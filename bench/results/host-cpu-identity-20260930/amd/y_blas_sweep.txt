@@ -1,0 +1,25 @@
+# y = X @ w (numpy 2.5.2, scipy-openblas 0.3.34 DYNAMIC_ARCH, core SkylakeX) on the MI325X host (EPYC 9575F, 20 vCPU); sha256[:16] of y at 20000 / 200000 / 1000000 rows
+cols (BLAS-free column loop): e3119a505554c59c d6c596e7aaa4e885 f046a1ab2cf96d73 
+threads=default: f68119ba8e05221b 2bf117765c273ab5 ff5158ad8dee8a05 
+threads=1: f68119ba8e05221b 2bf117765c273ab5 ff5158ad8dee8a05 
+threads=2: f68119ba8e05221b 2bf117765c273ab5 ff5158ad8dee8a05 
+threads=3: b82857f0482dbcc3 2eb52fe54200dc4a 0e18ceaa370b1785 
+threads=4: f68119ba8e05221b 2bf117765c273ab5 ff5158ad8dee8a05 
+threads=5: f68119ba8e05221b 2bf117765c273ab5 ff5158ad8dee8a05 
+threads=6: 075f653f53d17bc9 d531db6bb8a7f4f0 cff81c8fca019a59 
+threads=7: 783ba850d9000b0a 52cf7905409ccbb8 44f2c18e7a7e291f 
+threads=8: f68119ba8e05221b 2bf117765c273ab5 ff5158ad8dee8a05 
+threads=12: 8ccc7bdb90a835d0 553fd522622c3d46 a89986899747233a 
+threads=16: 3e1cd6f49f197cd5 2bf117765c273ab5 ff5158ad8dee8a05 
+threads=20: f68119ba8e05221b 2bf117765c273ab5 ff5158ad8dee8a05 
+threads=32: f68119ba8e05221b 2bf117765c273ab5 ff5158ad8dee8a05 
+threads=48: f68119ba8e05221b 2bf117765c273ab5 ff5158ad8dee8a05 
+cpu-view=32 (LD_PRELOAD shim): 8d980017240228ec 568434b480d7ccc2 47ed23ceba4be2b4 
+cpu-view=48 (LD_PRELOAD shim): 66eb4f0c7af963be 40a66bf40c0f2827 aef0454e8c17dc7e 
+cpu-view=64 (LD_PRELOAD shim): 639fed560de13228 15d23a0b1005e5d3 d00aa0df9f014be3 
+cpu-view=128 (LD_PRELOAD shim): 639fed560de13228 15d23a0b1005e5d3 d00aa0df9f014be3 
+OPENBLAS_CORETYPE=Haswell: f68119ba8e05221b 2bf117765c273ab5 ff5158ad8dee8a05 
+OPENBLAS_CORETYPE=Zen: f68119ba8e05221b 2bf117765c273ab5 ff5158ad8dee8a05 
+OPENBLAS_CORETYPE=SkylakeX: f68119ba8e05221b 2bf117765c273ab5 ff5158ad8dee8a05 
+OPENBLAS_CORETYPE=Sandybridge: a5a862022c252aee 2ed544f4121a81f3 a5766b83c65f252e 
+OPENBLAS_CORETYPE=Nehalem: 326e54201bee0a0f e58c36b697c228e4 60e6c22f6f422525 

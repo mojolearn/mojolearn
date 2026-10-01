@@ -1,0 +1,322 @@
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:485:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            dp[i] = out_dist[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:486:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            xp[i] = out_idx[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:612:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    pp[off + j] = proba[j]
+                    ~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:618:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                lp[j] = labels_out[j]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:622:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                up[uoff + j] = uniqs[i][j]
+                ~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:690:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[j] = out[j]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:767:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            idx[i] = xp[i]
+                     ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:806:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    pp[off + j] = proba[j]
+                    ~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:812:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                lp[j] = labels_out[j]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:816:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                up[uoff + j] = uniqs[i][j]
+                ~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:852:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            idx[i] = xp[i]
+                     ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:866:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[j] = out[j]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:936:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ap[0] = Int32(0)
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:939:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ap[q + 1] = Int32(nnz)
+            ~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:989:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if ap[0] != Int32(0) or Int(ap[nq]) != cap:
+           ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:989:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if ap[0] != Int32(0) or Int(ap[nq]) != cap:
+                                    ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:995:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if ap[q + 1] < ap[q]:
+               ~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:995:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if ap[q + 1] < ap[q]:
+                           ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:997:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            indptr[q] = ap[q]
+                        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:998:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        indptr[nq] = ap[nq]
+                     ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1022:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                xp[p] = cols[p]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1023:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                dp[p] = dists[p]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1025:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ap[q] = indptr[q]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1087:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            xp[i] = out_idx[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1088:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            dp[i] = out_dist[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1173:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cp[i] = centroids[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1175:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            lp[i] = labels[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1227:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            lp[i] = labels[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1270:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = out[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1322:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addrs = [dense, rows, cols, vals, affinity, status] (0 where unused);
+       ^
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:88:
+./bindings/host_helpers.mojo:204:33: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                memcpy(dest=dst + r * width, src=src + index * width, count=width)
+                            ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:88:
+./bindings/host_helpers.mojo:204:54: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                memcpy(dest=dst + r * width, src=src + index * width, count=width)
+                                                 ~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:88:
+./bindings/host_helpers.mojo:204:17: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+                memcpy(dest=dst + r * width, src=src + index * width, count=width)
+                ^~~~~~
+                unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:118:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:118:
+./bindings/hostptr.mojo:69:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:120:
+./core/dense_coo.mojo:116:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var m = (sptr[i + 1] - sptr[i]) if sparse else n
+                     ~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:120:
+./core/dense_coo.mojo:116:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var m = (sptr[i + 1] - sptr[i]) if sparse else n
+                                   ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:120:
+./core/dense_coo.mojo:122:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var e = Int(optr[sptr[i] + q])
+                                     ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:120:
+./core/dense_coo.mojo:122:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var e = Int(optr[sptr[i] + q])
+                                ~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:141:
+./core/knn_host_predict.mojo:821:26: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var pp = pan + (b0 // KNN_HOST_W) * d * KNN_HOST_W
+                     ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:141:
+./core/knn_host_predict.mojo:833:61: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                        _host_block_select(dist, b0, wv, bp + (r0 + r) * k, k)
+                                                         ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:141:
+./core/knn_host_predict.mojo:843:57: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    _host_block_select(dist, b0, wv, bp + (r0 + r) * k, k)
+                                                     ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:141:
+./core/knn_host_predict.mojo:847:35: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            _host_block_finish(bp + r * k, k, s0 + r, odp, oip)
+                               ~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:141:
+./core/knn_host_predict.mojo:1289:26: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var pp = pan + (b0 // KNN_HOST_W) * d * KNN_HOST_W
+                     ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:88:
+Imported from ./bindings/host_helpers.mojo:39:
+./core/host_parallel.mojo:74:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(0))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:88:
+Imported from ./bindings/host_helpers.mojo:39:
+./core/host_parallel.mojo:76:24: warning: 'load' is deprecated, use 'unsafe_load' instead
+        return UInt64(p.load(0))
+                      ~^~~~~
+                        unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:88:
+Imported from ./bindings/host_helpers.mojo:39:
+./core/host_parallel.mojo:90:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(v))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:405:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[t] = acc
+        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:409:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            red[t] = red[t] + red[t + step]
+            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:409:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            red[t] = red[t] + red[t + step]
+                     ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:409:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            red[t] = red[t] + red[t + step]
+                              ~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:411:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = ftz(red[0])
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:504:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var cv = (ctp + p * k + col0).load[width=W]()
+                  ~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:504:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var cv = (ctp + p * k + col0).load[width=W]()
+                  ~~~~~~~~~~~~^~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:504:38: warning: 'load' is deprecated, use 'unsafe_load' instead
+        var cv = (ctp + p * k + col0).load[width=W]()
+                 ~~~~~~~~~~~~~~~~~~~~^~~~~
+                                      unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:1161:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var base = pp + c * stride
+                   ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:1173:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                base[label * d + f] = base[label * d + f] + q
+                ~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:1173:43: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                base[label * d + f] = base[label * d + f] + q
+                                      ~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:1175:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            base[cd + label] = base[cd + label] + qw
+            ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:1175:36: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            base[cd + label] = base[cd + label] + qw
+                               ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:141:
+./core/knn_host_predict.mojo:621:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var q0 = qf + r0 * d
+             ~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:141:
+./core/knn_host_predict.mojo:622:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var q1 = qf + (r0 + 1) * d
+             ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:141:
+./core/knn_host_predict.mojo:623:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var q2 = qf + (r0 + 2) * d
+             ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:141:
+./core/knn_host_predict.mojo:624:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var q3 = qf + (r0 + 3) * d
+             ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1151:26: warning: assignment to 'inertia' was never used; assign to '_' instead?
+    var inertia = Float64(0.0)
+                         ^
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1152:18: warning: assignment to 'n_iter' was never used; assign to '_' instead?
+    var n_iter = 0
+                 ^
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1153:28: warning: assignment to 'sum_scale' was never used; assign to '_' instead?
+    var sum_scale = Float64(0.0)
+                           ^
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1154:31: warning: assignment to 'weight_scale' was never used; assign to '_' instead?
+    var weight_scale = Float64(0.0)
+                              ^
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1291:14: warning: assignment to 'nz' was never used; assign to '_' instead?
+    var nz = 0
+             ^
+/root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:1315:13: warning: assignment to 'k' was never used; assign to '_' instead?
+    var k = 0
+            ^
+Included from /root/mojolearn-neural-pass11/bindings/_mojolearn_core_host.mojo:133:
+./cluster/host/kmeans_oracle.mojo:1238:31: warning: assignment to 'c_norm' was never used; assign to '_' instead?
+    var c_norm = List[Float32](length=k, fill=Float32(0.0))
+                              ^
+built python/mojolearn/host/_mojolearn_core_host.so

@@ -1,0 +1,7 @@
+COMMAND ["/root/priority-pass/venv/bin/python", "/root/mojolearn-amd-verify/tools/bench_board_algos.py", "race", "--lane", "lr-warmup-cosine", "--dataset", "synthetic", "--data", "/root/priority-pass/algos-data", "--arms", "ours", "--rounds", "3", "--out", "/root/priority-pass/algos-lr-warmup-cosine-synthetic-old", "--work", "/root/priority-pass/work", "--ours-python", "/root/priority-pass/venv/bin/python"] ENV {"MOJOLEARN_LR_EXACT_ONLY": "1"}
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/lr-warmup-cosine", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=lr-warmup-cosine dataset=synthetic arm=ours round=0 ms=327532.713 infer_ms=None digest=61e4ce1e09ca405e
+ALGOS-ROUND lane=lr-warmup-cosine dataset=synthetic arm=ours round=1 ms=327648.636 infer_ms=None digest=61e4ce1e09ca405e
+ALGOS-ROUND lane=lr-warmup-cosine dataset=synthetic arm=ours round=2 ms=326668.711 infer_ms=None digest=61e4ce1e09ca405e
+ALGOS-ROUND lane=lr-warmup-cosine dataset=synthetic arm=ours round=3 ms=326498.735 infer_ms=None digest=61e4ce1e09ca405e
+ALGOS lane=lr-warmup-cosine dataset=synthetic arm=ours status=ok median_ms=326668.71067799366 quality={"max_rel_diff_vs_ours": 0.0}

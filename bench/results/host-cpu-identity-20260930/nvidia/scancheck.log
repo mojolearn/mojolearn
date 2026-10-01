@@ -1,0 +1,3 @@
+✨ Pixi task (check-pinned-scan in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . cluster/checks/pinned_scan_check.mojo
+33409 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x105d40000000, nodemask=1)
+PASS pinned_scan_check: warp 32 TPB 128 replay == host 32-lane oracle (inclusive, exclusive); library scan equals it: True ; identical build: True

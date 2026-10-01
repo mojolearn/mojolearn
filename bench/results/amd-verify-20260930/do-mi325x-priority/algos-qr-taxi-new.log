@@ -1,0 +1,7 @@
+COMMAND ["/root/priority-pass/venv/bin/python", "/root/mojolearn-amd-verify/tools/bench_board_algos.py", "race", "--lane", "qr", "--dataset", "taxi", "--data", "/root/priority-pass/algos-data", "--arms", "ours", "--rounds", "3", "--out", "/root/priority-pass/algos-qr-taxi-new", "--work", "/root/priority-pass/work", "--ours-python", "/root/priority-pass/venv/bin/python"] ENV {}
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/qr", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=qr dataset=taxi arm=ours round=0 ms=4221.328 infer_ms=None digest=e54f8db0f5ca6525
+ALGOS-ROUND lane=qr dataset=taxi arm=ours round=1 ms=4056.317 infer_ms=None digest=e54f8db0f5ca6525
+ALGOS-ROUND lane=qr dataset=taxi arm=ours round=2 ms=4052.344 infer_ms=None digest=e54f8db0f5ca6525
+ALGOS-ROUND lane=qr dataset=taxi arm=ours round=3 ms=4064.251 infer_ms=None digest=e54f8db0f5ca6525
+ALGOS lane=qr dataset=taxi arm=ours status=ok median_ms=4056.3171859976137 quality={"relative_gram_difference": 0.001995900098513438}

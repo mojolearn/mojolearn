@@ -91,6 +91,8 @@ from transformer.checks.transformer_oracle import RopeTable, refuse_nonfinite
 
 comptime HOST_FW = simd_width_of[DType.float32]()
 comptime F32V = SIMD[DType.float32, HOST_FW]
+#: Lanes of a head_dim-64 head the value sum keeps in flight at once.
+comptime VALUE_SUM_64 = 64 // HOST_FW
 comptime U32V = SIMD[DType.uint32, HOST_FW]
 #: SIMD accumulators `gemm_nt_rows` advances together per p step at one leaf
 #: (spelled out as eight locals there). A schedule knob: every lane still runs
@@ -456,6 +458,52 @@ def rope_fast(src: List[Float32], n_head: Int, hd: Int, l: Int, rope: RopeTable)
     return out^
 
 
+def copy_rows(src: List[Float32], lo: Int, hi: Int, width: Int) -> List[Float32]:
+    """Rows `[lo, hi)` of a row-major `[*, width]` list as their own list
+    (a plain copy; the token-split forward in `byte_lm_host.mojo` hands
+    each task the rows it owns)."""
+    var out = List[Float32](length=(hi - lo) * width, fill=Float32(0.0))
+    var sp = src.unsafe_ptr()
+    var op = out.unsafe_ptr()
+    for i in range((hi - lo) * width):
+        op.unsafe_store(i, sp.unsafe_load(lo * width + i))
+    return out^
+
+
+def rope_rows(src: List[Float32], n_head: Int, hd: Int, lo: Int, hi: Int, rope: RopeTable) raises -> List[Float32]:
+    """`rope_fast` for the tokens `[lo, hi)` of one batch row: `src` holds
+    those tokens' rows (local index `t - lo`), the rotary position is the
+    global `t`. Per element the same expression on the same operands."""
+    if hi > rope.positions:
+        raise Error("byte LM host kernels: length exceeds the rotary table")
+    var half = hd // 2
+    var width = n_head * hd
+    var out = List[Float32](length=(hi - lo) * width, fill=Float32(0.0))
+    var sp = src.unsafe_ptr()
+    var op = out.unsafe_ptr()
+    var cosp = rope.cos.unsafe_ptr()
+    var sinp = rope.sin.unsafe_ptr()
+    for t in range(lo, hi):
+        var lt = t - lo
+        for h in range(n_head):
+            var base = lt * width + h * hd
+            for j in range(hd):
+                var ci: Int
+                var rot: Float32
+                if j < half:
+                    ci = j
+                    rot = -ftz(sp.unsafe_load(base + j + half))
+                else:
+                    ci = j - half
+                    rot = ftz(sp.unsafe_load(base + j - half))
+                var cv = ftz(cosp.unsafe_load(t * half + ci))
+                var sv = ftz(sinp.unsafe_load(t * half + ci))
+                var pa = ftz(identical_mul(ftz(sp.unsafe_load(base + j)), cv))
+                var pb = ftz(identical_mul(rot, sv))
+                op.unsafe_store(base + j, ftz(ftz(pa) + ftz(pb)))
+    return out^
+
+
 @no_inline
 def _residual_add(a: List[Float32], b: List[Float32]) -> List[Float32]:
     """S22 and S23: `ftz(ftz(a[i]) + ftz(b[i]))`, one add per element, as
@@ -478,11 +526,21 @@ def _residual_add(a: List[Float32], b: List[Float32]) -> List[Float32]:
 
 @no_inline
 def _softmax_head(cell: List[Float32], masks: List[Float32], l: Int, s: Int, scale: Float32,
-                  mut aweights: List[Float32]):
+                  mut aweights: List[Float32], q_first: Int = -1):
     """S12-S18 for every query of one head, from `cell` (S11, `[l, s]`) and
     the additive `masks`, into `aweights` `[l, s]`: the scale, mask add,
     shift, exponential and division as lanes per key, the maximum (S14) and
-    the denominator (S17) as the oracle's serial scalar folds."""
+    the denominator (S17) as the oracle's serial scalar folds.
+
+    `q_first >= 0` (lane neural-pass11) says the rows are a causal prefill's
+    queries `q_first .. q_first + l - 1` over keys `0 .. s - 1` (the mask the
+    two callers build: key `j` visible iff `j <= query`), and then the
+    exponential, the denominator and the division run over the visible keys
+    only, the masked cells written `+0.0`: a masked cell is exactly
+    `-FLT_MAX`, its exponential exactly `+0.0`, its weight `+0.0 / den =
+    +0.0`, and a `+0.0` term is bitwise inert in the `+0.0`-seeded serial
+    denominator chain (the oracle's own section 7.2 theorem). The maximum
+    stays over every key of the row (contract 5.2)."""
     var cellp = cell.unsafe_ptr()
     var mkp = masks.unsafe_ptr()
     var awp = aweights.unsafe_ptr()
@@ -511,39 +569,53 @@ def _softmax_head(cell: List[Float32], masks: List[Float32], l: Int, s: Int, sca
         var mx = ftz(mp.unsafe_load(0))
         if s >= 2:
             mx = ftz(fmax_fold_span(masked, 0, s))
+        # The visible keys: all of them, or `0 .. q_first + qi` for a causal
+        # prefill's query (never past the row's end).
+        var count = s
+        if q_first >= 0 and q_first + qi + 1 < s:
+            count = q_first + qi + 1
+        var cbody = count - count % HOST_FW
         # S15, S16.
         var mxv = F32V(mx)
         jv = 0
-        while jv < sbody:
+        while jv < cbody:
             ep.unsafe_store[width=HOST_FW](jv, ftz_lanes(expf_lanes(ftz_lanes(mp.unsafe_load[width=HOST_FW](jv) - mxv))))
             jv += HOST_FW
-        while jv < s:
+        while jv < count:
             ep.unsafe_store(jv, ftz(identical_exp(ftz(ftz(mp.unsafe_load(jv)) - mx))))
             jv += 1
-        # S17, serial ascending from +0.0, scalar.
+        # S17, serial ascending from +0.0, scalar, over the visible keys.
         var den = Float32(0.0)
-        for j in range(s):
+        for j in range(count):
             den = ftz(ftz(den) + ftz(ep.unsafe_load(j)))
         den = ftz(den)
         # S18: `identical_div` is `portable_divf`, the flush around ONE
         # correctly rounded division, and every operand here is flushed.
+        # The masked keys' weights are `+0.0`, written as such.
         var denv = F32V(den)
         jv = 0
-        while jv < sbody:
+        while jv < cbody:
             awp.unsafe_store[width=HOST_FW](crow + jv, ftz_lanes(ep.unsafe_load[width=HOST_FW](jv) / denv))
             jv += HOST_FW
-        while jv < s:
+        while jv < count:
             awp.unsafe_store(crow + jv, ftz(identical_div(ftz(ep.unsafe_load(jv)), den)))
+            jv += 1
+        while jv < s:
+            awp.unsafe_store(crow + jv, Float32(0.0))
             jv += 1
 
 
 @no_inline
 def _value_sum_head(aweights: List[Float32], vpack: List[Float32], l: Int, s: Int, hd: Int,
-                    qw: Int, h: Int, mut ctx: List[Float32]):
+                    qw: Int, h: Int, mut ctx: List[Float32], q_first: Int = -1):
     """S19 for every query of one head: one serial chain per output over the
     key axis from `+0.0`, all `head_dim` outputs of a query as lanes. At a
-    head_dim of one or two SIMD widths the accumulators stay in registers;
-    `ctx` holds `+0.0` in this head's slots on entry."""
+    head_dim of one or two SIMD widths the accumulators stay in registers,
+    and at head_dim 64 every lane of the head is in flight in one pass over
+    the keys (lane neural-pass11); `ctx` holds `+0.0` in this head's slots
+    on entry. `q_first >= 0` (see `_softmax_head`) runs each query's chains
+    over its visible keys only: a masked key's weight is exactly `+0.0`, so
+    its fma term is inert in the `+0.0`-seeded chain."""
     var awp = aweights.unsafe_ptr()
     var vp = vpack.unsafe_ptr()
     var ctxp = ctx.unsafe_ptr()
@@ -551,10 +623,24 @@ def _value_sum_head(aweights: List[Float32], vpack: List[Float32], l: Int, s: In
     for qi in range(l):
         var cbase = qi * qw + h * hd
         var wrow = qi * s
+        var count = s
+        if q_first >= 0 and q_first + qi + 1 < s:
+            count = q_first + qi + 1
+        if hd == 64:
+            var accs = InlineArray[F32V, VALUE_SUM_64](fill=F32V(0.0))
+            for j in range(count):
+                var w64 = F32V(awp.unsafe_load(wrow + j))
+                var vrow64 = j * hd
+                comptime for v in range(VALUE_SUM_64):
+                    accs[v] = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                        w64, vp.unsafe_load[width=HOST_FW](vrow64 + v * HOST_FW), accs[v]))
+            comptime for v in range(VALUE_SUM_64):
+                ctxp.unsafe_store[width=HOST_FW](cbase + v * HOST_FW, accs[v])
+            continue
         if hd == 2 * HOST_FW:
             var a0 = F32V(0.0)
             var a1 = F32V(0.0)
-            for j in range(s):
+            for j in range(count):
                 var wv2 = F32V(awp.unsafe_load(wrow + j))
                 var vrow2 = j * hd
                 a0 = ftz_lanes(identical_mul_add_simd[HOST_FW](wv2, vp.unsafe_load[width=HOST_FW](vrow2), a0))
@@ -564,12 +650,12 @@ def _value_sum_head(aweights: List[Float32], vpack: List[Float32], l: Int, s: In
             continue
         if hd == HOST_FW:
             var a_one = F32V(0.0)
-            for j in range(s):
+            for j in range(count):
                 a_one = ftz_lanes(identical_mul_add_simd[HOST_FW](
                     F32V(awp.unsafe_load(wrow + j)), vp.unsafe_load[width=HOST_FW](j * hd), a_one))
             ctxp.unsafe_store[width=HOST_FW](cbase, a_one)
             continue
-        for j in range(s):
+        for j in range(count):
             var wj = awp.unsafe_load(wrow + j)
             var wv = F32V(wj)
             var vrow = j * hd
@@ -685,8 +771,8 @@ def block_fast(
                 vpp.unsafe_store(j * hd + d, ftz(vvp.unsafe_load(j * kw + kvh * hd + d)))
         # S11, one gemm per head, k = head_dim; then S12-S18 and S19.
         gemm_nt_rows(qmat, kpack, s, hd, 0, l, cell)
-        _softmax_head(cell, masks, l, s, scale, aweights)
-        _value_sum_head(aweights, vpack, l, s, hd, qw, h, ctx)
+        _softmax_head(cell, masks, l, s, scale, aweights, 0)
+        _value_sum_head(aweights, vpack, l, s, hd, qw, h, ctx, 0)
 
     # S5 o_proj, S22; S1-S4 again; the MLP (S5, S20, S21, S5); S23.
     var o = List[Float32](length=m * dm, fill=Float32(0.0))
