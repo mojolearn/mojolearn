@@ -1,0 +1,2 @@
+COMMAND ["pixi", "install"] ENV {}
+✔ The default environment has been installed.

@@ -9,7 +9,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.os import getenv
 from std.time import perf_counter_ns
-from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
+from checks.kernel_matrix import COLUMN_AMD, TARGET_COLUMN, lib_smem_page_fits_for
 
 from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_rsqrt, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf, identical_mul
 from mamba.checks.mamba3_fixture import M3_A_FLOOR, M3_D_STATE, M3_HEADDIM, M3_NUM_ROPE_ANGLES, M3_PI, M3_RMS_EPS, Mamba3Dims
@@ -377,7 +377,7 @@ def mamba3_s16_qk_shared_kernel(
 #:          over its own page (their accumulators are separate, so each
 #:          chain's order is untouched). Exactly the column's 48 KB; only
 #:          where `lib_smem_page_fits_for` says the page fits.
-#: MOJOLEARN_MAMBA3_S16_QK_ARM = naive | shared | regs (default) | smem48
+#: MOJOLEARN_MAMBA3_S16_QK_ARM = naive | shared | regs (default; regs2 on AMD) | regs2 | smem48
 #: picks the launch at run time, one build for the whole sweep; under
 #: MOJOLEARN_MAMBA_TIMING the S16 driver prints a wall per kernel.
 comptime M3_S16_SMEM48_BYTES = (M3_S16_QK_MAXQ * M3_D_STATE + M3_S16_QK_MAXQ * M3_HEADDIM) * 4
@@ -388,7 +388,10 @@ def m3_s16_qk_arm() -> Int:
     """The S16 q/k arm: `regs` by default (lane/neural-pass4, 2026-09-30:
     on the L4 `regs` read 9.2 ms against `regs2`'s 10.8 at the board shape
     and 83.5 against 86.0 at the default shape, the same bits on every arm;
-    `regs2` was the S16 pass's default and stays one env value away)."""
+    `regs2` was the S16 pass's default and stays one env value away).
+    On the AMD column the default is `regs2` (2026-09-30, MI325X: `regs` read
+    18.6 ms against `regs2`'s 12.1 at the board shape, same bits;
+    bench/results/pass4-20260930)."""
     var a = String(getenv("MOJOLEARN_MAMBA3_S16_QK_ARM"))
     if a == "naive":
         return 0
@@ -398,6 +401,10 @@ def m3_s16_qk_arm() -> Int:
         return 4
     if a == "smem48":
         return 3
+    if a == "regs":
+        return 2
+    comptime if TARGET_COLUMN == COLUMN_AMD:
+        return 4
     return 2
 
 

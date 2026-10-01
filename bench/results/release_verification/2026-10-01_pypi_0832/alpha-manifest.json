@@ -1,0 +1,126 @@
+{
+  "files": {
+    "mojolearn-0.8.32-py3-none-macosx_11_0_arm64.whl": "9cd5a1384f53777aec6259d590fbdffb4cefc6478cb78cb28fe0f94c745a5ce0",
+    "mojolearn-0.8.32-py3-none-manylinux_2_35_x86_64.whl": "0c7103babf28517fd6cfa50a5f62d38242e0d3fb477c5ce3a8714cf3f03e8239",
+    "mojolearn_amd-0.8.32-py3-none-manylinux_2_35_x86_64.whl": "7f1a36834d0e6b688c4804b04c8abdab7e72dd0fb0b7cbec8cf5671f8728a916",
+    "mojolearn_nvidia-0.8.32-py3-none-manylinux_2_35_x86_64.whl": "e0aa11bab5e0821cebf1a03d2bab0247d3c9451cf3c73a193bd0ad14f5041af4"
+  },
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "merge_evidence": [
+      {
+        "commit": "8729c2116ee184b0b8fc3824c4c51223901bbc5c",
+        "message": "Merge the GBDT split-score fix: gradients snapped onto the histogram's fixed-point grid before each tree, so partition totals equal the quantized sums and no phantom gradient wins a near-empty split (AUC now matches CatBoost/XGBoost on every lane; identity PASS: NVIDIA A40 GPU+CPU, AMD MI325X HIP+CPU, M2 Pro CPU and Metal; sabotage bites on every vendor)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "f89f43b85280d1c9c1ee34e313ca87e8ac7765ef",
+        "message": "Merge ordered-boosting speed and the Apple 256-thread histogram cap: per-permutation GPU sort, reused search state, fused sums (taxi 500 trees 490 -> 182 s on the M2 Pro, output bit-identical); the M2 GPU silently dropped 512-thread histogram dispatches (>128 borders read zero); CatBoost's ordered block size now matched (identity PASS: M2 Pro Metal+CPU, NVIDIA L40S CUDA+CPU, AMD MI325X HIP+CPU, sabotage bites)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "10523ede164135c2293d16f857b49c157eab71aa",
+        "message": "Merge pull request #3 from mojolearn/fix/sparse-label-graph-20260930\n\nFix label propagation and spreading kNN graph memory growth"
+      },
+      {
+        "commit": "3d0da1acf5303ebe7463222544b5791d78c93c09",
+        "message": "Merge KernelPCA GPU top-k Lanczos, on by default: NVIDIA L40S, Apple M4 and CPU column bit-identical (256/1000/10000 rows), 1000 rows 17.4 s -> 0.1 s on the M4; AMD not yet run\n\nMOJOLEARN_XN_KPCA_LANCZOS=0 restores the dense host eigensolve. Out of scope\n(eigen_solver != auto, n <= 200, components not 1..9) or an unconverged\nbasis takes the dense path.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "26cdf0767744c104ac7486f650bd2774e2c90cfc",
+        "message": "Merge pull request #4 from mojolearn/fix/apple-wheel-timestamp\n\nFix same-second freshness checks for reused Apple wheel bindings"
+      },
+      {
+        "commit": "31813da4a1f729e3bba1c31e8ca651b19fb54447",
+        "message": "Merge the strides pass (PR #5) and its L40S evidence: bit-identical to every restore, gemm-int8 60x, Mamba-3 S17 up to 2.5x, fixed15 transposed quantizer and L40S plan table"
+      },
+      {
+        "commit": "85965db7fd7ae877f1a6486a9eb285a84f368b3a",
+        "message": "AMD verification job for everything merged 2026-09-30: Kernel PCA, strides pass, fixed15 harness, classical pass, priority pass\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "03a67783ff211b363726fc88f4ca50433bfd1a16",
+        "message": "Merge the S16 pass (PR #6) and its L4 evidence: hardware ftz flush on NVIDIA (probe PASS, every digest unchanged), S16 regs2 6x, angle 8x, samba-train-step 1.28x"
+      },
+      {
+        "commit": "8369a48e40286858c4e94c1b3e8071f329cace17",
+        "message": "AMD job: main through the S16 pass; the five S16 arms and the angle-naive build\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "f4d3a5b1b09ec078ee2c6eed21e2cbd94e44afd4",
+        "message": "PR #7 measurement job: matmul digests main vs PR host entry, mlp_step_check at 256 and 32 rows, small-MLP tests, mlp-train-step cell fused vs per-operation\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "959d65a8fe5ce55518c292070f2fcab1f34ce3c9",
+        "message": "Merge the fused small-MLP step (PR #7) with two compile fixes and its L4 evidence: every byte equal, 1.6x a step, matmul digests unchanged"
+      },
+      {
+        "commit": "b86374f9f5577c874fca1b56154cd5e8a61a646d",
+        "message": "AMD job: main through PR #7; fused small-MLP check and matmul digests\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "75f1ddad40a987e55e30d9c9288fca14cd1e6706",
+        "message": "AMD job: small-MLP GPU gate (26 tests) fused and per-operation\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "6f230f731f5104df09a7e4f9c4e4ed4a6611ec2c",
+        "message": "PR #8 measurement job: resident optimizer check (adamw/adam/sgd), samba and lm cells resident on/off, S16 default regs digests and timing, small-MLP GPU gate, matmul digests, fixed15 k<=1024 rule\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "960c6e34167883a2fe81e15fe61b5e84b11a91d0",
+        "message": "Merge neural pass 4 (PR #8) and its L4 evidence: resident optimizer moments (every byte equal, 1.55x a step), samba-train-step 1.44x, S16 regs default, fixed15 k<=1024 rule"
+      },
+      {
+        "commit": "0f93bf80747a5fd8dde7834ec11757426d358126",
+        "message": "AMD (MI325X) part 1: Kernel PCA, Mamba-3 (every S16 arm, angle), gemm-int8, matmul and 422 fixed15 digests all equal to NVIDIA; fused MLP step every byte equal; small-MLP GPU gate 26/26\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "8afd9698bb5e2a560a9583adf5ce8f04c36407f6",
+        "message": "AMD part 2: classical fixes same bits old vs new on AMD (LU 23x, SGD 10x); cross-vendor DIVERGENCE in SGD-reg, LARS 200k, IVF 40k (old paths too; NVIDIA = CPU reference)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "ae8c154317d06747742093b5eefa8e5ae1600795",
+        "message": "AMD divergence isolated on the released 0.8.31 wheel: SGD-reg and LARS follow the host CPU (Zen 2 vs Zen 5), not the GPU vendor; IVF 40k is a true AMD GPU divergence\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "480a210b12695569a8ed0d364e0cd8cba0001fe5",
+        "message": "AMD part 3: priority pass identical to NVIDIA on every row (lr-warmup-cosine 669x, adafactor 21x on AMD); clip-grad-norm AMD = NVIDIA\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "13dcf08513cd35f44b893ad6d8239bd85d72181e",
+        "message": "mamba3 S16: regs2 is the default on the AMD column (MI325X: regs 18.6 ms vs regs2 12.1 ms at the board shape, same bits); regs elsewhere; MOJOLEARN_MAMBA3_S16_QK_ARM=regs now names regs explicitly\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "303d2f923754bd6178ba345e8b4410d7d358bc5a",
+        "message": "PR #8 on AMD: resident optimizer every byte equal (1.5x), Mamba-3 = NVIDIA digests; regs 54% slower than regs2 on AMD -> per-vendor default\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "0f061d54d25940d64d3673ae2a1dbf8110223ff4",
+        "message": "PR #11 evidence (AMD box host, 64 cores): CPU train gate 640/640, host step check PASS both shapes, lm-host-train-step 1464 -> 903 ms (1.62x), same losses\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "84a1ea82ac944662c000d032e875f5e902c1f71e",
+        "message": "Merge the CPU training step over host tasks (PR #11) and its AMD-host evidence: gate 640/640, both settings byte for byte, lm-host-train-step 1.62x"
+      },
+      {
+        "commit": "c5d048a9b9f81feeb696c79a01b1b98383621e8b",
+        "message": "PR #10 evidence (AMD box host): gate 144/144, sweep 4752/4752, lm-infer CPU 643 -> 176 ms (3.65x)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "17534aa3de7e2018cc9dccf05d9af64c32a5a840",
+        "message": "Merge the byte LM CPU inference token split (PR #10) with three fixes and its AMD-host evidence: gate 144/144, sweep 4752/4752, lm-infer CPU 3.65x"
+      },
+      {
+        "commit": "b1042ea658c97cdc388eeaed2d693d36297c5708",
+        "message": "PR #12 measurement: the host PR job (train gate, step check, profile, cell rows on/off)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "ea0e1f941ba7c627e9bd78c449314ccbd8666949",
+        "message": "PR #12 evidence (AMD box host): gate 640/640, step check PASS, lm-host-train-step 903 -> 783 ms (1464 before PR #11)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      }
+    ],
+    "new_runtime_verification": false,
+    "source_commit": "32ad138884fd39d69b8bf50c82ecf262b22e0da6"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.32"
+}

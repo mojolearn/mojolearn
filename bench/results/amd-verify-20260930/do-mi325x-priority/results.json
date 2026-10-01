@@ -1,0 +1,114 @@
+{
+  "gemm-int8-new": [
+    null,
+    null
+  ],
+  "gemm-int8-reference": [
+    null,
+    null
+  ],
+  "algos-cholesky-synthetic-new": [
+    null,
+    null
+  ],
+  "algos-cholesky-synthetic-old": [
+    null,
+    null
+  ],
+  "verdict-cholesky-synthetic": {
+    "same_hash": false,
+    "new_ms": null,
+    "old_ms": null
+  },
+  "algos-svd-taxi-new": [
+    null,
+    null
+  ],
+  "algos-svd-taxi-old": [
+    null,
+    null
+  ],
+  "verdict-svd-taxi": {
+    "same_hash": false,
+    "new_ms": null,
+    "old_ms": null
+  },
+  "algos-svd-istella-new": [
+    null,
+    null
+  ],
+  "algos-svd-istella-old": [
+    null,
+    null
+  ],
+  "verdict-svd-istella": {
+    "same_hash": false,
+    "new_ms": null,
+    "old_ms": null
+  },
+  "algos-qr-taxi-new": [
+    null,
+    null
+  ],
+  "algos-qr-taxi-old": [
+    null,
+    null
+  ],
+  "verdict-qr-taxi": {
+    "same_hash": false,
+    "new_ms": null,
+    "old_ms": null
+  },
+  "algos-qr-istella-new": [
+    null,
+    null
+  ],
+  "algos-qr-istella-old": [
+    null,
+    null
+  ],
+  "verdict-qr-istella": {
+    "same_hash": false,
+    "new_ms": null,
+    "old_ms": null
+  },
+  "algos-lr-warmup-cosine-synthetic-new": [
+    null,
+    null
+  ],
+  "algos-lr-warmup-cosine-synthetic-old": [
+    null,
+    null
+  ],
+  "verdict-lr-warmup-cosine-synthetic": {
+    "same_hash": false,
+    "new_ms": null,
+    "old_ms": null
+  },
+  "algos-adafactor-synthetic-new": [
+    null,
+    null
+  ],
+  "algos-adafactor-synthetic-old": [
+    null,
+    null
+  ],
+  "verdict-adafactor-synthetic": {
+    "same_hash": false,
+    "new_ms": null,
+    "old_ms": null
+  },
+  "algos-clip-grad-norm-synthetic-new": [
+    null,
+    null
+  ],
+  "algos-clip-grad-norm-synthetic-old": [
+    null,
+    null
+  ],
+  "verdict-clip-grad-norm-synthetic": {
+    "same_hash": false,
+    "new_ms": null,
+    "old_ms": null
+  }
+}

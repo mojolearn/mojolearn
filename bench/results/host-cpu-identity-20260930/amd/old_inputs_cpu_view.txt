@@ -1,0 +1,17 @@
+# released 0.8.31 host binding (MOJOLEARN_VENDOR=cpu) on the MI325X host, OLD harness inputs (y = X @ w); out = sha256[:16] of (coef_, intercept_), the harness digest
+## default OpenBLAS view (20 CPUs)
+sgd-reg 20000 matmul 100 X 58ac714177f66b1b y f68119ba8e05221b out f2571b6b6c94680d
+lars 200000 matmul 100 X c4722832ed232f3b y 2bf117765c273ab5 out 97a2c17f10a7f5ee
+## LD_PRELOAD shim: OpenBLAS sees 64 CPUs
+sgd-reg 20000 matmul 100 X 58ac714177f66b1b y 639fed560de13228 out 431ad9f1214c29a2
+lars 200000 matmul 100 X c4722832ed232f3b y 15d23a0b1005e5d3 out 356afc301a0d55c1
+## LD_PRELOAD shim: OpenBLAS sees 32 CPUs
+sgd-reg 20000 matmul 100 X 58ac714177f66b1b y 8d980017240228ec out 2c744922e4a9b8ad
+lars 200000 matmul 100 X c4722832ed232f3b y 568434b480d7ccc2 out 17696d9d0aae7f6d
+## LD_PRELOAD shim: OpenBLAS sees 48 CPUs
+sgd-reg 20000 matmul 100 X 58ac714177f66b1b y 66eb4f0c7af963be out 52aa729fcf7b19f3
+lars 200000 matmul 100 X c4722832ed232f3b y 40a66bf40c0f2827 out 754cabcfdb61d65d
+## 1M rows (from hcid/fake64_1m.log): shim 64 CPUs for the first two lines, default view for the third
+sgd-reg 1000000 matmul 100 X 5c89e35f0a7cfae3 y d00aa0df9f014be3 out f07701df3903e412
+lars 1000000 matmul 100 X 5c89e35f0a7cfae3 y d00aa0df9f014be3 out 88fba1aba928096e
+lars 1000000 matmul 100 X 5c89e35f0a7cfae3 y ff5158ad8dee8a05 out 88fba1aba928096e
