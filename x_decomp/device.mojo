@@ -1128,6 +1128,45 @@ def orgqr_dot_tile_kernel(
         w.unsafe_store(j, acc)
 
 
+# ---- the update tiles (lane neural-pass41, second commit) -------------------------------------
+#: geqrf_update_kernel / orgqr_update_kernel give each trailing cell its own
+#: thread, which loads scal, tau, w[j], the row's column-k word and the cell
+#: (five loads a cell, the column-k word once per cell). Here a thread takes
+#: UPD_COLS consecutive columns of one row and runs the cell function for
+#: each: the same statements per cell, the row's column-k word and the
+#: scalars loaded for four cells, the four cells' words one contiguous
+#: segment. MOJOLEARN_XD_QR_UPD_TILE=0 keeps the one-cell kernels.
+comptime UPD_COLS = 4
+
+
+def xd_qr_upd_tile() -> Bool:
+    return String(getenv("MOJOLEARN_XD_QR_UPD_TILE")) != "0"
+
+
+def geqrf_update_tile_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32):
+    var K = Int(k)
+    var cols = Int(n) - K - 1
+    var groups = (cols + UPD_COLS - 1) // UPD_COLS
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cols > 0 and t < (Int(m) - K) * groups:
+        var i = K + t // groups
+        var j0 = K + 1 + (t - (t // groups) * groups) * UPD_COLS
+        for j in range(j0, min(j0 + UPD_COLS, Int(n))):
+            geqrf_update_elem(a, tau, scal, K, i, j, Int(n), w.unsafe_load(j))
+
+
+def orgqr_update_tile_kernel(h: F32Ptr, tau: F32Ptr, q: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32, qc: Int32):
+    var K = Int(k)
+    var QC = Int(qc)
+    var groups = (QC + UPD_COLS - 1) // UPD_COLS
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < (Int(m) - K) * groups:
+        var i = K + t // groups
+        var j0 = (t - (t // groups) * groups) * UPD_COLS
+        for j in range(j0, min(j0 + UPD_COLS, QC)):
+            orgqr_update_elem(h, tau, q, K, i, j, Int(n), QC, w.unsafe_load(j))
+
+
 def orgqr_dot_staged_kernel(
     h: F32Ptr, tau: F32Ptr, q: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32, qc: Int32
 ):
@@ -2467,10 +2506,18 @@ struct DevExec(Exec):
                     )
                     _qr_tick(ctx, qrt, qrk, 2)
                 _qr_tick(ctx, qrt, qrk, -1)
-                ctx.enqueue_function[geqrf_update_kernel](
-                    da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
-                    grid_dim=_blocks((m - k) * (n - k - 1)), block_dim=TPB,
-                )
+                if xd_qr_upd_tile():
+                    _qr_tick(ctx, qrt, qrk, -1)
+                    ctx.enqueue_function[geqrf_update_tile_kernel](
+                        da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                        grid_dim=_blocks((m - k) * ((n - k - 1 + UPD_COLS - 1) // UPD_COLS)), block_dim=TPB,
+                    )
+                    _qr_tick(ctx, qrt, qrk, 4)
+                else:
+                    ctx.enqueue_function[geqrf_update_kernel](
+                        da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                        grid_dim=_blocks((m - k) * (n - k - 1)), block_dim=TPB,
+                    )
                 _qr_tick(ctx, qrt, qrk, 4)
         _down(ctx, da, a, m * n)
         _down(ctx, dt, tau, kk)
@@ -2526,10 +2573,18 @@ struct DevExec(Exec):
                     )
                     _qr_tick(ctx, qrt, qrk, 1)
             _qr_tick(ctx, qrt, qrk, -1)
-            ctx.enqueue_function[orgqr_update_kernel](
-                dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
-                grid_dim=_blocks((m - k) * qc), block_dim=TPB,
-            )
+            if xd_qr_upd_tile():
+                _qr_tick(ctx, qrt, qrk, -1)
+                ctx.enqueue_function[orgqr_update_tile_kernel](
+                    dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                    grid_dim=_blocks((m - k) * ((qc + UPD_COLS - 1) // UPD_COLS)), block_dim=TPB,
+                )
+                _qr_tick(ctx, qrt, qrk, 3)
+            else:
+                ctx.enqueue_function[orgqr_update_kernel](
+                    dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                    grid_dim=_blocks((m - k) * qc), block_dim=TPB,
+                )
             _qr_tick(ctx, qrt, qrk, 3)
         _down(ctx, dq, q, m * qc)
         ctx.synchronize()
