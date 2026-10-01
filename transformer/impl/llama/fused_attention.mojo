@@ -619,6 +619,14 @@ instantiations stay trial-only)."""
 comptime ATTN_STASH_HD = 64
 """The only head dim the candidate arms instantiate (the target shape)."""
 
+comptime ATTN_FWD_TQ = 16 if is_defined["MOJOLEARN_ATTN_FWD_TQ16"]() else 32
+"""Query rows per block of the second-round forward kernels (lane
+neural-pass46, 2026-10-01): 32 as shipped; `-D MOJOLEARN_ATTN_FWD_TQ16=1`
+instantiates them at 16 rows, which halves a block's threadgroup page
+(the Apple matrix-unit copy: 27.6 KB -> 19 KB) and doubles the blocks, for
+the Apple column where a 256-thread block with a 27.6 KB page sits alone on
+a core. The chains per row are the same; only which block owns a row moves."""
+
 
 def _attn_arm_base_from_name(base: String, full: String) raises -> Int:
     """The first-round base of an arm name (section 12.1)."""
@@ -7259,26 +7267,26 @@ def fused_forward_launch_ran(
                 if frows == 32 and qres:
                     if fpf:
                         if nsab:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, True, True, True](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, True](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
                             )
                         else:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, True, True, False](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
                             )
                     else:
                         if nsab:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, True, False, True](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, True, False, True](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
                             )
                         else:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, True, False, False](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, True, False, False](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
@@ -7286,26 +7294,26 @@ def fused_forward_launch_ran(
                 elif frows == 32:
                     if fpf:
                         if nsab:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, False, True, True](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, False, True, True](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
                             )
                         else:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, False, True, False](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, False, True, False](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
                             )
                     else:
                         if nsab:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, False, False, True](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, False, False, True](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
                             )
                         else:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, False, False, False](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, False, False, False](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
@@ -7621,7 +7629,7 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     context chain on Apple's matrix unit where admitted (see THE FORWARD ON
     APPLE'S MATRIX UNIT). Passes, statistics, stash and outputs are the
     original's."""
-    comptime assert HD == 64 and TQ == 32 and PF and not SABN, "amma forward: HD 64, TQ 32, PF, clean"
+    comptime assert HD == 64 and (TQ == 32 or TQ == 16) and PF and not SABN, "amma forward: HD 64, TQ 32 or 16, PF, clean"
     comptime RPT = TQ // 16
     comptime BK = ATTN_FR2_BK
     comptime NSG = FUSED_THREADS // 32
@@ -8346,7 +8354,7 @@ def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool
     # kernel below is enqueued on the same in-order `ctx`.
     _attn_tick(ctx, on, tk, "fwd_scratch_alloc")
     step_count_launch()
-    comptime if ATTN_FWD_APPLE_MMA and HD == 64 and TQ == 32 and PF and not SABN:
+    comptime if ATTN_FWD_APPLE_MMA and HD == 64 and (TQ == 32 or TQ == 16) and PF and not SABN:
         comptime ka = fused_attn_forward_r2_amma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
         ctx.enqueue_function[ka](
             ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
@@ -8399,7 +8407,7 @@ def _launch_fwd_r2_keep[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ:
     only the clean copy its column default resolves to, and only when that
     default carries the estash bits (DEVIATION 2657,
     `ATTN_SHIPPED_BWD_ESTASH`)."""
-    comptime if ATTN_FWD_APPLE_MMA and HD == 64 and TQ == 32 and PF and not SABN:
+    comptime if ATTN_FWD_APPLE_MMA and HD == 64 and (TQ == 32 or TQ == 16) and PF and not SABN:
         comptime ka = fused_attn_forward_r2_amma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
         step_count_launch()
         ctx.enqueue_function[ka](
@@ -9838,13 +9846,13 @@ def fused_forward_launch_estash_ran(
                 # 2657): a shipped build compiles the clean one below alone.
                 if nsab:
                     if swz:
-                        _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, True, True](
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, True, True](
                             ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
                             k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
                             scale,
                         )
                     else:
-                        _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, True, False](
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, True, False](
                             ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
                             k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
                             scale,
@@ -9853,19 +9861,19 @@ def fused_forward_launch_estash_ran(
             if not ran_sab:
                 comptime if ATTN_ARM_TRIAL:
                     if swz:
-                        _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, False, True](
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False, True](
                             ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
                             k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
                             scale,
                         )
                     else:
-                        _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, False, False](
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False, False](
                             ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
                             k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
                             scale,
                         )
                 else:
-                    _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, False, ATTN_DEFAULT_BSWZ](
+                    _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False, ATTN_DEFAULT_BSWZ](
                         ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
                         k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
                         scale,
