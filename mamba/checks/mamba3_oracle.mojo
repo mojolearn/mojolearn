@@ -126,7 +126,13 @@ from gemm.checks.gemm_oracle import (
     gemm_oracle,
     gemm_oracle_right_zero_padded,
 )
-from gemm.host.gemm_host_rows import gemm_host_rows, gemm_host_rows_right_zero_padded
+from std.math import min
+
+from std.time import perf_counter_ns
+
+from core.host_lanes import HostF32Ptr, host_block_timing_on, host_f32_uninit, host_row_tasks, host_tick
+from core.host_parallel import host_parallelize
+from gemm.host.gemm_host_rows import GHR_SERIAL_FMAS, gemm_host_rows, gemm_host_rows_right_zero_padded
 from mamba.checks.mamba_oracle import refuse_nonfinite
 from mamba.checks.mamba3_fixture import (
     BITS_POS_INF,
@@ -214,6 +220,13 @@ def m3_refuse_bad_inputs(
     if state.pending:
         refuse_nonfinite("input_states.k", state.pend_k)
         refuse_nonfinite("input_states.v", state.pend_v)
+
+
+def _p(values: List[Float32]) -> HostF32Ptr:
+    """The list's storage as the untracked mutable pointer the task closures
+    capture (lane neural-pass9); the list outlives every task it is passed
+    to, and tasks write disjoint indices."""
+    return HostF32Ptr(unsafe_from_address=Int(values.unsafe_ptr()))
 
 
 def _zeros(n: Int) -> List[Float32]:
@@ -426,73 +439,135 @@ def mamba3_block_oracle(
     var st = Mamba3Stages()
     st.q0_at_entry = state.buf_len
 
-    # ---- S1-S3: block RMSNorm (block.py:51-53, :67 non-fused arm) --
-    #      mamba2 S1-S3 VERBATIM (the mamba1 machinery).
-    for t in range(m):
-        var acc = Float32(0.0)
-        for j in range(dm):
-            var xj = ftz(x[t * dm + j])
-            acc = ftz(identical_mul_add(xj, xj, acc))
-        st.norm_sumsq.append(acc)
-        var mean = ftz(identical_div(acc, Float32(dm)))
-        var rstd = ftz(identical_rsqrt(ftz(mean + M3_RMS_EPS)))
-        for j in range(dm):
-            var inner = ftz(identical_mul(ftz(x[t * dm + j]), rstd))
-            st.norm_out.append(ftz(identical_mul(ftz(w.norm_w[j]), inner)))
+    # =====================================================================
+    # STAGES OVER HOST TASKS (lane neural-pass9). Every statement below is
+    # the serial oracle's, in the serial oracle's order WITHIN a row; what
+    # changed is which rows run on which task. A row is a token, a (batch,
+    # head), a (batch, head, chunk) or a (batch, chunk, head), the unit the
+    # contract already makes independent (the chunked scan's chunks share
+    # nothing but `pass_states`, which the serial inter-chunk pass per head
+    # writes before the chunk pass reads it). The stage lists are sized once
+    # and written by index in the order the appends made them. Every task runs
+    # in the calling thread's floating-point environment (`host_parallelize`,
+    # DEVIATION 5900), and MOJOLEARN_CPU_THREADS=1 runs every stage as one
+    # task on the calling thread: tools/host_threads_ab_check.py holds the two
+    # equal byte for byte. The small per-chunk gemm calls inside a task stay
+    # single-task because their work is under GHR_SERIAL_FMAS; a shape whose
+    # chunk products would split runs those two stages on one task.
+    # =====================================================================
+    var p_dim_v = p_dim
+    var n_state_v = n_state
+    var q_v = q
+    var r_ang_v = r_ang
+    var xp = _p(x)
+    var normw_p = _p(w.norm_w)
+    var dtb_p = _p(w.dt_bias)
+    var bnormw_p = _p(w.bnorm_w)
+    var cnormw_p = _p(w.cnorm_w)
+    var bbias_p = _p(w.b_bias)
+    var cbias_p = _p(w.c_bias)
+    var dskip_p = _p(w.d_skip)
+    var hton = host_block_timing_on()
+    var htk = Int(perf_counter_ns())
 
-    # ---- S4: in_proj (mamba3.py:176; Linear, bias=False), gemm v1
-    #      OP_NT, k = d_model. Columns z|x|B|C|dd_dt|dd_A|trap|angle.
+    # ---- S1-S3: block RMSNorm (block.py:51-53, :67 non-fused arm), tokens --
+    st.norm_sumsq = host_f32_uninit(m)
+    st.norm_out = host_f32_uninit(m * dm)
+    var nsq_p = _p(st.norm_sumsq)
+    var nout_p = _p(st.norm_out)
+    var ttasks = host_row_tasks(m, 6 * dm)
+    var tchunk = (m + ttasks - 1) // ttasks
+    def _norm_rows(task: Int) {imm xp, imm normw_p, imm nsq_p, imm nout_p, imm m, imm dm, imm tchunk}:
+        for t in range(task * tchunk, min((task + 1) * tchunk, m)):
+            var acc = Float32(0.0)
+            for j in range(dm):
+                var xj = ftz(xp.unsafe_load(t * dm + j))
+                acc = ftz(identical_mul_add(xj, xj, acc))
+            nsq_p.unsafe_store(t, acc)
+            var mean = ftz(identical_div(acc, Float32(dm)))
+            var rstd = ftz(identical_rsqrt(ftz(mean + M3_RMS_EPS)))
+            for j in range(dm):
+                var inner = ftz(identical_mul(ftz(xp.unsafe_load(t * dm + j)), rstd))
+                nout_p.unsafe_store(t * dm + j, ftz(identical_mul(ftz(normw_p.unsafe_load(j)), inner)))
+    if ttasks <= 1:
+        _norm_rows(0)
+    else:
+        host_parallelize(_norm_rows, ttasks)
+
+    host_tick(hton, htk, "m3.norm")
+    # ---- S4: in_proj (mamba3.py:176; Linear, bias=False), gemm v1 ---------
     st.in_proj = gemm_host_rows(st.norm_out, w.w_in, OP_NT, m, dip, dm)
+    var ip_p = _p(st.in_proj)
 
-    # ---- S5 (data-dependent A, clamped) + S6 (dt, NO clamp) per
-    #      (token, head).
+    host_tick(hton, htk, "m3.in_proj")
+    # ---- S5 (data-dependent A, clamped) + S6 (dt, NO clamp) per (token, head)
     var c_dt = dims.col_dt()
     var c_a = dims.col_a()
-    for t in range(m):
-        for hh in range(nh):
-            st.a_out.append(m3_heavy_tail_a(st.in_proj[t * dip + c_a + hh]))
-            var biased = ftz(
-                ftz(st.in_proj[t * dip + c_dt + hh]) + ftz(w.dt_bias[hh])
-            )
-            st.dt_out.append(ftz(identical_softplus(biased)))
+    st.a_out = host_f32_uninit(m * nh)
+    st.dt_out = host_f32_uninit(m * nh)
+    var aout_p = _p(st.a_out)
+    var dtout_p = _p(st.dt_out)
+    var htasks = host_row_tasks(m, 8 * nh)
+    var hchunk = (m + htasks - 1) // htasks
+    def _a_dt_rows(task: Int) {imm ip_p, imm dtb_p, imm aout_p, imm dtout_p, imm m, imm nh, imm dip, imm c_dt, imm c_a, imm hchunk}:
+        for t in range(task * hchunk, min((task + 1) * hchunk, m)):
+            for hh in range(nh):
+                aout_p.unsafe_store(t * nh + hh, m3_heavy_tail_a(ip_p.unsafe_load(t * dip + c_a + hh)))
+                var biased = ftz(
+                    ftz(ip_p.unsafe_load(t * dip + c_dt + hh)) + ftz(dtb_p.unsafe_load(hh))
+                )
+                dtout_p.unsafe_store(t * nh + hh, ftz(identical_softplus(biased)))
+    if htasks <= 1:
+        _a_dt_rows(0)
+    else:
+        host_parallelize(_a_dt_rows, htasks)
 
-    # ---- S21: B/C RMSNorm over d_state per (token, group), G = 1 --
-    #      the S1-S3 machinery at eps 1e-5, learned weight, NO gate, NO
-    #      bias (rms_norm_ref:29-30 at z=None, group_size=None; the bias
-    #      is S12's, added later, per head, in the core).
+    host_tick(hton, htk, "m3.a_dt")
+    # ---- S21: B/C RMSNorm over d_state per (token, group), G = 1, tokens --
     var c_b = dims.col_b()
     var c_c = dims.col_c()
-    for t in range(m):
-        var accb = Float32(0.0)
-        var accc = Float32(0.0)
-        for n in range(n_state):
-            var bj = ftz(st.in_proj[t * dip + c_b + n])
-            accb = ftz(identical_mul_add(bj, bj, accb))
-            var cj = ftz(st.in_proj[t * dip + c_c + n])
-            accc = ftz(identical_mul_add(cj, cj, accc))
-        var rstdb = ftz(
-            identical_rsqrt(
-                ftz(ftz(identical_div(accb, Float32(n_state))) + M3_RMS_EPS)
+    st.bcnorm_b = host_f32_uninit(m * n_state)
+    st.bcnorm_c = host_f32_uninit(m * n_state)
+    var bcb_p = _p(st.bcnorm_b)
+    var bcc_p = _p(st.bcnorm_c)
+    var ntasks = host_row_tasks(m, 8 * n_state)
+    var nchunk = (m + ntasks - 1) // ntasks
+    def _bc_norm_rows(task: Int) {imm ip_p, imm bnormw_p, imm cnormw_p, imm bcb_p, imm bcc_p, imm m, imm dip, imm c_b, imm c_c, imm n_state_v, imm nchunk}:
+        for t in range(task * nchunk, min((task + 1) * nchunk, m)):
+            var accb = Float32(0.0)
+            var accc = Float32(0.0)
+            for n in range(n_state_v):
+                var bj = ftz(ip_p.unsafe_load(t * dip + c_b + n))
+                accb = ftz(identical_mul_add(bj, bj, accb))
+                var cj = ftz(ip_p.unsafe_load(t * dip + c_c + n))
+                accc = ftz(identical_mul_add(cj, cj, accc))
+            var rstdb = ftz(
+                identical_rsqrt(
+                    ftz(ftz(identical_div(accb, Float32(n_state_v))) + M3_RMS_EPS)
+                )
             )
-        )
-        var rstdc = ftz(
-            identical_rsqrt(
-                ftz(ftz(identical_div(accc, Float32(n_state))) + M3_RMS_EPS)
+            var rstdc = ftz(
+                identical_rsqrt(
+                    ftz(ftz(identical_div(accc, Float32(n_state_v))) + M3_RMS_EPS)
+                )
             )
-        )
-        for n in range(n_state):
-            var innerb = ftz(
-                identical_mul(ftz(st.in_proj[t * dip + c_b + n]), rstdb)
-            )
-            st.bcnorm_b.append(ftz(identical_mul(ftz(w.bnorm_w[n]), innerb)))
-            var innerc = ftz(
-                identical_mul(ftz(st.in_proj[t * dip + c_c + n]), rstdc)
-            )
-            st.bcnorm_c.append(ftz(identical_mul(ftz(w.cnorm_w[n]), innerc)))
+            for n in range(n_state_v):
+                var innerb = ftz(
+                    identical_mul(ftz(ip_p.unsafe_load(t * dip + c_b + n)), rstdb)
+                )
+                bcb_p.unsafe_store(t * n_state_v + n, ftz(identical_mul(ftz(bnormw_p.unsafe_load(n)), innerb)))
+                var innerc = ftz(
+                    identical_mul(ftz(ip_p.unsafe_load(t * dip + c_c + n)), rstdc)
+                )
+                bcc_p.unsafe_store(t * n_state_v + n, ftz(identical_mul(ftz(cnormw_p.unsafe_load(n)), innerc)))
+    if ntasks <= 1:
+        _bc_norm_rows(0)
+    else:
+        host_parallelize(_bc_norm_rows, ntasks)
 
+    host_tick(hton, htk, "m3.bc_norm")
     # ---- assemble the WORKING sequence (DEVIATION 832: the last working
-    #      chunk's buffered rows ++ new rows). Copies, not seams. The
-    #      working start is chunk-aligned by 832(i)'s invariant.
+    # chunk's rows first, then this call's tokens) --------------------------
     var q0 = state.buf_len
     var t_work = q0 + l
     st.t_work = t_work
@@ -506,6 +581,12 @@ def mamba3_block_oracle(
     var dt_work = _zeros(b * t_work * nh)
     var sig_work = _zeros(b * t_work * nh)
     var adt_work = _zeros(b * t_work * nh)
+    var rotq_p = _p(rotq_work)
+    var rotk_p = _p(rotk_work)
+    var vw_p = _p(v_work)
+    var dtw_p = _p(dt_work)
+    var sigw_p = _p(sig_work)
+    var adtw_p = _p(adt_work)
     var c_x = dims.col_x()
     for bb in range(b):
         for t in range(q0):
@@ -530,98 +611,128 @@ def mamba3_block_oracle(
                 adt_work[(bb * t_work + t) * nh + hh] = state.buf_adt[
                     (bb * q + t) * nh + hh
                 ]
-        for li in range(l):
+    # this call's tokens: (batch, token) rows over tasks
+    var mtasks = host_row_tasks(m, 2 * nh * p_dim)
+    var mchunk = (m + mtasks - 1) // mtasks
+    def _new_token_rows(task: Int) {imm ip_p, imm dtout_p, imm vw_p, imm dtw_p, imm m, imm l, imm nh, imm dip, imm c_x, imm q0, imm t_work, imm p_dim_v, imm mchunk}:
+        for mm in range(task * mchunk, min((task + 1) * mchunk, m)):
+            var bb = mm // l
+            var li = mm % l
             var t = q0 + li
-            var mm = bb * l + li
             for hh in range(nh):
-                dt_work[(bb * t_work + t) * nh + hh] = st.dt_out[
-                    mm * nh + hh
-                ]
-            for i in range(nh * p_dim):
-                # v = the raw x split (no conv, no activation).
-                v_work[(bb * t_work + t) * nh * p_dim + i] = st.in_proj[
-                    mm * dip + c_x + i
-                ]
+                dtw_p.unsafe_store((bb * t_work + t) * nh + hh, dtout_p.unsafe_load(mm * nh + hh))
+            for i in range(nh * p_dim_v):
+                vw_p.unsafe_store((bb * t_work + t) * nh * p_dim_v + i, ip_p.unsafe_load(mm * dip + c_x + i))
+    if mtasks <= 1:
+        _new_token_rows(0)
+    else:
+        host_parallelize(_new_token_rows, mtasks)
 
-    # ---- S7 (ADT) + S8 (sigma(trap)) for the NEW working rows.
+    host_tick(hton, htk, "m3.working_seq")
+    # ---- S7 (ADT) + S8 (sigma(trap)) for the NEW working rows, tokens -----
     var c_trap = dims.col_trap()
-    for bb in range(b):
-        for li in range(l):
+    st.adt_out = host_f32_uninit(m * nh)
+    st.trap_sigma = host_f32_uninit(m * nh)
+    var adtout_p = _p(st.adt_out)
+    var tsig_p = _p(st.trap_sigma)
+    def _adt_sig_rows(task: Int) {imm ip_p, imm aout_p, imm dtw_p, imm adtw_p, imm sigw_p, imm adtout_p, imm tsig_p, imm m, imm l, imm nh, imm dip, imm c_trap, imm q0, imm t_work, imm hchunk}:
+        for mm in range(task * hchunk, min((task + 1) * hchunk, m)):
+            var bb = mm // l
+            var li = mm % l
             var t = q0 + li
-            var mm = bb * l + li
             for hh in range(nh):
                 var adt = ftz(
                     identical_mul(
-                        ftz(st.a_out[mm * nh + hh]),
-                        ftz(dt_work[(bb * t_work + t) * nh + hh]),
+                        ftz(aout_p.unsafe_load(mm * nh + hh)),
+                        ftz(dtw_p.unsafe_load((bb * t_work + t) * nh + hh)),
                     )
                 )
-                adt_work[(bb * t_work + t) * nh + hh] = adt
-                st.adt_out.append(adt)
+                adtw_p.unsafe_store((bb * t_work + t) * nh + hh, adt)
+                adtout_p.unsafe_store(mm * nh + hh, adt)
                 var sg = ftz(
                     identical_sigmoid(
-                        ftz(st.in_proj[mm * dip + c_trap + hh])
+                        ftz(ip_p.unsafe_load(mm * dip + c_trap + hh))
                     )
                 )
-                sig_work[(bb * t_work + t) * nh + hh] = sg
-                st.trap_sigma.append(sg)
+                sigw_p.unsafe_store((bb * t_work + t) * nh + hh, sg)
+                tsig_p.unsafe_store(mm * nh + hh, sg)
+    if htasks <= 1:
+        _adt_sig_rows(0)
+    else:
+        host_parallelize(_adt_sig_rows, htasks)
 
-    # ---- S9: gamma, beta', scale over ALL working rows. The shifted
-    #      operands past the sequence end are STRUCTURAL +0.0 (contract
-    #      section 3: the last real token's beta' leg belongs to the NEXT
-    #      call -- the trapezoid's seam, not a bug).
+    host_tick(hton, htk, "m3.adt_sigma")
+    # ---- S9: gamma, beta', scale over ALL working rows, (batch, t) rows ----
     var gamma_work = _zeros(b * t_work * nh)
     var betap_work = _zeros(b * t_work * nh)
     var scale_work = _zeros(b * t_work * nh)
-    for bb in range(b):
-        for t in range(t_work):
+    var gam_p = _p(gamma_work)
+    var bet_p = _p(betap_work)
+    var scl_p = _p(scale_work)
+    var wrows = b * t_work
+    var wtasks = host_row_tasks(wrows, 6 * nh)
+    var wchunk = (wrows + wtasks - 1) // wtasks
+    def _gamma_rows(task: Int) {imm dtw_p, imm sigw_p, imm gam_p, imm bet_p, imm scl_p, imm wrows, imm t_work, imm nh, imm wchunk}:
+        for r in range(task * wchunk, min((task + 1) * wchunk, wrows)):
+            var bb = r // t_work
+            var t = r % t_work
             for hh in range(nh):
                 var g = ftz(
                     identical_mul(
-                        ftz(dt_work[(bb * t_work + t) * nh + hh]),
-                        ftz(sig_work[(bb * t_work + t) * nh + hh]),
+                        ftz(dtw_p.unsafe_load((bb * t_work + t) * nh + hh)),
+                        ftz(sigw_p.unsafe_load((bb * t_work + t) * nh + hh)),
                     )
                 )
                 var bp = Float32(0.0)
                 if t + 1 < t_work:
                     bp = ftz(
                         identical_mul(
-                            ftz(dt_work[(bb * t_work + t + 1) * nh + hh]),
+                            ftz(dtw_p.unsafe_load((bb * t_work + t + 1) * nh + hh)),
                             ftz(
                                 Float32(1.0)
                                 - ftz(
-                                    sig_work[
-                                        (bb * t_work + t + 1) * nh + hh
-                                    ]
+                                    sigw_p.unsafe_load((bb * t_work + t + 1) * nh + hh)
                                 )
                             ),
                         )
                     )
-                gamma_work[(bb * t_work + t) * nh + hh] = g
-                betap_work[(bb * t_work + t) * nh + hh] = bp
-                scale_work[(bb * t_work + t) * nh + hh] = ftz(g + bp)
+                gam_p.unsafe_store((bb * t_work + t) * nh + hh, g)
+                bet_p.unsafe_store((bb * t_work + t) * nh + hh, bp)
+                scl_p.unsafe_store((bb * t_work + t) * nh + hh, ftz(g + bp))
+    if wtasks <= 1:
+        _gamma_rows(0)
+    else:
+        host_parallelize(_gamma_rows, wtasks)
+    st.trap_scale = host_f32_uninit(m * nh)
     for bb in range(b):
         for li in range(l):
             for hh in range(nh):
-                st.trap_scale.append(
-                    scale_work[(bb * t_work + q0 + li) * nh + hh]
-                )
+                st.trap_scale[(bb * l + li) * nh + hh] = scale_work[(bb * t_work + q0 + li) * nh + hh]
 
-    # ---- S10: the angle recurrence, SERIAL per token, mod 2pi EVERY
-    #      step (DEVIATION 829), theta_-1 = the carried angle state.
+    host_tick(hton, htk, "m3.gamma_scale")
+    # ---- S10: the angle recurrence, SERIAL per token, mod 2pi EVERY step;
+    # (batch, head) rows over tasks, each row its own r_ang chains ----------
     var c_ang = dims.col_angle()
     st.angle_theta = _zeros(m * nh * r_ang)
     st.theta_last = _zeros(b * nh * r_ang)
-    for bb in range(b):
-        for hh in range(nh):
-            for r in range(r_ang):
-                var run = ftz(state.theta[(bb * nh + hh) * r_ang + r])
+    var ang_p = _p(st.angle_theta)
+    var thl_p = _p(st.theta_last)
+    var stheta_p = _p(state.theta)
+    var bh_rows = b * nh
+    var atasks = host_row_tasks(bh_rows, 24 * l * r_ang)
+    var achunk = (bh_rows + atasks - 1) // atasks
+    def _angle_rows(task: Int) {imm ip_p, imm dtw_p, imm ang_p, imm thl_p, imm stheta_p, imm bh_rows, imm l, imm nh, imm dip, imm c_ang, imm q0, imm t_work, imm r_ang_v, imm achunk}:
+        for r0 in range(task * achunk, min((task + 1) * achunk, bh_rows)):
+            var bb = r0 // nh
+            var hh = r0 % nh
+            for r in range(r_ang_v):
+                var run = ftz(stheta_p.unsafe_load((bb * nh + hh) * r_ang_v + r))
                 for li in range(l):
                     var mm = bb * l + li
                     var a = ftz(
                         identical_mul(
                             identical_tanh(
-                                ftz(st.in_proj[mm * dip + c_ang + r])
+                                ftz(ip_p.unsafe_load(mm * dip + c_ang + r))
                             ),
                             M3_PI,
                         )
@@ -630,195 +741,239 @@ def mamba3_block_oracle(
                         identical_mul(
                             a,
                             ftz(
-                                dt_work[
-                                    (bb * t_work + q0 + li) * nh + hh
-                                ]
+                                dtw_p.unsafe_load((bb * t_work + q0 + li) * nh + hh)
                             ),
                         )
                     )
                     run = m3_mod_2pi(ftz(run + inc))
-                    st.angle_theta[(mm * nh + hh) * r_ang + r] = run
-                state.theta[(bb * nh + hh) * r_ang + r] = run
-                st.theta_last[(bb * nh + hh) * r_ang + r] = run
+                    ang_p.unsafe_store((mm * nh + hh) * r_ang_v + r, run)
+                stheta_p.unsafe_store((bb * nh + hh) * r_ang_v + r, run)
+                thl_p.unsafe_store((bb * nh + hh) * r_ang_v + r, run)
+    if atasks <= 1:
+        _angle_rows(0)
+    else:
+        host_parallelize(_angle_rows, atasks)
 
-    # ---- S12 (bias AFTER the norm) + S11/S13 (portable trig pair,
-    #      interleaved pairs, UNFUSED; pairs >= R structurally unrotated,
-    #      DEVIATION 828) for the NEW rows. B/C are broadcast to heads by
-    #      COPY; the bias and the rotation are per head.
-    for bb in range(b):
-        for li in range(l):
+    host_tick(hton, htk, "m3.angle")
+    # ---- S12 (bias AFTER the norm) + S11/S13 (portable trig pair, the
+    # rotation), tokens over tasks ------------------------------------------
+    var rtasks = host_row_tasks(m, 24 * nh * n_state)
+    var rchunk = (m + rtasks - 1) // rtasks
+    def _rotation_rows(task: Int) {imm bcb_p, imm bcc_p, imm bbias_p, imm cbias_p, imm ang_p, imm rotq_p, imm rotk_p, imm m, imm l, imm nh, imm q0, imm t_work, imm n_state_v, imm r_ang_v, imm rchunk}:
+        for mm in range(task * rchunk, min((task + 1) * rchunk, m)):
+            var bb = mm // l
+            var li = mm % l
             var t = q0 + li
-            var mm = bb * l + li
             for hh in range(nh):
-                for j in range(n_state // 2):
+                for j in range(n_state_v // 2):
                     var e0 = 2 * j
                     var e1 = 2 * j + 1
                     var q0v = ftz(
-                        ftz(st.bcnorm_c[mm * n_state + e0])
-                        + ftz(w.c_bias[hh * n_state + e0])
+                        ftz(bcc_p.unsafe_load(mm * n_state_v + e0))
+                        + ftz(cbias_p.unsafe_load(hh * n_state_v + e0))
                     )
                     var q1v = ftz(
-                        ftz(st.bcnorm_c[mm * n_state + e1])
-                        + ftz(w.c_bias[hh * n_state + e1])
+                        ftz(bcc_p.unsafe_load(mm * n_state_v + e1))
+                        + ftz(cbias_p.unsafe_load(hh * n_state_v + e1))
                     )
                     var k0v = ftz(
-                        ftz(st.bcnorm_b[mm * n_state + e0])
-                        + ftz(w.b_bias[hh * n_state + e0])
+                        ftz(bcb_p.unsafe_load(mm * n_state_v + e0))
+                        + ftz(bbias_p.unsafe_load(hh * n_state_v + e0))
                     )
                     var k1v = ftz(
-                        ftz(st.bcnorm_b[mm * n_state + e1])
-                        + ftz(w.b_bias[hh * n_state + e1])
+                        ftz(bcb_p.unsafe_load(mm * n_state_v + e1))
+                        + ftz(bbias_p.unsafe_load(hh * n_state_v + e1))
                     )
-                    var base = ((bb * t_work + t) * nh + hh) * n_state
-                    if j < r_ang:
+                    var base = ((bb * t_work + t) * nh + hh) * n_state_v
+                    if j < r_ang_v:
                         var th = ftz(
-                            st.angle_theta[(mm * nh + hh) * r_ang + j]
+                            ang_p.unsafe_load((mm * nh + hh) * r_ang_v + j)
                         )
                         var cv = ftz(portable_cosf(th))
                         var sv = ftz(portable_sinf(th))
-                        rotq_work[base + e0] = ftz(
+                        rotq_p.unsafe_store(base + e0, ftz(
                             ftz(identical_mul(q0v, cv))
                             - ftz(identical_mul(q1v, sv))
-                        )
-                        rotq_work[base + e1] = ftz(
+                        ))
+                        rotq_p.unsafe_store(base + e1, ftz(
                             ftz(identical_mul(q0v, sv))
                             + ftz(identical_mul(q1v, cv))
-                        )
-                        rotk_work[base + e0] = ftz(
+                        ))
+                        rotk_p.unsafe_store(base + e0, ftz(
                             ftz(identical_mul(k0v, cv))
                             - ftz(identical_mul(k1v, sv))
-                        )
-                        rotk_work[base + e1] = ftz(
+                        ))
+                        rotk_p.unsafe_store(base + e1, ftz(
                             ftz(identical_mul(k0v, sv))
                             + ftz(identical_mul(k1v, cv))
-                        )
+                        ))
                     else:
-                        # STRUCTURAL identity: never computed trig
-                        # (cos(+0.0)=1, sin(+0.0)=+0.0 agree bit for bit
-                        # with the references' pad spellings, DEV 828).
-                        rotq_work[base + e0] = q0v
-                        rotq_work[base + e1] = q1v
-                        rotk_work[base + e0] = k0v
-                        rotk_work[base + e1] = k1v
-
-    # rot.q / rot.k stages: the NEW-token slices (copies).
-    for bb in range(b):
-        for li in range(l):
+                        rotq_p.unsafe_store(base + e0, q0v)
+                        rotq_p.unsafe_store(base + e1, q1v)
+                        rotk_p.unsafe_store(base + e0, k0v)
+                        rotk_p.unsafe_store(base + e1, k1v)
+    if rtasks <= 1:
+        _rotation_rows(0)
+    else:
+        host_parallelize(_rotation_rows, rtasks)
+    st.rot_q = host_f32_uninit(m * nh * n_state)
+    st.rot_k = host_f32_uninit(m * nh * n_state)
+    var rotq_out_p = _p(st.rot_q)
+    var rotk_out_p = _p(st.rot_k)
+    def _rot_copy_rows(task: Int) {imm rotq_p, imm rotk_p, imm rotq_out_p, imm rotk_out_p, imm m, imm l, imm nh, imm q0, imm t_work, imm n_state_v, imm mchunk}:
+        for mm in range(task * mchunk, min((task + 1) * mchunk, m)):
+            var bb = mm // l
+            var li = mm % l
             var t = q0 + li
-            for i in range(nh * n_state):
-                st.rot_q.append(
-                    rotq_work[(bb * t_work + t) * nh * n_state + i]
-                )
-                st.rot_k.append(
-                    rotk_work[(bb * t_work + t) * nh * n_state + i]
-                )
+            for i in range(nh * n_state_v):
+                rotq_out_p.unsafe_store(mm * nh * n_state_v + i, rotq_p.unsafe_load((bb * t_work + t) * nh * n_state_v + i))
+                rotk_out_p.unsafe_store(mm * nh * n_state_v + i, rotk_p.unsafe_load((bb * t_work + t) * nh * n_state_v + i))
+    if mtasks <= 1:
+        _rot_copy_rows(0)
+    else:
+        host_parallelize(_rot_copy_rows, mtasks)
 
+    host_tick(hton, htk, "m3.rotation")
     # ---- S14: pre-rotation QK dot, gemm v1 cell over n (k = 128, ONE
-    #      serial ascending leaf), then times gamma (DEVIATION 830).
-    for bb in range(b):
-        for li in range(l):
-            var mm = bb * l + li
+    # leaf), gamma-scaled; tokens over tasks ---------------------------------
+    st.qkdot_out = host_f32_uninit(m * nh)
+    var qkd_p = _p(st.qkdot_out)
+    def _qkdot_rows(task: Int) {imm bcb_p, imm bcc_p, imm bbias_p, imm cbias_p, imm gam_p, imm qkd_p, imm m, imm l, imm nh, imm q0, imm t_work, imm n_state_v, imm rchunk}:
+        for mm in range(task * rchunk, min((task + 1) * rchunk, m)):
+            var bb = mm // l
+            var li = mm % l
             for hh in range(nh):
                 var acc = Float32(0.0)
-                for n in range(n_state):
+                for n in range(n_state_v):
                     var qv = ftz(
-                        ftz(st.bcnorm_c[mm * n_state + n])
-                        + ftz(w.c_bias[hh * n_state + n])
+                        ftz(bcc_p.unsafe_load(mm * n_state_v + n))
+                        + ftz(cbias_p.unsafe_load(hh * n_state_v + n))
                     )
                     var kv = ftz(
-                        ftz(st.bcnorm_b[mm * n_state + n])
-                        + ftz(w.b_bias[hh * n_state + n])
+                        ftz(bcb_p.unsafe_load(mm * n_state_v + n))
+                        + ftz(bbias_p.unsafe_load(hh * n_state_v + n))
                     )
                     acc = ftz(identical_mul_add(qv, kv, acc))
-                st.qkdot_out.append(
-                    ftz(
-                        identical_mul(
-                            ftz(acc),
-                            gamma_work[(bb * t_work + q0 + li) * nh + hh],
-                        )
+                qkd_p.unsafe_store(mm * nh + hh, ftz(
+                    identical_mul(
+                        ftz(acc),
+                        gam_p.unsafe_load((bb * t_work + q0 + li) * nh + hh),
                     )
-                )
+                ))
+    if rtasks <= 1:
+        _qkdot_rows(0)
+    else:
+        host_parallelize(_qkdot_rows, rtasks)
 
-    # ---- S15: K scaling over ALL working rows (the carried k-state and
-    #      the k_last report are PRE-scale; fwd:337-344).
+    host_tick(hton, htk, "m3.qkdot")
+    # ---- S15: K scaling over ALL working rows, (batch, t) rows over tasks -
     var kscale_work = _zeros(b * t_work * nh * n_state)
-    for bb in range(b):
-        for t in range(t_work):
+    var ksw_p = _p(kscale_work)
+    def _kscale_rows(task: Int) {imm rotk_p, imm scl_p, imm ksw_p, imm wrows, imm t_work, imm nh, imm n_state_v, imm wchunk}:
+        for r in range(task * wchunk, min((task + 1) * wchunk, wrows)):
+            var bb = r // t_work
+            var t = r % t_work
             for hh in range(nh):
-                for n in range(n_state):
-                    var idx = ((bb * t_work + t) * nh + hh) * n_state + n
-                    kscale_work[idx] = ftz(
+                for n in range(n_state_v):
+                    var idx = ((bb * t_work + t) * nh + hh) * n_state_v + n
+                    ksw_p.unsafe_store(idx, ftz(
                         identical_mul(
-                            ftz(rotk_work[idx]),
-                            scale_work[(bb * t_work + t) * nh + hh],
+                            ftz(rotk_p.unsafe_load(idx)),
+                            scl_p.unsafe_load((bb * t_work + t) * nh + hh),
                         )
-                    )
-    for bb in range(b):
-        for li in range(l):
+                    ))
+    if wtasks <= 1:
+        _kscale_rows(0)
+    else:
+        host_parallelize(_kscale_rows, wtasks)
+    st.kscale_out = host_f32_uninit(m * nh * n_state)
+    var kso_p = _p(st.kscale_out)
+    def _kscale_copy_rows(task: Int) {imm ksw_p, imm kso_p, imm m, imm l, imm nh, imm q0, imm t_work, imm n_state_v, imm mchunk}:
+        for mm in range(task * mchunk, min((task + 1) * mchunk, m)):
+            var bb = mm // l
+            var li = mm % l
             var t = q0 + li
-            for i in range(nh * n_state):
-                st.kscale_out.append(
-                    kscale_work[(bb * t_work + t) * nh * n_state + i]
-                )
+            for i in range(nh * n_state_v):
+                kso_p.unsafe_store(mm * nh * n_state_v + i, ksw_p.unsafe_load((bb * t_work + t) * nh * n_state_v + i))
+    if mtasks <= 1:
+        _kscale_copy_rows(0)
+    else:
+        host_parallelize(_kscale_copy_rows, mtasks)
 
-    # ---- mamba2 S11 inherited: per-chunk serial ascending cumsum of
-    #      ADT; the chunk boundary is a hard reset; padded positions COPY
-    #      the last real value.
+    host_tick(hton, htk, "m3.kscale")
+    # ---- mamba2 S11 inherited: per-chunk serial ascending cumsum of ADT,
+    # (batch, head, chunk) rows over tasks -----------------------------------
     st.dacs_out = _zeros(b * nh * nc * q)
-    for bb in range(b):
-        for hh in range(nh):
-            for c in range(nc):
-                var c0 = c * q
-                var real = t_work - c0
-                if real > q:
-                    real = q
-                var run = Float32(0.0)
-                for i in range(q):
-                    if i < real:
-                        var v = ftz(
-                            adt_work[(bb * t_work + c0 + i) * nh + hh]
-                        )
-                        if i == 0:
-                            run = v
-                        else:
-                            run = ftz(run + v)
-                    st.dacs_out[((bb * nh + hh) * nc + c) * q + i] = run
-
-    # ---- S16's decay: L = exp(segsum), STRICT triangle -- +0.0 ON and
-    #      above the diagonal, STRUCTURAL (DEVIATIONS 782 inherited +
-    #      830's strict mask). Column-serial rebuild.
-    st.seg_l = _zeros(b * nc * nh * q * q)
-    for bb in range(b):
-        for c in range(nc):
-            var c0 = c * q
+    var dacs_p = _p(st.dacs_out)
+    var hc_rows = b * nh * nc
+    var ctasks = host_row_tasks(hc_rows, 2 * q)
+    var cchunk = (hc_rows + ctasks - 1) // ctasks
+    def _cumsum_rows(task: Int) {imm adtw_p, imm dacs_p, imm hc_rows, imm nh, imm nc, imm t_work, imm q_v, imm cchunk}:
+        for r in range(task * cchunk, min((task + 1) * cchunk, hc_rows)):
+            var bb = r // (nh * nc)
+            var hh = (r // nc) % nh
+            var c = r % nc
+            var c0 = c * q_v
             var real = t_work - c0
-            if real > q:
-                real = q
-            for hh in range(nh):
-                var lbase = (((bb * nc + c) * nh + hh) * q) * q
-                for j in range(q):
-                    var acc = Float32(0.0)
-                    for i in range(j + 1, q):
-                        if i < real:
-                            acc = ftz(
-                                acc
-                                + ftz(
-                                    adt_work[
-                                        (bb * t_work + c0 + i) * nh + hh
-                                    ]
+            if real > q_v:
+                real = q_v
+            var run = Float32(0.0)
+            for i in range(q_v):
+                if i < real:
+                    var v = ftz(
+                        adtw_p.unsafe_load((bb * t_work + c0 + i) * nh + hh)
+                    )
+                    if i == 0:
+                        run = v
+                    else:
+                        run = ftz(run + v)
+                dacs_p.unsafe_store(((bb * nh + hh) * nc + c) * q_v + i, run)
+    if ctasks <= 1:
+        _cumsum_rows(0)
+    else:
+        host_parallelize(_cumsum_rows, ctasks)
+
+    host_tick(hton, htk, "m3.cumsum")
+    # ---- S16's decay: L = exp(segsum), STRICT triangle -- +0.0 ON and
+    # above the diagonal; (batch, chunk, head) rows over tasks -------------
+    st.seg_l = _zeros(b * nc * nh * q * q)
+    var segl_p = _p(st.seg_l)
+    var ch_rows = b * nc * nh
+    var dtasks = host_row_tasks(ch_rows, 3 * q * q)
+    var dchunk = (ch_rows + dtasks - 1) // dtasks
+    def _decay_rows(task: Int) {imm adtw_p, imm segl_p, imm ch_rows, imm nh, imm nc, imm t_work, imm q_v, imm dchunk}:
+        for r in range(task * dchunk, min((task + 1) * dchunk, ch_rows)):
+            var bb = r // (nc * nh)
+            var c = (r // nh) % nc
+            var hh = r % nh
+            var c0 = c * q_v
+            var real = t_work - c0
+            if real > q_v:
+                real = q_v
+            var lbase = (((bb * nc + c) * nh + hh) * q_v) * q_v
+            for j in range(q_v):
+                var acc = Float32(0.0)
+                for i in range(j + 1, q_v):
+                    if i < real:
+                        acc = ftz(
+                            acc
+                            + ftz(
+                                adtw_p.unsafe_load(
+                                    (bb * t_work + c0 + i) * nh + hh
                                 )
                             )
-                        st.seg_l[lbase + i * q + j] = ftz(
-                            identical_exp(acc)
                         )
-                    # i <= j (diagonal included): stays the +0.0 fill --
-                    # STRUCTURAL, never computed.
+                    segl_p.unsafe_store(lbase + i * q_v + j, ftz(
+                        identical_exp(acc)
+                    ))
+    if dtasks <= 1:
+        _decay_rows(0)
+    else:
+        host_parallelize(_decay_rows, dtasks)
 
+    host_tick(hton, htk, "m3.decay")
     # ---- S22: the pending Input_States correction, the NORMATIVE ref's
-    #      scalar-first association (:266-267): c = identical_mul(dt_1,
-    #      ftz(1 - sigma_1)); t = identical_mul(identical_mul(v_st, k_st), c);
-    #      h0 = ftz(h_in + t). dt_1/sigma_1 are the call's FIRST token's
-    #      (a fresh call by set_input_states' guard, so q0 = 0).
+    # `set_input_states` arm (unchanged, on the calling thread) -------------
     if state.pending:
         for bb in range(b):
             for hh in range(nh):
@@ -863,202 +1018,229 @@ def mamba3_block_oracle(
         for i in range(len(state.pend_v)):
             state.pend_v[i] = 0.0
 
+    # The per-chunk gemm calls inside the two task stages below stay
+    # single-task only while their work is under GHR_SERIAL_FMAS (no task
+    # starts a parallel region); otherwise those stages run on one task.
+    var chunk_gemms_serial = (p_dim * n_state * q < GHR_SERIAL_FMAS
+                              and q * q * n_state < GHR_SERIAL_FMAS
+                              and q * p_dim * q < GHR_SERIAL_FMAS
+                              and q * p_dim * n_state < GHR_SERIAL_FMAS)
+
+    host_tick(hton, htk, "m3.pending")
     # ---- S20: the SERIAL inter-chunk pass. pass_states records the
-    #      state ENTERING each working chunk; the carried h becomes the
-    #      state entering the LAST working chunk (DEVIATION 832(i): the
-    #      sealed boundary); h_last is the state after the FINAL padded
-    #      chunk (the report).
+    # entering state of every chunk; (batch, head) rows over tasks ---------
     st.pass_states = _zeros(b * nc * nh * p_dim * n_state)
     st.h_last = _zeros(b * nh * p_dim * n_state)
-    for bb in range(b):
-        for hh in range(nh):
+    var pass_p = _p(st.pass_states)
+    var hlast_p = _p(st.h_last)
+    var sh_p = _p(state.h)
+    var vwork_p = _p(v_work)
+    var ptasks = host_row_tasks(bh_rows, 4 * nc * q * p_dim * n_state)
+    if not chunk_gemms_serial:
+        ptasks = 1
+    var pchunk = (bh_rows + ptasks - 1) // ptasks
+    var err_flag = _zeros(1)
+    var err_p = _p(err_flag)
+    def _inter_chunk_rows(task: Int) {imm dacs_p, imm vwork_p, imm ksw_p, imm pass_p, imm hlast_p, imm sh_p, imm err_p, imm bh_rows, imm nh, imm nc, imm t_work, imm q_v, imm p_dim_v, imm n_state_v, imm pchunk}:
+        for r0 in range(task * pchunk, min((task + 1) * pchunk, bh_rows)):
+            var bb = r0 // nh
+            var hh = r0 % nh
             var h_run = List[Float32]()
-            for i in range(p_dim * n_state):
+            for i in range(p_dim_v * n_state_v):
                 h_run.append(
-                    state.h[((bb * nh + hh) * p_dim) * n_state + i]
+                    sh_p.unsafe_load(((bb * nh + hh) * p_dim_v) * n_state_v + i)
                 )
             var h_sealed = h_run.copy()
             for c in range(nc):
-                var pbase = (((bb * nc + c) * nh + hh) * p_dim) * n_state
-                for i in range(p_dim * n_state):
-                    st.pass_states[pbase + i] = h_run[i]
+                var pbase = (((bb * nc + c) * nh + hh) * p_dim_v) * n_state_v
+                for i in range(p_dim_v * n_state_v):
+                    pass_p.unsafe_store(pbase + i, h_run[i])
                 if c == nc - 1:
-                    for i in range(p_dim * n_state):
+                    for i in range(p_dim_v * n_state_v):
                         h_sealed[i] = h_run[i]
-                # increment = (v ⊙ exp(da_cs_rev))^T . k_scaled, a gemm
-                # v1 cell at k = Q = 64 (ONE leaf), output [P, N].
-                var c0 = c * q
+                var c0 = c * q_v
                 var real = t_work - c0
-                if real > q:
-                    real = q
+                if real > q_v:
+                    real = q_v
                 var dl = ftz(
-                    st.dacs_out[((bb * nh + hh) * nc + c) * q + (q - 1)]
+                    dacs_p.unsafe_load(((bb * nh + hh) * nc + c) * q_v + (q_v - 1))
                 )
-                var vs = _zeros(q * p_dim)
-                var ks = _zeros(q * n_state)
+                var vs = _zeros(q_v * p_dim_v)
+                var ks = _zeros(q_v * n_state_v)
                 for i in range(real):
                     var drev = ftz(
                         dl
                         - ftz(
-                            st.dacs_out[((bb * nh + hh) * nc + c) * q + i]
+                            dacs_p.unsafe_load(((bb * nh + hh) * nc + c) * q_v + i)
                         )
                     )
                     var e = ftz(identical_exp(drev))
-                    for p in range(p_dim):
-                        vs[i * p_dim + p] = ftz(
+                    for p in range(p_dim_v):
+                        vs[i * p_dim_v + p] = ftz(
                             identical_mul(
                                 ftz(
-                                    v_work[
+                                    vwork_p.unsafe_load(
                                         ((bb * t_work + c0 + i) * nh + hh)
-                                        * p_dim
+                                        * p_dim_v
                                         + p
-                                    ]
+                                    )
                                 ),
                                 e,
                             )
                         )
-                    for n in range(n_state):
-                        ks[i * n_state + n] = kscale_work[
-                            ((bb * t_work + c0 + i) * nh + hh) * n_state
+                    for n in range(n_state_v):
+                        ks[i * n_state_v + n] = ksw_p.unsafe_load(
+                            ((bb * t_work + c0 + i) * nh + hh) * n_state_v
                             + n
-                        ]
-                    # padded rows: v is exact +0.0, so the fold sees
-                    # exact zeros (contract section 3).
-                var inc = gemm_host_rows_right_zero_padded(
-                    vs, ks, OP_TN, p_dim, n_state, q, real
-                )
+                        )
+                var inc = List[Float32]()
+                try:
+                    inc = gemm_host_rows_right_zero_padded(
+                        vs, ks, OP_TN, p_dim_v, n_state_v, q_v, real
+                    )
+                except:
+                    # The shapes are the oracle's own, so this cannot
+                    # fire; if it ever does, the caller raises after the
+                    # region instead of this task swallowing it.
+                    err_p.unsafe_store(0, Float32(1.0))
+                    return
                 var scale_c = ftz(identical_exp(dl))
-                for i in range(p_dim * n_state):
+                for i in range(p_dim_v * n_state_v):
                     h_run[i] = ftz(
                         identical_mul_add(
                             scale_c, ftz(h_run[i]), ftz(inc[i])
                         )
                     )
-            for i in range(p_dim * n_state):
-                st.h_last[((bb * nh + hh) * p_dim) * n_state + i] = h_run[i]
-                state.h[((bb * nh + hh) * p_dim) * n_state + i] = h_sealed[
-                    i
-                ]
+            for i in range(p_dim_v * n_state_v):
+                hlast_p.unsafe_store(((bb * nh + hh) * p_dim_v) * n_state_v + i, h_run[i])
+                sh_p.unsafe_store(((bb * nh + hh) * p_dim_v) * n_state_v + i, h_sealed[i])
+    if ptasks <= 1:
+        _inter_chunk_rows(0)
+    else:
+        host_parallelize(_inter_chunk_rows, ptasks)
+    if err_flag[0] != Float32(0.0):
+        raise Error("mamba3_block_oracle: the inter-chunk product refused its operands")
 
-    # ---- S16 (intra-chunk attention) + S17 (state read-out) + S18
-    #      (diagonal + D, ONE add) + S19 (Z gate) for the NEW rows.
-    #      DEVIATION 833: y = ftz(ystate + yintra), ystate the left
-    #      operand (the kernel's accumulator order, fwd:406-418).
+    host_tick(hton, htk, "m3.inter_chunk")
+    # ---- S16 (intra-chunk attention) + S17 (state read-out) + S18 (skip)
+    # + S19 (gate); (batch, chunk, head) rows over tasks ---------------------
     st.yintra_out = _zeros(m * nh * p_dim)
     st.ystate_out = _zeros(m * nh * p_dim)
     st.skip_out = _zeros(m * nh * p_dim)
     st.gate_out = _zeros(m * nh * p_dim)
+    var yintra_p = _p(st.yintra_out)
+    var ystate_p = _p(st.ystate_out)
+    var skip_p = _p(st.skip_out)
+    var gate_p = _p(st.gate_out)
+    var rotqw_p = _p(rotq_work)
     var c_z = dims.col_z()
-    for bb in range(b):
-        for c in range(nc):
-            var c0 = c * q
+    var ktasks = host_row_tasks(ch_rows, 4 * q * q * n_state)
+    if not chunk_gemms_serial:
+        ktasks = 1
+    var kchunk = (ch_rows + ktasks - 1) // ktasks
+    def _chunk_rows(task: Int) {imm rotqw_p, imm ksw_p, imm vwork_p, imm segl_p, imm pass_p, imm dacs_p, imm qkd_p, imm ip_p, imm dskip_p, imm yintra_p, imm ystate_p, imm skip_p, imm gate_p, imm ch_rows, imm l, imm nh, imm nc, imm dip, imm c_z, imm q0, imm t_work, imm q_v, imm p_dim_v, imm n_state_v, imm kchunk}:
+        for r in range(task * kchunk, min((task + 1) * kchunk, ch_rows)):
+            var bb = r // (nc * nh)
+            var c = (r // nh) % nc
+            var hh = r % nh
+            var c0 = c * q_v
             var real = t_work - c0
-            if real > q:
-                real = q
-            for hh in range(nh):
-                # chunk matrices for this (b, c, h): rotated q rows,
-                # scaled k rows, raw v rows (padded rows exact +0.0).
-                var qmat = _zeros(q * n_state)
-                var kmat = _zeros(q * n_state)
-                var vmat = _zeros(q * p_dim)
-                for i in range(real):
-                    for n in range(n_state):
-                        qmat[i * n_state + n] = rotq_work[
-                            ((bb * t_work + c0 + i) * nh + hh) * n_state
-                            + n
-                        ]
-                        kmat[i * n_state + n] = kscale_work[
-                            ((bb * t_work + c0 + i) * nh + hh) * n_state
-                            + n
-                        ]
-                    for p in range(p_dim):
-                        vmat[i * p_dim + p] = v_work[
-                            ((bb * t_work + c0 + i) * nh + hh) * p_dim + p
-                        ]
-                # s = q_rot . k_scaled^T, gemm v1 cells over n (k = 128);
-                # only the strict triangle is USED (j < i); M's j >= i
-                # entries are STRUCTURAL +0.0 (the -inf mask never
-                # exists; the diagonal is DEVIATION 830's, moved to
-                # S14/S18).
-                # Padded output rows are never consumed. Keep the logical
-                # columns and contraction unchanged, but produce only the
-                # real row prefix.
-                var smat = gemm_host_rows(
-                    qmat, kmat, OP_NT, real, q, n_state
-                )
-                var lbase = (((bb * nc + c) * nh + hh) * q) * q
-                var m_mat = _zeros(q * q)
-                for i in range(real):
-                    for j in range(i):
-                        m_mat[i * q + j] = ftz(
-                            identical_mul(
-                                ftz(smat[i * q + j]),
-                                ftz(st.seg_l[lbase + i * q + j]),
-                            )
+            if real > q_v:
+                real = q_v
+            var qmat = _zeros(q_v * n_state_v)
+            var kmat = _zeros(q_v * n_state_v)
+            var vmat = _zeros(q_v * p_dim_v)
+            for i in range(real):
+                for n in range(n_state_v):
+                    qmat[i * n_state_v + n] = rotqw_p.unsafe_load(
+                        ((bb * t_work + c0 + i) * nh + hh) * n_state_v
+                        + n
+                    )
+                    kmat[i * n_state_v + n] = ksw_p.unsafe_load(
+                        ((bb * t_work + c0 + i) * nh + hh) * n_state_v
+                        + n
+                    )
+                for p in range(p_dim_v):
+                    vmat[i * p_dim_v + p] = vwork_p.unsafe_load(
+                        ((bb * t_work + c0 + i) * nh + hh) * p_dim_v + p
+                    )
+            var smat = gemm_host_rows(
+                qmat, kmat, OP_NT, real, q_v, n_state_v
+            )
+            var lbase = (((bb * nc + c) * nh + hh) * q_v) * q_v
+            var m_mat = _zeros(q_v * q_v)
+            for i in range(real):
+                for j in range(i):
+                    m_mat[i * q_v + j] = ftz(
+                        identical_mul(
+                            ftz(smat[i * q_v + j]),
+                            ftz(segl_p.unsafe_load(lbase + i * q_v + j)),
                         )
-                var yint = gemm_host_rows(
-                    m_mat, vmat, OP_NN, real, p_dim, q
-                )
-                # state read-out: (q_rot . h_entering^T) then * exp(da_cs)
-                var h_in = _zeros(p_dim * n_state)
-                var pbase = (((bb * nc + c) * nh + hh) * p_dim) * n_state
-                for i in range(p_dim * n_state):
-                    h_in[i] = st.pass_states[pbase + i]
-                var ch = gemm_host_rows(
-                    qmat, h_in, OP_NT, real, p_dim, n_state
-                )
-                for i in range(real):
-                    var t = c0 + i
-                    if t < q0:
-                        continue  # buffered rows re-emit no outputs
-                    var li = t - q0
-                    var mm = bb * l + li
-                    var e_i = ftz(
-                        identical_exp(
-                            ftz(
-                                st.dacs_out[
-                                    ((bb * nh + hh) * nc + c) * q + i
-                                ]
+                    )
+            var yint = gemm_host_rows(
+                m_mat, vmat, OP_NN, real, p_dim_v, q_v
+            )
+            var h_in = _zeros(p_dim_v * n_state_v)
+            var pbase = (((bb * nc + c) * nh + hh) * p_dim_v) * n_state_v
+            for i in range(p_dim_v * n_state_v):
+                h_in[i] = pass_p.unsafe_load(pbase + i)
+            var ch = gemm_host_rows(
+                qmat, h_in, OP_NT, real, p_dim_v, n_state_v
+            )
+            for i in range(real):
+                var t = c0 + i
+                if t < q0:
+                    continue  # buffered rows re-emit no outputs
+                var li = t - q0
+                var mm = bb * l + li
+                var e_i = ftz(
+                    identical_exp(
+                        ftz(
+                            dacs_p.unsafe_load(
+                                ((bb * nh + hh) * nc + c) * q_v + i
                             )
                         )
                     )
-                    for p in range(p_dim):
-                        var yi = yint[i * p_dim + p]
-                        var ys = ftz(
-                            identical_mul(ftz(ch[i * p_dim + p]), e_i)
+                )
+                for p in range(p_dim_v):
+                    var yi = yint[i * p_dim_v + p]
+                    var ys = ftz(
+                        identical_mul(ftz(ch[i * p_dim_v + p]), e_i)
+                    )
+                    yintra_p.unsafe_store((mm * nh + hh) * p_dim_v + p, yi)
+                    ystate_p.unsafe_store((mm * nh + hh) * p_dim_v + p, ys)
+                    var y0 = ftz(ys + yi)
+                    var tv = ftz(
+                        ftz(dskip_p.unsafe_load(hh))
+                        + qkd_p.unsafe_load(mm * nh + hh)
+                    )
+                    var pv = ftz(
+                        identical_mul(
+                            tv,
+                            ftz(
+                                vwork_p.unsafe_load(
+                                    ((bb * t_work + t) * nh + hh)
+                                    * p_dim_v
+                                    + p
+                                )
+                            ),
                         )
-                        st.yintra_out[(mm * nh + hh) * p_dim + p] = yi
-                        st.ystate_out[(mm * nh + hh) * p_dim + p] = ys
-                        # DEVIATION 833's ONE add, then S18's one add.
-                        var y0 = ftz(ys + yi)
-                        var tv = ftz(
-                            ftz(w.d_skip[hh])
-                            + st.qkdot_out[mm * nh + hh]
-                        )
-                        var pv = ftz(
-                            identical_mul(
-                                tv,
-                                ftz(
-                                    v_work[
-                                        ((bb * t_work + t) * nh + hh)
-                                        * p_dim
-                                        + p
-                                    ]
-                                ),
-                            )
-                        )
-                        var sk = ftz(y0 + pv)
-                        st.skip_out[(mm * nh + hh) * p_dim + p] = sk
-                        # S19: the ONE-division silu (mamba1 744).
-                        var zv = ftz(
-                            st.in_proj[mm * dip + c_z + hh * p_dim + p]
-                        )
-                        st.gate_out[(mm * nh + hh) * p_dim + p] = ftz(
-                            identical_mul(ftz(sk), ftz(identical_silu(zv)))
-                        )
+                    )
+                    var sk = ftz(y0 + pv)
+                    skip_p.unsafe_store((mm * nh + hh) * p_dim_v + p, sk)
+                    var zv = ftz(
+                        ip_p.unsafe_load(mm * dip + c_z + hh * p_dim_v + p)
+                    )
+                    gate_p.unsafe_store((mm * nh + hh) * p_dim_v + p, ftz(
+                        identical_mul(ftz(sk), ftz(identical_silu(zv)))
+                    ))
+    if ktasks <= 1:
+        _chunk_rows(0)
+    else:
+        host_parallelize(_chunk_rows, ktasks)
 
-    # ---- reports: k_last (post-bias post-rotation PRE-scale), v_last
-    #      (raw) -- the last real working row (fwd wrapper :709-729).
+    host_tick(hton, htk, "m3.chunk_attention")
+    # ---- reports: k_last (post-bias post-rotation PRE-scale), v_last -----
     st.k_last = _zeros(b * nh * n_state)
     st.v_last = _zeros(b * nh * p_dim)
     for bb in range(b):
@@ -1072,7 +1254,7 @@ def mamba3_block_oracle(
             ]
 
     # ---- the buffer update (DEVIATION 832(i)): keep the LAST WORKING
-    #      CHUNK's r = t_work - (C-1)*Q rows, r in [1, Q]. Copies.
+    # chunk's rows ------------------------------------------------------------
     var r_keep = t_work - (nc - 1) * q
     for bb in range(b):
         for t in range(r_keep):
@@ -1100,13 +1282,43 @@ def mamba3_block_oracle(
                 ]
     state.buf_len = r_keep
 
-    # ---- S4: out_proj (mamba3.py:277), gemm v1 OP_NT, k = d_inner.
-    #      The gate output IS the [M, d_inner] row (d = h*P + p, a copy).
+    host_tick(hton, htk, "m3.reports_buffer")
+    # ---- S4: out_proj (mamba3.py:277), gemm v1 OP_NT, k = d_inner. ------
     st.out_proj = gemm_host_rows(st.gate_out, w.w_out, OP_NT, m, dm, di)
 
-    # ---- S23: residual (block.py:52/:67), mamba2 S22 VERBATIM.
-    for i in range(m * dm):
-        st.residual_out.append(ftz(ftz(x[i]) + st.out_proj[i]))
+    host_tick(hton, htk, "m3.out_proj")
+    # ---- S23: residual (block.py:52/:67), mamba2 S22 VERBATIM; cells over
+    # tasks, the same statement --------------------------------------------
+    st.residual_out = host_f32_uninit(m * dm)
+    var res_p = _p(st.residual_out)
+    var op_p = _p(st.out_proj)
+    var cells = m * dm
+    var etasks = host_row_tasks(cells, 3)
+    var echunk = (cells + etasks - 1) // etasks
+    def _residual_cells(task: Int) {imm xp, imm op_p, imm res_p, imm cells, imm echunk}:
+        for i in range(task * echunk, min((task + 1) * echunk, cells)):
+            res_p.unsafe_store(i, ftz(ftz(xp.unsafe_load(i)) + op_p.unsafe_load(i)))
+    if etasks <= 1:
+        _residual_cells(0)
+    else:
+        host_parallelize(_residual_cells, etasks)
+    host_tick(hton, htk, "m3.residual")
+    # KEEP-ALIVES. Mojo destroys a local at its last use BY NAME, and the
+    # task closures above reach these lists through `_p` pointers only, so
+    # without a later use each would be freed while its pointer is still
+    # written (measured: the free-list corruption that crashed the first
+    # build of this lane). Every local list a pointer was taken of ends here.
+    _ = rotq_work^
+    _ = rotk_work^
+    _ = v_work^
+    _ = dt_work^
+    _ = sig_work^
+    _ = adt_work^
+    _ = gamma_work^
+    _ = betap_work^
+    _ = scale_work^
+    _ = kscale_work^
+    _ = err_flag^
 
     # Readable copies of the carried state for the gates.
     for i in range(len(state.h)):
