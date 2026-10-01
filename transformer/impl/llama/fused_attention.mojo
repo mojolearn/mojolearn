@@ -5732,11 +5732,19 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
                 var s4 = SIMD[DType.float32, RPT * 4](0.0)
                 var y4 = SIMD[DType.float32, RPT * 4](0.0)
                 comptime for v in range(CPT):
-                    q4 = q4.insert[offset = v * 4](qs.unsafe_load[width=4, alignment=16]((tc + v * 16) * TSTR + tk0))
-                    d4 = d4.insert[offset = v * 4](dcs.unsafe_load[width=4, alignment=16]((tc + v * 16) * TSTR + tk0))
+                    var q4_ld = qs.unsafe_load[width=4, alignment=16]((tc + v * 16) * TSTR + tk0)
+                    comptime for qq in range(4):
+                        q4[v * 4 + qq] = q4_ld[qq]
+                    var d4_ld = dcs.unsafe_load[width=4, alignment=16]((tc + v * 16) * TSTR + tk0)
+                    comptime for qq in range(4):
+                        d4[v * 4 + qq] = d4_ld[qq]
                 comptime for u in range(RPT):
-                    s4 = s4.insert[offset = u * 4](dss.unsafe_load[width=4, alignment=16]((tr + u * 16) * TSTR + tk0))
-                    y4 = y4.insert[offset = u * 4](ys.unsafe_load[width=4, alignment=16]((tr + u * 16) * TSTR + tk0))
+                    var s4_ld = dss.unsafe_load[width=4, alignment=16]((tr + u * 16) * TSTR + tk0)
+                    comptime for qq in range(4):
+                        s4[u * 4 + qq] = s4_ld[qq]
+                    var y4_ld = ys.unsafe_load[width=4, alignment=16]((tr + u * 16) * TSTR + tk0)
+                    comptime for qq in range(4):
+                        y4[u * 4 + qq] = y4_ld[qq]
                 comptime for q in range(4):
                     comptime tk = tk0 + q
                     var t = tq0 + tk
