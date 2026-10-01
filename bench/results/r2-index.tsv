@@ -24,3 +24,7 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T12:19:41Z	measurements/2026-10-01/pr50-metal.tar.gz	ae590d3152a78dd537a02ad6d14f0656924f4c0a4bb785e211131ea37491400b	15911	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr50-metal
 2026-10-01T12:34:16Z	measurements/2026-10-01/pr51-metal.tar.gz	88a7735db7b657fd6e46327bcdbadd823bcecc17ac82f95ffaa150e79cb1b819	121215	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr51-metal
 2026-10-01T12:46:07Z	measurements/2026-10-01/pr53-metal.tar.gz	e81050fbc0fe11bfbc2c33d91ff31d2aab29dbc86840051729a402ac0e40c4bd	102066	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr53-metal
+2026-10-01T12:48:59Z	measurements/2026-10-01/pr54-metal.tar.gz	01c69d0991da3966632adea93745080215259d1721763f3ca0354fd03e813254	2625	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr54-metal
+2026-10-01T12:52:02Z	measurements/2026-10-01/pr52-amd.tar.gz	708e8b6ac28aa8c7018984855e24837a97b6d94fa77cd42b7b3c39e2ac366296	51255	mojolearn-steward-do-amd	/root/pr52-amd
+2026-10-01T12:52:03Z	measurements/2026-10-01/pr52b-amd.tar.gz	8709f525890d59f9e76a5d779186ff499ca696d88dc7fcd7ffa26c20ebbe6338	44657	mojolearn-steward-do-amd	/root/pr52b-amd
+2026-10-01T12:52:04Z	measurements/2026-10-01/amd-toggle-sweep.tar.gz	b785f915c9ff8f366431fc98402be8f80c99244191814a1d05ebc3d1334e8d5c	37232	mojolearn-steward-do-amd	/root/amd-toggle-sweep
