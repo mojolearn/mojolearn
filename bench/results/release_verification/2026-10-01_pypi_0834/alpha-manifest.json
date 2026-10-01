@@ -1,0 +1,262 @@
+{
+  "files": {
+    "mojolearn-0.8.34-py3-none-macosx_11_0_arm64.whl": "513ffd27a3ab7f9e61be062bb84216844df5417096c8a275b0798ed8fcf447f1",
+    "mojolearn-0.8.34-py3-none-manylinux_2_35_x86_64.whl": "d9b3df503d8f6bfe6ce7b94857638a4d25a1085f4a318d63581468ab371f6c10",
+    "mojolearn_amd-0.8.34-py3-none-manylinux_2_35_x86_64.whl": "e0e2177d2b712a8525d269f04fed15d76709184740612bcceebf774e0da6f82c",
+    "mojolearn_nvidia-0.8.34-py3-none-manylinux_2_35_x86_64.whl": "ae02e6761759589570595a6d6fdef664c52efb17e3237d965a5c46c6f54ff360"
+  },
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "merge_evidence": [
+      {
+        "commit": "5ad15219d28c3c6f74d3e5680ed0e00c6e9513e3",
+        "message": "Evidence: PR #57 AMD forward and PR #73 GLM routes (both merged)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "01304cfb29dd917e0787f6d701519fedaa2b1c8c",
+        "message": "Merge pull request #73 from mojolearn/lane/neural-pass68\n\nx_linear GLM: stop on the Newton decrement; GLM and isotonic fits take the host binding by default"
+      },
+      {
+        "commit": "559a77f01f37aa115aadd28cf5ab50d431eb9d3c",
+        "message": "Merge pull request #57 from mojolearn/lane/neural-pass49\n\nByte LM download: pipelined chunked copy through pooled pinned stages, with a parallel non-finite scan"
+      },
+      {
+        "commit": "b2bccbfcef3f20fdbdbd0d3d10a1fa3dcdee2697",
+        "message": "Evidence: PR #71 AMD dK/dV BJ16 (merged) and PR #72 AMD neutral\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "ae4d2e34d31e33aef3433b9bc7d421c32f44095d",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass68"
+      },
+      {
+        "commit": "1b2840f1ebe533ea71e0f72a9695f7592c319780",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass49"
+      },
+      {
+        "commit": "5c346b5bd13bd8c6b7653d07b2d3542e82219392",
+        "message": "Merge pull request #71 from mojolearn/lane/neural-pass65\n\nAttention: dK/dV backward takes 16 keys per block on AMD (replaces #64)"
+      },
+      {
+        "commit": "78968370ce85d6406c410e4d91ce98cd0a8cb5e9",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass68"
+      },
+      {
+        "commit": "23137af9beab2c4f151f5108efeb7c45d5dbea70",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass65"
+      },
+      {
+        "commit": "a2d3b55a803fb38297cc0787ac0b4a15c16b7082",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass49"
+      },
+      {
+        "commit": "1034baee4d8c5d5341766c79ff743a2a85681148",
+        "message": "Evidence: #69 on MI325X (neutral, same bits); merged\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "610a036c8801d20e783779b174427baea73b5e50",
+        "message": "Merge #69: NVIDIA short-k tile rule: L40S train step -4% (-6% with #68), AMD neutral, same bits\n\nGEMM: NVIDIA steps the tuned tile down for short chains (k <= 512) at a 192-block floor"
+      },
+      {
+        "commit": "182f3f2ee9ace636936c42b518a2449d50ddb602",
+        "message": "Evidence: AMD pass9/10: #68 neutral (merged), GEMM tile arms lose on AMD, ATTN_DQ_MFMA faults on the #65 stack\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "8c7a3d50c8358e9d8cb4314e86afe78caa1e515d",
+        "message": "Merge #68: grouped GEMM reuses the caller's workspace on NVIDIA: L40S train step 41.8 -> 40.5 ms, AMD neutral, same bits\n\nGEMM: grouped launch reuses the caller's workspace by default on NVIDIA (no per-GEMM alloc + 2 syncs)"
+      },
+      {
+        "commit": "3c98de4f2ea5218c78d5826b2c1b30033c95555a",
+        "message": "Evidence: M3 Ultra #72 (neutral), #74 (cc 77 -> 6 ms), #75 (isotonic 955 -> 63 ms), same results as the opponents\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "0a998441a4cc35fbfffefd0cce452e1fa9a2fbed",
+        "message": "Evidence: #70 on the M3 Ultra (train step -12%, same bits; merged)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "b262be5c89b8011e61b90497634a9b655d3ba8a4",
+        "message": "Merge #70: dK/dV transposed staging off on Apple: M3 train step -12%, dkdv 9.7 -> 4.9 ms/layer, same bits; NVIDIA/AMD code unchanged\n\nAttention: dK/dV transposed staging off on Apple (M3 train step regression from #65)"
+      },
+      {
+        "commit": "3ad5cd7a7614333a5cd0d193ede4afbe9a11997b",
+        "message": "Evidence: #69 on L40S (train -4%, with #68 -6%, same bits; down_proj tick slower)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "f1b114aeddcea1e067af1c8d3942f8a1d2ae308e",
+        "message": "Merge main into lane/neural-pass49 (the fused download_f32_into_scanned inside the logits.download / logits.scan ticks, the peer's resolution from a78151603)\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "1a46d03962e4e0f1c9b89f824a22e8d64bdf983e",
+        "message": "Evidence: R2 index row for ab-pr67-amd\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "ec4f7048a781c65b4c46973408851a7f38cef50e",
+        "message": "Evidence: #67 on MI325X (lm-forward 37.6 -> 22.7 ms, same bits; merged) and the AMD launch probe\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "ae506584d3cf154e9d6f12b647a8b4a7b9fc396f",
+        "message": "Merge #67: pooled logits host storage: lm-forward L40S 51.4 -> 17.1 ms, MI325X 37.6 -> 22.7 ms, M3 neutral, same bits\n\nByte LM logits: pooled host output storage per trainer (+ env-gated logits path timers)"
+      },
+      {
+        "commit": "93e9762c6c93f12183bd9ee0e31269ee8e249a49",
+        "message": "Evidence: lr-* and adafactor rerun on the MI325X with 0.8.33 (warmup-cosine 2612x -> 4.2x, adafactor 1840x -> 80x)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "006c8a486a3dbedd78567c02298382b4db4c7369",
+        "message": "Evidence: #68 on L40S (train -3%, same bits); #57 on the #67 tree on L40S (forward -10%, same bits)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "5d5f473d0575520bb7c6b3a20e9095eb91fb1d11",
+        "message": "Evidence: worst board rows (archived 0.8.25/0.8.31 boards vs live 0.8.33 roots) as TSV\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "760ae8d982f3ffe0d3fd3efe721212f0171b7ea6",
+        "message": "Evidence: #57 on the M3 Ultra on merged main (~2% faster, same bits); #56 neutral\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "3befccd287b6e8ab2c9c0e4a88ab138b679e83b6",
+        "message": "Merge #65: attention stack (#58+#59+#60+#61): train step NVIDIA 41.3 -> 37.0 ms, AMD 75.5 -> 58.5 ms, same bits on all vendors\n\nAttention stack: #58 dq TQ16 + #59/#60 4-wide reads + #61 AMD MODE flush, on today's main"
+      },
+      {
+        "commit": "e50df8e210632fc04c6a52eee48b530229fcf54b",
+        "message": "Evidence: #65 on the M3 Ultra is 4% slower in the train step (dK/dV kernel +0.98 ms/layer on Metal), not merged\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "1e97691090fee8f78f117f273d21909898b0c1f9",
+        "message": "Evidence: PR #67 on the M3 Ultra (neutral, same bits)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "43f2b3a2a9cde8cacb6d6ff171df34055f03bf71",
+        "message": "Evidence: AMD arms59 (#66 TQ16 -4.6% train, #64 BJ16 -4% train but slower on NVIDIA)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "32bfc78a610a6a9a9ad2937b2fc01b10d74284e8",
+        "message": "Evidence: GEMM tile env arms on L40S (forward -5%, train step +3%, same bits)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "c49919cedb3bc436fbb6ddb6ba0e5462693ef3a5",
+        "message": "Evidence: header and NVIDIA section for the #65 summary\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "cc260c8a20521b0b79db005eaeb409e69ad8ad35",
+        "message": "Evidence: AMD #65 stack (train step 75.5 -> 58.5 ms) and #63 MFMA arms; M3 #65 run set aside\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "e07692acd05edb01b4dc007e257b1088a373337e",
+        "message": "Evidence: PR #67 pooled logits on L40S (lm-forward 51.4 -> 17.1 ms, same digest), #65 NVIDIA raw\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "3891568b92d020ecbccf80992dfb4693f45ce536",
+        "message": "L40S: FWD_TQ16 on the fixed base gives the same bits; forward phases halve, end to end ~1%\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "7131dcf9bd510b8fc090005c59eb30694f9b89e1",
+        "message": "L40S evidence: #58 confirm 41.7 -> 39.0 ms, #60 -3%, #59 neutral, BJ16 slower, FWD_TQ16 WRONG on NVIDIA, #62 merged\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "886f700b2588498f7b87975dcc82a1e049d821c9",
+        "message": "Merge remote-tracking branch 'origin/lane/neural-pass53' into lane/neural-pass58\n\n# Conflicts:\n#\ttransformer/impl/llama/fused_attention.mojo"
+      },
+      {
+        "commit": "a2dc112b72ef223a52477542f404a2f2845e1b66",
+        "message": "Merge remote-tracking branch 'origin/lane/neural-pass52' into lane/neural-pass58"
+      },
+      {
+        "commit": "d059776a133d3680de12e932d67f1b83e01e29ab",
+        "message": "Merge remote-tracking branch 'origin/lane/neural-pass51' into lane/neural-pass58"
+      },
+      {
+        "commit": "4605db9f0039b8a953749ece12d653c3c1f91ccf",
+        "message": "Merge remote-tracking branch 'origin/lane/neural-pass50' into lane/neural-pass58"
+      },
+      {
+        "commit": "2b3336d6c67f5c3f85b2c3c76d20f7a5f4cfd406",
+        "message": "MI325X evidence for PR #59/#60/#61: same bits; dq 1.69 -> 1.00, zdot 0.61 -> 0.42, dkdv 0.89 -> 0.64 ms per layer\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "b61b59be3160ddfd61e58296e5a6ca9783cdfcc1",
+        "message": "Merge the Apple matrix-unit attention forward stagings (PR #54): M3 lm-forward 77.7 -> 66.8 ms, transformer-forward 11.8 -> 10.3 ms, same bits on Metal, CUDA and HIP\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "48922b98adb90f988c53e35a490b08c3e6a65668",
+        "message": "PR #54 NVIDIA confirmation: same digests, times equal to main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "0c3314bf283b49922b40704bec8b0db74414febc",
+        "message": "L40S + MI325X evidence: PR #57 neutral; PR #58 TQ16 wins (AMD train-step 100.6 -> 90.9 ms, L40S 41.8 -> 38.7), same bits\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "a38d6f11412db9e20f5f30ba6cae2333319fea77",
+        "message": "L40S follow-up evidence: transformer-forward wheel race shows no regression; toggles neutral; attention phase ticks\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "be89959f3699e79decbc56ed9193a37620ac80dd",
+        "message": "MI325X evidence: PR #55 confirm (75 vs 101 ms), attention arms, MFMA forward trial, PR #56 pool\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "569f06575facb945c65eaaabffa8f3f83a3f313f",
+        "message": "Merge the AMD GEMM tile minimum of 1024 blocks (PR #55): AMD lm-train-step 101 -> 75 ms, same bits\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "7b34aae86b83fd857543380c88d85a14d445602d",
+        "message": "M3 Ultra evidence for PR #54: lm-forward 77.7 -> 66.8 ms, transformer-forward 11.8 -> 10.3 ms, same bits\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "1f776f53495ec068a8853d52db6b68f97fcd3263",
+        "message": "NVIDIA L40S evidence for PR #55 and #56: same bits; TILE knob stays AMD-only, scratch pool neutral on NVIDIA\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "74510f024d95bc12a9ed7c6b6ef05142193dfcf1",
+        "message": "Merge the AMD split-plan cap default of 1M cells (PR #52): AMD lm-train-step 1.2x, same bits\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "0ae585088e313419e9d645ffcccd4cee44ed0a90",
+        "message": "Evidence for PR #52 (AMD split cap 1M: lm-train-step 122 -> 101 ms, same bits) and the AMD neural toggle sweep\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "a1bcdb17ff57f67fd06cd3e07a09a2e974d67108",
+        "message": "Merge remote-tracking branch 'origin/lane/neural-pass45' into lane/neural-pass47\n\n# Conflicts:\n#\tgemm/checks/gemm_identical.mojo"
+      },
+      {
+        "commit": "468e3f940484124026b99dd2f4ec030b83a0dba8",
+        "message": "Merge the Apple byte-LM device arenas (PR #53): lm-train-step 1.48x and lm-forward 1.17x on Metal, same bits\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "cd7cd8a81d70a8c75b85eac29dbc0d5343690999",
+        "message": "Evidence for PR #53: Apple session arenas, launch 66 -> 22 us, lm-train-step 273 -> 185 ms, same bits\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "bf59f8c0739a0fe65fa02f224d09278894e18e0f",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass44\n\n# Conflicts:\n#\ttraining/checks/train_loop.mojo"
+      },
+      {
+        "commit": "8beab1c7099811492cbf3f7cd6054b66c52983f5",
+        "message": "Merge the Apple byte-LM transport defaults (PR #51): lm-forward 1.3x on Metal, same bits\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "c1813d711211d83aab6cf8c601182edd9efe4f86",
+        "message": "Evidence for PR #51: Apple lm-forward 108 -> 81 ms on the board race (staged logits download), same digests\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "537fdc625e7deb9a8c91a6101fdd4ea91b52815e",
+        "message": "Merge regs2h as the AMD S16 default (PR #50): samba-train-step 10% faster on AMD, same bits\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "69ff2656ed23ebeb27dbfcaff52f1a93473dba9a",
+        "message": "Evidence for PR #50: regs2h AMD default, Mamba-3 backward 71 -> 57 ms, samba-train-step 196 -> 178 ms, same digest\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "5e4f1415276363b6736105b7d7474f568dde03ca",
+        "message": "Merge SVD U from the sliced orth (PR #23): new U bits agree on all three vendors; svd taxi 2-4.7x\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "4da526600503b3c594ba602c48d0ddb531328da2",
+        "message": "Evidence for PR #23: SVD U via sliced orth; new taxi digest agrees on AMD, NVIDIA and M3; taxi 2-4.7x\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      }
+    ],
+    "new_runtime_verification": false,
+    "source_commit": "42b06235e1ec35e83eb02f10ee01b7be63a1c4b5"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.34"
+}
