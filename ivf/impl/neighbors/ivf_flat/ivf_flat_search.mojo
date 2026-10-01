@@ -85,6 +85,7 @@ from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import (
     IIVF_MAX_DIM,
     IIVF_QPB,
     identical_ivf_scan_kernel,
+    identical_ivf_scan_staged_kernel,
 )
 from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
     FIVF_MAX_DIM,
@@ -92,6 +93,7 @@ from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
     fast_ivf_scan_kernel,
 )
 from std.sys.compile import is_defined
+from std.os import getenv
 from std.gpu import WARP_SIZE
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_PREPARE
@@ -196,6 +198,14 @@ struct IvfSearchResult(Movable):
     var distances: List[Float32]
     var indices: List[UInt32]
     var n_candidates: List[Int32]
+
+
+
+def _ivf_scan_staged() -> Bool:
+    """The identical scan with its candidate rows staged through threadgroup
+    memory (identical_ivf_scan_staged_kernel, lane neural-pass35); default
+    on, MOJOLEARN_IVF_SCAN_STAGED=0 keeps the plain kernel. Same bits."""
+    return String(getenv("MOJOLEARN_IVF_SCAN_STAGED")) != "0"
 
 
 def _expanded_distances(
@@ -697,17 +707,30 @@ def ivf_flat_search_prepared(
                 comptime for KM in [8, 16, 32]:
                     if k <= KM and (KM == 8 or k > KM // 2):
                         comptime if IVF_IDENTICAL_SCAN:
-                            ctx.enqueue_function[identical_ivf_scan_kernel[KM]](
-                                dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
-                                dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
-                                dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
-                                dprobe_idx.unsafe_ptr(),
-                                d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
-                                Int32(n_queries), Int32(dim), Int32(n_probes),
-                                Int32(k),
-                                grid_dim=(n_queries + IIVF_QPB - 1) // IIVF_QPB,
-                                block_dim=IIVF_QPB * WARP_SIZE,
-                            )
+                            if _ivf_scan_staged():
+                                ctx.enqueue_function[identical_ivf_scan_staged_kernel[KM]](
+                                    dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
+                                    dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
+                                    dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
+                                    dprobe_idx.unsafe_ptr(),
+                                    d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
+                                    Int32(n_queries), Int32(dim), Int32(n_probes),
+                                    Int32(k),
+                                    grid_dim=(n_queries + IIVF_QPB - 1) // IIVF_QPB,
+                                    block_dim=IIVF_QPB * WARP_SIZE,
+                                )
+                            else:
+                                ctx.enqueue_function[identical_ivf_scan_kernel[KM]](
+                                    dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
+                                    dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
+                                    dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
+                                    dprobe_idx.unsafe_ptr(),
+                                    d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
+                                    Int32(n_queries), Int32(dim), Int32(n_probes),
+                                    Int32(k),
+                                    grid_dim=(n_queries + IIVF_QPB - 1) // IIVF_QPB,
+                                    block_dim=IIVF_QPB * WARP_SIZE,
+                                )
                         else:
                             ctx.enqueue_function[fast_ivf_scan_kernel[KM]](
                                 dq.unsafe_ptr(), dev.dlist_data.unsafe_ptr(),
