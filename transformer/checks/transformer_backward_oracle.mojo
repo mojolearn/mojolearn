@@ -133,7 +133,9 @@ from std.math import min
 from std.memory import bitcast
 
 from core.host_lanes import F32V, HOST_FW, ftz_lanes, host_row_tasks, lanes_are_identical
-from core.host_lanes import HostF32Ptr, host_f32_uninit
+from std.time import perf_counter_ns
+
+from core.host_lanes import HostF32Ptr, host_block_timing_on, host_f32_uninit, host_tick
 from core.host_parallel import host_parallelize
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_backward import (
@@ -1355,6 +1357,8 @@ def transformer_block_backward_oracle(
     # this refusal more likely to fire than the forward's and makes the
     # named error worth more.
     refuse_nonfinite("d_residual2", d_out)
+    var hton = host_block_timing_on()
+    var htk = Int(perf_counter_ns())
 
     var ones_m = _ones(m)
 
@@ -1404,12 +1408,14 @@ def transformer_block_backward_oracle(
         host_parallelize(_gate_elements, gtasks)
     st.d_silu_out = d_silu^
     st.d_up_proj_out = d_up^
+    host_tick(hton, htk, "bwd.down_proj_gate_elements")
     # =====================================================================
     var dgate = List[Float32]()
     silu_backward_into(
         st.d_silu_out, fwd.gate_proj_out, m * inter, dgate
     )
     st.d_gate_proj_out = dgate^
+    host_tick(hton, htk, "bwd.silu")
 
     # =====================================================================
     # STAGE 7-9. `gate_proj` and `up_proj`: forward `OP_NT` at
@@ -1449,6 +1455,7 @@ def transformer_block_backward_oracle(
         st.d_norm2_out[i] = ftz(ftz(t_gate[i]) + ftz(t_up[i]))
     _ = t_gate^
     _ = t_up^
+    host_tick(hton, htk, "bwd.gate_up_proj")
 
     # =====================================================================
     # STAGE 10-12. `post_attention_layernorm` backward. The norm's forward
@@ -1472,6 +1479,7 @@ def transformer_block_backward_oracle(
     st.dw_norm2 = gemm_host_rows(ones_m, prod2, OP_NN, 1, dm, m)
     st.norm2_dx = dx2^
     _ = prod2^
+    host_tick(hton, htk, "bwd.norm2")
 
     # =====================================================================
     # STAGE 13-14. S22, `r1 = x + o`. `residual1.out` fans out into the
@@ -1488,6 +1496,7 @@ def transformer_block_backward_oracle(
     # =====================================================================
     st.d_attn_ctx = _gemm_bwd_a(st.d_o_proj_out, w.w_o, OP_NT, m, dm, qw)
     st.dw_o = _gemm_bwd_b(st.d_o_proj_out, fwd.attn_ctx, OP_NT, m, dm, qw)
+    host_tick(hton, htk, "bwd.o_proj")
 
     # =====================================================================
     # STAGE 17. The attention-weight gradient. **ROUTED**, DEVIATION 1405,
@@ -1541,6 +1550,7 @@ def transformer_block_backward_oracle(
             _ = dctx_head^
             _ = v_head^
             _ = cell^
+    host_tick(hton, htk, "bwd.dctx_v_products")
 
     # =====================================================================
     # STAGE 18-19. The softmax backward, ONE closed form. DEVIATION 1406.
@@ -1552,6 +1562,7 @@ def transformer_block_backward_oracle(
     )
     st.attn_zdot = zdot^
     st.d_attn_masked = dsoft^
+    host_tick(hton, htk, "bwd.softmax")
 
     # =====================================================================
     # STAGE 20. S13's backward, an EXACT IDENTITY. DEVIATION 1414.
@@ -1595,6 +1606,7 @@ def transformer_block_backward_oracle(
     else:
         host_parallelize(_scale_cells, ctasks)
     st.d_qk_cell = dqk^
+    host_tick(hton, htk, "bwd.scale")
 
     # =====================================================================
     # STAGE 22. `dq`. **NEW ARITHMETIC, AND THE LANE'S LARGEST FINDING.**
@@ -1704,6 +1716,7 @@ def transformer_block_backward_oracle(
         st.d_attn_ctx, st.d_q_rope, st.d_k_cache, st.d_v_cache,
         b, l, s, nh, nkv, n_rep, hd, qw,
     )
+    host_tick(hton, htk, "bwd.attention_chains")
 
     # =====================================================================
     # STAGE 25-26. The KV append's backward: a SLICE, no arithmetic. This
@@ -1736,6 +1749,7 @@ def transformer_block_backward_oracle(
     rope_backward_into(st.d_k_rope, nkv, hd, b, l, pos0, rope, dkp)
     st.d_q_proj_out = dqp^
     st.d_k_proj_out = dkp^
+    host_tick(hton, htk, "bwd.kv_gather_rope")
 
     # =====================================================================
     # STAGE 29-32. The three input projections: forward `OP_NT` at
@@ -1760,6 +1774,7 @@ def transformer_block_backward_oracle(
     _ = t_q^
     _ = t_k^
     _ = t_v^
+    host_tick(hton, htk, "bwd.qkv_proj")
 
     # =====================================================================
     # STAGE 33-35. `input_layernorm` backward. Its forward INPUT is the
@@ -1783,6 +1798,7 @@ def transformer_block_backward_oracle(
     st.dw_norm1 = gemm_host_rows(ones_m, prod1, OP_NN, 1, dm, m)
     st.norm1_dx = dx1^
     _ = prod1^
+    host_tick(hton, htk, "bwd.norm1")
 
     # =====================================================================
     # STAGE 36. THE OUTPUT. `x` fans out into the norm (LDL:306) and into
@@ -1794,4 +1810,5 @@ def transformer_block_backward_oracle(
         st.d_x[i] = ftz(ftz(st.norm1_dx[i]) + ftz(st.d_residual1[i]))
 
     _ = ones_m^
+    host_tick(hton, htk, "bwd.d_x")
     return st^

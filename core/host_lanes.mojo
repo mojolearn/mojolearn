@@ -21,7 +21,9 @@ from std.math import abs, floor, fma, max, min
 from std.memory import bitcast, unsafe_memcpy
 from std.sys.info import simd_width_of
 
+from std.os import getenv
 from std.sys import llvm_intrinsic
+from std.time import perf_counter_ns
 
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count
@@ -400,6 +402,23 @@ def host_f32_copy(dst: HostF32Ptr, src: HostF32Ptr, n: Int):
         if hi > lo:
             unsafe_memcpy(dest=dst.unsafe_offset(lo), src=src.unsafe_offset(lo), count=hi - lo)
     host_parallelize(_copy, tasks)
+
+
+def host_block_timing_on() -> Bool:
+    """MOJOLEARN_HOST_BLOCK_TIMING set: the block oracles print a wall per
+    stage (`timing hblk.<stage> <ms> ms`, lane neural-pass8), the host twin
+    of MOJOLEARN_MAMBA_TIMING. Off, nothing is read or printed."""
+    return String(getenv("MOJOLEARN_HOST_BLOCK_TIMING")) != ""
+
+
+def host_tick(on: Bool, mut t: Int, name: StaticString):
+    """Print `timing hblk.<name> <ms> ms` since `t` and advance `t`; a no-op
+    when `on` is False. Timing only: it computes no value."""
+    if not on:
+        return
+    var now = Int(perf_counter_ns())
+    print("timing hblk." + String(name) + " " + String(Float64(now - t) / 1000000.0) + " ms")
+    t = now
 
 
 #: Scalar operations below which a row split is not worth a thread fork.

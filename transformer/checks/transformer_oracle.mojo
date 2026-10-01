@@ -110,7 +110,9 @@ from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
 # lane/lowbit-blocks (2026-09-29): the profile's host answer, Lane C's.
 from gemm.host.gemm_int15_oracle import gemm_int15_from_f32_oracle
-from core.host_lanes import host_f32_uninit
+from std.time import perf_counter_ns
+
+from core.host_lanes import host_block_timing_on, host_f32_uninit, host_tick
 from core.host_parallel import host_parallelize
 from core.host_lanes import (
     host_row_tasks,
@@ -1571,6 +1573,8 @@ def transformer_block_oracle(
     var window = cache.window
 
     st.input_x = x.copy()
+    var hton = host_block_timing_on()
+    var htk = Int(perf_counter_ns())
 
     # ---- S1-S4, input_layernorm (LDL:306, LRN:62-67) --------------------
     # LOCALS THEN ASSIGN, never `mut st.field` at a call site. A struct
@@ -1588,6 +1592,7 @@ def transformer_block_oracle(
     )
     st.norm1_sumsq = n1_sumsq^
     st.norm1_out = n1_out^
+    host_tick(hton, htk, "fwd.norm1")
 
     # ---- S5, q/k/v (LlamaAttention.forward :250-252) ---------------------
     # `nn.Linear` stores weight [out, in] and applies y = x @ W^T, which is
@@ -1606,6 +1611,7 @@ def transformer_block_oracle(
     st.q_proj_out = _oracle_product(st.norm1_out, w.w_q, m, qw, dm, int15)
     st.k_proj_out = _oracle_product(st.norm1_out, w.w_k, m, kw, dm, int15)
     st.v_proj_out = _oracle_product(st.norm1_out, w.w_v, m, kw, dm, int15)
+    host_tick(hton, htk, "fwd.qkv_proj")
     # DEVIATION 2934, `qkv_bias` (Qwen2's `attention_bias=True`): one plain
     # add per cell AFTER the GEMM, recorded INTO the `*_proj.out` stages so
     # the card keeps its thirty tags.
@@ -1667,6 +1673,7 @@ def transformer_block_oracle(
     apply_rope_into(st.k_proj_out, nkv, hd, b, l, pos0, rope, k_rope)
     st.q_rope_out = q_rope^
     st.k_rope_out = k_rope^
+    host_tick(hton, htk, "fwd.rope")
 
     # ---- the key span, BEFORE the append. A COPY. -----------------------
     # The stage `kv.k_cache` is `[B, n_kv, S, head_dim]`: the keys this
@@ -1709,6 +1716,7 @@ def transformer_block_oracle(
                 cache.k[dst] = kbits
                 cache.v[dst] = vbits
     cache.used = s_abs
+    host_tick(hton, htk, "fwd.kv_gather")
 
     # ---- S11, S12: the scores (EAF:204) ---------------------------------
     # `torch.matmul(query, key_states.transpose(2, 3)) * scaling`.
@@ -1778,6 +1786,7 @@ def transformer_block_oracle(
                         sc = ftz(identical_mul(th, cap))
                     scores[sbase + qi * s + j] = sc
     _apply_plant(scores, plant, PLANT_AT_SCORES)
+    host_tick(hton, htk, "fwd.scores")
 
     # ---- S13: the additive causal mask (EAF:205-206) ---------------------
     # `attn_weights = attn_weights + attention_mask`, with the mask built at
@@ -1832,6 +1841,7 @@ def transformer_block_oracle(
     else:
         host_parallelize(_mask_rows, mtasks)
     _apply_plant(masked, plant, PLANT_AT_MASKED)
+    host_tick(hton, htk, "fwd.mask")
 
     # ---- S14 through S18: the softmax (EAF:208) --------------------------
     # `nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32)`,
@@ -1945,6 +1955,7 @@ def transformer_block_oracle(
         _softmax_rows(0)
     else:
         host_parallelize(_softmax_rows, stasks)
+    host_tick(hton, htk, "fwd.softmax")
 
     # ---- S19: the attention-weighted value sum (EAF:210) -----------------
     # `torch.matmul(attn_weights, value_states)`.
@@ -2003,6 +2014,7 @@ def transformer_block_oracle(
     else:
         host_parallelize(_value_rows, vtasks)
     _ = vcache^
+    host_tick(hton, htk, "fwd.value_sum")
 
     st.attn_scores = scores^
     st.attn_masked = masked^
@@ -2014,6 +2026,7 @@ def transformer_block_oracle(
 
     # ---- S5, o_proj (:280). The flatten before it is a COPY (:279). ------
     st.o_proj_out = _oracle_product(st.attn_ctx, w.w_o, m, dm, qw, int15)
+    host_tick(hton, htk, "fwd.o_proj")
     # DEVIATION 2935, `o_bias`: one plain add per cell after the GEMM.
     if opts.o_bias:
         var ob = st.o_proj_out.copy()
@@ -2036,6 +2049,7 @@ def transformer_block_oracle(
     )
     st.norm2_sumsq = n2_sumsq^
     st.norm2_out = n2_out^
+    host_tick(hton, htk, "fwd.residual1_norm2")
 
     # ---- S5, S20, S21, S5: the MLP (LMLP:174-176) ------------------------
     # `down_proj(act_fn(gate_proj(x)) * up_proj(x))` at the default record.
@@ -2062,6 +2076,7 @@ def transformer_block_oracle(
             add_bias_into(gb, w.b_gate, m, inter)
             st.gate_proj_out = gb^
     st.up_proj_out = _oracle_product(st.norm2_out, w.w_up, m, inter, dm, int15)
+    host_tick(hton, htk, "fwd.gate_up_proj")
     if opts.mlp_bias:
         var ub = st.up_proj_out.copy()
         add_bias_into(ub, w.b_up, m, inter)
@@ -2080,6 +2095,7 @@ def transformer_block_oracle(
         else:
             span_silu(st.up_proj_out, 0, m * inter, st.silu_out, 0)
     var scalar_act = 0 if opts.act_is_silu() else m * inter
+    host_tick(hton, htk, "fwd.silu")
     for i in range(scalar_act):
         var z: Float32
         if gated:
@@ -2108,6 +2124,7 @@ def transformer_block_oracle(
     # ---- S23, the second residual (LDL:323) ------------------------------
     st.residual2_out = host_f32_uninit(m * dm)
     span_add(st.residual1_out, 0, st.down_proj_out, 0, m * dm, st.residual2_out, 0)
+    host_tick(hton, htk, "fwd.down_proj_residual2")
 
     return st^
 
