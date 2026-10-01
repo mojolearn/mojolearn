@@ -969,6 +969,163 @@ def geqrf_dot_staged_kernel(a: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int
         w.unsafe_store(j, acc)
 
 
+# ---- the dot tiles (lane neural-pass41, 2026-10-01) -----------------------------------------
+#: geqrf_dot_staged_kernel / orgqr_dot_staged_kernel give each trailing
+#: column its own block, whose threads stage that column's rows one word
+#: each at a stride of n (a scattered load per row per column: at 200,000
+#: x 220 the two kernels are 3.0 + 7.5 s of the device QR on an M4). Here a
+#: block takes DOT_COLS consecutive columns: its threads stage a slab of
+#: DOT_ROWS rows of those columns as contiguous row segments (one coalesced
+#: load per row), plus column k's slab, into threadgroup memory, and
+#: DOT_COLS chain threads each advance their column's chain over the slab.
+#: Every chain is the cell's: `w = ftz(a[k, j])`, then for i ascending
+#: `w = ftz(fma(ftz(a[i, k]), ftz(a[i, j]), w))`, the same operands in the
+#: same order. MOJOLEARN_XD_QR_DOT_TILE=0 keeps the one-column kernels.
+comptime DOT_COLS = 16
+comptime DOT_ROWS = 256
+comptime DOT_TPB = 256
+comptime DOT_LD = DOT_COLS + 1
+comptime DOT_BYTES = (DOT_ROWS * DOT_LD + DOT_ROWS) * 4
+
+
+def xd_qr_dot_tile() -> Bool:
+    return String(getenv("MOJOLEARN_XD_QR_DOT_TILE")) != "0"
+
+
+@always_inline
+def _dot_tile_chain(
+    colk: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+    tile: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+    c: Int, cnt: Int, acc0: Float32,
+) -> Float32:
+    """acc = ftz(fma(colk[r], tile[r, c], acc)) for r ascending over the slab,
+    eight rows' operands loaded before their eight dependent multiply-adds
+    (the chain's latency is the fma's, not the load's): the same chain."""
+    var acc = acc0
+    var r = 0
+    while r + 8 <= cnt:
+        var k0 = colk[r]
+        var k1 = colk[r + 1]
+        var k2 = colk[r + 2]
+        var k3 = colk[r + 3]
+        var k4 = colk[r + 4]
+        var k5 = colk[r + 5]
+        var k6 = colk[r + 6]
+        var k7 = colk[r + 7]
+        var x0 = tile[r * DOT_LD + c]
+        var x1 = tile[(r + 1) * DOT_LD + c]
+        var x2 = tile[(r + 2) * DOT_LD + c]
+        var x3 = tile[(r + 3) * DOT_LD + c]
+        var x4 = tile[(r + 4) * DOT_LD + c]
+        var x5 = tile[(r + 5) * DOT_LD + c]
+        var x6 = tile[(r + 6) * DOT_LD + c]
+        var x7 = tile[(r + 7) * DOT_LD + c]
+        acc = ftz(identical_mul_add(k0, x0, acc))
+        acc = ftz(identical_mul_add(k1, x1, acc))
+        acc = ftz(identical_mul_add(k2, x2, acc))
+        acc = ftz(identical_mul_add(k3, x3, acc))
+        acc = ftz(identical_mul_add(k4, x4, acc))
+        acc = ftz(identical_mul_add(k5, x5, acc))
+        acc = ftz(identical_mul_add(k6, x6, acc))
+        acc = ftz(identical_mul_add(k7, x7, acc))
+        r += 8
+    while r < cnt:
+        acc = ftz(identical_mul_add(colk[r], tile[r * DOT_LD + c], acc))
+        r += 1
+    return acc
+
+
+def geqrf_dot_tile_kernel(a: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32):
+    """`geqrf_dot` for the columns j0 .. j0 + DOT_COLS - 1 (j0 = k + 1 +
+    block * DOT_COLS), the slabs coalesced through threadgroup memory."""
+    var tile = stack_allocation[DOT_ROWS * DOT_LD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var colk = stack_allocation[DOT_ROWS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var K = Int(k)
+    var M = Int(m)
+    var N = Int(n)
+    var j0 = K + 1 + Int(block_idx.x) * DOT_COLS
+    if j0 >= N:
+        return
+    var j = j0 + tid
+    var mine = tid < DOT_COLS and j < N
+    if scal.unsafe_load(1) == Float32(0):
+        if mine:
+            w.unsafe_store(j, Float32(0))
+        return
+    var acc = Float32(0)
+    if mine:
+        acc = ftz(a.unsafe_load(K * N + j))
+    var c0 = K + 1
+    while c0 < M:
+        var cnt = min(DOT_ROWS, M - c0)
+        var idx = tid
+        while idx < cnt * DOT_COLS:
+            var r = idx // DOT_COLS
+            var c = idx - r * DOT_COLS
+            if j0 + c < N:
+                tile[r * DOT_LD + c] = ftz(a.unsafe_load((c0 + r) * N + j0 + c))
+            idx += DOT_TPB
+        var t = tid
+        while t < cnt:
+            colk[t] = ftz(a.unsafe_load((c0 + t) * N + K))
+            t += DOT_TPB
+        barrier()
+        if mine:
+            acc = _dot_tile_chain(colk, tile, tid, cnt, acc)
+        barrier()
+        c0 += DOT_ROWS
+    if mine:
+        w.unsafe_store(j, acc)
+
+
+def orgqr_dot_tile_kernel(
+    h: F32Ptr, tau: F32Ptr, q: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32, qc: Int32,
+):
+    """`orgqr_dot` for the columns j0 .. j0 + DOT_COLS - 1 of Q (j0 = block *
+    DOT_COLS), h's column k and Q's slabs through threadgroup memory."""
+    var tile = stack_allocation[DOT_ROWS * DOT_LD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var colk = stack_allocation[DOT_ROWS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var K = Int(k)
+    var M = Int(m)
+    var N = Int(n)
+    var QC = Int(qc)
+    var j0 = Int(block_idx.x) * DOT_COLS
+    if j0 >= QC:
+        return
+    var j = j0 + tid
+    var mine = tid < DOT_COLS and j < QC
+    if ftz(tau.unsafe_load(K)) == Float32(0):
+        if mine:
+            w.unsafe_store(j, Float32(0))
+        return
+    var acc = Float32(0)
+    if mine:
+        acc = ftz(q.unsafe_load(K * QC + j))
+    var c0 = K + 1
+    while c0 < M:
+        var cnt = min(DOT_ROWS, M - c0)
+        var idx = tid
+        while idx < cnt * DOT_COLS:
+            var r = idx // DOT_COLS
+            var c = idx - r * DOT_COLS
+            if j0 + c < QC:
+                tile[r * DOT_LD + c] = ftz(q.unsafe_load((c0 + r) * QC + j0 + c))
+            idx += DOT_TPB
+        var t = tid
+        while t < cnt:
+            colk[t] = ftz(h.unsafe_load((c0 + t) * N + K))
+            t += DOT_TPB
+        barrier()
+        if mine:
+            acc = _dot_tile_chain(colk, tile, tid, cnt, acc)
+        barrier()
+        c0 += DOT_ROWS
+    if mine:
+        w.unsafe_store(j, acc)
+
+
 def orgqr_dot_staged_kernel(
     h: F32Ptr, tau: F32Ptr, q: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32, qc: Int32
 ):
@@ -2267,10 +2424,16 @@ struct DevExec(Exec):
                     da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=_blocks(m - k - 1), block_dim=TPB
                 )
             if n - k - 1 > 0:
-                ctx.enqueue_function[geqrf_dot_staged_kernel](
-                    da.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
-                    grid_dim=n - k - 1, block_dim=STAGE_TPB,
-                )
+                if xd_qr_dot_tile():
+                    ctx.enqueue_function[geqrf_dot_tile_kernel](
+                        da.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                        grid_dim=(n - k - 1 + DOT_COLS - 1) // DOT_COLS, block_dim=DOT_TPB,
+                    )
+                else:
+                    ctx.enqueue_function[geqrf_dot_staged_kernel](
+                        da.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                        grid_dim=n - k - 1, block_dim=STAGE_TPB,
+                    )
                 ctx.enqueue_function[geqrf_update_kernel](
                     da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
                     grid_dim=_blocks((m - k) * (n - k - 1)), block_dim=TPB,
@@ -2301,10 +2464,16 @@ struct DevExec(Exec):
         for r in range(kk):
             var k = kk - 1 - r
             if qc > 0:
-                ctx.enqueue_function[orgqr_dot_staged_kernel](
-                    dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
-                    grid_dim=qc, block_dim=STAGE_TPB,
-                )
+                if xd_qr_dot_tile():
+                    ctx.enqueue_function[orgqr_dot_tile_kernel](
+                        dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                        grid_dim=(qc + DOT_COLS - 1) // DOT_COLS, block_dim=DOT_TPB,
+                    )
+                else:
+                    ctx.enqueue_function[orgqr_dot_staged_kernel](
+                        dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                        grid_dim=qc, block_dim=STAGE_TPB,
+                    )
             ctx.enqueue_function[orgqr_update_kernel](
                 dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
                 grid_dim=_blocks((m - k) * qc), block_dim=TPB,
