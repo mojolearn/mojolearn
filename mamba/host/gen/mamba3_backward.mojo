@@ -11,7 +11,7 @@ from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.os import getenv
 from std.time import perf_counter_ns
-from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
+from checks.kernel_matrix import COLUMN_AMD, TARGET_COLUMN, lib_smem_page_fits_for
 
 from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_rsqrt, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf, identical_mul
 from mamba.host.mamba3_s16_host import mamba3_s16_qkv_backward_host, mamba3_s17_reverse_state_host
@@ -324,7 +324,10 @@ def m3_s16_qk_arm() -> Int:
     """The S16 q/k arm: `regs` by default (lane/neural-pass4, 2026-09-30:
     on the L4 `regs` read 9.2 ms against `regs2`'s 10.8 at the board shape
     and 83.5 against 86.0 at the default shape, the same bits on every arm;
-    `regs2` was the S16 pass's default and stays one env value away)."""
+    `regs2` was the S16 pass's default and stays one env value away).
+    On the AMD column the default is `regs2` (2026-09-30, MI325X: `regs` read
+    18.6 ms against `regs2`'s 12.1 at the board shape, same bits;
+    bench/results/pass4-20260930)."""
     var a = String(getenv("MOJOLEARN_MAMBA3_S16_QK_ARM"))
     if a == "naive":
         return 0
@@ -334,6 +337,10 @@ def m3_s16_qk_arm() -> Int:
         return 4
     if a == "smem48":
         return 3
+    if a == "regs":
+        return 2
+    comptime if TARGET_COLUMN == COLUMN_AMD:
+        return 4
     return 2
 
 

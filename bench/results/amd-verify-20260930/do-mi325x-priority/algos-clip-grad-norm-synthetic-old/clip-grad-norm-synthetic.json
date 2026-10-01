@@ -1,0 +1,155 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/priority-pass/venv/bin/python",
+        "/root/mojolearn-amd-verify/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "clip-grad-norm",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/priority-pass/algos-data"
+      ],
+      "digest_stable": false,
+      "digests": [
+        "bea62536a1718eb8",
+        "973aad3bdd470a4e",
+        "439178bbb0006f5a",
+        "0801b9636024f876"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.clip_grad_norm_(error_if_nonfinite=True, max_norm=1.0, norm_type=2.0)",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/priority-pass/venv/lib/python3.14/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "readback failed (AttributeError('_mojolearn_x_training'))",
+        "numeric_mode_used": "unknown",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.31"
+      },
+      "median_ms": 107.20077500445768,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2171.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2171.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2171.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2171.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        105.34121900127502,
+        107.20077500445768,
+        107.94813399843406
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "error_if_nonfinite": true,
+        "max_norm": 1.0,
+        "norm_type": 2.0
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "clip_grad_norm_ over 8 fp32 gradients of 2,097,152 values",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 320.5666589929024
+    }
+  },
+  "block": {
+    "block": "tensor",
+    "dataset": "synthetic",
+    "synthetic": true
+  },
+  "commit": "75f1ddad40a987e55e30d9c9288fca14cd1e6706",
+  "dataset": "synthetic",
+  "finished": "2026-09-30T23:57:08Z",
+  "lane": "clip-grad-norm",
+  "lane_config": {
+    "block": "tensor",
+    "datasets": [
+      "synthetic"
+    ],
+    "expansion_lane": "training",
+    "kind": "extra",
+    "mismatches": [],
+    "notes": [
+      "gradients default_rng(7) standard normal; every round clips the same arrays again, on every arm, so each arm walks the same sequence"
+    ],
+    "ours_class": "mojolearn.clip_grad_norm_ or mojolearn.training.clip_grad_norm_",
+    "params": {
+      "error_if_nonfinite": true,
+      "max_norm": 1.0,
+      "norm_type": 2.0
+    },
+    "quality": "relative difference of the returned total norm vs ours",
+    "task": "clip",
+    "timed_fit": "clip_grad_norm_ over 8 fp32 gradients of 2,097,152 values",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/clip-grad-norm",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "norm": 0.999998927116394,
+      "norm_rel_diff_vs_ours": 0.0
+    }
+  },
+  "rounds_requested": 3,
+  "script": "tools/bench_board_algos.py",
+  "shape": "",
+  "started": "2026-09-30T23:57:07Z"
+}

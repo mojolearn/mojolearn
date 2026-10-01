@@ -1,0 +1,185 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/mojolearn-neural-pass6/.pixi/envs/default/bin/python3",
+        "/root/mojolearn-neural-pass6/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "lm-host-train-step",
+        "--shape",
+        "full",
+        "--data",
+        "/root/hostpr-pr11/work/neural-lm-host-train-step-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        null,
+        null,
+        null,
+        null
+      ],
+      "info": {
+        "call": "mojolearn.LanguageModelHostTrainer(parameters, shape=cfg).train_step(ids) (CPU)",
+        "cls": "LanguageModelHostTrainer",
+        "device": "cpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/mojolearn-neural-pass6/python/mojolearn/_byte_lm_host.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cpu",
+        "version": "0.8.32"
+      },
+      "median_ms": 903.4019839964458,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1419.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1441.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1519.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1529.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        903.4019839964458,
+        904.8686399983126,
+        876.7776750028133
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "amsgrad": false,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "lr": 0.001,
+        "weight_decay": 0.01
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 989.3505810032366
+    }
+  },
+  "commit": "unknown",
+  "dataset": "bytes",
+  "finished": "2026-10-01T00:26:40Z",
+  "inputs": {
+    "init": "default_rng(7).normal(0, .02) float32, +1 on norms",
+    "lane": "lm-host-train-step",
+    "parameters": 20453376,
+    "schedule": "step k row b: stream[(k*B*L + b*L) % (n - L - 1) : +L+1]; inputs [:, :L], targets [:, 1:]",
+    "seed": 7,
+    "sha256": {
+      "batches": "9228fa406a3dd38c",
+      "init": "fd9399d4528edaa1"
+    },
+    "shape": {
+      "batch": 1,
+      "d_model": 384,
+      "head_dim": 64,
+      "intermediate": 1024,
+      "label": "B1 L512 DM384 H6 KV6 HD64 FF1024 layers8 V8192",
+      "length": 512,
+      "n_heads": 6,
+      "n_kv": 6,
+      "n_layers": 8,
+      "name": "full",
+      "vocab_size": 8192
+    },
+    "steps": 4,
+    "stream": {
+      "bytes": 13902050,
+      "files": 424,
+      "package_dir": "/root/mojolearn-neural-pass6/python/mojolearn",
+      "sha256": "e3fe6c519df4560be98d82e8e415060b646c8d2e95b8b73141ff2444cd4d8506",
+      "source": "installed mojolearn package .py sources, sorted by path, concatenated"
+    }
+  },
+  "lane": "lm-host-train-step",
+  "ours_device": "cpu",
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "amsgrad": false,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "learning_rate": 0.001,
+          "seed": "none (deterministic)",
+          "weight_decay": 0.01
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/lm-host-train-step",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "loss_first_step": 9.017857551574707,
+      "loss_last_step": 5.601766109466553,
+      "steps": 4
+    }
+  },
+  "rounds_requested": 3,
+  "script": "tools/bench_board_neural.py",
+  "shape": "B1 L512 DM384 H6 KV6 HD64 FF1024 layers8 V8192",
+  "shape_record": {
+    "batch": 1,
+    "d_model": 384,
+    "head_dim": 64,
+    "intermediate": 1024,
+    "label": "B1 L512 DM384 H6 KV6 HD64 FF1024 layers8 V8192",
+    "length": 512,
+    "n_heads": 6,
+    "n_kv": 6,
+    "n_layers": 8,
+    "name": "full",
+    "vocab_size": 8192
+  },
+  "started": "2026-10-01T00:26:35Z",
+  "torch_settings": {}
+}
