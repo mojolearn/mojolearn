@@ -90,7 +90,13 @@ time.
 `[[mojo-string-float-roundtrip]]`: nothing here prints.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.memory import memcpy
+from std.os import getenv
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from core.host_predict_threads import host_predict_task_count
+from core.host_parallel import host_parallelize
+from std.time import perf_counter_ns
 
 from training.checks.loss import (
     identical_ce_backward_into,
@@ -113,6 +119,8 @@ from training.checks.optimizer import (
     identical_clip_grad_norm,
     identical_optimizer_step,
     identical_optimizer_workspace_floats,
+    _step_timing_on,
+    _step_timing_tick,
 )
 from training.checks.optimizer_oracle import (
     OPT_ADAM,
@@ -347,8 +355,14 @@ def identical_optimizer_step_host(
     var v_state = ctx.enqueue_create_buffer[DType.float32](n_total)
     ctx.enqueue_copy(dst_buf=m_state, src_ptr=m_ptr)
     ctx.enqueue_copy(dst_buf=v_state, src_ptr=v_ptr)
+    # this non-resident form keeps its per-call parameter and gradient
+    # buffers (lane neural-pass26: the resident form's are the handle's)
+    var p_buf = ctx.enqueue_create_buffer[DType.float32](n_total)
+    var g_buf = ctx.enqueue_create_buffer[DType.float32](n_total)
+    var p_stage = ctx.enqueue_create_host_buffer[DType.float32](n_total)
+    var g_stage = ctx.enqueue_create_host_buffer[DType.float32](n_total)
     var n_done = identical_optimizer_step_resident_host(
-        ctx, param_ptr, grad_ptr, m_state, v_state, offsets_ptr, init_ptr,
+        ctx, param_ptr, grad_ptr, m_state, v_state, p_buf, g_buf, p_stage, g_stage, offsets_ptr, init_ptr,
         info_ptr, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps,
         weight_decay, momentum, dampening, max_norm,
     )
@@ -357,7 +371,49 @@ def identical_optimizer_step_host(
     ctx.synchronize()
     _ = m_state
     _ = v_state
+    _ = p_buf
+    _ = g_buf
+    _ = p_stage
+    _ = g_stage
     return n_done
+
+
+
+def opt_download_staged() -> Bool:
+    """Whether the resident step downloads through its pinned stage (lane
+    neural-pass26): the Apple column by default, the raw copy elsewhere;
+    MOJOLEARN_OPT_STAGE=0/1 forces either. Measured on the boxes with the
+    pooled buffers in place: on the M3 Ultra the staged download is the
+    lever (the sgd/adam/adamw cells 348-363 ms raw -> 111-112 ms staged;
+    the raw device-to-host-pointer download is slow there), on the L40S the
+    raw path is faster (the staged one read 20-25% slower) and on the
+    MI325X they are even. A transport choice: no bit moves."""
+    var v = String(getenv("MOJOLEARN_OPT_STAGE"))
+    comptime if TARGET_COLUMN == COLUMN_APPLE:
+        return v != "0"
+    return v == "1"
+
+
+def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int):
+    """`memcpy(dst, src, n)` in contiguous chunks over host tasks (lane
+    neural-pass26): the one leg of the resident optimizer step that reads
+    pinned (write-combined) host memory, where one thread's reads are
+    latency-bound and several threads' are not."""
+    var tasks = host_predict_task_count(1 << 30)
+    if n < (1 << 20) or tasks <= 1:
+        memcpy(dest=dst, src=src, count=n)
+        return
+    if tasks > 16:
+        tasks = 16
+    var chunk = (n + tasks - 1) // tasks
+
+    def _chunk(t: Int) {imm dst, imm src, imm n, imm chunk}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, n)
+        if hi > lo:
+            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
+
+    host_parallelize(_chunk, tasks)
 
 
 def identical_optimizer_step_resident_host(
@@ -366,6 +422,10 @@ def identical_optimizer_step_resident_host(
     grad_ptr: MutPointer[Float32, MutUntrackedOrigin],
     mut m_state: DeviceBuffer[DType.float32],
     mut v_state: DeviceBuffer[DType.float32],
+    mut p_buf: DeviceBuffer[DType.float32],
+    mut g_buf: DeviceBuffer[DType.float32],
+    mut p_stage: HostBuffer[DType.float32],
+    mut g_stage: HostBuffer[DType.float32],
     offsets_ptr: MutPointer[Int32, MutUntrackedOrigin],
     init_ptr: MutPointer[Int32, MutUntrackedOrigin],
     info_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -431,11 +491,18 @@ def identical_optimizer_step_resident_host(
     _refuse_hyperparameters(cfg)
 
     # ---- Transport in. Nothing above this line touched the device.
-    var param = ctx.enqueue_create_buffer[DType.float32](n_total)
-    var grad = ctx.enqueue_create_buffer[DType.float32](n_total)
-    ctx.enqueue_copy(dst_buf=param, src_ptr=param_ptr)
-    ctx.enqueue_copy(dst_buf=grad, src_ptr=grad_ptr)
+    # Lane neural-pass26: the handle's resident parameter and gradient
+    # buffers (`p_buf`, `g_buf`, n_total floats each, created once at
+    # optimizer_resident_open) take the uploads; no buffer is created here.
+    var rton = _step_timing_on()
+    var rtk = Int(perf_counter_ns())
+    # the uploads are raw host-pointer copies: measured on the M4, a fresh
+    # 64 MB array uploads in 1.6-2.4 ms this way (only the process's first
+    # upload pays ~9-20 ms), and the memcpy-plus-DMA stage took 4.3 ms
+    ctx.enqueue_copy(dst_buf=p_buf, src_ptr=param_ptr)
+    ctx.enqueue_copy(dst_buf=g_buf, src_ptr=grad_ptr)
     ctx.synchronize()
+    _step_timing_tick(ctx, rton, rtk, "resident.upload")
 
     # `denom_out` and `q_out` are written only under `MOJOLEARN_OPT_RECORD`.
     # The pointers are in the kernel signature either way, so the recording
@@ -457,6 +524,7 @@ def identical_optimizer_step_resident_host(
     var sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
     ctx.synchronize()
 
+    _step_timing_tick(ctx, rton, rtk, "resident.small_buffers")
     var buf_initialized = List[Bool]()
     for j in range(n_tensors):
         buf_initialized.append(init_ptr.unsafe_load(j) != Int32(0))
@@ -465,8 +533,8 @@ def identical_optimizer_step_resident_host(
     # transport and everything below is transport.
     identical_optimizer_step(
         ctx,
-        param,
-        grad,
+        p_buf,
+        g_buf,
         m_state,
         v_state,
         denom_out,
@@ -484,14 +552,29 @@ def identical_optimizer_step_resident_host(
     )
 
     # ---- Transport out (the moments stay where the caller keeps them).
-    ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=param)
-    if max_norm > Float32(0.0):
-        # The gradient is scaled IN PLACE by the clip, so a caller who
-        # inspects its own gradient array after the step sees the CLIPPED
-        # values -- which is what `torch.nn.utils.clip_grad_norm_` does and
-        # is the reason it carries a trailing underscore.
-        ctx.enqueue_copy(dst_ptr=grad_ptr, src_buf=grad)
-    ctx.synchronize()
+    # the downloads through the pinned stages too (a device-to-host-pointer
+    # copy ran at about 3 GB/s here; the DMA into pinned memory and the
+    # memcpy out together take a fifth of that)
+    _step_timing_tick(ctx, rton, rtk, "resident.device_step")
+    if opt_download_staged():
+        ctx.enqueue_copy(dst_buf=p_stage, src_buf=p_buf)
+        if max_norm > Float32(0.0):
+            ctx.enqueue_copy(dst_buf=g_stage, src_buf=g_buf)
+        ctx.synchronize()
+        _step_timing_tick(ctx, rton, rtk, "resident.dma_down")
+        # the reads out of pinned memory go over host tasks: a single thread
+        # reads write-combined memory at about 3 GB/s here (26 ms per 64 MB),
+        # four or more read it at 10 GB/s and more (6 ms); a copy, no bit moves
+        _parallel_copy_out(param_ptr, p_stage.unsafe_ptr(), n_total)
+        if max_norm > Float32(0.0):
+            _parallel_copy_out(grad_ptr, g_stage.unsafe_ptr(), n_total)
+        _step_timing_tick(ctx, rton, rtk, "resident.memcpy_out")
+    else:
+        ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=p_buf)
+        if max_norm > Float32(0.0):
+            ctx.enqueue_copy(dst_ptr=grad_ptr, src_buf=g_buf)
+        ctx.synchronize()
+        _step_timing_tick(ctx, rton, rtk, "resident.download")
 
     for j in range(n_tensors):
         var flag = Int32(0)
@@ -511,8 +594,6 @@ def identical_optimizer_step_resident_host(
         info_ptr.unsafe_store(2, h.unsafe_ptr().unsafe_load(1))
         _ = h^
 
-    _ = param
-    _ = grad
     _ = denom_out
     _ = q_out
     _ = sumsq
