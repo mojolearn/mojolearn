@@ -7,7 +7,8 @@ ONE thread's loop over ascending rows, so every value carries the one-thread
 bits. Each returns with its outputs visible to the whole team; a scalar
 result is the lead's fold, broadcast.
 """
-from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, i2f
+from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, i2f, fsqrt, fabs, fsign, jacobi_eig
+from std.sys.compile import is_defined
 from x_linear.team import Team
 from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from x_linear.ops import fz as _fz
@@ -327,3 +328,67 @@ def fold_one_fmad(v: FP, off: Int, n: Int) -> Float32:
         acc = _acc_fmad(Float32(1), ld(v, off + i), acc)
         i += 1
     return acc
+
+
+def t_jacobi_eig(t: Team, a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int):
+    """`jacobi_eig` (x_linear/ops.mojo) on the team (lane/neural-pass85,
+    2026-10-01). A rotation (p, q) is three element-wise passes over k: the
+    columns p, q of A, then its rows p, q, then the columns p, q of V; in each
+    pass entry k reads and writes only its own pair, so the k of a pass are
+    independent and thread `tid` takes k = tid, tid + nt, ... with the serial
+    loop's statements. The passes and rotations are separated by team
+    barriers, so every read sees exactly the words the serial loop read.
+    Every thread computes the rotation's scalars from the same words, so the
+    skip test and the stop are uniform. The bits are `jacobi_eig`'s; on the
+    device it ran on the lead thread alone (BayesianRidge at 220 features:
+    about 30 s on the M4's GPU whatever the row count). A team of one runs
+    `jacobi_eig` itself. `-D MOJOLEARN_X_LINEAR_JACOBI_LEAD=1` restores the
+    lead-only call."""
+    comptime if is_defined["MOJOLEARN_X_LINEAR_JACOBI_LEAD"]():
+        if t.lead():
+            jacobi_eig(a, aoff, v, voff, m, max_sweeps)
+        t.sync()
+        return
+    if t.nt <= 1:
+        jacobi_eig(a, aoff, v, voff, m, max_sweeps)
+        return
+    for i in range(t.tid, m, t.nt):
+        for j in range(m):
+            st(v, voff + i * m + j, Float32(1) if i == j else Float32(0))
+    t.sync()
+    for _ in range(max_sweeps):
+        var rotated = False
+        for p in range(m):
+            for q in range(p + 1, m):
+                var apq = ld(a, aoff + p * m + q)
+                var app = ld(a, aoff + p * m + p)
+                var aqq = ld(a, aoff + q * m + q)
+                var scale = fsqrt(fabs(fm(app, aqq)))
+                if fabs(apq) <= fm(Float32(1e-9), scale) or apq == 0:
+                    continue
+                rotated = True
+                var theta = fd(fs(aqq, app), fm(Float32(2), apq))
+                var tt = fd(fsign(theta) if theta != 0 else Float32(1),
+                            fa(fabs(theta), fsqrt(fa(fm(theta, theta), Float32(1)))))
+                var c = fd(Float32(1), fsqrt(fa(fm(tt, tt), Float32(1))))
+                var s = fm(tt, c)
+                # every thread has read a_pq, a_pp, a_qq before any writes them
+                t.sync()
+                for k in range(t.tid, m, t.nt):
+                    var akp = ld(a, aoff + k * m + p)
+                    var akq = ld(a, aoff + k * m + q)
+                    st(a, aoff + k * m + p, fs(fm(c, akp), fm(s, akq)))
+                    st(a, aoff + k * m + q, fa(fm(s, akp), fm(c, akq)))
+                    var vkp = ld(v, voff + k * m + p)
+                    var vkq = ld(v, voff + k * m + q)
+                    st(v, voff + k * m + p, fs(fm(c, vkp), fm(s, vkq)))
+                    st(v, voff + k * m + q, fa(fm(s, vkp), fm(c, vkq)))
+                t.sync()
+                for k in range(t.tid, m, t.nt):
+                    var apk = ld(a, aoff + p * m + k)
+                    var aqk = ld(a, aoff + q * m + k)
+                    st(a, aoff + p * m + k, fs(fm(c, apk), fm(s, aqk)))
+                    st(a, aoff + q * m + k, fa(fm(s, apk), fm(c, aqk)))
+                t.sync()
+        if not rotated:
+            return
