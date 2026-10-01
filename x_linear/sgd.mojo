@@ -249,8 +249,17 @@ def sgd_one(
     var intercept = Float32(1) if one_class else Float32(0)
     var x_sub = True
     var trace = q
+    var pf_ahead = 1
+    # The objective only decides the stopping (`tol`); with tol None
+    # (-3e38 here) no epoch reads it, so the host skips its per-row penalty
+    # norms (lane/neural-pass81). The device keeps the one-thread sequence.
+    var need_obj = True
+    comptime if not is_gpu() and SGD_HOST_TRACK:
+        need_obj = tol > Float32(-3.0e38)
     comptime if not is_gpu() and SGD_HOST_TRACK:
         x_sub = _has_subnormal(x, n * d)
+        # the shuffled rows miss the caches: fetch ~2 KB of rows ahead
+        pf_ahead = max(1, min(16, 2048 // (4 * d + 1)))
         trace = alloc[Float32](d + 8).unsafe_origin_cast[MutAnyOrigin]()
     for i in range(n):
         sti(idx, i, i)
@@ -278,8 +287,8 @@ def sgd_one(
             var y = ld(ys, i)
             var p: Float32
             comptime if not is_gpu() and SGD_HOST_TRACK:
-                if r + 1 < n:
-                    _prefetch_row(x, Int(ldi(idx, r + 1)) * d, d)
+                if r + pf_ahead < n:
+                    _prefetch_row(x, Int(ldi(idx, r + pf_ahead)) * d, d)
                 if x_sub:
                     p = fa(_dot_tracked[True](x, i * d, w, woff, d, trace), intercept)
                 else:
@@ -292,7 +301,7 @@ def sgd_one(
                 eta = fd(eta0, identical_pow(i2f(t), power_t))
             var cur = sgd_loss(loss, y, p, eps)
             objective = fa(objective, cur)
-            if lr != LR_PA1 and lr != LR_PA2:
+            if lr != LR_PA1 and lr != LR_PA2 and need_obj:
                 if penalty != P_NONE:
                     var n2 = Float32(0)
                     var n1 = Float32(0)
