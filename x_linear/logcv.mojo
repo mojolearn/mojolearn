@@ -283,6 +283,85 @@ def _predict_code(x: FP, i: Int, d: Int, kp: Int, fi: Bool, th: FP, toff: Int) -
     return best
 
 
+def logcv_fold(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, f: Int):
+    """Fold f of logcv_fit: its training rows, then every C ascending (each
+    warm-started from the previous C's theta, theirs), each held-out score
+    into res[sc + f*nC + ci]. Writes only fold f's scores, so the folds may
+    run on separate teams with their own fw / iw / team scratch (the device
+    runs one block a fold, lane/neural-pass94)."""
+    var max_iter = ldi(ip, 0)
+    var fi = ldi(ip, 1)
+    var kp = ldi(ip, 2)
+    var nc = ldi(ip, 3)
+    var tol = ld(fp, 0)
+    var stride = d + 1
+    var p = kp * stride
+    var th = 0
+    var cslot = p
+    var work = p + 1 + n * (kp + 1)
+    var sc = kp * d + kp + 2
+    if t.lead():
+        sti(iw, 0, kp)
+        sti(iw, 1, fi)
+        sti(iw, 3, ldi(ip, 5))
+    var cptr = fw + cslot
+    var hitr = t.row(0)
+    var cnt = logcv_rows(t, y, n, f, kp)
+    if t.lead():
+        sti(iw, 2, f)
+        sti(iw, 4, cnt)
+        fill(fw, th, p, Float32(0))
+    t.sync()
+    for ci in range(nc):
+        if t.lead():
+            st(fw, cslot, ld(fp, 1 + ci))
+        t.sync()
+        _ = lbfgs[logistic_objective](t, x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + 1)
+        # each held-out row's hit (1) or miss (0) across the team, then
+        # the lead counts them in ascending row order
+        comptime if is_gpu():
+            for i in range(t.tid, n, t.nt):
+                if Int(ld(y, n + i)) == f:
+                    var hit = _predict_code(x, i, d, kp if kp > 1 else 1, fi != 0, fw, th) == Int(ld(y, i))
+                    st(hitr, i, Float32(1) if hit else Float32(0))
+        else:
+            # the host maps the held-out rows' hits in row blocks (lane linear-cpu)
+            var fwp = fw
+            var kpp = kp if kp > 1 else 1
+
+            def rows_hit(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm kpp, imm fi, imm fwp, imm th,
+                                            imm hitr, imm f}:
+                for i in range(lo, hi):
+                    if Int(ld(y, n + i)) == f:
+                        var hit = _predict_code(x, i, d, kpp, fi != 0, fwp, th) == Int(ld(y, i))
+                        st(hitr, i, Float32(1) if hit else Float32(0))
+
+            par_rows(rows_hit, n)
+        t.sync()
+        if t.lead():
+            if ldi(ip, 5) != 0:
+                # their scorer gets sample_weight[test]: the raw weights, at y + 3n
+                var wh = Float32(0)
+                var wt = Float32(0)
+                for i in range(n):
+                    if Int(ld(y, n + i)) == f:
+                        var wi = ld(y, 3 * n + i)
+                        wt = fa(wt, wi)
+                        if ld(hitr, i) != 0:
+                            wh = fa(wh, wi)
+                st(res, sc + f * nc + ci, fd(wh, wt) if wt > 0 else Float32(0))
+            else:
+                var hit = 0
+                var cnt = 0
+                for i in range(n):
+                    if Int(ld(y, n + i)) == f:
+                        cnt += 1
+                        if ld(hitr, i) != 0:
+                            hit += 1
+                st(res, sc + f * nc + ci, fd(i2f(hit), i2f(cnt)) if cnt > 0 else Float32(0))
+        t.sync()
+
+
 def logcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [max_iter, fit_intercept, K', n_Cs, n_folds, sample_weight]; fp: [tol, Cs...].
     With sample_weight, y = labels | folds | fit weights (sample x class) |
@@ -308,63 +387,30 @@ def logcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
         sti(iw, 0, kp)
         sti(iw, 1, fi)
         sti(iw, 3, ldi(ip, 5))
-    var cptr = fw + cslot
-    var hitr = t.row(0)
     for f in range(nf):
-        var cnt = logcv_rows(t, y, n, f, kp)
-        if t.lead():
-            sti(iw, 2, f)
-            sti(iw, 4, cnt)
-            fill(fw, th, p, Float32(0))
-        t.sync()
-        for ci in range(nc):
-            if t.lead():
-                st(fw, cslot, ld(fp, 1 + ci))
-            t.sync()
-            _ = lbfgs[logistic_objective](t, x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + 1)
-            # each held-out row's hit (1) or miss (0) across the team, then
-            # the lead counts them in ascending row order
-            comptime if is_gpu():
-                for i in range(t.tid, n, t.nt):
-                    if Int(ld(y, n + i)) == f:
-                        var hit = _predict_code(x, i, d, kp if kp > 1 else 1, fi != 0, fw, th) == Int(ld(y, i))
-                        st(hitr, i, Float32(1) if hit else Float32(0))
-            else:
-                # the host maps the held-out rows' hits in row blocks (lane linear-cpu)
-                var fwp = fw
-                var kpp = kp if kp > 1 else 1
+        logcv_fold(t, x, y, n, d, ip, fp, res, fw, iw, f)
+    logcv_final(t, x, y, n, d, ip, fp, res, fw, iw)
 
-                def rows_hit(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm kpp, imm fi, imm fwp, imm th,
-                                                imm hitr, imm f}:
-                    for i in range(lo, hi):
-                        if Int(ld(y, n + i)) == f:
-                            var hit = _predict_code(x, i, d, kpp, fi != 0, fwp, th) == Int(ld(y, i))
-                            st(hitr, i, Float32(1) if hit else Float32(0))
 
-                par_rows(rows_hit, n)
-            t.sync()
-            if t.lead():
-                if ldi(ip, 5) != 0:
-                    # their scorer gets sample_weight[test]: the raw weights, at y + 3n
-                    var wh = Float32(0)
-                    var wt = Float32(0)
-                    for i in range(n):
-                        if Int(ld(y, n + i)) == f:
-                            var wi = ld(y, 3 * n + i)
-                            wt = fa(wt, wi)
-                            if ld(hitr, i) != 0:
-                                wh = fa(wh, wi)
-                    st(res, sc + f * nc + ci, fd(wh, wt) if wt > 0 else Float32(0))
-                else:
-                    var hit = 0
-                    var cnt = 0
-                    for i in range(n):
-                        if Int(ld(y, n + i)) == f:
-                            cnt += 1
-                            if ld(hitr, i) != 0:
-                                hit += 1
-                    st(res, sc + f * nc + ci, fd(i2f(hit), i2f(cnt)) if cnt > 0 else Float32(0))
-            t.sync()
+def logcv_final(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """logcv_fit after its folds: the first best mean score's C, then the
+    refit on every row from theta 0."""
+    var max_iter = ldi(ip, 0)
+    var fi = ldi(ip, 1)
+    var kp = ldi(ip, 2)
+    var nc = ldi(ip, 3)
+    var nf = ldi(ip, 4)
+    var tol = ld(fp, 0)
+    var stride = d + 1
+    var p = kp * stride
+    var th = 0
+    var cslot = p
+    var work = p + 1 + n * (kp + 1)
+    var sc = kp * d + kp + 2
+    if t.lead():
+        sti(iw, 0, kp)
+        sti(iw, 1, fi)
+        sti(iw, 3, ldi(ip, 5))
     var best = 0
     if t.lead():
         var bs = Float32(0)
@@ -380,6 +426,7 @@ def logcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
         st(fw, cslot, ld(fp, 1 + best))
         fill(fw, th, p, Float32(0))
     best = t.bcast_int(best, 3)
+    var cptr = fw + cslot
     var it = lbfgs[logistic_objective](t, x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + 1)
     if not t.lead():
         return
