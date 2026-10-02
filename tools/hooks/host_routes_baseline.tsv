@@ -817,9 +817,6 @@ host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neig
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/cc_sparse.mojo:cc_iterate_sparse
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/device_ops.mojo:_buf
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/device_ops.mojo:_down
-host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/iter_device.mojo	0	import x_neighbors/svgp_ff.mojo:svgp_ff_solve
-host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/iter_device.mojo	0	svgp_ff_solve(FP(unsafe_from_address=kuu), FP(unsafe_from_address=bh), FP(unsafe_from_address=bl),
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/pr_sparse.mojo:pr_graph_from_dense
 host-call	host-import	PR#106	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/svgp_ff.mojo:svgp_ff_solve
 host-call	host-import	PR#106	debt	x_neighbors/iter_device.mojo	0	svgp_ff_solve(FP(unsafe_from_address=kuu), FP(unsafe_from_address=bh), FP(unsafe_from_address=bl),
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_a = _buf(ctx, 0, n * nc, False)
@@ -899,12 +896,6 @@ host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_g = _buf(
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_nxt = _buf(ctx, 0, nc, False)
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_ring = _buf(ctx, 0, (LP_BATCH + 1) * nc, False)
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_ys = _buf(ctx, ystatic, nc, True)
-host-threads	host-threads	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/svgp_ff.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/svgp_ff.mojo	0	host_parallelize(column, m)
-host-threads	host-threads	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/svgp_ff.mojo	0	host_parallelize(tcol, m)
-host-threads	host-threads	hr-graph	debt	x_neighbors/pr_sparse.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	hr-graph	debt	x_neighbors/pr_sparse.mojo	0	host_parallelize(_count, tasks)
-host-threads	host-threads	hr-graph	debt	x_neighbors/pr_sparse.mojo	0	host_parallelize(_fill, tasks)
 host-threads	host-threads	PR#106	debt	x_neighbors/svgp_ff.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	PR#106	debt	x_neighbors/svgp_ff.mojo	0	host_parallelize(column, m)
 host-threads	host-threads	PR#106	debt	x_neighbors/svgp_ff.mojo	0	host_parallelize(tcol, m)
