@@ -169,10 +169,11 @@ def fast_one_sided_jacobi_svd(r: List[Float32], n: Int, max_sweeps: Int, tol: Fl
                 var np_ = ftz(identical_sqrt(app))
                 var nq_ = ftz(identical_sqrt(aqq))
                 var thresh = ftz(tol * ftz(np_ * nq_))
-                if abs(apq) > thresh:
+                # Andrew, 2026-10-01: an insignificant rotation (a column below
+                # float32 resolution of its partner) is skipped outright
+                if abs(apq) > thresh and svd_rotation_significant(app, aqq):
                     rots += 1
-                    if svd_rotation_significant(app, aqq):
-                        sig += 1
+                    sig += 1
                     var cs = host_jacobi_rotation_cs(app, aqq, apq)
                     _rotate(rp, rq, n, cs[0], cs[1])
                     _rotate(pvt.unsafe_offset(p * n), pvt.unsafe_offset(q * n), n, cs[0], cs[1])
