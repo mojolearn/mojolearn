@@ -71,7 +71,7 @@ from gemm.checks.gemm_identical import identical_gemm
 # ORIENTATION NUMBERING: gemm_oracle's OP_NT = 1 (OP_NN = 0, OP_TN = 2),
 # the numbering identical_gemm reads -- NOT bench/gemm_shapes.mojo's
 # OP_NT = 0. The Mamba-1 header's trap note applies verbatim.
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 
 from checks.numerics import (
     identical_mul,

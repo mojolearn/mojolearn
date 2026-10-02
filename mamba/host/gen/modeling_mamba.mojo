@@ -180,7 +180,7 @@ from mamba.host.device_shim import identical_gemm
 # ORIENTATION NUMBERING: this `OP_NT` is `gemm_oracle`'s, where
 # `OP_NN = 0, OP_NT = 1, OP_TN = 2`. It is NOT `bench/gemm_shapes.mojo`'s
 # `OP_NT = 0`. `identical_gemm` reads this one. See the header's trap note.
-from gemm.checks.gemm_oracle import OP_NN, OP_NT
+from gemm.contract import OP_NN, OP_NT
 
 # `MambaConfig`'s constants and its derived shape
 # (`configuration_mamba.py`: `state_size` 16, `conv_kernel` 4,

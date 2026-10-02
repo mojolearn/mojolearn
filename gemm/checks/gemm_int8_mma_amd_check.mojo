@@ -129,7 +129,7 @@ from gemm.checks.gemm_lowbit_check import (
 )
 from gemm.checks.quantize_int8_par_check import Tally, _diff, _verdict
 from gemm.host.gemm_lowbit_oracle import gemm_int8_oracle, quantize_rows_int8
-from gemm.host.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 
 #: Whether this build has the plans: AMD only.
 comptime HAS_AMD = INT8_AMD_AVAILABLE

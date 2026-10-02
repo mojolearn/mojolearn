@@ -73,14 +73,8 @@ from gemm.host.gemm_lowbit_oracle import (
     quantize_rows_int8,
     widen_bf16,
 )
-from gemm.host.gemm_oracle import (
-    GEMM_ORACLE_HOST_SABOTAGE,
-    OP_NN,
-    OP_NT,
-    OP_TN,
-    gemm_oracle,
-    op_name,
-)
+from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NN, OP_NT, OP_TN, op_name
+from gemm.host.gemm_oracle import gemm_oracle
 
 comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime POISON = Float32(-987654.0)

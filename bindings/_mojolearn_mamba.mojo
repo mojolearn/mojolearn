@@ -138,7 +138,7 @@ from std.memory import bitcast, memcpy
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from mamba.impl.ops.mamba3_siso import m3_phase_tick
-from mamba.impl.modules.mamba3_transfer import M3_BULK_TRANSFER, m3_upload, m3_download
+from mamba.impl.modules.mamba3_transfer import m3_upload, m3_download
 from std.os import abort, getenv
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -228,23 +228,17 @@ def _write_f32(addr: Int, values: List[Float32]) raises:
     copy_f32(values.unsafe_ptr(), _f32_ptr(addr), len(values))
 
 
-comptime M3_DIRECT_TRANSFER = M3_BULK_TRANSFER and not is_defined["MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER"]()
+comptime M3_DIRECT_TRANSFER = not is_defined["MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER"]()
 
 
 def _m3_read_f32(addr: Int, n: Int) raises -> List[Float32]:
-    comptime if not M3_BULK_TRANSFER:
-        return _read_f32(addr, n)
-    else:
-        return read_f32(addr, n)
+    return read_f32(addr, n)
 
 
 def _m3_write_f32(addr: Int, values: List[Float32]) raises:
-    comptime if not M3_BULK_TRANSFER:
-        _write_f32(addr, values)
-    else:
-        var p = _f32_ptr(addr)
-        if len(values) > 0:
-            memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
+    var p = _f32_ptr(addr)
+    if len(values) > 0:
+        memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
 
 
 def _m3_upload_addr[wait: Bool = True](ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.float32]:

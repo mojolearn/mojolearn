@@ -11,17 +11,18 @@ four node arrays, the flat stack) is exactly what a mis-implementation hides in,
 and a gate that runs the same function twice cannot see it. This file
 is written from `isolation_tree_builder.cuh` again, recursively, over
 `List`s, with the ONE thing that must be shared shared: the RNG
-(`impl/rng/xorwow.mojo`) and its consumption order (rows,
-then features, then per node `sample_bounded(n_cols)` + `curand_uniform`
-in pre-order, left child first -- which is what their explicit stack,
-pushing right then left, walks).
+(`impl/rng/xorwow.mojo`) and its consumption order (per node
+`sample_bounded(n_cols)` + `curand_uniform` in pre-order, left child first
+-- which is what their explicit stack, pushing right then left, walks).
 
-The partition reproduces their IN-PLACE SWAP ORDER (`:200-208`), because
-the only order-dependent thing in the whole build -- which of two zeros
-a node's strict `<` fold calls its min (ADDENDUM 11) -- depends on the
-order rows reach the next level. A structurally equal tree with rows in
-another order is not bit-identical to theirs in that branch, so the
-oracle must not take the easy stable partition.
+The partition is the device's STABLE partition (cpu-gpu-cleanup t-forest:
+the block-parallel builder replaced their in-place swap order, `:200-208`)
+and the subsample is the device's counter draw (`if_bootstrap_draw`, the
+smallest `if_row_key`s), so the node draws take the tree's XORWOW stream
+from its start. The only order-dependent thing in the whole build -- which
+of two zeros a node's strict `<` fold calls its min (ADDENDUM 11) --
+depends on the order rows reach the next level, which is why this restates
+the stable order exactly rather than any other.
 
 The Float64 reference (`oracle_scores_f64`) walks the SAME trees (the
 structure is integer + one float per node and is the certified object)
@@ -48,7 +49,11 @@ from isolation_forest.impl.isolation_forest import (
 )
 from isolation_forest.impl.isolation_tree_builder import (
     EULER_MASCHERONI_F32,
+    if_bootstrap_draw,
+    if_row_key,
+    if_sample_base,
 )
+from std.builtin.sort import sort
 from checks.numerics import ftz, identical_log, identical_mul_add, identical_pow
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
@@ -209,24 +214,10 @@ def _build_node(
     var frac = curand_uniform(st)
     var threshold = ftz(identical_mul_add(frac, ftz(max_val - min_val), min_val))
 
-    var left_end = start
-    for r in range(start, end):
-        var v = t.local[idx[r] * n_cols + local_feature]
-        if v < threshold:
-            var tmp = idx[left_end]
-            idx[left_end] = idx[r]
-            idx[r] = tmp
-            left_end += 1
+    var left_end = _stable_partition(t, idx, start, end, n_cols, local_feature, threshold)
     if left_end == start or left_end == end:
         threshold = max_val
-        left_end = start
-        for r in range(start, end):
-            var v = t.local[idx[r] * n_cols + local_feature]
-            if v < threshold:
-                var tmp = idx[left_end]
-                idx[left_end] = idx[r]
-                idx[r] = tmp
-                left_end += 1
+        left_end = _stable_partition(t, idx, start, end, n_cols, local_feature, threshold)
 
     var left_child = n_nodes
     var right_child = n_nodes + 1
@@ -236,6 +227,43 @@ def _build_node(
     # left subtree completely before the right one.
     _build_node(t, st, idx, start, left_end, left_child, depth + 1, n_cols, max_depth, max_nodes_per_tree, n_nodes, observed_max_depth)
     _build_node(t, st, idx, left_end, end, right_child, depth + 1, n_cols, max_depth, max_nodes_per_tree, n_nodes, observed_max_depth)
+
+
+def _smallest_keys(base: UInt64, n: Int, k: Int) -> List[Int]:
+    """The `k` of `[0, n)` with the smallest `(if_row_key(base, r), r)`, in
+    increasing `r`: the device's `_block_select_smallest`, restated as a
+    sort. All of `[0, n)` when `k >= n`."""
+    var out = List[Int]()
+    if k >= n:
+        for r in range(n):
+            out.append(r)
+        return out^
+    var keys = List[UInt64](capacity=n)
+    for r in range(n):
+        keys.append((UInt64(if_row_key(base, r)) << 32) | UInt64(r))
+    sort(keys)
+    var rows = List[Int](capacity=k)
+    for i in range(k):
+        rows.append(Int(keys[i] & UInt64(0xFFFFFFFF)))
+    sort(rows)
+    return rows^
+
+
+def _stable_partition(t: OracleTree, mut idx: List[Int], start: Int, end: Int, n_cols: Int, feature: Int, threshold: Float32) -> Int:
+    """The device's stable partition: rows with `value < threshold` first,
+    then the rest, each side in its previous order. Returns the split."""
+    var less = List[Int]()
+    var more = List[Int]()
+    for r in range(start, end):
+        if t.local[idx[r] * n_cols + feature] < threshold:
+            less.append(idx[r])
+        else:
+            more.append(idx[r])
+    for i in range(len(less)):
+        idx[start + i] = less[i]
+    for i in range(len(more)):
+        idx[start + len(less) + i] = more[i]
+    return start + len(less)
 
 
 def oracle_fit(
@@ -275,31 +303,23 @@ def oracle_fit(
         var t = OracleTree()
         var st = curandStateXORWOW.zero()
         curand_init(params.seed, UInt64(tree_id), UInt64(0), st, seqp, offp)
-        # rows
+        # rows and features: the device's counter draws (cpu-gpu-cleanup
+        # t-forest), not the tree's XORWOW stream, which the node draws now
+        # take from its start
+        var row_base = if_sample_base(params.seed, UInt64(tree_id), 0)
         if params.bootstrap:
-            for _ in range(n_sampled_rows):
-                t.rows.append(Int64(_bounded(st, UInt64(n_rows))))
-        else:
-            var start = n_rows - n_sampled_rows
             for i in range(n_sampled_rows):
-                var j = start + i
-                var cand = Int64(_bounded(st, UInt64(j + 1)))
-                var seen = False
-                for q in range(i):
-                    if t.rows[q] == cand:
-                        seen = True
-                t.rows.append(Int64(j) if seen else cand)
-        # features
+                t.rows.append(Int64(if_bootstrap_draw(row_base, i, UInt64(n_rows))))
+        else:
+            var picked = _smallest_keys(row_base, n_rows, n_sampled_rows)
+            for i in range(len(picked)):
+                t.rows.append(Int64(picked[i]))
         if n_sampled_features < n_cols:
-            var start = n_cols - n_sampled_features
-            for i in range(n_sampled_features):
-                var j = start + i
-                var cand = Int32(_bounded(st, UInt64(j + 1)))
-                var seen = False
-                for q in range(i):
-                    if t.features[q] == cand:
-                        seen = True
-                t.features.append(Int32(j) if seen else cand)
+            var picked_f = _smallest_keys(
+                if_sample_base(params.seed, UInt64(tree_id), 1), n_cols, n_sampled_features
+            )
+            for i in range(len(picked_f)):
+                t.features.append(Int32(picked_f[i]))
         # gather
         for s in range(n_sampled_rows):
             var src_row = Int(t.rows[s])

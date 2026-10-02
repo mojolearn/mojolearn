@@ -3,44 +3,51 @@
 """lane/apple-fast-tsa (2026-10-02): the FAST ARIMA fit's evaluation
 workspace, allocated ONCE per solve (`-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`).
 
-THE CAUSE. `batched_loglike_grad_host` (`arima/impl/batched_arima.mojo`,
-the evaluation `batched_fit.mojo::eval_batch` makes at every candidate
-point of the shared L-BFGS, hundreds of times per fit) allocates at every
-call: `y_ext` ((N + 1) x batch_size series, the input replicated N + 1
-times through N + 1 device copies), `x_ext`, `d_grad`, two `ARIMAParams`
-(7 buffers each) and a `KalmanWorkspace` (26 buffers), plus four host
-buffers, then issues N `perturb_kernel` launches, N `grad_kernel`
-launches and the card's `P0` / `alpha0` copies, and synchronizes once.
-About 45 buffer creations and 2 (N + 1) copies per evaluation on a batch
-whose Kalman pass is 320 threads of 2,000 steps (the board's 64 ARMA(1,1)
-series): the evaluation is host and allocator time, not filter time
-(board, 0.8.25 L40S: arima 547 ms vs statsmodels 143).
+THE CAUSE. `eval_batch_device`'s stacked arm (`arima/impl/batched_fit.mojo`,
+the evaluation `batched_min_lbfgs` makes at every candidate point of the
+device L-BFGS, hundreds of times per fit) allocates at every call: `y_ext`
+((N + 1) x batch_size series, the input replicated N + 1 times through
+N + 1 device copies), `x_ext` (N + 1 copies of the candidates), `p_ext`
+and `loglike_ws_packed`'s `t_params` (7 buffers each) and a
+`KalmanWorkspace` (26 buffers), then issues N `perturb_kernel` launches, N
+`grad_kernel` launches, the card's `P0` / `alpha0` copies, and WAITS once
+so the workspace can be released. About 45 buffer creations, 2 (N + 1)
+copies and 2N + 5 launches per evaluation on a batch whose Kalman pass is
+320 threads of 2,000 steps (the board's 64 ARMA(1,1) series): the
+evaluation is allocator and launch time, not filter time.
 
 THE CHANGE. `FastEvalWS` holds every buffer for the solve; `eval` issues
-one host-to-device copy of the candidate vector, ONE stacking kernel
-(`ew_stack_kernel`: member m of series b is x, member m >= 1 perturbed at
-parameter m - 1 with `perturb_kernel`'s statement), `unpack`, the Jones
-transform, `fast_kalman_into` (the filter's three launches into the held
-workspace), ONE gradient kernel (`grad_kernel`'s statement over every
-(parameter, series)) and the same four readbacks and one synchronize. The
-per-element arithmetic is `perturb_kernel`'s, `grad_kernel`'s and the
-filter's, so the log-likelihood and gradient bits are the sequence's; the
-batch composition and launch geometry are unchanged. The compaction
-(`FIT_COMPACT`) rebuilds the workspace at the packed size.
+ONE stacking kernel (`ew_stack_kernel`: member m of series b is the
+candidate, member m >= 1 perturbed at parameter m - 1 with
+`perturb_kernel`'s statement), `unpack`, the Jones transform,
+`fast_kalman_into` (the filter's three launches into the held workspace),
+then main's `arima_mark_infeasible_kernel`, ONE gradient kernel
+(`grad_kernel`'s statement over every (parameter, series)), the
+`d_x_pert = d_x` copy and `arima_eval_finish_kernel`, exactly the stacked
+arm's tail. Nothing is read back and nothing waits: the results stay in the
+optimizer's device buffers as the stacked arm leaves them. The per-element
+arithmetic is `perturb_kernel`'s, `grad_kernel`'s and the filter's, so the
+log-likelihood and gradient bits are the stacked arm's; the batch
+composition and launch geometry are unchanged.
 
-FAST on Apple only; IDENTICAL never imports this file's launches."""
+FAST on Apple only; nothing here is launched or instantiated in any other
+build (`eval`'s body exists only under KALMAN_FAST_EVAL_WS)."""
 
-from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 
-from arima.impl.batched_arima import _mark_infeasible
 from arima.impl.batched_kalman import (
     KALMAN_FAST_EVAL_WS,
     KalmanWorkspace,
     fast_kalman_into,
 )
+from arima.impl.lbfgs_device import (
+    LBFGS_TPB,
+    arima_eval_finish_kernel,
+    arima_mark_infeasible_kernel,
+)
 from arima.impl.timeSeries.arima_helpers import batched_jones_transform
-from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack
+from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validate_order
 from checks.numerics import ftz
 
 comptime EW_TPB = 128
@@ -103,16 +110,10 @@ struct FastEvalWS(Movable):
     var N: Int
     var eb: Int
     var y_ext: DeviceBuffer[DType.float32]
-    var d_x: DeviceBuffer[DType.float32]
     var x_ext: DeviceBuffer[DType.float32]
-    var d_grad: DeviceBuffer[DType.float32]
     var p_ext: ARIMAParams
     var t_params: ARIMAParams
     var ws: KalmanWorkspace
-    var h_ll: HostBuffer[DType.float32]
-    var h_g: HostBuffer[DType.float32]
-    var h_i0: HostBuffer[DType.int32]
-    var h_i1: HostBuffer[DType.int32]
 
     def __init__(
         out self,
@@ -128,56 +129,44 @@ struct FastEvalWS(Movable):
         var M1 = N + 1
         var eb = M1 * nb
         var nb_y = nb * n_obs
-        var nb_x = nb * N
         var y_ext = ctx.enqueue_create_buffer[DType.float32](max(1, eb * n_obs))
         for m in range(M1):
             ctx.enqueue_copy(
                 dst_buf=y_ext.create_sub_buffer[DType.float32](m * nb_y, nb_y),
                 src_buf=d_y.create_sub_buffer[DType.float32](0, nb_y),
             )
-        var d_x = ctx.enqueue_create_buffer[DType.float32](max(1, nb_x))
         var x_ext = ctx.enqueue_create_buffer[DType.float32](max(1, eb * N))
-        var d_grad = ctx.enqueue_create_buffer[DType.float32](max(1, nb_x))
         var p_ext = ARIMAParams(ctx, order, eb)
         var t_params = ARIMAParams(ctx, order, eb)
         var ws = KalmanWorkspace(ctx, order, eb, n_obs, 0)
-        var h_ll = ctx.enqueue_create_host_buffer[DType.float32](max(1, nb))
-        var h_g = ctx.enqueue_create_host_buffer[DType.float32](max(1, nb_x))
-        var h_i0 = ctx.enqueue_create_host_buffer[DType.int32](max(1, eb))
-        var h_i1 = ctx.enqueue_create_host_buffer[DType.int32](max(1, eb))
         ctx.synchronize()
         self.nb = nb
         self.n_obs = n_obs
         self.N = N
         self.eb = eb
         self.y_ext = y_ext^
-        self.d_x = d_x^
         self.x_ext = x_ext^
-        self.d_grad = d_grad^
         self.p_ext = p_ext^
         self.t_params = t_params^
         self.ws = ws^
-        self.h_ll = h_ll^
-        self.h_g = h_g^
-        self.h_i0 = h_i0^
-        self.h_i1 = h_i1^
 
     def eval(
         mut self,
         ctx: DeviceContext,
         order: ARIMAOrder,
         h: Float32,
-        xin: List[Float32],
-        mut ll_out: List[Float32],
-        mut g_out: List[Float32],
+        scale: Float32,
+        mut d_x: DeviceBuffer[DType.float32],
+        mut d_grad: DeviceBuffer[DType.float32],
+        mut d_x_pert: DeviceBuffer[DType.float32],
+        mut d_f: DeviceBuffer[DType.float32],
+        mut d_g: DeviceBuffer[DType.float32],
+        mut d_bad: DeviceBuffer[DType.int32],
     ) raises:
-        """`batched_loglike_grad_host` with `trans = True` on the held
-        buffers: the base log-likelihood of `xin` (`nb * N` values) into
-        `ll_out[0:nb]`, the forward-difference gradient into `g_out[0:nb *
-        N]`. A series whose Kalman refusal code is set at the base or any
-        forward-difference member gets -inf (`_mark_infeasible`, as that
-        function does), never a raise. The body exists only under
-        KALMAN_FAST_EVAL_WS, so no kernel here is instantiated elsewhere."""
+        """`eval_batch_device`'s stacked arm at the candidates in `d_x`, on
+        the held buffers: `d_f` / `d_g` / `d_bad` are written as that arm
+        writes them, `d_x_pert` ends equal to `d_x`, nothing is read back
+        and nothing waits."""
         comptime if not KALMAN_FAST_EVAL_WS:
             raise Error("FastEvalWS.eval: not compiled in this build (MOJOLEARN_ARIMA_FAST_EVAL_WS)")
         else:
@@ -185,45 +174,34 @@ struct FastEvalWS(Movable):
             var N = self.N
             var eb = self.eb
             var nb_x = nb * N
-            if len(xin) != nb_x:
-                raise Error(
-                    "FastEvalWS.eval: len(xin)=" + String(len(xin)) + " is not nb * N = "
-                    + String(nb_x)
-                )
-            ctx.enqueue_copy(
-                dst_buf=self.d_x.create_sub_buffer[DType.float32](0, nb_x), src_ptr=xin.unsafe_ptr()
-            )
+            var grid = (nb + LBFGS_TPB - 1) // LBFGS_TPB
+            ctx.enqueue_memset(d_bad, Int32(0))
             var g1 = (eb + EW_TPB - 1) // EW_TPB
             ctx.enqueue_function[ew_stack_kernel](
-                self.x_ext.unsafe_ptr(), self.d_x.unsafe_ptr(), Int32(nb), Int32(N), h,
+                self.x_ext.unsafe_ptr(), d_x.unsafe_ptr(), Int32(nb), Int32(N), h,
                 grid_dim=(g1, 1, 1), block_dim=(EW_TPB, 1, 1),
             )
             unpack(ctx, self.p_ext, order, eb, self.x_ext)
+            validate_order(order)
             batched_jones_transform(ctx, order, eb, False, self.p_ext, self.t_params)
-            fast_kalman_into(ctx, self.y_ext, self.t_params, order, eb, self.n_obs, self.ws)
+            fast_kalman_into(ctx, self.y_ext, self.t_params, order, eb, self.n_obs, self.ws, 32)
+            ctx.enqueue_function[arima_mark_infeasible_kernel](
+                d_bad.unsafe_ptr(), self.ws.loglike.unsafe_ptr(), self.ws.info_init.unsafe_ptr(),
+                self.ws.info_loop.unsafe_ptr(), Int32(nb), Int32(N + 1),
+                grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
+            )
             var g2 = (nb_x + EW_TPB - 1) // EW_TPB
             ctx.enqueue_function[ew_grad_kernel](
-                self.d_grad.unsafe_ptr(), self.ws.loglike.unsafe_ptr(), Int32(nb), Int32(N), h,
+                d_grad.unsafe_ptr(), self.ws.loglike.unsafe_ptr(), Int32(nb), Int32(N), h,
                 grid_dim=(g2, 1, 1), block_dim=(EW_TPB, 1, 1),
             )
+            # the caller's scratch ends equal to d_x, as the sequential form leaves it
             ctx.enqueue_copy(
-                dst_ptr=self.h_ll.unsafe_ptr(),
-                src_buf=self.ws.loglike.create_sub_buffer[DType.float32](0, nb),
+                dst_buf=d_x_pert.create_sub_buffer[DType.float32](0, nb_x),
+                src_buf=d_x.create_sub_buffer[DType.float32](0, nb_x),
             )
-            ctx.enqueue_copy(
-                dst_ptr=self.h_g.unsafe_ptr(),
-                src_buf=self.d_grad.create_sub_buffer[DType.float32](0, nb_x),
+            ctx.enqueue_function[arima_eval_finish_kernel](
+                d_f.unsafe_ptr(), d_g.unsafe_ptr(), self.ws.loglike.unsafe_ptr(),
+                d_grad.unsafe_ptr(), d_bad.unsafe_ptr(), Int32(nb), Int32(N), scale,
+                grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
             )
-            ctx.enqueue_copy(dst_ptr=self.h_i0.unsafe_ptr(), src_buf=self.ws.info_init)
-            ctx.enqueue_copy(dst_ptr=self.h_i1.unsafe_ptr(), src_buf=self.ws.info_loop)
-            ctx.synchronize()
-            var i0 = List[Int32](capacity=eb)
-            var i1 = List[Int32](capacity=eb)
-            for b in range(eb):
-                i0.append(self.h_i0.unsafe_ptr()[b])
-                i1.append(self.h_i1.unsafe_ptr()[b])
-            for b in range(nb):
-                ll_out[b] = self.h_ll.unsafe_ptr()[b]
-            _mark_infeasible(i0, i1, nb, ll_out)
-            for t in range(nb_x):
-                g_out[t] = self.h_g.unsafe_ptr()[t]

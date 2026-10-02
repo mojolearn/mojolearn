@@ -17,10 +17,10 @@ Here the fit is launches:
   6. one block: the choice, then the refit on the full data from zero.
 Every value is the host schedule's statements over the same rows in the
 same order (cd.mojo `ecv_*`), so every word is the host's.
-`MOJOLEARN_X_LINEAR_ENETCV_GRID=0` restores the one-block team fit.
 Steps 1, 2 and 5 stage rows in threadgroup memory (lane/neural-pass110,
-below); `MOJOLEARN_X_LINEAR_ENETCV_STAGED=0` restores the per-value
-kernels.
+below) when the page fits; the per-value kernels otherwise. (The
+`MOJOLEARN_X_LINEAR_ENETCV_GRID` / `_STAGED` A/B switches were deleted,
+cpu-gpu-cleanup c-linear.)
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.sync import barrier
@@ -28,7 +28,6 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from max.gpu.host import DeviceContext
-from std.os import getenv
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.ops import FP, IP, fa, fm, fs, fd, fmad, ld, st, ldi, i2f, fill
 from x_linear.team import Team, TEAM_SLOTS, LINEAR_TPB, team_at
@@ -628,9 +627,8 @@ def enetcv_fit_grid(
     ctx.enqueue_copy(dst_buf=dip, src_ptr=hip.unsafe_ptr())
     if len(hfp) > 0:
         ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
-    var on = String(getenv("MOJOLEARN_X_LINEAR_ENETCV_STAGED")) != "0"
-    var staged = ECV_STAGED and on and f_n + 1 <= ECV_NT // ECV_TC
-    var staged_score = ECV_SCORE_STAGED and on and n_y >= 2 * n
+    var staged = ECV_STAGED and f_n + 1 <= ECV_NT // ECV_TC
+    var staged_score = ECV_SCORE_STAGED and n_y >= 2 * n
     # each fold's held-out rows lie in [lo, lo + span) (KFold: exactly
     # them; rows of other folds inside are skipped by their id)
     var hsp = List[Int32](length=max(2 * f_n, 1), fill=Int32(0))

@@ -319,6 +319,38 @@ def batched_loglike_packed_x(
     return r^
 
 
+def loglike_ws_packed(
+    ctx: DeviceContext,
+    mut d_y: DeviceBuffer[DType.float32],
+    mut d_exog: DeviceBuffer[DType.float32],
+    mut d_fut: DeviceBuffer[DType.float32],
+    batch_size: Int,
+    n_obs: Int,
+    order: ARIMAOrder,
+    mut d_params: DeviceBuffer[DType.float32],
+    mut params: ARIMAParams,
+) raises -> LoglikeResult:
+    """`batched_loglike_packed_x` with `trans = True`, `fc_steps = 0` and the
+    Kalman refusals DEFERRED, the log-likelihood LEFT ON THE DEVICE: the
+    optimizer's evaluation (`batched_fit.mojo::eval_batch_device`) marks an
+    infeasible series from `ws.info_init`, `ws.info_loop` and `ws.loglike`
+    in a kernel, so nothing here reads back or waits (cpu-gpu-cleanup n-seq,
+    2026-10-02). `loglike` is left empty. `d_fut` is the caller's
+    placeholder, alive until the caller's wait."""
+    unpack(ctx, params, order, batch_size, d_params)
+    validate_order(order)
+    var t_params = ARIMAParams(ctx, order, batch_size)
+    batched_jones_transform(ctx, order, batch_size, False, params, t_params)
+    # lane/apple-fast-tsa: `ll_only` (the last argument) selects the loop
+    # kernel without the per-step `pred` / `vs` / `Fs` stores under
+    # `-D MOJOLEARN_ARIMA_FAST_LLONLY=1` (FAST on Apple); every other build
+    # ignores it. This entry is the optimizer's only, no exog, no forecast.
+    var ws = batched_kalman_filter_x(
+        ctx, d_y, d_exog, d_fut, n_obs, t_params, order, batch_size, 0, 32, True, True
+    )
+    return LoglikeResult(ws=ws^, t_params=t_params^, loglike=List[Float32]())
+
+
 # ---------------------------------------------------------------------------
 # predict (:86-267)
 # ---------------------------------------------------------------------------
@@ -768,11 +800,8 @@ def batched_loglike_grad_host(
     else:
         _copy_params(ctx, p_ext, t_params, order, eb)
     var fut = _placeholder(ctx)
-    # lane/apple-fast-tsa: `ll_only` (the last argument) selects the loop
-    # kernel without the per-step `pred` / `vs` / `Fs` stores under
-    # `-D MOJOLEARN_ARIMA_FAST_LLONLY=1`; it is read by no other build.
     var ws = batched_kalman_filter_x(
-        ctx, y_ext, d_exog, fut, n_obs, t_params, order, eb, 0, 32, True, True
+        ctx, y_ext, d_exog, fut, n_obs, t_params, order, eb, 0, 32, True
     )
     for i in range(N):
         ctx.enqueue_function[grad_kernel](

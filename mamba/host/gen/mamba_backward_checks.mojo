@@ -8,7 +8,7 @@ from mamba.host.device_shim import host_launch, launch_count
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 from mamba.host.device_shim import identical_gemm_workspace_max_floats
 from mamba.host.gen.gemm_backward import (
     gemm_backward_a_call,

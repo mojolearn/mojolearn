@@ -29,10 +29,13 @@ alone would make the fold a function of the launch.
 
 The values of one chunk are the `PINNED_SUM_W` consecutive indices
 `[chunk * W, (chunk + 1) * W)`, positions past `n` hold `+0.0`. Each chunk's
-total is written to `partials[chunk]`, and the host folds the partials
-ASCENDING (`host_fold_partials`). So the whole sum is a pure function of `n`
-and the values: `ceil(n / W)` chunks, a fixed tree per chunk, a fixed serial
-fold over chunks. Grid shape, block size, how many chunks one physical block
+total is written to `partials[chunk]`. A grid-wide sum then folds the
+partials ON THE DEVICE with the same slab tree, level by level
+(`fold_partials_levels`, host model `host_tree_fold_partials`; the whole
+sum is `host_grid_sum`). So the whole sum is a pure function of `n` and the
+values: `ceil(n / W)` chunks, a fixed tree per chunk, a fixed tree over the
+chunk totals. A row-owned fold (one block per row) keeps the ascending
+chain `host_fold_partials` inside its block. Grid shape, block size, how many chunks one physical block
 serves: none of it reaches an addition.
 
 `ftz` is applied to every stored partial (row 10): a denormal partial is
@@ -60,7 +63,10 @@ from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 
+from max.gpu.host import DeviceBuffer, DeviceContext
+
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from metrics.checks.device_io import download_f32
 
 
 #: NUMERIC: the slab width. A different W is a different tree.
@@ -187,6 +193,162 @@ def host_fold_partials(partials: List[Float32], chunks: Int) -> Float32:
     for c in range(chunks):
         acc = ftz(acc + partials[c])
     return acc
+
+
+# ---------------------------------------------------------------------------
+# THE GRID-WIDE SECOND STAGE: a fixed tree over the chunk partials.
+#
+# A grid-wide sum (one value for the whole input: r2, KL, log loss, the
+# regression errors, the weighted scores, the silhouette mean) folds its
+# `chunk_count(n)` partials with the SAME slab tree, level by level: level
+# `L` folds `PINNED_SUM_W` consecutive partials of level `L - 1` into one,
+# until at most `PINNED_SUM_W` remain; the last level folds those (padded
+# with `+0.0`) into the total. Every level is a grid of blocks, so no lane
+# walks the partials serially. The order is a pure function of `n`: it does
+# not see the grid, the block size or the vendor. The host model is
+# `host_tree_fold_partials`; `host_grid_sum` is the whole two-stage sum.
+#
+# `host_fold_partials` (the ascending chain) stays for the ROW-OWNED folds
+# (silhouette's per-row `a`/`b`, resample's per-resample statistics), whose
+# chain runs inside one block per row and is parallel across rows.
+# ---------------------------------------------------------------------------
+
+
+def fold_partials_level_kernel[block_size: Int](
+    src: MutPointer[Float32, MutAnyOrigin],
+    m: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """One level of the partial tree: block `c` folds `src[c*W, (c+1)*W)`
+    (`+0.0` past `m`) into `dst[c]` through `virtual_block_sum`."""
+    comptime R = PINNED_SUM_W // block_size
+    var tid = Int(thread_idx.x)
+    var chunk = linear_block_id()
+    while chunk < chunk_count(Int(m)):
+        var values = SIMD[DType.float32, R](0.0)
+        comptime for r in range(R):
+            var i = chunk * PINNED_SUM_W + tid + r * block_size
+            if i < Int(m):
+                values[r] = src.unsafe_load(i)
+        var total = virtual_block_sum[block_size](values)
+        if tid == 0:
+            dst.unsafe_store(chunk, ftz(total))
+        chunk += physical_block_count()
+
+
+@always_inline
+def last_level_values[block_size: Int](
+    src: MutPointer[Float32, MutAnyOrigin], m: Int
+) -> SIMD[DType.float32, PINNED_SUM_W // block_size]:
+    """The slots thread `t` serves in the LAST level (`m <= W` partials):
+    an epilogue kernel folds these with `virtual_block_sum` and applies its
+    scalar epilogue on thread 0, so the final level and the epilogue are one
+    launch."""
+    comptime R = PINNED_SUM_W // block_size
+    var tid = Int(thread_idx.x)
+    var values = SIMD[DType.float32, R](0.0)
+    comptime for r in range(R):
+        var i = tid + r * block_size
+        if i < m:
+            values[r] = src.unsafe_load(i)
+    return values
+
+
+def fold_scratch_len(chunks: Int) -> Int:
+    """The length of each of the two ping-pong scratch buffers
+    `fold_partials_levels` needs for `chunks` partials."""
+    return max(1, chunk_count(chunks))
+
+
+def fold_partials_levels(
+    ctx: DeviceContext,
+    partials: MutPointer[Float32, MutAnyOrigin],
+    chunks: Int,
+    mut s0: DeviceBuffer[DType.float32],
+    mut s1: DeviceBuffer[DType.float32],
+) raises -> Tuple[MutPointer[Float32, MutAnyOrigin], Int]:
+    """Every level but the last, on the device: returns the buffer and count
+    (`<= PINNED_SUM_W`) the last level folds. `s0` and `s1` hold
+    `fold_scratch_len(chunks)` floats each and must outlive the last level."""
+    var src = partials
+    var m = chunks
+    var flip = False
+    var p0 = rebind[MutPointer[Float32, MutAnyOrigin]](s0.unsafe_ptr())
+    var p1 = rebind[MutPointer[Float32, MutAnyOrigin]](s1.unsafe_ptr())
+    while m > PINNED_SUM_W:
+        var next_m = chunk_count(m)
+        var dst = p1 if flip else p0
+        ctx.enqueue_function[fold_partials_level_kernel[PINNED_SUM_TPB]](
+            src, Int32(m), dst,
+            grid_dim=next_m, block_dim=PINNED_SUM_TPB,
+        )
+        src = dst
+        m = next_m
+        flip = not flip
+    return (src, m)
+
+
+def device_fold_partials(
+    ctx: DeviceContext, mut partials: DeviceBuffer[DType.float32], chunks: Int
+) raises -> Float32:
+    """The grid-wide second stage on the device (`host_tree_fold_partials`'s
+    additions), then the one total read back."""
+    var s0 = ctx.enqueue_create_buffer[DType.float32](fold_scratch_len(chunks))
+    var s1 = ctx.enqueue_create_buffer[DType.float32](fold_scratch_len(chunks))
+    var out = ctx.enqueue_create_buffer[DType.float32](1)
+    var lv = fold_partials_levels(
+        ctx, rebind[MutPointer[Float32, MutAnyOrigin]](partials.unsafe_ptr()), chunks, s0, s1
+    )
+    ctx.enqueue_function[fold_partials_level_kernel[PINNED_SUM_TPB]](
+        lv[0], Int32(lv[1]), out.unsafe_ptr(),
+        grid_dim=chunk_count(lv[1]), block_dim=PINNED_SUM_TPB,
+    )
+    var total = download_f32(ctx, out, 1)[0]
+    _ = s0^
+    _ = s1^
+    _ = out^
+    return total
+
+
+def host_fold_level(values: List[Float32], n: Int) -> List[Float32]:
+    """The host model of one level (`fold_partials_level_kernel`, or the
+    first stage's `virtual_block_sum` per chunk): `chunk_count(n)` slab
+    trees over `values[0:n]`, `+0.0` past `n`."""
+    var partials = List[Float32]()
+    var slab = List[Float32](length=PINNED_SUM_W, fill=Float32(0.0))
+    for c in range(chunk_count(n)):
+        for t in range(PINNED_SUM_W):
+            var i = c * PINNED_SUM_W + t
+            slab[t] = ftz(values[i]) if i < n else Float32(0.0)
+        var step = PINNED_SUM_W // 2
+        while step > 0:
+            for t in range(step):
+                slab[t] = ftz(slab[t] + slab[t + step])
+            step //= 2
+        partials.append(slab[0])
+    return partials^
+
+
+def host_tree_fold_partials(partials: List[Float32], chunks: Int) -> Float32:
+    """The host model of the grid-wide second stage: levels of the slab tree
+    until one level folds at most `PINNED_SUM_W` partials into the total.
+    At least one level always runs, so `-0.0` cannot survive as the total
+    of one chunk (it meets `+0.0` padding)."""
+    if chunks <= 0:
+        return Float32(0.0)
+    var m = chunks
+    var nxt = host_fold_level(partials, m)
+    while m > PINNED_SUM_W:
+        m = chunk_count(m)
+        var cur = nxt^
+        nxt = host_fold_level(cur, m)
+    return nxt[0]
+
+
+def host_grid_sum(values: List[Float32], n: Int) -> Float32:
+    """The host model of a grid-wide sum: the first stage (one slab tree per
+    chunk) plus `host_tree_fold_partials`."""
+    return host_tree_fold_partials(host_fold_level(values, n), chunk_count(n))
 
 
 def sabotage_shifted_host_tree_sum(

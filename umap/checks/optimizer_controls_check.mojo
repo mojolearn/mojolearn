@@ -3,7 +3,7 @@
 from max.gpu.host import DeviceContext
 from umap.checks.sparse_estimator_check import bits, fit_case
 from umap.graph import fuzzy_simplicial_graph
-from umap.sparse_graph import sparse_fuzzy_simplicial_graph
+from umap.host.sparse_graph_host import sparse_fuzzy_simplicial_graph
 from umap.optimizer_fast import optimize_layout_fast
 from umap.sparse_optimizer import optimize_sparse_layout_fast
 from umap.params import UMAPParams

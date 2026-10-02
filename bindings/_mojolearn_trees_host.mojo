@@ -77,6 +77,8 @@ from extratrees.checks.pcg_rng import PCG_HOST_SABOTAGE
 from extratrees.estimator import (
     ExtraTreesConfig,
     FitResult,
+)
+from extratrees.host_estimator import (
     fit_extra_trees_classifier_host_exact,
     fit_extra_trees_regressor_host_exact,
 )
