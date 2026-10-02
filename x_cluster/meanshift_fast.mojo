@@ -178,5 +178,4 @@ def meanshift_fast_grid(
         _ = done^
         _ = hd^
         return True
-    else:
-        return False
+    return False

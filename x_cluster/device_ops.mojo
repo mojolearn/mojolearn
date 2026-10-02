@@ -39,6 +39,7 @@ from x_cluster.bodies import (
     ap_r_update,
     meanshift_seed,
     nearest_row,
+    SplitMix64,
     sqdist_cell,
     sqrt_cell,
     tree_descend,
@@ -51,6 +52,7 @@ from gemm.checks.gemm_oracle import OP_TN
 from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
 from x_cluster.ops import ClusterOps
 from x_cluster.meanshift_fast import MEANSHIFT_FAST_GRID, meanshift_fast_grid
+from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, minibatch_fast_steps
 
 comptime TPB = 128
 
@@ -1662,3 +1664,20 @@ struct DeviceOps(ClusterOps):
             self._fp(q), self._fp(r), self._fp(lpn), grid_dim=_grid(n), block_dim=TPB,
         )
         self._ph1("estep")
+
+    def minibatch_fast(
+        mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
+        ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
+        mut steps_done: Int,
+    ) raises -> Bool:
+        # lane/apple-fast-cluster (2026-10-02), FAST on Apple only; the driver
+        # (x_cluster/minibatch.mojo) asks only with MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1
+        comptime if MINIBATCH_FAST_DEV:
+            self._ph0()
+            var took = minibatch_fast_steps(
+                self.ctx, self._fp(xs), n, d, k, batch, n_steps, max_no_improvement, ratio, seed, rng, c, w,
+                steps_done,
+            )
+            self._ph1("minibatch_fast")
+            return took
+        return False

@@ -16,6 +16,7 @@ rows, then per init the init rows and the k-means++ picks, then per step the
 batch rows (uniform with replacement, unit weights) and any reassignment.
 Not scikit-learn's Mersenne Twister stream, so a fit agrees with sklearn's
 at a tolerance, never bit for bit (NOT_IMPLEMENTED.tsv)."""
+from std.os import getenv
 from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_mul64
@@ -164,7 +165,19 @@ def minibatch_fit[O: ClusterOps](
     var lslot = ops.zeros_i(batch)
     var dslot = ops.zeros(batch)
     var steps_done = 0
-    for step in range(n_steps):
+    # lane/apple-fast-cluster (2026-10-02), FAST on Apple, OFF by default:
+    # `MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` runs the steps resident on the
+    # device (x_cluster/minibatch_fast.mojo: no upload, read-back or host
+    # center fold per step; the loop below pays all three every step).
+    # Unit weights and tol <= 0 only (the board's shape); `c`, `w` and
+    # `steps_done` come back as the loop would leave them.
+    var step_first = 0
+    if ops.fast_device() and not weighted and p.tol <= 0 and String(getenv("MOJOLEARN_X_CLUSTER_FAST_MINIBATCH")) == "1":
+        if ops.minibatch_fast(
+            xs, n, d, k, batch, n_steps, p.max_no_improvement, p.reassignment_ratio, p.seed, rng, c, w, steps_done
+        ):
+            step_first = n_steps
+    for step in range(step_first, n_steps):
         var bidx = List[Int](capacity=batch)
         for _t in range(batch):
             if weighted:
