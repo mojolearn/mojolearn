@@ -1,2 +1,8 @@
+# OPPONENT RERUN NEEDED: multinomial-nb text, complement-nb text (sklearn on CSR)
+# The stored sklearn text-NB times (266 / 265 ms) were measured on the DENSE block. tools/bench_board_algos.py now
+# hands the countclf block as scipy CSR, outside the clock, to every arm that takes sparse input (sklearn always;
+# ours only when built with -D MOJOLEARN_NB_TEXT_CSR), so re-run sklearn-cpu on CSR before reading the A/Bs below.
 CMD lane/apple-fast-nb nb-cat-atomic-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh nb-cat-atomic-taxi x_prep categorical-nb taxi 1 2 "" "-D MOJOLEARN_NB_CAT_ATOMIC=1"
 CMD lane/apple-fast-nb nb-lda-fused-zones AFC_FAMILY=algos bash tools/afc_ab_def.sh nb-lda-fused-zones x_decomp lda taxi-zones 1 2 "" "-D MOJOLEARN_LDA_FUSED_SS=1"
+CMD lane/apple-fast-nb nb-mnb-csr-text AFC_FAMILY=algos bash tools/afc_ab_def.sh nb-mnb-csr-text x_prep multinomial-nb text 1 2 "" "-D MOJOLEARN_NB_TEXT_CSR=1"
+CMD lane/apple-fast-nb nb-cnb-csr-text AFC_FAMILY=algos bash tools/afc_ab_def.sh nb-cnb-csr-text x_prep complement-nb text 1 2 "" "-D MOJOLEARN_NB_TEXT_CSR=1"

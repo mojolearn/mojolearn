@@ -2360,6 +2360,20 @@ def _build_est(lane, arm, D):
     info["config"] = "%s(%s)" % (what, ", ".join("%s=%r" % (k, v) for k, v in sorted(params.items())
                                                 if k != "score_func"))
     X, Xq = dev.get("X"), dev.get("Xq")
+    if s["block"] == "countclf" and X is not None and t == "clf":
+        # lane apple-fast-nb: the count block as scipy CSR, converted ONCE here outside the clock,
+        # for every arm whose estimator takes sparse input: sklearn's MultinomialNB / ComplementNB
+        # natively, ours when the FAST x_prep binding was built on Apple with
+        # -D MOJOLEARN_NB_TEXT_CSR (`_nb_csr_ready`). A build that cannot take sparse (ours without
+        # the export; cuML, whose arrays went up dense through _cuml_up) keeps the dense block.
+        sparse_ok = arm == "sklearn-cpu"
+        if arm in OURS_ARMS:
+            _, cls = _ours_class(lane)
+            ready = getattr(cls, "_nb_csr_ready", None)
+            sparse_ok = ready is not None and ready()
+        if sparse_ok:
+            import scipy.sparse as sp
+            X, Xq = sp.csr_matrix(X), sp.csr_matrix(Xq)
     y = dev.get("y")
     if t == "semi":
         y = D["y_semi"]
