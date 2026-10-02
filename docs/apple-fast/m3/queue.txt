@@ -53,203 +53,204 @@
     53	CMD lane/apple-fast-trees2 aft-ab-ettpb AFT_OUT=$HOME/aft-ab/ettpb bash tools/aft_ab.sh trees et taxi 3 "" "-D MOJOLEARN_ET_TPB_256"; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/ettpb bash tools/aft_ab.sh trees et istella 2 ""
     54	CMD lane/apple-fast-trees2 aft-ab-etb64 AFT_OUT=$HOME/aft-ab/etb64 bash tools/aft_ab.sh trees et taxi 3 "" "-D MOJOLEARN_ET_DEVICE_BATCH_65536"
     55	CMD lane/apple-fast-trees2 aft-ab-fin1 AFT_OUT=$HOME/aft-ab/fin1 bash tools/aft_ab.sh base et istella 3 "-D MOJOLEARN_ALL_FINITE_SERIAL" ""; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/fin1 bash tools/aft_ab.sh base rf istella
-    56	CMD lane/apple-fast afc-enet2 for p in enet-cv:taxi lasso-cv:taxi enet-cv:istella lasso-cv:istella; do bash tools/afc_ab.sh afc-enet2 ${p%%:*} ${p##*:} 2 2 - MOJOLEARN_X_LINEAR_ENETCV_FAST=0 > /dev/null; done; grep SUMMA
-    57	CMD lane/apple-fast id-gbdt-lossguide-taxi bash ~/mq/idcheck.sh gbdt-lossguide taxi
-    58	CMD lane/apple-fast id-gbdt-lossguide-istella bash ~/mq/idcheck.sh gbdt-lossguide istella
-    59	CMD lane/apple-fast id-gbdt-depthwise-taxi bash ~/mq/idcheck.sh gbdt-depthwise taxi
-    60	CMD lane/apple-fast id-gbdt-depthwise-istella bash ~/mq/idcheck.sh gbdt-depthwise istella
-    61	CMD lane/apple-fast id-gbdt-rank-yetirank-taxi bash ~/mq/idcheck.sh gbdt-rank-yetirank taxi
-    62	CMD lane/apple-fast id-gbdt-rank-yetirank-istella bash ~/mq/idcheck.sh gbdt-rank-yetirank istella
-    63	CMD lane/apple-fast id-iforest-taxi bash ~/mq/idcheck.sh iforest taxi
-    64	CMD lane/apple-fast id-iforest-istella bash ~/mq/idcheck.sh iforest istella
-    65	CMD lane/apple-fast afc-bayes2 for p in bayesian-ridge:taxi bayesian-ridge:istella ard:taxi ard:istella; do bash tools/afc_ab.sh afc-bayes2 ${p%%:*} ${p##*:} 2 2 - MOJOLEARN_X_LINEAR_GRAM_SSE=0 > /dev/null; done; grep SU
-    66	CMD lane/apple-fast afc-knn2 AFC_FAMILY=classical2 bash tools/afc_ab.sh afc-knn2 knn-clf istella 3 3 - MOJOLEARN_KNN_FAST_MMA_BIGD=0 > /dev/null; AFC_FAMILY=classical bash tools/afc_ab.sh afc-knn2 knn istella 3 3 - MOJOL
-    67	CMD lane/apple-fast-tier tier-pca-ident AFC_ARM=ours AFC_FAMILY=classical bash tools/afc_ab.sh tier-pca-ident pca istella 3 3 -
-    68	CMD lane/apple-fast-tier tier-pca-tnv1 AFC_FAMILY=classical bash tools/afc_ab.sh tier-pca-tnv1 pca istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_TN_V1=1
-    69	CMD lane/apple-fast-tier tier-pca-nttiled AFC_FAMILY=classical bash tools/afc_ab.sh tier-pca-nttiled pca istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1
-    70	CMD lane/apple-fast-tier tier-ols-tnv1 AFC_FAMILY=classical bash tools/afc_ab.sh tier-ols-tnv1 ols istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_TN_V1=1
-    71	CMD lane/apple-fast-tier tier-ols-nttiled AFC_FAMILY=classical bash tools/afc_ab.sh tier-ols-nttiled ols istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1
-    72	CMD lane/apple-fast-tier tier-kmeans-nttiled AFC_FAMILY=classical bash tools/afc_ab.sh tier-kmeans-nttiled kmeans istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1
-    73	CMD lane/apple-fast-tier tier-rbf-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh tier-rbf-ident rbf-sampler istella 3 3 -
-    74	CMD lane/apple-fast-tier tier-rbf-pinned AFC_FAMILY=classical2 bash tools/afc_ab.sh tier-rbf-pinned rbf-sampler istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
-    75	CMD lane/apple-fast-tier tier-rbf-pinned-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh tier-rbf-pinned-taxi rbf-sampler taxi 3 3 - MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
-    76	CMD lane/apple-fast-tier tier-nys-pinned AFC_FAMILY=classical2 bash tools/afc_ab.sh tier-nys-pinned nystroem istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
-    77	CMD lane/apple-fast-tier tier-theta-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh tier-theta-ident theta taxi-hourly 3 3 -
-    78	CMD lane/apple-fast-tier tier-theta-fast AFC_FAMILY=algos bash tools/afc_ab.sh tier-theta-fast theta taxi-hourly 3 3 -
-    79	CMD lane/apple-fast-tier tier-theta-fma AFC_FAMILY=algos bash tools/afc_ab_def.sh tier-theta-fma x_sequence theta taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_FAST_FMA=1"
-    80	CMD lane/apple-fast-yetirank aft-ab-yreuse1 AFT_OUT=$HOME/aft-ab/aft-ab-yreuse1 bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 3 "-D MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF" ""
-    81	CMD lane/apple-fast-depthwise aft-ab-dwfc1 O=$HOME/aft-ab/aft-ab-dwfc1; D="-D MOJOLEARN_GBDT_DW_FUSED_CHAIN"; AFT_OUT=$O/dw-taxi bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 3 "" "$D"; for t in dw-istella lg-taxi; do mk
-    82	CMD lane/apple-fast-tier tier-theta-reg AFC_FAMILY=algos bash tools/afc_ab_def.sh tier-theta-reg x_sequence theta taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_THETA_REG=1"
-    83	CMD lane/apple-fast-tier tier-theta-regfma AFC_FAMILY=algos bash tools/afc_ab_def.sh tier-theta-regfma x_sequence theta taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_THETA_REG=1 -D MOJOLEARN_SEQ_FAST_FMA=1"
-    84	CMD lane/apple-fast-rfet-scan aft-ab-rffin AFT_OUT=$HOME/aft-ab/aft-ab-rffin bash tools/aft_ab.sh rf rf taxi 3 "-D MOJOLEARN_FOREST_DEVICE_FINITE_OFF" "" && AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/aft-ab-rffin bash tools/a
-    85	CMD lane/apple-fast-rfet-scan aft-ab-etfin AFT_OUT=$HOME/aft-ab/aft-ab-etfin bash tools/aft_ab.sh trees et taxi 3 "-D MOJOLEARN_FOREST_DEVICE_FINITE_OFF" "" && AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/aft-ab-etfin bash tool
-    86	CMD lane/apple-fast-rfet-scan aft-ab-rfseg AFT_OUT=$HOME/aft-ab/aft-ab-rfseg bash tools/aft_ab.sh rf rf taxi 3 "-D MOJOLEARN_SEG_SUMS_SERIAL" "" && AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/aft-ab-rfseg bash tools/aft_ab.sh 
-    87	CMD lane/apple-fast-rfet-scan id-rf-taxi bash ~/mq/idcheck.sh rf taxi
-    88	CMD lane/apple-fast-rfet-scan id-rf-istella bash ~/mq/idcheck.sh rf istella
-    89	CMD lane/apple-fast-rfet-scan id-et-taxi bash ~/mq/idcheck.sh et taxi
-    90	CMD lane/apple-fast-rfet-scan id-et-istella bash ~/mq/idcheck.sh et istella
-    91	CMD lane/apple-fast aft-ab-lgw128 AFT_OUT=$HOME/aft-ab/lgw128 bash tools/aft_ab.sh gbdt gbdt-lossguide taxi 3 "" "-D MOJOLEARN_GBDT_LG_EXACT_BATCH128"
-    92	CMD lane/apple-fast-pca-eig pca-eig-ident AFC_ARM=ours AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-ident pca istella 3 3 -
-    93	CMD lane/apple-fast-pca-eig pca-eig-eig-istella AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-eig-istella pca istella 3 3 - MOJOLEARN_PCA_FAST_EIG=1
-    94	CMD lane/apple-fast-pca-eig pca-eig-topk-istella AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-topk-istella pca istella 3 3 - MOJOLEARN_PCA_FAST_TOPK=1
-    95	CMD lane/apple-fast-pca-eig pca-eig-noalias-istella AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-noalias-istella pca istella 3 3 - MOJOLEARN_PCA_FAST_NO_ALIAS=1
-    96	CMD lane/apple-fast-pca-eig pca-eig-all-istella AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-all-istella pca istella 3 3 - 'MOJOLEARN_PCA_FAST_EIG=1 MOJOLEARN_PCA_FAST_TOPK=1 MOJOLEARN_PCA_FAST_NO_ALIAS=1'
-    97	CMD lane/apple-fast-pca-eig pca-eig-eig-taxi AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-eig-taxi pca taxi 3 3 - MOJOLEARN_PCA_FAST_EIG=1
-    98	CMD lane/apple-fast-pca-eig pca-eig-topk-taxi AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-topk-taxi pca taxi 3 3 - MOJOLEARN_PCA_FAST_TOPK=1
-    99	CMD lane/apple-fast-pca-eig pca-eig-noalias-taxi AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-noalias-taxi pca taxi 3 3 - MOJOLEARN_PCA_FAST_NO_ALIAS=1
-   100	CMD lane/apple-fast-pca-eig pca-eig-tsvd-eig-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh pca-eig-tsvd-eig-istella tsvd istella 3 3 - MOJOLEARN_PCA_FAST_EIG=1
-   101	CMD lane/apple-fast-pca-eig pca-eig-tsvd-topk-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh pca-eig-tsvd-topk-istella tsvd istella 3 3 - MOJOLEARN_PCA_FAST_TOPK=1
-   102	CMD lane/apple-fast-pca-eig pca-eig-ipca-istella AFC_FAMILY=algos bash tools/afc_ab.sh pca-eig-ipca-istella incremental-pca istella 3 3 - MOJOLEARN_PCA_FAST_EIG=1
-   103	CMD lane/apple-fast-pca-eig pca-eig-ipca-taxi AFC_FAMILY=algos bash tools/afc_ab.sh pca-eig-ipca-taxi incremental-pca taxi 3 3 - MOJOLEARN_PCA_FAST_EIG=1
-   104	CMD lane/apple-fast-seq seq-croston-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh seq-croston-ident croston taxi-hourly 3 3 -
-   105	CMD lane/apple-fast-seq seq-croston-fast AFC_FAMILY=algos bash tools/afc_ab.sh seq-croston-fast croston taxi-hourly 3 3 -
-   106	CMD lane/apple-fast-seq seq-croston-reg AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-croston-reg x_sequence croston taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_CROSTON_REG=1"
-   107	CMD lane/apple-fast-seq seq-croston-reg-syn AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-croston-reg-syn x_sequence croston synthetic 3 3 "" "-D MOJOLEARN_SEQ_CROSTON_REG=1"
-   108	CMD lane/apple-fast-seq seq-garch-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh seq-garch-ident garch taxi-hourly 3 3 -
-   109	CMD lane/apple-fast-seq seq-garch-fast AFC_FAMILY=algos bash tools/afc_ab.sh seq-garch-fast garch taxi-hourly 3 3 -
-   110	CMD lane/apple-fast-seq seq-garch-dev AFC_FAMILY=algos bash tools/afc_ab.sh seq-garch-dev garch taxi-hourly 3 3 MOJOLEARN_SEQ_GARCH_HOST_MAX=0
-   111	CMD lane/apple-fast-seq seq-garch-reg MOJOLEARN_SEQ_GARCH_HOST_MAX=0 AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-garch-reg x_sequence garch taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_GARCH_REG=1"
-   112	CMD lane/apple-fast-seq seq-garch-grid MOJOLEARN_SEQ_GARCH_HOST_MAX=0 AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-garch-grid x_sequence garch taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_GARCH_GRID=1"
-   113	CMD lane/apple-fast-seq seq-garch-reggrid MOJOLEARN_SEQ_GARCH_HOST_MAX=0 AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-garch-reggrid x_sequence garch taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_GARCH_REG=1 -D MOJOLEARN_SEQ_GARC
-   114	CMD lane/apple-fast-seq seq-garch-reggrid-syn MOJOLEARN_SEQ_GARCH_HOST_MAX=0 AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-garch-reggrid-syn x_sequence garch synthetic 3 3 "" "-D MOJOLEARN_SEQ_GARCH_REG=1 -D MOJOLEARN_SE
-   115	CMD lane/apple-fast-trees-scan trees-scan-dw-taxi AFT_OUT=$HOME/aft-ab/trees-scan-dw-taxi bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1 -D MOJOLEARN_SCAN_U32_BLOCK=1 -D MOJOLEARN_REORD
-   116	CMD lane/apple-fast-trees-scan trees-scan-lg-taxi AFT_OUT=$HOME/aft-ab/trees-scan-lg-taxi bash tools/aft_ab.sh gbdt gbdt-lossguide taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1 -D MOJOLEARN_SCAN_U32_BLOCK=1 -D MOJOLEARN_REORD
-   117	CMD lane/apple-fast-trees-scan trees-scan-cat-taxi AFT_OUT=$HOME/aft-ab/trees-scan-cat-taxi bash tools/aft_ab.sh gbdt gbdt-categorical taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1 -D MOJOLEARN_SCAN_U32_BLOCK=1 -D MOJOLEARN_R
-   118	CMD lane/apple-fast-trees-scan trees-scan-rf-taxi AFT_OUT=$HOME/aft-ab/trees-scan-rf-taxi bash tools/aft_ab.sh rf rf taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1"
-   119	CMD lane/apple-fast-trees-scan trees-scan-rf-istella AFT_OUT=$HOME/aft-ab/trees-scan-rf-istella bash tools/aft_ab.sh rf rf istella 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1"
-   120	CMD lane/apple-fast-trees-scan trees-scan-et-taxi AFT_OUT=$HOME/aft-ab/trees-scan-et-taxi bash tools/aft_ab.sh trees et taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1"
-   121	CMD lane/apple-fast-gram gram-lars-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-lars-taxi lars taxi 3 3 - MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1
-   122	CMD lane/apple-fast-gram gram-lars-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-lars-istella lars istella 3 3 - MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1
-   123	CMD lane/apple-fast-gram gram-lars-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh gram-lars-ident lars istella 3 3 -
-   124	CMD lane/apple-fast-gram gram-llars-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-llars-taxi lasso-lars taxi 3 3 - MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1
-   125	CMD lane/apple-fast-gram gram-llars-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-llars-istella lasso-lars istella 3 3 - MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1
-   126	CMD lane/apple-fast-gram gram-llars-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh gram-llars-ident lasso-lars istella 3 3 -
-   127	CMD lane/apple-fast-gram gram-ridgeclf-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgeclf-taxi ridge-clf taxi 3 3 - MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1
-   128	CMD lane/apple-fast-gram gram-ridgeclf-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgeclf-istella ridge-clf istella 3 3 - MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1
-   129	CMD lane/apple-fast-gram gram-ridgeclf-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgeclf-ident ridge-clf istella 3 3 -
-   130	CMD lane/apple-fast-gram gram-ridgecv-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgecv-taxi ridge-cv taxi 3 3 - MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1
-   131	CMD lane/apple-fast-gram gram-ridgecv-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgecv-istella ridge-cv istella 3 3 - MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1
-   132	CMD lane/apple-fast-gram gram-ridgecv-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgecv-ident ridge-cv istella 3 3 -
-   133	CMD lane/apple-fast-gram gram-lda-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-lda-taxi lda-clf taxi 3 3 - MOJOLEARN_X_PREP_CLASS_COV_GRID=1
-   134	CMD lane/apple-fast-gram gram-lda-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-lda-istella lda-clf istella 3 3 - MOJOLEARN_X_PREP_CLASS_COV_GRID=1
-   135	CMD lane/apple-fast-gram gram-lda-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh gram-lda-ident lda-clf istella 3 3 -
-   136	CMD lane/apple-fast-gram gram-qda-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-qda-taxi qda taxi 3 3 - MOJOLEARN_X_PREP_CLASS_COV_GRID=1
-   137	CMD lane/apple-fast-gram gram-qda-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-qda-istella qda istella 3 3 - MOJOLEARN_X_PREP_CLASS_COV_GRID=1
-   138	CMD lane/apple-fast-gram gram-qda-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh gram-qda-ident qda istella 3 3 -
-   139	CMD lane/apple-fast-seq seq-garch-ident-dev AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh seq-garch-ident-dev garch taxi-hourly 3 3 MOJOLEARN_SEQ_GARCH_HOST_MAX=0
-   140	CMD lane/apple-fast-trees-io trees-io-if-istella AFT_OUT=$HOME/aft-ab/trees-io-if-istella bash tools/aft_ab.sh svm iforest istella 3 "" "-D MOJOLEARN_IF_SAMPLED_UPLOAD=1"
-   141	CMD lane/apple-fast-trees-io trees-io-if-taxi AFT_OUT=$HOME/aft-ab/trees-io-if-taxi bash tools/aft_ab.sh svm iforest taxi 3 "" "-D MOJOLEARN_IF_SAMPLED_UPLOAD=1"
-   142	CMD lane/apple-fast-trees-io trees-io-if-refusal MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SPEED_EXPECTED_VENDOR=metal PYTHONPATH=python $HOME/board-0834/cache/venv/bin/python tools/aft_if_refusal.py
-   143	CMD lane/apple-fast-rfet-scan aft-ab-gbseg AFT_OUT=$HOME/aft-ab/gbseg bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 3 "-D MOJOLEARN_SEG_SUMS_SERIAL" ""
-   144	CMD lane/apple-fast-cluster cluster-ms-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh cluster-ms-ident-istella meanshift istella 3 3 -
-   145	CMD lane/apple-fast-cluster cluster-ms-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster-ms-istella meanshift istella 3 3 - MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1
-   146	CMD lane/apple-fast-cluster cluster-ms-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster-ms-taxi meanshift taxi 3 3 - MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1
-   147	CMD lane/apple-fast-cluster cluster-mb-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh cluster-mb-ident-istella minibatch-kmeans istella 3 3 -
-   148	CMD lane/apple-fast-cluster cluster-mb-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster-mb-istella minibatch-kmeans istella 3 3 - MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1
-   149	CMD lane/apple-fast-cluster cluster-mb-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster-mb-taxi minibatch-kmeans taxi 3 3 - MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1
-   150	CMD lane/apple-fast-cluster cluster-cc-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh cluster-cc-ident-istella connected-components istella 3 3 -
-   151	CMD lane/apple-fast-cluster cluster-cc-fast-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster-cc-fast-istella connected-components istella 3 3 -
-   152	CMD lane/apple-fast-cluster cluster-cc-fast-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster-cc-fast-taxi connected-components taxi 3 3 -
-   153	CMD lane/apple-fast-cluster cluster-aggl-ident-istella AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-aggl-ident-istella agglomerative istella 3 3 -
-   154	CMD lane/apple-fast-cluster cluster-aggl-fast-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-aggl-fast-istella agglomerative istella 3 3 -
-   155	CMD lane/apple-fast-cluster cluster-aggl-fast-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-aggl-fast-taxi agglomerative taxi 3 3 -
-   156	CMD lane/apple-fast-cluster cluster-spec-ident-istella AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-spec-ident-istella spectral istella 3 3 -
-   157	CMD lane/apple-fast-cluster cluster-spec-fast-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-spec-fast-istella spectral istella 3 3 -
-   158	CMD lane/apple-fast-cluster cluster-spec-fast-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-spec-fast-taxi spectral taxi 3 3 -
-   159	CMD lane/apple-fast-prep prep-minmax-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-minmax-istella minmax-scaler istella 3 3 - MOJOLEARN_X_PREP_FAST_MINMAX=1
-   160	CMD lane/apple-fast-prep prep-minmax-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-minmax-taxi minmax-scaler taxi 3 3 - MOJOLEARN_X_PREP_FAST_MINMAX=1
-   161	CMD lane/apple-fast-prep prep-onehot-uniq-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-uniq-taxi onehot taxi 3 3 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
-   162	CMD lane/apple-fast-prep prep-onehot-noneg-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-noneg-taxi onehot taxi 3 3 - MOJOLEARN_X_PREP_FAST_NONEG=1
-   163	CMD lane/apple-fast-prep prep-onehot-both-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-both-taxi onehot taxi 3 3 - 'MOJOLEARN_X_PREP_FAST_UNIQUE=1 MOJOLEARN_X_PREP_FAST_NONEG=1'
-   164	CMD lane/apple-fast-prep prep-onehot-uniq-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-uniq-istella onehot istella 3 3 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
-   165	CMD lane/apple-fast-prep prep-onehot-noneg-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-noneg-istella onehot istella 3 3 - MOJOLEARN_X_PREP_FAST_NONEG=1
-   166	CMD lane/apple-fast-prep prep-ordinal-uniq-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-uniq-taxi ordinal taxi 3 3 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
-   167	CMD lane/apple-fast-prep prep-ordinal-noneg-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-noneg-taxi ordinal taxi 3 3 - MOJOLEARN_X_PREP_FAST_NONEG=1
-   168	CMD lane/apple-fast-prep prep-ordinal-uniq-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-uniq-istella ordinal istella 3 3 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
-   169	CMD lane/apple-fast-prep prep-ordinal-noneg-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-noneg-istella ordinal istella 3 3 - MOJOLEARN_X_PREP_FAST_NONEG=1
-   170	CMD lane/apple-fast-prep prep-mlb-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-mlb-taxi multilabel-binarizer taxi 3 3 - MOJOLEARN_X_PREP_FAST_MULTILABEL=1
-   171	CMD lane/apple-fast-prep prep-mlb-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-mlb-istella multilabel-binarizer istella 3 3 - MOJOLEARN_X_PREP_FAST_MULTILABEL=1
-   172	CMD lane/apple-fast-prep prep-labenc-base-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-labenc-base-taxi label-encoder taxi 3 3 -
-   173	CMD lane/apple-fast-prep prep-labenc-prof-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-labenc-prof-taxi label-encoder taxi 1 1 MOJOLEARN_XPREP_PROFILE=1
-   174	CMD lane/apple-fast-prep prep-labbin-base-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-labbin-base-taxi label-binarizer taxi 3 3 -
-   175	CMD lane/apple-fast-prep prep-labbin-prof-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-labbin-prof-taxi label-binarizer taxi 1 1 MOJOLEARN_XPREP_PROFILE=1
-   176	CMD lane/apple-fast-trees-yeti yeti-task16k AFT_OUT=$HOME/aft-ab/yeti-task16k bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 3 "" "-D MOJOLEARN_YETI_SEARCH_TASK16K=1"
-   177	CMD lane/apple-fast-trees-yeti yeti-symhist AFT_OUT=$HOME/aft-ab/yeti-symhist bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 3 "" "-D MOJOLEARN_SYM_HIST_FAST=1"
-   178	CMD lane/apple-fast-trees-yeti yeti-both AFT_OUT=$HOME/aft-ab/yeti-both bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 3 "" "-D MOJOLEARN_YETI_SEARCH_TASK16K=1 -D MOJOLEARN_SYM_HIST_FAST=1"
-   179	CMD lane/apple-fast-trees-yeti yeti-symhist-sym-taxi AFT_OUT=$HOME/aft-ab/yeti-symhist-sym-taxi bash tools/aft_ab.sh gbdt gbdt-symmetric taxi 3 "" "-D MOJOLEARN_SYM_HIST_FAST=1"
-   180	CMD lane/apple-fast-trees-yeti yeti-symhist-sym-istella AFT_OUT=$HOME/aft-ab/yeti-symhist-sym-istella bash tools/aft_ab.sh gbdt gbdt-symmetric istella 3 "" "-D MOJOLEARN_SYM_HIST_FAST=1"
-   181	CMD lane/apple-fast-trees-yeti yeti-symhist-ordered-taxi AFT_OUT=$HOME/aft-ab/yeti-symhist-ordered-taxi bash tools/aft_ab.sh gbdt gbdt-ordered taxi 3 "" "-D MOJOLEARN_SYM_HIST_FAST=1"
-   182	CMD lane/apple-fast-isotonic-knn ik-iso-ident-taxi AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ik-iso-ident-taxi isotonic taxi 3 3 -
-   183	CMD lane/apple-fast-isotonic-knn ik-iso-par-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-iso-par-taxi isotonic taxi 3 3 - MOJOLEARN_ISOTONIC_FAST_PAR=1
-   184	CMD lane/apple-fast-isotonic-knn ik-iso-par-istella AFC_FAMILY=algos bash tools/afc_ab.sh ik-iso-par-istella isotonic istella 3 3 - MOJOLEARN_ISOTONIC_FAST_PAR=1
-   185	CMD lane/apple-fast-isotonic-knn ik-lle-ident-taxi AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-ident-taxi lle taxi 3 3 -
-   186	CMD lane/apple-fast-isotonic-knn ik-lle-knn-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-knn-taxi lle taxi 3 3 - MOJOLEARN_LLE_FAST_KNN=1
-   187	CMD lane/apple-fast-isotonic-knn ik-lle-mma-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-mma-taxi lle taxi 3 3 - "MOJOLEARN_LLE_FAST_KNN=1 MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1"
-   188	CMD lane/apple-fast-isotonic-knn ik-lle-knn-istella AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-knn-istella lle istella 3 3 - MOJOLEARN_LLE_FAST_KNN=1
-   189	CMD lane/apple-fast-isotonic-knn ik-lle-mma-istella AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-mma-istella lle istella 3 3 - "MOJOLEARN_LLE_FAST_KNN=1 MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1"
-   190	CMD lane/apple-fast-isotonic-knn ik-lof-mma-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-lof-mma-taxi lof taxi 3 3 - MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1
-   191	CMD lane/apple-fast-isotonic-knn ik-lof-mma-istella AFC_FAMILY=algos bash tools/afc_ab.sh ik-lof-mma-istella lof istella 3 3 - MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1
-   192	CMD lane/apple-fast-isotonic-knn ik-imp-ident-taxi AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ik-imp-ident-taxi knn-imputer taxi 3 3 -
-   193	CMD lane/apple-fast-isotonic-knn ik-imp-fast-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-imp-fast-taxi knn-imputer taxi 3 3 -
-   194	CMD lane/apple-fast-kernel kernel-bayes-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-ident bayesian-ridge istella 3 3 -
-   195	CMD lane/apple-fast-kernel kernel-bayes-stats-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-stats-ist bayesian-ridge istella 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
-   196	CMD lane/apple-fast-kernel kernel-bayes-jacobi-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-jacobi-ist bayesian-ridge istella 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1
-   197	CMD lane/apple-fast-kernel kernel-bayes-both-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-both-ist bayesian-ridge istella 3 3 - "MOJOLEARN_KERNEL_FAST_BAYES_STATS=1 MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1"
-   198	CMD lane/apple-fast-kernel kernel-bayes-stats-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-stats-taxi bayesian-ridge taxi 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
-   199	CMD lane/apple-fast-kernel kernel-bayes-both-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-both-taxi bayesian-ridge taxi 3 3 - "MOJOLEARN_KERNEL_FAST_BAYES_STATS=1 MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1"
-   200	CMD lane/apple-fast-kernel kernel-ard-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh kernel-ard-ident ard istella 3 3 -
-   201	CMD lane/apple-fast-kernel kernel-ard-stats-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-ard-stats-ist ard istella 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
-   202	CMD lane/apple-fast-kernel kernel-ard-stats-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-ard-stats-taxi ard taxi 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
-   203	CMD lane/apple-fast-kernel kernel-huber-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh kernel-huber-ident huber istella 3 3 -
-   204	CMD lane/apple-fast-kernel kernel-huber-fast-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-huber-fast-taxi huber taxi 3 3 -
-   205	CMD lane/apple-fast-kernel kernel-huber-fast-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-huber-fast-ist huber istella 3 3 -
-   206	CMD lane/apple-fast-kernel kernel-kpca-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh kernel-kpca-ident kernel-pca istella 3 3 -
-   207	CMD lane/apple-fast-kernel kernel-kpca-fast-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-kpca-fast-ist kernel-pca istella 3 3 -
-   208	CMD lane/apple-fast-kernel kernel-kpca-fast-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-kpca-fast-taxi kernel-pca taxi 3 3 -
-   209	CMD lane/apple-fast-kernel kernel-gpr-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpr-ident gpr istella 3 3 -
-   210	CMD lane/apple-fast-kernel kernel-gpr-resident-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpr-resident-ist gpr istella 3 3 - MOJOLEARN_KERNEL_FAST_GPR_RESIDENT=1
-   211	CMD lane/apple-fast-kernel kernel-gpr-resident-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpr-resident-taxi gpr taxi 3 3 - MOJOLEARN_KERNEL_FAST_GPR_RESIDENT=1
-   212	CMD lane/apple-fast-kernel kernel-gpc-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpc-ident gpc istella 3 3 -
-   213	CMD lane/apple-fast-kernel kernel-gpc-fast-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpc-fast-ist gpc istella 3 3 -
-   214	CMD lane/apple-fast-kernel kernel-svr-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-svr-ident svr istella 3 3 -
-   215	CMD lane/apple-fast-kernel kernel-svr-fast-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-svr-fast-ist svr istella 3 3 -
-   216	CMD lane/apple-fast-kernel kernel-krr-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-krr-ident kernel-ridge istella 3 3 -
-   217	CMD lane/apple-fast-kernel kernel-krr-fast-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-krr-fast-ist kernel-ridge istella 3 3 -
-   218	CMD lane/apple-fast-kernel kernel-nys-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-nys-ident nystroem istella 3 3 -
-   219	CMD lane/apple-fast-kernel kernel-nys-rr-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-nys-rr-ist nystroem istella 3 3 - MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH=1
-   220	CMD lane/apple-fast-kernel kernel-nys-rr-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-nys-rr-taxi nystroem taxi 3 3 - MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH=1
-   221	CMD lane/apple-fast-linear linear-lasso-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-ident lasso istella 3 3 -
-   222	CMD lane/apple-fast-linear linear-lasso-gg-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-gg-istella lasso istella 3 3 - MOJOLEARN_CD_FAST_GRID_GRAM=1
-   223	CMD lane/apple-fast-linear linear-lasso-gg-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-gg-taxi lasso taxi 3 3 - MOJOLEARN_CD_FAST_GRID_GRAM=1
-   224	CMD lane/apple-fast-linear linear-lasso-rm-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-rm-istella lasso istella 3 3 - MOJOLEARN_CD_FAST_ROWMAJOR=1
-   225	CMD lane/apple-fast-linear linear-lasso-rm-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-rm-taxi lasso taxi 3 3 - MOJOLEARN_CD_FAST_ROWMAJOR=1
-   226	CMD lane/apple-fast-linear linear-enet-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-ident elasticnet istella 3 3 -
-   227	CMD lane/apple-fast-linear linear-enet-gg-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-gg-istella elasticnet istella 3 3 - MOJOLEARN_CD_FAST_GRID_GRAM=1
-   228	CMD lane/apple-fast-linear linear-enet-gg-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-gg-taxi elasticnet taxi 3 3 - MOJOLEARN_CD_FAST_GRID_GRAM=1
-   229	CMD lane/apple-fast-linear linear-enet-rm-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-rm-istella elasticnet istella 3 3 - MOJOLEARN_CD_FAST_ROWMAJOR=1
-   230	CMD lane/apple-fast-linear linear-enet-rm-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-rm-taxi elasticnet taxi 3 3 - MOJOLEARN_CD_FAST_ROWMAJOR=1
-   231	CMD lane/apple-fast-linear linear-logreg-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-logreg-ident logreg istella 3 3 -
-   232	CMD lane/apple-fast-linear linear-logreg-gs-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-logreg-gs-istella logreg istella 3 3 - MOJOLEARN_QN_FAST_GRID_SUMS=1
-   233	CMD lane/apple-fast-linear linear-logreg-gs-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-logreg-gs-taxi logreg taxi 3 3 - MOJOLEARN_QN_FAST_GRID_SUMS=1
-   234	CMD lane/apple-fast-linear linear-logreg-blocks AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-logreg-blocks estimators logreg istella 3 3 "" "-D MOJOLEARN_QN_FAST_BLOCKS=1"
-   235	CMD lane/apple-fast-linear linear-logreg-nocoal AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-logreg-nocoal estimators logreg istella 3 3 "" "-D MOJOLEARN_QN_FAST_COALESCED_OFF=1"
-   236	CMD lane/apple-fast-linear linear-svc-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-svc-ident linearsvc istella 3 3 -
-   237	CMD lane/apple-fast-linear linear-svc-gs-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-svc-gs-istella linearsvc istella 3 3 - MOJOLEARN_QN_FAST_GRID_SUMS=1
-   238	CMD lane/apple-fast-linear linear-svc-blocks AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-svc-blocks estimators linearsvc istella 3 3 "" "-D MOJOLEARN_QN_FAST_BLOCKS=1"
-   239	CMD lane/apple-fast-linear linear-svr-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-svr-ident linearsvr istella 3 3 -
-   240	CMD lane/apple-fast-linear linear-svr-gs-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-svr-gs-istella linearsvr istella 3 3 - MOJOLEARN_QN_FAST_GRID_SUMS=1
-   241	CMD lane/apple-fast-linear linear-svr-blocks AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-svr-blocks estimators linearsvr istella 3 3 "" "-D MOJOLEARN_QN_FAST_BLOCKS=1"
-   242	CMD lane/apple-fast-linear linear-gmm-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-ident gmm istella 3 3 -
-   243	CMD lane/apple-fast-linear linear-gmm-gc-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-gc-istella gmm istella 3 3 - MOJOLEARN_GMM_FAST_GRID_COV=1
-   244	CMD lane/apple-fast-linear linear-gmm-bc-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-bc-istella gmm istella 3 3 - MOJOLEARN_GMM_FAST_BIG_CHOL=1
-   245	CMD lane/apple-fast-linear linear-gmm-es-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-es-istella gmm istella 3 3 - MOJOLEARN_GMM_FAST_ESTEP_STACK=1
-   246	CMD lane/apple-fast-linear linear-gmm-all-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-all-istella gmm istella 3 3 - "MOJOLEARN_GMM_FAST_GRID_COV=1 MOJOLEARN_GMM_FAST_BIG_CHOL=1 MOJOLEARN_GMM_FAST_ESTEP_
-   247	CMD lane/apple-fast-trees-depthwise tdw-cat-scan AFT_OUT=$HOME/aft-ab/tdw-cat-scan bash tools/aft_ab.sh gbdt gbdt-categorical taxi 3 "" "-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1"
-   248	CMD lane/apple-fast-trees-depthwise tdw-cat-freq AFT_OUT=$HOME/aft-ab/tdw-cat-freq bash tools/aft_ab.sh gbdt gbdt-categorical taxi 3 "" "-D MOJOLEARN_GBDT_CTR_FAST_FREQ=1"
-   249	CMD lane/apple-fast-trees-depthwise tdw-cat-both AFT_OUT=$HOME/aft-ab/tdw-cat-both bash tools/aft_ab.sh gbdt gbdt-categorical taxi 3 "" "-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1 -D MOJOLEARN_GBDT_CTR_FAST_FREQ=1"
-   250	CMD lane/apple-fast-trees-depthwise tdw-cat-both-istella AFT_OUT=$HOME/aft-ab/tdw-cat-both-istella bash tools/aft_ab.sh gbdt gbdt-categorical istella 3 "" "-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1 -D MOJOLEARN_GBDT_CTR_FAST_FRE
-   251	CMD lane/apple-fast-trees-depthwise tdw-cat-freqcheck bash -c 'pixi run check-freq-ctr-device 2>&1 | tail -n 5'
-   252	CMD lane/apple-fast-trees-io trees-io-ifq-build AFT_OUT=$HOME/aft-ab/trees-io-ifq bash tools/aft_ab.sh svm iforest taxi 1 "" "-D MOJOLEARN_IF_QUERY_RAW=1"
-   253	CMD lane/apple-fast-trees-io trees-io-ifq-istella bash tools/aft_if_score_ab.sh $HOME/aft-ab/trees-io-ifq istella 3
-   254	CMD lane/apple-fast-trees-io trees-io-ifq-taxi bash tools/aft_if_score_ab.sh $HOME/aft-ab/trees-io-ifq taxi 3
-   255	CMD lane/apple-fast-trees-io trees-io-ifq-refusal MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SPEED_EXPECTED_VENDOR=metal PYTHONPATH=python $HOME/board-0834/cache/venv/bin/python tools/aft_if_refusal.py
+    56	CMD lane/apple-fast aft-ab-ettpb2 AFT_OUT=$HOME/aft-ab/ettpb2 bash tools/aft_ab.sh trees et taxi 3 "" "-D MOJOLEARN_ET_TPB_256"; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/ettpb2i bash tools/aft_ab.sh trees et istella 3 "" "-
+    57	CMD lane/apple-fast afc-enet2 for p in enet-cv:taxi lasso-cv:taxi enet-cv:istella lasso-cv:istella; do bash tools/afc_ab.sh afc-enet2 ${p%%:*} ${p##*:} 2 2 - MOJOLEARN_X_LINEAR_ENETCV_FAST=0 > /dev/null; done; grep SUMMA
+    58	CMD lane/apple-fast id-gbdt-lossguide-taxi bash ~/mq/idcheck.sh gbdt-lossguide taxi
+    59	CMD lane/apple-fast id-gbdt-lossguide-istella bash ~/mq/idcheck.sh gbdt-lossguide istella
+    60	CMD lane/apple-fast id-gbdt-depthwise-taxi bash ~/mq/idcheck.sh gbdt-depthwise taxi
+    61	CMD lane/apple-fast id-gbdt-depthwise-istella bash ~/mq/idcheck.sh gbdt-depthwise istella
+    62	CMD lane/apple-fast id-gbdt-rank-yetirank-taxi bash ~/mq/idcheck.sh gbdt-rank-yetirank taxi
+    63	CMD lane/apple-fast id-gbdt-rank-yetirank-istella bash ~/mq/idcheck.sh gbdt-rank-yetirank istella
+    64	CMD lane/apple-fast id-iforest-taxi bash ~/mq/idcheck.sh iforest taxi
+    65	CMD lane/apple-fast id-iforest-istella bash ~/mq/idcheck.sh iforest istella
+    66	CMD lane/apple-fast afc-bayes2 for p in bayesian-ridge:taxi bayesian-ridge:istella ard:taxi ard:istella; do bash tools/afc_ab.sh afc-bayes2 ${p%%:*} ${p##*:} 2 2 - MOJOLEARN_X_LINEAR_GRAM_SSE=0 > /dev/null; done; grep SU
+    67	CMD lane/apple-fast afc-knn2 AFC_FAMILY=classical2 bash tools/afc_ab.sh afc-knn2 knn-clf istella 3 3 - MOJOLEARN_KNN_FAST_MMA_BIGD=0 > /dev/null; AFC_FAMILY=classical bash tools/afc_ab.sh afc-knn2 knn istella 3 3 - MOJOL
+    68	CMD lane/apple-fast-tier tier-pca-ident AFC_ARM=ours AFC_FAMILY=classical bash tools/afc_ab.sh tier-pca-ident pca istella 3 3 -
+    69	CMD lane/apple-fast-tier tier-pca-tnv1 AFC_FAMILY=classical bash tools/afc_ab.sh tier-pca-tnv1 pca istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_TN_V1=1
+    70	CMD lane/apple-fast-tier tier-pca-nttiled AFC_FAMILY=classical bash tools/afc_ab.sh tier-pca-nttiled pca istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1
+    71	CMD lane/apple-fast-tier tier-ols-tnv1 AFC_FAMILY=classical bash tools/afc_ab.sh tier-ols-tnv1 ols istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_TN_V1=1
+    72	CMD lane/apple-fast-tier tier-ols-nttiled AFC_FAMILY=classical bash tools/afc_ab.sh tier-ols-nttiled ols istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1
+    73	CMD lane/apple-fast-tier tier-kmeans-nttiled AFC_FAMILY=classical bash tools/afc_ab.sh tier-kmeans-nttiled kmeans istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1
+    74	CMD lane/apple-fast-tier tier-rbf-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh tier-rbf-ident rbf-sampler istella 3 3 -
+    75	CMD lane/apple-fast-tier tier-rbf-pinned AFC_FAMILY=classical2 bash tools/afc_ab.sh tier-rbf-pinned rbf-sampler istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
+    76	CMD lane/apple-fast-tier tier-rbf-pinned-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh tier-rbf-pinned-taxi rbf-sampler taxi 3 3 - MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
+    77	CMD lane/apple-fast-tier tier-nys-pinned AFC_FAMILY=classical2 bash tools/afc_ab.sh tier-nys-pinned nystroem istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
+    78	CMD lane/apple-fast-tier tier-theta-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh tier-theta-ident theta taxi-hourly 3 3 -
+    79	CMD lane/apple-fast-tier tier-theta-fast AFC_FAMILY=algos bash tools/afc_ab.sh tier-theta-fast theta taxi-hourly 3 3 -
+    80	CMD lane/apple-fast-tier tier-theta-fma AFC_FAMILY=algos bash tools/afc_ab_def.sh tier-theta-fma x_sequence theta taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_FAST_FMA=1"
+    81	CMD lane/apple-fast-yetirank aft-ab-yreuse1 AFT_OUT=$HOME/aft-ab/aft-ab-yreuse1 bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 3 "-D MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF" ""
+    82	CMD lane/apple-fast-depthwise aft-ab-dwfc1 O=$HOME/aft-ab/aft-ab-dwfc1; D="-D MOJOLEARN_GBDT_DW_FUSED_CHAIN"; AFT_OUT=$O/dw-taxi bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 3 "" "$D"; for t in dw-istella lg-taxi; do mk
+    83	CMD lane/apple-fast-tier tier-theta-reg AFC_FAMILY=algos bash tools/afc_ab_def.sh tier-theta-reg x_sequence theta taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_THETA_REG=1"
+    84	CMD lane/apple-fast-tier tier-theta-regfma AFC_FAMILY=algos bash tools/afc_ab_def.sh tier-theta-regfma x_sequence theta taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_THETA_REG=1 -D MOJOLEARN_SEQ_FAST_FMA=1"
+    85	CMD lane/apple-fast-rfet-scan aft-ab-rffin AFT_OUT=$HOME/aft-ab/aft-ab-rffin bash tools/aft_ab.sh rf rf taxi 3 "-D MOJOLEARN_FOREST_DEVICE_FINITE_OFF" "" && AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/aft-ab-rffin bash tools/a
+    86	CMD lane/apple-fast-rfet-scan aft-ab-etfin AFT_OUT=$HOME/aft-ab/aft-ab-etfin bash tools/aft_ab.sh trees et taxi 3 "-D MOJOLEARN_FOREST_DEVICE_FINITE_OFF" "" && AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/aft-ab-etfin bash tool
+    87	CMD lane/apple-fast-rfet-scan aft-ab-rfseg AFT_OUT=$HOME/aft-ab/aft-ab-rfseg bash tools/aft_ab.sh rf rf taxi 3 "-D MOJOLEARN_SEG_SUMS_SERIAL" "" && AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/aft-ab-rfseg bash tools/aft_ab.sh 
+    88	CMD lane/apple-fast-rfet-scan id-rf-taxi bash ~/mq/idcheck.sh rf taxi
+    89	CMD lane/apple-fast-rfet-scan id-rf-istella bash ~/mq/idcheck.sh rf istella
+    90	CMD lane/apple-fast-rfet-scan id-et-taxi bash ~/mq/idcheck.sh et taxi
+    91	CMD lane/apple-fast-rfet-scan id-et-istella bash ~/mq/idcheck.sh et istella
+    92	CMD lane/apple-fast aft-ab-lgw128 AFT_OUT=$HOME/aft-ab/lgw128 bash tools/aft_ab.sh gbdt gbdt-lossguide taxi 3 "" "-D MOJOLEARN_GBDT_LG_EXACT_BATCH128"
+    93	CMD lane/apple-fast-pca-eig pca-eig-ident AFC_ARM=ours AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-ident pca istella 3 3 -
+    94	CMD lane/apple-fast-pca-eig pca-eig-eig-istella AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-eig-istella pca istella 3 3 - MOJOLEARN_PCA_FAST_EIG=1
+    95	CMD lane/apple-fast-pca-eig pca-eig-topk-istella AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-topk-istella pca istella 3 3 - MOJOLEARN_PCA_FAST_TOPK=1
+    96	CMD lane/apple-fast-pca-eig pca-eig-noalias-istella AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-noalias-istella pca istella 3 3 - MOJOLEARN_PCA_FAST_NO_ALIAS=1
+    97	CMD lane/apple-fast-pca-eig pca-eig-all-istella AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-all-istella pca istella 3 3 - 'MOJOLEARN_PCA_FAST_EIG=1 MOJOLEARN_PCA_FAST_TOPK=1 MOJOLEARN_PCA_FAST_NO_ALIAS=1'
+    98	CMD lane/apple-fast-pca-eig pca-eig-eig-taxi AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-eig-taxi pca taxi 3 3 - MOJOLEARN_PCA_FAST_EIG=1
+    99	CMD lane/apple-fast-pca-eig pca-eig-topk-taxi AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-topk-taxi pca taxi 3 3 - MOJOLEARN_PCA_FAST_TOPK=1
+   100	CMD lane/apple-fast-pca-eig pca-eig-noalias-taxi AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-noalias-taxi pca taxi 3 3 - MOJOLEARN_PCA_FAST_NO_ALIAS=1
+   101	CMD lane/apple-fast-pca-eig pca-eig-tsvd-eig-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh pca-eig-tsvd-eig-istella tsvd istella 3 3 - MOJOLEARN_PCA_FAST_EIG=1
+   102	CMD lane/apple-fast-pca-eig pca-eig-tsvd-topk-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh pca-eig-tsvd-topk-istella tsvd istella 3 3 - MOJOLEARN_PCA_FAST_TOPK=1
+   103	CMD lane/apple-fast-pca-eig pca-eig-ipca-istella AFC_FAMILY=algos bash tools/afc_ab.sh pca-eig-ipca-istella incremental-pca istella 3 3 - MOJOLEARN_PCA_FAST_EIG=1
+   104	CMD lane/apple-fast-pca-eig pca-eig-ipca-taxi AFC_FAMILY=algos bash tools/afc_ab.sh pca-eig-ipca-taxi incremental-pca taxi 3 3 - MOJOLEARN_PCA_FAST_EIG=1
+   105	CMD lane/apple-fast-seq seq-croston-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh seq-croston-ident croston taxi-hourly 3 3 -
+   106	CMD lane/apple-fast-seq seq-croston-fast AFC_FAMILY=algos bash tools/afc_ab.sh seq-croston-fast croston taxi-hourly 3 3 -
+   107	CMD lane/apple-fast-seq seq-croston-reg AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-croston-reg x_sequence croston taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_CROSTON_REG=1"
+   108	CMD lane/apple-fast-seq seq-croston-reg-syn AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-croston-reg-syn x_sequence croston synthetic 3 3 "" "-D MOJOLEARN_SEQ_CROSTON_REG=1"
+   109	CMD lane/apple-fast-seq seq-garch-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh seq-garch-ident garch taxi-hourly 3 3 -
+   110	CMD lane/apple-fast-seq seq-garch-fast AFC_FAMILY=algos bash tools/afc_ab.sh seq-garch-fast garch taxi-hourly 3 3 -
+   111	CMD lane/apple-fast-seq seq-garch-dev AFC_FAMILY=algos bash tools/afc_ab.sh seq-garch-dev garch taxi-hourly 3 3 MOJOLEARN_SEQ_GARCH_HOST_MAX=0
+   112	CMD lane/apple-fast-seq seq-garch-reg MOJOLEARN_SEQ_GARCH_HOST_MAX=0 AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-garch-reg x_sequence garch taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_GARCH_REG=1"
+   113	CMD lane/apple-fast-seq seq-garch-grid MOJOLEARN_SEQ_GARCH_HOST_MAX=0 AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-garch-grid x_sequence garch taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_GARCH_GRID=1"
+   114	CMD lane/apple-fast-seq seq-garch-reggrid MOJOLEARN_SEQ_GARCH_HOST_MAX=0 AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-garch-reggrid x_sequence garch taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_GARCH_REG=1 -D MOJOLEARN_SEQ_GARC
+   115	CMD lane/apple-fast-seq seq-garch-reggrid-syn MOJOLEARN_SEQ_GARCH_HOST_MAX=0 AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-garch-reggrid-syn x_sequence garch synthetic 3 3 "" "-D MOJOLEARN_SEQ_GARCH_REG=1 -D MOJOLEARN_SE
+   116	CMD lane/apple-fast-trees-scan trees-scan-dw-taxi AFT_OUT=$HOME/aft-ab/trees-scan-dw-taxi bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1 -D MOJOLEARN_SCAN_U32_BLOCK=1 -D MOJOLEARN_REORD
+   117	CMD lane/apple-fast-trees-scan trees-scan-lg-taxi AFT_OUT=$HOME/aft-ab/trees-scan-lg-taxi bash tools/aft_ab.sh gbdt gbdt-lossguide taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1 -D MOJOLEARN_SCAN_U32_BLOCK=1 -D MOJOLEARN_REORD
+   118	CMD lane/apple-fast-trees-scan trees-scan-cat-taxi AFT_OUT=$HOME/aft-ab/trees-scan-cat-taxi bash tools/aft_ab.sh gbdt gbdt-categorical taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1 -D MOJOLEARN_SCAN_U32_BLOCK=1 -D MOJOLEARN_R
+   119	CMD lane/apple-fast-trees-scan trees-scan-rf-taxi AFT_OUT=$HOME/aft-ab/trees-scan-rf-taxi bash tools/aft_ab.sh rf rf taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1"
+   120	CMD lane/apple-fast-trees-scan trees-scan-rf-istella AFT_OUT=$HOME/aft-ab/trees-scan-rf-istella bash tools/aft_ab.sh rf rf istella 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1"
+   121	CMD lane/apple-fast-trees-scan trees-scan-et-taxi AFT_OUT=$HOME/aft-ab/trees-scan-et-taxi bash tools/aft_ab.sh trees et taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1"
+   122	CMD lane/apple-fast-gram gram-lars-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-lars-taxi lars taxi 3 3 - MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1
+   123	CMD lane/apple-fast-gram gram-lars-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-lars-istella lars istella 3 3 - MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1
+   124	CMD lane/apple-fast-gram gram-lars-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh gram-lars-ident lars istella 3 3 -
+   125	CMD lane/apple-fast-gram gram-llars-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-llars-taxi lasso-lars taxi 3 3 - MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1
+   126	CMD lane/apple-fast-gram gram-llars-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-llars-istella lasso-lars istella 3 3 - MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1
+   127	CMD lane/apple-fast-gram gram-llars-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh gram-llars-ident lasso-lars istella 3 3 -
+   128	CMD lane/apple-fast-gram gram-ridgeclf-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgeclf-taxi ridge-clf taxi 3 3 - MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1
+   129	CMD lane/apple-fast-gram gram-ridgeclf-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgeclf-istella ridge-clf istella 3 3 - MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1
+   130	CMD lane/apple-fast-gram gram-ridgeclf-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgeclf-ident ridge-clf istella 3 3 -
+   131	CMD lane/apple-fast-gram gram-ridgecv-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgecv-taxi ridge-cv taxi 3 3 - MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1
+   132	CMD lane/apple-fast-gram gram-ridgecv-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgecv-istella ridge-cv istella 3 3 - MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1
+   133	CMD lane/apple-fast-gram gram-ridgecv-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgecv-ident ridge-cv istella 3 3 -
+   134	CMD lane/apple-fast-gram gram-lda-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-lda-taxi lda-clf taxi 3 3 - MOJOLEARN_X_PREP_CLASS_COV_GRID=1
+   135	CMD lane/apple-fast-gram gram-lda-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-lda-istella lda-clf istella 3 3 - MOJOLEARN_X_PREP_CLASS_COV_GRID=1
+   136	CMD lane/apple-fast-gram gram-lda-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh gram-lda-ident lda-clf istella 3 3 -
+   137	CMD lane/apple-fast-gram gram-qda-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-qda-taxi qda taxi 3 3 - MOJOLEARN_X_PREP_CLASS_COV_GRID=1
+   138	CMD lane/apple-fast-gram gram-qda-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-qda-istella qda istella 3 3 - MOJOLEARN_X_PREP_CLASS_COV_GRID=1
+   139	CMD lane/apple-fast-gram gram-qda-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh gram-qda-ident qda istella 3 3 -
+   140	CMD lane/apple-fast-seq seq-garch-ident-dev AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh seq-garch-ident-dev garch taxi-hourly 3 3 MOJOLEARN_SEQ_GARCH_HOST_MAX=0
+   141	CMD lane/apple-fast-trees-io trees-io-if-istella AFT_OUT=$HOME/aft-ab/trees-io-if-istella bash tools/aft_ab.sh svm iforest istella 3 "" "-D MOJOLEARN_IF_SAMPLED_UPLOAD=1"
+   142	CMD lane/apple-fast-trees-io trees-io-if-taxi AFT_OUT=$HOME/aft-ab/trees-io-if-taxi bash tools/aft_ab.sh svm iforest taxi 3 "" "-D MOJOLEARN_IF_SAMPLED_UPLOAD=1"
+   143	CMD lane/apple-fast-trees-io trees-io-if-refusal MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SPEED_EXPECTED_VENDOR=metal PYTHONPATH=python $HOME/board-0834/cache/venv/bin/python tools/aft_if_refusal.py
+   144	CMD lane/apple-fast-rfet-scan aft-ab-gbseg AFT_OUT=$HOME/aft-ab/gbseg bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 3 "-D MOJOLEARN_SEG_SUMS_SERIAL" ""
+   145	CMD lane/apple-fast-cluster cluster-ms-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh cluster-ms-ident-istella meanshift istella 3 3 -
+   146	CMD lane/apple-fast-cluster cluster-ms-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster-ms-istella meanshift istella 3 3 - MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1
+   147	CMD lane/apple-fast-cluster cluster-ms-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster-ms-taxi meanshift taxi 3 3 - MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1
+   148	CMD lane/apple-fast-cluster cluster-mb-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh cluster-mb-ident-istella minibatch-kmeans istella 3 3 -
+   149	CMD lane/apple-fast-cluster cluster-mb-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster-mb-istella minibatch-kmeans istella 3 3 - MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1
+   150	CMD lane/apple-fast-cluster cluster-mb-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster-mb-taxi minibatch-kmeans taxi 3 3 - MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1
+   151	CMD lane/apple-fast-cluster cluster-cc-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh cluster-cc-ident-istella connected-components istella 3 3 -
+   152	CMD lane/apple-fast-cluster cluster-cc-fast-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster-cc-fast-istella connected-components istella 3 3 -
+   153	CMD lane/apple-fast-cluster cluster-cc-fast-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster-cc-fast-taxi connected-components taxi 3 3 -
+   154	CMD lane/apple-fast-cluster cluster-aggl-ident-istella AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-aggl-ident-istella agglomerative istella 3 3 -
+   155	CMD lane/apple-fast-cluster cluster-aggl-fast-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-aggl-fast-istella agglomerative istella 3 3 -
+   156	CMD lane/apple-fast-cluster cluster-aggl-fast-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-aggl-fast-taxi agglomerative taxi 3 3 -
+   157	CMD lane/apple-fast-cluster cluster-spec-ident-istella AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-spec-ident-istella spectral istella 3 3 -
+   158	CMD lane/apple-fast-cluster cluster-spec-fast-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-spec-fast-istella spectral istella 3 3 -
+   159	CMD lane/apple-fast-cluster cluster-spec-fast-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-spec-fast-taxi spectral taxi 3 3 -
+   160	CMD lane/apple-fast-prep prep-minmax-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-minmax-istella minmax-scaler istella 3 3 - MOJOLEARN_X_PREP_FAST_MINMAX=1
+   161	CMD lane/apple-fast-prep prep-minmax-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-minmax-taxi minmax-scaler taxi 3 3 - MOJOLEARN_X_PREP_FAST_MINMAX=1
+   162	CMD lane/apple-fast-prep prep-onehot-uniq-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-uniq-taxi onehot taxi 3 3 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
+   163	CMD lane/apple-fast-prep prep-onehot-noneg-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-noneg-taxi onehot taxi 3 3 - MOJOLEARN_X_PREP_FAST_NONEG=1
+   164	CMD lane/apple-fast-prep prep-onehot-both-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-both-taxi onehot taxi 3 3 - 'MOJOLEARN_X_PREP_FAST_UNIQUE=1 MOJOLEARN_X_PREP_FAST_NONEG=1'
+   165	CMD lane/apple-fast-prep prep-onehot-uniq-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-uniq-istella onehot istella 3 3 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
+   166	CMD lane/apple-fast-prep prep-onehot-noneg-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-noneg-istella onehot istella 3 3 - MOJOLEARN_X_PREP_FAST_NONEG=1
+   167	CMD lane/apple-fast-prep prep-ordinal-uniq-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-uniq-taxi ordinal taxi 3 3 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
+   168	CMD lane/apple-fast-prep prep-ordinal-noneg-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-noneg-taxi ordinal taxi 3 3 - MOJOLEARN_X_PREP_FAST_NONEG=1
+   169	CMD lane/apple-fast-prep prep-ordinal-uniq-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-uniq-istella ordinal istella 3 3 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
+   170	CMD lane/apple-fast-prep prep-ordinal-noneg-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-noneg-istella ordinal istella 3 3 - MOJOLEARN_X_PREP_FAST_NONEG=1
+   171	CMD lane/apple-fast-prep prep-mlb-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-mlb-taxi multilabel-binarizer taxi 3 3 - MOJOLEARN_X_PREP_FAST_MULTILABEL=1
+   172	CMD lane/apple-fast-prep prep-mlb-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-mlb-istella multilabel-binarizer istella 3 3 - MOJOLEARN_X_PREP_FAST_MULTILABEL=1
+   173	CMD lane/apple-fast-prep prep-labenc-base-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-labenc-base-taxi label-encoder taxi 3 3 -
+   174	CMD lane/apple-fast-prep prep-labenc-prof-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-labenc-prof-taxi label-encoder taxi 1 1 MOJOLEARN_XPREP_PROFILE=1
+   175	CMD lane/apple-fast-prep prep-labbin-base-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-labbin-base-taxi label-binarizer taxi 3 3 -
+   176	CMD lane/apple-fast-prep prep-labbin-prof-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-labbin-prof-taxi label-binarizer taxi 1 1 MOJOLEARN_XPREP_PROFILE=1
+   177	CMD lane/apple-fast-trees-yeti yeti-task16k AFT_OUT=$HOME/aft-ab/yeti-task16k bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 3 "" "-D MOJOLEARN_YETI_SEARCH_TASK16K=1"
+   178	CMD lane/apple-fast-trees-yeti yeti-symhist AFT_OUT=$HOME/aft-ab/yeti-symhist bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 3 "" "-D MOJOLEARN_SYM_HIST_FAST=1"
+   179	CMD lane/apple-fast-trees-yeti yeti-both AFT_OUT=$HOME/aft-ab/yeti-both bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 3 "" "-D MOJOLEARN_YETI_SEARCH_TASK16K=1 -D MOJOLEARN_SYM_HIST_FAST=1"
+   180	CMD lane/apple-fast-trees-yeti yeti-symhist-sym-taxi AFT_OUT=$HOME/aft-ab/yeti-symhist-sym-taxi bash tools/aft_ab.sh gbdt gbdt-symmetric taxi 3 "" "-D MOJOLEARN_SYM_HIST_FAST=1"
+   181	CMD lane/apple-fast-trees-yeti yeti-symhist-sym-istella AFT_OUT=$HOME/aft-ab/yeti-symhist-sym-istella bash tools/aft_ab.sh gbdt gbdt-symmetric istella 3 "" "-D MOJOLEARN_SYM_HIST_FAST=1"
+   182	CMD lane/apple-fast-trees-yeti yeti-symhist-ordered-taxi AFT_OUT=$HOME/aft-ab/yeti-symhist-ordered-taxi bash tools/aft_ab.sh gbdt gbdt-ordered taxi 3 "" "-D MOJOLEARN_SYM_HIST_FAST=1"
+   183	CMD lane/apple-fast-isotonic-knn ik-iso-ident-taxi AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ik-iso-ident-taxi isotonic taxi 3 3 -
+   184	CMD lane/apple-fast-isotonic-knn ik-iso-par-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-iso-par-taxi isotonic taxi 3 3 - MOJOLEARN_ISOTONIC_FAST_PAR=1
+   185	CMD lane/apple-fast-isotonic-knn ik-iso-par-istella AFC_FAMILY=algos bash tools/afc_ab.sh ik-iso-par-istella isotonic istella 3 3 - MOJOLEARN_ISOTONIC_FAST_PAR=1
+   186	CMD lane/apple-fast-isotonic-knn ik-lle-ident-taxi AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-ident-taxi lle taxi 3 3 -
+   187	CMD lane/apple-fast-isotonic-knn ik-lle-knn-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-knn-taxi lle taxi 3 3 - MOJOLEARN_LLE_FAST_KNN=1
+   188	CMD lane/apple-fast-isotonic-knn ik-lle-mma-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-mma-taxi lle taxi 3 3 - "MOJOLEARN_LLE_FAST_KNN=1 MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1"
+   189	CMD lane/apple-fast-isotonic-knn ik-lle-knn-istella AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-knn-istella lle istella 3 3 - MOJOLEARN_LLE_FAST_KNN=1
+   190	CMD lane/apple-fast-isotonic-knn ik-lle-mma-istella AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-mma-istella lle istella 3 3 - "MOJOLEARN_LLE_FAST_KNN=1 MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1"
+   191	CMD lane/apple-fast-isotonic-knn ik-lof-mma-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-lof-mma-taxi lof taxi 3 3 - MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1
+   192	CMD lane/apple-fast-isotonic-knn ik-lof-mma-istella AFC_FAMILY=algos bash tools/afc_ab.sh ik-lof-mma-istella lof istella 3 3 - MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1
+   193	CMD lane/apple-fast-isotonic-knn ik-imp-ident-taxi AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ik-imp-ident-taxi knn-imputer taxi 3 3 -
+   194	CMD lane/apple-fast-isotonic-knn ik-imp-fast-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-imp-fast-taxi knn-imputer taxi 3 3 -
+   195	CMD lane/apple-fast-kernel kernel-bayes-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-ident bayesian-ridge istella 3 3 -
+   196	CMD lane/apple-fast-kernel kernel-bayes-stats-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-stats-ist bayesian-ridge istella 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
+   197	CMD lane/apple-fast-kernel kernel-bayes-jacobi-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-jacobi-ist bayesian-ridge istella 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1
+   198	CMD lane/apple-fast-kernel kernel-bayes-both-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-both-ist bayesian-ridge istella 3 3 - "MOJOLEARN_KERNEL_FAST_BAYES_STATS=1 MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1"
+   199	CMD lane/apple-fast-kernel kernel-bayes-stats-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-stats-taxi bayesian-ridge taxi 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
+   200	CMD lane/apple-fast-kernel kernel-bayes-both-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-both-taxi bayesian-ridge taxi 3 3 - "MOJOLEARN_KERNEL_FAST_BAYES_STATS=1 MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1"
+   201	CMD lane/apple-fast-kernel kernel-ard-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh kernel-ard-ident ard istella 3 3 -
+   202	CMD lane/apple-fast-kernel kernel-ard-stats-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-ard-stats-ist ard istella 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
+   203	CMD lane/apple-fast-kernel kernel-ard-stats-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-ard-stats-taxi ard taxi 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
+   204	CMD lane/apple-fast-kernel kernel-huber-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh kernel-huber-ident huber istella 3 3 -
+   205	CMD lane/apple-fast-kernel kernel-huber-fast-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-huber-fast-taxi huber taxi 3 3 -
+   206	CMD lane/apple-fast-kernel kernel-huber-fast-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-huber-fast-ist huber istella 3 3 -
+   207	CMD lane/apple-fast-kernel kernel-kpca-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh kernel-kpca-ident kernel-pca istella 3 3 -
+   208	CMD lane/apple-fast-kernel kernel-kpca-fast-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-kpca-fast-ist kernel-pca istella 3 3 -
+   209	CMD lane/apple-fast-kernel kernel-kpca-fast-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-kpca-fast-taxi kernel-pca taxi 3 3 -
+   210	CMD lane/apple-fast-kernel kernel-gpr-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpr-ident gpr istella 3 3 -
+   211	CMD lane/apple-fast-kernel kernel-gpr-resident-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpr-resident-ist gpr istella 3 3 - MOJOLEARN_KERNEL_FAST_GPR_RESIDENT=1
+   212	CMD lane/apple-fast-kernel kernel-gpr-resident-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpr-resident-taxi gpr taxi 3 3 - MOJOLEARN_KERNEL_FAST_GPR_RESIDENT=1
+   213	CMD lane/apple-fast-kernel kernel-gpc-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpc-ident gpc istella 3 3 -
+   214	CMD lane/apple-fast-kernel kernel-gpc-fast-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpc-fast-ist gpc istella 3 3 -
+   215	CMD lane/apple-fast-kernel kernel-svr-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-svr-ident svr istella 3 3 -
+   216	CMD lane/apple-fast-kernel kernel-svr-fast-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-svr-fast-ist svr istella 3 3 -
+   217	CMD lane/apple-fast-kernel kernel-krr-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-krr-ident kernel-ridge istella 3 3 -
+   218	CMD lane/apple-fast-kernel kernel-krr-fast-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-krr-fast-ist kernel-ridge istella 3 3 -
+   219	CMD lane/apple-fast-kernel kernel-nys-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-nys-ident nystroem istella 3 3 -
+   220	CMD lane/apple-fast-kernel kernel-nys-rr-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-nys-rr-ist nystroem istella 3 3 - MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH=1
+   221	CMD lane/apple-fast-kernel kernel-nys-rr-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-nys-rr-taxi nystroem taxi 3 3 - MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH=1
+   222	CMD lane/apple-fast-linear linear-lasso-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-ident lasso istella 3 3 -
+   223	CMD lane/apple-fast-linear linear-lasso-gg-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-gg-istella lasso istella 3 3 - MOJOLEARN_CD_FAST_GRID_GRAM=1
+   224	CMD lane/apple-fast-linear linear-lasso-gg-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-gg-taxi lasso taxi 3 3 - MOJOLEARN_CD_FAST_GRID_GRAM=1
+   225	CMD lane/apple-fast-linear linear-lasso-rm-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-rm-istella lasso istella 3 3 - MOJOLEARN_CD_FAST_ROWMAJOR=1
+   226	CMD lane/apple-fast-linear linear-lasso-rm-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-rm-taxi lasso taxi 3 3 - MOJOLEARN_CD_FAST_ROWMAJOR=1
+   227	CMD lane/apple-fast-linear linear-enet-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-ident elasticnet istella 3 3 -
+   228	CMD lane/apple-fast-linear linear-enet-gg-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-gg-istella elasticnet istella 3 3 - MOJOLEARN_CD_FAST_GRID_GRAM=1
+   229	CMD lane/apple-fast-linear linear-enet-gg-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-gg-taxi elasticnet taxi 3 3 - MOJOLEARN_CD_FAST_GRID_GRAM=1
+   230	CMD lane/apple-fast-linear linear-enet-rm-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-rm-istella elasticnet istella 3 3 - MOJOLEARN_CD_FAST_ROWMAJOR=1
+   231	CMD lane/apple-fast-linear linear-enet-rm-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-rm-taxi elasticnet taxi 3 3 - MOJOLEARN_CD_FAST_ROWMAJOR=1
+   232	CMD lane/apple-fast-linear linear-logreg-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-logreg-ident logreg istella 3 3 -
+   233	CMD lane/apple-fast-linear linear-logreg-gs-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-logreg-gs-istella logreg istella 3 3 - MOJOLEARN_QN_FAST_GRID_SUMS=1
+   234	CMD lane/apple-fast-linear linear-logreg-gs-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-logreg-gs-taxi logreg taxi 3 3 - MOJOLEARN_QN_FAST_GRID_SUMS=1
+   235	CMD lane/apple-fast-linear linear-logreg-blocks AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-logreg-blocks estimators logreg istella 3 3 "" "-D MOJOLEARN_QN_FAST_BLOCKS=1"
+   236	CMD lane/apple-fast-linear linear-logreg-nocoal AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-logreg-nocoal estimators logreg istella 3 3 "" "-D MOJOLEARN_QN_FAST_COALESCED_OFF=1"
+   237	CMD lane/apple-fast-linear linear-svc-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-svc-ident linearsvc istella 3 3 -
+   238	CMD lane/apple-fast-linear linear-svc-gs-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-svc-gs-istella linearsvc istella 3 3 - MOJOLEARN_QN_FAST_GRID_SUMS=1
+   239	CMD lane/apple-fast-linear linear-svc-blocks AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-svc-blocks estimators linearsvc istella 3 3 "" "-D MOJOLEARN_QN_FAST_BLOCKS=1"
+   240	CMD lane/apple-fast-linear linear-svr-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-svr-ident linearsvr istella 3 3 -
+   241	CMD lane/apple-fast-linear linear-svr-gs-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-svr-gs-istella linearsvr istella 3 3 - MOJOLEARN_QN_FAST_GRID_SUMS=1
+   242	CMD lane/apple-fast-linear linear-svr-blocks AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-svr-blocks estimators linearsvr istella 3 3 "" "-D MOJOLEARN_QN_FAST_BLOCKS=1"
+   243	CMD lane/apple-fast-linear linear-gmm-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-ident gmm istella 3 3 -
+   244	CMD lane/apple-fast-linear linear-gmm-gc-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-gc-istella gmm istella 3 3 - MOJOLEARN_GMM_FAST_GRID_COV=1
+   245	CMD lane/apple-fast-linear linear-gmm-bc-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-bc-istella gmm istella 3 3 - MOJOLEARN_GMM_FAST_BIG_CHOL=1
+   246	CMD lane/apple-fast-linear linear-gmm-es-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-es-istella gmm istella 3 3 - MOJOLEARN_GMM_FAST_ESTEP_STACK=1
+   247	CMD lane/apple-fast-linear linear-gmm-all-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-all-istella gmm istella 3 3 - "MOJOLEARN_GMM_FAST_GRID_COV=1 MOJOLEARN_GMM_FAST_BIG_CHOL=1 MOJOLEARN_GMM_FAST_ESTEP_
+   248	CMD lane/apple-fast-trees-depthwise tdw-cat-scan AFT_OUT=$HOME/aft-ab/tdw-cat-scan bash tools/aft_ab.sh gbdt gbdt-categorical taxi 3 "" "-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1"
+   249	CMD lane/apple-fast-trees-depthwise tdw-cat-freq AFT_OUT=$HOME/aft-ab/tdw-cat-freq bash tools/aft_ab.sh gbdt gbdt-categorical taxi 3 "" "-D MOJOLEARN_GBDT_CTR_FAST_FREQ=1"
+   250	CMD lane/apple-fast-trees-depthwise tdw-cat-both AFT_OUT=$HOME/aft-ab/tdw-cat-both bash tools/aft_ab.sh gbdt gbdt-categorical taxi 3 "" "-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1 -D MOJOLEARN_GBDT_CTR_FAST_FREQ=1"
+   251	CMD lane/apple-fast-trees-depthwise tdw-cat-both-istella AFT_OUT=$HOME/aft-ab/tdw-cat-both-istella bash tools/aft_ab.sh gbdt gbdt-categorical istella 3 "" "-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1 -D MOJOLEARN_GBDT_CTR_FAST_FRE
+   252	CMD lane/apple-fast-trees-depthwise tdw-cat-freqcheck bash -c 'pixi run check-freq-ctr-device 2>&1 | tail -n 5'
+   253	CMD lane/apple-fast-trees-io trees-io-ifq-build AFT_OUT=$HOME/aft-ab/trees-io-ifq bash tools/aft_ab.sh svm iforest taxi 1 "" "-D MOJOLEARN_IF_QUERY_RAW=1"
+   254	CMD lane/apple-fast-trees-io trees-io-ifq-istella bash tools/aft_if_score_ab.sh $HOME/aft-ab/trees-io-ifq istella 3
+   255	CMD lane/apple-fast-trees-io trees-io-ifq-taxi bash tools/aft_if_score_ab.sh $HOME/aft-ab/trees-io-ifq taxi 3
+   256	CMD lane/apple-fast-trees-io trees-io-ifq-refusal MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SPEED_EXPECTED_VENDOR=metal PYTHONPATH=python $HOME/board-0834/cache/venv/bin/python tools/aft_if_refusal.py
