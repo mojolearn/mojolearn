@@ -14,7 +14,9 @@ kernel leaves words stale, a dropped copy leaves -1). Guarded launches are
 idempotent (they rebuild their outputs from inputs the launch does not
 write), so a failed check reruns them: up to WITNESS_TRIES times, then the
 fit raises. Off Apple the words are never written and `ok` is True without
-a wait. `MOJOLEARN_METAL_WITNESS_LOG=1` prints each retry to stderr."""
+a wait. `MOJOLEARN_METAL_WITNESS_LOG=1` prints each rerun to stdout; any
+other non-empty value is a file path each rerun appends one line to (a
+harness that swallows the worker's output reads the file)."""
 from std.gpu import block_idx, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
@@ -51,6 +53,7 @@ struct Witness(Movable):
     var nonce: Int32
     var retries: Int
     var log: Bool
+    var log_path: String
 
     def __init__(out self, mut ctx: DeviceContext, cap: Int) raises:
         self.buf = ctx.enqueue_create_buffer[DType.int32](max(cap, 1))
@@ -58,7 +61,9 @@ struct Witness(Movable):
         # a per-process start, so a word left from an earlier fit never matches
         self.nonce = Int32(Int(perf_counter_ns()) & 0x3FFFFFFF)
         self.retries = 0
-        self.log = String(getenv("MOJOLEARN_METAL_WITNESS_LOG")) == "1"
+        var lv = String(getenv("MOJOLEARN_METAL_WITNESS_LOG"))
+        self.log = lv == "1"
+        self.log_path = lv if (lv != "" and lv != "1") else String("")
 
     def p(self) -> IP:
         return IP(unsafe_from_address=Int(self.buf.unsafe_ptr()))
@@ -79,11 +84,24 @@ struct Witness(Movable):
         for i in range(count):
             if self.host[i] != self.nonce:
                 self.retries += 1
+                var line = ("mojolearn: Metal witness: " + what + " incomplete (block " + String(i) + " of "
+                            + String(count) + "), rerunning; retries " + String(self.retries))
                 if self.log:
-                    print("mojolearn: Metal witness: " + what + " incomplete (block " + String(i) + " of "
-                          + String(count) + "), rerunning; retries " + String(self.retries))
+                    print(line)
+                if self.log_path != "":
+                    try:
+                        with open(self.log_path, "a") as f:
+                            f.write(line + "\n")
+                    except:
+                        pass
                 return False
         return True
 
     def fail(self) raises:
+        if self.log_path != "":
+            try:
+                with open(self.log_path, "a") as f:
+                    f.write("mojolearn: Metal witness: raised after " + String(self.retries) + " reruns\n")
+            except:
+                pass
         raise Error(WITNESS_ABORT)
