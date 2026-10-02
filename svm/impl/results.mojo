@@ -13,17 +13,20 @@ PRECOMPUTED early return is not implemented with its kernel.
 
     raft::linalg::binaryOp(coef = a * y)   -> combine_coefs_kernel
     set_flag / cub::DeviceSelect::Flagged   -> flag_* + SelectScratch.select_*
-    cub::DeviceReduce::Sum                  -> serial_sum_f32_kernel (DEVIATION 632)
-    cub::DeviceReduce::Min / Max            -> serial_min/max_f32_kernel (exact)
+    cub::DeviceReduce::Sum                  -> grid_sum_f32 (DEVIATION 632)
+    cub::DeviceReduce::Min / Max            -> grid_arg_f32 (exact)
     extractRows (dense)                     -> gather_rows_kernel
 
 # =========================================================================
 # DEVIATION 632 (svm/README.md, identity content section 5): `b` is a MEAN
 # of the free support vectors' `f`, and theirs takes the sum with
-# `cub::DeviceReduce::Sum`, whose fold shape is the library's. Ours is an
-# ascending serial chain over the order-preserving compaction of the free
-# SVs, every partial flushed (`serial_sum_f32_kernel`), then `-sum /
-# Float32(n_free)` on the host as theirs (`-sum / n_free`, math_t / int).
+# `cub::DeviceReduce::Sum`, whose fold shape is the library's. Ours is the
+# fixed-order grid fold of `svm/impl/grid_fold.mojo` (chunks of FOLD_TPB
+# halving trees, level over level, every partial flushed; the order is a
+# function of the count alone) over the order-preserving compaction of the
+# free SVs, then `-sum / Float32(n_free)` as theirs (`-sum / n_free`,
+# math_t / int). Until w2-svm (2026-10-02) it was a one-thread ascending
+# chain; the host oracle folds in the new order (`smo_oracle._tree_sum`).
 # The bound-only arm `-(b_up + b_low) / 2` is two exact selections and a
 # host expression. Gated bitwise against the host oracle.
 # =========================================================================
@@ -43,10 +46,8 @@ from svm.checks.device_select import (
     read_f32,
     read_i32,
     read_scalar_f32,
-    serial_max_f32_kernel,
-    serial_min_f32_kernel,
-    serial_sum_f32_kernel,
 )
+from svm.impl.grid_fold import FoldScratch, grid_arg_f32, grid_sum_f32
 from svm.impl.svm_parameter import C_SVC, EPSILON_SVR, SvmModel
 from svm.impl.ws_util import WS_TPB, set_lower_kernel, set_upper_kernel
 
@@ -105,6 +106,7 @@ struct Results(Movable):
     var flag: DeviceBuffer[DType.uint8]
     var d_val_reduced: DeviceBuffer[DType.float32]
     var select: SelectScratch
+    var fold: FoldScratch
 
     def __init__(
         out self,
@@ -141,6 +143,7 @@ struct Results(Movable):
         self.flag = ctx.enqueue_create_buffer[DType.uint8](nt)
         self.d_val_reduced = ctx.enqueue_create_buffer[DType.float32](1)
         self.select = SelectScratch(ctx, nt)
+        self.fold = FoldScratch(ctx, nt)
         ctx.synchronize()
         # raft::linalg::range(f_idx, n_train)
         ctx.enqueue_function[range_i32_kernel](
@@ -253,18 +256,18 @@ struct Results(Movable):
     ) raises -> Float32:
         """`CalcB` (`results.cuh:176-214`), the three arms in their order."""
         if n_support == 0:
-            ctx.enqueue_function[serial_sum_f32_kernel](
-                self.d_val_reduced.unsafe_ptr(), f.unsafe_ptr(),
-                Int32(self.n_train), grid_dim=1, block_dim=1,
+            grid_sum_f32(
+                ctx, f.unsafe_ptr(), self.n_train, self.fold,
+                self.d_val_reduced.unsafe_ptr(),
             )
             var f_sum = read_scalar_f32(ctx, self.d_val_reduced)
             return ftz(-f_sum / Float32(self.n_train))
         # Select f for unbound support vectors (0 < alpha < C)
         var n_free = self.select_unbound_sv(ctx, alpha, C, f)
         if n_free > 0:
-            ctx.enqueue_function[serial_sum_f32_kernel](
-                self.d_val_reduced.unsafe_ptr(), self.val_selected.unsafe_ptr(),
-                Int32(n_free), grid_dim=1, block_dim=1,
+            grid_sum_f32(
+                ctx, self.val_selected.unsafe_ptr(), n_free, self.fold,
+                self.d_val_reduced.unsafe_ptr(),
             )
             var s = read_scalar_f32(ctx, self.d_val_reduced)
             return ftz(-s / Float32(n_free))
@@ -323,13 +326,13 @@ struct Results(Movable):
                 " decision function"
             )
         if take_min:
-            ctx.enqueue_function[serial_min_f32_kernel](
-                self.d_val_reduced.unsafe_ptr(), self.val_selected.unsafe_ptr(),
-                Int32(n_selected), grid_dim=1, block_dim=1,
+            grid_arg_f32[False](
+                ctx, self.val_selected.unsafe_ptr(), n_selected, self.fold,
+                self.d_val_reduced.unsafe_ptr(),
             )
         else:
-            ctx.enqueue_function[serial_max_f32_kernel](
-                self.d_val_reduced.unsafe_ptr(), self.val_selected.unsafe_ptr(),
-                Int32(n_selected), grid_dim=1, block_dim=1,
+            grid_arg_f32[True](
+                ctx, self.val_selected.unsafe_ptr(), n_selected, self.fold,
+                self.d_val_reduced.unsafe_ptr(),
             )
         return read_scalar_f32(ctx, self.d_val_reduced)

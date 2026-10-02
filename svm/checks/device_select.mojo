@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The CUB / Thrust stand-ins the SVM implementation needs: flagged compaction, the
-float key twiddle, gathers, fills, and the pinned serial sum.
+float key twiddle, gathers and fills (the sum / min / max folds are
+`svm/impl/grid_fold.mojo`'s grid trees).
 
 DOES NOT FOLLOW any one file. Each function names the call it stands in for.
 CUB and Thrust are OPEN (CONTRIBUTING.md (Algorithms and references)), so these are written out
@@ -286,59 +287,6 @@ def gather_rows_kernel(
         var c = t - r * k
         var src_row = Int(idx.unsafe_load(r))
         dst.unsafe_store(t, x.unsafe_load(src_row * k + c))
-
-
-def serial_sum_f32_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin],
-    v: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-):
-    """DEVIATION 632: `cub::DeviceReduce::Sum`'s stand-in at the two
-    `CalcB` sites, an ASCENDING serial chain in one thread, every partial
-    flushed. One thread and no fold so there is no shape to pin; `n` is
-    the free-SV count or `n_train`, and this runs once per fit."""
-    if Int(thread_idx.x) == 0 and Int(block_idx.x) == 0:
-        var acc = Float32(0.0)
-        for i in range(Int(n_in)):
-            acc = ftz(acc + ftz(v.unsafe_load(i)))
-        dst.unsafe_store(0, acc)
-
-
-def serial_min_f32_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin],
-    v: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-):
-    """`cub::DeviceReduce::Min` (`results.cuh::SelectReduce`): exact away
-    from a +0.0/-0.0 pair, so a one-thread scan is the same answer as any
-    fold; ON that pair (row 39) the strict `<` keeps the FIRST element in
-    index order (the compaction preserves training-index order), which is
-    the oracle's serial rule in `smo_oracle.mojo::_results`, and not a
-    hardware `min`. A NaN at index 0 would persist and a later one would
-    be dropped; none reaches here (DEVIATION 637 raises first)."""
-    if Int(thread_idx.x) == 0 and Int(block_idx.x) == 0:
-        var m = v.unsafe_load(0)
-        for i in range(1, Int(n_in)):
-            var x = v.unsafe_load(i)
-            if x < m:
-                m = x
-        dst.unsafe_store(0, m)
-
-
-def serial_max_f32_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin],
-    v: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-):
-    """`cub::DeviceReduce::Max`; the twin of `serial_min_f32_kernel`, same
-    row-39 note: strict `>`, first index wins a +0.0/-0.0 tie."""
-    if Int(thread_idx.x) == 0 and Int(block_idx.x) == 0:
-        var m = v.unsafe_load(0)
-        for i in range(1, Int(n_in)):
-            var x = v.unsafe_load(i)
-            if x > m:
-                m = x
-        dst.unsafe_store(0, m)
 
 
 # ---------------------------------------------------------------------------
