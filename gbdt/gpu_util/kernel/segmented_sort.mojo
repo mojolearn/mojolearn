@@ -76,8 +76,11 @@ binary search that follows it (`exact_estimation.cu:31-39`).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
 from max.gpu.primitives.block import prefix_sum
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from core.segmented_sort import SEG_SUMS_BLOCK_SCAN, SEG_SUMS_TPB
 from std.gpu import block_dim, block_idx, thread_idx
 
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
@@ -199,6 +202,42 @@ def seg_scan_block_sums_kernel(
         var v = block_sums.unsafe_load(seg * wide + b)
         block_sums.unsafe_store(seg * wide + b, acc)
         acc += v
+
+
+def seg_scan_block_sums_block_kernel(
+    block_sums: MutPointer[Int32, MutAnyOrigin],
+    seg_sizes: MutPointer[UInt32, MutAnyOrigin],
+    blocks_wide_in: Int32,
+):
+    """`seg_scan_block_sums_kernel` with one SEG_SUMS_TPB-thread block per
+    segment (SEG_SUMS_BLOCK_SCAN, FAST on Apple; `-D
+    MOJOLEARN_SEG_SUMS_SERIAL` is the one-thread arm): chunks of block
+    totals scanned with the block prefix sum and carried. Exclusive and in
+    place over the same `used` slots; Int32 adds, so the same values."""
+    var seg = Int(block_idx.x)
+    var size = Int(seg_sizes.unsafe_load(seg))
+    var wide = Int(blocks_wide_in)
+    var used = (size + REORDER_BLOCK - 1) // REORDER_BLOCK
+    var tid = Int(thread_idx.x)
+    var total = stack_allocation[
+        1, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var carry = Int32(0)
+    var c0 = 0
+    while c0 < used:
+        var b = c0 + tid
+        var v = Int32(0)
+        if b < used:
+            v = block_sums.unsafe_load(seg * wide + b)
+        var ex = prefix_sum[block_size=SEG_SUMS_TPB, exclusive=True](v)
+        if b < used:
+            block_sums.unsafe_store(seg * wide + b, carry + ex)
+        if tid == SEG_SUMS_TPB - 1:
+            total[0] = ex + v
+        barrier()
+        carry += total[0]
+        barrier()
+        c0 += SEG_SUMS_TPB
 
 
 def seg_add_block_carry_kernel(
@@ -366,11 +405,18 @@ def _seg_radix_pass(
         grid_dim=(blocks_wide, n_segments, 1),
         block_dim=(REORDER_BLOCK, 1, 1),
     )
-    ctx.enqueue_function[seg_scan_block_sums_kernel](
-        block_sums.unsafe_ptr(), seg_sizes.unsafe_ptr(),
-        Int32(blocks_wide),
-        grid_dim=(n_segments, 1, 1), block_dim=(1, 1, 1),
-    )
+    comptime if SEG_SUMS_BLOCK_SCAN:
+        ctx.enqueue_function[seg_scan_block_sums_block_kernel](
+            block_sums.unsafe_ptr(), seg_sizes.unsafe_ptr(),
+            Int32(blocks_wide),
+            grid_dim=(n_segments, 1, 1), block_dim=(SEG_SUMS_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[seg_scan_block_sums_kernel](
+            block_sums.unsafe_ptr(), seg_sizes.unsafe_ptr(),
+            Int32(blocks_wide),
+            grid_dim=(n_segments, 1, 1), block_dim=(1, 1, 1),
+        )
     ctx.enqueue_function[seg_add_block_carry_kernel](
         offsets.unsafe_ptr(), block_sums.unsafe_ptr(),
         seg_offsets.unsafe_ptr(), seg_sizes.unsafe_ptr(),
