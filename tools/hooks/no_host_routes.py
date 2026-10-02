@@ -8,9 +8,11 @@ of them fails too, so touching a route means removing it, and the debt only
 shrinks.
 
 Only added lines are read (`git diff -U0`), so the check costs well under a
-second. Usage:
-    no_host_routes.py <base> <tip>     check the lines <tip> adds over <base>
-    no_host_routes.py --diff <file>    check a unified diff (tests)
+second. The same check runs on GitHub (.github/workflows/no-host-routes.yml)
+for every PR and every push to main, and the main ruleset requires it before
+a PR merges, so a merge done on GitHub is checked too. Usage:
+    no_host_routes.py <base> <tip> [--main REF]   lines <tip> adds over <base>
+    no_host_routes.py --diff <file>               check a unified diff (tests)
 Exit 1 with one line per finding, 0 when clean.
 """
 import re
@@ -66,12 +68,49 @@ _RULES = [
      "touches an existing host route (remove it, don't extend it)"),
 ]
 
+# Six PRs in flight when the check went in (Andrew, Oct 2: everything in
+# flight lands). Exactly the lines each PR had added up to this pinned head
+# pass; a commit added to the PR after the pin is checked like any other. An
+# entry goes away when its PR lands or closes; never add one.
+_IN_FLIGHT = {
+    77: "e0918aa35bfbf6b81b095ee364ed8cc5bfb2a003",
+    85: "6a483da91d76ae2560b5316910738e7b3328e375",
+    86: "11912bf71d8e8d7faaadf8301088c517562c7758",
+    106: "e2128048602c358e3a3c402fc70ea718c7a01d64",
+    116: "28671ad0e1bdb7e1c59d7ee7925e1fccf1fb204a",
+    126: "9901c6a91a8d8c8aa3e5162024c7b1acacd7bc37",
+}
+
 _ALWAYS_SKIP = re.compile(r"(^|/)(tests?|checks|bench|tools|docs)/|\.md$")
 _COMMENT = re.compile(r"^\s*(#|//)")
 
 
-def findings(diff_text):
-    out = []
+def _git(*args):
+    return subprocess.run(["git", *args], capture_output=True, text=True,
+                          errors="replace")
+
+
+def _added(base, tip):
+    return _git("diff", "-U0", "--no-color", "--no-ext-diff",
+                "--diff-filter=AMR", base, tip).stdout
+
+
+def in_flight_lines(main_ref):
+    """(path, stripped text) of every line the pinned PR heads add over main."""
+    lines = set()
+    for sha in _IN_FLIGHT.values():
+        if _git("cat-file", "-e", sha + "^{commit}").returncode != 0:
+            _git("fetch", "-q", "origin", sha)
+        mb = _git("merge-base", main_ref, sha)
+        if mb.returncode != 0:
+            continue
+        for path, _, text in _walk(_added(mb.stdout.strip(), sha)):
+            lines.add((path, text.strip()))
+    return lines
+
+
+def _walk(diff_text):
+    """(path, line number, text) of every added line of a -U0 diff."""
     path = None
     line_no = 0
     for raw in diff_text.splitlines():
@@ -85,10 +124,16 @@ def findings(diff_text):
             continue
         if not raw.startswith("+") or raw.startswith("+++") or path is None:
             continue
-        text = raw[1:]
-        here = line_no
         line_no += 1
+        yield path, line_no - 1, raw[1:]
+
+
+def findings(diff_text, exempt=frozenset()):
+    out = []
+    for path, here, text in _walk(diff_text):
         if _ALWAYS_SKIP.search(path) or _COMMENT.match(text):
+            continue
+        if (path, text.strip()) in exempt:
             continue
         scoped_skip = bool(_CPU_ONLY.search(path))
         for name, scoped, pat, why in _RULES:
@@ -106,19 +151,27 @@ def findings(diff_text):
 
 
 def main(argv):
+    main_ref = "origin/main"
+    if "--main" in argv:
+        i = argv.index("--main")
+        main_ref = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
     if len(argv) == 3 and argv[1] == "--diff":
         with open(argv[2], encoding="utf-8", errors="replace") as f:
             diff = f.read()
+        exempt = frozenset()
     elif len(argv) == 3:
-        diff = subprocess.run(
-            ["git", "diff", "-U0", "--no-color", "--no-ext-diff",
-             "--diff-filter=AMR", argv[1], argv[2]],
-            check=True, capture_output=True, text=True, errors="replace",
-        ).stdout
+        r = _git("diff", "-U0", "--no-color", "--no-ext-diff",
+                 "--diff-filter=AMR", argv[1], argv[2])
+        if r.returncode != 0:
+            print(r.stderr, file=sys.stderr)
+            return 2
+        diff = r.stdout
+        exempt = in_flight_lines(main_ref) if diff else frozenset()
     else:
         print(__doc__, file=sys.stderr)
         return 2
-    found = findings(diff)
+    found = findings(diff, exempt)
     if not found:
         return 0
     print("no-host-routes: REFUSED. These added lines add or touch a CPU route "

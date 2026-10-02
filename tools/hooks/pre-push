@@ -32,7 +32,7 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
         base=$remote_sha
         git cat-file -e "$base^{commit}" 2>/dev/null || continue
     fi
-    python3 "$here/no_host_routes.py" "$base" "$local_sha" || exit 4
+    python3 "$here/no_host_routes.py" "$base" "$local_sha" --main "refs/remotes/$1/main" || exit 4
 done
 [ $? -eq 4 ] && bad=1
 echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
