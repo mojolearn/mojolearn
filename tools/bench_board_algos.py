@@ -391,11 +391,13 @@ _add("gaussian-rp", xlane="decomp", ours="GaussianRandomProjection", task="trans
      block="tsvd", quality="distortion", sk="sklearn.random_projection:GaussianRandomProjection",
      params=dict(n_components=10, random_state=SEED),   # cuML benchmark GaussianRandomProjection
      cuml="cuml.random_projection:GaussianRandomProjection",
+     cuml_host_input=True,
      notes=["n_components = 10, the cuML benchmark's"])
 _add("sparse-rp", xlane="decomp", ours="SparseRandomProjection", task="transform", block="tsvd",
      quality="distortion", sk="sklearn.random_projection:SparseRandomProjection",
      params=dict(n_components=10, density="auto", random_state=SEED),  # cuML benchmark
      cuml="cuml.random_projection:SparseRandomProjection",
+     cuml_host_input=True,
      notes=["n_components = 10, the cuML benchmark's"])
 _add("nmf", xlane="decomp", ours="NMF", task="transform", block="nonneg", quality="nmf",
      sk="sklearn.decomposition:NMF",
@@ -2324,7 +2326,13 @@ def _build_est(lane, arm, D):
     make, what, params = _est_factory(lane, arm, D)
     S = {}
     sync = None
-    if arm == "cuml-gpu":
+    if arm == "cuml-gpu" and s.get("cuml_host_input"):
+        # Host input on both arms: cuML gets the numpy arrays, so its upload (and the numpy result's
+        # download) sits inside the clock exactly as ours does (Andrew, Oct 1: random projection).
+        _, info, sync = _cuml_up({})
+        dev = D
+        info.update(input_home="host", upload_ms_untimed=None)
+    elif arm == "cuml-gpu":
         keys = [k for k in ("X", "y", "Xq") if k in D]
         dev, info, sync = _cuml_up({k: D[k] for k in keys})
         if t == "clf" and "y" in dev:
