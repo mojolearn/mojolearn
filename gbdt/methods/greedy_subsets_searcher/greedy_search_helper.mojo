@@ -231,7 +231,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
 from gbdt.methods.greedy_subsets_searcher.kernel.fused_level import (
     FUSED_LEVEL_BLOCK,
     sym_copy_update_kernel,
-    sym_resolve_split_count_kernel,
+    sym_split_count_kernel,
     sym_scan_sub_pstats_kernel,
 )
 
@@ -246,9 +246,11 @@ from gbdt.methods.greedy_subsets_searcher.kernel.fused_level import (
 #     + reorder (1 or 2) + parent copy + partition update  = H + 13 (14)
 # and the fused one
 #     hist (H) + [scan + subtract + pstats partial] + pstats finish + score
-#     + [resolve + flags + partition count] + partition scan + place
-#     + reorder (1 or 2) + [parent copy + partition update] = H + 8 (9)
-# (depth 0 has no subtract: H + 12 -> H + 8). `kernel/fused_level.mojo`
+#     + resolve + [flags + partition count] + partition scan + place
+#     + reorder (1 or 2) + [parent copy + partition update] = H + 9 (10)
+# (depth 0 has no subtract: H + 12 -> H + 9). The resolve stays its own
+# launch: folded into the flags kernel it took 26 arguments and the Metal
+# compiler refused the metallib (2026-10-02). `kernel/fused_level.mojo`
 # carries the argument that every fused kernel writes the unfused bytes.
 # The tree's two drains (winners, then sizes) become one when the tree grows
 # to full depth: the leaf tail is enqueued before the winner drain and only
@@ -260,6 +262,16 @@ from gbdt.methods.greedy_subsets_searcher.kernel.fused_level import (
 # (`max_live_rows > FAST_SORT_SIZE`) keeps the unfused split chain.
 # ====================================================================
 comptime SYM_FUSED_LEVEL = not is_defined["MOJOLEARN_GBDT_FUSED_LEVEL_OFF"]()
+# per-fusion switches under the umbrella, for bisecting one fused kernel
+comptime SYM_FUSED_SCAN = SYM_FUSED_LEVEL and not is_defined[
+    "MOJOLEARN_GBDT_FUSED_SCAN_OFF"
+]()
+comptime SYM_FUSED_SPLIT = SYM_FUSED_LEVEL and not is_defined[
+    "MOJOLEARN_GBDT_FUSED_SPLIT_OFF"
+]()
+comptime SYM_FUSED_COPY = SYM_FUSED_LEVEL and not is_defined[
+    "MOJOLEARN_GBDT_FUSED_COPY_OFF"
+]()
 
 
 def compute_target_std_dev(
@@ -4239,7 +4251,7 @@ def enqueue_fused_resolve_split_partition(
     mut sorted_flags: DeviceBuffer[DType.uint8],
     sm_count: Int,
 ) raises -> Int:
-    """DEVIATION 3110: `enqueue_symmetric_level_winner`,
+    """DEVIATION 3110: `enqueue_symmetric_level_winner` unchanged, then
     `enqueue_symmetric_split_flags` and phase 1 of `launch_stable_partition`
     as ONE launch on phase 1's grid, then phases 2 and 3 exactly as
     `launch_stable_partition` launches them (same `max_chunks`, same
@@ -4252,15 +4264,16 @@ def enqueue_fused_resolve_split_partition(
         var target = split_points_grid_x(n_live, sm_count)
         if target < chunk_grid:
             chunk_grid = target
-    ctx.enqueue_function[sym_resolve_split_count_kernel](
-        out_score.unsafe_ptr(), out_bin.unsafe_ptr(), Int32(argmax_blocks),
-        bfr_off.unsafe_ptr(), bfr_mask.unsafe_ptr(), bfr_shift.unsafe_ptr(),
-        bfr_first.unsafe_ptr(), bfr_folds.unsafe_ptr(), bfr_oh.unsafe_ptr(),
-        bfr_bin.unsafe_ptr(), Int32(level), Int32(n_live),
-        winners_score.unsafe_ptr(), winners_bf.unsafe_ptr(),
-        sp_feats.unsafe_ptr(), sp_bins.unsafe_ptr(), ids_c.unsafe_ptr(),
+    enqueue_symmetric_level_winner(
+        ctx, out_score, out_bin, argmax_blocks,
+        bfr_off, bfr_mask, bfr_shift, bfr_first, bfr_folds,
+        bfr_oh, bfr_bin, level, n_live,
+        winners_score, winners_bf, sp_feats, sp_bins, ids_c,
+    )
+    ctx.enqueue_function[sym_split_count_kernel](
         cindex.unsafe_ptr(), row_index.unsafe_ptr(),
         p_off.unsafe_ptr(), p_sz.unsafe_ptr(), dense_ids.unsafe_ptr(),
+        sp_feats.unsafe_ptr().bitcast[CFeature](), sp_bins.unsafe_ptr(),
         flags.unsafe_ptr(), seq.unsafe_ptr(),
         chunk_zeros.unsafe_ptr(), Int32(max_chunks),
         grid_dim=(chunk_grid, n_live, 1),
@@ -4289,7 +4302,7 @@ def enqueue_fused_resolve_split_partition(
         grid_dim=(chunk_grid, n_live, 1),
         block_dim=(PARTITION_BLOCK, 1, 1),
     )
-    return 3
+    return 4
 
 
 def enqueue_fused_copy_update(
@@ -5660,7 +5673,7 @@ def run_tree_layout_traced[
                     )
         mgr.stream_kernel()
 
-        if SYM_FUSED_LEVEL:
+        comptime if SYM_FUSED_SCAN:
             # DEVIATION 3110: scan (+ subtract) and pstats phase 1 in one
             # launch, then phase 2; the same bytes as the branch below.
             var fused_launches = enqueue_fused_scan_sub_pstats(
@@ -5851,23 +5864,27 @@ def run_tree_layout_traced[
         # to the smaller bin-feature), same descriptors; the gates their
         # host applies BEFORE splitting are applied by ours AFTER the
         # drain, with a one-level rollback on the rare stop.
-        if fused_split_chain_ok(max_live_rows):
-            # DEVIATION 3110: resolve + pack + flags + partition phase 1 in
-            # one launch, then partition phases 2 and 3.
-            times.begin(ctx)
-            var split_launches = enqueue_fused_resolve_split_partition(
-                ctx, out_score, out_bin, argmax_blocks,
-                bfr_off, bfr_mask, bfr_shift, bfr_first, bfr_folds,
-                bfr_oh, bfr_bin, depth, n_live,
-                winners_score, winners_bf, sp_feats, sp_bins, ids_c,
-                active_cindex, row_index, p_off, p_sz, dense_ids,
-                flags, seq, max_live_rows,
-                chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
-                sm_count,
-            )
-            for _ in range(split_launches):
-                mgr.stream_kernel()
-            times.end(ctx, "sym.split.partition")
+        var take_fused_split = False
+        comptime if SYM_FUSED_SPLIT:
+            take_fused_split = fused_split_chain_ok(max_live_rows)
+        if take_fused_split:
+            comptime if SYM_FUSED_SPLIT:
+                # DEVIATION 3110: resolve + pack + flags + partition phase 1 in
+                # one launch, then partition phases 2 and 3.
+                times.begin(ctx)
+                var split_launches = enqueue_fused_resolve_split_partition(
+                    ctx, out_score, out_bin, argmax_blocks,
+                    bfr_off, bfr_mask, bfr_shift, bfr_first, bfr_folds,
+                    bfr_oh, bfr_bin, depth, n_live,
+                    winners_score, winners_bf, sp_feats, sp_bins, ids_c,
+                    active_cindex, row_index, p_off, p_sz, dense_ids,
+                    flags, seq, max_live_rows,
+                    chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
+                    sm_count,
+                )
+                for _ in range(split_launches):
+                    mgr.stream_kernel()
+                times.end(ctx, "sym.split.partition")
         else:
             times.begin(ctx)
             enqueue_symmetric_level_winner(
@@ -5950,7 +5967,7 @@ def run_tree_layout_traced[
         times.end(ctx, "sym.split.reorder")
         times.begin(ctx)
 
-        if SYM_FUSED_LEVEL:
+        comptime if SYM_FUSED_COPY:
             # DEVIATION 3110: the parent copy and the partition update (with
             # next level's plan) in one launch; disjoint buffers.
             var cu_launches = enqueue_fused_copy_update(

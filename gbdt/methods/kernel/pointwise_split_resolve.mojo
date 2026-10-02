@@ -306,6 +306,10 @@ def launch_pw_pack_winner(
 # MOJOLEARN_GBDT_FUSED_LEVEL_OFF` restores the chain.
 # ====================================================================
 comptime PW_FUSED_LEVEL = not is_defined["MOJOLEARN_GBDT_FUSED_LEVEL_OFF"]()
+# the searcher's fused launch alone, for bisecting
+comptime PW_FUSED_SEARCH = PW_FUSED_LEVEL and not is_defined[
+    "MOJOLEARN_GBDT_FUSED_PW_OFF"
+]()
 
 
 @always_inline

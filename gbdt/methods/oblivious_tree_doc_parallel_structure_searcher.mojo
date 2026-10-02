@@ -107,7 +107,7 @@ from gbdt.methods.pointwise_optimization_subsets import (
     update_subsets_stats,
 )
 from gbdt.methods.kernel.pointwise_split_resolve import (
-    PW_FUSED_LEVEL,
+    PW_FUSED_SEARCH,
     PW_SENTINEL_ID,
     launch_pw_pack_winner,
     pw_resolve_pack_bins_kernel,
@@ -706,7 +706,7 @@ def fit_oblivious_tree_structure_traced(
         for hi in range(len(calcer.helpers)):
             if calcer.helpers[hi].feature_count != 0:
                 live_helpers += 1
-        var fused_pw = PW_FUSED_LEVEL and live_helpers <= 3
+        var fused_pw = PW_FUSED_SEARCH and live_helpers <= 3
         if not fused_pw:
             times.begin(ctx)
             calcer.resolve_optimal_split(
@@ -742,78 +742,79 @@ def fit_oblivious_tree_structure_traced(
         # 1 -- is the reason the table stores `offset * n_rows`.
         times.begin(ctx)
         if fused_pw:
-            var bin_depth = subsets.current_depth + subsets.fold_bits
-            if Int(bin_depth) >= 32:
-                raise Error(
-                    String("Split at depth ") + String(bin_depth)
-                    + " would write bit " + String(bin_depth)
-                    + " of a ui32 bin; CatBoost's ReorderBins asserts"
-                    " (offset + bits) <= 32 (cuda_util/sort.cpp:557)"
-                )
-            # the live helpers in calcer order, the fold order of
-            # `resolve_optimal_split`; an absent slot folds 0 records
-            var r_ids = List[MutPointer[UInt32, MutAnyOrigin]]()
-            var r_scores = List[MutPointer[Float32, MutAnyOrigin]]()
-            var r_n = List[Int]()
-            for hi in range(len(calcer.helpers)):
-                if calcer.helpers[hi].feature_count == 0:
-                    continue
-                r_ids.append(
-                    rebind[MutPointer[UInt32, MutAnyOrigin]](
-                        calcer.helpers[hi].d_result_ids.unsafe_ptr()
+            comptime if PW_FUSED_SEARCH:
+                var bin_depth = subsets.current_depth + subsets.fold_bits
+                if Int(bin_depth) >= 32:
+                    raise Error(
+                        String("Split at depth ") + String(bin_depth)
+                        + " would write bit " + String(bin_depth)
+                        + " of a ui32 bin; CatBoost's ReorderBins asserts"
+                        " (offset + bits) <= 32 (cuda_util/sort.cpp:557)"
                     )
-                )
-                r_scores.append(
-                    rebind[MutPointer[Float32, MutAnyOrigin]](
-                        calcer.helpers[hi].d_result_scores.unsafe_ptr()
+                # the live helpers in calcer order, the fold order of
+                # `resolve_optimal_split`; an absent slot folds 0 records
+                var r_ids = List[MutPointer[UInt32, MutAnyOrigin]]()
+                var r_scores = List[MutPointer[Float32, MutAnyOrigin]]()
+                var r_n = List[Int]()
+                for hi in range(len(calcer.helpers)):
+                    if calcer.helpers[hi].feature_count == 0:
+                        continue
+                    r_ids.append(
+                        rebind[MutPointer[UInt32, MutAnyOrigin]](
+                            calcer.helpers[hi].d_result_ids.unsafe_ptr()
+                        )
                     )
+                    r_scores.append(
+                        rebind[MutPointer[Float32, MutAnyOrigin]](
+                            calcer.helpers[hi].d_result_scores.unsafe_ptr()
+                        )
+                    )
+                    r_n.append(calcer.helpers[hi].result_blocks)
+                var pad_ids = rebind[MutPointer[UInt32, MutAnyOrigin]](
+                    pool[0].d_best_ids.unsafe_ptr()
                 )
-                r_n.append(calcer.helpers[hi].result_blocks)
-            var pad_ids = rebind[MutPointer[UInt32, MutAnyOrigin]](
-                pool[0].d_best_ids.unsafe_ptr()
-            )
-            var pad_scores = rebind[MutPointer[Float32, MutAnyOrigin]](
-                pool[0].d_best_scores.unsafe_ptr()
-            )
-            while len(r_n) < 3:
-                r_ids.append(pad_ids)
-                r_scores.append(pad_scores)
-                r_n.append(0)
-            var split_ci = rebind[MutPointer[UInt32, MutAnyOrigin]](
-                cindex.unsafe_ptr()
-            )
-            if fold_order:
-                split_ci = rebind[MutPointer[UInt32, MutAnyOrigin]](
-                    d_fold_cindex.unsafe_ptr()
+                var pad_scores = rebind[MutPointer[Float32, MutAnyOrigin]](
+                    pool[0].d_best_scores.unsafe_ptr()
                 )
-            var num_blocks = (
-                subsets.doc_count + PW_SPLIT_BLOCK_SIZE - 1
-            ) // PW_SPLIT_BLOCK_SIZE
-            if num_blocks > PW_SPLIT_MAX_BLOCKS:
-                num_blocks = PW_SPLIT_MAX_BLOCKS
-            if num_blocks < 1:
-                # the pack still runs on an empty doc list
-                num_blocks = 1
-            ctx.enqueue_function[pw_resolve_pack_bins_kernel](
-                r_ids[0], r_scores[0], Int32(r_n[0]),
-                r_ids[1], r_scores[1], Int32(r_n[1]),
-                r_ids[2], r_scores[2], Int32(r_n[2]),
-                pad_ids, pad_scores,
-                Int32(depth),
-                pool[0].d_winners_ids.unsafe_ptr(),
-                pool[0].d_winners_scores.unsafe_ptr(),
-                pool[0].d_score_before.unsafe_ptr(),
-                pool[0].d_feat_table.unsafe_ptr(),
-                Int32(len(layout.features)),
-                pool[0].d_split_desc.unsafe_ptr(),
-                split_ci,
-                docs2.unsafe_ptr(),
-                Int32(subsets.doc_count),
-                UInt32(bin_depth),
-                subsets.bins.unsafe_ptr(),
-                grid_dim=(num_blocks, 1, 1),
-                block_dim=(PW_SPLIT_BLOCK_SIZE, 1, 1),
-            )
+                while len(r_n) < 3:
+                    r_ids.append(pad_ids)
+                    r_scores.append(pad_scores)
+                    r_n.append(0)
+                var split_ci = rebind[MutPointer[UInt32, MutAnyOrigin]](
+                    cindex.unsafe_ptr()
+                )
+                if fold_order:
+                    split_ci = rebind[MutPointer[UInt32, MutAnyOrigin]](
+                        d_fold_cindex.unsafe_ptr()
+                    )
+                var num_blocks = (
+                    subsets.doc_count + PW_SPLIT_BLOCK_SIZE - 1
+                ) // PW_SPLIT_BLOCK_SIZE
+                if num_blocks > PW_SPLIT_MAX_BLOCKS:
+                    num_blocks = PW_SPLIT_MAX_BLOCKS
+                if num_blocks < 1:
+                    # the pack still runs on an empty doc list
+                    num_blocks = 1
+                ctx.enqueue_function[pw_resolve_pack_bins_kernel](
+                    r_ids[0], r_scores[0], Int32(r_n[0]),
+                    r_ids[1], r_scores[1], Int32(r_n[1]),
+                    r_ids[2], r_scores[2], Int32(r_n[2]),
+                    pad_ids, pad_scores,
+                    Int32(depth),
+                    pool[0].d_winners_ids.unsafe_ptr(),
+                    pool[0].d_winners_scores.unsafe_ptr(),
+                    pool[0].d_score_before.unsafe_ptr(),
+                    pool[0].d_feat_table.unsafe_ptr(),
+                    Int32(len(layout.features)),
+                    pool[0].d_split_desc.unsafe_ptr(),
+                    split_ci,
+                    docs2.unsafe_ptr(),
+                    Int32(subsets.doc_count),
+                    UInt32(bin_depth),
+                    subsets.bins.unsafe_ptr(),
+                    grid_dim=(num_blocks, 1, 1),
+                    block_dim=(PW_SPLIT_BLOCK_SIZE, 1, 1),
+                )
         if fold_order:
             split_subsets_from_desc(
                 ctx,
