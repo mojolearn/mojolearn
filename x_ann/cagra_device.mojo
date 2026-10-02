@@ -20,6 +20,7 @@ from x_ann.cagra_core import F32P, I32P, cagra_prune, cagra_reverse_merge, cg_di
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_CAGRA_TEAM
+from x_ann.fast_env import cagra_fast_team
 
 comptime TPB = 64
 
@@ -48,7 +49,9 @@ def cg_search_kernel(
 comptime CG_T = 32
 comptime CG_LMAX = 128
 comptime CG_CMAX = 128
-comptime CAGRA_TEAM = ANN3_CAGRA_TEAM and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+#: the team search compiles under FAST on Apple; it runs when the ann-apple3
+#: define or the env switch below asks (lane/apple-fast-ann)
+comptime CAGRA_TEAM = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 
 
 def cg_search_team_kernel(
@@ -351,10 +354,17 @@ def cagra_search_on(
     var vis = ctx.enqueue_create_buffer[DType.int32](m * words)
     var od = ctx.enqueue_create_buffer[DType.float32](m * k)
     var oi = ctx.enqueue_create_buffer[DType.int32](m * k)
-    # lane ann-apple3, FAST on Apple, OPT-IN: a threadgroup per query
+    # lane ann-apple3, FAST on Apple, OPT-IN: a threadgroup per query.
+    # lane/apple-fast-ann (2026-10-02): `MOJOLEARN_CAGRA_FAST_TEAM=1` (host
+    # env, x_ann/fast_env.mojo) selects the same kernel at dispatch. Cause:
+    # the default `cg_search_kernel` is one thread per query, 4,000 queries
+    # = 63 threadgroups of 64 threads on an 80-core GPU, each thread forming
+    # every candidate distance (220 features on Istella) alone; the team
+    # kernel forms a parent's 32 distances side by side. Expected to move no
+    # bit (its docstring); the A/B is the measurement.
     var team = False
     comptime if CAGRA_TEAM:
-        if L <= CG_LMAX and deg <= CG_CMAX:
+        if (ANN3_CAGRA_TEAM or cagra_fast_team()) and L <= CG_LMAX and deg <= CG_CMAX:
             team = True
             ctx.enqueue_function[cg_search_team_kernel](
                 dq.unsafe_ptr(), dx, Int32(n), Int32(d), dg, Int32(deg), Int32(k), Int32(L), Int32(width),
