@@ -23,8 +23,9 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_RIDGE_KFOLD
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_RIDGE_KFOLD, ALGO_RIDGE
 from x_linear.ops import ld, st, fd, i2f, fa
+from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
 from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
@@ -294,6 +295,58 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     _ = dsum^
 
 
+
+# ------------------------------------------------ Ridge's float-float refit on the grid (lane/neural-pass93)
+def ridge_ff_unit_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fi: Int32, sw: Int32, u0: Int32, count: Int32,
+                         sh: FP, sl: FP):
+    var u = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if u < Int(count):
+        ridge_ff_unit(Int(u0) + u, x, y, Int(n), Int(d), Int(t_n), fi != 0, sw != 0, Int(n) * Int(t_n), sh, sl)
+
+
+def ridge_ff_solve_kernel(d: Int32, t_n: Int32, fi: Int32, alpha: Float32, sh: FP, sl: FP, bh: FP, bl: FP, out: FP):
+    """out: coef T*d | intercept T | ok (1 / 0)."""
+    var ok = ridge_ff_solve(Int(d), Int(t_n), fi != 0, alpha, sh, sl, bh, bl, out)
+    st(out, Int(t_n) * Int(d) + Int(t_n), Float32(1) if ok else Float32(0))
+
+
+def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: Int, fi: Bool, sw: Bool, alpha: Float32,
+                   res: FP, sidx: Int) raises:
+    var nm = d + t_n
+    var units = ridge_ff_units(n, d, t_n)
+    var words = d + t_n + d * d + d * t_n
+    var dsh = ctx.enqueue_create_buffer[DType.float32](words)
+    var dsl = ctx.enqueue_create_buffer[DType.float32](words)
+    var dbh = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dbl = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dout = ctx.enqueue_create_buffer[DType.float32](t_n * d + t_n + 1)
+    dsh.enqueue_fill(Float32(0))
+    dsl.enqueue_fill(Float32(0))
+    ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0), Int32(1 if sw else 0),
+                                               Int32(0), Int32(nm), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                               grid_dim=_xg_blocks(nm), block_dim=XG_TPB)
+    ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0), Int32(1 if sw else 0),
+                                               Int32(nm), Int32(units - nm), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                               grid_dim=_xg_blocks(units - nm), block_dim=XG_TPB)
+    ctx.enqueue_function[ridge_ff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
+                                                dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
+                                                grid_dim=1, block_dim=1)
+    var h = List[Float32](length=t_n * d + t_n + 1, fill=Float32(0))
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dout)
+    ctx.synchronize()
+    var ok = h[t_n * d + t_n] == Float32(1)
+    if ok:
+        for i in range(t_n * d + t_n):
+            res.unsafe_store(i, h[i])
+    res.unsafe_store(sidx, Float32(0) if ok else Float32(2))
+    _ = h^
+    _ = dsh^
+    _ = dsl^
+    _ = dbh^
+    _ = dbl^
+    _ = dout^
+
+
 def fit_device(
     algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
@@ -369,6 +422,15 @@ def fit_device(
     if n_out > 0:
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
     ctx.synchronize()
+    if algo == ALGO_RIDGE:
+        # lane/neural-pass93: the float-float refit when the float32 factor
+        # was not trusted (x_linear/ridge.mojo, status 1), on the grid
+        var t_n = Int(ip[0])
+        var a_n = Int(ip[2])
+        var sidx = t_n * d + t_n + 2 + a_n
+        if n_out > sidx and res.unsafe_load(sidx) == Float32(1):
+            _ridge_ff_grid(ctx, dx.unsafe_ptr(), dy.unsafe_ptr(), n, d, t_n, Int(ip[1]) != 0, len(ip) > 3 and Int(ip[3]) != 0,
+                           res.unsafe_load(t_n * d + t_n), res, sidx)
     _ = hip^
     _ = hfp^
     _ = dx^
