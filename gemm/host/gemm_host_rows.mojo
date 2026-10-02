@@ -551,10 +551,10 @@ def gemm_host_rows_into(
         if npan * k * GHR_G <= GHR_PACK_SERIAL_FLOATS:
             ghr_pack_b(b, op, n, k, bp)
         else:
-            def _pack_b(t: Int) {imm b, imm bp, imm op, imm n, imm k, imm pchunk, imm npan}:
+            def _pack(t: Int) {imm b, imm bp, imm op, imm n, imm k, imm pchunk, imm npan}:
                 ghr_pack_b(b, op, n, k, bp, t * pchunk, min((t + 1) * pchunk, npan))
 
-            host_parallelize(_pack_b, tasks)
+            host_parallelize(_pack, tasks)
         var by_rows = m >= 2 * tasks
         if not by_rows:
             ghr_pack_a(a, op, m, k, ap)
