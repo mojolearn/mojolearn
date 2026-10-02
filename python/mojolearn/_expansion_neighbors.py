@@ -1629,45 +1629,23 @@ class SVGP(_XNeighbors):
             M = min(int(self.n_inducing), n)
             Z = self._take_rows(X, [i * n // M for i in range(M)])
         M = Z.shape[0]
-        Kuu = self._k(Z, Z)
-        if _OLD_ITEMS:
-            Kfu = self._k(X, Z)
-            Kuf = self._k(Z, X)
-            B = self._matmul(Kuf, Kfu)
-            b = self._matmul(Kuf, yv.reshape((n, 1)))
-        else:
-            # the fused chain (lane/py-dn-kern): Kfu per row tile on the
-            # device, B = Kuf Kfu and b = Kuf y folded across the tiles, only
-            # B and b downloaded (`xn_svgp_stats`). Kuf is Kfu^T bit for bit
-            # (the rbf item squares a difference; IEEE subtraction is
-            # antisymmetric), so it is never formed.
-            B = _empty_out((M, M), "<f4")
-            b = _empty_out((M,), "<f4")
-            self._op("svgp_stats", [(X, 0), (Z, 0), (yv, 0), (B, 1), (b, 1)], (n, M, d),
-                     (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance)))
+        # one resident device chain (lane/cgr-kernel, `xn_svgp_fit_ff`):
+        # Kuu, then B = Kuf Kfu and b = Kuf y in float-float per Kfu row tile
+        # (Kuf is Kfu^T bit for bit, never formed), then the float-float
+        # solve (x_neighbors/svgp_ff.mojo). Taxi's Sigma (eigenvalues 1e-6 ..
+        # 9e5) defeats float32: B's float32 accumulation error alone exceeds
+        # its smallest eigenvalue. Kuu, B and b never leave the device.
         alpha = _empty_out((M,), "<f4")
         C = _empty_out((M, M), "<f4")
         qmu = _empty_out((M,), "<f4")
         qsqrt = _empty_out((M, M), "<f4")
         info = _empty_out((2,), "<f4")
-        self._op("svgp", [(Kuu, 0), (B, 0), (b, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
-                 (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
+        self._op("svgp_fit_ff", [(X, 0), (Z, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
+                 (n, M, d),
+                 (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance),
+                  _f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
         elbo, ok = info.tolist()
-        self.precision_ = "float32"
-        if ok == 0 and os.environ.get("MOJOLEARN_SVGP_FF", "1") != "0":
-            # lane/neural-pass106 (best accuracy, Andrew's standing order): the
-            # statistics and the solve in float-float (x_neighbors/svgp_ff.mojo).
-            # Taxi's Sigma (eigenvalues 1e-6 .. 9e5) defeats float32: B's
-            # float32 accumulation error alone exceeds its smallest eigenvalue.
-            bh, bl = _empty_out((M, M), "<f4"), _empty_out((M, M), "<f4")
-            bvh, bvl = _empty_out((M,), "<f4"), _empty_out((M,), "<f4")
-            self._op("svgp_stats_ff", [(X, 0), (Z, 0), (yv, 0), (bh, 1), (bl, 1), (bvh, 1), (bvl, 1)], (n, M, d),
-                     (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance)))
-            self._op("svgp_ff", [(Kuu, 0), (bh, 0), (bl, 0), (bvh, 0), (bvl, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1),
-                                 (qsqrt, 1), (info, 1)],
-                     (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
-            elbo, ok = info.tolist()
-            self.precision_ = "float-float"
+        self.precision_ = "float-float"
         if ok == 0:
             raise ValueError("SVGP: the inducing system is not positive definite; raise jitter or noise_variance")
         self.Z_, self._alpha, self._C = Z, alpha, C

@@ -249,16 +249,14 @@ CUSTOM_OPS = [
     ("svgp_stats",
      [("x", "fin", "n * d"), ("z", "fin", "m * d"), ("y", "fin", "n"), ("bmat", "fout", "m * m"), ("bvec", "fout", "m"),
       ("n", "int"), ("m", "int"), ("d", "int"), ("gamma", "float"), ("variance", "float")]),
-    # lane/neural-pass106: SVGP's float-float fallback (x_neighbors/svgp_ff.mojo)
-    ("svgp_stats_ff",
-     [("x", "fin", "n * d"), ("z", "fin", "m * d"), ("y", "fin", "n"), ("bh", "fout", "m * m"), ("bl", "fout", "m * m"),
-      ("bvh", "fout", "m"), ("bvl", "fout", "m"),
-      ("n", "int"), ("m", "int"), ("d", "int"), ("gamma", "float"), ("variance", "float")]),
-    ("svgp_ff",
-     [("kuu", "fin", "m * m"), ("bh", "fin", "m * m"), ("bl", "fin", "m * m"), ("bvh", "fin", "m"), ("bvl", "fin", "m"),
-      ("y", "fin", "n"), ("alpha", "fout", "m"), ("cmat", "fout", "m * m"), ("qmu", "fout", "m"),
-      ("qsqrt", "fout", "m * m"), ("info", "fout", "2"),
-      ("m", "int"), ("n", "int"), ("noise", "float"), ("jitter", "float"), ("kdiag", "float")]),
+    # lane/neural-pass106 + lane/cgr-kernel: SVGP.fit in float-float
+    # (x_neighbors/svgp_ff.mojo) as one resident chain: Kuu, B and b stay on
+    # the device between the statistics and the solve
+    ("svgp_fit_ff",
+     [("x", "fin", "n * d"), ("z", "fin", "m * d"), ("y", "fin", "n"), ("alpha", "fout", "m"),
+      ("cmat", "fout", "m * m"), ("qmu", "fout", "m"), ("qsqrt", "fout", "m * m"), ("info", "fout", "2"),
+      ("n", "int"), ("m", "int"), ("d", "int"),
+      ("gamma", "float"), ("variance", "float"), ("noise", "float"), ("jitter", "float"), ("kdiag", "float")]),
     ("svgp_predict",
      [("q", "fin", "n * d"), ("z", "fin", "m * d"), ("alpha", "fin", "m"), ("cmat", "fin", "m * m"),
       ("mean", "fout", "n"), ("var_", "fout", "n"),
