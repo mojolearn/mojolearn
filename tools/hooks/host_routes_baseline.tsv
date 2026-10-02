@@ -871,8 +871,6 @@ host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	var dv = _buf(
 host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	var dx = _buf(ctx, x, m * c, True)
 host-env	host-env/threshold	hr-small-passes	debt	x_neighbors/iter_device.mojo	0	comptime if is_defined["MOJOLEARN_XN_CC_HOST"]():
 route-switch	host-env/threshold	UNOWNED	debt	x_neighbors/iter_device.mojo	0	comptime if not is_defined["MOJOLEARN_XN_CC_GPU"]():
-serial-launch	serial-gpu	hr-graph	debt	x_neighbors/iter_device.mojo	0	ctx.enqueue_function[absdiff_sum_kernel](
-serial-launch	serial-gpu	hr-graph	debt	x_neighbors/iter_device.mojo	0	ctx.enqueue_function[pr_dangling_sum_kernel](
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	import x_neighbors/device_ops.mojo:_buf
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_g = _buf(ctx, g, n * n, True)
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_nxt = _buf(ctx, 0, nc, False)
