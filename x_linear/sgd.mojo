@@ -16,6 +16,10 @@ by five) and the loss classes at the top of that file. Differences, named:
     (`ws_decay`, `ws_mul`, `ws_div`, `ws_clip`), since float32 cannot hold
     1 - eta * alpha at 1M rows x 20 epochs (eta * alpha ~ 5e-8); the
     minibatch path and the warp form still multiply w directly;
+  * (lane/neural-pass139) the per-sample one-class intercept (near 1) is a
+    float-float (`ff_add`), the hinge decided on the margin p - 1
+    (`oc_hinge`), and every SGD path returns offset_ = 1 - intercept for
+    k == 1 (`oc_offset`), since float32 near 1 drops the late steps;
   * the shuffle is Fisher-Yates over splitmix64 (x_linear/ops.mojo), not
     their `SequentialDataset.shuffle` over numpy's MT19937, so a fit agrees
     with theirs in quality, not in bits; the OvR problem c is seeded
@@ -165,6 +169,7 @@ def sgd_one(
     fill(w, woff, d, Float32(0))
     fill(q, 0, d, Float32(0))
     var intercept = Float32(1) if one_class else Float32(0)
+    var il = Float32(0)  # one-class: the intercept's low word
     for i in range(n):
         sti(idx, i, i)
     var rng = seed
@@ -195,12 +200,16 @@ def sgd_one(
             # lane/neural-pass139: the predictor as MB_DBLK-column blocks,
             # each from zero, folded ascending (`mb_dot`; the device's
             # team-parallel per-sample kernel takes the same words)
-            var p = fa(ws_mul(mb_dot(x, i, d, w, woff, MB_DBLK), whi, wlo), intercept)
+            var dotw = ws_mul(mb_dot(x, i, d, w, woff, MB_DBLK), whi, wlo)
+            # one-class: the intercept is the float-float (intercept, il)
+            var p = fa(fa(dotw, il), intercept) if one_class else fa(dotw, intercept)
             if lr == LR_OPTIMAL:
                 eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
             elif lr == LR_INVSCALING:
                 eta = fd(eta0, identical_pow(i2f(t), power_t))
-            var cur = sgd_loss(loss, y, p, eps)
+            var oc = one_class and loss == L_HINGE
+            var och = oc_hinge(dotw, intercept, il)
+            var cur = och[0] if oc else sgd_loss(loss, y, p, eps)
             objective = fa(objective, cur)
             if lr != LR_PA1 and lr != LR_PA2:
                 if penalty != P_NONE and tol > Float32(-3.0e38):
@@ -231,7 +240,7 @@ def sgd_one(
                 elif fs(y, p) < 0:
                     update = -update
             else:
-                var dl = sgd_dloss(loss, y, p, eps)
+                var dl = och[1] if oc else sgd_dloss(loss, y, p, eps)
                 if dl < Float32(-1e12):
                     dl = Float32(-1e12)
                 elif dl > Float32(1e12):
@@ -261,7 +270,12 @@ def sgd_one(
                 if one_class:
                     iu = fs(iu, fm(eta, alpha))
                 if iu != 0:
-                    intercept = fa(intercept, iu)
+                    if one_class:
+                        var ia = ff_add(intercept, il, iu)
+                        intercept = ia[0]
+                        il = ia[1]
+                    else:
+                        intercept = fa(intercept, iu)
             if penalty == P_L1 or penalty == P_EN:
                 u = fa(u, fm(fm(l1_ratio, eta), alpha))
                 _l1_clip(w, woff, q, u, d, whi)
@@ -292,7 +306,8 @@ def sgd_one(
     # coef = wscale * v
     for j in range(d):
         st(w, woff + j, ws_mul(ld(w, woff + j), whi, wlo))
-    st(b, boff, intercept)
+    # one-class: the slot holds offset_ = 1 - intercept (`oc_offset`)
+    st(b, boff, oc_offset(intercept, il) if one_class else intercept)
     return epochs
 
 
@@ -698,7 +713,7 @@ def sgd_one_warp[K: Int](
         if lane + kk * W < d:
             st(w, woff + lane + kk * W, wr[kk])
     if lane == 0:
-        st(b, boff, intercept)
+        st(b, boff, fs(Float32(1), intercept) if one_class else intercept)
     return epochs
 
 
@@ -719,7 +734,8 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     2 = binary (positive class = label 1), K > 2 = one-vs-rest.
     fp: [alpha, l1_ratio, eta0, power_t, epsilon, tol].
     y: labels as 0..K-1 (classification) or targets. res: coef (P*d),
-    intercept (P), n_iter (1), status (1: 0 ok, -1 non-finite).
+    intercept (P; for k == 1 the one-class offset_ = 1 - intercept,
+    lane/neural-pass139), n_iter (1), status (1: 0 ok, -1 non-finite).
     Team form: the P one-vs-rest problems are independent; thread c runs
     problem c (targets in team row 2c, order in team row 2c + 1, q in its
     own d words, epochs in team row 2P), then the lead folds the epochs.
@@ -960,6 +976,42 @@ def ws_decay(hi: Float32, lo: Float32, s: Float32) -> Tuple[Float32, Float32]:
     var nh = fa(sh, tl)
     var nl = fs(tl, fs(nh, sh))
     return (nh, nl)
+
+
+@always_inline
+def ff_add(h: Float32, l: Float32, a: Float32) -> Tuple[Float32, Float32]:
+    """(h + l) + a in float-float (the one-class intercept's step):
+      sh = fa(h, a); bb = fs(sh, h)               (two-sum of h and a)
+      er = fa(fs(h, fs(sh, bb)), fs(a, bb))
+      tl = fa(er, l)
+      nh = fa(sh, tl); nl = fs(tl, fs(nh, sh))    (fast two-sum)"""
+    var sh = fa(h, a)
+    var bb = fs(sh, h)
+    var er = fa(fs(h, fs(sh, bb)), fs(a, bb))
+    var tl = fa(er, l)
+    var nh = fa(sh, tl)
+    var nl = fs(tl, fs(nh, sh))
+    return (nh, nl)
+
+
+@always_inline
+def oc_hinge(dotw: Float32, ih: Float32, il: Float32) -> Tuple[Float32, Float32]:
+    """The one-class hinge (y = 1, threshold 1) on p = dotw + (ih + il),
+    decided on the margin m = p - 1 = fa(fa(fs(ih, 1), il), dotw) (ih - 1
+    exact for ih in [0.5, 2]): (loss, dloss) = (fs(0, m), -1) when m <= 0,
+    else (0, 0). Their dloss decides z <= 1 in float64; float32's p near 1
+    cannot."""
+    var m = fa(fa(fs(ih, Float32(1)), il), dotw)
+    if m <= 0:
+        return (fs(Float32(0), m), Float32(-1))
+    return (Float32(0), Float32(0))
+
+
+@always_inline
+def oc_offset(ih: Float32, il: Float32) -> Float32:
+    """offset_ = 1 - (ih + il) rounded once: fs(fs(1, ih), il) (1 - ih
+    exact for ih in [0.5, 2])."""
+    return fs(fs(Float32(1), ih), il)
 
 
 def ws_fold(w: FP, woff: Int, d: Int, hi: Float32, lo: Float32):
@@ -1466,5 +1518,5 @@ def sgd_mb_one(
                     no_improve = 0
                 else:
                     break
-    st(b, boff, bias)
+    st(b, boff, fs(Float32(1), bias) if one_class else bias)
     return epochs

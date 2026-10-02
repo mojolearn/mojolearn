@@ -29,7 +29,7 @@ from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.sgd import (
     sgd_loss, sgd_dloss, sgd_reg_block, _sgd_target, _clip_one,
-    ws_mul, ws_div, ws_decay, ws_clip, WS_RESET,
+    ws_mul, ws_div, ws_decay, ws_clip, WS_RESET, ff_add, oc_hinge, oc_offset,
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
@@ -633,7 +633,8 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
         else:
             for j in range(d):
                 res.unsafe_store(c * d + j, hw[j])
-            res.unsafe_store(problems * d + c, hb[0])
+            # one-class: the slot holds offset_ = 1 - intercept
+            res.unsafe_store(problems * d + c, fs(Float32(1), hb[0]) if one_class else hb[0])
             if epochs > max_epochs:
                 max_epochs = epochs
     res.unsafe_store(problems * d + problems, i2f(max_epochs))
@@ -690,7 +691,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
 # the fit on the host instead (the A/B arm).
 comptime SGD_PS_CHUNK = 2048
 # the per-problem scalar state ps[SGD_PS_ST c ..]: intercept, u, objective,
-# (unused), wscale hi, wscale lo
+# the one-class intercept's low word, wscale hi, wscale lo
 comptime SGD_PS_ST = 6
 
 
@@ -701,7 +702,7 @@ def _sgd_ps_kernel_body(
     """ci: n, d, loss, penalty, lr, fit_intercept, need_obj, one_class, has_sw,
     has_cw, k, has_sq; cf: alpha, l1_ratio (the penalty's), eta0, power_t,
     eps, optimal_init, decay_factor; per problem c: pf[3c..] eta, wpos, wneg;
-    ps[SGD_PS_ST c..] intercept, u, objective, -, wscale hi, lo; pt[c] t; act[c] 1 while it trains."""
+    ps[SGD_PS_ST c..] intercept, u, objective, intercept lo (one-class), wscale hi, lo; pt[c] t; act[c] 1 while it trains."""
     var c = Int(block_idx.x)
     if ldi(act, c) == 0:
         return
@@ -736,6 +737,7 @@ def _sgd_ps_kernel_body(
     var intercept = ld(ps, SGD_PS_ST * c)
     var u = ld(ps, SGD_PS_ST * c + 1)
     var objective = Float32(0) if Int(start) == 0 else ld(ps, SGD_PS_ST * c + 2)
+    var il = ld(ps, SGD_PS_ST * c + 3)
     var whi = ld(ps, SGD_PS_ST * c + 4)
     var wlo = ld(ps, SGD_PS_ST * c + 5)
     var t = ldi(pt, c)
@@ -758,12 +760,15 @@ def _sgd_ps_kernel_body(
         for b in range(nb):
             dot = fa(dot, ld(part, poff + b))
         var y = _sgd_target(k, c, ld(lab, i))
-        var p = fa(ws_mul(dot, whi, wlo), intercept)
+        var dotw = ws_mul(dot, whi, wlo)
+        var p = fa(fa(dotw, il), intercept) if one_class else fa(dotw, intercept)
         if lr == LR_OPTIMAL:
             eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
         elif lr == LR_INVSCALING:
             eta = fd(eta0, identical_pow(i2f(t), power_t))
-        var cur = sgd_loss(loss, y, p, eps)
+        var oc = one_class and loss == L_HINGE
+        var och = oc_hinge(dotw, intercept, il)
+        var cur = och[0] if oc else sgd_loss(loss, y, p, eps)
         if need_obj:
             objective = fa(objective, cur)
             if not pa_rate:
@@ -796,7 +801,7 @@ def _sgd_ps_kernel_body(
                 elif fs(y, p) < 0:
                     update = -update
         else:
-            var dl = sgd_dloss(loss, y, p, eps)
+            var dl = och[1] if oc else sgd_dloss(loss, y, p, eps)
             if dl < Float32(-1e12):
                 dl = Float32(-1e12)
             elif dl > Float32(1e12):
@@ -831,7 +836,12 @@ def _sgd_ps_kernel_body(
                 if one_class:
                     iu = fs(iu, fm(eta, alpha))
                 if iu != 0:
-                    intercept = fa(intercept, iu)
+                    if one_class:
+                        var ia = ff_add(intercept, il, iu)
+                        intercept = ia[0]
+                        il = ia[1]
+                    else:
+                        intercept = fa(intercept, iu)
             if do_l1:
                 u = fa(u, fm(fm(l1_ratio, eta), alpha))
             # C: the weights, thread j
@@ -853,6 +863,7 @@ def _sgd_ps_kernel_body(
         st(ps, SGD_PS_ST * c, intercept)
         st(ps, SGD_PS_ST * c + 1, u)
         st(ps, SGD_PS_ST * c + 2, objective)
+        st(ps, SGD_PS_ST * c + 3, il)
         st(ps, SGD_PS_ST * c + 4, whi)
         st(ps, SGD_PS_ST * c + 5, wlo)
         sti(pt, c, t)
@@ -1065,7 +1076,9 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
             # coef = wscale * v
             for j in range(d):
                 res.unsafe_store(c * d + j, ws_mul(hw[c * d + j], hps[SGD_PS_ST * c + 4], hps[SGD_PS_ST * c + 5]))
-            res.unsafe_store(problems * d + c, hps[SGD_PS_ST * c])
+            # one-class: the slot holds offset_ = 1 - intercept (`oc_offset`)
+            res.unsafe_store(problems * d + c, oc_offset(hps[SGD_PS_ST * c], hps[SGD_PS_ST * c + 3])
+                             if one_class else hps[SGD_PS_ST * c])
             if epochs[c] > max_epochs:
                 max_epochs = epochs[c]
     res.unsafe_store(problems * d + problems, i2f(max_epochs))

@@ -918,7 +918,10 @@ class SGDOneClassSVM(NumericModeMixin):
             self.max_iter, self.tol, 5, self.shuffle, self.random_state, sample_weight,
             batch_size=self.batch_size)
         self.coef_ = coef.reshape((Xm[2],))
-        self.offset_ = Array.from_list([1.0 - intercept.tolist()[0]], "<f4")
+        # the binding returns offset_ itself for one class (lane/neural-pass139:
+        # the per-sample fit carries the intercept near 1 as a float-float,
+        # so 1 - float32(intercept) would drop every bit below 1.2e-7)
+        self.offset_ = Array.from_list([intercept.tolist()[0]], "<f4")
         return self
 
     def decision_function(self, X):
