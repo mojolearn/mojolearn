@@ -78,11 +78,7 @@ from decomposition.checks.jacobi_eigh_device import (
     JACOBI_TOL,
     jacobi_eigh_kernel,
 )
-from decomposition.host.linalg_public import (
-    EighHostResult,
-    _validate_shape,
-    _validate_square,
-)
+from decomposition.linalg_types import EighHostResult, _validate_shape, _validate_square
 from decomposition.spectrum_order_device import enqueue_eigh_ascending, enqueue_svdvals_descending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 from decomposition.impl.linalg.detail.svd_full import svd_of_r
