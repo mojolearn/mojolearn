@@ -113,7 +113,19 @@ from cholesky.estimator import (
     cholesky_solve_host,
 )
 from cholesky.checks.potrf import chol_jitter_pinned
-from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
+from cholesky.checks.potrf import (
+    CHOL_NB_PINNED,
+    CHOL_PANEL_TPB,
+    add_jitter,
+    chol_default_nb_hint,
+    chol_logdet,
+    chol_nb_for,
+    chol_workspace_floats,
+    potrf_lower,
+)
+from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower, cho_solve
+from std.os import getenv
+from std.sys.info import has_apple_gpu_accelerator
 from core.identity_trace import IdentityTrace
 from gaussian_process.checks.gp_sabotage import (
     GP_SAB_LOGDET_RECOMPUTED,
@@ -727,6 +739,70 @@ def gpr_fit_host(
         elem_tpb,
         sabotage,
     )
+    # lane/apple-fast-kernel (2026-10-02), FAST on Apple only:
+    # MOJOLEARN_KERNEL_FAST_GPR_RESIDENT=1 keeps K on the device for the
+    # ridge, the factorization, the log-determinant and the solve (the
+    # device entries cholesky_factor_host / cholesky_solve_host call) and
+    # downloads L and the dual once. The shipped path below downloads K
+    # (n^2), validates it on the host (chol_validate_matrix, a symmetry
+    # pass over n^2 cells), uploads it again, downloads L, uploads L and y
+    # again for the solve, downloads the dual: five n^2 host round trips
+    # and two host passes around a factorization of 3,000 rows. Not taken
+    # with a card or a sabotage arm (the stage records are the host path's).
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator():
+        if (
+            sabotage == GP_SAB_NONE and not trace.enabled
+            and String(getenv("MOJOLEARN_KERNEL_FAST_GPR_RESIDENT")) == "1"
+        ):
+            var nb_r = chol_nb_for(n_train, CHOL_NB_PINNED)
+            var ws_r = ctx.enqueue_create_buffer[DType.float32](
+                chol_workspace_floats(n_train, nb_r)
+            )
+            var dwork_r = ctx.enqueue_create_buffer[DType.float32](n_train + 1)
+            var dy_r = _upload(ctx, y)
+            ctx.synchronize()
+            add_jitter(ctx, dk, n_train, alpha, elem_tpb)
+            var run_r = potrf_lower(
+                ctx, dk, ws_r, n_train, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, elem_tpb
+            )
+            var dual_r = List[Float32]()
+            var logdet_r = Float32(0.0)
+            var ydotalpha_r = Float32(0.0)
+            var lml_r = Float32(0.0)
+            if run_r.info == 0:
+                logdet_r = chol_logdet(ctx, dk, dwork_r, n_train, trace, elem_tpb)
+                cho_solve(ctx, dk, dy_r, n_train, 1, trace, CHOL_SOLVE_TPB)
+                dual_r = _download(ctx, dy_r, n_train)
+                ydotalpha_r = _y_dot_alpha(y, dual_r, n_train, sabotage)
+                lml_r = gp_log_marginal_likelihood_value(ydotalpha_r, logdet_r, n_train)
+            else:
+                for _i in range(n_train):
+                    dual_r.append(Float32(0.0))
+            var l_r = _download(ctx, dk, n_train * n_train)
+            _ = ws_r^
+            _ = dwork_r^
+            _ = dy_r^
+            _ = dx^
+            _ = dls^
+            _ = dk^
+            _ = dstack^
+            _ = ctx^
+            return GPRegressor(
+                x.copy(),
+                y.copy(),
+                n_train,
+                n_features,
+                kernel.copy(),
+                alpha,
+                l_r^,
+                dual_r^,
+                logdet_r,
+                ydotalpha_r,
+                lml_r,
+                run_r.info,
+                run_r.nb,
+            )
+
     var k_host = _download(ctx, dk, n_train * n_train)
     _ = dx^
     _ = dls^
