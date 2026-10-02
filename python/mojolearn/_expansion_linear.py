@@ -74,6 +74,10 @@ def _vector(y, n, name="y"):
 #: against 0.2 s on the M4's cores, the same bits either way (the host
 #: binding is the same IDENTICAL arithmetic). These take the host binding
 #: when it is installed; `MOJOLEARN_X_LINEAR_DEVICE=1` keeps the device.
+#: GLM left this set (Andrew, 2026-10-02: a GPU install defaults to the GPU):
+#: its device route is the sliced grid of cells (lane neural-pass89/97, NV
+#: poisson taxi ~100 ms against ~2 s on the host). CPU-only installs and
+#: MOJOLEARN_VENDOR=cpu still run the host binding.
 _HOST_ALGOS = None
 
 
@@ -81,7 +85,7 @@ def _host_algos():
     global _HOST_ALGOS
     if _HOST_ALGOS is None:
         _HOST_ALGOS = frozenset() if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1" else frozenset(
-            (ALGO_GLM, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT))
+            (ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT))
     return _HOST_ALGOS
 
 
@@ -105,33 +109,9 @@ def _host_fit_module():
     return _HOST_MODULE[0]
 
 
-def _glm_host(est):
-    """Whether this GLM fit takes the host route (peer measurement on the
-    #73 head, 2026-10-01, bits equal on both routes): on the MI325X the host
-    wins for every family (gamma 615 vs 1726 ms, tweedie 495 vs 1237), on
-    the L40S box the device is ahead for tweedie (631 vs 764 ms) and gamma
-    is a wash, and poisson's 11 Newton iterations take the host everywhere
-    (2.07 s vs 49 s). So NVIDIA keeps the device for every family but
-    poisson. MOJOLEARN_X_LINEAR_GLM_HOST=1 forces the host route and =0 the
-    device route on any vendor."""
-    forced = os.environ.get("MOJOLEARN_X_LINEAR_GLM_HOST", "").strip()
-    if forced == "1":
-        return True
-    if forced == "0":
-        return False
-    try:
-        vendor = str(_backend.vendor()).strip().lower()
-    except Exception:  # noqa: BLE001 - no vendor read-back: the host policy
-        vendor = ""
-    if vendor in ("cuda", "nvidia"):  # the read-back says "cuda" on an NVIDIA box
-        return type(est).__name__ == "PoissonRegressor"
-    return True
-
-
 def _fit_module(est, algo):
     mode = getattr(est, "numeric_mode", None)
-    if algo in _host_algos() and (mode is None or str(mode).strip().lower() == "identical") \
-            and (algo != ALGO_GLM or _glm_host(est)):
+    if algo in _host_algos() and (mode is None or str(mode).strip().lower() == "identical"):
         host = _host_fit_module()
         if host is not None:
             return host
