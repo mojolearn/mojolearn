@@ -128,10 +128,10 @@ def eigh_par_off_part_kernel(a: F32Ptr, dst: F32Ptr, part: F32Ptr, n_in: Int32):
         part.unsafe_store(3 * b + 2, Float32(0.0))
 
 
-def eigh_par_off_fold_kernel(part: F32Ptr, out: F32Ptr, nb_in: Int32):
+def eigh_par_off_fold_kernel(part: F32Ptr, dst: F32Ptr, nb_in: Int32):
     """The tree past the blocks: thread t adds block partials t, t +
-    RR_OFF_TPB, ... ascending, then the pairwise tree. out[0] = the
-    off-diagonal sum, out[1] = the diagonal sum, out[2] = the least ran mark
+    RR_OFF_TPB, ... ascending, then the pairwise tree. dst[0] = the
+    off-diagonal sum, dst[1] = the diagonal sum, dst[2] = the least ran mark
     (-1: a block of `eigh_par_off_part_kernel` did not run). ONE block over
     the nb = ceil(n / RR_OFF_TPB) block partials (`rr_off_fold`'s order)."""
     var nb = Int(nb_in)
@@ -161,6 +161,6 @@ def eigh_par_off_fold_kernel(part: F32Ptr, out: F32Ptr, nb_in: Int32):
         barrier()
         w = w // 2
     if tid == 0:
-        out.unsafe_store(0, so[0])
-        out.unsafe_store(1, sd[0])
-        out.unsafe_store(2, sm[0])
+        dst.unsafe_store(0, so[0])
+        dst.unsafe_store(1, sd[0])
+        dst.unsafe_store(2, sm[0])
