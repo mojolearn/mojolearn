@@ -106,6 +106,7 @@ from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_mul,
     identical_pow,
@@ -433,6 +434,28 @@ def yeti_rank_task_kernel(
                                 der_acc.unsafe_store(r2, ftz(der_acc.unsafe_load(r2) + (-ll)))
 
 
+def yeti_task_16k_for[column: Int]() -> Bool:
+    """SCHEDULING row (lane/apple-fast-trees-yeti, 2026-10-02): whether the
+    block kernel is `yeti_rank_task_block16k_kernel` (16 KiB of threadgroup
+    memory, accumulators in registers) instead of
+    `yeti_rank_task_block_kernel` (32 KiB). `-D MOJOLEARN_YETI_SEARCH_TASK16K=1`,
+    FAST on Apple only, default off. Same bits (the kernel's docstring).
+
+    CAUSE. `yeti_rank_task_block_kernel` claims exactly Apple's 32 KiB
+    threadgroup limit (`yeti_rank.mojo`, the DEVIATION 3040 block), so one
+    task runs per GPU core: 8 simdgroups of the 24+ a core holds, with 19
+    barriers a round and the pair phases' read-modify-writes scattered into
+    threadgroup memory. The task kernel is the search gradient's whole cost
+    (`tree_search` 6.0 s of the 9.56 s Istella fit). At 16 KiB two tasks
+    share a core."""
+    comptime if is_defined["MOJOLEARN_YETI_SEARCH_TASK16K"]():
+        return column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    return False
+
+
+comptime YETI_TASK_16K = yeti_task_16k_for[TARGET_COLUMN]()
+
+
 def yeti_rank_task_block_kernel(
     approx: MutPointer[Float32, MutAnyOrigin],
     relev: MutPointer[Float32, MutAnyOrigin],
@@ -728,6 +751,313 @@ def yeti_rank_task_block_kernel(
             weight_acc.unsafe_store(offset + p, sh_weight.unsafe_load(p))
 
 
+def yeti_rank_decay_table_kernel(
+    decay_speed: Float32,
+    table: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`0.15 * pow(decaySpeed, d)` for every pair distance `d` in
+    `[0, YETI_TASK_POSITIONS)`: the block kernel's hoisted `lane_decay`,
+    which is a pure function of `j - queryBegin - 1`, tabled once per call
+    so `yeti_rank_task_block16k_kernel` can read it for a slot it does not
+    own. The same expression on the same device, so the same bits."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        table.unsafe_store(
+            i, Float32(0.15) * identical_pow(decay_speed, Float32(i))
+        )
+
+
+def _sort4_keys(mut v: SIMD[DType.uint64, 4]):
+    """Ascending order of four distinct keys (a five-comparator network):
+    the merge passes of width 1 and 2 over one aligned run of four."""
+    var t = UInt64(0)
+    if v[1] < v[0]:
+        t = v[0]
+        v[0] = v[1]
+        v[1] = t
+    if v[3] < v[2]:
+        t = v[2]
+        v[2] = v[3]
+        v[3] = t
+    if v[2] < v[0]:
+        t = v[0]
+        v[0] = v[2]
+        v[2] = t
+    if v[3] < v[1]:
+        t = v[1]
+        v[1] = v[3]
+        v[3] = t
+    if v[2] < v[1]:
+        t = v[1]
+        v[1] = v[2]
+        v[2] = t
+
+
+def yeti_rank_task_block16k_kernel(
+    approx: MutPointer[Float32, MutAnyOrigin],
+    relev: MutPointer[Float32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    has_weights: Int32,
+    row_qids: MutPointer[UInt32, MutAnyOrigin],
+    q_offsets: MutPointer[UInt32, MutAnyOrigin],
+    task_offsets: MutPointer[UInt32, MutAnyOrigin],
+    task_sizes: MutPointer[UInt32, MutAnyOrigin],
+    task_qids: MutPointer[UInt32, MutAnyOrigin],
+    cuda_seed: UInt32,
+    decay_speed: Float32,
+    permutations_in: Int32,
+    decay_table: MutPointer[Float32, MutAnyOrigin],
+    der_acc: MutPointer[Float32, MutAnyOrigin],
+    weight_acc: MutPointer[Float32, MutAnyOrigin],
+):
+    """`yeti_rank_task_block_kernel` on 16 KiB of threadgroup memory
+    (`YETI_TASK_16K`, lane/apple-fast-trees-yeti). Grid `(n_tasks, 1, 1)`,
+    block `(YETI_THREADS, 1, 1)`; every loop bound is the same on every
+    thread of a block, so every barrier is reached by every thread.
+
+    Shared memory: the composite sort keys (1024 x 8 bytes), `relev *
+    weight` and the exps (2 x 1024 x 4 bytes). No ping-pong copy and no
+    accumulator arrays.
+
+    WHY NO BIT MOVES against the 32 KiB kernel. (1) The draws are the same
+    text in the same (round, lane) order on the same per-thread stream.
+    (2) The sort computes no float: the merge of widths 1 and 2 is a
+    sorting network over each aligned run of four, and the eight wider
+    passes are the same rank merge, in place: every thread reads its four
+    keys and finds their output slots, a barrier, then writes them, a
+    barrier. Distinct composites, so the result is the one ascending order.
+    (3) The pairs: `pairWeight` and `ll` are the same expressions on the
+    same operands; the decay for a slot `j` is `decay_table[j - qb - 1]`,
+    the hoisted `lane_decay` tabled by `yeti_rank_decay_table_kernel`.
+    (4) The accumulation ORDER. In the 32 KiB kernel a document's sums take
+    at most ONE contribution per (round, lane k, phase) step, each thread
+    writing a distinct document, so the order of a document's float sums is
+    (round, lane of the ordered slot, phase). Here the document's OWNER
+    thread gathers those contributions instead of the slot's thread
+    scattering them: a document at sorted rank `r` is `doc1` of slot
+    `r + 1` (phase 1, lane `(r + 1) // 256`) when that slot is still its
+    query, and `doc2` of slot `r` (phase 2, lane `r // 256`) when `r` is not
+    its query's begin. The owner applies the two in that same (lane, phase)
+    order: phase 2 first only when `r + 1` starts a new lane. The sums live
+    in registers, start at 0.0, pass through `ftz` at every add as before,
+    and are stored once. (5) The rank is a lower-bound search of the
+    thread's own composite in the sorted keys."""
+    var sh_keys = stack_allocation[
+        YETI_TASK_POSITIONS,
+        Scalar[DType.uint64],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sh_relev = stack_allocation[
+        YETI_TASK_POSITIONS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sh_exp = stack_allocation[
+        YETI_TASK_POSITIONS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var task = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var offset = Int(task_offsets.unsafe_load(task))
+    var size = Int(task_sizes.unsafe_load(task))
+    var first_qid = row_qids.unsafe_load(offset)
+    var pad_qid = row_qids.unsafe_load(offset + size - 1) + UInt32(1) - first_qid
+    var perms = Int(permutations_in)
+
+    # this thread's stream (`:224-237`), advanced through its lanes in order
+    # every round
+    var s = _task_seed(task_qids.unsafe_load(task), tid, cuda_seed)
+
+    # per lane: the local query id, the query begin, this document's
+    # `relev * weight` and exp, and its two accumulators
+    var lane_qid = SIMD[DType.uint32, YETI_LANES](0)
+    var lane_begin = SIMD[DType.int32, YETI_LANES](0)
+    var own_relev = SIMD[DType.float32, YETI_LANES](0.0)
+    var own_exp = SIMD[DType.float32, YETI_LANES](0.0)
+    var acc_der = SIMD[DType.float32, YETI_LANES](0.0)
+    var acc_weight = SIMD[DType.float32, YETI_LANES](0.0)
+    var my_key = SIMD[DType.uint64, YETI_LANES](0)
+    for k in range(YETI_LANES):
+        var p = tid + YETI_THREADS * k
+        var qid = pad_qid
+        # the padding is one query that begins at the first padded position
+        var begin = size
+        var rv = Float32(1000.0)
+        var ev = Float32(1000.0)
+        if p < size:
+            var row_qid = row_qids.unsafe_load(offset + p)
+            qid = row_qid - first_qid
+            begin = Int(q_offsets.unsafe_load(Int(row_qid))) - offset
+            var w = Float32(1.0)
+            if has_weights != Int32(0):
+                w = weights.unsafe_load(offset + p)
+            rv = ftz(relev.unsafe_load(offset + p) * w)
+            ev = routed_exp(min(approx.unsafe_load(offset + p), Float32(70.0)))
+        sh_relev.unsafe_store(p, rv)
+        sh_exp.unsafe_store(p, ev)
+        own_relev[k] = rv
+        own_exp[k] = ev
+        lane_qid[k] = qid
+        lane_begin[k] = Int32(begin)
+    barrier()
+
+    for _ in range(perms):
+        # the draws (`:112-121`)
+        for k in range(YETI_LANES):
+            var p = tid + YETI_THREADS * k
+            var val = Float32(-1000.0)
+            if p < size:
+                val = own_exp[k]
+            s = _advance_seed32(s)
+            # `NextUniformFloat32`: `v * 2.328306435996595e-10f`, whose
+            # float is exactly 2^-32
+            var uni = identical_mul(Float32(s), Float32(2.328306435996595e-10))  # exact; pinned (lane/pinned-mul-contract-free)
+            val = val * (uni / (Float32(1.000001) - uni))
+            var bits = bitcast[DType.uint32](val)
+            if (bits & UInt32(0x80000000)) != UInt32(0):
+                bits = bits ^ UInt32(0xFFFFFFFF)
+            else:
+                bits = bits ^ UInt32(0x80000000)
+            # (query ascending, key descending, position ascending) as ONE
+            # ascending integer; the position makes every composite distinct
+            var composite = (
+                (UInt64(lane_qid[k]) << UInt64(42))
+                | (UInt64(bits ^ UInt32(0xFFFFFFFF)) << UInt64(10))
+                | UInt64(p)
+            )
+            sh_keys.unsafe_store(p, composite)
+            my_key[k] = composite
+        barrier()
+
+        # the merge passes of width 1 and 2: each thread sorts the aligned
+        # run of four it reads back, in registers
+        var run = SIMD[DType.uint64, YETI_LANES](0)
+        for e in range(YETI_LANES):
+            run[e] = sh_keys.unsafe_load(YETI_LANES * tid + e)
+        _sort4_keys(run)
+        for e in range(YETI_LANES):
+            sh_keys.unsafe_store(YETI_LANES * tid + e, run[e])
+        barrier()
+
+        # the eight wider passes, the rank merge in place: every element
+        # finds its output slot by a binary search of the sibling run (the
+        # composites are distinct, so "strictly below" needs no tie rule);
+        # all reads of a pass precede all its writes.
+        var width = YETI_LANES
+        while width < YETI_TASK_POSITIONS:
+            var dest = SIMD[DType.int32, YETI_LANES](0)
+            for e in range(YETI_LANES):
+                var i = YETI_LANES * tid + e
+                var lo = (i // (2 * width)) * (2 * width)
+                var mid = lo + width
+                var sibling = mid
+                var own_rank = i - lo
+                if i >= mid:
+                    sibling = lo
+                    own_rank = i - mid
+                var key = sh_keys.unsafe_load(i)
+                var base = 0
+                var length = width
+                while length > 1:
+                    var half = length // 2
+                    if sh_keys.unsafe_load(sibling + base + half - 1) < key:
+                        base += half
+                    length -= half
+                var below = base
+                if sh_keys.unsafe_load(sibling + base) < key:
+                    below += 1
+                run[e] = key
+                dest[e] = Int32(lo + own_rank + below)
+            barrier()
+            for e in range(YETI_LANES):
+                sh_keys.unsafe_store(Int(dest[e]), run[e])
+            barrier()
+            width = width * 2
+
+        # the pairs (`:130-168`), gathered by each document's owner in the
+        # (lane, phase) order of the 32 KiB kernel's scatter
+        for k in range(YETI_LANES):
+            var p = tid + YETI_THREADS * k
+            if p < size:
+                # this document's sorted rank: the lower bound of its own
+                # composite, which is present
+                var key = my_key[k]
+                var base = 0
+                var length = YETI_TASK_POSITIONS
+                while length > 1:
+                    var half = length // 2
+                    if sh_keys.unsafe_load(base + half - 1) < key:
+                        base += half
+                    length -= half
+                var r = base
+                if sh_keys.unsafe_load(base) < key:
+                    r = base + 1
+                var qb = Int(lane_begin[k])
+                var relev_p = own_relev[k]
+                var exp_p = own_exp[k]
+
+                # phase 1 of slot r + 1: this document is `doc1`
+                var has1 = False
+                var pw1 = Float32(0.0)
+                var ll1 = Float32(0.0)
+                if r + 1 < YETI_TASK_POSITIONS:
+                    var next_key = sh_keys.unsafe_load(r + 1)
+                    if (next_key >> UInt64(42)) == UInt64(lane_qid[k]):
+                        has1 = True
+                        var idx2 = Int(next_key & UInt64(1023))
+                        var relev2 = sh_relev.unsafe_load(idx2)
+                        var approx2 = sh_exp.unsafe_load(idx2)
+                        # slot j = r + 1: `0.15 * pow(decaySpeed, j - qb - 1)`
+                        var decay = decay_table.unsafe_load(r - qb)
+                        pw1 = ftz(decay * abs(relev_p - relev2) / Float32(perms))
+                        var sel = -exp_p
+                        if relev_p > relev2:
+                            sel = approx2
+                        ll1 = ftz(pw1 * sel / (approx2 + exp_p))
+
+                # phase 2 of slot r: this document is `doc2`
+                var has2 = r != qb
+                var pw2 = Float32(0.0)
+                var ll2 = Float32(0.0)
+                if has2:
+                    var prev_key = sh_keys.unsafe_load(r - 1)
+                    var idx1 = Int(prev_key & UInt64(1023))
+                    var relev1 = sh_relev.unsafe_load(idx1)
+                    var approx1 = sh_exp.unsafe_load(idx1)
+                    # slot j = r: `0.15 * pow(decaySpeed, j - qb - 1)`
+                    var decay = decay_table.unsafe_load(r - qb - 1)
+                    pw2 = ftz(decay * abs(relev1 - relev_p) / Float32(perms))
+                    var sel = -approx1
+                    if relev1 > relev_p:
+                        sel = exp_p
+                    ll2 = ftz(pw2 * sel / (exp_p + approx1))
+
+                # the scatter's step order: phase 2's slot r sits in an
+                # earlier lane than phase 1's slot r + 1 only when r + 1
+                # begins a lane
+                var two_first = has1 and has2 and ((r // YETI_THREADS) < ((r + 1) // YETI_THREADS))
+                if two_first:
+                    acc_weight[k] = ftz(acc_weight[k] + pw2)
+                    acc_der[k] = ftz(acc_der[k] + (-ll2))
+                if has1:
+                    acc_weight[k] = ftz(acc_weight[k] + pw1)
+                    acc_der[k] = ftz(acc_der[k] + ll1)
+                if has2 and not two_first:
+                    acc_weight[k] = ftz(acc_weight[k] + pw2)
+                    acc_der[k] = ftz(acc_der[k] + (-ll2))
+        # the next round's draws overwrite the keys every thread just read
+        barrier()
+
+    for k in range(YETI_LANES):
+        var p = tid + YETI_THREADS * k
+        if p < size:
+            der_acc.unsafe_store(offset + p, acc_der[k])
+            weight_acc.unsafe_store(offset + p, acc_weight[k])
+
+
 def yeti_rank_row_kernel[estimation: Bool](
     der_acc: MutPointer[Float32, MutAnyOrigin],
     weight_acc: MutPointer[Float32, MutAnyOrigin],
@@ -988,19 +1318,42 @@ def launch_yeti_rank_with[estimation: Bool](
             block_dim=(MSE_BLOCK_SIZE, 1, 1),
         )
     comptime if YETI_BLOCK_PARALLEL:
-        # DEVIATION 3040: one 256-thread block per task
-        ctx.enqueue_function[yeti_rank_task_block_kernel](
-            y.d_point.unsafe_ptr(), y.query.targets.unsafe_ptr(),
-            y.query.weights.unsafe_ptr(),
-            Int32(1) if y.query.has_weights else Int32(0),
-            y.query.qids.unsafe_ptr(), y.query.q_offsets.unsafe_ptr(),
-            y.d_task_offsets.unsafe_ptr(), y.d_task_sizes.unsafe_ptr(),
-            y.d_task_qids.unsafe_ptr(),
-            yeti_rank_cuda_seed(seed), y.decay, Int32(y.permutations),
-            y.d_der_acc.unsafe_ptr(), y.d_weight_acc.unsafe_ptr(),
-            grid_dim=(y.n_tasks, 1, 1),
-            block_dim=(YETI_THREADS, 1, 1),
-        )
+        comptime if YETI_TASK_16K:
+            # lane/apple-fast-trees-yeti: the 16 KiB block kernel. The decay
+            # table rides the first 1024 cells of `y.s_exp`, scratch of the
+            # sequential kernel, which this arm never launches.
+            ctx.enqueue_function[yeti_rank_decay_table_kernel](
+                y.decay, y.s_exp.unsafe_ptr(), Int32(YETI_TASK_POSITIONS),
+                grid_dim=((YETI_TASK_POSITIONS + YETI_THREADS - 1) // YETI_THREADS, 1, 1),
+                block_dim=(YETI_THREADS, 1, 1),
+            )
+            ctx.enqueue_function[yeti_rank_task_block16k_kernel](
+                y.d_point.unsafe_ptr(), y.query.targets.unsafe_ptr(),
+                y.query.weights.unsafe_ptr(),
+                Int32(1) if y.query.has_weights else Int32(0),
+                y.query.qids.unsafe_ptr(), y.query.q_offsets.unsafe_ptr(),
+                y.d_task_offsets.unsafe_ptr(), y.d_task_sizes.unsafe_ptr(),
+                y.d_task_qids.unsafe_ptr(),
+                yeti_rank_cuda_seed(seed), y.decay, Int32(y.permutations),
+                y.s_exp.unsafe_ptr(),
+                y.d_der_acc.unsafe_ptr(), y.d_weight_acc.unsafe_ptr(),
+                grid_dim=(y.n_tasks, 1, 1),
+                block_dim=(YETI_THREADS, 1, 1),
+            )
+        else:
+            # DEVIATION 3040: one 256-thread block per task
+            ctx.enqueue_function[yeti_rank_task_block_kernel](
+                y.d_point.unsafe_ptr(), y.query.targets.unsafe_ptr(),
+                y.query.weights.unsafe_ptr(),
+                Int32(1) if y.query.has_weights else Int32(0),
+                y.query.qids.unsafe_ptr(), y.query.q_offsets.unsafe_ptr(),
+                y.d_task_offsets.unsafe_ptr(), y.d_task_sizes.unsafe_ptr(),
+                y.d_task_qids.unsafe_ptr(),
+                yeti_rank_cuda_seed(seed), y.decay, Int32(y.permutations),
+                y.d_der_acc.unsafe_ptr(), y.d_weight_acc.unsafe_ptr(),
+                grid_dim=(y.n_tasks, 1, 1),
+                block_dim=(YETI_THREADS, 1, 1),
+            )
     else:
         _launch_yeti_rank_tasks_sequential(ctx, y, seed)
     if use_inverse:

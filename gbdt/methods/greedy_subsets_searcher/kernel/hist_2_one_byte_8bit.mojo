@@ -49,8 +49,11 @@ from std.atomic import Atomic, Ordering
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
 from std.memory import stack_allocation
+from std.sys import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_dither,
@@ -78,9 +81,28 @@ from checks.kernel_matrix import (
 #: IDENTICAL two-stat fit at the default 254 borders) kept its literal 512.
 #: No bit moves with the block: the addends are position-dithered Int32 and
 #: every sum is an Int32 sum (one slice per 128 threads, `H8_SLICES` of them).
-comptime H8_BLOCK = (
-    APPLE_HIST2_SHARED_I32_BLOCK_CAP if TARGET_COLUMN == COLUMN_APPLE else 512
-)
+def _h8_block_for[column: Int]() -> Int:
+    """The fused 8-bit kernel's block: 512, and the M2 Pro cap on Apple.
+
+    `-D MOJOLEARN_SYM_HIST_FAST=1` (lane/apple-fast-trees-yeti, 2026-10-02),
+    FAST on Apple only: the literal 512 this kernel kept until 2026-09-29,
+    which the M3 ran correctly (the cap's note in `kernel_matrix.mojo`).
+    Cause: under FAST every greedy one-byte width routes through this kernel
+    (`greedy_one_byte_fixed_for`), so the 256 cap halves the per-core
+    occupancy of every `sym.hist` launch on the M3 (one 32 KB block per core
+    either way; the 512 block fills its 4 slices with 16 warps instead of
+    8). No bit moves with the block (the note above). IDENTICAL keeps the
+    cap; its bits never move."""
+    comptime if (
+        is_defined["MOJOLEARN_SYM_HIST_FAST"]()
+        and column == COLUMN_APPLE
+        and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    ):
+        return 512
+    return APPLE_HIST2_SHARED_I32_BLOCK_CAP if column == COLUMN_APPLE else 512
+
+
+comptime H8_BLOCK = _h8_block_for[TARGET_COLUMN]()
 comptime H8_SLICE = 2048
 comptime H8_SLICES = H8_BLOCK // 128
 comptime H8_SMEM = H8_SLICE * H8_SLICES
