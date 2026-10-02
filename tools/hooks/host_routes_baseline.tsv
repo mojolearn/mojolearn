@@ -16,7 +16,6 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	5	for i in r
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	6	for i in range(n):
 py-loop	py-numpy	gap-neural-overhead2	debt	python/mojolearn/_expansion_decomp.py	7	for i in range(n):
 py-loop	py-numpy	gap-neural-overhead2	debt	python/mojolearn/_expansion_decomp.py	8	for i in range(n):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	for i in range(n):
 py-loop	py-numpy	gap-treeshap	debt	python/mojolearn/_expansion_trees.py	0	for i in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_trees.py	1	for i in range(n):
 host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	if os.path.exists(_backend.host_module_path(_HOST_INFERENCE_BASENAME)):
