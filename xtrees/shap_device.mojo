@@ -168,12 +168,12 @@ def _check_meta(ctx: DeviceContext, meta: DeviceBuffer[DType.int32], out_addr: I
     var h = ctx.enqueue_create_host_buffer[DType.int32](SHAP_META_WORDS)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=meta)
     ctx.synchronize()
-    if h.unsafe_ptr()[SHAP_META_BAD] != 0:
+    if h.unsafe_ptr()[unsafe_offset=SHAP_META_BAD] != 0:
         raise Error("x_trees tree_shap: malformed tree")
     if out_addr != 0:
         var o = I32P(unsafe_from_address=out_addr)
         for i in range(SHAP_META_WORDS):
-            o[unsafe_offset=i] = h.unsafe_ptr()[i]
+            o[unsafe_offset=i] = h.unsafe_ptr()[unsafe_offset=i]
     _ = h^
 
 
