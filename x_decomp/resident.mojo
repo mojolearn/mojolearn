@@ -37,6 +37,7 @@ from x_decomp.device import (
     launch_rowsum,
     launch_sqdist,
     launch_trisolve,
+    launch_knn_select,
     lda_rows_kernel,
     rowsum_scratch,
     TPB,
@@ -247,6 +248,18 @@ def dev_trisolve_py(lu: PythonObject, idx: PythonObject, src: PythonObject, dst:
     launch_trisolve(xd_ctx(), _ptr(_id(lu), n * n), _ptr(_id(idx), n), _ptr(_id(src), n * nrhs),
                     _ptr(_id(dst), n * nrhs), _ptr(sid, n * nrhs), n, nrhs, trans)
     pool_free(sid)
+    return PythonObject(n)
+
+
+def dev_knn_select_py(dmat: PythonObject, dist: PythonObject, idx: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`knn_select_py` on device ids, enqueued (no sync)."""
+    var n = _n(p, 0)
+    var m = _n(p, 1)
+    var k = _n(p, 2)
+    var ex = _n(p, 3)
+    if m >= 1 << 24 or n * m > 2147483647:
+        raise Error("x_decomp: knn_select exceeds the index bounds")
+    launch_knn_select(xd_ctx(), _ptr(_id(dmat), n * m), _ptr(_id(dist), n * k), _ptr(_id(idx), n * k), n, m, k, ex)
     return PythonObject(n)
 
 
