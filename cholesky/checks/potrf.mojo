@@ -596,6 +596,41 @@ def chol_hex32_bits(v: Float32) -> String:
     return out
 
 
+comptime _CHOL_SYM_TILE = 64
+
+
+def _chol_sym_ok(a: List[Float32], n: Int, tol: Float32) -> Bool:
+    """Every lower cell passes `chol_validate_matrix`'s relative symmetry
+    test (the same predicate), visited in 64 x 64 tiles."""
+    var p = a.unsafe_ptr()
+    var bi = 0
+    while bi < n:
+        var bj = 0
+        while bj <= bi:
+            var ie = min(bi + _CHOL_SYM_TILE, n)
+            var je = min(bj + _CHOL_SYM_TILE, n)
+            for i in range(bi, ie):
+                for j in range(bj, min(je, i)):
+                    var lo = p[i * n + j]
+                    var up = p[j * n + i]
+                    var d = lo - up
+                    if d < Float32(0.0):
+                        d = -d
+                    var m = lo
+                    if m < Float32(0.0):
+                        m = -m
+                    var mu = up
+                    if mu < Float32(0.0):
+                        mu = -mu
+                    if mu > m:
+                        m = mu
+                    if d > tol * m:
+                        return False
+            bj += _CHOL_SYM_TILE
+        bi += _CHOL_SYM_TILE
+    return True
+
+
 def chol_validate_matrix(a: List[Float32], n: Int, what: String) raises:
     """**DEVIATION 1638.** Finite and symmetric, on the HOST, before any
     upload. Names the cell and both values by bits.
@@ -652,6 +687,12 @@ def chol_validate_matrix(a: List[Float32], n: Int, what: String) raises:
                     + "]; refused by name"
                 )
     var tol = chol_sym_rel_tol()
+    # The scan below names the FIRST asymmetric cell (row-major over the
+    # lower triangle) but reads a[j, i] down a column: 0.23 s at n = 8192
+    # on the M4. `_chol_sym_ok` asks the same question cache-tile by tile
+    # (lane/neural-pass113); only a matrix it rejects walks the naming scan.
+    if _chol_sym_ok(a, n, tol):
+        return
     for i in range(n):
         for j in range(i):
             var lo = a[i * n + j]
