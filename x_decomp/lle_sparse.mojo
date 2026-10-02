@@ -689,9 +689,9 @@ def lle_sparse_eig(
             if e <= Float64(tol_sub) or (e <= Float64(tol_stall) and e >= e_prev):
                 settled = it + 1
             e_prev = e
-        var swap = xw
+        var sw = xw
         xw = yp
-        yp = swap
+        yp = sw
         have_prev = True
         checks += 1
         if settled >= 0:
