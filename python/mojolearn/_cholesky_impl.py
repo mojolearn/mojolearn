@@ -15,9 +15,9 @@ halves are public there: `fit` factors a GIVEN matrix (an inference answer,
 not a trained model, so `_CPU_FIT_IS_INFERENCE` exempts it from the CPU
 training refusal) and `solve` answers from a factor, including one written
 by `save` on a GPU box and read back by `load` (or `mojolearn.host_model`).
-`HostCholesky` is the same class bound to the host binding on a box that
-also has a GPU, which is how a GPU factor and a CPU solve meet in one
-process.
+`HostCholesky` (`_classical_host`, the CPU side) is the same class bound
+to the host binding on a box that also has a GPU, which is how a GPU factor
+and a CPU solve meet in one process.
 
 WHAT CROSSES. The matrix goes down as `n * n` float32 row-major and the
 factor comes back the same way, lower triangle `L` with the strict upper
@@ -298,17 +298,6 @@ class Cholesky(NumericModeMixin):
         obj._logdet = float(scalars[0])
         obj.jitter_ = float(scalars[1])
         return obj
-
-
-def __getattr__(name):
-    """`HostCholesky` lives with the other host-inference subclasses in
-    `_classical_host` (the CPU side; cpu-gpu-cleanup c-linear, 2026-10-02),
-    so this GPU-path module never loads a host binding. The name still
-    resolves here for callers that import it from this module."""
-    if name == "HostCholesky":
-        from ._classical_host import HostCholesky
-        return HostCholesky
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = ["Cholesky"]
