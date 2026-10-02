@@ -17,7 +17,10 @@ IDENTICAL by construction (IDENTITY_PATHS.md "The rule"):
   * no computed NaN reaches an output: the softmax subtracts the row max, the
     log reads a sum >= 1.
 """
+from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     ftz,
     identical_div,
     identical_exp,
@@ -37,6 +40,18 @@ comptime FP = MutPointer[Float32, MutUntrackedOrigin]
 #: host binding only): the GEMM reduction runs k DESCENDING, so every trained
 #: model this binary returns differs from the device's.
 comptime SEQUENCE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
+#: Apple FAST switches of lane/apple-fast-tsa2 (default OFF, FAST + Apple
+#: only; IDENTICAL compiles the code above and below unchanged):
+#: `-D MOJOLEARN_TSA2_VAR`: VAR's fit queues every launch behind one upload
+#: and ends on one wait (sequence/pyapi.mojo::var_fit_py); the residual
+#: and sigma_u products fuse their epilogues (sequence/vecar.mojo).
+#: `-D MOJOLEARN_TSA2_STL`: STL's LOESS passes as one thread per output
+#: point over every series (sequence/stl_grid.mojo), the inner iterations
+#: queued, one wait per fit (sequence/pyapi.mojo::stl_py).
+comptime _TSA2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime TSA2_VAR = _TSA2_FAST_APPLE and is_defined["MOJOLEARN_TSA2_VAR"]()
+comptime TSA2_STL = _TSA2_FAST_APPLE and is_defined["MOJOLEARN_TSA2_STL"]()
 
 # ------------------------------------------------------------------ op codes
 comptime OP_GEMM = 1
@@ -113,6 +128,14 @@ comptime OP_LAMB_SEGFOLD = 69
 comptime OP_LAMB_CLIP = 70
 comptime OP_LAMB_TRUST = 71
 comptime OP_LAMB_APPLY_ALL = 72
+#: lane/apple-fast-tsa2 (reached only under TSA2_VAR / TSA2_STL)
+comptime OP_VAR_RESID = 73
+comptime OP_VAR_SIGMA = 74
+comptime OP_STL_SEAS = 75
+comptime OP_STL_MA = 76
+comptime OP_STL_LOESS = 77
+comptime OP_STL_DESEAS = 78
+comptime OP_STL_FINISH = 79
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

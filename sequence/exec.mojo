@@ -72,6 +72,11 @@ from sequence.ops import (
     OP_MOE_ROUTE,
     OP_MOE_HIDDEN,
     OP_MOE_OUT,
+    OP_VAR_RESID,
+    OP_VAR_SIGMA,
+    OP_STL_SEAS,
+    OP_STL_MA,
+    OP_STL_LOESS,
 )
 
 #: The least work (in `_element_weight` units, roughly one fused
@@ -120,6 +125,14 @@ def _element_weight[OP: Int](a: Args) -> Int:
         return 256
     elif OP == OP_CELL_FWD or OP == OP_CELL_BWD:
         return 32
+    # lane/apple-fast-tsa2 (reached only under TSA2_VAR / TSA2_STL): the
+    # chain length of one point
+    elif OP == OP_VAR_RESID or OP == OP_VAR_SIGMA or OP == OP_STL_MA:
+        return max(a.i1, 1)
+    elif OP == OP_STL_SEAS:
+        return 4 * max(a.i2, 1)
+    elif OP == OP_STL_LOESS:
+        return 4 * max(a.i1, 1)
     else:
         return 2
 
