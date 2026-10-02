@@ -918,7 +918,8 @@ _add("voting-clf", xlane="trees", ours="VotingClassifier", task="clf", block="cl
 _add("voting-reg", xlane="trees", ours="VotingRegressor", task="reg", block="reg",
      sk="sklearn.ensemble:VotingRegressor",
      params=dict(estimators=[("ridge", _E("Ridge", alpha=1.0)), ("lasso", _E("Lasso", alpha=0.01, tol=1e-3, max_iter=1000, random_state=SEED)),
-                             ("dt", _E("DecisionTreeRegressor", max_depth=8, random_state=SEED))]))
+                             ("dt", _E("DecisionTreeRegressor", max_depth=8, random_state=SEED))]),
+     mism=["nested DecisionTreeRegressor(max_depth=8): ours is its forest builder with one tree, splitting on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("stacking-clf", xlane="trees", ours="StackingClassifier", task="clf", block="cls",
      sk="sklearn.ensemble:StackingClassifier",
      params=dict(estimators=[("nb", _E("GaussianNB")),
@@ -929,7 +930,8 @@ _add("stacking-reg", xlane="trees", ours="StackingRegressor", task="reg", block=
      sk="sklearn.ensemble:StackingRegressor",
      params=dict(estimators=[("lasso", _E("Lasso", alpha=0.01, tol=1e-3, max_iter=1000, random_state=SEED)),
                              ("dt", _E("DecisionTreeRegressor", max_depth=8, random_state=SEED))],
-                 final_estimator=_E("Ridge", alpha=1.0), cv=5))
+                 final_estimator=_E("Ridge", alpha=1.0), cv=5),
+     mism=["nested DecisionTreeRegressor(max_depth=8): ours is its forest builder with one tree, splitting on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("multioutput-clf", xlane="trees", ours="MultiOutputClassifier", task="multiclf", block="cls",
      sk="sklearn.multioutput:MultiOutputClassifier",
      params=dict(estimator=_E("LogisticRegression", max_iter=200)),
