@@ -87,6 +87,7 @@ from x_decomp.exec_trait import Exec
 from x_decomp.host import HostExec
 from x_decomp.jacobi2 import (
     J2_TPB,
+    dev_barrier,
     jacobi_eigh2_kernel,
     one_sided_svd2_chunk_kernel,
     one_sided_svd2_finish_kernel,
@@ -404,6 +405,78 @@ def lu_pivot_block_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
     if tid == 0:
         piv.unsafe_store(kk, ri.unsafe_load(0))
 
+
+
+# lane/neural-pass115 (2026-10-02): a step's small kernels in ONE launch.
+# The blocked route launched six kernels per column (pivot, swap, diagonal,
+# act, multipliers, the panel's update): about 49,000 launches at n = 8192
+# (M4: 1.1 s of the panel steps). Here one block runs step k's pivot (as
+# `lu_pivot_block_kernel`: strict greater, the lower row on a tie, which no
+# block size changes), the swap over columns [0, k1) (`lu_swap_elem`'s),
+# `lu_diag`, act[k] and the multipliers (`lu_l_elem`), separated by
+# barriers that order device memory (Apple: `dev_barrier`); the panel's
+# update stays its own launch over the whole device. The same cells, the
+# same statements, the same order. `MOJOLEARN_XD_LU_STEP_FUSED=0` restores
+# the per-kernel launches.
+comptime LUP_TPB = 512
+
+
+def lu_step_fused_kernel(
+    a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, k_in: Int32, k1: Int32, n: Int32
+):
+    var nn = Int(n)
+    var k = Int(k_in)
+    var kk1 = Int(k1)
+    var tid = Int(thread_idx.x)
+    var rv = stack_allocation[LUP_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ri = stack_allocation[LUP_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    # the pivot
+    var best = abs(ftz(a.unsafe_load(k * nn + k)))
+    var p = k
+    var i = k + 1 + tid
+    while i < nn:
+        var v = abs(ftz(a.unsafe_load(i * nn + k)))
+        if v > best:
+            best = v
+            p = i
+        i += LUP_TPB
+    rv.unsafe_store(tid, best)
+    ri.unsafe_store(tid, Int32(p))
+    barrier()
+    var active = LUP_TPB // 2
+    while active > 0:
+        if tid < active:
+            var ov = rv.unsafe_load(tid + active)
+            var oi = ri.unsafe_load(tid + active)
+            var cv = rv.unsafe_load(tid)
+            var ci = ri.unsafe_load(tid)
+            if ov > cv or (ov == cv and oi < ci):
+                rv.unsafe_store(tid, ov)
+                ri.unsafe_store(tid, oi)
+        barrier()
+        active = active // 2
+    var pr = Int(ri.unsafe_load(0))
+    if tid == 0:
+        piv.unsafe_store(k, Int32(pr))
+    # the swap over columns [0, k1)
+    if pr != k:
+        var j = tid
+        while j < kk1:
+            var t = a.unsafe_load(k * nn + j)
+            a.unsafe_store(k * nn + j, a.unsafe_load(pr * nn + j))
+            a.unsafe_store(pr * nn + j, t)
+            j += LUP_TPB
+    dev_barrier()
+    # the diagonal
+    if tid == 0:
+        lu_diag(a, info, scal, k, nn)
+        act.unsafe_store(k, scal.unsafe_load(1))
+    dev_barrier()
+    # the multipliers
+    var r = k + 1 + tid
+    while r < nn:
+        lu_l_elem(a, scal, k, r, nn)
+        r += LUP_TPB
 
 def lu_pivot_parallel() -> Bool:
     """`MOJOLEARN_XD_LU_PIVOT_SERIAL=1` restores the one-thread pivot scan
@@ -1687,6 +1760,7 @@ struct DevExec(Exec):
             ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
         var pivot_block = lu_pivot_parallel()
         var trail_r4 = String(getenv("MOJOLEARN_XD_LU_TRAIL_R4")) != "0"
+        var step_fused = String(getenv("MOJOLEARN_XD_LU_STEP_FUSED")) != "0"
         var nb = min(lu_panel_width(), LU_PANEL_NB)
         var dact = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
         if n > lu_serial_max() and nb > 0:
@@ -1700,6 +1774,17 @@ struct DevExec(Exec):
             while k0 < n:
                 var k1 = min(k0 + nb, n)
                 for k in range(k0, k1):
+                    if step_fused:
+                        ctx.enqueue_function[lu_step_fused_kernel](
+                            da.unsafe_ptr(), dp.unsafe_ptr(), di.unsafe_ptr(), ds.unsafe_ptr(), dact.unsafe_ptr(),
+                            Int32(k), Int32(k1), Int32(n), grid_dim=1, block_dim=LUP_TPB,
+                        )
+                        if k1 - k - 1 > 0 and n - k - 1 > 0:
+                            ctx.enqueue_function[lu_update_panel_kernel](
+                                da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), Int32(k1),
+                                grid_dim=_blocks((n - k - 1) * (k1 - k - 1)), block_dim=TPB,
+                            )
+                        continue
                     if pivot_block:
                         ctx.enqueue_function[lu_pivot_block_kernel](
                             da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
