@@ -210,7 +210,8 @@ def sgd_mb_parts_kernel(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP,
 
 
 def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias: FP, obj: FP, eta: Float32,
-                       alpha: Float32, l1r: Float32, penalty: Int32, fi: Int32, need_obj: Int32, one_class: Int32):
+                       alpha: Float32, l1r: Float32, penalty: Int32, fi: Int32, need_obj: Int32, one_class: Int32,
+                       bsum: Int32):
     var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
     var subs = mb_subs(Int(bs))
@@ -220,10 +221,10 @@ def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias:
     for s in range(subs):
         g = fa(g, ld(parts, j * Int(nsub) + s))
     if j < dd:
-        st(w, j, mb_step(ld(w, j), g, Int(bs), eta, alpha, l1r, Int(penalty)))
+        st(w, j, mb_step(ld(w, j), g, Int(bs), eta, alpha, l1r, Int(penalty), bsum != 0))
     elif j == dd:
         if fi != 0:
-            st(bias, 0, mb_bias_step(ld(bias, 0), g, Int(bs), eta, alpha, one_class != 0))
+            st(bias, 0, mb_bias_step(ld(bias, 0), g, Int(bs), eta, alpha, one_class != 0, bsum != 0))
     elif need_obj != 0:
         st(obj, 0, fa(ld(obj, 0), g))
 
@@ -243,6 +244,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var has_sw = Int(ip[10]) != 0
     var has_cw = Int(ip[11]) != 0
     var batch = Int(ip[12])
+    var bsum = len(ip) > 13 and Int(ip[13]) != 0
     var alpha = fp[0]
     var l1r = fp[1]
     var eta0 = fp[2]
@@ -328,9 +330,9 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                 ctx.enqueue_function[sgd_mb_step_kernel](
                     dparts.unsafe_ptr(), Int32(nsub), Int32(bs), Int32(d), dw.unsafe_ptr(), dbias.unsafe_ptr(),
                     dobj.unsafe_ptr(), et, alpha, l1r, Int32(penalty), Int32(1 if fi else 0), Int32(1 if need_obj else 0),
-                    Int32(1 if one_class else 0), grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
+                    Int32(1 if one_class else 0), Int32(1 if bsum else 0), grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
                 )
-                t += 1
+                t += bs if bsum else 1
                 start += bs
             ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=dw)
             ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=dbias)

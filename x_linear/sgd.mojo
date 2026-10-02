@@ -714,6 +714,8 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     var has_cw = ldi(ip, 11) != 0
     # ip[12] (lane/neural-pass103): the minibatch size, 0 the per-sample fit
     var batch = ldi(ip, 12) if ldi(ip, 12) > 0 else 0
+    # ip[13] (lane/neural-pass132): the per-sample-equivalent batch step (`mb_step`)
+    var bsum = ldi(ip, 13) != 0
     var swp = y + n
     var problems = k if k > 2 else 1
     var epr = fw + problems * (n + d)  # the host's epochs run per problem
@@ -806,7 +808,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
         def run_problems(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm k, imm fw, imm iw, imm res, imm problems,
                                             imm loss, imm penalty, imm alpha, imm l1r, imm lr, imm eta0, imm power_t,
                                             imm eps, imm fit_intercept, imm max_iter, imm tol, imm nic, imm do_shuffle,
-                                            imm seed, imm swp, imm has_sw, imm has_cw, imm fp, imm epr, imm batch}:
+                                            imm seed, imm swp, imm has_sw, imm has_cw, imm fp, imm epr, imm batch, imm bsum}:
             for c in range(lo, hi):
                 var ys = fw + c * (n + d)
                 var q = ys + n
@@ -831,7 +833,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         seed + UInt64(1000003) * UInt64(c), res, c * d, res, problems * d + c, idx,
                         swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
                         ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw, batch,
-                        FP(unsafe_from_address=Int(sl.unsafe_ptr())), k == 1,
+                        FP(unsafe_from_address=Int(sl.unsafe_ptr())), k == 1, bsum,
                     )
                     _ = sl^
                 else:
@@ -1040,8 +1042,23 @@ def mb_part(x: FP, d: Int, idx: IP, start: Int, dlv: FP, lv: FP, j: Int, s: Int,
 
 
 @always_inline
-def mb_step(wj: Float32, g: Float32, bs: Int, eta: Float32, alpha: Float32, l1r: Float32, penalty: Int) -> Float32:
-    """w_j after the batch: g the folded gradient sum."""
+def mb_step(wj: Float32, g: Float32, bs: Int, eta: Float32, alpha: Float32, l1r: Float32, penalty: Int,
+            bsum: Bool = False) -> Float32:
+    """w_j after the batch: g the folded gradient sum. `bsum` (lane/neural-
+    pass132, Perceptron and the one-class SVM) is the per-sample fit's step
+    over the batch with its rows' gradients taken at the batch's start: the
+    SUM of the gradients, the L2 part as sgd_one's per-row decay applied bs
+    times (max(0, 1 - eta (1 - l1_ratio) alpha)^bs), the L1 part bs times
+    alpha l1_ratio sign(w_j)."""
+    if bsum:
+        var w = wj
+        if penalty == P_L2 or penalty == P_EN:
+            var decay = fm(fs(Float32(1), l1r), alpha)
+            w = fm(w, identical_pow(fmax(Float32(0), fs(Float32(1), fm(decay, eta))), i2f(bs)))
+        var gs = g
+        if penalty == P_L1 or penalty == P_EN:
+            gs = fa(gs, fm(fm(i2f(bs), fm(alpha, l1r)), fsign(wj)))
+        return fs(w, fm(eta, gs))
     var gm = fd(g, i2f(bs))
     if penalty == P_L2:
         gm = fmad(alpha, wj, gm)
@@ -1053,9 +1070,15 @@ def mb_step(wj: Float32, g: Float32, bs: Int, eta: Float32, alpha: Float32, l1r:
 
 
 @always_inline
-def mb_bias_step(b: Float32, gb: Float32, bs: Int, eta: Float32, alpha: Float32, one_class: Bool) -> Float32:
+def mb_bias_step(b: Float32, gb: Float32, bs: Int, eta: Float32, alpha: Float32, one_class: Bool,
+                 bsum: Bool = False) -> Float32:
     """The intercept after the batch: gb the folded dl sum; the one-class
-    problem also takes their offset step."""
+    problem also takes their offset step (bs of them with `bsum`)."""
+    if bsum:
+        var nb = fs(b, fm(eta, gb))
+        if one_class:
+            nb = fs(nb, fm(fm(i2f(bs), eta), alpha))
+        return nb
     var nb = fs(b, fm(eta, fd(gb, i2f(bs))))
     if one_class:
         nb = fs(nb, fm(eta, alpha))
@@ -1082,7 +1105,7 @@ def sgd_mb_one(
     lr: Int, eta0: Float32, power_t: Float32, eps: Float32, fit_intercept: Bool, max_iter: Int, tol: Float32,
     nic: Int, do_shuffle: Bool, seed: UInt64, w: FP, woff: Int, b: FP, boff: Int, idx: IP,
     swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool, batch: Int, scratch: FP,
-    one_class: Bool = False,
+    one_class: Bool = False, bsum: Bool = False,
 ) -> Int:
     """One problem on the host (the CPU binding's form of the device's batches).
     scratch: dl batch | loss batch | partials (d + 2) * subs. Returns epochs,
@@ -1125,18 +1148,18 @@ def sgd_mb_one(
                 var g = Float32(0)
                 for s in range(subs):
                     g = fa(g, ld(parts, j * nsub + s))
-                st(w, woff + j, mb_step(ld(w, woff + j), g, bs, et, alpha, l1r, penalty))
+                st(w, woff + j, mb_step(ld(w, woff + j), g, bs, et, alpha, l1r, penalty, bsum))
             if fit_intercept:
                 var gb = Float32(0)
                 for s in range(subs):
                     gb = fa(gb, ld(parts, d * nsub + s))
-                bias = mb_bias_step(bias, gb, bs, et, alpha, one_class)
+                bias = mb_bias_step(bias, gb, bs, et, alpha, one_class, bsum)
             if need_obj:
                 var lb = Float32(0)
                 for s in range(subs):
                     lb = fa(lb, ld(parts, (d + 1) * nsub + s))
                 objective = fa(objective, lb)
-            t += 1
+            t += bs if bsum else 1  # bsum: the per-sample schedule counts rows
             start += bs
         var finite = bias == bias and fabs(bias) < Float32(3.0e38)
         for j in range(d):

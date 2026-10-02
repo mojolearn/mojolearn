@@ -305,7 +305,7 @@ def _expanded_class_weight(class_weight, classes, codes, sample_weight=None):
 
 def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0, power_t,
              epsilon, fit_intercept, max_iter, tol, n_iter_no_change, shuffle, random_state,
-             sample_weight=None, class_weight=None, classes=None, codes=None, batch_size=0):
+             sample_weight=None, class_weight=None, classes=None, codes=None, batch_size=0, batch_sum=False):
     a, n, d = X
     if penalty not in _SGD_PENALTY:
         raise ValueError(f"mojolearn {type(est).__name__}: penalty must be 'l2', 'l1', 'elasticnet' or None")
@@ -344,7 +344,12 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
         batch_size = 0
     if batch_size and (not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size < 1):
         raise ValueError(f"mojolearn {type(est).__name__}: batch_size must be a positive int")
-    ip += [has_sw, has_cw, int(batch_size)]
+    # batch_sum (lane/neural-pass132): Perceptron's batch step is the SUM of
+    # its rows' updates (the per-sample fit's scale, so `tol` reads the same
+    # loss scale); MOJOLEARN_SGD_BATCH_SUM=0/1 overrides for an A/B
+    if os.environ.get("MOJOLEARN_SGD_BATCH_SUM", "") in ("0", "1"):
+        batch_sum = os.environ["MOJOLEARN_SGD_BATCH_SUM"] == "1"
+    ip += [has_sw, has_cw, int(batch_size), int(bool(batch_sum))]
     vals = _run(est, ALGO_SGD, a, n, d, y, ip, fp, problems * d + problems + 2, problems * (n + d + 1), problems * n)
     if vals[-1] != 0:
         raise ValueError("Floating-point under-/overflow occurred. Scaling input data with "
@@ -795,7 +800,8 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
             self, Xm, codes, len(classes), _SGD_CLF_LOSS["perceptron"], self.penalty, "constant",
             self.alpha, self.l1_ratio, self.eta0, 0.5, 0.1, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, codes.tolist(), batch_size=self.batch_size)
+            sample_weight, self.class_weight, classes, codes.tolist(), batch_size=self.batch_size,
+            batch_sum=True)
         return self
 
 
