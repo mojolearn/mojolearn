@@ -224,6 +224,7 @@ from gbdt.data.pairs import (
     order_pairs_by_winner,
     prepare_pairs,
 )
+from gbdt.targets.kernel.pair_logit_group import PAIRLOGIT_GROUP_FUSED
 from gbdt.data.quantization import (
     NAN_TREATMENT_AS_IS,
     calc_quantization,
@@ -1287,9 +1288,15 @@ def train(
                 group_sizes, n_rows,
             )
         else:
-            pair_list = order_pairs_by_winner(
-                generate_pairs(group_sizes, y, sample_weight), group_sizes, n_rows
-            )
+            comptime if PAIRLOGIT_GROUP_FUSED:
+                # FAST Apple: the pairs are enumerated on the device from
+                # the grades (`gbdt/targets/kernel/pair_logit_group.mojo`),
+                # no host list; its refusals are raised at the device setup
+                pass
+            else:
+                pair_list = order_pairs_by_winner(
+                    generate_pairs(group_sizes, y, sample_weight), group_sizes, n_rows
+                )
     # Validate dense class codes before class-weight indexing or allocating
     # prediction planes. The later objective check was too late to protect
     # MakeClassificationWeights (reference data_providers.cpp:162-168).
@@ -1870,14 +1877,25 @@ def train(
     for i in range(n_rows, n_rows * target_dim):
         ht.unsafe_ptr().unsafe_store(i, y[i])
     if is_pair_logit:
-        # `InitPairLogit` (`targets/querywise_targets_impl.h:326-346`): the
-        # target weights become the per-row sums of the pair weights, folded
-        # in the pinned endpoint order (`gbdt/data/pairs.mojo::prepare_pairs`)
-        var pair_prep = prepare_pairs(
-            pair_list.winners, pair_list.losers, pair_list.weights, n_rows
-        )
-        for r in range(n_rows):
-            hw.unsafe_ptr().unsafe_store(r, pair_prep.row_weights[r])
+        comptime if PAIRLOGIT_GROUP_FUSED:
+            # generated pairs (empty list): the device setup rewrites the
+            # weights with the per-row pair weights; a caller's pairs keep
+            # the host fold
+            if len(pair_list.winners) > 0:
+                var pair_prep = prepare_pairs(
+                    pair_list.winners, pair_list.losers, pair_list.weights, n_rows
+                )
+                for r in range(n_rows):
+                    hw.unsafe_ptr().unsafe_store(r, pair_prep.row_weights[r])
+        else:
+            # `InitPairLogit` (`targets/querywise_targets_impl.h:326-346`): the
+            # target weights become the per-row sums of the pair weights, folded
+            # in the pinned endpoint order (`gbdt/data/pairs.mojo::prepare_pairs`)
+            var pair_prep = prepare_pairs(
+                pair_list.winners, pair_list.losers, pair_list.weights, n_rows
+            )
+            for r in range(n_rows):
+                hw.unsafe_ptr().unsafe_store(r, pair_prep.row_weights[r])
     ctx.enqueue_copy(dst_buf=targets, src_ptr=ht.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
     ctx.synchronize()

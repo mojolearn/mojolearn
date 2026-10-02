@@ -176,9 +176,11 @@ from gbdt.targets.kernel.pointwise_targets import (
 from gbdt.targets.kernel.pair_logit import (
     PairwiseTargetBuffers,
     launch_pair_logit_with,
+    make_pairwise_group_buffers,
     make_pairwise_target_buffers,
     pair_blocks,
 )
+from gbdt.targets.kernel.pair_logit_group import PAIRLOGIT_GROUP_FUSED
 from gbdt.targets.kernel.yeti_rank import (
     YetiRankTargetBuffers,
     launch_yeti_rank_with,
@@ -1887,6 +1889,11 @@ def fit_with_test(
     # PairLogit's value partials are per 256 PAIRS (`pair_logit.mojo`)
     if objective == OBJECTIVE_PAIR_LOGIT and pair_blocks(len(pair_winners)) > part_blocks:
         part_blocks = pair_blocks(len(pair_winners))
+    comptime if PAIRLOGIT_GROUP_FUSED:
+        # the group layout (`pair_logit_group.mojo`): one value partial and
+        # two magnitudes per GROUP
+        if objective == OBJECTIVE_PAIR_LOGIT and len(group_sizes) > part_blocks:
+            part_blocks = len(group_sizes)
     var fv_part = ctx.enqueue_create_buffer[DType.float32](part_blocks)
     var mag_part = ctx.enqueue_create_buffer[DType.float32](
         2 * part_blocks
@@ -1927,11 +1934,28 @@ def fit_with_test(
                 " searcher at one permutation with no eval set; this fit asked"
                 " for another arm"
             )
-        pair_buffers = Optional(
-            make_pairwise_target_buffers(
-                ctx, pair_winners, pair_losers, pair_weights, n_rows
+        comptime if PAIRLOGIT_GROUP_FUSED:
+            if len(pair_winners) == 0:
+                # generated pairs: the group layout, enumerated on the device
+                # from the grades, no pair list (`pair_logit_group.mojo`);
+                # `train` left the sample weights in `weights` for it
+                pair_buffers = Optional(
+                    make_pairwise_group_buffers(
+                        ctx, group_sizes, n_rows, targets, weights
+                    )
+                )
+            else:
+                pair_buffers = Optional(
+                    make_pairwise_target_buffers(
+                        ctx, pair_winners, pair_losers, pair_weights, n_rows
+                    )
+                )
+        else:
+            pair_buffers = Optional(
+                make_pairwise_target_buffers(
+                    ctx, pair_winners, pair_losers, pair_weights, n_rows
+                )
             )
-        )
         # `ComputeStats`' PairLogit weight (`querywise_targets_impl.h:98-101`)
         loss_norm = pair_buffers.value().pairs_total_weight
     # ---- the SAMPLED-PERMUTATION querywise target (YetiRank) ----
@@ -2366,6 +2390,10 @@ def fit_with_test(
         var mag_blocks = fv_blocks
         if is_pair_logit:
             fv_blocks = pair_buffers.value().blocks()
+            comptime if PAIRLOGIT_GROUP_FUSED:
+                # the group layout's magnitudes are per group too
+                if pair_buffers.value().n_pairs < 0:
+                    mag_blocks = fv_blocks
         ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
             fv_part.unsafe_ptr(), Int32(fv_blocks), fv.unsafe_ptr(),
             grid_dim=1, block_dim=256,

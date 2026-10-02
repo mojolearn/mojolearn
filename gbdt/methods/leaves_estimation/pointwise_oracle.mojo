@@ -127,8 +127,10 @@ from gbdt.targets.kernel.query_rmse import (
 )
 from gbdt.targets.kernel.pair_logit import (
     PairwiseTargetBuffers,
+    launch_pair_logit_estimation_from_search,
     launch_pair_logit_with,
 )
+from gbdt.targets.kernel.pair_logit_group import PAIRLOGIT_EST_REUSE
 from gbdt.targets.kernel.yeti_rank import (
     YetiRankTargetBuffers,
     launch_yeti_rank_with,
@@ -611,11 +613,33 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                         self.d_mag_dummy, False,
                     )
             elif self.pairs.__bool__():
-                launch_pair_logit_with[True, False](
-                    self.ctx, self.pairs.value(), self.d_cursor, True,
-                    self.d_eval_stats, self.d_fv, True,
-                    self.d_mag_dummy, False,
-                )
+                comptime if PAIRLOGIT_EST_REUSE:
+                    # FAST Apple: the tree's search call left its per-row
+                    # sums at this same point (`PAIRLOGIT_EST_REUSE`, the
+                    # YetiRank model); the search-point flag is the shared
+                    # one, cleared by any move that shifts a leaf
+                    var pair_reuse = (
+                        self.yeti_at_search_point
+                        and self.pairs.value().n_pairs < 0
+                    )
+                    self.yeti_at_search_point = False
+                    if pair_reuse:
+                        launch_pair_logit_estimation_from_search(
+                            self.ctx, self.pairs.value(),
+                            self.d_eval_stats, self.d_fv, True,
+                        )
+                    else:
+                        launch_pair_logit_with[True, False](
+                            self.ctx, self.pairs.value(), self.d_cursor, True,
+                            self.d_eval_stats, self.d_fv, True,
+                            self.d_mag_dummy, False,
+                        )
+                else:
+                    launch_pair_logit_with[True, False](
+                        self.ctx, self.pairs.value(), self.d_cursor, True,
+                        self.d_eval_stats, self.d_fv, True,
+                        self.d_mag_dummy, False,
+                    )
             elif self.query.__bool__():
                 launch_query_rmse_with[True](
                     self.ctx, self.query.value(), self.d_cursor, True,
