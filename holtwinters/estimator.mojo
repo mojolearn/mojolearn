@@ -472,7 +472,7 @@ comptime HW_PREDICT_TPB = 256
 
 
 def hw_predict_in_sample_kernel(
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     comps: MutPointer[Float32, MutAnyOrigin],
     components_len_in: Int64,
     bs_in: Int64,
@@ -492,7 +492,7 @@ def hw_predict_in_sample_kernel(
     var s = idx - k * bs
     var t = Int(start_in) + k
     if t < 2 * f:
-        out.unsafe_store(idx, bitcast[DType.float32](UInt32(0x7FC00000)))
+        dst.unsafe_store(idx, bitcast[DType.float32](UInt32(0x7FC00000)))
         return
     var i = t - f
     var leveltrend = ftz(
@@ -500,9 +500,9 @@ def hw_predict_in_sample_kernel(
     )
     var stmp = comps.unsafe_load(2 * cl + s + (i - f) * bs)
     if additive_in != 0:
-        out.unsafe_store(idx, ftz(leveltrend + stmp))
+        dst.unsafe_store(idx, ftz(leveltrend + stmp))
     else:
-        out.unsafe_store(idx, ftz(leveltrend * stmp))
+        dst.unsafe_store(idx, ftz(leveltrend * stmp))
 
 
 def holtwinters_predict_ptr(
