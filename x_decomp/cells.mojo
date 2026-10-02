@@ -1323,6 +1323,123 @@ def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans
 comptime ORTH_RANK_TOL2 = Float32(2.3283064365386963e-10)
 
 
+# ------------------------------------------------------------------ trisolve
+# The right-looking triangular solves on an LU factor (lane neural-pass134,
+# LocallyLinearEmbedding's shift-invert): each solved row is applied to the
+# rows it feeds at once, so a cell's chain runs in the order its operands
+# finish (ascending j below the diagonal, DESCENDING j above it). getrs's
+# ascending back substitution (`lu_solve_serial`, DEVIATION 5308) is one
+# n^2 / 2 chain per column; this order blocks on the device (a diagonal
+# block, then every row it feeds a cell at a time) with the same chains.
+# tri: 0 = unit L forward (coef lu[i, j]), 1 = U backward (lu[i, j], divide),
+# 2 = U^T forward (lu[j, i], divide), 3 = unit L^T backward (lu[j, i]).
+
+
+@always_inline
+def trs_coef(lu: F32Ptr, n: Int, tri: Int, i: Int, j: Int) -> Float32:
+    return lu.unsafe_load(j * n + i) if tri >= 2 else lu.unsafe_load(i * n + j)
+
+
+@always_inline
+def trs_divides(tri: Int) -> Bool:
+    return tri == 1 or tri == 2
+
+
+@always_inline
+def trs_step(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, i: Int, j: Int, c: Int):
+    """b[i, c] -= coef(i, j) b[j, c], one fused multiply-add (b[j] final)."""
+    b.unsafe_store(i * nrhs + c, ftz(identical_mul_add(
+        -ftz(trs_coef(lu, n, tri, i, j)), ftz(b.unsafe_load(j * nrhs + c)), ftz(b.unsafe_load(i * nrhs + c)))))
+
+
+@always_inline
+def trs_div(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, j: Int, c: Int):
+    """b[j, c] /= the diagonal (every step into row j applied)."""
+    b.unsafe_store(j * nrhs + c, div0(ftz(b.unsafe_load(j * nrhs + c)), lu.unsafe_load(j * n + j)))
+
+
+def trs_block_col(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, lo: Int, hi: Int, c: Int):
+    """Column c of the diagonal block [lo, hi): each row finished in turn
+    (forward ascending, backward descending) and applied to the block's
+    later rows."""
+    if tri == 0 or tri == 2:
+        for j in range(lo, hi):
+            if trs_divides(tri):
+                trs_div(lu, b, n, nrhs, j, c)
+            for i in range(j + 1, hi):
+                trs_step(lu, b, n, nrhs, tri, i, j, c)
+    else:
+        for jj in range(hi - lo):
+            var j = hi - 1 - jj
+            if trs_divides(tri):
+                trs_div(lu, b, n, nrhs, j, c)
+            for i in range(lo, j):
+                trs_step(lu, b, n, nrhs, tri, i, j, c)
+
+
+def trs_feed_cell(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, lo: Int, hi: Int, i: Int, c: Int):
+    """Cell (i, c) outside the block [lo, hi) receives the block's rows in
+    the order they finished: one register chain, stored once."""
+    var acc = ftz(b.unsafe_load(i * nrhs + c))
+    if tri == 0 or tri == 2:
+        for j in range(lo, hi):
+            acc = ftz(identical_mul_add(-ftz(trs_coef(lu, n, tri, i, j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+    else:
+        for jj in range(hi - lo):
+            var j = hi - 1 - jj
+            acc = ftz(identical_mul_add(-ftz(trs_coef(lu, n, tri, i, j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+    b.unsafe_store(i * nrhs + c, acc)
+
+
+def trs_tri_serial(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int):
+    """One triangle, every column: the reference walk (one row at a time,
+    each applied to every row it feeds, columns innermost)."""
+    if tri == 0 or tri == 2:
+        for j in range(n):
+            for c in range(nrhs):
+                if trs_divides(tri):
+                    trs_div(lu, b, n, nrhs, j, c)
+            for i in range(j + 1, n):
+                for c in range(nrhs):
+                    trs_step(lu, b, n, nrhs, tri, i, j, c)
+    else:
+        for jj in range(n):
+            var j = n - 1 - jj
+            for c in range(nrhs):
+                if trs_divides(tri):
+                    trs_div(lu, b, n, nrhs, j, c)
+            for i in range(j):
+                for c in range(nrhs):
+                    trs_step(lu, b, n, nrhs, tri, i, j, c)
+
+
+def trs_gather(src: F32Ptr, idx: F32Ptr, dst: F32Ptr, nrhs: Int, i: Int, c: Int):
+    """dst[i, c] = src[idx[i], c] (idx holds row numbers as floats, exact
+    below 2^24)."""
+    dst.unsafe_store(i * nrhs + c, src.unsafe_load(Int(idx.unsafe_load(i)) * nrhs + c))
+
+
+def trisolve_serial(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, tmp: F32Ptr, n: Int, nrhs: Int, trans: Int):
+    """trans 0: dst = U^-1 L^-1 (src gathered by idx), F0^-1 B with idx the
+    pivots' row order; trans 1: tmp = L^-T U^-T src, dst = tmp gathered by
+    idx, F0^-T B with idx that order's inverse. The right-looking order
+    above (`trs_tri_serial`)."""
+    if trans == 0:
+        for i in range(n):
+            for c in range(nrhs):
+                trs_gather(src, idx, dst, nrhs, i, c)
+        trs_tri_serial(lu, dst, n, nrhs, 0)
+        trs_tri_serial(lu, dst, n, nrhs, 1)
+        return
+    for q in range(n * nrhs):
+        tmp.unsafe_store(q, src.unsafe_load(q))
+    trs_tri_serial(lu, tmp, n, nrhs, 2)
+    trs_tri_serial(lu, tmp, n, nrhs, 3)
+    for i in range(n):
+        for c in range(nrhs):
+            trs_gather(tmp, idx, dst, nrhs, i, c)
+
+
 def orth_rank_guard(R: F32Ptr, l: Int):
     """Zero R[j, j] for every numerically dependent column j (DEVIATION
     5318), so trsm_row's div0 makes its Q column 0. The column is scaled by

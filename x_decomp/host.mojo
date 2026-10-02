@@ -11,6 +11,9 @@ writes outputs no other task writes; the O(n^3) cells (gemm, sqdist), the
 QR slices and the shortest-path rows have the host spellings of
 x_decomp/host_simd.mojo, host_qr.mojo and host_graph.mojo (same words).
 So the bits are the same at every thread count."""
+from x_decomp.rr import host_eigh_rr
+
+comptime RR_EIGH_SWEEPS = 30  # x_decomp/device.mojo PJ_EIGH_SWEEPS
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -18,8 +21,10 @@ from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
 from decomposition.host.linalg_public import eigh_ascending, host_eigh, host_qr_r
 from decomposition.host.pca_oracle import host_sign_flip
 from checks.numerics import ftz
+from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
+    trisolve_serial,
     F32Ptr,
     absmax_sign_cell,
     FOLD_BLOCK,
@@ -93,8 +98,21 @@ def xd_parallel[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
         for i in range(g * chunk, min(n, (g + 1) * chunk)):
             func(i)
 
-    for g in range(groups):
-        group(g)
+    # lane/neural-pass79 (2026-10-01): the groups now run on the host pool
+    # (core/host_parallel.mojo, in the caller's floating-point environment);
+    # until this lane they ran one after another on the calling thread, so
+    # every decomp host op was single threaded. Every task body writes only
+    # its own outputs and per-task scratch (rows, blocks, slices; audited),
+    # so the bits are the serial loop's.
+    # `-D MOJOLEARN_XDECOMP_HOST_SERIAL=1` restores the serial loop.
+    comptime if is_defined["MOJOLEARN_XDECOMP_HOST_SERIAL"]():
+        for g in range(groups):
+            group(g)
+        return
+    if groups <= 1:
+        group(0)
+        return
+    host_parallelize(group, groups)
 
 
 @fieldwise_init
@@ -281,6 +299,12 @@ struct HostExec(Exec):
             xd_parallel(elim, (rows + LU_ROWS - 1) // LU_ROWS)
 
     @staticmethod
+    def trisolve(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, n: Int, nrhs: Int, trans: Int) raises:
+        var tmp = List[Float32](unsafe_uninit_length=max(n * nrhs, 1))
+        trisolve_serial(lu, idx, src, dst, F32Ptr(unsafe_from_address=Int(tmp.unsafe_ptr())), n, nrhs, trans)
+        _ = tmp^
+
+    @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
         # lane neural-pass39: the block-interleaved walk of the same cells
         # (x_decomp/lu_host.mojo); MOJOLEARN_XD_LU_SOLVE_SERIAL=1 keeps the loop
@@ -300,6 +324,25 @@ struct HostExec(Exec):
         var m = List[Float32](capacity=n * n)
         for i in range(n * n):
             m.append(a.unsafe_load(i))
+        # lane/neural-pass104: the round-robin Jacobi first, the device's
+        # rounds and test (x_decomp/rr.mojo); the cyclic solve below when it
+        # does not converge (the device's fallback too)
+        comptime if not is_defined["MOJOLEARN_XD_EIGH_CYCLIC"]():
+            if n >= 2:
+                var ar = m.copy()
+                var vr = List[Float32](length=n * n, fill=Float32(0.0))
+                var rr = host_eigh_rr(ar, vr, n, RR_EIGH_SWEEPS, Float32(JACOBI_TOL))
+                if rr[0]:
+                    host_sign_flip(vr, n)
+                    var diag_rr = List[Float32]()
+                    for i in range(n):
+                        diag_rr.append(ar[i * n + i])
+                    var got_rr = eigh_ascending(diag_rr, vr, n, True, rr[1])
+                    for i in range(n):
+                        w.unsafe_store(i, got_rr.w[i])
+                    for i in range(n * n):
+                        v.unsafe_store(i, got_rr.v[i])
+                    return
         # host_eigh's steps, the rotations of x_decomp/host_jacobi.mojo
         var fe = fast_jacobi_eigh(m, n, JACOBI_SWEEPS, Float32(JACOBI_TOL))
         if not fe.converged:

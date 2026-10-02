@@ -595,6 +595,22 @@ class _Kit:
         self.b.x_decomp_lu(lu.addr, piv.buffer_info()[0], info.addr, [n])
         return lu, piv, int(info.s[0])
 
+    def trisolve(self, lu, idx, B, trans=0):
+        """The right-looking triangular solves on an LU factor (x_decomp/
+        cells.mojo `trisolve_serial`): trans 0, U^-1 L^-1 B[idx] (F0^-1 B
+        with idx the pivots' row order); trans 1, (L^-T U^-T B)[idx]
+        (F0^-T B with idx that order's inverse). idx is an n x 1 matrix of
+        row numbers."""
+        n, w = lu.r, B.c
+        if n * w and self._use(lu, B):
+            out = self._dout(n, w)
+            self.b.x_decomp_dev_trisolve(self._did(lu), self._did(idx), self._did(B), out._d.id, [n, w, int(trans)])
+            return out
+        out = _M.zeros(n, w)
+        if n * w:
+            self.b.x_decomp_trisolve(lu.addr, idx.addr, B.addr, out.addr, [n, w, int(trans)])
+        return out
+
     def lu_solve(self, lu, piv, B, trans=0):
         out = B.copy()
         p = [lu.r, B.c, trans] if trans else [lu.r, B.c]
@@ -3128,15 +3144,22 @@ def _lanczos_top(k, A, nc):
     return th.take_cols(top), V
 
 
-def _top_eig(k, A, nc, fast=False):
+def _top_eig(k, A, nc, topk=False):
     """The nc LARGEST eigenpairs of symmetric A (descending), vectors in
     columns, each column signed by sklearn's svd_flip(u_based_decision=True).
-    fast (FAST mode, eigen_solver 'auto'): the Lanczos route under sklearn's
-    ARPACK policy (_lanczos_top), the exact dense solve otherwise."""
+    topk: the Lanczos route under sklearn's ARPACK policy (_lanczos_top), the
+    exact dense solve otherwise.
+
+    lane/neural-pass105 (Andrew, 2026-10-01: Isomap / ClassicalMDS /
+    KernelPCA-style top-k uses take a deterministic top-k solver): the route
+    is on in every mode and on every vendor. Every step is a kit primitive
+    (the IDENTICAL GEMM, element-wise ops, the small eigh) or Python float64
+    scalar arithmetic, in a fixed order with a fixed seeded start, so the
+    words agree across vendors. MOJOLEARN_XD_LANCZOS=0 keeps the exact solve."""
     n = A.r
     got = None
-    if fast and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC and _os.environ.get(
-            "MOJOLEARN_XD_LANCZOS", "1" if _kit_vendor(k) == "metal" else "0") == "1":
+    if topk and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC and _os.environ.get(
+            "MOJOLEARN_XD_LANCZOS", "1") == "1":
         got = _lanczos_top(k, A, nc)
     if got is not None:
         w, V = got
@@ -3262,7 +3285,7 @@ class Isomap(_Base):
         self.dist_matrix_ = D.out()
         G = k.ew("scale", k.ew("sq", D), s=-0.5)
         Kc, self._k_col, self._k_all = _center_kernel(k, G)
-        w, V = _top_eig(k, Kc, int(self.n_components), fast=self.numeric_mode_ == "fast")
+        w, V = _top_eig(k, Kc, int(self.n_components), topk=self.eigen_solver in ("auto", "arpack"))
         self.eigenvalues_m_ = w
         self.eigenvectors_m_ = V
         self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
@@ -3356,7 +3379,7 @@ class ClassicalMDS(_Base):
             D2 = k.ew("sq", Dm)
             self.dissimilarity_matrix_ = Dm.out()
         B, _, _ = _center_kernel(k, k.ew("scale", D2, s=-0.5))
-        w, V = _top_eig(k, B, int(self.n_components), fast=self.numeric_mode_ == "fast")
+        w, V = _top_eig(k, B, int(self.n_components), topk=True)
         self.eigenvalues_ = w.out((w.c,))
         self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
         self.embedding_ = self.embedding_m_.out()
@@ -3566,8 +3589,6 @@ class MDS(_Base):
 #: square); 'ltsa', 'hessian' and 'modified' keep the dense route.
 _LLE_ITER_MIN_N = 200
 _LLE_ITER_MAX_K = 10
-#: The triangular inverse's leaf size (the LU solve against the identity).
-_LLE_TRI_LEAF = 64
 #: Converged: the sine of the largest principal angle between two successive
 #: wanted Ritz subspaces is at most _LLE_SUBSPACE_TOL, or, under
 #: _LLE_STALL_TOL, it stopped shrinking (float32's floor for this factor).
@@ -3583,45 +3604,6 @@ _LLE_NULL_GUARD = 1e-3
 #: constant, and any basis of it is the answer (sklearn's ARPACK returns
 #: its own); the iteration stops there from its third step.
 _LLE_NULL_FLOOR = 8.0
-
-
-def _lle_tri_inv(k, R):
-    """The inverse of an upper triangular R (zeros below the diagonal), by
-    blocks: [[A, B], [0, D]]^-1 = [[A^-1, -A^-1 B D^-1], [0, D^-1]], split
-    at n // 2; a leaf of at most _LLE_TRI_LEAF rows is the LU solve against
-    the identity with the identity pivot (L's unit diagonal and R's zero
-    lower part: plain back substitution, sums ascending)."""
-    n = R.r
-    if n <= _LLE_TRI_LEAF:
-        return k.lu_solve(R, array.array("i", range(n)), _eye(n))
-    h = n // 2
-    w = n - h
-    top = R.rows(0, h)
-    Ai = _lle_tri_inv(k, top.cols(0, h))
-    Di = _lle_tri_inv(k, R.rows(h, n).cols(h, n))
-    Bi = k.ew("scale", k.mm(Ai, k.mm(top.cols(h, n), Di)), s=-1.0)
-    a, b, d = Ai.s, Bi.s, Di.s
-    out = _M.zeros(n, n)
-    s = out.s
-    for i in range(h):
-        s[i * n:i * n + h] = a[i * h:(i + 1) * h]
-        s[i * n + h:(i + 1) * n] = b[i * w:(i + 1) * w]
-    for i in range(w):
-        s[(h + i) * n + h:(h + i + 1) * n] = d[i * w:(i + 1) * w]
-    return out
-
-
-def _lle_upper(s, n, unit=False):
-    """The upper triangle of the row-major n x n store `s` (zeros below the
-    diagonal; `unit`: ones on it) as an _M."""
-    out = array.array("f", s)
-    zero = array.array("f", [0.0]) * n
-    for i in range(1, n):
-        out[i * n:i * n + i] = zero[:i]
-    if unit:
-        for i in range(n):
-            out[i * n + i] = 1.0
-    return _M(out, n, n)
 
 
 def _lle_orth(k, Z):
@@ -3651,7 +3633,8 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     far under its rms row norm). F0 = [F^ | u] is square and, when
     u is not orthogonal to z (the unit left null vector of F^), nonsingular:
     ONE LU (the device's parallel right-looking getrf; a pivot under float32
-    resolution is set to eps times the largest), U^-1 and L^-1 by blocks. z = F0^-T e_{n-1}, normalized. For x in R^{n-1},
+    resolution is set to eps times the largest); every solve against it is `trisolve` (right-looking substitution
+    on the device, no inverse formed). z = F0^-T e_{n-1}, normalized. For x in R^{n-1},
     (F^T F^)^-1 x = the first n - 1 entries of F0^-1 (P_z F0^-T [x; 0]),
     P_z = I - z z^T: F0^-T [x; 0] solves F^^T y = x, P_z takes its
     minimum-norm part (in range(F^)), and F0^-1 solves F^ w = that exactly.
@@ -3705,8 +3688,6 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
         d = ls[i * n + i]
         if abs(d) < tiny:
             ls[i * n + i] = -tiny if d < 0 else tiny
-    Ui = _lle_tri_inv(k, _lle_upper(ls, n))              # U^-1
-    LiT = _lle_tri_inv(k, _lle_upper(lu.T.s, n, True))   # (L^T)^-1 = (L^-1)^T
     perm = list(range(n))
     for i in range(n):
         j = int(piv[i])
@@ -3714,12 +3695,14 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     inv = [0] * n
     for i, j in enumerate(perm):
         inv[j] = i
+    pm = _M.of([float(v) for v in perm], n, 1)
+    im = _M.of([float(v) for v in inv], n, 1)
 
     def solve(B):               # F0^-1 B = U^-1 L^-1 P B
-        return k.mm(Ui, k.mm(LiT, B.take_rows(perm), ta=True))
+        return k.trisolve(lu, pm, B)
 
     def solve_t(B):             # F0^-T B = P^T L^-T U^-T B
-        return k.mm(LiT, k.mm(Ui, B, ta=True)).take_rows(inv)
+        return k.trisolve(lu, im, B, 1)
 
     en = _M.zeros(n, 1)
     en.s[n - 1] = 1.0

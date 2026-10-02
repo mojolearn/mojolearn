@@ -14,6 +14,7 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_sqrt
 
 from x_cluster.bodies import (
@@ -144,6 +145,114 @@ def _meanshift_kernel(
     var t = _tid()
     if t < Int(ns):
         meanshift_seed(x, Int(n), Int(d), bw, stop, Int(max_iter), centers, scratch, intensity, iters, t)
+
+
+# lane/neural-pass111 (2026-10-02): one BLOCK per seed, IDENTICAL bits.
+# `_meanshift_kernel` walks all n rows of every shift on one thread per
+# seed: istella 10K x 220 with bin seeding is 18 seeds, so 18 threads ran
+# the whole fit (M4: 10.1 s of the 10.9 s fit; sklearn 1.7 s). Here a
+# block takes a seed: per tile of MST_T rows every thread tests its rows
+# against the bandwidth (`sq_dist_rows`' chain on the center, which lives
+# in threadgroup memory), then thread f folds feature f over the tile's
+# rows within the bandwidth, ascending, as `meanshift_seed` does; thread 0
+# runs the quotients, the shift and the stop test in feature order. Every
+# word is `meanshift_seed`'s. d > MST_MAX_D (or a page that does not fit)
+# runs `_meanshift_kernel`; `MOJOLEARN_MEANSHIFT_TEAM=0` restores it.
+comptime MST_TPB = 256
+comptime MST_T = 1024
+comptime MST_MAX_D = 1024
+comptime MST_U = 16
+comptime MST_BYTES = (2 * MST_MAX_D + MST_T + MST_TPB + 4) * 4
+comptime MEANSHIFT_TEAM = lib_smem_page_fits_for[TARGET_COLUMN, MST_BYTES]()
+
+
+def _meanshift_team_kernel(
+    x: FPtr, n: Int32, d: Int32, bw: Float32, stop: Float32, max_iter: Int32,
+    centers: FPtr, intensity: IPtr, iters: IPtr,
+):
+    var s = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var D = Int(d)
+    var cen = stack_allocation[MST_MAX_D, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sums = stack_allocation[MST_MAX_D, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var flag = stack_allocation[MST_T, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var cnts = stack_allocation[MST_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var state = stack_allocation[4, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    for f in range(tid, D, MST_TPB):
+        cen[f] = centers[s * D + f]
+    if tid == 0:
+        state[0] = Int32(0)  # 1: the seed is done
+        state[1] = Int32(0)  # completed shifts
+        state[2] = Int32(0)  # rows within the bandwidth at the last shift
+    barrier()
+    while True:
+        for f in range(tid, D, MST_TPB):
+            sums[f] = Float32(0)
+        var mine = 0
+        var t0 = 0
+        while t0 < N:
+            var cnt = min(MST_T, N - t0)
+            barrier()
+            for r in range(tid, cnt, MST_TPB):
+                var p = t0 + r
+                var acc = Float32(0)
+                for f in range(D):
+                    var t = ftz(ftz(cen[f]) - ftz(x[p * D + f]))
+                    acc = ftz(acc + ftz(identical_mul(t, t)))
+                var w = identical_sqrt(acc) <= bw
+                flag[r] = Int32(1) if w else Int32(0)
+                if w:
+                    mine += 1
+            barrier()
+            for f in range(tid, D, MST_TPB):
+                var a = sums[f]
+                var r = 0
+                while r + MST_U <= cnt:
+                    var bv = SIMD[DType.float32, MST_U]()
+                    var bf = SIMD[DType.int32, MST_U]()
+                    comptime for u in range(MST_U):
+                        bf[u] = flag[r + u]
+                        bv[u] = x[(t0 + r + u) * D + f]
+                    comptime for u in range(MST_U):
+                        if bf[u] != Int32(0):
+                            a = ftz(a + ftz(bv[u]))
+                    r += MST_U
+                while r < cnt:
+                    if flag[r] != Int32(0):
+                        a = ftz(a + ftz(x[(t0 + r) * D + f]))
+                    r += 1
+                sums[f] = a
+            t0 += cnt
+        cnts[tid] = Int32(mine)
+        barrier()
+        if tid == 0:
+            var within = 0
+            for u in range(MST_TPB):
+                within += Int(cnts[u])
+            state[2] = Int32(within)
+            if within == 0:
+                state[0] = Int32(1)
+            else:
+                var shift2 = Float32(0)
+                var c = Float32(within)
+                for f in range(D):
+                    var m = ftz(identical_div(sums[f], c))
+                    var t = ftz(m - cen[f])
+                    shift2 = ftz(shift2 + ftz(identical_mul(t, t)))
+                    cen[f] = m
+                if identical_sqrt(shift2) <= stop or Int(state[1]) == Int(max_iter):
+                    state[0] = Int32(1)
+                else:
+                    state[1] = state[1] + Int32(1)
+        barrier()
+        if state[0] != Int32(0):
+            break
+    for f in range(tid, D, MST_TPB):
+        centers[s * D + f] = cen[f]
+    if tid == 0:
+        intensity[s] = state[2]
+        iters[s] = state[1]
 
 
 # FAST ONLY (lane cluster-apple3), d <= MSB_MAX_D, OPT-IN
@@ -1170,6 +1279,15 @@ struct DeviceOps(ClusterOps):
                     self._fp(x), Int32(n), Int32(d), bw, stop, Int32(max_iter),
                     self._fp(centers), self._ip(intensity), self._ip(iters),
                     grid_dim=ns, block_dim=MSB_TPB,
+                )
+                self._ph1("meanshift")
+                return
+        comptime if MEANSHIFT_TEAM:
+            if d <= MST_MAX_D and ns > 0 and getenv("MOJOLEARN_MEANSHIFT_TEAM") != "0":
+                self.ctx.enqueue_function[_meanshift_team_kernel](
+                    self._fp(x), Int32(n), Int32(d), bw, stop, Int32(max_iter),
+                    self._fp(centers), self._ip(intensity), self._ip(iters),
+                    grid_dim=ns, block_dim=MST_TPB,
                 )
                 self._ph1("meanshift")
                 return

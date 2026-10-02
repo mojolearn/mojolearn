@@ -3,6 +3,7 @@
 """DevExec: the decomp lane's cells on the GPU. One thread per output, the
 cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
+from std.sys.compile import is_defined
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -21,6 +22,9 @@ from decomposition.linalg_public_device import device_eigh, device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.cells import (
     lu_solve_col,
+    trs_block_col,
+    trs_feed_cell,
+    trs_gather,
     div0,
     sqrt0,
     sub,
@@ -1103,6 +1107,78 @@ def colsum_scratch(n: Int, d: Int) -> Int:
     return nb * d if nb > 1 else 0
 
 
+#: The device triangular solve's diagonal block (rows a block finishes on
+#: one thread per column before the rows it feeds take its steps).
+comptime TRS_BLOCK = 64
+
+
+def trs_gather_kernel(src: F32Ptr, idx: F32Ptr, dst: F32Ptr, n: Int32, nrhs: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(n) * Int(nrhs):
+        trs_gather(src, idx, dst, Int(nrhs), t // Int(nrhs), t % Int(nrhs))
+
+
+def trs_copy_kernel(src: F32Ptr, dst: F32Ptr, count: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(count):
+        dst.unsafe_store(t, src.unsafe_load(t))
+
+
+def trs_block_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, lo: Int32, hi: Int32):
+    """`trs_block_col`, one thread per column."""
+    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if c < Int(nrhs):
+        trs_block_col(lu, b, Int(n), Int(nrhs), Int(tri), Int(lo), Int(hi), c)
+
+
+def trs_feed_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, lo: Int32, hi: Int32):
+    """`trs_feed_cell` for every cell the block feeds: rows [hi, n) going
+    forward, rows [0, lo) going backward."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var w = Int(nrhs)
+    var fwd = Int(tri) == 0 or Int(tri) == 2
+    var rows = Int(n) - Int(hi) if fwd else Int(lo)
+    if t < rows * w:
+        var i = t // w + (Int(hi) if fwd else 0)
+        trs_feed_cell(lu, b, Int(n), w, Int(tri), Int(lo), Int(hi), i, t % w)
+
+
+def launch_trs_tri(ctx: DeviceContext, lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int) raises:
+    """One triangle by TRS_BLOCK-row blocks in the order they finish: the
+    same chains as `trs_tri_serial`."""
+    var nblk = (n + TRS_BLOCK - 1) // TRS_BLOCK
+    for q in range(nblk):
+        var bq = q if (tri == 0 or tri == 2) else nblk - 1 - q
+        var lo = bq * TRS_BLOCK
+        var hi = min(n, lo + TRS_BLOCK)
+        ctx.enqueue_function[trs_block_kernel](
+            lu, b, Int32(n), Int32(nrhs), Int32(tri), Int32(lo), Int32(hi), grid_dim=_blocks(nrhs), block_dim=TPB
+        )
+        var rows = n - hi if (tri == 0 or tri == 2) else lo
+        if rows > 0:
+            ctx.enqueue_function[trs_feed_kernel](
+                lu, b, Int32(n), Int32(nrhs), Int32(tri), Int32(lo), Int32(hi), grid_dim=_blocks(rows * nrhs), block_dim=TPB
+            )
+
+
+def launch_trisolve(
+    ctx: DeviceContext, lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, tmp: F32Ptr, n: Int, nrhs: Int, trans: Int
+) raises:
+    """`trisolve_serial` on device pointers, enqueued (no sync)."""
+    var cells = n * nrhs
+    if cells <= 0:
+        return
+    if trans == 0:
+        ctx.enqueue_function[trs_gather_kernel](src, idx, dst, Int32(n), Int32(nrhs), grid_dim=_blocks(cells), block_dim=TPB)
+        launch_trs_tri(ctx, lu, dst, n, nrhs, 0)
+        launch_trs_tri(ctx, lu, dst, n, nrhs, 1)
+        return
+    ctx.enqueue_function[trs_copy_kernel](src, tmp, Int32(cells), grid_dim=_blocks(cells), block_dim=TPB)
+    launch_trs_tri(ctx, lu, tmp, n, nrhs, 2)
+    launch_trs_tri(ctx, lu, tmp, n, nrhs, 3)
+    ctx.enqueue_function[trs_gather_kernel](tmp, idx, dst, Int32(n), Int32(nrhs), grid_dim=_blocks(cells), block_dim=TPB)
+
+
 def launch_colsum(ctx: DeviceContext, a: F32Ptr, dst: F32Ptr, p: F32Ptr, n: Int, d: Int) raises:
     var nb = (n + FOLD_BLOCK - 1) // FOLD_BLOCK
     if nb > 1:
@@ -1428,6 +1504,25 @@ struct DevExec(Exec):
         _ = ctx^
 
     @staticmethod
+    def trisolve(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, n: Int, nrhs: Int, trans: Int) raises:
+        var ctx = xd_ctx()
+        var dl = _up(ctx, lu, n * n)
+        var di = _up(ctx, idx, n)
+        var ds = _up(ctx, src, n * nrhs)
+        var dd = ctx.enqueue_create_buffer[DType.float32](max(n * nrhs, 1))
+        var dt = ctx.enqueue_create_buffer[DType.float32](max(n * nrhs, 1))
+        launch_trisolve(ctx, _p(dl), _p(di), _p(ds), _p(dd), _p(dt), n, nrhs, trans)
+        _down(ctx, dd, dst, n * nrhs)
+        ctx.synchronize()
+        _ = dl^
+        _ = di^
+        _ = ds^
+        _ = dd^
+        _ = dt^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
         if xd_lu_solve_on_host(n):
             # lane neural-pass39: the host walk of the same cells (the device
@@ -1508,10 +1603,19 @@ struct DevExec(Exec):
         if n <= host_eigh_max():
             HostExec.eigh(a, w, v, n)
             return
-        var lo = pj_eigh_min()
-        if lo > 0 and n >= lo:
-            if DevExec._eigh_par(a, w, v, n):
+        # lane/neural-pass104 (Andrew, 2026-10-01): the round-robin Jacobi is
+        # THE eigh order (x_decomp/rr.mojo, pinned; the host runs the same
+        # rounds); a solve it does not converge falls back to the cyclic one,
+        # as the host does. `-D MOJOLEARN_XD_EIGH_CYCLIC=1` keeps the cyclic
+        # order (and MOJOLEARN_XD_PJ_EIGH_MIN its old opt-in threshold).
+        comptime if not is_defined["MOJOLEARN_XD_EIGH_CYCLIC"]():
+            if n >= 2 and DevExec._eigh_par(a, w, v, n):
                 return
+        else:
+            var lo = pj_eigh_min()
+            if lo > 0 and n >= lo:
+                if DevExec._eigh_par(a, w, v, n):
+                    return
         if jacobi2_eigh_on():
             DevExec._eigh2(a, w, v, n)
             return
