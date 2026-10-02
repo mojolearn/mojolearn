@@ -120,10 +120,8 @@ _PLAIN_STR = frozenset((str,))
 def _plain_labels(labels):
     """'number' or 'str' when EVERY label is exactly a Python int, float or
     bool, or exactly a str (the type set, read in C); None for anything
-    else, an empty sequence included, and when MOJOLEARN_HOTPATH=python."""
-    from ._buffer import hotpath_enabled
-
-    if not labels or not hotpath_enabled():
+    else, an empty sequence included."""
+    if not labels:
         return None
     kinds = set(map(type, labels))
     if kinds <= _PLAIN_NUMBERS:
@@ -239,9 +237,8 @@ def _encode_label_list_native(y):
     takes the Python routine, as does an int outside int64 and anything
     over `_NATIVE_ENCODE_MAX_CLASSES`. NaN raises the same ValueError."""
     import array
-    from ._buffer import hotpath_enabled
 
-    if type(y) not in (list, tuple) or len(y) < _NATIVE_LIST_MIN or not hotpath_enabled():
+    if type(y) not in (list, tuple) or len(y) < _NATIVE_LIST_MIN:
         return None
     kinds = set(map(type, y))
     if kinds == {int}:
@@ -373,9 +370,6 @@ def _decode_labels_native(classes, codes, kind):
         # the rows. Widened by `Array.astype` they take the gather. A code
         # the gather refuses (negative: Python indexes from the END, so the
         # Python arm ANSWERS it) sends the call back to the Python arm.
-        from ._buffer import hotpath_enabled
-        if not hotpath_enabled():
-            return None
         try:
             return _decode_labels_native(classes, codes.astype("<i8"), kind)
         except ImportError:
@@ -432,30 +426,29 @@ def classes_from_member(member):
 
 
 def argmax_rows(scores):
-    """Row-wise first-max-wins argmax of an `[n_rows, n_cols]` `Array`
-    of float32 or float64 scores, as an int64 `Array`. O(rows * classes)
-    Python: the argmax over class counts the contract permits."""
+    """Row-wise first-max-wins argmax of an `[n_rows, n_cols]` block of
+    scores, as an int64 `Array`: the base binding's scan (DEVIATION 2500,
+    strict `>` from column 0, so ties keep the lowest column and a NaN
+    never replaces). Every input takes it: a non-`Array` buffer is wrapped,
+    an F-order block is laid out in C order, and integer scores are widened
+    to float64 (exact below 2**53, so the order and the ties are the same).
+    The per-row Python loop is gone (cpu-gpu-cleanup c-core)."""
+    if not isinstance(scores, Array):
+        from ._buffer import _materialize
+        scores, _ = _materialize(scores, "scores")
     n_rows, n_cols = scores.shape
-    if (isinstance(scores, Array) and scores.dtype in ("<f4", "<f8")
-            and scores._has_order("C") and n_rows and n_cols):
-        # DEVIATION 2500: the same first-max-wins scan in the base binding.
-        from ._buffer import _native, _output_store
-        fn = _native("argmax_rows_f32" if scores.dtype == "<f4" else "argmax_rows_f64")
-        store = _output_store("q", n_rows)
-        fn(scores._addr, n_rows, n_cols, store.buffer_info()[0])
-        return Array._owned(store, (n_rows,), "<i8", "C")
-    view = flat_view(scores)
-    out = []
-    for r in range(n_rows):
-        base = r * n_cols
-        best = 0
-        best_value = view[base]
-        for c in range(1, n_cols):
-            value = view[base + c]
-            if value > best_value:
-                best, best_value = c, value
-        out.append(best)
-    return Array.from_list(out, "<i8")
+    if not n_rows:
+        return Array.from_list([], "<i8")
+    if not n_cols:
+        raise ValueError("argmax_rows: scores have no columns")
+    if scores.dtype not in ("<f4", "<f8"):
+        scores = scores.astype("<f8")
+    scores = scores._as_c()
+    from ._buffer import _native, _output_store
+    fn = _native("argmax_rows_f32" if scores.dtype == "<f4" else "argmax_rows_f64")
+    store = _output_store("q", n_rows)
+    fn(scores._addr, n_rows, n_cols, store.buffer_info()[0])
+    return Array._owned(store, (n_rows,), "<i8", "C")
 
 
 def finite_integer_codes(arr):
