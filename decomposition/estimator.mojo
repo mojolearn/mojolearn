@@ -36,7 +36,13 @@ from max.gpu.host import DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer
 
-from checks.numerics import ftz, identical_mul
+from std.os import getenv
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul
+from core.gram_splitk import (
+    gram_splitk_applies,
+    gram_splitk_chunk_count,
+    gram_splitk_scratch_covers,
+)
 from decomposition.host.pca_oracle import tsvd_explained_finish
 from core.column_stats import (
     STATS_TPB,
@@ -74,8 +80,27 @@ def pca_fit_host(
     n_components: Int,
 ) raises -> Float64:
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
-    var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    # lane/apple-fast-pca-eig (2026-10-02), MOJOLEARN_PCA_FAST_NO_ALIAS=1, FAST
+    # only: when `compute_covariance` takes the fused split-K arm
+    # (`gram_splitk_applies`, the PCA board shape), `xa2` is never touched
+    # and `xa` is only the split-K partials scratch (`n_chunks * d * d`
+    # floats, `gram_splitk_scratch_covers`), yet both were allocated at
+    # n * d floats each (3.5 GB each at Istella's 4,000,000 x 220). The
+    # transpose arm (`gemm_tn`, not fused) keeps both at n * d.
+    var xa_cells = n_rows * n_features
+    var xa2_cells = n_rows * n_features
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        if String(getenv("MOJOLEARN_PCA_FAST_NO_ALIAS")) == "1":
+            if gram_splitk_applies(n_features, n_features, n_rows):
+                xa2_cells = 1
+                if gram_splitk_scratch_covers(n_features, n_rows):
+                    xa_cells = (
+                        gram_splitk_chunk_count() * n_features * n_features
+                    )
+                else:
+                    xa_cells = 1
+    var xa = ctx.enqueue_create_buffer[DType.float32](xa_cells)
+    var xa2 = ctx.enqueue_create_buffer[DType.float32](xa2_cells)
     var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
     var cov = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
