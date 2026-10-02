@@ -29,6 +29,7 @@ from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross
 from x_linear.ops import ld, st, ldi, fd, i2f, fa, fs, fm, fabs, shuffle, fmad, flog, fill, copy, row_dot, mean_of
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
+from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_prep, bayes_yvar_part
 from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score, kf_ff_solve
 from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
 from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
@@ -95,6 +96,7 @@ comptime X_LINEAR_BLOCKS_GRAM = (
 
 def fit_kernel(
     algo: Int32, x: FP, y: FP, n: Int32, d: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, tw: FP,
+    wf: IP, woff: Int32, nonce: Int32,
 ):
     """ONE block. A team fit runs on every thread of it; any other fit on
     thread 0 alone, as a team of one (x_linear/team.mojo)."""
@@ -105,6 +107,7 @@ def fit_kernel(
         fit_dispatch(device_team(tw, Int(n), bufs, own), a, x, y, Int(n), Int(d), ip, fp, res, fw, iw)
     elif Int(thread_idx.x) == 0:
         fit_dispatch(solo(tw, Int(n), bufs, own), a, x, y, Int(n), Int(d), ip, fp, res, fw, iw)
+    witness_end(wf, woff, nonce)
 
 
 def decision_kernel(x: FP, wb: FP, n: Int32, d: Int32, k: Int32, link: Int32, res: FP):
@@ -122,7 +125,7 @@ def _xg_blocks(count: Int) -> Int:
     return (count + XG_TPB - 1) // XG_TPB
 
 
-def xg_means_kernel(x: FP, n: Int32, d: Int32, fi: Int32, fw: FP):
+def xg_means_kernel(x: FP, n: Int32, d: Int32, fi: Int32, fw: FP, wf: IP, woff: Int32, nonce: Int32):
     """`t_col_means` as a grid: thread j folds column j ascending
     (`fold_fa`) and divides by n, the same statements; zeros without an
     intercept, as `lars_fit` fills them."""
@@ -132,9 +135,11 @@ def xg_means_kernel(x: FP, n: Int32, d: Int32, fi: Int32, fw: FP):
             st(fw, j, fd(fold_fa(x, j, Int(d), Int(n)), i2f(Int(n))))
         else:
             st(fw, j, Float32(0))
+    witness_end(wf, woff, nonce)
 
 
-def xg_gram_kernel(x: FP, n: Int32, d: Int32, fw: FP):
+def xg_gram_kernel(x: FP, n: Int32, d: Int32, fw: FP, lo: Int32, cnt: Int32, src: FP, dst: FP,
+                   wf: IP, woff: Int32, nonce: Int32):
     """`t_centered_gram` as a grid (lane/neural-net-experiment, 2026-09-30,
     the classical pass): one thread per upper-triangle cell, each the same
     `chain_cfmad` over the rows ascending from the means in fw[0, d), into
@@ -150,10 +155,120 @@ def xg_gram_kernel(x: FP, n: Int32, d: Int32, fw: FP):
         var jk = upper_cell(c, dd)
         var j = jk[0]
         var k = jk[1]
-        var acc = chain_cfmad(x, j, dd, ld(fw, j), x, k, dd, ld(fw, k), Int(n))
-        st(fw, dd + j * dd + k, acc)
-        st(fw, dd + k * dd + j, acc)
+        # rows [lo, lo + cnt) resuming the cell's chain from `src` (lane/
+        # neural-pass131: the Apple slices; one slice of every row elsewhere)
+        var init = ld(src, dd + j * dd + k) if lo > 0 else Float32(0)
+        var acc = chain_cfmad(x, Int(lo) * dd + j, dd, ld(fw, j), x, Int(lo) * dd + k, dd, ld(fw, k), Int(cnt), init)
+        st(dst, dd + j * dd + k, acc)
+        st(dst, dd + k * dd + j, acc)
+    witness_end(wf, woff, nonce)
 
+
+
+# lane/neural-pass131 (2026-10-02): BayesianRidge's iterations with the sse
+# on the grid. The fit kernel ran every iteration's sse (a row pass: each
+# row's residual, then FOLD_BLOCK partials folded in order) on its one
+# block: the peer's L40S, istella 1M x 220 standardized (300 iterations):
+# 43.4 s, 141 ms an iteration. Here one block runs `bayes_prep` (the
+# statistics, the eigendecomposition, the first coefficients); then per
+# iteration a thread per row writes its residual (`_t_sse`'s statements),
+# a thread per block its partial (`_sse_part`), and one thread folds them
+# (`fold_parts`) and runs `bayes_step` (and the next coefficients); the
+# host reads the stop word. `bayes_ridge_fit`'s statements in its order.
+# `MOJOLEARN_X_LINEAR_BAYES_GRID=0` restores the one-block fit.
+def bayes_yparts_kernel(y: FP, n: Int32, yparts: FP, state: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread b: row block b's target sum from zero (`fold_fa`, rows
+    ascending), the partials `bayes_ymean` folds blocks ascending; thread 0
+    also writes the row count (wsum) into state[3]."""
+    var b = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    if b < fold_blocks(nn):
+        var lo = b * FOLD_BLOCK
+        st(yparts, b, fold_fa(y, lo, 1, min(FOLD_BLOCK, nn - lo)))
+    if b == 0:
+        st(state, 3, i2f(nn))
+    witness_end(wf, woff, nonce)
+
+def bayes_yvar_parts_kernel(y: FP, n: Int32, yparts: FP, vparts: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread b: row block b's squared deviations from the blocked mean
+    (`bayes_yvar_part`), the partials `bayes_yvar` folds."""
+    var b = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    var nb = fold_blocks(nn)
+    if b < nb:
+        var m = fd(fold_parts(yparts, 0, nb), i2f(nn))
+        var lo = b * FOLD_BLOCK
+        st(vparts, b, bayes_yvar_part(y, m, lo, min(FOLD_BLOCK, nn - lo)))
+    witness_end(wf, woff, nonce)
+
+def bayes_xty_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, fw: FP, yparts: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread j: X'y_j on centered data, `bayes_prep`'s team statement
+    (`chain_cfmad` over the rows ascending, from the means at fw[0, d) and
+    the blocked target mean), into fw[d + d*d + j]."""
+    var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    var nn = Int(n)
+    if j < dd:
+        var ym = fd(fold_parts(yparts, 0, fold_blocks(nn)), i2f(nn)) if fi != 0 else Float32(0)
+        st(fw, dd + dd * dd + j, chain_cfmad(x, j, dd, ld(fw, j), y, 0, 1, ym, nn))
+    witness_end(wf, woff, nonce)
+
+def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, yparts: FP, vparts: FP, tw: FP,
+                     state: FP, wf: IP, woff: Int32, nonce: Int32):
+    """One block team: the d x d half of the prep (`bayes_eig_prep`: the
+    Jacobi eigendecomposition of G, V'X'y, the starting alpha and lambda)
+    and the first coefficients. Every row pass ran on the grid kernels
+    above; this block folds only the nb row-block partials."""
+    var a = ALGO_BAYES
+    var dd = Int(d)
+    var t = device_team(tw, 0, team_rows(a, ip), team_own(a, dd))
+    var wsum = ld(state, 3)
+    var yvar = fd(fold_parts(vparts, 0, Int(nb)), wsum)
+    var al = bayes_eig_prep(t, fw, fp, dd, yvar)
+    if t.lead():
+        var ym = fd(fold_parts(yparts, 0, Int(nb)), wsum) if ldi(ip, 1) != 0 else Float32(0)
+        bayes_coef(fw, res, dd, al[1], al[0])
+        st(state, 0, al[0])
+        st(state, 1, al[1])
+        st(state, 2, ym)
+        st(state, 5, Float32(0))
+    witness_end(wf, woff, nonce)
+
+def bayes_resid_kernel(x: FP, y: FP, n: Int32, d: Int32, fw: FP, res: FP, state: FP, rows: FP, wf: IP, woff: Int32, nonce: Int32):
+    var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if i < Int(n):
+        var dd = Int(d)
+        var p = Float32(0)
+        for j in range(dd):
+            p = fmad(fs(ld(x, i * dd + j), ld(fw, j)), ld(res, j), p)
+        st(rows, i, fs(fs(ld(y, i), ld(state, 2)), p))
+    witness_end(wf, woff, nonce)
+
+def bayes_part_kernel(rows: FP, y: FP, n: Int32, sw: Int32, parts: FP, wf: IP, woff: Int32, nonce: Int32):
+    var bk = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    if bk < fold_blocks(nn):
+        var lo = bk * FOLD_BLOCK
+        st(parts, bk, _sse_part(rows, y, nn, sw != 0, lo, min(FOLD_BLOCK, nn - lo)))
+    witness_end(wf, woff, nonce)
+
+def bayes_step_kernel(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, parts: FP, state: FP, it: Int32, wf: IP, woff: Int32, nonce: Int32):
+    """One thread: the nb row-block sse partials folded blocks ascending,
+    then the d-sized update (`bayes_step`)."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        var sse = fold_parts(parts, 0, Int(nb))
+        var r = bayes_step(fw, res, Int(d), fp, ld(state, 1), ld(state, 0), sse, ld(state, 3), Int(it))
+        st(state, 0, r[1])
+        st(state, 1, r[0])
+        st(state, 5, Float32(r[2]))
+        if r[2] == 0:
+            bayes_coef(fw, res, Int(d), r[0], r[1])
+    witness_end(wf, woff, nonce)
+
+def bayes_finish_kernel(fw: FP, res: FP, d: Int32, fi: Int32, state: FP, iters: Int32, wf: IP, woff: Int32, nonce: Int32):
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        bayes_finish(fw, res, Int(d), fi != 0, ld(state, 2), ld(state, 0), ld(state, 1), Int(iters))
+    witness_end(wf, woff, nonce)
 
 def _sgd_on_host() -> Bool:
     """`MOJOLEARN_X_LINEAR_SGD_HOST=0` keeps SGD on its one device thread
@@ -172,6 +287,11 @@ def _enetcv_grid() -> Bool:
     the one-block team fit (the A/B arm); default the grid form
     (x_linear/cd_grid.mojo)."""
     return String(getenv("MOJOLEARN_X_LINEAR_ENETCV_GRID")) != "0"
+
+
+#: Apple: the longest a guarded x_linear launch runs, in chain steps (the
+#: grid Gram's row slices; x_linear/witness.mojo, lane/neural-pass131).
+comptime XL_APPLE_SLICE_MACS = 1 << 27
 
 
 def _bayes_grid_gram() -> Bool:
@@ -1981,68 +2101,201 @@ def fit_device(
         ctx.enqueue_copy(dst_buf=dip, src_ptr=hip.unsafe_ptr())
     if len(hfp) > 0:
         ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
-    dout.enqueue_fill(Float32(0))
-    dfw.enqueue_fill(Float32(0))
-    diw.enqueue_fill(Int32(0))
-    dtw.enqueue_fill(Float32(0))
-    if lars_pre:
-        # lane/neural-pass120's moments of [X | y] (fw: xm 0, G d, X'y
-        # d + d*d, y's mean parked in prev = 2d + d*d)
-        ctx.enqueue_function[mg_means_kernel](
-            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), Int32(hip[1]), dfw.unsafe_ptr(),
-            Int32(0), Int32(2 * d + d * d), grid_dim=mg_tiles(d, 1), block_dim=MG_NT,
+    # lane/neural-pass131 (2026-10-02): the setup (zeroed scratch, the grid
+    # Gram, then the prep or the whole one-block fit) runs under the Metal
+    # completion witness (x_linear/witness.mojo) as ONE unit: the fit and the
+    # prep work in place, so a cut launch reruns the unit from its zeros.
+    var cells = d * (d + 1) // 2
+    var rows_slice = n
+    comptime if has_apple_gpu_accelerator():
+        rows_slice = max(64, min(n, (XL_APPLE_SLICE_MACS // max(cells, 1)) // 64 * 64))
+    var nslices = (n + rows_slice - 1) // rows_slice if n > 0 else 1
+    var dgs = ctx.enqueue_create_buffer[DType.float32](max(d + d * d, 1) if grid_gram and nslices > 1 else 1)
+    var bayes_grid = False
+    comptime if not X_LINEAR_SERIAL_FOLDS:
+        # unweighted, with the grid Gram: every row pass on grid kernels
+        bayes_grid = algo == ALGO_BAYES and n > 0 and d > 0 and grid_gram and String(getenv("MOJOLEARN_X_LINEAR_BAYES_GRID")) != "0"
+    var ynb = fold_blocks(n)
+    var prep_blocks = 2 * _xg_blocks(ynb) + _xg_blocks(d) + 1
+    var wit = Witness(ctx, max(max(_xg_blocks(max(cells, d)), 1) + 1, prep_blocks))
+    var dstate = ctx.enqueue_create_buffer[DType.float32](8)
+    var dyparts = ctx.enqueue_create_buffer[DType.float32](max(ynb, 1) if bayes_grid else 1)
+    var dvparts = ctx.enqueue_create_buffer[DType.float32](max(ynb, 1) if bayes_grid else 1)
+    var setup_tries = 0
+    while True:
+        dout.enqueue_fill(Float32(0))
+        dfw.enqueue_fill(Float32(0))
+        diw.enqueue_fill(Int32(0))
+        dtw.enqueue_fill(Float32(0))
+        var good = True
+        if lars_pre:
+            # lane/neural-pass120's moments of [X | y] (fw: xm 0, G d, X'y
+            # d + d*d, y's mean parked in prev = 2d + d*d)
+            ctx.enqueue_function[mg_means_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), Int32(hip[1]), dfw.unsafe_ptr(),
+                Int32(0), Int32(2 * d + d * d), grid_dim=mg_tiles(d, 1), block_dim=MG_NT,
+            )
+            var tl = mg_tiles(d, 1)
+            ctx.enqueue_function[mg_cross_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), dfw.unsafe_ptr(),
+                Int32(0), Int32(2 * d + d * d), Int32(d), Int32(d + d * d), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
+            )
+        elif grid_gram and bayes_like and MOMENTS_GRID and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0":
+            # lane/neural-pass130: BayesianRidge / ARD's means and centered Gram
+            # from the staged moments kernels (no Y columns), into the layout
+            # `xg_gram_kernel` fills (xm at 0, G at d): the same chains, staged
+            var tlb = mg_tiles(d, 0)
+            ctx.enqueue_function[mg_means_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(0), Int32(hip[1]), dfw.unsafe_ptr(),
+                Int32(0), Int32(0), grid_dim=tlb, block_dim=MG_NT,
+            )
+            ctx.enqueue_function[mg_cross_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(0), dfw.unsafe_ptr(),
+                Int32(0), Int32(0), Int32(d), Int32(0), grid_dim=tlb * (tlb + 1) // 2, block_dim=MG_NT,
+            )
+        elif grid_gram:
+            # The means then the centered Gram into fw[0, d + d*d), the layout
+            # `lars_fit` reads (xm at 0, G at d); the team recomputes the means
+            # itself (the same statements, the same values) and skips the Gram.
+            var nonce = wit.begin()
+            ctx.enqueue_function[xg_means_kernel](
+                dx.unsafe_ptr(), Int32(n), Int32(d), Int32(hip[1]), dfw.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                grid_dim=_xg_blocks(d), block_dim=XG_TPB,
+            )
+            good = wit.ok(ctx, _xg_blocks(d), "means")
+            # row slices ping-pong between fw and dgs so a rerun slice reads
+            # what its predecessor wrote; the last one writes fw
+            var si = 0
+            var lo = 0
+            while good and lo < n:
+                var cnt = min(rows_slice, n - lo)
+                var to_fw = (nslices - 1 - si) % 2 == 0
+                var dst = dfw.unsafe_ptr() if to_fw else dgs.unsafe_ptr()
+                var src = dgs.unsafe_ptr() if to_fw else dfw.unsafe_ptr()
+                var t = 0
+                while True:
+                    var nc = wit.begin()
+                    ctx.enqueue_function[xg_gram_kernel](
+                        dx.unsafe_ptr(), Int32(n), Int32(d), dfw.unsafe_ptr(), Int32(lo), Int32(cnt),
+                        FP(unsafe_from_address=Int(src)), FP(unsafe_from_address=Int(dst)), wit.p(), Int32(0), nc,
+                        grid_dim=_xg_blocks(cells), block_dim=XG_TPB,
+                    )
+                    if wit.ok(ctx, _xg_blocks(cells), "Gram slice"):
+                        break
+                    t += 1
+                    if t >= WITNESS_TRIES:
+                        wit.fail()
+                lo += cnt
+                si += 1
+        if good and ridge_pre:
+            var t_n = Int(hip[0])
+            var r_xm = 0
+            var r_gg = d
+            var r_ym = d + 2 * d * d + d
+            var r_xty = r_ym + t_n
+            ctx.enqueue_function[mg_means_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), Int32(hip[1]), dfw.unsafe_ptr(),
+                Int32(r_xm), Int32(r_ym), grid_dim=mg_tiles(d, t_n), block_dim=MG_NT,
+            )
+            var tl = mg_tiles(d, t_n)
+            ctx.enqueue_function[mg_cross_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), dfw.unsafe_ptr(),
+                Int32(r_xm), Int32(r_ym), Int32(r_gg), Int32(r_xty), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
+            )
+        if good:
+            var nonce = wit.begin()
+            var units = 1
+            if bayes_grid:
+                # the prep's row passes on the grid (the target's blocked sum
+                # and variance partials, X'y one column a thread), then its
+                # d x d half on one block team
+                var wo = 0
+                ctx.enqueue_function[bayes_yparts_kernel](
+                    dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dstate.unsafe_ptr(),
+                    wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
+                )
+                wo += _xg_blocks(ynb)
+                ctx.enqueue_function[bayes_yvar_parts_kernel](
+                    dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dvparts.unsafe_ptr(),
+                    wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
+                )
+                wo += _xg_blocks(ynb)
+                ctx.enqueue_function[bayes_xty_kernel](
+                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(hip[1]), dfw.unsafe_ptr(),
+                    dyparts.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(d), block_dim=XG_TPB,
+                )
+                wo += _xg_blocks(d)
+                ctx.enqueue_function[bayes_eig_kernel](
+                    dfw.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dip.unsafe_ptr(), Int32(d), Int32(ynb),
+                    dyparts.unsafe_ptr(), dvparts.unsafe_ptr(), dtw.unsafe_ptr(), dstate.unsafe_ptr(),
+                    wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=LINEAR_TPB,
+                )
+                units = wo + 1
+            else:
+                ctx.enqueue_function[fit_kernel](
+                    Int32(algo), dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d),
+                    dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(), diw.unsafe_ptr(),
+                    dtw.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                    grid_dim=1, block_dim=LINEAR_TPB if team_fit(algo) else 1,
+                )
+            good = wit.ok(ctx, units, "fit")
+        if good:
+            break
+        setup_tries += 1
+        if setup_tries >= WITNESS_TRIES:
+            wit.fail()
+    if bayes_grid:
+        var drows = ctx.enqueue_create_buffer[DType.float32](n)
+        var dparts = ctx.enqueue_create_buffer[DType.float32](max(fold_blocks(n), 1))
+        var hst = List[Float32](length=8, fill=Float32(0))
+        var wit2 = Witness(ctx, _xg_blocks(n) + _xg_blocks(fold_blocks(n)) + 1)
+        var max_iter = Int(hip[0])
+        var sw = Int(hip[2]) if len(hip) > 2 else 0
+        var iters = 0
+        for it in range(max_iter):
+            iters = it + 1
+            # the residuals and partials rebuild from the coefficients: rerun
+            # on a cut; the step updates in place: a cut raises
+            var tr = 0
+            while True:
+                var nonce = wit2.begin()
+                ctx.enqueue_function[bayes_resid_kernel](
+                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dfw.unsafe_ptr(), dout.unsafe_ptr(),
+                    dstate.unsafe_ptr(), drows.unsafe_ptr(), wit2.p(), Int32(0), nonce,
+                    grid_dim=_xg_blocks(n), block_dim=XG_TPB,
+                )
+                ctx.enqueue_function[bayes_part_kernel](
+                    drows.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(sw), dparts.unsafe_ptr(),
+                    wit2.p(), Int32(_xg_blocks(n)), nonce, grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
+                )
+                if wit2.ok(ctx, _xg_blocks(n) + _xg_blocks(fold_blocks(n)), "Bayes residuals"):
+                    break
+                tr += 1
+                if tr >= WITNESS_TRIES:
+                    wit2.fail()
+            var ns = wit2.begin()
+            ctx.enqueue_function[bayes_step_kernel](
+                dfw.unsafe_ptr(), dout.unsafe_ptr(), dfp.unsafe_ptr(), Int32(d), Int32(ynb), dparts.unsafe_ptr(),
+                dstate.unsafe_ptr(), Int32(it), wit2.p(), Int32(0), ns, grid_dim=1, block_dim=1,
+            )
+            if not wit2.ok(ctx, 1, "Bayes step"):
+                wit2.fail()
+            ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dstate)
+            ctx.synchronize()
+            if hst[5] != Float32(0):
+                break
+        var nf = wit2.begin()
+        ctx.enqueue_function[bayes_finish_kernel](
+            dfw.unsafe_ptr(), dout.unsafe_ptr(), Int32(d), Int32(hip[1]), dstate.unsafe_ptr(), Int32(iters),
+            wit2.p(), Int32(0), nf, grid_dim=1, block_dim=1,
         )
-        var tl = mg_tiles(d, 1)
-        ctx.enqueue_function[mg_cross_kernel](
-            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), dfw.unsafe_ptr(),
-            Int32(0), Int32(2 * d + d * d), Int32(d), Int32(d + d * d), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
-        )
-    elif grid_gram and bayes_like and MOMENTS_GRID and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0":
-        # lane/neural-pass130: BayesianRidge / ARD's means and centered Gram
-        # from the staged moments kernels (no Y columns), into the layout
-        # `xg_gram_kernel` fills (xm at 0, G at d): the same chains, staged
-        var tlb = mg_tiles(d, 0)
-        ctx.enqueue_function[mg_means_kernel](
-            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(0), Int32(hip[1]), dfw.unsafe_ptr(),
-            Int32(0), Int32(0), grid_dim=tlb, block_dim=MG_NT,
-        )
-        ctx.enqueue_function[mg_cross_kernel](
-            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(0), dfw.unsafe_ptr(),
-            Int32(0), Int32(0), Int32(d), Int32(0), grid_dim=tlb * (tlb + 1) // 2, block_dim=MG_NT,
-        )
-    elif grid_gram:
-        # The means then the centered Gram into fw[0, d + d*d), the layout
-        # `lars_fit` reads (xm at 0, G at d); the team recomputes the means
-        # itself (the same statements, the same values) and skips the Gram.
-        ctx.enqueue_function[xg_means_kernel](
-            dx.unsafe_ptr(), Int32(n), Int32(d), Int32(hip[1]), dfw.unsafe_ptr(),
-            grid_dim=_xg_blocks(d), block_dim=XG_TPB,
-        )
-        ctx.enqueue_function[xg_gram_kernel](
-            dx.unsafe_ptr(), Int32(n), Int32(d), dfw.unsafe_ptr(),
-            grid_dim=_xg_blocks(d * (d + 1) // 2), block_dim=XG_TPB,
-        )
-    if ridge_pre:
-        var t_n = Int(hip[0])
-        var r_xm = 0
-        var r_gg = d
-        var r_ym = d + 2 * d * d + d
-        var r_xty = r_ym + t_n
-        ctx.enqueue_function[mg_means_kernel](
-            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), Int32(hip[1]), dfw.unsafe_ptr(),
-            Int32(r_xm), Int32(r_ym), grid_dim=mg_tiles(d, t_n), block_dim=MG_NT,
-        )
-        var tl = mg_tiles(d, t_n)
-        ctx.enqueue_function[mg_cross_kernel](
-            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), dfw.unsafe_ptr(),
-            Int32(r_xm), Int32(r_ym), Int32(r_gg), Int32(r_xty), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
-        )
-    ctx.enqueue_function[fit_kernel](
-        Int32(algo), dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d),
-        dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(), diw.unsafe_ptr(),
-        dtw.unsafe_ptr(),
-        grid_dim=1, block_dim=LINEAR_TPB if team_fit(algo) else 1,
-    )
+        if not wit2.ok(ctx, 1, "Bayes finish"):
+            wit2.fail()
+        ctx.synchronize()
+        _ = wit2^
+        _ = drows^
+        _ = dparts^
+        _ = hst^
     if n_out > 0:
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
     ctx.synchronize()
@@ -2065,6 +2318,11 @@ def fit_device(
     _ = dfw^
     _ = diw^
     _ = dtw^
+    _ = dgs^
+    _ = dstate^
+    _ = dyparts^
+    _ = dvparts^
+    _ = wit^
     _ = ctx^
 
 
