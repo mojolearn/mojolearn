@@ -363,23 +363,23 @@ def platt_terms(
     """One row's addends of libsvm's `sigmoid_train` sums (labels +1/-1):
     PLATT_COUNT the +1 indicator; PLATT_FVAL the objective term; PLATT_NEWTON
     the Hessian and gradient terms (h11, h22, h21, g1, g2)."""
-    var out = SIMD[DType.uint64, 8](0)
+    var res = SIMD[DType.uint64, 8](0)
     var pos = sp_gt(label, SF64_ZERO)
     if mode == PLATT_COUNT:
-        out[0] = _ONE if pos else SF64_ZERO
-        return out
+        res[0] = _ONE if pos else SF64_ZERO
+        return res
     var t = hi_t if pos else lo_t
     var fapb = sf64_add(sf64_mul(d, a), b)
     if mode == PLATT_FVAL:
         if sp_ge0(fapb):
-            out[0] = sf64_add(
+            res[0] = sf64_add(
                 sf64_mul(t, fapb), sf64_log(sf64_add(_ONE, sp_exp(sf64_neg(fapb))))
             )
         else:
-            out[0] = sf64_add(
+            res[0] = sf64_add(
                 sf64_mul(sf64_sub(t, _ONE), fapb), sf64_log(sf64_add(_ONE, sp_exp(fapb)))
             )
-        return out
+        return res
     var p: UInt64
     var q: UInt64
     if sp_ge0(fapb):
@@ -392,12 +392,12 @@ def platt_terms(
         q = sf64_div(e, sf64_add(_ONE, e))
     var d2 = sf64_mul(p, q)
     var d1 = sf64_sub(t, p)
-    out[0] = sf64_mul(sf64_mul(d, d), d2)
-    out[1] = d2
-    out[2] = sf64_mul(d, d2)
-    out[3] = sf64_mul(d, d1)
-    out[4] = d1
-    return out
+    res[0] = sf64_mul(sf64_mul(d, d), d2)
+    res[1] = d2
+    res[2] = sf64_mul(d, d2)
+    res[3] = sf64_mul(d, d1)
+    res[4] = d1
+    return res
 
 
 def tree_sum_sf64(vals: List[UInt64]) -> UInt64:
@@ -492,7 +492,7 @@ def shuffle_seed32(seed: UInt64) -> UInt32:
 @always_inline
 def gather_cell(
     cell: Int, src: U32P, n_src_rows: Int, n_src_cols: Int, rows: I32P, has_rows: Bool,
-    cols: I32P, has_cols: Bool, n_out_cols: Int, out: U32P,
+    cols: I32P, has_cols: Bool, n_out_cols: Int, dst: U32P,
 ) -> Int:
     """`out[r, c] = src[rows[r], cols[c]]` for one output cell (bits, no
     arithmetic). Returns ST_DIV0 on an index outside src."""
@@ -502,14 +502,14 @@ def gather_cell(
     var sc = Int(cols[c]) if has_cols else c
     if sr < 0 or sr >= n_src_rows or sc < 0 or sc >= n_src_cols:
         return ST_DIV0
-    out[cell] = src[sr * n_src_cols + sc]
+    dst[cell] = src[sr * n_src_cols + sc]
     return ST_OK
 
 
 @always_inline
 def c_row(
     i: Int, sw: U64P, has_sw: Bool, codes: I32P, cw: U64P, has_cw: Bool, k: Int,
-    c: UInt64, out: U32P,
+    c: UInt64, dst: U32P,
 ) -> Int:
     """One row's bound `C * (w_i * class_weight[y_i])`, binary64, rounded
     once to float32 (`_c_rows`)."""
@@ -519,5 +519,5 @@ def c_row(
         if code < 0 or code >= k:
             return ST_DIV0
         w = sf64_mul(w, cw[code])
-    out[i] = bitcast[DType.uint32](sf64_to_f32(sf64_mul(c, w)))
+    dst[i] = bitcast[DType.uint32](sf64_to_f32(sf64_mul(c, w)))
     return ST_OK

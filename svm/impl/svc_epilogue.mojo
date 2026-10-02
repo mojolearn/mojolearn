@@ -49,6 +49,7 @@ from svm.impl.svc_rows import (
     EPI_OVO,
     EPI_OVR,
     EPI_PROBA,
+    EPI_VOTES,
     FOLD_TPB,
     GLUE_C_ROWS,
     GLUE_GATHER,
@@ -174,8 +175,10 @@ struct DevicePlatt(PlattSums, Movable):
         var n_cur = nb
         while n_cur > 1:
             var nb2 = fold_blocks(n_cur)
-            var src = self.pa.unsafe_ptr() if cur_a else self.pb.unsafe_ptr()
-            var dst = self.pb.unsafe_ptr() if cur_a else self.pa.unsafe_ptr()
+            var a_ptr = rebind[U64P](self.pa.unsafe_ptr())
+            var b_ptr = rebind[U64P](self.pb.unsafe_ptr())
+            var src = a_ptr if cur_a else b_ptr
+            var dst = b_ptr if cur_a else a_ptr
             self.ctx.enqueue_function[sf64_level_kernel](
                 dst, src, Int32(n_cur), Int32(nch), Int32(nb2),
                 grid_dim=nb2, block_dim=FOLD_TPB,
@@ -213,13 +216,13 @@ def pmath_kernel(dst: U64P, src: U64P, n: Int32, which: Int32):
 # ------------------------------------------------------------ the row glue
 def gather_kernel(
     src: U32P, n_src_rows: Int64, n_src_cols: Int64, rows: I32P, has_rows: Int32,
-    cols: I32P, has_cols: Int32, n_out_cols: Int64, total: Int64, out: U32P, status: I32P,
+    cols: I32P, has_cols: Int32, n_out_cols: Int64, total: Int64, dst: U32P, status: I32P,
 ):
     var cell = Int(block_idx.x) * FOLD_TPB + Int(thread_idx.x)
     if cell < Int(total):
         var st = gather_cell(
             cell, src, Int(n_src_rows), Int(n_src_cols), rows, has_rows != 0,
-            cols, has_cols != 0, Int(n_out_cols), out,
+            cols, has_cols != 0, Int(n_out_cols), dst,
         )
         if st != ST_OK:
             status[0] = Int32(st)
@@ -302,11 +305,11 @@ def select_emit_kernel(
 
 def c_rows_kernel(
     sw: U64P, has_sw: Int32, codes: I32P, cw: U64P, has_cw: Int32, k: Int32,
-    c: UInt64, n: Int32, out: U32P, status: I32P,
+    c: UInt64, n: Int32, dst: U32P, status: I32P,
 ):
     var i = Int(block_idx.x) * FOLD_TPB + Int(thread_idx.x)
     if i < Int(n):
-        var st = c_row(i, sw, has_sw != 0, codes, cw, has_cw != 0, Int(k), c, out)
+        var st = c_row(i, sw, has_sw != 0, codes, cw, has_cw != 0, Int(k), c, dst)
         if st != ST_OK:
             status[0] = Int32(st)
 
