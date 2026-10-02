@@ -423,13 +423,13 @@ def _trees_member_native(member):
     return probe._bind("_mojolearn_rf")
 
 
-def _trees_member_session(member, X, row_major, x_finite=False):
+def _trees_member_session(member, X, row_major, x_finite=False, default="0"):
     """The data session (trees-apple3) for the member fits of one boosted
     ensemble, on the forest binding a clone of `member` resolves, or None
     (the choice is off, or the binary has no session entry). The session
     stands in for every member's finite scan of X, so X is scanned here
     unless the caller already did (`x_finite`)."""
-    if forest_data_session_choice(None) is None or not hasattr(member, "_capture_fit_mode"):
+    if forest_data_session_choice(None, default) is None or not hasattr(member, "_capture_fit_mode"):
         return None
     probe = _trees_clone(member)
     probe._capture_fit_mode()
@@ -438,7 +438,8 @@ def _trees_member_session(member, X, row_major, x_finite=False):
         return None
     if not x_finite and not all_finite(X):
         raise ValueError("X contains NaN or infinity; the forest has no missing-value arm")
-    return open_forest_data_session(native, X, row_major=row_major, mode=probe._effective_mode())
+    return open_forest_data_session(native, X, row_major=row_major, mode=probe._effective_mode(),
+                                    default=default)
 
 
 def _trees_arange(n):
@@ -1157,8 +1158,15 @@ class _DARTBase(_TreesEnsembleBase):
         session = None
         if not (float(self.subsample) < 1.0 and int(self.subsample_freq) > 0) \
                 and not float(self.colsample_bytree) < 1.0:
+            # lane/gap-nv-classical2: DART opens the exact session by default
+            # (MOJOLEARN_FOREST_SESSION=0 still turns it off). Without it each
+            # of the n_estimators members scanned, transposed, staged and
+            # uploaded the whole of X and rebuilt its quantiles; in the
+            # session each member still draws its own quantile sample, so
+            # each member's forest is the one its own fit returns.
             session = _trees_member_session(
-                RandomForestRegressor(n_estimators=1, numeric_mode=self.numeric_mode), Xa, True)
+                RandomForestRegressor(n_estimators=1, numeric_mode=self.numeric_mode), Xa, True,
+                default="1")
         try:
             self._boost_loop(Xa, y32, K, b, seed, drop_seed, score, g, h, target, lr, l1, mds, lam,
                              max_depth, all_cols, session)
