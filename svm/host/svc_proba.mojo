@@ -99,13 +99,13 @@ struct HostPlatt(PlattSums, Movable):
     """The Platt sums on the host: `platt_terms` per row, then the device
     fold's order (`tree_sum_sf64`) per channel."""
 
-    var dec: U64P
-    var lab: U64P
+    var dec: MutPointer[UInt64, MutUntrackedOrigin]
+    var lab: MutPointer[UInt64, MutUntrackedOrigin]
     var n: Int
 
-    def __init__(out self, dec: U64P, lab: U64P, n: Int):
-        self.dec = dec
-        self.lab = lab
+    def __init__(out self, dec_addr: Int, lab_addr: Int, n: Int):
+        self.dec = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=dec_addr)
+        self.lab = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=lab_addr)
         self.n = n
 
     def platt_sums(
@@ -252,11 +252,11 @@ def svc_platt_train_binding(
     var count = _ix(n)
     if count == 0:
         raise Error("svc_platt_train: no decision values")
-    var dp = U64P(unsafe_from_address=Int(py=dec_addr))
-    var lp = U64P(unsafe_from_address=Int(py=labels_addr))
+    var da = Int(py=dec_addr)
+    var la = Int(py=labels_addr)
     var op = U64P(unsafe_from_address=Int(py=out_addr))
     with GILReleased(Python()):
-        var src = HostPlatt(dp, lp, count)
+        var src = HostPlatt(da, la, count)
         var r = platt_solve(src, count)
         op[0] = r[0]
         op[1] = r[1]
