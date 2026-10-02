@@ -107,7 +107,12 @@ def ienv(env):
 def test_plan_cells_trees_two_batches_classical_four_lanes():
     races = bb.plan_races("apple", ["fast", "identical"], ["trees", "classical"], None, ["taxi"], None)
     by = {r["lane"]: inf.plan_cells(r) for r in races}
-    assert len(by["rf"]) == 2 * len(bb.TREE_OPPONENTS["apple"]["rf"] + ("ours", "ours-ab", "ours-cpu"))
+    # our GPU arms (ours, ours-ab; never ours-cpu) plus rf's opponents, which on Apple are
+    # all CPU (no GPU opponent, so they stay), each on the `test` and `large` batches
+    rf_opp = bb.gpu_opponents_first(bb.TREE_OPPONENTS["apple"]["rf"])
+    assert rf_opp == list(bb.TREE_OPPONENTS["apple"]["rf"])
+    assert len(by["rf"]) == 2 * len(rf_opp + ["ours", "ours-ab"])
+    assert all(a != bb.CPU_ARM for a, _ in by["rf"])
     assert {b for _, b in by["rf"]} == {"test", "large"}
     for lane in ("kmeans", "pca", "ols", "svc"):
         assert by[lane] and all(b == "Xq" for _, b in by[lane])
@@ -136,10 +141,15 @@ def test_dry_run_counts_inference_cells(env, capsys):
                    + env["base"]) == 0
     text = capsys.readouterr().out
     # trees: 12 races, arms (ours, ours-ab + opponents) x 2 batches; classical:
-    # kmeans/pca/ols/svc x 2 datasets, every arm once.
-    trees = sum(2 * (2 + len(v)) * len(bb.tree_task_datasets(l, bb.DATASETS))
+    # kmeans/pca/ols/svc x 2 datasets, every arm once. Opponents are what the plan
+    # races: a race with a GPU opponent drops its CPU ones (Oct 2 2026), so on Apple
+    # kmeans/pca/ols/svc keep only torch-gpu (3 arms each: 24 cells); trees keep their
+    # CPU opponents (no GPU one) for 164 cells. Never an ours-cpu cell.
+    trees = sum(2 * (2 + len(bb.gpu_opponents_first(v))) * len(bb.tree_task_datasets(l, bb.DATASETS))
                 for l, v in bb.TREE_OPPONENTS["apple"].items())
-    classical = sum(2 + len(bb.CLASSICAL_OPPONENTS["apple"][l]) for l in inf.CLASSICAL_INFER_LANES) * 2
+    classical = sum(2 + len(bb.gpu_opponents_first(bb.CLASSICAL_OPPONENTS["apple"][l]))
+                    for l in inf.CLASSICAL_INFER_LANES) * 2
+    assert (trees, classical) == (164, 24)
     assert "INFER cells=%d (classical %d, trees %d;" % (trees + classical, classical, trees) in text
     assert bb.main(["--dry-run", "--vendor", "apple", "--no-infer"] + env["base"]) == 0
     assert "INFER cells" not in capsys.readouterr().out
@@ -170,12 +180,14 @@ def test_run_infer_cells_ratios_and_board(ienv):
     assert ic[("ours", "test")]["batch_rows"] == 500 and ic[("ours", "large")]["batch_rows"] == 1000
     km = res["races"]["classical/kmeans/taxi/rows=1000"]
     kc = {c["arm"]: c for c in km["infer_cells"]}
-    assert set(kc) == {"ours", "ours-fast", "sklearn-cpu", "torch-gpu"}
-    assert kc["sklearn-cpu"]["ratio_ours_identical_over"] == pytest.approx(6 / 16)
+    # torch-gpu is a GPU opponent, so sklearn-cpu does not race (Oct 2 2026)
+    assert set(kc) == {"ours", "ours-fast", "torch-gpu"}
+    assert kc["torch-gpu"]["ratio_ours_identical_over"] == pytest.approx(6 / 16)
     assert kc["torch-gpu"]["verdict"].startswith("SPAN-ASYMMETRIC")
     assert kc["ours-fast"]["quality"]["bits_equal_vs_ours"] is True
     board = (ienv["out"] / "BOARD.md").read_text()
-    assert "## Inference at a glance" in board and "Inference cells: 24 (ok 24)." in board
+    # rf: 4 arms x 2 batches; kmeans: ours, ours-fast, torch-gpu; each on taxi and Istella
+    assert "## Inference at a glance" in board and "Inference cells: 22 (ok 22)." in board
     assert "inference call, sklearn-rf-cpu: stub sklearn-rf-cpu predict_proba(X), column 1" in board
     assert not bbt.BANNED.search(board)
 
