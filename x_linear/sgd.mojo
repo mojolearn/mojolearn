@@ -1007,15 +1007,53 @@ def mb_row(x: FP, ys: FP, i: Int, d: Int, w: FP, woff: Int, b: Float32, loss: In
            lr: Int, eta0: Float32, dblk: Int = 0) -> Tuple[Float32, Float32]:
     """(dl_i weighted, loss_i) of row i at (w, b); with a PA rate dl_i is minus
     the row's PA step (sgd_one's statements, eta0 = C)."""
+    return mb_row_dot(x, ys, i, d, mb_dot(x, i, d, w, woff, dblk), b, loss, eps, swp, has_sw, wpos, wneg, has_cw,
+                      lr, eta0, swp, False)
+
+
+@always_inline
+def mb_rowsq(x: FP, i: Int, d: Int) -> Float32:
+    """Row i's squared norm, j ascending, one fmad a term (the PA rates' |x|^2)."""
+    var sq = Float32(0)
+    for j in range(d):
+        var xj = ld(x, i * d + j)
+        sq = fmad(xj, xj, sq)
+    return sq
+
+
+@always_inline
+def mb_block_dot(x: FP, i: Int, d: Int, w: FP, woff: Int, blk: Int) -> Float32:
+    """Block blk (MB_DBLK columns) of row i's predictor from zero: `mb_dot`'s
+    chain for that block, with all MB_DBLK loads issued before it (the
+    device's one-task-per-block form, lane/neural-pass132 AMD fix)."""
+    var j0 = blk * MB_DBLK
+    var m = min(MB_DBLK, d - j0)
+    var xv = SIMD[DType.float32, MB_DBLK]()
+    var wv = SIMD[DType.float32, MB_DBLK]()
+    comptime for u in range(MB_DBLK):
+        if u < m:
+            xv[u] = ld(x, i * d + j0 + u)
+            wv[u] = ld(w, woff + j0 + u)
+    var acc = Float32(0)
+    comptime for u in range(MB_DBLK):
+        if u < m:
+            acc = fmad(xv[u], wv[u], acc)
+    return acc
+
+
+@always_inline
+def mb_row_dot(x: FP, ys: FP, i: Int, d: Int, dot: Float32, b: Float32, loss: Int, eps: Float32,
+               swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool,
+               lr: Int, eta0: Float32, sqp: FP, has_sq: Bool) -> Tuple[Float32, Float32]:
+    """`mb_row` from the row's predictor dot (w . x_i, before the intercept);
+    has_sq: the PA rates' |x_i|^2 read from sqp[i] (`mb_rowsq`, the same
+    chain computed once a fit)."""
     var y = ld(ys, i)
-    var p = fa(mb_dot(x, i, d, w, woff, dblk), b)
+    var p = fa(dot, b)
     var dl: Float32
     if lr == LR_PA1 or lr == LR_PA2:
         var cur = sgd_loss(loss, y, p, eps)
-        var sq = Float32(0)
-        for j in range(d):
-            var xj = ld(x, i * d + j)
-            sq = fmad(xj, xj, sq)
+        var sq = ld(sqp, i) if has_sq else mb_rowsq(x, i, d)
         var update = Float32(0)
         if lr == LR_PA1:
             if sq != 0:

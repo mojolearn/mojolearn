@@ -26,7 +26,7 @@ from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS
 from x_linear.ops import ld, st, ldi, fd, i2f, fa, fs, fm, fabs, shuffle
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
-from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
+from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
@@ -264,8 +264,18 @@ def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias:
 comptime SGD_CHUNK_DEFAULT = 64
 
 
+def sgd_rowsq_kernel(x: FP, n: Int32, d: Int32, sqp: FP, wf: IP, woff: Int32, nonce: Int32):
+    """sqp[i] = `mb_rowsq` of row i: the PA rates' |x_i|^2, the chain
+    `mb_row` walks, once an epoch instead of once a visit."""
+    var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if i < Int(n):
+        st(sqp, i, mb_rowsq(x, i, Int(d)))
+    witness_end(wf, woff, nonce)
+
+
 def _sgd_mb_chunk_kernel_body(
     x: FP, ys: FP, idx: IP, w: FP, bias: FP, swp: FP, dlv: FP, lv: FP, parts: FP, obj: FP, ci: IP, cf: FP,
+    dotp: FP, sqp: FP,
     start0: Int32, nbat: Int32, t0: Int32,
 ):
     """ci: n, batch, d, loss, has_sw, has_cw, lr, nsub, penalty, fi, need_obj,
@@ -286,6 +296,7 @@ def _sgd_mb_chunk_kernel_body(
     var bsum = ldi(ci, 12) != 0
     var sub = ldi(ci, 13)
     var dblk = ldi(ci, 14)
+    var has_sq = ldi(ci, 15) != 0
     var eps = ld(cf, 0)
     var wpos = ld(cf, 1)
     var wneg = ld(cf, 2)
@@ -304,11 +315,32 @@ def _sgd_mb_chunk_kernel_body(
         if bs <= 0:
             break
         var et = mb_eta(lr, eta, eta0, alpha, power_t, opt_init, t)
-        for r in range(tid, bs, nt):
-            var i = Int(idx.unsafe_load(start + r))
-            var o = mb_row(x, ys, i, dd, w, 0, ld(bias, 0), loss, eps, swp, has_sw, wpos, wneg, has_cw, lr, eta0, dblk)
-            st(dlv, r, o[0])
-            st(lv, r, o[1])
+        if dblk == MB_DBLK:
+            # one task per (row, MB_DBLK-column block), its loads all in
+            # flight before its chain, then each row's blocks folded
+            # ascending: `mb_dot`'s words (lane/neural-pass132: one thread
+            # walking a whole random row missed cache every step on the
+            # MI325X, istella 220 columns)
+            var nb = (dd + MB_DBLK - 1) // MB_DBLK
+            for q in range(tid, bs * nb, nt):
+                var r = q // nb
+                st(dotp, q, mb_block_dot(x, Int(idx.unsafe_load(start + r)), dd, w, 0, q - r * nb))
+            team_barrier()
+            for r in range(tid, bs, nt):
+                var i = Int(idx.unsafe_load(start + r))
+                var dot = Float32(0)
+                for bb in range(nb):
+                    dot = fa(dot, ld(dotp, r * nb + bb))
+                var o = mb_row_dot(x, ys, i, dd, dot, ld(bias, 0), loss, eps, swp, has_sw, wpos, wneg, has_cw, lr, eta0,
+                                   sqp, has_sq)
+                st(dlv, r, o[0])
+                st(lv, r, o[1])
+        else:
+            for r in range(tid, bs, nt):
+                var i = Int(idx.unsafe_load(start + r))
+                var o = mb_row(x, ys, i, dd, w, 0, ld(bias, 0), loss, eps, swp, has_sw, wpos, wneg, has_cw, lr, eta0, dblk)
+                st(dlv, r, o[0])
+                st(lv, r, o[1])
         team_barrier()
         var subs = mb_subs(bs, sub)
         for q in range(tid, (dd + 2) * subs, nt):
@@ -334,9 +366,9 @@ def _sgd_mb_chunk_kernel_body(
 
 def sgd_mb_chunk_kernel(
     x: FP, ys: FP, idx: IP, w: FP, bias: FP, swp: FP, dlv: FP, lv: FP, parts: FP, obj: FP, ci: IP, cf: FP,
-    start0: Int32, nbat: Int32, t0: Int32, wf: IP, woff: Int32, nonce: Int32,
+    dotp: FP, sqp: FP, start0: Int32, nbat: Int32, t0: Int32, wf: IP, woff: Int32, nonce: Int32,
 ):
-    _sgd_mb_chunk_kernel_body(x, ys, idx, w, bias, swp, dlv, lv, parts, obj, ci, cf, start0, nbat, t0)
+    _sgd_mb_chunk_kernel_body(x, ys, idx, w, bias, swp, dlv, lv, parts, obj, ci, cf, dotp, sqp, start0, nbat, t0)
     witness_end(wf, woff, nonce)
 
 
@@ -398,11 +430,15 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
         var wbs = min(batch, n - ws0)
         wcap += _xg_blocks(wbs) + _xg_blocks((d + 2) * mb_subs(wbs, sub)) + _xg_blocks(d + 2)
         ws0 += wbs
+    wcap += _xg_blocks(n)
     var wit = Witness(ctx, max(wcap, 1))
     var chunk = _sgd_chunk()
-    var dci = ctx.enqueue_create_buffer[DType.int32](15)
+    var dci = ctx.enqueue_create_buffer[DType.int32](16)
+    var ddotp = ctx.enqueue_create_buffer[DType.float32](max(batch * ((d + MB_DBLK - 1) // MB_DBLK), 1))
+    var pa_rate = lr == LR_PA1 or lr == LR_PA2
+    var dsq = ctx.enqueue_create_buffer[DType.float32](max(n, 1) if pa_rate else 1)
     var dcf = ctx.enqueue_create_buffer[DType.float32](9)
-    var hci = List[Int32](length=15, fill=Int32(0))
+    var hci = List[Int32](length=16, fill=Int32(0))
     var hcf = List[Float32](length=9, fill=Float32(0))
     hci[0] = Int32(n)
     hci[1] = Int32(batch)
@@ -417,6 +453,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     hci[12] = Int32(1 if bsum else 0)
     hci[13] = Int32(sub)
     hci[14] = Int32(dblk)
+    hci[15] = Int32(1 if pa_rate else 0)
     hcf[0] = eps
     hcf[3] = eta0
     hcf[5] = alpha
@@ -480,6 +517,12 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                 dobj.enqueue_fill(Float32(0))
                 var start = 0
                 if chunk > 1 and batch <= XG_TPB and d + 2 <= XG_TPB:
+                    if pa_rate:
+                        ctx.enqueue_function[sgd_rowsq_kernel](
+                            dx.unsafe_ptr(), Int32(n), Int32(d), dsq.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                            grid_dim=_xg_blocks(n), block_dim=XG_TPB,
+                        )
+                        wo += _xg_blocks(n)
                     hcf[4] = eta
                     hcf[1] = wpos
                     hcf[2] = wneg
@@ -500,7 +543,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                         ctx.enqueue_function[sgd_mb_chunk_kernel](
                             dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(), dbias.unsafe_ptr(),
                             dsw.unsafe_ptr(), ddl.unsafe_ptr(), dlv.unsafe_ptr(), dparts.unsafe_ptr(), dobj.unsafe_ptr(),
-                            dci.unsafe_ptr(), dcf.unsafe_ptr(), Int32(start), Int32(nbt), Int32(t),
+                            dci.unsafe_ptr(), dcf.unsafe_ptr(), ddotp.unsafe_ptr(), dsq.unsafe_ptr(), Int32(start), Int32(nbt), Int32(t),
                             wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
                         )
                         wo += 1
