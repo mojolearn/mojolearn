@@ -209,7 +209,9 @@ def _cells(rec):
             continue
         ms = c.get("median_ms")
         if c.get("library") == "mojolearn" or str(c.get("arm", "")).startswith("ours"):
-            if c.get("mode") == "fast" and ms:
+            # our CPU is never reported (Andrew, Oct 2 2026)
+            if c.get("mode") == "fast" and ms and c.get("device") != "cpu" \
+                    and c.get("arm") != "ours-cpu":
                 fast = c
         elif ms and c.get("status") == "ok":
             opp.append(c)
