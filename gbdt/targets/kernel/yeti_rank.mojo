@@ -159,6 +159,36 @@ comptime YETI_BLOCK_PARALLEL = yeti_block_parallel_for[TARGET_COLUMN]()
 comptime YETI_SABOTAGE = is_defined["MOJOLEARN_GBDT_YETI_SABOTAGE"]()
 
 
+def yeti_est_reuse_search_for[column: Int]() -> Bool:
+    """FAST Apple (lane apple-fast-yetirank): the leaf estimation's
+    evaluation at the tree's starting point REUSES the search gradient's
+    per-row derivatives and pair weights instead of relaunching the whole
+    task kernel (draws, 1024-key sorts, pairs) on a fresh seed.
+
+    WHY IT IS THE SAME POINT. The search call (`doc_parallel_boosting.mojo`,
+    `launch_yeti_rank_with[False]` on `cursors[learn_p]`) and the
+    estimation's first evaluation (`pointwise_oracle.mojo`, the same cursor
+    gathered to bin order and read back through `query.inverse`) see the
+    same row-order point; nothing moves the cursor between them, and no
+    other launch writes `d_der_acc` / `d_weight_acc`. What changes is the
+    SAMPLE: CatBoost draws an independent permutation set for estimation
+    (its own `NextUniformL`); this arm estimates the leaves on the sample
+    the tree was grown on. That moves FAST bits, never IDENTICAL ones
+    (comptime FAST + Apple only), and the A/B gates quality (ndcg/map).
+    One kernel launch (the scatter) replaces six, and the task kernel, the
+    fit's dominant cost, runs once per tree instead of twice.
+
+    `-D MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF` is the A arm."""
+    comptime if is_defined["MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF"]():
+        return False
+    comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        return True
+    return False
+
+
+comptime YETI_EST_REUSE_SEARCH = yeti_est_reuse_search_for[TARGET_COLUMN]()
+
+
 def _advance_seed32(seed: UInt32) -> UInt32:
     """`AdvanceSeed32` (`random_gen.cuh:40-43`), restated for the kernel."""
     return UInt32(1664525) * seed + UInt32(1013904223)
@@ -875,6 +905,35 @@ def launch_yeti_rank_with[estimation: Bool](
             grid_dim=(row_blocks, 1, 1),
             block_dim=(MSE_BLOCK_SIZE, 1, 1),
         )
+
+
+def launch_yeti_rank_estimation_from_search(
+    ctx: DeviceContext,
+    mut y: YetiRankTargetBuffers,
+    mut stats: DeviceBuffer[DType.float32],
+    mut function_value: DeviceBuffer[DType.float32],
+    compute_fv: Bool,
+    mut plane_magnitudes: DeviceBuffer[DType.float32],
+    compute_magnitudes: Bool,
+) raises:
+    """`YETI_EST_REUSE_SEARCH`: the estimation planes `[der, pair weight]`
+    at each row's bin position (`query.inverse`), read from the
+    accumulators the tree's search call left in `d_der_acc` /
+    `d_weight_acc`. Only the scatter of `launch_yeti_rank_with[True]`; the
+    caller guarantees the cursor has not moved since that search call and
+    that no estimation launch has overwritten the accumulators."""
+    var n_rows = y.query.n_rows
+    var row_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+    ctx.enqueue_function[yeti_rank_row_kernel[True]](
+        y.d_der_acc.unsafe_ptr(), y.d_weight_acc.unsafe_ptr(), Int32(n_rows),
+        y.query.inverse.unsafe_ptr(), Int32(1),
+        stats.unsafe_ptr(), function_value.unsafe_ptr(),
+        Int32(1) if compute_fv else Int32(0),
+        plane_magnitudes.unsafe_ptr(),
+        Int32(1) if compute_magnitudes else Int32(0),
+        grid_dim=(row_blocks, 1, 1),
+        block_dim=(MSE_BLOCK_SIZE, 1, 1),
+    )
 
 
 def yeti_rank_zero_value_kernel(
