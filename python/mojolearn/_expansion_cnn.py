@@ -15,6 +15,7 @@ first imported, after the package, so both may rely on every module existing:
                                its `_HostBound`; never import it at module level
 """
 from . import _backend
+from ._labels import unique_inverse
 from . import _portable_math as _pm
 
 __all__ = ["Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d",
@@ -804,7 +805,10 @@ class CNNClassifier(_Layer):
         np = _np()
         x = self._images(X)
         y = np.asarray(y)
-        self.classes_, yi = np.unique(y, return_inverse=True)
+        # sorted classes and inverse codes on the device (_labels.unique_inverse)
+        cls, yi = unique_inverse(y)
+        self.classes_ = np.asarray(cls).astype(y.dtype, copy=False) if y.dtype.kind in "biuf" else np.asarray(cls)
+        yi = np.asarray(yi)
         yi = yi.astype(np.int32)
         self._build(len(self.classes_))
         b = self._binding()

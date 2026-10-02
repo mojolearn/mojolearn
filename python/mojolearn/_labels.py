@@ -475,3 +475,50 @@ def finite_integer_codes(arr):
         if v != math.floor(v):
             return None
     return sorted(int(v) for v in distinct)
+
+
+def unique_inverse(y):
+    """`(classes, codes)` for one NUMERIC label vector, both `Array`s:
+    the sorted distinct values (float64 for real labels, int64 for integer
+    and bool labels) and one int32 code per row, `classes[codes] == y`.
+    This is `np.unique(y, return_inverse=True)` computed by the base
+    binding's `unique_inverse` (cpu-gpu-cleanup w2-pyglue, 2026-10-02): on a
+    GPU install a device sort, a flag/scan compaction and a gather
+    (`core/label_encode_device.mojo`); on a CPU-only install the core host
+    binding's twin of the same statements (`core/label_encode.mojo`).
+    `-0.0` and `0.0` are one class (the first row's spelling kept); a NaN
+    label is refused. str labels have no device sort: they take
+    `sorted_classes` (the ORDER RULE) and `classes` comes back a list."""
+    from ._buffer import _materialize, _native, _output_store
+
+    try:
+        arr, _ = _materialize(y, "y")
+    except (TypeError, ValueError):
+        arr = None
+    if arr is None or arr.dtype.lstrip("<>|=")[:1] not in ("f", "i", "u", "b"):
+        # str or object labels: no device sort orders text, so these take
+        # the ORDER RULE's own encoding (the label loop the contract permits)
+        classes, codes = sorted_classes(flatten_labels(y))
+        return classes, Array.from_list(codes, "<i4")
+    kind = 0 if arr.dtype.lstrip("<>|=")[:1] == "f" else 1
+    if arr.size == 0:
+        raise ValueError("mojolearn: y is empty")
+    if arr.size != max(arr.shape):
+        raise ValueError("mojolearn: y must be a vector of labels")
+    wide = arr.astype("<f8" if kind == 0 else "<i8")
+    n = int(wide.size)
+    classes_store = _output_store("d" if kind == 0 else "q", n)
+    codes_store = _output_store("i", n)
+    try:
+        k = int(_native("unique_inverse")(
+            wide._addr, n, kind, classes_store.buffer_info()[0],
+            codes_store.buffer_info()[0]))
+    except Exception as exc:  # a Mojo Error crosses as a bare Exception
+        if "NaN label" in str(exc):
+            raise ValueError(str(exc)) from None
+        raise
+    del wide, arr
+    classes = Array._owned(classes_store, (n,), "<f8" if kind == 0 else "<i8", "C")
+    if k < n:
+        classes = Array.from_list(classes.tolist()[:k], classes.dtype)
+    return classes, Array._owned(codes_store, (n,), "<i4", "C")
