@@ -80,6 +80,7 @@ from isolation_forest.impl.isolation_tree_builder import (
     IF_SCRATCH_WORDS_PER_NODE,
     IF_STACK_WORDS,
     IF_FAST_ROWMAJOR,
+    IF_QUERY_RAW,
     IF_SAMPLED_UPLOAD,
     build_isolation_trees_global_kernel,
     if_chunk_gather_kernel,
@@ -416,7 +417,8 @@ def _upload_rowmajor_as_colmajor(
 
 
 def _upload_rowmajor_fast(
-    ctx: DeviceContext, src_addr: Int, n_rows: Int, n_cols: Int, pad: Int, poison: Float32
+    ctx: DeviceContext, src_addr: Int, n_rows: Int, n_cols: Int, pad: Int, poison: Float32,
+    name: String = "X",
 ) raises -> DeviceBuffer[DType.float32]:
     """IF_FAST_ROWMAJOR: the borrowed ROW-major block copied to the device
     as it is (one raw host-pointer copy, no host pass over the cells), the
@@ -443,7 +445,7 @@ def _upload_rowmajor_fast(
     )
     var bad = read_i32(ctx, flag, 1)
     if bad[0] != 0:
-        _raise_first_nonfinite_colmajor_view("X", src, n_rows, n_cols)
+        _raise_first_nonfinite_colmajor_view(name, src, n_rows, n_cols)
     _ = flag^
     return buf^
 
@@ -1126,10 +1128,13 @@ def _score_samples_device(
     n_cols: Int,
     mut trace: IdentityTrace,
     knobs: IFLaunchKnobs,
+    src_addr: Int = 0,
 ) raises -> DeviceBuffer[DType.float32]:
     """The device half of `ML::score_samples` (`isolation_forest.cu:
     161-177`): path lengths, then scores, both left on the device (so
-    `predict` thresholds them there as theirs does)."""
+    `predict` thresholds them there as theirs does). IF_QUERY_RAW: a
+    nonzero `src_addr` lends the ROW-major query by address
+    (`input_rowmajor` then empty) and the upload is `_upload_rowmajor_fast`."""
     if not forest.fitted:
         raise Error("Model has not been fitted. Call fit() first.")
     if n_rows <= 0:
@@ -1141,9 +1146,21 @@ def _score_samples_device(
             + " features, the model was fitted with "
             + String(forest.n_features)
         )
-    check_finite_by_name("X_query", input_rowmajor, n_rows, n_cols)
     var if_model = IsolationForest(forest.params)
-    var data = _upload_f32(ctx, input_rowmajor, n_rows * n_cols, knobs.pad, knobs.poison)
+    var data: DeviceBuffer[DType.float32]
+    comptime if IF_QUERY_RAW:
+        if src_addr != 0:
+            # lane/apple-fast-trees-io: raw copy of the borrowed block and
+            # DEVIATION 680's scan on the device; no host pass over the cells.
+            data = _upload_rowmajor_fast(
+                ctx, src_addr, n_rows, n_cols, knobs.pad, knobs.poison, "X_query"
+            )
+        else:
+            check_finite_by_name("X_query", input_rowmajor, n_rows, n_cols)
+            data = _upload_f32(ctx, input_rowmajor, n_rows * n_cols, knobs.pad, knobs.poison)
+    else:
+        check_finite_by_name("X_query", input_rowmajor, n_rows, n_cols)
+        data = _upload_f32(ctx, input_rowmajor, n_rows * n_cols, knobs.pad, knobs.poison)
     var avg_path_lengths = _poisoned_f32(ctx, n_rows, knobs.pad, knobs.poison)
     var scores = _poisoned_f32(ctx, n_rows, knobs.pad, knobs.poison)
     if_model.compute_path_lengths(
@@ -1167,13 +1184,14 @@ def score_samples(
     n_cols: Int,
     mut trace: IdentityTrace,
     knobs: IFLaunchKnobs = IFLaunchKnobs.default(),
+    src_addr: Int = 0,
 ) raises -> List[Float32]:
     """`ML::score_samples` (`isolation_forest.cu:161-177`), PAPER
     convention (1 = anomaly, 0.5 = normal). The Python layer negates
     (`isolation_forest.pyx:959`). The card records `if.pathlen` and
-    `if.scores`."""
+    `if.scores`. `src_addr`: see `_score_samples_device` (IF_QUERY_RAW)."""
     var scores = _score_samples_device(
-        ctx, forest, input_rowmajor, n_rows, n_cols, trace, knobs
+        ctx, forest, input_rowmajor, n_rows, n_cols, trace, knobs, src_addr
     )
     var out = read_f32(ctx, scores, n_rows)
     _ = scores^
@@ -1213,12 +1231,14 @@ def predict(
     n_cols: Int,
     threshold: Float32 = Float32(0.5),
     knobs: IFLaunchKnobs = IFLaunchKnobs.default(),
+    src_addr: Int = 0,
 ) raises -> List[Int32]:
     """`ML::predict` (`isolation_forest.cu:201-224`): scores, then `score
-    > threshold ? 1 : -1` (1 = anomaly). The Python layer negates."""
+    > threshold ? 1 : -1` (1 = anomaly). The Python layer negates.
+    `src_addr`: see `_score_samples_device` (IF_QUERY_RAW)."""
     var trace = IdentityTrace.disabled()
     var scores = _score_samples_device(
-        ctx, forest, input_rowmajor, n_rows, n_cols, trace, knobs
+        ctx, forest, input_rowmajor, n_rows, n_cols, trace, knobs, src_addr
     )
     var preds = _poisoned_i32(ctx, n_rows, knobs.pad, knobs.poison)
     var blocks = (n_rows + knobs.path_tpb - 1) // knobs.path_tpb

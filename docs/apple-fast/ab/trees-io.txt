@@ -1,3 +1,7 @@
+CMD lane/apple-fast-trees-io trees-io-ifq-build AFT_OUT=$HOME/aft-ab/trees-io-ifq bash tools/aft_ab.sh svm iforest taxi 1 "" "-D MOJOLEARN_IF_QUERY_RAW=1"
+CMD lane/apple-fast-trees-io trees-io-ifq-istella bash tools/aft_if_score_ab.sh $HOME/aft-ab/trees-io-ifq istella 3
+CMD lane/apple-fast-trees-io trees-io-ifq-taxi bash tools/aft_if_score_ab.sh $HOME/aft-ab/trees-io-ifq taxi 3
+CMD lane/apple-fast-trees-io trees-io-ifq-refusal MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SPEED_EXPECTED_VENDOR=metal PYTHONPATH=python $HOME/board-0834/cache/venv/bin/python tools/aft_if_refusal.py
 CMD lane/apple-fast-trees-io trees-io-if-istella AFT_OUT=$HOME/aft-ab/trees-io-if-istella bash tools/aft_ab.sh svm iforest istella 3 "" "-D MOJOLEARN_IF_SAMPLED_UPLOAD=1"
 CMD lane/apple-fast-trees-io trees-io-if-taxi AFT_OUT=$HOME/aft-ab/trees-io-if-taxi bash tools/aft_ab.sh svm iforest taxi 3 "" "-D MOJOLEARN_IF_SAMPLED_UPLOAD=1"
 CMD lane/apple-fast-trees-io trees-io-if-refusal MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SPEED_EXPECTED_VENDOR=metal PYTHONPATH=python $HOME/board-0834/cache/venv/bin/python tools/aft_if_refusal.py

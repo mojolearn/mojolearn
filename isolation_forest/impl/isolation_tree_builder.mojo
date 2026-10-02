@@ -178,6 +178,21 @@ comptime IF_SAMPLED_UPLOAD = (
     IF_FAST_ROWMAJOR and is_defined["MOJOLEARN_IF_SAMPLED_UPLOAD"]()
 )
 
+#: FAST on Apple (lane/apple-fast-trees-io, 2026-10-02), A/B arm
+#: `-D MOJOLEARN_IF_QUERY_RAW=1` (default off): THE QUERY GOES UP AS THE
+#: FIT'S X DOES. Cause: the score / decision_function / predict path
+#: crosses the query matrix on ONE host thread three times before any
+#: kernel runs: the binding appends every cell into a List
+#: (`bindings/_mojolearn_svm.mojo` iforest_run_binding), `check_finite_by_name`
+#: walks it (`isolation_forest.mojo` _score_samples_device), and `_upload_f32`
+#: writes every cell through `ftz` into the pinned stage. Under this arm the
+#: binding lends the query by address, `_upload_rowmajor_fast` copies the block
+#: raw and runs DEVIATION 680's scan on the device (`ftz` is a no-op under
+#: FAST, so the same cells reach `traverse_global_tree`). Same scores.
+comptime IF_QUERY_RAW = (
+    IF_FAST_ROWMAJOR and is_defined["MOJOLEARN_IF_QUERY_RAW"]()
+)
+
 
 comptime EULER_MASCHERONI_F32 = Float32(0.5772156649015329)
 """`T(0.5772156649015329)` with T = float: 0x3f13c468. Printed and gated

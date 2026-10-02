@@ -7,6 +7,7 @@ is NOT on this branch: lane/apple-fast-rfet-scan has it.
 
 | switch | kind | site | what it changes under FAST on Apple |
 |---|---|---|---|
+| `-D MOJOLEARN_IF_QUERY_RAW=1` | build define (binding svm) | `isolation_tree_builder.mojo` `IF_QUERY_RAW`; `bindings/_mojolearn_svm.mojo` iforest_run_binding (query lent by address); `isolation_forest/estimator.mojo` `iforest_run_host`, `score_samples` / `decision_function` / `predict` (`src_addr`); `isolation_forest.mojo` `_score_samples_device` | the score / decision_function / predict query goes up as the FAST fit's X does: a raw host-pointer copy of the borrowed block and DEVIATION 680's scan on the device (`_upload_rowmajor_fast`), instead of three one-thread host passes over every query cell (the binding's cell-by-cell List append, `check_finite_by_name`, `_upload_f32`'s per-cell `ftz` store into the pinned stage). `ftz` is a no-op under FAST: the same cells reach the traversal, same scores. Not on the lane clock (the fit scores one row); measured by `tools/aft_if_score_ab.sh` + `tools/aft_if_score.py` (score_samples over the training rows, forest rebuild included in both arms). |
 | `-D MOJOLEARN_IF_SAMPLED_UPLOAD=1` | build define (binding svm) | `isolation_forest/impl/isolation_tree_builder.mojo` `IF_SAMPLED_UPLOAD`, `if_sample_rows_kernel`, `if_chunk_gather_kernel`, the build kernel's gather; `isolation_forest/impl/isolation_forest.mojo` `_upload_sampled_fast`, `fit` | the fit no longer allocates and fills a device buffer of X's size (Istella 1.8 GB). A device sample-index pass draws every tree's rows first (the build kernel's own XORWOW draws, same stream, same trees); X then streams through one 64 MB device stage in chunks, each chunk scanned for non-finite cells and its sampled rows gathered into a 22 MB compact buffer (entry `tree * max_samples + s`); the build kernel gathers from that entry. One readback (the finite flag). |
 
 Cause: `_upload_rowmajor_fast` (commit 8d79e4d70) copies the whole borrowed X into a fresh
@@ -45,8 +46,12 @@ Keep rule: the arm becomes the FAST Apple default when its A/B is faster on the 
 same FSPEED hash and held-out quality within FAST's run-to-run spread, and
 `tools/aft_if_refusal.py` still raises ValueError for NaN and inf; then the define goes.
 
-Queue (docs/apple-fast/ab/trees-io.txt): A/B istella, A/B taxi (binding svm owns iforest,
-tools/aft_ab.sh leaves arm B's .so installed), then the refusal check, which therefore runs
-against the sampled-upload build. Watch the first build for: deferred `var tables:
+Queue (docs/apple-fast/ab/trees-io.txt), in order: (1) `trees-io-ifq-build` builds the
+IF_QUERY_RAW pair (one fit pair on taxi, a by-product); (2-3) `aft_if_score_ab.sh`
+alternates those two .so files timing score_samples over istella and taxi training rows;
+(4) the refusal check against the query-raw build (fit NaN/inf and now query NaN/inf,
+`tools/aft_if_refusal.py` extended); (5-6) the sampled-upload A/B istella, taxi (binding
+svm owns iforest, tools/aft_ab.sh leaves arm B's .so installed); (7) the refusal check
+again, against the sampled-upload build. Keep rule applies to each switch separately. Watch the first build for: deferred `var tables:
 XorwowDeviceTables` init inside `comptime if`, `rebind` of `x_rows.unsafe_ptr()`, and
 `create_sub_buffer` on the stage inside the chunk loop.
