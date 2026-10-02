@@ -19,14 +19,16 @@ from extratrees.checks.fixtures import (
     shaped_dataset,
 )
 from extratrees.checks.fixture_parity_check import const_heavy_shapes
-from extratrees.impl.decisiontree.batched_levelalgo.builder import (
+from extratrees.impl.decisiontree.batched_levelalgo.host_builder import (
     train_classification,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
 from extratrees.checks.fixed_point import choose_scale, quantize
 from extratrees.impl.decisiontree.batched_levelalgo.builder import (
-    train_regression,
     train_regression_device,
+)
+from extratrees.impl.decisiontree.batched_levelalgo.host_builder import (
+    train_regression,
 )
 from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_MSE,

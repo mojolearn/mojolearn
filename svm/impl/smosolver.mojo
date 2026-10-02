@@ -92,8 +92,16 @@ from svm.checks.device_select import (
 from svm.impl.kernelcache import BatchDescriptor, CACHE_READY, KernelCache
 from svm.impl.fast_update_f import fast_update_f
 from svm.impl.results import Results
-from svm.impl.smoblocksolve import SMO_WS_SIZE, smo_block_solve_kernel
-from svm.impl.fast_block_solve import smo_block_solve_ept_kernel
+from svm.impl.smoblocksolve import (
+    SMO_GRID_MAX_BLOCKS,
+    SMO_GRID_SLOT,
+    SMO_GRID_TPB,
+    SMO_GRID_TPB_MIN,
+    SMO_GRID_WS_MAX,
+    SMO_WS_SIZE,
+    smo_grid_reset_kernel,
+    smo_grid_solve_kernel,
+)
 from svm.impl.svm_parameter import (
     check_c_rows,
     C_SVC,
@@ -120,65 +128,23 @@ comptime SAB_NO_FTZ = is_defined["MOJOLEARN_SVM_SABOTAGE_NO_FTZ"]()
 #: `int max_inner_iter = 10000` (`smosolver.h:124`, `Solve`'s default).
 comptime SMO_MAX_INNER_ITER = 10000
 
-#: FAST on Apple: two of the outer iteration's drains go. DEVIATION 634's
-#: fold order is ranked on the device (`fold_order_rank_kernel`, the same
-#: permutation `fold_order_for` computes, since the indices are distinct)
-#: instead of read back, sorted on the host and uploaded; and the nonzero
-#: delta_alpha values scatter through the offsets the index select just
-#: scanned from the same flags instead of scanning them again.
-#: `-D MOJOLEARN_SVM_FAST_SYNCS_OFF` restores both.
-#: Also under IDENTICAL on Apple (lane/neighbors-apple, 2026-09-28): all
-#: three are bit-preserving by construction. The ranked permutation is the
-#: host sort's (distinct indices); the scatter reuses the offsets the index
-#: select scanned from the SAME flags over the SAME n; and the NaN flag is
-#: still checked before any output is returned (one iteration later, and at
-#: the loop's exit), so a NaN fit raises exactly as before and a finite fit
-#: runs the same arithmetic in the same order.
-comptime FAST_SMO_SYNCS = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and not is_defined["MOJOLEARN_SVM_IDENTICAL_SYNCS_OFF"]()
-    ))
-    and not is_defined["MOJOLEARN_SVM_FAST_SYNCS_OFF"]()
-)
-#: EVERY GPU since lane/gap-classical-nv (2026-10-02): NVIDIA and AMD read
-#: the fold order back, sorted it on the host and uploaded it, and drained
-#: the stream for the NaN flag, every outer SMO iteration. The argument above
-#: (bit-preserving by construction) does not depend on the vendor.
+#: DEVIATION 634's fold order is ranked on the device
+#: (`fold_order_rank_kernel`, the permutation `fold_order_for` computes), the
+#: nonzero delta_alpha values scatter through the offsets the index select
+#: just scanned from the same flags, and the NaN flag lands with the next
+#: iteration's drain (checked again at the loop's exit). All three are
+#: bit-preserving by construction: the ranked permutation is the host sort's,
+#: the scatter reuses offsets scanned from the SAME flags over the SAME n,
+#: and a NaN fit still raises before any output is returned. Every column,
+#: every mode (cpu-gpu-cleanup c-svm, 2026-10-02: the host sort and upload of
+#: the fold order and its `MOJOLEARN_SVM_*SYNCS_OFF` switches are gone).
 
-
-#: FAST on Apple: a 1024-wide working set solves in
-#: `fast_block_solve.mojo`'s kernel, `FAST_EPT` elements per thread (the
-#: same selections and updates, bit for bit). Measurement arms
-#: `-D MOJOLEARN_SVM_FAST_EPT4|8` (measured slower than 2 on the M4);
-#: `-D MOJOLEARN_SVM_FAST_EPT_OFF` keeps one thread per element.
-comptime FAST_EPT = 4 if is_defined["MOJOLEARN_SVM_FAST_EPT4"]() else (
-    8 if is_defined["MOJOLEARN_SVM_FAST_EPT8"]() else 2
-)
-comptime SVM_FUSED_UPDATE_F = FAST_SMO_SYNCS and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined[
+comptime SVM_FUSED_UPDATE_F = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined[
     "MOJOLEARN_SVM_FUSED_UPDATE_F_OFF"
 ]()
 """FAST on Apple: the gradient update computes each kernel value where it
 is used (`fast_update_f.mojo`) instead of writing the `nnz x batch` kernel
 tile and reading it back; RBF and linear kernels, n_cols <= 64."""
-#: Also under IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26):
-#: the elements-per-thread kernel runs the reference kernel's per-element
-#: arithmetic (ftz, identical_mul_add, the same eta / q expressions) and its
-#: argmax / argmin reductions with the same strict tie-break, which no
-#: reduction order can change.
-#: The opt-in host block solve (`-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE`) was
-#: removed (hr-optin-flags).
-
-#: EVERY GPU since lane/gap-classical-nv (2026-10-02): NVIDIA refuses the
-#: warp-lane0 schedule at width 1024, so its 1024 working set ran the fused
-#: tree (~26 barriers per inner iteration, up to 10,000 inner iterations per
-#: outer one). 512 threads x 2 elements fold through `fast_smo_reduce` at
-#: the hardware wave width; same total order, same per-element arithmetic.
-comptime FAST_EPT_ON = (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and not is_defined["MOJOLEARN_SVM_FAST_SYNCS_OFF"]()
-    and not is_defined["MOJOLEARN_SVM_FAST_EPT_OFF"]()
-)
 
 
 def fold_order_rank_kernel(
@@ -186,31 +152,22 @@ def fold_order_rank_kernel(
     n_in: Int32,
     order: MutPointer[Int32, MutAnyOrigin],
 ):
-    """One block of `SMO_WS_SIZE` threads: `order[rank(p)] = p`, rank by
-    (training index, position), `fold_order_for` on the device. The
-    position breaks ties: EPSILON_SVR's projected indices repeat (rows i
+    """One thread per nonzero position over the grid: `order[rank(p)] =
+    p`, rank by (training index, position), `fold_order_for` on the device.
+    The position breaks ties: EPSILON_SVR's projected indices repeat (rows i
     and i + n of one working set both project to i), and a rank by index
     alone gave two positions one slot and left another unwritten
     (lane/neighbors-apple, 2026-09-28: SVR DIVERGENT on the M3 Ultra)."""
     var n = Int(n_in)
-    var sh = stack_allocation[
-        SVM_WS_MAX, Scalar[DType.int32], address_space = AddressSpace.SHARED
-    ]()
-    var t = Int(thread_idx.x)
-    while t < n:
-        sh[t] = nz_idx.unsafe_load(t)
-        t += Int(block_dim.x)
-    barrier()
-    t = Int(thread_idx.x)
-    while t < n:
-        var mine = sh[t]
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < n:
+        var mine = nz_idx.unsafe_load(t)
         var r = 0
         for q in range(n):
-            var other = sh[q]
+            var other = nz_idx.unsafe_load(q)
             if other < mine or (other == mine and q < t):
                 r += 1
         order.unsafe_store(r, Int32(t))
-        t += Int(block_dim.x)
 
 
 def _grid(n: Int) -> Int:
@@ -303,16 +260,65 @@ def update_f_kernel(
 
 
 def _block_solve_threads_for(n_ws: Int, requested: Int) -> Int:
-    """The block size of the one-block solve: `requested` if given (the
+    """The block width of the grid solve: `requested` if given (the
     launch-invariance gate passes 1024, theirs, and the smallest power of
-    two); otherwise the smallest power of two `>= n_ws`. A SCHEDULING
-    choice: the solve's reductions are selections over a total order."""
+    two), raised to `SMO_GRID_TPB_MIN`; otherwise `SMO_GRID_TPB`, or the
+    smallest power of two `>= n_ws` (at least `SMO_GRID_TPB_MIN`) when the
+    working set fits one block. A SCHEDULING choice: the solve's reductions
+    are selections over a total order."""
     if requested > 0:
-        return requested
-    var b = 32
-    while b < n_ws:
+        return requested if requested > SMO_GRID_TPB_MIN else SMO_GRID_TPB_MIN
+    var b = SMO_GRID_TPB_MIN
+    while b < n_ws and b < SMO_GRID_TPB:
         b *= 2
     return b
+
+
+struct SmoGridScratch(Movable):
+    """The grid solve's exchange: per-block partials (double-buffered by
+    epoch parity) and the per-block epoch flags."""
+
+    var xf: DeviceBuffer[DType.float32]
+    var xi: DeviceBuffer[DType.int32]
+    var flags: DeviceBuffer[DType.int32]
+
+    def __init__(out self, ctx: DeviceContext) raises:
+        comptime cells = 2 * SMO_GRID_MAX_BLOCKS * SMO_GRID_SLOT
+        self.xf = ctx.enqueue_create_buffer[DType.float32](cells)
+        self.xi = ctx.enqueue_create_buffer[DType.int32](cells)
+        self.flags = ctx.enqueue_create_buffer[DType.int32](SMO_GRID_MAX_BLOCKS)
+
+
+def _launch_grid_solve[TPB: Int](
+    ctx: DeviceContext,
+    blocks: Int,
+    mut y: DeviceBuffer[DType.float32],
+    n_train: Int,
+    mut alpha: DeviceBuffer[DType.float32],
+    n_ws: Int,
+    mut delta_alpha: DeviceBuffer[DType.float32],
+    mut f: DeviceBuffer[DType.float32],
+    mut kernel_tile: DeviceBuffer[DType.float32],
+    mut ws_idx: DeviceBuffer[DType.int32],
+    mut C_vec: DeviceBuffer[DType.float32],
+    eps: Float32,
+    mut return_buff: DeviceBuffer[DType.float32],
+    max_iter: Int,
+    mut scratch: SmoGridScratch,
+) raises:
+    ctx.enqueue_function[smo_grid_reset_kernel](
+        scratch.flags.unsafe_ptr(),
+        grid_dim=1, block_dim=SMO_GRID_MAX_BLOCKS,  # 32 flags, a constant
+    )
+    ctx.enqueue_function[smo_grid_solve_kernel[TPB]](
+        y.unsafe_ptr(), Int32(n_train), alpha.unsafe_ptr(), Int32(n_ws),
+        delta_alpha.unsafe_ptr(), f.unsafe_ptr(), kernel_tile.unsafe_ptr(),
+        ws_idx.unsafe_ptr(), C_vec.unsafe_ptr(), eps,
+        return_buff.unsafe_ptr(), Int32(max_iter),
+        scratch.xf.unsafe_ptr(), scratch.xi.unsafe_ptr(),
+        scratch.flags.unsafe_ptr(),
+        grid_dim=blocks, block_dim=TPB,
+    )
 
 
 def launch_block_solve(
@@ -330,89 +336,45 @@ def launch_block_solve(
     eps: Float32,
     mut return_buff: DeviceBuffer[DType.float32],
     max_iter: Int,
+    mut scratch: SmoGridScratch,
 ) raises:
-    """`SmoBlockSolve<math_t, SMO_WS_SIZE><<<1, n_ws, 0, stream>>>(...)`,
-    at one of the six comptime block sizes."""
-    if threads < n_ws:
+    """`SmoBlockSolve<math_t, SMO_WS_SIZE><<<1, n_ws, 0, stream>>>(...)` as
+    a grid solve: `ceil(n_ws / threads)` blocks of `threads` (a power of two
+    in 64..1024), one working-set element per thread."""
+    if n_ws < 1 or n_ws > SMO_GRID_WS_MAX:
         raise Error(
-            "svm launch_block_solve: threads=" + String(threads)
-            + " < n_ws=" + String(n_ws)
+            "svm launch_block_solve: n_ws=" + String(n_ws) + " outside 1.."
+            + String(SMO_GRID_WS_MAX)
         )
-    comptime if FAST_EPT_ON and SVM_WS_MAX == 2048:
-        if threads == 2048:
-            # 2048 rows as 512 threads x 4 (M4 taxi 50k: 1024 x 2 6.4 s,
-            # 512 x 4 5.2-6.0 s, 256 x 8 6.2-7.7 s; the same solution).
-            comptime WT = 256 if is_defined["MOJOLEARN_SVM_WS2048_EPT8"]() else (1024 if is_defined["MOJOLEARN_SVM_WS2048_EPT2"]() else 512)
-            ctx.enqueue_function[smo_block_solve_ept_kernel[WT, 2048 // WT]](
-                y.unsafe_ptr(), Int32(n_train), alpha.unsafe_ptr(), Int32(n_ws),
-                delta_alpha.unsafe_ptr(), f.unsafe_ptr(), kernel_tile.unsafe_ptr(),
-                ws_idx.unsafe_ptr(), C_vec.unsafe_ptr(), eps,
-                return_buff.unsafe_ptr(), Int32(max_iter),
-                grid_dim=1, block_dim=WT,
-            )
-            return
-    comptime if FAST_EPT_ON:
-        if threads == 1024:
-            comptime T = 1024 // FAST_EPT
-            ctx.enqueue_function[smo_block_solve_ept_kernel[T, FAST_EPT]](
-                y.unsafe_ptr(), Int32(n_train), alpha.unsafe_ptr(), Int32(n_ws),
-                delta_alpha.unsafe_ptr(), f.unsafe_ptr(), kernel_tile.unsafe_ptr(),
-                ws_idx.unsafe_ptr(), C_vec.unsafe_ptr(), eps,
-                return_buff.unsafe_ptr(), Int32(max_iter),
-                grid_dim=1, block_dim=T,
-            )
-            return
-    if threads == 32:
-        ctx.enqueue_function[smo_block_solve_kernel[32]](
-            y.unsafe_ptr(), Int32(n_train), alpha.unsafe_ptr(), Int32(n_ws),
-            delta_alpha.unsafe_ptr(), f.unsafe_ptr(), kernel_tile.unsafe_ptr(),
-            ws_idx.unsafe_ptr(), C_vec.unsafe_ptr(), eps,
-            return_buff.unsafe_ptr(), Int32(max_iter),
-            grid_dim=1, block_dim=32,
-        )
-    elif threads == 64:
-        ctx.enqueue_function[smo_block_solve_kernel[64]](
-            y.unsafe_ptr(), Int32(n_train), alpha.unsafe_ptr(), Int32(n_ws),
-            delta_alpha.unsafe_ptr(), f.unsafe_ptr(), kernel_tile.unsafe_ptr(),
-            ws_idx.unsafe_ptr(), C_vec.unsafe_ptr(), eps,
-            return_buff.unsafe_ptr(), Int32(max_iter),
-            grid_dim=1, block_dim=64,
+    var blocks = (n_ws + threads - 1) // threads
+    if threads == 64:
+        _launch_grid_solve[64](
+            ctx, blocks, y, n_train, alpha, n_ws, delta_alpha, f, kernel_tile,
+            ws_idx, C_vec, eps, return_buff, max_iter, scratch,
         )
     elif threads == 128:
-        ctx.enqueue_function[smo_block_solve_kernel[128]](
-            y.unsafe_ptr(), Int32(n_train), alpha.unsafe_ptr(), Int32(n_ws),
-            delta_alpha.unsafe_ptr(), f.unsafe_ptr(), kernel_tile.unsafe_ptr(),
-            ws_idx.unsafe_ptr(), C_vec.unsafe_ptr(), eps,
-            return_buff.unsafe_ptr(), Int32(max_iter),
-            grid_dim=1, block_dim=128,
+        _launch_grid_solve[128](
+            ctx, blocks, y, n_train, alpha, n_ws, delta_alpha, f, kernel_tile,
+            ws_idx, C_vec, eps, return_buff, max_iter, scratch,
         )
     elif threads == 256:
-        ctx.enqueue_function[smo_block_solve_kernel[256]](
-            y.unsafe_ptr(), Int32(n_train), alpha.unsafe_ptr(), Int32(n_ws),
-            delta_alpha.unsafe_ptr(), f.unsafe_ptr(), kernel_tile.unsafe_ptr(),
-            ws_idx.unsafe_ptr(), C_vec.unsafe_ptr(), eps,
-            return_buff.unsafe_ptr(), Int32(max_iter),
-            grid_dim=1, block_dim=256,
+        _launch_grid_solve[256](
+            ctx, blocks, y, n_train, alpha, n_ws, delta_alpha, f, kernel_tile,
+            ws_idx, C_vec, eps, return_buff, max_iter, scratch,
         )
     elif threads == 512:
-        ctx.enqueue_function[smo_block_solve_kernel[512]](
-            y.unsafe_ptr(), Int32(n_train), alpha.unsafe_ptr(), Int32(n_ws),
-            delta_alpha.unsafe_ptr(), f.unsafe_ptr(), kernel_tile.unsafe_ptr(),
-            ws_idx.unsafe_ptr(), C_vec.unsafe_ptr(), eps,
-            return_buff.unsafe_ptr(), Int32(max_iter),
-            grid_dim=1, block_dim=512,
+        _launch_grid_solve[512](
+            ctx, blocks, y, n_train, alpha, n_ws, delta_alpha, f, kernel_tile,
+            ws_idx, C_vec, eps, return_buff, max_iter, scratch,
         )
     elif threads == 1024:
-        ctx.enqueue_function[smo_block_solve_kernel[1024]](
-            y.unsafe_ptr(), Int32(n_train), alpha.unsafe_ptr(), Int32(n_ws),
-            delta_alpha.unsafe_ptr(), f.unsafe_ptr(), kernel_tile.unsafe_ptr(),
-            ws_idx.unsafe_ptr(), C_vec.unsafe_ptr(), eps,
-            return_buff.unsafe_ptr(), Int32(max_iter),
-            grid_dim=1, block_dim=1024,
+        _launch_grid_solve[1024](
+            ctx, blocks, y, n_train, alpha, n_ws, delta_alpha, f, kernel_tile,
+            ws_idx, C_vec, eps, return_buff, max_iter, scratch,
         )
     else:
         raise Error(
-            "svm launch_block_solve: threads must be one of 32..1024 powers"
+            "svm launch_block_solve: threads must be one of 64..1024 powers"
             " of two, got " + String(threads)
         )
 
@@ -520,6 +482,7 @@ struct SmoSolver(Movable):
     var select: SelectScratch
     var nan_flag: DeviceBuffer[DType.int32]
     var host_nan_flag: HostBuffer[DType.int32]
+    var grid: SmoGridScratch
 
     # Variables to track convergence of training
     var diff_prev: Float32
@@ -594,6 +557,7 @@ struct SmoSolver(Movable):
         self.select = SelectScratch(ctx, ws)
         self.nan_flag = ctx.enqueue_create_buffer[DType.int32](1)
         self.host_nan_flag = ctx.enqueue_create_host_buffer[DType.int32](1)
+        self.grid = SmoGridScratch(ctx)
         self.diff_prev = Float32(0.0)
         self.n_small_diff = 0
         self.n_increased_diff = 0
@@ -817,6 +781,7 @@ struct SmoSolver(Movable):
                 self.delta_alpha, self.f, cache.kernel_tile,
                 cache.ws_idx_mod_svr,
                 self.C_vec, self.tol, self.return_buff, max_iter_this_block,
+                self.grid,
             )
             # raft::update_host(host_return_buff, return_buff, 2)
             ctx.enqueue_copy(
@@ -833,39 +798,21 @@ struct SmoSolver(Movable):
             var nnz_da = self.select.select_i32(
                 ctx, cache.ws_idx_mod, self.nz_flags, self.nz_da_idx, n_ws
             )
-            comptime if FAST_SMO_SYNCS:
-                self.select.scatter_f32_rescan_free(
-                    ctx, self.delta_alpha, self.nz_flags, self.nz_da, n_ws
-                )
-            else:
-                _ = self.select.select_f32(
-                    ctx, self.delta_alpha, self.nz_flags, self.nz_da, n_ws
-                )
+            self.select.scatter_f32_rescan_free(
+                ctx, self.delta_alpha, self.nz_flags, self.nz_da, n_ws
+            )
             st.stop(ctx, "smo.nonzero_select", t0)
             # The following should be performed only for elements with
             # nonzero delta_alpha
             if nnz_da > 0:
                 t0 = st.start()
-                # DEVIATION 634: the fold order, from the host.
-                comptime if FAST_SMO_SYNCS:
-                    ctx.enqueue_function[fold_order_rank_kernel](
-                        self.nz_da_idx.unsafe_ptr(), Int32(nnz_da),
-                        self.fold_order.unsafe_ptr(),
-                        grid_dim=1, block_dim=SMO_WS_SIZE,  # loops to SVM_WS_MAX
-                    )
-                else:
-                    var nz_host = read_i32(ctx, self.nz_da_idx, nnz_da)
-                    var order = fold_order_for(nz_host)
-                    var hord = ctx.enqueue_create_host_buffer[DType.int32](nnz_da)
-                    for r in range(nnz_da):
-                        hord.unsafe_ptr().unsafe_store(r, order[r])
-                    ctx.enqueue_copy(
-                        dst_buf=self.fold_order.create_sub_buffer[DType.int32](0, nnz_da),
-                        src_ptr=hord.unsafe_ptr(),
-                    )
-                    ctx.synchronize()
-                    _ = hord^
-                st.stop(ctx, "smo.fold_order_host", t0)
+                # DEVIATION 634: the fold order, ranked on the device.
+                ctx.enqueue_function[fold_order_rank_kernel](
+                    self.nz_da_idx.unsafe_ptr(), Int32(nnz_da),
+                    self.fold_order.unsafe_ptr(),
+                    grid_dim=_grid(nnz_da), block_dim=SEL_TPB,
+                )
+                st.stop(ctx, "smo.fold_order", t0)
                 var bd = cache.init_full_tile_batching(ctx, x, self.nz_da_idx, nnz_da)
                 t0 = st.start()
                 var fused_f = False
@@ -919,11 +866,9 @@ struct SmoSolver(Movable):
             ctx.enqueue_copy(
                 dst_ptr=self.host_nan_flag.unsafe_ptr(), src_buf=self.nan_flag
             )
-            # FAST_SMO_SYNCS: no drain of its own; the flag lands with the
-            # next iteration's drain (read below one iteration late) and
-            # the loop's exit drains and checks the last one.
-            comptime if not FAST_SMO_SYNCS:
-                ctx.synchronize()
+            # No drain of its own: the flag lands with the next iteration's
+            # drain (read below one iteration late) and the loop's exit
+            # drains and checks the last one.
             st.stop(ctx, "smo.nan_scan_readback", t0)
 
             var diff = self.host_return_buff.unsafe_ptr().unsafe_load(0)
@@ -970,16 +915,15 @@ struct SmoSolver(Movable):
                 self.trace.inner_iter_seq.append(inner)
                 self.trace.nnz_seq.append(nnz_da)
 
-        comptime if FAST_SMO_SYNCS:
-            ctx.synchronize()
-            if self.host_nan_flag.unsafe_ptr().unsafe_load(0) != Int32(0):
-                raise Error(
-                    "SMO error: NaN found during fitting. This might be caused by"
-                    " floating point overflow. In such case using fp64 could"
-                    " help. Alternatively, try gamma='scale' kernel parameter."
-                    " (DEVIATION 637: NaN in alpha or f after outer iteration "
-                    + String(self.n_outer_iter) + ")"
-                )
+        ctx.synchronize()
+        if self.host_nan_flag.unsafe_ptr().unsafe_load(0) != Int32(0):
+            raise Error(
+                "SMO error: NaN found during fitting. This might be caused by"
+                " floating point overflow. In such case using fp64 could"
+                " help. Alternatively, try gamma='scale' kernel parameter."
+                " (DEVIATION 637: NaN in alpha or f after outer iteration "
+                + String(self.n_outer_iter) + ")"
+            )
         # CUML_LOG_DEBUG("SMO solver finished after %d outer iterations...")
         var t_res = st.start()
         var res = Results(ctx, n_rows, n_cols, self.svmType)

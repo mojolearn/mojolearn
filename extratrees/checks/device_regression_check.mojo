@@ -53,14 +53,18 @@ from extratrees.impl.decisiontree.flatnode import (
     predict_regression,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.builder import (
-    train_regression,
     train_regression_device,
+)
+from extratrees.impl.decisiontree.batched_levelalgo.host_builder import (
+    train_regression,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
 from extratrees.estimator import (
     ExtraTreesConfig,
-    fit_extra_trees_regressor_reference,
     fit_extra_trees_regressor_device,
+)
+from extratrees.host_estimator import (
+    fit_extra_trees_regressor_reference,
 )
 
 

@@ -32,11 +32,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.memory import bitcast, memcpy
+from std.memory import bitcast
 from core.device_zero import enqueue_fill
-from core.host_lanes import HOST_FW, U32V
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
@@ -58,7 +55,7 @@ from embedding.checks.embedding_oracle import (
     EmbConfig,
     emb_refuse_ids,
     emb_refuse_shape,
-    refuse_nonfinite,
+    nonfinite_refusal,
 )
 
 
@@ -130,7 +127,7 @@ def _refuse_nonfinite_device(
     var idx = device_first_nonfinite(ctx, buf, n)
     if idx < 0:
         return
-    _refuse_nonfinite_ptr(name, p, n)
+    nonfinite_refusal(name, idx, p.unsafe_load(idx))
     raise Error(
         String("embedding: the device scan found a non-finite value in ") + name
         + " at flat index " + String(idx) + " that the host scan did not (a scan defect)"
@@ -176,58 +173,18 @@ def _upload_i32(
     return dev^
 
 
-def _all_finite_ptr(p: MutPointer[Float32, MutUntrackedOrigin], n: Int) -> Bool:
-    """`core.host_lanes.all_finite`'s bit test over the caller's n floats, the
-    ranges over host tasks: it reads bits and computes nothing."""
-    var tasks = host_predict_task_count(1 << 30)
-    if tasks > EMB_COPY_TASKS_MAX:
-        tasks = EMB_COPY_TASKS_MAX
-    if n < (1 << 18) or tasks <= 1:
-        tasks = 1
-    var chunk = (n + tasks - 1) // tasks
-    var bad = List[Int32](length=tasks, fill=Int32(0))
-    var bp = bad.unsafe_ptr()
-
-    def _scan(t: Int) {imm p, imm bp, imm n, imm chunk}:
-        var lo = t * chunk
-        var hi = min(lo + chunk, n)
-        var i = lo
-        var acc = U32V(0)
-        var expm = U32V(0x7F800000)
-        while i + HOST_FW <= hi:
-            var e = bitcast[DType.uint32](p.unsafe_load[width=HOST_FW](i)) & expm
-            acc = acc | e.eq(expm).select(U32V(1), U32V(0))
-            i += HOST_FW
-        var found = acc.reduce_or() != UInt32(0)
-        while i < hi and not found:
-            if (bitcast[DType.uint32](p.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-                found = True
-            i += 1
-        if found:
-            bp.unsafe_store(t, Int32(1))
-
-    if tasks <= 1:
-        _scan(0)
-    else:
-        host_parallelize(_scan, tasks)
-    var ok = True
-    for t in range(tasks):
-        if bad[t] != Int32(0):
-            ok = False
-    _ = bad^
-    return ok
-
-
-def _refuse_nonfinite_ptr(name: String, p: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
-    """`refuse_nonfinite` over the caller's floats: the parallel bit test
-    first; only a refusal pays the list copy, so the message and the index
-    it names are the oracle's own."""
-    if _all_finite_ptr(p, n):
+def _refuse_nonfinite_upload(
+    name: String, p: MutPointer[Float32, MutUntrackedOrigin], n: Int
+) raises:
+    """The non-finite refusal of `p[0:n]` when no run uploads it (an empty
+    output): a device copy and the device scan, as the runs do."""
+    if n <= 0:
         return
-    var values = List[Float32](length=n if n > 0 else 1, fill=Float32(0.0))
-    if n > 0:
-        memcpy(dest=values.unsafe_ptr(), src=p, count=n)
-    refuse_nonfinite(name, values)
+    var ctx = neural_ctx[_NEURAL_CTX]()
+    var d = _upload_f32_ptr(ctx, p, n)
+    _refuse_nonfinite_device(ctx, name, d, p, n)
+    _ = d^
+    _ = ctx^
 
 
 def _zeros_i32(n: Int) -> List[Int32]:
@@ -351,10 +308,10 @@ def embedding_forward_binding(
     var yp = f32_ptr(Int(py=addrs[2]))
     # the W scan runs on the device copy unless there is nothing to gather
     # (then nothing is uploaded)
-    var host_scan = n_positions * width <= 0
+    var no_run = n_positions * width <= 0
     with GILReleased(Python()):
-        if host_scan:
-            _refuse_nonfinite_ptr(String("W"), wp, vocab * width)
+        if no_run:
+            _refuse_nonfinite_upload(String("W"), wp, vocab * width)
         _forward_run(wp, ids, n_positions, cfg, yp)
     return PythonObject(n_positions * width)
 
@@ -418,12 +375,12 @@ def embedding_backward_binding(
     var ids = read_i32(Int(py=addrs[1]), n_positions)
     emb_refuse_ids(ids, cfg)
     var dwp = f32_ptr(Int(py=addrs[2]))
-    var host_scan = vocab * width <= 0
+    var no_run = vocab * width <= 0
     with GILReleased(Python()):
-        if host_scan:
-            _refuse_nonfinite_ptr(String("dY"), dyp, n_positions * width)
+        if no_run:
+            _refuse_nonfinite_upload(String("dY"), dyp, n_positions * width)
             if cfg.accumulate:
-                _refuse_nonfinite_ptr(String("the carried dW"), dwp, vocab * width)
+                _refuse_nonfinite_upload(String("the carried dW"), dwp, vocab * width)
         _backward_run(dyp, ids, n_positions, cfg, dwp, plan)
     return PythonObject(vocab * width)
 

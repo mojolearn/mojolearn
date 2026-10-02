@@ -1,0 +1,71 @@
+rule	class	owner	state	path	occ	text
+host-call	host-import	UNOWNED	debt	decomposition/estimator.mojo	0	import decomposition/host/pca_oracle.mojo:tsvd_explained_finish
+host-call	host-import	UNOWNED	debt	decomposition/estimator.mojo	0	tsvd_explained_finish(lt, lx, explained_ptr, ratio_ptr)
+host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	host_sign_flip(vecs, n)
+host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	import decomposition/host/pca_full_oracle.mojo:host_one_sided_jacobi_svd
+host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	import decomposition/host/pca_full_oracle.mojo:host_qr_factor
+host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	import decomposition/host/pca_oracle.mojo:host_jacobi_eigh
+host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	import decomposition/host/pca_oracle.mojo:host_sign_flip
+host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	return host_qr_factor(work, n_rows, n_cols)
+host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	var got = host_jacobi_eigh(work, n, JACOBI_SWEEPS, Float32(JACOBI_TOL))
+host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	var got = host_one_sided_jacobi_svd(
+host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	var r = host_qr_factor(work, n_rows, n_cols)
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	host_halving_sum(lp), host_halving_sum(lq), host_halving_sum(lpq), Float32(0.0)
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	host_sign_flip(vecs32, n_cols)
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	import decomposition/host/pca_oracle.mojo:host_column_mean
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	import decomposition/host/pca_oracle.mojo:host_halving_sum
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	import decomposition/host/pca_oracle.mojo:host_order_truncate_spectrum
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	import decomposition/host/pca_oracle.mojo:host_shift_columns
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	import decomposition/host/pca_oracle.mojo:host_sign_flip
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	return host_halving_sum(partials)
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	sv[j] = ftz(identical_sqrt(host_halving_sum(partials)))
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	var centered = host_shift_columns(x, mu, n_rows, n_cols, Float32(-1.0))
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	var mu = host_column_mean(x, n_rows, n_cols)
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	var result = host_order_truncate_spectrum(
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	var sigma = host_halving_sum(norm_partials)
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_oracle.mojo	0	host_gemm_nt_into(
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_oracle.mojo	0	import core/classical_host_predict.mojo:host_gemm_nt_into
+host-threads	host-threads	UNOWNED	debt	decomposition/host/pca_oracle.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	decomposition/host/pca_oracle.mojo	0	host_parallelize(_chunks, tasks)
+host-call	host-import	UNOWNED	debt	decomposition/linalg_public_device.mojo	0	import decomposition/host/linalg_public.mojo:eigh_ascending
+host-call	host-import	UNOWNED	debt	decomposition/linalg_public_device.mojo	0	import decomposition/host/linalg_public.mojo:svdvals_descending
+host-call	host-import	UNOWNED	debt	decomposition/linalg_public_device.mojo	0	return eigh_ascending(diag, vecs, n, True, Int(info[2]))
+host-call	host-import	UNOWNED	debt	decomposition/linalg_public_device.mojo	0	return svdvals_descending(s, n_cols)
+py-loop	py-numpy	hr-kit	debt	python/mojolearn/_expansion_decomp.py	0	Xm = M.take_rows([i for i in range(n) if mask[i]])
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	adj = [[] for _ in range(n)] # neighbors either way, for the component walk
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	big = max(abs(ls[i * n + i]) for i in range(n))
+py-loop	py-numpy	hr-kit	debt	python/mojolearn/_expansion_decomp.py	0	cov = _emp_cov(k, M.take_rows([i for i in range(n) if support[i]]), assume_centered=True)
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	dead = [all(abs(Yk.s[i * q + j]) < thr for i in range(n)) for j in range(q)]
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	diag = _M.of([lu.s[i * n + i] for i in range(n)], 1, n)
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	for i in range(n):
+py-loop	py-numpy	gap-nv-classical2	debt	python/mojolearn/_expansion_decomp.py	1	for i in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	2	for i in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	3	for i in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	4	for i in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	5	for i in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	6	for i in range(n):
+py-loop	py-numpy	gap-neural-overhead2	debt	python/mojolearn/_expansion_decomp.py	7	for i in range(n):
+py-loop	py-numpy	gap-neural-overhead2	debt	python/mojolearn/_expansion_decomp.py	8	for i in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	9	for i in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	10	for i in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	11	for i in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	12	for i in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	for j in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	for s0 in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	ia = [i for i in range(n) if labels[i] == a]
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	ib = [i for i in range(n) if labels[i] == b]
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	js = [j for j in range(n) if Dq.s[i * n + j] <= r]
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	pos = [i * n + j for i in range(n) for j in range(i + 1, n) if Dis.s[i * n + j] != 0]
+d2h-loop	d2h-roundtrip	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
+d2h-loop	d2h-roundtrip	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s)
+host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	import decomposition/host/linalg_public.mojo:eigh_ascending
+host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	var got = eigh_ascending(diag, vecs, n, True, Int(i2))
+host-call	host-import	UNOWNED	debt	x_decomp/device.mojo	0	var got = eigh_ascending(diag, vecs, n, True, executed)
+host-threads	host-threads	hr-qr	debt	x_decomp/device.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	x_decomp/device.mojo	0	host_parallelize(_piece, tasks)
+serial-launch	serial-gpu	UNOWNED	debt	x_decomp/device.mojo	0	ctx.enqueue_function[chol_diag_kernel](
+serial-launch	serial-gpu	UNOWNED	debt	x_decomp/device.mojo	0	ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
+serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_function[lu_diag_kernel](
+serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	1	ctx.enqueue_function[lu_diag_kernel](
+serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_function[lu_pivot_block_kernel](
+serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	1	ctx.enqueue_function[lu_pivot_block_kernel](

@@ -22,8 +22,13 @@ on seven CPUs. Reference path only, one profile, one batch shape; identity is
 per shape because the weight gradients contract over the token count.
 """
 from ._byte_lm_config import ByteLanguageModelConfig
-from ._byte_lm_host import LanguageModelHostTrainer, LanguageModelInference
 from ._byte_lm_impl import SmallByteLanguageModelTrainer
+
+# The two CPU classes live in the CPU-side `_byte_lm_host` and load on first
+# touch (cpu-gpu-cleanup n-pyneural, 2026-10-02), so a GPU install importing
+# this module pulls in no CPU-side module.
+_CPU_SIDE = {'LanguageModelHostTrainer': '._byte_lm_host',
+             'LanguageModelInference': '._byte_lm_host'}
 
 LanguageModelConfig = ByteLanguageModelConfig
 LanguageModelTrainer = SmallByteLanguageModelTrainer
@@ -31,3 +36,16 @@ LanguageModelTrainer = SmallByteLanguageModelTrainer
 __all__ = ['LanguageModelConfig', 'LanguageModelTrainer', 'LanguageModelInference',
            'LanguageModelHostTrainer', 'SmallByteLanguageModelTrainer',
            'ByteLanguageModelConfig']
+
+
+def __getattr__(name):
+    if name in _CPU_SIDE:
+        import importlib
+        value = getattr(importlib.import_module(_CPU_SIDE[name], __package__), name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))
