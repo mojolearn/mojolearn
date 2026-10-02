@@ -80,6 +80,13 @@ from checks.numerics import (
     NUMERIC_IDENTICAL,
     identical_exp64,
 )
+from std.memory import bitcast as _hr2_bitcast
+from checks.soft_f64 import (
+    SF64_ONE,
+    sf64_ftz,
+    sf64_sigmoid_f64,
+    sf64_sub,
+)
 from gbdt.resident_model import (
     gbdt_resident_info,
     gbdt_resident_predict,
@@ -165,7 +172,8 @@ def gbdt_sigmoid_binding(
     var count = Int(py=n)
     for i in range(count):
         var r = rp.unsafe_load(i)
-        op.unsafe_store(i, 1.0 / (1.0 + identical_exp64(-r)))
+        # lane hr2-gbdt-host: soft binary64, every column's words
+        op.unsafe_store(i, _hr2_bitcast[DType.float64](sf64_sigmoid_f64(_hr2_bitcast[DType.uint64](r))))
     return PythonObject(count)
 
 
@@ -194,12 +202,15 @@ def gbdt_sigmoid_pair_binding(
         raise Error("gbdt_sigmoid_pair: n must be non-negative")
     for i in range(count):
         var r = rp.unsafe_load(i)
-        var p = 1.0 / (1.0 + identical_exp64(-r))
+        # lane hr2-gbdt-host: `resident_link_kernel`'s pair, soft binary64
+        var pb = sf64_ftz(sf64_sigmoid_f64(_hr2_bitcast[DType.uint64](r)))
+        var p = _hr2_bitcast[DType.float64](pb)
+        var q = _hr2_bitcast[DType.float64](sf64_sub(SF64_ONE, pb))
         comptime if GBDT_PAIR_SABOTAGE:
             op.unsafe_store(2 * i, p)
-            op.unsafe_store(2 * i + 1, 1.0 - p)
+            op.unsafe_store(2 * i + 1, q)
         else:
-            op.unsafe_store(2 * i, 1.0 - p)
+            op.unsafe_store(2 * i, q)
             op.unsafe_store(2 * i + 1, p)
     return PythonObject(count)
 

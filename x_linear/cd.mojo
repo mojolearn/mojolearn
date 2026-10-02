@@ -253,22 +253,7 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
     # the grids, on all rows
     _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
     if t.lead():
-        for l in range(l_n):
-            var l1r = ld(fp, 2 + l)
-            if explicit:
-                for k in range(a_n):
-                    st(res, alphas + l * a_n + k, ld(fp, 2 + l_n + k))
-                continue
-            var qmax = Float32(0)
-            for j in range(d):
-                qmax = fmax(qmax, fabs(ld(fw, q + j)))
-            var amax = fd(qmax, fm(i2f(n), l1r))
-            if amax <= Float32(1e-6):
-                for k in range(a_n):
-                    st(res, alphas + l * a_n + k, Float32(1e-6))
-                continue
-            for k in range(a_n):
-                st(res, alphas + l * a_n + k, alpha_grid_value(amax, eps, k, a_n))
+        ecv_alphas(res, alphas, fp, l_n, a_n, explicit, eps, fw, q, d, n)
     t.sync()
     # the path on each fold
     for f in range(f_n):
@@ -332,22 +317,7 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
                 for k in range(a_n):
                     st(res, mse + (l * a_n + k) * f_n + f, fd(ld(fw, pacc + k), i2f(n_te)) if n_te > 0 else Float32(0))
     if t.lead():
-        # the choice: the smallest mean over folds, first on a tie
-        var best_l = 0
-        var best_k = 0
-        var best = Float32(0)
-        for l in range(l_n):
-            for k in range(a_n):
-                var acc = Float32(0)
-                for f in range(f_n):
-                    acc = fa(acc, ld(res, mse + (l * a_n + k) * f_n + f))
-                var m = fd(acc, i2f(f_n))
-                if (l == 0 and k == 0) or m < best:  # DEVIATION 5005: the first minimum
-                    best = m
-                    best_l = l
-                    best_k = k
-        st(res, d + 1, ld(res, alphas + best_l * a_n + best_k))
-        st(res, d + 2, ld(fp, 2 + best_l))
+        ecv_choose(res, fp, d, l_n, a_n, f_n)
     t.sync()
     # the refit on all rows, from zero
     _prep(t, x, y, n, d, fid, -1, fi, fw, xm, gg, q, sc)
@@ -358,6 +328,74 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
     fill(fw, w, d, Float32(0))
     var iters = enet_gram_cd(fw, gg, q, qw, w, d, ld(fw, sc + 1), fm(fm(alpha, l1r), i2f(n)),
                              fm(fm(alpha, fs(Float32(1), l1r)), i2f(n)), max_iter, tol, positive)
+    ecv_finish(res, fw, xm, w, sc, d, fi, alpha, l1r, iters)
+
+
+def ecv_alphas(res: FP, alphas: Int, fp: FP, l_n: Int, a_n: Int, explicit: Bool, eps: Float32,
+               fw: FP, q: Int, d: Int, n: Int):
+    """The grid of each l1_ratio from the full data's X'y at fw[q:q+d]
+    (their `_alpha_grid`), or the explicit alphas, into res[alphas:]."""
+    for l in range(l_n):
+        var l1r = ld(fp, 2 + l)
+        if explicit:
+            for k in range(a_n):
+                st(res, alphas + l * a_n + k, ld(fp, 2 + l_n + k))
+            continue
+        var qmax = Float32(0)
+        for j in range(d):
+            qmax = fmax(qmax, fabs(ld(fw, q + j)))
+        var amax = fd(qmax, fm(i2f(n), l1r))
+        if amax <= Float32(1e-6):
+            for k in range(a_n):
+                st(res, alphas + l * a_n + k, Float32(1e-6))
+            continue
+        for k in range(a_n):
+            st(res, alphas + l * a_n + k, alpha_grid_value(amax, eps, k, a_n))
+
+
+def ecv_alpha_cell(res: FP, alphas: Int, fp: FP, l_n: Int, a_n: Int, explicit: Bool, eps: Float32,
+                   fw: FP, q: Int, d: Int, n: Int, l: Int, k: Int):
+    """Cell (l, k) of `ecv_alphas`, with its statements: the device runs one
+    cell per thread, the host loops them (same values, same chains)."""
+    if explicit:
+        st(res, alphas + l * a_n + k, ld(fp, 2 + l_n + k))
+        return
+    var l1r = ld(fp, 2 + l)
+    var qmax = Float32(0)
+    for j in range(d):
+        qmax = fmax(qmax, fabs(ld(fw, q + j)))
+    var amax = fd(qmax, fm(i2f(n), l1r))
+    if amax <= Float32(1e-6):
+        st(res, alphas + l * a_n + k, Float32(1e-6))
+        return
+    st(res, alphas + l * a_n + k, alpha_grid_value(amax, eps, k, a_n))
+
+
+def ecv_choose(res: FP, fp: FP, d: Int, l_n: Int, a_n: Int, f_n: Int):
+    """The choice: the smallest mean over folds, first on a tie; alpha_
+    and l1_ratio_ into res[d + 1], res[d + 2]."""
+    var alphas = d + 4
+    var mse = alphas + l_n * a_n
+    var best_l = 0
+    var best_k = 0
+    var best = Float32(0)
+    for l in range(l_n):
+        for k in range(a_n):
+            var acc = Float32(0)
+            for f in range(f_n):
+                acc = fa(acc, ld(res, mse + (l * a_n + k) * f_n + f))
+            var m = fd(acc, i2f(f_n))
+            if (l == 0 and k == 0) or m < best:  # DEVIATION 5005: the first minimum
+                best = m
+                best_l = l
+                best_k = k
+    st(res, d + 1, ld(res, alphas + best_l * a_n + best_k))
+    st(res, d + 2, ld(fp, 2 + best_l))
+
+
+def ecv_finish(res: FP, fw: FP, xm: Int, w: Int, sc: Int, d: Int, fi: Bool, alpha: Float32,
+               l1r: Float32, iters: Int):
+    """The refit's coef, intercept, alpha_, l1_ratio_, n_iter into res."""
     copy(res, 0, fw, w, d)
     var b = ld(fw, sc)
     for j in range(d):
@@ -366,3 +404,180 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
     st(res, d + 1, alpha)
     st(res, d + 2, l1r)
     st(res, d + 3, i2f(iters))
+
+
+# ------------------------------------------------ the grid form (lane/neural-pass109)
+# x_linear/cd_grid.mojo runs LassoCV / ElasticNetCV as launches over the
+# whole device: every fold's means, Gram and X'y at once (one thread per
+# value), one block per (fold, l1_ratio) path, one thread per held-out sum.
+# The helpers below are the host schedule's statements with the fold's rows
+# chosen by their fold id (rows ascending), so every word is the host's.
+
+
+@always_inline
+def _ecv_row(fid: FP, i: Int, fold: Int, held: Bool) -> Bool:
+    """Row i is in the fold's held-out rows (held) or its training rows
+    (all rows when fold < 0)."""
+    if held:
+        return Int(ld(fid, i)) == fold
+    return fold < 0 or Int(ld(fid, i)) != fold
+
+
+def ecv_rows(fid: FP, n: Int, fold: Int) -> Int:
+    var rows = 0
+    for i in range(n):
+        if _ecv_row(fid, i, fold, False):
+            rows += 1
+    return rows
+
+
+# Rows whose loads a grid chain issues before folding them (scheduling
+# only: the folds still take the rows one at a time, ascending).
+comptime ECV_U = 32
+comptime ECV_UH = 8
+
+
+def ecv_fold_fa(v: FP, off: Int, step: Int, fid: FP, n: Int, fold: Int) -> Float32:
+    """acc = fa(acc, v[off + i*step]) over the fold's training rows ascending
+    (`add_acc` per column, the y sum of `_prep_host`)."""
+    var acc = Float32(0)
+    var i0 = 0
+    while i0 + ECV_U <= n:
+        var bv = SIMD[DType.float32, ECV_U]()
+        var bf = SIMD[DType.float32, ECV_U]()
+        comptime for u in range(ECV_U):
+            bv[u] = ld(v, off + (i0 + u) * step)
+            bf[u] = ld(fid, i0 + u)
+        comptime for u in range(ECV_U):
+            if fold < 0 or Int(bf[u]) != fold:
+                acc = fa(acc, bv[u])
+        i0 += ECV_U
+    for i in range(i0, n):
+        if _ecv_row(fid, i, fold, False):
+            acc = fa(acc, ld(v, off + i * step))
+    return acc
+
+
+def ecv_cfmad(a: FP, aoff: Int, astep: Int, ma: Float32, b: FP, boff: Int, bstep: Int, mb: Float32,
+              fid: FP, n: Int, fold: Int) -> Float32:
+    """acc = fmad(a_i - ma, b_i - mb, acc) over the fold's training rows
+    ascending: a Gram, X'y or |yc|^2 entry of `_prep_host`."""
+    var acc = Float32(0)
+    var i0 = 0
+    while i0 + ECV_U <= n:
+        var ba = SIMD[DType.float32, ECV_U]()
+        var bb = SIMD[DType.float32, ECV_U]()
+        var bf = SIMD[DType.float32, ECV_U]()
+        comptime for u in range(ECV_U):
+            ba[u] = ld(a, aoff + (i0 + u) * astep)
+            bb[u] = ld(b, boff + (i0 + u) * bstep)
+            bf[u] = ld(fid, i0 + u)
+        comptime for u in range(ECV_U):
+            if fold < 0 or Int(bf[u]) != fold:
+                acc = fmad(fs(ba[u], ma), fs(bb[u], mb), acc)
+        i0 += ECV_U
+    for i in range(i0, n):
+        if _ecv_row(fid, i, fold, False):
+            acc = fmad(fs(ld(a, aoff + i * astep), ma), fs(ld(b, boff + i * bstep), mb), acc)
+    return acc
+
+
+def ecv_held_sse(x: FP, y: FP, fid: FP, n: Int, d: Int, fold: Int, wb: FP, o: Int) -> Float32:
+    """The held-out squared errors of the path point at wb[o:o+d+1] (coef,
+    intercept), rows ascending: the host schedule's per-alpha accumulator.
+    ECV_UH rows' predictions run side by side (each its own chain over j),
+    then fold in row order; a block with no held-out row is skipped."""
+    var acc = Float32(0)
+    var b0 = ld(wb, o + d)
+    var i0 = 0
+    while i0 + ECV_UH <= n:
+        var held = SIMD[DType.bool, ECV_UH](fill=False)
+        var any = False
+        comptime for u in range(ECV_UH):
+            held[u] = Int(ld(fid, i0 + u)) == fold
+            any = any or held[u]
+        if any:
+            var pv = SIMD[DType.float32, ECV_UH](b0)
+            for j in range(d):
+                var wj = ld(wb, o + j)
+                comptime for u in range(ECV_UH):
+                    pv[u] = fmad(ld(x, (i0 + u) * d + j), wj, pv[u])
+            comptime for u in range(ECV_UH):
+                if held[u]:
+                    var r = fs(pv[u], ld(y, i0 + u))
+                    acc = fmad(r, r, acc)
+        i0 += ECV_UH
+    for i in range(i0, n):
+        if _ecv_row(fid, i, fold, True):
+            var p = b0
+            for j in range(d):
+                p = fmad(ld(x, i * d + j), ld(wb, o + j), p)
+            var r = fs(p, ld(y, i))
+            acc = fmad(r, r, acc)
+    return acc
+
+
+def t_enet_gram_cd(t: Team, fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float32,
+                   l1: Float32, l2: Float32, max_iter: Int, tol: Float32, positive: Bool = False) -> Int:
+    """`enet_gram_cd` on the team. Coordinate j is updated by thread
+    j % nt, which owns w[j] and Qw[k] for k = tid, tid + nt, ...; it
+    publishes (new w_j, old w_j) through a broadcast slot (double buffered
+    by the barrier count) and every thread applies the Qw update to the
+    entries it owns. The statements per word are the serial loop's; the
+    convergence test reads the same broadcast words in every thread, so the
+    sweep count is uniform. The gap runs on the lead after a barrier. A team
+    of one runs `enet_gram_cd`."""
+    if t.nt <= 1:
+        return enet_gram_cd(fw, gg, q, qw, w, d, ynorm2, l1, l2, max_iter, tol, positive)
+    var slot = t.slot_at.unsafe_origin_cast[MutAnyOrigin]()
+    for j in range(t.tid, d, t.nt):
+        var acc = Float32(0)
+        for k in range(d):
+            acc = fmad(ld(fw, gg + j * d + k), ld(fw, w + k), acc)
+        st(fw, qw + j, acc)
+    t.sync()
+    var tol_s = fm(tol, ynorm2)
+    var g0 = Float32(0)
+    if t.lead():
+        g0 = _gap(fw, q, qw, w, d, ynorm2, l1, l2, positive)
+    if t.bcast(g0, 6) <= tol_s:
+        return 0
+    var nb = 0
+    for it in range(max_iter):
+        var w_max = Float32(0)
+        var dw_max = Float32(0)
+        for j in range(d):
+            var qjj = ld(fw, gg + j * d + j)
+            if qjj == 0:
+                continue
+            var s = 8 + (nb & 1) * 2
+            nb += 1
+            if j % t.nt == t.tid:
+                var wj0 = ld(fw, w + j)
+                var tt = fa(fs(ld(fw, q + j), ld(fw, qw + j)), fm(wj0, qjj))
+                var nw0 = fd(fm(fsign(tt), fmax(fs(fabs(tt), l1), Float32(0))), fa(qjj, l2))
+                if positive and tt < 0:
+                    nw0 = Float32(0)
+                st(fw, w + j, nw0)
+                slot.unsafe_store(s, nw0)
+                slot.unsafe_store(s + 1, wj0)
+            t.sync()
+            var nw = slot.unsafe_load(s)
+            var wj = slot.unsafe_load(s + 1)
+            if nw != wj:
+                var delta = fs(nw, wj)
+                for k in range(t.tid, d, t.nt):
+                    st(fw, qw + k, fmad(delta, ld(fw, gg + j * d + k), ld(fw, qw + k)))
+            var dw = fabs(fs(nw, wj))
+            if dw > dw_max:
+                dw_max = dw
+            if fabs(nw) > w_max:
+                w_max = fabs(nw)
+        if w_max == 0 or fd(dw_max, w_max) <= tol or it == max_iter - 1:
+            t.sync()
+            var g = Float32(0)
+            if t.lead():
+                g = _gap(fw, q, qw, w, d, ynorm2, l1, l2, positive)
+            if t.bcast(g, 6) <= tol_s:
+                return it + 1
+    return max_iter

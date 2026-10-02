@@ -37,6 +37,7 @@ Rejected: threaded host `all_finite_f32` in the base binding: the no-host-routes
 | 53 | aft-ab-ettpb | `-D MOJOLEARN_ET_TPB_256` et taxi + istella |
 | 54 | aft-ab-etb64 | `-D MOJOLEARN_ET_DEVICE_BATCH_65536` et taxi |
 | 55 | aft-ab-fin1 | VOID (see above) |
+| 80 | aft-ab-yreuse1 | lane/apple-fast-yetirank 098e89988: YetiRank estimation reuses the search derivatives (B, default) vs `-D MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF` (A), istellarank, 3 pairs |
 
 Owed: `lq add m3 ID lane/apple-fast-trees2 gbdt-lossguide,gbdt-depthwise,gbdt-rank-yetirank,iforest taxi,istella` (IDENTICAL device vs host at head; all changes are FAST-gated). Not queued.
 
