@@ -75,17 +75,23 @@ comptime RIDGE_FF_GATE = Float32(0.000244140625)  # 2^-12
 comptime RIDGE_FF_ALWAYS = is_defined["MOJOLEARN_RIDGE_FF_ALWAYS"]()
 
 
-def _chol_trusted(ok: Bool, fw: FP, mm: Int, gg: Int, d: Int, alpha: Float32) -> Bool:
-    """Whether a float32 factor of G + alpha I (at mm) may be used."""
+def chol_trusted(ok: Bool, l: FP, g: FP, d: Int, alpha: Float32) -> Bool:
+    """Whether a float32 factor l of G + alpha I (G at g) may be used: it
+    factored and no pivot kept less than RIDGE_FF_GATE of its diagonal."""
     comptime if RIDGE_FF_ALWAYS:
         return False
     if not ok:
         return False
     for j in range(d):
-        var l = ld(fw, mm + j * d + j)
-        if fm(l, l) < fm(fa(ld(fw, gg + j * d + j), alpha), RIDGE_FF_GATE):
+        var lj = ld(l, j * d + j)
+        if fm(lj, lj) < fm(fa(ld(g, j * d + j), alpha), RIDGE_FF_GATE):
             return False
     return True
+
+
+@always_inline
+def _chol_trusted(ok: Bool, fw: FP, mm: Int, gg: Int, d: Int, alpha: Float32) -> Bool:
+    return chol_trusted(ok, fw + mm, fw + gg, d, alpha)
 
 
 def ridge_ff_units(n: Int, d: Int, t_n: Int) -> Int:
@@ -95,14 +101,17 @@ def ridge_ff_units(n: Int, d: Int, t_n: Int) -> Int:
 
 
 def ridge_ff_unit(u: Int, x: FP, y: FP, n: Int, d: Int, t_n: Int, fi: Bool, sw: Bool, wo: Int,
-                  st_h: FP, st_l: FP):
+                  st_h: FP, st_l: FP, s: Int = 0, e: Int = 0):
     """Unit u of the float-float statistics into st_h / st_l: [xm d | ym T]
     then [G d*d] then [X'Y d*T]. The means units must all be done before
     any cell unit starts (two passes)."""
-    var wsum = ff_of(i2f(n))
+    # the rows outside [s, e) (k-fold RidgeCV's training rows; all when s == e)
+    var wsum = ff_of(i2f(n - (e - s)))
     if sw:
         wsum = ff_of(Float32(0))
         for i in range(n):
+            if i >= s and i < e:
+                continue
             wsum = ff_add_f(wsum, ld(y, wo + i))
     var gofs = d + t_n
     var xofs = gofs + d * d
@@ -110,9 +119,9 @@ def ridge_ff_unit(u: Int, x: FP, y: FP, n: Int, d: Int, t_n: Int, fi: Bool, sw: 
         var m = ff_of(Float32(0))
         if fi:
             if u < d:
-                m = ff_col_mean(x, d, u, n, n, n, y, wo, sw, wsum)
+                m = ff_col_mean(x, d, u, n, s, e, y, wo, sw, wsum)
             else:
-                m = ff_col_mean(y, t_n, u - d, n, n, n, y, wo, sw, wsum)
+                m = ff_col_mean(y, t_n, u - d, n, s, e, y, wo, sw, wsum)
         ff_st(st_h, st_l, u, m)
         return
     var c = u - (d + t_n)
@@ -121,32 +130,35 @@ def ridge_ff_unit(u: Int, x: FP, y: FP, n: Int, d: Int, t_n: Int, fi: Bool, sw: 
         var jk = upper_cell(c, d)
         var j = jk[0]
         var k = jk[1]
-        var v = ff_cross(x, d, j, ff_ld(st_h, st_l, j), x, d, k, ff_ld(st_h, st_l, k), n, n, n, y, wo, sw)
+        var v = ff_cross(x, d, j, ff_ld(st_h, st_l, j), x, d, k, ff_ld(st_h, st_l, k), n, s, e, y, wo, sw)
         ff_st(st_h, st_l, gofs + j * d + k, v)
         ff_st(st_h, st_l, gofs + k * d + j, v)
         return
     var q = c - cells
     var j = q // t_n
     var tt = q - j * t_n
-    var v = ff_cross(x, d, j, ff_ld(st_h, st_l, j), y, t_n, tt, ff_ld(st_h, st_l, d + tt), n, n, n, y, wo, sw)
+    var v = ff_cross(x, d, j, ff_ld(st_h, st_l, j), y, t_n, tt, ff_ld(st_h, st_l, d + tt), n, s, e, y, wo, sw)
     ff_st(st_h, st_l, xofs + j * t_n + tt, v)
 
 
 def ridge_ff_solve(d: Int, t_n: Int, fi: Bool, alpha: Float32, st_h: FP, st_l: FP, bh: FP, bl: FP,
-                   res: FP) -> Bool:
+                   res: FP, fh: FP, fl: FP) -> Bool:
     """(G + alpha I) W = X'Y in float-float from ridge_ff_unit's statistics
-    (G factored in place); coef and intercept words into res (T*d | T).
-    False when float-float cannot factor it either. bh, bl: d words."""
+    (G + alpha I factored into fh / fl, d*d words each, the statistics kept);
+    coef and intercept words into res (T*d | T). False when float-float
+    cannot factor it either. bh, bl: d words."""
     var gofs = d + t_n
     var xofs = gofs + d * d
+    for q in range(d * d):
+        ff_st(fh, fl, q, ff_ld(st_h, st_l, gofs + q))
     for j in range(d):
-        ff_st(st_h, st_l, gofs + j * d + j, ff_add_f(ff_ld(st_h, st_l, gofs + j * d + j), alpha))
-    if not ff_cholesky(st_h + gofs, st_l + gofs, d):
+        ff_st(fh, fl, j * d + j, ff_add_f(ff_ld(fh, fl, j * d + j), alpha))
+    if not ff_cholesky(fh, fl, d):
         return False
     for tt in range(t_n):
         for j in range(d):
             ff_st(bh, bl, j, ff_ld(st_h, st_l, xofs + j * t_n + tt))
-        ff_chol_solve(st_h + gofs, st_l + gofs, d, bh, bl)
+        ff_chol_solve(fh, fl, d, bh, bl)
         var acc = ff_of(Float32(0))
         for j in range(d):
             st(res, tt * d + j, ff_f32(ff_ld(bh, bl, j)))
@@ -337,11 +349,13 @@ def _ridge_ff_host(x: FP, y: FP, n: Int, d: Int, t_n: Int, fi: Bool, sw: Bool, w
     var units = ridge_ff_units(n, d, t_n)
     var nm = d + t_n
     var words = d + t_n + d * d + d * t_n
-    var hb = List[Float32](length=2 * words + 2 * d, fill=Float32(0))
+    var hb = List[Float32](length=2 * words + 2 * d + 2 * d * d, fill=Float32(0))
     var sh = FP(unsafe_from_address=Int(hb.unsafe_ptr()))
     var sl = sh + words
     var bh = sl + words
     var bl = bh + d
+    var fh = bl + d
+    var fl = fh + d * d
 
     def means(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm t_n, imm fi, imm sw, imm wo, imm sh, imm sl}:
         for u in range(lo, hi):
@@ -353,7 +367,7 @@ def _ridge_ff_host(x: FP, y: FP, n: Int, d: Int, t_n: Int, fi: Bool, sw: Bool, w
 
     par_rows(means, nm, 1)
     par_rows(cells, units - nm, 1)
-    var ok = ridge_ff_solve(d, t_n, fi, alpha, sh, sl, bh, bl, res)
+    var ok = ridge_ff_solve(d, t_n, fi, alpha, sh, sl, bh, bl, res, fh, fl)
     st(res, t_n * d + t_n + 2 + a_n, Float32(0) if ok else Float32(2))
     _ = hb^
 

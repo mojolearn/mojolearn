@@ -304,9 +304,10 @@ def ridge_ff_unit_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fi: Int32
         ridge_ff_unit(Int(u0) + u, x, y, Int(n), Int(d), Int(t_n), fi != 0, sw != 0, Int(n) * Int(t_n), sh, sl)
 
 
-def ridge_ff_solve_kernel(d: Int32, t_n: Int32, fi: Int32, alpha: Float32, sh: FP, sl: FP, bh: FP, bl: FP, dst: FP):
+def ridge_ff_solve_kernel(d: Int32, t_n: Int32, fi: Int32, alpha: Float32, sh: FP, sl: FP, bh: FP, bl: FP, dst: FP,
+                          fh: FP, fl: FP):
     """dst: coef T*d | intercept T | ok (1 / 0)."""
-    var ok = ridge_ff_solve(Int(d), Int(t_n), fi != 0, alpha, sh, sl, bh, bl, dst)
+    var ok = ridge_ff_solve(Int(d), Int(t_n), fi != 0, alpha, sh, sl, bh, bl, dst, fh, fl)
     st(dst, Int(t_n) * Int(d) + Int(t_n), Float32(1) if ok else Float32(0))
 
 
@@ -320,6 +321,8 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     var dbh = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
     var dbl = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
     var dout = ctx.enqueue_create_buffer[DType.float32](t_n * d + t_n + 1)
+    var dfh = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+    var dfl = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
     dsh.enqueue_fill(Float32(0))
     dsl.enqueue_fill(Float32(0))
     ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0), Int32(1 if sw else 0),
@@ -330,7 +333,7 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
                                                grid_dim=_xg_blocks(units - nm), block_dim=XG_TPB)
     ctx.enqueue_function[ridge_ff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
                                                 dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
-                                                grid_dim=1, block_dim=1)
+                                                dfh.unsafe_ptr(), dfl.unsafe_ptr(), grid_dim=1, block_dim=1)
     var h = List[Float32](length=t_n * d + t_n + 1, fill=Float32(0))
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dout)
     ctx.synchronize()
@@ -345,6 +348,8 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     _ = dbh^
     _ = dbl^
     _ = dout^
+    _ = dfh^
+    _ = dfl^
 
 
 def fit_device(
