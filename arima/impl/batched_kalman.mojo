@@ -191,6 +191,34 @@ the serial filter is the FAST default; `-D MOJOLEARN_KALMAN_TIME_SCAN=1` is
 the trial arm (20,000-point fits ~0.46 -> ~0.14 s on the M4)."""
 comptime KALMAN_TIME_SCAN_MIN_OBS = 4096
 
+#: lane/apple-fast-tsa (2026-10-02). `batched_kalman_loop_kernel` stores
+#: `pred`, `vs` and `Fs` to device memory at EVERY step (:548-563 of this
+#: file) on a kernel of one thread per (series, member) with nothing to hide
+#: the stores behind; inside the fit (`batched_loglike_grad_host`, (N + 1) x
+#: batch_size members per candidate point, hundreds of points) nobody reads
+#: them: only `loglike` and `info_loop` cross back. `-D
+#: MOJOLEARN_ARIMA_FAST_LLONLY=1` instantiates the loop kernel with
+#: `LL_ONLY = True` for those evaluations: the same recurrence, the same
+#: log-likelihood bits, three stores per step gone. FAST on Apple only;
+#: IDENTICAL compiles the storing kernel, as does every launch that
+#: reads the rows (predict, forecast, the card).
+comptime KALMAN_LL_ONLY = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_ARIMA_FAST_LLONLY"]()
+)
+
+#: lane/apple-fast-tsa (2026-10-02). `-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`:
+#: the fit's stacked evaluation runs on buffers held for the whole solve
+#: (`arima/impl/fast_eval_ws.mojo`, `fast_kalman_into` below) instead of
+#: allocating about 45 device buffers and copying the series N + 1 times
+#: at every candidate point. FAST on Apple only.
+comptime KALMAN_FAST_EVAL_WS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_ARIMA_FAST_EVAL_WS"]()
+)
+
 
 def _grid(n: Int, tpb: Int) -> Int:
     return (n + tpb - 1) // tpb
@@ -478,7 +506,7 @@ def _numerical_stability(n: Int, mut a: InlineArray[Float32, RD2_MAX]):
 
 
 def batched_kalman_loop_kernel[
-    RD_C: Int = 0
+    RD_C: Int = 0, LL_ONLY: Bool = False
 ](
     ys: MutPointer[Float32, MutAnyOrigin],
     T: MutPointer[Float32, MutAnyOrigin],
@@ -567,10 +595,12 @@ def batched_kalman_loop_kernel[
         else:
             for i in range(rd):
                 pred = ftz(identical_mul_add(l_alpha[i], l_Z[i], pred))
-        d_pred.unsafe_store(b_ys + it, pred)
+        comptime if not LL_ONLY:
+            d_pred.unsafe_store(b_ys + it, pred)
         var yt = ftz(ys.unsafe_load(b_ys + it))
         var vs_it = ftz(yt - pred)
-        d_vs.unsafe_store(b_ys + it, vs_it)
+        comptime if not LL_ONLY:
+            d_vs.unsafe_store(b_ys + it, vs_it)
 
         # 2. F = Z*P*Z'
         var _Fs = Float32(0.0)
@@ -581,7 +611,8 @@ def batched_kalman_loop_kernel[
                 for j in range(rd):
                     var t0 = ftz(l_P[j * rd + i] * l_Z[i])
                     _Fs = ftz(identical_mul_add(t0, l_Z[j], _Fs))
-        d_Fs.unsafe_store(b_ys + it, _Fs)
+        comptime if not LL_ONLY:
+            d_Fs.unsafe_store(b_ys + it, _Fs)
 
         # DEVIATION 677: the check covers EVERY step, not only the summed
         # ones. `it < n_diff` records a NEGATIVE code so the host can tell
@@ -707,7 +738,9 @@ def obs_intercept_kernel(
 # ---------------------------------------------------------------------------
 
 
-struct KalmanWorkspace(Movable):
+struct KalmanWorkspace(Copyable, Movable):
+    # (Copyable since lane/apple-fast-tsa: every field is a refcounted
+    # DeviceBuffer; the FAST fit's held workspace keeps one in a List.)
     """Every device buffer `_batched_kalman_filter` reaches (their
     `ARIMAMemory` carve-outs), owned here so each outlives its last launch
     and can be recorded as a card stage."""
@@ -867,6 +900,7 @@ def batched_kalman_filter_x(
     fc_steps: Int,
     kalman_tpb: Int = KALMAN_TPB,
     defer_checks: Bool = False,
+    ll_only: Bool = False,
 ) raises -> KalmanWorkspace:
     """`batched_kalman_filter` (:1248-1303) -> `_batched_kalman_filter`
     (:889-1139) -> `batched_kalman_loop` (:746-819, the `rd <= 8` arm),
@@ -915,8 +949,19 @@ def batched_kalman_filter_x(
     ctx.enqueue_copy(dst_buf=ws.P0, src_buf=ws.P)
     ctx.enqueue_copy(dst_buf=ws.alpha0, src_buf=ws.alpha)
     var kl_done = False
+    # lane/apple-fast-tsa: `ll_only` (the fit's evaluations, no exog, no
+    # forecast) takes the LL_ONLY instantiation under KALMAN_LL_ONLY; every
+    # other build and launch falls through to the storing kernel below.
+    comptime if KALMAN_LL_ONLY:
+        if ll_only and not has_exog and fc_steps == 0:
+            _launch_loop_ll_only(
+                ctx, d_ys, params, ws, rd, nobs, batch_size, order.k, n_diff, kalman_tpb
+            )
+            kl_done = True
     comptime if KALMAN_FAST_RD:
-        if rd == 1:
+        if kl_done:
+            pass
+        elif rd == 1:
             comptime if KALMAN_TIME_SCAN:
                 if nobs >= KALMAN_TIME_SCAN_MIN_OBS:
                     fast_kalman_scan[1](
@@ -1018,6 +1063,183 @@ def batched_kalman_filter_x(
     if not defer_checks:
         kalman_raise_info_loop(_read_info(ctx, ws.info_loop, batch_size), n_diff)
     return ws^
+
+
+def _launch_loop_ll_only(
+    ctx: DeviceContext,
+    mut d_ys: DeviceBuffer[DType.float32],
+    mut params: ARIMAParams,
+    mut ws: KalmanWorkspace,
+    rd: Int,
+    nobs: Int,
+    batch_size: Int,
+    k: Int,
+    n_diff: Int,
+    kalman_tpb: Int,
+) raises:
+    """lane/apple-fast-tsa: the loop kernel at `LL_ONLY = True` (no `pred` /
+    `vs` / `Fs` stores), the same per-rd instantiation choice as
+    `batched_kalman_filter_x`'s serial arm, no exog, no forecast steps.
+    Empty in every other build (no LL_ONLY instantiation exists there)."""
+    comptime if not KALMAN_LL_ONLY:
+        return
+    var grid = _grid(batch_size, kalman_tpb)
+    if rd == 1:
+        ctx.enqueue_function[batched_kalman_loop_kernel[1, True]](
+            d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+            ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+            ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+            ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+            ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+            Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
+            Int32(0),
+            grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
+        )
+    elif rd == 2:
+        ctx.enqueue_function[batched_kalman_loop_kernel[2, True]](
+            d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+            ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+            ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+            ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+            ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+            Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
+            Int32(0),
+            grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
+        )
+    elif rd == 3:
+        ctx.enqueue_function[batched_kalman_loop_kernel[3, True]](
+            d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+            ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+            ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+            ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+            ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+            Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
+            Int32(0),
+            grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
+        )
+    elif rd == 4:
+        ctx.enqueue_function[batched_kalman_loop_kernel[4, True]](
+            d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+            ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+            ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+            ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+            ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+            Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
+            Int32(0),
+            grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[batched_kalman_loop_kernel[0, True]](
+            d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+            ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+            ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+            ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+            ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+            Int32(rd), Int32(nobs), Int32(batch_size), Int32(k), Int32(n_diff), Int32(0),
+            Int32(0),
+            grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
+        )
+
+
+def fast_kalman_into(
+    ctx: DeviceContext,
+    mut d_ys: DeviceBuffer[DType.float32],
+    mut params: ARIMAParams,
+    order: ARIMAOrder,
+    batch_size: Int,
+    nobs: Int,
+    mut ws: KalmanWorkspace,
+    kalman_tpb: Int = KALMAN_TPB,
+) raises:
+    """lane/apple-fast-tsa (`-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`, FAST on
+    Apple): `batched_kalman_filter_x`'s launch sequence into a CALLER-OWNED
+    workspace, for the fit's evaluations (no exog, no forecast steps, checks
+    deferred: the caller reads `ws.info_init` / `ws.info_loop`). Nothing is
+    allocated and the `P0` / `alpha0` card copies are not issued. The three
+    kernels and their geometry are the serial arm's; the loop kernel is the
+    LL_ONLY instantiation when KALMAN_LL_ONLY, the storing one otherwise.
+    Empty in every other build."""
+    comptime if not KALMAN_FAST_EVAL_WS:
+        return
+    var rd = order.rd()
+    var r = order.r()
+    var n_diff = order.n_diff()
+    init_batched_kalman_matrices(ctx, params, batch_size, order, ws)
+    ctx.enqueue_function[kalman_init_state_kernel](
+        ws.R.unsafe_ptr(), ws.T.unsafe_ptr(), params.sigma2.unsafe_ptr(), params.mu.unsafe_ptr(),
+        ws.RQ.unsafe_ptr(), ws.RQR.unsafe_ptr(), ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(),
+        ws.ImAA.unsafe_ptr(), ws.ImAA_inv.unsafe_ptr(), ws.piv.unsafe_ptr(), ws.vecq.unsafe_ptr(),
+        ws.ImT.unsafe_ptr(), ws.ImT_inv.unsafe_ptr(), ws.info_init.unsafe_ptr(),
+        ws.guards.unsafe_ptr(),
+        Int32(batch_size), Int32(rd), Int32(r), Int32(n_diff), Int32(order.k),
+        grid_dim=(_grid(batch_size, INIT_TPB), 1, 1), block_dim=(INIT_TPB, 1, 1),
+    )
+    var kl_done = False
+    comptime if KALMAN_LL_ONLY:
+        _launch_loop_ll_only(
+            ctx, d_ys, params, ws, rd, nobs, batch_size, order.k, n_diff, kalman_tpb
+        )
+        kl_done = True
+    if not kl_done:
+        var grid = _grid(batch_size, kalman_tpb)
+        var fast_rd = False
+        comptime if KALMAN_FAST_RD:
+            fast_rd = True
+        if fast_rd and rd == 1:
+            ctx.enqueue_function[batched_kalman_loop_kernel[1]](
+                d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+                ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+                ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+                ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+                ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+                Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
+                Int32(0),
+                grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
+            )
+        elif fast_rd and rd == 2:
+            ctx.enqueue_function[batched_kalman_loop_kernel[2]](
+                d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+                ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+                ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+                ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+                ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+                Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
+                Int32(0),
+                grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
+            )
+        elif fast_rd and rd == 3:
+            ctx.enqueue_function[batched_kalman_loop_kernel[3]](
+                d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+                ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+                ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+                ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+                ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+                Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
+                Int32(0),
+                grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
+            )
+        elif fast_rd and rd == 4:
+            ctx.enqueue_function[batched_kalman_loop_kernel[4]](
+                d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+                ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+                ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+                ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+                ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+                Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
+                Int32(0),
+                grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[batched_kalman_loop_kernel[0]](
+                d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+                ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+                ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+                ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+                ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+                Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(0),
+                Int32(0),
+                grid_dim=(grid, 1, 1), block_dim=(kalman_tpb, 1, 1),
+            )
 
 
 def kalman_raise_info_init(info0: List[Int32]) raises:

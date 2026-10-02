@@ -737,8 +737,11 @@ def batched_loglike_grad_host(
     else:
         _copy_params(ctx, p_ext, t_params, order, eb)
     var fut = _placeholder(ctx)
+    # lane/apple-fast-tsa: `ll_only` (the last argument) selects the loop
+    # kernel without the per-step `pred` / `vs` / `Fs` stores under
+    # `-D MOJOLEARN_ARIMA_FAST_LLONLY=1`; it is read by no other build.
     var ws = batched_kalman_filter_x(
-        ctx, y_ext, d_exog, fut, n_obs, t_params, order, eb, 0, 32, True
+        ctx, y_ext, d_exog, fut, n_obs, t_params, order, eb, 0, 32, True, True
     )
     for i in range(N):
         ctx.enqueue_function[grad_kernel](
