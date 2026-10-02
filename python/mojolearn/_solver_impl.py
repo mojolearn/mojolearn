@@ -12,6 +12,8 @@ These classes are not re-exported from `mojolearn/__init__.py` by this file;
 whoever owns that file decides the public namespace.
 """
 
+import os
+
 from . import _mojolearn_solver, _serialize
 from ._array import Array
 from ._mode import ParamsMixin
@@ -346,7 +348,20 @@ class ElasticNet(ParamsMixin):
                 "for solver='cd' (elastic_net.py:265-269), and 'qn' is not "
                 "implemented"
             )
-        work_x, copied = self._as_fortran(X, "X")
+        # lane/apple-fast-linear (2026-10-02): MOJOLEARN_CD_FAST_ROWMAJOR=1 on
+        # the FAST tier hands X ROW-MAJOR (its own layout, no asfortranarray
+        # transpose of 1M x 220 inside the fit) to solver/impl/cd.mojo's FAST
+        # Apple Gram path, which reads row-major tiles and centers them at the
+        # means it computes itself; the shape rule is that path's.
+        row_major = False
+        if os.environ.get("MOJOLEARN_CD_FAST_ROWMAJOR") == "1" and _saved_mode(self) == "fast":
+            work_c, copied_c = as_f32_c(X, name="X")
+            nr_c, nc_c = work_c.shape
+            if nc_c <= 256 and nr_c >= 4 * nc_c:
+                row_major = True
+                work_x, copied = work_c, copied_c
+        if not row_major:
+            work_x, copied = self._as_fortran(X, "X")
         self.input_copied_ = copied
         self.fortran_copied_ = copied
         n_rows, n_cols = work_x.shape
@@ -364,11 +379,12 @@ class ElasticNet(ParamsMixin):
             addr(self.coef_, name="coef_"), addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_solver.mojo::cd_fit_binding.
             # n_rows, n_cols, fit_intercept, max_iter, alpha, l1_ratio, tol,
-            # shuffle, has_sample_weight
+            # shuffle, has_sample_weight, row_major
             [
                 n_rows, n_cols, 1 if self.fit_intercept else 0,
                 int(self.max_iter), float(self.alpha), float(self.l1_ratio),
                 float(self.tol), _SELECTION_SHUFFLE[self.selection], 0,
+                1 if row_major else 0,
             ],
         )
         self.intercept_ = float(info[0])

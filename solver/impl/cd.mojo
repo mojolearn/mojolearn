@@ -275,6 +275,221 @@ def cd_gram_blocks_kernel(
         c += CD_GB_TPB
 
 
+
+# ===========================================================================
+# lane/apple-fast-linear (2026-10-02): THE CD_FAST_GRAM PRODUCT ON THE GRID
+# ===========================================================================
+#
+# Two host env switches, FAST + Apple only (inside CD_FAST_GRAM), default off:
+#
+#   MOJOLEARN_CD_FAST_GRID_GRAM=1   [X ; y]^T [X ; y] as 32 x 32 tiles over
+#       8192-row chunks (both operands staged in threadgroup memory, 4 cells
+#       a thread, x_linear/enetcv_fast.mojo ef_gram_kernel's shape), the
+#       chunks folded on the device (`cd_grid_gram_red_kernel`), ONE readback
+#       of (p + 1)^2 floats. Cause (cd_fit_traced below, the `bmat` arm): the
+#       FAST Gram first copies X and y into a (p + 1) x n buffer (884 MB on
+#       Istella) and then runs `gemm_nt` -- MAX's matmul at M = N = 221,
+#       K = 1,000,000, which has no split-K on Apple, so 16 output tiles'
+#       worth of threadgroups carry a million-deep reduction -- or, at
+#       p < 32, `cd_gram_partial_kernel`'s 1024-thread blocks over 256 rows.
+#       Expected: the Gram at memory speed and no copy of X.
+#
+#   MOJOLEARN_CD_FAST_ROWMAJOR=1    (with python/mojolearn/_solver_impl.py)
+#       X arrives ROW-MAJOR as the caller holds it: no `np.asfortranarray`
+#       transpose of 1M x 220 on the host inside the fit, no centering and
+#       un-centering passes over X (`pre_process_data` / `post_process_data`,
+#       two read-write passes, the second only to restore a copy nobody
+#       reads), no `colNorm` pass. The column means come from the same
+#       chunks (`cd_grid_sums_kernel`), the Gram is centered at them while
+#       the tiles are staged, and the intercept is `y_mean - mu . w` on the
+#       host from the means read back beside the Gram. The sweeps are the
+#       Gram sweeps already here (the same words). Refused by name where
+#       CD_FAST_GRAM does not hold (IDENTICAL builds compile the old code).
+comptime CD_GG_TPB = 256
+comptime CD_GG_CH = 8192
+comptime CD_GG_TS = 32
+comptime CD_GG_RB = 32
+
+
+def _cd_grid_gram_on() -> Bool:
+    return String(getenv("MOJOLEARN_CD_FAST_GRID_GRAM")) == "1"
+
+
+@always_inline
+def _cd_gg_pair(pr: Int, nt: Int) -> Tuple[Int, Int]:
+    """The pr-th upper tile pair (tj <= tk), row-major."""
+    var q = pr
+    var tj = 0
+    while q >= nt - tj:
+        q -= nt - tj
+        tj += 1
+    return (tj, tj + q)
+
+
+@always_inline
+def _cd_gg_cell(
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    n: Int,
+    p: Int,
+    i: Int,
+    c: Int,
+    rowmajor: Bool,
+) -> Float32:
+    """[X ; y] at (row i, column c): X column-major (c * n + i) or row-major
+    (i * p + c); column p is y."""
+    if c < p:
+        if rowmajor:
+            return x[i * p + c]
+        return x[c * n + i]
+    return y[i]
+
+
+def cd_grid_sums_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    part_s: MutPointer[Float32, MutAnyOrigin],
+    p_in: Int32,
+    n_in: Int32,
+    rowmajor_in: Int32,
+):
+    """Chunk block_idx.x: the column sums of [X ; y] over its rows, a thread
+    per column (MOJOLEARN_CD_FAST_ROWMAJOR's means)."""
+    var p = Int(p_in)
+    var m = p + 1
+    var n = Int(n_in)
+    var rowmajor = rowmajor_in != 0
+    var ch = Int(block_idx.x)
+    var lo = ch * CD_GG_CH
+    var cnt = n - lo
+    if cnt > CD_GG_CH:
+        cnt = CD_GG_CH
+    var c = Int(thread_idx.x)
+    while c < m:
+        var acc = Float32(0)
+        for r in range(cnt):
+            acc += _cd_gg_cell(x, y, n, p, lo + r, c, rowmajor)
+        part_s[ch * m + c] = acc
+        c += CD_GG_TPB
+
+
+def cd_grid_means_kernel(
+    part_s: MutPointer[Float32, MutAnyOrigin],
+    mu: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    nch_in: Int32,
+    n_in: Int32,
+):
+    """Thread c: the mean of column c of [X ; y] from the chunk sums."""
+    var m = Int(m_in)
+    var c = Int(block_idx.x) * CD_GG_TPB + Int(thread_idx.x)
+    if c < m:
+        var s = Float32(0)
+        for ch in range(Int(nch_in)):
+            s += part_s[ch * m + c]
+        mu[c] = s / Float32(Int(n_in))
+
+
+def cd_grid_gram_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    mu: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    p_in: Int32,
+    n_in: Int32,
+    rowmajor_in: Int32,
+    npairs_in: Int32,
+    nt_in: Int32,
+):
+    """Block b: tile pair b % npairs of chunk b // npairs of
+    ([X ; y] - mu)^T ([X ; y] - mu) over the chunk's rows; 4 cells a thread.
+    `mu` is zero where the columns are centered already."""
+    var p = Int(p_in)
+    var m = p + 1
+    var n = Int(n_in)
+    var rowmajor = rowmajor_in != 0
+    var npairs = Int(npairs_in)
+    var b = Int(block_idx.x)
+    var pr = b % npairs
+    var ch = b // npairs
+    var tjk = _cd_gg_pair(pr, Int(nt_in))
+    var j0 = tjk[0] * CD_GG_TS
+    var k0 = tjk[1] * CD_GG_TS
+    var lo = ch * CD_GG_CH
+    var cnt = n - lo
+    if cnt > CD_GG_CH:
+        cnt = CD_GG_CH
+    var tid = Int(thread_idx.x)
+    var sa = stack_allocation[
+        CD_GG_RB * CD_GG_TS, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var sb = stack_allocation[
+        CD_GG_RB * CD_GG_TS, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var r = tid // 8
+    var c0 = (tid % 8) * 4
+    var acc = SIMD[DType.float32, 4](0)
+    var rb = 0
+    while rb < cnt:
+        comptime for u in range((CD_GG_RB * CD_GG_TS) // CD_GG_TPB):
+            var e = tid + u * CD_GG_TPB
+            # row-major X: neighbouring threads read neighbouring columns of
+            # one row; column-major X: neighbouring rows of one column
+            var rr = e // CD_GG_TS if rowmajor else e % CD_GG_RB
+            var cc = e % CD_GG_TS if rowmajor else e // CD_GG_RB
+            var row = rb + rr
+            var va = Float32(0)
+            var vb = Float32(0)
+            if row < cnt:
+                var i = lo + row
+                var ja = j0 + cc
+                var kb = k0 + cc
+                if ja < m:
+                    va = _cd_gg_cell(x, y, n, p, i, ja, rowmajor) - mu[ja]
+                if kb < m:
+                    vb = _cd_gg_cell(x, y, n, p, i, kb, rowmajor) - mu[kb]
+            sa[rr * CD_GG_TS + cc] = va
+            sb[rr * CD_GG_TS + cc] = vb
+        barrier()
+        comptime for rr in range(CD_GG_RB):
+            var a = sa[rr * CD_GG_TS + r]
+            var bv = (sb + rr * CD_GG_TS + c0).load[width=4]()
+            acc += a * bv
+        barrier()
+        rb += CD_GG_RB
+    var o = b * (CD_GG_TS * CD_GG_TS) + r * CD_GG_TS + c0
+    comptime for e in range(4):
+        part[o + e] = acc[e]
+
+
+def cd_grid_gram_red_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    gram: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    nch_in: Int32,
+    npairs_in: Int32,
+    nt_in: Int32,
+):
+    """Thread (pair, cell): the Gram cell summed over the chunks, both
+    triangles of the m x m result."""
+    var m = Int(m_in)
+    var npairs = Int(npairs_in)
+    comptime TT = CD_GG_TS * CD_GG_TS
+    var t = Int(block_idx.x) * CD_GG_TPB + Int(thread_idx.x)
+    if t < npairs * TT:
+        var pr = t // TT
+        var cell = t - pr * TT
+        var tjk = _cd_gg_pair(pr, Int(nt_in))
+        var j = tjk[0] * CD_GG_TS + cell // CD_GG_TS
+        var k = tjk[1] * CD_GG_TS + cell % CD_GG_TS
+        if j < m and k < m:
+            var s = Float32(0)
+            for ch in range(Int(nch_in)):
+                s += part[(ch * npairs + pr) * TT + cell]
+            gram[j * m + k] = s
+            gram[k * m + j] = s
+
+
 # ===========================================================================
 # lane/linear-apple2: THE IDENTICAL SWEEP IN THREE LAUNCHES PER COORDINATE
 # ===========================================================================
@@ -696,9 +911,30 @@ def cd_fit_traced(
     launch: CdLaunch,
     mut residual_out: DeviceBuffer[DType.float32],
     want_residual: Bool,
+    row_major: Bool = False,
 ) raises -> Tuple[Int, Float32]:
     """`cdFit` with a stage card, a scheduling surface and the residual
-    handed out. The dispatch guards first, in their order."""
+    handed out. The dispatch guards first, in their order.
+
+    `row_major` (lane/apple-fast-linear, MOJOLEARN_CD_FAST_ROWMAJOR): `x` is
+    the caller's ROW-MAJOR design; only the CD_FAST_GRAM grid path reads it
+    (the kernels above), so it is refused by name everywhere else."""
+    if row_major:
+        comptime if not CD_FAST_GRAM:
+            raise Error(
+                "cd_fit: a row-major design is served only by the FAST Apple"
+                " Gram path (CD_FAST_GRAM); hand the column-major design"
+            )
+        if (
+            trace.enabled
+            or want_residual
+            or n_cols > CD_GRAM_MAX_COLS
+            or n_rows < 4 * n_cols
+        ):
+            raise Error(
+                "cd_fit: a row-major design needs the Gram path: no trace, no"
+                " residual, n_cols <= 256 and n_rows >= 4 n_cols"
+            )
     if n_cols <= 0:
         raise Error(
             "Parameter n_cols: number of columns cannot be less than one"
@@ -794,7 +1030,7 @@ def cd_fit_traced(
     ctx.enqueue_memset(ws_rows, Float32(0.0))
     ctx.enqueue_memset(ws_cols, Float32(0.0))
 
-    if fit_intercept:
+    if fit_intercept and not row_major:
         pre_process_data(
             ctx, x, n_rows, n_cols, labels, mu_input, mu_labels,
             fit_intercept, ones, ws_rows, launch.dot_plan,
@@ -818,13 +1054,15 @@ def cd_fit_traced(
     trace.record_scalar_f32(prefix + ".l2_alpha", l2_alpha)
 
     # Precompute: colNorm, + l2_alpha, residual = labels.
-    col_norm_l2_squared(ctx, squared, x, n_cols, n_rows, ws_rows, launch.dot_plan)
-    record_device_canon(ctx, trace, prefix + ".colnorm", squared, n_cols, canon_ws)
-    ctx.enqueue_function[add_scalar_cols_kernel](
-        squared.unsafe_ptr(), Int32(n_cols), l2_alpha,
-        grid_dim=((n_cols + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-    )
-    record_device_canon(ctx, trace, prefix + ".squared", squared, n_cols, canon_ws)
+    # (row_major: the Gram sweeps take the diagonal of the Gram instead)
+    if not row_major:
+        col_norm_l2_squared(ctx, squared, x, n_cols, n_rows, ws_rows, launch.dot_plan)
+        record_device_canon(ctx, trace, prefix + ".colnorm", squared, n_cols, canon_ws)
+        ctx.enqueue_function[add_scalar_cols_kernel](
+            squared.unsafe_ptr(), Int32(n_cols), l2_alpha,
+            grid_dim=((n_cols + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+        record_device_canon(ctx, trace, prefix + ".squared", squared, n_cols, canon_ws)
     ctx.enqueue_copy(dst_buf=residual, src_buf=labels)
 
     var conv = ctx.enqueue_create_buffer[DType.float32](3)
@@ -832,6 +1070,9 @@ def cd_fit_traced(
 
     var n_iter = 0
     var device_sweeps = True
+    # lane/apple-fast-linear: the intercept of the row-major form, from the
+    # means read back with the Gram (set inside the Gram arm below)
+    var rm_intercept = 0.0
     comptime if CD_FAST_GRAM:
         if (
             not trace.enabled
@@ -873,6 +1114,67 @@ def cd_fit_traced(
                             gc += 1
                     _ = gp^
                     _ = hgp^
+            var gmu = List[Float64](capacity=p1)
+            if not blocks_done and (row_major or _cd_grid_gram_on()):
+                # lane/apple-fast-linear: the product on the grid (see
+                # cd_grid_gram_kernel's banner); row_major also takes the
+                # means from the chunks and centers the tiles at them
+                blocks_done = True
+                var nch = (n_rows + CD_GG_CH - 1) // CD_GG_CH
+                var nt = (p1 + CD_GG_TS - 1) // CD_GG_TS
+                var npairs = nt * (nt + 1) // 2
+                var rm = Int32(1) if row_major else Int32(0)
+                var dps = ctx.enqueue_create_buffer[DType.float32](nch * p1)
+                var dmu = ctx.enqueue_create_buffer[DType.float32](p1)
+                var dpg = ctx.enqueue_create_buffer[DType.float32](
+                    nch * npairs * CD_GG_TS * CD_GG_TS
+                )
+                var dgram = ctx.enqueue_create_buffer[DType.float32](p1 * p1)
+                var hgram = ctx.enqueue_create_host_buffer[DType.float32](p1 * p1)
+                var hmu = ctx.enqueue_create_host_buffer[DType.float32](p1)
+                if row_major and fit_intercept:
+                    ctx.enqueue_function[cd_grid_sums_kernel](
+                        x.unsafe_ptr(), labels.unsafe_ptr(), dps.unsafe_ptr(),
+                        Int32(p), Int32(n_rows), rm,
+                        grid_dim=(nch, 1, 1), block_dim=(CD_GG_TPB, 1, 1),
+                    )
+                    ctx.enqueue_function[cd_grid_means_kernel](
+                        dps.unsafe_ptr(), dmu.unsafe_ptr(), Int32(p1), Int32(nch),
+                        Int32(n_rows),
+                        grid_dim=((p1 + CD_GG_TPB - 1) // CD_GG_TPB, 1, 1),
+                        block_dim=(CD_GG_TPB, 1, 1),
+                    )
+                else:
+                    # the columns are centered already (pre_process_data),
+                    # or there is no intercept to center for
+                    ctx.enqueue_memset(dmu, Float32(0.0))
+                ctx.enqueue_function[cd_grid_gram_kernel](
+                    x.unsafe_ptr(), labels.unsafe_ptr(), dmu.unsafe_ptr(),
+                    dpg.unsafe_ptr(), Int32(p), Int32(n_rows), rm, Int32(npairs),
+                    Int32(nt),
+                    grid_dim=(nch * npairs, 1, 1), block_dim=(CD_GG_TPB, 1, 1),
+                )
+                ctx.enqueue_function[cd_grid_gram_red_kernel](
+                    dpg.unsafe_ptr(), dgram.unsafe_ptr(), Int32(p1), Int32(nch),
+                    Int32(npairs), Int32(nt),
+                    grid_dim=(
+                        (npairs * CD_GG_TS * CD_GG_TS + CD_GG_TPB - 1) // CD_GG_TPB, 1, 1
+                    ),
+                    block_dim=(CD_GG_TPB, 1, 1),
+                )
+                ctx.enqueue_copy(dst_buf=hgram, src_buf=dgram)
+                ctx.enqueue_copy(dst_buf=hmu, src_buf=dmu)
+                ctx.synchronize()
+                for q in range(p1 * p1):
+                    gsum[q] = Float64(hgram.unsafe_ptr().unsafe_load(q))
+                for q in range(p1):
+                    gmu.append(Float64(hmu.unsafe_ptr().unsafe_load(q)))
+                _ = dps^
+                _ = dmu^
+                _ = dpg^
+                _ = dgram^
+                _ = hgram^
+                _ = hmu^
             if not blocks_done:
                 # B = [X^T rows | y] as (p + 1) x n_rows row-major: X is column-
                 # major, so its columns are already the first p rows.
@@ -956,6 +1258,14 @@ def cd_fit_traced(
             ctx.enqueue_copy(dst_buf=coef, src_buf=hw)
             ctx.synchronize()
             _ = hw^
+            if row_major and fit_intercept and len(gmu) == p1:
+                # postProcessData's intercept, mu_labels - mu_input . coef,
+                # from the means the Gram pass read back
+                var bb = gmu[p]
+                for j in range(p):
+                    bb -= gmu[j] * w[j]
+                rm_intercept = bb
+            _ = gmu^
     # lane/linear-apple2: the three-launch coordinate (see
     # cd_axpy_pair_kernel) where the profile dot is PLAN_SPLITK on one device.
     var three = False
@@ -1120,7 +1430,9 @@ def cd_fit_traced(
             break
 
     var intercept = Float32(0.0)
-    if fit_intercept:
+    if fit_intercept and row_major:
+        intercept = Float32(rm_intercept)
+    elif fit_intercept:
         var d_intercept = ctx.enqueue_create_buffer[DType.float32](1)
         intercept = post_process_data(
             ctx, x, n_rows, n_cols, labels, coef, mu_input, mu_labels,

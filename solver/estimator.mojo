@@ -92,8 +92,14 @@ def cd_fit_host(
     tol: Float32,
     shuffle: Bool,
     has_sample_weight: Bool,
+    row_major: Bool = False,
 ) raises -> Int:
     """`cdFit` over host pointers. Returns `n_iter` (the epochs actually run).
+
+    `row_major` (lane/apple-fast-linear, 2026-10-02, MOJOLEARN_CD_FAST_ROWMAJOR
+    from the Python side): `x_ptr` is the caller's ROW-MAJOR design and the
+    FAST Apple Gram path of `cd_fit_traced` reads it as such (no Fortran copy
+    on the host, no centering passes); refused by name on every other path.
 
     `x_ptr` is COLUMN-MAJOR `n_rows x n_cols` float32 (see the module
     docstring); `y_ptr` is `n_rows`; `coef_ptr` receives `n_cols` floats;
@@ -141,7 +147,7 @@ def cd_fit_host(
         ctx, x, n_rows, n_cols, y, coef,
         fit_intercept, epochs, LOSS_SQRD_LOSS, alpha, l1_ratio, shuffle,
         tol, has_sample_weight, trace, "cd", CdLaunch.default(),
-        residual_out, False,
+        residual_out, False, row_major,
     )
     var n_iter = out[0]
     var intercept = out[1]
