@@ -944,7 +944,6 @@ host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x
 host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/iter_device.mojo	0	_down(ctx, d_vl, bvl, m)
 host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	_down(ctx, dr, res, n * c)
 host-call	host-import	hr-small-passes	debt	x_neighbors/iter_device.mojo	0	cc_iterate_csr(IP(unsafe_from_address=indptr), IP(unsafe_from_address=indices),
-host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	cc_iterate_sparse(FP(unsafe_from_address=a), IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/cc_sparse.mojo:cc_iterate_csr
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/cc_sparse.mojo:cc_iterate_sparse
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/device_ops.mojo:_buf
@@ -1030,7 +1029,6 @@ host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	var dv = _buf(
 host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	var dx = _buf(ctx, x, m * c, True)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var g = pr_graph_from_dense(FP(unsafe_from_address=a), n, binary != 0)
 host-env	host-env/threshold	hr-small-passes	debt	x_neighbors/iter_device.mojo	0	comptime if is_defined["MOJOLEARN_XN_CC_HOST"]():
-route-switch	host-env/threshold	UNOWNED	debt	x_neighbors/iter_device.mojo	0	comptime if not is_defined["MOJOLEARN_XN_CC_GPU"]():
 serial-launch	serial-gpu	hr-graph	debt	x_neighbors/iter_device.mojo	0	ctx.enqueue_function[absdiff_sum_kernel](
 serial-launch	serial-gpu	hr-graph	debt	x_neighbors/iter_device.mojo	1	ctx.enqueue_function[absdiff_sum_kernel](
 serial-launch	serial-gpu	hr-graph	debt	x_neighbors/iter_device.mojo	0	ctx.enqueue_function[pr_dangling_sum_kernel](
