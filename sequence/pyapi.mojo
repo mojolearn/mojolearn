@@ -1430,14 +1430,39 @@ def moe_forward_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
     var k = ival(ip, 4)
     if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
         raise Error("moe_forward: T, D, F, E >= 1 and 1 <= k <= E")
-    var X = ex.alloc(T * D)
-    ex.upload(X, fptr(addrs[0], "x"), T * D)
     var Wg = ex.alloc(En * D)
     ex.upload(Wg, fptr(addrs[1], "router"), En * D)
     var Gu = ex.alloc(En * 2 * F * D)
     ex.upload(Gu, fptr(addrs[2], "gate_up_proj"), En * 2 * F * D)
     var Dn = ex.alloc(En * D * F)
     ex.upload(Dn, fptr(addrs[3], "down_proj"), En * D * F)
+    return moe_forward_run(ex, addrs, T, D, F, En, k, ival(ip, 5), Wg, Gu, Dn)
+
+
+def moe_forward_check(addrs: PythonObject, ip: PythonObject, n_ip: Int) raises -> Tuple[Int, Int, Int, Int, Int]:
+    """`moe_forward`'s argument checks: (T, D, F, E, k)."""
+    if len(addrs) != 8 or len(ip) != n_ip:
+        raise Error("moe_forward: requires 8 addresses and " + String(n_ip) + " integer parameters")
+    var T = ival(ip, 0)
+    var D = ival(ip, 1)
+    var F = ival(ip, 2)
+    var En = ival(ip, 3)
+    var k = ival(ip, 4)
+    if T < 1 or D < 1 or F < 1 or En < 1 or k < 1 or k > En:
+        raise Error("moe_forward: T, D, F, E >= 1 and 1 <= k <= E")
+    return (T, D, F, En, k)
+
+
+def moe_forward_run[E: Exec](
+    mut ex: E, addrs: PythonObject, T: Int, D: Int, F: Int, En: Int, k: Int, renorm: Int, Wg: FP, Gu: FP, Dn: FP,
+) raises -> PythonObject:
+    """The MoE forward from x (addrs[0]) into addrs[4..7], the weights
+    already on `ex`'s side at `Wg`, `Gu`, `Dn`: the executor's own upload
+    (`moe_forward_py`), or a device copy kept between calls (the GPU
+    binding's `moe_forward` with a weight handle, lane gap-neural-overhead2).
+    The same launches on the same words either way."""
+    var X = ex.alloc(T * D)
+    ex.upload(X, fptr(addrs[0], "x"), T * D)
     var Y = ex.alloc(T * D)
     var L = ex.alloc(T * En)
     var Sel = ex.alloc(T * k)
@@ -1454,7 +1479,7 @@ def moe_forward_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
     a.i0 = D
     a.i1 = En
     a.i2 = k
-    a.i3 = ival(ip, 5)
+    a.i3 = renorm
     ex.launch[OP_MOE_ROUTE](a, T)
     # The pairs (token, pick) grouped by expert for the tiled device
     # products (lane neural-pass29, sequence/moe_tiled.mojo): `order` the

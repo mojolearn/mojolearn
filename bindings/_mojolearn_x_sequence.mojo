@@ -13,6 +13,8 @@ from checks.vendor import COMPILED_VENDOR
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from sequence.pyapi import ival, _getenv_seq, opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
+from sequence.pyapi import moe_forward_check, moe_forward_run, fptr
+from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -152,8 +154,32 @@ def prophet_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> Pyt
 
 
 def moe_forward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """ip = [T, D, F, E, k, renormalise] uploads the weights at addrs[1..3];
+    a seventh entry > 0 is a `moe_weights_put` handle whose device copies
+    are read instead (addrs[1..3] are then unread). Lane
+    gap-neural-overhead2: the same launches on the same words."""
+    if len(ip) == 7 and ival(ip, 6) > 0:
+        var t = moe_forward_check(addrs, ip, 7)
+        var w = moe_weights_ptrs(ival(ip, 6))
+        var ex = DeviceExec()
+        return moe_forward_run(ex, addrs, t[0], t[1], t[2], t[3], t[4], ival(ip, 5), w[0], w[1], w[2])
     var ex = DeviceExec()
     return moe_forward_py(ex, addrs, ip)
+
+
+def moe_weights_put_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """addrs = [router (E, D), gate_up (E, 2F, D), down (E, D, F)]; ip = [E, D, F]."""
+    if len(addrs) != 3 or len(ip) != 3:
+        raise Error("moe_weights_put: requires 3 addresses and [E, D, F]")
+    return PythonObject(moe_weights_put(
+        fptr(addrs[0], "router"), fptr(addrs[1], "gate_up_proj"), fptr(addrs[2], "down_proj"),
+        ival(ip, 0), ival(ip, 1), ival(ip, 2),
+    ))
+
+
+def moe_weights_free_binding(h: PythonObject) raises -> PythonObject:
+    moe_weights_free(Int(py=h))
+    return PythonObject(0)
 
 
 @export
@@ -181,6 +207,8 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[prophet_fit_binding]("prophet_fit")
         m.def_function[prophet_predict_binding]("prophet_predict")
         m.def_function[moe_forward_binding]("moe_forward")
+        m.def_function[moe_weights_put_binding]("moe_weights_put")
+        m.def_function[moe_weights_free_binding]("moe_weights_free")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence: ", e))
