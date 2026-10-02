@@ -25,7 +25,7 @@ from x_linear.ops import (
 )
 from std.sys.info import is_gpu
 from x_linear.team import Team
-from x_linear.tops import t_cholesky, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad
+from x_linear.tops import t_cholesky, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad, t_jacobi_eig
 
 
 def _center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, iw: IP) -> Float32:
@@ -242,8 +242,8 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
             else:
                 axpy_centered(fw, xty, b, x, i * d, fw, xm, d)
     var alpha = ld(fp, 5)
+    t_jacobi_eig(t, fw, gg, fw, vv, d, 60)
     if t.lead():
-        jacobi_eig(fw, gg, fw, vv, d, 60)
         for j in range(d):
             var ev = ld(fw, gg + j * d + j)
             st(fw, tmp + j, fmax(Float32(0), ev))
