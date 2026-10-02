@@ -88,6 +88,41 @@ def extrema_finalize_kernel(
         output.unsafe_store(4*d+column,offset)
 
 
+#: rows per block of `extrema_rows_fast_kernel`: `extrema_chunks_kernel`'s
+#: chunk of 256 rows, so `extrema_finalize_kernel` folds the same partials
+comptime FAST_ROWS = 256
+
+
+def extrema_rows_fast_kernel(
+    x: MutPointer[Float32, MutAnyOrigin], n: Int32, d: Int32, tpb: Int32,
+    lows: MutPointer[UInt32, MutAnyOrigin], highs: MutPointer[UInt32, MutAnyOrigin],
+):
+    """lane/apple-fast-prep (2026-10-02), MOJOLEARN_X_PREP_FAST_MINMAX=1, FAST
+    tier only (`minmax_fit_fast`). Block (chunk, column group): thread t owns
+    column group*tpb + t over the chunk's FAST_ROWS rows, so a simdgroup
+    reads consecutive words of one row. `extrema_chunks_kernel` (above) gives
+    a block one column: its 256 threads read 256 words d apart, a cache line
+    each, for every row of the 220-column Istella block (board minmax-scaler
+    Istella 5.7x behind scikit-learn). The same ordered keys folded by the
+    same min / max into the same (chunk, column) partials: the same words."""
+    var column = Int(block_idx.y) * Int(tpb) + Int(thread_idx.x)
+    var chunk = Int(block_idx.x)
+    var dd = Int(d)
+    if column >= dd:
+        return
+    var row0 = chunk * FAST_ROWS
+    var row1 = min(row0 + FAST_ROWS, Int(n))
+    var lo = UInt32(0xffffffff)
+    var hi = UInt32(0)
+    for row in range(row0, row1):
+        var k = ordered_key(x.unsafe_load(row * dd + column))
+        lo = min(lo, k)
+        hi = max(hi, k)
+    var index = chunk * dd + column
+    lows.unsafe_store(index, lo)
+    highs.unsafe_store(index, hi)
+
+
 def minmax_transform_kernel(
     x: MutPointer[Float32, MutAnyOrigin], scale: MutPointer[Float32, MutAnyOrigin],
     offset: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
@@ -118,6 +153,33 @@ def minmax_fit(
     ctx.enqueue_function[extrema_chunks_kernel](
         x.unsafe_ptr(),Int32(n),Int32(d),lows.unsafe_ptr(),highs.unsafe_ptr(),
         grid_dim=chunks*d,block_dim=256,
+    )
+    ctx.enqueue_function[extrema_finalize_kernel](
+        lows.unsafe_ptr(),highs.unsafe_ptr(),Int32(chunks),Int32(d),lower,upper,output.unsafe_ptr(),
+        grid_dim=(d+255)//256,block_dim=256,
+    )
+    var result = download_f32(ctx,output,5*d)
+    _ = output^
+    _ = highs^
+    _ = lows^
+    return result^
+
+
+def minmax_fit_fast(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n: Int, d: Int,
+    lower: Float32, upper: Float32,
+) raises -> List[Float32]:
+    """`minmax_fit` with the row-tiled `extrema_rows_fast_kernel` (lane
+    apple-fast-prep, FAST only): the same chunk count, the same finalize."""
+    var chunks = (n + FAST_ROWS - 1) // FAST_ROWS
+    var tpb = 256 if d >= 256 else ((d + 31) // 32) * 32
+    var cgroups = (d + tpb - 1) // tpb
+    var lows = ctx.enqueue_create_buffer[DType.uint32](chunks*d)
+    var highs = ctx.enqueue_create_buffer[DType.uint32](chunks*d)
+    var output = ctx.enqueue_create_buffer[DType.float32](5*d)
+    ctx.enqueue_function[extrema_rows_fast_kernel](
+        x.unsafe_ptr(), Int32(n), Int32(d), Int32(tpb), lows.unsafe_ptr(), highs.unsafe_ptr(),
+        grid_dim=(chunks, cgroups), block_dim=tpb,
     )
     ctx.enqueue_function[extrema_finalize_kernel](
         lows.unsafe_ptr(),highs.unsafe_ptr(),Int32(chunks),Int32(d),lower,upper,output.unsafe_ptr(),
