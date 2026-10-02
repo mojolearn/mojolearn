@@ -2426,8 +2426,11 @@ class _PLS(_Base):
         self.n_iter_ = []
         thr = 10 * _F32_EPS
         for _c in range(nc):
-            # Yk columns that are all below 10 eps are set to zero
-            dead = [all(abs(Yk.s[i * q + j]) < thr for i in range(n)) for j in range(q)]
+            # Yk columns that are all below 10 eps are set to zero: per
+            # column, the count of |y| >= thr (-|y| <= -thr, exact) on the
+            # device; q values come back
+            live = k.colsum(k.ew("le", k.ew("scale", k.ew("abs", Yk), s=-1.0), _M.of([-thr], 1, 1)))
+            dead = [v == 0.0 for v in live.s]
             if any(dead):
                 Yk = k.ew("mul", Yk, _M.of([0.0 if d else 1.0 for d in dead], 1, q))
             try:
@@ -4153,6 +4156,38 @@ def _emp_cov(k, Xs, assume_centered=False):
     return k.ew("scale", k.mm(Xc, Xc, ta=True), s=1.0 / Xs.r)
 
 
+def _f32_below(x):
+    """The largest float32 strictly below the float x: v < x is v <= this for
+    every float32 v (the kit's `le` cell takes the same decision)."""
+    f = _f32(x)
+    if f < x:
+        return f
+    b = array.array("f", [f])
+    u = array.array("I", b.tobytes())
+    if f > 0.0:
+        u[0] -= 1
+    elif f == 0.0:
+        u[0] = 0x80000001          # the least negative subnormal
+    else:
+        u[0] += 1
+    return array.array("f", u.tobytes())[0]
+
+
+def _masked_cov(k, M, m, assume_centered):
+    """sklearn's location and empirical covariance of the rows of M whose
+    mask entry (m, n x 1, 0 or 1) is 1, on the device: the masked rows are
+    exact zeros in the products, the count is the mask's total."""
+    cnt = k.total(m).s[0]
+    Xm = k.ew("mul", M, m)
+    if assume_centered:
+        loc = _M.zeros(1, M.c)
+        Xc = Xm
+    else:
+        loc = k.ew("scale", k.colsum(Xm), s=1.0 / cnt)
+        Xc = k.ew("mul", k.ew("sub", M, loc), m)
+    return loc, k.ew("scale", k.mm(Xc, Xc, ta=True), s=1.0 / cnt)
+
+
 def _mahal(k, X, loc, P):
     Xc = k.ew("sub", X, loc)
     return k.rowsum(k.ew("mul", k.mm(Xc, P), Xc))
@@ -4367,7 +4402,8 @@ class MinCovDet(_Base):
         loc, cov, support, dist = self._fast_mcd(k, M)
         if self.assume_centered:
             loc = _M.zeros(1, p)
-            cov = _emp_cov(k, M.take_rows([i for i in range(n) if support[i]]), assume_centered=True)
+            sm = _M.of([1.0 if v else 0.0 for v in support], n, 1)
+            _, cov = _masked_cov(k, M, sm, True)
             dist = k.rowsum(k.ew("mul", k.mm(M, _pinvh(k, cov)), M))
         self.raw_location_m_, self.raw_covariance_m_ = loc, cov
         self.raw_location_ = loc.out((p,))
@@ -4380,11 +4416,12 @@ class MinCovDet(_Base):
         dist = k.ew("scale", dist, s=1.0 / corr)
         # reweight_covariance
         thr = _chi2_quantile(k, p, 0.025)
-        mask = [v < thr for v in dist.s]
-        Xm = M.take_rows([i for i in range(n) if mask[i]])
-        locr = _M.zeros(1, p) if self.assume_centered else k.colmean(Xm)
-        covr = k.ew("scale", _emp_cov(k, Xm, assume_centered=self.assume_centered),
-                    s=_consistency_factor(k, p, 0.975))
+        # the reweighting mask dist < thr on the device (`le` against the
+        # float32 just below thr: the same decision), then the masked moments
+        mm = k.ew("le", dist, _M.of([_f32_below(thr)], 1, 1))
+        locr, covr = _masked_cov(k, M, mm, self.assume_centered)
+        covr = k.ew("scale", covr, s=_consistency_factor(k, p, 0.975))
+        mask = [v != 0.0 for v in mm.s]
         self.location_m_, self.covariance_m_ = locr, covr
         self.precision_m_ = _pinvh(k, covr)
         self.location_ = locr.out((p,))
