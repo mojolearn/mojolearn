@@ -11,7 +11,7 @@ from max.gpu.sync import barrier
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import memcpy
-from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
+from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count
 
@@ -496,6 +496,78 @@ def lu_pivot_block_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
         piv.unsafe_store(kk, ri.unsafe_load(0))
 
 
+
+# lane/neural-pass115 (2026-10-02): a step's small kernels in ONE launch.
+# The blocked route launched six kernels per column (pivot, swap, diagonal,
+# act, multipliers, the panel's update): about 49,000 launches at n = 8192
+# (M4: 1.1 s of the panel steps). Here one block runs step k's pivot (as
+# `lu_pivot_block_kernel`: strict greater, the lower row on a tie, which no
+# block size changes), the swap over columns [0, k1) (`lu_swap_elem`'s),
+# `lu_diag`, act[k] and the multipliers (`lu_l_elem`), separated by
+# barriers that order device memory (Apple: `dev_barrier`); the panel's
+# update stays its own launch over the whole device. The same cells, the
+# same statements, the same order. `MOJOLEARN_XD_LU_STEP_FUSED=0` restores
+# the per-kernel launches.
+comptime LUP_TPB = 512
+
+
+def lu_step_fused_kernel(
+    a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, k_in: Int32, k1: Int32, n: Int32
+):
+    var nn = Int(n)
+    var k = Int(k_in)
+    var kk1 = Int(k1)
+    var tid = Int(thread_idx.x)
+    var rv = stack_allocation[LUP_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ri = stack_allocation[LUP_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    # the pivot
+    var best = abs(ftz(a.unsafe_load(k * nn + k)))
+    var p = k
+    var i = k + 1 + tid
+    while i < nn:
+        var v = abs(ftz(a.unsafe_load(i * nn + k)))
+        if v > best:
+            best = v
+            p = i
+        i += LUP_TPB
+    rv.unsafe_store(tid, best)
+    ri.unsafe_store(tid, Int32(p))
+    barrier()
+    var active = LUP_TPB // 2
+    while active > 0:
+        if tid < active:
+            var ov = rv.unsafe_load(tid + active)
+            var oi = ri.unsafe_load(tid + active)
+            var cv = rv.unsafe_load(tid)
+            var ci = ri.unsafe_load(tid)
+            if ov > cv or (ov == cv and oi < ci):
+                rv.unsafe_store(tid, ov)
+                ri.unsafe_store(tid, oi)
+        barrier()
+        active = active // 2
+    var pr = Int(ri.unsafe_load(0))
+    if tid == 0:
+        piv.unsafe_store(k, Int32(pr))
+    # the swap over columns [0, k1)
+    if pr != k:
+        var j = tid
+        while j < kk1:
+            var t = a.unsafe_load(k * nn + j)
+            a.unsafe_store(k * nn + j, a.unsafe_load(pr * nn + j))
+            a.unsafe_store(pr * nn + j, t)
+            j += LUP_TPB
+    dev_barrier()
+    # the diagonal
+    if tid == 0:
+        lu_diag(a, info, scal, k, nn)
+        act.unsafe_store(k, scal.unsafe_load(1))
+    dev_barrier()
+    # the multipliers
+    var r = k + 1 + tid
+    while r < nn:
+        lu_l_elem(a, scal, k, r, nn)
+        r += LUP_TPB
+
 def lu_pivot_parallel() -> Bool:
     """`MOJOLEARN_XD_LU_PIVOT_SERIAL=1` restores the one-thread pivot scan
     (the A/B arm); default the block kernel."""
@@ -652,6 +724,84 @@ def lu_trail_tiled_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32
             if acts[kp] != Float32(0):
                 acc = ftz(identical_mul_add(-ls[r * width + kp], us[kp * LU_TILE + c], ftz(acc)))
         a.unsafe_store(i * nn + j, acc)
+
+
+
+# lane/neural-pass114 (2026-10-02): the trailing update with 4 x 4 cells a
+# thread. `lu_trail_tiled_kernel` gives each thread ONE cell of a 16 x 16
+# tile, so every staged operand feeds one multiply-add per thread (M4,
+# lu_factor at 8192: 7.0 s, ~50 GFLOP/s). Here a block owns 64 x 64 cells
+# and each thread 4 x 4 of them (rows r + 16a, columns c + 16b): every
+# cell's chain is unchanged (the panel's steps in order, the same
+# statement, a step with act = 0 skipped), so every word is the same.
+# A 16 KB page (fits gate; the one-cell kernel otherwise);
+# `MOJOLEARN_XD_LU_TRAIL_R4=0` restores it.
+comptime LUR_R = 4
+comptime LUR_T = LU_TILE * LUR_R
+comptime LUR_BYTES = (2 * LUR_T * LU_PANEL_NB + LU_PANEL_NB) * 4
+comptime LU_TRAIL_R4 = lib_smem_page_fits_for[TARGET_COLUMN, LUR_BYTES]()
+
+
+def lu_trail_r4_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, nb: Int32):
+    var nn = Int(n)
+    var kk0 = Int(k0)
+    var kk1 = Int(k1)
+    var width = Int(nb)
+    var tid = Int(thread_idx.x)
+    var r = tid // LU_TILE
+    var c = tid - r * LU_TILE
+    var i0 = kk1 + Int(block_idx.y) * LUR_T
+    var j0 = kk1 + Int(block_idx.x) * LUR_T
+    var ls = stack_allocation[LUR_T * LU_PANEL_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var us = stack_allocation[LU_PANEL_NB * LUR_T, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var acts = stack_allocation[LU_PANEL_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    # the L slab: LUR_T rows x width (unflushed, as the item reads l)
+    var q = tid
+    while q < LUR_T * width:
+        var rr = q // width
+        var cc = q - rr * width
+        var v = Float32(0)
+        if i0 + rr < nn:
+            v = a.unsafe_load((i0 + rr) * nn + kk0 + cc)
+        ls[q] = v
+        q += LU_TILE_TPB
+    # the U slab: width rows x LUR_T columns (flushed, as the item reads u)
+    q = tid
+    while q < width * LUR_T:
+        var rr = q // LUR_T
+        var cc = q - rr * LUR_T
+        var v = Float32(0)
+        if j0 + cc < nn:
+            v = ftz(a.unsafe_load((kk0 + rr) * nn + j0 + cc))
+        us[q] = v
+        q += LU_TILE_TPB
+    if tid < width:
+        acts[tid] = act.unsafe_load(kk0 + tid)
+    barrier()
+    var acc = SIMD[DType.float32, LUR_R * LUR_R](0)
+    comptime for qa in range(LUR_R):
+        comptime for qb in range(LUR_R):
+            var i = i0 + r + qa * LU_TILE
+            var j = j0 + c + qb * LU_TILE
+            if i < nn and j < nn:
+                acc[qa * LUR_R + qb] = ftz(a.unsafe_load(i * nn + j))
+    for kp in range(width):
+        if acts[kp] != Float32(0):
+            var lv = SIMD[DType.float32, LUR_R]()
+            var uv = SIMD[DType.float32, LUR_R]()
+            comptime for qa in range(LUR_R):
+                lv[qa] = ls[(r + qa * LU_TILE) * width + kp]
+            comptime for qb in range(LUR_R):
+                uv[qb] = us[kp * LUR_T + c + qb * LU_TILE]
+            comptime for qa in range(LUR_R):
+                comptime for qb in range(LUR_R):
+                    acc[qa * LUR_R + qb] = ftz(identical_mul_add(-lv[qa], uv[qb], ftz(acc[qa * LUR_R + qb])))
+    comptime for qa in range(LUR_R):
+        comptime for qb in range(LUR_R):
+            var i = i0 + r + qa * LU_TILE
+            var j = j0 + c + qb * LU_TILE
+            if i < nn and j < nn:
+                a.unsafe_store(i * nn + j, acc[qa * LUR_R + qb])
 
 
 def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
@@ -1811,6 +1961,14 @@ def launch_lu(
     else:
         ctx.enqueue_function[lu_info_init_kernel](info, grid_dim=1, block_dim=1)
     var pivot_block = lu_pivot_parallel()
+    # lane neural-pass115: on AMD both default off (the peer's MI325X:
+    # lu-factor 868 -> 930 ms, lu-solve 828 -> 933 with them; the L40S and
+    # the M4 gain): =1 opts in. The same words either way.
+    var trail_r4 = String(getenv("MOJOLEARN_XD_LU_TRAIL_R4")) != "0"
+    var step_fused = String(getenv("MOJOLEARN_XD_LU_STEP_FUSED")) != "0"
+    comptime if TARGET_COLUMN == COLUMN_AMD:
+        trail_r4 = String(getenv("MOJOLEARN_XD_LU_TRAIL_R4")) == "1"
+        step_fused = String(getenv("MOJOLEARN_XD_LU_STEP_FUSED")) == "1"
     var nb = min(lu_panel_width(), LU_PANEL_NB)
     if n > lu_serial_max() and nb > 0:
         # The blocked route (lane neural-pass32): the panel's steps run
@@ -1823,6 +1981,17 @@ def launch_lu(
         while k0 < n:
             var k1 = min(k0 + nb, n)
             for k in range(k0, k1):
+                if step_fused:
+                    ctx.enqueue_function[lu_step_fused_kernel](
+                        a, piv, info, scal, act,
+                        Int32(k), Int32(k1), Int32(n), grid_dim=1, block_dim=LUP_TPB,
+                    )
+                    if k1 - k - 1 > 0 and n - k - 1 > 0:
+                        ctx.enqueue_function[lu_update_panel_kernel](
+                            a, scal, Int32(k), Int32(n), Int32(k1),
+                            grid_dim=_blocks((n - k - 1) * (k1 - k - 1)), block_dim=TPB,
+                        )
+                    continue
                 if pivot_block:
                     ctx.enqueue_function[lu_pivot_block_kernel](
                         a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
@@ -1856,11 +2025,21 @@ def launch_lu(
                         a, act, Int32(k0), Int32(k1), Int32(n),
                         grid_dim=_blocks(n - k1), block_dim=TPB,
                     )
-                var tiles = (n - k1 + LU_TILE - 1) // LU_TILE
-                ctx.enqueue_function[lu_trail_tiled_kernel](
-                    a, act, Int32(k0), Int32(k1), Int32(n), Int32(k1 - k0),
-                    grid_dim=(tiles, tiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
-                )
+                var r4 = False
+                comptime if LU_TRAIL_R4:
+                    r4 = trail_r4
+                if r4:
+                    var t4 = (n - k1 + LUR_T - 1) // LUR_T
+                    ctx.enqueue_function[lu_trail_r4_kernel](
+                        a, act, Int32(k0), Int32(k1), Int32(n), Int32(k1 - k0),
+                        grid_dim=(t4, t4, 1), block_dim=(LU_TILE_TPB, 1, 1),
+                    )
+                else:
+                    var tiles = (n - k1 + LU_TILE - 1) // LU_TILE
+                    ctx.enqueue_function[lu_trail_tiled_kernel](
+                        a, act, Int32(k0), Int32(k1), Int32(n), Int32(k1 - k0),
+                        grid_dim=(tiles, tiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
+                    )
             k0 = k1
     for k in range(n if n > lu_serial_max() and nb == 0 else 0):
         if pivot_block:
