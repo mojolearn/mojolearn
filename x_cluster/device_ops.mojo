@@ -5,7 +5,7 @@ GPU. Each primitive is one kernel whose thread `t` calls the `x_cluster/
 bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
@@ -43,6 +43,8 @@ from x_cluster.bodies import (
     sqrt_cell,
     tree_descend,
     ward_cell,
+    lance_williams,
+    LINK_WARD,
 )
 from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
@@ -988,6 +990,205 @@ def _grid(n: Int) -> Int:
     return (n + TPB - 1) // TPB if n > 0 else 1
 
 
+# ---------------------------------------------------------------------------
+# THE AGGLOMERATIVE MERGE LOOP ON THE DEVICE (lane hr2-mds-agglo, 2026-10-02).
+# `agglo.agglo_tree`'s unconstrained loop, every step as parallel kernels on
+# the resident n x n matrix: no host step between two merges. Every pick is a
+# min of `_agg_key` (the value's order in the high word, the index in the low
+# word), so the reduction's shape cannot move it: the lowest value, the
+# lowest index on a tie, exactly the host loop's strict `<` scans.
+#   state ints:   [0] a  [1] b  [2] rescan list length  [3] error
+#   state floats: [0] dab  [1] size a  [2] size b
+comptime AGG_TPB = 256
+comptime AGG_PER = AGG_TPB * 4
+comptime AGG_RESCAN_BLOCKS = 128
+comptime AGG_NONE = UInt64(0xFFFFFFFFFFFFFFFF)
+
+
+@always_inline
+def _agg_key(v: Float32, k: Int) -> UInt64:
+    """Ascending in v (-0.0 folded onto +0.0, which `<` treats as equal),
+    then ascending in k."""
+    var b = bitcast[DType.uint32](v)
+    if b == UInt32(0x80000000):
+        b = UInt32(0)
+    var o = (b ^ UInt32(0x80000000)) if (b & UInt32(0x80000000)) == UInt32(0) else ~b
+    return (UInt64(o) << 32) | UInt64(UInt32(k))
+
+
+@always_inline
+def _agg_block_min(red: UnsafePointer[UInt64, MutUntrackedOrigin, address_space=AddressSpace.SHARED], mine: UInt64) -> UInt64:
+    var tid = Int(thread_idx.x)
+    red[tid] = mine
+    barrier()
+    var off = AGG_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = min(red[tid], red[tid + off])
+        barrier()
+        off //= 2
+    var r = red[0]
+    barrier()
+    return r
+
+
+def _agg_init_kernel(live: IPtr, nn: IPtr, md: FPtr, sz: FPtr, node: IPtr, lst: IPtr, st: IPtr, n: Int32):
+    var i = _tid()
+    if i < Int(n):
+        live[i] = 1
+        nn[i] = -1
+        md[i] = Float32.MAX * Float32(2)
+        sz[i] = Float32(1)
+        node[i] = Int32(i)
+        lst[i] = Int32(i)
+    if i == 0:
+        st[0] = 0
+        st[1] = 0
+        st[2] = n
+
+
+def _agg_mirror_kernel(x: FPtr, dm: FPtr, n: Int32, bad: IPtr):
+    var t = _tid()
+    var N = Int(n)
+    if t < N * N:
+        var i = t // N
+        var j = t % N
+        if i == j:
+            dm[t] = Float32(0)
+        else:
+            var lo = i if i < j else j
+            var hi = j if i < j else i
+            var v = x[lo * N + hi]
+            if i < j and (not (v >= Float32(0)) or v == Float32.MAX * Float32(2)):
+                bad[0] = 1
+            dm[t] = v
+
+
+def _agg_argmin_part_kernel(md: FPtr, nn: IPtr, live: IPtr, n: Int32, part: MutPointer[UInt64, MutAnyOrigin], st: IPtr):
+    """part[block] = the min key of (md[i], i) over the block's live rows
+    with a partner."""
+    var red = stack_allocation[AGG_TPB, UInt64, address_space = AddressSpace.SHARED]()
+    var mine = AGG_NONE
+    var base = Int(block_idx.x) * AGG_PER
+    var end = min(base + AGG_PER, Int(n))
+    for i in range(base + Int(thread_idx.x), end, AGG_TPB):
+        if live[i] != 0 and nn[i] >= 0:
+            mine = min(mine, _agg_key(md[i], i))
+    var r = _agg_block_min(red, mine)
+    if thread_idx.x == 0:
+        part[Int(block_idx.x)] = r
+
+
+def _agg_pick_kernel(
+    part: MutPointer[UInt64, MutAnyOrigin], nb: Int32, dm: FPtr, nn: IPtr, live: IPtr, sz: FPtr, node: IPtr,
+    n: Int32, step: Int32, linkage: Int32, ch: IPtr, dist: FPtr, st: IPtr, stf: FPtr,
+):
+    """The merge of this step from the partials: a, b = nn[a], the children
+    pair and value; then b dies and a takes the merged size and node id."""
+    var red = stack_allocation[AGG_TPB, UInt64, address_space = AddressSpace.SHARED]()
+    var mine = AGG_NONE
+    for q in range(Int(thread_idx.x), Int(nb), AGG_TPB):
+        mine = min(mine, part[q])
+    var r = _agg_block_min(red, mine)
+    if thread_idx.x == 0:
+        st[2] = 0
+        if st[3] != 0:
+            return
+        if r == AGG_NONE:
+            st[3] = 1
+            return
+        var N = Int(n)
+        var a = Int(UInt32(r & UInt64(0xFFFFFFFF)))
+        var b = Int(nn[a])
+        var dab = dm[a * N + b]
+        var na = node[a]
+        var nbb = node[b]
+        var s = Int(step)
+        ch[2 * s] = na if na < nbb else nbb
+        ch[2 * s + 1] = nbb if na < nbb else na
+        dist[s] = identical_sqrt(dab) if Int(linkage) == LINK_WARD else dab
+        st[0] = Int32(a)
+        st[1] = Int32(b)
+        stf[0] = dab
+        stf[1] = sz[a]
+        stf[2] = sz[b]
+        live[b] = 0
+        nn[b] = -1
+        sz[a] = ftz(sz[a] + sz[b])
+        node[a] = Int32(N + s)
+
+
+def _agg_lw_kernel(dm: FPtr, live: IPtr, sz: FPtr, n: Int32, linkage: Int32, st: IPtr, stf: FPtr):
+    """Row and column a of the matrix: the Lance-Williams value of (a u b)
+    to every live k."""
+    var k = _tid()
+    var N = Int(n)
+    if k >= N or st[3] != 0:
+        return
+    var a = Int(st[0])
+    if k == a or live[k] == 0:
+        return
+    var b = Int(st[1])
+    var v = lance_williams(Int(linkage), dm[a * N + k], dm[b * N + k], stf[0], stf[1], stf[2], sz[k], True, True)
+    dm[a * N + k] = v
+    dm[k * N + a] = v
+
+
+def _agg_flag_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: IPtr, lst: IPtr):
+    """Row a, and every live row below b whose partner was a or b, go to the
+    rescan list; a live row below a otherwise takes a when it is nearer (or
+    as near with a lower index)."""
+    var i = _tid()
+    var N = Int(n)
+    if i >= N or st[3] != 0:
+        return
+    var a = Int(st[0])
+    var b = Int(st[1])
+    var go = False
+    if i == a:
+        go = True
+    elif i < b and live[i] != 0:
+        var q = Int(nn[i])
+        if q == a or q == b:
+            go = True
+        elif i < a:
+            var v = dm[i * N + a]
+            if q < 0 or v < md[i] or (v == md[i] and a < q):
+                nn[i] = Int32(a)
+                md[i] = v
+    if go:
+        var at = Atomic.fetch_add(st.unsafe_offset(2), Int32(1))
+        lst[Int(at)] = Int32(i)
+
+
+def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: IPtr, lst: IPtr):
+    """nn[i], md[i] for each listed row: the live column j > i at the lowest
+    value, the lowest j on a tie (-1, +inf when none). One block a row."""
+    var red = stack_allocation[AGG_TPB, UInt64, address_space = AddressSpace.SHARED]()
+    var N = Int(n)
+    var cnt = Int(st[2])
+    if st[3] != 0:
+        cnt = 0
+    var e = Int(block_idx.x)
+    while e < cnt:
+        var i = Int(lst[e])
+        var mine = AGG_NONE
+        for j in range(i + 1 + Int(thread_idx.x), N, AGG_TPB):
+            if live[j] != 0:
+                mine = min(mine, _agg_key(dm[i * N + j], j))
+        var r = _agg_block_min(red, mine)
+        if thread_idx.x == 0:
+            if r == AGG_NONE:
+                nn[i] = -1
+                md[i] = Float32.MAX * Float32(2)
+            else:
+                var j = Int(UInt32(r & UInt64(0xFFFFFFFF)))
+                nn[i] = Int32(j)
+                md[i] = dm[i * N + j]
+        e += Int(grid_dim.x)
+
+
+
 struct _ClusterContext(Defaultable, Movable):
     """ONE process-lifetime DeviceContext for every x_cluster entry (the
     x_cnn `_Global` pattern: one DeviceContext per process). A context per call hung the SECOND
@@ -1631,6 +1832,110 @@ struct DeviceOps(ClusterOps):
                 grid_dim=_grid((n + g - 1) // g), block_dim=TPB,
             )
         self._ph1("dot_groups")
+
+    def agglo_on_device(self) -> Bool:
+        return True
+
+    def agglo_mirror(mut self, x: Int, n: Int, dst: Int) raises:
+        if n * n > 2147483647:
+            raise Error("AgglomerativeClustering: n * n exceeds the Int32 index bound")
+        self._ph0()
+        var bad = self.ctx.enqueue_create_buffer[DType.int32](1)
+        self.ctx.enqueue_memset(bad, Int32(0))
+        var pbad = bad.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        self.ctx.enqueue_function[_agg_mirror_kernel](
+            self._fp(x), self._fp(dst), Int32(n), pbad, grid_dim=_grid(n * n), block_dim=TPB,
+        )
+        var h = List[Int32](length=1, fill=Int32(0))
+        self.ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=bad)
+        self._sync()
+        _ = bad^
+        self._ph1("agglo_mirror")
+        if h[0] != 0:
+            raise Error("AgglomerativeClustering: a precomputed distance matrix must be finite and non-negative")
+
+    def agglo_merge(
+        mut self, dm: Int, n: Int, linkage: Int, n_merges: Int, mut children: List[Int32], mut dist: List[Float32]
+    ) raises:
+        if n * n > 2147483647:
+            raise Error("AgglomerativeClustering: n * n exceeds the Int32 index bound")
+        self._ph0()
+        var ctx = self.ctx.copy()
+        var live = ctx.enqueue_create_buffer[DType.int32](n)
+        var nn = ctx.enqueue_create_buffer[DType.int32](n)
+        var node = ctx.enqueue_create_buffer[DType.int32](n)
+        var lst = ctx.enqueue_create_buffer[DType.int32](n)
+        var st = ctx.enqueue_create_buffer[DType.int32](4)
+        ctx.enqueue_memset(st, Int32(0))
+        var md = ctx.enqueue_create_buffer[DType.float32](n)
+        var sz = ctx.enqueue_create_buffer[DType.float32](n)
+        var stf = ctx.enqueue_create_buffer[DType.float32](3)
+        var nch = max(2 * n_merges, 1)
+        var ndv = max(n_merges, 1)
+        var ch = ctx.enqueue_create_buffer[DType.int32](nch)
+        var dv = ctx.enqueue_create_buffer[DType.float32](ndv)
+        var nb = (n + AGG_PER - 1) // AGG_PER
+        var part = ctx.enqueue_create_buffer[DType.uint64](nb)
+        var p_live = live.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_nn = nn.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_node = node.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_lst = lst.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_st = st.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_md = md.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_sz = sz.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_stf = stf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_ch = ch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_dv = dv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_part = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_dm = self._fp(dm)
+        var rb = n if n < AGG_RESCAN_BLOCKS else AGG_RESCAN_BLOCKS
+        ctx.enqueue_function[_agg_init_kernel](
+            p_live, p_nn, p_md, p_sz, p_node, p_lst, p_st, Int32(n), grid_dim=_grid(n), block_dim=TPB,
+        )
+        # every row's first nearest partner: the rescan of the full list
+        ctx.enqueue_function[_agg_rescan_kernel](
+            p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, grid_dim=rb, block_dim=AGG_TPB,
+        )
+        for step in range(n_merges):
+            ctx.enqueue_function[_agg_argmin_part_kernel](
+                p_md, p_nn, p_live, Int32(n), p_part, p_st, grid_dim=nb, block_dim=AGG_TPB,
+            )
+            ctx.enqueue_function[_agg_pick_kernel](
+                p_part, Int32(nb), p_dm, p_nn, p_live, p_sz, p_node, Int32(n), Int32(step), Int32(linkage),
+                p_ch, p_dv, p_st, p_stf, grid_dim=1, block_dim=AGG_TPB,
+            )
+            ctx.enqueue_function[_agg_lw_kernel](
+                p_dm, p_live, p_sz, Int32(n), Int32(linkage), p_st, p_stf, grid_dim=_grid(n), block_dim=TPB,
+            )
+            ctx.enqueue_function[_agg_flag_kernel](
+                p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, grid_dim=_grid(n), block_dim=TPB,
+            )
+            ctx.enqueue_function[_agg_rescan_kernel](
+                p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, grid_dim=rb, block_dim=AGG_TPB,
+            )
+        var h_st = List[Int32](length=4, fill=Int32(0))
+        children = List[Int32](length=nch, fill=Int32(0))
+        dist = List[Float32](length=ndv, fill=Float32(0))
+        ctx.enqueue_copy(dst_ptr=h_st.unsafe_ptr(), src_buf=st)
+        ctx.enqueue_copy(dst_ptr=children.unsafe_ptr(), src_buf=ch)
+        ctx.enqueue_copy(dst_ptr=dist.unsafe_ptr(), src_buf=dv)
+        self._sync()
+        _ = live^
+        _ = nn^
+        _ = node^
+        _ = lst^
+        _ = st^
+        _ = md^
+        _ = sz^
+        _ = stf^
+        _ = ch^
+        _ = dv^
+        _ = part^
+        self._ph1("agglo_merge")
+        if h_st[3] != 0:
+            raise Error("AgglomerativeClustering: no connected pair is left to merge")
+        children.resize(2 * n_merges, Int32(0))
+        dist.resize(n_merges, Float32(0))
 
     def alloc(mut self, n: Int) raises -> Int:
         self._ph0()
