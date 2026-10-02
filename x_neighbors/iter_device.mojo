@@ -15,9 +15,6 @@ same loop over the items (`x_neighbors/iter_host.mojo`).
 """
 from std.memory import bitcast, memcpy
 from std.atomic import Atomic
-from core.host_lanes import host_row_tasks
-from std.time import perf_counter_ns
-from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
@@ -30,7 +27,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
 from x_neighbors.nan_cells import nan_cells_host
-from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
+from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, _add, knn_sq_item, knn_impute_finish
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
@@ -266,97 +263,18 @@ def op_pr_iterate(
 
 
 
-def pr_dangling_sum_kernel(x: FP, dangling: IP, res: FP, n_: Int64):
-    """ONE thread: the item's dangling-mass chain, once per iteration."""
-    if _tid() == 0:
-        res.unsafe_store(0, pagerank_dangling_sum(x, dangling, Int(n_)))
-
-
-def pagerank_step_sparse_kernel(
-    indptr: IP, rows: IP, vals: FP, x: FP, p: FP, dw: FP, dsum: FP, res: FP, n_: Int64, alpha_: Float32,
-):
-    var t = _tid()
-    if t < Int(n_):
-        pagerank_step_sparse_item(t, indptr, rows, vals, x, p, dw, dsum.unsafe_load(0), res, alpha_)
-
-
 def op_pr_iterate_sparse(
     a: Int, x: Int, p: Int, dw: Int, info: Int,
     n: Int, max_iter: Int, thr_hi: Int, thr_lo: Int, binary: Int, alpha: Float32,
 ) raises:
-    """`op_pr_iterate` over the nonzero cells of the dense adjacency `a`
-    (x_neighbors/pr_sparse.mojo): the scan on the host, the iteration on
-    the device over the column lists. `x` in: the start, out: the last
-    iterate. info (int32 x 2): iterations run, converged."""
-    var thr = bitcast[DType.float64]((UInt64(thr_hi) << UInt64(32)) | UInt64(thr_lo))
-    var timing = String(getenv("MOJOLEARN_PR_TIMING")) == "1"
-    var t_start = perf_counter_ns()
-    var g = pr_graph_from_dense(FP(unsafe_from_address=a), n, binary != 0)
-    if timing:
-        print("pr_iterate_sparse: scan", (perf_counter_ns() - t_start) // 1000000, "ms, nnz", g.nnz,
-              "tasks", host_row_tasks(n, 2 * n))
-        t_start = perf_counter_ns()
-    var ctx = xn_ctx()
-    var d_ip = _buf_i(ctx, Int(g.indptr.unsafe_ptr()), n + 1, True)
-    var d_rows = _buf_i(ctx, Int(g.rows.unsafe_ptr()), g.nnz, True)
-    var d_vals = _buf(ctx, Int(g.vals.unsafe_ptr()), g.nnz, True)
-    var d_dg = _buf_i(ctx, Int(g.dangling.unsafe_ptr()), n, True)
-    var d_a = _buf(ctx, x, n, True)
-    var d_b = _buf(ctx, 0, n, False)
-    var d_p = _buf(ctx, p, n, True)
-    var d_dw = _buf(ctx, dw, n, True)
-    var d_s = _buf(ctx, 0, 1, False)
-    var d_ds = _buf(ctx, 0, 1, False)
-    var hs = List[Float32](length=1, fill=Float32(0))
-    var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var nxt: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var cur_is_a = True
-    var n_iter = 0
-    var converged = False
-    for it in range(max_iter):
-        ctx.enqueue_function[pr_dangling_sum_kernel](
-            cur, d_dg.unsafe_ptr(), d_ds.unsafe_ptr(), Int64(n), grid_dim=1, block_dim=1,
-        )
-        ctx.enqueue_function[pagerank_step_sparse_kernel](
-            d_ip.unsafe_ptr(), d_rows.unsafe_ptr(), d_vals.unsafe_ptr(), cur, d_p.unsafe_ptr(), d_dw.unsafe_ptr(),
-            d_ds.unsafe_ptr(), nxt, Int64(n), alpha, grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
-        )
-        ctx.enqueue_function[absdiff_sum_kernel](
-            nxt, cur, d_s.unsafe_ptr(), Int64(n), grid_dim=1, block_dim=1,
-        )
-        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
-        ctx.synchronize()
-        var t = cur
-        cur = nxt
-        nxt = t
-        cur_is_a = not cur_is_a
-        n_iter = it + 1
-        if Float64(hs[0]) < thr:
-            converged = True
-            break
-    if cur_is_a:
-        _down(ctx, d_a, x, n)
-    else:
-        _down(ctx, d_b, x, n)
-    ctx.synchronize()
-    if timing:
-        print("pr_iterate_sparse: device", (perf_counter_ns() - t_start) // 1000000, "ms,", n_iter, "iterations")
-    var inf = IP(unsafe_from_address=info)
-    inf.unsafe_store(0, Int32(n_iter))
-    inf.unsafe_store(1, Int32(1 if converged else 0))
-    _ = hs^
-    _ = d_ip^
-    _ = d_rows^
-    _ = d_vals^
-    _ = d_dg^
-    _ = d_a^
-    _ = d_b^
-    _ = d_p^
-    _ = d_dw^
-    _ = d_s^
-    _ = d_ds^
-    _ = g^
-    _ = ctx^
+    """`op_pr_iterate` over the column lists of the dense adjacency `a`, all
+    on the device (lane hr-graph, x_neighbors/graph_par.mojo `pr_drive`):
+    the row sums, column lists and offsets built from `a`, the step one
+    thread per node over its column ascending, the dangling mass and
+    |x' - x| blocked folds. `x` in: the start, out: the last iterate. info
+    (int32 x 2): iterations run, converged."""
+    pr_iterate_gpu(a, x, p, dw, info, n, max_iter,
+                   bitcast[DType.float64]((UInt64(thr_hi) << UInt64(32)) | UInt64(thr_lo)), binary, alpha)
 
 def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int) raises:
     """lane/neural-pass71: the NaN cells of x (n x d): flat indices

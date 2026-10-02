@@ -6,8 +6,7 @@ from std.sys.compile import is_defined
 from std.os import getenv
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
-from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_item, louvain_item, svgp_item, svgp_var_item
-from x_neighbors.louvain_sparse import louvain_item_sparse
+from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_item, svgp_item, svgp_var_item
 
 #: the host gate's negative control (`MOJOLEARN_HOST_SABOTAGE`): every op's
 #: first float output moves by 1e-3 in its first element
@@ -615,13 +614,6 @@ def op_cc_step(a: Int, lab: Int, res: Int, n: Int) raises:
 def op_graph_symmetry(a: Int, flags: Int, n: Int) raises:
     for t in range(1):
         graph_symmetry_item(t, _f(a), _i(flags), n)
-
-
-def op_louvain(a: Int, labels: Int, info: Int, n: Int, max_level: Int, resolution: Float32, threshold: Float32) raises:
-    louvain_item_sparse(_f(a), _i(labels), _f(info), n, max_level, resolution, threshold)
-    comptime if X_NEIGHBORS_HOST_SABOTAGE:
-        if (2) > 0:
-            _f(info).unsafe_store(0, _f(info).unsafe_load(0) + Float32(1e-3))
 
 
 def op_svgp(kuu: Int, bmat: Int, b: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32) raises:
