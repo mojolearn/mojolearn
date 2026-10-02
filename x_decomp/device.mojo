@@ -43,9 +43,7 @@ from x_decomp.cells import (
     I32Ptr,
     bidx,
     cd_row,
-    chol_serial,
     chol_diag,
-    chol_col_elem,
     colsum_cell,
     ew_cell,
     gemm_cell,
@@ -421,23 +419,38 @@ def lu_info_init_kernel(info: F32Ptr):
 
 
 comptime LU_PIVOT_TPB = 256
+#: most blocks of the pivot search, and rows a thread scans before another
+#: block is added
+comptime LU_PIV_MAXB = 64
+comptime LU_PIV_ROWS = 8
+#: floats of the LU step scratch `scal`: [d, acts] then the pivot search's
+#: partial values and rows (as floats: exact below 2^24 rows)
+comptime LU_SCAL_LEN = 2 + 2 * LU_PIV_MAXB
 
 
-def lu_pivot_block_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
-    """`lu_pivot` on ONE BLOCK of LU_PIVOT_TPB threads (lane/neural-net-
-    experiment, 2026-09-30, the classical pass): the largest |a[i, k]| for
-    i >= k, ties to the LOWEST row. Comparisons only, no arithmetic, so the
-    result is the serial scan's by construction: every thread starts from
-    (|a[k, k]|, k) and takes a later row only on a STRICT greater value,
-    exactly as the serial scan does, and the tree combine prefers the
-    greater value and, on equal values, the lower row. A NaN never wins a
-    strict compare, so it is skipped as the serial scan skips it; a NaN at
-    row k makes every compare false and keeps row k, as the serial scan
-    does. The serial scan was one thread walking a column of n strided
-    loads per step: at n = 8192 on an MI325X that was most of a 600 s
-    factorization (bench_board 0.8.25, `lu-factor`)."""
+def lu_pivot_blocks(k: Int, n: Int) -> Int:
+    """Blocks of step k's pivot search: one per LU_PIVOT_TPB * LU_PIV_ROWS
+    rows below the diagonal, at least one, at most LU_PIV_MAXB."""
+    var rows = n - k - 1
+    var g = (rows + LU_PIVOT_TPB * LU_PIV_ROWS - 1) // (LU_PIVOT_TPB * LU_PIV_ROWS)
+    return max(1, min(g, LU_PIV_MAXB))
+
+
+def lu_pivot_part_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32, g: Int32):
+    """`lu_pivot` over every block (cpu-gpu-cleanup c-decomp, 2026-10-02;
+    was ONE block): the largest |a[i, k]| for i >= k, ties to the LOWEST
+    row. Comparisons only, so the result is the serial scan's by
+    construction: every thread starts from (|a[k, k]|, k) and takes a later
+    row only on a STRICT greater value, exactly as the serial scan does, and
+    every combine (here and in `lu_pivot_fin_kernel`) prefers the greater
+    value and, on equal values, the lower row. A NaN never wins a strict
+    compare, so it is skipped as the serial scan skips it; a NaN at row k
+    makes every compare false and keeps row k, as the serial scan does.
+    Block b's best goes to scal[2 + b] (value) and scal[2 + LU_PIV_MAXB + b]
+    (row)."""
     var kk = Int(k)
     var nn = Int(n)
+    var gg = Int(g)
     var rv = stack_allocation[
         LU_PIVOT_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
     ]()
@@ -445,15 +458,16 @@ def lu_pivot_block_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
         LU_PIVOT_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
     ]()
     var tid = Int(thread_idx.x)
+    var b = Int(block_idx.x)
     var best = abs(ftz(a.unsafe_load(kk * nn + kk)))
     var p = kk
-    var i = kk + 1 + tid
+    var i = kk + 1 + b * LU_PIVOT_TPB + tid
     while i < nn:
         var v = abs(ftz(a.unsafe_load(i * nn + kk)))
         if v > best:
             best = v
             p = i
-        i += LU_PIVOT_TPB
+        i += gg * LU_PIVOT_TPB
     rv.unsafe_store(tid, best)
     ri.unsafe_store(tid, Int32(p))
     barrier()
@@ -470,18 +484,70 @@ def lu_pivot_block_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
         barrier()
         active = active // 2
     if tid == 0:
-        piv.unsafe_store(kk, ri.unsafe_load(0))
+        scal.unsafe_store(2 + b, rv.unsafe_load(0))
+        scal.unsafe_store(2 + LU_PIV_MAXB + b, Float32(Int(ri.unsafe_load(0))))
 
 
-def lu_swap_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
+def lu_pivot_fin_kernel(scal: F32Ptr, piv: I32Ptr, k: Int32, g: Int32):
+    """The g block partials of `lu_pivot_part_kernel` combined by the same
+    rule (greater value, then lower row) into piv[k]."""
+    var rv = stack_allocation[
+        LU_PIVOT_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var ri = stack_allocation[
+        LU_PIVOT_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var tid = Int(thread_idx.x)
+    var gg = Int(g)
+    var cv = Float32(0)
+    var ci = Int32(-1)
+    var b = tid
+    while b < gg:
+        var ov = scal.unsafe_load(2 + b)
+        var oi = Int32(Int(scal.unsafe_load(2 + LU_PIV_MAXB + b)))
+        if ci < 0 or ov > cv or (ov == cv and oi < ci):
+            cv = ov
+            ci = oi
+        b += LU_PIVOT_TPB
+    rv.unsafe_store(tid, cv)
+    ri.unsafe_store(tid, ci)
+    barrier()
+    var active = LU_PIVOT_TPB // 2
+    while active > 0:
+        if tid < active:
+            var ov = rv.unsafe_load(tid + active)
+            var oi = ri.unsafe_load(tid + active)
+            var c2 = rv.unsafe_load(tid)
+            var i2 = ri.unsafe_load(tid)
+            if oi >= 0 and (i2 < 0 or ov > c2 or (ov == c2 and oi < i2)):
+                rv.unsafe_store(tid, ov)
+                ri.unsafe_store(tid, oi)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        piv.unsafe_store(Int(k), ri.unsafe_load(0))
+
+
+def enqueue_lu_pivot(ctx: DeviceContext, a: F32Ptr, piv: I32Ptr, scal: F32Ptr, k: Int, n: Int) raises:
+    """Step k's pivot row into piv[k]: the block partials, then their combine."""
+    var g = lu_pivot_blocks(k, n)
+    ctx.enqueue_function[lu_pivot_part_kernel](
+        a, scal, Int32(k), Int32(n), Int32(g), grid_dim=g, block_dim=LU_PIVOT_TPB
+    )
+    ctx.enqueue_function[lu_pivot_fin_kernel](scal, piv, Int32(k), Int32(g), grid_dim=1, block_dim=LU_PIVOT_TPB)
+
+
+def lu_swap_kernel(a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, k: Int32, n: Int32):
+    """`lu_swap_elem` for every column; column k's thread then runs step
+    k's `lu_diag` (and act[k] = scal[1]) on the swapped pivot: the cell no
+    other thread of the launch touches (cpu-gpu-cleanup c-decomp: was its
+    own one-thread launch)."""
     var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if j < Int(n):
         lu_swap_elem(a, piv, Int(k), j, Int(n))
-
-
-def lu_diag_kernel(a: F32Ptr, info: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
-    if block_idx.x == 0 and thread_idx.x == 0:
-        lu_diag(a, info, scal, Int(k), Int(n))
+        if j == Int(k):
+            lu_diag(a, info, scal, Int(k), Int(n))
+            act.unsafe_store(Int(k), scal.unsafe_load(1))
 
 
 def lu_l_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
@@ -517,13 +583,20 @@ def lu_panel_width() -> Int:
         return LU_PANEL_NB
 
 
-def lu_swap_cols_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32, col_lo: Int32, col_hi: Int32):
+def lu_swap_cols_kernel(
+    a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, k: Int32, n: Int32, col_lo: Int32, col_hi: Int32
+):
     """`lu_swap_elem` over the columns [col_lo, col_hi) of rows k and
     piv[k]: the panel's steps swap the panel's and the left columns at once,
-    the trailing columns later, in the same order (`lu_apply_swaps_kernel`)."""
+    the trailing columns later, in the same order (`lu_apply_swaps_kernel`).
+    Column k's thread then runs step k's `lu_diag` and act[k] = scal[1]
+    (cpu-gpu-cleanup c-decomp: were two one-thread launches)."""
     var j = Int(col_lo) + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if j < Int(col_hi):
         lu_swap_elem(a, piv, Int(k), j, Int(n))
+        if j == Int(k):
+            lu_diag(a, info, scal, Int(k), Int(n))
+            act.unsafe_store(Int(k), scal.unsafe_load(1))
 
 
 def lu_update_panel_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32, col_hi: Int32):
@@ -535,13 +608,6 @@ def lu_update_panel_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32, col_hi: 
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if w > 0 and h > 0 and t < h * w:
         lu_update_elem(a, scal, kk, kk + 1 + t // w, kk + 1 + t % w, Int(n))
-
-
-def lu_act_kernel(scal: F32Ptr, act: F32Ptr, k: Int32):
-    """act[k] = scal[1]: whether step k eliminated (a zero pivot skips its
-    step, and the trailing kernels skip it the same way)."""
-    if block_idx.x == 0 and thread_idx.x == 0:
-        act.unsafe_store(Int(k), scal.unsafe_load(1))
 
 
 def lu_apply_swaps_kernel(a: F32Ptr, piv: I32Ptr, k0: Int32, k1: Int32, n: Int32):
@@ -822,33 +888,33 @@ def lu_trail_rb_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, n
                 a.unsafe_store(i * nn + j, acc[r * LU_RB + c])
 
 
-def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
-    if block_idx.x == 0 and thread_idx.x == 0:
-        chol_serial(a, Int(n), info)
-
-
-def chol_diag_kernel(a: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
-    if block_idx.x == 0 and thread_idx.x == 0:
-        chol_diag(a, info, Int(j), Int(n))
-
-
-def chol_col_kernel(a: F32Ptr, j: Int32, n: Int32):
+def chol_step_kernel(a: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
+    """Column step j of `chol_serial`, one thread per row i >= j. Row j's
+    thread is `chol_diag` (the info store, a[j, j] = sqrt(acc)); every row
+    i > j forms the same pivot chain itself (the same fma chain, so the same
+    d that `chol_diag` stores) and runs `chol_col_elem`'s statements with
+    it. Reads only columns 0..j-1, final since their own steps; a[j, j] is
+    written by row j's thread and read by none."""
     var jj = Int(j)
-    var i = jj + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n):
-        chol_col_elem(a, jj, i, Int(n))
-
-
-def chol_serial_max() -> Int:
-    """Largest n whose Cholesky runs as ONE `chol_kernel` launch on one
-    thread (MOJOLEARN_XD_CHOL_SERIAL, default 16; timing only: the column
-    driver below stores the same cells in the same order). A value at or
-    above every n restores the one-thread kernel for the A/B."""
-    var v = String(getenv("MOJOLEARN_XD_CHOL_SERIAL", "16"))
-    try:
-        return Int(v)
-    except:
-        return 16
+    var nn = Int(n)
+    var i = jj + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= nn:
+        return
+    if i == jj:
+        chol_diag(a, info, jj, nn)
+        return
+    var acc = ftz(a.unsafe_load(jj * nn + jj))
+    for p in range(jj):
+        var l = ftz(a.unsafe_load(jj * nn + p))
+        acc = ftz(identical_mul_add(-l, l, acc))
+    if not (acc > Float32(0)):
+        acc = Float32(1)
+    var d = sqrt0(acc)
+    var s = ftz(a.unsafe_load(i * nn + jj))
+    for p in range(jj):
+        s = ftz(identical_mul_add(-ftz(a.unsafe_load(i * nn + p)), ftz(a.unsafe_load(jj * nn + p)), s))
+    a.unsafe_store(i * nn + jj, div0(s, d))
+    a.unsafe_store(jj * nn + i, Float32(0))
 
 
 def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int32, k: Int32):
@@ -1969,11 +2035,12 @@ def launch_lu(
     ctx: DeviceContext, a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, n: Int
 ) raises:
     """DevExec.lu's launches on device pointers, enqueued (no sync): `a`
-    (n x n) factored in place, `piv` (n), `info` (1), `scal` (2) and `act`
+    (n x n) factored in place, `piv` (n), `info` (1), `scal` (LU_SCAL_LEN) and `act`
     (n) scratch. DevExec.lu and the resident kit (x_decomp/kit_device.mojo)
     both call it, so the two run one launch sequence."""
-    # lu_serial's cells, step by step at every n: the pivot search on one
-    # block (a parallel reduction, `lu_pivot`'s choice), the swap, the
+    # lu_serial's cells, step by step at every n: the pivot search over
+    # every block (a parallel reduction, `lu_pivot`'s choice), the swap (with
+    # the diagonal step on column k's thread), the
     # multipliers and the trailing update one thread per cell. (The
     # one-thread `lu_kernel` for n <= MOJOLEARN_XD_LU_SERIAL and the
     # one-thread pivot scan are deleted: the same cells in the same order.)
@@ -2000,17 +2067,11 @@ def launch_lu(
         while k0 < n:
             var k1 = min(k0 + nb, n)
             for k in range(k0, k1):
-                ctx.enqueue_function[lu_pivot_block_kernel](
-                    a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
-                )
+                enqueue_lu_pivot(ctx, a, piv, scal, k, n)
                 ctx.enqueue_function[lu_swap_cols_kernel](
-                    a, piv, Int32(k), Int32(n), Int32(0), Int32(k1),
+                    a, piv, info, scal, act, Int32(k), Int32(n), Int32(0), Int32(k1),
                     grid_dim=_blocks(k1), block_dim=TPB,
                 )
-                ctx.enqueue_function[lu_diag_kernel](
-                    a, info, scal, Int32(k), Int32(n), grid_dim=1, block_dim=1
-                )
-                ctx.enqueue_function[lu_act_kernel](scal, act, Int32(k), grid_dim=1, block_dim=1)
                 if n - k - 1 > 0:
                     ctx.enqueue_function[lu_l_kernel](
                         a, scal, Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
@@ -2061,14 +2122,9 @@ def launch_lu(
                     )
             k0 = k1
     for k in range(n if nb == 0 else 0):
-        ctx.enqueue_function[lu_pivot_block_kernel](
-            a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
-        )
+        enqueue_lu_pivot(ctx, a, piv, scal, k, n)
         ctx.enqueue_function[lu_swap_kernel](
-            a, piv, Int32(k), Int32(n), grid_dim=_blocks(n), block_dim=TPB
-        )
-        ctx.enqueue_function[lu_diag_kernel](
-            a, info, scal, Int32(k), Int32(n), grid_dim=1, block_dim=1
+            a, piv, info, scal, act, Int32(k), Int32(n), grid_dim=_blocks(n), block_dim=TPB
         )
         if n - k - 1 > 0:
             ctx.enqueue_function[lu_l_kernel](
@@ -2186,7 +2242,7 @@ struct DevExec(Exec):
         var da = _up(ctx, a, n * n)
         var dp = ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
         var di = ctx.enqueue_create_buffer[DType.float32](1)
-        var ds = ctx.enqueue_create_buffer[DType.float32](2)
+        var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
         var dact = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
         launch_lu(
             ctx, _p(da), I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr())), _p(di), _p(ds), _p(dact), n
@@ -2271,19 +2327,16 @@ struct DevExec(Exec):
         # row below it one thread per row (each its own j-long chain, the
         # same chain `chol_serial` walks for that cell, reading only cells
         # final before the step), and the mirror cell zeroed there. Same
-        # cells, same order per cell, same bits; 2n launches.
-        if n <= chol_serial_max():
-            ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
-        else:
-            ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
-            for j in range(n):
-                ctx.enqueue_function[chol_diag_kernel](
-                    da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=1, block_dim=1
-                )
-                if n - j - 1 > 0:
-                    ctx.enqueue_function[chol_col_kernel](
-                        da.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j - 1), block_dim=TPB
-                    )
+        # cells, same order per cell, same bits. cpu-gpu-cleanup c-decomp
+        # (2026-10-02): one launch per column (`chol_step_kernel`), every row
+        # thread recomputing the pivot's chain itself, so neither the
+        # one-thread kernel (MOJOLEARN_XD_CHOL_SERIAL) nor the one-thread
+        # diagonal launch remains; n launches.
+        ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
+        for j in range(n):
+            ctx.enqueue_function[chol_step_kernel](
+                da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j), block_dim=TPB
+            )
         _down(ctx, da, a, n * n)
         _down(ctx, di, info, 1)
         ctx.synchronize()
