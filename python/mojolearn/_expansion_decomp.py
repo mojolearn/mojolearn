@@ -3748,6 +3748,60 @@ _LLE_NULL_GUARD = 1e-3
 #: constant, and any basis of it is the answer (sklearn's ARPACK returns
 #: its own); the iteration stops there from its third step.
 _LLE_NULL_FLOOR = 8.0
+#: FAST on Apple (lane/apple-fast-lle, 2026-10-02): an x_decomp binding
+#: built with `-D MOJOLEARN_LLE_SPARSE_EIG` registers
+#: `x_decomp_dev_lle_sparse_eig` (x_decomp/lle_sparse.mojo): the smallest
+#: eigenpairs of M = (I - W)^T (I - W) past the constant by LOBPCG on the
+#: SPARSE factor (F x and F^T y as launches over the kNN lists and their
+#: device CSC, the Rayleigh-Ritz on the device), no n x n matrix built, no
+#: LU. The block holds n_components + _LLE_SPARSE_EXTRA vectors; the host
+#: reads one fold every _LLE_SPARSE_EVERY iterations for main's stopping
+#: rules (_LLE_SUBSPACE_TOL, _LLE_STALL_TOL, _LLE_NULL_FLOOR); not settled
+#: in _LLE_SPARSE_ITERS iterations, the fit runs main's dense route. The
+#: FAST tier only: an IDENTICAL kit never has the entry.
+_LLE_SPARSE_EXTRA = 4
+_LLE_SPARSE_ITERS = 600
+_LLE_SPARSE_EVERY = 5
+
+
+def _lle_sparse_entry(k):
+    """The kit's sparse LLE eigensolver entry (the FAST GPU binding built
+    with -D MOJOLEARN_LLE_SPARSE_EIG), None otherwise; asked once per kit."""
+    fn = k.__dict__.get("_lle_sparse")
+    if fn is None:
+        fn = False
+        if k.mode == "fast" and k._res():
+            try:
+                fn = getattr(k._raw(), "x_decomp_dev_lle_sparse_eig")
+            except Exception:
+                fn = False
+        k._lle_sparse = fn
+    return fn or None
+
+
+def _lle_sparse_eig(k, fn, idm, wb, n, nn, nc, seed):
+    """`_lle_smallest`'s answer ((V n x nc, unit columns ascending, each
+    signed so its largest-|.| entry is positive; S 1 x nc) from the sparse
+    device solver on the kNN index matrix `idm` and barycenter weights `wb`
+    (n x nn); None when it did not settle or its columns are not unit (the
+    caller runs the dense route: an unconverged embedding is not returned
+    as one)."""
+    b = min(nc + _LLE_SPARSE_EXTRA, 12)
+    if nc < 1 or b < nc or b >= n:
+        return None
+    V = k._dout(n, nc)
+    lam = k._dout(1, nc)
+    its = int(fn(k._did(idm), k._did(wb), V._d.id, lam._d.id,
+                 [n, nn, nc, b, _LLE_SPARSE_ITERS, _LLE_SPARSE_EVERY, int(seed) & 0xFFFFFFFF],
+                 [_LLE_SUBSPACE_TOL, _LLE_STALL_TOL, _LLE_NULL_FLOOR * _F32_EPS]))
+    if its < 0:
+        return None
+    lv = [float(v) for v in lam.s]
+    sq = k.colsum(k.ew("sq", V)).s
+    if not all(0.9 <= float(v) <= 1.1 for v in sq) or not all(math.isfinite(v) for v in lv):
+        return None
+    sv = _M.of([math.sqrt(max(v, 0.0)) for v in lv], 1, nc)
+    return V.neg_cols(k.absmax_flags(V, True)), sv
 
 
 def _lle_orth(k, Z):
@@ -3938,11 +3992,20 @@ class LocallyLinearEmbedding(_Base):
                              "[n_components * (n_components + 3) / 2]")
         if self.method == "modified" and nn < nc:
             raise ValueError("modified LLE requires n_neighbors >= n_components")
+        iterative = (self.method == "standard" and self.eigen_solver == "auto" and n > _LLE_ITER_MIN_N
+                     and nc + 1 < _LLE_ITER_MAX_K)
+        got = None
         if self.method == "standard":
             # lane hr2-graph-embed: the kNN, the barycenter weights and I - W
             # as cells, I - W resident on the GPU binding
             idm, _ = _knn_mats(k, M, M, nn, True)
-            IW = k.graph_lle_iw(idm, k.barycenter(M, M, idm, self.reg), n)
+            wb = k.barycenter(M, M, idm, self.reg)
+            fn = _lle_sparse_entry(k) if iterative else None
+            if fn is not None:
+                # FAST on Apple (lane/apple-fast-lle): the null space on the
+                # sparse factor; the dense I - W is not built when it settles
+                got = _lle_sparse_eig(k, fn, idm, wb, n, nn, nc, _seed_of(self.random_state))
+            IW = None if got is not None else k.graph_lle_iw(idm, wb, n)
             idx = None
         else:
             idx, _ = _knn_lists(k, M, M, nn, True)
@@ -3960,9 +4023,7 @@ class LocallyLinearEmbedding(_Base):
         # float32 resolution next to M's largest, so the dense eigh of M
         # cannot order them; the one-sided Jacobi SVD of I - W resolves its
         # small singular values to high RELATIVE accuracy.
-        got = None
-        if (self.method == "standard" and self.eigen_solver == "auto" and n > _LLE_ITER_MIN_N
-                and nc + 1 < _LLE_ITER_MAX_K):
+        if got is None and iterative:
             got = _lle_smallest(k, IW, nc, int(self.max_iter), _seed_of(self.random_state))
         if got is not None:
             self.embedding_m_, sv = got
