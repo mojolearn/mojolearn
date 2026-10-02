@@ -415,3 +415,4 @@ def decision_device(x: FP, wb: FP, n: Int, d: Int, k: Int, link: Int, res: FP) r
     _ = dwb^
     _ = dout^
     _ = ctx^
+var sabotage = String(getenv("MOJOLEARN_SABOTAGE_HOST_MAX"))
