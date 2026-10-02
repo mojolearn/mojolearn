@@ -34,7 +34,8 @@ defined and ties only another default).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import thread_idx
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.sys.compile import is_defined
 
 comptime PW_SENTINEL_ID = UInt32(0xFFFFFFFF)
 """`(ui32)-1`, `TBestSplitProperties::FeatureId`'s default
@@ -286,3 +287,149 @@ def launch_pw_pack_winner(
         grid_dim=(1, 1, 1),
         block_dim=(1, 1, 1),
     )
+
+
+# ================= DEVIATION 3111 (scheduling only) =================
+# THE POINTWISE LEVEL'S WINNER, PACK AND BIN UPDATE IN ONE LAUNCH (lane
+# hr-gbdt-small). The Ordered structure search enqueued, per level, one
+# one-thread `pw_fold_winner_kernel` per policy helper (or the sentinel
+# seed), the one-thread `pw_pack_winner_kernel`, then
+# `update_bins_from_desc_kernel` reading the descriptor the pack wrote: two
+# to four launches whose only work is a fold of at most 32 records per
+# helper and a descriptor copy. Here every thread of the bin update runs
+# the SAME nested fold (`_fold_helper`, the per-block fold then the
+# per-helper fold, the chain's order and tie rules: challenger first, ties
+# keep the incumbent), block (0, 0) thread 0 makes the chain's stores
+# (`best_*`, `winners_*`, `score_before`, `split_desc`), and every thread
+# takes the descriptor from its registers. Integer and compare work only;
+# the bins written are the unfused kernel's. `-D
+# MOJOLEARN_GBDT_FUSED_LEVEL_OFF` restores the chain.
+# ====================================================================
+comptime PW_FUSED_LEVEL = not is_defined["MOJOLEARN_GBDT_FUSED_LEVEL_OFF"]()
+# the searcher's fused launch alone, for bisecting
+comptime PW_FUSED_SEARCH = PW_FUSED_LEVEL and not is_defined[
+    "MOJOLEARN_GBDT_FUSED_PW_OFF"
+]()
+
+
+@always_inline
+def _fold_helper(
+    result_ids: MutPointer[UInt32, MutAnyOrigin],
+    result_scores: MutPointer[Float32, MutAnyOrigin],
+    block_count: Int,
+    mut g_fid: UInt32,
+    mut g_bin: UInt32,
+    mut g_score: Float32,
+    mut g_gain: Float32,
+):
+    """`pw_fold_winner_kernel`'s body after its seed, in registers."""
+    var loc_fid = PW_SENTINEL_ID
+    var loc_bin = UInt32(0)
+    var loc_score = FLOAT32_MAX
+    var loc_gain = FLOAT32_MAX
+    for b in range(block_count):
+        var c_fid = result_ids.unsafe_load(2 * b)
+        var c_bin = result_ids.unsafe_load(2 * b + 1)
+        var c_score = result_scores.unsafe_load(2 * b)
+        var c_gain = result_scores.unsafe_load(2 * b + 1)
+        if _record_less(c_gain, c_fid, c_bin, loc_gain, loc_fid, loc_bin):
+            loc_fid = c_fid
+            loc_bin = c_bin
+            loc_score = c_score
+            loc_gain = c_gain
+    if block_count > 0:
+        if _record_less(loc_gain, loc_fid, loc_bin, g_gain, g_fid, g_bin):
+            g_fid = loc_fid
+            g_bin = loc_bin
+            g_score = loc_score
+            g_gain = loc_gain
+
+
+def pw_resolve_pack_bins_kernel(
+    r0_ids: MutPointer[UInt32, MutAnyOrigin],
+    r0_scores: MutPointer[Float32, MutAnyOrigin],
+    n0_in: Int32,
+    r1_ids: MutPointer[UInt32, MutAnyOrigin],
+    r1_scores: MutPointer[Float32, MutAnyOrigin],
+    n1_in: Int32,
+    r2_ids: MutPointer[UInt32, MutAnyOrigin],
+    r2_scores: MutPointer[Float32, MutAnyOrigin],
+    n2_in: Int32,
+    best_ids: MutPointer[UInt32, MutAnyOrigin],
+    best_scores: MutPointer[Float32, MutAnyOrigin],
+    depth_in: Int32,
+    winners_ids: MutPointer[UInt32, MutAnyOrigin],
+    winners_scores: MutPointer[Float32, MutAnyOrigin],
+    score_before: MutPointer[Float32, MutAnyOrigin],
+    feat_table: MutPointer[UInt32, MutAnyOrigin],
+    n_features_in: Int32,
+    split_desc: MutPointer[UInt32, MutAnyOrigin],
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    indices: MutPointer[UInt32, MutAnyOrigin],
+    size_in: Int32,
+    bin_depth: UInt32,
+    bins: MutPointer[UInt32, MutAnyOrigin],
+):
+    """DEVIATION 3111. Helpers absent from the calcer (or empty) come in
+    with a count of 0, which folds nothing, exactly as the chain skips
+    them; the global record starts as the sentinel the chain's first fold
+    (or `pw_seed_sentinel_kernel`) seeds. Grid and block are
+    `update_bins_from_desc_kernel`'s."""
+    var g_fid = PW_SENTINEL_ID
+    var g_bin = UInt32(0)
+    var g_score = FLOAT32_MAX
+    var g_gain = FLOAT32_MAX
+    _fold_helper(r0_ids, r0_scores, Int(n0_in), g_fid, g_bin, g_score, g_gain)
+    _fold_helper(r1_ids, r1_scores, Int(n1_in), g_fid, g_bin, g_score, g_gain)
+    _fold_helper(r2_ids, r2_scores, Int(n2_in), g_fid, g_bin, g_score, g_gain)
+
+    # `pw_pack_winner_kernel`'s descriptor, in registers
+    var fid_c = Int(g_fid)
+    if g_fid >= UInt32(n_features_in):
+        fid_c = 0
+    var d_off = feat_table.unsafe_load(4 * fid_c)
+    var d_mask = feat_table.unsafe_load(4 * fid_c + 1)
+    var d_shift = feat_table.unsafe_load(4 * fid_c + 2)
+    var d_one_hot = feat_table.unsafe_load(4 * fid_c + 3)
+
+    if (
+        Int(block_idx.x) == 0
+        and Int(block_idx.y) == 0
+        and Int(thread_idx.x) == 0
+    ):
+        best_ids.unsafe_store(0, g_fid)
+        best_ids.unsafe_store(1, g_bin)
+        best_scores.unsafe_store(0, g_score)
+        best_scores.unsafe_store(1, g_gain)
+        var depth = Int(depth_in)
+        winners_ids.unsafe_store(2 * depth, g_fid)
+        winners_ids.unsafe_store(2 * depth + 1, g_bin)
+        winners_scores.unsafe_store(2 * depth, g_score)
+        winners_scores.unsafe_store(2 * depth + 1, g_gain)
+        score_before.unsafe_store(0, g_score)
+        split_desc.unsafe_store(0, d_off)
+        split_desc.unsafe_store(1, d_mask)
+        split_desc.unsafe_store(2, d_shift)
+        split_desc.unsafe_store(3, d_one_hot)
+        split_desc.unsafe_store(4, g_bin)
+
+    # `update_bins_from_desc_kernel`, the descriptor from registers
+    var size = Int(size_in)
+    var f_offset = Int(d_off)
+    var feature_shift = d_shift
+    var value = g_bin << feature_shift
+    var mask = d_mask << feature_shift
+    var one_hot = d_one_hot != UInt32(0)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    while i < size:
+        var idx = Int(indices.unsafe_load(i))
+        var feature_val = compressed_index.unsafe_load(f_offset + idx) & mask
+        var goes_right: Bool
+        if one_hot:
+            goes_right = feature_val == value
+        else:
+            goes_right = feature_val > value
+        if goes_right:
+            bins.unsafe_store(i, bins.unsafe_load(i) | (UInt32(1) << bin_depth))
+        i += stride
