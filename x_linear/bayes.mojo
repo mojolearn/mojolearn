@@ -25,7 +25,7 @@ from x_linear.ops import (
 )
 from std.sys.info import is_gpu
 from x_linear.team import Team
-from x_linear.tops import t_cholesky, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad
+from x_linear.tops import t_cholesky, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad, t_jacobi_eig
 
 
 def _center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, iw: IP) -> Float32:
@@ -242,8 +242,8 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
             else:
                 axpy_centered(fw, xty, b, x, i * d, fw, xm, d)
     var alpha = ld(fp, 5)
+    t_jacobi_eig(t, fw, gg, fw, vv, d, 60)
     if t.lead():
-        jacobi_eig(fw, gg, fw, vv, d, 60)
         for j in range(d):
             var ev = ld(fw, gg + j * d + j)
             st(fw, tmp + j, fmax(Float32(0), ev))
@@ -344,6 +344,9 @@ def _ard_sigma(d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Floa
     return dk
 
 
+comptime ARD_TEAM_MIN = 32
+
+
 def _t_ard_sigma(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int) -> Int:
     """`_ard_sigma` on the team (lane/neural-pass86, 2026-10-01): the kept
     list on the lead, the rows of diag(lambda) + alpha G split across the
@@ -361,6 +364,14 @@ def _t_ard_sigma(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, 
         return dk0
     if t.nt <= 1:
         return _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+    # below ARD_TEAM_MIN features the column barriers of `t_cholesky` cost
+    # more than the lead's serial factor (ARD taxi, 11 features: 32.6 to
+    # 36.7 ms on the L40S); the lead runs `_ard_sigma`, the same words
+    if d < ARD_TEAM_MIN:
+        var dk1 = 0
+        if t.lead():
+            dk1 = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+        return t.bcast_int(dk1, 0)
     var dk = 0
     if t.lead():
         for j in range(d):
