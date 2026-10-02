@@ -120,13 +120,14 @@ from gaussian_process.estimator import (
     gpr_sample_y_host,
 )
 # Gaussian process classification (lane/gaussian-process-classifier,
-# 2026-09-15): the binary Laplace fit and its latent prediction on the
-# device, the float64 probability on the host (DEVIATIONS 2830-2832).
+# 2026-09-15): the binary Laplace fit, its latent prediction and (since
+# cpu-gpu-cleanup c-gp-kernel, 2026-10-02) the float64 probability and the
+# one-vs-rest combine on the device (DEVIATIONS 2830-2833).
 from gaussian_process.classifier import (
     gpc_fit_binary_host,
+    gpc_ovr_combine_host,
     gpc_predict_binary_host,
 )
-from gaussian_process.host.gpc_steps import gpc_proba
 # The Cholesky door (workstream D, 2026-09-14). `cholesky/` is already
 # linked into this binary because the GP factors through it; exposing the
 # one-shot host entries here adds no kernel and no second build.
@@ -1041,12 +1042,11 @@ def _gpc_predict_run(
     for t in range(n_star):
         mp.unsafe_store(t, lat.mean[t])
     if want_proba:
-        var p = gpc_proba(lat.mean, lat.variance)
         var vp = _f32_ptr(var_addr)
         var pr = _f64_ptr(proba_addr)
         for t in range(n_star):
             vp.unsafe_store(t, lat.variance[t])
-            pr.unsafe_store(t, p[t])
+            pr.unsafe_store(t, lat.proba[t])
     return 0
 
 
@@ -1119,6 +1119,44 @@ def gpc_predict_binding(
             want_proba, mean_addr, var_addr, proba_addr,
         )
     return PythonObject(rc)
+
+
+def gpc_ovr_combine_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """DEVIATION 2833's one-vs-rest combine on the device: the k class-1
+    probability columns normalized per row (ascending sum from +0.0, divided
+    unless zero) and the first strictly largest column per row. Returns 0.
+
+    `addrs`, in this exact order:
+
+        0      proba_out  n * k float64, row-major, WRITTEN
+        1      codes_out  n int32, WRITTEN
+        2..k+1 col_c      n float64, class c's probabilities, read
+
+    `params`, in this exact order: 0 n.
+    """
+    if len(addrs) < 3:
+        raise Error(
+            "gpc_ovr_combine: addrs must contain proba_out, codes_out and at"
+            " least one class column, got "
+            + String(len(addrs))
+            + " addresses"
+        )
+    if len(params) != 1:
+        raise Error(
+            "gpc_ovr_combine: params must contain 1 value (n), got "
+            + String(len(params))
+        )
+    var n = Int(py=params[0])
+    var out_addr = Int(py=addrs[0])
+    var codes_addr = Int(py=addrs[1])
+    var cols = List[Int]()
+    for c in range(2, len(addrs)):
+        cols.append(Int(py=addrs[c]))
+    with GILReleased(Python()):
+        gpc_ovr_combine_host(cols, out_addr, codes_addr, n)
+    return PythonObject(0)
 
 
 # ===========================================================================
@@ -1261,6 +1299,7 @@ def PyInit__mojolearn_gp() abi("C") -> PythonObject:
         m.def_function[gp_restart_uniforms_binding]("gp_restart_uniforms")
         m.def_function[gpc_fit_binding]("gpc_fit")
         m.def_function[gpc_predict_binding]("gpc_predict")
+        m.def_function[gpc_ovr_combine_binding]("gpc_ovr_combine")
         # The Cholesky door (workstream D, 2026-09-14).
         m.def_function[cholesky_parallel_available]("cholesky_parallel_available")
         m.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")

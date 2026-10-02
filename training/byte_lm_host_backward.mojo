@@ -67,7 +67,8 @@ from std.memory import unsafe_memcpy
 from std.os import getenv
 
 from core.host_lanes import host_f32_uninit
-from gemm.host.identical_gemm import OP_NT, gemm_oracle
+from gemm.contract import OP_NT
+from gemm.host.identical_gemm import gemm_oracle
 from gemm.host.gemm_host_rows import gemm_host_rows
 from embedding.checks.embedding_oracle import (
     EmbConfig,
@@ -79,16 +80,10 @@ from training.byte_lm_host import (
     byte_host_block_weights,
     byte_host_dims,
 )
-from training.checks.loss_oracle import (
-    CeConfig,
-    ce_backward_oracle,
-    ce_forward_oracle,
-)
-from training.checks.optimizer_oracle import (
-    OPT_ADAMW,
-    OptimizerConfig,
-    optimizer_step_oracle,
-)
+from training.checks.loss_contract import CeConfig
+from training.checks.loss_oracle import ce_backward_oracle, ce_forward_oracle
+from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
+from training.checks.optimizer_oracle import optimizer_step_oracle
 from training.loss_host_rows import ce_host_rows
 from training.optimizer_host_rows import adam_host_rows
 from transformer.checks.transformer_fixture import ScorePlant, TransformerWeights

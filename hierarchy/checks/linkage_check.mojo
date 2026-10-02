@@ -110,9 +110,11 @@ from hierarchy.checks.linkage_oracle import (
     host_pinned_distance_matrix,
     partitions_agree,
 )
-from hierarchy.impl.cluster.detail.agglomerative import (
+from hierarchy.checks.dendrogram_host_ref import (
     UnionFind,
     build_dendrogram_host,
+)
+from hierarchy.impl.cluster.detail.agglomerative import (
     extract_flattened_clusters,
 )
 from hierarchy.impl.cluster.detail.connectivities import (

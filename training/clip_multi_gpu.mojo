@@ -21,9 +21,9 @@ from training.checks.optimizer import (
     SAB_CLIP_PARAM_ORDER, SAB_CLIP_SERIAL_FOLD, SAB_CLIP_BLOCK_PARTITION,
     SAB_CLIP_FLAT_NORM,
 )
-from training.checks.optimizer_oracle import refuse_nonfinite_scalar
+from training.checks.optimizer_contract import refuse_nonfinite_scalar
 from gemm.checks.gemm_identical import identical_gemm_into
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 
 
 comptime CLIP_POOL_FAULT = is_defined["MOJOLEARN_CLIP_POOL_FAULT"]()

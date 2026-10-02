@@ -5,7 +5,7 @@
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats
 from gemm.checks.gemm_backward import (
     gemm_backward_a_call,

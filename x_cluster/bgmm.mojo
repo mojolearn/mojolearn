@@ -626,20 +626,16 @@ def bgmm_fit[O: ClusterOps](
     ops.set(cs, bgmm_constants(pr, best))
     ops.gauss_q(xs, n, d, ms, ps, kc, qs)
     ops.resp(qs, cs, n, kc, lpn)
-    var lr = ops.get(qs, n * kc)
-    labels = List[Int32](capacity=n)
-    for i in range(n):
-        var bk = 0
-        for k in range(1, kc):
-            if lr[i * kc + k] > lr[i * kc + bk]:
-                bk = k
-        labels.append(Int32(bk))
+    var ls = ops.zeros_i(n)
+    ops.argmax_rows(qs, n, kc, ls)
+    labels = ops.get_i(ls, n)
     return BgmmFit(max_lb, best_iter, converged_best)
 
 
 def bgmm_score[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, kc: Int, means: List[Float32], pchol: List[Float32],
     c: List[Float32], mut log_resp: List[Float32], mut lpn_out: List[Float32],
+    mut labels_out: List[Int32],
 ) raises:
     var xs = ops.put(x)
     var ms = ops.put(means)
@@ -649,5 +645,8 @@ def bgmm_score[O: ClusterOps](
     var lpn = ops.zeros(n)
     ops.gauss_q(xs, n, d, ms, ps, kc, qs)
     ops.resp(qs, cs, n, kc, lpn)
+    var ls = ops.zeros_i(n)
+    ops.argmax_rows(qs, n, kc, ls)
     log_resp = ops.get(qs, n * kc)
     lpn_out = ops.get(lpn, n)
+    labels_out = ops.get_i(ls, n)

@@ -33,7 +33,7 @@ kernel's file can import it without a cycle.
 from std.sys import is_defined
 
 from checks.numerics_int15 import dequant_int15_pinned, int15_recombine
-from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
+from gemm.contract import gemm_oracle_sabotage_value_flip
 
 #: DEVIATION 2973, the value arm, the define every fifteen-bit plan reads.
 comptime INT15_STORE_VALUE_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_SABOTAGE"]()

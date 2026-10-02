@@ -29,6 +29,7 @@ from x_cluster.bodies import (
     FPtr,
     IPtr,
     cov_cell,
+    argmax_row,
     exp_cell,
     gauss_q_cell,
     nk_cell,
@@ -492,6 +493,16 @@ struct HostOps(ClusterOps):
             exp_cell(ps, pd, t)
 
         host_cells(body, n, 30)
+
+    def argmax_rows(mut self, src: Int, n: Int, kc: Int, labels: Int) raises:
+        var ps = self._fp(src)
+        var pl = self._ip(labels)
+
+        def body(t: Int) {imm ps, imm pl, imm kc}:
+            argmax_row(ps, kc, pl, t)
+
+        if n > 0 and kc > 0:
+            host_cells(body, n, kc)
 
     def moments(
         mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
