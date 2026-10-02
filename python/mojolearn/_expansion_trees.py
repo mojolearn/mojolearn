@@ -2274,8 +2274,9 @@ class CalibratedClassifierCV(_TreesWrapperBase):
 # -------------------------------------------------------------------- SHAP
 # TreeExplainer: the `shap` package's exact path-dependent TreeSHAP
 # (`shap/explainers/_tree.py` -> `shap/cext/tree_shap.h`), restated in
-# xtrees/shap.mojo over this library's flat forests (RandomForest*,
-# ExtraTrees*, DecisionTree*) and DART. DEVIATION: the node cover is the
+# xtrees/shap.mojo (float32, per-leaf paths, fixed folds) over this
+# library's flat forests (RandomForest*, ExtraTrees*, DecisionTree*) and
+# DART, on the device on GPU installs. DEVIATION: the node cover is the
 # count of BACKGROUND rows (`data`, required) reaching each node, since the
 # flat forest stores no instance counts. KernelExplainer and
 # PermutationExplainer: cuML's `explainer/kernel_shap.cu` and
@@ -2299,8 +2300,13 @@ def _trees_forest_arrays(est):
 
 class TreeExplainer(_TreesEnsembleBase):
     """Exact TreeSHAP for this library's forests and DART models.
-    `shap_values(X)` is (n, d) for one output, else (n, d, k), float64;
-    `expected_value` is a float or a float64 Array of k."""
+    `shap_values(X)` is (n, d) for one output, else (n, d, k), float32;
+    `expected_value` is a float or a float32 Array of k.
+
+    GPU installs run it on the device (xtrees/shap_device.mojo), CPU-only
+    installs on the host (xtrees/shap_host.mojo); both run the units of
+    xtrees/shap.mojo in the same fixed orders, so the values are the same
+    bits on every column. Float32 throughout (Metal has no float64)."""
 
     def __init__(self, model, data=None, *, feature_perturbation="tree_path_dependent", model_output="raw"):
         if feature_perturbation not in ("tree_path_dependent", "auto"):
@@ -2318,58 +2324,80 @@ class TreeExplainer(_TreesEnsembleBase):
         self.numeric_mode = getattr(model, "numeric_mode", None)
         bg, _ = as_f32_c(data, ndim=2, name="data")
         self._bg = bg
-        self._parts = []   # (arrays tuple, k, scale, cover)
         init = 0.0
         if isinstance(model, _DARTBase):
             if not hasattr(model, "trees_"):
                 raise RuntimeError("the model is not fitted yet")
             K = int(getattr(model, "n_classes_", 1))
-            init = float(model.init_score_) if K == 1 else list(model.init_score_)
+            init = float(model.init_score_) if K == 1 else [float(v) for v in model.init_score_]
+            # one forest of every boosted tree, in boosting order, each tree
+            # scaled by its coefficient; a multiclass tree scores one class:
+            # its leaf values in column j % K.
+            offs, col, q, lc, lv, ts = [0], [], [], [], [], []
             for j, (tree, values, coef) in enumerate(zip(model.trees_, model.tree_values_, model.tree_coefs_)):
+                vals = values.tolist()
                 if K > 1:
-                    # a multiclass tree scores one class: its leaf values in column j % K.
                     c = j % K
-                    values = Array.from_list([v if q == c else 0.0 for v in values.tolist() for q in range(K)], "<f4")
-                self._add_part((tree._offsets, tree._colid, tree._quesval, tree._left_child, values), K, float(coef))
-            self.n_outputs_ = K
+                    vals = [v if qq == c else 0.0 for v in vals for qq in range(K)]
+                to = tree._offsets.tolist()
+                if len(to) != 2:
+                    raise ValueError("a DART tree must hold one tree")
+                col += tree._colid.tolist()
+                q += tree._quesval.tolist()
+                lc += tree._left_child.tolist()
+                lv += vals
+                offs.append(offs[-1] + to[1] - to[0])
+                ts.append(float(coef))
+            arrays = (Array.from_list(offs, "<i4"), Array.from_list(col, "<i4"), Array.from_list(q, "<f4"),
+                      Array.from_list(lc, "<i4"), Array.from_list(lv, "<f4"))
+            tscale = Array.from_list(ts, "<f4")
+            k = K
         else:
             fa = _trees_forest_arrays(model)
             if fa is None:
                 _refuse(f"TreeExplainer over {type(model).__name__}", "the explainer reads the flat forests"
                         " (RandomForest*, ExtraTrees*, DecisionTree*) and DART models.")
-            self._add_part(fa[:5], fa[5], fa[6])
-            self.n_outputs_ = fa[5]
-        k = self.n_outputs_
-        ev = Array.from_list(init, "<f8") if isinstance(init, list) else full((k,), init, "<f8")
-        for arrays, kk, scale, cover in self._parts:
-            n_trees = len(arrays[0]) - 1
-            self._bind().x_trees_expected_value(addr_ro(arrays[0], name="offsets"), addr_ro(arrays[3], name="left"),
-                                                addr_ro(arrays[4], name="leaves"), addr_ro(cover, name="cover"),
-                                                addr(ev, name="ev"), [n_trees, kk, scale])
+            arrays = fa[:5]
+            k = fa[5]
+            tscale = full((len(arrays[0]) - 1,), fa[6], "<f4")
+        self.n_outputs_ = k
+        n_trees = len(arrays[0]) - 1
+        n_nodes = int(arrays[0].tolist()[-1])
+        if n_trees < 1 or n_nodes < 1:
+            raise ValueError("TreeExplainer: the model holds no trees")
+        ev = Array.from_list(init, "<f4") if isinstance(init, list) else full((k,), init, "<f4")
+        cover = zeros((n_nodes,), "<i4")
+        meta = zeros((3,), "<i4")
+        self._bind().x_trees_tree_shap_prepare([addr_ro(a, name="forest") for a in arrays],
+                                               addr_ro(tscale, name="tscale"), addr_ro(bg, name="data"),
+                                               addr(cover, name="cover"), addr(ev, name="ev"), addr(meta, name="meta"),
+                                               [bg.shape[0], bg.shape[1], n_trees, k, n_nodes])
+        slots, depth, _ = meta.tolist()
+        need = min(depth, slots) + 1
+        width = 8
+        while width < need:
+            width *= 2
+        if width > 256:
+            _refuse("a leaf path of more than 255 distinct split features", "the device path is compiled up to"
+                    " 255 features per root-to-leaf path.")
+        self._forest = arrays
+        self._tscale = tscale
+        self._cover = cover
+        self._shape = (n_trees, k, n_nodes, int(slots), width)
         self.expected_value = ev.tolist()[0] if k == 1 else ev
         self.n_features_in_ = bg.shape[1]
-
-    def _add_part(self, arrays, k, scale):
-        bg = self._bg
-        n_nodes = int(arrays[0].tolist()[-1])
-        cover = zeros((n_nodes,), "<f8")
-        self._bind().x_trees_node_cover(addr_ro(arrays[0], name="offsets"), addr_ro(arrays[1], name="colid"),
-                                        addr_ro(arrays[2], name="quesval"), addr_ro(arrays[3], name="left"),
-                                        addr_ro(bg, name="data"), addr(cover, name="cover"),
-                                        [bg.shape[0], bg.shape[1], len(arrays[0]) - 1])
-        self._parts.append((arrays, k, scale, cover))
 
     def shap_values(self, X):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         n, d = Xa.shape
         if d != self.n_features_in_:
             raise ValueError(f"X has {d} features, data has {self.n_features_in_}")
-        k = self.n_outputs_
-        phi = zeros((n * d * k,), "<f8")
-        for arrays, kk, scale, cover in self._parts:
-            forest = [addr_ro(a, name="forest") for a in arrays]
-            self._bind().x_trees_tree_shap(forest, addr_ro(cover, name="cover"), addr_ro(Xa, name="X"),
-                                           addr(phi, name="phi"), [n, d, len(arrays[0]) - 1, kk, scale])
+        n_trees, k, n_nodes, slots, width = self._shape
+        phi = zeros((n * d * k,), "<f4")
+        self._bind().x_trees_tree_shap([addr_ro(a, name="forest") for a in self._forest],
+                                       addr_ro(self._tscale, name="tscale"), addr_ro(self._cover, name="cover"),
+                                       addr_ro(Xa, name="X"), addr(phi, name="phi"),
+                                       [n, d, n_trees, k, n_nodes, slots, width])
         return phi.reshape((n, d)) if k == 1 else phi.reshape((n, d, k))
 
 
