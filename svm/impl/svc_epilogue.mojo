@@ -150,7 +150,7 @@ struct DevicePlatt(PlattSums, Movable):
     var pb: DeviceBuffer[DType.uint64]
 
     def __init__(out self, ctx: DeviceContext, dec_addr: Int, lab_addr: Int, n: Int) raises:
-        self.ctx = ctx
+        self.ctx = ctx.copy()
         self.n = n
         self.dec = ctx.enqueue_create_buffer[DType.uint64](n)
         self.lab = ctx.enqueue_create_buffer[DType.uint64](n)
