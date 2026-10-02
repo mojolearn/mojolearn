@@ -369,10 +369,12 @@ def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
     f.p1 = sc
     f.i1 = K
     ex.launch[OP_ROWSCALE](f, m * K)
+    # three copies, one wait (lane gap-prep2: a download waits by itself, so
+    # the three were three waits after the one above); the same words
+    ex.download_async(fptr(addrs[1], "params"), Bm, m * K)
+    ex.download_async(fptr(addrs[2], "sigma_u"), S, K * K)
+    ex.download_async(fptr(addrs[3], "resid"), Rs, R * K)
     ex.sync()
-    ex.download(fptr(addrs[1], "params"), Bm, m * K)
-    ex.download(fptr(addrs[2], "sigma_u"), S, K * K)
-    ex.download(fptr(addrs[3], "resid"), Rs, R * K)
     return PythonObject(0)
 
 
@@ -401,7 +403,6 @@ def var_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) r
     a.i2 = kt
     a.i3 = h
     ex.launch[OP_VAR_FORECAST](a, 1)
-    ex.sync()
     ex.download(fptr(addrs[2], "out"), out, h * K)
     return PythonObject(h * K)
 
