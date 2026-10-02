@@ -822,7 +822,7 @@ def _gls_host_grid(
     comptime LT_CHUNK = 4096
     var lt_tasks = (sn + 1 + LT_CHUNK - 1) // LT_CHUNK
 
-    def _lt_task(t: Int) {imm ltp, imm sn}:
+    def _lt_task(t: Int) {imm ltp, imm sn, imm border_type}:
         var lo = t * LT_CHUNK
         var hi = min(lo + LT_CHUNK, sn + 1)
         for w in range(lo, hi):

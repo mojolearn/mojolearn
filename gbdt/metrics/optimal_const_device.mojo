@@ -71,6 +71,8 @@ from gbdt.targets.kernel.pointwise_targets import (
 )
 
 comptime _TPB = BFA_FOLD_TPB
+comptime _U64P = MutPointer[UInt64, MutAnyOrigin]
+comptime _F32P = MutPointer[Float32, MutAnyOrigin]
 comptime _TWO = UInt64(0x4000000000000000)
 
 # ---- the leaf of a row sum ----------------------------------------------
@@ -395,19 +397,19 @@ def _enqueue_tree_sum[MODE: Int](
     """`bfa_tree_sum` of MODE's leaves into `state[slot]`: level 0, then
     later levels until one chunk remains; the level that produces the one
     value writes the slot."""
-    var out = sc.state.unsafe_ptr() + slot
+    var out = rebind[_U64P](sc.state.unsafe_ptr()) + slot
     var nb = ceildiv(n_rows, _TPB)
     ctx.enqueue_function[bfa_leaf_kernel[MODE]](
-        out if nb == 1 else sc.a.unsafe_ptr(), t, w, Int32(1 if has_w else 0),
-        Int32(n_rows), sc.state.unsafe_ptr(),
+        out if nb == 1 else rebind[_U64P](sc.a.unsafe_ptr()), t, w, Int32(1 if has_w else 0),
+        Int32(n_rows), rebind[_U64P](sc.state.unsafe_ptr()),
         grid_dim=nb, block_dim=_TPB,
     )
     var m = nb
     var src_is_a = True
     while m > 1:
         var nb2 = ceildiv(m, _TPB)
-        var src = sc.a.unsafe_ptr() if src_is_a else sc.b.unsafe_ptr()
-        var nxt = sc.b.unsafe_ptr() if src_is_a else sc.a.unsafe_ptr()
+        var src = rebind[_U64P](sc.a.unsafe_ptr()) if src_is_a else rebind[_U64P](sc.b.unsafe_ptr())
+        var nxt = rebind[_U64P](sc.b.unsafe_ptr()) if src_is_a else rebind[_U64P](sc.a.unsafe_ptr())
         ctx.enqueue_function[bfa_fold_kernel](
             out if nb2 == 1 else nxt, src, Int32(m),
             grid_dim=nb2, block_dim=_TPB,
@@ -423,21 +425,21 @@ def _enqueue_minmax(
     """The (min, max) fold; returns the list whose first pair is the answer."""
     var nb = ceildiv(n_rows, _TPB)
     ctx.enqueue_function[bfa_minmax_kernel](
-        sc.mm_a.unsafe_ptr(), t, Int32(n_rows), Int32(1),
+        rebind[_F32P](sc.mm_a.unsafe_ptr()), t, Int32(n_rows), Int32(1),
         grid_dim=nb, block_dim=_TPB,
     )
     var m = nb
     var src_is_a = True
     while m > 1:
         var nb2 = ceildiv(m, _TPB)
-        var src = sc.mm_a.unsafe_ptr() if src_is_a else sc.mm_b.unsafe_ptr()
-        var nxt = sc.mm_b.unsafe_ptr() if src_is_a else sc.mm_a.unsafe_ptr()
+        var src = rebind[_F32P](sc.mm_a.unsafe_ptr()) if src_is_a else rebind[_F32P](sc.mm_b.unsafe_ptr())
+        var nxt = rebind[_F32P](sc.mm_b.unsafe_ptr()) if src_is_a else rebind[_F32P](sc.mm_a.unsafe_ptr())
         ctx.enqueue_function[bfa_minmax_kernel](
             nxt, src, Int32(m), Int32(0), grid_dim=nb2, block_dim=_TPB,
         )
         src_is_a = not src_is_a
         m = nb2
-    return sc.mm_a.unsafe_ptr() if src_is_a else sc.mm_b.unsafe_ptr()
+    return rebind[_F32P](sc.mm_a.unsafe_ptr()) if src_is_a else rebind[_F32P](sc.mm_b.unsafe_ptr())
 
 
 def _enqueue_sample_quantile(
@@ -461,29 +463,29 @@ def _enqueue_sample_quantile(
     if alpha <= 0:
         var mm = _enqueue_minmax(ctx, sc, t, n_rows)
         ctx.enqueue_function[bfa_init_kernel](
-            sc.state.unsafe_ptr(), mm, alpha_w, Int32(1), Int32(0),
+            rebind[_U64P](sc.state.unsafe_ptr()), mm, alpha_w, Int32(1), Int32(0),
             grid_dim=1, block_dim=1,
         )
         return
     if n_rows < SQ_LINEAR_SEARCH_MAX:
         ctx.enqueue_function[bfa_init_kernel](
-            sc.state.unsafe_ptr(), sc.mm_a.unsafe_ptr(), alpha_w, Int32(0), Int32(0),
+            rebind[_U64P](sc.state.unsafe_ptr()), rebind[_F32P](sc.mm_a.unsafe_ptr()), alpha_w, Int32(0), Int32(0),
             grid_dim=1, block_dim=1,
         )
         ctx.enqueue_function[bfa_linear_kernel](
-            sc.state.unsafe_ptr(), t, w, hw, Int32(n_rows),
+            rebind[_U64P](sc.state.unsafe_ptr()), t, w, hw, Int32(n_rows),
             grid_dim=ceildiv(n_rows, _TPB), block_dim=_TPB,
         )
         return
     var mm = _enqueue_minmax(ctx, sc, t, n_rows)
     ctx.enqueue_function[bfa_init_kernel](
-        sc.state.unsafe_ptr(), mm, alpha_w, Int32(0), Int32(1),
+        rebind[_U64P](sc.state.unsafe_ptr()), mm, alpha_w, Int32(0), Int32(1),
         grid_dim=1, block_dim=1,
     )
     for _ in range(SQ_BINARY_SEARCH_ITERATIONS):
         _enqueue_tree_sum[LEAF_LEFT](ctx, sc, S_SUM, t, w, has_w, n_rows)
         ctx.enqueue_function[bfa_search_step_kernel](
-            sc.state.unsafe_ptr(), grid_dim=1, block_dim=1,
+            rebind[_U64P](sc.state.unsafe_ptr()), grid_dim=1, block_dim=1,
         )
 
 
@@ -497,7 +499,7 @@ def bfa_store_word_kernel(
 
 def _store_word(ctx: DeviceContext, mut sc: BfaScratch, slot: Int, word: UInt64) raises:
     ctx.enqueue_function[bfa_store_word_kernel](
-        sc.state.unsafe_ptr(), Int32(slot), word, grid_dim=1, block_dim=1,
+        rebind[_U64P](sc.state.unsafe_ptr()), Int32(slot), word, grid_dim=1, block_dim=1,
     )
 
 
@@ -520,7 +522,7 @@ def _enqueue_weighted_target_quantile(
         _enqueue_tree_sum[LEAF_LESS](ctx, sc, S_LESS, t, w, has_w, n_rows)
         _enqueue_tree_sum[LEAF_EQUAL](ctx, sc, S_EQUAL, t, w, has_w, n_rows)
         ctx.enqueue_function[bfa_delta_kernel](
-            sc.state.unsafe_ptr(), bitcast[DType.uint64](alpha),
+            rebind[_U64P](sc.state.unsafe_ptr()), bitcast[DType.uint64](alpha),
             bitcast[DType.uint64](delta), grid_dim=1, block_dim=1,
         )
 
@@ -563,8 +565,8 @@ def optimum_const_approx_device(
             " rather than approximated."
         )
     var sc = BfaScratch(ctx, n_rows)
-    var t = targets.unsafe_ptr()
-    var w = weights.unsafe_ptr()
+    var t = rebind[_F32P](targets.unsafe_ptr())
+    var w = rebind[_F32P](weights.unsafe_ptr())
     if (
         objective == OBJECTIVE_RMSE or objective == OBJECTIVE_LOGLOSS
         or objective == OBJECTIVE_CROSSENTROPY
@@ -595,13 +597,13 @@ def optimum_const_approx_device(
         # `w / max(1, |t|)`, no delta adjust
         var wm = ctx.enqueue_create_buffer[DType.float32](n_rows)
         ctx.enqueue_function[mape_weights_kernel](
-            wm.unsafe_ptr(), t, w, Int32(1 if has_weights else 0), Int32(n_rows),
+            rebind[_F32P](wm.unsafe_ptr()), t, w, Int32(1 if has_weights else 0), Int32(n_rows),
             grid_dim=ceildiv(n_rows, _TPB), block_dim=_TPB,
         )
         comptime if SAMPLE_QUANTILE_SABOTAGE:
-            _enqueue_sample_quantile(ctx, sc, t, wm.unsafe_ptr(), True, n_rows, 0.75)
+            _enqueue_sample_quantile(ctx, sc, t, rebind[_F32P](wm.unsafe_ptr()), True, n_rows, 0.75)
         else:
-            _enqueue_sample_quantile(ctx, sc, t, wm.unsafe_ptr(), True, n_rows, 0.5)
+            _enqueue_sample_quantile(ctx, sc, t, rebind[_F32P](wm.unsafe_ptr()), True, n_rows, 0.5)
         var st = _read_state(ctx, sc)
         _ = wm^
         return Float64(Float32(st[S_Q]))
