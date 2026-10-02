@@ -1619,19 +1619,6 @@ def _edges(edge_index, n):
     return ei[0], ei[1]
 
 
-def _mean_vals_t(g, n):
-    """The mean aggregation's backward divisors on the transposed view: the
-    in-degree of each entry's target. Built once per graph and kept on it
-    (lane gap-neural-overhead2: the forward's resident upload and the
-    backward share it; no per-call count)."""
-    np = _np()
-    vt = g.__dict__.get("_mean_vt")
-    if vt is None:
-        deg = np.bincount(g.dst, minlength=n).astype(np.float32)
-        vt = g._mean_vt = np.ascontiguousarray(deg[g.dst[g.order_t]])
-    return vt
-
-
 def _graph_dev(layer, b, dev, g, vals_f, vals_t=None):
     """The resident CSR views of graph `g` and the propagation values (the
     forward's `vals_f`, the transposed view's `vals_t`, by default
@@ -1877,8 +1864,8 @@ class SAGEConv(_Layer):
     # or sum, no projection, no normalization) the layer runs on resident
     # arrays: x up once, y down once; the aggregation (the CSR views and
     # values resident with the cached graph), lin_l, the root transform and
-    # their sum stay on the device, and the backward's in-degree values are
-    # built once per graph instead of a bincount per call. The same
+    # their sum stay on the device, and the mean backward divides by the
+    # in-degree read from the resident CSR offsets (spmm mode 3). The same
     # entries' bodies on the same words: no bit moves.
 
     def _forward_dev(self, b, x, g):
@@ -1890,11 +1877,7 @@ class SAGEConv(_Layer):
         mean = self.aggr == "mean"
         if self.__dict__.get("_gdev_g") is not g or self.__dict__.get("_gdev_for") != (id(g), id(dev)):
             ones = np.ones(g.nnz, np.float32)
-            if mean:
-                vt = _mean_vals_t(g, n)
-            else:
-                vt = ones
-            _graph_dev(self, b, dev, g, ones, vt)
+            _graph_dev(self, b, dev, g, ones, ones)
         xh = dev.upload("x", x)
         aggh = dev.get("agg", n * D)
         b.x_cnn_spmm_m([dev.h["vals_f"][0], xh, dev.h["csr_f"][0], aggh], 0b1111, [n, D, g.nnz, 1 if mean else 0])
@@ -1930,8 +1913,14 @@ class SAGEConv(_Layer):
         if not self.bias:
             lin.grad_bias_[:] = 0
         dxs = dev.get("dxs", n * D)
-        b.x_cnn_spmm_m([dev.h["vals_t"][0], dagg, dev.h["csr_t"][0], dxs], 0b1111,
-                       [n, D, g.nnz, 2 if self.aggr == "mean" else 0])
+        if self.aggr == "mean":
+            # each target row of dagg over its in-degree, read from the
+            # forward CSR offsets on the device (spmm mode 3), then the
+            # transposed fold with unit values: no host degree count
+            dsc = dev.get("dsc", n * D)
+            b.x_cnn_spmm_m([dev.h["vals_f"][0], dagg, dev.h["csr_f"][0], dsc], 0b1111, [n, D, g.nnz, 3])
+            dagg = dsc
+        b.x_cnn_spmm_m([dev.h["vals_t"][0], dagg, dev.h["csr_t"][0], dxs], 0b1111, [n, D, g.nnz, 0])
         dx = np.empty((n, D), np.float32)
         if self.root_weight:
             gwr = np.empty((F, D), np.float32)
@@ -1968,7 +1957,8 @@ class SAGEConv(_Layer):
             b.x_cnn_graph_op(self._xs.ctypes.data, dagg.ctypes.data, self._max_aux.ctypes.data, dx.ctypes.data,
                              g.csr_t.ctypes.data, [n, dagg.shape[1], g.nnz, 1])
         elif self.aggr == "mean":
-            dx = g.spmm(b, _mean_vals_t(g, n), dagg, 2, transposed=True)
+            ones = np.ones(g.nnz, np.float32)
+            dx = g.spmm(b, ones, g.spmm(b, ones, dagg, 3), 0, transposed=True)
         else:
             dx = g.spmm(b, np.ones(g.nnz, np.float32), dagg, 0, transposed=True)
         if self.project:

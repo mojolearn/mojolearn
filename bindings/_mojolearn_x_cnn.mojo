@@ -490,8 +490,8 @@ def _csr(csr_addr: PythonObject, params: PythonObject) raises -> Tuple[List[Int3
 
 
 def _csr_ints(csr_addr: PythonObject, n: Int, F: Int, nnz: Int, mode: Int) raises -> Tuple[List[Int32], List[Int32]]:
-    if n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 2:
-        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2}")
+    if n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 3:
+        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2, 3}")
     var csr = read_i32(Int(py=csr_addr), n + 1 + 2 * nnz)
     if Int(csr[0]) != 0 or Int(csr[n]) != nnz:
         raise Error("x_cnn spmm: rowptr must start at 0 and end at nnz")
@@ -942,8 +942,8 @@ def spmm_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject)
     var d = Int(py=dev)
     if (d >> 2) & 1 == 0:
         _ = _csr(addrs[2], params)
-    elif n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 2:
-        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2}")
+    elif n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 3:
+        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2, 3}")
     var prm: List[Int32] = [Int32(n), Int32(F), Int32(nnz), Int32(mode)]
     if nnz <= 0:
         # the host entry's: no values are read, h stands in for them
