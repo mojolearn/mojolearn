@@ -82,6 +82,7 @@ _OPS = dict(
     pt_spts=110, pt_smap=111, pt_sfold=112, pt_sres=113, te_gather=114,
     te_hist=115, te_hsum=116, te_hstart=117, te_hscatter=118,
     lab_load=119, uniq_count=120, uniq_scan=121, uniq_write=122, chunk_neg=123,
+    colb_part=124, colb_fold=125, colb_ss=126, colb_var=127, maxabs_fold=128, csb_part=129, csb_fold=130, csb_ss=131, csb_var=132, cat_hpart=133, cat_hfold=134,
 )
 _PARAMS = 14
 _NONE = -1
@@ -126,6 +127,58 @@ _R3_DEFAULT = ("imputer_nosort", "mapped", "view", "work", "te_arrays")
 #: the smallest block (words) that is mapped, and the smallest read that is a view
 _MAP_MIN_WORDS = 2 ** 18
 _VIEW_MIN_WORDS = 2 ** 20
+
+#: lane gap-nb-maxabs-grp (2026-10-02), two A/B switches (unset or anything
+#: but "0": on):
+#:   MOJOLEARN_XPREP_DIRECT   an input of at least _DIRECT_MIN_WORDS words goes
+#:                            up to the device FROM ITS OWN BUFFER (a store
+#:                            slot for the length of the run, copied device to
+#:                            device into the arena) instead of being copied
+#:                            into the host arena first (at the board's 1M x 220
+#:                            that copy was 880 MB of fresh pages a call).
+#:                            Where a word travels moves no bit.
+#:   MOJOLEARN_XPREP_BLOCKED  naive Bayes and MaxAbsScaler fold rows in
+#:                            x_prep/blocked.mojo's blocks (one unit per block,
+#:                            class and column, then the partials) instead of
+#:                            col_stats / class_stats / cat_counts' one thread per
+#:                            column over every row. Counts, minima, maxima and
+#:                            max |x| keep their words (MaxAbsScaler, the
+#:                            discrete models' counts on integer data, and
+#:                            CategoricalNB unweighted are unchanged); sums,
+#:                            means and variances take the blocked order for
+#:                            n > _XB rows (GaussianNB's theta_, var_ and
+#:                            epsilon_; non-integer feature counts).
+_DIRECT_MIN_WORDS = 2 ** 20
+#: x_prep/blocked.mojo XB: the rows a block unit folds
+_XB = 2048
+#: CategoricalNB's block histograms hold at most this many words; past it
+#: the histogram block doubles (a function of the shape only)
+_CAT_HIST_WORDS = 2 ** 26
+
+
+def _switch(name):
+    return os.environ.get(name, "1").strip() != "0"
+
+
+def _blocked():
+    return _switch("MOJOLEARN_XPREP_BLOCKED")
+
+
+def _col_stats(pr, xo, n, d, out, var=True):
+    """col_stats' six rows of d into `out` (count, mean, variance, min, max,
+    max |x|), in the blocked order when `_blocked()`; var=False leaves the
+    variance row unwritten (its consumers here read the other rows)."""
+    if not _blocked():
+        pr.stage("col_stats", d, xo, n, d, out)
+        return
+    nb = (n + _XB - 1) // _XB
+    part = pr.work(5 * nb * d)
+    pr.stage("colb_part", nb * d, xo, n, d, part, nb)
+    pr.stage("colb_fold", d, part, nb, d, out)
+    if var:
+        ss = pr.work(nb * d)
+        pr.stage("colb_ss", nb * d, xo, n, d, out, ss, nb)
+        pr.stage("colb_var", d, ss, nb, d, out)
 
 
 def _r3(name):
@@ -317,12 +370,20 @@ class _Prog:
         run_ranges = (_optional_prep_entry(binding, "x_prep_run_ranges")
                       if (dev_scratch or sc == 0) and _arena_io.ranges_enabled() else None)
         spans = []
+        direct = None
         for off, arr, _ in self._inputs:
             if not arr.size:
                 continue
             inout = (off, off + arr.size) in self._inout
             cache = (_arena_io.active_cache(binding, "x_prep", arr.size)
                      if run_ranges is not None and not inout else None)
+            if (cache is None and run_ranges is not None and not inout and arr.size >= _DIRECT_MIN_WORDS
+                    and _switch("MOJOLEARN_XPREP_DIRECT")):
+                # MOJOLEARN_XPREP_DIRECT: up from the input's own buffer into a
+                # slot freed when the run ends (no copy into the host arena)
+                if direct is None and _arena_io.DeviceCache.supports(binding, "x_prep"):
+                    direct = _arena_io.DeviceCache(binding, "x_prep")
+                cache = direct
             if cache is not None:
                 # resident (lane py-shared): copied from the store on the device;
                 # the host words stay zero and `_check` refuses a read of them
@@ -344,9 +405,13 @@ class _Prog:
             outs = _arena_io.output_ranges(_arena_io.complement(ins, ha) + [list(s) for s in self._inout])
             ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
             out, out_addr = _zero_words(on, self._out_code) if dev_out else (None, 0)
-            run_ranges(base, prog.buffer_info()[0], out_addr,
-                       (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
-                       (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
+            try:
+                run_ranges(base, prog.buffer_info()[0], out_addr,
+                           (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
+                           (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
+            finally:
+                if direct is not None:
+                    direct.close()
             self._out = out
         elif dev_out:
             out, out_addr = _zero_words(on, self._out_code)
@@ -543,12 +608,21 @@ class MaxAbsScaler(_PrepBase):
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
-        st = pr.alloc(6 * d)
         scale = pr.alloc(d)
-        pr.stage("col_stats", d, xo, n, d, st)
-        pr.stage("scale_params", d, st + 5 * d, 1, d, _NONE, scale, 1)
+        if _blocked():
+            # x_prep/blocked.mojo: one unit per (row block, column), then the
+            # largest partial (a maximum is exact in any order: the same words)
+            nb = (n + _XB - 1) // _XB
+            part, ma = pr.work(5 * nb * d), pr.alloc(d)
+            pr.stage("colb_part", nb * d, xo, n, d, part, nb)
+            pr.stage("maxabs_fold", d, part, nb, d, ma, scale)
+        else:
+            st = pr.alloc(6 * d)
+            ma = st + 5 * d
+            pr.stage("col_stats", d, xo, n, d, st)
+            pr.stage("scale_params", d, ma, 1, d, _NONE, scale, 1)
         pr.run(mode)
-        self.max_abs_ = pr.get(st + 5 * d, d)
+        self.max_abs_ = pr.get(ma, d)
         self.scale_ = pr.get(scale, d)
         self.numeric_mode_, self.n_features_in_, self.n_samples_seen_ = mode, d, n
         return self
@@ -1740,7 +1814,9 @@ class _Classifier(_PrepBase):
         K = len(self.classes_)
         pr = _Prog()
         xo = pr.put(arr)
-        jll = pr.alloc(n * K)
+        chk = self._score_checks(pr, xo, n, d)
+        # the joint log likelihood stays on the device unless it is the answer
+        jll = pr.work(n * K) if want else pr.alloc(n * K)
         self._jll_stages(pr, xo, n, d, jll)
         lp = pr.alloc(n * K) if "log" in want else _NONE
         pp = pr.alloc(n * K) if "proba" in want else _NONE
@@ -1750,7 +1826,16 @@ class _Classifier(_PrepBase):
         if am != _NONE:
             pr.stage("row_argmax", n, jll, n, K, am)
         pr.run(self.numeric_mode_)
+        self._score_refusals(pr, d, chk)
         return pr, n, K, dict(jll=jll, log=lp, proba=pp, predict=am)
+
+    def _score_checks(self, pr, xo, n, d):
+        """Stages a subclass adds to check its input in the scoring program
+        (CategoricalNB); what it returns goes to `_score_refusals`."""
+        return None
+
+    def _score_refusals(self, pr, d, chk):
+        """Raises on what `_score_checks` found, after the run."""
 
     def predict(self, X):
         pr, n, K, o = self._scores(X, ("predict",))
@@ -1788,7 +1873,21 @@ def _nb_weights(pr, sample_weight, n):
 
 
 def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums):
-    """class_stats, or its weighted form when a sample_weight offset is given."""
+    """class_stats, or its weighted form when a sample_weight offset is given;
+    in x_prep/blocked.mojo's blocked order when `_blocked()` (offsets
+    _NONE are not written)."""
+    if _blocked():
+        nb = (n + _XB - 1) // _XB
+        w = _NONE if wo is None else wo
+        ps, pc, cn = pr.work(nb * K * d), pr.work(nb * K * d), pr.work(K * d)
+        if var != _NONE and mean == _NONE:
+            mean = pr.work(K * d)
+        pr.stage("csb_part", nb * K * d, xo, n, d, yo, K, ps, pc, nb, w)
+        pr.stage("csb_fold", K * d, ps, pc, nb, K, d, cn, cnt, mean, sums, w)
+        if var != _NONE:
+            pr.stage("csb_ss", nb * K * d, xo, n, d, yo, K, mean, cn, ps, nb, w)
+            pr.stage("csb_var", K * d, ps, nb, K, d, cn, var)
+        return
     if wo is None:
         pr.stage("class_stats", total, xo, n, d, yo, K, cnt, mean, var, sums)
     else:
@@ -1877,7 +1976,7 @@ class GaussianNB(_Classifier):
         eps = pr.alloc(1)
         cnt, theta, var, prior, const = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(K)
         wo = _nb_weights(pr, sample_weight, n)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _col_stats(pr, xo, n, d, st)
         pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
         _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var, _NONE)
         raw = _copy_block(pr, var, K, d)
@@ -1919,7 +2018,7 @@ class GaussianNB(_Classifier):
         eps = pr.alloc(1)
         bc, bm, bv = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d)
         wo = _nb_weights(pr, sample_weight, n)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _col_stats(pr, xo, n, d, st)
         pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
         _class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, bm, bv, _NONE)
         oc = pr.put_list(zk) if first else pr.put(self.class_count_)
@@ -1966,14 +2065,14 @@ class _DiscreteNB(_Classifier):
         wo = _nb_weights(pr, sample_weight, n)
         if binarize is not None:
             thr = pr.put_scalar(binarize)
-            xb = pr.alloc(n * d)
+            xb = pr.work(n * d)
             pr.stage("binarize", n * d, xo, n * d, thr, xb)
             xo = xb
         yo = pr.put_codes(codes)
         st = pr.alloc(6 * d)
         cnt, fc = pr.alloc(K), pr.alloc(K * d)
         clp = pr.alloc(K)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _col_stats(pr, xo, n, d, st, var=False)
         _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
         self._prior_stages(pr, K, cnt, clp)
         return pr, mode, n, d, K, st, cnt, fc, clp
@@ -2005,13 +2104,13 @@ class _DiscreteNB(_Classifier):
         xo = pr.put(arr)
         wo = _nb_weights(pr, sample_weight, n)
         if getattr(self, "binarize", None) is not None:
-            xb = pr.alloc(n * d)
+            xb = pr.work(n * d)
             pr.stage("binarize", n * d, xo, n * d, pr.put_scalar(self.binarize), xb)
             xo = xb
         yo = pr.put_codes(codes)
         st = pr.alloc(6 * d)
         cnt, fc, clp = pr.alloc(K), pr.alloc(K * d), pr.alloc(K)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _col_stats(pr, xo, n, d, st, var=False)
         if first:
             _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
         else:
@@ -2089,7 +2188,7 @@ class BernoulliNB(_DiscreteNB):
         K = len(self.classes_)
         if self.binarize is not None:
             thr = pr.put_scalar(self.binarize)
-            xb = pr.alloc(n * d)
+            xb = pr.work(n * d)
             pr.stage("binarize", n * d, xo, n * d, thr, xb)
             xo = xb
         w, b = pr.put(self._w), pr.put(self._bias)
@@ -4496,13 +4595,18 @@ class CategoricalNB(_DiscreteNB):
         return self._cat_fit(arr, codes, sample_weight, self.numeric_mode_, True)
 
     def _cat_fit(self, arr, codes, sample_weight, mode, merge):
+        # the two programs share one device copy of X (and of the codes)
+        with _arena_io.resident():
+            return self._cat_fit_programs(arr, codes, sample_weight, mode, merge)
+
+    def _cat_fit_programs(self, arr, codes, sample_weight, mode, merge):
         n, d = arr.shape
         K = len(self.classes_)
         pr = _Prog()
         xo, yo = pr.put(arr), pr.put_codes(codes)
         st, cnt, clp = pr.alloc(6 * d), pr.alloc(K), pr.alloc(K)
         wo = _nb_weights(pr, sample_weight, n)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _col_stats(pr, xo, n, d, st, var=False)
         if merge:
             bc = pr.alloc(K)
             _class_stats(pr, wo, K, xo, n, 1, yo, K, bc, _NONE, _NONE, _NONE)
@@ -4534,7 +4638,20 @@ class CategoricalNB(_DiscreteNB):
         no, co, a = q.put_list(ncat), q.put(pr.get(cnt, K)), q.put_scalar(self.alpha)
         wq = _nb_weights(q, sample_weight, n)
         cc = q.alloc(d * K * cmax)
-        q.stage("cat_counts", d * K * cmax, xo, n, d, yo, K, no, cmax, _NONE if wq is None else wq, cc)
+        if _blocked():
+            # x_prep/blocked.mojo: a histogram per (row block, feature), then
+            # each (feature, class, category) slot over the blocks (exact
+            # integer counts: cat_counts' words)
+            rows = _XB
+            while ((n + rows - 1) // rows) * d * K * cmax > _CAT_HIST_WORDS and rows < 2 ** 22:
+                rows *= 2
+            nbh = (n + rows - 1) // rows
+            hist = q.work(nbh * d * K * cmax)
+            w = _NONE if wq is None else wq
+            q.stage("cat_hpart", nbh * d, xo, n, d, yo, K, no, cmax, w, hist, rows)
+            q.stage("cat_hfold", d * K * cmax, hist, nbh, d, K, no, cmax, w, cc)
+        else:
+            q.stage("cat_counts", d * K * cmax, xo, n, d, yo, K, no, cmax, _NONE if wq is None else wq, cc)
         if merge:
             old, oc = self._cc.tolist(), self._cmax
             pad = [0.0] * (d * K * cmax)
@@ -4546,30 +4663,31 @@ class CategoricalNB(_DiscreteNB):
         q.stage("cat_flp", d * K * cmax, cc, K, no, cmax, co, a, flp)
         q.run(mode)
         self._cc = q.get(cc, d * K * cmax)
+        # each (feature, class) row read once (the same values)
+        ccv, flv = q.values(cc, d * K * cmax), q.values(flp, d * K * cmax)
         self.category_count_ = [Array.from_list(
-            [[q.values(cc + (j * K + k) * cmax, ncat[j])[v] for v in range(ncat[j])] for k in range(K)], "<f4")
-            for j in range(d)]
+            [ccv[(j * K + k) * cmax:(j * K + k) * cmax + ncat[j]] for k in range(K)], "<f4") for j in range(d)]
         self.n_categories_ = Array.from_list(ncat, "<i8")
         self._flp, self._cmax = q.get(flp, d * K * cmax), cmax
         self.feature_log_prob_ = [Array.from_list(
-            [[q.values(flp + (j * K + k) * cmax, ncat[j])[v] for v in range(ncat[j])] for k in range(K)], "<f4")
-            for j in range(d)]
+            [flv[(j * K + k) * cmax:(j * K + k) * cmax + ncat[j]] for k in range(K)], "<f4") for j in range(d)]
         self.class_count_, self.class_log_prior_ = pr.get(cnt, K), pr.get(clp, K)
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
-    def _scores(self, X, want):
-        arr = _x2d(X)
-        n, d = arr.shape
-        pr = _Prog()
+    def _score_checks(self, pr, xo, n, d):
+        """The input's column minima and maxima in the scoring program itself
+        (one upload of X; cat_jll reads nothing outside the table for an index
+        out of range, and the run is refused after it)."""
         st = pr.alloc(6 * d)
-        pr.stage("col_stats", d, pr.put(arr), n, d, st)
-        pr.run(self.numeric_mode_)
-        ncat = self.n_categories_.tolist() if d == self.n_features_in_ else []
+        _col_stats(pr, xo, n, d, st, var=False)
+        return st
+
+    def _score_refusals(self, pr, d, st):
+        ncat = self.n_categories_.tolist()
         if any(v < 0 for v in pr.values(st + 3 * d, d)) or \
                 any(int(v) >= c for v, c in zip(pr.values(st + 4 * d, d), ncat)):
             raise IndexError("mojolearn: CategoricalNB got a category index outside the fitted range")
-        return super()._scores(arr, want)
 
     def _jll_stages(self, pr, xo, n, d, out):
         K = len(self.classes_)
