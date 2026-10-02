@@ -43,7 +43,7 @@ from x_cluster.bodies import (
     tree_descend,
     ward_cell,
 )
-from cluster.estimator import kmeans_fit
+from cluster.estimator import kmeans_fit, kmeans_fit_rows
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_oracle import OP_TN
@@ -62,6 +62,20 @@ def _sqdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):
     var t = _tid()
     if t < Int(na) * Int(nb):
         sqdist_cell(a, Int(na), b, Int(nb), Int(d), dst, t)
+
+
+
+def _gather_rows_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, dst: FPtr):
+    """Block t copies row idx[t] (no division per element)."""
+    var t = Int(block_idx.x)
+    var dd = Int(d)
+    if t < Int(m):
+        var s0 = Int(idx[t]) * dd
+        var d0 = t * dd
+        var f = Int(thread_idx.x)
+        while f < dd:
+            dst[d0 + f] = src[s0 + f]
+            f += Int(block_dim.x)
 
 
 def _nearest_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, labels: IPtr, dist: FPtr):
@@ -1252,6 +1266,44 @@ struct DeviceOps(ClusterOps):
             labels.append(Int32(lab[t]))
         self._ph1("kmeans")
         return r.inertia
+
+    def gather_rows(mut self, src: Int, d: Int, idx: Int, m: Int, dst: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[_gather_rows_kernel](
+            self._fp(src), Int32(d), self._ip(idx), Int32(m), self._fp(dst),
+            grid_dim=max(m, 1), block_dim=TPB,
+        )
+        self._ph1("gather_rows")
+
+    def kmeans_rows(
+        mut self, sub: Int, x: List[Float32], rows: List[Int], d: Int, k: Int, max_iter: Int,
+        tol: Float64, seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32],
+        mut labels: List[Int32],
+    ) raises -> Float64:
+        self._ph0()
+        var n = len(rows)
+        centers = List[Float32](length=k * d, fill=Float32(0))
+        var lab = List[UInt32](length=n, fill=UInt32(0))
+        var r = kmeans_fit_rows(
+            self.ctx, self.f[sub], MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x.unsafe_ptr())), rows, d, k,
+            centers.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            max_iter=max_iter, tol=tol, seed=seed, n_init=n_init, init=init, metric=METRIC_L2_EXPANDED,
+        )
+        _ = x[0]
+        _ = rows[0]
+        labels = List[Int32](capacity=n)
+        for t in range(n):
+            labels.append(Int32(lab[t]))
+        self._ph1("kmeans")
+        return r.inertia
+
+    def shrink(mut self, slot: Int) raises:
+        self.f[slot] = self.ctx.enqueue_create_buffer[DType.float32](1)
+
+    def empty(mut self, n: Int) raises -> Int:
+        self.f.append(self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1))
+        return len(self.f) - 1
 
     def gauss_q(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
         self._ph0()
