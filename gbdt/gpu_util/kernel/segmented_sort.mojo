@@ -79,8 +79,29 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 from max.gpu.primitives.block import prefix_sum
 from std.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
+
+#: FAST on Apple, lane/apple-fast-trees-scan (2026-10-02), OPT-IN
+#: `-D MOJOLEARN_SEG_SCAN_BLOCK=1`. CAUSE: `_seg_radix_pass` runs
+#: `seg_scan_block_sums_kernel` as ONE THREAD per segment (grid
+#: (n_segments) x block 1, this file:~372 on main), so every bit pass of
+#: the Exact leaf sort walks `ceil(leaf_rows / 512)` dependent global round
+#: trips on one thread, 22 passes per estimation. EFFECT: with the define,
+#: each segment gets a `SEG_SCAN_SUMS_TPB`-thread block
+#: (`seg_scan_block_sums_block_kernel`): thread t sums a contiguous stripe of
+#: the segment's block totals, one `prefix_sum` hands every stripe its
+#: carry, and the stripe writes its exclusive prefixes. Int32 sums, so every
+#: prefix is bit for bit the serial scan's. IDENTICAL compiles the old launch.
+comptime SEG_SCAN_SUMS_TPB = 256
+comptime SEG_SCAN_BLOCK_SUMS = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_SEG_SCAN_BLOCK"]()
+)
 
 
 @always_inline
@@ -199,6 +220,40 @@ def seg_scan_block_sums_kernel(
         var v = block_sums.unsafe_load(seg * wide + b)
         block_sums.unsafe_store(seg * wide + b, acc)
         acc += v
+
+
+def seg_scan_block_sums_block_kernel(
+    block_sums: MutPointer[Int32, MutAnyOrigin],
+    seg_sizes: MutPointer[UInt32, MutAnyOrigin],
+    blocks_wide_in: Int32,
+):
+    """`seg_scan_block_sums_kernel` with `SEG_SCAN_SUMS_TPB` threads per
+    segment: the stripe form `scan_block_sums_parallel_kernel`
+    (`reorder_one_bit.mojo`) already runs for the unsegmented sort. Every
+    thread of the block reaches the `prefix_sum`; a thread past the
+    segment's used blocks owns an empty stripe and contributes 0. Launch
+    with `grid_dim=(n_segments, 1, 1), block_dim=(SEG_SCAN_SUMS_TPB, 1, 1)`.
+    """
+    var seg = Int(block_idx.x)
+    var size = Int(seg_sizes.unsafe_load(seg))
+    var wide = Int(blocks_wide_in)
+    var used = (size + REORDER_BLOCK - 1) // REORDER_BLOCK
+    var tid = Int(thread_idx.x)
+    var per = (used + SEG_SCAN_SUMS_TPB - 1) // SEG_SCAN_SUMS_TPB
+    var lo = min(tid * per, used)
+    var hi = min(lo + per, used)
+    var row = seg * wide
+    var local = Int32(0)
+    for b in range(lo, hi):
+        local += block_sums.unsafe_load(row + b)
+    var carry = prefix_sum[block_size=SEG_SCAN_SUMS_TPB, exclusive=True](
+        local
+    )
+    var running = carry
+    for b in range(lo, hi):
+        var v = block_sums.unsafe_load(row + b)
+        block_sums.unsafe_store(row + b, running)
+        running += v
 
 
 def seg_add_block_carry_kernel(
@@ -366,11 +421,20 @@ def _seg_radix_pass(
         grid_dim=(blocks_wide, n_segments, 1),
         block_dim=(REORDER_BLOCK, 1, 1),
     )
-    ctx.enqueue_function[seg_scan_block_sums_kernel](
-        block_sums.unsafe_ptr(), seg_sizes.unsafe_ptr(),
-        Int32(blocks_wide),
-        grid_dim=(n_segments, 1, 1), block_dim=(1, 1, 1),
-    )
+    comptime if SEG_SCAN_BLOCK_SUMS:
+        # one 256-thread block per segment (lane/apple-fast-trees-scan)
+        ctx.enqueue_function[seg_scan_block_sums_block_kernel](
+            block_sums.unsafe_ptr(), seg_sizes.unsafe_ptr(),
+            Int32(blocks_wide),
+            grid_dim=(n_segments, 1, 1),
+            block_dim=(SEG_SCAN_SUMS_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[seg_scan_block_sums_kernel](
+            block_sums.unsafe_ptr(), seg_sizes.unsafe_ptr(),
+            Int32(blocks_wide),
+            grid_dim=(n_segments, 1, 1), block_dim=(1, 1, 1),
+        )
     ctx.enqueue_function[seg_add_block_carry_kernel](
         offsets.unsafe_ptr(), block_sums.unsafe_ptr(),
         seg_offsets.unsafe_ptr(), seg_sizes.unsafe_ptr(),
