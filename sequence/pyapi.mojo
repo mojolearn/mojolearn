@@ -20,9 +20,7 @@ from sequence.moe_tiled import TILE_P, TILE_Q
 from sequence.prophet import MEM, ProphetData, _dot, _fg_prior
 from sequence.prophet import div as _pdiv
 from sequence.ops import add as p_add, fma3 as p_fma3, ld as p_ld, mul as p_mul, st as p_st, sub as p_sub
-from sequence.ops import sumsq_fold as _sumsq_fold_host
-from sequence.adafactor import AF_NORM_BLOCK, af_alpha_tail, af_denom_tail
-from std.sys.compile import is_defined
+from sequence.adafactor import AF_NORM_BLOCK
 from std.os import getenv as _getenv_seq
 
 
@@ -475,34 +473,16 @@ def _fast_norms() -> Bool:
     return GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
 
 
-#: lane/neural-net-experiment (2026-09-30): under IDENTICAL, Adafactor's two
-#: whole-tensor norms are ONE THREAD's ascending chain of fmas (`sumsq_fold`),
-#: which a GPU thread walks at memory latency: the bench board's adafactor
-#: lane (one tensor of 16,777,216 values, 10 steps) took 10.7 s on an
-#: MI325X against torch eager's 5.8 ms, about a second per step, most of it
-#: those two chains. From HOST_FOLD_MIN values the SAME chain (the same
-#: `sumsq_fold`, the same order, the same fmas, so the same bits: the host
-#: binding runs this very code) is folded on the host: the parameter norm
-#: from the caller's own bytes before they are uploaded, the update norm
-#: from the update downloaded once. MOJOLEARN_SEQ_HOST_FOLD=0 keeps the
-#: device chains (the A/B and the digest check). FAST keeps its partials.
-comptime HOST_FOLD_MIN = 1 << 16
-
-
-#: lane hr-adafactor (2026-10-02): IDENTICAL's whole-tensor norms are the
-#: blocked order on the device (sequence/adafactor.mojo, AF_NORM_BLOCK):
+#: lane hr-adafactor (2026-10-02, docs/plans/HOST_ROUTE_REMOVAL.md): under
+#: IDENTICAL, Adafactor's two whole-tensor norms of more than AF_NORM_BLOCK
+#: values are the blocked order on the device (sequence/adafactor.mojo):
 #: block partials, one GPU thread per block, then the partials added
-#: ascending; nothing leaves the device and no host fold runs. The A/B
-#: define -D MOJOLEARN_SEQ_AF_SERIAL_NORM=1 restores main's order (the one
-#: ascending chain, folded as before) for the measurement only; the final
-#: commit of the lane deletes it with the old route.
-comptime AF_SERIAL_NORM = is_defined["MOJOLEARN_SEQ_AF_SERIAL_NORM"]()
-
-
+#: ascending. Nothing leaves the device. It replaced one ascending chain
+#: over the whole tensor, which a GPU thread walked at memory latency (the
+#: board's 16,777,216-value lane, about a second a step on an MI325X) and
+#: which tensors of 65,536 values or more folded on the host instead.
 def _blocked_norms() -> Bool:
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or AF_SERIAL_NORM:
-        return False
-    return True
+    return GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 
 def _blk_sumsq[E: Exec](mut ex: E, src: FP, n: Int, parts: FP) raises -> Int:
@@ -516,14 +496,6 @@ def _blk_sumsq[E: Exec](mut ex: E, src: FP, n: Int, parts: FP) raises -> Int:
     c.i1 = AF_NORM_BLOCK
     ex.launch[OP_AF_BLK_SUMSQ](c, nb)
     return nb
-
-
-def _host_folds() -> Bool:
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        return False
-    comptime if not AF_SERIAL_NORM:
-        return False
-    return String(_getenv_seq("MOJOLEARN_SEQ_HOST_FOLD")) != "0"
 
 
 def _chunk_sumsq[E: Exec](mut ex: E, src: FP, start: Int, n: Int, parts: FP, slot: Int) raises -> Int:
@@ -574,34 +546,21 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
     if C > 0:
         ex.upload(S2, fptr(addrs[3], "col_var"), C)
     var fast = _fast_norms() and n >= FAST_NORM_MIN
-    var host_fold = _host_folds() and n >= HOST_FOLD_MIN
     var blocked = _blocked_norms() and n > AF_NORM_BLOCK
     var parts = ex.alloc(_PARTS if fast else ((n + AF_NORM_BLOCK - 1) // AF_NORM_BLOCK if blocked else 1))
-    # the four scalars, mirrored on the host when the folds run there:
-    # [unused, alpha, rmean (device only), denom]
-    var hsc = List[Float32](length=4, fill=Float32(0.0))
     var a = Args()
     a.p0 = P
     a.p1 = sc
     a.i0 = n
     a.f0 = fval(fp, 3)
     a.f1 = rho
-    if host_fold:
-        # ||p||^2 from the caller's bytes (the same bytes P was uploaded
-        # from), the same chain as op_af_alpha's; then its tail, into
-        # hsc[1], and up into sc[1] before anything reads sc
-        var ah = a
-        ah.p1 = FP(unsafe_from_address=Int(hsc.unsafe_ptr()))
-        af_alpha_tail(ah, _sumsq_fold_host(hp, 0, n, 1))
-        ex.upload(sc + 1, FP(unsafe_from_address=Int(hsc.unsafe_ptr())) + 1, 1)
-    else:
-        if fast:
-            a.p2 = parts
-            a.i2 = _chunk_sumsq(ex, P, 0, n, parts, 0)
-        elif blocked:
-            a.p2 = parts
-            a.i2 = _blk_sumsq(ex, P, n, parts)
-        ex.launch[OP_AF_ALPHA](a, 1)
+    if fast:
+        a.p2 = parts
+        a.i2 = _chunk_sumsq(ex, P, 0, n, parts, 0)
+    elif blocked:
+        a.p2 = parts
+        a.i2 = _blk_sumsq(ex, P, n, parts)
+    ex.launch[OP_AF_ALPHA](a, 1)
     if wd != Float32(0.0):
         var s = Args()
         s.p0 = P
@@ -649,26 +608,13 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
     d.p1 = sc
     d.i0 = n
     d.f0 = fval(fp, 4)
-    if host_fold:
-        # ||u||^2 from the update downloaded once (one wait), the same
-        # chain as op_af_denom's; its tail reads alpha (hsc[1], the value
-        # sc[1] holds) and writes hsc[3], uploaded into sc[3]
-        var hu = List[Float32](length=n, fill=Float32(0.0))
-        var hup = FP(unsafe_from_address=Int(hu.unsafe_ptr()))
-        ex.download(hup, U, n)
-        var dh = d
-        dh.p1 = FP(unsafe_from_address=Int(hsc.unsafe_ptr()))
-        af_denom_tail(dh, _sumsq_fold_host(hup, 0, n, 1))
-        ex.upload(sc + 3, FP(unsafe_from_address=Int(hsc.unsafe_ptr())) + 3, 1)
-        _ = hu^
-    else:
-        if fast:
-            d.p2 = parts
-            d.i2 = _chunk_sumsq(ex, U, 0, n, parts, 0)
-        elif blocked:
-            d.p2 = parts
-            d.i2 = _blk_sumsq(ex, U, n, parts)
-        ex.launch[OP_AF_DENOM](d, 1)
+    if fast:
+        d.p2 = parts
+        d.i2 = _chunk_sumsq(ex, U, 0, n, parts, 0)
+    elif blocked:
+        d.p2 = parts
+        d.i2 = _blk_sumsq(ex, U, n, parts)
+    ex.launch[OP_AF_DENOM](d, 1)
     var ap = Args()
     ap.p0 = P
     ap.p1 = U
@@ -679,7 +625,6 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
     if C > 0:
         ex.download_async(fptr(addrs[3], "col_var"), S2, C)
     ex.sync()
-    _ = hsc^
     return PythonObject(n)
 
 
