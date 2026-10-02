@@ -108,6 +108,7 @@ from x_decomp.apple_fast import (
     omp_block_on,
     small_eigh_j2_on,
 )
+from x_decomp.fast_chol import CH_FITS, CH_NB, launch_chol_blocked
 from x_decomp.fast_gemm import FG_TPB, fast_gemm_on, fg_gemm_tiled_kernel, fg_tiles
 from x_decomp.fast_qr import (
     FQ_TPB,
@@ -512,6 +513,40 @@ def lu_diag_kernel(a: F32Ptr, info: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
         lu_diag(a, info, scal, Int(k), Int(n))
 
 
+# lane/apple-fast-decomp-linalg (2026-10-02, pass 2): -D MOJOLEARN_LU_FAST_PANEL4,
+# FAST on Apple only. main's `launch_lu` is already blocked with a tiled,
+# register-blocked trailing update; its panel is six launches a column,
+# two of them one thread (`lu_diag_kernel`, `lu_act_kernel`). This fuses
+# those two into the multipliers' grid launch: every thread reads the
+# pivot a[k, k] (final after the swap) and skips a zero pivot as
+# `lu_l_elem` does through scal; thread 0 of block 0 writes scal, act and
+# info as `lu_diag` + `lu_act_kernel` did, for the update and trail
+# kernels that follow. Four launches a column (8192: 16,384 fewer).
+comptime LU_FAST_PANEL4 = XD_FAST_APPLE and is_defined["MOJOLEARN_LU_FAST_PANEL4"]()
+
+
+def lu_l_diag_kernel(a: F32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, k: Int32, n: Int32):
+    """`lu_diag` + `lu_act_kernel` + `lu_l_kernel` in one grid launch (see
+    above). The multipliers read the pivot directly, not scal, so no thread
+    depends on thread 0's stores."""
+    var kk = Int(k)
+    var nn = Int(n)
+    var d = ftz(a.unsafe_load(kk * nn + kk))
+    if block_idx.x == 0 and thread_idx.x == 0:
+        scal.unsafe_store(0, d)
+        if d == Float32(0):
+            if info.unsafe_load(0) == Float32(0):
+                info.unsafe_store(0, Float32(kk + 1))
+            scal.unsafe_store(1, Float32(0))
+            act.unsafe_store(kk, Float32(0))
+        else:
+            scal.unsafe_store(1, Float32(1))
+            act.unsafe_store(kk, Float32(1))
+    var i = kk + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < nn and d != Float32(0):
+        a.unsafe_store(i * nn + kk, div0(a.unsafe_load(i * nn + kk), d))
+
+
 def lu_l_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
     var i = Int(k) + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
@@ -848,6 +883,16 @@ def lu_trail_rb_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, n
             var j = j0 + tx + LU_TILE * c
             if i < nn and j < nn:
                 a.unsafe_store(i * nn + j, acc[r * LU_RB + c])
+
+
+# lane/apple-fast-decomp-linalg (2026-10-02, pass 2): the blocked
+# right-looking Cholesky of x_decomp/fast_chol.mojo, FAST on Apple only,
+# behind -D MOJOLEARN_CHOL_FAST_BLOCKED (IDENTICAL and every other column
+# compile the column driver unchanged). Cause, for the kit's `chol`: the
+# column driver is 2n launches, column j's cells each a j-long serial chain
+# per thread. The board's cholesky lane runs cholesky/checks/potrf.mojo
+# (the gp binding), which launches the same module under its own guard.
+comptime CHOL_FAST_BLOCKED = XD_FAST_APPLE and is_defined["MOJOLEARN_CHOL_FAST_BLOCKED"]() and CH_FITS
 
 
 def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
@@ -2016,15 +2061,24 @@ def orth_on_device_diag(
         var done = False
         if cholqr:
             launch_gemm(ctx, src.unsafe_ptr(), src.unsafe_ptr(), dg.unsafe_ptr(), gscr.unsafe_ptr(), l, m, l, True, False)
-            ctx.enqueue_function[lu_info_init_kernel](dinfo.unsafe_ptr(), grid_dim=1, block_dim=1)
-            for j in range(l):
-                ctx.enqueue_function[chol_diag_kernel](
-                    dg.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(j), Int32(l), grid_dim=1, block_dim=1
-                )
-                if l - j - 1 > 0:
-                    ctx.enqueue_function[chol_col_kernel](
-                        dg.unsafe_ptr(), Int32(j), Int32(l), grid_dim=_blocks(l - j - 1), block_dim=TPB
+            var gblocked = False
+            comptime if CHOL_FAST_BLOCKED:
+                # pass 2: the l x l Cholesky of the Gram as the blocked
+                # launch (3 l / CH_NB launches) instead of 2 l one-thread
+                # and column launches (l = 220: 440 a pass, 880 an svd).
+                if l > CH_NB:
+                    launch_chol_blocked(ctx, _p(dg), _p(dinfo), l)
+                    gblocked = True
+            if not gblocked:
+                ctx.enqueue_function[lu_info_init_kernel](dinfo.unsafe_ptr(), grid_dim=1, block_dim=1)
+                for j in range(l):
+                    ctx.enqueue_function[chol_diag_kernel](
+                        dg.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(j), Int32(l), grid_dim=1, block_dim=1
                     )
+                    if l - j - 1 > 0:
+                        ctx.enqueue_function[chol_col_kernel](
+                            dg.unsafe_ptr(), Int32(j), Int32(l), grid_dim=_blocks(l - j - 1), block_dim=TPB
+                        )
             ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
             ctx.enqueue_copy(dst_ptr=hg.unsafe_ptr(), src_buf=dg)
             ctx.synchronize()
@@ -2128,14 +2182,19 @@ def launch_lu(
                     a, piv, Int32(k), Int32(n), Int32(0), Int32(k1),
                     grid_dim=_blocks(k1), block_dim=TPB,
                 )
-                ctx.enqueue_function[lu_diag_kernel](
-                    a, info, scal, Int32(k), Int32(n), grid_dim=1, block_dim=1
-                )
-                ctx.enqueue_function[lu_act_kernel](scal, act, Int32(k), grid_dim=1, block_dim=1)
-                if n - k - 1 > 0:
-                    ctx.enqueue_function[lu_l_kernel](
-                        a, scal, Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
+                comptime if LU_FAST_PANEL4:
+                    ctx.enqueue_function[lu_l_diag_kernel](
+                        a, info, scal, act, Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
                     )
+                else:
+                    ctx.enqueue_function[lu_diag_kernel](
+                        a, info, scal, Int32(k), Int32(n), grid_dim=1, block_dim=1
+                    )
+                    ctx.enqueue_function[lu_act_kernel](scal, act, Int32(k), grid_dim=1, block_dim=1)
+                    if n - k - 1 > 0:
+                        ctx.enqueue_function[lu_l_kernel](
+                            a, scal, Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
+                        )
                 if k1 - k - 1 > 0 and n - k - 1 > 0:
                     ctx.enqueue_function[lu_update_panel_kernel](
                         a, scal, Int32(k), Int32(n), Int32(k1),
@@ -2393,7 +2452,17 @@ struct DevExec(Exec):
         # same chain `chol_serial` walks for that cell, reading only cells
         # final before the step), and the mirror cell zeroed there. Same
         # cells, same order per cell, same bits; 2n launches.
-        if n <= chol_serial_max():
+        var blocked = False
+        comptime if CHOL_FAST_BLOCKED:
+            # -D MOJOLEARN_CHOL_FAST_BLOCKED (lane/apple-fast-decomp-linalg,
+            # pass 2): `launch_chol_blocked` (see the kernels), FAST on
+            # Apple only; a matrix within one panel keeps the driver below.
+            if n > CH_NB:
+                launch_chol_blocked(ctx, _p(da), _p(di), n)
+                blocked = True
+        if blocked:
+            pass
+        elif n <= chol_serial_max():
             ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
         else:
             ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
