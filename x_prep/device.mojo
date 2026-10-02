@@ -22,6 +22,7 @@ from x_prep.select_fast import (
     SELECT_FREG, SELECT_FCLS, OP_F_CLASSIF, OP_F_REGRESSION, program_has_op, select_scratch_words,
     select_freg_device, select_fcls_device, select_cstats_device,
 )
+from x_prep.fastprep2 import PREP2_FAST, Prep2Switches, prep2_scratch_words, prep2_fast_stage
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.device_store import DeviceStore
 
@@ -164,6 +165,12 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # FAST: MOJOLEARN_XPREP_FAST_FOLDS=0 keeps the row-order units (the A/B arm of
     # bench/x_prep_quality.py and bench/x_prep_speed.py); unset or 1 folds by threadgroup
     var fast_folds = getenv("MOJOLEARN_XPREP_FAST_FOLDS", "1") != "0"
+    # lane/apple-fast-prep2 (2026-10-02): FAST + Apple paths behind env switches, each default OFF
+    # (x_prep/fastprep2.mojo: te_global / te_enc / ii_conv / ii_gram / eigh by threadgroups, the quantile
+    # stage by radix select). Every field is False outside FAST + Apple.
+    var p2 = Prep2Switches()
+    comptime if PREP2_FAST:
+        scratch = max(scratch, prep2_scratch_words(host_q, stages, p2))
     var mi_sorted = getenv("MOJOLEARN_XPREP_MI_SORTED", "1") != "0"
     var mi_ties = getenv("MOJOLEARN_XPREP_MI_TIES", "1") != "0"
     var mi_w = 1
@@ -252,6 +259,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 if select_cstats_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
                                         Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8]), Int(hq[9])):
                     continue
+        comptime if PREP2_FAST:
+            if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, qp, p2):
+                continue
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if fast_folds and op == OP_COL_STATS:
                 var hq = host_q + (s * STAGE_INTS + 2)
