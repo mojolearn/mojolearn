@@ -36,9 +36,9 @@ for r in $(seq 1 $REPS); do
       $VP $DRV race --lane $LANE --dataset $DS --data $DATA --arms ${AFC_ARM:-ours-fast} \
       --rounds $ROUNDS --out $d/res --work $d/work $XARGS > $d/race.txt 2>&1
     rm -rf $d/work
-    m=$(grep -o "^$PFX lane=.*" $d/race.txt | grep -o 'median_ms=[0-9.]*' | tail -1 | cut -d= -f2)
-    st=$(grep -o "^$PFX lane=.*" $d/race.txt | grep -o 'status=[A-Za-z_]*' | tail -1 | cut -d= -f2)
-    q=$(grep -o "^$PFX lane=.*" $d/race.txt | grep -o 'quality=.*' | tail -1 | cut -c1-200)
+    m=$(grep -o "$PFX lane=.*" $d/race.txt | grep -o 'median_ms=[0-9.]*' | tail -1 | cut -d= -f2)
+    st=$(grep -o "$PFX lane=.*" $d/race.txt | grep -o 'status=[A-Za-z_]*' | tail -1 | cut -d= -f2)
+    q=$(grep -o "$PFX lane=.*" $d/race.txt | grep -o 'quality=.*' | tail -1 | cut -c1-200)
     g=$(grep -o 'digest=[0-9a-f]*' $d/race.txt | tail -1 | cut -d= -f2 | cut -c1-16)
     echo "AFC-AB $TAG arm=$a rep=$r lane=$LANE ds=$DS status=${st:-none} median_ms=${m:-none} digest=${g:-none} env='$E' $q" | tee -a $LOG
     [ -z "$m" ] && grep -E -m 5 'Error|error|REFUSED|Traceback' $d/race.txt | cut -c1-300 | tee -a $LOG
