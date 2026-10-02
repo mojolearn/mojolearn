@@ -21,6 +21,10 @@ imports them), and the `comptime if LDA_FUSED_SS:` around `m.def_function` in th
 
 multinomial-nb / complement-nb on text (289 / 281 ms vs sklearn 266 / 265): pass 1 found the device side to be three
 coalesced passes over the dense 78k x 4096 count matrix plus a tiny `matmul`, the clock being the 1.3 GB upload and the
-Python staging; pass 2 removes both with the CSR path above (`nb-mnb-csr-text`, `nb-cnb-csr-text`). Note the bench's
-text block is built dense (`text_counts`); only the B arm (the define) receives it as CSR, through `_nb_csr_ready`,
-and sklearn's stored time is on the dense block.
+Python staging; pass 2 removes both with the CSR path above (`nb-mnb-csr-text`, `nb-cnb-csr-text`). The bench's text block is
+built dense (`text_counts`); `_build_est` now converts it to scipy CSR once, outside the clock, for EVERY arm whose
+estimator takes sparse input: sklearn-cpu unconditionally (its MultinomialNB / ComplementNB take CSR natively), ours
+only when `_nb_csr_ready()` (the define arm); a build that cannot take sparse (ours without the export, cuML through
+`_cuml_up`) keeps the dense block. **The stored sklearn text-NB times (266 / 265 ms) were measured on the dense block:
+the manager must re-run sklearn-cpu on CSR before comparing** (the `# OPPONENT RERUN NEEDED` line at the top of
+nb.txt), or the A/B result is read against a stale opponent.
