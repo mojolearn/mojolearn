@@ -18,8 +18,6 @@ from std.os import getenv
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count
 from core.step_phase import (
     step_count_d2h,
     step_count_host_alloc,
@@ -67,7 +65,7 @@ def download_f32_into_scanned[pool: StaticString = _STAGE_NAME](
     lane/neural-pass49 (2026-10-01): the staged copy is a PIPELINE over
     chunks of `download_chunk_floats()` through TWO pinned stages kept in a
     process pool (`DOWNLOAD_STAGES`): the copy engine fills one stage while
-    the host tasks drain the other into `dst`. The per-call 64 MiB pinned
+    one host thread drains the other into `dst`. The per-call 64 MiB pinned
     allocation of the first staged form (lane neural-pass43) is gone; it was
     what made the stage lose to the raw host-pointer copy on the L40S. A
     transport choice: the same bytes land in the same places.
@@ -110,7 +108,7 @@ def download_f32_into_scanned[pool: StaticString = _STAGE_NAME](
         ctx.synchronize()
         if k + 1 < nchunks:
             _stage_enqueue(ctx, buf, n, k + 1, chunk, st1)
-        var b0 = _copy_out_tasks(dst + k * chunk, st0.unsafe_ptr(), min(chunk, n - k * chunk), scan)
+        var b0 = _copy_out(dst + k * chunk, st0.unsafe_ptr(), min(chunk, n - k * chunk), scan)
         if b0 >= 0 and bad < 0:
             bad = k * chunk + b0
         if k + 1 >= nchunks:
@@ -119,7 +117,7 @@ def download_f32_into_scanned[pool: StaticString = _STAGE_NAME](
         ctx.synchronize()
         if k + 2 < nchunks:
             _stage_enqueue(ctx, buf, n, k + 2, chunk, st0)
-        var b1 = _copy_out_tasks(dst + (k + 1) * chunk, st1.unsafe_ptr(), min(chunk, n - (k + 1) * chunk), scan)
+        var b1 = _copy_out(dst + (k + 1) * chunk, st1.unsafe_ptr(), min(chunk, n - (k + 1) * chunk), scan)
         if b1 >= 0 and bad < 0:
             bad = (k + 1) * chunk + b1
         k += 2
@@ -240,41 +238,14 @@ def _first_nonfinite(p: MutPointer[Float32, MutUntrackedOrigin], n: Int) -> Int:
     return -1
 
 
-def _copy_out_tasks(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int, scan: Bool) -> Int:
-    """`memcpy(dst, src, n)` in contiguous chunks over host tasks: one
-    thread reads pinned (write-combined) memory at about 3 GB/s, several
-    read it at 10 GB/s and more (training/estimator.mojo::_parallel_copy_out).
-    With `scan`, every task also scans the pages it just wrote and the
-    result is the first non-finite index of `dst[0:n]` (-1 when none)."""
-    var tasks = host_predict_task_count(1 << 30)
-    if n < (1 << 20) or tasks <= 1:
-        memcpy(dest=dst, src=src, count=n)
-        if scan:
-            return _first_nonfinite(dst, n)
-        return -1
-    if tasks > 16:
-        tasks = 16
-    var chunk = (n + tasks - 1) // tasks
-    var found = List[Int](length=tasks, fill=-1)
-    var fp = found.unsafe_ptr()
-
-    def _chunk(t: Int) {imm dst, imm src, imm n, imm chunk, imm scan, imm fp}:
-        var lo = t * chunk
-        var hi = min(lo + chunk, n)
-        var bad = -1
-        if hi > lo:
-            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
-            if scan:
-                var b = _first_nonfinite(dst + lo, hi - lo)
-                if b >= 0:
-                    bad = lo + b
-        fp[t] = bad
-
-    host_parallelize(_chunk, tasks)
-    var first = -1
-    for t in range(tasks):
-        if found[t] >= 0:
-            first = found[t]
-            break
-    _ = found^
-    return first
+def _copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int, scan: Bool) -> Int:
+    """`memcpy(dst, src, n)` from a pinned stage into the caller's memory.
+    With `scan`, the result is the first non-finite index of `dst[0:n]`
+    (-1 when none). lane gap-neural-overhead2 (2026-10-02): ONE thread; the
+    copy-out over host tasks is gone (no CPU threads in GPU code, the
+    no_host_routes hook). The pipeline still overlaps this copy with the
+    copy engine filling the other stage. Copies only: no bit moves."""
+    memcpy(dest=dst, src=src, count=n)
+    if scan:
+        return _first_nonfinite(dst, n)
+    return -1

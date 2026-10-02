@@ -870,13 +870,9 @@ def identical_ce_admit_call(reduction: Int, want_grad: Int, n_rows: Int) raises:
 # stages; MOJOLEARN_DOWNLOAD_STAGE=0 is the raw copy). A NaN or a bad target
 # is now refused after the upload instead of before it, still before any
 # recorded stage; nothing is written to the caller's outputs on a refusal.
-# MOJOLEARN_CE_HOST_MIRROR=1 restores the List mirror and the raw download
-# for A/B. No bit moves: the same kernels read the same uploaded bytes.
+# The A/B switch back to the mirror is removed (lane gap-neural-overhead2).
+# No bit moves: the same kernels read the same uploaded bytes.
 comptime _CE_STAGE_POOL = "MojoDownloadStagesTrainingIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesTrainingFast"
-
-
-def ce_host_mirror() -> Bool:
-    return String(getenv("MOJOLEARN_CE_HOST_MIRROR")) == "1"
 
 
 def identical_ce_loss_host(
@@ -952,33 +948,22 @@ def identical_ce_loss_host(
     mirror of `logits` this entry built for `ce_refuse_inputs` is gone (the
     block comment above this function); the shape third runs here and the
     non-finite scan and the targets walk are `identical_ce_forward_into`'s
-    first statement, with the oracle's messages. MOJOLEARN_CE_HOST_MIRROR=1
-    restores the mirror.
+    first statement, with the oracle's messages.
     """
     identical_ce_admit_call(reduction, want_grad, n_rows)
 
     var cfg = CeConfig(vocab, ignore_index, reduction, label_smoothing, num_items)
-    var legacy = ce_host_mirror()
 
     # The targets as a host List (N int32: one memcpy), for `ce_count`.
     var h_targets = List[Int32](length=n_rows, fill=Int32(0))
     memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
-    if legacy:
-        # ---- The refusals, BEFORE any device work, through the oracle's
-        # own function, over a host List mirror of `logits`.
-        var h_logits = List[Float32]()
-        for i in range(n_rows * vocab):
-            h_logits.append(logits_ptr.unsafe_load(i))
-        _ = ce_refuse_inputs(h_logits, h_targets, cfg)
-        _ = h_logits^
-    else:
-        # The shape third of `ce_refuse_inputs` here, before any buffer is
-        # sized from N * V; the non-finite scan and the targets walk are the
-        # first statement of `identical_ce_forward_into`
-        # (`ce_refuse_device_inputs`: the oracle's shape check, scan order,
-        # first index and message, gated equal by loss_check clause (f)),
-        # and they run before any recorded stage.
-        ce_refuse_shape(n_rows, n_rows * vocab, cfg)
+    # The shape third of `ce_refuse_inputs` here, before any buffer is
+    # sized from N * V; the non-finite scan and the targets walk are the
+    # first statement of `identical_ce_forward_into`
+    # (`ce_refuse_device_inputs`: the oracle's shape check, scan order,
+    # first index and message, gated equal by loss_check clause (f)), and
+    # they run before any recorded stage.
+    ce_refuse_shape(n_rows, n_rows * vocab, cfg)
     var count = ce_count(h_targets, ignore_index)
     _ = h_targets^
 
@@ -1000,11 +985,7 @@ def identical_ce_loss_host(
         reduction, want_grad, cfg,
     )
     if want_grad != 0:
-        if legacy:
-            ctx.enqueue_copy(dst_ptr=dlogits_ptr, src_buf=dlogits)
-            ctx.synchronize()
-        else:
-            download_f32_into[_CE_STAGE_POOL](ctx, dlogits, cells, dlogits_ptr)
+        download_f32_into[_CE_STAGE_POOL](ctx, dlogits, cells, dlogits_ptr)
     _ = logits^
     _ = targets^
     _ = dlogits^
