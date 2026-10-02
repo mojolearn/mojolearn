@@ -693,7 +693,7 @@ serial-launch	serial-gpu	gap-nv-classical2	debt	x_ann/tsne_device.mojo	1	ctx.enq
 serial-launch	serial-gpu	gap-nv-classical2	debt	x_ann/tsne_device.mojo	2	ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
 serial-launch	serial-gpu	gap-nv-classical2	debt	x_ann/tsne_device.mojo	0	ctx.enqueue_function[sum_team_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=ZT)
 serial-launch	serial-gpu	gap-nv-classical2	debt	x_ann/tsne_device.mojo	1	ctx.enqueue_function[sum_team_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=ZT)
-host-env	host-env/threshold	PR#126	inflight@9901c6a91a8d8c8aa3e5162024c7b1acacd7bc37	x_cluster/minibatch.mojo	0	comptime MB_DEVICE_STEP = not is_defined["MOJOLEARN_MINIBATCH_HOST_STEP"]()
+host-env	host-env/threshold	PR#126	debt	x_cluster/minibatch.mojo	0	comptime MB_DEVICE_STEP = not is_defined["MOJOLEARN_MINIBATCH_HOST_STEP"]()
 host-env	host-env/threshold	gap-optin-flags	debt	x_cluster/optics.mojo	0	comptime OPTICS_HOSTROWS = OPTICS_SIMD and is_defined["MOJOLEARN_OPTICS_HOSTROWS"]()
 d2h-loop	d2h-roundtrip	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
 d2h-loop	d2h-roundtrip	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s)
