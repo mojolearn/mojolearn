@@ -154,43 +154,76 @@ def isotonic_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP,
 
 def iso_fit_sorted(x: FP, y: FP, n: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, perm: IP, nk: Int):
     """isotonic_fit after its sort: perm[0, nk) the rows in (x, y, row) order
-    (lane/neural-pass107: the device sorts them on the grid, x_linear/device.mojo)."""
-    var inc = ldi(ip, 0) != 0
+    (lane/neural-pass107: the device runs these steps as grid kernels and one
+    thread, x_linear/device.mojo, with the same statements)."""
     var has_w = ldi(ip, 3) != 0
-    var ux = 0
-    var uy = n
-    var uw = 2 * n
     var xs = fw + 3 * n
     var ys = fw + 4 * n
     var ws = fw + 5 * n
     for j in range(nk):
-        var r = ldi(perm, j)
-        st(xs, j, ld(x, r))
-        st(ys, j, ld(y, r))
-        st(ws, j, ld(y, n + r) if has_w else Float32(1))
-    # _make_unique
+        iso_gather_one(j, x, y, n, has_w, perm, xs, ys, ws)
+    var starts = iw + n
+    var m = iso_bounds(xs, nk, starts)
+    for g in range(m):
+        iso_group(g, xs, ys, ws, starts, fw, n)
+    iso_after_unique(m, n, ip, fp, res, fw, iw)
+
+
+@always_inline
+def iso_gather_one(j: Int, x: FP, y: FP, n: Int, has_w: Bool, perm: IP, xs: FP, ys: FP, ws: FP):
+    var r = ldi(perm, j)
+    st(xs, j, ld(x, r))
+    st(ys, j, ld(y, r))
+    st(ws, j, ld(y, n + r) if has_w else Float32(1))
+
+
+def iso_bounds(xs: FP, nk: Int, starts: IP) -> Int:
+    """_make_unique's groups: starts[g] the first sorted row of group g (a row
+    starts a group when it is at least 1e-6 above the group's first x),
+    starts[m] = nk; returns m."""
     var m = 0
+    sti(starts, 0, 0)
     var cx = ld(xs, 0)
-    var cy = Float32(0)
-    var cw = Float32(0)
-    for j in range(nk):
+    for j in range(1, nk):
         var xj = ld(xs, j)
-        var wj = ld(ws, j)
         if fs(xj, cx) >= Float32(1e-6):
-            st(fw, ux + m, cx)
-            st(fw, uw + m, cw)
-            st(fw, uy + m, fd(cy, cw))
             m += 1
+            sti(starts, m, j)
             cx = xj
-            cw = wj
-            cy = fm(ld(ys, j), wj)
-        else:
-            cw = fa(cw, wj)
-            cy = fmad(ld(ys, j), wj, cy)
-    st(fw, ux + m, cx)
-    st(fw, uw + m, cw)
-    st(fw, uy + m, fd(cy, cw))
     m += 1
+    sti(starts, m, nk)
+    return m
+
+
+@always_inline
+def iso_group(g: Int, xs: FP, ys: FP, ws: FP, starts: IP, fw: FP, n: Int):
+    """Group g's pooled x, weight and mean: _make_unique's chains (the first
+    group summed from zero, every other started by its first row)."""
+    var lo = ldi(starts, g)
+    var hi = ldi(starts, g + 1)
+    var cw = Float32(0)
+    var cy = Float32(0)
+    var j0 = lo
+    if g > 0:
+        cw = ld(ws, lo)
+        cy = fm(ld(ys, lo), cw)
+        j0 = lo + 1
+    for j in range(j0, hi):
+        var wj = ld(ws, j)
+        cw = fa(cw, wj)
+        cy = fmad(ld(ys, j), wj, cy)
+    st(fw, g, ld(xs, lo))
+    st(fw, 2 * n + g, cw)
+    st(fw, n + g, fd(cy, cw))
+
+
+def iso_after_unique(m: Int, n: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """isotonic_fit after _make_unique: PAVA (reversed for a decreasing fit),
+    the clip and the trim."""
+    var inc = ldi(ip, 0) != 0
+    var ux = 0
+    var uy = n
+    var uw = 2 * n
     # a decreasing fit runs PAVA on the reversed sequence
     if not inc:
         for a in range(m // 2):
