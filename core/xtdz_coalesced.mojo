@@ -31,9 +31,9 @@ from std.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
-from core.column_stats import STATS_TPB, xty_kernel
+from core.column_stats import STATS_TPB, column_mean_kernel, xty_kernel
 from core.pinned_reduce import pinned_block_sum
-from core.strided_walk import APPLE_IDENTICAL_STEP_UNROLL, strided_mul_add
+from core.strided_walk import APPLE_IDENTICAL_STEP_UNROLL, STRIDED_UNROLL, strided_mul_add
 
 
 #: Pass 1 needs `cells <= XTDZ_CO_MAX_CELLS` so one block holds every cell of
@@ -146,6 +146,106 @@ def xty_launch(
         out_v.unsafe_ptr(),
         x.unsafe_ptr(),
         y.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_cols),
+        grid_dim=(n_cols, 1, 1),
+        block_dim=(STATS_TPB, 1, 1),
+    )
+
+
+# ===========================================================================
+# `column_mean_kernel`, read row-coalesced (lane/gap-classical-nv,
+# 2026-10-02). That kernel runs one block per column, each SIMD group reading
+# one column at a stride of D floats (PCA's mean over 4M rows: 11 blocks on
+# a 142-SM L40S at taxi's width). Pass 1 here runs the SAME per-thread chain
+# `acc += x[r * D + j]` over `r = tid, tid + STATS_TPB, ...` ascending from
+# 0.0, cells fastest so a SIMD group reads consecutive floats of one row,
+# loads issued STRIDED_UNROLL rows ahead; pass 2 is the kernel's unchanged
+# tail, `ftz(pinned_block_sum)` then `ftz(s0 / n_rows)`. Same chains, same
+# fold, same quotient, same bits. Taken where `xtdz_coalesced_applies(D, 1)`;
+# `-D MOJOLEARN_APPLE_STEP_UNROLL_OFF` keeps the one-block-per-column kernel.
+# ===========================================================================
+
+
+def mean_partial_kernel(
+    partial: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    d_in: Int32,
+    s_in: Int32,
+):
+    """Pass 1: thread `(s, j)`, `j` fastest, runs column `j`'s chain `tid =
+    block * S + s` and stores it at `partial[j * STATS_TPB + tid]`."""
+    var D = Int(d_in)
+    var local = Int(thread_idx.x)
+    var s = local // D
+    var j = local - s * D
+    var tid = Int(block_idx.x) * Int(s_in) + s
+    if s >= Int(s_in) or tid >= STATS_TPB:
+        return
+    var n = Int(n_rows_in)
+    comptime U = STRIDED_UNROLL
+    comptime ST = STATS_TPB
+    var acc = Float32(0.0)
+    var r = tid
+    while r + (U - 1) * ST < n:
+        var t = InlineArray[Float32, U](fill=Float32(0.0))
+        comptime for u in range(U):
+            t[u] = x.unsafe_load((r + u * ST) * D + j)
+        comptime for u in range(U):
+            acc += t[u]
+        r += U * ST
+    while r < n:
+        acc += x.unsafe_load(r * D + j)
+        r += ST
+    partial.unsafe_store(j * STATS_TPB + tid, acc)
+
+
+def mean_fold_kernel(
+    mu: MutPointer[Float32, MutAnyOrigin],
+    partial: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+):
+    """Pass 2: block `j`, `STATS_TPB` threads, `column_mean_kernel`'s fold
+    and quotient over the chains pass 1 stored."""
+    var j = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var acc = partial.unsafe_load(j * STATS_TPB + tid)
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
+    if tid == 0:
+        var m = ftz(s0 / Float32(Int(n_rows_in)))
+        mu.unsafe_store(j, m)
+
+
+def column_mean_launch(
+    ctx: DeviceContext,
+    mut mu: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+) raises:
+    """`mu = column_mean_kernel(x)` bit for bit. The coalesced form
+    allocates its workspace here and SYNCHRONIZES before releasing it;
+    otherwise the one-block-per-column launch, asynchronous as before."""
+    if xtdz_coalesced_applies(n_cols, 1):
+        var ws = ctx.enqueue_create_buffer[DType.float32](n_cols * STATS_TPB)
+        var s = max(1, XTDZ_CO_BLOCK_TARGET // n_cols)
+        ctx.enqueue_function[mean_partial_kernel](
+            ws.unsafe_ptr(), x.unsafe_ptr(), Int32(n_rows), Int32(n_cols), Int32(s),
+            grid_dim=((STATS_TPB + s - 1) // s, 1, 1),
+            block_dim=(s * n_cols, 1, 1),
+        )
+        ctx.enqueue_function[mean_fold_kernel](
+            mu.unsafe_ptr(), ws.unsafe_ptr(), Int32(n_rows),
+            grid_dim=(n_cols, 1, 1),
+            block_dim=(STATS_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        _ = ws^
+        return
+    ctx.enqueue_function[column_mean_kernel](
+        mu.unsafe_ptr(),
+        x.unsafe_ptr(),
         Int32(n_rows),
         Int32(n_cols),
         grid_dim=(n_cols, 1, 1),

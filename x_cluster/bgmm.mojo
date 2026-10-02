@@ -19,7 +19,6 @@ its triangular inverse, digamma and log-gamma (series on the portable
 `identical_mul64`. The k-means start is this library's KMeans through
 `ClusterOps.kmeans`. Only covariance_type='full' (NOT_IMPLEMENTED.tsv)."""
 from std.math import sqrt
-from std.os import getenv
 from std.sys.compile import is_defined
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
@@ -40,19 +39,20 @@ comptime BGMM_ENT_G = 4
 # kernels as one launch, a row per thread (`ops.estep`; the same values).
 comptime BGMM_ESTEP1 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_BGMM_ESTEP1"]()
 # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple, the
-# GPU binding only, host-read env switches that default OFF:
-# `MOJOLEARN_BGMM_FAST_MAHAL_GEMM=1`: the E-step's Mahalanobis squares by
-#   the plain mixture's GEMM route (`ops.gauss_q_gemm`, device_ops.mojo).
-#   Cause: `gauss_q` is one thread per (row, component) folding the d x d
-#   triangle itself. Bits move; the paired quality check.
-# `MOJOLEARN_BGMM_FAST_ENT=1`: the BGMM_ENT arm (the entropy's n kc products
-#   on the device, the host adds ceil(n kc / 4) partials) without the build
-#   define. Cause: the lower bound read 2 n kc floats back an iteration
-#   (6.4 MB at 100,000 x 8) and formed n kc Float64 products on the host.
-# `MOJOLEARN_BGMM_FAST_ESTEP1=1`: the BGMM_ESTEP1 arm (the E-step's three
-#   kernels as one launch, a row per thread) without the build define.
-# `MOJOLEARN_BGMM_FAST_MOMENTS_GEMM=1` is read in device_ops.mojo `moments`.
-comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE
+# GPU binding only, build defines that default OFF:
+# `-D MOJOLEARN_BGMM_FAST_MAHAL_GEMM=1` (BGMM_FAST_MAHAL_GEMM): the E-step's
+#   Mahalanobis squares by the plain mixture's GEMM route (`ops.gauss_q_gemm`,
+#   device_ops.mojo). Cause: `gauss_q` is one thread per (row, component)
+#   folding the d x d triangle itself. Bits move; the paired quality check.
+# `-D MOJOLEARN_BGMM_FAST_MOMENTS_GEMM=1` is taken in device_ops.mojo `moments`.
+# The entropy and the one-launch E-step arms are main's own opt-ins above
+# (`-D MOJOLEARN_BGMM_ENT=1`: the lower bound's n kc entropy products on the
+# device, the host adds ceil(n kc / 4) partials, where the host read 2 n kc
+# floats back an iteration, 6.4 MB at 100,000 x 8; `-D MOJOLEARN_BGMM_ESTEP1=1`:
+# the E-step's three kernels as one launch, a row per thread). Their
+# host-read env twins (MOJOLEARN_BGMM_FAST_ENT / _ESTEP1) are gone.
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE
+comptime BGMM_FAST_MAHAL_GEMM = XC2_FAST and is_defined["MOJOLEARN_BGMM_FAST_MAHAL_GEMM"]()
 
 comptime LOG2 = 0.6931471805599453
 comptime LOG_2PI = 1.8378770664093453
@@ -487,13 +487,8 @@ def bgmm_fit[O: ClusterOps](
     comptime if BGMM_ESTEP1:
         estep1 = ops.fast_device()
     var mahal_gemm = False
-    comptime if XC2_FAST:
-        if ops.fast_device():
-            if String(getenv("MOJOLEARN_BGMM_FAST_ENT")) == "1":
-                ent_dev = pr.variational
-            if String(getenv("MOJOLEARN_BGMM_FAST_ESTEP1")) == "1":
-                estep1 = True
-            mahal_gemm = String(getenv("MOJOLEARN_BGMM_FAST_MAHAL_GEMM")) == "1"
+    comptime if BGMM_FAST_MAHAL_GEMM:
+        mahal_gemm = ops.fast_device()
     var n_ent = (n * kc + BGMM_ENT_G - 1) // BGMM_ENT_G
     var es = ops.zeros(n_ent if ent_dev else 1)
     var max_lb = Float64(0)

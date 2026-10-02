@@ -26,6 +26,8 @@ from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from std.sys.compile import is_defined
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 
 from checks.numerics import ftz, identical_mul_add
 from x_ann.tsne_core import F32P, I32P, ts_ftz_nonneg, ts_knn_beats, ts_knn_cell, ts_knn_offer
@@ -97,6 +99,109 @@ def knn_tiled_kernel[MAXD: Int](n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F3
         j0 += KTJ
 
 
+# lane/gap-nv-classical2: rows wider than 64 features on NVIDIA and AMD.
+# `knn_cell_kernel` (one thread per row re-reading both rows from global
+# memory) ran istella's 20k x 220 graph. `knn_wide_kernel` computes a
+# KW_TI x KW_TJ block of squared distances with both sides staged KW_KC
+# features at a time and 4 x 4 cells per thread, each cell the cell's chain
+# `ts_ftz_nonneg(fma(diff, diff, acc))`, diff = ftz(ftz(x_i) - ftz(x_j)),
+# c ascending over exactly d; then row i's owner offers the tile's
+# candidates in ascending j through the same `ts_knn_beats` /
+# `ts_knn_offer`. The same bits. -D MOJOLEARN_KNN_WIDE_OFF=1 restores the
+# cell kernel.
+comptime KNN_WIDE = (
+    (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and not is_defined["MOJOLEARN_KNN_WIDE_OFF"]()
+)
+comptime KW_TI = 64
+comptime KW_TJ = 64
+comptime KW_KC = 16
+comptime KW_TX = 16
+comptime KW_TY = 16
+comptime KW_RI = KW_TI // KW_TY
+comptime KW_RJ = KW_TJ // KW_TX
+comptime KW_TPB = KW_TX * KW_TY
+comptime KW_DS = KW_TJ + 1
+
+
+def knn_wide_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn_i: I32P):
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var tid = ty * KW_TX + tx
+    var nr = Int(n)
+    var dd = Int(d)
+    var k = Int(nn)
+    var i0 = Int(block_idx.x) * KW_TI
+    var a_s = stack_allocation[KW_KC * KW_TI, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var b_s = stack_allocation[KW_KC * KW_TJ, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var dist_s = stack_allocation[KW_TI * KW_DS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var i = i0 + tid
+    var owner = tid < KW_TI and i < nr
+    var base = i * k
+    var filled = 0
+    var ld = Float32(0.0)
+    var li = 0
+    var j0 = 0
+    while j0 < nr:
+        var acc = InlineArray[Float32, KW_RI * KW_RJ](fill=Float32(0.0))
+        var k0 = 0
+        while k0 < dd:
+            comptime for q in range(KW_KC * KW_TI // KW_TPB):
+                var e = tid + q * KW_TPB
+                var ii = e // KW_KC
+                var kk = e - ii * KW_KC
+                var c = k0 + kk
+                var v = Float32(0.0)
+                if c < dd and i0 + ii < nr:
+                    v = ftz(x.unsafe_load((i0 + ii) * dd + c))
+                a_s[kk * KW_TI + ii] = v
+            comptime for q in range(KW_KC * KW_TJ // KW_TPB):
+                var e = tid + q * KW_TPB
+                var jj = e // KW_KC
+                var kk = e - jj * KW_KC
+                var c = k0 + kk
+                var v = Float32(0.0)
+                if c < dd and j0 + jj < nr:
+                    v = ftz(x.unsafe_load((j0 + jj) * dd + c))
+                b_s[kk * KW_TJ + jj] = v
+            barrier()
+            var kmax = dd - k0
+            if kmax > KW_KC:
+                kmax = KW_KC
+            for kk in range(kmax):
+                var av = InlineArray[Float32, KW_RI](fill=Float32(0.0))
+                var bv = InlineArray[Float32, KW_RJ](fill=Float32(0.0))
+                comptime for r in range(KW_RI):
+                    av[r] = a_s[kk * KW_TI + ty + r * KW_TY]
+                comptime for c in range(KW_RJ):
+                    bv[c] = b_s[kk * KW_TJ + tx + c * KW_TX]
+                comptime for r in range(KW_RI):
+                    comptime for c in range(KW_RJ):
+                        var diff = ftz(av[r] - bv[c])
+                        acc[r * KW_RJ + c] = ts_ftz_nonneg(identical_mul_add(diff, diff, acc[r * KW_RJ + c]))
+            barrier()
+            k0 += KW_KC
+        comptime for r in range(KW_RI):
+            comptime for c in range(KW_RJ):
+                dist_s[(ty + r * KW_TY) * KW_DS + tx + c * KW_TX] = acc[r * KW_RJ + c]
+        barrier()
+        if owner:
+            var jn = KW_TJ if nr - j0 > KW_TJ else nr - j0
+            for r in range(jn):
+                var j = j0 + r
+                if j == i:
+                    continue
+                var dv = dist_s[tid * KW_DS + r]
+                if filled == k and not ts_knn_beats(dv, j, ld, li):
+                    continue
+                filled = ts_knn_offer(dv, j, base, k, filled, nn_d, nn_i)
+                if filled == k:
+                    ld = nn_d.unsafe_load(base + k - 1)
+                    li = Int(nn_i.unsafe_load(base + k - 1))
+        barrier()
+        j0 += KW_TJ
+
+
 def knn_enqueue(
     ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], n: Int, d: Int, nn: Int,
     mut dnd: DeviceBuffer[DType.float32], mut dni: DeviceBuffer[DType.int32],
@@ -119,5 +224,10 @@ def knn_enqueue(
         ctx.enqueue_function[knn_tiled_kernel[64]](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
                                                     dni.unsafe_ptr(), grid_dim=blocks, block_dim=KTB)
     else:
+        comptime if KNN_WIDE:
+            ctx.enqueue_function[knn_wide_kernel](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
+                                                  dni.unsafe_ptr(), grid_dim=(n + KW_TI - 1) // KW_TI,
+                                                  block_dim=(KW_TX, KW_TY, 1))
+            return
         ctx.enqueue_function[knn_cell_kernel](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn), dnd.unsafe_ptr(),
                                               dni.unsafe_ptr(), grid_dim=(n + TPB - 1) // TPB, block_dim=TPB)

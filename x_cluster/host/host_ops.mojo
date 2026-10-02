@@ -21,6 +21,7 @@ from std.memory import bitcast, memcpy
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_div, identical_mul
+from x_cluster.minibatch_cells import mb_center_update
 from cluster.host.host_cells import ftz_v, host_cells, mul_v
 from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 
@@ -402,6 +403,31 @@ struct HostOps(ClusterOps):
             labels.append(Int32(lab[t]))
         return r.inertia
 
+    def gather_rows(mut self, src: Int, d: Int, idx: Int, m: Int, dst: Int) raises:
+        var ps = self._fp(src)
+        var pi = self._ip(idx)
+        var pd = self._fp(dst)
+        for t in range(m):
+            var r = Int(pi[t])
+            for f in range(d):
+                pd[t * d + f] = ps[r * d + f]
+
+    def kmeans_rows(
+        mut self, sub: Int, x: List[Float32], rows: List[Int], d: Int, k: Int, max_iter: Int,
+        tol: Float64, seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32],
+        mut labels: List[Int32],
+    ) raises -> Float64:
+        var g = List[Float32](length=len(rows) * d, fill=Float32(0))
+        for t in range(len(rows)):
+            memcpy(dest=g.unsafe_ptr() + t * d, src=x.unsafe_ptr() + rows[t] * d, count=d)
+        return self.kmeans(g, len(rows), d, k, max_iter, tol, seed, n_init, init, centers, labels)
+
+    def shrink(mut self, slot: Int) raises:
+        self.f[slot] = List[Float32](length=1, fill=Float32(0))
+
+    def empty(mut self, n: Int) raises -> Int:
+        return self.zeros(n)
+
     def gauss_q(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
         var px = self._fp(x)
         var pm = self._fp(means)
@@ -553,6 +579,17 @@ struct HostOps(ClusterOps):
     def alloc(mut self, n: Int) raises -> Int:
         return self.zeros(n)
 
+    def agglo_on_device(self) -> Bool:
+        return False
+
+    def agglo_mirror(mut self, x: Int, n: Int, dst: Int) raises:
+        raise Error("x_cluster: agglo_mirror is the GPU column's (the host column runs agglo_tree's loop)")
+
+    def agglo_merge(
+        mut self, dm: Int, n: Int, linkage: Int, n_merges: Int, mut children: List[Int32], mut dist: List[Float32]
+    ) raises:
+        raise Error("x_cluster: agglo_merge is the GPU column's (the host column runs agglo_tree's loop)")
+
     def estep(
         mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
     ) raises:
@@ -646,3 +683,20 @@ struct HostOps(ClusterOps):
             var ri = Int(pw[i])
             for j in range(nb):
                 po[i * nb + j] = sq_dist_rows(pa, ri, pb, j, d)
+
+    def set_i(mut self, slot: Int, v: List[Int32]) raises:
+        if len(v) > len(self.i[slot]):
+            raise Error("x_cluster host: set_i of " + String(len(v)) + " values into a slot of " + String(len(self.i[slot])))
+        memcpy(dest=self._ip(slot), src=v.unsafe_ptr(), count=len(v))
+
+    def mb_update(mut self, b: Int, batch: Int, labels: Int, c: Int, w: Int, k: Int, d: Int) raises:
+        var pb = self._fp(b)
+        var pl = self._ip(labels)
+        var pc = self._fp(c)
+        var pw = self._fp(w)
+        for j in range(k):
+            mb_center_update(pb, batch, pl, pc, pw, j, d)
+
+    def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
+        self.gather_rows(src, d, idx, m, dst)
+        self.nearest(dst, m, c, k, d, labels, dist)

@@ -17,7 +17,6 @@ thread for the responsibilities, a column per thread for the availabilities,
 every fold ascending, the lowest index on an argmax tie) and one for the
 exemplar flags; the convergence window, the exemplar refinement and the
 labels are the reference's host logic from one source."""
-from std.os import getenv
 from std.sys.compile import is_defined
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
@@ -35,22 +34,23 @@ comptime AP_EXACT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEAR
 comptime AP_SPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_SPLIT"]()
 
 # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple, the
-# GPU binding only, three host-read env switches that default OFF:
-# `MOJOLEARN_AFFINITY_FAST_LOOP=1`: the iteration loop on the device,
-#   AP_LOOP_BATCH iterations per host wait, the convergence window and its
-#   counts kept there (`ops.ap_loop`, device_ops.mojo). Cause: `ops.get_i(e_s,
-#   n)` below drained the stream and crossed to the host EVERY iteration (up
-#   to max_iter = 200 waits of a few ms each on Metal). Same bits, same n_iter.
-# `MOJOLEARN_AFFINITY_FAST_SPLIT=1`: `ops.ap_a_split` (the availability
-#   column sums over row slices on every block of the grid) without the
-#   build define AP_SPLIT. Cause: `ap_a` is ONE THREAD PER COLUMN, n threads
-#   walking n rows twice. Bits move (the fold order); the paired quality check.
-# `MOJOLEARN_AFFINITY_FAST_EXACT=1`: the driver half of AP_EXACT without
-#   the build define: the median by `kth_flat` over the grid from the
-#   device's distances (no second n^2 host copy, no n^2 upload), the two
-#   final diagonals gathered on the device (not two n^2 readbacks), the
-#   equal-similarities scan stopped at its first difference. Same values.
-comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE
+# GPU binding only, one build define that defaults OFF:
+# `-D MOJOLEARN_AFFINITY_FAST_LOOP=1` (AP_FAST_LOOP): the iteration loop on
+#   the device, AP_LOOP_BATCH iterations per host wait, the convergence
+#   window and its counts kept there (`ops.ap_loop`, device_ops.mojo). Cause:
+#   `ops.get_i(e_s, n)` below drained the stream and crossed to the host
+#   EVERY iteration (up to max_iter = 200 waits of a few ms each on Metal).
+#   Same bits, same n_iter.
+# The lane's two other arms are main's own opt-ins above: `-D
+# MOJOLEARN_AP_SPLIT=1` (`ops.ap_a_split`, the availability column sums over
+# row slices on every block of the grid; bits move, the paired quality
+# check) and `-D MOJOLEARN_AP_EXACT=1` (the median by `kth_flat` over the
+# grid from the device's distances, no second n^2 host copy and no n^2
+# upload; the two final diagonals gathered on the device; the
+# equal-similarities scan stopped at its first difference; the same values).
+# Their host-read env twins (MOJOLEARN_AFFINITY_FAST_SPLIT / _EXACT) are gone.
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE
+comptime AP_FAST_LOOP = XC2_FAST and is_defined["MOJOLEARN_AFFINITY_FAST_LOOP"]()
 comptime AP_LOOP_BATCH = 16
 
 
@@ -70,13 +70,8 @@ def affinity_fit[O: ClusterOps](
     comptime if AP_EXACT:
         fast_exact = ops.fast_device()
     var dev_loop = False
-    var env_split = False
-    comptime if XC2_FAST:
-        if ops.fast_device():
-            if String(getenv("MOJOLEARN_AFFINITY_FAST_EXACT")) == "1":
-                fast_exact = True
-            dev_loop = String(getenv("MOJOLEARN_AFFINITY_FAST_LOOP")) == "1"
-            env_split = String(getenv("MOJOLEARN_AFFINITY_FAST_SPLIT")) == "1"
+    comptime if AP_FAST_LOOP:
+        dev_loop = ops.fast_device()
     var dm_slot = -1
     if precomputed:
         s_m = x.copy()
@@ -189,7 +184,7 @@ def affinity_fit[O: ClusterOps](
     var e = List[Int32]()
     var it = 0
     var never_converged = True
-    var split = env_split
+    var split = False
     comptime if AP_SPLIT:
         split = ops.fast_device()
     if dev_loop:

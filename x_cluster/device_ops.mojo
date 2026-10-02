@@ -5,7 +5,7 @@ GPU. Each primitive is one kernel whose thread `t` calls the `x_cluster/
 bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
@@ -19,6 +19,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 from x_cluster.bodies import (
     FPtr,
+    sq_dist_rows,
     IPtr,
     cov_cell,
     chain_add,
@@ -44,14 +45,20 @@ from x_cluster.bodies import (
     sqrt_cell,
     tree_descend,
     ward_cell,
+    lance_williams,
+    LINK_WARD,
 )
-from cluster.estimator import kmeans_fit
+from cluster.estimator import kmeans_fit, kmeans_fit_rows
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_oracle import OP_NN, OP_TN
 from mixture.checks.estep import mahal_kernel
 from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
 from x_cluster.ops import ClusterOps
+from std.gpu import WARP_SIZE
+from std.gpu.primitives.warp import shuffle_idx
+from x_cluster.minibatch_cells import mb_center_wsum, mb_center_word
+from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 
 comptime TPB = 128
 
@@ -65,6 +72,81 @@ def _sqdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):
     var t = _tid()
     if t < Int(na) * Int(nb):
         sqdist_cell(a, Int(na), b, Int(nb), Int(d), dst, t)
+
+
+
+def _gather_rows_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, dst: FPtr):
+    """Block t copies row idx[t] (no division per element)."""
+    var t = Int(block_idx.x)
+    var dd = Int(d)
+    if t < Int(m):
+        var s0 = Int(idx[t]) * dd
+        var d0 = t * dd
+        var f = Int(thread_idx.x)
+        while f < dd:
+            dst[d0 + f] = src[s0 + f]
+            f += Int(block_dim.x)
+
+
+# lane/neural-pass112 (2026-10-02): the pairwise squared distances in tiles.
+# `_sqdist_kernel` is one thread per cell, each reading its two rows from
+# device memory (M4, istella 10K x 220 self-distances for MeanShift's
+# bandwidth: 0.63 s). Here a block owns SQT_B x SQT_B cells and stages
+# SQT_K features of its SQT_B rows of a and of b in threadgroup memory;
+# each thread folds SQT_R x SQT_R cells, every cell its own chain over the
+# features ascending with `sq_dist_rows`' statements (the staged words are
+# already flushed: ftz is idempotent), so every word is the same.
+# `MOJOLEARN_XC_SQDIST_TILED=0` restores the per-cell kernel.
+comptime SQT_R = 4
+comptime SQT_TD = 16
+comptime SQT_B = SQT_R * SQT_TD
+comptime SQT_K = 16
+comptime SQT_BYTES = 2 * SQT_B * SQT_K * 4
+comptime SQDIST_TILED = lib_smem_page_fits_for[TARGET_COLUMN, SQT_BYTES]()
+
+
+def _sqdist_tiled_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):
+    var NA = Int(na)
+    var NB = Int(nb)
+    var D = Int(d)
+    var tid = Int(thread_idx.x)
+    var ti = tid // SQT_TD
+    var tj = tid % SQT_TD
+    var i0 = Int(block_idx.y) * SQT_B
+    var j0 = Int(block_idx.x) * SQT_B
+    var sa = stack_allocation[SQT_B * SQT_K, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sb = stack_allocation[SQT_B * SQT_K, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var acc = SIMD[DType.float32, SQT_R * SQT_R](0)
+    var f0 = 0
+    while f0 < D:
+        var kc = min(SQT_K, D - f0)
+        barrier()
+        for u in range(tid, SQT_B * SQT_K, SQT_TD * SQT_TD):
+            var r = u // SQT_K
+            var k = u % SQT_K
+            var ra = i0 + r
+            var rb = j0 + r
+            var ok = k < kc
+            sa[u] = ftz(a[min(ra, NA - 1) * D + f0 + min(k, kc - 1)]) if (ok and ra < NA) else Float32(0)
+            sb[u] = ftz(b[min(rb, NB - 1) * D + f0 + min(k, kc - 1)]) if (ok and rb < NB) else Float32(0)
+        barrier()
+        for k in range(kc):
+            var av = SIMD[DType.float32, SQT_R]()
+            var bv = SIMD[DType.float32, SQT_R]()
+            comptime for q in range(SQT_R):
+                av[q] = sa[(ti + q * SQT_TD) * SQT_K + k]
+                bv[q] = sb[(tj + q * SQT_TD) * SQT_K + k]
+            comptime for qi in range(SQT_R):
+                comptime for qj in range(SQT_R):
+                    var t = ftz(av[qi] - bv[qj])
+                    acc[qi * SQT_R + qj] = ftz(acc[qi * SQT_R + qj] + ftz(identical_mul(t, t)))
+        f0 += kc
+    comptime for qi in range(SQT_R):
+        comptime for qj in range(SQT_R):
+            var i = i0 + ti + qi * SQT_TD
+            var j = j0 + tj + qj * SQT_TD
+            if i < NA and j < NB:
+                dst[i * NB + j] = acc[qi * SQT_R + qj]
 
 
 def _nearest_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, labels: IPtr, dist: FPtr):
@@ -965,7 +1047,12 @@ def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32,
 # exemplar arithmetic is the plain kernels', cell for cell: the same bits
 # and the same n_iter; only the waits go. Expected: the per-iteration host
 # wait (the dominant cost of a 5,000-row iteration on Metal) once per batch.
-comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE
+comptime BGMM_FAST_MOMENTS_GEMM = XC2_FAST and is_defined["MOJOLEARN_BGMM_FAST_MOMENTS_GEMM"]()
+comptime BGMM_FAST_MAHAL_GEMM = XC2_FAST and is_defined["MOJOLEARN_BGMM_FAST_MAHAL_GEMM"]()
+comptime AP_FAST_LOOP = XC2_FAST and is_defined["MOJOLEARN_AFFINITY_FAST_LOOP"]()
+comptime BISECT_FAST_RESIDENT = XC2_FAST and is_defined["MOJOLEARN_BISECT_FAST_RESIDENT"]()
+comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST and is_defined["MOJOLEARN_OPTICS_FAST_DEVICE_ORDER"]()
 
 
 def _apl_r_kernel(
@@ -1161,6 +1248,211 @@ def _ward_nn_kernel(c: FPtr, sz: FPtr, l: Int32, d: Int32, nn: IPtr, md: FPtr):
 @always_inline
 def _grid(n: Int) -> Int:
     return (n + TPB - 1) // TPB if n > 0 else 1
+
+
+# ---------------------------------------------------------------------------
+# THE AGGLOMERATIVE MERGE LOOP ON THE DEVICE (lane hr2-mds-agglo, 2026-10-02).
+# `agglo.agglo_tree`'s unconstrained loop, every step as parallel kernels on
+# the resident n x n matrix: no host step between two merges. Every pick is a
+# min of `_agg_key` (the value's order in the high word, the index in the low
+# word), so the reduction's shape cannot move it: the lowest value, the
+# lowest index on a tie, exactly the host loop's strict `<` scans.
+#   state ints:   [0] a  [1] b  [2] rescan list length  [3] error
+#   state floats: [0] dab  [1] size a  [2] size b
+comptime AGG_TPB = 256
+comptime AGG_PER = AGG_TPB * 4
+comptime AGG_RESCAN_BLOCKS = 128
+comptime AGG_NONE = UInt64(0xFFFFFFFFFFFFFFFF)
+
+
+@always_inline
+def _agg_key(v: Float32, k: Int) -> UInt64:
+    """Ascending in v (-0.0 folded onto +0.0, which `<` treats as equal),
+    then ascending in k."""
+    var b = bitcast[DType.uint32](v)
+    if b == UInt32(0x80000000):
+        b = UInt32(0)
+    var o = (b ^ UInt32(0x80000000)) if (b & UInt32(0x80000000)) == UInt32(0) else ~b
+    return (UInt64(o) << 32) | UInt64(UInt32(k))
+
+
+@always_inline
+def _agg_block_min(red: UnsafePointer[UInt64, MutUntrackedOrigin, address_space=AddressSpace.SHARED], mine: UInt64) -> UInt64:
+    var tid = Int(thread_idx.x)
+    red[tid] = mine
+    barrier()
+    var off = AGG_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = min(red[tid], red[tid + off])
+        barrier()
+        off //= 2
+    var r = red[0]
+    barrier()
+    return r
+
+
+def _agg_init_kernel(live: IPtr, nn: IPtr, md: FPtr, sz: FPtr, node: IPtr, lst: IPtr, st: IPtr, n: Int32):
+    var i = _tid()
+    if i < Int(n):
+        live[i] = 1
+        nn[i] = -1
+        md[i] = Float32.MAX * Float32(2)
+        sz[i] = Float32(1)
+        node[i] = Int32(i)
+        lst[i] = Int32(i)
+    if i == 0:
+        st[0] = 0
+        st[1] = 0
+        st[2] = n
+
+
+def _agg_mirror_kernel(x: FPtr, dm: FPtr, n: Int32, bad: IPtr):
+    var t = _tid()
+    var N = Int(n)
+    if t < N * N:
+        var i = t // N
+        var j = t % N
+        if i == j:
+            dm[t] = Float32(0)
+        else:
+            var lo = i if i < j else j
+            var hi = j if i < j else i
+            var v = x[lo * N + hi]
+            if i < j and (not (v >= Float32(0)) or v == Float32.MAX * Float32(2)):
+                bad[0] = 1
+            dm[t] = v
+
+
+def _agg_argmin_part_kernel(md: FPtr, nn: IPtr, live: IPtr, n: Int32, part: MutPointer[UInt64, MutAnyOrigin], st: IPtr):
+    """part[block] = the min key of (md[i], i) over the block's live rows
+    with a partner."""
+    var red = stack_allocation[AGG_TPB, UInt64, address_space = AddressSpace.SHARED]()
+    var mine = AGG_NONE
+    var base = Int(block_idx.x) * AGG_PER
+    var end = min(base + AGG_PER, Int(n))
+    for i in range(base + Int(thread_idx.x), end, AGG_TPB):
+        if live[i] != 0 and nn[i] >= 0:
+            mine = min(mine, _agg_key(md[i], i))
+    var r = _agg_block_min(red, mine)
+    if thread_idx.x == 0:
+        part[Int(block_idx.x)] = r
+
+
+@always_inline
+def _agg_pick(part: MutPointer[UInt64, MutAnyOrigin], nb: Int) -> UInt64:
+    """The step's pick from the argmin partials (a few per thousand rows),
+    read by every thread that needs it."""
+    var r = AGG_NONE
+    for q in range(nb):
+        r = min(r, part[q])
+    return r
+
+
+def _agg_lw_kernel(
+    part: MutPointer[UInt64, MutAnyOrigin], nb: Int32, dm: FPtr, nn: IPtr, live: IPtr, sz: FPtr, n: Int32,
+    linkage: Int32, st: IPtr, stf: FPtr,
+):
+    """The merge (a, b = nn[a]) from the partials, then row and column a of
+    the matrix: the Lance-Williams value of (a u b) to every live k other
+    than a and b. Thread 0 records a, b, dab and the two sizes for the
+    kernels after it."""
+    var k = _tid()
+    var N = Int(n)
+    if st[3] != 0:
+        return
+    var r = _agg_pick(part, Int(nb))
+    if r == AGG_NONE:
+        if k == 0:
+            st[3] = 1
+        return
+    var a = Int(UInt32(r & UInt64(0xFFFFFFFF)))
+    var b = Int(nn[a])
+    var dab = dm[a * N + b]
+    var na = sz[a]
+    var nbs = sz[b]
+    if k == 0:
+        st[0] = Int32(a)
+        st[1] = Int32(b)
+        st[2] = 0
+        stf[0] = dab
+        stf[1] = na
+        stf[2] = nbs
+    if k >= N or k == a or k == b or live[k] == 0:
+        return
+    var v = lance_williams(Int(linkage), dm[a * N + k], dm[b * N + k], dab, na, nbs, sz[k], True, True)
+    dm[a * N + k] = v
+    dm[k * N + a] = v
+
+
+def _agg_flag_kernel(
+    dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, sz: FPtr, node: IPtr, n: Int32, step: Int32, linkage: Int32,
+    ch: IPtr, dist: FPtr, st: IPtr, stf: FPtr, lst: IPtr,
+):
+    """Thread a books the merge (the children pair and value; b dies; a
+    takes the merged size and node id n + step) and joins the rescan list
+    with every live row below b whose partner was a or b; a live row below
+    a otherwise takes a when it is nearer (or as near with a lower index)."""
+    var i = _tid()
+    var N = Int(n)
+    if i >= N or st[3] != 0:
+        return
+    var a = Int(st[0])
+    var b = Int(st[1])
+    var go = False
+    if i == a:
+        go = True
+        var dab = stf[0]
+        var x = node[a]
+        var y = node[b]
+        var s = Int(step)
+        ch[2 * s] = x if x < y else y
+        ch[2 * s + 1] = y if x < y else x
+        dist[s] = identical_sqrt(dab) if Int(linkage) == LINK_WARD else dab
+        live[b] = 0
+        nn[b] = -1
+        sz[a] = ftz(stf[1] + stf[2])
+        node[a] = Int32(N + s)
+    elif i < b and live[i] != 0:
+        var q = Int(nn[i])
+        if q == a or q == b:
+            go = True
+        elif i < a:
+            var v = dm[i * N + a]
+            if q < 0 or v < md[i] or (v == md[i] and a < q):
+                nn[i] = Int32(a)
+                md[i] = v
+    if go:
+        var at = Atomic.fetch_add(st.unsafe_offset(2), Int32(1))
+        lst[Int(at)] = Int32(i)
+
+
+def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: IPtr, lst: IPtr):
+    """nn[i], md[i] for each listed row: the live column j > i at the lowest
+    value, the lowest j on a tie (-1, +inf when none). One block a row."""
+    var red = stack_allocation[AGG_TPB, UInt64, address_space = AddressSpace.SHARED]()
+    var N = Int(n)
+    var cnt = Int(st[2])
+    if st[3] != 0:
+        cnt = 0
+    var e = Int(block_idx.x)
+    while e < cnt:
+        var i = Int(lst[e])
+        var mine = AGG_NONE
+        for j in range(i + 1 + Int(thread_idx.x), N, AGG_TPB):
+            if live[j] != 0:
+                mine = min(mine, _agg_key(dm[i * N + j], j))
+        var r = _agg_block_min(red, mine)
+        if thread_idx.x == 0:
+            if r == AGG_NONE:
+                nn[i] = -1
+                md[i] = Float32.MAX * Float32(2)
+            else:
+                var j = Int(UInt32(r & UInt64(0xFFFFFFFF)))
+                nn[i] = Int32(j)
+                md[i] = dm[i * N + j]
+        e += Int(grid_dim.x)
+
 
 
 struct _ClusterContext(Defaultable, Movable):
@@ -1416,6 +1708,14 @@ struct DeviceOps(ClusterOps):
 
     def sqdist(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
         self._ph0()
+        comptime if SQDIST_TILED:
+            if na > 0 and nb > 0 and d > 0 and getenv("MOJOLEARN_XC_SQDIST_TILED") != "0":
+                self.ctx.enqueue_function[_sqdist_tiled_kernel](
+                    self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
+                    grid_dim=((nb + SQT_B - 1) // SQT_B, (na + SQT_B - 1) // SQT_B), block_dim=SQT_TD * SQT_TD,
+                )
+                self._ph1("sqdist")
+                return
         self.ctx.enqueue_function[_sqdist_kernel](
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
             grid_dim=_grid(na * nb), block_dim=TPB,
@@ -1551,6 +1851,47 @@ struct DeviceOps(ClusterOps):
         self._ph1("kmeans")
         return r.inertia
 
+    def gather_rows(mut self, src: Int, d: Int, idx: Int, m: Int, dst: Int) raises:
+        self._ph0()
+        # a block a row, as wide as the row (lane/neural-pass133: 4096 blocks
+        # of TPB threads for 15-word taxi rows cost the minibatch step more
+        # than its assignment)
+        self.ctx.enqueue_function[_gather_rows_kernel](
+            self._fp(src), Int32(d), self._ip(idx), Int32(m), self._fp(dst),
+            grid_dim=max(m, 1), block_dim=min(TPB, max(32, (d + 31) // 32 * 32)),
+        )
+        self._ph1("gather_rows")
+
+    def kmeans_rows(
+        mut self, sub: Int, x: List[Float32], rows: List[Int], d: Int, k: Int, max_iter: Int,
+        tol: Float64, seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32],
+        mut labels: List[Int32],
+    ) raises -> Float64:
+        self._ph0()
+        var n = len(rows)
+        centers = List[Float32](length=k * d, fill=Float32(0))
+        var lab = List[UInt32](length=n, fill=UInt32(0))
+        var r = kmeans_fit_rows(
+            self.ctx, self.f[sub], MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x.unsafe_ptr())), rows, d, k,
+            centers.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            max_iter=max_iter, tol=tol, seed=seed, n_init=n_init, init=init, metric=METRIC_L2_EXPANDED,
+        )
+        _ = x[0]
+        _ = rows[0]
+        labels = List[Int32](capacity=n)
+        for t in range(n):
+            labels.append(Int32(lab[t]))
+        self._ph1("kmeans")
+        return r.inertia
+
+    def shrink(mut self, slot: Int) raises:
+        self.f[slot] = self.ctx.enqueue_create_buffer[DType.float32](1)
+
+    def empty(mut self, n: Int) raises -> Int:
+        self.f.append(self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1))
+        return len(self.f) - 1
+
     def gauss_q(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
         self._ph0()
         self.ctx.enqueue_function[_gauss_q_kernel](
@@ -1588,7 +1929,8 @@ struct DeviceOps(ClusterOps):
             self._ph1("moments")
             return
         # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple,
-        # env `MOJOLEARN_BGMM_FAST_MOMENTS_GEMM=1`: past MOM_MAX_D features
+        # `-D MOJOLEARN_BGMM_FAST_MOMENTS_GEMM=1` (BGMM_FAST_MOMENTS_GEMM):
+        # past MOM_MAX_D features
         # (Istella-S: 200) FAST fell through every grid path below to the
         # three ONE-THREAD-PER-CELL kernels (`_nk_kernel`, `_xk_kernel`,
         # `_cov_kernel`: kc d^2 threads each walking all n rows, n kc d^2 =
@@ -1596,8 +1938,8 @@ struct DeviceOps(ClusterOps):
         # IDENTICAL column's `_moments_gemm` (resp^T X and the kc centered
         # Grams through `identical_gemm_into`, whose FAST arm is the vendor
         # GEMM) is taken instead: the same addends, the GEMM's fold order.
-        comptime if XC2_FAST:
-            if d > MOM_MAX_D and getenv("MOJOLEARN_BGMM_FAST_MOMENTS_GEMM") == "1":
+        comptime if BGMM_FAST_MOMENTS_GEMM:
+            if d > MOM_MAX_D:
                 self._moments_gemm(resp, x, n, d, kc, reg, nk, means, cov)
                 self._ph1("moments")
                 return
@@ -1826,6 +2168,108 @@ struct DeviceOps(ClusterOps):
             )
         self._ph1("dot_groups")
 
+    def agglo_on_device(self) -> Bool:
+        return True
+
+    def agglo_mirror(mut self, x: Int, n: Int, dst: Int) raises:
+        if n * n > 2147483647:
+            raise Error("AgglomerativeClustering: n * n exceeds the Int32 index bound")
+        self._ph0()
+        var bad = self.ctx.enqueue_create_buffer[DType.int32](1)
+        self.ctx.enqueue_memset(bad, Int32(0))
+        var pbad = bad.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        self.ctx.enqueue_function[_agg_mirror_kernel](
+            self._fp(x), self._fp(dst), Int32(n), pbad, grid_dim=_grid(n * n), block_dim=TPB,
+        )
+        var h = List[Int32](length=1, fill=Int32(0))
+        self.ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=bad)
+        self._sync()
+        _ = bad^
+        self._ph1("agglo_mirror")
+        if h[0] != 0:
+            raise Error("AgglomerativeClustering: a precomputed distance matrix must be finite and non-negative")
+
+    def agglo_merge(
+        mut self, dm: Int, n: Int, linkage: Int, n_merges: Int, mut children: List[Int32], mut dist: List[Float32]
+    ) raises:
+        if n * n > 2147483647:
+            raise Error("AgglomerativeClustering: n * n exceeds the Int32 index bound")
+        self._ph0()
+        var ctx = self.ctx.copy()
+        var live = ctx.enqueue_create_buffer[DType.int32](n)
+        var nn = ctx.enqueue_create_buffer[DType.int32](n)
+        var node = ctx.enqueue_create_buffer[DType.int32](n)
+        var lst = ctx.enqueue_create_buffer[DType.int32](n)
+        var st = ctx.enqueue_create_buffer[DType.int32](4)
+        ctx.enqueue_memset(st, Int32(0))
+        var md = ctx.enqueue_create_buffer[DType.float32](n)
+        var sz = ctx.enqueue_create_buffer[DType.float32](n)
+        var stf = ctx.enqueue_create_buffer[DType.float32](3)
+        var nch = max(2 * n_merges, 1)
+        var ndv = max(n_merges, 1)
+        var ch = ctx.enqueue_create_buffer[DType.int32](nch)
+        var dv = ctx.enqueue_create_buffer[DType.float32](ndv)
+        var nb = (n + AGG_PER - 1) // AGG_PER
+        var part = ctx.enqueue_create_buffer[DType.uint64](nb)
+        var p_live = live.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_nn = nn.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_node = node.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_lst = lst.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_st = st.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_md = md.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_sz = sz.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_stf = stf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_ch = ch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_dv = dv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_part = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_dm = self._fp(dm)
+        var rb = n if n < AGG_RESCAN_BLOCKS else AGG_RESCAN_BLOCKS
+        ctx.enqueue_function[_agg_init_kernel](
+            p_live, p_nn, p_md, p_sz, p_node, p_lst, p_st, Int32(n), grid_dim=_grid(n), block_dim=TPB,
+        )
+        # every row's first nearest partner: the rescan of the full list
+        ctx.enqueue_function[_agg_rescan_kernel](
+            p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, grid_dim=rb, block_dim=AGG_TPB,
+        )
+        for step in range(n_merges):
+            ctx.enqueue_function[_agg_argmin_part_kernel](
+                p_md, p_nn, p_live, Int32(n), p_part, p_st, grid_dim=nb, block_dim=AGG_TPB,
+            )
+            ctx.enqueue_function[_agg_lw_kernel](
+                p_part, Int32(nb), p_dm, p_nn, p_live, p_sz, Int32(n), Int32(linkage), p_st, p_stf,
+                grid_dim=_grid(n), block_dim=TPB,
+            )
+            ctx.enqueue_function[_agg_flag_kernel](
+                p_dm, p_live, p_nn, p_md, p_sz, p_node, Int32(n), Int32(step), Int32(linkage), p_ch, p_dv,
+                p_st, p_stf, p_lst, grid_dim=_grid(n), block_dim=TPB,
+            )
+            ctx.enqueue_function[_agg_rescan_kernel](
+                p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, grid_dim=rb, block_dim=AGG_TPB,
+            )
+        var h_st = List[Int32](length=4, fill=Int32(0))
+        children = List[Int32](length=nch, fill=Int32(0))
+        dist = List[Float32](length=ndv, fill=Float32(0))
+        ctx.enqueue_copy(dst_ptr=h_st.unsafe_ptr(), src_buf=st)
+        ctx.enqueue_copy(dst_ptr=children.unsafe_ptr(), src_buf=ch)
+        ctx.enqueue_copy(dst_ptr=dist.unsafe_ptr(), src_buf=dv)
+        self._sync()
+        _ = live^
+        _ = nn^
+        _ = node^
+        _ = lst^
+        _ = st^
+        _ = md^
+        _ = sz^
+        _ = stf^
+        _ = ch^
+        _ = dv^
+        _ = part^
+        self._ph1("agglo_merge")
+        if h_st[3] != 0:
+            raise Error("AgglomerativeClustering: no connected pair is left to merge")
+        children.resize(2 * n_merges, Int32(0))
+        dist.resize(n_merges, Float32(0))
+
     def alloc(mut self, n: Int) raises -> Int:
         self._ph0()
         var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
@@ -1848,7 +2292,7 @@ struct DeviceOps(ClusterOps):
         ring: Int, cnt: Int, done_off: Int, split: Bool,
     ) raises:
         self._ph0()
-        comptime if XC2_FAST:
+        comptime if AP_FAST_LOOP:
             var pc = self._ip(cnt)
             var pd = pc + done_off
             var n_tiles = (n + APF_TPB - 1) // APF_TPB
@@ -1894,7 +2338,7 @@ struct DeviceOps(ClusterOps):
         mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
     ) raises:
         self._ph0()
-        comptime if XC2_FAST:
+        comptime if OPTICS_FAST_DEVICE_ORDER:
             self.ctx.enqueue_function[_optics_order_kernel](
                 self._fp(dm), self._fp(core), Int32(n), max_eps, self._ip(ordering), self._fp(reach), self._ip(pred),
                 self._ip(proc), grid_dim=1, block_dim=OPT_ORD_TPB,
@@ -1905,7 +2349,8 @@ struct DeviceOps(ClusterOps):
 
     def gauss_q_gemm(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
         """Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple,
-        env `MOJOLEARN_BGMM_FAST_MAHAL_GEMM=1` (read in x_cluster/bgmm.mojo):
+        `-D MOJOLEARN_BGMM_FAST_MAHAL_GEMM=1` (BGMM_FAST_MAHAL_GEMM, asked by
+        x_cluster/bgmm.mojo under the same define):
         the E-step's Mahalanobis squares as the plain GaussianMixture forms
         them (mixture/checks/estep.mojo, wrapped, not changed): per component
         y = X . P_k and murow = mu_k . P_k through `identical_gemm_into`
@@ -1916,7 +2361,7 @@ struct DeviceOps(ClusterOps):
         100,000 x 200 x 8, every P read from global memory). Bits move
         (product first, not the difference); the paired quality check."""
         self._ph0()
-        comptime if XC2_FAST:
+        comptime if BGMM_FAST_MAHAL_GEMM:
             var wsn = identical_gemm_workspace_max_floats(n, d, d)
             var w2 = identical_gemm_workspace_max_floats(1, d, d)
             if w2 > wsn:
@@ -1954,7 +2399,7 @@ struct DeviceOps(ClusterOps):
 
     def sqdist_rows(mut self, a: Int, rows: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
         self._ph0()
-        comptime if XC2_FAST:
+        comptime if BISECT_FAST_RESIDENT:
             self.ctx.enqueue_function[_sqdist_rows_kernel](
                 self._fp(a), self._ip(rows), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
                 grid_dim=_grid(na * nb), block_dim=TPB,
@@ -1962,3 +2407,167 @@ struct DeviceOps(ClusterOps):
         else:
             raise Error("x_cluster: sqdist_rows is the FAST Apple device path (MOJOLEARN_BISECT_FAST_RESIDENT)")
         self._ph1("sqdist_rows")
+
+    def set_i(mut self, slot: Int, v: List[Int32]) raises:
+        self._ph0()
+        var n = len(v)
+        if n == 0:
+            self._ph1("set_i")
+            return
+        var view = self.i[slot].create_sub_buffer[DType.int32](0, n)
+        self.pend_i.append(v.copy())
+        self.ctx.enqueue_copy(dst_buf=view, src_ptr=self.pend_i[len(self.pend_i) - 1].unsafe_ptr())
+        self._ph1("set_i")
+
+    def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[_mb_assign_kernel](
+            self._fp(src), Int32(d), self._ip(idx), Int32(m), self._fp(c), Int32(k), self._ip(labels),
+            self._fp(dist), self._fp(dst), grid_dim=_grid(m), block_dim=TPB,
+        )
+        self._ph1("mb_assign")
+
+    def mb_update(mut self, b: Int, batch: Int, labels: Int, c: Int, w: Int, k: Int, d: Int) raises:
+        self._ph0()
+        comptime if MB_BLOCK_FITS:
+            self.ctx.enqueue_function[_mb_centers_block_kernel](
+                self._fp(b), Int32(batch), self._ip(labels), self._fp(c), self._fp(w), Int32(d),
+                grid_dim=k, block_dim=MB_TPB,
+            )
+        else:
+            self.ctx.enqueue_function[_mb_centers_kernel](
+                self._fp(b), Int32(batch), self._ip(labels), self._fp(c), self._fp(w), Int32(k), Int32(d),
+                grid_dim=_grid(k * d), block_dim=TPB,
+            )
+            self.ctx.enqueue_function[_mb_counts_kernel](
+                Int32(batch), self._ip(labels), self._fp(w), Int32(k), grid_dim=_grid(k), block_dim=TPB,
+            )
+        self._ph1("mb_update")
+
+
+def _mb_centers_kernel(b: FPtr, batch: Int32, labels: IPtr, c: FPtr, w: FPtr, k: Int32, d: Int32):
+    """One thread a center word (lane/neural-pass133): `mb_center_word`; the
+    counts are left to `_mb_counts_kernel` (launched after, so every thread
+    reads the batch's starting count)."""
+    var q = _tid()
+    var dd = Int(d)
+    if q < Int(k) * dd:
+        var j = q // dd
+        var f = q - j * dd
+        var wsum = mb_center_wsum(labels, Int(batch), j)
+        if wsum > Float32(0):
+            c[q] = mb_center_word(b, Int(batch), labels, c[q], w[j], wsum, j, f, dd)
+
+
+def _mb_counts_kernel(batch: Int32, labels: IPtr, w: FPtr, k: Int32):
+    var j = _tid()
+    if j < Int(k):
+        var wsum = mb_center_wsum(labels, Int(batch), j)
+        if wsum > Float32(0):
+            w[j] = ftz(w[j] + wsum)
+
+
+#: The block form (one block a center, `_mb_centers_block_kernel`): each
+#: chunk of the batch compacted to the center's rows by a block scan in
+#: threadgroup memory, each thread a feature's chain over them in batch order;
+#: the count an integer sum (exact, so the host's `+ 1` chain's word below
+#: 2^24 rows). Behind its fits gate; the per-word kernels above otherwise.
+comptime MB_TPB = 256
+comptime MB_PF = 8
+comptime MB_BLOCK_FITS = lib_smem_page_fits_for[TARGET_COLUMN, 2 * MB_TPB * 4]()
+
+
+def _mb_centers_block_kernel(b: FPtr, batch: Int32, labels: IPtr, c: FPtr, w: FPtr, d: Int32):
+    """One block a center j: per chunk of MB_TPB batch rows, a block scan
+    compacts the chunk's rows of j in batch order into `sel`, then each
+    thread chains its feature over them; the count is the sum of the chunk
+    counts (exact). Thread 0 writes the count last: every thread read it
+    into `wj` before the first barrier."""
+    var j = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var nb = Int(batch)
+    var dd = Int(d)
+    var scan = stack_allocation[MB_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var sel = stack_allocation[MB_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var wj = w[j]
+    var total = 0
+    var f0 = 0
+    while f0 < dd:
+        var f = f0 + tid
+        var acc = Float32(0)
+        if f < dd:
+            acc = ftz(identical_mul(c[j * dd + f], wj))
+        var tot = 0
+        var t0 = 0
+        while t0 < nb:
+            var mine = 1 if (t0 + tid < nb and Int(labels[t0 + tid]) == j) else 0
+            # inclusive scan: within the warp by shuffles, then the warp
+            # totals (integers: any order gives the same counts)
+            var lane = tid % WARP_SIZE
+            var wid = tid // WARP_SIZE
+            var v = Int32(mine)
+            var off = 1
+            while off < WARP_SIZE:
+                var u = shuffle_idx(v, UInt32(max(lane - off, 0)))
+                if lane >= off:
+                    v += u
+                off *= 2
+            barrier()
+            if lane == WARP_SIZE - 1:
+                scan[wid] = v
+            barrier()
+            var base = Int32(0)
+            for q in range(wid):
+                base += scan[q]
+            var m = 0
+            for q in range(MB_TPB // WARP_SIZE):
+                m += Int(scan[q])
+            if mine == 1:
+                sel[Int(base + v) - 1] = Int32(tid)
+            barrier()
+            if f < dd:
+                # the loads of MB_PF rows issued before their adds (the adds
+                # stay in batch order): the chain no longer waits on each load
+                var q = 0
+                while q + MB_PF <= m:
+                    var v = SIMD[DType.float32, MB_PF]()
+                    comptime for u in range(MB_PF):
+                        v[u] = b[(t0 + Int(sel[q + u])) * dd + f]
+                    comptime for u in range(MB_PF):
+                        acc = ftz(acc + ftz(v[u]))
+                    q += MB_PF
+                while q < m:
+                    acc = ftz(acc + ftz(b[(t0 + Int(sel[q])) * dd + f]))
+                    q += 1
+            tot += m
+            t0 += MB_TPB
+        total = tot
+        if total > 0 and f < dd:
+            var alpha = ftz(identical_div(Float32(1), ftz(wj + Float32(total))))
+            c[j * dd + f] = ftz(identical_mul(acc, alpha))
+        f0 += MB_TPB
+    barrier()
+    if tid == 0 and total > 0:
+        w[j] = ftz(wj + Float32(total))
+
+
+def _mb_assign_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, c: FPtr, k: Int32, labels: IPtr, dist: FPtr,
+                      dst: FPtr):
+    """One thread a batch row t (lane/neural-pass133): copies row idx[t] of
+    `src` to row t of `dst`, then `nearest_row`'s loop on it (the same
+    `sq_dist_rows` words, the lowest index on a tie)."""
+    var t = _tid()
+    if t < Int(m):
+        var dd = Int(d)
+        var r = Int(idx[t])
+        for f in range(dd):
+            dst[t * dd + f] = src[r * dd + f]
+        var best = sq_dist_rows(dst, t, c, 0, dd)
+        var bi = 0
+        for j in range(1, Int(k)):
+            var v = sq_dist_rows(dst, t, c, j, dd)
+            if v < best:
+                best = v
+                bi = j
+        labels[t] = Int32(bi)
+        dist[t] = best

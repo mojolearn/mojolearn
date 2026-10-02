@@ -132,6 +132,8 @@ from gbdt.targets.kernel.pair_logit import (
 from gbdt.targets.kernel.yeti_rank import (
     YetiRankTargetBuffers,
     launch_yeti_rank_with,
+    launch_yeti_rank_estimation_from_search,
+    YETI_EST_REUSE_SEARCH,
 )
 from gbdt.data.permutation import TRandom
 from std.sys.compile import is_defined
@@ -346,6 +348,11 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: the seed of that call's task streams (`querywise_targets_impl.h:214`;
     #: the stream is the fit's per-tree draw, see `doc_parallel_boosting.mojo`)
     var yeti_rng: TRandom
+    #: `YETI_EST_REUSE_SEARCH` (FAST Apple): True until the cursor moves or
+    #: an evaluation runs, i.e. while the oracle sits at the tree's search
+    #: point and the search call's accumulators are still in the YetiRank
+    #: scratch (`gbdt/targets/kernel/yeti_rank.mojo`)
+    var yeti_at_search_point: Bool
     #: the DEFERRED weight sums (`make_bin_optimized_oracle(...,
     #: defer_weights=True)`): the per-leaf weight fold's host copy, read into
     #: `weights_cpu` by `settle_weights` after the caller's next drain. None
@@ -430,6 +437,17 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         self.times.begin(self.ctx)
         # `TVector<float> newPoint = MakeEstimationResult(point);` (`:43`)
         var new_point = self.make_estimation_result(point)
+        # `YETI_EST_REUSE_SEARCH`: a move that shifts any component leaves
+        # the YetiRank search point (the walker's `MoveTo(startPoint)` onto
+        # the zero point it already holds shifts nothing and keeps it)
+        if self.yeti_at_search_point:
+            if len(self.current_point) != len(new_point):
+                self.yeti_at_search_point = False
+            else:
+                for i in range(len(new_point)):
+                    if new_point[i] != self.current_point[i]:
+                        self.yeti_at_search_point = False
+                        break
 
         # DEVIATION 2030, the defensive corner: two `move_to` calls with
         # no evaluation between them (the walker never does this -- its
@@ -571,14 +589,27 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             # the point read back to row order through `query.inverse`
             # and the der/der2 planes written at each row's bin position.
             if self.yeti.__bool__():
-                # YetiRank: one `NextUniformL` per evaluation seeds the
-                # call's task streams (`querywise_targets_impl.h:213-229`)
-                launch_yeti_rank_with[True](
-                    self.ctx, self.yeti.value(), self.d_cursor, True,
-                    self.yeti_rng.next_uniform_l(),
-                    self.d_eval_stats, self.d_fv, True,
-                    self.d_mag_dummy, False,
-                )
+                var reuse = False
+                comptime if YETI_EST_REUSE_SEARCH:
+                    reuse = self.yeti_at_search_point
+                self.yeti_at_search_point = False
+                if reuse:
+                    # FAST Apple: the search call's derivatives at this same
+                    # point, scattered to bin order (`YETI_EST_REUSE_SEARCH`)
+                    launch_yeti_rank_estimation_from_search(
+                        self.ctx, self.yeti.value(),
+                        self.d_eval_stats, self.d_fv, True,
+                        self.d_mag_dummy, False,
+                    )
+                else:
+                    # YetiRank: one `NextUniformL` per evaluation seeds the
+                    # call's task streams (`querywise_targets_impl.h:213-229`)
+                    launch_yeti_rank_with[True](
+                        self.ctx, self.yeti.value(), self.d_cursor, True,
+                        self.yeti_rng.next_uniform_l(),
+                        self.d_eval_stats, self.d_fv, True,
+                        self.d_mag_dummy, False,
+                    )
             elif self.pairs.__bool__():
                 launch_pair_logit_with[True, False](
                     self.ctx, self.pairs.value(), self.d_cursor, True,
@@ -1962,5 +1993,6 @@ def make_bin_optimized_oracle(
         fv_blocks,
         yeti^,
         TRandom(yeti_seed),
+        True,  # yeti_at_search_point: no move, no evaluation yet
         h_weight_stats^,
     )

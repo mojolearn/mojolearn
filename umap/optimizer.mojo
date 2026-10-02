@@ -7,7 +7,6 @@ from checks.numerics import identical_pow64
 from std.math import isfinite
 from std.memory import bitcast
 from max.gpu.host import DeviceContext
-from checks.kernel_matrix import TARGET_COLUMN, umap_device_optimizer_for
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from umap.optimizer_fast import optimize_layout_fast
 from umap.optimizer_identical_device import optimize_dense_layout_identical_device
@@ -220,16 +219,10 @@ def optimize_layout(
     seed: UInt64 = UInt64(0),
 ) raises -> List[Float32]:
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        comptime if umap_device_optimizer_for[TARGET_COLUMN, True]():
-            return optimize_layout_identical_on_device(
-                ctx, initial_embedding, weights, n_samples, n_components,
-                n_epochs, initial_learning_rate, negative_sample_rate,
-                repulsion_strength, a, b, seed,
-            )
-        return optimize_layout_identical(
-            initial_embedding, weights, n_samples, n_components, n_epochs,
-            initial_learning_rate, negative_sample_rate, repulsion_strength,
-            a, b, seed,
+        return optimize_layout_identical_on_device(
+            ctx, initial_embedding, weights, n_samples, n_components,
+            n_epochs, initial_learning_rate, negative_sample_rate,
+            repulsion_strength, a, b, seed,
         )
     # Kernel launch and graph-upload overhead dominates small layouts on the
     # currently supported devices.  Keep FAST on the serial reference below

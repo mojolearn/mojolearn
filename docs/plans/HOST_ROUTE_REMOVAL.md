@@ -8,7 +8,7 @@ On a GPU install every fit, transform and predict runs on the GPU at every data 
 
 CPU-only installs keep their host bindings. Only the routing from GPU code to the host goes.
 
-The push hook and the GitHub check `no-host-routes` (tools/hooks/no_host_routes.py) stop any route from coming back. Deleting a route always passes them. Editing a route line never does.
+The push hook and the GitHub check `no-host-routes` (tools/hooks/no_host_routes.py --tree) scan every file a GPU install runs and fail on CPU work in GPU code that is not in tools/hooks/host_routes_baseline.tsv, and on any baseline row that no longer matches. Deleting a route means deleting its rows (`python3 tools/hooks/no_host_routes.py --prune-baseline`). The baseline never grows.
 
 ## Rules every lane follows
 
@@ -36,7 +36,7 @@ These come from Andrew's standing rules in memory; read the full rules there.
 
 ## Wave 0 (orchestrator, before any lane starts)
 
-1. **Land the in-flight PRs**, all of them. As each pinned PR lands, delete its entry from `_IN_FLIGHT` in tools/hooks/no_host_routes.py. The pinned PRs are #77, #85, #86, #106, #116 and #126.
+1. **Land the in-flight PRs**, all of them. Their host lines are `inflight@<head>` rows in the baseline (they replaced `_IN_FLIGHT`). Before a pinned PR merges, it merges main and runs `--prune-baseline`, which turns its rows into debt. The pinned PRs are #85, #86, #106, #116 and #126 (#77 landed).
 
    These in-flight PRs already cover route work:
 
@@ -96,11 +96,11 @@ The in-flight PRs own GLM, Isotonic, SGD and connected components. If any of the
 
    Record the time against the opponents from the board.
 4. **If the stage timing still shows waste** (launch-bound, one block, serial chains), send the subagent back with it. Never keep the route.
-5. **When it passes:** the subagent's final commit deletes the A/B define, the route, its env switch, its threshold, its host import and its route-only tests. Run the check (`python3 tools/hooks/no_host_routes.py $(git merge-base origin/main HEAD) HEAD`). Then the peer opens the PR and merges.
+5. **When it passes:** the subagent's final commit deletes the A/B define, the route, its env switch, its threshold, its host import and its route-only tests. Run the check (`python3 tools/hooks/no_host_routes.py --prune-baseline && python3 tools/hooks/no_host_routes.py --tree HEAD`). Then the peer opens the PR and merges.
 6. **Log it:** one line per lane in lane-pass-log-oct1 (PR, before/after on L40S and MI325X, digest).
 
 ## Done when
 
 - The Wave 0 grep, re-run on main, finds no routing from GPU code to the host.
-- `_IN_FLIGHT` in no_host_routes.py is empty, and the table is deleted.
+- tools/hooks/host_routes_baseline.tsv has no rows left, and the table is deleted.
 - Each lane's before/after numbers are in bench/results and R2.
