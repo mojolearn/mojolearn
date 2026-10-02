@@ -8,7 +8,9 @@ from std.ffi import _Global
 from std.os import getenv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
 from x_prep.dsort import sort_cols_device, sort_scratch_words
@@ -20,6 +22,7 @@ from x_prep.fastred import (
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.device_store import DeviceStore
+from x_linear.fast_gram import fast_sym_gram_into, fg_part_words
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
 #: (the host's argument, x_prep/host/mutual_info.mojo: the same words)
@@ -27,6 +30,15 @@ comptime OP_MI_CD = 69
 
 #: FAST only: ops folded by a threadgroup per column (x_prep/fastred.mojo)
 comptime OP_COL_STATS = 1
+#: FAST on Apple, `-D MOJOLEARN_X_PREP_CLASS_COV_GRID` (lane/apple-fast-gram, 2026-10-02):
+#: QDA's per-class covariances (op 40, naive_bayes/da.mojo `qda_cov_unit`: one
+#: thread per (class, cell) walking every row, K d^2 chains of a million rows)
+#: and LDA's Gram `matmul` (op 13, x_prep/prims.mojo `matmul_unit` as Z'Z: one
+#: thread per cell walking every row) run as x_linear/fast_gram.mojo's grid
+#: Gram: row chunks x 32 x 32 tiles through shared memory, then a sum over the
+#: chunks. Board: lda-clf Istella 5.1x, qda Istella 2.6x behind scikit-learn.
+comptime OP_MATMUL = 13
+comptime OP_QDA_COV = 40
 comptime OP_CLASS_STATS = 16
 comptime OP_II_MEAN = 53
 comptime OP_II_GRAM = 54
@@ -100,6 +112,16 @@ def _env_int(name: String, default: Int) -> Int:
         return default
 
 
+def _matmul_is_gram(hq: IP, total: Int) -> Bool:
+    """`matmul` q = [A, sa0, sa1, B, sb0, sb1, C, ncols, K, BIAS, ALPHA] as
+    the d x d Gram A'A of a K x d row-major A (LDA's Z'Z): both operands the
+    same array, A read down a column and B along a row, no bias, no scale."""
+    var d = Int(hq[7])
+    return (Int(hq[0]) == Int(hq[3]) and Int(hq[1]) == 1 and Int(hq[2]) == d and Int(hq[4]) == d
+            and Int(hq[5]) == 1 and Int(hq[8]) > 0 and Int(hq[9]) < 0 and Int(hq[10]) < 0
+            and d > 0 and total == d * d)
+
+
 def prep_kernel[OP: Int](f: FP, q: IP, total: Int32):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t < Int(total):
@@ -161,7 +183,24 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             var mq = host_q + (s * STAGE_INTS + 2)
             mi_w = max(mi_w, mi_w_words(Int(mq[1]), Int(mq[2])))
             mi_u = max(mi_u, mi_scratch_words(Int(mq[1]), Int(mq[2])))
+    # the grid Gram's per-chunk partials (OP_QDA_COV / the Gram-shaped
+    # OP_MATMUL above), sized over the program; 1 word when unused
+    var cov_grid = False
+    var cov_words = 1
+    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                 and is_defined["MOJOLEARN_X_PREP_CLASS_COV_GRID"]()):
+        cov_grid = True
+        if cov_grid:
+            for s in range(stages):
+                var op = Int(host_q.unsafe_load(s * STAGE_INTS))
+                var total = Int(host_q.unsafe_load(s * STAGE_INTS + 1))
+                var cq = host_q + (s * STAGE_INTS + 2)
+                if op == OP_QDA_COV and Int(cq[2]) > 0:
+                    cov_words = max(cov_words, fg_part_words(Int(cq[1]), Int(cq[2])))
+                elif op == OP_MATMUL and _matmul_is_gram(cq, total):
+                    cov_words = max(cov_words, fg_part_words(Int(cq[8]), Int(cq[7])))
     var ctx = x_prep_ctx()
+    var dcg = ctx.enqueue_create_buffer[DType.float32](cov_words)
     var dmw = ctx.enqueue_create_buffer[DType.uint64](mi_w if mi_sorted else 1)
     var dmu = ctx.enqueue_create_buffer[DType.uint32](mi_u if mi_sorted else 1)
     var out_n = out_len if out_addr != 0 and out_len > 0 else 0
@@ -221,6 +260,34 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                                  Int(hq[3]), Int(hq[4]))
             continue
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            if cov_grid and op == OP_QDA_COV:
+                # q = [X, n, d, Y, MEAN, CNT, COV]: class k's covariance
+                # sum_{y_i = k} (x_i - MEAN_k)(x_i - MEAN_k)' / CNT[k], the
+                # grid Gram with the label mask, one launch pair a class
+                var hq = host_q + (s * STAGE_INTS + 2)
+                var pf = FP(unsafe_from_address=Int(df.unsafe_ptr()))
+                var pc = FP(unsafe_from_address=Int(dcg.unsafe_ptr()))
+                var xo = Int(hq[0])
+                var nn = Int(hq[1])
+                var dd = Int(hq[2])
+                var yo = Int(hq[3])
+                var mo = Int(hq[4])
+                var co = Int(hq[5])
+                var vo = Int(hq[6])
+                if dd > 0 and nn > 0:
+                    for k in range(total // (dd * dd)):
+                        fast_sym_gram_into(ctx, pf + xo, 0, nn, dd, pf + (mo + k * dd), True, pf + yo, k, pc,
+                                           pf + (vo + k * dd * dd), pf + (co + k), True)
+                    continue
+            if cov_grid and op == OP_MATMUL:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                if _matmul_is_gram(hq, total):
+                    # C = A'A over the K rows of A (LDA's Z'Z), uncentered, no mask
+                    var pf = FP(unsafe_from_address=Int(df.unsafe_ptr()))
+                    var pc = FP(unsafe_from_address=Int(dcg.unsafe_ptr()))
+                    fast_sym_gram_into(ctx, pf + Int(hq[0]), 0, Int(hq[8]), Int(hq[7]), pf, False, pf, -1, pc,
+                                       pf + Int(hq[6]), pf, False)
+                    continue
             if fast_folds and op == OP_COL_STATS:
                 var hq = host_q + (s * STAGE_INTS + 2)
                 ctx.enqueue_function[col_stats_fast_kernel](
@@ -268,6 +335,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     _ = dw^
     _ = dmw^
     _ = dmu^
+    _ = dcg^
     _ = dq^
     _ = df^
     _ = ctx^
