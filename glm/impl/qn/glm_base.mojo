@@ -83,11 +83,109 @@ from glm.impl.qn.glm_logistic import logistic_loss_dz_kernel, logistic_lz, logis
 from std.sys import llvm_intrinsic
 from std.sys.info import is_apple_gpu
 from max.gpu.sync import barrier
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
 from glm.impl.qn.multi_gpu import gradient_columns
 from glm.impl.qn.fast_xtdz import fast_xtdz, fast_xtdz_applies, fast_xtdz_into, fast_xtdz_workspace_floats
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
+from std.os import getenv
+
+# lane/apple-fast-linear (2026-10-02), FAST + Apple, host env switch,
+# default off: MOJOLEARN_QN_FAST_GRID_SUMS=1 folds the loss value
+# (`sum_terms_kernel`) and the bias gradient (`mean_kernel`) over the grid
+# -- QN_GS_BLOCKS blocks of grid-stride partials, then one block over the
+# partials -- instead of ONE block of STATS_TPB threads walking all n rows
+# twice per objective evaluation (logreg / linearsvc / linearsvr on Istella:
+# a million rows, one evaluation per line-search candidate). The partials
+# live in `xtdz_ws`, which the gradient's own fold has consumed by the time
+# the mean runs and which the loss sum uses before the gradient starts
+# (one in-order queue); it needs >= QN_GS_BLOCKS floats, else the one-block
+# kernels stay. FAST promises no bits.
+comptime QN_GRID_SUMS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime QN_GS_TPB = 256
+comptime QN_GS_BLOCKS = 256
+
+
+def _qn_grid_sums_on() -> Bool:
+    return String(getenv("MOJOLEARN_QN_FAST_GRID_SUMS")) == "1"
+
+
+def qn_grid_sum_partial_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """Block b: the grid-stride sum of v over its share of [0, n), folded
+    through threadgroup memory into part[b]."""
+    var n = Int(n_in)
+    var tid = Int(thread_idx.x)
+    var sh = stack_allocation[
+        QN_GS_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var acc = Float32(0.0)
+    var i = Int(block_idx.x) * QN_GS_TPB + tid
+    var stride = QN_GS_BLOCKS * QN_GS_TPB
+    while i < n:
+        acc += v.unsafe_load(i)
+        i += stride
+    sh[tid] = acc
+    barrier()
+    var h = QN_GS_TPB // 2
+    while h > 0:
+        if tid < h:
+            sh[tid] = sh[tid] + sh[tid + h]
+        barrier()
+        h //= 2
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), sh[0])
+
+
+def qn_grid_sum_fold_kernel(
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    scale: Float32,
+):
+    """One block: out_v[0] = (sum of the QN_GS_BLOCKS partials) * scale."""
+    var tid = Int(thread_idx.x)
+    var sh = stack_allocation[
+        QN_GS_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var acc = Float32(0.0)
+    var i = tid
+    while i < QN_GS_BLOCKS:
+        acc += part.unsafe_load(i)
+        i += QN_GS_TPB
+    sh[tid] = acc
+    barrier()
+    var h = QN_GS_TPB // 2
+    while h > 0:
+        if tid < h:
+            sh[tid] = sh[tid] + sh[tid + h]
+        barrier()
+        h //= 2
+    if tid == 0:
+        out_v.unsafe_store(0, sh[0] * scale)
+
+
+def qn_grid_sum(
+    ctx: DeviceContext,
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    mut ws: DeviceBuffer[DType.float32],
+    n: Int,
+    scale: Float32,
+) raises:
+    """out_v[0] = scale * sum(v[0:n]) on the grid (the two launches above)."""
+    ctx.enqueue_function[qn_grid_sum_partial_kernel](
+        ws.unsafe_ptr(), v, Int32(n),
+        grid_dim=(QN_GS_BLOCKS, 1, 1), block_dim=(QN_GS_TPB, 1, 1),
+    )
+    ctx.enqueue_function[qn_grid_sum_fold_kernel](
+        out_v, ws.unsafe_ptr(), scale,
+        grid_dim=(1, 1, 1), block_dim=(QN_GS_TPB, 1, 1),
+    )
 
 comptime QN_FAST_XTDZ = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -486,6 +584,7 @@ def linear_bwd(
     n_rows: Int,
     dims: GLMDims,
     set_zero: Bool,
+    grid_sums: Bool = False,
 ) raises:
     """`linearBwd(handle, G, X, dZ, setZero)`, `glm_base.cuh:63-94`. The
     `C > 1` arm (DEVIATION 706) is the same three steps with the class
@@ -550,10 +649,22 @@ def linear_bwd(
     if dims.fit_intercept:
         # `raft::stats::mean<true>(Gbias.data, dZ.data, dZ.m, dZ.n, false)`
         # -- the bias gradient is ASSIGNED, not accumulated, in both arms.
-        ctx.enqueue_function[mean_kernel](
-            g.unsafe_ptr() + d, dz.unsafe_ptr(), Int32(n_rows),
-            grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
-        )
+        var grid_mean = False
+        comptime if QN_GRID_SUMS:
+            # lane/apple-fast-linear: MOJOLEARN_QN_FAST_GRID_SUMS (see the
+            # banner at qn_grid_sum): the mean over the grid, partials in
+            # xtdz_ws after the gradient's fold has read it
+            if grid_sums and len(xtdz_ws) >= QN_GS_BLOCKS:
+                grid_mean = True
+                qn_grid_sum(
+                    ctx, g.unsafe_ptr() + d, dz.unsafe_ptr(), xtdz_ws, n_rows,
+                    Float32(1.0) / Float32(n_rows),
+                )
+        if not grid_mean:
+            ctx.enqueue_function[mean_kernel](
+                g.unsafe_ptr() + d, dz.unsafe_ptr(), Int32(n_rows),
+                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
 
 
 struct GLMWithData(Movable):
@@ -711,10 +822,22 @@ struct GLMWithData(Movable):
                 "qn: loss id " + String(self.loss) + " has no getLossAndDZ"
                 " here (glm/NOT_IMPLEMENTED.tsv)"
             )
-        ctx.enqueue_function[sum_terms_kernel](
-            out_v, self.loss_terms.unsafe_ptr(), Int32(n),
-            grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
-        )
+        var grid_sum = False
+        comptime if QN_GRID_SUMS:
+            # lane/apple-fast-linear: MOJOLEARN_QN_FAST_GRID_SUMS (see the
+            # banner at qn_grid_sum): the loss value over the grid, partials
+            # in xtdz_ws before the gradient's pass writes it
+            if _qn_grid_sums_on() and len(self.xtdz_ws) >= QN_GS_BLOCKS:
+                grid_sum = True
+                qn_grid_sum(
+                    ctx, out_v, self.loss_terms.unsafe_ptr(), self.xtdz_ws, n,
+                    Float32(1.0),
+                )
+        if not grid_sum:
+            ctx.enqueue_function[sum_terms_kernel](
+                out_v, self.loss_terms.unsafe_ptr(), Int32(n),
+                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
 
     def loss_grad(
         mut self,
@@ -775,7 +898,7 @@ struct GLMWithData(Movable):
             else:
                 linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
                 self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
-                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, True)
+                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, True, _qn_grid_sums_on())
         else:
             ctx.enqueue_memset(g, Float32(0.0))
             # `G[:, 0:n_param - has_bias]`: the first `C*D` entries of the
@@ -792,7 +915,7 @@ struct GLMWithData(Movable):
             else:
                 linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
                 self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
-                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, False)
+                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, False, _qn_grid_sums_on())
         # `grad_norm`'s reduction of this `g`, speculatively
         var np = self.dims.n_param
         if self._gnorm_kind() == 1:
