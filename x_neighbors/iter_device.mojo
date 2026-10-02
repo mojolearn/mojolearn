@@ -843,17 +843,23 @@ def op_knn_sq_tiled(
         comptime if is_defined["MOJOLEARN_XN_KNN_ROWWISE"]() or not lib_smem_page_fits_for[TARGET_COLUMN, KNN2_SMEM_BYTES]():
             op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self)
             return
+        # direct device copies in and out (no host-thread staging)
         var ctx2 = xn_ctx()
-        var d_x2 = _buf(ctx2, x, n * d, True)
-        var d_y2 = _buf(ctx2, y, m * d, True)
-        var d_dist2 = _buf(ctx2, 0, n * k, False)
+        var d_x2 = ctx2.enqueue_create_buffer[DType.float32](max(n * d, 1))
+        var d_y2 = ctx2.enqueue_create_buffer[DType.float32](max(m * d, 1))
+        if n * d > 0:
+            ctx2.enqueue_copy(dst_buf=d_x2, src_ptr=FP(unsafe_from_address=x))
+        if m * d > 0:
+            ctx2.enqueue_copy(dst_buf=d_y2, src_ptr=FP(unsafe_from_address=y))
+        var d_dist2 = ctx2.enqueue_create_buffer[DType.float32](max(n * k, 1))
         var d_idx2 = _buf_i(ctx2, 0, n * k, False)
         ctx2.enqueue_function[knn_sq_tiled2_kernel](
             d_x2.unsafe_ptr(), d_y2.unsafe_ptr(), d_dist2.unsafe_ptr(), d_idx2.unsafe_ptr(),
             Int64(n), Int64(m), Int64(d), Int64(k), Int64(exclude_self),
             grid_dim=(n + KNN2_TX - 1) // KNN2_TX, block_dim=KNN2_TPB,
         )
-        _down(ctx2, d_dist2, dist, n * k)
+        if n * k > 0:
+            ctx2.enqueue_copy(dst_ptr=FP(unsafe_from_address=dist), src_buf=d_dist2)
         _down_i(ctx2, d_idx2, idx, n * k)
         ctx2.synchronize()
         _ = d_x2^
