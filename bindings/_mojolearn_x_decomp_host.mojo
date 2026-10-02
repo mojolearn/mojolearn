@@ -16,6 +16,10 @@ from x_decomp.api import (
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
+from x_decomp.graph_host import (
+    graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_lle_iw_py, graph_components_py, graph_join_py,
+    graph_dijkstra_py,
+)
 
 
 def x_decomp_host_numeric_mode_binding() raises -> PythonObject:
@@ -80,6 +84,13 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
         m.def_function[triu_nonzero_py]("x_decomp_triu_nonzero")
         m.def_function[argsort_f32_py]("x_decomp_argsort_f32")
         m.def_function[iso_order_py]("x_decomp_iso_order")
+        m.def_function[graph_knn_py]("x_decomp_graph_knn")
+        m.def_function[graph_knn_dense_py]("x_decomp_graph_knn_dense")
+        m.def_function[graph_radius_py]("x_decomp_graph_radius")
+        m.def_function[graph_lle_iw_py]("x_decomp_graph_lle_iw")
+        m.def_function[graph_components_py]("x_decomp_graph_components")
+        m.def_function[graph_join_py]("x_decomp_graph_join")
+        m.def_function[graph_dijkstra_py]("x_decomp_graph_dijkstra")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[HostExec]]("x_decomp_vendor")
         return m.finalize()

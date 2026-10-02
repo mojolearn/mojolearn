@@ -15,6 +15,10 @@ from x_decomp.api import (
 )
 from x_decomp.device import DevExec
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
+from x_decomp.graph_device import (
+    dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_lle_iw_py, dev_graph_components_py,
+    dev_graph_join_py, dev_graph_dijkstra_py,
+)
 from x_decomp.resident import (
     dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_project_py, dev_rand_py, dev_trisolve_py, dev_knn_select_py, dev_rowsum_py,
     dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_lda_rows_py,
@@ -85,6 +89,14 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_lda_rows_py]("x_decomp_dev_lda_rows")
         m.def_function[dev_lda_bound_py]("x_decomp_dev_lda_bound")
         m.def_function[dev_als_rows_py]("x_decomp_dev_als_rows")
+        # Isomap / LLE graph builds (x_decomp/graph_device.mojo, lane hr2-graph-embed)
+        m.def_function[dev_graph_knn_py]("x_decomp_dev_graph_knn")
+        m.def_function[dev_graph_knn_dense_py]("x_decomp_dev_graph_knn_dense")
+        m.def_function[dev_graph_radius_py]("x_decomp_dev_graph_radius")
+        m.def_function[dev_graph_lle_iw_py]("x_decomp_dev_graph_lle_iw")
+        m.def_function[dev_graph_components_py]("x_decomp_dev_graph_components")
+        m.def_function[dev_graph_join_py]("x_decomp_dev_graph_join")
+        m.def_function[dev_graph_dijkstra_py]("x_decomp_dev_graph_dijkstra")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
         return m.finalize()
