@@ -1442,7 +1442,7 @@ def nc_std_kernel(x: FP, lab: IP, cent: FP, std: FP, n_: Int64, d_: Int64, nc_: 
 #: and `nc_std_kernel` run one block per 16 features (14 blocks at Istella's
 #: 220), each walking every row; here a block is (16 features, NCC_ROWS rows)
 #: and a second launch sums the chunk partials. FAST's words move (the sums
-#: are chunked); `MOJOLEARN_XN_NC_CHUNKS=0` is the A/B arm.
+#: are chunked). No runtime switch: the A/B arm is main's build.
 comptime XN_NC_CHUNKED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime NCC_ROWS = 16384
 
@@ -1562,10 +1562,6 @@ def nc_std_red_kernel(pss: FP, std: FP, n_: Int64, d_: Int64, nc_: Int64, nch_: 
         std.unsafe_store(f, sqrt(ss / Float32(dof)) if dof > 0 else Float32(0))
 
 
-def _nc_chunked_on() -> Bool:
-    return String(getenv("MOJOLEARN_XN_NC_CHUNKS")) != "0"
-
-
 def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int) raises:
     if (n_classes + 1) * NCS_TC > 8 * NCS_NT:
         raise Error("nc_stats: more classes than the staged kernel's chains (" + String(n_classes) + ")")
@@ -1576,41 +1572,54 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
     var d_std = _buf(ctx, std, d, False)
     var d_dsc = _buf(ctx, dsc, d, False)
     var tiles = (d + NCS_TC - 1) // NCS_TC
+    # FAST on Apple: rows in NCC_ROWS chunks across the grid, then a fold per
+    # cell; otherwise one block per feature tile walking every row.
+    var chunked = False
     comptime if XN_NC_CHUNKED:
-        if _nc_chunked_on() and n > NCC_ROWS:
-            var nch = (n + NCC_ROWS - 1) // NCC_ROWS
-            var cells = (n_classes + 1) * d
-            var d_ps = ctx.enqueue_create_buffer[DType.float32](nch * cells)
-            var d_pc = ctx.enqueue_create_buffer[DType.float32](nch * cells)
-            var d_pss = ctx.enqueue_create_buffer[DType.float32](nch * d)
-            ctx.enqueue_function[nc_means_part_kernel](
-                d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_ps.unsafe_ptr(), d_pc.unsafe_ptr(),
-                Int64(n), Int64(d), Int64(n_classes), Int64(tiles), grid_dim=tiles * nch, block_dim=NCS_NT,
-            )
-            ctx.enqueue_function[nc_means_red_kernel](
-                d_ps.unsafe_ptr(), d_pc.unsafe_ptr(), d_cent.unsafe_ptr(), d_dsc.unsafe_ptr(),
-                Int64(n), Int64(d), Int64(n_classes), Int64(nch), grid_dim=(cells + 255) // 256, block_dim=256,
-            )
-            ctx.enqueue_function[nc_std_part_kernel](
-                d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_cent.unsafe_ptr(), d_pss.unsafe_ptr(),
-                Int64(n), Int64(d), Int64(tiles), grid_dim=tiles * nch, block_dim=NCS_NT,
-            )
-            ctx.enqueue_function[nc_std_red_kernel](
-                d_pss.unsafe_ptr(), d_std.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(nch),
-                grid_dim=(d + 255) // 256, block_dim=256,
-            )
-            _down(ctx, d_cent, cent, n_classes * d)
-            _down(ctx, d_std, std, d)
-            _down(ctx, d_dsc, dsc, d)
-            ctx.synchronize()
-            _ = d_ps^
-            _ = d_pc^
-            _ = d_pss^
-            _ = d_x^
-            _ = d_lab^
-            _ = d_cent^
-            _ = d_std^
-            _ = d_dsc^
+        chunked = n > NCC_ROWS
+    var nch = (n + NCC_ROWS - 1) // NCC_ROWS if chunked else 1
+    var cells = (n_classes + 1) * d
+    var d_ps = ctx.enqueue_create_buffer[DType.float32](nch * cells if chunked else 1)
+    var d_pc = ctx.enqueue_create_buffer[DType.float32](nch * cells if chunked else 1)
+    var d_pss = ctx.enqueue_create_buffer[DType.float32](nch * d if chunked else 1)
+    if chunked:
+        ctx.enqueue_function[nc_means_part_kernel](
+            d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_ps.unsafe_ptr(), d_pc.unsafe_ptr(),
+            Int64(n), Int64(d), Int64(n_classes), Int64(tiles), grid_dim=tiles * nch, block_dim=NCS_NT,
+        )
+        ctx.enqueue_function[nc_means_red_kernel](
+            d_ps.unsafe_ptr(), d_pc.unsafe_ptr(), d_cent.unsafe_ptr(), d_dsc.unsafe_ptr(),
+            Int64(n), Int64(d), Int64(n_classes), Int64(nch), grid_dim=(cells + 255) // 256, block_dim=256,
+        )
+        ctx.enqueue_function[nc_std_part_kernel](
+            d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_cent.unsafe_ptr(), d_pss.unsafe_ptr(),
+            Int64(n), Int64(d), Int64(tiles), grid_dim=tiles * nch, block_dim=NCS_NT,
+        )
+        ctx.enqueue_function[nc_std_red_kernel](
+            d_pss.unsafe_ptr(), d_std.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(nch),
+            grid_dim=(d + 255) // 256, block_dim=256,
+        )
+    else:
+        ctx.enqueue_function[nc_means_kernel](
+            d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_cent.unsafe_ptr(), d_dsc.unsafe_ptr(),
+            Int64(n), Int64(d), Int64(n_classes), grid_dim=max(tiles, 1), block_dim=NCS_NT,
+        )
+        ctx.enqueue_function[nc_std_kernel](
+            d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_cent.unsafe_ptr(), d_std.unsafe_ptr(),
+            Int64(n), Int64(d), Int64(n_classes), grid_dim=max(tiles, 1), block_dim=NCS_NT,
+        )
+    _down(ctx, d_cent, cent, n_classes * d)
+    _down(ctx, d_std, std, d)
+    _down(ctx, d_dsc, dsc, d)
+    ctx.synchronize()
+    _ = d_ps^
+    _ = d_pc^
+    _ = d_pss^
+    _ = d_x^
+    _ = d_lab^
+    _ = d_cent^
+    _ = d_std^
+    _ = d_dsc^
             return
     ctx.enqueue_function[nc_means_kernel](
         d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_cent.unsafe_ptr(), d_dsc.unsafe_ptr(),

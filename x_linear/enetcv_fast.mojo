@@ -21,9 +21,11 @@ Every training set (all rows but fold f; all rows) is then a sum of fold
 Grams moved to the set's means by the parallel-axis rule
 G_S = sum_g [C_g + n_g (mu_g - m_S)(mu_g - m_S)'], which never subtracts
 two large uncentered sums. The paths (one block per fold and l1_ratio,
-x_linear/cd.mojo `enet_gram_cd`, the same coordinate descent, warm starts
-and duality gap), the held-out errors (a grid over the rows, one block a
-chunk), the choice and the refit follow; one read back at the end.
+x_linear/cd.mojo `enet_gram_cd`'s coordinate descent, warm starts and
+duality gap with the block's threads sharing each sweep, `_cd_block`),
+the held-out errors (a grid over the rows, one block a chunk), the choice
+and the refit (one block, a thread per candidate, then `_cd_block`)
+follow; one read back at the end.
 
 Folds are scikit-learn's KFold(shuffle=False) from Python's `_kfold_ids`
 (contiguous, the first n % k one row longer). The device checks every row's
@@ -32,12 +34,13 @@ FAST promises quality, not bits. `MOJOLEARN_X_LINEAR_ENETCV_FAST=0` is the
 A/B arm (the team fit in the same build).
 """
 from std.gpu import block_idx, thread_idx
-from std.memory import stack_allocation
+from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from x_linear.ops import FP, IP, ld, st, ldi, sti, fa, fs, fm, fd, fabs, fmax, i2f
-from x_linear.cd import enet_gram_cd, alpha_grid_value
+from x_linear.ops import FP, IP, ld, st, ldi, sti, fa, fs, fm, fd, fabs, fmax, fmad, fsign, i2f
+from x_linear.team import team_barrier
+from x_linear.cd import alpha_grid_value
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES, WITNESS_ABORT
 
 comptime EF_TPB = 256
@@ -278,68 +281,206 @@ def ef_sets_kernel(cg: FP, mu: FP, d_in: Int32, f_n: Int32, l_n: Int32, fi: Int3
     witness_end(wf, woff, nonce)
 
 
+@always_inline
+def _gap_block(fw: FP, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float32, l1: Float32, l2: Float32,
+               positive: Bool) -> Float32:
+    """x_linear/cd.mojo `_gap` with its sums over d as block folds; every
+    thread returns the same value. Reads w and Qw after a device barrier."""
+    var tid = Int(thread_idx.x)
+    var sh = stack_allocation[4 * EF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var wl2 = Float32(0)
+    var qdw = Float32(0)
+    var wqw = Float32(0)
+    var wl1 = Float32(0)
+    for j in range(tid, d, EF_TPB):
+        var wj = ld(fw, w + j)
+        wl2 = fmad(wj, wj, wl2)
+        qdw = fmad(wj, ld(fw, q + j), qdw)
+        wqw = fmad(wj, ld(fw, qw + j), wqw)
+        wl1 = fa(wl1, fabs(wj))
+    sh[tid] = wl2
+    sh[EF_TPB + tid] = qdw
+    sh[2 * EF_TPB + tid] = wqw
+    sh[3 * EF_TPB + tid] = wl1
+    barrier()
+    var h = EF_TPB // 2
+    while h > 0:
+        if tid < h:
+            comptime for r in range(4):
+                sh[r * EF_TPB + tid] = fa(sh[r * EF_TPB + tid], sh[r * EF_TPB + tid + h])
+        barrier()
+        h //= 2
+    wl2 = sh[0]
+    qdw = sh[EF_TPB]
+    wqw = sh[2 * EF_TPB]
+    wl1 = sh[3 * EF_TPB]
+    barrier()
+    var r2 = fs(fa(ynorm2, wqw), fm(Float32(2), qdw))
+    var ry = fs(ynorm2, qdw)
+    var dn = Float32(0)
+    for j in range(tid, d, EF_TPB):
+        if l1 == 0:
+            var a = fs(ld(fw, q + j), ld(fw, qw + j))
+            dn = fmad(a, a, dn)
+        else:
+            var a = fs(fs(ld(fw, q + j), ld(fw, qw + j)), fm(l2, ld(fw, w + j)))
+            dn = fmax(dn, a if positive else fabs(a))
+    sh[tid] = dn
+    barrier()
+    h = EF_TPB // 2
+    while h > 0:
+        if tid < h:
+            sh[tid] = fa(sh[tid], sh[tid + h]) if l1 == 0 else fmax(sh[tid], sh[tid + h])
+        barrier()
+        h //= 2
+    var dual_norm = sh[0]
+    barrier()
+    if l1 == 0:
+        if l2 == 0:
+            return dual_norm
+        var g = fs(fa(r2, fm(fm(Float32(0.5), l2), wl2)), ry)
+        return fa(g, fm(fd(Float32(1), fm(Float32(2), l2)), dual_norm))
+    var base = fa(r2, fm(l2, wl2))
+    var primal = fa(fm(Float32(0.5), base), fm(l1, wl1))
+    var scale = fd(l1, dual_norm) if dual_norm > l1 else Float32(1)
+    var dual = fa(fm(fm(Float32(-0.5), fm(scale, scale)), base), fm(scale, ry))
+    return fs(primal, dual)
+
+
+@always_inline
+def _cd_block(fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float32, l1: Float32, l2: Float32,
+              max_iter: Int, tol: Float32, positive: Bool) -> Int:
+    """x_linear/cd.mojo `enet_gram_cd` on one block: Qw = G w a thread per
+    row, each coordinate's Qw update a thread per column, the gap's sums as
+    block folds. The coordinate order, every Qw element's fmad chain and so
+    w are the team routine's; only the gap's fold order differs. Every
+    thread returns the sweeps run."""
+    var tid = Int(thread_idx.x)
+    var sd = stack_allocation[2, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    for j in range(tid, d, EF_TPB):
+        var acc = Float32(0)
+        for k in range(d):
+            acc = fmad(ld(fw, gg + j * d + k), ld(fw, w + k), acc)
+        st(fw, qw + j, acc)
+    team_barrier()
+    var tol_s = fm(tol, ynorm2)
+    if _gap_block(fw, q, qw, w, d, ynorm2, l1, l2, positive) <= tol_s:
+        return 0
+    var w_max = Float32(0)
+    var dw_max = Float32(0)
+    for it in range(max_iter):
+        w_max = Float32(0)
+        dw_max = Float32(0)
+        for j in range(d):
+            var qjj = ld(fw, gg + j * d + j)
+            if qjj == 0:
+                continue
+            if tid == 0:
+                var wj = ld(fw, w + j)
+                var t = fa(fs(ld(fw, q + j), ld(fw, qw + j)), fm(wj, qjj))
+                var nw = fd(fm(fsign(t), fmax(fs(fabs(t), l1), Float32(0))), fa(qjj, l2))
+                if positive and t < 0:
+                    nw = Float32(0)
+                st(fw, w + j, nw)
+                sd[0] = fs(nw, wj)
+                sd[1] = Float32(1) if nw != wj else Float32(0)
+                var dw = fabs(fs(nw, wj))
+                if dw > dw_max:
+                    dw_max = dw
+                if fabs(nw) > w_max:
+                    w_max = fabs(nw)
+            team_barrier()
+            if sd[1] != 0:
+                var delta = sd[0]
+                for k in range(tid, d, EF_TPB):
+                    st(fw, qw + k, fmad(delta, ld(fw, gg + j * d + k), ld(fw, qw + k)))
+            team_barrier()
+        if tid == 0:
+            sd[1] = Float32(1) if (w_max == 0 or fd(dw_max, w_max) <= tol or it == max_iter - 1) else Float32(0)
+        barrier()
+        var check = sd[1] != 0
+        barrier()
+        if check:
+            if _gap_block(fw, q, qw, w, d, ynorm2, l1, l2, positive) <= tol_s:
+                return it + 1
+    return max_iter
+
+
 def ef_alphas_kernel(ws: FP, fp: FP, res: FP, d_in: Int32, n: Int32, f_n: Int32, l_n: Int32, a_n: Int32,
                      explicit: Int32, wf: IP, woff: Int32, nonce: Int32):
-    """The grids (x_linear/cd.mojo `enetcv_fit`'s, from all rows' X'y)."""
+    """Block l: l1_ratio l's grid (x_linear/cd.mojo `enetcv_fit`'s, from all
+    rows' X'y); max |X'y| a block fold, the grid a thread per alpha."""
     var d = Int(d_in)
     var ln = Int(l_n)
     var an = Int(a_n)
     var alphas = d + 4
-    if Int(thread_idx.x) == 0:
-        var base = (Int(f_n) * ln) * _ws_cells(d)
-        var q = base + d + d * d
-        var eps = ld(fp, 0)
-        for l in range(ln):
-            var l1r = ld(fp, 2 + l)
-            if explicit != 0:
-                for k in range(an):
-                    st(res, alphas + l * an + k, ld(fp, 2 + ln + k))
-                continue
-            var qmax = Float32(0)
-            for j in range(d):
-                qmax = fmax(qmax, fabs(ld(ws, q + j)))
-            var amax = fd(qmax, fm(i2f(Int(n)), l1r))
-            if amax <= Float32(1e-6):
-                for k in range(an):
-                    st(res, alphas + l * an + k, Float32(1e-6))
-                continue
-            for k in range(an):
-                st(res, alphas + l * an + k, alpha_grid_value(amax, eps, k, an))
+    var l = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var sh = stack_allocation[EF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var base = (Int(f_n) * ln) * _ws_cells(d)
+    var q = base + d + d * d
+    var eps = ld(fp, 0)
+    var l1r = ld(fp, 2 + l)
+    var qmax = Float32(0)
+    for j in range(tid, d, EF_TPB):
+        qmax = fmax(qmax, fabs(ld(ws, q + j)))
+    sh[tid] = qmax
+    barrier()
+    var h = EF_TPB // 2
+    while h > 0:
+        if tid < h:
+            sh[tid] = fmax(sh[tid], sh[tid + h])
+        barrier()
+        h //= 2
+    qmax = sh[0]
+    var amax = fd(qmax, fm(i2f(Int(n)), l1r))
+    for k in range(tid, an, EF_TPB):
+        var v: Float32
+        if explicit != 0:
+            v = ld(fp, 2 + ln + k)
+        elif amax <= Float32(1e-6):
+            v = Float32(1e-6)
+        else:
+            v = alpha_grid_value(amax, eps, k, an)
+        st(res, alphas + l * an + k, v)
     witness_end(wf, woff, nonce)
 
 
 def ef_path_kernel(ws: FP, fp: FP, res: FP, path: FP, d_in: Int32, l_n: Int32, a_n: Int32, max_iter: Int32,
                    positive: Int32, wf: IP, woff: Int32, nonce: Int32):
-    """Block (f, l): fold f's warm-started path for l1_ratio l; each alpha's
-    (w, b) into `path`."""
+    """Block (f, l): fold f's warm-started path for l1_ratio l, the block's
+    threads sharing each coordinate descent; each alpha's (w, b) into `path`."""
     var d = Int(d_in)
     var ln = Int(l_n)
     var an = Int(a_n)
     var b_id = Int(block_idx.x)
     var l = b_id % ln
-    if Int(thread_idx.x) == 0:
-        var wsc = _ws_cells(d)
-        var fw = ws + b_id * wsc
-        var gg = d
-        var q = gg + d * d
-        var qw = q + d
-        var w = qw + d
-        var ym = ld(fw, wsc - 3)
-        var yn = ld(fw, wsc - 2)
-        var rows = ld(fw, wsc - 1)
-        var l1r = ld(fp, 2 + l)
-        var tol = ld(fp, 1)
-        for k in range(an):
-            var alpha = ld(res, d + 4 + l * an + k)
-            var l1 = fm(fm(alpha, l1r), rows)
-            var l2 = fm(fm(alpha, fs(Float32(1), l1r)), rows)
-            _ = enet_gram_cd(fw, gg, q, qw, w, d, yn, l1, l2, Int(max_iter), tol, positive != 0)
+    var tid = Int(thread_idx.x)
+    var wsc = _ws_cells(d)
+    var fw = ws + b_id * wsc
+    var gg = d
+    var q = gg + d * d
+    var qw = q + d
+    var w = qw + d
+    var ym = ld(fw, wsc - 3)
+    var yn = ld(fw, wsc - 2)
+    var rows = ld(fw, wsc - 1)
+    var l1r = ld(fp, 2 + l)
+    var tol = ld(fp, 1)
+    for k in range(an):
+        var alpha = ld(res, d + 4 + l * an + k)
+        var l1 = fm(fm(alpha, l1r), rows)
+        var l2 = fm(fm(alpha, fs(Float32(1), l1r)), rows)
+        _ = _cd_block(fw, gg, q, qw, w, d, yn, l1, l2, Int(max_iter), tol, positive != 0)
+        var o = (b_id * an + k) * (d + 1)
+        for j in range(tid, d, EF_TPB):
+            st(path, o + j, ld(fw, w + j))
+        if tid == 0:
             var b = ym
-            var o = (b_id * an + k) * (d + 1)
             for j in range(d):
                 b = fs(b, fm(ld(fw, j), ld(fw, w + j)))
-                st(path, o + j, ld(fw, w + j))
             st(path, o + d, b)
+        team_barrier()
     witness_end(wf, woff, nonce)
 
 
@@ -397,44 +538,69 @@ def ef_mse_red_kernel(part_m: FP, f_n: Int32, p_n: Int32, meta: IP, res: FP, mse
     witness_end(wf, woff, nonce)
 
 
-def ef_final_kernel(ws: FP, fp: FP, res: FP, d_in: Int32, n: Int32, f_n: Int32, l_n: Int32, a_n: Int32,
+def ef_final_kernel(ws: FP, fp: FP, res: FP, d_in: Int32, f_n: Int32, l_n: Int32, a_n: Int32,
                     max_iter: Int32, positive: Int32, fi: Int32, wf: IP, woff: Int32, nonce: Int32):
-    """The choice (the smallest mean over folds, first on a tie) and the
-    refit on all rows from zero (x_linear/cd.mojo `enetcv_fit`'s tail)."""
+    """One block: the choice (the smallest mean over folds, first on a tie; a
+    thread per (l, alpha), then a block fold on (mean, index)) and the refit
+    on all rows from zero, the block sharing the coordinate descent
+    (x_linear/cd.mojo `enetcv_fit`'s tail). The row count is the all-rows
+    set's, from its workspace."""
     var d = Int(d_in)
     var nfo = Int(f_n)
     var ln = Int(l_n)
     var an = Int(a_n)
-    if Int(thread_idx.x) == 0:
-        var alphas = d + 4
-        var mse = alphas + ln * an
-        var best_l = 0
-        var best_k = 0
-        var best = Float32(0)
-        for l in range(ln):
-            for k in range(an):
-                var acc = Float32(0)
-                for f in range(nfo):
-                    acc = fa(acc, ld(res, mse + (l * an + k) * nfo + f))
-                var mv = fd(acc, i2f(nfo))
-                if (l == 0 and k == 0) or mv < best:
-                    best = mv
-                    best_l = l
-                    best_k = k
-        var alpha = ld(res, alphas + best_l * an + best_k)
-        var l1r = ld(fp, 2 + best_l)
-        var wsc = _ws_cells(d)
-        var fw = ws + (nfo * ln + best_l) * wsc
-        var gg = d
-        var q = gg + d * d
-        var qw = q + d
-        var w = qw + d
-        var nn = i2f(Int(n))
-        var iters = enet_gram_cd(fw, gg, q, qw, w, d, ld(fw, wsc - 2), fm(fm(alpha, l1r), nn),
-                                 fm(fm(alpha, fs(Float32(1), l1r)), nn), Int(max_iter), ld(fp, 1), positive != 0)
+    var tid = Int(thread_idx.x)
+    var alphas = d + 4
+    var mse = alphas + ln * an
+    var pn = ln * an
+    var sv = stack_allocation[EF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var si = stack_allocation[EF_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var inf = bitcast[DType.float32](UInt32(0x7F800000))
+    var best = inf
+    var best_p = pn
+    for p in range(tid, pn, EF_TPB):
+        var acc = Float32(0)
+        for f in range(nfo):
+            acc = fa(acc, ld(res, mse + p * nfo + f))
+        var mv = fd(acc, i2f(nfo))
+        if mv != mv:
+            mv = inf
+        if best_p == pn or mv < best:
+            best = mv
+            best_p = p
+    sv[tid] = best
+    si[tid] = Int32(best_p)
+    barrier()
+    var h = EF_TPB // 2
+    while h > 0:
+        if tid < h:
+            var v2 = sv[tid + h]
+            var i2 = si[tid + h]
+            if v2 < sv[tid] or (v2 == sv[tid] and i2 < si[tid]):
+                sv[tid] = v2
+                si[tid] = i2
+        barrier()
+        h //= 2
+    var bp = Int(si[0])
+    if bp >= pn:
+        bp = 0
+    var best_l = bp // an
+    var alpha = ld(res, alphas + bp)
+    var l1r = ld(fp, 2 + best_l)
+    var wsc = _ws_cells(d)
+    var fw = ws + (nfo * ln + best_l) * wsc
+    var gg = d
+    var q = gg + d * d
+    var qw = q + d
+    var w = qw + d
+    var nn = ld(fw, wsc - 1)
+    var iters = _cd_block(fw, gg, q, qw, w, d, ld(fw, wsc - 2), fm(fm(alpha, l1r), nn),
+                          fm(fm(alpha, fs(Float32(1), l1r)), nn), Int(max_iter), ld(fp, 1), positive != 0)
+    for j in range(tid, d, EF_TPB):
+        st(res, j, ld(fw, w + j))
+    if tid == 0:
         var b = ld(fw, wsc - 3)
         for j in range(d):
-            st(res, j, ld(fw, w + j))
             b = fs(b, fm(ld(fw, j), ld(fw, w + j)))
         st(res, d, b if fi != 0 else Float32(0))
         st(res, d + 1, alpha)
@@ -513,7 +679,7 @@ def enetcv_fast(
     var b_gred = _nb(f_n * npairs * EF_TS * EF_TS)
     var b_sets = _nb((f_n + 1) * m * m)
     var b_mred = _nb(f_n * p_n)
-    var total = b_chk + nch + b_mu + b_gram + b_gred + b_sets + 1 + f_n * l_n + nch + b_mred + 1
+    var total = b_chk + nch + b_mu + b_gram + b_gred + b_sets + l_n + f_n * l_n + nch + b_mred + 1
     var wit = Witness(ctx, total)
     var flag = List[Int32](length=1, fill=Int32(0))
     var tries = 0
@@ -549,11 +715,11 @@ def enetcv_fast(
         wo += b_sets
         ctx.enqueue_function[ef_alphas_kernel](
             dws.unsafe_ptr(), dfp.unsafe_ptr(), dres.unsafe_ptr(), Int32(d), Int32(n), Int32(f_n), Int32(l_n),
-            Int32(a_n), Int32(explicit), wf, Int32(wo), nonce, grid_dim=1, block_dim=1)
-        wo += 1
+            Int32(a_n), Int32(explicit), wf, Int32(wo), nonce, grid_dim=l_n, block_dim=EF_TPB)
+        wo += l_n
         ctx.enqueue_function[ef_path_kernel](
             dws.unsafe_ptr(), dfp.unsafe_ptr(), dres.unsafe_ptr(), dpath.unsafe_ptr(), Int32(d), Int32(l_n),
-            Int32(a_n), Int32(max_iter), Int32(positive), wf, Int32(wo), nonce, grid_dim=f_n * l_n, block_dim=1)
+            Int32(a_n), Int32(max_iter), Int32(positive), wf, Int32(wo), nonce, grid_dim=f_n * l_n, block_dim=EF_TPB)
         wo += f_n * l_n
         ctx.enqueue_function[ef_mse_kernel](
             dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(d), Int32(f_n), Int32(p_n), dmeta.unsafe_ptr(),
@@ -564,8 +730,9 @@ def enetcv_fast(
             wf, Int32(wo), nonce, grid_dim=b_mred, block_dim=EF_TPB)
         wo += b_mred
         ctx.enqueue_function[ef_final_kernel](
-            dws.unsafe_ptr(), dfp.unsafe_ptr(), dres.unsafe_ptr(), Int32(d), Int32(n), Int32(f_n), Int32(l_n),
-            Int32(a_n), Int32(max_iter), Int32(positive), Int32(fi), wf, Int32(wo), nonce, grid_dim=1, block_dim=1)
+            dws.unsafe_ptr(), dfp.unsafe_ptr(), dres.unsafe_ptr(), Int32(d), Int32(f_n), Int32(l_n),
+            Int32(a_n), Int32(max_iter), Int32(positive), Int32(fi), wf, Int32(wo), nonce, grid_dim=1,
+            block_dim=EF_TPB)
         wo += 1
         if n_out > 0:
             ctx.enqueue_copy(dst_ptr=res, src_buf=dres)
