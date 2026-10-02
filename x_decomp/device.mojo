@@ -3,6 +3,7 @@
 """DevExec: the decomp lane's cells on the GPU. One thread per output, the
 cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
+from std.sys.compile import is_defined
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
