@@ -12,7 +12,7 @@ x_linear/lbfgs.mojo (the same minimizer; a different path).
 """
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot, axpy_acc, par_rows, row_dots
 from std.sys.info import is_gpu
-from x_linear.lbfgs import lbfgs, lbfgs_work
+from x_linear.lbfgs import lbfgs, lbfgs_work, Objective
 from x_linear.team import Team
 from x_linear.tops import chain_fmad, fold_fa, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
 from std.memory import bitcast
@@ -116,6 +116,48 @@ def _huber_part(o: Int, cells: Int, d: Int, x: FP, y: FP, n: Int, cr: FP, rr: FP
     return acc
 
 
+
+@always_inline
+def huber_map_row(i: Int, x: FP, y: FP, n: Int, d: Int, th: FP, toff: Int, b: Float32, thr: Float32,
+                  two_over_sigma: Float32, two_eps: Float32, sw: Bool, cr: FP, rr: FP):
+    """Row i's residual (rr) and gradient coefficient (cr): the team map's
+    statements (lane/neural-pass129: the grid objective runs them too)."""
+    var r = fs(fs(ld(y, i), row_dot(x, i, d, th, toff)), b)
+    var ar = fabs(r)
+    var coefv: Float32
+    if sw:
+        var wi = ld(y, n + i)
+        if ar > thr:
+            coefv = fm(wi, -two_eps if r > 0 else two_eps)
+        else:
+            coefv = fm(-two_over_sigma, fm(wi, r))
+    elif ar > thr:
+        coefv = -two_eps if r > 0 else two_eps
+    else:
+        coefv = fm(-two_over_sigma, r)
+    st(rr, i, r)
+    st(cr, i, coefv)
+
+
+def huber_finish(g: FP, goff: Int, th: FP, toff: Int, d: Int, p: Int, n: Int, eps: Float32, alpha: Float32,
+                 sigma: Float32, two_eps: Float32, sw: Bool, sq: Float32, out_abs: Float32, n_out: Int,
+                 w_out: Float32, w_all: Float32) -> Float32:
+    """The team lead's last statements on the folded sums."""
+    var wn = Float32(0)
+    for j in range(d):
+        var w = ld(th, toff + j)
+        wn = fmad(w, w, wn)
+        st(g, goff + j, fmad(fm(Float32(2), alpha), w, ld(g, goff + j)))
+    var squared_loss = fd(sq, sigma)
+    var eps2 = fm(eps, eps)
+    var cnt_out = w_out if sw else i2f(n_out)
+    var cnt = w_all if sw else i2f(n)
+    var outlier_loss = fs(fm(two_eps, out_abs), fm(fm(sigma, cnt_out), eps2))
+    var gsigma = fs(fs(cnt, fm(cnt_out, eps2)), fd(squared_loss, sigma))
+    st(g, goff + p - 1, fm(gsigma, sigma))
+    return fa(fa(fa(fm(cnt, sigma), squared_loss), outlier_loss), fm(alpha, wn))
+
+
 def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int) -> Float32:
     """Team form: each row's residual and gradient coefficient across the
     team; the lead folds the loss sums in ascending row order; one thread
@@ -134,21 +176,7 @@ def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP,
     var cr = t.row(0)
     var rr = t.row(1)
     for i in range(t.tid, n, t.nt):
-        var r = fs(fs(ld(y, i), row_dot(x, i, d, th, toff)), b)
-        var ar = fabs(r)
-        var coefv: Float32
-        if sw:
-            var wi = ld(y, n + i)
-            if ar > thr:
-                coefv = fm(wi, -two_eps if r > 0 else two_eps)
-            else:
-                coefv = fm(-two_over_sigma, fm(wi, r))
-        elif ar > thr:
-            coefv = -two_eps if r > 0 else two_eps
-        else:
-            coefv = fm(-two_over_sigma, r)
-        st(rr, i, r)
-        st(cr, i, coefv)
+        huber_map_row(i, x, y, n, d, th, toff, b, thr, two_over_sigma, two_eps, sw, cr, rr)
     t.sync()
     var cells = d + 1 if fi else d
     # lane/linear-apple2: the loss sums the lead folded over the rows are
@@ -259,19 +287,7 @@ def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP,
             if sw:
                 w_all = p3
             n_out = kn
-        var wn = Float32(0)
-        for j in range(d):
-            var w = ld(th, toff + j)
-            wn = fmad(w, w, wn)
-            st(g, goff + j, fmad(fm(Float32(2), alpha), w, ld(g, goff + j)))
-        var squared_loss = fd(sq, sigma)
-        var eps2 = fm(eps, eps)
-        var cnt_out = w_out if sw else i2f(n_out)
-        var cnt = w_all if sw else i2f(n)
-        var outlier_loss = fs(fm(two_eps, out_abs), fm(fm(sigma, cnt_out), eps2))
-        var gsigma = fs(fs(cnt, fm(cnt_out, eps2)), fd(squared_loss, sigma))
-        st(g, goff + p - 1, fm(gsigma, sigma))
-        out = fa(fa(fa(fm(cnt, sigma), squared_loss), outlier_loss), fm(alpha, wn))
+        out = huber_finish(g, goff, th, toff, d, p, n, eps, alpha, sigma, two_eps, sw, sq, out_abs, n_out, w_out, w_all)
     return t.bcast(out)
 
 
@@ -405,7 +421,7 @@ def huber_objective(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
         return _huber_objective_host(x, y, n, d, ip, fp, th, toff, g, goff, sc)
 
 
-def huber_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+def huber_fit[obj: Objective = huber_objective](t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [max_iter, fit_intercept, sample_weight]; fp: [epsilon, alpha, tol].
     With sample_weight, y = targets n | weights n (their weighted objective).
     res: coef d, intercept 1, scale 1, n_iter 1 | theta scratch (P).
@@ -416,7 +432,7 @@ def huber_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
     if t.lead():
         fill(res, th, p, Float32(0))
     t.sync()
-    var it = lbfgs[huber_objective](t, x, y, n, d, ip, fp, res, th, p, ldi(ip, 0), ld(fp, 2), fw, 0, fw + lbfgs_work(p))
+    var it = lbfgs[obj](t, x, y, n, d, ip, fp, res, th, p, ldi(ip, 0), ld(fp, 2), fw, 0, fw + lbfgs_work(p))
     if not t.lead():
         return
     for j in range(d):
