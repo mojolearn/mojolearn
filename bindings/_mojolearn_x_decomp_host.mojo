@@ -16,7 +16,7 @@ from x_decomp.api import (
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
-from x_decomp.graph_cells import (
+from x_decomp.graph_host import (
     graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_lle_iw_py, graph_components_py, graph_join_py,
     graph_dijkstra_py,
 )
