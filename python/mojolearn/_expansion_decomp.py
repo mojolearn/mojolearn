@@ -683,6 +683,25 @@ class _Kit:
                                    [float(alpha), float(tol)])
         return W
 
+    def lle_apply(self, Wb, idm, E):
+        """out (nq x nc) = sum_a Wb[i, a] E[idm[i, a]] (LLE transform)."""
+        nq, nn, nc = Wb.r, Wb.c, E.c
+        out = _M.zeros(nq, nc)
+        if nq * nc:
+            self.b.x_decomp_lle_apply(Wb.addr, idm.addr, E.addr, out.addr, [nq, E.r, nn, nc])
+        return out
+
+    def lle_local(self, M, idm, method, nn, nc, tol):
+        """LocallyLinearEmbedding's stacked factor B (x_decomp/lle_local.mojo):
+        method 0 LTSA (n nn x n), 1 Hessian (n (nn - 1 - nc) x n), 2 modified
+        (n nn x n); every per-sample step (the local Gram, its eigh, the
+        assembly) a cell on the device, the local eigensolves batched."""
+        n, d = M.r, M.c
+        rows = n * (nn - 1 - nc) if method == 1 else n * nn
+        B = _M.zeros(rows, n)
+        self.b.x_decomp_lle_local(M.addr, idm.addr, B.addr, [int(method), n, d, int(nn), int(nc)], [float(tol)])
+        return B
+
     def omp_rows(self, G, Q, nnz):
         W = _M.zeros(Q.r, Q.c)
         na = _M.zeros(Q.r, 1)
@@ -3922,22 +3941,19 @@ class LocallyLinearEmbedding(_Base):
                              "[n_components * (n_components + 3) / 2]")
         if self.method == "modified" and nn < nc:
             raise ValueError("modified LLE requires n_neighbors >= n_components")
+        # lane hr2-graph-embed: the kNN, the barycenter weights and I - W
+        # as cells, I - W resident on the GPU binding; cgr-decomp: the LTSA,
+        # Hessian and modified factors as cells too (x_decomp/lle_local.mojo,
+        # the local eigensolves batched), no Python loop over the samples
+        idm, _ = _knn_mats(k, M, M, nn, True)
         if self.method == "standard":
-            # lane hr2-graph-embed: the kNN, the barycenter weights and I - W
-            # as cells, I - W resident on the GPU binding
-            idm, _ = _knn_mats(k, M, M, nn, True)
             IW = k.graph_lle_iw(idm, k.barycenter(M, M, idm, self.reg), n)
-            idx = None
-        else:
-            idx, _ = _knn_lists(k, M, M, nn, True)
-        if idx is None:
-            pass
         elif self.method == "ltsa":
-            IW = self._ltsa_factor(k, M, idx, nn, nc)
+            IW = k.lle_local(M, idm, 0, nn, nc, 0.0)
         elif self.method == "hessian":
-            IW = self._hessian_factor(k, M, idx, nn, nc)
+            IW = k.lle_local(M, idm, 1, nn, nc, float(self.hessian_tol))
         else:
-            IW = self._modified_factor(k, M, idx, nn, nc)
+            IW = k.lle_local(M, idm, 2, nn, nc, float(self.modified_tol))
         # The eigenvectors of M = (I - W)^T (I - W) for its smallest
         # eigenvalues are the right singular vectors of I - W for its
         # smallest singular values. Those eigenvalues sit near 1e-7, under
@@ -3963,129 +3979,6 @@ class LocallyLinearEmbedding(_Base):
         self.n_features_in_ = M.c
         return self
 
-    def _ltsa_factor(self, k, M, idx, nn, nc):
-        """sklearn LTSA's M = sum_i S_i^T (I - G_i G_i^T) S_i, returned as the
-        stacked factor B (n k x n) with M = B^T B, since I - G G^T is a
-        projector: G_i = [1/sqrt(k), the nc top eigenvectors of the centered
-        neighborhood's Gram] (Jacobi eigh, sign free: G G^T does not see it).
-        The null space is then B's smallest right singular vectors."""
-        n = M.r
-        B = _M.zeros(n * nn, n)
-        inv = 1.0 / math.sqrt(nn)
-        for i in range(n):
-            Xi = M.take_rows(idx[i])
-            Xi = k.ew("sub", Xi, k.colmean(Xi))
-            _, V = k.eigh(k.mm(Xi, Xi, tb=True))
-            top = V.take_cols(list(range(nn - 1, nn - 1 - nc, -1)))
-            Gi = _hstack(k.const(inv, nn, 1), top)
-            P = k.ew("sub", _eye(nn), k.mm(Gi, Gi, tb=True))
-            for a in range(nn):
-                row = (i * nn + a) * n
-                for b, j in enumerate(idx[i]):
-                    B.s[row + j] = P.s[a * nn + b]
-        return B
-
-    def _hessian_factor(self, k, M, idx, nn, nc):
-        """sklearn Hessian LLE's M = sum_i S_i^T w_i w_i^T S_i as the stacked
-        factor B (n (k - 1 - nc) x n), B_i = w_i^T scattered to the neighbor
-        columns. Yi = [1, U, the products U_a U_b (a <= b)] with U the nc top
-        eigenvectors of the centered neighborhood's Gram (sign free: every
-        column of w is divided by its own sum); w = the columns of Yi's
-        orthonormal basis past the linear ones (x_decomp orth, the Householder
-        R route: Gram-Schmidt of Yi up to sign) and then an orthonormal basis
-        of Yi's complement (the eigenvalue-1 eigenvectors of I - Q Q^T, Jacobi
-        eigh, descending). sklearn takes that complement from LAPACK's full Q,
-        whose basis is LAPACK's own choice (x_decomp/NOT_IMPLEMENTED.tsv:
-        DELIBERATELY DIVERGENT). A column sum under hessian_tol counts as 1."""
-        n = M.r
-        dp = nc * (nc + 1) // 2
-        ncol = nn - 1 - nc
-        extra = ncol - dp
-        tol = float(self.hessian_tol)
-        B = _M.zeros(n * ncol, n)
-        for i in range(n):
-            Gi = M.take_rows(idx[i])
-            Gi = k.ew("sub", Gi, k.colmean(Gi))
-            _, V = k.eigh(k.mm(Gi, Gi, tb=True))
-            U = V.take_cols(list(range(nn - 1, nn - 1 - nc, -1)))
-            cols = [k.const(1.0, nn, 1), U]
-            for a in range(nc):
-                cols.append(k.ew("mul", U.cols(a, nc), U.cols(a, a + 1)))
-            Q = k.orth(_hstack(*cols))
-            w = Q.cols(nc + 1, nc + 1 + dp)
-            if extra > 0:
-                _, Vc = k.eigh(k.ew("sub", _eye(nn), k.mm(Q, Q, tb=True)))
-                w = _hstack(w, Vc.take_cols(list(range(nn - 1, nn - 1 - extra, -1))))
-            S = k.colsum(w)
-            S = _M.of([1.0 if abs(v) < tol else v for v in S.s], 1, ncol)
-            w = k.ew("div", w, S)
-            for c in range(ncol):
-                row = (i * ncol + c) * n
-                for a, j in enumerate(idx[i]):
-                    B.s[row + j] = w.s[a * ncol + c]
-        return B
-
-    def _modified_factor(self, k, M, idx, nn, nc):
-        """sklearn modified LLE (Zhang & Wang) as a stacked factor: M = sum_i
-        A_i A_i^T with A_i (n x s_i) holding W_i on the neighbor rows and -1
-        on row i, which is sklearn's W_i W_i^T, -W_i 1 on row and column i
-        and s_i on the diagonal. The local spectra are the Jacobi eigh of
-        X_nbrs X_nbrs^T (descending; sklearn takes the full SVD of X_nbrs when
-        k > d, whose null-space basis is LAPACK's own choice:
-        x_decomp/NOT_IMPLEMENTED.tsv, DELIBERATELY DIVERGENT). The per-point
-        vectors (at most k values) are then IEEE double arithmetic in a fixed
-        order: the regularized weights, rho, eta (the median), s_i, alpha_i,
-        the Householder vector h and W_i."""
-        n, d = M.r, M.c
-        nev = min(d, nn)
-        tol = float(self.modified_tol)
-        Vs, evs = [], []
-        for i in range(n):
-            Xn = k.ew("sub", M.take_rows(idx[i]), M.rows(i, i + 1))
-            w, V = k.eigh(k.mm(Xn, Xn, tb=True))
-            order = list(range(nn - 1, -1, -1))
-            Vs.append(V.take_cols(order))
-            evs.append([float(w.s[j]) for j in order[:nev]])
-        wreg, rho = [], []
-        for i in range(n):
-            V, ev = Vs[i], evs[i]
-            reg = 1e-3 * _dsum(ev)
-            tmp = [_dsum(V.s[a * nn + c] for a in range(nn)) for c in range(nn)]
-            tmp = [tmp[c] / (ev[c] + reg) if c < nev else tmp[c] / reg for c in range(nn)]
-            wr = [_dsum(V.s[a * nn + c] * tmp[c] for c in range(nn)) for a in range(nn)]
-            tot = _dsum(wr)
-            wreg.append([v / tot for v in wr])
-            rho.append(_dsum(ev[nc:]) / _dsum(ev[:nc]))
-        srt = sorted(rho)
-        eta = srt[n // 2] if n % 2 else (srt[n // 2 - 1] + srt[n // 2]) / 2
-        cols = []
-        for i in range(n):
-            V, ev = Vs[i], evs[i]
-            cum, t = [], 0.0
-            for v in ev:
-                t += v
-                cum.append(t)
-            er = [cum[-1] / c - 1 for c in cum[:-1]][::-1]
-            si = sum(1 for v in er if v < eta) + nn - nev
-            Vi = [[float(V.s[a * nn + c]) for c in range(nn - si, nn)] for a in range(nn)]
-            vs = [_dsum(Vi[a][c] for a in range(nn)) for c in range(si)]
-            alpha = math.sqrt(_dsum(v * v for v in vs)) / math.sqrt(si)
-            h = [alpha - v for v in vs]
-            nh = math.sqrt(_dsum(v * v for v in h))
-            h = [0.0] * si if nh < tol else [v / nh for v in h]
-            for c in range(si):
-                col = [0.0] * n
-                for a, j in enumerate(idx[i]):
-                    vh = _dsum(Vi[a][e] * h[e] for e in range(si))
-                    col[j] = Vi[a][c] - 2 * vh * h[c] + (1 - alpha) * wreg[i][a]
-                col[i] = -1.0
-                cols.append(col)
-        rows = max(len(cols), n)
-        B = _M.zeros(rows, n)
-        for r, col in enumerate(cols):
-            B.s[r * n:(r + 1) * n] = array.array("f", col)
-        return B
-
     def fit_transform(self, X, y=None):
         return self.fit(X).embedding_
 
@@ -4093,15 +3986,11 @@ class LocallyLinearEmbedding(_Base):
         self._check("embedding_m_")
         k = self._kit()
         Q = _M.from_input(X)
-        idx, _ = _knn_lists(k, Q, self._fit_X, self._knn, False)
-        Wb = k.barycenter(Q, self._fit_X, idx, self.reg)
-        out = _M.zeros(Q.r, self.embedding_m_.c)
-        # X_new[i] = sum_a W[i, a] * embedding[idx[i][a]]  (one gemm row per query)
-        for i in range(Q.r):
-            E = self.embedding_m_.take_rows(idx[i])
-            r = k.mm(Wb.rows(i, i + 1), E)
-            out.s[i * out.c:(i + 1) * out.c] = r.s
-        return out.out()
+        idm, _ = _knn_mats(k, Q, self._fit_X, self._knn, False)
+        Wb = k.barycenter(Q, self._fit_X, idm, self.reg)
+        # X_new[i] = sum_a W[i, a] * embedding[idx[i][a]]: one cell per output
+        # (x_decomp/lle_local.mojo `lle_apply_cell`), no loop over the queries
+        return k.lle_apply(Wb, idm, self.embedding_m_).out()
 
 
 # ================================================================ robust covariance

@@ -210,6 +210,25 @@ def eigh_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: Pytho
     return PythonObject(n)
 
 
+def lle_apply_py[E: Exec](
+    wb: PythonObject, idx: PythonObject, emb: PythonObject, out: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """p = [nq, nf, nn, nc]: LLE transform's out (nq x nc) = W E[idx]."""
+    var nq = _n(p, 0)
+    var nf = _n(p, 1)
+    var nn = _n(p, 2)
+    var nc = _n(p, 3)
+    if nq * nc > 2147483647 or nf * nc > 2147483647 or nq * nn > 2147483647:
+        raise Error("x_decomp: lle_apply exceeds the Int32 index bound")
+    var pw = _f(wb)
+    var pi = _f(idx)
+    var pe = _f(emb)
+    var po = _f(out)
+    with GILReleased(Python()):
+        E.lle_apply(pw, pi, pe, po, nq, nf, nn, nc)
+    return PythonObject(nq)
+
+
 def lle_local_py[E: Exec](
     x: PythonObject, idx: PythonObject, b: PythonObject, p: PythonObject, f: PythonObject
 ) raises -> PythonObject:

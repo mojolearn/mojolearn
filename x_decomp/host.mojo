@@ -19,6 +19,7 @@ from x_decomp.lle_local import (
     hessian_comp_cell,
     hessian_ncy,
     hessian_q_cell,
+    lle_apply_cell,
     lle_gram_cell,
     lle_mean_cell,
     ltsa_cell,
@@ -404,6 +405,14 @@ struct HostExec(Exec):
             for i in range(n * n):
                 m.append(a.unsafe_load(b * n * n + i))
             _host_eigh_rr_one(m, w + b * n, v + b * n * n, n)
+
+    @staticmethod
+    def lle_apply(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, out: F32Ptr, nq: Int, nf: Int, nn: Int, nc: Int) raises:
+        def row(i: Int) {imm wb, imm idx, imm emb, imm out, imm nn, imm nc}:
+            for c in range(nc):
+                lle_apply_cell(wb, idx, emb, out, i, c, nn, nc)
+
+        xd_parallel(row, nq)
 
     @staticmethod
     def lle_local(

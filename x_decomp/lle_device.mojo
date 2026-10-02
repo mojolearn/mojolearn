@@ -10,6 +10,7 @@ from x_decomp.lle_local import (
     hessian_cell,
     hessian_comp_cell,
     hessian_q_cell,
+    lle_apply_cell,
     lle_gram_cell,
     lle_mean_cell,
     ltsa_cell,
@@ -109,3 +110,10 @@ def mlle_rows_kernel(
     if i < Int(n):
         var eta = mlle_eta(srt, Int(n))
         mlle_rows_cell(w, v, wreg, idx, bmat, scr, eta, i, Int(n), Int(nn), Int(nev), tol)
+
+
+def lle_apply_kernel(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, out: F32Ptr, nq: Int32, nn: Int32, nc: Int32):
+    var t = _tid()
+    if t < Int(nq) * Int(nc):
+        var i = t // Int(nc)
+        lle_apply_cell(wb, idx, emb, out, i, t - i * Int(nc), Int(nn), Int(nc))

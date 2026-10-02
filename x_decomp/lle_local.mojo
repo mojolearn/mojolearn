@@ -299,3 +299,11 @@ def mlle_unkey(k: UInt32) -> Float32:
     if (k & UInt32(0x80000000)) != UInt32(0):
         return bitcast[DType.float32](k & UInt32(0x7FFFFFFF))
     return bitcast[DType.float32](~k)
+
+
+def lle_apply_cell(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, out: F32Ptr, i: Int, c: Int, nn: Int, nc: Int):
+    """LLE transform: out[i, c] = sum_a W[i, a] emb[idx[i, a], c] (a ascending)."""
+    var acc = Float32(0.0)
+    for a in range(nn):
+        acc = _fma(wb.unsafe_load(i * nn + a), emb.unsafe_load(_ix(idx, i, a, nn) * nc + c), acc)
+    out.unsafe_store(i * nc + c, acc)

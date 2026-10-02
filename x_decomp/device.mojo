@@ -92,6 +92,7 @@ from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
 from x_decomp.rr_batch import rr_batch_kernel, rrb_cs_len, rrb_part_len
 from x_decomp.lle_local import hessian_ncy
 from x_decomp.lle_device import (
+    lle_apply_kernel,
     hessian_comp_kernel,
     hessian_kernel,
     hessian_q_kernel,
@@ -2415,6 +2416,25 @@ struct DevExec(Exec):
         _ = da^
         _ = dw^
         _ = dvo^
+        _ = ctx^
+
+    @staticmethod
+    def lle_apply(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, out: F32Ptr, nq: Int, nf: Int, nn: Int, nc: Int) raises:
+        """LLE transform's out = W E[idx] (`lle_apply_cell`), one thread a cell."""
+        var ctx = xd_ctx()
+        var dwb = _up(ctx, wb, nq * nn)
+        var di = _up(ctx, idx, nq * nn)
+        var de = _up(ctx, emb, nf * nc)
+        var dout = ctx.enqueue_create_buffer[DType.float32](max(nq * nc, 1))
+        ctx.enqueue_function[lle_apply_kernel](
+            _p(dwb), _p(di), _p(de), _p(dout), Int32(nq), Int32(nn), Int32(nc), grid_dim=_blocks(nq * nc), block_dim=TPB
+        )
+        _down(ctx, dout, out, nq * nc)
+        ctx.synchronize()
+        _ = dwb^
+        _ = di^
+        _ = de^
+        _ = dout^
         _ = ctx^
 
     @staticmethod
