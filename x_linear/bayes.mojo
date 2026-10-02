@@ -223,7 +223,7 @@ def _var(y: FP, n: Int) -> Float32:
     return fd(acc, i2f(n))
 
 
-def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP) -> Tuple[Float32, Float32, Float32, Float32]:
     """ip: [max_iter, fit_intercept, sample_weight]; fp: [tol, alpha_1, alpha_2, lambda_1,
     lambda_2, alpha_init (<0: none), lambda_init (<0: none)].
     With sample_weight, y = targets n | weights n: weighted centering, the
@@ -365,6 +365,85 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
     var lam = ld(fp, 6)
     if lam < 0:
         lam = Float32(1)
+    return (alpha, lam, ym, wsum)
+
+
+def bayes_coef(fw: FP, res: FP, d: Int, lam: Float32, alpha: Float32):
+    """coef = V diag(1/(ev + lam/alpha)) V' X'y (the lead's)."""
+    var xty = d + d * d
+    var vv = xty + d
+    var vty = vv + d * d
+    var tmp = vty + 2 * d
+    var ratio = fd(lam, alpha)
+    for j in range(d):
+        var acc = Float32(0)
+        for k in range(d):
+            acc = fmad(ld(fw, vv + j * d + k), fd(ld(fw, vty + k), fa(ld(fw, tmp + k), ratio)), acc)
+        st(res, j, acc)
+
+
+def bayes_step(fw: FP, res: FP, d: Int, fp: FP, lam_in: Float32, alpha_in: Float32, sse: Float32, wsum: Float32,
+               it: Int) -> Tuple[Float32, Float32, Int]:
+    """One iteration's lead update from its sse: (lambda, alpha, stop); on a
+    stop the final coefficients are written (their post-loop update)."""
+    var tol = ld(fp, 0)
+    var a1 = ld(fp, 1)
+    var a2 = ld(fp, 2)
+    var l1 = ld(fp, 3)
+    var l2 = ld(fp, 4)
+    var old = d + d * d + d + d * d + d
+    var tmp = old + d
+    var lam = lam_in
+    var alpha = alpha_in
+    var stop = 0
+    var gamma = Float32(0)
+    for k in range(d):
+        var aev = fm(alpha, ld(fw, tmp + k))
+        gamma = fa(gamma, fd(aev, fa(lam, aev)))
+    var wn = Float32(0)
+    for j in range(d):
+        wn = fmad(ld(res, j), ld(res, j), wn)
+    lam = fd(fa(gamma, fm(Float32(2), l1)), fa(wn, fm(Float32(2), l2)))
+    alpha = fd(fa(fs(wsum, gamma), fm(Float32(2), a1)), fa(sse, fm(Float32(2), a2)))
+    if it != 0:
+        var delta = Float32(0)
+        for j in range(d):
+            delta = fa(delta, fabs(fs(ld(fw, old + j), ld(res, j))))
+        if delta < tol:
+            # their loop breaks here and the update below the loop runs
+            bayes_coef(fw, res, d, lam, alpha)
+            stop = 1
+    if stop == 0:
+        copy(fw, old, res, 0, d)
+    return (lam, alpha, stop)
+
+
+def bayes_finish(fw: FP, res: FP, d: Int, fi: Bool, ym: Float32, alpha: Float32, lam: Float32, iters: Int):
+    st(res, d, _intercept(d, fw, 0, ym, res, 0) if fi else Float32(0))
+    st(res, d + 1, alpha)
+    st(res, d + 2, lam)
+    st(res, d + 3, i2f(iters))
+
+
+def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """See `bayes_prep` (the statistics, the eigendecomposition, the
+    starting alpha and lambda); then the iterations: the lead's
+    coefficients, the team's sse, the lead's update (`bayes_step`), and
+    `bayes_finish` (lane/neural-pass131 factored them for the grid driver;
+    the same statements in the same order)."""
+    var max_iter = ldi(ip, 0)
+    var fi = ldi(ip, 1) != 0
+    var sw = ldi(ip, 2) != 0
+    var xm = 0
+    var st4 = bayes_prep(t, x, y, n, d, ip, fp, res, fw, iw)
+    var alpha = st4[0]
+    var lam = st4[1]
+    var ym = st4[2]
+    var wsum = st4[3]
+    # fw layout (bayes_prep): G at gg, X'y, V, V'X'y at vty, old, eigenvalues at tmp
+    var gg = d
+    var vty = gg + d * d + d + d * d
+    var tmp = vty + 2 * d
     var gram_sse = False
     var yy = Float32(0)
     comptime if is_gpu() and X_LINEAR_GRAM_SSE:
@@ -373,14 +452,8 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
             yy = _t_yy(t, y, n, ym)
     var iters = 0
     for it in range(max_iter + 1):
-        # coef = V diag(1/(ev + lam/alpha)) V' X'y
         if t.lead():
-            var ratio = fd(lam, alpha)
-            for j in range(d):
-                var acc = Float32(0)
-                for k in range(d):
-                    acc = fmad(ld(fw, vv + j * d + k), fd(ld(fw, vty + k), fa(ld(fw, tmp + k), ratio)), acc)
-                st(res, j, acc)
+            bayes_coef(fw, res, d, lam, alpha)
         t.sync()
         if it == max_iter:
             break  # the last update after the loop
@@ -406,40 +479,16 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
             sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, sw, fw + 3 * d * d + 5 * d)
         var stop = 0
         if t.lead():
-            var gamma = Float32(0)
-            for k in range(d):
-                var aev = fm(alpha, ld(fw, tmp + k))
-                gamma = fa(gamma, fd(aev, fa(lam, aev)))
-            var wn = Float32(0)
-            for j in range(d):
-                wn = fmad(ld(res, j), ld(res, j), wn)
-            lam = fd(fa(gamma, fm(Float32(2), l1)), fa(wn, fm(Float32(2), l2)))
-            alpha = fd(fa(fs(wsum, gamma), fm(Float32(2), a1)), fa(sse, fm(Float32(2), a2)))
-            if it != 0:
-                var delta = Float32(0)
-                for j in range(d):
-                    delta = fa(delta, fabs(fs(ld(fw, old + j), ld(res, j))))
-                if delta < tol:
-                    # their loop breaks here and the update below the loop runs
-                    var ratio2 = fd(lam, alpha)
-                    for j in range(d):
-                        var acc = Float32(0)
-                        for k in range(d):
-                            acc = fmad(ld(fw, vv + j * d + k), fd(ld(fw, vty + k), fa(ld(fw, tmp + k), ratio2)), acc)
-                        st(res, j, acc)
-                    stop = 1
-            if stop == 0:
-                copy(fw, old, res, 0, d)
+            var r = bayes_step(fw, res, d, fp, lam, alpha, sse, wsum, it)
+            lam = r[0]
+            alpha = r[1]
+            stop = r[2]
         lam = t.bcast(lam, 1)
         alpha = t.bcast(alpha, 2)
         if t.bcast_int(stop, 3) == 1:
             break
     if t.lead():
-        st(res, d, _intercept(d, fw, xm, ym, res, 0) if fi else Float32(0))
-        st(res, d + 1, alpha)
-        st(res, d + 2, lam)
-        st(res, d + 3, i2f(iters))
-
+        bayes_finish(fw, res, d, fi, ym, alpha, lam, iters)
 
 def _ard_sigma(d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int) -> Int:
     """sigma (dk x dk, over the kept features in ascending order) = inv(diag(lambda) + alpha G). Returns dk."""
