@@ -399,13 +399,24 @@ class IsolationForest(NumericModeMixin):
                 "(cuML raises UnsupportedOnGPU for it too)"
             )
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        if not all_finite(x):
+        # A binary that scans the uploaded matrix on the device
+        # (`iforest_device_scan`, lane gap-trees-nv) refuses a non-finite X
+        # inside the fit; the host scan here would be the same refusal twice.
+        scan = getattr(self._bind("_mojolearn_svm"), "iforest_device_scan", None)
+        device_scan = scan is not None and int(scan()) == 1
+        if not device_scan and not all_finite(x):
             # was a bare Exception from the native fit; scikit-learn raises
             # ValueError for the same input
             raise ValueError("mojolearn IsolationForest: X contains NaN or infinity")
         self._x = x  # kept alive; every scoring call refits from it
         self.n_features_in_ = x.shape[1]
-        self._run(x[:1], _WANT_SCORE_SAMPLES)  # one row, an `Array` copy
+        try:
+            self._run(x[:1], _WANT_SCORE_SAMPLES)  # one row, an `Array` copy
+        except Exception as exc:  # noqa: BLE001
+            if device_scan and "Input X contains" in str(exc):
+                del self._x, self.n_features_in_
+                raise ValueError("mojolearn IsolationForest: X contains NaN or infinity") from None
+            raise
         return self
 
     def score_samples(self, X):
