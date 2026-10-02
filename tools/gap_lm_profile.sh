@@ -62,3 +62,10 @@ EOF
 else
     say "nsys absent"
 fi
+# Queued jobs name only `base` and `zkreg`; the later variants of this lane
+# ride on the zkreg job: one `label -D ...` per line of tools/gap_lm_variants.txt.
+if [ "$LABEL" = zkreg ] && [ -f tools/gap_lm_variants.txt ]; then
+    grep -v '^#' tools/gap_lm_variants.txt | while read -r vl vd; do
+        [ -n "$vl" ] && [ "$vl" != zkreg ] && bash tools/gap_lm_profile.sh "$vl" $vd < /dev/null
+    done
+fi
