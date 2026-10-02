@@ -131,7 +131,10 @@ from gbdt.options.catboost_options import (
 comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
 comptime DEFER_HIST_COPY_1903 = not SPLIT_COST_IDENTICAL or (
-    has_apple_gpu_accelerator()
+    (
+        has_apple_gpu_accelerator()
+        or is_defined["MOJOLEARN_GBDT_ID_DEFER_COPY"]()
+    )
     and not is_defined["MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY"]()
 )
 """DEVIATION 1903's schedule (the parent-histogram copy deferred to the
@@ -143,7 +146,9 @@ leaves the tree memset's +0.0 where the kernel would write +0.0) -- so it
 holds under IDENTICAL too. The other SPLIT_COST_IDENTICAL arms (1901's
 propagated partition stats, which re-associate; 1904's device fold) stay
 as they were. `-D MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY` restores the
-split-time copy and the full zero pass on Apple IDENTICAL."""
+split-time copy and the full zero pass on Apple IDENTICAL. Lane
+gap-trees-nv: `-D MOJOLEARN_GBDT_ID_DEFER_COPY` takes the same schedule
+under IDENTICAL on NVIDIA and AMD (opt-in until its A/B)."""
 
 # Cache unchanged partitions under IDENTICAL without propagating histogram
 # sums (which would change rounding). CatBoost updates only split children

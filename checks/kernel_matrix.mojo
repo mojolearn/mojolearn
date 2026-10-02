@@ -936,10 +936,20 @@ def ridx_only_splits_for[column: Int, identical: Bool]() -> Bool:
         # order through the index). The IDENTICAL-only readers of the stat
         # plane (the per-iteration partstats sweep, the `stats` trace
         # record) gather through the index too. Opt-out:
-        # `-D MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF`.
-        return column == COLUMN_APPLE and not is_defined[
-            "MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF"
-        ]()
+        # `-D MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF`. Lane gap-trees-nv: `-D
+        # MOJOLEARN_GBDT_ID_RIDX` takes the same schedule on NVIDIA and AMD
+        # IDENTICAL (opt-in until its A/B).
+        return (
+            column == COLUMN_APPLE
+            or (
+                is_defined["MOJOLEARN_GBDT_ID_RIDX"]()
+                and (
+                    column == COLUMN_NVIDIA
+                    or column == COLUMN_AMD
+                    or column == COLUMN_AMD_RDNA
+                )
+            )
+        ) and not is_defined["MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF"]()
     comptime if is_defined["MOJOLEARN_2044_FAST_NO_RIDX_ONLY"]():
         return False
     return (
