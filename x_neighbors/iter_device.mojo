@@ -36,7 +36,7 @@ from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, _add, knn_sq_item,
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
-    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK,
+    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK, op_kernel,
     absdiff_sum_kernel, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
     pagerank_step_kernel, cc_step_kernel,
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
@@ -48,6 +48,8 @@ from core.device_zero import enqueue_fill
 from neighbors.impl.detail.fast_mma_knn import FAST_MMA_KNN_ENABLED, fast_mma_knn, fast_mma_knn_applies
 from core.pinned_reduce import pinned_block_sum
 from checks.numerics import NUMERIC_IDENTICAL
+from checks.numerics import identical_exp
+from x_neighbors.items import lp_clamp_item, ls_clamp_item
 
 
 def op_lp_iterate(
@@ -1870,3 +1872,248 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
     _ = d_cent^
     _ = d_std^
     _ = d_dsc^
+
+
+# ---------------------------------------------------------------- lp_iterate_knn
+#: MOJOLEARN_LP_FAST_RESIDENT=1 (lane/apple-fast-neighbors2, 2026-10-02; FAST
+#: tier only, Python-side switch, default off): LabelPropagation /
+#: LabelSpreading's fit loop over the compact kNN graph as ONE resident op.
+#: Cause: with kernel='knn' `_LabelPropagationBase.fit`
+#: (python/mojolearn/_expansion_neighbors.py) runs the loop in Python, three
+#: binding calls per iteration: `absdiff_sum` (a one-item serial fold over
+#: n x C on the host), `lp_knn_product` (uploads cols, vals and the
+#: distributions, downloads the product) and `lp_clamp` / `ls_clamp` (upload,
+#: download) -- about 10 MB across the boundary and two drains per iteration
+#: at the board's 200,000 rows, for up to 1,000 iterations. Here the graph
+#: goes up once, the stopping sum is block partials + a one-block fold on the
+#: device (`pinned_block_sum`, FAST's block sum), the stopping test sets a
+#: device flag the later kernels of the batch honour, and LPK_BATCH iterations
+#: are enqueued per drain. The product is the finite-x item (a kNN graph's
+#: values and the distributions are finite); the fold order differs from the
+#: item's ascending chain (FAST promises quality, not bits); tol is compared
+#: in float32 on the device. Expected: the per-iteration boundary crossings
+#: gone (LabelPropagation taxi runs its 1,000 steps).
+comptime LPK_TPB = 256
+comptime LPK_BATCH = 16
+comptime LPK_FAST_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+
+
+def lpk_absdiff_partial_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
+    """Block partials of sum |a - b|; nothing once the flag is set."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var tid = Int(thread_idx.x)
+    var i = Int(block_idx.x) * LPK_TPB + tid
+    var v = Float32(0)
+    if i < Int(count_):
+        v = abs(a.unsafe_load(i) - b.unsafe_load(i))
+    var s = pinned_block_sum[LPK_TPB](v)
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), s)
+
+
+def lpk_check_kernel(part: FP, nparts_: Int64, flag: IP, iters: IP, tol_: Float32):
+    """ONE block of LPK_TPB threads: the partials folded; below tol the flag
+    is set (the loop stops before this step), else the step is counted."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var tid = Int(thread_idx.x)
+    var acc = Float32(0)
+    var i = tid
+    while i < Int(nparts_):
+        acc += part.unsafe_load(i)
+        i += LPK_TPB
+    var s = pinned_block_sum[LPK_TPB](acc)
+    if tid == 0:
+        if s < tol_:
+            flag.unsafe_store(0, 1)
+        else:
+            iters.unsafe_store(0, iters.unsafe_load(0) + 1)
+
+
+def lpk_product_kernel(cols: IP, vals: FP, x: FP, res: FP, flag: IP, n_: Int64, k_: Int64, c_: Int64):
+    """`lp_knn_product_item` (finite x); nothing once the flag is set."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var t = _tid()
+    if t < Int(n_) * Int(c_):
+        lp_knn_product_item(t, cols, vals, x, res, Int(n_), Int(n_), Int(k_), Int(c_), True)
+
+
+def lpk_clamp_kernel(
+    ld: FP, ystatic: FP, unlabeled: IP, res: FP, flag: IP, n_: Int64, c_: Int64, variant_: Int64, alpha_: Float32,
+):
+    """variant 0 `lp_clamp_item` per row, 1 `ls_clamp_item` per cell;
+    nothing once the flag is set."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var t = _tid()
+    var n = Int(n_)
+    var c = Int(c_)
+    if variant_ == 0:
+        if t < n:
+            lp_clamp_item(t, ld, ystatic, unlabeled, res, n, c)
+    else:
+        if t < n * c:
+            ls_clamp_item(t, ld, ystatic, res, n * c, alpha_)
+
+
+def op_lp_iterate_knn(
+    cols: Int, vals: Int, ld: Int, ystatic: Int, unlabeled: Int, info: Int,
+    n: Int, k: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int, alpha: Float32,
+) raises:
+    """The Python loop of `_LabelPropagationBase.fit` over the compact kNN
+    graph, resident (see LPK_TPB above). `ld` in: the initial distributions,
+    out: the last. info (int32 x 2): n_iter_, converged. tol is Python's
+    float64 bits."""
+    comptime if not LPK_FAST_BUILD:
+        raise Error("lp_iterate_knn: the FAST tier only (MOJOLEARN_LP_FAST_RESIDENT=1)")
+    else:
+        var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
+        var nc = n * c
+        var ctx = xn_ctx()
+        var d_cols = _buf_i(ctx, cols, n * k, True)
+        var d_vals = _buf(ctx, vals, n * k, True)
+        var d_a = _buf(ctx, ld, nc, True)
+        var d_b = _buf(ctx, 0, nc, False)
+        ctx.enqueue_memset(d_b, Float32(0))
+        var d_nxt = _buf(ctx, 0, nc, False)
+        var d_ys = _buf(ctx, ystatic, nc, True)
+        var d_unl = _buf_i(ctx, unlabeled, n, True)
+        var nparts = max(1, (nc + LPK_TPB - 1) // LPK_TPB)
+        var d_part = _buf(ctx, 0, nparts, False)
+        var h_fl = List[Int32](length=2, fill=Int32(0))
+        var d_fl = _buf_i(ctx, Int(h_fl.unsafe_ptr()), 2, True)
+        var flp: IP = d_fl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var itp: IP = flp + 1
+        var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var prev: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var tol32 = Float32(tol)
+        var done = 0
+        var converged = False
+        while done < max_iter and not converged:
+            var steps = min(LPK_BATCH, max_iter - done)
+            for _ in range(steps):
+                ctx.enqueue_function[lpk_absdiff_partial_kernel](
+                    cur, prev, d_part.unsafe_ptr(), flp, Int64(nc),
+                    grid_dim=nparts, block_dim=LPK_TPB,
+                )
+                ctx.enqueue_function[lpk_check_kernel](
+                    d_part.unsafe_ptr(), Int64(nparts), flp, itp, tol32,
+                    grid_dim=1, block_dim=LPK_TPB,
+                )
+                ctx.enqueue_function[lpk_product_kernel](
+                    d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), flp,
+                    Int64(n), Int64(k), Int64(c), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+                )
+                # prev = ld; ld = clamp(nxt): the clamp writes over the buffer
+                # the old prev held, then the two names swap (op_lp_iterate)
+                ctx.enqueue_function[lpk_clamp_kernel](
+                    d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), prev, flp,
+                    Int64(n), Int64(c), Int64(variant), alpha,
+                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+                )
+                var t = cur
+                cur = prev
+                prev = t
+            ctx.enqueue_copy(dst_ptr=h_fl.unsafe_ptr(), src_buf=d_fl)
+            ctx.synchronize()
+            converged = h_fl[0] != 0
+            done += steps
+        # steps taken: the loop's n_iter_ whether it converged (it) or ran out
+        var n_iter = Int(h_fl[1])
+        if n_iter % 2 == 0:
+            _down(ctx, d_a, ld, nc)
+        else:
+            _down(ctx, d_b, ld, nc)
+        ctx.synchronize()
+        var inf = IP(unsafe_from_address=info)
+        inf.unsafe_store(0, Int32(n_iter))
+        inf.unsafe_store(1, Int32(1 if converged else 0))
+        _ = h_fl^
+        _ = d_fl^
+        _ = d_part^
+        _ = d_cols^
+        _ = d_vals^
+        _ = d_a^
+        _ = d_b^
+        _ = d_nxt^
+        _ = d_ys^
+        _ = d_unl^
+        _ = ctx^
+
+
+# ---------------------------------------------------------------- kernel_tiled
+#: MOJOLEARN_XN_FAST_TILED_RBF=1 (lane/apple-fast-neighbors2, 2026-10-02; FAST
+#: tier only, Python-side switch, default off): the rbf kernel matrix from
+#: KT_T x KT_T tiles whose x and y rows are staged in threadgroup memory.
+#: Cause: `kernel_kernel` (x_neighbors/device_ops.mojo, one thread per cell)
+#: streams both rows from device memory for every cell: OneClassSVM's
+#: 10,000 x 10,000 Gram at Istella's 220 features reads each y row 10,000
+#: times (88 GB of traffic for 400 MB of output). Here a block reads its 16
+#: x rows and 16 y rows once and folds 256 cells from threadgroup memory.
+#: Same values up to FAST's fma/exp spellings. d <= KT_MAX_D; other kinds
+#: and wider rows take `kernel`.
+comptime KT_T = 16
+comptime KT_TPB = KT_T * KT_T
+comptime KT_MAX_D = 224
+
+
+def kernel_rbf_tiled_kernel(x: FP, y: FP, res: FP, n_: Int64, m_: Int64, d_: Int64, gamma_: Float32):
+    var n = Int(n_)
+    var m = Int(m_)
+    var d = Int(d_)
+    var tid = Int(thread_idx.x)
+    var i0 = Int(block_idx.y) * KT_T
+    var j0 = Int(block_idx.x) * KT_T
+    var xs = stack_allocation[KT_T * KT_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var ys = stack_allocation[KT_T * KT_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var q = tid
+    while q < KT_T * d:
+        var r = q // d
+        var f = q - r * d
+        var xv = Float32(0)
+        var yv = Float32(0)
+        if i0 + r < n:
+            xv = x.unsafe_load((i0 + r) * d + f)
+        if j0 + r < m:
+            yv = y.unsafe_load((j0 + r) * d + f)
+        xs[q] = xv
+        ys[q] = yv
+        q += KT_TPB
+    barrier()
+    var ti = tid // KT_T
+    var tj = tid - ti * KT_T
+    var i = i0 + ti
+    var j = j0 + tj
+    if i < n and j < m:
+        var acc = Float32(0)
+        for f in range(d):
+            var df = xs[ti * d + f] - ys[tj * d + f]
+            acc = identical_mul_add(df, df, acc)
+        res.unsafe_store(i * m + j, identical_exp(-gamma_ * acc))
+
+
+def op_kernel_tiled(
+    x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma: Float32, coef0: Float32, degree: Int,
+) raises:
+    """`kernel` from staged tiles for the rbf kind (see KT_T above); every
+    other kind, and d > KT_MAX_D, is `op_kernel` itself."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        if kind == K_RBF and d >= 1 and d <= KT_MAX_D and n > 0 and m > 0:
+            var ctx = xn_ctx()
+            var d_x = _buf(ctx, x, n * d, True)
+            var d_y = _buf(ctx, y, m * d, True)
+            var d_res = _buf(ctx, 0, n * m, False)
+            ctx.enqueue_function[kernel_rbf_tiled_kernel](
+                d_x.unsafe_ptr(), d_y.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), gamma,
+                grid_dim=((m + KT_T - 1) // KT_T, (n + KT_T - 1) // KT_T, 1), block_dim=(KT_TPB, 1, 1),
+            )
+            _down(ctx, d_res, res, n * m)
+            ctx.synchronize()
+            _ = d_x^
+            _ = d_y^
+            _ = d_res^
+            _ = ctx^
+            return
+    op_kernel(x, y, res, n, m, d, kind, gamma, coef0, degree)

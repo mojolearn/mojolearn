@@ -231,6 +231,19 @@ CUSTOM_OPS = [
      [("q", "fin", "n * d"), ("z", "fin", "m * d"), ("alpha", "fin", "m"), ("cmat", "fin", "m * m"),
       ("mean", "fout", "n"), ("var_", "fout", "n"),
       ("n", "int"), ("m", "int"), ("d", "int"), ("gamma", "float"), ("variance", "float"), ("kdiag", "float")]),
+    # lane/apple-fast-neighbors2 (2026-10-02), FAST tier only: LabelPropagation
+    # / LabelSpreading's fit loop over the compact kNN graph (cols, vals of
+    # lp_knn_graph) resident on the device (MOJOLEARN_LP_FAST_RESIDENT=1)
+    ("lp_iterate_knn",
+     [("cols", "iin", "n * k"), ("vals", "fin", "n * k"), ("ld", "finout", "n * c"), ("ystatic", "fin", "n * c"),
+      ("unlabeled", "iin", "n"), ("info", "iout", "2"), ("n", "int"), ("k", "int"), ("c", "int"), ("max_iter", "int"),
+      ("variant", "int"), ("tol_hi", "int"), ("tol_lo", "int"), ("alpha", "float")]),
+    # lane/apple-fast-neighbors2, FAST tier only: `kernel` with x and y tiles
+    # staged in threadgroup memory (rbf; other kinds take `kernel`),
+    # MOJOLEARN_XN_FAST_TILED_RBF=1
+    ("kernel_tiled",
+     [("x", "fin", "n * d"), ("y", "fin", "m * d"), ("res", "fout", "n * m"), ("n", "int"), ("m", "int"), ("d", "int"),
+      ("kind", "int"), ("gamma", "float"), ("coef0", "float"), ("degree", "int")]),
 ]
 
 #: Ops whose GPU driver runs a threadgroup form of the (sequential) item

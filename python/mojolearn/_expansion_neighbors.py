@@ -139,6 +139,12 @@ _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 #: per-row `pcs`, LabelSpreading's per-cell-degree `ls_laplacian`, PageRank's
 #: dangling rows in Python).
 _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
+#: lane/apple-fast-neighbors2 (2026-10-02), FAST tier only, both default off:
+#: the rbf kernel matrix from staged tiles (`kernel_tiled`; OneClassSVM's
+#: Gram), and LabelPropagation / LabelSpreading's kNN-graph loop as one
+#: resident op (`lp_iterate_knn`) instead of three binding calls per step.
+_FAST_TILED_RBF = os.environ.get("MOJOLEARN_XN_FAST_TILED_RBF", "") == "1"
+_LP_FAST_RESIDENT = os.environ.get("MOJOLEARN_LP_FAST_RESIDENT", "") == "1"
 
 
 class _XNeighbors(NumericModeMixin):
@@ -166,11 +172,20 @@ class _XNeighbors(NumericModeMixin):
         self._op("l1dist", [(A, 0), (B, 0), (out, 1)], (n, m, d))
         return out
 
+    def _fast_tier(self):
+        """True on the FAST tier (the lane/apple-fast-neighbors2 switches
+        apply there only; IDENTICAL keeps its ops)."""
+        try:
+            return self.numeric_mode_used() == "fast"
+        except Exception:
+            return False
+
     def _kernel(self, A, B, kind, gamma, coef0, degree):
         n, d = A.shape
         m = B.shape[0]
         out = _empty_out((n, m), "<f4")
-        self._op("kernel", [(A, 0), (B, 0), (out, 1)], (n, m, d, _KERNELS[kind], int(degree)),
+        op = "kernel_tiled" if (_FAST_TILED_RBF and kind == "rbf" and self._fast_tier()) else "kernel"
+        self._op(op, [(A, 0), (B, 0), (out, 1)], (n, m, d, _KERNELS[kind], int(degree)),
                  (_f32_scalar(gamma), _f32_scalar(coef0)))
         return out
 
@@ -1117,6 +1132,20 @@ class _LabelPropagationBase(_XNeighbors):
         ld = Array.from_list(ld0, "<f4")
         ystatic = Array.from_list(ys, "<f4")
         unlabeled = _i32(unl, "unlabeled")
+        if _LP_FAST_RESIDENT and not _HOST_LOOP_LP and isinstance(G, tuple) and self._fast_tier():
+            # lane/apple-fast-neighbors2: the loop below over the compact kNN
+            # graph as ONE resident op (x_neighbors/iter_device.mojo
+            # op_lp_iterate_knn), the graph uploaded once, the stopping sum
+            # and test on the device
+            cols, vals, _ = G
+            info = empty((2,), "<i4")
+            tol_bits = struct.unpack("<Q", struct.pack("<d", float(self.tol)))[0]
+            self._op("lp_iterate_knn", [(cols, 0), (vals, 0), (ld, 1), (ystatic, 0), (unlabeled, 0), (info, 1)],
+                     (n, cols.shape[1], C, int(self.max_iter), 0 if self._variant == "propagation" else 1,
+                      tol_bits >> 32, tol_bits & 0xFFFFFFFF),
+                     (_f32_scalar(self.alpha) if self._variant != "propagation" else 0.0,))
+            n_iter = int(info.tolist()[0])
+            return self._finish_fit(X, classes, ld, n, C, n_iter)
         if not _HOST_LOOP_LP and not isinstance(G, tuple):
             # The loop below as ONE resident op (x_neighbors/iter_device.mojo):
             # the same items in the same order, the graph uploaded once, tol
