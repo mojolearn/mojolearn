@@ -8,6 +8,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
 from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from max.gpu.primitives.block import prefix_sum
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -121,6 +122,24 @@ ascending order. M4 1M rows, same forest hashes: istella 18.0-19.4 ->
 slower with it (the sort costs more than the locality saves), so they keep
 the drawn order. `-D MOJOLEARN_RF_ROWS_SORTED_OFF` keeps the drawn order."""
 comptime ROWS_SORTED_MIN_COLS = 64
+
+#: FAST on Apple, lane/apple-fast-trees-scan (2026-10-02), OPT-IN
+#: `-D MOJOLEARN_SEG_SCAN_BLOCK=1` (shared with the GBDT segmented sort).
+#: CAUSE: `sort_selected_rows` runs `core/segmented_sort`'s
+#: `seg_scan_block_sums_kernel` as ONE THREAD (grid 1 x block 1, this
+#: file:~1842 on main): every bit pass walks `ceil(n_sampled / 512)`
+#: dependent global round trips on one thread, `sort_passes_for` (~22)
+#: passes per tree on wide data (`ROWS_SORTED_MIN_COLS`: Istella, not taxi).
+#: EFFECT: `rows_sort_scan_block_sums_block_kernel` runs that scan on one
+#: `ROWS_SORT_SCAN_TPB`-thread block, stripe per thread, one `prefix_sum`
+#: for the stripe carries. Int32 sums: the same prefixes, the same sort.
+#: IDENTICAL compiles the old launch.
+comptime ROWS_SORT_SCAN_TPB = 256
+comptime ROWS_SORT_SCAN_BLOCK = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_SEG_SCAN_BLOCK"]()
+)
 
 # The default bootstrap sampler already
 # computes each sampled row in a GPU thread, then the sampled-label staging
@@ -1763,6 +1782,40 @@ def sort_passes_for(n_rows_bound: Int) -> Int:
     return nb
 
 
+def rows_sort_scan_block_sums_block_kernel(
+    block_sums: MutPointer[Int32, MutAnyOrigin],
+    seg_size_in: Int32,
+    blocks_wide_in: Int32,
+):
+    """`core/segmented_sort`'s `seg_scan_block_sums_kernel` (one segment)
+    with `ROWS_SORT_SCAN_TPB` threads: thread t sums a contiguous stripe of
+    the block totals, the block's exclusive `prefix_sum` gives each stripe
+    its carry, and the stripe writes its exclusive prefixes (the form
+    `gbdt/gpu_util/kernel/reorder_one_bit.mojo`'s
+    `scan_block_sums_parallel_kernel` already compiles). Every thread
+    reaches the `prefix_sum`; an empty stripe contributes 0. Launch with
+    `grid_dim=(1, 1, 1), block_dim=(ROWS_SORT_SCAN_TPB, 1, 1)`."""
+    var seg = Int(block_idx.x)
+    var wide = Int(blocks_wide_in)
+    var used = (Int(seg_size_in) + SORT_BLOCK - 1) // SORT_BLOCK
+    var tid = Int(thread_idx.x)
+    var per = (used + ROWS_SORT_SCAN_TPB - 1) // ROWS_SORT_SCAN_TPB
+    var lo = min(tid * per, used)
+    var hi = min(lo + per, used)
+    var row = seg * wide
+    var local = Int32(0)
+    for b in range(lo, hi):
+        local += block_sums.unsafe_load(row + b)
+    var carry = prefix_sum[block_size=ROWS_SORT_SCAN_TPB, exclusive=True](
+        local
+    )
+    var running = carry
+    for b in range(lo, hi):
+        var v = block_sums.unsafe_load(row + b)
+        block_sums.unsafe_store(row + b, running)
+        running += v
+
+
 def sort_selected_rows[
     sabotage: Int = 0
 ](
@@ -1834,13 +1887,23 @@ def sort_selected_rows[
             block_dim=(SORT_BLOCK, 1, 1),
         )
         log_launch_ctx(ctx, "rows_sort_block_sums")
-        ctx.enqueue_function[seg_scan_block_sums_kernel](
-            block_sums_p,
-            Int32(n),
-            Int32(blocks_wide),
-            grid_dim=(1, 1, 1),
-            block_dim=(1, 1, 1),
-        )
+        comptime if ROWS_SORT_SCAN_BLOCK:
+            # one 256-thread block (lane/apple-fast-trees-scan)
+            ctx.enqueue_function[rows_sort_scan_block_sums_block_kernel](
+                block_sums_p,
+                Int32(n),
+                Int32(blocks_wide),
+                grid_dim=(1, 1, 1),
+                block_dim=(ROWS_SORT_SCAN_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[seg_scan_block_sums_kernel](
+                block_sums_p,
+                Int32(n),
+                Int32(blocks_wide),
+                grid_dim=(1, 1, 1),
+                block_dim=(1, 1, 1),
+            )
         log_launch_ctx(ctx, "rows_sort_carry")
         ctx.enqueue_function[seg_add_block_carry_kernel](
             offsets_p,
