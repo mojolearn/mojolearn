@@ -11,6 +11,9 @@ writes outputs no other task writes; the O(n^3) cells (gemm, sqdist), the
 QR slices and the shortest-path rows have the host spellings of
 x_decomp/host_simd.mojo, host_qr.mojo and host_graph.mojo (same words).
 So the bits are the same at every thread count."""
+from x_decomp.rr import host_eigh_rr
+
+comptime RR_EIGH_SWEEPS = 30  # x_decomp/device.mojo PJ_EIGH_SWEEPS
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -322,6 +325,25 @@ struct HostExec(Exec):
         var m = List[Float32](capacity=n * n)
         for i in range(n * n):
             m.append(a.unsafe_load(i))
+        # lane/neural-pass104: the round-robin Jacobi first, the device's
+        # rounds and test (x_decomp/rr.mojo); the cyclic solve below when it
+        # does not converge (the device's fallback too)
+        comptime if not is_defined["MOJOLEARN_XD_EIGH_CYCLIC"]():
+            if n >= 2:
+                var ar = m.copy()
+                var vr = List[Float32](length=n * n, fill=Float32(0.0))
+                var rr = host_eigh_rr(ar, vr, n, RR_EIGH_SWEEPS, Float32(JACOBI_TOL))
+                if rr[0]:
+                    host_sign_flip(vr, n)
+                    var diag_rr = List[Float32]()
+                    for i in range(n):
+                        diag_rr.append(ar[i * n + i])
+                    var got_rr = eigh_ascending(diag_rr, vr, n, True, rr[1])
+                    for i in range(n):
+                        w.unsafe_store(i, got_rr.w[i])
+                    for i in range(n * n):
+                        v.unsafe_store(i, got_rr.v[i])
+                    return
         # host_eigh's steps, the rotations of x_decomp/host_jacobi.mojo
         var fe = fast_jacobi_eigh(m, n, JACOBI_SWEEPS, Float32(JACOBI_TOL))
         if not fe.converged:

@@ -3,6 +3,7 @@
 """DevExec: the decomp lane's cells on the GPU. One thread per output, the
 cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
+from std.sys.compile import is_defined
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -1868,10 +1869,19 @@ struct DevExec(Exec):
         if n <= host_eigh_max():
             HostExec.eigh(a, w, v, n)
             return
-        var lo = pj_eigh_min()
-        if lo > 0 and n >= lo:
-            if DevExec._eigh_par(a, w, v, n):
+        # lane/neural-pass104 (Andrew, 2026-10-01): the round-robin Jacobi is
+        # THE eigh order (x_decomp/rr.mojo, pinned; the host runs the same
+        # rounds); a solve it does not converge falls back to the cyclic one,
+        # as the host does. `-D MOJOLEARN_XD_EIGH_CYCLIC=1` keeps the cyclic
+        # order (and MOJOLEARN_XD_PJ_EIGH_MIN its old opt-in threshold).
+        comptime if not is_defined["MOJOLEARN_XD_EIGH_CYCLIC"]():
+            if n >= 2 and DevExec._eigh_par(a, w, v, n):
                 return
+        else:
+            var lo = pj_eigh_min()
+            if lo > 0 and n >= lo:
+                if DevExec._eigh_par(a, w, v, n):
+                    return
         if jacobi2_eigh_on():
             DevExec._eigh2(a, w, v, n)
             return
