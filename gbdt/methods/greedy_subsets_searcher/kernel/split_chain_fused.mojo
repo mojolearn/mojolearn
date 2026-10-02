@@ -37,6 +37,7 @@ schedule change against the FAST path it replaces.
 from gbdt.gpu_data.gpu_structures import CFeature
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
+from std.memory import bitcast
 from max.gpu.primitives.block import broadcast as block_broadcast
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.sync import barrier
@@ -47,7 +48,7 @@ comptime FUSED_CHAIN_BLOCK = 512
 comptime FUSED_COPY_BLOCK = 256
 
 
-def fused_flags_count_kernel(
+def fused_flags_count_kernel[GUARD: Bool = False](
     compressed_index: MutPointer[UInt32, MutAnyOrigin],
     row_index: MutPointer[UInt32, MutAnyOrigin],
     part_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -58,9 +59,15 @@ def fused_flags_count_kernel(
     flags: MutPointer[UInt8, MutAnyOrigin],
     chunk_zeros: MutPointer[UInt32, MutAnyOrigin],
     max_chunks_in: Int32,
+    n_split_dev: MutPointer[UInt32, MutAnyOrigin],
 ):
     """K1: `split_and_make_sequence_kernel`'s side test plus
     `partition_count_chunks_kernel`. Grid (chunk stride, split leaf)."""
+    comptime if GUARD:
+        # DW_NO_LEVEL_SYNC: the grid covers every scored leaf; the split
+        # count is on the device (`dw_select_splits_kernel`). Whole block.
+        if Int(block_idx.y) >= Int(n_split_dev.unsafe_load(0)):
+            return
     var max_chunks = Int(max_chunks_in)
     var leaf_slot = Int(block_idx.y)
     var leaf_id = Int(leaf_ids.unsafe_load(leaf_slot))
@@ -105,7 +112,7 @@ def fused_flags_count_kernel(
         chunk += Int(grid_dim.x)
 
 
-def fused_scan_update_kernel(
+def fused_scan_update_kernel[GUARD: Bool = False](
     left_leaves: MutPointer[UInt32, MutAnyOrigin],
     right_leaves: MutPointer[UInt32, MutAnyOrigin],
     part_offset: MutPointer[UInt32, MutAnyOrigin],
@@ -122,10 +129,16 @@ def fused_scan_update_kernel(
     histograms: MutPointer[Float32, MutAnyOrigin],
     part_stats: MutPointer[Float32, MutAnyOrigin],
     max_chunks_in: Int32,
+    n_split_dev: MutPointer[UInt32, MutAnyOrigin],
 ):
     """K2: `partition_scan_chunks_kernel` + `update_partitions_after_split_kernel`
     + `update_partition_stats_from_split_kernel`. Grid (1, split leaf); the
     block strides over the leaf's CHUNKS, as the scan it replaces."""
+    comptime if GUARD:
+        # DW_NO_LEVEL_SYNC: the grid covers every scored leaf; the split
+        # count is on the device (`dw_select_splits_kernel`). Whole block.
+        if Int(block_idx.y) >= Int(n_split_dev.unsafe_load(0)):
+            return
     var max_chunks = Int(max_chunks_in)
     var leaf_slot = Int(block_idx.y)
     var left_leaf = Int(left_leaves.unsafe_load(leaf_slot))
@@ -195,7 +208,7 @@ def fused_scan_update_kernel(
         part_size.unsafe_store(right_leaf, UInt32(size - carry))
 
 
-def fused_place_scatter_kernel(
+def fused_place_scatter_kernel[GUARD: Bool = False](
     slot_off: MutPointer[UInt32, MutAnyOrigin],
     slot_sz: MutPointer[UInt32, MutAnyOrigin],
     flags: MutPointer[UInt8, MutAnyOrigin],
@@ -204,9 +217,15 @@ def fused_place_scatter_kernel(
     row_index: MutPointer[UInt32, MutAnyOrigin],
     temp_index: MutPointer[UInt32, MutAnyOrigin],
     max_chunks_in: Int32,
+    n_split_dev: MutPointer[UInt32, MutAnyOrigin],
 ):
     """K3: `partition_place_kernel`'s placement, applied to the row index
     as a scatter into `temp_index`. Grid (chunk stride, split leaf)."""
+    comptime if GUARD:
+        # DW_NO_LEVEL_SYNC: the grid covers every scored leaf; the split
+        # count is on the device (`dw_select_splits_kernel`). Whole block.
+        if Int(block_idx.y) >= Int(n_split_dev.unsafe_load(0)):
+            return
     var max_chunks = Int(max_chunks_in)
     var leaf_slot = Int(block_idx.y)
     var offset = Int(slot_off.unsafe_load(leaf_slot))
@@ -246,14 +265,20 @@ def fused_place_scatter_kernel(
         chunk += Int(grid_dim.x)
 
 
-def fused_copy_back_kernel(
+def fused_copy_back_kernel[GUARD: Bool = False](
     slot_off: MutPointer[UInt32, MutAnyOrigin],
     slot_sz: MutPointer[UInt32, MutAnyOrigin],
     temp_index: MutPointer[UInt32, MutAnyOrigin],
     row_index: MutPointer[UInt32, MutAnyOrigin],
+    n_split_dev: MutPointer[UInt32, MutAnyOrigin],
 ):
     """K4: the partitioned split ranges back into the row index. Grid
     (stride, split leaf), as `copy_index_in_leaves_kernel`."""
+    comptime if GUARD:
+        # DW_NO_LEVEL_SYNC: the grid covers every scored leaf; the split
+        # count is on the device (`dw_select_splits_kernel`). Whole block.
+        if Int(block_idx.y) >= Int(n_split_dev.unsafe_load(0)):
+            return
     var leaf_slot = Int(block_idx.y)
     var offset = Int(slot_off.unsafe_load(leaf_slot))
     var size = Int(slot_sz.unsafe_load(leaf_slot))
@@ -262,3 +287,72 @@ def fused_copy_back_kernel(
     while i < size:
         row_index.unsafe_store(offset + i, ldg(temp_index + (offset + i)))
         i += stride
+
+
+# ---- DW_NO_LEVEL_SYNC (FAST, Apple; opt-in) ------------------------------
+#: `dw_select_splits_kernel`'s block (one thread per scored leaf).
+comptime DW_SELECT_BLOCK = 64
+#: Words per `CFeature` record in the split payload (`CFEATURE_BYTES // 4`).
+comptime DW_FEAT_WORDS = 6
+#: The fold's record layout (`split_resolve.WINNER_RECORD_WORDS` and
+#: `WINNER_STATUS_DEFINED`), restated so this file imports no kernel module.
+comptime DW_WINNER_WORDS = 5
+comptime DW_WINNER_DEFINED = UInt32(1)
+
+
+def dw_select_splits_kernel(
+    winner: MutPointer[UInt32, MutAnyOrigin],
+    visit: MutPointer[UInt32, MutAnyOrigin],
+    n_visit_in: Int32,
+    leaves_count_in: Int32,
+    feat_table: MutPointer[UInt32, MutAnyOrigin],
+    left_leaves: MutPointer[UInt32, MutAnyOrigin],
+    right_leaves: MutPointer[UInt32, MutAnyOrigin],
+    split_features: MutPointer[UInt32, MutAnyOrigin],
+    split_bins: MutPointer[UInt32, MutAnyOrigin],
+    win_cells: MutPointer[UInt32, MutAnyOrigin],
+    n_split_out: MutPointer[UInt32, MutAnyOrigin],
+):
+    """The Depthwise `SelectLeavesToSplit` and the split payload, on the
+    device. One thread per scored leaf `v` (the visit list is ascending, so
+    visit order is leaf-id order, the host selection's order): selected iff
+    the fold's record is DEFINED with `Gain < 0` (their `Score < 0`, and the
+    two are one number on this kernel). Its slot is the count of selected
+    records before it, so slot `r` gets left = the leaf, right =
+    `leaves_count + r`, the bin, the winning cell, and the feature's
+    `CFeature` words (`feat_table`, offset already in elements). The last
+    thread writes the split count. Integer moves only; the host rebuilds
+    the same lists after the level's one readback and checks the count."""
+    var n_visit = Int(n_visit_in)
+    var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if v >= n_visit:
+        return
+    var rank = 0
+    for u in range(v):
+        var ub = u * DW_WINNER_WORDS
+        if winner.unsafe_load(ub + 3) == DW_WINNER_DEFINED:
+            if bitcast[DType.float32](winner.unsafe_load(ub + 2)) < Float32(
+                0.0
+            ):
+                rank += 1
+    var base = v * DW_WINNER_WORDS
+    var selected = False
+    if winner.unsafe_load(base + 3) == DW_WINNER_DEFINED:
+        selected = bitcast[DType.float32](
+            winner.unsafe_load(base + 2)
+        ) < Float32(0.0)
+    if selected:
+        left_leaves.unsafe_store(rank, visit.unsafe_load(v))
+        right_leaves.unsafe_store(
+            rank, UInt32(Int(leaves_count_in) + rank)
+        )
+        split_bins.unsafe_store(rank, winner.unsafe_load(base + 1))
+        win_cells.unsafe_store(rank, winner.unsafe_load(base + 4))
+        var feat = Int(winner.unsafe_load(base))
+        for w in range(DW_FEAT_WORDS):
+            split_features.unsafe_store(
+                rank * DW_FEAT_WORDS + w,
+                feat_table.unsafe_load(feat * DW_FEAT_WORDS + w),
+            )
+    if v == n_visit - 1:
+        n_split_out.unsafe_store(0, UInt32(rank + (1 if selected else 0)))

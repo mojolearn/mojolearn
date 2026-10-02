@@ -78,6 +78,10 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points_ridx import (
 from gbdt.methods.greedy_subsets_searcher.kernel.split_chain_fused import (
     FUSED_CHAIN_BLOCK,
     FUSED_COPY_BLOCK,
+    DW_FEAT_WORDS,
+    DW_SELECT_BLOCK,
+    DW_WINNER_WORDS,
+    dw_select_splits_kernel,
     fused_copy_back_kernel,
     fused_flags_count_kernel,
     fused_place_scatter_kernel,
@@ -222,8 +226,27 @@ comptime DW_FUSED_CHAIN = (
     and is_defined["MOJOLEARN_GBDT_DW_FUSED_CHAIN"]()
 )
 
+#: FAST on Apple, opt-in, stacked on DW_FUSED_CHAIN (lane
+#: apple-fast-depthwise, second pass): a Depthwise level takes ONE host wait
+#: instead of two. The winner fold's records stay on the device;
+#: `dw_select_splits_kernel` makes the Depthwise selection (DEFINED and
+#: `Gain < 0`) and the split payload (left/right ids, bin, cell, CFeature
+#: words) there, the fused chain runs over a grid of every scored leaf with
+#: the split count read on the device, and the winners, the new leaf sizes
+#: and the count come home in one wait. The host then replays the same
+#: selection from the same records (and checks the count), so leaves,
+#: paths and terminal marks are unchanged. Integer moves only: the same
+#: tree bit for bit. Lossguide, `min_split_gain >= 0` and a level with
+#: nothing to score keep the two-wait schedule.
+#: `-D MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC` is the B arm (with the chain define).
+comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and is_defined[
+    "MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC"
+]()
 
-def _launch_fused_split_chain(
+
+def _launch_fused_split_chain[
+    GUARD: Bool = False
+](
     ctx: DeviceContext,
     n_split: Int,
     n_rows: Int,
@@ -248,11 +271,14 @@ def _launch_fused_split_chain(
     mut slot_sz: DeviceBuffer[DType.uint32],
     mut hist: DeviceBuffer[DType.float32],
     mut part_stats: DeviceBuffer[DType.float32],
+    mut n_split_dev: DeviceBuffer[DType.uint32],
 ) raises:
     """DW_FUSED_CHAIN's four launches. Grids as the chain they replace: the
     chunk grid is `launch_stable_partition`'s (`max_chunks` off `n_rows`,
     the workspace's stride for `chunk_zeros`, capped at the machine-sized
-    `split_points_grid_x`), and the kernels stride the rest."""
+    `split_points_grid_x`), and the kernels stride the rest. GUARD
+    (DW_NO_LEVEL_SYNC): `n_split` is the scored-leaf count, an upper bound,
+    and every block past `n_split_dev[0]` returns at once."""
     if n_split <= 0:
         return
     var max_chunks = (n_rows + FUSED_CHAIN_BLOCK - 1) // FUSED_CHAIN_BLOCK
@@ -262,7 +288,7 @@ def _launch_fused_split_chain(
     var chunk_grid = max_chunks
     if grid_x < chunk_grid:
         chunk_grid = grid_x
-    ctx.enqueue_function[fused_flags_count_kernel](
+    ctx.enqueue_function[fused_flags_count_kernel[GUARD]](
         cindex.unsafe_ptr(),
         row_index.unsafe_ptr(),
         p_off.unsafe_ptr(),
@@ -273,10 +299,11 @@ def _launch_fused_split_chain(
         flags.unsafe_ptr(),
         chunk_zeros.unsafe_ptr(),
         Int32(max_chunks),
+        n_split_dev.unsafe_ptr(),
         grid_dim=(chunk_grid, n_split, 1),
         block_dim=(FUSED_CHAIN_BLOCK, 1, 1),
     )
-    ctx.enqueue_function[fused_scan_update_kernel](
+    ctx.enqueue_function[fused_scan_update_kernel[GUARD]](
         d_left.unsafe_ptr(),
         d_right.unsafe_ptr(),
         p_off.unsafe_ptr(),
@@ -293,10 +320,11 @@ def _launch_fused_split_chain(
         hist.unsafe_ptr(),
         part_stats.unsafe_ptr(),
         Int32(max_chunks),
+        n_split_dev.unsafe_ptr(),
         grid_dim=(1, n_split, 1),
         block_dim=(FUSED_CHAIN_BLOCK, 1, 1),
     )
-    ctx.enqueue_function[fused_place_scatter_kernel](
+    ctx.enqueue_function[fused_place_scatter_kernel[GUARD]](
         slot_off.unsafe_ptr(),
         slot_sz.unsafe_ptr(),
         flags.unsafe_ptr(),
@@ -305,14 +333,16 @@ def _launch_fused_split_chain(
         row_index.unsafe_ptr(),
         temp_index.unsafe_ptr(),
         Int32(max_chunks),
+        n_split_dev.unsafe_ptr(),
         grid_dim=(chunk_grid, n_split, 1),
         block_dim=(FUSED_CHAIN_BLOCK, 1, 1),
     )
-    ctx.enqueue_function[fused_copy_back_kernel](
+    ctx.enqueue_function[fused_copy_back_kernel[GUARD]](
         slot_off.unsafe_ptr(),
         slot_sz.unsafe_ptr(),
         temp_index.unsafe_ptr(),
         row_index.unsafe_ptr(),
+        n_split_dev.unsafe_ptr(),
         grid_dim=(grid_x, n_split, 1),
         block_dim=(FUSED_COPY_BLOCK, 1, 1),
     )
@@ -636,6 +666,14 @@ struct TDepthwiseWorkspace(Movable):
     var h_bf_folds: HostBuffer[DType.int32]
     var d_winner: DeviceBuffer[DType.uint32]
     var h_winner: HostBuffer[DType.uint32]
+    # DW_NO_LEVEL_SYNC: every feature's `CFeature` words (offset in
+    # elements), uploaded once per tree, and the device split count. Sized
+    # by `n_features` (a key); one record when the arm is compiled out.
+    var n_features_key: Int
+    var d_feat_table: DeviceBuffer[DType.uint32]
+    var h_feat_table: HostBuffer[DType.uint32]
+    var d_nsplit: DeviceBuffer[DType.uint32]
+    var h_nsplit: HostBuffer[DType.uint32]
 
     def __init__(
         out self,
@@ -646,8 +684,22 @@ struct TDepthwiseWorkspace(Movable):
         hist_cells: Int,
         n_rows: Int,
         qh_live: Bool,
+        n_features: Int,
     ) raises:
         self.max_leaves_key = max_leaves
+        self.n_features_key = n_features
+        var feat_records = 1
+        comptime if DW_NO_LEVEL_SYNC:
+            if n_features > 1:
+                feat_records = n_features
+        self.d_feat_table = ctx.enqueue_create_buffer[DType.uint32](
+            IDS_FEAT_SLOTS * feat_records
+        )
+        self.h_feat_table = ctx.enqueue_create_host_buffer[DType.uint32](
+            IDS_FEAT_SLOTS * feat_records
+        )
+        self.d_nsplit = ctx.enqueue_create_buffer[DType.uint32](1)
+        self.h_nsplit = ctx.enqueue_create_host_buffer[DType.uint32](1)
         self.final_ready = False
         self.final_offsets = List[Int]()
         self.final_sizes = List[Int]()
@@ -1500,12 +1552,14 @@ def fit_non_symmetric_tree[
         # the keys above
         or dws[0].n_rows_key != n_rows
         or dws[0].qh_key != qh_ok
+        # DW_NO_LEVEL_SYNC: the feature table is one record per feature
+        or dws[0].n_features_key != len(layout.features)
     ):
         dws.clear()
         dws.append(
             TDepthwiseWorkspace(
                 ctx, max_leaves, stat_count, argmax_blocks,
-                hist_cells_per_leaf, n_rows, qh_ok,
+                hist_cells_per_leaf, n_rows, qh_ok, len(layout.features),
             )
         )
 
@@ -1637,6 +1691,43 @@ def fit_non_symmetric_tree[
         )
         ctx.enqueue_copy(dst_buf=d_bf_folds, src_ptr=h_bf_folds.unsafe_ptr())
     # ======================================================================
+
+    # DW_NO_LEVEL_SYNC: whether this tree's levels take one wait, and the
+    # per-feature `CFeature` table the device selection copies from (the
+    # same record the host split loop packs, offset in elements). Written
+    # once per tree; the previous tree's waits settled the last copy.
+    ref d_feat_table = dws[0].d_feat_table
+    ref h_feat_table = dws[0].h_feat_table
+    ref d_nsplit = dws[0].d_nsplit
+    ref h_nsplit = dws[0].h_nsplit
+    var no_sync_tree = False
+    comptime if DW_NO_LEVEL_SYNC:
+        comptime assert (
+            DW_FEAT_WORDS == IDS_FEAT_SLOTS
+        ), "dw_select_splits_kernel copies CFEATURE_BYTES // 4 words"
+        comptime assert (
+            DW_WINNER_WORDS == WINNER_RECORD_WORDS
+        ), "dw_select_splits_kernel reads the fold's record layout"
+        no_sync_tree = (
+            use_ridx
+            and not lossguide
+            and options.min_split_gain < Float64(0)
+        )
+        if no_sync_tree:
+            var ft = h_feat_table.unsafe_ptr().bitcast[CFeature]()
+            for fi in range(len(layout.features)):
+                var lf = layout.features[fi]
+                ft[unsafe_offset=fi] = CFeature(
+                    lf.offset * UInt32(n_rows),
+                    lf.mask,
+                    lf.shift,
+                    lf.first_fold_index,
+                    lf.folds,
+                    lf.one_hot_feature,
+                )
+            ctx.enqueue_copy(
+                dst_buf=d_feat_table, src_ptr=h_feat_table.unsafe_ptr()
+            )
 
     # ============ THEIR `subsets.FeatureWeights`, WHICH WAS BEING DROPPED ===
     # `CreateInitialSubsets` writes `Options.FeatureWeights` into
@@ -1891,6 +1982,10 @@ def fit_non_symmetric_tree[
                 + " (a leaf is neither terminal nor improving and its"
                 " histogram is being rebuilt forever)"
             )
+
+        # DW_NO_LEVEL_SYNC: True once this level's split ran behind the
+        # fold and its sizes are already home (one wait for the level)
+        var level_synced = False
 
         # ================= ComputeOptimalSplits =====================
         # `greedy_search_helper.cpp:396`. The RNG draw is NOT here; see the
@@ -2663,9 +2758,53 @@ def fit_non_symmetric_tree[
                     block_dim=(WINNER_FOLD_BLOCK_SIZE, 1, 1),
                 )
                 mgr.stream_kernel()
-                ctx.enqueue_copy(
-                    dst_ptr=h_winner.unsafe_ptr(), src_buf=d_winner
-                )
+                if no_sync_tree:
+                    # DW_NO_LEVEL_SYNC: selection, payload and the fused
+                    # chain go behind the fold with no wait; the winners,
+                    # the new sizes and the split count come home in the
+                    # level's ONE wait (HOST WAIT TWO is skipped below).
+                    level_synced = True
+                    ctx.enqueue_function[dw_select_splits_kernel](
+                        d_winner.unsafe_ptr(),
+                        d_visit.unsafe_ptr(),
+                        Int32(len(visit)),
+                        Int32(len(leaves)),
+                        d_feat_table.unsafe_ptr(),
+                        d_left.unsafe_ptr(),
+                        d_right.unsafe_ptr(),
+                        sp_feats.unsafe_ptr(),
+                        sp_bins.unsafe_ptr(),
+                        d_win_cells.unsafe_ptr(),
+                        d_nsplit.unsafe_ptr(),
+                        grid_dim=(
+                            (len(visit) + DW_SELECT_BLOCK - 1)
+                            // DW_SELECT_BLOCK,
+                            1,
+                            1,
+                        ),
+                        block_dim=(DW_SELECT_BLOCK, 1, 1),
+                    )
+                    mgr.stream_kernel()
+                    _launch_fused_split_chain[True](
+                        ctx, len(visit), n_rows, sm_count, stat_count,
+                        hist_cells_per_leaf, cindex, row_index, new_index,
+                        p_off, p_sz, d_left, d_right, d_win_cells, sp_feats,
+                        sp_bins, flags, chunk_zeros, chunk_offsets,
+                        leaf_zeros, hp_off, hp_sz, hist, part_stats, d_nsplit,
+                    )
+                    for _ in range(4):
+                        mgr.stream_kernel()
+                    ctx.enqueue_copy(
+                        dst_ptr=h_winner.unsafe_ptr(), src_buf=d_winner
+                    )
+                    ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
+                    ctx.enqueue_copy(
+                        dst_ptr=h_nsplit.unsafe_ptr(), src_buf=d_nsplit
+                    )
+                else:
+                    ctx.enqueue_copy(
+                        dst_ptr=h_winner.unsafe_ptr(), src_buf=d_winner
+                    )
                 mgr.wait_complete()
                 stage_times.end(ctx, "score.read")
                 # the identity ladder's records are UNCHANGED: the
@@ -2851,6 +2990,18 @@ def fit_non_symmetric_tree[
             to_split = accepted^
             trace.record_list_i32(d_tag + "split.accepted", _as_i32(to_split))
 
+        if level_synced:
+            # DW_NO_LEVEL_SYNC: the device selected from the same records
+            # the host just replayed; a count that differs is a bookkeeping
+            # break, not a data condition
+            var dev_n_split = Int(h_nsplit.unsafe_ptr().unsafe_load(0))
+            if dev_n_split != len(to_split):
+                raise Error(
+                    String("DW_NO_LEVEL_SYNC: device selected ")
+                    + String(dev_n_split)
+                    + " splits, host selection "
+                    + String(len(to_split))
+                )
         if len(to_split) > 0:
             # --- MakeSplit's multi-leaf arm, `split_properties_helper
             # .cpp:845-950`. `leftId = leavesToSplit[i]` keeps the parent's
@@ -3021,15 +3172,19 @@ def fit_non_symmetric_tree[
             split_slots.append(IDS_SLOT_RIGHT)
             comptime if not SPLIT_COST_IDENTICAL:
                 split_slots.append(IDS_SLOT_WIN)
-            _upload_id_slots(
-                ctx, d_ids_arena, h_ids_arena_p, ids_host, max_leaves,
-                split_slots^,
-            )
+            if not level_synced:
+                _upload_id_slots(
+                    ctx, d_ids_arena, h_ids_arena_p, ids_host, max_leaves,
+                    split_slots^,
+                )
             stage_times.end(ctx, "split.host")
             var fused_chain = False
             comptime if DW_FUSED_CHAIN:
                 fused_chain = use_ridx
-            if fused_chain:
+            if level_synced:
+                # DW_NO_LEVEL_SYNC: the chain already ran behind the fold
+                pass
+            elif fused_chain:
                 # DW_FUSED_CHAIN: the eight-launch chain below in four, same
                 # permutation, partitions and stats (`kernel/split_chain_fused.mojo`)
                 stage_times.begin(ctx)
@@ -3038,7 +3193,7 @@ def fit_non_symmetric_tree[
                     hist_cells_per_leaf, cindex, row_index, new_index, p_off, p_sz,
                     d_left, d_right, d_win_cells, sp_feats, sp_bins, flags,
                     chunk_zeros, chunk_offsets, leaf_zeros, hp_off, hp_sz, hist,
-                    part_stats,
+                    part_stats, d_nsplit,
                 )
                 for _ in range(4):
                     mgr.stream_kernel()
@@ -3194,8 +3349,9 @@ def fit_non_symmetric_tree[
             # PINNED mirror with no copy; ours copies, for the reason in
             # `gpu_util/gpu_data/partitions.mojo`'s deviation block. =====
             stage_times.begin(ctx)
-            ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
-            mgr.wait_complete()
+            if not level_synced:
+                ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
+                mgr.wait_complete()
             for i in range(len(leaves)):
                 leaves[i].size = Int(h_sz.unsafe_ptr().unsafe_load(i))
             stage_times.end(ctx, "split.sizes")
