@@ -25,6 +25,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS
 from x_linear.ops import ld, st, fd, i2f, fa, fs, fm, fabs, shuffle
+from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.sgd import sgd_mb_on, mb_row, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
@@ -187,7 +188,8 @@ def _fit_on_host(
 # words), the step (one thread a weight, the intercept and the objective).
 # The shuffle, the rate schedule and the stopping run on the host with the
 # same statements; an epoch's batches are enqueued without a sync.
-def sgd_mb_rows_kernel(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
+@always_inline
+def _sgd_mb_rows_kernel_body(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
                        eps: Float32, swp: FP, has_sw: Int32, wpos: Float32, wneg: Float32, has_cw: Int32,
                        dlv: FP, lv: FP, lr: Int32, eta0: Float32):
     var r = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
@@ -199,7 +201,14 @@ def sgd_mb_rows_kernel(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32
         st(lv, r, o[1])
 
 
-def sgd_mb_parts_kernel(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP, bs: Int32, nsub: Int32, parts: FP):
+def sgd_mb_rows_kernel(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
+                       eps: Float32, swp: FP, has_sw: Int32, wpos: Float32, wneg: Float32, has_cw: Int32,
+                       dlv: FP, lv: FP, lr: Int32, eta0: Float32, wf: IP, woff: Int32, nonce: Int32):
+    _sgd_mb_rows_kernel_body(x, ys, idx, start, bs, d, w, bias, loss, eps, swp, has_sw, wpos, wneg, has_cw, dlv, lv, lr, eta0)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _sgd_mb_parts_kernel_body(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP, bs: Int32, nsub: Int32, parts: FP):
     var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
     var subs = mb_subs(Int(bs))
@@ -209,7 +218,12 @@ def sgd_mb_parts_kernel(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP,
         st(parts, j * Int(nsub) + s, mb_part(x, dd, idx, Int(start), dlv, lv, j, s, Int(bs)))
 
 
-def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias: FP, obj: FP, eta: Float32,
+def sgd_mb_parts_kernel(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP, bs: Int32, nsub: Int32, parts: FP, wf: IP, woff: Int32, nonce: Int32):
+    _sgd_mb_parts_kernel_body(x, d, idx, start, dlv, lv, bs, nsub, parts)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _sgd_mb_step_kernel_body(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias: FP, obj: FP, eta: Float32,
                        alpha: Float32, l1r: Float32, penalty: Int32, fi: Int32, need_obj: Int32, one_class: Int32,
                        bsum: Int32):
     var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
@@ -228,6 +242,12 @@ def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias:
     elif need_obj != 0:
         st(obj, 0, fa(ld(obj, 0), g))
 
+
+def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias: FP, obj: FP, eta: Float32,
+                       alpha: Float32, l1r: Float32, penalty: Int32, fi: Int32, need_obj: Int32, one_class: Int32,
+                       bsum: Int32, wf: IP, woff: Int32, nonce: Int32):
+    _sgd_mb_step_kernel_body(parts, nsub, bs, d, w, bias, obj, eta, alpha, l1r, penalty, fi, need_obj, one_class, bsum)
+    witness_end(wf, woff, nonce)
 
 def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
                  n_out: Int, res: FP) raises:
@@ -268,6 +288,15 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var dw = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
     var dbias = ctx.enqueue_create_buffer[DType.float32](1)
     var dobj = ctx.enqueue_create_buffer[DType.float32](1)
+    var dws = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dbs = ctx.enqueue_create_buffer[DType.float32](1)
+    var wcap = 0
+    var ws0 = 0
+    while ws0 < n:
+        var wbs = min(batch, n - ws0)
+        wcap += _xg_blocks(wbs) + _xg_blocks((d + 2) * mb_subs(wbs)) + _xg_blocks(d + 2)
+        ws0 += wbs
+    var wit = Witness(ctx, max(wcap, 1))
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     if has_sw:
@@ -311,32 +340,55 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
             epochs = epoch + 1
             if do_shuffle:
                 shuffle(ipp, n, rng)
-            ctx.enqueue_copy(dst_buf=didx, src_ptr=idx.unsafe_ptr())
-            dobj.enqueue_fill(Float32(0))
-            var start = 0
-            while start < n:
-                var bs = min(batch, n - start)
-                var et = mb_eta(lr, eta, eta0, alpha, power_t, opt_init, t)
-                ctx.enqueue_function[sgd_mb_rows_kernel](
-                    dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(start), Int32(bs), Int32(d),
-                    dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, dsw.unsafe_ptr(), Int32(1 if has_sw else 0),
-                    wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0,
-                    grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
-                )
-                ctx.enqueue_function[sgd_mb_parts_kernel](
-                    dx.unsafe_ptr(), Int32(d), didx.unsafe_ptr(), Int32(start), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
-                    Int32(bs), Int32(nsub), dparts.unsafe_ptr(), grid_dim=_xg_blocks((d + 2) * mb_subs(bs)), block_dim=XG_TPB,
-                )
-                ctx.enqueue_function[sgd_mb_step_kernel](
-                    dparts.unsafe_ptr(), Int32(nsub), Int32(bs), Int32(d), dw.unsafe_ptr(), dbias.unsafe_ptr(),
-                    dobj.unsafe_ptr(), et, alpha, l1r, Int32(penalty), Int32(1 if fi else 0), Int32(1 if need_obj else 0),
-                    Int32(1 if one_class else 0), Int32(1 if bsum else 0), grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
-                )
-                t += bs if bsum else 1
-                start += bs
-            ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=dw)
-            ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=dbias)
-            ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=dobj)
+            # the epoch as ONE guarded unit (x_linear/witness.mojo): its steps
+            # update the weights in place, so a cut epoch restores the weights
+            # it started from and replays the same batches
+            ctx.enqueue_copy(dst_buf=dws, src_buf=dw)
+            ctx.enqueue_copy(dst_buf=dbs, src_buf=dbias)
+            var t_start = t
+            var tries = 0
+            while True:
+                var nonce = wit.begin()
+                var wo = 0
+                t = t_start
+                ctx.enqueue_copy(dst_buf=didx, src_ptr=idx.unsafe_ptr())
+                dobj.enqueue_fill(Float32(0))
+                var start = 0
+                while start < n:
+                    var bs = min(batch, n - start)
+                    var et = mb_eta(lr, eta, eta0, alpha, power_t, opt_init, t)
+                    ctx.enqueue_function[sgd_mb_rows_kernel](
+                        dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(start), Int32(bs), Int32(d),
+                        dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, dsw.unsafe_ptr(), Int32(1 if has_sw else 0),
+                        wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0,
+                        wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(bs)
+                    ctx.enqueue_function[sgd_mb_parts_kernel](
+                        dx.unsafe_ptr(), Int32(d), didx.unsafe_ptr(), Int32(start), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
+                        Int32(bs), Int32(nsub), dparts.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                        grid_dim=_xg_blocks((d + 2) * mb_subs(bs)), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks((d + 2) * mb_subs(bs))
+                    ctx.enqueue_function[sgd_mb_step_kernel](
+                        dparts.unsafe_ptr(), Int32(nsub), Int32(bs), Int32(d), dw.unsafe_ptr(), dbias.unsafe_ptr(),
+                        dobj.unsafe_ptr(), et, alpha, l1r, Int32(penalty), Int32(1 if fi else 0), Int32(1 if need_obj else 0),
+                        Int32(1 if one_class else 0), Int32(1 if bsum else 0), wit.p(), Int32(wo), nonce,
+                        grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(d + 2)
+                    t += bs if bsum else 1
+                    start += bs
+                ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=dw)
+                ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=dbias)
+                ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=dobj)
+                if wit.ok(ctx, wo, "SGD epoch"):
+                    break
+                tries += 1
+                if tries >= WITNESS_TRIES:
+                    wit.fail()
+                ctx.enqueue_copy(dst_buf=dw, src_buf=dws)
+                ctx.enqueue_copy(dst_buf=dbias, src_buf=dbs)
             ctx.synchronize()
             var bias = hb[0]
             var finite = bias == bias and fabs(bias) < Float32(3.0e38)
@@ -391,6 +443,9 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     _ = dw^
     _ = dbias^
     _ = dobj^
+    _ = dws^
+    _ = dbs^
+    _ = wit^
 
 
 def fit_device(
