@@ -5,12 +5,6 @@ rule	class	owner	state	path	occ	text
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_array.py	0	return (self[i] for i in range(self.shape[0]))
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	0	for s in range(n_rows):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	1	for s in range(n_rows):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	big = max(abs(ls[i * n + i]) for i in range(n))
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	diag = _M.of([lu.s[i * n + i] for i in range(n)], 1, n)
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	for i in range(n):
-py-loop	py-numpy	gap-nv-classical2	debt	python/mojolearn/_expansion_decomp.py	1	for i in range(n):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	2	for i in range(n):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	3	for i in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	for i in range(n):
 py-loop	py-numpy	gap-treeshap	debt	python/mojolearn/_expansion_trees.py	0	for i in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_trees.py	1	for i in range(n):
