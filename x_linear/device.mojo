@@ -30,7 +30,7 @@ from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb
 from x_linear.sgd import (
     sgd_loss, sgd_dloss, sgd_reg_block, _sgd_target, _clip_one,
     ws_mul, ws_div, ws_decay, ws_clip, WS_RESET, ff_add, oc_hinge, oc_offset,
-    mb_dot, mb_oc_mode, mb_oc_row, oc_delta, oc_count, oc_hinge_at, mb_oc_bias_step,
+    mb_dot, mb_oc_mode, mb_oc_row, oc_delta, oc_count, oc_count_tie, oc_hinge_at, mb_oc_bias_step,
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
@@ -232,6 +232,19 @@ def sgd_mb_rows_kernel(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32
 
 
 @always_inline
+def _oc_team_sum(cnt: IP, tid: Int, nt: Int, v: Int) -> Int:
+    """The block's sum of each thread's count v (integers: exact in any
+    order), the same on every thread."""
+    sti(cnt, tid, v)
+    team_barrier()
+    var c = 0
+    for u in range(nt):
+        c += ldi(cnt, u)
+    team_barrier()
+    return c
+
+
+@always_inline
 def sgd_mb_oc_team(dlv: FP, lv: FP, bs: Int, eta: Float32, alpha: Float32, bsum: Bool, cnt: IP, tid: Int,
                    nt: Int) -> Float32:
     """x_linear/sgd.mojo `oc_solve` on one block (lane/neural-pass139): each
@@ -244,22 +257,31 @@ def sgd_mb_oc_team(dlv: FP, lv: FP, bs: Int, eta: Float32, alpha: Float32, bsum:
     var hi = bs
     while lo < hi:
         var mid = (lo + hi) // 2
-        sti(cnt, tid, oc_count(dlv, tid, bs, nt, oc_delta(mid, bs, eta, alpha, bsum)))
-        team_barrier()
-        var c = 0
-        for u in range(nt):
-            c += ldi(cnt, u)
-        team_barrier()
+        var c = _oc_team_sum(cnt, tid, nt, oc_count(dlv, tid, bs, nt, oc_delta(mid, bs, eta, alpha, bsum)))
         if mid >= c:
             hi = mid
         else:
             lo = mid + 1
-    var dlt = oc_delta(lo, bs, eta, alpha, bsum)
+    var dhi = oc_delta(lo, bs, eta, alpha, bsum)
+    var dlo = dhi
+    var cut = 0
+    if lo > 0:
+        dlo = oc_delta(lo - 1, bs, eta, alpha, bsum)
+        var need = lo - _oc_team_sum(cnt, tid, nt, oc_count(dlv, tid, bs, nt, dhi))
+        var a = 0
+        var b = bs
+        while a < b:
+            var mid = (a + b) // 2
+            if _oc_team_sum(cnt, tid, nt, oc_count_tie(dlv, tid, bs, nt, dhi, dlo, mid)) >= need:
+                b = mid
+            else:
+                a = mid + 1
+        cut = a
     for r in range(tid, bs, nt):
-        var o = oc_hinge_at(ld(dlv, r), dlt)
+        var o = oc_hinge_at(ld(dlv, r), r, dhi, dlo, cut)
         st(dlv, r, o[0])
         st(lv, r, o[1])
-    return dlt
+    return dhi
 
 
 def sgd_mb_oc_kernel(dlv: FP, lv: FP, bs: Int32, eta: Float32, alpha: Float32, bsum: Int32, cnt: IP, dlt: FP,

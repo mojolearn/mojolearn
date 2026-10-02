@@ -1436,7 +1436,9 @@ def mb_bias_step(b: Float32, gb: Float32, bs: Int, eta: Float32, alpha: Float32,
 # E[delta] = 0 gives E[k] / bs = nu, sklearn's stationary point (their
 # intercept += eta (1[m <= 0] - nu) per row), with no overshoot past the
 # batch's own nu-quantile. The rows' dl (the weights' step) are then the
-# flags at the moved intercept. Mode `ocm`: 0 not one-class, 1 the explicit
+# flags at the moved intercept, exactly k of them: when rows tie (every
+# margin is 0 at w = 0) C jumps past k at the solution, so the jump rows
+# fill the count in batch position order (`oc_solve`). Mode `ocm`: 0 not one-class, 1 the explicit
 # step (sample weights, or no intercept), 2 the implicit step.
 @always_inline
 def mb_oc_mode(one_class: Bool, fit_intercept: Bool, has_sw: Bool) -> Int:
@@ -1486,18 +1488,48 @@ def oc_count(mv: FP, lo: Int, hi: Int, step: Int, dlt: Float32) -> Int:
 
 
 @always_inline
-def oc_hinge_at(m0: Float32, dlt: Float32) -> Tuple[Float32, Float32]:
-    """(dl, loss) of a row of margin m0 after the step dlt (`oc_count`'s flag)."""
-    var m = fa(m0, dlt)
+def oc_tie(m0: Float32, dhi: Float32, dlo: Float32) -> Bool:
+    """A row flagged at the step dlo = delta_{k-1} but not at dhi = delta_k:
+    its margin sits in the jump of C at the solution (`oc_solve`)."""
+    return fa(m0, dlo) <= 0 and fa(m0, dhi) > 0
+
+
+@always_inline
+def oc_count_tie(mv: FP, lo: Int, hi: Int, step: Int, dhi: Float32, dlo: Float32, cut: Int) -> Int:
+    """Rows r = lo, lo + step, .. < min(hi, cut) in the jump (`oc_tie`)."""
+    var c = 0
+    var r = lo
+    var e = min(hi, cut)
+    while r < e:
+        if oc_tie(ld(mv, r), dhi, dlo):
+            c += 1
+        r += step
+    return c
+
+
+@always_inline
+def oc_hinge_at(m0: Float32, r: Int, dhi: Float32, dlo: Float32, cut: Int) -> Tuple[Float32, Float32]:
+    """(dl, loss) of batch row r of margin m0 after the step dhi: flagged
+    when fa(m0, dhi) <= 0 (`oc_count`'s flag), or when it is a jump row
+    (`oc_tie`) before position cut (loss 0: its margin is at the jump)."""
+    var m = fa(m0, dhi)
     if m <= 0:
         return (Float32(-1), fs(Float32(0), m))
+    if r < cut and fa(m0, dlo) <= 0:
+        return (Float32(-1), Float32(0))
     return (Float32(0), Float32(0))
 
 
-def oc_solve(mv: FP, bs: Int, eta: Float32, alpha: Float32, bsum: Bool) -> Float32:
-    """The implicit step (host): the least k in [0, bs] with k >= C(k), by
-    bisection; the device runs the same probes with the counts split over
-    a block."""
+def oc_solve(mv: FP, bs: Int, eta: Float32, alpha: Float32, bsum: Bool) -> Tuple[Float32, Float32, Int]:
+    """The implicit step (host): k* the least k in [0, bs] with k >= C(k), by
+    bisection; dhi = delta_{k*}. C jumps at k* when rows share a margin
+    (every row at w = 0): C(k* - 1) >= k* > C(k*) can hold, and flagging
+    only the C(k*) rows past the step would flag none of a tied batch, so
+    the weights never move. Exactly k* rows are flagged: the C(k*) and the
+    first (batch position, a shuffled order) k* - C(k*) of the jump rows
+    (`oc_tie` with dlo = delta_{k* - 1}), the cut found by a second
+    bisection over positions. Returns (dhi, dlo, cut); the device runs the
+    same probes with the counts split over a block."""
     var lo = 0
     var hi = bs
     while lo < hi:
@@ -1507,7 +1539,20 @@ def oc_solve(mv: FP, bs: Int, eta: Float32, alpha: Float32, bsum: Bool) -> Float
             hi = mid
         else:
             lo = mid + 1
-    return oc_delta(lo, bs, eta, alpha, bsum)
+    var dhi = oc_delta(lo, bs, eta, alpha, bsum)
+    if lo == 0:
+        return (dhi, dhi, 0)
+    var dlo = oc_delta(lo - 1, bs, eta, alpha, bsum)
+    var need = lo - oc_count(mv, 0, bs, 1, dhi)
+    var a = 0
+    var b = bs
+    while a < b:
+        var mid = (a + b) // 2
+        if oc_count_tie(mv, 0, bs, 1, dhi, dlo, mid) >= need:
+            b = mid
+        else:
+            a = mid + 1
+    return (dhi, dlo, a)
 
 
 @always_inline
@@ -1594,9 +1639,10 @@ def sgd_mb_one(
             var dlt = Float32(0)
             if ocm == 2:
                 # the implicit intercept step, then each row's (dl, loss) at it
-                dlt = oc_solve(dlv, bs, et, alpha, bsum)
+                var so = oc_solve(dlv, bs, et, alpha, bsum)
+                dlt = so[0]
                 for r in range(bs):
-                    var o = oc_hinge_at(ld(dlv, r), dlt)
+                    var o = oc_hinge_at(ld(dlv, r), r, so[0], so[1], so[2])
                     st(dlv, r, o[0])
                     st(lv, r, o[1])
             var subs = mb_subs(bs, sub)
