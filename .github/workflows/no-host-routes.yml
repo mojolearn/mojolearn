@@ -1,0 +1,68 @@
+name: No host routes
+
+# The one check that runs by itself (2026-10-02, Andrew: close the GitHub
+# merge loophole). tools/hooks/no_host_routes.py reads only the lines a PR or
+# a push to main adds and fails on any that add or touch a CPU route on GPU
+# installs. Python only, no build, seconds. The main ruleset requires the
+# `no-host-routes` check before a PR merges; a push to main that skipped the
+# local hook turns red here. `gh workflow run no-host-routes.yml -f pr=N`
+# checks an open PR that has had no event since the check went in and posts
+# the result on its head commit.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to check (posts the status on its head)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: no-host-routes-${{ github.event.pull_request.number || inputs.pr || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  no-host-routes:
+    name: no-host-routes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Added lines add no CPU route
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          PR: ${{ inputs.pr }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          tip=$(git rev-parse HEAD)
+          if [ -n "$PR" ]; then
+            git fetch -q origin "+refs/pull/$PR/head:refs/remotes/pr/$PR"
+            tip=$(git rev-parse "refs/remotes/pr/$PR")
+            state=success
+            python3 tools/hooks/no_host_routes.py "$(git merge-base origin/main "$tip")" "$tip" --main origin/main || state=failure
+            gh api "repos/$REPO/statuses/$tip" -f state=$state -f context=no-host-routes \
+              -f description="added lines add no CPU route" \
+              -f target_url="$GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID" >/dev/null
+            [ $state = success ]
+            exit
+          fi
+          if [ "$EVENT" = push ] && ! echo "$BEFORE" | grep -q '^0*$' \
+              && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            base=$BEFORE
+          else
+            base=$(git merge-base origin/main "$tip")
+          fi
+          python3 tools/hooks/no_host_routes.py "$base" "$tip" --main origin/main
