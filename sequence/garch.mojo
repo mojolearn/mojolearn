@@ -317,12 +317,121 @@ def _pers(i: Int) -> Float32:
     return Float32(0.98)
 
 
+@always_inline
+def _garch_grid_cell(t: Int, a: Args):
+    """MOJOLEARN_SEQ_GARCH_GRID: element t = b GARCH_GRID_N + c: the
+    negative log-likelihood of series b's starting-value candidate
+    c = 16 ia + 4 ig + ib (the serial grid's nesting order) into p6[t].
+    Scratch-free: the residuals, the backcast, the variance bounds, the
+    candidate and the recursion are formed from y in registers, the same
+    operations in the same order as op_garch's prologue, `_backcast`,
+    `_var_bounds`, the grid loop and `garch_nll_reg` (p, o, q <= 1)."""
+    var n = a.i0
+    var p = a.i2
+    var o = a.i3
+    var q = a.i4
+    var has_mean = a.i5 != 0
+    var b = t // GARCH_GRID_N
+    var c = t - b * GARCH_GRID_N
+    var ia = c // 16
+    var ig = (c - ia * 16) // 4
+    var ib = c - ia * 16 - ig * 4
+    var y = a.p0 + b * n
+    var mu0 = Float32(0.0)
+    if has_mean:
+        var s = Float32(0.0)
+        for i in range(n):
+            s = add(s, ld(y, i))
+        mu0 = div(s, Float32(n))
+    # _backcast over r_i = y_i - mu0
+    var tau = 75 if n > 75 else n
+    var w = Float32(1.0)
+    var sw = Float32(0.0)
+    var sb = Float32(0.0)
+    for i in range(tau):
+        var v = sub(ld(y, i), mu0)
+        sb = fma3(w, mul(v, v), sb)
+        sw = add(sw, w)
+        w = mul(w, Float32(0.94))
+    var backcast = div(sb, sw)
+    # _var_bounds' scalars
+    var s1 = Float32(0.0)
+    var mx = Float32(0.0)
+    for i in range(n):
+        var v = sub(ld(y, i), mu0)
+        s1 = add(s1, v)
+        var v2 = mul(v, v)
+        if v2 > mx:
+            mx = v2
+    var mean = div(s1, Float32(n))
+    var ss = Float32(0.0)
+    for i in range(n):
+        var d = sub(sub(ld(y, i), mu0), mean)
+        ss = fma3(d, d, ss)
+    var var_ = div(ss, Float32(n))
+    var lo_ = div(var_, Float32(1e8))
+    var up_min = add(Float32(1.0), mx)
+    var up_max = mul(Float32(1e7), up_min)
+    # target
+    var target = Float32(0.0)
+    for i in range(n):
+        var v = sub(ld(y, i), mu0)
+        target = fma3(v, v, target)
+    target = div(target, Float32(n))
+    # the candidate: the grid loop's cand[0 .. k - 1] (omega, alpha, gamma, beta)
+    var agb = _pers(ib)
+    var cw = mul(sub(Float32(1.0), agb), target)
+    var ca = Float32(0.0)
+    var cg = Float32(0.0)
+    var cb = Float32(0.0)
+    if p > 0:
+        ca = div(_grid(ia), Float32(p))
+        agb = sub(agb, _grid(ia))
+    if o > 0:
+        cg = div(_grid(ig), Float32(o))
+        agb = sub(agb, div(_grid(ig), Float32(2.0)))
+    if q > 0:
+        cb = div(agb, Float32(q))
+    # garch_nll_reg with _var_bounds' EWMA bounds formed per step
+    var ll = Float32(0.0)
+    var rp = Float32(0.0)
+    var sp = Float32(0.0)
+    var e = backcast
+    for tt in range(n):
+        if tt > 0:
+            e = fma3(Float32(0.06), mul(rp, rp), mul(Float32(0.94), e))
+        var b0 = div(e, Float32(1e6))
+        var b1 = mul(e, Float32(1e6))
+        if b0 < lo_:
+            b0 = lo_
+        if b1 < up_min:
+            b1 = up_min
+        if b1 > up_max:
+            b1 = up_max
+        var v = _garch_step_reg(cw, ca, cg, cb, p, o, q, tt, rp, sp, backcast, b0, b1)
+        var x = sub(ld(y, tt), mu0)
+        ll = add(ll, add(add(LOG_2PI, ftz(identical_log(v))), div(mul(x, x), v)))
+        rp = x
+        sp = v
+    ll = mul(Float32(0.5), ll)
+    if not (ll <= Float32(3.0e38)):
+        ll = Float32(3.0e38)
+    st(a.p6, t, ll)
+
+
 def op_garch(t: Int, a: Args):
     """Series t. p0 y [B, n]; p1 params out [B, 1 + 1 + p + o + q]
     (mu, omega, alpha, gamma, beta; mu 0 for a zero mean); p2 info [B, 4]
     out (loglik, iterations); p3 sigma [B, n] out (conditional
     volatility); p4 variance forecast [B, h] out; p5 scratch [B, stride].
-    i0 n, i1 h, i2 p, i3 o, i4 q, i5 constant mean, i6 stride."""
+    i0 n, i1 h, i2 p, i3 o, i4 q, i5 constant mean, i6 stride.
+    MOJOLEARN_SEQ_GARCH_GRID: i8 1 runs element t as a grid cell
+    (`_garch_grid_cell`, p6 [B, GARCH_GRID_N] out); i8 2 takes the
+    starting values from p6's argmin instead of the serial grid."""
+    comptime if GARCH_GRID:
+        if a.i8 == 1:
+            _garch_grid_cell(t, a)
+            return
     var n = a.i0
     var h = a.i1
     var p = a.i2
@@ -359,9 +468,23 @@ def op_garch(t: Int, a: Args):
         target = fma3(v, v, target)
     target = div(target, Float32(n))
     var best = Float32(3.0e38)
-    for ia in range(4):
-        for ig in range(4):
-            for ib in range(4):
+    var grid_done = False
+    comptime if GARCH_GRID:
+        if a.i8 == 2:
+            # the grid's values from p6, in candidate order, the serial
+            # loop's strict `<`: the first lowest candidate wins
+            grid_done = True
+            var nl = a.p6 + t * GARCH_GRID_N
+            var bc = -1
+            for c in range(GARCH_GRID_N):
+                var gv = ld(nl, c)
+                if gv < best:
+                    best = gv
+                    bc = c
+            if bc >= 0:
+                var ia = bc // 16
+                var ig = (bc - ia * 16) // 4
+                var ib = bc - ia * 16 - ig * 4
                 var agb = _pers(ib)
                 st(cand, 0, mul(sub(Float32(1.0), agb), target))
                 for j in range(k - 1):
@@ -377,11 +500,32 @@ def op_garch(t: Int, a: Args):
                 if q > 0:
                     for j in range(q):
                         st(cand, 1 + p + o + j, div(agb, Float32(q)))
-                var nll = garch_nll(cand, r, n, p, o, q, backcast, vb, s2)
-                if nll < best:
-                    best = nll
-                    for j in range(k):
-                        st(x, j + (1 if has_mean else 0), ld(cand, j))
+                for j in range(k):
+                    st(x, j + (1 if has_mean else 0), ld(cand, j))
+    if not grid_done:
+        for ia in range(4):
+            for ig in range(4):
+                for ib in range(4):
+                    var agb = _pers(ib)
+                    st(cand, 0, mul(sub(Float32(1.0), agb), target))
+                    for j in range(k - 1):
+                        st(cand, 1 + j, mul(sub(Float32(1.0), agb), target))
+                    if p > 0:
+                        for j in range(p):
+                            st(cand, 1 + j, div(_grid(ia), Float32(p)))
+                        agb = sub(agb, _grid(ia))
+                    if o > 0:
+                        for j in range(o):
+                            st(cand, 1 + p + j, div(_grid(ig), Float32(o)))
+                        agb = sub(agb, div(_grid(ig), Float32(2.0)))
+                    if q > 0:
+                        for j in range(q):
+                            st(cand, 1 + p + o + j, div(agb, Float32(q)))
+                    var nll = garch_nll(cand, r, n, p, o, q, backcast, vb, s2)
+                    if nll < best:
+                        best = nll
+                        for j in range(k):
+                            st(x, j + (1 if has_mean else 0), ld(cand, j))
     # box bounds (arch): mu free, omega [1e-8 v, 10 v], alpha, beta [0, 1],
     # gamma [-1, 2] under a matching alpha else [0, 2]
     var off = 0

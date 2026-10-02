@@ -15,7 +15,7 @@ from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
 from sequence.ets import ets_scratch
-from sequence.garch import GARCH_SNAP
+from sequence.garch import GARCH_GRID, GARCH_GRID_N, GARCH_SNAP
 from sequence.moe_tiled import TILE_P, TILE_Q
 from sequence.prophet import MEM, ProphetData, _dot, _fg_prior
 from sequence.prophet import div as _pdiv
@@ -1071,6 +1071,16 @@ def garch_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -
     a.i6 = stride
     a.i7 = ival(ip, 7) if len(ip) == 9 else GARCH_FAST_STALL_ITERS
     a.f0 = Float32(Float64(ival(ip, 8)) * 1e-9) if len(ip) == 9 else GARCH_FAST_STALL_REL
+    comptime if GARCH_GRID:
+        if m <= 1:
+            # lane/apple-fast-seq: the starting-value grid as one element per
+            # (series, candidate) before the fit (sequence/garch.mojo
+            # _garch_grid_cell); the fit reads its argmin (i8 2)
+            var G = ex.alloc(B * GARCH_GRID_N)
+            a.p6 = G
+            a.i8 = 1
+            ex.launch[OP_GARCH](a, B * GARCH_GRID_N)
+            a.i8 = 2
     ex.launch[OP_GARCH](a, B)
     ex.sync()
     ex.download(fptr(addrs[1], "params"), P, B * (1 + 1 + p + o + q))
