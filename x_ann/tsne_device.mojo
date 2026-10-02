@@ -24,7 +24,7 @@ from x_ann.switches import ANN3_TSNE_RB32, ANN3_TSNE_RB64, ANN3_TSNE_STEP_ROWS, 
 from checks.numerics import identical_div, identical_mul
 from x_ann.tsne_core import ts_q
 from x_ann.tsne_core import (
-    F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_repulse_fold, ts_repulse_pair, ts_repulse_terms, ts_step_cell,
+    F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_repulse_fold, ts_repulse_pair, ts_repulse_terms, ts_step_cell, ts_z_add,
     ts_sum_cell, tsne_nn, tsne_symmetrize, tsne_validate,
 )
 
@@ -157,9 +157,9 @@ def sum_team_kernel(n: Int32, row_z: F32P, z: F32P):
 # candidates with every thread of the block (`ts_repulse_terms`, the same
 # words) into threadgroup memory, then row i's owner folds them with
 # `ts_repulse_fold`'s statements in ascending j, skipping j == i: the same
-# fold in the same order. Z (`ts_sum_cell`'s ascending fold, a pinned
-# serial chain) is folded by the repulsion kernel's last finishing block,
-# its operands staged coalesced, so no one-block launch remains. Both
+# fold in the same order. Z is `ts_sum_cell`'s pinned pairwise tree, folded
+# in parallel inside the same kernel (each block's rows, then the parts in
+# the block that finishes last), so no one-block launch remains. Both
 # coordinates' steps run in one thread (`step_rows_kernel`, the cell's
 # statements in the cell's order). -D MOJOLEARN_TSNE_SPLIT_OFF=1 restores
 # main's three kernels.
@@ -171,10 +171,12 @@ comptime RS_ROWS = 32
 comptime RS_TJ = 64
 comptime RS_TPB = 256
 comptime RS_DS = RS_TJ + 1
+#: the parts folded per pass by the last block (a power of two, <= 8 * RS_TPB)
+comptime ZT_CHUNK = 2048
 comptime ZS_CHUNK = 2048
 
 
-def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P, done: I32P):
+def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P, done: I32P, parts: F32P):
     var tid = Int(thread_idx.x)
     var nr = Int(n)
     var i0 = Int(block_idx.x) * RS_ROWS
@@ -224,9 +226,20 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
         rep.unsafe_store(2 * i, r0)
         rep.unsafe_store(2 * i + 1, r1)
         fence[ordering = Ordering.RELEASE]()
-    # Z in the block that finishes last (no one-block launch): the blocks
-    # count themselves out; the last one sees every row_z and folds them
-    # with `ts_sum_cell`'s statements, rows ascending, staged coalesced.
+    # Z: `ts_sum_cell`'s pinned pairwise tree, in parallel. This block's
+    # RS_ROWS (a power of two, so the block is an aligned subtree) fold level
+    # by level into parts[b]; the block that finishes last folds the parts,
+    # ZT_CHUNK (aligned) at a time, the same levels in place, until one
+    # node is left. The nodes are the tree's nodes, so the bits are the
+    # host's and Apple's.
+    var zs = stack_allocation[ZT_CHUNK, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var rows_here = RS_ROWS if nr - i0 > RS_ROWS else nr - i0
+    if tid < rows_here:
+        zs[tid] = z
+    var root = _tree_shared(zs, rows_here, tid, RS_TPB)
+    if tid == 0:
+        parts.unsafe_store(Int(block_idx.x), root)
+        fence[ordering = Ordering.RELEASE]()
     var last = stack_allocation[1, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
     barrier()
     if tid == 0:
@@ -236,28 +249,58 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P,
     if last[0] == Int32(0):
         return
     fence[ordering = Ordering.ACQUIRE]()
-    var buf = stack_allocation[ZS_CHUNK, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-    var acc = Float32(0.0)
-    var c0 = 0
-    while c0 < nr:
-        for e in range(tid, ZS_CHUNK, RS_TPB):
-            var v = Float32(0.0)
-            if c0 + e < nr:
-                v = row_z.unsafe_load(c0 + e)
-            buf[e] = v
-        barrier()
-        if tid == 0:
-            var cn = ZS_CHUNK if nr - c0 > ZS_CHUNK else nr - c0
-            for e in range(cn):
-                acc = ftz(acc + buf[e])
-        barrier()
-        c0 += ZS_CHUNK
+    var count = Int(grid_dim.x)
+    while count > 1:
+        var c0 = 0
+        var nc = 0
+        while c0 < count:
+            var w = ZT_CHUNK if count - c0 > ZT_CHUNK else count - c0
+            for e in range(tid, w, RS_TPB):
+                zs[e] = parts.unsafe_load(c0 + e)
+            var r = _tree_shared(zs, w, tid, RS_TPB)
+            if tid == 0:
+                parts.unsafe_store(nc, r)
+            barrier()
+            fence[ordering = Ordering.ACQUIRE]()
+            c0 += ZT_CHUNK
+            nc += 1
+        count = nc
     if tid == 0:
-        z_out.unsafe_store(0, acc)
+        z_out.unsafe_store(0, ftz(parts.unsafe_load(0)))
         done.unsafe_store(0, Int32(0))
 
 
 @always_inline
+def _tree_shared(
+    buf: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED], w_in: Int, tid: Int, nth: Int
+) -> Float32:
+    """The pinned pairwise tree over buf[0 : w_in] in place: level by level
+    node q = ftz(c[2q] + c[2q + 1]), an odd last node carried; returns the
+    root (unflushed when w_in == 1, as the tree carries it). Every thread of
+    the block calls it."""
+    barrier()
+    var w = w_in
+    while w > 1:
+        var pairs = w // 2
+        var vals = InlineArray[Float32, 8](fill=Float32(0.0))
+        var k = 0
+        for q in range(tid, pairs, nth):
+            vals[k] = ts_z_add(buf[2 * q], buf[2 * q + 1])
+            k += 1
+        barrier()
+        k = 0
+        for q in range(tid, pairs, nth):
+            buf[q] = vals[k]
+            k += 1
+        if w % 2 == 1 and tid == 0:
+            buf[pairs] = buf[w - 1]
+        barrier()
+        w = pairs + w % 2
+    var r = buf[0]
+    barrier()
+    return r
+
+
 def _step_tail(
     e: Int, yi: Float32, attr: Float32, y_new: F32P, rep: F32P, z: F32P, update: F32P, gains: F32P,
     exaggeration: Float32, momentum: Float32, learning_rate: Float32,
@@ -324,11 +367,11 @@ def _ts_iter(
     mut dptr: DeviceBuffer[DType.int32], mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32],
     mut drz: DeviceBuffer[DType.float32], mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
     mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
-    lr: Float32, mut dcnt: DeviceBuffer[DType.int32],
+    lr: Float32, mut dcnt: DeviceBuffer[DType.int32], mut dparts: DeviceBuffer[DType.float32],
 ) raises:
     comptime if TS_SPLIT:
         ctx.enqueue_function[repulse_split_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
-                                                   dz.unsafe_ptr(), dcnt.unsafe_ptr(),
+                                                   dz.unsafe_ptr(), dcnt.unsafe_ptr(), dparts.unsafe_ptr(),
                                                    grid_dim=(n + RS_ROWS - 1) // RS_ROWS, block_dim=RS_TPB)
         ctx.enqueue_function[step_rows_kernel](
             Int32(n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
@@ -447,6 +490,7 @@ def tsne_fit_device(
     var dz = ctx.enqueue_create_buffer[DType.float32](1)
     var dcnt = ctx.enqueue_create_buffer[DType.int32](1)
     ctx.enqueue_memset(dcnt, Int32(0))
+    var dparts = ctx.enqueue_create_buffer[DType.float32]((n + RS_ROWS - 1) // RS_ROWS + 1)
     var dkl = ctx.enqueue_create_buffer[DType.float32](n)
     st.mark(ctx, "upload_graph")
     var t_rep = 0
@@ -464,9 +508,9 @@ def tsne_fit_device(
                 _ts_iter_timed(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
                                learning_rate, t_rep, t_sum, t_step)
         elif it % 2 == 0:
-            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt)
+            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt, dparts)
         else:
-            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt)
+            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt, dparts)
     st.mark(ctx, "iterations")
     if st.on:
         print("ANN-STAGE tsne_iter repulse", Float64(t_rep) / 1.0e6)
@@ -478,6 +522,7 @@ def tsne_fit_device(
         _ts_kl(ctx, dy2, n, dptr, dind, dval, drz, drep, dz, dkl)
     ctx.synchronize()
     _ = dcnt^
+    _ = dparts^
     if max_iter % 2 == 0:
         y_out = download_f32(ctx, dy, 2 * n)
     else:
