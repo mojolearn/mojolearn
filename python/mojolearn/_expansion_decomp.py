@@ -780,6 +780,21 @@ class _Kit:
         self.b.x_decomp_graph_radius(D.addr, out.addr, [n], float(r))
         return out
 
+    def graph_radius_geo(self, Dq, D, r):
+        """Isomap's radius transform: G[i, c] = min over j (ascending) with
+        Dq[i, j] <= r of D[j, c] + Dq[i, j] (x_decomp/graph_cells.mojo
+        `radius_geo_cell`; 0 for a row with no such j)."""
+        nq, n = Dq.r, Dq.c
+        if self._res():
+            out = self._dout(nq, n)
+            if nq * n:
+                self.b.x_decomp_dev_graph_radius_geo(self._did(Dq), self._did(D), out._d.id, [nq, n], float(r))
+            return out
+        out = _M.zeros(nq, n)
+        if nq * n:
+            self.b.x_decomp_graph_radius_geo(Dq.addr, D.addr, out.addr, [nq, n], float(r))
+        return out
+
     def graph_lle_iw(self, idx, wb, n):
         """LLE's dense I - W from the kNN lists and barycenter weights."""
         nn = idx.c
@@ -3478,23 +3493,18 @@ class Isomap(_Base):
     def _radius_geodesic(self, k, Q):
         """sklearn's radius transform: for each query, the minimum over the
         training rows within the radius (distance 0 included) of
-        dist_matrix_[j] + d(q, j). The candidates are taken in ascending j,
-        a fixed order, one elementwise min at a time."""
-        n = self._fit_X.r
+        dist_matrix_[j] + d(q, j): one cell per (query, column) on the
+        device, the candidates in ascending j (`graph_radius_geo`)."""
         r = _f32(float(self.radius))
         Dq = _dist(k, Q, self._fit_X, self._kind, self._pw)
         D = self.dist_matrix_m_
-        rows = []
-        for i in range(Q.r):
-            js = [j for j in range(n) if Dq.s[i * n + j] <= r]
-            if not js:
-                raise ValueError(f"Isomap.transform: query row {i} has no training row within radius {self.radius}")
-            g = None
-            for j in js:
-                cand = k.ew("adds", D.rows(j, j + 1), s=Dq.s[i * n + j])
-                g = cand if g is None else k.ew("min", g, cand)
-            rows.append(g)
-        return _vstack(*rows)
+        # every query has a training row within the radius: the per-row
+        # counts and their total on the device, one scalar read
+        hits = k.ew("gts", k.rowsum(k.ew("le", Dq, _M.of([r], 1, 1))), s=0.5)
+        if Q.r and k.total(hits).s[0] != Q.r:
+            i = list(hits.s).index(0.0)
+            raise ValueError(f"Isomap.transform: query row {i} has no training row within radius {self.radius}")
+        return k.graph_radius_geo(Dq, D, r)
 
     def reconstruction_error(self):
         self._check("embedding_m_")
@@ -3562,21 +3572,6 @@ class MDS(_Base):
 
     def _dist(self, k, Y):
         return k.ew("sqrt", k.sqdist(Y, Y))
-
-    def _disparities(self, k, n, pos, flat):
-        """sklearn's non-metric disparities: the upper-triangle values at
-        `pos` (row-major, dissimilarity != 0), scaled by sqrt((n (n - 1) / 2)
-        / sum of their squares), mirrored below the diagonal (an exact copy:
-        sklearn adds a zero)."""
-        P = _M.zeros(n, n)
-        for q, v in zip(pos, flat):
-            P.s[q] = v
-        ss = k.total(k.ew("sq", P)).s[0]
-        P = k.ew("scale", P, s=math.sqrt((n * (n - 1) / 2) / ss))
-        for q in pos:
-            i, j = divmod(q, n)
-            P.s[j * n + i] = P.s[q]
-        return P
 
     def _nm_native(self, k, Dis, n):
         """The non-metric SMACOF bookkeeping in native calls (lane/py-decomp-nbrs):
@@ -3647,52 +3642,34 @@ class MDS(_Base):
 
     def _single(self, k, Dis, Y, run):
         n = Dis.r
-        nonmetric = not self.metric_mds
-        native = (nonmetric and n * n <= 2147483647 and _os.environ.get("MOJOLEARN_XD_MDS_PYTHON") != "1")
+        # cgfin-c-decomp: non-metric SMACOF's bookkeeping is the native
+        # calls only (`_nm_native`); the Python pair lists and the
+        # MOJOLEARN_XD_MDS_PYTHON switch are deleted
+        native = not self.metric_mds
         if native:
+            if n * n > 2147483647:
+                raise ValueError(f"MDS(metric_mds=False): {n} rows exceed the 32-bit pair index (n * n <= 2**31 - 1)")
             nm = self._nm_native(k, Dis, n)
-            nonmetric = False
-        if nonmetric:
-            # sklearn `_smacof_single` with metric=False: a zero dissimilarity
-            # is a missing value; the first iteration uses the dissimilarities
-            # themselves, later ones IsotonicRegression(out_of_bounds='clip')
-            # of the distances on the dissimilarities (the linear lane's
-            # x_linear PAVA, fitted on (x, y)-sorted rows).
-            from . import _expansion_linear as _xlin    # a module import: see _sparse_encode
-            IsotonicRegression = _xlin.IsotonicRegression
-            pos = [i * n + j for i in range(n) for j in range(i + 1, n) if Dis.s[i * n + j] != 0]
-            dis_w = [Dis.s[q] for q in pos]
-            ir = IsotonicRegression(out_of_bounds="clip", numeric_mode=self.numeric_mode_)
         disp = Dis
         d = self._dist(k, Y)
         old = None
         it = 0
-        # The Guttman transform's diagonal on the device (lane hr2-mds-agglo):
-        # B's diagonal gets the row sums by fma(I, rs, B) (1 * rs + B, one
-        # rounding: the add the host loop did; 0 * rs + B is B off it), so
-        # the n x n matrix stays resident; the host loop read all of B and
-        # wrote it back every iteration. MOJOLEARN_XD_MDS_DIAG_V0=1 is the
-        # old loop (the A/B switch).
-        eye = None
-        if _os.environ.get("MOJOLEARN_XD_MDS_DIAG_V0") != "1":
-            eye = k.diag_mask(n)
+        # The Guttman transform's diagonal (lane hr2-mds-agglo): B's diagonal
+        # gets the row sums by fma(I, rs, B) (1 * rs + B, one rounding;
+        # 0 * rs + B is B off it), so the n x n matrix stays resident. The
+        # host binding takes the same fma on a host identity.
+        eye = k.diag_mask(n)
+        if eye is None:
+            eye = _eye(n)
         floor = k.const(1e-5)
         for it in range(1, self.max_iter + 1):
             if native:
                 disp = nm(d, it == 1)
-            elif nonmetric:
-                flat = dis_w if it == 1 else ir.fit_transform(dis_w, [d.s[q] for q in pos]).tolist()
-                disp = self._disparities(k, n, pos, flat)
             dz = k.ew("select", d, d, floor, s=0.0)
             ratio = k.ew("div", disp, dz)
             B = k.ew("scale", ratio, s=-1.0)
             rs = k.rowsum(ratio)
-            if eye is not None:
-                B = k.ew("fma", eye, rs, B)
-            else:
-                B = B.copy()
-                for i in range(n):
-                    B.s[i * n + i] = _f32(B.s[i * n + i] + rs.s[i])
+            B = k.ew("fma", eye, rs, B)
             Y = k.ew("scale", k.mm(B, Y), s=1.0 / n)
             d = self._dist(k, Y)
             stress = k.total(k.ew("sqdiff", d, disp)).s[0] / 2

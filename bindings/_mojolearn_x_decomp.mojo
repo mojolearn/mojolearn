@@ -16,7 +16,7 @@ from x_decomp.api import (
 from x_decomp.device import DevExec
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
 from x_decomp.graph_device import (
-    dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_lle_iw_py, dev_graph_components_py,
+    dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py,
     dev_graph_join_py, dev_graph_dijkstra_py,
 )
 from x_decomp.resident import (
@@ -93,6 +93,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_graph_knn_py]("x_decomp_dev_graph_knn")
         m.def_function[dev_graph_knn_dense_py]("x_decomp_dev_graph_knn_dense")
         m.def_function[dev_graph_radius_py]("x_decomp_dev_graph_radius")
+        m.def_function[dev_graph_radius_geo_py]("x_decomp_dev_graph_radius_geo")
         m.def_function[dev_graph_lle_iw_py]("x_decomp_dev_graph_lle_iw")
         m.def_function[dev_graph_components_py]("x_decomp_dev_graph_components")
         m.def_function[dev_graph_join_py]("x_decomp_dev_graph_join")
