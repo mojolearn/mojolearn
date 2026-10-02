@@ -181,3 +181,12 @@ trait ClusterOps(Movable):
         writes 1 and that iteration's index at cnt[done_off], cnt[done_off +
         1] and does nothing more, nor does anything after it."""
         ...
+
+    def optics_order(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
+    ) raises:
+        """FAST (lane cluster2): the OPTICS ordering loop over the resident
+        n x n distances `dm` and core distances `core`: ordering (n ints),
+        reachability (n floats, +inf unreached), predecessor (n ints, -1
+        none); `proc` n ints of scratch. The host loop's picks and updates."""
+        ...

@@ -17,9 +17,11 @@ the ratios in Float64 from the Float32 plot. sklearn's `np.around(...,
 decimals=precision)` of the core and reach distances is not carried
 (NOT_IMPLEMENTED.tsv)."""
 from std.math import sqrt
+from std.os import getenv
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul64
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, identical_mul64
 from x_cluster.bodies import FPtr, IPtr
 from x_cluster.ops import ClusterOps
 
@@ -39,6 +41,16 @@ comptime XC_ALLOC = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEAR
 # device's in the last place (bits move; the paired quality check).
 comptime OPTICS_HOSTROWS = OPTICS_SIMD and is_defined["MOJOLEARN_OPTICS_HOSTROWS"]()
 comptime _OW = 8
+# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple, the
+# GPU binding only, env `MOJOLEARN_OPTICS_FAST_DEVICE_ORDER=1` (default off):
+# the ordering loop on the device (`ops.optics_order`, device_ops.mojo).
+# Cause: `optics_graph` below reads the n x n distances back to the host
+# (`ops.get(dm, n * n)`, 400 MB at 10,000 rows) and walks the n serial steps
+# on one host thread, each a scan of n reachabilities and a relaxation of
+# n cells. On the device the step stays serial, its two walks are one
+# threadgroup wide, and nothing n^2 crosses to the host. Same picks, same
+# reachability and predecessors (compares and selects only).
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
 
 
 def dist_slot[O: ClusterOps](mut ops: O, n: Int) raises -> Int:
@@ -207,6 +219,24 @@ def optics_graph[O: ClusterOps](
     for i in range(n):
         if core[i] > max_eps:
             core[i] = inf
+    comptime if XC2_FAST:
+        if ops.fast_device() and String(getenv("MOJOLEARN_OPTICS_FAST_DEVICE_ORDER")) == "1":
+            # lane cluster2: the device's raw core distances (`cs`), the
+            # kernel's test `core <= max_eps and core != inf` is the clamp above
+            var os_ = ops.zeros_i(n)
+            var rs = ops.zeros(n)
+            var ps = ops.zeros_i(n)
+            var qs = ops.zeros_i(n)
+            ops.optics_order(dm, cs, n, max_eps, os_, rs, ps, qs)
+            var o32 = List[Int32]()
+            ops.get_if(os_, n, rs, n, o32, reach)
+            var p32 = ops.get_i(ps, n)
+            ordering = List[Int](capacity=n)
+            pred = List[Int](capacity=n)
+            for i in range(n):
+                ordering.append(Int(o32[i]))
+                pred.append(Int(p32[i]))
+            return
     comptime if OPTICS_HOSTROWS:
         if n >= _OW and metric == -1 and ops.fast_device():
             _order_simd(List[Float32](length=1, fill=Float32(0)), core, n, max_eps, ordering, reach, pred, x, d, True)

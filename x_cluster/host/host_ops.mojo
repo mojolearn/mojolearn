@@ -587,3 +587,37 @@ struct HostOps(ClusterOps):
                 if se == Int32(conv_iter) or se == Int32(0):
                     self.i[cnt][2 * it] += Int32(1)
                 self.i[cnt][2 * it + 1] += ei
+
+    def optics_order(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
+    ) raises:
+        # the host column never takes the FAST device paths (`fast_device`):
+        # the driver's serial loop over the slots, for the trait's sake
+        var inf = Float32.MAX * Float32(2)
+        for j in range(n):
+            self.f[reach][j] = inf
+            self.i[pred][j] = Int32(-1)
+            self.i[proc][j] = Int32(0)
+        for step in range(n):
+            var point = -1
+            var best = inf
+            for j in range(n):
+                if self.i[proc][j] != Int32(0):
+                    continue
+                if point < 0 or self.f[reach][j] < best:
+                    point = j
+                    best = self.f[reach][j]
+            self.i[proc][point] = Int32(1)
+            self.i[ordering][step] = Int32(point)
+            var cp = self.f[core][point]
+            if cp <= max_eps and cp != inf:
+                for o in range(n):
+                    if self.i[proc][o] != Int32(0):
+                        continue
+                    var dd = self.f[dm][point * n + o]
+                    if not (dd <= max_eps):
+                        continue
+                    var rd = dd if dd > cp else cp
+                    if rd < self.f[reach][o]:
+                        self.f[reach][o] = rd
+                        self.i[pred][o] = Int32(point)

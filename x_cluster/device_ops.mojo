@@ -1034,6 +1034,80 @@ def _apl_e_kernel(
     _ = Atomic.fetch_add[ordering = Ordering.RELAXED](cnt.unsafe_offset(2 * Int(it) + 1), ei)
 
 
+# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
+# env `MOJOLEARN_OPTICS_FAST_DEVICE_ORDER=1` (read in x_cluster/optics.mojo):
+# the OPTICS ordering loop on the device. Cause: `optics_graph` read the
+# whole n x n distance matrix back (`ops.get(dm, n * n)`: 400 MB at the
+# board's 10,000 rows) and walked the n steps on ONE host thread (the
+# OPTICS_SIMD define: 8 lanes). The step sequence is inherently serial (the
+# next point is the unprocessed one at the lowest reachability, the lowest
+# index on a tie, and its relaxation feeds the next pick), so the kernel is
+# ONE threadgroup of OPT_ORD_TPB threads that runs every step: the candidate
+# scan is an integer min of (reachability bits, index) keys folded in
+# threadgroup memory, the relaxation one cell per thread over the point's
+# row of the resident matrix. What stays serial: the n steps themselves.
+# Same picks, same reachability, same predecessors as the host loop (max,
+# compares and selects only). Expected: no n^2 readback, the n steps at
+# device speed. The matrix stays on the device.
+comptime OPT_ORD_TPB = 1024
+
+
+@always_inline
+def _opt_key(v: Float32, j: Int) -> UInt64:
+    """An integer whose order is the host loop's pick: the reachability's
+    bits in the high word (every reachability is >= +0 or +inf; -0.0 folded
+    onto +0.0), the index in the low word so the LOWEST index wins a tie."""
+    var b = bitcast[DType.uint32](v)
+    if b == UInt32(0x80000000):
+        b = UInt32(0)
+    return (UInt64(b) << 32) | UInt64(UInt32(j))
+
+
+def _optics_order_kernel(
+    dist: FPtr, core: FPtr, n: Int32, max_eps: Float32, ordering: IPtr, reach: FPtr, pred: IPtr, proc: IPtr,
+):
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var inf = Float32.MAX * Float32(2)
+    var red = stack_allocation[OPT_ORD_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    for j in range(tid, N, OPT_ORD_TPB):
+        reach[j] = inf
+        pred[j] = Int32(-1)
+        proc[j] = Int32(0)
+    barrier()
+    for step in range(N):
+        var mine = UInt64(0xFFFFFFFFFFFFFFFF)
+        for j in range(tid, N, OPT_ORD_TPB):
+            if proc[j] == Int32(0):
+                mine = min(mine, _opt_key(reach[j], j))
+        red[tid] = mine
+        barrier()
+        var off = OPT_ORD_TPB // 2
+        while off > 0:
+            if tid < off:
+                red[tid] = min(red[tid], red[tid + off])
+            barrier()
+            off //= 2
+        var point = Int(UInt32(red[0] & UInt64(0xFFFFFFFF)))
+        barrier()
+        if tid == 0:
+            ordering[step] = Int32(point)
+            proc[point] = Int32(1)
+        barrier()
+        var cp = core[point]
+        # the host's `core[point] != inf` after its clamp of core > max_eps
+        if cp <= max_eps and cp != inf:
+            for o in range(tid, N, OPT_ORD_TPB):
+                if proc[o] == Int32(0):
+                    var dd = dist[point * N + o]
+                    if dd <= max_eps:
+                        var rd = dd if dd > cp else cp
+                        if rd < reach[o]:
+                            reach[o] = rd
+                            pred[o] = Int32(point)
+        barrier()
+
+
 comptime WNN_TPB = 256
 
 
@@ -1780,3 +1854,16 @@ struct DeviceOps(ClusterOps):
         else:
             raise Error("x_cluster: ap_loop is the FAST Apple device path (MOJOLEARN_AFFINITY_FAST_LOOP)")
         self._ph1("ap_loop")
+
+    def optics_order(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
+    ) raises:
+        self._ph0()
+        comptime if XC2_FAST:
+            self.ctx.enqueue_function[_optics_order_kernel](
+                self._fp(dm), self._fp(core), Int32(n), max_eps, self._ip(ordering), self._fp(reach), self._ip(pred),
+                self._ip(proc), grid_dim=1, block_dim=OPT_ORD_TPB,
+            )
+        else:
+            raise Error("x_cluster: optics_order is the FAST Apple device path (MOJOLEARN_OPTICS_FAST_DEVICE_ORDER)")
+        self._ph1("optics_order")
