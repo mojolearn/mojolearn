@@ -31,9 +31,9 @@ from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_p
 from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
 from x_linear.glm import (
     _unit, _glm_deriv_row, _glm_cell, _glm_cell_rows, _glm_slot_count, _glm_slot_cell, _glm_step, GLM_LINK_LOG, GLM_STALL_ITERS,
-    _glm_cell_part, _glm_cell_store,
+    _glm_cell_part, _glm_cell_store, glm_den, glm_start, glm_start_of,
 )
-from x_linear.tops import upper_cell, fold_fa, chain_cfmad
+from x_linear.tops import upper_cell, fold_fa, chain_cfmad, chain_fmad
 from std.os import getenv
 from x_linear.logcv_grid import logcv_fit_grid
 from x_linear.huber_grid import huber_fit_grid
@@ -678,24 +678,54 @@ def _glm_grid() -> Bool:
 
 
 def glm_init_kernel(y: FP, n: Int32, d: Int32, fi: Int32, link: Int32, sw: Int32, res: FP, sc: FP, wf: IP, woff: Int32, nonce: Int32):
-    """glm_fit's prologue on one thread: den (sc[0]) and the intercept start."""
+    """glm_fit's prologue on one thread: den (sc[0]) and the intercept start
+    (the A/B arm `MOJOLEARN_X_LINEAR_GLM_GRID_INIT=0`; glm_fit's words)."""
     var nn = Int(n)
     var dd = Int(d)
-    var den = i2f(nn)
-    if sw != 0:
-        den = Float32(0)
-        for i in range(nn):
-            den = fa(den, ld(y, nn + i))
+    var den = glm_den(y, nn, sw != 0)
     st(sc, 0, den)
     fill(res, 0, dd + 3, Float32(0))
     if fi != 0:
-        var ym = mean_of(y, nn)
+        st(res, dd, glm_start(y, nn, den, Int(link), sw != 0))
+    witness_end(wf, woff, nonce)
+
+
+# lane/gap-serial-gpu (2026-10-02): the prologue on the grid. One thread a
+# FOLD_BLOCK row block: its weight-sum and y-sum partials from zero (glm_den /
+# glm_start's blocks); then one thread folds the partials ascending, the same
+# words as glm_fit's blocked folds. The one-thread prologue walked all n rows
+# twice. `MOJOLEARN_X_LINEAR_GLM_GRID_INIT=0` restores it.
+def _glm_grid_init() -> Bool:
+    comptime if X_LINEAR_SERIAL_FOLDS:
+        return False
+    return String(getenv("MOJOLEARN_X_LINEAR_GLM_GRID_INIT")) != "0"
+
+
+def glm_init_parts_kernel(y: FP, n: Int32, nb: Int32, sw: Int32, parts: FP, wf: IP, woff: Int32, nonce: Int32):
+    """parts[b] = the block's weight sum (sw), parts[nb + b] = its y sum (sum w y with sw)."""
+    var b = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    var nbb = Int(nb)
+    if b < nbb:
+        var lo = b * FOLD_BLOCK
+        var cnt = min(FOLD_BLOCK, nn - lo)
         if sw != 0:
-            var acc = Float32(0)
-            for i in range(nn):
-                acc = fmad(ld(y, nn + i), ld(y, i), acc)
-            ym = fd(acc, den)
-        st(res, dd, flog(ym) if Int(link) == GLM_LINK_LOG else ym)
+            st(parts, b, fold_fa(y, nn + lo, 1, cnt))
+            st(parts, nbb + b, chain_fmad(y, nn + lo, 1, y, lo, 1, cnt))
+        else:
+            st(parts, nbb + b, fold_fa(y, lo, 1, cnt))
+    witness_end(wf, woff, nonce)
+
+def glm_init_finish_kernel(parts: FP, n: Int32, nb: Int32, d: Int32, fi: Int32, link: Int32, sw: Int32,
+                           res: FP, sc: FP, wf: IP, woff: Int32, nonce: Int32):
+    """The partials folded ascending: den (sc[0]) and the intercept start."""
+    var nbb = Int(nb)
+    var dd = Int(d)
+    var den = fold_parts(parts, 0, nbb) if sw != 0 else i2f(Int(n))
+    st(sc, 0, den)
+    fill(res, 0, dd + 3, Float32(0))
+    if fi != 0:
+        st(res, dd, glm_start_of(fold_parts(parts, nbb, nbb), Int(n), den, Int(link), sw != 0))
     witness_end(wf, woff, nonce)
 
 def glm_obj_map_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, power: Float32, link: Int32, sw: Int32,
@@ -724,6 +754,35 @@ def glm_obj_fold_kernel(tw: FP, lt: FP, n: Int32, d: Int32, theta: FP, alpha: Fl
             var w = ld(theta, j)
             reg = fmad(w, w, reg)
         st(sc, Int(slot), fa(fd(acc, ld(sc, 0)), fm(fm(Float32(0.5), alpha), reg)))
+    witness_end(wf, woff, nonce)
+
+# lane/gap-serial-gpu (2026-10-02): the objective fold's FOLD_BLOCK partials
+# one thread a block over the grid (t_fold_fa_blocked ran them on one block
+# of LINEAR_TPB threads: nb / 256 blocks a thread past 1M rows), then one
+# thread folds them ascending: t_fold_fa_blocked's words.
+# `MOJOLEARN_X_LINEAR_GLM_GRID_FOLD=0` restores the one-block fold.
+def _glm_grid_fold() -> Bool:
+    comptime if X_LINEAR_SERIAL_FOLDS:
+        return False
+    return String(getenv("MOJOLEARN_X_LINEAR_GLM_GRID_FOLD")) != "0"
+
+
+def glm_obj_parts_kernel(lt: FP, n: Int32, nb: Int32, parts: FP, wf: IP, woff: Int32, nonce: Int32):
+    var b = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if b < Int(nb):
+        var lo = b * FOLD_BLOCK
+        st(parts, b, fold_fa(lt, lo, 1, min(FOLD_BLOCK, Int(n) - lo)))
+    witness_end(wf, woff, nonce)
+
+def glm_obj_finish_kernel(parts: FP, nb: Int32, d: Int32, theta: FP, alpha: Float32, sc: FP, slot: Int32,
+                          wf: IP, woff: Int32, nonce: Int32):
+    """`glm_obj_fold_kernel`'s value from the partials: sc[slot] = f."""
+    var acc = fold_parts(parts, 0, Int(nb))
+    var reg = Float32(0)
+    for j in range(Int(d)):
+        var w = ld(theta, j)
+        reg = fmad(w, w, reg)
+    st(sc, Int(slot), fa(fd(acc, ld(sc, 0)), fm(fm(Float32(0.5), alpha), reg)))
     witness_end(wf, woff, nonce)
 
 def glm_deriv_kernel(y: FP, n: Int32, power: Float32, link: Int32, sw: Int32, eta: FP, gr: FP, hr: FP, wf: IP, woff: Int32, nonce: Int32):
@@ -815,7 +874,7 @@ def glm_accept_kernel(res: FP, trial: FP, m: Int32):
 
 
 def _glm_grid_objective(
-    mut ctx: DeviceContext, theta: FP, x: FP, y: FP, eta: FP, lt: FP, tw: FP, sc: FP,
+    mut ctx: DeviceContext, theta: FP, x: FP, y: FP, eta: FP, lt: FP, tw: FP, fparts: FP, sc: FP,
     sc_buf: DeviceBuffer[DType.float32], hsc: FP,
     n: Int, d: Int, fi: Int, power: Float32, link: Int, sw: Int, alpha: Float32, rows_grid: Int,
     mut wit: Witness,
@@ -828,9 +887,19 @@ def _glm_grid_objective(
         ctx.enqueue_function[glm_obj_map_kernel](x, y, Int32(n), Int32(d), Int32(fi), power, Int32(link), Int32(sw),
                                                  theta, eta, lt, wit.p(), Int32(0), nonce,
                                                  grid_dim=rows_grid, block_dim=XG_TPB)
-        ctx.enqueue_function[glm_obj_fold_kernel](tw, lt, Int32(n), Int32(d), theta, alpha, sc, Int32(1),
-                                                  wit.p(), Int32(rows_grid), nonce, grid_dim=1, block_dim=LINEAR_TPB)
-        if wit.ok(ctx, rows_grid + 1, "GLM objective"):
+        var count = rows_grid + 1
+        if _glm_grid_fold():
+            var nb = fold_blocks(n)
+            ctx.enqueue_function[glm_obj_parts_kernel](lt, Int32(n), Int32(nb), fparts, wit.p(), Int32(rows_grid), nonce,
+                                                       grid_dim=_xg_blocks(nb), block_dim=XG_TPB)
+            ctx.enqueue_function[glm_obj_finish_kernel](fparts, Int32(nb), Int32(d), theta, alpha, sc, Int32(1),
+                                                        wit.p(), Int32(rows_grid + _xg_blocks(nb)), nonce,
+                                                        grid_dim=1, block_dim=1)
+            count = rows_grid + _xg_blocks(nb) + 1
+        else:
+            ctx.enqueue_function[glm_obj_fold_kernel](tw, lt, Int32(n), Int32(d), theta, alpha, sc, Int32(1),
+                                                      wit.p(), Int32(rows_grid), nonce, grid_dim=1, block_dim=LINEAR_TPB)
+        if wit.ok(ctx, count, "GLM objective"):
             break
         tries += 1
         if tries >= WITNESS_TRIES:
@@ -867,6 +936,7 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     var dtrial = ctx.enqueue_create_buffer[DType.float32](m)
     var dsc = ctx.enqueue_create_buffer[DType.float32](8)
     var dtw = ctx.enqueue_create_buffer[DType.float32](team_work(n, 3, 0))
+    var dfparts = ctx.enqueue_create_buffer[DType.float32](max(2 * fold_blocks(n), 1))
     var hsc_l = List[Float32](length=8, fill=Float32(0))
     var hscp = FP(unsafe_from_address=Int(hsc_l.unsafe_ptr()))
     if n_x > 0:
@@ -883,14 +953,24 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     var dparts = ctx.enqueue_create_buffer[DType.float32](max(slot_ub * nb, 1))
     var rows_slice = _glm_rows_slice(n, _glm_slot_count(d, m))
     var blocks_slice = _glm_blocks_slice(nb, _glm_slot_count(d, m))
-    var wit = Witness(ctx, max(rows_grid + 1, max(_xg_blocks(slot_ub * blocks_slice), slot_grid + 1)))
+    var wit = Witness(ctx, max(rows_grid + _xg_blocks(nb) + 1, max(_xg_blocks(slot_ub * blocks_slice), slot_grid + 1)))
     var tries0 = 0
     while True:
         var nonce = wit.begin()
-        ctx.enqueue_function[glm_init_kernel](dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), Int32(link), Int32(sw),
-                                              dres.unsafe_ptr(), dsc.unsafe_ptr(), wit.p(), Int32(0), nonce,
-                                              grid_dim=1, block_dim=1)
-        if wit.ok(ctx, 1, "GLM init"):
+        var count0 = 1
+        if _glm_grid_init():
+            var nbi = fold_blocks(n)
+            ctx.enqueue_function[glm_init_parts_kernel](dy.unsafe_ptr(), Int32(n), Int32(nbi), Int32(sw), dfparts.unsafe_ptr(),
+                                                        wit.p(), Int32(0), nonce, grid_dim=_xg_blocks(nbi), block_dim=XG_TPB)
+            ctx.enqueue_function[glm_init_finish_kernel](dfparts.unsafe_ptr(), Int32(n), Int32(nbi), Int32(d), Int32(fi),
+                                                         Int32(link), Int32(sw), dres.unsafe_ptr(), dsc.unsafe_ptr(),
+                                                         wit.p(), Int32(_xg_blocks(nbi)), nonce, grid_dim=1, block_dim=1)
+            count0 = _xg_blocks(nbi) + 1
+        else:
+            ctx.enqueue_function[glm_init_kernel](dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), Int32(link), Int32(sw),
+                                                  dres.unsafe_ptr(), dsc.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                                                  grid_dim=1, block_dim=1)
+        if wit.ok(ctx, count0, "GLM init"):
             break
         tries0 += 1
         if tries0 >= WITNESS_TRIES:
@@ -898,7 +978,7 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
 
     var iters = 0
     var converged = False
-    var f = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dres.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit)
+    var f = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dres.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit)
     var stall = 0
     for it in range(max_iter):
         var tries1 = 0
@@ -975,7 +1055,7 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
         for _ in range(40):
             ctx.enqueue_function[glm_trial_kernel](dstep.unsafe_ptr(), dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m), tt,
                                                    grid_dim=1, block_dim=1)
-            var ft = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit)
+            var ft = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit)
             if ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
                 ctx.enqueue_function[glm_accept_kernel](dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m),
                                                         grid_dim=1, block_dim=1)
@@ -988,7 +1068,7 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
                 break
             tt = fm(tt, Float32(0.5))
         if not accepted:
-            f = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dres.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit)
+            f = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dres.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dfparts.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid, wit)
             break
         if stall >= GLM_STALL_ITERS:
             converged = True

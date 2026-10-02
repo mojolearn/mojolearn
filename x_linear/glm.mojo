@@ -37,6 +37,30 @@ comptime GLM_STALL_ITERS = 3
 
 
 @always_inline
+# lane/gap-serial-gpu (2026-10-02): glm_fit's prologue folds (the weight sum
+# and the intercept start) in the blocked order (x_linear/tops.mojo, Andrew
+# 2026-10-01), so a device computes the FOLD_BLOCK partials at once
+# (x_linear/device.mojo glm_init_parts_kernel) and folds them ascending: the
+# same words as these. `-D MOJOLEARN_X_LINEAR_SERIAL_FOLDS=1` restores the
+# serial chains.
+def glm_den(y: FP, n: Int, sw: Bool) -> Float32:
+    """The objective's denominator: n, or sum w (y = targets n | weights n)."""
+    if sw:
+        return fold_fa_blocked(y, n, 1, n)
+    return i2f(n)
+
+
+def glm_start_of(sum_y: Float32, n: Int, den: Float32, link: Int, sw: Bool) -> Float32:
+    """The intercept start from the fold sum_y (sum y, or sum w y)."""
+    var ym = fd(sum_y, den) if sw else fd(sum_y, i2f(n))
+    return flog(ym) if link == GLM_LINK_LOG else ym
+
+
+def glm_start(y: FP, n: Int, den: Float32, link: Int, sw: Bool) -> Float32:
+    var acc = chain_fmad_blocked(y, n, 1, y, 0, 1, n) if sw else fold_fa_blocked(y, 0, 1, n)
+    return glm_start_of(acc, n, den, link, sw)
+
+
 def _unit(power: Float32, link: Int, y: Float32, eta: Float32, what: Int) -> Float32:
     """what 0: loss, 1: d/deta, 2: d2/deta2 (clamped at zero by the caller)."""
     if link == GLM_LINK_IDENTITY:
@@ -336,8 +360,7 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     if sw:
         den = Float32(0)
         if t.lead():
-            for i in range(n):
-                den = fa(den, ld(y, n + i))
+            den = glm_den(y, n, sw)
         den = t.bcast(den)
     var m = d + 1 if fi else d
     var eta = fw
@@ -352,13 +375,7 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     if t.lead():
         fill(res, 0, d + 3, Float32(0))
         if fi:
-            var ym = mean_of(y, n)
-            if sw:
-                var acc = Float32(0)
-                for i in range(n):
-                    acc = fmad(ld(y, n + i), ld(y, i), acc)
-                ym = fd(acc, den)
-            st(res, d, flog(ym) if link == GLM_LINK_LOG else ym)
+            st(res, d, glm_start(y, n, den, link, sw))
     t.sync()
     var iters = 0
     var converged = False

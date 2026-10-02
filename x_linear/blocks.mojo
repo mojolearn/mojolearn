@@ -37,7 +37,7 @@ from x_linear.ops import (
 from x_linear.team import team_barrier, team_at
 from x_linear.isotonic import isotonic_predict
 from x_linear.tops import fold_fa, fold_sq, chain_fmad, chain_fmad_scaled, fold_one_fmad
-from x_linear.glm import _unit, GLM_LINK_LOG
+from x_linear.glm import _unit, GLM_LINK_LOG, glm_den, glm_start
 from x_linear.lbfgs import LBFGS_M, lbfgs_work, _dot
 from x_linear.logcv import _predict_code
 from x_linear.quantile import _soft
@@ -923,11 +923,7 @@ def glm_fit_blocks(
     b.sw = sw
     var pa = Part(ctx, b.nb, 1)
     var pb = Part(ctx, b.nb, cells)
-    var den = i2f(n)
-    if sw:
-        den = Float32(0)
-        for i in range(n):
-            den = fa(den, ld(y, n + i))
+    var den = glm_den(y, n, sw)
     var hw = _zeros(3 * m + m * m + 1)
     var fw = _host_fp(hw)
     var g = 0
@@ -936,13 +932,7 @@ def glm_fit_blocks(
     var trial = step + m
     fill(res, 0, d + 3, Float32(0))
     if fi:
-        var ym = mean_of(y, n)
-        if sw:
-            var acc = Float32(0)
-            for i in range(n):
-                acc = fmad(ld(y, n + i), ld(y, i), acc)
-            ym = fd(acc, den)
-        st(res, d, flog(ym) if link == GLM_LINK_LOG else ym)
+        st(res, d, glm_start(y, n, den, link, sw))
     var iters = 0
     var converged = False
     var f = _glm_objective(b, pa, ctx, res, 0, m, power, link, alpha, den)
