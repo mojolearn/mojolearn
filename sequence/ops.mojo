@@ -106,6 +106,13 @@ comptime OP_GEMM_SPLITK = 64
 comptime OP_PROPHET_FG_PART = 65
 comptime OP_PROPHET_FG_SUM = 66
 comptime OP_AF_BLK_SUMSQ = 67
+# LAMB's multi-tensor ops (lane gap-optimizers): one launch over every
+# tensor, the per-tensor norms in the blocked order (sequence/adafactor.mojo)
+comptime OP_LAMB_BLK = 68
+comptime OP_LAMB_SEGFOLD = 69
+comptime OP_LAMB_CLIP = 70
+comptime OP_LAMB_TRUST = 71
+comptime OP_LAMB_APPLY_ALL = 72
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

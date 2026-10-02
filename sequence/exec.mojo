@@ -54,6 +54,10 @@ from sequence.ops import (
     OP_CHUNK_SUMSQ,
     OP_AF_BLK_SUMSQ,
     OP_LAMB_RATIO,
+    OP_LAMB_BLK,
+    OP_LAMB_SEGFOLD,
+    OP_LAMB_CLIP,
+    OP_LAMB_TRUST,
     OP_STL,
     OP_THETA,
     OP_CROSTON,
@@ -96,6 +100,10 @@ def _element_weight[OP: Int](a: Args) -> Int:
         return max(a.i0, 1)
     elif OP == OP_AF_BLK_SUMSQ:
         return max(a.i1, 1)
+    elif OP == OP_LAMB_BLK:
+        return max(a.i2, 1) * (2 if a.i1 != 0 else 1)
+    elif OP == OP_LAMB_SEGFOLD or OP == OP_LAMB_CLIP or OP == OP_LAMB_TRUST:
+        return _HEAVY
     elif (
         OP == OP_STL or OP == OP_THETA or OP == OP_CROSTON or OP == OP_ETS
         or OP == OP_GARCH or OP == OP_PROPHET_FIT or OP == OP_CHOLSOLVE
