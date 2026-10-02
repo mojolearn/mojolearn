@@ -11,19 +11,19 @@ host == oracle bit for bit under IDENTICAL, each stage on the card."""
 from core.identity_trace import IdentityTrace
 from x_neighbors.checks.oracles import (
     o_matmul, o_rowsum, o_colsum, o_group_mean, o_variance, o_row_normalize, o_softmax, o_log_softmax, o_sqdist, o_knn_select,
-    o_lof_lrd, o_lof_score,
+    o_lof_lrd, o_lof_score, o_absdiff_sum,
 )
 from x_neighbors.checks.seam_util import (
     seam_fixture, fa, ia, zf, zi, count_diff_f32, count_diff_i32, require_separates, same,
 )
 from x_neighbors.device_ops import (
     op_matmul, op_rowsum, op_colsum, op_group_mean, op_variance, op_row_normalize, op_softmax, op_log_softmax, op_lof_lrd,
-    op_lof_score,
+    op_lof_score, op_absdiff_sum,
 )
 from x_neighbors.host_ops import (
     op_matmul as h_matmul, op_rowsum as h_rowsum, op_colsum as h_colsum, op_group_mean as h_group_mean,
     op_variance as h_variance, op_row_normalize as h_row_normalize, op_softmax as h_softmax, op_log_softmax as h_log_softmax,
-    op_lof_lrd as h_lof_lrd, op_lof_score as h_lof_score,
+    op_lof_lrd as h_lof_lrd, op_lof_score as h_lof_score, op_absdiff_sum as h_absdiff_sum,
 )
 
 
@@ -95,6 +95,33 @@ def main() raises:
     h_variance(fa(vx), fa(hvar), len(vx))
     _ = vx^
     same("5209 variance host", count_diff_f32(hvar, wvar))
+
+    # lane neural-pass141: the blocked folds over several XN_FOLD_BLOCK blocks
+    # (5000 elements, three blocks, the last one short), each block led by a
+    # large value: the variance and sum |a - b|, device and host
+    var vb = List[Float32]()
+    var vb2 = List[Float32]()
+    for i in range(5000):
+        vb.append(Float32(10000) if i % 2048 == 0 else Float32(0.5) + Float32(i % 7) * Float32(0.125))
+        vb2.append(Float32(i % 5) * Float32(0.25))
+    var wvb = List[Float32]()
+    wvb.append(o_variance(vb))
+    wvb.append(o_absdiff_sum(vb, vb2))
+    var avb = List[Float32]()
+    avb.append(o_variance(vb, 1))
+    avb.append(o_absdiff_sum(vb, vb2, 1))
+    require_separates("5209 blocked folds", count_diff_f32(wvb, avb))
+    var dvb = zf(2)
+    op_variance(fa(vb), fa(dvb), len(vb))
+    op_absdiff_sum(fa(vb), fa(vb2), fa(dvb) + 4, len(vb))
+    same("5209 blocked folds device", count_diff_f32(dvb, wvb))
+    var hvb = zf(2)
+    h_variance(fa(vb), fa(hvb), len(vb))
+    h_absdiff_sum(fa(vb), fa(vb2), fa(hvb) + 4, len(vb))
+    _ = vb^
+    _ = vb2^
+    same("5209 blocked folds host", count_diff_f32(hvb, wvb))
+    tr.record_list_f32("x_neighbors.blocked_folds", dvb)
 
     var pos = a.copy()
     for i in range(len(pos)):

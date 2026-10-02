@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MiniBatchKMeans, FAST on Apple: the mini-batch steps resident on the
-device (lane/apple-fast-cluster, 2026-10-02). Switch:
-`MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1`, read on the host in
-`x_cluster/minibatch.mojo` `minibatch_fit`; off, nothing here runs.
+device (lane/apple-fast-cluster, 2026-10-02). Switch: the build define
+`-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` (`MINIBATCH_FAST_DEV` below, taken
+by `x_cluster/minibatch.mojo` `minibatch_fit`); without it nothing here
+compiles, and no build reads the environment.
 
 Cause: `minibatch_fit`'s step loop (x_cluster/minibatch.mojo, `for step in
 range(n_steps)`) gathers the batch on the host, uploads it (`ops.set`),
@@ -38,15 +39,19 @@ differ from the step loop's. IDENTICAL compiles none of this.
 """
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul64
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_mul64
 from x_cluster.bodies import FPtr, IPtr, SplitMix64
 
-comptime MINIBATCH_FAST_DEV = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+comptime MINIBATCH_FAST_DEV = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH"]()
+)
 comptime MBF_TPB = 256
 comptime MBF_CH = 256
 """Batch rows per chunk of `_mbf_sum_kernel`."""

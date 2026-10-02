@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MeanShift, FAST on Apple: every shift of every seed on the whole GPU
-(lane/apple-fast-cluster, 2026-10-02). Switch: `MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1`
-(read on the host in `x_cluster/device_ops.mojo` `DeviceOps.meanshift`; off,
-nothing here runs).
+(lane/apple-fast-cluster, 2026-10-02). Switch: the build define
+`-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1` (`MEANSHIFT_FAST_GRID` below, taken
+by `x_cluster/device_ops.mojo` `DeviceOps.meanshift`); without it nothing
+here compiles, and no build reads the environment.
 
 Cause: `_meanshift_team_kernel` (x_cluster/device_ops.mojo:169) takes ONE
 block per seed and walks all n rows of every shift inside it, so a fit with
@@ -29,15 +30,19 @@ the paired quality check holds). IDENTICAL compiles none of this.
 """
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_sqrt
 from x_cluster.bodies import FPtr, IPtr
 
-comptime MEANSHIFT_FAST_GRID = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+comptime MEANSHIFT_FAST_GRID = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT"]()
+)
 comptime MSG_TPB = 256
 comptime MSG_T = 256
 """Rows per chunk (one row per thread in the bandwidth test)."""
