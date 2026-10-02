@@ -150,29 +150,51 @@ def rr_row_off(a: F32Ptr, n: Int, k: Int) -> SIMD[DType.float32, 2]:
 
 
 comptime RR_OFF_TPB = 256
-"""Width of the convergence test's fold (`eigh_par_off_fold_kernel`)."""
+"""Block width of the convergence test's fold (`eigh_par_off_part_kernel`,
+`eigh_par_off_fold_kernel`)."""
 
 
-def rr_off_fold(a: F32Ptr, n: Int) -> SIMD[DType.float32, 2]:
-    """(sum of the rows' off-diagonal squares, sum of a_kk^2): the device's
-    `eigh_par_off_fold_kernel` order. Slot t adds rows t, t + RR_OFF_TPB, ...
-    ascending, then the pairwise tree over the RR_OFF_TPB slots."""
-    var po = InlineArray[Float32, RR_OFF_TPB](fill=Float32(0.0))
-    var pd = InlineArray[Float32, RR_OFF_TPB](fill=Float32(0.0))
-    for t in range(RR_OFF_TPB):
-        var k = t
-        while k < n:
-            var o = rr_row_off(a, n, k)
-            po[t] = ftz(po[t] + o[0])
-            pd[t] = ftz(pd[t] + o[1])
-            k += RR_OFF_TPB
+def _rr_tree(mut so: InlineArray[Float32, RR_OFF_TPB], mut sd: InlineArray[Float32, RR_OFF_TPB]):
+    """The pairwise tree over the RR_OFF_TPB slots (slot 0 the sum)."""
     var w = RR_OFF_TPB // 2
     while w > 0:
         for t in range(w):
-            po[t] = ftz(po[t] + po[t + w])
-            pd[t] = ftz(pd[t] + pd[t + w])
+            so[t] = ftz(so[t] + so[t + w])
+            sd[t] = ftz(sd[t] + sd[t + w])
         w = w // 2
-    return SIMD[DType.float32, 2](po[0], pd[0])
+
+
+def rr_off_fold(a: F32Ptr, n: Int) -> SIMD[DType.float32, 2]:
+    """(sum of the rows' off-diagonal squares, sum of a_kk^2) in the device's
+    order: block b of RR_OFF_TPB rows a pairwise tree
+    (`eigh_par_off_part_kernel`), then slot t adds block sums t, t +
+    RR_OFF_TPB, ... ascending and the pairwise tree again
+    (`eigh_par_off_fold_kernel`)."""
+    var nb = (n + RR_OFF_TPB - 1) // RR_OFF_TPB
+    var po = List[Float32](length=max(nb, 1), fill=Float32(0.0))
+    var pd = List[Float32](length=max(nb, 1), fill=Float32(0.0))
+    for b in range(nb):
+        var so = InlineArray[Float32, RR_OFF_TPB](fill=Float32(0.0))
+        var sd = InlineArray[Float32, RR_OFF_TPB](fill=Float32(0.0))
+        for t in range(RR_OFF_TPB):
+            var k = b * RR_OFF_TPB + t
+            if k < n:
+                var o = rr_row_off(a, n, k)
+                so[t] = o[0]
+                sd[t] = o[1]
+        _rr_tree(so, sd)
+        po[b] = so[0]
+        pd[b] = sd[0]
+    var so = InlineArray[Float32, RR_OFF_TPB](fill=Float32(0.0))
+    var sd = InlineArray[Float32, RR_OFF_TPB](fill=Float32(0.0))
+    for t in range(RR_OFF_TPB):
+        var b = t
+        while b < nb:
+            so[t] = ftz(so[t] + po[b])
+            sd[t] = ftz(sd[t] + pd[b])
+            b += RR_OFF_TPB
+    _rr_tree(so, sd)
+    return SIMD[DType.float32, 2](so[0], sd[0])
 
 
 def host_eigh_rr(mut a: List[Float32], mut v: List[Float32], n: Int, sweeps: Int, tol: Float32) -> Tuple[Bool, Int]:

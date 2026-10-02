@@ -27,7 +27,7 @@ m / 2 DISJOINT pairs, so the rotations of a round commute and run at once.
 
 Convergence is the cyclic kernel's own test (sum of squared off-diagonal
 cells against tol^2 ||A||_F^2), both sums folded on the device
-(`eigh_par_off_fold_kernel`, the fixed order of `x_decomp/rr.mojo`
+(`eigh_par_off_part_kernel` then `eigh_par_off_fold_kernel`, the fixed order of `x_decomp/rr.mojo`
 `rr_off_fold`) and three scalars read on the host once a sweep. A solve that
 does not converge in its budget returns False and the caller runs the cyclic
 solver on the untouched input. (cgfin-c-decomp deleted the one-sided SVD's
@@ -96,27 +96,45 @@ def eigh_par_update_kernel(a: F32Ptr, v: F32Ptr, cs: F32Ptr, n_in: Int32, m_in: 
         rr_vrow(v, cs, n, m, r, k, u - k * h)
 
 
-def eigh_par_off_kernel(a: F32Ptr, dst: F32Ptr, n_in: Int32):
-    """dst[k] = row k's off-diagonal squares, dst[n + k] = a_kk^2 (`rr_row_off`),
-    dst[2 n + k] = a_kk. One thread a row; `eigh_par_off_fold_kernel` folds the
-    first two."""
+def eigh_par_off_part_kernel(a: F32Ptr, dst: F32Ptr, part: F32Ptr, n_in: Int32):
+    """Thread t of block b takes row k = b RR_OFF_TPB + t: dst[2 n + k] = a_kk
+    (the converged diagonal), and block b's pairwise tree over its rows'
+    (`rr_row_off`) off-diagonal squares and a_kk^2 (rows past n add 0) goes to
+    part[3 b], part[3 b + 1]; part[3 b + 2] = 0 marks the block ran (the
+    caller fills -1). Launch ceil(n / RR_OFF_TPB) blocks of RR_OFF_TPB."""
     var n = Int(n_in)
-    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var b = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var k = b * RR_OFF_TPB + tid
+    var so = stack_allocation[RR_OFF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sd = stack_allocation[RR_OFF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var o = SIMD[DType.float32, 2](0.0, 0.0)
     if k < n:
-        var o = rr_row_off(a, n, k)
-        dst.unsafe_store(k, o[0])
-        dst.unsafe_store(n + k, o[1])
+        o = rr_row_off(a, n, k)
         dst.unsafe_store(2 * n + k, a.unsafe_load(k * n + k))
+    so[tid] = o[0]
+    sd[tid] = o[1]
+    barrier()
+    var w = RR_OFF_TPB // 2
+    while w > 0:
+        if tid < w:
+            so[tid] = ftz(so[tid] + so[tid + w])
+            sd[tid] = ftz(sd[tid] + sd[tid + w])
+        barrier()
+        w = w // 2
+    if tid == 0:
+        part.unsafe_store(3 * b, so[0])
+        part.unsafe_store(3 * b + 1, sd[0])
+        part.unsafe_store(3 * b + 2, Float32(0.0))
 
 
-def eigh_par_off_fold_kernel(src: F32Ptr, out: F32Ptr, n_in: Int32):
-    """out[0] = the off-diagonal sum, out[1] = the diagonal sum of
-    `eigh_par_off_kernel`'s rows (src[0, n), src[n, 2 n)), out[2] = the least
-    of those 2 n cells (a -1 left there is a dispatch that did not run).
-    `rr_off_fold`'s order: thread t adds rows t, t + RR_OFF_TPB, ...
-    ascending, then the pairwise tree. ONE block of RR_OFF_TPB threads (n is
-    the matrix order, not a row count)."""
-    var n = Int(n_in)
+def eigh_par_off_fold_kernel(part: F32Ptr, out: F32Ptr, nb_in: Int32):
+    """The tree past the blocks: thread t adds block partials t, t +
+    RR_OFF_TPB, ... ascending, then the pairwise tree. out[0] = the
+    off-diagonal sum, out[1] = the diagonal sum, out[2] = the least ran mark
+    (-1: a block of `eigh_par_off_part_kernel` did not run). ONE block over
+    the nb = ceil(n / RR_OFF_TPB) block partials (`rr_off_fold`'s order)."""
+    var nb = Int(nb_in)
     var tid = Int(thread_idx.x)
     var so = stack_allocation[RR_OFF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var sd = stack_allocation[RR_OFF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
@@ -124,14 +142,12 @@ def eigh_par_off_fold_kernel(src: F32Ptr, out: F32Ptr, n_in: Int32):
     var ao = Float32(0.0)
     var ad = Float32(0.0)
     var am = Float32(0.0)
-    var k = tid
-    while k < n:
-        var o = src.unsafe_load(k)
-        var d = src.unsafe_load(n + k)
-        ao = ftz(ao + o)
-        ad = ftz(ad + d)
-        am = min(am, min(o, d))
-        k += RR_OFF_TPB
+    var b = tid
+    while b < nb:
+        ao = ftz(ao + part.unsafe_load(3 * b))
+        ad = ftz(ad + part.unsafe_load(3 * b + 1))
+        am = min(am, part.unsafe_load(3 * b + 2))
+        b += RR_OFF_TPB
     so[tid] = ao
     sd[tid] = ad
     sm[tid] = am

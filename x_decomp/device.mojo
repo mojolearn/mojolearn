@@ -96,7 +96,7 @@ from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
     eigh_par_off_fold_kernel,
-    eigh_par_off_kernel,
+    eigh_par_off_part_kernel,
     eigh_par_update_kernel,
     pj_identity_kernel,
     pj_transpose_kernel,
@@ -1591,6 +1591,39 @@ def _pj_blocks(count: Int) -> Int:
     return (count + PJ_TPB - 1) // PJ_TPB if count > 0 else 1
 
 
+def _pj_off_blocks(n: Int) -> Int:
+    return max((n + RR_OFF_TPB - 1) // RR_OFF_TPB, 1)
+
+
+def _eigh_par_test(
+    ctx: DeviceContext,
+    da: DeviceBuffer[DType.float32],
+    doff: DeviceBuffer[DType.float32],
+    dpart: DeviceBuffer[DType.float32],
+    dfold: DeviceBuffer[DType.float32],
+    hfold: HostBuffer[DType.float32],
+    n: Int,
+) raises -> SIMD[DType.float32, 4]:
+    """The round-robin eigh's convergence test on the device: the block
+    trees of the rows' off-diagonal squares and a_kk^2 (a_kk left in
+    doff[2 n, 3 n)), then the tree past the blocks (x_decomp/rr.mojo
+    `rr_off_fold`, the host column's order). Returns (off, diag, ran, 0);
+    ran < 0 is a dispatch that did not run (the buffers are filled -1)."""
+    var nb = _pj_off_blocks(n)
+    enqueue_fill(ctx, dpart, Float32(-1.0))
+    enqueue_fill(ctx, dfold, Float32(-1.0))
+    ctx.enqueue_function[eigh_par_off_part_kernel](
+        da.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n), grid_dim=nb, block_dim=RR_OFF_TPB
+    )
+    ctx.enqueue_function[eigh_par_off_fold_kernel](
+        dpart.unsafe_ptr(), dfold.unsafe_ptr(), Int32(nb), grid_dim=1, block_dim=RR_OFF_TPB
+    )
+    ctx.enqueue_copy(dst_ptr=hfold.unsafe_ptr(), src_buf=dfold)
+    ctx.synchronize()
+    var p = hfold.unsafe_ptr()
+    return SIMD[DType.float32, 4](p.unsafe_load(0), p.unsafe_load(1), p.unsafe_load(2), Float32(0.0))
+
+
 def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
     """Floats of partial-sum scratch `launch_gemm` needs (0: none)."""
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
@@ -2288,7 +2321,7 @@ struct DevExec(Exec):
         (x_decomp/jacobi_par.mojo; FAST on Metal), then `device_eigh`'s own
         tail (`sign_flip_kernel`, the ascending permutation). The cyclic
         kernel's convergence test before every sweep, its sums folded on the
-        device (`eigh_par_off_fold_kernel`); the host reads three scalars.
+        device (`_eigh_par_test`); the host reads three scalars.
         `a` is not written; False = not converged in PJ_EIGH_SWEEPS sweeps
         (nothing stored), and the caller runs the cyclic solver."""
         var ctx = xd_ctx()
@@ -2298,6 +2331,7 @@ struct DevExec(Exec):
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
         var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
+        var dpart = ctx.enqueue_create_buffer[DType.float32](3 * _pj_off_blocks(n))
         var dfold = ctx.enqueue_create_buffer[DType.float32](3)
         var hfold = ctx.enqueue_create_host_buffer[DType.float32](3)
         ctx.enqueue_function[pj_identity_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
@@ -2307,24 +2341,11 @@ struct DevExec(Exec):
         var fro_in = Float64(-1.0)
         var fro_now = Float64(0.0)
         for sweep in range(PJ_EIGH_SWEEPS + 1):
-            # a sum of squares is never negative: -1 left in the readback is
-            # a dispatch that did not run
-            enqueue_fill(ctx, doff, Float32(-1.0))
-            enqueue_fill(ctx, dfold, Float32(-1.0))
-            ctx.enqueue_function[eigh_par_off_kernel](
-                da.unsafe_ptr(), doff.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n), block_dim=PJ_TPB
-            )
-            # both sums folded on the device (x_decomp/rr.mojo rr_off_fold,
-            # the host column's order); three scalars come back
-            ctx.enqueue_function[eigh_par_off_fold_kernel](
-                doff.unsafe_ptr(), dfold.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=RR_OFF_TPB
-            )
-            ctx.enqueue_copy(dst_ptr=hfold.unsafe_ptr(), src_buf=dfold)
-            ctx.synchronize()
-            var off = Float64(hfold.unsafe_ptr().unsafe_load(0))
-            var dg = Float64(hfold.unsafe_ptr().unsafe_load(1))
-            if not (hfold.unsafe_ptr().unsafe_load(2) >= Float32(0.0)):
+            var tst = _eigh_par_test(ctx, da, doff, dpart, dfold, hfold, n)
+            if not (tst[2] >= Float32(0.0)):
                 break
+            var off = Float64(tst[0])
+            var dg = Float64(tst[1])
             fro_now = off + dg
             if fro_in < 0.0:
                 fro_in = fro_now
@@ -2369,6 +2390,7 @@ struct DevExec(Exec):
         _ = dv^
         _ = dcs^
         _ = doff^
+        _ = dpart^
         _ = dfold^
         _ = hfold^
         ctx.synchronize()
