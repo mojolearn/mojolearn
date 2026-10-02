@@ -322,7 +322,7 @@ from gemm.checks.gemm_int15_heads import INT15_HEADS_MAX_L
 # ORIENTATION NUMBERING: these are `gemm_oracle`'s, where
 # `OP_NN = 0, OP_NT = 1, OP_TN = 2`. They are NOT `bench/gemm_shapes.mojo`'s
 # `OP_NT = 0`. `identical_gemm` reads these. See the header's trap note.
-from gemm.checks.gemm_oracle import OP_NN, OP_NT
+from gemm.contract import OP_NN, OP_NT
 
 # CROSS-LANE REUSE, contract section 0's table. `residual_add_kernel` is
 # seam S16 of the mamba contract and seams S22 and S23 of this one, the same

@@ -100,15 +100,14 @@ from gemm.checks.gemm_lowbit import (
     identical_gemm_int8_into,
     quantize_rows_int8_device,
 )
-from gemm.host.gemm_lowbit_oracle import INT8_MAX_K, LOWBIT_PROFILE_VERSION
+from gemm.contract import INT8_MAX_K, LOWBIT_PROFILE_VERSION
 from gemm.checks.gemm_int15 import (
     Int15QuantWorkspace,
     dequantize_planes_int15_device,
     identical_gemm_int15_planes_into,
     quantize_planes_int15_parallel_device,
 )
-from gemm.host.gemm_int15_oracle import INT15_MAX_K, INT15_PROFILE_VERSION
-from gemm.host.identical_gemm import OP_NN, OP_NT, OP_TN
+from gemm.contract import INT15_MAX_K, INT15_PROFILE_VERSION, OP_NN, OP_NT, OP_TN
 from max.gpu.host import DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 

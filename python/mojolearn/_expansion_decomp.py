@@ -335,11 +335,6 @@ _DEV_ONE = {}
 #: 0.129 / 0.124 s)
 import os as _os
 _RES_MIN = int(_os.environ.get("MOJOLEARN_XD_RES_MIN", "1"))
-#: A/B arm (lane hr2-graph-embed, 2026-10-02): Isomap's / LLE's kNN by
-#: heapq, their graphs, component walk and joins in Python, and the
-#: host-built Dijkstra arcs, instead of the graph cells
-#: (x_decomp/graph_cells.mojo) on device-resident matrices.
-_PY_GRAPH = _os.environ.get("MOJOLEARN_XD_PY_GRAPH", "") == "1"
 
 
 def _dev_one(kit):
@@ -735,13 +730,8 @@ class _Kit:
         """All-pairs shortest paths on a dense undirected graph (0 = no edge),
         one source per thread; -1 marks an unreachable pair. The GPU binding
         keeps W and the result resident and compresses the arcs on the
-        device (x_decomp/graph_device.mojo); MOJOLEARN_XD_PY_GRAPH=1 (A/B,
-        lane hr2-graph-embed) restores the host-address entry."""
+        device (x_decomp/graph_device.mojo)."""
         n = W.r
-        if _PY_GRAPH:
-            dist, reached = _M.zeros(n, n), _M.zeros(n, 1)
-            self.b.x_decomp_dijkstra_rows(W.addr, dist.addr, reached.addr, [n])
-            return dist
         if self._res():
             dist = self._dout(n, n)
             self.b.x_decomp_dev_graph_dijkstra(self._did(W), dist._d.id, [n])
@@ -788,6 +778,21 @@ class _Kit:
             return out
         out = _M.zeros(n, n)
         self.b.x_decomp_graph_radius(D.addr, out.addr, [n], float(r))
+        return out
+
+    def graph_radius_geo(self, Dq, D, r):
+        """Isomap's radius transform: G[i, c] = min over j (ascending) with
+        Dq[i, j] <= r of D[j, c] + Dq[i, j] (x_decomp/graph_cells.mojo
+        `radius_geo_cell`; 0 for a row with no such j)."""
+        nq, n = Dq.r, Dq.c
+        if self._res():
+            out = self._dout(nq, n)
+            if nq * n:
+                self.b.x_decomp_dev_graph_radius_geo(self._did(Dq), self._did(D), out._d.id, [nq, n], float(r))
+            return out
+        out = _M.zeros(nq, n)
+        if nq * n:
+            self.b.x_decomp_graph_radius_geo(Dq.addr, D.addr, out.addr, [nq, n], float(r))
         return out
 
     def graph_lle_iw(self, idx, wb, n):
@@ -2421,8 +2426,11 @@ class _PLS(_Base):
         self.n_iter_ = []
         thr = 10 * _F32_EPS
         for _c in range(nc):
-            # Yk columns that are all below 10 eps are set to zero
-            dead = [all(abs(Yk.s[i * q + j]) < thr for i in range(n)) for j in range(q)]
+            # Yk columns that are all below 10 eps are set to zero: per
+            # column, the count of |y| >= thr (-|y| <= -thr, exact) on the
+            # device; q values come back
+            live = k.colsum(k.ew("le", k.ew("scale", k.ew("abs", Yk), s=-1.0), _M.of([-thr], 1, 1)))
+            dead = [v == 0.0 for v in live.s]
             if any(dead):
                 Yk = k.ew("mul", Yk, _M.of([0.0 if d else 1.0 for d in dead], 1, q))
             try:
@@ -3310,23 +3318,11 @@ def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0, device_ok=Fal
         got = _knn_lists_device(k, Q, X, n_neighbors, exclude_self)
         if got is not None:
             return got
-    if not _PY_GRAPH:
-        im, dm = _knn_mats(k, Q, X, n_neighbors, exclude_self, kind, pw)
-        nn = n_neighbors
-        iv, dv = im.s, dm.s
-        return ([[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)],
-                [list(dv[i * nn:(i + 1) * nn]) for i in range(Q.r)])
-    D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
-    # each row's n_neighbors smallest by (value, column), its own column
-    # skipped: exactly nsmallest(n_neighbors + 1) less the row itself, on the
-    # device beside D (lane neural-pass142; the host heap walk was 5.5 s of a
-    # 10,000-row LocallyLinearEmbedding fit on the M4)
-    nn = min(n_neighbors, X.r - (1 if exclude_self else 0))
-    I, V = k.knn_select(D, nn, exclude_self)
-    iv, vv = I.s, V.s
-    idx = [[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)]
-    dst = [list(vv[i * nn:(i + 1) * nn]) for i in range(Q.r)]
-    return idx, dst
+    im, dm = _knn_mats(k, Q, X, n_neighbors, exclude_self, kind, pw)
+    nn = n_neighbors
+    iv, dv = im.s, dm.s
+    return ([[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)],
+            [list(dv[i * nn:(i + 1) * nn]) for i in range(Q.r)])
 
 
 def _center_kernel(k, K):
@@ -3447,51 +3443,6 @@ def _top_eig(k, A, nc, topk=False):
     return w, V.neg_cols(k.absmax_flags(V, True))
 
 
-def _fix_components(k, X, Wg, kind=0, pw=2.0, adj=None):
-    """sklearn `utils/graph.py::_fix_connected_components` on a dense graph:
-    for every pair of connected components (i < j, labels by lowest member),
-    the closest pair of points between them gets an edge of their distance.
-    `adj` (optional): each node's neighbors in either direction, the nonzero
-    entries of Wg's row and column; the components are walked over it
-    (O(edges), not O(n^2) in Python). The labels do not depend on the walk."""
-    n = Wg.r
-    labels = [-1] * n
-    comp = 0
-    for s0 in range(n):
-        if labels[s0] >= 0:
-            continue
-        stack = [s0]
-        labels[s0] = comp
-        while stack:
-            u = stack.pop()
-            for v in (adj[u] if adj is not None else range(n)):
-                if labels[v] < 0 and (adj is not None or Wg.s[u * n + v] != 0 or Wg.s[v * n + u] != 0):
-                    labels[v] = comp
-                    stack.append(v)
-        comp += 1
-    if comp == 1:
-        return Wg, 1
-    import warnings
-    warnings.warn(f"The number of connected components of the neighbors graph is {comp} > 1. "
-                  "Completing the graph to fit Isomap might be slow.", stacklevel=3)
-    D = _dist(k, X, X, kind, pw, same=True)
-    Wg = Wg.copy()
-    for a in range(comp):
-        ia = [i for i in range(n) if labels[i] == a]
-        for b in range(a + 1, comp):
-            ib = [i for i in range(n) if labels[i] == b]
-            best = None
-            for i in ia:
-                for j in ib:
-                    v = D.s[i * n + j]
-                    if best is None or v < best[0]:
-                        best = (v, i, j)
-            v, i, j = best
-            Wg.s[i * n + j] = v if v != 0 else 1e-10
-            Wg.s[j * n + i] = Wg.s[i * n + j]
-    return Wg, comp
-
-
 class Isomap(_Base):
     """sklearn.manifold.Isomap (reference: scikit-learn `manifold/_isomap.py`
     with `KernelPCA(kernel='precomputed')` and `utils/graph.py`): the
@@ -3531,10 +3482,7 @@ class Isomap(_Base):
         k = self._kit()
         M = _M.from_input(X)
         n = M.r
-        if not _PY_GRAPH:
-            Wg, nn = self._graph(k, M, n, kind, pw)
-        else:
-            Wg, nn = self._py_graph(k, M, n, kind, pw)
+        Wg, nn = self._graph(k, M, n, kind, pw)
         D = k.dijkstra(Wg)
         self.dist_matrix_m_ = D
         self.dist_matrix_ = D.out()
@@ -3574,36 +3522,6 @@ class Isomap(_Base):
             k.graph_join(Wg, D, comp, C)
         return Wg, nn
 
-    def _py_graph(self, k, M, n, kind, pw):
-        """MOJOLEARN_XD_PY_GRAPH=1 (A/B): the Python graph build."""
-        Wg = _M.zeros(n, n)
-        adj = [[] for _ in range(n)]      # neighbors either way, for the component walk
-        if self.radius is not None:
-            r = _f32(float(self.radius))
-            D = _dist(k, M, M, kind, pw, same=True)
-            for i in range(n):
-                for j in range(n):
-                    v = D.s[i * n + j]
-                    if j != i and v <= r:
-                        Wg.s[i * n + j] = v if v != 0 else 1e-10   # scipy drops explicit zeros; keep the edge
-                        adj[i].append(j)
-                        adj[j].append(i)
-            nn = None
-        else:
-            nn = int(self.n_neighbors)
-            idx, dst = _knn_lists(k, M, M, nn, True, kind, pw)
-            sq = _M.of([v for row in dst for v in row], n, nn)
-            if kind == 0:
-                sq = k.ew("sqrt", sq)
-            for i in range(n):
-                for a, j in enumerate(idx[i]):
-                    v = sq.s[i * nn + a]
-                    Wg.s[i * n + j] = v if v != 0 else 1e-10   # scipy drops explicit zeros; keep the edge
-                    adj[i].append(j)
-                    adj[j].append(i)
-        Wg, self.n_connected_components_ = _fix_components(k, M, Wg, kind, pw, adj)
-        return Wg, nn
-
     def fit_transform(self, X, y=None):
         return self.fit(X).embedding_
 
@@ -3636,23 +3554,18 @@ class Isomap(_Base):
     def _radius_geodesic(self, k, Q):
         """sklearn's radius transform: for each query, the minimum over the
         training rows within the radius (distance 0 included) of
-        dist_matrix_[j] + d(q, j). The candidates are taken in ascending j,
-        a fixed order, one elementwise min at a time."""
-        n = self._fit_X.r
+        dist_matrix_[j] + d(q, j): one cell per (query, column) on the
+        device, the candidates in ascending j (`graph_radius_geo`)."""
         r = _f32(float(self.radius))
         Dq = _dist(k, Q, self._fit_X, self._kind, self._pw)
         D = self.dist_matrix_m_
-        rows = []
-        for i in range(Q.r):
-            js = [j for j in range(n) if Dq.s[i * n + j] <= r]
-            if not js:
-                raise ValueError(f"Isomap.transform: query row {i} has no training row within radius {self.radius}")
-            g = None
-            for j in js:
-                cand = k.ew("adds", D.rows(j, j + 1), s=Dq.s[i * n + j])
-                g = cand if g is None else k.ew("min", g, cand)
-            rows.append(g)
-        return _vstack(*rows)
+        # every query has a training row within the radius: the per-row
+        # counts and their total on the device, one scalar read
+        hits = k.ew("gts", k.rowsum(k.ew("le", Dq, _M.of([r], 1, 1))), s=0.5)
+        if Q.r and k.total(hits).s[0] != Q.r:
+            i = list(hits.s).index(0.0)
+            raise ValueError(f"Isomap.transform: query row {i} has no training row within radius {self.radius}")
+        return k.graph_radius_geo(Dq, D, r)
 
     def reconstruction_error(self):
         self._check("embedding_m_")
@@ -3720,21 +3633,6 @@ class MDS(_Base):
 
     def _dist(self, k, Y):
         return k.ew("sqrt", k.sqdist(Y, Y))
-
-    def _disparities(self, k, n, pos, flat):
-        """sklearn's non-metric disparities: the upper-triangle values at
-        `pos` (row-major, dissimilarity != 0), scaled by sqrt((n (n - 1) / 2)
-        / sum of their squares), mirrored below the diagonal (an exact copy:
-        sklearn adds a zero)."""
-        P = _M.zeros(n, n)
-        for q, v in zip(pos, flat):
-            P.s[q] = v
-        ss = k.total(k.ew("sq", P)).s[0]
-        P = k.ew("scale", P, s=math.sqrt((n * (n - 1) / 2) / ss))
-        for q in pos:
-            i, j = divmod(q, n)
-            P.s[j * n + i] = P.s[q]
-        return P
 
     def _nm_native(self, k, Dis, n):
         """The non-metric SMACOF bookkeeping in native calls (lane/py-decomp-nbrs):
@@ -3805,52 +3703,34 @@ class MDS(_Base):
 
     def _single(self, k, Dis, Y, run):
         n = Dis.r
-        nonmetric = not self.metric_mds
-        native = (nonmetric and n * n <= 2147483647 and _os.environ.get("MOJOLEARN_XD_MDS_PYTHON") != "1")
+        # cgfin-c-decomp: non-metric SMACOF's bookkeeping is the native
+        # calls only (`_nm_native`); the Python pair lists and the
+        # MOJOLEARN_XD_MDS_PYTHON switch are deleted
+        native = not self.metric_mds
         if native:
+            if n * n > 2147483647:
+                raise ValueError(f"MDS(metric_mds=False): {n} rows exceed the 32-bit pair index (n * n <= 2**31 - 1)")
             nm = self._nm_native(k, Dis, n)
-            nonmetric = False
-        if nonmetric:
-            # sklearn `_smacof_single` with metric=False: a zero dissimilarity
-            # is a missing value; the first iteration uses the dissimilarities
-            # themselves, later ones IsotonicRegression(out_of_bounds='clip')
-            # of the distances on the dissimilarities (the linear lane's
-            # x_linear PAVA, fitted on (x, y)-sorted rows).
-            from . import _expansion_linear as _xlin    # a module import: see _sparse_encode
-            IsotonicRegression = _xlin.IsotonicRegression
-            pos = [i * n + j for i in range(n) for j in range(i + 1, n) if Dis.s[i * n + j] != 0]
-            dis_w = [Dis.s[q] for q in pos]
-            ir = IsotonicRegression(out_of_bounds="clip", numeric_mode=self.numeric_mode_)
         disp = Dis
         d = self._dist(k, Y)
         old = None
         it = 0
-        # The Guttman transform's diagonal on the device (lane hr2-mds-agglo):
-        # B's diagonal gets the row sums by fma(I, rs, B) (1 * rs + B, one
-        # rounding: the add the host loop did; 0 * rs + B is B off it), so
-        # the n x n matrix stays resident; the host loop read all of B and
-        # wrote it back every iteration. MOJOLEARN_XD_MDS_DIAG_V0=1 is the
-        # old loop (the A/B switch).
-        eye = None
-        if _os.environ.get("MOJOLEARN_XD_MDS_DIAG_V0") != "1":
-            eye = k.diag_mask(n)
+        # The Guttman transform's diagonal (lane hr2-mds-agglo): B's diagonal
+        # gets the row sums by fma(I, rs, B) (1 * rs + B, one rounding;
+        # 0 * rs + B is B off it), so the n x n matrix stays resident. The
+        # host binding takes the same fma on a host identity.
+        eye = k.diag_mask(n)
+        if eye is None:
+            eye = _eye(n)
         floor = k.const(1e-5)
         for it in range(1, self.max_iter + 1):
             if native:
                 disp = nm(d, it == 1)
-            elif nonmetric:
-                flat = dis_w if it == 1 else ir.fit_transform(dis_w, [d.s[q] for q in pos]).tolist()
-                disp = self._disparities(k, n, pos, flat)
             dz = k.ew("select", d, d, floor, s=0.0)
             ratio = k.ew("div", disp, dz)
             B = k.ew("scale", ratio, s=-1.0)
             rs = k.rowsum(ratio)
-            if eye is not None:
-                B = k.ew("fma", eye, rs, B)
-            else:
-                B = B.copy()
-                for i in range(n):
-                    B.s[i * n + i] = _f32(B.s[i * n + i] + rs.s[i])
+            B = k.ew("fma", eye, rs, B)
             Y = k.ew("scale", k.mm(B, Y), s=1.0 / n)
             d = self._dist(k, Y)
             stress = k.total(k.ew("sqdiff", d, disp)).s[0] / 2
@@ -4116,7 +3996,7 @@ class LocallyLinearEmbedding(_Base):
                              "[n_components * (n_components + 3) / 2]")
         if self.method == "modified" and nn < nc:
             raise ValueError("modified LLE requires n_neighbors >= n_components")
-        if self.method == "standard" and not _PY_GRAPH:
+        if self.method == "standard":
             # lane hr2-graph-embed: the kNN, the barycenter weights and I - W
             # as cells, I - W resident on the GPU binding
             idm = None
@@ -4137,15 +4017,8 @@ class LocallyLinearEmbedding(_Base):
             IW = self._ltsa_factor(k, M, idx, nn, nc)
         elif self.method == "hessian":
             IW = self._hessian_factor(k, M, idx, nn, nc)
-        elif self.method == "modified":
-            IW = self._modified_factor(k, M, idx, nn, nc)
         else:
-            Wb = k.barycenter(M, M, idx, self.reg)
-            IW = _M.zeros(n, n)
-            for i in range(n):
-                IW.s[i * n + i] = 1.0
-                for a, j in enumerate(idx[i]):
-                    IW.s[i * n + j] = _f32(IW.s[i * n + j] - Wb.s[i * nn + a])
+            IW = self._modified_factor(k, M, idx, nn, nc)
         # The eigenvectors of M = (I - W)^T (I - W) for its smallest
         # eigenvalues are the right singular vectors of I - W for its
         # smallest singular values. Those eigenvalues sit near 1e-7, under
@@ -4346,6 +4219,38 @@ def _emp_cov(k, Xs, assume_centered=False):
         return k.ew("scale", k.mm(Xs, Xs, ta=True), s=1.0 / Xs.r)
     Xc = k.ew("sub", Xs, k.colmean(Xs))
     return k.ew("scale", k.mm(Xc, Xc, ta=True), s=1.0 / Xs.r)
+
+
+def _f32_below(x):
+    """The largest float32 strictly below the float x: v < x is v <= this for
+    every float32 v (the kit's `le` cell takes the same decision)."""
+    f = _f32(x)
+    if f < x:
+        return f
+    b = array.array("f", [f])
+    u = array.array("I", b.tobytes())
+    if f > 0.0:
+        u[0] -= 1
+    elif f == 0.0:
+        u[0] = 0x80000001          # the least negative subnormal
+    else:
+        u[0] += 1
+    return array.array("f", u.tobytes())[0]
+
+
+def _masked_cov(k, M, m, assume_centered):
+    """sklearn's location and empirical covariance of the rows of M whose
+    mask entry (m, n x 1, 0 or 1) is 1, on the device: the masked rows are
+    exact zeros in the products, the count is the mask's total."""
+    cnt = k.total(m).s[0]
+    Xm = k.ew("mul", M, m)
+    if assume_centered:
+        loc = _M.zeros(1, M.c)
+        Xc = Xm
+    else:
+        loc = k.ew("scale", k.colsum(Xm), s=1.0 / cnt)
+        Xc = k.ew("mul", k.ew("sub", M, loc), m)
+    return loc, k.ew("scale", k.mm(Xc, Xc, ta=True), s=1.0 / cnt)
 
 
 def _mahal(k, X, loc, P):
@@ -4562,7 +4467,8 @@ class MinCovDet(_Base):
         loc, cov, support, dist = self._fast_mcd(k, M)
         if self.assume_centered:
             loc = _M.zeros(1, p)
-            cov = _emp_cov(k, M.take_rows([i for i in range(n) if support[i]]), assume_centered=True)
+            sm = _M.of([1.0 if v else 0.0 for v in support], n, 1)
+            _, cov = _masked_cov(k, M, sm, True)
             dist = k.rowsum(k.ew("mul", k.mm(M, _pinvh(k, cov)), M))
         self.raw_location_m_, self.raw_covariance_m_ = loc, cov
         self.raw_location_ = loc.out((p,))
@@ -4575,11 +4481,12 @@ class MinCovDet(_Base):
         dist = k.ew("scale", dist, s=1.0 / corr)
         # reweight_covariance
         thr = _chi2_quantile(k, p, 0.025)
-        mask = [v < thr for v in dist.s]
-        Xm = M.take_rows([i for i in range(n) if mask[i]])
-        locr = _M.zeros(1, p) if self.assume_centered else k.colmean(Xm)
-        covr = k.ew("scale", _emp_cov(k, Xm, assume_centered=self.assume_centered),
-                    s=_consistency_factor(k, p, 0.975))
+        # the reweighting mask dist < thr on the device (`le` against the
+        # float32 just below thr: the same decision), then the masked moments
+        mm = k.ew("le", dist, _M.of([_f32_below(thr)], 1, 1))
+        locr, covr = _masked_cov(k, M, mm, self.assume_centered)
+        covr = k.ew("scale", covr, s=_consistency_factor(k, p, 0.975))
+        mask = [v != 0.0 for v in mm.s]
         self.location_m_, self.covariance_m_ = locr, covr
         self.precision_m_ = _pinvh(k, covr)
         self.location_ = locr.out((p,))

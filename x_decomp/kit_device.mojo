@@ -36,6 +36,7 @@ from x_decomp.api import _f, _i, _n
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.device import (
     DevExec,
+    LU_SCAL_LEN,
     TPB,
     _blocks,
     _down,
@@ -372,10 +373,10 @@ struct DKit(Movable):
         var lu = self.copy(A)
         var pid = pool_alloc(max(n, 1))
         var iid = pool_alloc(1)
-        var sid = pool_alloc(2)
+        var sid = pool_alloc(LU_SCAL_LEN)
         var aid = pool_alloc(max(n, 1))
         launch_lu(
-            self.ctx, lu.p(), I32Ptr(unsafe_from_address=Int(_ptr(pid, max(n, 1)))), _ptr(iid, 1), _ptr(sid, 2),
+            self.ctx, lu.p(), I32Ptr(unsafe_from_address=Int(_ptr(pid, max(n, 1)))), _ptr(iid, 1), _ptr(sid, LU_SCAL_LEN),
             _ptr(aid, max(n, 1)), n,
         )
         var diag = DMat(1, n)

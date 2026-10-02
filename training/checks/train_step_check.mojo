@@ -75,7 +75,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import FNV_OFFSET, IdentityTrace, fnv1a64_bytes
 
-from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
+from gemm.contract import OP_NT
+from gemm.checks.gemm_oracle import gemm_oracle
 from gemm.checks.gemm_backward import (
     BWD_DC_LEFT,
     gemm_backward_a_call,
@@ -91,11 +92,8 @@ from embedding.checks.embedding_oracle import (
 )
 
 from training.checks.loss import loss_sabotage_name
-from training.checks.loss_oracle import (
-    CeConfig,
-    ce_backward_oracle,
-    ce_forward_oracle,
-)
+from training.checks.loss_contract import CeConfig
+from training.checks.loss_oracle import ce_backward_oracle, ce_forward_oracle
 from training.checks.optimizer import optimizer_sabotage_name
 from training.checks.optimizer_oracle import optimizer_step_oracle
 

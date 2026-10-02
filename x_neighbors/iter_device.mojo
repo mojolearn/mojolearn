@@ -14,7 +14,11 @@ compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
 from checks.kernel_matrix import lib_smem_page_fits_for, TARGET_COLUMN
-from x_neighbors.svgp_ff import matmul_tn_acc_ff_item, svgp_ff_solve
+from x_neighbors.svgp_ff import (
+    matmul_tn_acc_ff_item, svgp_ff_init_item, svgp_ff_chol_item, svgp_ff_chol_s_item, svgp_ff_column_item,
+    svgp_ff_x_item, svgp_ff_qmu_item, svgp_ff_qsqrt_item, svgp_ff_part_item, svgp_ff_fin_item, svgp_ff_nbn,
+    svgp_ff_nbm, svgp_ff_ws_size,
+)
 from std.memory import bitcast, memcpy
 from std.atomic import Atomic
 from std.math import sqrt
@@ -28,7 +32,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 
 from std.sys.compile import is_defined
-from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
 from x_neighbors.nan_cells_device import nan_cells_device
 from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
@@ -1600,15 +1603,133 @@ def op_svgp_stats_ff(
     _ = ctx^
 
 
+def svgp_ff_init_kernel(kuu: FP, bh: FP, bl: FP, w: FP, m_: Int64, n_: Int64, noise: Float32, jitter: Float32):
+    var t = _tid()
+    if t < Int(m_) * Int(m_):
+        svgp_ff_init_item(t, kuu, bh, bl, w, Int(m_), Int(n_), noise, jitter)
+
+
+def svgp_ff_chol_kernel(w: FP, m_: Int64, n_: Int64, j_: Int64):
+    var t = _tid()
+    if t < 2 * (Int(m_) - Int(j_)):
+        svgp_ff_chol_item(t, w, Int(m_), Int(n_), Int(j_))
+
+
+def svgp_ff_chol_s_kernel(w: FP, m_: Int64, n_: Int64, j_: Int64):
+    var t = _tid()
+    if t < Int(m_) - Int(j_):
+        svgp_ff_chol_s_item(t, w, Int(m_), Int(n_), Int(j_))
+
+
+def svgp_ff_column_kernel(kuu: FP, bh: FP, bl: FP, cmat: FP, w: FP, m_: Int64, n_: Int64, jitter: Float32):
+    var t = _tid()
+    if t < Int(m_):
+        svgp_ff_column_item(t, kuu, bh, bl, cmat, w, Int(m_), Int(n_), jitter)
+
+
+def svgp_ff_x_kernel(bvh: FP, bvl: FP, alpha: FP, w: FP, m_: Int64, n_: Int64, noise: Float32):
+    var t = _tid()
+    if t < Int(m_):
+        svgp_ff_x_item(t, bvh, bvl, alpha, w, Int(m_), Int(n_), noise)
+
+
+def svgp_ff_qmu_kernel(kuu: FP, qmu: FP, w: FP, m_: Int64, n_: Int64, jitter: Float32):
+    var t = _tid()
+    if t < Int(m_):
+        svgp_ff_qmu_item(t, kuu, qmu, w, Int(m_), Int(n_), jitter)
+
+
+def svgp_ff_qsqrt_kernel(qsqrt: FP, w: FP, m_: Int64, n_: Int64):
+    var t = _tid()
+    if t < Int(m_) * Int(m_):
+        svgp_ff_qsqrt_item(t, qsqrt, w, Int(m_), Int(n_))
+
+
+def svgp_ff_part_kernel(y: FP, bvh: FP, bvl: FP, w: FP, m_: Int64, n_: Int64):
+    var t = _tid()
+    if t < svgp_ff_nbn(Int(n_)) + svgp_ff_nbm(Int(m_)):
+        svgp_ff_part_item(t, y, bvh, bvl, w, Int(m_), Int(n_))
+
+
+def svgp_ff_fin_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float32, noise: Float32, kdiag: Float32):
+    if _tid() == 0:
+        svgp_ff_fin_item(w, info, Int(nbn_), Int(nbm_), nf, noise, kdiag)
+
+
 def op_svgp_ff(
     kuu: Int, bh: Int, bl: Int, bvh: Int, bvl: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int,
     m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
 ) raises:
-    """The float-float SVGP solve on the host, as svgp's item runs (HOST_RUN)."""
-    svgp_ff_solve(FP(unsafe_from_address=kuu), FP(unsafe_from_address=bh), FP(unsafe_from_address=bl),
-                  FP(unsafe_from_address=bvh), FP(unsafe_from_address=bvl), FP(unsafe_from_address=y),
-                  FP(unsafe_from_address=alpha), FP(unsafe_from_address=cmat), FP(unsafe_from_address=qmu),
-                  FP(unsafe_from_address=qsqrt), FP(unsafe_from_address=info), m, n, noise, jitter, kdiag)
+    """The float-float SVGP solve on the device (x_neighbors/svgp_ff.mojo):
+    the parallel item passes in the CPU column's order. Before
+    (cpu-gpu-cleanup c-xneighbors-iter), the solve ran on the host."""
+    var ctx = xn_ctx()
+    var d_kuu = _buf(ctx, kuu, m * m, True)
+    var d_bh = _buf(ctx, bh, m * m, True)
+    var d_bl = _buf(ctx, bl, m * m, True)
+    var d_bvh = _buf(ctx, bvh, m, True)
+    var d_bvl = _buf(ctx, bvl, m, True)
+    var d_y = _buf(ctx, y, n, True)
+    var d_alpha = _buf(ctx, 0, m, False)
+    var d_c = _buf(ctx, 0, m * m, False)
+    var d_qmu = _buf(ctx, 0, m, False)
+    var d_qs = _buf(ctx, 0, m * m, False)
+    var d_info = _buf(ctx, 0, 2, False)
+    var d_w = ctx.enqueue_create_buffer[DType.float32](max(svgp_ff_ws_size(m, n), 1))
+    enqueue_fill(ctx, d_w, Float32(0))
+    var wp = _p(d_w)
+    var mm = m * m
+    if mm > 0:
+        ctx.enqueue_function[svgp_ff_init_kernel](
+            _p(d_kuu), _p(d_bh), _p(d_bl), wp, Int64(m), Int64(n), noise, jitter,
+            grid_dim=_grid(mm), block_dim=BLOCK,
+        )
+    for j in range(m):
+        ctx.enqueue_function[svgp_ff_chol_kernel](wp, Int64(m), Int64(n), Int64(j),
+                                                  grid_dim=_grid(2 * (m - j)), block_dim=BLOCK)
+    if m > 0:
+        ctx.enqueue_function[svgp_ff_column_kernel](
+            _p(d_kuu), _p(d_bh), _p(d_bl), _p(d_c), wp, Int64(m), Int64(n), jitter,
+            grid_dim=_grid(m), block_dim=BLOCK,
+        )
+        ctx.enqueue_function[svgp_ff_x_kernel](
+            _p(d_bvh), _p(d_bvl), _p(d_alpha), wp, Int64(m), Int64(n), noise, grid_dim=_grid(m), block_dim=BLOCK,
+        )
+        ctx.enqueue_function[svgp_ff_qmu_kernel](
+            _p(d_kuu), _p(d_qmu), wp, Int64(m), Int64(n), jitter, grid_dim=_grid(m), block_dim=BLOCK,
+        )
+    for j in range(m):
+        ctx.enqueue_function[svgp_ff_chol_s_kernel](wp, Int64(m), Int64(n), Int64(j),
+                                                    grid_dim=_grid(m - j), block_dim=BLOCK)
+    if mm > 0:
+        ctx.enqueue_function[svgp_ff_qsqrt_kernel](_p(d_qs), wp, Int64(m), Int64(n), grid_dim=_grid(mm), block_dim=BLOCK)
+    var nbn = svgp_ff_nbn(n)
+    var nbm = svgp_ff_nbm(m)
+    if nbn + nbm > 0:
+        ctx.enqueue_function[svgp_ff_part_kernel](
+            _p(d_y), _p(d_bvh), _p(d_bvl), wp, Int64(m), Int64(n), grid_dim=_grid(nbn + nbm), block_dim=BLOCK,
+        )
+    ctx.enqueue_function[svgp_ff_fin_kernel](
+        wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=1,
+    )
+    _down(ctx, d_alpha, alpha, m)
+    _down(ctx, d_c, cmat, mm)
+    _down(ctx, d_qmu, qmu, m)
+    _down(ctx, d_qs, qsqrt, mm)
+    _down(ctx, d_info, info, 2)
+    ctx.synchronize()
+    _ = d_kuu^
+    _ = d_bh^
+    _ = d_bl^
+    _ = d_bvh^
+    _ = d_bvl^
+    _ = d_y^
+    _ = d_alpha^
+    _ = d_c^
+    _ = d_qmu^
+    _ = d_qs^
+    _ = d_info^
+    _ = d_w^
 
 
 def op_svgp_predict(

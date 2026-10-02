@@ -120,10 +120,8 @@ _PLAIN_STR = frozenset((str,))
 def _plain_labels(labels):
     """'number' or 'str' when EVERY label is exactly a Python int, float or
     bool, or exactly a str (the type set, read in C); None for anything
-    else, an empty sequence included, and when MOJOLEARN_HOTPATH=python."""
-    from ._buffer import hotpath_enabled
-
-    if not labels or not hotpath_enabled():
+    else, an empty sequence included."""
+    if not labels:
         return None
     kinds = set(map(type, labels))
     if kinds <= _PLAIN_NUMBERS:
@@ -239,9 +237,8 @@ def _encode_label_list_native(y):
     takes the Python routine, as does an int outside int64 and anything
     over `_NATIVE_ENCODE_MAX_CLASSES`. NaN raises the same ValueError."""
     import array
-    from ._buffer import hotpath_enabled
 
-    if type(y) not in (list, tuple) or len(y) < _NATIVE_LIST_MIN or not hotpath_enabled():
+    if type(y) not in (list, tuple) or len(y) < _NATIVE_LIST_MIN:
         return None
     kinds = set(map(type, y))
     if kinds == {int}:
@@ -373,9 +370,6 @@ def _decode_labels_native(classes, codes, kind):
         # the rows. Widened by `Array.astype` they take the gather. A code
         # the gather refuses (negative: Python indexes from the END, so the
         # Python arm ANSWERS it) sends the call back to the Python arm.
-        from ._buffer import hotpath_enabled
-        if not hotpath_enabled():
-            return None
         try:
             return _decode_labels_native(classes, codes.astype("<i8"), kind)
         except ImportError:
@@ -432,30 +426,29 @@ def classes_from_member(member):
 
 
 def argmax_rows(scores):
-    """Row-wise first-max-wins argmax of an `[n_rows, n_cols]` `Array`
-    of float32 or float64 scores, as an int64 `Array`. O(rows * classes)
-    Python: the argmax over class counts the contract permits."""
+    """Row-wise first-max-wins argmax of an `[n_rows, n_cols]` block of
+    scores, as an int64 `Array`: the base binding's scan (DEVIATION 2500,
+    strict `>` from column 0, so ties keep the lowest column and a NaN
+    never replaces). Every input takes it: a non-`Array` buffer is wrapped,
+    an F-order block is laid out in C order, and integer scores are widened
+    to float64 (exact below 2**53, so the order and the ties are the same).
+    The per-row Python loop is gone (cpu-gpu-cleanup c-core)."""
+    if not isinstance(scores, Array):
+        from ._buffer import _materialize
+        scores, _ = _materialize(scores, "scores")
     n_rows, n_cols = scores.shape
-    if (isinstance(scores, Array) and scores.dtype in ("<f4", "<f8")
-            and scores._has_order("C") and n_rows and n_cols):
-        # DEVIATION 2500: the same first-max-wins scan in the base binding.
-        from ._buffer import _native, _output_store
-        fn = _native("argmax_rows_f32" if scores.dtype == "<f4" else "argmax_rows_f64")
-        store = _output_store("q", n_rows)
-        fn(scores._addr, n_rows, n_cols, store.buffer_info()[0])
-        return Array._owned(store, (n_rows,), "<i8", "C")
-    view = flat_view(scores)
-    out = []
-    for r in range(n_rows):
-        base = r * n_cols
-        best = 0
-        best_value = view[base]
-        for c in range(1, n_cols):
-            value = view[base + c]
-            if value > best_value:
-                best, best_value = c, value
-        out.append(best)
-    return Array.from_list(out, "<i8")
+    if not n_rows:
+        return Array.from_list([], "<i8")
+    if not n_cols:
+        raise ValueError("argmax_rows: scores have no columns")
+    if scores.dtype not in ("<f4", "<f8"):
+        scores = scores.astype("<f8")
+    scores = scores._as_c()
+    from ._buffer import _native, _output_store
+    fn = _native("argmax_rows_f32" if scores.dtype == "<f4" else "argmax_rows_f64")
+    store = _output_store("q", n_rows)
+    fn(scores._addr, n_rows, n_cols, store.buffer_info()[0])
+    return Array._owned(store, (n_rows,), "<i8", "C")
 
 
 def finite_integer_codes(arr):
@@ -475,3 +468,50 @@ def finite_integer_codes(arr):
         if v != math.floor(v):
             return None
     return sorted(int(v) for v in distinct)
+
+
+def unique_inverse(y):
+    """`(classes, codes)` for one NUMERIC label vector, both `Array`s:
+    the sorted distinct values (float64 for real labels, int64 for integer
+    and bool labels) and one int32 code per row, `classes[codes] == y`.
+    This is `np.unique(y, return_inverse=True)` computed by the base
+    binding's `unique_inverse` (cpu-gpu-cleanup w2-pyglue, 2026-10-02): on a
+    GPU install a device sort, a flag/scan compaction and a gather
+    (`core/label_encode_device.mojo`); on a CPU-only install the core host
+    binding's twin of the same statements (`core/label_encode.mojo`).
+    `-0.0` and `0.0` are one class (the first row's spelling kept); a NaN
+    label is refused. str labels have no device sort: they take
+    `sorted_classes` (the ORDER RULE) and `classes` comes back a list."""
+    from ._buffer import _materialize, _native, _output_store
+
+    try:
+        arr, _ = _materialize(y, "y")
+    except (TypeError, ValueError):
+        arr = None
+    if arr is None or arr.dtype.lstrip("<>|=")[:1] not in ("f", "i", "u", "b"):
+        # str or object labels: no device sort orders text, so these take
+        # the ORDER RULE's own encoding (the label loop the contract permits)
+        classes, codes = sorted_classes(flatten_labels(y))
+        return classes, Array.from_list(codes, "<i4")
+    kind = 0 if arr.dtype.lstrip("<>|=")[:1] == "f" else 1
+    if arr.size == 0:
+        raise ValueError("mojolearn: y is empty")
+    if arr.size != max(arr.shape):
+        raise ValueError("mojolearn: y must be a vector of labels")
+    wide = arr.astype("<f8" if kind == 0 else "<i8")
+    n = int(wide.size)
+    classes_store = _output_store("d" if kind == 0 else "q", n)
+    codes_store = _output_store("i", n)
+    try:
+        k = int(_native("unique_inverse")(
+            wide._addr, n, kind, classes_store.buffer_info()[0],
+            codes_store.buffer_info()[0]))
+    except Exception as exc:  # a Mojo Error crosses as a bare Exception
+        if "NaN label" in str(exc):
+            raise ValueError(str(exc)) from None
+        raise
+    del wide, arr
+    classes = Array._owned(classes_store, (n,), "<f8" if kind == 0 else "<i8", "C")
+    if k < n:
+        classes = Array.from_list(classes.tolist()[:k], classes.dtype)
+    return classes, Array._owned(codes_store, (n,), "<i4", "C")
