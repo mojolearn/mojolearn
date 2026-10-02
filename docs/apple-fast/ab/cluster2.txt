@@ -1,0 +1,22 @@
+CMD lane/apple-fast-cluster2 cluster2-ap-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-ap-ident-istella affinity-prop istella 3 3 -
+CMD lane/apple-fast-cluster2 cluster2-ap-loop-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-ap-loop-istella affinity-prop istella 3 3 - MOJOLEARN_AFFINITY_FAST_LOOP=1
+CMD lane/apple-fast-cluster2 cluster2-ap-loop-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-ap-loop-taxi affinity-prop taxi 3 3 - MOJOLEARN_AFFINITY_FAST_LOOP=1
+CMD lane/apple-fast-cluster2 cluster2-ap-exact-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-ap-exact-istella affinity-prop istella 3 3 - MOJOLEARN_AFFINITY_FAST_EXACT=1
+CMD lane/apple-fast-cluster2 cluster2-ap-split-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-ap-split-istella affinity-prop istella 3 3 - MOJOLEARN_AFFINITY_FAST_SPLIT=1
+CMD lane/apple-fast-cluster2 cluster2-ap-all-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-ap-all-istella affinity-prop istella 3 3 - "MOJOLEARN_AFFINITY_FAST_LOOP=1 MOJOLEARN_AFFINITY_FAST_EXACT=1 MOJOLEARN_AFFINITY_FAST_SPLIT=1"
+CMD lane/apple-fast-cluster2 cluster2-ap-all-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-ap-all-taxi affinity-prop taxi 3 3 - "MOJOLEARN_AFFINITY_FAST_LOOP=1 MOJOLEARN_AFFINITY_FAST_EXACT=1 MOJOLEARN_AFFINITY_FAST_SPLIT=1"
+CMD lane/apple-fast-cluster2 cluster2-bgmm-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-bgmm-ident-istella bayesian-gmm istella 3 3 -
+CMD lane/apple-fast-cluster2 cluster2-bgmm-phases-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-bgmm-phases-istella bayesian-gmm istella 1 1 MOJOLEARN_XC_PHASES=1
+CMD lane/apple-fast-cluster2 cluster2-bgmm-momgemm-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-bgmm-momgemm-istella bayesian-gmm istella 3 3 - MOJOLEARN_BGMM_FAST_MOMENTS_GEMM=1
+CMD lane/apple-fast-cluster2 cluster2-bgmm-mahal-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-bgmm-mahal-istella bayesian-gmm istella 3 3 - MOJOLEARN_BGMM_FAST_MAHAL_GEMM=1
+CMD lane/apple-fast-cluster2 cluster2-bgmm-mahal-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-bgmm-mahal-taxi bayesian-gmm taxi 3 3 - MOJOLEARN_BGMM_FAST_MAHAL_GEMM=1
+CMD lane/apple-fast-cluster2 cluster2-bgmm-ent-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-bgmm-ent-istella bayesian-gmm istella 3 3 - MOJOLEARN_BGMM_FAST_ENT=1
+CMD lane/apple-fast-cluster2 cluster2-bgmm-ent-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-bgmm-ent-taxi bayesian-gmm taxi 3 3 - MOJOLEARN_BGMM_FAST_ENT=1
+CMD lane/apple-fast-cluster2 cluster2-bgmm-estep1-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-bgmm-estep1-taxi bayesian-gmm taxi 3 3 - MOJOLEARN_BGMM_FAST_ESTEP1=1
+CMD lane/apple-fast-cluster2 cluster2-bgmm-all-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-bgmm-all-istella bayesian-gmm istella 3 3 - "MOJOLEARN_BGMM_FAST_MOMENTS_GEMM=1 MOJOLEARN_BGMM_FAST_MAHAL_GEMM=1 MOJOLEARN_BGMM_FAST_ENT=1"
+CMD lane/apple-fast-cluster2 cluster2-bisect-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-bisect-ident-istella bisecting-kmeans istella 3 3 -
+CMD lane/apple-fast-cluster2 cluster2-bisect-resident-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-bisect-resident-istella bisecting-kmeans istella 3 3 - MOJOLEARN_BISECT_FAST_RESIDENT=1
+CMD lane/apple-fast-cluster2 cluster2-bisect-resident-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-bisect-resident-taxi bisecting-kmeans taxi 3 3 - MOJOLEARN_BISECT_FAST_RESIDENT=1
+CMD lane/apple-fast-cluster2 cluster2-optics-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-optics-ident-istella optics istella 3 3 -
+CMD lane/apple-fast-cluster2 cluster2-optics-devorder-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-optics-devorder-istella optics istella 3 3 - MOJOLEARN_OPTICS_FAST_DEVICE_ORDER=1
+CMD lane/apple-fast-cluster2 cluster2-optics-devorder-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster2-optics-devorder-taxi optics taxi 3 3 - MOJOLEARN_OPTICS_FAST_DEVICE_ORDER=1
