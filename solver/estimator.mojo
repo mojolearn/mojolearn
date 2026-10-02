@@ -73,6 +73,7 @@ that cannot leave a card. The trace is off unless the variable is set.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
+from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from solver.impl.cd import CdLaunch, cd_fit_traced, cd_predict
 from solver.impl.solvers.params import LOSS_SQRD_LOSS
 
@@ -92,6 +93,7 @@ def cd_fit_host(
     tol: Float32,
     shuffle: Bool,
     has_sample_weight: Bool,
+    row_major: Bool = False,
 ) raises -> Int:
     """`cdFit` over host pointers. Returns `n_iter` (the epochs actually run).
 
@@ -126,10 +128,30 @@ def cd_fit_host(
     var residual_out = ctx.enqueue_create_buffer[DType.float32](1)
     ctx.synchronize()
 
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
-    ctx.enqueue_memset(coef, Float32(0.0))
-    ctx.synchronize()
+    if row_major:
+        # lane/gap-nv-classical2: a C-order design crosses as it is and is
+        # transposed ON THE DEVICE (`transpose_kernel` moves words, no
+        # arithmetic), instead of a host transpose inside the fit's clock.
+        var xr = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+        ctx.enqueue_copy(dst_buf=xr, src_ptr=x_ptr)
+        ctx.enqueue_function[transpose_kernel](
+            x.unsafe_ptr(), xr.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
+            grid_dim=(
+                (n_cols + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+                min((n_rows + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE, CUDA_MAX_GRID_YZ),
+                1,
+            ),
+            block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+        )
+        ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
+        ctx.enqueue_memset(coef, Float32(0.0))
+        ctx.synchronize()
+        _ = xr^
+    else:
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
+        ctx.enqueue_memset(coef, Float32(0.0))
+        ctx.synchronize()
 
     # The trace reads MOJOLEARN_IDENTITY_TRACE and is disabled unless it is
     # set. `cd_fit_traced` writes its own header line, so none is written
