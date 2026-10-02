@@ -374,8 +374,8 @@ def eigh_block_fast_kernel(f: FP, q: IP):
     independent elements, so the threads take them strided (each element
     the unit's own expression, so the unit's words). A and V live in shared
     memory; A is written back destroyed, as the unit leaves it. The
-    descending selection sort of the eigenvalues is a permutation found on
-    thread 0; the columns move out in parallel with the sign rule."""
+    descending stable order of the eigenvalues is a rank per element, one
+    thread each; the columns move out in parallel with the sign rule."""
     var t = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var m = p(q, 1)
@@ -442,21 +442,23 @@ def eigh_block_fast_kernel(f: FP, q: IP):
                 barrier()
         if not rotated:
             break
-    # the unit's selection sort, descending, stable: as a permutation
-    if tid == 0:
-        for r in range(m):
-            perm[r] = Int32(r)
-        for r in range(m):
-            var best = r
-            for c in range(r + 1, m):
-                var pc = Int(perm[c])
-                var pb = Int(perm[best])
-                if sa[pc * m + pc] > sa[pb * m + pb]:
-                    best = c
-            if best != r:
-                var tmp = perm[r]
-                perm[r] = perm[best]
-                perm[best] = tmp
+    # the unit's selection sort (descending, stable) as ranks, one thread per
+    # eigenvalue: element r goes to slot (count of larger values) + (count of
+    # equal values at a lower index), the unit's permutation for finite
+    # eigenvalues (no thread loops alone over m). perm starts as the identity
+    # so a NaN eigenvalue, whose ranks collide, still leaves every slot in
+    # range (such a fit is spent either way).
+    for r in range(tid, m, EIG_TPB):
+        perm[r] = Int32(r)
+    barrier()
+    for r in range(tid, m, EIG_TPB):
+        var vr = sa[r * m + r]
+        var rank = 0
+        for c in range(m):
+            var vc = sa[c * m + c]
+            if vc > vr or (vc == vr and c < r):
+                rank += 1
+        perm[rank] = Int32(r)
     barrier()
     for e in range(tid, m * m, EIG_TPB):
         st(f, A + e, sa[e])
