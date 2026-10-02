@@ -58,7 +58,7 @@ changes no value.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import abs
-from std.memory import stack_allocation
+from std.memory import stack_allocation, bitcast
 from std.atomic import Atomic, Ordering
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -239,6 +239,7 @@ def compute_split_properties_nb_kernel[
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     total_feature_count_in: Int32,
     fixed_scale: Float32,
+    int_slot: Int32,
 ):
     """`ComputeSplitPropertiesNBImpl` (`:153-187`) with
     `ComputeSplitPropertiesPass` (`:64-147`) inlined into it.
@@ -377,6 +378,33 @@ def compute_split_properties_nb_kernel[
 
     var fold = (tid // 2) & 31
     while fold < feature_folds_here:
+        comptime if is_fixed and m > 1:
+            # lane/neural-pass123: the block's raw fixed-point counts into
+            # its private slot, every cell; `pw_fold_int_slots_kernel` adds
+            # the slots as integers (exact in any order) and converts and
+            # guards once, as the one-block writeback below does
+            if int_slot != 0:
+                if fid < f_count:
+                    var raw = smem.unsafe_bitcast[Int32]().unsafe_load(
+                        feature_offset_in_smem + 2 * fold
+                    )
+                    var at_i = (
+                        bin_sums_base
+                        + (
+                            Int(feature_first_fold_index.unsafe_load(f_base + fid))
+                            + fold
+                        )
+                        * 2
+                        + w
+                    )
+                    bin_sums.unsafe_store(
+                        pw_private_doc_slot[full_pass](
+                            at_i, Int(block_idx.x) % m, total_feature_count
+                        ),
+                        bitcast[DType.float32](raw),
+                    )
+                fold += 32
+                continue
         if fid < f_count:
             var val: Float32
             comptime if is_fixed:
