@@ -41,9 +41,9 @@ from x_linear.bayes import bayes_wy_part, bayes_wx_part, bayes_wgram_part, bayes
 from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST
 from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score, kf_ff_solve, kf_blocks, kf_ysum_part, kf_sq_part, kf_score_final
 from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
-from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
+from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK
 from x_linear.glm import (
-    _unit, _glm_deriv_row, _glm_cell, _glm_cell_rows, _glm_slot_count, _glm_slot_cell, GLM_LINK_LOG, GLM_STALL_ITERS,
+    _unit, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, GLM_LINK_LOG, GLM_STALL_ITERS,
     glm_g_item, glm_h_item, glm_fwd_col, glm_back_col, glm_slope_part, glm_slope_blocks,
     _glm_cell_part, _glm_cell_store, glm_den, glm_start, glm_start_of,
 )
@@ -53,11 +53,13 @@ from x_linear.logcv_grid import logcv_fit_grid, lcv_fold_ids_device
 from x_linear.huber_grid import huber_fit_grid
 from x_linear.dispatch import ALGO_HUBER, ALGO_ENETCV
 from x_linear.enetcv_fast import enetcv_fast
-from x_linear.tops import X_LINEAR_SERIAL_FOLDS
 from x_linear.dispatch import ALGO_LOGCV
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
 from x_linear.dispatch import ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_QUANTILE
 from x_linear.quantile_grid import quantile_fit_grid
+from x_linear.ard_grid import ard_fit_grid
+from x_linear.ridge_grid import ridge_fit_grid
+from x_linear.lars import lars_fit
 from x_linear.isotonic import iso_predict_one, iso_gather_one, iso_group, ISO_CHUNK, iso_pava_chunk, iso_pava_merge, iso_pava_levels, iso_reverse_one, iso_clip_one, iso_keep
 from std.memory import bitcast
 from std.memory import stack_allocation
@@ -101,20 +103,42 @@ comptime BAYES_GRID_GUARD = (
 )
 
 
-def fit_kernel(
-    algo: Int32, x: FP, y: FP, n: Int32, d: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, tw: FP,
-    wf: IP, woff: Int32, nonce: Int32,
+def lars_path_kernel(
+    x: FP, y: FP, d: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, tw: FP, wf: IP, woff: Int32, nonce: Int32,
 ):
-    """ONE block. A team fit runs on every thread of it; any other fit on
-    thread 0 alone, as a team of one (x_linear/team.mojo)."""
-    var a = Int(algo)
-    var bufs = team_rows(a, ip)
-    var own = team_own(a, Int(d))
-    if team_fit(a):
-        fit_dispatch(device_team(tw, Int(n), bufs, own), a, x, y, Int(n), Int(d), ip, fp, res, fw, iw)
-    elif Int(thread_idx.x) == 0:
-        fit_dispatch(solo(tw, Int(n), bufs, own), a, x, y, Int(n), Int(d), ip, fp, res, fw, iw)
+    """One block team: LARS's d x d path (x_linear/lars.mojo `lars_fit`, the
+    moments already in fw; ip[6] the row count for the alpha scale). No row
+    pass runs here (cgr-linear: the one-block fit kernel is gone)."""
+    var t = device_team(tw, 0, 3, 0)
+    lars_fit(t, x, y, ldi(ip, 6), Int(d), ip, fp, res, fw, iw)
     witness_end(wf, woff, nonce)
+
+
+def _ridge_device(
+    var ctx: DeviceContext, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
+    ip: List[Int32], fp: List[Float32], n_out: Int, res: FP,
+) raises:
+    """Ridge on the grid (x_linear/ridge_grid.mojo), then the float-float
+    refit when the float32 factor was not trusted (status 1)."""
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+    var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
+    if n_x > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    if n_y > 0:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    var dxp = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
+    var dyp = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
+    ridge_fit_grid(ctx.copy(), dxp, dyp, n, d, ip, fp, n_out, res)
+    # lane/neural-pass93: the float-float refit on the grid
+    var t_n = Int(ip[0])
+    var a_n = Int(ip[2])
+    var sidx = t_n * d + t_n + 2 + a_n
+    if n_out > sidx and res.unsafe_load(sidx) == Float32(1):
+        _ridge_ff_grid(ctx, dxp, dyp, n, d, t_n, Int(ip[1]) != 0, len(ip) > 3 and Int(ip[3]) != 0,
+                       res.unsafe_load(t_n * d + t_n), res, sidx)
+    ctx.synchronize()
+    _ = dx^
+    _ = dy^
 
 
 def decision_kernel(x: FP, wb: FP, n: Int32, d: Int32, k: Int32, link: Int32, res: FP):
@@ -1514,26 +1538,6 @@ def glm_deriv_kernel(y: FP, n: Int32, power: Float32, link: Int32, sw: Int32, et
         _glm_deriv_row(y, Int(n), i, power, Int(link), eta, sw != 0, gr, hr)
     witness_end(wf, woff, nonce)
 
-def glm_cells_kernel(x: FP, gr: FP, hr: FP, lo: Int32, cnt: Int32, d: Int32, m: Int32, g: FP, h: FP):
-    """One thread a slot of glm_fit's warp-uniform layout, rows [lo, lo + cnt)."""
-    var sl = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
-    var dd = Int(d)
-    var mm = Int(m)
-    if sl < _glm_slot_count(dd, mm):
-        var c = _glm_slot_cell(sl, dd, mm)
-        if c >= 0:
-            _glm_cell_rows(c, x, gr, hr, Int(lo), Int(cnt), dd, mm, g, h)
-
-
-#: Apple: macOS silently aborts a command buffer that holds the GPU for
-#: seconds and leaves its output partly stale (the M2's GLM grid digests
-#: differed run to run on istella, 24,531 cells of 1M-row chains in ONE
-#: launch, and on taxi under a second Metal job). The cells run in row
-#: slices of at most GLM_APPLE_SLICE_MACS chain steps a launch, each waited
-#: on, every chain resuming from its stored value (the same words).
-comptime GLM_APPLE_SLICE_MACS = 1 << 29
-
-
 def _glm_rows_slice(n: Int, slots: Int) -> Int:
     comptime if has_apple_gpu_accelerator():
         return max(64, min(n, (GLM_APPLE_SLICE_MACS // max(slots, 1)) // 64 * 64))
@@ -1818,49 +1822,37 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
             tries1 += 1
             if tries1 >= WITNESS_TRIES:
                 wit.fail()
-        comptime if X_LINEAR_SERIAL_FOLDS:
-            var lo = 0
-            while lo < n:
-                var cnt = min(rows_slice, n - lo)
-                ctx.enqueue_function[glm_cells_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(lo), Int32(cnt),
-                                                       Int32(d), Int32(m), dg.unsafe_ptr(), dh.unsafe_ptr(),
-                                                       grid_dim=slot_grid, block_dim=XG_TPB)
-                lo += cnt
-                if lo < n and rows_slice < n:
-                    ctx.synchronize()
-        else:
-            var b0 = 0
-            while b0 < nb:
-                var bc = min(blocks_slice, nb - b0)
-                var tries2 = 0
-                while True:
-                    var nonce = wit.begin()
-                    ctx.enqueue_function[glm_cell_parts_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(n), Int32(d),
-                                                                Int32(m), Int32(nb), Int32(b0), Int32(bc), dparts.unsafe_ptr(),
-                                                                wit.p(), Int32(0), nonce,
-                                                                grid_dim=_xg_blocks(slot_ub * bc), block_dim=XG_TPB)
-                    if wit.ok(ctx, _xg_blocks(slot_ub * bc), "GLM cell parts"):
-                        break
-                    tries2 += 1
-                    if tries2 >= WITNESS_TRIES:
-                        wit.fail()
-                b0 += bc
-                if b0 < nb and blocks_slice < nb:
-                    ctx.synchronize()
-        # the combine rebuilds g and h from the parts; the step (which scales
-        # them in place) runs once the combine is witnessed
-        comptime if not X_LINEAR_SERIAL_FOLDS:
-            var tries3 = 0
+        var b0 = 0
+        while b0 < nb:
+            var bc = min(blocks_slice, nb - b0)
+            var tries2 = 0
             while True:
                 var nonce = wit.begin()
-                ctx.enqueue_function[glm_cell_combine_kernel](dparts.unsafe_ptr(), Int32(d), Int32(m), Int32(nb), dg.unsafe_ptr(),
-                                                              dh.unsafe_ptr(), wit.p(), Int32(0), nonce,
-                                                              grid_dim=slot_grid, block_dim=XG_TPB)
-                if wit.ok(ctx, slot_grid, "GLM combine"):
+                ctx.enqueue_function[glm_cell_parts_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(n), Int32(d),
+                                                            Int32(m), Int32(nb), Int32(b0), Int32(bc), dparts.unsafe_ptr(),
+                                                            wit.p(), Int32(0), nonce,
+                                                            grid_dim=_xg_blocks(slot_ub * bc), block_dim=XG_TPB)
+                if wit.ok(ctx, _xg_blocks(slot_ub * bc), "GLM cell parts"):
                     break
-                tries3 += 1
-                if tries3 >= WITNESS_TRIES:
+                tries2 += 1
+                if tries2 >= WITNESS_TRIES:
                     wit.fail()
+            b0 += bc
+            if b0 < nb and blocks_slice < nb:
+                ctx.synchronize()
+        # the combine rebuilds g and h from the parts; the step (which scales
+        # them in place) runs once the combine is witnessed
+        var tries3 = 0
+        while True:
+            var nonce = wit.begin()
+            ctx.enqueue_function[glm_cell_combine_kernel](dparts.unsafe_ptr(), Int32(d), Int32(m), Int32(nb), dg.unsafe_ptr(),
+                                                          dh.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                                                          grid_dim=slot_grid, block_dim=XG_TPB)
+            if wit.ok(ctx, slot_grid, "GLM combine"):
+                break
+            tries3 += 1
+            if tries3 >= WITNESS_TRIES:
+                wit.fail()
         _glm_step_device(ctx, FP(unsafe_from_address=Int(dg.unsafe_ptr())), FP(unsafe_from_address=Int(dh.unsafe_ptr())),
                          FP(unsafe_from_address=Int(dstep.unsafe_ptr())), FP(unsafe_from_address=Int(dres.unsafe_ptr())),
                          FP(unsafe_from_address=Int(dl_.unsafe_ptr())), FP(unsafe_from_address=Int(dyv.unsafe_ptr())),
@@ -3214,16 +3206,25 @@ def fit_device(
         if algo == ALGO_ENETCV and n > 0 and String(getenv("MOJOLEARN_X_LINEAR_ENETCV_FAST")) != "0":
             if enetcv_fast(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res):
                 return
-    comptime if not X_LINEAR_SERIAL_FOLDS:
-        if algo == ALGO_LOGCV and n > 0:
-            logcv_fit_grid(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
-            return
-        if algo == ALGO_HUBER and n > 0:
-            huber_fit_grid(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
-            return
+    if algo == ALGO_LOGCV and n > 0:
+        logcv_fit_grid(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
+        return
+    if algo == ALGO_HUBER and n > 0:
+        huber_fit_grid(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
+        return
     if algo == ALGO_ENETCV and d > 0 and len(ip) >= 7:
         enetcv_fit_grid(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
+    # cgr-linear: ARD and Ridge on their grid drivers; LARS and BayesianRidge
+    # below; nothing runs on a one-block fit kernel any more
+    if algo == ALGO_ARD and n > 0 and d > 0:
+        ard_fit_grid(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
+        return
+    if algo == ALGO_RIDGE and n > 0 and d > 0:
+        _ridge_device(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
+        return
+    if not ((algo == ALGO_LARS or algo == ALGO_BAYES) and n > 0 and d > 0):
+        raise Error("x_linear: no device route for fit " + String(algo) + " at this shape")
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
     var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(fp), 1))
@@ -3231,32 +3232,23 @@ def fit_device(
     var dfw = ctx.enqueue_create_buffer[DType.float32](max(n_fw, 1))
     var diw = ctx.enqueue_create_buffer[DType.int32](max(n_iw, 1))
     var hip = ip.copy()
-    # LARS reads ip[4] on the device: 1 when the Gram is already in fw
-    # (`xg_gram_kernel` below), 0 when the team computes it.
-    var grid_gram = algo == ALGO_LARS and d > 0
-    # Ridge: the moments of [X | Y] on the grid (lane/neural-pass120);
-    # ip[4] tells the team they are in fw
-    var ridge_pre = False
-    comptime if MOMENTS_GRID:
-        ridge_pre = algo == ALGO_RIDGE and d > 0 and n > 0 and len(ip) >= 4 and Int(ip[3]) == 0
-    if algo == ALGO_RIDGE:
-        while len(hip) < 5:
-            hip.append(Int32(0))
-        hip[4] = Int32(1 if ridge_pre else 0)
+    comptime assert MOMENTS_GRID, "the moments grid's page must fit every GPU column"
+    var grid_gram = algo == ALGO_LARS
     # lane/neural-pass87 (2026-10-01): BayesianRidge (unweighted) and ARD read
     # the same layout (xm at 0, G at d, ip[1] fit_intercept) and the same
     # centered Gram chains, which the team ran on ONE block (24,310 chains
     # of every row at 220 features over 256 threads).
-    var bayes_like = (algo == ALGO_BAYES and len(ip) > 2 and ip[2] == 0) or algo == ALGO_ARD
-    if bayes_like and d > 0:
+    var bayes_like = algo == ALGO_BAYES and len(ip) > 2 and ip[2] == 0
+    if bayes_like:
         grid_gram = True
-    var lars_pre = False
-    comptime if MOMENTS_GRID:
-        lars_pre = algo == ALGO_LARS and grid_gram and n > 0
-    if algo == ALGO_LARS or bayes_like:
-        while len(hip) < 5:
+    # LARS: the moments of [X | y] (means, Gram, X'y, y's mean) on the grid,
+    # then the path on one block team (`lars_path_kernel`, which reads the
+    # row count from ip[6])
+    var lars_pre = algo == ALGO_LARS
+    if algo == ALGO_LARS:
+        while len(hip) < 7:
             hip.append(Int32(0))
-        hip[4] = Int32(2 if lars_pre else (1 if grid_gram else 0))
+        hip[6] = Int32(n)
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         # x_linear/bayes.mojo `X_LINEAR_GRAM_SSE`: ip[5], the sse from the
         # normal equations (lane/apple-fast-classical); `=0` is the A/B arm
@@ -3265,8 +3257,7 @@ def fit_device(
                 hip.append(Int32(0))
             hip[5] = Int32(0 if String(getenv("MOJOLEARN_X_LINEAR_GRAM_SSE")) == "0" else 1)
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
-    var dtw = ctx.enqueue_create_buffer[DType.float32](
-        team_work(n, team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr()))), team_own(algo, d)))
+    var dtw = ctx.enqueue_create_buffer[DType.float32](team_work(0, 3, 0))
     var hfp = fp.copy()
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
@@ -3290,16 +3281,14 @@ def fit_device(
     var nslices = (n + rows_slice - 1) // rows_slice if n > 0 else 1
     var dgs = ctx.enqueue_create_buffer[DType.float32](max(d + d * d, 1) if grid_gram and nslices > 1 else 1)
     var bayes_grid = False
-    comptime if not X_LINEAR_SERIAL_FOLDS:
-        # unweighted, with the grid Gram: every row pass on grid kernels
-        bayes_grid = algo == ALGO_BAYES and n > 0 and d > 0 and grid_gram
+    # unweighted, with the grid Gram: every row pass on grid kernels
+    bayes_grid = algo == ALGO_BAYES and n > 0 and d > 0 and grid_gram
     # cgr-linear: a weighted BayesianRidge on the grid too (its statistics in
     # the blocked order, then the same eigen prep and iterations)
     var bayes_w = False
-    comptime if not X_LINEAR_SERIAL_FOLDS:
-        bayes_w = algo == ALGO_BAYES and n > 0 and d > 0 and len(ip) > 2 and ip[2] != 0
-        if bayes_w:
-            bayes_grid = True
+    bayes_w = algo == ALGO_BAYES and n > 0 and d > 0 and len(ip) > 2 and ip[2] != 0
+    if bayes_w:
+        bayes_grid = True
     var ynb = fold_blocks(n)
     var prep_blocks = 2 * _xg_blocks(ynb) + _xg_blocks(d) + 1
     if bayes_w:
@@ -3330,7 +3319,7 @@ def fit_device(
                 dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), dfw.unsafe_ptr(),
                 Int32(0), Int32(2 * d + d * d), Int32(d), Int32(d + d * d), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
             )
-        elif grid_gram and bayes_like and MOMENTS_GRID and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0":
+        elif grid_gram and bayes_like:
             # lane/neural-pass130: BayesianRidge / ARD's means and centered Gram
             # from the staged moments kernels (no Y columns), into the layout
             # `xg_gram_kernel` fills (xm at 0, G at d): the same chains, staged
@@ -3377,21 +3366,6 @@ def fit_device(
                         wit.fail()
                 lo += cnt
                 si += 1
-        if good and ridge_pre:
-            var t_n = Int(hip[0])
-            var r_xm = 0
-            var r_gg = d
-            var r_ym = d + 2 * d * d + d
-            var r_xty = r_ym + t_n
-            ctx.enqueue_function[mg_means_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), Int32(hip[1]), dfw.unsafe_ptr(),
-                Int32(r_xm), Int32(r_ym), grid_dim=mg_tiles(d, t_n), block_dim=MG_NT,
-            )
-            var tl = mg_tiles(d, t_n)
-            ctx.enqueue_function[mg_cross_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), dfw.unsafe_ptr(),
-                Int32(r_xm), Int32(r_ym), Int32(r_gg), Int32(r_xty), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
-            )
         if good:
             var nonce = wit.begin()
             var units = 1
@@ -3455,11 +3429,10 @@ def fit_device(
                 )
                 units = wo + 1
             else:
-                ctx.enqueue_function[fit_kernel](
-                    Int32(algo), dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d),
-                    dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(), diw.unsafe_ptr(),
-                    dtw.unsafe_ptr(), wit.p(), Int32(0), nonce,
-                    grid_dim=1, block_dim=LINEAR_TPB if team_fit(algo) else 1,
+                ctx.enqueue_function[lars_path_kernel](
+                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(),
+                    dfw.unsafe_ptr(), diw.unsafe_ptr(), dtw.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                    grid_dim=1, block_dim=LINEAR_TPB,
                 )
             good = wit.ok(ctx, units, "fit")
         if good:
@@ -3605,15 +3578,6 @@ def fit_device(
     if n_out > 0:
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
     ctx.synchronize()
-    if algo == ALGO_RIDGE:
-        # lane/neural-pass93: the float-float refit when the float32 factor
-        # was not trusted (x_linear/ridge.mojo, status 1), on the grid
-        var t_n = Int(ip[0])
-        var a_n = Int(ip[2])
-        var sidx = t_n * d + t_n + 2 + a_n
-        if n_out > sidx and res.unsafe_load(sidx) == Float32(1):
-            _ridge_ff_grid(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), n, d, t_n, Int(ip[1]) != 0, len(ip) > 3 and Int(ip[3]) != 0,
-                           res.unsafe_load(t_n * d + t_n), res, sidx)
     _ = hip^
     _ = hfp^
     _ = dx^
