@@ -16,7 +16,7 @@ from x_decomp.api import (
 from x_decomp.device import DevExec
 from x_decomp.host import HostExec
 from x_decomp.resident import (
-    dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_trisolve_py, dev_rowsum_py,
+    dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_project_py, dev_trisolve_py, dev_rowsum_py,
     dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_lda_rows_py,
 )
 
@@ -68,6 +68,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_download_py]("x_decomp_dev_download")
         m.def_function[dev_ew_py]("x_decomp_dev_ew")
         m.def_function[dev_gemm_py]("x_decomp_dev_gemm")
+        m.def_function[dev_project_py]("x_decomp_dev_project")
         m.def_function[dev_trisolve_py]("x_decomp_dev_trisolve")
         m.def_function[dev_colsum_py]("x_decomp_dev_colsum")
         m.def_function[dev_rowsum_py]("x_decomp_dev_rowsum")

@@ -34,6 +34,8 @@ from x_decomp.device import (
     launch_colsum,
     launch_ew,
     launch_gemm,
+    launch_project,
+    PROJECT_TILED,
     launch_rowsum,
     launch_sqdist,
     launch_trisolve,
@@ -233,6 +235,30 @@ def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObje
     launch_gemm(xd_ctx(), _ptr(_id(a), m * k), _ptr(_id(b), k * n), _ptr(_id(c), m * n), _ptr(sid, ns),
                 m, k, n, ta, tb)
     pool_free(sid)
+    return PythonObject(m * n)
+
+
+def dev_project_py(a: PythonObject, b: PythonObject, c: PythonObject, flag: PythonObject, p: PythonObject) raises -> PythonObject:
+    """c = a b^T (a m x k, b n x k; `dev_gemm` with tb=1's words) by the
+    tiled projection kernel, enqueued (no sync), and flag[0] = 1 when an
+    entry of a is not finite, else 0 (the random projection's transform;
+    lane gap-nb-maxabs-grp). Returns -1, launching nothing, on a column
+    whose shared memory does not hold the tile."""
+    var m = _n(p, 0)
+    var k = _n(p, 1)
+    var n = _n(p, 2)
+    if m * n > 2147483647 or m * k > 2147483647 or k * n > 2147483647:
+        raise Error("x_decomp: projection exceeds the Int32 index bound")
+    comptime if not PROJECT_TILED:
+        return PythonObject(-1)
+    var pf = _ptr(_id(flag), 1)
+    var pa = _ptr(_id(a), m * k)
+    var pb = _ptr(_id(b), k * n)
+    var pc = _ptr(_id(c), m * n)
+    var ctx = xd_ctx()
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    enqueue_fill(ctx, pool[].bufs[_id(flag)], Float32(0))
+    launch_project(ctx, pa, pb, pc, pf, m, k, n)
     return PythonObject(m * n)
 
 

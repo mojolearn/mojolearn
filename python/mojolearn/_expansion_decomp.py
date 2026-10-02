@@ -25,7 +25,8 @@ import sys
 
 from . import _backend
 from . import _portable_math as _pm
-from ._buffer import as_f32_c, as_i32_c, frombytes
+from ._array import Array
+from ._buffer import addr_ro, as_f32_c, as_i32_c, frombytes
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
@@ -1035,10 +1036,46 @@ class _RandomProjection(_Base):
 
     def transform(self, X):
         self._check()
+        if _os.environ.get("MOJOLEARN_XD_RP_TILED", "1").strip() != "0" and not _is_sparse(X):
+            out = self._project(X)
+            if out is not None:
+                return out
         M = _M.from_input(X)
         if M.c != self.n_features_in_:
             raise ValueError(f"X has {M.c} features, but {type(self).__name__} is expecting {self.n_features_in_}")
         return self._kit().mm(M, self.components_m_, tb=True).out()
+
+    def _project(self, X):
+        """transform on the GPU binding (lane gap-nb-maxabs-grp; the A/B
+        switch MOJOLEARN_XD_RP_TILED=0 keeps the path above): X goes up from
+        its own buffer (no host copy into a store, no host finiteness pass),
+        x_decomp_dev_project's tiled kernel computes `mm(X, components, tb)`'s
+        words and flags a non-finite entry of X on the device, and the result
+        comes down once into the returned array. None on the host binding
+        (or a column without the tile): the caller takes the path above."""
+        k = self._kit()
+        if not k._res():
+            return None
+        a = as_f32_c(X, ndim=2, name="X")[0]
+        if a.ndim != 2 or min(a.shape) == 0:
+            raise ValueError("X: a nonempty two-dimensional input is required")
+        m, d = a.shape
+        if d != self.n_features_in_:
+            raise ValueError(f"X has {d} features, but {type(self).__name__} is expecting {self.n_features_in_}")
+        B = self.components_m_
+        nc = B.r
+        A = _M._on_device(_DevBuf(k._raw(), a.size), m, d)
+        k.b.x_decomp_dev_upload(A._d.id, addr_ro(a, name="X"), a.size)
+        C, flag = k._dout(m, nc), k._dout(1, 1)
+        if int(k.b.x_decomp_dev_project(A._d.id, k._did(B), C._d.id, flag._d.id, [m, d, nc])) < 0:
+            return None
+        res = array.array("f", [0.0]) * (m * nc)
+        k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], m * nc)
+        bad = array.array("f", [0.0])
+        k.b.x_decomp_dev_download(flag._d.id, bad.buffer_info()[0], 1)
+        if bad[0] != 0:
+            raise ValueError("X: input must be finite; NaN/inf are unsupported")
+        return Array._owned(res, (m, nc), "<f4", "C")
 
     def inverse_transform(self, X):
         self._check()
