@@ -20,6 +20,9 @@ from core.host_parallel import host_parallelize
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from x_cnn.host.gemm_host import gemm_host_into, parallel_tasks
 from checks.numerics import ftz
+from bindings.hostptr import i32_ptr
+from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from x_cnn.ops import (
     canon,
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, CP_REV,
@@ -974,3 +977,53 @@ def adam_host(w: List[Float32], g: List[Float32], mv: List[Float32], hyper: List
     _ = sg^
     sw.extend(sm^)
     return sw^
+
+
+def csr_build_host(rows: IP, cols: IP, nnz: Int, n: Int, csr_out: IP, order_out: IP):
+    """`x_cnn/device.mojo::csr_build_device` on the host (the CPU-only
+    install's twin of `x_cnn_csr_build`): `[rowptr | col | row]` in ascending
+    (row, col) order with ties in edge order, and the edge ids in that order.
+    Two stable counting passes (by column, then by row): the lexsort order,
+    the device's words exactly."""
+    var cnt = List[Int](length=n + 1, fill=0)
+    var by_col = List[Int](length=max(1, nnz), fill=0)
+    for e in range(nnz):
+        cnt[Int(cols[e]) + 1] += 1
+    for c in range(n):
+        cnt[c + 1] += cnt[c]
+    for e in range(nnz):
+        var c = Int(cols[e])
+        by_col[cnt[c]] = e
+        cnt[c] += 1
+    for r in range(n + 1):
+        cnt[r] = 0
+    for e in range(nnz):
+        cnt[Int(rows[e]) + 1] += 1
+    for r in range(n):
+        cnt[r + 1] += cnt[r]
+    for r in range(n + 1):
+        csr_out[r] = Int32(cnt[r])
+    for i in range(nnz):
+        var e = by_col[i]
+        var r = Int(rows[e])
+        var at = cnt[r]
+        cnt[r] += 1
+        order_out[at] = Int32(e)
+        csr_out[n + 1 + at] = cols[e]
+        csr_out[n + 1 + nnz + at] = rows[e]
+
+
+def csr_build_host_binding(rows_addr: PythonObject, cols_addr: PythonObject, csr_addr: PythonObject, order_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`x_cnn_csr_build` for the host binding (`bindings/_mojolearn_x_cnn.mojo`'s
+    `csr_build_binding`, same arguments, same words)."""
+    var n = Int(py=params[0])
+    var nnz = Int(py=params[1])
+    if n <= 0 or nnz < 0:
+        raise Error("x_cnn csr_build: positive n and nnz >= 0 required")
+    var pc = i32_ptr(Int(py=csr_addr)).unsafe_origin_cast[MutAnyOrigin]()
+    var rows = i32_ptr(Int(py=rows_addr)).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else pc
+    var cols = i32_ptr(Int(py=cols_addr)).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else pc
+    var order = i32_ptr(Int(py=order_addr)).unsafe_origin_cast[MutAnyOrigin]() if nnz > 0 else pc
+    with GILReleased(Python()):
+        csr_build_host(rows, cols, nnz, n, pc, order)
+    return PythonObject(n + 1 + 2 * nnz)
