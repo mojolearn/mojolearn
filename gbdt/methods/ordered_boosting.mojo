@@ -688,6 +688,54 @@ def _ord_leaf_scan_kernel(
         totals.unsafe_store(b, run)
 
 
+
+#: Threads of `_ord_leaf_scan_block_kernel`'s block (one block a leaf).
+comptime ORD_SCAN_TPB = 256
+
+
+def _ord_leaf_scan_block_kernel(
+    counts: MutPointer[UInt32, MutAnyOrigin],
+    prefix: MutPointer[UInt32, MutAnyOrigin],
+    totals: MutPointer[UInt32, MutAnyOrigin],
+    n_chunks_in: Int32,
+    n_leaves_in: Int32,
+):
+    """`_ord_leaf_scan_kernel` with ONE BLOCK per leaf (lane/neural-pass125):
+    thread i scans a contiguous run of the leaf's chunk counts, a shared
+    scan of the runs' totals gives each run its start, and the run writes
+    its exclusive prefixes. Integer sums: the same prefixes. The one-thread
+    form walked ~3,200 chunks per leaf on ONE block of 64 threads (L40S
+    taxi 4.1M: 0.75 ms a launch, 4 a tree)."""
+    var b = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var nc = Int(n_chunks_in)
+    if b >= Int(n_leaves_in):
+        return
+    var per = (nc + ORD_SCAN_TPB - 1) // ORD_SCAN_TPB
+    var lo = min(nc, tid * per)
+    var hi = min(nc, lo + per)
+    var row = b * nc
+    var s = UInt32(0)
+    for t in range(lo, hi):
+        s += counts.unsafe_load(row + t)
+    var sh = stack_allocation[ORD_SCAN_TPB, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
+    sh[tid] = s
+    barrier()
+    var off = 1
+    while off < ORD_SCAN_TPB:
+        var v = sh[tid] + (sh[tid - off] if tid >= off else UInt32(0))
+        barrier()
+        sh[tid] = v
+        barrier()
+        off *= 2
+    var run = sh[tid] - s
+    for t in range(lo, hi):
+        prefix.unsafe_store(row + t, run)
+        run += counts.unsafe_load(row + t)
+    if tid == ORD_SCAN_TPB - 1:
+        totals.unsafe_store(b, sh[tid])
+
+
 def _ord_seg_start_kernel(
     totals: MutPointer[UInt32, MutAnyOrigin],
     seg_start: MutPointer[UInt32, MutAnyOrigin],
@@ -761,7 +809,9 @@ def _ord_chunk_scatter_kernel(
 #: the per-(leaf, chunk) count matrix is capped at this many cells; the
 #: chunk grows to fit (depth 16 has 65,536 leaves)
 comptime ORDERED_PART_CELLS = 1 << 22
-comptime ORDERED_PART_CHUNK = 1024
+# (lane/neural-pass125: 256, was 1024 -- the count and scatter kernels
+# run one thread a chunk; the stable sort's output does not depend on it)
+comptime ORDERED_PART_CHUNK = 256
 
 
 struct _PermPartition(Movable):
@@ -905,10 +955,10 @@ struct _PermPartition(Movable):
             self.d_starts.unsafe_ptr(), Int32(n_chunks), Int32(n_leaves),
             grid_dim=(_grid(n_chunks), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
         )
-        ctx.enqueue_function[_ord_leaf_scan_kernel](
+        ctx.enqueue_function[_ord_leaf_scan_block_kernel](
             counts.unsafe_ptr(), prefix.unsafe_ptr(), self.d_tot.unsafe_ptr(),
             Int32(n_chunks), Int32(n_leaves),
-            grid_dim=(_grid(n_leaves), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+            grid_dim=(n_leaves, 1, 1), block_dim=(ORD_SCAN_TPB, 1, 1),
         )
         ctx.enqueue_function[_ord_seg_start_kernel](
             self.d_tot.unsafe_ptr(), self.d_seg.unsafe_ptr(), Int32(n_leaves),
