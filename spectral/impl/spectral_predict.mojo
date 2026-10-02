@@ -29,7 +29,7 @@ from cluster.estimator import kmeans_predict_device
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from neighbors.estimator import knn_search
 from spectral.checks.device_io import download_f32, download_i32, upload_f32
-from spectral.host.spectral_predict_host import (
+from spectral.impl.spectral_predict_common import (
     SPECTRAL_AFFINITY_NEAREST_NEIGHBORS,
     SPECTRAL_PREDICT_MIN_ABS_EIGENVALUE,
     SPECTRAL_PREDICT_ONE_WAY_EDGE,

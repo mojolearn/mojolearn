@@ -44,7 +44,7 @@ from core.identity_trace import IdentityTrace
 from core.row_norms import NORM_TPB, row_norm_kernel
 from checks.fixed_point import choose_scale
 from spectral.checks.device_io import download_f32, download_u32, upload_f32
-from spectral.host.spectral_predict_host import SpectralPredictionState
+from spectral.impl.spectral_predict_common import SpectralPredictionState
 from spectral.impl.preprocessing.detail.spectral_embedding import (
     SpectralEmbeddingParams,
     _use_fast_graph,
