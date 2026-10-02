@@ -15,6 +15,7 @@ from x_decomp.kit import mat_from
 from x_decomp.mcd import fast_mcd
 from x_decomp.lda_online import lda_online_pass
 from x_decomp.moves import argsort_f32, gather, iso_order, scatter, triu_nonzero
+from x_decomp.tsqr_core import TS_MAX_N
 
 
 def _f(addr: PythonObject) raises -> F32Ptr:
@@ -380,6 +381,42 @@ def qr_r_py[E: Exec](a: PythonObject, r: PythonObject, p: PythonObject) raises -
     var pr = _f(r)
     E.qr_r(pa, m, n, pr)
     return PythonObject(n)
+
+
+def tsqr_r_py[E: Exec](a: PythonObject, b: PythonObject, r: PythonObject, p: PythonObject) raises -> PythonObject:
+    """r (n x n, n = d + nrhs) = R of the blocked TSQR of [a | b] (a m x d,
+    b m x nrhs, row major; b is read only when nrhs > 0). p = [m, d, nrhs,
+    keep]: keep != 0 holds the factorization for `tsqr_q_py`."""
+    var m = _n(p, 0)
+    var d = _n(p, 1)
+    var nrhs = _n(p, 2)
+    var keep = Int(py=p[3]) != 0
+    var n = d + nrhs
+    if d < 1 or n > TS_MAX_N or m < n:
+        raise Error("x_decomp: tsqr_r needs 1 <= d, d + nrhs <= " + String(TS_MAX_N) + " and m >= d + nrhs")
+    if m * n > 2147483647:
+        raise Error("x_decomp: tsqr_r exceeds the Int32 index bound")
+    var pa = _f(a)
+    var pb = _f(b)
+    var pr = _f(r)
+    with GILReleased(Python()):
+        E.tsqr_factor(pa, pb, pr, m, d, nrhs, keep)
+    return PythonObject(n)
+
+
+def tsqr_q_py[E: Exec](c: PythonObject, q: PythonObject, p: PythonObject) raises -> PythonObject:
+    """q (m x k) = Q c (c n x k) for the factorization `tsqr_r_py` kept,
+    which is then released; p = [m, n, k], k == 0 releases it only."""
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    var k = _n(p, 2)
+    if k > 0 and m * k > 2147483647:
+        raise Error("x_decomp: tsqr_q exceeds the Int32 index bound")
+    var pc = _f(c)
+    var pq = _f(q)
+    with GILReleased(Python()):
+        E.tsqr_apply(pc, pq, m, n, k)
+    return PythonObject(k)
 
 
 def geqrf_py[E: Exec](a: PythonObject, tau: PythonObject, p: PythonObject) raises -> PythonObject:
