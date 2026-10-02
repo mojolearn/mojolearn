@@ -253,7 +253,7 @@ def ols_equilibration_scale(diag: Float32) -> Float32:
     return bitcast[DType.float32](UInt32(127 - k) << 23)
 
 
-def ols_abs_max_kernel(v: MutPointer[Float32, MutAnyOrigin], n: Int32, out: MutPointer[Int32, MutAnyOrigin]):
+def ols_abs_max_kernel(v: MutPointer[Float32, MutAnyOrigin], n: Int32, dst: MutPointer[Int32, MutAnyOrigin]):
     """The largest |v_i| as its float bits by an integer atomic max (an
     order-free max; a NaN and a zero never raise it, as `mag > max_abs`
     never took them)."""
@@ -261,7 +261,7 @@ def ols_abs_max_kernel(v: MutPointer[Float32, MutAnyOrigin], n: Int32, out: MutP
     if i < Int(n):
         var mag = abs(v.unsafe_load(i))
         if mag == mag and mag > Float32(0.0):
-            _ = Atomic[DType.int32].max(out, Int32(Int(bitcast[DType.uint32](mag))))
+            _ = Atomic[DType.int32].max(dst, Int32(Int(bitcast[DType.uint32](mag))))
 
 
 def ols_device_abs_max(ctx: DeviceContext, mut v: DeviceBuffer[DType.float32], n: Int, tpb: Int) raises -> Float32:
