@@ -121,21 +121,16 @@ def _knn_rows_kernel(
         cmat.unsafe_store(i * n + j, UInt8(1))
 
 
-def _status_kernel(bad: _I, first: _I, n_: Int32, status: _I):
-    if _tid() == 0:
-        var f = Int(first.unsafe_load(0))
-        if f < Int(n_):
-            status.unsafe_store(0, bad.unsafe_load(f))
-            status.unsafe_store(1, Int32(f))
-        else:
-            status.unsafe_store(0, Int32(0))
-            status.unsafe_store(1, Int32(0))
-
-
-def _aff_kernel(cmat: _B, n_: Int32, status: _I, aff: _F):
+def _aff_kernel(cmat: _B, bad: _I, first: _I, n_: Int32, status: _I, aff: _F):
+    # the status pair (code, first bad row) is written by thread 0 of the same
+    # launch; every thread reads the same `first`, so no separate one-thread launch
     var t = _tid()
     var n = Int(n_)
-    if t >= n * n or status.unsafe_load(0) != Int32(0):
+    var f = Int(first.unsafe_load(0))
+    if t == 0:
+        status.unsafe_store(0, bad.unsafe_load(f) if f < n else Int32(0))
+        status.unsafe_store(1, Int32(f) if f < n else Int32(0))
+    if t >= n * n or f < n:
         return
     var i = t // n
     var j = t - i * n
@@ -202,11 +197,9 @@ def knn_affinity_f32_device(
         d_order.unsafe_ptr(), Int32(1 if sparse else 0), Int32(n), Int32(k), d_sel.unsafe_ptr(), d_c.unsafe_ptr(),
         d_bad.unsafe_ptr(), d_first.unsafe_ptr(), grid_dim=_blocks(n), block_dim=_TPB,
     )
-    ctx.enqueue_function[_status_kernel](
-        d_bad.unsafe_ptr(), d_first.unsafe_ptr(), Int32(n), d_status.unsafe_ptr(), grid_dim=1, block_dim=1,
-    )
     ctx.enqueue_function[_aff_kernel](
-        d_c.unsafe_ptr(), Int32(n), d_status.unsafe_ptr(), d_aff.unsafe_ptr(), grid_dim=_blocks(nn), block_dim=_TPB,
+        d_c.unsafe_ptr(), d_bad.unsafe_ptr(), d_first.unsafe_ptr(), Int32(n), d_status.unsafe_ptr(), d_aff.unsafe_ptr(),
+        grid_dim=_blocks(max(nn, 1)), block_dim=_TPB,
     )
     ctx.enqueue_copy(dst_ptr=_I(unsafe_from_address=status), src_buf=d_status)
     ctx.enqueue_copy(dst_ptr=_F(unsafe_from_address=aff), src_buf=d_aff)
