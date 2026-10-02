@@ -1619,6 +1619,19 @@ def _edges(edge_index, n):
     return ei[0], ei[1]
 
 
+def _mean_vals_t(g, n):
+    """The mean aggregation's backward divisors on the transposed view: the
+    in-degree of each entry's target. Built once per graph and kept on it
+    (lane gap-neural-overhead2: the forward's resident upload and the
+    backward share it; no per-call count)."""
+    np = _np()
+    vt = g.__dict__.get("_mean_vt")
+    if vt is None:
+        deg = np.bincount(g.dst, minlength=n).astype(np.float32)
+        vt = g._mean_vt = np.ascontiguousarray(deg[g.dst[g.order_t]])
+    return vt
+
+
 def _graph_dev(layer, b, dev, g, vals_f, vals_t=None):
     """The resident CSR views of graph `g` and the propagation values (the
     forward's `vals_f`, the transposed view's `vals_t`, by default
@@ -1878,8 +1891,7 @@ class SAGEConv(_Layer):
         if self.__dict__.get("_gdev_g") is not g or self.__dict__.get("_gdev_for") != (id(g), id(dev)):
             ones = np.ones(g.nnz, np.float32)
             if mean:
-                deg = np.bincount(g.dst, minlength=n).astype(np.float32)
-                vt = np.ascontiguousarray(deg[g.dst[g.order_t]])
+                vt = _mean_vals_t(g, n)
             else:
                 vt = ones
             _graph_dev(self, b, dev, g, ones, vt)
@@ -1956,8 +1968,7 @@ class SAGEConv(_Layer):
             b.x_cnn_graph_op(self._xs.ctypes.data, dagg.ctypes.data, self._max_aux.ctypes.data, dx.ctypes.data,
                              g.csr_t.ctypes.data, [n, dagg.shape[1], g.nnz, 1])
         elif self.aggr == "mean":
-            deg = np.bincount(g.dst, minlength=n).astype(np.float32)
-            dx = g.spmm(b, np.ascontiguousarray(deg[g.dst[g.order_t]]), dagg, 2, transposed=True)
+            dx = g.spmm(b, _mean_vals_t(g, n), dagg, 2, transposed=True)
         else:
             dx = g.spmm(b, np.ones(g.nnz, np.float32), dagg, 0, transposed=True)
         if self.project:
