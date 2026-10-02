@@ -1515,14 +1515,11 @@ def _precision_recall_fscore(y_true, y_pred, *, labels, pos_label, average,
          0 if warn else int(zero_division), selected_count])
     if warn and output[3 * width + metric] != 0:
         import warnings
-        try:
-            from sklearn.exceptions import UndefinedMetricWarning
-        except ImportError:
-            UndefinedMetricWarning = RuntimeWarning
+        from ._expansion_metrics import _undefined_category
         name = ("Precision", "Recall", "F-score")[metric]
         warnings.warn(f"{name} is ill-defined and being set to 0.0 due to zero "
                       "denominator; use zero_division to control this behavior.",
-                      UndefinedMetricWarning, stacklevel=3)
+                      _undefined_category(), stacklevel=3)
     values = output[metric * width:(metric + 1) * width]
     return values.copy() if average is None else float(values[0])
 

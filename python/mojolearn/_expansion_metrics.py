@@ -408,12 +408,23 @@ class _Sums:
         self.weighted = w is not None
 
 
+class UndefinedMetricWarning(UserWarning):
+    """scikit-learn's `UndefinedMetricWarning` (a UserWarning): a metric that
+    is ill-defined for the input and was set to a fallback value. Defined
+    here so the metrics do not import scikit-learn."""
+
+
+def _undefined_category():
+    """The warning class to raise: scikit-learn's own when the caller has
+    already imported `sklearn.exceptions` (so its filters and `pytest.warns`
+    match), else `UndefinedMetricWarning` above. Never imports scikit-learn."""
+    import sys
+    sk = sys.modules.get("sklearn.exceptions")
+    return getattr(sk, "UndefinedMetricWarning", UndefinedMetricWarning)
+
+
 def _undefined_warning(msg):
-    try:
-        from sklearn.exceptions import UndefinedMetricWarning
-    except ImportError:
-        UndefinedMetricWarning = RuntimeWarning
-    warnings.warn(msg, UndefinedMetricWarning, stacklevel=3)
+    warnings.warn(msg, _undefined_category(), stacklevel=3)
 
 
 def _zero_division_value(zero_division):
