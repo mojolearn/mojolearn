@@ -36,30 +36,30 @@ def gpc_weight_item(i: Int, f: _P, pi: _P, w: _P, wsr: _P):
 
 
 @always_inline
-def gpc_rhs_item(i: Int, w: _P, f: _P, y: _P, pi: _P, out: _P):
+def gpc_rhs_item(i: Int, w: _P, f: _P, y: _P, pi: _P, dst: _P):
     """`b = W f + (y - pi)`."""
     var wf = ftz(identical_mul(ftz(w.unsafe_load(i)), ftz(f.unsafe_load(i))))
     var r = ftz(ftz(y.unsafe_load(i)) - ftz(pi.unsafe_load(i)))
-    out.unsafe_store(i, ftz(wf + r))
+    dst.unsafe_store(i, ftz(wf + r))
 
 
 @always_inline
-def gpc_scale_item(i: Int, wsr: _P, v: _P, out: _P):
+def gpc_scale_item(i: Int, wsr: _P, v: _P, dst: _P):
     """`W_sr_i * v_i`."""
-    out.unsafe_store(i, ftz(identical_mul(ftz(wsr.unsafe_load(i)), ftz(v.unsafe_load(i)))))
+    dst.unsafe_store(i, ftz(identical_mul(ftz(wsr.unsafe_load(i)), ftz(v.unsafe_load(i)))))
 
 
 @always_inline
-def gpc_a_item(i: Int, b: _P, wsr: _P, x: _P, out: _P):
+def gpc_a_item(i: Int, b: _P, wsr: _P, x: _P, dst: _P):
     """`a = b - W_sr x`."""
     var s = ftz(identical_mul(ftz(wsr.unsafe_load(i)), ftz(x.unsafe_load(i))))
-    out.unsafe_store(i, ftz(ftz(b.unsafe_load(i)) - s))
+    dst.unsafe_store(i, ftz(ftz(b.unsafe_load(i)) - s))
 
 
 @always_inline
-def gpc_residual_item(i: Int, y: _P, pi: _P, out: _P):
+def gpc_residual_item(i: Int, y: _P, pi: _P, dst: _P):
     """`y - pi`."""
-    out.unsafe_store(i, ftz(ftz(y.unsafe_load(i)) - ftz(pi.unsafe_load(i))))
+    dst.unsafe_store(i, ftz(ftz(y.unsafe_load(i)) - ftz(pi.unsafe_load(i))))
 
 
 def gpc_lml_part_item(blk: Int, a: _P, f: _P, y: _P, n: Int, pdot: _P, pt2: _P):

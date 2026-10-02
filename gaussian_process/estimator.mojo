@@ -918,11 +918,11 @@ def gp_grad_part_kernel(
 
 
 def gp_grad_fin_kernel(
-    part: MutPointer[Float32, MutAnyOrigin], nb: Int32, nf: Int32, half: Float32, out: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin], nb: Int32, nf: Int32, half: Float32, dst: MutPointer[Float32, MutAnyOrigin],
 ):
     var p = Int(_gb_idx.x) * GP_GRAD_TPB + Int(_gt_idx.x)
     if p < Int(nf):
-        gp_grad_fin_item(p, part, Int(nb), half, out)
+        gp_grad_fin_item(p, part, Int(nb), half, dst)
 
 
 def gpr_lml_grad_host(

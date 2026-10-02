@@ -187,33 +187,33 @@ def gpc_w_kernel(f: _GP, pi: _GP, w: _GP, wsr: _GP, n: Int32):
         gpc_weight_item(i, f, pi, w, wsr)
 
 
-def gpc_rhs_kernel(w: _GP, f: _GP, y: _GP, pi: _GP, out: _GP, n: Int32):
+def gpc_rhs_kernel(w: _GP, f: _GP, y: _GP, pi: _GP, dst: _GP, n: Int32):
     var i = _gtid()
     if i < Int(n):
-        gpc_rhs_item(i, w, f, y, pi, out)
+        gpc_rhs_item(i, w, f, y, pi, dst)
 
 
-def gpc_scale_nan_kernel(wsr: _GP, v: _GP, out: _GP, nan_at: _GI, n: Int32):
+def gpc_scale_nan_kernel(wsr: _GP, v: _GP, dst: _GP, nan_at: _GI, n: Int32):
     """`gpc_scale`, and the lowest index whose value is NaN (DEVIATION 1638's
     refusal of a NaN right-hand side) by an atomic min."""
     var i = _gtid()
     if i < Int(n):
-        gpc_scale_item(i, wsr, v, out)
-        var c = out.unsafe_load(i)
+        gpc_scale_item(i, wsr, v, dst)
+        var c = dst.unsafe_load(i)
         if c != c:
             _ = Atomic[DType.int32].min(nan_at, Int32(i))
 
 
-def gpc_a_kernel(b: _GP, wsr: _GP, x: _GP, out: _GP, n: Int32):
+def gpc_a_kernel(b: _GP, wsr: _GP, x: _GP, dst: _GP, n: Int32):
     var i = _gtid()
     if i < Int(n):
-        gpc_a_item(i, b, wsr, x, out)
+        gpc_a_item(i, b, wsr, x, dst)
 
 
-def gpc_residual_kernel(y: _GP, pi: _GP, out: _GP, n: Int32):
+def gpc_residual_kernel(y: _GP, pi: _GP, dst: _GP, n: Int32):
     var i = _gtid()
     if i < Int(n):
-        gpc_residual_item(i, y, pi, out)
+        gpc_residual_item(i, y, pi, dst)
 
 
 def gpc_lml_part_kernel(a: _GP, f: _GP, y: _GP, n: Int32, pdot: _GP, pt2: _GP, nb: Int32):
@@ -222,29 +222,29 @@ def gpc_lml_part_kernel(a: _GP, f: _GP, y: _GP, n: Int32, pdot: _GP, pt2: _GP, n
         gpc_lml_part_item(b, a, f, y, Int(n), pdot, pt2)
 
 
-def gpc_lml_fin_kernel(pdot: _GP, pt2: _GP, nb: Int32, logdet: Float32, out: _GP):
+def gpc_lml_fin_kernel(pdot: _GP, pt2: _GP, nb: Int32, logdet: Float32, dst: _GP):
     if _gtid() == 0:
-        out.unsafe_store(0, gpc_lml_fin(pdot, pt2, Int(nb), logdet))
+        dst.unsafe_store(0, gpc_lml_fin(pdot, pt2, Int(nb), logdet))
 
 
 comptime _GU = MutPointer[UInt64, MutAnyOrigin]
 
 
-def gpc_proba_kernel(mean: _GP, variance: _GP, out: _GU, n: Int32):
+def gpc_proba_kernel(mean: _GP, variance: _GP, dst: _GU, n: Int32):
     """DEVIATION 2832's class-1 probability, one query row per thread, as
     the float64 word (`gpc_proba64.mojo::gpc_pi_star_sf64`, the host
     column's `gpc_pi_star` in software binary64)."""
     var t = _gtid()
     if t < Int(n):
-        out.unsafe_store(t, gpc_pi_star_sf64(mean.unsafe_load(t), variance.unsafe_load(t)))
+        dst.unsafe_store(t, gpc_pi_star_sf64(mean.unsafe_load(t), variance.unsafe_load(t)))
 
 
-def gpc_ovr_combine_kernel(cols: _GU, out: _GU, codes: _GI, n: Int32, k: Int32):
+def gpc_ovr_combine_kernel(cols: _GU, dst: _GU, codes: _GI, n: Int32, k: Int32):
     """DEVIATION 2833's one-vs-rest normalization and argmax, one query row
     per thread (`gpc_proba64.mojo::gpc_ovr_combine_row`)."""
     var t = _gtid()
     if t < Int(n):
-        gpc_ovr_combine_row(cols, out, codes, t, Int(n), Int(k))
+        gpc_ovr_combine_row(cols, dst, codes, t, Int(n), Int(k))
 
 
 def gpc_ovr_combine_host(col_addrs: List[Int], out_addr: Int, codes_addr: Int, n: Int) raises:

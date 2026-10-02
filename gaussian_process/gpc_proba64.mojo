@@ -230,7 +230,7 @@ def gpc_pi_star_sf64(mean: Float32, variance: Float32) -> UInt64:
 @always_inline
 def gpc_ovr_combine_row(
     cols: MutPointer[UInt64, MutAnyOrigin],
-    out: MutPointer[UInt64, MutAnyOrigin],
+    dst: MutPointer[UInt64, MutAnyOrigin],
     codes: MutPointer[Int32, MutAnyOrigin],
     t: Int,
     n: Int,
@@ -238,7 +238,7 @@ def gpc_ovr_combine_row(
 ):
     """Row `t` of DEVIATION 2833's one-vs-rest combine. `cols` holds the k
     unnormalized class-1 probabilities class-major (`cols[c * n + t]`),
-    `out` the normalized row row-major (`out[t * k + c]`), `codes[t]` the
+    `dst` the normalized row row-major (`dst[t * k + c]`), `codes[t]` the
     first index of the strictly largest unnormalized value (NumPy's argmax
     tie rule; a NaN never wins a `>`)."""
     var total = SF64_ZERO
@@ -253,5 +253,5 @@ def gpc_ovr_combine_row(
     var nonzero = (total & ~SF64_SIGN) != 0
     for c in range(k):
         var v = cols.unsafe_load(c * n + t)
-        out.unsafe_store(t * k + c, sf64_div(v, total) if nonzero else v)
+        dst.unsafe_store(t * k + c, sf64_div(v, total) if nonzero else v)
     codes.unsafe_store(t, Int32(best_k))
