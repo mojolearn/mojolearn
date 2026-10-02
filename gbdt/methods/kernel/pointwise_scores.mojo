@@ -261,6 +261,9 @@ from checks.numerics import (
     identical_sqrt,
 )
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 from gbdt.gpu_util.kernel.random_gen import (
     advance_seed_k,
@@ -482,6 +485,21 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
             # (contract=fast) build formed, written out (lane/explicit-fma-contract-proof, 2026-09-26)
             self.score = identical_mul_add(sum, mu, self.score)
             self.denum_sqr = identical_mul_add(weight * mu, mu, self.denum_sqr)
+
+    @always_inline
+    def combine(mut self, score: Float32, denum_sqr: Float32):
+        """`Combine(other)` (`score_calcers.cuh`), the node-tiled FAST pass's
+        half: every `add_leaf` body above is a plain running sum into
+        `score` (and, for cosine, `denum_sqr`), so a tile's partial folds
+        in by addition. Only `pw_sym_score_fold_kernel` calls it; the
+        one-launch kernels never combine (each thread owns a candidate end
+        to end). FAST + Apple only (`SYM_DEVICE_LEVEL`)."""
+        self.score += score
+        comptime if (
+            Self.score_function == SCORE_FUNCTION_COSINE
+            or Self.score_function == SCORE_FUNCTION_NEWTON_COSINE
+        ):
+            self.denum_sqr += denum_sqr
 
     @always_inline
     def get_score(self) -> Float32:
@@ -1915,3 +1933,367 @@ def update_partition_props(
         grid_dim=(parts_count, 1, 1),
         block_dim=(POINTWISE_WIDE_BLOCK, 1, 1),
     )
+
+
+# ---------------------------------------------------------------------------
+# lane/apple-fast-trees-symmetric: the plain level score as a node-tiled
+# 2-D grid (`-D MOJOLEARN_SYM_DEVICE_LEVEL`, FAST + Apple only)
+# ---------------------------------------------------------------------------
+#
+# `find_optimal_split_single_fold_kernel` is launched at `result_blocks`
+# = min(ceil(binFeatures / 128), 32) blocks (`histograms_helper.h:205-208`),
+# and every thread loops the level's `p_count` nodes SERIALLY, loading two
+# histogram cells per node `2 * binFeatureCount` floats apart. At depth 5
+# that is 32 blocks x 128 threads x 32 strided node loads for the whole
+# machine -- istella's ~56k bin features fit 438 blocks and get 32. Here
+# the same arithmetic runs as two launches:
+#
+#   1. `pw_sym_score_partial_kernel`, grid (ceil(binFeatures / 128),
+#      ceil(p_count / PW_SYM_LEAF_TILE)): one thread per (bin feature,
+#      node tile) owns a calcer, `add_leaf`s its tile's nodes (left and
+#      right, exactly the one-launch body) and stores the calcer's two
+#      running sums;
+#   2. `pw_sym_score_fold_kernel`, grid ceil(binFeatures / 128): one
+#      thread per bin feature `combine`s the tiles in tile order, takes
+#      `get_score`, the gain, and the block argmin (`_block_argmin_and_
+#      store`, unchanged) into `result_*[2 * block]` -- so the result
+#      records are one per 128-bin-feature block, UNCAPPED, and
+#      `pw_fold_winner_block_kernel` folds them.
+#
+# BITS: the per-candidate score is the same sum in a different order
+# (tile partials added instead of one left-to-right chain over nodes), so
+# this is a FAST-only route; the IDENTICAL build never compiles a call to
+# it (`SYM_DEVICE_LEVEL` is False there and every use is under
+# `comptime if`). The cosine `DenumSqr` seed (1e-10, `next_feature`) is
+# carried by tile 0 only; the other tiles start at 0 so the fold holds
+# exactly one seed, as the one-launch calcer does.
+#
+# Skipped bin features (`SkipInScoreCount != 0`) write no partial and
+# score nothing, as the one-launch kernel skips them; empty tiles
+# (`leaf0 >= p_count`) are never launched because the grid is sized by
+# the level's `p_count`.
+
+#: `-D MOJOLEARN_SYM_DEVICE_LEVEL`, FAST + Apple only.
+comptime SYM_DEVICE_LEVEL = (
+    is_defined["MOJOLEARN_SYM_DEVICE_LEVEL"]()
+    and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+)
+
+#: nodes (parts) per tile of the partial pass: at max_depth 6 the scored
+#: level has at most 32 parts, so 8 tiles x ceil(binFeatures / 128) blocks.
+comptime PW_SYM_LEAF_TILE = 4
+
+
+def pw_sym_leaf_tiles(part_count: Int) -> Int:
+    """Tiles of `PW_SYM_LEAF_TILE` nodes covering `part_count` (at least 1)."""
+    var t = (part_count + PW_SYM_LEAF_TILE - 1) // PW_SYM_LEAF_TILE
+    if t < 1:
+        t = 1
+    return t
+
+
+def pw_sym_result_blocks(bin_feature_count: Int) -> Int:
+    """The uncapped block count: one result record per
+    `POINTWISE_SCORE_BLOCK` bin features (at least 1)."""
+    var n = (
+        bin_feature_count + POINTWISE_SCORE_BLOCK - 1
+    ) // POINTWISE_SCORE_BLOCK
+    if n < 1:
+        n = 1
+    return n
+
+
+def pw_sym_score_partial_kernel[
+    block_size: Int, score_function: Int
+](
+    bf: MutPointer[UInt32, MutAnyOrigin],
+    bin_feature_count_in: Int32,
+    bin_sums: MutPointer[Float32, MutAnyOrigin],
+    parts: MutPointer[Float32, MutAnyOrigin],
+    p_count_in: Int32,
+    lambda_l2: Float32,
+    meta_exponent: Float32,
+    normalize_in: Int32,
+    score_std_dev: Float32,
+    global_seed: UInt64,
+    partials: MutPointer[Float32, MutAnyOrigin],
+):
+    """Stage 1: one (bin feature, node tile) per thread; the tile's nodes
+    through `add_leaf` exactly as `find_optimal_split_single_fold_kernel`'s
+    direct-loader loop, the calcer's two running sums stored at
+    `partials[2 * (tile * binFeatures + b) + {0, 1}]`. No barrier in this
+    kernel, so the early returns are legal."""
+    var bin_feature_count = Int(bin_feature_count_in)
+    var p_count = Int(p_count_in)
+    var b = Int(block_idx.x) * block_size + Int(thread_idx.x)
+    if b >= bin_feature_count:
+        return
+    if bf.unsafe_load(3 * b + 2) != UInt32(0):
+        return
+    var tile = Int(block_idx.y)
+    var leaf0 = tile * PW_SYM_LEAF_TILE
+    if leaf0 >= p_count:
+        return
+    var leaf1 = leaf0 + PW_SYM_LEAF_TILE
+    if leaf1 > p_count:
+        leaf1 = p_count
+
+    var helper = PointwisePartOffsetsHelper(UInt32(1))
+    var calcer = make_score_calcer[score_function](
+        lambda_l2,
+        meta_exponent,
+        normalize_in != Int32(0),
+        score_std_dev,
+        global_seed,
+    )
+    calcer.next_feature(bf.unsafe_load(3 * b))
+    if tile != 0:
+        # the seed rides with tile 0 only (see the section comment)
+        calcer.denum_sqr = Float32(0.0)
+
+    for leaf in range(leaf0, leaf1):
+        var part_off = Int(
+            helper.data_partition_offset(UInt32(leaf), UInt32(0))
+        )
+        var part_weight = ldg(parts.unsafe_offset(3 * part_off + 0))
+        var part_sum = ldg(parts.unsafe_offset(3 * part_off + 1))
+        # `TDirectHistLoader::LoadWeight/LoadSum` (`:170-177`)
+        var base = (
+            2 * b
+            + bin_feature_count
+            * Int(helper.histogram_offset(UInt32(leaf), UInt32(0)))
+            * 2
+        )
+        var weight_left = bin_sums.unsafe_load(base)
+        var sum_left = bin_sums.unsafe_load(base + 1)
+        var weight_right = max(part_weight - weight_left, Float32(0.0))
+        var sum_right = part_sum - sum_left
+        calcer.add_leaf(sum_left, weight_left)
+        calcer.add_leaf(sum_right, weight_right)
+
+    var out = 2 * (tile * bin_feature_count + b)
+    partials.unsafe_store(out, calcer.score)
+    partials.unsafe_store(out + 1, calcer.denum_sqr)
+
+
+def pw_sym_score_fold_kernel[
+    block_size: Int, score_function: Int
+](
+    bf: MutPointer[UInt32, MutAnyOrigin],
+    bin_feature_count_in: Int32,
+    cat_features_weights: MutPointer[Float32, MutAnyOrigin],
+    bin_features_weights: MutPointer[Float32, MutAnyOrigin],
+    score_before: MutPointer[Float32, MutAnyOrigin],
+    partials: MutPointer[Float32, MutAnyOrigin],
+    tiles_in: Int32,
+    lambda_l2: Float32,
+    meta_exponent: Float32,
+    normalize_in: Int32,
+    score_std_dev: Float32,
+    global_seed: UInt64,
+    result_ids: MutPointer[UInt32, MutAnyOrigin],
+    result_scores: MutPointer[Float32, MutAnyOrigin],
+):
+    """Stage 2: one bin feature per thread, the tiles combined in tile
+    order, then `get_score`, the gain (same fused form as the one-launch
+    kernel) and the block argmin. Every thread reaches
+    `_block_argmin_and_store` (it barriers), so there is no early return:
+    a thread past the end or on a skipped bin feature carries the
+    `FLOAT32_MAX` defaults in."""
+    var bin_feature_count = Int(bin_feature_count_in)
+    var tiles = Int(tiles_in)
+    var score_before_split = score_before.unsafe_load(0)
+
+    var best_score = FLOAT32_MAX
+    var best_gain = FLOAT32_MAX
+    var best_index = 0
+    var tid = Int(thread_idx.x)
+    var b = Int(block_idx.x) * block_size + tid
+
+    if b < bin_feature_count:
+        if bf.unsafe_load(3 * b + 2) == UInt32(0):
+            var calcer = make_score_calcer[score_function](
+                lambda_l2,
+                meta_exponent,
+                normalize_in != Int32(0),
+                score_std_dev,
+                global_seed,
+            )
+            calcer.next_feature(bf.unsafe_load(3 * b))
+            # tile 0 holds the seeded sums; the rest add on
+            calcer.score = partials.unsafe_load(2 * b)
+            calcer.denum_sqr = partials.unsafe_load(2 * b + 1)
+            for t in range(1, tiles):
+                var o = 2 * (t * bin_feature_count + b)
+                calcer.combine(
+                    partials.unsafe_load(o), partials.unsafe_load(o + 1)
+                )
+            var score = calcer.get_score()
+
+            var feature_id = Int(bf.unsafe_load(3 * b))
+            var cat_w = ldg(cat_features_weights.unsafe_offset(feature_id))
+            var gain = fma(score, cat_w, -score_before_split)
+            score *= cat_w
+            gain *= ldg(bin_features_weights.unsafe_offset(feature_id))
+
+            if gain < best_gain:
+                best_score = score
+                best_gain = gain
+                best_index = b
+
+    _block_argmin_and_store[block_size](
+        tid, best_score, best_gain, best_index, bf, bin_feature_count,
+        result_ids, result_scores,
+    )
+
+
+def _launch_sym_two_stage[
+    score_function: Int
+](
+    ctx: DeviceContext,
+    mut binary_features: DeviceBuffer[DType.uint32],
+    binary_feature_count: Int,
+    mut cat_features_weights: DeviceBuffer[DType.float32],
+    mut bin_features_weights: DeviceBuffer[DType.float32],
+    mut splits: DeviceBuffer[DType.float32],
+    mut parts: DeviceBuffer[DType.float32],
+    p_count: Int,
+    mut score_before: DeviceBuffer[DType.float32],
+    mut partials: DeviceBuffer[DType.float32],
+    tiles: Int,
+    l2: Float32,
+    meta_exponent: Float32,
+    normalize: Bool,
+    score_std_dev: Float32,
+    seed: UInt64,
+    mut result_ids: DeviceBuffer[DType.uint32],
+    mut result_scores: DeviceBuffer[DType.float32],
+    result_size: Int,
+) raises:
+    """The two launches of the node-tiled pass; `result_size` is
+    `pw_sym_result_blocks(binary_feature_count)` (the caller sized the
+    result buffers by it) and `tiles` is `pw_sym_leaf_tiles(p_count)`."""
+    ctx.enqueue_function[
+        pw_sym_score_partial_kernel[POINTWISE_SCORE_BLOCK, score_function]
+    ](
+        binary_features.unsafe_ptr(),
+        Int32(binary_feature_count),
+        splits.unsafe_ptr(),
+        parts.unsafe_ptr(),
+        Int32(p_count),
+        l2,
+        meta_exponent,
+        Int32(1) if normalize else Int32(0),
+        score_std_dev,
+        seed,
+        partials.unsafe_ptr(),
+        grid_dim=(result_size, tiles, 1),
+        block_dim=(POINTWISE_SCORE_BLOCK, 1, 1),
+    )
+    ctx.enqueue_function[
+        pw_sym_score_fold_kernel[POINTWISE_SCORE_BLOCK, score_function]
+    ](
+        binary_features.unsafe_ptr(),
+        Int32(binary_feature_count),
+        cat_features_weights.unsafe_ptr(),
+        bin_features_weights.unsafe_ptr(),
+        score_before.unsafe_ptr(),
+        partials.unsafe_ptr(),
+        Int32(tiles),
+        l2,
+        meta_exponent,
+        Int32(1) if normalize else Int32(0),
+        score_std_dev,
+        seed,
+        result_ids.unsafe_ptr(),
+        result_scores.unsafe_ptr(),
+        grid_dim=(result_size, 1, 1),
+        block_dim=(POINTWISE_SCORE_BLOCK, 1, 1),
+    )
+
+
+def find_optimal_split_sym(
+    ctx: DeviceContext,
+    mut binary_features: DeviceBuffer[DType.uint32],
+    binary_feature_count: Int,
+    mut cat_features_weights: DeviceBuffer[DType.float32],
+    mut bin_features_weights: DeviceBuffer[DType.float32],
+    mut splits: DeviceBuffer[DType.float32],
+    mut parts: DeviceBuffer[DType.float32],
+    p_count: Int,
+    mut score_before: DeviceBuffer[DType.float32],
+    mut partials: DeviceBuffer[DType.float32],
+    tiles: Int,
+    mut result_ids: DeviceBuffer[DType.uint32],
+    mut result_scores: DeviceBuffer[DType.float32],
+    result_size: Int,
+    score_function: Int,
+    l2: Float32,
+    meta_l2_exponent: Float32,
+    meta_frequency: Float32,
+    normalize: Bool,
+    score_std_dev: Float32,
+    seed: UInt64,
+) raises:
+    """`FindOptimalSplitPlain<TDirectHistLoader>`'s five-arm switch for
+    the node-tiled pass (plain boosting, one fold, direct layout only --
+    the caller dispatches `fold_count == 1` here and everything else to
+    `find_optimal_split`). The L2 arm's `metaExponent` draw and the
+    seed-copy rule are `find_optimal_split_plain`'s, unchanged."""
+    var meta_exponent = Float32(1.0)
+    var calcer_seed = seed
+
+    if (
+        score_function == SCORE_FUNCTION_L2
+        or score_function == SCORE_FUNCTION_NEWTON_L2
+    ):
+        var drawn = meta_exponent_draw(seed, meta_frequency, meta_l2_exponent)
+        meta_exponent = drawn[0]
+
+    if score_function == SCORE_FUNCTION_SOLAR_L2:
+        _launch_sym_two_stage[SCORE_FUNCTION_SOLAR_L2](
+            ctx, binary_features, binary_feature_count, cat_features_weights,
+            bin_features_weights, splits, parts, p_count, score_before,
+            partials, tiles, l2, meta_exponent, normalize, score_std_dev,
+            calcer_seed, result_ids, result_scores, result_size,
+        )
+    elif score_function == SCORE_FUNCTION_SAT_L2:
+        _launch_sym_two_stage[SCORE_FUNCTION_SAT_L2](
+            ctx, binary_features, binary_feature_count, cat_features_weights,
+            bin_features_weights, splits, parts, p_count, score_before,
+            partials, tiles, l2, meta_exponent, normalize, score_std_dev,
+            calcer_seed, result_ids, result_scores, result_size,
+        )
+    elif score_function == SCORE_FUNCTION_LOO_L2:
+        _launch_sym_two_stage[SCORE_FUNCTION_LOO_L2](
+            ctx, binary_features, binary_feature_count, cat_features_weights,
+            bin_features_weights, splits, parts, p_count, score_before,
+            partials, tiles, l2, meta_exponent, normalize, score_std_dev,
+            calcer_seed, result_ids, result_scores, result_size,
+        )
+    elif (
+        score_function == SCORE_FUNCTION_L2
+        or score_function == SCORE_FUNCTION_NEWTON_L2
+    ):
+        _launch_sym_two_stage[SCORE_FUNCTION_L2](
+            ctx, binary_features, binary_feature_count, cat_features_weights,
+            bin_features_weights, splits, parts, p_count, score_before,
+            partials, tiles, l2, meta_exponent, normalize, score_std_dev,
+            calcer_seed, result_ids, result_scores, result_size,
+        )
+    elif (
+        score_function == SCORE_FUNCTION_COSINE
+        or score_function == SCORE_FUNCTION_NEWTON_COSINE
+    ):
+        _launch_sym_two_stage[SCORE_FUNCTION_COSINE](
+            ctx, binary_features, binary_feature_count, cat_features_weights,
+            bin_features_weights, splits, parts, p_count, score_before,
+            partials, tiles, l2, meta_exponent, normalize, score_std_dev,
+            calcer_seed, result_ids, result_scores, result_size,
+        )
+    else:
+        raise Error(
+            "find_optimal_split_sym: unknown score function"
+            " (`pointwise_scores.cu:521` throws)"
+        )

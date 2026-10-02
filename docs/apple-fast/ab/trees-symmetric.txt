@@ -1,0 +1,1 @@
+CMD lane/apple-fast-trees-symmetric tsym-level-istella AFT_OUT=$HOME/aft-ab/tsym-level-istella bash tools/aft_ab.sh gbdt gbdt-symmetric istella 2 "" "-D MOJOLEARN_SYM_DEVICE_LEVEL"

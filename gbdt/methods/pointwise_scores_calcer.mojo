@@ -68,9 +68,16 @@ from gbdt.methods.histograms_helper import (
     POLICY_ONE_BYTE,
     ComputeHistogramsHelper,
 )
-from gbdt.methods.kernel.pointwise_scores import find_optimal_split
+from gbdt.methods.kernel.pointwise_scores import (
+    SYM_DEVICE_LEVEL,
+    find_optimal_split,
+    find_optimal_split_sym,
+    pw_sym_leaf_tiles,
+    pw_sym_result_blocks,
+)
 from gbdt.methods.kernel.pointwise_split_resolve import (
     launch_pw_fold_winner,
+    launch_pw_fold_winner_block,
     launch_pw_seed_sentinel,
 )
 from gbdt.methods.pointwise_kernels import FoldsHistogram, compute_hist2
@@ -180,6 +187,15 @@ struct PolicyScoreHelper(Movable):
     # between the plain and the dynamic scorer. Was a literal 1 at three
     # sites -- DEVIATION 126.
     var fold_count: Int
+    # lane/apple-fast-trees-symmetric (`SYM_DEVICE_LEVEL`, FAST + Apple
+    # only): the node-tiled score pass's partial sums, 2 floats per
+    # (node tile, bin feature), sized for the deepest level this helper
+    # scores (`1 << (max_depth - 1)` parts). `sym_tiles_max` is that
+    # tile count; a level needing more falls back to the one-launch
+    # kernel. Under every other build both are a 1-float buffer and 0,
+    # never launched against.
+    var d_sym_partials: DeviceBuffer[DType.float32]
+    var sym_tiles_max: Int
 
     def __init__(
         out self,
@@ -323,9 +339,24 @@ struct PolicyScoreHelper(Movable):
         var blocks_n = (total + 127) // 128
         if blocks_n > 32:
             blocks_n = 32
+        comptime if SYM_DEVICE_LEVEL:
+            # one record per 128 bin features, uncapped: the node-tiled
+            # fold kernel writes `result_*[2 * block]` for every block
+            blocks_n = pw_sym_result_blocks(total)
         if blocks_n < 1:
             blocks_n = 1
         self.result_blocks = blocks_n
+        self.sym_tiles_max = 0
+        comptime if SYM_DEVICE_LEVEL:
+            var deepest = max_depth - 1
+            if deepest < 0:
+                deepest = 0
+            self.sym_tiles_max = pw_sym_leaf_tiles(1 << deepest)
+            self.d_sym_partials = ctx.enqueue_create_buffer[DType.float32](
+                max(2 * total * self.sym_tiles_max, 1)
+            )
+        else:
+            self.d_sym_partials = ctx.enqueue_create_buffer[DType.float32](1)
         self.d_result_ids = ctx.enqueue_create_buffer[DType.uint32](
             2 * blocks_n
         )
@@ -469,6 +500,35 @@ struct PolicyScoreHelper(Movable):
         never read by the host. Same launches, same arithmetic."""
         if self.feature_count == 0:
             return
+        comptime if SYM_DEVICE_LEVEL:
+            # the node-tiled pass (plain boosting, direct layout); the
+            # same five score arms, the same `score_before` word
+            var tiles = pw_sym_leaf_tiles(part_count)
+            if self.fold_count == 1 and tiles <= self.sym_tiles_max:
+                find_optimal_split_sym(
+                    ctx,
+                    self.d_bf,
+                    self.bin_feature_count,
+                    self.d_cat_w,
+                    self.d_bin_w,
+                    self.d_hist,
+                    part_stats,
+                    part_count,
+                    score_before,
+                    self.d_sym_partials,
+                    tiles,
+                    self.d_result_ids,
+                    self.d_result_scores,
+                    self.result_blocks,
+                    score_function,
+                    l2,
+                    Float32(1.0),
+                    Float32(0.0),
+                    False,
+                    score_std_dev,
+                    seed,
+                )
+                return
         find_optimal_split(
             ctx,
             self.d_bf,
@@ -672,15 +732,27 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
         for i in range(len(self.helpers)):
             if self.helpers[i].feature_count == 0:
                 continue
-            launch_pw_fold_winner(
-                ctx,
-                self.helpers[i].d_result_ids,
-                self.helpers[i].d_result_scores,
-                self.helpers[i].result_blocks,
-                first,
-                best_ids,
-                best_scores,
-            )
+            comptime if SYM_DEVICE_LEVEL:
+                # uncapped record count: one block folds it
+                launch_pw_fold_winner_block(
+                    ctx,
+                    self.helpers[i].d_result_ids,
+                    self.helpers[i].d_result_scores,
+                    self.helpers[i].result_blocks,
+                    first,
+                    best_ids,
+                    best_scores,
+                )
+            else:
+                launch_pw_fold_winner(
+                    ctx,
+                    self.helpers[i].d_result_ids,
+                    self.helpers[i].d_result_scores,
+                    self.helpers[i].result_blocks,
+                    first,
+                    best_ids,
+                    best_scores,
+                )
             first = False
         if first:
             # no helper has features: the host fold would return the

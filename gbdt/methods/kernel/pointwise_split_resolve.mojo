@@ -34,7 +34,10 @@ defined and ties only another default).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.gpu import thread_idx
+from std.memory import stack_allocation
 
 comptime PW_SENTINEL_ID = UInt32(0xFFFFFFFF)
 """`(ui32)-1`, `TBestSplitProperties::FeatureId`'s default
@@ -285,4 +288,149 @@ def launch_pw_pack_winner(
         split_desc.unsafe_ptr(),
         grid_dim=(1, 1, 1),
         block_dim=(1, 1, 1),
+    )
+
+
+# ---------------------------------------------------------------------------
+# lane/apple-fast-trees-symmetric: the cross-block fold as one block
+# (FAST + Apple only, `SYM_DEVICE_LEVEL` in pointwise_scores.mojo)
+# ---------------------------------------------------------------------------
+
+#: threads of `pw_fold_winner_block_kernel`
+comptime PW_FOLD_BLOCK = 256
+
+
+def pw_fold_winner_block_kernel[
+    block_size: Int
+](
+    result_ids: MutPointer[UInt32, MutAnyOrigin],
+    result_scores: MutPointer[Float32, MutAnyOrigin],
+    block_count_in: Int32,
+    is_first_in: Int32,
+    best_ids: MutPointer[UInt32, MutAnyOrigin],
+    best_scores: MutPointer[Float32, MutAnyOrigin],
+):
+    """`pw_fold_winner_kernel` for an UNCAPPED record count (the node-tiled
+    score pass writes one record per 128 bin features: ~440 on istella),
+    as one block instead of one thread.
+
+    THE SAME ANSWER AS THE SEQUENTIAL FOLD. `_record_less` is a strict
+    total order on (gain, feature, bin), so the minimum is the same
+    whichever order the records are compared in, with one exception: a
+    NaN gain, which the sequential fold never takes (`less` is false both
+    ways). To keep that, each thread first folds its strided share
+    SEQUENTIALLY from the sentinel (so a NaN record never becomes a
+    thread's local), and only then do the locals meet in the shared tree,
+    where every record is finite or the sentinel. The nesting is the
+    original's: the helper's records fold into a LOCAL seeded with the
+    sentinel, and the local folds ONCE into the global slot
+    (`TakeBest(helper->Read(), best)`, ties keep the earlier policy).
+    Thread 0 does the `is_first` seeding and that final fold, after the
+    tree, which is the same global write order as the one-thread kernel.
+    """
+    var tid = Int(thread_idx.x)
+    var block_count = Int(block_count_in)
+
+    var loc_fid = PW_SENTINEL_ID
+    var loc_bin = UInt32(0)
+    var loc_score = FLOAT32_MAX
+    var loc_gain = FLOAT32_MAX
+    var b = tid
+    while b < block_count:
+        var c_fid = result_ids.unsafe_load(2 * b)
+        var c_bin = result_ids.unsafe_load(2 * b + 1)
+        var c_score = result_scores.unsafe_load(2 * b)
+        var c_gain = result_scores.unsafe_load(2 * b + 1)
+        if _record_less(c_gain, c_fid, c_bin, loc_gain, loc_fid, loc_bin):
+            loc_fid = c_fid
+            loc_bin = c_bin
+            loc_score = c_score
+            loc_gain = c_gain
+        b += block_size
+
+    var s_fid = stack_allocation[
+        block_size,
+        Scalar[DType.uint32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var s_bin = stack_allocation[
+        block_size,
+        Scalar[DType.uint32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var s_score = stack_allocation[
+        block_size,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var s_gain = stack_allocation[
+        block_size,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    s_fid[unsafe_offset=tid] = loc_fid
+    s_bin[unsafe_offset=tid] = loc_bin
+    s_score[unsafe_offset=tid] = loc_score
+    s_gain[unsafe_offset=tid] = loc_gain
+    barrier()
+
+    # the barrier is outside the `if`, as in `_block_argmin_and_store`
+    var s = block_size >> 1
+    while s > 0:
+        if tid < s:
+            if _record_less(
+                s_gain[unsafe_offset=tid + s],
+                s_fid[unsafe_offset=tid + s],
+                s_bin[unsafe_offset=tid + s],
+                s_gain[unsafe_offset=tid],
+                s_fid[unsafe_offset=tid],
+                s_bin[unsafe_offset=tid],
+            ):
+                s_fid[unsafe_offset=tid] = s_fid[unsafe_offset=tid + s]
+                s_bin[unsafe_offset=tid] = s_bin[unsafe_offset=tid + s]
+                s_score[unsafe_offset=tid] = s_score[unsafe_offset=tid + s]
+                s_gain[unsafe_offset=tid] = s_gain[unsafe_offset=tid + s]
+        barrier()
+        s >>= 1
+
+    if tid == 0:
+        if is_first_in != Int32(0):
+            best_ids.unsafe_store(0, PW_SENTINEL_ID)
+            best_ids.unsafe_store(1, UInt32(0))
+            best_scores.unsafe_store(0, FLOAT32_MAX)
+            best_scores.unsafe_store(1, FLOAT32_MAX)
+        if block_count > 0:
+            var l_fid = s_fid[unsafe_offset=0]
+            var l_bin = s_bin[unsafe_offset=0]
+            var l_score = s_score[unsafe_offset=0]
+            var l_gain = s_gain[unsafe_offset=0]
+            var g_fid = best_ids.unsafe_load(0)
+            var g_bin = best_ids.unsafe_load(1)
+            var g_gain = best_scores.unsafe_load(1)
+            if _record_less(l_gain, l_fid, l_bin, g_gain, g_fid, g_bin):
+                best_ids.unsafe_store(0, l_fid)
+                best_ids.unsafe_store(1, l_bin)
+                best_scores.unsafe_store(0, l_score)
+                best_scores.unsafe_store(1, l_gain)
+
+
+def launch_pw_fold_winner_block(
+    ctx: DeviceContext,
+    mut result_ids: DeviceBuffer[DType.uint32],
+    mut result_scores: DeviceBuffer[DType.float32],
+    block_count: Int,
+    is_first: Bool,
+    mut best_ids: DeviceBuffer[DType.uint32],
+    mut best_scores: DeviceBuffer[DType.float32],
+) raises:
+    """`launch_pw_fold_winner`'s signature, one block of `PW_FOLD_BLOCK`."""
+    ctx.enqueue_function[pw_fold_winner_block_kernel[PW_FOLD_BLOCK]](
+        result_ids.unsafe_ptr(),
+        result_scores.unsafe_ptr(),
+        Int32(block_count),
+        Int32(1) if is_first else Int32(0),
+        best_ids.unsafe_ptr(),
+        best_scores.unsafe_ptr(),
+        grid_dim=(1, 1, 1),
+        block_dim=(PW_FOLD_BLOCK, 1, 1),
     )
