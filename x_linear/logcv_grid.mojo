@@ -419,11 +419,11 @@ def lcv_score_parts_kernel(y: FP, n: Int32, f: Int32, sw: Int32, hit: FP, sp: FP
     witness_end(wf, woff, nonce)
 
 
-def lcv_score_fin_kernel(sp: FP, nb: Int32, out: FP, wf: IP, woff: Int32, nonce: Int32):
+def lcv_score_fin_kernel(sp: FP, nb: Int32, res: FP, wf: IP, woff: Int32, nonce: Int32):
     """One thread: the nb block partials folded blocks ascending, the score."""
     if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
         var b = Int(nb)
-        st(out, 0, lcv_score_final(fold_parts(sp, 0, b), fold_parts(sp, b, b)))
+        st(res, 0, lcv_score_final(fold_parts(sp, 0, b), fold_parts(sp, b, b)))
     witness_end(wf, woff, nonce)
 
 
@@ -507,7 +507,7 @@ def logcv_fit_grid(
     if n_y > 0:
         ctx.enqueue_copy(dst_buf=stp[].bf[LCV_Y], src_ptr=y)
     # the StratifiedKFold ids from the device labels (the caller sent zeros)
-    lcv_fold_ids_device(ctx.copy(), stp[].bf[LCV_Y].unsafe_ptr(), n, max(Int(ip[2]), 2), Int(ip[4]))
+    lcv_fold_ids_device(ctx.copy(), FP(unsafe_from_address=Int(stp[].bf[LCV_Y].unsafe_ptr())), n, max(Int(ip[2]), 2), Int(ip[4]))
     ctx.synchronize()
     # the host team, as `_fit_on_host` builds it
     var hip = ip.copy()

@@ -3233,7 +3233,7 @@ def fit_device(
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     if algo == ALGO_LOGCV and n > 0:
         # the StratifiedKFold ids from the device labels (x_linear/logcv_grid.mojo)
-        lcv_fold_ids_device(ctx.copy(), dy.unsafe_ptr(), n, max(Int(ip[2]), 2), Int(ip[4]))
+        lcv_fold_ids_device(ctx.copy(), FP(unsafe_from_address=Int(dy.unsafe_ptr())), n, max(Int(ip[2]), 2), Int(ip[4]))
     if len(hip) > 0:
         ctx.enqueue_copy(dst_buf=dip, src_ptr=hip.unsafe_ptr())
     if len(hfp) > 0:
