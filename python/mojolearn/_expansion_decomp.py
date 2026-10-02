@@ -334,6 +334,11 @@ _DEV_ONE = {}
 #: 0.129 / 0.124 s)
 import os as _os
 _RES_MIN = int(_os.environ.get("MOJOLEARN_XD_RES_MIN", "1"))
+#: A/B arm (lane hr2-graph-embed, 2026-10-02): Isomap's / LLE's kNN by
+#: heapq, their graphs, component walk and joins in Python, and the
+#: host-built Dijkstra arcs, instead of the graph cells
+#: (x_decomp/graph_cells.mojo) on device-resident matrices.
+_PY_GRAPH = _os.environ.get("MOJOLEARN_XD_PY_GRAPH", "") == "1"
 
 
 def _dev_one(kit):
@@ -697,17 +702,103 @@ class _Kit:
 
     def dijkstra(self, W):
         """All-pairs shortest paths on a dense undirected graph (0 = no edge),
-        one source per thread; -1 marks an unreachable pair."""
+        one source per thread; -1 marks an unreachable pair. The GPU binding
+        keeps W and the result resident and compresses the arcs on the
+        device (x_decomp/graph_device.mojo); MOJOLEARN_XD_PY_GRAPH=1 (A/B,
+        lane hr2-graph-embed) restores the host-address entry."""
         n = W.r
-        dist, reached = _M.zeros(n, n), _M.zeros(n, 1)
-        self.b.x_decomp_dijkstra_rows(W.addr, dist.addr, reached.addr, [n])
+        if _PY_GRAPH:
+            dist, reached = _M.zeros(n, n), _M.zeros(n, 1)
+            self.b.x_decomp_dijkstra_rows(W.addr, dist.addr, reached.addr, [n])
+            return dist
+        if self._res():
+            dist = self._dout(n, n)
+            self.b.x_decomp_dev_graph_dijkstra(self._did(W), dist._d.id, [n])
+            return dist
+        dist = _M.zeros(n, n)
+        self.b.x_decomp_graph_dijkstra(W.addr, dist.addr, [n])
         return dist
+
+    # ---- neighbor graphs (x_decomp/graph_cells.mojo, lane hr2-graph-embed):
+    # resident on the GPU binding, the same cells on the host binding
+    def graph_knn(self, D, nn, exclude_self):
+        """(idx, dst), n x nn each: the nn smallest of every row of D, ties
+        to the lower column, `exclude_self` dropping column i; idx holds the
+        column numbers as exact floats."""
+        n, m = D.r, D.c
+        p = [n, m, nn, int(bool(exclude_self))]
+        if self._res():
+            idx, dst = self._dout(n, nn), self._dout(n, nn)
+            if n * nn:
+                self.b.x_decomp_dev_graph_knn(self._did(D), idx._d.id, dst._d.id, p)
+            return idx, dst
+        idx, dst = _M.zeros(n, nn), _M.zeros(n, nn)
+        if n * nn:
+            self.b.x_decomp_graph_knn(D.addr, idx.addr, dst.addr, p)
+        return idx, dst
+
+    def graph_knn_dense(self, idx, w, n):
+        """The dense n x n graph W[i, idx[i, a]] = w[i, a] (1e-10 for 0)."""
+        nn = idx.c
+        if self._res():
+            out = self._dout(n, n)
+            self.b.x_decomp_dev_graph_knn_dense(self._did(idx), self._did(w), out._d.id, [n, nn])
+            return out
+        out = _M.zeros(n, n)
+        self.b.x_decomp_graph_knn_dense(idx.addr, w.addr, out.addr, [n, nn])
+        return out
+
+    def graph_radius(self, D, r):
+        """W[i, j] = D[i, j] (1e-10 for 0) where j != i and D[i, j] <= r."""
+        n = D.r
+        if self._res():
+            out = self._dout(n, n)
+            self.b.x_decomp_dev_graph_radius(self._did(D), out._d.id, [n], float(r))
+            return out
+        out = _M.zeros(n, n)
+        self.b.x_decomp_graph_radius(D.addr, out.addr, [n], float(r))
+        return out
+
+    def graph_lle_iw(self, idx, wb, n):
+        """LLE's dense I - W from the kNN lists and barycenter weights."""
+        nn = idx.c
+        if self._res():
+            out = self._dout(n, n)
+            self.b.x_decomp_dev_graph_lle_iw(self._did(idx), self._did(wb), out._d.id, [n, nn])
+            return out
+        out = _M.zeros(n, n)
+        self.b.x_decomp_graph_lle_iw(idx.addr, wb.addr, out.addr, [n, nn])
+        return out
+
+    def graph_components(self, W):
+        """(comp n x 1, C): the weak components of W (nonzero either way),
+        numbered by their lowest node."""
+        n = W.r
+        if self._res():
+            comp = self._dout(n, 1)
+            c = self.b.x_decomp_dev_graph_components(self._did(W), comp._d.id, [n])
+            return comp, int(c)
+        comp = _M.zeros(n, 1)
+        c = self.b.x_decomp_graph_components(W.addr, comp.addr, [n])
+        return comp, int(c)
+
+    def graph_join(self, W, D, comp, C):
+        """sklearn `_fix_connected_components`, W changed in place."""
+        n = W.r
+        if self._res():
+            self.b.x_decomp_dev_graph_join(self._did(W), self._did(D), self._did(comp), [n, C])
+            return W
+        self.b.x_decomp_graph_join(W.addr, D.addr, comp.addr, [n, C])
+        return W
 
     def barycenter(self, X, Y, nbr, reg):
         """sklearn barycenter_weights: (n x k) weights of each row of X on
         its k neighbors in Y (`nbr`: n lists of k indices)."""
-        n, k = X.r, len(nbr[0])
-        idx = _M.of([float(j) for row in nbr for j in row], n, k)
+        if isinstance(nbr, _M):
+            n, k, idx = X.r, nbr.c, nbr
+        else:
+            n, k = X.r, len(nbr[0])
+            idx = _M.of([float(j) for row in nbr for j in row], n, k)
         W, flags = _M.zeros(n, k), _M.zeros(n, 1)
         self.b.x_decomp_barycenter_rows(X.addr, Y.addr, idx.addr, W.addr, flags.addr, [n, Y.r, X.c, k], float(reg))
         return W
@@ -2949,12 +3040,26 @@ def _dist(k, A, B, kind, pw, same=False):
     return D
 
 
+def _knn_mats(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
+    """`_knn_lists` as two matrices (indices as exact floats, distances),
+    n x n_neighbors, selected by the `graph_knn` cell (resident on the GPU
+    binding)."""
+    D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
+    return k.graph_knn(D, n_neighbors, exclude_self)
+
+
 def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
     """(indices, distances) of the n_neighbors nearest rows of X for every
     row of Q, ascending, ties to the lower index; `exclude_self` drops the
     query's own index (queries ARE the training rows). kind 0 returns
     SQUARED Euclidean distances (the callers take the root); any other kind
     the `_dist` distances themselves."""
+    if not _PY_GRAPH:
+        im, dm = _knn_mats(k, Q, X, n_neighbors, exclude_self, kind, pw)
+        nn = n_neighbors
+        iv, dv = im.s, dm.s
+        return ([[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)],
+                [list(dv[i * nn:(i + 1) * nn]) for i in range(Q.r)])
     D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
     idx, dst = [], []
     take = n_neighbors + (1 if exclude_self else 0)
@@ -3174,6 +3279,51 @@ class Isomap(_Base):
         k = self._kit()
         M = _M.from_input(X)
         n = M.r
+        if not _PY_GRAPH:
+            Wg, nn = self._graph(k, M, n, kind, pw)
+        else:
+            Wg, nn = self._py_graph(k, M, n, kind, pw)
+        D = k.dijkstra(Wg)
+        self.dist_matrix_m_ = D
+        self.dist_matrix_ = D.out()
+        G = k.ew("scale", k.ew("sq", D), s=-0.5)
+        Kc, self._k_col, self._k_all = _center_kernel(k, G)
+        w, V = _top_eig(k, Kc, int(self.n_components), topk=self.eigen_solver in ("auto", "arpack"))
+        self.eigenvalues_m_ = w
+        self.eigenvectors_m_ = V
+        self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
+        self.embedding_ = self.embedding_m_.out()
+        self._fit_X, self._knn = M, nn
+        self.n_features_in_ = M.c
+        self._Kc = Kc
+        return self
+
+    def _graph(self, k, M, n, kind, pw):
+        """The neighbor graph, its components joined (sklearn
+        `_fix_connected_components`), all as graph cells (lane
+        hr2-graph-embed): resident on the GPU binding."""
+        if self.radius is not None:
+            D = _dist(k, M, M, kind, pw, same=True)
+            Wg = k.graph_radius(D, _f32(float(self.radius)))
+            nn = None
+        else:
+            nn = int(self.n_neighbors)
+            idx, sq = _knn_mats(k, M, M, nn, True, kind, pw)
+            if kind == 0:
+                sq = k.ew("sqrt", sq)
+            Wg = k.graph_knn_dense(idx, sq, n)
+        comp, C = k.graph_components(Wg)
+        self.n_connected_components_ = C
+        if C > 1:
+            import warnings
+            warnings.warn(f"The number of connected components of the neighbors graph is {C} > 1. "
+                          "Completing the graph to fit Isomap might be slow.", stacklevel=3)
+            D = _dist(k, M, M, kind, pw, same=True)
+            k.graph_join(Wg, D, comp, C)
+        return Wg, nn
+
+    def _py_graph(self, k, M, n, kind, pw):
+        """MOJOLEARN_XD_PY_GRAPH=1 (A/B): the Python graph build."""
         Wg = _M.zeros(n, n)
         adj = [[] for _ in range(n)]      # neighbors either way, for the component walk
         if self.radius is not None:
@@ -3200,20 +3350,7 @@ class Isomap(_Base):
                     adj[i].append(j)
                     adj[j].append(i)
         Wg, self.n_connected_components_ = _fix_components(k, M, Wg, kind, pw, adj)
-        D = k.dijkstra(Wg)
-        self.dist_matrix_m_ = D
-        self.dist_matrix_ = D.out()
-        G = k.ew("scale", k.ew("sq", D), s=-0.5)
-        Kc, self._k_col, self._k_all = _center_kernel(k, G)
-        w, V = _top_eig(k, Kc, int(self.n_components), topk=self.eigen_solver in ("auto", "arpack"))
-        self.eigenvalues_m_ = w
-        self.eigenvectors_m_ = V
-        self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
-        self.embedding_ = self.embedding_m_.out()
-        self._fit_X, self._knn = M, nn
-        self.n_features_in_ = M.c
-        self._Kc = Kc
-        return self
+        return Wg, nn
 
     def fit_transform(self, X, y=None):
         return self.fit(X).embedding_
@@ -3714,8 +3851,17 @@ class LocallyLinearEmbedding(_Base):
                              "[n_components * (n_components + 3) / 2]")
         if self.method == "modified" and nn < nc:
             raise ValueError("modified LLE requires n_neighbors >= n_components")
-        idx, _ = _knn_lists(k, M, M, nn, True)
-        if self.method == "ltsa":
+        if self.method == "standard" and not _PY_GRAPH:
+            # lane hr2-graph-embed: the kNN, the barycenter weights and I - W
+            # as cells, I - W resident on the GPU binding
+            idm, _ = _knn_mats(k, M, M, nn, True)
+            IW = k.graph_lle_iw(idm, k.barycenter(M, M, idm, self.reg), n)
+            idx = None
+        else:
+            idx, _ = _knn_lists(k, M, M, nn, True)
+        if idx is None:
+            pass
+        elif self.method == "ltsa":
             IW = self._ltsa_factor(k, M, idx, nn, nc)
         elif self.method == "hessian":
             IW = self._hessian_factor(k, M, idx, nn, nc)

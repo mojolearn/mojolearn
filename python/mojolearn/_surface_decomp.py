@@ -26,7 +26,7 @@ FAMILIES = (
         forest_kinds=(),
         classes=("IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "NMF", "FastICA", "FactorAnalysis", "SpectralEmbedding", "lu_factor", "lstsq", "PLSRegression", "PLSCanonical", "CCA", "DictionaryLearning", "MiniBatchDictionaryLearning", "SparsePCA", "MiniBatchSparsePCA", "LatentDirichletAllocation", "Isomap", "MDS", "ClassicalMDS", "LocallyLinearEmbedding", "MinCovDet", "EllipticEnvelope", "AlternatingLeastSquares", "SparseCoder"),
         display="the decomposition and linear algebra expansion",
-        host_modules=("x_decomp/host.mojo", "x_decomp/host_simd.mojo", "x_decomp/host_graph.mojo", "x_decomp/host_qr.mojo", "x_decomp/host_jacobi.mojo", "x_decomp/host_lda.mojo", "x_decomp/host_ew.mojo", "x_decomp/cells.mojo", "x_decomp/api.mojo", "x_decomp/exec_trait.mojo", "x_decomp/kit.mojo", "x_decomp/mcd.mojo", "x_decomp/lda_online.mojo", "x_decomp/moves.mojo"),
+        host_modules=("x_decomp/host.mojo", "x_decomp/host_simd.mojo", "x_decomp/host_graph.mojo", "x_decomp/host_qr.mojo", "x_decomp/host_jacobi.mojo", "x_decomp/host_lda.mojo", "x_decomp/host_ew.mojo", "x_decomp/cells.mojo", "x_decomp/api.mojo", "x_decomp/exec_trait.mojo", "x_decomp/kit.mojo", "x_decomp/mcd.mojo", "x_decomp/lda_online.mojo", "x_decomp/moves.mojo", "x_decomp/graph_cells.mojo"),
         exports=(
             "x_decomp_host_numeric_mode", "x_decomp_host_vendor", "x_decomp_host_column", "x_decomp_host_sabotage",
             "x_decomp_gemm", "x_decomp_ew", "x_decomp_colsum", "x_decomp_rowsum", "x_decomp_sqdist",
@@ -34,6 +34,9 @@ FAMILIES = (
             # lane py-decomp-nbrs (2026-09-28): fast_mcd, LDA online and the MDS / Isomap moves
             "x_decomp_mcd", "x_decomp_lda_online", "x_decomp_gather", "x_decomp_scatter", "x_decomp_triu_nonzero",
             "x_decomp_argsort_f32", "x_decomp_iso_order",
+            # lane hr2-graph-embed (2026-10-02): the Isomap / LLE graph builds as cells
+            "x_decomp_graph_knn", "x_decomp_graph_knn_dense", "x_decomp_graph_radius", "x_decomp_graph_lle_iw",
+            "x_decomp_graph_components", "x_decomp_graph_join", "x_decomp_graph_dijkstra",
             "x_decomp_numeric_mode", "x_decomp_vendor",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
