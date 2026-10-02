@@ -79,7 +79,7 @@ from metrics.checks.pinned_sum import (
     PINNED_SUM_TPB,
     PINNED_SUM_W,
     chunk_count,
-    host_fold_partials,
+    device_fold_partials,
     linear_block_id,
     physical_block_count,
     virtual_block_sum,
@@ -277,14 +277,7 @@ def silhouette_score_launch[
         grid_dim=(sgx, sgy, 1),
         block_dim=(block_size, 1, 1),
     )
-    var h = ctx.enqueue_create_host_buffer[DType.float32](chunks)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=partials)
-    ctx.synchronize()
-    var lst = List[Float32]()
-    for c in range(chunks):
-        lst.append(h.unsafe_ptr().unsafe_load(c))
-    var total = host_fold_partials(lst, chunks)
-    _ = h^
+    var total = device_fold_partials(ctx, partials, chunks)
     _ = partials^
     _ = a^
     _ = b^

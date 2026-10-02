@@ -13,6 +13,12 @@ from ._arrays import _addr, _addr_ro
 
 __all__ = ['MinMaxScaler', 'StandardScaler']
 
+
+class NotFittedError(ValueError, AttributeError):
+    """Raised by transform before fit, with scikit-learn's `NotFittedError`
+    bases (ValueError and AttributeError), so callers that catch either keep
+    working without this module importing scikit-learn."""
+
 #: The saved-model format of both scalers (lane/inference-linear-svm,
 #: 2026-09-15): `mojolearn.host_model(path)` transforms from it on a CPU.
 _SCALER_FORMAT = "mojolearn-scaler-1"
@@ -239,9 +245,14 @@ class _ScalerProtocol:
         return hasattr(self, 'scale_') and hasattr(self, 'numeric_mode_')
 
     def __sklearn_tags__(self):
-        from sklearn.utils import Tags, TargetTags, TransformerTags
-        return Tags(estimator_type=None, target_tags=TargetTags(required=False),
-                    transformer_tags=TransformerTags(preserves_dtype=['float32']))
+        """scikit-learn's tag protocol, read only by scikit-learn: the shared
+        `_mode.ParamsMixin` answer (no estimator type, no required target),
+        with float32-preserving transformer tags from the same tag module."""
+        import sys
+        from ._mode import ParamsMixin
+        tags = ParamsMixin.__sklearn_tags__(self)
+        tags.transformer_tags = sys.modules[type(tags).__module__].TransformerTags(preserves_dtype=['float32'])
+        return tags
 
 
 class MinMaxScaler(_ScalerProtocol):
@@ -391,10 +402,6 @@ class MinMaxScaler(_ScalerProtocol):
 
     def _transform(self, X, inverse):
         if not self.__sklearn_is_fitted__():
-            try:
-                from sklearn.exceptions import NotFittedError
-            except ImportError:
-                NotFittedError = RuntimeError
             raise NotFittedError('MinMaxScaler is not fitted')
         values, finite, copied = self._input(X, allow_nan=True, with_copied=True)
         n, d = values.shape
@@ -619,10 +626,6 @@ class StandardScaler(_ScalerProtocol):
             raise ValueError('StandardScaler transform copy must be a bool or None')
         copy = self.copy if copy is None else copy
         if not self.__sklearn_is_fitted__():
-            try:
-                from sklearn.exceptions import NotFittedError
-            except ImportError:
-                NotFittedError = RuntimeError
             raise NotFittedError('StandardScaler is not fitted')
         values, finite, copied = self._input(X, allow_nan=True, with_copied=True)
         n, d = values.shape

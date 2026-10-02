@@ -12,29 +12,26 @@ from std.ffi import _Global
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from std.time import perf_counter_ns
-from core.host_parallel import host_parallelize
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA, COLUMN_AMD
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
-from core.forest_inference import validate_flat_forest, require_finite, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES
+from core.forest_inference import (
+    validate_flat_forest, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES,
+    device_all_finite,
+)
 from core.forest_inference_pool import PooledForest, forest_device_count
 from core.neural_context import process_ctx
 
 
-#: DEVIATION 2962 (lane/forest-groves-cpu-and-speed, 2026-09-17): the two
-#: per-call host scans of the resident path (input finiteness before the
-#: upload, output finiteness after the readback) run 16 lanes wide in chunks
-#: across the host pool instead of one scalar compare per element. The
-#: verdict is the same predicate on the same bits (exponent field all ones);
-#: no arithmetic. With `MOJOLEARN_FOREST_PINNED_STAGE=1` the input scan is
-#: fused with a copy into a pinned host stage retained beside the device
-#: workspace pair (FOREST-IO-REUSE-1's lifetime), and the upload reads the
-#: stage, so the caller's pageable rows cross to the device from pinned
-#: memory. Both are host glue; the kernel, its 32-group topology, the
-#: reduction order and the FTZ rules are untouched. `MOJOLEARN_FOREST_PROFILE=1`
-#: prints one line per call with the nanoseconds of each stage, the
-#: stream drained between stages so the numbers attribute; it is a
-#: diagnostic build, never a timed arm.
+#: The resident path checks its input and output for non-finite values on
+#: the device where they land (`device_all_finite`, core/forest_inference);
+#: the host scans of DEVIATION 2962 are gone (cpu-gpu-cleanup). With
+#: `MOJOLEARN_FOREST_PINNED_STAGE=1` a pinned host stage is still retained
+#: beside the device workspace pair (FOREST-IO-REUSE-1's lifetime) but the
+#: upload reads the caller's rows. `MOJOLEARN_FOREST_PROFILE=1` prints one
+#: line per call with the nanoseconds of each stage, the stream drained
+#: between stages so the numbers attribute; it is a diagnostic build, never
+#: a timed arm.
 comptime FOREST_PINNED_STAGE = is_defined["MOJOLEARN_FOREST_PINNED_STAGE"]()
 comptime FOREST_PROFILE = is_defined["MOJOLEARN_FOREST_PROFILE"]()
 
@@ -81,66 +78,6 @@ comptime FOREST_ORDERED_RESIDENT = forest_ordered_resident_policy[
     is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT"](),
     is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"](),
 ]()
-comptime FOREST_CHECK_W = 16
-comptime FOREST_CHECK_CHUNK = 1 << 20
-comptime FOREST_CHECK_SERIAL = 1 << 16
-
-
-@always_inline
-def _nonfinite_lanes(v: SIMD[DType.float32, FOREST_CHECK_W]) -> Int:
-    var e = bitcast[DType.uint32](v) & SIMD[DType.uint32, FOREST_CHECK_W](0x7f800000)
-    return Int(e.eq(SIMD[DType.uint32, FOREST_CHECK_W](0x7f800000)).cast[DType.uint32]().reduce_add())
-
-
-def scan_finite_f32(src: MutPointer[Float32, MutAnyOrigin], dst: MutPointer[Float32, MutAnyOrigin],
-                    n: Int, copy: Bool) -> Bool:
-    """DEVIATION 2962: True when every one of the `n` floats at `src` is
-    finite; with `copy`, also moves them to `dst` (a pure byte move) in the
-    same pass. Chunks across the host pool above `FOREST_CHECK_SERIAL`."""
-    if n <= 0:
-        return True
-    var chunks = (n + FOREST_CHECK_CHUNK - 1) // FOREST_CHECK_CHUNK
-    var flags = List[Int](length=chunks, fill=0)
-    var fp = flags.unsafe_ptr()
-
-    def _chunk(k: Int) {imm src, imm dst, imm n, imm copy, imm fp}:
-        var i0 = k * FOREST_CHECK_CHUNK
-        var i1 = i0 + FOREST_CHECK_CHUNK
-        if i1 > n:
-            i1 = n
-        var bad = 0
-        var i = i0
-        while i + FOREST_CHECK_W <= i1:
-            var v = src.unsafe_load[width=FOREST_CHECK_W](i)
-            if copy:
-                dst.unsafe_store[width=FOREST_CHECK_W](i, v)
-            bad += _nonfinite_lanes(v)
-            i += FOREST_CHECK_W
-        while i < i1:
-            var s = src.unsafe_load(i)
-            if copy:
-                dst.unsafe_store(i, s)
-            if (bitcast[DType.uint32](s) & UInt32(0x7f800000)) == UInt32(0x7f800000):
-                bad += 1
-            i += 1
-        if bad > 0:
-            fp.unsafe_store(k, 1)
-
-    if chunks == 1 or n < FOREST_CHECK_SERIAL:
-        for k in range(chunks):
-            _chunk(k)
-    else:
-        host_parallelize(_chunk, chunks)
-    _ = len(flags)
-    for k in range(chunks):
-        if flags[k] != 0:
-            return False
-    return True
-
-
-def require_finite_pointer(values: MutPointer[Float32, MutAnyOrigin], count: Int) raises:
-    if not scan_finite_f32(values, values, count, False):
-        raise Error("resident forest requires finite Float32 values")
 
 
 struct ForestIOWorkspace(Defaultable, Movable):
@@ -396,7 +333,6 @@ struct ResidentForest(Movable):
             raise Error("resident forest prediction dimensions exceed Int32")
         if len(x) != rows * features:
             raise Error("resident forest input shape mismatch")
-        require_finite(x)
         if rows == 0:
             return List[Float32]()
         if self.pool:
@@ -408,9 +344,12 @@ struct ResidentForest(Movable):
             return result^
         var dx = self.ctx.value().enqueue_create_buffer[DType.float32](len(x))
         var dout = self.ctx.value().enqueue_create_buffer[DType.float32](rows * outputs)
+        var out_ok = True
         var hout = self.ctx.value().enqueue_create_host_buffer[DType.float32](rows * outputs)
         try:
             self.ctx.value().enqueue_copy(dst_buf=dx, src_ptr=x.unsafe_ptr())
+            if not device_all_finite(self.ctx.value(), dx, rows * features):
+                raise Error("resident forest requires finite Float32 values")
             if self.ordered:
                 launch_forest_inference[RF_INPUT, False, FOREST_PACKED_NODES](
                     self.ctx.value(), self.offsets.value(), self.columns.value(),
@@ -423,6 +362,7 @@ struct ResidentForest(Movable):
                     self.thresholds.value(), self.left.value(), self.leaves.value(),
                     dx, dout, rows, features, outputs, self.trees,
                 )
+            out_ok = device_all_finite(self.ctx.value(), dout, rows * outputs)
             self.ctx.value().enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
             self.ctx.value().synchronize()
         except e:
@@ -432,7 +372,8 @@ struct ResidentForest(Movable):
         var result = List[Float32](capacity=rows * outputs)
         for i in range(rows * outputs):
             result.append(hout.unsafe_ptr().unsafe_load(i))
-        require_finite(result)
+        if not out_ok:
+            raise Error("resident forest requires finite Float32 values")
         _ = len(x)
         _ = dx^
         _ = dout^
@@ -454,10 +395,8 @@ struct ResidentForest(Movable):
         if rows < 0 or rows > 2147483647 // features or rows > 2147483647 // outputs:
             raise Error("resident forest prediction dimensions exceed Int32")
         if rows == 0:
-            require_finite_pointer(x, 0)
             return
         if self.pool:
-            require_finite_pointer(x, rows * features)
             self.pool.value().predict_into[RF_INPUT](x, output, rows)
             return
         if reuse_io and self.shared:
@@ -537,6 +476,8 @@ struct ResidentForest(Movable):
         rows: Int, features: Int, outputs: Int) raises:
         """`predict_labels`' device leg on a given workspace."""
         self.ctx.value().enqueue_copy(dst_buf=dx, src_ptr=x)
+        if not device_all_finite(self.ctx.value(), dx, rows * features):
+            raise Error("resident forest requires finite Float32 values")
         if self.ordered:
             launch_forest_inference[RF_INPUT, False, FOREST_PACKED_NODES](
                 self.ctx.value(), self.offsets.value(), self.columns.value(),
@@ -549,6 +490,8 @@ struct ResidentForest(Movable):
                 self.thresholds.value(), self.left.value(), self.leaves.value(),
                 dx, dout, rows, features, outputs, self.trees,
             )
+        if not device_all_finite(self.ctx.value(), dout, rows * outputs):
+            raise Error("resident forest requires finite Float32 values")
         launch_forest_argmax(self.ctx.value(), dout, dlab, rows, outputs)
         self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=dlab)
         self.ctx.value().synchronize()
@@ -562,24 +505,10 @@ struct ResidentForest(Movable):
         if rows < 0 or rows > 2147483647 // features or rows > 2147483647 // outputs:
             raise Error("resident forest prediction dimensions exceed Int32")
         if self.pool:
-            require_finite_pointer(x, rows * features)
-            var votes = List[Float32](length=rows * outputs, fill=Float32(0))
-            self.pool.value().predict_into[RF_INPUT](
-                x, votes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows)
-            for row in range(rows):
-                var best = 0
-                var best_value = votes[row * outputs]
-                for c in range(1, outputs):
-                    if votes[row * outputs + c] > best_value:
-                        best = c
-                        best_value = votes[row * outputs + c]
-                output.unsafe_store(row, Int32(best))
-            _ = votes^
+            self.pool.value().predict_labels_into[RF_INPUT](x, output, rows)
             return
         if rows == 0:
-            require_finite_pointer(x, 0)
             return
-        require_finite_pointer(x, rows * features)
         if self.shared:
             var io = RF_IO.get_or_create_ptr()
             comptime if not RF_INPUT:
@@ -598,6 +527,8 @@ struct ResidentForest(Movable):
                 if not self.label_workspace:
                     self.label_workspace = self.ctx.value().enqueue_create_buffer[DType.int32](rows)
                 self.ctx.value().enqueue_copy(dst_buf=self.input_workspace.value(), src_ptr=x)
+                if not device_all_finite(self.ctx.value(), self.input_workspace.value(), rows * features):
+                    raise Error("resident forest requires finite Float32 values")
                 if self.ordered:
                     launch_forest_inference[RF_INPUT, False, FOREST_PACKED_NODES](
                         self.ctx.value(), self.offsets.value(), self.columns.value(),
@@ -612,6 +543,8 @@ struct ResidentForest(Movable):
                         self.input_workspace.value(), self.output_workspace.value(), rows,
                         features, outputs, self.trees,
                     )
+                if not device_all_finite(self.ctx.value(), self.output_workspace.value(), rows * outputs):
+                    raise Error("resident forest requires finite Float32 values")
                 launch_forest_argmax(self.ctx.value(), self.output_workspace.value(),
                                      self.label_workspace.value(), rows, outputs)
                 self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=self.label_workspace.value())
@@ -619,9 +552,6 @@ struct ResidentForest(Movable):
             except e:
                 self.ctx.value().synchronize()
                 raise e
-        for row in range(rows):
-            if output.unsafe_load(row) < 0:
-                raise Error("resident forest requires finite Float32 values")
 
 
 def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
@@ -642,12 +572,16 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
     var t4 = 0
     comptime if FOREST_PROFILE:
         t0 = Int(perf_counter_ns())
-    if not scan_finite_f32(x, stage, rows * features, staged):
-        raise Error("resident forest requires finite Float32 values")
+    # the input goes up as it is and is scanned where it lands (the host
+    # scan and the staging copy are gone; `stage` is unused)
+    _ = staged
+    _ = stage
     comptime if FOREST_PROFILE:
         t1 = Int(perf_counter_ns())
     try:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=stage)
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        if not device_all_finite(ctx, dx, rows * features):
+            raise Error("resident forest requires finite Float32 values")
         comptime if FOREST_PROFILE:
             ctx.synchronize()
             t2 = Int(perf_counter_ns())
@@ -662,12 +596,13 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
             t3 = Int(perf_counter_ns())
         ctx.enqueue_copy(dst_ptr=output, src_buf=dout)
         ctx.synchronize()
+        if not device_all_finite(ctx, dout, rows * outputs):
+            raise Error("resident forest requires finite Float32 values")
     except e:
         ctx.synchronize()
         raise e
     comptime if FOREST_PROFILE:
         t4 = Int(perf_counter_ns())
-    require_finite_pointer(output, rows * outputs)
     comptime if FOREST_PROFILE:
         var t5 = Int(perf_counter_ns())
         print("FOREST_PROFILE rows", rows, "features", features, "outputs", outputs,

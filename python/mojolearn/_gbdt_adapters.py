@@ -17,6 +17,12 @@ from ._arrays import _addr, _addr_ro
 from .ensemble import GradientBoosting
 
 
+class NotFittedError(ValueError, AttributeError):
+    """Raised before fit, with scikit-learn's `NotFittedError` bases
+    (ValueError and AttributeError), so callers that catch either keep
+    working without this module importing scikit-learn."""
+
+
 class _GBDTAdapter:
     _loss = None
 
@@ -82,22 +88,20 @@ class _GBDTAdapter:
 
     def _check_fitted(self):
         if not self.__sklearn_is_fitted__():
-            try:
-                from sklearn.exceptions import NotFittedError
-            except ImportError:
-                NotFittedError = RuntimeError
             raise NotFittedError(f'{type(self).__name__} is not fitted')
 
     def __sklearn_is_fitted__(self):
         return getattr(getattr(self, '_learner_', None), 'model_', None) is not None
 
     def __sklearn_tags__(self):
-        from sklearn.utils import Tags, TargetTags, ClassifierTags, RegressorTags
-        classifier = self._estimator_type == 'classifier'
-        return Tags(estimator_type=self._estimator_type,
-                    target_tags=TargetTags(required=True),
-                    classifier_tags=ClassifierTags(multi_class=False) if classifier else None,
-                    regressor_tags=None if classifier else RegressorTags())
+        """scikit-learn's tag protocol, read only by scikit-learn: the shared
+        `_mode.ParamsMixin` answer, with the classifier marked binary-only
+        (these adapters fit binary Logloss)."""
+        from ._mode import ParamsMixin
+        tags = ParamsMixin.__sklearn_tags__(self)
+        if tags.classifier_tags is not None:
+            tags.classifier_tags.multi_class = False
+        return tags
 
     def _fit_native(self, X, y, sample_weight, eval_set):
         raw_mode = self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()

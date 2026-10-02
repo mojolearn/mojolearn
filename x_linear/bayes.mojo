@@ -161,56 +161,61 @@ def _t_sse(t: Team, x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, 
 
 
 #: FAST on Apple (lane/apple-fast-classical, 2026-10-02): the evidence
-#: iteration's sse from the normal equations instead of a pass over the rows.
-#: With yy = |y - ym|^2, q = Xc'yc and G = Xc'Xc already in hand,
-#: |yc - Xc w|^2 = yy - 2 w'q + w'G w: O(d) (BayesianRidge, in the
+#: iteration's sse from the normal equations instead of a pass over the rows,
+#: relative to a REFERENCE row pass (lane/apple-fast-bayes): with s0 the sse
+#: of a row pass at w0, dw = w - w0, q = Xc'yc and G = Xc'Xc,
+#: |yc - Xc w|^2 = s0 + dw'(G (w + w0) - 2 q): O(d) (BayesianRidge, in the
 #: eigenbasis) or O(d^2) (ARD) an iteration in place of n * d on ONE block
-#: (300 iterations x 1M rows x 220 features of `_t_sse`). Unweighted fits
-#: only; ip[5] (set by x_linear/device.mojo, `MOJOLEARN_X_LINEAR_GRAM_SSE=0`
-#: is the A/B arm) turns it on. IDENTICAL and the other vendors never compile it.
+#: (300 iterations x 1M rows x 220 features of `_t_sse`). The plain form
+#: yy - 2 w'q + w'G w cancelled to below zero on istella (220 features,
+#: near-null Gram directions with f32 noise eigenvalues, w huge along them):
+#: sse clamped to 0, alpha to inf, coef NaN. The delta form carries an error
+#: bound (2^-12 relative on every entry of G and q); when it could move sse by
+#: more than 2^-8 of itself (or sse is not positive or finite) that iteration
+#: makes the row pass and it becomes the new reference. Unweighted fits, n >= d
+#: (w0 lives in the host's sse scratch, unused on the device); ip[5] (set by
+#: x_linear/device.mojo, `MOJOLEARN_X_LINEAR_GRAM_SSE=0` is the A/B arm) turns
+#: it on. IDENTICAL and the other vendors never compile it.
 comptime X_LINEAR_GRAM_SSE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+#: |error| <= mag * 2^-12 must stay <= 2^-8 * sse: mag * 2^-4 <= sse
+comptime GRAM_SSE_TRUST = Float32(0.0625)
 
 
-def _t_yy(t: Team, y: FP, n: Int, ym: Float32) -> Float32:
-    """|y - ym|^2 on the team: strided per-thread partials in team row 0,
-    the lead folds the nt partials; broadcast."""
-    var acc = Float32(0)
-    if n >= t.nt:
-        var pr = t.row(0)
-        var a = Float32(0)
-        for i in range(t.tid, n, t.nt):
-            var r = fs(ld(y, i), ym)
-            a = fmad(r, r, a)
-        st(pr, t.tid, a)
-        t.sync()
-        if t.lead():
-            for k in range(t.nt):
-                acc = fa(acc, ld(pr, k))
-    elif t.lead():
-        for i in range(n):
-            var r = fs(ld(y, i), ym)
-            acc = fmad(r, r, acc)
-    return t.bcast(acc)
-
-
-def _t_sse_gram(t: Team, fw: FP, gg: Int, xty: Int, res: FP, d: Int, yy: Float32) -> Float32:
-    """yy - 2 w'q + w'G w on the team (G intact at gg, q at xty, w in res):
-    thread j's term w_j (G w)_j - 2 w_j q_j in team row 0, the lead's sum."""
+def _t_sse_delta(t: Team, fw: FP, gg: Int, xty: Int, res: FP, w0: Int, d: Int, s0: Float32) -> Float32:
+    """s0 + dw'(G (w + w0) - 2 q) on the team (G intact at gg, q at xty, w in
+    res, w0 at fw[w0, w0 + d)): thread j's term dw_j ((G (w + w0))_j - 2 q_j)
+    in team row 0 and its magnitude |dw_j| (sum_k |G_jk| |w_k + w0_k| + 2 |q_j|)
+    in row 1, the lead's sums. Returns -1 when the bound says untrusted."""
     var pr = t.row(0)
+    var pm = t.row(1)
     for j in range(t.tid, d, t.nt):
-        var wj = ld(res, j)
-        var g = Float32(0)
-        if wj != 0:
+        var dw = fs(ld(res, j), ld(fw, w0 + j))
+        var c = Float32(0)
+        var m = Float32(0)
+        if dw != 0:
+            var g = Float32(0)
+            var ga = Float32(0)
             for k in range(d):
-                g = fmad(ld(fw, gg + j * d + k), ld(res, k), g)
-        st(pr, j, fs(fm(wj, g), fm(fm(Float32(2), wj), ld(fw, xty + j))))
+                var gjk = ld(fw, gg + j * d + k)
+                var ws = fa(ld(res, k), ld(fw, w0 + k))
+                g = fmad(gjk, ws, g)
+                ga = fmad(fabs(gjk), fabs(ws), ga)
+            var q = ld(fw, xty + j)
+            c = fm(dw, fs(g, fm(Float32(2), q)))
+            m = fm(fabs(dw), fa(ga, fm(Float32(2), fabs(q))))
+        st(pr, j, c)
+        st(pm, j, m)
     t.sync()
-    var s = Float32(0)
+    var s = Float32(-1)
     if t.lead():
         var acc = Float32(0)
+        var mag = Float32(0)
         for j in range(d):
             acc = fa(acc, ld(pr, j))
-        s = fmax(fa(yy, acc), Float32(0))
+            mag = fa(mag, ld(pm, j))
+        var v = fa(s0, acc)
+        if fm(mag, GRAM_SSE_TRUST) <= v:
+            s = v
     return t.bcast(s)
 
 
@@ -508,11 +513,16 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
     var vty = gg + d * d + d + d * d
     var tmp = vty + 2 * d
     var gram_sse = False
-    var yy = Float32(0)
+    var have_ref = False
+    var s0 = Float32(0)  # the reference row pass's sse, at z0
+    var z0 = 3 * d * d + 5 * d  # the host's sse scratch (n >= d words), unused on the device
+    var emax = Float32(0)
     comptime if is_gpu() and X_LINEAR_GRAM_SSE:
-        if not sw and ldi(ip, 5) != 0:
+        if not sw and n >= d and ldi(ip, 5) != 0:
             gram_sse = True
-            yy = _t_yy(t, y, n, ym)
+            if t.lead():
+                for k in range(d):
+                    emax = fmax(emax, fabs(ld(fw, gg + k * d + k)))
     var iters = 0
     for it in range(max_iter + 1):
         if t.lead():
@@ -525,17 +535,37 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
         comptime if is_gpu() and X_LINEAR_GRAM_SSE:
             if gram_sse:
                 # w = V z, z_k = vty_k / (ev_k+ + lam/alpha); in the eigenbasis
-                # yy - 2 w'q + w'G w = yy - sum_k (2 z_k vty_k - ev_k z_k^2)
+                # (G = V diag(ev) V', q = V vty) the delta form is
+                # s0 + sum_k dz_k (ev_k (z_k + z0_k) - 2 vty_k); its bound takes
+                # every eigenvalue off by 2^-12 (|ev_k| + max |ev|)
                 var s = Float32(0)
-                if t.lead():
+                var fresh = 1
+                if t.lead() and have_ref:
                     var ratio = fd(lam, alpha)
                     var acc = Float32(0)
+                    var mag = Float32(0)
                     for k in range(d):
                         var v = ld(fw, vty + k)
+                        var e = ld(fw, gg + k * d + k)
                         var z = fd(v, fa(ld(fw, tmp + k), ratio))
-                        acc = fa(acc, fs(fm(fm(Float32(2), z), v), fm(ld(fw, gg + k * d + k), fm(z, z))))
-                    s = fmax(fs(yy, acc), Float32(0))
-                sse = t.bcast(s)
+                        var zo = ld(fw, z0 + k)
+                        var dz = fs(z, zo)
+                        var zs = fa(z, zo)
+                        acc = fmad(dz, fs(fm(e, zs), fm(Float32(2), v)), acc)
+                        mag = fmad(fabs(dz), fa(fm(fa(fabs(e), emax), fabs(zs)), fm(Float32(2), fabs(v))), mag)
+                    s = fa(s0, acc)
+                    if fm(mag, GRAM_SSE_TRUST) <= s:
+                        fresh = 0
+                if t.bcast_int(fresh, 0) == 0:
+                    sse = t.bcast(s)
+                else:
+                    sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, sw, fw + 3 * d * d + 5 * d)
+                    s0 = sse
+                    have_ref = True
+                    if t.lead():
+                        var ratio = fd(lam, alpha)
+                        for k in range(d):
+                            st(fw, z0 + k, fd(ld(fw, vty + k), fa(ld(fw, tmp + k), ratio)))
             else:
                 sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, sw, fw + 3 * d * d + 5 * d)
         else:
@@ -705,11 +735,12 @@ def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             sti(iw, keep + j, 1)
     alpha = t.bcast(alpha, 2)
     var gram_sse = False
-    var yy = Float32(0)
+    var have_ref = False
+    var s0 = Float32(0)  # the reference row pass's sse, at w0
+    var w0 = 3 * d * d + 4 * d  # the host's sse scratch (n >= d words), unused on the device
     comptime if is_gpu() and X_LINEAR_GRAM_SSE:
         if ldi(ip, 5) != 0 and n >= d:
             gram_sse = True
-            yy = _t_yy(t, y, n, ym)
     var iters = 0
     var any_kept = True
     for it in range(max_iter):
@@ -719,7 +750,18 @@ def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
         var sse: Float32
         comptime if is_gpu() and X_LINEAR_GRAM_SSE:
             if gram_sse:
-                sse = _t_sse_gram(t, fw, gg, xty, res, d, yy)
+                var s = Float32(-1)
+                if have_ref:
+                    s = _t_sse_delta(t, fw, gg, xty, res, w0, d, s0)
+                if s >= 0:
+                    sse = s
+                else:
+                    sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, False, fw + 3 * d * d + 4 * d)
+                    s0 = sse
+                    have_ref = True
+                    if t.lead():
+                        copy(fw, w0, res, 0, d)
+                    t.sync()
             else:
                 sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, False, fw + 3 * d * d + 4 * d)
         else:

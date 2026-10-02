@@ -372,7 +372,8 @@ def bgmm_score_entry[O: ClusterOps](
     mut ops: O, x: List[Float32], a: List[Float32], ip: List[Int]
 ) raises -> ClusterOut:
     """ip = [n, d, n_components]; a = means (k x d), precisions_cholesky
-    (k x d x d), constants (k). f = [log_resp (n x k), log_prob_norm (n)]."""
+    (k x d x d), constants (k). f = [log_resp (n x k), log_prob_norm (n)];
+    i = [labels (n), each row's first largest log responsibility]."""
     var n = ip[0]
     var d = ip[1]
     var kc = ip[2]
@@ -387,10 +388,12 @@ def bgmm_score_entry[O: ClusterOps](
         c.append(a[kc * d + kc * d * d + t])
     var lr = List[Float32]()
     var lpn = List[Float32]()
-    bgmm_score(ops, x, n, d, kc, means, pchol, c, lr, lpn)
+    var labels = List[Int32]()
+    bgmm_score(ops, x, n, d, kc, means, pchol, c, lr, lpn, labels)
     var out = ClusterOut()
     out.f.append(lr^)
     out.f.append(lpn^)
+    out.i.append(labels^)
     return out^
 
 

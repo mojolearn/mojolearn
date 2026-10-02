@@ -48,7 +48,7 @@ twice the row count and `n_ws = min(1024, 2n)`):
     Z  signed zero  n_ws=8 planted at the BLOCK-SOLVE ENTRY (row 39): every
                     f in the working set is a zero, +0.0 and -0.0 mixed,
                     keys a permutation, upper/lower sets split by y; two
-                    orders (A, B); block 32 and 1024
+                    orders (A, B); block 64 and 1024
     N  nan          refusals of non-finite X / labels / C / tol / gamma, and
                     a finite input whose linear kernel OVERFLOWS (DEVIATION 637)
 
@@ -100,6 +100,7 @@ from svm.checks.smo_oracle import (
 )
 from svm.impl.smoblocksolve import SMO_WS_SIZE
 from svm.impl.smosolver import (
+    SmoGridScratch,
     SmoSolver,
     SmoTrace,
     fold_order_for,
@@ -941,9 +942,10 @@ def _run_zero_fixture_device(
     var delta_alpha = upload_f32(ctx, da0)
     var rb0: List[Float32] = [Float32(0.0), Float32(0.0)]
     var return_buff = upload_f32(ctx, rb0)
+    var grid = SmoGridScratch(ctx)
     launch_block_solve(
         ctx, threads, y, 8, alpha, 8, delta_alpha, f, tile, ws_idx, C_vec,
-        Float32(1.0e-3), return_buff, 10000,
+        Float32(1.0e-3), return_buff, 10000, grid,
     )
     ctx.synchronize()
     var rb = read_f32(ctx, return_buff, 2)
@@ -957,12 +959,13 @@ def _run_zero_fixture_device(
     _ = alpha^
     _ = delta_alpha^
     _ = return_buff^
+    _ = grid^
     return (rb[0], Int(rb[1]), a_out^, da_out^)
 
 
 def check_block_solve_signed_zero_tie(ctx: DeviceContext) raises:
     """ROW 39, THE -0.0 FIXTURE: both zeros in one working set, both
-    orders, block 32 and 1024; device == oracle BITWISE on `diff` (the one
+    orders, block 64 and 1024; device == oracle BITWISE on `diff` (the one
     recorded bit a zero's sign can reach), n_iter, alpha and delta_alpha,
     and `diff` equals the value the smallest-key rule predicts.
 
@@ -989,7 +992,7 @@ def check_block_solve_signed_zero_tie(ctx: DeviceContext) raises:
         var o_diff = o[0]
         var o_iter = o[1]
         for which in range(2):
-            var threads = 32 if which == 0 else 1024
+            var threads = 64 if which == 0 else 1024
             var d = _run_zero_fixture_device(ctx, zf, threads)
             var d_diff = d[0]
             var d_iter = d[1]
