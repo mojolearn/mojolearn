@@ -1964,10 +1964,6 @@ def fit_device(
         while len(hip) < 5:
             hip.append(Int32(0))
         hip[4] = Int32(1 if ridge_pre else 0)
-    var lars_pre = False
-    comptime if MOMENTS_GRID:
-        lars_pre = (grid_gram and n > 0
-                    and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0")
     # lane/neural-pass87 (2026-10-01): BayesianRidge (unweighted) and ARD read
     # the same layout (xm at 0, G at d, ip[1] fit_intercept) and the same
     # centered Gram chains, which the team ran on ONE block (24,310 chains
@@ -1975,6 +1971,10 @@ def fit_device(
     var bayes_like = (algo == ALGO_BAYES and len(ip) > 2 and ip[2] == 0) or algo == ALGO_ARD
     if bayes_like and _bayes_grid_gram() and d > 0:
         grid_gram = True
+    var lars_pre = False
+    comptime if MOMENTS_GRID:
+        lars_pre = (algo == ALGO_LARS and grid_gram and n > 0
+                    and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0")
     if algo == ALGO_LARS or bayes_like:
         while len(hip) < 5:
             hip.append(Int32(0))
@@ -2013,6 +2013,19 @@ def fit_device(
         ctx.enqueue_function[mg_cross_kernel](
             dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), dfw.unsafe_ptr(),
             Int32(0), Int32(2 * d + d * d), Int32(d), Int32(d + d * d), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
+        )
+    elif grid_gram and bayes_like and MOMENTS_GRID and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0":
+        # lane/neural-pass130: BayesianRidge / ARD's means and centered Gram
+        # from the staged moments kernels (no Y columns), into the layout
+        # `xg_gram_kernel` fills (xm at 0, G at d): the same chains, staged
+        var tlb = mg_tiles(d, 0)
+        ctx.enqueue_function[mg_means_kernel](
+            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(0), Int32(hip[1]), dfw.unsafe_ptr(),
+            Int32(0), Int32(0), grid_dim=tlb, block_dim=MG_NT,
+        )
+        ctx.enqueue_function[mg_cross_kernel](
+            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(0), dfw.unsafe_ptr(),
+            Int32(0), Int32(0), Int32(d), Int32(0), grid_dim=tlb * (tlb + 1) // 2, block_dim=MG_NT,
         )
     elif grid_gram:
         # The means then the centered Gram into fw[0, d + d*d), the layout

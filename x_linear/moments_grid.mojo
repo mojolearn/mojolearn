@@ -40,7 +40,7 @@ def _augv(x: FP, y: FP, n: Int, d: Int, t_n: Int, row: Int, col: Int) -> Float32
     in-range addresses, the word selected (no branch per load)."""
     var rr = min(row, n - 1)
     var xv = ld(x, rr * d + min(col, d - 1))
-    var yv = ld(y, rr * t_n + min(max(col - d, 0), t_n - 1))
+    var yv = ld(y, rr * t_n + min(max(col - d, 0), max(t_n - 1, 0)))  # t_n == 0: a load in range, never selected
     var v = xv if col < d else yv
     return v if (row < n and col < d + t_n) else Float32(0)
 
