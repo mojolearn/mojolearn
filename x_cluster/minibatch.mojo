@@ -182,16 +182,15 @@ def minibatch_fit[O: ClusterOps](
     # every step). Unit weights and tol <= 0 only (the board's shape); `c`,
     # `w` and `steps_done` come back as the loop would leave them, the loop
     # is skipped (n_steps = 0) and `cslot` holds the final centers for the
-    # MB_DEVICE_STEP readback after it (else that readback would hand back
-    # the centers uploaded above).
+    # readback after the loop (else it would hand back the centers uploaded
+    # above).
     comptime if MINIBATCH_FAST_DEV:
         if not weighted and p.tol <= 0:
             if ops.minibatch_fast(
                 xs, n, d, k, batch, n_steps, p.max_no_improvement, p.reassignment_ratio, p.seed, rng, c, w, steps_done
             ):
                 n_steps = 0
-                comptime if MB_DEVICE_STEP:
-                    ops.set(cslot, c)
+                ops.set(cslot, c)
     for step in range(n_steps):
         var bidx = List[Int](capacity=batch)
         for _t in range(batch):
