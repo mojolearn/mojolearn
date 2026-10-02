@@ -596,6 +596,125 @@ def lu_trail_r4_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, n
                 a.unsafe_store(i * nn + j, acc[qa * LUR_R + qb])
 
 
+# ---- the panel LU trailing kernels (lane neural-pass135, 2026-10-02) -----------------------------
+#: The register-blocked trailing kernel: LU_RB x LU_RB cells a thread at
+#: stride LU_TILE, so a block of LU_TILE x LU_TILE threads owns an
+#: LU_RB_TILE x LU_RB_TILE tile; the L slab (LU_RB_TILE rows x NB, stored
+#: k-major) and the U slab (NB x LU_RB_TILE columns) in threadgroup memory.
+comptime LU_RB = 4
+comptime LU_RB_TILE = LU_TILE * LU_RB
+comptime LU_RB_SMEM_BYTES = (2 * LU_RB_TILE * LU_PANEL_NB + LU_PANEL_NB) * 4
+comptime LU_RB_FITS = lib_smem_page_fits_for[TARGET_COLUMN, LU_RB_SMEM_BYTES]()
+
+
+def lu_swaps_trsm_on() -> Bool:
+    """Whether the trailing columns' swaps and U rows run as ONE
+    `lu_swaps_trsm_kernel` launch (lane neural-pass135): MOJOLEARN_XD_LU_PANEL1=0
+    restores `lu_apply_swaps_kernel` + `lu_trsm_kernel` (the A/B arm).
+    (np135's one-block `lu_panel1_kernel` is not on main: a new one-block
+    launch, refused by tools/hooks/no_host_routes.py.)"""
+    return String(getenv("MOJOLEARN_XD_LU_PANEL1", "1")) != "0"
+
+
+def lu_trail_rb_on() -> Bool:
+    """Whether the trailing update runs `lu_trail_rb_kernel` (MOJOLEARN_XD_LU_
+    TRAIL_RB=0, or MOJOLEARN_XD_LU_PANEL1=0, keeps `lu_trail_tiled_kernel`;
+    a column whose shared limit cannot hold its page keeps it too)."""
+    comptime if not LU_RB_FITS:
+        return False
+    if String(getenv("MOJOLEARN_XD_LU_PANEL1", "1")) == "0":
+        return False
+    return String(getenv("MOJOLEARN_XD_LU_TRAIL_RB", "1")) != "0"
+
+
+def lu_swaps_trsm_kernel(a: F32Ptr, piv: I32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32):
+    """One thread per trailing column j >= k1: `lu_apply_swaps_kernel`'s
+    swaps, then `lu_trsm_kernel`'s U rows, in one launch. Both touch column
+    j only (the multipliers a[k, k'] they read are the panel's, final), so
+    a column's statements and their order are the two kernels' exactly."""
+    var nn = Int(n)
+    var j = Int(k1) + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < nn:
+        for k in range(Int(k0), Int(k1)):
+            lu_swap_elem(a, piv, k, j, nn)
+        for k in range(Int(k0) + 1, Int(k1)):
+            var acc = ftz(a.unsafe_load(k * nn + j))
+            for kp in range(Int(k0), k):
+                if act.unsafe_load(kp) != Float32(0):
+                    var l = a.unsafe_load(k * nn + kp)
+                    acc = ftz(identical_mul_add(-l, ftz(a.unsafe_load(kp * nn + j)), ftz(acc)))
+            a.unsafe_store(k * nn + j, acc)
+
+
+def lu_trail_rb_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, nb: Int32):
+    """`lu_trail_tiled_kernel` register-blocked: each thread owns LU_RB x
+    LU_RB cells (rows i0 + ty + LU_TILE r, columns j0 + tx + LU_TILE c),
+    every cell the panel's steps k' = k0 .. k1 - 1 in order, each
+    `lu_update_elem`'s statement with l = a[i, k'] (unflushed) and
+    u = ftz(a[k', j]), a step with act[k'] = 0 skipped: the same chain per
+    cell as the tiled kernel and the serial loop, with LU_RB^2 fused
+    multiply-adds per 2 LU_RB threadgroup loads instead of 1 per 2."""
+    var nn = Int(n)
+    var kk0 = Int(k0)
+    var kk1 = Int(k1)
+    var width = Int(nb)
+    var tid = Int(thread_idx.x)
+    var ty = tid // LU_TILE
+    var tx = tid - ty * LU_TILE
+    var i0 = kk1 + Int(block_idx.y) * LU_RB_TILE
+    var j0 = kk1 + Int(block_idx.x) * LU_RB_TILE
+    var ls = stack_allocation[LU_PANEL_NB * LU_RB_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var us = stack_allocation[LU_PANEL_NB * LU_RB_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var acts = stack_allocation[LU_PANEL_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    # the L slab, k-major: ls[k' * LU_RB_TILE + row] (unflushed, as the item reads l)
+    var q = tid
+    while q < LU_RB_TILE * width:
+        var rr = q // width
+        var cc = q - rr * width
+        var v = Float32(0)
+        if i0 + rr < nn:
+            v = a.unsafe_load((i0 + rr) * nn + kk0 + cc)
+        ls[cc * LU_RB_TILE + rr] = v
+        q += LU_TILE_TPB
+    # the U slab: us[k' * LU_RB_TILE + col] (flushed, as the item reads u)
+    q = tid
+    while q < width * LU_RB_TILE:
+        var rr = q // LU_RB_TILE
+        var cc = q - rr * LU_RB_TILE
+        var v = Float32(0)
+        if j0 + cc < nn:
+            v = ftz(a.unsafe_load((kk0 + rr) * nn + j0 + cc))
+        us[q] = v
+        q += LU_TILE_TPB
+    if tid < width:
+        acts[tid] = act.unsafe_load(kk0 + tid)
+    barrier()
+    var acc = InlineArray[Float32, LU_RB * LU_RB](fill=Float32(0))
+    comptime for r in range(LU_RB):
+        comptime for c in range(LU_RB):
+            var i = i0 + ty + LU_TILE * r
+            var j = j0 + tx + LU_TILE * c
+            if i < nn and j < nn:
+                acc[r * LU_RB + c] = ftz(a.unsafe_load(i * nn + j))
+    for kp in range(width):
+        if acts[kp] != Float32(0):
+            var lv = InlineArray[Float32, LU_RB](fill=Float32(0))
+            var uv = InlineArray[Float32, LU_RB](fill=Float32(0))
+            comptime for r in range(LU_RB):
+                lv[r] = ls[kp * LU_RB_TILE + ty + LU_TILE * r]
+            comptime for c in range(LU_RB):
+                uv[c] = us[kp * LU_RB_TILE + tx + LU_TILE * c]
+            comptime for r in range(LU_RB):
+                comptime for c in range(LU_RB):
+                    acc[r * LU_RB + c] = ftz(identical_mul_add(-lv[r], uv[c], ftz(acc[r * LU_RB + c])))
+    comptime for r in range(LU_RB):
+        comptime for c in range(LU_RB):
+            var i = i0 + ty + LU_TILE * r
+            var j = j0 + tx + LU_TILE * c
+            if i < nn and j < nn:
+                a.unsafe_store(i * nn + j, acc[r * LU_RB + c])
+
+
 def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
     if block_idx.x == 0 and thread_idx.x == 0:
         chol_serial(a, Int(n), info)
@@ -1441,6 +1560,8 @@ def launch_lu(
     var trail_r4 = String(getenv("MOJOLEARN_XD_LU_TRAIL_R4")) != "0"
     comptime if TARGET_COLUMN == COLUMN_AMD:
         trail_r4 = String(getenv("MOJOLEARN_XD_LU_TRAIL_R4")) == "1"
+    var swaps_trsm = lu_swaps_trsm_on()
+    var trail_rb = lu_trail_rb_on()
     var nb = min(lu_panel_width(), LU_PANEL_NB)
     if nb > 0:
         # The blocked route (lane neural-pass32): the panel's steps run
@@ -1474,19 +1595,33 @@ def launch_lu(
                         grid_dim=_blocks((n - k - 1) * (k1 - k - 1)), block_dim=TPB,
                     )
             if k1 < n:
-                ctx.enqueue_function[lu_apply_swaps_kernel](
-                    a, piv, Int32(k0), Int32(k1), Int32(n),
-                    grid_dim=_blocks(n - k1), block_dim=TPB,
-                )
-                if k1 - k0 > 1:
-                    ctx.enqueue_function[lu_trsm_kernel](
-                        a, act, Int32(k0), Int32(k1), Int32(n),
+                if swaps_trsm:
+                    ctx.enqueue_function[lu_swaps_trsm_kernel](
+                        a, piv, act, Int32(k0), Int32(k1), Int32(n),
                         grid_dim=_blocks(n - k1), block_dim=TPB,
                     )
+                else:
+                    ctx.enqueue_function[lu_apply_swaps_kernel](
+                        a, piv, Int32(k0), Int32(k1), Int32(n),
+                        grid_dim=_blocks(n - k1), block_dim=TPB,
+                    )
+                    if k1 - k0 > 1:
+                        ctx.enqueue_function[lu_trsm_kernel](
+                            a, act, Int32(k0), Int32(k1), Int32(n),
+                            grid_dim=_blocks(n - k1), block_dim=TPB,
+                        )
                 var r4 = False
                 comptime if LU_TRAIL_R4:
                     r4 = trail_r4
-                if r4:
+                if trail_rb:
+                    # lane neural-pass135's register-blocked trail (default);
+                    # MOJOLEARN_XD_LU_TRAIL_RB=0 falls back to np115's r4 arm
+                    var rtiles = (n - k1 + LU_RB_TILE - 1) // LU_RB_TILE
+                    ctx.enqueue_function[lu_trail_rb_kernel](
+                        a, act, Int32(k0), Int32(k1), Int32(n), Int32(k1 - k0),
+                        grid_dim=(rtiles, rtiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
+                    )
+                elif r4:
                     var t4 = (n - k1 + LUR_T - 1) // LUR_T
                     ctx.enqueue_function[lu_trail_r4_kernel](
                         a, act, Int32(k0), Int32(k1), Int32(n), Int32(k1 - k0),
