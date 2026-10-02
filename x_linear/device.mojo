@@ -444,17 +444,19 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
 
 # ------------------------------------------------ Ridge's float-float refit on the grid (lane/neural-pass93)
 def ridge_ff_unit_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fi: Int32, sw: Int32, u0: Int32, count: Int32,
-                         sh: FP, sl: FP):
+                         sh: FP, sl: FP, wf: IP, woff: Int32, nonce: Int32):
     var u = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     if u < Int(count):
         ridge_ff_unit(Int(u0) + u, x, y, Int(n), Int(d), Int(t_n), fi != 0, sw != 0, Int(n) * Int(t_n), sh, sl)
+    witness_end(wf, woff, nonce)
 
 
 def ridge_ff_solve_kernel(d: Int32, t_n: Int32, fi: Int32, alpha: Float32, sh: FP, sl: FP, bh: FP, bl: FP, dst: FP,
-                          fh: FP, fl: FP):
+                          fh: FP, fl: FP, wf: IP, woff: Int32, nonce: Int32):
     """dst: coef T*d | intercept T | ok (1 / 0)."""
     var ok = ridge_ff_solve(Int(d), Int(t_n), fi != 0, alpha, sh, sl, bh, bl, dst, fh, fl)
     st(dst, Int(t_n) * Int(d) + Int(t_n), Float32(1) if ok else Float32(0))
+    witness_end(wf, woff, nonce)
 
 
 def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: Int, fi: Bool, sw: Bool, alpha: Float32,
@@ -469,20 +471,37 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
     var dout = ctx.enqueue_create_buffer[DType.float32](t_n * d + t_n + 1)
     var dfh = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
     var dfl = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
-    dsh.enqueue_fill(Float32(0))
-    dsl.enqueue_fill(Float32(0))
-    ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0), Int32(1 if sw else 0),
-                                               Int32(0), Int32(nm), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                               grid_dim=_xg_blocks(nm), block_dim=XG_TPB)
-    ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0), Int32(1 if sw else 0),
-                                               Int32(nm), Int32(units - nm), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
-                                               grid_dim=_xg_blocks(units - nm), block_dim=XG_TPB)
-    ctx.enqueue_function[ridge_ff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
-                                                dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
-                                                dfh.unsafe_ptr(), dfl.unsafe_ptr(), grid_dim=1, block_dim=1)
+    # lane/neural-xlw: the refit as ONE guarded unit from zeroed sums (the M2
+    # under load returned an all-zero RidgeClassifier from a cut unit launch)
     var h = List[Float32](length=t_n * d + t_n + 1, fill=Float32(0))
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dout)
+    var b1 = _xg_blocks(nm)
+    var b2 = _xg_blocks(units - nm)
+    var wit = Witness(ctx, b1 + b2 + 1)
+    var tries = 0
+    while True:
+        var nonce = wit.begin()
+        dsh.enqueue_fill(Float32(0))
+        dsl.enqueue_fill(Float32(0))
+        ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
+                                                   Int32(1 if sw else 0), Int32(0), Int32(nm), dsh.unsafe_ptr(),
+                                                   dsl.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                                                   grid_dim=b1, block_dim=XG_TPB)
+        ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
+                                                   Int32(1 if sw else 0), Int32(nm), Int32(units - nm), dsh.unsafe_ptr(),
+                                                   dsl.unsafe_ptr(), wit.p(), Int32(b1), nonce,
+                                                   grid_dim=b2, block_dim=XG_TPB)
+        ctx.enqueue_function[ridge_ff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
+                                                    dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
+                                                    dfh.unsafe_ptr(), dfl.unsafe_ptr(), wit.p(), Int32(b1 + b2), nonce,
+                                                    grid_dim=1, block_dim=1)
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dout)
+        if wit.ok(ctx, b1 + b2 + 1, "Ridge float-float refit"):
+            break
+        tries += 1
+        if tries >= WITNESS_TRIES:
+            wit.fail()
     ctx.synchronize()
+    _ = wit^
     var ok = h[t_n * d + t_n] == Float32(1)
     if ok:
         for i in range(t_n * d + t_n):
