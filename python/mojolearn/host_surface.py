@@ -1720,8 +1720,7 @@ FAMILIES = (
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
-            "argmax_rows_f64", "column_mean_f64", "center_columns_f32",
-            "scale_rows_f32", "probability_rows_f32",
+            "argmax_rows_f64", "probability_rows_f32",
             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
             # of bindings/hotpath_helpers.mojo that stand in for per-row Python,
             # and the ORDER RULE's label encoder (DEVIATION 2500) a CPU-only

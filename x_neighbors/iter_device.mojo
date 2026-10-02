@@ -29,7 +29,6 @@ from std.sys.info import has_apple_gpu_accelerator
 
 from std.sys.compile import is_defined
 from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
-from x_neighbors.nan_cells import nan_cells_host
 from x_neighbors.nan_cells_device import nan_cells_device
 from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
 from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, _add, knn_sq_item, knn_impute_finish
@@ -364,12 +363,8 @@ def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int) ra
     ascending into `cells`, the NaN count per column, the total in info[0].
     lane hr-small-passes (2026-10-02): a device NaN mask and a deterministic
     prefix-sum compaction (x_neighbors/nan_cells_device.mojo), the same
-    integers in the same order. A/B during measurement:
-    `-D MOJOLEARN_XN_NAN_CELLS_SERIAL=1` restores the serial pass."""
-    comptime if is_defined["MOJOLEARN_XN_NAN_CELLS_SERIAL"]():
-        nan_cells_host(FP(unsafe_from_address=x), IP(unsafe_from_address=cells),
-                       IP(unsafe_from_address=colmiss), IP(unsafe_from_address=info), n, d)
-        return
+    integers in the same order as the CPU column's pass
+    (x_neighbors/nan_cells.mojo)."""
     nan_cells_device(x, cells, colmiss, info, n, d)
 
 
