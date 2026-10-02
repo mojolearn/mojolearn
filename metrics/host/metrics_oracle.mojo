@@ -22,7 +22,7 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
                            holds `ftz(values[c*W + t])` (`+0.0` past `n`),
                            the halving tree `slab[t] = ftz(slab[t] +
                            slab[t + step])` for `step = W/2 .. 1`, the chunk
-                           totals folded ascending from `+0.0` through `ftz`.
+                           totals folded by the same tree level by level.
   `host_canonicalize_nan`  `canonicalize_nan`, `pinned_sum.mojo:183`.
   `host_accuracy_score`    `accuracy_score`, `metrics/impl/stats/detail/
                            scores.mojo:106`: the integer count of agreeing
@@ -152,16 +152,62 @@ def host_chunk_count(n: Int) -> Int:
     return (n + PINNED_SUM_W - 1) // PINNED_SUM_W
 
 
+def host_fold_level(values: List[Float32], n: Int) -> List[Float32]:
+    """`host_fold_level`, `pinned_sum.mojo`: one slab tree per
+    `PINNED_SUM_W` values, `+0.0` past `n` (one level of the device
+    partial tree, `fold_partials_level_kernel`)."""
+    var partials = List[Float32]()
+    var slab = List[Float32](length=PINNED_SUM_W, fill=Float32(0.0))
+    for c in range(host_chunk_count(n)):
+        for t in range(PINNED_SUM_W):
+            var i = c * PINNED_SUM_W + t
+            slab[t] = ftz(values[i]) if i < n else Float32(0.0)
+        var step = PINNED_SUM_W // 2
+        while step > 0:
+            for t in range(step):
+                slab[t] = ftz(slab[t] + slab[t + step])
+            step //= 2
+        partials.append(slab[0])
+    return partials^
+
+
 def host_fold_partials(partials: List[Float32], chunks: Int) -> Float32:
-    """`host_fold_partials`, `pinned_sum.mojo:197`."""
+    """`host_tree_fold_partials`, `pinned_sum.mojo`: the grid-wide second
+    stage. The chunk totals fold by the same slab tree, level by level,
+    until one level folds at most `PINNED_SUM_W` of them (the device's
+    `fold_partials_levels` plus its last level)."""
+    if chunks <= 0:
+        return Float32(0.0)
+    var m = chunks
+    var nxt = host_fold_level(partials, m)
+    while m > PINNED_SUM_W:
+        m = host_chunk_count(m)
+        var cur = nxt^
+        nxt = host_fold_level(cur, m)
+    return nxt[0]
+
+
+def host_row_chain_sum(values: List[Float32], n: Int) -> Float32:
+    """A ROW-OWNED sum (silhouette's per-row `a` / `b`, one block per
+    row): the chunk trees, then the chunk totals added ascending from
+    `+0.0` through `ftz` inside that row's block
+    (`pinned_sum.mojo::host_fold_partials`)."""
+    var partials = _host_first_stage(values, n)
     var acc = Float32(0.0)
-    for c in range(chunks):
+    for c in range(len(partials)):
         acc = ftz(acc + partials[c])
     return acc
 
 
 def host_tree_sum(values: List[Float32], n: Int) -> Float32:
-    """`host_tree_sum`, `pinned_sum.mojo:138` (module docstring)."""
+    """`host_grid_sum`, `pinned_sum.mojo` (module docstring): the chunk
+    trees, then the device partial tree (`host_fold_partials`)."""
+    var partials = _host_first_stage(values, n)
+    return host_fold_partials(partials, len(partials))
+
+
+def _host_first_stage(values: List[Float32], n: Int) -> List[Float32]:
+    """The first stage, one slab tree per chunk, with the sabotage arm."""
     var partials = List[Float32]()
     var chunks = host_chunk_count(n)
     var slab = List[Float32](length=PINNED_SUM_W, fill=Float32(0.0))
@@ -180,7 +226,7 @@ def host_tree_sum(values: List[Float32], n: Int) -> Float32:
                 slab[t] = ftz(slab[t] + slab[t + step])
             step //= 2
         partials.append(slab[0])
-    return host_fold_partials(partials, chunks)
+    return partials^
 
 
 def host_canonicalize_nan(x: Float32) -> Float32:
@@ -965,7 +1011,7 @@ def host_silhouette(
                             terms[j] = ftz(dist[j] / denom)
                         else:
                             terms[j] = Float32(0.0)
-                    var s = host_tree_sum(terms, n_rows)
+                    var s = host_row_chain_sum(terms, n_rows)
                     if c == rc:
                         a = ftz(a + ftz(s))
                     else:

@@ -301,7 +301,7 @@ def _both_routes():
         return None
     try:
         device = _linalg_impl._door()
-        host = _linalg_impl._host_load()
+        host = _backend.load_host_module("_mojolearn_linalg_host")
     except Exception:
         return None
     return None if device is host else (device, host)

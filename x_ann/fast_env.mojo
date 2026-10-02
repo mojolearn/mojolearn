@@ -20,9 +20,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 #: the compile gate of every switch here: FAST on Apple
 comptime ANN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 
-#: t-SNE: Z from one threadgroup of 128 threads (`sum_team_kernel`) instead
-#: of one thread adding the n row sums (`sum_kernel`).
-comptime FAST_TSNE_ZSUM = ANN_FAST_APPLE and is_defined["MOJOLEARN_TSNE_FAST_ZSUM"]()
+#: (MOJOLEARN_TSNE_FAST_ZSUM was dropped 2026-10-02: main's `_ts_z` is the
+#: parallel Z, a pinned pairwise tree, so the switch had nothing to add.)
 
 #: t-SNE: the repulsion's candidate rows split into TS_STRIPES stripes per
 #: row, one threadgroup per (row block, stripe), joined in stripe order.

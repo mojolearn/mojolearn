@@ -45,8 +45,8 @@ from cluster.estimator import (
     KMeansFitResult,
     kmeans_fit,
     plan_sum_scale,
-    plan_sum_scale_certified,
 )
+from cluster.host.kmeans_oracle import host_plan_sum_scale
 from cluster.impl.kmeans_params import (
     INIT_ARRAY,
     METRIC_L2_EXPANDED,
@@ -92,175 +92,105 @@ def _fill(x: MutPointer[Float32, MutUntrackedOrigin]):
             )
 
 
+def _upload_scale(
+    ctx: DeviceContext, hx: List[Float32], n: Int, d: Int
+) raises -> Float64:
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.synchronize()
+    var s = plan_sum_scale(ctx, x, n, d)
+    _ = x^
+    return s
+
+
 def check_plan_sum_scale() raises:
     """The scale policy, asserted without running a fit.
 
-    Two claims, and the second is the one that differs from what
-    `kmeans_check.mojo` exercises.
+    CLAIM 1: the device fold is the WORST column, widened only by the fold's
+    error bound: the scale equals `choose_scale` of the bound over the
+    independently recomputed worst column, or is one binade coarser (the
+    widening crossed a power of two). CLAIM 2: the row count reaches
+    `choose_scale` (the scale is finer than the blanket one).
     """
     var ctx = DeviceContext()
-    var hx = ctx.enqueue_create_host_buffer[DType.float32](
-        EST_ROWS * EST_FEATURES
-    )
-    ctx.synchronize()
-    _fill(hx.unsafe_ptr())
-
-    # CLAIM 1: the bound is the WORST column, not the first or the mean.
-    # Recompute here independently of the implementation.
+    var hx = List[Float32](length=EST_ROWS * EST_FEATURES, fill=Float32(0.0))
+    _fill(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(hx.unsafe_ptr())))
     var worst = Float64(0.0)
     for f in range(EST_FEATURES):
         var col = Float64(0.0)
         for r in range(EST_ROWS):
-            col += Float64(
-                abs(hx.unsafe_ptr().unsafe_load(r * EST_FEATURES + f))
-            )
+            col += Float64(abs(hx[r * EST_FEATURES + f]))
         if col > worst:
             worst = col
     var expected = choose_scale(worst, EST_ROWS)
-    var got = plan_sum_scale(hx.unsafe_ptr(), EST_ROWS, EST_FEATURES)
-    if got != expected:
+    var got = _upload_scale(ctx, hx, EST_ROWS, EST_FEATURES)
+    if got != expected and got != expected * 0.5:
         raise Error(
             "plan_sum_scale did not use the worst column: got "
             + String(got)
             + " expected "
             + String(expected)
+            + " (or half of it)"
         )
-
-    # CLAIM 2: THE ROW COUNT IS PASSED, which the kernel checks do not do.
-    # `fixed_point.mojo:55-70` says stating it buys a strictly finer scale.
-    # If a future edit drops the argument this assertion is what notices.
-    var blanket = choose_scale(worst)
-    if not (got >= blanket):
+    var blanket = choose_scale(worst * 1.001)
+    if not (got > blanket):
         raise Error(
-            "the row-count-aware scale must never be weaker than the blanket"
-            " one: got " + String(got) + " blanket " + String(blanket)
+            "plan_sum_scale returned the BLANKET scale or weaker, so the row"
+            " count is not reaching choose_scale. See POLICY CHOICE 2."
         )
-    if got == blanket:
-        raise Error(
-            "plan_sum_scale returned the BLANKET scale, so the row count is"
-            " not reaching choose_scale. See POLICY CHOICE 2."
-        )
-
-    print(
-        "check_plan_sum_scale: OK (worst column, row count reaches"
-        " choose_scale, scale is",
-        got / blanket,
-        "x finer than blanket)",
-    )
+    print("check_plan_sum_scale: OK (worst column, row count reaches choose_scale)")
 
 
-def check_plan_sum_scale_certified() raises:
-    """DEVIATION 3081: `plan_sum_scale_certified` either REFUSES (0.0) or
-    returns `plan_sum_scale`'s scale exactly. Swept over 48 magnitudes a
-    factor of 2^(1/8) apart, so the worst column crosses six power-of-two
-    boundaries of `choose_scale` and several members sit close to one; over
-    a planted column whose total is an EXACT boundary (which the certificate
-    must refuse); over a NaN and over an infinity (refused: the finiteness
-    clause); and over an all-zero plane (refused). At least 40 of the 48
-    sweep members must certify, or the fast arm is not the arm in use.
-    """
+def check_plan_sum_scale_device() raises:
+    """The device fold equals the host column's restatement
+    (`kmeans_oracle.host_plan_sum_scale`) word for word, over 48 magnitudes a
+    factor of 2^(1/8) apart at n = 5000 (three chunks), the all-zero plane
+    (scale 1.0), and a NaN and an infinity (both refused by name on both
+    sides)."""
     var ctx = DeviceContext()
     var n = 5000
     var d = 7
-    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
-    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
-    ctx.synchronize()
-    var certified = 0
+    var hx = List[Float32](length=n * d, fill=Float32(0.0))
     var gain = Float64(1.0)
     for member in range(48):
         for r in range(n):
             for f in range(d):
                 var h = (r * 2654435761 + f * 40503 + member * 7919) % 2039
                 var v = (Float64(h) / 2039.0 - 0.5) * gain * Float64(f + 1)
-                hx.unsafe_ptr().unsafe_store(r * d + f, Float32(v))
-        ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-        ctx.synchronize()
-        var want = plan_sum_scale(hx.unsafe_ptr(), n, d)
-        var got = plan_sum_scale_certified(ctx, x, n, d)
-        if got != 0.0:
-            certified += 1
-            if got != want:
-                raise Error(
-                    "certified scale " + String(got) + " != host scale "
-                    + String(want) + " at sweep member " + String(member)
-                )
-        gain *= 1.0905077326652577
-    if certified < 40:
-        raise Error(
-            "only " + String(certified) + " of 48 sweep members certified;"
-            " the device arm is refusing almost everything"
-        )
-
-    # The all-zero plane: refused (the host pass answers 1.0 for it).
-    for r in range(n):
-        for f in range(d):
-            hx.unsafe_ptr().unsafe_store(r * d + f, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.synchronize()
-    if plan_sum_scale_certified(ctx, x, n, d) != 0.0:
-        raise Error("an all-zero plane must be refused, not certified")
-    # Straddle: bisect a constant column's value until the host scale flips,
-    # then test both sides of the flip and the two nearest floats to it.
-    var lo_v = Float32(1.0)
-    var hi_v = Float32(2.0)
-    for r in range(n):
-        hx.unsafe_ptr().unsafe_store(r * d, lo_v)
-    var s_lo = plan_sum_scale(hx.unsafe_ptr(), n, d)
-    for _ in range(40):
-        var mid = (lo_v + hi_v) * 0.5
-        if mid == lo_v or mid == hi_v:
-            break
-        for r in range(n):
-            hx.unsafe_ptr().unsafe_store(r * d, mid)
-        if plan_sum_scale(hx.unsafe_ptr(), n, d) == s_lo:
-            lo_v = mid
-        else:
-            hi_v = mid
-    var refused = 0
-    for side in range(2):
-        var v = lo_v if side == 0 else hi_v
-        for r in range(n):
-            hx.unsafe_ptr().unsafe_store(r * d, v)
-        ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-        ctx.synchronize()
-        var want = plan_sum_scale(hx.unsafe_ptr(), n, d)
-        var got = plan_sum_scale_certified(ctx, x, n, d)
-        if got == 0.0:
-            refused += 1
-        elif got != want:
+                hx[r * d + f] = Float32(v)
+        var want = host_plan_sum_scale(hx, n, d)
+        var got = _upload_scale(ctx, hx, n, d)
+        if got != want:
             raise Error(
-                "AT THE BOUNDARY the certified scale " + String(got)
-                + " != host scale " + String(want)
+                "device scale " + String(got) + " != host column scale "
+                + String(want) + " at sweep member " + String(member)
             )
-    if refused != 2:
-        raise Error(
-            "the two floats adjacent to a choose_scale boundary must both be"
-            " refused (the interval straddles it); refused " + String(refused)
-        )
-
-    # Non-finite input: refused, whatever the host pass would do with it.
+        gain *= 1.0905077326652577
+    for i in range(n * d):
+        hx[i] = Float32(0.0)
+    if _upload_scale(ctx, hx, n, d) != 1.0 or host_plan_sum_scale(hx, n, d) != 1.0:
+        raise Error("an all-zero plane must take scale 1.0 on both sides")
     for r in range(n):
-        hx.unsafe_ptr().unsafe_store(r * d, Float32(1.5))
-    var nan = bitcast[DType.float32](UInt32(0x7FC00000))
-    hx.unsafe_ptr().unsafe_store(1234 * d + 3, nan)
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.synchronize()
-    if plan_sum_scale_certified(ctx, x, n, d) != 0.0:
-        raise Error("a NaN in the design must be refused")
-    hx.unsafe_ptr().unsafe_store(
-        1234 * d + 3, bitcast[DType.float32](UInt32(0x7F800000))
-    )
-    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
-    ctx.synchronize()
-    if plan_sum_scale_certified(ctx, x, n, d) != 0.0:
-        raise Error("an infinity in the design must be refused")
+        hx[r * d] = Float32(1.5)
+    for word in range(2):
+        var bad = UInt32(0x7FC00000) if word == 0 else UInt32(0x7F800000)
+        hx[1234 * d + 3] = bitcast[DType.float32](bad)
+        var dev_refused = False
+        var host_refused = False
+        try:
+            _ = _upload_scale(ctx, hx, n, d)
+        except:
+            dev_refused = True
+        try:
+            _ = host_plan_sum_scale(hx, n, d)
+        except:
+            host_refused = True
+        if not dev_refused or not host_refused:
+            raise Error("a non-finite design value must be refused on both sides")
     print(
-        "check_plan_sum_scale_certified: OK (" + String(certified)
-        + " of 48 sweep members certified and equal to the host scale, the"
-        " boundary pair, the zero plane, NaN and inf refused)"
+        "check_plan_sum_scale_device: OK (48 sweep members equal to the host"
+        " column, zero plane 1.0, NaN and inf refused on both sides)"
     )
-    _ = x^
-    _ = hx^
 
 
 def check_kmeans_fit_recovers_planted() raises:

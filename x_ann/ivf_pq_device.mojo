@@ -12,7 +12,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import (
-    ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_HOST_RESIDUALS, ANN3_PQ_SEED, ANN3_ROW_THREADS,
+    ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_SEED, ANN3_ROW_THREADS,
 )
 from x_ann.kpp_seed import kpp_seed
 from x_ann.fast_env import FAST_IVFPQ_DEVICE_CODEBOOKS
@@ -291,14 +291,6 @@ def ivf_pq_build_device(
     var dr = ctx.enqueue_create_buffer[DType.float32](n * rot_dim)
     _enqueue_residual(ctx, n, dim, rot_dim, _dp(dx), _dp(dc), _dp(dl), _dp(dr))
     ctx.synchronize()
-    # FAST, OPT-IN (lane ann-apple3, `ANN3_PQ_HOST_RESIDUALS`): when the
-    # codebooks train on a sample, the sampled rows' residuals are formed
-    # here (FAST's `pq_residual_cell` is one subtraction) in the sample's
-    # row order, which is what `_codebooks` gathers from the whole matrix
-    # otherwise; the matrix stays on the device for the encode.
-    var host_sample = False
-    comptime if PQ_FAST_TRAINSET and ANN3_PQ_HOST_RESIDUALS:
-        host_sample = n > PQ_FAST_ROWS_PER_CODE * n_codes
     # FAST on Apple, `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1` (lane/apple-
     # fast-ann, 2026-10-02; x_ann/pq_kmeans_device.mojo): the codebooks of
     # every subspace from one batched device Lloyd loop over the residuals
@@ -314,6 +306,8 @@ def ivf_pq_build_device(
         dev_cb = pq_len <= PQK_LEN_MAX and n_codes <= PQK_CODES_MAX
     var codebooks = List[Float32]()
     var dcb: DeviceBuffer[DType.float32]
+    var codebooks = List[Float32]()
+    var dcb: DeviceBuffer[DType.float32]
     if dev_cb:
         var n_train = n
         comptime if PQ_FAST_TRAINSET:
@@ -323,21 +317,9 @@ def ivf_pq_build_device(
         codebooks = download_f32(ctx, dcb, pq_dim * n_codes * pq_len)
         st.host("codebooks")
     else:
-        if host_sample:
-            var n_train = PQ_FAST_ROWS_PER_CODE * n_codes
-            var rows = ivf_trainset_rows(n, n_train, UInt64(seed))
-            var rs = List[Float32](length=n_train * rot_dim, fill=Float32(0.0))
-            for i in range(n_train):
-                var row = rows[i]
-                var l = Int(labels[row])
-                for c in range(dim):
-                    rs[i * rot_dim + c] = x[row * dim + c] - centers[l * dim + c]
-            st.host("residuals")
-            codebooks = _codebooks(rs, n_train, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
-        else:
-            var r = download_f32(ctx, dr, n * rot_dim)
-            st.host("residuals")
-            codebooks = _codebooks(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+        var r = download_f32(ctx, dr, n * rot_dim)
+        st.host("residuals")
+        codebooks = _codebooks(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
         st.host("codebooks")
         dcb = upload_f32(ctx, codebooks)
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * pq_dim)

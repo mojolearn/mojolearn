@@ -83,6 +83,7 @@ from checks.numerics import (
 )
 from core.host_simd_identical import expf_v, ftz_v
 from core.host_predict_threads import HostF32Ptr, host_predict_chunk, host_predict_task_count
+from svm.impl.grid_fold import FOLD_TPB, fold_blocks
 from svm.impl.smosolver import fold_order_for, hash_f32_list
 from svm.impl.svm_parameter import (
     EPSILON_SVR,
@@ -127,6 +128,32 @@ def _flush[dt: DType](x: Scalar[dt]) -> Scalar[dt]:
         return rebind[Scalar[dt]](ftz(rebind[Float32](x)))
     else:
         return x
+
+
+def _tree_sum[dt: DType](values: List[Scalar[dt]]) -> Scalar[dt]:
+    """`svm/impl/grid_fold.mojo::grid_sum_f32`'s order on the host: chunks of
+    FOLD_TPB cells (flushed; +0.0 past the end) folded by a halving tree,
+    the chunk sums the next level, until one chunk remains. `len >= 1`."""
+    var level = values.copy()
+    while True:
+        var n = len(level)
+        var nb = fold_blocks(n)
+        var nxt = List[Scalar[dt]](length=nb, fill=Scalar[dt](0))
+        var s = List[Scalar[dt]](length=FOLD_TPB, fill=Scalar[dt](0))
+        for b in range(nb):
+            for t in range(FOLD_TPB):
+                var i = b * FOLD_TPB + t
+                s[t] = _flush[dt](level[i]) if i < n else Scalar[dt](0)
+            var step = FOLD_TPB // 2
+            while step > 0:
+                for t in range(step):
+                    s[t] = _flush[dt](s[t] + s[t + step])
+                step //= 2
+            nxt[b] = s[0]
+        level = nxt^
+        if nb == 1:
+            break
+    return level[0]
 
 
 @always_inline
@@ -1234,23 +1261,27 @@ def smo_oracle_fit[
             res.dual_coefs.append(coef[i])
             res.support_idx.append(Int32(i))
     var n_support = len(res.dual_coefs)
+    # The sums are `grid_sum_f32`'s fixed-order tree (DEVIATION 632's order
+    # since w2-svm, 2026-10-02), over f in index order or over the free
+    # SVs' f in index order (the device's order-preserving compaction).
     if n_support == 0:
-        var s = Scalar[dt](0)
+        var fs = List[Scalar[dt]](capacity=n_train)
         for i in range(n_train):
-            s = _flush[dt](s + _flush[dt](f[i]))
+            fs.append(f[i])
+        var s = _tree_sum[dt](fs)
         res.b = _flush[dt](-s / Scalar[dt](n_train))
     else:
-        var n_free = 0
-        var s = Scalar[dt](0)
+        var free_f = List[Scalar[dt]]()
         for i in range(n_train):
             if Scalar[dt](0) < alpha[i] and alpha[i] < C_vec[i]:
-                s = _flush[dt](s + _flush[dt](f[i]))
-                n_free += 1
+                free_f.append(f[i])
+        var n_free = len(free_f)
         if n_free > 0:
+            var s = _tree_sum[dt](free_f)
             res.b = _flush[dt](-s / Scalar[dt](n_free))
         else:
             # strict `<`/`>` ascending: the FIRST index wins a +0.0/-0.0
-            # tie, as `serial_min/max_f32_kernel` do over the compaction
+            # tie, as `grid_arg_f32`'s keyed trees do over the compaction
             # (row 39); no hardware min/max
             var b_up = _inf[dt]()
             var b_low = -_inf[dt]()

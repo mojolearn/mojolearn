@@ -1,4 +1,3 @@
-CMD lane/apple-fast-ann ann-tsne-zsum-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-tsne-zsum-istella x_ann tsne istella 1 2 "" "-D MOJOLEARN_TSNE_FAST_ZSUM=1"
 CMD lane/apple-fast-ann ann-tsne-split-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-tsne-split-istella x_ann tsne istella 1 2 "" "-D MOJOLEARN_TSNE_FAST_SPLIT=1"
 CMD lane/apple-fast-ann ann-cagra-team-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-cagra-team-istella x_ann cagra istella 1 2 "" "-D MOJOLEARN_CAGRA_FAST_TEAM=1"
 CMD lane/apple-fast-ann ann-cagra-knnbigd-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-cagra-knnbigd-istella x_ann cagra istella 1 2 "" "-D MOJOLEARN_ANN_FAST_KNN_BIGD=1"

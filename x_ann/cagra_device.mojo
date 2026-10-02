@@ -244,7 +244,7 @@ def _bitonic_u64[
 
 
 def prune_kernel[KMAX: Int](n: Int32, kdeg: Int32, deg: Int32, knn: I32P, pruned: I32P, short: I32P):
-    """`cagra_prune` (x_ann/cagra_core.mojo) for node a = block_idx.x, every
+    """`cagra_prune` (x_ann/host/cagra_host.mojo) for node a = block_idx.x, every
     row (distinct or not) on the device.
 
     1. The row's entries as composite keys (id as UInt32 << 32 | rank),

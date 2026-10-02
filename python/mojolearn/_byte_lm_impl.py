@@ -98,7 +98,6 @@ from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, fromb
 from ._bufcheck import flat_view, is_int32, is_native_f32, le_bytes, memcopy, probe
 from ._byte_lm_config import ByteLanguageModelConfig, require_shape, state_shape
 from . import _byte_lm_checkpoint
-from ._byte_lm_host import _greedy_next_bytes, _logits_ids
 from . import _ragged
 
 PROFILE = 'mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1'
@@ -316,11 +315,10 @@ def _load(shape=None):
     # single-device entries from the CPU byte LM binding
     # (_byte_lm_trainer_host, lane/cpu-training-embedding-ivf, 2026-09-15),
     # which reads back "cpu"; a box with a GPU never admits that vendor.
-    vendors = ('cuda', 'hip', 'metal')
-    if _backend._CPU_ONLY is not None:
-        from ._byte_lm_trainer_host import is_cpu_trainer_binding
-        if is_cpu_trainer_binding(binding):
-            vendors = ('cpu',)
+    # A CPU-only install admits only the "cpu" vendor and a GPU install only
+    # the GPU vendors; the install decides, so this module never imports the
+    # CPU trainer adapter (cpu-gpu-cleanup n-pyneural).
+    vendors = ('cpu',) if _backend._CPU_ONLY is not None else ('cuda', 'hip', 'metal')
     if (int(binding.byte_lm_numeric_mode()) != 1
             or str(binding.byte_lm_profile()) != PROFILE
             or str(binding.byte_lm_vendor()) not in vendors):
@@ -441,9 +439,64 @@ def _binding_metadata(binding, shape):
                 source_scope='available direct source files; binding SHA identifies the compiled artifact')
 
 
+# THE IDS ADMISSION AND THE GREEDY PICK, shared by the GPU trainer's
+# `logits`/`next_bytes` and the CPU `LanguageModelInference` (DEVIATION
+# 2658), so both surfaces admit the same ids and equal logits bytes pick
+# equal bytes. They live here, in the GPU-path module, so this module does
+# not import the CPU-side `_byte_lm_host` (cpu-gpu-cleanup n-pyneural,
+# 2026-10-02); `_byte_lm_host` keeps the same spelling.
+
+
+def _logits_ids(ids, shape):
+    """`(tokens, copied)` for a logits call, int32 ids `[batch, length]` with
+    `batch >= 1`, `1 <= length <= shape.length` and every id a byte value in
+    `[0, vocab)`, refused with ValueError otherwise."""
+    tokens, copied = as_i32_c(ids, ndim=2, name='ids')
+    batch, length = tokens.shape
+    if batch <= 0 or not 0 < length <= shape.length:
+        raise ValueError(f'ids must be [batch, 1..{shape.length}]')
+    vocab = shape.vocab_size
+    # Native min/max admits the common case in one pass; the scan below runs
+    # only to name the first offending id.
+    if tokens.size and tokens.min() >= 0 and tokens.max() < vocab:
+        return tokens, copied
+    flat = flat_view(tokens, 'i')
+    for r in range(batch):
+        base = r * length
+        for c in range(length):
+            v = flat[base + c]
+            if not 0 <= v < vocab:
+                raise ValueError(f'ids must be byte values in [0, {vocab}); got {v} at row {r}, position {c}')
+    return tokens, copied
+
+
+def _greedy_next_bytes(logits):
+    """The greedy next byte after each row of float32 logits
+    `[batch, length, vocab]`, read at the last position; ties go to the
+    lowest byte value (the base binding's `argmax_rows_f32`: strict `>` from
+    index 0, so ties keep the lowest byte and a NaN never replaces)."""
+    batch, length, vocab = logits.shape
+    flat = flat_view(logits, 'f')
+    if batch and vocab and hasattr(logits, '_addr'):
+        from ._labels import argmax_rows
+        last = b''.join(bytes(flat[((b * length) + length - 1) * vocab:((b * length) + length) * vocab])
+                        for b in range(batch))
+        rows = frombytes(last, '<f4', (batch, vocab))
+        return [int(i) for i in flat_view(argmax_rows(rows), 'q')]
+    result = []
+    for b in range(batch):
+        base = ((b * length) + length - 1) * vocab
+        best = 0
+        for v in range(1, vocab):
+            if flat[base + v] > flat[base + best]:
+                best = v
+        result.append(best)
+    return result
+
+
 def _gpu_logits_ids(ids, shape):
     """`(tokens, batch, length)` for `logits` (DEVIATION 2658). The CPU
-    class's admission (`_byte_lm_host._logits_ids`) plus the native batch
+    class's admission (`_logits_ids` above) plus the native batch
     and cell limits, returned as an owned copy so the trainer never aliases
     caller memory. An empty 2-D buffer is refused by its reported shape
     before any conversion."""

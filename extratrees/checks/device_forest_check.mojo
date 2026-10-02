@@ -83,10 +83,12 @@ from std.sys import has_accelerator
 from extratrees.estimator import (
     ExtraTreesConfig,
     MAX_FEATURES_ALL,
-    fit_extra_trees_classifier_reference,
     fit_extra_trees_classifier_device,
-    fit_extra_trees_regressor_reference,
     fit_extra_trees_regressor_device,
+)
+from extratrees.host_estimator import (
+    fit_extra_trees_classifier_reference,
+    fit_extra_trees_regressor_reference,
 )
 from extratrees.checks.fixtures import (
     Dataset as FixtureDataset,
@@ -115,10 +117,12 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
 from extratrees.impl.randomforest.randomforest import (
     Forest,
     class_ids_for,
-    fit_classification,
     fit_classification_device,
     forest_vote,
     predict_class_forest,
+)
+from extratrees.impl.randomforest.host_forest import (
+    fit_classification,
 )
 
 

@@ -10,7 +10,7 @@ RaBitQ coarse build reaches `ivf_flat_build` through `ivf_flat_build_host`), bin
 classical2 `ivf` lane. Datasets: taxi (400,000 x 11 index rows,
 4,000 queries), Istella (400,000 x 220); tsne 20,000 stride rows (manifold block).
 
-Merged with main (2026-10-02): main's `knn_wide_kernel` (rows wider than 64 features, NVIDIA and AMD
+Merged with main (2026-10-02, twice; the second merge dropped the ZSUM switch, see the table): main's `knn_wide_kernel` (rows wider than 64 features, NVIDIA and AMD
 only) and `repulse_split_kernel` / `TS_SPLIT` (t-SNE repulsion with the in-kernel Z tree, NVIDIA and
 AMD only) are separate arms that never compile on Apple; this lane's t-SNE arm is
 `repulse_stripe_kernel` / `repulse_stripe_join_kernel` / `TS_STRIPES`.
@@ -18,7 +18,7 @@ AMD only) are separate arms that never compile on Apple; this lane's t-SNE arm i
 | switch | lanes | site | what it changes under FAST on Apple |
 |---|---|---|---|
 | `-D MOJOLEARN_TSNE_FAST_SPLIT=1` (`TS_STRIPED`) | tsne | `x_ann/tsne_device.mojo` `repulse_stripe_kernel` + `repulse_stripe_join_kernel`, `_ts_repulse` | the exact repulsion with each row's candidate rows split into 8 stripes, one threadgroup per (row block, stripe), partials joined in stripe order: 8x the threadgroups (157 -> 1,256 at 20,000 rows) for 1000 iterations. FAST bits move (fold per stripe) |
-| `-D MOJOLEARN_TSNE_FAST_ZSUM=1` (`TS_ZSUM`) | tsne | `x_ann/tsne_device.mojo` `_ts_iter` (the ann-apple3 `sum_team_kernel`; main's launch lines unchanged) | Z from one threadgroup of 128 threads and a halving tree instead of `sum_kernel`, ONE thread adding the n row sums (20,000 dependent adds per iteration, 1000 iterations). FAST bits move (sum order) |
+| (`MOJOLEARN_TSNE_FAST_ZSUM`: dropped) | tsne | `x_ann/tsne_device.mojo` `_ts_z` (main) | main's cpu-gpu-cleanup c-ann replaced the one-thread `sum_kernel` with `_ts_z`, a parallel pinned pairwise tree over the row sums (one launch per level), which is what this switch was for; no ann line for it |
 | `-D MOJOLEARN_CAGRA_FAST_TEAM=1` (`FAST_CAGRA_TEAM`) | cagra | `x_ann/cagra_device.mojo` `cagra_search_on` (the ann-apple3 `cg_search_team_kernel`) | one threadgroup of 32 threads per query, the parent's 32 candidate distances formed side by side, instead of one thread per query (63 threadgroups of 64 for 4,000 queries, 220 features each). Expected to move no bit |
 | `-D MOJOLEARN_ANN_FAST_KNN_BIGD=1` (`FAST_KNN_BIGD`) | cagra (build), tsne (affinities) on Istella | `x_ann/knn_device.mojo` `knn_tiled_bigd_kernel`, `knn_enqueue` | the exact k-NN graph for rows wider than 64 features with candidate rows staged in threadgroup memory 32 rows x 32 features at a time, 32 running sums per thread, instead of `knn_cell_kernel` (one thread per row reading every candidate row from device memory, nothing staged; 400,000 x 400,000 x 220). The cell's fold order: same bits expected |
 | `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1` (`FAST_IVFPQ_DEVICE_CODEBOOKS`) | ivf-pq, ivf-refine, ivf-filter | `x_ann/pq_kmeans_device.mojo`, `ivf_pq_device.mojo` `ivf_pq_build_device` | every subspace codebook from ONE batched device Lloyd loop over the residuals already on the device (stride sample, seeded sample-row init, 3 launches per iteration, no host sync, fixed-order sums without atomics), instead of downloading the n x rot_dim residuals (352 MB on Istella), gathering each subspace on the host and running cluster/'s `kmeans_fit` once per subspace in series (55 host-driven fits on Istella, each with its k-means‖ seeding rounds and syncs). FAST bits move: paired recall |
@@ -65,7 +65,7 @@ tag per lane x dataset x switch, no IDENTICAL rows (the IDENTICAL bits are the M
 each has been read alone (afc_ab_def.sh takes several `-D` in one quoted arm).
 
 Risky compile sites (no toolchain here): `x_ann/tsne_device.mojo` `_ts_iter` / `_ts_iter_timed` now take
-`dpart` beside main's `dcnt` / `dparts`; `knn_device.mojo` `knn_enqueue` returns from inside `comptime if
+`dpart` beside main's `dcnt` / `dparts` / `dzs`; `knn_device.mojo` `knn_enqueue` returns from inside `comptime if
 FAST_KNN_BIGD`; `ivf_flat_build.mojo` `IVF_FAST_TRAINSET` / `IVF_FAST_CSR` gate the device arms whose
 `else` is main's host code; `pq_kmeans_device.mojo` and `fast_build_device.mojo` are new files (kernels
 launched with the file's `buf.unsafe_ptr()` form; no helper takes a pointer parameter).
