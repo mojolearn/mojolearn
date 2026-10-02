@@ -12,6 +12,7 @@ QR slices and the shortest-path rows have the host spellings of
 x_decomp/host_simd.mojo, host_qr.mojo and host_graph.mojo (same words).
 So the bits are the same at every thread count."""
 from x_decomp.rr_solve import host_eigh_rr_sorted
+from x_decomp.rr_svd import host_rr_svd
 from std.memory import bitcast
 from std.builtin.sort import sort
 from x_decomp.lle_local import (
@@ -73,7 +74,6 @@ from core.host_parallel import host_parallelize
 from x_decomp.exec_trait import Exec
 from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
 from x_decomp.qr_sliced_host import qs_geqrf_host, qs_orgqr_host
-from x_decomp.host_jacobi import fast_one_sided_jacobi_svd
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
 from x_decomp.host_ew import ew_range
 from x_decomp.host_lda import lda_doc_row_host, lda_pack_t
@@ -573,13 +573,21 @@ struct HostExec(Exec):
         m >= n), then the one-sided Jacobi SVD of R. Unordered values, V in
         columns: the host replay of DevExec.svd."""
         var r = HostExec._qr_r(a, m, n)
-        var got = fast_one_sided_jacobi_svd(r, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
-        if not got.converged:
-            raise Error("x_decomp svd: the one-sided Jacobi SVD did not converge")
+        # the device's round-robin rounds (x_decomp/rr_svd.mojo)
+        var rt = List[Float32](length=max(n * n, 1), fill=Float32(0.0))
+        var vt = List[Float32](length=max(n * n, 1), fill=Float32(0.0))
         for i in range(n):
-            s.unsafe_store(i, got.s[i])
-        for i in range(n * n):
-            v.unsafe_store(i, got.v[i])
+            for j in range(n):
+                rt[j * n + i] = r[i * n + j]
+        var got = host_rr_svd(
+            F32Ptr(unsafe_from_address=Int(rt.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(vt.unsafe_ptr())), s, n,
+            X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL,
+        )
+        if not got[0]:
+            raise Error("x_decomp svd: the round-robin one-sided Jacobi did not converge")
+        for i in range(n):
+            for j in range(n):
+                v.unsafe_store(i * n + j, vt[j * n + i])
 
     @staticmethod
     def lasso_rows(

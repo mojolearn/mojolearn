@@ -15,7 +15,6 @@ from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_sm
 
 from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
-from decomposition.impl.linalg.detail.svd_full import svd_of_r
 from decomposition.linalg_public_device import device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.cells import (
@@ -86,15 +85,12 @@ from x_decomp.cells import (
     sqdist_cell,
 )
 from x_decomp.exec_trait import Exec
-from x_decomp.jacobi2 import (
-    J2_TPB,
-    dev_barrier,
-    one_sided_svd2_chunk_kernel,
-    one_sided_svd2_finish_kernel,
-)
+from x_decomp.jacobi2 import dev_barrier
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
 from x_decomp.rr_batch import rr_batch_kernel, rrb_cs_len, rrb_part_len
+from x_decomp.rr_svd import RS_TPB
+from x_decomp.rr_svd_device import rs_norm_kernel, rs_round_kernel
 from x_decomp.lle_local import hessian_ncy
 from x_decomp.lle_device import (
     lle_apply_kernel,
@@ -131,12 +127,6 @@ from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 
 #: rounds enqueued between two synchronize() calls
 comptime PJ_SYNC_ROUNDS = 512
-
-
-def jacobi2_on() -> Bool:
-    """MOJOLEARN_XD_JACOBI=1 selects the shipped-before Jacobi kernels
-    (timing A/B only: `x_decomp/jacobi2.mojo` stores the same bits)."""
-    return String(getenv("MOJOLEARN_XD_JACOBI", "2")) != "1"
 
 
 struct _XdContext(Defaultable, Movable):
@@ -1458,116 +1448,6 @@ def _p(buf: DeviceBuffer[DType.float32]) -> F32Ptr:
     return F32Ptr(unsafe_from_address=Int(buf.unsafe_ptr()))
 
 
-#: Pair-column cells (pairs x n) per chunk launch of the bounded one-sided
-#: Jacobi SVD: about 0.2 s on the M2 Pro at n = 1,000 and 2,000.
-comptime J2_CHUNK_CELLS = 1 << 22
-#: `svd_of_r`'s single launch is left to shapes under this many columns (a
-#: few milliseconds); from here on every solve is the bounded chunk route.
-comptime J2_BOUNDED_MIN_N = 64
-
-
-def _svd2_of_r(
-    ctx: DeviceContext,
-    mut r: DeviceBuffer[DType.float32],
-    mut v: DeviceBuffer[DType.float32],
-    mut s: DeviceBuffer[DType.float32],
-    n: Int,
-    cells: Int = J2_CHUNK_CELLS,
-) raises:
-    """`svd_of_r` (x_decomp's sweeps and tolerance) as `one_sided_svd2_kernel`
-    stores it, BOUNDED IN WORK PER LAUNCH (x_decomp/jacobi2.mojo, lane/
-    lle-timeout): rt = R^T and vt = I, then each sweep's cyclic pairs in
-    chunks of about J2_CHUNK_CELLS pair-column cells (`one_sided_svd2_chunk_
-    kernel`, the device waited for after each), each chunk's rotation count
-    in its own slot, poisoned with -1 before the sweep: a slot still -1 after
-    it is a launch that did not finish, refused. A sweep without a rotation
-    ends the solve (the one launch's test); none in X_DECOMP_SVD_SWEEPS is
-    the same refusal. Then the tail (`one_sided_svd2_finish_kernel`). The
-    bits do not depend on `cells` (dense_check cuts a sweep at 7 pairs)."""
-    var rt = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
-    ctx.enqueue_function[pj_transpose_kernel](
-        r.unsafe_ptr(), rt.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
-    )
-    ctx.enqueue_function[pj_identity_kernel](vt.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
-    ctx.synchronize()
-    var per = cells // n if n > 0 else 1
-    if per < 1:
-        per = 1
-    var pairs = n * (n - 1) // 2
-    var slots = (pairs + per - 1) // per if pairs > 0 else 1
-    var rots = ctx.enqueue_create_buffer[DType.float32](slots)
-    var hrots = ctx.enqueue_create_host_buffer[DType.float32](slots)
-    var converged = pairs == 0
-    var last = 0
-    var sweep = 0
-    while not converged and sweep < X_DECOMP_SVD_SWEEPS:
-        enqueue_fill(ctx, rots, Float32(-1.0))
-        var p = 0
-        var q = 1
-        var done = 0
-        var k = 0
-        while done < pairs:
-            var cnt = per if pairs - done > per else pairs - done
-            ctx.enqueue_function[one_sided_svd2_chunk_kernel](
-                rt.unsafe_ptr(), vt.unsafe_ptr(), _p(rots) + k, Int32(n), Int32(p), Int32(q), Int32(cnt),
-                X_DECOMP_SVD_TOL, grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
-            )
-            ctx.synchronize()
-            # (p, q) advanced by cnt pairs in the cyclic order
-            var left = cnt
-            while left > 0:
-                var row = n - 1 - q
-                if left <= row:
-                    q += left
-                    left = 0
-                else:
-                    left -= row + 1
-                    p += 1
-                    q = p + 1
-            done += cnt
-            k += 1
-        ctx.enqueue_copy(dst_ptr=hrots.unsafe_ptr(), src_buf=rots)
-        ctx.synchronize()
-        var total = 0
-        for t in range(k):
-            var c = hrots.unsafe_ptr().unsafe_load(t)
-            if not (c >= Float32(0.0)):
-                raise Error(
-                    "the one-sided Jacobi SVD at n_cols = " + String(n) + ": chunk " + String(t) + " of sweep "
-                    + String(sweep) + " did not finish (its rotation slot kept its poison); a launch the device"
-                    " cut short is refused, never read as a converged answer"
-                )
-            total += Int(c)
-        last = total
-        sweep += 1
-        if total == 0:
-            converged = True
-    if not converged:
-        raise Error(
-            "the one-sided Jacobi SVD did not converge in "
-            + String(X_DECOMP_SVD_SWEEPS)
-            + " sweeps at n_cols = "
-            + String(n)
-            + ": the last sweep still performed "
-            + String(last)
-            + " rotations against a tolerance of "
-            + String(X_DECOMP_SVD_TOL)
-            + ". The remedy is more sweeps, the same one cuSOLVER's syevj"
-            " has. An unconverged decomposition is not returned as if it"
-            " were one; see DEVIATION 590."
-        )
-    ctx.enqueue_function[one_sided_svd2_finish_kernel](
-        r.unsafe_ptr(), v.unsafe_ptr(), s.unsafe_ptr(), rt.unsafe_ptr(), vt.unsafe_ptr(), Int32(n),
-        grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
-    )
-    ctx.synchronize()
-    _ = rots^
-    _ = hrots^
-    _ = rt^
-    _ = vt^
-
-
 def _pj_blocks(count: Int) -> Int:
     return (count + PJ_TPB - 1) // PJ_TPB if count > 0 else 1
 
@@ -2677,54 +2557,80 @@ struct DevExec(Exec):
 
     @staticmethod
     def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
-        """`device_svdvals`'s route (qr_factor, then svd_of_r) keeping V."""
-        DevExec.svd_cells(a, m, n, s, v, QRB_CELLS, J2_CHUNK_CELLS)
+        """The tall route: the bounded Householder QR, then the one-sided
+        Jacobi SVD of R in the round-robin order (x_decomp/rr_svd.mojo, one
+        block a pair, every pair of a round at once) keeping V."""
+        DevExec.svd_cells(a, m, n, s, v, QRB_CELLS)
 
     @staticmethod
-    def svd_cells(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr, qr_cells: Int, j2_cells: Int) raises:
-        """`svd` with the work per launch named (QR cells, Jacobi pair-column
-        cells): dense_check proves the bits do not depend on it."""
+    def svd_cells(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr, qr_cells: Int) raises:
+        """`svd` with the QR's work per launch named: dense_check proves the
+        bits do not depend on it. cgr-decomp (2026-10-03): the one-block
+        cyclic solvers (`svd_of_r`, `one_sided_svd2_chunk_kernel`) and their
+        MOJOLEARN_XD_JACOBI switch are replaced by the round-robin rounds."""
         var ctx = xd_ctx()
         var da = _up(ctx, a, m * n)
         var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
         var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var rt = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
         var v_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
         var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
+        var mm = n + (n % 2)
+        var h = mm // 2
+        var flags = ctx.enqueue_create_buffer[DType.float32](max(h, 1))
+        var hflags = List[Float32](length=max(h, 1), fill=Float32(0.0))
         ctx.synchronize()
         # bounded in work per launch and poisoned (x_decomp/qr_bounded.mojo):
         # a launch macOS cut short leaves NaN in R, hence in s, refused below
         _ = qr_factor_bounded(ctx, da, scratch, r_buf, m, n, qr_cells)
-        var nan = Float32(0.0) / Float32(0.0)
-        enqueue_fill(ctx, s_buf, nan)
-        enqueue_fill(ctx, v_buf, nan)
-        # cgfin-c-decomp: the MOJOLEARN_XD_PJ_SVD_MIN round-robin SVD
-        # experiment (default never) is deleted with its host sums
-        if jacobi2_on() and n >= J2_BOUNDED_MIN_N:
-            # measured (m4pro-b 1790606245923): 0.45x at n = 28, 1.07x at
-            # 256, 1.21x at 800 (one launch); from 64 columns the bounded
-            # chunk route (lane/lle-timeout), the old one launch below
-            _svd2_of_r(ctx, r_buf, v_buf, s_buf, n, j2_cells)
-        else:
-            svd_of_r(ctx, r_buf, v_buf, s_buf, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
+        ctx.enqueue_function[pj_transpose_kernel](_p(r_buf), _p(rt), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
+        ctx.enqueue_function[pj_identity_kernel](_p(vt), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
+        var converged = n < 2
+        var executed = 0
+        while not converged and executed < X_DECOMP_SVD_SWEEPS:
+            executed += 1
+            enqueue_fill(ctx, flags, Float32(0.0))
+            for rd in range(mm - 1):
+                ctx.enqueue_function[rs_round_kernel](
+                    _p(rt), _p(vt), _p(flags), Int32(n), Int32(mm), Int32(rd), X_DECOMP_SVD_TOL,
+                    grid_dim=h, block_dim=RS_TPB,
+                )
+                if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
+                    ctx.synchronize()
+            _down(ctx, flags, F32Ptr(unsafe_from_address=Int(hflags.unsafe_ptr())), h)
+            ctx.synchronize()
+            var any = False
+            for b in range(h):
+                if hflags[b] != Float32(0.0):
+                    any = True
+            if not any:
+                converged = True
+        if not converged:
+            raise Error(
+                "x_decomp svd: the round-robin one-sided Jacobi did not converge in " + String(X_DECOMP_SVD_SWEEPS)
+                + " sweeps at n_cols = " + String(n) + ". An unconverged decomposition is not returned as if it"
+                " were one; see DEVIATION 590."
+            )
+        ctx.enqueue_function[rs_norm_kernel](_p(rt), _p(s_buf), Int32(n), grid_dim=n, block_dim=RS_TPB)
+        ctx.enqueue_function[pj_transpose_kernel](_p(vt), _p(v_buf), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
         _down(ctx, s_buf, s, n)
         _down(ctx, v_buf, v, n * n)
         ctx.synchronize()
-        # READ BACK WHOLE: every value was poisoned before the solve and is
-        # written by a finished one; a NaN left is a launch cut short (or a
-        # NaN in the input), refused rather than returned
+        # a NaN left is a launch cut short (or a NaN input): refused
         for t in range(n):
             if s.unsafe_load(t) != s.unsafe_load(t):
                 raise Error("x_decomp svd: singular value " + String(t) + " of " + String(n)
                             + " is NaN after the solve (a device launch cut short, or a NaN input): refused")
-        for t in range(n * n):
-            if v.unsafe_load(t) != v.unsafe_load(t):
-                raise Error("x_decomp svd: V entry " + String(t) + " of " + String(n * n)
-                            + " is NaN after the solve (a device launch cut short, or a NaN input): refused")
         _ = da^
         _ = scratch^
         _ = r_buf^
+        _ = rt^
+        _ = vt^
         _ = v_buf^
         _ = s_buf^
+        _ = flags^
+        _ = hflags^
         ctx.synchronize()
         _ = ctx^
 
