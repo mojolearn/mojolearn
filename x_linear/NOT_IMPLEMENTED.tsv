@@ -19,7 +19,7 @@ _least_angle.py coef_path_, alphas_ path, jitter, LarsCV/LassoLarsCV/LassoLarsIC
 _quantile.py linear program (highs, interior-point, revised simplex)	replaced	scaled ADMM (Boyd et al. 2011, 3.3.1 stopping, 3.4.1 balancing); optimum to ADMM precision, not a vertex
 _quantile.py solver_options	ignored	ADMM has its own max_iter and tol (sample_weight implemented)
 _ridge.py RidgeClassifier positive, solvers other than cholesky	refused	pass 2 (sample_weight, class_weight implemented)
-_ridge.py RidgeCV cv (k-fold), scoring, alpha_per_target, multi-target y, gcv_mode eigen/svd	refused / replaced	LOO by one Cholesky per alpha; the rest pass 2
+_ridge.py RidgeCV cv objects other than an int, scoring, alpha_per_target, multi-target y, gcv_mode eigen/svd, sample_weight with cv	refused / replaced	cv=None: LOO by one Cholesky per alpha; cv=k: KFold(k) R^2 (x_linear/ridgecv.mojo); the rest pass 2
 _cd_fast.pyx gap-safe screening (do_screening)	not applied	it only skips coordinates; pass 2 speed
 _coordinate_descent.py LassoCV/ElasticNetCV cv splitters other than None/int, shuffle, selection=random, sample_weight, precompute arrays	refused	pass 2 (positive implemented)
 _coordinate_descent.py refit with precompute=False	replaced	Gram CD refit, same minimizer
