@@ -1,4 +1,4 @@
-pos=125 lines=     377
+pos=129 lines=     378
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -134,3 +134,10 @@ pos=125 lines=     377
 218:FBUILD lane/apple-fast@269ffa57a core=0 ibase=0 estimators=0 gbdt=0 gp=0 training=0 x_ann=0 x_cluster=0 x_cnn=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0
 219:CMD apple-fast@269ffa57a br-main-q rc=0 AFC-AB-SUMMARY br-main-q arm=B lane=ard ds=istella median_of_medians_ms=7158.277896014624 runs=[7158.277896014624 ] dige
 220:CMD apple-fast-board@0e743cac9 afb2-opp rc=0 afb opp chunks=43 board=~/board-0834
+221:FBUILD lane/apple-fast-tier@0a2048a44 core=0 ibase=0 gbdt=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0
+222:CMD apple-fast-tier@0a2048a44 tier-ols-tnv1 rc=0 AFC-AB-SUMMARY tier-ols-tnv1 arm=B lane=ols ds=istella median_of_medians_ms=none runs=[    ] digest= 
+223:FBUILD lane/apple-fast-bayes@e9312ac06 core=0 ibase=0 estimators=0 gbdt=0 gp=0 training=0 x_ann=0 x_cluster=0 x_cnn=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0
+224:CMD apple-fast-bayes@e9312ac06 bayes-br-guard-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=3036.4 all=[3036] quality=['{"finite":'] defines='-D MOJOLEARN_BAYES_GRID_GUARD=1'
+225:SWAP 20:09Z runner: estimators binding in every FAST build set (classical lanes need it)
+226:FBUILD lane/apple-fast-tier@0a2048a44 core=0 ibase=0 estimators=0 gbdt=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0
+227:CMD apple-fast-tier@0a2048a44 tier-ols-nttiled rc=0 AFC-AB-SUMMARY tier-ols-nttiled arm=B lane=ols ds=istella median_of_medians_ms=2666.4949785044882 runs=[   2666.4949785044882 ] digest= digest=73dd4908dcb824b7 
