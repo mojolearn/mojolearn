@@ -3048,15 +3048,22 @@ def _lanczos_top(k, A, nc):
     return th.take_cols(top), V
 
 
-def _top_eig(k, A, nc, fast=False):
+def _top_eig(k, A, nc, topk=False):
     """The nc LARGEST eigenpairs of symmetric A (descending), vectors in
     columns, each column signed by sklearn's svd_flip(u_based_decision=True).
-    fast (FAST mode, eigen_solver 'auto'): the Lanczos route under sklearn's
-    ARPACK policy (_lanczos_top), the exact dense solve otherwise."""
+    topk: the Lanczos route under sklearn's ARPACK policy (_lanczos_top), the
+    exact dense solve otherwise.
+
+    lane/neural-pass105 (Andrew, 2026-10-01: Isomap / ClassicalMDS /
+    KernelPCA-style top-k uses take a deterministic top-k solver): the route
+    is on in every mode and on every vendor. Every step is a kit primitive
+    (the IDENTICAL GEMM, element-wise ops, the small eigh) or Python float64
+    scalar arithmetic, in a fixed order with a fixed seeded start, so the
+    words agree across vendors. MOJOLEARN_XD_LANCZOS=0 keeps the exact solve."""
     n = A.r
     got = None
-    if fast and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC and _os.environ.get(
-            "MOJOLEARN_XD_LANCZOS", "1" if _kit_vendor(k) == "metal" else "0") == "1":
+    if topk and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC and _os.environ.get(
+            "MOJOLEARN_XD_LANCZOS", "1") == "1":
         got = _lanczos_top(k, A, nc)
     if got is not None:
         w, V = got
@@ -3182,7 +3189,7 @@ class Isomap(_Base):
         self.dist_matrix_ = D.out()
         G = k.ew("scale", k.ew("sq", D), s=-0.5)
         Kc, self._k_col, self._k_all = _center_kernel(k, G)
-        w, V = _top_eig(k, Kc, int(self.n_components), fast=self.numeric_mode_ == "fast")
+        w, V = _top_eig(k, Kc, int(self.n_components), topk=self.eigen_solver in ("auto", "arpack"))
         self.eigenvalues_m_ = w
         self.eigenvectors_m_ = V
         self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
@@ -3276,7 +3283,7 @@ class ClassicalMDS(_Base):
             D2 = k.ew("sq", Dm)
             self.dissimilarity_matrix_ = Dm.out()
         B, _, _ = _center_kernel(k, k.ew("scale", D2, s=-0.5))
-        w, V = _top_eig(k, B, int(self.n_components), fast=self.numeric_mode_ == "fast")
+        w, V = _top_eig(k, B, int(self.n_components), topk=True)
         self.eigenvalues_ = w.out((w.c,))
         self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
         self.embedding_ = self.embedding_m_.out()
