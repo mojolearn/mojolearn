@@ -83,7 +83,7 @@ _OPS = dict(
     lab_load=119, uniq_count=120, uniq_scan=121, uniq_write=122, chunk_neg=123,
     colb_part=124, colb_fold=125, colb_ss=126, colb_var=127, maxabs_fold=128, csb_part=129, csb_fold=130, csb_ss=131, csb_var=132, cat_hpart=133, cat_hfold=134,
     row_ones=135, ii_rcount=136, ii_rwrite=137, ii_gather=138, ii_scatter=139,
-    hcat=140,
+    hcat=140, colblock=141,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1616,6 +1616,21 @@ class SimpleImputer(_PrepBase):
         if not m:
             return pr.get(out, (n, dout))
         return pr.get(hc, (n, dout + m))
+
+
+def join_column_blocks(parts, ranges, n, d, mode=None):
+    """The (n, d) float32 matrix whose columns [start, end) are the C-order
+    (n, end - start) Array parts[k] for ranges[k]: one `colblock` stage per
+    part in one program (word copies, on the device on a GPU install)."""
+    pr = _Prog()
+    out = pr.output(n * d)
+    for (start, end), part in zip(ranges, parts):
+        w = end - start
+        if w <= 0 or n <= 0:
+            continue
+        pr.stage("colblock", n * w, pr.put(part), w, out, d, start)
+    pr.run(_mode() if mode is None else mode)
+    return pr.get(out, (n, d))
 
 
 # ---------------------------------------------------------------- discretizer

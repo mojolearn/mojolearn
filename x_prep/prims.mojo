@@ -638,6 +638,15 @@ def gather_cols_unit(t: Int, f: FP, q: IP):
     f.unsafe_store(p(q, 5) + t, raw(f, p(q, 0) + i * p(q, 2) + c))
 
 
+def colblock_unit(t: Int, f: FP, q: IP):
+    """q = [SRC, w, OUT, d, start]; t = i*w + c: OUT[i, start + c] = SRC[i, c]
+    (SRC is n x w, OUT n x d), bit for bit: one column block of a row-major
+    matrix written from its own contiguous shard."""
+    var w = p(q, 1)
+    var i = t // w
+    f.unsafe_store(p(q, 2) + i * p(q, 3) + p(q, 4) + t % w, raw(f, p(q, 0) + t))
+
+
 def hcat_unit(t: Int, f: FP, q: IP):
     """q = [A, pa, B, pb, OUT]; t = i*(pa+pb) + c: OUT = [A | B] row by row
     (A is n x pa, B is n x pb), bit for bit."""

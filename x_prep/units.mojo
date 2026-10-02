@@ -11,7 +11,7 @@ from x_prep.prims import (
     label_binarize_unit, scatter_ones_unit, gather_cols_unit, var_ptp_unit,
     sqsum_cols_unit, block_argmax_unit, ord_inverse_unit, cat_gather_unit, where_code_unit,
     class_stats_w_unit, indicator_unit, code_counts_unit, remap_codes_unit, add_arrays_unit,
-    scaler_stats_unit, std_scale_unit, nan_keep_unit, hcat_unit,
+    scaler_stats_unit, std_scale_unit, nan_keep_unit, hcat_unit, colblock_unit,
 )
 from x_prep.eigh import eigh_unit
 from x_prep.target import (
@@ -47,7 +47,7 @@ from naive_bayes.da import (
     da_shrink_unit, da_pool_unit, sym_fn_unit, da_intercept_unit, evr_unit,
 )
 
-comptime N_OPS = 141
+comptime N_OPS = 142
 
 
 @always_inline
@@ -334,3 +334,5 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         ii_scatter_unit(t, f, q)
     comptime if OP == 140:
         hcat_unit(t, f, q)
+    comptime if OP == 141:
+        colblock_unit(t, f, q)
