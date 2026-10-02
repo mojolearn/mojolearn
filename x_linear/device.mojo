@@ -48,6 +48,7 @@ from x_linear.tops import upper_cell, fold_fa, chain_cfmad, chain_fmad
 from std.os import getenv
 from x_linear.logcv_grid import logcv_fit_grid
 from x_linear.huber_grid import huber_fit_grid
+from x_linear.huber_fast import HUBER_DEVICE_LBFGS, huber_fit_fast
 from x_linear.dispatch import ALGO_HUBER, ALGO_ENETCV
 from x_linear.enetcv_fast import enetcv_fast
 from x_linear.tops import X_LINEAR_SERIAL_FOLDS
@@ -2670,6 +2671,13 @@ def fit_device(
         # (x_linear/enetcv_fast.mojo, lane/apple-fast-classical); `=0` is the A/B arm
         if algo == ALGO_ENETCV and n > 0 and String(getenv("MOJOLEARN_X_LINEAR_ENETCV_FAST")) != "0":
             if enetcv_fast(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res):
+                return
+        # HuberRegressor with the L-BFGS on the device (x_linear/huber_fast.mojo,
+        # lane/apple-fast-robust): -D MOJOLEARN_HUBER_DEVICE_LBFGS, the grid
+        # fit's objective and folds, one read of the stop word per batch
+        comptime if HUBER_DEVICE_LBFGS and not X_LINEAR_SERIAL_FOLDS:
+            if algo == ALGO_HUBER and n > 0:
+                huber_fit_fast(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
                 return
     comptime if not X_LINEAR_SERIAL_FOLDS:
         if algo == ALGO_LOGCV and n > 0 and String(getenv("MOJOLEARN_X_LINEAR_LOGCV_GRID")) != "0":
