@@ -1,0 +1,12 @@
+CMD lane/apple-fast-isotonic-knn ik-iso-ident-taxi AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ik-iso-ident-taxi isotonic taxi 3 3 -
+CMD lane/apple-fast-isotonic-knn ik-iso-par-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-iso-par-taxi isotonic taxi 3 3 - MOJOLEARN_ISOTONIC_FAST_PAR=1
+CMD lane/apple-fast-isotonic-knn ik-iso-par-istella AFC_FAMILY=algos bash tools/afc_ab.sh ik-iso-par-istella isotonic istella 3 3 - MOJOLEARN_ISOTONIC_FAST_PAR=1
+CMD lane/apple-fast-isotonic-knn ik-lle-ident-taxi AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-ident-taxi lle taxi 3 3 -
+CMD lane/apple-fast-isotonic-knn ik-lle-knn-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-knn-taxi lle taxi 3 3 - MOJOLEARN_LLE_FAST_KNN=1
+CMD lane/apple-fast-isotonic-knn ik-lle-mma-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-mma-taxi lle taxi 3 3 - "MOJOLEARN_LLE_FAST_KNN=1 MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1"
+CMD lane/apple-fast-isotonic-knn ik-lle-knn-istella AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-knn-istella lle istella 3 3 - MOJOLEARN_LLE_FAST_KNN=1
+CMD lane/apple-fast-isotonic-knn ik-lle-mma-istella AFC_FAMILY=algos bash tools/afc_ab.sh ik-lle-mma-istella lle istella 3 3 - "MOJOLEARN_LLE_FAST_KNN=1 MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1"
+CMD lane/apple-fast-isotonic-knn ik-lof-mma-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-lof-mma-taxi lof taxi 3 3 - MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1
+CMD lane/apple-fast-isotonic-knn ik-lof-mma-istella AFC_FAMILY=algos bash tools/afc_ab.sh ik-lof-mma-istella lof istella 3 3 - MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1
+CMD lane/apple-fast-isotonic-knn ik-imp-ident-taxi AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ik-imp-ident-taxi knn-imputer taxi 3 3 -
+CMD lane/apple-fast-isotonic-knn ik-imp-fast-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ik-imp-fast-taxi knn-imputer taxi 3 3 -
