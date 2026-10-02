@@ -4,8 +4,8 @@
 merge and the search. The search is one thread per cell of
 `x_ann/cagra_core.mojo`; the prune and the merge are one block per node and
 compute `cagra_prune` / `cagra_reverse_merge` (the host column's functions)
-integer for integer (gap-fails2, 2026-10-02: the host prune switch
-MOJOLEARN_CAGRA_HOST_PRUNE and its 64-entry bound are gone)."""
+integer for integer (gap-fails2, 2026-10-02: the opt-in host prune and its
+64-entry bound are gone)."""
 
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
