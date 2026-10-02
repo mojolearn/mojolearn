@@ -5664,7 +5664,8 @@ def run_tree_layout_traced[
             # DEVIATION 3110: scan (+ subtract) and pstats phase 1 in one
             # launch, then phase 2; the same bytes as the branch below.
             var fused_launches = enqueue_fused_scan_sub_pstats(
-                ctx, use_ridx, planned and half > 0, level_ids, sub_from,
+                ctx, use_ridx, planned and half > 0,
+                rebind[MutPointer[UInt32, MutAnyOrigin]](level_ids), sub_from,
                 flat_first, flat_folds, flat_one_hot,
                 len(active_fold_counts), hist_cells_per_leaf, hist,
                 n_compute, n_live, stat_count, n_rows,
