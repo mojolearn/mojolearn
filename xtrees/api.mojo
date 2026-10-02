@@ -19,6 +19,7 @@ from xtrees.ops import (
     samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, leaf_newton_rows, tree_score_add, uniform,
     onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict, platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes, column_f64,
+    stratified_folds, kfolds, fold_rows,
 )
 
 
@@ -567,6 +568,38 @@ def column_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObjec
     return PythonObject(n)
 
 
+def stratified_folds_binding(codes: PythonObject, folds: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, n_splits]: folds (int32, n) = each row's test fold, counts
+    (int32, n_splits) = fold sizes; returns 1 when the Python routine refuses."""
+    _need(params, 2, "x_trees_stratified_folds")
+    var n = _count(_i(params, 0), "x_trees_stratified_folds")
+    var status = 0
+    if n > 0:
+        status = stratified_folds(i32_ptr(Int(py=codes)), n, _i(params, 1), i32_ptr(Int(py=folds)), i32_ptr(Int(py=counts)))
+    return PythonObject(status)
+
+
+def kfolds_binding(folds: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, n_splits]."""
+    _need(params, 2, "x_trees_kfolds")
+    var n = _count(_i(params, 0), "x_trees_kfolds")
+    kfolds(n, _i(params, 1), i32_ptr(Int(py=folds)), i32_ptr(Int(py=counts)))
+    return PythonObject(n)
+
+
+def fold_rows_binding(folds: PythonObject, tr: PythonObject, te: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, i, n_te]: tr (int32, n - n_te) and te (int32, n_te), the
+    rows outside and inside fold i, ascending."""
+    _need(params, 3, "x_trees_fold_rows")
+    var n = _count(_i(params, 0), "x_trees_fold_rows")
+    var n_te = _count(_i(params, 2), "x_trees_fold_rows")
+    if n_te > n:
+        raise Error("x_trees_fold_rows: n_te exceeds n")
+    if n > 0:
+        fold_rows(i32_ptr(Int(py=folds)), n, _i(params, 1), n_te, i32_ptr(Int(py=tr)), i32_ptr(Int(py=te)))
+    return PythonObject(n)
+
+
 def node_cover_binding(
     offsets: PythonObject, colid: PythonObject, quesval: PythonObject, left: PythonObject,
     x: PythonObject, cover: PythonObject, params: PythonObject,
@@ -688,6 +721,9 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[complement_pairs_binding]("x_trees_complement_pairs")
     m.def_function[indicator_codes_binding]("x_trees_indicator_codes")
     m.def_function[column_f64_binding]("x_trees_column_f64")
+    m.def_function[stratified_folds_binding]("x_trees_stratified_folds")
+    m.def_function[kfolds_binding]("x_trees_kfolds")
+    m.def_function[fold_rows_binding]("x_trees_fold_rows")
     m.def_function[node_cover_binding]("x_trees_node_cover")
     m.def_function[tree_shap_binding]("x_trees_tree_shap")
     m.def_function[expected_value_binding]("x_trees_expected_value")

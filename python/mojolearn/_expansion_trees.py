@@ -37,7 +37,8 @@ from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_c
 from ._labels import decode_labels, encode_labels, is_bool
 from ._mode import NumericModeMixin
 from ._forest_protocol import (forest_estimator, _forest_fit_arrays, _forest_fit_function,
-                               forest_data_session_choice, open_forest_data_session)
+                               forest_data_session_choice, open_forest_data_session,
+                               ForestDataSession, _export_fit_result)
 from .extratrees import ExtraTreesRegressor, ExtraTreesClassifier as _ET_CLS
 from .randomforest import (
     RandomForestClassifier, RandomForestRegressor, _class_weight_rows, _refuse,
@@ -282,6 +283,37 @@ class DecisionTreeClassifier(RandomForestClassifier):
         self._num_outputs = int(meta[1])
         return self
 
+    def _fit_rows_in_session(self, session, y, rows):
+        """`fit(X[rows], y)` for the X a `ForestDataSession` holds, the rows
+        (int32 ids, repeats allowed) gathered on the device
+        (`rf_classifier_fit_session_rows_export`, the classifier twin of
+        `RandomForestRegressor._fit_in_session(..., rows=)`): the member fit
+        of BaggingClassifier under MOJOLEARN_TREES_ENSEMBLES_BAG_SESSION=1
+        (lane/apple-fast-trees-ensembles, 2026-10-02). Same params, same
+        entry underneath, minus the host gather, the finite scan, the
+        transposition and the upload of each member's rows. No sample or
+        class weights (the caller routes those through `fit`)."""
+        self._refresh_config()
+        self._capture_fit_mode()
+        self.classes_, y32 = encode_labels(y)
+        self.n_classes_ = int(len(self.classes_))
+        if self.n_classes_ < 2:
+            raise ValueError("y has fewer than 2 classes")
+        n_rows, n_features = len(rows), int(session.shape[1])
+        if len(y32) != n_rows:
+            raise ValueError(f"y has {len(y32)} rows, X has {n_rows}")
+        params = self._fit_params(n_rows, n_features, self.n_classes_)
+        native = session.native
+        out = _export_fit_result(native, native.rf_classifier_fit_session_rows_export(
+            session.handle, addr_ro(rows, name="rows"), addr_ro(y32, name="y"), params,
+            self._cfg["criterion"]))
+        (self._offsets, self._colid, self._quesval, self._left_child,
+         self._leaves, meta) = _forest_fit_arrays(out)
+        self.n_features_in_ = int(n_features)
+        self._n_trees = int(meta[0])
+        self._num_outputs = int(meta[1])
+        return self
+
     def get_depth(self):
         return _trees_depth(self)
 
@@ -445,6 +477,49 @@ def _trees_arange(n):
     return Array.from_list(list(range(n)), "<i4")
 
 
+# lane/apple-fast-trees-ensembles (2026-10-02): the Apple FAST switches of
+# this module apply on the FAST tier only; IDENTICAL (the default) runs the
+# code above and below them unchanged. Each is an env var read on the host
+# at fit time, default off:
+#   MOJOLEARN_TREES_ENSEMBLES_BAG_SESSION=1   Bagging members fit a bootstrap
+#     of ONE device copy of X (`_BaggingBase._bag_session`);
+#   MOJOLEARN_TREES_ENSEMBLES_NATIVE_SPLITS=1 the cv fold bookkeeping of
+#     Stacking / CalibratedClassifierCV, OneVsRest's targets and
+#     MultiOutputClassifier's label columns leave their Python row loops
+#     (`_trees_native_folds`, `_trees_native_glue`).
+def _trees_fast_tier(est):
+    """True when `est` runs on the FAST tier (its own `numeric_mode`, else
+    the process default)."""
+    from . import _backend
+    mode = getattr(est, "numeric_mode", None)
+    mode = _backend.default_mode() if mode is None else str(mode).strip().lower()
+    return mode == "fast"
+
+
+def _trees_switch(est, name):
+    return os.environ.get(name) == "1" and _trees_fast_tier(est)
+
+
+def _trees_native_glue(est):
+    """`est` when MOJOLEARN_TREES_ENSEMBLES_NATIVE_SPLITS=1 selects the
+    native cv bookkeeping for it (FAST tier, a binding that carries
+    `x_trees_fold_rows`), else None."""
+    if not _trees_switch(est, "MOJOLEARN_TREES_ENSEMBLES_NATIVE_SPLITS"):
+        return None
+    return est if callable(getattr(est._bind(), "x_trees_fold_rows", None)) else None
+
+
+def _trees_float_dtype(Y):
+    """True for a buffer whose dtype is a float (an ndarray's `kind`, or an
+    `Array`'s format string): its `tolist()` labels are Python floats, the
+    classes a native float64 column encodes to."""
+    d = getattr(Y, "dtype", None)
+    kind = getattr(d, "kind", None)
+    if kind is not None:
+        return kind == "f"
+    return isinstance(d, str) and d.lstrip("<>=|").startswith("f")
+
+
 class _TreesEnsembleBase(NumericModeMixin):
     """The lane's binding (`_bind()`) and its row/column helpers."""
     _BINDING = "_mojolearn_x_trees"
@@ -566,27 +641,83 @@ class _BaggingBase(_TreesEnsembleBase):
         self.estimators_, self.estimators_features_, self._oob_rows = [], [], []
         all_rows = n_rows == n and not self.bootstrap
         all_cols = n_feat == d and not self.bootstrap_features
-        for k in range(int(self.n_estimators)):
-            rows = _trees_arange(n) if all_rows else self._indices(n, n_rows, self.bootstrap, seed, 2 * k)
-            if all_cols:
-                cols = _trees_arange(d)
-            else:
-                cols = self._indices(d, n_feat, self.bootstrap_features, seed, 2 * k + 1)
-                if not self.bootstrap_features:
-                    cols = Array.from_list(sorted(cols.tolist()), "<i4")
-            Xs = Xa if (all_rows and all_cols) else self._gather(Xa, rows, cols)
-            ys = y_sub(rows, all_rows)
-            est = _trees_clone(base, random_state=_trees_sub_seed(seed, k))
-            if sw is None:
-                est.fit(Xs, ys)
-            else:
-                est.fit(Xs, ys, sample_weight=sw if all_rows else self._gather_vec(sw, rows))
-            self.estimators_.append(est)
-            self.estimators_features_.append(cols)
-            if self.oob_score:
-                self._oob_rows.append(self._oob_of(rows, n))
+        session, entry = self._bag_session(base, Xa, sw, all_rows, all_cols)
+        try:
+            for k in range(int(self.n_estimators)):
+                rows = _trees_arange(n) if all_rows else self._indices(n, n_rows, self.bootstrap, seed, 2 * k)
+                if all_cols:
+                    cols = _trees_arange(d)
+                else:
+                    cols = self._indices(d, n_feat, self.bootstrap_features, seed, 2 * k + 1)
+                    if not self.bootstrap_features:
+                        cols = Array.from_list(sorted(cols.tolist()), "<i4")
+                ys = y_sub(rows, all_rows)
+                est = _trees_clone(base, random_state=_trees_sub_seed(seed, k))
+                if session is not None:
+                    # the member's rows gathered on the device from the one
+                    # staged X: the forest `fit(X[rows], ys)` returns
+                    if entry == "rf_regressor_fit_session_rows_export":
+                        est._fit_in_session(session, ys, rows=rows)
+                    else:
+                        est._fit_rows_in_session(session, ys, rows)
+                else:
+                    Xs = Xa if (all_rows and all_cols) else self._gather(Xa, rows, cols)
+                    if sw is None:
+                        est.fit(Xs, ys)
+                    else:
+                        est.fit(Xs, ys, sample_weight=sw if all_rows else self._gather_vec(sw, rows))
+                self.estimators_.append(est)
+                self.estimators_features_.append(cols)
+                if self.oob_score:
+                    self._oob_rows.append(self._oob_of(rows, n))
+        finally:
+            if session is not None:
+                session.close()
         self.n_features_in_ = d
         return self
+
+    def _bag_session(self, base, Xa, sw, all_rows, all_cols):
+        """lane/apple-fast-trees-ensembles (2026-10-02),
+        MOJOLEARN_TREES_ENSEMBLES_BAG_SESSION=1 (FAST tier): ONE device copy
+        of X for every member (a `ForestDataSession`, trees-apple3), each
+        member's bootstrap rows gathered there
+        (`rf_regressor_fit_session_rows_export`, and the new classifier twin
+        `rf_classifier_fit_session_rows_export`). The loop above otherwise
+        gathers every member's rows on the host (`_gather`, n x d), and the
+        member's own `fit` then scans them for NaN one thread, transposes
+        them into a pinned stage and uploads them (python/mojolearn/
+        randomforest.py `_fit_arrays`, bindings/_mojolearn_rf.mojo
+        `_rf_classifier_fit`): at 1M rows ten times per fit. Same draws,
+        same gathered bytes, same fit entry underneath, so the members are
+        the old path's. Returns (session, entry) or (None, None): an
+        unweighted best-splitter DecisionTree member (squared error for the
+        regressor, no class_weight for the classifier) on a bootstrap of
+        every column, on a binding that carries the session entries."""
+        if not _trees_switch(self, "MOJOLEARN_TREES_ENSEMBLES_BAG_SESSION"):
+            return None, None
+        if sw is not None or all_rows or not all_cols:
+            return None, None
+        if type(base) is DecisionTreeRegressor:
+            if base.splitter != "best" or base.criterion not in ("squared_error", "mse"):
+                return None, None
+            entry = "rf_regressor_fit_session_rows_export"
+        elif type(base) is DecisionTreeClassifier:
+            if base.splitter != "best" or base.class_weight is not None:
+                return None, None
+            entry = "rf_classifier_fit_session_rows_export"
+        else:
+            return None, None
+        try:
+            native = _trees_member_native(base)
+            if not callable(getattr(native, "rf_data_session_open", None)) \
+                    or not callable(getattr(native, entry, None)):
+                return None, None
+        except (AttributeError, ImportError):
+            return None, None
+        # the one finite scan of X (each member's `fit` scanned its own rows)
+        if not all_finite(Xa):
+            raise ValueError("X contains NaN or infinity; the forest has no missing-value arm")
+        return ForestDataSession(native, Xa, True, False), entry
 
     @staticmethod
     def _oob_of(rows, n):
@@ -1521,14 +1652,44 @@ def _trees_fold_rows(folds, i):
     return Array.from_list(tr, "<i4"), Array.from_list(te, "<i4")
 
 
-def _trees_splits(cv, X, y, n, codes=None, partition=False):
+def _trees_native_folds(est, n_splits, n, codes):
+    """`_trees_splits` for an int cv with the fold assignment and the fold
+    row lists made natively (xtrees/ops.mojo `stratified_folds`, `kfolds`,
+    `fold_rows`: the same index bookkeeping, no Python row loop), under
+    MOJOLEARN_TREES_ENSEMBLES_NATIVE_SPLITS=1 (lane/apple-fast-trees-ensembles,
+    2026-10-02). `codes` is an int32 code Array (stratified) or None (KFold)."""
+    b = est._bind()
+    folds, counts = empty((n,), "<i4"), empty((n_splits,), "<i4")
+    if codes is not None:
+        c32 = as_i32_c(codes, ndim=1, name="codes")[0]
+        if int(b.x_trees_stratified_folds(addr_ro(c32, name="codes"), addr(folds, name="folds"),
+                                          addr(counts, name="counts"), [n, n_splits])) != 0:
+            raise ValueError(f"n_splits={n_splits} cannot be greater than the number of members in each class")
+    else:
+        b.x_trees_kfolds(addr(folds, name="folds"), addr(counts, name="counts"), [n, n_splits])
+    cnt = [int(v) for v in counts.tolist()]
+    used = max([i for i in range(n_splits) if cnt[i] > 0] or [0]) + 1
+    out = []
+    for i in range(used):
+        tr, te = empty((n - cnt[i],), "<i4"), empty((cnt[i],), "<i4")
+        b.x_trees_fold_rows(addr_ro(folds, name="folds"), addr(tr, name="train"), addr(te, name="test"),
+                            [n, i, cnt[i]])
+        out.append((tr, te))
+    return out
+
+
+def _trees_splits(cv, X, y, n, codes=None, partition=False, native=None):
     """[(train rows, test rows)] as int32 Arrays. An int is sklearn's
     unshuffled StratifiedKFold (with `codes`) or KFold; a splitter object's
     `split(X, y)` and an iterable of pairs are taken as given (sklearn
     `check_cv`), their indices in the order they come. `partition`: every row
-    must be in exactly one test set (sklearn cross_val_predict)."""
+    must be in exactly one test set (sklearn cross_val_predict). `native`:
+    the estimator whose binding builds an int cv's folds
+    (`_trees_native_folds`; `codes` is then an int32 Array), else None."""
     c = _trees_cv(cv)
     if isinstance(c, int):
+        if native is not None:
+            return _trees_native_folds(native, c, n, codes)
         folds = _trees_stratified_folds(codes, c) if codes is not None else _trees_kfolds(n, c)
         return [_trees_fold_rows(folds, i) for i in range(max(folds) + 1)]
     pairs = c.split(X, y) if hasattr(c, "split") else c
@@ -1836,7 +1997,9 @@ class StackingClassifier(_StackingBase):
             _refuse("StackingClassifier sample_weight", "not carried in pass 1.")
         self.classes_, codes = encode_labels(y)
         self._binary = len(self.classes_) == 2
-        splits = _trees_splits(self.cv, X, y, len(codes), codes=codes.tolist(), partition=True)
+        nat = _trees_native_glue(self)
+        splits = _trees_splits(self.cv, X, y, len(codes), codes=codes if nat is not None else codes.tolist(),
+                               partition=True, native=nat)
         final = self.final_estimator
         if final is None:
             from .linear_model import LogisticRegression
@@ -1868,7 +2031,7 @@ class StackingRegressor(_StackingBase):
         if sample_weight is not None:
             _refuse("StackingRegressor sample_weight", "not carried in pass 1.")
         y32, _ = as_f32_c(y, ndim=1, name="y")
-        splits = _trees_splits(self.cv, X, y, len(y32), partition=True)
+        splits = _trees_splits(self.cv, X, y, len(y32), partition=True, native=_trees_native_glue(self))
         final = self.final_estimator
         if final is None:
             from .linear_model import Ridge
@@ -1929,13 +2092,29 @@ class MultiOutputClassifier(_TreesWrapperBase):
 
     def fit(self, X, Y, sample_weight=None):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
-        rows = Y.tolist() if hasattr(Y, "tolist") else [list(r) for r in Y]
-        if len(rows) != Xa.shape[0]:
-            raise ValueError(f"Y has {len(rows)} rows, X has {Xa.shape[0]}")
-        m = len(rows[0])
+        Ya = None
+        if _trees_native_glue(self) is not None and _trees_float_dtype(Y):
+            # a float Y: each column natively (x_trees_column_f64), the same
+            # float labels its `tolist()` rows hold
+            Ya, _ = as_f64_c(Y, ndim=2, name="Y")
+            rows = None
+            if Ya.shape[0] != Xa.shape[0]:
+                raise ValueError(f"Y has {Ya.shape[0]} rows, X has {Xa.shape[0]}")
+            m = Ya.shape[1]
+        else:
+            rows = Y.tolist() if hasattr(Y, "tolist") else [list(r) for r in Y]
+            if len(rows) != Xa.shape[0]:
+                raise ValueError(f"Y has {len(rows)} rows, X has {Xa.shape[0]}")
+            m = len(rows[0])
         self.estimators_, self.classes_ = [], []
         for j in range(m):
-            classes, codes = encode_labels([r[j] for r in rows])
+            if Ya is not None:
+                n = Ya.shape[0]
+                col = empty((n,), "<f8")
+                self._bind().x_trees_column_f64(addr_ro(Ya, name="Y"), addr(col, name="column"), [n, m, j])
+                classes, codes = encode_labels(col)
+            else:
+                classes, codes = encode_labels([r[j] for r in rows])
             e = _trees_clone(self.estimator)
             e.fit(Xa, codes) if sample_weight is None else e.fit(Xa, codes, sample_weight=sample_weight)
             self.estimators_.append(e)
@@ -1987,8 +2166,13 @@ class OneVsRestClassifier(_TreesWrapperBase):
         k = len(self.classes_)
         if k < 2:
             raise ValueError("y has fewer than 2 classes")
-        cl = codes.tolist()
-        targets = [codes] if k == 2 else [Array.from_list([1 if c == j else 0 for c in cl], "<i4") for j in range(k)]
+        if _trees_native_glue(self) is not None:
+            # the 0/1 targets natively (x_trees_indicator_codes), the int32
+            # words the list comprehension below builds
+            targets = [codes] if k == 2 else [self._indicator(codes, j) for j in range(k)]
+        else:
+            cl = codes.tolist()
+            targets = [codes] if k == 2 else [Array.from_list([1 if c == j else 0 for c in cl], "<i4") for j in range(k)]
         self.estimators_ = []
         for t in targets:
             e = _trees_clone(self.estimator)
@@ -1997,6 +2181,12 @@ class OneVsRestClassifier(_TreesWrapperBase):
         self.n_features_in_ = Xa.shape[1]
         self._fitted = True
         return self
+
+    def _indicator(self, codes, j):
+        n = len(codes)
+        yj = empty((n,), "<i4")
+        self._bind().x_trees_indicator_codes(addr_ro(codes, name="codes"), addr(yj, name="y"), 0, [n, j])
+        return yj
 
     def _positive(self, e, Xa):
         """The estimator's score for class 1, float32 (n,): decision_function
@@ -2230,7 +2420,9 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         if base is None:
             from .svm import LinearSVC
             base = LinearSVC()
-        splits = _trees_splits(self.cv, X, y, n, codes=codes.tolist(), partition=not self.ensemble)
+        nat = _trees_native_glue(self)
+        splits = _trees_splits(self.cv, X, y, n, codes=codes if nat is not None else codes.tolist(),
+                               partition=not self.ensemble, native=nat)
         cols = _trees_arange(d)
         self.calibrated_classifiers_ = []
         if self.ensemble:

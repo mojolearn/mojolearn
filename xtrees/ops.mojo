@@ -1092,3 +1092,117 @@ def column_f64(
     """dst[r] = src[r, j] of a row-major (n, c) block (a copy)."""
     for r in range(n):
         dst[unsafe_offset=r] = src[unsafe_offset=r * c + j]
+
+# ------------------------------------------------- wrappers' cv bookkeeping
+# lane/apple-fast-trees-ensembles (2026-10-02): the fold assignment and the
+# fold row lists of StackingClassifier / StackingRegressor /
+# CalibratedClassifierCV were Python loops over every row
+# (`_trees_stratified_folds`, `_trees_kfolds`, `_trees_fold_rows` in
+# python/mojolearn/_expansion_trees.py: a dict walk, a sort of a million
+# codes and ten list comprehensions of a million rows per cv=5 fit). These
+# restate them one for one: index bookkeeping only, no arithmetic, so the
+# splits are the Python routine's. `MOJOLEARN_TREES_ENSEMBLES_NATIVE_SPLITS=1`
+# (FAST tier) selects them.
+def stratified_folds(
+    codes: MutPointer[Int32, MutUntrackedOrigin], n: Int, n_splits: Int,
+    folds: MutPointer[Int32, MutUntrackedOrigin], counts: MutPointer[Int32, MutUntrackedOrigin],
+) raises -> Int:
+    """sklearn StratifiedKFold(n_splits, shuffle=False)._make_test_folds as
+    `_trees_stratified_folds` restates it: classes in order of first
+    appearance; the sorted labels dealt round robin give each class its
+    per-fold allocation; the rows of a class, in row order, take the folds
+    0 .. n_splits - 1 each that many times. `folds[r]` is row r's test
+    fold; `counts[i]` the size of fold i. Returns 1 for the refusal the
+    Python routine raises on (n_splits above every class count), else 0."""
+    if n_splits < 2:
+        raise Error("x_trees stratified_folds: n_splits must be >= 2")
+    var k = 0
+    for i in range(n):
+        var c = Int(codes[unsafe_offset=i])
+        if c < 0:
+            raise Error("x_trees stratified_folds: negative code")
+        if c + 1 > k:
+            k = c + 1
+    # enc_of[code] = the class's index in order of first appearance
+    var enc_of = List[Int](length=k, fill=-1)
+    var n_seen = 0
+    for i in range(n):
+        var c = Int(codes[unsafe_offset=i])
+        if enc_of[c] < 0:
+            enc_of[c] = n_seen
+            n_seen += 1
+    var class_counts = List[Int](length=n_seen, fill=0)
+    for i in range(n):
+        class_counts[enc_of[Int(codes[unsafe_offset=i])]] += 1
+    var cmin = n
+    var cmax = 0
+    for e in range(n_seen):
+        if class_counts[e] < cmin:
+            cmin = class_counts[e]
+        if class_counts[e] > cmax:
+            cmax = class_counts[e]
+    if n_splits > cmax and cmin < n_splits and cmax < n_splits:
+        return 1
+    # alloc[i * n_seen + e]: positions p of class e's block of the sorted
+    # labels (blocks in class order) with p % n_splits == i
+    var alloc = List[Int](length=n_splits * n_seen, fill=0)
+    var start = 0
+    for e in range(n_seen):
+        for p in range(start, start + class_counts[e]):
+            alloc[(p % n_splits) * n_seen + e] += 1
+        start += class_counts[e]
+    var cur_fold = List[Int](length=n_seen, fill=0)
+    var remaining = List[Int](length=n_seen, fill=0)
+    for e in range(n_seen):
+        remaining[e] = alloc[e]
+    for i in range(n_splits):
+        counts[unsafe_offset=i] = Int32(0)
+    for r in range(n):
+        var e = enc_of[Int(codes[unsafe_offset=r])]
+        while remaining[e] == 0:
+            cur_fold[e] += 1
+            remaining[e] = alloc[cur_fold[e] * n_seen + e]
+        folds[unsafe_offset=r] = Int32(cur_fold[e])
+        counts[unsafe_offset=cur_fold[e]] += 1
+        remaining[e] -= 1
+    return 0
+
+
+def kfolds(
+    n: Int, n_splits: Int, folds: MutPointer[Int32, MutUntrackedOrigin],
+    counts: MutPointer[Int32, MutUntrackedOrigin],
+) raises:
+    """sklearn KFold(n_splits, shuffle=False) as `_trees_kfolds`: contiguous
+    folds, the first n % n_splits one row longer."""
+    if n_splits < 2:
+        raise Error("x_trees kfolds: n_splits must be >= 2")
+    var start = 0
+    for i in range(n_splits):
+        var size = n // n_splits + (1 if i < n % n_splits else 0)
+        for r in range(start, start + size):
+            folds[unsafe_offset=r] = Int32(i)
+        counts[unsafe_offset=i] = Int32(size)
+        start += size
+
+
+def fold_rows(
+    folds: MutPointer[Int32, MutUntrackedOrigin], n: Int, i: Int, n_te: Int,
+    tr: MutPointer[Int32, MutUntrackedOrigin], te: MutPointer[Int32, MutUntrackedOrigin],
+) raises:
+    """`_trees_fold_rows`: tr = the rows whose fold is not i, te = the rows
+    whose fold is i, both ascending; te holds `n_te` rows, tr the rest."""
+    var a = 0
+    var b = 0
+    for r in range(n):
+        if Int(folds[unsafe_offset=r]) == i:
+            if b >= n_te:
+                raise Error("x_trees fold_rows: fold count mismatch")
+            te[unsafe_offset=b] = Int32(r)
+            b += 1
+        else:
+            if a >= n - n_te:
+                raise Error("x_trees fold_rows: fold count mismatch")
+            tr[unsafe_offset=a] = Int32(r)
+            a += 1
+    if b != n_te:
+        raise Error("x_trees fold_rows: fold count mismatch")

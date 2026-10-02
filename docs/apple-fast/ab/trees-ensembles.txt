@@ -1,0 +1,31 @@
+CMD lane/apple-fast-trees-ensembles te-bagclf-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh te-bagclf-ident bagging-clf istella 3 3 -
+CMD lane/apple-fast-trees-ensembles te-bagclf-istella AFC_FAMILY=algos bash tools/afc_ab.sh te-bagclf-istella bagging-clf istella 3 3 - MOJOLEARN_TREES_ENSEMBLES_BAG_SESSION=1
+CMD lane/apple-fast-trees-ensembles te-bagclf-taxi AFC_FAMILY=algos bash tools/afc_ab.sh te-bagclf-taxi bagging-clf taxi 3 3 - MOJOLEARN_TREES_ENSEMBLES_BAG_SESSION=1
+CMD lane/apple-fast-trees-ensembles te-bagreg-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh te-bagreg-ident bagging-reg istella 3 3 -
+CMD lane/apple-fast-trees-ensembles te-bagreg-istella AFC_FAMILY=algos bash tools/afc_ab.sh te-bagreg-istella bagging-reg istella 3 3 - MOJOLEARN_TREES_ENSEMBLES_BAG_SESSION=1
+CMD lane/apple-fast-trees-ensembles te-bagreg-taxi AFC_FAMILY=algos bash tools/afc_ab.sh te-bagreg-taxi bagging-reg taxi 3 3 - MOJOLEARN_TREES_ENSEMBLES_BAG_SESSION=1
+CMD lane/apple-fast-trees-ensembles te-stackclf-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh te-stackclf-ident stacking-clf istella 3 3 -
+CMD lane/apple-fast-trees-ensembles te-stackclf-istella AFC_FAMILY=algos bash tools/afc_ab.sh te-stackclf-istella stacking-clf istella 3 3 - MOJOLEARN_TREES_ENSEMBLES_NATIVE_SPLITS=1
+CMD lane/apple-fast-trees-ensembles te-stackclf-taxi AFC_FAMILY=algos bash tools/afc_ab.sh te-stackclf-taxi stacking-clf taxi 3 3 - MOJOLEARN_TREES_ENSEMBLES_NATIVE_SPLITS=1
+CMD lane/apple-fast-trees-ensembles te-stackreg-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh te-stackreg-ident stacking-reg istella 3 3 -
+CMD lane/apple-fast-trees-ensembles te-stackreg-istella AFC_FAMILY=algos bash tools/afc_ab.sh te-stackreg-istella stacking-reg istella 3 3 - MOJOLEARN_TREES_ENSEMBLES_NATIVE_SPLITS=1
+CMD lane/apple-fast-trees-ensembles te-cal-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh te-cal-ident calibrated istella 3 3 -
+CMD lane/apple-fast-trees-ensembles te-cal-istella AFC_FAMILY=algos bash tools/afc_ab.sh te-cal-istella calibrated istella 3 3 - MOJOLEARN_TREES_ENSEMBLES_NATIVE_SPLITS=1
+CMD lane/apple-fast-trees-ensembles te-cal-taxi AFC_FAMILY=algos bash tools/afc_ab.sh te-cal-taxi calibrated taxi 3 3 - MOJOLEARN_TREES_ENSEMBLES_NATIVE_SPLITS=1
+CMD lane/apple-fast-trees-ensembles te-ovr-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh te-ovr-ident ovr istella 3 3 -
+CMD lane/apple-fast-trees-ensembles te-ovr-istella AFC_FAMILY=algos bash tools/afc_ab.sh te-ovr-istella ovr istella 3 3 - MOJOLEARN_TREES_ENSEMBLES_NATIVE_SPLITS=1
+CMD lane/apple-fast-trees-ensembles te-ovr-taxi AFC_FAMILY=algos bash tools/afc_ab.sh te-ovr-taxi ovr taxi 3 3 - MOJOLEARN_TREES_ENSEMBLES_NATIVE_SPLITS=1
+CMD lane/apple-fast-trees-ensembles te-moclf-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh te-moclf-ident multioutput-clf istella 3 3 -
+CMD lane/apple-fast-trees-ensembles te-moclf-istella AFC_FAMILY=algos bash tools/afc_ab.sh te-moclf-istella multioutput-clf istella 3 3 - MOJOLEARN_TREES_ENSEMBLES_NATIVE_SPLITS=1
+CMD lane/apple-fast-trees-ensembles te-adaclf-sess-taxi AFC_FAMILY=algos bash tools/afc_ab.sh te-adaclf-sess-taxi adaboost-clf taxi 3 3 - MOJOLEARN_FOREST_SESSION=1
+CMD lane/apple-fast-trees-ensembles te-adaclf-sess-istella AFC_FAMILY=algos bash tools/afc_ab.sh te-adaclf-sess-istella adaboost-clf istella 3 3 - MOJOLEARN_FOREST_SESSION=1
+CMD lane/apple-fast-trees-ensembles te-adaclf-share-taxi AFC_FAMILY=algos bash tools/afc_ab.sh te-adaclf-share-taxi adaboost-clf taxi 3 3 MOJOLEARN_FOREST_SESSION=1 MOJOLEARN_FOREST_SESSION=share
+CMD lane/apple-fast-trees-ensembles te-adareg-sess-taxi AFC_FAMILY=algos bash tools/afc_ab.sh te-adareg-sess-taxi adaboost-reg taxi 3 3 - MOJOLEARN_FOREST_SESSION=1
+CMD lane/apple-fast-trees-ensembles te-adareg-sess-istella AFC_FAMILY=algos bash tools/afc_ab.sh te-adareg-sess-istella adaboost-reg istella 3 3 - MOJOLEARN_FOREST_SESSION=1
+CMD lane/apple-fast-trees-ensembles te-dart-sess-taxi AFC_FAMILY=algos bash tools/afc_ab.sh te-dart-sess-taxi dart taxi 3 3 - MOJOLEARN_FOREST_SESSION=1
+CMD lane/apple-fast-trees-ensembles te-dartreg-sess-taxi AFC_FAMILY=algos bash tools/afc_ab.sh te-dartreg-sess-taxi dart-reg taxi 3 3 - MOJOLEARN_FOREST_SESSION=1
+CMD lane/apple-fast-trees-ensembles te-rte-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh te-rte-ident-istella random-trees-embedding istella 3 3 -
+CMD lane/apple-fast-trees-ensembles te-rte-fast-istella AFC_FAMILY=algos bash tools/afc_ab.sh te-rte-fast-istella random-trees-embedding istella 3 3 -
+CMD lane/apple-fast-trees-ensembles te-rte-fast-taxi AFC_FAMILY=algos bash tools/afc_ab.sh te-rte-fast-taxi random-trees-embedding taxi 3 3 -
+CMD lane/apple-fast-trees-ensembles te-rte-stage-istella AFC_FAMILY=algos bash tools/afc_ab.sh te-rte-stage-istella random-trees-embedding istella 1 1 MOJOLEARN_STAGE_TIMES=1
+CMD lane/apple-fast-trees-ensembles te-rte-stage-taxi AFC_FAMILY=algos bash tools/afc_ab.sh te-rte-stage-taxi random-trees-embedding taxi 1 1 MOJOLEARN_STAGE_TIMES=1
