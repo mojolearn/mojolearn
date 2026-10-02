@@ -503,18 +503,6 @@ py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_forest_protocol.py	0	from skl
 py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_gbdt_adapters.py	0	from sklearn.exceptions import NotFittedError
 py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_gbdt_adapters.py	0	from sklearn.utils import Tags, TargetTags, ClassifierTags, RegressorTags
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_impl.py	0	pairs = [(flat[2 * i], flat[2 * i + 1]) for i in range(n)]
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_optimizer.py	0	active = [(x[i] <= lo[i] and g[i] > 0.0) or (x[i] >= hi[i] and g[i] < 0.0) for i in range(n)]
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_optimizer.py	0	d = [0.0 if active[i] else -g[i] for i in range(n)]
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_optimizer.py	0	d = [0.0 if active[i] else -q[i] for i in range(n)]
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_optimizer.py	0	for i in range(n):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_optimizer.py	1	for i in range(n):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_optimizer.py	2	for i in range(n):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_optimizer.py	3	for i in range(n):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_optimizer.py	0	q = [0.0 if active[i] else g[i] for i in range(n)]
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_optimizer.py	0	step = [xt[i] - x[i] for i in range(n)]
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_optimizer.py	0	x = [_clip(float(x0[i]), lo[i], hi[i]) for i in range(n)]
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_optimizer.py	0	xt = [_clip(x[i] + t * d[i], lo[i], hi[i]) for i in range(n)]
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_optimizer.py	0	y = [gt[i] - g[i] for i in range(n)]
 host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	if os.path.exists(_backend.host_module_path(_HOST_INFERENCE_BASENAME)):
 host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	return _backend.load_host_module(_HOST_BASENAME)
 host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	return _backend.load_host_module(_HOST_INFERENCE_BASENAME)
@@ -528,8 +516,6 @@ py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	from c
 py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	self._threads = ThreadPoolExecutor(max_workers=len(self.devices))
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_portable_math.py	0	for i in range(n):
 route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/_portable_math.py	0	if _environ.get("MOJOLEARN_HOTPATH", "").strip().lower() != "python":
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_serialize.py	0	for i in range(n)]
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_serialize.py	0	items = [raw[i * width:(i + 1) * width].rstrip(b"\x00") for i in range(n)]
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_svm_impl.py	0	for i in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_svm_impl.py	0	for r in range(n_rows):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_svm_impl.py	0	idx = [r for r in range(len(codes)) if codes[r] == ci or codes[r] == cj]

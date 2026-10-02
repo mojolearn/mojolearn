@@ -60,8 +60,11 @@ _verify_small.py _verify_worker.py _verification_catalog.py
 _verification_coverage.py _verification_ctr_models.py
 _verification_evidence_data.py _verification_profiles.py
 _forest_host.py _gbdt_host.py _byte_lm_host.py _byte_lm_trainer_host.py
-_classical_host.py
+_classical_host.py _serialize.py _gp_optimizer.py
 """.split())
+# _serialize.py: model save/load (no fit, transform or predict).
+# _gp_optimizer.py: L-BFGS over the kernel's few hyperparameters (its loops
+# run over parameters, not samples); the kernel matrix work is on the GPU.
 
 # The host thread pool's own implementation: its contents are the CPU-only
 # executor. Every USE of it in GPU code is still a finding.
