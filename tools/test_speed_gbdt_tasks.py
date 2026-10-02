@@ -52,10 +52,10 @@ def test_task_rosters_per_vendor(vendor):
                                           else {"lightgbm"})
         assert libs == want, (vendor, r["id"], opp)
         if vendor == "apple":
-            assert r["our_arms"] == {"ours": "identical", "ours-ab": "fast", "ours-cpu": "identical"}
+            assert r["our_arms"] == {"ours": "identical", "ours-ab": "fast"}
             assert all(o.endswith("-cpu") for o in opp)
         else:
-            assert r["our_arms"] == {"ours": "identical", "ours-cpu": "identical"}
+            assert r["our_arms"] == {"ours": "identical"}
         if vendor == "nvidia":
             assert all(not o.endswith("-cpu") for o in opp)
         if vendor == "amd":
