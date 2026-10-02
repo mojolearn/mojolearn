@@ -1,14 +1,13 @@
 diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
-index bc04f5c16..2097d9df6 100644
 --- a/x_neighbors/items.mojo
 +++ b/x_neighbors/items.mojo
-@@ -1037,7 +1037,8 @@ def _chol_inplace(a: FP, m: Int) -> Bool:
-     is not positive."""
-     for j in range(m):
-         var s = a.unsafe_load(j * m + j)
--        for k in range(j):
-+        for kk in range(j):
-+            var k = j - 1 - kk
-             var l = a.unsafe_load(j * m + k)
-             s = ftz(identical_mul_add(-l, l, s))
-         if not (s > Float32(0)):
+@@ -1383,7 +1383,8 @@
+     if i < j or Int(fl.unsafe_load(c)) < j:
+         return
+     var s = a.unsafe_load(j * m + j)
+-    for k in range(j):
++    for kk in range(j):
++        var k = j - 1 - kk
+         var l = a.unsafe_load(j * m + k)
+         s = ftz(identical_mul_add(-l, l, s))
+     if not (s > Float32(0)):

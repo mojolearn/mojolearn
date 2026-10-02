@@ -48,7 +48,21 @@ there because the hazard is invisible at review time and free at run time.
 
 from max.gpu.host import DeviceContext
 
-from gemm.checks.gemm_identical import identical_gemm
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from gemm.checks.gemm_identical import (
+    identical_gemm,
+    identical_gemm_into,
+    identical_gemm_workspace_max_floats,
+)
+from gemm.host_transport import (
+    GemmHostLease,
+    ROLE_A,
+    ROLE_B,
+    ROLE_C,
+    ROLE_WS,
+    gemm_down_f32,
+    gemm_up_f32,
+)
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 
 
@@ -101,26 +115,31 @@ def identical_gemm_host(
             " (OP_TN), got " + String(op)
         )
 
-    var a = ctx.enqueue_create_buffer[DType.float32](m * k)
-    var b = ctx.enqueue_create_buffer[DType.float32](n * k)
-    var c = ctx.enqueue_create_buffer[DType.float32](m * n)
-    ctx.enqueue_copy(dst_buf=a, src_ptr=a_ptr)
-    ctx.enqueue_copy(dst_buf=b, src_ptr=b_ptr)
-    # NO WAIT AFTER THE UPLOADS (lane/apple-mlp-fused, 2026-09-30). The
-    # uploads and the GEMM's launches sit on one in-order context, so the
-    # wait that stood here ordered nothing (DEVIATION 2721's argument; the
-    # Samba ops' `samba_linear_forward_host` never had it). The caller's
-    # pointers outlive the call, so the uploads may read them whenever the
-    # queue reaches them. `identical_gemm` still waits before it returns
-    # (its workspace's lifetime), and the download below waits once more.
-    # One host round trip fewer per `matmul`; same kernels, same bits.
+    # lane/gap-neural-models (2026-10-02): pooled device buffers, the
+    # dispatcher's workspace pooled with them, and staged transfers
+    # (gemm/host_transport.mojo; MOJOLEARN_GEMM_POOL=0 and
+    # MOJOLEARN_GEMM_STAGE_DOWN/UP=0 restore the old transport). The kernels
+    # and their plan are the same; copies only, no bit moves.
+    var lease = GemmHostLease()
+    var a = lease.f32(ctx, ROLE_A, m * k)
+    var b = lease.f32(ctx, ROLE_B, n * k)
+    var c = lease.f32(ctx, ROLE_C, m * n)
+    gemm_up_f32(ctx, lease, a, a_ptr, m * k)
+    gemm_up_f32(ctx, lease, b, b_ptr, n * k)
+    # NO WAIT AFTER THE UPLOADS (lane/apple-mlp-fused, 2026-09-30): the
+    # uploads and the GEMM's launches sit on one in-order context.
 
     # THE ONE LINE THAT COMPUTES ANYTHING. Everything above is transport and
     # everything below is transport.
-    identical_gemm(ctx, c, a, b, m, n, k, op)
-
-    ctx.enqueue_copy(dst_ptr=c_ptr, src_buf=c)
-    ctx.synchronize()
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        var ws = lease.f32(ctx, ROLE_WS, identical_gemm_workspace_max_floats(m, n, k))
+        identical_gemm_into(ctx, c, a, b, ws, m, n, k, op)
+        gemm_down_f32(ctx, lease, c, c_ptr, m * n)
+        _ = ws
+    else:
+        identical_gemm(ctx, c, a, b, m, n, k, op)
+        gemm_down_f32(ctx, lease, c, c_ptr, m * n)
+    lease.release()
     _ = a
     _ = b
     _ = c

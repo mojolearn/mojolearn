@@ -77,14 +77,14 @@ class ForestDataSession:
             self.handle, _addr_ro(y32), params, criterion, _addr_ro(weights)))
 
 
-def forest_data_session_choice(mode):
+def forest_data_session_choice(mode, default="0"):
     """What `MOJOLEARN_FOREST_SESSION` asks for: None (no session: every
     member stages X itself), 'exact' (the session; each member draws its own
     quantile sample, so its forest is the one its own fit returns) or
     'share' (FAST only: later members reuse the first member's tables).
     OPT-IN (trees-apple3, unproven): unset means no session."""
     import os
-    choice = os.environ.get("MOJOLEARN_FOREST_SESSION", "0").strip().lower()
+    choice = os.environ.get("MOJOLEARN_FOREST_SESSION", default).strip().lower()
     if choice in ("", "0", "off", "no"):
         return None
     if choice in ("1", "on", "exact"):
@@ -94,11 +94,11 @@ def forest_data_session_choice(mode):
     raise ValueError("MOJOLEARN_FOREST_SESSION must be 0, 1 (exact) or share")
 
 
-def open_forest_data_session(native, X, *, row_major, mode):
+def open_forest_data_session(native, X, *, row_major, mode, default="0"):
     """A `ForestDataSession` for X on this binding, or None when the choice
     is off or the binary has no session entry (a CPU host build, an older
     binding)."""
-    choice = forest_data_session_choice(mode)
+    choice = forest_data_session_choice(mode, default)
     if choice is None or not callable(getattr(native, "rf_data_session_open", None)):
         return None
     return ForestDataSession(native, X, row_major, choice == "share")

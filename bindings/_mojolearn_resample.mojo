@@ -5,7 +5,7 @@
 
 A separate extension module, for `bindings/_mojolearn_gp.mojo`'s reason.
 `resample/estimator.mojo`'s three host surfaces are reached and nothing is
-re-decided: every refusal (`validate_positions`, `validate_pooled`, the
+re-decided: every refusal (`validate_positions`, the
 statistic and method codes, the BCa refusal DEVIATION 1699, the non-finite
 cell, the sort-cell ceiling) is raised one layer down by name. This file
 refuses a null address, a list of the wrong length and an integrand id
