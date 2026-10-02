@@ -92,6 +92,8 @@ from x_decomp.jacobi2 import (
     one_sided_svd2_finish_kernel,
 )
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
+from x_decomp.qr_sliced import XD_QR_SLICED
+from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
 from x_decomp.tsqr_device import ts_apply_device, ts_factor_device, ts_free_device, ts_pack_device
 from x_decomp.jacobi_par import (
     PJ_TPB,
@@ -2295,6 +2297,21 @@ struct DevExec(Exec):
 
     @staticmethod
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+        comptime if XD_QR_SLICED:
+            # lane hr-qr: every fold over slices of rows, a fixed tree
+            # (x_decomp/qr_sliced.mojo), on every column at every size
+            var sctx = xd_ctx()
+            var skk = m if m < n else n
+            var sa = _up(sctx, a, m * n)
+            var st = sctx.enqueue_create_buffer[DType.float32](skk if skk > 0 else 1)
+            qs_geqrf_device(sctx, sa, st, m, n)
+            _down(sctx, sa, a, m * n)
+            _down(sctx, st, tau, skk)
+            sctx.synchronize()
+            _ = sa^
+            _ = st^
+            _ = sctx^
+            return
         if xd_qr_on_host(m):
             # lane neural-pass37: the row-streaming host walk of the same cells
             geqrf_host_rows(a, tau, m, n)
@@ -2338,6 +2355,19 @@ struct DevExec(Exec):
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        comptime if XD_QR_SLICED:
+            var sctx = xd_ctx()
+            var sh = _up(sctx, h, m * n)
+            var st = _up(sctx, tau, kk if kk > 0 else 1)
+            var sq = sctx.enqueue_create_buffer[DType.float32](m * qc if m * qc > 0 else 1)
+            qs_orgqr_device(sctx, sh, st, sq, m, n, kk, qc)
+            _down(sctx, sq, q, m * qc)
+            sctx.synchronize()
+            _ = sh^
+            _ = st^
+            _ = sq^
+            _ = sctx^
+            return
         if xd_qr_on_host(m):
             orgqr_host_rows(h, tau, q, m, n, kk, qc)
             return

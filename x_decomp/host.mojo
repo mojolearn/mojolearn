@@ -50,6 +50,8 @@ from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_serial
 from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_serial
 from x_decomp.exec_trait import Exec
 from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
+from x_decomp.qr_sliced import XD_QR_SLICED
+from x_decomp.qr_sliced_host import qs_geqrf_host, qs_orgqr_host
 from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
 from x_decomp.host_ew import ew_range
@@ -464,6 +466,10 @@ struct HostExec(Exec):
 
     @staticmethod
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+        comptime if XD_QR_SLICED:
+            # lane hr-qr: the sliced order's host replay (x_decomp/qr_sliced_host.mojo)
+            qs_geqrf_host(a, tau, m, n)
+            return
         # lane neural-pass37: the row-streaming walk of the same cells
         # (x_decomp/qr_host.mojo); MOJOLEARN_XD_QR_SERIAL=1 keeps the
         # column-by-column serial loop (the A/B arm)
@@ -474,6 +480,9 @@ struct HostExec(Exec):
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        comptime if XD_QR_SLICED:
+            qs_orgqr_host(h, tau, q, m, n, kk, qc)
+            return
         if xd_qr_serial():
             for j in range(qc):
                 orgqr_col(h, tau, q, j, m, n, kk, qc)
