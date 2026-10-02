@@ -612,6 +612,20 @@ class _Kit:
             self.b.x_decomp_trisolve(lu.addr, idx.addr, B.addr, out.addr, [n, w, int(trans)])
         return out
 
+    def knn_select(self, D, k, exclude_self):
+        """(indices as floats, values) of each row's k smallest entries of D,
+        ascending by (value, column), column r skipped in row r when
+        exclude_self (x_decomp/cells.mojo `knn_select_row`)."""
+        n, m = D.r, D.c
+        if n * k and self._use(D):
+            I, V = self._dout(n, k), self._dout(n, k)
+            self.b.x_decomp_dev_knn_select(self._did(D), V._d.id, I._d.id, [n, m, k, int(bool(exclude_self))])
+            return I, V
+        I, V = _M.zeros(n, k), _M.zeros(n, k)
+        if n * k:
+            self.b.x_decomp_knn_select(D.addr, V.addr, I.addr, [n, m, k, int(bool(exclude_self))])
+        return I, V
+
     def lu_solve(self, lu, piv, B, trans=0):
         out = B.copy()
         p = [lu.r, B.c, trans] if trans else [lu.r, B.c]
@@ -3124,19 +3138,15 @@ def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
     SQUARED Euclidean distances (the callers take the root); any other kind
     the `_dist` distances themselves."""
     D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
-    idx, dst = [], []
-    take = n_neighbors + (1 if exclude_self else 0)
-    for i in range(Q.r):
-        row = D.row(i)
-        # the `take` smallest, exactly sorted(range(X.r), key=(row[j], j))[:take]
-        # (nsmallest is stable: ties to the lower index), O(n) per row
-        # instead of the full sort (lane/lle-timeout: 51 s of a 10,000-row fit)
-        order = _heapq.nsmallest(take, range(X.r), key=row.__getitem__)
-        if exclude_self:
-            order = [j for j in order if j != i]
-        sel = order[:n_neighbors]
-        idx.append(sel)
-        dst.append([row[j] for j in sel])
+    # each row's n_neighbors smallest by (value, column), its own column
+    # skipped: exactly nsmallest(n_neighbors + 1) less the row itself, on the
+    # device beside D (lane neural-pass142; the host heap walk was 5.5 s of a
+    # 10,000-row LocallyLinearEmbedding fit on the M4)
+    nn = min(n_neighbors, X.r - (1 if exclude_self else 0))
+    I, V = k.knn_select(D, nn, exclude_self)
+    iv, vv = I.s, V.s
+    idx = [[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)]
+    dst = [list(vv[i * nn:(i + 1) * nn]) for i in range(Q.r)]
     return idx, dst
 
 

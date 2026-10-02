@@ -153,6 +153,22 @@ def trisolve_py[E: Exec](lu: PythonObject, idx: PythonObject, src: PythonObject,
     return PythonObject(n)
 
 
+def knn_select_py[E: Exec](dmat: PythonObject, dist: PythonObject, idx: PythonObject, p: PythonObject) raises -> PythonObject:
+    """p = [n, m, k, exclude_self]: `knn_select_row` for every row."""
+    var n = _n(p, 0)
+    var m = _n(p, 1)
+    var k = _n(p, 2)
+    var ex = _n(p, 3)
+    if m >= 1 << 24:
+        raise Error("x_decomp: knn_select columns exceed float32's exact integers")
+    var pd = _f(dmat)
+    var ps = _f(dist)
+    var pi = _f(idx)
+    with GILReleased(Python()):
+        E.knn_select(pd, ps, pi, n, m, k, ex)
+    return PythonObject(n)
+
+
 def lu_solve_py[E: Exec](lu: PythonObject, piv: PythonObject, b: PythonObject, p: PythonObject) raises -> PythonObject:
     var n = _n(p, 0)
     var nrhs = _n(p, 1)

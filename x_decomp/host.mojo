@@ -27,6 +27,7 @@ from x_decomp.cells import (
     lu_perm_src,
     trs_tri_cols,
     trisolve_serial,
+    knn_select_row,
     F32Ptr,
     absmax_sign_cell,
     FOLD_BLOCK,
@@ -351,6 +352,13 @@ struct HostExec(Exec):
         var tmp = List[Float32](unsafe_uninit_length=max(n * nrhs, 1))
         trisolve_serial(lu, idx, src, dst, F32Ptr(unsafe_from_address=Int(tmp.unsafe_ptr())), n, nrhs, trans)
         _ = tmp^
+
+    @staticmethod
+    def knn_select(dmat: F32Ptr, dist: F32Ptr, idx: F32Ptr, n: Int, m: Int, k: Int, exclude_self: Int) raises:
+        def row(t: Int) {imm dmat, imm dist, imm idx, imm m, imm k, imm exclude_self}:
+            knn_select_row(dmat, dist, idx, t, m, k, exclude_self)
+
+        xd_parallel(row, n)
 
     @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
