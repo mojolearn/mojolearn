@@ -79,7 +79,7 @@ def _launch_hb[
         compute_split_properties_half_byte_kernel[full, m]
     ](
         p_off, p_ffi, p_folds, Int32(f_count), p_ci, p_tgt, p_wt, p_idx,
-        p_part, p_sums, Int32(total_bin_features),
+        p_part, p_sums, Int32(total_bin_features), Float32(1.0), Int32(0),
         grid_dim=(gx, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
     )
 
@@ -104,7 +104,7 @@ def _launch_b[
 ) raises:
     ctx.enqueue_function[compute_split_properties_b_kernel[full, m]](
         p_off, p_ffi, Int32(f_count), p_ci, p_tgt, p_wt, p_idx, p_part,
-        p_sums, Int32(total_bin_features),
+        p_sums, Int32(total_bin_features), Float32(1.0), Int32(0),
         grid_dim=(gx, 1, 1), block_dim=(PW_HB_BLOCK, 1, 1),
     )
 
