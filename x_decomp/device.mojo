@@ -5,7 +5,7 @@ cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
 from std.sys.compile import is_defined
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import stack_allocation
+from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.ffi import _Global
@@ -203,6 +203,106 @@ def gemm_kernel(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int32, k: Int32, n: Int32, t
         var i = t // Int(n)
         var j = t % Int(n)
         c.unsafe_store(t, gemm_cell(a, b, i, j, Int(m), Int(k), Int(n), ta != 0, tb != 0))
+
+
+# ---- the random projection's transform (lane gap-nb-maxabs-grp, 2026-10-02)
+#: C = A B^T for a tall A (m x k) and a short B (n x k), a block of PJ_THREADS
+#: threads per PJ_TM x PJ_TN tile of C: the A and B tiles PJ_KT terms at a time
+#: through shared memory (each row of A read once per column tile, coalesced
+#: along k, where gemm_kernel's thread per output read its row k words apart),
+#: each thread PJ_TM / (PJ_THREADS / PJ_TN) rows of one column.
+comptime PJ_TM = 64
+comptime PJ_TN = 16
+comptime PJ_KT = 32
+comptime PJ_LD = PJ_KT + 1
+comptime PJ_THREADS = 256
+comptime PJ_ROWS = PJ_TM // (PJ_THREADS // PJ_TN)
+comptime PJ_BYTES = (PJ_TM + PJ_TN) * PJ_LD * 4
+#: the tile's shared page fits the target column (it does on every column at
+#: 10,560 bytes; a column where it did not would keep launch_gemm)
+comptime PROJECT_TILED = lib_smem_page_fits_for[TARGET_COLUMN, PJ_BYTES]()
+
+
+@always_inline
+def _nonfinite(v: Float32) -> Bool:
+    return (bitcast[DType.uint32](v) & UInt32(0x7F800000)) == UInt32(0x7F800000)
+
+
+def project_kernel(a: F32Ptr, b: F32Ptr, c: F32Ptr, flag: F32Ptr, m: Int32, k: Int32, n: Int32):
+    """launch_gemm(ta=False, tb=True)'s WORDS by tiles: each output's chain
+    is gemm_part_cell's (p ascending from zero, `ftz(identical_mul_add(ftz(x),
+    ftz(y), acc))`), restarted every FOLD_BLOCK terms, and past one block the
+    partials folded ascending from zero by `add` (fold_cell); PJ_KT divides
+    FOLD_BLOCK, so the restarts fall on tile edges. Any entry of A that is
+    not finite (every entry is staged once) sets flag[0] to one: the
+    caller's finiteness refusal, on the device."""
+    var As = stack_allocation[PJ_TM * PJ_LD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var Bs = stack_allocation[PJ_TN * PJ_LD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var M = Int(m)
+    var K = Int(k)
+    var N = Int(n)
+    var ncb = (N + PJ_TN - 1) // PJ_TN
+    var row0 = (Int(block_idx.x) // ncb) * PJ_TM
+    var col0 = (Int(block_idx.x) % ncb) * PJ_TN
+    var tid = Int(thread_idx.x)
+    var tx = tid % PJ_TN
+    var ty = tid // PJ_TN
+    var nb = (K + FOLD_BLOCK - 1) // FOLD_BLOCK
+    var acc = SIMD[DType.float32, PJ_ROWS](0)
+    var tot = SIMD[DType.float32, PJ_ROWS](0)
+    var bad = False
+    var k0 = 0
+    while k0 < K:
+        var kn = min(PJ_KT, K - k0)
+        comptime for s in range(PJ_TM * PJ_KT // PJ_THREADS):
+            var e = tid + s * PJ_THREADS
+            var r = e // PJ_KT
+            var kk = e % PJ_KT
+            var v = Float32(0)
+            if row0 + r < M and kk < kn:
+                v = a.unsafe_load((row0 + r) * K + k0 + kk)
+                if _nonfinite(v):
+                    bad = True
+            As[r * PJ_LD + kk] = v
+        comptime for s in range(PJ_TN * PJ_KT // PJ_THREADS):
+            var e = tid + s * PJ_THREADS
+            var r = e // PJ_KT
+            var kk = e % PJ_KT
+            var v = Float32(0)
+            if col0 + r < N and kk < kn:
+                v = b.unsafe_load((col0 + r) * K + k0 + kk)
+            Bs[r * PJ_LD + kk] = v
+        barrier()
+        for kk in range(kn):
+            var y = ftz(Bs[tx * PJ_LD + kk])
+            comptime for r in range(PJ_ROWS):
+                acc[r] = ftz(identical_mul_add(ftz(As[(ty + r * (PJ_THREADS // PJ_TN)) * PJ_LD + kk]), y, acc[r]))
+        barrier()
+        k0 += kn
+        if nb > 1 and (k0 % FOLD_BLOCK == 0 or k0 == K):
+            comptime for r in range(PJ_ROWS):
+                tot[r] = add(tot[r], acc[r])
+                acc[r] = Float32(0)
+    if bad:
+        flag.unsafe_store(0, Float32(1))
+    var col = col0 + tx
+    if col < N:
+        comptime for r in range(PJ_ROWS):
+            var row = row0 + ty + r * (PJ_THREADS // PJ_TN)
+            if row < M:
+                c.unsafe_store(row * N + col, tot[r] if nb > 1 else acc[r])
+
+
+def launch_project(ctx: DeviceContext, a: F32Ptr, b: F32Ptr, c: F32Ptr, flag: F32Ptr, m: Int, k: Int, n: Int) raises:
+    """project_kernel over every tile of C, enqueued (no sync); flag[0] must
+    be zero before it runs."""
+    comptime if PROJECT_TILED:
+        var tiles = ((m + PJ_TM - 1) // PJ_TM) * ((n + PJ_TN - 1) // PJ_TN)
+        ctx.enqueue_function[project_kernel](
+            a, b, c, flag, Int32(m), Int32(k), Int32(n), grid_dim=tiles, block_dim=PJ_THREADS,
+        )
+    else:
+        raise Error("x_decomp: the projection tile does not fit this column's shared memory")
 
 
 def gemm_part_kernel(

@@ -25,7 +25,8 @@ import sys
 
 from . import _backend
 from . import _portable_math as _pm
-from ._buffer import as_f32_c, as_i32_c, frombytes
+from ._array import Array
+from ._buffer import addr_ro, as_f32_c, as_i32_c, frombytes
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
@@ -1014,6 +1015,24 @@ def _pinv_rows(k, C):
     return k.lu_solve(lu, piv, C).T
 
 
+def _rp_tiled():
+    """The A/B switch MOJOLEARN_XD_RP_TILED (lane gap-nb-maxabs-grp; unset or
+    anything but "0": on): the random projections draw their matrix on the
+    device (`x_decomp_dev_rand`, the same Philox words as `x_decomp_rand`)
+    and transform through the tiled projection kernel."""
+    return _os.environ.get("MOJOLEARN_XD_RP_TILED", "1").strip() != "0"
+
+
+def _rp_rand(k, r, c, seed, stream, kind, dev):
+    """`k.rand`'s matrix; with dev, drawn into a device matrix by the same
+    kernel (enqueued, nothing downloaded)."""
+    if not (dev and r * c):
+        return k.rand(r, c, seed, stream, kind)
+    out = k._dout(r, c)
+    k.b.x_decomp_dev_rand(out._d.id, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
+    return out
+
+
 class _RandomProjection(_Base):
     """sklearn `random_projection.py::BaseRandomProjection`. The matrix is
     drawn from the lane's counter-based Philox stream (x_decomp/cells.mojo
@@ -1040,8 +1059,18 @@ class _RandomProjection(_Base):
         k = self._kit()
         self.n_components_ = kc
         self.n_features_in_ = d
-        self.components_m_ = self._make(k, kc, d, _seed_of(self.random_state))
-        self.components_ = self.components_m_.out()
+        dev = _rp_tiled() and k._res()
+        self.components_m_ = self._make(k, kc, d, _seed_of(self.random_state), dev)
+        if dev and self.components_m_._d is not None:
+            # MOJOLEARN_XD_RP_TILED: the matrix was drawn on the device and
+            # stays there for transform; components_ is a copy of its words
+            # (one download, the device matrix kept)
+            C = self.components_m_
+            res = array.array("f", [0.0]) * (kc * d)
+            k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], kc * d)
+            self.components_ = Array._owned(res, (kc, d), "<f4", "C")
+        else:
+            self.components_ = self.components_m_.out()
         if self.compute_inverse_components:
             self.inverse_m_ = _pinv_rows(k, self.components_m_)
             self.inverse_components_ = self.inverse_m_.out()
@@ -1049,10 +1078,46 @@ class _RandomProjection(_Base):
 
     def transform(self, X):
         self._check()
+        if _rp_tiled() and not _is_sparse(X):
+            out = self._project(X)
+            if out is not None:
+                return out
         M = _M.from_input(X)
         if M.c != self.n_features_in_:
             raise ValueError(f"X has {M.c} features, but {type(self).__name__} is expecting {self.n_features_in_}")
         return self._kit().mm(M, self.components_m_, tb=True).out()
+
+    def _project(self, X):
+        """transform on the GPU binding (lane gap-nb-maxabs-grp; the A/B
+        switch MOJOLEARN_XD_RP_TILED=0 keeps the path above): X goes up from
+        its own buffer (no host copy into a store, no host finiteness pass),
+        x_decomp_dev_project's tiled kernel computes `mm(X, components, tb)`'s
+        words and flags a non-finite entry of X on the device, and the result
+        comes down once into the returned array. None on the host binding
+        (or a column without the tile): the caller takes the path above."""
+        k = self._kit()
+        if not k._res():
+            return None
+        a = as_f32_c(X, ndim=2, name="X")[0]
+        if a.ndim != 2 or min(a.shape) == 0:
+            raise ValueError("X: a nonempty two-dimensional input is required")
+        m, d = a.shape
+        if d != self.n_features_in_:
+            raise ValueError(f"X has {d} features, but {type(self).__name__} is expecting {self.n_features_in_}")
+        B = self.components_m_
+        nc = B.r
+        A = _M._on_device(_DevBuf(k._raw(), a.size), m, d)
+        k.b.x_decomp_dev_upload(A._d.id, addr_ro(a, name="X"), a.size)
+        C, flag = k._dout(m, nc), k._dout(1, 1)
+        if int(k.b.x_decomp_dev_project(A._d.id, k._did(B), C._d.id, flag._d.id, [m, d, nc])) < 0:
+            return None
+        res = array.array("f", [0.0]) * (m * nc)
+        k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], m * nc)
+        bad = array.array("f", [0.0])
+        k.b.x_decomp_dev_download(flag._d.id, bad.buffer_info()[0], 1)
+        if bad[0] != 0:
+            raise ValueError("X: input must be finite; NaN/inf are unsupported")
+        return Array._owned(res, (m, nc), "<f4", "C")
 
     def inverse_transform(self, X):
         self._check()
@@ -1073,8 +1138,8 @@ class GaussianRandomProjection(_RandomProjection):
         self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
         self.numeric_mode = numeric_mode
 
-    def _make(self, k, kc, d, seed):
-        return k.ew("scale", k.rand(kc, d, seed, 1, 1), s=1.0 / math.sqrt(kc))
+    def _make(self, k, kc, d, seed, dev=False):
+        return k.ew("scale", _rp_rand(k, kc, d, seed, 1, 1, dev), s=1.0 / math.sqrt(kc))
 
 
 class SparseRandomProjection(_RandomProjection):
@@ -1092,13 +1157,13 @@ class SparseRandomProjection(_RandomProjection):
         self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
         self.numeric_mode = numeric_mode
 
-    def _make(self, k, kc, d, seed):
+    def _make(self, k, kc, d, seed, dev=False):
         dens = 1.0 / math.sqrt(d) if self.density == "auto" else float(self.density)
         if not 0 < dens <= 1:
             raise ValueError(f"Expected density in range ]0, 1], got: {dens}")
         self.density_ = dens
-        u = k.rand(kc, d, seed, 2, 0)
-        sgn = k.ew("scale", k.rand(kc, d, seed, 3, 2), s=math.sqrt(1.0 / dens) / math.sqrt(kc))
+        u = _rp_rand(k, kc, d, seed, 2, 0, dev)
+        sgn = k.ew("scale", _rp_rand(k, kc, d, seed, 3, 2, dev), s=math.sqrt(1.0 / dens) / math.sqrt(kc))
         if dens == 1:
             return sgn
         # u < density keeps the signed value, else 0 (select: x > s -> y else z)
