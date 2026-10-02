@@ -63,7 +63,6 @@ import array
 from . import _portable_math as math
 import struct
 
-from . import _backend
 from ._array import Array
 from ._buffer import (
     as_f32_c, as_i8_c, as_i32_c, as_u16_c,
