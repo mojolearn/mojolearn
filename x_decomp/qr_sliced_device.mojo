@@ -6,7 +6,7 @@ host replay.
 
 THE LAUNCHES, per step k (no host step, no host read-back between steps):
   geqrf: `qs_norm_part_kernel` (one thread per slice: its (s, q) pair),
-         `qs_head_kernel` (one thread: the pair tree, dlarfg),
+         `qs_head_level_kernel` (the pair tree a level a launch, then dlarfg),
          `qs_scale_kernel` (one thread per row: the multipliers),
          `qs_dot_part_kernel` (one thread per (column, slice)),
          `qs_dot_fold_kernel` (one thread per column: the tree),
@@ -33,7 +33,8 @@ from x_decomp.qr_sliced import (
     QS_LAUNCH_CELLS,
     QS_ROWS,
     qs_dot_finish,
-    qs_head,
+    qs_head_finish,
+    qs_pair,
     qs_slice_hi,
     qs_slice_lo,
     qs_slice_ssq,
@@ -62,9 +63,27 @@ def qs_norm_part_kernel(a: F32Ptr, ps: F32Ptr, pq: F32Ptr, k: Int32, m: Int32, n
     pq.unsafe_store(c, r[1])
 
 
-def qs_head_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, ps: F32Ptr, pq: F32Ptr, k: Int32, n: Int32, ns: Int32):
-    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
-        qs_head(a, tau, scal, ps, pq, Int(k), Int(n), Int(ns))
+def qs_head_level_kernel(
+    a: F32Ptr, tau: F32Ptr, scal: F32Ptr, ps: F32Ptr, pq: F32Ptr, k: Int32, n: Int32, ns: Int32, h: Int32
+):
+    """One level of `qs_pair_tree` at stride h, a thread per pair: p[a0] =
+    qs_pair(p[a0], p[a0 + h]) for a0 = 2 h t (the tree's pairs, in place;
+    the levels are launches, in order). At the last level (2 h >= ns) thread
+    0 then finishes `qs_head` (dlarfg) from the tree's (s, q): the serial
+    tree's pairs, the same values."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var H = Int(h)
+    var NS = Int(ns)
+    var a0 = t * 2 * H
+    if a0 + H < NS:
+        var r = qs_pair(ps.unsafe_load(a0), pq.unsafe_load(a0), ps.unsafe_load(a0 + H), pq.unsafe_load(a0 + H))
+        ps.unsafe_store(a0, r[0])
+        pq.unsafe_store(a0, r[1])
+    if t == 0 and 2 * H >= NS:
+        var tt = SIMD[DType.float32, 2](0, 0)
+        if NS > 0:
+            tt = SIMD[DType.float32, 2](ps.unsafe_load(0), pq.unsafe_load(0))
+        qs_head_finish(a, tau, scal, tt, Int(k), Int(n))
 
 
 def qs_scale_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, m: Int32, n: Int32):
@@ -240,7 +259,17 @@ def qs_geqrf_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], dt: Dev
             ctx.enqueue_function[qs_norm_part_kernel](
                 a, pms, pq, Int32(k), Int32(m), Int32(n), Int32(ns), grid_dim=_grid(ns), block_dim=QS_TPB
             )
-        ctx.enqueue_function[qs_head_kernel](a, t, s, pms, pq, Int32(k), Int32(n), Int32(ns), grid_dim=1, block_dim=1)
+        # the head: the pair tree a level a launch, a thread per pair, and
+        # dlarfg on the last level's thread 0
+        var h = 1
+        while True:
+            var pairs = max(1, (ns + 2 * h - 1) // (2 * h))
+            ctx.enqueue_function[qs_head_level_kernel](
+                a, t, s, pms, pq, Int32(k), Int32(n), Int32(ns), Int32(h), grid_dim=_grid(pairs), block_dim=QS_TPB
+            )
+            if 2 * h >= ns:
+                break
+            h *= 2
         pace.add(ctx, 2 * (m - k))
         if ns > 0:
             ctx.enqueue_function[qs_scale_kernel](a, s, Int32(k), Int32(m), Int32(n), grid_dim=_grid(m - k - 1), block_dim=QS_TPB)

@@ -142,8 +142,12 @@ def qs_head(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, ps: F32Ptr, pq: F32Ptr, k: Int
     """Step k's reflector (dlarfg) from the ns slice pairs (ps, pq), folded
     in place: tau[k], beta on the diagonal, and in `scal` [the divisor
     alpha - beta, 1 when the step acts else 0] (`geqrf_head`'s outputs)."""
+    qs_head_finish(a, tau, scal, qs_pair_tree(ps, pq, ns), k, n)
+
+
+def qs_head_finish(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, t: SIMD[DType.float32, 2], k: Int, n: Int):
+    """`qs_head` after its pair tree: t is the tree's (s, q)."""
     var alpha = ftz(a.unsafe_load(k * n + k))
-    var t = qs_pair_tree(ps, pq, ns)
     if t[0] == Float32(0):
         tau.unsafe_store(k, Float32(0))
         scal.unsafe_store(0, Float32(1))
