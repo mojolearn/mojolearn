@@ -21,6 +21,7 @@ the same bits (IDENTITY_PATHS.md "The rule"):
 
 Nothing here imports a GPU module, so the CPU-only host binding compiles it.
 """
+from std.sys.info import is_gpu
 from checks.numerics import (
     ftz,
     identical_mul_add,
@@ -604,6 +605,101 @@ def nc_std_item(t: Int, x: FP, lab: IP, cent: FP, std: FP, n: Int, d: Int, n_cla
         std.unsafe_store(f, Float32(0))
         return
     std.unsafe_store(f, ftz(identical_sqrt(ftz(identical_div(ss, Float32(n - n_classes))))))
+
+
+# lane/neural-pass95 (2026-10-01): NearestCentroid's fit statistics for
+# feature f in one item, so the fit uploads X once and runs on the device:
+# the class means (group_mean_item's chain for every class, rows
+# ascending, one division by the class count), the within-class std
+# (nc_std_item's chain) and the dataset centroid nc_shrink_item summed
+# again for every class (its chain, once). The same statements, the same
+# words. On the GPU column group_mean and nc_std ran on the host
+# (HOST_RUN), each a walk over all of X at a stride of d words: 5.2 s of
+# a 5.7 s istella fit on the M4.
+def nc_stats_item(t: Int, x: FP, lab: IP, nk: FP, cent: FP, std: FP, dsc: FP, n: Int, d: Int, n_classes: Int):
+    # on a device each pass loads NC_U rows ahead of its chain (a thread then
+    # waits on memory once a block, not once a row); the adds keep their order
+    comptime U = 32 if is_gpu() else 1
+    var f = t
+    for g in range(n_classes):
+        var acc = Float32(0)
+        var cnt = 0
+        var i0 = 0
+        while i0 + U <= n:
+            var xs = SIMD[DType.float32, U]()
+            var ls = SIMD[DType.int32, U]()
+            comptime for u in range(U):
+                xs[u] = x.unsafe_load((i0 + u) * d + f)
+                ls[u] = lab.unsafe_load(i0 + u)
+            comptime for u in range(U):
+                if Int(ls[u]) == g:
+                    acc = _add(acc, xs[u])
+                    cnt += 1
+            i0 += U
+        for i in range(i0, n):
+            if Int(lab.unsafe_load(i)) == g:
+                acc = _add(acc, x.unsafe_load(i * d + f))
+                cnt += 1
+        if cnt == 0:
+            cent.unsafe_store(g * d + f, Float32(0))
+        else:
+            cent.unsafe_store(g * d + f, ftz(identical_div(acc, Float32(cnt))))
+    var ss = Float32(0)
+    var all_ = Float32(0)
+    var i0 = 0
+    while i0 + U <= n:
+        var xs = SIMD[DType.float32, U]()
+        var cs = SIMD[DType.float32, U]()
+        comptime for u in range(U):
+            xs[u] = x.unsafe_load((i0 + u) * d + f)
+            cs[u] = cent.unsafe_load(Int(lab.unsafe_load(i0 + u)) * d + f)
+        comptime for u in range(U):
+            var df = _sub(xs[u], cs[u])
+            ss = ftz(identical_mul_add(df, df, ss))
+            all_ = _add(all_, xs[u])
+        i0 += U
+    for i in range(i0, n):
+        var xv = x.unsafe_load(i * d + f)
+        var df = _sub(xv, cent.unsafe_load(Int(lab.unsafe_load(i)) * d + f))
+        ss = ftz(identical_mul_add(df, df, ss))
+        all_ = _add(all_, xv)
+    if n - n_classes <= 0:
+        std.unsafe_store(f, Float32(0))
+    else:
+        std.unsafe_store(f, ftz(identical_sqrt(ftz(identical_div(ss, Float32(n - n_classes))))))
+    dsc.unsafe_store(f, ftz(identical_div(all_, Float32(n))))
+
+
+def nc_shrink_d_item(
+    t: Int, dsc_in: FP, cent: FP, nk: FP, std: FP, res: FP, devs: FP,
+    n: Int, d: Int, n_classes: Int, do_shrink: Int, med: Float32, shrink: Float32,
+):
+    """nc_shrink_item with the dataset centroid given (nc_stats_item's)."""
+    var k = t // d
+    var f = t - k * d
+    var c = cent.unsafe_load(t)
+    var dsc = dsc_in.unsafe_load(f)
+    var m = ftz(identical_sqrt(_sub(ftz(identical_div(Float32(1), nk.unsafe_load(k))), ftz(identical_div(Float32(1), Float32(n))))))
+    var s = _add(std.unsafe_load(f), med)
+    var ms = ftz(identical_mul(m, s))
+    var dev = Float32(0)
+    if ms != Float32(0):
+        dev = ftz(identical_div(_sub(c, dsc), ms))
+    if do_shrink == 0:
+        devs.unsafe_store(t, dev)
+        res.unsafe_store(t, c)
+        return
+    var mag = _sub(abs(dev), shrink)
+    if mag < Float32(0):
+        mag = Float32(0)
+    if dev < Float32(0):
+        dev = -mag
+    elif dev > Float32(0):
+        dev = mag
+    else:
+        dev = Float32(0)
+    devs.unsafe_store(t, dev)
+    res.unsafe_store(t, _add(dsc, ftz(identical_mul(ms, dev))))
 
 
 # DEVIATION 5212 / 5201 (row 126)

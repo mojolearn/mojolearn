@@ -75,6 +75,13 @@ OPS = [
     ("nc_std", "items", "nc_std_item", "d",
      [("x", "fin", "n * d"), ("lab", "iin", "n"), ("cent", "fin", "n_classes * d"), ("std", "fout", "d"),
       ("n", "int"), ("d", "int"), ("n_classes", "int")]),
+    # lane/neural-pass95: group_mean + nc_std + the dataset centroid in ONE
+    # op over the features (one upload of X); nc_shrink_d takes that centroid
+    ("nc_shrink_d", "items", "nc_shrink_d_item", "n_classes * d",
+     [("dsc", "fin", "d"), ("cent", "fin", "n_classes * d"), ("nk", "fin", "n_classes"), ("std", "fin", "d"),
+      ("res", "fout", "n_classes * d"), ("devs", "fout", "n_classes * d"), ("n", "int"), ("d", "int"),
+      ("n_classes", "int"), ("do_shrink", "int"),
+      ("med", "float"), ("shrink", "float")]),
     ("nc_shrink", "items", "nc_shrink_item", "n_classes * d",
      [("x", "fin", "n * d"), ("cent", "fin", "n_classes * d"), ("nk", "fin", "n_classes"), ("std", "fin", "d"),
       ("res", "fout", "n_classes * d"), ("devs", "fout", "n_classes * d"), ("n", "int"), ("d", "int"),
@@ -158,6 +165,12 @@ OPS = [
 #: x_neighbors/iter_host.mojo on the CPU): loops of the items above that keep
 #: their buffers on the device between steps. Exported like any op.
 CUSTOM_OPS = [
+    # lane/neural-pass95: group_mean + nc_std + the dataset centroid (one
+    # upload of X); a custom op since the follow-up so the device stages
+    # rows for every (class, feature) chain (MI325X taxi: 351 ms on 11
+    # threads, main 177)
+    ("nc_stats", [("x", "fin", "n * d"), ("lab", "iin", "n"), ("nk", "fin", "n_classes"), ("cent", "fout", "n_classes * d"),
+     ("std", "fout", "d"), ("dsc", "fout", "d"), ("n", "int"), ("d", "int"), ("n_classes", "int")]),
     ("lp_knn_graph", [("idx", "iin", "n * k"), ("cols", "iout", "n * k"), ("vals", "fout", "n * k"),
      ("n", "int"), ("m", "int"), ("k", "int"), ("variant", "int")]),
     ("lp_knn_product", [("cols", "iin", "n * k"), ("vals", "fin", "n * k"), ("x", "fin", "m * c"), ("res", "fout", "n * c"),
@@ -169,6 +182,13 @@ CUSTOM_OPS = [
     ("pr_iterate",
      [("q", "fin", "n * n"), ("x", "finout", "n"), ("p", "fin", "n"), ("dw", "fin", "n"), ("dangling", "iin", "n"),
       ("info", "iout", "2"), ("n", "int"), ("max_iter", "int"), ("thr_hi", "int"), ("thr_lo", "int"),
+      ("alpha", "float")]),
+    # lane neural-pass30's sparse power iteration (x_neighbors/pr_sparse.mojo).
+    # Its export was added to the generated bindings by hand and the next
+    # regeneration dropped it; the entry lives here now (lane/neural-pass96).
+    ("pr_iterate_sparse",
+     [("a", "fin", "n * n"), ("x", "finout", "n"), ("p", "fin", "n"), ("dw", "fin", "n"), ("info", "iout", "2"),
+      ("n", "int"), ("max_iter", "int"), ("thr_hi", "int"), ("thr_lo", "int"), ("binary", "int"),
       ("alpha", "float")]),
     ("pcs_resident",
      [("x", "fin", "n * d_in"), ("hidx", "iin", "degree * nf"), ("hbit", "iin", "degree * nf"), ("res", "fout", "n * nc"),
@@ -182,6 +202,17 @@ CUSTOM_OPS = [
       ("n", "int"), ("m", "int"), ("d", "int"), ("k", "int"), ("weights", "int"), ("nc", "int")]),
     ("cc_iterate",
      [("a", "fin", "n * n"), ("lab", "iinout", "n"), ("info", "iout", "1"), ("n", "int")]),
+    # lane/neural-pass69 (2026-10-01): the same rounds from a CSR adjacency
+    # (indptr n + 1, indices nnz, int32), no dense matrix anywhere
+    ("cc_iterate_csr",
+     [("indptr", "iin", "n + 1"), ("indices", "iin", "nnz"), ("lab", "iinout", "n"), ("info", "iout", "1"),
+      ("n", "int"), ("nnz", "int")]),
+    # lane/neural-pass71 (2026-10-01): the NaN cells of an n x d matrix in
+    # one host pass (flat indices ascending, the NaN count per column, the
+    # count): KNNImputer's mask without a Python walk of every cell
+    ("nan_cells",
+     [("x", "fin", "n * d"), ("cells", "iout", "n * d"), ("colmiss", "iout", "d"), ("info", "iout", "1"),
+      ("n", "int"), ("d", "int")]),
     # lane/py-dn-kern (2026-09-28): the fused kernel chains (the kernel
     # matrix stays on the device, per row tile; only the output comes back)
     ("kpca_transform",

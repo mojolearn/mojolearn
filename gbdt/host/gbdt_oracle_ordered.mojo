@@ -675,51 +675,57 @@ def _ordered_tree_structure(
                                 acc[c] = Int32(0)
                             reached[at // 2] = False
                         reached_list.clear()
-                    elif hp.policy == POLICY_BINARY:
-                        # `compute_split_properties_b_kernel`
-                        # (`pointwise_hist2_binary.mojo`): the half-byte
-                        # accumulator over the word's eight nibbles, then
-                        # `pw_hb_binary_sum`: feature `fid` is bit
-                        # `3 - (fid & 3)` of nibble `fid / 4`, its one cell
-                        # per stat the sum from 0.0, ascending in the nibble
-                        # value, of the reduced cells whose value has that
-                        # bit clear, stored when its magnitude exceeds
-                        # `PW_WRITE_EPS`. No scan: one fold.
-                        var runs = _pw_live_runs(off, sz, full_pass)
-                        var f_base = 0
-                        while f_base < n_feat:
-                            var f_count = min(group, n_feat - f_base)
-                            var cells = _pw_binary_cells(
-                                runs, docs, s.g_weight, s.g_target, cindex,
-                                hp.offsets[f_base], (f_count + 3) // 4,
-                            )
-                            for j in range(f_count):
-                                var group_id = j // 4
-                                var f_mask = 1 << (3 - (j & 3))
-                                for w in range(2):
-                                    var acc_b = Float32(0.0)
-                                    for i in range(16):
-                                        if (i & f_mask) == 0 and not (GBDT_HOST_BINARY_SABOTAGE and i == 0):
-                                            acc_b += cells[i * 16 + 2 * group_id + w]
-                                    if abs(acc_b) > Float32(1e-20):
-                                        hp.hist[base + hp.first[f_base + j] * 2 + w] = acc_b
-                            f_base += group
                     else:
-                        var points = _pw_thread_points(off, sz, full_pass)
-                        var f_base = 0
-                        while f_base < n_feat:
-                            var f_count = min(group, n_feat - f_base)
-                            var cells = _pw_half_byte_group(
-                                points, docs, s.g_weight, s.g_target, cindex,
-                                hp.offsets[f_base], f_count,
-                            )
-                            for j in range(f_count):
-                                for fold in range(hp.folds[f_base + j]):
-                                    for w in range(2):
-                                        var result = cells[fold * 16 + 2 * j + w]
-                                        if abs(result) > Float32(1e-20):
-                                            hp.hist[base + (hp.first[f_base + j] + fold) * 2 + w] = result
-                            f_base += group
+                        # lane/neural-pass124: the half-byte and binary
+                        # kernels in fixed point (`PointHistHalfByteInt`):
+                        # the Int32 sum of `hist2_quantize(stat, scale,
+                        # hist2_dither(doc id))` per cell, any order. A
+                        # half-byte feature's cell is its 4-bit value's
+                        # (filed when below its fold count); a binary
+                        # feature's one cell takes the rows whose bit
+                        # `3 - (j & 3)` of nibble `j / 4` is clear
+                        # (`pw_hb_binary_sum_int`). Converted and guarded
+                        # once, as the one-byte branch above.
+                        var is_bin = hp.policy == POLICY_BINARY
+                        for pos in range(off, off + sz):
+                            var row = docs[pos]
+                            var u = _hist2_dither(row)
+                            var qw = _hist2_quantize(s.g_weight[pos], fixed_scale, u)
+                            var qt = _hist2_quantize(s.g_target[pos], fixed_scale, u)
+                            var f_base = 0
+                            while f_base < n_feat:
+                                var ci = cindex[hp.offsets[f_base] + row]
+                                var f_count = min(group, n_feat - f_base)
+                                for j in range(f_count):
+                                    var at: Int
+                                    if is_bin:
+                                        var v = Int((ci >> UInt32(28 - 4 * (j // 4))) & UInt32(15))
+                                        var f_mask = 1 << (3 - (j & 3))
+                                        if (v & f_mask) != 0:
+                                            continue
+                                        if GBDT_HOST_BINARY_SABOTAGE and v == 0:
+                                            continue
+                                        at = hp.first[f_base + j] * 2
+                                    else:
+                                        var bin = Int((ci >> UInt32(28 - 4 * j)) & UInt32(15))
+                                        if bin >= hp.folds[f_base + j]:
+                                            continue
+                                        at = (hp.first[f_base + j] + bin) * 2
+                                    if not reached[at // 2]:
+                                        reached[at // 2] = True
+                                        reached_list.append(at)
+                                    acc[at] = acc[at] + qw
+                                    acc[at + 1] = acc[at + 1] + qt
+                                f_base += group
+                        for k in range(len(reached_list)):
+                            var at = reached_list[k]
+                            for c in range(at, at + 2):
+                                var val = Float32(Int(acc[c])) / fixed_scale
+                                if abs(val) > Float32(1e-20):
+                                    hp.hist[base + c] = val
+                                acc[c] = Int32(0)
+                            reached[at // 2] = False
+                        reached_list.clear()
             # ---- the scan over the computed slots ----
             for y in range(ny):
                 for z in range(fold_count):

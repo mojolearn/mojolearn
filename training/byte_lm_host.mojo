@@ -39,17 +39,19 @@ the comparison is not reaching the arithmetic. The threaded path reverses the
 fold inside the kernel it actually runs (`gemm_nt_rows(..., reverse=True)`).
 """
 
+from std.math import max, min
 from std.os import getenv
 from std.sys.compile import is_defined
-from std.sys.info import num_physical_cores
+from std.sys.info import num_physical_cores, simd_width_of
 
-from std.memory import unsafe_memcpy
+from std.memory import bitcast, unsafe_memcpy
 
-from core.host_lanes import host_f32_uninit
+from core.host_lanes import ftz_lanes, host_f32_uninit
 from core.host_parallel import host_parallelize
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from embedding.checks.embedding_oracle import EmbConfig, emb_forward_oracle, refuse_nonfinite
+from gemm.host.gemm_host_rows import GhrPtr
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, gemm_oracle
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_kernels import (
@@ -57,8 +59,12 @@ from training.byte_lm_host_kernels import (
     ce_causal_mean_loss_fast,
     flushed_span,
     gemm_nt_rows,
+    gemm_w,
     hidden_fast,
     pack_nt_span,
+    pack_w_range,
+    pack_w_units,
+    packed_w_len,
     _residual_add,
     _silu_gated,
     _softmax_head,
@@ -87,6 +93,8 @@ from transformer.checks.transformer_oracle import (
 
 comptime BYTE_HOST_SABOTAGE = is_defined["MOJOLEARN_BYTE_LM_HOST_SABOTAGE"]()
 comptime BYTE_HOST_MAX_THREADS = 1024
+comptime HOST_FW_P = simd_width_of[DType.float32]()
+comptime U32P = SIMD[DType.uint32, HOST_FW_P]
 
 
 def byte_host_sabotage_compiled() -> Bool:
@@ -349,9 +357,9 @@ def block_par(
             var q = List[Float32](length=rows * qw, fill=Float32(0.0))
             var k = List[Float32](length=rows * kw, fill=Float32(0.0))
             var vv = List[Float32](length=rows * kw, fill=Float32(0.0))
-            gemm_nt_rows(n1, tp[][tb + 1], qw, dm, 0, rows, q)
-            gemm_nt_rows(n1, tp[][tb + 2], kw, dm, 0, rows, k)
-            gemm_nt_rows(n1, tp[][tb + 3], kw, dm, 0, rows, vv)
+            gemm_w(n1, tp[][tb + 1], qw, dm, 0, rows, q)
+            gemm_w(n1, tp[][tb + 2], kw, dm, 0, rows, k)
+            gemm_w(n1, tp[][tb + 3], kw, dm, 0, rows, vv)
             var qrc = rope_rows(q, nh, hd, lo, hi, rp[])
             var krc = rope_rows(k, c_kv, hd, lo, hi, rp[])
             for i in range(rows * qw):
@@ -456,16 +464,16 @@ def block_par(
                 _value_sum_head(aweights, vpack, rows, s, hd, qw, h, ctx, lo)
             var xc = copy_rows(xp[0], lo, hi, dm)
             var o = List[Float32](length=rows * dm, fill=Float32(0.0))
-            gemm_nt_rows(ctx, tp[][tb + 4], dm, qw, 0, rows, o)
+            gemm_w(ctx, tp[][tb + 4], dm, qw, 0, rows, o)
             var r1 = _residual_add(xc, o)
             var n2 = rms_norm_fast(r1, tp[][tb + 5], rows, dm)
             var gate = List[Float32](length=rows * inter, fill=Float32(0.0))
             var up = List[Float32](length=rows * inter, fill=Float32(0.0))
-            gemm_nt_rows(n2, tp[][tb + 6], inter, dm, 0, rows, gate)
-            gemm_nt_rows(n2, tp[][tb + 7], inter, dm, 0, rows, up)
+            gemm_w(n2, tp[][tb + 6], inter, dm, 0, rows, gate)
+            gemm_w(n2, tp[][tb + 7], inter, dm, 0, rows, up)
             var gated = _silu_gated(gate, up)
             var down = List[Float32](length=rows * dm, fill=Float32(0.0))
-            gemm_nt_rows(gated, tp[][tb + 8], dm, inter, 0, rows, down)
+            gemm_w(gated, tp[][tb + 8], dm, inter, 0, rows, down)
             var res = _residual_add(r1, down)
             for i in range(rows * dm):
                 op.unsafe_store(lo * dm + i, res[i])
@@ -546,7 +554,7 @@ def head_rows_par(
             if lo >= hi:
                 return  # a trailing chunk past the last token: nothing to do
             var part = List[Float32](length=(hi - lo) * vocab, fill=Float32(0.0))
-            gemm_nt_rows(hp[0], wp[][head_index], vocab, dm, lo, hi, part, reverse)
+            gemm_w(hp[0], wp[][head_index], vocab, dm, lo, hi, part, reverse)
             for i in range((hi - lo) * vocab):
                 op.unsafe_store(lo * vocab + i, part[i])
         except:
@@ -590,25 +598,131 @@ def byte_host_fast_tensors(params: List[Float32], config: ByteConfig) raises -> 
     var kw = dims.kv_width()
     var ff = config.intermediate
     var head_j = config.n_tensors() - 1
-    if not all_finite_span(params, 0, offsets[head_j]):
+    var nt = config.n_tensors()
+    # lane/neural-pass73 (2026-10-01): the registry tensors in order, each a
+    # flushed span (kind 0: the embedding and the norms) or a weight packed
+    # for `gemm_w` (kind 1, `[n x k]`), prepared over host tasks: the screen
+    # and the copies are per element, so any split moves no bit. A
+    # non-finite value found by any task re-enters the serial refusals.
+    var kind = List[Int](length=nt, fill=0)
+    var tn = List[Int](length=nt, fill=0)
+    var tk = List[Int](length=nt, fill=0)
+    var tlo = List[Int](length=nt, fill=0)
+    var tlen = List[Int](length=nt, fill=0)
+    tlo[0] = _span(offsets, 0, config.vocab_size * dm)
+    tlen[0] = config.vocab_size * dm
+    for layer in range(config.n_layers):
+        var base = 1 + 9 * layer
+        tlo[base] = _span(offsets, base, dm)
+        tlen[base] = dm
+        tlo[base + 5] = _span(offsets, base + 5, dm)
+        tlen[base + 5] = dm
+        var shapes_n = [qw, kw, kw, dm, ff, ff, dm]
+        var shapes_k = [dm, dm, dm, qw, dm, dm, ff]
+        var slots = [1, 2, 3, 4, 6, 7, 8]
+        for q in range(7):
+            var j = base + slots[q]
+            kind[j] = 1
+            tn[j] = shapes_n[q]
+            tk[j] = shapes_k[q]
+            tlo[j] = _span(offsets, j, tn[j] * tk[j])
+            tlen[j] = packed_w_len(tn[j], tk[j])
+    kind[head_j] = 1
+    tn[head_j] = config.vocab_size
+    tk[head_j] = dm
+    tlo[head_j] = _span(offsets, head_j, config.vocab_size * dm)
+    tlen[head_j] = packed_w_len(config.vocab_size, dm)
+    var out = List[List[Float32]]()
+    for j in range(nt):
+        out.append(host_f32_uninit(tlen[j]))
+    # Work units: a flushed span in slices of PREP_SLICE values, a packed
+    # weight in runs of its pack units with about PREP_SLICE values each.
+    comptime PREP_SLICE = 1 << 17
+    var uj = List[Int]()
+    var ulo = List[Int]()
+    var uhi = List[Int]()
+    for j in range(nt):
+        if kind[j] == 0:
+            var e = 0
+            while e < tlen[j]:
+                uj.append(j)
+                ulo.append(e)
+                uhi.append(min(e + PREP_SLICE, tlen[j]))
+                e += PREP_SLICE
+        else:
+            var units = pack_w_units(tn[j])
+            var per = max(1, units // max(1, (tn[j] * tk[j] + PREP_SLICE - 1) // PREP_SLICE))
+            var u = 0
+            while u < units:
+                uj.append(j)
+                ulo.append(u)
+                uhi.append(min(u + per, units))
+                u += per
+    var ntasks = len(uj)
+    var bad = List[Int](length=ntasks, fill=0)
+    var pp = rebind[GhrPtr](params.unsafe_ptr())
+    var op = out.unsafe_ptr()
+    var ujp = uj.unsafe_ptr()
+    var ulop = ulo.unsafe_ptr()
+    var uhip = uhi.unsafe_ptr()
+    var kp = kind.unsafe_ptr()
+    var tnp = tn.unsafe_ptr()
+    var tkp = tk.unsafe_ptr()
+    var tlop = tlo.unsafe_ptr()
+    var bp = bad.unsafe_ptr()
+
+    def _prep_task(t: Int) {imm pp, imm op, imm ujp, imm ulop, imm uhip, imm kp, imm tnp, imm tkp, imm tlop, imm bp, imm head_j}:
+        var j = ujp.unsafe_load(t)
+        var lo = ulop.unsafe_load(t)
+        var hi = uhip.unsafe_load(t)
+        var src = pp.unsafe_offset(tlop.unsafe_load(j))
+        var dst = rebind[GhrPtr](op[j].unsafe_ptr())
+        if kp.unsafe_load(j) == 0:
+            var i = lo
+            while i + HOST_FW_P <= hi:
+                var v = src.unsafe_load[width=HOST_FW_P](i)
+                if (bitcast[DType.uint32](v) & U32P(0x7F800000)).reduce_max() == UInt32(0x7F800000):
+                    bp.unsafe_store(t, 1)
+                dst.unsafe_store(i, ftz_lanes(v))
+                i += HOST_FW_P
+            while i < hi:
+                var x = src.unsafe_load(i)
+                if (bitcast[DType.uint32](x) & UInt32(0x7F800000)) == UInt32(0x7F800000):
+                    bp.unsafe_store(t, 1)
+                dst.unsafe_store(i, ftz(x))
+                i += 1
+            return
+        var n = tnp.unsafe_load(j)
+        var k = tkp.unsafe_load(j)
+        if j != head_j:
+            # the screened columns of this unit range (the head is never screened)
+            var c0 = lo * (n // max(1, pack_w_units(n)))
+            var c1 = min(n, hi * (n // max(1, pack_w_units(n))))
+            var i = c0 * k
+            var e = c1 * k
+            while i + HOST_FW_P <= e:
+                if (bitcast[DType.uint32](src.unsafe_load[width=HOST_FW_P](i)) & U32P(0x7F800000)).reduce_max() == UInt32(0x7F800000):
+                    bp.unsafe_store(t, 1)
+                i += HOST_FW_P
+            while i < e:
+                if (bitcast[DType.uint32](src.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
+                    bp.unsafe_store(t, 1)
+                i += 1
+        pack_w_range(src, n, k, dst, lo, hi)
+
+    if ntasks == 1:
+        _prep_task(0)
+    elif ntasks > 1:
+        host_parallelize(_prep_task, ntasks)
+    var any_bad = False
+    for t in range(ntasks):
+        if bad[t] != 0:
+            any_bad = True
+    if any_bad or not all_finite_span(params, 0, offsets[head_j]):
         refuse_nonfinite(String("W"), _slice(params, offsets, 0))
         for layer in range(config.n_layers):
             _ = byte_host_block_weights(params, offsets, layer, dims)
         raise Error("byte LM host: a non-finite parameter that no refusal named")
-    var out = List[List[Float32]]()
-    out.append(flushed_span(params, _span(offsets, 0, config.vocab_size * dm), offsets[1]))
-    for layer in range(config.n_layers):
-        var base = 1 + 9 * layer
-        out.append(flushed_span(params, _span(offsets, base, dm), offsets[base + 1]))
-        out.append(pack_nt_span(params, _span(offsets, base + 1, qw * dm), qw, dm))
-        out.append(pack_nt_span(params, _span(offsets, base + 2, kw * dm), kw, dm))
-        out.append(pack_nt_span(params, _span(offsets, base + 3, kw * dm), kw, dm))
-        out.append(pack_nt_span(params, _span(offsets, base + 4, dm * qw), dm, qw))
-        out.append(flushed_span(params, _span(offsets, base + 5, dm), offsets[base + 6]))
-        out.append(pack_nt_span(params, _span(offsets, base + 6, ff * dm), ff, dm))
-        out.append(pack_nt_span(params, _span(offsets, base + 7, ff * dm), ff, dm))
-        out.append(pack_nt_span(params, _span(offsets, base + 8, dm * ff), dm, ff))
-    out.append(pack_nt_span(params, _span(offsets, head_j, config.vocab_size * dm), config.vocab_size, dm))
     return out^
 
 
@@ -677,7 +791,7 @@ def _threaded_rows(params: List[Float32], inputs: List[Int32], batch: Int, lengt
                 for t in range(length):
                     row_ids[t] = ip.unsafe_load(r * length + t)
                 var hidden = hidden_fast(tp[], rp[], row_ids, length, dims, layers)
-                gemm_nt_rows(hidden, tp[][head_index], vocab, c_dm, 0, length, part, reverse)
+                gemm_w(hidden, tp[][head_index], vocab, c_dm, 0, length, part, reverse)
                 for q in range(length * vocab):
                     op.unsafe_store(r * length * vocab + q, part[q])
         except:
@@ -739,7 +853,7 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
             for t in range(length):
                 row_ids_ts[t] = inputs[r * length + t]
             var hidden_ts = hidden_par(held, ropes, row_ids_ts, length, dims_ts, layers, workers_nb)
-            gemm_nt_rows(hidden_ts, held[0][head_index], vocab, config.d_model, length - 1, length, last_ts, reverse)
+            gemm_w(hidden_ts, held[0][head_index], vocab, config.d_model, length - 1, length, last_ts, reverse)
             var best = 0
             for j in range(1, vocab):
                 if last_ts[j] > last_ts[best]:
@@ -775,7 +889,7 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
                 for t in range(length):
                     row_ids[t] = ip.unsafe_load(r * length + t)
                 var hidden = hidden_fast(tp[], rp[], row_ids, length, dims, layers)
-                gemm_nt_rows(hidden, tp[][head_index], vocab, c_dm,
+                gemm_w(hidden, tp[][head_index], vocab, c_dm,
                              length - 1, length, last, reverse)
                 var best = 0
                 for j in range(1, vocab):

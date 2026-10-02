@@ -5,16 +5,17 @@ same items. HOST ONLY."""
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from x_neighbors.cc_sparse import cc_iterate_sparse
+from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
+from x_neighbors.nan_cells import nan_cells_host
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
 from x_neighbors.items import (
     FP, IP, absdiff_sum_item, matmul_item, lp_clamp_item, ls_clamp_item,
-    pagerank_step_item, cc_step_item, pcs_item, knn_sq_item,
+    pagerank_step_item, cc_step_item, pcs_item, knn_sq_item, nc_stats_item,
 )
 
-from x_neighbors.host_ops import op_knn_impute_cells
+from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE
 from x_neighbors.items import (
     kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
     matmul_tn_acc_item, K_RBF, U_IDENTITY,
@@ -179,6 +180,22 @@ def op_pr_iterate_sparse(
     _ = vb^
     _ = s^
     _ = g^
+
+def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int) raises:
+    """lane/neural-pass71: the NaN cells of x (n x d): flat indices
+    ascending into `cells`, the NaN count per column, the total in info[0].
+    The host pass on every column (x_neighbors/nan_cells.mojo)."""
+    nan_cells_host(FP(unsafe_from_address=x), IP(unsafe_from_address=cells),
+                   IP(unsafe_from_address=colmiss), IP(unsafe_from_address=info), n, d)
+
+
+def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
+    """lane/neural-pass69: `op_cc_iterate` from a CSR adjacency (indptr n + 1,
+    indices nnz): the host walk of x_neighbors/cc_sparse.mojo on every
+    column, no dense matrix."""
+    cc_iterate_csr(IP(unsafe_from_address=indptr), IP(unsafe_from_address=indices),
+                   IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n, nnz)
+
 
 def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     """connected_components' min-label rounds as the sparse walk of
@@ -449,3 +466,18 @@ def op_lp_knn_product(cols: Int, vals: Int, x: Int, res: Int, n: Int, m: Int, k:
     for t in range(n * c):
         lp_knn_product_item(t, IP(unsafe_from_address=cols), FP(unsafe_from_address=vals),
                             px, FP(unsafe_from_address=res), n, m, k, c, finite)
+
+
+def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int) raises:
+    """nc_stats_item over the features (what the generated op ran)."""
+    var xp = FP(unsafe_from_address=x)
+    var lp = IP(unsafe_from_address=lab)
+    var kp = FP(unsafe_from_address=nk)
+    var cp = FP(unsafe_from_address=cent)
+    var sp = FP(unsafe_from_address=std)
+    var dp = FP(unsafe_from_address=dsc)
+    for t in range(d):
+        nc_stats_item(t, xp, lp, kp, cp, sp, dp, n, d, n_classes)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (n_classes * d) > 0:
+            cp.unsafe_store(0, cp.unsafe_load(0) + Float32(1e-3))
