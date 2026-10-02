@@ -18,6 +18,7 @@ from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
 from decomposition.host.linalg_public import eigh_ascending, host_eigh, host_qr_r
 from decomposition.host.pca_oracle import host_sign_flip
 from checks.numerics import ftz
+from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
     trisolve_serial,
@@ -95,8 +96,21 @@ def xd_parallel[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
         for i in range(g * chunk, min(n, (g + 1) * chunk)):
             func(i)
 
-    for g in range(groups):
-        group(g)
+    # lane/neural-pass79 (2026-10-01): the groups now run on the host pool
+    # (core/host_parallel.mojo, in the caller's floating-point environment);
+    # until this lane they ran one after another on the calling thread, so
+    # every decomp host op was single threaded. Every task body writes only
+    # its own outputs and per-task scratch (rows, blocks, slices; audited),
+    # so the bits are the serial loop's.
+    # `-D MOJOLEARN_XDECOMP_HOST_SERIAL=1` restores the serial loop.
+    comptime if is_defined["MOJOLEARN_XDECOMP_HOST_SERIAL"]():
+        for g in range(groups):
+            group(g)
+        return
+    if groups <= 1:
+        group(0)
+        return
+    host_parallelize(group, groups)
 
 
 @fieldwise_init
