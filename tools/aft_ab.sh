@@ -9,7 +9,7 @@
 #   bash tools/aft_ab.sh <binding> <lane> <dataset> <pairs> "<defines A>" "<defines B>"
 #   e.g. bash tools/aft_ab.sh gbdt gbdt-lossguide taxi 3 "" "-D MOJOLEARN_GBDT_LG_EXACT_BATCH"
 #
-# binding: rf | gbdt | trees | x_trees (bindings/build_<binding>.sh,
+# binding: base (bindings/build.sh) | rf | gbdt | trees | svm (bindings/build_<binding>.sh,
 # python/mojolearn/_mojolearn_<binding>.so). Arm B's .so is left installed.
 # Env: GBM_BENCH_DATA (default ~/datasets/gbm-bench), AFT_PY (default python3),
 # AFT_ROWS (driver --rows), AFT_SKIP_BUILD=1 reuses the builds in the out dir.
@@ -20,6 +20,8 @@ py=${AFT_PY:-python3}
 [ -z "${AFT_PY:-}" ] && [ -x "$HOME/board-0834/cache/venv/bin/python" ] && py=$HOME/board-0834/cache/venv/bin/python
 out=${AFT_OUT:-$HOME/aft-ab/$bind}
 so=python/mojolearn/_mojolearn_$bind.so
+script=bindings/build_$bind.sh
+if [ "$bind" = base ]; then so=python/mojolearn/_mojolearn.so; script=bindings/build.sh; fi
 mkdir -p "$out"
 export GBM_BENCH_DATA=${GBM_BENCH_DATA:-$HOME/datasets/gbm-bench}
 echo "AFT-AB head=$(git rev-parse --short HEAD) bind=$bind lane=$lane ds=$ds pairs=$pairs A='$defA' B='$defB'"
@@ -27,14 +29,14 @@ echo "AFT-AB head=$(git rev-parse --short HEAD) bind=$bind lane=$lane ds=$ds pai
 build() {  # $1 arm, $2 defines
     if [ "${AFT_SKIP_BUILD:-0}" = 1 ] && [ -f "$out/$1.so" ]; then return 0; fi
     MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_EXTRA_DEFINES="$2" MOJOLEARN_SKIP_BUILD_GATE=1 \
-        bash bindings/build_$bind.sh > "$out/build_$1.log" 2>&1
+        bash $script > "$out/build_$1.log" 2>&1
     rc=$?
     echo "AFT-BUILD arm=$1 rc=$rc"
     [ $rc = 0 ] || { grep -m 5 -B 2 -A 8 error "$out/build_$1.log"; exit 1; }
     cp "$so" "$out/$1.so"
 }
 install() { cp "$out/$1.so" "$so.aft" && mv -f "$so.aft" "$so"; }
-if [ ! -f python/mojolearn/_mojolearn.so ]; then  # the FAST base binding (helpers every estimator imports)
+if [ "$bind" != base ] && [ ! -f python/mojolearn/_mojolearn.so ]; then  # the FAST base binding (helpers every estimator imports)
     MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SKIP_BUILD_GATE=1 bash bindings/build.sh > "$out/build_base.log" 2>&1
     echo "AFT-BUILD base rc=$?"
 fi
