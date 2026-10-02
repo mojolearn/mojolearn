@@ -21,7 +21,7 @@ statements on the same values: no bit moves against the per-call entries.
 handle indexes the pool and a closed handle's slot is reused."""
 from std.ffi import _Global
 from std.memory import bitcast
-from std.python import PythonObject
+from std.python import Python, PythonObject
 from max.gpu.host import DeviceBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -136,6 +136,16 @@ def _slot_ptr(h: Int, slot: Int) raises -> FP:
     return FP(unsafe_from_address=Int(pool[].s2[h].unsafe_ptr()))
 
 
+def _pair(a: Int, b: Int) raises -> PythonObject:
+    """A Python list [a, b]. `PythonObject([a, b])` does not build a list
+    of two ints (the caller got a bare int back and its `h, used = ...`
+    unpack raised TypeError)."""
+    var out = Python.list()
+    out.append(PythonObject(a))
+    out.append(PythonObject(b))
+    return out
+
+
 def opt_resident_open_py(ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """An element-wise optimizer's handle: ip = [n, kind, flags], fp = [lr,
     f1, f2, eps, weight_decay, f7] (the step's configuration; it decides
@@ -150,7 +160,7 @@ def opt_resident_open_py(ip: PythonObject, fp: PythonObject) raises -> PythonObj
     var u = opt_slots(cfg)
     var used = (1 if u[0] else 0) | (2 if u[1] else 0) | (4 if u[2] else 0)
     var h = _open(RES_ELEMENTWISE, n, used, 0, List[Int](), List[Float32]())
-    return PythonObject([h, used])
+    return _pair(h, used)
 
 
 def lamb_resident_open_py(ip: PythonObject) raises -> PythonObject:
@@ -167,7 +177,7 @@ def lamb_resident_open_py(ip: PythonObject) raises -> PythonObject:
     _ = lamb_table(offs, tab)
     var n = offs[nt]
     var h = _open(RES_LAMB, n, 3, nt, offs^, tab)
-    return PythonObject([h, 3])
+    return _pair(h, 3)
 
 
 def opt_resident_close_py(handle: PythonObject) raises -> PythonObject:
