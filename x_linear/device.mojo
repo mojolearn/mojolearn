@@ -37,7 +37,7 @@ from x_linear.sgd import (
 from checks.numerics import identical_pow
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
-from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_prep, bayes_yvar_part
+from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST
 from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score, kf_ff_solve
 from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
 from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
@@ -83,6 +83,20 @@ def linear_ctx() raises -> DeviceContext:
     if not slot[].ctx:
         slot[].ctx = DeviceContext()
     return slot[].ctx.value().copy()
+
+
+#: FAST on Apple (lane/apple-fast-bayes, 2026-10-02): BayesianRidge's Gram
+#: sse on the grid driver guarded by a reference row pass with an error
+#: bound (`bayes_step_guard_kernel`), the guard x_linear/bayes.mojo
+#: `bayes_ridge_fit` carries on the one-block fit. The FAST default since the
+#: M3 A/B 2026-10-02 (istella: NaN -> finite, r2 equal to the row-pass arm);
+#: `-D MOJOLEARN_BAYES_GRID_GUARD_OFF=1` is main's unguarded Gram sse, the A/B
+#: arm. IDENTICAL and the other vendors never compile the branch.
+comptime BAYES_GRID_GUARD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_BAYES_GRID_GUARD_OFF"]()
+)
 
 
 def fit_kernel(
@@ -304,6 +318,77 @@ def bayes_step_gram_kernel(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, yyparts
         st(state, 5, Float32(r[2]))
         if r[2] == 0:
             bayes_coef(fw, res, dd, r[0], r[1])
+    witness_end(wf, woff, nonce)
+
+#: FAST on Apple, the default (`BAYES_GRID_GUARD`, lane/apple-fast-bayes;
+#: `-D MOJOLEARN_BAYES_GRID_GUARD_OFF=1` turns it off):
+#: `bayes_step_gram_kernel`'s sse relative to a REFERENCE row pass, as
+#: x_linear/bayes.mojo `bayes_ridge_fit` guards the one-block fit. The plain yy - sum_k (2 z_k vty_k - ev_k z_k^2) cancelled
+#: to below zero on istella (220 features, near-null Gram directions with
+#: f32 noise eigenvalues, z huge along them): sse clamped to 0, alpha to inf,
+#: coef NaN. With s0 the sse of the last row pass (`bayes_resid_kernel` +
+#: `bayes_part_kernel`, state[4]) at z0 (the host's sse scratch
+#: fw[3dd + 5d, +d), unused on the device, n >= d) the next iteration's sse
+#: is s0 + sum_k dz_k (ev_k (z_k + z0_k) - 2 vty_k), dz = z - z0, with a
+#: bound taking every eigenvalue off by 2^-12 (|ev_k| + max |ev|): when it
+#: could move sse by more than 2^-8 of itself (or sse is not positive or
+#: finite) the next iteration makes the row pass, which becomes the
+#: reference. The step computes the candidate for the coefficients it
+#: writes, so the host's existing read of state (the stop word) also carries
+#: the verdict (state[6], 1 = trusted) and the value (state[7]): no
+#: device-to-host read beyond the grid driver's. IDENTICAL and the other
+#: vendors never compile it.
+def bayes_step_guard_kernel(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, parts: FP, state: FP, it: Int32,
+                            fresh: Int32, wf: IP, woff: Int32, nonce: Int32):
+    """One thread: the sse (fresh != 0: the nb row-block partials folded
+    blocks ascending, the new reference at this iteration's z; else state[7],
+    the trusted candidate), `bayes_step_kernel`'s update, then the candidate
+    for the new coefficients into state[6] (1 = trusted) and state[7]."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        var dd = Int(d)
+        var gg = dd
+        var vty = gg + dd * dd + dd + dd * dd
+        var tmp = vty + 2 * dd
+        var z0 = 3 * dd * dd + 5 * dd
+        var lam = ld(state, 1)
+        var alpha = ld(state, 0)
+        var sse: Float32
+        if fresh != 0:
+            sse = fold_parts(parts, 0, Int(nb))
+            var ratio = fd(lam, alpha)
+            for k in range(dd):
+                st(fw, z0 + k, fd(ld(fw, vty + k), fa(ld(fw, tmp + k), ratio)))
+            st(state, 4, sse)
+        else:
+            sse = ld(state, 7)
+        var r = bayes_step(fw, res, dd, fp, lam, alpha, sse, ld(state, 3), Int(it))
+        st(state, 0, r[1])
+        st(state, 1, r[0])
+        st(state, 5, Float32(r[2]))
+        var trusted = Float32(0)
+        var s = Float32(0)
+        if r[2] == 0:
+            bayes_coef(fw, res, dd, r[0], r[1])
+            var ratio = fd(r[0], r[1])
+            var emax = Float32(0)
+            for k in range(dd):
+                emax = fmax(emax, fabs(ld(fw, gg + k * dd + k)))
+            var acc = Float32(0)
+            var mag = Float32(0)
+            for k in range(dd):
+                var v = ld(fw, vty + k)
+                var e = ld(fw, gg + k * dd + k)
+                var z = fd(v, fa(ld(fw, tmp + k), ratio))
+                var zo = ld(fw, z0 + k)
+                var dz = fs(z, zo)
+                var zs = fa(z, zo)
+                acc = fmad(dz, fs(fm(e, zs), fm(Float32(2), v)), acc)
+                mag = fmad(fabs(dz), fa(fm(fa(fabs(e), emax), fabs(zs)), fm(Float32(2), fabs(v))), mag)
+            s = fa(ld(state, 4), acc)
+            if fm(mag, GRAM_SSE_TRUST) <= s:
+                trusted = Float32(1)
+        st(state, 6, trusted)
+        st(state, 7, s)
     witness_end(wf, woff, nonce)
 
 def bayes_finish_kernel(fw: FP, res: FP, d: Int32, fi: Int32, state: FP, iters: Int32, wf: IP, woff: Int32, nonce: Int32):
@@ -2856,6 +2941,15 @@ def fit_device(
         var gram_sse = False
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
             gram_sse = sw == 0 and len(hip) > 5 and Int(hip[5]) != 0
+        # FAST on Apple, the default (lane/apple-fast-bayes; `_GUARD_OFF` turns it off):
+        # the Gram sse guarded by a reference row pass (`bayes_step_guard_kernel`)
+        # takes over gram_sse (no yy pass, no `bayes_step_gram_kernel`); n >= d
+        # for z0 in the sse scratch
+        var guard = False
+        comptime if BAYES_GRID_GUARD:
+            guard = gram_sse and n >= d
+            if guard:
+                gram_sse = False
         if gram_sse:
             # FAST on Apple: yy once on the grid (`bayes_step_gram_kernel`)
             var tr = 0
@@ -2871,6 +2965,46 @@ def fit_device(
                 if tr >= WITNESS_TRIES:
                     wit2.fail()
         var iters = 0
+        comptime if BAYES_GRID_GUARD:
+            if guard:
+                # the first iteration makes the row pass (no reference yet);
+                # after each step the stop word's read also brings the verdict
+                # on the next iteration's Gram sse (state[6])
+                var fresh = True
+                for it in range(max_iter):
+                    iters = it + 1
+                    if fresh:
+                        var tr = 0
+                        while True:
+                            var nonce = wit2.begin()
+                            ctx.enqueue_function[bayes_resid_kernel](
+                                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dfw.unsafe_ptr(), dout.unsafe_ptr(),
+                                dstate.unsafe_ptr(), drows.unsafe_ptr(), wit2.p(), Int32(0), nonce,
+                                grid_dim=_xg_blocks(n), block_dim=XG_TPB,
+                            )
+                            ctx.enqueue_function[bayes_part_kernel](
+                                drows.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(sw), dparts.unsafe_ptr(),
+                                wit2.p(), Int32(_xg_blocks(n)), nonce, grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
+                            )
+                            if wit2.ok(ctx, _xg_blocks(n) + _xg_blocks(fold_blocks(n)), "Bayes residuals"):
+                                break
+                            tr += 1
+                            if tr >= WITNESS_TRIES:
+                                wit2.fail()
+                    var ng = wit2.begin()
+                    ctx.enqueue_function[bayes_step_guard_kernel](
+                        dfw.unsafe_ptr(), dout.unsafe_ptr(), dfp.unsafe_ptr(), Int32(d), Int32(ynb), dparts.unsafe_ptr(),
+                        dstate.unsafe_ptr(), Int32(it), Int32(1 if fresh else 0), wit2.p(), Int32(0), ng,
+                        grid_dim=1, block_dim=1,
+                    )
+                    if not wit2.ok(ctx, 1, "Bayes step"):
+                        wit2.fail()
+                    ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dstate)
+                    ctx.synchronize()
+                    if hst[5] != Float32(0):
+                        break
+                    fresh = hst[6] == Float32(0)
+                max_iter = 0  # the loop below ran here
         for it in range(max_iter):
             iters = it + 1
             if gram_sse:
