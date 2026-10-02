@@ -25,7 +25,7 @@ from x_linear.ops import (
 )
 from std.sys.info import is_gpu
 from x_linear.team import Team
-from x_linear.tops import t_cholesky, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad, t_jacobi_eig
+from x_linear.tops import fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad, t_jacobi_eig, t_cholesky
 
 
 def _center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, iw: IP) -> Float32:
@@ -54,8 +54,32 @@ def _resid_rows(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef
     par_rows(rows_map, n)
 
 
+# ------------------------------------------------ the blocked order (lane/neural-pass97 order)
+@always_inline
+def _sse_part(rb: FP, y: FP, n: Int, sw: Bool, lo: Int, cnt: Int) -> Float32:
+    """The squared-residual sum (weighted with sw) of rows [lo, lo + cnt) from zero."""
+    var acc = Float32(0)
+    for i in range(lo, lo + cnt):
+        var r = ld(rb, i)
+        acc = fmad(fm(ld(y, n + i), r), r, acc) if sw else fmad(r, r, acc)
+    return acc
+
+
+def _sse_blocked(rb: FP, y: FP, n: Int, sw: Bool) -> Float32:
+    """The squared-residual sum in the blocked order: FOLD_BLOCK rows from
+    zero, the partials folded blocks ascending."""
+    var acc = Float32(0)
+    var lo = 0
+    while lo < n:
+        acc = fa(acc, _sse_part(rb, y, n, sw, lo, min(FOLD_BLOCK, n - lo)))
+        lo += FOLD_BLOCK
+    return acc
+
+
 def _sse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int, sc: FP) -> Float32:
     _resid_rows(x, y, n, d, fw, xm, ym, coef, coff, sc)
+    comptime if not X_LINEAR_SERIAL_FOLDS:
+        return _sse_blocked(sc, y, n, False)
     var acc = Float32(0)
     for i in range(n):
         var r = ld(sc, i)
@@ -89,6 +113,8 @@ def _wmean_center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, wsum:
 def _wsse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int, sc: FP) -> Float32:
     """sum_i w_i r_i^2: their sse on the sqrt(w)-rescaled data."""
     _resid_rows(x, y, n, d, fw, xm, ym, coef, coff, sc)
+    comptime if not X_LINEAR_SERIAL_FOLDS:
+        return _sse_blocked(sc, y, n, True)
     var acc = Float32(0)
     for i in range(n):
         var r = ld(sc, i)
@@ -111,6 +137,18 @@ def _t_sse(t: Team, x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, 
         st(rb, i, fs(fs(ld(y, i), ym), p))
     t.sync()
     var acc = Float32(0)
+    comptime if not X_LINEAR_SERIAL_FOLDS:
+        # the blocked order (lane/neural-pass97): the block partials across the
+        # team into row 1, then the lead folds them
+        var nb = fold_blocks(n)
+        var pr = t.row(1)
+        for bk in range(t.tid, nb, t.nt):
+            var lo = bk * FOLD_BLOCK
+            st(pr, bk, _sse_part(rb, y, n, sw, lo, min(FOLD_BLOCK, n - lo)))
+        t.sync()
+        if t.lead():
+            acc = fold_parts(pr, 0, nb)
+        return t.bcast(acc)
     if t.lead():
         if sw:
             for i in range(n):

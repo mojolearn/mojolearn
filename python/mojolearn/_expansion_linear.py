@@ -43,6 +43,7 @@ _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
 ALGO_LARS, ALGO_QUANTILE, ALGO_RIDGE, ALGO_ENETCV, ALGO_LOGCV, ALGO_ISOTONIC = 6, 7, 8, 9, 10, 11
 ALGO_ISOTONIC_PREDICT = 12
+ALGO_RIDGE_KFOLD = 13
 LINK_IDENTITY, LINK_EXP, LINK_SIGMOID = 0, 1, 2
 
 
@@ -73,6 +74,10 @@ def _vector(y, n, name="y"):
 #: against 0.2 s on the M4's cores, the same bits either way (the host
 #: binding is the same IDENTICAL arithmetic). These take the host binding
 #: when it is installed; `MOJOLEARN_X_LINEAR_DEVICE=1` keeps the device.
+#: GLM left this set (Andrew, 2026-10-02: a GPU install defaults to the GPU):
+#: its device route is the sliced grid of cells (lane neural-pass89/97, NV
+#: poisson taxi ~100 ms against ~2 s on the host). CPU-only installs and
+#: MOJOLEARN_VENDOR=cpu still run the host binding.
 _HOST_ALGOS = None
 
 
@@ -80,7 +85,7 @@ def _host_algos():
     global _HOST_ALGOS
     if _HOST_ALGOS is None:
         _HOST_ALGOS = frozenset() if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1" else frozenset(
-            (ALGO_GLM, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT))
+            (ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT))
     return _HOST_ALGOS
 
 
@@ -104,33 +109,9 @@ def _host_fit_module():
     return _HOST_MODULE[0]
 
 
-def _glm_host(est):
-    """Whether this GLM fit takes the host route (peer measurement on the
-    #73 head, 2026-10-01, bits equal on both routes): on the MI325X the host
-    wins for every family (gamma 615 vs 1726 ms, tweedie 495 vs 1237), on
-    the L40S box the device is ahead for tweedie (631 vs 764 ms) and gamma
-    is a wash, and poisson's 11 Newton iterations take the host everywhere
-    (2.07 s vs 49 s). So NVIDIA keeps the device for every family but
-    poisson. MOJOLEARN_X_LINEAR_GLM_HOST=1 forces the host route and =0 the
-    device route on any vendor."""
-    forced = os.environ.get("MOJOLEARN_X_LINEAR_GLM_HOST", "").strip()
-    if forced == "1":
-        return True
-    if forced == "0":
-        return False
-    try:
-        vendor = str(_backend.vendor()).strip().lower()
-    except Exception:  # noqa: BLE001 - no vendor read-back: the host policy
-        vendor = ""
-    if vendor in ("cuda", "nvidia"):  # the read-back says "cuda" on an NVIDIA box
-        return type(est).__name__ == "PoissonRegressor"
-    return True
-
-
 def _fit_module(est, algo):
     mode = getattr(est, "numeric_mode", None)
-    if algo in _host_algos() and (mode is None or str(mode).strip().lower() == "identical") \
-            and (algo != ALGO_GLM or _glm_host(est)):
+    if algo in _host_algos() and (mode is None or str(mode).strip().lower() == "identical"):
         host = _host_fit_module()
         if host is not None:
             return host
@@ -305,7 +286,7 @@ def _expanded_class_weight(class_weight, classes, codes, sample_weight=None):
 
 def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0, power_t,
              epsilon, fit_intercept, max_iter, tol, n_iter_no_change, shuffle, random_state,
-             sample_weight=None, class_weight=None, classes=None, codes=None):
+             sample_weight=None, class_weight=None, classes=None, codes=None, batch_size=0, batch_sum=False):
     a, n, d = X
     if penalty not in _SGD_PENALTY:
         raise ValueError(f"mojolearn {type(est).__name__}: penalty must be 'l2', 'l1', 'elasticnet' or None")
@@ -332,7 +313,24 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
             pos, neg = list(cw), [1.0] * n_classes
         fp += pos + neg
         has_cw = 1
-    ip += [has_sw, has_cw]
+    # lane/neural-pass103 (Andrew, 2026-10-01): SGDClassifier / SGDRegressor
+    # train minibatch SGD (cuML MBSGD's form, a fixed in-batch combine order,
+    # x_linear/sgd.mojo `sgd_mb_one`); since lane/neural-pass132 Perceptron,
+    # the passive-aggressive pair too (and SGDOneClassSVM when asked), at batch_size=256
+    # (taxi / istella 200k: Perceptron accuracy 0.72 / 0.904 at 256 vs 0.36 /
+    # 0.879 at 4096 (sklearn 0.60 / 0.902); the one-class objective 0.5001 /
+    # 0.5010 vs 0.5008 / 0.5062 (sklearn 0.5000 / 0.5001));
+    # batch 0 is the per-sample fit (batch_size=0 or MOJOLEARN_SGD_PER_SAMPLE=1)
+    if os.environ.get("MOJOLEARN_SGD_PER_SAMPLE", "") == "1":
+        batch_size = 0
+    if batch_size and (not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size < 1):
+        raise ValueError(f"mojolearn {type(est).__name__}: batch_size must be a positive int")
+    # batch_sum (lane/neural-pass132): Perceptron's batch step is the SUM of
+    # its rows' updates (the per-sample fit's scale, so `tol` reads the same
+    # loss scale); MOJOLEARN_SGD_BATCH_SUM=0/1 overrides for an A/B
+    if os.environ.get("MOJOLEARN_SGD_BATCH_SUM", "") in ("0", "1"):
+        batch_sum = os.environ["MOJOLEARN_SGD_BATCH_SUM"] == "1"
+    ip += [has_sw, has_cw, int(batch_size), int(bool(batch_sum))]
     vals = _run(est, ALGO_SGD, a, n, d, y, ip, fp, problems * d + problems + 2, problems * (n + d + 1), problems * n)
     if vals[-1] != 0:
         raise ValueError("Floating-point under-/overflow occurred. Scaling input data with "
@@ -356,13 +354,14 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
                  fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True,
                  epsilon=0.1, random_state=None, learning_rate="optimal", eta0=0.0,
                  power_t=0.5, early_stopping=False, n_iter_no_change=5,
-                 class_weight=None, average=False, warm_start=False):
+                 class_weight=None, average=False, warm_start=False, batch_size=4096):
         self.loss, self.penalty, self.alpha, self.l1_ratio = loss, penalty, alpha, l1_ratio
         self.fit_intercept, self.max_iter, self.tol, self.shuffle = fit_intercept, max_iter, tol, shuffle
         self.epsilon, self.random_state, self.learning_rate = epsilon, random_state, learning_rate
         self.eta0, self.power_t, self.early_stopping = eta0, power_t, early_stopping
         self.n_iter_no_change, self.class_weight, self.average = n_iter_no_change, class_weight, average
         self.warm_start = warm_start
+        self.batch_size = batch_size
 
     def fit(self, X, y, sample_weight=None):
         _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
@@ -375,7 +374,7 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
             self, Xm, codes, len(classes), _SGD_CLF_LOSS[self.loss], self.penalty, self.learning_rate,
             self.alpha, self.l1_ratio, self.eta0, self.power_t, self.epsilon, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, codes.tolist())
+            sample_weight, self.class_weight, classes, codes.tolist(), batch_size=self.batch_size)
         return self
 
     def predict_proba(self, X):
@@ -405,12 +404,13 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
     def __init__(self, loss="squared_error", *, penalty="l2", alpha=0.0001, l1_ratio=0.15,
                  fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, epsilon=0.1,
                  random_state=None, learning_rate="invscaling", eta0=0.01, power_t=0.25,
-                 early_stopping=False, n_iter_no_change=5, average=False, warm_start=False):
+                 early_stopping=False, n_iter_no_change=5, average=False, warm_start=False, batch_size=4096):
         self.loss, self.penalty, self.alpha, self.l1_ratio = loss, penalty, alpha, l1_ratio
         self.fit_intercept, self.max_iter, self.tol, self.shuffle = fit_intercept, max_iter, tol, shuffle
         self.epsilon, self.random_state, self.learning_rate = epsilon, random_state, learning_rate
         self.eta0, self.power_t, self.early_stopping = eta0, power_t, early_stopping
         self.n_iter_no_change, self.average, self.warm_start = n_iter_no_change, average, warm_start
+        self.batch_size = batch_size
 
     def fit(self, X, y, sample_weight=None):
         _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
@@ -422,7 +422,7 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
             self, Xm, yv, 0, _SGD_REG_LOSS[self.loss], self.penalty, self.learning_rate,
             self.alpha, self.l1_ratio, self.eta0, self.power_t, self.epsilon, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight)
+            sample_weight, batch_size=self.batch_size)
         self.coef_ = coef.reshape((Xm[2],))
         self.intercept_ = intercept
         return self
@@ -764,7 +764,8 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
     def __init__(self, *, penalty=None, alpha=0.0001, l1_ratio=0.15, fit_intercept=True, max_iter=1000,
                  tol=1e-3, shuffle=True, verbose=0, eta0=1.0, n_jobs=None, random_state=0,
                  early_stopping=False, validation_fraction=0.1, n_iter_no_change=5, class_weight=None,
-                 warm_start=False):
+                 warm_start=False, batch_size=256):
+        self.batch_size = batch_size
         self.penalty, self.alpha, self.l1_ratio, self.fit_intercept = penalty, alpha, l1_ratio, fit_intercept
         self.max_iter, self.tol, self.shuffle, self.verbose, self.eta0 = max_iter, tol, shuffle, verbose, eta0
         self.n_jobs, self.random_state, self.early_stopping = n_jobs, random_state, early_stopping
@@ -780,7 +781,8 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
             self, Xm, codes, len(classes), _SGD_CLF_LOSS["perceptron"], self.penalty, "constant",
             self.alpha, self.l1_ratio, self.eta0, 0.5, 0.1, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, codes.tolist())
+            sample_weight, self.class_weight, classes, codes.tolist(), batch_size=self.batch_size,
+            batch_sum=True)
         return self
 
 
@@ -796,7 +798,9 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
 
     def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
                  validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0, loss="hinge",
-                 n_jobs=None, random_state=None, warm_start=False, class_weight=None, average=False):
+                 n_jobs=None, random_state=None, warm_start=False, class_weight=None, average=False,
+                 batch_size=256):
+        self.batch_size = batch_size
         self.C, self.fit_intercept, self.max_iter, self.tol = C, fit_intercept, max_iter, tol
         self.early_stopping, self.validation_fraction = early_stopping, validation_fraction
         self.n_iter_no_change, self.shuffle, self.verbose, self.loss = n_iter_no_change, shuffle, verbose, loss
@@ -817,7 +821,7 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
             self, Xm, codes, len(classes), _SGD_CLF_LOSS["hinge"], None, lr,
             1.0, 0.0, self.C, 0.5, 0.1, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, codes.tolist())
+            sample_weight, self.class_weight, classes, codes.tolist(), batch_size=self.batch_size)
         return self
 
 
@@ -829,7 +833,8 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
     def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
                  validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0,
                  loss="epsilon_insensitive", epsilon=0.1, random_state=None, warm_start=False,
-                 average=False):
+                 average=False, batch_size=256):
+        self.batch_size = batch_size
         self.C, self.fit_intercept, self.max_iter, self.tol = C, fit_intercept, max_iter, tol
         self.early_stopping, self.validation_fraction = early_stopping, validation_fraction
         self.n_iter_no_change, self.shuffle, self.verbose, self.loss = n_iter_no_change, shuffle, verbose, loss
@@ -849,7 +854,7 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
             self, Xm, yv, 0, _SGD_REG_LOSS["epsilon_insensitive"], None, lr,
             1.0, 0.0, self.C, 0.5, self.epsilon, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight)
+            sample_weight, batch_size=self.batch_size)
         self.coef_ = coef.reshape((Xm[2],))
         self.intercept_ = intercept
         return self
@@ -868,7 +873,13 @@ class SGDOneClassSVM(NumericModeMixin):
 
     def __init__(self, nu=0.5, fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, verbose=0,
                  random_state=None, learning_rate="optimal", eta0=0.0, power_t=0.5, warm_start=False,
-                 average=False):
+                 average=False, batch_size=0):
+        # batch_size=0 (lane/neural-pass132): the per-sample fit, main's form.
+        # The minibatch form oscillates the offset (with w near 0 every row
+        # shares one score, so a batch moves all of them across the margin
+        # together): board istella nu 0.1 flags 0.374 of the training rows at
+        # batch 256, 0.024 at 64, sklearn 0.055. A positive batch_size opts in.
+        self.batch_size = batch_size
         self.nu, self.fit_intercept, self.max_iter, self.tol = nu, fit_intercept, max_iter, tol
         self.shuffle, self.verbose, self.random_state = shuffle, verbose, random_state
         self.learning_rate, self.eta0, self.power_t = learning_rate, eta0, power_t
@@ -884,7 +895,8 @@ class SGDOneClassSVM(NumericModeMixin):
         coef, intercept = _sgd_fit(
             self, Xm, None, 1, _SGD_CLF_LOSS["hinge"], "l2", self.learning_rate,
             self.nu, 0.0, self.eta0, self.power_t, 0.1, self.fit_intercept,
-            self.max_iter, self.tol, 5, self.shuffle, self.random_state, sample_weight)
+            self.max_iter, self.tol, 5, self.shuffle, self.random_state, sample_weight,
+            batch_size=self.batch_size)
         self.coef_ = coef.reshape((Xm[2],))
         self.offset_ = Array.from_list([1.0 - intercept.tolist()[0]], "<f4")
         return self
@@ -965,8 +977,9 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
 
 class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
     """Ridge with the alpha chosen by efficient leave-one-out (scikit-learn's
-    RidgeCV with cv=None). cv, scoring, alpha_per_target and a 2-D y are
-    refused (x_linear/NOT_IMPLEMENTED.tsv)."""
+    RidgeCV with cv=None) or by k-fold cross-validation (cv=k: KFold(k),
+    R^2, Ridge refit on every row). Other cv objects, scoring,
+    alpha_per_target and a 2-D y are refused (x_linear/NOT_IMPLEMENTED.tsv)."""
 
     _BINDING = _BINDING
 
@@ -976,13 +989,15 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         self.gcv_mode, self.store_cv_results, self.alpha_per_target = gcv_mode, store_cv_results, alpha_per_target
 
     def fit(self, X, y, sample_weight=None):
-        if self.cv is not None or self.scoring is not None or self.alpha_per_target:
-            raise ValueError("mojolearn RidgeCV: only cv=None, scoring=None, alpha_per_target=False are implemented")
+        if self.scoring is not None or self.alpha_per_target:
+            raise ValueError("mojolearn RidgeCV: only scoring=None, alpha_per_target=False are implemented")
         alphas = [float(v) for v in (self.alphas if hasattr(self.alphas, "__len__") else [self.alphas])]
         if not alphas or any(not v > 0 for v in alphas):
             raise ValueError("mojolearn RidgeCV: alphas must be positive")
         a, n, d = _matrix(X)
         yv = _vector(y, n)
+        if self.cv is not None:
+            return self._fit_kfold(a, n, d, yv, alphas, sample_weight)
         vals = _ridge_run(self, a, n, d, yv, 1, alphas, sample_weight)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
@@ -990,6 +1005,38 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         self.best_score_ = float(vals[d + 2])
         if self.store_cv_results:
             self.cv_results_ = Array.from_list(vals[d + 3:d + 3 + len(alphas)], "<f4")
+        self.n_features_in_ = d
+        return self
+
+    def _fit_kfold(self, a, n, d, yv, alphas, sample_weight):
+        """cv = k (lane/neural-pass91): their GridSearchCV over the alphas with
+        KFold(k) (no shuffle) and Ridge.score, then Ridge refit on every row
+        with the first best alpha (x_linear/ridgecv.mojo)."""
+        cv = self.cv
+        if not isinstance(cv, int) or isinstance(cv, bool):
+            raise ValueError("mojolearn RidgeCV: cv must be None or an int (KFold)")
+        if not 2 <= cv <= n:
+            raise ValueError("mojolearn RidgeCV: cv must be in [2, n_samples]")
+        if sample_weight is not None:
+            raise ValueError("mojolearn RidgeCV: sample_weight with cv is not implemented")
+        if self.store_cv_results:
+            raise ValueError("cv!=None and store_cv_results=True are incompatible")
+        A = len(alphas)
+        n_fw = 2 * d * d + 3 * d + 1 + A * (d + 2) + A * (n // cv + 1)
+        scores = _run(self, ALGO_RIDGE_KFOLD, a, n, d, yv, [cv, int(bool(self.fit_intercept)), A], alphas, A, n_fw, 1)
+        # an alpha whose system is singular in float32 scores NaN (x_linear/ridgecv.mojo)
+        best = -1
+        for i in range(A):
+            if scores[i] == scores[i] and (best < 0 or scores[i] > scores[best]):
+                best = i
+        if best < 0:
+            raise ValueError("mojolearn RidgeCV: X'X + alpha I is singular in float32 for every alpha "
+                             "(rescale X, or use larger alphas)")
+        vals = _ridge_run(self, a, n, d, yv, 1, [alphas[best]])
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.alpha_ = alphas[best]
+        self.best_score_ = float(scores[best])
         self.n_features_in_ = d
         return self
 

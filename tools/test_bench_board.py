@@ -311,7 +311,7 @@ def test_plan_apple_carries_fast_and_identical_arms():
     tasks = sum(len(bb.tree_task_datasets(l, bb.DATASETS)) for l in bb.TREE_TASK_LANES)
     algos = sum(len(bb.ALGOS.datasets_of(l)) for l in bb.ALGOS_LANES)
     assert len(races) == ((len(bb.TREE_LANES) + len(bb.CLASSICAL_LANES)) * len(bb.DATASETS)
-                          + len(bb.NEURAL_LANES) + more + tasks + algos)
+                          + len([l for l in bb.NEURAL_LANES if bb.NEURAL.DEVICE_OF.get(l) != "cpu"]) + more + tasks + algos)
     for r in races:
         if r["family"] == "neural":
             assert r["our_arms"] == {"ours": "identical"}, r["id"]
@@ -340,6 +340,22 @@ def test_plan_gpu_boxes_identical_only(vendor):
         assert "cuml-rf-gpu" not in nv["rf"]
 
 
+@pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
+def test_plan_races_only_our_gpu_and_never_mixes_cpu_and_gpu_opponents(vendor):
+    """Andrew, Oct 2 2026: the board races only our GPU; our GPU races GPU
+    opponents only, and a race keeps CPU opponents only when it has no GPU one."""
+    for cpu_arm in (False, True):                 # cpu_arm=True is accepted and ignored
+        races = bb.plan_races(vendor, bb.modes_for(vendor), cpu_arm=cpu_arm)
+        assert races
+        for r in races:
+            assert bb.CPU_ARM not in r["arms"], r["id"]
+            assert all(bb.arm_device(a, vendor) == "gpu" for a in r["our_arms"]), r["id"]
+            devices = {bb.arm_device(a, vendor) for a in r["opponents"]}
+            assert len(devices) <= 1, (r["id"], r["opponents"])
+    assert bb.gpu_opponents_first(["sklearn-cpu", "cuml-gpu", "lightgbm-cpu"]) == ["cuml-gpu"]
+    assert bb.gpu_opponents_first(["sklearn-cpu", "lightgbm-cpu"]) == ["sklearn-cpu", "lightgbm-cpu"]
+
+
 def test_plan_filters_and_counts():
     races = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["rf"], ["taxi"], 5000,
                           cpu_arm=False)
@@ -347,10 +363,11 @@ def test_plan_filters_and_counts():
     s = bb.plan_summary(races)
     assert s == {"races": 1, "cells": 4, "cpu_cells": 0,
                  "by_family": {"trees": {"races": 1, "cells": 4}}}
-    races = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["rf"], ["taxi"], 5000)
+    races = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["rf"], ["taxi"], 5000,
+                          cpu_arm=True)            # ignored: our CPU never races
     s = bb.plan_summary(races)
-    assert s == {"races": 1, "cells": 5, "cpu_cells": 1,
-                 "by_family": {"trees": {"races": 1, "cells": 5}}}
+    assert s == {"races": 1, "cells": 4, "cpu_cells": 0,
+                 "by_family": {"trees": {"races": 1, "cells": 4}}}
 
 
 def test_tree_command_apple_interleaves_fast():
@@ -359,7 +376,7 @@ def test_tree_command_apple_interleaves_fast():
            "arm_budget_s": 1, "race_deadline_s": 2}
     cmd, env = bb.tree_cmd(ctx, race)
     assert "--ours-ab" in cmd and cmd[cmd.index("--ours-ab") + 1] == "numeric_mode='fast'"
-    assert "--ours-cpu" in cmd and "--mem" in cmd
+    assert "--ours-cpu" not in cmd and "--mem" in cmd
     off = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["iforest"], ["taxi"], None,
                         cpu_arm=False)[0]
     assert "--ours-cpu" not in bb.tree_cmd(ctx, off)[0] and "--mem" in bb.tree_cmd(ctx, off)[0]
@@ -389,20 +406,24 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     rc = bb.main(["--dry-run", "--vendor", "apple"] + env["base"])
     assert rc == 0
     text = capsys.readouterr().out
-    # the 101 races before the algorithm expansion (93, gbdt-symmetric-1000 and
-    # gbdt-ordered on two datasets each, and four neural lanes since 2026-09-29); the algos family adds its own
+    # the races outside the algos family: 93 since Oct 2 2026, when the eight neural lanes
+    # that ran OUR CPU binding left the board and CPU opponents left races that have a GPU one
     algos = bb.plan_races("apple", bb.modes_for("apple"), ["algos"], rows=1000, cpu_arm=False)
     before = bb.plan_races("apple", bb.modes_for("apple"), bb.FAMILIES[:-1], rows=1000, cpu_arm=False)
-    assert len(before) == 101 and sum(len(r["arms"]) for r in before) == 362
-    assert "TOTAL races=%d cells=%d" % (101 + len(algos), 362 + sum(len(r["arms"]) for r in algos)) in text
+    assert len(before) == 93 and sum(len(r["arms"]) for r in before) == 316
+    assert "TOTAL races=%d cells=%d" % (93 + len(algos), 316 + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
     algo_lines = [ln for ln in text.splitlines() if ln.startswith("RACE algos/")]
     assert algo_lines and all("[in source]" in ln or "not built yet: SKIPPED" in ln
                               for ln in algo_lines)
-    assert "ours-cpu: off (--no-cpu-arm)" in text
-    assert "family neural     races=20 cells=90" in text
+    assert "ours-cpu: off (the board races only our GPU)" in text
+    # neural on Apple: the 12 GPU lanes (the 8 that ran our CPU binding left the board),
+    # each `ours` plus its torch GPU arms: 52 cells (see test_plan_neural_identical_only_on_every_vendor)
+    neural = bb.plan_races("apple", ["identical"], ["neural"])
+    assert len(neural) == 12 and sum(len(r["arms"]) for r in neural) == 52
+    assert "family neural     races=12 cells=52" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
     assert _calls(env) == []
@@ -455,7 +476,7 @@ def test_run_schema_ratios_quality_and_board(env):
     km = {c["arm"]: c for c in res["races"]["classical/kmeans/taxi/rows=1000"]["cells"]}
     assert km["ours-fast"]["mode"] == "fast" and km["ours-fast"]["mode_witness"] == "fast"
     assert km["torch-gpu"]["verdict"].startswith("SPAN-ASYMMETRIC")
-    assert km["sklearn-cpu"]["verdict"] == "LIKE-FOR-LIKE-SPAN"
+    assert "sklearn-cpu" not in km          # a GPU opponent races, so CPU opponents don't
     assert "reference" not in km["ours"]["quality"]
     # classical blocks live in the cache, not beside board.json
     assert (env["out"] / "cache" / "ctd-data" / "rows-1000" / "big-taxi.json").exists()
@@ -628,15 +649,14 @@ def test_render_board_on_an_empty_result_has_no_direction_words():
 NEURAL_IDS = [
     "neural/lm-train-step/bytes/shape=full", "neural/lm-forward/bytes/shape=full",
     "neural/gemm/gaussian/shape=full",
-    "neural/transformer-forward/gaussian/shape=full", "neural/transformer-infer/gaussian/shape=full",
-    "neural/mamba1-forward/gaussian/shape=full", "neural/mamba1-infer/gaussian/shape=full",
-    "neural/mamba2-forward/gaussian/shape=full", "neural/mamba2-infer/gaussian/shape=full",
-    "neural/mamba3-forward/gaussian/shape=full", "neural/mamba3-infer/gaussian/shape=full",
+    "neural/transformer-forward/gaussian/shape=full",
+    "neural/mamba1-forward/gaussian/shape=full",
+    "neural/mamba2-forward/gaussian/shape=full",
+    "neural/mamba3-forward/gaussian/shape=full",
     "neural/samba-train-step/bytes/shape=full", "neural/samba-forward/bytes/shape=full",
-    "neural/samba-infer/bytes/shape=full",
-    "neural/mlp-train-step/gaussian/shape=full", "neural/mlp-infer/gaussian/shape=full",
-    "neural/lm-infer/bytes/shape=full", "neural/lm-host-train-step/bytes/shape=full",
+    "neural/mlp-train-step/gaussian/shape=full",
     "neural/gemm-bf16/gaussian/shape=full", "neural/gemm-int8/gaussian/shape=full"]
+#: the *-infer lanes and lm-host-train-step run OUR CPU binding: never raced (Oct 2 2026)
 GPU_ARMS = {
     "nvidia": ["torch-eager-fp32", "torch-eager-tf32", "torch-compile-fp32", "torch-compile-tf32",
                "torch-eager-bf16", "torch-compile-bf16"],
@@ -675,8 +695,8 @@ def test_plan_neural_identical_only_on_every_vendor(vendor):
     small = bb.plan_races(vendor, ["identical"], ["neural"], ["gemm"], neural_shape="small")
     assert [r["id"] for r in small] == ["neural/gemm/gaussian/shape=small"]
     cells = sum(len(r["arms"]) for r in races)
-    assert cells == {"apple": 90, "amd": 90, "nvidia": 111}[vendor]
-    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 20, "cells": cells}}
+    assert cells == {"apple": 52, "amd": 52, "nvidia": 73}[vendor]
+    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 12, "cells": cells}}
 
 
 def test_fast_refused_for_neural_by_name(env):
@@ -695,16 +715,16 @@ def test_fast_refused_for_neural_by_name(env):
     assert _calls(env) == []
 
 
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 362, 134, 90),
-                                                      ("nvidia", 304, 94, 111),
-                                                      ("amd", 292, 90, 90)])
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 316, 134, 52),
+                                                      ("nvidia", 260, 88, 73),
+                                                      ("amd", 222, 90, 52)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=101 cells=%d" % cells in text
+    assert "TOTAL races=93 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text
-    assert "family neural     races=20 cells=%d" % neural in text
+    assert "family neural     races=12 cells=%d" % neural in text
     assert "neural: IDENTICAL only" in text
     # what is left off the plan is printed by name, never dropped silently
     assert "neural not planned: torch-compile-* on mamba1-forward" in text
@@ -731,10 +751,8 @@ def test_neural_command_and_settings():
     assert "identical" in s["numeric_mode"]
     assert s["optimizer"].startswith("AdamW lr 1e-3")
     assert s["shape_dims"] == "B2 L64 DM64 H4 KV2 HD16 FF128 layers2 V256 (smoke)"
-    infer = bb.plan_races("amd", ["identical"], ["neural"], ["mamba2-infer"])[0]
-    si = bb.race_settings(ctx, infer)
-    assert si["ours_device"] == "cpu" and "Mamba2BlockInference" in si["ours_call"]
-    assert si["shape_dims"] == "B1 L512 DM384"             # the CPU lanes' length cap
+    # a lane whose `ours` runs our CPU binding is never planned (Oct 2 2026)
+    assert bb.plan_races("amd", ["identical"], ["neural"], ["mamba2-infer"]) == []
 
 
 def _run_neural(env, *extra):
@@ -778,8 +796,9 @@ def test_neural_run_schema_quality_and_board(env):
     assert res["config"]["smoke"] is True
     assert set(res["races"]) == {i.replace("shape=full", "shape=small") for i in NEURAL_IDS}
     assert sorted(_calls(env)) == sorted(
-        "neural %s small %s" % (l, ",".join(("ours",) + bb.NEURAL_OPPONENTS["nvidia"][l]))
-        for l in bb.NEURAL_LANES)
+        "neural %s small %s" % (l, ",".join(["ours"] + bb.gpu_opponents_first(
+            bb.NEURAL_OPPONENTS["nvidia"][l])))
+        for l in bb.NEURAL_LANES if bb.NEURAL.DEVICE_OF.get(l) != "cpu")
     rec = res["races"]["neural/lm-train-step/bytes/shape=small"]
     assert rec["status"] == "done" and rec["shape"] == "small"
     cells = {c["arm"]: c for c in rec["cells"]}
@@ -799,10 +818,12 @@ def test_neural_run_schema_quality_and_board(env):
     assert "## Neural" in board and "neural shape small" in board
     assert "--neural-shape small" in board and "SMOKE RUN" in board
     assert "loss_last_step" in board and "torch-eager-fp32" in board
-    for arm in GPU_ARMS["nvidia"] + CPU_ARMS:
+    for arm in GPU_ARMS["nvidia"]:
         assert "| %s | torch |" % arm in board, arm
-    cpu = {c["arm"]: c for c in res["races"]["neural/mlp-infer/gaussian/shape=small"]["cells"]}
-    assert cpu["torch-cpu-eager-bf16"]["device"] == "cpu"
+    # our CPU is never raced: no *-infer race, and no torch CPU arm, on the board
+    assert not any(l.endswith("-infer") for l in (r["lane"] for r in res["races"].values()))
+    for arm in CPU_ARMS:
+        assert "| %s | torch |" % arm not in board, arm
     assert "## Trees" not in board
     # the neural Not covered lines come from the driver's tables
     assert "not mamba-ssm's fused CUDA/Triton kernels" in board
@@ -921,7 +942,7 @@ def test_plan_classical2_per_vendor():
     assert nv["classical2/umap/taxi/rows=full"]["arms"] == ["ours", "cuml-gpu"]
     assert nv["classical2/ivf/taxi/rows=full"]["opponents"] == ["cuvs-gpu"]
     assert nv["classical2/gmm/taxi/rows=full"]["opponents"] == ["sklearn-cpu"]
-    assert nv["classical2/ets/synthetic/rows=full"]["opponents"] == ["cuml-gpu", "statsmodels-cpu"]
+    assert nv["classical2/ets/synthetic/rows=full"]["opponents"] == ["cuml-gpu"]
     for r in nv.values():
         assert r["our_arms"] == {"ours": "identical"}
     amd = bb.plan_races("amd", ["identical"], ["classical2"])
@@ -1369,3 +1390,31 @@ def test_full_board_starts_after_a_smoke_pass(env):
     assert _run(env, "--rows", "full") == 0
     res = json.loads((env["out"] / "board.json").read_text())
     assert res["config"]["smoke_gate"].startswith("passed")
+
+
+# --- GPU-only board (Andrew, Oct 2 2026): locked in code, no switch -----------
+
+@pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
+def test_board_races_only_our_gpu(vendor):
+    races = bb.plan_races(vendor, bb.modes_for(vendor), cpu_arm=True)   # cpu_arm is ignored
+    for r in races:
+        assert not any(bb._ours_runs_on_cpu(r["family"], r["lane"], a) for a in r["our_arms"]), r["id"]
+        opp = r["opponents"]
+        assert not (any(bb._is_cpu_arm(a) for a in opp) and any(not bb._is_cpu_arm(a) for a in opp)), r["id"]
+
+
+def test_gpu_only_guard_refuses_cpu_races():
+    with pytest.raises(SystemExit, match="our arm ours-cpu runs on the CPU"):
+        bb.enforce_gpu_only([{"id": "x", "family": "algos", "lane": "pca",
+                              "our_arms": {"ours": "identical", "ours-cpu": "identical"},
+                              "opponents": ["cuml-gpu"]}])
+    with pytest.raises(SystemExit, match="race beside GPU ones"):
+        bb.enforce_gpu_only([{"id": "x", "family": "algos", "lane": "pca",
+                              "our_arms": {"ours": "identical"},
+                              "opponents": ["cuml-gpu", "sklearn-cpu"]}])
+    with pytest.raises(SystemExit, match="runs on the CPU"):
+        bb.enforce_gpu_only([{"id": "x", "family": "neural", "lane": "mamba2-infer",
+                              "our_arms": {"ours": "identical"}, "opponents": []}])
+    with pytest.raises(SystemExit, match="our CPU never races"):
+        bb.base_cell({"vendor": "nvidia"}, {"id": "x", "family": "algos", "lane": "pca"},
+                     "ours-cpu", "identical")

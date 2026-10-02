@@ -45,26 +45,10 @@ from max.gpu.sync import barrier
 
 from decomposition.checks.jacobi_eigh_device import jacobi_rotation_cs
 from x_decomp.cells import F32Ptr
+from x_decomp.rr import pj_first, pj_second, rr_cs, rr_block, rr_vrow, rr_row_off
 
 comptime PJ_TPB = 256
 """Launch width of every kernel here (under the M2 Pro dispatch limit)."""
-
-
-@always_inline
-def pj_first(r: Int, b: Int, m: Int) -> Int:
-    """One player of pair b in round r of the circle method on m players
-    (m even, 0 <= r < m - 1, 0 <= b < m / 2): pair 0 is (r, m - 1), pair b
-    is ((r + b) mod (m - 1), (r - b) mod (m - 1))."""
-    if b == 0:
-        return r
-    return (r + b) % (m - 1)
-
-
-@always_inline
-def pj_second(r: Int, b: Int, m: Int) -> Int:
-    if b == 0:
-        return m - 1
-    return (r + m - 1 - b) % (m - 1)
 
 
 def pj_transpose_kernel(src: F32Ptr, dst: F32Ptr, n_in: Int32):
@@ -196,31 +180,18 @@ def svd_par_norm_kernel(rt: F32Ptr, s_out: F32Ptr, n_in: Int32):
 
 def eigh_par_cs_kernel(a: F32Ptr, cs: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32):
     """cs[2 b], cs[2 b + 1] = the rotation of pair b in round `round_in`
-    from (a_pp, a_qq, a_pq), p < q; (1, 0) for the bye. One thread a pair."""
-    var n = Int(n_in)
+    (`rr_cs`). One thread a pair."""
     var m = Int(m_in)
     var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if b < m // 2:
-        var a0 = pj_first(Int(round_in), b, m)
-        var a1 = pj_second(Int(round_in), b, m)
-        var p = min(a0, a1)
-        var q = max(a0, a1)
-        var c = Float32(1.0)
-        var s = Float32(0.0)
-        if q < n:
-            var got = jacobi_rotation_cs(a.unsafe_load(p * n + p), a.unsafe_load(q * n + q), a.unsafe_load(p * n + q))
-            c = got[0]
-            s = got[1]
-        cs.unsafe_store(2 * b, c)
-        cs.unsafe_store(2 * b + 1, s)
+        var got = rr_cs(a, Int(n_in), m, Int(round_in), b)
+        cs.unsafe_store(2 * b, got[0])
+        cs.unsafe_store(2 * b + 1, got[1])
 
 
 def eigh_par_update_kernel(a: F32Ptr, v: F32Ptr, cs: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32):
-    """A = J^T A J and V = V J for the m / 2 rotations of round `round_in`
-    (`cs` from `eigh_par_cs_kernel`, the launch before). Threads
-    0 .. h h - 1 (h = m / 2) are the 2 x 2 blocks (i, j) of pairs; i > j
-    does nothing (its block is the mirror thread (j, i) stores). Threads
-    h h .. h h + n h - 1 are V's (row, pair)."""
+    """A = J^T A J and V = V J for round `round_in`: threads 0 .. h h - 1 the
+    2 x 2 blocks (i, j), i <= j (`rr_block`), then V's (row, pair) (`rr_vrow`)."""
     var n = Int(n_in)
     var m = Int(m_in)
     var h = m // 2
@@ -230,91 +201,21 @@ def eigh_par_update_kernel(a: F32Ptr, v: F32Ptr, cs: F32Ptr, n_in: Int32, m_in: 
         var i = t // h
         var j = t - i * h
         if i <= j:
-            var i0 = pj_first(r, i, m)
-            var i1 = pj_second(r, i, m)
-            var pi = min(i0, i1)
-            var qi = max(i0, i1)
-            var ci = cs.unsafe_load(2 * i)
-            var si = cs.unsafe_load(2 * i + 1)
-            if i == j:
-                if qi < n:
-                    var app = a.unsafe_load(pi * n + pi)
-                    var aqq = a.unsafe_load(qi * n + qi)
-                    var apq = a.unsafe_load(pi * n + qi)
-                    var tt = si / ci
-                    a.unsafe_store(pi * n + pi, app - tt * apq)
-                    a.unsafe_store(qi * n + qi, aqq + tt * apq)
-                    a.unsafe_store(pi * n + qi, Float32(0.0))
-                    a.unsafe_store(qi * n + pi, Float32(0.0))
-            else:
-                var j0 = pj_first(r, j, m)
-                var j1 = pj_second(r, j, m)
-                var pj = min(j0, j1)
-                var qj = max(j0, j1)
-                var cj = cs.unsafe_load(2 * j)
-                var sj = cs.unsafe_load(2 * j + 1)
-                var vi = qi < n
-                var vj = qj < n
-                var b00 = a.unsafe_load(pi * n + pj)
-                var b01 = Float32(0.0)
-                var b10 = Float32(0.0)
-                var b11 = Float32(0.0)
-                if vj:
-                    b01 = a.unsafe_load(pi * n + qj)
-                if vi:
-                    b10 = a.unsafe_load(qi * n + pj)
-                if vi and vj:
-                    b11 = a.unsafe_load(qi * n + qj)
-                # the columns of pair j, then the rows of pair i
-                var t00 = cj * b00 - sj * b01
-                var t01 = sj * b00 + cj * b01
-                var t10 = cj * b10 - sj * b11
-                var t11 = sj * b10 + cj * b11
-                var n00 = ci * t00 - si * t10
-                var n01 = ci * t01 - si * t11
-                var n10 = si * t00 + ci * t10
-                var n11 = si * t01 + ci * t11
-                a.unsafe_store(pi * n + pj, n00)
-                a.unsafe_store(pj * n + pi, n00)
-                if vj:
-                    a.unsafe_store(pi * n + qj, n01)
-                    a.unsafe_store(qj * n + pi, n01)
-                if vi:
-                    a.unsafe_store(qi * n + pj, n10)
-                    a.unsafe_store(pj * n + qi, n10)
-                if vi and vj:
-                    a.unsafe_store(qi * n + qj, n11)
-                    a.unsafe_store(qj * n + qi, n11)
+            rr_block(a, cs, n, m, r, i, j)
     elif t < h * h + n * h:
         var u = t - h * h
         var k = u // h
-        var j = u - k * h
-        var j0 = pj_first(r, j, m)
-        var j1 = pj_second(r, j, m)
-        var pj = min(j0, j1)
-        var qj = max(j0, j1)
-        if qj < n:
-            var cj = cs.unsafe_load(2 * j)
-            var sj = cs.unsafe_load(2 * j + 1)
-            var vkp = v.unsafe_load(k * n + pj)
-            var vkq = v.unsafe_load(k * n + qj)
-            v.unsafe_store(k * n + pj, cj * vkp - sj * vkq)
-            v.unsafe_store(k * n + qj, sj * vkp + cj * vkq)
+        rr_vrow(v, cs, n, m, r, k, u - k * h)
 
 
 def eigh_par_off_kernel(a: F32Ptr, dst: F32Ptr, n_in: Int32):
-    """dst[k] = the sum of squares of row k's off-diagonal cells, dst[n + k]
-    = a_kk^2, dst[2 n + k] = a_kk. One thread a row; the host adds the
-    first two in float64 and reads the eigenvalues from the third."""
+    """dst[k] = row k's off-diagonal squares, dst[n + k] = a_kk^2 (`rr_row_off`),
+    dst[2 n + k] = a_kk. One thread a row; the host adds the first two in
+    float64, rows ascending."""
     var n = Int(n_in)
     var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if k < n:
-        var acc = Float32(0.0)
-        for j in range(n):
-            if j != k:
-                var x = a.unsafe_load(k * n + j)
-                acc = x * x + acc
-        dst.unsafe_store(k, acc)
-        var d = a.unsafe_load(k * n + k)
-        dst.unsafe_store(n + k, d * d)
-        dst.unsafe_store(2 * n + k, d)
+        var o = rr_row_off(a, n, k)
+        dst.unsafe_store(k, o[0])
+        dst.unsafe_store(n + k, o[1])
+        dst.unsafe_store(2 * n + k, a.unsafe_load(k * n + k))
