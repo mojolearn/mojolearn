@@ -37,6 +37,8 @@ from resample.estimator import (
     monte_carlo_integrate_host,
     permutation_samples_host,
     permutation_test_host,
+    resample_gather_fast_host,
+    resample_indices_fast_into,
     resample_indices_host,
 )
 
@@ -382,10 +384,53 @@ def resample_indices_binding(
     var replace = Int(py=params[2]) != 0
     var seed = UInt64(Int(py=params[3]))
     with GILReleased(Python()):
-        var idx = resample_indices_host(n, count, replace, seed)
-        for i in range(count):
-            op.unsafe_store(i, idx[i])
+        # lane/apple-fast-resample (2026-10-02), MOJOLEARN_RESAMPLE_FAST_IDX_BULK=1:
+        # FAST + Apple only; False (and every IDENTICAL build) takes the old
+        # path below, the two per-element host loops included.
+        var done = resample_indices_fast_into(n, count, replace, seed, op)
+        if not done:
+            var idx = resample_indices_host(n, count, replace, seed)
+            for i in range(count):
+                op.unsafe_store(i, idx[i])
     return PythonObject(0)
+
+
+def resample_gather_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`sklearn.utils.resample(*arrays, replace=True)` with the draw and the
+    gathers on the device (`resample_gather_fast_host`, lane/apple-fast-resample,
+    2026-10-02; MOJOLEARN_RESAMPLE_FAST_GATHER=1, FAST + Apple only).
+    `addrs`: 0 idx_out (n_samples int32, WRITTEN), then one (src, dst) pair
+    per array: src `n x d_a` float32 row-major read, dst `n_samples x d_a`
+    WRITTEN. `params`: 0 n, 1 n_samples, 2 replace (0/1), 3 seed, then
+    d_a per array. Returns 1 when the device path ran, 0 when the switch is
+    off or the build is not FAST + Apple (the caller then takes
+    `resample_indices` and its own gather)."""
+    var k = (len(addrs) - 1) // 2
+    if k < 1 or len(addrs) != 1 + 2 * k or len(params) != 4 + k:
+        raise Error(
+            "resample: gather addrs must hold idx_out plus (src, dst) per array,"
+            " and params n, n_samples, replace, seed plus a width per array"
+        )
+    var idx_out = Int(py=addrs[0])
+    var n = Int(py=params[0])
+    var count = Int(py=params[1])
+    var replace = Int(py=params[2]) != 0
+    var seed = UInt64(Int(py=params[3]))
+    var srcs = List[Int]()
+    var dsts = List[Int]()
+    var widths = List[Int]()
+    for a in range(k):
+        srcs.append(Int(py=addrs[1 + 2 * a]))
+        dsts.append(Int(py=addrs[2 + 2 * a]))
+        widths.append(Int(py=params[4 + a]))
+    var done = False
+    with GILReleased(Python()):
+        done = resample_gather_fast_host(
+            n, count, replace, seed, idx_out, srcs, dsts, widths
+        )
+    return PythonObject(1 if done else 0)
 
 
 def _mc_run(
@@ -500,6 +545,7 @@ def PyInit__mojolearn_resample() abi("C") -> PythonObject:
         m.def_function[permutation_test_binding]("permutation_test")
         m.def_function[permutation_samples_binding]("permutation_samples")
         m.def_function[resample_indices_binding]("resample_indices")
+        m.def_function[resample_gather_binding]("resample_gather")
         m.def_function[monte_carlo_integrate_binding]("monte_carlo_integrate")
         return m.finalize()
     except e:

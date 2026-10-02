@@ -37,7 +37,16 @@ from bindings.hostptr import copy_f32
 from std.math import ceildiv
 from std.os import getenv
 from std.sys.compile import is_defined
+from std.memory import memcpy
+from bindings.hostptr import f32_ptr, i32_ptr
 from max.gpu.host import DeviceBuffer, DeviceContext
+from resample.fast_apple import (
+    RESAMPLE_FAST_APPLE,
+    bootstrap_mean_fast,
+    gather_rows_f32,
+    perm_select_fast,
+    rank_sort_f32,
+)
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
@@ -139,6 +148,44 @@ comptime RESAMPLE_TPB = 256
 #: position, no fold at all), so this one is not even constrained to divide
 #: `PINNED_SUM_W`.
 comptime RESAMPLE_MAP_TPB = 256
+
+
+# ===========================================================================
+# FAST + Apple switches (lane/apple-fast-resample, 2026-10-02). Read on the
+# host at dispatch; every one defaults OFF and is compiled under
+# `RESAMPLE_FAST_APPLE` only (resample/fast_apple.mojo has the kernels and
+# the causes). IDENTICAL compiles the old path exactly.
+# ===========================================================================
+
+
+def _fast_rank_sort_on() -> Bool:
+    """MOJOLEARN_RESAMPLE_FAST_RANK_SORT=1: the bootstrap distribution sorted
+    by one rank launch instead of `_sort_segments` (130 launches, 32 of them
+    one-thread scans, for one segment of n_resamples keys)."""
+    comptime if RESAMPLE_FAST_APPLE:
+        return String(getenv("MOJOLEARN_RESAMPLE_FAST_RANK_SORT")) == "1"
+    else:
+        return False
+
+
+def _fast_one_fold_on() -> Bool:
+    """MOJOLEARN_RESAMPLE_FAST_ONE_FOLD=1: mean / diff_means replicates folded
+    once per block (registers, then block.sum) instead of once per 256-draw
+    chunk (`_chunked_sum`'s virtual_block_sum per chunk)."""
+    comptime if RESAMPLE_FAST_APPLE:
+        return String(getenv("MOJOLEARN_RESAMPLE_FAST_ONE_FOLD")) == "1"
+    else:
+        return False
+
+
+def _fast_perm_select_on() -> Bool:
+    """MOJOLEARN_RESAMPLE_FAST_PERM_SELECT=1: the permutation null by radix
+    select, no PERM_MAX_POOLED (perm_stat_kernel's O(N^2) counting rank and
+    its 1024-position threadgroup bound refuse the board's 40,000)."""
+    comptime if RESAMPLE_FAST_APPLE:
+        return String(getenv("MOJOLEARN_RESAMPLE_FAST_PERM_SELECT")) == "1"
+    else:
+        return False
 
 
 # ===========================================================================
@@ -787,19 +834,37 @@ def _bootstrap_theta(
         _ = vals^
         _ = svals^
     else:
-        _launch_bootstrap_stat(
-            ctx,
-            theta,
-            dx,
-            key,
-            r_first,
-            n_resamples,
-            n,
-            n,
-            n_features,
-            statistic,
-            tpb,
-        )
+        # lane/apple-fast-resample (2026-10-02), MOJOLEARN_RESAMPLE_FAST_ONE_FOLD=1:
+        # `bootstrap_stat_kernel` folds every 256-draw chunk through
+        # `virtual_block_sum` (resample/checks/statistics.mojo `_chunked_sum`),
+        # 79 block folds per replicate at n = 20,000; the FAST kernel folds a
+        # replicate once. Same draws, FAST's own summation order.
+        var folded = False
+        comptime if RESAMPLE_FAST_APPLE:
+            if (
+                (statistic == STAT_MEAN or statistic == STAT_DIFF_MEANS)
+                and tpb == 256
+                and _fast_one_fold_on()
+            ):
+                bootstrap_mean_fast(
+                    ctx, theta, dx, key, r_first, n_resamples, n, n_features,
+                    statistic,
+                )
+                folded = True
+        if not folded:
+            _launch_bootstrap_stat(
+                ctx,
+                theta,
+                dx,
+                key,
+                r_first,
+                n_resamples,
+                n,
+                n,
+                n_features,
+                statistic,
+                tpb,
+            )
         ctx.synchronize()
 
 
@@ -1137,7 +1202,19 @@ def bootstrap_host(
 
     var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
-    _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
+    # lane/apple-fast-resample (2026-10-02), MOJOLEARN_RESAMPLE_FAST_RANK_SORT=1:
+    # `_sort_segments` runs core/segmented_sort.mojo's 32 one-bit passes (4
+    # launches each, one of them `seg_scan_block_sums_kernel` on ONE thread)
+    # over this single segment of n_resamples keys: 130 launches for 9,999
+    # floats, the bootstrap's Apple cost (M3 16 ms vs 2 ms on the L40S).
+    # The rank launch produces the same order and the same bits.
+    var ranked = False
+    comptime if RESAMPLE_FAST_APPLE:
+        if _fast_rank_sort_on():
+            rank_sort_f32(ctx, theta, sorted_buf, n_resamples)
+            ranked = True
+    if not ranked:
+        _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
     trace.record_device(ctx, "resample.sorted", sorted_buf, n_resamples)
     var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
 
@@ -1298,7 +1375,14 @@ def bootstrap_unpaired_host(
     var theta = _upload(ctx, dist)
     var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
-    _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
+    # MOJOLEARN_RESAMPLE_FAST_RANK_SORT=1: see bootstrap_host.
+    var ranked = False
+    comptime if RESAMPLE_FAST_APPLE:
+        if _fast_rank_sort_on():
+            rank_sort_f32(ctx, theta, sorted_buf, n_resamples)
+            ranked = True
+    if not ranked:
+        _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
     var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
 
     var mx = point_estimate_host(x, n_x, 1, STAT_MEAN, Float32(0.5))
@@ -1403,7 +1487,21 @@ def permutation_test_host(
         )
     validate_positions(n_resamples, n_pooled)
     validate_positions(r_first + n_resamples, n_pooled)
-    validate_pooled(n_pooled)
+    # lane/apple-fast-resample (2026-10-02), MOJOLEARN_RESAMPLE_FAST_PERM_SELECT=1:
+    # `perm_stat_kernel` ranks the pooled positions by counting a total
+    # order (O(N^2) per replicate, 8 N bytes of threadgroup memory), so
+    # `validate_pooled` refuses N > PERM_MAX_POOLED = 1024 and the board's
+    # 20,000 + 20,000 row is REFUSED. The radix select (fast_apple.mojo)
+    # finds the same n_x smallest keys with no bound.
+    var fast_perm = False
+    comptime if RESAMPLE_FAST_APPLE:
+        fast_perm = (
+            (statistic == STAT_MEAN or statistic == STAT_DIFF_MEANS)
+            and tpb == 256
+            and _fast_perm_select_on()
+        )
+    if not fast_perm:
+        validate_pooled(n_pooled)
     if statistic == STAT_STD and n_x < 2:
         raise Error(
             "permutation_test: statistic 'std' is ddof=1 and needs at least"
@@ -1447,7 +1545,17 @@ def permutation_test_host(
     var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
     var owners = resample_device_count()
-    if owners > 1 and n_resamples > 1:
+    var selected = False
+    comptime if RESAMPLE_FAST_APPLE:
+        if fast_perm:
+            perm_select_fast(
+                ctx, null_buf, dpool, key, r_first, n_resamples, n_pooled, n_x,
+                statistic,
+            )
+            selected = True
+    if selected:
+        pass
+    elif owners > 1 and n_resamples > 1:
         _perm_null_owners(
             ctx, null_buf, pooled, key, r_first, n_resamples, n_pooled, n_x,
             statistic, tpb, owners,
@@ -1845,3 +1953,131 @@ def resample_indices_host(
     # DEVIATION 1946: the context dies LAST.
     _ = ctx^
     return out^
+
+
+# ===========================================================================
+# FAST + Apple: sklearn.utils.resample on the device end to end
+# (lane/apple-fast-resample, 2026-10-02)
+# ===========================================================================
+
+
+def _draw_rows_device(
+    ctx: DeviceContext, n: Int, count: Int, seed: UInt64, tpb: Int
+) raises -> DeviceBuffer[DType.int32]:
+    """`resample_indices_host`'s replace=True draw, left on the device."""
+    var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE)
+    var rows = ctx.enqueue_create_buffer[DType.int32](count)
+    var keys = ctx.enqueue_create_buffer[DType.uint64](1)
+    ctx.enqueue_function[utils_draw_kernel](
+        rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
+        Int32(n), Int32(count), Int32(1),
+        grid_dim=(ceildiv(count, tpb), 1, 1), block_dim=(tpb, 1, 1),
+    )
+    _ = rows.unsafe_ptr()
+    _ = keys.unsafe_ptr()
+    ctx.synchronize()
+    _ = keys^
+    return rows^
+
+
+def _copy_rows_out(
+    ctx: DeviceContext,
+    mut rows: DeviceBuffer[DType.int32],
+    count: Int,
+    out: MutPointer[Int32, MutUntrackedOrigin],
+) raises:
+    """The drawn indices to the caller's int32 buffer in ONE device-to-host
+    copy and one memcpy (the old path appends them one by one into a List
+    and the binding stores them one by one again)."""
+    var host = ctx.enqueue_create_host_buffer[DType.int32](count)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=rows)
+    ctx.synchronize()
+    memcpy(dest=out, src=host.unsafe_ptr(), count=count)
+    _ = host^
+
+
+def resample_indices_fast_into(
+    n: Int,
+    count: Int,
+    replace: Bool,
+    seed: UInt64,
+    out: MutPointer[Int32, MutUntrackedOrigin],
+    tpb: Int = 256,
+) raises -> Bool:
+    """MOJOLEARN_RESAMPLE_FAST_IDX_BULK=1 (FAST + Apple, replace=True only):
+    `resample_indices_host` with the indices copied out in bulk instead of
+    `_download_i32`'s per-element List append plus the binding's
+    per-element store (two host loops over n_samples = 1,000,000 on the
+    board). Same draws, same bytes. False: the caller takes the old path."""
+    comptime if RESAMPLE_FAST_APPLE:
+        if not replace or String(getenv("MOJOLEARN_RESAMPLE_FAST_IDX_BULK")) != "1":
+            return False
+        utils_validate(n, count, replace)
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var rows = _draw_rows_device(ctx, n, count, seed, tpb)
+        _copy_rows_out(ctx, rows, count, out)
+        _ = rows^
+        # DEVIATION 1946: the context dies LAST.
+        _ = ctx^
+        return True
+    else:
+        return False
+
+
+def resample_gather_fast_host(
+    n: Int,
+    count: Int,
+    replace: Bool,
+    seed: UInt64,
+    idx_out: Int,
+    srcs: List[Int],
+    dsts: List[Int],
+    widths: List[Int],
+    tpb: Int = 256,
+) raises -> Bool:
+    """MOJOLEARN_RESAMPLE_FAST_GATHER=1 (FAST + Apple, replace=True only):
+    `sklearn.utils.resample(*arrays)` for float32 row-major arrays with the
+    draw AND the gathers on the device. `srcs[a]` / `dsts[a]` are the host
+    addresses of array `a` (`n x widths[a]` in, `count x widths[a]` out);
+    `idx_out` receives the `count` drawn indices (the same ones
+    `resample_indices_host` returns). Each array crosses twice (one host
+    copy into a pinned stage, one copy back) and the rows are gathered by
+    `gather_rows_f32_kernel`, instead of the host's per-element index
+    loops and numpy's fancy-index gather of 1,000,000 rows (the timed part
+    of the board's resample row). False: the caller takes the old path."""
+    comptime if RESAMPLE_FAST_APPLE:
+        if not replace or String(getenv("MOJOLEARN_RESAMPLE_FAST_GATHER")) != "1":
+            return False
+        if len(srcs) != len(dsts) or len(srcs) != len(widths) or len(srcs) == 0:
+            raise Error("resample: the gather takes one (src, dst, width) per array")
+        utils_validate(n, count, replace)
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var rows = _draw_rows_device(ctx, n, count, seed, tpb)
+        for a in range(len(srcs)):
+            var d = widths[a]
+            if d <= 0:
+                raise Error("resample: every gathered array needs a positive row width")
+            var src_ptr = f32_ptr(srcs[a])
+            var dst_ptr = f32_ptr(dsts[a])
+            var hsrc = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+            var dsrc = ctx.enqueue_create_buffer[DType.float32](n * d)
+            var dout = ctx.enqueue_create_buffer[DType.float32](count * d)
+            var hout = ctx.enqueue_create_host_buffer[DType.float32](count * d)
+            ctx.synchronize()
+            copy_f32(src_ptr, hsrc.unsafe_ptr(), n * d)
+            ctx.enqueue_copy(dst_buf=dsrc, src_ptr=hsrc.unsafe_ptr())
+            gather_rows_f32(ctx, dout, dsrc, rows, count, d)
+            ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
+            ctx.synchronize()
+            copy_f32(hout.unsafe_ptr(), dst_ptr, count * d)
+            _ = hsrc^
+            _ = dsrc^
+            _ = dout^
+            _ = hout^
+        _copy_rows_out(ctx, rows, count, i32_ptr(idx_out))
+        _ = rows^
+        # DEVIATION 1946: the context dies LAST.
+        _ = ctx^
+        return True
+    else:
+        return False
