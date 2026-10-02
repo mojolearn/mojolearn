@@ -7,9 +7,11 @@ ONE thread's loop over ascending rows, so every value carries the one-thread
 bits. Each returns with its outputs visible to the whole team; a scalar
 result is the lead's fold, broadcast.
 """
-from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, i2f, fsqrt, fabs, fsign, jacobi_eig
+from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, i2f, fsqrt, cholesky, fabs, fsign, jacobi_eig
 from std.sys.compile import is_defined
 from x_linear.team import Team
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
 from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from x_linear.ops import fz as _fz
 from x_linear.ops import xmad
@@ -328,6 +330,96 @@ def fold_one_fmad(v: FP, off: Int, n: Int) -> Float32:
         acc = _acc_fmad(Float32(1), ld(v, off + i), acc)
         i += 1
     return acc
+
+
+# ------------------------------------------------ staged folds (lane/neural-pass88)
+# A fold whose order is the rows ascending runs on ONE thread; on the device
+# that thread waited on global memory once per CHAIN_U_DEVICE rows (GLM's
+# objective: a million-row fold per line-search trial). Here the whole team
+# stages the next chunk of the vector into threadgroup memory (coalesced,
+# double-buffered) while the lead folds the current chunk from it: the same
+# `_acc_fa` steps in the same order, so the same word; the lead's chain no
+# longer waits on DRAM. STAGE_CH floats a buffer, two buffers: 8 KB, inside
+# every column's threadgroup limit (Apple 32 KB).
+comptime STAGE_CH = 1024
+
+
+def t_fold_fa_staged(t: Team, v: FP, off: Int, n: Int, init: Float32 = Float32(0)) -> Float32:
+    """`fold_fa(v, off, 1, n, init)` on the team; the value is the lead's
+    (other threads return their partial garbage: callers broadcast or use the
+    lead's). A team of one runs `fold_fa`. `-D MOJOLEARN_X_LINEAR_NO_STAGED_FOLD=1`
+    restores `fold_fa` on the lead."""
+    comptime if not (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) or is_defined["MOJOLEARN_X_LINEAR_NO_STAGED_FOLD"]():
+        var r0 = Float32(0)
+        if t.lead():
+            r0 = fold_fa(v, off, 1, n, init)
+        return r0
+    else:
+        if t.nt <= 1:
+            return fold_fa(v, off, 1, n, init)
+        var buf = stack_allocation[2 * STAGE_CH, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+        var chunks = (n + STAGE_CH - 1) // STAGE_CH
+        var acc = _fz(init)
+        if chunks > 0:
+            for u in range(t.tid, min(STAGE_CH, n), t.nt):
+                buf[u] = ld(v, off + u)
+        t.sync()
+        for c in range(chunks):
+            var cur = (c & 1) * STAGE_CH
+            if c + 1 < chunks:
+                # the helpers load the next chunk while the lead folds this one
+                var nxt = ((c + 1) & 1) * STAGE_CH
+                var base = (c + 1) * STAGE_CH
+                var cnt = min(STAGE_CH, n - base)
+                if not t.lead():
+                    for u in range(t.tid - 1, cnt, t.nt - 1):
+                        buf[nxt + u] = ld(v, off + base + u)
+            if t.lead():
+                var cnt_c = min(STAGE_CH, n - c * STAGE_CH)
+                var u = 0
+                while u + 32 <= cnt_c:
+                    var blk = SIMD[DType.float32, 32]()
+                    comptime for k in range(32):
+                        blk[k] = buf[cur + u + k]
+                    comptime for k in range(32):
+                        acc = _acc_fa(acc, blk[k])
+                    u += 32
+                while u < cnt_c:
+                    acc = _acc_fa(acc, buf[cur + u])
+                    u += 1
+            t.sync()
+        return acc
+
+
+def t_cholesky(t: Team, a: FP, aoff: Int, m: Int) -> Bool:
+    """`cholesky` (x_linear/ops.mojo) on the team (lane/neural-pass86,
+    2026-10-01). Column j ascending as there; every thread computes the
+    pivot from the same words (so the stop at a non-positive pivot is
+    uniform and leaves the block as the serial loop leaves it), and the
+    entries below the pivot, each its own chain over k ascending reading
+    only finished columns, are split across the team. Same statements per
+    entry, so the same words. A team of one runs `cholesky` itself."""
+    if t.nt <= 1:
+        return cholesky(a, aoff, m)
+    for j in range(m):
+        var s = ld(a, aoff + j * m + j)
+        for k in range(j):
+            var l = ld(a, aoff + j * m + k)
+            s = fs(s, fm(l, l))
+        if not (s > 0):
+            t.sync()
+            return False
+        var r = fsqrt(s)
+        t.sync()
+        if t.lead():
+            st(a, aoff + j * m + j, r)
+        for i in range(j + 1 + t.tid, m, t.nt):
+            var tv = ld(a, aoff + i * m + j)
+            for k in range(j):
+                tv = fs(tv, fm(ld(a, aoff + i * m + k), ld(a, aoff + j * m + k)))
+            st(a, aoff + i * m + j, fd(tv, r))
+        t.sync()
+    return True
 
 
 def t_jacobi_eig(t: Team, a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int):

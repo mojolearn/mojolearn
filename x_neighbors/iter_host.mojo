@@ -12,10 +12,10 @@ from core.host_parallel import host_parallelize
 from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
 from x_neighbors.items import (
     FP, IP, absdiff_sum_item, matmul_item, lp_clamp_item, ls_clamp_item,
-    pagerank_step_item, cc_step_item, pcs_item, knn_sq_item,
+    pagerank_step_item, cc_step_item, pcs_item, knn_sq_item, nc_stats_item,
 )
 
-from x_neighbors.host_ops import op_knn_impute_cells
+from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE
 from x_neighbors.items import (
     kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
     matmul_tn_acc_item, K_RBF, U_IDENTITY,
@@ -466,3 +466,18 @@ def op_lp_knn_product(cols: Int, vals: Int, x: Int, res: Int, n: Int, m: Int, k:
     for t in range(n * c):
         lp_knn_product_item(t, IP(unsafe_from_address=cols), FP(unsafe_from_address=vals),
                             px, FP(unsafe_from_address=res), n, m, k, c, finite)
+
+
+def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int) raises:
+    """nc_stats_item over the features (what the generated op ran)."""
+    var xp = FP(unsafe_from_address=x)
+    var lp = IP(unsafe_from_address=lab)
+    var kp = FP(unsafe_from_address=nk)
+    var cp = FP(unsafe_from_address=cent)
+    var sp = FP(unsafe_from_address=std)
+    var dp = FP(unsafe_from_address=dsc)
+    for t in range(d):
+        nc_stats_item(t, xp, lp, kp, cp, sp, dp, n, d, n_classes)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (n_classes * d) > 0:
+            cp.unsafe_store(0, cp.unsafe_load(0) + Float32(1e-3))
