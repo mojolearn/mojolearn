@@ -604,7 +604,7 @@ def scan_file(tree, path):
                 src = tree.sym_src.get((path, alias))
                 if src and name and name in tree.host_funcs.get(src[0], ()):
                     host_syms.add(alias)
-                    import_of.setdefault(no, []).append(alias)
+                    import_of.setdefault(no, []).append(f"{src[0]}:{name}")
     local_host = tree.host_funcs.get(path, set()) if lang == "mojo" else set()
     sha = getattr(tree, "_sha", {}).get(path)
     ck = (path, sha, frozenset(host_thread_names), frozenset(host_syms),
@@ -657,7 +657,14 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
             add(rule, no, t)
         if alias_re and alias_re.search(t) and not (dm and alias_re.fullmatch(dm.group(2))):
             add("host-threads", no, t)
-        if no in import_of or (host_call_re and host_call_re.search(t)):
+        if no in import_of:
+            # one finding per imported host function, keyed on the symbol, so
+            # dropping one name from an import line leaves the others' rows
+            if not flagged[no] & {"host-threads", "host-import", "host-exec"}:
+                for sym in sorted(import_of[no]):
+                    out.append(("host-call", no, "import " + sym))
+                flagged[no].add("host-call")
+        elif host_call_re and host_call_re.search(t):
             if not flagged[no] & {"host-threads", "host-import", "host-exec"}:
                 add("host-call", no, t)
     if lang != "mojo":

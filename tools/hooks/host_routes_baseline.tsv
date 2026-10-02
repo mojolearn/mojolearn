@@ -4,31 +4,36 @@
 rule	class	owner	state	path	occ	text
 host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	dg_init[b] = dot_at(grad, b * n, drt, b * n, n)
 host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	endv[b] = lbfgs_search_dir_at(
-host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	from arima.impl.lbfgs_host import (
 host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	gnorm[b] = nrm_max_at(grad, b * n, n)
 host-call	host-import	gap-neural-overhead2	debt	arima/impl/batched_fit.mojo	1	gnorm[b] = nrm_max_at(grad, b * n, n)
+host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	import arima/impl/lbfgs_host.mojo:dot_at
+host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	import arima/impl/lbfgs_host.mojo:lbfgs_search_dir_at
+host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	import arima/impl/lbfgs_host.mojo:nrm2_at
+host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	import arima/impl/lbfgs_host.mojo:nrm_max_at
 host-call	host-import	UNOWNED	debt	arima/impl/batched_fit.mojo	0	step[b] = ftz(Float32(1.0) / nrm2_at(drt, b * n, n))
 tid0-loop	serial-gpu	UNOWNED	debt	arima/impl/fast_arma_ls.mojo	0	if tid == 0:
 host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	dense_knn_affinity_f32(dense, rp, cp, vp, nnz, sparse, n, k, aff, status)
-host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	from bindings.hotpath_helpers import (
-host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	from core.dense_coo import (
+host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import bindings/hotpath_helpers.mojo:cast_elements_binding
+host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import bindings/hotpath_helpers.mojo:equal_elements_binding
+host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import bindings/hotpath_helpers.mojo:gather_i32_binding
+host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import core/dense_coo.mojo:knn_affinity_f32
 host-threads	host-threads	hr-small-passes	debt	bindings/_mojolearn.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	hr-small-passes	debt	bindings/_mojolearn.mojo	0	host_parallelize(_center_task, chunks)
 host-threads	host-threads	hr-small-passes	debt	bindings/_mojolearn.mojo	0	host_parallelize(_col_group_task, groups)
 host-threads	host-threads	hr-small-passes	debt	bindings/_mojolearn.mojo	0	host_parallelize(_scale_task, chunks)
-host-call	host-import	gap-lm	debt	bindings/_mojolearn_byte_lm.mojo	0	from bindings.hostptr import f32_ptr, read_f32, copy_f32
+host-call	host-import	gap-lm	debt	bindings/_mojolearn_byte_lm.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	gap-lm	debt	bindings/_mojolearn_byte_lm.mojo	0	return read_f32(address, n)
-host-call	host-import	gap-neural-models	debt	bindings/_mojolearn_embedding.mojo	0	from bindings.hostptr import f32_ptr, read_f32, read_i32
+host-call	host-import	gap-neural-models	debt	bindings/_mojolearn_embedding.mojo	0	import bindings/hostptr.mojo:read_f32
 host-threads	host-threads	gap-neural-models	debt	bindings/_mojolearn_embedding.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	gap-neural-overhead2	debt	bindings/_mojolearn_embedding.mojo	0	host_parallelize(_piece, tasks)
 host-threads	host-threads	gap-neural-models	debt	bindings/_mojolearn_embedding.mojo	0	host_parallelize(_scan, tasks)
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	from glm.estimator import (
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	import glm/estimator.mojo:qn_softmax_host
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	qn_softmax_host(sp, op, nr, nc)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	weights = read_f32(Int(wp), max(0, n_train))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	1	weights = read_f32(Int(wp), max(0, n_train))
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	0	from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	0	from gaussian_process.host.gpc_steps import gpc_proba
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_proba
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	0	var a = read_f32(Int(ap), max(0, n * n))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	0	var b = read_f32(Int(bp), max(0, n * nrhs))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	0	var dual = read_f32(Int(dp), n_train)
@@ -57,7 +62,7 @@ host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	0	var y = read_f3
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	1	var y = read_f32(Int(py=addrs[1]), max(0, n_train))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	2	var y = read_f32(Int(py=addrs[1]), max(0, n_train))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	0	var y = read_f32(Int(yp), n_train)
-host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_hdbscan.mojo	0	from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_hdbscan.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_hdbscan.mojo	0	var core = read_f32(Int(py=addrs[1]), m)
 host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_hdbscan.mojo	1	var core = read_f32(Int(py=addrs[1]), m)
 host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_hdbscan.mojo	0	var deaths = read_f32(Int(py=addrs[3]), n_clusters)
@@ -72,7 +77,7 @@ host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_hdbscan.mojo	0	
 host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_hdbscan.mojo	0	var x = read_f32(Int(py=addrs[0]), m * d)
 host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_hdbscan.mojo	1	var x = read_f32(Int(py=addrs[0]), m * d)
 host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_hdbscan.mojo	2	var x = read_f32(Int(py=addrs[0]), m * d)
-host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_ivf.mojo	0	from bindings.hostptr import f32_ptr, i32_ptr, copy_f32, read_f32
+host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_ivf.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_ivf.mojo	0	var distances = read_f32(Int(py=address), n)
 host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_ivf.mojo	0	var new_x = read_f32(Int(py=addrs[5]), n_new * arrays.dim)
 host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_ivf.mojo	0	var queries = read_f32(Int(py=addrs[0]), m * dim)
@@ -80,7 +85,7 @@ host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_ivf.mojo	0	var 
 host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_ivf.mojo	0	var queries = read_f32(Int(py=addrs[5]), m * arrays.dim)
 host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_ivf.mojo	0	var x = read_f32(Int(py=addrs[0]), max(0, n * dim))
 host-call	host-import	gap-nv-classical2	debt	bindings/_mojolearn_ivf.mojo	0	var x = read_f32(Int(py=addrs[0]), n * dim)
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_kernel_methods.mojo	0	from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_kernel_methods.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_kernel_methods.mojo	0	sw = read_f32(Int(py=addrs[4]), max(0, n))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_kernel_methods.mojo	0	var components = read_f32(Int(py=addrs[0]), max(0, q * d))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_kernel_methods.mojo	0	var dual = read_f32(Int(dp), max(0, n * t))
@@ -96,16 +101,16 @@ host-call	host-import	UNOWNED	debt	bindings/_mojolearn_kernel_methods.mojo	1	var
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_kernel_methods.mojo	0	var x_fit = read_f32(Int(xfp), max(0, n * d))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_kernel_methods.mojo	0	var x_new = read_f32(Int(xnp), max(0, q * d))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_kernel_methods.mojo	0	var y = read_f32(Int(yp), max(0, n * t))
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_linalg.mojo	0	from bindings.hostptr import f32_ptr, f64_ptr, i8_ptr, i32_ptr, read_f32, u16_ptr
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_linalg.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_linalg.mojo	0	var a = read_f32(Int(py=addrs[0]), max(0, n * n))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_linalg.mojo	0	var a = read_f32(Int(py=addrs[0]), max(0, n_rows * n_cols))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_linalg.mojo	1	var a = read_f32(Int(py=addrs[0]), max(0, n_rows * n_cols))
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mamba.mojo	0	from bindings.hostptr import f32_ptr, read_f32, copy_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mamba.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mamba.mojo	0	return read_f32(addr, max(0, n))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mamba.mojo	0	return read_f32(addr, n)
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_metrics.mojo	0	from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_metrics.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_metrics.mojo	0	return read_f32(addr, max(0, n))
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mixture.mojo	0	from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mixture.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mixture.mojo	0	var covariances = read_f32(Int(py=addrs[2]), max(0, k * d * d))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mixture.mojo	0	var log_det = read_f32(Int(py=addrs[4]), max(0, k))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mixture.mojo	0	var means = read_f32(Int(py=addrs[1]), max(0, k * d))
@@ -116,9 +121,9 @@ host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mixture.mojo	1	var x = re
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mixture.mojo	2	var x = read_f32(Int(py=addrs[5]), max(0, n * model.n_features))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mixture.mojo	3	var x = read_f32(Int(py=addrs[5]), max(0, n * model.n_features))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mixture.mojo	0	var x = read_f32(Int(xp), max(0, n * d))
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_preprocessing.mojo	0	from bindings.hostptr import f32_ptr, read_f32, copy_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_preprocessing.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_preprocessing.mojo	0	return read_f32(addr, max(0, n))
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_resample.mojo	0	from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_resample.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_resample.mojo	0	var lower = read_f32(Int(py=addrs[0]), MC_DIMS)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_resample.mojo	0	var upper = read_f32(Int(py=addrs[1]), MC_DIMS)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_resample.mojo	0	var x = read_f32(Int(_f32_ptr(Int(py=addrs[0]))), max(0, n_x))
@@ -134,20 +139,25 @@ host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	2	colmajor_from_r
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	copy_f32_threaded(xp, hxp, n_rows * n_cols)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	1	copy_f32_threaded(xp, hxp, n_rows * n_cols)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	2	copy_f32_threaded(xp, hxp, n_rows * n_cols)
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	from core.forest_host_predict import rf_host_predict, rf_host_trees
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	from ensemble.host_layout import (
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	from hostptr import copy_f32, read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	if has_nan_f32_threaded(xp, n_rows * n_cols):
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	1	if has_nan_f32_threaded(xp, n_rows * n_cols):
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	2	if has_nan_f32_threaded(xp, n_rows * n_cols):
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	import core/forest_host_predict.mojo:rf_host_predict
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	import ensemble/host_layout.mojo:colmajor_from_rowmajor_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	import ensemble/host_layout.mojo:copy_f32_threaded
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	import ensemble/host_layout.mojo:has_nan_f32_threaded
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	rf_host_predict(trees, rows, n_rows, n_cols, n_trees, 1, preds)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	rf_host_predict(trees, rows, n_rows, n_cols, n_trees, num_outputs, probs)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	var rows = read_f32(x_address, n_rows * n_cols)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	1	var rows = read_f32(x_address, n_rows * n_cols)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	dual = read_f32(Int(dp), max(0, n_support))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	1	dual = read_f32(Int(dp), max(0, n_support))
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	from svm.host.svc_proba import (
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/host/svc_proba.mojo:svc_pair_epilogue_binding
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/host/svc_proba.mojo:svc_platt_train_binding
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/host/svc_proba.mojo:svc_portable_math_binding
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/host/svc_proba.mojo:svc_splitmix_perm_binding
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	out = read_f32(a, n_rows)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	support = read_f32(Int(smp), max(0, n_support * n_cols))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	1	support = read_f32(Int(smp), max(0, n_support * n_cols))
@@ -157,20 +167,20 @@ host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	2	x = read_f32(I
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	y = read_f32(Int(yp), max(0, n_rows))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	1	y = read_f32(Int(yp), max(0, n_rows))
 host-call	host-import	gap-train-utils	debt	bindings/_mojolearn_training.mojo	0	count = parallel_accumulate_host(
-host-call	host-import	gap-train-utils	debt	bindings/_mojolearn_training.mojo	0	from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
-host-call	host-import	gap-train-utils	debt	bindings/_mojolearn_training.mojo	0	from training.optimizer_multi_gpu import parallel_optimizer_step_host
+host-call	host-import	gap-train-utils	debt	bindings/_mojolearn_training.mojo	0	import training/accumulate_multi_gpu.mojo:parallel_accumulate_host
+host-call	host-import	gap-train-utils	debt	bindings/_mojolearn_training.mojo	0	import training/optimizer_multi_gpu.mojo:parallel_optimizer_step_host
 host-call	host-import	gap-train-utils	debt	bindings/_mojolearn_training.mojo	0	n_total = parallel_optimizer_step_host(
 host-call	host-import	gap-train-utils	debt	bindings/_mojolearn_training.mojo	1	n_total = parallel_optimizer_step_host(
-host-call	host-import	gap-neural-models	debt	bindings/_mojolearn_transformer.mojo	0	from bindings.hostptr import f32_ptr, read_f32, copy_f32, i8_ptr, i32_ptr
+host-call	host-import	gap-neural-models	debt	bindings/_mojolearn_transformer.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	gap-neural-models	debt	bindings/_mojolearn_transformer.mojo	0	return read_f32(addr, n)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	et_host_predict(trees, rows, n_rows, n_features, n_trees, num_outputs, out)
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	from core.forest_host_predict import et_host_predict, et_host_trees
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	from hostptr import read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	import core/forest_host_predict.mojo:et_host_predict
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	var rows = read_f32(x_address, n_rows * n_features)
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_cluster.mojo	0	from bindings.hostptr import read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_cluster.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_cluster.mojo	0	var a = read_f32(Int(py=a_addr), na) if na > 0 else List[Float32]()
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_cluster.mojo	0	var x = read_f32(Int(py=x_addr), nx) if nx > 0 else List[Float32]()
-host-call	host-import	gap-neural-overhead2	debt	bindings/_mojolearn_x_cnn.mojo	0	from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
+host-call	host-import	gap-neural-overhead2	debt	bindings/_mojolearn_x_cnn.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	gap-neural-overhead2	debt	bindings/_mojolearn_x_cnn.mojo	0	var a = read_f32(Int(py=a_addr), n * F)
 host-call	host-import	gap-neural-overhead2	debt	bindings/_mojolearn_x_cnn.mojo	0	var aux = read_f32(Int(py=aux_addr), naux)
 host-call	host-import	gap-neural-overhead2	debt	bindings/_mojolearn_x_cnn.mojo	0	var b = read_f32(Int(py=b_addr), n * F) if kind == 1 or kind == 3 else a.copy()
@@ -180,15 +190,19 @@ host-exec	hostexec	UNOWNED	debt	bindings/_mojolearn_x_decomp.mojo	0	from x_decom
 host-exec	hostexec	UNOWNED	debt	bindings/_mojolearn_x_decomp.mojo	0	m.def_function[lda_online_py[DevExec, HostExec]]("x_decomp_lda_online")
 host-exec	hostexec	UNOWNED	debt	bindings/_mojolearn_x_decomp.mojo	0	m.def_function[mcd_py[DevExec, HostExec]]("x_decomp_mcd")
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_linear.mojo	0	fit_device(a, x, n_x, y, n_y, n, d, ipl, fpl, n_out, n_fw, n_iw, out)
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_linear.mojo	0	from x_linear.device import fit_device, decision_device
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_metrics.mojo	0	from x_metrics.epilogue import expected_mi_tasks, row_sum_range_tasks
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_metrics.mojo	0	from x_metrics.epilogue import scatter_rows, encode_small_i64, first_rows_i32, ovo_pair
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_linear.mojo	0	import x_linear/device.mojo:fit_device
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_metrics.mojo	0	import x_metrics/epilogue.mojo:encode_small_i64
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_metrics.mojo	0	import x_metrics/epilogue.mojo:expected_mi_tasks
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_metrics.mojo	0	import x_metrics/epilogue.mojo:row_sum_range_tasks
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_metrics.mojo	0	return PythonObject(encode_small_i64(Int(py=src), Int(py=n), Int(py=classes), Int(py=max_classes), Int(py=codes)))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_metrics.mojo	0	return PythonObject(expected_mi_tasks(Int(py=a), Int(py=na), Int(py=b), Int(py=nb), Int(py=n)))
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_metrics.mojo	0	row_sum_range_tasks(Int(py=s), Int(py=n), Int(py=k), Int(py=out_addr))
-host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	bindings/_mojolearn_x_prep.mojo	0	from x_prep.user_host import F32P, F64P, ii_rows, ii_gather, ii_scatter, ii_conv
 host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	bindings/_mojolearn_x_prep.mojo	0	ii_gather(F32P(unsafe_from_address=xa), dk, I32P(unsafe_from_address=ra), m, cp, nc, j,
 host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	bindings/_mojolearn_x_prep.mojo	0	ii_scatter(F32P(unsafe_from_address=xa), dk, I32P(unsafe_from_address=ra), m, j, F64P(unsafe_from_address=va),
+host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	bindings/_mojolearn_x_prep.mojo	0	import x_prep/user_host.mojo:ii_conv
+host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	bindings/_mojolearn_x_prep.mojo	0	import x_prep/user_host.mojo:ii_gather
+host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	bindings/_mojolearn_x_prep.mojo	0	import x_prep/user_host.mojo:ii_rows
+host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	bindings/_mojolearn_x_prep.mojo	0	import x_prep/user_host.mojo:ii_scatter
 host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	bindings/_mojolearn_x_prep.mojo	0	r = ii_conv(F32P(unsafe_from_address=aa), F32P(unsafe_from_address=ba), n, dk, Int(py=ints[2]) != 0)
 host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	bindings/_mojolearn_x_prep.mojo	0	return PythonObject(ii_rows(F32P(unsafe_from_address=ma), n, dk, j, Int(py=ints[3]) != 0,
 host-env	host-env/threshold	UNOWNED	debt	bindings/_mojolearn_x_sequence.mojo	0	var v = String(_getenv_seq("MOJOLEARN_SEQ_GARCH_HOST_MAX", "4096"))
@@ -198,9 +212,10 @@ host-exec	hostexec	UNOWNED	debt	bindings/_mojolearn_x_sequence.mojo	0	var hx = H
 host-exec	hostexec	UNOWNED	debt	bindings/_mojolearn_x_sequence.mojo	1	var hx = HostExec()
 host-threshold	host-env/threshold	UNOWNED	debt	bindings/_mojolearn_x_sequence.mojo	0	var v = String(_getenv_seq("MOJOLEARN_SEQ_GARCH_HOST_MAX", "4096"))
 host-threshold	host-env/threshold	UNOWNED	debt	bindings/_mojolearn_x_sequence.mojo	0	var v = String(_getenv_seq("MOJOLEARN_SEQ_PROPHET_HOST_MAX", "4096"))
-host-call	host-import	UNOWNED	debt	bindings/arima_exog_layout.mojo	0	from bindings.hostptr import read_f32
+host-call	host-import	UNOWNED	debt	bindings/arima_exog_layout.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/arima_exog_layout.mojo	0	var src = read_f32(address, n)
-host-call	host-import	UNOWNED	debt	bindings/holtwinters_host_predict.mojo	0	from holtwinters.host.hw_predict import (
+host-call	host-import	UNOWNED	debt	bindings/holtwinters_host_predict.mojo	0	import holtwinters/host/hw_predict.mojo:hw_forecast_from_state_ptr
+host-call	host-import	UNOWNED	debt	bindings/holtwinters_host_predict.mojo	0	import holtwinters/host/hw_predict.mojo:hw_predict_in_sample_ptr
 host-call	host-import	UNOWNED	debt	bindings/holtwinters_host_predict.mojo	0	var fc = hw_forecast_from_state_ptr(
 host-call	host-import	UNOWNED	debt	bindings/holtwinters_host_predict.mojo	0	var out = hw_predict_in_sample_ptr(
 host-threads	host-threads	UNOWNED	debt	bindings/hostptr.mojo	0	from core.host_parallel import host_parallelize
@@ -209,7 +224,7 @@ host-threads	host-threads	UNOWNED	debt	bindings/hotpath_helpers.mojo	0	from core
 host-threads	host-threads	gap-neural-overhead2	debt	bindings/hotpath_helpers.mojo	0	host_parallelize(_range, tasks)
 host-threads	host-threads	UNOWNED	debt	bindings/hotpath_helpers.mojo	1	host_parallelize(_range, tasks)
 host-threads	host-threads	UNOWNED	debt	bindings/hotpath_helpers.mojo	2	host_parallelize(_range, tasks)
-host-call	host-import	gap-nv-classical2	debt	bindings/ivf_index_arrays.mojo	0	from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+host-call	host-import	gap-nv-classical2	debt	bindings/ivf_index_arrays.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	gap-nv-classical2	debt	bindings/ivf_index_arrays.mojo	0	var center_norms = read_f32(Int(py=addrs[1]), n_lists)
 host-call	host-import	gap-nv-classical2	debt	bindings/ivf_index_arrays.mojo	0	var centers = read_f32(Int(py=addrs[0]), n_lists * dim)
 host-call	host-import	gap-nv-classical2	debt	bindings/ivf_index_arrays.mojo	0	var list_data = read_f32(Int(py=addrs[4]), n * dim)
@@ -219,13 +234,13 @@ d2h-loop	d2h-roundtrip	gap-classical-nv	debt	cholesky/checks/trsm.mojo	0	s.ctx.e
 host-threads	host-threads	PR#126	debt	cluster/estimator.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	PR#126	debt	cluster/estimator.mojo	0	host_parallelize(_abs_sum_task, groups)
 host-threads	host-threads	PR#126	inflight@9901c6a91a8d8c8aa3e5162024c7b1acacd7bc37	cluster/estimator.mojo	1	host_parallelize(_abs_sum_task, groups)
-host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	from cluster.host.host_cells import ftz_v, host_cells, mul_add_v
-host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	from core.classical_host_predict import host_gemm_nt
 host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	host_cells(_chunk, n_chunks, 4 * ACCUMULATE_CHUNK * (d + 1))
 host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	host_cells(_lane, n_trials * PLUS_PLUS_TPB, 8 * (n // PLUS_PLUS_TPB + 1))
 host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	host_cells(_row, n, 3 * k * d)
 host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	1	host_cells(_row, n, 3 * k * d)
 host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	host_cells(_row, n_rows, 2 * d + 64)
+host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	import cluster/host/host_cells.mojo:host_cells
+host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	import core/classical_host_predict.mojo:host_gemm_nt
 host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	var z = host_gemm_nt(x, candidates, n, n_trials, d)
 host-threads	host-threads	UNOWNED	debt	core/classical_host_predict.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	core/classical_host_predict.mojo	0	host_parallelize(_rows, t)
@@ -263,46 +278,55 @@ host-threads	host-threads	UNOWNED	debt	core/knn_host_predict.mojo	1	host_paralle
 host-threads	host-threads	UNOWNED	debt	core/knn_host_predict.mojo	2	host_parallelize(_rows, tasks)
 host-threads	host-threads	UNOWNED	debt	core/knn_host_predict.mojo	3	host_parallelize(_rows, tasks)
 d2h-loop	d2h-roundtrip	multi-GPU-driver-review	debt	dbscan/impl/multi_gpu.mojo	0	ctx.enqueue_copy(dst_ptr=root_ia.unsafe_ptr(), src_buf=iv)
-host-call	host-import	UNOWNED	debt	decomposition/estimator.mojo	0	from decomposition.host.pca_oracle import tsvd_explained_finish
+host-call	host-import	UNOWNED	debt	decomposition/estimator.mojo	0	import decomposition/host/pca_oracle.mojo:tsvd_explained_finish
 host-call	host-import	UNOWNED	debt	decomposition/estimator.mojo	0	tsvd_explained_finish(lt, lx, explained_ptr, ratio_ptr)
-host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	from decomposition.host.pca_full_oracle import (
-host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	from decomposition.host.pca_oracle import (
 host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	host_sign_flip(vecs, n)
+host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	import decomposition/host/pca_full_oracle.mojo:host_one_sided_jacobi_svd
+host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	import decomposition/host/pca_full_oracle.mojo:host_qr_factor
+host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	import decomposition/host/pca_oracle.mojo:host_jacobi_eigh
+host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	import decomposition/host/pca_oracle.mojo:host_sign_flip
 host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	return host_qr_factor(work, n_rows, n_cols)
 host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	var got = host_jacobi_eigh(work, n, JACOBI_SWEEPS, Float32(JACOBI_TOL))
 host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	var got = host_one_sided_jacobi_svd(
 host-call	host-import	UNOWNED	debt	decomposition/host/linalg_public.mojo	0	var r = host_qr_factor(work, n_rows, n_cols)
-host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	from decomposition.host.pca_oracle import (
 host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	host_halving_sum(lp), host_halving_sum(lq), host_halving_sum(lpq), Float32(0.0)
 host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	host_sign_flip(vecs32, n_cols)
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	import decomposition/host/pca_oracle.mojo:host_column_mean
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	import decomposition/host/pca_oracle.mojo:host_halving_sum
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	import decomposition/host/pca_oracle.mojo:host_order_truncate_spectrum
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	import decomposition/host/pca_oracle.mojo:host_shift_columns
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	import decomposition/host/pca_oracle.mojo:host_sign_flip
 host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	return host_halving_sum(partials)
 host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	sv[j] = ftz(identical_sqrt(host_halving_sum(partials)))
 host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	var centered = host_shift_columns(x, mu, n_rows, n_cols, Float32(-1.0))
 host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	var mu = host_column_mean(x, n_rows, n_cols)
 host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	var result = host_order_truncate_spectrum(
 host-call	host-import	UNOWNED	debt	decomposition/host/pca_full_oracle.mojo	0	var sigma = host_halving_sum(norm_partials)
-host-call	host-import	UNOWNED	debt	decomposition/host/pca_oracle.mojo	0	from core.classical_host_predict import host_gemm_nt_into
 host-call	host-import	UNOWNED	debt	decomposition/host/pca_oracle.mojo	0	host_gemm_nt_into(
+host-call	host-import	UNOWNED	debt	decomposition/host/pca_oracle.mojo	0	import core/classical_host_predict.mojo:host_gemm_nt_into
 host-threads	host-threads	UNOWNED	debt	decomposition/host/pca_oracle.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	decomposition/host/pca_oracle.mojo	0	host_parallelize(_chunks, tasks)
-host-call	host-import	UNOWNED	debt	decomposition/linalg_public_device.mojo	0	from decomposition.host.linalg_public import (
+host-call	host-import	UNOWNED	debt	decomposition/linalg_public_device.mojo	0	import decomposition/host/linalg_public.mojo:eigh_ascending
+host-call	host-import	UNOWNED	debt	decomposition/linalg_public_device.mojo	0	import decomposition/host/linalg_public.mojo:svdvals_descending
 host-call	host-import	UNOWNED	debt	decomposition/linalg_public_device.mojo	0	return eigh_ascending(diag, vecs, n, True, Int(info[2]))
 host-call	host-import	UNOWNED	debt	decomposition/linalg_public_device.mojo	0	return svdvals_descending(s, n_cols)
-host-call	host-import	gap-neural-overhead2	debt	embedding/checks/embedding_oracle.mojo	0	from core.host_lanes import all_finite
 host-call	host-import	gap-neural-overhead2	debt	embedding/checks/embedding_oracle.mojo	0	if all_finite(values):
+host-call	host-import	gap-neural-overhead2	debt	embedding/checks/embedding_oracle.mojo	0	import core/host_lanes.mojo:all_finite
 host-threads	host-threads	UNOWNED	debt	ensemble/host_layout.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	ensemble/host_layout.mojo	0	host_parallelize(_block, n_blocks)
 host-threads	host-threads	UNOWNED	debt	ensemble/host_layout.mojo	1	host_parallelize(_block, n_blocks)
 host-threads	host-threads	UNOWNED	debt	ensemble/host_layout.mojo	0	host_parallelize(_chunk, n_chunks)
 host-threads	host-threads	UNOWNED	debt	ensemble/host_layout.mojo	1	host_parallelize(_chunk, n_chunks)
 host-threads	host-threads	UNOWNED	debt	ensemble/host_layout.mojo	2	host_parallelize(_chunk, n_chunks)
-host-call	host-import	UNOWNED	debt	extratrees/estimator.mojo	0	from extratrees.impl.randomforest.randomforest import (
+host-call	host-import	UNOWNED	debt	extratrees/estimator.mojo	0	import extratrees/impl/randomforest/randomforest.mojo:fit_forest_exact
 host-call	host-import	UNOWNED	debt	extratrees/estimator.mojo	0	var forest = fit_forest_exact(
 host-call	host-import	UNOWNED	debt	extratrees/estimator.mojo	1	var forest = fit_forest_exact(
 host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	colmajor_from_rowmajor_f32(source, stage, Int(n_rows), Int(n_cols))
 host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	copy_f32_threaded(source, stage, count)
-host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	from ensemble.host_layout import colmajor_from_rowmajor_f32, copy_f32_threaded
-host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	from extratrees.checks.host_splitter import (
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	import ensemble/host_layout.mojo:colmajor_from_rowmajor_f32
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	import ensemble/host_layout.mojo:copy_f32_threaded
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	import extratrees/checks/host_splitter.mojo:node_split_random_gini
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	import extratrees/checks/host_splitter.mojo:node_split_random_mse
 host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	result = node_split_random_gini[DType.float32](
 host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	1	result = node_split_random_gini[DType.float32](
 host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	result = node_split_random_mse[DType.float64](
@@ -313,11 +337,20 @@ host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalg
 host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	1	var result = node_split_random_mse[DType.float64](
 host-threads	host-threads	UNOWNED	debt	extratrees/impl/randomforest/randomforest.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	extratrees/impl/randomforest/randomforest.mojo	0	host_parallelize(_tree_task, tasks)
-host-call	host-import	UNOWNED	debt	gaussian_process/checks/kernel_gradient.mojo	0	from gaussian_process.host.gp_theta import gp_free_count
+host-call	host-import	UNOWNED	debt	gaussian_process/checks/kernel_gradient.mojo	0	import gaussian_process/host/gp_theta.mojo:gp_free_count
 host-call	host-import	UNOWNED	debt	gaussian_process/checks/kernel_gradient.mojo	0	var n_free = gp_free_count(spec.kinds, spec.ls_len, free)
-host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	from gaussian_process.host.gpc_steps import (
 host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	gpc_validate_labels(y, n_train)
 host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	1	gpc_validate_labels(y, n_train)
+host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_a_vector
+host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_b_matrix
+host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_latent_var
+host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_lml
+host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_newton_rhs
+host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_residual
+host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_scale
+host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_scale_rows
+host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_validate_labels
+host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_weights
 host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	var a = gpc_a_vector(bvec, wt.wsr, xs)
 host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	1	var a = gpc_a_vector(bvec, wt.wsr, xs)
 host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	var bmat = gpc_b_matrix(k, wt.wsr, n_train)
@@ -333,7 +366,8 @@ host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	var wt = g
 host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	1	var wt = gpc_weights(f)
 host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	variance = gpc_latent_var(v, n_train, n_star, kss)
 host-env	host-env/threshold	UNOWNED	debt	gaussian_process/classifier.mojo	0	comptime GPC_DEVICE_NEWTON = not is_defined["MOJOLEARN_GPC_HOST_NEWTON"]()
-host-call	host-import	UNOWNED	debt	gaussian_process/estimator.mojo	0	from gaussian_process.host.gp_theta import gp_free_count, gp_lml_gradient_fold
+host-call	host-import	UNOWNED	debt	gaussian_process/estimator.mojo	0	import gaussian_process/host/gp_theta.mojo:gp_free_count
+host-call	host-import	UNOWNED	debt	gaussian_process/estimator.mojo	0	import gaussian_process/host/gp_theta.mojo:gp_lml_gradient_fold
 host-call	host-import	UNOWNED	debt	gaussian_process/estimator.mojo	0	var grad = gp_lml_gradient_fold(dual, kinv, g_host, n, n_free)
 host-call	host-import	UNOWNED	debt	gaussian_process/estimator.mojo	0	var n_free = gp_free_count(kernel.kinds, kernel.ls_len, free)
 host-threads	host-threads	UNOWNED	debt	gaussian_process/host/gpc_steps.mojo	0	from core.host_parallel import host_parallelize
@@ -352,8 +386,21 @@ host-threads	host-threads	UNOWNED	debt	gbdt/train.mojo	0	from core.host_parallel
 host-threads	host-threads	UNOWNED	debt	gbdt/train.mojo	0	host_parallelize_pool_env(_dp_task, n_float)
 host-threads	host-threads	UNOWNED	debt	gbdt/train.mojo	0	host_parallelize_pool_env(_draw_task, n_float_prescan)
 host-threads	host-threads	UNOWNED	debt	gbdt/train.mojo	0	host_parallelize_pool_env(_stage_task, width)
-host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	from gemm.host.gemm_oracle import (
-host-call	host-import	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	from gemm.host.gemm_oracle import (
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:fold_balanced_tree
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:fold_level_base
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:fold_level_count
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:fold_node_addr
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:fold_node_total
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_at_leaf
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_cell
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_right_zero_padded
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_serial
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_serial_cell
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:oracle_leaf_partial
+host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:oracle_leaf_partial_right_zero_padded
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_right_zero_padded
 host-call	host-import	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	out = gemm_oracle(la, lb, op, m, n, k)
 host-call	host-import	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	out = gemm_oracle_right_zero_padded(la, lb, op, m, n, k, real_k)
 host-call	host-import	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	return gemm_oracle(a, b, op, m, n, k)
@@ -364,19 +411,31 @@ host-threads	host-threads	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0
 host-threads	host-threads	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	host_parallelize(_cells, tasks)
 host-threads	host-threads	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	host_parallelize(_cols, stasks)
 host-threads	host-threads	gap-neural-models	debt	gemm/host/gemm_host_rows.mojo	0	host_parallelize(_pack, tasks)
-host-call	host-import	gap-neural-models	debt	gemm/host/gemm_int15_oracle.mojo	0	from gemm.host.gemm_lowbit_oracle import row_absmax
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_int15_oracle.mojo	0	import gemm/host/gemm_lowbit_oracle.mojo:row_absmax
 host-call	host-import	gap-neural-models	debt	gemm/host/gemm_int15_oracle.mojo	0	var ex = int15_row_exponent(row_absmax(x, r, cols))
-host-call	host-import	gap-neural-models	debt	gemm/host/gemm_lowbit_oracle.mojo	0	from gemm.host.gemm_oracle import (
+host-call	host-import	gap-neural-models	debt	gemm/host/gemm_lowbit_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle
 host-call	host-import	gap-neural-models	debt	gemm/host/gemm_lowbit_oracle.mojo	0	return gemm_oracle(a, b, op, m, n, k)
 host-call	host-import	gap-neural-models	debt	gemm/host/gemm_lowbit_oracle.mojo	1	return gemm_oracle(a, b, op, m, n, k)
-host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	from gemm.host.gemm_oracle import (
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:fold_balanced_tree
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:fold_level_base
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:fold_level_count
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:fold_node_addr
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:fold_node_total
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_at_leaf
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_cell
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_right_zero_padded
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_serial
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle_serial_cell
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:oracle_leaf_partial
+host-call	host-import	gap-neural-models	debt	gemm/host/identical_gemm.mojo	0	import gemm/host/gemm_oracle.mojo:oracle_leaf_partial_right_zero_padded
 host-threads	host-threads	UNOWNED	debt	glm/estimator.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	glm/estimator.mojo	0	host_parallelize(_rows, tasks)
 d2h-loop	d2h-roundtrip	UNOWNED	debt	glm/impl/linalg/detail/lstsq_min_norm.mojo	0	ctx.enqueue_copy(dst_ptr=h_diag.unsafe_ptr(), src_buf=s_vec)
 d2h-loop	d2h-roundtrip	UNOWNED	debt	glm/impl/linalg/detail/lstsq_min_norm.mojo	0	ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
 d2h-loop	d2h-roundtrip	gap-nv-classical2	debt	hdbscan/impl/cluster/detail/single_linkage.mojo	0	ctx.enqueue_copy(dst_ptr=h_src.unsafe_ptr(), src_buf=v_src)
 host-import	host-import	gap-nv-classical2	debt	hdbscan/impl/detail/extract.mojo	0	var labels = do_labelling_on_host(
-host-call	host-import	gap-nv-classical2	debt	hdbscan/impl/runner.mojo	0	from hdbscan.impl.detail.extract import ExtractOutput, extract_clusters
+host-call	host-import	gap-nv-classical2	debt	hdbscan/impl/runner.mojo	0	import hdbscan/impl/detail/extract.mojo:extract_clusters
 host-call	host-import	gap-nv-classical2	debt	hdbscan/impl/runner.mojo	0	var ext = extract_clusters(
 d2h-loop	d2h-roundtrip	UNOWNED	debt	hierarchy/impl/cluster/detail/agglomerative.mojo	0	ctx.enqueue_copy(dst_ptr=h_children.unsafe_ptr(), src_buf=v_children)
 d2h-loop	d2h-roundtrip	UNOWNED	debt	hierarchy/impl/cluster/detail/agglomerative.mojo	0	ctx.enqueue_copy(dst_ptr=mst_src_h.unsafe_ptr(), src_buf=v_rows)
@@ -384,12 +443,12 @@ d2h-loop	d2h-roundtrip	UNOWNED	debt	hierarchy/impl/sparse/op/sort.mojo	0	ctx.enq
 host-threads	host-threads	UNOWNED	debt	holtwinters/host/hw_predict.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	holtwinters/host/hw_predict.mojo	0	host_parallelize(_cells, tasks)
 host-threads	host-threads	UNOWNED	debt	holtwinters/host/hw_predict.mojo	0	host_parallelize(_steps, tasks)
-host-call	host-import	gap-trees-nv/apple-fast-trees2	debt	isolation_forest/impl/isolation_forest.mojo	0	from ensemble.host_layout import colmajor_ftz_from_rowmajor_f32
 host-call	host-import	gap-trees-nv/apple-fast-trees2	debt	isolation_forest/impl/isolation_forest.mojo	0	if not colmajor_ftz_from_rowmajor_f32(src, hp, n_rows, n_cols):
+host-call	host-import	gap-trees-nv/apple-fast-trees2	debt	isolation_forest/impl/isolation_forest.mojo	0	import ensemble/host_layout.mojo:colmajor_ftz_from_rowmajor_f32
 tid0-loop	serial-gpu	gap-trees-nv/apple-fast-trees2	debt	isolation_forest/impl/isolation_tree_builder.mojo	0	if tid == 0:
-host-call	host-import	UNOWNED	debt	kernel_methods/estimator.mojo	0	from decomposition.host.pca_oracle import host_sign_flip
-host-call	host-import	UNOWNED	debt	kernel_methods/estimator.mojo	0	from x_decomp.host_jacobi import fast_jacobi_eigh
 host-call	host-import	UNOWNED	debt	kernel_methods/estimator.mojo	0	host_sign_flip(vecs, q)
+host-call	host-import	UNOWNED	debt	kernel_methods/estimator.mojo	0	import decomposition/host/pca_oracle.mojo:host_sign_flip
+host-call	host-import	UNOWNED	debt	kernel_methods/estimator.mojo	0	import x_decomp/host_jacobi.mojo:fast_jacobi_eigh
 host-call	host-import	UNOWNED	debt	kernel_methods/estimator.mojo	0	var tw = fast_jacobi_eigh(kh, q, JACOBI_SWEEPS, Float32(JACOBI_TOL))
 host-env	host-env/threshold	UNOWNED	debt	kernel_methods/estimator.mojo	0	and is_defined["MOJOLEARN_NYS_HOST_EIGH"]()
 host-env	host-env/threshold	UNOWNED	debt	kernel_methods/estimator.mojo	0	comptime if is_defined["MOJOLEARN_NYS_HOST_EIGH_TWIN"]():
@@ -398,15 +457,15 @@ host-switch	host-env/threshold	UNOWNED	debt	kernel_methods/estimator.mojo	0	comp
 host-threads	host-threads	UNOWNED	debt	kernel_methods/estimator.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	gap-classical-nv	debt	kernel_methods/estimator.mojo	0	host_parallelize(_mpart, mtasks)
 host-threads	host-threads	gap-classical-nv	debt	kernel_methods/estimator.mojo	0	host_parallelize(_part, tasks)
-host-call	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	from core.host_lanes import all_finite
-host-call	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	from gemm.host.gemm_host_rows import gemm_host_rows
 host-call	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	if all_finite(values):
+host-call	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	import core/host_lanes.mojo:all_finite
+host-call	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	import gemm/host/gemm_host_rows.mojo:gemm_host_rows
 host-import	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	st.dt_proj = gemm_host_rows(dt_low, w.w_dt, OP_NT, m, di, r)
 host-import	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	st.in_proj = gemm_host_rows(st.norm_out, w.w_in, OP_NT, m, 2 * di, dm)
 host-import	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	st.out_proj = gemm_host_rows(st.gate_out, w.w_out, OP_NT, m, dm, di)
 host-import	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	st.x_proj = gemm_host_rows(st.silu_out, w.w_x, OP_NT, m, xr, di)
 host-env	host-env/threshold	UNOWNED	debt	mamba/impl/modules/mamba3_transfer.mojo	0	comptime M3_BULK_TRANSFER = not is_defined["MOJOLEARN_MAMBA3_LEGACY_HOST_COPY"]()
-host-call	host-import	UNOWNED	debt	mamba/impl/modules/mamba_simple.mojo	0	from mamba.checks.mamba_oracle import (
+host-call	host-import	UNOWNED	debt	mamba/impl/modules/mamba_simple.mojo	0	import mamba/checks/mamba_oracle.mojo:mamba_block_oracle
 host-call	host-import	UNOWNED	debt	mamba/impl/modules/mamba_simple.mojo	0	return mamba_block_oracle(w, x, b, l, state)
 serial-launch	serial-gpu	UNOWNED	debt	metrics/impl/binary_ranking.mojo	0	ctx.enqueue_function[ranking_auc_partial_fold_kernel](
 serial-launch	serial-gpu	UNOWNED	debt	metrics/impl/log_loss.mojo	0	ctx.enqueue_function[log_loss_finalize_kernel](
@@ -576,10 +635,11 @@ py-sklearn	py-numpy	gap-prep2/gap-nb-maxabs-grp	debt	python/mojolearn/preprocess
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	module = _backend.load_host_module(_EXTENSION)
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	return _Entries(_backend.load_host_module(_EXTENSION))
 py-loop	py-numpy	gap-lm	debt	python/mojolearn/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
-host-call	host-import	UNOWNED	debt	sequence/exec.mojo	0	from sequence.host_gemm import host_gemm_pack, host_gemm_rows
 host-call	host-import	UNOWNED	debt	sequence/exec.mojo	0	host_gemm_pack(a, self.panel)
 host-call	host-import	UNOWNED	debt	sequence/exec.mojo	0	host_gemm_rows(a, bp, ldb, 0, M)
 host-call	host-import	UNOWNED	debt	sequence/exec.mojo	0	host_gemm_rows(a, bp, ldb, lo, min(lo + chunk, M))
+host-call	host-import	UNOWNED	debt	sequence/exec.mojo	0	import sequence/host_gemm.mojo:host_gemm_pack
+host-call	host-import	UNOWNED	debt	sequence/exec.mojo	0	import sequence/host_gemm.mojo:host_gemm_rows
 host-threads	host-threads	UNOWNED	debt	sequence/exec.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	sequence/exec.mojo	0	host_parallelize(_chunk, tasks)
 host-threads	host-threads	UNOWNED	debt	sequence/exec.mojo	0	host_parallelize(_rows, tasks)
@@ -590,24 +650,26 @@ host-threshold	host-env/threshold	UNOWNED	debt	sequence/pyapi.mojo	0	comptime HO
 host-threshold	host-env/threshold	UNOWNED	debt	sequence/pyapi.mojo	0	var host_fold = _host_folds() and n >= HOST_FOLD_MIN
 route-switch	host-env/threshold	UNOWNED	debt	sequence/pyapi.mojo	0	comptime HOST_FOLD_MIN = 1 << 16
 route-switch	host-env/threshold	UNOWNED	debt	sequence/pyapi.mojo	0	var host_fold = _host_folds() and n >= HOST_FOLD_MIN
-host-call	host-import	UNOWNED	debt	spectral/host/spectral_predict_host.mojo	0	from cluster.host.kmeans_oracle import METRIC_L2_EXPANDED, host_kmeans_predict
-host-call	host-import	UNOWNED	debt	spectral/host/spectral_predict_host.mojo	0	from core.knn_host_predict import KNN_HOST_METRIC_FROM_IS_SQRT, host_knn_search
 host-call	host-import	UNOWNED	debt	spectral/host/spectral_predict_host.mojo	0	host_kmeans_predict(emb, n_queries, k, state.centroids, n_clusters, METRIC_L2_EXPANDED, u_labels)
 host-call	host-import	UNOWNED	debt	spectral/host/spectral_predict_host.mojo	0	host_knn_search(
-host-call	host-import	UNOWNED	debt	spectral/impl/cluster/detail/spectral.mojo	0	from cluster.estimator import plan_sum_scale
+host-call	host-import	UNOWNED	debt	spectral/host/spectral_predict_host.mojo	0	import cluster/host/kmeans_oracle.mojo:host_kmeans_predict
+host-call	host-import	UNOWNED	debt	spectral/host/spectral_predict_host.mojo	0	import core/knn_host_predict.mojo:host_knn_search
+host-call	host-import	UNOWNED	debt	spectral/impl/cluster/detail/spectral.mojo	0	import cluster/estimator.mojo:plan_sum_scale
 host-call	host-import	UNOWNED	debt	spectral/impl/cluster/detail/spectral.mojo	0	var sum_scale = plan_sum_scale(
-host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	spectral/impl/preprocessing/detail/spectral_embedding.mojo	0	from spectral.host.spectral_predict_host import (
+host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	spectral/impl/preprocessing/detail/spectral_embedding.mojo	0	import spectral/host/spectral_predict_host.mojo:spectral_keep_embedding_order
 host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	spectral/impl/preprocessing/detail/spectral_embedding.mojo	0	spectral_keep_embedding_order(eigenvalues, eigenvectors, k, n_samples, state)
-host-call	host-import	gap-neural-overhead2	debt	spectral/impl/sparse/solver/detail/lanczos.mojo	0	from spectral.checks.symmetric_eig_host import (
+host-call	host-import	gap-neural-overhead2	debt	spectral/impl/sparse/solver/detail/lanczos.mojo	0	import spectral/checks/symmetric_eig_host.mojo:symmetric_eig_host
 host-call	host-import	gap-neural-overhead2	debt	spectral/impl/sparse/solver/detail/lanczos.mojo	0	var sweeps = symmetric_eig_host[DType.float32](t, ncv, evals, evecs)
-host-call	host-import	UNOWNED	debt	spectral/impl/spectral_predict.mojo	0	from spectral.host.spectral_predict_host import (
+host-call	host-import	UNOWNED	debt	spectral/impl/spectral_predict.mojo	0	import spectral/host/spectral_predict_host.mojo:spectral_predict_mu
+host-call	host-import	UNOWNED	debt	spectral/impl/spectral_predict.mojo	0	import spectral/host/spectral_predict_host.mojo:spectral_slots_from_dense
+host-call	host-import	UNOWNED	debt	spectral/impl/spectral_predict.mojo	0	import spectral/host/spectral_predict_host.mojo:spectral_slots_from_knn
 host-call	host-import	UNOWNED	debt	spectral/impl/spectral_predict.mojo	0	slots = spectral_slots_from_dense(input, n_queries, n_train)
 host-call	host-import	UNOWNED	debt	spectral/impl/spectral_predict.mojo	0	slots = spectral_slots_from_knn(idx, n_queries, n_neighbors)
 host-call	host-import	UNOWNED	debt	spectral/impl/spectral_predict.mojo	0	var mu = spectral_predict_mu(state.eigenvalues)
 serial-launch	serial-gpu	gap-classical-nv	debt	svm/checks/device_select.mojo	0	ctx.enqueue_function[count_flagged_kernel](
 host-threads	host-threads	UNOWNED	debt	svm/host/svc_proba.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	svm/host/svc_proba.mojo	0	host_parallelize(_rows, tasks)
-host-call	host-import	gap-optin-flags	debt	svm/impl/smosolver.mojo	0	from svm.impl.host_block_solve import HbsFP, HbsIP, host_block_solve
+host-call	host-import	gap-optin-flags	debt	svm/impl/smosolver.mojo	0	import svm/impl/host_block_solve.mojo:host_block_solve
 host-call	host-import	gap-optin-flags	debt	svm/impl/smosolver.mojo	0	var hbs = host_block_solve(
 host-env	host-env/threshold	gap-optin-flags	debt	svm/impl/smosolver.mojo	0	and is_defined["MOJOLEARN_SVM_HOST_BLOCK_SOLVE"]()
 serial-launch	serial-gpu	gap-optin-flags	debt	svm/impl/smosolver.mojo	0	ctx.enqueue_function[smo_block_solve_ept_kernel[T, FAST_EPT]](
@@ -619,20 +681,20 @@ serial-launch	serial-gpu	gap-optin-flags	debt	svm/impl/smosolver.mojo	0	ctx.enqu
 serial-launch	serial-gpu	gap-optin-flags	debt	svm/impl/smosolver.mojo	0	ctx.enqueue_function[smo_block_solve_kernel[512]](
 serial-launch	serial-gpu	gap-optin-flags	debt	svm/impl/smosolver.mojo	0	ctx.enqueue_function[smo_block_solve_kernel[64]](
 host-call	host-import	UNOWNED	debt	svm/impl/svc_impl.mojo	0	check_finite_ptr(x_ptr, n_rows * n_cols, "X")
-host-call	host-import	UNOWNED	debt	svm/impl/svc_impl.mojo	0	from svm.impl.svm_parameter import (
+host-call	host-import	UNOWNED	debt	svm/impl/svc_impl.mojo	0	import svm/impl/svm_parameter.mojo:check_finite_ptr
 host-threads	host-threads	UNOWNED	debt	svm/impl/svm_parameter.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	svm/impl/svm_parameter.mojo	0	host_parallelize(_span_task, spans)
 host-threads	host-threads	multi-GPU-driver-review	debt	training/accumulate_multi_gpu.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	multi-GPU-driver-review	debt	training/accumulate_multi_gpu.mojo	0	host_parallelize(_reduce,devices)
 host-threads	host-threads	gap-lm	debt	training/byte_lm_parallel.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	gap-lm	debt	training/byte_lm_parallel.mojo	0	host_parallelize(_gradient_task, active)
-host-call	host-import	UNOWNED	debt	training/checks/loss_oracle.mojo	0	from core.host_lanes import all_finite
-host-call	host-import	UNOWNED	debt	training/checks/loss_oracle.mojo	0	from gemm.host.gemm_host_rows import gemm_host_rows
 host-call	host-import	UNOWNED	debt	training/checks/loss_oracle.mojo	0	if all_finite(values):
+host-call	host-import	UNOWNED	debt	training/checks/loss_oracle.mojo	0	import core/host_lanes.mojo:all_finite
+host-call	host-import	UNOWNED	debt	training/checks/loss_oracle.mojo	0	import gemm/host/gemm_host_rows.mojo:gemm_host_rows
 host-import	host-import	UNOWNED	debt	training/checks/loss_oracle.mojo	0	var out = gemm_host_rows(row, ones, OP_NN, 1, 1, count)
-host-call	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	from core.host_lanes import all_finite
-host-call	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	from gemm.host.gemm_host_rows import gemm_host_rows
 host-call	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	if all_finite(values):
+host-call	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	import core/host_lanes.mojo:all_finite
+host-call	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	import gemm/host/gemm_host_rows.mojo:gemm_host_rows
 host-import	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	var out = gemm_host_rows(g, g, OP_NT, 1, 1, count)
 host-import	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	var tot = gemm_host_rows(norms_copy, norms_copy, OP_NT, 1, 1, j_count)
 host-threads	host-threads	UNOWNED	debt	training/checks/train_loop.mojo	0	from core.host_parallel import host_parallelize
@@ -646,15 +708,15 @@ host-threads	host-threads	gap-train-utils	debt	training/estimator.mojo	0	host_pa
 d2h-loop	d2h-roundtrip	gap-neural-models	debt	training/mlp_ops.mojo	0	ctx.enqueue_copy(dst_ptr=logits_ptr, src_buf=logits)
 host-threads	host-threads	multi-GPU-driver-review	debt	training/optimizer_multi_gpu.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	multi-GPU-driver-review	debt	training/optimizer_multi_gpu.mojo	0	host_parallelize(_update,devices)
-host-call	host-import	UNOWNED	debt	umap/sparse_estimator.mojo	0	from umap.sparse_graph import (
+host-call	host-import	UNOWNED	debt	umap/sparse_estimator.mojo	0	import umap/sparse_graph.mojo:sparse_fuzzy_simplicial_graph
 host-call	host-import	UNOWNED	debt	umap/sparse_estimator.mojo	0	return sparse_fuzzy_simplicial_graph(
 host-threads	host-threads	UNOWNED	debt	umap/sparse_graph.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	umap/sparse_graph.mojo	0	host_parallelize(_sigma_rows, tasks)
-host-call	host-import	UNOWNED	debt	x_ann/abi.mojo	0	from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+host-call	host-import	UNOWNED	debt	x_ann/abi.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	x_ann/abi.mojo	0	return read_f32(a_int(addrs, i), n)
 host-call	host-import	gap-fails2	debt	x_ann/cagra_core.mojo	0	ann_tasks(task, tasks)
 host-call	host-import	gap-fails2	debt	x_ann/cagra_core.mojo	1	ann_tasks(task, tasks)
-host-call	host-import	gap-fails2	debt	x_ann/cagra_core.mojo	0	from x_ann.host.ann_host_cells import ann_span, ann_task_count, ann_tasks
+host-call	host-import	gap-fails2	debt	x_ann/cagra_core.mojo	0	import x_ann/host/ann_host_cells.mojo:ann_tasks
 host-env	host-env/threshold	gap-fails2	debt	x_ann/cagra_device.mojo	0	var on_device = kdeg <= PRUNE_KMAX and deg <= kdeg and not is_defined["MOJOLEARN_CAGRA_HOST_PRUNE"]()
 host-threads	host-threads	UNOWNED	debt	x_ann/host/ann_host_cells.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	x_ann/host/ann_host_cells.mojo	0	host_parallelize(body, tasks)
@@ -669,9 +731,10 @@ host-env	host-env/threshold	PR#126	inflight@9901c6a91a8d8c8aa3e5162024c7b1acacd7
 host-env	host-env/threshold	gap-optin-flags	debt	x_cluster/optics.mojo	0	comptime OPTICS_HOSTROWS = OPTICS_SIMD and is_defined["MOJOLEARN_OPTICS_HOSTROWS"]()
 d2h-loop	d2h-roundtrip	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
 d2h-loop	d2h-roundtrip	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s)
-host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	from decomposition.host.linalg_public import eigh_ascending
-host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_on_host
-host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_on_host
+host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	import decomposition/host/linalg_public.mojo:eigh_ascending
+host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	import x_decomp/lu_host.mojo:lu_solve_host_rows
+host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	import x_decomp/qr_host.mojo:geqrf_host_rows
+host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	import x_decomp/qr_host.mojo:orgqr_host_rows
 host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	var got = eigh_ascending(diag, vecs, n, True, Int(i2))
 host-call	host-import	UNOWNED	debt	x_decomp/device.mojo	0	var got = eigh_ascending(diag, vecs, n, True, executed)
 host-env	host-env/threshold	hr-qr	debt	x_decomp/device.mojo	0	var v = String(getenv("MOJOLEARN_XD_HOST_EIGH_MAX", "0"))
@@ -702,20 +765,32 @@ host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	colsum_rows(a, dst, d, 0,
 host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	colsum_rows(a, pp.unsafe_offset(bl * d), d, bl * FOLD_BLOCK, min(n, (bl + 1) * FOLD_BLOCK))
 host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	ew_range(op, a, b, bm, c, cm, dst, t * EW_CHUNK, min(count, (t + 1) * EW_CHUNK), d, s)
 host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	fast_qr_finish(ps, pr, ns, n)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	from decomposition.host.linalg_public import eigh_ascending, host_eigh, host_qr_r
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	from decomposition.host.pca_oracle import host_sign_flip
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	from x_decomp.host_ew import ew_range
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	from x_decomp.host_graph import EdgeList, dijkstra_heap_row
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	from x_decomp.host_lda import lda_doc_row_host, lda_pack_t
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	from x_decomp.host_simd import (
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_serial
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_serial
 host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	gemm_fold_rows(i, c, pp, m, n, nb)
 host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	gemm_task(t, a, b, c, pp, m, k, n, ta, tb)
 host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	host_sign_flip(vecs, n)
 host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	host_sign_flip(vr, n)
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import decomposition/host/linalg_public.mojo:eigh_ascending
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import decomposition/host/linalg_public.mojo:host_eigh
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import decomposition/host/pca_oracle.mojo:host_sign_flip
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_ew.mojo:ew_range
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_graph.mojo:dijkstra_heap_row
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_jacobi.mojo:fast_jacobi_eigh
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_jacobi.mojo:fast_one_sided_jacobi_svd
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_lda.mojo:lda_doc_row_host
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_lda.mojo:lda_pack_t
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_qr.mojo:fast_qr_finish
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_qr.mojo:qr_slice
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:colsum_rows
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:gemm_fold_rows
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:gemm_task
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:lu_rows
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:rowdot_task
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:rowsum_rows
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:sqdist_prepare
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:sqdist_task
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/lu_host.mojo:lu_solve_host_rows
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/qr_host.mojo:geqrf_host_rows
+host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/qr_host.mojo:orgqr_host_rows
 host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	its.unsafe_store(i, lda_doc_row_host(x, ew, pt, d, e, i, k, v, prior, max_iter, tol))
 host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	lu_rows(a, n, k, d, k + 1 + t * LU_ROWS, k + 1 + min(rows, (t + 1) * LU_ROWS))
 host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	qr_slice(pw, pr, m, n, 1, 0)
@@ -743,10 +818,10 @@ host-import	host-import	hr-kit	debt	x_decomp/host.mojo	0	lu_solve_host_rows(lu, 
 host-import	host-import	hr-kit	debt	x_decomp/host.mojo	0	orgqr_host_rows(h, tau, q, m, n, kk, qc)
 host-threads	host-threads	hr-kit	debt	x_decomp/host.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	hr-kit	debt	x_decomp/host.mojo	0	host_parallelize(group, groups)
-host-call	host-import	UNOWNED	debt	x_decomp/host_jacobi.mojo	0	from decomposition.host.pca_oracle import PCA_ORACLE_HOST_SABOTAGE, _host_jacobi_fold, host_jacobi_rotation_cs
+host-call	host-import	UNOWNED	debt	x_decomp/host_jacobi.mojo	0	import decomposition/host/pca_oracle.mojo:_host_jacobi_fold
 host-call	host-import	UNOWNED	debt	x_decomp/host_jacobi.mojo	0	var fro2 = _host_jacobi_fold(a, n, False)
 host-call	host-import	UNOWNED	debt	x_decomp/host_jacobi.mojo	0	var off = _host_jacobi_fold(a, n, True)
-host-call	host-import	UNOWNED	debt	x_decomp/host_qr.mojo	0	from decomposition.host.pca_full_oracle import QR_TPB, host_qr_slice_count
+host-call	host-import	UNOWNED	debt	x_decomp/host_qr.mojo	0	import decomposition/host/pca_full_oracle.mojo:host_qr_slice_count
 host-call	host-import	UNOWNED	debt	x_decomp/host_qr.mojo	0	return host_qr_slice_count(m, n)
 host-env	host-env/threshold	hr-lu	debt	x_decomp/lu_host.mojo	0	var v = String(getenv("MOJOLEARN_XD_LU_SOLVE_HOST"))
 host-threads	host-threads	hr-lu	debt	x_decomp/lu_host.mojo	0	from core.host_parallel import host_parallelize
@@ -766,7 +841,7 @@ host-threshold	host-env/threshold	hr-qr	debt	x_decomp/qr_host.mojo	0	return m >=
 route-switch	host-env/threshold	hr-qr	debt	x_decomp/qr_host.mojo	0	comptime XD_QR_HOST_MIN = 1 << 16
 route-switch	host-env/threshold	hr-qr	debt	x_decomp/qr_host.mojo	0	return m >= XD_QR_HOST_MIN
 route-switch	host-env/threshold	hr-qr	debt	x_decomp/qr_host.mojo	0	var v = String(getenv("MOJOLEARN_XD_QR_HOST"))
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/bayes.mojo	0	from x_linear.ops import (
+host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/bayes.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/bayes.mojo	0	par_rows(rows_map, n)
 serial-launch	serial-gpu	UNOWNED	debt	x_linear/blocks.mojo	0	ctx.enqueue_function[xq_step_kernel](
 tid0-loop	serial-gpu	UNOWNED	debt	x_linear/blocks_gram.mojo	0	if tid == 0:
@@ -786,27 +861,27 @@ serial-launch	serial-gpu	UNOWNED	debt	x_linear/device.mojo	0	ctx.enqueue_functio
 serial-launch	serial-gpu	PR#116	inflight@28671ad0e1bdb7e1c59d7ee7925e1fccf1fb204a	x_linear/device.mojo	0	ctx.enqueue_function[iso_after_kernel](Int32(n), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(),
 serial-launch	serial-gpu	PR#116	inflight@28671ad0e1bdb7e1c59d7ee7925e1fccf1fb204a	x_linear/device.mojo	0	ctx.enqueue_function[iso_bounds_kernel](dfw.unsafe_ptr(), Int32(n), diw.unsafe_ptr(), dm.unsafe_ptr(),
 serial-launch	serial-gpu	PR#116	inflight@28671ad0e1bdb7e1c59d7ee7925e1fccf1fb204a	x_linear/device.mojo	0	ctx.enqueue_function[rs_scan_kernel](dbt.unsafe_ptr(), Int32(nb), Int32(n), dfl.unsafe_ptr(),
-host-call	host-import	UNOWNED	debt	x_linear/dispatch.mojo	0	from x_linear.isotonic import isotonic_fit, isotonic_predict
+host-call	host-import	UNOWNED	debt	x_linear/dispatch.mojo	0	import x_linear/isotonic.mojo:isotonic_fit
 host-call	host-import	UNOWNED	debt	x_linear/dispatch.mojo	0	isotonic_fit(t, x, y, n, d, ip, fp, res, fw, iw)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/glm.mojo	0	from x_linear.ops import (
+host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/glm.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/glm.mojo	0	par_rows(rows_gh, n)
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/glm.mojo	0	par_rows(rows_map, n)
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/glm.mojo	0	par_rows(units_fold, units, 1)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/huber.mojo	0	from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot, axpy_acc, par_rows, row_dots
+host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/huber.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/huber.mojo	0	par_rows(rows_map, n)
 host-threads	host-threads	PR#116	debt	x_linear/isotonic.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	PR#116	debt	x_linear/isotonic.mojo	0	host_parallelize(_sort_chunk, tasks)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/logcv.mojo	0	from x_linear.ops import (
+host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/logcv.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/logcv.mojo	0	par_rows(rows_hit, n)
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/logcv.mojo	0	par_rows(rows_map, n)
 host-env	host-env/threshold	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/ops.mojo	0	comptime if is_defined["MOJOLEARN_X_LINEAR_HOST_SERIAL"]():
 host-threads	host-threads	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/ops.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/ops.mojo	0	host_parallelize(group, groups)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/quantile.mojo	0	from x_linear.ops import (
+host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/quantile.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/quantile.mojo	0	par_rows(rows_map, n)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/ridge.mojo	0	from x_linear.ops import (
+host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/ridge.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/ridge.mojo	0	par_rows(rows_loo, n)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/sgd.mojo	0	from x_linear.ops import (
+host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/sgd.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/sgd.mojo	0	par_rows(run_problems, problems, 1)
 host-env	host-env/threshold	PR#85	inflight@6a483da91d76ae2560b5316910738e7b3328e375	x_linear/sgd.mojo	0	and not is_defined["MOJOLEARN_SGD_HOST_LEGACY"]()
 tid0-loop	serial-gpu	UNOWNED	debt	x_linear/sgd.mojo	0	if lane == 0:
@@ -822,7 +897,7 @@ host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	1	host
 host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	0	host_parallelize(_fill, tasks)
 host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	1	host_parallelize(_fill, tasks)
 host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	0	host_parallelize(_round, tasks)
-host-call	host-import	hr-graph	debt	x_neighbors/device_ops.mojo	0	from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_item, louvain_item, svgp_item, svgp_var_item
+host-call	host-import	hr-graph	debt	x_neighbors/device_ops.mojo	0	import x_neighbors/items.mojo:svgp_item
 host-call	host-import	PR#106	debt	x_neighbors/device_ops.mojo	0	svgp_item(t, _f(kuu), _f(bmat), _f(b), _f(y), _f(alpha), _f(cmat), _f(qmu), _f(qsqrt), _f(info), FP(unsafe_from_address=Int(s_luu.unsafe_ptr())), FP(unsafe_from_address=Int(s_ls.unsafe_ptr())), FP(unsafe_from_address=Int(s_e.unsafe_ptr())), FP(unsafe_from_address=Int(s_col.unsafe_ptr())), m, n, noise, jitter, kdiag)
 host-call	host-import	PR#106	debt	x_neighbors/device_ops.mojo	0	svgp_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, e, col, m, n, noise, jitter, kdiag)
 host-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	0	comptime if is_defined["MOJOLEARN_XN_MAPPED_DOWN"]():
@@ -839,7 +914,7 @@ route-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	3	comp
 route-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	4	comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
 route-switch	host-env/threshold	PR#106	debt	x_neighbors/device_ops.mojo	5	comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
 serial-launch	serial-gpu	UNOWNED	debt	x_neighbors/device_ops.mojo	0	ctx.enqueue_function[ocsvm_kernel](
-host-call	host-import	UNOWNED	debt	x_neighbors/eigh.mojo	0	from spectral.checks.symmetric_eig_host import symmetric_eig_host
+host-call	host-import	UNOWNED	debt	x_neighbors/eigh.mojo	0	import spectral/checks/symmetric_eig_host.mojo:symmetric_eig_host
 host-call	host-import	UNOWNED	debt	x_neighbors/eigh.mojo	0	var sweeps = symmetric_eig_host[DType.float32](m, n, w, v)
 host-threads	host-threads	PR#106	debt	x_neighbors/items.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	PR#106	debt	x_neighbors/items.mojo	0	host_parallelize(task, 2 * m)
@@ -870,10 +945,12 @@ host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x
 host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	_down(ctx, dr, res, n * c)
 host-call	host-import	hr-small-passes	debt	x_neighbors/iter_device.mojo	0	cc_iterate_csr(IP(unsafe_from_address=indptr), IP(unsafe_from_address=indices),
 host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	cc_iterate_sparse(FP(unsafe_from_address=a), IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n)
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	from x_neighbors.device_ops import (
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
-host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/iter_device.mojo	0	from x_neighbors.svgp_ff import matmul_tn_acc_ff_item, svgp_ff_solve
+host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/cc_sparse.mojo:cc_iterate_csr
+host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/cc_sparse.mojo:cc_iterate_sparse
+host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/device_ops.mojo:_buf
+host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/device_ops.mojo:_down
+host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/pr_sparse.mojo:pr_graph_from_dense
+host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/iter_device.mojo	0	import x_neighbors/svgp_ff.mojo:svgp_ff_solve
 host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/iter_device.mojo	0	svgp_ff_solve(FP(unsafe_from_address=kuu), FP(unsafe_from_address=bh), FP(unsafe_from_address=bl),
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_a = _buf(ctx, 0, n * nc, False)
 host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	var d_a = _buf(ctx, a, n * n, True)
@@ -957,7 +1034,7 @@ route-switch	host-env/threshold	UNOWNED	debt	x_neighbors/iter_device.mojo	0	comp
 serial-launch	serial-gpu	hr-graph	debt	x_neighbors/iter_device.mojo	0	ctx.enqueue_function[absdiff_sum_kernel](
 serial-launch	serial-gpu	hr-graph	debt	x_neighbors/iter_device.mojo	1	ctx.enqueue_function[absdiff_sum_kernel](
 serial-launch	serial-gpu	hr-graph	debt	x_neighbors/iter_device.mojo	0	ctx.enqueue_function[pr_dangling_sum_kernel](
-host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	from x_neighbors.device_ops import (
+host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	import x_neighbors/device_ops.mojo:_buf
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_g = _buf(ctx, g, n * n, True)
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_nxt = _buf(ctx, 0, nc, False)
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_ring = _buf(ctx, 0, (LP_BATCH + 1) * nc, False)
@@ -969,13 +1046,15 @@ host-threads	host-threads	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d
 host-threads	host-threads	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/svgp_ff.mojo	0	host_parallelize(column, m)
 host-threads	host-threads	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/svgp_ff.mojo	0	host_parallelize(tcol, m)
 host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	apply_trees(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=colid)), f32_ptr(Int(py=quesval)),
-host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	from xtrees.ops import (
-host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	from xtrees.shap import node_cover, tree_shap, expected_value, mask_expand, block_mean, kernel_solve
 host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	gather_f32(f32_ptr(Int(py=src)), _i(params, 0), _i(params, 1), i32_ptr(Int(py=rows)), n_rows,
+host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	import xtrees/ops.mojo:apply_trees
+host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	import xtrees/ops.mojo:gather_f32
+host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	import xtrees/ops.mojo:weighted_sample
+host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	import xtrees/shap.mojo:tree_shap
 host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	tree_shap(i32_ptr(_i(forest, 0)), i32_ptr(_i(forest, 1)), f32_ptr(_i(forest, 2)), i32_ptr(_i(forest, 3)),
 host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	weighted_sample(f64_ptr(Int(py=w_addr)), n, i32_ptr(Int(py=out_addr)), n_draw, _i(params, 2), _i(params, 3))
 host-call	host-import	UNOWNED	debt	xtrees/ops.mojo	0	colmajor_from_rowmajor_f32(src, dst, n, d)
-host-call	host-import	UNOWNED	debt	xtrees/ops.mojo	0	from ensemble.host_layout import (
+host-call	host-import	UNOWNED	debt	xtrees/ops.mojo	0	import ensemble/host_layout.mojo:colmajor_from_rowmajor_f32
 host-threads	host-threads	UNOWNED	debt	xtrees/ops.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	xtrees/ops.mojo	0	host_parallelize(_block, n_blocks)
 host-threads	host-threads	UNOWNED	debt	xtrees/ops.mojo	1	host_parallelize(_block, n_blocks)

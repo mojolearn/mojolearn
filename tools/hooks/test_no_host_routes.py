@@ -97,9 +97,9 @@ BLOCKED = [
     ("*_host_rows call", {DEV: "def _p7(n: Int):\n    lu_solve_host_rows(0, 0, 0, n, 1, 0)"},
      "lu_solve_host_rows(0, 0, 0, n, 1, 0)"),
     ("import from a *_host module", {DEV: "from x_decomp.lu_host import _solve_blocks"},
-     "from x_decomp.lu_host import _solve_blocks"),
+     "x_decomp/lu_host.mojo:_solve_blocks"),
     ("import from a host/ module without _host", {DEV: "from cluster.host.host_cells import host_cells"},
-     "from cluster.host.host_cells import host_cells"),
+     "cluster/host/host_cells.mojo:host_cells"),
     ("host helper not named *_on_host", {DEV: "from x_neighbors.cc_sparse import _cc_rounds\n"
                                               "def _p8(n: Int):\n    _cc_rounds(0, 0, 0, n)"},
      "_cc_rounds(0, 0, 0, n)"),
