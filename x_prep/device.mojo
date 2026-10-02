@@ -8,6 +8,7 @@ from std.ffi import _Global
 from std.os import getenv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
+from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_prep.common import FP, IP, STAGE_INTS
@@ -29,7 +30,7 @@ comptime OP_MI_CD = 69
 
 #: FAST only: ops folded by a threadgroup per column (x_prep/fastred.mojo)
 comptime OP_COL_STATS = 1
-#: FAST only, `MOJOLEARN_X_PREP_CLASS_COV_GRID=1` (lane/apple-fast-gram, 2026-10-02):
+#: FAST on Apple, `-D MOJOLEARN_X_PREP_CLASS_COV_GRID` (lane/apple-fast-gram, 2026-10-02):
 #: QDA's per-class covariances (op 40, naive_bayes/da.mojo `qda_cov_unit`: one
 #: thread per (class, cell) walking every row, K d^2 chains of a million rows)
 #: and LDA's Gram `matmul` (op 13, x_prep/prims.mojo `matmul_unit` as Z'Z: one
@@ -186,8 +187,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # OP_MATMUL above), sized over the program; 1 word when unused
     var cov_grid = False
     var cov_words = 1
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
-        cov_grid = getenv("MOJOLEARN_X_PREP_CLASS_COV_GRID", "0") == "1"
+    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                 and is_defined["MOJOLEARN_X_PREP_CLASS_COV_GRID"]()):
+        cov_grid = True
         if cov_grid:
             for s in range(stages):
                 var op = Int(host_q.unsafe_load(s * STAGE_INTS))

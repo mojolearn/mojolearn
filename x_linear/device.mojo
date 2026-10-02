@@ -353,24 +353,30 @@ def _bayes_grid_gram() -> Bool:
     return String(getenv("MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM")) != "0"
 
 
+#: lane/apple-fast-gram (2026-10-02), FAST on Apple, build-time switches
+#: (`-D MOJOLEARN_X_LINEAR_LARS_FAST_GRAM`, `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM`;
+#: no env read on the fit path), both default off (the A/B arm is main's path):
+#: LARS_FAST_GRAM builds Lars / LassoLars' means, centered Gram, X'y and y mean
+#: with x_linear/fast_gram.mojo (row chunks x 32 x 32 tiles on the grid) instead
+#: of main's moments grid (one block per 16-column tile pair, one serial chain
+#: per cell: ONE block at taxi's 16 features) or the sliced `xg_gram_kernel`;
+#: RIDGE_FAST_GRAM does the same for RidgeClassifier / RidgeCV's means, centered
+#: Gram and X'Y, and for k-fold RidgeCV's fold Grams instead of `kf_cells_kernel`
+#: (one thread per cell walking the fold's rows). Unweighted fits only.
+comptime XL_LARS_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                              and is_defined["MOJOLEARN_X_LINEAR_LARS_FAST_GRAM"]())
+comptime XL_RIDGE_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                               and is_defined["MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM"]())
+
+
+@always_inline
 def _lars_fast_gram() -> Bool:
-    """lane/apple-fast-gram (2026-10-02), FAST on Apple: `MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1`
-    builds Lars / LassoLars' means, centered Gram, X'y and y mean with
-    x_linear/fast_gram.mojo (row chunks x 32 x 32 tiles on the grid) instead
-    of `xg_gram_kernel` (one thread per Gram cell walking every row: 136
-    threads, ONE block, at taxi's 16 features) plus the team's own means and
-    X'y passes (one block). Default off (the A/B arm is the old path)."""
-    return String(getenv("MOJOLEARN_X_LINEAR_LARS_FAST_GRAM")) == "1"
+    return XL_LARS_FAST_GRAM
 
 
+@always_inline
 def _ridge_fast_gram() -> Bool:
-    """lane/apple-fast-gram (2026-10-02), FAST on Apple: `MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1`
-    builds RidgeClassifier / RidgeCV's means, centered Gram and X'Y with
-    x_linear/fast_gram.mojo instead of the team's cell chains on ONE block
-    (x_linear/ridge.mojo `_ridge_fit_team`), and k-fold RidgeCV's fold Grams
-    with it instead of `kf_cells_kernel` (one thread per cell walking the
-    fold's rows). Unweighted fits only. Default off."""
-    return String(getenv("MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM")) == "1"
+    return XL_RIDGE_FAST_GRAM
 
 
 # ------------------------------------------------ minibatch SGD on the grid (lane/neural-pass103)

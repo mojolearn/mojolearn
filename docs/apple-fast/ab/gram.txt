@@ -1,6 +1,6 @@
-CMD lane/apple-fast-gram gram-lars-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-lars-taxi lars taxi 1 2 - MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1
-CMD lane/apple-fast-gram gram-llars-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-llars-taxi lasso-lars taxi 1 2 - MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1
-CMD lane/apple-fast-gram gram-ridgeclf-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgeclf-taxi ridge-clf taxi 1 2 - MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1
-CMD lane/apple-fast-gram gram-ridgecv-taxi AFC_FAMILY=algos bash tools/afc_ab.sh gram-ridgecv-taxi ridge-cv taxi 1 2 - MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1
-CMD lane/apple-fast-gram gram-lda-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-lda-istella lda-clf istella 1 2 - MOJOLEARN_X_PREP_CLASS_COV_GRID=1
-CMD lane/apple-fast-gram gram-qda-istella AFC_FAMILY=algos bash tools/afc_ab.sh gram-qda-istella qda istella 1 2 - MOJOLEARN_X_PREP_CLASS_COV_GRID=1
+CMD lane/apple-fast-gram gram-lars-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh gram-lars-taxi x_linear lars taxi 1 2 "" "-D MOJOLEARN_X_LINEAR_LARS_FAST_GRAM"
+CMD lane/apple-fast-gram gram-llars-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh gram-llars-taxi x_linear lasso-lars taxi 1 2 "" "-D MOJOLEARN_X_LINEAR_LARS_FAST_GRAM"
+CMD lane/apple-fast-gram gram-ridgeclf-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh gram-ridgeclf-taxi x_linear ridge-clf taxi 1 2 "" "-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM"
+CMD lane/apple-fast-gram gram-ridgecv-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh gram-ridgecv-taxi x_linear ridge-cv taxi 1 2 "" "-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM"
+CMD lane/apple-fast-gram gram-lda-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh gram-lda-istella x_prep lda-clf istella 1 2 "" "-D MOJOLEARN_X_PREP_CLASS_COV_GRID"
+CMD lane/apple-fast-gram gram-qda-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh gram-qda-istella x_prep qda istella 1 2 "" "-D MOJOLEARN_X_PREP_CLASS_COV_GRID"

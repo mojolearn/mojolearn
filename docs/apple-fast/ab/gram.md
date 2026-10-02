@@ -15,9 +15,9 @@ enqueue only). No witness (as `xg_gram_kernel`); enetcv_fast.mojo is untouched.
 
 | switch | kind | site | what it changes under FAST on Apple |
 |---|---|---|---|
-| `MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1` | env, read in `fit_device` | `x_linear/device.mojo` fit_device (ip[4] = 2, main's `pre_all` flag); `x_linear/lars.mojo` lars_fit reads it | Lars / LassoLars: means, centered Gram, X'y and the y mean from `fast_gram_into` into fw before `fit_kernel` (the words main's moments grid `mg_means_kernel` / `mg_cross_kernel` fills); the team skips `t_col_means`, `t_mean`, `t_centered_gram`, `t_centered_xty`; neither the moments grid nor the sliced `xg_gram_kernel` is launched |
-| `MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1` | env, read in `fit_device` and the k-fold RidgeCV loop | `x_linear/device.mojo` (ridge ip[4] = 1, main's `pre` flag, `ridge_pre` off; the k-fold unit A); `x_linear/ridge.mojo` `_ridge_fit_team` reads it (main's code) | RidgeClassifier (and LOO RidgeCV): xm, ym (T targets), G, X'Y from the grid, the team skips its cell chains (unweighted fits only). k-fold RidgeCV (the board's cv=5): each fold's means, Gram and X'y from `fast_gram_into` instead of `kf_means_kernel` + `kf_cells_kernel` |
-| `MOJOLEARN_X_PREP_CLASS_COV_GRID=1` | env, read in `run_program_device_ptr` | `x_prep/device.mojo` (ops 40 `qda_cov` and 13 `matmul` when Gram-shaped, `_matmul_is_gram`) | QDA: each class's covariance (divisor CNT[k]) as the masked grid Gram, one launch pair a class, into the unit's COV words. LDA (solver svd): the Gram `matmul` Z2'Z2 as the uncentered grid Gram into C. The other stages are the units' |
+| `-D MOJOLEARN_X_LINEAR_LARS_FAST_GRAM` | define (`XL_LARS_FAST_GRAM`, x_linear binding) | `x_linear/device.mojo` fit_device (ip[4] = 2, main's `pre_all` flag); `x_linear/lars.mojo` lars_fit reads it | Lars / LassoLars: means, centered Gram, X'y and the y mean from `fast_gram_into` into fw before `fit_kernel` (the words main's moments grid `mg_means_kernel` / `mg_cross_kernel` fills); the team skips `t_col_means`, `t_mean`, `t_centered_gram`, `t_centered_xty`; neither the moments grid nor the sliced `xg_gram_kernel` is launched |
+| `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM` | define (`XL_RIDGE_FAST_GRAM`, x_linear binding) | `x_linear/device.mojo` (ridge ip[4] = 1, main's `pre` flag, `ridge_pre` off; the k-fold unit A); `x_linear/ridge.mojo` `_ridge_fit_team` reads it (main's code) | RidgeClassifier (and LOO RidgeCV): xm, ym (T targets), G, X'Y from the grid, the team skips its cell chains (unweighted fits only). k-fold RidgeCV (the board's cv=5): each fold's means, Gram and X'y from `fast_gram_into` instead of `kf_means_kernel` + `kf_cells_kernel` |
+| `-D MOJOLEARN_X_PREP_CLASS_COV_GRID` | define (x_prep binding) | `x_prep/device.mojo` (ops 40 `qda_cov` and 13 `matmul` when Gram-shaped, `_matmul_is_gram`) | QDA: each class's covariance (divisor CNT[k]) as the masked grid Gram, one launch pair a class, into the unit's COV words. LDA (solver svd): the Gram `matmul` Z2'Z2 as the uncentered grid Gram into C. The other stages are the units' |
 
 ## Causes (what was slow)
 - lars / lasso-lars taxi 5.3x: `xg_gram_kernel` (`x_linear/device.mojo`) is one thread per upper cell
@@ -34,7 +34,7 @@ enqueue only). No witness (as `xg_gram_kernel`); enetcv_fast.mojo is untouched.
 ## Keep rule
 A switch becomes the FAST default when its arm is faster on the M3 and held-out quality stays within
 FAST's run-to-run spread (light A/Bs: old FAST vs new FAST, `1 2`, no -ident lines; the IDENTICAL
-hash check is the manager's); then the env read goes, the old team passes stay as the IDENTICAL /
+hash check is the manager's); then the define goes (the arm is the code), the old team passes stay as the IDENTICAL /
 other-vendor code. One dataset per switch first (taxi for the x_linear switches, where 16 features
 make main's moments grid ONE block per launch; istella for x_prep's); the second after a win.
 
@@ -57,3 +57,6 @@ this lane any more (main's flags serve).
   `mut ctx: DeviceContext` (as `enetcv_fast`); device pointers cross as
   `FP(unsafe_from_address=Int(buf.unsafe_ptr()))`; x_prep imports `x_linear.fast_gram` (the build's
   `-I .` resolves it, as `naive_bayes.da` does).
+
+Switches are build-time defines (COMMON.md: no env read on the fit path); the A/B lines use
+`tools/afc_ab_def.sh` (copied from lane/apple-fast-tier) with the x_linear and x_prep bindings.
