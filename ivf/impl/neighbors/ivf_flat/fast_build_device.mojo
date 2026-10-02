@@ -23,7 +23,10 @@ lists by a device histogram, scan and ranked scatter, the closure condition
 of its block with the same label, and the block's count per list, both from
 the staged labels, no atomics), `csr_prefix_kernel` (per list, the running
 count over the blocks in block order, and the list size),
-`csr_offsets_kernel` (one threadgroup: the exclusive scan of the sizes),
+`csr_offsets_block_kernel` + `csr_offsets_add_kernel` (the exclusive scan
+of the sizes in two levels: a block-local scan per FB_T lists writing block
+totals, then each block adding the totals before it; at most CSR_OFF_BLOCKS
+blocks, a comptime bound, so no one-block launch over n_lists),
 `csr_scatter_kernel` (slot = offset of the list + the earlier blocks' count
 + the rank), `csr_gather_data_kernel` (the permuted vectors). The slot of
 row i is its position among the rows of its label in ascending i, which is
@@ -134,40 +137,62 @@ def csr_prefix_kernel(nb: Int32, n_lists: Int32, bcount: I32P, bprefix: I32P, si
         sizes.unsafe_store(l, run)
 
 
-def csr_offsets_kernel(n_lists: Int32, sizes: I32P, offsets: I32P):
-    """ONE threadgroup of FB_T threads: offsets[0 .. n_lists] = the
-    exclusive scan of sizes (n_lists <= CSR_LISTS_MAX). Thread t sums its
-    run of CSR_LISTS_MAX / FB_T lists, the FB_T totals are scanned in
-    threadgroup memory (Hillis-Steele), and each thread writes its run's
-    running offsets."""
+#: blocks of the two-level offsets scan: n_lists <= CSR_LISTS_MAX, FB_T lists
+#: per block, so the block totals are at most this many (a comptime bound)
+comptime CSR_OFF_BLOCKS = CSR_LISTS_MAX // FB_T
+
+
+def csr_offsets_block_kernel(n_lists: Int32, sizes: I32P, offsets: I32P, btot: I32P):
+    """Level 1 of the offsets scan. Block b, list l = b FB_T + t:
+    offsets[l] = the exclusive scan of the block's sizes (Hillis-Steele in
+    threadgroup memory), btot[b] = the block's total. ceil(n_lists / FB_T)
+    blocks (<= CSR_OFF_BLOCKS)."""
+    var b = Int(block_idx.x)
     var t = Int(thread_idx.x)
     var nl = Int(n_lists)
-    comptime PER = CSR_LISTS_MAX // FB_T
-    var tot = stack_allocation[FB_T, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    var local = Int32(0)
-    for q in range(PER):
-        var l = t * PER + q
-        if l < nl:
-            local = local + sizes.unsafe_load(l)
-    tot[t] = local
+    var l = b * FB_T + t
+    var sc = stack_allocation[FB_T, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var v0 = Int32(0)
+    if l < nl:
+        v0 = sizes.unsafe_load(l)
+    sc[t] = v0
     barrier()
     var step = 1
     while step < FB_T:
         var v = Int32(0)
         if t >= step:
-            v = tot[t - step]
+            v = sc[t - step]
         barrier()
-        tot[t] = tot[t] + v
+        sc[t] = sc[t] + v
         barrier()
         step *= 2
-    var run = tot[t] - local
-    for q in range(PER):
-        var l = t * PER + q
-        if l < nl:
-            offsets.unsafe_store(l, run)
-            run = run + sizes.unsafe_load(l)
+    if l < nl:
+        offsets.unsafe_store(l, sc[t] - v0)
     if t == 0:
-        offsets.unsafe_store(nl, tot[FB_T - 1])
+        btot.unsafe_store(b, sc[FB_T - 1])
+
+
+def csr_offsets_add_kernel(n_lists: Int32, sizes: I32P, btot: I32P, offsets: I32P):
+    """Level 2, the same grid: block b adds the totals of the blocks before
+    it (CSR_OFF_BLOCKS candidates, a comptime bound) to its lists' offsets;
+    the thread of the last list writes offsets[n_lists] = its offset + its
+    size (the total). The same integer sums as one serial scan: the same
+    offsets."""
+    var b = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var nl = Int(n_lists)
+    var l = b * FB_T + t
+    var carry = Int32(0)
+    comptime for q in range(CSR_OFF_BLOCKS):
+        if q < b:
+            carry = carry + btot.unsafe_load(q)
+    if l < nl:
+        var o = offsets.unsafe_load(l) + carry
+        offsets.unsafe_store(l, o)
+        if l == nl - 1:
+            offsets.unsafe_store(nl, o + sizes.unsafe_load(l))
+    if nl == 0 and b == 0 and t == 0:
+        offsets.unsafe_store(0, Int32(0))
 
 
 def csr_scatter_kernel(
@@ -266,6 +291,7 @@ def fast_list_layout_device(
     var dbprefix = ctx.enqueue_create_buffer[DType.int32](nb * n_lists)
     var dsizes = ctx.enqueue_create_buffer[DType.int32](n_lists)
     var doff = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
+    var dbtot = ctx.enqueue_create_buffer[DType.int32](CSR_OFF_BLOCKS)
     var dind = ctx.enqueue_create_buffer[DType.uint32](n_rows)
     var ddata = ctx.enqueue_create_buffer[DType.float32]((n_rows * dim) if with_data else 1)
     ctx.enqueue_function[csr_count_kernel](
@@ -276,8 +302,14 @@ def fast_list_layout_device(
         Int32(nb), Int32(n_lists), dbcount.unsafe_ptr(), dbprefix.unsafe_ptr(), dsizes.unsafe_ptr(),
         grid_dim=_grid(n_lists), block_dim=FB_T,
     )
-    ctx.enqueue_function[csr_offsets_kernel](
-        Int32(n_lists), dsizes.unsafe_ptr(), doff.unsafe_ptr(), grid_dim=1, block_dim=FB_T,
+    # the offsets in two launches over ceil(n_lists / FB_T) blocks (never one
+    # block over n_lists: the block totals are CSR_OFF_BLOCKS at most)
+    var nob = (n_lists + FB_T - 1) // FB_T
+    ctx.enqueue_function[csr_offsets_block_kernel](
+        Int32(n_lists), dsizes.unsafe_ptr(), doff.unsafe_ptr(), dbtot.unsafe_ptr(), grid_dim=nob, block_dim=FB_T,
+    )
+    ctx.enqueue_function[csr_offsets_add_kernel](
+        Int32(n_lists), dsizes.unsafe_ptr(), dbtot.unsafe_ptr(), doff.unsafe_ptr(), grid_dim=nob, block_dim=FB_T,
     )
     ctx.enqueue_function[csr_scatter_kernel](
         Int32(n_rows), Int32(n_lists), labels.unsafe_ptr(), dranks.unsafe_ptr(), dbprefix.unsafe_ptr(),
@@ -297,6 +329,7 @@ def fast_list_layout_device(
         list_data = List[Float32]()
     _ = ddata^
     _ = dind^
+    _ = dbtot^
     _ = doff^
     _ = dsizes^
     _ = dbprefix^
