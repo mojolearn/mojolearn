@@ -2360,6 +2360,15 @@ def _build_est(lane, arm, D):
     info["config"] = "%s(%s)" % (what, ", ".join("%s=%r" % (k, v) for k, v in sorted(params.items())
                                                 if k != "score_func"))
     X, Xq = dev.get("X"), dev.get("Xq")
+    if arm in OURS_ARMS and s["block"] == "countclf" and X is not None and t == "clf":
+        # lane apple-fast-nb: a FAST x_prep binding built on Apple with -D MOJOLEARN_NB_TEXT_CSR
+        # takes the count block as scipy CSR without densifying it (`_nb_csr_ready`); the
+        # conversion is outside the clock. Every other build gets the dense block as before.
+        _, cls = _ours_class(lane)
+        ready = getattr(cls, "_nb_csr_ready", None)
+        if ready is not None and ready():
+            import scipy.sparse as sp
+            X, Xq = sp.csr_matrix(X), sp.csr_matrix(Xq)
     y = dev.get("y")
     if t == "semi":
         y = D["y_semi"]
