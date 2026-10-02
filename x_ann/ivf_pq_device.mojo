@@ -15,6 +15,8 @@ from x_ann.switches import (
     ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_HOST_RESIDUALS, ANN3_PQ_SEED, ANN3_ROW_THREADS,
 )
 from x_ann.kpp_seed import kpp_seed
+from x_ann.fast_env import ANN_FAST_APPLE, ivfpq_fast_device_codebooks
+from x_ann.pq_kmeans_device import PQK_CODES_MAX, PQK_LEN_MAX, pq_codebooks_device
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.ivf_scan_device import ivf_scan_search
 
@@ -297,24 +299,47 @@ def ivf_pq_build_device(
     var host_sample = False
     comptime if PQ_FAST_TRAINSET and ANN3_PQ_HOST_RESIDUALS:
         host_sample = n > PQ_FAST_ROWS_PER_CODE * n_codes
+    # FAST on Apple, `MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1` (lane/apple-
+    # fast-ann, 2026-10-02; x_ann/pq_kmeans_device.mojo): the codebooks of
+    # every subspace from one batched device Lloyd loop over the residuals
+    # already in `dr`, on the same sample size as `_codebooks` (a stride
+    # sample). Cause: `_codebooks` downloads the n x rot_dim residuals,
+    # gathers each subspace's sample on the host and runs cluster/'s
+    # `kmeans_fit` once per subspace in series (55 host-driven fits on
+    # Istella), each with its seeding rounds and `synchronize`s. The
+    # device codebooks are downloaded once for the index; the encode reads
+    # them where they are. Moves FAST bits: paired recall check.
+    var dev_cb = False
+    comptime if ANN_FAST_APPLE:
+        dev_cb = ivfpq_fast_device_codebooks() and pq_len <= PQK_LEN_MAX and n_codes <= PQK_CODES_MAX
     var codebooks = List[Float32]()
-    if host_sample:
-        var n_train = PQ_FAST_ROWS_PER_CODE * n_codes
-        var rows = ivf_trainset_rows(n, n_train, UInt64(seed))
-        var rs = List[Float32](length=n_train * rot_dim, fill=Float32(0.0))
-        for i in range(n_train):
-            var row = rows[i]
-            var l = Int(labels[row])
-            for c in range(dim):
-                rs[i * rot_dim + c] = x[row * dim + c] - centers[l * dim + c]
-        st.host("residuals")
-        codebooks = _codebooks(rs, n_train, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+    var dcb: DeviceBuffer[DType.float32]
+    if dev_cb:
+        var n_train = n
+        comptime if PQ_FAST_TRAINSET:
+            if n > PQ_FAST_ROWS_PER_CODE * n_codes:
+                n_train = PQ_FAST_ROWS_PER_CODE * n_codes
+        dcb = pq_codebooks_device(ctx, dr, n, n_train, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+        codebooks = download_f32(ctx, dcb, pq_dim * n_codes * pq_len)
+        st.host("codebooks")
     else:
-        var r = download_f32(ctx, dr, n * rot_dim)
-        st.host("residuals")
-        codebooks = _codebooks(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
-    st.host("codebooks")
-    var dcb = upload_f32(ctx, codebooks)
+        if host_sample:
+            var n_train = PQ_FAST_ROWS_PER_CODE * n_codes
+            var rows = ivf_trainset_rows(n, n_train, UInt64(seed))
+            var rs = List[Float32](length=n_train * rot_dim, fill=Float32(0.0))
+            for i in range(n_train):
+                var row = rows[i]
+                var l = Int(labels[row])
+                for c in range(dim):
+                    rs[i * rot_dim + c] = x[row * dim + c] - centers[l * dim + c]
+            st.host("residuals")
+            codebooks = _codebooks(rs, n_train, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+        else:
+            var r = download_f32(ctx, dr, n * rot_dim)
+            st.host("residuals")
+            codebooks = _codebooks(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+        st.host("codebooks")
+        dcb = upload_f32(ctx, codebooks)
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * pq_dim)
     _enqueue_assign(ctx, n, _dp(dr), _dp(dcb), pq_dim, rot_dim, pq_len, n_codes, _dp(dcodes))
     ctx.synchronize()
