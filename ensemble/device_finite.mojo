@@ -66,7 +66,7 @@ struct ForestFiniteScan(Movable):
         self.hflag = ctx.enqueue_create_host_buffer[DType.int32](1)
 
     def enqueue(
-        mut self, ctx: DeviceContext, data: DeviceBuffer[DType.float32], n: Int
+        mut self, ctx: DeviceContext, mut data: DeviceBuffer[DType.float32], n: Int
     ) raises:
         self.dflag.enqueue_fill(Int32(0))
         if n > 0:
