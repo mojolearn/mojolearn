@@ -21,7 +21,6 @@ the same bits (IDENTITY_PATHS.md "The rule"):
 
 Nothing here imports a GPU module, so the CPU-only host binding compiles it.
 """
-from std.sys.info import is_gpu
 from checks.numerics import (
     ftz,
     identical_mul_add,
@@ -38,7 +37,6 @@ from checks.numerics import (
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from std.sys.info import is_gpu
-from core.host_parallel import host_parallelize
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
@@ -490,18 +488,64 @@ def take_cols_item(t: Int, src: FP, cols: IP, res: FP, n: Int, src_c: Int, c: In
 
 
 # DEVIATION 5209 (row 123)
-def variance_item(t: Int, x: FP, res: FP, count: Int):
-    """numpy's `X.var()` over every element, ONE item: the mean by an
-    ascending fold and one division, then the ascending fold of squared
-    deviations and one division (population variance, ddof = 0)."""
+comptime XN_FOLD_BLOCK = 2048
+"""The fixed block of the lane's blocked folds (variance, the absolute-
+difference sum, SVGP's y^T y): elements [t * XN_FOLD_BLOCK, (t + 1) *
+XN_FOLD_BLOCK) fold from zero in ascending order into partial t (one item per
+block, the device's full width), then the partials fold from zero in
+ascending order (one item). The host runs the same items, so the order is
+the device's by construction."""
+
+
+@always_inline
+def xn_fold_blocks(count: Int) -> Int:
+    """The number of XN_FOLD_BLOCK blocks (partials) over `count` elements."""
+    return (count + XN_FOLD_BLOCK - 1) // XN_FOLD_BLOCK if count > 0 else 0
+
+
+@always_inline
+def _fold_parts(part: FP, nb: Int) -> Float32:
+    """The partials folded from zero, ascending."""
     var acc = Float32(0)
-    for i in range(count):
+    for i in range(nb):
+        acc = _add(acc, part.unsafe_load(i))
+    return acc
+
+
+def variance_part_item(t: Int, x: FP, res: FP, part: FP, count: Int):
+    """numpy's `X.var()` over every element (population variance, ddof = 0),
+    stage 1 of 4: block t's ascending sum from zero into part[t]."""
+    var lo = t * XN_FOLD_BLOCK
+    var hi = min(lo + XN_FOLD_BLOCK, count)
+    var acc = Float32(0)
+    for i in range(lo, hi):
         acc = _add(acc, x.unsafe_load(i))
-    var mean = ftz(identical_div(acc, Float32(count)))
+    part.unsafe_store(t, acc)
+
+
+def variance_mean_item(t: Int, x: FP, res: FP, part: FP, count: Int):
+    """Stage 2 of 4, ONE item: the partials folded ascending, one division;
+    the mean is parked in res[0] for stage 3."""
+    var acc = _fold_parts(part, xn_fold_blocks(count))
+    res.unsafe_store(0, ftz(identical_div(acc, Float32(count))))
+
+
+def variance_ss_part_item(t: Int, x: FP, res: FP, part: FP, count: Int):
+    """Stage 3 of 4: block t's ascending fold of squared deviations from the
+    mean (res[0]) from zero into part[t]."""
+    var mean = res.unsafe_load(0)
+    var lo = t * XN_FOLD_BLOCK
+    var hi = min(lo + XN_FOLD_BLOCK, count)
     var ss = Float32(0)
-    for i in range(count):
+    for i in range(lo, hi):
         var df = _sub(x.unsafe_load(i), mean)
         ss = ftz(identical_mul_add(df, df, ss))
+    part.unsafe_store(t, ss)
+
+
+def variance_fin_item(t: Int, x: FP, res: FP, part: FP, count: Int):
+    """Stage 4 of 4, ONE item: the partials folded ascending, one division."""
+    var ss = _fold_parts(part, xn_fold_blocks(count))
     res.unsafe_store(0, ftz(identical_div(ss, Float32(count))))
 
 
@@ -955,11 +999,34 @@ def skew_transform_item(t: Int, lx: FP, w: FP, off: FP, res: FP, n: Int, d: Int,
 
 # ------------------------------------------------------------------ label propagation / spreading
 # DEVIATION 5209 (row 123)
-def absdiff_sum_item(t: Int, a: FP, b: FP, res: FP, count: Int):
-    """sum |a - b| over every element, ascending, ONE item."""
+@always_inline
+def _absdiff_block(a: FP, b: FP, t: Int, count: Int) -> Float32:
+    """Block t of sum |a - b|, ascending from zero."""
+    var lo = t * XN_FOLD_BLOCK
+    var hi = min(lo + XN_FOLD_BLOCK, count)
     var acc = Float32(0)
-    for i in range(count):
+    for i in range(lo, hi):
         acc = _add(acc, abs(_sub(a.unsafe_load(i), b.unsafe_load(i))))
+    return acc
+
+
+def absdiff_part_item(t: Int, a: FP, b: FP, res: FP, part: FP, count: Int):
+    """sum |a - b| over every element, stage 1 of 2: block t into part[t]."""
+    part.unsafe_store(t, _absdiff_block(a, b, t, count))
+
+
+def absdiff_fin_item(t: Int, a: FP, b: FP, res: FP, part: FP, count: Int):
+    """Stage 2 of 2, ONE item: the partials folded ascending."""
+    res.unsafe_store(0, _fold_parts(part, xn_fold_blocks(count)))
+
+
+def absdiff_sum_item(t: Int, a: FP, b: FP, res: FP, count: Int):
+    """sum |a - b| over every element, ONE host item in the blocked order of
+    `absdiff_part_item` + `absdiff_fin_item` (the resident label-propagation
+    loops' convergence test, the same bits as the `absdiff_sum` op)."""
+    var acc = Float32(0)
+    for blk in range(xn_fold_blocks(count)):
+        acc = _add(acc, _absdiff_block(a, b, blk, count))
     res.unsafe_store(0, acc)
 
 
@@ -1198,22 +1265,35 @@ def pagerank_step_item(t: Int, q: FP, x: FP, p: FP, dw: FP, dangling: IP, res: F
 
 
 # DEVIATION 5217 (row 129)
-def graph_symmetry_item(t: Int, a: FP, flags: IP, n: Int):
+def graph_symmetry_row_item(t: Int, a: FP, flags: IP, rf: IP, n: Int):
     """The adjacency checks the graph estimators' wrappers made in Python
     over `A.tolist()` (lane neural-pass14; at the board's 20,000 nodes that
-    was a 400-million-cell Python scan): `flags[0] = 1` when some cell
-    `a[u, v]` with `u < v` is not equal to `a[v, u]` (a NaN is not equal to
-    itself, as in Python), `flags[1] = 1` when some cell is nonzero. One
-    item, integers out, no arithmetic."""
+    was a 400-million-cell Python scan), stage 1 of 2, one item per row u =
+    t: rf[2u] = 1 when some cell `a[u, v]` with `u < v` is not equal to
+    `a[v, u]` (a NaN is not equal to itself, as in Python), rf[2u + 1] = 1
+    when some cell of row u is nonzero. Integers out, no arithmetic."""
+    var asym = Int32(0)
+    var nonzero = Int32(0)
+    for v in range(n):
+        var x = a.unsafe_load(t * n + v)
+        if x != Float32(0):
+            nonzero = Int32(1)
+        if v > t and x != a.unsafe_load(v * n + t):
+            asym = Int32(1)
+    rf.unsafe_store(2 * t, asym)
+    rf.unsafe_store(2 * t + 1, nonzero)
+
+
+def graph_symmetry_fin_item(t: Int, a: FP, flags: IP, rf: IP, n: Int):
+    """Stage 2 of 2, ONE item: the rows' flags OR-ed, rows ascending
+    (integers: the same flags as the one-item scan)."""
     var asym = Int32(0)
     var nonzero = Int32(0)
     for u in range(n):
-        for v in range(n):
-            var x = a.unsafe_load(u * n + v)
-            if x != Float32(0):
-                nonzero = Int32(1)
-            if v > u and x != a.unsafe_load(v * n + u):
-                asym = Int32(1)
+        if rf.unsafe_load(2 * u) != Int32(0):
+            asym = Int32(1)
+        if rf.unsafe_load(2 * u + 1) != Int32(0):
+            nonzero = Int32(1)
     flags.unsafe_store(0, asym)
     flags.unsafe_store(1, nonzero)
 
@@ -1231,182 +1311,49 @@ def cc_step_item(t: Int, a: FP, lab: IP, res: IP, n: Int):
     res.unsafe_store(t, best)
 
 
-def _louvain_modularity(w: FP, comm: IP, n: Int, m: Float32, resolution: Float32, tot: FP, inner: FP) -> Float32:
-    """networkx `modularity` on the dense symmetric graph w (self-loops on the
-    diagonal, each edge counted once): sum_c L_c / m - resolution (deg_c / 2m)^2,
-    communities folded in ascending id. tot / inner are n floats of scratch."""
-    for c in range(n):
-        tot.unsafe_store(c, Float32(0))
-        inner.unsafe_store(c, Float32(0))
-    for u in range(n):
-        var cu = Int(comm.unsafe_load(u))
-        var deg = Float32(0)
-        for v in range(n):
-            var wv = w.unsafe_load(u * n + v)
-            deg = _add(deg, wv)
-            if v == u:
-                deg = _add(deg, wv)
-                inner.unsafe_store(cu, _add(inner.unsafe_load(cu), wv))
-            elif v > u and Int(comm.unsafe_load(v)) == cu:
-                inner.unsafe_store(cu, _add(inner.unsafe_load(cu), wv))
-        tot.unsafe_store(cu, _add(tot.unsafe_load(cu), deg))
-    var q = Float32(0)
-    var two_m = ftz(identical_mul(Float32(2), m))
-    for c in range(n):
-        var lc = ftz(identical_div(inner.unsafe_load(c), m))
-        var fr = ftz(identical_div(tot.unsafe_load(c), two_m))
-        q = _add(q, _sub(lc, ftz(identical_mul(resolution, ftz(identical_mul(fr, fr))))))
-    return q
-
-
-# DEVIATION 5204 (row 129)
-def louvain_item(
-    t: Int, a: FP, labels: IP, info: FP, w: FP, w2: FP, comm: IP, node_of: IP, deg: FP, stot: FP, k2c: FP, tmp: FP,
-    n: Int, max_level: Int, resolution: Float32, threshold: Float32,
-):
-    """Louvain community detection, sequential, ONE item (networkx
-    `louvain_partitions` / `_one_level` / `_gen_graph`; cuGraph
-    cpp/src/community/louvain_impl.cuh is the parallel, order-dependent
-    reference). PINNED ORDER (DEVIATION 5204): nodes are visited in ascending
-    id (networkx shuffles them by `seed`), candidate communities are scanned
-    in ascending id and a move needs a STRICTLY larger gain, so equal gains
-    go to the lowest community id. Float32 folds in ascending order. `a` is
-    the n x n symmetric weight matrix (diagonal = self-loops). labels[u]
-    (original node u) ends as its community, numbered by first appearance.
-    info = [modularity, levels]."""
-    # m = total edge weight, each undirected edge once, self-loops once
-    var m = Float32(0)
-    for u in range(n):
-        for v in range(u, n):
-            m = _add(m, a.unsafe_load(u * n + v))
-    var two_m2 = ftz(identical_mul(Float32(2), ftz(identical_mul(m, m))))
-    var nn = n
-    for u in range(n):
-        labels.unsafe_store(u, Int32(u))
-        for v in range(n):
-            w.unsafe_store(u * n + v, a.unsafe_load(u * n + v))
-    for u in range(n):
-        comm.unsafe_store(u, Int32(u))
-    var levels = 0
-    var mod = _louvain_modularity(w, comm, nn, m, resolution, tmp, k2c)
-    while max_level <= 0 or levels < max_level:
-        # ---- networkx `_one_level` on the current graph w (nn nodes) ----
-        for u in range(nn):
-            comm.unsafe_store(u, Int32(u))
-            var dg = Float32(0)
-            for v in range(nn):
-                dg = _add(dg, w.unsafe_load(u * nn + v))
-            dg = _add(dg, w.unsafe_load(u * nn + u))
-            deg.unsafe_store(u, dg)
-            stot.unsafe_store(u, dg)
-        var improvement = False
-        var moves = 1
-        while moves > 0:
-            moves = 0
-            for u in range(nn):
-                var cu = Int(comm.unsafe_load(u))
-                for c in range(nn):
-                    k2c.unsafe_store(c, Float32(0))
-                for v in range(nn):
-                    if v != u:
-                        var wv = w.unsafe_load(u * nn + v)
-                        if wv != Float32(0):
-                            var cv = Int(comm.unsafe_load(v))
-                            k2c.unsafe_store(cv, _add(k2c.unsafe_load(cv), wv))
-                var du = deg.unsafe_load(u)
-                stot.unsafe_store(cu, _sub(stot.unsafe_load(cu), du))
-                var remove_cost = _add(
-                    -ftz(identical_div(k2c.unsafe_load(cu), m)),
-                    ftz(identical_div(ftz(identical_mul(resolution, ftz(identical_mul(stot.unsafe_load(cu), du)))), two_m2)),
-                )
-                var best = cu
-                var best_gain = Float32(0)
-                for c in range(nn):
-                    var kc = k2c.unsafe_load(c)
-                    if kc == Float32(0):
-                        continue
-                    var gain = _sub(
-                        _add(remove_cost, ftz(identical_div(kc, m))),
-                        ftz(identical_div(ftz(identical_mul(resolution, ftz(identical_mul(stot.unsafe_load(c), du)))), two_m2)),
-                    )
-                    if gain > best_gain:
-                        best_gain = gain
-                        best = c
-                stot.unsafe_store(best, _add(stot.unsafe_load(best), du))
-                if best != cu:
-                    comm.unsafe_store(u, Int32(best))
-                    moves += 1
-                    improvement = True
-        if levels > 0 and not improvement:
-            break
-        # renumber by ascending old community id (their filter(len, partition))
-        for c in range(nn):
-            node_of.unsafe_store(c, Int32(-1))
-        var nc = 0
-        for c in range(nn):
-            var used = False
-            for u in range(nn):
-                if Int(comm.unsafe_load(u)) == c:
-                    used = True
-                    break
-            if used:
-                node_of.unsafe_store(c, Int32(nc))
-                nc += 1
-        for u in range(nn):
-            comm.unsafe_store(u, node_of.unsafe_load(Int(comm.unsafe_load(u))))
-        for u in range(n):
-            labels.unsafe_store(u, comm.unsafe_load(Int(labels.unsafe_load(u))))
-        levels += 1
-        var new_mod = _louvain_modularity(w, comm, nn, m, resolution, tmp, k2c)
-        if not (_sub(new_mod, mod) > threshold):
-            break
-        mod = new_mod
-        # aggregate (their _gen_graph): W'[c,d] = sum of w[u,v] over u in c, v in d,
-        # each undirected edge once; an edge inside c becomes c's self-loop
-        for i in range(nc * nc):
-            w2.unsafe_store(i, Float32(0))
-        for u in range(nn):
-            var cu2 = Int(comm.unsafe_load(u))
-            for v in range(u, nn):
-                var wv = w.unsafe_load(u * nn + v)
-                if wv == Float32(0):
-                    continue
-                var cv2 = Int(comm.unsafe_load(v))
-                w2.unsafe_store(cu2 * nc + cv2, _add(w2.unsafe_load(cu2 * nc + cv2), wv))
-                if cu2 != cv2:
-                    w2.unsafe_store(cv2 * nc + cu2, _add(w2.unsafe_load(cv2 * nc + cu2), wv))
-        for i in range(nc * nc):
-            w.unsafe_store(i, w2.unsafe_load(i))
-        nn = nc
-        for u in range(nn):
-            comm.unsafe_store(u, Int32(u))
-    info.unsafe_store(0, _louvain_modularity(a, labels, n, m, resolution, tmp, k2c))
-    info.unsafe_store(1, Float32(levels))
-
-
 # ------------------------------------------------------------------ SVGP
 # DEVIATION 5205 (row 129)
-def _chol_inplace(a: FP, m: Int) -> Bool:
-    """Lower Cholesky of the m x m row-major a, in place (upper triangle
-    zeroed), columns left to right, each fold ascending. False when a pivot
-    is not positive."""
-    for j in range(m):
-        var s = a.unsafe_load(j * m + j)
-        for k in range(j):
-            var l = a.unsafe_load(j * m + k)
-            s = ftz(identical_mul_add(-l, l, s))
-        if not (s > Float32(0)):
-            return False
-        var d = ftz(identical_sqrt(s))
-        a.unsafe_store(j * m + j, d)
-        for i in range(j + 1, m):
-            var t = a.unsafe_load(i * m + j)
-            for k in range(j):
-                t = ftz(identical_mul_add(-a.unsafe_load(i * m + k), a.unsafe_load(j * m + k), t))
-            a.unsafe_store(i * m + j, ftz(identical_div(t, d)))
-        for i in range(j):
+def _chol_col(a: FP, dv: FP, fl: IP, c: Int, m: Int, i: Int, j: Int):
+    """Column j of the lower Cholesky of the m x m row-major a, row i (one
+    item per row, one launch per column, columns left to right; each fold
+    ascending, the left-looking column of the one-item factorization, so
+    every stored value is that factorization's). Every row recomputes the
+    pivot fold itself (no value passes between the rows of one launch); the
+    pivot goes to dv[j] and reaches the diagonal in `_chol_fix` (the rows of
+    this launch still read the input diagonal). A pivot that is not positive
+    records column j in fl[c] (m while none has failed); that column and
+    every later one stay untouched, as the one-item factorization's early
+    return left them."""
+    if i < j or Int(fl.unsafe_load(c)) < j:
+        return
+    var s = a.unsafe_load(j * m + j)
+    for k in range(j):
+        var l = a.unsafe_load(j * m + k)
+        s = ftz(identical_mul_add(-l, l, s))
+    if not (s > Float32(0)):
+        if i == j:
+            fl.unsafe_store(c, Int32(j))
+        return
+    var d = ftz(identical_sqrt(s))
+    if i == j:
+        dv.unsafe_store(j, d)
+        return
+    var tt = a.unsafe_load(i * m + j)
+    for k in range(j):
+        tt = ftz(identical_mul_add(-a.unsafe_load(i * m + k), a.unsafe_load(j * m + k), tt))
+    a.unsafe_store(i * m + j, ftz(identical_div(tt, d)))
+
+
+@always_inline
+def _chol_fix(a: FP, dv: FP, fl: IP, c: Int, m: Int, i: Int, j: Int):
+    """After `_chol_col`'s last column: a factored column's pivot onto the
+    diagonal and its upper triangle zeroed (columns from the failed one on
+    stay as they were)."""
+    if j < Int(fl.unsafe_load(c)):
+        if i < j:
             a.unsafe_store(i * m + j, Float32(0))
-    return True
+        elif i == j:
+            a.unsafe_store(j * m + j, dv.unsafe_load(j))
 
 
 def _chol_solve(l: FP, m: Int, b: FP, x: FP):
@@ -1424,69 +1371,6 @@ def _chol_solve(l: FP, m: Int, b: FP, x: FP):
         x.unsafe_store(i, ftz(identical_div(s, l.unsafe_load(i * m + i))))
 
 
-def _svgp_c_cols(cmat: FP, luu: FP, ls: FP, e: FP, col: FP, m: Int, j0: Int, j1: Int):
-    """Columns [j0, j1) of C = Kuu^-1 - Sigma^-1 (svgp_item's loop)."""
-    for j in range(j0, j1):
-        for i in range(m):
-            e.unsafe_store(i, Float32(1) if i == j else Float32(0))
-        _chol_solve(luu, m, e, col)
-        for i in range(m):
-            cmat.unsafe_store(i * m + j, col.unsafe_load(i))
-        _chol_solve(ls, m, e, col)
-        for i in range(m):
-            cmat.unsafe_store(i * m + j, _sub(cmat.unsafe_load(i * m + j), col.unsafe_load(i)))
-
-
-def _svgp_q_cols(kuu: FP, qsqrt: FP, ls: FP, e: FP, col: FP, m: Int, jitter: Float32, j0: Int, j1: Int):
-    """Columns [j0, j1) of Kuu Sigma^-1 Kuu (svgp_item's loop, before its Cholesky)."""
-    for j in range(j0, j1):
-        for i in range(m):
-            var kv = kuu.unsafe_load(i * m + j)
-            if i == j:
-                kv = _add(kv, jitter)
-            e.unsafe_store(i, kv)
-        _chol_solve(ls, m, e, col)
-        for i in range(m):
-            var s = Float32(0)
-            for k in range(m):
-                var kv = kuu.unsafe_load(i * m + k)
-                if i == k:
-                    kv = _add(kv, jitter)
-                s = ftz(identical_mul_add(kv, col.unsafe_load(k), s))
-            qsqrt.unsafe_store(i * m + j, s)
-
-
-def _svgp_cq_par(kuu: FP, cmat: FP, qsqrt: FP, luu: FP, ls: FP, m: Int, jitter: Float32):
-    """`_svgp_c_cols` and `_svgp_q_cols` over all columns as host tasks, one
-    column of each per task with its own scratch (host only)."""
-    def task(t: Int) {imm kuu, imm cmat, imm qsqrt, imm luu, imm ls, imm m, imm jitter}:
-        var sc = List[Float32](length=2 * m, fill=Float32(0))
-        var e = FP(unsafe_from_address=Int(sc.unsafe_ptr()))
-        var col = e.unsafe_offset(m)
-        if t < m:
-            _svgp_c_cols(cmat, luu, ls, e, col, m, t, t + 1)
-        else:
-            _svgp_q_cols(kuu, qsqrt, ls, e, col, m, jitter, t - m, t - m + 1)
-        _ = sc^
-
-    host_parallelize(task, 2 * m)
-
-
-def _svgp_trace_par(bmat: FP, luu: FP, m: Int, dst: FP):
-    """dst[j] = ((L L^T)^-1 B[:, j])[j] for every j, as host tasks (host only)."""
-    def task(j: Int) {imm bmat, imm luu, imm m, imm dst}:
-        var sc = List[Float32](length=2 * m, fill=Float32(0))
-        var e = FP(unsafe_from_address=Int(sc.unsafe_ptr()))
-        var col = e.unsafe_offset(m)
-        for i in range(m):
-            e.unsafe_store(i, bmat.unsafe_load(i * m + j))
-        _chol_solve(luu, m, e, col)
-        dst.unsafe_store(j, col.unsafe_load(j))
-        _ = sc^
-
-    host_parallelize(task, m)
-
-
 def _log_diag_sum(l: FP, m: Int) -> Float32:
     var s = Float32(0)
     for i in range(m):
@@ -1494,95 +1378,210 @@ def _log_diag_sum(l: FP, m: Int) -> Float32:
     return s
 
 
+@always_inline
+def _svgp_ok(fl: IP, m: Int) -> Bool:
+    """Both Cholesky factorizations (Kuu + jitter I and Sigma) succeeded."""
+    return Int(fl.unsafe_load(0)) == m and Int(fl.unsafe_load(1)) == m
+
+
+@always_inline
+def _kj(kuu: FP, m: Int, jitter: Float32, i: Int, k: Int) -> Float32:
+    """The jittered Kuu at (i, k)."""
+    var kv = kuu.unsafe_load(i * m + k)
+    if i == k:
+        kv = _add(kv, jitter)
+    return kv
+
+
 # DEVIATION 5205 (row 129)
-def svgp_item(
+# The SVGP with a Gaussian likelihood at its OPTIMAL variational distribution
+# (Titsias 2009; GPflow gpflow/models/svgp.py `elbo` reaches this bound at its
+# optimum q) on the m x m system: Sigma = Kuu + jitter I + B / noise with B =
+# Kuf Kfu; alpha = Sigma^-1 b / noise with b = Kuf y (the predictive mean is
+# K*u alpha); C = Kuu^-1 - Sigma^-1 (the predictive variance is k** - K*u C
+# Ku*); q_mu = Kuu alpha; q_sqrt = chol(Kuu Sigma^-1 Kuu); info = [elbo, ok].
+# Nine stages (x_neighbors/gen.py), each item one element, row, column or
+# right-hand side: the Cholesky factorizations one launch per column, the
+# 4m + 1 triangular solves one item per right-hand side (scratch xs, m floats
+# each: Kuu^-1 e_j, Sigma^-1 e_j, Sigma^-1 Kuu[:, j], Kuu^-1 B[:, j],
+# Sigma^-1 b), the products one item per cell. Every stored value is the
+# one-item solve's (folds ascending); y^T y is the blocked fold (XN_FOLD_BLOCK).
+# fl: the first failed column of chol(Kuu + jitter I), chol(Sigma), chol(S).
+def svgp_init_item(
     t: Int, kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP,
-    luu: FP, ls: FP, e: FP, col: FP,
+    luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP,
     m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
 ):
-    """The SVGP with a Gaussian likelihood at its OPTIMAL variational
-    distribution (Titsias 2009; GPflow gpflow/models/svgp.py `elbo` reaches
-    this bound at its optimum q), ONE sequential item on the m x m system:
-    Sigma = Kuu + jitter I + B / noise with B = Kuf Kfu; alpha = Sigma^-1 b /
-    noise with b = Kuf y (the predictive mean is K*u alpha); C = Kuu^-1 -
-    Sigma^-1 (the predictive variance is k** - K*u C Ku*); q_mu = Kuu alpha,
-    q_sqrt = chol(Kuu Sigma^-1 Kuu); info = [elbo, ok]. Cholesky, the
-    triangular solves and every fold in ascending order."""
-    for i in range(m * m):
-        luu.unsafe_store(i, kuu.unsafe_load(i))
-    for i in range(m):
-        luu.unsafe_store(i * m + i, _add(luu.unsafe_load(i * m + i), jitter))
-    for i in range(m * m):
-        ls.unsafe_store(i, _add(luu.unsafe_load(i), ftz(identical_div(bmat.unsafe_load(i), noise))))
-    var ok1 = _chol_inplace(luu, m)
-    var ok2 = _chol_inplace(ls, m)
-    if not (ok1 and ok2):
+    """Stage 1, per cell: Kuu + jitter I into luu, Sigma into ls."""
+    var i = t // m
+    var k = t - i * m
+    var kv = _kj(kuu, m, jitter, i, k)
+    luu.unsafe_store(t, kv)
+    ls.unsafe_store(t, _add(kv, ftz(identical_div(bmat.unsafe_load(t), noise))))
+    if t == 0:
+        for c in range(3):
+            fl.unsafe_store(c, Int32(m))
+
+
+def svgp_chol2_item(
+    t: Int, j: Int, kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP,
+    luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP,
+    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+):
+    """Stage 2, launched for column j = 0 .. m - 1: row t % m of column j
+    of chol(luu) (t < m) or chol(ls)."""
+    var c = t // m
+    var i = t - c * m
+    if c == 0:
+        _chol_col(luu, dv, fl, 0, m, i, j)
+    else:
+        _chol_col(ls, dv.unsafe_offset(m), fl, 1, m, i, j)
+
+
+def svgp_fix2_item(
+    t: Int, kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP,
+    luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP,
+    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+):
+    """Stage 3, per diagonal entry of luu (t < m) and ls: the pivot in
+    place (their upper triangles are never read)."""
+    var c = t // m
+    var j = t - c * m
+    if c == 0:
+        _chol_fix(luu, dv, fl, 0, m, j, j)
+    else:
+        _chol_fix(ls, dv.unsafe_offset(m), fl, 1, m, j, j)
+
+
+def svgp_solve_item(
+    t: Int, kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP,
+    luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP,
+    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+):
+    """Stage 4, per right-hand side t of 4m + 1, solved in place into
+    xs[t * m ..] (`_chol_solve` reads b[i] before it writes x[i])."""
+    if not _svgp_ok(fl, m):
+        return
+    var x = xs.unsafe_offset(t * m)
+    var l = ls
+    if t < m:
+        l = luu
+        for i in range(m):
+            x.unsafe_store(i, Float32(1) if i == t else Float32(0))
+    elif t < 2 * m:
+        for i in range(m):
+            x.unsafe_store(i, Float32(1) if i == t - m else Float32(0))
+    elif t < 3 * m:
+        for i in range(m):
+            x.unsafe_store(i, _kj(kuu, m, jitter, i, t - 2 * m))
+    elif t < 4 * m:
+        l = luu
+        for i in range(m):
+            x.unsafe_store(i, bmat.unsafe_load(i * m + t - 3 * m))
+    else:
+        for i in range(m):
+            x.unsafe_store(i, b.unsafe_load(i))
+    _chol_solve(l, m, x, x)
+
+
+def svgp_mid_item(
+    t: Int, kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP,
+    luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP,
+    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+):
+    """Stage 5, per cell (i, j): C, then S = Kuu Sigma^-1 Kuu into qsqrt
+    (k ascending); rows i = t < m also alpha and q_mu = Kuu alpha (each
+    alpha[k] the same division, recomputed)."""
+    if not _svgp_ok(fl, m):
+        return
+    var i = t // m
+    var j = t - i * m
+    cmat.unsafe_store(t, _sub(xs.unsafe_load(j * m + i), xs.unsafe_load((m + j) * m + i)))
+    var col = xs.unsafe_offset((2 * m + j) * m)
+    var s = Float32(0)
+    for k in range(m):
+        s = ftz(identical_mul_add(_kj(kuu, m, jitter, i, k), col.unsafe_load(k), s))
+    qsqrt.unsafe_store(t, s)
+    if t < m:
+        var sb = xs.unsafe_offset(4 * m * m)
+        alpha.unsafe_store(t, ftz(identical_div(sb.unsafe_load(t), noise)))
+        var q = Float32(0)
+        for k in range(m):
+            q = ftz(identical_mul_add(_kj(kuu, m, jitter, t, k), ftz(identical_div(sb.unsafe_load(k), noise)), q))
+        qmu.unsafe_store(t, q)
+
+
+def svgp_qchol_item(
+    t: Int, j: Int, kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP,
+    luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP,
+    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+):
+    """Stage 6, launched for column j = 0 .. m - 1: row t of column j of
+    chol(S) in qsqrt."""
+    if not _svgp_ok(fl, m):
+        return
+    _chol_col(qsqrt, dv.unsafe_offset(2 * m), fl, 2, m, t, j)
+
+
+def svgp_qfix_item(
+    t: Int, kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP,
+    luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP,
+    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+):
+    """Stage 7, per cell of qsqrt: the pivots and the zeroed upper
+    triangle of the factored columns."""
+    if not _svgp_ok(fl, m):
+        return
+    var i = t // m
+    _chol_fix(qsqrt, dv.unsafe_offset(2 * m), fl, 2, m, i, t - i * m)
+
+
+def svgp_ypart_item(
+    t: Int, kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP,
+    luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP,
+    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+):
+    """Stage 8, per XN_FOLD_BLOCK block of y: y^T y over the block from
+    zero, ascending, into yp[t]."""
+    var lo = t * XN_FOLD_BLOCK
+    var hi = min(lo + XN_FOLD_BLOCK, n)
+    var acc = Float32(0)
+    for i in range(lo, hi):
+        var yv = y.unsafe_load(i)
+        acc = ftz(identical_mul_add(yv, yv, acc))
+    yp.unsafe_store(t, acc)
+
+
+def svgp_fin_item(
+    t: Int, kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP,
+    luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP,
+    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+):
+    """Stage 9, ONE item: the collapsed bound. info = [0, 0] when Kuu +
+    jitter I or Sigma is not positive definite (nothing else written)."""
+    if not _svgp_ok(fl, m):
         info.unsafe_store(0, Float32(0))
         info.unsafe_store(1, Float32(0))
         return
-    # alpha = Sigma^-1 b / noise
-    _chol_solve(ls, m, b, alpha)
-    for i in range(m):
-        alpha.unsafe_store(i, ftz(identical_div(alpha.unsafe_load(i), noise)))
-    # C = Kuu^-1 - Sigma^-1, column by column; e / col are m floats of scratch
-    # lane/neural-pass80 (2026-10-01): on the host the three column loops
-    # below (C, q_sqrt and the trace term: two thirds of a billion serial
-    # fmas at m = 512) run their columns over the host pool, each with its
-    # own unit/rhs and solution scratch. A column's solve and fold are the
-    # same statements in the same order and write only that column; the
-    # trace term's sum stays one ascending fold over j, of per-column values.
-    # `-D MOJOLEARN_SVGP_SERIAL=1` restores the single loop.
-    comptime if not is_gpu() and not is_defined["MOJOLEARN_SVGP_SERIAL"]():
-        _svgp_cq_par(kuu, cmat, qsqrt, luu, ls, m, jitter)
-    else:
-        _svgp_c_cols(cmat, luu, ls, e, col, m, 0, m)
-    # q_mu = Kuu alpha (the jittered Kuu, as the solves)
-    for i in range(m):
-        var s = Float32(0)
-        for k in range(m):
-            var kv = kuu.unsafe_load(i * m + k)
-            if i == k:
-                kv = _add(kv, jitter)
-            s = ftz(identical_mul_add(kv, alpha.unsafe_load(k), s))
-        qmu.unsafe_store(i, s)
-    # S = Kuu Sigma^-1 Kuu, then its Cholesky into q_sqrt
-    comptime if is_gpu() or is_defined["MOJOLEARN_SVGP_SERIAL"]():
-        _svgp_q_cols(kuu, qsqrt, ls, e, col, m, jitter, 0, m)
-    var ok3 = _chol_inplace(qsqrt, m)
-    # the collapsed bound
-    var yty = Float32(0)
-    for i in range(n):
-        var yv = y.unsafe_load(i)
-        yty = ftz(identical_mul_add(yv, yv, yty))
-    _chol_solve(ls, m, b, col)
+    var yty = _fold_parts(yp, xn_fold_blocks(n))
+    var sb = xs.unsafe_offset(4 * m * m)
     var bsb = Float32(0)
     for i in range(m):
-        bsb = ftz(identical_mul_add(b.unsafe_load(i), col.unsafe_load(i), bsb))
+        bsb = ftz(identical_mul_add(b.unsafe_load(i), sb.unsafe_load(i), bsb))
     var quad = _sub(ftz(identical_div(yty, noise)), ftz(identical_div(bsb, ftz(identical_mul(noise, noise)))))
     var logdet = _add(
         ftz(identical_mul(Float32(2), _sub(_log_diag_sum(ls, m), _log_diag_sum(luu, m)))),
         ftz(identical_mul(Float32(n), ftz(identical_log(noise)))),
     )
-    # tr(Kuu^-1 B): column solves against B
+    # tr(Kuu^-1 B): entry j of the solve against B's column j, j ascending
     var trq = Float32(0)
-    comptime if not is_gpu() and not is_defined["MOJOLEARN_SVGP_SERIAL"]():
-        var tv = List[Float32](length=m, fill=Float32(0))
-        var tvp = FP(unsafe_from_address=Int(tv.unsafe_ptr()))
-        _svgp_trace_par(bmat, luu, m, tvp)
-        for j in range(m):
-            trq = _add(trq, tvp.unsafe_load(j))
-        _ = tv^
-    else:
-        for j in range(m):
-            for i in range(m):
-                e.unsafe_store(i, bmat.unsafe_load(i * m + j))
-            _chol_solve(luu, m, e, col)
-            trq = _add(trq, col.unsafe_load(j))
+    for j in range(m):
+        trq = _add(trq, xs.unsafe_load((3 * m + j) * m + j))
     var trace_term = ftz(identical_div(_sub(ftz(identical_mul(Float32(n), kdiag)), trq), noise))
     var log2pi = Float32(1.8378770664093453)
     var elbo = -ftz(identical_mul(Float32(0.5), _add(_add(ftz(identical_mul(Float32(n), log2pi)), logdet), _add(quad, trace_term))))
     info.unsafe_store(0, elbo)
-    info.unsafe_store(1, Float32(1) if ok3 else Float32(0))
+    info.unsafe_store(1, Float32(1) if Int(fl.unsafe_load(2)) == m else Float32(0))
 
 
 # DEVIATION 5209 (row 123), lane/py-dn-kern 2026-09-28

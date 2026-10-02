@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CAGRA on the device: the exact k-NN graph and the search, one thread per
-cell of `x_ann/cagra_core.mojo` / `x_ann/tsne_core.mojo`; pruning and the
-reverse-edge merge are the shared host functions."""
+"""CAGRA on the device: the exact k-NN graph, the prune, the reverse-edge
+merge and the search. The search is one thread per cell of
+`x_ann/cagra_core.mojo`; the prune and the merge are one block per node and
+compute `cagra_prune` / `cagra_reverse_merge` (the host column's functions)
+integer for integer (gap-fails2, 2026-10-02: the opt-in host prune and its
+64-entry bound are gone)."""
 
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from std.atomic import Atomic
-from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceContext
@@ -16,7 +18,8 @@ from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
 
 from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
-from x_ann.cagra_core import F32P, I32P, cagra_prune, cagra_reverse_merge, cg_dist, cg_search_cell
+from x_ann.cagra_core import F32P, I32P, cg_dist, cg_search_cell, cg_seed_node
+from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_CAGRA_TEAM
@@ -35,12 +38,12 @@ def _grid(count: Int) -> Int:
 def cg_search_kernel(
     m: Int32, queries: F32P, x: F32P, n: Int32, d: Int32, graph: I32P, deg: Int32, k: Int32,
     L: Int32, width: Int32, max_iter: Int32, n_seeds: Int32, bd: F32P, bi: I32P, bx: I32P,
-    visited: I32P, words: Int32, out_d: F32P, out_i: I32P,
+    visited: I32P, words: Int32, out_d: F32P, out_i: I32P, rs: Int32,
 ):
     var q = _tid()
     if q < Int(m):
         cg_search_cell(q, queries, x, Int(n), Int(d), graph, Int(deg), Int(k), Int(L), Int(width),
-                       Int(max_iter), Int(n_seeds), bd, bi, bx, visited, Int(words), out_d, out_i)
+                       Int(max_iter), Int(n_seeds), bd, bi, bx, visited, Int(words), out_d, out_i, Int(rs))
 
 
 #: the team search (lane ann-apple3): threads per query, the longest itopk
@@ -53,7 +56,7 @@ comptime CAGRA_TEAM = ANN3_CAGRA_TEAM and GLOBAL_NUMERIC_MODE == NUMERIC_FAST an
 
 def cg_search_team_kernel(
     queries: F32P, x: F32P, n: Int32, d: Int32, graph: I32P, deg: Int32, k: Int32, L: Int32, width: Int32,
-    max_iter: Int32, n_seeds: Int32, visited: I32P, words: Int32, out_d: F32P, out_i: I32P,
+    max_iter: Int32, n_seeds: Int32, visited: I32P, words: Int32, out_d: F32P, out_i: I32P, rs: Int32,
 ):
     """FAST on Apple, OPT-IN (lane ann-apple3): `cg_search_row` for query
     block_idx.x by a threadgroup of CG_T threads. THREAD 0 WALKS, as the cell
@@ -146,7 +149,7 @@ def cg_search_team_kernel(
             if code >= 0:
                 v = Int(graph.unsafe_load(code * dg + e))
             else:
-                v = ((c0 + e) * nn) // ns
+                v = cg_seed_node(c0 + e, nn, ns, Int(rs))
             cv[e] = Int32(v)
             cd[e] = cg_dist(queries, q_off, x, v, dd)
         barrier()
@@ -186,93 +189,325 @@ def cg_search_team_kernel(
             out_i.unsafe_store(qi * kk + s, sbi[s])
 
 
-#: the device prune's widest k-NN row (one thread per entry)
-comptime PRUNE_KMAX = 64
+#: The device prune and merge (gap-fails2, 2026-10-02): one block per node,
+#: threads striding over the row, the row's composite keys sorted block-wide
+#: in threadgroup memory. The widest row is the comptime capacity of the
+#: launched specialization (64, 128, 256, 512 or 1024 entries, the smallest
+#: that holds intermediate_graph_degree), so no degree routes to the host.
+comptime PRUNE_KMAX = 1024
+comptime PRUNE_TPB = 256
+comptime U64_MAX = ~UInt64(0)
 
 
-def prune_kernel(n: Int32, kdeg: Int32, deg: Int32, knn: I32P, pruned: I32P, bad: I32P):
-    """`cagra_prune` for node a = block_idx.x, one thread per k-NN rank
-    (lane ann-apple2). For a row of kdeg DISTINCT ids in [0, n) the host's
-    detour count of rank kab is the number of (kad < kab, kdb) with
-    knn[knn[a, kad], kdb] == knn[a, kab] (plus kdeg when that id is a
-    itself), and its selection takes the deg least (count, rank) in order,
-    so rank kab lands at output slot #{k : (cnt[k], k) < (cnt[kab], kab)}.
-    Integer counts: the same integers, the same graph. A row that is not
-    distinct is flagged (bad[a] = 1) and the host prunes the graph itself."""
+@always_inline
+def _u32_bits(v: Int32) -> UInt64:
+    """`v`'s 32 bits, zero-extended (masked: index_map.mojo::key_lo's
+    sign-extension note)."""
+    return v.cast[DType.uint32]().cast[DType.uint64]() & UInt64(0xFFFFFFFF)
+
+
+@always_inline
+def _pow2_at_least(k: Int) -> Int:
+    var p = 1
+    while p < k:
+        p *= 2
+    return p
+
+
+@always_inline
+def _bitonic_u64[
+    o: MutOrigin
+](keys: MutPointer[UInt64, o, address_space=AddressSpace.SHARED], P: Int, t: Int, tpb: Int):
+    """Ascending bitonic sort of `keys[0:P]` (P a power of two) by the whole
+    block. Integer compares and swaps only: one answer on every device."""
+    var size = 2
+    while size <= P:
+        var stride = size // 2
+        while stride > 0:
+            var i = t
+            while i < P:
+                var j = i ^ stride
+                if j > i:
+                    var ka = keys[i]
+                    var kb = keys[j]
+                    var up = (i & size) == 0
+                    if (ka > kb) == up:
+                        keys[i] = kb
+                        keys[j] = ka
+                i += tpb
+            barrier()
+            stride //= 2
+        size *= 2
+
+
+def prune_kernel[KMAX: Int](n: Int32, kdeg: Int32, deg: Int32, knn: I32P, pruned: I32P, short: I32P):
+    """`cagra_prune` (x_ann/cagra_core.mojo) for node a = block_idx.x, every
+    row (distinct or not) on the device.
+
+    1. The row's entries as composite keys (id as UInt32 << 32 | rank),
+       sorted block-wide: equal ids are adjacent, ranks ascending.
+    2. Detour counts: every (kad, kdb) pair with kad < kdeg - 1 is one
+       thread step; cand = knn[knn[a, kad], kdb] lands on the FIRST rank
+       kab > kad holding cand (a lower bound for (cand, kad + 1) in the
+       sorted keys), which is the host's distinct-row `rank[cand] > kad` and
+       its repeat-row `for kab in kad + 1 ..: if == cand: break` alike.
+       Integer atomics: the same counts in any order. A walked row d outside
+       [0, n) is skipped (the host skips it too).
+    3. Selection: the host takes, deg times, the least eligible (cnt, rank)
+       (cnt < 0xFFFF) and retires every entry with that id, so each id
+       enters at its least eligible (cnt, rank) and ids come out in that
+       order. Each id's representative carries (cnt << 32 | rank); a
+       block-wide sort orders them; the first deg are the row. Fewer than
+       deg eligible ids sets `short[0]` (the host's refusal)."""
     var a = Int(block_idx.x)
     var t = Int(thread_idx.x)
     var k = Int(kdeg)
     var nr = Int(n)
-    var ids = stack_allocation[PRUNE_KMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    var cnt = stack_allocation[PRUNE_KMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    var flag = stack_allocation[1, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    if t == 0:
-        flag[0] = 0
-    if t < k:
-        ids[t] = knn.unsafe_load(a * k + t)
+    var dg = Int(deg)
+    var P = _pow2_at_least(k)
+    var ids = stack_allocation[KMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var cnt = stack_allocation[KMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var keys = stack_allocation[KMAX, Scalar[DType.uint64], address_space=AddressSpace.SHARED]()
+    var e = t
+    while e < P:
+        if e < k:
+            var v = knn.unsafe_load(a * k + e)
+            ids[e] = v
+            keys[e] = (_u32_bits(v) << UInt64(32)) | UInt64(e)
+            cnt[e] = Int32(k) if Int(v) == a else Int32(0)
+        else:
+            keys[e] = U64_MAX
+        e += PRUNE_TPB
     barrier()
-    if t < k:
-        var v = Int(ids[t])
-        var dup = v < 0 or v >= nr
-        for u in range(t):
-            if Int(ids[u]) == v:
-                dup = True
-        if dup:
-            flag[0] = 1
-    barrier()
-    var is_bad = flag[0] != 0
-    if is_bad:
-        if t == 0:
-            bad.unsafe_store(a, Int32(1))
-        return
-    # lane ann-apple2: row a's ids sorted (distinct: position = #smaller)
-    # with their ranks; thread kad walks row knn[a, kad] once, finds each
-    # candidate's rank kab by binary search and adds 1 to cnt[kab] when kab >
-    # kad (threadgroup integer atomics: the sum of the same ones in any
-    # order is the same integer)
-    var sid = stack_allocation[PRUNE_KMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    var srk = stack_allocation[PRUNE_KMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
-    if t < k:
-        var mine_id = ids[t]
-        var pos = 0
-        for u in range(k):
-            if ids[u] < mine_id:
-                pos += 1
-        sid[pos] = mine_id
-        srk[pos] = Int32(t)
-        cnt[t] = Int32(k) if Int(mine_id) == a else Int32(0)
-    barrier()
-    if t < k - 1:
-        var d = Int(ids[t])
-        for kdb in range(k):
-            var cand = knn.unsafe_load(d * k + kdb)
+    _bitonic_u64(keys, P, t, PRUNE_TPB)
+    var pairs = (k - 1) * k
+    var pidx = t
+    while pidx < pairs:
+        var kad = pidx // k
+        var kdb = pidx - kad * k
+        var d = Int(ids[kad])
+        if d >= 0 and d < nr:
+            var cand = _u32_bits(knn.unsafe_load(d * k + kdb))
+            var target = (cand << UInt64(32)) | UInt64(kad + 1)
             var lo = 0
-            var hi = k
+            var hi = P
             while lo < hi:
                 var mid = (lo + hi) // 2
-                if sid[mid] < cand:
+                if keys[mid] < target:
                     lo = mid + 1
                 else:
                     hi = mid
-            if lo < k and sid[lo] == cand:
-                var kab = Int(srk[lo])
-                if kab > t:
-                    _ = Atomic.fetch_add(cnt + kab, Int32(1))
+            if lo < k:
+                var hit = keys[lo]
+                if (hit >> UInt64(32)) == cand:
+                    _ = Atomic.fetch_add(cnt + Int(hit & UInt64(0xFFFFFFFF)), Int32(1))
+        pidx += PRUNE_TPB
     barrier()
-    if t < k:
-        var mine = cnt[t]
-        var rank = 0
-        for u in range(k):
-            var o = cnt[u]
-            if o < mine or (o == mine and u < t):
-                rank += 1
-        if rank < Int(deg):
-            pruned.unsafe_store(a * Int(deg) + rank, ids[t])
+    # representatives: sorted position p holds rank r; r represents its id
+    # when eligible and least (cnt, rank) among its id's eligible entries
+    comptime PER = KMAX // PRUNE_TPB if KMAX >= PRUNE_TPB else 1
+    var sel = InlineArray[UInt64, PER](fill=U64_MAX)
+    for j in range(PER):
+        var pos = t + j * PRUNE_TPB
+        if pos < k:
+            var me = keys[pos]
+            var r = Int(me & UInt64(0xFFFFFFFF))
+            var mc = cnt[r]
+            if mc < Int32(0xFFFF):
+                var idb = me >> UInt64(32)
+                var rep = True
+                var q = pos - 1
+                while q >= 0 and (keys[q] >> UInt64(32)) == idb:
+                    var r2 = Int(keys[q] & UInt64(0xFFFFFFFF))
+                    var c2 = cnt[r2]
+                    if c2 < Int32(0xFFFF) and (c2 < mc or (c2 == mc and r2 < r)):
+                        rep = False
+                    q -= 1
+                q = pos + 1
+                while q < k and (keys[q] >> UInt64(32)) == idb:
+                    var r2 = Int(keys[q] & UInt64(0xFFFFFFFF))
+                    var c2 = cnt[r2]
+                    if c2 < Int32(0xFFFF) and (c2 < mc or (c2 == mc and r2 < r)):
+                        rep = False
+                    q += 1
+                if rep:
+                    sel[j] = (UInt64(Int(mc)) << UInt64(32)) | UInt64(r)
+    barrier()
+    for j in range(PER):
+        var pos = t + j * PRUNE_TPB
+        if pos < P:
+            keys[pos] = sel[j]
+    barrier()
+    _bitonic_u64(keys, P, t, PRUNE_TPB)
+    var o = t
+    while o < dg:
+        var kk = keys[o] if o < P else U64_MAX
+        if kk == U64_MAX:
+            _ = Atomic.fetch_add(short, Int32(1))
+        else:
+            pruned.unsafe_store(a * dg + o, ids[Int(kk & UInt64(0xFFFFFFFF))])
+        o += PRUNE_TPB
+
+
+def rev_keys_kernel(n: Int32, deg: Int32, pruned: I32P, keys: MutPointer[UInt32, MutAnyOrigin],
+                    vals: MutPointer[UInt32, MutAnyOrigin]):
+    """Edge e = k * n + src (the reverse lists' (rank, source) order):
+    key the destination, carry e. A STABLE sort by key then lists every
+    destination's sources in (rank, source id) order, `cagra_reverse_merge`'s
+    order."""
+    var e = _tid()
+    var nn = Int(n)
+    var total = nn * Int(deg)
+    if e < total:
+        var k = e // nn
+        var src = e - k * nn
+        keys[e] = pruned.unsafe_load(src * Int(deg) + k).cast[DType.uint32]()
+        vals[e] = UInt32(e)
+
+
+def merge_kernel[DMAX: Int](n: Int32, deg: Int32, pruned: I32P, skeys: MutPointer[UInt32, MutAnyOrigin],
+                            svals: MutPointer[UInt32, MutAnyOrigin], outg: I32P):
+    """`cagra_reverse_merge`'s merge for node nid = block_idx.x, block-wide.
+    The host inserts the reverse sources v_{kr-1}, ..., v_0 (kr = min(rcount,
+    deg)) each at slot `protected`, moving it from its slot when present in
+    the tail and dropping the last slot when absent, skipping one already in
+    the protected head. Distinct sources (a source's pruned row is distinct)
+    make that a move-to-front list, so the tail is
+        [v_i, i ascending, v_i not in the head] ++ [the old tail minus those]
+    cut at deg - protected. Each entry's slot is a count of the entries
+    before it with the same flag: integer work, the host's row."""
+    var nid = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var nn = Int(n)
+    var dg = Int(deg)
+    var protected = dg // 2
+    var row = stack_allocation[DMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var rev = stack_allocation[DMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var fa = stack_allocation[DMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var fb = stack_allocation[DMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var span = stack_allocation[2, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
     if t == 0:
-        bad.unsafe_store(a, Int32(0))
+        # this node's run in the sorted keys: [lower_bound(nid), lower_bound(nid + 1))
+        var total = nn * dg
+        var lo = 0
+        var hi = total
+        while lo < hi:
+            var mid = (lo + hi) // 2
+            if Int(skeys[mid]) < nid:
+                lo = mid + 1
+            else:
+                hi = mid
+        var lo2 = lo
+        var hi2 = total
+        while lo2 < hi2:
+            var mid = (lo2 + hi2) // 2
+            if Int(skeys[mid]) < nid + 1:
+                lo2 = mid + 1
+            else:
+                hi2 = mid
+        span[0] = Int32(lo)
+        span[1] = Int32(lo2 - lo)
+    var i = t
+    while i < dg:
+        row[i] = pruned.unsafe_load(nid * dg + i)
+        i += PRUNE_TPB
+    barrier()
+    var start = Int(span[0])
+    var kr = Int(span[1])
+    if kr > dg:
+        kr = dg
+    i = t
+    while i < kr:
+        rev[i] = Int32(Int(svals[start + i]) % nn)
+        i += PRUNE_TPB
+    barrier()
+    # fa[i]: v_i is not in the head; fb[j]: tail entry j is no inserted v_i
+    i = t
+    while i < kr:
+        var v = rev[i]
+        var keep = Int32(1)
+        for h in range(protected):
+            if row[h] == v:
+                keep = 0
+        fa[i] = keep
+        i += PRUNE_TPB
+    var j = protected + t
+    while j < dg:
+        var w = row[j]
+        var keep = Int32(1)
+        for r in range(kr):
+            if rev[r] == w:
+                keep = 0
+        fb[j] = keep
+        j += PRUNE_TPB
+    barrier()
+    var tail = dg - protected
+    var na = 0
+    for r in range(kr):
+        na += Int(fa[r])
+    i = t
+    while i < kr:
+        if fa[i] != 0:
+            var pos = 0
+            for r in range(i):
+                pos += Int(fa[r])
+            if pos < tail:
+                outg.unsafe_store(nid * dg + protected + pos, rev[i])
+        i += PRUNE_TPB
+    j = protected + t
+    while j < dg:
+        if fb[j] != 0:
+            var pos = na
+            for r in range(protected, j):
+                pos += Int(fb[r])
+            if pos < tail:
+                outg.unsafe_store(nid * dg + protected + pos, row[j])
+        j += PRUNE_TPB
+    i = t
+    while i < protected:
+        outg.unsafe_store(nid * dg + i, row[i])
+        i += PRUNE_TPB
+
+
+def _launch_prune(ctx: DeviceContext, n: Int, kdeg: Int, deg: Int, dni: I32P, dout: I32P, dshort: I32P) raises:
+    if kdeg <= 64:
+        ctx.enqueue_function[prune_kernel[64]](Int32(n), Int32(kdeg), Int32(deg), dni, dout, dshort,
+                                               grid_dim=n, block_dim=PRUNE_TPB)
+    elif kdeg <= 128:
+        ctx.enqueue_function[prune_kernel[128]](Int32(n), Int32(kdeg), Int32(deg), dni, dout, dshort,
+                                                grid_dim=n, block_dim=PRUNE_TPB)
+    elif kdeg <= 256:
+        ctx.enqueue_function[prune_kernel[256]](Int32(n), Int32(kdeg), Int32(deg), dni, dout, dshort,
+                                                grid_dim=n, block_dim=PRUNE_TPB)
+    elif kdeg <= 512:
+        ctx.enqueue_function[prune_kernel[512]](Int32(n), Int32(kdeg), Int32(deg), dni, dout, dshort,
+                                                grid_dim=n, block_dim=PRUNE_TPB)
+    else:
+        ctx.enqueue_function[prune_kernel[1024]](Int32(n), Int32(kdeg), Int32(deg), dni, dout, dshort,
+                                                 grid_dim=n, block_dim=PRUNE_TPB)
+
+
+def _launch_merge(ctx: DeviceContext, n: Int, deg: Int, dpr: I32P, sk: MutPointer[UInt32, MutAnyOrigin],
+                  sv: MutPointer[UInt32, MutAnyOrigin], dout: I32P) raises:
+    if deg <= 64:
+        ctx.enqueue_function[merge_kernel[64]](Int32(n), Int32(deg), dpr, sk, sv, dout, grid_dim=n,
+                                               block_dim=PRUNE_TPB)
+    elif deg <= 256:
+        ctx.enqueue_function[merge_kernel[256]](Int32(n), Int32(deg), dpr, sk, sv, dout, grid_dim=n,
+                                                block_dim=PRUNE_TPB)
+    else:
+        ctx.enqueue_function[merge_kernel[1024]](Int32(n), Int32(deg), dpr, sk, sv, dout, grid_dim=n,
+                                                 block_dim=PRUNE_TPB)
 
 
 def cagra_build_device(x: List[Float32], n: Int, d: Int, kdeg: Int, deg: Int) raises -> List[Int32]:
+    """The exact k-NN graph, the prune and the reverse-edge merge, all on
+    the device; the merged graph is the one download."""
+    if kdeg > PRUNE_KMAX:
+        raise Error("CAGRA: intermediate_graph_degree " + String(kdeg) + " exceeds the device prune's "
+                    + String(PRUNE_KMAX) + " (one block per node holds its row)")
+    if n * deg >= 2147483647:
+        raise Error("CAGRA: n * graph_degree must be below 2^31 (the reverse-edge sort's index)")
     var st = AnnStages("cagra_build")
     var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
@@ -280,44 +515,52 @@ def cagra_build_device(x: List[Float32], n: Int, d: Int, kdeg: Int, deg: Int) ra
     var dnd = ctx.enqueue_create_buffer[DType.float32](n * kdeg)
     var dni = ctx.enqueue_create_buffer[DType.int32](n * kdeg)
     knn_enqueue(ctx, dx, n, d, kdeg, dnd, dni)
-    var pruned = List[Int32]()
-    var on_device = kdeg <= PRUNE_KMAX and deg <= kdeg and not is_defined["MOJOLEARN_CAGRA_HOST_PRUNE"]()
-    if on_device:
-        var dout = ctx.enqueue_create_buffer[DType.int32](n * deg)
-        var dbad = ctx.enqueue_create_buffer[DType.int32](n)
-        ctx.enqueue_function[prune_kernel](Int32(n), Int32(kdeg), Int32(deg), dni.unsafe_ptr(), dout.unsafe_ptr(),
-                                           dbad.unsafe_ptr(), grid_dim=n, block_dim=PRUNE_KMAX)
-        ctx.synchronize()
-        st.host("knn_prune")
-        var bad = download_i32(ctx, dbad, n)
-        for a in range(n):
-            if bad[a] != 0:
-                on_device = False
-                break
-        if on_device:
-            pruned = download_i32(ctx, dout, n * deg)
-        _ = dbad^
-        _ = dout^
-    if not on_device:
-        ctx.synchronize()
-        st.host("knn")
-        var knn = download_i32(ctx, dni, n * kdeg)
-        st.host("download")
-        pruned = cagra_prune(n, kdeg, knn, deg)
-        st.host("prune")
+    var dpr = ctx.enqueue_create_buffer[DType.int32](n * deg)
+    var dshort = ctx.enqueue_create_buffer[DType.int32](1)
+    dshort.enqueue_fill(Int32(0))
+    _launch_prune(ctx, n, kdeg, deg, dni.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                  dpr.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                  dshort.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+    st.mark(ctx, "knn_prune")
+    var short = download_i32(ctx, dshort, 1)
+    if short[0] != 0:
+        raise Error("CAGRA: the k-NN graph has too few distinct neighbors for graph_degree")
+    var total = n * deg
+    var keys = ctx.enqueue_create_buffer[DType.uint32](total)
+    var vals = ctx.enqueue_create_buffer[DType.uint32](total)
+    var tkeys = ctx.enqueue_create_buffer[DType.uint32](total)
+    var tvals = ctx.enqueue_create_buffer[DType.uint32](total)
+    var counts = ctx.enqueue_create_buffer[DType.int32](frs_counts_len(total))
+    ctx.enqueue_function[rev_keys_kernel](Int32(n), Int32(deg), dpr.unsafe_ptr(), keys.unsafe_ptr(),
+                                          vals.unsafe_ptr(), grid_dim=_grid(total), block_dim=TPB)
+    fast_radix_sort_pairs_u32(ctx, total, keys, vals, tkeys, tvals, counts)
+    var dmg = ctx.enqueue_create_buffer[DType.int32](total)
+    _launch_merge(ctx, n, deg, dpr.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                  keys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                  vals.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                  dmg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+    st.mark(ctx, "reverse_merge")
+    var merged = download_i32(ctx, dmg, total)
+    st.host("download")
+    _ = dmg^
+    _ = counts^
+    _ = tvals^
+    _ = tkeys^
+    _ = vals^
+    _ = keys^
+    _ = dshort^
+    _ = dpr^
     _ = dni^
     _ = dnd^
     _ = dx^
     _ = ctx^
-    var merged = cagra_reverse_merge(n, deg, pruned)
-    st.host("reverse_merge")
     return merged^
 
 
 def cagra_search_device(
     x: List[Float32], n: Int, d: Int, graph: List[Int32], deg: Int, queries: List[Float32], m: Int,
     k: Int, L: Int, width: Int, max_iter: Int, n_seeds: Int,
-    mut out_d: List[Float32], mut out_i: List[Int32],
+    mut out_d: List[Float32], mut out_i: List[Int32], rs: Int = 0,
 ) raises:
     var st = AnnStages("cagra_search")
     var ctx = x_ann_ctx()
@@ -327,7 +570,7 @@ def cagra_search_device(
     cagra_search_on(
         ctx, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n, d,
         dg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), deg, queries, m, k, L, width, max_iter,
-        n_seeds, out_d, out_i,
+        n_seeds, out_d, out_i, rs,
     )
     _ = dg^
     _ = dx^
@@ -337,7 +580,7 @@ def cagra_search_device(
 def cagra_search_on(
     ctx: DeviceContext, dx: F32P, n: Int, d: Int, dg: I32P, deg: Int, queries: List[Float32], m: Int,
     k: Int, L: Int, width: Int, max_iter: Int, n_seeds: Int,
-    mut out_d: List[Float32], mut out_i: List[Int32],
+    mut out_d: List[Float32], mut out_i: List[Int32], rs: Int = 0,
 ) raises:
     """The search over a dataset and graph already on the device
     (`cagra_search_device` uploads them first; `x_ann/resident.mojo` holds
@@ -359,14 +602,14 @@ def cagra_search_on(
             ctx.enqueue_function[cg_search_team_kernel](
                 dq.unsafe_ptr(), dx, Int32(n), Int32(d), dg, Int32(deg), Int32(k), Int32(L), Int32(width),
                 Int32(max_iter), Int32(n_seeds), vis.unsafe_ptr(), Int32(words), od.unsafe_ptr(),
-                oi.unsafe_ptr(), grid_dim=m, block_dim=CG_T,
+                oi.unsafe_ptr(), Int32(rs), grid_dim=m, block_dim=CG_T,
             )
     if not team:
         ctx.enqueue_function[cg_search_kernel](
             Int32(m), dq.unsafe_ptr(), dx, Int32(n), Int32(d), dg, Int32(deg), Int32(k),
             Int32(L), Int32(width), Int32(max_iter), Int32(n_seeds), bd.unsafe_ptr(), bi.unsafe_ptr(),
             bx.unsafe_ptr(), vis.unsafe_ptr(), Int32(words), od.unsafe_ptr(), oi.unsafe_ptr(),
-            grid_dim=_grid(m), block_dim=TPB,
+            Int32(rs), grid_dim=_grid(m), block_dim=TPB,
         )
     ctx.synchronize()
     st.host("search")

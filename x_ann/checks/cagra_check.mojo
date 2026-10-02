@@ -12,7 +12,10 @@ Card stages: cagra.<fixture>.graph, cagra.<fixture>.search.{dist,idx}."""
 from std.sys import exit
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_ann.cagra_device import cagra_build_device, cagra_search_device
+from x_ann.cagra_device import cagra_build_device, cagra_search_device, _launch_prune
+from x_ann.cagra_core import cagra_prune
+from x_ann.device_ctx import x_ann_ctx
+from x_ann.io import upload_i32, download_i32
 from x_ann.checks.cagra_oracle import co_prune, co_reverse_merge, co_search
 from x_ann.checks.tsne_oracle import to_knn
 from x_ann.checks.ann_check_fixtures import fixture_ties, fixture_wide, report, same_f32, same_i32
@@ -32,6 +35,41 @@ def same_int(a: List[Int], b: List[Int]) -> Bool:
         if a[e] != b[e]:
             return False
     return True
+
+
+def repeat_rows_prune(mut failed: Int) raises:
+    """The device prune on k-NN rows WITH REPEATS (the host's second path,
+    which an exact k-NN never feeds the build): a synthetic graph whose rows
+    repeat ids, prune_kernel == cagra_prune integer for integer."""
+    var n = 48
+    var kdeg = 20
+    var deg = 7
+    var knn = List[Int32]()
+    var rep = 0
+    for a in range(n):
+        for e in range(kdeg):
+            var v = (a * 7 + e * 5 + (e * e) % 11) % n
+            if e % 6 == 5:
+                v = Int((knn[a * kdeg + e - 3]))  # a repeat of an earlier entry
+                rep += 1
+            knn.append(Int32(v))
+    var want = cagra_prune(n, kdeg, knn, deg)
+    var ctx = x_ann_ctx()
+    var dk = upload_i32(ctx, knn)
+    var dout = ctx.enqueue_create_buffer[DType.int32](n * deg)
+    var ds = ctx.enqueue_create_buffer[DType.int32](1)
+    ds.enqueue_fill(Int32(0))
+    _launch_prune(ctx, n, kdeg, deg, dk.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                  dout.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                  ds.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+    ctx.synchronize()
+    var got = download_i32(ctx, dout, n * deg)
+    var short = download_i32(ctx, ds, 1)
+    report("repeat rows: device prune == cagra_prune (" + String(rep) + " repeats)",
+           short[0] == 0 and same_i32(got, want), failed)
+    _ = dk^
+    _ = dout^
+    _ = ds^
 
 
 def main() raises:
@@ -94,6 +132,7 @@ def main() raises:
         trace.record_list_f32(String("cagra.") + name + ".search.dist", dd)
         trace.record_list_i32(String("cagra.") + name + ".search.idx", di)
         report(name + ": search == oracle (5822-5824)", same_f32(dd, od) and same_i32(di, oi), failed)
+    repeat_rows_prune(failed)
     print("separation: prune", sep_prune, "reverse", sep_rev, "topk-tie", sep_topk, "parents", sep_parent,
           "seeds", sep_seed)
     if sep_prune == 0 or sep_rev == 0 or sep_topk == 0 or sep_parent == 0 or sep_seed == 0:

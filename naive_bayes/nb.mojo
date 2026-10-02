@@ -170,7 +170,10 @@ def cat_params_unit(t: Int, f: FP, q: IP):
 
 def cat_jll_unit(t: Int, f: FP, q: IP):
     """q = [X, n, d, FLP, K, CMAX, CLP, OUT]; t = i*K + k:
-    CLP[k] + sum_j FLP[(j*K + k)*CMAX + x_ij], j ascending."""
+    CLP[k] + sum_j FLP[(j*K + k)*CMAX + x_ij], j ascending. A category
+    outside [0, CMAX) adds nothing and reads nothing: the caller checks the
+    input's range from the same program's column stats and refuses it (the
+    words of a valid input are unchanged)."""
     var d = p(q, 2)
     var K = p(q, 4)
     var cmax = p(q, 5)
@@ -179,6 +182,8 @@ def cat_jll_unit(t: Int, f: FP, q: IP):
     var s = Float32(0)
     for j in range(d):
         var v = Int(ld(f, p(q, 0) + i * d + j))
+        if v < 0 or v >= cmax:
+            continue
         s = add(s, ld(f, p(q, 3) + (j * K + k) * cmax + v))
     st(f, p(q, 7) + t, add(s, ld(f, p(q, 6) + k)))
 

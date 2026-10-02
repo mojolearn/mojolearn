@@ -24,7 +24,10 @@ from checks.numerics import ftz
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
+    lu_perm_src,
+    trs_tri_cols,
     trisolve_serial,
+    knn_select_row,
     F32Ptr,
     absmax_sign_cell,
     FOLD_BLOCK,
@@ -38,22 +41,21 @@ from x_decomp.cells import (
     chol_serial,
     als_row,
     als_cg_row,
-    geqrf_serial,
-    orgqr_col,
     barycenter_row,
     gamma_cell,
     lasso_row,
     omp_row,
-    lu_solve_serial,
     orth_diag_cell,
     orth_rank_guard,
     trsm_row,
     rand_cell,
     pdist_cell,
 )
-from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_serial
-from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_serial
+from core.host_lanes import host_row_tasks
+from core.host_parallel import host_parallelize
 from x_decomp.exec_trait import Exec
+from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
+from x_decomp.qr_sliced_host import qs_geqrf_host, qs_orgqr_host
 from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
 from x_decomp.host_ew import ew_range
@@ -77,6 +79,52 @@ from x_decomp.host_simd import (
 )
 
 comptime X_DECOMP_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
+#: columns of B per host task of the right-looking lu_solve (a schedule cut)
+comptime LU_RL_COLS = 16
+
+
+def lu_solve_rl(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int):
+    """lu_solve in the right-looking order (DEVIATION 5308), the device's
+    chains: B gathered by the swaps' row order (`lu_perm_src`), then
+    `trs_tri_cols` on slices of LU_RL_COLS columns over host tasks (each
+    column's chains are its own); 'T' solves first and scatters the rows
+    back through the same order."""
+    if n <= 0 or nrhs <= 0:
+        return
+    var src = List[Int](length=n, fill=0)
+    for i in range(n):
+        src[i] = lu_perm_src(piv, i)
+    var tmp = List[Float32](unsafe_uninit_length=n * nrhs)
+    var tp = F32Ptr(unsafe_from_address=Int(tmp.unsafe_ptr()))
+    for i in range(n):
+        var r = src[i] if trans == 0 else i
+        for c in range(nrhs):
+            tp.unsafe_store(i * nrhs + c, b.unsafe_load(r * nrhs + c))
+    var t0 = 0 if trans == 0 else 2
+    var slices = (nrhs + LU_RL_COLS - 1) // LU_RL_COLS
+    var tasks = host_row_tasks(slices, n * n * LU_RL_COLS)
+    var per = (slices + tasks - 1) // tasks
+
+    def run(t: Int) {imm lu, imm tp, imm n, imm nrhs, imm t0, imm per}:
+        var c0 = t * per * LU_RL_COLS
+        var c1 = min(nrhs, c0 + per * LU_RL_COLS)
+        if c1 > c0:
+            trs_tri_cols(lu, tp, n, nrhs, t0, c0, c1)
+            trs_tri_cols(lu, tp, n, nrhs, t0 + 1, c0, c1)
+
+    var used = (slices + per - 1) // per
+    if used <= 1:
+        run(0)
+    else:
+        host_parallelize(run, used)
+    for i in range(n):
+        var r = i if trans == 0 else src[i]
+        for c in range(nrhs):
+            b.unsafe_store(r * nrhs + c, tp.unsafe_load(i * nrhs + c))
+    _ = tmp^
+    _ = src^
+
 
 #: elements per elementwise task, rows per row-fold task: shape-only cuts
 comptime EW_CHUNK = 32768
@@ -306,13 +354,15 @@ struct HostExec(Exec):
         _ = tmp^
 
     @staticmethod
+    def knn_select(dmat: F32Ptr, dist: F32Ptr, idx: F32Ptr, n: Int, m: Int, k: Int, exclude_self: Int) raises:
+        def row(t: Int) {imm dmat, imm dist, imm idx, imm m, imm k, imm exclude_self}:
+            knn_select_row(dmat, dist, idx, t, m, k, exclude_self)
+
+        xd_parallel(row, n)
+
+    @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
-        # lane neural-pass39: the block-interleaved walk of the same cells
-        # (x_decomp/lu_host.mojo); MOJOLEARN_XD_LU_SOLVE_SERIAL=1 keeps the loop
-        if xd_lu_solve_serial():
-            lu_solve_serial(lu, piv, b, n, nrhs, trans)
-        else:
-            lu_solve_host_rows(lu, piv, b, n, nrhs, trans)
+        lu_solve_rl(lu, piv, b, n, nrhs, trans)
 
     @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:
@@ -506,21 +556,12 @@ struct HostExec(Exec):
 
     @staticmethod
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
-        # lane neural-pass37: the row-streaming walk of the same cells
-        # (x_decomp/qr_host.mojo); MOJOLEARN_XD_QR_SERIAL=1 keeps the
-        # column-by-column serial loop (the A/B arm)
-        if xd_qr_serial():
-            geqrf_serial(a, tau, m, n)
-        else:
-            geqrf_host_rows(a, tau, m, n)
+        """The sliced order's host replay (x_decomp/qr_sliced_host.mojo)."""
+        qs_geqrf_host(a, tau, m, n)
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
-        if xd_qr_serial():
-            for j in range(qc):
-                orgqr_col(h, tau, q, j, m, n, kk, qc)
-        else:
-            orgqr_host_rows(h, tau, q, m, n, kk, qc)
+        qs_orgqr_host(h, tau, q, m, n, kk, qc)
 
     @staticmethod
     def als_cg_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, steps: F32Ptr, n: Int, m: Int, f: Int, reg: Float32, cg: Int) raises:
@@ -535,6 +576,18 @@ struct HostExec(Exec):
         var got = HostExec._qr_r(a, m, n)
         for t in range(n * n):
             r.unsafe_store(t, got[t])
+
+    @staticmethod
+    def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
+        """The blocked TSQR's host replay (x_decomp/tsqr_host.mojo)."""
+        ts_factor_host(a, b, r, m, d, nrhs, keep)
+
+    @staticmethod
+    def tsqr_apply(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
+        if k == 0:
+            ts_free_host()
+            return
+        ts_apply_host(c, q, m, n, k)
 
     @staticmethod
     def vendor() -> String:

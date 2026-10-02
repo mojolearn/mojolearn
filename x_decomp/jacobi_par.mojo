@@ -37,6 +37,7 @@ against tol^2 ||A||_F^2), read on the host once a sweep. The host refuses
 nothing here: a solve that does not converge in its budget returns False
 and the caller runs the cyclic solver on the untouched input.
 """
+from x_decomp.cells import svd_rotation_significant
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 from std.memory import stack_allocation
@@ -127,7 +128,7 @@ def svd_par_round_kernel(
             var c0 = Float32(1.0)
             var s0 = Float32(0.0)
             var go = Float32(0.0)
-            if abs(apq) > thresh:
+            if abs(apq) > thresh and svd_rotation_significant(app, aqq):  # Andrew 2026-10-01
                 var cs = jacobi_rotation_cs(app, aqq, apq)
                 c0 = cs[0]
                 s0 = cs[1]

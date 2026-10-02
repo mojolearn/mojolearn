@@ -65,6 +65,21 @@ from std.os import getenv
 # DEVIATION 258: the probability links (double, as CatBoost computes them)
 # go through the host-portable exp64 under IDENTICAL; FAST is the stdlib
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_exp64
+from checks.numerics import ftz as _hr2_ftz
+from std.os import getenv as _hr2_getenv
+from gbdt.grid_creator.gls_borders_device import device_float_borders
+from checks.soft_f64 import (
+    SF64_ZERO,
+    sf64_add,
+    sf64_div,
+    sf64_exp,
+    sf64_from_f32,
+    sf64_gt,
+    sf64_neg,
+    sf64_sigmoid_f32,
+    sf64_sub,
+    sf64_to_f32,
+)
 from gbdt.methods.doc_parallel_boosting import (
     TAdditiveModel,
     fit_with_test,
@@ -2448,6 +2463,7 @@ def _quantize_training_columns(
     var border_sample_n = n_rows
     if border_build_max_samples > 0 and border_build_max_samples < n_rows:
         border_sample_n = border_build_max_samples
+    var nan_mode_opt_early = nan_mode_from_name(nan_mode)
 
     # phase-A/B scratch: which columns are float, and one flat buffer
     # holding every sorted float column back to back
@@ -2472,8 +2488,33 @@ def _quantize_training_columns(
     # per-column GATHER stays parallel (it is `n_float * 200k` loads);
     # only the DRAW is serial, because it is one draw now and not one
     # per feature. Per-slot error flags re-raised after the join.
+    # LANE hr2-gbdt-host: the float columns' GreedyLogSum grids on the
+    # device (`gbdt/grid_creator/gls_borders.mojo`: a parallel Feistel
+    # subsample, device keys, a segmented sort, one search thread per
+    # column). `MOJOLEARN_HR2_OLD_BORDERS=1` takes the host draw and the
+    # host phase B below (the A/B arm; deleted once the gates pass).
+    var use_dev = (
+        border_type == BORDER_TYPE_GREEDY_LOG_SUM
+        and n_float_prescan > 0
+        and _hr2_getenv("MOJOLEARN_HR2_OLD_BORDERS") != "1"
+    )
+    var dev_borders = List[List[Float32]]()
+    var dev_modes = List[Int]()
+    if use_dev:
+        var dcols = List[MutPointer[Float32, MutUntrackedOrigin]](
+            capacity=n_float_prescan
+        )
+        for k in range(n_float_prescan):
+            dcols.append(cps[float_idx[k]])
+        var got = device_float_borders(
+            ctx, dcols, n_rows, border_sample_n, border_count, nan_mode_opt_early,
+            generate_seed_for_borders(random_seed),
+        )
+        dev_borders = got[0].copy()
+        dev_modes = got[1].copy()
+        _ = len(cps)
     var predrawn = List[Float32]()
-    if border_sample_n < n_rows and n_float_prescan > 0:
+    if not use_dev and border_sample_n < n_rows and n_float_prescan > 0:
         predrawn.resize(n_float_prescan * border_sample_n, Float32(0.0))
         var pd = predrawn.unsafe_ptr()
         var fi = float_idx.unsafe_ptr()
@@ -2520,8 +2561,9 @@ def _quantize_training_columns(
         _ = sample_idx^
         _ = len(cps)  # DEVIATION 2550: the task read `cps`; past the join
     var border_sorter = DeviceFloatSorter(
-        ctx, n_rows if border_sample_n == n_rows else 1
+        ctx, n_rows if (border_sample_n == n_rows and not use_dev) else 1
     )
+    var dev_k = 0
     # their `TFloatFeature::NanValueTreatment`, one per COLUMN. One-hot and
     # CTR columns stay `AsIs`: a one-hot column holds dense codes and a CTR
     # column holds a computed statistic, and a NaN in either is a caller
@@ -2604,6 +2646,12 @@ def _quantize_training_columns(
             # `NPar::LocalExecutor`), with the device never touched
             # inside the parallel region (the sync_parallelize deadlock
             # rule mojotrees recorded).
+            if use_dev:
+                column_nan_treatment[f] = nan_value_treatment(dev_modes[dev_k])
+                fold_counts.append(len(dev_borders[dev_k]))
+                borders.append(dev_borders[dev_k].copy())
+                dev_k += 1
+                continue
             if border_sample_n == n_rows:
                 # full-data path only: their GPU ComputeBorders device
                 # RadixSort. The SAMPLED path skips the device entirely --
@@ -2646,7 +2694,7 @@ def _quantize_training_columns(
     # flat output slots, errors carried out through a per-slot flag and
     # re-raised after the join.
     var n_float = len(float_cols)
-    if n_float > 0:
+    if n_float > 0 and not use_dev:
         var out_cap = border_count + 1
         var out_borders = List[Float32](capacity=n_float * out_cap)
         out_borders.resize(n_float * out_cap, Float32(0.0))
@@ -2998,11 +3046,8 @@ def one_vs_all_probabilities(
         )
     var out = List[Float32]()
     for i in range(n_rows * num_classes):
-        out.append(
-            Float32(
-                1.0 / (1.0 + identical_exp64(-Float64(approxes[i])))
-            )
-        )
+        # lane hr2-gbdt-host: soft binary64, `resident_link_kernel`'s words
+        out.append(_hr2_ftz(sf64_to_f32(sf64_sigmoid_f32(approxes[i]))))
     return out^
 
 
@@ -3029,18 +3074,20 @@ def multiclass_probabilities(
         )
     var out = List[Float32]()
     for r in range(n_rows):
-        var mx = Float64(0.0)
+        # lane hr2-gbdt-host: soft binary64, `resident_link_kernel`'s words
+        var mx = SF64_ZERO
         for k in range(eff):
-            var v = Float64(approxes[r * eff + k])
-            if v > mx:
+            var v = sf64_from_f32(approxes[r * eff + k])
+            if sf64_gt(v, mx):
                 mx = v
-        var se = Float64(0.0)
+        var se = SF64_ZERO
         for k in range(eff):
-            se += identical_exp64(Float64(approxes[r * eff + k]) - mx)
-        se += identical_exp64(-mx)
+            se = sf64_add(se, sf64_exp(sf64_sub(sf64_from_f32(approxes[r * eff + k]), mx)))
+        var e_pin = sf64_exp(sf64_neg(mx))
+        se = sf64_add(se, e_pin)
         for k in range(eff):
-            out.append(
-                Float32(identical_exp64(Float64(approxes[r * eff + k]) - mx) / se)
-            )
-        out.append(Float32(identical_exp64(-mx) / se))
+            out.append(_hr2_ftz(sf64_to_f32(sf64_div(
+                sf64_exp(sf64_sub(sf64_from_f32(approxes[r * eff + k]), mx)), se
+            ))))
+        out.append(_hr2_ftz(sf64_to_f32(sf64_div(e_pin, se))))
     return out^

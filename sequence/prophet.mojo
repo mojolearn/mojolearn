@@ -51,7 +51,7 @@ def op_prophet_features(t: Int, a: Args):
         st(a.p3, t * K + col + h, ld(a.p2, t * nh + h))
 
 
-struct ProphetData:
+struct ProphetData(ImplicitlyCopyable, Movable):
     var t: FP        # [N] scaled time
     var X: FP        # [N, K]
     var cp: FP       # [S] changepoint times (scaled)
@@ -202,10 +202,63 @@ def _dot(a: FP, b: FP, n: Int) -> Float32:
     return s
 
 
-def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[Float32, Int]:
-    """Minimise prophet_fg from th (in place). w: scratch of
-    (6 + 2 MEM) P + 2 MEM floats. Returns (f, iterations)."""
-    var P = 3 + d.S + d.K
+trait ProphetFG:
+    """The objective `lbfgs_steps` minimises: -log posterior at th and its
+    gradient into g (`prophet_fg`, or the block-cooperative form of
+    sequence/fit_team.mojo)."""
+
+    @always_inline
+    def fg(mut self, th: FP, g: FP) -> Float32:
+        ...
+
+
+struct PlainFG(ProphetFG):
+    """prophet_fg over one series, in one thread."""
+    var d: ProphetData
+    var y: FP
+
+    @always_inline
+    def __init__(out self, d: ProphetData, y: FP):
+        self.d = d
+        self.y = y
+
+    @always_inline
+    def fg(mut self, th: FP, g: FP) -> Float32:
+        return prophet_fg(self.d, self.y, th, g)
+
+
+struct LBState(ImplicitlyCopyable, Movable):
+    """`lbfgs_prophet`'s loop state between iterations (lane neural-pass143);
+    with th, g and the pairs in w, everything the next iteration reads."""
+    var f: Float32
+    var npairs: Int
+    var head: Int
+    var small: Int
+    var it: Int
+    var done: Bool
+
+    @always_inline
+    def __init__(out self, f: Float32):
+        self.f = f
+        self.npairs = 0
+        self.head = 0
+        self.small = 0
+        self.it = 0
+        self.done = False
+
+
+@always_inline
+def lbfgs_start[F: ProphetFG](mut fg: F, th: FP, w: FP) -> LBState:
+    """The objective at the start point (gradient into w's g)."""
+    return LBState(fg.fg(th, w))
+
+
+@always_inline
+def lbfgs_steps[F: ProphetFG](mut fg: F, mut s: LBState, P: Int, th: FP, w: FP,
+                              max_iter: Int, budget: Int = -1) -> Int:
+    """`lbfgs_prophet`'s iterations from state `s`: at most `budget` of them
+    (all when budget < 0); `s.done` says whether the loop ended. Returns the
+    number run here."""
     var g = w
     var dvec = g + P
     var thn = dvec + P
@@ -215,12 +268,21 @@ def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[
     var ym = sm + MEM * P
     var rho = ym + MEM * P
     var al = rho + MEM
-    var f = prophet_fg(d, y, th, g)
-    var npairs = 0
-    var head = 0
-    var small = 0
-    var it = 0
+    var f = s.f
+    var npairs = s.npairs
+    var head = s.head
+    var small = s.small
+    var it = s.it
+    var steps = 0
+    var finished = True
     while it < max_iter:
+        # the slice boundary (lane neural-pass143): the state is exactly
+        # what `s` and w hold here, so a later call resumes with the same
+        # iteration
+        if budget >= 0 and steps >= budget:
+            finished = False
+            break
+        steps += 1
         # two-loop recursion: q = g; newest to oldest, then oldest to newest
         for i in range(P):
             st(q, i, ld(g, i))
@@ -266,7 +328,7 @@ def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[
         for _ in range(40):
             for i in range(P):
                 st(thn, i, fma3(step, ld(dvec, i), ld(th, i)))
-            fnew = prophet_fg(d, y, thn, gn)
+            fnew = fg.fg(thn, gn)
             if fnew <= fma3(mul(Float32(1e-4), step), gd, f):
                 ok = True
                 break
@@ -312,7 +374,23 @@ def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[
                 break
         else:
             small = 0
-    return (f, it)
+    s.f = f
+    s.npairs = npairs
+    s.head = head
+    s.small = small
+    s.it = it
+    s.done = finished
+    return steps
+
+
+def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[Float32, Int]:
+    """Minimise prophet_fg from th (in place). w: scratch of
+    (6 + 2 MEM) P + 2 MEM floats. Returns (f, iterations)."""
+    var P = 3 + d.S + d.K
+    var fg = PlainFG(d, y)
+    var s = lbfgs_start(fg, th, w)
+    _ = lbfgs_steps(fg, s, P, th, w, max_iter)
+    return (s.f, s.it)
 
 
 def op_prophet_fit(t: Int, a: Args):
