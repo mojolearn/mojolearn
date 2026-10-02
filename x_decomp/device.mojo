@@ -1172,6 +1172,9 @@ def _svd2_of_r(
     var slots = (pairs + per - 1) // per if pairs > 0 else 1
     var rots = ctx.enqueue_create_buffer[DType.float32](slots)
     var hrots = ctx.enqueue_create_host_buffer[DType.float32](slots)
+    var sigs = ctx.enqueue_create_buffer[DType.float32](slots)
+    var hsigs = ctx.enqueue_create_host_buffer[DType.float32](slots)
+    var last_sig = -1
     var converged = pairs == 0
     var last = 0
     var sweep = 0
@@ -1184,7 +1187,7 @@ def _svd2_of_r(
         while done < pairs:
             var cnt = per if pairs - done > per else pairs - done
             ctx.enqueue_function[one_sided_svd2_chunk_kernel](
-                rt.unsafe_ptr(), vt.unsafe_ptr(), _p(rots) + k, Int32(n), Int32(p), Int32(q), Int32(cnt),
+                rt.unsafe_ptr(), vt.unsafe_ptr(), _p(rots) + k, _p(sigs) + k, Int32(n), Int32(p), Int32(q), Int32(cnt),
                 X_DECOMP_SVD_TOL, grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
             )
             ctx.synchronize()
@@ -1202,8 +1205,10 @@ def _svd2_of_r(
             done += cnt
             k += 1
         ctx.enqueue_copy(dst_ptr=hrots.unsafe_ptr(), src_buf=rots)
+        ctx.enqueue_copy(dst_ptr=hsigs.unsafe_ptr(), src_buf=sigs)
         ctx.synchronize()
         var total = 0
+        var sig_total = 0
         for t in range(k):
             var c = hrots.unsafe_ptr().unsafe_load(t)
             if not (c >= Float32(0.0)):
@@ -1213,10 +1218,17 @@ def _svd2_of_r(
                     " cut short is refused, never read as a converged answer"
                 )
             total += Int(c)
+            sig_total += Int(hsigs.unsafe_ptr().unsafe_load(t))
         last = total
+        last_sig = sig_total
         sweep += 1
         if total == 0:
             converged = True
+    # lane/neural-pass100: at the sweep limit, a last sweep whose rotations all
+    # paired a column with one below float32 resolution of it is converged
+    # (x_decomp/cells.mojo `svd_rotation_significant`; host_jacobi.mojo the same)
+    if not converged and last_sig == 0:
+        converged = True
     if not converged:
         raise Error(
             "the one-sided Jacobi SVD did not converge in "

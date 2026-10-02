@@ -32,6 +32,7 @@ from std.math import ceildiv, fma
 from std.sys.info import simd_width_of
 
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
+from x_decomp.cells import svd_rotation_significant
 from decomposition.host.pca_full_oracle import SVD_TPB
 from decomposition.host.pca_oracle import PCA_ORACLE_HOST_SABOTAGE, _host_jacobi_fold, host_jacobi_rotation_cs
 from x_decomp.cells import F32Ptr
@@ -134,6 +135,7 @@ def _fold3(xp: F32Ptr, xq: F32Ptr, n: Int, lp: F32Ptr, lq: F32Ptr, lpq: F32Ptr):
         j0 += SVD_TPB
 
 
+
 def fast_one_sided_jacobi_svd(r: List[Float32], n: Int, max_sweeps: Int, tol: Float32) -> FastSvdResult:
     """`host_one_sided_jacobi_svd(r, n, max_sweeps, tol)` (r is not modified)."""
     var rt = List[Float32](length=n * n, fill=Float32(0))
@@ -152,8 +154,10 @@ def fast_one_sided_jacobi_svd(r: List[Float32], n: Int, max_sweeps: Int, tol: Fl
 
     var executed = 0
     var converged = False
+    var last_sig = -1
     for _sweep in range(max_sweeps):
         var rots = 0
+        var sig = 0
         for p in range(n):
             for q in range(p + 1, n):
                 var rp = prt.unsafe_offset(p * n)
@@ -167,13 +171,23 @@ def fast_one_sided_jacobi_svd(r: List[Float32], n: Int, max_sweeps: Int, tol: Fl
                 var thresh = ftz(tol * ftz(np_ * nq_))
                 if abs(apq) > thresh:
                     rots += 1
+                    if svd_rotation_significant(app, aqq):
+                        sig += 1
                     var cs = host_jacobi_rotation_cs(app, aqq, apq)
                     _rotate(rp, rq, n, cs[0], cs[1])
                     _rotate(pvt.unsafe_offset(p * n), pvt.unsafe_offset(q * n), n, cs[0], cs[1])
         executed += 1
+        last_sig = sig
         if rots == 0:
             converged = True
             break
+    # lane/neural-pass100: at the sweep limit, a last sweep whose every
+    # rotation paired a column with one below float32 resolution of it is
+    # converged (see `svd_rotation_significant`); a sweep without rotations
+    # still ends the solve exactly as before, so every solve that converged
+    # keeps its words.
+    if not converged and last_sig == 0:
+        converged = True
 
     var sv = List[Float32](length=n, fill=Float32(0.0))
     for j in range(n):

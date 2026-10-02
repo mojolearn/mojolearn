@@ -46,6 +46,25 @@ comptime X_DECOMP_SVD_SWEEPS = 60
 #: usual float32 one-sided Jacobi threshold (LAPACK sgesvj uses m*eps).
 comptime X_DECOMP_SVD_TOL = Float32(9.5367431640625e-07)
 
+# lane/neural-pass100 (2026-10-01): the stall istella showed (FactorAnalysis,
+# SparsePCA: "did not converge in 60 sweeps at n_cols = 220"). Its R has
+# columns of squared norm ~2e13 next to numerically null ones (1e-16 to
+# 1e-20: the rank-deficient directions of 21 constant features); their
+# a_pq is the float32 rounding of products of a huge and a vanishing column,
+# |a_pq| / (|p| |q|) from 1e-6 to 2e-4, above the 2^-20 tolerance every
+# sweep, so a few rotations repeat forever. A rotation is SIGNIFICANT when
+# the smaller column's squared norm is at least 2^-48 of the larger's (the
+# smaller column above float32 resolution relative to its partner).
+comptime SVD_SIGNIFICANT_RATIO = Float32(3.552713678800501e-15)  # 2^-48
+
+
+@always_inline
+def svd_rotation_significant(app: Float32, aqq: Float32) -> Bool:
+    var lo = app if app < aqq else aqq
+    var hi = aqq if app < aqq else app
+    return lo >= ftz(identical_mul(hi, SVD_SIGNIFICANT_RATIO))
+
+
 comptime F32Ptr = MutPointer[Float32, MutAnyOrigin]
 comptime I32Ptr = MutPointer[Int32, MutAnyOrigin]
 
