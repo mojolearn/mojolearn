@@ -657,8 +657,9 @@ def linear_bwd(
             if grid_sums and len(xtdz_ws) >= QN_GS_BLOCKS:
                 grid_mean = True
                 qn_grid_sum(
-                    ctx, g.unsafe_ptr() + d, dz.unsafe_ptr(), xtdz_ws, n_rows,
-                    Float32(1.0) / Float32(n_rows),
+                    ctx, (g.unsafe_ptr() + d).unsafe_origin_cast[MutAnyOrigin](),
+                    dz.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), xtdz_ws,
+                    n_rows, Float32(1.0) / Float32(n_rows),
                 )
         if not grid_mean:
             ctx.enqueue_function[mean_kernel](
@@ -830,8 +831,9 @@ struct GLMWithData(Movable):
             if _qn_grid_sums_on() and len(self.xtdz_ws) >= QN_GS_BLOCKS:
                 grid_sum = True
                 qn_grid_sum(
-                    ctx, out_v, self.loss_terms.unsafe_ptr(), self.xtdz_ws, n,
-                    Float32(1.0),
+                    ctx, out_v,
+                    self.loss_terms.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    self.xtdz_ws, n, Float32(1.0),
                 )
         if not grid_sum:
             ctx.enqueue_function[sum_terms_kernel](
