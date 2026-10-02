@@ -936,10 +936,20 @@ def ridx_only_splits_for[column: Int, identical: Bool]() -> Bool:
         # order through the index). The IDENTICAL-only readers of the stat
         # plane (the per-iteration partstats sweep, the `stats` trace
         # record) gather through the index too. Opt-out:
-        # `-D MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF`.
-        return column == COLUMN_APPLE and not is_defined[
-            "MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF"
-        ]()
+        # `-D MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF`. Lane gap-trees-nv: `-D
+        # MOJOLEARN_GBDT_ID_RIDX` takes the same schedule on NVIDIA and AMD
+        # IDENTICAL (opt-in until its A/B).
+        return (
+            column == COLUMN_APPLE
+            or (
+                is_defined["MOJOLEARN_GBDT_ID_RIDX"]()
+                and (
+                    column == COLUMN_NVIDIA
+                    or column == COLUMN_AMD
+                    or column == COLUMN_AMD_RDNA
+                )
+            )
+        ) and not is_defined["MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF"]()
     comptime if is_defined["MOJOLEARN_2044_FAST_NO_RIDX_ONLY"]():
         return False
     return (
@@ -1450,12 +1460,8 @@ def knn_selector_warpbound_guard_for[column: Int, identical: Bool]() -> Bool:
 
 
 def umap_device_optimizer_for[column: Int, identical: Bool]() -> Bool:
-    """ROUTING row (2026-09-09, lane/umap-optimizer): whether the IDENTICAL UMAP layout optimizer runs on the device (`umap/optimizer_identical_device.mojo`: one thread per vertex, one epoch snapshot, each vertex's update a fixed-order fold over its CSR row, negatives from Philox keyed by (seed, epoch, edge, slot), no atomics, no launch-geometry dependence) instead of the serial host loop (`umap/optimizer.mojo::optimize_layout_identical`, `umap/sparse_optimizer.mojo::optimize_sparse_layout_identical`). The two produce DIFFERENT bits (Jacobi versus Gauss-Seidel order); the device path is the IDENTICAL contract on every column and is gated against itself across launch widths and GPUs, not against the host loop. `-D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER=1` restores the host loop on every column (the pre-2026-09-09 cards). FAST and DETERMINISTIC never enter this row."""
-    comptime if not identical:
-        return False
-    comptime if is_defined["MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER"]():
-        return False
-    return True
+    """ROUTING row (2026-09-09, lane/umap-optimizer): whether the IDENTICAL UMAP layout optimizer runs on the device (`umap/optimizer_identical_device.mojo`: one thread per vertex, one epoch snapshot, each vertex's update a fixed-order fold over its CSR row, negatives from Philox keyed by (seed, epoch, edge, slot), no atomics, no launch-geometry dependence) instead of the serial host loop (`umap/optimizer.mojo::optimize_layout_identical`, `umap/sparse_optimizer.mojo::optimize_sparse_layout_identical`). The two produce DIFFERENT bits (Jacobi versus Gauss-Seidel order); the device path is the IDENTICAL contract on every column and is gated against itself across launch widths and GPUs, not against the host loop. The opt-in host loop (`-D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER`) was removed (hr-optin-flags). FAST and DETERMINISTIC never enter this row."""
+    return identical
 
 
 comptime KNN_IDENTICAL_INDEX_TILE = 65536

@@ -9,7 +9,7 @@ logsumexp and its row max are one thread per row and the log responsibility
 is one cell. So contiguous row ranges run the original `gmm_e_step` on their
 owners, and their five per-row outputs are copied back into the original row
 positions. The mean log likelihood (the convergence quantity) is then folded
-on the root by the original one-thread ascending `meanll_kernel` over the
+on the root by `gmm_meanll_launch` (the chunked levels) over the
 complete gathered `lse`. The M-step, the precision Cholesky, the convergence
 test and the initialization stay on the root and are unchanged; the KMeans
 initialization uses its own row-tile driver when MOJOLEARN_KMEANS_DEVICE_COUNT
@@ -34,6 +34,7 @@ from mixture.checks.estep import (
     gmm_estep_gemm_workspace_floats,
     gmm_estep_scratch_floats,
     meanll_kernel,
+    gmm_meanll_launch,
 )
 from mixture.checks.gmm_sabotage import GMM_SAB_NONE
 
@@ -236,11 +237,5 @@ def gmm_e_step_dispatch(
     trace.record_device(ctx, tag + ".logresp", logresp, n * ncomp)
     # THE CONVERGENCE QUANTITY: the original one-block, one-thread ascending
     # fold over the complete gathered lse, on the root.
-    ctx.enqueue_function[meanll_kernel](
-        lse.unsafe_ptr(),
-        meanll.unsafe_ptr(),
-        Int32(n),
-        grid_dim=(1, 1, 1),
-        block_dim=(1, 1, 1),
-    )
+    gmm_meanll_launch(ctx, lse, meanll, scratch, n)
     trace.record_device(ctx, tag + ".meanll", meanll, 1)

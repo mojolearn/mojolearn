@@ -23,7 +23,7 @@ ascending order, for the lower set).
 """
 
 from std.bit import pop_count
-from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import vote
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -38,7 +38,9 @@ from svm.impl.smo_sets import in_lower, in_upper
 #: steward 1790601522115), no Dynamic Caching, and the over-limit dispatch
 #: is dropped with no error: svc / svr moved on M2 Metal only.
 comptime FWS_T = 256 if has_apple_gpu_accelerator() else 1024
-comptime FWS_WARPS = FWS_T // 32
+comptime FWS_WARPS = FWS_T // WARP_SIZE
+#: The ballot word: one bit per hardware lane (AMD's wave is 64 wide).
+comptime FWS_VOTE = DType.uint64 if WARP_SIZE == 64 else DType.uint32
 comptime FWS_MAX_WS = 2048
 
 comptime FWS_UPPER = 0
@@ -96,8 +98,8 @@ def fws_walk_kernel[
     fill from the front, if anything is still missing. `state[stage]`
     receives the count this stage selected."""
     var t = Int(thread_idx.x)
-    var lane = t & 31
-    var warp = t >> 5
+    var lane = t % WARP_SIZE
+    var warp = t // WARP_SIZE
     var nt = Int(nt_in)
     var n_ws = Int(n_ws_in)
     var n_already = Int(n_fifo_in)
@@ -129,8 +131,8 @@ def fws_walk_kernel[
         var flag = False
         if r < nt:
             flag = flags.unsafe_load(j) != UInt8(0)
-        var m = vote[DType.uint32](flag)
-        var below = Int(pop_count(m & ((UInt32(1) << UInt32(lane)) - 1)))
+        var m = vote[FWS_VOTE](flag)
+        var below = Int(pop_count(m & ((Scalar[FWS_VOTE](1) << Scalar[FWS_VOTE](lane)) - 1)))
         if lane == 0:
             wsum[warp] = Int32(pop_count(m))
         barrier()

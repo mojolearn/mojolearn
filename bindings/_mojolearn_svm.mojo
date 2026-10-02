@@ -52,6 +52,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from checks.vendor import COMPILED_VENDOR
+from isolation_forest.impl.isolation_forest import IF_DEVICE_TRANSPOSE
 
 from isolation_forest.impl.isolation_tree_builder import IF_FAST_ROWMAJOR
 from isolation_forest.estimator import (
@@ -601,6 +602,16 @@ def iforest_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
 
+def iforest_device_scan_binding() raises -> PythonObject:
+    """1 when this binary's fit uploads the training matrix as raw row-major
+    bytes and scans it for non-finite cells on the device
+    (`IF_DEVICE_TRANSPOSE`, lane gap-trees-nv), so the Python layer's host
+    scan before the fit is the same refusal twice; 0 otherwise."""
+    comptime if IF_DEVICE_TRANSPOSE:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn_svm() abi("C") -> PythonObject:
     try:
@@ -618,6 +629,7 @@ def PyInit__mojolearn_svm() abi("C") -> PythonObject:
         m.def_function[svr_fit_binding]("svr_fit")
         m.def_function[svr_predict_binding]("svr_predict")
         m.def_function[iforest_run_binding]("iforest_run")
+        m.def_function[iforest_device_scan_binding]("iforest_device_scan")
         m.def_function[iforest_device_finite_scan_binding]("iforest_device_finite_scan")
         return m.finalize()
     except e:
