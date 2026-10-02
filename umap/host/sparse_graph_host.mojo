@@ -76,7 +76,7 @@ def sparse_fuzzy_simplicial_graph(
             ):
                 raise Error("UMAP k-NN distances must be finite and sorted")
             previous = d
-        rhos[i] = ug_row_rho(dp, i, n_neighbors, local_connectivity)
+        rhos[i] = ug_row_rho(dp, i, n_neighbors, local_connectivity, tol)
     var tasks = host_predict_task_count(n_samples)
     # The thread-pool join is not worthwhile for small graph builds.
     if n_samples < 256:
