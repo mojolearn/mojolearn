@@ -272,13 +272,16 @@ def glm_cell_parts_kernel(x: FP, gr: FP, hr: FP, n: Int32, d: Int32, m: Int32, n
     var dd = Int(d)
     var mm = Int(m)
     var nbb = Int(nb)
-    var sl = q // nbb
-    if sl < _glm_slot_count(dd, mm):
+    # block-major: neighbouring threads are neighbouring slots over the same
+    # rows, so their x words share cache lines (and a warp keeps one kind)
+    var slots = _glm_slot_count(dd, mm)
+    var b = q // slots
+    var sl = q - b * slots
+    if b < nbb:
         var c = _glm_slot_cell(sl, dd, mm)
         if c >= 0:
-            var b = q - sl * nbb
             var lo = b * FOLD_BLOCK
-            st(parts, q, _glm_cell_part(c, x, gr, hr, dd, mm, lo, min(FOLD_BLOCK, Int(n) - lo)))
+            st(parts, sl * nbb + b, _glm_cell_part(c, x, gr, hr, dd, mm, lo, min(FOLD_BLOCK, Int(n) - lo)))
 
 
 def glm_cell_combine_kernel(parts: FP, d: Int32, m: Int32, nb: Int32, g: FP, h: FP):
