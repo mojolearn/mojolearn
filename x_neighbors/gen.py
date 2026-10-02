@@ -16,7 +16,18 @@ An op is (name, module, item, count, params). Buffer params (fin, fout,
 finout, iin, iout, iinout, fscr) come first in the item's signature after
 `t`, then the scalars (int, float), each in table order. A buffer's size is a
 Python-free expression over the scalars. `count` is the number of items (one
-GPU thread each); "1" is a sequential solve."""
+GPU thread each); "1" is a sequential solve.
+
+A STAGED op (lane neural-pass141) gives a list of stages for `item` and None
+for `count`: each stage is (item, count) or (item, count, loop). Every stage
+item takes the op's whole signature (`t`, then a loop stage's `j`, then the
+buffers and scalars); the GPU driver launches the stages in order over the
+same device buffers (one launch per stage, `loop` launches with j = 0 ..
+loop - 1 for a loop stage; launches on one stream are ordered, so a stage
+reads what the stage before stored), and the host driver runs the same
+stages' items in the same order. The blocked folds and the m x m solves are
+staged ops: the device runs them at full width and the host column runs the
+SAME items, so the two agree by construction."""
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,8 +63,10 @@ OPS = [
       ("n_out", "int"), ("d", "int"), ("n_src", "int")]),
     ("take_cols", "items", "take_cols_item", "n * c",
      [("src", "fin", "n * src_c"), ("cols", "iin", "c"), ("res", "fout", "n * c"), ("n", "int"), ("src_c", "int"), ("c", "int")]),
-    ("variance", "items", "variance_item", "1",
-     [("x", "fin", "count"), ("res", "fout", "1"), ("count", "int")]),
+    ("variance", "items",
+     [("variance_part_item", "xn_fold_blocks(count)"), ("variance_mean_item", "1"),
+      ("variance_ss_part_item", "xn_fold_blocks(count)"), ("variance_fin_item", "1")], None,
+     [("x", "fin", "count"), ("res", "fout", "1"), ("part", "fscr", "xn_fold_blocks(count)"), ("count", "int")]),
     ("ocsvm", "items", "ocsvm_smo_item", "1",
      [("q", "fin", "n * n"), ("cv", "fin", "n"), ("alpha", "finout", "n"), ("g", "fscr", "n"), ("info", "fout", "1"), ("iters", "iout", "1"),
       ("n", "int"), ("eps", "float"), ("max_iter", "int")]),
@@ -99,8 +112,9 @@ OPS = [
     ("skew_transform", "items", "skew_transform_item", "n * nc",
      [("lx", "fin", "n * d"), ("w", "fin", "d * nc"), ("off", "fin", "nc"), ("res", "fout", "n * nc"),
       ("n", "int"), ("d", "int"), ("nc", "int")]),
-    ("absdiff_sum", "items", "absdiff_sum_item", "1",
-     [("a", "fin", "count"), ("b", "fin", "count"), ("res", "fout", "1"), ("count", "int")]),
+    ("absdiff_sum", "items", [("absdiff_part_item", "xn_fold_blocks(count)"), ("absdiff_fin_item", "1")], None,
+     [("a", "fin", "count"), ("b", "fin", "count"), ("res", "fout", "1"), ("part", "fscr", "xn_fold_blocks(count)"),
+      ("count", "int")]),
     ("row_normalize", "items", "row_normalize_item", "n",
      [("a", "fin", "n * m"), ("res", "fout", "n * m"), ("n", "int"), ("m", "int")]),
     ("lp_clamp", "items", "lp_clamp_item", "n",
@@ -139,16 +153,20 @@ OPS = [
       ("n", "int"), ("alpha", "float")]),
     ("cc_step", "items", "cc_step_item", "n",
      [("a", "fin", "n * n"), ("lab", "iin", "n"), ("res", "iout", "n"), ("n", "int")]),
-    ("graph_symmetry", "items", "graph_symmetry_item", "1",
-     [("a", "fin", "n * n"), ("flags", "iout", "2"), ("n", "int")]),
+    ("graph_symmetry", "items", [("graph_symmetry_row_item", "n"), ("graph_symmetry_fin_item", "1")], None,
+     [("a", "fin", "n * n"), ("flags", "iout", "2"), ("rf", "iscr", "2 * n"), ("n", "int")]),
     ("louvain", "items", "louvain_item", "1",
      [("a", "fin", "n * n"), ("labels", "iout", "n"), ("info", "fout", "2"), ("w", "fscr", "n * n"), ("w2", "fscr", "n * n"),
       ("comm", "iscr", "n"), ("node_of", "iscr", "n"), ("deg", "fscr", "n"), ("stot", "fscr", "n"), ("k2c", "fscr", "n"),
       ("tmp", "fscr", "n"), ("n", "int"), ("max_level", "int"), ("resolution", "float"), ("threshold", "float")]),
-    ("svgp", "items", "svgp_item", "1",
+    ("svgp", "items",
+     [("svgp_init_item", "m * m"), ("svgp_chol2_item", "2 * m", "m"), ("svgp_fix2_item", "2 * m"),
+      ("svgp_solve_item", "4 * m + 1"), ("svgp_mid_item", "m * m"), ("svgp_qchol_item", "m", "m"),
+      ("svgp_qfix_item", "m * m"), ("svgp_ypart_item", "xn_fold_blocks(n)"), ("svgp_fin_item", "1")], None,
      [("kuu", "fin", "m * m"), ("bmat", "fin", "m * m"), ("b", "fin", "m"), ("y", "fin", "n"), ("alpha", "fout", "m"),
       ("cmat", "fout", "m * m"), ("qmu", "fout", "m"), ("qsqrt", "fout", "m * m"), ("info", "fout", "2"),
-      ("luu", "fscr", "m * m"), ("ls", "fscr", "m * m"), ("e", "fscr", "m"), ("col", "fscr", "m"),
+      ("luu", "fscr", "m * m"), ("ls", "fscr", "m * m"), ("xs", "fscr", "(4 * m + 1) * m"), ("dv", "fscr", "3 * m"),
+      ("yp", "fscr", "xn_fold_blocks(n)"), ("fl", "iscr", "3"),
       ("m", "int"), ("n", "int"), ("noise", "float"), ("jitter", "float"), ("kdiag", "float")]),
     ("svgp_var", "items", "svgp_var_item", "n",
      [("ksu", "fin", "n * m"), ("cmat", "fin", "m * m"), ("res", "fout", "n"), ("n", "int"), ("m", "int"), ("kdiag", "float")]),
@@ -229,15 +247,10 @@ CUSTOM_OPS = [
 #: launch.
 HOST_RUN = {
     "louvain": "MOJOLEARN_XN_LOUVAIN_GPU",
-    "graph_symmetry": "MOJOLEARN_XN_SERIAL_GPU",
-    # a handful of long serial folds (one item per class x feature, per
-    # feature, or one item): NearestCentroid's group means and std, the
-    # variance, SVGP's m x m solve, the one-item absolute-difference sum
+    # long serial folds (one item per class x feature, or per feature):
+    # NearestCentroid's group means and std
     "group_mean": "MOJOLEARN_XN_SERIAL_GPU",
     "nc_std": "MOJOLEARN_XN_SERIAL_GPU",
-    "variance": "MOJOLEARN_XN_SERIAL_GPU",
-    "svgp": "MOJOLEARN_XN_SERIAL_GPU",
-    "absdiff_sum": "MOJOLEARN_XN_SERIAL_GPU",
 }
 
 BLOCK_OPS = {
@@ -268,10 +281,18 @@ def split(params):
     return bufs, scal
 
 
+def stages(item, count):
+    """An op's stages as (item, count, loop or None)."""
+    if isinstance(item, str):
+        return [(item, count, None)]
+    return [(st[0], st[1], st[2] if len(st) > 2 else None) for st in item]
+
+
 def imports(kind):
-    mods = {}
+    mods = {"items": ["xn_fold_blocks"]}
     for name, mod, item, count, params in OPS:
-        mods.setdefault(mod, []).append(item)
+        for it, _, _ in stages(item, count):
+            mods.setdefault(mod, []).append(it)
     lines = []
     for mod, items in mods.items():
         lines.append(f"from x_neighbors.{mod} import FP, IP, {', '.join(items)}")
@@ -460,7 +481,14 @@ def _i(addr: Int) -> IP:
         kp += [f"{p[0]}_: {'Int64' if p[1] == 'int' else 'Float32'}" for p in scal]
         conv = "".join(f"    var {p[0]} = Int({p[0]}_)\n" if p[1] == "int" else f"    var {p[0]} = {p[0]}_\n" for p in scal)
         call = ", ".join(["t"] + [b[0] for b in bufs] + [p[0] for p in scal])
-        if name in BLOCK_OPS:
+        if not isinstance(item, str):
+            # a staged op: one kernel per stage
+            for si, (it, ct, lp) in enumerate(stages(item, count)):
+                skp = kp + (["lj_: Int64"] if lp else [])
+                sconv = conv + ("    var lj = Int(lj_)\n" if lp else "")
+                scall = ", ".join(["t"] + (["lj"] if lp else []) + [b[0] for b in bufs] + [p[0] for p in scal])
+                s.append(f"\n\ndef {name}_k{si}({', '.join(skp)}):\n{sconv}    var t = _tid()\n    if t < {ct}:\n        {it}({scall})\n")
+        elif name in BLOCK_OPS:
             bm, bf, bc, bd = BLOCK_OPS[name]
             bcall = ", ".join([b[0] for b in bufs] + [p[0] for p in scal])
             s.append(f"\n\ndef {name}_kernel({', '.join(kp)}):\n{conv}    comptime if is_defined[\"{bd}\"]():\n"
@@ -487,7 +515,15 @@ def _i(addr: Int) -> IP:
             fn = "_buf_i" if is_int_buf(b[1]) else "_buf"
             body += f"    var d_{b[0]} = {fn}(ctx, {addr}, {b[2]}, {up})\n"
         args = [f"d_{b[0]}.unsafe_ptr()" for b in bufs] + [f"Int64({p[0]})" if p[1] == "int" else p[0] for p in scal]
-        if name in BLOCK_OPS:
+        if not isinstance(item, str):
+            for si, (it, ct, lp) in enumerate(stages(item, count)):
+                launch = (f"ctx.enqueue_function[{name}_k{si}](\n        {', '.join(args + (['Int64(lj)'] if lp else []))},\n"
+                          f"        grid_dim=_grid({ct}), block_dim=(BLOCK if {ct} > 1 else 1),\n    )\n")
+                if lp:
+                    body += f"    for lj in range({lp}):\n        " + launch.replace("\n    ", "\n        ")
+                else:
+                    body += "    " + launch
+        elif name in BLOCK_OPS:
             bm, bf, bc, bd = BLOCK_OPS[name]
             body += f"    comptime tpb = 1 if is_defined[\"{bd}\"]() else {bc}\n"
             body += f"    ctx.enqueue_function[{name}_kernel](\n        {', '.join(args)},\n        grid_dim=1, block_dim=tpb,\n    )\n"
@@ -563,8 +599,12 @@ def host_loop(item, count, bufs, scal, name=None):
                 ptrs.append(f"IP(unsafe_from_address=Int(s_{b[0]}.unsafe_ptr()))")
             else:
                 ptrs.append(f"_i({b[0]})" if is_int_buf(b[1]) else f"_f({b[0]})")
-        call = ", ".join(["t"] + ptrs + [p[0] for p in scal])
-        body += f"    for t in range({count}):\n        {item}({call})\n"
+        for it, ct, lp in stages(item, count):
+            call = ", ".join(["t"] + (["lj"] if lp else []) + ptrs + [p[0] for p in scal])
+            if lp:
+                body += f"    for lj in range({lp}):\n        for t in range({ct}):\n            {it}({call})\n"
+            else:
+                body += f"    for t in range({ct}):\n        {it}({call})\n"
         return body
 
 

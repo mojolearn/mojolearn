@@ -11,6 +11,7 @@ from checks.numerics import (
     ftz, identical_mul_add, identical_mul, identical_div, identical_exp, identical_log, identical_sqrt,
     identical_tanh, identical_cos, identical_sin,
 )
+from x_neighbors.items import XN_FOLD_BLOCK, xn_fold_blocks
 
 
 def _a(x: Float32, y: Float32) -> Float32:
@@ -212,17 +213,54 @@ def o_group_mean(x: List[Float32], lab: List[Int32], n: Int, d: Int, g: Int, var
     return out^
 
 
+def _o_blocked_sum(v: List[Float32], variant: Int = 0) -> Float32:
+    """The lane's blocked fold (items.mojo XN_FOLD_BLOCK): each block of
+    XN_FOLD_BLOCK elements from zero ascending, then the partials from zero
+    ascending. variant 1: every fold descending."""
+    var n = len(v)
+    var nb = xn_fold_blocks(n)
+    var parts = List[Float32](length=nb if nb > 0 else 1, fill=Float32(0))
+    for blk in range(nb):
+        var lo = blk * XN_FOLD_BLOCK
+        var hi = min(lo + XN_FOLD_BLOCK, n)
+        var acc = Float32(0)
+        for q in range(hi - lo):
+            acc = _a(acc, v[hi - 1 - q if variant == 1 else lo + q])
+        parts[blk] = acc
+    var tot = Float32(0)
+    for q in range(nb):
+        tot = _a(tot, parts[nb - 1 - q if variant == 1 else q])
+    return tot
+
+
+def o_absdiff_sum(a: List[Float32], b: List[Float32], variant: Int = 0) -> Float32:
+    """absdiff_part/fin restated: the blocked sum of |a - b|."""
+    var d = List[Float32](capacity=len(a))
+    for i in range(len(a)):
+        d.append(abs(_s(a[i], b[i])))
+    return _o_blocked_sum(d, variant)
+
+
 def o_variance(x: List[Float32], variant: Int = 0) -> Float32:
+    """variance_part/mean/ss_part/fin restated: the blocked sum, one
+    division, then each block's fma fold of squared deviations from zero and
+    the partials' blocked sum, one division."""
     var n = len(x)
-    var acc = Float32(0)
-    for q in range(n):
-        acc = _a(acc, x[n - 1 - q if variant == 1 else q])
-    var mean = ftz(identical_div(acc, Float32(n)))
-    var ss = Float32(0)
-    for q in range(n):
-        var t = _s(x[n - 1 - q if variant == 1 else q], mean)
-        ss = ftz(identical_mul_add(t, t, ss))
-    return ftz(identical_div(ss, Float32(n)))
+    var mean = ftz(identical_div(_o_blocked_sum(x, variant), Float32(n)))
+    var nb = xn_fold_blocks(n)
+    var parts = List[Float32](capacity=nb)
+    for blk in range(nb):
+        var lo = blk * XN_FOLD_BLOCK
+        var hi = min(lo + XN_FOLD_BLOCK, n)
+        var ss = Float32(0)
+        for q in range(hi - lo):
+            var t = _s(x[hi - 1 - q if variant == 1 else lo + q], mean)
+            ss = ftz(identical_mul_add(t, t, ss))
+        parts.append(ss)
+    var tot = Float32(0)
+    for q in range(nb):
+        tot = _a(tot, parts[nb - 1 - q if variant == 1 else q])
+    return ftz(identical_div(tot, Float32(n)))
 
 
 def o_row_normalize(a: List[Float32], n: Int, m: Int, variant: Int = 0) -> List[Float32]:
@@ -823,9 +861,14 @@ def o_svgp(kuu: List[Float32], bmat: List[Float32], b: List[Float32], y: List[Fl
                 s = ftz(identical_mul_add(kj[i * m + k], col[k], s))
             sm[i * m + j] = s
     var qs = o_cholesky(sm, m, variant)
+    # y^T y: the blocked fold (XN_FOLD_BLOCK), fma within a block
+    var nyb = xn_fold_blocks(n)
     var yty = Float32(0)
-    for i in range(n):
-        yty = ftz(identical_mul_add(y[i], y[i], yty))
+    for blk in range(nyb):
+        var acc = Float32(0)
+        for i in range(blk * XN_FOLD_BLOCK, min((blk + 1) * XN_FOLD_BLOCK, n)):
+            acc = ftz(identical_mul_add(y[i], y[i], acc))
+        yty = _a(yty, acc)
     var sb = _chol_solve(ls, m, b)
     var bsb = Float32(0)
     for i in range(m):
