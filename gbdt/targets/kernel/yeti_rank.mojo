@@ -101,8 +101,14 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
-from checks.numerics import ftz, identical_mul, identical_pow
+from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    ftz,
+    identical_mul,
+    identical_pow,
+)
 from gbdt.data.yeti_rank_tasks import (
     YETI_TASK_POSITIONS,
     yeti_rank_cuda_seed,
@@ -136,6 +142,14 @@ def yeti_block_parallel_for[column: Int]() -> Bool:
     comptime if is_defined["MOJOLEARN_3040_YETI_SEQUENTIAL"]():
         return False
     comptime if is_defined["MOJOLEARN_3040_YETI_BLOCK"]():
+        return True
+    # FAST on Apple (lane apple-fast-trees2): the block kernel too. The
+    # one-thread-per-task launch ran each task's permutations, its 1024-key
+    # sort and its pairs on ONE GPU thread (block_dim 1); the block kernel is
+    # the same bits (above), its 32 KiB of shared memory is Apple's
+    # threadgroup limit, and its barriers order threadgroup memory only.
+    # `-D MOJOLEARN_3040_YETI_SEQUENTIAL` is the A/B arm.
+    comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
         return True
     return column == COLUMN_NVIDIA
 
