@@ -17,12 +17,6 @@ Here the n columns play a round-robin tournament (the circle method on
 m = n or n + 1 players, the odd one a bye): m - 1 rounds a sweep, each round
 m / 2 DISJOINT pairs, so the rotations of a round commute and run at once.
 
-  one-sided SVD: ONE launch a round, a block a pair. The block folds the
-    pair's 2 x 2 Gram (256 partials, a pairwise tree), takes the same
-    relative test and the same `jacobi_rotation_cs` as the cyclic kernel and
-    rotates the two columns of R and of V. R and V are kept transposed, so
-    a column is a contiguous row. No device word crosses threads inside a
-    launch: thread t owns elements t, t + 256, ... of the block's two rows.
   eigh: TWO launches a round. `eigh_par_cs_kernel` takes every pair's (c, s)
     from its three cells; `eigh_par_update_kernel` applies J^T A J by 2 x 2
     blocks: block (i, j) of pairs i < j is J_i^T B J_j, one thread, stored to
@@ -31,22 +25,22 @@ m / 2 DISJOINT pairs, so the rotations of a round commute and run at once.
     (row, pair). Every cell has one writer a launch and no reader but its
     writer.
 
-Convergence is the cyclic kernels' own test (SVD: a sweep with no rotation
-against tol sqrt(app) sqrt(aqq); eigh: sum of squared off-diagonal cells
-against tol^2 ||A||_F^2), read on the host once a sweep. The host refuses
-nothing here: a solve that does not converge in its budget returns False
-and the caller runs the cyclic solver on the untouched input.
+Convergence is the cyclic kernel's own test (sum of squared off-diagonal
+cells against tol^2 ||A||_F^2), both sums folded on the device
+(`eigh_par_off_fold_kernel`, the fixed order of `x_decomp/rr.mojo`
+`rr_off_fold`) and three scalars read on the host once a sweep. A solve that
+does not converge in its budget returns False and the caller runs the cyclic
+solver on the untouched input. (cgfin-c-decomp deleted the one-sided SVD's
+round-robin experiment, MOJOLEARN_XD_PJ_SVD_MIN, default never.)
 """
-from x_decomp.cells import svd_rotation_significant
 from std.gpu import block_dim, block_idx, thread_idx
-from std.math import sqrt
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from decomposition.checks.jacobi_eigh_device import jacobi_rotation_cs
+from checks.numerics import ftz
 from x_decomp.cells import F32Ptr
-from x_decomp.rr import pj_first, pj_second, rr_cs, rr_block, rr_vrow, rr_row_off
+from x_decomp.rr import RR_OFF_TPB, rr_cs, rr_block, rr_vrow, rr_row_off
 
 comptime PJ_TPB = 256
 """Launch width of every kernel here (under the M2 Pro dispatch limit)."""
@@ -70,113 +64,6 @@ def pj_identity_kernel(dst: F32Ptr, n_in: Int32):
         var i = t // n
         var j = t - i * n
         dst.unsafe_store(t, Float32(1.0) if i == j else Float32(0.0))
-
-
-def svd_par_round_kernel(
-    rt: F32Ptr, vt: F32Ptr, flags: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32, tol_in: Float32
-):
-    """Round `round_in` of the one-sided Jacobi: block b takes pair b. `rt`
-    and `vt` are R^T and V^T (n x n); `flags` has 2 (m / 2) slots: slot b is
-    set to 1 when pair b rotated (the host clears it before a sweep) and
-    slot m / 2 + b takes round + 1 from EVERY block, the bye included, so
-    the host can tell a dispatch Metal dropped (M2: a launch over the
-    pipeline's thread limit is dropped with no error) from a sweep without
-    rotations. Launch with m / 2 blocks of exactly PJ_TPB threads."""
-    var n = Int(n_in)
-    var m = Int(m_in)
-    var b = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var a0 = pj_first(Int(round_in), b, m)
-    var a1 = pj_second(Int(round_in), b, m)
-    var p = min(a0, a1)
-    var q = max(a0, a1)
-    var slab = stack_allocation[3 * PJ_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var rot = stack_allocation[3, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    if tid == 0:
-        flags.unsafe_store(m // 2 + b, Float32(Int(round_in) + 1))
-    # q >= n is the bye of an odd n: uniform over the block
-    if q < n:
-        var lp = Float32(0.0)
-        var lq = Float32(0.0)
-        var lpq = Float32(0.0)
-        var i = tid
-        while i < n:
-            var xp = rt.unsafe_load(p * n + i)
-            var xq = rt.unsafe_load(q * n + i)
-            lp = xp * xp + lp
-            lq = xq * xq + lq
-            lpq = xp * xq + lpq
-            i += PJ_TPB
-        slab[tid] = lp
-        slab[PJ_TPB + tid] = lq
-        slab[2 * PJ_TPB + tid] = lpq
-        barrier()
-        if tid == 0:
-            var w = PJ_TPB // 2
-            while w > 0:
-                for t in range(w):
-                    slab[t] = slab[t] + slab[t + w]
-                    slab[PJ_TPB + t] = slab[PJ_TPB + t] + slab[PJ_TPB + t + w]
-                    slab[2 * PJ_TPB + t] = slab[2 * PJ_TPB + t] + slab[2 * PJ_TPB + t + w]
-                w = w // 2
-            var app = slab[0]
-            var aqq = slab[PJ_TPB]
-            var apq = slab[2 * PJ_TPB]
-            # two roots, as the cyclic kernel: the product of two squared
-            # norms can overflow where this cannot
-            var thresh = tol_in * (sqrt(app) * sqrt(aqq))
-            var c0 = Float32(1.0)
-            var s0 = Float32(0.0)
-            var go = Float32(0.0)
-            if abs(apq) > thresh and svd_rotation_significant(app, aqq):  # Andrew 2026-10-01
-                var cs = jacobi_rotation_cs(app, aqq, apq)
-                c0 = cs[0]
-                s0 = cs[1]
-                go = Float32(1.0)
-                flags.unsafe_store(b, Float32(1.0))
-            rot[0] = c0
-            rot[1] = s0
-            rot[2] = go
-        barrier()
-        var c = rot[0]
-        var s = rot[1]
-        if rot[2] != Float32(0.0):
-            var k = tid
-            while k < n:
-                var rp = rt.unsafe_load(p * n + k)
-                var rq = rt.unsafe_load(q * n + k)
-                var vp = vt.unsafe_load(p * n + k)
-                var vq = vt.unsafe_load(q * n + k)
-                rt.unsafe_store(p * n + k, c * rp - s * rq)
-                rt.unsafe_store(q * n + k, s * rp + c * rq)
-                vt.unsafe_store(p * n + k, c * vp - s * vq)
-                vt.unsafe_store(q * n + k, s * vp + c * vq)
-                k += PJ_TPB
-
-
-def svd_par_norm_kernel(rt: F32Ptr, s_out: F32Ptr, n_in: Int32):
-    """s_out[j] = the norm of row j of rt (column j of the rotated R): block
-    j, 256 partials, the pairwise tree. Launch with n blocks of PJ_TPB."""
-    var n = Int(n_in)
-    var j = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var slab = stack_allocation[PJ_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var acc = Float32(0.0)
-    if j < n:
-        var i = tid
-        while i < n:
-            var x = rt.unsafe_load(j * n + i)
-            acc = x * x + acc
-            i += PJ_TPB
-    slab[tid] = acc
-    barrier()
-    if tid == 0 and j < n:
-        var w = PJ_TPB // 2
-        while w > 0:
-            for t in range(w):
-                slab[t] = slab[t] + slab[t + w]
-            w = w // 2
-        s_out.unsafe_store(j, sqrt(slab[0]))
 
 
 def eigh_par_cs_kernel(a: F32Ptr, cs: F32Ptr, n_in: Int32, m_in: Int32, round_in: Int32):
@@ -211,8 +98,8 @@ def eigh_par_update_kernel(a: F32Ptr, v: F32Ptr, cs: F32Ptr, n_in: Int32, m_in: 
 
 def eigh_par_off_kernel(a: F32Ptr, dst: F32Ptr, n_in: Int32):
     """dst[k] = row k's off-diagonal squares, dst[n + k] = a_kk^2 (`rr_row_off`),
-    dst[2 n + k] = a_kk. One thread a row; the host adds the first two in
-    float64, rows ascending."""
+    dst[2 n + k] = a_kk. One thread a row; `eigh_par_off_fold_kernel` folds the
+    first two."""
     var n = Int(n_in)
     var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if k < n:
@@ -220,3 +107,44 @@ def eigh_par_off_kernel(a: F32Ptr, dst: F32Ptr, n_in: Int32):
         dst.unsafe_store(k, o[0])
         dst.unsafe_store(n + k, o[1])
         dst.unsafe_store(2 * n + k, a.unsafe_load(k * n + k))
+
+
+def eigh_par_off_fold_kernel(src: F32Ptr, out: F32Ptr, n_in: Int32):
+    """out[0] = the off-diagonal sum, out[1] = the diagonal sum of
+    `eigh_par_off_kernel`'s rows (src[0, n), src[n, 2 n)), out[2] = the least
+    of those 2 n cells (a -1 left there is a dispatch that did not run).
+    `rr_off_fold`'s order: thread t adds rows t, t + RR_OFF_TPB, ...
+    ascending, then the pairwise tree. ONE block of RR_OFF_TPB threads (n is
+    the matrix order, not a row count)."""
+    var n = Int(n_in)
+    var tid = Int(thread_idx.x)
+    var so = stack_allocation[RR_OFF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sd = stack_allocation[RR_OFF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sm = stack_allocation[RR_OFF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ao = Float32(0.0)
+    var ad = Float32(0.0)
+    var am = Float32(0.0)
+    var k = tid
+    while k < n:
+        var o = src.unsafe_load(k)
+        var d = src.unsafe_load(n + k)
+        ao = ftz(ao + o)
+        ad = ftz(ad + d)
+        am = min(am, min(o, d))
+        k += RR_OFF_TPB
+    so[tid] = ao
+    sd[tid] = ad
+    sm[tid] = am
+    barrier()
+    var w = RR_OFF_TPB // 2
+    while w > 0:
+        if tid < w:
+            so[tid] = ftz(so[tid] + so[tid + w])
+            sd[tid] = ftz(sd[tid] + sd[tid + w])
+            sm[tid] = min(sm[tid], sm[tid + w])
+        barrier()
+        w = w // 2
+    if tid == 0:
+        out.unsafe_store(0, so[0])
+        out.unsafe_store(1, sd[0])
+        out.unsafe_store(2, sm[0])

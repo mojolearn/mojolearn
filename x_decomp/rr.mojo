@@ -149,11 +149,37 @@ def rr_row_off(a: F32Ptr, n: Int, k: Int) -> SIMD[DType.float32, 2]:
 
 
 
+comptime RR_OFF_TPB = 256
+"""Width of the convergence test's fold (`eigh_par_off_fold_kernel`)."""
+
+
+def rr_off_fold(a: F32Ptr, n: Int) -> SIMD[DType.float32, 2]:
+    """(sum of the rows' off-diagonal squares, sum of a_kk^2): the device's
+    `eigh_par_off_fold_kernel` order. Slot t adds rows t, t + RR_OFF_TPB, ...
+    ascending, then the pairwise tree over the RR_OFF_TPB slots."""
+    var po = InlineArray[Float32, RR_OFF_TPB](fill=Float32(0.0))
+    var pd = InlineArray[Float32, RR_OFF_TPB](fill=Float32(0.0))
+    for t in range(RR_OFF_TPB):
+        var k = t
+        while k < n:
+            var o = rr_row_off(a, n, k)
+            po[t] = ftz(po[t] + o[0])
+            pd[t] = ftz(pd[t] + o[1])
+            k += RR_OFF_TPB
+    var w = RR_OFF_TPB // 2
+    while w > 0:
+        for t in range(w):
+            po[t] = ftz(po[t] + po[t + w])
+            pd[t] = ftz(pd[t] + pd[t + w])
+        w = w // 2
+    return SIMD[DType.float32, 2](po[0], pd[0])
+
+
 def host_eigh_rr(mut a: List[Float32], mut v: List[Float32], n: Int, sweeps: Int, tol: Float32) -> Tuple[Bool, Int]:
     """The device driver's solve on the host (x_decomp/device.mojo `_eigh_par`):
     `a` consumed in place (its diagonal the eigenvalues), v = the vectors in
     columns (row major). The same rounds in the same order, the same
-    convergence test (float64 sums, rows ascending, before every sweep) and
+    convergence test (`rr_off_fold`, before every sweep) and
     the same Frobenius check. Returns (converged, sweeps run)."""
     var m = n + (n % 2)
     var h = m // 2
@@ -170,12 +196,9 @@ def host_eigh_rr(mut a: List[Float32], mut v: List[Float32], n: Int, sweeps: Int
     var fro_in = Float64(-1.0)
     var fro_now = Float64(0.0)
     for sweep in range(sweeps + 1):
-        var off = Float64(0.0)
-        var dg = Float64(0.0)
-        for k in range(n):
-            var o = rr_row_off(ap, n, k)
-            off += Float64(o[0])
-            dg += Float64(o[1])
+        var sums = rr_off_fold(ap, n)
+        var off = Float64(sums[0])
+        var dg = Float64(sums[1])
         fro_now = off + dg
         if fro_in < 0.0:
             fro_in = fro_now

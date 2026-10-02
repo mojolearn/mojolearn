@@ -89,17 +89,17 @@ from x_decomp.jacobi2 import (
     one_sided_svd2_finish_kernel,
 )
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
+from x_decomp.rr import RR_OFF_TPB
 from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
 from x_decomp.tsqr_device import ts_apply_device, ts_factor_device, ts_free_device, ts_pack_device
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
+    eigh_par_off_fold_kernel,
     eigh_par_off_kernel,
     eigh_par_update_kernel,
     pj_identity_kernel,
     pj_transpose_kernel,
-    svd_par_norm_kernel,
-    svd_par_round_kernel,
 )
 from std.os import getenv
 from core.device_zero import enqueue_fill
@@ -111,7 +111,6 @@ from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 #: Sweep budgets of the round-robin solvers (FAST on Metal). A solve that
 #: does not converge inside its budget is handed to the cyclic solver.
 comptime PJ_EIGH_SWEEPS = 30
-comptime PJ_SVD_SWEEPS = X_DECOMP_SVD_SWEEPS
 #: rounds enqueued between two synchronize() calls
 comptime PJ_SYNC_ROUNDS = 512
 
@@ -121,15 +120,6 @@ def pj_eigh_min() -> Int:
     x_decomp/jacobi_par.mojo (FAST builds for Metal only; 0 = never).
     MOJOLEARN_XD_PJ_EIGH_MIN overrides it."""
     var v = String(getenv("MOJOLEARN_XD_PJ_EIGH_MIN", "0"))
-    try:
-        return Int(v)
-    except:
-        return 0
-
-
-def pj_svd_min() -> Int:
-    """`pj_eigh_min` for the one-sided SVD (MOJOLEARN_XD_PJ_SVD_MIN)."""
-    var v = String(getenv("MOJOLEARN_XD_PJ_SVD_MIN", "0"))
     try:
         return Int(v)
     except:
@@ -1601,89 +1591,6 @@ def _pj_blocks(count: Int) -> Int:
     return (count + PJ_TPB - 1) // PJ_TPB if count > 0 else 1
 
 
-def _svd_par_of_r(
-    ctx: DeviceContext,
-    mut r: DeviceBuffer[DType.float32],
-    mut v: DeviceBuffer[DType.float32],
-    mut s: DeviceBuffer[DType.float32],
-    n: Int,
-) raises -> Bool:
-    """The one-sided Jacobi SVD of R in the round-robin ordering
-    (x_decomp/jacobi_par.mojo; FAST on Metal): `v` and `s` as `svd_of_r`
-    leaves them. `r` is NOT written, so on False (no convergence in
-    PJ_SVD_SWEEPS sweeps) the caller runs the cyclic solver on it."""
-    var m = n + (n % 2)
-    var h = m // 2
-    var rt = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var flags = ctx.enqueue_create_buffer[DType.float32](2 * h)
-    var hflags = ctx.enqueue_create_host_buffer[DType.float32](2 * h)
-    var hs = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_function[pj_transpose_kernel](
-        r.unsafe_ptr(), rt.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
-    )
-    ctx.enqueue_function[pj_identity_kernel](vt.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
-    # ||R||_F^2 before the sweeps (the rotations keep it): the column norms
-    ctx.enqueue_function[svd_par_norm_kernel](
-        rt.unsafe_ptr(), s.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(PJ_TPB, 1, 1)
-    )
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s)
-    ctx.synchronize()
-    var fro_in = Float64(0.0)
-    for i in range(n):
-        var x = Float64(hs.unsafe_ptr().unsafe_load(i))
-        fro_in += x * x
-    var converged = False
-    var ran = True
-    for _sweep in range(PJ_SVD_SWEEPS):
-        enqueue_fill(ctx, flags, Float32(0.0))
-        for rd in range(m - 1):
-            ctx.enqueue_function[svd_par_round_kernel](
-                rt.unsafe_ptr(), vt.unsafe_ptr(), flags.unsafe_ptr(), Int32(n), Int32(m), Int32(rd), X_DECOMP_SVD_TOL,
-                grid_dim=(h, 1, 1), block_dim=(PJ_TPB, 1, 1),
-            )
-            if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
-                ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=hflags.unsafe_ptr(), src_buf=flags)
-        ctx.synchronize()
-        var rots = 0
-        for i in range(h):
-            if hflags.unsafe_ptr().unsafe_load(i) != Float32(0.0):
-                rots += 1
-            # every block of the sweep's last round wrote its round number
-            if hflags.unsafe_ptr().unsafe_load(h + i) != Float32(m - 1):
-                ran = False
-        if not ran:
-            break
-        if rots == 0:
-            converged = True
-            break
-    if converged:
-        ctx.enqueue_function[svd_par_norm_kernel](
-            rt.unsafe_ptr(), s.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(PJ_TPB, 1, 1)
-        )
-        ctx.enqueue_function[pj_transpose_kernel](
-            vt.unsafe_ptr(), v.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
-        )
-        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s)
-        ctx.synchronize()
-        # the rotations are orthogonal: sum of s^2 is ||R||_F^2, or the
-        # solve is not an answer (a dropped dispatch, a wrong launch)
-        var fro_out = Float64(0.0)
-        for i in range(n):
-            var x = Float64(hs.unsafe_ptr().unsafe_load(i))
-            fro_out += x * x
-        if not (abs(fro_out - fro_in) <= 1.0e-3 * fro_in):
-            converged = False
-    ctx.synchronize()
-    _ = rt^
-    _ = vt^
-    _ = flags^
-    _ = hflags^
-    _ = hs^
-    return converged
-
-
 def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
     """Floats of partial-sum scratch `launch_gemm` needs (0: none)."""
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
@@ -2380,7 +2287,8 @@ struct DevExec(Exec):
         """The two-sided Jacobi in the round-robin ordering
         (x_decomp/jacobi_par.mojo; FAST on Metal), then `device_eigh`'s own
         tail (`sign_flip_kernel`, the ascending permutation). The cyclic
-        kernel's convergence test, taken on the host before every sweep.
+        kernel's convergence test before every sweep, its sums folded on the
+        device (`eigh_par_off_fold_kernel`); the host reads three scalars.
         `a` is not written; False = not converged in PJ_EIGH_SWEEPS sweeps
         (nothing stored), and the caller runs the cyclic solver."""
         var ctx = xd_ctx()
@@ -2390,7 +2298,8 @@ struct DevExec(Exec):
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
         var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
-        var hoff = ctx.enqueue_create_host_buffer[DType.float32](3 * n)
+        var dfold = ctx.enqueue_create_buffer[DType.float32](3)
+        var hfold = ctx.enqueue_create_host_buffer[DType.float32](3)
         ctx.enqueue_function[pj_identity_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
         var tol2 = Float64(JACOBI_TOL) * Float64(JACOBI_TOL)
         var converged = False
@@ -2401,22 +2310,20 @@ struct DevExec(Exec):
             # a sum of squares is never negative: -1 left in the readback is
             # a dispatch that did not run
             enqueue_fill(ctx, doff, Float32(-1.0))
+            enqueue_fill(ctx, dfold, Float32(-1.0))
             ctx.enqueue_function[eigh_par_off_kernel](
                 da.unsafe_ptr(), doff.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n), block_dim=PJ_TPB
             )
-            ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
+            # both sums folded on the device (x_decomp/rr.mojo rr_off_fold,
+            # the host column's order); three scalars come back
+            ctx.enqueue_function[eigh_par_off_fold_kernel](
+                doff.unsafe_ptr(), dfold.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=RR_OFF_TPB
+            )
+            ctx.enqueue_copy(dst_ptr=hfold.unsafe_ptr(), src_buf=dfold)
             ctx.synchronize()
-            var off = Float64(0.0)
-            var dg = Float64(0.0)
-            var ran = True
-            for i in range(n):
-                var o = Float64(hoff.unsafe_ptr().unsafe_load(i))
-                var d2 = Float64(hoff.unsafe_ptr().unsafe_load(n + i))
-                if o < 0.0 or d2 < 0.0:
-                    ran = False
-                off += o
-                dg += d2
-            if not ran:
+            var off = Float64(hfold.unsafe_ptr().unsafe_load(0))
+            var dg = Float64(hfold.unsafe_ptr().unsafe_load(1))
+            if not (hfold.unsafe_ptr().unsafe_load(2) >= Float32(0.0)):
                 break
             fro_now = off + dg
             if fro_in < 0.0:
@@ -2462,7 +2369,8 @@ struct DevExec(Exec):
         _ = dv^
         _ = dcs^
         _ = doff^
-        _ = hoff^
+        _ = dfold^
+        _ = hfold^
         ctx.synchronize()
         _ = ctx^
         return converged
@@ -2621,17 +2529,9 @@ struct DevExec(Exec):
         var nan = Float32(0.0) / Float32(0.0)
         enqueue_fill(ctx, s_buf, nan)
         enqueue_fill(ctx, v_buf, nan)
-        var done = False
-        # MOJOLEARN_XD_PJ_SVD_MIN=n: the round-robin one-sided Jacobi from n
-        # up, on every vendor and tier (lane/neural-net-experiment; it was
-        # Metal FAST only). Default 0: never. NOT the pinned cyclic order's
-        # bits under IDENTICAL: an experiment the digest check reports.
-        var lo_svd = pj_svd_min()
-        if lo_svd > 0 and n >= lo_svd:
-            done = _svd_par_of_r(ctx, r_buf, v_buf, s_buf, n)
-        if done:
-            pass
-        elif jacobi2_on() and n >= J2_BOUNDED_MIN_N:
+        # cgfin-c-decomp: the MOJOLEARN_XD_PJ_SVD_MIN round-robin SVD
+        # experiment (default never) is deleted with its host sums
+        if jacobi2_on() and n >= J2_BOUNDED_MIN_N:
             # measured (m4pro-b 1790606245923): 0.45x at n = 28, 1.07x at
             # 256, 1.21x at 800 (one launch); from 64 columns the bounded
             # chunk route (lane/lle-timeout), the old one launch below
