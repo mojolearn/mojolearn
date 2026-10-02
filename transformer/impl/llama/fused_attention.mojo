@@ -7318,6 +7318,8 @@ comptime ZK_TQ = 16
 comptime ZK_RG = 4
 
 
+#: Two blocks an SM at most 128 registers a thread (register allocation only).
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(512)))
 def fused_bwd_zdot_kreg_kernel[HD: Int, TQ: Int, SWZ: Bool = False](
     zdot: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
