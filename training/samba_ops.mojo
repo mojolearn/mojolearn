@@ -492,28 +492,42 @@ def samba_validate_accumulation(n: Int, a: Int, t_tokens: Int) raises:
         )
 
 
-def samba_accumulate_host(
+def samba_ftz_copy_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`dst[i] = ftz(src[i])`, one thread per cell: the `A == 1` accumulate
+    (the tree of one piece is its seam)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    dst.unsafe_store(i, ftz(src.unsafe_load(i)))
+
+
+def samba_accumulate_buffer(
     ctx: DeviceContext,
+    var src: DeviceBuffer[DType.float32],
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    parts_ptr: MutPointer[Float32, MutUntrackedOrigin],
     n: Int,
     a: Int,
-    t_tokens: Int,
 ) raises -> Int:
-    """`out[n] = tree(parts[0], ..., parts[a-1])`, `parts` being `a`
-    consecutive blocks of `n` floats in ascending microbatch index.
-    `t_tokens >= 1` asks for clause 9.2's alignment predicate and refuses a
-    misaligned split BY NAME; `t_tokens < 0` makes no alignment claim (the
-    residual or tied-weight pair add). Returns `n`."""
-    samba_validate_accumulation(n, a, t_tokens)
-    _refuse_nonfinite("accumulate parts", parts_ptr, n * a)
+    """The balanced-tree accumulate over `a` consecutive blocks of `n` floats
+    already resident in `src` (ascending microbatch index), written to the
+    host `out_ptr`. Every level is one grid-wide launch; `A == 1` is one ftz
+    copy on the device. The caller validated the shape. Returns `n`."""
+    var dst = ctx.enqueue_create_buffer[DType.float32](n * max(1, a // 2))
     if a == 1:
-        for i in range(n):
-            out_ptr.unsafe_store(i, ftz(parts_ptr.unsafe_load(i)))
+        ctx.enqueue_function[samba_ftz_copy_kernel](
+            dst.unsafe_ptr(), src.unsafe_ptr(), Int32(n),
+            grid_dim=(_grid(n), 1, 1),
+            block_dim=(SAMBA_TPB, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=dst)
+        ctx.synchronize()
+        _ = src^
+        _ = dst^
         return n
-    var src = _upload_f32(ctx, parts_ptr, n * a)
-    var dst = ctx.enqueue_create_buffer[DType.float32](n * (a // 2))
-    ctx.synchronize()
     var pieces = a
     var from_src = True
     while pieces > 1:
@@ -530,7 +544,6 @@ def samba_accumulate_host(
                 grid_dim=(_grid(n * pairs), 1, 1),
                 block_dim=(SAMBA_TPB, 1, 1),
             )
-        ctx.synchronize()
         from_src = not from_src
         pieces = pairs
     if from_src:
@@ -543,7 +556,26 @@ def samba_accumulate_host(
         ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=view)
         ctx.synchronize()
         _ = view
-    ctx.synchronize()
     _ = src^
     _ = dst^
     return n
+
+
+def samba_accumulate_host(
+    ctx: DeviceContext,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    parts_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    a: Int,
+    t_tokens: Int,
+) raises -> Int:
+    """`out[n] = tree(parts[0], ..., parts[a-1])`, `parts` being `a`
+    consecutive blocks of `n` floats in ascending microbatch index, on the
+    device (`samba_accumulate_buffer`); `host` names the caller's buffers.
+    `t_tokens >= 1` asks for clause 9.2's alignment predicate and refuses a
+    misaligned split BY NAME; `t_tokens < 0` makes no alignment claim (the
+    residual or tied-weight pair add). Returns `n`."""
+    samba_validate_accumulation(n, a, t_tokens)
+    _refuse_nonfinite("accumulate parts", parts_ptr, n * a)
+    var src = _upload_f32(ctx, parts_ptr, n * a)
+    return samba_accumulate_buffer(ctx, src^, out_ptr, n, a)
