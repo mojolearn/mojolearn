@@ -353,6 +353,24 @@ def ecv_alphas(res: FP, alphas: Int, fp: FP, l_n: Int, a_n: Int, explicit: Bool,
             st(res, alphas + l * a_n + k, alpha_grid_value(amax, eps, k, a_n))
 
 
+def ecv_alpha_cell(res: FP, alphas: Int, fp: FP, l_n: Int, a_n: Int, explicit: Bool, eps: Float32,
+                   fw: FP, q: Int, d: Int, n: Int, l: Int, k: Int):
+    """Cell (l, k) of `ecv_alphas`, with its statements: the device runs one
+    cell per thread, the host loops them (same values, same chains)."""
+    if explicit:
+        st(res, alphas + l * a_n + k, ld(fp, 2 + l_n + k))
+        return
+    var l1r = ld(fp, 2 + l)
+    var qmax = Float32(0)
+    for j in range(d):
+        qmax = fmax(qmax, fabs(ld(fw, q + j)))
+    var amax = fd(qmax, fm(i2f(n), l1r))
+    if amax <= Float32(1e-6):
+        st(res, alphas + l * a_n + k, Float32(1e-6))
+        return
+    st(res, alphas + l * a_n + k, alpha_grid_value(amax, eps, k, a_n))
+
+
 def ecv_choose(res: FP, fp: FP, d: Int, l_n: Int, a_n: Int, f_n: Int):
     """The choice: the smallest mean over folds, first on a tie; alpha_
     and l1_ratio_ into res[d + 1], res[d + 2]."""

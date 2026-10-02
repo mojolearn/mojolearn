@@ -29,11 +29,12 @@ from max.gpu.memory import AddressSpace
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from max.gpu.host import DeviceContext
 from std.os import getenv
+from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.ops import FP, IP, fa, fm, fs, fd, fmad, ld, st, ldi, i2f, fill
 from x_linear.team import Team, TEAM_SLOTS, LINEAR_TPB, team_at
 from x_linear.tops import upper_cell, _acc_fa, _acc_fmad
 from x_linear.cd import (
-    ecv_alphas, ecv_choose, ecv_finish, ecv_rows, ecv_fold_fa, ecv_cfmad, ecv_held_sse, ECV_UH,
+    ecv_alphas, ecv_alpha_cell, ecv_choose, ecv_finish, ecv_rows, ecv_fold_fa, ecv_cfmad, ecv_held_sse, ECV_UH,
     t_enet_gram_cd,
 )
 
@@ -76,7 +77,8 @@ def _fold_of(p: Int, f_n: Int) -> Int:
     return -1 if p == f_n else p
 
 
-def ecv_means_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP):
+@always_inline
+def _ecv_means_kernel_body(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP):
     """Thread (p, j): column j's mean of prep p (j == d: the y mean and the
     training row count)."""
     var dd = Int(d)
@@ -100,7 +102,12 @@ def ecv_means_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP):
         st(ew, sc + 2, i2f(Int(rows)))
 
 
-def ecv_gram_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP):
+def ecv_means_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP, wf: IP, woff: Int32, nonce: Int32):
+    _ecv_means_kernel_body(x, y, n, d, ip, ew)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _ecv_gram_kernel_body(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP):
     """Thread (p, c): Gram cell c (upper triangle, mirrored), X'y entry or
     |yc|^2 of prep p, from the means of `ecv_means_kernel`."""
     var dd = Int(d)
@@ -134,17 +141,30 @@ def ecv_gram_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP):
         st(ew, sc + 1, ecv_cfmad(y, 0, 1, ym, y, 0, 1, ym, fid, nn, fold))
 
 
-def ecv_grid_kernel(n: Int32, d: Int32, ip: IP, fp: FP, res: FP, ew: FP):
-    """One thread: the alpha grids from the full data's X'y."""
-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
-        return
+def ecv_gram_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP, wf: IP, woff: Int32, nonce: Int32):
+    _ecv_gram_kernel_body(x, y, n, d, ip, ew)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _ecv_grid_kernel_body(n: Int32, d: Int32, ip: IP, fp: FP, res: FP, ew: FP):
+    """Thread (l, k): cell (l, k) of the alpha grids from the full data's
+    X'y (`ecv_alpha_cell`, the host's statements, one cell per thread)."""
     var dd = Int(d)
     var lay = _EcvLayout(dd, ldi(ip, 2), ldi(ip, 3), ldi(ip, 4))
+    var g = Int(block_idx.x) * ECV_TPB + Int(thread_idx.x)
+    if g >= lay.l_n * lay.a_n:
+        return
     var q = lay.prep(lay.f_n) + dd + dd * dd
-    ecv_alphas(res, dd + 4, fp, lay.l_n, lay.a_n, ldi(ip, 5) != 0, ld(fp, 0), ew, q, dd, Int(n))
+    ecv_alpha_cell(res, dd + 4, fp, lay.l_n, lay.a_n, ldi(ip, 5) != 0, ld(fp, 0), ew, q, dd, Int(n),
+                   g // lay.a_n, g % lay.a_n)
 
 
-def ecv_path_kernel(d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP):
+def ecv_grid_kernel(n: Int32, d: Int32, ip: IP, fp: FP, res: FP, ew: FP, wf: IP, woff: Int32, nonce: Int32):
+    _ecv_grid_kernel_body(n, d, ip, fp, res, ew)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _ecv_path_kernel_body(d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP):
     """Block r = f * L + l: the warm-started path of fold f at l1_ratio l,
     each point's (coef, intercept) into the path's words."""
     var dd = Int(d)
@@ -182,7 +202,12 @@ def ecv_path_kernel(d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP):
         t.sync()
 
 
-def ecv_score_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, res: FP, ew: FP):
+def ecv_path_kernel(d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP, wf: IP, woff: Int32, nonce: Int32):
+    _ecv_path_kernel_body(d, ip, fp, res, ew, tw)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _ecv_score_kernel_body(x: FP, y: FP, n: Int32, d: Int32, ip: IP, res: FP, ew: FP):
     """Thread (f, l, k): the held-out mean squared error of that path point
     into res's mse words."""
     var dd = Int(d)
@@ -202,8 +227,9 @@ def ecv_score_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, res: FP, ew: FP):
     st(res, mse + (l * lay.a_n + k) * lay.f_n + f, fd(acc, i2f(n_te)) if n_te > 0 else Float32(0))
 
 
-
-
+def ecv_score_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, res: FP, ew: FP, wf: IP, woff: Int32, nonce: Int32):
+    _ecv_score_kernel_body(x, y, n, d, ip, res, ew)
+    witness_end(wf, woff, nonce)
 
 # Held-out rows a score block stages: SCORE_WORDS floats of rows (as many
 # rows as fit, at most ECV_SR), their y and fold ids.
@@ -214,7 +240,8 @@ comptime ECV_SCORE_BYTES = (ECV_SW + 2 * ECV_SR) * 4
 comptime ECV_SCORE_STAGED = lib_smem_page_fits_for[TARGET_COLUMN, ECV_SCORE_BYTES]()
 
 
-def ecv_score_staged_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, res: FP, ew: FP, spans: IP):
+@always_inline
+def _ecv_score_staged_kernel_body(x: FP, y: FP, n: Int32, d: Int32, ip: IP, res: FP, ew: FP, spans: IP):
     """Block r = f * L + l: the held-out mean squared errors of the path of
     (fold f, l1_ratio l). The fold's held-out rows lie in
     [spans[2f], spans[2f] + spans[2f + 1]); tiles of them are staged in
@@ -282,8 +309,17 @@ def ecv_score_staged_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, res: FP, e
         kb += ECV_SNT
 
 
-def ecv_refit_kernel(n: Int32, d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP):
-    """One block: the choice, then the refit on the full data from zero."""
+def ecv_score_staged_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, res: FP, ew: FP, spans: IP, wf: IP, woff: Int32, nonce: Int32):
+    _ecv_score_staged_kernel_body(x, y, n, d, ip, res, ew, spans)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _ecv_refit_kernel_body(d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP):
+    """One block team: the choice, then the refit on the full data from
+    zero. Its work is the d x d Gram's coordinate descent (one problem);
+    the rows were folded by the means and Gram kernels, and the row count
+    is the full prep's (the word the means kernel wrote, as the path kernel
+    reads its fold's)."""
     var dd = Int(d)
     var lay = _EcvLayout(dd, ldi(ip, 2), ldi(ip, 3), ldi(ip, 4))
     var r = lay.f_n * lay.l_n
@@ -301,13 +337,16 @@ def ecv_refit_kernel(n: Int32, d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP
     t.sync()
     var alpha = ld(res, dd + 1)
     var l1r = ld(res, dd + 2)
-    var nf = i2f(Int(n))
+    var nf = ld(ew, sc + 2)
     var iters = t_enet_gram_cd(t, ew, gg, q, qw, w, dd, ld(ew, sc + 1), fm(fm(alpha, l1r), nf),
                                fm(fm(alpha, fs(Float32(1), l1r)), nf), ldi(ip, 0), ld(fp, 1), ldi(ip, 6) != 0)
     if t.lead():
         ecv_finish(res, ew, base, w, sc, dd, ldi(ip, 1) != 0, alpha, l1r, iters)
 
 
+def ecv_refit_kernel(d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP, wf: IP, woff: Int32, nonce: Int32):
+    _ecv_refit_kernel_body(d, ip, fp, res, ew, tw)
+    witness_end(wf, woff, nonce)
 
 # ------------------------------------------------ staged preps (lane/neural-pass110)
 # The means and the Gram as above were one thread per value folding a
@@ -362,7 +401,8 @@ def _fid_at(fid: FP, n: Int, row: Int) -> Float32:
     return v if row < n else Float32(-1)
 
 
-def ecv_means_staged_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP):
+@always_inline
+def _ecv_means_staged_kernel_body(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP):
     """Block b: columns [16b, 16b + 16) of [X | y]; thread (p, c) folds
     column 16b + c over prep p's training rows (`ecv_means_kernel`'s
     values). ECV_NT threads; the next tile's words are loaded into
@@ -445,7 +485,12 @@ def ecv_means_staged_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP):
             st(ew, sc + 2, i2f(Int(rows)))
 
 
-def ecv_gram_staged_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP):
+def ecv_means_staged_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP, wf: IP, woff: Int32, nonce: Int32):
+    _ecv_means_staged_kernel_body(x, y, n, d, ip, ew)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _ecv_gram_staged_kernel_body(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP):
     """Block b = pair * P + p: prep p's cells of the tile pair (J, K) =
     upper_cell(pair, tiles) of [X | y]; thread (a, b) the cell
     (16J + a, 16K + b) when it is on or above the diagonal
@@ -544,6 +589,14 @@ def ecv_gram_staged_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP):
             st(ew, q + dd + 1, acc)
 
 
+def ecv_gram_staged_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP, wf: IP, woff: Int32, nonce: Int32):
+    _ecv_gram_staged_kernel_body(x, y, n, d, ip, ew)
+    witness_end(wf, woff, nonce)
+
+#: the witness words of one fit: every launch's blocks (x_linear/witness.mojo)
+comptime ECV_WIT_CAP = 1 << 20
+
+
 def _blocks(count: Int) -> Int:
     return max((count + ECV_TPB - 1) // ECV_TPB, 1)
 
@@ -575,9 +628,6 @@ def enetcv_fit_grid(
     ctx.enqueue_copy(dst_buf=dip, src_ptr=hip.unsafe_ptr())
     if len(hfp) > 0:
         ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
-    dout.enqueue_fill(Float32(0))
-    dew.enqueue_fill(Float32(0))
-    dtw.enqueue_fill(Float32(0))
     var on = String(getenv("MOJOLEARN_X_LINEAR_ENETCV_STAGED")) != "0"
     var staged = ECV_STAGED and on and f_n + 1 <= ECV_NT // ECV_TC
     var staged_score = ECV_SCORE_STAGED and on and n_y >= 2 * n
@@ -598,51 +648,78 @@ def enetcv_fit_grid(
                 hsp[2 * f] = Int32(lo[f])
                 hsp[2 * f + 1] = Int32(hi[f] - lo[f])
     var dsp = ctx.enqueue_create_buffer[DType.int32](len(hsp))
-    if staged:
-        var tiles = (d + 1 + ECV_TC - 1) // ECV_TC
-        ctx.enqueue_function[ecv_means_staged_kernel](
-            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
-            grid_dim=tiles, block_dim=ECV_NT,
-        )
-        ctx.enqueue_function[ecv_gram_staged_kernel](
-            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
-            grid_dim=tiles * (tiles + 1) // 2 * (f_n + 1), block_dim=ECV_NT,
-        )
-    else:
-        ctx.enqueue_function[ecv_means_kernel](
-            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
-            grid_dim=_blocks((f_n + 1) * (d + 1)), block_dim=ECV_TPB,
-        )
-        ctx.enqueue_function[ecv_gram_kernel](
-            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
-            grid_dim=_blocks((f_n + 1) * (d * (d + 1) // 2 + d + 1)), block_dim=ECV_TPB,
-        )
-    ctx.enqueue_function[ecv_grid_kernel](
-        Int32(n), Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dew.unsafe_ptr(),
-        grid_dim=1, block_dim=1,
-    )
-    if paths > 0:
-        ctx.enqueue_function[ecv_path_kernel](
-            Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dew.unsafe_ptr(), dtw.unsafe_ptr(),
-            grid_dim=paths, block_dim=nt,
-        )
-        if staged_score:
-            ctx.enqueue_copy(dst_buf=dsp, src_ptr=hsp.unsafe_ptr())
-            ctx.enqueue_function[ecv_score_staged_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dout.unsafe_ptr(),
-                dew.unsafe_ptr(), dsp.unsafe_ptr(), grid_dim=paths, block_dim=ECV_SNT,
+    var ctx_w = ctx.copy()
+    # the whole fit (no host step between its launches) as ONE guarded unit
+    # from zeroed scratch: a cut launch reruns it (x_linear/witness.mojo)
+    var wit = Witness(ctx_w, ECV_WIT_CAP)
+    var tries = 0
+    while True:
+        var nonce = wit.begin()
+        var wo = 0
+        dout.enqueue_fill(Float32(0))
+        dew.enqueue_fill(Float32(0))
+        dtw.enqueue_fill(Float32(0))
+        if staged:
+            var tiles = (d + 1 + ECV_TC - 1) // ECV_TC
+            ctx.enqueue_function[ecv_means_staged_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
+                wit.p(), Int32(wo), nonce, grid_dim=tiles, block_dim=ECV_NT,
             )
+            wo += tiles
+            ctx.enqueue_function[ecv_gram_staged_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
+                wit.p(), Int32(wo), nonce, grid_dim=tiles * (tiles + 1) // 2 * (f_n + 1), block_dim=ECV_NT,
+            )
+            wo += tiles * (tiles + 1) // 2 * (f_n + 1)
         else:
-            ctx.enqueue_function[ecv_score_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dout.unsafe_ptr(),
-                dew.unsafe_ptr(), grid_dim=_blocks(paths * a_n), block_dim=ECV_TPB,
+            ctx.enqueue_function[ecv_means_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
+                wit.p(), Int32(wo), nonce, grid_dim=_blocks((f_n + 1) * (d + 1)), block_dim=ECV_TPB,
             )
-    ctx.enqueue_function[ecv_refit_kernel](
-        Int32(n), Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dew.unsafe_ptr(),
-        dtw.unsafe_ptr(), grid_dim=1, block_dim=nt,
-    )
-    if n_out > 0:
-        ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
+            wo += _blocks((f_n + 1) * (d + 1))
+            ctx.enqueue_function[ecv_gram_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dew.unsafe_ptr(),
+                wit.p(), Int32(wo), nonce, grid_dim=_blocks((f_n + 1) * (d * (d + 1) // 2 + d + 1)), block_dim=ECV_TPB,
+            )
+            wo += _blocks((f_n + 1) * (d * (d + 1) // 2 + d + 1))
+        ctx.enqueue_function[ecv_grid_kernel](
+            Int32(n), Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dew.unsafe_ptr(),
+            wit.p(), Int32(wo), nonce, grid_dim=_blocks(l_n * a_n), block_dim=ECV_TPB,
+        )
+        wo += _blocks(l_n * a_n)
+        if paths > 0:
+            ctx.enqueue_function[ecv_path_kernel](
+                Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dew.unsafe_ptr(), dtw.unsafe_ptr(),
+                wit.p(), Int32(wo), nonce, grid_dim=paths, block_dim=nt,
+            )
+            wo += paths
+            if staged_score:
+                ctx.enqueue_copy(dst_buf=dsp, src_ptr=hsp.unsafe_ptr())
+                ctx.enqueue_function[ecv_score_staged_kernel](
+                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dout.unsafe_ptr(),
+                    dew.unsafe_ptr(), dsp.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=paths, block_dim=ECV_SNT,
+                )
+                wo += paths
+            else:
+                ctx.enqueue_function[ecv_score_kernel](
+                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dout.unsafe_ptr(),
+                    dew.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_blocks(paths * a_n), block_dim=ECV_TPB,
+                )
+                wo += _blocks(paths * a_n)
+        ctx.enqueue_function[ecv_refit_kernel](
+            Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dew.unsafe_ptr(),
+            dtw.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=nt,
+        )
+        wo += 1
+        if n_out > 0:
+            ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
+        if wo > ECV_WIT_CAP:
+            raise Error("ElasticNetCV: witness capacity")
+        if wit.ok(ctx_w, wo, "ElasticNetCV fit"):
+            break
+        tries += 1
+        if tries >= WITNESS_TRIES:
+            wit.fail()
     ctx.synchronize()
     _ = hip^
     _ = hfp^
@@ -655,3 +732,4 @@ def enetcv_fit_grid(
     _ = dtw^
     _ = dsp^
     _ = hsp^
+    _ = wit^
