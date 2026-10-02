@@ -91,9 +91,11 @@ time.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.ffi import _Global
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.memory import memcpy
 from std.os import getenv
-from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from core.host_predict_threads import host_predict_task_count
 from core.host_parallel import host_parallelize
 from std.time import perf_counter_ns
@@ -117,6 +119,7 @@ from training.checks.optimizer import (
     OPT_RECORD_INTERMEDIATES,
     SAB_CHUNKS,
     identical_clip_grad_norm,
+    identical_clip_grad_norm_batched,
     identical_optimizer_step,
     identical_optimizer_workspace_floats,
     _step_timing_on,
@@ -430,6 +433,196 @@ def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPoi
     host_parallelize(_chunk, tasks)
 
 
+# ===========================================================================
+# PIPELINED TRANSPORT (lane gap-train-utils, 2026-10-02)
+# ===========================================================================
+# Pipelined host <-> device transport for the optimizer step and the
+# global-norm clip (lane gap-train-utils, 2026-10-02).
+#
+# The training surface takes the caller's HOST float32 buffers (parameters,
+# gradients) and must write the parameters (and a clipped gradient) back into
+# them, so a step moves its registry up and down the bus. At the board's
+# 16.8M parameters that transport was most of the step: the raw host-pointer
+# copies of pageable memory ran at about a third of the link, one after the
+# other. Here every transfer goes in chunks of `opt_pipe_floats()` through
+# TWO pinned stage halves: on the way up the host copies chunk i into one
+# half (over host tasks) while the DMA of chunk i - 1 runs out of the other;
+# on the way down the DMA of chunk i runs into one half while the host copies
+# chunk i - 1 out of the other. One in-order context, so every ordering below
+# is a `ctx.synchronize()`; nothing computes here and no bit moves.
+#
+# `MOJOLEARN_OPT_PIPE=0/1` forces the route off/on (the A/B; default on for
+# the NVIDIA and AMD columns, off elsewhere), and
+# `MOJOLEARN_OPT_PIPE_FLOATS` sets the chunk (default 2^21 floats, 8 MB).
+#
+# A stage half is free when the transfer that used it last has been waited
+# for: every entry here begins with a wait (a previous call's last upload DMA
+# may still be reading a half) and the uploads leave their last DMA in
+# flight, ordered before the caller's next work on the one queue.
+#
+# The host copies are `_parallel_copy_out` above, the transport copy this
+# file already ran for the staged download.
+
+comptime _FP = MutPointer[Float32, MutUntrackedOrigin]
+
+#: the default chunk, floats (8 MB): eight chunks for a 64 MB tensor
+comptime OPT_PIPE_FLOATS = 1 << 21
+
+
+def opt_pipe_on() -> Bool:
+    """Whether the optimizer step and the clip move their buffers through
+    the pipelined stage (MOJOLEARN_OPT_PIPE forces either)."""
+    var v = String(getenv("MOJOLEARN_OPT_PIPE"))
+    comptime if TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD:
+        return v != "0"
+    return v == "1"
+
+
+def opt_pipe_floats() -> Int:
+    var v = String(getenv("MOJOLEARN_OPT_PIPE_FLOATS"))
+    if v == "":
+        return OPT_PIPE_FLOATS
+    try:
+        var n = Int(v)
+        if n >= 1024:
+            return n
+    except:
+        pass
+    return OPT_PIPE_FLOATS
+
+
+struct _OptStage(Defaultable, Movable):
+    var bufs: List[HostBuffer[DType.float32]]
+    var ch: Int
+
+    def __init__(out self):
+        self.bufs = List[HostBuffer[DType.float32]]()
+        self.ch = 0
+
+
+comptime _STAGE_NAME = "MojoTrainingOptPipeStageIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoTrainingOptPipeStageFast"
+comptime _STAGE = _Global[StorageType=_OptStage, name=_STAGE_NAME, init_fn=_OptStage.__init__]
+
+
+def _stage_half(ctx: DeviceContext, ch: Int, half: Int) raises -> _FP:
+    """Stage half `half` (0 or 1) of `ch` floats, created (pinned) on first
+    use and again when the chunk changes; the caller has waited."""
+    var s = _STAGE.get_or_create_ptr()
+    if s[].ch != ch or len(s[].bufs) != 2:
+        s[].bufs.clear()
+        s[].bufs.append(ctx.enqueue_create_host_buffer[DType.float32](ch))
+        s[].bufs.append(ctx.enqueue_create_host_buffer[DType.float32](ch))
+        ctx.synchronize()
+        s[].ch = ch
+    return _FP(unsafe_from_address=Int(s[].bufs[half].unsafe_ptr()))
+
+
+struct PipeSegs(Movable):
+    """Transfer segments, in order: segment s moves `n[s]` floats between
+    host address `host[s]` and device buffer `which[s]` (0 or 1, the two
+    buffers the entry is handed) at float offset `off[s]`."""
+    var which: List[Int]
+    var off: List[Int]
+    var host: List[Int]
+    var n: List[Int]
+
+    def __init__(out self):
+        self.which = List[Int]()
+        self.off = List[Int]()
+        self.host = List[Int]()
+        self.n = List[Int]()
+
+    def add(mut self, which: Int, off: Int, host: Int, n: Int):
+        if n > 0:
+            self.which.append(which)
+            self.off.append(off)
+            self.host.append(host)
+            self.n.append(n)
+
+
+def opt_pipe_upload(
+    ctx: DeviceContext,
+    mut d0: DeviceBuffer[DType.float32],
+    mut d1: DeviceBuffer[DType.float32],
+    segs: PipeSegs,
+) raises:
+    """Every segment host -> device through the stage, in order. Returns
+    with the last chunk's DMA possibly in flight (ordered before the
+    caller's next enqueue)."""
+    var ch = opt_pipe_floats()
+    ctx.synchronize()
+    var half = 0
+    for s in range(len(segs.n)):
+        var src = _FP(unsafe_from_address=segs.host[s])
+        var n = segs.n[s]
+        var done = 0
+        while done < n:
+            var cnt = min(ch, n - done)
+            var sp = _stage_half(ctx, ch, half)
+            # overlaps the DMA of the previous chunk, out of the other half
+            _parallel_copy_out(sp, src + done, cnt)
+            # the previous DMA done: this half's last user finished before
+            # the copy above (the wait one chunk earlier), the other half is
+            # free for the next copy
+            ctx.synchronize()
+            if segs.which[s] == 0:
+                ctx.enqueue_copy(
+                    dst_buf=d0.create_sub_buffer[DType.float32](segs.off[s] + done, cnt), src_ptr=sp
+                )
+            else:
+                ctx.enqueue_copy(
+                    dst_buf=d1.create_sub_buffer[DType.float32](segs.off[s] + done, cnt), src_ptr=sp
+                )
+            done += cnt
+            half = 1 - half
+
+
+def opt_pipe_download(
+    ctx: DeviceContext,
+    mut d0: DeviceBuffer[DType.float32],
+    mut d1: DeviceBuffer[DType.float32],
+    segs: PipeSegs,
+) raises:
+    """Every segment device -> host through the stage, in order, after all
+    work already on the queue. Returns with every byte in host memory."""
+    var ch = opt_pipe_floats()
+    var half = 0
+    var have_prev = False
+    var prev_dst = 0
+    var prev_cnt = 0
+    var prev_half = 0
+    for s in range(len(segs.n)):
+        var n = segs.n[s]
+        var done = 0
+        while done < n:
+            var cnt = min(ch, n - done)
+            var sp = _stage_half(ctx, ch, half)
+            if segs.which[s] == 0:
+                ctx.enqueue_copy(
+                    dst_ptr=sp, src_buf=d0.create_sub_buffer[DType.float32](segs.off[s] + done, cnt)
+                )
+            else:
+                ctx.enqueue_copy(
+                    dst_ptr=sp, src_buf=d1.create_sub_buffer[DType.float32](segs.off[s] + done, cnt)
+                )
+            if have_prev:
+                # overlaps the DMA just queued, into the other half
+                _parallel_copy_out(
+                    _FP(unsafe_from_address=prev_dst),
+                    _stage_half(ctx, ch, prev_half),
+                    prev_cnt,
+                )
+            ctx.synchronize()
+            have_prev = True
+            prev_dst = segs.host[s] + done * 4
+            prev_cnt = cnt
+            prev_half = half
+            done += cnt
+            half = 1 - half
+    if have_prev:
+        _parallel_copy_out(_FP(unsafe_from_address=prev_dst), _stage_half(ctx, ch, prev_half), prev_cnt)
+
+
 def identical_optimizer_step_resident_host(
     ctx: DeviceContext,
     param_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -513,9 +706,19 @@ def identical_optimizer_step_resident_host(
     # the uploads are raw host-pointer copies: measured on the M4, a fresh
     # 64 MB array uploads in 1.6-2.4 ms this way (only the process's first
     # upload pays ~9-20 ms), and the memcpy-plus-DMA stage took 4.3 ms
-    ctx.enqueue_copy(dst_buf=p_buf, src_ptr=param_ptr)
-    ctx.enqueue_copy(dst_buf=g_buf, src_ptr=grad_ptr)
-    ctx.synchronize()
+    var piped = opt_pipe_on()
+    if piped:
+        # lane gap-train-utils: the two uploads through the pipelined
+        # pinned stage (the PIPELINED TRANSPORT section above); a transport choice,
+        # no bit moves. The in-order queue orders them before the step.
+        var up = PipeSegs()
+        up.add(0, 0, Int(param_ptr), n_total)
+        up.add(1, 0, Int(grad_ptr), n_total)
+        opt_pipe_upload(ctx, p_buf, g_buf, up)
+    else:
+        ctx.enqueue_copy(dst_buf=p_buf, src_ptr=param_ptr)
+        ctx.enqueue_copy(dst_buf=g_buf, src_ptr=grad_ptr)
+        ctx.synchronize()
     _step_timing_tick(ctx, rton, rtk, "resident.upload")
 
     # `denom_out` and `q_out` are written only under `MOJOLEARN_OPT_RECORD`.
@@ -536,7 +739,8 @@ def identical_optimizer_step_resident_host(
     var ws_floats = identical_optimizer_workspace_floats(offsets)
     var ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
     var sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
-    ctx.synchronize()
+    if not piped:
+        ctx.synchronize()
 
     _step_timing_tick(ctx, rton, rtk, "resident.small_buffers")
     var buf_initialized = List[Bool]()
@@ -570,7 +774,14 @@ def identical_optimizer_step_resident_host(
     # copy ran at about 3 GB/s here; the DMA into pinned memory and the
     # memcpy out together take a fifth of that)
     _step_timing_tick(ctx, rton, rtk, "resident.device_step")
-    if opt_download_staged():
+    if piped:
+        var down = PipeSegs()
+        down.add(0, 0, Int(param_ptr), n_total)
+        if max_norm > Float32(0.0):
+            down.add(1, 0, Int(grad_ptr), n_total)
+        opt_pipe_download(ctx, p_buf, g_buf, down)
+        _step_timing_tick(ctx, rton, rtk, "resident.download")
+    elif opt_download_staged():
         ctx.enqueue_copy(dst_buf=p_stage, src_buf=p_buf)
         if max_norm > Float32(0.0):
             ctx.enqueue_copy(dst_buf=g_stage, src_buf=g_buf)
@@ -767,13 +978,24 @@ def identical_clip_grad_norm_addrs_host(
     var n_total = offsets[n_tensors]
 
     var grad = ctx.enqueue_create_buffer[DType.float32](n_total)
-    for j in range(n_tensors):
-        var n_j = offsets[j + 1] - offsets[j]
-        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addrs[j])
-        var view = grad.create_sub_buffer[DType.float32](offsets[j], n_j)
-        ctx.enqueue_copy(dst_buf=view, src_ptr=src)
-        _ = view^
-    ctx.synchronize()
+    # lane gap-train-utils: the J tensors through the pipelined pinned stage
+    # (the PIPELINED TRANSPORT section above) and the batched clip (no per-tensor
+    # waits); the same device buffer, offsets and launches, the same bits
+    var piped = opt_pipe_on()
+    var segs = PipeSegs()
+    var spare = ctx.enqueue_create_buffer[DType.float32](1)
+    if piped:
+        for j in range(n_tensors):
+            segs.add(0, offsets[j], addrs[j], offsets[j + 1] - offsets[j])
+        opt_pipe_upload(ctx, grad, spare, segs)
+    else:
+        for j in range(n_tensors):
+            var n_j = offsets[j + 1] - offsets[j]
+            var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addrs[j])
+            var view = grad.create_sub_buffer[DType.float32](offsets[j], n_j)
+            ctx.enqueue_copy(dst_buf=view, src_ptr=src)
+            _ = view^
+        ctx.synchronize()
 
     var sumsq = ctx.enqueue_create_buffer[DType.float32](n_tensors)
     var norms = ctx.enqueue_create_buffer[DType.float32](n_tensors)
@@ -783,28 +1005,34 @@ def identical_clip_grad_norm_addrs_host(
         identical_optimizer_workspace_floats(offsets)
     )
     var sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
-    ctx.synchronize()
 
     # THE ONE CALL THAT COMPUTES ANYTHING.
-    _ = identical_clip_grad_norm(
-        ctx,
-        grad,
-        sumsq,
-        norms,
-        total_cell,
-        out2,
-        ws,
-        sab_partials,
-        offsets,
-        max_norm,
-    )
-
-    for j in range(n_tensors):
-        var n_j = offsets[j + 1] - offsets[j]
-        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addrs[j])
-        var view = grad.create_sub_buffer[DType.float32](offsets[j], n_j)
-        ctx.enqueue_copy(dst_ptr=dst, src_buf=view)
-        _ = view^
+    if piped:
+        _ = identical_clip_grad_norm_batched(
+            ctx, grad, sumsq, norms, total_cell, out2, ws, sab_partials, offsets, max_norm,
+        )
+        opt_pipe_download(ctx, grad, spare, segs)
+    else:
+        ctx.synchronize()
+        _ = identical_clip_grad_norm(
+            ctx,
+            grad,
+            sumsq,
+            norms,
+            total_cell,
+            out2,
+            ws,
+            sab_partials,
+            offsets,
+            max_norm,
+        )
+        for j in range(n_tensors):
+            var n_j = offsets[j + 1] - offsets[j]
+            var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addrs[j])
+            var view = grad.create_sub_buffer[DType.float32](offsets[j], n_j)
+            ctx.enqueue_copy(dst_ptr=dst, src_buf=view)
+            _ = view^
+    _ = spare
     var h = ctx.enqueue_create_host_buffer[DType.float32](2)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=out2)
     ctx.synchronize()

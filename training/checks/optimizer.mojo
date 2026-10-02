@@ -1189,6 +1189,61 @@ def identical_clip_grad_norm(
     return coef
 
 
+def identical_clip_grad_norm_batched(
+    ctx: DeviceContext,
+    mut grad: DeviceBuffer[DType.float32],
+    mut sumsq: DeviceBuffer[DType.float32],
+    mut norms: DeviceBuffer[DType.float32],
+    mut total_cell: DeviceBuffer[DType.float32],
+    mut out2: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    mut sab_partials: DeviceBuffer[DType.float32],
+    offsets: List[Int],
+    max_norm: Float32,
+) raises -> Float32:
+    """`identical_clip_grad_norm` with its owed batched launcher (lane
+    gap-train-utils, 2026-10-02): the SAME per-tensor
+    `identical_gemm_into(..., 1, 1, N_j, OP_NT)` calls in `param_id` order
+    on the same views and workspace, then the same coefficient and scale,
+    with the J per-tensor waits removed. The views are held in one list
+    across the coefficient's first wait (the reason the original waits per
+    tensor), and the one in-order queue already orders each GEMM's use of
+    `ws` after the previous one's. The same launches in the same order: the
+    same bits. Any clip sabotage build takes the original."""
+    comptime if SAB_CLIP_PARAM_ORDER or SAB_CLIP_SERIAL_FOLD or SAB_CLIP_BLOCK_PARTITION:
+        return identical_clip_grad_norm(
+            ctx, grad, sumsq, norms, total_cell, out2, ws, sab_partials, offsets, max_norm
+        )
+    var j_count = len(offsets) - 1
+    if j_count <= 0:
+        return Float32(0.0)
+    var keep = List[DeviceBuffer[DType.float32]]()
+    for j in range(j_count):
+        var begin = offsets[j]
+        var count = offsets[j + 1] - begin
+        var ga = grad.create_sub_buffer[DType.float32](begin, count)
+        var gb = grad.create_sub_buffer[DType.float32](begin, count)
+        var cv = sumsq.create_sub_buffer[DType.float32](j, 1)
+        identical_gemm_into(ctx, cv, ga, gb, ws, 1, 1, count, OP_NT)
+        keep.append(ga^)
+        keep.append(gb^)
+        keep.append(cv^)
+    var coef = identical_clip_coefficient(ctx, sumsq, norms, total_cell, out2,
+                                           ws, j_count, max_norm)
+    # (the coefficient waited before it read its two floats back)
+    _ = keep^
+
+    step_count_launch()
+    ctx.enqueue_function[clip_scale_kernel](
+        grad.unsafe_ptr(),
+        Int32(offsets[j_count]),
+        coef,
+        grid_dim=(_grid_for(offsets[j_count]), 1, 1),
+        block_dim=(OPT_TPB, 1, 1),
+    )
+    return coef
+
+
 # ===========================================================================
 # THE HOST-VISIBLE ENTRY POINT
 # ===========================================================================
