@@ -66,7 +66,17 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
         # is skipped. The means are recomputed here regardless (the same
         # statements give the same values).
         var pre_gram = ldi(ip, 4) != 0
-        if fi:
+        # ip[4] == 2 (lane/neural-pass120's moments grid): the means, the
+        # Gram and X'y are all in fw already, and y's mean waits in
+        # fw[prev] (read here, then the slot zeroed as the path expects)
+        var pre_all = ldi(ip, 4) == 2
+        if pre_all:
+            ym = ld(fw, prev)
+            t.sync()
+            if t.lead():
+                st(fw, prev, Float32(0))
+            t.sync()
+        elif fi:
             t_col_means(t, x, n, d, fw, xm)
             ym = t_mean(t, y, n, 1)
         else:
@@ -75,7 +85,8 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
             t.sync()
         if not pre_gram:
             t_centered_gram(t, x, n, d, fw, xm, fw, gg)
-        t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
+        if not pre_all:
+            t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
     else:
         # the host: one row pass per statistic, vector accumulators (lane linear-cpu)
         if fi:

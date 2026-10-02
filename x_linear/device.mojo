@@ -232,10 +232,14 @@ def fit_device(
         while len(hip) < 5:
             hip.append(Int32(0))
         hip[4] = Int32(1 if ridge_pre else 0)
+    var lars_pre = False
+    comptime if MOMENTS_GRID:
+        lars_pre = (grid_gram and n > 0
+                    and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0")
     if algo == ALGO_LARS:
         while len(hip) < 5:
             hip.append(Int32(0))
-        hip[4] = Int32(1 if grid_gram else 0)
+        hip[4] = Int32(2 if lars_pre else (1 if grid_gram else 0))
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](
         team_work(n, team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr()))), team_own(algo, d)))
@@ -252,7 +256,19 @@ def fit_device(
     dfw.enqueue_fill(Float32(0))
     diw.enqueue_fill(Int32(0))
     dtw.enqueue_fill(Float32(0))
-    if grid_gram:
+    if lars_pre:
+        # lane/neural-pass120's moments of [X | y] (fw: xm 0, G d, X'y
+        # d + d*d, y's mean parked in prev = 2d + d*d)
+        ctx.enqueue_function[mg_means_kernel](
+            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), Int32(hip[1]), dfw.unsafe_ptr(),
+            Int32(0), Int32(2 * d + d * d), grid_dim=mg_tiles(d, 1), block_dim=MG_NT,
+        )
+        var tl = mg_tiles(d, 1)
+        ctx.enqueue_function[mg_cross_kernel](
+            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), dfw.unsafe_ptr(),
+            Int32(0), Int32(2 * d + d * d), Int32(d), Int32(d + d * d), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
+        )
+    elif grid_gram:
         # The means then the centered Gram into fw[0, d + d*d), the layout
         # `lars_fit` reads (xm at 0, G at d); the team recomputes the means
         # itself (the same statements, the same values) and skips the Gram.
