@@ -98,6 +98,23 @@ _HOST_INFERENCE_BASENAME = "_mojolearn_gp_infer_host"
 _NAME = "mojolearn GaussianProcessClassifier"
 
 
+def _ovr_combine(ext, cols, n_star):
+    """DEVIATION 2833 on the binding (`gpc_ovr_combine`, the device on a GPU
+    install): the k unnormalized class-1 probability columns normalized per
+    row and the first strictly largest column per row. Returns the
+    (n_star, k) float64 probabilities and the n_star int32 codes."""
+    k = len(cols)
+    proba = empty((n_star, k), "<f8")
+    codes = empty((n_star,), "<i4")
+    ext.gpc_ovr_combine(
+        # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_ovr_combine_binding.
+        [addr(proba, name="proba_out"), addr(codes, name="codes_out")]
+        + [addr_ro(c, name=f"class_{i}") for i, c in enumerate(cols)],
+        [int(n_star)],
+    )
+    return proba, codes
+
+
 def _kernel_arrays(kernel):
     """The postfix spec as the four flat arrays `_gp_impl.py` sends
     (DEVIATION 1756), plus the length-scale count."""
@@ -422,17 +439,9 @@ class GaussianProcessClassifier(NumericModeMixin):
         if self.n_classes_ == 2:
             _, _, p = self._latent(ext, self.estimators_[0], q, True)
             return Array.from_list([[1.0 - v, v] for v in p.tolist()], "<f8")
-        cols = [self._latent(ext, e, q, True)[2].tolist() for e in self.estimators_]
-        rows = []
-        for t in range(int(q.shape[0])):
-            vals = [c[t] for c in cols]
-            total = 0.0
-            for v in vals:
-                total += v
-            if total != 0.0:
-                vals = [v / total for v in vals]
-            rows.append(vals)
-        return Array.from_list(rows, "<f8")
+        cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]
+        proba, _ = _ovr_combine(ext, cols, int(q.shape[0]))
+        return proba
 
     def predict(self, X):
         """Two classes: `classes_[1]` where the latent mean is positive
@@ -444,14 +453,9 @@ class GaussianProcessClassifier(NumericModeMixin):
             mean, _, _ = self._latent(ext, self.estimators_[0], q, False)
             codes = [1 if v > 0.0 else 0 for v in mean.tolist()]
         else:
-            cols = [self._latent(ext, e, q, True)[2].tolist() for e in self.estimators_]
-            codes = []
-            for t in range(int(q.shape[0])):
-                best, best_k = cols[0][t], 0
-                for k in range(1, len(cols)):
-                    if cols[k][t] > best:
-                        best, best_k = cols[k][t], k
-                codes.append(best_k)
+            cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]
+            _, codes32 = _ovr_combine(ext, cols, int(q.shape[0]))
+            codes = codes32.tolist()
         return decode_labels(self.classes_, Array.from_list(codes, "<i8"))
 
     def log_marginal_likelihood(self, theta=None, eval_gradient=False, clone_kernel=True):

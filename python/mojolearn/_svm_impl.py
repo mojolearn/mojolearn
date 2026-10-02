@@ -56,7 +56,7 @@ import numbers
 from . import _backend
 from . import _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, zeros
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, zeros
 from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, encode_labels, sorted_classes
 from ._mode import NumericModeMixin
 from ._scale_gamma import scale_gamma
@@ -183,16 +183,16 @@ def _as_labels(y):
             "vendor-specific payload and cannot sit in a hashed stage)"
         )
     # lane py-shared: the native encoder (`sorted_classes` is its definition)
-    classes, _codes = encode_labels(labels)
-    _codes = _codes.tolist()
+    classes, codes_arr = encode_labels(labels)
+    _codes = codes_arr.tolist()
     if len(classes) < 2:
         raise ValueError(
             f"mojolearn SVC: y has {len(classes)} class; at least two are needed"
         )
     if len(classes) > 2:
         # One-vs-one over the binary solver (`SVC._fit_ovo`): the caller
-        # forms each pair's 0.0 / 1.0 labels from these codes.
-        return None, classes, _codes
+        # forms each pair's rows and 0.0 / 1.0 labels from these int32 codes.
+        return None, classes, codes_arr
     if not all(isinstance(c, numbers.Real) for c in classes):
         # String (or other non-numeric) labels: the solver sees each row's
         # dense code, 0.0 or 1.0, so `classes_[1]` still maps to +1 and the
@@ -212,7 +212,7 @@ def _as_labels(y):
     return f, classes, (classes[0], classes[1])
 
 
-def _c_rows(C, n_rows, sample_weight, class_weight=None, y=None, who="SVC"):
+def _c_rows(binding, C, n_rows, sample_weight, class_weight=None, y=None, who="SVC"):
     """`InitPenalty`'s weighted arm: the per-row bounds `C * class_weight[y_i]
     * sample_weight_i` (scikit-learn's libsvm `C_i`; cuML's `C_vec = C * w`
     after its Python layer folds class_weight into sample_weight), formed in
@@ -220,33 +220,40 @@ def _c_rows(C, n_rows, sample_weight, class_weight=None, y=None, who="SVC"):
     the solver the same bounds. None when nothing is weighted (the
     unweighted arm, C at every row, bit for bit the old fit). A zero weight
     pins that row's alpha at 0 (cuML keeps the row; libsvm drops it, and the
-    solution is the same)."""
+    solution is the same).
+
+    The per-row products run in the binding (cgfin-c-svm: on the device on
+    a GPU install, `svm/impl/svc_rows.mojo::c_row`, soft binary64); here
+    only the checks and the per-class weights."""
     if sample_weight is None and class_weight is None:
         return None
-    if sample_weight is None:
-        w = [1.0] * n_rows
-    else:
-        w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else sample_weight)]
-        if len(w) != n_rows:
+    sw = None
+    if sample_weight is not None:
+        sw = as_f64_c(sample_weight, ndim=1, name="sample_weight")
+        if sw.shape[0] != n_rows:
             raise ValueError(
-                f"mojolearn {who}: sample_weight has {len(w)} entries, X has {n_rows} rows"
+                f"mojolearn {who}: sample_weight has {sw.shape[0]} entries, X has {n_rows} rows"
             )
-        for v in w:
+        for v in sw.tolist():
             if not math.isfinite(v) or v < 0.0:
                 raise ValueError(
                     f"mojolearn {who}: sample_weight must be finite and >= 0, got {v!r}"
                 )
+    codes = cwa = None
+    n_classes = 0
     if class_weight is not None:
         labels, _shape = _labels_1d(y)
         classes, codes = encode_labels(labels)
-        codes = codes.tolist()
+        n_classes = len(classes)
+        if codes.shape[0] != n_rows:
+            raise ValueError(f"mojolearn {who}: y has {codes.shape[0]} entries, X has {n_rows} rows")
         if isinstance(class_weight, str):
             if class_weight != "balanced":
                 raise ValueError(
                     f"mojolearn {who}: class_weight is a dict, 'balanced' or None, got {class_weight!r}"
                 )
             counts = [0] * len(classes)
-            for c in codes:
+            for c in codes.tolist():
                 counts[c] += 1
             cw = [n_rows / (len(classes) * counts[k]) for k in range(len(classes))]
         else:
@@ -258,44 +265,77 @@ def _c_rows(C, n_rows, sample_weight, class_weight=None, y=None, who="SVC"):
                         f"which is not in y's classes {classes!r}"
                     )
                 cw[classes.index(key)] = float(value)
-        w = [w[i] * cw[codes[i]] for i in range(n_rows)]
-    C = float(C)
-    return Array.from_list([C * v for v in w], "<f4")
+        cwa = Array.from_list(cw, "<f8")
+    out = empty((n_rows,), "<f4")
+    if n_rows:
+        binding.svc_pair_epilogue(
+            0 if sw is None else addr_ro(sw, name="sample_weight"),
+            0 if cwa is None else addr_ro(codes, name="class codes"),
+            0 if cwa is None else addr_ro(cwa, name="class_weight"),
+            addr(out, name="C rows"),
+            [_GLUE_C_ROWS, n_rows, n_classes, float(C), 0])
+    return out
 
 
-def _precomputed_columns(q, support):
+def _i32(values):
+    """`values` (an int32 Array or a sequence of ints) as an int32 Array."""
+    if isinstance(values, Array):
+        return values
+    return Array.from_list([int(v) for v in values], "<i4")
+
+
+def _gather(binding, x, rows=None, cols=None):
+    """`x[rows][:, cols]`, an exact copy of float32 cells, gathered in the
+    binding (on the device on a GPU install; cgfin-c-svm). An absent index
+    list keeps that axis whole."""
+    n_rows, n_cols = x.shape
+    ra = None if rows is None else _i32(rows)
+    ca = None if cols is None else _i32(cols)
+    nor = n_rows if ra is None else ra.shape[0]
+    noc = n_cols if ca is None else ca.shape[0]
+    out = empty((nor, noc), "<f4")
+    if nor and noc:
+        binding.svc_pair_epilogue(
+            addr_ro(x, name="x"),
+            0 if ra is None else addr_ro(ra, name="row indices"),
+            0 if ca is None else addr_ro(ca, name="column indices"),
+            addr(out, name="gathered"),
+            [_GLUE_GATHER, n_rows, n_cols, nor, noc])
+    return out
+
+
+def _pair_select(binding, codes, ci, cj, c_rows=None):
+    """The rows of class ci or cj, in row order, selected in the binding (a
+    device compaction on a GPU install; cgfin-c-svm): their indices (int32
+    Array), their labels (float32, 1.0 for class cj, 0.0 for ci) and their
+    bounds cut from `c_rows` (None when unweighted)."""
+    n = codes.shape[0]
+    idx = empty((n,), "<i4")
+    lab = empty((n,), "<f4")
+    cout = None if c_rows is None else empty((n,), "<f4")
+    m = 0
+    if n:
+        m = int(binding.svc_pair_epilogue(
+            addr_ro(codes, name="class codes"),
+            0 if c_rows is None else addr_ro(c_rows, name="C * sample_weight"),
+            addr(lab, name="pair labels"),
+            addr(idx, name="pair rows"),
+            [_GLUE_SELECT, n, int(ci), int(cj), 0 if cout is None else addr(cout, name="pair bounds")]))
+    return idx[:m], lab[:m], (None if cout is None else cout[:m])
+
+
+def _precomputed_columns(binding, q, support):
     """kernel='precomputed' at predict: `X[:, support_]`, the query's
     cross-kernel columns at the support vectors, copied exactly (float32
     bytes, no arithmetic). What the solver's decision reads as its kernel
     tile."""
     n_rows, n_cols = q.shape
-    cells = array.array("f")
-    cells.frombytes(q.tobytes())
     idx = [int(s) for s in support]
     for s in idx:
         if not 0 <= s < n_cols:
             raise ValueError(
                 f"mojolearn SVC: kernel='precomputed' support index {s} is outside X's {n_cols} columns")
-    out = array.array("f", [cells[r * n_cols + s] for r in range(n_rows) for s in idx])
-    return Array._owned(out, (n_rows, len(idx)), "<f4", "C")
-
-
-def _precomputed_rows(x, idx):
-    """`K[idx]`, an exact copy of whole rows."""
-    n = x.shape[1]
-    cells = array.array("f")
-    cells.frombytes(x.tobytes())
-    out = array.array("f", [cells[r * n + c] for r in idx for c in range(n)])
-    return Array._owned(out, (len(idx), n), "<f4", "C")
-
-
-def _precomputed_block(x, idx):
-    """`K[idx][:, idx]`, an exact copy: the kernel matrix of a row subset."""
-    n = x.shape[1]
-    cells = array.array("f")
-    cells.frombytes(x.tobytes())
-    out = array.array("f", [cells[r * n + c] for r in idx for c in idx])
-    return Array._owned(out, (len(idx), len(idx)), "<f4", "C")
+    return _gather(binding, q, None, idx)
 
 
 def _dual_times_sv(dual_coef, support_vectors):
@@ -321,25 +361,97 @@ def _dual_times_sv(dual_coef, support_vectors):
     return Array.from_list([acc], "<f4")
 
 
+_FEISTEL_M0 = 0xD2B74407B1CE6E93
+_M64 = 0xFFFFFFFFFFFFFFFF
+
+
+def _shuffle_seed32(seed):
+    """The Feistel key: the low 32 bits of one SplitMix64 step of `seed`
+    (`svm/impl/svc_rows.mojo::shuffle_seed32`)."""
+    z = (seed + 0x9E3779B97F4A7C15) & _M64
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & _M64
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & _M64
+    z ^= z >> 31
+    return z & 0xFFFFFFFF
+
+
 def _splitmix_perm(n, seed):
-    """libsvm's `svm_binary_svc_probability` shuffle (`j = i + rand() %
-    (l - i)`, swap) with `rand()` a SplitMix64 stream keyed by `seed`: pure
-    integer arithmetic, so every host draws the same permutation."""
-    state = seed & 0xFFFFFFFFFFFFFFFF
-    perm = list(range(n))
+    """The probability shuffle (cgfin-c-svm, 2026-10-02): `perm[i]` is
+    `core/shuffle_iterator.mojo`'s Feistel bijection of `[0, n)` (CCCL's
+    `random_bijection`: 24 rounds keyed by a minstd stream, cycle walk) at
+    i, keyed by `_shuffle_seed32(seed)`. Every index is independent, so the
+    device draws it one thread per index; pure integer arithmetic, so every
+    column draws the same permutation. (It was libsvm's serial Fisher-Yates
+    over a SplitMix64 stream.)"""
+    x = _shuffle_seed32(seed & _M64) % 2147483647
+    x = 1 if x == 0 else x
+    keys = []
+    for _ in range(24):
+        sp = 0
+        for _ in range(2):
+            x = (48271 * x) % 2147483647
+            u = x - 1
+            while u >= 2147418112:
+                x = (48271 * x) % 2147483647
+                u = x - 1
+            sp = ((sp << 16) + (u & 0xFFFF)) & 0xFFFFFFFF
+        keys.append(sp)
+    num = max(1, n)
+    total = max(8, (num - 1).bit_length())
+    lb = total // 2
+    rb = total - lb
+    lmask = (1 << lb) - 1
+    rmask = (1 << rb) - 1
+
+    def trip(v):
+        left = (v >> rb) & 0xFFFFFFFF
+        right = v & rmask
+        for key in keys:
+            product = (_FEISTEL_M0 * left) & _M64
+            f_k = ((product >> 32) & 0xFFFFFFFF) ^ key
+            b_k = product & 0xFFFFFFFF
+            lp = f_k ^ right
+            rp = ((b_k << (rb - lb)) & 0xFFFFFFFF) | (right >> lb)
+            left = lp & lmask
+            right = rp & rmask
+        return (left << rb) | right
+
+    perm = []
     for i in range(n):
-        state = (state + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
-        z = state
-        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
-        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
-        z ^= z >> 31
-        j = i + z % (n - i)
-        perm[i], perm[j] = perm[j], perm[i]
+        v = trip(i)
+        while v >= num:
+            v = trip(v)
+        perm.append(v)
     return perm
 
 
-#: `svm/host/svc_proba.mojo::pair_epilogue` modes (lane/py-dn-svm, 2026-09-28)
-_EPI_OVO, _EPI_OVR, _EPI_VOTES, _EPI_PROBA, _EPI_LOG_PROBA, _EPI_BINARY = range(6)
+def _tree_sum(vals):
+    """The device fold's order (`svm/impl/svc_rows.mojo::tree_sum_sf64`):
+    chunks of 256 cells, each folded by a halving tree (padding +0.0), the
+    chunk sums the next level's cells, until one chunk remains."""
+    cur = list(vals)
+    if not cur:
+        return 0.0
+    while True:
+        nxt = []
+        for base in range(0, len(cur), 256):
+            blk = cur[base:base + 256]
+            blk += [0.0] * (256 - len(blk))
+            step = 128
+            while step:
+                for t in range(step):
+                    blk[t] = blk[t] + blk[t + step]
+                step //= 2
+            nxt.append(blk[0])
+        if len(nxt) == 1:
+            return nxt[0]
+        cur = nxt
+
+
+#: `svc_pair_epilogue` modes (svm/impl/svc_rows.mojo): the epilogues
+#: (lane/py-dn-svm, 2026-09-28) and the row glue (cgfin-c-svm, 2026-10-02)
+(_EPI_OVO, _EPI_OVR, _EPI_VOTES, _EPI_PROBA, _EPI_LOG_PROBA, _EPI_BINARY,
+ _GLUE_GATHER, _GLUE_SELECT, _GLUE_C_ROWS) = range(9)
 
 
 def _native_perm(binding, n, seed):
@@ -365,10 +477,11 @@ def _native_sigmoid_train(binding, dec, labels):
     return ab[0], ab[1]
 
 
-# THE PYTHON REFERENCE (lane/py-dn-svm, 2026-09-28). `_splitmix_perm`,
+# THE PYTHON REFERENCE (lane/py-dn-svm, 2026-09-28; the row sums and the
+# shuffle follow the device since cgfin-c-svm, 2026-10-02). `_splitmix_perm`,
 # `_platt_fval`, `_sigmoid_train`, `_sigmoid_predict` and
 # `_multiclass_probability` below are no longer called by SVC: the
-# estimator runs their Mojo transcription (svm/host/svc_proba.mojo) through
+# estimator runs their Mojo transcription (svm/impl/svc_rows.mojo) through
 # the svm bindings. They stay as the reference that transcription is held to
 # bit for bit, and as the libsvm reading the tests exercise.
 # DEVIATION 6903 (IDENTITY_PATHS row 253, lane py-bugs): Platt scaling and the
@@ -376,22 +489,23 @@ def _native_sigmoid_train(binding, dec, labels):
 # on the pinned exp / log (`_portable_math` here, `pm_exp` / `pm_log` in the
 # Mojo transcription, lane py-dn-svm).
 def _platt_fval(dec, t, a, b):
-    f = 0.0
+    terms = []
     for d, ti in zip(dec, t):
         fapb = d * a + b
         if fapb >= 0.0:
-            f += ti * fapb + math.log(1.0 + math.exp(-fapb))
+            terms.append(ti * fapb + math.log(1.0 + math.exp(-fapb)))
         else:
-            f += (ti - 1.0) * fapb + math.log(1.0 + math.exp(fapb))
-    return f
+            terms.append((ti - 1.0) * fapb + math.log(1.0 + math.exp(fapb)))
+    return _tree_sum(terms)
 
 
 def _sigmoid_train(dec, labels):
     """libsvm's `sigmoid_train` (Platt's method with Lin, Lin and Weng's
     Newton iteration and backtracking), transcribed in binary64 with the
-    repository's portable exp and log, in its loop order: the same
-    `(A, B)` bits on every host for the same decision values. `labels` are
-    +1 / -1."""
+    repository's portable exp and log: the same `(A, B)` bits on every
+    host for the same decision values. `labels` are +1 / -1. The row sums
+    run in the device fold's order (`_tree_sum`; cgfin-c-svm), with h11 and
+    h22 `sigma + sum`."""
     prior1 = float(sum(1 for v in labels if v > 0))
     prior0 = float(len(labels)) - prior1
     max_iter, min_step, sigma, eps = 100, 1e-10, 1e-12, 1e-5
@@ -402,7 +516,7 @@ def _sigmoid_train(dec, labels):
     b = math.log((prior0 + 1.0) / (prior1 + 1.0))
     fval = _platt_fval(dec, t, a, b)
     for _ in range(max_iter):
-        h11, h22, h21, g1, g2 = sigma, sigma, 0.0, 0.0, 0.0
+        th11, th22, th21, tg1, tg2 = [], [], [], [], []
         for d, ti in zip(dec, t):
             fapb = d * a + b
             if fapb >= 0.0:
@@ -414,12 +528,15 @@ def _sigmoid_train(dec, labels):
                 p = 1.0 / (1.0 + e)
                 q = e / (1.0 + e)
             d2 = p * q
-            h11 += d * d * d2
-            h22 += d2
-            h21 += d * d2
+            th11.append(d * d * d2)
+            th22.append(d2)
+            th21.append(d * d2)
             d1 = ti - p
-            g1 += d * d1
-            g2 += d1
+            tg1.append(d * d1)
+            tg2.append(d1)
+        h11 = sigma + _tree_sum(th11)
+        h22 = sigma + _tree_sum(th22)
+        h21, g1, g2 = _tree_sum(th21), _tree_sum(tg1), _tree_sum(tg2)
         if abs(g1) < eps and abs(g2) < eps:
             break
         det = h11 * h22 - h21 * h21
@@ -485,25 +602,6 @@ def _multiclass_probability(k, r):
                 qp[j] = (qp[j] + diff * q[t][j]) / (1.0 + diff)
                 p[j] /= (1.0 + diff)
     return p
-
-
-def _precomputed_rect(x, rows, cols):
-    """`K[rows][:, cols]`, an exact copy."""
-    n = x.shape[1]
-    cells = array.array("f")
-    cells.frombytes(x.tobytes())
-    out = array.array("f", [cells[r * n + c] for r in rows for c in cols])
-    return Array._owned(out, (len(rows), len(cols)), "<f4", "C")
-
-
-def _rows_copy(x, rows):
-    """`X[rows]`, an exact copy."""
-    n_cols = x.shape[1]
-    rb = 4 * n_cols
-    raw = x.tobytes()
-    store = array.array("f")
-    store.frombytes(b"".join(raw[r * rb:(r + 1) * rb] for r in rows))
-    return Array._owned(store, (len(rows), n_cols), "<f4", "C")
 
 
 class SVC(NumericModeMixin):
@@ -907,7 +1005,7 @@ class SVC(NumericModeMixin):
         x, self.input_copied_ = as_f32_dense_c(X, ndim=2, name="X")
         labels, classes, pair = _as_labels(y)
         n_rows, n_cols = x.shape
-        n_y = len(pair) if labels is None else labels.shape[0]
+        n_y = pair.shape[0] if labels is None else labels.shape[0]
         if n_y != n_rows:
             raise ValueError(
                 f"mojolearn SVC: y has {n_y} entries, X has {n_rows} rows"
@@ -918,7 +1016,8 @@ class SVC(NumericModeMixin):
                 f"kernel matrix as X, got {n_rows} x {n_cols}"
             )
         gamma = self._resolve_gamma(x)
-        c_rows = _c_rows(self.C, n_rows, sample_weight, getattr(self, "class_weight", None), y, "SVC")
+        c_rows = _c_rows(self._bind(_EXT_NAME), self.C, n_rows, sample_weight,
+                         getattr(self, "class_weight", None), y, "SVC")
         if labels is None:
             return self._fit_ovo(x, classes, pair, gamma, c_rows)
         self.__dict__.pop("_pairs", None)
@@ -954,7 +1053,12 @@ class SVC(NumericModeMixin):
         self._gamma = gamma
         self._label0 = label0
         self._label1 = label1
-        self._fit_probability(x, [0 if v == label0 else 1 for v in labels.tolist()], gamma, c_rows)
+        if self.probability:
+            self._fit_probability(
+                x, Array.from_list([0 if v == label0 else 1 for v in labels.tolist()], "<i4"),
+                gamma, c_rows)
+        else:
+            self.__dict__.pop("_prob_ab", None)
         return self
 
     def _fit_probability(self, x, codes, gamma, c_rows):
@@ -982,9 +1086,12 @@ class SVC(NumericModeMixin):
         pair_no = 0
         for ci in range(k):
             for cj in range(ci + 1, k):
-                idx = [r for r in range(len(codes)) if codes[r] == ci or codes[r] == cj]
+                # the pair's rows in row order, selected in the binding (a
+                # device compaction on a GPU install); libsvm's +1 is class ci
+                idx_a, lab_a, _ = _pair_select(native, codes, ci, cj)
+                idx = idx_a.tolist()
                 n = len(idx)
-                labels = [1.0 if codes[r] == ci else -1.0 for r in idx]
+                labels = [1.0 if v == 0.0 else -1.0 for v in lab_a.tolist()]
                 perm = _native_perm(native, n, seed ^ ((pair_no * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF))
                 dec = [0.0] * n
                 for f in range(5):
@@ -1003,11 +1110,11 @@ class SVC(NumericModeMixin):
                         continue
                     rows = [idx[m] for m in train]
                     hrows = [idx[m] for m in held]
-                    sub = _precomputed_block(x, rows) if precomputed else _rows_copy(x, rows)
-                    lab = Array.from_list([0.0 if codes[r] == ci else 1.0 for r in rows], "<f4")
+                    sub = _gather(native, x, rows, rows) if precomputed else _gather(native, x, rows)
+                    lab = Array.from_list([0.0 if labels[m] > 0 else 1.0 for m in train], "<f4")
                     sub_c = None if cb is None else Array.from_list([cb[r] for r in rows], "<f4")
                     n_sv, dual, support, sv, info = self._solve(sub, lab, gamma, sub_c)
-                    q = _precomputed_rect(x, hrows, rows) if precomputed else _rows_copy(x, hrows)
+                    q = _gather(native, x, hrows, rows) if precomputed else _gather(native, x, hrows)
                     cols = sub.shape[1]
                     d = self._machine(q, dual[:n_sv].reshape((1, n_sv)),
                                       sv[:n_sv * cols].reshape((n_sv, cols)), n_sv,
@@ -1042,22 +1149,20 @@ class SVC(NumericModeMixin):
         per pair."""
         n_rows, n_cols = x.shape
         k = len(classes)
-        row_bytes = 4 * n_cols
-        raw = x.tobytes()
-        cb = None if c_rows is None else c_rows.tolist()
+        native = self._bind(_EXT_NAME)
         pairs = []
         for i in range(k):
             for j in range(i + 1, k):
-                idx = [r for r in range(n_rows) if codes[r] == i or codes[r] == j]
+                # the pair's rows in row order, their 0.0 / 1.0 labels and
+                # bounds, selected in the binding (a device compaction on a
+                # GPU install), then their X rows gathered there
+                idx_a, lab, sub_c = _pair_select(native, codes, i, j, c_rows)
+                idx = idx_a.tolist()
                 if self.kernel == "precomputed":
                     # the pair's kernel matrix: its rows AND its columns
-                    sub = _precomputed_block(x, idx)
+                    sub = _gather(native, x, idx_a, idx_a)
                 else:
-                    store = array.array("f")
-                    store.frombytes(b"".join(raw[r * row_bytes:(r + 1) * row_bytes] for r in idx))
-                    sub = Array._owned(store, (len(idx), n_cols), "<f4", "C")
-                lab = Array.from_list([1.0 if codes[r] == j else 0.0 for r in idx], "<f4")
-                sub_c = None if cb is None else Array.from_list([cb[r] for r in idx], "<f4")
+                    sub = _gather(native, x, idx_a)
                 n_sv, dual, support, sv, info = self._solve(sub, lab, gamma, sub_c)
                 if _round_f32(info[3]) != 0.0 or _round_f32(info[4]) != 1.0:
                     raise RuntimeError(
@@ -1070,7 +1175,7 @@ class SVC(NumericModeMixin):
                 if self.kernel == "precomputed":
                     # the support rows of the WHOLE kernel matrix, as the
                     # binary fit keeps them (predict reads support_ only)
-                    sv_rows = _precomputed_rows(x, [idx[s] for s in local])
+                    sv_rows = _gather(native, x, [idx[s] for s in local])
                 pairs.append(dict(
                     i=i, j=j,
                     dual=dual[:n_sv].reshape((1, n_sv)),
@@ -1176,7 +1281,7 @@ class SVC(NumericModeMixin):
         if self.kernel == "precomputed" and n_support > 0:
             # X is the cross-kernel against the TRAINING rows; the decision
             # reads its columns at the support vectors and no support rows.
-            q = _precomputed_columns(q, support)
+            q = _precomputed_columns(self._bind(_EXT_NAME), q, support)
             n_features = n_support
             sv = dual
         # Kept in locals so the arrays outlive the call; the Mojo side
@@ -1889,7 +1994,7 @@ class SVR(NumericModeMixin):
                 f"kernel matrix as X, got {n_rows} x {n_cols}"
             )
         gamma = self._resolve_gamma(x)
-        c_rows = _c_rows(self.C, n_rows, sample_weight, who="SVR")
+        c_rows = _c_rows(self._bind(_EXT_NAME), self.C, n_rows, sample_weight, who="SVR")
 
         # WORST-CASE OUTPUT BUFFERS, AND `n_rows` IS THE WORST CASE.
         # The solver's domain is `2 * n_rows` (alpha+ and alpha-), but
@@ -1968,7 +2073,7 @@ class SVR(NumericModeMixin):
         n_features = self.n_features_in_
         if self.kernel == "precomputed" and self.n_support_ > 0:
             # the cross-kernel's columns at the support vectors (SVC's rule)
-            q = _precomputed_columns(q, self.support_.tolist())
+            q = _precomputed_columns(self._bind(_EXT_NAME), q, self.support_.tolist())
             n_features = self.n_support_
             sv = dual
         self._bind(_EXT_NAME).svr_predict(

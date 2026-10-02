@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The CUB / Thrust stand-ins the SVM implementation needs: flagged compaction, the
-float key twiddle, gathers, fills, and the pinned serial sum.
+float key twiddle, gathers and fills (the sum / min / max folds are
+`svm/impl/grid_fold.mojo`'s grid trees).
 
 DOES NOT FOLLOW any one file. Each function names the call it stands in for.
 CUB and Thrust are OPEN (CONTRIBUTING.md (Algorithms and references)), so these are written out
@@ -29,6 +30,7 @@ because the keys are already on the device.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.atomic import Atomic
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -135,11 +137,13 @@ def count_flagged_kernel(
     flags: MutPointer[UInt8, MutAnyOrigin],
     n_in: Int32,
 ):
-    """`d_num_selected = offsets[n-1] + flags[n-1]`."""
-    if Int(thread_idx.x) == 0 and Int(block_idx.x) == 0:
-        var n = Int(n_in)
-        var last = Int32(Int(flags.unsafe_load(n - 1)) & 1)
-        d_count.unsafe_store(0, offsets.unsafe_load(n - 1) + last)
+    """`d_num_selected = offsets[n-1] + flags[n-1]`, launched over all n
+    (no one-thread launch): the thread at index `n - 1` writes it."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i == n - 1:
+        var last = Int32(Int(flags.unsafe_load(i)) & 1)
+        d_count.unsafe_store(0, offsets.unsafe_load(i) + last)
 
 
 def flag_nonzero_f32_kernel(
@@ -285,59 +289,6 @@ def gather_rows_kernel(
         dst.unsafe_store(t, x.unsafe_load(src_row * k + c))
 
 
-def serial_sum_f32_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin],
-    v: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-):
-    """DEVIATION 632: `cub::DeviceReduce::Sum`'s stand-in at the two
-    `CalcB` sites, an ASCENDING serial chain in one thread, every partial
-    flushed. One thread and no fold so there is no shape to pin; `n` is
-    the free-SV count or `n_train`, and this runs once per fit."""
-    if Int(thread_idx.x) == 0 and Int(block_idx.x) == 0:
-        var acc = Float32(0.0)
-        for i in range(Int(n_in)):
-            acc = ftz(acc + ftz(v.unsafe_load(i)))
-        dst.unsafe_store(0, acc)
-
-
-def serial_min_f32_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin],
-    v: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-):
-    """`cub::DeviceReduce::Min` (`results.cuh::SelectReduce`): exact away
-    from a +0.0/-0.0 pair, so a one-thread scan is the same answer as any
-    fold; ON that pair (row 39) the strict `<` keeps the FIRST element in
-    index order (the compaction preserves training-index order), which is
-    the oracle's serial rule in `smo_oracle.mojo::_results`, and not a
-    hardware `min`. A NaN at index 0 would persist and a later one would
-    be dropped; none reaches here (DEVIATION 637 raises first)."""
-    if Int(thread_idx.x) == 0 and Int(block_idx.x) == 0:
-        var m = v.unsafe_load(0)
-        for i in range(1, Int(n_in)):
-            var x = v.unsafe_load(i)
-            if x < m:
-                m = x
-        dst.unsafe_store(0, m)
-
-
-def serial_max_f32_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin],
-    v: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-):
-    """`cub::DeviceReduce::Max`; the twin of `serial_min_f32_kernel`, same
-    row-39 note: strict `>`, first index wins a +0.0/-0.0 tie."""
-    if Int(thread_idx.x) == 0 and Int(block_idx.x) == 0:
-        var m = v.unsafe_load(0)
-        for i in range(1, Int(n_in)):
-            var x = v.unsafe_load(i)
-            if x > m:
-                m = x
-        dst.unsafe_store(0, m)
-
-
 # ---------------------------------------------------------------------------
 # the flagged compaction: scratch + host driver
 # ---------------------------------------------------------------------------
@@ -399,7 +350,7 @@ struct SelectScratch(Movable):
         ctx.enqueue_function[count_flagged_kernel](
             self.d_count.unsafe_ptr(), self.offsets.unsafe_ptr(),
             flags.unsafe_ptr(), Int32(n),
-            grid_dim=1, block_dim=1,
+            grid_dim=_grid(n), block_dim=SEL_TPB,
         )
         ctx.enqueue_copy(dst_ptr=self.h_count.unsafe_ptr(), src_buf=self.d_count)
         ctx.synchronize()
@@ -568,3 +519,50 @@ def upload_i32(
     ctx.synchronize()
     _ = h^
     return d^
+
+
+def first_nonfinite_kernel(
+    first: MutPointer[Int32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """DEVIATION 636 on the device: `first[0] = min i` over the cells whose
+    exponent bits are all ones (a NaN or an infinity, `isfinite`'s
+    predicate by bits). An integer `Atomic.min` is order-free, so every
+    column reports the same first index."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var bits = bitcast[DType.uint32](v.unsafe_load(i)) & UInt32(0x7FFFFFFF)
+        if bits >= UInt32(0x7F800000):
+            _ = Atomic.min(first.unsafe_offset(0), Int32(i))
+
+
+def check_finite_device(
+    ctx: DeviceContext,
+    mut values: DeviceBuffer[DType.float32],
+    n: Int,
+    what: String,
+) raises:
+    """`check_finite_list` over `n` uploaded cells: one grid scan and one
+    int read back; the same first flat index and the same message."""
+    if n <= 0:
+        return
+    if n > 2147483647:
+        raise Error("svm: " + what + " has more than 2^31 - 1 cells")
+    var first = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_function[set_i32_kernel](
+        first.unsafe_ptr(), Int32(2147483647), grid_dim=1, block_dim=1,
+    )
+    ctx.enqueue_function[first_nonfinite_kernel](
+        first.unsafe_ptr(), values.unsafe_ptr(), Int32(n),
+        grid_dim=_grid(n), block_dim=SEL_TPB,
+    )
+    var got = read_i32(ctx, first, 1)
+    _ = first^
+    var f = Int(got[0])
+    if f != 2147483647:
+        raise Error(
+            "svm: " + what + " contains a non-finite value at flat index "
+            + String(f) + " (DEVIATION 636: a NaN or inf input cannot be"
+            " fitted; a computed NaN has a vendor-specific payload)"
+        )

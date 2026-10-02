@@ -126,6 +126,8 @@ arithmetic:
 from core.device_zero import enqueue_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
+from std.atomic import Atomic
+from std.gpu import block_idx as _ols_bidx, block_dim as _ols_bdim, thread_idx as _ols_tidx
 
 from cluster.checks.reduce_by_key import copy_f32_kernel
 from core.gemm import gemm_nt, gemm_tn, gemv_n, pinned_gemm_nt_kernel
@@ -251,6 +253,47 @@ def ols_equilibration_scale(diag: Float32) -> Float32:
     return bitcast[DType.float32](UInt32(127 - k) << 23)
 
 
+def ols_abs_max_kernel(v: MutPointer[Float32, MutAnyOrigin], n: Int32, dst: MutPointer[Int32, MutAnyOrigin]):
+    """The largest |v_i| as its float bits by an integer atomic max (an
+    order-free max; a NaN and a zero never raise it, as `mag > max_abs`
+    never took them)."""
+    var i = Int(_ols_bidx.x) * Int(_ols_bdim.x) + Int(_ols_tidx.x)
+    if i < Int(n):
+        var mag = abs(v.unsafe_load(i))
+        if mag == mag and mag > Float32(0.0):
+            _ = Atomic[DType.int32].max(dst, Int32(Int(bitcast[DType.uint32](mag))))
+
+
+def ols_device_abs_max(ctx: DeviceContext, mut v: DeviceBuffer[DType.float32], n: Int, tpb: Int) raises -> Float32:
+    """max_i |v_i| (0 for none) on the device; one int crosses back
+    (cpu-gpu-cleanup c-linear: the whole vector was read and scanned on
+    the host)."""
+    var d = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill(ctx, d, Int32(0))
+    ctx.enqueue_function[ols_abs_max_kernel](
+        v.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n),
+        d.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=((n + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
+    )
+    var h = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d)
+    ctx.synchronize()
+    var r = bitcast[DType.float32](UInt32(Int(h.unsafe_ptr().unsafe_load(0))))
+    _ = h^
+    _ = d^
+    return r
+
+
+def ols_scale_kernel(
+    diag: MutPointer[Float32, MutAnyOrigin], scale: MutPointer[Float32, MutAnyOrigin], n: Int32
+):
+    """`ols_equilibration_scale` per diagonal entry, one thread each (the
+    bits only; cpu-gpu-cleanup c-linear: the diagonal went to the host and the
+    scales came back)."""
+    var i = Int(_ols_bidx.x) * Int(_ols_bdim.x) + Int(_ols_tidx.x)
+    if i < Int(n):
+        scale.unsafe_store(i, ols_equilibration_scale(diag.unsafe_load(i)))
+
+
 def lstsq_eig(
     ctx: DeviceContext,
     mut a: DeviceBuffer[DType.float32],
@@ -372,21 +415,10 @@ def lstsq_eig_traced(
         grid_dim=((n_cols + elem_tpb - 1) // elem_tpb, 1, 1),
         block_dim=(elem_tpb, 1, 1),
     )
-    var h_diag = ctx.enqueue_create_host_buffer[DType.float32](n_cols)
-    ctx.enqueue_copy(dst_ptr=h_diag.unsafe_ptr(), src_buf=s_vec)
-    ctx.synchronize()
-    var h_scale = ctx.enqueue_create_host_buffer[DType.float32](n_cols)
-    ctx.synchronize()
-    for i in range(n_cols):
-        h_scale.unsafe_ptr().unsafe_store(
-            i, ols_equilibration_scale(h_diag.unsafe_ptr().unsafe_load(i))
-        )
-    ctx.enqueue_copy(dst_buf=scale, src_ptr=h_scale.unsafe_ptr())
-    ctx.synchronize()
-    # `[[mojo-buffer-freed-at-last-use]]`: a host buffer is dead at its last
-    # `.unsafe_ptr()` unless something uses it after the synchronize.
-    _ = h_diag^
-    _ = h_scale^
+    ctx.enqueue_function[ols_scale_kernel](
+        s_vec.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), scale.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n_cols), grid_dim=((n_cols + elem_tpb - 1) // elem_tpb, 1, 1), block_dim=(elem_tpb, 1, 1),
+    )
     var cells = n_cols * n_cols
     ctx.enqueue_function[row_vector_binary_mult_kernel](
         cov_a.unsafe_ptr(),
@@ -498,11 +530,7 @@ def lstsq_eig_traced(
     var h_eig = ctx.enqueue_create_host_buffer[DType.float32](n_cols)
     ctx.enqueue_copy(dst_ptr=h_eig.unsafe_ptr(), src_buf=s_vec)
     ctx.synchronize()
-    var max_abs = Float32(0.0)
-    for i in range(n_cols):
-        var mag = abs(h_eig.unsafe_ptr().unsafe_load(i))
-        if mag > max_abs:
-            max_abs = mag
+    var max_abs = ols_device_abs_max(ctx, s_vec, n_cols, elem_tpb)
     var thresh = ols_pinv_threshold(max_abs, n_cols)
     var kept = 0
     for i in range(n_cols):

@@ -20,12 +20,11 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
   `HostRngReplay`          `HostRng`, `cluster/impl/detail/kmeans.mojo:113`:
                            splitmix64, `next_index` is `u % n`, `next_unit`
                            is `Float64(u >> 11) * 2^-53`.
-  `host_plan_sum_scale`    `plan_sum_scale`, `cluster/estimator.mojo:143`:
-                           one sequential Float64 chain `column += abs(x)`
-                           per column over the rows in order, the worst
-                           column under a strict `>`, `choose_scale(worst,
-                           n_samples)`. The host pool split there is
-                           scheduling and reorders no chain.
+  `host_plan_sum_scale`    `plan_sum_scale`, `cluster/estimator.mojo`:
+                           the float32 chunk sums of `ftz(abs(x))` in row
+                           order, per feature the strided lane folds and
+                           the halving tree, then `sum_scale_from_columns`
+                           (`cluster/impl/sum_scale_plan.mojo`).
   `host_row_norm`          `row_norm_kernel`, `core/row_norms.mojo:70`:
                            NORM_TPB strided lane chains `acc =
                            ftz(fma(v, v, acc))`, the halving tree of
@@ -174,6 +173,15 @@ from core.classical_host_predict import host_gemm_nt
 from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_list_ptr_u32
 from cluster.host.host_cells import ftz_v, host_cells, mul_add_v
 from cluster.impl.kmeans_params import weighted_sum_scale_cap
+from cluster.impl.sum_scale_plan import (
+    SUM_SCALE_CHUNK,
+    SUM_SCALE_TPB,
+    sum_scale_from_columns,
+    sum_scale_inf,
+    sum_scale_is_finite,
+    sum_scale_n_chunks,
+    sum_scale_term,
+)
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -1328,18 +1336,54 @@ struct KMeansHostResult(Copyable, Movable):
 
 
 def host_plan_sum_scale(x: List[Float32], n: Int, d: Int) raises -> Float64:
-    """`plan_sum_scale` (module docstring)."""
-    var totals = List[Float64](length=d, fill=Float64(0.0))
-    for r in range(n):
-        var row = r * d
+    """`plan_sum_scale` (`cluster/estimator.mojo`), add for add: the chunk
+    sums of `sum_scale_term` in row order, then per feature the strided lane
+    folds and the halving tree of `halving_block_sum`
+    (`cluster/impl/sum_scale_plan.mojo`)."""
+    var n_chunks = sum_scale_n_chunks(n)
+    var chunk = List[Float32](length=n_chunks * d, fill=Float32(0.0))
+    for b in range(n_chunks):
+        var r0 = b * SUM_SCALE_CHUNK
+        var r1 = min(n, r0 + SUM_SCALE_CHUNK)
         for f in range(d):
-            totals[f] = totals[f] + Float64(abs(x[row + f]))
-    var worst = Float64(0.0)
+            var acc = Float32(0.0)
+            var bad = False
+            for r in range(r0, r1):
+                var a = sum_scale_term(x[r * d + f])
+                if not sum_scale_is_finite(a):
+                    bad = True
+                acc = acc + a
+            if bad:
+                acc = sum_scale_inf()
+            chunk[b * d + f] = acc
+    var cols = List[Float32](length=d, fill=Float32(0.0))
+    var red = List[Float32](length=SUM_SCALE_TPB, fill=Float32(0.0))
+    var flag = List[Float32](length=SUM_SCALE_TPB, fill=Float32(0.0))
     for f in range(d):
-        var column = totals[f]
-        if column > worst:
-            worst = column
-    return choose_scale(worst, n)
+        for t in range(SUM_SCALE_TPB):
+            var acc = Float32(0.0)
+            var bad = Float32(0.0)
+            var b = t
+            while b < n_chunks:
+                var v = chunk[b * d + f]
+                if sum_scale_is_finite(v):
+                    acc = acc + v
+                else:
+                    bad = Float32(1.0)
+                b += SUM_SCALE_TPB
+            red[t] = acc
+            flag[t] = bad
+        var step = SUM_SCALE_TPB // 2
+        while step > 0:
+            for t in range(step):
+                red[t] = red[t] + red[t + step]
+                flag[t] = flag[t] + flag[t + step]
+            step //= 2
+        var total = red[0]
+        if flag[0] > Float32(0.0) or not sum_scale_is_finite(total):
+            total = sum_scale_inf()
+        cols[f] = total
+    return sum_scale_from_columns(cols, n)
 
 
 def host_kmeans_validate(
