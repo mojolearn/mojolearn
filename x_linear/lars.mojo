@@ -25,7 +25,8 @@ from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmin, fsign, ld, st, ldi, sti, i2f,
     fill, copy, cholesky, chol_solve, centered_gram, centered_xty, add_acc,
 )
-from std.sys.info import is_gpu
+from std.sys.info import is_gpu, is_apple_gpu
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.team import Team
 from x_linear.tops import t_col_means, t_mean, t_centered_gram, t_centered_xty
 
@@ -66,16 +67,30 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
         # is skipped. The means are recomputed here regardless (the same
         # statements give the same values).
         var pre_gram = ldi(ip, 4) != 0
-        if fi:
-            t_col_means(t, x, n, d, fw, xm)
-            ym = t_mean(t, y, n, 1)
+        # lane/apple-fast-gram (2026-10-02), FAST on Apple only: ip[5] is 1
+        # when `fast_gram_into` (x_linear/fast_gram.mojo, the grid Gram
+        # over row chunks, `MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1`) already
+        # wrote the means, the centered Gram, X'y and the y mean (in the
+        # `prev` words, zeroed below) into fw, so every row pass of the
+        # team (`t_col_means`, `t_mean`, `t_centered_xty`: one block, one
+        # thread per column walking a million rows) is skipped. IDENTICAL
+        # and the other vendors compile the old statements.
+        var pre_stats = False
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and is_apple_gpu():
+            pre_stats = ldi(ip, 5) != 0
+        if pre_stats:
+            ym = ld(fw, prev)
         else:
-            if t.lead():
-                fill(fw, xm, d, Float32(0))
-            t.sync()
-        if not pre_gram:
-            t_centered_gram(t, x, n, d, fw, xm, fw, gg)
-        t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
+            if fi:
+                t_col_means(t, x, n, d, fw, xm)
+                ym = t_mean(t, y, n, 1)
+            else:
+                if t.lead():
+                    fill(fw, xm, d, Float32(0))
+                t.sync()
+            if not pre_gram:
+                t_centered_gram(t, x, n, d, fw, xm, fw, gg)
+            t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
     else:
         # the host: one row pass per statistic, vector accumulators (lane linear-cpu)
         if fi:

@@ -39,6 +39,7 @@ from x_linear.logcv_grid import logcv_fit_grid
 from x_linear.huber_grid import huber_fit_grid
 from x_linear.dispatch import ALGO_HUBER, ALGO_ENETCV
 from x_linear.enetcv_fast import enetcv_fast
+from x_linear.fast_gram import fast_gram_into
 from x_linear.tops import X_LINEAR_SERIAL_FOLDS
 from x_linear.dispatch import ALGO_LOGCV
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
@@ -162,6 +163,26 @@ def _bayes_grid_gram() -> Bool:
     """`MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM=0` keeps BayesianRidge's and
     ARD's Gram on the team (the A/B arm); default the grid kernel."""
     return String(getenv("MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM")) != "0"
+
+
+def _lars_fast_gram() -> Bool:
+    """lane/apple-fast-gram (2026-10-02), FAST on Apple: `MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1`
+    builds Lars / LassoLars' means, centered Gram, X'y and y mean with
+    x_linear/fast_gram.mojo (row chunks x 32 x 32 tiles on the grid) instead
+    of `xg_gram_kernel` (one thread per Gram cell walking every row: 136
+    threads, ONE block, at taxi's 16 features) plus the team's own means and
+    X'y passes (one block). Default off (the A/B arm is the old path)."""
+    return String(getenv("MOJOLEARN_X_LINEAR_LARS_FAST_GRAM")) == "1"
+
+
+def _ridge_fast_gram() -> Bool:
+    """lane/apple-fast-gram (2026-10-02), FAST on Apple: `MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1`
+    builds RidgeClassifier / RidgeCV's means, centered Gram and X'Y with
+    x_linear/fast_gram.mojo instead of the team's cell chains on ONE block
+    (x_linear/ridge.mojo `_ridge_fit_team`), and k-fold RidgeCV's fold Grams
+    with it instead of `kf_cells_kernel` (one thread per cell walking the
+    fold's rows). Unweighted fits only. Default off."""
+    return String(getenv("MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM")) == "1"
 
 
 def _fit_on_host(
@@ -1098,13 +1119,27 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     ctx.enqueue_copy(dst_buf=dal, src_ptr=hfp.unsafe_ptr())
     dsum.enqueue_fill(Float32(0))
     var cells = d * (d + 1) // 2
+    # lane/apple-fast-gram (2026-10-02), FAST on Apple: `MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1`
+    # builds each fold's means, centered Gram and X'y with the shared grid
+    # Gram (x_linear/fast_gram.mojo; the same dxm / dg / dxty words) instead
+    # of `kf_cells_kernel`, one thread per cell walking the fold's rows
+    # (136 threads at taxi's 16 features). Default off.
+    var fold_fast_gram = False
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        fold_fast_gram = _ridge_fast_gram() and d > 0
     for f in range(k):
         var s = Int32(kf_start(n, k, f))
         var e = Int32(kf_end(n, k, f))
-        ctx.enqueue_function[kf_means_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, Int32(fi),
-                                              dxm.unsafe_ptr(), grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
-        ctx.enqueue_function[kf_cells_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, dxm.unsafe_ptr(),
-                                              dg.unsafe_ptr(), dxty.unsafe_ptr(), grid_dim=_xg_blocks(cells + d), block_dim=XG_TPB)
+        if fold_fast_gram:
+            var pxm = FP(unsafe_from_address=Int(dxm.unsafe_ptr()))
+            fast_gram_into(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())),
+                           Int(s), Int(e) - Int(s), d, 1, fi != 0, pxm, pxm + d,
+                           FP(unsafe_from_address=Int(dg.unsafe_ptr())), FP(unsafe_from_address=Int(dxty.unsafe_ptr())))
+        else:
+            ctx.enqueue_function[kf_means_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, Int32(fi),
+                                                  dxm.unsafe_ptr(), grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
+            ctx.enqueue_function[kf_cells_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, dxm.unsafe_ptr(),
+                                                  dg.unsafe_ptr(), dxty.unsafe_ptr(), grid_dim=_xg_blocks(cells + d), block_dim=XG_TPB)
         ctx.enqueue_function[kf_solve_kernel](dg.unsafe_ptr(), dxty.unsafe_ptr(), dxm.unsafe_ptr(), Int32(d), dal.unsafe_ptr(),
                                               Int32(na), Int32(fi), daw.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
                                               grid_dim=_xg_blocks(na), block_dim=XG_TPB)
@@ -1197,6 +1232,7 @@ def fit_device(
         while len(hip) < 5:
             hip.append(Int32(0))
         hip[4] = Int32(1 if grid_gram else 0)
+    var fast_gram = False
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         # x_linear/bayes.mojo `X_LINEAR_GRAM_SSE`: ip[5], the sse from the
         # normal equations (lane/apple-fast-classical); `=0` is the A/B arm
@@ -1204,6 +1240,22 @@ def fit_device(
             while len(hip) < 6:
                 hip.append(Int32(0))
             hip[5] = Int32(0 if String(getenv("MOJOLEARN_X_LINEAR_GRAM_SSE")) == "0" else 1)
+        # lane/apple-fast-gram: the shared grid Gram (x_linear/fast_gram.mojo)
+        # fills the stats the team would build on one block; LARS reads
+        # ip[5], ridge ip[4] (both always present in this build, 0 = old path).
+        if algo == ALGO_LARS and d > 0 and n > 0:
+            while len(hip) < 6:
+                hip.append(Int32(0))
+            fast_gram = _lars_fast_gram()
+            hip[5] = Int32(1 if fast_gram else 0)
+            if fast_gram:
+                hip[4] = Int32(1)
+                grid_gram = False
+        if algo == ALGO_RIDGE and d > 0 and n > 0 and len(hip) >= 4:
+            while len(hip) < 5:
+                hip.append(Int32(0))
+            fast_gram = _ridge_fast_gram() and hip[3] == 0 and hip[0] > 0
+            hip[4] = Int32(1 if fast_gram else 0)
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](
         team_work(n, team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr()))), team_own(algo, d)))
@@ -1220,6 +1272,21 @@ def fit_device(
     dfw.enqueue_fill(Float32(0))
     diw.enqueue_fill(Int32(0))
     dtw.enqueue_fill(Float32(0))
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        if fast_gram:
+            var pfw = FP(unsafe_from_address=Int(dfw.unsafe_ptr()))
+            var px = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
+            var py = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
+            if algo == ALGO_LARS:
+                # lars_fit's fw: xm 0 | G d | xty d + d*d | prev (the y mean
+                # goes in its first word; lars_fit zeroes prev after reading it)
+                var xty_o = d + d * d
+                fast_gram_into(ctx, px, py, 0, n, d, 1, hip[1] != 0, pfw, pfw + (xty_o + d), pfw + d, pfw + xty_o)
+            else:
+                # ridge_fit's fw: xm 0 | G d | M | rhs | ym T | xty d*T
+                var t_n = Int(hip[0])
+                var ym_o = d + 2 * d * d + d
+                fast_gram_into(ctx, px, py, 0, n, d, t_n, hip[1] != 0, pfw, pfw + ym_o, pfw + d, pfw + (ym_o + t_n))
     if grid_gram:
         # The means then the centered Gram into fw[0, d + d*d), the layout
         # `lars_fit` reads (xm at 0, G at d); the team recomputes the means

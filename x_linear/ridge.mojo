@@ -19,7 +19,8 @@ from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, copy, cholesky, chol_solve, centered_gram,
     axpy_acc, add_acc, axpy_centered, par_rows,
 )
-from std.sys.info import is_gpu
+from std.sys.info import is_gpu, is_apple_gpu
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.team import Team
 from x_linear.tops import upper_cell, t_centered_gram, t_sum, fold_fa, fold_sq, chain_fmad, chain_cfmad
 
@@ -106,57 +107,68 @@ def _ridge_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
     var sw = ldi(ip, 3) != 0
     var wo = n * t_n
     var wsum = Float32(0)
-    if sw:
-        wsum = t_sum(t, y + wo, n)
-    for j in range(t.tid, d + t_n, t.nt):
-        var acc = Float32(0)
-        if j < d:
-            if fi:
-                if sw:
-                    acc = fd(chain_fmad(y, wo, 1, x, j, d, n), wsum)
-                else:
-                    acc = fd(fold_fa(x, j, d, n), i2f(n))
-            st(fw, xm + j, acc)
-        else:
-            var c = j - d
-            if fi:
-                if sw:
-                    acc = fd(chain_fmad(y, wo, 1, y, c, t_n, n), wsum)
-                else:
-                    acc = fd(fold_fa(y, c, t_n, n), i2f(n))
-            st(fw, ym + c, acc)
-    t.sync()
-    if sw:
-        # sum_i w_i xc_i xc_i' (theirs: the sqrt(w) rescale of _rescale_data)
-        var cells = d * (d + 1) // 2
-        for c in range(t.tid, cells, t.nt):
-            var jk = upper_cell(c, d)
-            var j = jk[0]
-            var k = jk[1]
-            var acc = Float32(0)
-            var mj = ld(fw, xm + j)
-            var mk = ld(fw, xm + k)
-            for i in range(n):
-                acc = fmad(fm(ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)
-            st(fw, gg + j * d + k, acc)
-            st(fw, gg + k * d + j, acc)
-        t.sync()
-    else:
-        t_centered_gram(t, x, n, d, fw + xm, 0, fw, gg)
-    for c in range(t.tid, t_n * d, t.nt):
-        var tt = c // d
-        var j = c - tt * d
-        var ymt = ld(fw, ym + tt)
-        var mj = ld(fw, xm + j)
-        var acc = Float32(0)
+    # lane/apple-fast-gram (2026-10-02), FAST on Apple only: ip[4] is 1 when
+    # `fast_gram_into` (x_linear/fast_gram.mojo, `MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1`)
+    # already wrote xm, ym, the centered Gram and X'Y into fw on the grid,
+    # so the team's row passes below (`t_centered_gram` and the X'Y chains:
+    # one thread per cell walking every row on ONE block, the board's
+    # ridge-clf taxi 5.3x) are skipped. Unweighted fits only; IDENTICAL and
+    # the other vendors compile the old statements.
+    var pre_stats = False
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and is_apple_gpu():
+        pre_stats = ldi(ip, 4) != 0 and not sw
+    if not pre_stats:
         if sw:
-            for i in range(n):
-                var xc = fm(ld(y, wo + i), fs(ld(x, i * d + j), mj))
-                acc = fmad(xc, fs(ld(y, i * t_n + tt), ymt), acc)
+            wsum = t_sum(t, y + wo, n)
+        for j in range(t.tid, d + t_n, t.nt):
+            var acc = Float32(0)
+            if j < d:
+                if fi:
+                    if sw:
+                        acc = fd(chain_fmad(y, wo, 1, x, j, d, n), wsum)
+                    else:
+                        acc = fd(fold_fa(x, j, d, n), i2f(n))
+                st(fw, xm + j, acc)
+            else:
+                var c = j - d
+                if fi:
+                    if sw:
+                        acc = fd(chain_fmad(y, wo, 1, y, c, t_n, n), wsum)
+                    else:
+                        acc = fd(fold_fa(y, c, t_n, n), i2f(n))
+                st(fw, ym + c, acc)
+        t.sync()
+        if sw:
+            # sum_i w_i xc_i xc_i' (theirs: the sqrt(w) rescale of _rescale_data)
+            var cells = d * (d + 1) // 2
+            for c in range(t.tid, cells, t.nt):
+                var jk = upper_cell(c, d)
+                var j = jk[0]
+                var k = jk[1]
+                var acc = Float32(0)
+                var mj = ld(fw, xm + j)
+                var mk = ld(fw, xm + k)
+                for i in range(n):
+                    acc = fmad(fm(ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)
+                st(fw, gg + j * d + k, acc)
+                st(fw, gg + k * d + j, acc)
+            t.sync()
         else:
-            acc = chain_cfmad(x, j, d, mj, y, tt, t_n, ymt, n)
-        st(fw, xty + tt * d + j, acc)
-    t.sync()
+            t_centered_gram(t, x, n, d, fw + xm, 0, fw, gg)
+        for c in range(t.tid, t_n * d, t.nt):
+            var tt = c // d
+            var j = c - tt * d
+            var ymt = ld(fw, ym + tt)
+            var mj = ld(fw, xm + j)
+            var acc = Float32(0)
+            if sw:
+                for i in range(n):
+                    var xc = fm(ld(y, wo + i), fs(ld(x, i * d + j), mj))
+                    acc = fmad(xc, fs(ld(y, i * t_n + tt), ymt), acc)
+            else:
+                acc = chain_cfmad(x, j, d, mj, y, tt, t_n, ymt, n)
+            st(fw, xty + tt * d + j, acc)
+        t.sync()
     var best = 0
     var best_err = Float32(0)
     if a_n > 1:
