@@ -755,7 +755,6 @@ host-exec	hostexec	hr-kit	debt	x_decomp/host.mojo	0	var r = HostExec._qr_r(a, m,
 host-import	host-import	hr-kit	debt	x_decomp/host.mojo	0	geqrf_host_rows(a, tau, m, n)
 host-import	host-import	hr-kit	debt	x_decomp/host.mojo	0	lu_solve_host_rows(lu, piv, b, n, nrhs, trans)
 host-import	host-import	hr-kit	debt	x_decomp/host.mojo	0	orgqr_host_rows(h, tau, q, m, n, kk, qc)
-host-switch	host-env/threshold	hr-kit	debt	x_decomp/host.mojo	0	comptime if not is_defined["MOJOLEARN_XD_EIGH_CYCLIC"]():
 host-threads	host-threads	hr-kit	debt	x_decomp/host.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	hr-kit	debt	x_decomp/host.mojo	0	host_parallelize(group, groups)
 host-call	host-import	UNOWNED	debt	x_decomp/host_jacobi.mojo	0	from decomposition.host.pca_oracle import PCA_ORACLE_HOST_SABOTAGE, _host_jacobi_fold, host_jacobi_rotation_cs

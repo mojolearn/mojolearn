@@ -355,7 +355,17 @@ class Tree:
 
         mojo = sorted(p for p in files if p.endswith(".mojo"))
         self.lines = lines(mojo, "mojo")
-        self.imps = {p: _imports(l) for p, l in self.lines.items()}
+        self._sha = {p: (None if p in overlay else shas.get(p)) for p in files}
+        self.imps = {}
+        for p, l in self.lines.items():
+            k = ("imps", self._sha[p])
+            if self._sha[p] is None or k not in _LINES_CACHE:
+                v = _imports(l)
+                if self._sha[p] is None:
+                    self.imps[p] = v
+                    continue
+                _LINES_CACHE[k] = v
+            self.imps[p] = _LINES_CACHE[k]
         # module graph
         self.edges = collections.defaultdict(set)
         self.sym_src = {}  # (path, alias) -> (module path it came from, name)
@@ -387,7 +397,16 @@ class Tree:
                     and "/tests/" not in p and os.path.basename(p) not in _PY_CPU_SIDE)
         self.lines.update(lines(py, "py"))
         self.gpu_py = set(py)
-        self.host_funcs = {p: self._host_functions(p) for p in self.gpu_mojo}
+        self.host_funcs = {}
+        for p in self.gpu_mojo:
+            k = ("hf", p, self._sha.get(p))
+            if self._sha.get(p) is None or k not in _LINES_CACHE:
+                v = self._host_functions(p)
+                if self._sha.get(p) is None:
+                    self.host_funcs[p] = v
+                    continue
+                _LINES_CACHE[k] = v
+            self.host_funcs[p] = _LINES_CACHE[k]
 
     _DEVICE_API = re.compile(r"\b(enqueue_function\w*|DeviceContext|DeviceBuffer|enqueue_copy"
                              r"|thread_idx|block_idx|global_idx|barrier)\b")
@@ -460,8 +479,10 @@ _HOST_FOR = re.compile(r"^\s*for\s+\w+\s+in\s+range\(")
 _TID0 = re.compile(r"^\s*if\s+\(?\s*(thread_idx\.x|tid|lane|lane_id|t|local_tid|thread_id)\s*==\s*0\b")
 _RUNTIME_RANGE = re.compile(r"\bfor\s+\w+\s+in\s+range\(\s*([^)]*)\)")
 _ENV_READ = re.compile(r"\b(getenv|_getenv\w*|environ\.get|is_defined)\b[\[(]\s*['\"](MOJOLEARN_\w+)")
-_THRESH_CMP = re.compile(r"[<>]=?\s*([A-Z][A-Z0-9_]*(MIN|MAX|THRESH|LIMIT|CUTOFF)[A-Z0-9_]*)\b"
-                         r"|\b([A-Z][A-Z0-9_]*(MIN|MAX|THRESH|LIMIT|CUTOFF)[A-Z0-9_]*)\s*[<>]=?")
+# a size test against a constant: `n < SMALL_N`, `rows >= 4096`, `LIMIT > m`
+_SZ = r"(n|m|n_\w+|rows|cols|count|size|numel|nnz|cells|total|\w+_rows|\w+_cells|\w+_size|\w+_count)"
+_THRESH_CMP = re.compile(r"\b" + _SZ + r"(\s*[*]\s*\w+)?\s*[<>]=?\s*([A-Z][A-Z0-9_]{2,}|\d{2,}[\d_]*|1\s*<<\s*\d+)\b"
+                         r"|\b([A-Z][A-Z0-9_]{2,}|\d{2,}[\d_]*)\s*[<>]=?\s*" + _SZ + r"\b")
 
 
 def _runtime_bound(expr):
@@ -556,6 +577,10 @@ def _top_args(s):
 
 
 dm_def = re.compile(r"\s*(def|fn)\s")
+# a line none of the line rules can match is skipped quickly
+_PREFILTER = re.compile(r"host|HOST|Host|parallel|MOJOLEARN_|_MIN|np\.|sklearn|range\(|futures|Executor"
+                        r"|multiprocessing|threading")
+_SCAN_CACHE = {}
 
 
 def scan_file(tree, path):
@@ -578,6 +603,19 @@ def scan_file(tree, path):
                     host_syms.add(alias)
                     import_of.setdefault(no, []).append(alias)
     local_host = tree.host_funcs.get(path, set()) if lang == "mojo" else set()
+    sha = getattr(tree, "_sha", {}).get(path)
+    ck = (path, sha, frozenset(host_thread_names), frozenset(host_syms),
+          tuple(sorted((k, tuple(v)) for k, v in import_of.items())), frozenset(local_host))
+    if sha is not None and ck in _SCAN_CACHE:
+        return _SCAN_CACHE[ck]
+    res = _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host)
+    if sha is not None:
+        _SCAN_CACHE[ck] = res
+    return res
+
+
+def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host):
+    out = []
     alias_re = (re.compile(r"\b(" + "|".join(map(re.escape, sorted(host_thread_names))) + r")\b")
                 if host_thread_names else None)
     host_call_re = (re.compile(r"\b(" + "|".join(map(re.escape, sorted(host_syms))) + r")\s*[\[(]")
@@ -602,7 +640,7 @@ def scan_file(tree, path):
 
     for no, t in lines:
         dm = _DEFINES.match(t)
-        for rule, _cls, langs, pat, _why in _LINE_RULES:
+        for rule, _cls, langs, pat, _why in (_LINE_RULES if _PREFILTER.search(t) else ()):
             if lang not in langs:
                 continue
             ms = [m.group(0) for m in pat.finditer(t)]
@@ -622,8 +660,15 @@ def scan_file(tree, path):
     if lang != "mojo":
         return out
     hostish = {"host-call", "host-import", "host-exec", "host-threads", "std-parallelize"}
-    # host-switch: an env/define read or threshold test whose branch reaches host code
+    # host-switch: in a function that runs device code, an env/define read or
+    # a size test against a constant whose branch reaches host code (a route)
+    device_fn = set()
+    for a, b in _functions(lines):
+        if any(Tree._DEVICE_API.search(t) for _, t in lines[a:b]):
+            device_fn.update(range(a, b))
     for k, (no, t) in enumerate(lines):
+        if k not in device_fn:
+            continue
         if not re.match(r"\s*(comptime\s+)?(if|elif)\b", t):
             continue
         if not (_ENV_READ.search(t) or _THRESH_CMP.search(t)) or "is_gpu()" in t:
