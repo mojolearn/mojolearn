@@ -61,7 +61,6 @@ _CHOLESKY_FORMAT = "mojolearn-cholesky-1"
 #: route because its host binding ships; the gp host binding does not.
 _GPU_BINDING = "_mojolearn_gp"
 _CPU_BINDING = "_mojolearn_linalg"
-_HOST_BASENAME = "_mojolearn_linalg_host"
 
 
 class Cholesky(NumericModeMixin):
@@ -301,29 +300,15 @@ class Cholesky(NumericModeMixin):
         return obj
 
 
-class HostCholesky(Cholesky):
-    """`Cholesky` bound to `_mojolearn_linalg_host` on any box, a GPU box
-    included, so a GPU factor and a CPU solve can be compared in one
-    process (`mojolearn.host_model` returns this for a saved factor).
-    IDENTICAL only."""
-
-    _HOST_INFERENCE_ONLY = True
-
-    def _door(self):
-        mode = getattr(self, "numeric_mode", None)
-        if mode is not None and mode != "identical":
-            raise ValueError(
-                f"mojolearn: HostCholesky runs IDENTICAL only on the host; this "
-                f"factor was saved {mode!r}"
-            )
-        return _backend.load_host_module(_HOST_BASENAME), "linalg_numeric_mode"
-
-    def _host_refusals(self):
-        """Nothing beyond `load`'s own checks: the host binding carries all
-        three door names."""
-
-    def vendor_used(self):
-        return "cpu"
+def __getattr__(name):
+    """`HostCholesky` lives with the other host-inference subclasses in
+    `_classical_host` (the CPU side; cpu-gpu-cleanup c-linear, 2026-10-02),
+    so this GPU-path module never loads a host binding. The name still
+    resolves here for callers that import it from this module."""
+    if name == "HostCholesky":
+        from ._classical_host import HostCholesky
+        return HostCholesky
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["Cholesky", "HostCholesky"]
+__all__ = ["Cholesky"]
