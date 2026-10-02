@@ -29,6 +29,7 @@ because the keys are already on the device.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.atomic import Atomic
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -570,3 +571,50 @@ def upload_i32(
     ctx.synchronize()
     _ = h^
     return d^
+
+
+def first_nonfinite_kernel(
+    first: MutPointer[Int32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """DEVIATION 636 on the device: `first[0] = min i` over the cells whose
+    exponent bits are all ones (a NaN or an infinity, `isfinite`'s
+    predicate by bits). An integer `Atomic.min` is order-free, so every
+    column reports the same first index."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var bits = bitcast[DType.uint32](v.unsafe_load(i)) & UInt32(0x7FFFFFFF)
+        if bits >= UInt32(0x7F800000):
+            _ = Atomic.min(first.unsafe_offset(0), Int32(i))
+
+
+def check_finite_device(
+    ctx: DeviceContext,
+    mut values: DeviceBuffer[DType.float32],
+    n: Int,
+    what: String,
+) raises:
+    """`check_finite_list` over `n` uploaded cells: one grid scan and one
+    int read back; the same first flat index and the same message."""
+    if n <= 0:
+        return
+    if n > 2147483647:
+        raise Error("svm: " + what + " has more than 2^31 - 1 cells")
+    var first = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_function[set_i32_kernel](
+        first.unsafe_ptr(), Int32(2147483647), grid_dim=1, block_dim=1,
+    )
+    ctx.enqueue_function[first_nonfinite_kernel](
+        first.unsafe_ptr(), values.unsafe_ptr(), Int32(n),
+        grid_dim=_grid(n), block_dim=SEL_TPB,
+    )
+    var got = read_i32(ctx, first, 1)
+    _ = first^
+    var f = Int(got[0])
+    if f != 2147483647:
+        raise Error(
+            "svm: " + what + " contains a non-finite value at flat index "
+            + String(f) + " (DEVIATION 636: a NaN or inf input cannot be"
+            " fitted; a computed NaN has a vendor-specific payload)"
+        )
