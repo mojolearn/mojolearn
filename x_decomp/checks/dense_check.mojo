@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Seams DEVIATION 5307-5309 and 5320 of the decomp lane: the LU pivot and
-its tie (5307), the substitution folds of getrs and of the Cholesky (5308),
+its tie (5307), the right-looking substitution folds of lu_solve and the Cholesky's (5308),
 the two-pass modified Gram-Schmidt (5309), and the Householder QR that keeps
 its reflectors with its explicit Q (geqrf + orgqr, 5320).
 
@@ -153,7 +153,7 @@ def main() raises:
         if abs(bsrc[t]) > Float32(100):
             bsrc[t] = bsrc[t] * Float32(1e-6)
     var want = oracle_lu_solve(got_o[0], got_o[1], bsrc, n, nrhs)
-    require_separates("5308 getrs substitution order", count_diff_f32(want, oracle_lu_solve(got_o[0], got_o[1], bsrc, n, nrhs, 1)))
+    require_separates("5308 lu_solve substitution order", count_diff_f32(want, oracle_lu_solve(got_o[0], got_o[1], bsrc, n, nrhs, 1)))
     var xd = bsrc.copy()
     DevExec.lu_solve(ptr(got_o[0]), iptr(got_o[1]), ptr(xd), n, nrhs)
     same("5308 lu_solve device", count_diff_f32(xd, want))
@@ -162,7 +162,7 @@ def main() raises:
     same("5308 lu_solve host", count_diff_f32(xh, want))
     tr.record_list_f32("x_decomp.lu_solve", xd)
     var want_t = oracle_lu_solve_t(got_o[0], got_o[1], bsrc, n, nrhs)
-    require_separates("5308 getrs 'T' substitution order", count_diff_f32(want_t, oracle_lu_solve_t(got_o[0], got_o[1], bsrc, n, nrhs, 1)))
+    require_separates("5308 lu_solve 'T' substitution order", count_diff_f32(want_t, oracle_lu_solve_t(got_o[0], got_o[1], bsrc, n, nrhs, 1)))
     var xtd = bsrc.copy()
     DevExec.lu_solve(ptr(got_o[0]), iptr(got_o[1]), ptr(xtd), n, nrhs, 1)
     same("5308 lu_solve trans device", count_diff_f32(xtd, want_t))
@@ -170,6 +170,24 @@ def main() raises:
     HostExec.lu_solve(ptr(got_o[0]), iptr(got_o[1]), ptr(xth), n, nrhs, 1)
     same("5308 lu_solve trans host", count_diff_f32(xth, want_t))
     tr.record_list_f32("x_decomp.lu_solve_t", xtd)
+    # past one diagonal block (device TRS_BLOCK 128): three blocks, the last
+    # partial, so the feed kernel and the descending block order run; 'N'
+    # and 'T', device == host == the oracle
+    var bn = 300
+    var bnr = 3
+    var ba = seam_fixture(bn, bn, UInt64(91))
+    for i in range(bn):
+        ba[i * bn + i] = ba[i * bn + i] + Float32(6)
+    var bw = oracle_lu(ba, bn)
+    var bb = seam_fixture(bn, bnr, UInt64(92))
+    for tt in range(2):
+        var bwant = oracle_lu_solve(bw[0], bw[1], bb, bn, bnr) if tt == 0 else oracle_lu_solve_t(bw[0], bw[1], bb, bn, bnr)
+        var bxd = bb.copy()
+        DevExec.lu_solve(ptr(bw[0]), iptr(bw[1]), ptr(bxd), bn, bnr, tt)
+        same("5308 lu_solve device n 300 trans " + String(tt), count_diff_f32(bxd, bwant))
+        var bxh = bb.copy()
+        HostExec.lu_solve(ptr(bw[0]), iptr(bw[1]), ptr(bxh), bn, bnr, tt)
+        same("5308 lu_solve host n 300 trans " + String(tt), count_diff_f32(bxh, bwant))
     var ns = 11
     var g = spd(ns)
     var wl = oracle_chol(g, ns)

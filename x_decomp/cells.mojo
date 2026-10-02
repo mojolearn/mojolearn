@@ -1132,9 +1132,15 @@ def als_cg_row(
 
 # DEVIATION 5307 (PIN; row 134): the pivot is the largest |a| with ties to the
 # LOWEST row (strict >); arm 5307_pivot_tie.
-# DEVIATION 5308 (PIN; row 134): every substitution and Cholesky fold ascending,
-# getrs 'N' and 'T' alike ('T' undoes the swaps last to first); arm
-# 5308_getrs_order.
+# DEVIATION 5308 (PIN; row 134; lane hr-lu 2026-10-02): lu_solve is
+# right-looking, the `trisolve` order: the row swaps as ONE gather by the row
+# order they make (`lu_perm_src`), then every cell's chain in the order its
+# operands finish, ascending j going forward (unit L for 'N', U^T for 'T', as
+# getrs) and DESCENDING j going backward (U for 'N', unit L^T for 'T'; getrs
+# folds these ascending), each row divided once every step into it is
+# applied; 'T' scatters the rows back through the swaps (getrs's last to
+# first). The bits do not depend on the device's block size. The Cholesky
+# fold ascending. Arm 5308_lu_solve_order.
 def lu_pivot(a: F32Ptr, piv: I32Ptr, k: Int, n: Int):
     """Step k's pivot row: the largest |a[i, k]| for i >= k, ties to the
     LOWEST row (strict >), into piv[k]."""
@@ -1210,103 +1216,6 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
                 lu_update_elem(a, sp, k, i, j, n)
 
 
-def lu_solve_col(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int, c: Int):
-    """`lu_solve_serial` for ONE right-hand side column `c` (lane/neural-net-
-    experiment, 2026-09-30, the classical pass): the columns of B are
-    independent in every statement of the serial solve (each swap, each
-    substitution sum reads and writes column c alone), so a thread per
-    column runs the same cells in the same order and writes the same bits.
-    The device launches one thread per column; the host keeps
-    `lu_solve_serial`, whose column loop is this function called c ascending."""
-    if trans != 0:
-        for i in range(n):
-            var acc = ftz(b.unsafe_load(i * nrhs + c))
-            for j in range(i):
-                acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-            b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
-        for ii in range(n):
-            var i = n - 1 - ii
-            var acc = ftz(b.unsafe_load(i * nrhs + c))
-            for j in range(i + 1, n):
-                acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-            b.unsafe_store(i * nrhs + c, acc)
-        for kk in range(n):
-            var k = n - 1 - kk
-            var p = Int(piv.unsafe_load(k))
-            if p != k:
-                var t = b.unsafe_load(k * nrhs + c)
-                b.unsafe_store(k * nrhs + c, b.unsafe_load(p * nrhs + c))
-                b.unsafe_store(p * nrhs + c, t)
-        return
-    for k in range(n):
-        var p = Int(piv.unsafe_load(k))
-        if p != k:
-            var t = b.unsafe_load(k * nrhs + c)
-            b.unsafe_store(k * nrhs + c, b.unsafe_load(p * nrhs + c))
-            b.unsafe_store(p * nrhs + c, t)
-    for i in range(n):
-        var acc = ftz(b.unsafe_load(i * nrhs + c))
-        for j in range(i):
-            acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(i * n + j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-        b.unsafe_store(i * nrhs + c, acc)
-    for ii in range(n):
-        var i = n - 1 - ii
-        var acc = ftz(b.unsafe_load(i * nrhs + c))
-        for j in range(i + 1, n):
-            acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(i * n + j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-        b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
-
-
-def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0):
-    """getrs: apply the row swaps to B (n x nrhs, row major) in order, then
-    forward substitution with unit L and back substitution with U, each
-    inner sum ascending. trans != 0 solves A^T X = B (getrs 'T'; a real
-    matrix's 'C' is the same): forward substitution with U^T, back
-    substitution with unit L^T, each inner sum ascending in j, then the row
-    swaps in REVERSE order."""
-    if trans != 0:
-        for c in range(nrhs):
-            for i in range(n):
-                var acc = ftz(b.unsafe_load(i * nrhs + c))
-                for j in range(i):
-                    acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-                b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
-            for ii in range(n):
-                var i = n - 1 - ii
-                var acc = ftz(b.unsafe_load(i * nrhs + c))
-                for j in range(i + 1, n):
-                    acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-                b.unsafe_store(i * nrhs + c, acc)
-        for kk in range(n):
-            var k = n - 1 - kk
-            var p = Int(piv.unsafe_load(k))
-            if p != k:
-                for c in range(nrhs):
-                    var t = b.unsafe_load(k * nrhs + c)
-                    b.unsafe_store(k * nrhs + c, b.unsafe_load(p * nrhs + c))
-                    b.unsafe_store(p * nrhs + c, t)
-        return
-    for k in range(n):
-        var p = Int(piv.unsafe_load(k))
-        if p != k:
-            for c in range(nrhs):
-                var t = b.unsafe_load(k * nrhs + c)
-                b.unsafe_store(k * nrhs + c, b.unsafe_load(p * nrhs + c))
-                b.unsafe_store(p * nrhs + c, t)
-    for c in range(nrhs):
-        for i in range(n):
-            var acc = ftz(b.unsafe_load(i * nrhs + c))
-            for j in range(i):
-                acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(i * n + j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-            b.unsafe_store(i * nrhs + c, acc)
-        for ii in range(n):
-            var i = n - 1 - ii
-            var acc = ftz(b.unsafe_load(i * nrhs + c))
-            for j in range(i + 1, n):
-                acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(i * n + j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-            b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
-
-
 # DEVIATION 5309 (PIN; row 134): the orthonormal basis of a tall A is two
 # passes of {R = the Householder QR's R of decomposition/ (qr_factor, TSQR
 # slices a function of the shape); orth_rank_guard(R); Q = A R^-1, one thread
@@ -1328,9 +1237,9 @@ comptime ORTH_RANK_TOL2 = Float32(2.3283064365386963e-10)
 # LocallyLinearEmbedding's shift-invert): each solved row is applied to the
 # rows it feeds at once, so a cell's chain runs in the order its operands
 # finish (ascending j below the diagonal, DESCENDING j above it). getrs's
-# ascending back substitution (`lu_solve_serial`, DEVIATION 5308) is one
-# n^2 / 2 chain per column; this order blocks on the device (a diagonal
-# block, then every row it feeds a cell at a time) with the same chains.
+# ascending back substitution is one n^2 / 2 chain per column; this order
+# blocks on the device (a diagonal block, then every row it feeds a cell at
+# a time) with the same chains. lu_solve runs it too (DEVIATION 5308).
 # tri: 0 = unit L forward (coef lu[i, j]), 1 = U backward (lu[i, j], divide),
 # 2 = U^T forward (lu[j, i], divide), 3 = unit L^T backward (lu[j, i]).
 
@@ -1391,32 +1300,51 @@ def trs_feed_cell(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, lo: Int, h
     b.unsafe_store(i * nrhs + c, acc)
 
 
-def trs_tri_serial(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int):
-    """One triangle, every column: the reference walk (one row at a time,
-    each applied to every row it feeds, columns innermost)."""
+def trs_tri_cols(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, c0: Int, c1: Int):
+    """One triangle on the columns [c0, c1): the reference walk (one row at
+    a time, each applied to every row it feeds, columns innermost). Every
+    cell's chain is its own column's, so column slices run apart."""
     if tri == 0 or tri == 2:
         for j in range(n):
-            for c in range(nrhs):
-                if trs_divides(tri):
+            if trs_divides(tri):
+                for c in range(c0, c1):
                     trs_div(lu, b, n, nrhs, j, c)
             for i in range(j + 1, n):
-                for c in range(nrhs):
+                for c in range(c0, c1):
                     trs_step(lu, b, n, nrhs, tri, i, j, c)
     else:
         for jj in range(n):
             var j = n - 1 - jj
-            for c in range(nrhs):
-                if trs_divides(tri):
+            if trs_divides(tri):
+                for c in range(c0, c1):
                     trs_div(lu, b, n, nrhs, j, c)
             for i in range(j):
-                for c in range(nrhs):
+                for c in range(c0, c1):
                     trs_step(lu, b, n, nrhs, tri, i, j, c)
+
+
+def trs_tri_serial(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int):
+    """One triangle, every column (`trs_tri_cols`)."""
+    trs_tri_cols(lu, b, n, nrhs, tri, 0, nrhs)
 
 
 def trs_gather(src: F32Ptr, idx: F32Ptr, dst: F32Ptr, nrhs: Int, i: Int, c: Int):
     """dst[i, c] = src[idx[i], c] (idx holds row numbers as floats, exact
     below 2^24)."""
     dst.unsafe_store(i * nrhs + c, src.unsafe_load(Int(idx.unsafe_load(i)) * nrhs + c))
+
+
+def lu_perm_src(piv: I32Ptr, i: Int) -> Int:
+    """The row of B that getrs's swaps (k ascending: rows k and piv[k])
+    bring to row i, from row i alone: swap k > i never touches row i (piv[k]
+    >= k), swap i brings row piv[i], and each earlier swap k whose piv[k] is
+    the row being followed brings row k instead. Integer compares only."""
+    var p = Int(piv.unsafe_load(i))
+    for q in range(i):
+        var k = i - 1 - q
+        if Int(piv.unsafe_load(k)) == p:
+            p = k
+    return p
 
 
 def trisolve_serial(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, tmp: F32Ptr, n: Int, nrhs: Int, trans: Int):

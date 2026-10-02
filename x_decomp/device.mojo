@@ -11,7 +11,7 @@ from max.gpu.sync import barrier
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import memcpy
-from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count
 
@@ -21,8 +21,10 @@ from decomposition.impl.linalg.detail.svd_full import svd_of_r
 from decomposition.linalg_public_device import device_eigh, device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.cells import (
-    lu_solve_col,
+    lu_perm_src,
     trs_block_col,
+    trs_coef,
+    trs_divides,
     trs_feed_cell,
     trs_gather,
     div0,
@@ -74,7 +76,6 @@ from x_decomp.cells import (
     lu_swap_elem,
     lu_update_elem,
     omp_row,
-    lu_solve_serial,
     orth_diag_cell,
     orth_rank_guard,
     trsm_row,
@@ -83,7 +84,6 @@ from x_decomp.cells import (
     pdist_cell,
     sqdist_cell,
 )
-from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_on_host
 from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_on_host
 from x_decomp.exec_trait import Exec
 from x_decomp.jacobi2 import (
@@ -373,16 +373,6 @@ def lu_pivot_block_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
         piv.unsafe_store(kk, ri.unsafe_load(0))
 
 
-def lu_solve_cols_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, trans: Int32):
-    """One thread per right-hand side column (`lu_solve_col`): the columns
-    are independent in every statement of the serial solve, so the bits are
-    the serial solve's. The serial solve was one thread for n^2 * nrhs
-    dependent multiply-adds: 616 s at 8192 x 64 on an MI325X."""
-    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if c < Int(nrhs):
-        lu_solve_col(lu, piv, b, Int(n), Int(nrhs), Int(trans), c)
-
-
 def lu_swap_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
     var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if j < Int(n):
@@ -533,11 +523,6 @@ def lu_trail_tiled_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32
             if acts[kp] != Float32(0):
                 acc = ftz(identical_mul_add(-ls[r * width + kp], us[kp * LU_TILE + c], ftz(acc)))
         a.unsafe_store(i * nn + j, acc)
-
-
-def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, trans: Int32):
-    if block_idx.x == 0 and thread_idx.x == 0:
-        lu_solve_serial(lu, piv, b, Int(n), Int(nrhs), Int(trans))
 
 
 def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
@@ -1331,9 +1316,17 @@ def colsum_scratch(n: Int, d: Int) -> Int:
     return nb * d if nb > 1 else 0
 
 
-#: The device triangular solve's diagonal block (rows a block finishes on
-#: one thread per column before the rows it feeds take its steps).
-comptime TRS_BLOCK = 64
+#: The device triangular solve's diagonal block: its rows are finished on
+#: one thread per (row, column) cell before the rows it feeds take its steps.
+#: The bits do not depend on it (every cell's chain is all of its j in one
+#: order, a block at a time); a wider block halves the launches (lane hr-lu,
+#: 2026-10-02: 64 -> 128).
+comptime TRS_BLOCK = 128
+#: Columns of B per thread block of `trs_diag_kernel` and its shared page.
+comptime TRS_DIAG_COLS = 2
+comptime TRS_DIAG_TPB = TRS_BLOCK * TRS_DIAG_COLS
+comptime TRS_DIAG_PAGE_BYTES = TRS_DIAG_TPB * 4
+comptime TRS_DIAG_FITS = lib_smem_page_fits_for[TARGET_COLUMN, TRS_DIAG_PAGE_BYTES]()
 
 
 def trs_gather_kernel(src: F32Ptr, idx: F32Ptr, dst: F32Ptr, n: Int32, nrhs: Int32):
@@ -1353,6 +1346,64 @@ def trs_block_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, l
     var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if c < Int(nrhs):
         trs_block_col(lu, b, Int(n), Int(nrhs), Int(tri), Int(lo), Int(hi), c)
+
+
+def trs_diag_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, lo: Int32, hi: Int32):
+    """`trs_block_col` with a thread per (row, column) cell of the diagonal
+    block [lo, hi) (lane hr-lu, 2026-10-02): the block's rows sit in one
+    shared page, and at step j (forward ascending, backward descending)
+    every row that j feeds takes `trs_step`'s fused multiply-add from the
+    finished row j, then the next row to finish divides (`trs_div`), one
+    barrier a step. Each cell's chain is `trs_block_col`'s, the same operands
+    in the same order; the serial kernel walked h^2 / 2 dependent global
+    loads and stores on ONE thread per column."""
+    var s = stack_allocation[TRS_DIAG_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var r = tid // TRS_DIAG_COLS
+    var cl = tid % TRS_DIAG_COLS
+    var c = Int(block_idx.x) * TRS_DIAG_COLS + cl
+    var nn = Int(n)
+    var w = Int(nrhs)
+    var t = Int(tri)
+    var l0 = Int(lo)
+    var h = Int(hi) - l0
+    var i = l0 + r
+    var live = r < h and c < w
+    var divs = trs_divides(t)
+    var d = Float32(0)
+    if live:
+        s.unsafe_store(tid, b.unsafe_load(i * w + c))
+        if divs:
+            d = lu.unsafe_load(i * nn + i)
+    if t == 0 or t == 2:
+        if live and divs and r == 0:
+            s.unsafe_store(tid, div0(ftz(s.unsafe_load(tid)), d))
+        barrier()
+        for jr in range(h - 1):
+            if live and r > jr:
+                var acc = ftz(identical_mul_add(
+                    -ftz(trs_coef(lu, nn, t, i, l0 + jr)), ftz(s.unsafe_load(jr * TRS_DIAG_COLS + cl)),
+                    ftz(s.unsafe_load(tid))))
+                if divs and r == jr + 1:
+                    acc = div0(ftz(acc), d)
+                s.unsafe_store(tid, acc)
+            barrier()
+    else:
+        if live and divs and r == h - 1:
+            s.unsafe_store(tid, div0(ftz(s.unsafe_load(tid)), d))
+        barrier()
+        for q in range(h - 1):
+            var jr = h - 1 - q
+            if live and r < jr:
+                var acc = ftz(identical_mul_add(
+                    -ftz(trs_coef(lu, nn, t, i, l0 + jr)), ftz(s.unsafe_load(jr * TRS_DIAG_COLS + cl)),
+                    ftz(s.unsafe_load(tid))))
+                if divs and r == jr - 1:
+                    acc = div0(ftz(acc), d)
+                s.unsafe_store(tid, acc)
+            barrier()
+    if live:
+        b.unsafe_store(i * w + c, s.unsafe_load(tid))
 
 
 def trs_feed_kernel(lu: F32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, tri: Int32, lo: Int32, hi: Int32):
@@ -1375,9 +1426,15 @@ def launch_trs_tri(ctx: DeviceContext, lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int,
         var bq = q if (tri == 0 or tri == 2) else nblk - 1 - q
         var lo = bq * TRS_BLOCK
         var hi = min(n, lo + TRS_BLOCK)
-        ctx.enqueue_function[trs_block_kernel](
-            lu, b, Int32(n), Int32(nrhs), Int32(tri), Int32(lo), Int32(hi), grid_dim=_blocks(nrhs), block_dim=TPB
-        )
+        comptime if TRS_DIAG_FITS:
+            ctx.enqueue_function[trs_diag_kernel](
+                lu, b, Int32(n), Int32(nrhs), Int32(tri), Int32(lo), Int32(hi),
+                grid_dim=(nrhs + TRS_DIAG_COLS - 1) // TRS_DIAG_COLS, block_dim=TRS_DIAG_TPB,
+            )
+        else:
+            ctx.enqueue_function[trs_block_kernel](
+                lu, b, Int32(n), Int32(nrhs), Int32(tri), Int32(lo), Int32(hi), grid_dim=_blocks(nrhs), block_dim=TPB
+            )
         var rows = n - hi if (tri == 0 or tri == 2) else lo
         if rows > 0:
             ctx.enqueue_function[trs_feed_kernel](
@@ -1401,6 +1458,31 @@ def launch_trisolve(
     launch_trs_tri(ctx, lu, tmp, n, nrhs, 2)
     launch_trs_tri(ctx, lu, tmp, n, nrhs, 3)
     ctx.enqueue_function[trs_gather_kernel](tmp, idx, dst, Int32(n), Int32(nrhs), grid_dim=_blocks(cells), block_dim=TPB)
+
+
+def lu_perm_kernel(piv: I32Ptr, idx: F32Ptr, n: Int32, trans: Int32):
+    """The swaps' row order as `trisolve`'s idx, a thread per row: trans 0
+    idx[i] = `lu_perm_src`(i) (the gather getrs's swaps make), trans 1 its
+    inverse (the scatter of 'T''s swaps last to first). Integer compares."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        var p = lu_perm_src(piv, i)
+        if Int(trans) == 0:
+            idx.unsafe_store(i, Float32(p))
+        else:
+            idx.unsafe_store(p, Float32(i))
+
+
+def launch_lu_solve(
+    ctx: DeviceContext, lu: F32Ptr, piv: I32Ptr, b: F32Ptr, idx: F32Ptr, dst: F32Ptr, n: Int, nrhs: Int, trans: Int
+) raises:
+    """lu_solve in the right-looking order (DEVIATION 5308), enqueued (no
+    sync): the swaps' row order, then `launch_trisolve` from b into dst
+    (trans 1 solves in b itself before its gather)."""
+    if n <= 0 or nrhs <= 0:
+        return
+    ctx.enqueue_function[lu_perm_kernel](piv, idx, Int32(n), Int32(trans), grid_dim=_blocks(n), block_dim=TPB)
+    launch_trisolve(ctx, lu, idx, b, dst, b, n, nrhs, trans)
 
 
 def launch_colsum(ctx: DeviceContext, a: F32Ptr, dst: F32Ptr, p: F32Ptr, n: Int, d: Int) raises:
@@ -1750,32 +1832,24 @@ struct DevExec(Exec):
 
     @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
-        if xd_lu_solve_on_host(n):
-            # lane neural-pass39: the host walk of the same cells (the device
-            # ran one thread per column of B: 64 threads on the whole GPU)
-            lu_solve_host_rows(lu, piv, b, n, nrhs, trans)
+        if n <= 0 or nrhs <= 0:
             return
-        var ctx = xd_ctx()
-        var dl = _up(ctx, lu, n * n)
-        var dp = _up_i(ctx, piv, n)
-        var db = _up(ctx, b, n * nrhs)
-        if String(getenv("MOJOLEARN_XD_LU_SOLVE_SERIAL")) == "1":
-            ctx.enqueue_function[lu_solve_kernel](
-                dl.unsafe_ptr(), dp.unsafe_ptr(), db.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(trans), grid_dim=1, block_dim=1
-            )
-        else:
-            # One thread per right-hand side (lane/neural-net-experiment).
-            ctx.enqueue_function[lu_solve_cols_kernel](
-                dl.unsafe_ptr(), dp.unsafe_ptr(), db.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(trans),
-                grid_dim=_blocks(nrhs), block_dim=TPB,
-            )
-        _down(ctx, db, b, n * nrhs)
-        ctx.synchronize()
-        _ = dl^
-        _ = dp^
-        _ = db^
-        ctx.synchronize()
-        _ = ctx^
+        var cx = xd_ctx()
+        var ul = _up(cx, lu, n * n)
+        var up = _up_i(cx, piv, n)
+        var ub = _up(cx, b, n * nrhs)
+        var ui = cx.enqueue_create_buffer[DType.float32](n)
+        var ud = cx.enqueue_create_buffer[DType.float32](n * nrhs)
+        launch_lu_solve(cx, _p(ul), I32Ptr(unsafe_from_address=Int(up.unsafe_ptr())), _p(ub), _p(ui), _p(ud), n, nrhs, trans)
+        _down(cx, ud, b, n * nrhs)
+        cx.synchronize()
+        _ = ul^
+        _ = up^
+        _ = ub^
+        _ = ui^
+        _ = ud^
+        cx.synchronize()
+        _ = cx^
 
     @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:
