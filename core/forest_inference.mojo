@@ -537,6 +537,47 @@ def require_finite(values: List[Float32]) raises:
             raise Error("forest inference prototype requires finite Float32 values")
 
 
+comptime FOREST_FINITE_TPB = 256
+
+
+def forest_nonfinite_kernel(v: MutPointer[Float32, MutAnyOrigin], n: Int32, flag: MutPointer[Int32, MutAnyOrigin]):
+    """The finiteness predicate on the device, one thread a value: any
+    exponent field of all ones (inf or NaN) sets flag[0] (every writer
+    stores the same 1, so the flag has no order)."""
+    var i = Int(block_idx.x) * FOREST_FINITE_TPB + Int(thread_idx.x)
+    if i < Int(n):
+        if (bitcast[DType.uint32](v.unsafe_load(i)) & UInt32(0x7f800000)) == UInt32(0x7f800000):
+            flag.unsafe_store(0, Int32(1))
+
+
+def device_all_finite(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int) raises -> Bool:
+    """True when the first n values of `buf` are finite: the scan runs on
+    the device and one int comes back (cpu-gpu-cleanup: the forest predict
+    paths scanned their inputs and outputs on host threads)."""
+    return device_ptr_all_finite(ctx, buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n)
+
+
+def device_ptr_all_finite(ctx: DeviceContext, v: MutPointer[Float32, MutAnyOrigin], n: Int) raises -> Bool:
+    """`device_all_finite` on n values at device address `v` (a slice of a
+    larger device buffer)."""
+    if n <= 0:
+        return True
+    var flag = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(flag, Int32(0))
+    ctx.enqueue_function[forest_nonfinite_kernel](
+        v, Int32(n),
+        flag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        grid_dim=(n + FOREST_FINITE_TPB - 1) // FOREST_FINITE_TPB, block_dim=FOREST_FINITE_TPB,
+    )
+    var h = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=flag)
+    ctx.synchronize()
+    var ok = h.unsafe_ptr().unsafe_load(0) == Int32(0)
+    _ = h^
+    _ = flag^
+    return ok
+
+
 def validate_flat_forest(
     offsets: List[Int32], columns: List[Int32], thresholds: List[Float32],
     left: List[Int32], leaves: List[Float32], x: List[Float32],
@@ -557,7 +598,9 @@ def validate_flat_forest(
         raise Error("forest inference offsets must cover all nodes")
     require_finite(thresholds)
     require_finite(leaves)
-    require_finite(x)
+    # the input rows are scanned on the device where they land
+    # (forest_predict_gpu), not here on host threads
+    _ = len(x)
     for t in range(len(offsets)-1):
         var base = Int(offsets[t])
         var end = Int(offsets[t+1])
@@ -607,9 +650,12 @@ def forest_predict_gpu[RF_INPUT: Bool, GROVE: Bool](
     ctx.enqueue_copy(dst_buf=dleft,src_ptr=left.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dleaf,src_ptr=leaves.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=dx,src_ptr=x.unsafe_ptr())
+    if not device_all_finite(ctx,dx,len(x)):
+        raise Error("forest inference prototype requires finite Float32 values")
     launch_forest_inference[RF_INPUT,GROVE](
         ctx,doff,dcol,dthr,dleft,dleaf,dx,dout,n_rows,n_features,n_outputs,trees,
     )
+    var out_ok = device_all_finite(ctx,dout,n_rows*n_outputs)
     ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(),src_buf=dout)
     ctx.synchronize()
     # Keep borrowed host inputs and device operands live through the drain.
@@ -630,5 +676,6 @@ def forest_predict_gpu[RF_INPUT: Bool, GROVE: Bool](
     for i in range(n_rows*n_outputs):
         result.append(hout[i])
     _ = hout^
-    require_finite(result)
+    if not out_ok:
+        raise Error("forest inference prototype requires finite Float32 values")
     return result^

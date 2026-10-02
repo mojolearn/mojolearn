@@ -33,8 +33,10 @@ WHAT THE REFERENCE FUNCTION DOES, STEP FOR STEP (`:62-117`), AND WHAT THIS ONE D
              OURS: `hierarchy/impl/cluster/detail/mst.mojo::
              build_sorted_mst`, unchanged, with `nnz = m * m`.
   `:107-117` `build_dendrogram_host(...)`
-             OURS: `hierarchy/impl/cluster/detail/agglomerative.mojo`,
-             unchanged.
+             OURS: `hierarchy/impl/cluster/detail/dendrogram_device.mojo::
+             build_dendrogram_device`, the same three outputs bit for bit
+             on the device (integer work only), so no host step sits
+             between the MST and the condense.
 
 THE SABOTAGE ARGUMENT IS NOT FORWARDED INTO `hierarchy/`. This lane's
 `HDB_SAB_*` constants and that lane's `LINK_SAB_*` constants are two
@@ -45,6 +47,7 @@ condense sabotage, which is the kind of defect a green suite does not
 show.
 """
 
+from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
@@ -60,7 +63,7 @@ from hdbscan.impl.detail.reachability import (
     compute_core_dists,
 )
 from hierarchy.checks.edge_order import LINK_SAB_NONE, edge_hi, edge_lo
-from hierarchy.impl.cluster.detail.agglomerative import build_dendrogram_host
+from hierarchy.impl.cluster.detail.dendrogram_device import build_dendrogram_device
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
     PAIRWISE_MAX_ROWS,
@@ -87,6 +90,38 @@ comptime MR_GRAPH_DENSE = 1
 comptime MR_GRAPH_SPARSE = 2
 """The on-the-fly Boruvka (DEVIATION 1620) at any size; the seam check
 runs it where the dense arm can run too."""
+
+comptime ORIENT_TPB = 256
+
+
+def _orient_edges_kernel(
+    src: MutPointer[Int32, MutAnyOrigin],
+    dst: MutPointer[Int32, MutAnyOrigin],
+    n_edges: Int32,
+):
+    """DEVIATION 1614 per edge: `(min(u, v), max(u, v))`. One thread per
+    edge, each writing only its own slots, so there is no order to pin."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_edges):
+        return
+    var cu = src.unsafe_load(i)
+    var cv = dst.unsafe_load(i)
+    src.unsafe_store(i, edge_lo(cu, cv))
+    dst.unsafe_store(i, edge_hi(cu, cv))
+
+
+def _interleave_edges_kernel(
+    src: MutPointer[Int32, MutAnyOrigin],
+    dst: MutPointer[Int32, MutAnyOrigin],
+    out: MutPointer[Int32, MutAnyOrigin],
+    n_edges: Int32,
+):
+    """`(src[i], dst[i])` at `out[2i], out[2i + 1]`: the trace's edge list."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_edges):
+        return
+    out.unsafe_store(2 * i, src.unsafe_load(i))
+    out.unsafe_store(2 * i + 1, dst.unsafe_load(i))
 
 
 def build_mr_linkage(
@@ -296,14 +331,7 @@ def build_mr_linkage(
         print("HDB_STAGE mst_ms=" + String(Float64(now - st_t) / 1.0e6) + " rounds=" + String(rounds))
         st_t = now
     var n_edges = m - 1
-    var h_src = ctx.enqueue_create_host_buffer[DType.int32](n_edges)
-    var h_dst = ctx.enqueue_create_host_buffer[DType.int32](n_edges)
-    ctx.synchronize()
-    var v_src = mst_rows.create_sub_buffer[DType.int32](0, n_edges)
-    var v_dst = mst_cols.create_sub_buffer[DType.int32](0, n_edges)
-    ctx.enqueue_copy(dst_ptr=h_src.unsafe_ptr(), src_buf=v_src)
-    ctx.enqueue_copy(dst_ptr=h_dst.unsafe_ptr(), src_buf=v_dst)
-    ctx.synchronize()
+    var orient_grid = max(1, (n_edges + ORIENT_TPB - 1) // ORIENT_TPB)
     # ==================================================================
     # DEVIATION 1614. THE MST EDGE ORIENTATION IS CANONICALIZED TO
     # (min(u, v), max(u, v)). THEIRS IS BORUVKA'S, AND IS NOT A RULE.
@@ -347,23 +375,31 @@ def build_mr_linkage(
     # check_condensed_tree_vs_oracle on blobs96.
     # ==================================================================
     if sabotage != HDB_SAB_MST_ORIENT_RAW:
-        for i in range(n_edges):
-            var cu = h_src.unsafe_ptr().unsafe_load(i)
-            var cv = h_dst.unsafe_ptr().unsafe_load(i)
-            h_src.unsafe_ptr().unsafe_store(i, edge_lo(cu, cv))
-            h_dst.unsafe_ptr().unsafe_store(i, edge_hi(cu, cv))
-        ctx.enqueue_copy(dst_buf=v_src, src_ptr=h_src.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=v_dst, src_ptr=h_dst.unsafe_ptr())
-        ctx.synchronize()
+        ctx.enqueue_function[_orient_edges_kernel](
+            mst_rows.unsafe_ptr(),
+            mst_cols.unsafe_ptr(),
+            Int32(n_edges),
+            grid_dim=(orient_grid, 1, 1),
+            block_dim=(ORIENT_TPB, 1, 1),
+        )
 
-    var edges = List[Int32](capacity=n_edges * 2)
-    for i in range(n_edges):
-        edges.append(h_src.unsafe_ptr().unsafe_load(i))
-        edges.append(h_dst.unsafe_ptr().unsafe_load(i))
     var rounds_list = List[Int32]()
     rounds_list.append(Int32(rounds))
     trace.record_list_i32("hdbscan.mst.rounds", rounds_list)
-    trace.record_list_i32("hdbscan.mst.edges", edges)
+    if trace.enabled:
+        var edges = ctx.enqueue_create_buffer[DType.int32](max(1, n_edges * 2))
+        ctx.enqueue_function[_interleave_edges_kernel](
+            mst_rows.unsafe_ptr(),
+            mst_cols.unsafe_ptr(),
+            edges.unsafe_ptr(),
+            Int32(n_edges),
+            grid_dim=(orient_grid, 1, 1),
+            block_dim=(ORIENT_TPB, 1, 1),
+        )
+        trace.record_device[DType.int32](
+            ctx, "hdbscan.mst.edges", edges, n_edges * 2
+        )
+        _ = edges^
     trace.record_device[DType.float32](
         ctx, "hdbscan.mst.weights", mst_weights, n_edges
     )
@@ -373,8 +409,8 @@ def build_mr_linkage(
         var now = Int(perf_counter_ns())
         print("HDB_STAGE edges_ms=" + String(Float64(now - st_t) / 1.0e6))
         st_t = now
-    # `:107-117` Perform hierarchical labeling.
-    build_dendrogram_host(
+    # `:107-117` Perform hierarchical labeling, on the device.
+    build_dendrogram_device(
         ctx, mst_rows, mst_cols, mst_weights, n_edges,
         out_dendrogram, out_distances, out_sizes,
     )
@@ -400,8 +436,4 @@ def build_mr_linkage(
     _ = pw_dists^
     _ = norms^
     _ = color^
-    _ = h_src^
-    _ = h_dst^
-    _ = v_src^
-    _ = v_dst^
     return rounds

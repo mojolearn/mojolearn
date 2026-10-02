@@ -36,7 +36,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from gemm.checks.gemm_int15 import INT15_TPB
 from gemm.checks.gemm_int15_epilogue import int15_store_cell
-from gemm.host.gemm_int15_oracle import INT15_MAX_K
+from gemm.contract import INT15_MAX_K
 
 #: The most query rows per head the one-launch form takes (the decode rows).
 comptime INT15_HEADS_MAX_L = 16

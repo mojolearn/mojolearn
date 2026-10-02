@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The batched Isolation Forest tree builder: one block per tree, thread 0
-walks the stack.
+"""The batched Isolation Forest tree builder: one block per tree, the whole
+block draws the subsample and walks the stack (cpu-gpu-cleanup t-forest; see
+the block comment above `IF_BUILD_TPB_MAX` for what changed from cuML's
+thread-0 walk).
 
 Reference: `cpp/src/isolation_forest/isolation_tree_builder.cuh` at
 rapidsai/cuml v26.08.00, branch for branch and loop for loop:
@@ -115,7 +117,8 @@ discipline, same push order (right then left). Spelling only.
 ===================================================
 """
 
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
+from max.gpu.memory import AddressSpace
 
 from std.sys import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -200,7 +203,9 @@ as hex by `if_check.mojo` so the constant cannot drift by a decimal."""
 
 comptime IF_BUILD_TPB = 128
 """`build_isolation_trees_global_kernel<T><<<n_trees, 128, 0, stream>>>`
-(`:397`). A scheduling width: only the gather uses the block's threads."""
+(`:397`). A scheduling width: the sampling, the gather and every node's
+min/max and partition are split over the block's threads; no bit depends
+on it (at most `IF_BUILD_TPB_MAX`)."""
 
 comptime IF_DECISION_WORDS = 6
 """Int32 words of RECORDED DECISION per node (archive/plans/CARD_GAPS.md's isolation
@@ -403,6 +408,343 @@ def _record_decision(
     decisions.unsafe_store(base + 5, Int32(local_feature))
 
 
+# ---------------------------------------------------------------------------
+# cpu-gpu-cleanup t-forest: THE BLOCK BUILDS ITS TREE TOGETHER.
+#
+# Until this lane one thread of each block drew the subsample (bootstrap
+# draws and Floyd's sampler on the tree's XORWOW stream) and then walked the
+# whole tree alone: every node's per-feature min/max over its rows and its
+# partition ran on thread 0 while the other threads of the block waited at
+# the final barrier. Now:
+#
+#   * the SUBSAMPLE is a counter draw. With replacement, draw i is
+#     `if_bootstrap_draw(base, i, n_rows)` (SplitMix64 keyed by (seed, tree,
+#     i), rejection keyed by the attempt). Without replacement, the tree takes
+#     the `k` rows with the smallest `(if_row_key(base, r), r)`, listed in row
+#     order: a 4-bit-digit radix select of the k-th key (eight block-wide
+#     integer count passes, no atomics), then one block scan that compacts
+#     the chosen rows. Features are chosen the same way from the columns.
+#     Every thread computes the same counts and the same digits, so no thread
+#     owns the walk.
+#   * the WALK is block-uniform: every thread runs the same stack and draws
+#     the same XORWOW values (the node draws are the tree stream's, from its
+#     start), so the control flow needs no broadcast; the data work of a node
+#     is split over the block. The per-feature min/max is a block reduction
+#     whose tie goes to the LOWER position, which is exactly the serial
+#     strict-`<` / strict-`>` fold's answer (the first row in partition order
+#     wins a signed-zero tie). The partition is STABLE (rows below the
+#     threshold first, each side in its previous order) through two block
+#     scans into the tree's scratch half of `work_indices`.
+#
+# Bits: integer counts and scans, compares and copies; the float arithmetic
+# (threshold, path length) is the serial walk's. The answer does not depend
+# on the block width. The host oracle (`checks/if_oracle.mojo`, the CPU-only
+# install's fit) draws and partitions the same way. Changed from cuML's
+# serial semantics (Floyd's sample, the in-place swap partition): every
+# forest's bits move once, on every vendor and the CPU column together.
+# ---------------------------------------------------------------------------
+
+comptime IF_BUILD_TPB_MAX = 256
+"""The widest build block the shared scratch is sized for (the launch
+invariance gates run 32..256); the launch refuses a wider one."""
+
+comptime IF_KEY_BUCKETS = 16
+"""4-bit digits of the 32-bit selection key: eight count passes."""
+
+comptime IF_GOLDEN: UInt64 = 0x9E3779B97F4A7C15
+comptime IF_REJECT_STEP: UInt64 = 0xD1B54A32D192ED03
+
+comptime SHI32 = UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED]
+comptime SHF32 = UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED]
+comptime SHU32 = UnsafePointer[UInt32, MutUntrackedOrigin, address_space=AddressSpace.SHARED]
+
+
+@always_inline
+def _if_mix64(z_in: UInt64) -> UInt64:
+    """SplitMix64's finalizer (Steele, Lea, Flood 2014)."""
+    var z = z_in
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EB
+    return z ^ (z >> 31)
+
+
+@always_inline
+def if_sample_base(seed: UInt64, tree: UInt64, stream: UInt64) -> UInt64:
+    """The counter base of one tree's draws; stream 0 rows, stream 1
+    features."""
+    return _if_mix64(
+        _if_mix64(seed + IF_GOLDEN) + tree * IF_GOLDEN + stream * IF_REJECT_STEP + 1
+    )
+
+
+@always_inline
+def if_row_key(base: UInt64, r: Int) -> UInt32:
+    """Row (or column) `r`'s selection key; the sample is the `k` smallest
+    `(key, r)`."""
+    return UInt32(_if_mix64(base + UInt64(r + 1) * IF_GOLDEN) >> 32)
+
+
+@always_inline
+def if_bootstrap_draw(base: UInt64, i: Int, bound: UInt64) -> UInt64:
+    """Draw `i` with replacement from `[0, bound)`, bounded rejection on a
+    counter (attempt `j` is `mix(v + j * step)`), so no modulo bias and no
+    shared stream."""
+    if bound <= 1:
+        return 0
+    var max_uint64: UInt64 = 0xFFFFFFFFFFFFFFFF
+    var limit: UInt64 = max_uint64 - (max_uint64 % bound)
+    var v = _if_mix64(base + UInt64(i + 1) * IF_GOLDEN)
+    var j: UInt64 = 0
+    while v >= limit:
+        j += 1
+        v = _if_mix64(v + j * IF_REJECT_STEP)
+    return v % bound
+
+
+@always_inline
+def _block_scan(scan: SHI32, tid: Int, n_threads: Int, flag: Int32) -> Tuple[Int, Int]:
+    """(exclusive prefix, block total) of `flag` over the block, a
+    Hillis-Steele scan in shared memory. Integer, exact."""
+    scan[tid] = flag
+    barrier()
+    var off = 1
+    while off < n_threads:
+        var add = Int32(0)
+        if tid >= off:
+            add = scan[tid - off]
+        barrier()
+        scan[tid] = scan[tid] + add
+        barrier()
+        off *= 2
+    var inclusive = Int(scan[tid])
+    var total = Int(scan[n_threads - 1])
+    barrier()
+    return (inclusive - Int(flag), total)
+
+
+def _block_select_smallest(
+    base: UInt64,
+    n: Int,
+    k: Int,
+    out64: MutPointer[Int64, MutAnyOrigin],
+    out32: MutPointer[Int32, MutAnyOrigin],
+    wide: Bool,
+    counts: SHU32,
+    totals: SHU32,
+    scan: SHI32,
+    tid: Int,
+    n_threads: Int,
+):
+    """The `k` of `[0, n)` with the smallest `(if_row_key(base, r), r)`, in
+    increasing `r`, written to `out64` (`wide`) or `out32`. Block-uniform:
+    every thread derives the same threshold from the same integer counts."""
+    if k >= n:
+        var r = tid
+        while r < n:
+            if wide:
+                out64.unsafe_store(r, Int64(r))
+            else:
+                out32.unsafe_store(r, Int32(r))
+            r += n_threads
+        barrier()
+        return
+    var prefix = UInt32(0)
+    var mask = UInt32(0)
+    var k_rem = k
+    for p in range(8):
+        var shift = UInt32(28 - 4 * p)
+        var local = InlineArray[UInt32, IF_KEY_BUCKETS](fill=UInt32(0))
+        var r = tid
+        while r < n:
+            var key = if_row_key(base, r)
+            if (key & mask) == prefix:
+                var d = Int((key >> shift) & UInt32(15))
+                local[d] = local[d] + UInt32(1)
+            r += n_threads
+        for d in range(IF_KEY_BUCKETS):
+            counts[d * IF_BUILD_TPB_MAX + tid] = local[d]
+        barrier()
+        if tid < IF_KEY_BUCKETS:
+            var total = UInt32(0)
+            for t in range(n_threads):
+                total += counts[tid * IF_BUILD_TPB_MAX + t]
+            totals[tid] = total
+        barrier()
+        var cum = 0
+        var digit = IF_KEY_BUCKETS - 1
+        for d in range(IF_KEY_BUCKETS):
+            var c = Int(totals[d])
+            if cum + c >= k_rem:
+                digit = d
+                break
+            cum += c
+        k_rem -= cum
+        prefix = prefix | (UInt32(digit) << shift)
+        mask = mask | (UInt32(15) << shift)
+        barrier()
+    # `prefix` is the k-th smallest key; `k_rem` rows holding it are taken,
+    # lowest row first
+    var eq_before = 0
+    var sel_before = 0
+    var base_r = 0
+    while base_r < n:
+        var r = base_r + tid
+        var less = False
+        var eq = False
+        if r < n:
+            var key = if_row_key(base, r)
+            less = key < prefix
+            eq = key == prefix
+        var eq_scan = _block_scan(scan, tid, n_threads, Int32(1) if eq else Int32(0))
+        var take = less or (eq and eq_before + eq_scan[0] < k_rem)
+        var take_scan = _block_scan(scan, tid, n_threads, Int32(1) if take else Int32(0))
+        if take:
+            var pos = sel_before + take_scan[0]
+            if wide:
+                out64.unsafe_store(pos, Int64(r))
+            else:
+                out32.unsafe_store(pos, Int32(r))
+        eq_before += eq_scan[1]
+        sel_before += take_scan[1]
+        base_r += n_threads
+    barrier()
+
+
+@always_inline
+def _better_min(av: Float32, ai: Int, bv: Float32, bi: Int) -> Bool:
+    """True when (bv, bi) beats (av, ai) for the minimum: a smaller value,
+    or an equal one at a lower position (the serial strict-`<` fold keeps
+    the first). `ai < 0` is no element."""
+    if bi < 0:
+        return False
+    if ai < 0:
+        return True
+    if bv < av:
+        return True
+    if av < bv:
+        return False
+    return bi < ai
+
+
+@always_inline
+def _better_max(av: Float32, ai: Int, bv: Float32, bi: Int) -> Bool:
+    if bi < 0:
+        return False
+    if ai < 0:
+        return True
+    if bv > av:
+        return True
+    if av > bv:
+        return False
+    return bi < ai
+
+
+def _block_min_max(
+    local_data: MutPointer[Float32, MutAnyOrigin],
+    work_indices: MutPointer[Int32, MutAnyOrigin],
+    start: Int,
+    end: Int,
+    n_cols: Int,
+    candidate: Int,
+    minv: SHF32,
+    mini: SHI32,
+    maxv: SHF32,
+    maxi: SHI32,
+    tid: Int,
+    n_threads: Int,
+) -> Tuple[Float32, Float32]:
+    """(min, max) of column `candidate` over the node's rows, each the
+    serial positional fold's answer (ties to the lower position)."""
+    var lmin = Float32(0.0)
+    var lmin_i = -1
+    var lmax = Float32(0.0)
+    var lmax_i = -1
+    var r = start + tid
+    while r < end:
+        var v = local_data.unsafe_load(Int(work_indices.unsafe_load(r)) * n_cols + candidate)
+        if _better_min(lmin, lmin_i, v, r):
+            lmin = v
+            lmin_i = r
+        if _better_max(lmax, lmax_i, v, r):
+            lmax = v
+            lmax_i = r
+        r += n_threads
+    minv[tid] = lmin
+    mini[tid] = Int32(lmin_i)
+    maxv[tid] = lmax
+    maxi[tid] = Int32(lmax_i)
+    barrier()
+    var s = 1
+    while s < n_threads:
+        if tid % (2 * s) == 0 and tid + s < n_threads:
+            if _better_min(minv[tid], Int(mini[tid]), minv[tid + s], Int(mini[tid + s])):
+                minv[tid] = minv[tid + s]
+                mini[tid] = mini[tid + s]
+            if _better_max(maxv[tid], Int(maxi[tid]), maxv[tid + s], Int(maxi[tid + s])):
+                maxv[tid] = maxv[tid + s]
+                maxi[tid] = maxi[tid + s]
+        barrier()
+        s *= 2
+    var out_min = minv[0]
+    var out_max = maxv[0]
+    barrier()
+    return (out_min, out_max)
+
+
+def _block_stable_partition(
+    local_data: MutPointer[Float32, MutAnyOrigin],
+    work_indices: MutPointer[Int32, MutAnyOrigin],
+    temp: MutPointer[Int32, MutAnyOrigin],
+    start: Int,
+    end: Int,
+    n_cols: Int,
+    feature: Int,
+    threshold: Float32,
+    scan: SHI32,
+    tid: Int,
+    n_threads: Int,
+) -> Int:
+    """Rows of `[start, end)` with `value < threshold` first, then the rest,
+    each side in its previous order; returns the split position."""
+    var n_less = 0
+    var base_r = start
+    while base_r < end:
+        var r = base_r + tid
+        var f = Int32(0)
+        var idx = Int32(0)
+        if r < end:
+            idx = work_indices.unsafe_load(r)
+            if local_data.unsafe_load(Int(idx) * n_cols + feature) < threshold:
+                f = Int32(1)
+        var sc = _block_scan(scan, tid, n_threads, f)
+        if f != 0:
+            temp.unsafe_store(n_less + sc[0], idx)
+        n_less += sc[1]
+        base_r += n_threads
+    var n_more = 0
+    base_r = start
+    while base_r < end:
+        var r = base_r + tid
+        var g = Int32(0)
+        var idx = Int32(0)
+        if r < end:
+            idx = work_indices.unsafe_load(r)
+            if not (local_data.unsafe_load(Int(idx) * n_cols + feature) < threshold):
+                g = Int32(1)
+        var sc = _block_scan(scan, tid, n_threads, g)
+        if g != 0:
+            temp.unsafe_store(n_less + n_more + sc[0], idx)
+        n_more += sc[1]
+        base_r += n_threads
+    barrier()
+    var r2 = start + tid
+    while r2 < end:
+        work_indices.unsafe_store(r2, temp.unsafe_load(r2 - start))
+        r2 += n_threads
+    barrier()
+    return start + n_less
+
+
 def build_tree_iterative_global(
     local_data: MutPointer[Float32, MutAnyOrigin],
     n_samples: Int,
@@ -419,18 +761,26 @@ def build_tree_iterative_global(
     n_nodes_out: MutPointer[Int32, MutAnyOrigin],
     max_depth_out: MutPointer[Int32, MutAnyOrigin],
     work_indices: MutPointer[Int32, MutAnyOrigin],
+    work_temp: MutPointer[Int32, MutAnyOrigin],
     stack: MutPointer[Int32, MutAnyOrigin],
     decisions: MutPointer[Int32, MutAnyOrigin],
+    minv: SHF32,
+    mini: SHI32,
+    maxv: SHF32,
+    maxi: SHI32,
+    scan: SHI32,
     tid: Int,
     n_threads: Int,
 ):
-    """`build_tree_iterative_global<T>` (`:125-243`). `local_data` is the
-    tree's gathered subsample, row-major `n_samples x n_cols` where
-    `n_cols` is `max_features`; `feature_indices` maps a local column to
-    the original one when `has_feature_indices`. The node pointers are
-    already offset to this tree. `tid`/`n_threads` are the block's thread
-    index and width (the `work_indices` fill is the only parallel line;
-    everything after `if tid == 0` is one thread's serial walk).
+    """`build_tree_iterative_global<T>` (`:125-243`), walked by the WHOLE
+    block (cpu-gpu-cleanup t-forest, the comment block above). `local_data`
+    is the tree's gathered subsample, row-major `n_samples x n_cols` where
+    `n_cols` is `max_features`; `feature_indices` maps a local column to the
+    original one when `has_feature_indices`. The node pointers are already
+    offset to this tree. Every thread runs the same stack and draws the same
+    XORWOW values; a node's min/max and partition are split over the block;
+    single stores (nodes, records, results) are thread 0's. `work_temp` is
+    the tree's partition scratch, `n_samples` words.
 
     `decisions` is the card's per-node decision slice, `IF_DECISION_WORDS`
     Int32 per node, written by `_record_decision` at every node the walk
@@ -442,73 +792,34 @@ def build_tree_iterative_global(
         i += n_threads
     barrier()
 
-    if tid == 0:
-        var n_nodes = 1
-        var observed_max_depth = 0
-        var stack_top = 0
-        _stack_push(stack, stack_top, 0, 0, n_samples, 0)
+    var n_nodes = 1
+    var observed_max_depth = 0
+    var stack_top = 0
+    # every thread pushes the same words to the same cells and reads back
+    # its own: the stack needs no barrier of its own
+    _stack_push(stack, stack_top, 0, 0, n_samples, 0)
 
-        while stack_top > 0:
-            stack_top -= 1
-            var node_idx = Int(stack.unsafe_load(4 * stack_top + 0))
-            var start = Int(stack.unsafe_load(4 * stack_top + 1))
-            var end = Int(stack.unsafe_load(4 * stack_top + 2))
-            var depth = Int(stack.unsafe_load(4 * stack_top + 3))
-            var n_node_samples = end - start
-            observed_max_depth = (
-                observed_max_depth if observed_max_depth > depth else depth
-            )
+    while stack_top > 0:
+        stack_top -= 1
+        var node_idx = Int(stack.unsafe_load(4 * stack_top + 0))
+        var start = Int(stack.unsafe_load(4 * stack_top + 1))
+        var end = Int(stack.unsafe_load(4 * stack_top + 2))
+        var depth = Int(stack.unsafe_load(4 * stack_top + 3))
+        var n_node_samples = end - start
+        observed_max_depth = (
+            observed_max_depth if observed_max_depth > depth else depth
+        )
 
-            # `:158`, implemented verbatim. THIS BRANCH IS UNREACHABLE, and the
-            # proof is short enough to keep next to it so nobody writes a
-            # gate that can never fire (adjudicated 2026-08-24; the
-            # repo-wide card audit flagged it as a possible dangling-node
-            # defect, archive/plans/CARD_GAPS.md:232-236).
-            #
-            #   `max_nodes_per_tree = min(2*max_samples - 1,
-            #   2^(max_depth+1) - 1)` with `max_samples >= 1` and
-            #   `max_depth >= 0` both enforced by a raise in
-            #   `compute_global_max_nodes_per_tree`, so it is >= 1.
-            #
-            #   There are exactly THREE sites that ever push a node index:
-            #   the root push of 0, and the two child pushes below. 0 <
-            #   max_nodes_per_tree because the bound is >= 1. The child
-            #   pushes are reachable ONLY past the capacity arm of the
-            #   stopping condition, so at the moment they run
-            #   `n_nodes + 2 <= max_nodes_per_tree`, and they push
-            #   `left_child = n_nodes <= max_nodes_per_tree - 2` and
-            #   `right_child = n_nodes + 1 <= max_nodes_per_tree - 1`.
-            #   Both are < max_nodes_per_tree, and an index does not change
-            #   after it is pushed.
-            #
-            #   Therefore every popped `node_idx` is < max_nodes_per_tree
-            #   and the `continue` never runs. It is cuML's defensive
-            #   spelling and we keep it because we mirror them, not because
-            #   any shape reaches it. NO DEVIATION: theirs is identical
-            #   (`isolation_tree_builder.cuh:158`), so there is no bug of
-            #   theirs to fix and nothing of ours to number.
-            #
-            # If it ever DID run it would be a real defect, not a hash gap:
-            # the node stays at the poison fill while its parent still
-            # points at it. It would NOT be invisible, though -- the audit's
-            # secondary claim is wrong. A dropped index is always < n_nodes
-            # (it was produced by incrementing n_nodes), and the card
-            # records `for i in range(n_used)` with `n_used = n_nodes`
-            # (`isolation_forest.mojo:608,627`), so a poisoned dangling
-            # child lands INSIDE the hashed range and diverges from the
-            # oracle on `structure.feat` at that index.
-            if node_idx >= max_nodes_per_tree:
-                continue
+        # `:158`, cuML's defensive guard; unreachable (every pushed index is
+        # below the capacity, see the stopping condition's capacity arm).
+        if node_idx >= max_nodes_per_tree:
+            continue
 
-            # Stopping condition: max depth, isolated sample, or exhausted capacity.
-            # EVERY arm is evaluated for the record, not just the first
-            # one `or` stops at: when two hold, the leaf written is
-            # byte-identical either way, and which held is the only thing
-            # that can tell two vendors apart here.
-            var stop_depth = depth >= max_depth
-            var stop_isolated = n_node_samples <= 1
-            var stop_capacity = n_nodes + 2 > max_nodes_per_tree
-            if stop_depth or stop_isolated or stop_capacity:
+        var stop_depth = depth >= max_depth
+        var stop_isolated = n_node_samples <= 1
+        var stop_capacity = n_nodes + 2 > max_nodes_per_tree
+        if stop_depth or stop_isolated or stop_capacity:
+            if tid == 0:
                 var path_length = ftz(
                     Float32(depth) + compute_c_n(n_node_samples)
                 )
@@ -524,44 +835,32 @@ def build_tree_iterative_global(
                 if stop_capacity:
                     flags += 8
                 _record_decision(
-                    decisions,
-                    node_idx,
-                    Float32(0.0),
-                    Float32(0.0),
-                    Float32(0.0),
-                    -1,
-                    -1,
-                    flags,
+                    decisions, node_idx, Float32(0.0), Float32(0.0),
+                    Float32(0.0), -1, -1, flags,
                 )
-                continue
+            continue
 
-            # Try every feature, starting from a random offset, before concluding
-            # that this node cannot be split.
-            var local_feature = -1
-            var min_val = Float32(0.0)
-            var max_val = Float32(0.0)
-            var feature_start = Int(sample_bounded(rng_state, UInt64(n_cols)))
-            for attempt in range(n_cols):
-                var candidate = (feature_start + attempt) % n_cols
-                var candidate_min = local_data.unsafe_load(
-                    Int(work_indices.unsafe_load(start)) * n_cols + candidate
-                )
-                var candidate_max = candidate_min
-                for r in range(start + 1, end):
-                    var val = local_data.unsafe_load(
-                        Int(work_indices.unsafe_load(r)) * n_cols + candidate
-                    )
-                    if val < candidate_min:
-                        candidate_min = val
-                    if val > candidate_max:
-                        candidate_max = val
-                if candidate_min < candidate_max:
-                    local_feature = candidate
-                    min_val = candidate_min
-                    max_val = candidate_max
-                    break
+        # Try every feature, starting from a random offset, before concluding
+        # that this node cannot be split; each candidate's min/max is a block
+        # reduction, the first splittable candidate in order wins.
+        var local_feature = -1
+        var min_val = Float32(0.0)
+        var max_val = Float32(0.0)
+        var feature_start = Int(sample_bounded(rng_state, UInt64(n_cols)))
+        for attempt in range(n_cols):
+            var candidate = (feature_start + attempt) % n_cols
+            var mm = _block_min_max(
+                local_data, work_indices, start, end, n_cols, candidate,
+                minv, mini, maxv, maxi, tid, n_threads,
+            )
+            if mm[0] < mm[1]:
+                local_feature = candidate
+                min_val = mm[0]
+                max_val = mm[1]
+                break
 
-            if local_feature < 0:
+        if local_feature < 0:
+            if tid == 0:
                 var path_length = ftz(
                     Float32(depth) + compute_c_n(n_node_samples)
                 )
@@ -570,86 +869,56 @@ def build_tree_iterative_global(
                 node_left.unsafe_store(node_idx, Int32(-1))
                 node_right.unsafe_store(node_idx, Int32(-1))
                 _record_decision(
-                    decisions,
-                    node_idx,
-                    Float32(0.0),
-                    Float32(0.0),
-                    Float32(0.0),
-                    feature_start,
-                    -1,
-                    1 + 16,
+                    decisions, node_idx, Float32(0.0), Float32(0.0),
+                    Float32(0.0), feature_start, -1, 1 + 16,
                 )
-                continue
+            continue
 
-            var original_feature = Int32(local_feature)
-            if has_feature_indices:
-                original_feature = feature_indices.unsafe_load(local_feature)
-            var rand_frac = curand_uniform(rng_state)
-            # T threshold = min_val + static_cast<T>(rand_frac) * (max_val - min_val);
-            var threshold = ftz(
-                identical_mul_add(rand_frac, ftz(max_val - min_val), min_val)
+        var original_feature = Int32(local_feature)
+        if has_feature_indices:
+            original_feature = feature_indices.unsafe_load(local_feature)
+        var rand_frac = curand_uniform(rng_state)
+        # T threshold = min_val + static_cast<T>(rand_frac) * (max_val - min_val);
+        var threshold = ftz(
+            identical_mul_add(rand_frac, ftz(max_val - min_val), min_val)
+        )
+
+        var left_end = _block_stable_partition(
+            local_data, work_indices, work_temp, start, end, n_cols,
+            local_feature, threshold, scan, tid, n_threads,
+        )
+        var repartitioned = left_end == start or left_end == end
+        if repartitioned:
+            # Numerical rounding can move the random threshold onto an
+            # endpoint. Repartition with max_val so the stored split and the
+            # training partition agree; min_val < max_val, so both children
+            # are nonempty.
+            threshold = max_val
+            left_end = _block_stable_partition(
+                local_data, work_indices, work_temp, start, end, n_cols,
+                local_feature, threshold, scan, tid, n_threads,
             )
 
-            var left_end = start
-            for r in range(start, end):
-                var val = local_data.unsafe_load(
-                    Int(work_indices.unsafe_load(r)) * n_cols + local_feature
-                )
-                if val < threshold:
-                    var tmp = work_indices.unsafe_load(left_end)
-                    work_indices.unsafe_store(
-                        left_end, work_indices.unsafe_load(r)
-                    )
-                    work_indices.unsafe_store(r, tmp)
-                    left_end += 1
-
-            var repartitioned = left_end == start or left_end == end
-            if repartitioned:
-                # Numerical rounding can move the random threshold onto an endpoint.
-                # Repartition with max_val so the stored split and training partition
-                # remain consistent. Since min_val < max_val, both children are nonempty.
-                threshold = max_val
-                left_end = start
-                for r in range(start, end):
-                    var val = local_data.unsafe_load(
-                        Int(work_indices.unsafe_load(r)) * n_cols + local_feature
-                    )
-                    if val < threshold:
-                        var tmp = work_indices.unsafe_load(left_end)
-                        work_indices.unsafe_store(
-                            left_end, work_indices.unsafe_load(r)
-                        )
-                        work_indices.unsafe_store(r, tmp)
-                        left_end += 1
-
-            # AFTER the fallback, so the record says whether the stored
-            # `structure.thr` is the drawn threshold or the repaired one.
+        var left_child = n_nodes
+        var right_child = n_nodes + 1
+        n_nodes += 2
+        if tid == 0:
             var split_flags = 0
             if repartitioned:
                 split_flags += 32
             _record_decision(
-                decisions,
-                node_idx,
-                min_val,
-                max_val,
-                rand_frac,
-                feature_start,
-                local_feature,
-                split_flags,
+                decisions, node_idx, min_val, max_val, rand_frac,
+                feature_start, local_feature, split_flags,
             )
-
-            var left_child = n_nodes
-            var right_child = n_nodes + 1
-            n_nodes += 2
-
             node_feature.unsafe_store(node_idx, original_feature)
             node_threshold.unsafe_store(node_idx, threshold)
             node_left.unsafe_store(node_idx, Int32(left_child))
             node_right.unsafe_store(node_idx, Int32(right_child))
 
-            _stack_push(stack, stack_top, right_child, left_end, end, depth + 1)
-            _stack_push(stack, stack_top, left_child, start, left_end, depth + 1)
+        _stack_push(stack, stack_top, right_child, left_end, end, depth + 1)
+        _stack_push(stack, stack_top, left_child, start, left_end, depth + 1)
 
+    if tid == 0:
         n_nodes_out.unsafe_store(0, Int32(n_nodes))
         max_depth_out.unsafe_store(0, Int32(observed_max_depth))
 
@@ -728,7 +997,31 @@ def build_isolation_trees_global_kernel(
     var local_data = subsample_buffer.unsafe_offset(tree_id * max_samples * max_features)
     var tree_sample_indices = sample_indices.unsafe_offset(tree_id * max_samples)
     var tree_feature_indices = feature_indices.unsafe_offset(tree_id * max_features)
-    var tree_work_indices = work_indices.unsafe_offset(tree_id * max_samples)
+    # two halves per tree: the partition order, then its scratch
+    var tree_work_indices = work_indices.unsafe_offset(tree_id * 2 * max_samples)
+    var tree_work_temp = work_indices.unsafe_offset(tree_id * 2 * max_samples + max_samples)
+    var sh_counts = stack_allocation[
+        IF_KEY_BUCKETS * IF_BUILD_TPB_MAX, Scalar[DType.uint32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sh_totals = stack_allocation[
+        IF_KEY_BUCKETS, Scalar[DType.uint32], address_space = AddressSpace.SHARED
+    ]()
+    var sh_scan = stack_allocation[
+        IF_BUILD_TPB_MAX, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var sh_minv = stack_allocation[
+        IF_BUILD_TPB_MAX, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var sh_mini = stack_allocation[
+        IF_BUILD_TPB_MAX, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var sh_maxv = stack_allocation[
+        IF_BUILD_TPB_MAX, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var sh_maxi = stack_allocation[
+        IF_BUILD_TPB_MAX, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
     # ONE buffer, THREE disjoint slices, so the kernel's argument count
     # stays at 25 (Metal caps a kernel at 31; holtwinters died on the 32nd).
     #   [0, 4*mn)              the stack
@@ -749,34 +1042,32 @@ def build_isolation_trees_global_kernel(
     var t_left = node_left.unsafe_offset(tree_offset)
     var t_right = node_right.unsafe_offset(tree_offset)
 
-    # Thread 0 samples source rows using sklearn IsolationForest semantics:
-    # bootstrap=True samples with replacement; bootstrap=False samples without
-    # replacement. Bounded rejection sampling avoids modulo bias.
-    if tid == 0:
-        if bootstrap:
-            for i in range(max_samples):
-                tree_sample_indices.unsafe_store(
-                    i, Int64(sample_bounded(rng_state, UInt64(n_rows)))
-                )
-        else:
-            var start = n_rows - max_samples
-            for i in range(max_samples):
-                var j = start + i
-                var t = Int64(sample_bounded(rng_state, UInt64(j + 1)))
-                if contains_sample(tree_sample_indices, i, t):
-                    tree_sample_indices.unsafe_store(i, Int64(j))
-                else:
-                    tree_sample_indices.unsafe_store(i, t)
-
-        if has_feature_indices:
-            var start = n_cols - max_features
-            for i in range(max_features):
-                var j = start + i
-                var t = Int32(sample_bounded(rng_state, UInt64(j + 1)))
-                if contains_int_sample(tree_feature_indices, i, t):
-                    tree_feature_indices.unsafe_store(i, Int32(j))
-                else:
-                    tree_feature_indices.unsafe_store(i, t)
+    # The subsample, drawn by the whole block (the comment block above
+    # `IF_BUILD_TPB_MAX`): bootstrap=True samples with replacement, one
+    # counter draw per sample; bootstrap=False takes the `max_samples` rows
+    # of smallest key, in row order. Features likewise without replacement.
+    var global_tree = UInt64(tree_id + Int(global_tree_start))
+    var row_base = if_sample_base(seed, global_tree, 0)
+    if bootstrap:
+        var si = tid
+        while si < max_samples:
+            tree_sample_indices.unsafe_store(
+                si, Int64(if_bootstrap_draw(row_base, si, UInt64(n_rows)))
+            )
+            si += n_threads
+        barrier()
+    else:
+        _block_select_smallest(
+            row_base, n_rows, max_samples, tree_sample_indices,
+            tree_feature_indices, True, sh_counts, sh_totals, sh_scan,
+            tid, n_threads,
+        )
+    if has_feature_indices:
+        _block_select_smallest(
+            if_sample_base(seed, global_tree, 1), n_cols, max_features,
+            tree_sample_indices, tree_feature_indices, False, sh_counts,
+            sh_totals, sh_scan, tid, n_threads,
+        )
     barrier()
 
     for s in range(max_samples):
@@ -825,8 +1116,14 @@ def build_isolation_trees_global_kernel(
         tree_n_nodes.unsafe_offset(tree_id),
         tree_max_depth.unsafe_offset(tree_id),
         tree_work_indices,
+        tree_work_temp,
         tree_stack,
         tree_decisions,
+        sh_minv,
+        sh_mini,
+        sh_maxv,
+        sh_maxi,
+        sh_scan,
         tid,
         n_threads,
     )

@@ -63,7 +63,7 @@ from gemm.host_transport import (
     gemm_down_f32,
     gemm_up_f32,
 )
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
+from gemm.contract import OP_NN, OP_NT, OP_TN
 
 
 def identical_gemm_host(

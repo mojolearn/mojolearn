@@ -343,13 +343,12 @@ _PREDICT_CLASSES = 4
 _PREDICT_CLASSES_PINNED = 5
 _PREDICT_CLASSES_OVA = 6
 
-#: DEVIATION 2980: the device-resident parsed model is the default door of
+#: DEVIATION 2980: the device-resident parsed model is THE door of
 #: `GradientBoosting.predict` and `predict_proba` wherever the loaded binding
-#: exports `gbdt_resident_prepare`. `MOJOLEARN_GBDT_RESIDENT=0` in the
-#: environment at import, or this name set to False at run time, takes the
-#: per-call parse (`gbdt_predict`, `gbdt_predict_multi`) instead; the speed
-#: harness flips it to interleave the two arms in one process.
-GBDT_RESIDENT = os.environ.get("MOJOLEARN_GBDT_RESIDENT", "1").strip() != "0"
+#: exports `gbdt_resident_prepare`. The env switch that took the per-call
+#: parse instead is gone (cpu-gpu-cleanup t-forest); the per-call parse
+#: (`gbdt_predict`, `gbdt_predict_multi`) serves only a binary without the
+#: resident entry points.
 
 #: Losses whose parameter CatBoost makes MANDATORY. Passing the loss without
 #: it raises here rather than in Mojo, so the message names the Python
@@ -2260,16 +2259,14 @@ class GradientBoosting(NumericModeMixin):
         the first call and reused while the text is the same bytes; None
         where the loaded binding has no `gbdt_resident_prepare` (a binary
         built before DEVIATION 2980, a CPU-only install's proxy, which
-        refuses an absent name with ImportError) or where `GBDT_RESIDENT`
-        is off, in which case the call takes the per-call parse.
+        refuses an absent name with ImportError), in which case the call
+        takes the per-call parse.
 
         The fast check is object identity on the text (`str` is
         immutable, and the entry keeps a reference so the id cannot be
         reused). A different object is hashed and compared to the sha256
         the entry was prepared from: the same text keeps the handle, a
         new text releases it and prepares again."""
-        if not GBDT_RESIDENT:
-            return None
         try:
             prepare = binding.gbdt_resident_prepare
         except (ImportError, AttributeError):
