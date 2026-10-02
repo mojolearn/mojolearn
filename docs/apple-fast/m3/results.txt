@@ -1,4 +1,4 @@
-pos=56 lines=     256
+pos=81 lines=     258
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -54,3 +54,28 @@ pos=56 lines=     256
 108:CMD apple-fast-trees2@bfd1d7cc6 aft-ab-ettpb rc=0 AFT-MEDIAN arm=B n=2 median_ms=4513.1 all=[4504, 4523] hashes=['40a6bd5b6b694e15'] acc={'logloss': [0.189989, 0.189989], 'auc': [0.937987, 0.937987]}
 109:CMD apple-fast-trees2@bfd1d7cc6 aft-ab-etb64 rc=0 AFT-MEDIAN arm=B n=3 median_ms=3789.1 all=[3788, 3789, 3827] hashes=['8570e6992c12452d'] acc={'logloss': [0.526142, 0.526142, 0.526142], 'auc': [0.618907, 0.618907, 0.618907]}
 110:CMD apple-fast-trees2@bfd1d7cc6 aft-ab-fin1 rc=1 AFT-BUILD arm=A rc=127
+116:CMD apple-fast@952422579 aft-ab-ettpb2 rc=0 AFT-MEDIAN arm=B n=3 median_ms=4378.8 all=[4379, 4340, 4384] hashes=['40a6bd5b6b694e15'] acc={'logloss': [0.189989, 0.189989, 0.189989], 'auc': [0.937987, 0.937987, 0.937987]}
+117:CMD apple-fast@952422579 aft-ab-etb64b rc=0 AFT-MEDIAN arm=B n=3 median_ms=3079.8 all=[3085, 3077, 3080] hashes=['8570e6992c12452d'] acc={'logloss': [0.526142, 0.526142, 0.526142], 'auc': [0.618907, 0.618907, 0.618907]}
+118:CMD apple-fast@952422579 afc-enet2 rc=0 AFC-AB-SUMMARY afc-enet2 arm=B lane=lasso-cv ds=istella median_of_medians_ms=none runs=[        ] digest= 
+119:CMD apple-fast@952422579 id-gbdt-lossguide-taxi rc=0 IDCHECK gbdt-lossguide taxi rows=small metal=none host=none ERROR
+120:CMD apple-fast@952422579 id-gbdt-lossguide-istella rc=0 IDCHECK gbdt-lossguide istella rows=small metal=none host=none ERROR
+121:CMD apple-fast@952422579 id-gbdt-depthwise-taxi rc=0 IDCHECK gbdt-depthwise taxi rows=small metal=none host=none ERROR
+122:CMD apple-fast@952422579 id-gbdt-depthwise-istella rc=0 IDCHECK gbdt-depthwise istella rows=small metal=none host=none ERROR
+123:CMD apple-fast@952422579 id-gbdt-rank-yetirank-taxi rc=0 IDCHECK gbdt-rank-yetirank taxi rows=small metal=none host=none ERROR
+124:CMD apple-fast@952422579 id-gbdt-rank-yetirank-istella rc=0 IDCHECK gbdt-rank-yetirank istella rows=small metal=none host=none ERROR
+125:CMD apple-fast@952422579 id-iforest-taxi rc=0 IDCHECK iforest taxi rows=small metal=none host=none ERROR
+126:CMD apple-fast@952422579 id-iforest-istella rc=0 IDCHECK iforest istella rows=small metal=none host=none ERROR
+127:CMD apple-fast@952422579 afc-bayes2 rc=0 AFC-AB-SUMMARY afc-bayes2 arm=B lane=ard ds=istella median_of_medians_ms=none runs=[        ] digest= 
+128:CMD apple-fast@952422579 afc-knn2 rc=0 AFC-AB-SUMMARY afc-knn2 arm=B lane=knn ds=istella median_of_medians_ms=none runs=[      ] digest= 
+134:CMD apple-fast-tier@a35af407e tier-pca-ident rc=0 AFC-AB-SUMMARY tier-pca-ident arm=A lane=pca ds=istella median_of_medians_ms=none runs=[   ] digest= 
+135:CMD apple-fast-tier@a35af407e tier-pca-tnv1 rc=0 AFC-AB-SUMMARY tier-pca-tnv1 arm=B lane=pca ds=istella median_of_medians_ms=none runs=[   ] digest= 
+136:CMD apple-fast-tier@a35af407e tier-pca-nttiled rc=0 AFC-AB-SUMMARY tier-pca-nttiled arm=B lane=pca ds=istella median_of_medians_ms=none runs=[   ] digest= 
+137:CMD apple-fast-tier@a35af407e tier-ols-tnv1 rc=0 AFC-AB-SUMMARY tier-ols-tnv1 arm=B lane=ols ds=istella median_of_medians_ms=none runs=[   ] digest= 
+138:CMD apple-fast-tier@a35af407e tier-ols-nttiled rc=0 AFC-AB-SUMMARY tier-ols-nttiled arm=B lane=ols ds=istella median_of_medians_ms=none runs=[   ] digest= 
+139:CMD apple-fast-tier@a35af407e tier-kmeans-nttiled rc=0 AFC-AB-SUMMARY tier-kmeans-nttiled arm=B lane=kmeans ds=istella median_of_medians_ms=none runs=[   ] digest= 
+140:CMD apple-fast-tier@a35af407e tier-rbf-ident rc=0 AFC-AB-SUMMARY tier-rbf-ident arm=A lane=rbf-sampler ds=istella median_of_medians_ms=none runs=[   ] digest= 
+141:CMD apple-fast-tier@a35af407e tier-rbf-pinned rc=0 AFC-AB-SUMMARY tier-rbf-pinned arm=B lane=rbf-sampler ds=istella median_of_medians_ms=none runs=[   ] digest= 
+142:CMD apple-fast-tier@a35af407e tier-rbf-pinned-taxi rc=0 AFC-AB-SUMMARY tier-rbf-pinned-taxi arm=B lane=rbf-sampler ds=taxi median_of_medians_ms=none runs=[   ] digest= 
+143:CMD apple-fast-tier@a35af407e tier-nys-pinned rc=0 AFC-AB-SUMMARY tier-nys-pinned arm=B lane=nystroem ds=istella median_of_medians_ms=none runs=[   ] digest= 
+144:CMD apple-fast-tier@a35af407e tier-theta-ident rc=0 AFC-AB-SUMMARY tier-theta-ident arm=A lane=theta ds=taxi-hourly median_of_medians_ms=none runs=[   ] digest= 
+145:CMD apple-fast-tier@a35af407e tier-theta-fast rc=0 AFC-AB-SUMMARY tier-theta-fast arm=A lane=theta ds=taxi-hourly median_of_medians_ms=none runs=[   ] digest= 
