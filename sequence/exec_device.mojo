@@ -19,6 +19,8 @@ from sequence.ops import OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF
 from sequence.coop import COOP_W, apply_coop
 from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
 from sequence.ops import OP_GARCH
+from x_linear.ops import IP
+from x_linear.witness import witness_end
 from std.sys.info import has_apple_gpu_accelerator
 
 #: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple only
@@ -114,10 +116,12 @@ def team_kernel[OP: Int](
     p6: FP, p7: FP, p8: FP, p9: FP, p10: FP, p11: FP,
     i01: Int64, i23: Int64, i45: Int64, i67: Int64, i89: Int64, i1011: Int64,
     f01: Int64, f23: Int64, f45: Int64, f67: Int64,
-    n: Int64,
+    n: Int64, wf: IP, woff: Int32, nonce: Int32,
 ):
     """One block per series of the group (the arguments packed as
-    seq_kernel's). The early exit is block-uniform."""
+    seq_kernel's). The early exit is block-uniform, and every thread then
+    reaches the completion witness (x_linear/witness.mojo: on Apple each
+    block's word reports the slice ran to its end; elsewhere nothing)."""
     var blk = Int(block_idx.x)
     if blk < Int(n):
         var a = Args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11,
@@ -130,6 +134,7 @@ def team_kernel[OP: Int](
             garch_team(blk, team, a)
         else:
             prophet_fit_team(blk, team, a)
+    witness_end(wf, woff, nonce)
 
 
 
@@ -518,7 +523,7 @@ struct DeviceExec(Exec):
             block_dim=(TPB, 1, 1),
         )
 
-    def launch_team[OP: Int](mut self, a: Args, nblocks: Int, tpb: Int) raises:
+    def launch_team[OP: Int](mut self, a: Args, nblocks: Int, tpb: Int, wf: IP, woff: Int, nonce: Int32) raises:
         """`team_kernel[OP]` (lane neural-pass143): one block of tpb threads
         per series of a group of nblocks (sequence/fit_team.mojo)."""
         if nblocks <= 0:
@@ -528,10 +533,23 @@ struct DeviceExec(Exec):
             _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
             _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
             _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
-            Int64(nblocks),
+            Int64(nblocks), wf, Int32(woff), nonce,
             grid_dim=(nblocks, 1, 1),
             block_dim=(tpb, 1, 1),
         )
+
+    def copy(mut self, dst: FP, src: FP, n: Int) raises:
+        """A device-to-device copy of n words between this executor's
+        buffers, queued (no wait)."""
+        if n <= 0:
+            return
+        var fd = self._find(dst, n)
+        var fs = self._find(src, n)
+        var vd = self._sub(fd[0], fd[1], n)
+        var vs = self._sub(fs[0], fs[1], n)
+        self.ctx.enqueue_copy(dst_buf=vd, src_buf=vs)
+        _ = vd^
+        _ = vs^
 
     def sync(mut self) raises:
         self.ctx.synchronize()

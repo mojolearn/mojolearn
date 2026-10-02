@@ -4,12 +4,24 @@
 series per block (`sequence/fit_team.mojo`), the whole fit in one launch on
 NVIDIA and AMD, and on Apple sliced over launches of bounded work (macOS
 aborts a long command buffer silently: memory MACOS ABORTS LONG METAL
-LAUNCHES). Same arguments and outputs as `garch_py` / `prophet_fit_py`."""
+LAUNCHES). Same arguments and outputs as `garch_py` / `prophet_fit_py`.
+
+Every slice ends each block with the completion witness
+(x_linear/witness.mojo). On Apple a slice is one idempotent unit: the
+group's private rows (each thread's phase, optimizer state and scratch) and
+shared rows are copied aside before it, and a slice whose words do not all
+read the nonce (cut by macOS, or its copies dropped) gets them back and runs
+again, the same iterations from the same state, up to WITNESS_TRIES times;
+then the fit raises. NVIDIA and AMD run the fit in one launch with no check
+(witness_end compiles to nothing there).
+`-D MOJOLEARN_WITNESS_SABOTAGE=1` makes every Apple GARCH / Prophet fit
+raise (the test that the check is wired)."""
 from std.python import PythonObject
 from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.exec_device import DeviceExec
+from x_linear.witness import WITNESS_TRIES, Witness
 from sequence.fit_team import (
     SEQ_TEAM_TPB,
     garch_team_priv,
@@ -47,14 +59,34 @@ def _team_budget(g: Int, steps_per_iter: Int) -> Int:
         return -1
 
 
-def _run_team[OP: Int](mut ex: DeviceExec, a: Args, g: Int, flags: FP) raises:
+def _run_team[OP: Int](mut ex: DeviceExec, a: Args, g: Int, flags: FP, mut wit: Witness, what: String,
+                       sh: FP, pv: FP, nsh: Int, npv: Int, sv_sh: FP, sv_pv: FP) raises:
     """Launches the group until every series is done: one launch where the
-    budget is unbounded, else until the done flags all read 1."""
+    budget is unbounded (NVIDIA, AMD), else (Apple) slice after slice until
+    the done flags all read 1, each slice witness-checked and rerun from
+    its saved starting state: the group's nsh shared words at sh and npv
+    private words at pv, kept at sv_sh / sv_pv."""
+    if a.i9 < 0:
+        var nonce0 = wit.begin()
+        ex.launch_team[OP](a, g, SEQ_TEAM_TPB, wit.p(), 0, nonce0)
+        return
     var fl = List[Float32](length=g, fill=Float32(0.0))
     while True:
-        ex.launch_team[OP](a, g, SEQ_TEAM_TPB)
-        if a.i9 < 0:
-            return
+        # the slice's starting state (the rows are all a slice reads that
+        # an earlier slice wrote; the outputs are rewritten from them)
+        ex.copy(sv_pv, pv, npv)
+        ex.copy(sv_sh, sh, nsh)
+        var tries = 0
+        while True:
+            var nonce = wit.begin()
+            ex.launch_team[OP](a, g, SEQ_TEAM_TPB, wit.p(), 0, nonce)
+            if wit.ok(ex.ctx, g, what):
+                break
+            tries += 1
+            if tries >= WITNESS_TRIES:
+                wit.fail()
+            ex.copy(pv, sv_pv, npv)
+            ex.copy(sh, sv_sh, nsh)
         ex.download(fptr_of(fl), flags, g)
         var all_done = True
         for i in range(g):
@@ -63,6 +95,15 @@ def _run_team[OP: Int](mut ex: DeviceExec, a: Args, g: Int, flags: FP) raises:
                 break
         if all_done:
             return
+
+
+def _saves(mut ex: DeviceExec, nsh: Int, npv: Int, sh: FP, pv: FP) raises -> Tuple[FP, FP]:
+    """The slice-start copies of a group's shared and private rows: Apple
+    only (elsewhere the fit is one launch and the rows stand in)."""
+    comptime if has_apple_gpu_accelerator():
+        return (ex._alloc(nsh, False), ex._alloc(npv, False))
+    else:
+        return (sh, pv)
 
 
 def _zero(mut ex: DeviceExec, p: FP, n: Int) raises:
@@ -75,6 +116,8 @@ def _zero(mut ex: DeviceExec, p: FP, n: Int) raises:
 def _group(B: Int, shared: Int, priv: Int) -> Int:
     """Series per group: as many as SEQ_TEAM_BYTES holds, at least one."""
     var per = (shared + SEQ_TEAM_TPB * priv) * 4
+    comptime if has_apple_gpu_accelerator():
+        per *= 2  # the slice-start copies (_saves)
     return min(B, max(1, SEQ_TEAM_BYTES // per))
 
 
@@ -104,6 +147,8 @@ def garch_team_py(mut ex: DeviceExec, addrs: PythonObject, ip: PythonObject) rai
     var Sh = ex.alloc(G * SH)
     var Pv = ex.alloc(G * SEQ_TEAM_TPB * R)
     var Fl = ex.alloc(G)
+    var sv = _saves(ex, G * SH, G * SEQ_TEAM_TPB * R, Sh, Pv)
+    var wit = Witness(ex.ctx, G)
     var a = Args()
     a.p0 = Y
     a.p1 = Pp
@@ -130,7 +175,8 @@ def garch_team_py(mut ex: DeviceExec, addrs: PythonObject, ip: PythonObject) rai
             _zero(ex, Pv, g * SEQ_TEAM_TPB * R)
         a.i8 = s0
         a.i9 = _team_budget(g, 2 * n)
-        _run_team[OP_GARCH](ex, a, g, Fl)
+        _run_team[OP_GARCH](ex, a, g, Fl, wit, "GARCH fit slice", Sh, Pv, g * SH, g * SEQ_TEAM_TPB * R,
+                            sv[0], sv[1])
         s0 += g
     ex.sync()
     ex.download(fptr(addrs[1], "params"), Pp, B * (1 + 1 + p + o + q))
@@ -176,6 +222,8 @@ def prophet_fit_team_py(mut ex: DeviceExec, addrs: PythonObject, ip: PythonObjec
     var Sh = ex.alloc(G * SH)
     var Pv = ex.alloc(G * SEQ_TEAM_TPB * R)
     var Fl = ex.alloc(G)
+    var sv = _saves(ex, G * SH, G * SEQ_TEAM_TPB * R, Sh, Pv)
+    var wit = Witness(ex.ctx, G)
     var a = Args()
     a.p0 = Y
     a.p1 = T
@@ -204,7 +252,8 @@ def prophet_fit_team_py(mut ex: DeviceExec, addrs: PythonObject, ip: PythonObjec
             _zero(ex, Pv, g * SEQ_TEAM_TPB * R)
         a.i8 = s0
         a.i9 = _team_budget(g, 2 * per_eval)
-        _run_team[OP_PROPHET_FIT](ex, a, g, Fl)
+        _run_team[OP_PROPHET_FIT](ex, a, g, Fl, wit, "Prophet fit slice", Sh, Pv, g * SH, g * SEQ_TEAM_TPB * R,
+                                  sv[0], sv[1])
         s0 += g
     ex.sync()
     ex.download(fptr(addrs[7], "params"), Pm, B * P)
