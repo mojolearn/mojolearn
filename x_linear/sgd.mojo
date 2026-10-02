@@ -986,7 +986,7 @@ def mb_row(x: FP, ys: FP, i: Int, d: Int, w: FP, woff: Int, b: Float32, loss: In
     """(dl_i weighted, loss_i) of row i at (w, b); with a PA rate dl_i is minus
     the row's PA step (sgd_one's statements, eta0 = C)."""
     var y = ld(ys, i)
-    var p = fa(row_dot(x, i, d, w, woff), b)
+    var p = fa(mb_dot(x, i, d, w, woff), b)
     var dl: Float32
     if lr == LR_PA1 or lr == LR_PA2:
         var cur = sgd_loss(loss, y, p, eps)
@@ -1020,6 +1020,33 @@ def mb_row(x: FP, ys: FP, i: Int, d: Int, w: FP, woff: Int, b: Float32, loss: In
     return (dl, sgd_loss(loss, y, p, eps))
 
 
+comptime MB_PF = 16
+
+
+@always_inline
+def mb_dot(x: FP, i: Int, d: Int, w: FP, woff: Int) -> Float32:
+    """`row_dot` (j ascending, one fmad a term) with MB_PF terms' loads in
+    flight on the device (lane/neural-pass134); the host's is row_dot."""
+    comptime if is_gpu():
+        var acc = Float32(0)
+        var j = 0
+        var base = i * d
+        while j + MB_PF <= d:
+            var xv = SIMD[DType.float32, MB_PF]()
+            var wv = SIMD[DType.float32, MB_PF]()
+            comptime for u in range(MB_PF):
+                xv[u] = ld(x, base + j + u)
+                wv[u] = ld(w, woff + j + u)
+            comptime for u in range(MB_PF):
+                acc = fmad(xv[u], wv[u], acc)
+            j += MB_PF
+        while j < d:
+            acc = fmad(ld(x, base + j), ld(w, woff + j), acc)
+            j += 1
+        return acc
+    return row_dot(x, i, d, w, woff)
+
+
 @always_inline
 def mb_part(x: FP, d: Int, idx: IP, start: Int, dlv: FP, lv: FP, j: Int, s: Int, bs: Int) -> Float32:
     """Sub-block s of the batch at position `start` (bs rows), from zero:
@@ -1029,9 +1056,24 @@ def mb_part(x: FP, d: Int, idx: IP, start: Int, dlv: FP, lv: FP, j: Int, s: Int,
     var hi = min(bs, lo + MB_SUB)
     var acc = Float32(0)
     if j < d:
-        for r in range(lo, hi):
+        var r = lo
+        comptime if is_gpu():
+            # lane/neural-pass134: MB_PF rows' loads in flight before their
+            # fmads (the same fmads in the same order; the chain no longer
+            # waits on an idx load and then an x load each step)
+            while r + MB_PF <= hi:
+                var xv = SIMD[DType.float32, MB_PF]()
+                var dv = SIMD[DType.float32, MB_PF]()
+                comptime for u in range(MB_PF):
+                    xv[u] = ld(x, Int(ldi(idx, start + r + u)) * d + j)
+                    dv[u] = ld(dlv, r + u)
+                comptime for u in range(MB_PF):
+                    acc = fmad(dv[u], xv[u], acc)
+                r += MB_PF
+        while r < hi:
             var i = Int(ldi(idx, start + r))
             acc = fmad(ld(dlv, r), ld(x, i * d + j), acc)
+            r += 1
     elif j == d:
         for r in range(lo, hi):
             acc = fa(acc, ld(dlv, r))
