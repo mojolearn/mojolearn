@@ -21,6 +21,7 @@ from std.memory import bitcast, memcpy
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_div, identical_mul
+from x_cluster.minibatch_cells import mb_center_update
 from cluster.host.host_cells import ftz_v, host_cells, mul_v
 from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 
@@ -583,3 +584,16 @@ struct HostOps(ClusterOps):
         self.gauss_q(x, n, d, means, pchol, kc, q)
         self.resp(q, c, n, kc, lpn)
         self.exp(q, r, n * kc)
+
+    def set_i(mut self, slot: Int, v: List[Int32]) raises:
+        if len(v) > len(self.i[slot]):
+            raise Error("x_cluster host: set_i of " + String(len(v)) + " values into a slot of " + String(len(self.i[slot])))
+        memcpy(dest=self._ip(slot), src=v.unsafe_ptr(), count=len(v))
+
+    def mb_update(mut self, b: Int, batch: Int, labels: Int, c: Int, w: Int, k: Int, d: Int) raises:
+        var pb = self._fp(b)
+        var pl = self._ip(labels)
+        var pc = self._fp(c)
+        var pw = self._fp(w)
+        for j in range(k):
+            mb_center_update(pb, batch, pl, pc, pw, j, d)
