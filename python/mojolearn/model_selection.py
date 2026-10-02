@@ -522,12 +522,23 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
     if isinstance(scoring, str):
         scoring = get_scorer(scoring)
     X, y, folds = _prepare_folds(estimator, X, y, cv, scoring, groups, error_score)
+    # lane/apple-fast-resample (2026-10-02), MOJOLEARN_CV_FAST_SLICE=1, FAST
+    # tier only: the default unshuffled folds are contiguous row ranges, so
+    # each fold's test rows are a zero-copy view and its training rows two
+    # memcpys, instead of `_take_rows`' per-row byte gather of every row of
+    # X and y for every fold (4 gathers of up to 1,000,000 rows per fold on
+    # the board). Same rows in the same order; the fit sees the same words.
+    slicer = _kfold_slicer(X, y, folds) if _cv_fast_on('MOJOLEARN_CV_FAST_SLICE') else None
     scores = []
-    for train, test in folds:
+    for i, (train, test) in enumerate(folds):
         fitted = _clone(estimator)
         try:
-            scores.append(_fit_score_fold(fitted, _take_rows(X, train), _take_rows(y, train),
-                                          _take_rows(X, test), _take_rows(y, test), scoring))
+            if slicer is not None:
+                Xtr, ytr, Xte, yte = slicer(i)
+            else:
+                Xtr, ytr, Xte, yte = (_take_rows(X, train), _take_rows(y, train),
+                                      _take_rows(X, test), _take_rows(y, test))
+            scores.append(_fit_score_fold(fitted, Xtr, ytr, Xte, yte, scoring))
         finally:
             # Release each fold before constructing the next estimator. Native
             # contexts retain their own cleanup contract; no forced GPU reset.
@@ -558,15 +569,104 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
         if getattr(groups, "ndim", 1) != 1 or len(groups) != len(X):
             raise ValueError('groups must be 1-D and match X rows')
     folds = []
-    for train, test in _folds(cv, estimator, X, y, groups):
-        train = _indices(train, len(X), 'train')
-        test = _indices(test, len(X), 'test')
-        if _overlap(train, test, len(X)):
-            raise ValueError('train and test indices overlap')
-        folds.append((train, test))
+    # lane/apple-fast-resample (2026-10-02), MOJOLEARN_CV_FAST_TRUST_FOLDS=1,
+    # FAST tier only: the default folds from `_native_default_folds`
+    # (`fold_ids` + `select_fold_i64`) are a partition by construction, so
+    # the `_indices` range/duplicate pass and the `_overlap` pass over every
+    # fold's two int64 arrays (ten passes over 1,000,000 rows on the board)
+    # are skipped. Any other cv, groups, or the sabotage control: as before.
+    trusted = None
+    if (_cv_fast_on('MOJOLEARN_CV_FAST_TRUST_FOLDS') and groups is None
+            and (cv is None or isinstance(cv, numbers.Integral)) and not is_bool(cv)
+            and not _sabotage_requested()):
+        trusted = _native_default_folds(y, 5 if cv is None else cv, _classifier(estimator))
+    if trusted is not None:
+        folds = list(trusted)
+    else:
+        for train, test in _folds(cv, estimator, X, y, groups):
+            train = _indices(train, len(X), 'train')
+            test = _indices(test, len(X), 'test')
+            if _overlap(train, test, len(X)):
+                raise ValueError('train and test indices overlap')
+            folds.append((train, test))
     if not folds:
         raise ValueError('cv must produce at least one fold')
     return X, y, folds
+
+
+def _cv_fast_on(name):
+    """An Apple FAST experiment switch (lane/apple-fast-resample): `name`=1 in
+    the environment AND the library's default tier is 'fast'."""
+    if os.environ.get(name) != '1':
+        return False
+    from ._backend import default_mode
+    return default_mode() == 'fast'
+
+
+def _row_range_view(arr, a, b):
+    """Rows [a, b) of a C-order Array as a view over the same memory (no
+    copy; `arr` stays alive through the view), `_prefix_rows` with a start."""
+    if a == 0 and b == arr.shape[0]:
+        return arr
+    if arr.order != 'C' and arr.ndim > 1:
+        raise ValueError('mojolearn: a row range needs a C-order Array')
+    per = arr.size // arr.shape[0] if arr.shape[0] else 0
+    view = Array.__new__(Array)
+    view._store = arr._store
+    view._base = arr
+    view._pin = arr._pin
+    view._mv = arr._mv[a * per:b * per]
+    view._addr = arr._addr + a * per * arr.itemsize
+    view._readonly = arr._readonly
+    view._set_meta((b - a,) + tuple(arr.shape[1:]), arr.dtype, 'C')
+    return view
+
+
+def _rows_outside(arr, a, b):
+    """Rows [0, a) then [b, n) of a C-order Array: a view when one side is
+    empty, else one new Array filled by two memcpys."""
+    n = arr.shape[0]
+    if a == 0:
+        return _row_range_view(arr, b, n)
+    if b == n:
+        return _row_range_view(arr, 0, a)
+    per = arr.size // n if n else 0
+    out = empty((n - (b - a),) + tuple(arr.shape[1:]), arr.dtype)
+    out._mv[:a * per] = arr._mv[:a * per]
+    out._mv[a * per:] = arr._mv[b * per:]
+    return out
+
+
+def _kfold_slicer(X, y, folds):
+    """A `fold -> (X_train, y_train, X_test, y_test)` over contiguous row
+    ranges, or None unless EVERY fold is `KFold(shuffle=False)`-shaped:
+    test = [a, b), train = [0, a) + [b, n), both ascending (checked by size
+    and both ends of each int64 index Array; the folds were accepted by
+    `_prepare_folds`, so they hold no duplicate and no out-of-range row)."""
+    n = len(X)
+    if X.order != 'C' or getattr(y, 'order', 'C') != 'C':
+        return None
+    ranges = []
+    for train, test in folds:
+        if not isinstance(test, Array) or not isinstance(train, Array):
+            return None
+        if test.dtype != '<i8' or train.dtype != '<i8' or not test.size or not train.size:
+            return None
+        a = int(test._mv[0])
+        b = int(test._mv[-1]) + 1
+        if b - a != test.size or train.size != n - test.size:
+            return None
+        first = 0 if a > 0 else b
+        last = n - 1 if b < n else a - 1
+        if int(train._mv[0]) != first or int(train._mv[-1]) != last:
+            return None
+        ranges.append((a, b))
+
+    def take(i):
+        a, b = ranges[i]
+        return (_rows_outside(X, a, b), _rows_outside(y, a, b),
+                _row_range_view(X, a, b), _row_range_view(y, a, b))
+    return take
 
 
 def _fit_score_fold(fitted, X_train, y_train, X_test, y_test, scoring):
