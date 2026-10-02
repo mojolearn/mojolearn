@@ -237,6 +237,57 @@ def bayes_ymean(y: FP, n: Int, fi: Bool) -> Float32:
     return fd(fold_fa_blocked(y, 0, 1, n), i2f(n))
 
 
+# the weighted statistics' row-block partials (cgr-linear): w at y + n,
+# each from zero over rows [lo, lo + cnt) ascending
+@always_inline
+def bayes_wy_part(y: FP, n: Int, lo: Int, cnt: Int) -> Float32:
+    """sum w_i y_i."""
+    var acc = Float32(0)
+    for i in range(lo, lo + cnt):
+        acc = fmad(ld(y, n + i), ld(y, i), acc)
+    return acc
+
+
+@always_inline
+def bayes_wx_part(x: FP, y: FP, n: Int, d: Int, j: Int, lo: Int, cnt: Int) -> Float32:
+    """sum w_i x_ij."""
+    var acc = Float32(0)
+    for i in range(lo, lo + cnt):
+        acc = fmad(ld(y, n + i), ld(x, i * d + j), acc)
+    return acc
+
+
+@always_inline
+def bayes_wgram_part(x: FP, y: FP, n: Int, d: Int, fw: FP, j: Int, k: Int, lo: Int, cnt: Int) -> Float32:
+    """sum (w_i (x_ij - xm_j)) (x_ik - xm_k), the means at fw[0, d)."""
+    var mj = ld(fw, j)
+    var mk = ld(fw, k)
+    var acc = Float32(0)
+    for i in range(lo, lo + cnt):
+        acc = fmad(fm(ld(y, n + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)
+    return acc
+
+
+@always_inline
+def bayes_wxty_part(x: FP, y: FP, n: Int, d: Int, fw: FP, j: Int, ym: Float32, lo: Int, cnt: Int) -> Float32:
+    """sum (y_i - ym) (w_i (x_ij - xm_j))."""
+    var mj = ld(fw, j)
+    var acc = Float32(0)
+    for i in range(lo, lo + cnt):
+        acc = fmad(fs(ld(y, i), ym), fm(ld(y, n + i), fs(ld(x, i * d + j), mj)), acc)
+    return acc
+
+
+@always_inline
+def bayes_wvar_part(y: FP, n: Int, m: Float32, lo: Int, cnt: Int) -> Float32:
+    """sum w_i (y_i - m)^2."""
+    var acc = Float32(0)
+    for i in range(lo, lo + cnt):
+        var r = fs(ld(y, i), m)
+        acc = fmad(fm(ld(y, n + i), r), r, acc)
+    return acc
+
+
 @always_inline
 def bayes_yvar_part(y: FP, m: Float32, lo: Int, cnt: Int) -> Float32:
     """sum (y_i - m)^2 over rows [lo, lo + cnt) from zero, rows ascending."""
@@ -319,6 +370,7 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
     var sw = ldi(ip, 2) != 0
     var wsum = i2f(n)
     var ym = Float32(0)
+    var wyvar = Float32(0)
     comptime if is_gpu():
         if sw:
             wsum = t_sum(t, y + n, n)
@@ -381,46 +433,81 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
     else:
         # the host's row passes: one pass per statistic, vector accumulators
         if sw:
-            wsum = Float32(0)
-            for i in range(n):
-                wsum = fa(wsum, ld(y, n + i))
-            ym = _wmean_center(x, y, n, d, fi, fw, xm, wsum)
-            for j in range(d):
-                fill(fw, gg + j * d + j, d - j, Float32(0))
-            for i in range(n):
-                var wi = ld(y, n + i)
+            # cgr-linear: the weighted statistics in the blocked order (each
+            # FOLD_BLOCK rows from zero, the blocks folded ascending), the
+            # order the grid driver folds them (x_linear/device.mojo)
+            wsum = fold_fa_blocked(y, n, 1, n)
+            var scr = List[Float32](length=d * d + d, fill=Float32(0))
+            var sp = FP(unsafe_from_address=Int(scr.unsafe_ptr()))
+            var ywm = Float32(0)
+            fill(fw, xm, d, Float32(0))
+            var lo = 0
+            while lo < n:
+                var hi = min(lo + FOLD_BLOCK, n)
+                ywm = fa(ywm, bayes_wy_part(y, n, lo, hi - lo))
+                if fi:
+                    fill(sp, 0, d, Float32(0))
+                    for i in range(lo, hi):
+                        axpy_acc(sp, 0, ld(y, n + i), x, i * d, d)
+                    add_acc(fw, xm, sp, 0, d)
+                lo = hi
+            ywm = fd(ywm, wsum)
+            if fi:
+                ym = ywm
                 for j in range(d):
-                    var a = fm(wi, fs(ld(x, i * d + j), ld(fw, xm + j)))
-                    axpy_centered(fw, gg + j * d + j, a, x, i * d + j, fw, xm + j, d - j)
+                    st(fw, xm + j, fd(ld(fw, xm + j), wsum))
+            fill(fw, gg, d * d, Float32(0))
+            fill(fw, xty, d, Float32(0))
+            lo = 0
+            while lo < n:
+                var hi = min(lo + FOLD_BLOCK, n)
+                fill(sp, 0, d * d + d, Float32(0))
+                for i in range(lo, hi):
+                    var wi = ld(y, n + i)
+                    for j in range(d):
+                        var a = fm(wi, fs(ld(x, i * d + j), ld(fw, xm + j)))
+                        axpy_centered(sp, j * d + j, a, x, i * d + j, fw, xm + j, d - j)
+                    axpy_centered[True](sp, d * d, fs(ld(y, i), ym), x, i * d, fw, xm, d, wi)
+                add_acc(fw, gg, sp, 0, d * d)
+                add_acc(fw, xty, sp, d * d, d)
+                lo = hi
             for j in range(d):
                 for k in range(j + 1, d):
                     st(fw, gg + k * d + j, ld(fw, gg + j * d + k))
+            if ld(fp, 5) < 0:
+                # np.average((y - y_mean) ** 2, weights=sample_weight), blocked
+                var acc = Float32(0)
+                lo = 0
+                while lo < n:
+                    acc = fa(acc, bayes_wvar_part(y, n, ywm, lo, min(FOLD_BLOCK, n - lo)))
+                    lo += FOLD_BLOCK
+                wyvar = fd(acc, wsum)
         else:
             _ = _center(x, y, n, d, fi, fw, xm, iw)
             ym = bayes_ymean(y, n, fi)
             centered_gram(x, n, d, fw, xm, fw, gg)
-        var yc = ym
-        # X'y on centered data
-        fill(fw, xty, d, Float32(0))
-        for i in range(n):
-            var b = fs(ld(y, i), yc)
-            if sw:
-                axpy_centered[True](fw, xty, b, x, i * d, fw, xm, d, ld(y, n + i))
-            else:
+            var yc = ym
+            # X'y on centered data
+            fill(fw, xty, d, Float32(0))
+            for i in range(n):
+                var b = fs(ld(y, i), yc)
                 axpy_centered(fw, xty, b, x, i * d, fw, xm, d)
     var yvar = Float32(0)
     if t.lead() and ld(fp, 5) < 0:
         if sw:
-            # np.average((y - y_mean) ** 2, weights=sample_weight)
-            var m = Float32(0)
-            for i in range(n):
-                m = fmad(ld(y, n + i), ld(y, i), m)
-            m = fd(m, wsum)
-            var acc = Float32(0)
-            for i in range(n):
-                var r = fs(ld(y, i), m)
-                acc = fmad(fm(ld(y, n + i), r), r, acc)
-            yvar = fd(acc, wsum)
+            comptime if is_gpu():
+                # np.average((y - y_mean) ** 2, weights=sample_weight)
+                var m = Float32(0)
+                for i in range(n):
+                    m = fmad(ld(y, n + i), ld(y, i), m)
+                m = fd(m, wsum)
+                var acc = Float32(0)
+                for i in range(n):
+                    var r = fs(ld(y, i), m)
+                    acc = fmad(fm(ld(y, n + i), r), r, acc)
+                yvar = fd(acc, wsum)
+            else:
+                yvar = wyvar
         else:
             yvar = bayes_yvar(y, n)
     var al = bayes_eig_prep(t, fw, fp, d, yvar)
@@ -429,18 +516,24 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
     return (alpha, lam, ym, wsum)
 
 
-def bayes_coef(fw: FP, res: FP, d: Int, lam: Float32, alpha: Float32):
-    """coef = V diag(1/(ev + lam/alpha)) V' X'y (the lead's)."""
-    var xty = d + d * d
-    var vv = xty + d
+@always_inline
+def bayes_coef_one(fw: FP, d: Int, j: Int, ratio: Float32) -> Float32:
+    """coef_j = sum_k V_jk vty_k / (ev_k+ + ratio), k ascending."""
+    var vv = d + d * d + d
     var vty = vv + d * d
     var tmp = vty + 2 * d
+    var acc = Float32(0)
+    for k in range(d):
+        acc = fmad(ld(fw, vv + j * d + k), fd(ld(fw, vty + k), fa(ld(fw, tmp + k), ratio)), acc)
+    return acc
+
+
+def bayes_coef(fw: FP, res: FP, d: Int, lam: Float32, alpha: Float32):
+    """coef = V diag(1/(ev + lam/alpha)) V' X'y (the lead's); the grid driver
+    runs `bayes_coef_one` a thread a coefficient."""
     var ratio = fd(lam, alpha)
     for j in range(d):
-        var acc = Float32(0)
-        for k in range(d):
-            acc = fmad(ld(fw, vv + j * d + k), fd(ld(fw, vty + k), fa(ld(fw, tmp + k), ratio)), acc)
-        st(res, j, acc)
+        st(res, j, bayes_coef_one(fw, d, j, ratio))
 
 
 def bayes_step(fw: FP, res: FP, d: Int, fp: FP, lam_in: Float32, alpha_in: Float32, sse: Float32, wsum: Float32,

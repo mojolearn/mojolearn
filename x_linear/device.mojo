@@ -37,6 +37,7 @@ from x_linear.sgd import (
 from checks.numerics import identical_pow
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
+from x_linear.bayes import bayes_wy_part, bayes_wx_part, bayes_wgram_part, bayes_wxty_part, bayes_wvar_part, bayes_coef_one
 from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST
 from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score, kf_ff_solve
 from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
@@ -218,6 +219,109 @@ def bayes_xty_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, fw: FP, yparts
         st(fw, dd + dd * dd + j, chain_cfmad(x, j, dd, ld(fw, j), y, 0, 1, ym, nn))
     witness_end(wf, woff, nonce)
 
+# cgr-linear: weighted BayesianRidge's statistics on the grid, the blocked
+# order of x_linear/bayes.mojo's host branch (w at y + n): row-block
+# partials, a thread per (statistic, block), then a thread per statistic
+# folding them blocks ascending.
+def bayes_wparts_kernel(y: FP, n: Int32, yparts: FP, wparts: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread b: block b's sum w y and sum w from zero."""
+    var b = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    if b < fold_blocks(nn):
+        var lo = b * FOLD_BLOCK
+        var cnt = min(FOLD_BLOCK, nn - lo)
+        st(yparts, b, bayes_wy_part(y, nn, lo, cnt))
+        st(wparts, b, fold_fa(y, nn + lo, 1, cnt))
+    witness_end(wf, woff, nonce)
+
+def bayes_wvar_parts_kernel(y: FP, n: Int32, yparts: FP, wparts: FP, vparts: FP, state: FP,
+                            wf: IP, woff: Int32, nonce: Int32):
+    """Thread b: block b's sum w (y - m)^2 (m the weighted mean); thread 0
+    also writes sum(w) into state[3]."""
+    var b = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    var nb = fold_blocks(nn)
+    if b < nb:
+        var wsum = fold_parts(wparts, 0, nb)
+        var m = fd(fold_parts(yparts, 0, nb), wsum)
+        var lo = b * FOLD_BLOCK
+        st(vparts, b, bayes_wvar_part(y, nn, m, lo, min(FOLD_BLOCK, nn - lo)))
+        if b == 0:
+            st(state, 3, wsum)
+    witness_end(wf, woff, nonce)
+
+def bayes_wx_parts_kernel(x: FP, y: FP, n: Int32, d: Int32, mparts: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread (column, block): sum w x_j over the block from zero."""
+    var t = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    var dd = Int(d)
+    var nb = fold_blocks(nn)
+    if t < dd * nb:
+        var j = t % dd
+        var b = t // dd
+        var lo = b * FOLD_BLOCK
+        st(mparts, j * nb + b, bayes_wx_part(x, y, nn, dd, j, lo, min(FOLD_BLOCK, nn - lo)))
+    witness_end(wf, woff, nonce)
+
+def bayes_wmeans_kernel(n: Int32, d: Int32, fi: Int32, mparts: FP, wparts: FP, fw: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread j: the weighted mean of column j into fw[j] (0 without an intercept)."""
+    var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nb = fold_blocks(Int(n))
+    if j < Int(d):
+        if fi != 0:
+            st(fw, j, fd(fold_parts(mparts, j * nb, nb), fold_parts(wparts, 0, nb)))
+        else:
+            st(fw, j, Float32(0))
+    witness_end(wf, woff, nonce)
+
+def bayes_wgram_parts_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, fw: FP, yparts: FP, wparts: FP,
+                             gparts: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread (statistic, block): an upper cell of the weighted centered Gram,
+    or (after the cells) a column of the weighted centered X'y."""
+    var t = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    var dd = Int(d)
+    var nb = fold_blocks(nn)
+    var cells = dd * (dd + 1) // 2
+    var stats = cells + dd
+    if t < stats * nb:
+        var c = t % stats
+        var b = t // stats
+        var lo = b * FOLD_BLOCK
+        var cnt = min(FOLD_BLOCK, nn - lo)
+        if c < cells:
+            var jk = upper_cell(c, dd)
+            st(gparts, c * nb + b, bayes_wgram_part(x, y, nn, dd, fw, jk[0], jk[1], lo, cnt))
+        else:
+            var ym = fd(fold_parts(yparts, 0, nb), fold_parts(wparts, 0, nb)) if fi != 0 else Float32(0)
+            st(gparts, c * nb + b, bayes_wxty_part(x, y, nn, dd, fw, c - cells, ym, lo, cnt))
+    witness_end(wf, woff, nonce)
+
+def bayes_wgram_fin_kernel(n: Int32, d: Int32, gparts: FP, fw: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread per statistic: its partials folded blocks ascending, into G at
+    fw[d, d + d*d) (both halves) or X'y at fw[d + d*d + j]."""
+    var c = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    var nb = fold_blocks(Int(n))
+    var cells = dd * (dd + 1) // 2
+    if c < cells + dd:
+        var v = fold_parts(gparts, c * nb, nb)
+        if c < cells:
+            var jk = upper_cell(c, dd)
+            st(fw, dd + jk[0] * dd + jk[1], v)
+            st(fw, dd + jk[1] * dd + jk[0], v)
+        else:
+            st(fw, dd + dd * dd + (c - cells), v)
+    witness_end(wf, woff, nonce)
+
+def bayes_coef_kernel(fw: FP, res: FP, d: Int32, state: FP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread j: the next iteration's coefficient j (`bayes_coef_one`, lambda
+    and alpha from state) unless the step stopped (its final update wrote them)."""
+    var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if j < Int(d) and ld(state, 5) == Float32(0):
+        st(res, j, bayes_coef_one(fw, Int(d), j, fd(ld(state, 1), ld(state, 0))))
+    witness_end(wf, woff, nonce)
+
 def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, yparts: FP, vparts: FP, tw: FP,
                      state: FP, wf: IP, woff: Int32, nonce: Int32):
     """One block team: the d x d half of the prep (`bayes_eig_prep`: the
@@ -230,9 +334,11 @@ def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, ypart
     var wsum = ld(state, 3)
     var yvar = fd(fold_parts(vparts, 0, Int(nb)), wsum)
     var al = bayes_eig_prep(t, fw, fp, dd, yvar)
+    var ratio = fd(al[1], al[0])
+    for j in range(t.tid, dd, t.nt):
+        st(res, j, bayes_coef_one(fw, dd, j, ratio))
     if t.lead():
         var ym = fd(fold_parts(yparts, 0, Int(nb)), wsum) if ldi(ip, 1) != 0 else Float32(0)
-        bayes_coef(fw, res, dd, al[1], al[0])
         st(state, 0, al[0])
         st(state, 1, al[1])
         st(state, 2, ym)
@@ -259,15 +365,14 @@ def bayes_part_kernel(rows: FP, y: FP, n: Int32, sw: Int32, parts: FP, wf: IP, w
 
 def bayes_step_kernel(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, parts: FP, state: FP, it: Int32, wf: IP, woff: Int32, nonce: Int32):
     """One thread: the nb row-block sse partials folded blocks ascending,
-    then the d-sized update (`bayes_step`)."""
+    then the scalar update (`bayes_step`, O(d) folds); `bayes_coef_kernel`
+    then writes the next coefficients a thread each."""
     if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
         var sse = fold_parts(parts, 0, Int(nb))
         var r = bayes_step(fw, res, Int(d), fp, ld(state, 1), ld(state, 0), sse, ld(state, 3), Int(it))
         st(state, 0, r[1])
         st(state, 1, r[0])
         st(state, 5, Float32(r[2]))
-        if r[2] == 0:
-            bayes_coef(fw, res, Int(d), r[0], r[1])
     witness_end(wf, woff, nonce)
 
 #: FAST on Apple (lane/apple-fast-classical, re-expressed on the grid
@@ -3200,8 +3305,20 @@ def fit_device(
     comptime if not X_LINEAR_SERIAL_FOLDS:
         # unweighted, with the grid Gram: every row pass on grid kernels
         bayes_grid = algo == ALGO_BAYES and n > 0 and d > 0 and grid_gram
+    # cgr-linear: a weighted BayesianRidge on the grid too (its statistics in
+    # the blocked order, then the same eigen prep and iterations)
+    var bayes_w = False
+    comptime if not X_LINEAR_SERIAL_FOLDS:
+        bayes_w = algo == ALGO_BAYES and n > 0 and d > 0 and len(ip) > 2 and ip[2] != 0
+        if bayes_w:
+            bayes_grid = True
     var ynb = fold_blocks(n)
     var prep_blocks = 2 * _xg_blocks(ynb) + _xg_blocks(d) + 1
+    if bayes_w:
+        prep_blocks = 2 * _xg_blocks(ynb) + _xg_blocks(d * ynb) + _xg_blocks(d) + _xg_blocks((cells + d) * ynb) + _xg_blocks(cells + d) + 1
+    var dwparts = ctx.enqueue_create_buffer[DType.float32](max(ynb, 1) if bayes_w else 1)
+    var dmparts = ctx.enqueue_create_buffer[DType.float32](max(d * ynb, 1) if bayes_w else 1)
+    var dgparts = ctx.enqueue_create_buffer[DType.float32](max((cells + d) * ynb, 1) if bayes_w else 1)
     var wit = Witness(ctx, max(max(_xg_blocks(max(cells, d)), 1) + 1, prep_blocks))
     var dstate = ctx.enqueue_create_buffer[DType.float32](8)
     var dyparts = ctx.enqueue_create_buffer[DType.float32](max(ynb, 1) if bayes_grid else 1)
@@ -3295,21 +3412,54 @@ def fit_device(
                 # and variance partials, X'y one column a thread), then its
                 # d x d half on one block team
                 var wo = 0
-                ctx.enqueue_function[bayes_yparts_kernel](
-                    dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dstate.unsafe_ptr(),
-                    wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
-                )
-                wo += _xg_blocks(ynb)
-                ctx.enqueue_function[bayes_yvar_parts_kernel](
-                    dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dvparts.unsafe_ptr(),
-                    wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
-                )
-                wo += _xg_blocks(ynb)
-                ctx.enqueue_function[bayes_xty_kernel](
-                    dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(hip[1]), dfw.unsafe_ptr(),
-                    dyparts.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(d), block_dim=XG_TPB,
-                )
-                wo += _xg_blocks(d)
+                if bayes_w:
+                    ctx.enqueue_function[bayes_wparts_kernel](
+                        dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dwparts.unsafe_ptr(),
+                        wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(ynb)
+                    ctx.enqueue_function[bayes_wvar_parts_kernel](
+                        dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dwparts.unsafe_ptr(), dvparts.unsafe_ptr(),
+                        dstate.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(ynb)
+                    ctx.enqueue_function[bayes_wx_parts_kernel](
+                        dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dmparts.unsafe_ptr(),
+                        wit.p(), Int32(wo), nonce, grid_dim=max(_xg_blocks(d * ynb), 1), block_dim=XG_TPB,
+                    )
+                    wo += max(_xg_blocks(d * ynb), 1)
+                    ctx.enqueue_function[bayes_wmeans_kernel](
+                        Int32(n), Int32(d), Int32(hip[1]), dmparts.unsafe_ptr(), dwparts.unsafe_ptr(), dfw.unsafe_ptr(),
+                        wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(d), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(d)
+                    ctx.enqueue_function[bayes_wgram_parts_kernel](
+                        dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(hip[1]), dfw.unsafe_ptr(),
+                        dyparts.unsafe_ptr(), dwparts.unsafe_ptr(), dgparts.unsafe_ptr(),
+                        wit.p(), Int32(wo), nonce, grid_dim=max(_xg_blocks((cells + d) * ynb), 1), block_dim=XG_TPB,
+                    )
+                    wo += max(_xg_blocks((cells + d) * ynb), 1)
+                    ctx.enqueue_function[bayes_wgram_fin_kernel](
+                        Int32(n), Int32(d), dgparts.unsafe_ptr(), dfw.unsafe_ptr(),
+                        wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(cells + d), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(cells + d)
+                else:
+                    ctx.enqueue_function[bayes_yparts_kernel](
+                        dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dstate.unsafe_ptr(),
+                        wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(ynb)
+                    ctx.enqueue_function[bayes_yvar_parts_kernel](
+                        dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dvparts.unsafe_ptr(),
+                        wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(ynb)
+                    ctx.enqueue_function[bayes_xty_kernel](
+                        dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(hip[1]), dfw.unsafe_ptr(),
+                        dyparts.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(d), block_dim=XG_TPB,
+                    )
+                    wo += _xg_blocks(d)
                 ctx.enqueue_function[bayes_eig_kernel](
                     dfw.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dip.unsafe_ptr(), Int32(d), Int32(ynb),
                     dyparts.unsafe_ptr(), dvparts.unsafe_ptr(), dtw.unsafe_ptr(), dstate.unsafe_ptr(),
@@ -3333,7 +3483,7 @@ def fit_device(
         var drows = ctx.enqueue_create_buffer[DType.float32](n)
         var dparts = ctx.enqueue_create_buffer[DType.float32](max(fold_blocks(n), 1))
         var hst = List[Float32](length=8, fill=Float32(0))
-        var wit2 = Witness(ctx, _xg_blocks(n) + _xg_blocks(fold_blocks(n)) + 1)
+        var wit2 = Witness(ctx, max(_xg_blocks(n) + _xg_blocks(fold_blocks(n)), _xg_blocks(d)) + 1)
         var max_iter = Int(hip[0])
         var sw = Int(hip[2]) if len(hip) > 2 else 0
         var gram_sse = False
@@ -3442,7 +3592,11 @@ def fit_device(
                 dfw.unsafe_ptr(), dout.unsafe_ptr(), dfp.unsafe_ptr(), Int32(d), Int32(ynb), dparts.unsafe_ptr(),
                 dstate.unsafe_ptr(), Int32(it), wit2.p(), Int32(0), ns, grid_dim=1, block_dim=1,
             )
-            if not wit2.ok(ctx, 1, "Bayes step"):
+            ctx.enqueue_function[bayes_coef_kernel](
+                dfw.unsafe_ptr(), dout.unsafe_ptr(), Int32(d), dstate.unsafe_ptr(), wit2.p(), Int32(1), ns,
+                grid_dim=_xg_blocks(d), block_dim=XG_TPB,
+            )
+            if not wit2.ok(ctx, 1 + _xg_blocks(d), "Bayes step"):
                 wit2.fail()
             ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dstate)
             ctx.synchronize()
@@ -3486,6 +3640,9 @@ def fit_device(
     _ = dstate^
     _ = dyparts^
     _ = dvparts^
+    _ = dwparts^
+    _ = dmparts^
+    _ = dgparts^
     _ = wit^
     _ = ctx^
 
