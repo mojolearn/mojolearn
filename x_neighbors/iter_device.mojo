@@ -13,6 +13,7 @@ same values; only the stopping sum crosses back, one float per iteration,
 compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
+from checks.kernel_matrix import lib_smem_page_fits_for, TARGET_COLUMN
 from std.memory import bitcast, memcpy
 from std.atomic import Atomic
 from std.os import getenv
@@ -654,13 +655,130 @@ def knn_sq_tiled_kernel(
         j0 += rows
 
 
+# lane/neural-pass101 (2026-10-01): the fused k-NN for any d, tiled in two
+# dimensions. A block owns KNN2_TX rows of x; per KNN2_TY rows of y it builds
+# the KNN2_TX x KNN2_TY distance tile, every pair's chain over the features
+# ascending (KNN2_FC features of both rows staged in threadgroup memory at a
+# time, each thread KNN2_PT pairs in registers), with knn_sq_item's
+# statements, then the x row's thread offers the tile's columns in ascending
+# order to the item's strict-< insertion. The same values in the same order,
+# so the same lists. The one-thread-per-row kernel this replaces for d above
+# KNN_TILE_MAX_D read every y row from device memory in every thread
+# (LabelPropagation on istella, 220 features: 23 s at 20,000 rows on the M4).
+# `-D MOJOLEARN_XN_KNN_ROWWISE=1` restores it.
+comptime KNN2_TX = 64
+comptime KNN2_TY = 64
+comptime KNN2_FC = 16
+comptime KNN2_TPB = 256
+#: a thread's register block: KNN2_R x rows by KNN2_R y rows (16 x 16 threads)
+comptime KNN2_R = 4
+comptime KNN2_XS = KNN2_FC + 1  # padded rows (bank spread)
+comptime KNN2_SMEM_BYTES = 4 * (KNN2_TX * KNN2_XS + KNN2_TY * KNN2_XS + KNN2_TX * (KNN2_TY + 1))
+
+
+def knn_sq_tiled2_kernel(
+    x: FP, y: FP, dist: FP, idx: IP, n_: Int64, m_: Int64, d_: Int64, k_: Int64, ex_: Int64,
+):
+    var n = Int(n_)
+    var m = Int(m_)
+    var d = Int(d_)
+    var k = Int(k_)
+    var ex = Int(ex_)
+    var tid = Int(thread_idx.x)
+    var x0 = Int(block_idx.x) * KNN2_TX
+    var xs = stack_allocation[KNN2_TX * KNN2_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var ys = stack_allocation[KNN2_TY * KNN2_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var dt = stack_allocation[KNN2_TX * (KNN2_TY + 1), Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var inf = _bc[DType.float32](UInt32(0x7F800000))
+    var t = x0 + tid
+    var owner = tid < KNN2_TX and t < n
+    var worst = inf
+    if owner:
+        for s in range(k):
+            dist.unsafe_store(t * k + s, inf)
+            idx.unsafe_store(t * k + s, Int32(-1))
+    var ta = tid // 16
+    var tb = tid - ta * 16
+    var j0 = 0
+    while j0 < m:
+        var rows = min(KNN2_TY, m - j0)
+        var acc = InlineArray[Float32, KNN2_R * KNN2_R](fill=Float32(0))
+        var f0 = 0
+        while f0 < d:
+            var fc = min(KNN2_FC, d - f0)
+            var q = tid
+            while q < KNN2_TX * KNN2_FC:
+                var r = q // KNN2_FC
+                var f = q - r * KNN2_FC
+                xs[r * KNN2_XS + f] = x.unsafe_load((x0 + r) * d + f0 + f) if (x0 + r < n and f < fc) else Float32(0)
+                ys[r * KNN2_XS + f] = y.unsafe_load((j0 + r) * d + f0 + f) if (r < rows and f < fc) else Float32(0)
+                q += KNN2_TPB
+            barrier()
+            for f in range(fc):
+                var xv = InlineArray[Float32, KNN2_R](fill=Float32(0))
+                var yv = InlineArray[Float32, KNN2_R](fill=Float32(0))
+                comptime for i in range(KNN2_R):
+                    xv[i] = xs[(ta + 16 * i) * KNN2_XS + f]
+                    yv[i] = ys[(tb + 16 * i) * KNN2_XS + f]
+                comptime for i in range(KNN2_R):
+                    comptime for jj in range(KNN2_R):
+                        var df = _sub(xv[i], yv[jj])
+                        acc[i * KNN2_R + jj] = ftz(identical_mul_add(df, df, acc[i * KNN2_R + jj]))
+            barrier()
+            f0 += KNN2_FC
+        comptime for i in range(KNN2_R):
+            comptime for jj in range(KNN2_R):
+                dt[(ta + 16 * i) * (KNN2_TY + 1) + tb + 16 * jj] = acc[i * KNN2_R + jj]
+        barrier()
+        if owner:
+            for bb in range(rows):
+                var j = j0 + bb
+                if ex != 0 and j == t:
+                    continue
+                var v = dt[tid * (KNN2_TY + 1) + bb]
+                if not (v < worst):
+                    continue
+                var s = k - 1
+                while s > 0 and v < dist.unsafe_load(t * k + s - 1):
+                    dist.unsafe_store(t * k + s, dist.unsafe_load(t * k + s - 1))
+                    idx.unsafe_store(t * k + s, idx.unsafe_load(t * k + s - 1))
+                    s -= 1
+                dist.unsafe_store(t * k + s, v)
+                idx.unsafe_store(t * k + s, Int32(j))
+                worst = dist.unsafe_load(t * k + k - 1)
+        barrier()
+        j0 += rows
+
+
 def op_knn_sq_tiled(
     x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: Int, exclude_self: Int,
 ) raises:
     """The fused k-NN (`knn_sq`) with y staged per block; d above
     KNN_TILE_MAX_D takes the one-thread-per-row item kernel."""
     if d > KNN_TILE_MAX_D:
-        op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self)
+        # the 2-D tiled kernel's threadgroup pages (25,344 bytes) under every
+        # column's limit, or the row kernel (every shared page has a fits gate)
+        comptime if is_defined["MOJOLEARN_XN_KNN_ROWWISE"]() or not lib_smem_page_fits_for[TARGET_COLUMN, KNN2_SMEM_BYTES]():
+            op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self)
+            return
+        var ctx2 = xn_ctx()
+        var d_x2 = _buf(ctx2, x, n * d, True)
+        var d_y2 = _buf(ctx2, y, m * d, True)
+        var d_dist2 = _buf(ctx2, 0, n * k, False)
+        var d_idx2 = _buf_i(ctx2, 0, n * k, False)
+        ctx2.enqueue_function[knn_sq_tiled2_kernel](
+            d_x2.unsafe_ptr(), d_y2.unsafe_ptr(), d_dist2.unsafe_ptr(), d_idx2.unsafe_ptr(),
+            Int64(n), Int64(m), Int64(d), Int64(k), Int64(exclude_self),
+            grid_dim=(n + KNN2_TX - 1) // KNN2_TX, block_dim=KNN2_TPB,
+        )
+        _down(ctx2, d_dist2, dist, n * k)
+        _down_i(ctx2, d_idx2, idx, n * k)
+        ctx2.synchronize()
+        _ = d_x2^
+        _ = d_y2^
+        _ = d_dist2^
+        _ = d_idx2^
+        _ = ctx2^
         return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
