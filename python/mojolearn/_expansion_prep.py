@@ -576,7 +576,9 @@ class RobustScaler(_PrepBase):
         center = pr.alloc(d)
         scale = pr.alloc(d)
         pr.stage("sort_cols", d, xo, n, d, so, 0)
-        pr.stage("col_stats", d, xo, n, d, st)
+        # the quantile stage reads the count row only: an exact integer in
+        # the blocked order too (lane gap-prep2), so the same words
+        _col_stats(pr, xo, n, d, st, var=False)
         pr.stage("quantile", 3 * d, so, n, d, qf, 3, q, st)
         pr.stage("scale_params", d, q, 3, d, center, scale, 0, 0, 2, 1)
         if self.unit_variance:
