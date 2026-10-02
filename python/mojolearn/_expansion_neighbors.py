@@ -1654,6 +1654,21 @@ class SVGP(_XNeighbors):
         self._op("svgp", [(Kuu, 0), (B, 0), (b, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
                  (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
         elbo, ok = info.tolist()
+        self.precision_ = "float32"
+        if ok == 0 and os.environ.get("MOJOLEARN_SVGP_FF", "1") != "0":
+            # lane/neural-pass106 (best accuracy, Andrew's standing order): the
+            # statistics and the solve in float-float (x_neighbors/svgp_ff.mojo).
+            # Taxi's Sigma (eigenvalues 1e-6 .. 9e5) defeats float32: B's
+            # float32 accumulation error alone exceeds its smallest eigenvalue.
+            bh, bl = _empty_out((M, M), "<f4"), _empty_out((M, M), "<f4")
+            bvh, bvl = _empty_out((M,), "<f4"), _empty_out((M,), "<f4")
+            self._op("svgp_stats_ff", [(X, 0), (Z, 0), (yv, 0), (bh, 1), (bl, 1), (bvh, 1), (bvl, 1)], (n, M, d),
+                     (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance)))
+            self._op("svgp_ff", [(Kuu, 0), (bh, 0), (bl, 0), (bvh, 0), (bvl, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1),
+                                 (qsqrt, 1), (info, 1)],
+                     (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
+            elbo, ok = info.tolist()
+            self.precision_ = "float-float"
         if ok == 0:
             raise ValueError("SVGP: the inducing system is not positive definite; raise jitter or noise_variance")
         self.Z_, self._alpha, self._C = Z, alpha, C
