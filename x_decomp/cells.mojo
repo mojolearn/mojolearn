@@ -1014,8 +1014,8 @@ def als_row_solve(X: F32Ptr, S: F32Ptr, u: Int, f: Int) -> Float32:
     """`als_row`'s tail on its accumulated scratch (A at u * (f*f + f), b
     after it): the Cholesky (lower, left-looking, sums ascending), then the
     two solves into row u of X. Returns 1 at a non-positive pivot (x_u = 0),
-    else 0. Split out so the device's team kernel (x_decomp/device.mojo
-    `als_team_kernel`) runs the same tail after a parallel accumulation."""
+    else 0. x_decomp/device.mojo `als_block_kernel` runs the same sums with
+    the Cholesky's rows below the diagonal in parallel."""
     var ab = u * (f * f + f)
     var bb = ab + f * f
     # Cholesky (lower, left-looking, sums ascending), then the two solves
