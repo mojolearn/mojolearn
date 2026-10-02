@@ -1,0 +1,5 @@
+CMD lane/apple-fast-shap shap-tree-tab AFC_FAMILY=algos bash tools/afc_ab_def.sh shap-tree-tab x_trees tree-shap istella 1 2 "" "-D MOJOLEARN_SHAP_TREE_TAB"
+CMD lane/apple-fast-shap shap-kernel-dev AFC_FAMILY=algos bash tools/afc_ab_def.sh shap-kernel-dev x_trees kernel-shap istella 1 2 "" "-D MOJOLEARN_SHAP_KERNEL_DEV"
+CMD lane/apple-fast-shap shap-perm-cache AFC_FAMILY=algos bash tools/afc_ab_def.sh shap-perm-cache x_trees permutation-shap istella 1 2 "" "-D MOJOLEARN_SHAP_PERM_CACHE"
+# after shap-tree-tab wins on istella:
+# CMD lane/apple-fast-shap shap-tree-tab-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh shap-tree-tab-taxi x_trees tree-shap taxi 1 2 "" "-D MOJOLEARN_SHAP_TREE_TAB"
