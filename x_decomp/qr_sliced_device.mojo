@@ -131,7 +131,7 @@ def qs_dot_fold_kernel(
     if ftz(gate.unsafe_load(Int(gi))) == Float32(0):
         w.unsafe_store(j, Float32(0))
         return
-    w.unsafe_store(j, qs_dot_finish(y.unsafe_load(Int(k) * Int(ys) + j), dp + j * Int(nsmax), Int(ns)))
+    w.unsafe_store(j, qs_dot_finish(y.unsafe_load(Int(k) * Int(ys) + j), dp.unsafe_offset(j * Int(nsmax)), Int(ns)))
 
 
 def qs_geqrf_update_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, n: Int32, r0: Int32, rows: Int32):
@@ -235,7 +235,7 @@ def qs_geqrf_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], dt: Dev
     for k in range(kk):
         var ns = qs_slices(m - k - 1)
         # the norm's pairs land in column k's partial row, free at step k
-        var pq = p + k * nsmax
+        var pq = p.unsafe_offset(k * nsmax)
         if ns > 0:
             ctx.enqueue_function[qs_norm_part_kernel](
                 a, pms, pq, Int32(k), Int32(m), Int32(n), Int32(ns), grid_dim=_grid(ns), block_dim=QS_TPB

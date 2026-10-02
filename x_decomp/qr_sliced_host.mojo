@@ -31,13 +31,13 @@ def _partials(x: F32Ptr, xs: Int, y: F32Ptr, ys: Int, k: Int, m: Int, j0: Int, n
         var c_lo = task * chunk
         var c_hi = min(c_lo + chunk, ns)
         for c in range(c_lo, c_hi):
-            var acc = part + c * pstride
+            var acc = part.unsafe_offset(c * pstride)
             for jo in range(ncols):
                 acc.unsafe_store(jo, Float32(0))
             for i in range(qs_slice_lo(k, c), qs_slice_hi(k, c, m)):
                 var v = ftz(x.unsafe_load(i * xs + k))
                 var vv = F32V(v)
-                var row = y + i * ys + j0
+                var row = y.unsafe_offset(i * ys + j0)
                 var jo = 0
                 while jo + _W <= ncols:
                     var old = acc.unsafe_load[width=_W](jo)
