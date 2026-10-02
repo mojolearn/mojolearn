@@ -2608,6 +2608,14 @@ def _pt_spec_depth(n, d):
     s = max(0, min(s, 6))
     while s > 1 and (2 ** s - 1) * n * d > 2 ** 28:
         s -= 1
+    # the first round always evaluates the search's two opening points
+    # (PowerTransformer.fit: m = 2 at k0 = 0), so the candidates' buffer holds
+    # at least two transforms; when even two exceed the cap, the staged search
+    # (lane gap-board-refusals: Istella 1,000,000 x 220 reached S = 1 with a
+    # one-candidate buffer and the opening round wrote past it, an illegal
+    # address on the L40S and the MI300X, 0.8.34 board)
+    if s == 1 and 2 * n * d > 2 ** 28:
+        s = 0
     return s
 
 
@@ -2649,7 +2657,7 @@ class PowerTransformer(_PrepBase):
             if spec:
                 # the search speculated `spec` evaluations deep (transform.mojo pt_spts ..
                 # pt_sres): the same points, values and decisions, fewer dependent folds
-                mmax = 2 ** spec - 1
+                mmax = max(2 ** spec - 1, 2)   # the opening round's two points (see _pt_spec_depth)
                 # the candidates' transforms: contiguous per candidate (0) or one row's side by side (1)
                 il = 1 if os.environ.get("MOJOLEARN_XPREP_PT_INTERLEAVE", "0") == "1" else 0
                 state, leval = pr.alloc(_PT_STATE * d), pr.alloc(d)
