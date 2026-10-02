@@ -89,6 +89,7 @@ FAMILIES = (
             "xn_lp_knn_product",
             "xn_lp_iterate",
             "xn_pr_iterate",
+            "xn_pr_iterate_sparse",
             "xn_pcs_resident",
             "xn_knn_sq_tiled",
             "xn_knn_impute_tiled",
