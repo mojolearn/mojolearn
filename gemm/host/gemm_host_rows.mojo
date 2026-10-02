@@ -448,6 +448,9 @@ def ghr_small_m(
 #: Fused multiply-adds below which a product runs on the calling thread: a
 #: thread split costs tens of microseconds, about this much arithmetic.
 comptime GHR_SERIAL_FMAS = 1 << 20
+#: Packed right-operand floats at or under which the panels are packed on the
+#: calling thread rather than in a fork of their own (a schedule knob).
+comptime GHR_PACK_SERIAL_FLOATS = 1 << 20
 
 
 def ghr_task_count(m: Int, npan: Int, n: Int, k: Int) -> Int:
@@ -529,25 +532,39 @@ def gemm_host_rows_into(
         ghr_pack_b(b, op, n, k, bp)
         ghr_tile(ap, bp, c, n, k, 0, m, 0, npan, force_redo, real_k)
     else:
-        # THE THREAD SPLIT (lane neural-cpu). Every task packs a disjoint
-        # range of left rows and right panels, then computes a disjoint
-        # block of cells; no task reads what another writes before the join
-        # between the two splits. A cell's arithmetic does not depend on
-        # which task computes it (module note), and `host_parallelize` runs
-        # every task in the caller's floating-point environment.
+        # THE THREAD SPLIT (lane neural-cpu), ONE FORK A CALL where the
+        # shapes allow (lane neural-pass13). The right operand's panels are
+        # packed once: on the calling thread when they are small
+        # (GHR_PACK_SERIAL_FLOATS), over tasks otherwise. Then, split by
+        # rows, each task packs ITS OWN rows of the left operand (a disjoint
+        # slice of `ap`) right before its tiles, so the pack-then-compute
+        # fork pair becomes one fork and the rows a task computes are the
+        # rows it just wrote; split by panels (few rows), the left operand
+        # is packed once on the calling thread. No task reads what another
+        # writes. A cell's arithmetic does not depend on which task computes
+        # it (module note), and `host_parallelize` runs every task in the
+        # caller's floating-point environment. On a 64-core host the bench
+        # read 99 GFLOP/s on one thread and 800 at the policy before this:
+        # the call, not the kernel.
         var rchunk = (m + tasks - 1) // tasks
         var pchunk = (npan + tasks - 1) // tasks
+        if npan * k * GHR_G <= GHR_PACK_SERIAL_FLOATS:
+            ghr_pack_b(b, op, n, k, bp)
+        else:
+            def _pack(t: Int) {imm b, imm bp, imm op, imm n, imm k, imm pchunk, imm npan}:
+                ghr_pack_b(b, op, n, k, bp, t * pchunk, min((t + 1) * pchunk, npan))
 
-        def _pack(t: Int) {imm a, imm b, imm ap, imm bp, imm op, imm m, imm n, imm k, imm rchunk, imm pchunk, imm npan}:
-            ghr_pack_a(a, op, m, k, ap, t * rchunk, min((t + 1) * rchunk, m))
-            ghr_pack_b(b, op, n, k, bp, t * pchunk, min((t + 1) * pchunk, npan))
-
-        host_parallelize(_pack, tasks)
+            host_parallelize(_pack, tasks)
         var by_rows = m >= 2 * tasks
+        if not by_rows:
+            ghr_pack_a(a, op, m, k, ap)
 
-        def _cells(t: Int) {imm ap, imm bp, imm c, imm m, imm n, imm k, imm rchunk, imm pchunk, imm npan, imm by_rows, imm force_redo, imm real_k}:
+        def _cells(t: Int) {imm a, imm ap, imm bp, imm c, imm op, imm m, imm n, imm k, imm rchunk, imm pchunk, imm npan, imm by_rows, imm force_redo, imm real_k}:
             if by_rows:
-                ghr_tile(ap, bp, c, n, k, t * rchunk, min((t + 1) * rchunk, m), 0, npan, force_redo, real_k)
+                var lo = t * rchunk
+                var hi = min((t + 1) * rchunk, m)
+                ghr_pack_a(a, op, m, k, ap, lo, hi)
+                ghr_tile(ap, bp, c, n, k, lo, hi, 0, npan, force_redo, real_k)
             else:
                 ghr_tile(ap, bp, c, n, k, 0, m, t * pchunk, min((t + 1) * pchunk, npan), force_redo, real_k)
 
