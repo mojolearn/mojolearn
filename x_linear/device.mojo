@@ -40,7 +40,7 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
-from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross_kernel, mg_tiles
+from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross_kernel, mg_tiles, mg_rows_slice
 from x_linear.dispatch import ALGO_RIDGE
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
@@ -1742,6 +1742,48 @@ def _iso_predict_grid(x: FP, n_x: Int, thr: FP, n_thr: Int, n: Int, ip: List[Int
     _ = dout^
     _ = wit^
 
+
+def _mg_sliced(
+    mut ctx: DeviceContext, mut wit: Witness, cross: Bool, dx: FP, dy: FP, n: Int, d: Int, tn: Int, fi: Int,
+    fw: FP, xm: Int, ym: Int, gg: Int, xty: Int, pa: FP, pb: FP, what: String,
+) raises:
+    """A moments kernel (x_linear/moments_grid.mojo) over its row slices
+    (`mg_rows_slice`: every row at once off Apple), each slice resuming the
+    previous slice's partials from one buffer and leaving its own in the
+    other, so a slice the witness finds cut reruns from the same words."""
+    var tl = mg_tiles(d, tn)
+    var grid = tl * (tl + 1) // 2 if cross else tl
+    var rs = mg_rows_slice(n)
+    var lo = 0
+    var si = 0
+    while lo < n or (n == 0 and si == 0):
+        var hi = min(n, lo + rs)
+        var pin = pa if si % 2 == 0 else pb
+        var pout = pb if si % 2 == 0 else pa
+        var t = 0
+        while True:
+            var nonce = wit.begin()
+            if cross:
+                ctx.enqueue_function[mg_cross_kernel](
+                    dx, dy, Int32(n), Int32(d), Int32(tn), fw, Int32(xm), Int32(ym), Int32(gg), Int32(xty),
+                    Int32(lo), Int32(hi), pin, pout, wit.p(), Int32(0), nonce, grid_dim=grid, block_dim=MG_NT,
+                )
+            else:
+                ctx.enqueue_function[mg_means_kernel](
+                    dx, dy, Int32(n), Int32(d), Int32(tn), Int32(fi), fw, Int32(xm), Int32(ym),
+                    Int32(lo), Int32(hi), pin, pout, wit.p(), Int32(0), nonce, grid_dim=grid, block_dim=MG_NT,
+                )
+            if wit.ok(ctx, grid, what):
+                break
+            t += 1
+            if t >= WITNESS_TRIES:
+                wit.fail()
+        lo = hi
+        si += 1
+        if n == 0:
+            break
+
+
 def fit_device(
     algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
@@ -1848,6 +1890,8 @@ def fit_device(
     var nslices = (n + rows_slice - 1) // rows_slice if n > 0 else 1
     var dgs = ctx.enqueue_create_buffer[DType.float32](max(d + d * d, 1) if grid_gram and nslices > 1 else 1)
     var mgt = mg_tiles(d, Int(hip[0]) if ridge_pre else 1)
+    var dmga = ctx.enqueue_create_buffer[DType.float32](max(mgt * (mgt + 1) // 2, 1) * MG_NT)
+    var dmgb = ctx.enqueue_create_buffer[DType.float32](max(mgt * (mgt + 1) // 2, 1) * MG_NT)
     var wit = Witness(ctx, max(max(_xg_blocks(max(cells, d)), 1) + 1, mgt + mgt * (mgt + 1) // 2 + 1))
     var bayes_grid = False
     comptime if not X_LINEAR_SERIAL_FOLDS:
@@ -1860,37 +1904,23 @@ def fit_device(
         diw.enqueue_fill(Int32(0))
         dtw.enqueue_fill(Float32(0))
         var good = True
+        var fxp = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
+        var fyp = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
+        var fwp = FP(unsafe_from_address=Int(dfw.unsafe_ptr()))
+        var pap = FP(unsafe_from_address=Int(dmga.unsafe_ptr()))
+        var pbp = FP(unsafe_from_address=Int(dmgb.unsafe_ptr()))
         if lars_pre:
             # lane/neural-pass120's moments of [X | y] (fw: xm 0, G d, X'y
             # d + d*d, y's mean parked in prev = 2d + d*d)
-            var nonce = wit.begin()
-            var tl = mg_tiles(d, 1)
-            ctx.enqueue_function[mg_means_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), Int32(hip[1]), dfw.unsafe_ptr(),
-                Int32(0), Int32(2 * d + d * d), wit.p(), Int32(0), nonce, grid_dim=tl, block_dim=MG_NT,
-            )
-            ctx.enqueue_function[mg_cross_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), dfw.unsafe_ptr(),
-                Int32(0), Int32(2 * d + d * d), Int32(d), Int32(d + d * d), wit.p(), Int32(tl), nonce,
-                grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
-            )
-            good = wit.ok(ctx, tl + tl * (tl + 1) // 2, "LARS moments")
+            _mg_sliced(ctx, wit, False, fxp, fyp, n, d, 1, Int(hip[1]), fwp, 0, 2 * d + d * d, 0, 0, pap, pbp, "LARS means")
+            _mg_sliced(ctx, wit, True, fxp, fyp, n, d, 1, Int(hip[1]), fwp, 0, 2 * d + d * d, d, d + d * d, pap, pbp,
+                       "LARS cross")
         elif grid_gram and bayes_like and MOMENTS_GRID and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0":
             # lane/neural-pass130: BayesianRidge / ARD's means and centered Gram
             # from the staged moments kernels (no Y columns), into the layout
             # `xg_gram_kernel` fills (xm at 0, G at d): the same chains, staged
-            var nonce = wit.begin()
-            var tlb = mg_tiles(d, 0)
-            ctx.enqueue_function[mg_means_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(0), Int32(hip[1]), dfw.unsafe_ptr(),
-                Int32(0), Int32(0), wit.p(), Int32(0), nonce, grid_dim=tlb, block_dim=MG_NT,
-            )
-            ctx.enqueue_function[mg_cross_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(0), dfw.unsafe_ptr(),
-                Int32(0), Int32(0), Int32(d), Int32(0), wit.p(), Int32(tlb), nonce,
-                grid_dim=tlb * (tlb + 1) // 2, block_dim=MG_NT,
-            )
-            good = wit.ok(ctx, tlb + tlb * (tlb + 1) // 2, "Bayes moments")
+            _mg_sliced(ctx, wit, False, fxp, fyp, n, d, 0, Int(hip[1]), fwp, 0, 0, 0, 0, pap, pbp, "Bayes means")
+            _mg_sliced(ctx, wit, True, fxp, fyp, n, d, 0, Int(hip[1]), fwp, 0, 0, d, 0, pap, pbp, "Bayes cross")
         elif grid_gram:
             # The means then the centered Gram into fw[0, d + d*d), the layout
             # `lars_fit` reads (xm at 0, G at d); the team recomputes the means
@@ -1927,22 +1957,10 @@ def fit_device(
                 si += 1
         if good and ridge_pre:
             var t_n = Int(hip[0])
-            var r_xm = 0
-            var r_gg = d
             var r_ym = d + 2 * d * d + d
-            var r_xty = r_ym + t_n
-            var nonce = wit.begin()
-            var tl = mg_tiles(d, t_n)
-            ctx.enqueue_function[mg_means_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), Int32(hip[1]), dfw.unsafe_ptr(),
-                Int32(r_xm), Int32(r_ym), wit.p(), Int32(0), nonce, grid_dim=tl, block_dim=MG_NT,
-            )
-            ctx.enqueue_function[mg_cross_kernel](
-                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), dfw.unsafe_ptr(),
-                Int32(r_xm), Int32(r_ym), Int32(r_gg), Int32(r_xty), wit.p(), Int32(tl), nonce,
-                grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
-            )
-            good = wit.ok(ctx, tl + tl * (tl + 1) // 2, "Ridge moments")
+            _mg_sliced(ctx, wit, False, fxp, fyp, n, d, t_n, Int(hip[1]), fwp, 0, r_ym, 0, 0, pap, pbp, "Ridge means")
+            _mg_sliced(ctx, wit, True, fxp, fyp, n, d, t_n, Int(hip[1]), fwp, 0, r_ym, d, r_ym + t_n, pap, pbp,
+                       "Ridge cross")
         if good:
             var nonce = wit.begin()
             if bayes_grid:
@@ -2038,6 +2056,8 @@ def fit_device(
     _ = dfw^
     _ = diw^
     _ = dtw^
+    _ = dmga^
+    _ = dmgb^
     _ = dgs^
     _ = dstate^
     _ = wit^

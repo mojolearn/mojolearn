@@ -23,6 +23,7 @@ from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from x_linear.ops import IP
 from x_linear.witness import witness_end
+from std.sys.info import has_apple_gpu_accelerator
 from x_linear.ops import FP, fs, fd, ld, st, i2f
 from x_linear.tops import upper_cell, _acc_fa, _acc_fmad
 
@@ -47,7 +48,8 @@ def _augv(x: FP, y: FP, n: Int, d: Int, t_n: Int, row: Int, col: Int) -> Float32
     return v if (row < n and col < d + t_n) else Float32(0)
 
 
-def mg_means_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fi: Int32, fw: FP, xm: Int32, ym: Int32, wf: IP, woff: Int32, nonce: Int32):
+def mg_means_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fi: Int32, fw: FP, xm: Int32, ym: Int32,
+                    lo: Int32, hi: Int32, pin: FP, pout: FP, wf: IP, woff: Int32, nonce: Int32):
     var nn = Int(n)
     var dd = Int(d)
     var tn = Int(t_n)
@@ -59,21 +61,27 @@ def mg_means_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fi: Int32, fw:
     var reg = SIMD[DType.float32, MG_LM]()
     comptime for v in range(MG_LM):
         var u = v * MG_NT + tid
-        reg[v] = _augv(x, y, nn, dd, tn, u // MG_TC, c0 + u % MG_TC)
+        reg[v] = _augv(x, y, nn, dd, tn, Int(lo) + u // MG_TC, c0 + u % MG_TC)
+    # rows [lo, hi) (lane/neural-xlw: the Apple slices), resuming the chain
+    # from this thread's partial in `pin`; an acc is always flushed
+    var hh = Int(hi)
+    var slot = Int(block_idx.x) * MG_NT + tid
     var acc = Float32(0)
-    var r0 = 0
-    while r0 < nn:
+    if Int(lo) > 0 and live:
+        acc = ld(pin, slot)
+    var r0 = Int(lo)
+    while r0 < hh:
         barrier()
         comptime for v in range(MG_LM):
             xs[v * MG_NT + tid] = reg[v]
         barrier()
         var r1 = r0 + MG_TR
-        if r1 < nn:
+        if r1 < hh:
             comptime for v in range(MG_LM):
                 var u = v * MG_NT + tid
                 reg[v] = _augv(x, y, nn, dd, tn, r1 + u // MG_TC, c0 + u % MG_TC)
         if live:
-            var cnt = Int32(min(MG_TR, nn - r0))
+            var cnt = Int32(min(MG_TR, hh - r0))
             var px = xs + tid
             var r = Int32(0)
             while r + MG_RU <= cnt:
@@ -89,7 +97,9 @@ def mg_means_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fi: Int32, fw:
                 px += MG_TC
                 r += 1
         r0 = r1
-    if live:
+    if live and hh < nn:
+        st(pout, slot, acc)
+    elif live:
         var v = fd(acc, i2f(nn)) if fi != 0 else Float32(0)
         if col < dd:
             st(fw, Int(xm) + col, v)
@@ -98,7 +108,7 @@ def mg_means_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fi: Int32, fw:
     witness_end(wf, woff, nonce)
 
 def mg_cross_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fw: FP, xm: Int32, ym: Int32,
-                    gg: Int32, xty: Int32, wf: IP, woff: Int32, nonce: Int32):
+                    gg: Int32, xty: Int32, lo: Int32, hi: Int32, pin: FP, pout: FP, wf: IP, woff: Int32, nonce: Int32):
     var nn = Int(n)
     var dd = Int(d)
     var tn = Int(t_n)
@@ -123,22 +133,26 @@ def mg_cross_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fw: FP, xm: In
     comptime for v in range(MG_LG):
         var u = v * MG_NT + tid
         var cc = u % (2 * MG_TC)
-        reg[v] = _augv(x, y, nn, dd, tn, u // (2 * MG_TC), cj + cc if cc < MG_TC else ck + cc - MG_TC)
+        reg[v] = _augv(x, y, nn, dd, tn, Int(lo) + u // (2 * MG_TC), cj + cc if cc < MG_TC else ck + cc - MG_TC)
+    var hh = Int(hi)
+    var slot = Int(block_idx.x) * MG_NT + tid
     var acc = Float32(0)
-    var r0 = 0
-    while r0 < nn:
+    if Int(lo) > 0 and live:
+        acc = ld(pin, slot)
+    var r0 = Int(lo)
+    while r0 < hh:
         barrier()
         comptime for v in range(MG_LG):
             xs[v * MG_NT + tid] = reg[v]
         barrier()
         var r1 = r0 + MG_TR
-        if r1 < nn:
+        if r1 < hh:
             comptime for v in range(MG_LG):
                 var u = v * MG_NT + tid
                 var cc = u % (2 * MG_TC)
                 reg[v] = _augv(x, y, nn, dd, tn, r1 + u // (2 * MG_TC), cj + cc if cc < MG_TC else ck + cc - MG_TC)
         if live:
-            var cnt = Int32(min(MG_TR, nn - r0))
+            var cnt = Int32(min(MG_TR, hh - r0))
             var pj = xs + a
             var pk = xs + b
             var r = Int32(0)
@@ -159,7 +173,9 @@ def mg_cross_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fw: FP, xm: In
                 pk += 2 * MG_TC
                 r += 1
         r0 = r1
-    if live:
+    if live and hh < nn:
+        st(pout, slot, acc)
+    elif live:
         if k < dd:
             st(fw, Int(gg) + j * dd + k, acc)
             st(fw, Int(gg) + k * dd + j, acc)
@@ -169,3 +185,16 @@ def mg_cross_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fw: FP, xm: In
 
 def mg_tiles(d: Int, t_n: Int) -> Int:
     return (d + t_n + MG_TC - 1) // MG_TC
+
+
+#: Apple: the rows a moments launch walks (lane/neural-xlw). A block walks
+#: every row of its slice serially, so a long slice is a long launch; macOS
+#: cuts those under a contended GPU (the M2 harness: taxi's one- and two-block
+#: moments grids cut on every rerun).
+comptime MG_APPLE_ROWS = 1 << 16
+
+
+def mg_rows_slice(n: Int) -> Int:
+    comptime if has_apple_gpu_accelerator():
+        return min(n, MG_APPLE_ROWS)
+    return n
