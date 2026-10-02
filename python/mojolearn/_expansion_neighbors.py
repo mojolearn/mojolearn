@@ -132,7 +132,6 @@ _UNFUSED_KNN = os.environ.get("MOJOLEARN_XN_UNFUSED_KNN", "") == "1"
 #: spreading, PageRank and connected_components in Python, one op per step,
 #: instead of the resident `lp_iterate` / `pr_iterate` / `cc_iterate`.
 _HOST_LOOP_LP = os.environ.get("MOJOLEARN_XN_HOST_LOOPS", "") == "1"
-_PR_SPARSE = os.environ.get("MOJOLEARN_PR_SPARSE", "1") != "0"
 #: A/B arm: KNNImputer.transform over every cell instead of the missing ones.
 _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 #: A/B arm: the one-item forms these replaced (PolynomialCountSketch's
@@ -1407,11 +1406,11 @@ class PageRank(_XNeighbors):
         A = _adjacency(A)
         n = A.shape[0]
         binary = self.weight is None or self.weight is False
-        if _PR_SPARSE and not _HOST_LOOP_LP:
-            # lane neural-pass30: the iteration over the nonzero cells of
-            # the adjacency (x_neighbors/pr_sparse.mojo), the same chains
-            # with their zero terms left out; MOJOLEARN_PR_SPARSE=0 keeps
-            # the dense route below
+        if not _HOST_LOOP_LP:
+            # the iteration over the column lists of the adjacency, built
+            # and iterated on the device (lane hr-graph,
+            # x_neighbors/graph_par.mojo): the dense chains with their zero
+            # terms left out, the dangling mass and |x' - x| blocked folds
             if self.personalization is None:
                 p = Array.from_list([1.0 / n] * n, "<f4")
             else:
@@ -1445,20 +1444,6 @@ class PageRank(_XNeighbors):
             p = self._unit(self.personalization, n, "personalization")
         dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
         x = Array.from_list([1.0 / n] * n, "<f4") if self.nstart is None else self._unit(self.nstart, n, "nstart")
-        if not _HOST_LOOP_LP:
-            # The loop below as ONE resident op (x_neighbors/iter_device.mojo),
-            # Q uploaded once; n * tol passed as its float64 bits.
-            info = empty((2,), "<i4")
-            thr = struct.unpack("<Q", struct.pack("<d", n * float(self.tol)))[0]
-            x = Array.from_list(x.tolist(), "<f4")
-            self._op("pr_iterate", [(Q, 0), (x, 1), (p, 0), (dw, 0), (dangling, 0), (info, 1)],
-                     (n, int(self.max_iter), thr >> 32, thr & 0xFFFFFFFF), (_f32_scalar(self.alpha),))
-            it, ok = info.tolist()
-            if ok:
-                self.pagerank_ = x
-                self.n_iter_ = int(it)
-                return self
-            raise RuntimeError(f"PageRank: power iteration failed to converge within {self.max_iter} iterations")
         s = _empty_out((1,), "<f4")
         for it in range(int(self.max_iter)):
             nxt = _empty_out((n,), "<f4")

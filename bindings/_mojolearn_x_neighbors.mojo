@@ -633,19 +633,6 @@ def graph_symmetry_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject)
     return PythonObject(None)
 
 
-def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_a = _a(a_, 0)
-    var v_labels = _a(a_, 1)
-    var v_info = _a(a_, 2)
-    var v_n = _n(i_, 0)
-    var v_max_level = _n(i_, 1)
-    var v_resolution = _f(f_, 0)
-    var v_threshold = _f(f_, 1)
-    with GILReleased(Python()):
-        op_louvain(v_a, v_labels, v_info, v_n, v_max_level, v_resolution, v_threshold)
-    return PythonObject(None)
-
-
 def svgp_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_kuu = _a(a_, 0)
     var v_bmat = _a(a_, 1)
@@ -927,6 +914,19 @@ def svgp_predict_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) r
     return PythonObject(None)
 
 
+def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_a = _a(a_, 0)
+    var v_labels = _a(a_, 1)
+    var v_info = _a(a_, 2)
+    var v_n = _n(i_, 0)
+    var v_max_level = _n(i_, 1)
+    var v_resolution = _f(f_, 0)
+    var v_threshold = _f(f_, 1)
+    with GILReleased(Python()):
+        op_louvain(v_a, v_labels, v_info, v_n, v_max_level, v_resolution, v_threshold)
+    return PythonObject(None)
+
+
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[sqdist_binding]("xn_sqdist")
     m.def_function[nan_sqdist_binding]("xn_nan_sqdist")
@@ -976,7 +976,6 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[pagerank_step_binding]("xn_pagerank_step")
     m.def_function[cc_step_binding]("xn_cc_step")
     m.def_function[graph_symmetry_binding]("xn_graph_symmetry")
-    m.def_function[louvain_binding]("xn_louvain")
     m.def_function[svgp_binding]("xn_svgp")
     m.def_function[svgp_var_binding]("xn_svgp_var")
     m.def_function[nc_stats_binding]("xn_nc_stats")
@@ -995,6 +994,7 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[kernel_matmul_binding]("xn_kernel_matmul")
     m.def_function[svgp_stats_binding]("xn_svgp_stats")
     m.def_function[svgp_predict_binding]("xn_svgp_predict")
+    m.def_function[louvain_binding]("xn_louvain")
     m.def_function[eigh_binding]("xn_eigh")
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
 

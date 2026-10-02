@@ -3,18 +3,10 @@
 """The device column of x_neighbors/graph_par.mojo (lane hr-graph): every
 stage's items as threads of one launch, the arenas resident on the device,
 launches in order on the lane's one stream. Only the driver's control
-values (counts, flags, the convergence sum, the modularity) cross back.
-
-A/B arms during measurement (deleted with the old routes):
-  -D MOJOLEARN_XN_LOUVAIN_OLD_WALK  Louvain: the old sequential sparse walk
-  -D MOJOLEARN_XN_PR_OLD_SCAN       PageRank: the old CSR scan (in
-                                    iter_device.op_pr_iterate_sparse)
-"""
-from std.sys.compile import is_defined
+values (counts, flags, the convergence sum, the modularity) cross back."""
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_neighbors.items import FP, IP
 from x_neighbors.device_ops import xn_ctx, _buf, _grid, _tid, BLOCK
-from x_neighbors.louvain_sparse import louvain_item_sparse
 from x_neighbors.graph_par import GA, GExec, Lay, LP, GP_NST, gp_item, pr_drive, lv_drive
 
 
@@ -147,10 +139,6 @@ def pr_iterate_gpu(
 def op_louvain(a: Int, labels: Int, info: Int, n: Int, max_level: Int, resolution: Float32,
                threshold: Float32) raises:
     """Louvain on the device (graph_par.lv_drive)."""
-    comptime if is_defined["MOJOLEARN_XN_LOUVAIN_OLD_WALK"]():
-        louvain_item_sparse(FP(unsafe_from_address=a), IP(unsafe_from_address=labels), FP(unsafe_from_address=info),
-                            n, max_level, resolution, threshold)
-        return
     var ex = GraphDev(a, n * n)
     lv_drive(ex, n, max_level, resolution, threshold, labels, info)
     _ = ex^

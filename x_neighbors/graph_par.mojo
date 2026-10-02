@@ -15,7 +15,7 @@ Stage arguments: `GA` holds three arenas (float32, int32, int64), the layout
 (the offset of every named array, `Lay`), the dense input and eight integer
 and two float scalars. A stage's scalars are documented on its item.
 
-PageRank (replaces x_neighbors/pr_sparse.mojo's host scan): the dense
+PageRank (replaces lane neural-pass30's host scan): the dense
 adjacency is read on the device, rows for the row sums (each row's nonzero
 cells ascending, the dense item's chain with its zero terms left out),
 columns for the transposed lists (column t's nonzero cells, rows
@@ -373,8 +373,8 @@ def _pr_colcnt(t: Int, g: GA):
 
 def _pr_colfill(t: Int, g: GA):
     """Column t's list from its offset: the rows of its nonzero cells
-    ascending and the row-normalized values (pr_sparse's `_fill`: the
-    flushed quotient by the row sum, 1 for an all-zero sum)."""
+    ascending and the row-normalized values: the flushed quotient by the
+    row sum (by 1 for an all-zero sum)."""
     var n = g.n0
     var rows = _is(g, P_ROWS)
     var vals = _fs(g, P_VALS)
@@ -410,7 +410,9 @@ def pr_step_csr(
     t: Int, indptr: IP, rows: IP, vals: FP, x: FP, p: FP, dw: FP, dsum: Float32, res: FP, alpha: Float32,
 ):
     """`pagerank_step_item` for node t over column t's nonzero cells
-    ascending (x_neighbors/pr_sparse.mojo `pagerank_step_sparse_item`)."""
+    ascending: the dense item's chain with its zero terms left out (a zero
+    cell adds x * 0 = +0.0 to a +0.0-seeded chain; a denormal cell is
+    flushed to 0 in the item, and its stored quotient is flushed here)."""
     var acc = Float32(0)
     var lo = Int(indptr.unsafe_load(t))
     var hi = Int(indptr.unsafe_load(t + 1))

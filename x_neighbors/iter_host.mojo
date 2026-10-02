@@ -9,7 +9,6 @@ from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
 from x_neighbors.nan_cells import nan_cells_host
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
-from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
 from x_neighbors.items import (
     FP, IP, absdiff_sum_item, matmul_item, lp_clamp_item, ls_clamp_item,
     pagerank_step_item, cc_step_item, pcs_item, knn_sq_item, nc_stats_item,
