@@ -83,7 +83,7 @@ def test_every_opponent_has_a_pin_or_is_in_an_existing_set():
 
 @pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
 def test_plan_has_every_lane_with_our_arms(vendor):
-    races = bb.plan_races(vendor, bb.modes_for(vendor), ["algos"], cpu_arm=True)
+    races = bb.plan_races(vendor, bb.modes_for(vendor), ["algos"])
     assert {r["lane"] for r in races} == set(A.LANE_ORDER)
     want = {"ours": "identical"}          # the board never races our CPU (Oct 2 2026)
     if vendor == "apple":
