@@ -87,7 +87,6 @@ from x_decomp.cells import (
 from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_on_host
 from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_on_host
 from x_decomp.exec_trait import Exec
-from x_decomp.host import HostExec
 from x_decomp.jacobi2 import (
     J2_TPB,
     jacobi_eigh2_kernel,
@@ -135,19 +134,6 @@ def pj_eigh_min() -> Int:
     x_decomp/jacobi_par.mojo (FAST builds for Metal only; 0 = never).
     MOJOLEARN_XD_PJ_EIGH_MIN overrides it."""
     var v = String(getenv("MOJOLEARN_XD_PJ_EIGH_MIN", "0"))
-    try:
-        return Int(v)
-    except:
-        return 0
-
-
-def host_eigh_max() -> Int:
-    """Largest n whose eigh runs on the host executor inside the GPU binding
-    (FAST builds for Metal only; 0 = never): the same cyclic Jacobi, without
-    the upload, launch, readback and sync a device solve of a few hundred
-    values is made of (`Kit[E, S]`'s rule for the native drivers).
-    MOJOLEARN_XD_HOST_EIGH_MAX overrides it."""
-    var v = String(getenv("MOJOLEARN_XD_HOST_EIGH_MAX", "0"))
     try:
         return Int(v)
     except:
@@ -1863,23 +1849,14 @@ struct DevExec(Exec):
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
-        # lane/neural-net-experiment (2026-09-30): the two routes below were
-        # compiled for Metal FAST only. Both envs are honoured on every
-        # vendor and tier now, with their defaults unchanged (0: never),
-        # so a box can A/B them:
-        #   MOJOLEARN_XD_HOST_EIGH_MAX=n  the host executor's cyclic Jacobi
-        #     for n at or under it: the host column's own arithmetic, held
-        #     bit for bit to the device kernels by the identity gates.
-        #   MOJOLEARN_XD_PJ_EIGH_MIN=n  the round-robin ordering
-        #     (x_decomp/jacobi_par.mojo) from n up: NOT the pinned cyclic
-        #     order, so NOT the identical tier's bits -- an experiment the
-        #     digest check must report as MOVED. It is the only route here
-        #     whose rotations run across the GPU: the cyclic kernels are one
-        #     block of 256 threads for the whole solve (eigh at n = 4096
-        #     timed out on the AMD board).
-        if n <= host_eigh_max():
-            HostExec.eigh(a, w, v, n)
-            return
+        # lane/neural-net-experiment (2026-09-30): MOJOLEARN_XD_PJ_EIGH_MIN=n
+        # takes the round-robin ordering (x_decomp/jacobi_par.mojo) from n
+        # up on every vendor and tier, default 0 (never), so a box can A/B
+        # it: NOT the pinned cyclic order, so NOT the identical tier's bits
+        # -- an experiment the digest check must report as MOVED. It is the
+        # only route here whose rotations run across the GPU: the cyclic
+        # kernels are one block of 256 threads for the whole solve (eigh at
+        # n = 4096 timed out on the AMD board).
         var lo = pj_eigh_min()
         if lo > 0 and n >= lo:
             if DevExec._eigh_par(a, w, v, n):

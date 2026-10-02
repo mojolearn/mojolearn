@@ -5,17 +5,15 @@ points of x_decomp/api.mojo on the device executor (x_decomp/device.mojo).
 bindings/_mojolearn_x_decomp_host.mojo registers the same names on the host
 executor."""
 from std.os import abort
-from std.sys.compile import is_defined
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from x_decomp.api import (
     cd_rows_py, chol_py, colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
-    geqrf_py, orgqr_py, als_cg_rows_py, mcd_py, lda_online_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
+    geqrf_py, orgqr_py, als_cg_rows_py,  gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.device import DevExec
-from x_decomp.host import HostExec
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
 from x_decomp.resident import (
     dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_trisolve_py, dev_rowsum_py,
@@ -55,14 +53,9 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[orgqr_py[DevExec]]("x_decomp_orgqr")
         m.def_function[als_cg_rows_py[DevExec]]("x_decomp_als_cg_rows")
         # MinCovDet's fast_mcd and online LDA on the resident kit
-        # (x_decomp/kit_device.mojo). A/B during measurement only:
-        # -D MOJOLEARN_XD_KIT_SPLIT keeps the old split kit.
-        comptime if is_defined["MOJOLEARN_XD_KIT_SPLIT"]():
-            m.def_function[mcd_py[DevExec, HostExec]]("x_decomp_mcd")
-            m.def_function[lda_online_py[DevExec, HostExec]]("x_decomp_lda_online")
-        else:
-            m.def_function[mcd_dev_py]("x_decomp_mcd")
-            m.def_function[lda_online_dev_py]("x_decomp_lda_online")
+        # (x_decomp/kit_device.mojo)
+        m.def_function[mcd_dev_py]("x_decomp_mcd")
+        m.def_function[lda_online_dev_py]("x_decomp_lda_online")
         m.def_function[gather_py]("x_decomp_gather")
         m.def_function[scatter_py]("x_decomp_scatter")
         m.def_function[triu_nonzero_py]("x_decomp_triu_nonzero")

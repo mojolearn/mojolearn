@@ -432,9 +432,9 @@ def als_cg_rows_py[E: Exec](
     return PythonObject(n)
 
 
-def mcd_py[E: Exec, S: Exec](
+def mcd_py[E: Exec](
     x: PythonObject, loc: PythonObject, cov: PythonObject, sup: PythonObject, dist: PythonObject,
-    p: PythonObject, dev: PythonObject,
+    p: PythonObject,
 ) raises -> PythonObject:
     """MinCovDet's fast_mcd (x_decomp/mcd.mojo): x (n x d) in; location
     (d), covariance (d x d), support (n int32 0/1) and distances (n) out.
@@ -448,7 +448,6 @@ def mcd_py[E: Exec, S: Exec](
         raise Error("x_decomp: mcd needs n >= 1, d >= 2 and 1 <= h <= n")
     if n > 500 and (q[4] < 1 or q[4] * q[5] > n or q[8] > n or q[8] < 1 or q[10] < 1):
         raise Error("x_decomp: mcd subset plan out of range")
-    var dv = Int(py=dev)
     var px = _f(x)
     var pl = _f(loc)
     var pc = _f(cov)
@@ -456,13 +455,12 @@ def mcd_py[E: Exec, S: Exec](
     var pd = _f(dist)
     with GILReleased(Python()):
         var X = mat_from(px, n, d)
-        fast_mcd[E, S](X, q, dv, pl, pc, ps, pd)
+        fast_mcd[E](X, q, pl, pc, ps, pd)
     return PythonObject(n)
 
 
-def lda_online_py[E: Exec, S: Exec](
-    x: PythonObject, comps: PythonObject, exp_dir: PythonObject, p: PythonObject, f: PythonObject,
-    dev: PythonObject,
+def lda_online_py[E: Exec](
+    x: PythonObject, comps: PythonObject, exp_dir: PythonObject, p: PythonObject, f: PythonObject
 ) raises -> PythonObject:
     """One online pass of LatentDirichletAllocation (x_decomp/lda_online.mojo)
     over x (n x v): comps and exp_dir (nc x v) updated in place.
@@ -482,7 +480,6 @@ def lda_online_py[E: Exec, S: Exec](
     var fv = List[Float64]()
     for i in range(6):
         fv.append(Float64(py=f[i]))
-    var dv = Int(py=dev)
     var px = _f(x)
     var pc = _f(comps)
     var pe = _f(exp_dir)
@@ -490,7 +487,7 @@ def lda_online_py[E: Exec, S: Exec](
         var X = mat_from(px, n, v)
         var C = mat_from(pc, nc, v)
         var ED = mat_from(pe, nc, v)
-        lda_online_pass[E, S](X, C, ED, bs, mdi, seed, draw, nbi, fv[0], fv[1], fv[2], fv[3], fv[4], fv[5], dv)
+        lda_online_pass[E](X, C, ED, bs, mdi, seed, draw, nbi, fv[0], fv[1], fv[2], fv[3], fv[4], fv[5])
         for i in range(nc * v):
             pc.unsafe_store(i, C.d[i])
             pe.unsafe_store(i, ED.d[i])

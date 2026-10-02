@@ -4,7 +4,7 @@
 
 MinCovDet's fast_mcd (x_decomp/mcd.mojo) and LatentDirichletAllocation's
 online pass (x_decomp/lda_online.mojo) make thousands of kit calls on
-operands of a few hundred values. `Kit[DevExec, ...]` paid an upload, a
+operands of a few hundred values. `Kit[DevExec]` would pay an upload, a
 launch, a download and two syncs for each one. Here every matrix lives in a
 pooled device buffer (x_decomp/resident.mojo) and every kit call is an
 enqueued launch, with no sync:
@@ -12,9 +12,8 @@ enqueued launch, with no sync:
 - the launch sequences are DevExec's own (`launch_ew`, `launch_gemm`,
   `launch_colsum`, `launch_rowsum`, `launch_lu`, `rand_kernel`,
   `gamma_kernel`, `lda_rows_kernel`, `DevExec._eigh2_on`), so every value
-  is the same bits as `Kit[DevExec, DevExec]`, which is the same bits as
-  the host column's `Kit[HostExec, HostExec]` (every x-decomp lane's
-  GPU == CPU claim);
+  is the same bits as `Kit[DevExec]`, which is the same bits as the CPU
+  column's kit (every x-decomp lane's GPU == CPU claim);
 - the host reads a value only where the search branches on it: a C-step's
   log determinant (the LU's diagonal and pivots, and the summed logs, in
   ONE sync), the distances it selects the next support from, the Philox
@@ -685,9 +684,9 @@ def lda_online_dev(
 # ---- Python entries (GPU binding only; the arguments of api.mojo's)
 def mcd_dev_py(
     x: PythonObject, loc: PythonObject, cov: PythonObject, sup: PythonObject, dist: PythonObject,
-    p: PythonObject, dev: PythonObject,
+    p: PythonObject,
 ) raises -> PythonObject:
-    """`mcd_py` on the resident kit. `dev` is read and unused."""
+    """`mcd_py` on the resident kit."""
     var q = List[Int]()
     for i in range(11):
         q.append(Int(py=p[i]))
@@ -697,7 +696,6 @@ def mcd_dev_py(
         raise Error("x_decomp: mcd needs n >= 1, d >= 2 and 1 <= h <= n")
     if n > 500 and (q[4] < 1 or q[4] * q[5] > n or q[8] > n or q[8] < 1 or q[10] < 1):
         raise Error("x_decomp: mcd subset plan out of range")
-    _ = Int(py=dev)
     var px = _f(x)
     var pl = _f(loc)
     var pc = _f(cov)
@@ -710,10 +708,9 @@ def mcd_dev_py(
 
 
 def lda_online_dev_py(
-    x: PythonObject, comps: PythonObject, exp_dir: PythonObject, p: PythonObject, f: PythonObject,
-    dev: PythonObject,
+    x: PythonObject, comps: PythonObject, exp_dir: PythonObject, p: PythonObject, f: PythonObject
 ) raises -> PythonObject:
-    """`lda_online_py` on the resident kit. `dev` is read and unused."""
+    """`lda_online_py` on the resident kit."""
     var n = _n(p, 0)
     var v = _n(p, 1)
     var nc = _n(p, 2)
@@ -727,7 +724,6 @@ def lda_online_dev_py(
     var fv = List[Float64]()
     for i in range(6):
         fv.append(Float64(py=f[i]))
-    _ = Int(py=dev)
     var px = _f(x)
     var pc = _f(comps)
     var pe = _f(exp_dir)
