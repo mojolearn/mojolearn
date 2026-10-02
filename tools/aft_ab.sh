@@ -17,6 +17,7 @@ set -u
 bind=$1; lane=$2; ds=$3; pairs=$4; defA=$5; defB=$6
 here=$(cd "$(dirname "$0")/.." && pwd); cd "$here"
 py=${AFT_PY:-python3}
+[ -z "${AFT_PY:-}" ] && [ -x "$HOME/board-0834/cache/venv/bin/python" ] && py=$HOME/board-0834/cache/venv/bin/python
 out=${AFT_OUT:-$HOME/aft-ab/$bind}
 so=python/mojolearn/_mojolearn_$bind.so
 mkdir -p "$out"
@@ -33,6 +34,10 @@ build() {  # $1 arm, $2 defines
     cp "$so" "$out/$1.so"
 }
 install() { cp "$out/$1.so" "$so.aft" && mv -f "$so.aft" "$so"; }
+if [ ! -f python/mojolearn/_mojolearn.so ]; then  # the FAST base binding (helpers every estimator imports)
+    MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SKIP_BUILD_GATE=1 bash bindings/build.sh > "$out/build_base.log" 2>&1
+    echo "AFT-BUILD base rc=$?"
+fi
 build A "$defA"
 build B "$defB"
 rows=""; [ -n "${AFT_ROWS:-}" ] && rows="--rows $AFT_ROWS"
@@ -44,7 +49,7 @@ for i in $(seq 1 "$pairs"); do
             "$py" -u bench/speed/forest_speed_arm.py --lane "$lane" --dataset "$ds" --ours-only $rows \
             > "$out/run_${arm}_$i.log" 2>&1
         echo "AFT-RUN arm=$arm pair=$i rc=$?"
-        grep -E '^FSPEED(-ACC|-REFUSED)? ' "$out/run_${arm}_$i.log" | sed "s/^/AFT arm=$arm pair=$i /"
+        grep -E '^FSPEED(-ACC|-REFUSED|-HEADER)? ' "$out/run_${arm}_$i.log" | sed "s/^/AFT arm=$arm pair=$i /"
         grep -m 3 -iE 'Traceback|Error' "$out/run_${arm}_$i.log"
     done
 done
