@@ -12,8 +12,6 @@ These classes are not re-exported from `mojolearn/__init__.py` by this file;
 whoever owns that file decides the public namespace.
 """
 
-import os
-
 from . import _mojolearn_solver, _serialize
 from ._array import Array
 from ._mode import ParamsMixin
@@ -351,19 +349,15 @@ class ElasticNet(ParamsMixin):
         # lane/gap-nv-classical2: a float32 C-order design crosses AS IT IS
         # and the device transposes it (`cd_fit_host`'s row_major arm), so
         # no host transpose sits inside the fit. Every other input takes the
-        # one F-order copy as before. MOJOLEARN_CD_HOST_TRANSPOSE=1 restores
-        # the host transpose for every input.
-        row_major = False
-        if os.environ.get("MOJOLEARN_CD_HOST_TRANSPOSE", "0") != "1":
-            a, a_copied = _materialize(X, "X")
-            if (a.ndim == 2 and a.dtype == "<f4" and a.size
-                    and a.order == "C" and not a._both_orders()):
-                work_x, row_major, copied = a, True, a_copied
-            else:
-                work_x, copied = self._as_fortran(a, "X")
-                copied = copied or a_copied
+        # one F-order copy as before.
+        a, a_copied = _materialize(X, "X")
+        row_major = bool(a.ndim == 2 and a.dtype == "<f4" and a.size
+                         and a.order == "C" and not a._both_orders())
+        if row_major:
+            work_x, copied = a, a_copied
         else:
-            work_x, copied = self._as_fortran(X, "X")
+            work_x, copied = self._as_fortran(a, "X")
+            copied = copied or a_copied
         self.input_copied_ = copied
         self.fortran_copied_ = copied
         n_rows, n_cols = work_x.shape
