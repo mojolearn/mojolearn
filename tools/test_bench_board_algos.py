@@ -85,12 +85,16 @@ def test_every_opponent_has_a_pin_or_is_in_an_existing_set():
 def test_plan_has_every_lane_with_our_arms(vendor):
     races = bb.plan_races(vendor, bb.modes_for(vendor), ["algos"], cpu_arm=True)
     assert {r["lane"] for r in races} == set(A.LANE_ORDER)
-    want = {"ours": "identical", "ours-cpu": "identical"}
+    want = {"ours": "identical"}          # the board never races our CPU (Oct 2 2026)
     if vendor == "apple":
         want["ours-fast"] = "fast"
     for r in races:
         assert r["our_arms"] == want, r["id"]
         assert sorted(r["arms"][:len(want)]) == sorted(want)
+        # a race with any GPU opponent races only GPU opponents
+        opp = r["opponents"]
+        if any("-cpu" not in a for a in opp):
+            assert not any(bb._is_cpu_arm(a) for a in opp), r["id"]
     # --datasets narrows taxi/Istella; a lane's own data always runs
     only = bb.plan_races(vendor, bb.modes_for(vendor), ["algos"], datasets=["taxi"])
     assert not any(r["dataset"] == "istella" for r in only)
