@@ -1,16 +1,7 @@
-CMD lane/apple-fast-resample resample-boot-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh resample-boot-ident bootstrap taxi 3 3 -
-CMD lane/apple-fast-resample resample-boot-rank-taxi AFC_FAMILY=algos bash tools/afc_ab.sh resample-boot-rank-taxi bootstrap taxi 3 3 - MOJOLEARN_RESAMPLE_FAST_RANK_SORT=1
-CMD lane/apple-fast-resample resample-boot-rank-istella AFC_FAMILY=algos bash tools/afc_ab.sh resample-boot-rank-istella bootstrap istella 3 3 - MOJOLEARN_RESAMPLE_FAST_RANK_SORT=1
-CMD lane/apple-fast-resample resample-boot-onefold-taxi AFC_FAMILY=algos bash tools/afc_ab.sh resample-boot-onefold-taxi bootstrap taxi 3 3 - MOJOLEARN_RESAMPLE_FAST_ONE_FOLD=1
-CMD lane/apple-fast-resample resample-boot-both-taxi AFC_FAMILY=algos bash tools/afc_ab.sh resample-boot-both-taxi bootstrap taxi 3 3 - "MOJOLEARN_RESAMPLE_FAST_RANK_SORT=1 MOJOLEARN_RESAMPLE_FAST_ONE_FOLD=1"
-CMD lane/apple-fast-resample resample-perm-select-taxi AFC_FAMILY=algos bash tools/afc_ab.sh resample-perm-select-taxi permutation-test taxi 3 3 - MOJOLEARN_RESAMPLE_FAST_PERM_SELECT=1
-CMD lane/apple-fast-resample resample-perm-select-istella AFC_FAMILY=algos bash tools/afc_ab.sh resample-perm-select-istella permutation-test istella 3 3 - MOJOLEARN_RESAMPLE_FAST_PERM_SELECT=1
-CMD lane/apple-fast-resample resample-rs-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh resample-rs-ident resample taxi 3 3 -
-CMD lane/apple-fast-resample resample-rs-idxbulk-taxi AFC_FAMILY=algos bash tools/afc_ab.sh resample-rs-idxbulk-taxi resample taxi 3 3 - MOJOLEARN_RESAMPLE_FAST_IDX_BULK=1
-CMD lane/apple-fast-resample resample-rs-gather-taxi AFC_FAMILY=algos bash tools/afc_ab.sh resample-rs-gather-taxi resample taxi 3 3 - MOJOLEARN_RESAMPLE_FAST_GATHER=1
-CMD lane/apple-fast-resample resample-rs-gather-istella AFC_FAMILY=algos bash tools/afc_ab.sh resample-rs-gather-istella resample istella 3 3 - MOJOLEARN_RESAMPLE_FAST_GATHER=1
-CMD lane/apple-fast-resample resample-cv-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh resample-cv-ident cross-val-score istella 3 3 -
-CMD lane/apple-fast-resample resample-cv-slice-taxi AFC_FAMILY=algos bash tools/afc_ab.sh resample-cv-slice-taxi cross-val-score taxi 3 3 - MOJOLEARN_CV_FAST_SLICE=1
-CMD lane/apple-fast-resample resample-cv-slice-istella AFC_FAMILY=algos bash tools/afc_ab.sh resample-cv-slice-istella cross-val-score istella 3 3 - MOJOLEARN_CV_FAST_SLICE=1
-CMD lane/apple-fast-resample resample-cv-trust-taxi AFC_FAMILY=algos bash tools/afc_ab.sh resample-cv-trust-taxi cross-val-score taxi 3 3 - MOJOLEARN_CV_FAST_TRUST_FOLDS=1
-CMD lane/apple-fast-resample resample-cv-both-istella AFC_FAMILY=algos bash tools/afc_ab.sh resample-cv-both-istella cross-val-score istella 3 3 - "MOJOLEARN_CV_FAST_SLICE=1 MOJOLEARN_CV_FAST_TRUST_FOLDS=1"
+CMD lane/apple-fast-resample resample-boot-rank-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh resample-boot-rank-taxi resample bootstrap taxi 1 2 "" "-D MOJOLEARN_RESAMPLE_FAST_RANK_SORT"
+CMD lane/apple-fast-resample resample-boot-onefold-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh resample-boot-onefold-taxi resample bootstrap taxi 1 2 "" "-D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD"
+CMD lane/apple-fast-resample resample-perm-select-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh resample-perm-select-taxi resample permutation-test taxi 1 2 "" "-D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT"
+CMD lane/apple-fast-resample resample-rs-idxbulk-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh resample-rs-idxbulk-taxi resample resample taxi 1 2 "" "-D MOJOLEARN_RESAMPLE_FAST_IDX_BULK"
+CMD lane/apple-fast-resample resample-rs-gather-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh resample-rs-gather-taxi resample resample taxi 1 2 "" "-D MOJOLEARN_RESAMPLE_FAST_GATHER"
+CMD lane/apple-fast-resample resample-cv-slice-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh resample-cv-slice-taxi resample cross-val-score taxi 1 2 "" "-D MOJOLEARN_CV_FAST_SLICE"
+CMD lane/apple-fast-resample resample-cv-trust-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh resample-cv-trust-taxi resample cross-val-score taxi 1 2 "" "-D MOJOLEARN_CV_FAST_TRUST_FOLDS"
