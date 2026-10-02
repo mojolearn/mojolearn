@@ -12,12 +12,11 @@ process memory or speed claim follows without main-lane measurements.
 from max.gpu.host import DeviceContext
 from std.math import isfinite
 from neighbors.estimator import knn_search
-from umap.graph import canonicalize_self_neighbors
 from umap.sparse_graph import (
     SparseFuzzySimplicialGraph,
     categorical_intersection,
     general_intersection,
-    sparse_fuzzy_simplicial_graph,
+    sparse_fuzzy_simplicial_graph_device,
 )
 from umap.sparse_optimizer import optimize_sparse_layout, validate_sparse_weights
 from umap.params import UMAPParams, UMAP_MAX_COMPONENTS
@@ -61,19 +60,23 @@ def sparse_fuzzy_graph_from_data(
             n_features, params.n_neighbors, hd.unsafe_ptr(), hi.unsafe_ptr(),
             metric=params.metric, metric_arg=params.metric_arg,
         )
-    var distances = List[Float32]()
-    var indices = List[UInt32]()
-    for i in range(n_samples * params.n_neighbors):
-        distances.append(hd.unsafe_ptr().unsafe_load(i))
-        indices.append(hi.unsafe_ptr().unsafe_load(i))
+    # The k-NN's rows go up once; the self-first adapter and the whole graph
+    # build run on the device (`sparse_fuzzy_simplicial_graph_device`).
+    var nk = n_samples * params.n_neighbors
+    var d_dist = ctx.enqueue_create_buffer[DType.float32](nk)
+    var d_idx = ctx.enqueue_create_buffer[DType.uint32](nk)
+    ctx.enqueue_copy(dst_buf=d_dist, src_ptr=hd.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_idx, src_ptr=hi.unsafe_ptr())
+    var graph = sparse_fuzzy_simplicial_graph_device(
+        ctx, d_idx, d_dist, n_samples, params.n_neighbors,
+        params.set_op_mix_ratio, params.local_connectivity, canonicalize=True,
+    )
     _ = hx^
     _ = hd^
     _ = hi^
-    canonicalize_self_neighbors(indices, distances, n_samples, params.n_neighbors)
-    return sparse_fuzzy_simplicial_graph(
-        indices^, distances^, n_samples, params.n_neighbors,
-        params.set_op_mix_ratio, params.local_connectivity,
-    )
+    _ = d_dist^
+    _ = d_idx^
+    return graph^
 
 
 

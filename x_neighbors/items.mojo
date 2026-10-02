@@ -349,15 +349,16 @@ def ocsvm_obj(gmax: Float32, gjv: Float32, qdi: Float32, qjj: Float32, qij: Floa
 
 
 @always_inline
-def ocsvm_update(q: FP, cv: FP, alpha: FP, g: FP, n: Int, i: Int, j: Int) -> Tuple[Float32, Float32]:
-    """The two-variable step on (i, j): stores alpha_i, alpha_j and returns
-    their changes (dai, daj)."""
-    var old_ai = alpha.unsafe_load(i)
-    var old_aj = alpha.unsafe_load(j)
+def ocsvm_pair(
+    q: FP, cv: FP, n: Int, i: Int, j: Int, old_ai: Float32, old_aj: Float32, g_i: Float32, g_j: Float32,
+) -> Tuple[Float32, Float32]:
+    """The two-variable step on (i, j) from alpha_i, alpha_j and gradients
+    g_i, g_j: the new (alpha_i, alpha_j). Pure, so every GPU block of the
+    step launch computes it from the values the selection carried."""
     var quad = _sub(_add(q.unsafe_load(i * n + i), q.unsafe_load(j * n + j)), ftz(identical_mul(Float32(2), q.unsafe_load(i * n + j))))
     if quad <= Float32(0):
         quad = SMO_TAU
-    var delta = ftz(identical_div(_sub(g.unsafe_load(i), g.unsafe_load(j)), quad))
+    var delta = ftz(identical_div(_sub(g_i, g_j), quad))
     var ci = cv.unsafe_load(i)
     var cj = cv.unsafe_load(j)
     var total = _add(old_ai, old_aj)
@@ -379,9 +380,19 @@ def ocsvm_update(q: FP, cv: FP, alpha: FP, g: FP, n: Int, i: Int, j: Int) -> Tup
         if ai < Float32(0):
             ai = Float32(0)
             aj = total
-    alpha.unsafe_store(i, ai)
-    alpha.unsafe_store(j, aj)
-    return (_sub(ai, old_ai), _sub(aj, old_aj))
+    return (ai, aj)
+
+
+@always_inline
+def ocsvm_update(q: FP, cv: FP, alpha: FP, g: FP, n: Int, i: Int, j: Int) -> Tuple[Float32, Float32]:
+    """The two-variable step on (i, j): stores alpha_i, alpha_j and returns
+    their changes (dai, daj)."""
+    var old_ai = alpha.unsafe_load(i)
+    var old_aj = alpha.unsafe_load(j)
+    var a = ocsvm_pair(q, cv, n, i, j, old_ai, old_aj, g.unsafe_load(i), g.unsafe_load(j))
+    alpha.unsafe_store(i, a[0])
+    alpha.unsafe_store(j, a[1])
+    return (_sub(a[0], old_ai), _sub(a[1], old_aj))
 
 
 @always_inline
@@ -394,15 +405,18 @@ def ocsvm_g_step(q: FP, g: FP, n: Int, i: Int, j: Int, dai: Float32, daj: Float3
 
 
 @always_inline
-def ocsvm_rho(g: FP, alpha: FP, cv: FP, n: Int) -> Float32:
-    """libsvm's calculate_rho, y = +1 throughout; samples ascending."""
+def ocsvm_rho_part(g: FP, alpha: FP, cv: FP, n: Int, b: Int) -> Tuple[Float32, Float32, Float32, Int]:
+    """calculate_rho over block b (samples [b * XN_FOLD_BLOCK, ...), ascending):
+    (the free gradients summed from zero, lb, ub, the free count)."""
     var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
     var pos_inf = bitcast[DType.float32](UInt32(0x7F800000))
     var ub = pos_inf
     var lb = neg_inf
     var nr_free = 0
     var sum_free = Float32(0)
-    for i in range(n):
+    var lo = b * XN_FOLD_BLOCK
+    var hi = min(lo + XN_FOLD_BLOCK, n)
+    for i in range(lo, hi):
         var yg = g.unsafe_load(i)
         var a = alpha.unsafe_load(i)
         if a >= cv.unsafe_load(i):
@@ -414,9 +428,67 @@ def ocsvm_rho(g: FP, alpha: FP, cv: FP, n: Int) -> Float32:
         else:
             nr_free += 1
             sum_free = _add(sum_free, yg)
+    return (sum_free, lb, ub, nr_free)
+
+
+@always_inline
+def ocsvm_rho_from(sum_free: Float32, lb: Float32, ub: Float32, nr_free: Int) -> Float32:
     if nr_free > 0:
         return ftz(identical_div(sum_free, Float32(nr_free)))
     return ftz(identical_mul(_add(ub, lb), Float32(0.5)))
+
+
+@always_inline
+def ocsvm_rho(g: FP, alpha: FP, cv: FP, n: Int) -> Float32:
+    """libsvm's calculate_rho, y = +1 throughout, as a blocked fold: block
+    partials (ocsvm_rho_part), then the partials ascending (the free sum
+    from zero; lb / ub by the scan's strict `>` / `<`, which a fold of the
+    block results in order reproduces exactly). The GPU runs the same
+    partials as items (ocsvm_rho_part_item, ocsvm_rho_fin_item)."""
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var pos_inf = bitcast[DType.float32](UInt32(0x7F800000))
+    var ub = pos_inf
+    var lb = neg_inf
+    var nr_free = 0
+    var sum_free = Float32(0)
+    for b in range(xn_fold_blocks(n)):
+        var p = ocsvm_rho_part(g, alpha, cv, n, b)
+        sum_free = _add(sum_free, p[0])
+        if p[1] > lb:
+            lb = p[1]
+        if p[2] < ub:
+            ub = p[2]
+        nr_free += p[3]
+    return ocsvm_rho_from(sum_free, lb, ub, nr_free)
+
+
+def ocsvm_rho_part_item(t: Int, g: FP, alpha: FP, cv: FP, pf: FP, pc: IP, n: Int):
+    """Block t's calculate_rho partial: pf[3t..3t+2] = (sum, lb, ub), pc[t] = count."""
+    var p = ocsvm_rho_part(g, alpha, cv, n, t)
+    pf.unsafe_store(3 * t, p[0])
+    pf.unsafe_store(3 * t + 1, p[1])
+    pf.unsafe_store(3 * t + 2, p[2])
+    pc.unsafe_store(t, Int32(p[3]))
+
+
+def ocsvm_rho_fin_item(t: Int, pf: FP, pc: IP, info: FP, n: Int):
+    """ONE item: ocsvm_rho's fold of the block partials, ascending."""
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var pos_inf = bitcast[DType.float32](UInt32(0x7F800000))
+    var ub = pos_inf
+    var lb = neg_inf
+    var nr_free = 0
+    var sum_free = Float32(0)
+    for b in range(xn_fold_blocks(n)):
+        sum_free = _add(sum_free, pf.unsafe_load(3 * b))
+        var plb = pf.unsafe_load(3 * b + 1)
+        var pub = pf.unsafe_load(3 * b + 2)
+        if plb > lb:
+            lb = plb
+        if pub < ub:
+            ub = pub
+        nr_free += Int(pc.unsafe_load(b))
+    info.unsafe_store(0, ocsvm_rho_from(sum_free, lb, ub, nr_free))
 
 
 def ocsvm_smo_item(t: Int, q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP, n: Int, eps: Float32, max_iter: Int):
@@ -430,8 +502,8 @@ def ocsvm_smo_item(t: Int, q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP,
     the pinned spellings where libsvm computes in double (DEVIATION 5200).
     Ties in the working-set scans resolve as libsvm's `>=` / `<=` dres: the
     LAST index of equal gradient wins. info[0] = rho. The GPU column runs the
-    same helpers with the scans spread over a threadgroup
-    (`x_neighbors/block_ops.mojo::ocsvm_smo_block`)."""
+    same helpers with every scan and update over the grid
+    (`x_neighbors/ocsvm_dev.mojo`)."""
     var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
     var pos_inf = bitcast[DType.float32](UInt32(0x7F800000))
     for i in range(n):

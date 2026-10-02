@@ -33,7 +33,8 @@ from std.math import fma
 from std.memory import bitcast
 from checks.numerics import ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
 from core.philox import philox4x32_10
-from gemm.host.identical_gemm import gemm_oracle, gemm_oracle_serial, OP_TN
+from gemm.contract import OP_TN
+from gemm.host.identical_gemm import gemm_oracle, gemm_oracle_serial
 
 
 def _nan() -> Float32:

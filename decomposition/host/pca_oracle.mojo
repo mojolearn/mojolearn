@@ -144,6 +144,7 @@ brief records what it has shown.
 from std.math import fma
 from std.math import sqrt
 from std.sys.compile import is_defined
+from decomposition.tsvd_finish import tsvd_finish_host
 
 from core.host_parallel import host_parallelize
 
@@ -699,17 +700,15 @@ def tsvd_explained_finish(
     explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
     ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
 ):
-    """`tsvd_explained_host`'s tail, host code both columns run
-    (lane/algos-decomp, 2026-09-27): the total variance is the column
-    variances of X summed in ascending order in Float64 and rounded once to
-    Float32; each ratio is one Float32 division (0 when the total is 0)."""
-    var full64 = Float64(0.0)
-    for v in var_x:
-        full64 += Float64(v)
-    var full = Float32(full64)
-    for i in range(len(var_t)):
-        explained_ptr.unsafe_store(i, var_t[i])
-        ratio_ptr.unsafe_store(i, ftz(var_t[i] / full) if full > Float32(0.0) else Float32(0.0))
+    """`tsvd_explained_host`'s tail on the host column: decomposition/
+    tsvd_finish.mojo's statements, the device kernel's (cpu-gpu-cleanup
+    c-decomp: the total in float-float slots and a fixed tree, not Float64)."""
+    tsvd_finish_host(
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(var_t.unsafe_ptr())), len(var_t),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(var_x.unsafe_ptr())), len(var_x),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(explained_ptr)),
+        MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(ratio_ptr)),
+    )
 
 
 def host_column_variance(m: List[Float32], n_rows: Int, n_cols: Int) -> List[Float32]:

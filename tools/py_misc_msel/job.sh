@@ -54,7 +54,7 @@ PY
 echo "== 3. equality script"
 env PYTHONPATH=python $PY tools/py_misc_msel/check.py equal > "$OUT/equal_gpu.log" 2>&1; echo "gpu exit $?"; tail -3 "$OUT/equal_gpu.log"
 env PYTHONPATH=python MOJOLEARN_VENDOR=cpu MOJOLEARN_HOST_DIR=$PWD/$HOST $PY tools/py_misc_msel/check.py equal > "$OUT/equal_cpu.log" 2>&1; echo "cpu exit $?"; tail -3 "$OUT/equal_cpu.log"
-echo "== 4. timing 1M rows"
+echo "== 4. timing 1M rows (GPU only)"
 env PYTHONPATH=python $PY tools/py_misc_msel/check.py time > "$OUT/time_gpu.log" 2>&1; echo "gpu exit $?"; cat "$OUT/time_gpu.log" | tail -20
-env PYTHONPATH=python MOJOLEARN_VENDOR=cpu MOJOLEARN_HOST_DIR=$PWD/$HOST $PY tools/py_misc_msel/check.py time > "$OUT/time_cpu.log" 2>&1; echo "cpu exit $?"; tail -20 "$OUT/time_cpu.log"
+# no CPU timing: our CPU is never timed (Andrew, Oct 2 2026); the CPU column is checked by digest above
 echo "JOB END $(date -u +%FT%TZ)"

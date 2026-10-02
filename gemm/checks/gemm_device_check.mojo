@@ -89,17 +89,16 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_floats,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import (
+from gemm.contract import (
     CONTRACT_MAX_LEAVES,
     OP_NN,
     OP_NT,
     OP_TN,
     contract_leaf_count,
     contract_leaf_size,
-    fold_balanced_tree,
-    gemm_oracle,
     op_name,
 )
+from gemm.checks.gemm_oracle import fold_balanced_tree, gemm_oracle
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, numeric_mode_name
 
 comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

@@ -90,12 +90,9 @@ from gemm.checks.gemm_lowbit_check import (
     _upload_i32,
     _upload_i8,
 )
-from gemm.host.gemm_lowbit_oracle import (
-    INT8_MAX_K,
-    gemm_int8_oracle,
-    quantize_rows_int8,
-)
-from gemm.host.gemm_oracle import OP_NT
+from gemm.contract import INT8_MAX_K
+from gemm.host.gemm_lowbit_oracle import gemm_int8_oracle, quantize_rows_int8
+from gemm.contract import OP_NT
 
 comptime PLANT_ALL_POSITIVE = 0
 comptime PLANT_ALL_NEGATIVE = 1

@@ -8,7 +8,7 @@ speed change can show its bits did not move.
 
     MOJOLEARN_NUMERIC_MODE=identical pixi run python tools/sequence_speed.py \
         --data ~/data/higgs_speed.npz --out /root/speed/before.json [--algos lstm,gru]
-    MOJOLEARN_VENDOR=cpu ...                  # the CPU column (host bindings)
+    MOJOLEARN_VENDOR=cpu ...                  # the CPU column: digests only, never timed
     python tools/sequence_speed.py --compare before.json after.json
 
 Data: HIGGS (gbm-bench/higgs/higgs_speed.npz from R2, docs/REMOTE_DATA_R2.md),
@@ -18,7 +18,11 @@ consecutive rows); the forecasters read its columns as series (1M values as
 
 Shapes are the lane's working sizes at 1M rows; each record carries them,
 the seconds, and the output digest. `--compare` prints before -> after and
-refuses when a digest moved (IDENTICAL: the bits must not change)."""
+refuses when a digest moved (IDENTICAL: the bits must not change).
+
+OUR CPU IS NEVER TIMED (Andrew, Oct 2 2026): on the host column (MOJOLEARN_VENDOR=cpu
+or a CPU-only install) every *_s field is dropped and SEQ_PROFILE is refused; the
+digests stay."""
 import argparse
 import hashlib
 import json
@@ -270,7 +274,12 @@ def compare(a, b):
         if k not in Bd:
             continue
         ra, rb = A[k], Bd[k]
-        if "error" in ra or "error" in rb:
+        if "error" in ra or "error" in rb or "fit_s" not in ra or "fit_s" not in rb:
+            if "error" not in ra and "error" not in rb:
+                same = ra["digest"] == rb["digest"]
+                moved += [] if same else [k]
+                print(f"{k:12s} {'-':>10s} {'-':>10s} {'-':>7s}  {'same' if same else 'MOVED'}")
+                continue
             print(f"{k:12s} error: {ra.get('error', '')[:40]} | {rb.get('error', '')[:40]}")
             continue
         same = ra["digest"] == rb["digest"]
@@ -297,6 +306,13 @@ def main():
     if args.compare:
         return compare(*args.compare)
     import mojolearn as ml
+    host = os.environ.get("MOJOLEARN_VENDOR", "").strip().lower() == "cpu" or ml.vendor() == "cpu"
+    if host:
+        if os.environ.get("SEQ_PROFILE"):
+            raise SystemExit("sequence_speed: SEQ_PROFILE refused on the host column: our CPU is never "
+                             "timed (Andrew, Oct 2 2026)")
+        print("sequence_speed: host column: digests only, no *_s fields (our CPU is never timed, "
+              "Andrew, Oct 2 2026)", flush=True)
     X, y = load(args.data, args.rows)
     recs = []
     out = Path(os.path.expanduser(args.out)) if args.out else None
@@ -314,7 +330,8 @@ def main():
                 s = io.StringIO()
                 pstats.Stats(pr, stream=s).sort_stats("tottime").print_stats(18)
                 print("\n".join("PROF " + name + " " + l for l in s.getvalue().splitlines() if l.strip()), flush=True)
-            rec.update(run_case(ml, X, y, name, True))
+            r = run_case(ml, X, y, name, True)
+            rec.update({k: v for k, v in r.items() if not (host and k.endswith("_s"))})
         except Exception as e:                       # recorded, never hidden
             rec["error"] = f"{type(e).__name__}: {e}"
         print(json.dumps(rec), flush=True)

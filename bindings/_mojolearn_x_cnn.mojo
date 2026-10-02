@@ -28,6 +28,7 @@ from x_cnn.ops import relu_fwd_at, relu_bwd_at, add_at, mul_at, bias_rows_at
 from x_cnn.device import graph_op_device as graph_op_impl
 from x_cnn.device import adaptive_pool_device as adaptive_pool_impl
 from x_cnn.device import gcn_norm_device as gcn_norm_impl
+from x_cnn.device import csr_build_device as csr_build_impl
 
 
 def _fp(addr: PythonObject) raises -> FP:
@@ -930,6 +931,25 @@ def csr_upload_binding(csr_addr: PythonObject, params: PythonObject) raises -> P
     return PythonObject(h)
 
 
+def csr_build_binding(rows_addr: PythonObject, cols_addr: PythonObject, csr_addr: PythonObject, order_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """The CSR view of an edge list, on the device (x_cnn/device.mojo
+    csr_build_device): `rows`, `cols` int32 [nnz] in [0, n); `csr` int32
+    [n + 1 + 2 * nnz] gets [rowptr | col | row] in ascending (row, col) order,
+    ties in edge order; `order` int32 [nnz] the edge ids in that order.
+    params = [n, nnz]. Returns n + 1 + 2 * nnz."""
+    var n = Int(py=params[0])
+    var nnz = Int(py=params[1])
+    if n <= 0 or nnz < 0:
+        raise Error("x_cnn csr_build: positive n and nnz >= 0 required")
+    var pc = _ip(csr_addr)
+    var rows = _ip(rows_addr) if nnz > 0 else pc
+    var cols = _ip(cols_addr) if nnz > 0 else pc
+    var order = _ip(order_addr) if nnz > 0 else pc
+    with GILReleased(Python()):
+        csr_build_impl(rows, cols, nnz, n, pc, order)
+    return PythonObject(n + 1 + 2 * nnz)
+
+
 def spmm_m_binding(addrs: PythonObject, dev: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs = [vals, h, csr, out]; params = [n, F, nnz, mode]. A resident
     csr (bit 2) is a `x_cnn_csr_upload` handle, checked when it was made; a
@@ -1153,6 +1173,7 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[batchnorm_backward_m_binding]("x_cnn_batchnorm_backward_m")
         m.def_function[dropout2d_m_binding]("x_cnn_dropout2d_m")
         m.def_function[csr_upload_binding]("x_cnn_csr_upload")
+        m.def_function[csr_build_binding]("x_cnn_csr_build")
         m.def_function[spmm_m_binding]("x_cnn_spmm_m")
         return m.finalize()
     except e:

@@ -94,8 +94,8 @@ from checks.kernel_matrix import (
     lib_int8_matrix_unit_for,
 )
 from checks.numerics import dequant_int8_pinned
-from gemm.host.gemm_lowbit_oracle import INT8_MAX_K
-from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
+from gemm.contract import INT8_MAX_K
+from gemm.contract import gemm_oracle_sabotage_value_flip
 
 #: DEVIATION 2908, the value arm, read from the same define the flat kernel
 #: reads (`gemm_lowbit.mojo::LOWBIT_SABOTAGE`); re-derived here rather than

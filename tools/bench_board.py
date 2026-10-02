@@ -85,6 +85,7 @@ numbers only (CONTRIBUTING.md, "never say we are faster"). A ratio column is
 `ours median / that arm's median`: below 1.0 our median time is the lower one.
 """
 import argparse
+import copy
 import datetime
 import hashlib
 import importlib.util
@@ -105,8 +106,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 
 SCHEMA = "mojolearn-bench-board/1"
-#: Fields added to schema /1 without breaking a resume: the `ours-cpu` arm and
-#: per cell `peak_host_mb`, `peak_gpu_mb`, `memory` and `ratio_ours_cpu_over`.
+#: Fields added to schema /1 without breaking a resume: per cell `peak_host_mb`,
+#: `peak_gpu_mb` and `memory`. An old record's `ours-cpu` cells and
+#: `ratio_ours_cpu_over` are dropped on load (strip_our_cpu).
 SEED = 7                 # the drivers' own seed (lane_config seed=7); one seed only
 DEFAULT_ROUNDS = 1
 TREE_ROW_FLOOR = 1_000_000
@@ -361,26 +363,12 @@ DEFAULT_TORCH_SPEC = {"apple": "torch==2.13.0", "nvidia": "torch==2.13.0+cu129",
                       "amd": AMD_TORCH_ROCM}
 #: an EXTRA index for the default torch spec (PyPI stays the main index)
 DEFAULT_TORCH_EXTRA_INDEX = {"nvidia": "https://download.pytorch.org/whl/cu129"}
-#: OUR CPU ARM. The wheel's public CPU switch is MOJOLEARN_VENDOR=cpu before
-#: import (python/mojolearn/_backend.py): no GPU set loads and the host
-#: bindings under mojolearn/host/ answer, IDENTICAL only. `ours-cpu` is our
-#: IDENTICAL estimator in a worker started under that switch
-#: (tools/bench_board_probe.py), raced beside the CPU opponents already on the
-#: board, and its output is compared bit for bit with our GPU IDENTICAL arm.
-#: Every estimator on the board routes to a shipped host family
-#: (python/mojolearn/host_surface.py routed_modules); a configuration the host
-#: side does not restate (the GBDT options in host_surface.NO_CPU_PATH)
-#: refuses by name in its cell. `--no-cpu-arm` leaves it off.
+#: OUR CPU IS NEVER RACED (Andrew, Oct 2 2026, hard rule). `ours-cpu` is the
+#: name old records used for our IDENTICAL estimator under MOJOLEARN_VENDOR=cpu;
+#: nothing plans, runs, times, ratios or renders it now, and strip_our_cpu drops
+#: it (and any other cell of ours on the CPU) from a record on load and render.
+#: The host column gives same-bits digests only (lq ID, tools/aft_idcheck.sh).
 CPU_ARM = "ours-cpu"
-CPU_SWITCH = "MOJOLEARN_VENDOR=cpu before import (the wheel's public CPU switch), IDENTICAL"
-
-
-def cpu_arm_reason(family, lane):
-    """None when `ours-cpu` is planned for this lane, else why not."""
-    if family == "neural" and NEURAL.DEVICE_OF.get(lane) == "cpu":
-        return ("its `ours` arm already IS the CPU path (the public *Inference class runs on "
-                "the host binding)")
-    return None
 
 
 #: The neural family's one extra pin: einops, which mamba/corpus/gen_corpus.py's
@@ -450,7 +438,7 @@ HARNESS = _load_tool("bench_board_harness")
 STORE = _load_tool("bench_board_store")
 WATCHDOG = _load_tool("bench_board_watchdog")
 
-#: Per-arm memory and the ours-cpu readback (standard library only at import).
+#: Per-arm memory and the our-CPU refusal (standard library only at import).
 PROBE = _load_tool("bench_board_probe")
 
 
@@ -509,16 +497,9 @@ def race_id(family, lane, dataset, rows, shape=None):
     return "%s/%s/%s/rows=%s" % (family, lane, dataset, rows_tag(rows))
 
 
-def our_arms(family, modes, lane=None, cpu_arm=False):
-    """driver arm name -> numeric mode, for our arms in one race. `cpu_arm`
-    adds `ours-cpu` (IDENTICAL, the only tier the host bindings build) where
-    identical is planned and the lane has a CPU arm (cpu_arm_reason)."""
-    # Andrew, Oct 2 2026: the board races only OUR GPU. `ours-cpu` is never
-    # planned; `cpu_arm` is kept only so old callers still work.
-    return _our_gpu_arms(family, modes, lane)
-
-
-def _our_gpu_arms(family, modes, lane=None):
+def our_arms(family, modes, lane=None):
+    """driver arm name -> numeric mode, for our arms in one race. Our GPU
+    only: the board never races our CPU (Andrew, Oct 2 2026)."""
     if family == "neural":
         return {"ours": "identical"}          # identical only, every vendor
     if family == "classical2" and lane and not MORE.has_fast(lane):
@@ -551,7 +532,7 @@ def gpu_opponents_first(opp):
 def _ours_runs_on_cpu(family, lane, arm):
     """True when a planned `ours*` arm would time our CPU: the ours-cpu arm, or a
     neural lane whose public class is the host binding."""
-    if arm == CPU_ARM:
+    if arm == CPU_ARM or PROBE.is_our_cpu_arm(arm):
         return True
     return arm_library(arm) == "mojolearn" and family == "neural" and \
         NEURAL.DEVICE_OF.get(lane) == "cpu"
@@ -577,7 +558,7 @@ def enforce_gpu_only(races):
 
 
 def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, rows=None,
-               neural_shape="full", cpu_arm=False):
+               neural_shape="full"):
     check_neural_modes(families, modes)
     races = []
     for fam in families:
@@ -588,7 +569,7 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                 if NEURAL.DEVICE_OF.get(lane) == "cpu":
                     continue                  # ours would run on the CPU: never raced
                 # one race per lane: its own data, not taxi/Istella; IDENTICAL only
-                ours = our_arms(fam, modes, lane, cpu_arm)
+                ours = our_arms(fam, modes, lane)
                 opp = gpu_opponents_first(NEURAL_OPPONENTS[vendor][lane])
                 ds = NEURAL_DATA[lane]
                 races.append({
@@ -599,7 +580,7 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                 })
                 continue
             if fam == "algos":
-                ours = our_arms(fam, modes, lane, cpu_arm)
+                ours = our_arms(fam, modes, lane)
                 if not ours:
                     continue
                 opp = gpu_opponents_first(ALGOS.opponents(vendor, lane))
@@ -615,7 +596,7 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                     })
                 continue
             if fam == "classical2":
-                ours = our_arms(fam, modes, lane, cpu_arm)
+                ours = our_arms(fam, modes, lane)
                 if not ours:
                     continue
                 opp = gpu_opponents_first(MORE.OPPONENTS[vendor][lane])
@@ -634,7 +615,7 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
             for ds in (tree_task_datasets(lane, datasets) if fam == "trees" else datasets):
                 opp = gpu_opponents_first(
                     (TREE_OPPONENTS if fam == "trees" else CLASSICAL_OPPONENTS)[vendor][lane])
-                ours = our_arms(fam, modes, lane, cpu_arm)
+                ours = our_arms(fam, modes, lane)
                 races.append({
                     "id": race_id(fam, lane, ds, rows),
                     "family": fam, "lane": lane, "dataset": ds, "rows": rows,
@@ -652,7 +633,6 @@ def plan_summary(races):
         f["races"] += 1
         f["cells"] += len(r["arms"])
     return {"races": len(races), "cells": sum(len(r["arms"]) for r in races),
-            "cpu_cells": sum(1 for r in races if CPU_ARM in r["arms"]),
             "by_family": by_fam}
 
 
@@ -1274,7 +1254,7 @@ def _refuse_cell(cell, reason):
                          "max_ms": cell.get("max_ms"), "times_ms": cell.get("times_ms"),
                          "quality": cell.get("quality")}
     for k in ("median_ms", "min_ms", "max_ms", "warmup_ms", "quality", "peak_gpu_mb", "peak_host_mb",
-              "ratio_ours_identical_over", "ratio_ours_fast_over", "ratio_ours_cpu_over"):
+              "ratio_ours_identical_over", "ratio_ours_fast_over"):
         if k in cell:
             cell[k] = None
     cell["times_ms"] = []
@@ -1340,7 +1320,7 @@ def load_result(path):
     if not os.path.exists(path):
         return None
     with open(path) as fh:
-        return json.load(fh)
+        return strip_our_cpu(json.load(fh))
 
 
 def save_result(path, result):
@@ -1424,8 +1404,6 @@ def tree_cmd(ctx, race):
         cmd += ["--ours-only"]
     if "ours-ab" in ours:
         cmd += ["--ours-ab", "numeric_mode='%s'" % ours["ours-ab"]]
-    if CPU_ARM in ours:
-        cmd += ["--ours-cpu"]
     cmd += ["--mem"]
     if ctx.get("infer"):
         cmd += INFER.driver_args(race)
@@ -1496,14 +1474,8 @@ def tree_cells(ctx, race, parsed):
             cell["installed_wheel"] = _from_wheel(b.get("path"), ctx)
             if b and (b.get("compiled") != mode or b.get("resolved") != mode):
                 cell["status"] = "MODE-MISMATCH(requested %s, compiled %s)" % (mode, b.get("compiled"))
-            if arm == CPU_ARM:
-                cell["vendor_witness"] = b.get("vendor")
-                cell["cpu_switch"] = CPU_SWITCH
-                if b and b.get("vendor") != "cpu":
-                    cell["status"] = "VENDOR-MISMATCH(ours-cpu read back %s)" % b.get("vendor")
         cells.append(cell)
-    add_cpu_bits(cells)
-    return cells
+    return strip_our_cpu_cells(cells)
 
 
 def memory_fields(samples):
@@ -1516,22 +1488,46 @@ def memory_fields(samples):
     return {"peak_host_mb": m["peak_host_mb"], "peak_gpu_mb": m["peak_gpu_mb"], "memory": m}
 
 
-def add_cpu_bits(cells):
-    """`bits_equal_vs_ours_identical` on the ours-cpu cell: the driver's
-    array comparison when it made one (classical, classical2, neural), else
-    the round hash of the same output against ours' (trees: the prediction
-    vector's hash, FSPEED)."""
-    cpu = next((c for c in cells if c["arm"] == CPU_ARM), None)
-    ours = next((c for c in cells if c["arm"] == "ours"), None)
-    if cpu is None:
-        return cells
-    q = cpu.setdefault("quality", {})
-    if "bits_equal_vs_ours_identical" in q:
-        cpu["bits_basis"] = "the saved outputs, array by array"
-    elif ours is not None and cpu.get("hash") and ours.get("hash"):
-        q["bits_equal_vs_ours_identical"] = cpu["hash"] == ours["hash"]
-        cpu["bits_basis"] = "the last timed round's output hash"
-    return cells
+def is_our_cpu_cell(c):
+    """A cell of ours that ran on the CPU: the old `ours-cpu` arm, any arm of
+    ours on the host (bench_board_probe.is_our_cpu_arm), or a mojolearn cell
+    whose device is the CPU (an old neural *-infer / host train lane)."""
+    if c.get("library") != "mojolearn" and not str(c.get("arm", "")).startswith("ours"):
+        return False
+    return c.get("arm") == CPU_ARM or PROBE.is_our_cpu_arm(c.get("arm")) \
+        or c.get("device") == "cpu"
+
+
+def strip_our_cpu_cells(cells):
+    """Our CPU is never on a board (Andrew, Oct 2 2026): drop every cell of ours
+    on the CPU and every our-CPU ratio, whatever an old record holds."""
+    out = []
+    for c in cells or []:
+        if is_our_cpu_cell(c):
+            continue
+        c.pop("ratio_ours_cpu_over", None)
+        out.append(c)
+    return out
+
+
+def strip_our_cpu(result):
+    """strip_our_cpu_cells over a whole board record, in place. A race whose
+    every cell of ours ran on the CPU (and has none on the GPU) is dropped."""
+    races = (result or {}).get("races") or {}
+    for rid in list(races):
+        rr = races[rid]
+        if rr.get("infer_cells"):
+            rr["infer_cells"] = strip_our_cpu_cells(rr["infer_cells"])
+        cells = rr.get("cells")
+        if not cells:
+            continue
+        had_ours = any(c.get("library") == "mojolearn" for c in cells)
+        kept = strip_our_cpu_cells(cells)
+        if had_ours and not any(c.get("library") == "mojolearn" for c in kept):
+            del races[rid]
+            continue
+        rr["cells"] = kept
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1809,14 +1805,8 @@ def classical_cells(ctx, race, r):
             if info and info.get("numeric_mode_used") not in (None, mode):
                 cell["status"] = "MODE-MISMATCH(requested %s, read back %s)" % (
                     mode, info.get("numeric_mode_used"))
-            if arm == CPU_ARM:
-                cell["vendor_witness"] = info.get("vendor_used")
-                cell["cpu_switch"] = CPU_SWITCH
-                if info and info.get("vendor_used") not in (None, "cpu"):
-                    cell["status"] = "VENDOR-MISMATCH(ours-cpu read back %s)" % info.get("vendor_used")
         cells.append(cell)
-    add_cpu_bits(cells)
-    return cells
+    return strip_our_cpu_cells(cells)
 
 
 # ---------------------------------------------------------------------------
@@ -1897,41 +1887,34 @@ def race_settings(ctx, race):
 
 
 def ours_of(cells, which):
-    """Our cell of one kind: 'identical' (the GPU IDENTICAL arm), 'fast', or
-    'cpu' (ours-cpu). By arm name, so ours-cpu (also IDENTICAL) never stands
-    in for the GPU IDENTICAL arm."""
+    """Our GPU cell of one kind: 'identical' or 'fast'. A cell of ours on the
+    CPU is never picked (Andrew, Oct 2 2026)."""
+    if which not in ("identical", "fast"):
+        raise ValueError("ours_of: %r: our CPU is never on a board" % (which,))
     for c in cells:
-        if c["library"] != "mojolearn":
+        if c["library"] != "mojolearn" or is_our_cpu_cell(c):
             continue
-        if which == "cpu" and c["arm"] == CPU_ARM:
-            return c
-        if which == "fast" and c["arm"] != CPU_ARM and c["mode"] == "fast":
-            return c
-        if which == "identical" and c["arm"] != CPU_ARM and c["mode"] == "identical":
+        if c["mode"] == which:
             return c
     return None
 
 
 def add_ratios(cells):
-    """ratio_ours_identical_over / ratio_ours_fast_over / ratio_ours_cpu_over:
-    our median divided by this OPPONENT arm median, computed only when both
-    sides completed every round."""
+    """ratio_ours_identical_over / ratio_ours_fast_over: our GPU median divided
+    by this OPPONENT arm median, computed only when both sides completed every
+    round. Our CPU is never in a ratio (Andrew, Oct 2 2026)."""
     ok = [c for c in cells if c["status"] == "ok" and c["median_ms"]]
     ours_id = ours_of(ok, "identical")
     ours_fast = ours_of(ok, "fast")
-    ours_cpu = ours_of(ok, "cpu")
     done = {id(c) for c in ok}
     for c in cells:
         c["ratio_ours_identical_over"] = None
         c["ratio_ours_fast_over"] = None
-        c["ratio_ours_cpu_over"] = None
+        c.pop("ratio_ours_cpu_over", None)
         # Opponents only. FAST over IDENTICAL is the cost of identity, an
-        # internal number that never reaches a board (ENGINEERING_RULES 0b-iii);
-        # our CPU tier over our GPU tier is not a board number either.
+        # internal number that never reaches a board (ENGINEERING_RULES 0b-iii).
         if id(c) not in done or c["library"] == "mojolearn":
             continue
-        if ours_cpu:
-            c["ratio_ours_cpu_over"] = ours_cpu["median_ms"] / c["median_ms"]
         if ours_id and c is not ours_id:
             c["ratio_ours_identical_over"] = ours_id["median_ms"] / c["median_ms"]
         if ours_fast and c is not ours_fast:
@@ -2527,8 +2510,6 @@ def _q(q):
 
 
 def _arm_label(c):
-    if c["arm"] == CPU_ARM:
-        return "mojolearn CPU %s" % (c["mode"] or "?").upper()
     if c["library"] == "mojolearn":
         return "mojolearn %s" % (c["mode"] or "?").upper()
     return c["arm"]
@@ -2561,6 +2542,7 @@ QUALITY_NOTE = {
 
 
 def render_board(result):
+    result = strip_our_cpu(copy.deepcopy(result))
     box = result.get("box") or {}
     cfg = result.get("config") or {}
     gpu = box.get("gpu") or {}
@@ -2638,9 +2620,9 @@ def render_board(result):
              "parameters and reads the same inputs, so losses and outputs are comparable; "
              "`max_abs_diff_vs_ours` / `max_rel_diff_vs_ours` are the arm's output against ours.")
     L.append("- `installed_wheel` confirms our binding loaded from site-packages, not the repo tree.")
-    L.append("- Our CPU is never raced: the board races only our GPU, against GPU opponents; a "
-             "race keeps CPU opponents only when it has no GPU opponent (Andrew, Oct 2 2026). "
-             "The `ours CPU` columns are filled only on races recorded before that rule.")
+    L.append("- Our CPU is never raced or reported: the board races only our GPU, against GPU "
+             "opponents; a race keeps CPU opponents only when it has no GPU opponent (Andrew, "
+             "Oct 2 2026). A cell of ours on the CPU in an old record is dropped before rendering.")
     L.append("- Memory: `peak host MB` and `peak GPU MB` are the highest per-round peaks over the "
              "timed rounds, read outside the clock; each arm's method is listed under its table "
              "(host: the resettable peak RSS on Linux, the peak physical footprint on macOS, which "
@@ -2677,11 +2659,10 @@ def render_board(result):
     # Quality at a glance
     L.append("## Quality at a glance")
     L.append("")
-    L.append("Per lane and dataset: our FAST value, our IDENTICAL value, our CPU IDENTICAL value, "
-             "and each opponent's.")
+    L.append("Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.")
     L.append("")
-    L.append("| family | lane | dataset | metric | ours FAST | ours IDENTICAL | ours CPU | opponents |")
-    L.append("|---|---|---|---|---|---|---|---|")
+    L.append("| family | lane | dataset | metric | ours FAST | ours IDENTICAL | opponents |")
+    L.append("|---|---|---|---|---|---|---|")
     for rid in sorted(races):
         rc = races[rid].get("cells") or []
         metrics = []
@@ -2692,16 +2673,14 @@ def render_board(result):
         for m in metrics:
             fast = ours_of(rc, "fast")
             ident = ours_of(rc, "identical")
-            cpu = ours_of(rc, "cpu")
             opps = [c for c in rc if c["library"] != "mojolearn"]
             q = lambda c: _f((c.get("quality") or {}).get(m), 6) if c else "-"   # noqa: E731
-            L.append("| %s | %s | %s | %s%s | %s | %s | %s | %s |" % (
+            L.append("| %s | %s | %s | %s%s | %s | %s | %s |" % (
                 races[rid]["family"], races[rid]["lane"], races[rid]["dataset"], m,
                 (" (%s)" % QUALITY_NOTE[m]) if m in QUALITY_NOTE else "",
-                q(fast), q(ident), q(cpu),
+                q(fast), q(ident),
                 "; ".join("%s %s" % (c["arm"], q(c)) for c in opps) or "-"))
     L.append("")
-    L.extend(render_cpu_glance(races))
     L.extend(INFER.render_glance(_bb(), races))
 
     for fam in FAMILIES:
@@ -2728,12 +2707,12 @@ def render_board(result):
                 " (pod %s)" % rh["pod_id"] if rh.get("pod_id") else ""))
             L.append("")
             L.append("| arm | library | device | mode | median ms | min..max ms | rounds | "
-                     "ours IDENTICAL / arm | ours FAST / arm | ours CPU / arm | peak host MB | "
+                     "ours IDENTICAL / arm | ours FAST / arm | peak host MB | "
                      "peak GPU MB | quality | hash stable | comparability | installed_wheel | "
                      "status |")
-            L.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+            L.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
             for c in rc:
-                L.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | "
+                L.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | "
                          "%s | %s | %s |" % (
                              _arm_label(c), c["library"], c["device"], c["mode"],
                              _f(c["median_ms"]),
@@ -2742,7 +2721,6 @@ def render_board(result):
                              c["rounds"],
                              _f(c.get("ratio_ours_identical_over"), 3),
                              _f(c.get("ratio_ours_fast_over"), 3),
-                             _f(c.get("ratio_ours_cpu_over"), 3),
                              _f(c.get("peak_host_mb")), _f(c.get("peak_gpu_mb")),
                              _q(c.get("quality")), _f(c.get("hash_stable")),
                              clean(c.get("verdict")), clean(c.get("installed_wheel", "-")),
@@ -2794,34 +2772,6 @@ def render_board(result):
     return "\n".join(L) + "\n"
 
 
-def render_cpu_glance(races):
-    """'Our CPU tier at a glance': per race, ours-cpu's median, whether its
-    output equals our GPU IDENTICAL output bit for bit, and each CPU
-    opponent's median with ours CPU / arm."""
-    rows = []
-    for rid in sorted(races):
-        rc = races[rid].get("cells") or []
-        cpu = ours_of(rc, "cpu")
-        if cpu is None:
-            continue
-        q = cpu.get("quality") or {}
-        opps = [c for c in rc if c["library"] != "mojolearn" and c.get("device") == "cpu"]
-        rows.append("| %s | %s | %s | %s | %s | %s | %s |" % (
-            races[rid]["family"], races[rid]["lane"], races[rid]["dataset"],
-            _f(cpu["median_ms"]), _f(q.get("bits_equal_vs_ours_identical")),
-            _f(cpu.get("peak_host_mb")),
-            "; ".join("%s %s ms (ours CPU / arm %s)" % (
-                c["arm"], _f(c["median_ms"]), _f(c.get("ratio_ours_cpu_over"), 3))
-                for c in opps) or "- (no CPU opponent on this lane here)"))
-    if not rows:
-        return []
-    return ["## Our CPU tier at a glance", "",
-            "Arm `ours-cpu`: " + CPU_SWITCH + ". `CPU = GPU IDENTICAL bits` compares its output "
-            "with our GPU IDENTICAL arm's in the same race. A REFUSED ours-cpu cell names why.", "",
-            "| family | lane | dataset | ours CPU ms | CPU = GPU IDENTICAL bits | peak host MB | "
-            "CPU opponents |", "|---|---|---|---|---|---|---|"] + rows + [""]
-
-
 def render_memory_methods(cells):
     """One line per distinct (host method, GPU method) pair, naming the arms."""
     groups = {}
@@ -2841,8 +2791,8 @@ def render_memory_methods(cells):
 def cpu_not_covered(cfg):
     """The board's 'Not covered' lines for the CPU arm and for memory."""
     out = []
-    if cfg.get("cpu_arm") is False:
-        out.append("Our CPU: never raced; the board races only our GPU (Andrew, Oct 2 2026).")
+    out.append("Our CPU: never raced or reported; the board races only our GPU (Andrew, Oct 2 "
+               "2026). The host column gives same-bits digests only (lq ID).")
     lanes = sorted(l for l in NEURAL_LANES if NEURAL.DEVICE_OF.get(l) == "cpu")
     if lanes:
         out.append("Neural, not planned: %s: ours runs the CPU binding, and our CPU is never "
@@ -3068,8 +3018,7 @@ def build_parser():
     p.add_argument("--no-infer", action="store_true",
                    help="time training only: skip the inference cells (trees, and the classical "
                         "kmeans/pca/ols/svc lanes) that are timed after each race's fit rounds")
-    p.add_argument("--no-cpu-arm", action="store_true",
-                   help="accepted for old scripts; the board never races our CPU")
+    p.add_argument("--no-cpu-arm", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--rerun", default=None,
                    help="comma list of race id prefixes (e.g. trees/rf/,trees/et/) to run again "
                         "although done; the old record is kept under `superseded`")
@@ -3241,7 +3190,7 @@ def print_plan(vendor, modes, races, args, rows, data):
     for fam, f in sorted(s["by_family"].items()):
         print("family %-10s races=%d cells=%d" % (fam, f["races"], f["cells"]))
     print("TOTAL races=%d cells=%d" % (s["races"], s["cells"]))
-    print("ours-cpu: off (the board races only our GPU)")
+    print("our CPU: never raced (the board races only our GPU)")
     print("memory: peak_host_mb and peak_gpu_mb per arm and cell (tools/bench_board_probe.py)")
     if not args.no_infer:
         inf = {}
@@ -3332,8 +3281,7 @@ def main(argv=None):
              if args.lanes else None)
     datasets = _csv(args.datasets, DATASETS, "dataset")
     rows = parse_rows(args.rows)
-    races = plan_races(vendor, modes, families, lanes, datasets, rows, args.neural_shape,
-                       cpu_arm=False)
+    races = plan_races(vendor, modes, families, lanes, datasets, rows, args.neural_shape)
     if args.shard:
         races = shard_races(races, args.shard)
     # taxi and Istella-S are read by trees and classical only; a neural-only
@@ -3451,7 +3399,6 @@ def main(argv=None):
     result["config"] = {"vendor": vendor, "modes": modes, "families": families,
                         "lanes": lanes, "datasets": datasets, "rows": rows,
                         "rounds": args.rounds, "seed": SEED, "infer": not args.no_infer,
-                        "cpu_arm": False,
                         "neural_shape": args.neural_shape if "neural" in families else None,
                         "smoke": (bool(rows) and rows < TREE_ROW_FLOOR
                                   and any(r["family"] != "neural" for r in races))
