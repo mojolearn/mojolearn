@@ -82,17 +82,22 @@ def bisect_fit[O: ClusterOps](
     var weighted = len(weights) > 0
     if k < 1 or k > n:
         raise Error("BisectingKMeans: n_samples=" + String(n) + " should be >= n_clusters=" + String(k))
-    # the column means: one ascending Float64 chain per column
+    # the column means: one ascending Float64 chain per column, the chains
+    # advanced row by row (lane/neural-pass108: one pass over the rows in
+    # memory order, not d strided passes; each chain's adds are unchanged)
+    var acc = List[Float64](length=d, fill=Float64(0))
+    for r in range(n):
+        var row = r * d
+        for f in range(d):
+            acc[f] = acc[f] + Float64(x[row + f])
     var mean = List[Float32](capacity=d)
     for f in range(d):
-        var acc = Float64(0)
-        for r in range(n):
-            acc = acc + Float64(x[r * d + f])
-        mean.append(Float32(acc / Float64(n)))
-    var xc = List[Float32](capacity=n * d)
+        mean.append(Float32(acc[f] / Float64(n)))
+    var xc = List[Float32](length=n * d, fill=Float32(0))
     for r in range(n):
+        var row = r * d
         for f in range(d):
-            xc.append(ftz(ftz(x[r * d + f]) - ftz(mean[f])))
+            xc[row + f] = ftz(ftz(x[row + f]) - ftz(mean[f]))
     var rng = SplitMix64(seed)
     var all_rows = List[Int](capacity=n)
     for r in range(n):
@@ -100,6 +105,7 @@ def bisect_fit[O: ClusterOps](
     var root_center = List[Float32](length=d, fill=Float32(0))
     _ = tree.add(root_center, Float64(0), all_rows^)
     var kinit = INIT_RANDOM if init == INIT_RANDOM else INIT_KMEANS_PLUS_PLUS
+    var xc_s = -1
     for _split in range(k - 1):
         var leaves = tree.leaves()
         var pick = leaves[0]
@@ -110,7 +116,6 @@ def bisect_fit[O: ClusterOps](
         var m = len(rows)
         if m < 2:
             raise Error("BisectingKMeans: a cluster of " + String(m) + " sample cannot be bisected")
-        var sub = gather_rows(xc, d, rows)
         var sub_w = List[Float32]()
         if weighted:
             for r in rows:
@@ -118,16 +123,39 @@ def bisect_fit[O: ClusterOps](
         var best_c = List[Float32]()
         var best_l = List[Int32]()
         var best_inertia = Float64(0)
-        for it in range(n_init):
-            var c = List[Float32]()
-            var l = List[Int32]()
-            var inertia = ops.kmeans(sub, m, d, 2, max_iter, tol, rng.next() >> 1, 1, kinit, c, l, sub_w)
-            if it == 0 or inertia < best_inertia * (1 - 1e-6):
-                best_inertia = inertia
-                best_c = c^
-                best_l = l^
+        var sub_s: Int
+        if weighted:
+            var sub = gather_rows(xc, d, rows)
+            for it in range(n_init):
+                var c = List[Float32]()
+                var l = List[Int32]()
+                var inertia = ops.kmeans(sub, m, d, 2, max_iter, tol, rng.next() >> 1, 1, kinit, c, l, sub_w)
+                if it == 0 or inertia < best_inertia * (1 - 1e-6):
+                    best_inertia = inertia
+                    best_c = c^
+                    best_l = l^
+            sub_s = ops.put(sub)
+        else:
+            # the cluster's rows gathered on the device from the one upload
+            # of the centered data (lane/neural-pass108: a host gather and two
+            # uploads per split were 6 s of a 13 s istella 1M x 220 fit)
+            if xc_s < 0:
+                xc_s = ops.put(xc)
+            var idx = List[Int32](capacity=m)
+            for r in rows:
+                idx.append(Int32(r))
+            var idx_s = ops.put_i(idx)
+            sub_s = ops.empty(m * d)
+            ops.gather_rows(xc_s, d, idx_s, m, sub_s)
+            for it in range(n_init):
+                var c = List[Float32]()
+                var l = List[Int32]()
+                var inertia = ops.kmeans_rows(sub_s, xc, rows, d, 2, max_iter, tol, rng.next() >> 1, 1, kinit, c, l)
+                if it == 0 or inertia < best_inertia * (1 - 1e-6):
+                    best_inertia = inertia
+                    best_c = c^
+                    best_l = l^
         # per-child scores and rows
-        var sub_s = ops.put(sub)
         var cs = ops.put(best_c)
         var ds = ops.zeros(m * 2)
         ops.sqdist(sub_s, m, cs, 2, d, ds)
@@ -151,6 +179,7 @@ def bisect_fit[O: ClusterOps](
             for f in range(d):
                 cen.append(ftz(ftz(best_c[j * d + f]) + ftz(mean[f])))
             ids.append(tree.add(cen, sc[j], child_rows[j].copy()))
+        ops.shrink(sub_s)
         tree.left[pick] = ids[0]
         tree.right[pick] = ids[1]
         tree.rows[pick] = List[Int]()
