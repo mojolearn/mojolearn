@@ -75,6 +75,14 @@ from gbdt.gpu_util.kernel.reorder_single_pass import (
 from gbdt.methods.greedy_subsets_searcher.kernel.split_points_ridx import (
     launch_reorder_index_only,
 )
+from gbdt.methods.greedy_subsets_searcher.kernel.split_chain_fused import (
+    FUSED_CHAIN_BLOCK,
+    FUSED_COPY_BLOCK,
+    fused_copy_back_kernel,
+    fused_flags_count_kernel,
+    fused_place_scatter_kernel,
+    fused_scan_update_kernel,
+)
 from checks.kernel_matrix import TARGET_COLUMN, ridx_only_splits_for
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
@@ -201,6 +209,113 @@ comptime RIDX_IDENTICAL_MAX_FEATURES = 64
 comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[
     TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 ]()
+
+#: FAST on Apple, opt-in (lane apple-fast-depthwise): the per-level split
+#: chain of the row-index-only schedule in four launches instead of eight
+#: (`kernel/split_chain_fused.mojo` has the mapping and why it is the same
+#: permutation, partitions and stats bit for bit). Taken only when the tree
+#: runs the row-index-only schedule (`use_ridx`); the stat-moving schedule
+#: keeps the old chain. `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN` is the B arm.
+comptime DW_FUSED_CHAIN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_DW_FUSED_CHAIN"]()
+)
+
+
+def _launch_fused_split_chain(
+    ctx: DeviceContext,
+    n_split: Int,
+    n_rows: Int,
+    sm_count: Int,
+    stat_count: Int,
+    hist_cells_per_leaf: Int,
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut temp_index: DeviceBuffer[DType.uint32],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut d_left: DeviceBuffer[DType.uint32],
+    mut d_right: DeviceBuffer[DType.uint32],
+    mut d_win_cells: DeviceBuffer[DType.uint32],
+    mut sp_feats: DeviceBuffer[DType.uint32],
+    mut sp_bins: DeviceBuffer[DType.uint32],
+    mut flags: DeviceBuffer[DType.uint8],
+    mut chunk_zeros: DeviceBuffer[DType.uint32],
+    mut chunk_offsets: DeviceBuffer[DType.uint32],
+    mut leaf_zeros: DeviceBuffer[DType.uint32],
+    mut slot_off: DeviceBuffer[DType.uint32],
+    mut slot_sz: DeviceBuffer[DType.uint32],
+    mut hist: DeviceBuffer[DType.float32],
+    mut part_stats: DeviceBuffer[DType.float32],
+) raises:
+    """DW_FUSED_CHAIN's four launches. Grids as the chain they replace: the
+    chunk grid is `launch_stable_partition`'s (`max_chunks` off `n_rows`,
+    the workspace's stride for `chunk_zeros`, capped at the machine-sized
+    `split_points_grid_x`), and the kernels stride the rest."""
+    if n_split <= 0:
+        return
+    var max_chunks = (n_rows + FUSED_CHAIN_BLOCK - 1) // FUSED_CHAIN_BLOCK
+    if max_chunks < 1:
+        max_chunks = 1
+    var grid_x = split_points_grid_x(n_split, sm_count)
+    var chunk_grid = max_chunks
+    if grid_x < chunk_grid:
+        chunk_grid = grid_x
+    ctx.enqueue_function[fused_flags_count_kernel](
+        cindex.unsafe_ptr(),
+        row_index.unsafe_ptr(),
+        p_off.unsafe_ptr(),
+        p_sz.unsafe_ptr(),
+        d_left.unsafe_ptr(),
+        sp_feats.unsafe_ptr().bitcast[CFeature](),
+        sp_bins.unsafe_ptr(),
+        flags.unsafe_ptr(),
+        chunk_zeros.unsafe_ptr(),
+        Int32(max_chunks),
+        grid_dim=(chunk_grid, n_split, 1),
+        block_dim=(FUSED_CHAIN_BLOCK, 1, 1),
+    )
+    ctx.enqueue_function[fused_scan_update_kernel](
+        d_left.unsafe_ptr(),
+        d_right.unsafe_ptr(),
+        p_off.unsafe_ptr(),
+        p_sz.unsafe_ptr(),
+        chunk_zeros.unsafe_ptr(),
+        chunk_offsets.unsafe_ptr(),
+        leaf_zeros.unsafe_ptr(),
+        slot_off.unsafe_ptr(),
+        slot_sz.unsafe_ptr(),
+        d_win_cells.unsafe_ptr(),
+        sp_feats.unsafe_ptr().bitcast[CFeature](),
+        Int32(hist_cells_per_leaf),
+        Int32(stat_count),
+        hist.unsafe_ptr(),
+        part_stats.unsafe_ptr(),
+        Int32(max_chunks),
+        grid_dim=(1, n_split, 1),
+        block_dim=(FUSED_CHAIN_BLOCK, 1, 1),
+    )
+    ctx.enqueue_function[fused_place_scatter_kernel](
+        slot_off.unsafe_ptr(),
+        slot_sz.unsafe_ptr(),
+        flags.unsafe_ptr(),
+        chunk_offsets.unsafe_ptr(),
+        leaf_zeros.unsafe_ptr(),
+        row_index.unsafe_ptr(),
+        temp_index.unsafe_ptr(),
+        Int32(max_chunks),
+        grid_dim=(chunk_grid, n_split, 1),
+        block_dim=(FUSED_CHAIN_BLOCK, 1, 1),
+    )
+    ctx.enqueue_function[fused_copy_back_kernel](
+        slot_off.unsafe_ptr(),
+        slot_sz.unsafe_ptr(),
+        temp_index.unsafe_ptr(),
+        row_index.unsafe_ptr(),
+        grid_dim=(grid_x, n_split, 1),
+        block_dim=(FUSED_COPY_BLOCK, 1, 1),
+    )
 # ========================================================================
 
 
@@ -2909,150 +3024,168 @@ def fit_non_symmetric_tree[
                 split_slots^,
             )
             stage_times.end(ctx, "split.host")
-            stage_times.begin(ctx)
-
-            # ============================ DEVIATION 1901 ============================
-            # Their split's own "Update part stats"
-            # (`split_properties_helper.cpp:918`), replaced by LightGBM's
-            # O(1)-per-split propagation (`cuda_data_partition.cu:798-903`)
-            # -- the full block is on the kernel. Enqueued FIRST in the
-            # chain: it reads the parent's `part_stats` row and the
-            # parent's scanned histogram, and nothing later in the chain
-            # touches either, so the position is a statement of intent, not
-            # an ordering need. FAST arm only; IDENTICAL's stats come from
-            # the sweep above, byte for byte as before.
-            # =======================================================================
-            comptime if not SPLIT_COST_IDENTICAL:
-                ctx.enqueue_function[update_partition_stats_from_split_kernel](
-                    d_left.unsafe_ptr(),
-                    d_right.unsafe_ptr(),
-                    d_win_cells.unsafe_ptr(),
-                    sp_feats.unsafe_ptr().bitcast[CFeature](),
-                    Int32(hist_cells_per_leaf),
-                    Int32(stat_count),
-                    hist.unsafe_ptr(),
-                    part_stats.unsafe_ptr(),
-                    grid_dim=(1, n_split, 1),
-                    block_dim=(32, 1, 1),
+            var fused_chain = False
+            comptime if DW_FUSED_CHAIN:
+                fused_chain = use_ridx
+            if fused_chain:
+                # DW_FUSED_CHAIN: the eight-launch chain below in four, same
+                # permutation, partitions and stats (`kernel/split_chain_fused.mojo`)
+                stage_times.begin(ctx)
+                _launch_fused_split_chain(
+                    ctx, n_split, n_rows, sm_count, stat_count,
+                    hist_cells_per_leaf, cindex, row_index, new_index, p_off, p_sz,
+                    d_left, d_right, d_win_cells, sp_feats, sp_bins, flags,
+                    chunk_zeros, chunk_offsets, leaf_zeros, hp_off, hp_sz, hist,
+                    part_stats,
                 )
-                mgr.stream_kernel()
-            stage_times.end(ctx, "split.chain.stats")
-            stage_times.begin(ctx)
-
-            # their `TSplitPointsKernel`, whose five steps are five calls
-            # here (`split_points.cpp:64-136`): flag and sequence, stable
-            # partition, segmented gather of the index and every stat
-            # column, copy the histogram to the new leaf, update the
-            # partitions. IDENTICAL CALLS TO THE SYMMETRIC LANE'S -- only
-            # the id arrays differ.
-            ctx.enqueue_function[split_and_make_sequence_kernel](
-                cindex.unsafe_ptr(),
-                row_index.unsafe_ptr(),
-                p_off.unsafe_ptr(),
-                p_sz.unsafe_ptr(),
-                d_left.unsafe_ptr(),
-                sp_feats.unsafe_ptr().bitcast[CFeature](),
-                sp_bins.unsafe_ptr(),
-                flags.unsafe_ptr(),
-                seq.unsafe_ptr(),
-                grid_dim=(
-                    split_points_grid_x(n_split, sm_count), n_split, 1
-                ),
-                block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
-            )
-            mgr.stream_kernel()
-            stage_times.end(ctx, "split.chain.flags")
-            stage_times.begin(ctx)
-
-            launch_stable_partition_routed[SPLIT_COST_IDENTICAL](
-                ctx, n_split, n_rows, d_left, p_off, p_sz, flags,
-                chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
-                sm_count=sm_count,
-            )
-            mgr.stream_kernel()
-            stage_times.end(ctx, "split.chain.partition")
-            stage_times.begin(ctx)
-
-            var reorder_launches = 0
-
-            if use_ridx:
-                # DEVIATION 1902: the stat planes are stationary; the
-                # split's gather_map permutes the 4 B/row index alone.
-                reorder_launches = launch_reorder_index_only(
-                    ctx, n_split, max_split_rows, d_left, p_off, p_sz,
-                    row_index, new_index, gmap, sm_count=sm_count,
-                )
+                for _ in range(4):
+                    mgr.stream_kernel()
+                stage_times.end(ctx, "split.chain.fused")
             else:
-                reorder_launches = launch_reorder_in_leaves(
-                    ctx, n_split, wide, max_split_rows, stat_count, n_rows,
-                    d_left, p_off, p_sz, stats, new_stats, row_index,
-                    new_index, gmap, sm_count=sm_count,
-                )
-            for _ in range(reorder_launches):
-                mgr.stream_kernel()
-            stage_times.end(ctx, "split.chain.reorder")
-            stage_times.begin(ctx)
+                stage_times.begin(ctx)
 
-            # their `CopyHistograms(leftLeaves, rightLeaves, ...)`
-            # (`split_points.cpp:139-140`) -- the MULTI-leaf call, which is
-            # the arm this lane mirrors. `CopyHistogram` singular at `:327`
-            # is the single-leaf kernel and belongs to the lossguide lane. The left child kept the parent's
-            # slot; this puts the same histogram in the right child's, so
-            # both are `PreviousPath` and next level can pair them.
-            # WIDTH DISPATCH, same story as the subtraction above.
-            #
-            # DEVIATION 1903: IDENTICAL arm only. On the FAST arm the copy
-            # happens at PLAN time, and only for the pairs whose derived
-            # sibling is the right child -- see the block above the zero
-            # pass. Same kernels, same bytes, fewer launches.
-            comptime if not DEFER_HIST_COPY_1903:
-                if (hist_cells_per_leaf * stat_count) % 4 == 0:
-                    ctx.enqueue_function[copy_histograms_vec4_kernel](
+                # ============================ DEVIATION 1901 ============================
+                # Their split's own "Update part stats"
+                # (`split_properties_helper.cpp:918`), replaced by LightGBM's
+                # O(1)-per-split propagation (`cuda_data_partition.cu:798-903`)
+                # -- the full block is on the kernel. Enqueued FIRST in the
+                # chain: it reads the parent's `part_stats` row and the
+                # parent's scanned histogram, and nothing later in the chain
+                # touches either, so the position is a statement of intent, not
+                # an ordering need. FAST arm only; IDENTICAL's stats come from
+                # the sweep above, byte for byte as before.
+                # =======================================================================
+                comptime if not SPLIT_COST_IDENTICAL:
+                    ctx.enqueue_function[update_partition_stats_from_split_kernel](
                         d_left.unsafe_ptr(),
                         d_right.unsafe_ptr(),
-                        Int32(stat_count),
+                        d_win_cells.unsafe_ptr(),
+                        sp_feats.unsafe_ptr().bitcast[CFeature](),
                         Int32(hist_cells_per_leaf),
+                        Int32(stat_count),
                         hist.unsafe_ptr(),
-                        grid_dim=(
-                            (hist_cells_per_leaf * stat_count // 4 + 255)
-                            // 256,
-                            n_split,
-                            1,
-                        ),
-                        block_dim=(256, 1, 1),
+                        part_stats.unsafe_ptr(),
+                        grid_dim=(1, n_split, 1),
+                        block_dim=(32, 1, 1),
+                    )
+                    mgr.stream_kernel()
+                stage_times.end(ctx, "split.chain.stats")
+                stage_times.begin(ctx)
+
+                # their `TSplitPointsKernel`, whose five steps are five calls
+                # here (`split_points.cpp:64-136`): flag and sequence, stable
+                # partition, segmented gather of the index and every stat
+                # column, copy the histogram to the new leaf, update the
+                # partitions. IDENTICAL CALLS TO THE SYMMETRIC LANE'S -- only
+                # the id arrays differ.
+                ctx.enqueue_function[split_and_make_sequence_kernel](
+                    cindex.unsafe_ptr(),
+                    row_index.unsafe_ptr(),
+                    p_off.unsafe_ptr(),
+                    p_sz.unsafe_ptr(),
+                    d_left.unsafe_ptr(),
+                    sp_feats.unsafe_ptr().bitcast[CFeature](),
+                    sp_bins.unsafe_ptr(),
+                    flags.unsafe_ptr(),
+                    seq.unsafe_ptr(),
+                    grid_dim=(
+                        split_points_grid_x(n_split, sm_count), n_split, 1
+                    ),
+                    block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
+                )
+                mgr.stream_kernel()
+                stage_times.end(ctx, "split.chain.flags")
+                stage_times.begin(ctx)
+
+                launch_stable_partition_routed[SPLIT_COST_IDENTICAL](
+                    ctx, n_split, n_rows, d_left, p_off, p_sz, flags,
+                    chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
+                    sm_count=sm_count,
+                )
+                mgr.stream_kernel()
+                stage_times.end(ctx, "split.chain.partition")
+                stage_times.begin(ctx)
+
+                var reorder_launches = 0
+
+                if use_ridx:
+                    # DEVIATION 1902: the stat planes are stationary; the
+                    # split's gather_map permutes the 4 B/row index alone.
+                    reorder_launches = launch_reorder_index_only(
+                        ctx, n_split, max_split_rows, d_left, p_off, p_sz,
+                        row_index, new_index, gmap, sm_count=sm_count,
                     )
                 else:
-                    ctx.enqueue_function[copy_histograms_kernel](
-                        d_left.unsafe_ptr(),
-                        d_right.unsafe_ptr(),
-                        Int32(stat_count),
-                        Int32(hist_cells_per_leaf),
-                        hist.unsafe_ptr(),
-                        grid_dim=(
-                            (hist_cells_per_leaf * stat_count + 255) // 256,
-                            n_split,
-                            1,
-                        ),
-                        block_dim=(256, 1, 1),
+                    reorder_launches = launch_reorder_in_leaves(
+                        ctx, n_split, wide, max_split_rows, stat_count, n_rows,
+                        d_left, p_off, p_sz, stats, new_stats, row_index,
+                        new_index, gmap, sm_count=sm_count,
                     )
-                mgr.stream_kernel()
+                for _ in range(reorder_launches):
+                    mgr.stream_kernel()
+                stage_times.end(ctx, "split.chain.reorder")
+                stage_times.begin(ctx)
 
-            ctx.enqueue_function[update_partitions_after_split_kernel](
-                d_left.unsafe_ptr(),
-                d_right.unsafe_ptr(),
-                Int32(n_split),
-                sflags.unsafe_ptr(),
-                p_off.unsafe_ptr(),
-                p_sz.unsafe_ptr(),
-                hp_off.unsafe_ptr(),
-                hp_sz.unsafe_ptr(),
-                grid_dim=(
-                    split_points_grid_x(n_split, sm_count), n_split, 1
-                ),
-                block_dim=(512, 1, 1),
-            )
-            mgr.stream_kernel()
-            stage_times.end(ctx, "split.chain")
+                # their `CopyHistograms(leftLeaves, rightLeaves, ...)`
+                # (`split_points.cpp:139-140`) -- the MULTI-leaf call, which is
+                # the arm this lane mirrors. `CopyHistogram` singular at `:327`
+                # is the single-leaf kernel and belongs to the lossguide lane. The left child kept the parent's
+                # slot; this puts the same histogram in the right child's, so
+                # both are `PreviousPath` and next level can pair them.
+                # WIDTH DISPATCH, same story as the subtraction above.
+                #
+                # DEVIATION 1903: IDENTICAL arm only. On the FAST arm the copy
+                # happens at PLAN time, and only for the pairs whose derived
+                # sibling is the right child -- see the block above the zero
+                # pass. Same kernels, same bytes, fewer launches.
+                comptime if not DEFER_HIST_COPY_1903:
+                    if (hist_cells_per_leaf * stat_count) % 4 == 0:
+                        ctx.enqueue_function[copy_histograms_vec4_kernel](
+                            d_left.unsafe_ptr(),
+                            d_right.unsafe_ptr(),
+                            Int32(stat_count),
+                            Int32(hist_cells_per_leaf),
+                            hist.unsafe_ptr(),
+                            grid_dim=(
+                                (hist_cells_per_leaf * stat_count // 4 + 255)
+                                // 256,
+                                n_split,
+                                1,
+                            ),
+                            block_dim=(256, 1, 1),
+                        )
+                    else:
+                        ctx.enqueue_function[copy_histograms_kernel](
+                            d_left.unsafe_ptr(),
+                            d_right.unsafe_ptr(),
+                            Int32(stat_count),
+                            Int32(hist_cells_per_leaf),
+                            hist.unsafe_ptr(),
+                            grid_dim=(
+                                (hist_cells_per_leaf * stat_count + 255) // 256,
+                                n_split,
+                                1,
+                            ),
+                            block_dim=(256, 1, 1),
+                        )
+                    mgr.stream_kernel()
+
+                ctx.enqueue_function[update_partitions_after_split_kernel](
+                    d_left.unsafe_ptr(),
+                    d_right.unsafe_ptr(),
+                    Int32(n_split),
+                    sflags.unsafe_ptr(),
+                    p_off.unsafe_ptr(),
+                    p_sz.unsafe_ptr(),
+                    hp_off.unsafe_ptr(),
+                    hp_sz.unsafe_ptr(),
+                    grid_dim=(
+                        split_points_grid_x(n_split, sm_count), n_split, 1
+                    ),
+                    block_dim=(512, 1, 1),
+                )
+                mgr.stream_kernel()
+                stage_times.end(ctx, "split.chain")
 
             # ===== HOST WAIT TWO OF TWO: `RebuildLeavesSizes`
             # (`split_properties_helper.cpp:800-812`). Theirs reads the
