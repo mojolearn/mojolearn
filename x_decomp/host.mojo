@@ -407,10 +407,10 @@ struct HostExec(Exec):
             _host_eigh_rr_one(m, w + b * n, v + b * n * n, n)
 
     @staticmethod
-    def lle_apply(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, out: F32Ptr, nq: Int, nf: Int, nn: Int, nc: Int) raises:
-        def row(i: Int) {imm wb, imm idx, imm emb, imm out, imm nn, imm nc}:
+    def lle_apply(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, dst: F32Ptr, nq: Int, nf: Int, nn: Int, nc: Int) raises:
+        def row(i: Int) {imm wb, imm idx, imm emb, imm dst, imm nn, imm nc}:
             for c in range(nc):
-                lle_apply_cell(wb, idx, emb, out, i, c, nn, nc)
+                lle_apply_cell(wb, idx, emb, dst, i, c, nn, nc)
 
         xd_parallel(row, nq)
 

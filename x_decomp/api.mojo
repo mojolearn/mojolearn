@@ -211,7 +211,7 @@ def eigh_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: Pytho
 
 
 def lle_apply_py[E: Exec](
-    wb: PythonObject, idx: PythonObject, emb: PythonObject, out: PythonObject, p: PythonObject
+    wb: PythonObject, idx: PythonObject, emb: PythonObject, dst: PythonObject, p: PythonObject
 ) raises -> PythonObject:
     """p = [nq, nf, nn, nc]: LLE transform's out (nq x nc) = W E[idx]."""
     var nq = _n(p, 0)
@@ -223,7 +223,7 @@ def lle_apply_py[E: Exec](
     var pw = _f(wb)
     var pi = _f(idx)
     var pe = _f(emb)
-    var po = _f(out)
+    var po = _f(dst)
     with GILReleased(Python()):
         E.lle_apply(pw, pi, pe, po, nq, nf, nn, nc)
     return PythonObject(nq)

@@ -64,7 +64,7 @@ trait Exec:
         ...
 
     @staticmethod
-    def lle_apply(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, out: F32Ptr, nq: Int, nf: Int, nn: Int, nc: Int) raises:
+    def lle_apply(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, dst: F32Ptr, nq: Int, nf: Int, nn: Int, nc: Int) raises:
         ...
 
     @staticmethod

@@ -2419,7 +2419,7 @@ struct DevExec(Exec):
         _ = ctx^
 
     @staticmethod
-    def lle_apply(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, out: F32Ptr, nq: Int, nf: Int, nn: Int, nc: Int) raises:
+    def lle_apply(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, dst: F32Ptr, nq: Int, nf: Int, nn: Int, nc: Int) raises:
         """LLE transform's out = W E[idx] (`lle_apply_cell`), one thread a cell."""
         var ctx = xd_ctx()
         var dwb = _up(ctx, wb, nq * nn)
@@ -2429,7 +2429,7 @@ struct DevExec(Exec):
         ctx.enqueue_function[lle_apply_kernel](
             _p(dwb), _p(di), _p(de), _p(dout), Int32(nq), Int32(nn), Int32(nc), grid_dim=_blocks(nq * nc), block_dim=TPB
         )
-        _down(ctx, dout, out, nq * nc)
+        _down(ctx, dout, dst, nq * nc)
         ctx.synchronize()
         _ = dwb^
         _ = di^

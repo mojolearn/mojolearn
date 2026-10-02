@@ -112,8 +112,8 @@ def mlle_rows_kernel(
         mlle_rows_cell(w, v, wreg, idx, bmat, scr, eta, i, Int(n), Int(nn), Int(nev), tol)
 
 
-def lle_apply_kernel(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, out: F32Ptr, nq: Int32, nn: Int32, nc: Int32):
+def lle_apply_kernel(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, dst: F32Ptr, nq: Int32, nn: Int32, nc: Int32):
     var t = _tid()
     if t < Int(nq) * Int(nc):
         var i = t // Int(nc)
-        lle_apply_cell(wb, idx, emb, out, i, t - i * Int(nc), Int(nn), Int(nc))
+        lle_apply_cell(wb, idx, emb, dst, i, t - i * Int(nc), Int(nn), Int(nc))
