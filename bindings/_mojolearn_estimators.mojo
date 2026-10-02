@@ -58,6 +58,7 @@ from glm.estimator import (
 )
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from glm.impl.center_device import col_sums_device, center_device, scale_rows_device
+from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -608,6 +609,61 @@ def ridge_fit_binding(
     return PythonObject(0)
 
 
+def ridge_fit_multi_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    ymean_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Lane apple-fast-meta (MOJOLEARN_MULTIOUT_RIDGE): ridge on every column
+    of Y (n_rows x n_targets, row-major) in one program; coef is n_targets x
+    n_features, ymean the n_targets column means. params: n_rows,
+    n_features, n_targets, alpha, center_y (1 subtracts the column means)."""
+    if len(params) != 5:
+        raise Error("ridge_fit_multi: params must contain n_rows, n_features, n_targets, alpha, center_y")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var wp = _f32_ptr(Int(py=coef_addr))
+    var mp = _f32_ptr(Int(py=ymean_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nt = Int(py=params[2])
+    var alpha = Float32(Float64(py=params[3]))
+    var center = Int(py=params[4]) != 0
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        ridge_fit_multi_host(ctx, xp, yp, wp, mp, nr, nf, nt, alpha, center)
+        ctx.synchronize()
+    return PythonObject(0)
+
+
+def ridge_predict_multi_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    icpt_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Lane apple-fast-meta (MOJOLEARN_MULTIOUT_RIDGE): out (n_rows x
+    n_targets, row-major) = X coef^T + icpt. params: n_rows, n_features,
+    n_targets."""
+    if len(params) != 3:
+        raise Error("ridge_predict_multi: params must contain n_rows, n_features, n_targets")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=coef_addr))
+    var ip = _f32_ptr(Int(py=icpt_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nt = Int(py=params[2])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        ridge_predict_multi_host(ctx, xp, cp, ip, op, nr, nf, nt)
+        ctx.synchronize()
+    return PythonObject(0)
+
+
 def qn_fit_binding(
     x_addr: PythonObject,
     y_addr: PythonObject,
@@ -938,6 +994,9 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[ridge_fit_binding]("ridge_fit")
+        comptime if MULTIOUT_RIDGE:
+            m.def_function[ridge_fit_multi_binding]("ridge_fit_multi")
+            m.def_function[ridge_predict_multi_binding]("ridge_predict_multi")
         m.def_function[qn_fit_binding]("qn_fit")
         m.def_function[qn_decision_function_binding]("qn_decision_function")
         m.def_function[qn_predict_binary_binding]("qn_predict_binary")
