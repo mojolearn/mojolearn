@@ -1,0 +1,11 @@
+CMD lane/apple-fast-seq seq-croston-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh seq-croston-ident croston taxi-hourly 3 3 -
+CMD lane/apple-fast-seq seq-croston-fast AFC_FAMILY=algos bash tools/afc_ab.sh seq-croston-fast croston taxi-hourly 3 3 -
+CMD lane/apple-fast-seq seq-croston-reg AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-croston-reg x_sequence croston taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_CROSTON_REG=1"
+CMD lane/apple-fast-seq seq-croston-reg-syn AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-croston-reg-syn x_sequence croston synthetic 3 3 "" "-D MOJOLEARN_SEQ_CROSTON_REG=1"
+CMD lane/apple-fast-seq seq-garch-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh seq-garch-ident garch taxi-hourly 3 3 -
+CMD lane/apple-fast-seq seq-garch-fast AFC_FAMILY=algos bash tools/afc_ab.sh seq-garch-fast garch taxi-hourly 3 3 -
+CMD lane/apple-fast-seq seq-garch-dev AFC_FAMILY=algos bash tools/afc_ab.sh seq-garch-dev garch taxi-hourly 3 3 MOJOLEARN_SEQ_GARCH_HOST_MAX=0
+CMD lane/apple-fast-seq seq-garch-reg MOJOLEARN_SEQ_GARCH_HOST_MAX=0 AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-garch-reg x_sequence garch taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_GARCH_REG=1"
+CMD lane/apple-fast-seq seq-garch-grid MOJOLEARN_SEQ_GARCH_HOST_MAX=0 AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-garch-grid x_sequence garch taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_GARCH_GRID=1"
+CMD lane/apple-fast-seq seq-garch-reggrid MOJOLEARN_SEQ_GARCH_HOST_MAX=0 AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-garch-reggrid x_sequence garch taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_GARCH_REG=1 -D MOJOLEARN_SEQ_GARCH_GRID=1"
+CMD lane/apple-fast-seq seq-garch-reggrid-syn MOJOLEARN_SEQ_GARCH_HOST_MAX=0 AFC_FAMILY=algos bash tools/afc_ab_def.sh seq-garch-reggrid-syn x_sequence garch synthetic 3 3 "" "-D MOJOLEARN_SEQ_GARCH_REG=1 -D MOJOLEARN_SEQ_GARCH_GRID=1"
