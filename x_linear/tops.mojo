@@ -7,7 +7,7 @@ ONE thread's loop over ascending rows, so every value carries the one-thread
 bits. Each returns with its outputs visible to the whole team; a scalar
 result is the lead's fold, broadcast.
 """
-from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, i2f, fsqrt, fabs, fsign, jacobi_eig
+from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, i2f, fsqrt, cholesky, fabs, fsign, jacobi_eig
 from std.sys.compile import is_defined
 from x_linear.team import Team
 from std.memory import stack_allocation
@@ -471,6 +471,37 @@ def t_fold_fa_blocked(t: Team, v: FP, n: Int, scratch: FP) -> Float32:
     if t.lead():
         acc = fold_parts(scratch, 0, nb)
     return acc
+
+
+def t_cholesky(t: Team, a: FP, aoff: Int, m: Int) -> Bool:
+    """`cholesky` (x_linear/ops.mojo) on the team (lane/neural-pass86,
+    2026-10-01). Column j ascending as there; every thread computes the
+    pivot from the same words (so the stop at a non-positive pivot is
+    uniform and leaves the block as the serial loop leaves it), and the
+    entries below the pivot, each its own chain over k ascending reading
+    only finished columns, are split across the team. Same statements per
+    entry, so the same words. A team of one runs `cholesky` itself."""
+    if t.nt <= 1:
+        return cholesky(a, aoff, m)
+    for j in range(m):
+        var s = ld(a, aoff + j * m + j)
+        for k in range(j):
+            var l = ld(a, aoff + j * m + k)
+            s = fs(s, fm(l, l))
+        if not (s > 0):
+            t.sync()
+            return False
+        var r = fsqrt(s)
+        t.sync()
+        if t.lead():
+            st(a, aoff + j * m + j, r)
+        for i in range(j + 1 + t.tid, m, t.nt):
+            var tv = ld(a, aoff + i * m + j)
+            for k in range(j):
+                tv = fs(tv, fm(ld(a, aoff + i * m + k), ld(a, aoff + j * m + k)))
+            st(a, aoff + i * m + j, fd(tv, r))
+        t.sync()
+    return True
 
 
 def t_jacobi_eig(t: Team, a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int):

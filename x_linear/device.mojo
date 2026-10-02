@@ -23,7 +23,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_BAYES, ALGO_ARD
 from x_linear.ops import ld, st, fd, i2f, fa, fm, fmad, flog, fill, copy, row_dot, mean_of
 from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
 from x_linear.glm import (
@@ -147,6 +147,12 @@ def _lars_grid_gram() -> Bool:
     """`MOJOLEARN_X_LINEAR_LARS_GRID_GRAM=0` keeps the Gram on the team
     (the A/B arm); default the grid kernel."""
     return String(getenv("MOJOLEARN_X_LINEAR_LARS_GRID_GRAM")) != "0"
+
+
+def _bayes_grid_gram() -> Bool:
+    """`MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM=0` keeps BayesianRidge's and
+    ARD's Gram on the team (the A/B arm); default the grid kernel."""
+    return String(getenv("MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM")) != "0"
 
 
 def _fit_on_host(
@@ -479,7 +485,14 @@ def fit_device(
     # LARS reads ip[4] on the device: 1 when the Gram is already in fw
     # (`xg_gram_kernel` below), 0 when the team computes it.
     var grid_gram = algo == ALGO_LARS and _lars_grid_gram() and d > 0
-    if algo == ALGO_LARS:
+    # lane/neural-pass87 (2026-10-01): BayesianRidge (unweighted) and ARD read
+    # the same layout (xm at 0, G at d, ip[1] fit_intercept) and the same
+    # centered Gram chains, which the team ran on ONE block (24,310 chains
+    # of every row at 220 features over 256 threads).
+    var bayes_like = (algo == ALGO_BAYES and len(ip) > 2 and ip[2] == 0) or algo == ALGO_ARD
+    if bayes_like and _bayes_grid_gram() and d > 0:
+        grid_gram = True
+    if algo == ALGO_LARS or bayes_like:
         while len(hip) < 5:
             hip.append(Int32(0))
         hip[4] = Int32(1 if grid_gram else 0)
