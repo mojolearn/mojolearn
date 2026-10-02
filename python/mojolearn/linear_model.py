@@ -17,6 +17,8 @@ arithmetic otherwise (DEVIATION 2450).
 """
 
 import array
+import os
+
 from . import _portable_math as math
 
 from . import _backend, _mojolearn_estimators, _serialize
@@ -599,6 +601,31 @@ class LinearRegression(NumericModeMixin):
             "mojolearn LinearRegression X and y lengths differ",
         )
         weights = _check_sample_weight(sample_weight, rows, "LinearRegression")
+        if self.fit_intercept and weights is None and self._fast_device_center():
+            # MOJOLEARN_OLS_FAST_DEVICE_CENTER=1 (lane/apple-fast-core,
+            # 2026-10-02, FAST tier only, default off): the two host passes
+            # below (`_column_means`, a sequential float64 chain over every
+            # value, and `_center`, a centered copy) plus the upload of the
+            # copy are replaced by one upload of the raw X and y and the
+            # centering on the device (`glm/estimator.mojo::
+            # ols_fit_centered_host`). The intercept is formed here as
+            # before from the means the device hands back.
+            self.coef_ = empty((cols,), "<f4")
+            means = empty((cols,), "<f4")
+            y_mean = self._bind("_mojolearn_estimators").ols_fit_centered(
+                addr_ro(x, name="X"), addr_ro(target, name="y"),
+                addr(self.coef_, name="coef_"), addr(means, name="means"),
+                [rows, cols],
+            )
+            self._x_mean = means
+            self._y_mean = float(y_mean)
+            dot = math.fsum(
+                float(a) * float(b)
+                for a, b in zip(self._x_mean.tolist(), self.coef_.tolist())
+            )
+            self.intercept_ = float(self._y_mean - dot)
+            self.n_features_in_ = cols
+            return self
         if self.fit_intercept:
             # float64 column means -> float32, then a float32 subtraction.
             # The means come from `column_mean_f64`, a sequential row-order
@@ -649,6 +676,19 @@ class LinearRegression(NumericModeMixin):
             self.intercept_ = 0.0
         self.n_features_in_ = cols
         return self
+
+    def _fast_device_center(self):
+        """Whether `fit` takes the device-centering entry: the env switch is
+        set, this estimator runs on the FAST tier, and the loaded binding
+        has the entry (the CPU host binding has not)."""
+        if os.environ.get("MOJOLEARN_OLS_FAST_DEVICE_CENTER") != "1":
+            return False
+        try:
+            if self.numeric_mode_used() != "fast":
+                return False
+        except Exception:  # noqa: BLE001
+            return False
+        return getattr(self._bind("_mojolearn_estimators"), "ols_fit_centered", None) is not None
 
     def predict(self, X):
         if not hasattr(self, "coef_"):

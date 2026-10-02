@@ -47,6 +47,7 @@ from decomposition.estimator import (
     tsvd_transform_host,
 )
 from glm.estimator import (
+    ols_fit_centered_host,
     ols_fit_host,
     ols_predict_host,
     qn_decision_function_host,
@@ -514,6 +515,34 @@ def ols_fit_binding(
     return PythonObject(0)
 
 
+def ols_fit_centered_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    means_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`ols_fit` on RAW X and y with the intercept's centering on the device
+    (MOJOLEARN_OLS_FAST_DEVICE_CENTER=1, lane/apple-fast-core, 2026-10-02;
+    `glm/estimator.mojo::ols_fit_centered_host`). params: n_rows,
+    n_features. `means_addr` receives the n_features float32 column means;
+    returns the mean of y. FAST + Apple only: refused by name elsewhere."""
+    if len(params) != 2:
+        raise Error("ols_fit_centered: params must contain n_rows, n_features")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var wp = _f32_ptr(Int(py=coef_addr))
+    var mp = _f32_ptr(Int(py=means_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var y_mean = Float64(0.0)
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        y_mean = ols_fit_centered_host(ctx, xp, yp, wp, mp, nr, nf)
+        ctx.synchronize()
+    return PythonObject(y_mean)
+
+
 def ols_predict_binding(
     x_addr: PythonObject,
     coef_addr: PythonObject,
@@ -884,6 +913,7 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[tsvd_explained_binding]("tsvd_explained")
         m.def_function[inverse_transform_binding]("inverse_transform")
         m.def_function[ols_fit_binding]("ols_fit")
+        m.def_function[ols_fit_centered_binding]("ols_fit_centered")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[ridge_fit_binding]("ridge_fit")
         m.def_function[qn_fit_binding]("qn_fit")

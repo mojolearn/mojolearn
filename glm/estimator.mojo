@@ -35,7 +35,9 @@ min-norm card, which a bypass to `lstsq_eig` cannot do.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.host_parallel import host_parallelize
 
 from core.gemm import gemv_n
@@ -574,3 +576,252 @@ def qn_softmax_host(
         _rows(0)
     else:
         host_parallelize(_rows, tasks)
+
+
+# ---------------------------------------------------------------------------
+# MOJOLEARN_OLS_FAST_DEVICE_CENTER=1 (lane/apple-fast-core, 2026-10-02): THE
+# INTERCEPT'S CENTERING ON THE DEVICE
+# ---------------------------------------------------------------------------
+# Cause: `python/mojolearn/linear_model.py::LinearRegression.fit` centers X
+# and y on the HOST before `ols_fit`: `column_mean_f64` (one sequential
+# float64 chain over every value, 4,000,000 x 11 on taxi) and
+# `center_columns_f32` (a second host pass writing a centered copy), then
+# the upload of the copy. Here the raw X and y go up once, the column sums
+# are a three-level chunked fold on the grid (512-row chunks, groups of
+# 64), the centering is one thread per element, and the solve is the same
+# `ols_fit_traced`. The means come back for the Python intercept
+# (`mean(y) - mu . coef`, the same `fsum`). FAST + Apple only: the means are
+# float32 folds, not the host's float64 chain, so the centered bits can
+# differ in the last place from the host path's.
+comptime OLS_FAST_CENTER_TPB = 256
+comptime OLS_FAST_CENTER_CHUNK = 512
+comptime OLS_FAST_CENTER_GROUP = 64
+
+
+def ols_colsum_chunk_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_cols_in: Int32,
+):
+    """Thread `(chunk b, column f)`: the serial sum of `x[r, f]` over the
+    chunk's rows into `dst[b * n_cols + f]`."""
+    var n_rows = Int(n_rows_in)
+    var n_cols = Int(n_cols_in)
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var b = gid // n_cols
+    var f = gid - b * n_cols
+    var r0 = b * OLS_FAST_CENTER_CHUNK
+    if r0 >= n_rows:
+        return
+    var r1 = r0 + OLS_FAST_CENTER_CHUNK
+    if r1 > n_rows:
+        r1 = n_rows
+    var acc = Float32(0.0)
+    for row in range(r0, r1):
+        acc = acc + x.unsafe_load(row * n_cols + f)
+    dst.unsafe_store(gid, acc)
+
+
+def ols_colsum_fold_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    n_src_in: Int32,
+    n_cols_in: Int32,
+    group_in: Int32,
+):
+    """Thread `(group g, column f)`: the serial sum of `group` consecutive
+    partial rows of `src` into `dst[g * n_cols + f]`."""
+    var n_src = Int(n_src_in)
+    var n_cols = Int(n_cols_in)
+    var group = Int(group_in)
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var g = gid // n_cols
+    var f = gid - g * n_cols
+    var s0 = g * group
+    if s0 >= n_src:
+        return
+    var s1 = s0 + group
+    if s1 > n_src:
+        s1 = n_src
+    var acc = Float32(0.0)
+    for i in range(s0, s1):
+        acc = acc + src.unsafe_load(i * n_cols + f)
+    dst.unsafe_store(gid, acc)
+
+
+def ols_sum_to_mean_kernel(
+    mu: MutPointer[Float32, MutAnyOrigin],
+    n_cols_in: Int32,
+    n_rows_f: Float32,
+):
+    var f = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if f < Int(n_cols_in):
+        mu.unsafe_store(f, mu.unsafe_load(f) / n_rows_f)
+
+
+def ols_center_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    mu: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    n_cols_in: Int32,
+):
+    """`x[i] -= mu[i % n_cols]`, one thread per element, in place."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var n_cols = Int(n_cols_in)
+        var f = i - (i // n_cols) * n_cols
+        x.unsafe_store(i, x.unsafe_load(i) - mu.unsafe_load(f))
+
+
+def _ols_fast_grid(n: Int) -> Int:
+    return (n + OLS_FAST_CENTER_TPB - 1) // OLS_FAST_CENTER_TPB
+
+
+def ols_fast_column_means(
+    ctx: DeviceContext,
+    mut mu: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+) raises:
+    """`mu[f] = mean of x[:, f]` for row-major `x`, on the grid: 512-row
+    chunk sums, two folds by 64, a last fold over what remains, the divide."""
+    var n_chunks = (n_rows + OLS_FAST_CENTER_CHUNK - 1) // OLS_FAST_CENTER_CHUNK
+    var n1 = (n_chunks + OLS_FAST_CENTER_GROUP - 1) // OLS_FAST_CENTER_GROUP
+    var n2 = (n1 + OLS_FAST_CENTER_GROUP - 1) // OLS_FAST_CENTER_GROUP
+    var p0 = ctx.enqueue_create_buffer[DType.float32](n_chunks * n_cols)
+    var p1 = ctx.enqueue_create_buffer[DType.float32](n1 * n_cols)
+    var p2 = ctx.enqueue_create_buffer[DType.float32](n2 * n_cols)
+    ctx.enqueue_function[ols_colsum_chunk_kernel](
+        p0.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(n_cols),
+        grid_dim=(_ols_fast_grid(n_chunks * n_cols), 1, 1),
+        block_dim=(OLS_FAST_CENTER_TPB, 1, 1),
+    )
+    ctx.enqueue_function[ols_colsum_fold_kernel](
+        p1.unsafe_ptr(),
+        p0.unsafe_ptr(),
+        Int32(n_chunks),
+        Int32(n_cols),
+        Int32(OLS_FAST_CENTER_GROUP),
+        grid_dim=(_ols_fast_grid(n1 * n_cols), 1, 1),
+        block_dim=(OLS_FAST_CENTER_TPB, 1, 1),
+    )
+    ctx.enqueue_function[ols_colsum_fold_kernel](
+        p2.unsafe_ptr(),
+        p1.unsafe_ptr(),
+        Int32(n1),
+        Int32(n_cols),
+        Int32(OLS_FAST_CENTER_GROUP),
+        grid_dim=(_ols_fast_grid(n2 * n_cols), 1, 1),
+        block_dim=(OLS_FAST_CENTER_TPB, 1, 1),
+    )
+    ctx.enqueue_function[ols_colsum_fold_kernel](
+        mu.unsafe_ptr(),
+        p2.unsafe_ptr(),
+        Int32(n2),
+        Int32(n_cols),
+        Int32(n2),
+        grid_dim=(_ols_fast_grid(n_cols), 1, 1),
+        block_dim=(OLS_FAST_CENTER_TPB, 1, 1),
+    )
+    ctx.enqueue_function[ols_sum_to_mean_kernel](
+        mu.unsafe_ptr(),
+        Int32(n_cols),
+        Float32(n_rows),
+        grid_dim=(_ols_fast_grid(n_cols), 1, 1),
+        block_dim=(OLS_FAST_CENTER_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    _ = p0^
+    _ = p1^
+    _ = p2^
+
+
+def ols_fit_centered_host(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    means_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+) raises -> Float64:
+    """`ols_fit_host` on RAW `x` and `y`: both centered on the device by
+    their column means, the solve as there, the `n_features` column means
+    written to `means_ptr` and the mean of `y` returned. FAST + Apple only;
+    refused by name elsewhere."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or not has_apple_gpu_accelerator():
+        raise Error("ols_fit_centered: FAST + Apple only (MOJOLEARN_OLS_FAST_DEVICE_CENTER)")
+    else:
+        if n_rows < 2 or n_features < 1:
+            raise Error(
+                "ols_fit_centered needs n_rows >= 2 and n_features >= 1, got "
+                + String(n_rows) + " x " + String(n_features)
+            )
+        var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+        var y = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        var w = ctx.enqueue_create_buffer[DType.float32](n_features)
+        var cov = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+        var q = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+        var qs = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+        var s = ctx.enqueue_create_buffer[DType.float32](n_features)
+        var ab = ctx.enqueue_create_buffer[DType.float32](n_features)
+        var inv = ctx.enqueue_create_buffer[DType.float32](n_features * n_features)
+        var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+        var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+        var mu = ctx.enqueue_create_buffer[DType.float32](n_features)
+        var muy = ctx.enqueue_create_buffer[DType.float32](1)
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
+        ctx.synchronize()
+        ols_fast_column_means(ctx, mu, x, n_rows, n_features)
+        ols_fast_column_means(ctx, muy, y, n_rows, 1)
+        var cells = n_rows * n_features
+        ctx.enqueue_function[ols_center_kernel](
+            x.unsafe_ptr(),
+            mu.unsafe_ptr(),
+            Int32(cells),
+            Int32(n_features),
+            grid_dim=(_ols_fast_grid(cells), 1, 1),
+            block_dim=(OLS_FAST_CENTER_TPB, 1, 1),
+        )
+        ctx.enqueue_function[ols_center_kernel](
+            y.unsafe_ptr(),
+            muy.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(1),
+            grid_dim=(_ols_fast_grid(n_rows), 1, 1),
+            block_dim=(OLS_FAST_CENTER_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        var trace = IdentityTrace()
+        if trace.enabled:
+            trace.header(
+                String("ols n=") + String(n_rows) + " d=" + String(n_features)
+                + " algo=" + String(OLS_ALGO_EIG) + " device_center=1"
+            )
+        ols_fit_traced(
+            ctx, x, y, w, cov, q, qs, s, ab, inv, xa, xa2,
+            n_rows, n_features, trace, OLS_ALGO_EIG,
+        )
+        var hw = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+        var hmu = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+        var hmuy = ctx.enqueue_create_host_buffer[DType.float32](1)
+        ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+        ctx.enqueue_copy(dst_ptr=hmu.unsafe_ptr(), src_buf=mu)
+        ctx.enqueue_copy(dst_ptr=hmuy.unsafe_ptr(), src_buf=muy)
+        ctx.synchronize()
+        for i in range(n_features):
+            coef_ptr.unsafe_store(i, hw.unsafe_ptr().unsafe_load(i))
+            means_ptr.unsafe_store(i, hmu.unsafe_ptr().unsafe_load(i))
+        var y_mean = Float64(hmuy.unsafe_ptr().unsafe_load(0))
+        _ = hw^
+        _ = hmu^
+        _ = hmuy^
+        _ = mu^
+        _ = muy^
+        return y_mean
