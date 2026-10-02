@@ -87,6 +87,8 @@ bootstrap arrives.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.gpu import block_dim, block_idx, thread_idx
+from std.os import getenv
 
 from core.identity_trace import IdentityTrace
 from gbdt.data.permutation import TRandom
@@ -134,6 +136,47 @@ from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_GREATER,
     TBinarySplit,
 )
+
+
+
+# ================= lane/neural-pass116 (2026-10-02) =================
+# THE FOLD-ORDER COMPRESSED INDEX. With more than one fold every level
+# gathered `docs[i] = docIndices[subsets.Indices[i]]` and the histogram and
+# split kernels read the column-major compressed index at those scattered
+# document ids: four uncoalesced words per document per level over the ~2n
+# concatenated documents (L40S, taxi 4.1M x 16, 20 Ordered trees:
+# `pw.hist` 797 ms of 2,098). Here each permutation's index is gathered
+# ONCE into the fold-concatenated order (column c, position p holds the
+# word of document docIndices[p]), the calcer and the split table take the
+# stride `doc_count`, and the levels read position `subsets.Indices[i]`
+# directly: the same word for every (position, feature), in the same order,
+# so the same histograms and splits. `MOJOLEARN_ORDERED_FOLD_INDEX=0`
+# restores the per-level gather.
+def ordered_fold_index() -> Bool:
+    return String(getenv("MOJOLEARN_ORDERED_FOLD_INDEX")) != "0"
+
+
+def fold_cindex_gather_kernel(
+    src: UnsafePointer[UInt32, MutAnyOrigin],
+    ids: UnsafePointer[UInt32, MutAnyOrigin],
+    dst: UnsafePointer[UInt32, MutAnyOrigin],
+    n_rows: Int32,
+    doc_count: Int32,
+    n_cols: Int32,
+):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var dc = Int(doc_count)
+    if t < Int(n_cols) * dc:
+        var c = t // dc
+        var p = t - c * dc
+        dst[t] = src[c * Int(n_rows) + Int(ids[p])]
+
+
+def _cindex_columns(layout: CompressedIndexLayout) -> Int:
+    var m = 0
+    for f in range(len(layout.features)):
+        m = max(m, Int(layout.features[f].offset) + 1)
+    return m
 
 
 struct PointwiseTreeWorkspace(Movable):
@@ -184,6 +227,9 @@ struct PointwiseTreeWorkspace(Movable):
     #: the fold arm's `MakeDocIndices` per caller permutation id
     var doc_ids_keys: List[Int]
     var doc_ids: List[DeviceBuffer[DType.uint32]]
+    # the compressed index in each permutation's fold order (one per
+    # doc_ids entry; lane/neural-pass116, `ordered_fold_index`)
+    var fold_cindex: List[DeviceBuffer[DType.uint32]]
 
     # ---- DEVIATION 207: the blind level loop's device state ----------
     # The winner fold slot (2 words + 2 floats), the per-level winner
@@ -227,6 +273,7 @@ struct PointwiseTreeWorkspace(Movable):
         self.fold_count_key = fold_count
         self.doc_ids_keys = List[Int]()
         self.doc_ids = List[DeviceBuffer[DType.uint32]]()
+        self.fold_cindex = List[DeviceBuffer[DType.uint32]]()
 
         self.d_best_ids = ctx.enqueue_create_buffer[DType.uint32](2)
         self.d_best_scores = ctx.enqueue_create_buffer[DType.float32](2)
@@ -369,7 +416,9 @@ def fit_oblivious_tree_structure_traced(
                 " per row"
             )
 
-    var blocks = blocks_for(layout, n_rows)
+    var fold_order = fold_count > 1 and ordered_fold_index()
+    var stride = doc_count if fold_order else n_rows
+    var blocks = blocks_for(layout, stride)
     var global_ids = List[Int]()
     for f in range(len(layout.features)):
         global_ids.append(f)
@@ -387,7 +436,7 @@ def fit_oblivious_tree_structure_traced(
         len(pool) != 0
         and pool[0].fold_count_key == fold_count
         and pool[0].doc_count_key == doc_count
-        and pool[0].n_rows_key == n_rows
+        and pool[0].n_rows_key == stride
         and pool[0].max_depth_key == max_depth
         and pool[0].n_features_key == len(layout.features)
     )
@@ -420,12 +469,12 @@ def fit_oblivious_tree_structure_traced(
         # nothing was hard-coded and nothing needed rewriting. The subsets
         # branch immediately above already took the fold path.
         var calcer_new = ScoresCalcerOnCompressedDataSet(
-            ctx, blocks, layout, n_rows, max_depth, global_ids, fold_count
+            ctx, blocks, layout, stride, max_depth, global_ids, fold_count
         )
         pool.append(
             PointwiseTreeWorkspace(
                 ctx, subsets_new^, calcer_new^, layout, one_hot, doc_count,
-                n_rows, max_depth, len(layout.features), fold_count,
+                stride, max_depth, len(layout.features), fold_count,
             )
         )
     ref subsets = pool[0].subsets
@@ -497,6 +546,28 @@ def fit_oblivious_tree_structure_traced(
             if permutation_id >= 0:
                 pool[0].doc_ids_keys.append(permutation_id)
                 pool[0].doc_ids.append(d_doc_ids.copy())
+    var d_fold_cindex: DeviceBuffer[DType.uint32]
+    if fold_order and cached >= 0 and cached < len(pool[0].fold_cindex):
+        d_fold_cindex = pool[0].fold_cindex[cached].copy()
+    elif fold_order:
+        var n_cols = _cindex_columns(layout)
+        d_fold_cindex = ctx.enqueue_create_buffer[DType.uint32](
+            max(n_cols * doc_count, 1)
+        )
+        ctx.enqueue_function[fold_cindex_gather_kernel](
+            cindex.unsafe_ptr(),
+            d_doc_ids.unsafe_ptr(),
+            d_fold_cindex.unsafe_ptr(),
+            Int32(n_rows),
+            Int32(doc_count),
+            Int32(n_cols),
+            grid_dim=max((n_cols * doc_count + 255) // 256, 1),
+            block_dim=256,
+        )
+        if permutation_id >= 0 and cached < 0:
+            pool[0].fold_cindex.append(d_fold_cindex.copy())
+    else:
+        d_fold_cindex = ctx.enqueue_create_buffer[DType.uint32](1)
     var d_observations = ctx.enqueue_create_buffer[DType.uint32](doc_count)
 
     var structure = List[TBinarySplit]()
@@ -554,7 +625,7 @@ def fit_oblivious_tree_structure_traced(
         # `subsets.Indices`; DEVIATION 105.
         var docs = subsets.indices.copy()
         times.begin(ctx)
-        if fold_count > 1:
+        if fold_count > 1 and not fold_order:
             launch_gather_with_mask_u32(
                 ctx,
                 d_observations,
@@ -564,9 +635,15 @@ def fit_oblivious_tree_structure_traced(
                 GATHER_NO_MASK,
             )
             docs = d_observations.copy()
-        calcer.submit_compute(
-            ctx, subsets, cindex, docs, doc_count, sm_count, fixed_scale
-        )
+        if fold_order:
+            calcer.submit_compute(
+                ctx, subsets, d_fold_cindex, docs, doc_count, sm_count,
+                fixed_scale,
+            )
+        else:
+            calcer.submit_compute(
+                ctx, subsets, cindex, docs, doc_count, sm_count, fixed_scale
+            )
         times.end(ctx, "pw.hist")
 
         # ---- identity checkpoint: this depth's REDUCED histograms ----
@@ -630,9 +707,9 @@ def fit_oblivious_tree_structure_traced(
         # gathered array the histograms just read, because
         # `UpdateBinFromCompressedIndex` indexes the compressed index by
         # `docsForBins[i]` and not by `i`.
-        var docs2 = d_observations.copy() if fold_count > 1 else (
-            subsets.indices.copy()
-        )
+        var docs2 = d_observations.copy() if (
+            fold_count > 1 and not fold_order
+        ) else subsets.indices.copy()
         # `TCFeature::Offset` is an ELEMENT offset into the compressed
         # index and this tree's layout stores it as a COLUMN index strided
         # by `n_rows`; the conversion lives in `d_feat_table`'s build now
@@ -640,14 +717,24 @@ def fit_oblivious_tree_structure_traced(
         # column reading column 0's bits and stopping every tree at depth
         # 1 -- is the reason the table stores `offset * n_rows`.
         times.begin(ctx)
-        split_subsets_from_desc(
-            ctx,
-            target,
-            cindex,
-            docs2,
-            pool[0].d_split_desc,
-            subsets,
-        )
+        if fold_order:
+            split_subsets_from_desc(
+                ctx,
+                target,
+                d_fold_cindex,
+                docs2,
+                pool[0].d_split_desc,
+                subsets,
+            )
+        else:
+            split_subsets_from_desc(
+                ctx,
+                target,
+                cindex,
+                docs2,
+                pool[0].d_split_desc,
+                subsets,
+            )
         times.end(ctx, "pw.split")
 
     # ---- THE ONE DRAIN OF THE TREE (DEVIATION 207) -------------------
