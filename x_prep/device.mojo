@@ -8,7 +8,8 @@ from std.ffi import _Global
 from std.os import getenv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
 from x_prep.dsort import sort_cols_device, sort_scratch_words
@@ -185,7 +186,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # OP_MATMUL above), sized over the program; 1 word when unused
     var cov_grid = False
     var cov_words = 1
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         cov_grid = getenv("MOJOLEARN_X_PREP_CLASS_COV_GRID", "0") == "1"
         if cov_grid:
             for s in range(stages):

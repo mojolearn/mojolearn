@@ -19,7 +19,8 @@ order-free and the array is `m` ints.
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from hierarchy.checks.edge_order import LINK_SAB_NONE
-from hierarchy.impl.sparse.op.sort import coo_sort_by_weight, merge_sort_u64_with_index
+from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from hierarchy.impl.cluster.detail.dendrogram_device import coo_sort_by_weight_device
 from hierarchy.impl.sparse.solver.mst_solver import Graph_COO, mst
 from hierarchy.impl.sparse.solver.detail.mst_kernels import (
     MST_FILL_TPB,
@@ -117,7 +118,7 @@ def build_sorted_mst[DENSE: Bool = False](
         )
 
     # `:337-338`
-    coo_sort_by_weight(
+    coo_sort_by_weight_device(
         ctx, mst_coo.src, mst_coo.dst, mst_coo.weights, mst_coo.n_edges, sabotage
     )
 

@@ -10,8 +10,7 @@ from bindings.hostptr import copy_f32
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_item, louvain_item, svgp_item, svgp_var_item
-from x_neighbors.louvain_sparse import louvain_item_sparse
+from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_init_item, svgp_chol2_item, svgp_fix2_item, svgp_solve_item, svgp_mid_item, svgp_qchol_item, svgp_qfix_item, svgp_ypart_item, svgp_fin_item, svgp_var_item
 from x_neighbors.block_ops import ocsvm_smo_block, OCSVM_TPB
 
 comptime BLOCK = 128
@@ -519,29 +518,60 @@ def op_take_cols(src: Int, cols: Int, res: Int, n: Int, src_c: Int, c: Int) rais
     _ = ctx^
 
 
-def variance_kernel(x: FP, res: FP, count_: Int64):
+def variance_k0(x: FP, res: FP, part: FP, count_: Int64):
+    var count = Int(count_)
+    var t = _tid()
+    if t < xn_fold_blocks(count):
+        variance_part_item(t, x, res, part, count)
+
+
+def variance_k1(x: FP, res: FP, part: FP, count_: Int64):
     var count = Int(count_)
     var t = _tid()
     if t < 1:
-        variance_item(t, x, res, count)
+        variance_mean_item(t, x, res, part, count)
+
+
+def variance_k2(x: FP, res: FP, part: FP, count_: Int64):
+    var count = Int(count_)
+    var t = _tid()
+    if t < xn_fold_blocks(count):
+        variance_ss_part_item(t, x, res, part, count)
+
+
+def variance_k3(x: FP, res: FP, part: FP, count_: Int64):
+    var count = Int(count_)
+    var t = _tid()
+    if t < 1:
+        variance_fin_item(t, x, res, part, count)
 
 
 def op_variance(x: Int, res: Int, count: Int) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        for t in range(1):
-            variance_item(t, _f(x), _f(res), count)
-        return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, count, True)
     var d_res = _buf(ctx, res, 1, False)
-    ctx.enqueue_function[variance_kernel](
-        d_x.unsafe_ptr(), d_res.unsafe_ptr(), Int64(count),
+    var d_part = _buf(ctx, 0, xn_fold_blocks(count), False)
+    ctx.enqueue_function[variance_k0](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), d_part.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(xn_fold_blocks(count)), block_dim=(BLOCK if xn_fold_blocks(count) > 1 else 1),
+    )
+    ctx.enqueue_function[variance_k1](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), d_part.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+    )
+    ctx.enqueue_function[variance_k2](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), d_part.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(xn_fold_blocks(count)), block_dim=(BLOCK if xn_fold_blocks(count) > 1 else 1),
+    )
+    ctx.enqueue_function[variance_k3](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), d_part.unsafe_ptr(), Int64(count),
         grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
     )
     _down(ctx, d_res, res, 1)
     ctx.synchronize()
     _ = d_x^
     _ = d_res^
+    _ = d_part^
     _ = ctx^
 
 
@@ -1027,24 +1057,32 @@ def op_skew_transform(lx: Int, w: Int, off: Int, res: Int, n: Int, d: Int, nc: I
     _ = ctx^
 
 
-def absdiff_sum_kernel(a: FP, b: FP, res: FP, count_: Int64):
+def absdiff_sum_k0(a: FP, b: FP, res: FP, part: FP, count_: Int64):
+    var count = Int(count_)
+    var t = _tid()
+    if t < xn_fold_blocks(count):
+        absdiff_part_item(t, a, b, res, part, count)
+
+
+def absdiff_sum_k1(a: FP, b: FP, res: FP, part: FP, count_: Int64):
     var count = Int(count_)
     var t = _tid()
     if t < 1:
-        absdiff_sum_item(t, a, b, res, count)
+        absdiff_fin_item(t, a, b, res, part, count)
 
 
 def op_absdiff_sum(a: Int, b: Int, res: Int, count: Int) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        for t in range(1):
-            absdiff_sum_item(t, _f(a), _f(b), _f(res), count)
-        return
     var ctx = xn_ctx()
     var d_a = _buf(ctx, a, count, True)
     var d_b = _buf(ctx, b, count, True)
     var d_res = _buf(ctx, res, 1, False)
-    ctx.enqueue_function[absdiff_sum_kernel](
-        d_a.unsafe_ptr(), d_b.unsafe_ptr(), d_res.unsafe_ptr(), Int64(count),
+    var d_part = _buf(ctx, 0, xn_fold_blocks(count), False)
+    ctx.enqueue_function[absdiff_sum_k0](
+        d_a.unsafe_ptr(), d_b.unsafe_ptr(), d_res.unsafe_ptr(), d_part.unsafe_ptr(), Int64(count),
+        grid_dim=_grid(xn_fold_blocks(count)), block_dim=(BLOCK if xn_fold_blocks(count) > 1 else 1),
+    )
+    ctx.enqueue_function[absdiff_sum_k1](
+        d_a.unsafe_ptr(), d_b.unsafe_ptr(), d_res.unsafe_ptr(), d_part.unsafe_ptr(), Int64(count),
         grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
     )
     _down(ctx, d_res, res, 1)
@@ -1052,6 +1090,7 @@ def op_absdiff_sum(a: Int, b: Int, res: Int, count: Int) raises:
     _ = d_a^
     _ = d_b^
     _ = d_res^
+    _ = d_part^
     _ = ctx^
 
 
@@ -1450,80 +1489,132 @@ def op_cc_step(a: Int, lab: Int, res: Int, n: Int) raises:
     _ = ctx^
 
 
-def graph_symmetry_kernel(a: FP, flags: IP, n_: Int64):
+def graph_symmetry_k0(a: FP, flags: IP, rf: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < n:
+        graph_symmetry_row_item(t, a, flags, rf, n)
+
+
+def graph_symmetry_k1(a: FP, flags: IP, rf: IP, n_: Int64):
     var n = Int(n_)
     var t = _tid()
     if t < 1:
-        graph_symmetry_item(t, a, flags, n)
+        graph_symmetry_fin_item(t, a, flags, rf, n)
 
 
 def op_graph_symmetry(a: Int, flags: Int, n: Int) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        for t in range(1):
-            graph_symmetry_item(t, _f(a), _i(flags), n)
-        return
     var ctx = xn_ctx()
     var d_a = _buf(ctx, a, n * n, True)
     var d_flags = _buf_i(ctx, flags, 2, False)
-    ctx.enqueue_function[graph_symmetry_kernel](
-        d_a.unsafe_ptr(), d_flags.unsafe_ptr(), Int64(n),
+    var d_rf = _buf_i(ctx, 0, 2 * n, False)
+    ctx.enqueue_function[graph_symmetry_k0](
+        d_a.unsafe_ptr(), d_flags.unsafe_ptr(), d_rf.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    ctx.enqueue_function[graph_symmetry_k1](
+        d_a.unsafe_ptr(), d_flags.unsafe_ptr(), d_rf.unsafe_ptr(), Int64(n),
         grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
     )
     _down_i(ctx, d_flags, flags, 2)
     ctx.synchronize()
     _ = d_a^
     _ = d_flags^
+    _ = d_rf^
     _ = ctx^
 
 
-def louvain_kernel(a: FP, labels: IP, info: FP, w: FP, w2: FP, comm: IP, node_of: IP, deg: FP, stot: FP, k2c: FP, tmp: FP, n_: Int64, max_level_: Int64, resolution_: Float32, threshold_: Float32):
+def svgp_k0(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
+    var m = Int(m_)
     var n = Int(n_)
-    var max_level = Int(max_level_)
-    var resolution = resolution_
-    var threshold = threshold_
+    var noise = noise_
+    var jitter = jitter_
+    var kdiag = kdiag_
     var t = _tid()
-    if t < 1:
-        louvain_item(t, a, labels, info, w, w2, comm, node_of, deg, stot, k2c, tmp, n, max_level, resolution, threshold)
+    if t < m * m:
+        svgp_init_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
 
 
-def op_louvain(a: Int, labels: Int, info: Int, n: Int, max_level: Int, resolution: Float32, threshold: Float32) raises:
-    comptime if not is_defined["MOJOLEARN_XN_LOUVAIN_GPU"]():
-        louvain_item_sparse(_f(a), _i(labels), _f(info), n, max_level, resolution, threshold)
-        return
-    var ctx = xn_ctx()
-    var d_a = _buf(ctx, a, n * n, True)
-    var d_labels = _buf_i(ctx, labels, n, False)
-    var d_info = _buf(ctx, info, 2, False)
-    var d_w = _buf(ctx, 0, n * n, False)
-    var d_w2 = _buf(ctx, 0, n * n, False)
-    var d_comm = _buf_i(ctx, 0, n, False)
-    var d_node_of = _buf_i(ctx, 0, n, False)
-    var d_deg = _buf(ctx, 0, n, False)
-    var d_stot = _buf(ctx, 0, n, False)
-    var d_k2c = _buf(ctx, 0, n, False)
-    var d_tmp = _buf(ctx, 0, n, False)
-    ctx.enqueue_function[louvain_kernel](
-        d_a.unsafe_ptr(), d_labels.unsafe_ptr(), d_info.unsafe_ptr(), d_w.unsafe_ptr(), d_w2.unsafe_ptr(), d_comm.unsafe_ptr(), d_node_of.unsafe_ptr(), d_deg.unsafe_ptr(), d_stot.unsafe_ptr(), d_k2c.unsafe_ptr(), d_tmp.unsafe_ptr(), Int64(n), Int64(max_level), resolution, threshold,
-        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
-    )
-    _down_i(ctx, d_labels, labels, n)
-    _down(ctx, d_info, info, 2)
-    ctx.synchronize()
-    _ = d_a^
-    _ = d_labels^
-    _ = d_info^
-    _ = d_w^
-    _ = d_w2^
-    _ = d_comm^
-    _ = d_node_of^
-    _ = d_deg^
-    _ = d_stot^
-    _ = d_k2c^
-    _ = d_tmp^
-    _ = ctx^
+def svgp_k1(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32, lj_: Int64):
+    var m = Int(m_)
+    var n = Int(n_)
+    var noise = noise_
+    var jitter = jitter_
+    var kdiag = kdiag_
+    var lj = Int(lj_)
+    var t = _tid()
+    if t < 2 * m:
+        svgp_chol2_item(t, lj, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
 
 
-def svgp_kernel(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, e: FP, col: FP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
+def svgp_k2(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
+    var m = Int(m_)
+    var n = Int(n_)
+    var noise = noise_
+    var jitter = jitter_
+    var kdiag = kdiag_
+    var t = _tid()
+    if t < 2 * m:
+        svgp_fix2_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
+
+
+def svgp_k3(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
+    var m = Int(m_)
+    var n = Int(n_)
+    var noise = noise_
+    var jitter = jitter_
+    var kdiag = kdiag_
+    var t = _tid()
+    if t < 4 * m + 1:
+        svgp_solve_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
+
+
+def svgp_k4(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
+    var m = Int(m_)
+    var n = Int(n_)
+    var noise = noise_
+    var jitter = jitter_
+    var kdiag = kdiag_
+    var t = _tid()
+    if t < m * m:
+        svgp_mid_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
+
+
+def svgp_k5(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32, lj_: Int64):
+    var m = Int(m_)
+    var n = Int(n_)
+    var noise = noise_
+    var jitter = jitter_
+    var kdiag = kdiag_
+    var lj = Int(lj_)
+    var t = _tid()
+    if t < m:
+        svgp_qchol_item(t, lj, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
+
+
+def svgp_k6(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
+    var m = Int(m_)
+    var n = Int(n_)
+    var noise = noise_
+    var jitter = jitter_
+    var kdiag = kdiag_
+    var t = _tid()
+    if t < m * m:
+        svgp_qfix_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
+
+
+def svgp_k7(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
+    var m = Int(m_)
+    var n = Int(n_)
+    var noise = noise_
+    var jitter = jitter_
+    var kdiag = kdiag_
+    var t = _tid()
+    if t < xn_fold_blocks(n):
+        svgp_ypart_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
+
+
+def svgp_k8(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP, luu: FP, ls: FP, xs: FP, dv: FP, yp: FP, fl: IP, m_: Int64, n_: Int64, noise_: Float32, jitter_: Float32, kdiag_: Float32):
     var m = Int(m_)
     var n = Int(n_)
     var noise = noise_
@@ -1531,22 +1622,10 @@ def svgp_kernel(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, q
     var kdiag = kdiag_
     var t = _tid()
     if t < 1:
-        svgp_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, e, col, m, n, noise, jitter, kdiag)
+        svgp_fin_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, xs, dv, yp, fl, m, n, noise, jitter, kdiag)
 
 
 def op_svgp(kuu: Int, bmat: Int, b: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        var s_luu = List[Float32](length=(m * m) if (m * m) > 0 else 1, fill=Float32(0))
-        var s_ls = List[Float32](length=(m * m) if (m * m) > 0 else 1, fill=Float32(0))
-        var s_e = List[Float32](length=(m) if (m) > 0 else 1, fill=Float32(0))
-        var s_col = List[Float32](length=(m) if (m) > 0 else 1, fill=Float32(0))
-        for t in range(1):
-            svgp_item(t, _f(kuu), _f(bmat), _f(b), _f(y), _f(alpha), _f(cmat), _f(qmu), _f(qsqrt), _f(info), FP(unsafe_from_address=Int(s_luu.unsafe_ptr())), FP(unsafe_from_address=Int(s_ls.unsafe_ptr())), FP(unsafe_from_address=Int(s_e.unsafe_ptr())), FP(unsafe_from_address=Int(s_col.unsafe_ptr())), m, n, noise, jitter, kdiag)
-        _ = s_luu^
-        _ = s_ls^
-        _ = s_e^
-        _ = s_col^
-        return
     var ctx = xn_ctx()
     var d_kuu = _buf(ctx, kuu, m * m, True)
     var d_bmat = _buf(ctx, bmat, m * m, True)
@@ -1559,10 +1638,46 @@ def op_svgp(kuu: Int, bmat: Int, b: Int, y: Int, alpha: Int, cmat: Int, qmu: Int
     var d_info = _buf(ctx, info, 2, False)
     var d_luu = _buf(ctx, 0, m * m, False)
     var d_ls = _buf(ctx, 0, m * m, False)
-    var d_e = _buf(ctx, 0, m, False)
-    var d_col = _buf(ctx, 0, m, False)
-    ctx.enqueue_function[svgp_kernel](
-        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_e.unsafe_ptr(), d_col.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
+    var d_xs = _buf(ctx, 0, (4 * m + 1) * m, False)
+    var d_dv = _buf(ctx, 0, 3 * m, False)
+    var d_yp = _buf(ctx, 0, xn_fold_blocks(n), False)
+    var d_fl = _buf_i(ctx, 0, 3, False)
+    ctx.enqueue_function[svgp_k0](
+        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
+        grid_dim=_grid(m * m), block_dim=(BLOCK if m * m > 1 else 1),
+    )
+    for lj in range(m):
+        ctx.enqueue_function[svgp_k1](
+            d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag, Int64(lj),
+            grid_dim=_grid(2 * m), block_dim=(BLOCK if 2 * m > 1 else 1),
+        )
+    ctx.enqueue_function[svgp_k2](
+        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
+        grid_dim=_grid(2 * m), block_dim=(BLOCK if 2 * m > 1 else 1),
+    )
+    ctx.enqueue_function[svgp_k3](
+        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
+        grid_dim=_grid(4 * m + 1), block_dim=(BLOCK if 4 * m + 1 > 1 else 1),
+    )
+    ctx.enqueue_function[svgp_k4](
+        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
+        grid_dim=_grid(m * m), block_dim=(BLOCK if m * m > 1 else 1),
+    )
+    for lj in range(m):
+        ctx.enqueue_function[svgp_k5](
+            d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag, Int64(lj),
+            grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
+        )
+    ctx.enqueue_function[svgp_k6](
+        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
+        grid_dim=_grid(m * m), block_dim=(BLOCK if m * m > 1 else 1),
+    )
+    ctx.enqueue_function[svgp_k7](
+        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
+        grid_dim=_grid(xn_fold_blocks(n)), block_dim=(BLOCK if xn_fold_blocks(n) > 1 else 1),
+    )
+    ctx.enqueue_function[svgp_k8](
+        d_kuu.unsafe_ptr(), d_bmat.unsafe_ptr(), d_b.unsafe_ptr(), d_y.unsafe_ptr(), d_alpha.unsafe_ptr(), d_cmat.unsafe_ptr(), d_qmu.unsafe_ptr(), d_qsqrt.unsafe_ptr(), d_info.unsafe_ptr(), d_luu.unsafe_ptr(), d_ls.unsafe_ptr(), d_xs.unsafe_ptr(), d_dv.unsafe_ptr(), d_yp.unsafe_ptr(), d_fl.unsafe_ptr(), Int64(m), Int64(n), noise, jitter, kdiag,
         grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
     )
     _down(ctx, d_alpha, alpha, m)
@@ -1582,8 +1697,10 @@ def op_svgp(kuu: Int, bmat: Int, b: Int, y: Int, alpha: Int, cmat: Int, qmu: Int
     _ = d_info^
     _ = d_luu^
     _ = d_ls^
-    _ = d_e^
-    _ = d_col^
+    _ = d_xs^
+    _ = d_dv^
+    _ = d_yp^
+    _ = d_fl^
     _ = ctx^
 
 

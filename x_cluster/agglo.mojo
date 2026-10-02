@@ -314,6 +314,28 @@ def agglo_tree[O: ClusterOps](
                 n_components = 1
                 return
     var inf = Float32.MAX * Float32(2)
+    # THE MERGE LOOP ON THE DEVICE (lane hr2-mds-agglo): without a
+    # connectivity graph the GPU column keeps the n x n matrix resident and
+    # runs every step as parallel kernels (`DeviceOps.agglo_merge`): the
+    # argmin over the rows' nearest pairs, the Lance-Williams row update, and
+    # the row rescans, each a min-reduction with the lowest index on a tie,
+    # which is this loop's own order; the same children and values. The host
+    # column answers False and runs the loop below.
+    # MOJOLEARN_XC_AGGLO_LOOP_V0=1 keeps the loop below on the GPU column (A/B).
+    if n_edges < 0 and ops.agglo_on_device() and getenv("MOJOLEARN_XC_AGGLO_LOOP_V0") != "1":
+        var xs0 = ops.put(x)
+        var ds_dev = ops.alloc(n * n)
+        if metric == 5:
+            ops.agglo_mirror(xs0, n, ds_dev)
+        elif metric >= 0:
+            ops.pdist(xs0, n, xs0, n, d, metric, p, ds_dev)
+        else:
+            ops.sqdist(xs0, n, xs0, n, d, ds_dev)
+            if linkage != LINK_WARD:
+                ops.sqrt(ds_dev, n * n)
+        ops.agglo_merge(ds_dev, n, linkage, n_merges, children, dist)
+        n_components = 1
+        return
     var dm = List[Float32]()
     if metric == 5:
         dm = List[Float32](length=n * n, fill=Float32(0))
@@ -385,7 +407,7 @@ def agglo_tree[O: ClusterOps](
     var ph_rescan = 0
     var live = List[Bool](length=n, fill=True)
     var node = List[Int](capacity=n)
-    var size = List[Float64](length=n, fill=Float64(1))
+    var size = List[Float32](length=n, fill=Float32(1))
     for i in range(n):
         node.append(i)
     var nn = List[Int](length=n, fill=-1)

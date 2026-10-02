@@ -101,7 +101,7 @@ def cagra_build_host(x: F32P, n: Int, d: Int, kdeg: Int, deg: Int) raises -> Lis
 
 def cagra_search_host(
     x: F32P, n: Int, d: Int, graph: I32P, deg: Int, queries: F32P, m: Int,
-    k: Int, L: Int, width: Int, max_iter: Int, n_seeds: Int, out_d: F32P, out_i: I32P,
+    k: Int, L: Int, width: Int, max_iter: Int, n_seeds: Int, out_d: F32P, out_i: I32P, rs: Int = 0,
 ):
     """`cg_search_cell` per query on the caller's arrays; each task keeps one
     itopk buffer and one visited bitset (`cg_search_row` at offset 0)."""
@@ -116,7 +116,7 @@ def cagra_search_host(
         var vis = List[Int32](length=words, fill=Int32(0))
         for q in range(span[0], span[1]):
             cg_search_row(q, queries, x, n, d, graph, deg, k, L, width, max_iter, n_seeds,
-                          fp(bd), ip(bi), ip(bx), 0, ip(vis), 0, words, out_d, out_i)
+                          fp(bd), ip(bi), ip(bx), 0, ip(vis), 0, words, out_d, out_i, rs)
         _ = bd^
         _ = bi^
         _ = bx^

@@ -36,7 +36,7 @@ merge row, and the label roots are a SET.
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
+from hierarchy.impl.cluster.detail.dendrogram_device import _roots_kernel
 
 
 struct UnionFind(Movable):
@@ -271,31 +271,16 @@ def extract_flattened_clusters(
         return
 
     var n_edges = (n_leaves - 1) * 2
-
-    # `:263-264` n_vertices = max(children) + 1, a thrust::max_element; the
-    # children are on the device, and `m - 1` rows is a host read here.
-    var h_children = ctx.enqueue_create_host_buffer[DType.int32](n_edges)
-    ctx.synchronize()
-    var v_children = children.create_sub_buffer[DType.int32](0, n_edges)
-    ctx.enqueue_copy(dst_ptr=h_children.unsafe_ptr(), src_buf=v_children)
-    ctx.synchronize()
-    var max_child = Int32(-1)
-    for i in range(n_edges):
-        var c = h_children.unsafe_ptr().unsafe_load(i)
-        if c > max_child:
-            max_child = c
-    var n_vertices = Int(max_child) + 1
-
-    # `:266-272`
     if n_leaves <= 0:
         raise Error("hierarchy.extract_flattened_clusters: n_leaves must be positive")
-    if n_vertices != (n_leaves - 1) * 2:
-        raise Error(
-            "hierarchy.extract_flattened_clusters: Multiple components found"
-            " in MST or MST is invalid. Cannot find single-linkage solution."
-            " (n_vertices=" + String(n_vertices) + ", expected "
-            + String((n_leaves - 1) * 2) + ")"
-        )
+
+    # `:263-272` n_vertices = max(children) + 1, checked against
+    # (n_leaves - 1) * 2: every caller hands a dendrogram of a spanning tree
+    # (`build_sorted_mst` refuses any other edge count and any second
+    # component), whose children are exactly the 2 (n_leaves - 1) node ids
+    # below the root, so the count is that, with no read of the children
+    # (lane hr2-mds-agglo: it was a download and a host scan).
+    var n_vertices = n_edges
 
     var levels = ctx.enqueue_create_buffer[DType.int32](n_vertices)
     var n_blocks = (n_vertices + tpb - 1) // tpb
@@ -309,25 +294,18 @@ def extract_flattened_clusters(
 
     # `:279-296` Step 1: label roots = the last (n_clusters - 1) * 2 children,
     # sorted DESCENDING (thrust::sort with thrust::greater); the n_clusters
-    # at the TAIL of that order are the cluster roots.
+    # at the TAIL of that order are the cluster roots: on the device, each
+    # candidate placed by its count of larger candidates (`_roots_kernel`).
     var child_size = (n_clusters - 1) * 2
-    var children_cpy_start = n_edges - child_size
-    var keys = List[UInt64](capacity=child_size)
-    var idx = List[Int](capacity=child_size)
-    for j in range(child_size):
-        var c = Int(h_children.unsafe_ptr().unsafe_load(children_cpy_start + j))
-        # descending: sort on the complement
-        keys.append(UInt64(0x7FFFFFFF - c))
-        idx.append(j)
-    merge_sort_u64_with_index(keys, idx)
-    var h_roots = ctx.enqueue_create_host_buffer[DType.int32](n_clusters)
-    ctx.synchronize()
-    for j in range(n_clusters):
-        var pos = child_size - n_clusters + j
-        var c = Int32(0x7FFFFFFF - Int(keys[pos]))
-        h_roots.unsafe_ptr().unsafe_store(j, c)
     var d_roots = ctx.enqueue_create_buffer[DType.int32](n_clusters)
-    ctx.enqueue_copy(dst_buf=d_roots, src_ptr=h_roots.unsafe_ptr())
+    ctx.enqueue_function[_roots_kernel](
+        children.unsafe_ptr(),
+        d_roots.unsafe_ptr(),
+        Int32(n_edges),
+        Int32(n_clusters),
+        grid_dim=((child_size + tpb - 1) // tpb, 1, 1),
+        block_dim=(tpb, 1, 1),
+    )
 
     # `:298-310` tmp_labels = -1; labels for the roots
     var tmp_labels = ctx.enqueue_create_buffer[DType.int32](n_vertices)
@@ -364,10 +342,7 @@ def extract_flattened_clusters(
     var v_labels = labels.create_sub_buffer[DType.int32](0, n_leaves)
     ctx.enqueue_copy(dst_buf=v_labels, src_buf=v_tmp)
     ctx.synchronize()
-    _ = h_children^
-    _ = v_children^
     _ = levels^
-    _ = h_roots^
     _ = d_roots^
     _ = tmp_labels^
     _ = v_tmp^

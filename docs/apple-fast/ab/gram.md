@@ -15,8 +15,8 @@ enqueue only). No witness (as `xg_gram_kernel`); enetcv_fast.mojo is untouched.
 
 | switch | kind | site | what it changes under FAST on Apple |
 |---|---|---|---|
-| `MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1` | env, read in `fit_device` | `x_linear/device.mojo` fit_device (ip[5]); `x_linear/lars.mojo` lars_fit reads it | Lars / LassoLars: means, centered Gram, X'y and the y mean from `fast_gram_into` into fw before `fit_kernel`; the team skips `t_col_means`, `t_mean`, `t_centered_gram`, `t_centered_xty` and `xg_gram_kernel` is not launched |
-| `MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1` | env, read in `fit_device` and `_ridge_kfold_grid` | `x_linear/device.mojo` (ridge ip[4]; the k-fold loop); `x_linear/ridge.mojo` `_ridge_fit_team` reads it | RidgeClassifier (and LOO RidgeCV): xm, ym (T targets), G, X'Y from the grid, the team skips its cell chains (unweighted fits only). k-fold RidgeCV (the board's cv=5): each fold's means, Gram and X'y from `fast_gram_into` instead of `kf_means_kernel` + `kf_cells_kernel` |
+| `MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1` | env, read in `fit_device` | `x_linear/device.mojo` fit_device (ip[4] = 2, main's `pre_all` flag); `x_linear/lars.mojo` lars_fit reads it | Lars / LassoLars: means, centered Gram, X'y and the y mean from `fast_gram_into` into fw before `fit_kernel` (the words main's moments grid `mg_means_kernel` / `mg_cross_kernel` fills); the team skips `t_col_means`, `t_mean`, `t_centered_gram`, `t_centered_xty`; neither the moments grid nor the sliced `xg_gram_kernel` is launched |
+| `MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1` | env, read in `fit_device` and the k-fold RidgeCV loop | `x_linear/device.mojo` (ridge ip[4] = 1, main's `pre` flag, `ridge_pre` off; the k-fold unit A); `x_linear/ridge.mojo` `_ridge_fit_team` reads it (main's code) | RidgeClassifier (and LOO RidgeCV): xm, ym (T targets), G, X'Y from the grid, the team skips its cell chains (unweighted fits only). k-fold RidgeCV (the board's cv=5): each fold's means, Gram and X'y from `fast_gram_into` instead of `kf_means_kernel` + `kf_cells_kernel` |
 | `MOJOLEARN_X_PREP_CLASS_COV_GRID=1` | env, read in `run_program_device_ptr` | `x_prep/device.mojo` (ops 40 `qda_cov` and 13 `matmul` when Gram-shaped, `_matmul_is_gram`) | QDA: each class's covariance (divisor CNT[k]) as the masked grid Gram, one launch pair a class, into the unit's COV words. LDA (solver svd): the Gram `matmul` Z2'Z2 as the uncentered grid Gram into C. The other stages are the units' |
 
 ## Causes (what was slow)
@@ -33,8 +33,19 @@ enqueue only). No witness (as `xg_gram_kernel`); enetcv_fast.mojo is untouched.
 
 ## Keep rule
 A switch becomes the FAST default when its arm is faster on the M3 and held-out quality stays within
-FAST's run-to-run spread (the `gram-*-ident` lines are the IDENTICAL arm at head for the ratio); then
-the env read goes, the old team passes stay as the IDENTICAL / other-vendor code.
+FAST's run-to-run spread (light A/Bs: old FAST vs new FAST, `1 2`, no -ident lines; the IDENTICAL
+hash check is the manager's); then the env read goes, the old team passes stay as the IDENTICAL /
+other-vendor code. One dataset per switch first (taxi for the x_linear switches, where 16 features
+make main's moments grid ONE block per launch; istella for x_prep's); the second after a win.
+
+## After the 2026-10-02 merge of origin/main
+Main's lane/neural-pass120 moments grid (`x_linear/moments_grid.mojo`: a block per 16-column tile pair
+of [X | Y], one thread per cell folding every row, IDENTICAL bits) now fills the same fw words for
+Lars (ip[4] == 2) and Ridge (ip[4] == 1) by default. The FAST grid Gram differs by splitting the rows
+into chunks (hundreds of blocks at taxi's 16 features against the moments grid's one) and summing the
+partials; its launches run inside main's witnessed setup unit (x_linear/witness.mojo) but are not
+themselves witnessed (`fast_gram_into` waits for them). lars.mojo and ridge.mojo carry no change of
+this lane any more (main's flags serve).
 
 ## Not done here (notes for the owner)
 - `x_prep` `eigh` (op 18, `x_prep/eigh.mojo`): one thread per matrix (cyclic Jacobi at 220 x 220 for
