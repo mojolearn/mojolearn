@@ -1156,14 +1156,35 @@ def _rp_rand(k, r, c, seed, stream, kind, dev):
     return out
 
 
+def _sparse_rp_device(mode):
+    """lane/apple-fast-kapprox: whether SparseRandomProjection.fit draws its
+    matrix in one x_neighbors launch and skips the host finiteness pass over
+    X (FAST + Apple, `-D MOJOLEARN_SPARSE_RP_DEVICE`), read back from that
+    binding's compile-time constant (no env read). The binding, or None."""
+    try:
+        b = _backend.binding("_mojolearn_x_neighbors", mode)
+    except Exception:
+        return None
+    fn = getattr(b, "x_neighbors_sparse_rp_device", None)
+    return b if fn is not None and int(fn()) != 0 else None
+
+
 class _RandomProjection(_Base):
     """sklearn `random_projection.py::BaseRandomProjection`. The matrix is
     drawn from the lane's counter-based Philox stream (x_decomp/cells.mojo
     `rand_cell`), not numpy's generator: the same `random_state` gives the
     same matrix on every box, and a different one than sklearn's."""
 
+    def _device_fit(self, X):
+        """lane/apple-fast-kapprox: the FAST + Apple fit of the sparse
+        projection (SparseRandomProjection overrides); None takes main's path."""
+        return None
+
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
+        got = self._device_fit(X)
+        if got is not None:
+            return got
         # fit reads only the input's shape and refuses a non-finite input;
         # the store (a copy of the whole input) is transform's to build
         # (lane neural-pass27: fit_transform converted the 880 MB input
@@ -1291,6 +1312,40 @@ class SparseRandomProjection(_RandomProjection):
             return sgn
         # u < density keeps the signed value, else 0 (select: x > s -> y else z)
         return k.ew("select", u, _M.zeros(1, 1), sgn, s=dens - 2.0 ** -25)
+
+    def _device_fit(self, X):
+        """lane/apple-fast-kapprox (FAST + Apple, -D MOJOLEARN_SPARSE_RP_DEVICE):
+        fit reads the input's shape from its own buffer (no host finiteness
+        pass over every cell: transform's tiled device projection flags a
+        non-finite X, as it does on main) and draws the kc x d matrix in ONE
+        x_neighbors launch (counter-based uniforms of the same law as the
+        kit's four-launch draw, not its Philox words). The matrix comes down
+        once as components_; transform's `_project` uploads it once and
+        keeps it on the device, as main does."""
+        if self.n_components == "auto" or self.compute_inverse_components or _is_sparse(X):
+            return None
+        b = _sparse_rp_device(self.numeric_mode_)
+        if b is None:
+            return None
+        a = as_f32_c(X, ndim=2, name="X")[0]
+        if a.ndim != 2 or min(a.shape) == 0:
+            raise ValueError("X: a nonempty two-dimensional input is required")
+        n, d = a.shape
+        kc = int(self.n_components)
+        if kc <= 0:
+            raise ValueError(f"n_components must be greater than 0, got {kc}")
+        dens = 1.0 / math.sqrt(d) if self.density == "auto" else float(self.density)
+        if not 0 < dens <= 1:
+            raise ValueError(f"Expected density in range ]0, 1], got: {dens}")
+        self.density_ = dens
+        res = array.array("f", [0.0]) * (kc * d)
+        b.xn_kapprox_sparse_rp([res.buffer_info()[0]], [kc, d, _seed_of(self.random_state) & 0x7FFFFFFF],
+                               [float(dens), math.sqrt(1.0 / dens) / math.sqrt(kc)])
+        self.n_components_ = kc
+        self.n_features_in_ = d
+        self.components_m_ = _M(res, kc, d)
+        self.components_ = Array._owned(array.array("f", res), (kc, d), "<f4", "C")
+        return self
 
 
 # ================================================================ thin SVD

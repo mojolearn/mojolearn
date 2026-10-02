@@ -119,6 +119,48 @@ def _kapprox_fast(est):
     return fn is not None and int(fn()) != 0
 
 
+def _kpca_resident(est):
+    """lane/apple-fast-kapprox: whether KernelPCA.fit builds, centers and
+    solves its kernel matrix on x_decomp's resident kit with one upload of X
+    (FAST + Apple, `-D MOJOLEARN_KPCA_RESIDENT`), read back from the
+    x_neighbors binding's compile-time constant (no env read)."""
+    fn = getattr(est._bind(), "x_neighbors_kpca_resident", None)
+    return fn is not None and int(fn()) != 0
+
+
+#: the kernels the resident route builds from the kit's sqdist / gemm and
+#: elementwise launches (any other kernel takes main's path)
+_KPCA_RESIDENT_KERNELS = ("rbf", "linear", "poly", "sigmoid")
+
+
+def _kpca_resident_center(kit, X, n, kernel, gamma, coef0, degree):
+    """lane/apple-fast-kapprox: X (an Array) uploaded once from its own
+    buffer; the kernel matrix, sklearn's KernelCenterer (K - rows - cols +
+    all) and the two fit vectors on the device. Returns (Kc, cols, all_)
+    as resident `_M` matrices, or None when this kit has no resident path
+    (the caller then runs main's code)."""
+    from ._expansion_decomp import _M, _DevBuf
+    if not kit._res():
+        return None
+    d = X.shape[1]
+    Xm = _M._on_device(_DevBuf(kit._raw(), X.size), n, d)
+    kit.b.x_decomp_dev_upload(Xm._d.id, addr_ro(X, name="X"), X.size)
+    if kernel == "rbf":
+        K = kit.ew("exp", kit.ew("scale", kit.sqdist(Xm, Xm), s=-gamma))
+    else:
+        K = kit.mm(Xm, Xm, tb=True)
+        if kernel == "poly":
+            K = kit.ew("adds", kit.ew("scale", K, s=gamma), s=coef0)
+            K = kit.ew("sq" if degree == 2 else "cube", K)
+        elif kernel == "sigmoid":
+            K = kit.ew("tanh", kit.ew("adds", kit.ew("scale", K, s=gamma), s=coef0))
+    cols = kit.ew("scale", kit.colsum(K), s=1.0 / n)          # K_fit_rows_ (1 x n)
+    all_ = kit.ew("scale", kit.rowsum(cols), s=1.0 / n)       # K_fit_all_ (1 x 1)
+    colv = _M._on_device(cols._d, n, 1)                        # the same buffer as a column
+    Kc = kit.ew("add", kit.ew("sub", kit.ew("sub", K, cols), colv), all_)
+    return Kc, cols, all_
+
+
 def _kapprox_op(est, name, bufs, ints, floats, message):
     """One kapprox op with its refusal flag appended (the op's last buffer):
     the device sets flag[0] when a cell fails the sampler's check, and the
@@ -733,11 +775,28 @@ class KernelPCA(_XNeighbors):
         if self.kernel == "precomputed" and n != d:
             raise ValueError("Precomputed matrix must be a square matrix.")
         self._gamma = _f32_scalar(1.0 / d if self.gamma is None else float(self.gamma))
-        K = self._k(X, X)
-        cols = self._scale_div(self._colsum(K), float(n))              # K_fit_rows_
-        all_ = self._scale_div(self._colsum(cols.reshape((1, n))), float(n))  # K_fit_all_
-        Kc = _empty_out((n, n), "<f4")
-        self._op("kpca_center", [(K, 0), (cols, 0), (cols, 0), (all_, 0), (Kc, 1)], (n, n))
+        Kc_M = None
+        kit = None
+        if (self.kernel in _KPCA_RESIDENT_KERNELS and (self.kernel != "poly" or int(self.degree) in (2, 3))
+                and _kpca_resident(self)):
+            # lane/apple-fast-kapprox: the kernel matrix never leaves the
+            # device (main's path moved the n x n matrix through the host
+            # five times: the kernel op's download, colsum's upload, the
+            # center op's upload and download, tobytes + the kit's upload)
+            from ._expansion_decomp import _Kit
+            kit = _Kit(self.numeric_mode_used())
+            got = _kpca_resident_center(kit, X, n, self.kernel, self._gamma, _f32_scalar(self.coef0),
+                                        int(self.degree))
+            if got is not None:
+                Kc_M, cols_m, all_m = got
+                cols = cols_m.out((n,))
+                all_ = all_m.out((1,))
+        if Kc_M is None:
+            K = self._k(X, X)
+            cols = self._scale_div(self._colsum(K), float(n))              # K_fit_rows_
+            all_ = self._scale_div(self._colsum(cols.reshape((1, n))), float(n))  # K_fit_all_
+            Kc = _empty_out((n, n), "<f4")
+            self._op("kpca_center", [(K, 0), (cols, 0), (cols, 0), (all_, 0), (Kc, 1)], (n, n))
         # Top-k GPU Lanczos instead of the full n-by-n host eigensolve when
         # auto asks for a few components (on by default since 2026-09-30:
         # L40S CUDA, Apple Metal and the CPU column bit-identical, residual < 1e-5,
@@ -745,22 +804,24 @@ class KernelPCA(_XNeighbors):
         # Anything outside that scope, or a basis that does not converge,
         # takes the exact dense path below.
         c = 0 if self.n_components is None else int(self.n_components)
-        kit = None
-        if (os.environ.get("MOJOLEARN_XN_KPCA_LANCZOS", "1") != "0"
-                and self.eigen_solver == "auto" and n > 200 and 0 < c < 10):
+        lanczos = (os.environ.get("MOJOLEARN_XN_KPCA_LANCZOS", "1") != "0"
+                   and self.eigen_solver == "auto" and n > 200 and 0 < c < 10)
+        if lanczos and kit is None:
             from ._expansion_decomp import _Kit
             # Every column (CUDA, HIP, Metal and the CPU host binding) takes
             # this route, so a CPU-only install gives the GPUs' bits.
             kit = _Kit(self.numeric_mode_used())
         result = None
-        if kit is not None:
+        if lanczos:
             import array
             from ._expansion_decomp import _M, _lanczos_top
-            # Array's buffer is float32 in row order; no Python float list of
-            # n*n cells. The kit uploads it once and retains the device store.
-            store = array.array("f")
-            store.frombytes(Kc.tobytes())
-            result = _lanczos_top(kit, _M(store, n, n), c)
+            if Kc_M is None:
+                # Array's buffer is float32 in row order; no Python float list of
+                # n*n cells. The kit uploads it once and retains the device store.
+                store = array.array("f")
+                store.frombytes(Kc.tobytes())
+                Kc_M = _M(store, n, n)
+            result = _lanczos_top(kit, Kc_M, c)
         if result is not None:
             values, vectors = result
             vectors = vectors.neg_cols(kit.absmax_flags(vectors, True))
@@ -790,9 +851,11 @@ class KernelPCA(_XNeighbors):
             from ._expansion_decomp import _Kit, _M
             if kit is None:
                 kit = _Kit(self.numeric_mode_used())
-            store = array.array("f")
-            store.frombytes(Kc.tobytes())
-            wm, Vm = kit.eigh(_M(store, n, n))
+            if Kc_M is None:
+                store = array.array("f")
+                store.frombytes(Kc.tobytes())
+                Kc_M = _M(store, n, n)
+            wm, Vm = kit.eigh(Kc_M)
             wl = list(wm.s)
         order = list(range(n - 1, -1, -1))           # descending; equal values: higher index first
         order = order[:c]
