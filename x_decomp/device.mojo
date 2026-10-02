@@ -10,7 +10,7 @@ from max.gpu.sync import barrier
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import memcpy
-from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count
 
@@ -87,6 +87,7 @@ from x_decomp.exec_trait import Exec
 from x_decomp.host import HostExec
 from x_decomp.jacobi2 import (
     J2_TPB,
+    dev_barrier,
     jacobi_eigh2_kernel,
     one_sided_svd2_chunk_kernel,
     one_sided_svd2_finish_kernel,
@@ -571,6 +572,221 @@ def lu_trail_tiled_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32
             if acts[kp] != Float32(0):
                 acc = ftz(identical_mul_add(-ls[r * width + kp], us[kp * LU_TILE + c], ftz(acc)))
         a.unsafe_store(i * nn + j, acc)
+
+
+# ---- the one-launch panel LU (lane neural-pass135, 2026-10-02) -----------------------------
+#: Threads of `lu_panel1_kernel`'s one block (a power of two: the pivot
+#: reduction halves it), and its threadgroup page: the pivot reduction's
+#: values and rows.
+comptime LU_PANEL1_TPB = 512
+comptime LU_PANEL1_SMEM_BYTES = LU_PANEL1_TPB * 8
+comptime LU_PANEL1_FITS = lib_smem_page_fits_for[TARGET_COLUMN, LU_PANEL1_SMEM_BYTES]()
+#: The register-blocked trailing kernel: LU_RB x LU_RB cells a thread at
+#: stride LU_TILE, so a block of LU_TILE x LU_TILE threads owns an
+#: LU_RB_TILE x LU_RB_TILE tile; the L slab (LU_RB_TILE rows x NB, stored
+#: k-major) and the U slab (NB x LU_RB_TILE columns) in threadgroup memory.
+comptime LU_RB = 4
+comptime LU_RB_TILE = LU_TILE * LU_RB
+comptime LU_RB_SMEM_BYTES = (2 * LU_RB_TILE * LU_PANEL_NB + LU_PANEL_NB) * 4
+comptime LU_RB_FITS = lib_smem_page_fits_for[TARGET_COLUMN, LU_RB_SMEM_BYTES]()
+
+
+def lu_panel1_on() -> Bool:
+    """Whether a panel's steps run as ONE `lu_panel1_kernel` launch:
+    MOJOLEARN_XD_LU_PANEL1=0 restores the per-step launches (the A/B arm,
+    with `lu_apply_swaps_kernel` + `lu_trsm_kernel` + `lu_trail_tiled_kernel`);
+    a column whose shared limit cannot hold the kernel's page keeps them too."""
+    comptime if not LU_PANEL1_FITS:
+        return False
+    return String(getenv("MOJOLEARN_XD_LU_PANEL1", "1")) != "0"
+
+
+def lu_trail_rb_on() -> Bool:
+    """Whether the trailing update runs `lu_trail_rb_kernel` (MOJOLEARN_XD_LU_
+    TRAIL_RB=0, or MOJOLEARN_XD_LU_PANEL1=0, keeps `lu_trail_tiled_kernel`;
+    a column whose shared limit cannot hold its page keeps it too)."""
+    comptime if not LU_RB_FITS:
+        return False
+    if String(getenv("MOJOLEARN_XD_LU_PANEL1", "1")) == "0":
+        return False
+    return String(getenv("MOJOLEARN_XD_LU_TRAIL_RB", "1")) != "0"
+
+
+def lu_panel1_kernel(a: F32Ptr, piv: I32Ptr, info: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32):
+    """The panel's steps k = k0 .. k1 - 1 in ONE block of LU_PANEL1_TPB
+    threads, the per-step launches' cells in their order, a block barrier
+    that orders DEVICE memory (`dev_barrier`: Apple's `barrier()` orders
+    threadgroup memory only) between the phases that hand device words
+    from thread to thread:
+      * the pivot: `lu_pivot_block_kernel`'s scan and tree (comparisons
+        only; strict >, ties to the LOWEST row, a NaN never wins) at this
+        width, which yields the serial scan's row at any width;
+      * the swap of rows k and piv[k] over the columns [0, k1)
+        (`lu_swap_cols_kernel`); the trailing columns get it later;
+      * `lu_diag`: d = ftz(a[k, k]); an exactly-zero d records info = k + 1
+        (the first only) and act[k] = 0, which skips the step here and in
+        the trailing kernels;
+      * per row i > k (one thread owns the row for the step): the multiplier
+        `div0(a[i, k], d)` stored raw (`lu_l_elem`), then that row's panel
+        cells j = k + 1 .. k1 - 1 take `lu_update_elem`'s statement
+        ftz(fma(-l, ftz(a[k, j]), ftz(a[i, j]))). Row k is read only in
+        this phase, so the row's thread needs no barrier between the two.
+    Every cell takes the same statements in the same step order as the
+    per-step route and `lu_serial`. One launch per panel replaces 6 per step
+    (n = 10,000 on an M4 was ~60,000 launches)."""
+    var nn = Int(n)
+    var kk1 = Int(k1)
+    var tid = Int(thread_idx.x)
+    var rv = stack_allocation[LU_PANEL1_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ri = stack_allocation[LU_PANEL1_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    for k in range(Int(k0), kk1):
+        # the pivot (lu_pivot_block_kernel at LU_PANEL1_TPB)
+        var best = abs(ftz(a.unsafe_load(k * nn + k)))
+        var p = k
+        var i = k + 1 + tid
+        while i < nn:
+            var v = abs(ftz(a.unsafe_load(i * nn + k)))
+            if v > best:
+                best = v
+                p = i
+            i += LU_PANEL1_TPB
+        rv.unsafe_store(tid, best)
+        ri.unsafe_store(tid, Int32(p))
+        barrier()
+        var active = LU_PANEL1_TPB // 2
+        while active > 0:
+            if tid < active:
+                var ov = rv.unsafe_load(tid + active)
+                var oi = ri.unsafe_load(tid + active)
+                var cv = rv.unsafe_load(tid)
+                var ci = ri.unsafe_load(tid)
+                if ov > cv or (ov == cv and oi < ci):
+                    rv.unsafe_store(tid, ov)
+                    ri.unsafe_store(tid, oi)
+            barrier()
+            active = active // 2
+        var pr = Int(ri.unsafe_load(0))
+        if tid == 0:
+            piv.unsafe_store(k, Int32(pr))
+        # the swap over the columns [0, k1) (lu_swap_cols_kernel)
+        if pr != k:
+            var j = tid
+            while j < kk1:
+                var t = a.unsafe_load(k * nn + j)
+                a.unsafe_store(k * nn + j, a.unsafe_load(pr * nn + j))
+                a.unsafe_store(pr * nn + j, t)
+                j += LU_PANEL1_TPB
+        dev_barrier()
+        # lu_diag
+        var d = ftz(a.unsafe_load(k * nn + k))
+        if tid == 0:
+            if d == Float32(0):
+                if info.unsafe_load(0) == Float32(0):
+                    info.unsafe_store(0, Float32(k + 1))
+                act.unsafe_store(k, Float32(0))
+            else:
+                act.unsafe_store(k, Float32(1))
+        # lu_l_elem, then that row's lu_update_elem over the panel columns
+        if d != Float32(0):
+            var r = k + 1 + tid
+            while r < nn:
+                var l = div0(a.unsafe_load(r * nn + k), d)
+                a.unsafe_store(r * nn + k, l)
+                for j in range(k + 1, kk1):
+                    a.unsafe_store(
+                        r * nn + j,
+                        ftz(identical_mul_add(-l, ftz(a.unsafe_load(k * nn + j)), ftz(a.unsafe_load(r * nn + j)))),
+                    )
+                r += LU_PANEL1_TPB
+        dev_barrier()
+
+
+def lu_swaps_trsm_kernel(a: F32Ptr, piv: I32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32):
+    """One thread per trailing column j >= k1: `lu_apply_swaps_kernel`'s
+    swaps, then `lu_trsm_kernel`'s U rows, in one launch. Both touch column
+    j only (the multipliers a[k, k'] they read are the panel's, final), so
+    a column's statements and their order are the two kernels' exactly."""
+    var nn = Int(n)
+    var j = Int(k1) + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < nn:
+        for k in range(Int(k0), Int(k1)):
+            lu_swap_elem(a, piv, k, j, nn)
+        for k in range(Int(k0) + 1, Int(k1)):
+            var acc = ftz(a.unsafe_load(k * nn + j))
+            for kp in range(Int(k0), k):
+                if act.unsafe_load(kp) != Float32(0):
+                    var l = a.unsafe_load(k * nn + kp)
+                    acc = ftz(identical_mul_add(-l, ftz(a.unsafe_load(kp * nn + j)), ftz(acc)))
+            a.unsafe_store(k * nn + j, acc)
+
+
+def lu_trail_rb_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, nb: Int32):
+    """`lu_trail_tiled_kernel` register-blocked: each thread owns LU_RB x
+    LU_RB cells (rows i0 + ty + LU_TILE r, columns j0 + tx + LU_TILE c),
+    every cell the panel's steps k' = k0 .. k1 - 1 in order, each
+    `lu_update_elem`'s statement with l = a[i, k'] (unflushed) and
+    u = ftz(a[k', j]), a step with act[k'] = 0 skipped: the same chain per
+    cell as the tiled kernel and the serial loop, with LU_RB^2 fused
+    multiply-adds per 2 LU_RB threadgroup loads instead of 1 per 2."""
+    var nn = Int(n)
+    var kk0 = Int(k0)
+    var kk1 = Int(k1)
+    var width = Int(nb)
+    var tid = Int(thread_idx.x)
+    var ty = tid // LU_TILE
+    var tx = tid - ty * LU_TILE
+    var i0 = kk1 + Int(block_idx.y) * LU_RB_TILE
+    var j0 = kk1 + Int(block_idx.x) * LU_RB_TILE
+    var ls = stack_allocation[LU_PANEL_NB * LU_RB_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var us = stack_allocation[LU_PANEL_NB * LU_RB_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var acts = stack_allocation[LU_PANEL_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    # the L slab, k-major: ls[k' * LU_RB_TILE + row] (unflushed, as the item reads l)
+    var q = tid
+    while q < LU_RB_TILE * width:
+        var rr = q // width
+        var cc = q - rr * width
+        var v = Float32(0)
+        if i0 + rr < nn:
+            v = a.unsafe_load((i0 + rr) * nn + kk0 + cc)
+        ls[cc * LU_RB_TILE + rr] = v
+        q += LU_TILE_TPB
+    # the U slab: us[k' * LU_RB_TILE + col] (flushed, as the item reads u)
+    q = tid
+    while q < width * LU_RB_TILE:
+        var rr = q // LU_RB_TILE
+        var cc = q - rr * LU_RB_TILE
+        var v = Float32(0)
+        if j0 + cc < nn:
+            v = ftz(a.unsafe_load((kk0 + rr) * nn + j0 + cc))
+        us[q] = v
+        q += LU_TILE_TPB
+    if tid < width:
+        acts[tid] = act.unsafe_load(kk0 + tid)
+    barrier()
+    var acc = InlineArray[Float32, LU_RB * LU_RB](fill=Float32(0))
+    comptime for r in range(LU_RB):
+        comptime for c in range(LU_RB):
+            var i = i0 + ty + LU_TILE * r
+            var j = j0 + tx + LU_TILE * c
+            if i < nn and j < nn:
+                acc[r * LU_RB + c] = ftz(a.unsafe_load(i * nn + j))
+    for kp in range(width):
+        if acts[kp] != Float32(0):
+            var lv = InlineArray[Float32, LU_RB](fill=Float32(0))
+            var uv = InlineArray[Float32, LU_RB](fill=Float32(0))
+            comptime for r in range(LU_RB):
+                lv[r] = ls[kp * LU_RB_TILE + ty + LU_TILE * r]
+            comptime for c in range(LU_RB):
+                uv[c] = us[kp * LU_RB_TILE + tx + LU_TILE * c]
+            comptime for r in range(LU_RB):
+                comptime for c in range(LU_RB):
+                    acc[r * LU_RB + c] = ftz(identical_mul_add(-lv[r], uv[c], ftz(acc[r * LU_RB + c])))
+    comptime for r in range(LU_RB):
+        comptime for c in range(LU_RB):
+            var i = i0 + ty + LU_TILE * r
+            var j = j0 + tx + LU_TILE * c
+            if i < nn and j < nn:
+                a.unsafe_store(i * nn + j, acc[r * LU_RB + c])
 
 
 def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, trans: Int32):
@@ -1617,10 +1833,23 @@ struct DevExec(Exec):
             # brought up to date, and every trailing cell the panel's
             # steps in order through tiles. The same cells in the same
             # order as the per-step route below.
+            #
+            # lane neural-pass135: by default a panel's steps are ONE
+            # `lu_panel1_kernel` launch, the trailing columns' swaps and U
+            # rows one `lu_swaps_trsm_kernel` launch, and the trailing cells
+            # `lu_trail_rb_kernel` (same cells, same order);
+            # MOJOLEARN_XD_LU_PANEL1=0 restores the per-step launches below.
+            var panel1 = lu_panel1_on()
+            var trail_rb = lu_trail_rb_on()
             var k0 = 0
             while k0 < n:
                 var k1 = min(k0 + nb, n)
-                for k in range(k0, k1):
+                if panel1:
+                    ctx.enqueue_function[lu_panel1_kernel](
+                        da.unsafe_ptr(), dp.unsafe_ptr(), di.unsafe_ptr(), dact.unsafe_ptr(),
+                        Int32(k0), Int32(k1), Int32(n), grid_dim=1, block_dim=LU_PANEL1_TPB,
+                    )
+                for k in range(k0, k1 if not panel1 else k0):
                     if pivot_block:
                         ctx.enqueue_function[lu_pivot_block_kernel](
                             da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
@@ -1645,20 +1874,33 @@ struct DevExec(Exec):
                             grid_dim=_blocks((n - k - 1) * (k1 - k - 1)), block_dim=TPB,
                         )
                 if k1 < n:
-                    ctx.enqueue_function[lu_apply_swaps_kernel](
-                        da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n),
-                        grid_dim=_blocks(n - k1), block_dim=TPB,
-                    )
-                    if k1 - k0 > 1:
-                        ctx.enqueue_function[lu_trsm_kernel](
-                            da.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n),
+                    if panel1:
+                        ctx.enqueue_function[lu_swaps_trsm_kernel](
+                            da.unsafe_ptr(), dp.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n),
                             grid_dim=_blocks(n - k1), block_dim=TPB,
                         )
-                    var tiles = (n - k1 + LU_TILE - 1) // LU_TILE
-                    ctx.enqueue_function[lu_trail_tiled_kernel](
-                        da.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n), Int32(k1 - k0),
-                        grid_dim=(tiles, tiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
-                    )
+                    else:
+                        ctx.enqueue_function[lu_apply_swaps_kernel](
+                            da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n),
+                            grid_dim=_blocks(n - k1), block_dim=TPB,
+                        )
+                        if k1 - k0 > 1:
+                            ctx.enqueue_function[lu_trsm_kernel](
+                                da.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n),
+                                grid_dim=_blocks(n - k1), block_dim=TPB,
+                            )
+                    if trail_rb:
+                        var rtiles = (n - k1 + LU_RB_TILE - 1) // LU_RB_TILE
+                        ctx.enqueue_function[lu_trail_rb_kernel](
+                            da.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n), Int32(k1 - k0),
+                            grid_dim=(rtiles, rtiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
+                        )
+                    else:
+                        var tiles = (n - k1 + LU_TILE - 1) // LU_TILE
+                        ctx.enqueue_function[lu_trail_tiled_kernel](
+                            da.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n), Int32(k1 - k0),
+                            grid_dim=(tiles, tiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
+                        )
                 k0 = k1
         for k in range(n if n > lu_serial_max() and nb == 0 else 0):
             if pivot_block:
