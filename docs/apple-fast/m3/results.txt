@@ -1,4 +1,4 @@
-pos=130 lines=     360
+pos=131 lines=     360
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -145,3 +145,4 @@ pos=130 lines=     360
 229:CUT 21:11Z opp2-trees stopped after multiclass taxi; rest runs as opp2-trees-b (--opponents-only)
 230:CMD apple-fast-opp@ac9d7088d opp2-trees rc=143 OPP-RACE trees/gbdt-multiclass/istella/rows=full arms=catboost-cpu,xgboost-cpu,lightgbm-cpu ceiling_s=1800
 231:FBUILD lane/apple-fast-opp@ac9d7088d core=0 ibase=0 estimators=0 gbdt=0 gp=0 training=0 x_ann=0 x_cluster=0 x_cnn=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0
+232:CMD apple-fast-opp@ac9d7088d opp2-trees-b rc=0 OPP-DONE tag=opp2-trees-b out=~/mq/out/opp-opp2-trees-b
