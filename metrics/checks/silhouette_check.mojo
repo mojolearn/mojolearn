@@ -86,7 +86,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from metrics.checks.device_io import download_f32, upload_f32, upload_i32
 from metrics.checks.fixtures import bits32, bits64, hashed_points, u01
 from metrics.checks.pinned_distance import host_l2sqrt_unexpanded
-from metrics.checks.pinned_sum import host_tree_sum
+from metrics.checks.pinned_sum import host_grid_sum, host_tree_sum
 from metrics.impl.silhouette_score_batched_float import (
     silhouette_score,
 )
@@ -171,7 +171,7 @@ def _oracle_silhouette(
             if b[c] < bmin:
                 bmin = b[c]
         scores.append(sil_op(a, bmin))
-    var mean = ftz(host_tree_sum(scores, n) / Float32(n))
+    var mean = ftz(host_grid_sum(scores, n) / Float32(n))
     return (scores^, mean)
 
 
