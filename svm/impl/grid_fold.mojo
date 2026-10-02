@@ -36,6 +36,9 @@ comptime FOLD_TPB = 256
 
 comptime _KEY_PAD = Int32(2147483647)
 
+comptime _FP = MutPointer[Float32, MutAnyOrigin]
+comptime _IP = MutPointer[Int32, MutAnyOrigin]
+
 
 @always_inline
 def fold_blocks(n: Int) -> Int:
@@ -131,21 +134,23 @@ struct FoldScratch(Movable):
 
 def grid_sum_f32(
     ctx: DeviceContext,
-    src: MutPointer[Float32, MutAnyOrigin],
+    src: DeviceBuffer[DType.float32],
     n: Int,
     mut scratch: FoldScratch,
-    dst: MutPointer[Float32, MutAnyOrigin],
+    dst: DeviceBuffer[DType.float32],
 ) raises:
     """The fixed-order sum of `src[0, n)` into `dst[0]`, `n >= 1`: one
     grid launch per level, the last level writing `dst`."""
-    var cur = src
+    var cur = rebind[_FP](src.unsafe_ptr())
+    var sa = rebind[_FP](scratch.a.unsafe_ptr())
+    var sb = rebind[_FP](scratch.b.unsafe_ptr())
     var n_cur = n
     var level = 0
     while True:
         var nb = fold_blocks(n_cur)
-        var out = dst
+        var out = rebind[_FP](dst.unsafe_ptr())
         if nb > 1:
-            out = scratch.a.unsafe_ptr() if (level & 1) == 0 else scratch.b.unsafe_ptr()
+            out = sa if (level & 1) == 0 else sb
         ctx.enqueue_function[tree_sum_f32_kernel](
             out, cur, Int32(n_cur), grid_dim=nb, block_dim=FOLD_TPB,
         )
@@ -158,22 +163,26 @@ def grid_sum_f32(
 
 def grid_arg_f32[MAX: Bool](
     ctx: DeviceContext,
-    src: MutPointer[Float32, MutAnyOrigin],
+    src: DeviceBuffer[DType.float32],
     n: Int,
     mut scratch: FoldScratch,
-    dst: MutPointer[Float32, MutAnyOrigin],
+    dst: DeviceBuffer[DType.float32],
 ) raises:
     """The keyed min (or max) of `src[0, n)` into `dst[0]`, `n >= 1`."""
-    var cur_v = src
-    var cur_k = scratch.ka.unsafe_ptr()
+    var sa = rebind[_FP](scratch.a.unsafe_ptr())
+    var sb = rebind[_FP](scratch.b.unsafe_ptr())
+    var ska = rebind[_IP](scratch.ka.unsafe_ptr())
+    var skb = rebind[_IP](scratch.kb.unsafe_ptr())
+    var cur_v = rebind[_FP](src.unsafe_ptr())
+    var cur_k = ska
     var n_cur = n
     var level = 0
     while True:
         var nb = fold_blocks(n_cur)
-        var out_v = scratch.a.unsafe_ptr() if (level & 1) == 0 else scratch.b.unsafe_ptr()
-        var out_k = scratch.ka.unsafe_ptr() if (level & 1) == 0 else scratch.kb.unsafe_ptr()
+        var out_v = sa if (level & 1) == 0 else sb
+        var out_k = ska if (level & 1) == 0 else skb
         if nb == 1:
-            out_v = dst
+            out_v = rebind[_FP](dst.unsafe_ptr())
         ctx.enqueue_function[tree_arg_f32_kernel[MAX]](
             out_v, out_k, cur_v, cur_k, Int32(n_cur), Int32(1 if level == 0 else 0),
             grid_dim=nb, block_dim=FOLD_TPB,

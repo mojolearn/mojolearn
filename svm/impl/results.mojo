@@ -257,8 +257,8 @@ struct Results(Movable):
         """`CalcB` (`results.cuh:176-214`), the three arms in their order."""
         if n_support == 0:
             grid_sum_f32(
-                ctx, f.unsafe_ptr(), self.n_train, self.fold,
-                self.d_val_reduced.unsafe_ptr(),
+                ctx, f, self.n_train, self.fold,
+                self.d_val_reduced,
             )
             var f_sum = read_scalar_f32(ctx, self.d_val_reduced)
             return ftz(-f_sum / Float32(self.n_train))
@@ -266,8 +266,8 @@ struct Results(Movable):
         var n_free = self.select_unbound_sv(ctx, alpha, C, f)
         if n_free > 0:
             grid_sum_f32(
-                ctx, self.val_selected.unsafe_ptr(), n_free, self.fold,
-                self.d_val_reduced.unsafe_ptr(),
+                ctx, self.val_selected, n_free, self.fold,
+                self.d_val_reduced,
             )
             var s = read_scalar_f32(ctx, self.d_val_reduced)
             return ftz(-s / Float32(n_free))
@@ -327,12 +327,12 @@ struct Results(Movable):
             )
         if take_min:
             grid_arg_f32[False](
-                ctx, self.val_selected.unsafe_ptr(), n_selected, self.fold,
-                self.d_val_reduced.unsafe_ptr(),
+                ctx, self.val_selected, n_selected, self.fold,
+                self.d_val_reduced,
             )
         else:
             grid_arg_f32[True](
-                ctx, self.val_selected.unsafe_ptr(), n_selected, self.fold,
-                self.d_val_reduced.unsafe_ptr(),
+                ctx, self.val_selected, n_selected, self.fold,
+                self.d_val_reduced,
             )
         return read_scalar_f32(ctx, self.d_val_reduced)
