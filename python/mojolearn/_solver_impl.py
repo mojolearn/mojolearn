@@ -165,9 +165,10 @@ class ElasticNet(ParamsMixin):
                                   and un-centers `input` IN PLACE and does
                                   not restore the bits). False is refused
                                   because this surface cannot offer it.
-        random_state    refused   it only ever selected the `std::shuffle`
-                                  stream, and `selection='random'` is
-                                  refused
+        random_state    accepted  stored for get_params/clone; scikit-learn
+                                  reads it only under selection='random',
+                                  which is refused, so it is inert (as it
+                                  is in scikit-learn under 'cyclic')
         y 2-D           refused   one target only, at this boundary
         n_rows <= 1     refused by name by `cdFit` itself (`cd.cuh:145`),
                         in `fit` AND in `predict` -- so `predict(X[:1])`
@@ -277,12 +278,21 @@ class ElasticNet(ParamsMixin):
                 "never written (DEVIATION 880); there is no in-place arm to "
                 "select"
             )
-        if random_state is not None:
-            raise NotImplementedError(
-                "mojolearn ElasticNet: random_state is refused. It selects "
-                "nothing here -- the only randomness in cdFit is the "
-                "coordinate shuffle, and selection='random' is refused by "
-                "name (DEVIATION 611 reserved)"
+        # random_state is accepted and stored, scikit-learn's semantics:
+        # it seeds the coordinate draw of selection='random' only and is
+        # inert under 'cyclic' (sklearn ElasticNet: "Used when selection ==
+        # 'random'"). 'random' is refused by name above (DEVIATION 611), so
+        # no fit reads it and no output bit depends on it. Refusing it broke
+        # every nested Lasso(random_state=...) (the board's voting-reg and
+        # stacking-reg members), so it is now accepted.
+        if random_state is not None and (
+                isinstance(random_state, bool)
+                or not (isinstance(random_state, int)
+                        or hasattr(random_state, "randint")
+                        or hasattr(random_state, "integers"))):
+            raise ValueError(
+                f"random_state={random_state!r}: None, an int or a "
+                "numpy random state"
             )
         self.alpha = alpha
         self.l1_ratio = l1_ratio
@@ -295,7 +305,7 @@ class ElasticNet(ParamsMixin):
         self.copy_X = True
         self.warm_start = False
         self.positive = False
-        self.random_state = None
+        self.random_state = random_state
 
     def _as_fortran(self, X, name):
         """A float32 column-major Array over X, and whether that cost the
