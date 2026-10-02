@@ -335,11 +335,6 @@ _DEV_ONE = {}
 #: 0.129 / 0.124 s)
 import os as _os
 _RES_MIN = int(_os.environ.get("MOJOLEARN_XD_RES_MIN", "1"))
-#: A/B arm (lane hr2-graph-embed, 2026-10-02): Isomap's / LLE's kNN by
-#: heapq, their graphs, component walk and joins in Python, and the
-#: host-built Dijkstra arcs, instead of the graph cells
-#: (x_decomp/graph_cells.mojo) on device-resident matrices.
-_PY_GRAPH = _os.environ.get("MOJOLEARN_XD_PY_GRAPH", "") == "1"
 
 
 def _dev_one(kit):
@@ -735,13 +730,8 @@ class _Kit:
         """All-pairs shortest paths on a dense undirected graph (0 = no edge),
         one source per thread; -1 marks an unreachable pair. The GPU binding
         keeps W and the result resident and compresses the arcs on the
-        device (x_decomp/graph_device.mojo); MOJOLEARN_XD_PY_GRAPH=1 (A/B,
-        lane hr2-graph-embed) restores the host-address entry."""
+        device (x_decomp/graph_device.mojo)."""
         n = W.r
-        if _PY_GRAPH:
-            dist, reached = _M.zeros(n, n), _M.zeros(n, 1)
-            self.b.x_decomp_dijkstra_rows(W.addr, dist.addr, reached.addr, [n])
-            return dist
         if self._res():
             dist = self._dout(n, n)
             self.b.x_decomp_dev_graph_dijkstra(self._did(W), dist._d.id, [n])
@@ -3252,23 +3242,11 @@ def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
     query's own index (queries ARE the training rows). kind 0 returns
     SQUARED Euclidean distances (the callers take the root); any other kind
     the `_dist` distances themselves."""
-    if not _PY_GRAPH:
-        im, dm = _knn_mats(k, Q, X, n_neighbors, exclude_self, kind, pw)
-        nn = n_neighbors
-        iv, dv = im.s, dm.s
-        return ([[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)],
-                [list(dv[i * nn:(i + 1) * nn]) for i in range(Q.r)])
-    D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
-    # each row's n_neighbors smallest by (value, column), its own column
-    # skipped: exactly nsmallest(n_neighbors + 1) less the row itself, on the
-    # device beside D (lane neural-pass142; the host heap walk was 5.5 s of a
-    # 10,000-row LocallyLinearEmbedding fit on the M4)
-    nn = min(n_neighbors, X.r - (1 if exclude_self else 0))
-    I, V = k.knn_select(D, nn, exclude_self)
-    iv, vv = I.s, V.s
-    idx = [[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)]
-    dst = [list(vv[i * nn:(i + 1) * nn]) for i in range(Q.r)]
-    return idx, dst
+    im, dm = _knn_mats(k, Q, X, n_neighbors, exclude_self, kind, pw)
+    nn = n_neighbors
+    iv, dv = im.s, dm.s
+    return ([[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)],
+            [list(dv[i * nn:(i + 1) * nn]) for i in range(Q.r)])
 
 
 def _center_kernel(k, K):
@@ -3389,51 +3367,6 @@ def _top_eig(k, A, nc, topk=False):
     return w, V.neg_cols(k.absmax_flags(V, True))
 
 
-def _fix_components(k, X, Wg, kind=0, pw=2.0, adj=None):
-    """sklearn `utils/graph.py::_fix_connected_components` on a dense graph:
-    for every pair of connected components (i < j, labels by lowest member),
-    the closest pair of points between them gets an edge of their distance.
-    `adj` (optional): each node's neighbors in either direction, the nonzero
-    entries of Wg's row and column; the components are walked over it
-    (O(edges), not O(n^2) in Python). The labels do not depend on the walk."""
-    n = Wg.r
-    labels = [-1] * n
-    comp = 0
-    for s0 in range(n):
-        if labels[s0] >= 0:
-            continue
-        stack = [s0]
-        labels[s0] = comp
-        while stack:
-            u = stack.pop()
-            for v in (adj[u] if adj is not None else range(n)):
-                if labels[v] < 0 and (adj is not None or Wg.s[u * n + v] != 0 or Wg.s[v * n + u] != 0):
-                    labels[v] = comp
-                    stack.append(v)
-        comp += 1
-    if comp == 1:
-        return Wg, 1
-    import warnings
-    warnings.warn(f"The number of connected components of the neighbors graph is {comp} > 1. "
-                  "Completing the graph to fit Isomap might be slow.", stacklevel=3)
-    D = _dist(k, X, X, kind, pw, same=True)
-    Wg = Wg.copy()
-    for a in range(comp):
-        ia = [i for i in range(n) if labels[i] == a]
-        for b in range(a + 1, comp):
-            ib = [i for i in range(n) if labels[i] == b]
-            best = None
-            for i in ia:
-                for j in ib:
-                    v = D.s[i * n + j]
-                    if best is None or v < best[0]:
-                        best = (v, i, j)
-            v, i, j = best
-            Wg.s[i * n + j] = v if v != 0 else 1e-10
-            Wg.s[j * n + i] = Wg.s[i * n + j]
-    return Wg, comp
-
-
 class Isomap(_Base):
     """sklearn.manifold.Isomap (reference: scikit-learn `manifold/_isomap.py`
     with `KernelPCA(kernel='precomputed')` and `utils/graph.py`): the
@@ -3473,10 +3406,7 @@ class Isomap(_Base):
         k = self._kit()
         M = _M.from_input(X)
         n = M.r
-        if not _PY_GRAPH:
-            Wg, nn = self._graph(k, M, n, kind, pw)
-        else:
-            Wg, nn = self._py_graph(k, M, n, kind, pw)
+        Wg, nn = self._graph(k, M, n, kind, pw)
         D = k.dijkstra(Wg)
         self.dist_matrix_m_ = D
         self.dist_matrix_ = D.out()
@@ -3514,36 +3444,6 @@ class Isomap(_Base):
                           "Completing the graph to fit Isomap might be slow.", stacklevel=3)
             D = _dist(k, M, M, kind, pw, same=True)
             k.graph_join(Wg, D, comp, C)
-        return Wg, nn
-
-    def _py_graph(self, k, M, n, kind, pw):
-        """MOJOLEARN_XD_PY_GRAPH=1 (A/B): the Python graph build."""
-        Wg = _M.zeros(n, n)
-        adj = [[] for _ in range(n)]      # neighbors either way, for the component walk
-        if self.radius is not None:
-            r = _f32(float(self.radius))
-            D = _dist(k, M, M, kind, pw, same=True)
-            for i in range(n):
-                for j in range(n):
-                    v = D.s[i * n + j]
-                    if j != i and v <= r:
-                        Wg.s[i * n + j] = v if v != 0 else 1e-10   # scipy drops explicit zeros; keep the edge
-                        adj[i].append(j)
-                        adj[j].append(i)
-            nn = None
-        else:
-            nn = int(self.n_neighbors)
-            idx, dst = _knn_lists(k, M, M, nn, True, kind, pw)
-            sq = _M.of([v for row in dst for v in row], n, nn)
-            if kind == 0:
-                sq = k.ew("sqrt", sq)
-            for i in range(n):
-                for a, j in enumerate(idx[i]):
-                    v = sq.s[i * nn + a]
-                    Wg.s[i * n + j] = v if v != 0 else 1e-10   # scipy drops explicit zeros; keep the edge
-                    adj[i].append(j)
-                    adj[j].append(i)
-        Wg, self.n_connected_components_ = _fix_components(k, M, Wg, kind, pw, adj)
         return Wg, nn
 
     def fit_transform(self, X, y=None):
@@ -4058,7 +3958,7 @@ class LocallyLinearEmbedding(_Base):
                              "[n_components * (n_components + 3) / 2]")
         if self.method == "modified" and nn < nc:
             raise ValueError("modified LLE requires n_neighbors >= n_components")
-        if self.method == "standard" and not _PY_GRAPH:
+        if self.method == "standard":
             # lane hr2-graph-embed: the kNN, the barycenter weights and I - W
             # as cells, I - W resident on the GPU binding
             idm, _ = _knn_mats(k, M, M, nn, True)
@@ -4072,15 +3972,8 @@ class LocallyLinearEmbedding(_Base):
             IW = self._ltsa_factor(k, M, idx, nn, nc)
         elif self.method == "hessian":
             IW = self._hessian_factor(k, M, idx, nn, nc)
-        elif self.method == "modified":
-            IW = self._modified_factor(k, M, idx, nn, nc)
         else:
-            Wb = k.barycenter(M, M, idx, self.reg)
-            IW = _M.zeros(n, n)
-            for i in range(n):
-                IW.s[i * n + i] = 1.0
-                for a, j in enumerate(idx[i]):
-                    IW.s[i * n + j] = _f32(IW.s[i * n + j] - Wb.s[i * nn + a])
+            IW = self._modified_factor(k, M, idx, nn, nc)
         # The eigenvectors of M = (I - W)^T (I - W) for its smallest
         # eigenvalues are the right singular vectors of I - W for its
         # smallest singular values. Those eigenvalues sit near 1e-7, under
