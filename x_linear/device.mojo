@@ -1538,6 +1538,12 @@ def glm_deriv_kernel(y: FP, n: Int32, power: Float32, link: Int32, sw: Int32, et
         _glm_deriv_row(y, Int(n), i, power, Int(link), eta, sw != 0, gr, hr)
     witness_end(wf, woff, nonce)
 
+#: Apple: macOS silently aborts a command buffer that holds the GPU for
+#: seconds and leaves its output partly stale. The GLM cells run in row
+#: slices of at most GLM_APPLE_SLICE_MACS chain steps a launch, each waited
+#: on (the same words).
+comptime GLM_APPLE_SLICE_MACS = 1 << 29
+
 def _glm_rows_slice(n: Int, slots: Int) -> Int:
     comptime if has_apple_gpu_accelerator():
         return max(64, min(n, (GLM_APPLE_SLICE_MACS // max(slots, 1)) // 64 * 64))
