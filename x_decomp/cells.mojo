@@ -20,6 +20,7 @@ cell is written so it cannot:
   * no float64 anywhere.
 """
 from std.memory import bitcast
+from std.sys.compile import is_defined
 
 from checks.numerics import (
     ftz,
@@ -1125,6 +1126,12 @@ def als_cg_row(
     return Float32(steps)
 
 
+#: A/B arm of lane hr-lu (measurement only): -D MOJOLEARN_XD_LU_SOLVE_GETRS
+#: runs lu_solve in getrs's left-looking order, as main did (the host walk for
+#: n >= 1,024 on a device install, a thread per right-hand side below).
+comptime XD_LU_SOLVE_GETRS = is_defined["MOJOLEARN_XD_LU_SOLVE_GETRS"]()
+
+
 # ------------------------------------------------------------------ serial
 # Small dense routines run by ONE thread on the device (a single-thread
 # kernel) and by the host loop: the same function body both ways.
@@ -1132,9 +1139,15 @@ def als_cg_row(
 
 # DEVIATION 5307 (PIN; row 134): the pivot is the largest |a| with ties to the
 # LOWEST row (strict >); arm 5307_pivot_tie.
-# DEVIATION 5308 (PIN; row 134): every substitution and Cholesky fold ascending,
-# getrs 'N' and 'T' alike ('T' undoes the swaps last to first); arm
-# 5308_getrs_order.
+# DEVIATION 5308 (PIN; row 134; lane hr-lu 2026-10-02): lu_solve is
+# right-looking, the `trisolve` order: the row swaps as ONE gather by the row
+# order they make (`lu_perm_src`), then every cell's chain in the order its
+# operands finish, ascending j going forward (unit L for 'N', U^T for 'T', as
+# getrs) and DESCENDING j going backward (U for 'N', unit L^T for 'T'; getrs
+# folds these ascending), each row divided once every step into it is
+# applied; 'T' scatters the rows back through the swaps (getrs's last to
+# first). The bits do not depend on the device's block size. The Cholesky
+# fold ascending. Arm 5308_lu_solve_order.
 def lu_pivot(a: F32Ptr, piv: I32Ptr, k: Int, n: Int):
     """Step k's pivot row: the largest |a[i, k]| for i >= k, ties to the
     LOWEST row (strict >), into piv[k]."""
@@ -1391,32 +1404,51 @@ def trs_feed_cell(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, lo: Int, h
     b.unsafe_store(i * nrhs + c, acc)
 
 
-def trs_tri_serial(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int):
-    """One triangle, every column: the reference walk (one row at a time,
-    each applied to every row it feeds, columns innermost)."""
+def trs_tri_cols(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, c0: Int, c1: Int):
+    """One triangle on the columns [c0, c1): the reference walk (one row at
+    a time, each applied to every row it feeds, columns innermost). Every
+    cell's chain is its own column's, so column slices run apart."""
     if tri == 0 or tri == 2:
         for j in range(n):
-            for c in range(nrhs):
-                if trs_divides(tri):
+            if trs_divides(tri):
+                for c in range(c0, c1):
                     trs_div(lu, b, n, nrhs, j, c)
             for i in range(j + 1, n):
-                for c in range(nrhs):
+                for c in range(c0, c1):
                     trs_step(lu, b, n, nrhs, tri, i, j, c)
     else:
         for jj in range(n):
             var j = n - 1 - jj
-            for c in range(nrhs):
-                if trs_divides(tri):
+            if trs_divides(tri):
+                for c in range(c0, c1):
                     trs_div(lu, b, n, nrhs, j, c)
             for i in range(j):
-                for c in range(nrhs):
+                for c in range(c0, c1):
                     trs_step(lu, b, n, nrhs, tri, i, j, c)
+
+
+def trs_tri_serial(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int):
+    """One triangle, every column (`trs_tri_cols`)."""
+    trs_tri_cols(lu, b, n, nrhs, tri, 0, nrhs)
 
 
 def trs_gather(src: F32Ptr, idx: F32Ptr, dst: F32Ptr, nrhs: Int, i: Int, c: Int):
     """dst[i, c] = src[idx[i], c] (idx holds row numbers as floats, exact
     below 2^24)."""
     dst.unsafe_store(i * nrhs + c, src.unsafe_load(Int(idx.unsafe_load(i)) * nrhs + c))
+
+
+def lu_perm_src(piv: I32Ptr, i: Int) -> Int:
+    """The row of B that getrs's swaps (k ascending: rows k and piv[k])
+    bring to row i, from row i alone: swap k > i never touches row i (piv[k]
+    >= k), swap i brings row piv[i], and each earlier swap k whose piv[k] is
+    the row being followed brings row k instead. Integer compares only."""
+    var p = Int(piv.unsafe_load(i))
+    for q in range(i):
+        var k = i - 1 - q
+        if Int(piv.unsafe_load(k)) == p:
+            p = k
+    return p
 
 
 def trisolve_serial(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, tmp: F32Ptr, n: Int, nrhs: Int, trans: Int):

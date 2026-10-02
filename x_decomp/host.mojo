@@ -20,6 +20,9 @@ from decomposition.host.pca_oracle import host_sign_flip
 from checks.numerics import ftz
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
+    XD_LU_SOLVE_GETRS,
+    lu_perm_src,
+    trs_tri_cols,
     trisolve_serial,
     F32Ptr,
     absmax_sign_cell,
@@ -48,6 +51,8 @@ from x_decomp.cells import (
     pdist_cell,
 )
 from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_serial
+from core.host_lanes import host_row_tasks
+from core.host_parallel import host_parallelize
 from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_serial
 from x_decomp.exec_trait import Exec
 from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
@@ -73,6 +78,52 @@ from x_decomp.host_simd import (
 )
 
 comptime X_DECOMP_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
+#: columns of B per host task of the right-looking lu_solve (a schedule cut)
+comptime LU_RL_COLS = 16
+
+
+def lu_solve_rl(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int):
+    """lu_solve in the right-looking order (DEVIATION 5308), the device's
+    chains: B gathered by the swaps' row order (`lu_perm_src`), then
+    `trs_tri_cols` on slices of LU_RL_COLS columns over host tasks (each
+    column's chains are its own); 'T' solves first and scatters the rows
+    back through the same order."""
+    if n <= 0 or nrhs <= 0:
+        return
+    var src = List[Int](length=n, fill=0)
+    for i in range(n):
+        src[i] = lu_perm_src(piv, i)
+    var tmp = List[Float32](unsafe_uninit_length=n * nrhs)
+    var tp = F32Ptr(unsafe_from_address=Int(tmp.unsafe_ptr()))
+    for i in range(n):
+        var r = src[i] if trans == 0 else i
+        for c in range(nrhs):
+            tp.unsafe_store(i * nrhs + c, b.unsafe_load(r * nrhs + c))
+    var t0 = 0 if trans == 0 else 2
+    var slices = (nrhs + LU_RL_COLS - 1) // LU_RL_COLS
+    var tasks = host_row_tasks(slices, n * n * LU_RL_COLS)
+    var per = (slices + tasks - 1) // tasks
+
+    def run(t: Int) {imm lu, imm tp, imm n, imm nrhs, imm t0, imm per}:
+        var c0 = t * per * LU_RL_COLS
+        var c1 = min(nrhs, c0 + per * LU_RL_COLS)
+        if c1 > c0:
+            trs_tri_cols(lu, tp, n, nrhs, t0, c0, c1)
+            trs_tri_cols(lu, tp, n, nrhs, t0 + 1, c0, c1)
+
+    var used = (slices + per - 1) // per
+    if used <= 1:
+        run(0)
+    else:
+        host_parallelize(run, used)
+    for i in range(n):
+        var r = i if trans == 0 else src[i]
+        for c in range(nrhs):
+            b.unsafe_store(r * nrhs + c, tp.unsafe_load(i * nrhs + c))
+    _ = tmp^
+    _ = src^
+
 
 #: elements per elementwise task, rows per row-fold task: shape-only cuts
 comptime EW_CHUNK = 32768
@@ -290,6 +341,9 @@ struct HostExec(Exec):
 
     @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
+        comptime if not XD_LU_SOLVE_GETRS:
+            lu_solve_rl(lu, piv, b, n, nrhs, trans)
+            return
         # lane neural-pass39: the block-interleaved walk of the same cells
         # (x_decomp/lu_host.mojo); MOJOLEARN_XD_LU_SOLVE_SERIAL=1 keeps the loop
         if xd_lu_solve_serial():
