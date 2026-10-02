@@ -981,6 +981,9 @@ def compute_hist2_non_binary[
         var slots_i = ctx.enqueue_create_buffer[DType.float32](
             multiplier * stride_i
         )
+        # zeroed: a cell no block of this width files (another width's
+        # feature in the window) must fold to 0 and stay unwritten
+        enqueue_fill(ctx, slots_i, Float32(0.0))
         non_binary_multiplier_ladder[bits](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             nb_count, cindex, target, weight, indices, partition,
