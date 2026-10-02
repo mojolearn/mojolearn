@@ -513,10 +513,9 @@ def our_arms(family, modes, lane=None, cpu_arm=False):
     """driver arm name -> numeric mode, for our arms in one race. `cpu_arm`
     adds `ours-cpu` (IDENTICAL, the only tier the host bindings build) where
     identical is planned and the lane has a CPU arm (cpu_arm_reason)."""
-    out = _our_gpu_arms(family, modes, lane)
-    if cpu_arm and "identical" in modes and out and cpu_arm_reason(family, lane) is None:
-        out[CPU_ARM] = "identical"
-    return out
+    # Andrew, Oct 2 2026: the board races only OUR GPU. `ours-cpu` is never
+    # planned; `cpu_arm` is kept only so old callers still work.
+    return _our_gpu_arms(family, modes, lane)
 
 
 def _our_gpu_arms(family, modes, lane=None):
@@ -537,8 +536,20 @@ def _our_gpu_arms(family, modes, lane=None):
     return out
 
 
+def _is_cpu_arm(arm):
+    return re.search(r"-cpu(?:-|$)", arm) is not None
+
+
+def gpu_opponents_first(opp):
+    """Andrew, Oct 2 2026: when a race has any GPU opponent, only GPU opponents
+    race and every CPU opponent is dropped (sklearn included). A race with no
+    GPU opponent at all keeps its CPU opponents."""
+    gpu = [a for a in opp if not _is_cpu_arm(a)]
+    return gpu if gpu else list(opp)
+
+
 def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, rows=None,
-               neural_shape="full", cpu_arm=True):
+               neural_shape="full", cpu_arm=False):
     check_neural_modes(families, modes)
     races = []
     for fam in families:
@@ -546,9 +557,11 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
             if lanes and lane not in lanes:
                 continue
             if fam == "neural":
+                if NEURAL.DEVICE_OF.get(lane) == "cpu":
+                    continue                  # ours would run on the CPU: never raced
                 # one race per lane: its own data, not taxi/Istella; IDENTICAL only
                 ours = our_arms(fam, modes, lane, cpu_arm)
-                opp = NEURAL_OPPONENTS[vendor][lane]
+                opp = gpu_opponents_first(NEURAL_OPPONENTS[vendor][lane])
                 ds = NEURAL_DATA[lane]
                 races.append({
                     "id": race_id(fam, lane, ds, None, neural_shape),
@@ -561,7 +574,7 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                 ours = our_arms(fam, modes, lane, cpu_arm)
                 if not ours:
                     continue
-                opp = ALGOS.opponents(vendor, lane)
+                opp = gpu_opponents_first(ALGOS.opponents(vendor, lane))
                 # taxi/Istella follow --datasets; a lane's own data (text,
                 # taxi-hourly, synthetic, ...) runs whatever --datasets says
                 for ds in [d for d in ALGOS.datasets_of(lane) if d not in DATASETS or d in datasets]:
@@ -577,7 +590,7 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                 ours = our_arms(fam, modes, lane, cpu_arm)
                 if not ours:
                     continue
-                opp = MORE.OPPONENTS[vendor][lane]
+                opp = gpu_opponents_first(MORE.OPPONENTS[vendor][lane])
                 own = MORE.datasets_of(lane)
                 # a lane on its own synthetic data runs once, whatever
                 # --datasets says; taxi/Istella lanes follow --datasets
@@ -591,7 +604,8 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                     })
                 continue
             for ds in (tree_task_datasets(lane, datasets) if fam == "trees" else datasets):
-                opp = (TREE_OPPONENTS if fam == "trees" else CLASSICAL_OPPONENTS)[vendor][lane]
+                opp = gpu_opponents_first(
+                    (TREE_OPPONENTS if fam == "trees" else CLASSICAL_OPPONENTS)[vendor][lane])
                 ours = our_arms(fam, modes, lane, cpu_arm)
                 races.append({
                     "id": race_id(fam, lane, ds, rows),
@@ -2802,7 +2816,7 @@ def cpu_not_covered(cfg):
     """The board's 'Not covered' lines for the CPU arm and for memory."""
     out = []
     if cfg.get("cpu_arm") is False:
-        out.append("Our CPU tier: `--no-cpu-arm` was passed, so no `ours-cpu` arm ran.")
+        out.append("Our CPU: never raced; the board races only our GPU (Andrew, Oct 2 2026).")
     lanes = sorted({l for l in NEURAL_LANES if cpu_arm_reason("neural", l)})
     if lanes:
         out.append("Our CPU tier, no ours-cpu arm: neural %s: %s." % (
@@ -3033,8 +3047,7 @@ def build_parser():
                    help="time training only: skip the inference cells (trees, and the classical "
                         "kmeans/pca/ols/svc lanes) that are timed after each race's fit rounds")
     p.add_argument("--no-cpu-arm", action="store_true",
-                   help="skip our CPU tier: no `ours-cpu` arm (by default it races on every lane "
-                        "whose estimator has a CPU path, on every vendor)")
+                   help="accepted for old scripts; the board never races our CPU")
     p.add_argument("--rerun", default=None,
                    help="comma list of race id prefixes (e.g. trees/rf/,trees/et/) to run again "
                         "although done; the old record is kept under `superseded`")
@@ -3206,18 +3219,7 @@ def print_plan(vendor, modes, races, args, rows, data):
     for fam, f in sorted(s["by_family"].items()):
         print("family %-10s races=%d cells=%d" % (fam, f["races"], f["cells"]))
     print("TOTAL races=%d cells=%d" % (s["races"], s["cells"]))
-    if args.no_cpu_arm:
-        print("ours-cpu: off (--no-cpu-arm)")
-    else:
-        print("ours-cpu cells=%d (%s; bit-compared with our GPU IDENTICAL arm)"
-              % (s["cpu_cells"], CPU_SWITCH))
-        skipped = sorted({(r["family"], r["lane"]) for r in races
-                          if CPU_ARM not in r["arms"] and cpu_arm_reason(r["family"], r["lane"])})
-        for fam, lane in skipped:
-            print("ours-cpu NOT PLANNED: %s %s: %s" % (fam, lane, cpu_arm_reason(fam, lane)))
-        if "identical" not in modes:
-            print("ours-cpu NOT PLANNED: --modes %s has no identical; the host bindings build "
-                  "IDENTICAL only" % ",".join(modes))
+    print("ours-cpu: off (the board races only our GPU)")
     print("memory: peak_host_mb and peak_gpu_mb per arm and cell (tools/bench_board_probe.py)")
     if not args.no_infer:
         inf = {}
@@ -3309,7 +3311,7 @@ def main(argv=None):
     datasets = _csv(args.datasets, DATASETS, "dataset")
     rows = parse_rows(args.rows)
     races = plan_races(vendor, modes, families, lanes, datasets, rows, args.neural_shape,
-                       cpu_arm=not args.no_cpu_arm)
+                       cpu_arm=False)
     if args.shard:
         races = shard_races(races, args.shard)
     # taxi and Istella-S are read by trees and classical only; a neural-only
@@ -3427,7 +3429,7 @@ def main(argv=None):
     result["config"] = {"vendor": vendor, "modes": modes, "families": families,
                         "lanes": lanes, "datasets": datasets, "rows": rows,
                         "rounds": args.rounds, "seed": SEED, "infer": not args.no_infer,
-                        "cpu_arm": not args.no_cpu_arm,
+                        "cpu_arm": False,
                         "neural_shape": args.neural_shape if "neural" in families else None,
                         "smoke": (bool(rows) and rows < TREE_ROW_FLOOR
                                   and any(r["family"] != "neural" for r in races))
