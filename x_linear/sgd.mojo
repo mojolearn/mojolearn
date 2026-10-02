@@ -674,9 +674,9 @@ def sgd_one_warp[K: Int](
 @always_inline
 def sgd_mb_on(batch: Int, k: Int, lr: Int) -> Bool:
     """Whether a problem takes the minibatch form (lane/neural-pass103): a batch
-    size was given, not the one-class problem and not the passive-aggressive
-    rates (their steps are per sample by definition)."""
-    return batch > 0 and k != 1 and lr != LR_PA1 and lr != LR_PA2
+    size was given. Since lane/neural-pass132 the one-class problem and the
+    passive-aggressive rates take it too (see `mb_row`, `sgd_mb_one`)."""
+    return batch > 0
 
 
 def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
@@ -831,7 +831,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         seed + UInt64(1000003) * UInt64(c), res, c * d, res, problems * d + c, idx,
                         swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
                         ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw, batch,
-                        FP(unsafe_from_address=Int(sl.unsafe_ptr())),
+                        FP(unsafe_from_address=Int(sl.unsafe_ptr())), k == 1,
                     )
                     _ = sl^
                 else:
@@ -930,6 +930,15 @@ def sgd_team_rows(ip: IP) -> Int:
 #     penalty's gradient: alpha w_j (l2), alpha sign(w_j) (l1), alpha (l1_ratio
 #     sign(w_j) + (1 - l1_ratio) w_j) (elasticnet)); b = b - eta_t G_b / bs;
 #     eta_t sgd_one's schedule with t counting batches.
+# lane/neural-pass132 (2026-10-02; GPU-only rule: Perceptron, PA and the
+# one-class SVM ran per sample on the host inside the device binding):
+#   * passive-aggressive (pa1 / pa2): row i's own PA step u_i (theirs, at the
+#     batch's starting weights) is its dl_i = -u_i and the rate is 1, so the
+#     batch moves by the MEAN of its rows' PA steps (no penalty, as theirs);
+#   * one-class: the intercept starts at 1 and every batch also takes their
+#     offset step, b = b - eta_t G_b / bs - eta_t alpha; the epoch objective
+#     adds alpha b (theirs adds alpha times the intercept per row);
+#   * Perceptron is the perceptron loss at a constant rate (already covered).
 # The epoch objective (only with tol) is the per-batch loss sums in the same
 # blocked order, batches ascending, over n, plus alpha times the penalty at the
 # epoch's end; the stopping and the adaptive rate are sgd_one's. Every value
@@ -957,7 +966,10 @@ def mb_optimal_init(loss: Int, alpha: Float32, eps: Float32) -> Float32:
 @always_inline
 def mb_eta(lr: Int, eta: Float32, eta0: Float32, alpha: Float32, power_t: Float32, opt_init: Float32, t: Int) -> Float32:
     """The rate of batch t (from 1): sgd_one's schedule with t counting batches;
-    `eta` is the constant / adaptive rate."""
+    `eta` is the constant / adaptive rate; 1 for the PA rates (the step is in
+    each row's dl, `mb_row`)."""
+    if lr == LR_PA1 or lr == LR_PA2:
+        return Float32(1)
     if lr == LR_OPTIMAL:
         return fd(Float32(1), fm(alpha, fs(fa(opt_init, i2f(t)), Float32(1))))
     if lr == LR_INVSCALING:
@@ -967,15 +979,36 @@ def mb_eta(lr: Int, eta: Float32, eta0: Float32, alpha: Float32, power_t: Float3
 
 @always_inline
 def mb_row(x: FP, ys: FP, i: Int, d: Int, w: FP, woff: Int, b: Float32, loss: Int, eps: Float32,
-           swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool) -> Tuple[Float32, Float32]:
-    """(dl_i weighted, loss_i) of row i at (w, b)."""
+           swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool,
+           lr: Int, eta0: Float32) -> Tuple[Float32, Float32]:
+    """(dl_i weighted, loss_i) of row i at (w, b); with a PA rate dl_i is minus
+    the row's PA step (sgd_one's statements, eta0 = C)."""
     var y = ld(ys, i)
     var p = fa(row_dot(x, i, d, w, woff), b)
-    var dl = sgd_dloss(loss, y, p, eps)
-    if dl < Float32(-1e12):
-        dl = Float32(-1e12)
-    elif dl > Float32(1e12):
-        dl = Float32(1e12)
+    var dl: Float32
+    if lr == LR_PA1 or lr == LR_PA2:
+        var cur = sgd_loss(loss, y, p, eps)
+        var sq = Float32(0)
+        for j in range(d):
+            var xj = ld(x, i * d + j)
+            sq = fmad(xj, xj, sq)
+        var update = Float32(0)
+        if lr == LR_PA1:
+            if sq != 0:
+                update = fmin(eta0, fd(cur, sq))
+        else:
+            update = fd(cur, fa(sq, fd(Float32(0.5), eta0)))
+        if loss == L_HINGE:
+            update = fm(update, y)
+        elif fs(y, p) < 0:
+            update = -update
+        dl = -update
+    else:
+        dl = sgd_dloss(loss, y, p, eps)
+        if dl < Float32(-1e12):
+            dl = Float32(-1e12)
+        elif dl > Float32(1e12):
+            dl = Float32(1e12)
     if has_cw or has_sw:
         var cw = Float32(1)
         if has_cw:
@@ -1020,6 +1053,16 @@ def mb_step(wj: Float32, g: Float32, bs: Int, eta: Float32, alpha: Float32, l1r:
 
 
 @always_inline
+def mb_bias_step(b: Float32, gb: Float32, bs: Int, eta: Float32, alpha: Float32, one_class: Bool) -> Float32:
+    """The intercept after the batch: gb the folded dl sum; the one-class
+    problem also takes their offset step."""
+    var nb = fs(b, fm(eta, fd(gb, i2f(bs))))
+    if one_class:
+        nb = fs(nb, fm(eta, alpha))
+    return nb
+
+
+@always_inline
 def mb_penalty(w: FP, woff: Int, d: Int, alpha: Float32, l1r: Float32, penalty: Int) -> Float32:
     """alpha times the penalty (sgd_one's reg) at w."""
     if penalty == P_NONE:
@@ -1039,6 +1082,7 @@ def sgd_mb_one(
     lr: Int, eta0: Float32, power_t: Float32, eps: Float32, fit_intercept: Bool, max_iter: Int, tol: Float32,
     nic: Int, do_shuffle: Bool, seed: UInt64, w: FP, woff: Int, b: FP, boff: Int, idx: IP,
     swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool, batch: Int, scratch: FP,
+    one_class: Bool = False,
 ) -> Int:
     """One problem on the host (the CPU binding's form of the device's batches).
     scratch: dl batch | loss batch | partials (d + 2) * subs. Returns epochs,
@@ -1048,7 +1092,7 @@ def sgd_mb_one(
     var parts = lv + batch
     var nsub = mb_subs(batch)
     fill(w, woff, d, Float32(0))
-    var bias = Float32(0)
+    var bias = Float32(1) if one_class else Float32(0)
     for i in range(n):
         sti(idx, i, i)
     var rng = seed
@@ -1068,7 +1112,8 @@ def sgd_mb_one(
         while start < n:
             var bs = min(batch, n - start)
             for r in range(bs):
-                var dl_l = mb_row(x, ys, Int(ldi(idx, start + r)), d, w, woff, bias, loss, eps, swp, has_sw, wpos, wneg, has_cw)
+                var dl_l = mb_row(x, ys, Int(ldi(idx, start + r)), d, w, woff, bias, loss, eps, swp, has_sw, wpos, wneg, has_cw,
+                                  lr, eta0)
                 st(dlv, r, dl_l[0])
                 st(lv, r, dl_l[1])
             var subs = mb_subs(bs)
@@ -1085,7 +1130,7 @@ def sgd_mb_one(
                 var gb = Float32(0)
                 for s in range(subs):
                     gb = fa(gb, ld(parts, d * nsub + s))
-                bias = fs(bias, fm(et, fd(gb, i2f(bs))))
+                bias = mb_bias_step(bias, gb, bs, et, alpha, one_class)
             if need_obj:
                 var lb = Float32(0)
                 for s in range(subs):
@@ -1104,6 +1149,8 @@ def sgd_mb_one(
             return -1
         if need_obj:
             var mean_obj = fa(fd(objective, i2f(n)), mb_penalty(w, woff, d, alpha, l1r, penalty))
+            if one_class:
+                mean_obj = fa(mean_obj, fm(alpha, bias))
             if mean_obj > fs(best, tol):
                 no_improve += 1
             else:

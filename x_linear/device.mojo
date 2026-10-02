@@ -25,7 +25,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS
 from x_linear.ops import ld, st, fd, i2f, fa, fs, fm, fabs, shuffle
-from x_linear.sgd import sgd_mb_on, mb_row, mb_part, mb_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
+from x_linear.sgd import sgd_mb_on, mb_row, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo
@@ -189,11 +189,12 @@ def _fit_on_host(
 # same statements; an epoch's batches are enqueued without a sync.
 def sgd_mb_rows_kernel(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
                        eps: Float32, swp: FP, has_sw: Int32, wpos: Float32, wneg: Float32, has_cw: Int32,
-                       dlv: FP, lv: FP):
+                       dlv: FP, lv: FP, lr: Int32, eta0: Float32):
     var r = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     if r < Int(bs):
         var i = Int(idx.unsafe_load(Int(start) + r))
-        var o = mb_row(x, ys, i, Int(d), w, 0, ld(bias, 0), Int(loss), eps, swp, has_sw != 0, wpos, wneg, has_cw != 0)
+        var o = mb_row(x, ys, i, Int(d), w, 0, ld(bias, 0), Int(loss), eps, swp, has_sw != 0, wpos, wneg, has_cw != 0,
+                       Int(lr), eta0)
         st(dlv, r, o[0])
         st(lv, r, o[1])
 
@@ -209,7 +210,7 @@ def sgd_mb_parts_kernel(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP,
 
 
 def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias: FP, obj: FP, eta: Float32,
-                       alpha: Float32, l1r: Float32, penalty: Int32, fi: Int32, need_obj: Int32):
+                       alpha: Float32, l1r: Float32, penalty: Int32, fi: Int32, need_obj: Int32, one_class: Int32):
     var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
     var subs = mb_subs(Int(bs))
@@ -222,7 +223,7 @@ def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias:
         st(w, j, mb_step(ld(w, j), g, Int(bs), eta, alpha, l1r, Int(penalty)))
     elif j == dd:
         if fi != 0:
-            st(bias, 0, fs(ld(bias, 0), fm(eta, fd(g, i2f(Int(bs))))))
+            st(bias, 0, mb_bias_step(ld(bias, 0), g, Int(bs), eta, alpha, one_class != 0))
     elif need_obj != 0:
         st(obj, 0, fa(ld(obj, 0), g))
 
@@ -253,6 +254,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     elif penalty == P_L1:
         l1r = Float32(1)
     var problems = k if k > 2 else 1
+    var one_class = k == 1
     var nsub = mb_subs(batch)
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dys = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
@@ -278,17 +280,20 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var status = 0
     for c in range(problems):
         for i in range(n):
-            var v = y.unsafe_load(i)
-            if k == 0:
-                ys[i] = v
-            elif k == 2:
-                ys[i] = Float32(1) if v == Float32(1) else Float32(-1)
+            if one_class:
+                ys[i] = Float32(1)  # sgd_fit's one-class target (y is not read)
             else:
-                ys[i] = Float32(1) if v == i2f(c) else Float32(-1)
+                var v = y.unsafe_load(i)
+                if k == 0:
+                    ys[i] = v
+                elif k == 2:
+                    ys[i] = Float32(1) if v == Float32(1) else Float32(-1)
+                else:
+                    ys[i] = Float32(1) if v == i2f(c) else Float32(-1)
             idx[i] = Int32(i)
         ctx.enqueue_copy(dst_buf=dys, src_ptr=ys.unsafe_ptr())
         dw.enqueue_fill(Float32(0))
-        dbias.enqueue_fill(Float32(0))
+        dbias.enqueue_fill(Float32(1) if one_class else Float32(0))
         var wpos = fp[6 + c] if has_cw else Float32(1)
         var wneg = fp[6 + problems + c] if has_cw else Float32(1)
         var rng = seed + UInt64(1000003) * UInt64(c)
@@ -313,7 +318,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                 ctx.enqueue_function[sgd_mb_rows_kernel](
                     dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(start), Int32(bs), Int32(d),
                     dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, dsw.unsafe_ptr(), Int32(1 if has_sw else 0),
-                    wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
+                    wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0,
                     grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
                 )
                 ctx.enqueue_function[sgd_mb_parts_kernel](
@@ -323,7 +328,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                 ctx.enqueue_function[sgd_mb_step_kernel](
                     dparts.unsafe_ptr(), Int32(nsub), Int32(bs), Int32(d), dw.unsafe_ptr(), dbias.unsafe_ptr(),
                     dobj.unsafe_ptr(), et, alpha, l1r, Int32(penalty), Int32(1 if fi else 0), Int32(1 if need_obj else 0),
-                    grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
+                    Int32(1 if one_class else 0), grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
                 )
                 t += 1
                 start += bs
@@ -342,6 +347,8 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                 break
             if need_obj:
                 var mean_obj = fa(fd(ho[0], i2f(n)), mb_penalty(FP(unsafe_from_address=Int(hw.unsafe_ptr())), 0, d, alpha, l1r, penalty))
+                if one_class:
+                    mean_obj = fa(mean_obj, fm(alpha, bias))
                 if mean_obj > fs(best, tol):
                     no_improve += 1
                 else:

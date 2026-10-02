@@ -334,8 +334,12 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
         has_cw = 1
     # lane/neural-pass103 (Andrew, 2026-10-01): SGDClassifier / SGDRegressor
     # train minibatch SGD (cuML MBSGD's form, a fixed in-batch combine order,
-    # x_linear/sgd.mojo `sgd_mb_one`); batch 0 is the per-sample fit (the other
-    # SGD-family classes, or MOJOLEARN_SGD_PER_SAMPLE=1)
+    # x_linear/sgd.mojo `sgd_mb_one`); since lane/neural-pass132 Perceptron,
+    # the passive-aggressive pair and SGDOneClassSVM too, at batch_size=256
+    # (taxi / istella 200k: Perceptron accuracy 0.72 / 0.904 at 256 vs 0.36 /
+    # 0.879 at 4096 (sklearn 0.60 / 0.902); the one-class objective 0.5001 /
+    # 0.5010 vs 0.5008 / 0.5062 (sklearn 0.5000 / 0.5001));
+    # batch 0 is the per-sample fit (batch_size=0 or MOJOLEARN_SGD_PER_SAMPLE=1)
     if os.environ.get("MOJOLEARN_SGD_PER_SAMPLE", "") == "1":
         batch_size = 0
     if batch_size and (not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size < 1):
@@ -774,7 +778,8 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
     def __init__(self, *, penalty=None, alpha=0.0001, l1_ratio=0.15, fit_intercept=True, max_iter=1000,
                  tol=1e-3, shuffle=True, verbose=0, eta0=1.0, n_jobs=None, random_state=0,
                  early_stopping=False, validation_fraction=0.1, n_iter_no_change=5, class_weight=None,
-                 warm_start=False):
+                 warm_start=False, batch_size=256):
+        self.batch_size = batch_size
         self.penalty, self.alpha, self.l1_ratio, self.fit_intercept = penalty, alpha, l1_ratio, fit_intercept
         self.max_iter, self.tol, self.shuffle, self.verbose, self.eta0 = max_iter, tol, shuffle, verbose, eta0
         self.n_jobs, self.random_state, self.early_stopping = n_jobs, random_state, early_stopping
@@ -790,7 +795,7 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
             self, Xm, codes, len(classes), _SGD_CLF_LOSS["perceptron"], self.penalty, "constant",
             self.alpha, self.l1_ratio, self.eta0, 0.5, 0.1, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, codes.tolist())
+            sample_weight, self.class_weight, classes, codes.tolist(), batch_size=self.batch_size)
         return self
 
 
@@ -806,7 +811,9 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
 
     def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
                  validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0, loss="hinge",
-                 n_jobs=None, random_state=None, warm_start=False, class_weight=None, average=False):
+                 n_jobs=None, random_state=None, warm_start=False, class_weight=None, average=False,
+                 batch_size=256):
+        self.batch_size = batch_size
         self.C, self.fit_intercept, self.max_iter, self.tol = C, fit_intercept, max_iter, tol
         self.early_stopping, self.validation_fraction = early_stopping, validation_fraction
         self.n_iter_no_change, self.shuffle, self.verbose, self.loss = n_iter_no_change, shuffle, verbose, loss
@@ -827,7 +834,7 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
             self, Xm, codes, len(classes), _SGD_CLF_LOSS["hinge"], None, lr,
             1.0, 0.0, self.C, 0.5, 0.1, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight, self.class_weight, classes, codes.tolist())
+            sample_weight, self.class_weight, classes, codes.tolist(), batch_size=self.batch_size)
         return self
 
 
@@ -839,7 +846,8 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
     def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
                  validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0,
                  loss="epsilon_insensitive", epsilon=0.1, random_state=None, warm_start=False,
-                 average=False):
+                 average=False, batch_size=256):
+        self.batch_size = batch_size
         self.C, self.fit_intercept, self.max_iter, self.tol = C, fit_intercept, max_iter, tol
         self.early_stopping, self.validation_fraction = early_stopping, validation_fraction
         self.n_iter_no_change, self.shuffle, self.verbose, self.loss = n_iter_no_change, shuffle, verbose, loss
@@ -859,7 +867,7 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
             self, Xm, yv, 0, _SGD_REG_LOSS["epsilon_insensitive"], None, lr,
             1.0, 0.0, self.C, 0.5, self.epsilon, self.fit_intercept,
             self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
-            sample_weight)
+            sample_weight, batch_size=self.batch_size)
         self.coef_ = coef.reshape((Xm[2],))
         self.intercept_ = intercept
         return self
@@ -878,7 +886,8 @@ class SGDOneClassSVM(NumericModeMixin):
 
     def __init__(self, nu=0.5, fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, verbose=0,
                  random_state=None, learning_rate="optimal", eta0=0.0, power_t=0.5, warm_start=False,
-                 average=False):
+                 average=False, batch_size=256):
+        self.batch_size = batch_size
         self.nu, self.fit_intercept, self.max_iter, self.tol = nu, fit_intercept, max_iter, tol
         self.shuffle, self.verbose, self.random_state = shuffle, verbose, random_state
         self.learning_rate, self.eta0, self.power_t = learning_rate, eta0, power_t
@@ -894,7 +903,8 @@ class SGDOneClassSVM(NumericModeMixin):
         coef, intercept = _sgd_fit(
             self, Xm, None, 1, _SGD_CLF_LOSS["hinge"], "l2", self.learning_rate,
             self.nu, 0.0, self.eta0, self.power_t, 0.1, self.fit_intercept,
-            self.max_iter, self.tol, 5, self.shuffle, self.random_state, sample_weight)
+            self.max_iter, self.tol, 5, self.shuffle, self.random_state, sample_weight,
+            batch_size=self.batch_size)
         self.coef_ = coef.reshape((Xm[2],))
         self.offset_ = Array.from_list([1.0 - intercept.tolist()[0]], "<f4")
         return self
