@@ -1,4 +1,4 @@
-pos=114 lines=     446
+pos=122 lines=     450
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -119,3 +119,13 @@ pos=114 lines=     446
 203:FBUILD lane/apple-fast-tier@a35af407e core=1 gbdt=1 x_cluster=1 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0
 204:CMD apple-fast-tier@a35af407e tier-pca-tnv1 rc=0 AFC-AB-SUMMARY tier-pca-tnv1 arm=B lane=pca ds=istella median_of_medians_ms=none runs=[    ] digest= 
 205:FBUILD lane/apple-fast@3d0e76bd8 core=1 gbdt=1 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0
+206:CMD apple-fast@3d0e76bd8 opp-rfet-m3 rc=0 OPP-DONE
+207:SWAP 19:33Z runner: FAST-only builds for apple-fast speed jobs; FAST build gate skipped (needs IDENTICAL base)
+208:FBUILD lane/apple-fast-tier@a35af407e core=1 gbdt=0 x_cluster=1 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0
+209:CMD apple-fast-tier@a35af407e tier-pca-nttiled rc=0 AFC-AB-SUMMARY tier-pca-nttiled arm=B lane=pca ds=istella median_of_medians_ms=none runs=[    ] digest= 
+210:FBUILD lane/apple-fast-board@0e743cac9 core=0 gbdt=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0
+211:CMD apple-fast-board@0e743cac9 afb2-trees-1 rc=0 afb done tag=afb2-trees-1 pairs=11 ok=2
+212:CMD apple-fast-board@0e743cac9 afb2-algos-2 rc=0 afb done tag=afb2-algos-2 pairs=10 ok=10
+213:CMD apple-fast-board@0e743cac9 afb2-classical2-3 rc=0 afb done tag=afb2-classical2-3 pairs=2 ok=2
+214:CMD apple-fast-board@0e743cac9 afb2-classical-4 rc=0 afb done tag=afb2-classical-4 pairs=2 ok=2
+215:SWAP 19:40Z runner: FAST builds also build the IDENTICAL base (FAST imports its helpers)
