@@ -10,6 +10,8 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
+from std.atomic import Atomic, Ordering, fence
+from std.gpu import grid_dim
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
@@ -155,9 +157,10 @@ def sum_team_kernel(n: Int32, row_z: F32P, z: F32P):
 # candidates with every thread of the block (`ts_repulse_terms`, the same
 # words) into threadgroup memory, then row i's owner folds them with
 # `ts_repulse_fold`'s statements in ascending j, skipping j == i: the same
-# fold in the same order. `sum_staged_kernel` is `ts_sum_cell`'s serial
-# ascending fold, its operands staged coalesced through threadgroup memory.
-# Both coordinates' steps run in one thread (`step_rows_kernel`, the cell's
+# fold in the same order. Z (`ts_sum_cell`'s ascending fold, a pinned
+# serial chain) is folded by the repulsion kernel's last finishing block,
+# its operands staged coalesced, so no one-block launch remains. Both
+# coordinates' steps run in one thread (`step_rows_kernel`, the cell's
 # statements in the cell's order). -D MOJOLEARN_TSNE_SPLIT_OFF=1 restores
 # main's three kernels.
 comptime TS_SPLIT = (
@@ -168,11 +171,10 @@ comptime RS_ROWS = 32
 comptime RS_TJ = 64
 comptime RS_TPB = 256
 comptime RS_DS = RS_TJ + 1
-comptime ZS_TPB = 256
 comptime ZS_CHUNK = 2048
 
 
-def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
+def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P, done: I32P):
     var tid = Int(thread_idx.x)
     var nr = Int(n)
     var i0 = Int(block_idx.x) * RS_ROWS
@@ -221,18 +223,24 @@ def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
         row_z.unsafe_store(i, z)
         rep.unsafe_store(2 * i, r0)
         rep.unsafe_store(2 * i + 1, r1)
-
-
-def sum_staged_kernel(n: Int32, row_z: F32P, z: F32P):
-    """`ts_sum_cell`: acc = ftz(acc + row_z[i]), i ascending, one thread
-    folding; the block stages each chunk of row_z coalesced."""
-    var tid = Int(thread_idx.x)
-    var nr = Int(n)
+        fence[ordering = Ordering.RELEASE]()
+    # Z in the block that finishes last (no one-block launch): the blocks
+    # count themselves out; the last one sees every row_z and folds them
+    # with `ts_sum_cell`'s statements, rows ascending, staged coalesced.
+    var last = stack_allocation[1, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    barrier()
+    if tid == 0:
+        var old = Atomic.fetch_add(done, Int32(1))
+        last[0] = Int32(1) if Int(old) == Int(grid_dim.x) - 1 else Int32(0)
+    barrier()
+    if last[0] == Int32(0):
+        return
+    fence[ordering = Ordering.ACQUIRE]()
     var buf = stack_allocation[ZS_CHUNK, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var acc = Float32(0.0)
     var c0 = 0
     while c0 < nr:
-        for e in range(tid, ZS_CHUNK, ZS_TPB):
+        for e in range(tid, ZS_CHUNK, RS_TPB):
             var v = Float32(0.0)
             if c0 + e < nr:
                 v = row_z.unsafe_load(c0 + e)
@@ -245,7 +253,8 @@ def sum_staged_kernel(n: Int32, row_z: F32P, z: F32P):
         barrier()
         c0 += ZS_CHUNK
     if tid == 0:
-        z.unsafe_store(0, acc)
+        z_out.unsafe_store(0, acc)
+        done.unsafe_store(0, Int32(0))
 
 
 @always_inline
@@ -315,13 +324,12 @@ def _ts_iter(
     mut dptr: DeviceBuffer[DType.int32], mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32],
     mut drz: DeviceBuffer[DType.float32], mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
     mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
-    lr: Float32,
+    lr: Float32, mut dcnt: DeviceBuffer[DType.int32],
 ) raises:
     comptime if TS_SPLIT:
         ctx.enqueue_function[repulse_split_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                                   dz.unsafe_ptr(), dcnt.unsafe_ptr(),
                                                    grid_dim=(n + RS_ROWS - 1) // RS_ROWS, block_dim=RS_TPB)
-        ctx.enqueue_function[sum_staged_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1,
-                                                block_dim=ZS_TPB)
         ctx.enqueue_function[step_rows_kernel](
             Int32(n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
             dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
@@ -437,6 +445,8 @@ def tsne_fit_device(
     var drz = ctx.enqueue_create_buffer[DType.float32](n)
     var drep = ctx.enqueue_create_buffer[DType.float32](2 * n)
     var dz = ctx.enqueue_create_buffer[DType.float32](1)
+    var dcnt = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(dcnt, Int32(0))
     var dkl = ctx.enqueue_create_buffer[DType.float32](n)
     st.mark(ctx, "upload_graph")
     var t_rep = 0
@@ -454,9 +464,9 @@ def tsne_fit_device(
                 _ts_iter_timed(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
                                learning_rate, t_rep, t_sum, t_step)
         elif it % 2 == 0:
-            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate)
+            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt)
         else:
-            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate)
+            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt)
     st.mark(ctx, "iterations")
     if st.on:
         print("ANN-STAGE tsne_iter repulse", Float64(t_rep) / 1.0e6)
@@ -467,6 +477,7 @@ def tsne_fit_device(
     else:
         _ts_kl(ctx, dy2, n, dptr, dind, dval, drz, drep, dz, dkl)
     ctx.synchronize()
+    _ = dcnt^
     if max_iter % 2 == 0:
         y_out = download_f32(ctx, dy, 2 * n)
     else:
