@@ -96,6 +96,7 @@ from x_decomp.jacobi2 import (
     one_sided_svd2_finish_kernel,
 )
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
+from x_decomp.fast_gemm import FG_TPB, fast_gemm_on, fg_gemm_tiled_kernel, fg_tiles
 from x_decomp.fast_qr import (
     FQ_TPB,
     fast_qr_on,
@@ -1355,6 +1356,23 @@ def launch_gemm(
     """C = op(A) op(B) on device pointers, enqueued (no sync): FOLD_BLOCK
     partial sums then the fold past one block (DEVIATIONS 5300/5301)."""
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+        # MOJOLEARN_DECOMP_FAST_GEMM_TILED=1 (lane/apple-fast-decomp-linalg,
+        # 2026-10-02, FAST on Apple only): the threadgroup-tiled kernel of
+        # x_decomp/fast_gemm.mojo, 32 x 32 output tiles with the k axis
+        # staged 16 deep, the same FOLD_BLOCK partials (grid z) and fold.
+        # Cause: `gemm_kernel` / `gemm_part_kernel` are one thread per
+        # output cell reading the whole k axis from device memory (every
+        # operand word re-read once per output row or column it feeds).
+        if fast_gemm_on() and m > 0 and n > 0 and k > 0:
+            ctx.enqueue_function[fg_gemm_tiled_kernel](
+                a, b, p if nb > 1 else c, Int32(m), Int32(k), Int32(n),
+                Int32(1 if ta else 0), Int32(1 if tb else 0), Int32(nb),
+                grid_dim=(fg_tiles(n), fg_tiles(m), nb), block_dim=(FG_TPB, 1, 1),
+            )
+            if nb > 1:
+                ctx.enqueue_function[fold_kernel](p, c, Int32(m * n), Int32(nb), grid_dim=_blocks(m * n), block_dim=TPB)
+            return
     if nb > 1:
         ctx.enqueue_function[gemm_part_kernel](
             a, b, p, Int32(m), Int32(k), Int32(n),
