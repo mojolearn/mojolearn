@@ -94,7 +94,6 @@ from svm.impl.fast_update_f import fast_update_f
 from svm.impl.results import Results
 from svm.impl.smoblocksolve import SMO_WS_SIZE, smo_block_solve_kernel
 from svm.impl.fast_block_solve import smo_block_solve_ept_kernel
-from svm.impl.host_block_solve import HbsFP, HbsIP, host_block_solve
 from svm.impl.svm_parameter import (
     check_c_rows,
     C_SVC,
@@ -140,9 +139,12 @@ comptime FAST_SMO_SYNCS = (
         GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
         and not is_defined["MOJOLEARN_SVM_IDENTICAL_SYNCS_OFF"]()
     ))
-    and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_FAST_SYNCS_OFF"]()
 )
+#: EVERY GPU since lane/gap-classical-nv (2026-10-02): NVIDIA and AMD read
+#: the fold order back, sorted it on the host and uploaded it, and drained
+#: the stream for the NaN flag, every outer SMO iteration. The argument above
+#: (bit-preserving by construction) does not depend on the vendor.
 
 
 #: FAST on Apple: a 1024-wide working set solves in
@@ -153,7 +155,7 @@ comptime FAST_SMO_SYNCS = (
 comptime FAST_EPT = 4 if is_defined["MOJOLEARN_SVM_FAST_EPT4"]() else (
     8 if is_defined["MOJOLEARN_SVM_FAST_EPT8"]() else 2
 )
-comptime SVM_FUSED_UPDATE_F = FAST_SMO_SYNCS and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined[
+comptime SVM_FUSED_UPDATE_F = FAST_SMO_SYNCS and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined[
     "MOJOLEARN_SVM_FUSED_UPDATE_F_OFF"
 ]()
 """FAST on Apple: the gradient update computes each kernel value where it
@@ -164,20 +166,16 @@ tile and reading it back; RBF and linear kernels, n_cols <= 64."""
 #: arithmetic (ftz, identical_mul_add, the same eta / q expressions) and its
 #: argmax / argmin reductions with the same strict tie-break, which no
 #: reduction order can change.
-#: FAST on Apple (lane neighbors-apple3, 2026-09-28): the block solve runs
-#: on the host cores over a copy of the square kernel tile
-#: (`host_block_solve.mojo`): the same selections and updates, no barriers.
-#: OPT-IN until its A/B and quality check pass:
-#: `-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE`.
-comptime SVM_HOST_BLOCK_SOLVE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_SVM_HOST_BLOCK_SOLVE"]()
-)
+#: The opt-in host block solve (`-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE`) was
+#: removed (hr-optin-flags).
 
+#: EVERY GPU since lane/gap-classical-nv (2026-10-02): NVIDIA refuses the
+#: warp-lane0 schedule at width 1024, so its 1024 working set ran the fused
+#: tree (~26 barriers per inner iteration, up to 10,000 inner iterations per
+#: outer one). 512 threads x 2 elements fold through `fast_smo_reduce` at
+#: the hardware wave width; same total order, same per-element arithmetic.
 comptime FAST_EPT_ON = (
     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_FAST_SYNCS_OFF"]()
     and not is_defined["MOJOLEARN_SVM_FAST_EPT_OFF"]()
 )
@@ -787,32 +785,6 @@ struct SmoSolver(Movable):
         var st = StageTimes()
         var t_fit = st.start()
         self.host_nan_flag.unsafe_ptr().unsafe_store(0, Int32(0))
-        # SVM_HOST_BLOCK_SOLVE: the host's copies. y and C never change and
-        # alpha changes only in the block solve, so those three come down
-        # once; f, the tile and the working set come down per iteration.
-        var hbs_nt = self.n_train if SVM_HOST_BLOCK_SOLVE else 1
-        var hbs_ws = n_ws if SVM_HOST_BLOCK_SOLVE else 1
-        var h_tile = ctx.enqueue_create_host_buffer[DType.float32](hbs_ws * hbs_ws)
-        var h_ws = ctx.enqueue_create_host_buffer[DType.int32](hbs_ws)
-        var h_da = ctx.enqueue_create_host_buffer[DType.float32](hbs_ws)
-        var h_f = ctx.enqueue_create_host_buffer[DType.float32](hbs_nt)
-        var h_alpha = ctx.enqueue_create_host_buffer[DType.float32](hbs_nt)
-        var h_y = ctx.enqueue_create_host_buffer[DType.float32](hbs_nt)
-        var h_c = ctx.enqueue_create_host_buffer[DType.float32](hbs_nt)
-        comptime if SVM_HOST_BLOCK_SOLVE:
-            ctx.enqueue_copy(
-                dst_ptr=h_alpha.unsafe_ptr(),
-                src_buf=self.alpha.create_sub_buffer[DType.float32](0, self.n_train),
-            )
-            ctx.enqueue_copy(
-                dst_ptr=h_y.unsafe_ptr(),
-                src_buf=self.y_train.create_sub_buffer[DType.float32](0, self.n_train),
-            )
-            ctx.enqueue_copy(
-                dst_ptr=h_c.unsafe_ptr(),
-                src_buf=self.C_vec.create_sub_buffer[DType.float32](0, self.n_train),
-            )
-            ctx.synchronize()
         while keep_going:
             var t0 = st.start()
             ctx.enqueue_function[fill_f32_kernel](
@@ -840,53 +812,16 @@ struct SmoSolver(Movable):
             # takes `getKernelIndices(false)`, the projected one, because
             # what it feeds is a gather of rows of X. For C_SVC the two
             # buffers hold the same values.
-            comptime if SVM_HOST_BLOCK_SOLVE:
-                ctx.enqueue_copy(
-                    dst_ptr=h_tile.unsafe_ptr(),
-                    src_buf=cache.kernel_tile.create_sub_buffer[DType.float32](0, n_ws * n_ws),
-                )
-                ctx.enqueue_copy(
-                    dst_ptr=h_ws.unsafe_ptr(),
-                    src_buf=cache.ws_idx_mod_svr.create_sub_buffer[DType.int32](0, n_ws),
-                )
-                ctx.enqueue_copy(
-                    dst_ptr=h_f.unsafe_ptr(),
-                    src_buf=self.f.create_sub_buffer[DType.float32](0, self.n_train),
-                )
-                ctx.synchronize()
-                var hbs = host_block_solve(
-                    HbsIP(unsafe_from_address=Int(h_ws.unsafe_ptr())),
-                    n_ws,
-                    HbsFP(unsafe_from_address=Int(h_y.unsafe_ptr())),
-                    HbsFP(unsafe_from_address=Int(h_alpha.unsafe_ptr())),
-                    HbsFP(unsafe_from_address=Int(h_f.unsafe_ptr())),
-                    HbsFP(unsafe_from_address=Int(h_tile.unsafe_ptr())),
-                    HbsFP(unsafe_from_address=Int(h_c.unsafe_ptr())),
-                    self.tol,
-                    max_iter_this_block,
-                    HbsFP(unsafe_from_address=Int(h_da.unsafe_ptr())),
-                )
-                self.host_return_buff.unsafe_ptr().unsafe_store(0, hbs[0])
-                self.host_return_buff.unsafe_ptr().unsafe_store(1, Float32(hbs[1]))
-                ctx.enqueue_copy(
-                    dst_buf=self.alpha.create_sub_buffer[DType.float32](0, self.n_train),
-                    src_ptr=h_alpha.unsafe_ptr(),
-                )
-                ctx.enqueue_copy(
-                    dst_buf=self.delta_alpha.create_sub_buffer[DType.float32](0, n_ws),
-                    src_ptr=h_da.unsafe_ptr(),
-                )
-            else:
-                launch_block_solve(
-                    ctx, threads, self.y_train, self.n_train, self.alpha, n_ws,
-                    self.delta_alpha, self.f, cache.kernel_tile,
-                    cache.ws_idx_mod_svr,
-                    self.C_vec, self.tol, self.return_buff, max_iter_this_block,
-                )
-                # raft::update_host(host_return_buff, return_buff, 2)
-                ctx.enqueue_copy(
-                    dst_ptr=self.host_return_buff.unsafe_ptr(), src_buf=self.return_buff
-                )
+            launch_block_solve(
+                ctx, threads, self.y_train, self.n_train, self.alpha, n_ws,
+                self.delta_alpha, self.f, cache.kernel_tile,
+                cache.ws_idx_mod_svr,
+                self.C_vec, self.tol, self.return_buff, max_iter_this_block,
+            )
+            # raft::update_host(host_return_buff, return_buff, 2)
+            ctx.enqueue_copy(
+                dst_ptr=self.host_return_buff.unsafe_ptr(), src_buf=self.return_buff
+            )
             st.stop(ctx, "smo.block_solve", t0)
             t0 = st.start()
 
@@ -1069,13 +1004,6 @@ struct SmoSolver(Movable):
         card.record_scalar_f32("svm.n_iter", Float32(self.n_iter))
         card.record_scalar_f32("svm.n_outer_iter", Float32(self.n_outer_iter))
         # ReleaseBuffers: fields, freed with the solver.
-        _ = h_tile^
-        _ = h_ws^
-        _ = h_da^
-        _ = h_f^
-        _ = h_alpha^
-        _ = h_y^
-        _ = h_c^
         _ = ws^
         _ = cache^
         _ = res^

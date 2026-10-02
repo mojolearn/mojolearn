@@ -1,275 +1,366 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""TreeSHAP over this library's flat forests (the trees lane, 2026-09-27).
+"""TreeSHAP over this library's flat forests: the per-unit chains that the
+device kernels (xtrees/shap_device.mojo, the GPU binding) and the host runner
+(xtrees/shap_host.mojo, the CPU-only binding) both call (lane gap-treeshap,
+2026-10-02). One spelling of every arithmetic statement, so the host column
+and every GPU column produce the same bits.
 
 Reference: the `shap` package's exact path-dependent algorithm,
-`shap/cext/tree_shap.h` (`extend_path`, `unwind_path`, `unwound_path_sum`,
-`tree_shap_recursive`; Lundberg et al. 2020, Algorithm 2), which
-`shap/explainers/_tree.py` calls for `feature_perturbation=
-"tree_path_dependent"`. Every arithmetic statement is theirs in their
-association order, in binary64 on the host; each product that meets an add
-is `identical_mul64` (the build contracts `a * b + c` otherwise).
+`shap/cext/tree_shap.h` (`extend_path`, `unwound_path_sum`; Lundberg et al.
+2020, Algorithm 2), which `shap/explainers/_tree.py` calls for
+`feature_perturbation="tree_path_dependent"`, in the per-leaf formulation of
+GPUTreeShap (Mitchell et al. 2022, `gpu_treeshap.h`): the recursion's state
+at a leaf depends only on that leaf's root path, so each leaf rebuilds its
+path (the repeated features merged, as `unwind_path` merges them), extends
+it, and adds its unwound sums. The same polynomial as the recursion; the
+association differs from shap's in the last bits only.
 
-DEVIATIONS. The node cover (`node_sample_weight`) is the count of BACKGROUND
-rows reaching each node (`node_cover`), since the flat forest stores no
-instance counts; a node no background row reaches gives both children a zero
-fraction where theirs would divide 0 / 0. Conditioning (`condition != 0`,
-the interaction values) is not carried.
+FLOAT32 (Metal has no float64 on the device; mojolearn hardware limits).
+Every product is `identical_mul` (never contracted) and every result is
+flushed (`ftz`, row 10); every quotient is `identical_div`. Inputs are
+flushed where they are read, including both sides of the split compare
+(Metal compares flush their operands).
+
+THE UNITS AND THEIR FIXED ORDERS:
+  * `shap_parent_unit` (node u): the tree-relative parent of u's children,
+    and u's split feature marked in its tree's feature row.
+  * `shap_depth_unit` (node u): u's depth, folded by an integer atomic max
+    (order free).
+  * `shap_cover_unit` (tree t, background row r): +1 on every node r's walk
+    visits, integer atomics (order free). cover = the count of background
+    rows reaching the node (the flat forest stores no instance counts).
+  * `shap_slot_unit` (tree t): the tree's split features, ascending, numbered
+    0, 1, ... (its slots); -1 elsewhere. The widest tree's slot count by an
+    integer atomic max.
+  * `shap_ev_part_unit` (tree t, output j): sum over the tree's leaves,
+    ascending node index, of value * cover / root cover * scale.
+    `shap_ev_fold_unit` (output j): ev[j] (the caller's init) plus those
+    partials, ascending tree index.
+  * `shap_tree_unit` (row r, tree t): for each leaf, ascending node index,
+    the leaf's terms added into the (row, tree, slot) cells of its path's
+    features, each cell a chain from +0. `shap_fold_unit` (row r, feature
+    f, output j): +0 plus the (r, t, slot of f in t) cells of every tree t
+    that splits on f, ASCENDING TREE INDEX. These are the only folds, so a
+    SHAP value is the same sum on every vendor and on the host, at every
+    chunking and launch geometry.
+
+DEVIATIONS. The node cover is the background count (above); a node no
+background row reaches gives both children a zero fraction where shap would
+divide 0 / 0; a leaf whose merged path holds an element with zero and one
+fractions both zero contributes exactly zero and is skipped (the recursion
+returns there; its unwind would divide 0 / 0). Conditioning (`condition !=
+0`, the interaction values) is not carried.
 
 The flat forest (ensemble/flatnode.mojo): tree t is nodes offsets[t] ..
 offsets[t+1]; a leaf has left == -1; children are left and left + 1,
 tree-relative; `x[colid] <= quesval` goes LEFT.
 """
-from std.os import getenv
-from checks.numerics import identical_mul64
-from core.host_lanes import host_row_tasks
-from core.host_parallel import host_parallelize
+from std.atomic import Atomic
+from checks.numerics import ftz, identical_div, identical_mul, identical_mul64
+
+comptime F32P = MutPointer[Float32, MutAnyOrigin]
+comptime I32P = MutPointer[Int32, MutAnyOrigin]
+
+#: meta words written by the preparation units: [widest slot count, deepest
+#: leaf depth, malformed-forest flag]
+comptime SHAP_META_SLOTS = 0
+comptime SHAP_META_DEPTH = 1
+comptime SHAP_META_BAD = 2
+comptime SHAP_META_WORDS = 3
+
+#: the path widths the tree unit is compiled for (the merged path of a leaf
+#: holds at most min(depth, slot count) features)
+comptime SHAP_MAX_PATH = 256
 
 
-struct _Path(Movable):
-    var feature: List[Int]
-    var zero: List[Float64]
-    var one: List[Float64]
-    var pw: List[Float64]
-
-    def __init__(out self, n: Int):
-        self.feature = List[Int](length=n, fill=-1)
-        self.zero = List[Float64](length=n, fill=0.0)
-        self.one = List[Float64](length=n, fill=0.0)
-        self.pw = List[Float64](length=n, fill=0.0)
+@always_inline
+def _m(a: Float32, b: Float32) -> Float32:
+    return ftz(identical_mul(a, b))
 
 
-def _extend(mut p: _Path, b: Int, d: Int, zf: Float64, of: Float64, fi: Int):
-    """`extend_path`, on the path starting at `b`."""
-    p.feature[b + d] = fi
-    p.zero[b + d] = zf
-    p.one[b + d] = of
-    p.pw[b + d] = 1.0 if d == 0 else 0.0
-    var i = d - 1
-    while i >= 0:
-        p.pw[b + i + 1] = p.pw[b + i + 1] + identical_mul64(identical_mul64(of, p.pw[b + i]), Float64(i + 1)) / Float64(d + 1)
-        p.pw[b + i] = identical_mul64(identical_mul64(zf, p.pw[b + i]), Float64(d - i)) / Float64(d + 1)
-        i -= 1
+@always_inline
+def _a(a: Float32, b: Float32) -> Float32:
+    return ftz(a + b)
 
 
-def _unwind(mut p: _Path, b: Int, d: Int, path_index: Int):
-    """`unwind_path`."""
-    var of = p.one[b + path_index]
-    var zf = p.zero[b + path_index]
-    var next_one = p.pw[b + d]
-    var i = d - 1
-    while i >= 0:
-        if of != 0:
-            var tmp = p.pw[b + i]
-            p.pw[b + i] = identical_mul64(next_one, Float64(d + 1)) / identical_mul64(Float64(i + 1), of)
-            next_one = tmp - identical_mul64(identical_mul64(p.pw[b + i], zf), Float64(d - i)) / Float64(d + 1)
+@always_inline
+def _s(a: Float32, b: Float32) -> Float32:
+    return ftz(a - b)
+
+
+@always_inline
+def _q(a: Float32, b: Float32) -> Float32:
+    return ftz(identical_div(a, b))
+
+
+def shap_path_width(depth: Int, slots: Int) -> Int:
+    """The compiled path width for a forest whose deepest leaf is `depth`
+    and widest tree has `slots` split features; 0 = too wide."""
+    var need = min(depth, slots) + 1
+    var w = 8
+    while w < need:
+        w *= 2
+    return w if w <= SHAP_MAX_PATH else 0
+
+
+@always_inline
+def _tree_of(offsets: I32P, n_trees: Int, g: Int) -> Int:
+    """The tree holding node g: the largest t with offsets[t] <= g."""
+    var lo = 0
+    var hi = n_trees - 1
+    while lo < hi:
+        var mid = (lo + hi + 1) // 2
+        if Int(offsets[unsafe_offset=mid]) <= g:
+            lo = mid
         else:
-            p.pw[b + i] = identical_mul64(p.pw[b + i], Float64(d + 1)) / identical_mul64(zf, Float64(d - i))
-        i -= 1
-    for j in range(path_index, d):
-        p.feature[b + j] = p.feature[b + j + 1]
-        p.zero[b + j] = p.zero[b + j + 1]
-        p.one[b + j] = p.one[b + j + 1]
+            hi = mid - 1
+    return lo
 
 
-def _unwound_sum(p: _Path, b: Int, d: Int, path_index: Int) -> Float64:
-    """`unwound_path_sum`."""
-    var of = p.one[b + path_index]
-    var zf = p.zero[b + path_index]
-    var next_one = p.pw[b + d]
-    var total: Float64 = 0.0
-    var i = d - 1
+def shap_parent_unit(u: Int, offsets: I32P, n_trees: Int, colid: I32P, left: I32P, d: Int,
+                     parent: I32P, mark: I32P, meta: I32P):
+    """Node u: parent[child] = u (tree-relative) for both children, and
+    mark[t * d + colid[u]] = 1. parent is -1 filled by the caller (a root
+    keeps it), mark zero filled."""
+    var t = _tree_of(offsets, n_trees, u)
+    var lo = Int(offsets[unsafe_offset=t])
+    var count = Int(offsets[unsafe_offset=t + 1]) - lo
+    var l = Int(left[unsafe_offset=u])
+    if l == -1:
+        return
+    var c = Int(colid[unsafe_offset=u])
+    if l < 1 or l + 1 >= count or c < 0 or c >= d:
+        meta[unsafe_offset=SHAP_META_BAD] = 1
+        return
+    parent[unsafe_offset=lo + l] = Int32(u - lo)
+    parent[unsafe_offset=lo + l + 1] = Int32(u - lo)
+    mark[unsafe_offset=t * d + c] = 1
+
+
+def shap_depth_unit(u: Int, offsets: I32P, n_trees: Int, parent: I32P, meta: I32P):
+    """Node u's depth into meta[SHAP_META_DEPTH] by integer max."""
+    var t = _tree_of(offsets, n_trees, u)
+    var lo = Int(offsets[unsafe_offset=t])
+    var count = Int(offsets[unsafe_offset=t + 1]) - lo
+    var p = Int(parent[unsafe_offset=u])
+    var depth = 0
+    while p != -1:
+        depth += 1
+        if depth > count:
+            meta[unsafe_offset=SHAP_META_BAD] = 1
+            return
+        p = Int(parent[unsafe_offset=lo + p])
+    _ = Atomic[DType.int32].max(meta.unsafe_offset(SHAP_META_DEPTH), Int32(depth))
+
+
+def shap_cover_unit(u: Int, nb: Int, offsets: I32P, colid: I32P, quesval: F32P, left: I32P,
+                    bg: F32P, d: Int, cover: I32P, meta: I32P):
+    """Unit u = t * nb + r: background row r's walk down tree t, +1 on every
+    node it visits (cover zero filled by the caller)."""
+    var t = u // nb
+    var r = u - t * nb
+    var lo = Int(offsets[unsafe_offset=t])
+    var count = Int(offsets[unsafe_offset=t + 1]) - lo
+    var node = 0
+    var steps = 0
+    while True:
+        _ = Atomic.fetch_add(cover.unsafe_offset(lo + node), Int32(1))
+        var l = Int(left[unsafe_offset=lo + node])
+        if l == -1:
+            return
+        var c = Int(colid[unsafe_offset=lo + node])
+        if c < 0 or c >= d or l < 1 or l + 1 >= count:
+            meta[unsafe_offset=SHAP_META_BAD] = 1
+            return
+        if ftz(bg[unsafe_offset=r * d + c]) <= ftz(quesval[unsafe_offset=lo + node]):
+            node = l
+        else:
+            node = l + 1
+        steps += 1
+        if steps > count:
+            meta[unsafe_offset=SHAP_META_BAD] = 1
+            return
+
+
+def shap_slot_unit(t: Int, d: Int, slot: I32P, meta: I32P):
+    """Tree t's row of `slot` (the marks of `shap_parent_unit`) becomes its
+    slot numbers: marked features ascending 0, 1, ..., the rest -1."""
+    var c = 0
+    for f in range(d):
+        if slot[unsafe_offset=t * d + f] != 0:
+            slot[unsafe_offset=t * d + f] = Int32(c)
+            c += 1
+        else:
+            slot[unsafe_offset=t * d + f] = -1
+    _ = Atomic[DType.int32].max(meta.unsafe_offset(SHAP_META_SLOTS), Int32(c))
+
+
+def shap_ev_part_unit(u: Int, k: Int, offsets: I32P, left: I32P, leaves: F32P, cover: I32P, tscale: F32P,
+                      part: F32P):
+    """Unit u = t * k + j: tree t's share of the expected value of output j."""
+    var t = u // k
+    var j = u - t * k
+    var lo = Int(offsets[unsafe_offset=t])
+    var hi = Int(offsets[unsafe_offset=t + 1])
+    var root = Int(cover[unsafe_offset=lo])
+    var e = Float32(0.0)
+    if root != 0:
+        var rootf = Float32(root)
+        var sc = ftz(tscale[unsafe_offset=t])
+        for g in range(lo, hi):
+            if left[unsafe_offset=g] != -1:
+                continue
+            var frac = _q(Float32(Int(cover[unsafe_offset=g])), rootf)
+            e = _a(e, _m(_m(ftz(leaves[unsafe_offset=g * k + j]), frac), sc))
+    part[unsafe_offset=u] = e
+
+
+def shap_ev_fold_unit(j: Int, n_trees: Int, k: Int, part: F32P, ev: F32P):
+    """ev[j] (the caller's init) plus every tree's share, ascending."""
+    var acc = ftz(ev[unsafe_offset=j])
+    for t in range(n_trees):
+        acc = _a(acc, part[unsafe_offset=t * k + j])
+    ev[unsafe_offset=j] = acc
+
+
+@always_inline
+def _unwound_sum[W: Int](pz: InlineArray[Float32, W], po: InlineArray[Float32, W], pw: InlineArray[Float32, W],
+                         dd: Int, pi: Int) -> Float32:
+    """`unwound_path_sum` of path element pi on the path 0 .. dd."""
+    var of = po[pi]
+    var zf = pz[pi]
+    var next_one = pw[dd]
+    var total = Float32(0.0)
+    var d1 = Float32(dd + 1)
+    var i = dd - 1
     while i >= 0:
         if of != 0:
-            var tmp = identical_mul64(next_one, Float64(d + 1)) / identical_mul64(Float64(i + 1), of)
-            total = total + tmp
-            next_one = p.pw[b + i] - identical_mul64(identical_mul64(tmp, zf), Float64(d - i) / Float64(d + 1))
+            var tmp = _q(_m(next_one, d1), _m(Float32(i + 1), of))
+            total = _a(total, tmp)
+            next_one = _s(pw[i], _m(_m(tmp, zf), _q(Float32(dd - i), d1)))
         elif zf != 0:
-            total = total + (p.pw[b + i] / zf) / (Float64(d - i) / Float64(d + 1))
+            total = _a(total, _q(_q(pw[i], zf), _q(Float32(dd - i), d1)))
         i -= 1
     return total
 
 
-def _recurse(
-    colid: MutPointer[Int32, MutUntrackedOrigin], quesval: MutPointer[Float32, MutUntrackedOrigin],
-    left: MutPointer[Int32, MutUntrackedOrigin], leaves: MutPointer[Float32, MutUntrackedOrigin],
-    cover: MutPointer[Float64, MutUntrackedOrigin], lo: Int, k: Int,
-    x: MutPointer[Float32, MutUntrackedOrigin], xoff: Int,
-    phi: MutPointer[Float64, MutUntrackedOrigin], phioff: Int, scale: Float64,
-    mut p: _Path, node: Int, depth_in: Int, parent_b: Int,
-    pzero: Float64, pone: Float64, pfeature: Int,
+def shap_tree_unit[W: Int](
+    u: Int, rows: Int, d: Int, k: Int, slots: Int,
+    offsets: I32P, colid: I32P, quesval: F32P, left: I32P, leaves: F32P,
+    parent: I32P, cover: I32P, tscale: F32P, slot: I32P, x: F32P, buf: F32P, meta: I32P,
 ):
-    """`tree_shap_recursive` with condition 0. `phi[phioff + f * k + j]`
-    receives feature f's share of output j, times `scale`."""
-    # Neither the background nor the explained row can reach this path.
-    # Its contribution is exactly zero. Visiting a repeated feature here
-    # would unwind a (zero, zero) path fraction through 0 / 0, producing
-    # architecture-dependent NaN signs instead of a finite explanation.
-    if pzero == 0 and pone == 0:
-        return
-    var depth = depth_in
-    var b = parent_b + depth + 1
-    for j in range(depth + 1):
-        p.feature[b + j] = p.feature[parent_b + j]
-        p.zero[b + j] = p.zero[parent_b + j]
-        p.one[b + j] = p.one[parent_b + j]
-        p.pw[b + j] = p.pw[parent_b + j]
-    _extend(p, b, depth, pzero, pone, pfeature)
-    var g = lo + node
-    var l = Int(left[unsafe_offset=g])
-    if l == -1:
-        for i in range(1, depth + 1):
-            var w = _unwound_sum(p, b, depth, i)
-            var s = identical_mul64(identical_mul64(w, p.one[b + i] - p.zero[b + i]), scale)
-            var f = p.feature[b + i]
-            for j in range(k):
-                var o = phioff + f * k + j
-                phi[unsafe_offset=o] = phi[unsafe_offset=o] + identical_mul64(s, Float64(leaves[unsafe_offset=g * k + j]))
-        return
-    var split = Int(colid[unsafe_offset=g])
-    var hot: Int
-    var cold: Int
-    if x[unsafe_offset=xoff + split] <= quesval[unsafe_offset=g]:
-        hot = l
-        cold = l + 1
-    else:
-        hot = l + 1
-        cold = l
-    var w = cover[unsafe_offset=g]
-    var hot_zero: Float64 = 0.0
-    var cold_zero: Float64 = 0.0
-    if w != 0:
-        hot_zero = cover[unsafe_offset=lo + hot] / w
-        cold_zero = cover[unsafe_offset=lo + cold] / w
-    var in_zero: Float64 = 1.0
-    var in_one: Float64 = 1.0
-    var path_index = 0
-    while path_index <= depth:
-        if p.feature[b + path_index] == split:
-            break
-        path_index += 1
-    if path_index != depth + 1:
-        in_zero = p.zero[b + path_index]
-        in_one = p.one[b + path_index]
-        _unwind(p, b, depth, path_index)
-        depth -= 1
-    _recurse(colid, quesval, left, leaves, cover, lo, k, x, xoff, phi, phioff, scale, p, hot, depth + 1, b,
-             identical_mul64(hot_zero, in_zero), in_one, split)
-    _recurse(colid, quesval, left, leaves, cover, lo, k, x, xoff, phi, phioff, scale, p, cold, depth + 1, b,
-             identical_mul64(cold_zero, in_zero), 0.0, split)
-
-
-def _tree_depth(left: MutPointer[Int32, MutUntrackedOrigin], lo: Int, count: Int) -> Int:
-    var depth = List[Int](length=count, fill=0)
-    var best = 0
-    for i in range(count):
-        var c = Int(left[unsafe_offset=lo + i])
-        if c != -1 and c + 1 < count:
-            depth[c] = depth[i] + 1
-            depth[c + 1] = depth[i] + 1
-            if depth[i] + 1 > best:
-                best = depth[i] + 1
-    return best
-
-
-def node_cover(
-    offsets: MutPointer[Int32, MutUntrackedOrigin], colid: MutPointer[Int32, MutUntrackedOrigin],
-    quesval: MutPointer[Float32, MutUntrackedOrigin], left: MutPointer[Int32, MutUntrackedOrigin],
-    x: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int, n_trees: Int,
-    cover: MutPointer[Float64, MutUntrackedOrigin],
-) raises:
-    """cover[node] = the number of rows of `x` whose walk visits the node
-    (zeroed by the caller)."""
-    for t in range(n_trees):
-        var lo = Int(offsets[unsafe_offset=t])
-        var count = Int(offsets[unsafe_offset=t + 1]) - lo
-        for i in range(n):
-            var node = 0
-            var steps = 0
-            while True:
-                cover[unsafe_offset=lo + node] = cover[unsafe_offset=lo + node] + 1.0
-                var l = Int(left[unsafe_offset=lo + node])
-                if l == -1:
-                    break
-                var c = Int(colid[unsafe_offset=lo + node])
-                if c < 0 or c >= d or l < 1 or l + 1 >= count:
-                    raise Error("x_trees node_cover: malformed tree")
-                node = l if x[unsafe_offset=i * d + c] <= quesval[unsafe_offset=lo + node] else l + 1
-                steps += 1
-                if steps > count:
-                    raise Error("x_trees node_cover: cycle in tree")
-
-
-def tree_shap(
-    offsets: MutPointer[Int32, MutUntrackedOrigin], colid: MutPointer[Int32, MutUntrackedOrigin],
-    quesval: MutPointer[Float32, MutUntrackedOrigin], left: MutPointer[Int32, MutUntrackedOrigin],
-    leaves: MutPointer[Float32, MutUntrackedOrigin], cover: MutPointer[Float64, MutUntrackedOrigin],
-    x: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int, n_trees: Int, k: Int, scale: Float64,
-    phi: MutPointer[Float64, MutUntrackedOrigin],
-) raises:
-    """phi[i, f, j] += scale * the TreeSHAP value of feature f for output j
-    of row i, trees in order (phi zeroed by the caller). `leaves` holds k
-    values per node."""
-    # The rows over host tasks (lane neural-pass31): a row's phi cells are
-    # its own, and each task walks the trees in order for every row of its
-    # block, so every phi cell still accumulates its trees ascending, the
-    # leaf terms within a tree in the recursion's order: the same sums in
-    # the same order as the serial trees-outside loop. One path scratch per
-    # task, sized by the deepest tree. MOJOLEARN_XTREES_SHAP_TASKS forces
-    # the task count (1 = the serial walk).
-    var maxd = 0
-    var nodes = 0
-    for t in range(n_trees):
-        var lo = Int(offsets[unsafe_offset=t])
-        var count = Int(offsets[unsafe_offset=t + 1]) - lo
-        if count < 1:
-            raise Error("x_trees tree_shap: empty tree")
-        nodes += count
-        var dt = _tree_depth(left, lo, count) + 2
-        if dt > maxd:
-            maxd = dt
-    var plen = (maxd * (maxd + 1)) // 2 + maxd + 2
-    var tasks = host_row_tasks(n, 8 * nodes)
-    var forced = Int(getenv("MOJOLEARN_XTREES_SHAP_TASKS", "0"))
-    if forced > 0:
-        tasks = max(1, min(n, forced))
-    var chunk = (n + tasks - 1) // tasks
-    def _rows(task: Int) {imm colid, imm quesval, imm left, imm leaves, imm cover, imm offsets, imm x, imm phi,
-                          imm n, imm d, imm n_trees, imm k, imm scale, imm plen, imm chunk}:
-        var p = _Path(plen)
-        var r0 = task * chunk
-        var r1 = min(r0 + chunk, n)
-        for t in range(n_trees):
-            var lo = Int(offsets[unsafe_offset=t])
-            for i in range(r0, r1):
-                _recurse(colid, quesval, left, leaves, cover, lo, k, x, i * d, phi, i * d * k, scale, p, 0, 0, 0,
-                         1.0, 1.0, -1)
-        _ = p^
-    if tasks <= 1:
-        _rows(0)
-    else:
-        host_parallelize(_rows, tasks)
-
-
-def expected_value(
-    offsets: MutPointer[Int32, MutUntrackedOrigin], left: MutPointer[Int32, MutUntrackedOrigin],
-    leaves: MutPointer[Float32, MutUntrackedOrigin], cover: MutPointer[Float64, MutUntrackedOrigin],
-    n_trees: Int, k: Int, scale: Float64, res: MutPointer[Float64, MutUntrackedOrigin],
-):
-    """res[j] += scale * sum over each tree's leaves (node order) of
-    value[j] * cover / root cover."""
-    for t in range(n_trees):
-        var lo = Int(offsets[unsafe_offset=t])
-        var hi = Int(offsets[unsafe_offset=t + 1])
-        var root = cover[unsafe_offset=lo]
-        if root == 0:
+    """Unit u = t * rows + r: row r of `x` (rows x d) through tree t. The
+    (r, t, s, j) cell is buf[((t * slots + s) * k + j) * rows + r]; this unit
+    zeroes the tree's cells, then adds each leaf's terms, leaves ascending.
+    W (>= the merged path length + 1) is a register width only: no bit
+    depends on it."""
+    var t = u // rows
+    var r = u - t * rows
+    for s in range(slots):
+        for j in range(k):
+            buf[unsafe_offset=((t * slots + s) * k + j) * rows + r] = 0.0
+    var lo = Int(offsets[unsafe_offset=t])
+    var hi = Int(offsets[unsafe_offset=t + 1])
+    var sc = ftz(tscale[unsafe_offset=t])
+    var xr = r * d
+    var pf = InlineArray[Int32, W](fill=Int32(-1))
+    var pz = InlineArray[Float32, W](fill=Float32(0.0))
+    var po = InlineArray[Float32, W](fill=Float32(0.0))
+    var pw = InlineArray[Float32, W](fill=Float32(0.0))
+    var mf = InlineArray[Int32, W](fill=Int32(-1))
+    var mz = InlineArray[Float32, W](fill=Float32(0.0))
+    var mo = InlineArray[Float32, W](fill=Float32(0.0))
+    for g in range(lo, hi):
+        if left[unsafe_offset=g] != -1:
             continue
-        for g in range(lo, hi):
-            if left[unsafe_offset=g] != -1:
-                continue
-            var frac = cover[unsafe_offset=g] / root
+        # the leaf's root path, walked up: a feature seen again (shallower)
+        # merges into its deepest element (`unwind_path`'s merge: the
+        # zero fractions multiplied deeper * shallower, the one fractions
+        # both required)
+        var n = 0
+        var c = g - lo
+        var p = Int(parent[unsafe_offset=g])
+        while p != -1:
+            var a = lo + p
+            var f = colid[unsafe_offset=a]
+            var ca = Int(cover[unsafe_offset=a])
+            var z = Float32(0.0)
+            if ca != 0:
+                z = _q(Float32(Int(cover[unsafe_offset=lo + c])), Float32(ca))
+            var l = Int(left[unsafe_offset=a])
+            var hot = l if ftz(x[unsafe_offset=xr + Int(f)]) <= ftz(quesval[unsafe_offset=a]) else l + 1
+            var o = Float32(1.0) if c == hot else Float32(0.0)
+            var i = 0
+            while i < n and mf[i] != f:
+                i += 1
+            if i < n:
+                mz[i] = _m(mz[i], z)
+                if o == 0:
+                    mo[i] = 0.0
+            else:
+                if n + 1 >= W:
+                    # wider than the compiled path: refused by the caller
+                    meta[unsafe_offset=SHAP_META_BAD] = 1
+                    return
+                mf[i] = f
+                mz[i] = z
+                mo[i] = o
+                n += 1
+            c = p
+            p = Int(parent[unsafe_offset=a])
+        var dead = False
+        for i in range(n):
+            if mz[i] == 0 and mo[i] == 0:
+                dead = True
+        if dead:
+            continue
+        # the path in the recursion's order (ascending last appearance),
+        # after the root element (feature -1, fractions 1, 1)
+        pf[0] = -1
+        pz[0] = 1.0
+        po[0] = 1.0
+        for i in range(n):
+            pf[i + 1] = mf[n - 1 - i]
+            pz[i + 1] = mz[n - 1 - i]
+            po[i + 1] = mo[n - 1 - i]
+        # `extend_path` for elements 0 .. n
+        for dd in range(n + 1):
+            var zf = pz[dd]
+            var of = po[dd]
+            pw[dd] = 1.0 if dd == 0 else 0.0
+            var d1 = Float32(dd + 1)
+            var i = dd - 1
+            while i >= 0:
+                pw[i + 1] = _a(pw[i + 1], _q(_m(_m(of, pw[i]), Float32(i + 1)), d1))
+                pw[i] = _q(_m(_m(zf, pw[i]), Float32(dd - i)), d1)
+                i -= 1
+        for i in range(1, n + 1):
+            var w = _unwound_sum[W](pz, po, pw, n, i)
+            var s = _m(_m(w, _s(po[i], pz[i])), sc)
+            var sl = Int(slot[unsafe_offset=t * d + Int(pf[i])])
+            if sl < 0 or sl >= slots:
+                meta[unsafe_offset=SHAP_META_BAD] = 1
+                return
             for j in range(k):
-                res[unsafe_offset=j] = res[unsafe_offset=j] + identical_mul64(identical_mul64(Float64(leaves[unsafe_offset=g * k + j]), frac), scale)
+                var o = ((t * slots + sl) * k + j) * rows + r
+                buf[unsafe_offset=o] = _a(buf[unsafe_offset=o], _m(s, ftz(leaves[unsafe_offset=g * k + j])))
+
+
+def shap_fold_unit(u: Int, r0: Int, rows: Int, n_trees: Int, d: Int, k: Int, slots: Int, slot: I32P, buf: F32P,
+                   phi: F32P):
+    """Unit u = (f * k + j) * rows + r: phi[r0 + r, f, j] = +0 plus the
+    (r, t, slot of f in t, j) cells, ascending tree index."""
+    var r = u % rows
+    var fj = u // rows
+    var j = fj % k
+    var f = fj // k
+    var acc = Float32(0.0)
+    for t in range(n_trees):
+        var s = Int(slot[unsafe_offset=t * d + f])
+        if s >= 0:
+            acc = _a(acc, buf[unsafe_offset=((t * slots + s) * k + j) * rows + r])
+    phi[unsafe_offset=((r0 + r) * d + f) * k + j] = acc
 
 
 # ------------------------------------------- the model-agnostic explainers
