@@ -1,121 +1,870 @@
 #!/usr/bin/env python3
-"""Refuse a push whose added lines add or touch a CPU route on GPU installs.
+"""Refuse CPU work on GPU installs. The rule is enforced in code, not in notes.
 
-On a GPU install every fit, transform and predict runs on the GPU. A slow
-GPU kernel gets fixed, never routed around (Andrew, Oct 1 2026). The routes
-already on main are debt. There is no allowlist: an added line that names one
-of them fails too, so touching a route means removing it, and the debt only
-shrinks.
+On a GPU install every fit, transform and predict runs only GPU work, in
+parallel (Andrew, Oct 1-2 2026). The CPU is only for CPU-only installs,
+MOJOLEARN_VENDOR=cpu verification digests and inference.
 
-Only added lines are read (`git diff -U0`), so the check costs well under a
-second. The same check runs on GitHub (.github/workflows/no-host-routes.yml)
-for every PR and every push to main, and the main ruleset requires it before
-a PR merges, so a merge done on GitHub is checked too. Usage:
-    no_host_routes.py <base> <tip> [--main REF]   lines <tip> adds over <base>
-    no_host_routes.py --diff <file>               check a unified diff (tests)
-Exit 1 with one line per finding, 0 when clean.
+Modes:
+    no_host_routes.py --tree REF [--baseline FILE]
+        Scan EVERY file of REF that a GPU install runs. Fail on any finding
+        that is not in the baseline, and on any baseline row that no longer
+        matches (the baseline only shrinks). Prints the debt per class and
+        per owner. This is what the pre-push hook and the GitHub check run.
+    no_host_routes.py --prune-baseline [REF]
+        Rewrite REF's baseline (default HEAD, the worktree file) without its
+        stale rows, and flip in-flight rows whose code is now in the tree to
+        debt. It never adds a row.
+    no_host_routes.py <base> <tip> [--main REF]
+        Diff mode: only the lines <tip> adds over merge-base(main, tip).
+    no_host_routes.py --diff FILE
+        Diff mode on a unified diff (no scope: every path is GPU code).
+Exit 1 with one line per finding, 0 when clean, 2 on usage errors.
+
+Which files count as GPU code is decided by imports, not by file names:
+  * Mojo: every module that a GPU binding (the entry file of a non-host
+    bindings/build_*.sh, or bindings/build.sh) reaches through its imports,
+    wherever it lives (checks/, host/, *host*, *multi_gpu* all count).
+    A host binding's own modules that no GPU binding imports are out of scope.
+  * Python: every module of python/mojolearn/ except tests/ and the fixed
+    list _PY_CPU_SIDE (verification, the CPU inference product, the CPU
+    backend). That list is code: adding to it is a reviewed change.
+
+Baseline: tools/hooks/host_routes_baseline.tsv, one row per finding key
+(rule, path, normalized line text, occurrence), with its class, owner and
+state. `debt` rows must match the tree. `inflight@<PR head>` rows (the
+replacement of _IN_FLIGHT) pre-authorize the lines one open PR adds, and only
+for a tree that contains that PR head; once that code is in a tree that
+carries the baseline the row must become `debt` (--prune-baseline does it).
+Nothing in this tool adds a row: the baseline was written once, from the
+Oct 2 2026 audit, and every later change can only delete rows.
 """
+import collections
+import os
 import re
 import subprocess
 import sys
 
-# Files that never run on a GPU install's fit path: the CPU-only host
-# bindings, any file named *host* (host walks, host lanes), their Python
-# loaders and the verifier's CPU column. Rules marked `scoped` skip them;
-# the route-table rule does not, so the named routes cannot hide there.
-_CPU_ONLY = re.compile(
-    r"(^|/)(tests?|checks|bench|tools|docs)/"
-    r"|\.(md|txt|json|tsv|toml|cfg|sh)$"
-    r"|^bindings/_mojolearn_\w*_host\.mojo$"
-    r"|^bindings/build_\w*\.sh$"
-    r"|(^|/)host/"
-    r"|(^|/)[^/]*host[^/]*$"
-    r"|^python/mojolearn/(_backend|host_surface|_verify\w*|_\w*_host)\.py$"
+BASELINE = "tools/hooks/host_routes_baseline.tsv"
+
+# ---------------------------------------------------------------- scope ----
+
+# Python modules that legitimately run on the CPU: verification, the CPU
+# backend loader and the CPU inference product. Exact file names, not a
+# pattern: a new CPU-side module is added here in review.
+_PY_CPU_SIDE = frozenset("""
+__main__.py _backend.py host_surface.py _cpu_reference.py _conformance.py
+_verify.py _verify_all.py _verify_causal_lm.py _verify_distributed.py
+_verify_par.py _verify_parallel_cv.py _verify_reference.py _verify_resources.py
+_verify_small.py _verify_worker.py _verification_catalog.py
+_verification_coverage.py _verification_ctr_models.py
+_verification_evidence_data.py _verification_profiles.py
+_forest_host.py _gbdt_host.py _byte_lm_host.py _byte_lm_trainer_host.py
+_classical_host.py
+""".split())
+
+# The host thread pool's own implementation: its contents are the CPU-only
+# executor. Every USE of it in GPU code is still a finding.
+_INFRA = frozenset(["core/host_parallel.mojo"])
+
+# Route switches and thresholds whose names do not say HOST. Each picks a
+# CPU route (or keeps the GPU route off) on a GPU install.
+_KNOWN_ROUTE_SWITCHES = (
+    "MOJOLEARN_PR_SPARSE", "MOJOLEARN_GBDT_ROUTE", "MOJOLEARN_X_LINEAR_DEVICE",
+    "MOJOLEARN_XN_CC_GPU", "MOJOLEARN_SGD_PER_SAMPLE", "MOJOLEARN_XD_RES_DEV_MIN",
+    "MOJOLEARN_XN_SERIAL_GPU", "MOJOLEARN_MSEL3", "MOJOLEARN_GBDT_RESIDENT",
+    "MOJOLEARN_HOTPATH", "MOJOLEARN_XD_QR_HOST", "MOJOLEARN_XD_LU_SOLVE_HOST",
+)
+_KNOWN_ROUTE_THRESHOLDS = (
+    "XD_RES_DEV_MIN", "HOST_FOLD_MIN", "XD_QR_HOST_MIN", "XD_LU_SOLVE_HOST_MIN",
 )
 
-# Lines that only define the host executor type itself.
-_DEFINES_HOSTEXEC = re.compile(r"^\s*(struct|trait|comptime|alias)\s+HostExec\b")
-
-# Env var names of the host binding's own plumbing, not routes.
+# Env names of the host binding's own plumbing, not routes.
 _HOST_PLUMBING = re.compile(
-    r"MOJOLEARN_(\w+_)?HOST_(DIR|ALLOW_SABOTAGE|BINARY|BLOCK_TIMING)\b"
+    r"MOJOLEARN_(\w+_)?HOST_(DIR|ALLOW_SABOTAGE|BINARY|BLOCK_TIMING|SABOTAGE)\b"
+    r"|MOJOLEARN_HOST_SABOTAGE\b"
 )
+_DEFINES = re.compile(r"^\s*(struct|trait|comptime|alias|def|fn|class)\s+(\w+)")
 
-# (name, scoped, pattern, why). An unscoped rule applies to every file
-# outside tests, tools, benchmarks, checks and docs. Comment lines never count.
-_RULES = [
-    ("host-module", True,
+# ---------------------------------------------------------------- rules ----
+# (rule, class, applies-to {"mojo","py"}, pattern, why)
+_LINE_RULES = [
+    ("host-module", "host-import", {"mojo", "py"},
      re.compile(r"\b(load_host_module|host_module_path)\s*\("),
-     "loads a host binding outside the CPU-only modules"),
-    ("host-exec", True,
+     "loads a host binding from GPU code"),
+    ("host-exec", "hostexec", {"mojo"},
      re.compile(r"\bHostExec\b"),
-     "runs HostExec outside the CPU-only bindings"),
-    ("host-import", True,
-     re.compile(r"^\s*from\s+[\w.]*_host\b[\w.]*\s+import\b"
-                r"|^\s*import\s+[\w.]*_host\b"
-                r"|\b\w+(_on_host|_host_rows)\s*\("),
+     "runs HostExec in GPU code"),
+    ("host-import", "host-import", {"mojo", "py"},
+     re.compile(r"\b\w+(_on_host|_host_rows)\s*\("),
      "pulls a host walk into GPU code"),
-    ("host-env", True,
+    ("py-host-import", "host-import", {"py"},
+     re.compile(r"^\s*from\s+\.*[\w.]*_host\b[\w.]*\s+import\b|^\s*import\s+[\w.]*_host\b"),
+     "imports a CPU-side module into GPU-path Python"),
+    ("host-env", "host-env/threshold", {"mojo", "py"},
      re.compile(r"MOJOLEARN_\w*HOST\w*"),
-     "adds a MOJOLEARN_*HOST* switch (a host route knob)"),
-    ("host-threshold", True,
+     "a MOJOLEARN_*HOST* switch (a host route knob)"),
+    ("host-threshold", "host-env/threshold", {"mojo", "py"},
      re.compile(r"\b\w*HOST\w*_(MIN|MAX)(_\w+)?\b|\bHOST_(MIN|MAX)\b"),
      "a size threshold that picks the host"),
-    ("host-threads", True,
-     re.compile(r"\bhost_parallel\w*\s*[\[(]"
-                r"|^\s*from\s+core\.host_parallel\s+import\b"),
-     "runs a step on CPU threads inside GPU code (put it on the GPU; a "
-     "CPU-only path lives in a *host* file)"),
-    ("route-table", False,
-     re.compile(r"\b(_HOST_ALGOS|_HOST_ROUTE_LANES|_HOST_ROUTE_MAX_CELLS"
-                r"|_HOST_ONE_BORDER_\w+|_glm_host|_small_pool_host"
-                r"|_fit_on_host|_sgd_on_host|HOST_RUN)\b"),
-     "touches an existing host route (remove it, don't extend it)"),
+    ("route-switch", "host-env/threshold", {"mojo", "py"},
+     re.compile(r"\b(" + "|".join(_KNOWN_ROUTE_SWITCHES + _KNOWN_ROUTE_THRESHOLDS) + r")\b"),
+     "a known route switch or threshold (its name does not say HOST)"),
+    ("host-threads", "host-threads", {"mojo", "py"},
+     re.compile(r"\bhost_parallel\w*\b"),
+     "runs a step on CPU threads in GPU code"),
+    ("std-parallelize", "host-threads", {"mojo"},
+     re.compile(r"\b(sync_)?parallelize\b|\bfrom\s+algorithm(\.functional)?\s+import\b.*\bparallelize"),
+     "stdlib parallelize: CPU threads in GPU code"),
+    ("route-table", "host-env/threshold", {"mojo", "py"},
+     re.compile(r"\b(_HOST_ALGOS|_HOST_ROUTE_\w+|_HOST_ONE_BORDER_\w+|_glm_host"
+                r"|_small_pool_host|_fit_on_host|_sgd_on_host|HOST_RUN)\b"),
+     "a named host route"),
+    ("py-numpy", "py-numpy", {"py"},
+     re.compile(r"\bnp\.(argsort|unique|cumsum|bincount|sort|lexsort|searchsorted)\s*\("),
+     "numpy work over n in a GPU-path module"),
+    ("py-sklearn", "py-numpy", {"py"},
+     re.compile(r"^\s*(import\s+sklearn\b|from\s+sklearn\b)"),
+     "sklearn in a GPU-path module"),
+    ("py-loop", "py-numpy", {"py"},
+     re.compile(r"\bfor\s+.+?\s+in\s+range\(\s*(n|n_(samples|rows|obs|nodes|points|q|test|train|edges))\s*\)"
+                r"|\bfor\s+.+?\s+in\s+range\(\s*(len\(\s*(X|y|x|rows|codes|labels|idx|indices|data|y_true"
+                r"|y_pred|sample_weight|weights|w|targets|points|samples)\s*\)|\w+\.shape\[0\]|self\.n_samples)\s*\)"),
+     "a Python loop over n in a GPU-path module"),
+    ("py-threads", "host-threads", {"py"},
+     re.compile(r"\b(concurrent\.futures|ThreadPoolExecutor|ProcessPoolExecutor|multiprocessing"
+                r"|threading\.Thread)\b"),
+     "a Python thread or process pool in a GPU-path module"),
+    ("py-vendor-cpu", "host-env/threshold", {"py"},
+     re.compile(r"environ\s*\[\s*['\"]MOJOLEARN_VENDOR['\"]\s*\]\s*=(?!=)"
+                r"|environ\.setdefault\(\s*['\"]MOJOLEARN_VENDOR"
+                r"|putenv\(\s*['\"]MOJOLEARN_VENDOR"),
+     "forces the CPU vendor from a GPU-path module"),
 ]
 
-# Files whose host threads only drive one GPU each (multi-GPU dispatch):
-# the host-threads rule skips them, every other rule still reads them.
-_DRIVES_GPUS = re.compile(r"(^|/)[^/]*multi_gpu[^/]*$")
+_RULE_CLASS = {r[0]: r[1] for r in _LINE_RULES}
+_RULE_CLASS.update({"host-call": "host-import", "serial-launch": "serial-gpu", "host-switch": "host-env/threshold",
+                    "d2h-loop": "d2h-roundtrip", "tid0-loop": "serial-gpu"})
+_RULE_WHY = {r[0]: r[4] for r in _LINE_RULES}
+_RULE_WHY.update({
+    "host-call": "calls a host-only module from GPU code",
+    "host-switch": "a switch or threshold in a function that calls host code",
+    "d2h-loop": "downloads, synchronizes, loops on the host, then goes back to the device",
+    "tid0-loop": "one thread loops over a runtime n",
+    "serial-launch": "a one-block or one-thread launch over a runtime size",
+})
 
-# Six PRs in flight when the check went in (Andrew, Oct 2: everything in
-# flight lands). Exactly the lines each PR had added up to this pinned head
-# pass; a commit added to the PR after the pin is checked like any other. An
-# entry goes away when its PR lands or closes; never add one.
-_IN_FLIGHT = {
-    77: "e0918aa35bfbf6b81b095ee364ed8cc5bfb2a003",
-    85: "6a483da91d76ae2560b5316910738e7b3328e375",
-    86: "11912bf71d8e8d7faaadf8301088c517562c7758",
-    106: "e2128048602c358e3a3c402fc70ea718c7a01d64",
-    116: "28671ad0e1bdb7e1c59d7ee7925e1fccf1fb204a",
-    126: "9901c6a91a8d8c8aa3e5162024c7b1acacd7bc37",
-}
-
-_ALWAYS_SKIP = re.compile(r"(^|/)(tests?|checks|bench|tools|docs)/|\.md$")
-_COMMENT = re.compile(r"^\s*(#|//)")
+# --------------------------------------------------------------- git io ----
 
 
-def _git(*args):
+def _git(*args, inp=None):
     return subprocess.run(["git", *args], capture_output=True, text=True,
-                          errors="replace")
+                          errors="replace", input=inp)
 
 
-def _added(base, tip):
-    return _git("diff", "-U0", "--no-color", "--no-ext-diff",
-                "--diff-filter=AMR", base, tip).stdout
+_BLOB_CACHE = {}
+_LINES_CACHE = {}
 
 
-def in_flight_lines(main_ref):
-    """(path, stripped text) of every line the pinned PR heads add over main."""
-    lines = set()
-    for sha in _IN_FLIGHT.values():
-        if _git("cat-file", "-e", sha + "^{commit}").returncode != 0:
-            _git("fetch", "-q", "origin", sha)
-        mb = _git("merge-base", main_ref, sha)
-        if mb.returncode != 0:
+def _ls(ref):
+    """{path: blob sha} of every file at ref."""
+    r = _git("ls-tree", "-r", "--full-tree", ref)
+    if r.returncode != 0:
+        raise SystemExit(f"no_host_routes: cannot list {ref}: {r.stderr.strip()}")
+    out = {}
+    for ln in r.stdout.splitlines():
+        meta, _, path = ln.partition("\t")
+        bits = meta.split()
+        if len(bits) == 3 and bits[1] == "blob":
+            out[path] = bits[2]
+    return out
+
+
+def _read_blobs(shas):
+    """{sha: text}, one `git cat-file --batch` process for the uncached ones."""
+    need = [s for s in dict.fromkeys(shas) if s not in _BLOB_CACHE]
+    if need:
+        p = subprocess.run(["git", "cat-file", "--batch"], input="".join(s + "\n" for s in need).encode(),
+                           capture_output=True)
+        out, i = p.stdout, 0
+        for sha in need:
+            nl = out.index(b"\n", i)
+            head = out[i:nl].split()
+            i = nl + 1
+            if len(head) < 3 or head[1] == b"missing":
+                _BLOB_CACHE[sha] = ""
+                continue
+            size = int(head[2])
+            _BLOB_CACHE[sha] = out[i:i + size].decode("utf-8", "replace")
+            i += size + 1
+    return {s: _BLOB_CACHE[s] for s in shas}
+
+
+def _lines_of(sha, text, lang):
+    k = (sha, lang)
+    if sha is None or k not in _LINES_CACHE:
+        v = _code_lines(text, lang)
+        if sha is None:
+            return v
+        _LINES_CACHE[k] = v
+    return _LINES_CACHE[k]
+
+
+# -------------------------------------------------------------- parsing ----
+
+
+def _code_lines(text, lang):
+    """[(line_no, code_text)] with comments and docstrings blanked."""
+    out = []
+    in_doc = None
+    for no, raw in enumerate(text.splitlines(), 1):
+        line = raw
+        if in_doc:
+            j = line.find(in_doc)
+            if j < 0:
+                continue
+            line = line[j + 3:]
+            in_doc = None
+        # strip docstrings opening (and maybe closing) on this line
+        while True:
+            m = re.search(r'("""|\'\'\')', line)
+            if not m:
+                break
+            q = m.group(1)
+            k = line.find(q, m.end())
+            if k < 0:
+                in_doc = q
+                line = line[:m.start()]
+                break
+            line = line[:m.start()] + line[k + 3:]
+        s = line.lstrip()
+        if not s or s.startswith("#") or s.startswith("//"):
             continue
-        for path, _, text in _walk(_added(mb.stdout.strip(), sha)):
-            lines.add((path, text.strip()))
-    return lines
+        out.append((no, line.rstrip()))
+    return out
+
+
+_IMPORT_FROM = re.compile(r"^\s*from\s+(\.*[\w.]*)\s+import\s+(.*)$")
+_IMPORT = re.compile(r"^\s*import\s+(.*)$")
+
+
+def _imports(lines):
+    """[(line_no, module, [(name, alias)])] for each import statement,
+    joining parenthesized continuation lines."""
+    res = []
+    i = 0
+    while i < len(lines):
+        no, ln = lines[i]
+        m = _IMPORT_FROM.match(ln)
+        if m:
+            mod, rest = m.group(1), m.group(2)
+            if "(" in rest and ")" not in rest:
+                j = i + 1
+                while j < len(lines) and ")" not in lines[j][1]:
+                    rest += " " + lines[j][1]
+                    j += 1
+                if j < len(lines):
+                    rest += " " + lines[j][1]
+                i = j
+            names = []
+            for part in rest.replace("(", " ").replace(")", " ").split(","):
+                part = part.split("#")[0].strip()
+                if not part:
+                    continue
+                bits = part.split()
+                name = bits[0]
+                alias = bits[2] if len(bits) >= 3 and bits[1] == "as" else name
+                names.append((name, alias))
+            res.append((no, mod, names))
+        else:
+            m = _IMPORT.match(ln)
+            if m:
+                for part in m.group(1).split(","):
+                    bits = part.strip().split()
+                    if bits:
+                        alias = bits[2] if len(bits) >= 3 and bits[1] == "as" else bits[0]
+                        res.append((no, bits[0], [("", alias)]))
+        i += 1
+    return res
+
+
+def _resolve(mod, src, files):
+    """Repo paths of a Mojo import's module (and the submodule a name may
+    be), searching the package root and bindings/ (the build's -I paths)."""
+    if mod.startswith("."):
+        dots = len(mod) - len(mod.lstrip("."))
+        base = os.path.dirname(src)
+        for _ in range(dots - 1):
+            base = os.path.dirname(base)
+        rel = mod.lstrip(".").replace(".", "/")
+        cands = [os.path.join(base, rel) if rel else base]
+    else:
+        rel = mod.replace(".", "/")
+        cands = [rel, "bindings/" + rel]
+    out = []
+    for c in cands:
+        c = os.path.normpath(c)
+        for p in (c + ".mojo", c + "/__init__.mojo"):
+            if p in files:
+                out.append(p)
+        if out:
+            # the packages along the path load too
+            parts = c.split("/")
+            for k in range(1, len(parts)):
+                ini = "/".join(parts[:k]) + "/__init__.mojo"
+                if ini in files:
+                    out.append(ini)
+            return out, c
+    return out, None
+
+# ---------------------------------------------------------------- scope ----
+
+
+def _gpu_roots(ref_files, texts_of):
+    """Entry files of the GPU bindings, read from the build scripts."""
+    scripts = [p for p in ref_files if re.fullmatch(r"bindings/build(_\w+)?\.sh", p)
+               and not p.endswith("_host.sh") and p != "bindings/build_host_family.sh"]
+    roots = set()
+    for p, t in texts_of(scripts).items():
+        for m in re.finditer(r"bindings/(_mojolearn\w*)\.mojo", t):
+            q = f"bindings/{m.group(1)}.mojo"
+            if not q.endswith("_host.mojo") and q in ref_files:
+                roots.add(q)
+    return roots
+
+
+class Tree:
+    """Every scoped file of a ref with its code lines, imports and scope."""
+
+    def __init__(self, ref, overlay=None):
+        self.ref = ref
+        shas = _ls(ref)
+        overlay = overlay or {}
+        files = set(shas) | set(overlay)
+        self.files = files
+
+        def lines(paths, lang):
+            got = _read_blobs([shas[p] for p in paths if p not in overlay])
+            res = {}
+            for p in paths:
+                if p in overlay:
+                    res[p] = _lines_of(None, overlay[p], lang)
+                else:
+                    res[p] = _lines_of(shas[p], got[shas[p]], lang)
+            return res
+
+        mojo = sorted(p for p in files if p.endswith(".mojo"))
+        self.lines = lines(mojo, "mojo")
+        self.imps = {p: _imports(l) for p, l in self.lines.items()}
+        # module graph
+        self.edges = collections.defaultdict(set)
+        self.sym_src = {}  # (path, alias) -> (module path it came from, name)
+        for p, imps in self.imps.items():
+            for _, mod, names in imps:
+                mods, base = _resolve(mod, p, files)
+                for m in mods:
+                    self.edges[p].add(m)
+                for name, alias in names:
+                    if base is not None and name:
+                        sub, _ = _resolve(mod + name if mod.endswith(".") else mod + "." + name, p, files)
+                        for s in sub:
+                            self.edges[p].add(s)
+                    if mods:
+                        self.sym_src[(p, alias)] = (mods[0], name)
+        scripts = [p for p in files if re.fullmatch(r"bindings/build(_\w+)?\.sh", p)]
+        stext = {p: overlay[p] if p in overlay else _read_blobs([shas[p]])[shas[p]] for p in scripts}
+        roots = _gpu_roots(files, lambda ps: {p: stext[p] for p in ps if p in stext})
+        seen, stack = set(), list(roots)
+        while stack:
+            p = stack.pop()
+            if p in seen:
+                continue
+            seen.add(p)
+            stack.extend(self.edges.get(p, ()))
+        self.gpu_mojo = seen
+        self.roots = roots
+        py = sorted(p for p in files if p.startswith("python/mojolearn/") and p.endswith(".py")
+                    and "/tests/" not in p and os.path.basename(p) not in _PY_CPU_SIDE)
+        self.lines.update(lines(py, "py"))
+        self.gpu_py = set(py)
+        self.host_funcs = {p: self._host_functions(p) for p in self.gpu_mojo}
+
+    _DEVICE_API = re.compile(r"\b(enqueue_function\w*|DeviceContext|DeviceBuffer|enqueue_copy"
+                             r"|thread_idx|block_idx|global_idx|barrier)\b")
+    _HOST_EXEC = re.compile(r"\bhost_parallel\w*\s*[\[(]|\bHostExec\b|\b(sync_)?parallelize\s*\["
+                            r"|\b\w+(_on_host|_host_rows)\s*\(")
+    _HOST_NAMED = re.compile(r"(^|/)host/|(^|/)[^/]*_host\.mojo$|(^|/)host_[^/]*\.mojo$")
+
+    def _host_functions(self, p):
+        """Top-level functions of p that run CPU work: their body runs host
+        threads or HostExec (or a *_on_host / *_host_rows walk), or (in a
+        module with no device code) calls such a function of the same module,
+        or, in a module laid out as host code
+        with no device code at all, loops."""
+        lines = self.lines.get(p, [])
+        named = bool(self._HOST_NAMED.search(p)) and not any(
+            self._DEVICE_API.search(t) for _, t in lines)
+        drivers = _driver_lines(lines)
+        bodies = {}
+        for a, b in _functions(lines, top_only=True):
+            m = re.match(r"\s*(?:def|fn)\s+(\w+)", lines[a][1])
+            if m:
+                bodies[m.group(1)] = lines[a + 1:b]
+        out = set()
+        for name, body in bodies.items():
+            if any(self._HOST_EXEC.search(t) and no not in drivers for no, t in body) or (
+                    named and any(re.match(r"\s*(for|while)\s", t) for _, t in body)):
+                out.add(name)
+        # same-module callers count only in a module with no device code
+        # (a host walk's entry points), not in a device module whose staging
+        # helper happens to use host threads
+        device_module = any(self._DEVICE_API.search(t) for _, t in lines)
+        while not device_module:
+            if not out:
+                break
+            call = re.compile(r"\b(" + "|".join(map(re.escape, sorted(out))) + r")\s*[\[(]")
+            more = {n for n, body in bodies.items() if n not in out
+                    and any(call.search(t) for _, t in body)}
+            if not more:
+                break
+            out |= more
+        return out
+
+    def scoped(self):
+        return sorted((self.gpu_mojo | self.gpu_py) - _INFRA)
+
+# -------------------------------------------------------------- scanning ----
+
+
+def _functions(lines, top_only=False):
+    """Split code lines into outermost function units: [(start_idx, end_idx)].
+    top_only: only functions at column 0 (not struct methods)."""
+    units, cur, ind = [], None, None
+    for i, (_, t) in enumerate(lines):
+        indent = len(t) - len(t.lstrip())
+        m = re.match(r"\s*(def|fn)\s", t) if not top_only else re.match(r"(def|fn)\s", t)
+        if cur is not None and indent <= ind and not t.strip().startswith(("@", ")", "]")):
+            units.append((cur, i))
+            cur = None
+        if cur is None and m:
+            cur, ind = i, indent
+    if cur is not None:
+        units.append((cur, len(lines)))
+    return units
+
+
+_D2H = re.compile(r"enqueue_copy\(\s*dst_ptr\s*=|\bmap_to_host\b|enqueue_copy_from_device|\bto_host\(")
+_DEV_AGAIN = re.compile(r"enqueue_copy\(\s*dst_buf\s*=|enqueue_function|enqueue_copy_to_device|\bupload\w*\(")
+_SYNC = re.compile(r"\.synchronize\(\)")
+_HOST_FOR = re.compile(r"^\s*for\s+\w+\s+in\s+range\(")
+_TID0 = re.compile(r"^\s*if\s+\(?\s*(thread_idx\.x|tid|lane|lane_id|t|local_tid|thread_id)\s*==\s*0\b")
+_RUNTIME_RANGE = re.compile(r"\bfor\s+\w+\s+in\s+range\(\s*([^)]*)\)")
+_ENV_READ = re.compile(r"\b(getenv|_getenv\w*|environ\.get|is_defined)\b[\[(]\s*['\"](MOJOLEARN_\w+)")
+_THRESH_CMP = re.compile(r"[<>]=?\s*([A-Z][A-Z0-9_]*(MIN|MAX|THRESH|LIMIT|CUTOFF)[A-Z0-9_]*)\b"
+                         r"|\b([A-Z][A-Z0-9_]*(MIN|MAX|THRESH|LIMIT|CUTOFF)[A-Z0-9_]*)\s*[<>]=?")
+
+
+def _runtime_bound(expr):
+    """True when a range() bound is a runtime size, not a literal/constant."""
+    e = expr.split(",")[-1 if expr.count(",") >= 1 else 0].strip()
+    if not e:
+        return False
+    if re.fullmatch(r"[\d_]+|[A-Z][A-Z0-9_]*|[\d_]+\s*[-+*]\s*[\d_]+", e):
+        return False
+    return True
+
+
+_DRIVE = re.compile(r"\bDeviceContext\s*\(|\.enqueue_\w+|\bctx\.synchronize\(")
+
+
+def _driver_lines(lines):
+    """Line numbers of host_parallel* calls whose task closure drives a GPU
+    (one host thread per device, each enqueueing on its own context): the
+    multi-GPU dispatch Andrew allows. Decided by the closure's code."""
+    out = set()
+    for i, (no, t) in enumerate(lines):
+        m = re.search(r"\bhost_parallel\w*\s*(?:\[[^\]]*\])?\s*\(\s*(\w+)", t)
+        if not m:
+            continue
+        name = m.group(1)
+        for j in range(i - 1, -1, -1):
+            dm = re.match(r"(\s*)(?:def|fn)\s+" + re.escape(name) + r"\b", lines[j][1])
+            if dm:
+                ind = len(dm.group(1))
+                body = []
+                for _, t2 in lines[j + 1:i]:
+                    if len(t2) - len(t2.lstrip()) <= ind:
+                        break
+                    body.append(t2)
+                if any(_DRIVE.search(b) for b in body):
+                    out.add(no)
+                break
+    return out
+
+
+def _launch_statements(lines):
+    """[(line_idx, joined text)] of each enqueue_function call."""
+    out = []
+    for i, (_, t) in enumerate(lines):
+        if "enqueue_function" not in t:
+            continue
+        txt, depth, j = "", 0, i
+        started = False
+        while j < len(lines):
+            seg = lines[j][1]
+            if j > i:
+                txt += " "
+            txt += seg.strip()
+            depth += seg.count("(") - seg.count(")")
+            started = started or "(" in seg
+            if started and depth <= 0:
+                break
+            j += 1
+            if j - i > 40:
+                break
+        out.append((i, txt))
+    return out
+
+
+_GRID1 = re.compile(r"\bgrid_dim\s*=\s*(1\b(?!\s*[.\w])|\(\s*1\s*,\s*1\s*\)|\(\s*1\s*\))")
+_BLOCK1 = re.compile(r"\bblock_dim\s*=\s*(1\b(?!\s*[.\w])|\(\s*1\s*\))")
+# a runtime size among the launch arguments (rows, samples, elements, nnz)
+_SIZES = (r"(n|m|n_rows|rows|n_samples|nnz|n_nodes|n_points|n_q|numel|n_elems|n_obs|n_train"
+          r"|n_test|n_items|n_edges|max_samples|r1|length|size|n_rows_total|n_cells)")
+_SIZE_TOKEN = re.compile(r"\b" + _SIZES + r"\b")
+# a launch argument that is a runtime size: `n` or `Int32(n)`, not `blocks(n)`
+_SIZE_ARG = re.compile(r"^\s*(U?Int(8|16|32|64)?\s*\(\s*)?" + _SIZES + r"\s*\)?\s*$")
+
+
+def _top_args(s):
+    """Top-level comma-separated arguments of a call's argument text."""
+    out, depth, cur = [], 0, ""
+    for ch in s:
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+            if depth < 0:
+                break
+        if ch == "," and depth == 0:
+            out.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    out.append(cur)
+    return out
+
+
+dm_def = re.compile(r"\s*(def|fn)\s")
+
+
+def scan_file(tree, path):
+    """[(rule, line_no, code_text)] for one scoped file."""
+    lang = "py" if path.endswith(".py") else "mojo"
+    lines = tree.lines.get(path, [])
+    out = []
+    host_thread_names = set()
+    host_syms = set()
+    import_of = {}
+    if lang == "mojo":
+        for no, mod, names in tree.imps.get(path, ()):
+            for name, alias in names:
+                leaf = name or mod.split(".")[-1]
+                if leaf.startswith("host_parallel") or mod.endswith("host_parallel"):
+                    host_thread_names.add(alias)
+                    continue
+                src = tree.sym_src.get((path, alias))
+                if src and name and name in tree.host_funcs.get(src[0], ()):
+                    host_syms.add(alias)
+                    import_of.setdefault(no, []).append(alias)
+    local_host = tree.host_funcs.get(path, set()) if lang == "mojo" else set()
+    alias_re = (re.compile(r"\b(" + "|".join(map(re.escape, sorted(host_thread_names))) + r")\b")
+                if host_thread_names else None)
+    host_call_re = (re.compile(r"\b(" + "|".join(map(re.escape, sorted(host_syms))) + r")\s*[\[(]")
+                    if host_syms else None)
+    local_call_re = (re.compile(r"\b(" + "|".join(map(re.escape, sorted(local_host))) + r")\s*[\[(]")
+                     if local_host else None)
+    flagged = collections.defaultdict(set)
+    drivers = _driver_lines(lines) if lang == "mojo" else set()
+    uses = [no for no, t in lines if re.search(r"\bhost_parallel\w*\s*(\[[^\]]*\])?\s*\(", t)
+            and not _DEFINES.match(t)] if lang == "mojo" else []
+    only_drivers = bool(uses) and all(no in drivers for no in uses)
+
+    def add(rule, no, t):
+        if rule in ("host-threads",) and (no in drivers or (only_drivers and re.match(
+                r"\s*(from|import)\b", t))):
+            return
+        if rule == "host-import" and dm_def.match(t):
+            return
+        if rule not in flagged[no]:
+            out.append((rule, no, t))
+            flagged[no].add(rule)
+
+    for no, t in lines:
+        dm = _DEFINES.match(t)
+        for rule, _cls, langs, pat, _why in _LINE_RULES:
+            if lang not in langs:
+                continue
+            ms = [m.group(0) for m in pat.finditer(t)]
+            if rule == "host-env":
+                ms = [h for h in ms if not _HOST_PLUMBING.fullmatch(h)]
+            if not ms:
+                continue
+            if dm and rule in ("host-exec", "host-threads", "std-parallelize") and \
+                    re.match(r"(HostExec|host_parallel\w*|parallelize)$", dm.group(2)):
+                continue
+            add(rule, no, t)
+        if alias_re and alias_re.search(t) and not (dm and alias_re.fullmatch(dm.group(2))):
+            add("host-threads", no, t)
+        if no in import_of or (host_call_re and host_call_re.search(t)):
+            if not flagged[no] & {"host-threads", "host-import", "host-exec"}:
+                add("host-call", no, t)
+    if lang != "mojo":
+        return out
+    hostish = {"host-call", "host-import", "host-exec", "host-threads", "std-parallelize"}
+    # host-switch: an env/define read or threshold test whose branch reaches host code
+    for k, (no, t) in enumerate(lines):
+        if not re.match(r"\s*(comptime\s+)?(if|elif)\b", t):
+            continue
+        if not (_ENV_READ.search(t) or _THRESH_CMP.search(t)) or "is_gpu()" in t:
+            continue
+        if flagged[no]:
+            continue
+        ind = len(t) - len(t.lstrip())
+        reach = False
+        for no2, t2 in lines[k + 1:]:
+            ind2 = len(t2) - len(t2.lstrip())
+            if ind2 < ind or (ind2 == ind and not re.match(r"\s*(else|elif)\b", t2)):
+                break
+            if flagged[no2] & hostish or (local_call_re and local_call_re.search(t2)):
+                reach = True
+                break
+        if reach:
+            add("host-switch", no, t)
+    for a, b in _functions(lines):
+        body = lines[a:b]
+        # download -> synchronize -> host loop -> device again
+        state, d2h = 0, None
+        for no, t in body:
+            if state == 0 and _D2H.search(t):
+                state, d2h = 1, (no, t)
+            elif state == 1 and _SYNC.search(t):
+                state = 2
+            elif state == 2 and _HOST_FOR.search(t) and _SIZE_TOKEN.search(t.split("range(", 1)[1]):
+                state = 3
+            elif state == 3 and _DEV_AGAIN.search(t):
+                add("d2h-loop", d2h[0], d2h[1])
+                state, d2h = 0, None
+        # if tid == 0: for i in range(<runtime>)
+        for k, (no, t) in enumerate(body):
+            if not _TID0.match(t):
+                continue
+            ind = len(t) - len(t.lstrip())
+            for no2, t2 in body[k + 1:]:
+                if len(t2) - len(t2.lstrip()) <= ind:
+                    break
+                m = _RUNTIME_RANGE.search(t2)
+                if m and _runtime_bound(m.group(1)) and _SIZE_TOKEN.search(m.group(1)):
+                    add("tid0-loop", no, t)
+                    break
+    # one-block / one-thread launches over a runtime size
+    for i, txt in _launch_statements(lines):
+        g1, b1 = _GRID1.search(txt), _BLOCK1.search(txt)
+        if not g1:
+            continue
+        args = txt[:g1.start()]
+        args = args[args.find("(", args.find("enqueue_function")) + 1:] if "(" in args else args
+        if any(_SIZE_ARG.match(a) for a in _top_args(args)):
+            add("serial-launch", lines[i][0], lines[i][1])
+    return out
+
+
+def _norm(t):
+    return re.sub(r"\s+", " ", t.strip())
+
+
+def tree_findings(tree, paths=None):
+    """[(key, line_no)] where key = (rule, path, normalized text, occurrence)."""
+    res = []
+    for p in (paths if paths is not None else tree.scoped()):
+        seen = collections.Counter()
+        for rule, no, t in sorted(scan_file(tree, p), key=lambda x: (x[1], x[0])):
+            n = _norm(t)
+            occ = seen[(rule, n)]
+            seen[(rule, n)] += 1
+            res.append(((rule, p, n, occ), no))
+    return res
+
+# ------------------------------------------------------------- baseline ----
+
+_HDR = "rule\tclass\towner\tstate\tpath\tocc\ttext"
+
+
+def load_baseline(text):
+    rows = []
+    for ln in text.splitlines():
+        if not ln.strip() or ln.startswith("#") or ln.startswith("rule\t"):
+            continue
+        c = ln.split("\t")
+        if len(c) != 7:
+            raise SystemExit(f"no_host_routes: bad baseline row: {ln[:120]}")
+        rule, cls, owner, state, path, occ, text = c
+        rows.append(dict(rule=rule, cls=cls, owner=owner, state=state, path=path,
+                         occ=int(occ), text=text))
+    return rows
+
+
+def dump_baseline(rows):
+    rows = sorted(rows, key=lambda r: (r["path"], r["rule"], r["text"], r["occ"]))
+    head = ("# no_host_routes baseline: CPU work in GPU code that main still carries.\n"
+            "# It only shrinks. A fix deletes its rows (no_host_routes.py --prune-baseline).\n"
+            "# state debt = on main; inflight = pre-authorized lines of an open PR.\n")
+    return head + _HDR + "\n" + "".join(
+        "\t".join([r["rule"], r["cls"], r["owner"], r["state"], r["path"], str(r["occ"]),
+                   r["text"]]) + "\n" for r in rows)
+
+
+def _key(r):
+    return (r["rule"], r["path"], r["text"], r["occ"])
+
+
+_ANC = {}
+
+
+def _inflight_ok(state, ref):
+    """An in-flight row (state inflight@<PR head>) only serves a tree that
+    contains that PR head: the allowance belongs to the PR, not to its text."""
+    if not state.startswith("inflight@"):
+        return False
+    sha = state.split("@", 1)[1]
+    k = (sha, ref)
+    if k not in _ANC:
+        _ANC[k] = _git("merge-base", "--is-ancestor", sha, ref).returncode == 0
+    return _ANC[k]
+
+
+def summary(rows, out=sys.stderr):
+    debt = [r for r in rows if r["state"] == "debt"]
+    by_cls = collections.Counter(r["cls"] for r in debt)
+    by_owner = collections.Counter(r["owner"] for r in debt)
+    infl = collections.Counter(r["owner"] for r in rows if r["state"].startswith("inflight"))
+    print(f"no-host-routes debt: {len(debt)} rows on GPU paths "
+          f"(+{sum(infl.values())} in-flight allowances)", file=out)
+    print("  by class: " + ", ".join(f"{k} {v}" for k, v in by_cls.most_common()), file=out)
+    print("  by owner: " + ", ".join(f"{k} {v}" for k, v in by_owner.most_common()), file=out)
+    if infl:
+        print("  in flight: " + ", ".join(f"{k} {v}" for k, v in infl.most_common()), file=out)
+
+
+def _baseline_text(ref, explicit):
+    if explicit:
+        with open(explicit, encoding="utf-8") as f:
+            return f.read(), True
+    r = _git("show", f"{ref}:{BASELINE}")
+    if r.returncode == 0:
+        return r.stdout, True
+    for m in ("refs/remotes/origin/main", "origin/main"):
+        r = _git("show", f"{m}:{BASELINE}")
+        if r.returncode == 0:
+            return r.stdout, False
+    return "", False
+
+
+def check_tree(ref, baseline_path=None, overlay=None, quiet=False):
+    """0 clean, 1 new findings or stale rows."""
+    btext, own = _baseline_text(ref, baseline_path)
+    rows = load_baseline(btext)
+    tree = Tree(ref, overlay)
+    found = tree_findings(tree)
+    debt_keys = collections.Counter(_key(r) for r in rows if r["state"] == "debt")
+    infl_keys = collections.Counter(_key(r) for r in rows if _inflight_ok(r["state"], ref))
+    allowed_extra = collections.Counter()
+    if not own:
+        # the tree predates the baseline: judge only what the branch adds over
+        # its merge-base with main (main's later fixes are not charged to it)
+        mb = _git("merge-base", "refs/remotes/origin/main", ref)
+        if mb.returncode != 0:
+            mb = _git("merge-base", "origin/main", ref)
+        if mb.returncode == 0:
+            allowed_extra = collections.Counter(k for k, _ in tree_findings(Tree(mb.stdout.strip())))
+    found_keys = collections.Counter(k for k, _ in found)
+    new, matched_infl = [], []
+    for k, no in found:
+        if debt_keys[k] > 0:
+            debt_keys[k] -= 1
+        elif infl_keys[k] > 0:
+            infl_keys[k] -= 1
+            matched_infl.append((k, no))
+        elif allowed_extra[k] > 0:
+            allowed_extra[k] -= 1
+        else:
+            new.append((k, no))
+    stale = [k for k, c in debt_keys.items() for _ in range(c)] if own else []
+    bad = bool(new or stale or (own and matched_infl))
+    if not quiet:
+        summary(rows)
+    if new:
+        print(f"no-host-routes: REFUSED. {len(new)} finding(s) of CPU work in GPU code "
+              "are not in the baseline:", file=sys.stderr)
+        for (rule, p, n, _), no in new:
+            print(f"  {p}:{no}: [{rule}] {_RULE_WHY.get(rule, '')}: {n[:120]}", file=sys.stderr)
+        print("  Put the step on the GPU, in parallel. The baseline never grows.", file=sys.stderr)
+    if stale:
+        print(f"no-host-routes: REFUSED. {len(stale)} baseline row(s) no longer match "
+              "(the CPU work is gone: delete the rows with "
+              "`python3 tools/hooks/no_host_routes.py --prune-baseline`):", file=sys.stderr)
+        for rule, p, n, occ in stale[:40]:
+            print(f"  {p}: [{rule}] #{occ}: {n[:110]}", file=sys.stderr)
+        if len(stale) > 40:
+            print(f"  ... {len(stale) - 40} more", file=sys.stderr)
+    if own and matched_infl:
+        print(f"no-host-routes: REFUSED. {len(matched_infl)} in-flight row(s) are now in the "
+              "tree: mark them debt (`--prune-baseline`):", file=sys.stderr)
+        for (rule, p, n, _), no in matched_infl[:20]:
+            print(f"  {p}:{no}: [{rule}] {n[:110]}", file=sys.stderr)
+    return 1 if bad else 0
+
+
+def prune_baseline(ref="HEAD", path=BASELINE):
+    with open(path, encoding="utf-8") as f:
+        rows = load_baseline(f.read())
+    tree = Tree(ref) if ref != "HEAD" else Tree("HEAD", _worktree_overlay())
+    found = collections.Counter(k for k, _ in tree_findings(tree))
+    keep = []
+    removed = flipped = 0
+    for r in rows:
+        k = _key(r)
+        if found[k] > 0:
+            found[k] -= 1
+            if r["state"].startswith("inflight"):
+                r["state"] = "debt"
+                flipped += 1
+            keep.append(r)
+        elif r["state"].startswith("inflight"):
+            keep.append(r)
+        else:
+            removed += 1
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(dump_baseline(keep))
+    print(f"no-host-routes: pruned {removed} stale row(s), flipped {flipped} in-flight row(s) "
+          f"to debt; {len(keep)} rows remain", file=sys.stderr)
+    summary(keep)
+    return 0
+
+
+def _worktree_overlay():
+    """Uncommitted edits of tracked files, so --prune-baseline sees the worktree."""
+    r = _git("diff", "--name-only", "HEAD")
+    over = {}
+    top = _git("rev-parse", "--show-toplevel").stdout.strip()
+    for p in r.stdout.splitlines():
+        fp = os.path.join(top, p)
+        if os.path.exists(fp):
+            with open(fp, encoding="utf-8", errors="replace") as f:
+                over[p] = f.read()
+    return over
+
+# ------------------------------------------------------------ diff mode ----
 
 
 def _walk(diff_text):
@@ -138,74 +887,104 @@ def _walk(diff_text):
 
 
 def findings(diff_text, exempt=frozenset()):
+    """Diff of added lines, no scope (every .mojo/.py path counts): line rules only."""
     out = []
     for path, here, text in _walk(diff_text):
-        if _ALWAYS_SKIP.search(path) or _COMMENT.match(text):
+        lang = "py" if path.endswith(".py") else "mojo" if path.endswith(".mojo") else None
+        if lang is None:
             continue
-        if (path, text.strip()) in exempt:
+        cl = _code_lines(text, lang)
+        if not cl:
             continue
-        scoped_skip = bool(_CPU_ONLY.search(path))
-        for name, scoped, pat, why in _RULES:
-            if scoped and scoped_skip:
+        t = cl[0][1]
+        if (path, _norm(t)) in exempt:
+            continue
+        dm = _DEFINES.match(t)
+        for rule, _cls, langs, pat, why in _LINE_RULES:
+            if lang not in langs:
                 continue
-            if name == "host-threads" and _DRIVES_GPUS.search(path):
-                continue
-            hits = [m.group(0) for m in pat.finditer(text)]
-            if name == "host-env":
+            hits = [m.group(0) for m in pat.finditer(t)]
+            if rule == "host-env":
                 hits = [h for h in hits if not _HOST_PLUMBING.fullmatch(h)]
             if not hits:
                 continue
-            if name == "host-exec" and _DEFINES_HOSTEXEC.search(text):
+            if dm and rule in ("host-exec", "host-threads", "std-parallelize") and \
+                    re.match(r"(HostExec|host_parallel\w*|parallelize)$", dm.group(2)):
                 continue
-            out.append(f"{path}:{here}: [{name}] {why}: {text.strip()[:120]}")
+            out.append(f"{path}:{here}: [{rule}] {why}: {t.strip()[:120]}")
     return out
 
 
+def diff_mode(base, tip, main_ref):
+    """Findings on the lines tip adds, in tip's GPU scope (full rule set)."""
+    mb = _git("merge-base", main_ref, tip)
+    if mb.returncode == 0:
+        base = mb.stdout.strip()
+    r = _git("diff", "-U0", "--no-color", "--no-ext-diff", "--diff-filter=AMR", base, tip)
+    if r.returncode != 0:
+        print(r.stderr, file=sys.stderr)
+        return 2
+    added = collections.defaultdict(set)
+    for p, no, _ in _walk(r.stdout):
+        added[p].add(no)
+    if not added:
+        return 0
+    btext, _ = _baseline_text(tip, None)
+    infl = {(r_["path"], r_["text"]) for r_ in load_baseline(btext) if _inflight_ok(r_["state"], tip)}
+    tree = Tree(tip)
+    scoped = set(tree.scoped())
+    out = []
+    for p in sorted(added):
+        if p not in scoped:
+            continue
+        for rule, no, t in scan_file(tree, p):
+            if no in added[p] and (p, _norm(t)) not in infl:
+                out.append(f"{p}:{no}: [{rule}] {_RULE_WHY.get(rule, '')}: {_norm(t)[:120]}")
+    if not out:
+        return 0
+    print("no-host-routes: REFUSED. These added lines add CPU work to GPU code:", file=sys.stderr)
+    for f in out:
+        print("  " + f, file=sys.stderr)
+    return 1
+
+# ----------------------------------------------------------------- main ----
+
+
 def main(argv):
+    args = argv[1:]
+    if args[:1] == ["--tree"]:
+        ref = args[1] if len(args) > 1 and not args[1].startswith("--") else "HEAD"
+        bl = None
+        if "--baseline" in args:
+            bl = args[args.index("--baseline") + 1]
+        return check_tree(ref, bl)
+    if args[:1] == ["--prune-baseline"]:
+        return prune_baseline(args[1] if len(args) > 1 else "HEAD")
+    if args[:1] == ["--summary"]:
+        btext, _ = _baseline_text(args[1] if len(args) > 1 else "HEAD", None)
+        summary(load_baseline(btext), out=sys.stdout)
+        return 0
+    if args[:1] == ["--diff"] and len(args) == 2:
+        with open(args[1], encoding="utf-8", errors="replace") as f:
+            found = findings(f.read())
+        if found:
+            print("no-host-routes: REFUSED. These added lines add CPU work to GPU code:",
+                  file=sys.stderr)
+            for x in found:
+                print("  " + x, file=sys.stderr)
+            return 1
+        return 0
     main_ref = "origin/main"
-    if "--main" in argv:
-        i = argv.index("--main")
-        main_ref = argv[i + 1]
-        argv = argv[:i] + argv[i + 2:]
-        # a push to a URL or a mirror has no refs/remotes/<remote>/main: read
-        # the range against origin/main then, or every line main gained since
-        # the mirror's old tip is charged to the push
+    if "--main" in args:
+        i = args.index("--main")
+        main_ref = args[i + 1]
+        args = args[:i] + args[i + 2:]
         if _git("rev-parse", "--verify", "-q", main_ref).returncode != 0:
             main_ref = "origin/main"
-    if len(argv) == 3 and argv[1] == "--diff":
-        with open(argv[2], encoding="utf-8", errors="replace") as f:
-            diff = f.read()
-        exempt = frozenset()
-    elif len(argv) == 3:
-        base = argv[1]
-        if main_ref:
-            # count what the tip adds over main (the CI check's range): from
-            # merge-base(main, tip). A push that merges main into a lane then
-            # is not charged with main's own lines, which were checked when
-            # they landed; every line the lane itself adds is still read.
-            mb = _git("merge-base", main_ref, argv[2])
-            if mb.returncode == 0:
-                base = mb.stdout.strip()
-        r = _git("diff", "-U0", "--no-color", "--no-ext-diff",
-                 "--diff-filter=AMR", base, argv[2])
-        if r.returncode != 0:
-            print(r.stderr, file=sys.stderr)
-            return 2
-        diff = r.stdout
-        exempt = in_flight_lines(main_ref) if diff else frozenset()
-    else:
-        print(__doc__, file=sys.stderr)
-        return 2
-    found = findings(diff, exempt)
-    if not found:
-        return 0
-    print("no-host-routes: REFUSED. These added lines add or touch a CPU route "
-          "on GPU installs:", file=sys.stderr)
-    for f in found:
-        print("  " + f, file=sys.stderr)
-    print("  Fix the GPU kernel instead. Touching an existing route means "
-          "removing it (memory gpu-kernels-not-cpu-routes).", file=sys.stderr)
-    return 1
+    if len(args) == 2:
+        return diff_mode(args[0], args[1], main_ref)
+    print(__doc__, file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":
