@@ -18,7 +18,7 @@ README's HAND-OFF.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from spectral.host.spectral_predict_host import SpectralPredictionState
+from spectral.impl.spectral_predict_common import SpectralPredictionState
 from spectral.impl.cluster.detail.spectral import (
     SpectralClusteringParams,
     fit_predict_dataset_keep,

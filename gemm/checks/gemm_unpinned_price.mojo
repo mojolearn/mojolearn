@@ -100,13 +100,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import (
-    OP_NN,
-    OP_NT,
-    OP_TN,
-    contract_leaf_count,
-    contract_leaf_size,
-)
+from gemm.contract import OP_NN, OP_NT, OP_TN, contract_leaf_count, contract_leaf_size
 from gemm.checks.gemm_unpinned import (
     unpinned_gemm_banner,
     unpinned_gemm_into,

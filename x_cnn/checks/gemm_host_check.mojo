@@ -26,7 +26,8 @@ aligned). Each must make this check FAIL with its own `FAIL 5719` line."""
 from std.memory import bitcast
 from checks.fixture_rng import hashed_signed_f32
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_mul_add
-from gemm.host.identical_gemm import OP_NN, OP_NT, OP_TN, gemm_oracle, op_name
+from gemm.contract import OP_NN, OP_NT, OP_TN, op_name
+from gemm.host.identical_gemm import gemm_oracle
 from x_cnn.host.gemm_host import gemm_host_into
 from x_cnn.ops import FP
 

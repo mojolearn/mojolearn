@@ -1,0 +1,47 @@
+rule	class	owner	state	path	occ	text
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	import glm/estimator.mojo:qn_softmax_host
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	qn_softmax_host(sp, op, nr, nc)
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	weights = read_f32(Int(wp), max(0, n_train))
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	1	weights = read_f32(Int(wp), max(0, n_train))
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	et_host_predict(trees, rows, n_rows, n_features, n_trees, num_outputs, out)
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	import core/forest_host_predict.mojo:et_host_predict
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_trees.mojo	0	var rows = read_f32(x_address, n_rows * n_features)
+d2h-loop	d2h-roundtrip	UNOWNED	debt	gbdt/methods/doc_parallel_boosting.mojo	0	ctx.enqueue_copy(dst_ptr=h_t.unsafe_ptr(), src_buf=targets)
+host-env	host-env/threshold	gap-trees-nv/apple-fast-trees2	debt	gbdt/methods/doc_parallel_boosting.mojo	0	"MOJOLEARN_GBDT_FAST_DEPTHWISE_HOST_PARTITION"
+d2h-loop	d2h-roundtrip	UNOWNED	debt	gbdt/methods/leaves_estimation/doc_parallel_leaves_estimator.mojo	0	ctx.enqueue_copy(dst_ptr=h_bins.unsafe_ptr(), src_buf=bins)
+host-threads	host-threads	UNOWNED	debt	gbdt/resident_model.mojo	0	from core.host_parallel import host_parallelize_pool_env
+host-threads	host-threads	UNOWNED	debt	gbdt/resident_model.mojo	0	host_parallelize_pool_env(_classes_task, tasks)
+host-threads	host-threads	UNOWNED	debt	gbdt/resident_model.mojo	0	host_parallelize_pool_env(_col_task, n_active)
+host-threads	host-threads	UNOWNED	debt	gbdt/resident_model.mojo	0	host_parallelize_pool_env(_pair_task, tasks)
+host-threads	host-threads	UNOWNED	debt	gbdt/resident_model.mojo	0	host_parallelize_pool_env(_rows_task, tasks)
+host-threads	host-threads	UNOWNED	debt	gbdt/resident_model.mojo	1	host_parallelize_pool_env(_rows_task, tasks)
+host-env	host-env/threshold	UNOWNED	debt	gbdt/train.mojo	0	comptime BORROW_X_COLUMNS = not is_defined["MOJOLEARN_2550_HOST_COPY"]()
+host-threads	host-threads	UNOWNED	debt	gbdt/train.mojo	0	from core.host_parallel import host_parallelize_pool_env
+host-threads	host-threads	UNOWNED	debt	gbdt/train.mojo	0	host_parallelize_pool_env(_dp_task, n_float)
+host-threads	host-threads	UNOWNED	debt	gbdt/train.mojo	0	host_parallelize_pool_env(_draw_task, n_float_prescan)
+host-threads	host-threads	UNOWNED	debt	gbdt/train.mojo	0	host_parallelize_pool_env(_stage_task, width)
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_trees.py	0	acc = Array.from_list([cols[j][i] for i in range(n) for j in range(k)], "<f8")
+py-loop	py-numpy	gap-nv-classical2	debt	python/mojolearn/_expansion_trees.py	0	else Array.from_list([v for v in inits for _ in range(n)], "<f8"))
+py-loop	py-numpy	gap-treeshap	debt	python/mojolearn/_expansion_trees.py	0	for i in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_trees.py	1	for i in range(n):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_trees.py	0	return Array.from_list([i for i in range(n) if not seen[i]], "<i4")
+py-loop	py-numpy	gap-nv-classical2	debt	python/mojolearn/_expansion_trees.py	0	return Array.from_list([raw[c * n + i] for i in range(n) for c in range(K)], "<f8").reshape((n, K))
+py-loop	py-numpy	gap-nv-classical2	debt	python/mojolearn/_expansion_trees.py	0	rows = [i for i in range(n) if uv[i] < frac]
+py-loop	py-numpy	gap-nv-classical2	debt	python/mojolearn/_expansion_trees.py	0	score = Array.from_list([v for v in inits for _ in range(n)], "<f8")
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_trees.py	0	self.oob_score_ = sum(1 for i in range(n) if pred[i] == y[i]) / n
+py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_gbdt_adapters.py	0	from sklearn.exceptions import NotFittedError
+py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_gbdt_adapters.py	0	from sklearn.utils import Tags, TargetTags, ClassifierTags, RegressorTags
+host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	apply_trees(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=colid)), f32_ptr(Int(py=quesval)),
+host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	gather_f32(f32_ptr(Int(py=src)), _i(params, 0), _i(params, 1), i32_ptr(Int(py=rows)), n_rows,
+host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	import xtrees/ops.mojo:apply_trees
+host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	import xtrees/ops.mojo:gather_f32
+host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	import xtrees/ops.mojo:weighted_sample
+host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	weighted_sample(f64_ptr(Int(py=w_addr)), n, i32_ptr(Int(py=out_addr)), n_draw, _i(params, 2), _i(params, 3))
+host-call	host-import	UNOWNED	debt	xtrees/ops.mojo	0	colmajor_from_rowmajor_f32(src, dst, n, d)
+host-call	host-import	UNOWNED	debt	xtrees/ops.mojo	0	import ensemble/host_layout.mojo:colmajor_from_rowmajor_f32
+host-threads	host-threads	UNOWNED	debt	xtrees/ops.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	xtrees/ops.mojo	0	host_parallelize(_block, n_blocks)
+host-threads	host-threads	UNOWNED	debt	xtrees/ops.mojo	1	host_parallelize(_block, n_blocks)
+host-threads	host-threads	gap-nv-classical2	debt	xtrees/ops.mojo	2	host_parallelize(_block, n_blocks)

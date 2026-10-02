@@ -26,9 +26,10 @@ from gemm.checks.gemm_identical import (
     identical_gemm_splitk_fits, choose_gemm_plan,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
+from gemm.contract import OP_NN, OP_NT, OP_TN
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from core.staged_download import download_f32_into
+from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW,
     CP_SH, CP_SW, CP_PH, CP_PW, CP_DH, CP_DW,
@@ -1977,4 +1978,122 @@ def conv_block_backward_into[resident: Bool = False](
     _ = ones^
     _ = gw^
     _ = gb^
+    _ = ctx^
+
+
+# ---------------------------------------------------------------------------
+# THE GRAPH LAYERS' CSR VIEWS, BUILT ON THE DEVICE (cpu-gpu-cleanup n-pyneural,
+# 2026-10-02). `_expansion_cnn._Graph` sorted the edge list on the host in
+# NumPy (a stable argsort of `row * n + col`, a bincount and a cumsum), host
+# work that dominated a graph layer's forward at a million edges. Here: two
+# stable LSD radix sorts of (u32 key, edge id) pairs (`core/fast_radix_sort`,
+# by column, then by row: the lexsort order exactly, ties in edge order), a
+# gather and a row-pointer kernel. Integer work only: the answer is unique,
+# so every vendor and the host twin agree on every word.
+# ---------------------------------------------------------------------------
+
+comptime UP = MutPointer[UInt32, MutAnyOrigin]
+
+
+def _csr_key_init_kernel(keys: UP, ids: UP, cols: IP, nnz: Int32):
+    var e = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if e >= Int(nnz):
+        return
+    keys[e] = cols[e].cast[DType.uint32]()
+    ids[e] = UInt32(e)
+
+
+def _csr_key_rows_kernel(keys: UP, ids: UP, rows: IP, nnz: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(nnz):
+        return
+    keys[i] = rows[Int(ids[i])].cast[DType.uint32]()
+
+
+def _csr_gather_kernel(csr: IP, order: IP, ids: UP, rows: IP, cols: IP, n: Int32, nnz: Int32):
+    """`[rowptr | col | row]`'s two edge blocks in sorted order, and the order."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var m = Int(nnz)
+    if i >= m:
+        return
+    var e = Int(ids[i])
+    var base = Int(n) + 1
+    csr[base + i] = cols[e]
+    csr[base + m + i] = rows[e]
+    order[i] = Int32(e)
+
+
+def _csr_rowptr_kernel(csr: IP, sorted_rows: UP, n_in: Int32, nnz: Int32):
+    """`rowptr[r]` = the first sorted position whose row is >= r, one thread
+    per row `r` in [0, n] by a binary search of the sorted rows (no thread
+    walks a run of empty rows, so a skewed graph costs no serial tail)."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_in)
+    if r > n:
+        return
+    var lo = 0
+    var hi = Int(nnz)
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if Int(sorted_rows[mid]) < r:
+            lo = mid + 1
+        else:
+            hi = mid
+    csr[r] = Int32(lo)
+
+
+def csr_build_device(rows_h: IP, cols_h: IP, nnz: Int, n: Int, csr_out: IP, order_out: IP) raises:
+    """The CSR view of `nnz` edges over `n` nodes with rows `rows_h` and
+    columns `cols_h` (host int32, each in [0, n)): `csr_out` gets
+    `[rowptr (n + 1) | col (nnz) | row (nnz)]` in ascending (row, col) order
+    with ties in edge order, `order_out` the edge ids in that order."""
+    var ctx = cnn_ctx()
+    var m = max(1, nnz)
+    var rows_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var cols_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var keys = ctx.enqueue_create_buffer[DType.uint32](m)
+    var ids = ctx.enqueue_create_buffer[DType.uint32](m)
+    var tkeys = ctx.enqueue_create_buffer[DType.uint32](m)
+    var tids = ctx.enqueue_create_buffer[DType.uint32](m)
+    var counts = ctx.enqueue_create_buffer[DType.int32](max(1, frs_counts_len(m)))
+    var csr_d = ctx.enqueue_create_buffer[DType.int32](n + 1 + 2 * nnz)
+    var order_d = ctx.enqueue_create_buffer[DType.int32](m)
+    var grid = (m + TPB - 1) // TPB
+    if nnz > 0:
+        ctx.enqueue_copy(dst_buf=rows_d, src_ptr=rows_h)
+        ctx.enqueue_copy(dst_buf=cols_d, src_ptr=cols_h)
+        ctx.enqueue_function[_csr_key_init_kernel](
+            keys.unsafe_ptr(), ids.unsafe_ptr(), cols_d.unsafe_ptr(), Int32(nnz),
+            grid_dim=grid, block_dim=TPB,
+        )
+        fast_radix_sort_pairs_u32(ctx, nnz, keys, ids, tkeys, tids, counts)
+        ctx.enqueue_function[_csr_key_rows_kernel](
+            keys.unsafe_ptr(), ids.unsafe_ptr(), rows_d.unsafe_ptr(), Int32(nnz),
+            grid_dim=grid, block_dim=TPB,
+        )
+        fast_radix_sort_pairs_u32(ctx, nnz, keys, ids, tkeys, tids, counts)
+        ctx.enqueue_function[_csr_gather_kernel](
+            csr_d.unsafe_ptr(), order_d.unsafe_ptr(), ids.unsafe_ptr(), rows_d.unsafe_ptr(),
+            cols_d.unsafe_ptr(), Int32(n), Int32(nnz),
+            grid_dim=grid, block_dim=TPB,
+        )
+    ctx.enqueue_function[_csr_rowptr_kernel](
+        csr_d.unsafe_ptr(), keys.unsafe_ptr(), Int32(n), Int32(nnz),
+        grid_dim=(n + 1 + TPB - 1) // TPB, block_dim=TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=csr_out, src_buf=csr_d)
+    if nnz > 0:
+        ctx.enqueue_copy(
+            dst_ptr=order_out, src_buf=order_d.create_sub_buffer[DType.int32](0, nnz)
+        )
+    ctx.synchronize()
+    _ = rows_d^
+    _ = cols_d^
+    _ = keys^
+    _ = ids^
+    _ = tkeys^
+    _ = tids^
+    _ = counts^
+    _ = csr_d^
+    _ = order_d^
     _ = ctx^

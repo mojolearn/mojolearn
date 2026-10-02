@@ -146,7 +146,7 @@ def _as_bounds(bounds, n, what):
         pairs = [tuple(float(v) for v in _flatten(bounds))] * n
     elif shape == (n, 2):
         flat = [float(v) for v in _flatten(bounds)]
-        pairs = [(flat[2 * i], flat[2 * i + 1]) for i in range(n)]
+        pairs = list(zip(flat[0::2], flat[1::2]))
     else:
         raise ValueError(
             f"mojolearn {what}: bounds must be 'fixed', a (low, high) pair, or {n} pairs; got shape {shape}")

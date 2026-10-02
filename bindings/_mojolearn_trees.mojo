@@ -72,8 +72,9 @@ from extratrees.impl.decisiontree.flatnode import (
     TreeMetaDataNode,
 )
 from extratrees.impl.randomforest.randomforest import Forest, forest_vote
-from core.forest_host_predict import et_host_predict, et_host_trees
-from hostptr import read_f32
+from core.forest_inference_model import (
+    resident_prepare, resident_predict_into, resident_release,
+)
 
 
 # DEVIATION 2482: fit/export ownership is separate from inference residency.
@@ -510,35 +511,48 @@ def et_predict_binding(
     var xp = _f32_ptr(Int(py=x_addr))
     var op = _f32_ptr(Int(py=out_addr))
 
-    # DEVIATION 2900 (lane/infer-speed-trees, 2026-09-17): the walk is
-    # `core/forest_host_predict.mojo`'s, which is `forest_vote` row for row
-    # (zero, `predict_one_accumulate` per tree in tree order, divide by
-    # `Float32(n_trees)`) with the rows spread over host threads
-    # (`MOJOLEARN_CPU_THREADS`), the tree rebuild in `TreeMetaDataNode`'s
-    # own layout bounds-checked, and the input copied as one memcpy. The
-    # CPU training column runs this same function.
+    # cpu-gpu-cleanup t-gbdt: the `sequential` engine runs on the device.
+    # The host walk (`core/forest_host_predict.mojo`'s `et_host_predict`,
+    # DEVIATION 2900) is the CPU-only install's (`_mojolearn_trees_host`);
+    # here `forest_vote`'s arithmetic -- zero, add every tree's leaf in
+    # increasing tree order, divide by `Float32(n_trees)` -- is
+    # `forest_ordered_kernel`, one thread per (row, output), through a
+    # one-call ordered snapshot. The GIL stays held for the registry.
     if n_rows == 0:
         return PythonObject(0)
     var n_nodes = Int(offsets_p[n_trees])
     if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
         raise Error("et_predict: tree_offsets must start at 0 and hold at least one node per tree")
-    # X's address is read while the GIL is held: `Int(py=...)` calls
-    # into the interpreter, which is not safe inside GILReleased.
-    var x_address = Int(py=x_addr)
-    var wrote = 0
-    with GILReleased(Python()):
-        var rows = read_f32(x_address, n_rows * n_features)
-        var out = List[Float32](length=n_rows * num_outputs, fill=Float32(0.0))
-        var trees = et_host_trees(
-            offsets_p, colid_p, quesval_p, left_p, leaves_p,
-            n_trees, n_nodes, n_features, num_outputs,
+    if n_nodes > 2147483647 // num_outputs:
+        raise Error("et_predict: node/output count exceeds Int32")
+    var offsets = List[Int32](capacity=n_trees + 1)
+    var columns = List[Int32](capacity=n_nodes)
+    var thresholds = List[Float32](capacity=n_nodes)
+    var left = List[Int32](capacity=n_nodes)
+    var leaves = List[Float32](capacity=n_nodes * num_outputs)
+    for i in range(n_trees + 1):
+        offsets.append(offsets_p[i])
+    for i in range(n_nodes):
+        columns.append(colid_p[i])
+        thresholds.append(quesval_p[i])
+        left.append(left_p[i])
+    for i in range(n_nodes * num_outputs):
+        leaves.append(leaves_p[i])
+    var handle = resident_prepare[False](
+        offsets, columns, thresholds, left, leaves, n_features, num_outputs, True
+    )
+    try:
+        resident_predict_into[False](
+            handle,
+            xp.unsafe_origin_cast[MutAnyOrigin](),
+            op.unsafe_origin_cast[MutAnyOrigin](),
+            n_rows, n_features, num_outputs, True,
         )
-        et_host_predict(trees, rows, n_rows, n_features, n_trees, num_outputs, out)
-        for i in range(n_rows * num_outputs):
-            op[i] = out[i]
-        wrote = n_rows
-    _ = xp
-    return PythonObject(wrote)
+    except e:
+        resident_release[False](handle)
+        raise e
+    resident_release[False](handle)
+    return PythonObject(n_rows)
 
 
 def et_predict_gpu_parallel_binding(
