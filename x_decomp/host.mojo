@@ -13,6 +13,21 @@ x_decomp/host_simd.mojo, host_qr.mojo and host_graph.mojo (same words).
 So the bits are the same at every thread count."""
 from x_decomp.rr import RR_EIGH_SWEEPS, host_eigh_rr
 from std.memory import bitcast
+from std.builtin.sort import sort
+from x_decomp.lle_local import (
+    hessian_cell,
+    hessian_comp_cell,
+    hessian_ncy,
+    hessian_q_cell,
+    lle_gram_cell,
+    lle_mean_cell,
+    ltsa_cell,
+    mlle_eta,
+    mlle_key,
+    mlle_rows_cell,
+    mlle_unkey,
+    mlle_weights_cell,
+)
 from std.sys.compile import is_defined
 
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
@@ -389,6 +404,113 @@ struct HostExec(Exec):
             for i in range(n * n):
                 m.append(a.unsafe_load(b * n * n + i))
             _host_eigh_rr_one(m, w + b * n, v + b * n * n, n)
+
+    @staticmethod
+    def lle_local(
+        x: F32Ptr, idx: F32Ptr, bmat: F32Ptr, method: Int, n: Int, d: Int, nn: Int, nc: Int, tol: Float32
+    ) raises:
+        """DevExec.lle_local's cells, one index at a time (the same words);
+        `bmat` arrives zeroed (the caller's zeros)."""
+        var nn2 = n * nn * nn
+        var g = List[Float32](length=max(nn2, 1), fill=Float32(0.0))
+        var pg = F32Ptr(unsafe_from_address=Int(g.unsafe_ptr()))
+        var mu = List[Float32](length=max(n * d, 1), fill=Float32(0.0))
+        var pmu = F32Ptr(unsafe_from_address=Int(mu.unsafe_ptr()))
+        var cen = x if method == 2 else pmu
+        if method != 2:
+            def mean(t: Int) {imm x, imm idx, imm pmu, imm d, imm nn}:
+                lle_mean_cell(x, idx, pmu, t // d, t % d, d, nn)
+
+            xd_parallel(mean, n * d)
+
+        def gram(i: Int) {imm x, imm idx, imm cen, imm pg, imm d, imm nn}:
+            for a in range(nn):
+                for b in range(nn):
+                    lle_gram_cell(x, idx, cen, pg, i, a, b, d, nn)
+
+        xd_parallel(gram, n)
+        var w = List[Float32](length=max(n * nn, 1), fill=Float32(0.0))
+        var v = List[Float32](length=max(nn2, 1), fill=Float32(0.0))
+        var pw = F32Ptr(unsafe_from_address=Int(w.unsafe_ptr()))
+        var pv = F32Ptr(unsafe_from_address=Int(v.unsafe_ptr()))
+        HostExec.eigh_batch(pg, pw, pv, n, nn)
+        if method == 0:
+            def ltsa(i: Int) {imm pv, imm idx, imm bmat, imm n, imm nn, imm nc}:
+                for a in range(nn):
+                    for b in range(nn):
+                        ltsa_cell(pv, idx, bmat, i, a, b, n, nn, nc)
+
+            xd_parallel(ltsa, n)
+        elif method == 1:
+            var ncy = hessian_ncy(nc)
+            var ncol = nn - 1 - nc
+            var extra = ncol - nc * (nc + 1) // 2
+            var q = List[Float32](length=max(n * nn * ncy, 1), fill=Float32(0.0))
+            var pq = F32Ptr(unsafe_from_address=Int(q.unsafe_ptr()))
+
+            def hq(i: Int) {imm pv, imm pq, imm nn, imm nc}:
+                hessian_q_cell(pv, pq, i, nn, nc)
+
+            xd_parallel(hq, n)
+            var vc = List[Float32](length=max(nn2, 1), fill=Float32(0.0))
+            var pvc = F32Ptr(unsafe_from_address=Int(vc.unsafe_ptr()))
+            if extra > 0:
+                var cm = List[Float32](length=max(nn2, 1), fill=Float32(0.0))
+                var pc = F32Ptr(unsafe_from_address=Int(cm.unsafe_ptr()))
+
+                def comp(i: Int) {imm pq, imm pc, imm nn, imm nc}:
+                    for a in range(nn):
+                        for b in range(nn):
+                            hessian_comp_cell(pq, pc, i, a, b, nn, nc)
+
+                xd_parallel(comp, n)
+                var w2 = List[Float32](length=max(n * nn, 1), fill=Float32(0.0))
+                HostExec.eigh_batch(pc, F32Ptr(unsafe_from_address=Int(w2.unsafe_ptr())), pvc, n, nn)
+                _ = cm^
+                _ = w2^
+
+            def hs(i: Int) {imm pq, imm pvc, imm idx, imm bmat, imm n, imm nn, imm nc, imm tol, imm ncol}:
+                for c in range(ncol):
+                    hessian_cell(pq, pvc, idx, bmat, i, c, n, nn, nc, tol)
+
+            xd_parallel(hs, n)
+            _ = q^
+            _ = vc^
+        else:
+            var nev = min(d, nn)
+            var wr = List[Float32](length=max(n * nn, 1), fill=Float32(0.0))
+            var rho = List[Float32](length=max(n, 1), fill=Float32(0.0))
+            var scr = List[Float32](length=max(3 * n * nn, 1), fill=Float32(0.0))
+            var pwr = F32Ptr(unsafe_from_address=Int(wr.unsafe_ptr()))
+            var prho = F32Ptr(unsafe_from_address=Int(rho.unsafe_ptr()))
+            var pscr = F32Ptr(unsafe_from_address=Int(scr.unsafe_ptr()))
+
+            def mw(i: Int) {imm pw, imm pv, imm pwr, imm prho, imm pscr, imm nn, imm nev, imm nc}:
+                mlle_weights_cell(pw, pv, pwr, prho, pscr, i, nn, nev, nc)
+
+            xd_parallel(mw, n)
+            # the device's radix-sort keys, sorted (exact: the same order)
+            var keys = List[UInt64](capacity=n)
+            for i in range(n):
+                keys.append((UInt64(mlle_key(rho[i])) << 32) | UInt64(i))
+            sort(keys)
+            var srt = List[Float32](length=max(n, 1), fill=Float32(0.0))
+            for i in range(n):
+                srt[i] = mlle_unkey(UInt32(keys[i] >> 32))
+            var eta = mlle_eta(F32Ptr(unsafe_from_address=Int(srt.unsafe_ptr())), n)
+
+            def mr(i: Int) {imm pw, imm pv, imm pwr, imm idx, imm bmat, imm pscr, imm eta, imm n, imm nn, imm nev, imm tol}:
+                mlle_rows_cell(pw, pv, pwr, idx, bmat, pscr, eta, i, n, nn, nev, tol)
+
+            xd_parallel(mr, n)
+            _ = wr^
+            _ = rho^
+            _ = scr^
+            _ = srt^
+        _ = g^
+        _ = mu^
+        _ = w^
+        _ = v^
 
     @staticmethod
     def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:

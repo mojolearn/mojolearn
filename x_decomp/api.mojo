@@ -210,6 +210,31 @@ def eigh_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: Pytho
     return PythonObject(n)
 
 
+def lle_local_py[E: Exec](
+    x: PythonObject, idx: PythonObject, b: PythonObject, p: PythonObject, f: PythonObject
+) raises -> PythonObject:
+    """LocallyLinearEmbedding's stacked factor (x_decomp/lle_local.mojo).
+    p = [method (0 ltsa, 1 hessian, 2 modified), n, d, nn, nc]; f = [tol]
+    (hessian_tol / modified_tol). idx (n x nn) the neighbor indices as exact
+    floats; b zeroed, n nn x n (n (nn - 1 - nc) x n for hessian)."""
+    var method = _n(p, 0)
+    var n = _n(p, 1)
+    var d = _n(p, 2)
+    var nn = _n(p, 3)
+    var nc = _n(p, 4)
+    var tol = Float32(Float64(py=f[0]))
+    if method < 0 or method > 2 or n < 1 or d < 1 or nn < 1 or nc < 1 or nn - 1 - nc < 1:
+        raise Error("x_decomp: lle_local needs method 0..2, n, d >= 1 and n_neighbors > n_components + 1")
+    if n * nn * n > 2147483647 or n * nn * nn > 2147483647 or n >= 16777216:
+        raise Error("x_decomp: lle_local exceeds the Int32 index bound")
+    var px = _f(x)
+    var pi = _f(idx)
+    var pb = _f(b)
+    with GILReleased(Python()):
+        E.lle_local(px, pi, pb, method, n, d, nn, nc, tol)
+    return PythonObject(n)
+
+
 def eigh_batch_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
     """p = [batch, n]: `batch` n x n symmetric problems stacked in `a`; w
     (batch x n, ascending) and v (batch x n x n, vectors in columns), each

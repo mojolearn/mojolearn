@@ -90,6 +90,20 @@ from x_decomp.jacobi2 import (
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
 from x_decomp.rr_batch import rr_batch_kernel, rrb_cs_len, rrb_part_len
+from x_decomp.lle_local import hessian_ncy
+from x_decomp.lle_device import (
+    hessian_comp_kernel,
+    hessian_kernel,
+    hessian_q_kernel,
+    lle_gram_kernel,
+    lle_mean_kernel,
+    ltsa_kernel,
+    mlle_key_kernel,
+    mlle_rows_kernel,
+    mlle_unkey_kernel,
+    mlle_weights_kernel,
+)
+from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
 from x_decomp.tsqr_device import ts_apply_device, ts_factor_device, ts_free_device, ts_pack_device
 from x_decomp.jacobi_par import (
@@ -2346,40 +2360,32 @@ struct DevExec(Exec):
         _ = hfold^
 
     @staticmethod
-    def eigh_batch(a: F32Ptr, w: F32Ptr, v: F32Ptr, batch: Int, n: Int) raises:
-        """`eigh` of `batch` n x n problems stacked in `a`, one block each
-        (x_decomp/rr_batch.mojo): w batch x n ascending, v batch x n x n
-        (vectors in columns); the same words `eigh` gives each one."""
-        if batch <= 0:
-            return
-        var ctx = xd_ctx()
-        var da = _up(ctx, a, batch * n * n)
+    def _rr_batch_on(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], batch: Int, n: Int,
+        mut dw: DeviceBuffer[DType.float32], mut dvo: DeviceBuffer[DType.float32],
+    ) raises:
+        """x_decomp/rr_batch.mojo on `batch` n x n problems already on the
+        device in `da` (consumed): dw (batch x n ascending) and dvo (batch x
+        n x n, vectors in columns). One sync to read the convergence marks;
+        an unconverged problem raises."""
         var dv = ctx.enqueue_create_buffer[DType.float32](batch * n * n)
         var dcs = ctx.enqueue_create_buffer[DType.float32](batch * rrb_cs_len(n))
         var dpart = ctx.enqueue_create_buffer[DType.float32](batch * rrb_part_len(n))
         var ddg = ctx.enqueue_create_buffer[DType.float32](batch * n)
         var dinfo = ctx.enqueue_create_buffer[DType.float32](2 * batch)
         enqueue_fill(ctx, dinfo, Float32(-1.0))
-        var dw = ctx.enqueue_create_buffer[DType.float32](batch * n)
-        var dvo = ctx.enqueue_create_buffer[DType.float32](batch * n * n)
         ctx.enqueue_function[rr_batch_kernel](
             _p(da), _p(dv), _p(dcs), _p(dpart), _p(ddg), _p(dinfo), _p(dw), _p(dvo), Int32(n),
             Int32(RR_EIGH_SWEEPS), Float32(JACOBI_TOL), grid_dim=batch, block_dim=RR_OFF_TPB,
         )
         var hinfo = List[Float32](length=2 * batch, fill=Float32(0.0))
         _down(ctx, dinfo, F32Ptr(unsafe_from_address=Int(hinfo.unsafe_ptr())), 2 * batch)
-        _down(ctx, dw, w, batch * n)
-        _down(ctx, dvo, v, batch * n * n)
         ctx.synchronize()
-        _ = da^
         _ = dv^
         _ = dcs^
         _ = dpart^
         _ = ddg^
         _ = dinfo^
-        _ = dw^
-        _ = dvo^
-        _ = ctx^
         for b in range(batch):
             if hinfo[2 * b] < Float32(0.0):
                 raise Error("eigh_batch: a block of the batched Jacobi did not run (a launch failure)")
@@ -2390,6 +2396,133 @@ struct DevExec(Exec):
                     " decomposition is not returned as if it were one (DEVIATION 590)."
                 )
         _ = hinfo^
+
+    @staticmethod
+    def eigh_batch(a: F32Ptr, w: F32Ptr, v: F32Ptr, batch: Int, n: Int) raises:
+        """`eigh` of `batch` n x n problems stacked in `a`, one block each
+        (x_decomp/rr_batch.mojo): w batch x n ascending, v batch x n x n
+        (vectors in columns); the same words `eigh` gives each one."""
+        if batch <= 0:
+            return
+        var ctx = xd_ctx()
+        var da = _up(ctx, a, batch * n * n)
+        var dw = ctx.enqueue_create_buffer[DType.float32](batch * n)
+        var dvo = ctx.enqueue_create_buffer[DType.float32](batch * n * n)
+        DevExec._rr_batch_on(ctx, da, batch, n, dw, dvo)
+        _down(ctx, dw, w, batch * n)
+        _down(ctx, dvo, v, batch * n * n)
+        ctx.synchronize()
+        _ = da^
+        _ = dw^
+        _ = dvo^
+        _ = ctx^
+
+    @staticmethod
+    def lle_local(
+        x: F32Ptr, idx: F32Ptr, bmat: F32Ptr, method: Int, n: Int, d: Int, nn: Int, nc: Int, tol: Float32
+    ) raises:
+        """LocallyLinearEmbedding's stacked factor B for method 0 LTSA (n nn x
+        n), 1 Hessian (n (nn - 1 - nc) x n), 2 modified (n nn x n), every
+        per-sample step a cell of x_decomp/lle_local.mojo on the device and
+        the local eigensolves batched (x_decomp/rr_batch.mojo). B is written
+        whole (zeros included); one download."""
+        var ctx = xd_ctx()
+        var nn2 = n * nn * nn
+        var rows = n * (nn - 1 - nc) if method == 1 else n * nn
+        var dx = _up(ctx, x, n * d)
+        var di = _up(ctx, idx, n * nn)
+        var db = ctx.enqueue_create_buffer[DType.float32](max(rows * n, 1))
+        enqueue_fill(ctx, db, Float32(0.0))
+        var dg = ctx.enqueue_create_buffer[DType.float32](max(nn2, 1))
+        var dmu = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
+        if method == 2:
+            ctx.enqueue_function[lle_gram_kernel](
+                _p(dx), _p(di), _p(dx), _p(dg), Int32(n), Int32(d), Int32(nn), grid_dim=_blocks(nn2), block_dim=TPB
+            )
+        else:
+            ctx.enqueue_function[lle_mean_kernel](
+                _p(dx), _p(di), _p(dmu), Int32(n), Int32(d), Int32(nn), grid_dim=_blocks(n * d), block_dim=TPB
+            )
+            ctx.enqueue_function[lle_gram_kernel](
+                _p(dx), _p(di), _p(dmu), _p(dg), Int32(n), Int32(d), Int32(nn), grid_dim=_blocks(nn2), block_dim=TPB
+            )
+        var dw = ctx.enqueue_create_buffer[DType.float32](max(n * nn, 1))
+        var dv = ctx.enqueue_create_buffer[DType.float32](max(nn2, 1))
+        DevExec._rr_batch_on(ctx, dg, n, nn, dw, dv)
+        if method == 0:
+            ctx.enqueue_function[ltsa_kernel](
+                _p(dv), _p(di), _p(db), Int32(n), Int32(nn), Int32(nc), grid_dim=_blocks(nn2), block_dim=TPB
+            )
+        elif method == 1:
+            var ncy = hessian_ncy(nc)
+            var ncol = nn - 1 - nc
+            var extra = ncol - nc * (nc + 1) // 2
+            var dq = ctx.enqueue_create_buffer[DType.float32](max(n * nn * ncy, 1))
+            ctx.enqueue_function[hessian_q_kernel](
+                _p(dv), _p(dq), Int32(n), Int32(nn), Int32(nc), grid_dim=_blocks(n), block_dim=TPB
+            )
+            var dvc = ctx.enqueue_create_buffer[DType.float32](max(nn2, 1))
+            if extra > 0:
+                var dc = ctx.enqueue_create_buffer[DType.float32](max(nn2, 1))
+                ctx.enqueue_function[hessian_comp_kernel](
+                    _p(dq), _p(dc), Int32(n), Int32(nn), Int32(nc), grid_dim=_blocks(nn2), block_dim=TPB
+                )
+                var dw2 = ctx.enqueue_create_buffer[DType.float32](max(n * nn, 1))
+                DevExec._rr_batch_on(ctx, dc, n, nn, dw2, dvc)
+                _ = dc^
+                _ = dw2^
+            ctx.enqueue_function[hessian_kernel](
+                _p(dq), _p(dvc), _p(di), _p(db), Int32(n), Int32(nn), Int32(nc), tol,
+                grid_dim=_blocks(n * ncol), block_dim=TPB,
+            )
+            ctx.synchronize()
+            _ = dq^
+            _ = dvc^
+        else:
+            var nev = min(d, nn)
+            var dwr = ctx.enqueue_create_buffer[DType.float32](max(n * nn, 1))
+            var drho = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+            var dscr = ctx.enqueue_create_buffer[DType.float32](max(3 * n * nn, 1))
+            ctx.enqueue_function[mlle_weights_kernel](
+                _p(dw), _p(dv), _p(dwr), _p(drho), _p(dscr), Int32(n), Int32(nn), Int32(nev), Int32(nc),
+                grid_dim=_blocks(n), block_dim=TPB,
+            )
+            # eta = the median of rho: an exact radix sort of its keys
+            var keys = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
+            var vals = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
+            var tk = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
+            var tv = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
+            var cnt = ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(n), 1))
+            ctx.enqueue_function[mlle_key_kernel](
+                _p(drho), keys.unsafe_ptr(), vals.unsafe_ptr(), Int32(n), grid_dim=_blocks(n), block_dim=TPB
+            )
+            fast_radix_sort_pairs_u32(ctx, n, keys, vals, tk, tv, cnt)
+            var dsrt = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+            ctx.enqueue_function[mlle_unkey_kernel](keys.unsafe_ptr(), _p(dsrt), Int32(n), grid_dim=_blocks(n), block_dim=TPB)
+            ctx.enqueue_function[mlle_rows_kernel](
+                _p(dw), _p(dv), _p(dwr), _p(di), _p(db), _p(dscr), _p(dsrt), Int32(n), Int32(nn), Int32(nev), tol,
+                grid_dim=_blocks(n), block_dim=TPB,
+            )
+            ctx.synchronize()
+            _ = dwr^
+            _ = drho^
+            _ = dscr^
+            _ = keys^
+            _ = vals^
+            _ = tk^
+            _ = tv^
+            _ = cnt^
+            _ = dsrt^
+        _down(ctx, db, bmat, rows * n)
+        ctx.synchronize()
+        _ = dx^
+        _ = di^
+        _ = db^
+        _ = dg^
+        _ = dmu^
+        _ = dw^
+        _ = dv^
+        _ = ctx^
 
     @staticmethod
     def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:

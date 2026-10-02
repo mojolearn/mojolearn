@@ -64,6 +64,12 @@ trait Exec:
         ...
 
     @staticmethod
+    def lle_local(
+        x: F32Ptr, idx: F32Ptr, bmat: F32Ptr, method: Int, n: Int, d: Int, nn: Int, nc: Int, tol: Float32
+    ) raises:
+        ...
+
+    @staticmethod
     def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:
         ...
 
