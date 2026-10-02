@@ -437,9 +437,7 @@ def mlp_train_step_host(
     identical_ce_admit_call(REDUCTION_MEAN, 1, rows)
     var cfg = CeConfig(MLP_OUT, IGNORE_INDEX_DEFAULT, REDUCTION_MEAN, Float32(0.0), 0)
     var count = rows
-    var h_row = List[Float32](capacity=rows)
-    for _ in range(rows):
-        h_row.append(Float32(0.0))
+    var h_row = List[Float32](length=rows, fill=Float32(0.0))
     var dlogits = ctx.enqueue_create_buffer[DType.float32](rows * MLP_OUT)
     identical_ce_loss_resident(
         ctx, loss_ptr, h_row.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
