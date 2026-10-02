@@ -25,6 +25,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_ENETCV
 from x_linear.cd_grid import enetcv_fit_grid
+from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross_kernel, mg_tiles
+from x_linear.dispatch import ALGO_RIDGE
 from x_linear.ops import ld, st, fd, i2f
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
@@ -220,6 +222,16 @@ def fit_device(
     # LARS reads ip[4] on the device: 1 when the Gram is already in fw
     # (`xg_gram_kernel` below), 0 when the team computes it.
     var grid_gram = algo == ALGO_LARS and _lars_grid_gram() and d > 0
+    # Ridge: the moments of [X | Y] on the grid (lane/neural-pass120);
+    # ip[4] tells the team they are in fw
+    var ridge_pre = False
+    comptime if MOMENTS_GRID:
+        ridge_pre = (algo == ALGO_RIDGE and d > 0 and n > 0 and len(ip) >= 4 and Int(ip[3]) == 0
+                     and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0")
+    if algo == ALGO_RIDGE:
+        while len(hip) < 5:
+            hip.append(Int32(0))
+        hip[4] = Int32(1 if ridge_pre else 0)
     if algo == ALGO_LARS:
         while len(hip) < 5:
             hip.append(Int32(0))
@@ -251,6 +263,21 @@ def fit_device(
         ctx.enqueue_function[xg_gram_kernel](
             dx.unsafe_ptr(), Int32(n), Int32(d), dfw.unsafe_ptr(),
             grid_dim=_xg_blocks(d * (d + 1) // 2), block_dim=XG_TPB,
+        )
+    if ridge_pre:
+        var t_n = Int(hip[0])
+        var r_xm = 0
+        var r_gg = d
+        var r_ym = d + 2 * d * d + d
+        var r_xty = r_ym + t_n
+        ctx.enqueue_function[mg_means_kernel](
+            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), Int32(hip[1]), dfw.unsafe_ptr(),
+            Int32(r_xm), Int32(r_ym), grid_dim=mg_tiles(d, t_n), block_dim=MG_NT,
+        )
+        var tl = mg_tiles(d, t_n)
+        ctx.enqueue_function[mg_cross_kernel](
+            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), dfw.unsafe_ptr(),
+            Int32(r_xm), Int32(r_ym), Int32(r_gg), Int32(r_xty), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
         )
     ctx.enqueue_function[fit_kernel](
         Int32(algo), dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d),
