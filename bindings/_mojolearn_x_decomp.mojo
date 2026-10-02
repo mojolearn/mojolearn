@@ -5,6 +5,7 @@ points of x_decomp/api.mojo on the device executor (x_decomp/device.mojo).
 bindings/_mojolearn_x_decomp_host.mojo registers the same names on the host
 executor."""
 from std.os import abort
+from std.sys.compile import is_defined
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
@@ -15,6 +16,7 @@ from x_decomp.api import (
 )
 from x_decomp.device import DevExec
 from x_decomp.host import HostExec
+from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
 from x_decomp.resident import (
     dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_trisolve_py, dev_rowsum_py,
     dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_lda_rows_py,
@@ -52,10 +54,15 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[geqrf_py[DevExec]]("x_decomp_geqrf")
         m.def_function[orgqr_py[DevExec]]("x_decomp_orgqr")
         m.def_function[als_cg_rows_py[DevExec]]("x_decomp_als_cg_rows")
-        # MinCovDet's fast_mcd: calls of at least `dev` elements on the GPU,
-        # smaller ones on the host executor (the same cells, the same bits)
-        m.def_function[mcd_py[DevExec, HostExec]]("x_decomp_mcd")
-        m.def_function[lda_online_py[DevExec, HostExec]]("x_decomp_lda_online")
+        # MinCovDet's fast_mcd and online LDA on the resident kit
+        # (x_decomp/kit_device.mojo). A/B during measurement only:
+        # -D MOJOLEARN_XD_KIT_SPLIT keeps the old split kit.
+        comptime if is_defined["MOJOLEARN_XD_KIT_SPLIT"]():
+            m.def_function[mcd_py[DevExec, HostExec]]("x_decomp_mcd")
+            m.def_function[lda_online_py[DevExec, HostExec]]("x_decomp_lda_online")
+        else:
+            m.def_function[mcd_dev_py]("x_decomp_mcd")
+            m.def_function[lda_online_dev_py]("x_decomp_lda_online")
         m.def_function[gather_py]("x_decomp_gather")
         m.def_function[scatter_py]("x_decomp_scatter")
         m.def_function[triu_nonzero_py]("x_decomp_triu_nonzero")
