@@ -2784,7 +2784,16 @@ def launch_build_histograms_kernel[
             comptime TILE = 10 if is_defined[
                 "MOJOLEARN_RF_HIST_COLUMNS10"
             ]() else (
-                8 if is_defined["MOJOLEARN_RF_HIST_COLUMNS8"]() else (
+                8 if (
+                    is_defined["MOJOLEARN_RF_HIST_COLUMNS8"]()
+                    # FAST Apple default (M3 aft-ab-rfc8: taxi 11.51 -> 11.36 s,
+                    # Istella 14.38 -> 14.24 s, same hashes as 4-column tiles)
+                    or (
+                        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+                        and has_apple_gpu_accelerator()
+                        and not is_defined["MOJOLEARN_RF_HIST_COLUMNS8_OFF"]()
+                    )
+                ) else (
                     4 if USE4 else 2
                 )
             )

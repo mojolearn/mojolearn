@@ -232,7 +232,11 @@ comptime GRAM_MAX_COLS = 128
 
 comptime GRAM_STAGE_FLOATS = GRAM_ROWS_TILE * GRAM_MAX_COLS
 
-comptime APPLE_GRAM_WIDE_STAGE = has_apple_gpu_accelerator() and not is_defined[
+#: EVERY GPU since lane/gap-classical-nv (2026-10-02), the name kept: on
+#: NVIDIA and AMD a narrow Gram (PCA's covariance at m = 11 over 4M rows)
+#: staged 32 rows per barrier pair, ~12x the barriers. The tile is the same
+#: 16 KB; the staged values and every chain's row order are unchanged.
+comptime APPLE_GRAM_WIDE_STAGE = not is_defined[
     "MOJOLEARN_APPLE_GRAM_WIDE_STAGE_OFF"
 ]()
 """Apple: a narrow Gram stages `GRAM_STAGE_FLOATS // m` rows per barrier

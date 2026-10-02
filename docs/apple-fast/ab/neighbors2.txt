@@ -1,27 +1,6 @@
-CMD lane/apple-fast-neighbors2 n2-lof-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh n2-lof-ident lof istella 3 3 -
-CMD lane/apple-fast-neighbors2 n2-lof-mma-taxi AFC_FAMILY=algos bash tools/afc_ab.sh n2-lof-mma-taxi lof taxi 3 3 - MOJOLEARN_XN_FAST_MMA_KNN=1
-CMD lane/apple-fast-neighbors2 n2-lof-mma-istella AFC_FAMILY=algos bash tools/afc_ab.sh n2-lof-mma-istella lof istella 3 3 - MOJOLEARN_XN_FAST_MMA_KNN=1
-CMD lane/apple-fast-neighbors2 n2-lp-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh n2-lp-ident label-propagation istella 3 3 -
-CMD lane/apple-fast-neighbors2 n2-lp-mma-taxi AFC_FAMILY=algos bash tools/afc_ab.sh n2-lp-mma-taxi label-propagation taxi 3 3 - MOJOLEARN_XN_FAST_MMA_KNN=1
-CMD lane/apple-fast-neighbors2 n2-lp-mma-istella AFC_FAMILY=algos bash tools/afc_ab.sh n2-lp-mma-istella label-propagation istella 3 3 - MOJOLEARN_XN_FAST_MMA_KNN=1
-CMD lane/apple-fast-neighbors2 n2-lp-res-taxi AFC_FAMILY=algos bash tools/afc_ab.sh n2-lp-res-taxi label-propagation taxi 3 3 - MOJOLEARN_LP_FAST_RESIDENT=1
-CMD lane/apple-fast-neighbors2 n2-lp-res-istella AFC_FAMILY=algos bash tools/afc_ab.sh n2-lp-res-istella label-propagation istella 3 3 - MOJOLEARN_LP_FAST_RESIDENT=1
-CMD lane/apple-fast-neighbors2 n2-ls-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh n2-ls-ident label-spreading istella 3 3 -
-CMD lane/apple-fast-neighbors2 n2-ls-mma-taxi AFC_FAMILY=algos bash tools/afc_ab.sh n2-ls-mma-taxi label-spreading taxi 3 3 - MOJOLEARN_XN_FAST_MMA_KNN=1
-CMD lane/apple-fast-neighbors2 n2-ls-mma-istella AFC_FAMILY=algos bash tools/afc_ab.sh n2-ls-mma-istella label-spreading istella 3 3 - MOJOLEARN_XN_FAST_MMA_KNN=1
-CMD lane/apple-fast-neighbors2 n2-ls-res-taxi AFC_FAMILY=algos bash tools/afc_ab.sh n2-ls-res-taxi label-spreading taxi 3 3 - MOJOLEARN_LP_FAST_RESIDENT=1
-CMD lane/apple-fast-neighbors2 n2-ls-res-istella AFC_FAMILY=algos bash tools/afc_ab.sh n2-ls-res-istella label-spreading istella 3 3 - MOJOLEARN_LP_FAST_RESIDENT=1
-CMD lane/apple-fast-neighbors2 n2-pr-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh n2-pr-ident pagerank istella 3 3 -
-CMD lane/apple-fast-neighbors2 n2-pr-reduce-taxi AFC_FAMILY=algos bash tools/afc_ab.sh n2-pr-reduce-taxi pagerank taxi 3 3 - MOJOLEARN_PAGERANK_FAST_REDUCE=1
-CMD lane/apple-fast-neighbors2 n2-pr-reduce-istella AFC_FAMILY=algos bash tools/afc_ab.sh n2-pr-reduce-istella pagerank istella 3 3 - MOJOLEARN_PAGERANK_FAST_REDUCE=1
-CMD lane/apple-fast-neighbors2 n2-ocsvm-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh n2-ocsvm-ident ocsvm istella 3 3 -
-CMD lane/apple-fast-neighbors2 n2-ocsvm-tiled-taxi AFC_FAMILY=algos bash tools/afc_ab.sh n2-ocsvm-tiled-taxi ocsvm taxi 3 3 - MOJOLEARN_XN_FAST_TILED_RBF=1
-CMD lane/apple-fast-neighbors2 n2-ocsvm-tiled-istella AFC_FAMILY=algos bash tools/afc_ab.sh n2-ocsvm-tiled-istella ocsvm istella 3 3 - MOJOLEARN_XN_FAST_TILED_RBF=1
-CMD lane/apple-fast-neighbors2 n2-svgp-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh n2-svgp-ident svgp istella 3 3 -
-CMD lane/apple-fast-neighbors2 n2-svgp-gpu-taxi AFC_FAMILY=algos bash tools/afc_ab.sh n2-svgp-gpu-taxi svgp taxi 3 3 - MOJOLEARN_SVGP_FAST_GPU=1
-CMD lane/apple-fast-neighbors2 n2-svgp-gpu-istella AFC_FAMILY=algos bash tools/afc_ab.sh n2-svgp-gpu-istella svgp istella 3 3 - MOJOLEARN_SVGP_FAST_GPU=1
-CMD lane/apple-fast-neighbors2 n2-radius-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh n2-radius-ident radius-neighbors istella 3 3 -
-CMD lane/apple-fast-neighbors2 n2-radius-reuse-taxi AFC_FAMILY=algos bash tools/afc_ab.sh n2-radius-reuse-taxi radius-neighbors taxi 3 3 - MOJOLEARN_RADIUS_FAST_REUSE_COUNT=1
-CMD lane/apple-fast-neighbors2 n2-radius-reuse-istella AFC_FAMILY=algos bash tools/afc_ab.sh n2-radius-reuse-istella radius-neighbors istella 3 3 - MOJOLEARN_RADIUS_FAST_REUSE_COUNT=1
-CMD lane/apple-fast-neighbors2 n2-pcs-sparse-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh n2-pcs-sparse-taxi x_neighbors poly-count-sketch taxi 3 3 "" "-D MOJOLEARN_XN_PCS_SPARSE=1"
-CMD lane/apple-fast-neighbors2 n2-pcs-sparse-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh n2-pcs-sparse-istella x_neighbors poly-count-sketch istella 3 3 "" "-D MOJOLEARN_XN_PCS_SPARSE=1"
+CMD lane/apple-fast-neighbors2 n2-lp-res-taxi AFC_FAMILY=algos bash tools/afc_ab.sh n2-lp-res-taxi label-propagation taxi 1 2 - MOJOLEARN_LP_FAST_RESIDENT=1
+CMD lane/apple-fast-neighbors2 n2-ls-res-taxi AFC_FAMILY=algos bash tools/afc_ab.sh n2-ls-res-taxi label-spreading taxi 1 2 - MOJOLEARN_LP_FAST_RESIDENT=1
+CMD lane/apple-fast-neighbors2 n2-ocsvm-tiled-istella AFC_FAMILY=algos bash tools/afc_ab.sh n2-ocsvm-tiled-istella ocsvm istella 1 2 - MOJOLEARN_XN_FAST_TILED_RBF=1
+CMD lane/apple-fast-neighbors2 n2-svgp-gpu-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh n2-svgp-gpu-taxi x_neighbors svgp taxi 1 2 "" "-D MOJOLEARN_SVGP_FAST_GPU=1"
+CMD lane/apple-fast-neighbors2 n2-radius-reuse-taxi AFC_FAMILY=algos bash tools/afc_ab.sh n2-radius-reuse-taxi radius-neighbors taxi 1 2 - MOJOLEARN_RADIUS_FAST_REUSE_COUNT=1
+CMD lane/apple-fast-neighbors2 n2-pcs-sparse-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh n2-pcs-sparse-taxi x_neighbors poly-count-sketch taxi 1 2 "" "-D MOJOLEARN_XN_PCS_SPARSE=1"

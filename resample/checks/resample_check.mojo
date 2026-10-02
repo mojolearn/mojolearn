@@ -106,6 +106,7 @@ from checks.numerics import (
 )
 from resample.estimator import (
     RESAMPLE_MAP_TPB,
+    _launch_perm_stat,
     RESAMPLE_TPB,
     _download_f32,
     _download_i32,
@@ -164,6 +165,8 @@ from resample.checks.resample_fixture import (
     planted_signed_zero_distribution,
 )
 from resample.checks.resample_oracle import (
+    oracle_permutation_statistic_f32,
+    oracle_permutation_statistic_from_ranks,
     oracle_bootstrap_distribution_f32,
     oracle_bootstrap_statistic_f32,
     oracle_monte_carlo_f32,
@@ -182,6 +185,7 @@ from resample.checks.statistics import (
     STAT_TRIMMED_MEAN,
     _mean_of_sum,
     mc_closed_form,
+    perm_select_stat_kernel,
     quantile_position,
     stat_from_name,
     stat_name,
@@ -842,20 +846,6 @@ def check_resample_refusals() raises:
     except e:
         named += 1
 
-    # (12) a pooled permutation sample above PERM_MAX_POOLED.
-    var big_x = List[Float32]()
-    var big_y = List[Float32]()
-    for i in range(PERM_MAX_POOLED):
-        big_x.append(Float32(i))
-        big_y.append(Float32(-i))
-    try:
-        var _p = permutation_test_host(
-            big_x, big_y, STAT_DIFF_MEANS, 8, CHECK_SEED, ALT_TWO_SIDED
-        )
-        missed += "pooled-length "
-    except e:
-        named += 1
-
     # (13) permutation_test with a statistic that has no independent arm.
     var sx = List[Float32]()
     var sy = List[Float32]()
@@ -904,8 +894,8 @@ def check_resample_refusals() raises:
         + " refusals by name (n_resamples 0 and negative, unknown"
         " method/statistic/alternative, inf and NaN in the sample, BCa for an order statistic in"
         " BOTH modes, a column the sample lacks, confidence_level at 1,"
-        " the sort ceiling, a trim that cuts everything, a pooled length"
-        " above PERM_MAX_POOLED, pearson under the independent null, an"
+        " the sort ceiling, a trim that cuts everything,"
+        " pearson under the independent null, an"
         " inverted box, tpb=33); seed is UInt64 so every bit pattern is a"
         " legal seed and there is nothing to refuse there"
     )
@@ -1745,6 +1735,148 @@ def check_permutation_separable() raises:
         + " replicates' ranks are bijections of "
         + String(n_pooled)
         + " positions and match the host mirror exactly"
+    )
+
+
+def _perm_null_device(
+    ctx: DeviceContext,
+    pooled: List[Float32],
+    key: UInt64,
+    R: Int,
+    n_x: Int,
+    stat: Int,
+    force_count: Bool,
+) raises -> List[Float32]:
+    var dp = _upload(ctx, pooled)
+    var nb = ctx.enqueue_create_buffer[DType.float32](R)
+    ctx.synchronize()
+    _launch_perm_stat(
+        ctx, nb, dp, key, 0, R, len(pooled), n_x, stat, RESAMPLE_TPB, force_count
+    )
+    ctx.synchronize()
+    var out = _download_f32(ctx, nb, R)
+    _ = dp^
+    _ = nb^
+    return out^
+
+
+def check_permutation_select() raises:
+    """The radix-select null (`perm_select_stat_kernel`) is main's counting
+    null bit for bit, at every pooled length (gap-fails2, 2026-10-02).
+
+      1. n = 700 (under PERM_MAX_POOLED): select == counting rank, every
+         replicate, mean / std / diff_means.
+      2. n = 3,201 (above it, where the counting rank never ran): select ==
+         the host oracle's masked fold over `permutation_ranks_host`.
+      3. THE TIE PATH: a 4-bit key mask makes most keys collide, so the
+         threshold splits a run of equal keys and the position passes run;
+         select == the oracle fold over the counted (key & 15, j) ranks.
+    """
+    var ctx = DeviceContext()
+    var key = resample_key(CHECK_SEED, RESAMPLE_KIND_PERMUTATION)
+    var stats: List[Int] = [STAT_DIFF_MEANS, STAT_MEAN, STAT_STD]
+
+    var small = List[Float32]()
+    for i in range(700):
+        small.append(Float32((i * 37) % 101) * Float32(0.25) - Float32(9.0))
+    var R = 64
+    for si in range(len(stats)):
+        var a = _perm_null_device(ctx, small, key, R, 300, stats[si], True)
+        var b = _perm_null_device(ctx, small, key, R, 300, stats[si], False)
+        for r in range(R):
+            if _bits(a[r]) != _bits(b[r]):
+                raise Error(
+                    "check_permutation_select: n=700 stat "
+                    + stat_name(stats[si])
+                    + " replicate "
+                    + String(r)
+                    + ": select "
+                    + _hex32(b[r])
+                    + " != counting rank "
+                    + _hex32(a[r])
+                )
+
+    var big = List[Float32]()
+    for i in range(3201):
+        big.append(Float32((i * 7919) % 1009) * Float32(0.125) - Float32(40.0))
+    var Rb = 6
+    for si in range(len(stats)):
+        var d = _perm_null_device(ctx, big, key, Rb, 1500, stats[si], False)
+        for r in range(Rb):
+            var want = oracle_permutation_statistic_f32(
+                big, key, r, len(big), 1500, stats[si]
+            )
+            if _bits(d[r]) != _bits(want):
+                raise Error(
+                    "check_permutation_select: n=3201 stat "
+                    + stat_name(stats[si])
+                    + " replicate "
+                    + String(r)
+                    + ": device "
+                    + _hex32(d[r])
+                    + " != oracle "
+                    + _hex32(want)
+                )
+
+    # 3. the tie path
+    comptime MASK = UInt64(15)
+    var n_t = 900
+    var n_xt = 333
+    var Rt = 8
+    var tie = List[Float32]()
+    for i in range(n_t):
+        tie.append(Float32((i * 131) % 257) * Float32(0.5) - Float32(60.0))
+    var dpt = _upload(ctx, tie)
+    var nbt = ctx.enqueue_create_buffer[DType.float32](Rt)
+    ctx.synchronize()
+    ctx.enqueue_function[
+        perm_select_stat_kernel[STAT_DIFF_MEANS, RESAMPLE_TPB, MASK]
+    ](
+        nbt.unsafe_ptr(),
+        dpt.unsafe_ptr(),
+        key_lo(key),
+        key_hi(key),
+        Int32(0),
+        Int32(Rt),
+        Int32(n_t),
+        Int32(n_xt),
+        grid_dim=(Rt, 1, 1),
+        block_dim=(RESAMPLE_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    var dt = _download_f32(ctx, nbt, Rt)
+    for r in range(Rt):
+        var keys = List[UInt64]()
+        for j in range(n_t):
+            keys.append(draw_permutation_key(key, r, j) & MASK)
+        var ranks = List[Int32]()
+        for j in range(n_t):
+            var rank = 0
+            for l in range(n_t):
+                if permutation_key_lt(keys[l], l, keys[j], j):
+                    rank += 1
+            ranks.append(Int32(rank))
+        var want = oracle_permutation_statistic_from_ranks(
+            tie, ranks, n_t, n_xt, STAT_DIFF_MEANS
+        )
+        if _bits(dt[r]) != _bits(want):
+            raise Error(
+                "check_permutation_select: tie probe replicate "
+                + String(r)
+                + ": device "
+                + _hex32(dt[r])
+                + " != oracle "
+                + _hex32(want)
+                + " (the position passes under a 4-bit key)"
+            )
+    _ = dpt^
+    _ = nbt^
+    print(
+        "check_permutation_select OK ["
+        + _mode_name()
+        + "]: select == counting rank at n=700 (64 replicates x 3"
+        " statistics), == the oracle at n=3201 above PERM_MAX_POOLED, and =="
+        " the oracle on the 4-bit-key tie probe"
     )
 
 
@@ -2646,6 +2778,7 @@ def main() raises:
     check_statistic_arms()
     check_percentile_interval()
     check_permutation_separable()
+    check_permutation_select()
     check_permutation_null_is_uniform()
     check_monte_carlo_vs_closed_form()
     check_jackknife_and_bca()

@@ -19,7 +19,7 @@ x_neighbors/checks/semi_check.mojo	x_neighbors/checks/sabotage/5215_donor_tie_hi
 x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5216_pagerank_fold_reversed.patch
 x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5216_pagerank_dangling_follows_p.patch
 x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5217_cc_max_label.patch
-x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5204_louvain_order_reversed.patch
+x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5204_louvain_tie_high.patch
 x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5205_cholesky_fold_reversed.patch
 neighbors/checks/fused_slot_merge_check.mojo	neighbors/checks/sabotage/5219_slot_merge_drops_last_block.patch
 kernel_methods/checks/nystroem_basis_sort_check.mojo	kernel_methods/checks/sabotage/1672a_basis_sort_unstable_scatter.patch

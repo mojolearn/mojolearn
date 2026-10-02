@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """SVGP's m x m solve on the device (lane/apple-fast-neighbors2, 2026-10-02;
-FAST tier only, `MOJOLEARN_SVGP_FAST_GPU=1`, default off).
+FAST + Apple only, under `-D MOJOLEARN_SVGP_FAST_GPU=1` from the generated
+`op_svgp` driver (x_neighbors/gen.py FAST_ALT), default off).
 
 Cause: `svgp` is a HOST_RUN op (x_neighbors/gen.py): `svgp_item` runs on the
 host, three serial m x m Cholesky factorizations (m = 512 on the board) and
@@ -32,7 +33,7 @@ from cholesky.checks.potrf import (
 )
 from cholesky.checks.trsm import cho_solve, CHOL_SOLVE_TPB
 from x_neighbors.items import FP
-from x_neighbors.device_ops import xn_ctx, _buf, _down, _grid, _tid, BLOCK, matmul_kernel
+from x_neighbors.device_ops import xn_ctx, _grid, _tid, BLOCK, matmul_kernel
 
 comptime SVF_TPB = 256
 
@@ -124,23 +125,27 @@ def svgp_solve_device(
     written, as the item leaves them."""
     var ctx = xn_ctx()
     var mm = m * m
-    var d_kuu = _buf(ctx, kuu, mm, True)
-    var d_bm = _buf(ctx, bmat, mm, True)
-    var d_b = _buf(ctx, b, m, True)
-    var d_y = _buf(ctx, y, n, True)
-    var d_kj = _buf(ctx, 0, mm, False)
-    var d_luu = _buf(ctx, 0, mm, False)
-    var d_ls = _buf(ctx, 0, mm, False)
-    var d_t = _buf(ctx, 0, mm, False)
-    var d_e2 = _buf(ctx, 0, mm, False)
-    var d_c = _buf(ctx, 0, mm, False)
-    var d_s = _buf(ctx, 0, mm, False)
-    var d_al = _buf(ctx, 0, m, False)
-    var d_col = _buf(ctx, 0, m, False)
-    var d_qmu = _buf(ctx, 0, m, False)
+    var d_kuu = ctx.enqueue_create_buffer[DType.float32](mm)
+    ctx.enqueue_copy(dst_buf=d_kuu, src_ptr=FP(unsafe_from_address=kuu))
+    var d_bm = ctx.enqueue_create_buffer[DType.float32](mm)
+    ctx.enqueue_copy(dst_buf=d_bm, src_ptr=FP(unsafe_from_address=bmat))
+    var d_b = ctx.enqueue_create_buffer[DType.float32](m)
+    ctx.enqueue_copy(dst_buf=d_b, src_ptr=FP(unsafe_from_address=b))
+    var d_y = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_buf=d_y, src_ptr=FP(unsafe_from_address=y))
+    var d_kj = ctx.enqueue_create_buffer[DType.float32](mm)
+    var d_luu = ctx.enqueue_create_buffer[DType.float32](mm)
+    var d_ls = ctx.enqueue_create_buffer[DType.float32](mm)
+    var d_t = ctx.enqueue_create_buffer[DType.float32](mm)
+    var d_e2 = ctx.enqueue_create_buffer[DType.float32](mm)
+    var d_c = ctx.enqueue_create_buffer[DType.float32](mm)
+    var d_s = ctx.enqueue_create_buffer[DType.float32](mm)
+    var d_al = ctx.enqueue_create_buffer[DType.float32](m)
+    var d_col = ctx.enqueue_create_buffer[DType.float32](m)
+    var d_qmu = ctx.enqueue_create_buffer[DType.float32](m)
     var nparts = max(1, (n + SVF_TPB - 1) // SVF_TPB)
-    var d_part = _buf(ctx, 0, nparts, False)
-    var d_sc = _buf(ctx, 0, 4, False)
+    var d_part = ctx.enqueue_create_buffer[DType.float32](nparts)
+    var d_sc = ctx.enqueue_create_buffer[DType.float32](4)
     var nb = chol_nb_for(m, chol_default_nb_hint())
     var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(m, nb))
     var dwork = ctx.enqueue_create_buffer[DType.float32](m + 1)
@@ -208,10 +213,10 @@ def svgp_solve_device(
         var ld_luu = chol_logdet(ctx, d_luu, dwork, m, trace, CHOL_ELEM_TPB)
         var hs = List[Float32](length=4, fill=Float32(0))
         ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_sc)
-        _down(ctx, d_al, alpha, m)
-        _down(ctx, d_c, cmat, mm)
-        _down(ctx, d_qmu, qmu, m)
-        _down(ctx, d_s, qsqrt, mm)
+        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=alpha), src_buf=d_al)
+        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=cmat), src_buf=d_c)
+        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=qmu), src_buf=d_qmu)
+        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=qsqrt), src_buf=d_s)
         ctx.synchronize()
         var bsb = hs[0]
         var trq = hs[1]

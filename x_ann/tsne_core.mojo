@@ -376,7 +376,7 @@ def ts_repulse_fold(tm: SIMD[DType.float32, 4], mut z: Float32, mut r0: Float32,
 @always_inline
 def ts_repulse_cell(i: Int, y: F32P, n: Int, row_z: F32P, rep: F32P):
     """row_z[i] = sum_{j != i} q_ij; rep[i] = sum_j q_ij^2 (y_i - y_j), j
-    ascending (DEVIATION 5813; Z over rows ascending in `ts_sum_cell`)."""
+    ascending (DEVIATION 5813; Z by `ts_sum_cell`'s pinned pairwise tree)."""
     var z = Float32(0.0)
     var r0 = Float32(0.0)
     var r1 = Float32(0.0)
@@ -391,12 +391,46 @@ def ts_repulse_cell(i: Int, y: F32P, n: Int, row_z: F32P, rep: F32P):
     rep.unsafe_store(2 * i + 1, r1)
 
 
+comptime TS_Z_STACK = 64
+
+
+@always_inline
+def ts_z_add(a: Float32, b: Float32) -> Float32:
+    """One node of Z's pinned tree: ftz(left + right)."""
+    return ftz(a + b)
+
+
 @always_inline
 def ts_sum_cell(row_z: F32P, n: Int, z: F32P):
-    var acc = Float32(0.0)
+    """Z = sum of row_z over rows by the PINNED PAIRWISE TREE (lane
+    gap-nv-classical2, 2026-10-02; was the serial ascending chain): level by
+    level, node q = ftz(c[2q] + c[2q + 1]), an odd last node carried up
+    unchanged, z = ftz(root). Written here as the equivalent binary-counter
+    stack (equal-height subtrees merge as they complete, the leftover stack
+    merges right to left), so one thread needs O(log n) words; the device's
+    parallel level-by-level form (`x_ann/tsne_device.mojo::
+    repulse_split_kernel`) forms the same nodes, so every column agrees."""
+    var sv = InlineArray[Float32, TS_Z_STACK](fill=Float32(0.0))
+    var sl = InlineArray[Int, TS_Z_STACK](fill=0)
+    var top = 0
     for i in range(n):
-        acc = ftz(acc + row_z.unsafe_load(i))
-    z.unsafe_store(0, acc)
+        var v = row_z.unsafe_load(i)
+        var lvl = 0
+        while top > 0 and sl[top - 1] == lvl:
+            v = ts_z_add(sv[top - 1], v)
+            top -= 1
+            lvl += 1
+        sv[top] = v
+        sl[top] = lvl
+        top += 1
+    var acc = Float32(0.0)
+    if top > 0:
+        acc = sv[top - 1]
+        var t = top - 2
+        while t >= 0:
+            acc = ts_z_add(sv[t], acc)
+            t -= 1
+    z.unsafe_store(0, ftz(acc))
 
 
 @always_inline
