@@ -49,3 +49,5 @@ Keep rule: a switch becomes the FAST default when its arm is faster on the M3 an
 stays within FAST's run-to-run spread (the bits are the stored path's by construction, so the
 quality should be identical); then the define goes and the arm is the code.
 `tools/afc_ab_def.sh` is copied from lane/apple-fast-tier.
+
+Host-route note: the garch binding sends batches of at most 4096 series to the host executor, so no queue line times that route (our CPU is never timed). Both garch baselines carry `MOJOLEARN_SEQ_GARCH_HOST_MAX=0` and race the device under IDENTICAL (`seq-garch-ident-dev`) and FAST (`seq-garch-dev`).
