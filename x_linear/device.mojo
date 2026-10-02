@@ -2660,14 +2660,14 @@ def fit_device(
                 hip.append(Int32(0))
             hip[5] = Int32(0 if String(getenv("MOJOLEARN_X_LINEAR_GRAM_SSE")) == "0" else 1)
     # lane/apple-fast-kernel (2026-10-02), FAST on Apple only, both default
-    # off. MOJOLEARN_KERNEL_FAST_BAYES_STATS=1: the means, the centered Gram,
+    # off, build-time. -D MOJOLEARN_KERNEL_FAST_BAYES_STATS: the means, the centered Gram,
     # X'y and the target scalars from x_linear/bayes_fast.mojo (chunked
     # tiles on the grid) instead of `xg_means_kernel` + `xg_gram_kernel`
     # (one serial million-row chain per cell) and the team's own X'y /
     # mean / variance passes on one block (after the 2026-10-02 merge: in
     # place of main's moments grid, one block per 16-column tile pair with
     # one serial chain per cell, and main's `bayes_xty_kernel`; the y
-    # partials stay main's). MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1 (ip[7]): the team Jacobi
+    # partials stay main's). -D MOJOLEARN_KERNEL_FAST_BAYES_JACOBI (ip[7]): the team Jacobi
     # skips rotations below 1e-7 * sqrt(a_pp a_qq) instead of 1e-9, a
     # threshold float32 roundoff never reaches, so it ran all 60 sweeps.
     var kstats = False
@@ -2675,13 +2675,13 @@ def fit_device(
         if bayes_like:
             # STATS: BayesianRidge (unweighted) on main's grid driver only;
             # ARD keeps main's moments grid (its X'y pass is the team's)
-            if algo == ALGO_BAYES and n > 0 and d > 0 and String(getenv("MOJOLEARN_KERNEL_FAST_BAYES_STATS")) == "1":
+            if algo == ALGO_BAYES and n > 0 and d > 0 and is_defined["MOJOLEARN_KERNEL_FAST_BAYES_STATS"]():
                 kstats = True
                 grid_gram = True
                 hip[4] = Int32(1)
             while len(hip) < 8:
                 hip.append(Int32(0))
-            hip[7] = Int32(1 if String(getenv("MOJOLEARN_KERNEL_FAST_BAYES_JACOBI")) == "1" else 0)
+            hip[7] = Int32(1 if is_defined["MOJOLEARN_KERNEL_FAST_BAYES_JACOBI"]() else 0)
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](
         team_work(n, team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr()))), team_own(algo, d)))

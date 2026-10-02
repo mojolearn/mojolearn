@@ -1,4 +1,4 @@
-CMD lane/apple-fast-kernel kernel-bayes-stats-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-stats-ist bayesian-ridge istella 1 2 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
-CMD lane/apple-fast-kernel kernel-bayes-jacobi-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-jacobi-ist bayesian-ridge istella 1 2 - MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1
-CMD lane/apple-fast-kernel kernel-gpr-resident-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpr-resident-ist gpr istella 1 2 - MOJOLEARN_KERNEL_FAST_GPR_RESIDENT=1
-CMD lane/apple-fast-kernel kernel-nys-rr-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-nys-rr-ist nystroem istella 1 2 - MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH=1
+CMD lane/apple-fast-kernel kernel-bayes-stats-ist AFC_FAMILY=algos bash tools/afc_ab_def.sh kernel-bayes-stats-ist x_linear bayesian-ridge istella 1 2 "" "-D MOJOLEARN_KERNEL_FAST_BAYES_STATS"
+CMD lane/apple-fast-kernel kernel-bayes-jacobi-ist AFC_FAMILY=algos bash tools/afc_ab_def.sh kernel-bayes-jacobi-ist x_linear bayesian-ridge istella 1 2 "" "-D MOJOLEARN_KERNEL_FAST_BAYES_JACOBI"
+CMD lane/apple-fast-kernel kernel-gpr-resident-ist AFC_FAMILY=classical2 bash tools/afc_ab_def.sh kernel-gpr-resident-ist gp gpr istella 1 2 "" "-D MOJOLEARN_KERNEL_FAST_GPR_RESIDENT"
+CMD lane/apple-fast-kernel kernel-nys-rr-ist AFC_FAMILY=classical2 bash tools/afc_ab_def.sh kernel-nys-rr-ist kernel_methods nystroem istella 1 2 "" "-D MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH"

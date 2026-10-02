@@ -130,7 +130,11 @@ from checks.numerics import ftz, identical_div, identical_sqrt
 from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from svm.impl.svm_parameter import KernelParams
-from x_neighbors.fast_eigh import EigP, symmetric_eig_rows
+from std.atomic import Atomic
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from x_decomp.cells import F32Ptr
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
@@ -737,22 +741,63 @@ def nystroem_params(model: NystroemModel) -> KernelParams:
     return KernelParams(model.kernel, model.degree, model.gamma, model.coef0)
 
 
-#: lane/apple-fast-kernel (2026-10-02), FAST on Apple only:
-#: MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH=1 solves the q x q basis kernel's
+#: lane/apple-fast-kernel (2026-10-02), FAST on Apple only, build-time:
+#: `-D MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH` solves the q x q basis kernel's
 #: eigenproblem with x_decomp/jacobi_par.mojo's round-robin Jacobi (every
 #: round's q / 2 disjoint rotations across the grid, two launches a round,
-#: the cyclic kernel's convergence test on the host once a sweep) in place
+#: the cyclic kernel's convergence test folded on the grid once a sweep,
+#: three words read back, no host loop) in place
 #: of `jacobi_eigh_kernel`: ONE block of 256 threads running the q (q - 1) / 2
 #: rotations of a sweep one after the other behind two barriers each (at the
 #: board's q = 256: 32,640 serial rotations a sweep, up to 15 sweeps) while
 #: the rest of the GPU idles. A solve that does not converge in
 #: NYS_RR_SWEEPS sweeps leaves `dk` untouched and the cyclic kernel runs.
-comptime NYS_RR_EIGH = _CTX_MODE != _CTX_IDENTICAL and has_apple_gpu_accelerator()
+comptime NYS_RR_EIGH = (_CTX_MODE != _CTX_IDENTICAL and has_apple_gpu_accelerator()
+                        and is_defined["MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH"]())
 comptime NYS_RR_SWEEPS = 30
 
 
 def _pj_blocks(count: Int) -> Int:
     return (count + PJ_TPB - 1) // PJ_TPB if count > 0 else 1
+
+
+def nys_rr_test_kernel(off: F32Ptr, n_in: Int32, out: F32Ptr):
+    """The sweep's convergence test on the grid: `eigh_par_off_kernel`'s
+    per-row words (off-diagonal squares at [0, n), diagonal squares at
+    [n, 2n), -1 where a dispatch did not run) folded a block at a time
+    into out[0] (off), out[1] (diag) and out[2] (rows left at -1)."""
+    var n = Int(n_in)
+    var tid = Int(thread_idx.x)
+    var i = Int(block_idx.x) * PJ_TPB + tid
+    var o = Float32(0)
+    var d2 = Float32(0)
+    var bad = Float32(0)
+    if i < n:
+        o = off[i]
+        d2 = off[n + i]
+        if o < Float32(0) or d2 < Float32(0):
+            bad = Float32(1)
+            o = Float32(0)
+            d2 = Float32(0)
+    var so = stack_allocation[PJ_TPB, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var sd = stack_allocation[PJ_TPB, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var sb = stack_allocation[PJ_TPB, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    so[tid] = o
+    sd[tid] = d2
+    sb[tid] = bad
+    barrier()
+    var w = PJ_TPB // 2
+    while w > 0:
+        if tid < w:
+            so[tid] = so[tid] + so[tid + w]
+            sd[tid] = sd[tid] + sd[tid + w]
+            sb[tid] = sb[tid] + sb[tid + w]
+        barrier()
+        w //= 2
+    if tid == 0:
+        _ = Atomic.fetch_add(out.unsafe_offset(0), so[0])
+        _ = Atomic.fetch_add(out.unsafe_offset(1), sd[0])
+        _ = Atomic.fetch_add(out.unsafe_offset(2), sb[0])
 
 
 def _nystroem_rr_eigh(
@@ -775,6 +820,8 @@ def _nystroem_rr_eigh(
     var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
     var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
     var hoff = ctx.enqueue_create_host_buffer[DType.float32](3 * n)
+    var dres = ctx.enqueue_create_buffer[DType.float32](3)
+    var hres = ctx.enqueue_create_host_buffer[DType.float32](3)
     ctx.enqueue_copy(dst_buf=da, src_buf=dk)
     ctx.enqueue_function[pj_identity_kernel](
         dvec.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
@@ -791,19 +838,16 @@ def _nystroem_rr_eigh(
         ctx.enqueue_function[eigh_par_off_kernel](
             da.unsafe_ptr(), doff.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n), block_dim=PJ_TPB
         )
-        ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
+        # the test's three sums fold on the grid; three words come back
+        dres.enqueue_fill(Float32(0))
+        ctx.enqueue_function[nys_rr_test_kernel](
+            doff.unsafe_ptr(), Int32(n), dres.unsafe_ptr(), grid_dim=_pj_blocks(n), block_dim=PJ_TPB
+        )
+        ctx.enqueue_copy(dst_ptr=hres.unsafe_ptr(), src_buf=dres)
         ctx.synchronize()
-        var off = Float64(0.0)
-        var dg = Float64(0.0)
-        var ran = True
-        for i in range(n):
-            var o = Float64(hoff.unsafe_ptr().unsafe_load(i))
-            var d2 = Float64(hoff.unsafe_ptr().unsafe_load(n + i))
-            if o < 0.0 or d2 < 0.0:
-                ran = False
-            off += o
-            dg += d2
-        if not ran:
+        var off = Float64(hres.unsafe_ptr().unsafe_load(0))
+        var dg = Float64(hres.unsafe_ptr().unsafe_load(1))
+        if hres.unsafe_ptr().unsafe_load(2) != Float32(0):
             break
         fro_now = off + dg
         if fro_in < 0.0:
@@ -834,9 +878,10 @@ def _nystroem_rr_eigh(
             grid_dim=(n, 1, 1),
             block_dim=(SIGNFLIP_TPB, 1, 1),
         )
+        # the last test's words hold the diagonal of the converged A
+        ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
         ctx.synchronize()
         var got = _download(ctx, dvec, n * n)
-        # the last test's readback holds the diagonal of the converged A
         for c in range(n):
             eig_diag.append(hoff.unsafe_ptr().unsafe_load(2 * n + c))
         for i in range(n * n):
@@ -847,6 +892,8 @@ def _nystroem_rr_eigh(
     _ = dcs^
     _ = doff^
     _ = hoff^
+    _ = dres^
+    _ = hres^
     return sweeps
 
 
@@ -866,7 +913,7 @@ def _nystroem_device_eigh(
     flipped eigenvectors. Appends eigenvalue c to `eig_diag` and the q x q
     eigenvectors (vector c in COLUMN c) to `vecs`; returns the sweeps."""
     comptime if NYS_RR_EIGH:
-        if sabotage == KMSAB_NONE and String(getenv("MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH")) == "1":
+        if sabotage == KMSAB_NONE:
             var got = _nystroem_rr_eigh(ctx, dk, dvec, q, eig_diag, vecs)
             if got >= 0:
                 trace.record_device(ctx, "nys.eigenvectors_flipped", dvec, q * q)

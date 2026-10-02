@@ -749,11 +749,9 @@ def gpr_fit_host(
     # again for the solve, downloads the dual: five n^2 host round trips
     # and two host passes around a factorization of 3,000 rows. Not taken
     # with a card or a sabotage arm (the stage records are the host path's).
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator():
-        if (
-            sabotage == GP_SAB_NONE and not trace.enabled
-            and String(getenv("MOJOLEARN_KERNEL_FAST_GPR_RESIDENT")) == "1"
-        ):
+    comptime if (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+                 and is_defined["MOJOLEARN_KERNEL_FAST_GPR_RESIDENT"]()):
+        if sabotage == GP_SAB_NONE and not trace.enabled:
             var nb_r = chol_nb_for(n_train, CHOL_NB_PINNED)
             var ws_r = ctx.enqueue_create_buffer[DType.float32](
                 chol_workspace_floats(n_train, nb_r)
