@@ -398,14 +398,22 @@ def _kit_vendor(kit):
     return v
 
 
-def _decomp_fast_on(kit, name):
-    """lane/apple-fast-decomp-sparse (2026-10-02): the FAST-tier, Metal-only
-    host switches of this file, MOJOLEARN_DECOMP_FAST_<name>=1, read at
-    dispatch. IDENTICAL kits never take one (their bits never move), nor a
-    kit on another vendor (nothing is measured there)."""
-    if kit.mode != "fast" or _os.environ.get("MOJOLEARN_DECOMP_FAST_" + name) != "1":
+def _kit_fast_define(kit, name):
+    """lane/apple-fast-decomp-linalg and -sparse (2026-10-02): whether the
+    kit's binding is a FAST Metal build compiled with `-D <name>` (asked of
+    the binding's `x_decomp_fast_defines` once per kit; no env read). False
+    for every IDENTICAL kit, for another vendor and for a binding without
+    the entry, so the default tier never takes one of these routes."""
+    if kit.mode != "fast" or _kit_vendor(kit) != "metal":
         return False
-    return _kit_vendor(kit) == "metal"
+    d = kit.__dict__.get("_fast_defines")
+    if d is None:
+        try:
+            d = str(kit._raw().x_decomp_fast_defines()).split(",")
+        except Exception:
+            d = []
+        kit._fast_defines = d
+    return name in d
 
 
 class _FastMetalEigh:
@@ -2661,7 +2669,7 @@ def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=
     the atoms in order, each projected onto the unit ball. Returns (D, code)."""
     if A is None:
         A = k.mm(code, code, ta=True)
-    if not positive and _decomp_fast_on(k, "DICT_UPDATE"):
+    if not positive and _kit_fast_define(k, "MOJOLEARN_DECOMP_FAST_DICT_UPDATE"):
         got = _update_dict_resident(k, D, Y, code, A, B)
         if got is not None:
             return got

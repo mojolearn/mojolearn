@@ -26,12 +26,12 @@ for a 4-atom answer). Here a row is one threadgroup:
 FAST promises quality, not bits: the spellings are the cells' own, and a
 fold on (value, index) picks the atom the serial scan picks. IDENTICAL
 never compiles these: x_decomp/device.mojo gates each launch on
-GLOBAL_NUMERIC_MODE and TARGET_COLUMN, and each has a host-read env switch
+GLOBAL_NUMERIC_MODE and TARGET_COLUMN, and each is a `-D` build define
 that defaults OFF (`lasso_block_on`, `omp_block_on`, `small_eigh_j2_on`).
 """
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
-from std.os import getenv
+from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -50,27 +50,27 @@ cyclic kernel (x_decomp/jacobi2.mojo) instead of the round-robin grid."""
 
 
 def lasso_block_on(k: Int) -> Bool:
-    """MOJOLEARN_DECOMP_FAST_LASSO_BLOCK=1 (host env, read at dispatch) and
+    """-D MOJOLEARN_DECOMP_FAST_LASSO_BLOCK (a build define; no env read) and
     a dictionary the block holds."""
-    return k >= 1 and k <= LB_TPB and String(getenv("MOJOLEARN_DECOMP_FAST_LASSO_BLOCK")) == "1"
+    return k >= 1 and k <= LB_TPB and is_defined["MOJOLEARN_DECOMP_FAST_LASSO_BLOCK"]()
 
 
 def omp_block_on(k: Int, nnz: Int) -> Bool:
-    """MOJOLEARN_DECOMP_FAST_OMP_BLOCK=1 and a dictionary and active set the
+    """-D MOJOLEARN_DECOMP_FAST_OMP_BLOCK and a dictionary and active set the
     block holds."""
     if k < 1 or k > OMP_TPB or nnz < 1 or nnz > OMP_NNZ_MAX:
         return False
-    return String(getenv("MOJOLEARN_DECOMP_FAST_OMP_BLOCK")) == "1"
+    return is_defined["MOJOLEARN_DECOMP_FAST_OMP_BLOCK"]()
 
 
 def small_eigh_j2_on(n: Int) -> Bool:
-    """MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2=1 and n at most SMALL_EIGH_MAX.
+    """-D MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2 and n at most SMALL_EIGH_MAX.
     The round-robin eigh (x_decomp/device.mojo `_eigh_par`) launches two
     kernels per round, n - 1 rounds per sweep, and reads the off-diagonal
     norm back before every sweep: for FastICA's n_components x n_components
     decorrelation (8 x 8, every iteration) that is ~130 launches and ~16
     host syncs for 28 rotations; `_eigh2` is one launch and one readback."""
-    return n >= 2 and n <= SMALL_EIGH_MAX and String(getenv("MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2")) == "1"
+    return n >= 2 and n <= SMALL_EIGH_MAX and is_defined["MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2"]()
 
 
 def lasso_block_kernel(
@@ -223,16 +223,16 @@ def omp_block_kernel(g: F32Ptr, q: F32Ptr, w: F32Ptr, na_out: F32Ptr, n: Int32, 
                 sl[na * OMP_NNZ_MAX + na] = sqrt0(lkk)
                 sact[na] = Int32(lam)
                 # gamma = (L L^T)^-1 Xy[S]: forward then back substitution
-                var m = na + 1
-                for t in range(m):
+                var ns = na + 1
+                for t in range(ns):
                     var acc = ftz(q.unsafe_load(base + Int(sact[t])))
                     for u in range(t):
                         acc = ftz(identical_mul_add(-ftz(sl[t * OMP_NNZ_MAX + u]), ftz(stmp[u]), acc))
                     stmp[t] = div0(acc, sl[t * OMP_NNZ_MAX + t])
-                for tt in range(m):
-                    var t = m - 1 - tt
+                for tt in range(ns):
+                    var t = ns - 1 - tt
                     var acc = ftz(stmp[t])
-                    for u in range(t + 1, m):
+                    for u in range(t + 1, ns):
                         acc = ftz(identical_mul_add(-ftz(sl[u * OMP_NNZ_MAX + t]), ftz(sgam[u]), acc))
                     sgam[t] = div0(acc, sl[t * OMP_NNZ_MAX + t])
         barrier()

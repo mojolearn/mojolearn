@@ -19,7 +19,13 @@ from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
 from decomposition.impl.linalg.detail.svd_full import svd_of_r
 from decomposition.linalg_public_device import device_eigh, device_qr_r
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
+from std.sys.info import has_apple_gpu_accelerator
+
+# lane/apple-fast-decomp-linalg and -sparse (2026-10-02): the FAST + Apple
+# guard of every `-D MOJOLEARN_..._FAST_...` switch in this file. Compiled
+# only there; IDENTICAL and every other vendor compile main's code unchanged.
+comptime XD_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 from x_decomp.cells import (
     lu_perm_src,
     trs_block_col,
@@ -2326,7 +2332,7 @@ struct DevExec(Exec):
         # rounds); a solve it does not converge falls back to the cyclic one,
         # as the host does. `-D MOJOLEARN_XD_EIGH_CYCLIC=1` keeps the cyclic
         # order (and MOJOLEARN_XD_PJ_EIGH_MIN its old opt-in threshold).
-        # MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2=1 (lane/apple-fast-decomp-sparse,
+        # -D MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2 (lane/apple-fast-decomp-sparse,
         # 2026-10-02; FAST on Apple only): an eigh of order at most
         # SMALL_EIGH_MAX (x_decomp/apple_fast.mojo) takes `_eigh2`, ONE
         # launch of the cyclic kernel plus one readback, instead of
@@ -2334,7 +2340,7 @@ struct DevExec(Exec):
         # host readback of the off-diagonal norm before every sweep (for
         # FastICA's 8 x 8 decorrelation, every one of its 200 iterations:
         # ~130 launches and ~16 syncs for 28 rotations). Default off.
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+        comptime if XD_FAST_APPLE:
             if small_eigh_j2_on(n):
                 DevExec._eigh2(a, w, v, n)
                 return
@@ -2654,7 +2660,7 @@ struct DevExec(Exec):
         max_iter: Int, tol: Float32, positive: Bool,
     ) raises:
         var ctx = xd_ctx()
-        # MOJOLEARN_DECOMP_FAST_LASSO_BLOCK=1 (lane/apple-fast-decomp-sparse,
+        # -D MOJOLEARN_DECOMP_FAST_LASSO_BLOCK (lane/apple-fast-decomp-sparse,
         # 2026-10-02; FAST on Apple only): one threadgroup per row
         # (x_decomp/apple_fast.mojo `lasso_block_kernel`) instead of one
         # thread per row walking its k-wide h strip in global memory for
@@ -2664,7 +2670,7 @@ struct DevExec(Exec):
         # Expected: the sweep's k x k loads and stores become k parallel
         # threadgroup updates; no h scratch buffer. Default off.
         var block = False
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+        comptime if XD_FAST_APPLE:
             if n > 0 and lasso_block_on(k):
                 block = True
         var dg = _up(ctx, g, k * k)
@@ -2672,7 +2678,7 @@ struct DevExec(Exec):
         var dw = _up(ctx, w, n * k)
         var dh = ctx.enqueue_create_buffer[DType.float32](n * k if (n * k > 0 and not block) else 1)
         var di = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+        comptime if XD_FAST_APPLE:
             if block:
                 ctx.enqueue_function[lasso_block_kernel](
                     dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
@@ -2698,7 +2704,7 @@ struct DevExec(Exec):
     def omp_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int, k: Int, nnz: Int) raises:
         var ctx = xd_ctx()
         var per = k * k + 3 * k
-        # MOJOLEARN_DECOMP_FAST_OMP_BLOCK=1 (lane/apple-fast-decomp-sparse,
+        # -D MOJOLEARN_DECOMP_FAST_OMP_BLOCK (lane/apple-fast-decomp-sparse,
         # 2026-10-02; FAST on Apple only): one threadgroup per row
         # (x_decomp/apple_fast.mojo `omp_block_kernel`), the correlations a
         # thread per atom and every scratch in threadgroup memory, instead
@@ -2709,7 +2715,7 @@ struct DevExec(Exec):
         # against scikit-learn's 0.03 s. Expected: no scratch buffer, the
         # k-wide correlation scan parallel. Default off.
         var block = False
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+        comptime if XD_FAST_APPLE:
             if n > 0 and omp_block_on(k, nnz):
                 block = True
         var dg = _up(ctx, g, k * k)
@@ -2717,7 +2723,7 @@ struct DevExec(Exec):
         var dw = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
         var ds = ctx.enqueue_create_buffer[DType.float32](n * per if (n * per > 0 and not block) else 1)
         var dn = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+        comptime if XD_FAST_APPLE:
             if block:
                 ctx.enqueue_function[omp_block_kernel](
                     dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
