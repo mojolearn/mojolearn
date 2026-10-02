@@ -23,7 +23,8 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_LOGCV
+from x_linear.logcv import logcv_fold, logcv_final
 from x_linear.ops import ld, st, fd, i2f
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
@@ -178,10 +179,89 @@ def _fit_on_host(
     _ = tw^
 
 
+
+# ------------------------------------------------ LogisticRegressionCV: one block a fold (lane/neural-pass94)
+# The folds are independent (x_linear/logcv.mojo `logcv_fold`: its own
+# training rows, its own C path from theta 0, its own score slots), so the
+# device runs them at once, one block a fold, each with its own fw, iw and
+# team scratch; then one block picks the C and refits (`logcv_final`). Each
+# fold's team runs the same statements as the one-block fit did, in the same
+# order: the same words. The one-block fit ran the folds one after another.
+# `MOJOLEARN_X_LINEAR_LOGCV_ONE_BLOCK=1` restores it.
+def _logcv_one_block() -> Bool:
+    return String(getenv("MOJOLEARN_X_LINEAR_LOGCV_ONE_BLOCK")) == "1"
+
+
+def logcv_folds_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, tw: FP,
+                       n_fw: Int32, n_iw: Int32, tw_words: Int32, bufs: Int32):
+    var f = Int(block_idx.x)
+    var t = device_team(tw + f * Int(tw_words), Int(n), Int(bufs), 0)
+    logcv_fold(t, x, y, Int(n), Int(d), ip, fp, res, fw + f * Int(n_fw), iw + f * Int(n_iw), f)
+
+
+def logcv_final_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, tw: FP,
+                       bufs: Int32):
+    var t = device_team(tw, Int(n), Int(bufs), 0)
+    logcv_final(t, x, y, Int(n), Int(d), ip, fp, res, fw, iw)
+
+
+def _logcv_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
+                n_out: Int, n_fw: Int, n_iw: Int, res: FP) raises:
+    var ctx = linear_ctx()
+    var nf = Int(ip[4])
+    var hip = ip.copy()
+    var hfp = fp.copy()
+    var bufs = team_rows(ALGO_LOGCV, IP(unsafe_from_address=Int(hip.unsafe_ptr())))
+    var tw_words = team_work(n, bufs, 0)
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+    var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
+    var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
+    var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(hfp), 1))
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
+    var dfw = ctx.enqueue_create_buffer[DType.float32](max(n_fw, 1) * nf)
+    var diw = ctx.enqueue_create_buffer[DType.int32](max(n_iw, 1) * nf)
+    var dtw = ctx.enqueue_create_buffer[DType.float32](tw_words * nf)
+    if n_x > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    if n_y > 0:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    ctx.enqueue_copy(dst_buf=dip, src_ptr=hip.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
+    dout.enqueue_fill(Float32(0))
+    dfw.enqueue_fill(Float32(0))
+    diw.enqueue_fill(Int32(0))
+    dtw.enqueue_fill(Float32(0))
+    ctx.enqueue_function[logcv_folds_kernel](
+        dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(),
+        dfw.unsafe_ptr(), diw.unsafe_ptr(), dtw.unsafe_ptr(), Int32(max(n_fw, 1)), Int32(max(n_iw, 1)), Int32(tw_words),
+        Int32(bufs), grid_dim=nf, block_dim=LINEAR_TPB,
+    )
+    ctx.enqueue_function[logcv_final_kernel](
+        dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(),
+        dfw.unsafe_ptr(), diw.unsafe_ptr(), dtw.unsafe_ptr(), Int32(bufs), grid_dim=1, block_dim=LINEAR_TPB,
+    )
+    if n_out > 0:
+        ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
+    ctx.synchronize()
+    _ = hip^
+    _ = hfp^
+    _ = dx^
+    _ = dy^
+    _ = dip^
+    _ = dfp^
+    _ = dout^
+    _ = dfw^
+    _ = diw^
+    _ = dtw^
+
+
 def fit_device(
     algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
 ) raises:
+    if algo == ALGO_LOGCV and not _logcv_one_block() and len(ip) > 4 and Int(ip[4]) > 1:
+        _logcv_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
+        return
     if algo == ALGO_SGD and _sgd_on_host():
         _fit_on_host(algo, x, y, n, d, ip, fp, n_out, n_fw, n_iw, res)
         return
