@@ -41,3 +41,27 @@ Risky compile sites (no toolchain here):
 Requests (`kapprox.txt`): `kap-schi2-taxi` (skewed-chi2 taxi) and `kap-achi2-istella`
 (additive-chi2 istella), old FAST vs the define, one alternation. After a win: skewed-chi2
 istella (1.84x) and additive-chi2 taxi (1.50x) with the same define.
+
+## Pass 2 (2026-10-02): kernel-pca and sparse-rp
+
+Both switches are read back from the x_neighbors binding (`x_neighbors_kpca_resident()`,
+`x_neighbors_sparse_rp_device()`, compile-time constants in `x_neighbors/kapprox_dev.mojo`), so the
+A/B builds the `x_neighbors` binding; the KernelPCA route itself runs on main's x_decomp kit.
+
+| switch | kind | site | what it changes under FAST on Apple |
+|---|---|---|---|
+| `-D MOJOLEARN_KPCA_RESIDENT=1` | build define (`x_neighbors`), Python-only route | `_expansion_neighbors.py` `KernelPCA.fit`, `_kpca_resident_center` | X uploaded once from its own buffer to the x_decomp resident kit; the kernel matrix (rbf: `sqdist`, `scale`, `exp`; linear / poly degree 2-3 / sigmoid: `gemm` + elementwise), sklearn's KernelCenterer (K - rows - cols + all as three broadcast `ew` launches) and `K_fit_rows_` / `K_fit_all_` stay on the device; the resident Kc goes straight to main's `_lanczos_top` (auto, n > 200, c < 10) or `kit.eigh`. Main's path moves the n x n matrix through the host five times (the kernel op's download, colsum's upload, the center op's upload and download, `tobytes` + the kit's upload: ~2 GB at the board's 10k rows). Other kernels, precomputed, poly of another degree: main's path. transform unchanged (main's fused `kpca_transform`). |
+| `-D MOJOLEARN_SPARSE_RP_DEVICE=1` | build define (`x_neighbors`) | `_expansion_decomp.py` `SparseRandomProjection._device_fit`; `x_neighbors/kapprox_dev.mojo` `op_kapprox_sparse_rp` | fit reads the shape from the input's buffer and skips the host `all_finite` pass over every cell of X (the board's clocked fit was that pass plus four small kit launches: the components are already dense and device-drawn on main, no CSR build or SciPy product); the kc x d matrix is drawn in ONE launch (two counter-based uniforms per entry: keep with probability density, sign) and comes down once as `components_`; transform's `_project` uploads it once and flags a non-finite X on the device, as on main. `n_components='auto'`, `compute_inverse_components`, sparse X: main's path. |
+
+Bits: FAST only. KernelPCA's kernel matrix is the kit's `sqdist` + `exp` (not `kernel_item`'s rbf
+spelling) and the centering sums fold in the kit's order; the Lanczos start and solve are main's.
+sparse-rp's matrix is a different draw of the same law (not the Philox words); the quality metric
+(distortion) is a statistic of the draw. Behaviour change under the define: a non-finite X is refused
+by `SparseRandomProjection.transform` (device flag) instead of `fit`.
+
+Risky compile sites: `kapprox_items.mojo` `kapprox_sparse_rp_item` (`UInt32(seed) ^ UInt32(0x9E3779B9)`);
+the op launches follow the pass-1 ops. Python: `_M._on_device(cols._d, n, 1)` views the row-vector's
+device buffer as a column for the broadcast (the `_DevBuf` is refcounted, freed after `cols.out`).
+
+Requests: `kap-kpca-istella` (kernel-pca istella), `kap-srp-taxi` (sparse-rp taxi). After a win:
+kernel-pca taxi, sparse-rp istella with the same defines.
