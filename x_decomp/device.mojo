@@ -71,8 +71,6 @@ from x_decomp.cells import (
     lda_doc_row,
     lu_diag,
     lu_l_elem,
-    lu_pivot,
-    lu_serial,
     lu_swap_elem,
     lu_update_elem,
     omp_row,
@@ -110,16 +108,6 @@ from core.device_zero import enqueue_fill
 from decomposition.checks.jacobi_eigh_device import JACOBI_INFO_UNWRITTEN, JACOBI_SWEEPS, JACOBI_TOL
 from decomposition.host.linalg_public import eigh_ascending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
-
-
-def lu_serial_max() -> Int:
-    """Largest n whose LU runs as ONE `lu_kernel` launch (MOJOLEARN_XD_LU_SERIAL,
-    default 16; timing only, the cells and their order are the same)."""
-    var v = String(getenv("MOJOLEARN_XD_LU_SERIAL", "16"))
-    try:
-        return Int(v)
-    except:
-        return 16
 
 
 #: Sweep budgets of the round-robin solvers (FAST on Metal). A solve that
@@ -327,19 +315,9 @@ def rand_kernel(dst: F32Ptr, count: Int32, seed: UInt32, stream: UInt32, kind: I
         dst.unsafe_store(i, rand_cell(i, seed, stream, Int(kind)))
 
 
-def lu_kernel(a: F32Ptr, piv: I32Ptr, info: F32Ptr, n: Int32):
-    if block_idx.x == 0 and thread_idx.x == 0:
-        lu_serial(a, piv, Int(n), info)
-
-
 def lu_info_init_kernel(info: F32Ptr):
     if block_idx.x == 0 and thread_idx.x == 0:
         info.unsafe_store(0, Float32(0))
-
-
-def lu_pivot_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
-    if block_idx.x == 0 and thread_idx.x == 0:
-        lu_pivot(a, piv, Int(k), Int(n))
 
 
 comptime LU_PIVOT_TPB = 256
@@ -393,12 +371,6 @@ def lu_pivot_block_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
         active = active // 2
     if tid == 0:
         piv.unsafe_store(kk, ri.unsafe_load(0))
-
-
-def lu_pivot_parallel() -> Bool:
-    """`MOJOLEARN_XD_LU_PIVOT_SERIAL=1` restores the one-thread pivot scan
-    (the A/B arm); default the block kernel."""
-    return String(getenv("MOJOLEARN_XD_LU_PIVOT_SERIAL")) != "1"
 
 
 def lu_solve_cols_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, trans: Int32):
@@ -1560,18 +1532,14 @@ def launch_lu(
     (n x n) factored in place, `piv` (n), `info` (1), `scal` (2) and `act`
     (n) scratch. DevExec.lu and the resident kit (x_decomp/kit_device.mojo)
     both call it, so the two run one launch sequence."""
-    # lu_serial's cells, step by step: the pivot search one thread, the
-    # swap, the multipliers and the trailing update one thread per cell
-    if n <= lu_serial_max():
-        # A small matrix: lu_serial itself on one device thread, the
-        # same cells in the same order as the step-by-step launches
-        # below (which exist for large n), in ONE launch instead of 5n.
-        ctx.enqueue_function[lu_kernel](a, piv, info, Int32(n), grid_dim=1, block_dim=1)
-    else:
-        ctx.enqueue_function[lu_info_init_kernel](info, grid_dim=1, block_dim=1)
-    var pivot_block = lu_pivot_parallel()
+    # lu_serial's cells, step by step at every n: the pivot search on one
+    # block (a parallel reduction, `lu_pivot`'s choice), the swap, the
+    # multipliers and the trailing update one thread per cell. (The
+    # one-thread `lu_kernel` for n <= MOJOLEARN_XD_LU_SERIAL and the
+    # one-thread pivot scan are deleted: the same cells in the same order.)
+    ctx.enqueue_function[lu_info_init_kernel](info, grid_dim=1, block_dim=1)
     var nb = min(lu_panel_width(), LU_PANEL_NB)
-    if n > lu_serial_max() and nb > 0:
+    if nb > 0:
         # The blocked route (lane neural-pass32): the panel's steps run
         # the per-step kernels over the panel's columns; the trailing
         # columns then get the panel's swaps in order, the U rows
@@ -1582,12 +1550,9 @@ def launch_lu(
         while k0 < n:
             var k1 = min(k0 + nb, n)
             for k in range(k0, k1):
-                if pivot_block:
-                    ctx.enqueue_function[lu_pivot_block_kernel](
-                        a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
-                    )
-                else:
-                    ctx.enqueue_function[lu_pivot_kernel](a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=1)
+                ctx.enqueue_function[lu_pivot_block_kernel](
+                    a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
+                )
                 ctx.enqueue_function[lu_swap_cols_kernel](
                     a, piv, Int32(k), Int32(n), Int32(0), Int32(k1),
                     grid_dim=_blocks(k1), block_dim=TPB,
@@ -1621,13 +1586,10 @@ def launch_lu(
                     grid_dim=(tiles, tiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
                 )
             k0 = k1
-    for k in range(n if n > lu_serial_max() and nb == 0 else 0):
-        if pivot_block:
-            ctx.enqueue_function[lu_pivot_block_kernel](
-                a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
-            )
-        else:
-            ctx.enqueue_function[lu_pivot_kernel](a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=1)
+    for k in range(n if nb == 0 else 0):
+        ctx.enqueue_function[lu_pivot_block_kernel](
+            a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
+        )
         ctx.enqueue_function[lu_swap_kernel](
             a, piv, Int32(k), Int32(n), grid_dim=_blocks(n), block_dim=TPB
         )
