@@ -787,11 +787,44 @@ def kmeans_predict(
         n_clusters * n_features
     )
     var labels = ctx.enqueue_create_buffer[DType.uint32](n_samples)
-    var x_norm = ctx.enqueue_create_buffer[DType.float32](n_samples)
-    var min_dist = ctx.enqueue_create_buffer[DType.float32](n_samples)
-    ctx.synchronize()
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=centroids, src_ptr=centroids_ptr)
+    kmeans_predict_device(
+        ctx, x, n_samples, n_features, n_clusters, centroids, labels, metric
+    )
+    ctx.enqueue_copy(dst_ptr=out_labels_ptr, src_buf=labels)
+    ctx.synchronize()
+
+
+def kmeans_predict_device(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    mut centroids: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    metric: Int = METRIC_L2_EXPANDED,
+) raises:
+    """`kmeans_predict` on rows and centroids already on the device (the
+    same pass, statement for statement); `labels` is written on the
+    device. For callers whose rows a kernel just produced (the spectral
+    Nystrom predict), so they do not leave the device in between."""
+    if n_samples < 1 or n_features < 1 or n_clusters < 1:
+        raise Error(
+            "kmeans_predict needs n_samples, n_features and n_clusters >= 1: got "
+            + String(n_samples)
+            + ", "
+            + String(n_features)
+            + ", "
+            + String(n_clusters)
+        )
+    var params = KMeansParams.default()
+    params.n_clusters = n_clusters
+    params.metric = metric
+    params.validate()
+    var x_norm = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var min_dist = ctx.enqueue_create_buffer[DType.float32](n_samples)
     var take_sqrt = Int32(0)
     if centroid_norms_take_sqrt(metric):
         take_sqrt = Int32(1)
@@ -803,7 +836,6 @@ def kmeans_predict(
         grid_dim=(n_samples, 1, 1),
         block_dim=(NORM_TPB, 1, 1),
     )
-    ctx.synchronize()
     predict(
         ctx,
         x,
@@ -815,8 +847,9 @@ def kmeans_predict(
         n_samples,
         n_features,
     )
-    ctx.enqueue_copy(dst_ptr=out_labels_ptr, src_buf=labels)
     ctx.synchronize()
+    _ = x_norm^
+    _ = min_dist^
 
 
 def kmeans_transform(
