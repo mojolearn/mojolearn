@@ -7,8 +7,8 @@ kernel_methods (estimator.mojo). Nothing in gemm/, core/gemm.mojo, decomposition
 
 | switch | kind | site | what it changes under FAST on Apple |
 |---|---|---|---|
-| `MOJOLEARN_KERNEL_FAST_BAYES_STATS=1` | env, read in `x_linear/device.mojo` fit_device (ip[6]) | `x_linear/bayes_fast.mojo` (new); `x_linear/bayes.mojo` bayes_ridge_fit, ard_fit | the column means, the centered Gram, X'y, |y - ym|^2 and var(y) of all rows on the whole grid (8192-row chunks of 32 x 32 tiles, chunk partials folded ascending: enetcv_fast's pattern on [X, y]) in place of `xg_means_kernel` + `xg_gram_kernel` (one SERIAL million-row float32 chain per Gram cell, `chain_cfmad`) and the team's own one-block passes (`t_col_means`, `t_mean`, the X'y chains, `_var` on the lead thread) |
-| `MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1` | env, same site (ip[7]) | `x_linear/tops.mojo` t_jacobi_eig (new `skip_tol` parameter, default the old 1e-9) | the team Jacobi skips a rotation at |a_pq| <= 1e-7 sqrt(a_pp a_qq) instead of 1e-9; float32 roundoff leaves every |a_pq| near 6e-8 x scale so the 1e-9 test never fires and the 220 x 220 solve ran all 60 sweeps (about 5x what the diagonal needs), 24,090 rotations x 3 barriers each on one block |
+| `MOJOLEARN_KERNEL_FAST_BAYES_STATS=1` | env, read in `x_linear/device.mojo` fit_device | `x_linear/bayes_fast.mojo` (new); the grid driver's setup unit in `fit_device` (BayesianRidge, unweighted, on main's `bayes_grid` path only; ARD keeps main's moments grid) | the column means, the centered Gram, X'y, |y - ym|^2 and var(y) of all rows on the whole grid (8192-row chunks of 32 x 32 tiles, chunk partials folded ascending: enetcv_fast's pattern on [X, y]) in place of `xg_means_kernel` + `xg_gram_kernel` (one SERIAL million-row float32 chain per Gram cell, `chain_cfmad`) and the team's own one-block passes (`t_col_means`, `t_mean`, the X'y chains, `_var` on the lead thread) |
+| `MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1` | env, same site (ip[7]) | `x_linear/tops.mojo` t_jacobi_eig (new `skip_tol` parameter, default the old 1e-9), through `bayes_eig_prep`'s `jtol` from `bayes_prep` (team) and `bayes_eig_kernel` (grid driver) | the team Jacobi skips a rotation at |a_pq| <= 1e-7 sqrt(a_pp a_qq) instead of 1e-9; float32 roundoff leaves every |a_pq| near 6e-8 x scale so the 1e-9 test never fires and the 220 x 220 solve ran all 60 sweeps (about 5x what the diagonal needs), 24,090 rotations x 3 barriers each on one block |
 | `MOJOLEARN_KERNEL_FAST_GPR_RESIDENT=1` | env | `gaussian_process/estimator.mojo` gpr_fit_host | K stays on the device for add_jitter, potrf_lower, chol_logdet and cho_solve; L and the dual come down once. The shipped path downloads K, runs `chol_validate_matrix` on the host (a symmetry pass over n^2 cells), uploads K again (`cholesky_factor_host`), downloads L, uploads L and y (`cholesky_solve_host`), downloads the dual: five n^2 host round trips around one 3,000-row factorization. Not taken with an identity card or a sabotage arm |
 | `MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH=1` | env | `kernel_methods/estimator.mojo` _nystroem_device_eigh (new `_nystroem_rr_eigh`) | the q x q basis kernel's eigenproblem by x_decomp/jacobi_par.mojo's round-robin Jacobi (q / 2 disjoint rotations a launch, two launches a round, the cyclic test on the host once a sweep, 30-sweep budget, fallback to the cyclic kernel on the untouched input) instead of `jacobi_eigh_kernel`: ONE block of 256 threads running the 32,640 rotations of a sweep (q = 256) serially behind two barriers each |
 
@@ -75,3 +75,20 @@ A switch becomes the FAST default when its arm is faster on the M3 and held-out 
 run-to-run spread (for `BAYES_STATS` the Istella R2 must also move toward scikit-learn's: that is the point of
 it); then the env read goes and the arm is the code. `BAYES_STATS` and `BAYES_JACOBI` are independent and the
 `-both-` rows measure them together.
+
+## After the 2026-10-02 merge of origin/main
+
+Main rebuilt BayesianRidge on grid kernels (`bayes_yparts_kernel`, `bayes_yvar_parts_kernel`, `bayes_xty_kernel`,
+`bayes_eig_kernel`, the yy / step / finish kernels) with the Gram from the moments grid
+(`x_linear/moments_grid.mojo`: a block per 16-column tile pair, one serial chain per cell, IDENTICAL bits) and
+factored the team fit into `bayes_prep` / `bayes_eig_prep` / `bayes_step` / `bayes_finish`. Main's path wins:
+`x_linear/bayes.mojo` is main's plus the `jtol` parameter; the ip[6] team flag is gone.
+- `BAYES_STATS` is re-expressed on top: when set (BayesianRidge, unweighted, `bayes_grid` on) the setup unit
+  runs `bayes_fast_stats` (chunked 32 x 32 tiles, pairwise partials) for xm, G and X'y instead of the moments
+  grid and `bayes_xty_kernel`; the y partials and the eig unit are main's. It still adds the pairwise Gram
+  (the Istella quality diagnosis above) and row parallelism at small d; ARD is no longer covered (main's
+  ARD Istella is 0.86 s).
+- `BAYES_JACOBI` is unchanged in effect; it reaches both the team Jacobi and the grid driver's eig block.
+- Light A/B form: `1 2`, no -ident lines, one dataset per switch (istella; taxi after a win). The huber,
+  kernel-pca, gpc, svr and kernel-ridge baseline-only lines were dropped (no switch of this lane; the
+  board holds their times).

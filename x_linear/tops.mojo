@@ -268,11 +268,12 @@ def chain_fmad_ix(a: FP, b: FP, boff: Int, bstep: Int, ix: IP, cnt: Int) -> Floa
 
 @always_inline
 def chain_cfmad(a: FP, aoff: Int, astep: Int, ma: Float32, b: FP, boff: Int, bstep: Int, mb: Float32,
-                n: Int) -> Float32:
+                n: Int, init: Float32 = Float32(0)) -> Float32:
     """acc = fmad(fs(a_i, ma), fs(b_i, mb), acc), a_i = a[aoff + i*astep],
-    b_i = b[boff + i*bstep], i ascending (a centered cross product)."""
+    b_i = b[boff + i*bstep], i ascending (a centered cross product); `init`
+    resumes a chain (an acc is always flushed, so `_fz(init)` is its word)."""
     comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
-    var acc = Float32(0)
+    var acc = _fz(init)
     var i = 0
     while i + U <= n:
         var pa = SIMD[DType.float32, U]()

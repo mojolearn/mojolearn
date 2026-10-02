@@ -321,6 +321,18 @@ from cholesky.checks.chol_sabotage import (
     sabotage_trsm_panel_kernel,
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_panel_kernel, trsm_panel_guarded_kernel
+from cholesky.checks.potrf_strip import (
+    CHOL_STRIP_ROUTE,
+    CHOL_STRIP_W,
+    CS_BM,
+    CS_DIAG_TPB,
+    CS_NB,
+    CS_TPB,
+    CS_TRSM_TPB,
+    chol_strip_diag_kernel,
+    chol_strip_trsm_kernel,
+    chol_strip_update_kernel,
+)
 from gemm.checks.gemm_identical import (
     APPLE_MMA,
     APPLE_MMA_ADMIT_EXP_SUM,
@@ -1661,6 +1673,109 @@ def fast_diag_factor(
         s0 += sw
 
 
+def _strip_update(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    mut dinfo: DeviceBuffer[DType.int32],
+    n: Int,
+    col0: Int,
+    col_end: Int,
+    p_lo: Int,
+    p_hi: Int,
+    guard: Bool,
+) raises:
+    """Panels p_lo .. p_hi - 1 onto the lower cells of columns
+    [col0, col_end), rows col0 .. n - 1 (`chol_strip_update_kernel`)."""
+    if p_hi <= p_lo or col_end <= col0:
+        return
+    var gx = (col_end - col0 + CS_BM - 1) // CS_BM
+    var gy = (n - col0 + CS_BM - 1) // CS_BM
+    if guard:
+        ctx.enqueue_function[chol_strip_update_kernel[True]](
+            a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(col0),
+            Int32(col_end), Int32(p_lo), Int32(p_hi),
+            grid_dim=(gx, gy, 1), block_dim=(CS_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[chol_strip_update_kernel[False]](
+            a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(col0),
+            Int32(col_end), Int32(p_lo), Int32(p_hi),
+            grid_dim=(gx, gy, 1), block_dim=(CS_TPB, 1, 1),
+        )
+
+
+def _potrf_lower_strips(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    n: Int,
+    elem_tpb: Int,
+    mut trace: IdentityTrace,
+) raises -> CholRun:
+    """`potrf_lower` at the pinned width in strips of CHOL_STRIP_W columns
+    (`cholesky/checks/potrf_strip.mojo` states the argument). Strip
+    [J, J + sw): one launch applies panels 0 .. J/32 - 1 to its lower cells,
+    left-looking; then each of its panels is factored, solved and applied
+    to the strip's later columns. `info` is read ONCE, after the loop; every
+    launch returns at once when it is set, so the matrix is what the
+    per-panel read stopped at, and the later strips then take the panels
+    before the failing one: the right-looking partial factor."""
+    var dinfo = ctx.enqueue_create_buffer[DType.int32](1)
+    var hinfo = ctx.enqueue_create_host_buffer[DType.int32](1)
+    hinfo.unsafe_ptr().unsafe_store(0, Int32(0))
+    ctx.enqueue_copy(dst_buf=dinfo, src_ptr=hinfo.unsafe_ptr())
+    var j_strip = 0
+    while j_strip < n:
+        var sw = min(CHOL_STRIP_W, n - j_strip)
+        var s_end = j_strip + sw
+        _strip_update(ctx, a, dinfo, n, j_strip, s_end, 0, j_strip // CS_NB, True)
+        var q0 = j_strip
+        while q0 < s_end:
+            var w = min(CS_NB, n - q0)
+            var n_trail = n - q0 - w
+            ctx.enqueue_function[chol_strip_diag_kernel](
+                a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(q0), Int32(w),
+                grid_dim=(1, 1, 1), block_dim=(CS_DIAG_TPB, 1, 1),
+            )
+            if n_trail > 0:
+                ctx.enqueue_function[chol_strip_trsm_kernel](
+                    a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(q0),
+                    Int32(n_trail),
+                    grid_dim=((n_trail + CS_TRSM_TPB - 1) // CS_TRSM_TPB, 1, 1),
+                    block_dim=(CS_TRSM_TPB, 1, 1),
+                )
+                var p = q0 // CS_NB
+                _strip_update(ctx, a, dinfo, n, q0 + w, s_end, p, p + 1, True)
+            q0 += CS_NB
+        j_strip = s_end
+    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+    ctx.synchronize()
+    var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
+    var n_panels = (n + CS_NB - 1) // CS_NB
+    if info != 0:
+        var pf = (info - 1) // CS_NB
+        var f_end = min((pf * CS_NB // CHOL_STRIP_W + 1) * CHOL_STRIP_W, n)
+        _strip_update(ctx, a, dinfo, n, f_end, n, 0, pf, False)
+        n_panels = pf + 1
+    else:
+        var cells = n * n
+        ctx.enqueue_function[zero_upper_kernel](
+            a.unsafe_ptr(),
+            Int32(n),
+            grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
+    trace.record_device(ctx, "chol.factor", a, n * n)
+    var nb_record = List[Int32]()
+    nb_record.append(Int32(CS_NB))
+    nb_record.append(Int32(n_panels))
+    nb_record.append(Int32(info))
+    trace.record_list_i32("chol.nb", nb_record)
+    ctx.synchronize()
+    _ = dinfo^
+    _ = hinfo^
+    return CholRun(info, CS_NB, n_panels)
+
+
 def potrf_lower(
     ctx: DeviceContext,
     mut a: DeviceBuffer[DType.float32],
@@ -1743,6 +1858,20 @@ def potrf_lower(
             " and letting a later one run past it is an out-of-bounds write"
             " that a small matrix will not show you"
         )
+
+    # The strip schedule (cholesky/checks/potrf_strip.mojo): the same cells,
+    # the same steps, the same order. Only without a trace, a sabotage or a
+    # multi-GPU owner set, at the pinned width. MOJOLEARN_CHOL_STRIP_OFF=1
+    # runs the panel-by-panel loop below (the A/B arm).
+    comptime if CHOL_STRIP_ROUTE:
+        if (
+            sabotage == CHOL_SAB_NONE
+            and not trace.enabled
+            and chol_device_count() == 1
+            and nb == CS_NB
+            and String(getenv("MOJOLEARN_CHOL_STRIP_OFF")) != "1"
+        ):
+            return _potrf_lower_strips(ctx, a, n, elem_tpb, trace)
 
     var nt_max = n - nb
     if nt_max < 0:

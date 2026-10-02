@@ -125,6 +125,22 @@ from gbdt.models.kernel.add_bin_values import (
 from gbdt.models.model_text import load_model_text
 from gbdt.models.oblivious_model import BIN_SPLIT_TAKE_BIN
 from gbdt.train import TrainedModel, model_input_features
+from gbdt.models.kernel.resident_link import (
+    LINK_BLOCK,
+    STAGE_BLOCK,
+    STAGE_NO_BAD,
+    STAGE_SKIP,
+    resident_link_kernel,
+    resident_stage_kernel,
+)
+from std.os import getenv
+
+
+def _old_link() -> Bool:
+    """Lane hr2-gbdt-host's A/B switch: `MOJOLEARN_HR2_OLD_LINK=1` takes
+    the previous host staging and host link; unset takes the device ones.
+    Deleted once the gates pass."""
+    return getenv("MOJOLEARN_HR2_OLD_LINK") == "1"
 
 #: `gbdt_resident_predict`'s modes. The first three are
 #: `gbdt/estimator.mojo`'s `PREDICT_RAW`, `PREDICT_SOFTMAX` and
@@ -193,6 +209,16 @@ struct ResidentGbdtModel(Movable):
     var d_cindex: Optional[DeviceBuffer[DType.uint32]]
     var d_cursor: Optional[DeviceBuffer[DType.float32]]
     var h_out: Optional[HostBuffer[DType.float32]]
+    #: lane hr2-gbdt-host: the device staging + link workspace (raw input
+    #: as handed over, per-column NaN treatment, the refusal word, and the
+    #: three output planes the link writes in the caller's layout)
+    var d_raw: Optional[DeviceBuffer[DType.float32]]
+    var d_treat: Optional[DeviceBuffer[DType.int32]]
+    var d_bad: Optional[DeviceBuffer[DType.int32]]
+    var h_bad: Optional[HostBuffer[DType.int32]]
+    var d_out_f32: Optional[DeviceBuffer[DType.float32]]
+    var d_out_u64: Optional[DeviceBuffer[DType.uint64]]
+    var d_out_i64: Optional[DeviceBuffer[DType.int64]]
 
     def __init__(out self, text: String) raises:
         var tm = load_model_text(text)
@@ -379,10 +405,24 @@ struct ResidentGbdtModel(Movable):
         self.d_cindex = Optional[DeviceBuffer[DType.uint32]]()
         self.d_cursor = Optional[DeviceBuffer[DType.float32]]()
         self.h_out = Optional[HostBuffer[DType.float32]]()
+        self.d_raw = Optional[DeviceBuffer[DType.float32]]()
+        self.d_treat = Optional[DeviceBuffer[DType.int32]]()
+        self.d_bad = Optional[DeviceBuffer[DType.int32]]()
+        self.h_bad = Optional[HostBuffer[DType.int32]]()
+        self.d_out_f32 = Optional[DeviceBuffer[DType.float32]]()
+        self.d_out_u64 = Optional[DeviceBuffer[DType.uint64]]()
+        self.d_out_i64 = Optional[DeviceBuffer[DType.int64]]()
         self.ctx = ctx^
 
     def __deinit__(deinit self):
         # every buffer before the context it was created on (DEVIATION 1946)
+        _ = self.d_out_i64^
+        _ = self.d_out_u64^
+        _ = self.d_out_f32^
+        _ = self.h_bad^
+        _ = self.d_bad^
+        _ = self.d_treat^
+        _ = self.d_raw^
         _ = self.h_out^
         _ = self.d_cursor^
         _ = self.d_cindex^
@@ -412,6 +452,10 @@ struct ResidentGbdtModel(Movable):
         releases the old set first)."""
         if self.workspace_rows == n_rows:
             return
+        self.d_out_i64 = None
+        self.d_out_u64 = None
+        self.d_out_f32 = None
+        self.d_raw = None
         self.h_out = None
         self.d_cursor = None
         self.d_cindex = None
@@ -419,9 +463,10 @@ struct ResidentGbdtModel(Movable):
         self.h_x = None
         self.workspace_rows = 0
         try:
-            self.h_x = self.ctx.enqueue_create_host_buffer[DType.float32](
-                n_rows * self.n_columns
-            )
+            if _old_link():
+                self.h_x = self.ctx.enqueue_create_host_buffer[DType.float32](
+                    n_rows * self.n_columns
+                )
             self.d_x = self.ctx.enqueue_create_buffer[DType.float32](
                 n_rows * self.n_columns
             )
@@ -431,11 +476,53 @@ struct ResidentGbdtModel(Movable):
             self.d_cursor = self.ctx.enqueue_create_buffer[DType.float32](
                 self.approx_dim * n_rows
             )
-            self.h_out = self.ctx.enqueue_create_host_buffer[DType.float32](
-                self.approx_dim * n_rows
-            )
+            if _old_link():
+                self.h_out = self.ctx.enqueue_create_host_buffer[DType.float32](
+                    self.approx_dim * n_rows
+                )
+            else:
+                self.d_raw = self.ctx.enqueue_create_buffer[DType.float32](
+                    n_rows * self.n_columns
+                )
+                self.d_out_f32 = self.ctx.enqueue_create_buffer[
+                    DType.float32
+                ]((self.approx_dim + 1) * n_rows)
+                self.d_out_u64 = self.ctx.enqueue_create_buffer[DType.uint64](
+                    2 * n_rows
+                )
+                self.d_out_i64 = self.ctx.enqueue_create_buffer[DType.int64](
+                    n_rows
+                )
+                if not self.d_treat:
+                    var ht = self.ctx.enqueue_create_host_buffer[DType.int32](
+                        max(self.n_columns, 1)
+                    )
+                    self.ctx.synchronize()
+                    var htp = ht.unsafe_ptr()
+                    for f in range(self.n_columns):
+                        var t = Int32(STAGE_SKIP)
+                        if len(self.tm.borders[f]) != 0:
+                            t = Int32(NAN_TREATMENT_AS_IS)
+                            if len(self.tm.nan_treatment) == self.n_columns:
+                                t = Int32(self.tm.nan_treatment[f])
+                        htp.unsafe_store(f, t)
+                    var dt = self.ctx.enqueue_create_buffer[DType.int32](
+                        max(self.n_columns, 1)
+                    )
+                    self.ctx.enqueue_copy(dst_buf=dt, src_buf=ht)
+                    self.d_treat = dt^
+                    self.d_bad = self.ctx.enqueue_create_buffer[DType.int32](1)
+                    self.h_bad = self.ctx.enqueue_create_host_buffer[
+                        DType.int32
+                    ](1)
+                    self.ctx.synchronize()
+                    _ = ht^
         except e:
             self.ctx.synchronize()
+            self.d_out_i64 = None
+            self.d_out_u64 = None
+            self.d_out_f32 = None
+            self.d_raw = None
             self.h_out = None
             self.d_cursor = None
             self.d_cindex = None
@@ -651,6 +738,138 @@ struct ResidentGbdtModel(Movable):
             ) * self.approx_dim
             t += count
 
+    def _predict_device(
+        mut self,
+        src: MutPointer[Float32, MutUntrackedOrigin],
+        n_rows: Int,
+        row_major: Bool,
+        out_f32: MutPointer[Float32, MutUntrackedOrigin],
+        out_f64: MutPointer[Float64, MutUntrackedOrigin],
+        out_i64: MutPointer[Int64, MutUntrackedOrigin],
+        mode: Int,
+    ) raises -> Int:
+        """Lane hr2-gbdt-host: the whole call on the device. The input
+        goes up as handed over, `resident_stage_kernel` substitutes and
+        lays it out, the binarize launches and `_apply` run as before,
+        `resident_link_kernel` writes the caller's output, and ONE copy
+        brings it into the caller's array; the refusal word rides the
+        same drain. The mode refusals are made before any device work."""
+        var dim = self.approx_dim
+        var width: Int
+        if mode >= RESIDENT_CLASSES_BINARY and mode <= RESIDENT_CLASSES_OVA:
+            if mode == RESIDENT_CLASSES_BINARY and dim != 1:
+                raise Error("binary class prediction requires one model dimension")
+            width = 1
+        elif mode == RESIDENT_RAW:
+            width = dim
+        elif mode == RESIDENT_SIGMOID_PAIR:
+            if dim != 1:
+                raise Error(
+                    "gbdt_resident_predict: the sigmoid pair is the"
+                    " one-dimensional Logloss / CrossEntropy transform; this"
+                    " model has dim " + String(dim)
+                )
+            width = 2
+        else:
+            if dim < 2:
+                raise Error(
+                    "gbdt_predict_multi: a probability mode needs a"
+                    " multi-dimensional model; this one has dim " + String(dim)
+                    + ". A two-class problem's link is the sigmoid, which"
+                    " Logloss's own predict_proba applies."
+                )
+            if mode != RESIDENT_SOFTMAX and mode != RESIDENT_SIGMOID:
+                raise Error("gbdt_resident_predict: unknown mode " + String(mode))
+            width = dim + 1 if mode == RESIDENT_SOFTMAX else dim
+        ref ctx = self.ctx
+        var n_cols = self.n_columns
+        try:
+            enqueue_fill(ctx, self.d_bad.value(), STAGE_NO_BAD)
+            enqueue_fill(ctx, self.d_cindex.value(), UInt32(0))
+            if n_rows * n_cols > 0:
+                ctx.enqueue_copy(
+                    dst_buf=self.d_raw.value(),
+                    src_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](src),
+                )
+                var total = n_rows * n_cols
+                var blocks = min((total + STAGE_BLOCK - 1) // STAGE_BLOCK, 65535)
+                ctx.enqueue_function[resident_stage_kernel](
+                    self.d_raw.value().unsafe_ptr(),
+                    self.d_x.value().unsafe_ptr(),
+                    self.d_treat.value().unsafe_ptr(),
+                    self.d_bad.value().unsafe_ptr(),
+                    Int32(n_rows), Int32(n_cols),
+                    Int32(1 if row_major else 0),
+                    grid_dim=blocks, block_dim=STAGE_BLOCK,
+                )
+            comptime BIN_GRID = BINARIZE_BLOCK_SIZE * BINARIZE_DOCS_PER_THREAD
+            for f in range(n_cols):
+                if len(self.tm.borders[f]) == 0:
+                    continue
+                ref cf = self.layout.features[f]
+                ctx.enqueue_function[binarize_float_feature_kernel](
+                    Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
+                    self.d_x.value().unsafe_ptr() + f * n_rows, Int32(n_rows),
+                    self.d_borders.unsafe_ptr() + f * BORDER_SLAB,
+                    self.d_cindex.value().unsafe_ptr(),
+                    grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
+                    block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
+                )
+            self._apply(n_rows)
+            var link_blocks = min((n_rows + LINK_BLOCK - 1) // LINK_BLOCK, 65535)
+            ctx.enqueue_function[resident_link_kernel](
+                self.d_cursor.value().unsafe_ptr(),
+                self.d_out_f32.value().unsafe_ptr(),
+                self.d_out_u64.value().unsafe_ptr(),
+                self.d_out_i64.value().unsafe_ptr(),
+                Int32(n_rows), Int32(dim), Int32(mode),
+                Int32(1 if RESIDENT_SABOTAGE else 0),
+                Int32(1 if PAIR_SABOTAGE else 0),
+                grid_dim=link_blocks, block_dim=LINK_BLOCK,
+            )
+            ctx.enqueue_copy(
+                dst_buf=self.h_bad.value(), src_buf=self.d_bad.value()
+            )
+            if mode >= RESIDENT_CLASSES_BINARY and mode <= RESIDENT_CLASSES_OVA:
+                var v = self.d_out_i64.value().create_sub_buffer[DType.int64](
+                    0, n_rows
+                )
+                ctx.enqueue_copy(
+                    dst_ptr=rebind[UnsafePointer[Int64, MutAnyOrigin]](out_i64),
+                    src_buf=v,
+                )
+                ctx.synchronize()
+            elif mode == RESIDENT_SIGMOID_PAIR:
+                var v2 = self.d_out_u64.value().create_sub_buffer[DType.uint64](
+                    0, 2 * n_rows
+                )
+                ctx.enqueue_copy(
+                    dst_ptr=rebind[UnsafePointer[UInt64, MutAnyOrigin]](
+                        out_f64.bitcast[UInt64]()
+                    ),
+                    src_buf=v2,
+                )
+                ctx.synchronize()
+            else:
+                var v3 = self.d_out_f32.value().create_sub_buffer[
+                    DType.float32
+                ](0, width * n_rows)
+                ctx.enqueue_copy(
+                    dst_ptr=rebind[UnsafePointer[Float32, MutAnyOrigin]](out_f32),
+                    src_buf=v3,
+                )
+                ctx.synchronize()
+        except e:
+            ctx.synchronize()
+            raise e
+        var first = Int(self.h_bad.value().unsafe_ptr().unsafe_load(0))
+        if first != Int(STAGE_NO_BAD):
+            raise Error(
+                "There are NaNs in feature number " + String(first)
+                + " but there were no NaNs in the learn dataset"
+            )
+        return width
+
     def predict_into(
         mut self,
         x: MutPointer[Float32, MutUntrackedOrigin],
@@ -701,6 +920,12 @@ struct ResidentGbdtModel(Movable):
                 expanded.unsafe_ptr()
             )
         self._prepare_workspace(n_rows)
+        if not _old_link():
+            var width = self._predict_device(
+                src, n_rows, staged_row_major, out_f32, out_f64, out_i64, mode
+            )
+            _ = len(expanded)
+            return width
         self._stage(src, n_rows, staged_row_major)
         ref ctx = self.ctx
         try:

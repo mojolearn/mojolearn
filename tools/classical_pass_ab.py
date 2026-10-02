@@ -14,7 +14,7 @@ import argparse, hashlib, json, os, shutil, subprocess, sys, time
 from pathlib import Path
 
 OLD_ENV = {
-    "lu": {"MOJOLEARN_XD_LU_PIVOT_SERIAL": "1", "MOJOLEARN_XD_LU_SOLVE_SERIAL": "1"},
+    "lu": {"MOJOLEARN_XD_LU_PIVOT_SERIAL": "1"},
     "sgd-reg": {"MOJOLEARN_X_LINEAR_SGD_HOST": "0"},
     "sgd-clf": {"MOJOLEARN_X_LINEAR_SGD_HOST": "0"},
     "lars": {"MOJOLEARN_X_LINEAR_LARS_GRID_GRAM": "0"},

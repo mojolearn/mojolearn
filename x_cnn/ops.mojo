@@ -877,12 +877,21 @@ def mul_at(i: Int, a: FP, b: FP, dst: FP, f3: FP, q: IP, p: IP):
 def spmm_at(i: Int, vals: FP, h: FP, dst: FP, f3: FP, q: IP, p: IP):
     """dst[r, f] = fold over row r's entries e, in order, of
     mode 0: vals[e] * h[col[e], f];  mode 1: h[col[e], f], then / count
-    (PyG mean aggregation; an empty row is +0.0);  mode 2: h[col[e], f] / vals[e]."""
+    (PyG mean aggregation; an empty row is +0.0);  mode 2: h[col[e], f] / vals[e];
+    mode 3 (no fold): h[r, f] / count, row r's entry count read from the
+    offsets (the in-degree on the forward view; +0.0 for an empty row), the
+    mean's backward scale before a mode-0 fold of the transposed view."""
     var n = _g(p, 0); var F = _g(p, 1); var mode = _g(p, 3)
     var r = i // F
     var f = i - r * F
     var lo = _g(q, r)
     var hi = _g(q, r + 1)
+    if mode == 3:
+        var d = Float32(0)
+        if hi > lo:
+            d = ftz(identical_div(ftz(h.unsafe_load(i)), Float32(hi - lo)))
+        dst.unsafe_store(i, d)
+        return
     var acc = Float32(0)
     for e in range(lo, hi):
         var c = _g(q, n + 1 + e)

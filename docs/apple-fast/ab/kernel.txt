@@ -1,27 +1,4 @@
-CMD lane/apple-fast-kernel kernel-bayes-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-ident bayesian-ridge istella 3 3 -
-CMD lane/apple-fast-kernel kernel-bayes-stats-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-stats-ist bayesian-ridge istella 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
-CMD lane/apple-fast-kernel kernel-bayes-jacobi-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-jacobi-ist bayesian-ridge istella 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1
-CMD lane/apple-fast-kernel kernel-bayes-both-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-both-ist bayesian-ridge istella 3 3 - "MOJOLEARN_KERNEL_FAST_BAYES_STATS=1 MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1"
-CMD lane/apple-fast-kernel kernel-bayes-stats-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-stats-taxi bayesian-ridge taxi 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
-CMD lane/apple-fast-kernel kernel-bayes-both-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-both-taxi bayesian-ridge taxi 3 3 - "MOJOLEARN_KERNEL_FAST_BAYES_STATS=1 MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1"
-CMD lane/apple-fast-kernel kernel-ard-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh kernel-ard-ident ard istella 3 3 -
-CMD lane/apple-fast-kernel kernel-ard-stats-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-ard-stats-ist ard istella 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
-CMD lane/apple-fast-kernel kernel-ard-stats-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-ard-stats-taxi ard taxi 3 3 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
-CMD lane/apple-fast-kernel kernel-huber-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh kernel-huber-ident huber istella 3 3 -
-CMD lane/apple-fast-kernel kernel-huber-fast-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-huber-fast-taxi huber taxi 3 3 -
-CMD lane/apple-fast-kernel kernel-huber-fast-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-huber-fast-ist huber istella 3 3 -
-CMD lane/apple-fast-kernel kernel-kpca-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh kernel-kpca-ident kernel-pca istella 3 3 -
-CMD lane/apple-fast-kernel kernel-kpca-fast-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-kpca-fast-ist kernel-pca istella 3 3 -
-CMD lane/apple-fast-kernel kernel-kpca-fast-taxi AFC_FAMILY=algos bash tools/afc_ab.sh kernel-kpca-fast-taxi kernel-pca taxi 3 3 -
-CMD lane/apple-fast-kernel kernel-gpr-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpr-ident gpr istella 3 3 -
-CMD lane/apple-fast-kernel kernel-gpr-resident-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpr-resident-ist gpr istella 3 3 - MOJOLEARN_KERNEL_FAST_GPR_RESIDENT=1
-CMD lane/apple-fast-kernel kernel-gpr-resident-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpr-resident-taxi gpr taxi 3 3 - MOJOLEARN_KERNEL_FAST_GPR_RESIDENT=1
-CMD lane/apple-fast-kernel kernel-gpc-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpc-ident gpc istella 3 3 -
-CMD lane/apple-fast-kernel kernel-gpc-fast-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpc-fast-ist gpc istella 3 3 -
-CMD lane/apple-fast-kernel kernel-svr-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-svr-ident svr istella 3 3 -
-CMD lane/apple-fast-kernel kernel-svr-fast-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-svr-fast-ist svr istella 3 3 -
-CMD lane/apple-fast-kernel kernel-krr-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-krr-ident kernel-ridge istella 3 3 -
-CMD lane/apple-fast-kernel kernel-krr-fast-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-krr-fast-ist kernel-ridge istella 3 3 -
-CMD lane/apple-fast-kernel kernel-nys-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-nys-ident nystroem istella 3 3 -
-CMD lane/apple-fast-kernel kernel-nys-rr-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-nys-rr-ist nystroem istella 3 3 - MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH=1
-CMD lane/apple-fast-kernel kernel-nys-rr-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-nys-rr-taxi nystroem taxi 3 3 - MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH=1
+CMD lane/apple-fast-kernel kernel-bayes-stats-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-stats-ist bayesian-ridge istella 1 2 - MOJOLEARN_KERNEL_FAST_BAYES_STATS=1
+CMD lane/apple-fast-kernel kernel-bayes-jacobi-ist AFC_FAMILY=algos bash tools/afc_ab.sh kernel-bayes-jacobi-ist bayesian-ridge istella 1 2 - MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1
+CMD lane/apple-fast-kernel kernel-gpr-resident-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-gpr-resident-ist gpr istella 1 2 - MOJOLEARN_KERNEL_FAST_GPR_RESIDENT=1
+CMD lane/apple-fast-kernel kernel-nys-rr-ist AFC_FAMILY=classical2 bash tools/afc_ab.sh kernel-nys-rr-ist nystroem istella 1 2 - MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH=1
