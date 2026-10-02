@@ -14,8 +14,6 @@ from core.classical_host_predict import host_qn_sigmoid_into, host_qn_softmax_in
 from core.host_predict_threads import HostF32Ptr, HostF64Ptr, host_predict_task_count
 
 
-
-
 def _sigmoid_serial(scores: List[Float32], mut dst: List[Float64]):
     for i in range(len(scores)):
         var z = Float64(scores[i])
