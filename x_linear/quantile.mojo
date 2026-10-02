@@ -48,6 +48,24 @@ def _soft(a: Float32, t: Float32) -> Float32:
     return Float32(0)
 
 
+@always_inline
+def _balance(prim_n: Float32, dual_n: Float32, eps_p: Float32, eps_d: Float32, rel: Bool) -> Float32:
+    """The residual balancing's rho factor (2, 1/2 or 0 = keep). rel (the
+    default, fp[4] = 1): the residuals RELATIVE to their stopping
+    tolerances, prim/eps_p against dual/eps_d (OSQP's rule); the absolute
+    rule (prim against dual, fp[4] = 0, MOJOLEARN_XQ_ABS_BALANCE=1) compares
+    two norms in different units and on standardized Istella-S and taxi
+    doubled rho to ~4000x its start, where float32 ADMM drifts off the LP
+    optimum (Istella-S r2 -1.7e11) and never meets the tolerance (5000 iterations)."""
+    var p = fm(prim_n, eps_d) if rel else prim_n
+    var dl = fm(dual_n, eps_p) if rel else dual_n
+    if p > fm(Float32(10), dl):
+        return Float32(2)
+    if dl > fm(Float32(10), p):
+        return Float32(0.5)
+    return Float32(0)
+
+
 def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """The team schedule (see quantile_fit).
     ip: [max_iter, fit_intercept, sample_weight]; fp: [quantile, alpha, eps_abs, eps_rel].
@@ -65,6 +83,7 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
     var alpha = ld(fp, 1)
     var eps_abs = ld(fp, 2)
     var eps_rel = ld(fp, 3)
+    var rel_bal = ld(fp, 4) != Float32(0)
     var sw = ldi(ip, 2) != 0
     var den = i2f(n)
     if sw:
@@ -262,11 +281,7 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
             if prim_n <= eps_p and dual_n <= eps_d:
                 flag = 1
             elif (it + 1) % 10 == 0:
-                var factor = Float32(0)
-                if prim_n > fm(Float32(10), dual_n):
-                    factor = Float32(2)
-                elif dual_n > fm(Float32(10), prim_n):
-                    factor = Float32(0.5)
+                var factor = _balance(prim_n, dual_n, eps_p, eps_d, rel_bal)
                 if factor != 0:
                     rho = fm(rho, factor)
                     inv = fd(Float32(1), factor)
@@ -307,6 +322,7 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
     var alpha = ld(fp, 1)
     var eps_abs = ld(fp, 2)
     var eps_rel = ld(fp, 3)
+    var rel_bal = ld(fp, 4) != Float32(0)
     var sw = ldi(ip, 2) != 0
     var den = i2f(n)
     if sw:
@@ -478,11 +494,7 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
             converged = True
             break
         if (it + 1) % 10 == 0:
-            var factor = Float32(0)
-            if prim_n > fm(Float32(10), dual_n):
-                factor = Float32(2)
-            elif dual_n > fm(Float32(10), prim_n):
-                factor = Float32(0.5)
+            var factor = _balance(prim_n, dual_n, eps_p, eps_d, rel_bal)
             if factor != 0:
                 rho = fm(rho, factor)
                 var inv = fd(Float32(1), factor)

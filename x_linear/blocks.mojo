@@ -40,7 +40,7 @@ from x_linear.tops import fold_fa, fold_sq, chain_fmad, chain_fmad_scaled, fold_
 from x_linear.glm import _unit, GLM_LINK_LOG
 from x_linear.lbfgs import LBFGS_M, lbfgs_work, _dot
 from x_linear.logcv import _predict_code
-from x_linear.quantile import _soft
+from x_linear.quantile import _soft, _balance
 from checks.numerics import identical_sigmoid, identical_softplus, ftz
 from std.sys.compile import is_defined
 
@@ -66,6 +66,7 @@ comptime XQ_IT = 9
 comptime XQ_DONE = 10
 comptime XQ_ITERS = 11
 comptime XQ_MAX_ITER = 12
+comptime XQ_REL_BAL = 13
 comptime XQ_SCALARS = 16
 
 #: Threads per block (the M2 Pro drops a dispatch above its pipeline limit
@@ -724,12 +725,10 @@ def xq_step_kernel(
     var pick = 0
     var inv = Float32(1)
     if (it + 1) % 10 == 0:
-        var factor = Float32(0)
-        if prim_n > fm(Float32(10), dual_n):
-            factor = Float32(2)
+        var factor = _balance(prim_n, dual_n, eps_p, eps_d, ld(sd, sc + XQ_REL_BAL) != Float32(0))
+        if factor == Float32(2):
             pick = 1
-        elif dual_n > fm(Float32(10), prim_n):
-            factor = Float32(0.5)
+        elif factor == Float32(0.5):
             pick = 2
         if factor != 0:
             rho = fm(rho, factor)
@@ -1361,6 +1360,7 @@ def quantile_fit_blocks(
     var alpha = fp[1]
     var eps_abs = fp[2]
     var eps_rel = fp[3]
+    var rel_bal = fp[4] != Float32(0)
     var m = d + 1 if fi else d
     var gcells = m * (m + 1) // 2
     var b = XB(ctx, x, n_x, y, n_y, n, d, d + 4, 6)
@@ -1442,6 +1442,7 @@ def quantile_fit_blocks(
             hp.unsafe_store(sc + XQ_Q, q)
             hp.unsafe_store(sc + XQ_ALPHA, alpha)
             hp.unsafe_store(sc + XQ_EPS_ABS, eps_abs)
+            hp.unsafe_store(sc + XQ_REL_BAL, Float32(1) if rel_bal else Float32(0))
             hp.unsafe_store(sc + XQ_EPS_REL, eps_rel)
             hp.unsafe_store(sc + XQ_YNORM, ynorm)
             hp.unsafe_store(sc + XQ_DEN, den)
@@ -1564,11 +1565,7 @@ def quantile_fit_blocks(
             converged = True
             break
         if (it + 1) % 10 == 0:
-            var factor = Float32(0)
-            if prim_n > fm(Float32(10), dual_n):
-                factor = Float32(2)
-            elif dual_n > fm(Float32(10), prim_n):
-                factor = Float32(0.5)
+            var factor = _balance(prim_n, dual_n, eps_p, eps_d, rel_bal)
             if factor != 0:
                 rho = fm(rho, factor)
                 var inv = fd(Float32(1), factor)
