@@ -19,7 +19,7 @@ from x_linear.quantile import quantile_fit
 from x_linear.ridge import ridge_fit
 from x_linear.cd import enetcv_fit
 from x_linear.logcv import logcv_fit, logcv_team_rows
-from x_linear.isotonic import isotonic_fit, isotonic_predict
+from x_linear.isotonic import isotonic_predict
 from x_linear.ridgecv import ridge_kfold_fit
 from std.sys.info import is_gpu
 
@@ -48,7 +48,7 @@ def team_fit(algo: Int) -> Bool:
     return (algo == ALGO_GLM or algo == ALGO_HUBER or algo == ALGO_LOGCV
             or algo == ALGO_BAYES or algo == ALGO_ARD or algo == ALGO_RIDGE
             or algo == ALGO_ENETCV or algo == ALGO_LARS
-            or algo == ALGO_QUANTILE or algo == ALGO_SGD or algo == ALGO_ISOTONIC
+            or algo == ALGO_QUANTILE or algo == ALGO_SGD
             or algo == ALGO_ISOTONIC_PREDICT)
 
 
@@ -96,8 +96,9 @@ def fit_dispatch(t: Team, algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: F
     elif algo == ALGO_LOGCV:
         logcv_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ISOTONIC:
-        comptime if not is_gpu():
-            isotonic_fit(t, x, y, n, d, ip, fp, res, fw, iw)
+        # the host binding calls `isotonic_fit_host` (x_linear/isotonic_host.mojo)
+        # and the device binding `_iso_fit_grid`; nothing reaches this arm
+        pass
     elif algo == ALGO_ISOTONIC_PREDICT:
         comptime if not is_gpu():
             isotonic_predict(t, x, y, n, d, ip, fp, res, fw, iw)
