@@ -1,6 +1,9 @@
 # lane/apple-fast-lle: LocallyLinearEmbedding's null space on the sparse factor
 
 Written without a Mojo toolchain (cloud peer, 2026-10-02); the first M3 build is the compile check.
+Merged with origin/lane/apple-fast-isotonic-knn (fd9ebd32a): the LLE fit's standard branch runs the peer's fused k-NN
+(`MOJOLEARN_LLE_FAST_KNN=1`, env, FAST tier) before the barycenter weights, then this lane's eigensolver. The A/B
+below sets no env, so both arms take main's `graph_knn` cell and the define measures the eigensolver alone.
 The switch defaults OFF and is compiled under FAST + Apple only; IDENTICAL compiles main's code unchanged
 (the binding registers the new entry only under the define; the Python kit takes the route only when the entry exists).
 
