@@ -143,12 +143,12 @@ def _soft_kernel(
     a: MutPointer[UInt64, MutAnyOrigin],
     b: MutPointer[UInt64, MutAnyOrigin],
     c: MutPointer[UInt64, MutAnyOrigin],
-    out: MutPointer[UInt64, MutAnyOrigin],
+    dst: MutPointer[UInt64, MutAnyOrigin],
     n: Int32,
 ):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
-        out[i] = _soft(Int(ops[i]), a[i], b[i], c[i])
+        dst[i] = _soft(Int(ops[i]), a[i], b[i], c[i])
 
 
 def main() raises:
