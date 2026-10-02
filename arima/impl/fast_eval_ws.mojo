@@ -33,12 +33,11 @@ FAST on Apple only; IDENTICAL never imports this file's launches."""
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import block_dim, block_idx, thread_idx
 
+from arima.impl.batched_arima import _mark_infeasible
 from arima.impl.batched_kalman import (
     KALMAN_FAST_EVAL_WS,
     KalmanWorkspace,
     fast_kalman_into,
-    kalman_raise_info_init,
-    kalman_raise_info_loop,
 )
 from arima.impl.timeSeries.arima_helpers import batched_jones_transform
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack
@@ -93,10 +92,11 @@ def ew_grad_kernel(
     d_grad.unsafe_store(N * b + i, ftz(diff / h))
 
 
-struct FastEvalWS(Copyable, Movable):
-    """Every buffer of one stacked evaluation, sized for `nb` series.
-    Copyable because every field is a refcounted buffer or an Int, so the
-    optimizer can keep one in a List that is empty when the switch is off."""
+struct FastEvalWS(Movable):
+    """Every buffer of one stacked evaluation, sized for `nb` series. The
+    optimizer holds one in an `Optional` that is `None` when the switch is
+    off (`training/byte_lm_logits.mojo`'s `Optional[ByteLogitsScratch]`
+    shape), so nothing here is allocated in any other build."""
 
     var nb: Int
     var n_obs: Int
@@ -174,53 +174,56 @@ struct FastEvalWS(Copyable, Movable):
         """`batched_loglike_grad_host` with `trans = True` on the held
         buffers: the base log-likelihood of `xin` (`nb * N` values) into
         `ll_out[0:nb]`, the forward-difference gradient into `g_out[0:nb *
-        N]`; the Kalman refusals are raised after the one synchronize."""
+        N]`. A series whose Kalman refusal code is set at the base or any
+        forward-difference member gets -inf (`_mark_infeasible`, as that
+        function does), never a raise. The body exists only under
+        KALMAN_FAST_EVAL_WS, so no kernel here is instantiated elsewhere."""
         comptime if not KALMAN_FAST_EVAL_WS:
             raise Error("FastEvalWS.eval: not compiled in this build (MOJOLEARN_ARIMA_FAST_EVAL_WS)")
-        var nb = self.nb
-        var N = self.N
-        var eb = self.eb
-        var nb_x = nb * N
-        if len(xin) != nb_x:
-            raise Error(
-                "FastEvalWS.eval: len(xin)=" + String(len(xin)) + " is not nb * N = "
-                + String(nb_x)
+        else:
+            var nb = self.nb
+            var N = self.N
+            var eb = self.eb
+            var nb_x = nb * N
+            if len(xin) != nb_x:
+                raise Error(
+                    "FastEvalWS.eval: len(xin)=" + String(len(xin)) + " is not nb * N = "
+                    + String(nb_x)
+                )
+            ctx.enqueue_copy(
+                dst_buf=self.d_x.create_sub_buffer[DType.float32](0, nb_x), src_ptr=xin.unsafe_ptr()
             )
-        ctx.enqueue_copy(
-            dst_buf=self.d_x.create_sub_buffer[DType.float32](0, nb_x), src_ptr=xin.unsafe_ptr()
-        )
-        var g1 = (eb + EW_TPB - 1) // EW_TPB
-        ctx.enqueue_function[ew_stack_kernel](
-            self.x_ext.unsafe_ptr(), self.d_x.unsafe_ptr(), Int32(nb), Int32(N), h,
-            grid_dim=(g1, 1, 1), block_dim=(EW_TPB, 1, 1),
-        )
-        unpack(ctx, self.p_ext, order, eb, self.x_ext)
-        batched_jones_transform(ctx, order, eb, False, self.p_ext, self.t_params)
-        fast_kalman_into(ctx, self.y_ext, self.t_params, order, eb, self.n_obs, self.ws)
-        var g2 = (nb_x + EW_TPB - 1) // EW_TPB
-        ctx.enqueue_function[ew_grad_kernel](
-            self.d_grad.unsafe_ptr(), self.ws.loglike.unsafe_ptr(), Int32(nb), Int32(N), h,
-            grid_dim=(g2, 1, 1), block_dim=(EW_TPB, 1, 1),
-        )
-        ctx.enqueue_copy(
-            dst_ptr=self.h_ll.unsafe_ptr(),
-            src_buf=self.ws.loglike.create_sub_buffer[DType.float32](0, nb),
-        )
-        ctx.enqueue_copy(
-            dst_ptr=self.h_g.unsafe_ptr(),
-            src_buf=self.d_grad.create_sub_buffer[DType.float32](0, nb_x),
-        )
-        ctx.enqueue_copy(dst_ptr=self.h_i0.unsafe_ptr(), src_buf=self.ws.info_init)
-        ctx.enqueue_copy(dst_ptr=self.h_i1.unsafe_ptr(), src_buf=self.ws.info_loop)
-        ctx.synchronize()
-        var i0 = List[Int32](capacity=eb)
-        var i1 = List[Int32](capacity=eb)
-        for b in range(eb):
-            i0.append(self.h_i0.unsafe_ptr()[b])
-            i1.append(self.h_i1.unsafe_ptr()[b])
-        kalman_raise_info_init(i0)
-        kalman_raise_info_loop(i1, order.n_diff())
-        for b in range(nb):
-            ll_out[b] = self.h_ll.unsafe_ptr()[b]
-        for t in range(nb_x):
-            g_out[t] = self.h_g.unsafe_ptr()[t]
+            var g1 = (eb + EW_TPB - 1) // EW_TPB
+            ctx.enqueue_function[ew_stack_kernel](
+                self.x_ext.unsafe_ptr(), self.d_x.unsafe_ptr(), Int32(nb), Int32(N), h,
+                grid_dim=(g1, 1, 1), block_dim=(EW_TPB, 1, 1),
+            )
+            unpack(ctx, self.p_ext, order, eb, self.x_ext)
+            batched_jones_transform(ctx, order, eb, False, self.p_ext, self.t_params)
+            fast_kalman_into(ctx, self.y_ext, self.t_params, order, eb, self.n_obs, self.ws)
+            var g2 = (nb_x + EW_TPB - 1) // EW_TPB
+            ctx.enqueue_function[ew_grad_kernel](
+                self.d_grad.unsafe_ptr(), self.ws.loglike.unsafe_ptr(), Int32(nb), Int32(N), h,
+                grid_dim=(g2, 1, 1), block_dim=(EW_TPB, 1, 1),
+            )
+            ctx.enqueue_copy(
+                dst_ptr=self.h_ll.unsafe_ptr(),
+                src_buf=self.ws.loglike.create_sub_buffer[DType.float32](0, nb),
+            )
+            ctx.enqueue_copy(
+                dst_ptr=self.h_g.unsafe_ptr(),
+                src_buf=self.d_grad.create_sub_buffer[DType.float32](0, nb_x),
+            )
+            ctx.enqueue_copy(dst_ptr=self.h_i0.unsafe_ptr(), src_buf=self.ws.info_init)
+            ctx.enqueue_copy(dst_ptr=self.h_i1.unsafe_ptr(), src_buf=self.ws.info_loop)
+            ctx.synchronize()
+            var i0 = List[Int32](capacity=eb)
+            var i1 = List[Int32](capacity=eb)
+            for b in range(eb):
+                i0.append(self.h_i0.unsafe_ptr()[b])
+                i1.append(self.h_i1.unsafe_ptr()[b])
+            for b in range(nb):
+                ll_out[b] = self.h_ll.unsafe_ptr()[b]
+            _mark_infeasible(i0, i1, nb, ll_out)
+            for t in range(nb_x):
+                g_out[t] = self.h_g.unsafe_ptr()[t]

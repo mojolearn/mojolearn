@@ -738,9 +738,7 @@ def obs_intercept_kernel(
 # ---------------------------------------------------------------------------
 
 
-struct KalmanWorkspace(Copyable, Movable):
-    # (Copyable since lane/apple-fast-tsa: every field is a refcounted
-    # DeviceBuffer; the FAST fit's held workspace keeps one in a List.)
+struct KalmanWorkspace(Movable):
     """Every device buffer `_batched_kalman_filter` reaches (their
     `ARIMAMemory` carve-outs), owned here so each outlives its last launch
     and can be recorded as a card stage."""

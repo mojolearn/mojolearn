@@ -151,7 +151,7 @@ def validate_order(order: ARIMAOrder) raises:
 # ---------------------------------------------------------------------------
 
 
-struct ARIMAParams(Copyable, Movable):
+struct ARIMAParams(Movable):
     """`arima_common.h:53-62`: one device array per parameter kind, laid out
     `[kind][bid * n_kind + i]` (`mu`, `sigma2` are `batch_size` long; `ar`
     is `p * batch_size`, ...). Allocated at least one float long so an

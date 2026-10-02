@@ -111,7 +111,9 @@ from arima.impl.batched_arima import (
     batched_loglike_grad_host,
     batched_loglike_grad_x,
 )
+from arima.impl.batched_kalman import KALMAN_FAST_EVAL_WS
 from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
+from arima.impl.fast_eval_ws import FastEvalWS
 from arima.impl.lbfgs_host import (
     armijo_ok,
     check_convergence_at,
@@ -362,6 +364,62 @@ def _eval_packed(
             gout[b * n + i] = gs[j * n + i]
 
 
+def _eval_ws(
+    ctx: DeviceContext,
+    mut ews: FastEvalWS,
+    order_kf: ARIMAOrder,
+    h: Float32,
+    scale: Float32,
+    xin: List[Float32],
+    mut fout: List[Float32],
+    mut gout: List[Float32],
+) raises:
+    """lane/apple-fast-tsa (`-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`, FAST on
+    Apple): `eval_batch`'s ARIMA_FAST_BATCH_GRAD arm on the solve's held
+    workspace (`arima/impl/fast_eval_ws.mojo`): the same flushes, the same
+    infeasible rule. `ews` is sized for exactly `len(fout)` series."""
+    var nb = ews.nb
+    var llh = _zeros(nb)
+    var gh = _zeros(len(xin))
+    ews.eval(ctx, order_kf, h, xin, llh, gh)
+    for b in range(nb):
+        fout[b] = ftz(ftz(-llh[b]) / scale)
+    for i in range(len(xin)):
+        gout[i] = ftz(ftz(-gh[i]) / scale)
+    _infeasible_fg(llh, nb, len(xin) // max(1, nb), fout, gout)
+
+
+def _eval_ws_packed(
+    ctx: DeviceContext,
+    mut ews: FastEvalWS,
+    cidx: List[Int],
+    order_kf: ARIMAOrder,
+    h: Float32,
+    scale: Float32,
+    xin: List[Float32],
+    mut fout: List[Float32],
+    mut gout: List[Float32],
+    n: Int,
+) raises:
+    """`_eval_packed` on the held workspace (rebuilt at the packed size by
+    the repack): the series `cidx` only, scattered back into the full
+    `fout` / `gout`."""
+    var nb = len(cidx)
+    var xs = List[Float32](capacity=nb * n)
+    for j in range(nb):
+        var b = cidx[j]
+        for i in range(n):
+            xs.append(xin[b * n + i])
+    var fs = _zeros(nb)
+    var gs = _zeros(nb * n)
+    _eval_ws(ctx, ews, order_kf, h, scale, xs, fs, gs)
+    for j in range(nb):
+        var b = cidx[j]
+        fout[b] = fs[j]
+        for i in range(n):
+            gout[b * n + i] = gs[j * n + i]
+
+
 def _iter_tag(k: Int) -> String:
     """`fit.iterNNNN`, zero padded so the card's tags sort and align, as
     `glm/impl/qn/qn_solvers.mojo::_iter_tag` does."""
@@ -435,6 +493,13 @@ def batched_min_lbfgs(
     var d_x_pert = ctx.enqueue_create_buffer[DType.float32](b_n)
     var scratch = ARIMAParams(ctx, order_kf, batch_size)
     ctx.synchronize()
+    # lane/apple-fast-tsa: the stacked evaluation's buffers, held for the
+    # whole solve (`-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`, FAST on Apple, no
+    # exog); `None` in every other build, so nothing below allocates.
+    var ews = Optional[FastEvalWS]()
+    comptime if KALMAN_FAST_EVAL_WS:
+        if order_kf.n_exog == 0:
+            ews = FastEvalWS(ctx, d_y_kf, batch_size, n_obs_kf, order_kf)
 
     # host state, flat and per series
     var x = x0.copy()
@@ -488,10 +553,16 @@ def batched_min_lbfgs(
 
     # `min_lbfgs:161-173`: evaluate at x0, and exit early per series if it
     # is already a minimizer.
-    eval_batch(
-        ctx, d_y_kf, d_exog_kf, batch_size, n_obs_kf, order_kf, d_x, d_grad, d_x_pert,
-        scratch, h, scale, x, fx, grad,
-    )
+    var ev0_done = False
+    comptime if KALMAN_FAST_EVAL_WS:
+        if ews:
+            _eval_ws(ctx, ews.value(), order_kf, h, scale, x, fx, grad)
+            ev0_done = True
+    if not ev0_done:
+        eval_batch(
+            ctx, d_y_kf, d_exog_kf, batch_size, n_obs_kf, order_kf, d_x, d_grad, d_x_pert,
+            scratch, h, scale, x, fx, grad,
+        )
     n_eval += 1
     trace.record_list_f32("fit.init.x", x)
     trace.record_list_f32("fit.init.loss", fx)
@@ -544,6 +615,13 @@ def batched_min_lbfgs(
                             yc.append(y_host[b * n_obs_kf + t])
                 d_y_c = ctx.enqueue_create_buffer[DType.float32](max(1, len(yc)))
                 _upload(ctx, d_y_c, yc)
+                # lane/apple-fast-tsa: the held workspace follows the pack
+                # (its series copies come from `d_y_c`, on the same queue
+                # as the upload above)
+                comptime if KALMAN_FAST_EVAL_WS:
+                    if ews:
+                        ews = None
+                        ews = FastEvalWS(ctx, d_y_c, n_act, n_obs_kf, order_kf)
 
         # `min_lbfgs:188-191`: save x, grad, fx
         for b in range(batch_size):
@@ -592,16 +670,27 @@ def batched_min_lbfgs(
                 else:
                     for i in range(n):
                         cand[b * n + i] = x[b * n + i]
-            if len(cidx) > 0:
-                _eval_packed(
-                    ctx, d_y_c, d_exog_kf, cidx, n_obs_kf, order_kf, d_x,
-                    d_grad, d_x_pert, scratch, h, scale, cand, fxc, gradc, n,
-                )
-            else:
-                eval_batch(
-                    ctx, d_y_kf, d_exog_kf, batch_size, n_obs_kf, order_kf, d_x,
-                    d_grad, d_x_pert, scratch, h, scale, cand, fxc, gradc,
-                )
+            var ev_done = False
+            comptime if KALMAN_FAST_EVAL_WS:
+                if ews:
+                    if len(cidx) > 0:
+                        _eval_ws_packed(
+                            ctx, ews.value(), cidx, order_kf, h, scale, cand, fxc, gradc, n,
+                        )
+                    else:
+                        _eval_ws(ctx, ews.value(), order_kf, h, scale, cand, fxc, gradc)
+                    ev_done = True
+            if not ev_done:
+                if len(cidx) > 0:
+                    _eval_packed(
+                        ctx, d_y_c, d_exog_kf, cidx, n_obs_kf, order_kf, d_x,
+                        d_grad, d_x_pert, scratch, h, scale, cand, fxc, gradc, n,
+                    )
+                else:
+                    eval_batch(
+                        ctx, d_y_kf, d_exog_kf, batch_size, n_obs_kf, order_kf, d_x,
+                        d_grad, d_x_pert, scratch, h, scale, cand, fxc, gradc,
+                    )
             n_eval += 1
             for b in range(batch_size):
                 if not searching[b]:
@@ -685,6 +774,7 @@ def batched_min_lbfgs(
     _ = d_x_pert^
     _ = scratch^
     _ = d_y_c^
+    _ = ews^
     return BatchedLBFGSResult(
         x=x^, fx=fx^, n_iter=n_iter^, retcode=retcode^, n_eval=n_eval
     )
