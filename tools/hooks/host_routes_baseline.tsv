@@ -25,9 +25,6 @@ py-loop	py-numpy	gap-neural-overhead2	debt	python/mojolearn/_expansion_decomp.py
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	for i in range(n):
 py-loop	py-numpy	gap-treeshap	debt	python/mojolearn/_expansion_trees.py	0	for i in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_trees.py	1	for i in range(n):
-host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	if os.path.exists(_backend.host_module_path(_HOST_INFERENCE_BASENAME)):
-host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	return _backend.load_host_module(_HOST_BASENAME)
-host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	return _backend.load_host_module(_HOST_INFERENCE_BASENAME)
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_linalg_impl.py	0	for i in range(n):
 py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
 py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	from concurrent.futures import ThreadPoolExecutor
