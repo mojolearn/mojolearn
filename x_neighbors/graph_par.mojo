@@ -50,6 +50,9 @@ from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
 from x_neighbors.items import FP, IP, _add, _sub
 
 comptime LP = MutPointer[Int64, MutAnyOrigin]
+comptime FPU = MutPointer[Float32, MutUntrackedOrigin]
+comptime IPU = MutPointer[Int32, MutUntrackedOrigin]
+comptime LPU = MutPointer[Int64, MutUntrackedOrigin]
 
 comptime GP_FOLD_BLOCK = 2048
 """Elements per item of a blocked float fold (lane neural-pass141's
@@ -76,13 +79,15 @@ def gp_scan_blocks(count: Int) -> Int:
 
 @fieldwise_init
 struct GA(TrivialRegisterPassable):
-    """One stage's arguments (module note); the arenas, the layout and the
-    dense input as addresses."""
-    var f: Int
-    var i: Int
-    var l: Int
-    var lay: Int
-    var a: Int
+    """One stage's arguments (module note): the arenas, the layout and the
+    dense input as typed pointers. Never an integer address: on Metal a
+    pointer rebuilt from an integer inside a kernel does not reach device
+    memory (every load reads 0, every store is lost)."""
+    var f: FPU
+    var i: IPU
+    var l: LPU
+    var lay: LPU
+    var a: FPU
     var n0: Int
     var n1: Int
     var n2: Int
@@ -153,27 +158,27 @@ trait GExec:
 
 @always_inline
 def _off(g: GA, slot: Int) -> Int:
-    return Int(LP(unsafe_from_address=g.lay).unsafe_load(slot))
+    return Int(g.lay.unsafe_load(slot))
 
 
 @always_inline
 def _fs(g: GA, slot: Int) -> FP:
-    return FP(unsafe_from_address=g.f).unsafe_offset(_off(g, slot))
+    return g.f.unsafe_offset(_off(g, slot)).unsafe_origin_cast[MutAnyOrigin]()
 
 
 @always_inline
 def _is(g: GA, slot: Int) -> IP:
-    return IP(unsafe_from_address=g.i).unsafe_offset(_off(g, slot))
+    return g.i.unsafe_offset(_off(g, slot)).unsafe_origin_cast[MutAnyOrigin]()
 
 
 @always_inline
 def _ls(g: GA, slot: Int) -> LP:
-    return LP(unsafe_from_address=g.l).unsafe_offset(_off(g, slot))
+    return g.l.unsafe_offset(_off(g, slot)).unsafe_origin_cast[MutAnyOrigin]()
 
 
 @always_inline
 def _ain(g: GA) -> FP:
-    return FP(unsafe_from_address=g.a)
+    return g.a.unsafe_origin_cast[MutAnyOrigin]()
 
 
 # ------------------------------------------------------------------ stage ids
@@ -611,7 +616,7 @@ def _lv_uncol(t: Int, g: GA):
 
 def _lv_ckey(t: Int, g: GA):
     """The key (colour, node) of node t into KA. n0 nodes."""
-    _ls(g, L_KA).unsafe_store(t, Int64(Int(_is(g, L_COLOR).unsafe_load(t)) * g.n0 + t))
+    _ls(g, L_KA).unsafe_store(t, Int64(_is(g, L_COLOR).unsafe_load(t)) * Int64(g.n0) + Int64(t))
 
 
 def _lower_bound(k: LP, lo: Int, hi: Int, key: Int64) -> Int:
@@ -628,7 +633,7 @@ def _lower_bound(k: LP, lo: Int, hi: Int, key: Int64) -> Int:
 
 def _lv_coff(t: Int, g: GA):
     """Colour t's first position among the sorted keys (slot n4, n0 nodes)."""
-    _is(g, L_COFF).unsafe_store(t, Int32(_lower_bound(_ls(g, g.n4), 0, g.n0, Int64(t * g.n0))))
+    _is(g, L_COFF).unsafe_store(t, Int32(_lower_bound(_ls(g, g.n4), 0, g.n0, Int64(t) * Int64(g.n0))))
 
 
 def _lv_copyl(t: Int, g: GA):
@@ -702,7 +707,7 @@ def lv_move_item(t: Int, g: GA):
     for j in range(d):
         var v = Int(col.unsafe_load(lo + j))
         if v != u and val.unsafe_load(lo + j) != Float32(0):
-            ek.unsafe_store(lo + cnt, Int64(Int(comm.unsafe_load(v)) * d + j))
+            ek.unsafe_store(lo + cnt, Int64(comm.unsafe_load(v)) * Int64(d) + Int64(j))
             cnt += 1
     if cnt == 0:
         return
@@ -715,10 +720,11 @@ def lv_move_item(t: Int, g: GA):
     var stot_cu = _sub(stot.unsafe_load(cu), du)
     # k_i,in of u's own community
     var kcu = Float32(0)
+    var d64 = Int64(d)
     for r in range(cnt):
-        var key = Int(ek.unsafe_load(lo + r))
-        if key // d == cu:
-            kcu = _add(kcu, val.unsafe_load(lo + key % d))
+        var key = ek.unsafe_load(lo + r)
+        if key // d64 == Int64(cu):
+            kcu = _add(kcu, val.unsafe_load(lo + Int(key % d64)))
     var remove_cost = _add(
         -ftz(identical_div(kcu, m)),
         ftz(identical_div(ftz(identical_mul(res, ftz(identical_mul(stot_cu, du)))), two_m2)),
@@ -727,10 +733,10 @@ def lv_move_item(t: Int, g: GA):
     var best_gain = Float32(0)
     var r = 0
     while r < cnt:
-        var c = Int(ek.unsafe_load(lo + r)) // d
+        var c = Int(ek.unsafe_load(lo + r) // d64)
         var kc = Float32(0)
-        while r < cnt and Int(ek.unsafe_load(lo + r)) // d == c:
-            kc = _add(kc, val.unsafe_load(lo + Int(ek.unsafe_load(lo + r)) % d))
+        while r < cnt and ek.unsafe_load(lo + r) // d64 == Int64(c):
+            kc = _add(kc, val.unsafe_load(lo + Int(ek.unsafe_load(lo + r) % d64)))
             r += 1
         if kc == Float32(0):
             continue
@@ -750,7 +756,7 @@ def lv_move_item(t: Int, g: GA):
 def _lv_skey(t: Int, g: GA):
     """The key (community, node) of node t into KA; stot[t] = 0 (an empty
     community's total). n0 nodes."""
-    _ls(g, L_KA).unsafe_store(t, Int64(Int(_is(g, L_COMM).unsafe_load(t)) * g.n0 + t))
+    _ls(g, L_KA).unsafe_store(t, Int64(_is(g, L_COMM).unsafe_load(t)) * Int64(g.n0) + Int64(t))
     _fs(g, L_STOT).unsafe_store(t, Float32(0))
 
 
@@ -759,16 +765,17 @@ def _lv_sfold(t: Int, g: GA):
     its members' degrees folded in ascending node id into stot."""
     var nn = g.n0
     var k = _ls(g, g.n4)
-    var c = Int(k.unsafe_load(t)) // nn
-    if t > 0 and Int(k.unsafe_load(t - 1)) // nn == c:
+    var n64 = Int64(nn)
+    var c = k.unsafe_load(t) // n64
+    if t > 0 and k.unsafe_load(t - 1) // n64 == c:
         return
     var deg = _fs(g, L_DEG)
     var acc = Float32(0)
     var r = t
-    while r < nn and Int(k.unsafe_load(r)) // nn == c:
-        acc = _add(acc, deg.unsafe_load(Int(k.unsafe_load(r)) % nn))
+    while r < nn and k.unsafe_load(r) // n64 == c:
+        acc = _add(acc, deg.unsafe_load(Int(k.unsafe_load(r) % n64)))
         r += 1
-    _fs(g, L_STOT).unsafe_store(c, acc)
+    _fs(g, L_STOT).unsafe_store(Int(c), acc)
 
 
 def _lv_qv(t: Int, g: GA):
@@ -828,16 +835,17 @@ def _lv_ekey(t: Int, g: GA):
     var cu = Int(comm.unsafe_load(u))
     var cv = Int(comm.unsafe_load(v))
     var keep = (cu != cv or u <= v) and _gval(g, g.n3).unsafe_load(t) != Float32(0)
-    var pk = cu * nc + cv if keep else nc * nc
-    _ls(g, L_KA).unsafe_store(t, Int64(pk * nnz + t))
+    # int64 throughout: the key exceeds 2^31 (Int is narrower on some GPUs)
+    var pk = Int64(cu) * Int64(nc) + Int64(cv) if keep else Int64(nc) * Int64(nc)
+    _ls(g, L_KA).unsafe_store(t, pk * Int64(nnz) + Int64(t))
 
 
 @always_inline
 def _ehead(k: LP, t: Int, nnz: Int, nc: Int) -> Bool:
-    var pk = Int(k.unsafe_load(t)) // nnz
-    if pk >= nc * nc:
+    var pk = k.unsafe_load(t) // Int64(nnz)
+    if pk >= Int64(nc) * Int64(nc):
         return False
-    return t == 0 or Int(k.unsafe_load(t - 1)) // nnz != pk
+    return t == 0 or k.unsafe_load(t - 1) // Int64(nnz) != pk
 
 
 def _lv_head(t: Int, g: GA):
@@ -853,16 +861,16 @@ def _lv_agg(t: Int, g: GA):
     var k = _ls(g, g.n4)
     if not _ehead(k, t, nnz, nc):
         return
-    var pk = Int(k.unsafe_load(t)) // nnz
+    var pk = k.unsafe_load(t) // Int64(nnz)
     var val = _gval(g, g.n3)
     var w = Float32(0)
     var r = t
-    while r < nnz and Int(k.unsafe_load(r)) // nnz == pk:
-        w = _add(w, val.unsafe_load(Int(k.unsafe_load(r)) % nnz))
+    while r < nnz and k.unsafe_load(r) // Int64(nnz) == pk:
+        w = _add(w, val.unsafe_load(Int(k.unsafe_load(r) % Int64(nnz))))
         r += 1
     var s = Int(_is(g, L_SEGH).unsafe_load(t))
-    _gsrc(g, g.n5).unsafe_store(s, Int32(pk // nc))
-    _gcol(g, g.n5).unsafe_store(s, Int32(pk % nc))
+    _gsrc(g, g.n5).unsafe_store(s, Int32(pk // Int64(nc)))
+    _gcol(g, g.n5).unsafe_store(s, Int32(pk % Int64(nc)))
     _gval(g, g.n5).unsafe_store(s, w)
 
 

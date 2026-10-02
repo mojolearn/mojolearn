@@ -5,7 +5,7 @@ stage's items in ascending t, the same driver, so its bits are the device's
 by construction. CPU-only installs and the verification digests only."""
 from x_neighbors.items import FP, IP
 from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE
-from x_neighbors.graph_par import GA, GExec, Lay, LP, GP_NST, gp_item, pr_drive, lv_drive
+from x_neighbors.graph_par import GA, GExec, Lay, LP, FPU, IPU, LPU, GP_NST, gp_item, pr_drive, lv_drive
 
 
 struct GraphCpu(GExec):
@@ -29,11 +29,11 @@ struct GraphCpu(GExec):
         self.ll = List[Int64](length=max(lay.nl, 1), fill=Int64(0))
         self.llay = lay.off.copy()
         return GA(
-            Int(self.lf.unsafe_ptr()),
-            Int(self.li.unsafe_ptr()),
-            Int(self.ll.unsafe_ptr()),
-            Int(self.llay.unsafe_ptr()),
-            self.a if self.a != 0 else Int(self.lf.unsafe_ptr()),
+            FPU(unsafe_from_address=Int(self.lf.unsafe_ptr())),
+            IPU(unsafe_from_address=Int(self.li.unsafe_ptr())),
+            LPU(unsafe_from_address=Int(self.ll.unsafe_ptr())),
+            LPU(unsafe_from_address=Int(self.llay.unsafe_ptr())),
+            FPU(unsafe_from_address=self.a if self.a != 0 else Int(self.lf.unsafe_ptr())),
             0, 0, 0, 0, 0, 0, 0, 0, Float32(0), Float32(0),
         )
 

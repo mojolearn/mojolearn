@@ -17,7 +17,9 @@ def gp_kernel[S: Int](
 ):
     var t = _tid()
     if t < Int(cnt):
-        gp_item[S](t, GA(Int(f), Int(i), Int(l), Int(lay), Int(a), Int(n0), Int(n1), Int(n2), Int(n3), Int(n4), Int(n5), Int(n6), Int(n7), x0, x1))
+        gp_item[S](t, GA(f.unsafe_origin_cast[MutUntrackedOrigin](), i.unsafe_origin_cast[MutUntrackedOrigin](),
+                         l.unsafe_origin_cast[MutUntrackedOrigin](), lay.unsafe_origin_cast[MutUntrackedOrigin](),
+                         a.unsafe_origin_cast[MutUntrackedOrigin](), Int(n0), Int(n1), Int(n2), Int(n3), Int(n4), Int(n5), Int(n6), Int(n7), x0, x1))
 
 
 struct GraphDev(GExec):
@@ -40,13 +42,13 @@ struct GraphDev(GExec):
         self.off = List[Int64]()
         self.ctx = ctx^
 
-    def _ga(self) -> GA:
+    def _ga(mut self) -> GA:
         return GA(
-            Int(self.bf.unsafe_ptr()),
-            Int(self.bi.unsafe_ptr()),
-            Int(self.bl.unsafe_ptr()),
-            Int(self.blay.unsafe_ptr()),
-            Int(self.ba.unsafe_ptr()),
+            self.bf.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            self.bi.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            self.bl.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            self.blay.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            self.ba.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             0, 0, 0, 0, 0, 0, 0, 0, Float32(0), Float32(0),
         )
 
@@ -68,8 +70,9 @@ struct GraphDev(GExec):
         comptime for s in range(GP_NST):
             if stage == s:
                 self.ctx.enqueue_function[gp_kernel[s]](
-                    FP(unsafe_from_address=g.f), IP(unsafe_from_address=g.i), LP(unsafe_from_address=g.l),
-                    LP(unsafe_from_address=g.lay), FP(unsafe_from_address=g.a),
+                    g.f.unsafe_origin_cast[MutAnyOrigin](), g.i.unsafe_origin_cast[MutAnyOrigin](),
+                    g.l.unsafe_origin_cast[MutAnyOrigin](), g.lay.unsafe_origin_cast[MutAnyOrigin](),
+                    g.a.unsafe_origin_cast[MutAnyOrigin](),
                     Int64(g.n0), Int64(g.n1), Int64(g.n2), Int64(g.n3), Int64(g.n4), Int64(g.n5), Int64(g.n6),
                     Int64(g.n7), g.x0, g.x1, Int64(count),
                     grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
