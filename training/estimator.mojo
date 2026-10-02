@@ -99,6 +99,7 @@ from core.host_parallel import host_parallelize
 from std.time import perf_counter_ns
 
 from core.staged_download import download_f32_into
+from core.device_pool import pool_give, pool_take
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.checks.loss import (
     identical_ce_backward_into,
@@ -873,6 +874,15 @@ def identical_ce_admit_call(reduction: Int, want_grad: Int, n_rows: Int) raises:
 # The A/B switch back to the mirror is removed (lane gap-neural-overhead2).
 # No bit moves: the same kernels read the same uploaded bytes.
 comptime _CE_STAGE_POOL = "MojoDownloadStagesTrainingIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesTrainingFast"
+# The N * V device buffers of the host entry (logits, dlogits, shift, expo,
+# weights, the smoothing logp) and the GEMM workspace are kept between calls
+# in this pool (core/device_pool.mojo, lane gap-neural-overhead2) instead of
+# allocated and freed per call. Every kernel writes each cell of its output
+# before any read (ce_shift_exp, ce_logp, ce_weights, ce_dlogits store every
+# cell, ignored rows included), the logits are uploaded whole, and the
+# workspace is gated dirty-safe (`identical_ce_workspace_max_floats`): a
+# buffer's previous words never reach a result. Storage only: no bit moves.
+comptime _CE_DEV_POOL = "MojoDevPoolCeIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDevPoolCeFast"
 
 
 def identical_ce_loss_host(
@@ -970,7 +980,7 @@ def identical_ce_loss_host(
     var cells = n_rows * vocab
 
     # ---- Transport in.
-    var logits = ctx.enqueue_create_buffer[DType.float32](cells)
+    var logits = pool_take[_CE_DEV_POOL](ctx, cells)
     var targets = ctx.enqueue_create_buffer[DType.int32](n_rows)
     ctx.enqueue_copy(dst_buf=logits, src_ptr=logits_ptr)
     ctx.enqueue_copy(dst_buf=targets, src_ptr=targets_ptr)
@@ -979,20 +989,37 @@ def identical_ce_loss_host(
     var grad_cells = 1
     if want_grad != 0:
         grad_cells = cells
-    var dlogits = ctx.enqueue_create_buffer[DType.float32](grad_cells)
-    identical_ce_loss_resident(
+    var dlogits = pool_take[_CE_DEV_POOL](ctx, grad_cells)
+    identical_ce_loss_resident[_CE_DEV_POOL](
         ctx, loss_ptr, row_ptr, dlogits, logits, targets, n_rows, count,
         reduction, want_grad, cfg,
     )
     if want_grad != 0:
         download_f32_into[_CE_STAGE_POOL](ctx, dlogits, cells, dlogits_ptr)
-    _ = logits^
+    # every use of both is behind the download's (or the resident body's
+    # final) synchronize
+    pool_give[_CE_DEV_POOL](logits^)
+    pool_give[_CE_DEV_POOL](dlogits^)
     _ = targets^
-    _ = dlogits^
     return count
 
 
-def identical_ce_loss_resident(
+def _ce_buf[pool: StaticString](ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """A pooled buffer when `pool` names one, else a fresh allocation (the
+    resident callers `samba_head_loss_host` and the MLP head keep theirs)."""
+    comptime if pool == "":
+        return ctx.enqueue_create_buffer[DType.float32](n)
+    return pool_take[pool](ctx, n)
+
+
+def _ce_ret[pool: StaticString](var b: DeviceBuffer[DType.float32]) raises:
+    comptime if pool == "":
+        _ = b^
+        return
+    pool_give[pool](b^)
+
+
+def identical_ce_loss_resident[pool: StaticString = ""](
     ctx: DeviceContext,
     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
     row_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -1023,13 +1050,13 @@ def identical_ce_loss_resident(
         smooth_rows = n_rows
 
     var max_v = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var shift = ctx.enqueue_create_buffer[DType.float32](cells)
-    var expo = ctx.enqueue_create_buffer[DType.float32](cells)
+    var shift = _ce_buf[pool](ctx, cells)
+    var expo = _ce_buf[pool](ctx, cells)
     var denom = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var logdenom = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var logp_target = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var nll = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var logp = ctx.enqueue_create_buffer[DType.float32](smooth_cells)
+    var logp = _ce_buf[pool](ctx, smooth_cells)
     var logp_sum = ctx.enqueue_create_buffer[DType.float32](smooth_rows)
     var smooth = ctx.enqueue_create_buffer[DType.float32](smooth_rows)
     var row = ctx.enqueue_create_buffer[DType.float32](n_rows)
@@ -1045,8 +1072,8 @@ def identical_ce_loss_resident(
     ctx.enqueue_copy(dst_buf=ones, src_ptr=h_ones.unsafe_ptr())
 
     # THE WORKSPACE COMES FROM THE CERTIFIED SIZER, NEVER FROM A GUESS.
-    var ws = ctx.enqueue_create_buffer[DType.float32](
-        identical_ce_workspace_max_floats(n_rows, vocab, reduction)
+    var ws = _ce_buf[pool](
+        ctx, identical_ce_workspace_max_floats(n_rows, vocab, reduction)
     )
     ctx.synchronize()
 
@@ -1078,7 +1105,7 @@ def identical_ce_loss_resident(
     var grad_cells = 1
     if want_grad != 0:
         grad_cells = cells
-    var weights = ctx.enqueue_create_buffer[DType.float32](grad_cells)
+    var weights = _ce_buf[pool](ctx, grad_cells)
     if want_grad != 0:
         # Enqueued behind the forward on the SAME context, which MAX runs in
         # order, so `expo` and `denom` are the forward's own values by the
@@ -1109,18 +1136,19 @@ def identical_ce_loss_resident(
 
     _ = h_ones^
     _ = max_v
-    _ = shift
-    _ = expo
     _ = denom
     _ = logdenom
     _ = logp_target
     _ = nll
-    _ = logp
     _ = logp_sum
     _ = smooth
     _ = row
     _ = total
     _ = loss
     _ = ones
-    _ = ws
-    _ = weights
+    # every use is behind the synchronize above
+    _ce_ret[pool](shift^)
+    _ce_ret[pool](expo^)
+    _ce_ret[pool](logp^)
+    _ce_ret[pool](ws^)
+    _ce_ret[pool](weights^)
