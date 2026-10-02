@@ -9,7 +9,8 @@
 # defines, then runs bench/speed/forest_speed_arm.py for every spec with ours alone, at the board's
 # parameters (tools/speed_gbdt_arm.py) and IDENTICAL.
 #
-#   arms     comma list; `base` builds with no define, any other word is define names joined by `+`,
+#   arms     comma list; `base` builds with no define; `hr2old` (lane hr2-gbdt-host) is `base` run with
+#            MOJOLEARN_HR2_OLD_LINK=1 MOJOLEARN_HR2_OLD_BORDERS=1 (the host link and host borders, the A arm); any other word is define names joined by `+`,
 #            each built as `-D NAME=1` (e.g. base,MOJOLEARN_GBDT_X+MOJOLEARN_GBDT_Y)
 #   rounds   timed rounds after the warm-up
 #   rows     `full`: the board shape, timing only.  N: the first N training rows, plus the host column
@@ -42,8 +43,9 @@ fi
 need="gbdt"; case "$*" in *iforest*) need="gbdt svm";; esac
 [ "$need" = "gbdt svm" ] && case " $* " in *" gbdt-"*) ;; *) need="svm";; esac
 for arm in ${arms//,/ }; do
-  defs=""
-  if [ "$arm" != base ]; then for d in ${arm//+/ }; do defs="$defs -D $d=1"; done; fi
+  defs=""; armenv=""
+  if [ "$arm" = hr2old ]; then armenv="MOJOLEARN_HR2_OLD_LINK=1 MOJOLEARN_HR2_OLD_BORDERS=1"
+  elif [ "$arm" != base ]; then for d in ${arm//+/ }; do defs="$defs -D $d=1"; done; fi
   export MOJOLEARN_EXTRA_DEFINES="$defs"
   ok=1
   for b in $need; do
@@ -59,7 +61,7 @@ for arm in ${arms//,/ }; do
     extra=""; [ "$rows" != full ] && extra="--rows $rows --ours-cpu"
     log="$L/$arm-$lane-$ds-$rows.log"
     if [ "${GAPTREES_STAGE:-0}" = 1 ]; then st="MOJOLEARN_STAGE_TIMES=1"; else st="MOJOLEARN_STAGE_TIMES=0"; fi
-    env $st MOJOLEARN_SPEED_ROUNDS=$rounds MOJOLEARN_SPEED_SIZE=shipped MOJOLEARN_NUMERIC_MODE=identical \
+    env $armenv $st MOJOLEARN_SPEED_ROUNDS=$rounds MOJOLEARN_SPEED_SIZE=shipped MOJOLEARN_NUMERIC_MODE=identical \
       python3 -u bench/speed/forest_speed_arm.py --lane "$lane" --dataset "$ds" --ours-only $extra > "$log" 2>&1
     rc=$?
     python3 - "$log" "$arm" "$lane" "$ds" "$rows" "$rc" <<'EOS'

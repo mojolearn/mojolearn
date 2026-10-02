@@ -556,6 +556,93 @@ class _BaggingBase(_TreesEnsembleBase):
             raise ValueError(f"{name} resolves to {k}, outside [1, {total}]")
         return k
 
+    # -- lane hr2-gbdt-host: the members as ONE forest fit -------------------
+    # A bag of best-splitter decision trees over every feature, without row
+    # weights or out-of-bag scoring, IS a random forest of `n_estimators`
+    # trees with the member's tree parameters and the bag's bootstrap: the
+    # forest builder grows every member on the device in one fit (one
+    # staging of X, the trees batched) instead of a Python loop that draws,
+    # gathers and stages X per member. The members' rows are drawn by the
+    # forest's own bootstrap stream. `estimators_` slices the forest into
+    # per-tree members when it is read. `MOJOLEARN_HR2_BAGGING_MEMBERS=1`
+    # keeps the per-member loop (the A/B arm; deleted once the gates pass).
+    def _batched_ok(self, base, n_rows, n, n_feat, d, sample_weight):
+        if os.environ.get("MOJOLEARN_HR2_BAGGING_MEMBERS") == "1":
+            return False
+        if type(base) not in (DecisionTreeClassifier, DecisionTreeRegressor):
+            return False
+        if base.splitter != "best" or getattr(base, "max_leaf_nodes", None) is not None:
+            return False
+        if sample_weight is not None or self.oob_score or self.bootstrap_features or n_feat != d:
+            return False
+        if not self.bootstrap and n_rows != n:
+            return False  # sampling without replacement: not the forest's draw
+        return True
+
+    def _fit_batched(self, Xa, y, base, n_rows, n, seed):
+        common = dict(n_estimators=int(self.n_estimators), criterion=base.criterion,
+                      max_depth=base.max_depth, min_samples_split=base.min_samples_split,
+                      min_samples_leaf=base.min_samples_leaf,
+                      max_features=1.0 if base.max_features is None else base.max_features,
+                      min_impurity_decrease=base.min_impurity_decrease,
+                      bootstrap=bool(self.bootstrap),
+                      max_samples=(n_rows / n) if self.bootstrap else None,
+                      random_state=seed, n_bins=base.n_bins,
+                      numeric_mode=getattr(base, "numeric_mode", None))
+        if isinstance(base, DecisionTreeClassifier):
+            forest = RandomForestClassifier(class_weight=base.class_weight, **common)
+        else:
+            forest = RandomForestRegressor(**common)
+        forest.fit(Xa, y)
+        self._batched = (forest, base)
+        self._estimators = None
+        d = Xa.shape[1]
+        self.estimators_features_ = [_trees_arange(d) for _ in range(int(forest._n_trees))]
+        self._oob_rows = []
+        self.n_features_in_ = d
+        return self
+
+    @property
+    def estimators_(self):
+        if getattr(self, "_estimators", None) is None and getattr(self, "_batched", None) is not None:
+            self._estimators = self._slice_members()
+        if getattr(self, "_estimators", None) is None:
+            raise AttributeError("estimators_")
+        return self._estimators
+
+    @estimators_.setter
+    def estimators_(self, value):
+        self._estimators = value
+        self._batched = None
+
+    def _slice_members(self):
+        """The batched forest's trees as fitted member estimators."""
+        forest, base = self._batched
+        offsets = forest._offsets.tolist()
+        no = int(forest._num_outputs)
+        colid, ques = forest._colid.tolist(), forest._quesval.tolist()
+        left, leaves = forest._left_child.tolist(), forest._leaves.tolist()
+        seed = _trees_seed(self.random_state)
+        out = []
+        for t in range(int(forest._n_trees)):
+            lo, hi = offsets[t], offsets[t + 1]
+            est = _trees_clone(base, random_state=_trees_sub_seed(seed, t))
+            est._refresh_config()
+            est._capture_fit_mode()
+            est._offsets = Array.from_list([0, hi - lo], "<i4")
+            est._colid = Array.from_list(colid[lo:hi], "<i4")
+            est._quesval = Array.from_list(ques[lo:hi], "<f4")
+            est._left_child = Array.from_list(left[lo:hi], "<i4")
+            est._leaves = Array.from_list(leaves[lo * no:hi * no], "<f4")
+            est._n_trees = 1
+            est._num_outputs = no
+            est.n_features_in_ = forest.n_features_in_
+            if hasattr(forest, "classes_"):
+                est.classes_ = forest.classes_
+                est.n_classes_ = forest.n_classes_
+            out.append(est)
+        return out
+
     def _fit_bags(self, X, y_sub, sample_weight, make_default):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         n, d = Xa.shape
@@ -563,6 +650,8 @@ class _BaggingBase(_TreesEnsembleBase):
         n_rows = self._count(self.max_samples, n, "max_samples")
         n_feat = self._count(self.max_features, d, "max_features")
         base = self.estimator if self.estimator is not None else make_default()
+        if self._batched_ok(base, n_rows, n, n_feat, d, sample_weight):
+            return self._fit_batched(Xa, y_sub(None, True), base, n_rows, n, seed)
         sw = None if sample_weight is None else as_f32_c(sample_weight, ndim=1, name="sample_weight")[0]
         self.estimators_, self.estimators_features_, self._oob_rows = [], [], []
         all_rows = n_rows == n and not self.bootstrap
@@ -615,7 +704,7 @@ class _BaggingBase(_TreesEnsembleBase):
         return acc, counts
 
     def _check_X(self, X):
-        if not hasattr(self, "estimators_"):
+        if getattr(self, "_batched", None) is None and getattr(self, "_estimators", None) is None:
             raise RuntimeError("this estimator is not fitted yet")
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         if Xa.shape[1] != self.n_features_in_:
@@ -678,6 +767,10 @@ class BaggingClassifier(_BaggingBase):
     def predict_proba(self, X):
         Xa = self._check_X(X)
         n, k = Xa.shape[0], self.n_classes_
+        if getattr(self, "_batched", None) is not None:
+            # lane hr2-gbdt-host: the forest's mean of the trees' leaf
+            # distributions, every tree in one device walk
+            return self._batched[0].predict_proba(Xa).astype("<f8")
         acc = zeros((n * k,), "<f8")
         rows_all = _trees_arange(n)
         for est, cols in zip(self.estimators_, self.estimators_features_):
@@ -738,6 +831,9 @@ class BaggingRegressor(_BaggingBase):
     def predict(self, X):
         Xa = self._check_X(X)
         n = Xa.shape[0]
+        if getattr(self, "_batched", None) is not None:
+            # lane hr2-gbdt-host: the forest's mean over the trees
+            return as_f32_c(self._batched[0].predict(Xa), ndim=1, name="prediction")[0].astype("<f8")
         acc = zeros((n,), "<f8")
         rows_all = _trees_arange(n)
         for est, cols in zip(self.estimators_, self.estimators_features_):
