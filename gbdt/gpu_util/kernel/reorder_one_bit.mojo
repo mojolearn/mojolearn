@@ -57,8 +57,27 @@ scan serves both destinations.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import prefix_sum
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+
+#: FAST on Apple, lane/apple-fast-trees-scan (2026-10-02), OPT-IN
+#: `-D MOJOLEARN_REORDER_FLAGS_SCAN_BLOCK=1`. CAUSE: `launch_reorder_one_bit`
+#: (the per-leaf flag partition) still runs the serial
+#: `scan_block_sums_kernel` (grid 1 x block 1, this file:~266 on main)
+#: while `radix_sort.mojo` already runs `scan_block_sums_parallel_kernel`
+#: for the same totals. EFFECT: the same 256-thread kernel here. Int32
+#: sums, the same prefixes. Reached today by `checks/reorder_check.mojo`
+#: only; no production driver calls `launch_reorder_one_bit`. IDENTICAL
+#: compiles the old launch.
+comptime REORDER_FLAGS_SCAN_BLOCK = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_REORDER_FLAGS_SCAN_BLOCK"]()
+)
 
 #: `const int blockSize = 512` at their call site (`split_points.cu:722`),
 #: and again at `reorder_one_bit.cu:35`.
@@ -261,10 +280,17 @@ def launch_reorder_one_bit(
         offsets.unsafe_ptr(), block_sums.unsafe_ptr(),
         grid_dim=n_blocks, block_dim=REORDER_BLOCK,
     )
-    ctx.enqueue_function[scan_block_sums_kernel](
-        block_sums.unsafe_ptr(), Int32(n_blocks),
-        grid_dim=1, block_dim=1,
-    )
+    comptime if REORDER_FLAGS_SCAN_BLOCK:
+        # one 256-thread block (lane/apple-fast-trees-scan)
+        ctx.enqueue_function[scan_block_sums_parallel_kernel](
+            block_sums.unsafe_ptr(), Int32(n_blocks),
+            grid_dim=1, block_dim=SCAN_SUMS_BLOCK,
+        )
+    else:
+        ctx.enqueue_function[scan_block_sums_kernel](
+            block_sums.unsafe_ptr(), Int32(n_blocks),
+            grid_dim=1, block_dim=1,
+        )
     ctx.enqueue_function[add_block_carry_kernel](
         offsets.unsafe_ptr(), block_sums.unsafe_ptr(), Int32(size),
         grid_dim=n_blocks, block_dim=REORDER_BLOCK,
