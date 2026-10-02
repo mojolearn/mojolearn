@@ -522,7 +522,6 @@ def one_sided_svd2_chunk_kernel(
     rt: MutPointer[Float32, MutAnyOrigin],
     vt: MutPointer[Float32, MutAnyOrigin],
     rots_out: MutPointer[Float32, MutAnyOrigin],
-    sig_out: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
     p0_in: Int32,
     q0_in: Int32,
@@ -531,8 +530,7 @@ def one_sided_svd2_chunk_kernel(
 ):
     """`count` pairs of one sweep of `one_sided_svd2_kernel` from (p0, q0) on
     its scratch (rt = R^T, vt = V^T), launched with exactly `J2_TPB`
-    threads; rots_out[0] = the rotations performed, sig_out[0] the significant
-    ones (x_decomp/cells.mojo `svd_rotation_significant`, lane/neural-pass100)."""
+    threads; rots_out[0] = the rotations performed."""
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
     var slab = stack_allocation[2 * 3 * S2_R, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
@@ -575,7 +573,6 @@ def one_sided_svd2_chunk_kernel(
     var p = p0
     var q = q0
     var rots = 0
-    var sig = 0
     for _k in range(Int(count_in)):
         var np_ = ftz(identical_sqrt(app))
         var nq_ = ftz(identical_sqrt(aqq))
@@ -585,8 +582,6 @@ def one_sided_svd2_chunk_kernel(
         var s = Float32(0.0)
         if rotate:
             rots += 1
-            if svd_rotation_significant(app, aqq):
-                sig += 1
             var cs = jacobi_rotation_cs(app, aqq, apq)
             c = cs[0]
             s = cs[1]
@@ -680,7 +675,6 @@ def one_sided_svd2_chunk_kernel(
             q = p + 1
     if tid == 0:
         rots_out.unsafe_store(0, Float32(rots))
-        sig_out.unsafe_store(0, Float32(sig))
 
 
 def one_sided_svd2_finish_kernel(
