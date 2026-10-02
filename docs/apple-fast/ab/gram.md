@@ -1,0 +1,48 @@
+# lane/apple-fast-gram: the shared FAST grid Gram (PLAN.md item 4; PLAN-classical.md 4 and 9)
+
+Written without a Mojo toolchain (cloud peer); the first M3 build is the compile check
+(bindings x_linear and x_prep, FAST). Every switch defaults OFF; IDENTICAL compiles the old code.
+
+New file `x_linear/fast_gram.mojo`: enetcv_fast's `ef_sums_kernel` / `ef_gram_kernel` /
+`ef_gram_red_kernel` generalised to one row range (no folds, so no parallel-axis move): column sums
+per chunk of 8192 rows (2048 below 8 tile pairs, so taxi's 16 features still fill hundreds of
+blocks), the means (zeros without an intercept), the Gram of [X, Y] centered at them as 32 x 32
+tiles per chunk through shared memory, a sum over the chunks into G (both triangles) and X'Y.
+Options: uncentered, a class mask (rows whose label is not `cls` contribute nothing), a divisor.
+Entries: `fast_gram_into` (x_linear: xm, ym, G, X'Y into the fit's own fw words; waits, so its
+scratch dies inside) and `fast_sym_gram_into` (x_prep: one symmetric block, caller's scratch,
+enqueue only). No witness (as `xg_gram_kernel`); enetcv_fast.mojo is untouched.
+
+| switch | kind | site | what it changes under FAST on Apple |
+|---|---|---|---|
+| `MOJOLEARN_X_LINEAR_LARS_FAST_GRAM=1` | env, read in `fit_device` | `x_linear/device.mojo` fit_device (ip[5]); `x_linear/lars.mojo` lars_fit reads it | Lars / LassoLars: means, centered Gram, X'y and the y mean from `fast_gram_into` into fw before `fit_kernel`; the team skips `t_col_means`, `t_mean`, `t_centered_gram`, `t_centered_xty` and `xg_gram_kernel` is not launched |
+| `MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1` | env, read in `fit_device` and `_ridge_kfold_grid` | `x_linear/device.mojo` (ridge ip[4]; the k-fold loop); `x_linear/ridge.mojo` `_ridge_fit_team` reads it | RidgeClassifier (and LOO RidgeCV): xm, ym (T targets), G, X'Y from the grid, the team skips its cell chains (unweighted fits only). k-fold RidgeCV (the board's cv=5): each fold's means, Gram and X'y from `fast_gram_into` instead of `kf_means_kernel` + `kf_cells_kernel` |
+| `MOJOLEARN_X_PREP_CLASS_COV_GRID=1` | env, read in `run_program_device_ptr` | `x_prep/device.mojo` (ops 40 `qda_cov` and 13 `matmul` when Gram-shaped, `_matmul_is_gram`) | QDA: each class's covariance (divisor CNT[k]) as the masked grid Gram, one launch pair a class, into the unit's COV words. LDA (solver svd): the Gram `matmul` Z2'Z2 as the uncentered grid Gram into C. The other stages are the units' |
+
+## Causes (what was slow)
+- lars / lasso-lars taxi 5.3x: `xg_gram_kernel` (`x_linear/device.mojo`) is one thread per upper cell
+  walking every row: d(d+1)/2 = 136 threads, ONE block at 16 features; then the team's own means and
+  X'y passes (`x_linear/lars.mojo` lars_fit, `x_linear/tops.mojo` t_col_means / t_centered_xty) on one block.
+- ridge-clf taxi 5.3x: `x_linear/ridge.mojo` `_ridge_fit_team` builds means, `t_centered_gram` and
+  the X'Y chains one thread per cell on ONE block of 256 threads. ridge-cv (cv=5): `kf_cells_kernel`
+  is the same one-thread-per-cell chain per fold on the grid (136 threads at taxi).
+- lda-clf Istella 5.1x: `x_prep/prims.mojo` `matmul_unit` as Z2'Z2 (python `_expansion_prep.py`
+  LinearDiscriminantAnalysis.fit, the `matmul` stage): 48,400 threads each walking a million rows.
+- qda Istella 2.6x: `naive_bayes/da.mojo` `qda_cov_unit`: K d^2 threads each walking every row with a
+  class test (two column loads a row a thread; the tile shares them through shared memory).
+
+## Keep rule
+A switch becomes the FAST default when its arm is faster on the M3 and held-out quality stays within
+FAST's run-to-run spread (the `gram-*-ident` lines are the IDENTICAL arm at head for the ratio); then
+the env read goes, the old team passes stay as the IDENTICAL / other-vendor code.
+
+## Not done here (notes for the owner)
+- `x_prep` `eigh` (op 18, `x_prep/eigh.mojo`): one thread per matrix (cyclic Jacobi at 220 x 220 for
+  LDA, K of them for QDA) remains after the Gram; it is PLAN.md item 7's shape (PCA one-block Jacobi).
+- Weighted ridge (`sample_weight`) and LOO RidgeCV's per-row solves stay on the team.
+- The grid Gram carries no completion witness (x_linear/witness.mojo); add it if the M3 shows cut
+  launches under contention, as enetcv_fast does.
+- Compile risks to watch on the first M3 build: `fast_gram_into` / `fast_sym_gram_into` take
+  `mut ctx: DeviceContext` (as `enetcv_fast`); device pointers cross as
+  `FP(unsafe_from_address=Int(buf.unsafe_ptr()))`; x_prep imports `x_linear.fast_gram` (the build's
+  `-I .` resolves it, as `naive_bayes.da` does).
