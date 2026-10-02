@@ -27,6 +27,7 @@ entrypoints are comparison arms; they do not run on the default fit path.
 """
 
 from std.os import abort
+from ensemble.device_finite import FOREST_DEVICE_FINITE
 from ensemble.instruments import StageTimes
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -617,6 +618,13 @@ def trees_stage_copy_policy_binding() raises -> PythonObject:
     return PythonObject("vector_bytes")
 
 
+def trees_device_finite_scan_binding() raises -> PythonObject:
+    """1 when this build's ExtraTrees fits refuse a non-finite X cell through
+    a device scan in `upload_dataset` (FOREST_DEVICE_FINITE, FAST on Apple),
+    so the Python fit skips its host scan of the same cells; 0 otherwise."""
+    return PythonObject(1 if FOREST_DEVICE_FINITE else 0)
+
+
 def trees_numeric_mode_binding() raises -> PythonObject:
     """Compiled numeric tier, independent of the package directory label."""
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
@@ -643,6 +651,7 @@ def PyInit__mojolearn_trees() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_trees")
         m.def_function[trees_vendor_binding]("trees_vendor")
         m.def_function[trees_numeric_mode_binding]("trees_numeric_mode")
+        m.def_function[trees_device_finite_scan_binding]("trees_device_finite_scan")
         m.def_function[trees_stage_copy_policy_binding]("trees_stage_copy_policy")
         m.def_function[trees_shared_counts_mask_binding]("trees_shared_counts_mask")
         m.def_function[et_classifier_fit_binding[False]]("et_classifier_fit")

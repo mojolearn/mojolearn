@@ -38,6 +38,7 @@ from ensemble.host_layout import (
 )
 
 from std.os import abort
+from ensemble.device_finite import FOREST_DEVICE_FINITE, ForestFiniteScan
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -429,8 +430,11 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _i32_ptr(Int(py=y_addr))
     var crit = Int(py=criterion)
-    if has_nan_f32_threaded(xp, n_rows * n_cols):
-        raise Error("rf_classifier_fit: " + RF_NAN_REFUSAL)
+    # FAST on Apple: the refusal is the device scan after the upload below
+    # (ensemble/device_finite.mojo), not this pooled host scan.
+    comptime if not FOREST_DEVICE_FINITE:
+        if has_nan_f32_threaded(xp, n_rows * n_cols):
+            raise Error("rf_classifier_fit: " + RF_NAN_REFUSAL)
     _check_criterion("rf_classifier_fit", crit, _cls_criteria())
     var rf_params = _rf_params_from(params, crit)
 
@@ -493,7 +497,13 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         # The host weights drive sampling; non-bootstrap objectives read the
         # device weights at original row IDs. Keep both alive through fitting.
         var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
-        ctx.synchronize()
+        comptime if FOREST_DEVICE_FINITE:
+            var fscan = ForestFiniteScan(ctx)
+            fscan.enqueue(ctx, dx, n_rows * n_cols)
+            ctx.synchronize()
+            fscan.refuse_if_bad("rf_classifier_fit: ")
+        else:
+            ctx.synchronize()
         bt.stop_host("bind_h2d", t_s)
         if len(weights) > 0:
             ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
@@ -1028,8 +1038,11 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     var crit = Int(py=criterion)
-    if has_nan_f32_threaded(xp, n_rows * n_cols):
-        raise Error("rf_regressor_fit: " + RF_NAN_REFUSAL)
+    # FAST on Apple: the refusal is the device scan after the upload below
+    # (ensemble/device_finite.mojo), not this pooled host scan.
+    comptime if not FOREST_DEVICE_FINITE:
+        if has_nan_f32_threaded(xp, n_rows * n_cols):
+            raise Error("rf_regressor_fit: " + RF_NAN_REFUSAL)
     _check_criterion("rf_regressor_fit", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
 
@@ -1065,7 +1078,13 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
         var dy = ctx.enqueue_create_buffer[RLT](n_rows)
         ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
         var dsw = ctx.enqueue_create_buffer[DT](1)
-        ctx.synchronize()
+        comptime if FOREST_DEVICE_FINITE:
+            var fscan = ForestFiniteScan(ctx)
+            fscan.enqueue(ctx, dx, n_rows * n_cols)
+            ctx.synchronize()
+            fscan.refuse_if_bad("rf_regressor_fit: ")
+        else:
+            ctx.synchronize()
         bt.stop_host("bind_h2d", t_s)
         # THE LABEL SCALE IS NOT OPTIONAL. `RegressionBin` accumulates
         # `label_sum` in fixed point through `BinScales.label_scale`
@@ -1401,6 +1420,13 @@ def rf_predict_reg_gpu_parallel_binding(
         leaves_addr, x_addr, out_addr, params,
     )
 
+def rf_device_finite_scan_binding() raises -> PythonObject:
+    """1 when this build's RF fits refuse a non-finite X cell through a
+    device scan (FOREST_DEVICE_FINITE, FAST on Apple), so the Python fit
+    skips its host scan of the same cells; 0 otherwise."""
+    return PythonObject(1 if FOREST_DEVICE_FINITE else 0)
+
+
 def rf_numeric_mode_binding() raises -> PythonObject:
     """Read the numeric policy compiled into this RF binding."""
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
@@ -1440,6 +1466,7 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_rf")
         m.def_function[rf_vendor_binding]("rf_vendor")
         m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
+        m.def_function[rf_device_finite_scan_binding]("rf_device_finite_scan")
         m.def_function[rf_fused_bootstrap_gather_binding](
             "rf_fused_bootstrap_gather"
         )

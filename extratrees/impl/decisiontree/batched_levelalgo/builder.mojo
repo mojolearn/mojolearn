@@ -2625,6 +2625,7 @@ struct DeviceDataset(Movable):
 
 
 from ensemble.host_layout import colmajor_from_rowmajor_f32, copy_f32_threaded
+from ensemble.device_finite import FOREST_DEVICE_FINITE, ForestFiniteScan
 
 
 def upload_dataset(
@@ -2678,7 +2679,16 @@ def upload_dataset(
     ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
     var d_data_rm = ctx.enqueue_create_buffer[DType.float32](1)
-    ctx.synchronize()
+    # FAST on Apple (lane apple-fast-rfet-scan): the non-finite refusal is
+    # this device scan of the uploaded X; the Python fit skips its host scan
+    # (`trees_device_finite_scan`). See ensemble/device_finite.mojo.
+    comptime if FOREST_DEVICE_FINITE:
+        var fscan = ForestFiniteScan(ctx)
+        fscan.enqueue(ctx, d_data, count)
+        ctx.synchronize()
+        fscan.refuse_if_bad("upload_dataset: ")
+    else:
+        ctx.synchronize()
     boundary_times.stop_host("boundary_dataset_upload", boundary_start)
     boundary_times.report()
     var d_bins_rm = ctx.enqueue_create_buffer[ET_CODE](1)
