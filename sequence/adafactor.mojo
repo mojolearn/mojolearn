@@ -13,7 +13,8 @@ whole-tensor norms are the blocked order (AF_NORM_BLOCK below). torch's
 norms are sqrt(sum of squares), squared back where the reference squares
 them, and its lerp is torch's two-branch formula."""
 from sequence.ops import FP, Args, add, fma3, ld, lerp, mul, st, sub, sumsq_fold
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_rsqrt, identical_sqrt
+from std.memory import bitcast
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul_add, identical_rsqrt, identical_sqrt
 
 
 @always_inline
@@ -224,8 +225,16 @@ def op_seg_sumsq(t: Int, a: Args):
 def op_lamb_upd(t: Int, a: Args):
     """m = b1 m + beta3 g; v = b2 v + (1 - b2) g g; u = (m / bc1) /
     (sqrt(v) / sqrt(bc2) + eps) (+ wd p). p0 param, p1 grad, p2 m, p3 v,
-    p4 u; f1 b1, f2 b2, f3 eps, f4 wd, f5 bc1, f6 sqrt(bc2), f7 beta3."""
+    p4 u; f1 b1, f2 b2, f3 eps, f4 wd, f5 bc1, f6 sqrt(bc2), f7 beta3.
+    i0 != 0: the global gradient-norm clip, the coefficient c = p5[0]
+    (op_lamb_clip): g = g / c when c > 1, op_divs's statement (it ran as
+    its own launch over the gradient before; the same division, no bit
+    moves)."""
     var g = ld(a.p1, t)
+    if a.i0 != 0:
+        var c = ld(a.p5, 0)
+        if c > Float32(1.0):
+            g = div(g, c)
     var m = fma3(a.f1, ld(a.p2, t), mul(a.f7, g))
     var v = fma3(a.f2, ld(a.p3, t), mul(mul(sub(Float32(1.0), a.f2), g), g))
     st(a.p2, t, m)
@@ -265,4 +274,107 @@ def op_lamb_apply(t: Int, a: Args):
     """p0[t] = p0[t] - lr (u[t] ratio): p1 u, p2 ratios, i0 the segment of
     this launch, f0 lr."""
     var r = ld(a.p2, a.i0)
+    st(a.p0, t, fma3(-a.f0, mul(ld(a.p1, t), r), ld(a.p0, t)))
+
+
+# ------------------------------------------------------------------ LAMB, every tensor in one launch
+#: lane gap-optimizers (2026-10-02). LAMB's per-tensor norms (the gradient
+#: norms of the global clip, the parameter and update norms of the trust
+#: ratio) in the blocked order of the Adafactor norms above, for every
+#: tensor of the step in ONE launch, under FAST and IDENTICAL alike: each
+#: tensor is cut into blocks of AF_NORM_BLOCK consecutive values from its
+#: own start, each block's squares folded ascending from zero by one chain
+#: of fmas (`sumsq_fold`, one block per GPU thread), and a tensor's block
+#: partials then added ascending from zero (`af_fold_parts`). A tensor of
+#: at most AF_NORM_BLOCK values is one block, the one chain it always was
+#: (its bits do not move); larger tensors get new bits (one GPU thread
+#: walked the whole tensor before, at memory latency). The order is fixed
+#: by the tensor sizes alone, so the host binding walks the same chains.
+#:
+#: THE TABLE (`tab`, a float32 buffer holding int32 bit patterns, read raw
+#: and never through `ld`, whose flush would zero them): tab[0 .. nt] the
+#: element offsets of the nt tensors (tab[nt] = n), tab[nt + 1 .. 2 nt + 1]
+#: their first block indices (tab[2 nt + 1] = the block count). Offsets are
+#: exact integers to 2^31 (the float offsets the per-tensor ops read capped
+#: a step at 2^24 values, which refused the board's 16,777,216-value lane).
+
+
+@always_inline
+def lamb_ti(tab: FP, i: Int) -> Int:
+    """tab[i] as the int32 it holds."""
+    return Int(bitcast[DType.int32](tab.unsafe_load(i)))
+
+
+@always_inline
+def lamb_seg_of(tab: FP, base: Int, nt: Int, x: Int) -> Int:
+    """The k in [0, nt) with tab[base + k] <= x < tab[base + k + 1] (the
+    starts rise strictly), by bisection."""
+    var lo = 0
+    var hi = nt - 1
+    while lo < hi:
+        var mid = (lo + hi + 1) // 2
+        if lamb_ti(tab, base + mid) <= x:
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
+
+
+@always_inline
+def lamb_seg_sum(parts: FP, tab: FP, nt: Int, k: Int) -> Float32:
+    """Tensor k's sum of squares from its block partials: the one block's
+    chain itself, or the partials added ascending from zero."""
+    var b0 = lamb_ti(tab, nt + 1 + k)
+    var nb = lamb_ti(tab, nt + 2 + k) - b0
+    if nb == 1:
+        return ld(parts, b0)
+    return af_fold_parts(parts + b0, nb)
+
+
+def op_lamb_blk(t: Int, a: Args):
+    """Block t of the step (over every tensor): p3[t] = the sum of squares
+    of p0's values in it, ascending from zero; with i1 != 0 also p4[t] from
+    p1 over the same values. p2 the table, i0 nt, i2 B (= AF_NORM_BLOCK)."""
+    var nt = a.i0
+    var B = a.i2
+    var k = lamb_seg_of(a.p2, nt + 1, nt, t)
+    var lo = lamb_ti(a.p2, k) + (t - lamb_ti(a.p2, nt + 1 + k)) * B
+    var cnt = min(B, lamb_ti(a.p2, k + 1) - lo)
+    st(a.p3, t, sumsq_fold(a.p0, lo, cnt, 1))
+    if a.i1 != 0:
+        st(a.p4, t, sumsq_fold(a.p1, lo, cnt, 1))
+
+
+def op_lamb_segfold(t: Int, a: Args):
+    """Tensor t: p2[t] = its sum of squares from the block partials p0;
+    p1 the table, i0 nt."""
+    st(a.p2, t, lamb_seg_sum(a.p0, a.p1, a.i0, t))
+
+
+def op_lamb_clip(t: Int, a: Args):
+    """The global gradient-norm clip coefficient, one cell: ||g|| = the
+    norm of the per-tensor norms sqrt(p0[k]), k ascending (timm's
+    torch.norm(torch.stack(norms))), and p1[0] = ||g|| / f0 (max_grad_norm);
+    i0 nt. The host statements of the step it replaces (which downloaded
+    the per-tensor sums and folded them there), verbatim."""
+    var gs = Float32(0.0)
+    for k in range(a.i0):
+        var nk = ftz(identical_sqrt(ld(a.p0, k)))
+        gs = ftz(identical_mul_add(nk, nk, gs))
+    st(a.p1, 0, ftz(identical_div(ftz(identical_sqrt(gs)), a.f0)))
+
+
+def op_lamb_trust(t: Int, a: Args):
+    """Tensor t's trust ratio from the block partials of p (p0) and u (p1):
+    p3[t] = ||p|| / ||u|| (`lamb_ratio_tail`); p2 the table, i0 the
+    trust_clip bit (bit 0), i1 nt."""
+    lamb_ratio_tail(a, t, lamb_seg_sum(a.p0, a.p2, a.i1, t), lamb_seg_sum(a.p1, a.p2, a.i1, t))
+
+
+def op_lamb_apply_all(t: Int, a: Args):
+    """op_lamb_apply over every tensor in one launch: element t's tensor k
+    from the table, then p0[t] = p0[t] - lr (u[t] ratio[k]), the same
+    statement. p1 u, p2 ratios, p3 the table, i0 nt, f0 lr."""
+    var k = lamb_seg_of(a.p3, 0, a.i0, t)
+    var r = ld(a.p2, k)
     st(a.p0, t, fma3(-a.f0, mul(ld(a.p1, t), r), ld(a.p0, t)))

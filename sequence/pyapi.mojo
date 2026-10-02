@@ -8,9 +8,10 @@ nothing is retained after the call."""
 from std.python import PythonObject
 
 from std.math import sqrt
+from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
@@ -629,17 +630,155 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
     return PythonObject(n)
 
 
+def lamb_table(offs: List[Int], mut tab: List[Float32]) raises -> Int:
+    """LAMB's table (`sequence/adafactor.mojo`, THE TABLE): the nt + 1
+    element offsets, then each tensor's first block index of AF_NORM_BLOCK
+    values and the block count, as int32 bit patterns in float32 words
+    (copied, never converted). Returns the block count."""
+    var nt = len(offs) - 1
+    tab.clear()
+    for k in range(nt + 1):
+        tab.append(bitcast[DType.float32](Int32(offs[k])))
+    var nb = 0
+    for k in range(nt):
+        tab.append(bitcast[DType.float32](Int32(nb)))
+        nb += (offs[k + 1] - offs[k] + AF_NORM_BLOCK - 1) // AF_NORM_BLOCK
+    tab.append(bitcast[DType.float32](Int32(nb)))
+    return nb
+
+
+def lamb_offsets(ip: PythonObject, at: Int, nt: Int) raises -> List[Int]:
+    """ip[at .. at + nt]: the tensor offsets, rising strictly from 0, below
+    2^31 (exact in the int32 table; the float offsets of the per-tensor
+    ops capped a step below 2^24 values)."""
+    var offs = List[Int]()
+    for k in range(nt + 1):
+        var o = ival(ip, at + k)
+        if (k == 0 and o != 0) or (k > 0 and o <= offs[k - 1]) or o >= 2147483647:
+            raise Error("lamb_step: offsets must rise strictly from 0, below 2^31 - 1")
+        offs.append(o)
+    return offs^
+
+
+def lamb_bias(flags: Int, t: Int, t0: Int, b1: Float32, b2: Float32, sc: FP,
+              carry: Bool) -> Tuple[Float32, Float32, Float32, Float32]:
+    """(bc1, bc2, beta1^t, beta2^t): the host scalars of step t, from the
+    running products after step t0 (sc, when carried and t0 > 0) or from
+    step 1, one identical_mul per step."""
+    var pw1 = Float32(1.0)
+    var pw2 = Float32(1.0)
+    if (flags & 8) == 0:
+        return (Float32(1.0), Float32(1.0), pw1, pw2)
+    var k0 = 0
+    if carry and t0 > 0:
+        pw1 = sc.unsafe_load(0)
+        pw2 = sc.unsafe_load(1)
+        k0 = t0
+    for _ in range(k0, t):
+        pw1 = ftz(identical_mul(pw1, b1))
+        pw2 = ftz(identical_mul(pw2, b2))
+    return (Float32(1.0) - pw1, Float32(1.0) - pw2, pw1, pw2)
+
+
+def lamb_core[E: Exec](
+    mut ex: E, P: FP, G: FP, M: FP, V: FP, U: FP, TAB: FP,
+    partsA: FP, partsB: FP, nrm: FP, ratio: FP, scal: FP,
+    n: Int, nt: Int, nb: Int, flags: Int,
+    lr: Float32, b1: Float32, b2: Float32, eps: Float32, wd: Float32, max_norm: Float32,
+    bc1: Float32, bc2: Float32,
+) raises:
+    """ONE LAMB STEP over every tensor, launches only (lane gap-optimizers):
+    nothing is read back. The global clip's per-tensor gradient norms and
+    its coefficient on the device (op_lamb_blk, op_lamb_segfold,
+    op_lamb_clip; the coefficient was folded on the host from downloaded
+    norms), the moments and the update (op_lamb_upd, which applies the
+    clip), the trust ratios (op_lamb_blk over p and u, op_lamb_trust) and
+    the update of every tensor (op_lamb_apply_all, one launch). Buffers:
+    P, G, M, V, U n floats; TAB `lamb_table`'s 2 nt + 2 words; partsA and
+    partsB nb; nrm and ratio nt; scal 1. G is read, never written."""
+    if (flags & 16) != 0:
+        var q = Args()
+        q.p0 = G
+        q.p2 = TAB
+        q.p3 = partsA
+        q.i0 = nt
+        q.i2 = AF_NORM_BLOCK
+        ex.launch[OP_LAMB_BLK](q, nb)
+        var s = Args()
+        s.p0 = partsA
+        s.p1 = TAB
+        s.p2 = nrm
+        s.i0 = nt
+        ex.launch[OP_LAMB_SEGFOLD](s, nt)
+        var c = Args()
+        c.p0 = nrm
+        c.p1 = scal
+        c.i0 = nt
+        c.f0 = max_norm
+        ex.launch[OP_LAMB_CLIP](c, 1)
+    var u = Args()
+    u.p0 = P
+    u.p1 = G
+    u.p2 = M
+    u.p3 = V
+    u.p4 = U
+    u.p5 = scal
+    u.i0 = 1 if (flags & 16) != 0 else 0
+    u.f1 = b1
+    u.f2 = b2
+    u.f3 = eps
+    u.f4 = wd
+    u.f5 = bc1
+    u.f6 = ftz(identical_sqrt(bc2))
+    u.f7 = (Float32(1.0) - b1) if (flags & 4) != 0 else Float32(1.0)
+    ex.launch[OP_LAMB_UPD](u, n)
+    if wd != Float32(0.0) or (flags & 2) != 0:
+        var q = Args()
+        q.p0 = P
+        q.p1 = U
+        q.p2 = TAB
+        q.p3 = partsA
+        q.p4 = partsB
+        q.i0 = nt
+        q.i1 = 1
+        q.i2 = AF_NORM_BLOCK
+        ex.launch[OP_LAMB_BLK](q, nb)
+        var r = Args()
+        r.p0 = partsA
+        r.p1 = partsB
+        r.p2 = TAB
+        r.p3 = ratio
+        r.i0 = flags & 1
+        r.i1 = nt
+        ex.launch[OP_LAMB_TRUST](r, nt)
+    else:
+        var f = Args()
+        f.p0 = ratio
+        f.f0 = Float32(1.0)
+        ex.launch[OP_FILL](f, nt)
+    var ap = Args()
+    ap.p0 = P
+    ap.p1 = U
+    ap.p2 = ratio
+    ap.p3 = TAB
+    ap.i0 = nt
+    ap.f0 = lr
+    ex.launch[OP_LAMB_APPLY_ALL](ap, n)
+
+
 def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """One LAMB step over packed tensors, in place (`sequence/adafactor.mojo`,
-    timm's Lamb). addrs = [params, grads, exp_avg, exp_avg_sq] (flat);
-    ip = [n_tensors, t, flags, off_0, ..., off_n] with flags bit0 trust_clip,
-    bit1 always_adapt, bit2 grad_averaging, bit3 bias_correction, bit4 the
-    global gradient-norm clip; fp = [lr, beta1, beta2, eps, weight_decay,
-    max_grad_norm (, t0)]. An optional fifth address, float32[2], carries
-    (beta1^t0, beta2^t0) after step t0 = fp[6] (0: not yet run); the call
-    advances it through step t and writes it back, so the bias corrections
-    cost O(1) per step instead of a replay of t products (lane py-sequence;
-    the same products in the same order, so the same bits)."""
+    timm's Lamb; `lamb_core`). addrs = [params, grads, exp_avg, exp_avg_sq]
+    (flat); ip = [n_tensors, t, flags, off_0, ..., off_n] with flags bit0
+    trust_clip, bit1 always_adapt, bit2 grad_averaging, bit3
+    bias_correction, bit4 the global gradient-norm clip; fp = [lr, beta1,
+    beta2, eps, weight_decay, max_grad_norm (, t0)]. An optional fifth
+    address, float32[2], carries (beta1^t0, beta2^t0) after step t0 = fp[6]
+    (0: not yet run); the call advances it through step t and writes it
+    back, so the bias corrections cost O(1) per step instead of a replay of
+    t products (lane py-sequence; the same products in the same order, so
+    the same bits). The resident route (`sequence/opt_resident.mojo`)
+    runs the same `lamb_core` with the moments kept on the device."""
     if len(addrs) < 4 or len(addrs) > 5 or len(fp) != len(addrs) + 2 or len(ip) < 5:
         raise Error("lamb_step: requires 4 (or 5) addresses, >= 5 integer and 6 (or 7) float parameters")
     var nt = ival(ip, 0)
@@ -647,135 +786,46 @@ def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: 
     var flags = ival(ip, 2)
     if nt < 1 or t < 1 or len(ip) != 4 + nt:
         raise Error("lamb_step: n_tensors >= 1, t >= 1 and n_tensors + 1 offsets")
-    var offs = List[Float32]()
-    for k in range(nt + 1):
-        var o = ival(ip, 3 + k)
-        if (k == 0 and o != 0) or (k > 0 and o <= Int(offs[k - 1])) or o >= 16777216:
-            raise Error("lamb_step: offsets must rise strictly from 0, below 2^24")
-        offs.append(Float32(o))
-    var n = Int(offs[nt])
-    var lr = fval(fp, 0)
-    var b1 = fval(fp, 1)
-    var b2 = fval(fp, 2)
-    var wd = fval(fp, 4)
-    var P = ex.alloc(n)
-    var G = ex.alloc(n)
-    var M = ex.alloc(n)
-    var V = ex.alloc(n)
-    var U = ex.alloc(n)
-    var O = ex.alloc(nt + 1)
-    var nrm = ex.alloc(nt)
+    var offs = lamb_offsets(ip, 3, nt)
+    var n = offs[nt]
+    var tab = List[Float32]()
+    var nb = lamb_table(offs, tab)
+    var carry = len(addrs) == 5
+    var t0 = 0
+    if carry and (flags & 8) != 0:
+        t0 = Int(Float64(py=fp[6]))
+        if t0 < 0 or t0 >= t or Float64(t0) != Float64(py=fp[6]):
+            raise Error("lamb_step: the scalars' step t0 must be an integer with 0 <= t0 < t")
+    var sc = fptr(addrs[4], "scalars") if carry else fptr(addrs[0], "params")
+    var bias = lamb_bias(flags, t, t0, fval(fp, 1), fval(fp, 2), sc, carry)
     var hp = fptr(addrs[0], "params")
     var hm = fptr(addrs[2], "exp_avg")
     var hv = fptr(addrs[3], "exp_avg_sq")
-    ex.upload(P, hp, n)
-    ex.upload(G, fptr(addrs[1], "grads"), n)
-    ex.upload(M, hm, n)
-    ex.upload(V, hv, n)
-    ex.upload(O, FP(unsafe_from_address=Int(offs.unsafe_ptr())), nt + 1)
-    var fast = _fast_norms() and n >= FAST_NORM_MIN
-    var partsA = ex.alloc(nt * _PARTS if fast else 1)
-    var partsB = ex.alloc(nt * _PARTS if fast else 1)
-    if (flags & 16) != 0:
-        var q = Args()
-        q.p0 = G
-        q.p1 = O
-        q.p2 = nrm
-        if fast:
-            for k in range(nt):
-                _ = _chunk_sumsq(ex, G, Int(offs[k]), Int(offs[k + 1]) - Int(offs[k]), partsA, k * _PARTS)
-            q.p3 = partsA
-            q.i0 = 1
-        ex.launch[OP_SEG_SUMSQ](q, nt)
-        ex.sync()
-        var h = List[Float32](length=nt, fill=Float32(0.0))
-        ex.download(FP(unsafe_from_address=Int(h.unsafe_ptr())), nrm, nt)
-        var gs = Float32(0.0)
-        for k in range(nt):
-            var nk = ftz(identical_sqrt(h[k]))
-            gs = ftz(identical_mul_add(nk, nk, gs))
-        var clip = ftz(identical_div(ftz(identical_sqrt(gs)), fval(fp, 5)))
-        if clip > Float32(1.0):
-            var d = Args()
-            d.p0 = G
-            d.f0 = clip
-            ex.launch[OP_DIVS](d, n)
-    var bc1 = Float32(1.0)
-    var bc2 = Float32(1.0)
-    var pw1 = Float32(1.0)
-    var pw2 = Float32(1.0)
-    if (flags & 8) != 0:
-        var k0 = 0
-        if len(addrs) == 5:
-            var t0 = Int(Float64(py=fp[6]))
-            if t0 < 0 or t0 >= t or Float64(t0) != Float64(py=fp[6]):
-                raise Error("lamb_step: the scalars' step t0 must be an integer with 0 <= t0 < t")
-            if t0 > 0:
-                var sc = fptr(addrs[4], "scalars")
-                pw1 = sc.unsafe_load(0)
-                pw2 = sc.unsafe_load(1)
-                k0 = t0
-        for _ in range(k0, t):
-            pw1 = ftz(identical_mul(pw1, b1))
-            pw2 = ftz(identical_mul(pw2, b2))
-        bc1 = Float32(1.0) - pw1
-        bc2 = Float32(1.0) - pw2
-    var u = Args()
-    u.p0 = P
-    u.p1 = G
-    u.p2 = M
-    u.p3 = V
-    u.p4 = U
-    u.f1 = b1
-    u.f2 = b2
-    u.f3 = fval(fp, 3)
-    u.f4 = wd
-    u.f5 = bc1
-    u.f6 = ftz(identical_sqrt(bc2))
-    u.f7 = (Float32(1.0) - b1) if (flags & 4) != 0 else Float32(1.0)
-    ex.launch[OP_LAMB_UPD](u, n)
+    # `bind`: the host column runs on the caller's arrays in place (G is
+    # only read); the device uploads copies
+    var P = ex.bind(hp, n)
+    var G = ex.bind(fptr(addrs[1], "grads"), n)
+    var M = ex.bind(hm, n)
+    var V = ex.bind(hv, n)
+    var TAB = ex.alloc(len(tab))
+    ex.upload(TAB, FP(unsafe_from_address=Int(tab.unsafe_ptr())), len(tab))
+    var U = ex.alloc(n)
+    var partsA = ex.alloc(nb)
+    var partsB = ex.alloc(nb)
+    var nrm = ex.alloc(nt)
     var ratio = ex.alloc(nt)
-    var r = Args()
-    r.p0 = P
-    r.p1 = U
-    r.p2 = O
-    r.p3 = ratio
-    r.i0 = flags & 1
-    if wd != Float32(0.0) or (flags & 2) != 0:
-        if fast:
-            for k in range(nt):
-                var s = Int(offs[k])
-                var e = Int(offs[k + 1])
-                _ = _chunk_sumsq(ex, P, s, e - s, partsA, k * _PARTS)
-                _ = _chunk_sumsq(ex, U, s, e - s, partsB, k * _PARTS)
-            r.p4 = partsA
-            r.p5 = partsB
-            r.i1 = 1
-        ex.launch[OP_LAMB_RATIO](r, nt)
-    else:
-        var f = Args()
-        f.p0 = ratio
-        f.f0 = Float32(1.0)
-        ex.launch[OP_FILL](f, nt)
-    for k in range(nt):
-        var s = Int(offs[k])
-        var e = Int(offs[k + 1])
-        var ap = Args()
-        ap.p0 = P + s
-        ap.p1 = U + s
-        ap.p2 = ratio
-        ap.i0 = k
-        ap.f0 = lr
-        ex.launch[OP_LAMB_APPLY](ap, e - s)
+    var scal = ex.alloc(1)
+    lamb_core(ex, P, G, M, V, U, TAB, partsA, partsB, nrm, ratio, scal, n, nt, nb, flags,
+              fval(fp, 0), fval(fp, 1), fval(fp, 2), fval(fp, 3), fval(fp, 4), fval(fp, 5),
+              bias[0], bias[1])
     ex.download_async(hp, P, n)
     ex.download_async(hm, M, n)
     ex.download_async(hv, V, n)
     ex.sync()
-    _ = offs^
-    if len(addrs) == 5 and (flags & 8) != 0:
-        var sc = fptr(addrs[4], "scalars")
-        sc.unsafe_store(0, pw1)
-        sc.unsafe_store(1, pw2)
+    _ = tab^
+    if carry and (flags & 8) != 0:
+        sc.unsafe_store(0, bias[2])
+        sc.unsafe_store(1, bias[3])
     return PythonObject(n)
 
 
