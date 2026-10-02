@@ -15,6 +15,8 @@ Speed (a parallel schedule with the same fold order) is pass 2.
 from std.sys.compile import is_defined
 from std.sys.info import is_gpu, is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from std.sys import llvm_intrinsic
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count, host_predict_chunk
 from std.memory import bitcast
 from checks.numerics import (
     ftz, identical_mul, identical_mul_add, identical_div, identical_sqrt,
@@ -356,13 +358,30 @@ def par_rows[F: def(Int, Int) -> None](ref f: F, n: Int, grain: Int = ROW_CHUNK)
     comptime if is_gpu():
         f(0, n)
     else:
-        var lo = 0
-        while lo < n:
-            var hi = lo + grain
-            if hi > n:
-                hi = n
-            f(lo, hi)
-            lo = hi
+        # lane/neural-pass82 (2026-10-01): the blocks run on the host pool
+        # (core/host_parallel.mojo, in the caller's floating-point
+        # environment), in `host_predict_task_count` contiguous groups. Until
+        # this lane they ran one after another on the calling thread, so
+        # every x_linear host fit's row passes (GLM, Huber, LogisticCV,
+        # quantile, Bayes, ridge LOO, SGD one-vs-rest) were single threaded.
+        # Every caller's f writes only its own rows' (or units') slots and
+        # per-block scratch (audited), so the bits are the serial loop's.
+        # `-D MOJOLEARN_X_LINEAR_HOST_SERIAL=1` restores the serial loop.
+        var blocks = (n + grain - 1) // grain
+        var groups = host_predict_task_count(blocks)
+        comptime if is_defined["MOJOLEARN_X_LINEAR_HOST_SERIAL"]():
+            groups = 1
+        var per = host_predict_chunk(blocks, groups)
+
+        def group(g: Int) {imm f, imm n, imm grain, imm per, imm blocks}:
+            for bk in range(g * per, min(blocks, (g + 1) * per)):
+                f(bk * grain, min(n, (bk + 1) * grain))
+
+        if groups <= 1:
+            for g in range(groups):
+                group(g)
+            return
+        host_parallelize(group, groups)
 
 
 # ----------------------------------------------------------------- RNG
