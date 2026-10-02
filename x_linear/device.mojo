@@ -281,6 +281,19 @@ def fit_device(
             dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), dfw.unsafe_ptr(),
             Int32(0), Int32(2 * d + d * d), Int32(d), Int32(d + d * d), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
         )
+    elif grid_gram and bayes_like and MOMENTS_GRID and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0":
+        # lane/neural-pass130: BayesianRidge / ARD's means and centered Gram
+        # from the staged moments kernels (no Y columns), into the layout
+        # `xg_gram_kernel` fills (xm at 0, G at d): the same chains, staged
+        var tlb = mg_tiles(d, 0)
+        ctx.enqueue_function[mg_means_kernel](
+            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(0), Int32(hip[1]), dfw.unsafe_ptr(),
+            Int32(0), Int32(0), grid_dim=tlb, block_dim=MG_NT,
+        )
+        ctx.enqueue_function[mg_cross_kernel](
+            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(0), dfw.unsafe_ptr(),
+            Int32(0), Int32(0), Int32(d), Int32(0), grid_dim=tlb * (tlb + 1) // 2, block_dim=MG_NT,
+        )
     elif grid_gram:
         # The means then the centered Gram into fw[0, d + d*d), the layout
         # `lars_fit` reads (xm at 0, G at d); the team recomputes the means
