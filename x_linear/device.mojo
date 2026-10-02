@@ -232,13 +232,6 @@ def bayes_finish_kernel(fw: FP, res: FP, d: Int32, fi: Int32, state: FP, iters: 
         bayes_finish(fw, res, Int(d), fi != 0, ld(state, 2), ld(state, 0), ld(state, 1), Int(iters))
     witness_end(wf, woff, nonce)
 
-def _sgd_on_host() -> Bool:
-    """`MOJOLEARN_X_LINEAR_SGD_HOST=1` runs the per-sample SGD fit on the host
-    inside the device binding (the A/B arm); by default (lane/neural-pass139,
-    GPU-only rule) it runs on the device, `_sgd_ps_grid`."""
-    return String(getenv("MOJOLEARN_X_LINEAR_SGD_HOST")) == "1"
-
-
 def _lars_grid_gram() -> Bool:
     """`MOJOLEARN_X_LINEAR_LARS_GRID_GRAM=0` keeps the Gram on the team
     (the A/B arm); default the grid kernel."""
@@ -261,41 +254,6 @@ def _enetcv_grid() -> Bool:
     the one-block team fit (the A/B arm); default the grid form
     (x_linear/cd_grid.mojo)."""
     return String(getenv("MOJOLEARN_X_LINEAR_ENETCV_GRID")) != "0"
-
-
-def _fit_on_host(
-    algo: Int, x: FP, y: FP, n: Int, d: Int,
-    ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
-) raises:
-    """The host form of a fit, from the device binding (lane/neural-net-
-    experiment, 2026-09-30, the classical pass): exactly what
-    bindings/_mojolearn_x_linear_host.mojo runs, a `solo` team on host
-    scratch. For SGD, whose program is one sample after the next (their
-    plain SGD, the order is the algorithm), the device ran that sequence on
-    ONE GPU THREAD: 630 s for a million rows of istella on an L40S against
-    sklearn's 55 s (bench_board 0.8.25, `sgd-reg`). The host form is the
-    same program, the identical tier's own reference, on a CPU thread; the
-    one-vs-rest problems of a classifier run as independent units."""
-    var hip = ip.copy()
-    var hfp = fp.copy()
-    var fw = List[Float32](length=max(n_fw, 1), fill=Float32(0))
-    var iw = List[Int32](length=max(n_iw, 1), fill=Int32(0))
-    var bufs = team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr())))
-    var own = team_own(algo, d)
-    var tw = List[Float32](length=team_work(n, bufs, own), fill=Float32(0))
-    for i in range(n_out):
-        res.unsafe_store(i, Float32(0))
-    fit_dispatch(
-        solo(FP(unsafe_from_address=Int(tw.unsafe_ptr())), n, bufs, own), algo, x, y, n, d,
-        IP(unsafe_from_address=Int(hip.unsafe_ptr())), FP(unsafe_from_address=Int(hfp.unsafe_ptr())),
-        res, FP(unsafe_from_address=Int(fw.unsafe_ptr())), IP(unsafe_from_address=Int(iw.unsafe_ptr())),
-    )
-    _ = hip^
-    _ = hfp^
-    _ = fw^
-    _ = iw^
-    _ = tw^
-
 
 
 # ------------------------------------------------ minibatch SGD on the grid (lane/neural-pass103)
@@ -1149,8 +1107,8 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
 # included) and t are
 # restored from their epoch-start copies and the epoch replays on a rerun.
 # The shuffle, the finite check, the stopping and the adaptive rate run on
-# the host with sgd_one's statements. `MOJOLEARN_X_LINEAR_SGD_HOST=1` runs
-# the fit on the host instead (the A/B arm).
+# the host with sgd_one's statements (lane merged: the host fit arm is
+# removed, GPU-only rule).
 comptime SGD_PS_CHUNK = 2048
 # the per-problem scalar state ps[SGD_PS_ST c ..]: intercept, u, objective,
 # the one-class intercept's low word, wscale hi, wscale lo
@@ -2448,10 +2406,7 @@ def fit_device(
         _iso_predict_grid(x, n_x, y, n_y, n, ip, fp, res)
         return
     if algo == ALGO_SGD:
-        if _sgd_on_host():
-            _fit_on_host(algo, x, y, n, d, ip, fp, n_out, n_fw, n_iw, res)
-        else:
-            _sgd_ps_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
+        _sgd_ps_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
     var ctx = linear_ctx()
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():

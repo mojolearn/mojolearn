@@ -642,29 +642,29 @@ def host_loop(item, count, bufs, scal, name=None, par=False):
             else:
                 ptrs.append(f"_i({b[0]})" if is_int_buf(b[1]) else f"_f({b[0]})")
         stg = stages(item, count)
-        if len(stg) == 1 and stg[0][2] is None:
-            item, count = stg[0][0], stg[0][1]
-            call = ", ".join(["t"] + ptrs + [p[0] for p in scal])
-            scratch = any(b[1] in ("fscr", "iscr") for b in bufs) and name not in PAR_SCRATCH_OK
-            if par and not scratch and name not in HOST_RUN:
-                # lane/neural-pass72: the items over host tasks (`_items`)
-                binds = [b[0] for b in bufs]
-                for b, ptr in zip(bufs, ptrs):
-                    body += f"    var p_{b[0]} = {ptr}\n"
-                caps = ", ".join([f"imm p_{b}" for b in binds] + [f"imm {p[0]}" for p in scal])
-                pcall = ", ".join(["t"] + [f"p_{b}" for b in binds] + [p[0] for p in scal])
-                body += f"    def _item(t: Int) {{{caps}}}:\n        {item}({pcall})\n"
-                body += f"    _items(_item, {count})\n"
-                return body
-            body += f"    for t in range({count}):\n        {item}({call})\n"
+        if len(stg) != 1 or stg[0][2] is not None:
+            # lane/neural-pass141: multi-stage ops run their stages in order
+            for it, ct, lp in stg:
+                call = ", ".join(["t"] + (["lj"] if lp else []) + ptrs + [p[0] for p in scal])
+                if lp:
+                    body += f"    for lj in range({lp}):\n        for t in range({ct}):\n            {it}({call})\n"
+                else:
+                    body += f"    for t in range({ct}):\n        {it}({call})\n"
             return body
-        # lane/neural-pass141: multi-stage ops run their stages in order
-        for it, ct, lp in stg:
-            call = ", ".join(["t"] + (["lj"] if lp else []) + ptrs + [p[0] for p in scal])
-            if lp:
-                body += f"    for lj in range({lp}):\n        for t in range({ct}):\n            {it}({call})\n"
-            else:
-                body += f"    for t in range({ct}):\n        {it}({call})\n"
+        item, count = stg[0][0], stg[0][1]
+        call = ", ".join(["t"] + ptrs + [p[0] for p in scal])
+        scratch = any(b[1] in ("fscr", "iscr") for b in bufs) and name not in PAR_SCRATCH_OK
+        if par and not scratch and name not in HOST_RUN:
+            # lane/neural-pass72: the items over host tasks (`_items`)
+            binds = [b[0] for b in bufs]
+            for b, ptr in zip(bufs, ptrs):
+                body += f"    var p_{b[0]} = {ptr}\n"
+            caps = ", ".join([f"imm p_{b}" for b in binds] + [f"imm {p[0]}" for p in scal])
+            pcall = ", ".join(["t"] + [f"p_{b}" for b in binds] + [p[0] for p in scal])
+            body += f"    def _item(t: Int) {{{caps}}}:\n        {item}({pcall})\n"
+            body += f"    _items(_item, {count})\n"
+            return body
+        body += f"    for t in range({count}):\n        {item}({call})\n"
         return body
 
 
