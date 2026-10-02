@@ -96,3 +96,4 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T23:28:51Z	measurements/2026-10-01/pr80-amd.tar.gz	ec26ae6c286d3395a5952e0419d018afebd6024fbbde49676aca28aec8c8dc1b	852859356	mojolearn-steward-do-amd	/root/pr80-amd
 2026-10-01T23:30:03Z	measurements/2026-10-01/board-0834-nvc1-l40s.tar.gz	9d987fc61fe7ca222d9cc6d20a05e891ab88fb0637a1bfac4a25e43ea3f1b596	21421868	b07640402f07	/root/board-0834
 2026-10-01T23:30:07Z	measurements/2026-10-01/board-0834-hotaisle-mi300x.tar.gz	b82960fc8f4767dc9bbe655094d310e20b8ef2a6c73312a77170264b082e3e0b	6904286	enc1-gpuvm005	/root/board-0834
+2026-10-02T00:01:20Z	measurements/2026-10-02/board-0834-hotaisle-mi300x.tar.gz	edc2ba75b45d3ec0ba01e0b9d0bd9055fbbcd21049fbd8c20b6cb07739e697ad	21167327	enc1-gpuvm005	/root/board-0834
