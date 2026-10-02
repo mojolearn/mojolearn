@@ -30,6 +30,7 @@ from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb
 from x_linear.sgd import (
     sgd_loss, sgd_dloss, sgd_reg_block, _sgd_target, _clip_one,
     ws_mul, ws_div, ws_decay, ws_clip, WS_RESET, ff_add, oc_hinge, oc_offset,
+    mb_dot, mb_oc_mode, mb_oc_row, oc_delta, oc_count, oc_hinge_at, mb_oc_bias_step,
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
@@ -205,10 +206,17 @@ def _fit_on_host(
 @always_inline
 def _sgd_mb_rows_kernel_body(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
                        eps: Float32, swp: FP, has_sw: Int32, wpos: Float32, wneg: Float32, has_cw: Int32,
-                       dlv: FP, lv: FP, lr: Int32, eta0: Float32, dblk: Int32):
+                       dlv: FP, lv: FP, lr: Int32, eta0: Float32, dblk: Int32, ocm: Int32):
     var r = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     if r < Int(bs):
         var i = Int(idx.unsafe_load(Int(start) + r))
+        if ocm != 0:
+            # one-class (lane/neural-pass139): the float-float intercept's margin
+            var oc = mb_oc_row(mb_dot(x, i, Int(d), w, 0, Int(dblk)), ld(bias, 0), ld(bias, 1), Int(ocm),
+                               ld(swp, i) if has_sw != 0 else Float32(1), has_sw != 0)
+            st(dlv, r, oc[0])
+            st(lv, r, oc[1])
+            return
         var o = mb_row(x, ys, i, Int(d), w, 0, ld(bias, 0), Int(loss), eps, swp, has_sw != 0, wpos, wneg, has_cw != 0,
                        Int(lr), eta0, Int(dblk))
         st(dlv, r, o[0])
@@ -217,9 +225,51 @@ def _sgd_mb_rows_kernel_body(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d:
 
 def sgd_mb_rows_kernel(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
                        eps: Float32, swp: FP, has_sw: Int32, wpos: Float32, wneg: Float32, has_cw: Int32,
-                       dlv: FP, lv: FP, lr: Int32, eta0: Float32, dblk: Int32, wf: IP, woff: Int32, nonce: Int32):
+                       dlv: FP, lv: FP, lr: Int32, eta0: Float32, dblk: Int32, ocm: Int32, wf: IP, woff: Int32, nonce: Int32):
     _sgd_mb_rows_kernel_body(x, ys, idx, start, bs, d, w, bias, loss, eps, swp, has_sw, wpos, wneg, has_cw, dlv, lv, lr, eta0,
-                             dblk)
+                             dblk, ocm)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def sgd_mb_oc_team(dlv: FP, lv: FP, bs: Int, eta: Float32, alpha: Float32, bsum: Bool, cnt: IP, tid: Int,
+                   nt: Int) -> Float32:
+    """x_linear/sgd.mojo `oc_solve` on one block (lane/neural-pass139): each
+    probe's count split over the threads (rows tid, tid + nt, ..; integer
+    counts, so any split is exact), every thread folding the nt counts and
+    taking the same branch; then each row's (dl, loss) at the step
+    (`oc_hinge_at`). dlv holds the rows' margins on entry, from the rows
+    pass with the same row-to-thread map. Returns the step."""
+    var lo = 0
+    var hi = bs
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        sti(cnt, tid, oc_count(dlv, tid, bs, nt, oc_delta(mid, bs, eta, alpha, bsum)))
+        team_barrier()
+        var c = 0
+        for u in range(nt):
+            c += ldi(cnt, u)
+        team_barrier()
+        if mid >= c:
+            hi = mid
+        else:
+            lo = mid + 1
+    var dlt = oc_delta(lo, bs, eta, alpha, bsum)
+    for r in range(tid, bs, nt):
+        var o = oc_hinge_at(ld(dlv, r), dlt)
+        st(dlv, r, o[0])
+        st(lv, r, o[1])
+    return dlt
+
+
+def sgd_mb_oc_kernel(dlv: FP, lv: FP, bs: Int32, eta: Float32, alpha: Float32, bsum: Int32, cnt: IP, dlt: FP,
+                     wf: IP, woff: Int32, nonce: Int32):
+    """The one-class implicit intercept step of a batch (one block,
+    `sgd_mb_oc_team`); the step to dlt[0] for the step kernel."""
+    var tid = Int(thread_idx.x)
+    var d0 = sgd_mb_oc_team(dlv, lv, Int(bs), eta, alpha, bsum != 0, cnt, tid, Int(block_dim.x))
+    if tid == 0:
+        st(dlt, 0, d0)
     witness_end(wf, woff, nonce)
 
 @always_inline
@@ -242,7 +292,7 @@ def sgd_mb_parts_kernel(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP,
 @always_inline
 def _sgd_mb_step_kernel_body(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias: FP, obj: FP, eta: Float32,
                        alpha: Float32, l1r: Float32, penalty: Int32, fi: Int32, need_obj: Int32, one_class: Int32,
-                       bsum: Int32, sub: Int32):
+                       bsum: Int32, sub: Int32, ocm: Int32, dlt: FP):
     var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
     var subs = mb_subs(Int(bs), Int(sub))
@@ -255,15 +305,22 @@ def _sgd_mb_step_kernel_body(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP,
         st(w, j, mb_step(ld(w, j), g, Int(bs), eta, alpha, l1r, Int(penalty), bsum != 0))
     elif j == dd:
         if fi != 0:
-            st(bias, 0, mb_bias_step(ld(bias, 0), g, Int(bs), eta, alpha, one_class != 0, bsum != 0))
+            if one_class != 0:
+                var nb = mb_oc_bias_step(ld(bias, 0), ld(bias, 1), g, Int(bs), eta, alpha, bsum != 0, Int(ocm),
+                                         ld(dlt, 0) if ocm == 2 else Float32(0))
+                st(bias, 0, nb[0])
+                st(bias, 1, nb[1])
+            else:
+                st(bias, 0, mb_bias_step(ld(bias, 0), g, Int(bs), eta, alpha, False, bsum != 0))
     elif need_obj != 0:
         st(obj, 0, fa(ld(obj, 0), g))
 
 
 def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias: FP, obj: FP, eta: Float32,
                        alpha: Float32, l1r: Float32, penalty: Int32, fi: Int32, need_obj: Int32, one_class: Int32,
-                       bsum: Int32, sub: Int32, wf: IP, woff: Int32, nonce: Int32):
-    _sgd_mb_step_kernel_body(parts, nsub, bs, d, w, bias, obj, eta, alpha, l1r, penalty, fi, need_obj, one_class, bsum, sub)
+                       bsum: Int32, sub: Int32, ocm: Int32, dlt: FP, wf: IP, woff: Int32, nonce: Int32):
+    _sgd_mb_step_kernel_body(parts, nsub, bs, d, w, bias, obj, eta, alpha, l1r, penalty, fi, need_obj, one_class, bsum, sub,
+                             ocm, dlt)
     witness_end(wf, woff, nonce)
 
 
@@ -289,11 +346,11 @@ def sgd_rowsq_kernel(x: FP, n: Int32, d: Int32, sqp: FP, wf: IP, woff: Int32, no
 
 def _sgd_mb_chunk_kernel_body(
     x: FP, ys: FP, idx: IP, w: FP, bias: FP, swp: FP, dlv: FP, lv: FP, parts: FP, obj: FP, ci: IP, cf: FP,
-    dotp: FP, sqp: FP,
+    dotp: FP, sqp: FP, cnt: IP,
     start0: Int32, nbat: Int32, t0: Int32,
 ):
     """ci: n, batch, d, loss, has_sw, has_cw, lr, nsub, penalty, fi, need_obj,
-    one_class, bsum; cf: eps, wpos, wneg, eta0, eta, alpha, l1r, power_t,
+    one_class, bsum, sub, dblk, has_sq, ocm; cf: eps, wpos, wneg, eta0, eta, alpha, l1r, power_t,
     opt_init (Metal takes at most 31 kernel arguments)."""
     var nn = ldi(ci, 0)
     var batch = ldi(ci, 1)
@@ -311,6 +368,7 @@ def _sgd_mb_chunk_kernel_body(
     var sub = ldi(ci, 13)
     var dblk = ldi(ci, 14)
     var has_sq = ldi(ci, 15) != 0
+    var ocm = ldi(ci, 16)
     var eps = ld(cf, 0)
     var wpos = ld(cf, 1)
     var wneg = ld(cf, 2)
@@ -345,6 +403,11 @@ def _sgd_mb_chunk_kernel_body(
                 var dot = Float32(0)
                 for bb in range(nb):
                     dot = fa(dot, ld(dotp, r * nb + bb))
+                if ocm != 0:
+                    var oc = mb_oc_row(dot, ld(bias, 0), ld(bias, 1), ocm, ld(swp, i) if has_sw else Float32(1), has_sw)
+                    st(dlv, r, oc[0])
+                    st(lv, r, oc[1])
+                    continue
                 var o = mb_row_dot(x, ys, i, dd, dot, ld(bias, 0), loss, eps, swp, has_sw, wpos, wneg, has_cw, lr, eta0,
                                    sqp, has_sq)
                 st(dlv, r, o[0])
@@ -352,9 +415,20 @@ def _sgd_mb_chunk_kernel_body(
         else:
             for r in range(tid, bs, nt):
                 var i = Int(idx.unsafe_load(start + r))
+                if ocm != 0:
+                    var oc = mb_oc_row(mb_dot(x, i, dd, w, 0, dblk), ld(bias, 0), ld(bias, 1), ocm,
+                                       ld(swp, i) if has_sw else Float32(1), has_sw)
+                    st(dlv, r, oc[0])
+                    st(lv, r, oc[1])
+                    continue
                 var o = mb_row(x, ys, i, dd, w, 0, ld(bias, 0), loss, eps, swp, has_sw, wpos, wneg, has_cw, lr, eta0, dblk)
                 st(dlv, r, o[0])
                 st(lv, r, o[1])
+        var dlt = Float32(0)
+        if ocm == 2:
+            # the one-class implicit intercept step (`oc_solve`): the rows'
+            # margins above sit at the rows this thread owns
+            dlt = sgd_mb_oc_team(dlv, lv, bs, et, alpha, bsum, cnt, tid, nt)
         team_barrier()
         var subs = mb_subs(bs, sub)
         for q in range(tid, (dd + 2) * subs, nt):
@@ -370,7 +444,12 @@ def _sgd_mb_chunk_kernel_body(
                 st(w, j, mb_step(ld(w, j), g, bs, et, alpha, l1r, penalty, bsum))
             elif j == dd:
                 if fi:
-                    st(bias, 0, mb_bias_step(ld(bias, 0), g, bs, et, alpha, one_class, bsum))
+                    if one_class:
+                        var nb = mb_oc_bias_step(ld(bias, 0), ld(bias, 1), g, bs, et, alpha, bsum, ocm, dlt)
+                        st(bias, 0, nb[0])
+                        st(bias, 1, nb[1])
+                    else:
+                        st(bias, 0, mb_bias_step(ld(bias, 0), g, bs, et, alpha, False, bsum))
             elif need_obj:
                 st(obj, 0, fa(ld(obj, 0), g))
         team_barrier()
@@ -380,9 +459,9 @@ def _sgd_mb_chunk_kernel_body(
 
 def sgd_mb_chunk_kernel(
     x: FP, ys: FP, idx: IP, w: FP, bias: FP, swp: FP, dlv: FP, lv: FP, parts: FP, obj: FP, ci: IP, cf: FP,
-    dotp: FP, sqp: FP, start0: Int32, nbat: Int32, t0: Int32, wf: IP, woff: Int32, nonce: Int32,
+    dotp: FP, sqp: FP, cnt: IP, start0: Int32, nbat: Int32, t0: Int32, wf: IP, woff: Int32, nonce: Int32,
 ):
-    _sgd_mb_chunk_kernel_body(x, ys, idx, w, bias, swp, dlv, lv, parts, obj, ci, cf, dotp, sqp, start0, nbat, t0)
+    _sgd_mb_chunk_kernel_body(x, ys, idx, w, bias, swp, dlv, lv, parts, obj, ci, cf, dotp, sqp, cnt, start0, nbat, t0)
     witness_end(wf, woff, nonce)
 
 
@@ -434,25 +513,31 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var dlv = ctx.enqueue_create_buffer[DType.float32](batch)
     var dparts = ctx.enqueue_create_buffer[DType.float32]((d + 2) * nsub)
     var dw = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
-    var dbias = ctx.enqueue_create_buffer[DType.float32](1)
+    # the intercept as (hi, lo): the one-class float-float (lane/neural-pass139)
+    var dbias = ctx.enqueue_create_buffer[DType.float32](2)
     var dobj = ctx.enqueue_create_buffer[DType.float32](1)
     var dws = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
-    var dbs = ctx.enqueue_create_buffer[DType.float32](1)
+    var dbs = ctx.enqueue_create_buffer[DType.float32](2)
+    var ocm = mb_oc_mode(one_class, fi, has_sw)
+    var dcnt = ctx.enqueue_create_buffer[DType.int32](XG_TPB)
+    var ddlt = ctx.enqueue_create_buffer[DType.float32](1)
+    var hb0 = List[Float32](length=2, fill=Float32(0))
+    hb0[0] = Float32(1) if one_class else Float32(0)
     var wcap = 0
     var ws0 = 0
     while ws0 < n:
         var wbs = min(batch, n - ws0)
-        wcap += _xg_blocks(wbs) + _xg_blocks((d + 2) * mb_subs(wbs, sub)) + _xg_blocks(d + 2)
+        wcap += _xg_blocks(wbs) + _xg_blocks((d + 2) * mb_subs(wbs, sub)) + _xg_blocks(d + 2) + (1 if ocm == 2 else 0)
         ws0 += wbs
     wcap += _xg_blocks(n)
     var wit = Witness(ctx, max(wcap, 1))
     var chunk = _sgd_chunk()
-    var dci = ctx.enqueue_create_buffer[DType.int32](16)
+    var dci = ctx.enqueue_create_buffer[DType.int32](17)
     var ddotp = ctx.enqueue_create_buffer[DType.float32](max(batch * ((d + MB_DBLK - 1) // MB_DBLK), 1))
     var pa_rate = lr == LR_PA1 or lr == LR_PA2
     var dsq = ctx.enqueue_create_buffer[DType.float32](max(n, 1) if pa_rate else 1)
     var dcf = ctx.enqueue_create_buffer[DType.float32](9)
-    var hci = List[Int32](length=16, fill=Int32(0))
+    var hci = List[Int32](length=17, fill=Int32(0))
     var hcf = List[Float32](length=9, fill=Float32(0))
     hci[0] = Int32(n)
     hci[1] = Int32(batch)
@@ -468,6 +553,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     hci[13] = Int32(sub)
     hci[14] = Int32(dblk)
     hci[15] = Int32(1 if pa_rate else 0)
+    hci[16] = Int32(ocm)
     hcf[0] = eps
     hcf[3] = eta0
     hcf[5] = alpha
@@ -480,7 +566,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var ys = List[Float32](length=max(n, 1), fill=Float32(0))
     var idx = List[Int32](length=max(n, 1), fill=Int32(0))
     var hw = List[Float32](length=max(d, 1), fill=Float32(0))
-    var hb = List[Float32](length=1, fill=Float32(0))
+    var hb = List[Float32](length=2, fill=Float32(0))
     var ho = List[Float32](length=1, fill=Float32(0))
     var need_obj = tol > Float32(-3.0e38)
     var max_epochs = 0
@@ -500,7 +586,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
             idx[i] = Int32(i)
         ctx.enqueue_copy(dst_buf=dys, src_ptr=ys.unsafe_ptr())
         dw.enqueue_fill(Float32(0))
-        dbias.enqueue_fill(Float32(1) if one_class else Float32(0))
+        ctx.enqueue_copy(dst_buf=dbias, src_ptr=hb0.unsafe_ptr())
         var wpos = fp[6 + c] if has_cw else Float32(1)
         var wneg = fp[6 + problems + c] if has_cw else Float32(1)
         var rng = seed + UInt64(1000003) * UInt64(c)
@@ -557,7 +643,8 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                         ctx.enqueue_function[sgd_mb_chunk_kernel](
                             dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(), dbias.unsafe_ptr(),
                             dsw.unsafe_ptr(), ddl.unsafe_ptr(), dlv.unsafe_ptr(), dparts.unsafe_ptr(), dobj.unsafe_ptr(),
-                            dci.unsafe_ptr(), dcf.unsafe_ptr(), ddotp.unsafe_ptr(), dsq.unsafe_ptr(), Int32(start), Int32(nbt), Int32(t),
+                            dci.unsafe_ptr(), dcf.unsafe_ptr(), ddotp.unsafe_ptr(), dsq.unsafe_ptr(), dcnt.unsafe_ptr(),
+                            Int32(start), Int32(nbt), Int32(t),
                             wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=XG_TPB,
                         )
                         wo += 1
@@ -571,9 +658,16 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                             dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(start), Int32(bs), Int32(d),
                             dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, dsw.unsafe_ptr(), Int32(1 if has_sw else 0),
                             wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0, Int32(dblk),
-                            wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
+                            Int32(ocm), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
                         )
                         wo += _xg_blocks(bs)
+                        if ocm == 2:
+                            ctx.enqueue_function[sgd_mb_oc_kernel](
+                                ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(bs), et, alpha, Int32(1 if bsum else 0),
+                                dcnt.unsafe_ptr(), ddlt.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                grid_dim=1, block_dim=XG_TPB,
+                            )
+                            wo += 1
                         ctx.enqueue_function[sgd_mb_parts_kernel](
                             dx.unsafe_ptr(), Int32(d), didx.unsafe_ptr(), Int32(start), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
                             Int32(bs), Int32(nsub), dparts.unsafe_ptr(), Int32(sub), wit.p(), Int32(wo), nonce,
@@ -583,7 +677,8 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                         ctx.enqueue_function[sgd_mb_step_kernel](
                             dparts.unsafe_ptr(), Int32(nsub), Int32(bs), Int32(d), dw.unsafe_ptr(), dbias.unsafe_ptr(),
                             dobj.unsafe_ptr(), et, alpha, l1r, Int32(penalty), Int32(1 if fi else 0), Int32(1 if need_obj else 0),
-                            Int32(1 if one_class else 0), Int32(1 if bsum else 0), Int32(sub), wit.p(), Int32(wo), nonce,
+                            Int32(1 if one_class else 0), Int32(1 if bsum else 0), Int32(sub), Int32(ocm), ddlt.unsafe_ptr(),
+                            wit.p(), Int32(wo), nonce,
                             grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
                         )
                         wo += _xg_blocks(d + 2)
@@ -634,7 +729,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
             for j in range(d):
                 res.unsafe_store(c * d + j, hw[j])
             # one-class: the slot holds offset_ = 1 - intercept
-            res.unsafe_store(problems * d + c, fs(Float32(1), hb[0]) if one_class else hb[0])
+            res.unsafe_store(problems * d + c, oc_offset(hb[0], hb[1]) if one_class else hb[0])
             if epochs > max_epochs:
                 max_epochs = epochs
     res.unsafe_store(problems * d + problems, i2f(max_epochs))
@@ -656,6 +751,9 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     _ = dobj^
     _ = dws^
     _ = dbs^
+    _ = dcnt^
+    _ = ddlt^
+    _ = hb0^
     _ = wit^
 
 

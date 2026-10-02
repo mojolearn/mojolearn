@@ -20,6 +20,9 @@ by five) and the loss classes at the top of that file. Differences, named:
     float-float (`ff_add`), the hinge decided on the margin p - 1
     (`oc_hinge`), and every SGD path returns offset_ = 1 - intercept for
     k == 1 (`oc_offset`), since float32 near 1 drops the late steps;
+    the one-class minibatch carries the same float-float intercept and
+    takes an implicit intercept step (`oc_solve`, see `mb_oc_mode`), new
+    bits against their per-row step, the same stationary point;
   * the shuffle is Fisher-Yates over splitmix64 (x_linear/ops.mojo), not
     their `SequentialDataset.shuffle` over numpy's MT19937, so a fit agrees
     with theirs in quality, not in bits; the OvR problem c is seeded
@@ -1415,6 +1418,113 @@ def mb_bias_step(b: Float32, gb: Float32, bs: Int, eta: Float32, alpha: Float32,
     return nb
 
 
+# lane/neural-pass139 (2026-10-02): the one-class minibatch intercept.
+# With w near 0 every row's margin is nearly one value, while the batch's
+# intercept step eta_b (k / bs - nu) (k flagged rows; eta_b = bs times the
+# per-row rate, 2e-3 at istella's last batch at 4096) is orders above the
+# margins' spread (|coef| ~ 1e-5): the explicit step is bang-bang, every
+# row flagged then none, and the final intercept lands anywhere in that
+# cycle (istella nu 0.1 flagged 0.374 of the training rows at batch 256).
+# Their per-sample fit, batch-equivalent, moves the intercept after EVERY
+# row, so each row's flag sees the steps of the rows before it. The
+# minibatch takes the same feedback in one parallel step: the IMPLICIT
+# step, delta = eta (k / bs - nu) with k the rows flagged at the moved
+# intercept, m_r + delta <= 0. k - C(k) (C(k) the rows flagged at delta_k)
+# is strictly increasing in k, so the least k with k >= C(k) is unique and
+# a bisection over k in [0, bs] finds it with integer counts (exact, any
+# order); each count is a parallel pass over the batch. Its fixed point:
+# E[delta] = 0 gives E[k] / bs = nu, sklearn's stationary point (their
+# intercept += eta (1[m <= 0] - nu) per row), with no overshoot past the
+# batch's own nu-quantile. The rows' dl (the weights' step) are then the
+# flags at the moved intercept. Mode `ocm`: 0 not one-class, 1 the explicit
+# step (sample weights, or no intercept), 2 the implicit step.
+@always_inline
+def mb_oc_mode(one_class: Bool, fit_intercept: Bool, has_sw: Bool) -> Int:
+    if not one_class:
+        return 0
+    if fit_intercept and not has_sw:
+        return 2
+    return 1
+
+
+@always_inline
+def oc_margin(dot: Float32, ih: Float32, il: Float32) -> Float32:
+    """`oc_hinge`'s margin m = (ih - 1) + il + dot."""
+    return fa(fa(fs(ih, Float32(1)), il), dot)
+
+
+@always_inline
+def mb_oc_row(dot: Float32, ih: Float32, il: Float32, ocm: Int, swi: Float32, has_sw: Bool) -> Tuple[Float32, Float32]:
+    """A one-class row of the batch: ocm 2 (the margin, 0), the implicit step
+    then converts it (`oc_hinge_at`); ocm 1 (dl weighted, loss) of `oc_hinge`."""
+    if ocm == 2:
+        return (oc_margin(dot, ih, il), Float32(0))
+    var h = oc_hinge(dot, ih, il)
+    var dl = fm(h[1], swi) if has_sw else h[1]
+    return (dl, h[0])
+
+
+@always_inline
+def oc_delta(k: Int, bs: Int, eta: Float32, alpha: Float32, bsum: Bool) -> Float32:
+    """The intercept step with k rows flagged: mean eta (k / bs - alpha), sum
+    eta (k - bs alpha). Nondecreasing in k."""
+    if bsum:
+        return fm(eta, fs(i2f(k), fm(i2f(bs), alpha)))
+    return fm(eta, fs(fd(i2f(k), i2f(bs)), alpha))
+
+
+@always_inline
+def oc_count(mv: FP, lo: Int, hi: Int, step: Int, dlt: Float32) -> Int:
+    """Rows r = lo, lo + step, .. < hi flagged at the step dlt: fa(m_r, dlt) <= 0."""
+    var c = 0
+    var r = lo
+    while r < hi:
+        if fa(ld(mv, r), dlt) <= 0:
+            c += 1
+        r += step
+    return c
+
+
+@always_inline
+def oc_hinge_at(m0: Float32, dlt: Float32) -> Tuple[Float32, Float32]:
+    """(dl, loss) of a row of margin m0 after the step dlt (`oc_count`'s flag)."""
+    var m = fa(m0, dlt)
+    if m <= 0:
+        return (Float32(-1), fs(Float32(0), m))
+    return (Float32(0), Float32(0))
+
+
+def oc_solve(mv: FP, bs: Int, eta: Float32, alpha: Float32, bsum: Bool) -> Float32:
+    """The implicit step (host): the least k in [0, bs] with k >= C(k), by
+    bisection; the device runs the same probes with the counts split over
+    a block."""
+    var lo = 0
+    var hi = bs
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        var c = oc_count(mv, 0, bs, 1, oc_delta(mid, bs, eta, alpha, bsum))
+        if mid >= c:
+            hi = mid
+        else:
+            lo = mid + 1
+    return oc_delta(lo, bs, eta, alpha, bsum)
+
+
+@always_inline
+def mb_oc_bias_step(ih: Float32, il: Float32, gb: Float32, bs: Int, eta: Float32, alpha: Float32, bsum: Bool,
+                    ocm: Int, dlt: Float32) -> Tuple[Float32, Float32]:
+    """The one-class intercept (float-float, `ff_add`) after the batch: ocm 2
+    the implicit step dlt; ocm 1 `mb_bias_step`'s explicit step as one word."""
+    if ocm == 2:
+        return ff_add(ih, il, dlt)
+    var a: Float32
+    if bsum:
+        a = fs(fm(fs(Float32(0), eta), gb), fm(fm(i2f(bs), eta), alpha))
+    else:
+        a = fs(fm(fs(Float32(0), eta), fd(gb, i2f(bs))), fm(eta, alpha))
+    return ff_add(ih, il, a)
+
+
 @always_inline
 def mb_penalty(w: FP, woff: Int, d: Int, alpha: Float32, l1r: Float32, penalty: Int) -> Float32:
     """alpha times the penalty (sgd_one's reg) at w."""
@@ -1448,6 +1558,8 @@ def sgd_mb_one(
     var nsub = mb_subs(batch, sub)
     fill(w, woff, d, Float32(0))
     var bias = Float32(1) if one_class else Float32(0)
+    var bl = Float32(0)  # one-class: the intercept's low word
+    var ocm = mb_oc_mode(one_class, fit_intercept, has_sw)
     for i in range(n):
         sti(idx, i, i)
     var rng = seed
@@ -1466,16 +1578,31 @@ def sgd_mb_one(
         var start = 0
         while start < n:
             var bs = min(batch, n - start)
+            var et = mb_eta(lr, eta, eta0, alpha, power_t, opt_init, t)
             for r in range(bs):
-                var dl_l = mb_row(x, ys, Int(ldi(idx, start + r)), d, w, woff, bias, loss, eps, swp, has_sw, wpos, wneg, has_cw,
+                var ir = Int(ldi(idx, start + r))
+                if one_class:
+                    var oc = mb_oc_row(mb_dot(x, ir, d, w, woff, dblk), bias, bl, ocm,
+                                       ld(swp, ir) if has_sw else Float32(1), has_sw)
+                    st(dlv, r, oc[0])
+                    st(lv, r, oc[1])
+                    continue
+                var dl_l = mb_row(x, ys, ir, d, w, woff, bias, loss, eps, swp, has_sw, wpos, wneg, has_cw,
                                   lr, eta0, dblk)
                 st(dlv, r, dl_l[0])
                 st(lv, r, dl_l[1])
+            var dlt = Float32(0)
+            if ocm == 2:
+                # the implicit intercept step, then each row's (dl, loss) at it
+                dlt = oc_solve(dlv, bs, et, alpha, bsum)
+                for r in range(bs):
+                    var o = oc_hinge_at(ld(dlv, r), dlt)
+                    st(dlv, r, o[0])
+                    st(lv, r, o[1])
             var subs = mb_subs(bs, sub)
             for j in range(d + 2):
                 for s in range(subs):
                     st(parts, j * nsub + s, mb_part(x, d, idx, start, dlv, lv, j, s, bs, sub))
-            var et = mb_eta(lr, eta, eta0, alpha, power_t, opt_init, t)
             for j in range(d):
                 var g = Float32(0)
                 for s in range(subs):
@@ -1485,7 +1612,12 @@ def sgd_mb_one(
                 var gb = Float32(0)
                 for s in range(subs):
                     gb = fa(gb, ld(parts, d * nsub + s))
-                bias = mb_bias_step(bias, gb, bs, et, alpha, one_class, bsum)
+                if one_class:
+                    var nb = mb_oc_bias_step(bias, bl, gb, bs, et, alpha, bsum, ocm, dlt)
+                    bias = nb[0]
+                    bl = nb[1]
+                else:
+                    bias = mb_bias_step(bias, gb, bs, et, alpha, one_class, bsum)
             if need_obj:
                 var lb = Float32(0)
                 for s in range(subs):
@@ -1518,5 +1650,6 @@ def sgd_mb_one(
                     no_improve = 0
                 else:
                     break
-    st(b, boff, fs(Float32(1), bias) if one_class else bias)
+    # one-class: the slot holds offset_ = 1 - intercept (`oc_offset`)
+    st(b, boff, oc_offset(bias, bl) if one_class else bias)
     return epochs
