@@ -97,8 +97,8 @@ comptime SVM_WS_MAX = 2048 if (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_WS1024"]()
 ) else 1024
-"""FAST on Apple: a working set of up to 2048 (the block solve's
-two-elements-per-thread kernel carries it in one 1024-thread block), half
+"""FAST on Apple: a working set of up to 2048 (the grid solve carries it
+over eight blocks of 256, `smoblocksolve.mojo`), half
 the SMO outer iterations of 1024 on a hard problem. Taken from
 SVM_WS_BIG_MIN training rows: below that 1024 is as fast and the solver
 keeps the reference's working set (and every gate fixture's shape)."""
