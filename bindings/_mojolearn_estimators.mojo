@@ -516,7 +516,7 @@ def ols_fit_binding(
 
 
 def lm_col_sums_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """lane hr-small-passes: the exact, correctly rounded float64 sum of
+    """Lane hr-small-passes: the exact, correctly rounded float64 sum of
     every column of a float32 [rows, cols] matrix, on the device
     (glm/impl/center_device.mojo). params: rows, cols. Returns 0."""
     if len(params) != 2:
@@ -532,7 +532,7 @@ def lm_col_sums_binding(x_addr: PythonObject, out_addr: PythonObject, params: Py
 
 
 def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """lane hr-small-passes: out = x - mu per column in float32 on the
+    """Lane hr-small-passes: out = x - mu per column in float32 on the
     device, subnormals flushed. params: rows, cols. Returns 0."""
     if len(params) != 2:
         raise Error("lm_center: params must contain rows, cols")
@@ -548,7 +548,7 @@ def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: Pyt
 
 
 def lm_scale_rows_binding(x_addr: PythonObject, w_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """lane hr-small-passes: out = x * w per row in float32 on the device,
+    """Lane hr-small-passes: out = x * w per row in float32 on the device,
     subnormals flushed. params: rows, cols. Returns 0."""
     if len(params) != 2:
         raise Error("lm_scale_rows: params must contain rows, cols")

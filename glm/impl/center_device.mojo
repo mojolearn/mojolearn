@@ -62,7 +62,7 @@ def cs_partial_kernel(x: F32P, part: I64P, rows_: Int64, cols_: Int64, rb_: Int6
         part.unsafe_store(o + L, acc[L])
 
 
-def cs_fold_kernel(part: I64P, out: U64P, nrb_: Int64, cols_: Int64):
+def cs_fold_kernel(part: I64P, dst: U64P, nrb_: Int64, cols_: Int64):
     """Block c: column c's nrb partials (partial (blk, c) at blk * cols + c)."""
     var nrb = Int(nrb_)
     var cols = Int(cols_)
@@ -98,27 +98,27 @@ def cs_fold_kernel(part: I64P, out: U64P, nrb_: Int64, cols_: Int64):
         var acc = InlineArray[Int64, CS_WORDS](fill=Int64(0))
         for L in range(CS_WORDS):
             acc[L] = tot[L]
-        out.unsafe_store(c, exact_finish(acc))
+        dst.unsafe_store(c, exact_finish(acc))
 
 
-def center_kernel(x: F32P, mu: F32P, out: F32P, rows_: Int64, cols_: Int64):
+def center_kernel(x: F32P, mu: F32P, dst: F32P, rows_: Int64, cols_: Int64):
     var cols = Int(cols_)
     var total = Int(rows_) * cols
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < total:
-        out.unsafe_store(i, center_cell(x.unsafe_load(i), mu.unsafe_load(i % cols)))
+        dst.unsafe_store(i, center_cell(x.unsafe_load(i), mu.unsafe_load(i % cols)))
 
 
-def scale_rows_kernel(x: F32P, w: F32P, out: F32P, rows_: Int64, cols_: Int64):
+def scale_rows_kernel(x: F32P, w: F32P, dst: F32P, rows_: Int64, cols_: Int64):
     var cols = Int(cols_)
     var total = Int(rows_) * cols
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < total:
-        out.unsafe_store(i, scale_cell(x.unsafe_load(i), w.unsafe_load(i // cols)))
+        dst.unsafe_store(i, scale_cell(x.unsafe_load(i), w.unsafe_load(i // cols)))
 
 
-def col_sums_device(ctx: DeviceContext, x: Int, out: Int, rows: Int, cols: Int) raises:
-    """out (float64[cols], written as its bits): the correctly rounded exact
+def col_sums_device(ctx: DeviceContext, x: Int, dst: Int, rows: Int, cols: Int) raises:
+    """dst (float64[cols], written as its bits): the correctly rounded exact
     sum of every column of the float32 [rows, cols] matrix at x."""
     comptime assert CS_SMEM_FITS, "col_sums_device: a 2 KB threadgroup page must fit"
     if rows <= 0 or cols <= 0:
@@ -135,15 +135,15 @@ def col_sums_device(ctx: DeviceContext, x: Int, out: Int, rows: Int, cols: Int) 
                                             grid_dim=(threads + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
     ctx.enqueue_function[cs_fold_kernel](d_p.unsafe_ptr(), d_o.unsafe_ptr(), Int64(nrb), Int64(cols),
                                          grid_dim=cols, block_dim=CS_TPB)
-    ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=out), src_buf=d_o)
+    ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=dst), src_buf=d_o)
     ctx.synchronize()
     _ = d_x^
     _ = d_p^
     _ = d_o^
 
 
-def center_device(ctx: DeviceContext, x: Int, mu: Int, out: Int, rows: Int, cols: Int) raises:
-    """out[r, c] = center_cell(x[r, c], mu[c]); mu float32[cols]."""
+def center_device(ctx: DeviceContext, x: Int, mu: Int, dst: Int, rows: Int, cols: Int) raises:
+    """dst[r, c] = center_cell(x[r, c], mu[c]); mu float32[cols]."""
     var cells = rows * cols
     if cells <= 0:
         return
@@ -154,15 +154,15 @@ def center_device(ctx: DeviceContext, x: Int, mu: Int, out: Int, rows: Int, cols
     ctx.enqueue_copy(dst_buf=d_m, src_ptr=F32P(unsafe_from_address=mu))
     ctx.enqueue_function[center_kernel](d_x.unsafe_ptr(), d_m.unsafe_ptr(), d_o.unsafe_ptr(), Int64(rows), Int64(cols),
                                         grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
-    ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=out), src_buf=d_o)
+    ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=dst), src_buf=d_o)
     ctx.synchronize()
     _ = d_x^
     _ = d_m^
     _ = d_o^
 
 
-def scale_rows_device(ctx: DeviceContext, x: Int, w: Int, out: Int, rows: Int, cols: Int) raises:
-    """out[r, c] = scale_cell(x[r, c], w[r]); w float32[rows]."""
+def scale_rows_device(ctx: DeviceContext, x: Int, w: Int, dst: Int, rows: Int, cols: Int) raises:
+    """dst[r, c] = scale_cell(x[r, c], w[r]); w float32[rows]."""
     var cells = rows * cols
     if cells <= 0:
         return
@@ -173,7 +173,7 @@ def scale_rows_device(ctx: DeviceContext, x: Int, w: Int, out: Int, rows: Int, c
     ctx.enqueue_copy(dst_buf=d_w, src_ptr=F32P(unsafe_from_address=w))
     ctx.enqueue_function[scale_rows_kernel](d_x.unsafe_ptr(), d_w.unsafe_ptr(), d_o.unsafe_ptr(), Int64(rows), Int64(cols),
                                             grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
-    ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=out), src_buf=d_o)
+    ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=dst), src_buf=d_o)
     ctx.synchronize()
     _ = d_x^
     _ = d_w^

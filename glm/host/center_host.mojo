@@ -10,11 +10,11 @@ comptime _F32P = MutPointer[Float32, MutAnyOrigin]
 comptime _U64P = MutPointer[UInt64, MutAnyOrigin]
 
 
-def col_sums_on_cpu(x: Int, out: Int, rows: Int, cols: Int) raises:
+def col_sums_on_cpu(x: Int, dst: Int, rows: Int, cols: Int) raises:
     if rows <= 0 or cols <= 0:
         raise Error("col_sums: rows and cols must be positive")
     var xp = _F32P(unsafe_from_address=x)
-    var op = _U64P(unsafe_from_address=out)
+    var op = _U64P(unsafe_from_address=dst)
     for c in range(cols):
         var acc = InlineArray[Int64, CS_WORDS](fill=Int64(0))
         for r in range(rows):
@@ -22,17 +22,17 @@ def col_sums_on_cpu(x: Int, out: Int, rows: Int, cols: Int) raises:
         op.unsafe_store(c, exact_finish(acc))
 
 
-def center_on_cpu(x: Int, mu: Int, out: Int, rows: Int, cols: Int):
+def center_on_cpu(x: Int, mu: Int, dst: Int, rows: Int, cols: Int):
     var xp = _F32P(unsafe_from_address=x)
     var mp = _F32P(unsafe_from_address=mu)
-    var op = _F32P(unsafe_from_address=out)
+    var op = _F32P(unsafe_from_address=dst)
     for i in range(rows * cols):
         op.unsafe_store(i, center_cell(xp.unsafe_load(i), mp.unsafe_load(i % cols)))
 
 
-def scale_rows_on_cpu(x: Int, w: Int, out: Int, rows: Int, cols: Int):
+def scale_rows_on_cpu(x: Int, w: Int, dst: Int, rows: Int, cols: Int):
     var xp = _F32P(unsafe_from_address=x)
     var wp = _F32P(unsafe_from_address=w)
-    var op = _F32P(unsafe_from_address=out)
+    var op = _F32P(unsafe_from_address=dst)
     for i in range(rows * cols):
         op.unsafe_store(i, scale_cell(xp.unsafe_load(i), wp.unsafe_load(i // cols)))
