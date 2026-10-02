@@ -97,3 +97,4 @@ pos=96 lines=     522
 171:FBUILD lane/apple-fast@125ba6d60 core=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0
 172:CMD apple-fast@125ba6d60 id-tr-lg-taxi rc=0 IDCHECK gbdt-lossguide taxi rows=50000 metal=c40ab81ee571e2ab host=none ERROR
 173:CMD apple-fast@125ba6d60 id-tr-gbdt-lossguide-istella rc=0 IDCHECK gbdt-lossguide istella rows=50000 metal=e44530447b3e1e8d host=none ERROR
+179:FBUILD lane/apple-fast@9a4372c2a core=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0
