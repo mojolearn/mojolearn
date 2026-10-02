@@ -1123,21 +1123,25 @@ def _apl_e_kernel(
 
 
 # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
-# env `MOJOLEARN_OPTICS_FAST_DEVICE_ORDER=1` (read in x_cluster/optics.mojo):
-# the OPTICS ordering loop on the device. Cause: `optics_graph` read the
-# whole n x n distance matrix back (`ops.get(dm, n * n)`: 400 MB at the
-# board's 10,000 rows) and walked the n steps on ONE host thread (the
-# OPTICS_SIMD define: 8 lanes). The step sequence is inherently serial (the
-# next point is the unprocessed one at the lowest reachability, the lowest
-# index on a tie, and its relaxation feeds the next pick), so the kernel is
-# ONE threadgroup of OPT_ORD_TPB threads that runs every step: the candidate
-# scan is an integer min of (reachability bits, index) keys folded in
-# threadgroup memory, the relaxation one cell per thread over the point's
-# row of the resident matrix. What stays serial: the n steps themselves.
-# Same picks, same reachability, same predecessors as the host loop (max,
-# compares and selects only). Expected: no n^2 readback, the n steps at
-# device speed. The matrix stays on the device.
-comptime OPT_ORD_TPB = 1024
+# `-D MOJOLEARN_OPTICS_FAST_DEVICE_ORDER=1` (OPTICS_FAST_DEVICE_ORDER, asked by
+# x_cluster/optics.mojo under the same define): sklearn's
+# `compute_optics_graph` ordering loop on the device. The n steps stay serial
+# by construction (each pick depends on the last relaxation); every step is
+# ONE grid launch of ceil(n / OPT_ORD_PER) blocks, block b owning the rows
+# [b * OPT_ORD_PER, (b + 1) * OPT_ORD_PER): it folds the previous launch's
+# partial keys to the step's point (the min of `_opt_key`: the lowest
+# reachability, the lowest index on a tie, exactly the host's strict `<`
+# scan over `processed == 0`), marks the point processed and writes the
+# ordering, relaxes its own rows from the point's distance row (max(dist,
+# core) when it improves, the predecessor set), then scans its rows for
+# the next step's partial key. The partials are double-buffered (launch s
+# reads half s & 1, writes half (s + 1) & 1), so no block reads what
+# another writes in the same launch; the n + 1 launches (step -1 is the
+# init and the first scan) go out without a host wait. Nothing n^2 crosses
+# to the host. Same picks, same reachability and predecessors.
+comptime OPT_ORD_TPB = 256
+comptime OPT_ORD_PER = OPT_ORD_TPB * 2
+"""Rows per block (two per thread): 20 blocks at the board's 10,000 rows."""
 
 
 @always_inline
@@ -1151,53 +1155,74 @@ def _opt_key(v: Float32, j: Int) -> UInt64:
     return (UInt64(b) << 32) | UInt64(UInt32(j))
 
 
-def _optics_order_kernel(
+@always_inline
+def _opt_pick(part: MutPointer[UInt64, MutAnyOrigin], nb: Int) -> UInt64:
+    """The min of the nb partial keys (every thread folds them itself: nb is
+    the block count, tens at the board's rows)."""
+    var k = UInt64(0xFFFFFFFFFFFFFFFF)
+    for b in range(nb):
+        k = min(k, part[b])
+    return k
+
+
+def _optics_step_kernel(
     dist: FPtr, core: FPtr, n: Int32, max_eps: Float32, ordering: IPtr, reach: FPtr, pred: IPtr, proc: IPtr,
+    part: MutPointer[UInt64, MutAnyOrigin], nb: Int32, step: Int32,
 ):
     var tid = Int(thread_idx.x)
+    var b = Int(block_idx.x)
     var N = Int(n)
+    var NB = Int(nb)
+    var s = Int(step)
+    var r0 = b * OPT_ORD_PER
+    var r1 = r0 + OPT_ORD_PER
+    if r1 > N:
+        r1 = N
     var inf = Float32.MAX * Float32(2)
     var red = stack_allocation[OPT_ORD_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
-    for j in range(tid, N, OPT_ORD_TPB):
-        reach[j] = inf
-        pred[j] = Int32(-1)
-        proc[j] = Int32(0)
-    barrier()
-    for step in range(N):
-        var mine = UInt64(0xFFFFFFFFFFFFFFFF)
-        for j in range(tid, N, OPT_ORD_TPB):
-            if proc[j] == Int32(0):
-                mine = min(mine, _opt_key(reach[j], j))
-        red[tid] = mine
-        barrier()
-        var off = OPT_ORD_TPB // 2
-        while off > 0:
-            if tid < off:
-                red[tid] = min(red[tid], red[tid + off])
-            barrier()
-            off //= 2
-        var point = Int(UInt32(red[0] & UInt64(0xFFFFFFFF)))
-        barrier()
-        if tid == 0:
-            ordering[step] = Int32(point)
-            proc[point] = Int32(1)
-        barrier()
+    if s < 0:
+        for o in range(r0 + tid, r1, OPT_ORD_TPB):
+            reach[o] = inf
+            pred[o] = Int32(-1)
+            proc[o] = Int32(0)
+    else:
+        var key = _opt_pick(part + (s & 1) * NB, NB)
+        var point = Int(UInt32(key & UInt64(0xFFFFFFFF)))
+        if b == 0 and tid == 0:
+            ordering[s] = Int32(point)
         var cp = core[point]
         # the host's `core[point] != inf` after its clamp of core > max_eps
-        if cp <= max_eps and cp != inf:
-            for o in range(tid, N, OPT_ORD_TPB):
-                if proc[o] == Int32(0):
-                    var dd = dist[point * N + o]
-                    if dd <= max_eps:
-                        var rd = dd if dd > cp else cp
-                        if rd < reach[o]:
-                            reach[o] = rd
-                            pred[o] = Int32(point)
+        var relax = cp <= max_eps and cp != inf
+        for o in range(r0 + tid, r1, OPT_ORD_TPB):
+            if o == point:
+                proc[o] = Int32(1)
+            elif relax and proc[o] == Int32(0):
+                var dd = dist[point * N + o]
+                if dd <= max_eps:
+                    var rd = dd if dd > cp else cp
+                    if rd < reach[o]:
+                        reach[o] = rd
+                        pred[o] = Int32(point)
+    # this thread's rows again (the same stride): the next step's candidate
+    var mine = UInt64(0xFFFFFFFFFFFFFFFF)
+    for o in range(r0 + tid, r1, OPT_ORD_TPB):
+        if proc[o] == Int32(0):
+            mine = min(mine, _opt_key(reach[o], o))
+    red[tid] = mine
+    barrier()
+    var off = OPT_ORD_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = min(red[tid], red[tid + off])
         barrier()
+        off //= 2
+    if tid == 0:
+        part[((s + 1) & 1) * NB + b] = red[0]
 
 
 # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
-# env `MOJOLEARN_BISECT_FAST_RESIDENT=1` (read in x_cluster/bisect.mojo):
+# `-D MOJOLEARN_BISECT_FAST_RESIDENT=1` (BISECT_FAST_RESIDENT, asked by
+# x_cluster/bisect.mojo under the same define):
 # `sqdist_cell` for the rows `rows[i]` of the resident centered data, so a
 # split's child scores need an upload of m ints, not of the m x d subset
 # again (`ops.put(sub)` after `ops.kmeans` had already uploaded it). The
@@ -2339,10 +2364,21 @@ struct DeviceOps(ClusterOps):
     ) raises:
         self._ph0()
         comptime if OPTICS_FAST_DEVICE_ORDER:
-            self.ctx.enqueue_function[_optics_order_kernel](
-                self._fp(dm), self._fp(core), Int32(n), max_eps, self._ip(ordering), self._fp(reach), self._ip(pred),
-                self._ip(proc), grid_dim=1, block_dim=OPT_ORD_TPB,
-            )
+            var nb = (n + OPT_ORD_PER - 1) // OPT_ORD_PER
+            if nb < 1:
+                nb = 1
+            var part = self.ctx.enqueue_create_buffer[DType.uint64](2 * nb)
+            var p_part = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            # step -1 initialises and scans; steps 0 .. n-1 pick, relax, scan
+            for s in range(-1, n):
+                self.ctx.enqueue_function[_optics_step_kernel](
+                    self._fp(dm), self._fp(core), Int32(n), max_eps, self._ip(ordering), self._fp(reach),
+                    self._ip(pred), self._ip(proc), p_part, Int32(nb), Int32(s), grid_dim=nb, block_dim=OPT_ORD_TPB,
+                )
+            # one wait per fit, after the whole loop: the driver reads the
+            # ordering next anyway, and the partials buffer goes out of scope
+            self.ctx.synchronize()
+            _ = part^
         else:
             raise Error("x_cluster: optics_order is the FAST Apple device path (MOJOLEARN_OPTICS_FAST_DEVICE_ORDER)")
         self._ph1("optics_order")
