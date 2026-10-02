@@ -96,11 +96,6 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	9	for i in r
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	js = [j for j in range(n) if Dq.s[i * n + j] <= r]
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	pos = [i * n + j for i in range(n) for j in range(i + 1, n) if Dis.s[i * n + j] != 0]
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	for i in range(n):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_metrics.py	0	flags = Array.from_list([1 if cl[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_metrics.py	1	flags = Array.from_list([1 if cl[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_metrics.py	0	rows = [r for r in range(n) if codes[r] in (a, b)]
-route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/_expansion_metrics.py	0	if size >= _ARENA_LAZY and os.environ.get("MOJOLEARN_MSEL3") == "1":
-route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/_expansion_metrics.py	0	return os.environ.get("MOJOLEARN_MSEL3") == "1"
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_trees.py	0	acc = Array.from_list([cols[j][i] for i in range(n) for j in range(k)], "<f8")
 py-loop	py-numpy	gap-treeshap	debt	python/mojolearn/_expansion_trees.py	0	for i in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_trees.py	1	for i in range(n):
@@ -114,7 +109,6 @@ host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	return _bac
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_labels.py	0	for r in range(n_rows):
 host-module	host-import	UNOWNED	debt	python/mojolearn/_linalg_impl.py	0	_host_binding_cache = _backend.load_host_module(_LINALG_HOST_BASENAME)
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_linalg_impl.py	0	for i in range(n):
-route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/_metrics_impl.py	0	if os.environ.get("MOJOLEARN_MSEL3") != "1":
 py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
 py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	from concurrent.futures import ThreadPoolExecutor
 py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	self._threads = ThreadPoolExecutor(max_workers=len(self.devices))
@@ -134,11 +128,7 @@ py-host-import	host-import	gap-trees-nv/apple-fast-trees2	debt	python/mojolearn/
 py-host-import	host-import	gap-trees-nv/apple-fast-trees2	debt	python/mojolearn/ensemble.py	0	from ._gbdt_host import parse_model_text
 py-host-import	host-import	UNOWNED	debt	python/mojolearn/ensemble.py	1	from ._gbdt_host import parse_model_text
 py-threads	host-threads	gap-lm	debt	python/mojolearn/lm_corpus.py	0	worker = threading.Thread(target=produce, name="mojolearn-token-prefetch", daemon=True)
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/model_selection.py	0	_as_index([i for i in range(n) if self.test_fold[i] == f]))
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/model_selection.py	0	for i in range(n):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/model_selection.py	0	yield (_as_index([i for i in range(n) if self.test_fold[i] != f]),
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/model_selection.py	0	yield [i for i in range(n) if i not in heldout], test
-route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/model_selection.py	0	return os.environ.get('MOJOLEARN_MSEL3') == '1'
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/models/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
 host-module	host-import	UNOWNED	debt	python/mojolearn/neural_inference.py	0	return _backend.load_host_module(_EXTENSION)
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/parallel_gaussian_process.py	0	for row in range(q.shape[0]):
