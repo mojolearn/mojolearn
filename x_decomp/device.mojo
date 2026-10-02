@@ -96,6 +96,16 @@ from x_decomp.jacobi2 import (
     one_sided_svd2_finish_kernel,
 )
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
+from x_decomp.fast_qr import (
+    FQ_TPB,
+    fast_qr_on,
+    fq_dot_blocks,
+    fq_geqrf_dot_kernel,
+    fq_head_blocks,
+    fq_head_finish_kernel,
+    fq_head_part_kernel,
+    fq_orgqr_dot_kernel,
+)
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
@@ -2398,6 +2408,13 @@ struct DevExec(Exec):
 
     @staticmethod
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+            # MOJOLEARN_QR_FAST_DEV=1 (lane/apple-fast-decomp-linalg, 2026-10-02):
+            # the grid-fold route of x_decomp/fast_qr.mojo, on the device,
+            # ahead of the host walk below. FAST on Apple only.
+            if fast_qr_on():
+                DevExec._geqrf_fast(a, tau, m, n)
+                return
         if xd_qr_on_host(m):
             # lane neural-pass37: the row-streaming host walk of the same cells
             geqrf_host_rows(a, tau, m, n)
@@ -2441,6 +2458,11 @@ struct DevExec(Exec):
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+            # MOJOLEARN_QR_FAST_DEV=1 (lane/apple-fast-decomp-linalg): see geqrf.
+            if fast_qr_on():
+                DevExec._orgqr_fast(h, tau, q, m, n, kk, qc)
+                return
         if xd_qr_on_host(m):
             orgqr_host_rows(h, tau, q, m, n, kk, qc)
             return
@@ -2469,6 +2491,105 @@ struct DevExec(Exec):
         _ = dt^
         _ = dq^
         _ = dw^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def _geqrf_fast(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+        """`geqrf` with every fold a grid reduction (x_decomp/fast_qr.mojo;
+        MOJOLEARN_QR_FAST_DEV=1, FAST on Apple, lane/apple-fast-decomp-linalg
+        2026-10-02). Cause: the route below ran each column's norm and each
+        w = v^T a_j as ONE thread's chain, and on Apple handed the whole
+        factorization to the host (`xd_qr_on_host`: the board's qr lane at
+        1,000,000 x d is a CPU walk, 7.7 s on the M3 Ultra). Step k: the
+        norm's (scale, ssq) pairs over `fq_head_blocks` blocks and a
+        one-thread finish (dlarfg's tau, beta), the scale kernel, the
+        reflector products as row-chunk partials folded by `fold_kernel`,
+        then the elementwise update: 5 launches a column, all grid."""
+        var ctx = xd_ctx()
+        var kk = m if m < n else n
+        var da = _up(ctx, a, m * n)
+        var dt = ctx.enqueue_create_buffer[DType.float32](kk if kk > 0 else 1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](2)
+        var dw = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        var nbh = fq_head_blocks(m)
+        var dph = ctx.enqueue_create_buffer[DType.float32](2 * nbh)
+        var nbd = fq_dot_blocks(m, 0)
+        var dpd = ctx.enqueue_create_buffer[DType.float32](nbd * n if n > 0 else 1)
+        for k in range(kk):
+            ctx.enqueue_function[fq_head_part_kernel](
+                da.unsafe_ptr(), dph.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(nbh),
+                grid_dim=nbh, block_dim=FQ_TPB,
+            )
+            ctx.enqueue_function[fq_head_finish_kernel](
+                da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dph.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(nbh),
+                grid_dim=1, block_dim=1,
+            )
+            if m - k - 1 > 0:
+                ctx.enqueue_function[geqrf_scale_kernel](
+                    da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=_blocks(m - k - 1), block_dim=TPB
+                )
+            if n - k - 1 > 0:
+                var nb = fq_dot_blocks(m, k)
+                ctx.enqueue_function[fq_geqrf_dot_kernel](
+                    da.unsafe_ptr(), ds.unsafe_ptr(), dpd.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                    grid_dim=nb, block_dim=FQ_TPB,
+                )
+                ctx.enqueue_function[fold_kernel](
+                    dpd.unsafe_ptr(), dw.unsafe_ptr(), Int32(n), Int32(nb), grid_dim=_blocks(n), block_dim=TPB
+                )
+                ctx.enqueue_function[geqrf_update_kernel](
+                    da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                    grid_dim=_blocks((m - k) * (n - k - 1)), block_dim=TPB,
+                )
+        _down(ctx, da, a, m * n)
+        _down(ctx, dt, tau, kk)
+        ctx.synchronize()
+        _ = da^
+        _ = dt^
+        _ = ds^
+        _ = dw^
+        _ = dph^
+        _ = dpd^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def _orgqr_fast(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        """`orgqr` with the reflector products as row-chunk grid partials
+        (`fq_orgqr_dot_kernel` + `fold_kernel`); the init and update kernels
+        are the shipped ones. MOJOLEARN_QR_FAST_DEV=1, FAST on Apple
+        (lane/apple-fast-decomp-linalg, 2026-10-02); cause as `_geqrf_fast`."""
+        var ctx = xd_ctx()
+        var dh = _up(ctx, h, m * n)
+        var dt = _up(ctx, tau, kk if kk > 0 else 1)
+        var dq = ctx.enqueue_create_buffer[DType.float32](m * qc if m * qc > 0 else 1)
+        var dw = ctx.enqueue_create_buffer[DType.float32](qc if qc > 0 else 1)
+        var nbd = fq_dot_blocks(m, 0)
+        var dpd = ctx.enqueue_create_buffer[DType.float32](nbd * qc if qc > 0 else 1)
+        ctx.enqueue_function[orgqr_init_kernel](dq.unsafe_ptr(), Int32(m), Int32(qc), grid_dim=_blocks(m * qc), block_dim=TPB)
+        for r in range(kk):
+            var k = kk - 1 - r
+            if qc > 0:
+                var nb = fq_dot_blocks(m, k)
+                ctx.enqueue_function[fq_orgqr_dot_kernel](
+                    dh.unsafe_ptr(), dq.unsafe_ptr(), dpd.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                    grid_dim=nb, block_dim=FQ_TPB,
+                )
+                ctx.enqueue_function[fold_kernel](
+                    dpd.unsafe_ptr(), dw.unsafe_ptr(), Int32(qc), Int32(nb), grid_dim=_blocks(qc), block_dim=TPB
+                )
+            ctx.enqueue_function[orgqr_update_kernel](
+                dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                grid_dim=_blocks((m - k) * qc), block_dim=TPB,
+            )
+        _down(ctx, dq, q, m * qc)
+        ctx.synchronize()
+        _ = dh^
+        _ = dt^
+        _ = dq^
+        _ = dw^
+        _ = dpd^
         ctx.synchronize()
         _ = ctx^
 

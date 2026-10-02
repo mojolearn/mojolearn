@@ -1072,8 +1072,14 @@ def _qr_q(a, mode):
     lane's cells (x_decomp/cells.mojo `geqrf_serial`, `orgqr_col`, DEVIATION
     5320; lane/algos-decomp, 2026-09-27). Any shape, wide included."""
     a_arr, rows, cols = _two_d(a, "a")
-    k = _xd_kit()
-    h, tau = _qr_q_factor(a_arr, rows, cols)
+    # MOJOLEARN_QR_FAST_DEV=1 (lane/apple-fast-decomp-linalg, 2026-10-02, FAST
+    # on Apple only): the FAST x_decomp kit, whose DevExec.geqrf / orgqr then
+    # take the grid-fold device route of x_decomp/fast_qr.mojo (the same env
+    # read there). Cause: with the IDENTICAL kit the Apple column runs
+    # geqrf + orgqr as a HOST walk (x_decomp/qr_host.mojo xd_qr_on_host,
+    # m >= its floor), the board's whole qr cell on the CPU.
+    k = _fast_apple_kit("MOJOLEARN_QR_FAST_DEV") or _xd_kit()
+    h, tau = k.geqrf(_xd_matrix(a_arr, rows, cols))
     kk = min(rows, cols)
     if mode == "raw":
         # numpy returns geqrf's Fortran-ordered array seen in C order: the
@@ -1379,7 +1385,14 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
     a_arr, rows, cols = _two_d(a, "a")
     if not compute_uv:
         return svdvals(a_arr)
-    k = _xd_kit()
+    # MOJOLEARN_SVD_FAST_CHOLQR=1 (lane/apple-fast-decomp-linalg, 2026-10-02,
+    # FAST on Apple only): the FAST x_decomp kit, whose `orth_diag` (U =
+    # orth(A V / s) in `_svd_tall`) then takes the CholeskyQR2 route of
+    # x_decomp/device.mojo orth_on_device_diag (the same env read there)
+    # instead of two sliced Householder passes. Cause: `_svd_tall` is three
+    # TSQR passes over the 1,000,000 x d matrix (one in `k.svd`, two in
+    # `orth_diag`), each 64 slices x 32 threads reading columns at stride d.
+    k = _fast_apple_kit("MOJOLEARN_SVD_FAST_CHOLQR") or _xd_kit()
     A = _xd_matrix(a_arr, rows, cols)
     if hermitian:
         if rows != cols:
