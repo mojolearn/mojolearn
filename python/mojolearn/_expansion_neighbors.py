@@ -533,8 +533,9 @@ class OneClassSVM(_XNeighbors):
 
     Reference: scikit-learn `svm/_classes.py` (OneClassSVM) over libsvm
     `svm.cpp` (`solve_one_class`, `Solver::Solve` with WSS3 working-set
-    selection, `calculate_rho`). The dual is solved in ONE sequential Mojo
-    item (x_neighbors/items.mojo `ocsvm_smo_item`) over the kernel matrix,
+    selection, `calculate_rho`). On the GPU each SMO iteration is three grid
+    launches (x_neighbors/ocsvm_dev.mojo); the host column runs the same
+    order as one item (x_neighbors/items.mojo `ocsvm_smo_item`) over the kernel matrix,
     in float32 with the pinned spellings (DEVIATION 5200; libsvm is double).
     `shrinking` and `cache_size` are accepted and change nothing (no
     shrinking, the whole kernel matrix is formed). max_iter=-1 caps at
