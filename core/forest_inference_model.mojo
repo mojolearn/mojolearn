@@ -11,6 +11,7 @@ Only input validation/upload and result readback recur per prediction.
 from std.ffi import _Global
 from std.sys.compile import is_defined
 from std.memory import bitcast
+from std.gpu import block_idx as _fim_bidx, thread_idx as _fim_tidx
 from std.time import perf_counter_ns
 from core.host_parallel import host_parallelize
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
@@ -136,6 +137,40 @@ def scan_finite_f32(src: MutPointer[Float32, MutAnyOrigin], dst: MutPointer[Floa
         if flags[k] != 0:
             return False
     return True
+
+
+comptime FOREST_FINITE_TPB = 256
+
+
+def forest_nonfinite_kernel(v: MutPointer[Float32, MutAnyOrigin], n: Int32, flag: MutPointer[Int32, MutAnyOrigin]):
+    """`scan_finite_f32`'s predicate on the device, one thread a value: any
+    exponent field of all ones (inf or NaN) sets flag[0]."""
+    var i = Int(_fim_bidx.x) * FOREST_FINITE_TPB + Int(_fim_tidx.x)
+    if i < Int(n):
+        if (bitcast[DType.uint32](v.unsafe_load(i)) & UInt32(0x7f800000)) == UInt32(0x7f800000):
+            flag.unsafe_store(0, Int32(1))
+
+
+def device_all_finite(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int) raises -> Bool:
+    """True when the first n values of `buf` are finite: the scan on the
+    device, one int back (cpu-gpu-cleanup c-core: the resident predict path
+    scanned its input and output over host threads)."""
+    if n <= 0:
+        return True
+    var flag = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(flag, Int32(0))
+    ctx.enqueue_function[forest_nonfinite_kernel](
+        buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n),
+        flag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        grid_dim=(n + FOREST_FINITE_TPB - 1) // FOREST_FINITE_TPB, block_dim=FOREST_FINITE_TPB,
+    )
+    var h = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=flag)
+    ctx.synchronize()
+    var ok = h.unsafe_ptr().unsafe_load(0) == Int32(0)
+    _ = h^
+    _ = flag^
+    return ok
 
 
 def require_finite_pointer(values: MutPointer[Float32, MutAnyOrigin], count: Int) raises:
@@ -642,12 +677,16 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
     var t4 = 0
     comptime if FOREST_PROFILE:
         t0 = Int(perf_counter_ns())
-    if not scan_finite_f32(x, stage, rows * features, staged):
-        raise Error("resident forest requires finite Float32 values")
+    # the input goes up as it is and is scanned where it lands (the host
+    # scan and the staging copy are gone; `stage` is unused)
+    _ = staged
+    _ = stage
     comptime if FOREST_PROFILE:
         t1 = Int(perf_counter_ns())
     try:
-        ctx.enqueue_copy(dst_buf=dx, src_ptr=stage)
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        if not device_all_finite(ctx, dx, rows * features):
+            raise Error("resident forest requires finite Float32 values")
         comptime if FOREST_PROFILE:
             ctx.synchronize()
             t2 = Int(perf_counter_ns())
@@ -662,12 +701,13 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
             t3 = Int(perf_counter_ns())
         ctx.enqueue_copy(dst_ptr=output, src_buf=dout)
         ctx.synchronize()
+        if not device_all_finite(ctx, dout, rows * outputs):
+            raise Error("resident forest requires finite Float32 values")
     except e:
         ctx.synchronize()
         raise e
     comptime if FOREST_PROFILE:
         t4 = Int(perf_counter_ns())
-    require_finite_pointer(output, rows * outputs)
     comptime if FOREST_PROFILE:
         var t5 = Int(perf_counter_ns())
         print("FOREST_PROFILE rows", rows, "features", features, "outputs", outputs,
