@@ -14,7 +14,10 @@ from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div
-from core.forest_inference import forest_add, reached_leaf, require_finite, FOREST_PACKED_NODES
+from core.forest_inference import (
+    forest_add, reached_leaf, FOREST_PACKED_NODES, device_ptr_all_finite, device_all_finite,
+    launch_forest_argmax,
+)
 
 
 def forest_device_count() raises -> Int:
@@ -311,40 +314,75 @@ struct PooledForest(Movable):
                     raise Error("injected forest owner failure after contribution")
         return totals^
 
-    def predict_into[RF_INPUT: Bool](mut self, x: MutPointer[Float32, MutAnyOrigin],
-        output: MutPointer[Float32, MutAnyOrigin], rows: Int,
-    ) raises:
-        var staged = List[Float32](length=rows * self.outputs, fill=Float32(0.0))
+    def _finish_resident[RF_INPUT: Bool](mut self, x: MutPointer[Float32, MutAnyOrigin],
+        rows: Int,
+    ) raises -> DeviceBuffer[DType.float32]:
+        """Every row's finished output, resident on owner 0's device. The
+        owners scan their input rows on the device (`contribution`), and
+        the finished outputs are scanned where they land: no host scan
+        and no host staging list (cpu-gpu-cleanup w2-core-scope)."""
+        ref ctx = self.owners[0].ctx.value()
+        var dout = ctx.enqueue_create_buffer[DType.float32](rows * self.outputs)
         # Bound both rows and output cells: even wide vector leaves never
         # create more than 4096*32 canonical reduction cells on any device.
         var tile = min(4096, 64 * self.outputs)
         for first in range(0, rows * self.outputs, tile):
             var items = min(tile, rows * self.outputs - first)
             var totals = self.collect_items[RF_INPUT](x, first, items)
-            ref ctx = self.owners[0].ctx.value()
             var dt = ctx.enqueue_create_buffer[DType.float32](len(totals))
-            var dout = ctx.enqueue_create_buffer[DType.float32](items)
-            var host = ctx.enqueue_create_host_buffer[DType.float32](items)
             try:
                 ctx.enqueue_copy(dst_buf=dt, src_ptr=totals.unsafe_ptr())
                 ctx.enqueue_function[forest_finish_groves_kernel](dt.unsafe_ptr(),
-                    dout.unsafe_ptr(), Int32(items), Int32(self.trees),
+                    dout.unsafe_ptr() + first, Int32(items), Int32(self.trees),
                     grid_dim=(items + 3) // 4, block_dim=128)
-                ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=dout)
                 ctx.synchronize()
             except e:
                 ctx.synchronize()
                 _ = totals^
                 _ = dt^
                 _ = dout^
-                _ = host^
                 raise e
             _ = totals^
-            for i in range(items):
-                staged[first + i] = host.unsafe_ptr()[i]
             _ = dt^
+        if not device_all_finite(ctx, dout, rows * self.outputs):
             _ = dout^
-            _ = host^
-        require_finite(staged)
-        for i in range(rows * self.outputs):
-            output[i] = staged[i]
+            raise Error("forest inference prototype requires finite Float32 values")
+        return dout^
+
+    def predict_into[RF_INPUT: Bool](mut self, x: MutPointer[Float32, MutAnyOrigin],
+        output: MutPointer[Float32, MutAnyOrigin], rows: Int,
+    ) raises:
+        if rows <= 0:
+            return
+        var dout = self._finish_resident[RF_INPUT](x, rows)
+        ref ctx = self.owners[0].ctx.value()
+        try:
+            ctx.enqueue_copy(dst_ptr=output, src_buf=dout)
+            ctx.synchronize()
+        except e:
+            ctx.synchronize()
+            _ = dout^
+            raise e
+        _ = dout^
+
+    def predict_labels_into[RF_INPUT: Bool](mut self, x: MutPointer[Float32, MutAnyOrigin],
+        output: MutPointer[Int32, MutAnyOrigin], rows: Int,
+    ) raises:
+        """Class codes: the row argmax runs on owner 0's device over the
+        resident votes (the host argmax loop is gone)."""
+        if rows <= 0:
+            return
+        var dout = self._finish_resident[RF_INPUT](x, rows)
+        ref ctx = self.owners[0].ctx.value()
+        var dlab = ctx.enqueue_create_buffer[DType.int32](rows)
+        try:
+            launch_forest_argmax(ctx, dout, dlab, rows, self.outputs)
+            ctx.enqueue_copy(dst_ptr=output, src_buf=dlab)
+            ctx.synchronize()
+        except e:
+            ctx.synchronize()
+            _ = dout^
+            _ = dlab^
+            raise e
+        _ = dout^
+        _ = dlab^

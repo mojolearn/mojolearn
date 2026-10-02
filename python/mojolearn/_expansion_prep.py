@@ -83,6 +83,7 @@ _OPS = dict(
     lab_load=119, uniq_count=120, uniq_scan=121, uniq_write=122, chunk_neg=123,
     colb_part=124, colb_fold=125, colb_ss=126, colb_var=127, maxabs_fold=128, csb_part=129, csb_fold=130, csb_ss=131, csb_var=132, cat_hpart=133, cat_hfold=134,
     row_ones=135, ii_rcount=136, ii_rwrite=137, ii_gather=138, ii_scatter=139,
+    hcat=140,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1601,22 +1602,14 @@ class SimpleImputer(_PrepBase):
         if m:
             io, mo = pr.put_list(self._indicator), pr.alloc(n * m)
             pr.stage("nan_mask", n * m, xo, n, d, io, m, mo)
+            hc = pr.output(n * (dout + m))
+            pr.stage("hcat", n * (dout + m), out, dout, mo, m, hc)
         pr.run(self.numeric_mode_)
         if not m:
             return pr.get(out, (n, dout))
-        return _hstack(pr.get(out, (n, dout)), pr.get(mo, (n, m)))
+        return pr.get(hc, (n, dout + m))
 
 
-def _hstack(a, b):
-    """[a | b] for two C-order float32 2-D Arrays of the same row count (a
-    byte copy per row)."""
-    n, p = a.shape
-    q = b.shape[1]
-    out = Array((n, p + q), "<f4")
-    for i in range(n):
-        ctypes.memmove(out._addr + 4 * i * (p + q), a._addr + 4 * i * p, 4 * p)
-        ctypes.memmove(out._addr + 4 * (i * (p + q) + p), b._addr + 4 * i * q, 4 * q)
-    return out
 
 
 # ---------------------------------------------------------------- discretizer
@@ -3954,8 +3947,12 @@ class IterativeImputer(_PrepBase):
         xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
         mo = pr.alloc(n * m)
         pr.stage("nan_mask", n * m, xo, n, d, pr.put_list(self._indicator), m, mo)
+        dk = Xt.shape[1]
+        to = pr.put(Xt)
+        hc = pr.output(n * (dk + m))
+        pr.stage("hcat", n * (dk + m), to, dk, mo, m, hc)
         pr.run(self.numeric_mode_)
-        return _hstack(Xt, pr.get(mo, (n, m)))
+        return pr.get(hc, (n, dk + m))
 
     def _fit_user(self, arr, Xf, orders, corr, tol):
         """estimator=<any>: the reference's rounds over copies of the
