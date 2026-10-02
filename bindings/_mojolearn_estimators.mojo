@@ -57,6 +57,7 @@ from glm.estimator import (
     ridge_fit_host,
 )
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
+from glm.impl.center_device import col_sums_device, center_device, scale_rows_device
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -514,6 +515,54 @@ def ols_fit_binding(
     return PythonObject(0)
 
 
+def lm_col_sums_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """lane hr-small-passes: the exact, correctly rounded float64 sum of
+    every column of a float32 [rows, cols] matrix, on the device
+    (glm/impl/center_device.mojo). params: rows, cols. Returns 0."""
+    if len(params) != 2:
+        raise Error("lm_col_sums: params must contain rows, cols")
+    var xa = Int(py=x_addr)
+    var oa = Int(py=out_addr)
+    var nr = Int(py=params[0])
+    var nc = Int(py=params[1])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        col_sums_device(ctx, xa, oa, nr, nc)
+    return PythonObject(0)
+
+
+def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """lane hr-small-passes: out = x - mu per column in float32 on the
+    device, subnormals flushed. params: rows, cols. Returns 0."""
+    if len(params) != 2:
+        raise Error("lm_center: params must contain rows, cols")
+    var xa = Int(py=x_addr)
+    var ma = Int(py=mu_addr)
+    var oa = Int(py=out_addr)
+    var nr = Int(py=params[0])
+    var nc = Int(py=params[1])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        center_device(ctx, xa, ma, oa, nr, nc)
+    return PythonObject(0)
+
+
+def lm_scale_rows_binding(x_addr: PythonObject, w_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """lane hr-small-passes: out = x * w per row in float32 on the device,
+    subnormals flushed. params: rows, cols. Returns 0."""
+    if len(params) != 2:
+        raise Error("lm_scale_rows: params must contain rows, cols")
+    var xa = Int(py=x_addr)
+    var wa = Int(py=w_addr)
+    var oa = Int(py=out_addr)
+    var nr = Int(py=params[0])
+    var nc = Int(py=params[1])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        scale_rows_device(ctx, xa, wa, oa, nr, nc)
+    return PythonObject(0)
+
+
 def ols_predict_binding(
     x_addr: PythonObject,
     coef_addr: PythonObject,
@@ -884,6 +933,9 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[tsvd_explained_binding]("tsvd_explained")
         m.def_function[inverse_transform_binding]("inverse_transform")
         m.def_function[ols_fit_binding]("ols_fit")
+        m.def_function[lm_col_sums_binding]("lm_col_sums")
+        m.def_function[lm_center_binding]("lm_center")
+        m.def_function[lm_scale_rows_binding]("lm_scale_rows")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[ridge_fit_binding]("ridge_fit")
         m.def_function[qn_fit_binding]("qn_fit")

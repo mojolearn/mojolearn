@@ -1866,6 +1866,7 @@ FAMILIES = (
         host_modules=(
             "kde/host/kde_oracle.mojo", "core/classical_host_predict.mojo",
             "decomposition/host/pca_oracle.mojo", "glm/host/glm_oracle.mojo",
+            "glm/host/center_host.mojo", "glm/impl/center_items.mojo",
             "dbscan/host/dbscan_oracle.mojo", "glm/host/qn_oracle.mojo",
             "decomposition/host/pca_full_oracle.mojo",
             "core/labeled_reference_host_predict.mojo",
@@ -1880,6 +1881,8 @@ FAMILIES = (
             "estimators_host_column", "estimators_host_sabotage",
             "estimators_vendor", "estimators_numeric_mode", "kde_score_samples",
             "pca_fit", "pca_fit_full", "tsvd_fit", "ols_fit", "ridge_fit", "dbscan_fit", "qn_fit",
+            # lane hr-small-passes (2026-10-02): the linear models' centering
+            "lm_col_sums", "lm_center", "lm_scale_rows",
             "tsvd_explained",
             "dbscan_fit_core", "labeled_reference_predict",
             "ols_predict", "tsvd_transform", "pca_transform",
