@@ -2602,19 +2602,14 @@ def render_board(result):
              "(torch.compile, inductor), `torch-eager-tf32` / `torch-compile-tf32` (NVIDIA CUDA "
              "only), `torch-eager-bf16` / `torch-compile-bf16` (bf16 autocast mixed precision). "
              "TF32 and bf16 arms are ANOTHER PRECISION than ours; their quality columns show how "
-             "far. The `*-infer` lanes are the CPU *Inference classes and race `torch-cpu-*` "
-             "arms. An arm torch cannot run on this box is REFUSED by name in its cell. Every "
+             "far. An arm torch cannot run on this box is REFUSED by name in its cell. Every "
              "clock is host in, host out, synchronized. Every arm starts from the same "
              "parameters and reads the same inputs, so losses and outputs are comparable; "
              "`max_abs_diff_vs_ours` / `max_rel_diff_vs_ours` are the arm's output against ours.")
     L.append("- `installed_wheel` confirms our binding loaded from site-packages, not the repo tree.")
-    L.append("- Our CPU tier (`mojolearn CPU IDENTICAL`, arm `ours-cpu`): the same public estimator "
-             "in a worker started under MOJOLEARN_VENDOR=cpu, the wheel's CPU switch (no GPU set "
-             "loads; the host bindings answer, IDENTICAL only), read back as vendor cpu or refused "
-             "by name. It races in the same rounds as every arm; `ours CPU / arm` is its median "
-             "over each opponent's. `bits_equal_vs_ours_identical` compares its output with our "
-             "GPU IDENTICAL arm's, bit for bit. Our CPU and GPU times are never divided by each "
-             "other here.")
+    L.append("- Our CPU is never raced: the board races only our GPU, against GPU opponents; a "
+             "race keeps CPU opponents only when it has no GPU opponent (Andrew, Oct 2 2026). "
+             "The `ours CPU` columns are filled only on races recorded before that rule.")
     L.append("- Memory: `peak host MB` and `peak GPU MB` are the highest per-round peaks over the "
              "timed rounds, read outside the clock; each arm's method is listed under its table "
              "(host: the resettable peak RSS on Linux, the peak physical footprint on macOS, which "
@@ -2817,14 +2812,10 @@ def cpu_not_covered(cfg):
     out = []
     if cfg.get("cpu_arm") is False:
         out.append("Our CPU: never raced; the board races only our GPU (Andrew, Oct 2 2026).")
-    lanes = sorted({l for l in NEURAL_LANES if cpu_arm_reason("neural", l)})
+    lanes = sorted(l for l in NEURAL_LANES if NEURAL.DEVICE_OF.get(l) == "cpu")
     if lanes:
-        out.append("Our CPU tier, no ours-cpu arm: neural %s: %s." % (
-            ", ".join(lanes), cpu_arm_reason("neural", lanes[0])))
-    out.append("Our CPU tier: a GBDT configuration the host side does not restate refuses by name "
-               "in its ours-cpu cell (python/mojolearn/host_surface.py NO_CPU_PATH lists them), and "
-               "a FAST-only run (`--modes fast`) has no ours-cpu arm: the host bindings build "
-               "IDENTICAL only.")
+        out.append("Neural, not planned: %s: ours runs the CPU binding, and our CPU is never "
+                   "raced." % ", ".join(lanes))
     out.append("Memory: GPU memory on Apple has no per-process counter (Metal buffers are inside "
                "the host footprint); the trees driver runs every arm in one process, so its GPU "
                "figure is the process total; a figure taken at the round's end misses a buffer "

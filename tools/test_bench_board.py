@@ -340,6 +340,22 @@ def test_plan_gpu_boxes_identical_only(vendor):
         assert "cuml-rf-gpu" not in nv["rf"]
 
 
+@pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
+def test_plan_races_only_our_gpu_and_never_mixes_cpu_and_gpu_opponents(vendor):
+    """Andrew, Oct 2 2026: the board races only our GPU; our GPU races GPU
+    opponents only, and a race keeps CPU opponents only when it has no GPU one."""
+    for cpu_arm in (False, True):                 # cpu_arm=True is accepted and ignored
+        races = bb.plan_races(vendor, bb.modes_for(vendor), cpu_arm=cpu_arm)
+        assert races
+        for r in races:
+            assert bb.CPU_ARM not in r["arms"], r["id"]
+            assert all(bb.arm_device(a, vendor) == "gpu" for a in r["our_arms"]), r["id"]
+            devices = {bb.arm_device(a, vendor) for a in r["opponents"]}
+            assert len(devices) <= 1, (r["id"], r["opponents"])
+    assert bb.gpu_opponents_first(["sklearn-cpu", "cuml-gpu", "lightgbm-cpu"]) == ["cuml-gpu"]
+    assert bb.gpu_opponents_first(["sklearn-cpu", "lightgbm-cpu"]) == ["sklearn-cpu", "lightgbm-cpu"]
+
+
 def test_plan_filters_and_counts():
     races = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["rf"], ["taxi"], 5000,
                           cpu_arm=False)
@@ -403,7 +419,11 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     assert algo_lines and all("[in source]" in ln or "not built yet: SKIPPED" in ln
                               for ln in algo_lines)
     assert "ours-cpu: off (the board races only our GPU)" in text
-    assert "family neural     races=20 cells=90" in text
+    # neural on Apple: the 12 GPU lanes (the 8 that ran our CPU binding left the board),
+    # each `ours` plus its torch GPU arms: 52 cells (see test_plan_neural_identical_only_on_every_vendor)
+    neural = bb.plan_races("apple", ["identical"], ["neural"])
+    assert len(neural) == 12 and sum(len(r["arms"]) for r in neural) == 52
+    assert "family neural     races=12 cells=52" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
     assert _calls(env) == []
@@ -798,10 +818,12 @@ def test_neural_run_schema_quality_and_board(env):
     assert "## Neural" in board and "neural shape small" in board
     assert "--neural-shape small" in board and "SMOKE RUN" in board
     assert "loss_last_step" in board and "torch-eager-fp32" in board
-    for arm in GPU_ARMS["nvidia"] + CPU_ARMS:
+    for arm in GPU_ARMS["nvidia"]:
         assert "| %s | torch |" % arm in board, arm
-    cpu = {c["arm"]: c for c in res["races"]["neural/mlp-infer/gaussian/shape=small"]["cells"]}
-    assert cpu["torch-cpu-eager-bf16"]["device"] == "cpu"
+    # our CPU is never raced: no *-infer race, and no torch CPU arm, on the board
+    assert not any(l.endswith("-infer") for l in (r["lane"] for r in res["races"].values()))
+    for arm in CPU_ARMS:
+        assert "| %s | torch |" % arm not in board, arm
     assert "## Trees" not in board
     # the neural Not covered lines come from the driver's tables
     assert "not mamba-ssm's fused CUDA/Triton kernels" in board
