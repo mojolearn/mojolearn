@@ -9,7 +9,13 @@ step, weight decay, Tsuruoka's cumulative L1 penalty `l1penalty`, the
 objective-based stopping with `n_iter_no_change`, the adaptive rate's divide
 by five) and the loss classes at the top of that file. Differences, named:
   * float32 throughout (theirs accumulates in float64);
-  * the weight decay multiplies w directly instead of their lazy `wscale`;
+  * (lane/neural-pass139) the per-sample path keeps their lazy `wscale`
+    (w = wscale * v; the decay multiplies wscale only, the step adds
+    update / wscale * x to v, the fold into v below 1e-9) with wscale a
+    float-float pair (hi, lo) built from fma's exact transforms
+    (`ws_decay`, `ws_mul`, `ws_div`, `ws_clip`), since float32 cannot hold
+    1 - eta * alpha at 1M rows x 20 epochs (eta * alpha ~ 5e-8); the
+    minibatch path and the warp form still multiply w directly;
   * the shuffle is Fisher-Yates over splitmix64 (x_linear/ops.mojo), not
     their `SequentialDataset.shuffle` over numpy's MT19937, so a fit agrees
     with theirs in quality, not in bits; the OvR problem c is seeded
@@ -174,6 +180,9 @@ def sgd_one(
     var best = Float32(3.0e38)
     var no_improve = 0
     var decay_factor = fm(fs(Float32(1), l1_ratio), alpha)
+    # their WeightVector's wscale, a float-float (hi, lo): w = wscale * v
+    var whi = Float32(1)
+    var wlo = Float32(0)
     var epochs = 0
     for epoch in range(max_iter):
         epochs = epoch + 1
@@ -186,7 +195,7 @@ def sgd_one(
             # lane/neural-pass139: the predictor as MB_DBLK-column blocks,
             # each from zero, folded ascending (`mb_dot`; the device's
             # team-parallel per-sample kernel takes the same words)
-            var p = fa(mb_dot(x, i, d, w, woff, MB_DBLK), intercept)
+            var p = fa(ws_mul(mb_dot(x, i, d, w, woff, MB_DBLK), whi, wlo), intercept)
             if lr == LR_OPTIMAL:
                 eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
             elif lr == LR_INVSCALING:
@@ -198,8 +207,9 @@ def sgd_one(
                     # lane/neural-pass139: the norms as MB_DBLK-weight blocks
                     # (`sgd_reg_blocked`); only `tol` reads the objective
                     var nrm = sgd_reg_blocked(w, woff, d)
-                    var n2 = nrm[0]
-                    var n1 = nrm[1]
+                    # wscale's norms: wscale^2 |v|^2 and wscale |v|_1
+                    var n2 = fm(fm(whi, whi), nrm[0])
+                    var n1 = fm(whi, nrm[1])
                     var reg = fa(fm(fm(fs(Float32(1), l1_ratio), Float32(0.5)), n2), fm(l1_ratio, n1))
                     objective = fa(objective, fm(alpha, reg))
                 if one_class:
@@ -235,10 +245,17 @@ def sgd_one(
                 var swi = ld(swp, i) if has_sw else Float32(1)
                 update = fm(update, fm(cw, swi))
             if penalty == P_L2 or penalty == P_EN:
-                var scale = fmax(Float32(0), fs(Float32(1), fm(decay_factor, eta)))
-                scale_acc(w, woff, scale, d)
+                # their w.scale: wscale *= max(0, 1 - decay_factor * eta),
+                # folded into v below 1e-9 (their reset_wscale)
+                var ws = ws_decay(whi, wlo, fm(decay_factor, eta))
+                whi = ws[0]
+                wlo = ws[1]
+                if whi < WS_RESET:
+                    ws_fold(w, woff, d, whi, wlo)
+                    whi = Float32(1)
+                    wlo = Float32(0)
             if update != 0:
-                axpy_acc(w, woff, update, x, i * d, d)
+                axpy_acc(w, woff, ws_div(update, whi, wlo), x, i * d, d)
             if fit_intercept:
                 var iu = update
                 if one_class:
@@ -247,12 +264,12 @@ def sgd_one(
                     intercept = fa(intercept, iu)
             if penalty == P_L1 or penalty == P_EN:
                 u = fa(u, fm(fm(l1_ratio, eta), alpha))
-                _l1_clip(w, woff, q, u, d)
+                _l1_clip(w, woff, q, u, d, whi)
             t += 1
         # their floating-point under-/overflow check
         var finite = intercept == intercept and fabs(intercept) < Float32(3.0e38)
         for j in range(d):
-            var wj = ld(w, woff + j)
+            var wj = ws_mul(ld(w, woff + j), whi, wlo)
             if not (wj == wj and fabs(wj) < Float32(3.0e38)):
                 finite = False
         if not finite:
@@ -272,6 +289,9 @@ def sgd_one(
                 no_improve = 0
             else:
                 break
+    # coef = wscale * v
+    for j in range(d):
+        st(w, woff + j, ws_mul(ld(w, woff + j), whi, wlo))
     st(b, boff, intercept)
     return epochs
 
@@ -884,10 +904,99 @@ def _clip_one(z: Float32, uq_pos: Float32, uq_neg: Float32) -> Float32:
     return z
 
 
-def _l1_clip(w: FP, woff: Int, q: FP, u: Float32, d: Int):
+# ------------------------------------------------ wscale as float-float (lane/neural-pass139)
+# Their WeightVector (`_weight_vector.pyx.tp`): w = wscale * v with wscale a
+# float64 scalar. Ours is a float-float pair (hi, lo), hi + lo the value,
+# |lo| <= ulp(hi) / 2, every statement one of the lane's identical ops
+# (fa / fs / fm / fd / fmad: one rounding each, the flush around it), so
+# every column rounds alike and Apple needs no FP64. With wscale = (1, 0)
+# (the PA rates, penalty none and L1, which never scale) each statement
+# reduces exactly: `ws_mul(a, 1, 0)` = fm(a, 1) = a, `ws_div(a, 1, 0)` =
+# fd(a, 1) = a, `ws_clip(..., 1)` = the old clip. Host `sgd_one` and the
+# device's `_sgd_ps_kernel_body` run the same statements.
+comptime WS_RESET = Float32(1e-9)
+
+
+@always_inline
+def ws_mul(a: Float32, hi: Float32, lo: Float32) -> Float32:
+    """a * (hi + lo) rounded once to float32: fmad(a, hi, fm(a, lo)); a zero
+    lo is fm(a, hi) (so wscale = (1, 0) returns a, its sign and an infinity
+    included)."""
+    if lo == 0:
+        return fm(a, hi)
+    return fmad(a, hi, fm(a, lo))
+
+
+@always_inline
+def ws_div(a: Float32, hi: Float32, lo: Float32) -> Float32:
+    """a / (hi + lo): c0 = fd(a, hi), then c0 (1 - lo / hi) as
+    fmad(c0, fd(fs(0, lo), hi), c0); a zero lo is fd(a, hi)."""
+    if lo == 0:
+        return fd(a, hi)
+    var c0 = fd(a, hi)
+    return fmad(c0, fd(fs(Float32(0), lo), hi), c0)
+
+
+@always_inline
+def ws_decay(hi: Float32, lo: Float32, s: Float32) -> Tuple[Float32, Float32]:
+    """Their `w.scale(max(0, 1 - s))` for s = decay_factor * eta (float32):
+    (hi + lo) - s (hi + lo) in float-float. A factor fs(1, s) <= 0 is
+    (0, 0) (their scale(0); the caller's reset then zeroes v).
+      ph = fm(s, hi); pe = fmad(s, hi, -ph)       (two-prod: s hi = ph + pe)
+      pl = fmad(s, lo, pe)                        (s lo + pe)
+      sh = fs(hi, ph); bb = fs(sh, hi)            (two-sum of hi and -ph)
+      er = fa(fs(hi, fs(sh, bb)), fs(-ph, bb))
+      tl = fa(er, fs(lo, pl))
+      nh = fa(sh, tl); nl = fs(tl, fs(nh, sh))    (fast two-sum)"""
+    if fs(Float32(1), s) <= 0:
+        return (Float32(0), Float32(0))
+    var ph = fm(s, hi)
+    var pe = fmad(s, hi, -ph)
+    var pl = fmad(s, lo, pe)
+    var sh = fs(hi, ph)
+    var bb = fs(sh, hi)
+    var er = fa(fs(hi, fs(sh, bb)), fs(-ph, bb))
+    var tl = fa(er, fs(lo, pl))
+    var nh = fa(sh, tl)
+    var nl = fs(tl, fs(nh, sh))
+    return (nh, nl)
+
+
+def ws_fold(w: FP, woff: Int, d: Int, hi: Float32, lo: Float32):
+    """Their `reset_wscale`: v_j = ws_mul(v_j, hi, lo) (the caller then sets
+    wscale = (1, 0))."""
+    for j in range(d):
+        st(w, woff + j, ws_mul(ld(w, woff + j), hi, lo))
+
+
+@always_inline
+def ws_clip(z: Float32, u: Float32, qj: Float32, wf: Float32) -> Tuple[Float32, Float32]:
+    """Their `l1penalty` for one weight v_j = z with wscale wf (> 0, hi of
+    the pair): (the new v_j, the new q_j).
+      z > 0: v = fmax(0, fs(z, fd(fa(u, q), wf)))
+      z < 0: v = fmin(0, fa(z, fd(fs(u, q), wf)))
+      q' = fa(q, fm(wf, fs(v, z)))
+    wf = 1 is `_clip_one` and the old q statement, bit for bit."""
+    var nz = z
+    if z > 0:
+        nz = fmax(Float32(0), fs(z, fd(fa(u, qj), wf)))
+    elif z < 0:
+        nz = fmin(Float32(0), fa(z, fd(fs(u, qj), wf)))
+    return (nz, fa(qj, fm(wf, fs(nz, z))))
+
+
+def _l1_clip(w: FP, woff: Int, q: FP, u: Float32, d: Int, wf: Float32 = Float32(1)):
     """The cumulative L1 penalty over every weight (their `l1penalty`); each
     weight and its q entry are updated on their own, so lanes are
-    independent and the vector form is the scalar loop bit for bit."""
+    independent and the vector form is the scalar loop bit for bit. wf (the
+    wscale's hi) != 1 runs `ws_clip` per weight, which at wf = 1 is the
+    statements below exactly."""
+    if wf != 1:
+        for j in range(d):
+            var r = ws_clip(ld(w, woff + j), u, ld(q, j), wf)
+            st(w, woff + j, r[0])
+            st(q, j, r[1])
+        return
     comptime if is_gpu():
         for j in range(d):
             var z = ld(w, woff + j)

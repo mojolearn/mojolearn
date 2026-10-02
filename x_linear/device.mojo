@@ -29,6 +29,7 @@ from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.sgd import (
     sgd_loss, sgd_dloss, sgd_reg_block, _sgd_target, _clip_one,
+    ws_mul, ws_div, ws_decay, ws_clip, WS_RESET,
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
@@ -673,16 +674,24 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
 #      weights, the decay factor, the intercept and the cumulative L1 u) in
 #      registers: the same words in every thread, so no barrier is needed
 #      before C and the control flow is uniform;
-#   C. thread j applies sgd_one's per-weight statements to w_j (the decay
-#      `fm(w_j, scale)`, the step `fmad(update, x_ij, w_j)`, Tsuruoka's clip
-#      with q_j), then a barrier.
+#   C. thread j applies sgd_one's per-weight statements to v_j (the fold
+#      `ws_mul(v_j, hi, lo)` when wscale fell below 1e-9, the step
+#      `fmad(update / wscale, x_ij, v_j)`, Tsuruoka's clip `ws_clip` with
+#      q_j), then a barrier.
+# The weights are their WeightVector's v with wscale = (hi, lo) a float-float
+# in the scalar state (x_linear/sgd.mojo `ws_decay`); w = wscale * v leaves
+# the device only at the finite check and the result.
 # A launch runs SGD_PS_CHUNK samples of the epoch; the epoch is ONE witness-
-# guarded unit (x_linear/witness.mojo): w, q, the scalar state and t are
+# guarded unit (x_linear/witness.mojo): w, q, the scalar state (wscale
+# included) and t are
 # restored from their epoch-start copies and the epoch replays on a rerun.
 # The shuffle, the finite check, the stopping and the adaptive rate run on
 # the host with sgd_one's statements. `MOJOLEARN_X_LINEAR_SGD_HOST=1` runs
 # the fit on the host instead (the A/B arm).
 comptime SGD_PS_CHUNK = 2048
+# the per-problem scalar state ps[SGD_PS_ST c ..]: intercept, u, objective,
+# (unused), wscale hi, wscale lo
+comptime SGD_PS_ST = 6
 
 
 def _sgd_ps_kernel_body(
@@ -692,7 +701,7 @@ def _sgd_ps_kernel_body(
     """ci: n, d, loss, penalty, lr, fit_intercept, need_obj, one_class, has_sw,
     has_cw, k, has_sq; cf: alpha, l1_ratio (the penalty's), eta0, power_t,
     eps, optimal_init, decay_factor; per problem c: pf[3c..] eta, wpos, wneg;
-    ps[4c..] intercept, u, objective; pt[c] t; act[c] 1 while it trains."""
+    ps[SGD_PS_ST c..] intercept, u, objective, -, wscale hi, lo; pt[c] t; act[c] 1 while it trains."""
     var c = Int(block_idx.x)
     if ldi(act, c) == 0:
         return
@@ -724,9 +733,11 @@ def _sgd_ps_kernel_body(
     var poff = c * 3 * nb
     var do_decay = penalty == P_L2 or penalty == P_EN
     var do_l1 = penalty == P_L1 or penalty == P_EN
-    var intercept = ld(ps, 4 * c)
-    var u = ld(ps, 4 * c + 1)
-    var objective = Float32(0) if Int(start) == 0 else ld(ps, 4 * c + 2)
+    var intercept = ld(ps, SGD_PS_ST * c)
+    var u = ld(ps, SGD_PS_ST * c + 1)
+    var objective = Float32(0) if Int(start) == 0 else ld(ps, SGD_PS_ST * c + 2)
+    var whi = ld(ps, SGD_PS_ST * c + 4)
+    var wlo = ld(ps, SGD_PS_ST * c + 5)
     var t = ldi(pt, c)
     var eta = ld(pf, 3 * c)
     var wpos = ld(pf, 3 * c + 1)
@@ -747,7 +758,7 @@ def _sgd_ps_kernel_body(
         for b in range(nb):
             dot = fa(dot, ld(part, poff + b))
         var y = _sgd_target(k, c, ld(lab, i))
-        var p = fa(dot, intercept)
+        var p = fa(ws_mul(dot, whi, wlo), intercept)
         if lr == LR_OPTIMAL:
             eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
         elif lr == LR_INVSCALING:
@@ -762,6 +773,8 @@ def _sgd_ps_kernel_body(
                     for b in range(nb):
                         n2 = fa(n2, ld(part, poff + nb + b))
                         n1 = fa(n1, ld(part, poff + 2 * nb + b))
+                    n2 = fm(fm(whi, whi), n2)
+                    n1 = fm(whi, n1)
                     var reg = fa(fm(fm(fs(Float32(1), l1_ratio), Float32(0.5)), n2), fm(l1_ratio, n1))
                     objective = fa(objective, fm(alpha, reg))
                 if one_class:
@@ -796,9 +809,23 @@ def _sgd_ps_kernel_body(
                     cwv = wpos if y > 0 else wneg
                 var swi = ld(swp, i) if has_sw else Float32(1)
                 update = fm(update, fm(cwv, swi))
-            var scale = Float32(1)
+            # their w.scale on wscale, the fold into v below 1e-9 (C)
+            var fold = False
+            var fhi = Float32(1)
+            var flo = Float32(0)
             if do_decay:
-                scale = fmax(Float32(0), fs(Float32(1), fm(decay_factor, eta)))
+                var ws = ws_decay(whi, wlo, fm(decay_factor, eta))
+                whi = ws[0]
+                wlo = ws[1]
+                if whi < WS_RESET:
+                    fold = True
+                    fhi = whi
+                    flo = wlo
+                    whi = Float32(1)
+                    wlo = Float32(0)
+            var cu = Float32(0)
+            if update != 0:
+                cu = ws_div(update, whi, wlo)
             if fi:
                 var iu = update
                 if one_class:
@@ -811,22 +838,23 @@ def _sgd_ps_kernel_body(
             var ixd = i * d
             for j in range(tid, d, nt):
                 var wj = ld(w, woff + j)
-                if do_decay:
-                    wj = fm(wj, scale)
+                if fold:
+                    wj = ws_mul(wj, fhi, flo)
                 if update != 0:
-                    wj = fmad(update, ld(x, ixd + j), wj)
+                    wj = fmad(cu, ld(x, ixd + j), wj)
                 if do_l1:
-                    var qj = ld(q, woff + j)
-                    var nz = _clip_one(wj, fa(u, qj), fs(u, qj))
-                    st(q, woff + j, fa(qj, fs(nz, wj)))
-                    wj = nz
+                    var rq = ws_clip(wj, u, ld(q, woff + j), whi)
+                    st(q, woff + j, rq[1])
+                    wj = rq[0]
                 st(w, woff + j, wj)
             t += 1
         team_barrier()
     if tid == 0:
-        st(ps, 4 * c, intercept)
-        st(ps, 4 * c + 1, u)
-        st(ps, 4 * c + 2, objective)
+        st(ps, SGD_PS_ST * c, intercept)
+        st(ps, SGD_PS_ST * c + 1, u)
+        st(ps, SGD_PS_ST * c + 2, objective)
+        st(ps, SGD_PS_ST * c + 4, whi)
+        st(ps, SGD_PS_ST * c + 5, wlo)
         sti(pt, c, t)
 
 
@@ -881,7 +909,7 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var dq = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
     var dsq = ctx.enqueue_create_buffer[DType.float32](max(n, 1) if pa_rate else 1)
     var dpart = ctx.enqueue_create_buffer[DType.float32](max(problems * 3 * nb, 1))
-    var dps = ctx.enqueue_create_buffer[DType.float32](4 * problems)
+    var dps = ctx.enqueue_create_buffer[DType.float32](SGD_PS_ST * problems)
     var dpt = ctx.enqueue_create_buffer[DType.int32](problems)
     var dact = ctx.enqueue_create_buffer[DType.int32](problems)
     var dpf = ctx.enqueue_create_buffer[DType.float32](3 * problems)
@@ -889,7 +917,7 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var dcf = ctx.enqueue_create_buffer[DType.float32](7)
     var dws = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
     var dqs = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
-    var dpss = ctx.enqueue_create_buffer[DType.float32](4 * problems)
+    var dpss = ctx.enqueue_create_buffer[DType.float32](SGD_PS_ST * problems)
     var dpts = ctx.enqueue_create_buffer[DType.int32](problems)
     var launches = (n + chunk - 1) // chunk
     var wit = Witness(ctx, max(launches * problems + (_xg_blocks(n) if pa_rate else 0), 1))
@@ -916,7 +944,7 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     hcf[6] = decay_factor
     var hidx = List[Int32](length=max(problems * n, 1), fill=Int32(0))
     var hw = List[Float32](length=max(problems * d, 1), fill=Float32(0))
-    var hps = List[Float32](length=4 * problems, fill=Float32(0))
+    var hps = List[Float32](length=SGD_PS_ST * problems, fill=Float32(0))
     var hpt = List[Int32](length=problems, fill=Int32(1))
     var hact = List[Int32](length=problems, fill=Int32(1))
     var hpf = List[Float32](length=3 * problems, fill=Float32(0))
@@ -929,7 +957,8 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     for c in range(problems):
         for i in range(n):
             hidx[c * n + i] = Int32(i)
-        hps[4 * c] = Float32(1) if one_class else Float32(0)
+        hps[SGD_PS_ST * c] = Float32(1) if one_class else Float32(0)
+        hps[SGD_PS_ST * c + 4] = Float32(1)
         rngs[c] = seed + UInt64(1000003) * UInt64(c)
         hpf[3 * c + 1] = fp[6 + c] if has_cw else Float32(1)
         hpf[3 * c + 2] = fp[6 + problems + c] if has_cw else Float32(1)
@@ -1001,17 +1030,17 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
             if hact[c] == 0:
                 continue
             # sgd_one's floating-point under-/overflow check
-            var intercept = hps[4 * c]
+            var intercept = hps[SGD_PS_ST * c]
             var finite = intercept == intercept and fabs(intercept) < Float32(3.0e38)
             for j in range(d):
-                var wj = hw[c * d + j]
+                var wj = ws_mul(hw[c * d + j], hps[SGD_PS_ST * c + 4], hps[SGD_PS_ST * c + 5])
                 if not (wj == wj and fabs(wj) < Float32(3.0e38)):
                     finite = False
             if not finite:
                 failed[c] = True
                 hact[c] = 0
                 continue
-            var mean_obj = fd(hps[4 * c + 2], i2f(n))
+            var mean_obj = fd(hps[SGD_PS_ST * c + 2], i2f(n))
             if need_obj and mean_obj > fs(bests[c], tol):
                 no_imp[c] += 1
             else:
@@ -1033,9 +1062,10 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                 res.unsafe_store(c * d + j, Float32(0))
             res.unsafe_store(problems * d + c, Float32(0))
         else:
+            # coef = wscale * v
             for j in range(d):
-                res.unsafe_store(c * d + j, hw[c * d + j])
-            res.unsafe_store(problems * d + c, hps[4 * c])
+                res.unsafe_store(c * d + j, ws_mul(hw[c * d + j], hps[SGD_PS_ST * c + 4], hps[SGD_PS_ST * c + 5]))
+            res.unsafe_store(problems * d + c, hps[SGD_PS_ST * c])
             if epochs[c] > max_epochs:
                 max_epochs = epochs[c]
     res.unsafe_store(problems * d + problems, i2f(max_epochs))
