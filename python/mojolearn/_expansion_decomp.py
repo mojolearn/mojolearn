@@ -327,14 +327,14 @@ class _M:
 
 _M._one = _M(array.array("f", [0.0]), 1, 1)
 _DEV_ONE = {}
-#: the fewest values for which a host-only kit call goes resident (_Kit._use);
-#: MOJOLEARN_XD_RES_MIN overrides it (timing only: the bits are the same).
+#: the fewest values for which a host-only kit call goes resident (_Kit._use)
+#: (cgr-decomp: the MOJOLEARN_XD_RES_MIN override is deleted).
 #: 1 (always) measured fastest on m4pro-a once the pool was O(1) and capped
 #: (1790588268075: MiniBatchDictionaryLearning 0.66 s at 1 against 1.56 s at
 #: 1024 and 1.76 s at 16384; MinCovDet 48.4 / 55.0 / 51.1 s; FastICA 0.089 /
 #: 0.129 / 0.124 s)
 import os as _os
-_RES_MIN = int(_os.environ.get("MOJOLEARN_XD_RES_MIN", "1"))
+_RES_MIN = 1
 
 
 def _dev_one(kit):
@@ -1167,14 +1167,6 @@ def _pinv_rows(k, C):
     return k.lu_solve(lu, piv, C).T
 
 
-def _rp_tiled():
-    """The A/B switch MOJOLEARN_XD_RP_TILED (lane gap-nb-maxabs-grp; unset or
-    anything but "0": on): the random projections draw their matrix on the
-    device (`x_decomp_dev_rand`, the same Philox words as `x_decomp_rand`)
-    and transform through the tiled projection kernel."""
-    return _os.environ.get("MOJOLEARN_XD_RP_TILED", "1").strip() != "0"
-
-
 def _rp_rand(k, r, c, seed, stream, kind, dev):
     """`k.rand`'s matrix; with dev, drawn into a device matrix by the same
     kernel (enqueued, nothing downloaded)."""
@@ -1211,10 +1203,13 @@ class _RandomProjection(_Base):
         k = self._kit()
         self.n_components_ = kc
         self.n_features_in_ = d
-        dev = _rp_tiled() and k._res()
+        # lane gap-nb-maxabs-grp: on the GPU binding the matrix is drawn on
+        # the device (`x_decomp_dev_rand`, the same Philox words as
+        # `x_decomp_rand`); cgr-decomp deleted the MOJOLEARN_XD_RP_TILED switch
+        dev = k._res()
         self.components_m_ = self._make(k, kc, d, _seed_of(self.random_state), dev)
         if dev and self.components_m_._d is not None:
-            # MOJOLEARN_XD_RP_TILED: the matrix was drawn on the device and
+            # the matrix was drawn on the device and
             # stays there for transform; components_ is a copy of its words
             # (one download, the device matrix kept)
             C = self.components_m_
@@ -1230,7 +1225,7 @@ class _RandomProjection(_Base):
 
     def transform(self, X):
         self._check()
-        if _rp_tiled() and not _is_sparse(X):
+        if not _is_sparse(X):
             out = self._project(X)
             if out is not None:
                 return out
@@ -1240,8 +1235,7 @@ class _RandomProjection(_Base):
         return self._kit().mm(M, self.components_m_, tb=True).out()
 
     def _project(self, X):
-        """transform on the GPU binding (lane gap-nb-maxabs-grp; the A/B
-        switch MOJOLEARN_XD_RP_TILED=0 keeps the path above): X goes up from
+        """transform on the GPU binding (lane gap-nb-maxabs-grp): X goes up from
         its own buffer (no host copy into a store, no host finiteness pass),
         x_decomp_dev_project's tiled kernel computes `mm(X, components, tb)`'s
         words and flags a non-finite entry of X on the device, and the result
@@ -3088,13 +3082,9 @@ class LatentDirichletAllocation(_Base):
         """`for a in range(0, n, batch_size): self._em_step(k, M.rows(a, b),
         total_samples, False)` in ONE binding call (x_decomp/lda_online.mojo,
         lane/py-decomp-nbrs): the same cells, draws and float32 scalars per
-        mini-batch. MOJOLEARN_XD_LDA_PYTHON=1 runs the Python loop (the
-        reference arm, timing and A/B only)."""
+        mini-batch (cgr-decomp: the MOJOLEARN_XD_LDA_PYTHON loop arm is
+        deleted)."""
         bs = self.batch_size
-        if _os.environ.get("MOJOLEARN_XD_LDA_PYTHON") == "1":
-            for a in range(0, M.r, bs):
-                self._em_step(k, M.rows(a, min(a + bs, M.r)), total_samples, False)
-            return
         if isinstance(bs, bool) or not isinstance(bs, int) or bs < 1:
             raise ValueError("batch_size must be a positive integer")
         C, E = self.components_m_, self._exp_dir
