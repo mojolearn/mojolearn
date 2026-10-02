@@ -371,11 +371,15 @@ struct ByteParallelTrainer(Movable, Writable):
                 var fp = rebind[MutPointer[Int, MutUntrackedOrigin]](failed.unsafe_ptr())
                 var base = start
 
+                # One host thread per device: each rank's thread drives only
+                # its own context (the multi-GPU dispatch), no host compute.
                 def _gradient_task(rank: Int) {imm cp, imm tp, imm sp, imm lp, imm fp, imm base, imm n}:
                     try:
-                        lp[base + rank] = byte_gradient_device(cp[rank], tp[rank], sp[base + rank])
-                        _require_device_finite(cp[rank], tp[rank].scan,
+                        ref ctx = cp[rank]
+                        lp[base + rank] = byte_gradient_device(ctx, tp[rank], sp[base + rank])
+                        _require_device_finite(ctx, tp[rank].scan,
                             tp[rank].buffers.grad, n, "shard gradients")
+                        ctx.synchronize()
                     except:
                         fp[rank] = 1
 
