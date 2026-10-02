@@ -852,10 +852,19 @@ comptime LG_EXACT_BATCH_WIDTH = (
 #: `doc_parallel_boosting` hands them to the estimator when the fit has one
 #: permutation. OPT-IN until its A/B passes: `-D
 #: MOJOLEARN_GBDT_NS_INHERIT_PARTITION`.
+#:
+#: IDENTICAL, every GPU (lane gap-trees-nv): `-D MOJOLEARN_GBDT_NS_INHERIT_ID`.
+#: The same rows in the same order per leaf as the rebuild (a stable radix
+#: sort of 0..n-1 by leaf keeps rows ascending inside each leaf, as the
+#: searcher's stable partitions of 0..n-1 do), at the same offsets, so the
+#: estimator reduces the same values in the same order.
 comptime NS_INHERIT_PARTITION = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_GBDT_NS_INHERIT_PARTITION"]()
+) or (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_GBDT_NS_INHERIT_ID"]()
 )
 
 
