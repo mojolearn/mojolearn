@@ -1318,8 +1318,9 @@ def eigh(a, UPLO="L"):
 
     Notes
     -----
-    Runs `jacobi_eigh_kernel` and `sign_flip_kernel` ON THE DEVICE where
-    there is one, and their host replay on a CPU-only install.
+    Runs x_decomp's round-robin Jacobi (`eigh_par_*` kernels) and
+    `sign_flip_kernel` ON THE DEVICE where there is one, and their host
+    replay (x_decomp's host binding, the same rounds) on a CPU-only install.
     """
     a_arr, rows, cols = _two_d(a, "a")
     if rows != cols:
@@ -1329,27 +1330,17 @@ def eigh(a, UPLO="L"):
     if UPLO not in ("L", "U"):
         raise ValueError("mojolearn.linalg.eigh: UPLO argument must be 'L' or 'U'")
     a_arr = _from_triangle(a_arr, rows, UPLO)
-    kf = _fast_apple_kit("MOJOLEARN_EIGH_FAST_RR")
-    if kf is not None:
-        # -D MOJOLEARN_EIGH_FAST_RR (lane/apple-fast-decomp-linalg, 2026-10-02,
-        # FAST on Apple only): the x_decomp kit's eigh, whose default route
-        # is the round-robin Jacobi of x_decomp/jacobi_par.mojo (h = n/2
-        # blocks per round, the off-norm convergence test once per sweep)
-        # with the one-block cyclic kernel as its fallback. Cause: the
-        # `_door().eigh` route below is `jacobi_eigh_kernel` on ONE block of
-        # 256 threads for the whole n = 4096 solve (decomposition/
-        # linalg_public_device.mojo device_eigh; the board's eigh lane timed
-        # out on AMD). Same ascending order, same sign pin
-        # (sign_flip_kernel runs in both routes); bits differ (FAST).
-        w, v = kf.eigh(_xd_matrix(a_arr, rows, rows))
-        return w.out((rows,)), v.out()
-    w = empty((rows,), "<f4")
-    v = empty((rows, rows), "<f4")
-    scalars = empty((2,), "<f8")
-    _door().eigh([addr_ro(a_arr, name="a"), addr(w, name="w_out"),
-                  addr(v, name="v_out"), addr(scalars, name="scalars_out")],
-                 [int(rows)])
-    return w, v
+    # lane fix-eigh-main (2026-10-02): x_decomp's eigh, the round-robin
+    # Jacobi (x_decomp/jacobi_par.mojo, the pinned order of x_decomp/rr.mojo:
+    # n/2 independent rotations per round, one thread per updated cell; the
+    # host binding replays the same rounds), then `device_eigh`'s own tail
+    # (sign_flip_kernel, eigh_ascending). It replaces the linalg binding's
+    # `device_eigh`, ONE threadblock for the whole cyclic sweep
+    # (grid_dim=(1, 1, 1)), which never finished n = 4096 on the L40S inside
+    # the board's 2400 s (0.8.34 board: 1,984 s). `svd(hermitian=True)`
+    # already took this route.
+    w, v = _xd_kit().eigh(_xd_matrix(a_arr, rows, rows))
+    return w.out((rows,)), v.out()
 
 
 def svdvals(a):

@@ -14,8 +14,9 @@
 #            each built as `-D NAME=1` (e.g. base,MOJOLEARN_GBDT_X+MOJOLEARN_GBDT_Y)
 #   rounds   timed rounds after the warm-up
 #   rows     `full`: the board shape, timing only.  N: the first N training rows, plus the host column
-#            (`--ours-cpu`, MOJOLEARN_VENDOR=cpu in a worker), and the line says whether the device
-#            prediction digest equals the host one (the same-bits check)
+#            in a separate process (MOJOLEARN_VENDOR=cpu --host-digest: hashes only, never timed; our
+#            CPU is never raced), and the line says whether the device prediction digest equals the
+#            host one (the same-bits check)
 #   spec     lane:driver-dataset, e.g. gbdt-lossguide:taxi gbdt-categorical:taxicat
 #            gbdt-rank-pairlogit:istellarank iforest:taxi
 #   GAPTREES_STAGE=1 adds MOJOLEARN_STAGE_TIMES=1 (every stage drains: triage, never a timing) and
@@ -58,15 +59,21 @@ for arm in ${arms//,/ }; do
   [ $ok = 1 ] || continue
   for s in "$@"; do
     lane=${s%%:*} ds=${s#*:}
-    extra=""; [ "$rows" != full ] && extra="--rows $rows --ours-cpu"
+    extra=""; [ "$rows" != full ] && extra="--rows $rows"
     log="$L/$arm-$lane-$ds-$rows.log"
     if [ "${GAPTREES_STAGE:-0}" = 1 ]; then st="MOJOLEARN_STAGE_TIMES=1"; else st="MOJOLEARN_STAGE_TIMES=0"; fi
     env $armenv $st MOJOLEARN_SPEED_ROUNDS=$rounds MOJOLEARN_SPEED_SIZE=shipped MOJOLEARN_NUMERIC_MODE=identical \
       python3 -u bench/speed/forest_speed_arm.py --lane "$lane" --dataset "$ds" --ours-only $extra > "$log" 2>&1
     rc=$?
-    python3 - "$log" "$arm" "$lane" "$ds" "$rows" "$rc" <<'EOS'
+    : > "$log.host"
+    if [ "$rows" != full ]; then
+      env $armenv MOJOLEARN_VENDOR=cpu MOJOLEARN_SPEED_ROUNDS=1 MOJOLEARN_SPEED_SIZE=shipped MOJOLEARN_NUMERIC_MODE=identical \
+        python3 -u bench/speed/forest_speed_arm.py --lane "$lane" --dataset "$ds" --ours-only --host-digest \
+        --rows "$rows" > "$log.host" 2>&1
+    fi
+    python3 - "$log" "$arm" "$lane" "$ds" "$rows" "$rc" "$log.host" <<'EOS'
 import re, sys, statistics
-log, arm, lane, ds, rows, rc = sys.argv[1:]
+log, arm, lane, ds, rows, rc, hostlog = sys.argv[1:]
 kv = lambda line: dict(re.findall(r"(\S+?)=(\S+)", line))
 ms, hashes, acc, refused, stage = {}, {}, {}, [], {}
 for line in open(log, errors="replace"):
@@ -90,7 +97,11 @@ out = "GAPTREES arm=%s lane=%s ds=%s rows=%s rc=%s median_ms=%s rounds_ms=%s qua
     arm, lane, ds, rows, rc, "%.1f" % statistics.median(o) if o else "-", "/".join("%.0f" % x for x in o) or "-",
     ",".join("%s=%s" % kv_ for kv_ in sorted(acc.items())) or "-", hashes.get("ours", "-")[:16])
 if rows != "full":
-    h = hashes.get("ours-cpu", "-")[:16]
+    h = "-"
+    for line in open(hostlog, errors="replace"):
+        if line.startswith("FSPEED-DIGEST ") and kv(line).get("arm") == "ours":
+            h = kv(line).get("hash", "-")[:16]
+    h = h or "-"
     out += " host=%s %s" % (h, "MATCH" if h != "-" and h == hashes.get("ours", "")[:16] else "DIFFER")
 if refused:
     out += " REFUSED: " + " | ".join(refused)[:300]

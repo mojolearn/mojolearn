@@ -633,8 +633,6 @@ def fast_defines_py() raises -> PythonObject:
             s += "MOJOLEARN_QR_FAST_DEV,"
         comptime if is_defined["MOJOLEARN_SVD_FAST_CHOLQR"]():
             s += "MOJOLEARN_SVD_FAST_CHOLQR,"
-        comptime if is_defined["MOJOLEARN_EIGH_FAST_RR"]():
-            s += "MOJOLEARN_EIGH_FAST_RR,"
         comptime if is_defined["MOJOLEARN_DECOMP_FAST_GEMM_TILED"]():
             s += "MOJOLEARN_DECOMP_FAST_GEMM_TILED,"
         comptime if is_defined["MOJOLEARN_FA_FAST_QRR"]():
