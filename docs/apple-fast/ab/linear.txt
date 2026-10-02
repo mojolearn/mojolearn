@@ -1,26 +1,15 @@
-CMD lane/apple-fast-linear linear-lasso-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-ident lasso istella 3 3 -
-CMD lane/apple-fast-linear linear-lasso-gg-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-gg-istella lasso istella 3 3 - MOJOLEARN_CD_FAST_GRID_GRAM=1
-CMD lane/apple-fast-linear linear-lasso-gg-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-gg-taxi lasso taxi 3 3 - MOJOLEARN_CD_FAST_GRID_GRAM=1
-CMD lane/apple-fast-linear linear-lasso-rm-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-rm-istella lasso istella 3 3 - MOJOLEARN_CD_FAST_ROWMAJOR=1
-CMD lane/apple-fast-linear linear-lasso-rm-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-lasso-rm-taxi lasso taxi 3 3 - MOJOLEARN_CD_FAST_ROWMAJOR=1
-CMD lane/apple-fast-linear linear-enet-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-ident elasticnet istella 3 3 -
-CMD lane/apple-fast-linear linear-enet-gg-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-gg-istella elasticnet istella 3 3 - MOJOLEARN_CD_FAST_GRID_GRAM=1
-CMD lane/apple-fast-linear linear-enet-gg-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-gg-taxi elasticnet taxi 3 3 - MOJOLEARN_CD_FAST_GRID_GRAM=1
-CMD lane/apple-fast-linear linear-enet-rm-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-rm-istella elasticnet istella 3 3 - MOJOLEARN_CD_FAST_ROWMAJOR=1
-CMD lane/apple-fast-linear linear-enet-rm-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-enet-rm-taxi elasticnet taxi 3 3 - MOJOLEARN_CD_FAST_ROWMAJOR=1
-CMD lane/apple-fast-linear linear-logreg-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-logreg-ident logreg istella 3 3 -
-CMD lane/apple-fast-linear linear-logreg-gs-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-logreg-gs-istella logreg istella 3 3 - MOJOLEARN_QN_FAST_GRID_SUMS=1
-CMD lane/apple-fast-linear linear-logreg-gs-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-logreg-gs-taxi logreg taxi 3 3 - MOJOLEARN_QN_FAST_GRID_SUMS=1
-CMD lane/apple-fast-linear linear-logreg-blocks AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-logreg-blocks estimators logreg istella 3 3 "" "-D MOJOLEARN_QN_FAST_BLOCKS=1"
-CMD lane/apple-fast-linear linear-logreg-nocoal AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-logreg-nocoal estimators logreg istella 3 3 "" "-D MOJOLEARN_QN_FAST_COALESCED_OFF=1"
-CMD lane/apple-fast-linear linear-svc-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-svc-ident linearsvc istella 3 3 -
-CMD lane/apple-fast-linear linear-svc-gs-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-svc-gs-istella linearsvc istella 3 3 - MOJOLEARN_QN_FAST_GRID_SUMS=1
-CMD lane/apple-fast-linear linear-svc-blocks AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-svc-blocks estimators linearsvc istella 3 3 "" "-D MOJOLEARN_QN_FAST_BLOCKS=1"
-CMD lane/apple-fast-linear linear-svr-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-svr-ident linearsvr istella 3 3 -
-CMD lane/apple-fast-linear linear-svr-gs-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-svr-gs-istella linearsvr istella 3 3 - MOJOLEARN_QN_FAST_GRID_SUMS=1
-CMD lane/apple-fast-linear linear-svr-blocks AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-svr-blocks estimators linearsvr istella 3 3 "" "-D MOJOLEARN_QN_FAST_BLOCKS=1"
-CMD lane/apple-fast-linear linear-gmm-ident AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-ident gmm istella 3 3 -
-CMD lane/apple-fast-linear linear-gmm-gc-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-gc-istella gmm istella 3 3 - MOJOLEARN_GMM_FAST_GRID_COV=1
-CMD lane/apple-fast-linear linear-gmm-bc-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-bc-istella gmm istella 3 3 - MOJOLEARN_GMM_FAST_BIG_CHOL=1
-CMD lane/apple-fast-linear linear-gmm-es-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-es-istella gmm istella 3 3 - MOJOLEARN_GMM_FAST_ESTEP_STACK=1
-CMD lane/apple-fast-linear linear-gmm-all-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh linear-gmm-all-istella gmm istella 3 3 - "MOJOLEARN_GMM_FAST_GRID_COV=1 MOJOLEARN_GMM_FAST_BIG_CHOL=1 MOJOLEARN_GMM_FAST_ESTEP_STACK=1"
+CMD lane/apple-fast-linear linear-lasso-gg-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-lasso-gg-istella solver lasso istella 1 2 "" "-D MOJOLEARN_CD_FAST_GRID_GRAM=1"
+CMD lane/apple-fast-linear linear-lasso-rm-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-lasso-rm-istella solver lasso istella 1 2 "" "-D MOJOLEARN_CD_FAST_GRID_GRAM=1 -D MOJOLEARN_CD_FAST_ROWMAJOR=1"
+CMD lane/apple-fast-linear linear-enet-gg-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-enet-gg-istella solver elasticnet istella 1 2 "" "-D MOJOLEARN_CD_FAST_GRID_GRAM=1"
+CMD lane/apple-fast-linear linear-enet-rm-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-enet-rm-istella solver elasticnet istella 1 2 "" "-D MOJOLEARN_CD_FAST_GRID_GRAM=1 -D MOJOLEARN_CD_FAST_ROWMAJOR=1"
+CMD lane/apple-fast-linear linear-logreg-gs-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-logreg-gs-istella estimators logreg istella 1 2 "" "-D MOJOLEARN_QN_FAST_GRID_SUMS=1"
+CMD lane/apple-fast-linear linear-logreg-blocks-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-logreg-blocks-istella estimators logreg istella 1 2 "" "-D MOJOLEARN_QN_FAST_BLOCKS=1"
+CMD lane/apple-fast-linear linear-logreg-nocoal-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-logreg-nocoal-istella estimators logreg istella 1 2 "" "-D MOJOLEARN_QN_FAST_COALESCED_OFF=1"
+CMD lane/apple-fast-linear linear-svc-gs-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-svc-gs-istella estimators linearsvc istella 1 2 "" "-D MOJOLEARN_QN_FAST_GRID_SUMS=1"
+CMD lane/apple-fast-linear linear-svc-blocks-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-svc-blocks-istella estimators linearsvc istella 1 2 "" "-D MOJOLEARN_QN_FAST_BLOCKS=1"
+CMD lane/apple-fast-linear linear-svr-gs-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-svr-gs-istella estimators linearsvr istella 1 2 "" "-D MOJOLEARN_QN_FAST_GRID_SUMS=1"
+CMD lane/apple-fast-linear linear-svr-blocks-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-svr-blocks-istella estimators linearsvr istella 1 2 "" "-D MOJOLEARN_QN_FAST_BLOCKS=1"
+CMD lane/apple-fast-linear linear-gmm-gc-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-gmm-gc-istella mixture gmm istella 1 2 "" "-D MOJOLEARN_GMM_FAST_GRID_COV=1"
+CMD lane/apple-fast-linear linear-gmm-bc-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-gmm-bc-istella mixture gmm istella 1 2 "" "-D MOJOLEARN_GMM_FAST_BIG_CHOL=1"
+CMD lane/apple-fast-linear linear-gmm-es-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-gmm-es-istella mixture gmm istella 1 2 "" "-D MOJOLEARN_GMM_FAST_ESTEP_STACK=1"
+CMD lane/apple-fast-linear linear-gmm-all-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-gmm-all-istella mixture gmm istella 1 2 "" "-D MOJOLEARN_GMM_FAST_GRID_COV=1 -D MOJOLEARN_GMM_FAST_BIG_CHOL=1 -D MOJOLEARN_GMM_FAST_ESTEP_STACK=1"

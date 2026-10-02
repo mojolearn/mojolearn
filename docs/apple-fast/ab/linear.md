@@ -1,19 +1,29 @@
 # lane/apple-fast-linear: penalized linear, GLM quasi-Newton, GMM (2026-10-02)
 
 Written without a Mojo toolchain (cloud peer); the first M3 build is the compile check
-(bindings: solver, estimators, mixture). Every switch is FAST + Apple only and defaults OFF;
-IDENTICAL compiles the old code. `tools/afc_ab_def.sh` is copied from lane/apple-fast-tier.
+(bindings: solver, estimators, mixture). Every switch is a `-D` build define, FAST + Apple
+only, default OFF; IDENTICAL compiles main's code unchanged. `tools/afc_ab_def.sh` is copied
+from lane/apple-fast-tier; the request lines are light A/Bs (old FAST vs new FAST, `1 2`,
+istella first; taxi rows only after an istella win).
+
+Merged origin/main (2026-10-02, 200177a6e). What main brought and how the switches sit on it:
+`cd_fit_host` now takes a C-order design by its layout and transposes it on the device
+(lane/gap-nv-classical2), so the Python env read is gone and `MOJOLEARN_CD_FAST_ROWMAJOR`
+only skips that transpose (`solver/estimator.mojo`, `cd_fast_rowmajor_serves`); main's
+`QN_TILED` (one pass over X, tiled folds) is IDENTICAL-only, so the FAST one-block folds
+remain and `MOJOLEARN_QN_FAST_GRID_SUMS` still applies; main's `GMM_ESTEP_STACK` is
+IDENTICAL + Apple only, so `MOJOLEARN_GMM_FAST_ESTEP_STACK` still applies under FAST.
 
 | switch | kind | site | what it changes under FAST on Apple |
 |---|---|---|---|
-| `MOJOLEARN_CD_FAST_GRID_GRAM=1` | env | `solver/impl/cd.mojo` `cd_fit_traced`, CD_FAST_GRAM arm (`cd_grid_gram_kernel`, `cd_grid_gram_red_kernel`) | the plain Lasso / ElasticNet Gram `[X ; y]^T [X ; y]` as 32 x 32 tiles over 8192-row chunks (4 cells a thread, both operands staged), chunks folded on the device, one readback of (p + 1)^2 floats |
-| `MOJOLEARN_CD_FAST_ROWMAJOR=1` | env (Python + Mojo) | `python/mojolearn/_solver_impl.py` `ElasticNet.fit`, `bindings/_mojolearn_solver.mojo` params[9], `solver/estimator.mojo`, `solver/impl/cd.mojo` (`cd_grid_sums_kernel`, `cd_grid_means_kernel`) | X handed row-major as the caller holds it; no `np.asfortranarray` transpose on the host inside the fit, no `pre_process_data` / `post_process_data` / `colNorm` passes over X; the means come from the chunks, the Gram is centered at them while the tiles are staged, the intercept is `y_mean - mu . w` on the host; implies the grid Gram |
-| `MOJOLEARN_QN_FAST_GRID_SUMS=1` | env | `glm/impl/qn/glm_base.mojo` `enqueue_loss_and_dz`, `linear_bwd` (`qn_grid_sum`) | the loss value (`sum_terms_kernel`) and the bias gradient (`mean_kernel`) folded over 256 blocks + one fold block instead of ONE block of 256 threads walking all n rows, twice per objective evaluation; partials in `xtdz_ws` |
+| `-D MOJOLEARN_CD_FAST_GRID_GRAM=1` | define (`CD_FAST_GRID_GRAM`) | `solver/impl/cd.mojo` `cd_fit_traced`, CD_FAST_GRAM arm (`cd_grid_gram_kernel`, `cd_grid_gram_red_kernel`) | the plain Lasso / ElasticNet Gram `[X ; y]^T [X ; y]` as 32 x 32 tiles over 8192-row chunks (4 cells a thread, both operands staged), chunks folded on the device, one readback of (p + 1)^2 floats |
+| `-D MOJOLEARN_CD_FAST_ROWMAJOR=1` | define (`CD_FAST_ROWMAJOR`) | `solver/estimator.mojo` `cd_fit_host` (`rm_grid`), `solver/impl/cd.mojo` (`cd_fast_rowmajor_serves`, `cd_grid_sums_kernel`, `cd_grid_means_kernel`) | a C-order X (main's `row_major` slot) goes up as it is and the device transpose (`transpose_kernel`) is skipped when `n_cols <= 256` and `n_rows >= 4 n_cols`; no `pre_process_data` / `post_process_data` / `colNorm` passes over X; the means come from the chunks, the Gram is centered at them while the tiles are staged, the intercept is `y_mean - mu . w` on the host; implies the grid Gram |
+| `-D MOJOLEARN_QN_FAST_GRID_SUMS=1` | define (`QN_GRID_SUMS`) | `glm/impl/qn/glm_base.mojo` `enqueue_loss_and_dz`, `linear_bwd` (`qn_grid_sum`) | the loss value (`sum_terms_kernel`) and the bias gradient (`mean_kernel`) folded over 256 blocks + one fold block instead of ONE block of 256 threads walking all n rows, twice per objective evaluation; partials in `xtdz_ws` |
 | `-D MOJOLEARN_QN_FAST_BLOCKS=1` | build define (existing, unmeasured) | `glm/impl/qn/glm_base.mojo` `qn_block_eval_kernel` / `qn_block_fold_kernel` | one pass over X per evaluation: forward, loss and gradient partials per 1024-row block, then one fold; instead of MAX's gemv, the loss kernel, the one-block sum, `xtdz_coalesced`, the one-block mean |
 | `-D MOJOLEARN_QN_FAST_COALESCED_OFF=1` | build define (existing) | `glm/impl/qn/glm_base.mojo` `QN_FAST_COALESCED` | the gradient's `X^T dZ` through `fast_xtdz` (256 blocks, 16-row tiles) instead of `xtdz_coalesced` (64 blocks of 880 threads at d = 220) |
-| `MOJOLEARN_GMM_FAST_GRID_COV=1` | env | `mixture/checks/mstep.mojo` `gmm_m_step` (`gmm_grid_cov_kernel`, `gmm_grid_cov_red_kernel`) | every component's covariance in ONE launch over (component, 8192-row chunk, 32 x 32 tile pair), sqrt(r_ik)(x_i - mu_k) staged straight from X, then one fold (/ nk, + reg_covar) |
-| `MOJOLEARN_GMM_FAST_BIG_CHOL=1` | env | `mixture/checks/mstep.mojo` `gmm_precision_cholesky` (`gmm_big_chol_kernel`) | d in (32, 256]: every component's Cholesky, L^{-1}, its transpose and log det in one launch (a block per component, the matrix in its `chol_l` slot behind a device-memory barrier), one readback of the pivot flags |
-| `MOJOLEARN_GMM_FAST_ESTEP_STACK=1` | env | `mixture/checks/estep.mojo` `gmm_e_step` | the stacked E-step (`X . [P_1 .. P_K]` as one GEMM, one `mahal_stacked_kernel`), until now IDENTICAL-only, under FAST where the fused kernel does not hold (d > 32) |
+| `-D MOJOLEARN_GMM_FAST_GRID_COV=1` | define (`GMM_FAST_GRID_COV`) | `mixture/checks/mstep.mojo` `gmm_m_step` (`gmm_grid_cov_kernel`, `gmm_grid_cov_red_kernel`) | every component's covariance in ONE launch over (component, 8192-row chunk, 32 x 32 tile pair), sqrt(r_ik)(x_i - mu_k) staged straight from X, then one fold (/ nk, + reg_covar) |
+| `-D MOJOLEARN_GMM_FAST_BIG_CHOL=1` | define (`GMM_FAST_BIG_CHOL`) | `mixture/checks/mstep.mojo` `gmm_precision_cholesky` (`gmm_big_chol_kernel`) | d in (32, 256]: every component's Cholesky, L^{-1}, its transpose and log det in one launch (a block per component, the matrix in its `chol_l` slot behind a device-memory barrier), one readback of the pivot flags |
+| `-D MOJOLEARN_GMM_FAST_ESTEP_STACK=1` | define (`GMM_FAST_ESTEP_STACK`) | `mixture/checks/estep.mojo` `gmm_e_step` | the stacked E-step (`X . [P_1 .. P_K]` as one GEMM, one `mahal_stacked_kernel`), until now IDENTICAL-only, under FAST where the fused kernel does not hold (d > 32) |
 
 ## Causes (file:line at lane/apple-fast f5f61bde)
 
@@ -26,11 +36,13 @@ IDENTICAL compiles the old code. `tools/afc_ab_def.sh` is copied from lane/apple
 
 A switch becomes the FAST default when its arm is faster on the M3 and held-out quality stays
 within FAST's run-to-run spread (lasso / elasticnet: r2 and the coefficient vector against arm `-`;
-gmm: held-out mean log likelihood and n_iter_); then the env read goes and the arm is the code.
-`MOJOLEARN_CD_FAST_ROWMAJOR` supersedes `MOJOLEARN_CD_FAST_GRID_GRAM` if both win. The gmm `all`
-row is the three gmm switches together.
+gmm: held-out mean log likelihood and n_iter_); then the define goes and the arm is the code.
+`MOJOLEARN_CD_FAST_ROWMAJOR` implies and supersedes `MOJOLEARN_CD_FAST_GRID_GRAM` if both win
+(the `rm` rows pass both defines). The gmm `all` row is the three gmm switches together.
 
 Compile risks to watch: `cd_grid_gram_kernel` / `gmm_grid_cov_kernel` (the `(sb + off).load[width=4]()`
 and `comptime for` spellings are enetcv_fast's), `gmm_big_chol_kernel`'s `llvm.air.wg.barrier`
 (x_linear/team.mojo's), `glm_base.mojo`'s new `stack_allocation` / `AddressSpace` imports, the
-`row_major` default parameter added to `cd_fit_traced` and `cd_fit_host`.
+`row_major` default parameter added to `cd_fit_traced`, `CD_FAST_GRID_GRAM` (a comptime Bool)
+inside a runtime `or` in `cd_fit_traced`, and `solver/estimator.mojo`'s import of
+`CD_FAST_ROWMAJOR` / `cd_fast_rowmajor_serves` from `solver.impl.cd`.
