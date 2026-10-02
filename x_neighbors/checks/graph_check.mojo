@@ -14,8 +14,8 @@ from x_neighbors.checks.seam_util import (
 )
 from x_neighbors.device_ops import op_pagerank_step, op_cc_step, op_svgp
 from x_neighbors.host_ops import op_pagerank_step as h_pagerank_step, op_cc_step as h_cc_step, op_svgp as h_svgp
-from x_neighbors.graph_dev import op_louvain
-from x_neighbors.graph_host import op_louvain as h_louvain, GraphCpu
+from x_neighbors.graph_dev import op_louvain, pr_iterate_gpu
+from x_neighbors.graph_host import op_louvain as h_louvain, GraphCpu, pr_iterate_cpu
 from x_neighbors.graph_par import (
     Lay, LV_MOVE, L_NSLOT, L_G0, L_COMM, L_IC, L_DEG, L_STOT, L_FV, L_EK, L_ORD, _is, _fs, _ls,
 )
@@ -74,6 +74,44 @@ def main() raises:
     same("5216 pagerank dangling host", count_diff_f32(hdw, wpd))
     tr.record_list_f32("x_neighbors.pagerank_dangling", ddw)
     _ = dwt^
+
+    # ---- PageRank's device route (graph_par.pr_drive): the column lists and
+    # the power iteration on the device == the host column, and a real
+    # distribution (sums to ~1, every score positive). Row 5 zeroed: a
+    # dangling node. An all-zero or never-written device result fails here.
+    var pa = _graph(n, 49)
+    for j in range(n):
+        pa[5 * n + j] = Float32(0)
+    var pcols = List[List[Float32]]()
+    var pinfs = List[List[Int32]]()
+    for col in range(2):
+        var px = zf(n)
+        var pp = zf(n)
+        var pdw = zf(n)
+        for i in range(n):
+            px[i] = Float32(1) / Float32(n)
+            pp[i] = Float32(1) / Float32(n)
+            pdw[i] = Float32(1) / Float32(n)
+        var pinf = zi(2)
+        if col == 0:
+            pr_iterate_gpu(fa(pa), fa(px), fa(pp), fa(pdw), ia(pinf), n, 100, Float64(n) * 1e-6, 0, Float32(0.85))
+        else:
+            pr_iterate_cpu(fa(pa), fa(px), fa(pp), fa(pdw), ia(pinf), n, 100, Float64(n) * 1e-6, 0, Float32(0.85))
+        _ = pp^
+        _ = pdw^
+        pcols.append(px^)
+        pinfs.append(pinf^)
+    var psum = Float64(0)
+    var pmin = Float32(1)
+    for i in range(n):
+        psum += Float64(pcols[0][i])
+        pmin = min(pmin, pcols[0][i])
+    if not (psum > 0.99 and psum < 1.01 and pmin > Float32(0)):
+        raise Error("5216 pagerank device iterate: not a distribution (sum " + String(psum) + ", min " + String(pmin) + ")")
+    same("5216 pagerank iterate device == host", count_diff_f32(pcols[0], pcols[1]))
+    same("5216 pagerank iterate info device == host", count_diff_i32(pinfs[0], pinfs[1]))
+    tr.record_list_f32("x_neighbors.pagerank_iterate", pcols[0])
+    _ = pa^
 
     var g = _graph(n, 43)
     var lab = zi(n)

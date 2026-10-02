@@ -82,7 +82,10 @@ struct GA(TrivialRegisterPassable):
     """One stage's arguments (module note): the arenas, the layout and the
     dense input as typed pointers. Never an integer address: on Metal a
     pointer rebuilt from an integer inside a kernel does not reach device
-    memory (every load reads 0, every store is lost)."""
+    memory (every load reads 0, every store is lost). And every function that
+    takes a GA or a pointer from it is @always_inline: across a real call
+    the pointer is a generic-address-space argument, which Metal's AIR has
+    no lowering for (the metallib compiler crashes on any such stage)."""
     var f: FPU
     var i: IPU
     var l: LPU
@@ -225,6 +228,7 @@ comptime GP_NST = 39
 
 
 # ------------------------------------------------------------------ generic stages
+@always_inline
 def _scan_part(t: Int, g: GA):
     """Integer exclusive scan, stage 1 of 3, one item per GP_SCAN_BLOCK
     block: n0 count, n4 the array (count + 1 entries), n5 the parts (blocks
@@ -238,6 +242,7 @@ def _scan_part(t: Int, g: GA):
     _is(g, g.n5).unsafe_store(t, Int32(s))
 
 
+@always_inline
 def _scan_mid(t: Int, g: GA):
     """Stage 2 of 3, ONE item: the parts scanned exclusively in place, the
     total into x[count]. n1 the number of blocks."""
@@ -250,6 +255,7 @@ def _scan_mid(t: Int, g: GA):
     _is(g, g.n4).unsafe_store(g.n0, Int32(run))
 
 
+@always_inline
 def _scan_fin(t: Int, g: GA):
     """Stage 3 of 3, one item per block: the block's exclusive prefix."""
     var x = _is(g, g.n4)
@@ -262,6 +268,7 @@ def _scan_fin(t: Int, g: GA):
         run += v
 
 
+@always_inline
 def _sort_run(t: Int, g: GA):
     """Merge sort of UNIQUE int64 keys, pass 0, one item per GP_SORT_RUN
     keys: an insertion sort of the run in place. n0 count, n4 the keys."""
@@ -277,6 +284,7 @@ def _sort_run(t: Int, g: GA):
         k.unsafe_store(b, v)
 
 
+@always_inline
 def _sort_merge(t: Int, g: GA):
     """One merge pass, one item per key: n0 count, n1 the run width, n4 the
     source, n5 the destination. A key's place in the merged pair is its
@@ -312,6 +320,7 @@ def _sort_merge(t: Int, g: GA):
     dst.unsafe_store(base + (t - lo) + (a - plo), key)
 
 
+@always_inline
 def _fpart(t: Int, g: GA):
     """Blocked float fold, stage 1: n0 count, n4 the values, n5 the parts:
     block t ascending from zero."""
@@ -324,6 +333,7 @@ def _fpart(t: Int, g: GA):
     _fs(g, g.n5).unsafe_store(t, acc)
 
 
+@always_inline
 def _ffin(t: Int, g: GA):
     """Blocked float fold, stage 2, ONE item: n1 parts in slot n5 folded
     ascending from zero into slot n6 at index n7."""
@@ -350,6 +360,7 @@ comptime P_SUM = 11
 comptime P_NSLOT = 12
 
 
+@always_inline
 def _pr_rowsum(t: Int, g: GA):
     """Row t's sum over its nonzero cells ascending (1.0 each when n1, the
     unweighted graph) and its dangling flag. n0 = n."""
@@ -365,6 +376,7 @@ def _pr_rowsum(t: Int, g: GA):
     _is(g, P_DG).unsafe_store(t, Int32(1 if c == 0 else 0))
 
 
+@always_inline
 def _pr_colcnt(t: Int, g: GA):
     """Column t's nonzero cells counted (consecutive items read consecutive
     words of a row)."""
@@ -376,6 +388,7 @@ def _pr_colcnt(t: Int, g: GA):
     _is(g, P_CNT).unsafe_store(t, Int32(c))
 
 
+@always_inline
 def _pr_colfill(t: Int, g: GA):
     """Column t's list from its offset: the rows of its nonzero cells
     ascending and the row-normalized values: the flushed quotient by the
@@ -396,6 +409,7 @@ def _pr_colfill(t: Int, g: GA):
             w += 1
 
 
+@always_inline
 def _pr_dpart(t: Int, g: GA):
     """The dangling mass, block t: the dangling nodes' x (slot n4)
     ascending from zero into P_FP."""
@@ -429,6 +443,7 @@ def pr_step_csr(
     res.unsafe_store(t, ftz(identical_mul_add(alpha, inner, teleport)))
 
 
+@always_inline
 def _pr_step(t: Int, g: GA):
     """One node of a step: x in slot n4, the next iterate into slot n5,
     alpha x0, the dangling mass from P_SUM[0]."""
@@ -436,6 +451,7 @@ def _pr_step(t: Int, g: GA):
                 _fs(g, P_SUM).unsafe_load(0), _fs(g, g.n5), g.x0)
 
 
+@always_inline
 def _pr_apart(t: Int, g: GA):
     """sum |x' - x|, block t (x' slot n5, x slot n4) ascending from zero
     into P_FP (neural-pass141's `_absdiff_block(x', x)`)."""
@@ -498,6 +514,7 @@ def _gval(g: GA, b: Int) -> FP:
     return _fs(g, b + 3)
 
 
+@always_inline
 def _lv_rowcnt(t: Int, g: GA):
     """Row t of the dense n0 x n0 input: its nonzero cells counted into
     G0's indptr; labels[t] = t."""
@@ -510,6 +527,7 @@ def _lv_rowcnt(t: Int, g: GA):
     _is(g, L_LAB).unsafe_store(t, Int32(t))
 
 
+@always_inline
 def _lv_fill(t: Int, g: GA):
     """Row t's nonzero cells, columns ascending, into G0 from its offset."""
     var n = g.n0
@@ -526,6 +544,7 @@ def _lv_fill(t: Int, g: GA):
             w += 1
 
 
+@always_inline
 def _lv_mrow(t: Int, g: GA):
     """Row t's share of m (each undirected edge once, a self-loop once):
     its weights at columns >= t ascending from zero, into VQ. n3 graph."""
@@ -539,6 +558,7 @@ def _lv_mrow(t: Int, g: GA):
     _fs(g, L_VQ).unsafe_store(t, s)
 
 
+@always_inline
 def _lv_deg(t: Int, g: GA):
     """Node t's degree on graph n3 (its row ascending, then its self-loop
     once more, networkx's degree); when n1: its own community (comm = t,
@@ -579,10 +599,12 @@ def _beats(v: Int, u: Int) -> Bool:
     return pv > pu or (pv == pu and v > u)
 
 
+@always_inline
 def _lv_col0(t: Int, g: GA):
     _is(g, L_COLOR).unsafe_store(t, Int32(-1))
 
 
+@always_inline
 def _lv_colr(t: Int, g: GA):
     """Colouring round n1 on graph n3: an uncoloured node whose priority
     beats every neighbour uncoloured at the round's start takes colour n1.
@@ -604,21 +626,25 @@ def _lv_colr(t: Int, g: GA):
     color.unsafe_store(t, Int32(r))
 
 
+@always_inline
 def _lv_icz(t: Int, g: GA):
     _is(g, L_IC).unsafe_store(g.n1, Int32(0))
 
 
+@always_inline
 def _lv_uncol(t: Int, g: GA):
     """IC[1] = 1 when node t is uncoloured (every writer stores 1)."""
     if Int(_is(g, L_COLOR).unsafe_load(t)) == -1:
         _is(g, L_IC).unsafe_store(1, Int32(1))
 
 
+@always_inline
 def _lv_ckey(t: Int, g: GA):
     """The key (colour, node) of node t into KA. n0 nodes."""
     _ls(g, L_KA).unsafe_store(t, Int64(_is(g, L_COLOR).unsafe_load(t)) * Int64(g.n0) + Int64(t))
 
 
+@always_inline
 def _lower_bound(k: LP, lo: Int, hi: Int, key: Int64) -> Int:
     var a = lo
     var b = hi
@@ -631,25 +657,30 @@ def _lower_bound(k: LP, lo: Int, hi: Int, key: Int64) -> Int:
     return a
 
 
+@always_inline
 def _lv_coff(t: Int, g: GA):
     """Colour t's first position among the sorted keys (slot n4, n0 nodes)."""
     _is(g, L_COFF).unsafe_store(t, Int32(_lower_bound(_ls(g, g.n4), 0, g.n0, Int64(t) * Int64(g.n0))))
 
 
+@always_inline
 def _lv_copyl(t: Int, g: GA):
     _ls(g, L_ORD).unsafe_store(t, _ls(g, g.n4).unsafe_load(t))
 
 
+@always_inline
 def _lv_save(t: Int, g: GA):
     _is(g, L_SAVE).unsafe_store(t, _is(g, L_COMM).unsafe_load(t))
     _fs(g, L_SSAVE).unsafe_store(t, _fs(g, L_STOT).unsafe_load(t))
 
 
+@always_inline
 def _lv_restore(t: Int, g: GA):
     _is(g, L_COMM).unsafe_store(t, _is(g, L_SAVE).unsafe_load(t))
     _fs(g, L_STOT).unsafe_store(t, _fs(g, L_SSAVE).unsafe_load(t))
 
 
+@always_inline
 def _heap_sift(k: LP, lo: Int, start: Int, end: Int):
     var root = start
     while True:
@@ -667,6 +698,7 @@ def _heap_sift(k: LP, lo: Int, start: Int, end: Int):
             return
 
 
+@always_inline
 def _heap_sort(k: LP, lo: Int, cnt: Int):
     """k[lo .. lo + cnt) ascending (in-thread heap sort)."""
     var s = cnt // 2 - 1
@@ -682,6 +714,7 @@ def _heap_sort(k: LP, lo: Int, cnt: Int):
         end -= 1
 
 
+@always_inline
 def lv_move_item(t: Int, g: GA):
     """One node of the current colour moves (networkx `_one_level`'s step
     for one node): n0 nodes, n1 the colour's first position in ORD, n3 the
@@ -753,6 +786,7 @@ def lv_move_item(t: Int, g: GA):
         _is(g, L_IC).unsafe_store(0, Int32(1))
 
 
+@always_inline
 def _lv_skey(t: Int, g: GA):
     """The key (community, node) of node t into KA; stot[t] = 0 (an empty
     community's total). n0 nodes."""
@@ -760,6 +794,7 @@ def _lv_skey(t: Int, g: GA):
     _fs(g, L_STOT).unsafe_store(t, Float32(0))
 
 
+@always_inline
 def _lv_sfold(t: Int, g: GA):
     """At a community's first position among the sorted keys (slot n4):
     its members' degrees folded in ascending node id into stot."""
@@ -778,6 +813,7 @@ def _lv_sfold(t: Int, g: GA):
     _fs(g, L_STOT).unsafe_store(Int(c), acc)
 
 
+@always_inline
 def _lv_qv(t: Int, g: GA):
     """Index t's modularity term on graph n3 (x0 the resolution, m in
     FV[0]): node t's weight inside its community (its self-loop once, its
@@ -801,27 +837,32 @@ def _lv_qv(t: Int, g: GA):
     _fs(g, L_VQ).unsafe_store(t, _sub(lc, ftz(identical_mul(g.x0, ftz(identical_mul(fr, fr))))))
 
 
+@always_inline
 def _lv_flagz(t: Int, g: GA):
     _is(g, L_FLAG).unsafe_store(t, Int32(0))
 
 
+@always_inline
 def _lv_used(t: Int, g: GA):
     """FLAG[comm[t]] = 1 (every writer stores 1)."""
     _is(g, L_FLAG).unsafe_store(Int(_is(g, L_COMM).unsafe_load(t)), Int32(1))
 
 
+@always_inline
 def _lv_renum(t: Int, g: GA):
     """comm[t] -> its community's rank among the used ids (FLAG scanned)."""
     var comm = _is(g, L_COMM)
     comm.unsafe_store(t, _is(g, L_FLAG).unsafe_load(Int(comm.unsafe_load(t))))
 
 
+@always_inline
 def _lv_lab(t: Int, g: GA):
     """Original node t's label through this level's communities."""
     var lab = _is(g, L_LAB)
     lab.unsafe_store(t, _is(g, L_COMM).unsafe_load(Int(lab.unsafe_load(t))))
 
 
+@always_inline
 def _lv_ekey(t: Int, g: GA):
     """Aggregation key of entry t of graph n3 (n0 entries, n1 communities):
     (comm[u] * n1 + comm[v]) * n0 + t, an entry inside a community only from
@@ -848,11 +889,13 @@ def _ehead(k: LP, t: Int, nnz: Int, nc: Int) -> Bool:
     return t == 0 or k.unsafe_load(t - 1) // Int64(nnz) != pk
 
 
+@always_inline
 def _lv_head(t: Int, g: GA):
     """SEGH[t] = 1 at the first sorted key (slot n4) of a community pair."""
     _is(g, L_SEGH).unsafe_store(t, Int32(1 if _ehead(_ls(g, g.n4), t, g.n0, g.n1) else 0))
 
 
+@always_inline
 def _lv_agg(t: Int, g: GA):
     """At a pair's first sorted key: the pair's weights folded in ascending
     entry order into entry SEGH[t] (scanned) of graph n5: row c, column d."""
@@ -874,6 +917,7 @@ def _lv_agg(t: Int, g: GA):
     _gval(g, g.n5).unsafe_store(s, w)
 
 
+@always_inline
 def _lv_aip(t: Int, g: GA):
     """Graph n5's indptr[t]: the first of its n2 entries whose row is >= t."""
     var src = _gsrc(g, g.n5)
@@ -888,11 +932,13 @@ def _lv_aip(t: Int, g: GA):
     _gip(g, g.n5).unsafe_store(t, Int32(a))
 
 
+@always_inline
 def _lv_copyi(t: Int, g: GA):
     """comm[t] = labels[t] (the final modularity on the input graph)."""
     _is(g, L_COMM).unsafe_store(t, _is(g, L_LAB).unsafe_load(t))
 
 
+@always_inline
 def gp_item[S: Int](t: Int, g: GA):
     """Stage S's item t."""
     comptime if S == GP_SCAN_PART:
