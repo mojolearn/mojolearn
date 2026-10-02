@@ -20,6 +20,8 @@ for k, v in sorted(d["races"].items()):
         q = {a: round(b, 5) for a, b in q.items() if isinstance(b, (int, float))}
         tag = "%s:%s:%s:%s" % (arm, c.get("status"), None if ms is None else round(ms), c.get("mode"))
         if arm.startswith("ours"):
+            if arm == "ours-cpu" or c.get("device") == "cpu":
+                continue          # our CPU is never reported (Andrew, Oct 2 2026)
             ours[arm] = (ms, q, tag, c.get("hash"))
         elif ms is not None and c.get("status") == "ok":
             opp.append((ms, arm, q))

@@ -31,6 +31,11 @@ take the per-row class weights (the weighted BOOTSTRAP, and since
 and `forest_prepare_gpu`, `forest_predict_resident_reuse_gpu` and
 `forest_release_gpu`, the resident `parallel_groves` entries, predict over
 `core/forest_host_groves.mojo` (`RF_INPUT=True`: the input flushed).
+ADDED 2026-10-02 (lane/fix-dart-host): the data session entries
+`rf_data_session_open`, `rf_data_session_close`,
+`rf_regressor_fit_session_export`, `rf_regressor_fit_session_rows_export`
+and `rf_classifier_fit_weighted_session_export`, which DART opens by default
+(e3372c826); each member fit is the plain entries' body on the session's X.
 ABSENT, and so refused BY NAME through `_HostBinding`: the global tree-ID
 shard fits (`rf_*_fit_shard`, the multi-GPU driver's), the non-resident
 `rf_predict_*_gpu_parallel` and the pool and comparison entries.
@@ -75,6 +80,7 @@ from bindings.forest_host_groves_binding import (
     forest_prepare_host_binding,
     forest_release_host_binding,
 )
+from ensemble.host_layout import RF_NAN_REFUSAL, has_nan_f32_threaded
 from ensemble.host.rf_oracle import (
     RF_ENTROPY,
     RF_GAMMA,
@@ -261,6 +267,30 @@ def _retain_rf_export(var forest: RfHostForest) raises -> PythonObject:
     )
 
 
+def _read_weights(weights_addr: Int, n_rows: Int) raises -> List[Float32]:
+    """The weighted classifier's Float32 row weights (0: none), with the GPU
+    binding's checks in its words (`bindings/_mojolearn_rf.mojo:363-380`);
+    all-unit weights fit unweighted (an empty list)."""
+    var weights = List[Float32]()
+    if weights_addr == 0:
+        return weights^
+    var wp = f32_ptr(weights_addr)
+    var total = Float64(0)
+    var all_unit = True
+    for i in range(n_rows):
+        var w = wp[i]
+        if not (w >= 0 and w <= Float32(3.4028234663852886e38)):
+            raise Error("class weights must be finite and nonnegative")
+        weights.append(w)
+        total += Float64(w)
+        all_unit = all_unit and w == Float32(1)
+    if total <= 0:
+        raise Error("class weights must have positive total")
+    if all_unit:
+        return List[Float32]()
+    return weights^
+
+
 def _rf_fit[
     CLASSIFIER: Bool, EXPORT: Bool, ROWMAJOR: Bool
 ](
@@ -297,51 +327,56 @@ def _rf_fit[
     var p = _params_from(params, crit)
     # `bindings/_mojolearn_rf.mojo:363-380`: the weights' checks in their
     # words; all-unit weights fit unweighted.
-    var weights = List[Float32]()
-    if weights_addr != 0:
-        var wp = f32_ptr(weights_addr)
-        var total = Float64(0)
-        var all_unit = True
-        for i in range(n_rows):
-            var w = wp[i]
-            if not (w >= 0 and w <= Float32(3.4028234663852886e38)):
-                raise Error("class weights must be finite and nonnegative")
-            weights.append(w)
-            total += Float64(w)
-            all_unit = all_unit and w == Float32(1)
-        if total <= 0:
-            raise Error("class weights must have positive total")
-        if all_unit:
-            weights = List[Float32]()
+    var weights = _read_weights(weights_addr, n_rows)
     var x_address = _index(x_addr)
     var y_address = _index(y_addr)
     var forest: RfHostForest
     with GILReleased(Python()):
         var x = _read_x_col_major(x_address, n_rows, n_cols, ROWMAJOR)
-        comptime if CLASSIFIER:
-            var y = read_i32(y_address, n_rows)
-            forest = rf_host_fit(
-                x^, y, List[Float32](), n_rows, n_cols, n_classes, True, p,
-                Float32(1.0), tree_start, weights,
-            )
-        else:
-            var y = read_f32(y_address, n_rows)
-            # `bindings/_mojolearn_rf.mojo:594-600`: the label plane's
-            # fixed-point scale from the sum of label magnitudes, in their
-            # Float64 order.
-            var mag = Float64(0.0)
-            for i in range(n_rows):
-                var v = Float64(y[i])
-                mag += v if v >= 0.0 else -v
-            var scale = Float32(choose_scale(mag, n_rows))
-            forest = rf_host_fit(
-                x^, List[Int32](), y, n_rows, n_cols, 1, False, p, scale,
-                tree_start,
-            )
+        forest = _rf_fit_colmajor[CLASSIFIER](
+            x^, y_address, n_rows, n_cols, n_classes, p, weights, tree_start
+        )
     comptime if EXPORT:
         return _retain_rf_export(forest^)
     else:
         return _forest_out(forest)
+
+
+def _rf_fit_colmajor[CLASSIFIER: Bool](
+    var x: List[Float32],
+    y_address: Int,
+    n_rows: Int,
+    n_cols: Int,
+    n_classes: Int,
+    p: RfHostParams,
+    weights: List[Float32],
+    tree_start: Int,
+) raises -> RfHostForest:
+    """The host fit on a COLUMN-major X already read: the one body `_rf_fit`
+    and the data session entries below share, so a session member's forest
+    is the forest the plain entry returns on the same X."""
+    var forest: RfHostForest
+    comptime if CLASSIFIER:
+        var y = read_i32(y_address, n_rows)
+        forest = rf_host_fit(
+            x^, y, List[Float32](), n_rows, n_cols, n_classes, True, p,
+            Float32(1.0), tree_start, weights,
+        )
+    else:
+        var y = read_f32(y_address, n_rows)
+        # `bindings/_mojolearn_rf.mojo:594-600`: the label plane's
+        # fixed-point scale from the sum of label magnitudes, in their
+        # Float64 order.
+        var mag = Float64(0.0)
+        for i in range(n_rows):
+            var v = Float64(y[i])
+            mag += v if v >= 0.0 else -v
+        var scale = Float32(choose_scale(mag, n_rows))
+        forest = rf_host_fit(
+            x^, List[Int32](), y, n_rows, n_cols, 1, False, p, scale,
+            tree_start,
+        )
+    return forest^
 
 
 def rf_classifier_fit_binding(
@@ -448,6 +483,210 @@ def rf_regressor_fit_shard_binding(
     return _rf_fit[False, False, False](
         x_addr, y_addr, params, criterion, 0, _index(tree_start)
     )
+
+
+# ---------------------------------------------------------------------------
+# THE DATA SESSION, on the host (lane/fix-dart-host, 2026-10-02). The GPU
+# binding's `rf_data_session_open` (bindings/_mojolearn_rf.mojo, trees-apple3)
+# stages X once for the member fits of one boosted ensemble; DART opens it by
+# default since e3372c826 (python/mojolearn/_expansion_trees.py `_DARTBase`).
+# Its member fits are the plain fit on the staged bytes, so a member's forest
+# is the forest `rf_*_fit_export` returns. Here the session holds the
+# COLUMN-major X `_read_x_col_major` reads, and every member fit is
+# `_rf_fit_colmajor` on a copy of it: the body the plain entries run, so the
+# host column computes the bits it computes without a session. The same
+# names, params and refusals as the GPU binding. One thread uses a session at
+# a time.
+struct RfHostSession(Movable):
+    var id: Int
+    var x: List[Float32]
+    var n_rows: Int
+    var n_cols: Int
+
+    def __init__(out self, id: Int, var x: List[Float32], n_rows: Int, n_cols: Int):
+        self.id = id
+        self.x = x^
+        self.n_rows = n_rows
+        self.n_cols = n_cols
+
+
+struct RfHostSessionRegistry(Defaultable, Movable):
+    var sessions: List[RfHostSession]
+    var next_id: Int
+
+    def __init__(out self):
+        self.sessions = List[RfHostSession]()
+        self.next_id = 1
+
+    def find(self, id: Int) raises -> Int:
+        for i in range(len(self.sessions)):
+            if self.sessions[i].id == id:
+                return i
+        raise Error("unknown or closed forest data session handle")
+
+
+comptime RF_HOST_SESSIONS = _Global[
+    StorageType=RfHostSessionRegistry,
+    name="MojoRFDataSessionHost",
+    init_fn=RfHostSessionRegistry.__init__,
+]
+
+
+def rf_data_session_open_binding(
+    x_addr: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`bindings/_mojolearn_rf.mojo::rf_data_session_open_binding`: `params`
+    is [n_rows, n_cols, row_major, share_tables]; `x` is float32, ROW-major
+    when `row_major` is 1 and COLUMN-major otherwise, borrowed through this
+    call only. Returns the session handle."""
+    if len(params) != 4:
+        raise Error("rf_data_session_open: params must hold 4 values")
+    var n_rows = _index(params[0])
+    var n_cols = _index(params[1])
+    var row_major = _index(params[2]) != 0
+    var share_tables = _index(params[3]) != 0
+    if n_rows <= 0 or n_cols <= 0:
+        raise Error("rf_data_session_open: invalid shape")
+    # A host binding is IDENTICAL only, and an IDENTICAL member draws its
+    # own quantile sample (the GPU binding's IDENTICAL refusal).
+    if share_tables:
+        raise Error(
+            "rf_data_session_open: shared quantile tables are a FAST"
+            " option; an IDENTICAL member draws its own sample"
+        )
+    var x_address = _index(x_addr)
+    if has_nan_f32_threaded(f32_ptr(x_address), n_rows * n_cols):
+        raise Error("rf_data_session_open: " + RF_NAN_REFUSAL)
+    var x = List[Float32]()
+    with GILReleased(Python()):
+        x = _read_x_col_major(x_address, n_rows, n_cols, row_major)
+    var reg = RF_HOST_SESSIONS.get_or_create_ptr()
+    var id = reg[].next_id
+    reg[].next_id += 1
+    reg[].sessions.append(RfHostSession(id, x^, n_rows, n_cols))
+    return PythonObject(id)
+
+
+def rf_data_session_close_binding(handle: PythonObject) raises -> PythonObject:
+    var reg = RF_HOST_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(_index(handle))
+    _ = reg[].sessions.pop(si)
+    return PythonObject(None)
+
+
+def _session_params[CLASSIFIER: Bool](
+    entry: String, params: PythonObject, criterion: PythonObject
+) raises -> RfHostParams:
+    """The GPU session entries' slot checks, in their words."""
+    if len(params) != N_RF_FIT_PARAMS:
+        raise Error(
+            entry + ": params must hold " + String(N_RF_FIT_PARAMS)
+            + " values, got " + String(len(params))
+        )
+    comptime if CLASSIFIER:
+        if _index(params[2]) < 2:
+            raise Error(entry + ": n_classes must be >= 2")
+    else:
+        if _index(params[2]) != 0:
+            raise Error(entry + ": n_classes (slot 2) must be 0")
+    var crit = _index(criterion)
+    _check_criterion(entry, crit, CLASSIFIER)
+    return _params_from(params, crit)
+
+
+def _session_x(entry: String, session_id: Int, n_rows: Int, n_cols: Int) raises -> List[Float32]:
+    """A copy of the session's column-major X (the fit consumes its X), after
+    `bindings/_mojolearn_rf.mojo::_session_shape_check`."""
+    var reg = RF_HOST_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(session_id)
+    var sr = reg[].sessions[si].n_rows
+    var sc = reg[].sessions[si].n_cols
+    if sr != n_rows or sc != n_cols:
+        raise Error(
+            entry + ": params name " + String(n_rows) + " x " + String(n_cols)
+            + ", the session holds " + String(sr) + " x " + String(sc)
+        )
+    return reg[].sessions[si].x.copy()
+
+
+def rf_regressor_fit_session_binding(
+    handle: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject,
+) raises -> PythonObject:
+    """`rf_regressor_fit_export` on the session's X."""
+    comptime entry = "rf_regressor_fit_session"
+    var p = _session_params[False](entry, params, criterion)
+    var n_rows = _index(params[0])
+    var n_cols = _index(params[1])
+    var x = _session_x(entry, _index(handle), n_rows, n_cols)
+    var y_address = _index(y_addr)
+    var forest: RfHostForest
+    with GILReleased(Python()):
+        forest = _rf_fit_colmajor[False](
+            x^, y_address, n_rows, n_cols, 0, p, List[Float32](), 0
+        )
+    return _retain_rf_export(forest^)
+
+
+def rf_regressor_fit_session_rows_binding(
+    handle: PythonObject, rows_addr: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject,
+) raises -> PythonObject:
+    """`rf_regressor_fit_export` on the rows `rows` (int32 row ids of the
+    session's X, `params[0]` of them, repeats allowed), `y` their labels in
+    that order: the column-major gather of those rows (the bytes the GPU
+    binding's `launch_gather_rows_colmajor` writes), then the plain fit."""
+    comptime entry = "rf_regressor_fit_session_rows"
+    var p = _session_params[False](entry, params, criterion)
+    var n_rows = _index(params[0])
+    var n_cols = _index(params[1])
+    if n_rows <= 0:
+        raise Error(entry + ": no rows")
+    var rp = i32_ptr(_index(rows_addr))
+    var reg = RF_HOST_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(_index(handle))
+    var src_rows = reg[].sessions[si].n_rows
+    if reg[].sessions[si].n_cols != n_cols:
+        raise Error(entry + ": the session holds another column count")
+    for i in range(n_rows):
+        var r = Int(rp[i])
+        if r < 0 or r >= src_rows:
+            raise Error(entry + ": a row id is outside the session's X")
+    var x = List[Float32](length=n_rows * n_cols, fill=Float32(0.0))
+    for c in range(n_cols):
+        for i in range(n_rows):
+            x[c * n_rows + i] = reg[].sessions[si].x[c * src_rows + Int(rp[i])]
+    var y_address = _index(y_addr)
+    var forest: RfHostForest
+    with GILReleased(Python()):
+        forest = _rf_fit_colmajor[False](
+            x^, y_address, n_rows, n_cols, 0, p, List[Float32](), 0
+        )
+    return _retain_rf_export(forest^)
+
+
+def rf_classifier_fit_weighted_session_binding(
+    handle: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+) raises -> PythonObject:
+    """`rf_classifier_fit_weighted_export` on the session's X."""
+    comptime entry = "rf_classifier_fit_weighted_session"
+    var p = _session_params[True](entry, params, criterion)
+    var n_rows = _index(params[0])
+    var n_cols = _index(params[1])
+    var n_classes = _index(params[2])
+    var w_address = _index(weights_addr)
+    if w_address == 0:
+        raise Error("weighted RF requires a nonzero Float32 weight pointer")
+    var weights = _read_weights(w_address, n_rows)
+    var x = _session_x(entry, _index(handle), n_rows, n_cols)
+    var y_address = _index(y_addr)
+    var forest: RfHostForest
+    with GILReleased(Python()):
+        forest = _rf_fit_colmajor[True](
+            x^, y_address, n_rows, n_cols, n_classes, p, weights, 0
+        )
+    return _retain_rf_export(forest^)
 
 
 def rf_forest_export_binding(
@@ -637,6 +876,11 @@ def PyInit__mojolearn_rf_host() abi("C") -> PythonObject:
         module.def_function[resident_prepare_binding]("forest_prepare_gpu")
         module.def_function[resident_predict_binding]("forest_predict_resident_reuse_gpu")
         module.def_function[resident_release_binding]("forest_release_gpu")
+        module.def_function[rf_data_session_open_binding]("rf_data_session_open")
+        module.def_function[rf_data_session_close_binding]("rf_data_session_close")
+        module.def_function[rf_regressor_fit_session_binding]("rf_regressor_fit_session_export")
+        module.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
+        module.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_rf_host: ", error))
