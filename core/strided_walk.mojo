@@ -40,9 +40,14 @@ from checks.numerics import (
 )
 
 
+#: EVERY GPU since lane/gap-classical-nv (2026-10-02), the name kept for
+#: its call sites: NVIDIA and AMD ran `xty_kernel` (one block per column, a
+#: SIMD group reading one column at a stride of D floats, X re-read once per
+#: column: LinearSVC's gradient, Ridge's U^T b, lstsq) and the one-load-at-a-
+#: time single-block loss sums. Only which thread runs a chain and when its
+#: loads issue move; the adds and the fold are the same, so no bit moves.
 comptime APPLE_IDENTICAL_STEP_UNROLL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_APPLE_STEP_UNROLL_OFF"]()
 )
 
