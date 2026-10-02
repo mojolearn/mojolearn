@@ -24,7 +24,8 @@ from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_BAYES, ALGO_ARD
-from x_linear.ops import ld, st, fd, i2f, fa, fm, fmad, flog, fill, copy, row_dot, mean_of
+from x_linear.ops import ld, st, fd, i2f, fa, fm, fmad, flog, fill, copy, row_dot, mean_of, fs
+from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part
 from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
 from x_linear.glm import (
     _unit, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, _glm_step, GLM_LINK_LOG, GLM_STALL_ITERS,
@@ -135,6 +136,65 @@ def xg_gram_kernel(x: FP, n: Int32, d: Int32, fw: FP):
         var acc = chain_cfmad(x, j, dd, ld(fw, j), x, k, dd, ld(fw, k), Int(n))
         st(fw, dd + j * dd + k, acc)
         st(fw, dd + k * dd + j, acc)
+
+
+
+# lane/neural-pass131 (2026-10-02): BayesianRidge's iterations with the sse
+# on the grid. The fit kernel ran every iteration's sse (a row pass: each
+# row's residual, then FOLD_BLOCK partials folded in order) on its one
+# block: the peer's L40S, istella 1M x 220 standardized (300 iterations):
+# 43.4 s, 141 ms an iteration. Here one block runs `bayes_prep` (the
+# statistics, the eigendecomposition, the first coefficients); then per
+# iteration a thread per row writes its residual (`_t_sse`'s statements),
+# a thread per block its partial (`_sse_part`), and one thread folds them
+# (`fold_parts`) and runs `bayes_step` (and the next coefficients); the
+# host reads the stop word. `bayes_ridge_fit`'s statements in its order.
+# `MOJOLEARN_X_LINEAR_BAYES_GRID=0` restores the one-block fit.
+def bayes_prep_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, tw: FP, state: FP):
+    var a = ALGO_BAYES
+    var t = device_team(tw, Int(n), team_rows(a, ip), team_own(a, Int(d)))
+    var st4 = bayes_prep(t, x, y, Int(n), Int(d), ip, fp, res, fw, iw)
+    if t.lead():
+        bayes_coef(fw, res, Int(d), st4[1], st4[0])
+        st(state, 0, st4[0])
+        st(state, 1, st4[1])
+        st(state, 2, st4[2])
+        st(state, 3, st4[3])
+        st(state, 5, Float32(0))
+
+
+def bayes_resid_kernel(x: FP, y: FP, n: Int32, d: Int32, fw: FP, res: FP, state: FP, rows: FP):
+    var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if i < Int(n):
+        var dd = Int(d)
+        var p = Float32(0)
+        for j in range(dd):
+            p = fmad(fs(ld(x, i * dd + j), ld(fw, j)), ld(res, j), p)
+        st(rows, i, fs(fs(ld(y, i), ld(state, 2)), p))
+
+
+def bayes_part_kernel(rows: FP, y: FP, n: Int32, sw: Int32, parts: FP):
+    var bk = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    if bk < fold_blocks(nn):
+        var lo = bk * FOLD_BLOCK
+        st(parts, bk, _sse_part(rows, y, nn, sw != 0, lo, min(FOLD_BLOCK, nn - lo)))
+
+
+def bayes_step_kernel(fw: FP, res: FP, fp: FP, d: Int32, n: Int32, parts: FP, state: FP, it: Int32):
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        var sse = fold_parts(parts, 0, fold_blocks(Int(n)))
+        var r = bayes_step(fw, res, Int(d), fp, ld(state, 1), ld(state, 0), sse, ld(state, 3), Int(it))
+        st(state, 0, r[1])
+        st(state, 1, r[0])
+        st(state, 5, Float32(r[2]))
+        if r[2] == 0:
+            bayes_coef(fw, res, Int(d), r[0], r[1])
+
+
+def bayes_finish_kernel(fw: FP, res: FP, d: Int32, fi: Int32, state: FP, iters: Int32):
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        bayes_finish(fw, res, Int(d), fi != 0, ld(state, 2), ld(state, 0), ld(state, 1), Int(iters))
 
 
 def _sgd_on_host() -> Bool:
@@ -524,12 +584,56 @@ def fit_device(
             dx.unsafe_ptr(), Int32(n), Int32(d), dfw.unsafe_ptr(),
             grid_dim=_xg_blocks(d * (d + 1) // 2), block_dim=XG_TPB,
         )
-    ctx.enqueue_function[fit_kernel](
-        Int32(algo), dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d),
-        dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(), diw.unsafe_ptr(),
-        dtw.unsafe_ptr(),
-        grid_dim=1, block_dim=LINEAR_TPB if team_fit(algo) else 1,
-    )
+    var bayes_grid = False
+    comptime if not X_LINEAR_SERIAL_FOLDS:
+        bayes_grid = algo == ALGO_BAYES and n > 0 and d > 0 and String(getenv("MOJOLEARN_X_LINEAR_BAYES_GRID")) != "0"
+    if bayes_grid:
+        var dstate = ctx.enqueue_create_buffer[DType.float32](8)
+        var drows = ctx.enqueue_create_buffer[DType.float32](n)
+        var dparts = ctx.enqueue_create_buffer[DType.float32](max(fold_blocks(n), 1))
+        var hst = List[Float32](length=8, fill=Float32(0))
+        ctx.enqueue_function[bayes_prep_kernel](
+            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(),
+            dout.unsafe_ptr(), dfw.unsafe_ptr(), diw.unsafe_ptr(), dtw.unsafe_ptr(), dstate.unsafe_ptr(),
+            grid_dim=1, block_dim=LINEAR_TPB,
+        )
+        var max_iter = Int(hip[0])
+        var sw = Int(hip[2]) if len(hip) > 2 else 0
+        var iters = 0
+        for it in range(max_iter):
+            iters = it + 1
+            ctx.enqueue_function[bayes_resid_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dfw.unsafe_ptr(), dout.unsafe_ptr(),
+                dstate.unsafe_ptr(), drows.unsafe_ptr(), grid_dim=_xg_blocks(n), block_dim=XG_TPB,
+            )
+            ctx.enqueue_function[bayes_part_kernel](
+                drows.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(sw), dparts.unsafe_ptr(),
+                grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
+            )
+            ctx.enqueue_function[bayes_step_kernel](
+                dfw.unsafe_ptr(), dout.unsafe_ptr(), dfp.unsafe_ptr(), Int32(d), Int32(n), dparts.unsafe_ptr(),
+                dstate.unsafe_ptr(), Int32(it), grid_dim=1, block_dim=1,
+            )
+            ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dstate)
+            ctx.synchronize()
+            if hst[5] != Float32(0):
+                break
+        ctx.enqueue_function[bayes_finish_kernel](
+            dfw.unsafe_ptr(), dout.unsafe_ptr(), Int32(d), Int32(hip[1]), dstate.unsafe_ptr(), Int32(iters),
+            grid_dim=1, block_dim=1,
+        )
+        ctx.synchronize()
+        _ = dstate^
+        _ = drows^
+        _ = dparts^
+        _ = hst^
+    else:
+        ctx.enqueue_function[fit_kernel](
+            Int32(algo), dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d),
+            dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(), diw.unsafe_ptr(),
+            dtw.unsafe_ptr(),
+            grid_dim=1, block_dim=LINEAR_TPB if team_fit(algo) else 1,
+        )
     if n_out > 0:
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
     ctx.synchronize()
