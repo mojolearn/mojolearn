@@ -40,6 +40,7 @@ from x_cluster.bodies import (
     ap_r_update,
     meanshift_seed,
     nearest_row,
+    sq_dist_rows,
     sqdist_cell,
     sqrt_cell,
     tree_descend,
@@ -1109,6 +1110,21 @@ def _optics_order_kernel(
         barrier()
 
 
+# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
+# env `MOJOLEARN_BISECT_FAST_RESIDENT=1` (read in x_cluster/bisect.mojo):
+# `sqdist_cell` for the rows `rows[i]` of the resident centered data, so a
+# split's child scores need an upload of m ints, not of the m x d subset
+# again (`ops.put(sub)` after `ops.kmeans` had already uploaded it). The
+# same `sq_dist_rows` on the same rows: the same bits.
+def _sqdist_rows_kernel(a: FPtr, rows: IPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):
+    var t = _tid()
+    var NB = Int(nb)
+    if t < Int(na) * NB:
+        var i = t // NB
+        var j = t - i * NB
+        dst[t] = sq_dist_rows(a, Int(rows[i]), b, j, Int(d))
+
+
 comptime WNN_TPB = 256
 
 
@@ -1936,3 +1952,14 @@ struct DeviceOps(ClusterOps):
         else:
             raise Error("x_cluster: gauss_q_gemm is the FAST Apple device path (MOJOLEARN_BGMM_FAST_MAHAL_GEMM)")
         self._ph1("gauss_q_gemm")
+
+    def sqdist_rows(mut self, a: Int, rows: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
+        self._ph0()
+        comptime if XC2_FAST:
+            self.ctx.enqueue_function[_sqdist_rows_kernel](
+                self._fp(a), self._ip(rows), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
+                grid_dim=_grid(na * nb), block_dim=TPB,
+            )
+        else:
+            raise Error("x_cluster: sqdist_rows is the FAST Apple device path (MOJOLEARN_BISECT_FAST_RESIDENT)")
+        self._ph1("sqdist_rows")

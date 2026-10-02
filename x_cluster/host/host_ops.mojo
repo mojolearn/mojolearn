@@ -33,6 +33,7 @@ from x_cluster.bodies import (
     nk_cell,
     pdist_cell,
     resp_row,
+    sq_dist_rows,
     xk_cell,
     ap_availability_col,
     ap_exemplar_cell,
@@ -625,3 +626,13 @@ struct HostOps(ClusterOps):
     def gauss_q_gemm(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
         # the host column never takes the FAST device paths (`fast_device`)
         self.gauss_q(x, n, d, means, pchol, kc, dst)
+
+    def sqdist_rows(mut self, a: Int, rows: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
+        # the host column never takes the FAST device paths (`fast_device`)
+        var pa = self._fp(a)
+        var pb = self._fp(b)
+        var po = self._fp(dst)
+        for i in range(na):
+            var ri = Int(self.i[rows][i])
+            for j in range(nb):
+                po[i * nb + j] = sq_dist_rows(pa, ri, pb, j, d)

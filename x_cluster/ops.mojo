@@ -195,3 +195,8 @@ trait ClusterOps(Movable):
         """FAST (lane cluster2): `gauss_q` by the plain mixture's GEMM route
         (X . P_k, mu_k . P_k, the row fold of their difference squared)."""
         ...
+
+    def sqdist_rows(mut self, a: Int, rows: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
+        """FAST (lane cluster2): `sqdist` of the rows `rows[i]` (an int slot
+        of na indices) of `a` against the nb rows of `b`."""
+        ...
