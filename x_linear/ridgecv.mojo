@@ -60,6 +60,14 @@ def kf_solve(g: FP, xty: FP, xm: FP, ym: Float32, d: Int, alpha: Float32, fi: Bo
         st(w, j, ld(xty, j))
     if cholesky(aw, 0, d):
         chol_solve(aw, 0, d, w, 0)
+    else:
+        # G + alpha I is not positive definite in float32 (istella: G's
+        # eigenvalues span 7.6e17 with 21 zero columns): no solution word;
+        # the alpha's fold score is NaN and the Python side skips it
+        var nan = Float32(0) / Float32(0)
+        for j in range(d):
+            st(w, j, nan)
+        return nan
     if not fi:
         return Float32(0)
     var acc = Float32(0)

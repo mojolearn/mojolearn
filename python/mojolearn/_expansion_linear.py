@@ -1013,10 +1013,14 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         A = len(alphas)
         n_fw = 2 * d * d + 3 * d + 1 + A * (d + 2) + A * (n // cv + 1)
         scores = _run(self, ALGO_RIDGE_KFOLD, a, n, d, yv, [cv, int(bool(self.fit_intercept)), A], alphas, A, n_fw, 1)
-        best = 0
-        for i in range(1, A):
-            if scores[i] > scores[best]:
+        # an alpha whose system is singular in float32 scores NaN (x_linear/ridgecv.mojo)
+        best = -1
+        for i in range(A):
+            if scores[i] == scores[i] and (best < 0 or scores[i] > scores[best]):
                 best = i
+        if best < 0:
+            raise ValueError("mojolearn RidgeCV: X'X + alpha I is singular in float32 for every alpha "
+                             "(rescale X, or use larger alphas)")
         vals = _ridge_run(self, a, n, d, yv, 1, [alphas[best]])
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
