@@ -43,6 +43,7 @@ _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
 ALGO_LARS, ALGO_QUANTILE, ALGO_RIDGE, ALGO_ENETCV, ALGO_LOGCV, ALGO_ISOTONIC = 6, 7, 8, 9, 10, 11
 ALGO_ISOTONIC_PREDICT = 12
+ALGO_RIDGE_KFOLD = 13
 LINK_IDENTITY, LINK_EXP, LINK_SIGMOID = 0, 1, 2
 
 
@@ -965,8 +966,9 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
 
 class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
     """Ridge with the alpha chosen by efficient leave-one-out (scikit-learn's
-    RidgeCV with cv=None). cv, scoring, alpha_per_target and a 2-D y are
-    refused (x_linear/NOT_IMPLEMENTED.tsv)."""
+    RidgeCV with cv=None) or by k-fold cross-validation (cv=k: KFold(k),
+    R^2, Ridge refit on every row). Other cv objects, scoring,
+    alpha_per_target and a 2-D y are refused (x_linear/NOT_IMPLEMENTED.tsv)."""
 
     _BINDING = _BINDING
 
@@ -976,13 +978,15 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         self.gcv_mode, self.store_cv_results, self.alpha_per_target = gcv_mode, store_cv_results, alpha_per_target
 
     def fit(self, X, y, sample_weight=None):
-        if self.cv is not None or self.scoring is not None or self.alpha_per_target:
-            raise ValueError("mojolearn RidgeCV: only cv=None, scoring=None, alpha_per_target=False are implemented")
+        if self.scoring is not None or self.alpha_per_target:
+            raise ValueError("mojolearn RidgeCV: only scoring=None, alpha_per_target=False are implemented")
         alphas = [float(v) for v in (self.alphas if hasattr(self.alphas, "__len__") else [self.alphas])]
         if not alphas or any(not v > 0 for v in alphas):
             raise ValueError("mojolearn RidgeCV: alphas must be positive")
         a, n, d = _matrix(X)
         yv = _vector(y, n)
+        if self.cv is not None:
+            return self._fit_kfold(a, n, d, yv, alphas, sample_weight)
         vals = _ridge_run(self, a, n, d, yv, 1, alphas, sample_weight)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
@@ -990,6 +994,38 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         self.best_score_ = float(vals[d + 2])
         if self.store_cv_results:
             self.cv_results_ = Array.from_list(vals[d + 3:d + 3 + len(alphas)], "<f4")
+        self.n_features_in_ = d
+        return self
+
+    def _fit_kfold(self, a, n, d, yv, alphas, sample_weight):
+        """cv = k (lane/neural-pass91): their GridSearchCV over the alphas with
+        KFold(k) (no shuffle) and Ridge.score, then Ridge refit on every row
+        with the first best alpha (x_linear/ridgecv.mojo)."""
+        cv = self.cv
+        if not isinstance(cv, int) or isinstance(cv, bool):
+            raise ValueError("mojolearn RidgeCV: cv must be None or an int (KFold)")
+        if not 2 <= cv <= n:
+            raise ValueError("mojolearn RidgeCV: cv must be in [2, n_samples]")
+        if sample_weight is not None:
+            raise ValueError("mojolearn RidgeCV: sample_weight with cv is not implemented")
+        if self.store_cv_results:
+            raise ValueError("cv!=None and store_cv_results=True are incompatible")
+        A = len(alphas)
+        n_fw = 2 * d * d + 3 * d + 1 + A * (d + 2) + A * (n // cv + 1)
+        scores = _run(self, ALGO_RIDGE_KFOLD, a, n, d, yv, [cv, int(bool(self.fit_intercept)), A], alphas, A, n_fw, 1)
+        # an alpha whose system is singular in float32 scores NaN (x_linear/ridgecv.mojo)
+        best = -1
+        for i in range(A):
+            if scores[i] == scores[i] and (best < 0 or scores[i] > scores[best]):
+                best = i
+        if best < 0:
+            raise ValueError("mojolearn RidgeCV: X'X + alpha I is singular in float32 for every alpha "
+                             "(rescale X, or use larger alphas)")
+        vals = _ridge_run(self, a, n, d, yv, 1, [alphas[best]])
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.alpha_ = alphas[best]
+        self.best_score_ = float(scores[best])
         self.n_features_in_ = d
         return self
 
@@ -1248,26 +1284,23 @@ class IsotonicRegression(NumericModeMixin):
     def fit(self, X, y, sample_weight=None):
         if self.out_of_bounds not in ("nan", "clip", "raise"):
             raise ValueError("mojolearn IsotonicRegression: out_of_bounds must be 'nan', 'clip' or 'raise'")
-        xs = _column(X).tolist()
-        n = len(xs)
-        ys = _vector(y, n).tolist()
-        ws = [1.0] * n if sample_weight is None else _vector(sample_weight, n, "sample_weight").tolist()
+        # lane/neural-pass70 (2026-10-01): no lists and no Python sort; the
+        # binding sorts the positive-weight rows by (x, y, row) itself
+        xa = _column(X)
+        n = xa.shape[0]
+        yv = _vector(y, n)
         if self.increasing == "auto":
-            self.increasing_ = _spearman_sign(xs, ys) >= 0
+            self.increasing_ = _spearman_sign(xa.tolist(), yv.tolist()) >= 0
         else:
             self.increasing_ = bool(self.increasing)
-        keep = [i for i in range(n) if ws[i] > 0]
-        order = sorted(keep, key=lambda i: (xs[i], ys[i]))
-        m = len(order)
-        xa = Array.from_list([[xs[i]] for i in order], "<f4")
-        yy = Array.from_list([ys[i] for i in order] + [ws[i] for i in order], "<f4")
-        ip = [int(self.increasing_), int(self.y_min is not None), int(self.y_max is not None)]
+        yy, has_w = _with_weights(yv, sample_weight, n)
+        ip = [int(self.increasing_), int(self.y_min is not None), int(self.y_max is not None), int(has_w)]
         fp = [0.0 if self.y_min is None else self.y_min, 0.0 if self.y_max is None else self.y_max]
-        vals = _run(self, ALGO_ISOTONIC, xa, m, 1, yy, ip, fp, 3 + 2 * m, 3 * m, m)
+        vals = _run(self, ALGO_ISOTONIC, xa, n, 1, yy, ip, fp, 3 + 2 * n, 6 * n, 3 * n)
         k = int(vals[0])
         self.X_min_, self.X_max_ = float(vals[1]), float(vals[2])
         self.X_thresholds_ = Array.from_list(vals[3:3 + k], "<f4")
-        self.y_thresholds_ = Array.from_list(vals[3 + m:3 + m + k], "<f4")
+        self.y_thresholds_ = Array.from_list(vals[3 + n:3 + n + k], "<f4")
         self.n_features_in_ = 1
         return self
 

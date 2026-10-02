@@ -81,6 +81,7 @@ _OPS = dict(
     scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107, te_bucket=108, pt_log=109,
     pt_spts=110, pt_smap=111, pt_sfold=112, pt_sres=113, te_gather=114,
     te_hist=115, te_hsum=116, te_hstart=117, te_hscatter=118,
+    lab_load=119, uniq_count=120, uniq_scan=121, uniq_write=122, chunk_neg=123,
 )
 _PARAMS = 14
 _NONE = -1
@@ -270,6 +271,12 @@ class _Prog:
         out = self.alloc(codes.size)
         self.stage("i2f", codes.size, bits, out)
         return out
+
+    def put_words(self, words):
+        """An int32 Array's words as they are (no conversion stage) -> offset."""
+        off = self.alloc(words.size)
+        self._inputs.append((off, words, "i"))
+        return off
 
     def put_ints(self, values):
         """int32 words (read by `ldi`) -> offset."""
@@ -3111,21 +3118,158 @@ def _multilabel_indicator(y):
     return _x2d(Array.from_list([[float(v) for v in r] for r in rows], "<f4"), "y")
 
 
+# lane neural-pass137: a numeric label BUFFER (an ndarray, an Array) takes the
+# device from its own bytes. The route it replaces built Python objects for
+# every label five times over (tolist, the float32 exactness test, the float
+# list, the float32 Array, the type sets) in fit and again in transform, then
+# ran two programs whose unique scan and unknown count were ONE thread
+# walking every row. Here: one upload of the raw words, `lab_load` (the
+# float32 word the old route would have built, NaN where float32 cannot hold
+# the label, which sends the call back to the old route), the device sort, a
+# chunked run scan, and for fit_transform the codes in the same program.
+# MOJOLEARN_XPREP_LABELS=0 is the old route (the A/B arm).
+_LABEL_KIND = {"<f4": (0, 1), "<i4": (1, 1), "<u4": (2, 1), "<i8": (3, 2), "<f8": (4, 2)}
+
+
+class _LabelBuf:
+    __slots__ = ("kind", "words", "n", "is_float", "_src")
+
+    def __init__(self, kind, words, n, is_float, src):
+        self.kind, self.words, self.n, self.is_float, self._src = kind, words, n, is_float, src
+
+
+def _label_buffer(y):
+    """A numeric label vector as raw int32 words (a view, no copy, of a
+    contiguous buffer), or None: the old route (lists, str or bool labels,
+    other dtypes, a matrix, an empty y, MOJOLEARN_XPREP_LABELS=0)."""
+    if os.environ.get("MOJOLEARN_XPREP_LABELS", "1") == "0":
+        return None
+    if isinstance(y, (list, tuple, str, bytes)):
+        return None
+    from ._buffer import Buf, _has_buffer, _materialize, _raw_store_type, typestr_of
+    if not isinstance(y, Array):
+        if not _has_buffer(y):
+            return None
+        with Buf(y, name="y") as b:
+            if typestr_of(b) == "|b1":
+                return None
+    try:
+        arr, _ = _materialize(y, "y")
+    except (TypeError, ValueError):
+        return None
+    spec = _LABEL_KIND.get(arr.dtype)
+    if spec is None or arr.size == 0 or arr.ndim < 1 or arr.size != max(arr.shape):
+        return None
+    kind, wpe = spec
+    nw = arr.size * wpe
+    if nw > 2 ** 30:
+        return None
+    store = _raw_store_type("i", nw).from_address(arr._addr)
+    store._keep = arr
+    words = Array._owned(store, (nw,), "<i4", "C")
+    return _LabelBuf(kind, words, arr.size, arr.dtype in ("<f4", "<f8"), arr)
+
+
+def _label_chunk(n):
+    """Rows per chunk of the run scan and the unknown count (bookkeeping
+    only: every chunking writes the same words)."""
+    return max(1024, int(n ** 0.5) + 1)
+
+
+def _label_load(pr, lb):
+    x = pr.work(lb.n)
+    pr.stage("lab_load", lb.n, pr.put_words(lb.words), lb.kind, x)
+    return x
+
+
+def _label_unique(pr, x, n):
+    """Stages: the sorted distinct words of x (sort_cols + a chunked run
+    scan: `unique_cols`' words). Returns (U offset, count offset)."""
+    s = pr.work(n)
+    pr.stage("sort_cols", 1, x, n, 1, s, 1)
+    ch = _label_chunk(n)
+    nch = -(-n // ch)
+    cnt, off = pr.work(nch), pr.work(nch)
+    u, k = pr.alloc(n), pr.alloc(1)
+    pr.stage("uniq_count", nch, s, n, ch, cnt)
+    pr.stage("uniq_scan", 1, cnt, nch, off, k)
+    pr.stage("uniq_write", nch, s, n, ch, off, u)
+    return u, k
+
+
+def _label_classes_of(pr, lb, u, k):
+    """(classes, cats) read back after the run, or None when a label has no
+    exact float32 word (NaN sorts last): the caller takes the old route."""
+    K = int(pr.values(k, 1)[0])
+    cats = pr.get(u, K)
+    vals = cats.tolist()
+    if not vals or vals[-1] != vals[-1]:
+        return None
+    classes = [float(c) for c in vals] if lb.is_float else [int(c) for c in vals]
+    return classes, cats
+
+
+def _label_fit_device(mode, lb, codes=False):
+    """One program: (classes, cats, int32 codes Array or None), or None for
+    the old route."""
+    n = lb.n
+    pr = _Prog()
+    x = _label_load(pr, lb)
+    u, k = _label_unique(pr, x, n)
+    out = None
+    if codes:
+        c = pr.work(n)
+        pr.stage("lookup", n, x, n, 1, u, n, k, c)
+        out = pr.output(n, "i")
+        pr.stage("f2i", n, c, out)
+    pr.run(mode)
+    got = _label_classes_of(pr, lb, u, k)
+    if got is None:
+        return None
+    return got[0], got[1], (pr.get_i32(out, n) if codes else None)
+
+
+def _label_codes_device(pr, lb, cats):
+    """Stages: each label's index among `cats` (-1 when absent). Returns the
+    float codes offset."""
+    x = _label_load(pr, lb)
+    K = cats.size
+    c = pr.work(lb.n)
+    pr.stage("lookup", lb.n, x, lb.n, 1, pr.put(cats), K, pr.put_scalar(K), c)
+    return c
+
+
 class LabelEncoder(_PrepBase):
     """sklearn.preprocessing.LabelEncoder: classes_ are the sorted distinct
     labels (numeric labels on the device: sort + run scan; str labels in
     Python), transform is each label's index (a device binary search),
-    int32. An unseen label is refused, as the reference refuses it."""
+    int32. An unseen label is refused, as the reference refuses it. A
+    numeric label buffer crosses as its raw words (`_label_buffer`, lane
+    neural-pass137); fit_transform is then one program."""
     _parameters = ()
 
     def fit(self, y):
         self.numeric_mode_ = _mode()
-        values = flatten_labels(y)
-        self._classes, self._cats = _label_classes(self.numeric_mode_, values)
+        lb = _label_buffer(y)
+        got = _label_fit_device(self.numeric_mode_, lb) if lb is not None else None
+        if got is not None:
+            self._classes, self._cats = got[0], got[1]
+        else:
+            values = flatten_labels(y)
+            self._classes, self._cats = _label_classes(self.numeric_mode_, values)
         self.classes_ = _classes_array(self._classes)
         return self
 
     def fit_transform(self, y):
+        # a numeric buffer: classes and codes in ONE program (lane neural-pass137)
+        lb = _label_buffer(y)
+        if lb is not None:
+            self.numeric_mode_ = _mode()
+            got = _label_fit_device(self.numeric_mode_, lb, codes=True)
+            if got is not None:
+                self._classes, self._cats = got[0], got[1]
+                self.classes_ = _classes_array(self._classes)
+                return got[2]
         return self.fit(y).transform(y)
 
     def _check_fitted(self):
@@ -3134,6 +3278,21 @@ class LabelEncoder(_PrepBase):
 
     def transform(self, y):
         self._check_fitted()
+        lb = _label_buffer(y) if self._cats is not None else None
+        if lb is not None:
+            n = lb.n
+            pr = _Prog()
+            codes = _label_codes_device(pr, lb, self._cats)
+            out = pr.output(n, "i")
+            pr.stage("f2i", n, codes, out)
+            ch = _label_chunk(n)
+            nch = -(-n // ch)
+            neg = pr.alloc(nch)
+            pr.stage("chunk_neg", nch, codes, n, ch, neg)
+            pr.run(self.numeric_mode_)
+            if not any(pr.get_i32(neg, nch).tolist()):
+                return pr.get_i32(out, n)
+            # an unknown label: the old route names the refusal
         values = flatten_labels(y)
         if not values:
             return Array((0,), "<i4")
@@ -3192,8 +3351,13 @@ class LabelBinarizer(_PrepBase):
             self.classes_ = Array.from_list(self._classes, "<i8")
             self.y_type_ = "multilabel-indicator"
             return self
-        values = flatten_labels(y)
-        self._classes, self._cats = _label_classes(self.numeric_mode_, values)
+        lb = _label_buffer(y)
+        got = _label_fit_device(self.numeric_mode_, lb) if lb is not None else None
+        if got is not None:
+            self._classes, self._cats = got[0], got[1]
+        else:
+            values = flatten_labels(y)
+            self._classes, self._cats = _label_classes(self.numeric_mode_, values)
         self.classes_ = _classes_array(self._classes)
         self.y_type_ = "binary" if len(self._classes) <= 2 else "multiclass"
         return self
@@ -3222,10 +3386,23 @@ class LabelBinarizer(_PrepBase):
                      out)
             pr.run(self.numeric_mode_)
             return pr.get_i32(out, (n, K))
-        values = flatten_labels(y)
-        n, K = len(values), len(self._classes)
+        K = len(self._classes)
         binary = K <= 2
         W = 1 if binary else K
+        lb = _label_buffer(y) if self._cats is not None and K > 1 else None
+        if lb is not None:
+            # lane neural-pass137: the raw words up, the codes and the dense
+            # output on the device, no Python object per label
+            n = lb.n
+            pr = _Prog()
+            codes = _label_codes_device(pr, lb, self._cats)
+            out = pr.output(n * W, "i")
+            pr.stage("label_binarize", n * W, codes, n, K, 1 if binary else 0, int(self.neg_label),
+                     int(self.pos_label), W, out)
+            pr.run(self.numeric_mode_)
+            return pr.get_i32(out, (n, W))
+        values = flatten_labels(y)
+        n = len(values)
         pr = _Prog()
         if self._cats is None or _numeric_labels(values) is None:
             index = {c: i for i, c in enumerate(self._classes)}
