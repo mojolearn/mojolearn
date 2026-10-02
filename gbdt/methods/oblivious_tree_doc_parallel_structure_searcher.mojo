@@ -153,7 +153,16 @@ from gbdt.models.oblivious_model import (
 # so the same histograms and splits. `MOJOLEARN_ORDERED_FOLD_INDEX=0`
 # restores the per-level gather.
 def ordered_fold_index() -> Bool:
-    return String(getenv("MOJOLEARN_ORDERED_FOLD_INDEX")) != "0"
+    """OPT-IN (`MOJOLEARN_ORDERED_FOLD_INDEX=1`) since lane/neural-pass124:
+    the histogram accumulators key their quantizer's dither on the row id
+    they are handed (`hist2_dither(row)`), and on the fold-order index that
+    id is the fold POSITION, not the document: where a stat is not exactly
+    on the grid the dither moves the cell (peer's L40S, taxi 4.1M, 20
+    Ordered trees: hash 72f4fbfc vs main's cc8d198d; the M4's 30K checks
+    sat on the grid). Off, the levels gather document ids and the cells are
+    main's. Keying the dither on docIndices[position] would make it a pure
+    layout change; it measured 6% of pw.hist on the L40S."""
+    return String(getenv("MOJOLEARN_ORDERED_FOLD_INDEX")) == "1"
 
 
 def fold_cindex_gather_kernel(
