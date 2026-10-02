@@ -53,29 +53,8 @@ only input this implementation scans is a 0/1 flag per row.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import prefix_sum
-
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-
-#: FAST on Apple, lane/apple-fast-trees-scan (2026-10-02), OPT-IN
-#: `-D MOJOLEARN_SCAN_U32_BLOCK=1`. CAUSE: `launch_scan_vector_u32` runs
-#: `scan_block_sums_u32_kernel` as ONE THREAD (grid 1 x block 1, this
-#: file:~174 on main) over `ceil(size / 512)` block totals, on the CTR
-#: path (`ctr_bins_builder.compute_current_bins`,
-#: `ctr_calcers.visit_equal_up_to_prior_freq_ctrs`: taxi 4.1M rows is
-#: ~8,000 dependent round trips per call). EFFECT: with the define the scan
-#: runs on one `SCAN_SUMS_TPB`-thread block, stripe per thread, one
-#: `prefix_sum` for the stripe carries. Integer sums: the same prefixes.
-#: IDENTICAL compiles the old launch.
-comptime SCAN_SUMS_TPB = 256
-comptime SCAN_U32_BLOCK_SUMS = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_SCAN_U32_BLOCK"]()
-)
 
 
 comptime SCAN_BLOCK = 512
@@ -128,33 +107,6 @@ def scan_block_sums_u32_kernel(
     var n = Int(n_blocks_in)
     var running = UInt32(0)
     for b in range(n):
-        var v = block_sums.unsafe_load(b)
-        block_sums.unsafe_store(b, running)
-        running += v
-
-
-def scan_block_sums_u32_block_kernel(
-    block_sums: MutPointer[UInt32, MutAnyOrigin], n_blocks_in: Int32
-):
-    """`scan_block_sums_u32_kernel` with `SCAN_SUMS_TPB` threads in ONE
-    block: thread t sums a contiguous stripe of the totals, the block's
-    exclusive `prefix_sum` gives each stripe its carry, and the stripe
-    writes its exclusive prefixes (the form `reorder_one_bit.mojo`'s
-    `scan_block_sums_parallel_kernel` runs). The totals are counts below
-    `size`, so they ride through `prefix_sum`'s Int32 exactly as
-    `scan_block_u32_kernel`'s do. Launch with `grid_dim=1,
-    block_dim=SCAN_SUMS_TPB`."""
-    var n = Int(n_blocks_in)
-    var tid = Int(thread_idx.x)
-    var per = (n + SCAN_SUMS_TPB - 1) // SCAN_SUMS_TPB
-    var lo = min(tid * per, n)
-    var hi = min(lo + per, n)
-    var local = Int32(0)
-    for b in range(lo, hi):
-        local += Int32(Int(block_sums.unsafe_load(b)))
-    var carry = prefix_sum[block_size=SCAN_SUMS_TPB, exclusive=True](local)
-    var running = UInt32(Int(carry))
-    for b in range(lo, hi):
         var v = block_sums.unsafe_load(b)
         block_sums.unsafe_store(b, running)
         running += v
@@ -217,17 +169,10 @@ def launch_scan_vector_u32(
         block_sums.unsafe_ptr(),
         grid_dim=n_blocks, block_dim=SCAN_BLOCK,
     )
-    comptime if SCAN_U32_BLOCK_SUMS:
-        # one 256-thread block (lane/apple-fast-trees-scan)
-        ctx.enqueue_function[scan_block_sums_u32_block_kernel](
-            block_sums.unsafe_ptr(), Int32(n_blocks),
-            grid_dim=1, block_dim=SCAN_SUMS_TPB,
-        )
-    else:
-        ctx.enqueue_function[scan_block_sums_u32_kernel](
-            block_sums.unsafe_ptr(), Int32(n_blocks),
-            grid_dim=1, block_dim=1,
-        )
+    ctx.enqueue_function[scan_block_sums_u32_kernel](
+        block_sums.unsafe_ptr(), Int32(n_blocks),
+        grid_dim=1, block_dim=1,
+    )
     ctx.enqueue_function[scan_add_carry_u32_kernel](
         output.unsafe_ptr(), block_sums.unsafe_ptr(), Int32(size),
         grid_dim=n_blocks, block_dim=SCAN_BLOCK,
