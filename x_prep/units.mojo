@@ -37,12 +37,16 @@ from x_prep.iterative import (
 from x_prep.labels import lab_load_unit, uniq_count_unit, uniq_scan_unit, uniq_write_unit, chunk_neg_unit
 from x_prep.stats import f_classif_unit, f_regression_unit, chi2_unit
 from x_prep.mutual_info import mi_colscale_unit, mi_noise_unit, mi_cc_unit, mi_cd_unit, mi_reduce_unit, mi_dc_unit, mi_dd_unit
+from x_prep.blocked import (
+    colb_part_unit, colb_fold_unit, colb_ss_unit, colb_var_unit, maxabs_fold_unit,
+    csb_part_unit, csb_fold_unit, csb_ss_unit, csb_var_unit, cat_hpart_unit, cat_hfold_unit,
+)
 from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
     da_shrink_unit, da_pool_unit, sym_fn_unit, da_intercept_unit, evr_unit,
 )
 
-comptime N_OPS = 124
+comptime N_OPS = 135
 
 
 @always_inline
@@ -295,3 +299,25 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         uniq_write_unit(t, f, q)
     comptime if OP == 123:
         chunk_neg_unit(t, f, q)
+    comptime if OP == 124:
+        colb_part_unit(t, f, q)
+    comptime if OP == 125:
+        colb_fold_unit(t, f, q)
+    comptime if OP == 126:
+        colb_ss_unit(t, f, q)
+    comptime if OP == 127:
+        colb_var_unit(t, f, q)
+    comptime if OP == 128:
+        maxabs_fold_unit(t, f, q)
+    comptime if OP == 129:
+        csb_part_unit(t, f, q)
+    comptime if OP == 130:
+        csb_fold_unit(t, f, q)
+    comptime if OP == 131:
+        csb_ss_unit(t, f, q)
+    comptime if OP == 132:
+        csb_var_unit(t, f, q)
+    comptime if OP == 133:
+        cat_hpart_unit(t, f, q)
+    comptime if OP == 134:
+        cat_hfold_unit(t, f, q)
