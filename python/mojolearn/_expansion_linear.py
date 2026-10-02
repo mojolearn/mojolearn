@@ -926,8 +926,14 @@ def _ridge_run(est, a, n, d, Y, T, alphas, sample_weight=None):
         w = _with_weights(zeros((n,), "<f4"), sample_weight, n)[0].tolist()[n:]
         Y = Array.from_list(Y.tolist() + w, "<f4")
         has_sw = 1
-    return _run(est, ALGO_RIDGE, a, n, d, Y, [T, int(bool(est.fit_intercept)), A, has_sw], list(alphas),
-                T * d + T + 2 + A, 3 * d * d + 3 * d + T + d * T + 2 * n, 1)
+    vals = _run(est, ALGO_RIDGE, a, n, d, Y, [T, int(bool(est.fit_intercept)), A, has_sw], list(alphas),
+                T * d + T + 2 + A + 1, 3 * d * d + 3 * d + T + d * T + 2 * n, 1)
+    # lane/neural-pass93: status 2 = X'X + alpha I does not factor even in
+    # float-float (x_linear/ridge.mojo); 1 never leaves a binding
+    if vals[T * d + T + 2 + A] == 2.0:
+        raise ValueError(f"mojolearn {type(est).__name__}: X'X + alpha I is singular even in float-float "
+                         f"(alpha={vals[T * d + T]:g}); rescale X or use a larger alpha")
+    return vals
 
 
 def _ridge_refuse(est):
