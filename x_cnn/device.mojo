@@ -1999,7 +1999,7 @@ def _csr_key_init_kernel(keys: UP, ids: UP, cols: IP, nnz: Int32):
     var e = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if e >= Int(nnz):
         return
-    keys[e] = UInt32(cols[e])
+    keys[e] = cols[e].cast[DType.uint32]()
     ids[e] = UInt32(e)
 
 
@@ -2007,7 +2007,7 @@ def _csr_key_rows_kernel(keys: UP, ids: UP, rows: IP, nnz: Int32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(nnz):
         return
-    keys[i] = UInt32(rows[Int(ids[i])])
+    keys[i] = rows[Int(ids[i])].cast[DType.uint32]()
 
 
 def _csr_gather_kernel(csr: IP, order: IP, ids: UP, rows: IP, cols: IP, n: Int32, nnz: Int32):
