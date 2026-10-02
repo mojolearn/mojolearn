@@ -102,6 +102,7 @@ def main():
     p.add_argument("--arm-budget-s", type=int, default=300)
     p.add_argument("--race-deadline-s", type=int, default=900)
     p.add_argument("--no-infer", action="store_true")
+    p.add_argument("--only-arms", default=None, help="comma list: race only these planned opponents (rerun of arms a race cap cut off)")
     p.add_argument("--dry-run", action="store_true")
     a = p.parse_args()
 
@@ -147,6 +148,8 @@ def main():
         if race is None:
             continue
         opp = list(race["opponents"])
+        if a.only_arms:
+            opp = [x for x in opp if x in a.only_arms.split(",")]
         if not opp:
             print("OPP-NONE lane=%s ds=%s (no opponent planned for %s)" % (lane, ds, a.vendor))
             continue
