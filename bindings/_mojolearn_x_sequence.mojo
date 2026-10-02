@@ -10,10 +10,9 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
-from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from sequence.fit_team_py import garch_team_py, prophet_fit_team_py
-from sequence.pyapi import ival, _getenv_seq, opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
+from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, prophet_predict_py, moe_forward_py
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -98,50 +97,18 @@ def ets_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises 
     return ets_py(ex, addrs, ip, fp)
 
 
-def garch_host_max() -> Int:
-    """Batches of at most this many series run GARCH on a HostExec inside the
-    GPU binding. 0 by default (lane neural-pass143): every batch runs on the
-    device, one series per block (`sequence/fit_team.mojo`), the same
-    statements per series as the host column's `op_garch`. (Lane
-    neural-pass14 had set 4,096: the old device path ran each series'
-    serial Nelder-Mead MLE in ONE GPU thread, 2 to 9 s on the GPUs for the
-    board's 64 x 1,440 race against 60 ms for arch on the CPU.)
-    MOJOLEARN_SEQ_GARCH_HOST_MAX overrides it."""
-    var v = String(_getenv_seq("MOJOLEARN_SEQ_GARCH_HOST_MAX", "0"))
-    try:
-        return Int(v)
-    except:
-        return 0
-
-
 def garch_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    if len(ip) >= 1 and ival(ip, 0) <= garch_host_max():
-        var hx = HostExec()
-        return garch_py(hx, addrs, ip)
+    """GARCH on the device, one series per block (`sequence/fit_team.mojo`),
+    every batch size: the same statements per series as the host column's
+    `op_garch`."""
     var ex = DeviceExec()
     return garch_team_py(ex, addrs, ip)
 
 
-def prophet_host_max() -> Int:
-    """Batches of at most this many series run the Prophet fit on a HostExec
-    inside the GPU binding. 0 by default (lane neural-pass143): every batch
-    runs on the device, one series per block (`sequence/fit_team.mojo`), the
-    same statements per series as the host column's `op_prophet_fit`. (Lane
-    neural-pass23 had set 4,096: the old device path ran each series' serial
-    L-BFGS in ONE GPU thread, 17 to 37 s on the GPUs for the board's 64 x
-    1,440 race against 0.25 to 0.9 s for prophet on the CPU.)
-    MOJOLEARN_SEQ_PROPHET_HOST_MAX overrides it."""
-    var v = String(_getenv_seq("MOJOLEARN_SEQ_PROPHET_HOST_MAX", "0"))
-    try:
-        return Int(v)
-    except:
-        return 0
-
-
 def prophet_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    if len(ip) >= 1 and ival(ip, 0) <= prophet_host_max():
-        var hx = HostExec()
-        return prophet_fit_py(hx, addrs, ip, fp)
+    """The Prophet fit on the device, one series per block
+    (`sequence/fit_team.mojo`), every batch size: the same statements per
+    series as the host column's `op_prophet_fit`."""
     var ex = DeviceExec()
     return prophet_fit_team_py(ex, addrs, ip, fp)
 
