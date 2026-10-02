@@ -175,6 +175,43 @@ def _glm_cell(c: Int, x: FP, gr: FP, hr: FP, n: Int, d: Int, m: Int, g: FP, h: F
 
 
 @always_inline
+def _glm_cell_jk(c: Int, m: Int) -> Tuple[Int, Int]:
+    """Cell c >= m: its lower-triangle (j, k)."""
+    var q = c - m
+    var j = 0
+    while (j + 1) * (j + 2) // 2 <= q:
+        j += 1
+    return (j, q - j * (j + 1) // 2)
+
+
+@always_inline
+def _glm_cell_part(c: Int, x: FP, gr: FP, hr: FP, d: Int, m: Int, lo: Int, cnt: Int) -> Float32:
+    """Cell c's chain over the block of rows [lo, lo + cnt), from zero: the
+    partial `_glm_cell`'s blocked folds combine (lane/neural-pass97)."""
+    if c < m:
+        if c < d:
+            return chain_fmad(gr, lo, 1, x, lo * d + c, d, cnt)
+        return fold_fa(gr, lo, 1, cnt)
+    var jk = _glm_cell_jk(c, m)
+    var j = jk[0]
+    var k = jk[1]
+    if j < d:
+        return chain_fmad_scaled(hr + lo, x + lo * d, j, k, d, cnt)
+    if k < d:
+        return chain_fmad(hr, lo, 1, x, lo * d + k, d, cnt)
+    return fold_fa(hr, lo, 1, cnt)
+
+
+@always_inline
+def _glm_cell_store(c: Int, v: Float32, g: FP, h: FP, m: Int):
+    if c < m:
+        st(g, c, v)
+        return
+    var jk = _glm_cell_jk(c, m)
+    st(h, jk[0] * m + jk[1], v)
+
+
+@always_inline
 def _glm_slot_count(d: Int, m: Int) -> Int:
     """Slots of the warp-uniform cell layout (see glm_fit)."""
     var n_hd = d * (d + 1) // 2

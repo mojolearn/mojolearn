@@ -25,9 +25,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM
 from x_linear.ops import ld, st, fd, i2f, fa, fm, fmad, flog, fill, copy, row_dot, mean_of
-from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked
+from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
 from x_linear.glm import (
     _unit, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, _glm_step, GLM_LINK_LOG, GLM_STALL_ITERS,
+    _glm_cell_part, _glm_cell_store,
 )
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
@@ -264,6 +265,33 @@ def glm_cells_kernel(x: FP, gr: FP, hr: FP, n: Int32, d: Int32, m: Int32, g: FP,
             _glm_cell(c, x, gr, hr, Int(n), dd, mm, g, h)
 
 
+def glm_cell_parts_kernel(x: FP, gr: FP, hr: FP, n: Int32, d: Int32, m: Int32, nb: Int32, parts: FP):
+    """lane/neural-pass97: one thread a (slot, row block): the slot's cell
+    chain over the block from zero into parts[slot * nb + block]."""
+    var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    var mm = Int(m)
+    var nbb = Int(nb)
+    var sl = q // nbb
+    if sl < _glm_slot_count(dd, mm):
+        var c = _glm_slot_cell(sl, dd, mm)
+        if c >= 0:
+            var b = q - sl * nbb
+            var lo = b * FOLD_BLOCK
+            st(parts, q, _glm_cell_part(c, x, gr, hr, dd, mm, lo, min(FOLD_BLOCK, Int(n) - lo)))
+
+
+def glm_cell_combine_kernel(parts: FP, d: Int32, m: Int32, nb: Int32, g: FP, h: FP):
+    """One thread a slot: its partials folded blocks ascending."""
+    var sl = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    var mm = Int(m)
+    if sl < _glm_slot_count(dd, mm):
+        var c = _glm_slot_cell(sl, dd, mm)
+        if c >= 0:
+            _glm_cell_store(c, fold_parts(parts, sl * Int(nb), Int(nb)), g, h, mm)
+
+
 def glm_step_kernel(g: FP, h: FP, step: FP, res: FP, m: Int32, d: Int32, alpha: Float32, tol: Float32, sc: FP):
     """The dense step on one thread: sc[2] flag, sc[3] slope."""
     var fs_ = _glm_step(g, h, step, res, Int(m), Int(d), alpha, ld(sc, 0), tol, 0, Float32(0))
@@ -333,7 +361,10 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     dh.enqueue_fill(Float32(0))
     dtw.enqueue_fill(Float32(0))
     var rows_grid = _xg_blocks(n)
-    var slot_grid = _xg_blocks(m + m * (m + 1) // 2 + 4 * 64)
+    var slot_ub = m + m * (m + 1) // 2 + 4 * 64
+    var slot_grid = _xg_blocks(slot_ub)
+    var nb = fold_blocks(n)
+    var dparts = ctx.enqueue_create_buffer[DType.float32](max(slot_ub * nb, 1))
     ctx.enqueue_function[glm_init_kernel](dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), Int32(link), Int32(sw),
                                           dres.unsafe_ptr(), dsc.unsafe_ptr(), grid_dim=1, block_dim=1)
 
@@ -344,8 +375,15 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     for it in range(max_iter):
         ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
                                                dgr.unsafe_ptr(), dhr.unsafe_ptr(), grid_dim=rows_grid, block_dim=XG_TPB)
-        ctx.enqueue_function[glm_cells_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(n), Int32(d),
-                                               Int32(m), dg.unsafe_ptr(), dh.unsafe_ptr(), grid_dim=slot_grid, block_dim=XG_TPB)
+        comptime if X_LINEAR_SERIAL_FOLDS:
+            ctx.enqueue_function[glm_cells_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(n), Int32(d),
+                                                   Int32(m), dg.unsafe_ptr(), dh.unsafe_ptr(), grid_dim=slot_grid, block_dim=XG_TPB)
+        else:
+            ctx.enqueue_function[glm_cell_parts_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(n), Int32(d),
+                                                        Int32(m), Int32(nb), dparts.unsafe_ptr(),
+                                                        grid_dim=_xg_blocks(slot_ub * nb), block_dim=XG_TPB)
+            ctx.enqueue_function[glm_cell_combine_kernel](dparts.unsafe_ptr(), Int32(d), Int32(m), Int32(nb), dg.unsafe_ptr(),
+                                                          dh.unsafe_ptr(), grid_dim=slot_grid, block_dim=XG_TPB)
         ctx.enqueue_function[glm_step_kernel](dg.unsafe_ptr(), dh.unsafe_ptr(), dstep.unsafe_ptr(), dres.unsafe_ptr(),
                                               Int32(m), Int32(d), alpha, tol, dsc.unsafe_ptr(), grid_dim=1, block_dim=1)
         ctx.enqueue_copy(dst_ptr=hscp, src_buf=dsc)
@@ -400,6 +438,7 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     _ = dtrial^
     _ = dsc^
     _ = dtw^
+    _ = dparts^
     _ = hsc_l^
 
 
