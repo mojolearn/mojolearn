@@ -429,7 +429,7 @@ def fit_device(
         var a_n = Int(ip[2])
         var sidx = t_n * d + t_n + 2 + a_n
         if n_out > sidx and res.unsafe_load(sidx) == Float32(1):
-            _ridge_ff_grid(ctx, dx.unsafe_ptr(), dy.unsafe_ptr(), n, d, t_n, Int(ip[1]) != 0, len(ip) > 3 and Int(ip[3]) != 0,
+            _ridge_ff_grid(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), n, d, t_n, Int(ip[1]) != 0, len(ip) > 3 and Int(ip[3]) != 0,
                            res.unsafe_load(t_n * d + t_n), res, sidx)
     _ = hip^
     _ = hfp^
