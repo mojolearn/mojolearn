@@ -2,8 +2,6 @@
 # It only shrinks. A fix deletes its rows (no_host_routes.py --prune-baseline).
 # state debt = on main; inflight = pre-authorized lines of an open PR.
 rule	class	owner	state	path	occ	text
-host-threads	host-threads	gap-neural-models	debt	bindings/_mojolearn_embedding.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	gap-neural-models	debt	bindings/_mojolearn_embedding.mojo	0	host_parallelize(_scan, tasks)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_proba
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	0	var p = gpc_proba(lat.mean, lat.variance)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/host/svc_proba.mojo:svc_pair_epilogue_binding
@@ -12,9 +10,6 @@ host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/hos
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/host/svc_proba.mojo:svc_splitmix_perm_binding
 d2h-loop	d2h-roundtrip	gap-classical-nv	debt	cholesky/checks/trsm.mojo	0	ctx.enqueue_copy(dst_ptr=host_l.unsafe_ptr(), src_buf=lv)
 d2h-loop	d2h-roundtrip	gap-classical-nv	debt	cholesky/checks/trsm.mojo	0	s.ctx.enqueue_copy(dst_ptr=result.unsafe_ptr(), src_buf=s.b)
-host-threads	host-threads	PR#126	debt	cluster/estimator.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	PR#126	debt	cluster/estimator.mojo	0	host_parallelize(_abs_sum_task, groups)
-host-threads	host-threads	PR#126	debt	cluster/estimator.mojo	1	host_parallelize(_abs_sum_task, groups)
 host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	host_cells(_chunk, n_chunks, 4 * ACCUMULATE_CHUNK * (d + 1))
 host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	host_cells(_lane, n_trials * PLUS_PLUS_TPB, 8 * (n // PLUS_PLUS_TPB + 1))
 host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	host_cells(_row, n, 3 * k * d)
@@ -45,9 +40,6 @@ host-threads	host-threads	UNOWNED	debt	core/knn_host_predict.mojo	0	host_paralle
 host-threads	host-threads	UNOWNED	debt	core/knn_host_predict.mojo	1	host_parallelize(_rows, tasks)
 host-threads	host-threads	UNOWNED	debt	core/knn_host_predict.mojo	2	host_parallelize(_rows, tasks)
 host-threads	host-threads	UNOWNED	debt	core/knn_host_predict.mojo	3	host_parallelize(_rows, tasks)
-d2h-loop	d2h-roundtrip	multi-GPU-driver-review	debt	dbscan/impl/multi_gpu.mojo	0	ctx.enqueue_copy(dst_ptr=root_ia.unsafe_ptr(), src_buf=iv)
-host-call	host-import	gap-neural-overhead2	debt	embedding/checks/embedding_oracle.mojo	0	if all_finite(values):
-host-call	host-import	gap-neural-overhead2	debt	embedding/checks/embedding_oracle.mojo	0	import core/host_lanes.mojo:all_finite
 host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	gpc_validate_labels(y, n_train)
 host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	1	gpc_validate_labels(y, n_train)
 host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_validate_labels
@@ -76,8 +68,6 @@ py-loop	py-numpy	gap-lm	debt	python/mojolearn/_byte_lm_impl.py	2	for layer in ra
 py-loop	py-numpy	gap-lm	debt	python/mojolearn/_byte_lm_impl.py	0	values = [int(info[12 + 3 * layer + offset]) for layer in range(n)]
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_causal_lm_fixtures.py	0	for _ in range(n):
 host-module	host-import	UNOWNED	debt	python/mojolearn/_cholesky_impl.py	0	return _backend.load_host_module(_HOST_BASENAME), "linalg_numeric_mode"
-py-loop	py-numpy	gap-optimizers	debt	python/mojolearn/_expansion_cluster.py	0	for r in range(n):
-py-loop	py-numpy	PR#111	debt	python/mojolearn/_expansion_cluster.py	0	labels = [max(range(k), key=lambda j: (lr[r * k + j], -j)) for r in range(n)]
 py-loop	py-numpy	hr-kit	debt	python/mojolearn/_expansion_decomp.py	0	Xm = M.take_rows([i for i in range(n) if mask[i]])
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	big = max(abs(ls[i * n + i]) for i in range(n))
 py-loop	py-numpy	hr-kit	debt	python/mojolearn/_expansion_decomp.py	0	cov = _emp_cov(k, M.take_rows([i for i in range(n) if support[i]]), assume_centered=True)
@@ -152,10 +142,6 @@ host-call	host-import	UNOWNED	debt	spectral/host/spectral_predict_host.mojo	0	ho
 host-call	host-import	UNOWNED	debt	spectral/host/spectral_predict_host.mojo	0	host_knn_search(
 host-call	host-import	UNOWNED	debt	spectral/host/spectral_predict_host.mojo	0	import cluster/host/kmeans_oracle.mojo:host_kmeans_predict
 host-call	host-import	UNOWNED	debt	spectral/host/spectral_predict_host.mojo	0	import core/knn_host_predict.mojo:host_knn_search
-host-call	host-import	UNOWNED	debt	spectral/impl/cluster/detail/spectral.mojo	0	import cluster/estimator.mojo:plan_sum_scale
-host-call	host-import	UNOWNED	debt	spectral/impl/cluster/detail/spectral.mojo	0	var sum_scale = plan_sum_scale(
-host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	spectral/impl/preprocessing/detail/spectral_embedding.mojo	0	import spectral/host/spectral_predict_host.mojo:spectral_keep_embedding_order
-host-call	host-import	gap-prep2/gap-nb-maxabs-grp	debt	spectral/impl/preprocessing/detail/spectral_embedding.mojo	0	spectral_keep_embedding_order(eigenvalues, eigenvectors, k, n_samples, state)
 host-call	host-import	gap-neural-overhead2	debt	spectral/impl/sparse/solver/detail/lanczos.mojo	0	import spectral/checks/symmetric_eig_host.mojo:symmetric_eig_host
 host-call	host-import	gap-neural-overhead2	debt	spectral/impl/sparse/solver/detail/lanczos.mojo	0	var sweeps = symmetric_eig_host[DType.float32](t, ncv, evals, evecs)
 host-threads	host-threads	UNOWNED	debt	svm/host/svc_proba.mojo	0	from core.host_parallel import host_parallelize
