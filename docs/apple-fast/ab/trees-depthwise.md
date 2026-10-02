@@ -56,3 +56,41 @@ would need a second-level `block_sums` buffer in all three callers (`ctr_bins_bu
 
 Light form: three tags on `gbdt-categorical taxi` (scan, freq, both), 2 pairs each; the istella row
 (`tdw-cat-both-istella`) is deferred until the taxi rows win.
+
+## Pass 2: gbdt-categorical taxi 84.4 s vs LightGBM 58.9 s (NEXT_PASS_TREES item 4, family `trees-ctr`)
+
+Read-profile first. The simple CTRs are computed ONCE before boosting (`train.mojo`, the `cat_features`
+walk: `compute_simple_ctrs_gpu` per cat feature x permutation, read back, quantized), and tree CTRs are
+not admitted (`max_ctr_complexity > 1` is refused), so there is no per-iteration CTR computation or
+re-binarization to reuse: the borders are already built once per fit. What a CTR-bearing fit DOES pay
+per tree is `permutation_count` = 4 column sets: the non-symmetric per-tree loop
+(`doc_parallel_boosting.mojo`, `for p in range(perm_count)`) runs every permutation's leaf estimation
+serially, each with its own partition drain, one drain per Newton evaluation
+(`leaf_estimation_iterations` rounds plus the line search) and a tail drain: ~4 x (2 + N) host waits
+per tree. Before boosting, each permutation's cindex is packed on the host (`flat.append` over
+`n_columns x n_rows`, four 200M-element copies) into `_build_cindex_from_floats`.
+
+| switch | kind | site | what it changes under FAST on Apple |
+|---|---|---|---|
+| `-D MOJOLEARN_GBDT_CTR_PERM_BATCH=1` | build define | `gbdt/methods/doc_parallel_boosting.mojo` (`CTR_PERM_BATCH`, the per-tree permutation loop); `gbdt/methods/leaves_estimation/doc_parallel_leaves_estimator.mojo` (`DeviceLeafPartitioner.partition_enqueue` / `partition_collect`, the two halves of `partition`) | the four permutations' partitions enqueued back to back behind ONE drain, then the four Newton walks in lock step through the batched path `ordered_boosting.mojo` already uses (`_estimate_prepare`, `estimate_advance`, `_estimate_complete`): one drain per walker round for all four, one closing drain per tree. ~(2 + N) waits per tree instead of 4 x (2 + N). Taken when `estimate_can_batch` holds (Logloss: yes), `approx_dim == 1` and the device partitioner is on; else the serial loop |
+| `-D MOJOLEARN_GBDT_CTR_PERM_PTRS=1` | build define | `gbdt/train.mojo` (`CTR_PERM_PTRS`, the per-permutation cindex loop) | each permutation's cindex from `_build_cindex_from_columns` with a pointer per column (dependent columns into `dep_by_perm[p]`), no host flat pack, one drain per staging ring instead of per feature |
+
+Bits. PERM_BATCH: each task runs the same kernels on the same inputs in the same order as its serial
+run (the ordered fit relies on the same property); only the drains are shared, and the estimation
+permutation's leaf values are the ones the serial loop returned. PERM_PTRS: same columns, same borders,
+same `binarize_float_feature_kernel`; the columns builder is documented bit-identical to the flat path.
+
+Risky compile sites (no toolchain here): `_estimate_prepare(... perm_est_ws[p], perm_arena, stage_times,
+iterations=...)` with a `List[List[TEstimationWorkspace]]` element as `mut est_ws`; `ref lp =
+perm_leaf_parts[p]` then `lp.partition_enqueue` (mirrors `ref lp = leaf_parts[0]; lp.partition`);
+`_ = parts^` / `_ = pend^` past the closing drain.
+
+Not done (owed, read but not written blind): `build_ctr_tables` (the apply-time CTR tables) and the
+`CTR_FAST_FREQ`-off `compute_simple_ctrs` are host passes over `n_rows` per cat feature inside the fit,
+the plan's "one device pass per feature group (segmented sums)"; `visit_cat_feature_ctr` reads every
+CTR column back (3 Borders priors x 2 features x 4 permutations) and `set_binarized_sample` /
+`TCtrBinBuilderGpu(order)` re-upload the same target and order per feature; the CTR columns then go
+host -> quantize -> device. A device-resident CTR column path (quantize from the calcer's `dst`)
+removes those round trips; it needs `_quantize_training_columns` to take device columns.
+
+Request lines: `tdw-cat-permbatch`, `tdw-cat-permptrs` (gbdt-categorical taxi, 2 pairs each).
