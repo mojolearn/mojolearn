@@ -51,7 +51,6 @@ happens to it:
 """
 
 from std.math import isfinite
-from std.memory import bitcast
 
 
 comptime C_SVC = 0
@@ -255,24 +254,10 @@ def check_finite_list(values: List[Float32], what: String) raises:
             )
 
 
-# DEVIATION 2665: the same check over a borrowed host buffer. The threaded
-# pass lives in `svm/host/finite_scan.mojo` for the CPU host binding; the
-# GPU binding checks X on the device (`check_finite_device`). This serial
-# spelling (no host pool) stays until the host binding imports the host
-# module (cpu-gpu-cleanup c-svm, 2026-10-02).
-def check_finite_ptr(
-    values: MutPointer[Float32, MutUntrackedOrigin], n: Int, what: String
-) raises:
-    """`check_finite_list` over `n` borrowed cells (DEVIATION 2665)."""
-    for i in range(n):
-        if (bitcast[DType.uint32](values.unsafe_load(i)) & UInt32(0x7FFFFFFF)) >= UInt32(
-            0x7F800000
-        ):
-            raise Error(
-                "svm: " + what + " contains a non-finite value at flat index "
-                + String(i) + " (DEVIATION 636: a NaN or inf input cannot be"
-                " fitted; a computed NaN has a vendor-specific payload)"
-            )
+# DEVIATION 2665: the borrowed-buffer spelling of this check lives in
+# `svm/host/finite_scan.mojo::check_finite_ptr` (the CPU host binding's
+# threaded pass); the GPU binding checks X on the device
+# (`svm/checks/device_select.mojo::check_finite_device`).
 
 
 def check_c_rows(c_rows: List[Float32], n_rows: Int) raises:
