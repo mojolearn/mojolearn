@@ -1,0 +1,4 @@
+CMD lane/apple-fast-kapprox kap-schi2-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-schi2-taxi x_neighbors skewed-chi2 taxi 1 2 "" "-D MOJOLEARN_KAPPROX_DEVICE=1"
+CMD lane/apple-fast-kapprox kap-achi2-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-achi2-istella x_neighbors additive-chi2 istella 1 2 "" "-D MOJOLEARN_KAPPROX_DEVICE=1"
+CMD lane/apple-fast-kapprox kap-kpca-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-kpca-istella x_neighbors kernel-pca istella 1 2 "" "-D MOJOLEARN_KPCA_RESIDENT=1"
+CMD lane/apple-fast-kapprox kap-srp-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-srp-taxi x_neighbors sparse-rp taxi 1 2 "" "-D MOJOLEARN_SPARSE_RP_DEVICE=1"
