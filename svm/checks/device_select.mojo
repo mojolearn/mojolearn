@@ -135,11 +135,13 @@ def count_flagged_kernel(
     flags: MutPointer[UInt8, MutAnyOrigin],
     n_in: Int32,
 ):
-    """`d_num_selected = offsets[n-1] + flags[n-1]`."""
-    if Int(thread_idx.x) == 0 and Int(block_idx.x) == 0:
-        var n = Int(n_in)
-        var last = Int32(Int(flags.unsafe_load(n - 1)) & 1)
-        d_count.unsafe_store(0, offsets.unsafe_load(n - 1) + last)
+    """`d_num_selected = offsets[n-1] + flags[n-1]`, launched over all n
+    (no one-thread launch): the thread at index `n - 1` writes it."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i == n - 1:
+        var last = Int32(Int(flags.unsafe_load(i)) & 1)
+        d_count.unsafe_store(0, offsets.unsafe_load(i) + last)
 
 
 def flag_nonzero_f32_kernel(
@@ -399,7 +401,7 @@ struct SelectScratch(Movable):
         ctx.enqueue_function[count_flagged_kernel](
             self.d_count.unsafe_ptr(), self.offsets.unsafe_ptr(),
             flags.unsafe_ptr(), Int32(n),
-            grid_dim=1, block_dim=1,
+            grid_dim=_grid(n), block_dim=SEL_TPB,
         )
         ctx.enqueue_copy(dst_ptr=self.h_count.unsafe_ptr(), src_buf=self.d_count)
         ctx.synchronize()
