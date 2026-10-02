@@ -34,7 +34,7 @@ from x_linear.ops import FP, IP, fa, fm, fs, fd, fmad, ld, st, ldi, i2f, fill
 from x_linear.team import Team, TEAM_SLOTS, LINEAR_TPB, team_at
 from x_linear.tops import upper_cell, _acc_fa, _acc_fmad
 from x_linear.cd import (
-    ecv_alphas, ecv_choose, ecv_finish, ecv_rows, ecv_fold_fa, ecv_cfmad, ecv_held_sse, ECV_UH,
+    ecv_alphas, ecv_alpha_cell, ecv_choose, ecv_finish, ecv_rows, ecv_fold_fa, ecv_cfmad, ecv_held_sse, ECV_UH,
     t_enet_gram_cd,
 )
 
@@ -147,13 +147,16 @@ def ecv_gram_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, ew: FP, wf: IP, wo
 
 @always_inline
 def _ecv_grid_kernel_body(n: Int32, d: Int32, ip: IP, fp: FP, res: FP, ew: FP):
-    """One thread: the alpha grids from the full data's X'y."""
-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
-        return
+    """Thread (l, k): cell (l, k) of the alpha grids from the full data's
+    X'y (`ecv_alpha_cell`, the host's statements, one cell per thread)."""
     var dd = Int(d)
     var lay = _EcvLayout(dd, ldi(ip, 2), ldi(ip, 3), ldi(ip, 4))
+    var g = Int(block_idx.x) * ECV_TPB + Int(thread_idx.x)
+    if g >= lay.l_n * lay.a_n:
+        return
     var q = lay.prep(lay.f_n) + dd + dd * dd
-    ecv_alphas(res, dd + 4, fp, lay.l_n, lay.a_n, ldi(ip, 5) != 0, ld(fp, 0), ew, q, dd, Int(n))
+    ecv_alpha_cell(res, dd + 4, fp, lay.l_n, lay.a_n, ldi(ip, 5) != 0, ld(fp, 0), ew, q, dd, Int(n),
+                   g // lay.a_n, g % lay.a_n)
 
 
 def ecv_grid_kernel(n: Int32, d: Int32, ip: IP, fp: FP, res: FP, ew: FP, wf: IP, woff: Int32, nonce: Int32):
@@ -311,8 +314,12 @@ def ecv_score_staged_kernel(x: FP, y: FP, n: Int32, d: Int32, ip: IP, res: FP, e
     witness_end(wf, woff, nonce)
 
 @always_inline
-def _ecv_refit_kernel_body(n: Int32, d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP):
-    """One block: the choice, then the refit on the full data from zero."""
+def _ecv_refit_kernel_body(d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP):
+    """One block team: the choice, then the refit on the full data from
+    zero. Its work is the d x d Gram's coordinate descent (one problem);
+    the rows were folded by the means and Gram kernels, and the row count
+    is the full prep's (the word the means kernel wrote, as the path kernel
+    reads its fold's)."""
     var dd = Int(d)
     var lay = _EcvLayout(dd, ldi(ip, 2), ldi(ip, 3), ldi(ip, 4))
     var r = lay.f_n * lay.l_n
@@ -330,15 +337,15 @@ def _ecv_refit_kernel_body(n: Int32, d: Int32, ip: IP, fp: FP, res: FP, ew: FP, 
     t.sync()
     var alpha = ld(res, dd + 1)
     var l1r = ld(res, dd + 2)
-    var nf = i2f(Int(n))
+    var nf = ld(ew, sc + 2)
     var iters = t_enet_gram_cd(t, ew, gg, q, qw, w, dd, ld(ew, sc + 1), fm(fm(alpha, l1r), nf),
                                fm(fm(alpha, fs(Float32(1), l1r)), nf), ldi(ip, 0), ld(fp, 1), ldi(ip, 6) != 0)
     if t.lead():
         ecv_finish(res, ew, base, w, sc, dd, ldi(ip, 1) != 0, alpha, l1r, iters)
 
 
-def ecv_refit_kernel(n: Int32, d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP, wf: IP, woff: Int32, nonce: Int32):
-    _ecv_refit_kernel_body(n, d, ip, fp, res, ew, tw)
+def ecv_refit_kernel(d: Int32, ip: IP, fp: FP, res: FP, ew: FP, tw: FP, wf: IP, woff: Int32, nonce: Int32):
+    _ecv_refit_kernel_body(d, ip, fp, res, ew, tw)
     witness_end(wf, woff, nonce)
 
 # ------------------------------------------------ staged preps (lane/neural-pass110)
@@ -677,9 +684,9 @@ def enetcv_fit_grid(
             wo += _blocks((f_n + 1) * (d * (d + 1) // 2 + d + 1))
         ctx.enqueue_function[ecv_grid_kernel](
             Int32(n), Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dew.unsafe_ptr(),
-            wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1,
+            wit.p(), Int32(wo), nonce, grid_dim=_blocks(l_n * a_n), block_dim=ECV_TPB,
         )
-        wo += 1
+        wo += _blocks(l_n * a_n)
         if paths > 0:
             ctx.enqueue_function[ecv_path_kernel](
                 Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dew.unsafe_ptr(), dtw.unsafe_ptr(),
@@ -700,7 +707,7 @@ def enetcv_fit_grid(
                 )
                 wo += _blocks(paths * a_n)
         ctx.enqueue_function[ecv_refit_kernel](
-            Int32(n), Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dew.unsafe_ptr(),
+            Int32(d), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dew.unsafe_ptr(),
             dtw.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=nt,
         )
         wo += 1
