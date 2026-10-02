@@ -50,6 +50,7 @@ from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_works
 from gemm.checks.gemm_oracle import OP_TN
 from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
 from x_cluster.ops import ClusterOps
+from x_cluster.meanshift_fast import MEANSHIFT_FAST_GRID, meanshift_fast_grid
 
 comptime TPB = 128
 
@@ -1273,6 +1274,19 @@ struct DeviceOps(ClusterOps):
         centers: Int, ns: Int, scratch: Int, intensity: Int, iters: Int,
     ) raises:
         self._ph0()
+        # lane/apple-fast-cluster (2026-10-02), FAST on Apple, OFF by default:
+        # `MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1` runs every shift on a grid of
+        # (seed, row chunk) blocks (x_cluster/meanshift_fast.mojo) instead of
+        # `_meanshift_team_kernel` below, ONE block per seed walking all n rows
+        # (Istella 10k x 220 with bin seeding: 18 blocks for the whole fit).
+        comptime if MEANSHIFT_FAST_GRID:
+            if String(getenv("MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT")) == "1":
+                if meanshift_fast_grid(
+                    self.ctx, self._fp(x), n, d, bw, stop, max_iter, self._fp(centers), ns,
+                    self._ip(intensity), self._ip(iters),
+                ):
+                    self._ph1("meanshift")
+                    return
         comptime if MEANSHIFT_BLOCK:
             if d <= MSB_MAX_D and ns > 0:
                 self.ctx.enqueue_function[_meanshift_block_kernel](
