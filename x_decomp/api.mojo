@@ -156,6 +156,8 @@ def lu_solve_py[E: Exec](lu: PythonObject, piv: PythonObject, b: PythonObject, p
     var n = _n(p, 0)
     var nrhs = _n(p, 1)
     var trans = _n(p, 2) if len(p) > 2 else 0
+    if n >= 1 << 24:
+        raise Error("x_decomp: lu_solve row numbers exceed float32's exact integers")
     var pl = _f(lu)
     var pp = _i(piv)
     var pb = _f(b)

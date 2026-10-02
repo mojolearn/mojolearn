@@ -438,7 +438,10 @@ def oracle_lu(a: List[Float32], n: Int, alt: Int = 0) -> Tuple[List[Float32], Li
 
 
 def oracle_lu_solve(lu: List[Float32], piv: List[Int32], b: List[Float32], n: Int, nrhs: Int, alt: Int = 0) -> List[Float32]:
-    """getrs; alt 1 folds each substitution's inner sum descending."""
+    """lu_solve in DEVIATION 5308's order, written left-looking: the swaps,
+    then forward substitution with unit L folded ascending in j and back
+    substitution with U folded DESCENDING in j (getrs folds it ascending);
+    alt 1 reverses each fold (alt 1's back substitution is getrs's)."""
     var x = b.copy()
     for k in range(n):
         var p = Int(piv[k])
@@ -458,16 +461,17 @@ def oracle_lu_solve(lu: List[Float32], piv: List[Int32], b: List[Float32], n: In
             var i = n - 1 - ii
             var acc = ftz(x[i * nrhs + c])
             for q in range(n - i - 1):
-                var j = n - 1 - q if alt == 1 else i + 1 + q
+                var j = i + 1 + q if alt == 1 else n - 1 - q
                 acc = o_fma(-lu[i * n + j], x[j * nrhs + c], acc)
             x[i * nrhs + c] = o_div0(acc, lu[i * n + i])
     return x^
 
 
 def oracle_lu_solve_t(lu: List[Float32], piv: List[Int32], b: List[Float32], n: Int, nrhs: Int, alt: Int = 0) -> List[Float32]:
-    """getrs 'T' (A^T X = B), written independently of the cell: U^T forward,
-    unit L^T back, the swaps undone last to first; alt 1 folds each inner sum
-    descending."""
+    """lu_solve 'T' (A^T X = B) in DEVIATION 5308's order, written
+    independently of the cell: U^T forward folded ascending, unit L^T back
+    folded DESCENDING, the swaps undone last to first; alt 1 reverses each
+    fold."""
     var x = b.copy()
     for c in range(nrhs):
         for i in range(n):
@@ -480,7 +484,7 @@ def oracle_lu_solve_t(lu: List[Float32], piv: List[Int32], b: List[Float32], n: 
             var i = n - 1 - ii
             var acc = ftz(x[i * nrhs + c])
             for q in range(n - i - 1):
-                var j = n - 1 - q if alt == 1 else i + 1 + q
+                var j = i + 1 + q if alt == 1 else n - 1 - q
                 acc = o_fma(-lu[j * n + i], x[j * nrhs + c], acc)
             x[i * nrhs + c] = acc
     var k = n - 1
