@@ -1,0 +1,2 @@
+CMD lane/apple-fast-robust robust-huber-dev-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh robust-huber-dev-taxi x_linear huber taxi 1 2 "" "-D MOJOLEARN_HUBER_DEVICE_LBFGS=1"
+CMD lane/apple-fast-robust robust-huber-blk-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh robust-huber-blk-taxi x_linear huber taxi 1 2 "-D MOJOLEARN_HUBER_DEVICE_LBFGS=1" "-D MOJOLEARN_HUBER_DEVICE_LBFGS=1 -D MOJOLEARN_HUBER_FAST_BLOCK512=1"
