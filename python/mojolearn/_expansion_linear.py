@@ -85,7 +85,11 @@ def _host_algos():
     global _HOST_ALGOS
     if _HOST_ALGOS is None:
         _HOST_ALGOS = frozenset() if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1" else frozenset(
-            (ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT))
+            ((ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT)
+             if os.environ.get("MOJOLEARN_X_LINEAR_ISOTONIC_HOST", "") == "1" else ()))
+    # lane/neural-pass107 (GPU-only rule): IsotonicRegression runs on the device
+    # (x_linear/device.mojo: the radix-sorted fit, one thread a predicted
+    # query); MOJOLEARN_X_LINEAR_ISOTONIC_HOST=1 restores the host route
     return _HOST_ALGOS
 
 
