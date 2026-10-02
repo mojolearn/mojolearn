@@ -3456,10 +3456,10 @@ class MDS(_Base):
         # B's diagonal gets the row sums by fma(I, rs, B) (1 * rs + B, one
         # rounding: the add the host loop did; 0 * rs + B is B off it), so
         # the n x n matrix stays resident; the host loop read all of B and
-        # wrote it back every iteration. MOJOLEARN_XD_MDS_HOST_DIAG=1 is the
+        # wrote it back every iteration. MOJOLEARN_XD_MDS_DIAG_V0=1 is the
         # old loop (the A/B switch).
         eye = None
-        if _os.environ.get("MOJOLEARN_XD_MDS_HOST_DIAG") != "1":
+        if _os.environ.get("MOJOLEARN_XD_MDS_DIAG_V0") != "1":
             eye = k.diag_mask(n)
         floor = k.const(1e-5)
         for it in range(1, self.max_iter + 1):
