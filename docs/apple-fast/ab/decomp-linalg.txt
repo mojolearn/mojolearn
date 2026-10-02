@@ -1,4 +1,3 @@
-CMD lane/apple-fast-decomp-linalg dlin-eigh-rr AFC_FAMILY=algos bash tools/afc_ab_def.sh dlin-eigh-rr x_decomp eigh synthetic 1 2 "" "-D MOJOLEARN_EIGH_FAST_RR"
 CMD lane/apple-fast-decomp-linalg dlin-qr-dev-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh dlin-qr-dev-istella x_decomp qr istella 1 2 "" "-D MOJOLEARN_QR_FAST_DEV"
 CMD lane/apple-fast-decomp-linalg dlin-svd-cholqr-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh dlin-svd-cholqr-istella x_decomp svd istella 1 2 "" "-D MOJOLEARN_SVD_FAST_CHOLQR"
 CMD lane/apple-fast-decomp-linalg dlin-lstsq-tiled-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh dlin-lstsq-tiled-istella x_decomp lstsq istella 1 2 "" "-D MOJOLEARN_DECOMP_FAST_GEMM_TILED"
