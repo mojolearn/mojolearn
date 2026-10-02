@@ -11,12 +11,27 @@ from x_neighbors.kapprox_items import (
     kapprox_achi2_item,
     kapprox_skew_fit_item,
     kapprox_skew_log_item,
+    kapprox_sparse_rp_item,
 )
 
 
 def kapprox_fast_binding() raises -> PythonObject:
     """The host column never takes the device fit/transform."""
     return PythonObject(0)
+
+
+def kpca_resident_binding() raises -> PythonObject:
+    return PythonObject(0)
+
+
+def sparse_rp_device_binding() raises -> PythonObject:
+    return PythonObject(0)
+
+
+def op_kapprox_sparse_rp(res: Int, kc: Int, d: Int, seed: Int, dens: Float32, scale: Float32) raises:
+    var p_res = FP(unsafe_from_address=res)
+    for t in range(kc * d):
+        kapprox_sparse_rp_item(t, p_res, kc, d, seed, dens, scale)
 
 
 def op_kapprox_check(x: Int, flag: Int, n: Int, d: Int, strict: Int, floor: Float32) raises:

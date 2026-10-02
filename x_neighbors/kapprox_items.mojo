@@ -101,3 +101,16 @@ def kapprox_skew_log_item(t: Int, x: FP, lx: FP, flag: IP, skew: Float32):
     if v <= -skew:
         flag.unsafe_store(0, Int32(1))
     lx.unsafe_store(t, ftz(identical_log(_add(v, skew))))
+
+
+def kapprox_sparse_rp_item(t: Int, res: FP, kc: Int, d: Int, seed: Int, dens: Float32, scale: Float32):
+    """Entry t of SparseRandomProjection's kc x d matrix (Achlioptas / Li):
+    +-scale with probability dens / 2 each, else 0, from two counter-based
+    uniforms of stream `seed` (one for the keep test, one for the sign). One
+    launch, no host draw; FAST only (IDENTICAL keeps x_decomp's Philox words)."""
+    var keep = kapprox_uniform(UInt32(seed), t)
+    var sgn = kapprox_uniform(UInt32(seed) ^ UInt32(0x9E3779B9), t)
+    var v = Float32(0)
+    if keep < dens:
+        v = -scale if sgn < Float32(0.5) else scale
+    res.unsafe_store(t, v)

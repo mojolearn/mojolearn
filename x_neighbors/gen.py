@@ -308,6 +308,9 @@ OWN_DRIVERS = {
     "kapprox_skew_transform": ("kapprox_dev", "kapprox_host",
                                [("x", "fin", "n * d"), ("w", "fin", "d * nc"), ("off", "fin", "nc"), ("res", "fout", "n * nc"),
                                 ("flag", "iinout", "1"), ("n", "int"), ("d", "int"), ("nc", "int"), ("skew", "float")]),
+    "kapprox_sparse_rp": ("kapprox_dev", "kapprox_host",
+                          [("res", "fout", "kc * d"), ("kc", "int"), ("d", "int"), ("seed", "int"),
+                           ("dens", "float"), ("scale", "float")]),
 }
 
 
@@ -769,7 +772,7 @@ def gpu_binding():
             + BIND_HEAD + "from checks.vendor import COMPILED_VENDOR\n"
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
-            + "from x_neighbors.kapprox_dev import kapprox_fast_binding\n"
+            + "from x_neighbors.kapprox_dev import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding\n"
             + wrappers() + """
 
 def x_neighbors_vendor_binding() raises -> PythonObject:
@@ -783,6 +786,8 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
+        m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+        m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors: ", e))
@@ -795,7 +800,7 @@ def host_binding():
             + BIND_HEAD + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
-            + "from x_neighbors.kapprox_host import kapprox_fast_binding\n"
+            + "from x_neighbors.kapprox_host import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding\n"
             + wrappers() + """
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:
@@ -830,6 +835,8 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
+        m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+        m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors_host: ", e))
@@ -847,7 +854,8 @@ if __name__ == "__main__":
     b = t.index("# END GENERATED EXPORTS")
     names = ["x_neighbors_host_numeric_mode", "x_neighbors_host_vendor", "x_neighbors_host_column",
              "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["xn_eigh", "x_neighbors_numeric_mode",
-                                                                            "x_neighbors_vendor", "x_neighbors_kapprox_fast"]
+                                                                            "x_neighbors_vendor", "x_neighbors_kapprox_fast",
+                                                                            "x_neighbors_kpca_resident", "x_neighbors_sparse_rp_device"]
     body = "# BEGIN GENERATED EXPORTS\n" + "".join(f'            "{x}",\n' for x in names) + "            "
     surf.write_text(t[:a] + body + t[b:])
     print(f"x_neighbors/gen.py: {len(OPS)} ops -> device_ops, host_ops and the two bindings")

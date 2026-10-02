@@ -17,7 +17,8 @@ from x_neighbors.kapprox_host import op_kapprox_check
 from x_neighbors.kapprox_host import op_kapprox_achi2
 from x_neighbors.kapprox_host import op_kapprox_skew_fit
 from x_neighbors.kapprox_host import op_kapprox_skew_transform
-from x_neighbors.kapprox_host import kapprox_fast_binding
+from x_neighbors.kapprox_host import op_kapprox_sparse_rp
+from x_neighbors.kapprox_host import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding
 
 
 def _a(v: PythonObject, k: Int) raises -> Int:
@@ -1023,6 +1024,18 @@ def kapprox_skew_transform_binding(a_: PythonObject, i_: PythonObject, f_: Pytho
     return PythonObject(None)
 
 
+def kapprox_sparse_rp_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_res = _a(a_, 0)
+    var v_kc = _n(i_, 0)
+    var v_d = _n(i_, 1)
+    var v_seed = _n(i_, 2)
+    var v_dens = _f(f_, 0)
+    var v_scale = _f(f_, 1)
+    with GILReleased(Python()):
+        op_kapprox_sparse_rp(v_res, v_kc, v_d, v_seed, v_dens, v_scale)
+    return PythonObject(None)
+
+
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[sqdist_binding]("xn_sqdist")
     m.def_function[nan_sqdist_binding]("xn_nan_sqdist")
@@ -1097,6 +1110,7 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[kapprox_achi2_binding]("xn_kapprox_achi2")
     m.def_function[kapprox_skew_fit_binding]("xn_kapprox_skew_fit")
     m.def_function[kapprox_skew_transform_binding]("xn_kapprox_skew_transform")
+    m.def_function[kapprox_sparse_rp_binding]("xn_kapprox_sparse_rp")
     m.def_function[eigh_binding]("xn_eigh")
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
 
@@ -1133,6 +1147,8 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
+        m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+        m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors_host: ", e))

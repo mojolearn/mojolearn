@@ -21,6 +21,7 @@ from x_neighbors.kapprox_items import (
     kapprox_achi2_item,
     kapprox_skew_fit_item,
     kapprox_skew_log_item,
+    kapprox_sparse_rp_item,
 )
 
 #: The switch: FAST, an Apple GPU and `-D MOJOLEARN_KAPPROX_DEVICE`. Default
@@ -35,6 +36,41 @@ comptime XN_KAPPROX_FAST = (
 def kapprox_fast_binding() raises -> PythonObject:
     """1 when this binary takes the device fit/transform of the chi2 samplers."""
     comptime if XN_KAPPROX_FAST:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
+#: KernelPCA.fit resident on x_decomp's kit (one upload of X; the kernel
+#: matrix, its centering and the top-k solve never leave the device):
+#: FAST + Apple + `-D MOJOLEARN_KPCA_RESIDENT`. A Python-only route; this
+#: binary only answers whether it is on.
+comptime XN_KPCA_RESIDENT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_KPCA_RESIDENT"]()
+)
+
+#: SparseRandomProjection.fit: the sparse matrix in one launch
+#: (`op_kapprox_sparse_rp`) and no host finiteness pass over X (transform's
+#: device flag refuses a non-finite X): FAST + Apple +
+#: `-D MOJOLEARN_SPARSE_RP_DEVICE`.
+comptime XN_SPARSE_RP_DEVICE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_SPARSE_RP_DEVICE"]()
+)
+
+
+def kpca_resident_binding() raises -> PythonObject:
+    """1 when KernelPCA.fit takes the resident kit route."""
+    comptime if XN_KPCA_RESIDENT:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
+def sparse_rp_device_binding() raises -> PythonObject:
+    """1 when SparseRandomProjection.fit draws its matrix in one launch here."""
+    comptime if XN_SPARSE_RP_DEVICE:
         return PythonObject(1)
     return PythonObject(0)
 
@@ -101,6 +137,33 @@ def kapprox_skew_log_kernel(x: FP, lx: FP, flag: IP, count_: Int64, skew_: Float
     var t = _tid()
     if t < count:
         kapprox_skew_log_item(t, x, lx, flag, skew_)
+
+
+def kapprox_sparse_rp_kernel(res: FP, kc_: Int64, d_: Int64, seed_: Int64, dens_: Float32, scale_: Float32):
+    var kc = Int(kc_)
+    var d = Int(d_)
+    var seed = Int(seed_)
+    var t = _tid()
+    if t < kc * d:
+        kapprox_sparse_rp_item(t, res, kc, d, seed, dens_, scale_)
+
+
+def op_kapprox_sparse_rp(res: Int, kc: Int, d: Int, seed: Int, dens: Float32, scale: Float32) raises:
+    """SparseRandomProjection's kc x d matrix in one launch, one thread per entry."""
+    comptime if not XN_SPARSE_RP_DEVICE:
+        _refuse()
+        return
+    var ctx = xn_ctx()
+    var count = kc * d
+    var d_res = _dev_f(ctx, res, count, False)
+    ctx.enqueue_function[kapprox_sparse_rp_kernel](
+        d_res.unsafe_ptr(), Int64(kc), Int64(d), Int64(seed), dens, scale,
+        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+    )
+    _back_f(ctx, d_res, res, count)
+    ctx.synchronize()
+    _ = d_res^
+    _ = ctx^
 
 
 def op_kapprox_check(x: Int, flag: Int, n: Int, d: Int, strict: Int, floor: Float32) raises:
