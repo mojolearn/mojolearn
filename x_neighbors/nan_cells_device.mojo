@@ -27,7 +27,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from x_neighbors.items import FP, IP
-from x_neighbors.device_ops import xn_ctx, _buf, _down_i
+from x_neighbors.device_ops import xn_ctx, _down_i
 
 
 comptime NC_TPB = 256
@@ -208,7 +208,10 @@ def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int
     comptime assert NC_SMEM_FITS, "nan_cells_device: a 1 KB threadgroup page must fit"
     var ctx = xn_ctx()
     var total = n * d
-    var d_x = _buf(ctx, x, total, True)
+    # x straight to the device (the copy engine; no host-thread staging)
+    var d_x = ctx.enqueue_create_buffer[DType.float32](max(total, 1))
+    if total > 0:
+        ctx.enqueue_copy(dst_buf=d_x, src_ptr=FP(unsafe_from_address=x))
     var nb = max((total + NC_CHUNK - 1) // NC_CHUNK, 1)
     var ng = (nb + NC_CHUNK - 1) // NC_CHUNK
     var d_bc = ctx.enqueue_create_buffer[DType.int32](nb)
