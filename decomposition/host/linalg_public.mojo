@@ -79,6 +79,7 @@ oracles first, which is exactly why they came out with no GPU column at all
 purpose: the fold order is the oracles' business, the ORDER a public name
 promises is settled once, here.
 """
+from decomposition.spectrum_order_device import spectrum_rank_desc
 from decomposition.host.pca_oracle import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
@@ -92,21 +93,17 @@ from decomposition.host.pca_full_oracle import (
 
 
 def _argsort_desc(key: List[Float32], n: Int) -> List[Int]:
-    """`host_order_truncate_spectrum`'s selection sort on `>`, over indices.
-
-    THE SAME COMPARISON, deliberately: a spectrum ordered two ways in one
-    tree is two answers to one question. Ties keep the lower index, which is
-    what `>` (not `>=`) gives and what the oracle's loop gives.
-    """
-    var order = List[Int]()
+    """Indices in DESCENDING order of `spectrum_key` (the float bits made
+    monotone, -0.0 keyed as +0.0), ties to the LOWER index: a strict total
+    order, so each index lands at its rank. The device twin
+    (decomposition/spectrum_order_device.mojo) forms the same ranks
+    (cpu-gpu-cleanup c-decomp, 2026-10-02: was an exchange sort on `>`,
+    whose tie order was not the lower index and which the device could not
+    run in parallel)."""
+    var order = List[Int](length=n, fill=0)
+    var kp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(key.unsafe_ptr()))
     for i in range(n):
-        order.append(i)
-    for i in range(n):
-        for j in range(i + 1, n):
-            if key[order[j]] > key[order[i]]:
-                var t = order[i]
-                order[i] = order[j]
-                order[j] = t
+        order[spectrum_rank_desc(kp, n, i)] = i
     return order^
 
 

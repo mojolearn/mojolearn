@@ -104,7 +104,7 @@ from x_decomp.jacobi_par import (
 from std.os import getenv
 from core.device_zero import enqueue_fill
 from decomposition.checks.jacobi_eigh_device import JACOBI_INFO_UNWRITTEN, JACOBI_SWEEPS, JACOBI_TOL
-from decomposition.host.linalg_public import eigh_ascending
+from decomposition.spectrum_order_device import enqueue_eigh_ascending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 
 
@@ -2445,22 +2445,19 @@ struct DevExec(Exec):
             ctx.enqueue_function[sign_flip_kernel](
                 dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
             )
-            var hv = ctx.enqueue_create_host_buffer[DType.float32](n * n)
-            ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=dv)
+            # the last test's kernel left the diagonal of the converged A in
+            # doff[2n, 3n); the ascending order on the device
+            # (decomposition/spectrum_order_device.mojo), then w and v out
+            var dw = ctx.enqueue_create_buffer[DType.float32](n)
+            var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
+            var dpos = ctx.enqueue_create_buffer[DType.int32](n)
+            enqueue_eigh_ascending(ctx, _p(doff) + 2 * n, 1, _p(dv), n, dpos, _p(dw), _p(dvo))
+            _down(ctx, dw, w, n)
+            _down(ctx, dvo, v, n * n)
             ctx.synchronize()
-            # the last test's readback holds the diagonal of the converged A
-            var diag = List[Float32](capacity=n)
-            for i in range(n):
-                diag.append(hoff.unsafe_ptr().unsafe_load(2 * n + i))
-            var vecs = List[Float32](capacity=n * n)
-            for i in range(n * n):
-                vecs.append(hv.unsafe_ptr().unsafe_load(i))
-            var got = eigh_ascending(diag, vecs, n, True, executed)
-            for i in range(n):
-                w.unsafe_store(i, got.w[i])
-            for i in range(n * n):
-                v.unsafe_store(i, got.v[i])
-            _ = hv^
+            _ = dw^
+            _ = dvo^
+            _ = dpos^
         _ = da^
         _ = dv^
         _ = dcs^
@@ -2504,10 +2501,7 @@ struct DevExec(Exec):
             )
         ctx.enqueue_function[sign_flip_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1))
         var hinfo = ctx.enqueue_create_host_buffer[DType.float32](3)
-        var hwork = ctx.enqueue_create_host_buffer[DType.float32](n * n)
         ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
-        ctx.enqueue_copy(dst_ptr=hwork.unsafe_ptr(), src_buf=da.create_sub_buffer[DType.float32](0, n * n))
-        _down(ctx, dv, v, n * n)
         ctx.synchronize()
         var i0 = hinfo.unsafe_ptr().unsafe_load(0)
         var i1 = hinfo.unsafe_ptr().unsafe_load(1)
@@ -2532,22 +2526,23 @@ struct DevExec(Exec):
                 " one; see DEVIATION 590. The remedy is more sweeps, the same one"
                 " cuSOLVER's syevj has"
             )
-        var diag = List[Float32](capacity=n)
-        for i in range(n):
-            diag.append(hwork.unsafe_ptr().unsafe_load(i * n + i))
-        var vecs = List[Float32](capacity=n * n)
-        for i in range(n * n):
-            vecs.append(v.unsafe_load(i))
-        var got = eigh_ascending(diag, vecs, n, True, Int(i2))
-        for i in range(n):
-            w.unsafe_store(i, got.w[i])
-        for i in range(n * n):
-            v.unsafe_store(i, got.v[i])
+        # the ascending order on the device (the converged A's diagonal,
+        # decomposition/spectrum_order_device.mojo), then w and v out
+        _ = i2
+        var dw = ctx.enqueue_create_buffer[DType.float32](n)
+        var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dpos = ctx.enqueue_create_buffer[DType.int32](n)
+        enqueue_eigh_ascending(ctx, _p(da), n + 1, _p(dv), n, dpos, _p(dw), _p(dvo))
+        _down(ctx, dw, w, n)
+        _down(ctx, dvo, v, n * n)
+        ctx.synchronize()
+        _ = dw^
+        _ = dvo^
+        _ = dpos^
         _ = dv^
         _ = dinfo^
         _ = dvt^
         _ = hinfo^
-        _ = hwork^
         ctx.synchronize()
 
     @staticmethod
