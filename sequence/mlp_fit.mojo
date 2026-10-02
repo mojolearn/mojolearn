@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The multi-layer perceptron's epoch loop and prediction over `Exec`
 (`sequence/mlp.mojo` holds the element bodies and the reference citations)."""
-from sequence.exec import Exec
+from sequence.exec_trait import Exec
 from sequence.mlp import (
     ACT_SOFTMAX,
     EPI_ACT_BWD,

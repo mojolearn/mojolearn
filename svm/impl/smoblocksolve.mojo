@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`SmoBlockSolve`: one block solves the working-set QP by SMO.
+"""`SmoBlockSolve`: the working-set QP by SMO, solved by the whole grid.
 
 Reference: `cuml/cpp/src/svm/smoblocksolve.cuh` (cuML v26.08.00), the kernel
 body (`:154-271`), with the same branches. The math is documented in
@@ -66,49 +66,46 @@ update `a +- q*y` with `0 <= q <= min(tmp_u, tmp_l)` stays in `[+0.0, C]`
 (a result of exactly zero is +0.0 under round-to-nearest; a positive
 subnormal flushes to +0.0), so `a`, `C - a`, and `q_l = (f - f_u)/eta`
 with `f_u < f` are all `>= +0.0` with the sign bit clear (row 39).
+THE GRID (cpu-gpu-cleanup c-svm, 2026-10-02). Theirs is ONE block of
+`n_ws` threads (`SmoBlockSolve<<<1, n_ws>>>`), and so was ours, at six
+comptime widths plus an elements-per-thread variant. Now the working set is
+spread over `ceil(n_ws / TPB)` blocks of `TPB` threads, one element per
+thread, and the grid solves it together in one persistent launch:
 
-WSIZE is a comptime parameter because the threadgroup slabs are; theirs is
-`SMO_WS_SIZE = 1024` at the one call site. `n_ws <= WSIZE` threads carry
-data; the rest pass the identity to every reduction and do nothing else.
-A selection over a total order cannot see WSIZE, and the launch-invariance
-gate runs two values of it on the same problem.
+  * each of the two selections of an inner iteration (the fused f_u argmin
+    / f_max argmax, then the l argmax) is a block halving tree, then a
+    GRID EXCHANGE: thread 0 of every block publishes its block's winner to
+    a global slot (double-buffered by epoch parity) and RELEASES its flag
+    to the epoch; threads `t < n_blocks` of every block ACQUIRE flag `t`,
+    load block t's partial into threadgroup memory, and every block folds
+    the partials in the same fixed halving tree over block index. Every
+    block therefore holds the same winner, and the control flow (the
+    `diff < diff_end` and `q == 0` exits) is the same in every block;
+  * the winner carries its own payload (`tmp_u` for u; `min(tmp_l, q_l)`
+    for l, which each candidate forms from its own registers and Kd[u]),
+    so the alpha update needs no third exchange;
+  * `Kd[u]` and `Kd[l]` are read from the kernel tile's diagonal in global
+    memory (the same cells the old threadgroup slab copied).
+
+The selections are over the total order (value, then the smaller training
+index), so the winner is the same element whatever the block width and the
+fold shape: the bits are the one-block kernel's and the host oracle's
+(`svm/host/smo_oracle.mojo::_block_solve`) unchanged. The flags are reset
+by `smo_grid_reset_kernel` before every launch. The grid is at most
+`SMO_GRID_WS_MAX / TPB` blocks of at least 64 threads, which every column
+keeps resident at once (the spin waits need that).
 """
 
-from std.gpu import thread_idx
+from std.atomic import Atomic, Ordering
+from std.gpu import block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
-from std.math import inf
+from std.math import inf, max
 from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
-from std.gpu import WARP_SIZE
-from std.sys.info import has_apple_gpu_accelerator
-from svm.impl.fast_smo_reduce import fast_argext, fast_argmin_argmax
-from checks.kernel_matrix import (
-    TARGET_COLUMN,
-)
-from checks.kernel_matrix_svm import (
-    SVM_SCHED_FUSED_TREE,
-    SVM_SCHED_RARY_TREE,
-    SVM_SCHED_TREE,
-    SVM_SCHED_WARP,
-    SVM_SCHED_WARP_LANE0,
-    svm_block_solve_schedule_for,
-    svm_block_solve_tree_arity_for,
-)
-from svm.checks.pinned_argreduce import (
-    block_argext,
-    block_argext_lane0,
-    pinned_block_argext_tid,
-    pinned_block_argext_tid_rary,
-    pinned_block_argmin_argmax_tid,
-    pinned_block_argmin_argmax_tid_rary,
-    pinned_block_argmax,
-    pinned_block_argmin,
-    sabotage_block_max_hw,
-    sabotage_block_max_nokey,
-)
+from checks.numerics import ftz, identical_mul_add
+from svm.checks.pinned_argreduce import _arg_better
 
 
 #: SABOTAGES of the `f_max` fold (row 39; svc_check "signed-zero tie"):
@@ -128,9 +125,185 @@ comptime SMO_WS_SIZE = 1024
 #: `constexpr math_t ETA_EPS = 1.0e-12` (`smoblocksolve.cuh:168`).
 comptime ETA_EPS = Float32(1.0e-12)
 
+#: The largest working set the grid solve takes (the FAST Apple 2048 set).
+comptime SMO_GRID_WS_MAX = 2048
 
-def smo_block_solve_kernel[
-    WSIZE: Int
+#: The narrowest block: the partial tree over `SMO_GRID_WS_MAX / TPB`
+#: blocks must fit in one block's threads.
+comptime SMO_GRID_TPB_MIN = 64
+
+#: The default block width of the grid solve.
+comptime SMO_GRID_TPB = 256
+
+#: Partial slots per block per parity: 4 floats and 4 ints.
+comptime SMO_GRID_SLOT = 4
+
+#: The most blocks any width launches (`SMO_GRID_WS_MAX / SMO_GRID_TPB_MIN`).
+comptime SMO_GRID_MAX_BLOCKS = SMO_GRID_WS_MAX // SMO_GRID_TPB_MIN
+
+comptime _KEY_PAD = Int32(2147483647)
+
+
+def smo_grid_reset_kernel(flags: MutPointer[Int32, MutAnyOrigin]):
+    """Zero the `SMO_GRID_MAX_BLOCKS` exchange flags before a solve (one
+    thread per flag)."""
+    var t = Int(thread_idx.x)
+    if t < SMO_GRID_MAX_BLOCKS:
+        flags.unsafe_store(t, Int32(0))
+
+
+@always_inline
+def _fmax_better(ov: Float32, ok: Int32, mv: Float32, mk: Int32) -> Bool:
+    """The f_max fold's compare: DEVIATION 635's key-tied argmax, or the
+    NOKEY sabotage (value only, position decides a tie)."""
+    comptime if SAB_FMAX_NOKEY:
+        return ov > mv
+    else:
+        return _arg_better[True](ov, ok, mv, mk)
+
+
+@always_inline
+def _tree_dual[
+    o1: MutOrigin, o2: MutOrigin, o3: MutOrigin, o4: MutOrigin,
+    o5: MutOrigin, o6: MutOrigin, //, N: Int,
+](
+    nv: Float32,
+    nk: Int32,
+    npos: Int32,
+    npay: Float32,
+    xv: Float32,
+    xk: Int32,
+    s_nv: MutPointer[Float32, o1, address_space = AddressSpace.SHARED],
+    s_nk: MutPointer[Int32, o2, address_space = AddressSpace.SHARED],
+    s_np: MutPointer[Int32, o3, address_space = AddressSpace.SHARED],
+    s_npay: MutPointer[Float32, o4, address_space = AddressSpace.SHARED],
+    s_xv: MutPointer[Float32, o5, address_space = AddressSpace.SHARED],
+    s_xk: MutPointer[Int32, o6, address_space = AddressSpace.SHARED],
+) -> Tuple[Float32, Int32, Int32, Float32, Float32, Int32]:
+    """One halving tree over the first `N` threads' entries: the (value,
+    key) argmin with its position and payload, and the (value, key) argmax.
+    Every thread of the block calls it (`N` a power of two, `N <=` the
+    block width); the result is returned to every thread and the trailing
+    barrier protects the slabs."""
+    var tid = Int(thread_idx.x)
+    if tid < N:
+        s_nv[tid] = nv
+        s_nk[tid] = nk
+        s_np[tid] = npos
+        s_npay[tid] = npay
+        s_xv[tid] = xv
+        s_xk[tid] = xk
+    barrier()
+    var step = N // 2
+    while step > 0:
+        if tid < step:
+            var ov = s_nv[tid + step]
+            var ok = s_nk[tid + step]
+            if _arg_better[False](ov, ok, s_nv[tid], s_nk[tid]):
+                s_nv[tid] = ov
+                s_nk[tid] = ok
+                s_np[tid] = s_np[tid + step]
+                s_npay[tid] = s_npay[tid + step]
+            var mv = s_xv[tid + step]
+            var mk = s_xk[tid + step]
+            comptime if SAB_FMAX_HWMAX:
+                s_xv[tid] = max(s_xv[tid], mv)
+            elif SAB_FMAX_HWMAX_SWAP:
+                s_xv[tid] = max(mv, s_xv[tid])
+            else:
+                if _fmax_better(mv, mk, s_xv[tid], s_xk[tid]):
+                    s_xv[tid] = mv
+                    s_xk[tid] = mk
+        barrier()
+        step //= 2
+    var r = (s_nv[0], s_nk[0], s_np[0], s_npay[0], s_xv[0], s_xk[0])
+    barrier()
+    return r
+
+
+@always_inline
+def _tree_max[
+    o1: MutOrigin, o2: MutOrigin, o3: MutOrigin, o4: MutOrigin, //, N: Int,
+](
+    v: Float32,
+    k: Int32,
+    pos: Int32,
+    pay: Float32,
+    s_v: MutPointer[Float32, o1, address_space = AddressSpace.SHARED],
+    s_k: MutPointer[Int32, o2, address_space = AddressSpace.SHARED],
+    s_p: MutPointer[Int32, o3, address_space = AddressSpace.SHARED],
+    s_pay: MutPointer[Float32, o4, address_space = AddressSpace.SHARED],
+) -> Tuple[Float32, Int32, Int32, Float32]:
+    """The (value, key) argmax with its position and payload, over the
+    first `N` threads' entries; the contract is `_tree_dual`'s."""
+    var tid = Int(thread_idx.x)
+    if tid < N:
+        s_v[tid] = v
+        s_k[tid] = k
+        s_p[tid] = pos
+        s_pay[tid] = pay
+    barrier()
+    var step = N // 2
+    while step > 0:
+        if tid < step:
+            var ov = s_v[tid + step]
+            var ok = s_k[tid + step]
+            if _arg_better[True](ov, ok, s_v[tid], s_k[tid]):
+                s_v[tid] = ov
+                s_k[tid] = ok
+                s_p[tid] = s_p[tid + step]
+                s_pay[tid] = s_pay[tid + step]
+        barrier()
+        step //= 2
+    var r = (s_v[0], s_k[0], s_p[0], s_pay[0])
+    barrier()
+    return r
+
+
+@always_inline
+def _publish(
+    xf: MutPointer[Float32, MutAnyOrigin],
+    xi: MutPointer[Int32, MutAnyOrigin],
+    flags: MutPointer[Int32, MutAnyOrigin],
+    epoch: Int32,
+    blk: Int,
+    f0: Float32,
+    f1: Float32,
+    f2: Float32,
+    i0: Int32,
+    i1: Int32,
+    i2: Int32,
+):
+    """Thread 0 of block `blk`: write the block's partial to the slot of
+    this epoch's parity, then RELEASE the flag to `epoch`. The same thread
+    writes the payload and releases, so the release orders the payload."""
+    var base = ((Int(epoch) & 1) * SMO_GRID_MAX_BLOCKS + blk) * SMO_GRID_SLOT
+    xf.unsafe_store(base, f0)
+    xf.unsafe_store(base + 1, f1)
+    xf.unsafe_store(base + 2, f2)
+    xi.unsafe_store(base, i0)
+    xi.unsafe_store(base + 1, i1)
+    xi.unsafe_store(base + 2, i2)
+    Atomic.store[ordering = Ordering.RELEASE](flags.unsafe_offset(blk), epoch)
+
+
+@always_inline
+def _await(flags: MutPointer[Int32, MutAnyOrigin], epoch: Int32, blk: Int):
+    """Spin until block `blk` has published `epoch` (flags only grow, and no
+    block runs more than one epoch ahead of the slowest). The ACQUIRE load's
+    value is consumed by the compare, so it emits on every column
+    (core/device_mutex.mojo)."""
+    while Atomic.load[ordering = Ordering.ACQUIRE](flags.unsafe_offset(blk)) < epoch:
+        pass
+
+
+@always_inline
+def _slot(epoch: Int32, blk: Int) -> Int:
+    return ((Int(epoch) & 1) * SMO_GRID_MAX_BLOCKS + blk) * SMO_GRID_SLOT
+
+
+def smo_grid_solve_kernel[
+    TPB: Int
 ](
     y_array: MutPointer[Float32, MutAnyOrigin],
     n_train_in: Int32,
@@ -144,180 +317,121 @@ def smo_block_solve_kernel[
     eps: Float32,
     return_buff: MutPointer[Float32, MutAnyOrigin],
     max_iter_in: Int32,
+    xf: MutPointer[Float32, MutAnyOrigin],
+    xi: MutPointer[Int32, MutAnyOrigin],
+    flags: MutPointer[Int32, MutAnyOrigin],
 ):
-    """`SmoBlockSolve<math_t, WSIZE><<<1, n_ws>>>(...)` for `svmType =
-    C_SVC`. Launch ONE block of `WSIZE` threads (theirs launches `n_ws`
-    threads of a `WSIZE`-sized reduce; here the padding threads are real
-    and inert)."""
+    """`SmoBlockSolve<math_t, WSIZE>(...)` for `C_SVC` and `EPSILON_SVR`
+    over the grid: launch `ceil(n_ws / TPB)` blocks of `TPB` threads, one
+    working-set element per thread, after `smo_grid_reset_kernel`. Threads
+    past `n_ws` carry the identity of every selection and do nothing else.
+    `xf`, `xi` hold `2 * SMO_GRID_MAX_BLOCKS * SMO_GRID_SLOT` cells, `flags`
+    `SMO_GRID_MAX_BLOCKS`."""
+    comptime GP = SMO_GRID_WS_MAX // TPB
+    comptime assert TPB >= SMO_GRID_TPB_MIN and GP <= TPB, "smo_grid_solve_kernel: TPB out of range"
     var n_ws = Int(n_ws_in)
     var max_iter = Int(max_iter_in)
     var tid = Int(thread_idx.x)
-    var active = tid < n_ws
-    # DEVIATIONS 2623, 2627, 2628: which schedule folds the three
-    # arg-reductions is a kernel-matrix row (the halving trees with a thread
-    # ballot; DEVIATION 2491's warp butterflies; 2627's butterflies with a
-    # lane-0 cross-warp loop; 2628's fused thread-carrying trees). All select
-    # the same element. The f_max sabotage arms need the separate f_max fold,
-    # so a sabotage build takes the tree schedule in place of the fused one.
-    comptime SCHED_ROW = svm_block_solve_schedule_for[TARGET_COLUMN, WSIZE]()
-    comptime SAB_FMAX_ANY = SAB_FMAX_NOKEY or SAB_FMAX_HWMAX or SAB_FMAX_HWMAX_SWAP
-    comptime SCHED = SVM_SCHED_TREE if (
-        (SCHED_ROW == SVM_SCHED_FUSED_TREE or SCHED_ROW == SVM_SCHED_RARY_TREE)
-        and SAB_FMAX_ANY
-    ) else SCHED_ROW
-    #: DEVIATION 2628's R-ary tree: its arity, whether each reduction keeps
-    #: its trailing barrier, and whether the alpha update keeps its second.
-    comptime ARITY = svm_block_solve_tree_arity_for[TARGET_COLUMN, WSIZE]()
-    comptime RARY_PROTECT = not is_defined["MOJOLEARN_SVM_RARY_NO_TRAILING"]()
-    comptime UPDATE_SECOND_BARRIER = SCHED != SVM_SCHED_RARY_TREE or not is_defined[
-        "MOJOLEARN_SVM_UPDATE_ONE_BARRIER"
-    ]()
-    comptime WARP_FOLDS = SCHED == SVM_SCHED_WARP
-    #: DEVIATION 2627's trailing barrier after each lane-0 fold (on unless
-    #: `-D MOJOLEARN_SVM_LANE0_NO_TRAILING`).
-    comptime LANE0_PROTECT = not is_defined["MOJOLEARN_SVM_LANE0_NO_TRAILING"]()
-    #: FAST on Apple: `svm/impl/fast_smo_reduce.mojo` (the f_u argmin and
-    #: f_max argmax in one pass, both levels butterflies, per-site slots, no
-    #: trailing barriers). Same selections as every pinned schedule.
-    #: `-D MOJOLEARN_SVM_FAST_FUSED_OFF` restores the pinned schedule.
-    comptime FAST_FUSED = (
-        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-        and has_apple_gpu_accelerator()
-        and not SAB_FMAX_ANY
-        and not is_defined["MOJOLEARN_SVM_FAST_FUSED_OFF"]()
-        and WSIZE >= WARP_SIZE
-        and WSIZE % WARP_SIZE == 0
-        and WSIZE // WARP_SIZE <= WARP_SIZE
-    )
-    comptime FW = 2 * (WSIZE // WARP_SIZE) if FAST_FUSED else 1
-    var fa_v = stack_allocation[FW, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var fa_k = stack_allocation[FW, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    var fa_t = stack_allocation[FW, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    var fb_v = stack_allocation[FW, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var fb_k = stack_allocation[FW, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    var fb_t = stack_allocation[FW, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var blk = Int(block_idx.x)
+    var n_blocks = Int(grid_dim.x)
+    var p = blk * TPB + tid
+    var active = p < n_ws
 
-    var Kd = stack_allocation[
-        WSIZE, Scalar[DType.float32], address_space = AddressSpace.SHARED
-    ]()
-    var sh_tmp = stack_allocation[
-        2, Scalar[DType.float32], address_space = AddressSpace.SHARED
-    ]()
+    # block tree slabs
+    var s_nv = stack_allocation[TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var s_nk = stack_allocation[TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var s_np = stack_allocation[TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var s_npay = stack_allocation[TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var s_xv = stack_allocation[TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var s_xk = stack_allocation[TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    # partial tree slabs (one entry per block of the grid)
+    var g_nv = stack_allocation[GP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var g_nk = stack_allocation[GP, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var g_np = stack_allocation[GP, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var g_npay = stack_allocation[GP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var g_xv = stack_allocation[GP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var g_xk = stack_allocation[GP, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
 
     var idx = 0
     var y = Float32(0.0)
     var f = Float32(0.0)
     var a = Float32(0.0)
     var C = Float32(0.0)
+    var kd = Float32(0.0)
     # Padding threads carry the largest key, so an active thread always
-    # wins a tie against them and `u`, `l` are real threads (theirs: the
-    # pair's key IS a real tid by construction).
-    var key = Int32(2147483647)
+    # wins a tie against them and `u`, `l` are real elements.
+    var key = _KEY_PAD
     if active:
-        idx = Int(ws_idx.unsafe_load(tid))
+        idx = Int(ws_idx.unsafe_load(p))
         # store values in registers
         y = y_array.unsafe_load(idx)
         f = f_array.unsafe_load(idx)
         a = alpha.unsafe_load(idx)
         C = C_vec.unsafe_load(idx)
-        Kd[tid] = kernel.unsafe_load(tid + tid * n_ws)
+        kd = kernel.unsafe_load(p + p * n_ws)
         key = Int32(idx)
     var a_save = a
-    if tid == 0:
-        sh_tmp[0] = Float32(0.0)
-        sh_tmp[1] = Float32(0.0)
-    barrier()
 
     var n_iter = 0
     var diff_end = Float32(0.0)
     var pos_inf = inf[DType.float32]()
     var neg_inf = -inf[DType.float32]()
+    var epoch = Int32(0)
 
     while n_iter < max_iter:
         # mask values outside of X_upper
         var f_tmp = pos_inf
         if active and in_upper(a, y, C):
             f_tmp = f
-        # select f_max to check stopping condition: the X_lower mask (the
-        # same values whether it is formed before or after the argmin;
-        # nothing between them writes a, y, C or f)
+        # the X_lower mask for f_max (nothing between the two selections
+        # writes a, y, C or f)
         var f_lo = neg_inf
         if active and in_lower(a, y, C):
             f_lo = f
-        var f_u: Float32
-        var u: Int
+        # `tmp_u` of the alpha update, carried by the argmin's winner
+        var pay_u = C - a if y > Float32(0.0) else a
+        var r1 = _tree_dual[TPB](
+            f_tmp, key, Int32(p), pay_u, f_lo, key,
+            s_nv, s_nk, s_np, s_npay, s_xv, s_xk,
+        )
+        if n_blocks > 1:
+            epoch += 1
+            if tid == 0:
+                _publish(xf, xi, flags, epoch, blk, r1[0], r1[3], r1[4], r1[1], r1[2], r1[5])
+            var gnv = pos_inf
+            var gnk = _KEY_PAD
+            var gnp = Int32(0)
+            var gnpay = Float32(0.0)
+            var gxv = neg_inf
+            var gxk = _KEY_PAD
+            if tid < n_blocks:
+                _await(flags, epoch, tid)
+                var s = _slot(epoch, tid)
+                gnv = xf.unsafe_load(s)
+                gnpay = xf.unsafe_load(s + 1)
+                gxv = xf.unsafe_load(s + 2)
+                gnk = xi.unsafe_load(s)
+                gnp = xi.unsafe_load(s + 1)
+                gxk = xi.unsafe_load(s + 2)
+            r1 = _tree_dual[GP](
+                gnv, gnk, gnp, gnpay, gxv, gxk,
+                g_nv, g_nk, g_np, g_npay, g_xv, g_xk,
+            )
+        var f_u = r1[0]
+        var u = Int(r1[2])
+        var tmp_u = r1[3]
         # DEVIATION 635: the key-tied argmax; `f_max` is the winner's own
         # bits (+0.0 or -0.0 as that sample holds it), decided by the key.
-        var f_max: Float32
-        comptime if FAST_FUSED:
-            var rf = fast_argmin_argmax[WSIZE](
-                f_tmp, key, Int32(tid), f_lo, key, Int32(tid), fa_v, fa_k, fa_t)
-            f_u = rf[0]
-            u = Int(rf[1])
-            f_max = rf[2]
-        elif SCHED == SVM_SCHED_FUSED_TREE:
-            # DEVIATION 2628: one tree for the argmin (with its thread) and
-            # the argmax, no ballot.
-            var rf = pinned_block_argmin_argmax_tid[WSIZE](f_tmp, f_lo, key)
-            f_u = rf[0]
-            u = Int(rf[1])
-            f_max = rf[2]
-        elif SCHED == SVM_SCHED_RARY_TREE:
-            # DEVIATION 2628: the same selections on the R-ary tree.
-            var rf = pinned_block_argmin_argmax_tid_rary[WSIZE, ARITY, RARY_PROTECT](
-                f_tmp, f_lo, key
-            )
-            f_u = rf[0]
-            u = Int(rf[1])
-            f_max = rf[2]
-        else:
-            # DEVIATION 2491: the reduction returns the winning THREAD beside
-            # the (value, key) pair; the ballot through threadgroup memory
-            # that used to recover it (two barriers) is gone.
-            comptime if WARP_FOLDS:
-                var res = block_argext[WSIZE, False](f_tmp, key)
-                f_u = res[0]
-                u = Int(res[2])
-            elif SCHED == SVM_SCHED_WARP_LANE0:
-                # DEVIATION 2627: the cross-warp fold on lane 0.
-                var res = block_argext_lane0[WSIZE, False, LANE0_PROTECT](f_tmp, key)
-                f_u = res[0]
-                u = Int(res[2])
-            else:
-                # `u` is the THREAD holding the winning (value, key); one
-                # ballot through threadgroup memory recovers it (keys are
-                # unique).
-                var res = pinned_block_argmin[WSIZE](f_tmp, key)
-                f_u = res[0]
-                if active and key == res[1]:
-                    sh_tmp[0] = Float32(tid)
-                barrier()
-                u = Int(sh_tmp[0])
-                barrier()
-            comptime if SAB_FMAX_NOKEY:
-                f_max = sabotage_block_max_nokey[WSIZE](f_lo)
-            elif SAB_FMAX_HWMAX:
-                f_max = sabotage_block_max_hw[WSIZE, False](f_lo)
-            elif SAB_FMAX_HWMAX_SWAP:
-                f_max = sabotage_block_max_hw[WSIZE, True](f_lo)
-            else:
-                comptime if WARP_FOLDS:
-                    var resm = block_argext[WSIZE, True](f_lo, key)
-                    f_max = resm[0]
-                elif SCHED == SVM_SCHED_WARP_LANE0:
-                    var resm = block_argext_lane0[WSIZE, True, LANE0_PROTECT](f_lo, key)
-                    f_max = resm[0]
-                else:
-                    var resm = pinned_block_argmax[WSIZE](f_lo, key)
-                    f_max = resm[0]
+        var f_max = r1[4]
         var Kui = Float32(0.0)
         if active:
-            Kui = kernel.unsafe_load(u * n_ws + tid)
+            Kui = kernel.unsafe_load(u * n_ws + p)
+        var kd_u = kernel.unsafe_load(u + u * n_ws)
 
         # f_max - f_u is used to check stopping condition.
         var diff = ftz(f_max - f_u)
         if n_iter == 0:
-            if tid == 0:
+            if blk == 0 and tid == 0:
                 return_buff.unsafe_store(0, diff)
             var d10 = ftz(Float32(0.1) * diff)
             diff_end = eps if eps > d10 else d10
@@ -325,7 +439,7 @@ def smo_block_solve_kernel[
             break
 
         if active and f_u < f and in_lower(a, y, C):
-            var eta_ui = ftz(ftz(Kd[tid] + Kd[u]) - ftz(Float32(2.0) * Kui))
+            var eta_ui = ftz(ftz(kd + kd_u) - ftz(Float32(2.0) * Kui))
             # row 39: a compare, not `max`; -0.0 < ETA_EPS is TRUE everywhere
             if eta_ui < ETA_EPS:
                 eta_ui = ETA_EPS
@@ -333,58 +447,45 @@ def smo_block_solve_kernel[
             f_tmp = ftz(ftz(d * d) / eta_ui)
         else:
             f_tmp = neg_inf
-        var l: Int
-        comptime if FAST_FUSED:
-            var res2 = fast_argext[WSIZE, True](f_tmp, key, Int32(tid), fb_v, fb_k, fb_t)
-            l = Int(res2[1])
-        elif WARP_FOLDS:
-            var res2 = block_argext[WSIZE, True](f_tmp, key)
-            l = Int(res2[2])
-        elif SCHED == SVM_SCHED_WARP_LANE0:
-            var res2 = block_argext_lane0[WSIZE, True, LANE0_PROTECT](f_tmp, key)
-            l = Int(res2[2])
-        elif SCHED == SVM_SCHED_FUSED_TREE:
-            var res2 = pinned_block_argext_tid[WSIZE, True](f_tmp, key)
-            l = Int(res2[2])
-        elif SCHED == SVM_SCHED_RARY_TREE:
-            var res2 = pinned_block_argext_tid_rary[WSIZE, ARITY, True, RARY_PROTECT](
-                f_tmp, key
-            )
-            l = Int(res2[2])
-        else:
-            var res2 = pinned_block_argmax[WSIZE](f_tmp, key)
-            if active and key == res2[1]:
-                sh_tmp[0] = Float32(tid)
-            barrier()
-            l = Int(sh_tmp[0])
-            barrier()
+        # `min(tmp_l, q_l)` as this element would form it if it were l
+        # (note: Kui == Kul for this thread)
+        var tmp_l = a if y > Float32(0.0) else C - a
+        var eta_ul = ftz(ftz(kd_u + kd) - ftz(Float32(2.0) * Kui))
+        if eta_ul < ETA_EPS:
+            eta_ul = ETA_EPS
+        var q_l = ftz(ftz(f - f_u) / eta_ul)
+        var pay_l = tmp_l if tmp_l < q_l else q_l
+        var r2 = _tree_max[TPB](f_tmp, key, Int32(p), pay_l, s_nv, s_nk, s_np, s_npay)
+        if n_blocks > 1:
+            epoch += 1
+            if tid == 0:
+                _publish(
+                    xf, xi, flags, epoch, blk, r2[0], r2[3], Float32(0.0),
+                    r2[1], r2[2], Int32(0),
+                )
+            var gv = neg_inf
+            var gk = _KEY_PAD
+            var gp = Int32(0)
+            var gpay = Float32(0.0)
+            if tid < n_blocks:
+                _await(flags, epoch, tid)
+                var s = _slot(epoch, tid)
+                gv = xf.unsafe_load(s)
+                gpay = xf.unsafe_load(s + 1)
+                gk = xi.unsafe_load(s)
+                gp = xi.unsafe_load(s + 1)
+            r2 = _tree_max[GP](gv, gk, gp, gpay, g_nv, g_nk, g_np, g_npay)
+        var l = Int(r2[2])
+        var tmp_l2 = r2[3]
         var Kli = Float32(0.0)
         if active:
-            Kli = kernel.unsafe_load(l * n_ws + tid)
+            Kli = kernel.unsafe_load(l * n_ws + p)
 
         # Update alpha (the clipping argument is in their comment block)
-        if tid == u:
-            sh_tmp[0] = C - a if y > Float32(0.0) else a
-        if tid == l:
-            var tmp_l = a if y > Float32(0.0) else C - a
-            # note: Kui == Kul for this thread
-            var eta_ul = ftz(ftz(Kd[u] + Kd[l]) - ftz(Float32(2.0) * Kui))
-            if eta_ul < ETA_EPS:
-                eta_ul = ETA_EPS
-            var q_l = ftz(ftz(f - f_u) / eta_ul)
-            sh_tmp[1] = tmp_l if tmp_l < q_l else q_l
-        barrier()
-        var tmp_u = sh_tmp[0]
-        var tmp_l2 = sh_tmp[1]
         var q = tmp_u if tmp_u < tmp_l2 else tmp_l2
-        # The second barrier protects `sh_tmp` for a write in the next
-        # segment; only the tree ballot writes it there, so the R-ary
-        # schedule may drop it (DEVIATION 2628).
-        comptime if UPDATE_SECOND_BARRIER and not FAST_FUSED:
-            barrier()
-        if tid == u:
+        if p == u:
             a = ftz(identical_mul_add(q, y, a))  # the default build's fused op (lane/pinned-mul-contract-free)
-        if tid == l:
+        if p == l:
             a = ftz(identical_mul_add(-q, y, a))  # the default build's fused op (lane/pinned-mul-contract-free)
         f = ftz(identical_mul_add(q, ftz(Kui - Kli), f))
         if q == Float32(0.0):
@@ -396,7 +497,7 @@ def smo_block_solve_kernel[
     if active:
         alpha.unsafe_store(idx, a)
         # it is actually y * \Delta \alpha
-        delta_alpha.unsafe_store(tid, ftz(ftz(a - a_save) * y))
+        delta_alpha.unsafe_store(p, ftz(ftz(a - a_save) * y))
     # f is recalculated in f_update, therefore we do not need to save that
-    if tid == 0:
+    if blk == 0 and tid == 0:
         return_buff.unsafe_store(1, Float32(n_iter))

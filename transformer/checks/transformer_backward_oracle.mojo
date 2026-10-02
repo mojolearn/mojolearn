@@ -143,7 +143,8 @@ from gemm.checks.gemm_backward import (
     gemm_backward_a_call,
     gemm_backward_b_call,
 )
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, gemm_oracle
+from gemm.contract import OP_NN, OP_NT
+from gemm.checks.gemm_oracle import gemm_oracle
 from gemm.host.gemm_host_rows import gemm_host_rows
 from checks.numerics import (
     ftz,

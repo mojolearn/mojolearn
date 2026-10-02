@@ -20,7 +20,7 @@ from x_ann.knn_device import knn_enqueue
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_log
 from std.sys.info import has_apple_gpu_accelerator
-from x_ann.switches import ANN3_TSNE_RB32, ANN3_TSNE_RB64, ANN3_TSNE_STEP_ROWS, ANN3_TSNE_ZSUM
+from x_ann.switches import ANN3_TSNE_RB32, ANN3_TSNE_RB64, ANN3_TSNE_STEP_ROWS
 from checks.numerics import identical_div, identical_mul
 from x_ann.tsne_core import ts_q
 from x_ann.tsne_core import (
@@ -114,40 +114,47 @@ def repulse_tiled_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
         rep.unsafe_store(2 * i + 1, r1)
 
 
-def sum_kernel(n: Int32, row_z: F32P, z: F32P):
-    if _tid() == 0:
-        ts_sum_cell(row_z, Int(n), z)
-
-
-#: threads of the FAST Z sum
-comptime ZT = 128
-comptime TS_ZSUM = _FAST_APPLE and ANN3_TSNE_ZSUM
 comptime TS_STEP_ROWS = _FAST_APPLE and ANN3_TSNE_STEP_ROWS
 
 
-def sum_team_kernel(n: Int32, row_z: F32P, z: F32P):
-    """FAST on Apple, OPT-IN (lane ann-apple3): Z from ONE threadgroup of ZT
-    threads. Thread t adds rows t, t + ZT, ...; the ZT sums are joined by a
-    halving tree in threadgroup memory; thread 0 stores Z."""
-    var t = Int(thread_idx.x)
-    var part = stack_allocation[ZT, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-    var acc = Float32(0.0)
-    for i in range(t, Int(n), ZT):
-        acc = acc + row_z.unsafe_load(i)
-    part[t] = acc
-    barrier()
-    var step = ZT // 2
-    while step > 0:
-        var v = Float32(0.0)
-        if t < step:
-            v = part[t] + part[t + step]
-        barrier()
-        if t < step:
-            part[t] = v
-        barrier()
-        step = step // 2
-    if t == 0:
-        z.unsafe_store(0, part[0])
+def z_level_kernel(ln: Int32, src: F32P, dst: F32P):
+    """One level of Z's pinned pairwise tree (`ts_sum_cell`): node q =
+    ftz(c[2q] + c[2q + 1]), an odd last node carried up unchanged."""
+    var q = _tid()
+    var l = Int(ln)
+    if q < (l + 1) // 2:
+        if 2 * q + 1 < l:
+            dst.unsafe_store(q, ts_z_add(src.unsafe_load(2 * q), src.unsafe_load(2 * q + 1)))
+        else:
+            dst.unsafe_store(q, src.unsafe_load(2 * q))
+
+
+def z_root_kernel(ln: Int32, src: F32P, z: F32P):
+    """z = ftz(root) (0 for no rows)."""
+    if _tid() == 0:
+        z.unsafe_store(0, ftz(src.unsafe_load(0)) if Int(ln) > 0 else Float32(0.0))
+
+
+def _ts_z(
+    ctx: DeviceContext, n: Int, mut drz: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
+    mut dzs: DeviceBuffer[DType.float32],
+) raises:
+    """Z = `ts_sum_cell`'s pinned pairwise tree over row_z, one parallel
+    launch per level (ping-pong between drz and dzs; row_z is not read
+    after Z), then the root. cpu-gpu-cleanup c-ann (2026-10-02): replaces
+    the one-thread chain (`sum_kernel`) and Apple's opt-in one-threadgroup
+    sum; the same nodes as the host column's stack form."""
+    var src: F32P = drz.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var dst: F32P = dzs.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var ln = n
+    while ln > 1:
+        var h = (ln + 1) // 2
+        ctx.enqueue_function[z_level_kernel](Int32(ln), src, dst, grid_dim=_grid(h), block_dim=TPB)
+        var t = src
+        src = dst
+        dst = t
+        ln = h
+    ctx.enqueue_function[z_root_kernel](Int32(ln), src, dz.unsafe_ptr(), grid_dim=1, block_dim=1)
 
 
 # lane/gap-nv-classical2: the repulsion and Z on NVIDIA and AMD. The tiled
@@ -368,6 +375,7 @@ def _ts_iter(
     mut drz: DeviceBuffer[DType.float32], mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
     mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
     lr: Float32, mut dcnt: DeviceBuffer[DType.int32], mut dparts: DeviceBuffer[DType.float32],
+    mut dzs: DeviceBuffer[DType.float32],
 ) raises:
     comptime if TS_SPLIT:
         ctx.enqueue_function[repulse_split_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
@@ -381,10 +389,7 @@ def _ts_iter(
         return
     ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
                                                grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
-    comptime if TS_ZSUM:
-        ctx.enqueue_function[sum_team_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=ZT)
-    else:
-        ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
+    _ts_z(ctx, n, drz, dz, dzs)
     comptime if TS_STEP_ROWS:
         ctx.enqueue_function[step_rows_kernel](
             Int32(n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
@@ -404,7 +409,7 @@ def _ts_iter_timed(
     mut dptr: DeviceBuffer[DType.int32], mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32],
     mut drz: DeviceBuffer[DType.float32], mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
     mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
-    lr: Float32, mut t_rep: Int, mut t_sum: Int, mut t_step: Int,
+    lr: Float32, mut t_rep: Int, mut t_sum: Int, mut t_step: Int, mut dzs: DeviceBuffer[DType.float32],
 ) raises:
     """`_ts_iter` for the stage pass only (MOJOLEARN_ANN_STAGES, lane
     ann-apple3): the same three launches, drained one by one, their wall
@@ -414,10 +419,7 @@ def _ts_iter_timed(
                                                grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
     ctx.synchronize()
     var t1 = Int(perf_counter_ns())
-    comptime if TS_ZSUM:
-        ctx.enqueue_function[sum_team_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=ZT)
-    else:
-        ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
+    _ts_z(ctx, n, drz, dz, dzs)
     ctx.synchronize()
     var t2 = Int(perf_counter_ns())
     comptime if TS_STEP_ROWS:
@@ -443,10 +445,11 @@ def _ts_kl(
     ctx: DeviceContext, mut y: DeviceBuffer[DType.float32], n: Int, mut dptr: DeviceBuffer[DType.int32],
     mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32], mut drz: DeviceBuffer[DType.float32],
     mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32], mut dkl: DeviceBuffer[DType.float32],
+    mut dzs: DeviceBuffer[DType.float32],
 ) raises:
     ctx.enqueue_function[repulse_tiled_kernel](Int32(n), y.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
                                                grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
-    ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
+    _ts_z(ctx, n, drz, dz, dzs)
     ctx.enqueue_function[kl_kernel](Int32(n), y.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
                                     dval.unsafe_ptr(), dz.unsafe_ptr(), dkl.unsafe_ptr(), grid_dim=_grid(n),
                                     block_dim=TPB)
@@ -491,6 +494,7 @@ def tsne_fit_device(
     var dcnt = ctx.enqueue_create_buffer[DType.int32](1)
     ctx.enqueue_memset(dcnt, Int32(0))
     var dparts = ctx.enqueue_create_buffer[DType.float32]((n + RS_ROWS - 1) // RS_ROWS + 1)
+    var dzs = ctx.enqueue_create_buffer[DType.float32]((n + 1) // 2 + 1)
     var dkl = ctx.enqueue_create_buffer[DType.float32](n)
     st.mark(ctx, "upload_graph")
     var t_rep = 0
@@ -503,26 +507,27 @@ def tsne_fit_device(
             # the stage pass: each launch drained and timed (ann-apple3)
             if it % 2 == 0:
                 _ts_iter_timed(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
-                               learning_rate, t_rep, t_sum, t_step)
+                               learning_rate, t_rep, t_sum, t_step, dzs)
             else:
                 _ts_iter_timed(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
-                               learning_rate, t_rep, t_sum, t_step)
+                               learning_rate, t_rep, t_sum, t_step, dzs)
         elif it % 2 == 0:
-            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt, dparts)
+            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt, dparts, dzs)
         else:
-            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt, dparts)
+            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt, dparts, dzs)
     st.mark(ctx, "iterations")
     if st.on:
         print("ANN-STAGE tsne_iter repulse", Float64(t_rep) / 1.0e6)
         print("ANN-STAGE tsne_iter sum", Float64(t_sum) / 1.0e6)
         print("ANN-STAGE tsne_iter step", Float64(t_step) / 1.0e6)
     if max_iter % 2 == 0:
-        _ts_kl(ctx, dy, n, dptr, dind, dval, drz, drep, dz, dkl)
+        _ts_kl(ctx, dy, n, dptr, dind, dval, drz, drep, dz, dkl, dzs)
     else:
-        _ts_kl(ctx, dy2, n, dptr, dind, dval, drz, drep, dz, dkl)
+        _ts_kl(ctx, dy2, n, dptr, dind, dval, drz, drep, dz, dkl, dzs)
     ctx.synchronize()
     _ = dcnt^
     _ = dparts^
+    _ = dzs^
     if max_iter % 2 == 0:
         y_out = download_f32(ctx, dy, 2 * n)
     else:

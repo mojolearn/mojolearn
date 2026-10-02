@@ -58,6 +58,7 @@ from checks.numerics import (
     identical_mul_add,
 )
 from core.philox import philox4x32_10
+from gaussian_process.gp_grad_items import gp_grad_blocks, gp_grad_part_item, gp_grad_fin_item, gp_free_count
 
 #: THE NEGATIVE CONTROL. See this file's header.
 comptime GP_GRAD_SABOTAGE = is_defined["MOJOLEARN_GP_GRAD_SABOTAGE"]()
@@ -107,43 +108,6 @@ def gp_restart_uniform(seed: UInt64, restart: Int, dim: Int) -> Float64:
     return Float64(bits53) * bitcast[DType.float64](GP_TWO_POW_M53_BITS)
 
 
-def gp_free_count(
-    kinds: List[Int32], ls_len: List[Int32], free: List[Int32]
-) raises -> Int:
-    """The number of theta entries: 1 per free CONST or WHITE leaf, `ls_len`
-    per free RBF or MATERN leaf. Refuses a flag list the two sides of the
-    binding disagree about, by name."""
-    if len(free) != len(kinds) or len(ls_len) != len(kinds):
-        raise Error(
-            "gpr_lml_grad: the free-flag list holds "
-            + String(len(free))
-            + " entries for a kernel of "
-            + String(len(kinds))
-            + " postfix nodes; one flag per node is required"
-        )
-    var n = 0
-    for t in range(len(kinds)):
-        var f = Int(free[t])
-        var k = Int(kinds[t])
-        if f != 0 and f != 1:
-            raise Error(
-                "gpr_lml_grad: node " + String(t) + " has free flag "
-                + String(f) + "; a flag is 0 (fixed) or 1 (free)"
-            )
-        if f == 0:
-            continue
-        if k == _K_SUM or k == _K_PROD:
-            raise Error(
-                "gpr_lml_grad: node " + String(t) + " is a Sum or Product"
-                " marked free; only leaves carry hyperparameters"
-            )
-        if k == _K_RBF or k == _K_MATERN:
-            n += Int(ls_len[t])
-        else:
-            n += 1
-    return n
-
-
 def gp_lml_gradient_fold(
     dual: List[Float32],
     kinv: List[Float32],
@@ -155,20 +119,25 @@ def gp_lml_gradient_fold(
     serial chain of this file's header. `dual` is `alpha_` (n), `kinv` is
     `K^-1` row-major (n x n), `dk` is the `n_free` gradient matrices, `p`
     ascending, each row-major."""
-    var cells = n * n
-    var g = List[Float32](capacity=n_free)
-    var half = Float32(0.5)
-    comptime if GP_GRAD_SABOTAGE:
-        half = Float32(0.625)
+    var g = List[Float32](length=n_free, fill=Float32(0.0))
+    var half = gp_grad_half()
+    var nb = gp_grad_blocks(n)
+    var part = List[Float32](length=max(n_free * nb, 1), fill=Float32(0.0))
+    var pp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(part.unsafe_ptr()))
+    for t in range(n_free * nb):
+        gp_grad_part_item(
+            t, MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(dual.unsafe_ptr())),
+            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(kinv.unsafe_ptr())),
+            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(dk.unsafe_ptr())), n, nb, pp,
+        )
     for p in range(n_free):
-        var acc = Float32(0.0)
-        var base = p * cells
-        for i in range(n):
-            var ai = ftz(dual[i])
-            for j in range(n):
-                var w = ftz(
-                    identical_mul_add(ai, ftz(dual[j]), ftz(-kinv[i * n + j]))
-                )
-                acc = ftz(identical_mul_add(w, ftz(dk[base + j * n + i]), acc))
-        g.append(ftz(identical_mul(half, acc)))
+        gp_grad_fin_item(p, pp, nb, half, MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(g.unsafe_ptr())))
     return g^
+
+
+@always_inline
+def gp_grad_half() -> Float32:
+    """0.5 (0.625 under -D MOJOLEARN_GP_GRAD_SABOTAGE)."""
+    comptime if GP_GRAD_SABOTAGE:
+        return Float32(0.625)
+    return Float32(0.5)
