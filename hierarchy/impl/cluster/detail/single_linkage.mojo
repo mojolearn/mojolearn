@@ -25,9 +25,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from hierarchy.checks.edge_order import LINK_SAB_NONE
 from hierarchy.impl.cluster.detail.agglomerative import (
     EXTRACT_TPB,
-    build_dendrogram_host,
     extract_flattened_clusters,
 )
+from hierarchy.impl.cluster.detail.dendrogram_device import build_dendrogram_device
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_EXPANDED,
     DISTANCE_L2_SQRT_EXPANDED,
@@ -105,7 +105,7 @@ def build_dist_linkage(
                 mst_rows, mst_cols, mst_weights,
                 False, x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             )
-            build_dendrogram_host(
+            build_dendrogram_device(
                 ctx, mst_rows, mst_cols, mst_weights, m - 1,
                 out_dendrogram, out_distances, out_sizes,
             )
@@ -140,7 +140,7 @@ def build_dist_linkage(
     _ = color^
 
     # `:194-204` Perform hierarchical labeling
-    build_dendrogram_host(
+    build_dendrogram_device(
         ctx, mst_rows, mst_cols, mst_weights, n_edges,
         out_dendrogram, out_distances, out_sizes,
     )

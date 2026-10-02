@@ -176,6 +176,7 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     compute_bins_for_model,
     LeafPartition,
 )
+from gbdt.methods.kernel.pointwise_split_resolve import PW_FUSED_LEVEL
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
     PointwiseTreeWorkspace,
     fit_oblivious_tree_structure_traced,
@@ -1654,6 +1655,19 @@ def fit_ordered(
         var fused_sums = opts.random_strength != Float32(0.0) and not bootstrap_on
         var m0 = Float64(0.0)
         var m1 = Float64(0.0)
+        # DEVIATION 3111: ONE DRAIN FOR THE NOISE SUM, THE BOOTSTRAP AND THE
+        # MAGNITUDES. Off the `fused_sums` arm the tree drained up to three
+        # times here (the noise readback, a drain after the bootstrap that
+        # only kept `draws` alive, the magnitudes readback). The kernels are
+        # in-order on one queue, so the noise sum is still taken from the
+        # unbootstrapped planes and the magnitudes from the bootstrapped
+        # ones; both readbacks ride the magnitudes' drain, the host
+        # arithmetic on them is the same statements run after it, and every
+        # temporary is held past it. `-D MOJOLEARN_GBDT_FUSED_LEVEL_OFF`
+        # restores the three drains.
+        var defer_drain = PW_FUSED_LEVEL and not fused_sums
+        var held = List[DeviceBuffer[DType.float32]]()
+        var held_h = List[HostBuffer[DType.float32]]()
         if fused_sums:
             var part = ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
             if String(getenv("MOJOLEARN_ORD_STD_SPLIT")) != "0":
@@ -1705,26 +1719,31 @@ def fit_ordered(
             )
             var hs = ctx.enqueue_create_host_buffer[DType.float32](1)
             ctx.enqueue_copy(dst_buf=hs, src_buf=s2)
-            ctx.synchronize()
-            var count = 0
-            for f in range(n_folds):
-                count += (
-                    folds[f].quality_evaluate_samples.right
-                    - folds[f].estimate_samples.right
+            if defer_drain:
+                held.append(terms^)
+                held.append(s2^)
+                held_h.append(hs^)
+            else:
+                ctx.synchronize()
+                var count = 0
+                for f in range(n_folds):
+                    count += (
+                        folds[f].quality_evaluate_samples.right
+                        - folds[f].estimate_samples.right
+                    )
+                # the product pinned: inlined, the default build fused it into
+                # `log(n) - model_size` (lane/pinned-mul-contract-free)
+                var mult = ordered_model_length_mult(
+                    n_rows, identical_mul64(Float64(iteration), Float64(opts.learning_rate))
                 )
-            # the product pinned: inlined, the default build fused it into
-            # `log(n) - model_size` (lane/pinned-mul-contract-free)
-            var mult = ordered_model_length_mult(
-                n_rows, identical_mul64(Float64(iteration), Float64(opts.learning_rate))
-            )
-            score_std = Float32(
-                mult
-                * sqrt(Float64(hs[0]) / (Float64(count) + 1e-100))
-                * Float64(opts.random_strength)
-            )
-            _ = terms^
-            _ = s2^
-            _ = hs^
+                score_std = Float32(
+                    mult
+                    * sqrt(Float64(hs[0]) / (Float64(count) + 1e-100))
+                    * Float64(opts.random_strength)
+                )
+                _ = terms^
+                _ = s2^
+                _ = hs^
 
         times.end(ctx, "ord.score_std")
         # 4. the bootstrap, quality slices only
@@ -1741,8 +1760,11 @@ def fit_ordered(
                 quality.unsafe_ptr(), Int32(total),
                 grid_dim=(_grid(total), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
             )
-            ctx.synchronize()
-            _ = draws^
+            if defer_drain:
+                held.append(draws^)
+            else:
+                ctx.synchronize()
+                _ = draws^
 
         times.end(ctx, "ord.bootstrap")
         # the fixed-point scale from the planes as the searcher reads them
@@ -1766,6 +1788,27 @@ def fit_ordered(
             _ = absv^
             _ = mags^
             _ = hm^
+            if len(held_h) > 0:
+                # the deferred noise readback (DEVIATION 3111), the
+                # statements of the branch above
+                var count = 0
+                for f in range(n_folds):
+                    count += (
+                        folds[f].quality_evaluate_samples.right
+                        - folds[f].estimate_samples.right
+                    )
+                # the product pinned: inlined, the default build fused it into
+                # `log(n) - model_size` (lane/pinned-mul-contract-free)
+                var mult = ordered_model_length_mult(
+                    n_rows, identical_mul64(Float64(iteration), Float64(opts.learning_rate))
+                )
+                score_std = Float32(
+                    mult
+                    * sqrt(Float64(held_h[0][0]) / (Float64(count) + 1e-100))
+                    * Float64(opts.random_strength)
+                )
+        _ = held^
+        _ = held_h^
         var scale = Float32(choose_scale(m1 if m1 > m0 else m0, total))
         trace.record_scalar_f32(tag + ".scale", scale)
         trace.record_scalar_f32(tag + ".score_std", score_std)
@@ -1814,6 +1857,11 @@ def fit_ordered(
         # 6. the fold models, then the estimation model
         times.begin(ctx)
         var leaves = List[Float32]()
+        # DEVIATION 3111: the batch's closing drain only kept its buffers
+        # alive for the enqueued `AppendModels`; under the fused schedule
+        # they are held here instead and released after the learn-loss
+        # drain below, which then covers both (one drain, not two).
+        var pend_held = List[_OrderedPending]()
         if batch:
             var pend = List[_OrderedPending]()
             for lp in range(learn_count):
@@ -1866,8 +1914,11 @@ def fit_ordered(
                 est_cursor, opts, est_pools[est_slot], trace,
                 tag + ".estimation", est_times, walker_times,
             )
-            ctx.synchronize()
-            _ = pend^
+            comptime if PW_FUSED_LEVEL:
+                pend_held = pend^
+            else:
+                ctx.synchronize()
+                _ = pend^
         for lp in range(0 if batch else learn_count):
             for f in range(n_folds):
                 var est = folds[f].estimate_samples.right
@@ -1912,6 +1963,7 @@ def fit_ordered(
         )
         ctx.enqueue_copy(dst_buf=h_fv, src_buf=fv)
         ctx.synchronize()
+        _ = pend_held^
         losses.append(-Float64(h_fv[0]) / Float64(n_rows))
         times.end(ctx, "ord.learn_loss")
         _ = bins^

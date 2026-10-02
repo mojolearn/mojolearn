@@ -95,9 +95,9 @@ def cd_fit_binding(
     implemented refusals stay REACHABLE from this surface. A refusal only the
     Python layer can raise is a refusal the Mojo entry never proves it has.
     """
-    if len(params) != 9:
+    if len(params) != 9 and len(params) != 10:
         raise Error(
-            "cd_fit: params must contain 9 values, got " + String(len(params))
+            "cd_fit: params must contain 9 or 10 values, got " + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
@@ -112,12 +112,17 @@ def cd_fit_binding(
     var tol = Float32(Float64(py=params[6]))
     var shuffle = Int(py=params[7]) != 0
     var has_sw = Int(py=params[8]) != 0
+    # 9  row_major (0/1, optional): x_addr is C-ORDER and the device
+    #    transposes it (lane/gap-nv-classical2)
+    var row_major = False
+    if len(params) == 10:
+        row_major = Int(py=params[9]) != 0
     var n_iter = 0
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         n_iter = cd_fit_host(
             ctx, xp, yp, cp, ip, nr, nc, fit_intercept, epochs, alpha,
-            l1_ratio, tol, shuffle, has_sw,
+            l1_ratio, tol, shuffle, has_sw, row_major,
         )
         ctx.synchronize()
     return PythonObject(n_iter)

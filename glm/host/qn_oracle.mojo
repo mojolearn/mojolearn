@@ -148,6 +148,67 @@ from core.host_predict_threads import host_list_ptr
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
 comptime QN_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
+#: QN_TILED (`glm/impl/qn/glm_base.mojo`): the `C == 1` objective's loss
+#: sum, bias mean and `X^T dZ` in the row-tile order every GPU runs.
+#: `-D MOJOLEARN_QN_TILED_OFF=1` restores the 256-chain order (the device
+#: build must take the same define).
+comptime HOST_QN_TILED = not is_defined["MOJOLEARN_QN_TILED_OFF"]()
+comptime HOST_QNT_ROWS = 256
+
+
+def host_qnt_tiles(n: Int) -> Int:
+    return (n + HOST_QNT_ROWS - 1) // HOST_QNT_ROWS
+
+
+def host_qnt_fold(part: List[Float32], off: Int, tiles: Int) -> Float32:
+    """`qnt_fold_kernel`'s fold: lane t takes tiles t, t + STATS_TPB, ...
+    (`ftz(acc + p)`), then the halving tree, flushed."""
+    var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
+    for t in range(STATS_TPB):
+        var acc = Float32(0.0)
+        var k = t
+        while k < tiles:
+            acc = ftz(acc + part[off + k])
+            k += STATS_TPB
+        partials[t] = acc
+    return ftz(host_halving_sum(partials))
+
+
+def host_qnt_sum(v: List[Float32], n: Int) -> Float32:
+    """`qnt_partial_kernel`'s sum outputs then the fold: each tile's rows
+    ascending from 0.0 (`ftz(acc + v[r])`)."""
+    var tiles = host_qnt_tiles(n)
+    var part = List[Float32](length=tiles, fill=Float32(0.0))
+    for k in range(tiles):
+        var acc = Float32(0.0)
+        for r in range(k * HOST_QNT_ROWS, min(n, (k + 1) * HOST_QNT_ROWS)):
+            acc = ftz(acc + v[r])
+        part[k] = acc
+    return host_qnt_fold(part, 0, tiles)
+
+
+def host_qnt_xty(x: List[Float32], dz: List[Float32], n: Int, d: Int) -> List[Float32]:
+    """`qnt_partial_kernel`'s `X^T dZ` cells then the fold: cell j of tile k
+    is `identical_mul_add(x[r, j], dz[r], acc)` over the tile's rows
+    ascending from 0.0 (row by row, every column its own accumulator)."""
+    var tiles = host_qnt_tiles(n)
+    var part = List[Float32](length=tiles * d, fill=Float32(0.0))
+    var acc = List[Float32](length=d, fill=Float32(0.0))
+    var ap = host_list_ptr(acc)
+    var xp = host_list_ptr(x)
+    for k in range(tiles):
+        for j in range(d):
+            acc[j] = Float32(0.0)
+        for r in range(k * HOST_QNT_ROWS, min(n, (k + 1) * HOST_QNT_ROWS)):
+            host_fma_row_into(ap, xp + r * d, dz[r], d)
+        for j in range(d):
+            part[j * tiles + k] = acc[j]
+    var out = List[Float32](length=d, fill=Float32(0.0))
+    for j in range(d):
+        out[j] = host_qnt_fold(part, j * tiles, tiles)
+    return out^
+
+
 #: `qn.h`'s loss ids, `glm/impl/linear_model/qn.mojo`.
 comptime QN_LOSS_LOGISTIC = 0
 comptime QN_LOSS_SQUARED = 1
@@ -452,6 +513,8 @@ struct HostGLM(Movable):
                     host_one_target_lz(self.loss, yi, zi, self.svr_eps) * normalization
                 )
                 self.z[i] = host_one_target_dlz(self.loss, yi, zi, self.svr_eps)
+            comptime if HOST_QN_TILED:
+                return host_qnt_sum(self.loss_terms, n)
         var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
         for t in range(STATS_TPB):
             var acc = Float32(0.0)
@@ -507,6 +570,18 @@ struct HostGLM(Movable):
                         partials[t] = bpart[t * C + cc]
                     var s0 = ftz(host_halving_sum(partials))
                     g[cd + cc] = ftz(s0 * ratio)
+            return
+        comptime if HOST_QN_TILED:
+            var xt = host_qnt_xty(self.x, self.z, n, self.d)
+            for j in range(self.d):
+                var st = ftz(alpha * xt[j])
+                if set_zero:
+                    g[j] = st
+                else:
+                    g[j] = ftz(st + g[j])
+            if self.fit_intercept:
+                var s0t = host_qnt_sum(self.z, n)
+                g[self.d] = ftz(s0t * (Float32(1.0) / Float32(n)))
             return
         var xtdz = host_xty(self.x, self.z, n, self.d)
         for j in range(self.d):

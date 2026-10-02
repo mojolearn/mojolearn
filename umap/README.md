@@ -204,7 +204,7 @@ not the graph, the init or any parameter:
 
 - the two inits agree. Ours with the optimizer effectively off scored 0.9097
   and cuML's the same way 0.9104;
-- our own serial host optimizer (`-D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER=1`),
+- our own serial host optimizer (the opt-in `-D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER`, since removed),
   on the same graph and the same init, scored 0.9796 (retention 0.4987),
   ABOVE cuML, in 48.6 s against the device optimizer's 2.6 s;
 - cuML's own edge-parallel kernel (`force_serial_epochs=False`) drops them

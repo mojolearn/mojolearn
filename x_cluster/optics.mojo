@@ -16,7 +16,6 @@ strictly lower. The xi and dbscan extractions are the reference's host logic,
 the ratios in Float64 from the Float32 plot. sklearn's `np.around(...,
 decimals=precision)` of the core and reach distances is not carried
 (NOT_IMPLEMENTED.tsv)."""
-from std.math import sqrt
 from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul64
@@ -32,12 +31,8 @@ from x_cluster.ops import ClusterOps
 # agglomerative).
 comptime OPTICS_SIMD = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_OPTICS_SIMD"]()
 comptime XC_ALLOC = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_XC_ALLOC"]()
-# `-D MOJOLEARN_OPTICS_HOSTROWS=1` (with OPTICS_SIMD, euclidean, the GPU
-# binding): the n x n distances are not read to the host; the loop forms the
-# one row a step needs from X (n * d operations by vectors). The core
-# distances stay the device's. The host's float32 row may differ from the
-# device's in the last place (bits move; the paired quality check).
-comptime OPTICS_HOSTROWS = OPTICS_SIMD and is_defined["MOJOLEARN_OPTICS_HOSTROWS"]()
+# The opt-in host distance rows (`-D MOJOLEARN_OPTICS_HOSTROWS`) were removed
+# (hr-optin-flags): the loop reads the device's n x n distances.
 comptime _OW = 8
 
 
@@ -75,7 +70,6 @@ def _relax1(dd: Float32, j: Int, cp: Float32, max_eps: Float32, point: Int, rp: 
 def _order_simd(
     dist: List[Float32], core: List[Float32], n: Int, max_eps: Float32,
     mut ordering: List[Int], mut reach: List[Float32], mut pred: List[Int],
-    x: List[Float32], d: Int, host_rows: Bool,
 ):
     """The ordering loop of `optics_graph`, the same decisions by vectors.
 
@@ -94,16 +88,6 @@ def _order_simd(
     var mp: FPtr = pm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var qp: IPtr = pr.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var dp = dist.unsafe_ptr()
-    # host_rows: X feature-major (padded by a vector) and the step's row
-    var np = n + _OW
-    var xt = List[Float32](length=(d * np if host_rows else 1), fill=Float32(0))
-    var rowbuf = List[Float32](length=(np if host_rows else 1), fill=Float32(0))
-    if host_rows:
-        for j in range(n):
-            for f in range(d):
-                xt[f * np + j] = x[j * d + f]
-    var xp = xt.unsafe_ptr()
-    var bp: FPtr = rowbuf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var zero = SIMD[DType.float32, _OW](0)
     var ev = SIMD[DType.float32, _OW](max_eps)
     for _step in range(n):
@@ -145,37 +129,19 @@ def _order_simd(
             var cp = core[point]
             var cpv = SIMD[DType.float32, _OW](cp)
             var pv = SIMD[DType.int32, _OW](Int32(point))
-            if host_rows:
-                j = 0
-                while j < n:
-                    var acc = SIMD[DType.float32, _OW](0)
-                    for f in range(d):
-                        var t = SIMD[DType.float32, _OW](x[point * d + f]) - (xp + f * np).load[width=_OW](j)
-                        acc = acc + t * t
-                    var dd = sqrt(acc)
-                    if j + _OW <= n:
-                        _relax(dd, j, cpv, ev, zero, pv, rp, mp, qp)
-                    else:
-                        (bp + j).store(dd)
-                        for q in range(j, n):
-                            _relax1(bp[q], q, cp, max_eps, point, rp, mp, qp)
-                    j += _OW
-            else:
-                var row = dp + point * n
-                j = 0
-                while j + _OW <= n:
-                    _relax(row.load[width=_OW](j), j, cpv, ev, zero, pv, rp, mp, qp)
-                    j += _OW
-                while j < n:
-                    _relax1(row[j], j, cp, max_eps, point, rp, mp, qp)
-                    j += 1
+            var row = dp + point * n
+            j = 0
+            while j + _OW <= n:
+                _relax(row.load[width=_OW](j), j, cpv, ev, zero, pv, rp, mp, qp)
+                j += _OW
+            while j < n:
+                _relax1(row[j], j, cp, max_eps, point, rp, mp, qp)
+                j += 1
     pred = List[Int](capacity=n)
     for i in range(n):
         pred.append(Int(pr[i]))
     _ = pm^
     _ = pr^
-    _ = xt^
-    _ = rowbuf^
 
 
 def optics_graph[O: ClusterOps](
@@ -207,14 +173,10 @@ def optics_graph[O: ClusterOps](
     for i in range(n):
         if core[i] > max_eps:
             core[i] = inf
-    comptime if OPTICS_HOSTROWS:
-        if n >= _OW and metric == -1 and ops.fast_device():
-            _order_simd(List[Float32](length=1, fill=Float32(0)), core, n, max_eps, ordering, reach, pred, x, d, True)
-            return
     var dist = ops.get(dm, n * n)
     comptime if OPTICS_SIMD:
         if n >= _OW:
-            _order_simd(dist, core, n, max_eps, ordering, reach, pred, x, d, False)
+            _order_simd(dist, core, n, max_eps, ordering, reach, pred)
             return
     reach = List[Float32](length=n, fill=inf)
     pred = List[Int](length=n, fill=-1)

@@ -17,5 +17,5 @@ LabelPropagation / LabelSpreading callable kernels	REFUSED BY NAME	'rbf' and 'kn
 KNNImputer metric other than nan_euclidean, callable weights (numeric missing_values IMPLEMENTED)	REFUSED BY NAME	The imputation item computes nan_euclidean only; a numeric missing_values is mapped to NaN first, as sklearn's mask
 PageRank nstart and dangling vector (weight attribute name: a dense matrix carries the weights)	IMPLEMENTED	nstart normalized as networkx; dangling mass follows the caller's vector (sabotage 5216_pagerank_dangling_follows_p)
 connected_components connection='strong' on a directed graph	REFUSED BY NAME	The min-label product computes weak connectivity only
-Louvain seed (networkx shuffles the visit order)	DEVIATION 5204	Visit order pinned ascending, ties to the lowest community id; seed accepted and unused
+Louvain seed (networkx shuffles the visit order)	DEVIATION 5204	Colour-batched parallel local moving in a fixed order (x_neighbors/graph_par.mojo), ties to the lowest community id; seed accepted and unused
 SVGP hyperparameter and variational optimization (GPflow training loop), whiten, other kernels / likelihoods, mean functions	DEVIATION 5205	q(u) is set to its closed-form optimum for the caller's hyperparameters (squared exponential, scalar lengthscale, Gaussian likelihood, zero mean); nothing is trained by gradient steps
