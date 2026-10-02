@@ -1620,21 +1620,3 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
     _ = d_cent^
     _ = d_std^
     _ = d_dsc^
-            return
-    ctx.enqueue_function[nc_means_kernel](
-        d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_cent.unsafe_ptr(), d_dsc.unsafe_ptr(),
-        Int64(n), Int64(d), Int64(n_classes), grid_dim=max(tiles, 1), block_dim=NCS_NT,
-    )
-    ctx.enqueue_function[nc_std_kernel](
-        d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_cent.unsafe_ptr(), d_std.unsafe_ptr(),
-        Int64(n), Int64(d), Int64(n_classes), grid_dim=max(tiles, 1), block_dim=NCS_NT,
-    )
-    _down(ctx, d_cent, cent, n_classes * d)
-    _down(ctx, d_std, std, d)
-    _down(ctx, d_dsc, dsc, d)
-    ctx.synchronize()
-    _ = d_x^
-    _ = d_lab^
-    _ = d_cent^
-    _ = d_std^
-    _ = d_dsc^
