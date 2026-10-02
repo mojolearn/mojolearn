@@ -3246,6 +3246,60 @@ def _dist(k, A, B, kind, pw, same=False):
     return D
 
 
+#: FAST on Apple (lane/apple-fast-isotonic-knn, 2026-10-02): LLE's neighbour
+#: lists from the x_neighbors lane's fused k-NN. Main selects them with the
+#: `graph_knn` cell over the n x n squared-distance matrix (`_knn_mats`,
+#: lane hr2-graph-embed); MOJOLEARN_LLE_FAST_KNN=1 takes `xn_knn_sq_tiled`
+#: instead: ascending by (squared distance, index), the query's own row
+#: dropped, no n x n matrix (with `-D MOJOLEARN_XN_FAST_MMA_ROUTE=1` the
+#: binding routes it through fast_mma_knn). FAST tier only; the same lists
+#: up to the distance rounding of the fused item.
+_LLE_FAST_KNN = _os.environ.get("MOJOLEARN_LLE_FAST_KNN", "") == "1"
+
+
+def _knn_fused_device(k, Q, X, n_neighbors, exclude_self):
+    """(indices array('i'), squared distances array('f')), n x n_neighbors
+    row-major, from the x_neighbors binding's `xn_knn_sq_tiled`; None when
+    the binding or the shape is not there (the caller runs main's path)."""
+    try:
+        fn = getattr(_backend.binding("_mojolearn_x_neighbors", k.mode), "xn_knn_sq_tiled")
+    except Exception:
+        return None
+    n, d = Q.r, Q.c
+    m = X.r
+    nn = int(n_neighbors)
+    if X.c != d or nn < 1 or nn + (1 if exclude_self else 0) > m:
+        return None
+    dist = array.array("f", [0.0]) * (n * nn)
+    idx = array.array("i", [0]) * (n * nn)
+    fn([Q.addr, X.addr, dist.buffer_info()[0], idx.buffer_info()[0]],
+       [n, m, d, nn, 1 if exclude_self else 0], [])
+    return idx, dist
+
+
+def _knn_mats_device(k, Q, X, n_neighbors, exclude_self):
+    """`_knn_mats` (kind 0) through `_knn_fused_device`: the index matrix
+    holds the column numbers as exact floats, as `graph_knn` writes them
+    (one C-level cast of the int32 store, no Python loop); None when the
+    fused k-NN is not there."""
+    got = _knn_fused_device(k, Q, X, n_neighbors, exclude_self)
+    if got is None:
+        return None
+    nn = int(n_neighbors)
+    return _M(array.array("f", got[0]), Q.r, nn), _M(got[1], Q.r, nn)
+
+
+def _knn_lists_device(k, Q, X, n_neighbors, exclude_self):
+    """`_knn_lists` (kind 0) through `_knn_fused_device`."""
+    got = _knn_fused_device(k, Q, X, n_neighbors, exclude_self)
+    if got is None:
+        return None
+    nn = int(n_neighbors)
+    il = got[0].tolist()
+    dl = got[1].tolist()
+    return ([il[i * nn:(i + 1) * nn] for i in range(Q.r)], [dl[i * nn:(i + 1) * nn] for i in range(Q.r)])
+
+
 def _knn_mats(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
     """`_knn_lists` as two matrices (indices as exact floats, distances),
     n x n_neighbors, selected by the `graph_knn` cell (resident on the GPU
@@ -3254,12 +3308,16 @@ def _knn_mats(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
     return k.graph_knn(D, n_neighbors, exclude_self)
 
 
-def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
+def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0, device_ok=False):
     """(indices, distances) of the n_neighbors nearest rows of X for every
     row of Q, ascending, ties to the lower index; `exclude_self` drops the
     query's own index (queries ARE the training rows). kind 0 returns
     SQUARED Euclidean distances (the callers take the root); any other kind
     the `_dist` distances themselves."""
+    if kind == 0 and device_ok and _LLE_FAST_KNN and k.mode == "fast":
+        got = _knn_lists_device(k, Q, X, n_neighbors, exclude_self)
+        if got is not None:
+            return got
     im, dm = _knn_mats(k, Q, X, n_neighbors, exclude_self, kind, pw)
     nn = n_neighbors
     iv, dv = im.s, dm.s
@@ -3998,7 +4056,14 @@ class LocallyLinearEmbedding(_Base):
         if self.method == "standard":
             # lane hr2-graph-embed: the kNN, the barycenter weights and I - W
             # as cells, I - W resident on the GPU binding
-            idm, _ = _knn_mats(k, M, M, nn, True)
+            idm = None
+            if _LLE_FAST_KNN and k.mode == "fast":
+                # FAST on Apple (lane/apple-fast-isotonic-knn): the fused
+                # k-NN's index matrix, no n x n distance matrix built
+                kn = _knn_mats_device(k, M, M, nn, True)
+                idm = kn[0] if kn is not None else None
+            if idm is None:
+                idm, _ = _knn_mats(k, M, M, nn, True)
             wb = k.barycenter(M, M, idm, self.reg)
             fn = _lle_sparse_entry(k) if iterative else None
             if fn is not None:
@@ -4008,7 +4073,7 @@ class LocallyLinearEmbedding(_Base):
             IW = None if got is not None else k.graph_lle_iw(idm, wb, n)
             idx = None
         else:
-            idx, _ = _knn_lists(k, M, M, nn, True)
+            idx, _ = _knn_lists(k, M, M, nn, True, device_ok=True)
         if idx is None:
             pass
         elif self.method == "ltsa":
