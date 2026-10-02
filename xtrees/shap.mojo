@@ -20,7 +20,10 @@ The flat forest (ensemble/flatnode.mojo): tree t is nodes offsets[t] ..
 offsets[t+1]; a leaf has left == -1; children are left and left + 1,
 tree-relative; `x[colid] <= quesval` goes LEFT.
 """
+from std.os import getenv
 from checks.numerics import identical_mul64
+from core.host_lanes import host_row_tasks
+from core.host_parallel import host_parallelize
 
 
 struct _Path(Movable):
@@ -207,16 +210,45 @@ def tree_shap(
     """phi[i, f, j] += scale * the TreeSHAP value of feature f for output j
     of row i, trees in order (phi zeroed by the caller). `leaves` holds k
     values per node."""
+    # The rows over host tasks (lane neural-pass31): a row's phi cells are
+    # its own, and each task walks the trees in order for every row of its
+    # block, so every phi cell still accumulates its trees ascending, the
+    # leaf terms within a tree in the recursion's order: the same sums in
+    # the same order as the serial trees-outside loop. One path scratch per
+    # task, sized by the deepest tree. MOJOLEARN_XTREES_SHAP_TASKS forces
+    # the task count (1 = the serial walk).
+    var maxd = 0
+    var nodes = 0
     for t in range(n_trees):
         var lo = Int(offsets[unsafe_offset=t])
         var count = Int(offsets[unsafe_offset=t + 1]) - lo
         if count < 1:
             raise Error("x_trees tree_shap: empty tree")
-        var maxd = _tree_depth(left, lo, count) + 2
-        var p = _Path((maxd * (maxd + 1)) // 2 + maxd + 2)
-        for i in range(n):
-            _recurse(colid, quesval, left, leaves, cover, lo, k, x, i * d, phi, i * d * k, scale, p, 0, 0, 0,
-                     1.0, 1.0, -1)
+        nodes += count
+        var dt = _tree_depth(left, lo, count) + 2
+        if dt > maxd:
+            maxd = dt
+    var plen = (maxd * (maxd + 1)) // 2 + maxd + 2
+    var tasks = host_row_tasks(n, 8 * nodes)
+    var forced = Int(getenv("MOJOLEARN_XTREES_SHAP_TASKS", "0"))
+    if forced > 0:
+        tasks = max(1, min(n, forced))
+    var chunk = (n + tasks - 1) // tasks
+    def _rows(task: Int) {imm colid, imm quesval, imm left, imm leaves, imm cover, imm offsets, imm x, imm phi,
+                          imm n, imm d, imm n_trees, imm k, imm scale, imm plen, imm chunk}:
+        var p = _Path(plen)
+        var r0 = task * chunk
+        var r1 = min(r0 + chunk, n)
+        for t in range(n_trees):
+            var lo = Int(offsets[unsafe_offset=t])
+            for i in range(r0, r1):
+                _recurse(colid, quesval, left, leaves, cover, lo, k, x, i * d, phi, i * d * k, scale, p, 0, 0, 0,
+                         1.0, 1.0, -1)
+        _ = p^
+    if tasks <= 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, tasks)
 
 
 def expected_value(

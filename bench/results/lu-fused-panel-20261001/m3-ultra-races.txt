@@ -1,0 +1,6 @@
+lu-factor-main  ms=14499.340 digest=43e06346de01739b  
+lu-factor-branch  ms=15572.706 digest=43e06346de01739b  
+lu-factor-restore  ms=14464.517 digest=43e06346de01739b  
+lu-solve-main  ms=14509.336 digest=43e06346de01739b  
+lu-solve-branch  ms=15563.332 digest=43e06346de01739b  
+lu-solve-restore  ms=14494.522 digest=43e06346de01739b  

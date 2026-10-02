@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "/Users/ec2-user/mojolearn-apple-verify/tools/strides_digest.py", line 17, in <module>
+    y = blk.forward(x); g = blk.backward(x, dy)
+                            ~~~~~~~~~~~~^^^^^^^
+  File "/Users/ec2-user/apple-verify-0832/venv/lib/python3.13/site-packages/mojolearn/_mamba_impl.py", line 1781, in backward
+    return self._prefill_backward(x, grad_output, "mamba3_backward")
+           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ec2-user/apple-verify-0832/venv/lib/python3.13/site-packages/mojolearn/_mamba_impl.py", line 423, in _prefill_backward
+    native(addresses, params)
+    ~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Users/ec2-user/apple-verify-0832/venv/lib/python3.13/site-packages/mojolearn/_mamba_impl.py", line 1632, in <lambda>
+    return lambda addresses, params: session_backward(session, addresses, params)
+                                     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exception: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: Failed to create compute pipeline state (GPU machine code generation): Threadgroup memory size (35328) exceeds the maximum threadgroup memory allowed (32768)
+To get more accurate error information, set MODULAR_DEBUG=device-sync-mode.

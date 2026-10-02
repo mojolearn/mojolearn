@@ -16,6 +16,7 @@ from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
 from sequence.ets import ets_scratch
 from sequence.garch import GARCH_SNAP
+from sequence.moe_tiled import TILE_P, TILE_Q
 from sequence.prophet import MEM, ProphetData, _dot, _fg_prior
 from sequence.prophet import div as _pdiv
 from sequence.ops import add as p_add, fma3 as p_fma3, ld as p_ld, mul as p_mul, st as p_st, sub as p_sub
@@ -1411,6 +1412,10 @@ def prophet_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject
     return PythonObject(B * M)
 
 
+def fptr_of(xs: List[Float32]) -> FP:
+    return FP(unsafe_from_address=Int(xs.unsafe_ptr()))
+
+
 def moe_forward_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     """The Mixtral sparse MoE block forward (`sequence/moe.mojo`).
     addrs = [x (T, D), router (E, D), gate_up (E, 2F, D), down (E, D, F),
@@ -1451,14 +1456,68 @@ def moe_forward_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
     a.i2 = k
     a.i3 = ival(ip, 5)
     ex.launch[OP_MOE_ROUTE](a, T)
+    # The pairs (token, pick) grouped by expert for the tiled device
+    # products (lane neural-pass29, sequence/moe_tiled.mojo): `order` the
+    # pair indices sorted by expert (stable), `poff` each expert's first
+    # pair, `boff` each expert's first block of TILE_P pairs x TILE_Q
+    # outputs. The host executor runs the items and reads none of these.
+    ex.sync()
+    var sel_host = List[Float32](length=T * k, fill=Float32(0.0))
+    ex.download(fptr_of(sel_host), Sel, T * k)
+    var counts = List[Int](length=En + 1, fill=0)
+    for i in range(T * k):
+        counts[Int(sel_host[i]) + 1] += 1
+    var poff_host = List[Float32](length=En + 1, fill=Float32(0.0))
+    var running = 0
+    for e in range(En):
+        poff_host[e] = Float32(running)
+        running += counts[e + 1]
+    poff_host[En] = Float32(running)
+    var cursor = List[Int](length=En, fill=0)
+    for e in range(En):
+        cursor[e] = Int(poff_host[e])
+    var order_host = List[Float32](length=T * k, fill=Float32(0.0))
+    for i in range(T * k):
+        var e = Int(sel_host[i])
+        order_host[cursor[e]] = Float32(i)
+        cursor[e] += 1
+    var n_ftiles = (F + TILE_Q - 1) // TILE_Q
+    var n_dtiles = (D + TILE_Q - 1) // TILE_Q
+    var boff_h = List[Float32](length=En + 1, fill=Float32(0.0))
+    var boff_o = List[Float32](length=En + 1, fill=Float32(0.0))
+    var blocks_h = 0
+    var blocks_o = 0
+    for e in range(En):
+        boff_h[e] = Float32(blocks_h)
+        boff_o[e] = Float32(blocks_o)
+        var ptiles = (counts[e + 1] + TILE_P - 1) // TILE_P
+        blocks_h += ptiles * n_ftiles
+        blocks_o += ptiles * n_dtiles
+    boff_h[En] = Float32(blocks_h)
+    boff_o[En] = Float32(blocks_o)
+    var Order = ex.alloc(T * k)
+    ex.upload(Order, fptr_of(order_host), T * k)
+    var Poff = ex.alloc(En + 1)
+    ex.upload(Poff, fptr_of(poff_host), En + 1)
+    var BoffH = ex.alloc(En + 1)
+    ex.upload(BoffH, fptr_of(boff_h), En + 1)
+    var BoffO = ex.alloc(En + 1)
+    ex.upload(BoffO, fptr_of(boff_o), En + 1)
+    var S = ex.alloc(T * k * D)
     var b = Args()
     b.p0 = X
     b.p1 = Gu
     b.p2 = Sel
     b.p3 = H
+    b.p4 = Order
+    b.p5 = Poff
+    b.p6 = BoffH
     b.i0 = D
     b.i1 = F
     b.i2 = k
+    b.i3 = En
+    b.i4 = blocks_h
+    b.i5 = n_ftiles
     ex.launch[OP_MOE_HIDDEN](b, T * k * F)
     var c = Args()
     c.p0 = H
@@ -1466,10 +1525,24 @@ def moe_forward_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
     c.p2 = Sel
     c.p3 = W
     c.p4 = Y
+    c.p5 = S
+    c.p6 = Order
+    c.p7 = Poff
+    c.p8 = BoffO
     c.i0 = D
     c.i1 = F
     c.i2 = k
+    c.i3 = En
+    c.i4 = blocks_o
+    c.i5 = n_dtiles
     ex.launch[OP_MOE_OUT](c, T * D)
+    _ = sel_host^
+    _ = order_host^
+    _ = poff_host^
+    _ = boff_h^
+    _ = boff_o^
+    _ = counts^
+    _ = cursor^
     ex.sync()
     ex.download(fptr(addrs[4], "y"), Y, T * D)
     ex.download(fptr(addrs[5], "logits"), L, T * En)

@@ -1,0 +1,18 @@
+AMD
+build rc=0
+check-ivf FAST rc=0
+check-ivf IDENTICAL rc=0
+before rep1 RESULT fit 3484.2 ms search 557.5 ms sha 95089ab768e8be7a
+before rep2 RESULT fit 3482.8 ms search 558.8 ms sha 95089ab768e8be7a
+after rep1 RESULT fit 3447.9 ms search 70.1 ms sha 95089ab768e8be7a
+after rep2 RESULT fit 3445.7 ms search 69.7 ms sha 95089ab768e8be7a
+NVIDIA
+build rc=0
+check-ivf FAST rc=0
+check-ivf IDENTICAL rc=0
+before rep1 RESULT fit 2865.4 ms search 843.0 ms sha 95089ab768e8be7a
+before rep2 RESULT fit 2702.6 ms search 798.3 ms sha 95089ab768e8be7a
+after rep1 RESULT fit 2678.0 ms search 248.8 ms sha 95089ab768e8be7a
+after rep2 RESULT fit 2595.0 ms search 194.1 ms sha 95089ab768e8be7a
+
+[exited with code 0]

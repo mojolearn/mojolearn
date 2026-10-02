@@ -1,0 +1,8 @@
+qr before taxi ms=966.635 digest=e54f8db0f5ca6525 
+qr before istella ms=21007.579 digest=76e60d3379a2735a 
+qr after taxi ms=269.381 digest=e54f8db0f5ca6525 
+qr after istella ms=8393.155 digest=76e60d3379a2735a 
+svd before taxi ms=985.909 digest=f07891b9aaf42a98 
+svd before istella ms=42177.205 digest=92c189cb2337dc73 
+svd after taxi ms=345.493 digest=f07891b9aaf42a98 
+svd after istella ms=32230.036 digest=92c189cb2337dc73 

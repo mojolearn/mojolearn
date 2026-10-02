@@ -19,19 +19,24 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 
 from x_decomp.cells import F32Ptr
 from x_decomp.device import (
+    _down,
+    _up_into,
     absmax_scratch,
     colsum_scratch,
     launch_absmax,
     orth_on_device,
+    orth_on_device_diag,
     gemm_scratch,
     launch_colsum,
     launch_ew,
     launch_gemm,
     launch_rowsum,
     launch_sqdist,
+    launch_trisolve,
     lda_rows_kernel,
     rowsum_scratch,
     TPB,
@@ -175,8 +180,7 @@ def dev_upload_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises 
     _ = _ptr(i, cnt)
     with GILReleased(Python()):
         var ctx = xd_ctx()
-        if cnt > 0:
-            ctx.enqueue_copy(dst_buf=p[].bufs[i].create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
+        _up_into(ctx, p[].bufs[i], src, cnt)
         ctx.synchronize()
     return PythonObject(cnt)
 
@@ -190,8 +194,7 @@ def dev_download_py(id: PythonObject, addr: PythonObject, n: PythonObject) raise
     _ = _ptr(i, cnt)
     with GILReleased(Python()):
         var ctx = xd_ctx()
-        if cnt > 0:
-            ctx.enqueue_copy(dst_ptr=dst, src_buf=p[].bufs[i].create_sub_buffer[DType.float32](0, cnt))
+        _down(ctx, p[].bufs[i], dst, cnt)
         ctx.synchronize()
     return PythonObject(cnt)
 
@@ -231,6 +234,20 @@ def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObje
                 m, k, n, ta, tb)
     pool_free(sid)
     return PythonObject(m * n)
+
+
+def dev_trisolve_py(lu: PythonObject, idx: PythonObject, src: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`trisolve_py` on device ids, enqueued (no sync)."""
+    var n = _n(p, 0)
+    var nrhs = _n(p, 1)
+    var trans = _n(p, 2)
+    if n >= 1 << 24:
+        raise Error("x_decomp: trisolve row numbers exceed float32's exact integers")
+    var sid = pool_alloc(max(n * nrhs, 1))
+    launch_trisolve(xd_ctx(), _ptr(_id(lu), n * n), _ptr(_id(idx), n), _ptr(_id(src), n * nrhs),
+                    _ptr(_id(dst), n * nrhs), _ptr(sid, n * nrhs), n, nrhs, trans)
+    pool_free(sid)
+    return PythonObject(n)
 
 
 def dev_colsum_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
@@ -296,6 +313,33 @@ def dev_orth_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> P
         ctx.enqueue_copy(dst_buf=sub, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
         with GILReleased(Python()):
             orth_on_device(ctx, sub, m, l)
+    return PythonObject(cells)
+
+
+def dev_orth_diag_py(a: PythonObject, dst: PythonObject, diag: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`dev_orth_py`, and the host floats at `diag` (l) = the product of the
+    two passes' R diagonals (`orth_on_device_diag`, lane neural-pass17)."""
+    var m = _n(p, 0)
+    var l = _n(p, 1)
+    var cells = m * l
+    var ia = _id(a)
+    var io = _id(dst)
+    _ = _ptr(ia, cells)
+    _ = _ptr(io, cells)
+    var pd = F32Ptr(unsafe_from_address=Int(py=diag))
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    var dd = ctx.enqueue_create_buffer[DType.float32](l if l > 0 else 1)
+    enqueue_fill(ctx, dd, Float32(1.0))
+    if cells > 0:
+        var sub = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
+        ctx.enqueue_copy(dst_buf=sub, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+        with GILReleased(Python()):
+            orth_on_device_diag(ctx, sub, m, l, dd, True)
+    if l > 0:
+        ctx.enqueue_copy(dst_ptr=pd, src_buf=dd.create_sub_buffer[DType.float32](0, l))
+    ctx.synchronize()
+    _ = dd^
     return PythonObject(cells)
 
 

@@ -43,12 +43,16 @@ from training.byte_lm import (
     _unpack_block,
     byte_dims,
 )
-from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into
+from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into, download_f32_into_scanned
+from core.device_arena import arena_begin, arena_end, arena_release
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_oracle import OP_NT
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
+from std.time import perf_counter_ns
 from transformer.impl.llama.modeling_llama import (
+    timing_on,
+    timing_tick,
     LlamaDeviceStages,
     LlamaDeviceWeights,
     LlamaKVCache,
@@ -122,12 +126,15 @@ struct ByteLogitsScratch(Movable):
     var stages: List[LlamaDeviceStages]
     var logits: DeviceBuffer[DType.float32]
     var head_ws: DeviceBuffer[DType.float32]
+    var arena_id: Int
 
     def __init__(out self, ctx: DeviceContext, batch: Int, length: Int, config: ByteConfig) raises:
         var m = batch * length
         var dims = byte_dims(config)
         self.batch = batch
         self.length = length
+        # lane/neural-pass43: the scratch's buffers carved from arena chunks
+        self.arena_id = arena_begin()
         self.ids = _zeros_i32(ctx, m)
         self.x = _zeros(ctx, m * config.d_model)
         self.cache = LlamaKVCache(ctx, batch, dims, length)
@@ -136,6 +143,13 @@ struct ByteLogitsScratch(Movable):
             self.stages.append(LlamaDeviceStages(ctx, batch, length, length, dims, lean=True))
         self.logits = _zeros(ctx, m * config.vocab_size)
         self.head_ws = _zeros(ctx, identical_gemm_workspace_max_floats(m, config.vocab_size, config.d_model))
+        arena_end(self.arena_id)
+
+    def __deinit__(deinit self):
+        try:
+            arena_release(self.arena_id)
+        except:
+            pass
 
     def fits(self, batch: Int, length: Int) -> Bool:
         return self.batch == batch and self.length == length
@@ -171,8 +185,11 @@ def _logits_enqueue(
     if len(inputs) != m:
         raise Error("byte LM logits: ids must hold batch * length tokens")
 
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
     ctx.enqueue_copy(dst_buf=sc.ids, src_ptr=inputs.unsafe_ptr())
     identical_embedding_forward_into(ctx, sc.x, emb_w, sc.ids, m, EmbConfig.llama(vocab, dm))
+    timing_tick(ctx, ton, tk, "logits.ids_and_embedding")
 
     # One cache for every block, reset to a fresh prefill before each, as the
     # trainer's `prefill_cache` is; stages sized for this call's shape.
@@ -212,9 +229,10 @@ def _logits_enqueue(
                 llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.stages[layer - 1].residual2,
                     batch, length, 0, trace, prefix, norm1_ready=norm1_ready, forward_only=True)
         sc.stages.insert(layer, st^)
-
+    timing_tick(ctx, ton, tk, "logits.layers")
     identical_gemm_into(ctx, sc.logits, sc.stages[config.n_layers - 1].residual2, lm_w, sc.head_ws,
         m, vocab, dm, OP_NT)
+    timing_tick(ctx, ton, tk, "logits.head_gemm")
     _ = trace
 
 
@@ -268,9 +286,13 @@ def _refuse_nonfinite_logits(destination: MutPointer[Float32, MutUntrackedOrigin
         i += W
     while i < n:
         if (bitcast[DType.uint32](destination.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            raise Error("byte LM logits: non-finite logit at flat index " + String(i)
-                        + " REFUSED (NaN payloads are vendor-shaped, IDENTITY_PATHS row 39)")
+            _raise_nonfinite_logit(i)
         i += 1
+
+
+def _raise_nonfinite_logit(i: Int) raises:
+    raise Error("byte LM logits: non-finite logit at flat index " + String(i)
+                + " REFUSED (NaN payloads are vendor-shaped, IDENTITY_PATHS row 39)")
 
 
 def _logits_forward_into(
@@ -306,10 +328,15 @@ def _logits_forward_into(
     var m = batch * length
     var vocab = config.vocab_size
     _logits_enqueue(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config)
-    download_f32_into(ctx, sc.logits, m * vocab, destination)
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
+    var bad = download_f32_into_scanned(ctx, sc.logits, m * vocab, destination, True)
+    timing_tick(ctx, ton, tk, "logits.download")
     comptime if is_defined["MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE"]():
         destination.unsafe_store(0, bitcast[DType.float32](bitcast[DType.uint32](destination.unsafe_load(0)) ^ UInt32(1)))
-    _refuse_nonfinite_logits(destination, m * vocab)
+    if bad >= 0:
+        _raise_nonfinite_logit(bad)
+    timing_tick(ctx, ton, tk, "logits.scan")
 
 
 def byte_logits_from_params(ctx: DeviceContext, params: List[Float32], inputs: List[Int32],

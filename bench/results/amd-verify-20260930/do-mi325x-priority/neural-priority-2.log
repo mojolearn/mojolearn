@@ -1,0 +1,38 @@
+COMMAND ["/root/priority-pass/venv/bin/python", "/root/mojolearn-amd-verify/tools/neural_experiments.py", "--set", "priority", "--calls", "10", "--json", "/root/priority-pass/neural-priority-2.json"] ENV {}
+### baseline  (defaults)
+    transformer-forward     5.175 ms  digest=d5a2b289afdb5709
+    mamba3-forward          8.161 ms  digest=481c50cae2dd749e
+    samba-forward          20.668 ms  digest=ddce61948b8456e0
+    samba-train-step      192.730 ms  digest=None
+    lm-forward             56.160 ms  digest=4a8e781b0739a038
+    lm-train-step         120.946 ms  digest=None
+### mamba3_legacy  MOJOLEARN_MAMBA3_LEGACY_SETUP=1
+    transformer-forward     5.234 ms  digest=d5a2b289afdb5709
+    mamba3-forward          9.625 ms  digest=481c50cae2dd749e
+    samba-forward          22.481 ms  digest=ddce61948b8456e0
+    samba-train-step      209.205 ms  digest=None
+    lm-forward             56.065 ms  digest=4a8e781b0739a038
+    lm-train-step         122.024 ms  digest=None
+### mamba3_no_retain_stages  MOJOLEARN_MAMBA3_RETAIN_STAGES=0
+    transformer-forward     5.205 ms  digest=d5a2b289afdb5709
+    mamba3-forward          8.424 ms  digest=481c50cae2dd749e
+    samba-forward          20.981 ms  digest=ddce61948b8456e0
+    samba-train-step      206.364 ms  digest=None
+    lm-forward             56.082 ms  digest=4a8e781b0739a038
+    lm-train-step         121.891 ms  digest=None
+### norm_dw_own_ws  MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS=1
+    transformer-forward     5.359 ms  digest=d5a2b289afdb5709
+    mamba3-forward          7.945 ms  digest=481c50cae2dd749e
+    samba-forward          20.001 ms  digest=ddce61948b8456e0
+    samba-train-step      194.144 ms  digest=None
+    lm-forward             55.868 ms  digest=4a8e781b0739a038
+    lm-train-step         122.109 ms  digest=None
+
+| experiment | transformer-forward | mamba3-forward | samba-forward | samba-train-step | lm-forward | lm-train-step |
+|---|---:|---:|---:|---:|---:|---:|
+| baseline | 5.175 (1.00x) | 8.161 (1.00x) | 20.668 (1.00x) | 192.730 (1.00x) | 56.160 (1.00x) | 120.946 (1.00x) |
+| mamba3_legacy | 5.234 (1.01x) same | 9.625 (1.18x) same | 22.481 (1.09x) same | 209.205 (1.09x) same | 56.065 (1.00x) same | 122.024 (1.01x) same |
+| mamba3_no_retain_stages | 5.205 (1.01x) same | 8.424 (1.03x) same | 20.981 (1.02x) same | 206.364 (1.07x) same | 56.082 (1.00x) same | 121.891 (1.01x) same |
+| norm_dw_own_ws | 5.359 (1.04x) same | 7.945 (0.97x) same | 20.001 (0.97x) same | 194.144 (1.01x) same | 55.868 (0.99x) same | 122.109 (1.01x) same |
+
+ratio < 1 is faster than baseline; MOVED means the output bits differ from baseline: do not keep that toggle.

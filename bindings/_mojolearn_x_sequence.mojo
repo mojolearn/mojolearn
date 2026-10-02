@@ -10,8 +10,9 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
+from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
+from sequence.pyapi import ival, _getenv_seq, opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -96,12 +97,51 @@ def ets_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises 
     return ets_py(ex, addrs, ip, fp)
 
 
+def garch_host_max() -> Int:
+    """Batches of at most this many series run GARCH on a HostExec inside the
+    GPU binding (lane neural-pass14): each series is one serial Nelder-Mead
+    MLE (`sequence/garch.mojo::op_garch`), which one GPU thread runs far
+    slower than one CPU core (the board's 64 x 1,440 race: 2 to 9 s on the
+    GPUs against 60 ms for arch on the CPU), while the host executor runs
+    the series over host tasks. The same element body, the host column's own
+    statements, which the identity gates hold to the device column.
+    MOJOLEARN_SEQ_GARCH_HOST_MAX overrides it (0: always the device)."""
+    var v = String(_getenv_seq("MOJOLEARN_SEQ_GARCH_HOST_MAX", "4096"))
+    try:
+        return Int(v)
+    except:
+        return 4096
+
+
 def garch_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    if len(ip) >= 1 and ival(ip, 0) <= garch_host_max():
+        var hx = HostExec()
+        return garch_py(hx, addrs, ip)
     var ex = DeviceExec()
     return garch_py(ex, addrs, ip)
 
 
+def prophet_host_max() -> Int:
+    """Batches of at most this many series run the Prophet fit on a HostExec
+    inside the GPU binding (lane neural-pass23), as garch does above: each
+    series is one serial optimizer (`sequence/prophet.mojo::op_prophet_fit`),
+    which one GPU thread runs far slower than one CPU core (the board's 64 x
+    1,440 race: 17 to 37 s on the GPUs against 0.25 to 0.9 s for prophet on
+    the CPU), while the host executor runs the series over host tasks. The
+    same element body, the host column's own statements, which the identity
+    gates hold to the device column. MOJOLEARN_SEQ_PROPHET_HOST_MAX
+    overrides it (0: always the device)."""
+    var v = String(_getenv_seq("MOJOLEARN_SEQ_PROPHET_HOST_MAX", "4096"))
+    try:
+        return Int(v)
+    except:
+        return 4096
+
+
 def prophet_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    if len(ip) >= 1 and ival(ip, 0) <= prophet_host_max():
+        var hx = HostExec()
+        return prophet_fit_py(hx, addrs, ip, fp)
     var ex = DeviceExec()
     return prophet_fit_py(ex, addrs, ip, fp)
 

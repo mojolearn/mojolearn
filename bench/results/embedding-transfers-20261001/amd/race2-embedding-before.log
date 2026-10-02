@@ -1,0 +1,6 @@
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/embedding", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=embedding dataset=synthetic arm=ours round=0 ms=646.111 infer_ms=73.58281398774125 digest=2753e61a6dde36e3
+ALGOS-ROUND lane=embedding dataset=synthetic arm=ours round=1 ms=206.096 infer_ms=75.81165200099349 digest=2753e61a6dde36e3
+ALGOS-ROUND lane=embedding dataset=synthetic arm=ours round=2 ms=185.421 infer_ms=75.23144299921114 digest=2753e61a6dde36e3
+ALGOS-ROUND lane=embedding dataset=synthetic arm=ours round=3 ms=185.281 infer_ms=76.81866000348236 digest=2753e61a6dde36e3
+ALGOS lane=embedding dataset=synthetic arm=ours status=ok median_ms=185.42118500045035 quality={}

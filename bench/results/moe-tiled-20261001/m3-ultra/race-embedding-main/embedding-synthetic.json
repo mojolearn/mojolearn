@@ -1,0 +1,113 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/mojolearn-mainnow/.pixi/envs/default/bin/python3",
+        "/Users/ec2-user/mojolearn-mainnow/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "embedding",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/Users/ec2-user/emb-moe-metal/data"
+      ],
+      "digest_stable": null,
+      "digests": [],
+      "error": {
+        "error": "ModuleNotFoundError(\"No module named 'torch'\")",
+        "event": "error",
+        "stage": "ready"
+      },
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "median_ms": null,
+      "mem": [],
+      "ms": [],
+      "span": {
+        "input_home": "host",
+        "inside_clock": "forward + backward(dy)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "not_ready",
+      "warmup_ms": null
+    }
+  },
+  "block": {
+    "block": "tensor",
+    "dataset": "synthetic",
+    "synthetic": true
+  },
+  "commit": "unknown",
+  "dataset": "synthetic",
+  "finished": "2026-10-01T04:44:56Z",
+  "infer": {
+    "arms": {
+      "ours": {
+        "digest_stable": null,
+        "digests": [],
+        "error": {
+          "error": "ModuleNotFoundError(\"No module named 'torch'\")",
+          "event": "error",
+          "stage": "ready"
+        },
+        "info": {},
+        "ms": [],
+        "status": "not_ready",
+        "warmup_ms": null
+      }
+    },
+    "batch": "Xq",
+    "call": "forward(x) (no autograd)",
+    "quality": {},
+    "rows": null
+  },
+  "lane": "embedding",
+  "lane_config": {
+    "block": "tensor",
+    "datasets": [
+      "synthetic"
+    ],
+    "expansion_lane": "embedding",
+    "kind": "layer",
+    "mismatches": [],
+    "notes": [
+      "ids (64, 512) uniform over the 32,768 rows, seed 7; the table is torch's nn.Embedding seeded N(0,1) init, handed to ours as weight= (ours refuses to draw one); training column = forward + the dense (V, d) weight gradient of dy",
+      "fp32 torch arms only: a gather has no matmul for TF32 and autocast leaves nn.Embedding in fp32"
+    ],
+    "ours_class": "mojolearn.Embedding",
+    "params": {
+      "embedding_dim": 1024,
+      "max_norm": null,
+      "norm_type": 2.0,
+      "num_embeddings": 32768,
+      "padding_idx": null,
+      "scale_grad_by_freq": false,
+      "sparse": false
+    },
+    "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+    "task": "embedding",
+    "timed_fit": "forward + backward(dy)",
+    "timed_infer": "forward(x) (no autograd)"
+  },
+  "params_check": {
+    "arms": {},
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/embedding",
+    "problems": [],
+    "reference": null,
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {},
+  "rounds_requested": 3,
+  "script": "tools/bench_board_algos.py",
+  "shape": "",
+  "started": "2026-10-01T04:44:53Z"
+}

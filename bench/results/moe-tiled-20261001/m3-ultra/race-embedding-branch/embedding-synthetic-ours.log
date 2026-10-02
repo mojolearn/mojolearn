@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/Users/ec2-user/mojolearn-pass28/tools/bench_board_algos.py", line 4191, in worker
+    runner = build(args.lane, args.arm, D)
+  File "/Users/ec2-user/mojolearn-pass28/tools/bench_board_algos.py", line 2261, in build
+    return fn(lane, arm, D)
+  File "/Users/ec2-user/mojolearn-pass28/tools/bench_board_algos.py", line 3354, in _build_layer
+    import torch
+ModuleNotFoundError: No module named 'torch'

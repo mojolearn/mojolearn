@@ -1,0 +1,4 @@
+CTD-PREP block=ts-synthetic Y=64x1440
+ALGOS-PREP block=ts dataset=synthetic seconds=0.0
+CTD-PREP block=ts-taxi-hourly Y=64x1440
+ALGOS-PREP block=ts dataset=taxi-hourly seconds=0.4

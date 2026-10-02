@@ -1,0 +1,210 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/pagerank-nvidia/venv-before/bin/python",
+        "/root/mojolearn-pass30/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "pagerank",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/pagerank-nvidia/data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "8084077034791453",
+        "8084077034791453",
+        "8084077034791453",
+        "8084077034791453"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.PageRank({'alpha': 0.85, 'tol': 1e-06, 'max_iter': 100}) on the dense adjacency (20000 x 20000)",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/pagerank-nvidia/venv-before/lib/python3.14/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_neighbors numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.32"
+      },
+      "median_ms": 1357.6836679130793,
+      "mem": [
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 4556.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 4557.4,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 4556.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 4556.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        1312.4654833227396,
+        1633.2387439906597,
+        1357.6836679130793
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "alpha": 0.85,
+        "max_iter": 100,
+        "tol": 1e-06
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "the graph algorithm on the CSR graph",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 2251.6407165676355
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "e862b85355ccaa4c97adb47ea6e4993a0f1561a4ced9140b4a2909289a110903",
+        "shape": [
+          20000,
+          11
+        ]
+      },
+      "indices": {
+        "dtype": "int64",
+        "sha256": "fa029490f1f4565ef907b1a1f7620a52c76e4bbfd9461aa6dba90efab300fcd2",
+        "shape": [
+          253708
+        ]
+      },
+      "indices2": {
+        "dtype": "int64",
+        "sha256": "8211f9dc72f8b5b58e6a816a084589e3418b119bf362f6362fbc226e66f57f76",
+        "shape": [
+          54528
+        ]
+      },
+      "indptr": {
+        "dtype": "int64",
+        "sha256": "d890fd15fd0a0556da61a5036129a824bf4acf04cede0b0f531f9eab6506fe23",
+        "shape": [
+          20001
+        ]
+      },
+      "indptr2": {
+        "dtype": "int64",
+        "sha256": "f992c676be61a63222d4bb3f8da87be0abad8c5410fea72663fda15162988dc7",
+        "shape": [
+          20001
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "a9c1ff43396a579b11bd72a28ededbb9bcad05a89a5557fd689ca4e5a2227c31",
+        "shape": [
+          20000
+        ]
+      }
+    },
+    "block": "graph",
+    "dataset": "taxi",
+    "k": 10,
+    "nodes": 20000,
+    "rule": "tools/bench_board_algos.py prep",
+    "seed": 7,
+    "smoke_max_rows": null,
+    "written": "2026-10-01T04:57:59Z"
+  },
+  "commit": "unknown",
+  "dataset": "taxi",
+  "finished": "2026-10-01T04:58:23Z",
+  "lane": "pagerank",
+  "lane_config": {
+    "block": "graphs",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "neighbors",
+    "kind": "graph",
+    "mismatches": [
+      "ours takes a dense adjacency matrix (its class's contract), built from the CSR graph before the clock; networkx and cuGraph take the graph itself"
+    ],
+    "notes": [
+      "graph: the symmetric 10-nearest-neighbour graph of 20000 stride rows of the cls block (float64 brute force in prep), unweighted"
+    ],
+    "ours_class": "mojolearn.PageRank",
+    "params": {
+      "alpha": 0.85,
+      "max_iter": 100,
+      "tol": 1e-06
+    },
+    "quality": "L1 distance of the scores vs networkx's",
+    "task": "pagerank",
+    "timed_fit": "the graph algorithm on the CSR graph",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "alpha": 0.85,
+          "max_iter": 100,
+          "seed": "none (deterministic)",
+          "tol": 1e-06
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/pagerank",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "sum": 1.0000000589461706
+    }
+  },
+  "rounds_requested": 3,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 20000x11; indices 253708; indices2 54528; indptr 20001; indptr2 20001; y 20000",
+  "started": "2026-10-01T04:58:16Z"
+}

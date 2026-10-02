@@ -1,0 +1,93 @@
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:873:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses [y (n*width), w (vocab*width), ids (n int32)]; params
+       ^
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:890:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses [y (m*dm), x (m*dm), w (dm)]; params [m, dm, eps]."""
+       ^
+Imported from /root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:72:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:72:
+./bindings/hostptr.mojo:69:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:100:
+./mamba/checks/mamba3_oracle.mojo:1025:31: warning: constant value on left side of 'True and ...'
+                              and q * q * n_state < GHR_SERIAL_FMAS
+                              ^
+Imported from /root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:100:
+Imported from ./mamba/checks/mamba3_oracle.mojo:134:
+/root/mojolearn-neural-pass13/./core/host_parallel.mojo:74:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(0))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:100:
+Imported from ./mamba/checks/mamba3_oracle.mojo:134:
+/root/mojolearn-neural-pass13/./core/host_parallel.mojo:76:24: warning: 'load' is deprecated, use 'unsafe_load' instead
+        return UInt64(p.load(0))
+                      ~^~~~~
+                        unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:100:
+Imported from ./mamba/checks/mamba3_oracle.mojo:134:
+/root/mojolearn-neural-pass13/./core/host_parallel.mojo:90:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(v))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Included from /root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:100:
+./mamba/checks/mamba3_oracle.mojo:1025:51: warning: unreachable code after 'if True'
+                              and q * q * n_state < GHR_SERIAL_FMAS
+                                                  ^
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:288:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:339:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:379:17: warning: assignment to 'qw' was never used; assign to '_' instead?
+    var qw = nh * hd
+                ^
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:380:18: warning: assignment to 'kw' was never used; assign to '_' instead?
+    var kw = nkv * hd
+                 ^
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:425:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:448:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:481:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:678:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:699:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:817:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:839:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+/root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:859:19: warning: assignment to 'out_len' was never used; assign to '_' instead?
+    var out_len = 0
+                  ^
+Included from /root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:100:
+./mamba/checks/mamba3_oracle.mojo:1096:40: warning: assignment to 'inc' was never used; assign to '_' instead?
+                var inc = List[Float32]()
+                                       ^
+Included from /root/mojolearn-neural-pass13/bindings/_mojolearn_neural_host.mojo:108:
+Included from ./transformer/host/transformer_block_host.mojo:51:
+./transformer/checks/transformer_oracle.mojo:1812:29: warning: assignment to 'actx' was never used; assign to '_' instead?
+    var actx = List[Float32]()
+                            ^
+built python/mojolearn/host/_mojolearn_neural_host.so

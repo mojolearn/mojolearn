@@ -1,0 +1,30 @@
+## /root/ab-fwdtq16-nvidia
+stage-pass59-1                              49.668 42.093  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-pass59-2                              52.432 42.062  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-pass59_MOJOLEARN_ATTN_FWD_TQ16-1      51.040 41.351  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-pass59_MOJOLEARN_ATTN_FWD_TQ16-2      50.906 41.364  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-main-1                                51.610 41.597  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-main-2                                51.235 41.664  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-timers-pass59                         51.556 41.893  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-timers-pass59_MOJOLEARN_ATTN_FWD_TQ16 51.482 41.685  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-timers-main                           51.119 41.900  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+== stage-timers-pass59
+attn.bwd_dq_tiled_pf 1.266495 ms
+attn.bwd_kvgrid_dkdv_pf 0.658505 ms
+attn.bwd_zdot_estash_dres_pf 0.676713 ms
+attn.core 2.146402 ms
+attn.fwd_r2_keep_kernel 1.989647 ms
+== stage-timers-pass59_MOJOLEARN_ATTN_FWD_TQ16
+attn.bwd_dq_tiled_pf 1.277151 ms
+attn.bwd_kvgrid_dkdv_pf 0.664254 ms
+attn.bwd_zdot_estash_dres_pf 0.677574 ms
+attn.core 1.04259 ms
+attn.fwd_r2_keep_kernel 0.887078 ms
+== stage-timers-main
+attn.bwd_dq_tiled_pf 1.305453 ms
+attn.bwd_kvgrid_dkdv_pf 0.675341 ms
+attn.bwd_zdot_estash_dres_pf 0.69495 ms
+attn.core 2.139121 ms
+attn.fwd_r2_keep_kernel 1.975356 ms
+
+[exited with code 0]

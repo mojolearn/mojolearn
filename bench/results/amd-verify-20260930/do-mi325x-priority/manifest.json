@@ -1,0 +1,17 @@
+{
+  "head": "75f1ddad40a987e55e30d9c9288fca14cd1e6706",
+  "vendor": "amd",
+  "arch": "gfx942",
+  "source_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "artifacts": {
+    "_mojolearn_linalg.int8-reference.so": "7348582b4763f7482c71b91b69644f74c1c9b0bb12917f284d91eafe1d83a4dd",
+    "_mojolearn_transformer.so": "eb611847d573b09590409362cecbcd7eb21fe30e95d4bee5779731999e61fed3",
+    "_mojolearn_mamba.so": "f7bad7da9f21da2709b63950bb7bea4e02baf0fd141d79bbdcee122f3ab23acf",
+    "_mojolearn_byte_lm.so": "c8a91861aac44af8c39e1f13db6b5a92b981ec3030ecee1f24a26a34ad58aa2c",
+    "_mojolearn_x_decomp.so": "ab118fa98f2017991e908ce9b29fb386b9f8747bcc8ca75471a14718b4e387d7",
+    "_mojolearn_x_sequence.so": "45059747f04f470bff999060b997f08ce25a0b11878b69ef9eb431605c489934",
+    "_mojolearn_training.so": "a83c644d223ac9263375a35d8401646ea720593f1ceb51e571d1877897d8e37b",
+    "_mojolearn_linalg.so": "4bb8913a8732638481c511f5b346408c48f941b903f2237eed30b3ea653395f1"
+  },
+  "base_distribution": "mojolearn 0.8.31; Python sources and seven IDENTICAL bindings replaced from head"
+}

@@ -1,0 +1,33 @@
+{
+  "backend": "hip",
+  "group": "lifetime",
+  "reverse_order": false,
+  "arrays": 9,
+  "ownership": [
+    0,
+    0,
+    false,
+    0
+  ],
+  "samples": [
+    {
+      "case": "lifetime.0",
+      "baseline_ms": 308.5737099972903,
+      "retained_ms": 1.0428770037833601
+    },
+    {
+      "case": "lifetime.1",
+      "baseline_ms": 0.914049000130035,
+      "retained_ms": 0.9402470022905618
+    },
+    {
+      "case": "lifetime.2",
+      "baseline_ms": 0.9332469999208115,
+      "retained_ms": 0.9394389999215491
+    }
+  ],
+  "refusals": {},
+  "warm_baseline_median_ms": null,
+  "warm_retained_median_ms": null,
+  "binding_sha256": "eb611847d573b09590409362cecbcd7eb21fe30e95d4bee5779731999e61fed3"
+}

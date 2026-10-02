@@ -1,0 +1,6 @@
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"max_depth": 6, "n_estimators": 100, "seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/tree-shap", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+ALGOS-ROUND lane=tree-shap dataset=istella arm=ours round=0 ms=8132.628 infer_ms=None digest=9c42e3fbec797f77
+ALGOS-ROUND lane=tree-shap dataset=istella arm=ours round=1 ms=8094.519 infer_ms=None digest=9c42e3fbec797f77
+ALGOS-ROUND lane=tree-shap dataset=istella arm=ours round=2 ms=8120.341 infer_ms=None digest=9c42e3fbec797f77
+ALGOS-ROUND lane=tree-shap dataset=istella arm=ours round=3 ms=8081.296 infer_ms=None digest=9c42e3fbec797f77
+ALGOS lane=tree-shap dataset=istella arm=ours status=ok median_ms=8094.519472986576 quality={"max_additivity_error": 1.0991096455192917e-06}

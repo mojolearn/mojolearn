@@ -136,6 +136,22 @@ def lu_py[E: Exec](a: PythonObject, piv: PythonObject, info: PythonObject, p: Py
     return PythonObject(n)
 
 
+def trisolve_py[E: Exec](lu: PythonObject, idx: PythonObject, src: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """p = [n, nrhs, trans]: `trisolve_serial` (x_decomp/cells.mojo)."""
+    var n = _n(p, 0)
+    var nrhs = _n(p, 1)
+    var trans = _n(p, 2)
+    if n >= 1 << 24:
+        raise Error("x_decomp: trisolve row numbers exceed float32's exact integers")
+    var pl = _f(lu)
+    var pi = _f(idx)
+    var ps = _f(src)
+    var pd = _f(dst)
+    with GILReleased(Python()):
+        E.trisolve(pl, pi, ps, pd, n, nrhs, trans)
+    return PythonObject(n)
+
+
 def lu_solve_py[E: Exec](lu: PythonObject, piv: PythonObject, b: PythonObject, p: PythonObject) raises -> PythonObject:
     var n = _n(p, 0)
     var nrhs = _n(p, 1)
@@ -189,6 +205,18 @@ def orth_py[E: Exec](a: PythonObject, p: PythonObject) raises -> PythonObject:
     var pa = _f(a)
     with GILReleased(Python()):
         E.orth(pa, m, l)
+    return PythonObject(l)
+
+
+def orth_diag_py[E: Exec](a: PythonObject, diag: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`orth` in place, and diag (l floats) = the product of the two passes'
+    R diagonals (lane neural-pass17)."""
+    var m = _n(p, 0)
+    var l = _n(p, 1)
+    var pa = _f(a)
+    var pd = _f(diag)
+    with GILReleased(Python()):
+        E.orth_diag(pa, m, l, pd)
     return PythonObject(l)
 
 

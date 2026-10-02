@@ -40,11 +40,19 @@ def fast_ivf_scan_kernel[KM: Int](
     probe_idx: MutPointer[UInt32, MutAnyOrigin],
     out_dist: MutPointer[Float32, MutAnyOrigin],
     out_idx: MutPointer[UInt32, MutAnyOrigin],
+    keep: MutPointer[Int32, MutAnyOrigin],
+    keep_len: Int32,
     n_queries: Int32,
     dim_in: Int32,
     n_probes_in: Int32,
     k_in: Int32,
 ):
+    """`keep` (lane ivf-filter-fix, 2026-10-01): the sample filter, one
+    int32 per original row, 0 removing the row; `keep_len` 0 is no filter.
+    A removed candidate is never scored, selected or counted, as
+    `filter_candidate_slots` drops it before the per-query path scores it,
+    so a filtered search is this same kernel over the kept set and an
+    all-ones filter is the unfiltered search bit for bit."""
     var warp = Int(thread_idx.x) // WARP_SIZE
     var lane = Int(lane_id())
     var q = Int(block_idx.x) * FIVF_QPB + warp
@@ -71,6 +79,9 @@ def fast_ivf_scan_kernel[KM: Int](
         var e = Int(list_offsets[l + 1])
         var pos = s + lane
         while pos < e:
+            if keep_len != 0 and keep[Int(list_indices[pos])] == 0:
+                pos += WARP_SIZE
+                continue
             var row = list_data + pos * dim
             var d = Float32(0)
             for j in range(dim):

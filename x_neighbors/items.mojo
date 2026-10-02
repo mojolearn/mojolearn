@@ -21,6 +21,7 @@ the same bits (IDENTITY_PATHS.md "The rule"):
 
 Nothing here imports a GPU module, so the CPU-only host binding compiles it.
 """
+from std.sys.info import is_gpu
 from checks.numerics import (
     ftz,
     identical_mul_add,
@@ -35,6 +36,9 @@ from checks.numerics import (
 )
 
 from std.memory import bitcast
+from std.sys.compile import is_defined
+from std.sys.info import is_gpu
+from core.host_parallel import host_parallelize
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
@@ -603,6 +607,101 @@ def nc_std_item(t: Int, x: FP, lab: IP, cent: FP, std: FP, n: Int, d: Int, n_cla
     std.unsafe_store(f, ftz(identical_sqrt(ftz(identical_div(ss, Float32(n - n_classes))))))
 
 
+# lane/neural-pass95 (2026-10-01): NearestCentroid's fit statistics for
+# feature f in one item, so the fit uploads X once and runs on the device:
+# the class means (group_mean_item's chain for every class, rows
+# ascending, one division by the class count), the within-class std
+# (nc_std_item's chain) and the dataset centroid nc_shrink_item summed
+# again for every class (its chain, once). The same statements, the same
+# words. On the GPU column group_mean and nc_std ran on the host
+# (HOST_RUN), each a walk over all of X at a stride of d words: 5.2 s of
+# a 5.7 s istella fit on the M4.
+def nc_stats_item(t: Int, x: FP, lab: IP, nk: FP, cent: FP, std: FP, dsc: FP, n: Int, d: Int, n_classes: Int):
+    # on a device each pass loads NC_U rows ahead of its chain (a thread then
+    # waits on memory once a block, not once a row); the adds keep their order
+    comptime U = 32 if is_gpu() else 1
+    var f = t
+    for g in range(n_classes):
+        var acc = Float32(0)
+        var cnt = 0
+        var i0 = 0
+        while i0 + U <= n:
+            var xs = SIMD[DType.float32, U]()
+            var ls = SIMD[DType.int32, U]()
+            comptime for u in range(U):
+                xs[u] = x.unsafe_load((i0 + u) * d + f)
+                ls[u] = lab.unsafe_load(i0 + u)
+            comptime for u in range(U):
+                if Int(ls[u]) == g:
+                    acc = _add(acc, xs[u])
+                    cnt += 1
+            i0 += U
+        for i in range(i0, n):
+            if Int(lab.unsafe_load(i)) == g:
+                acc = _add(acc, x.unsafe_load(i * d + f))
+                cnt += 1
+        if cnt == 0:
+            cent.unsafe_store(g * d + f, Float32(0))
+        else:
+            cent.unsafe_store(g * d + f, ftz(identical_div(acc, Float32(cnt))))
+    var ss = Float32(0)
+    var all_ = Float32(0)
+    var i0 = 0
+    while i0 + U <= n:
+        var xs = SIMD[DType.float32, U]()
+        var cs = SIMD[DType.float32, U]()
+        comptime for u in range(U):
+            xs[u] = x.unsafe_load((i0 + u) * d + f)
+            cs[u] = cent.unsafe_load(Int(lab.unsafe_load(i0 + u)) * d + f)
+        comptime for u in range(U):
+            var df = _sub(xs[u], cs[u])
+            ss = ftz(identical_mul_add(df, df, ss))
+            all_ = _add(all_, xs[u])
+        i0 += U
+    for i in range(i0, n):
+        var xv = x.unsafe_load(i * d + f)
+        var df = _sub(xv, cent.unsafe_load(Int(lab.unsafe_load(i)) * d + f))
+        ss = ftz(identical_mul_add(df, df, ss))
+        all_ = _add(all_, xv)
+    if n - n_classes <= 0:
+        std.unsafe_store(f, Float32(0))
+    else:
+        std.unsafe_store(f, ftz(identical_sqrt(ftz(identical_div(ss, Float32(n - n_classes))))))
+    dsc.unsafe_store(f, ftz(identical_div(all_, Float32(n))))
+
+
+def nc_shrink_d_item(
+    t: Int, dsc_in: FP, cent: FP, nk: FP, std: FP, res: FP, devs: FP,
+    n: Int, d: Int, n_classes: Int, do_shrink: Int, med: Float32, shrink: Float32,
+):
+    """nc_shrink_item with the dataset centroid given (nc_stats_item's)."""
+    var k = t // d
+    var f = t - k * d
+    var c = cent.unsafe_load(t)
+    var dsc = dsc_in.unsafe_load(f)
+    var m = ftz(identical_sqrt(_sub(ftz(identical_div(Float32(1), nk.unsafe_load(k))), ftz(identical_div(Float32(1), Float32(n))))))
+    var s = _add(std.unsafe_load(f), med)
+    var ms = ftz(identical_mul(m, s))
+    var dev = Float32(0)
+    if ms != Float32(0):
+        dev = ftz(identical_div(_sub(c, dsc), ms))
+    if do_shrink == 0:
+        devs.unsafe_store(t, dev)
+        res.unsafe_store(t, c)
+        return
+    var mag = _sub(abs(dev), shrink)
+    if mag < Float32(0):
+        mag = Float32(0)
+    if dev < Float32(0):
+        dev = -mag
+    elif dev > Float32(0):
+        dev = mag
+    else:
+        dev = Float32(0)
+    devs.unsafe_store(t, dev)
+    res.unsafe_store(t, _add(dsc, ftz(identical_mul(ms, dev))))
+
+
 # DEVIATION 5212 / 5201 (row 126)
 def nc_shrink_item(
     t: Int, x: FP, cent: FP, nk: FP, std: FP, res: FP, devs: FP,
@@ -1099,6 +1198,26 @@ def pagerank_step_item(t: Int, q: FP, x: FP, p: FP, dw: FP, dangling: IP, res: F
 
 
 # DEVIATION 5217 (row 129)
+def graph_symmetry_item(t: Int, a: FP, flags: IP, n: Int):
+    """The adjacency checks the graph estimators' wrappers made in Python
+    over `A.tolist()` (lane neural-pass14; at the board's 20,000 nodes that
+    was a 400-million-cell Python scan): `flags[0] = 1` when some cell
+    `a[u, v]` with `u < v` is not equal to `a[v, u]` (a NaN is not equal to
+    itself, as in Python), `flags[1] = 1` when some cell is nonzero. One
+    item, integers out, no arithmetic."""
+    var asym = Int32(0)
+    var nonzero = Int32(0)
+    for u in range(n):
+        for v in range(n):
+            var x = a.unsafe_load(u * n + v)
+            if x != Float32(0):
+                nonzero = Int32(1)
+            if v > u and x != a.unsafe_load(v * n + u):
+                asym = Int32(1)
+    flags.unsafe_store(0, asym)
+    flags.unsafe_store(1, nonzero)
+
+
 def cc_step_item(t: Int, a: FP, lab: IP, res: IP, n: Int):
     """Weak connectivity as a product (DBSCAN's weak_cc; cuGraph
     weakly_connected_components_impl.cuh): the smallest label among the node
@@ -1305,6 +1424,69 @@ def _chol_solve(l: FP, m: Int, b: FP, x: FP):
         x.unsafe_store(i, ftz(identical_div(s, l.unsafe_load(i * m + i))))
 
 
+def _svgp_c_cols(cmat: FP, luu: FP, ls: FP, e: FP, col: FP, m: Int, j0: Int, j1: Int):
+    """Columns [j0, j1) of C = Kuu^-1 - Sigma^-1 (svgp_item's loop)."""
+    for j in range(j0, j1):
+        for i in range(m):
+            e.unsafe_store(i, Float32(1) if i == j else Float32(0))
+        _chol_solve(luu, m, e, col)
+        for i in range(m):
+            cmat.unsafe_store(i * m + j, col.unsafe_load(i))
+        _chol_solve(ls, m, e, col)
+        for i in range(m):
+            cmat.unsafe_store(i * m + j, _sub(cmat.unsafe_load(i * m + j), col.unsafe_load(i)))
+
+
+def _svgp_q_cols(kuu: FP, qsqrt: FP, ls: FP, e: FP, col: FP, m: Int, jitter: Float32, j0: Int, j1: Int):
+    """Columns [j0, j1) of Kuu Sigma^-1 Kuu (svgp_item's loop, before its Cholesky)."""
+    for j in range(j0, j1):
+        for i in range(m):
+            var kv = kuu.unsafe_load(i * m + j)
+            if i == j:
+                kv = _add(kv, jitter)
+            e.unsafe_store(i, kv)
+        _chol_solve(ls, m, e, col)
+        for i in range(m):
+            var s = Float32(0)
+            for k in range(m):
+                var kv = kuu.unsafe_load(i * m + k)
+                if i == k:
+                    kv = _add(kv, jitter)
+                s = ftz(identical_mul_add(kv, col.unsafe_load(k), s))
+            qsqrt.unsafe_store(i * m + j, s)
+
+
+def _svgp_cq_par(kuu: FP, cmat: FP, qsqrt: FP, luu: FP, ls: FP, m: Int, jitter: Float32):
+    """`_svgp_c_cols` and `_svgp_q_cols` over all columns as host tasks, one
+    column of each per task with its own scratch (host only)."""
+    def task(t: Int) {imm kuu, imm cmat, imm qsqrt, imm luu, imm ls, imm m, imm jitter}:
+        var sc = List[Float32](length=2 * m, fill=Float32(0))
+        var e = FP(unsafe_from_address=Int(sc.unsafe_ptr()))
+        var col = e.unsafe_offset(m)
+        if t < m:
+            _svgp_c_cols(cmat, luu, ls, e, col, m, t, t + 1)
+        else:
+            _svgp_q_cols(kuu, qsqrt, ls, e, col, m, jitter, t - m, t - m + 1)
+        _ = sc^
+
+    host_parallelize(task, 2 * m)
+
+
+def _svgp_trace_par(bmat: FP, luu: FP, m: Int, dst: FP):
+    """dst[j] = ((L L^T)^-1 B[:, j])[j] for every j, as host tasks (host only)."""
+    def task(j: Int) {imm bmat, imm luu, imm m, imm dst}:
+        var sc = List[Float32](length=2 * m, fill=Float32(0))
+        var e = FP(unsafe_from_address=Int(sc.unsafe_ptr()))
+        var col = e.unsafe_offset(m)
+        for i in range(m):
+            e.unsafe_store(i, bmat.unsafe_load(i * m + j))
+        _chol_solve(luu, m, e, col)
+        dst.unsafe_store(j, col.unsafe_load(j))
+        _ = sc^
+
+    host_parallelize(task, m)
+
+
 def _log_diag_sum(l: FP, m: Int) -> Float32:
     var s = Float32(0)
     for i in range(m):
@@ -1343,15 +1525,17 @@ def svgp_item(
     for i in range(m):
         alpha.unsafe_store(i, ftz(identical_div(alpha.unsafe_load(i), noise)))
     # C = Kuu^-1 - Sigma^-1, column by column; e / col are m floats of scratch
-    for j in range(m):
-        for i in range(m):
-            e.unsafe_store(i, Float32(1) if i == j else Float32(0))
-        _chol_solve(luu, m, e, col)
-        for i in range(m):
-            cmat.unsafe_store(i * m + j, col.unsafe_load(i))
-        _chol_solve(ls, m, e, col)
-        for i in range(m):
-            cmat.unsafe_store(i * m + j, _sub(cmat.unsafe_load(i * m + j), col.unsafe_load(i)))
+    # lane/neural-pass80 (2026-10-01): on the host the three column loops
+    # below (C, q_sqrt and the trace term: two thirds of a billion serial
+    # fmas at m = 512) run their columns over the host pool, each with its
+    # own unit/rhs and solution scratch. A column's solve and fold are the
+    # same statements in the same order and write only that column; the
+    # trace term's sum stays one ascending fold over j, of per-column values.
+    # `-D MOJOLEARN_SVGP_SERIAL=1` restores the single loop.
+    comptime if not is_gpu() and not is_defined["MOJOLEARN_SVGP_SERIAL"]():
+        _svgp_cq_par(kuu, cmat, qsqrt, luu, ls, m, jitter)
+    else:
+        _svgp_c_cols(cmat, luu, ls, e, col, m, 0, m)
     # q_mu = Kuu alpha (the jittered Kuu, as the solves)
     for i in range(m):
         var s = Float32(0)
@@ -1362,21 +1546,8 @@ def svgp_item(
             s = ftz(identical_mul_add(kv, alpha.unsafe_load(k), s))
         qmu.unsafe_store(i, s)
     # S = Kuu Sigma^-1 Kuu, then its Cholesky into q_sqrt
-    for j in range(m):
-        for i in range(m):
-            var kv = kuu.unsafe_load(i * m + j)
-            if i == j:
-                kv = _add(kv, jitter)
-            e.unsafe_store(i, kv)
-        _chol_solve(ls, m, e, col)
-        for i in range(m):
-            var s = Float32(0)
-            for k in range(m):
-                var kv = kuu.unsafe_load(i * m + k)
-                if i == k:
-                    kv = _add(kv, jitter)
-                s = ftz(identical_mul_add(kv, col.unsafe_load(k), s))
-            qsqrt.unsafe_store(i * m + j, s)
+    comptime if is_gpu() or is_defined["MOJOLEARN_SVGP_SERIAL"]():
+        _svgp_q_cols(kuu, qsqrt, ls, e, col, m, jitter, 0, m)
     var ok3 = _chol_inplace(qsqrt, m)
     # the collapsed bound
     var yty = Float32(0)
@@ -1394,11 +1565,19 @@ def svgp_item(
     )
     # tr(Kuu^-1 B): column solves against B
     var trq = Float32(0)
-    for j in range(m):
-        for i in range(m):
-            e.unsafe_store(i, bmat.unsafe_load(i * m + j))
-        _chol_solve(luu, m, e, col)
-        trq = _add(trq, col.unsafe_load(j))
+    comptime if not is_gpu() and not is_defined["MOJOLEARN_SVGP_SERIAL"]():
+        var tv = List[Float32](length=m, fill=Float32(0))
+        var tvp = FP(unsafe_from_address=Int(tv.unsafe_ptr()))
+        _svgp_trace_par(bmat, luu, m, tvp)
+        for j in range(m):
+            trq = _add(trq, tvp.unsafe_load(j))
+        _ = tv^
+    else:
+        for j in range(m):
+            for i in range(m):
+                e.unsafe_store(i, bmat.unsafe_load(i * m + j))
+            _chol_solve(luu, m, e, col)
+            trq = _add(trq, col.unsafe_load(j))
     var trace_term = ftz(identical_div(_sub(ftz(identical_mul(Float32(n), kdiag)), trq), noise))
     var log2pi = Float32(1.8378770664093453)
     var elbo = -ftz(identical_mul(Float32(0.5), _add(_add(ftz(identical_mul(Float32(n), log2pi)), logdet), _add(quad, trace_term))))

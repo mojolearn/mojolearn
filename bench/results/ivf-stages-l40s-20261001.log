@@ -1,0 +1,18 @@
+216317 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59ed00000000, nodemask=2)
+216317 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x311500000000, nodemask=1)
+ANN-STAGE ivf_flat_binding copy_in 175.061528
+ANN-STAGE ivf_flat_build validate 21.852215
+ANN-STAGE ivf_flat_build trainset_scale 82.316431
+ANN-STAGE ivf_flat_build upload 751.795603
+ANN-STAGE ivf_flat_build row_norms 0.647966
+ANN-STAGE ivf_flat_build kmeans 1085.39976
+ANN-STAGE ivf_flat_build predict 9.07759
+ANN-STAGE ivf_flat_build download 1.784322
+ANN-STAGE ivf_flat_build layout 203.584392
+ANN-STAGE ivf_flat_build index 0.102994
+ANN-STAGE ivf_flat_binding build 2322.195529
+ANN-STAGE ivf_flat_binding copy_out 82.834575
+ANN-STAGE ivf_flat_prepare read_admit 194.743765
+ANN-STAGE ivf_flat_prepare index_copy 1.123446
+ANN-STAGE ivf_flat_prepare device_prepare 30.869675
+WALL fit 2805.2 ms search 789.6 ms

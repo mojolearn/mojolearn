@@ -1,0 +1,42 @@
+{
+  "version": "0.8.34",
+  "published": true,
+  "source_commit": "42b06235e1ec35e83eb02f10ee01b7be63a1c4b5",
+  "workflow": "https://github.com/mojolearn/mojolearn/actions/runs/36927960448",
+  "admission_run": "https://github.com/mojolearn/mojolearn/actions/runs/36927841404",
+  "release": "https://github.com/mojolearn/mojolearn/releases/tag/alpha-api-0.8.34-main-20261001",
+  "validation_profile": "preverified",
+  "fresh_runtime_verification": false,
+  "published_files": [
+    {
+      "project": "mojolearn",
+      "filename": "mojolearn-0.8.34-py3-none-macosx_11_0_arm64.whl",
+      "sha256": "513ffd27a3ab7f9e61be062bb84216844df5417096c8a275b0798ed8fcf447f1",
+      "url": "https://files.pythonhosted.org/packages/02/0a/81638e4aa4a23df6debd18f7c823ce68b87be3f99be9bc44419528ebf694/mojolearn-0.8.34-py3-none-macosx_11_0_arm64.whl",
+      "upload_time": "2026-10-01T21:23:17.998890Z"
+    },
+    {
+      "project": "mojolearn",
+      "filename": "mojolearn-0.8.34-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "d9b3df503d8f6bfe6ce7b94857638a4d25a1085f4a318d63581468ab371f6c10",
+      "url": "https://files.pythonhosted.org/packages/97/e9/8307784621216e0246ff4680ca3073137f47bb447457f9af987e2a352e94/mojolearn-0.8.34-py3-none-manylinux_2_35_x86_64.whl",
+      "upload_time": "2026-10-01T21:23:21.599063Z"
+    },
+    {
+      "project": "mojolearn-nvidia",
+      "filename": "mojolearn_nvidia-0.8.34-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "ae02e6761759589570595a6d6fdef664c52efb17e3237d965a5c46c6f54ff360",
+      "url": "https://files.pythonhosted.org/packages/5a/9c/589cb34c3e5be8f6dfeb828065b9e5200dd77a2aa4ddddeac47b07fc0f74/mojolearn_nvidia-0.8.34-py3-none-manylinux_2_35_x86_64.whl",
+      "upload_time": "2026-10-01T21:21:51.822815Z"
+    },
+    {
+      "project": "mojolearn-amd",
+      "filename": "mojolearn_amd-0.8.34-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "e0e2177d2b712a8525d269f04fed15d76709184740612bcceebf774e0da6f82c",
+      "url": "https://files.pythonhosted.org/packages/2f/3e/6061ca248f1edff529d8d4a5ba77cca94b491363353e742a34e8ef24c6cb/mojolearn_amd-0.8.34-py3-none-manylinux_2_35_x86_64.whl",
+      "upload_time": "2026-10-01T21:21:26.754219Z"
+    }
+  ],
+  "macos_build": "local, packaging/macos/build_release_wheel.sh --build-only (release.py macos-build step, 57 bindings reused from 0.8.33)",
+  "linux_note": "The published Linux wheels are the packed wheels from linux/, not linux/final/: every payload file is byte-identical to the audited final wheels and each RECORD validates; only the RECORD file ordering differs."
+}

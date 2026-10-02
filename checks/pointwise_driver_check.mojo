@@ -141,7 +141,7 @@ def _launch[
     )
     ctx.enqueue_function[compute_split_properties_nb_kernel[bits, full, m]](
         p_off, p_ffi, p_folds, Int32(N_FEATURES), p_ci, p_tgt, p_wt,
-        p_idx, p_part, p_sums, Int32(total_bin_features), scale,
+        p_idx, p_part, p_sums, Int32(total_bin_features), scale, Int32(0),
         grid_dim=(gx, gy, 1), block_dim=(nb_block, 1, 1),
     )
 

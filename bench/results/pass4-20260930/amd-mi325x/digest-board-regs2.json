@@ -1,0 +1,28 @@
+{
+ "call0": {
+  "y": "c39af301c9b088a2",
+  "B_bias": "8884ae2028d9ba58",
+  "B_norm.weight": "9fc52c3c79644812",
+  "C_bias": "07575bce125d2c03",
+  "C_norm.weight": "4fdabc838e859bd2",
+  "D": "74973e4d0b06731c",
+  "block_norm.weight": "2c9b2a42d6ec5291",
+  "dt_bias": "48fc2abeb01d491c",
+  "in_proj.weight": "8e7a6b895118f16a",
+  "out_proj.weight": "ca09ce9b0a298dae",
+  "x": "887250f76992aa33"
+ },
+ "call1": {
+  "y": "c39af301c9b088a2",
+  "B_bias": "8884ae2028d9ba58",
+  "B_norm.weight": "9fc52c3c79644812",
+  "C_bias": "07575bce125d2c03",
+  "C_norm.weight": "4fdabc838e859bd2",
+  "D": "74973e4d0b06731c",
+  "block_norm.weight": "2c9b2a42d6ec5291",
+  "dt_bias": "48fc2abeb01d491c",
+  "in_proj.weight": "8e7a6b895118f16a",
+  "out_proj.weight": "ca09ce9b0a298dae",
+  "x": "887250f76992aa33"
+ }
+}

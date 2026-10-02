@@ -132,6 +132,7 @@ _UNFUSED_KNN = os.environ.get("MOJOLEARN_XN_UNFUSED_KNN", "") == "1"
 #: spreading, PageRank and connected_components in Python, one op per step,
 #: instead of the resident `lp_iterate` / `pr_iterate` / `cc_iterate`.
 _HOST_LOOP_LP = os.environ.get("MOJOLEARN_XN_HOST_LOOPS", "") == "1"
+_PR_SPARSE = os.environ.get("MOJOLEARN_PR_SPARSE", "1") != "0"
 #: A/B arm: KNNImputer.transform over every cell instead of the missing ones.
 _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 #: A/B arm: the one-item forms these replaced (PolynomialCountSketch's
@@ -409,7 +410,8 @@ class NearestCentroid(_XNeighbors):
         lab = _i32(codes, "y")
         if self.metric == "euclidean":
             cent = _empty_out((C, d), "<f4")
-            self._op("group_mean", [(X, 0), (lab, 0), (cent, 1)], (n, d, C))
+            if os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") == "1":
+                self._op("group_mean", [(X, 0), (lab, 0), (cent, 1)], (n, d, C))
         else:
             rows = X.tolist()
             med = []
@@ -420,16 +422,28 @@ class NearestCentroid(_XNeighbors):
         stats = _empty_out((d,), "<f4")
         new_cent = _empty_out((C, d), "<f4")
         devs = _empty_out((C, d), "<f4")
-        self._op("nc_std", [(X, 0), (lab, 0), (cent, 0), (stats, 1)], (n, d, C))
+        nk = Array.from_list([float(c) for c in counts], "<f4")
+        dsc = None
+        if self.metric == "euclidean" and os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") != "1":
+            # lane/neural-pass95: the class means, the within-class std and the
+            # dataset centroid in one op (x_neighbors/items.mojo nc_stats_item):
+            # X goes to the device once; MOJOLEARN_NC_SPLIT_OPS=1 restores the three ops
+            dsc = _empty_out((d,), "<f4")
+            self._op("nc_stats", [(X, 0), (lab, 0), (nk, 0), (cent, 1), (stats, 1), (dsc, 1)], (n, d, C))
+        else:
+            self._op("nc_std", [(X, 0), (lab, 0), (cent, 0), (stats, 1)], (n, d, C))
         std = stats.tolist()
         if all(v == 0.0 for v in std) and self._ptp_zero(X):
             raise ValueError("All features have zero variance. Division by zero.")
         std_sorted = sorted(std)
         med_std = _f32_scalar(_median(std_sorted))
-        nk = Array.from_list([float(c) for c in counts], "<f4")
         shrink = float(self.shrink_threshold) if self.shrink_threshold else 0.0
-        self._op("nc_shrink", [(X, 0), (cent, 0), (nk, 0), (stats, 0), (new_cent, 1), (devs, 1)],
-                 (n, d, C, 1 if shrink else 0), (med_std, shrink))
+        if dsc is not None:
+            self._op("nc_shrink_d", [(dsc, 0), (cent, 0), (nk, 0), (stats, 0), (new_cent, 1), (devs, 1)],
+                     (n, d, C, 1 if shrink else 0), (med_std, shrink))
+        else:
+            self._op("nc_shrink", [(X, 0), (cent, 0), (nk, 0), (stats, 0), (new_cent, 1), (devs, 1)],
+                     (n, d, C, 1 if shrink else 0), (med_std, shrink))
         self.centroids_ = new_cent
         self.deviations_ = devs
         self.within_class_std_dev_ = stats
@@ -1259,6 +1273,17 @@ class KNNImputer(_XNeighbors):
         if self.weights not in ("uniform", "distance"):
             raise NotImplementedError("KNNImputer: weights must be 'uniform' or 'distance'")
 
+    def _nan_cells(self, X):
+        """(cells, colmiss, count): the flat indices of the NaN cells of X
+        ascending (an int32 Array of n * d slots, the first `count` used), the
+        NaN count per column as a list, and the count (xn_nan_cells)."""
+        n, d = X.shape
+        cells = empty((max(n * d, 1),), "<i4")
+        colmiss = empty((max(d, 1),), "<i4")
+        info = empty((1,), "<i4")
+        self._op("nan_cells", [(X, 0), (cells, 1), (colmiss, 1), (info, 1)], (n, d))
+        return cells, colmiss.tolist(), int(info.tolist()[0])
+
     def _masked(self, X):
         X = _f32(X)
         mv = self.missing_values
@@ -1271,10 +1296,11 @@ class KNNImputer(_XNeighbors):
         self._check()
         X = self._masked(X)
         n, d = X.shape
-        rows = X.tolist()
-        miss = [[v != v for v in r] for r in rows]
-        self._valid = [not all(miss[i][f] for i in range(n)) for f in range(d)]
-        self._miss_cols = [f for f in range(d) if any(miss[i][f] for i in range(n))]
+        # lane/neural-pass71 (2026-10-01): the column flags from one native
+        # pass over the cells (xn_nan_cells), no list of the matrix
+        cm = self._nan_cells(X)[1]
+        self._valid = [cm[f] < n for f in range(d)]
+        self._miss_cols = [f for f in range(d) if cm[f] > 0]
         self._fit_X = X
         self.n_features_in_ = d
         return self
@@ -1295,13 +1321,12 @@ class KNNImputer(_XNeighbors):
         else:
             # one GPU thread per MISSING cell (`knn_impute_cells`): the same
             # item statements; a present cell keeps x, as the item stores it
-            flat = X.reshape((n * d,)).tolist()
-            cells = [i for i, v in enumerate(flat) if v != v]
-            out = Array.from_list(flat, "<f4").reshape((n, d))
-            if cells:
+            cells, _, nc = self._nan_cells(X)        # lane/neural-pass71: no Python walk
+            out = X.copy()
+            if nc:
                 self._op("knn_impute_cells" if _OLD_ITEMS else "knn_impute_tiled",
-                         [(_i32(cells, "cells"), 0), (X, 0), (self._fit_X, 0), (out, 1)],
-                         (n, m, d, k, 1 if self.weights == "distance" else 0, len(cells)))
+                         [(cells, 0), (X, 0), (self._fit_X, 0), (out, 1)],
+                         (n, m, d, k, 1 if self.weights == "distance" else 0, nc))
         keep = [f for f in range(d) if self._valid[f]]
         if self.keep_empty_features:
             empty_cols = [f for f in range(d) if not self._valid[f]]
@@ -1381,7 +1406,31 @@ class PageRank(_XNeighbors):
     def fit(self, A, y=None):
         A = _adjacency(A)
         n = A.shape[0]
-        if self.weight is None or self.weight is False:
+        binary = self.weight is None or self.weight is False
+        if _PR_SPARSE and not _HOST_LOOP_LP:
+            # lane neural-pass30: the iteration over the nonzero cells of
+            # the adjacency (x_neighbors/pr_sparse.mojo), the same chains
+            # with their zero terms left out; MOJOLEARN_PR_SPARSE=0 keeps
+            # the dense route below
+            if self.personalization is None:
+                p = Array.from_list([1.0 / n] * n, "<f4")
+            else:
+                p = self._unit(self.personalization, n, "personalization")
+            dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
+            x = Array.from_list([1.0 / n] * n, "<f4") if self.nstart is None else self._unit(self.nstart, n, "nstart")
+            x = Array.from_list(x.tolist(), "<f4")
+            info = empty((2,), "<i4")
+            thr = struct.unpack("<Q", struct.pack("<d", n * float(self.tol)))[0]
+            self._op("pr_iterate_sparse", [(A, 0), (x, 1), (p, 0), (dw, 0), (info, 1)],
+                     (n, int(self.max_iter), thr >> 32, thr & 0xFFFFFFFF, 1 if binary else 0),
+                     (_f32_scalar(self.alpha),))
+            it, ok = info.tolist()
+            if ok:
+                self.pagerank_ = x
+                self.n_iter_ = int(it)
+                return self
+            raise RuntimeError(f"PageRank: power iteration failed to converge within {self.max_iter} iterations")
+        if binary:
             A = Array.from_list([[1.0 if v != 0 else 0.0 for v in r] for r in A.tolist()], "<f4")
         Q = _empty_out((n, n), "<f4")
         self._op("row_normalize", [(A, 0), (Q, 1)], (n, n))
@@ -1439,6 +1488,16 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         raise ValueError("connection must be 'weak' or 'strong'")
     est = _XNeighbors()
     est.numeric_mode = numeric_mode
+    csr = _csr_of(A)
+    if csr is not None:
+        # lane/neural-pass69 (2026-10-01): a sparse graph (scipy.sparse CSR, or
+        # (indptr, indices, n)) walks its edge lists directly: the same rounds
+        # and labels as the dense matrix's, without building or scanning it
+        indptr, indices, n = csr
+        lab = _i32(list(range(n)), "labels")
+        info = empty((1,), "<i4")
+        est._op("cc_iterate_csr", [(indptr, 0), (indices, 0), (lab, 1), (info, 1)], (n, indices.shape[0]))
+        return _cc_relabel(lab, return_labels)
     A = _adjacency(A)
     n = A.shape[0]
     lab = _i32(list(range(n)), "labels")
@@ -1452,12 +1511,37 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         if nxt.tolist() == lab.tolist():
             break
         lab = nxt
+    return _cc_relabel(lab, return_labels)
+
+
+def _cc_relabel(lab, return_labels):
     roots = {}
     out = []
     for v in lab.tolist():
         out.append(roots.setdefault(v, len(roots)))
     labels = Array.from_list(out, "<i4")
     return (len(roots), labels) if return_labels else len(roots)
+
+
+def _csr_of(A):
+    """(indptr, indices, n) as int32 Arrays for a scipy.sparse matrix (any
+    format: converted to CSR) or a tuple (indptr, indices, n); None for a
+    dense input. The edge weights do not matter to connectivity."""
+    if isinstance(A, tuple) and len(A) == 3:
+        indptr, indices, n = A
+        n = int(n)
+    elif hasattr(A, "tocsr") and hasattr(A, "shape"):
+        if len(A.shape) != 2 or A.shape[0] != A.shape[1]:
+            raise ValueError("the adjacency matrix must be square")
+        M = A.tocsr()
+        indptr, indices, n = M.indptr, M.indices, int(M.shape[0])
+    else:
+        return None
+    ip = _i32(indptr, "indptr")
+    ix = _i32(indices, "indices")
+    if ip.shape[0] != n + 1:
+        raise ValueError("connected_components: indptr must hold n + 1 entries")
+    return ip, ix, n
 
 
 # ====================================================================== Louvain
@@ -1484,10 +1568,15 @@ class Louvain(_XNeighbors):
     def fit(self, A, y=None):
         A = _adjacency(A)
         n = A.shape[0]
-        rows = A.tolist()
-        if any(rows[i][j] != rows[j][i] for i in range(n) for j in range(i + 1, n)):
+        # The symmetry and no-edge checks run natively (`xn_graph_symmetry`,
+        # lane neural-pass14): over `A.tolist()` they were a 400-million-cell
+        # Python scan at the board's 20,000 nodes, most of the race's minute.
+        flags = _empty_out((2,), "<i4")
+        self._op("graph_symmetry", [(A, 0), (flags, 1)], (n,))
+        flags = flags.tolist()
+        if flags[0]:
             raise ValueError("Louvain: the adjacency matrix must be symmetric (an undirected graph)")
-        if all(v == 0 for r in rows for v in r):
+        if not flags[1]:
             raise ValueError("Louvain: the graph has no edges")
         labels = empty((n,), "<i4")
         info = _empty_out((2,), "<f4")

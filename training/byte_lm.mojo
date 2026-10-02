@@ -82,6 +82,7 @@ from training.checks.optimizer import (
 )
 from training.checks.optimizer_oracle import OPT_ADAMW, OPT_SGD, OptimizerConfig
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, byte_lm_release_eager_for
+from core.device_arena import arena_begin, arena_end, arena_release
 from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, FUSED_CORNER, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ, attention_estash_memory_grant
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
@@ -757,6 +758,7 @@ struct ByteTrainer(Movable):
     refuses unless it equals `completed_steps`.
     """
     var config: ByteConfig
+    var arena_id: Int
     var buffers: ByteBuffers
     var weights: List[LlamaDeviceWeights]
     var rope: LlamaRopeTable
@@ -790,6 +792,9 @@ struct ByteTrainer(Movable):
         self.shadow_step = -1
         self.released_eager_cells = 0
         self.grad_step = -1
+        # lane/neural-pass43: the session's buffers carved from arena chunks
+        # (core/device_arena.mojo) between here and `arena_end` below.
+        self.arena_id = arena_begin()
         self.scan = DeviceScanScratch(ctx)
         self.buffers = ByteBuffers(ctx, initial_params, initial_m, initial_v, flags, config, optimizer_first, optimizer_count)
         self.weights = List[LlamaDeviceWeights]()
@@ -804,6 +809,7 @@ struct ByteTrainer(Movable):
             # still grows them through ensure_*_attention_capacity.
             self.forward.append(LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
             self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
+        arena_end(self.arena_id)
         step_count_sync()
         ctx.synchronize()
         # lane/neural-apple (2026-09-28): on a gated Apple build, the estash
@@ -832,6 +838,14 @@ struct ByteTrainer(Movable):
             return
         byte_validate_device_state(ctx, self.scan, self.buffers.param, self.buffers.m_state,
             self.buffers.v_state, self.buffers.buf_initialized, completed, self.config)
+
+    def __deinit__(deinit self):
+        """The session's arena chunks go back to the pool (not freed: the
+        views in this struct's fields die right after this body)."""
+        try:
+            arena_release(self.arena_id)
+        except:
+            pass
 
 
 def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
@@ -1291,10 +1305,16 @@ def _byte_layer_sync() -> Bool:
     one in-order context, the next layer's kernels are enqueued behind this
     layer's, and the eager-scratch release only drops buffer handles whose
     frees are themselves enqueued (DEVIATION 2520), so no bit moves; what
-    moves is the host idling per layer. Default ON (the measured behaviour)
-    until a box has run both; the step's `step.*` timing ticks read the
-    same either way."""
-    return String(getenv("MOJOLEARN_BYTE_LM_LAYER_SYNC")) != "0"
+    moves is the host idling per layer. Default ON on NVIDIA and AMD (the
+    measured behaviour; the L40S toggle sweep read 1.00 either way) and OFF
+    on the Apple column (lane/neural-pass43, 2026-10-01: a Metal wait with
+    a readback costs about 0.2 ms on the M4 and more on the M3 Ultra;
+    `MOJOLEARN_BYTE_LM_LAYER_SYNC=1` restores them); the step's `step.*`
+    timing ticks read the same either way."""
+    var v = String(getenv("MOJOLEARN_BYTE_LM_LAYER_SYNC"))
+    comptime if TARGET_COLUMN == COLUMN_APPLE:
+        return v == "1"
+    return v != "0"
 
 
 def _byte_release_forward_scratch(ctx: DeviceContext,

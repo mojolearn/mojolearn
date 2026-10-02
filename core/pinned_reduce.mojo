@@ -49,10 +49,11 @@ exactly what was there before.
 """
 
 from std.bit import log2_floor
-from std.gpu import thread_idx
+from std.gpu import thread_idx, WARP_SIZE
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum
+from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -254,3 +255,129 @@ def pinned_block_min[block_size: Int](value: Float32) -> Float32:
     var total = red[0]
     barrier()
     return total
+
+
+# ===========================================================================
+# THE FLOAT BLOCK SCAN (host-cpu-identity lane, 2026-09-30)
+# ===========================================================================
+#
+# `max.gpu.primitives.block.prefix_sum` has the same residue as `block.sum`
+# above: a Hillis-Steele scan inside each HARDWARE warp
+# (`res += shuffle_up(res, 1, 2, 4, ...)`, std/gpu/primitives/warp.mojo:1084
+# at max 26.5.0), the warp totals scanned by warp 0 the same way, and the
+# previous warps' inclusive prefix added (max/gpu/primitives/block.mojo:672).
+# The warp is 32 lanes on Apple and NVIDIA and 64 on AMD CDNA, so on Float32
+# the AMD scan is a different association of the same values and differs in
+# the last bits. In k-means++ (`cluster/checks/plus_plus.mojo`) that scan
+# is the cumulative d^2 weight the draw binary-searches, and on the MI325X
+# one draw of the IVF 40000-row quantizer (pick 890 of 1024) landed on the
+# other side of a boundary: every later centroid, the index and the search
+# moved (bench/results/host-cpu-identity-20260930). The host oracle
+# (`cluster/host/kmeans_oracle.mojo::host_block_prefix_sum`) has always
+# replayed the 32-wide shape; this is the device half of that claim.
+
+
+@always_inline
+def pinned_block_prefix_sum[
+    block_size: Int, exclusive: Bool = False
+](value: Float32) -> Float32:
+    """`block.prefix_sum` at a 32-LANE warp on every vendor, under IDENTICAL.
+
+    Where the hardware warp is 32 (Apple, NVIDIA) this IS the library call,
+    so those columns keep their bits by construction. Elsewhere (AMD CDNA,
+    64) the library's 32-wide shape is replayed through threadgroup memory,
+    step for step: the in-warp Hillis-Steele scan (lane l adds lane
+    l - offset's previous value when l >= offset, offsets 1 .. 16), the
+    exclusive shift (lane 0 gets 0), the warp total (`inclusive`, or
+    `exclusive + value` for an exclusive scan, as the library forms it),
+    warp 0's inclusive scan of the totals, then the previous warps' prefix
+    added to every warp past the first. Under FAST it is the library call.
+
+    Same contract as the library: EVERY thread of the block calls it, and
+    `block_size` is a multiple of 32 no larger than 32 * 32.
+    """
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or WARP_SIZE == 32:
+        return block_prefix_sum[block_size=block_size, exclusive=exclusive](
+            value
+        )
+    else:
+        return warp32_block_prefix_sum[block_size, exclusive](value)
+
+
+def warp32_block_prefix_sum[
+    block_size: Int, exclusive: Bool = False
+](value: Float32) -> Float32:
+    """The 32-lane replay of `pinned_block_prefix_sum`, callable at any
+    warp width and in every mode (its check, `cluster/checks/
+    pinned_scan_check.mojo`, compares it with the library scan on a 32-lane
+    GPU and with the host oracle anywhere)."""
+    comptime W = 32
+    comptime assert block_size % W == 0 and block_size <= W * W, (
+        "the 32-lane scan needs a block that is a multiple of 32, at"
+        " most 1024 threads"
+    )
+    comptime n_warps = block_size // W
+    var tid = Int(thread_idx.x)
+    var lane = tid % W
+    var wid = tid // W
+    var slab = stack_allocation[
+        block_size,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var tot = stack_allocation[
+        W,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    # Step 1: the in-warp Hillis-Steele scan, each step reading the
+    # previous step's values (a shuffle_up reads before anyone writes).
+    var res = value
+    slab[unsafe_offset=tid] = res
+    barrier()
+    comptime for i in range(5):
+        comptime offset = 1 << i
+        var n = Float32(0.0)
+        if lane >= offset:
+            n = slab[unsafe_offset=tid - offset]
+        barrier()
+        if lane >= offset:
+            res += n
+        slab[unsafe_offset=tid] = res
+        barrier()
+    comptime if exclusive:
+        if lane == 0:
+            res = Float32(0.0)
+        else:
+            res = slab[unsafe_offset=tid - 1]
+    # Step 2: the last lane of each warp stores the warp's INCLUSIVE sum.
+    if lane == W - 1:
+        var inclusive_warp_sum = res
+        comptime if exclusive:
+            inclusive_warp_sum += value
+        tot[unsafe_offset=wid] = inclusive_warp_sum
+    if tid < W and tid >= n_warps:
+        # lanes past the warp count read nothing a lower lane uses; zero
+        # keeps them finite
+        tot[unsafe_offset=tid] = Float32(0.0)
+    barrier()
+    # Step 3: warp 0 scans the warp totals, inclusive, the same way.
+    var p = Float32(0.0)
+    if tid < W:
+        p = tot[unsafe_offset=tid]
+    comptime for i in range(5):
+        comptime offset = 1 << i
+        var n = Float32(0.0)
+        if tid < W and tid >= offset:
+            n = tot[unsafe_offset=tid - offset]
+        barrier()
+        if tid < W and tid >= offset:
+            p += n
+        if tid < W:
+            tot[unsafe_offset=tid] = p
+        barrier()
+    # Step 4: the previous warps' prefix.
+    if wid > 0:
+        res += tot[unsafe_offset=wid - 1]
+    barrier()
+    return res
