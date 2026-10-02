@@ -297,16 +297,16 @@ def _iso_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, ip: List[Int32], fp:
     for key in range(2):
         for pas in range(4):
             var shift = Int32(8 * pas)
-            var kp = dky.unsafe_ptr() if key == 0 else dkx.unsafe_ptr()
-            var src = dpa.unsafe_ptr() if cur_a else dpb.unsafe_ptr()
-            var dst = dpb.unsafe_ptr() if cur_a else dpa.unsafe_ptr()
+            var kp = IP(unsafe_from_address=Int(dky.unsafe_ptr()) if key == 0 else Int(dkx.unsafe_ptr()))
+            var src = IP(unsafe_from_address=Int(dpa.unsafe_ptr()) if cur_a else Int(dpb.unsafe_ptr()))
+            var dst = IP(unsafe_from_address=Int(dpb.unsafe_ptr()) if cur_a else Int(dpa.unsafe_ptr()))
             ctx.enqueue_function[iso_count_kernel](kp, src, Int32(n), shift, dcnt.unsafe_ptr(), Int32(ntiles),
                                                    grid_dim=_xg_blocks(ntiles), block_dim=XG_TPB)
             ctx.enqueue_function[iso_scan_kernel](dcnt.unsafe_ptr(), Int32(ISO_RADIX * ntiles), grid_dim=1, block_dim=1)
             ctx.enqueue_function[iso_scatter_kernel](kp, src, dst, Int32(n), shift, dcnt.unsafe_ptr(), Int32(ntiles),
                                                      grid_dim=_xg_blocks(ntiles), block_dim=XG_TPB)
             cur_a = not cur_a
-    var pp = dpa.unsafe_ptr() if cur_a else dpb.unsafe_ptr()
+    var pp = IP(unsafe_from_address=Int(dpa.unsafe_ptr()) if cur_a else Int(dpb.unsafe_ptr()))
     ctx.enqueue_function[iso_fit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), dip.unsafe_ptr(), dfp.unsafe_ptr(),
                                          dout.unsafe_ptr(), dfw.unsafe_ptr(), diw.unsafe_ptr(), pp, grid_dim=1, block_dim=1)
     if n_out > 0:
