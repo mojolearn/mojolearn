@@ -643,7 +643,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from x_neighbors.eigh import op_eigh
+from x_neighbors.%s import op_eigh
 """
 
 
@@ -655,7 +655,7 @@ def own_imports(col):
 def gpu_binding():
     ops = ", ".join(f"op_{o[0]}" for o in OPS)
     return (HDR + GEN + '"""THE NEIGHBORS EXPANSION LANE\'S GPU BINDING:\nevery export is xn_<op>(addresses, ints, floats) over x_neighbors/device_ops.mojo."""\n'
-            + BIND_HEAD + "from checks.vendor import COMPILED_VENDOR\n"
+            + BIND_HEAD % "eigh_device" + "from checks.vendor import COMPILED_VENDOR\n"
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
             + wrappers() + """
@@ -679,7 +679,7 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
 def host_binding():
     ops = ", ".join(f"op_{o[0]}" for o in OPS)
     return (HDR + GEN + '"""CPU binding for `_mojolearn_x_neighbors`: the GPU binding\'s export names and\naddress contract over the host drivers x_neighbors/host_ops.mojo. HOST ONLY."""\n'
-            + BIND_HEAD + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
+            + BIND_HEAD % "eigh" + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
             + wrappers() + """
