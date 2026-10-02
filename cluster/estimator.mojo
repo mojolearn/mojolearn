@@ -457,7 +457,7 @@ def _kmeans_fit_tail(
     weight_scale: Float64,
 ) raises -> KMeansFitResult:
     """`kmeans_fit` from the uploaded design on: the row norms, the fit, the
-    read-back."""
+    read-back (shared with `kmeans_fit_rows`)."""
     var take_sqrt = Int32(0)
     if centroid_norms_take_sqrt(metric):
         take_sqrt = Int32(1)
@@ -508,6 +508,49 @@ def _kmeans_fit_tail(
 
     return KMeansFitResult(
         result.inertia, result.n_iter, sum_scale, weight_scale
+    )
+
+
+def kmeans_fit_rows(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    host_x: MutPointer[Float32, MutUntrackedOrigin],
+    rows: List[Int],
+    n_features: Int,
+    n_clusters: Int,
+    out_centroids_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_labels_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    max_iter: Int = 300,
+    tol: Float64 = 1e-4,
+    seed: UInt64 = 0,
+    n_init: Int = 1,
+    init: Int = INIT_KMEANS_PLUS_PLUS,
+    metric: Int = METRIC_L2_EXPANDED,
+    oversampling_factor: Float64 = 2.0,
+) raises -> KMeansFitResult:
+    """`kmeans_fit` with unit weights on rows `rows` of the host matrix
+    `host_x`, whose gathered copy (rows in that order) is ALREADY on the
+    device in `x` (lane/neural-pass108: BisectingKMeans gathers each
+    cluster on the device instead of copying and uploading it per split).
+    The same device scale over the gathered copy (`plan_sum_scale`) and the
+    same tail, so the same words; `host_x` is not read."""
+    var n_samples = len(rows)
+    if n_samples < 1 or n_features < 1 or n_clusters < 1 or n_clusters > n_samples:
+        raise Error("kmeans_fit_rows: bad shape " + String(n_samples) + " x " + String(n_features)
+                    + " for " + String(n_clusters) + " clusters")
+    var sum_scale = plan_sum_scale(ctx, x, n_samples, n_features)
+    var weight_scale = choose_scale(Float64(n_samples), n_samples)
+    var cd = n_clusters * n_features
+    var weights = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var centroids = ctx.enqueue_create_buffer[DType.float32](cd)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](n_samples)
+    var x_norm = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var min_dist = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    enqueue_fill[DType.float32](ctx, weights, Float32(1.0))
+    return _kmeans_fit_tail(
+        ctx, x, x_norm, weights, centroids, labels, min_dist, n_samples, n_features,
+        n_clusters, out_centroids_ptr, out_labels_ptr, max_iter, tol, seed, n_init, init,
+        metric, oversampling_factor, sum_scale, weight_scale,
     )
 
 
