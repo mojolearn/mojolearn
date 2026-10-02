@@ -65,60 +65,12 @@ def _vector(y, n, name="y"):
     return a
 
 
-#: lane/neural-pass68 (2026-10-01): the fits the device binding runs on ONE
-#: block (x_linear/dispatch.mojo team_fit: a Team of one threadgroup, every
-#: gradient and Hessian cell one thread's chain over all the rows, the
-#: objective's fold on the lead thread) and the host runs over its cores
-#: (par_rows): on the board's poisson taxi block (1,000,000 x 11) the device
-#: route costs 8 s a Newton iteration on the M4's GPU and 0.47 s on an L40S
-#: against 0.2 s on the M4's cores, the same bits either way (the host
-#: binding is the same IDENTICAL arithmetic). These take the host binding
-#: when it is installed; `MOJOLEARN_X_LINEAR_DEVICE=1` keeps the device.
-#: GLM left this set (Andrew, 2026-10-02: a GPU install defaults to the GPU):
-#: its device route is the sliced grid of cells (lane neural-pass89/97, NV
-#: poisson taxi ~100 ms against ~2 s on the host). CPU-only installs and
-#: MOJOLEARN_VENDOR=cpu still run the host binding.
-_HOST_ALGOS = None
-
-
-def _host_algos():
-    global _HOST_ALGOS
-    if _HOST_ALGOS is None:
-        _HOST_ALGOS = frozenset() if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1" else frozenset(
-            ((ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT)
-             if os.environ.get("MOJOLEARN_X_LINEAR_ISOTONIC_HOST", "") == "1" else ()))
-    # lane/neural-pass107 (GPU-only rule): IsotonicRegression runs on the device
-    # (x_linear/device.mojo: the radix-sorted fit, one thread a predicted
-    # query); MOJOLEARN_X_LINEAR_ISOTONIC_HOST=1 restores the host route
-    return _HOST_ALGOS
-
-
-_HOST_MODULE = []
-
-
-def _host_fit_module():
-    """`mojolearn.host._mojolearn_x_linear_host` when it is importable (every
-    install that ships the host set), else None; resolved once."""
-    if not _HOST_MODULE:
-        mod = None
-        try:
-            import importlib
-            pkg = __name__.rsplit(".", 1)[0]
-            cand = importlib.import_module(f"{pkg}.host.{_BINDING}_host")
-            if getattr(cand, "x_linear_fit", None) is not None:
-                mod = cand
-        except Exception:  # noqa: BLE001 - no host set: the device binding serves
-            mod = None
-        _HOST_MODULE.append(mod)
-    return _HOST_MODULE[0]
-
-
 def _fit_module(est, algo):
-    mode = getattr(est, "numeric_mode", None)
-    if algo in _host_algos() and (mode is None or str(mode).strip().lower() == "identical"):
-        host = _host_fit_module()
-        if host is not None:
-            return host
+    """The estimator's binding: the GPU binding on a GPU install, the host
+    binding on a CPU-only one (`_bind`). cpu-gpu-cleanup c-linear (2026-10-02):
+    the host route table (`_HOST_ALGOS`, MOJOLEARN_X_LINEAR_DEVICE,
+    MOJOLEARN_X_LINEAR_ISOTONIC_HOST) that sent fits to the host binding on a
+    GPU install is deleted."""
     return est._bind(_BINDING)
 
 
@@ -324,9 +276,7 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
     # (taxi / istella 200k: Perceptron accuracy 0.72 / 0.904 at 256 vs 0.36 /
     # 0.879 at 4096 (sklearn 0.60 / 0.902); the one-class objective 0.5001 /
     # 0.5010 vs 0.5008 / 0.5062 (sklearn 0.5000 / 0.5001));
-    # batch 0 is the per-sample fit (batch_size=0 or MOJOLEARN_SGD_PER_SAMPLE=1)
-    if os.environ.get("MOJOLEARN_SGD_PER_SAMPLE", "") == "1":
-        batch_size = 0
+    # batch 0 is the per-sample fit (batch_size=0)
     if batch_size and (not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size < 1):
         raise ValueError(f"mojolearn {type(est).__name__}: batch_size must be a positive int")
     # batch_sum (lane/neural-pass132): Perceptron's batch step is the SUM of

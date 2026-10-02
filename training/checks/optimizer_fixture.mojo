@@ -114,15 +114,15 @@ from checks.numerics import (
     identical_mul,
     numeric_mode_name,
 )
-from training.checks.optimizer_oracle import (
+from training.checks.optimizer_contract import (
     OPT_ADAM,
     OPT_ADAMW,
     OPT_SGD,
     OptimizerConfig,
-    adam_element_oracle,
     clip_eps,
     step_scalars,
 )
+from training.checks.optimizer_oracle import adam_element_oracle
 
 
 # ===========================================================================

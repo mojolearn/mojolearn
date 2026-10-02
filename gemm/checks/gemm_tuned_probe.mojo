@@ -28,7 +28,7 @@ from gemm.checks.gemm_identical import (
     gemm_plan_name, identical_gemm_into, identical_gemm_with_plan,
     identical_gemm_workspace_floats, identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
+from gemm.contract import OP_NN, OP_NT, OP_TN
 
 comptime POISON = Float32(-1.0e37)
 

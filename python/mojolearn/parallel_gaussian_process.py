@@ -85,28 +85,18 @@ def predict_gaussian_process_classifier(estimator, X, *, devices=(0,), method='p
         part.X_train_, part.kernel_ = estimator.X_train_, estimator.kernel_
         part.n_features_in_ = estimator.n_features_in_
         requests.append(('gpc_class_predict', part, (fit, q, want_proba)))
-    columns = [value.tolist() for value in _run(requests, devices)]
-    if any(len(column) != q.shape[0] for column in columns):
+    arrays = list(_run(requests, devices))
+    if any(len(column) != q.shape[0] for column in arrays):
         raise ValueError('GPC worker returned an invalid row count')
-    if method == 'predict_proba':
-        if estimator.n_classes_ == 2:
-            return Array.from_list([[1.0 - v, v] for v in columns[0]], '<f8')
-        rows = []
-        for row in range(q.shape[0]):
-            values = [c[row] for c in columns]
-            total = 0.0
-            for value in values:
-                total += value
-            rows.append([v / total for v in values] if total != 0.0 else values)
-        return Array.from_list(rows, '<f8')
     if estimator.n_classes_ == 2:
-        codes = [1 if v > 0.0 else 0 for v in columns[0]]
-    else:
-        codes = []
-        for row in range(q.shape[0]):
-            best, index = columns[0][row], 0
-            for k in range(1, len(columns)):
-                if columns[k][row] > best:
-                    best, index = columns[k][row], k
-            codes.append(index)
-    return decode_labels(estimator.classes_, Array.from_list(codes, '<i8'))
+        if method == 'predict_proba':
+            return Array.from_list([[1.0 - v, v] for v in arrays[0].tolist()], '<f8')
+        codes = [1 if v > 0.0 else 0 for v in arrays[0].tolist()]
+        return decode_labels(estimator.classes_, Array.from_list(codes, '<i8'))
+    # DEVIATION 2833's one-vs-rest combine on this process's device, the
+    # single-device class's own call (cpu-gpu-cleanup c-gp-kernel).
+    from ._gpc_impl import _ovr_combine
+    proba, codes32 = _ovr_combine(estimator._extension(), arrays, int(q.shape[0]))
+    if method == 'predict_proba':
+        return proba
+    return decode_labels(estimator.classes_, Array.from_list(codes32.tolist(), '<i8'))

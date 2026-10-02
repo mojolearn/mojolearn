@@ -3,7 +3,7 @@
 """The host-safe definitions of `gemm/checks/gemm_identical.mojo` the generated passes import:
 GEMM_FOLD_LEVELS, GEMM_FOLD_SLOTS, SAB_FOLD_STRIDE, SAB_LEAF_ROTATE, contract_partition, _fold_push, _fold_drain, _leaf_bounds, _leaf_at."""
 from std.sys.compile import is_defined
-from gemm.checks.gemm_oracle import contract_leaf_count, contract_leaf_size
+from gemm.contract import contract_leaf_count, contract_leaf_size
 from checks.numerics import ftz
 
 

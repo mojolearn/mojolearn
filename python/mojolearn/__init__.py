@@ -188,8 +188,13 @@ from .language_model import (SmallByteLanguageModelTrainer, ByteLanguageModelCon
 # GradientBoosting model on a CPU with no GPU, through
 # host/_mojolearn_forest_host.so. Resolves its binding on first use, so an
 # install without it still imports and raises BY NAME when touched.
-from ._forest_host import HostForest, host_model, host_predict, host_predict_proba
-from ._gbdt_host import HostGBDT
+# cpu-gpu-cleanup c-core (2026-10-02): the CPU inference modules load on
+# first touch (`__getattr__` below), so importing the package on a GPU
+# install pulls in no CPU-side module.
+_CPU_INFERENCE = {
+    "HostForest": "._forest_host", "host_model": "._forest_host", "host_predict": "._forest_host",
+    "host_predict_proba": "._forest_host", "HostGBDT": "._gbdt_host",
+}
 from ._svm_impl import SVC, SVR
 # lane/expose-qn-objectives (2026-09-20): the linear machines, the
 # quasi-Newton solver on the four hinge-family losses, and the `svm`
@@ -536,6 +541,11 @@ _NOT_YET = {}
 
 
 def __getattr__(name):
+    if name in _CPU_INFERENCE:
+        import importlib
+        value = getattr(importlib.import_module(_CPU_INFERENCE[name], __name__), name)
+        globals()[name] = value
+        return value
     if name in _LAZY_EXPANSION_EXPORTS:
         value = getattr(_LAZY_EXPANSION_EXPORTS[name], name)
         globals()[name] = value

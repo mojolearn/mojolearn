@@ -208,7 +208,7 @@ CPU_SETTINGS = ("eager-fp32", "compile-fp32", "eager-bf16", "compile-bf16")
 NO_COMPILE = ("mamba1-forward", "mamba1-infer")
 VENDORS = ("apple", "nvidia", "amd")
 
-ARMS = ("ours", "ours-cpu") + tuple("torch-" + s for s in TORCH_SETTINGS) \
+ARMS = ("ours",) + tuple("torch-" + s for s in TORCH_SETTINGS) \
     + tuple("torch-cpu-" + s for s in CPU_SETTINGS) + ("torch-eager-int8", "torch-compile-int8")
 #: gemm-int8's torch settings: torch._int_mm (int8 x int8 -> int32), no autocast, no TF32
 INT8_COLUMNS = {"eager_int8": dict(tf32=False, compile=False, autocast=None),
@@ -698,8 +698,6 @@ def _ours_info(ml, module_path, mode_used, device="gpu"):
         info["vendor_used"] = "unavailable (%r)" % (exc,)
     if mode_used != "identical":
         raise RuntimeError("ours is not IDENTICAL: read back %r" % (mode_used,))
-    # an ours-cpu worker: the wheel must have loaded its CPU set (refuses by name)
-    info.update(_load("bench_board_probe").ours_cpu_check(ml))
     return info
 
 
@@ -1365,7 +1363,7 @@ def _load_speed_torch_seq(torch, info):
 
 
 def build_runner(lane, arm, shape, data):
-    if arm in ("ours", "ours-cpu"):
+    if arm in ("ours",):
         return OURS[MODEL_OF[lane]](lane, shape, data)
     return TorchArm(lane, shape, data, arm)
 
@@ -1506,10 +1504,8 @@ def _worker_env(arm):
     for k in ctd.THREAD_ENV:
         env.pop(k, None)
     ctd.apply_cpu_quota(env)
-    if arm in ("ours", "ours-cpu"):
+    if arm in ("ours",):
         env["MOJOLEARN_NUMERIC_MODE"] = "identical"
-        if arm == "ours-cpu":
-            _load("bench_board_probe").ours_cpu_env(env)
         if os.environ.get("MOJOLEARN_BENCH_INSTALLED", "0").strip() in ("", "0"):
             tree = os.path.join(REPO, "python")
             env["PYTHONPATH"] = tree + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
@@ -1525,6 +1521,12 @@ def race(args):
     ctd = _load("classical_two_datasets")
     lane, shape = args.lane, args.shape
     arms = [a for a in args.arms.split(",") if a]
+    probe = _load("bench_board_probe")
+    probe.refuse_our_cpu_arms(arms, "bench_board_neural")
+    if DEVICE_OF.get(lane) == "cpu" and any(a.startswith("ours") for a in arms):
+        # ours IS the host binding on this lane (a *-infer or host train lane)
+        raise SystemExit("bench_board_neural: refused ours on %s (it runs on the CPU): %s"
+                         % (lane, probe.OUR_CPU_RULE))
     for a in arms:
         if a not in ARMS:
             raise SystemExit("no arm %r for lane %r" % (a, lane))
@@ -1542,7 +1544,7 @@ def race(args):
               "commit": os.environ.get("MOJOLEARN_REPO_COMMIT", "unknown")}
     workers = {}
     for arm in arms:
-        py = args.ours_python if arm in ("ours", "ours-cpu") else args.theirs_python
+        py = args.ours_python if arm in ("ours",) else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm,
                                  "--lane", lane, "--shape", shape, "--data", data_path]
         workers[arm] = ctd.Worker(arm, cmd, _worker_env(arm),
@@ -1629,11 +1631,6 @@ def race(args):
         with np.load(data_path) as z:
             data = {k: z[k] for k in z.files}
         result["quality"] = quality(lane, data, outs)
-        # our CPU tier against our GPU IDENTICAL, bit for bit (the promise):
-        # the outputs on forward lanes, every step's loss on train lanes
-        if "ours-cpu" in outs and "ours" in outs:
-            result["quality"].setdefault("ours-cpu", {})["bits_equal_vs_ours_identical"] = \
-                _load("bench_board_probe").bits_equal(outs["ours-cpu"], outs["ours"])
     except Exception as exc:  # noqa: BLE001
         result["quality"] = {"error": repr(exc)}
     try:

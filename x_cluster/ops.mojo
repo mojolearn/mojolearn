@@ -135,6 +135,10 @@ trait ClusterOps(Movable):
     def exp(mut self, src: Int, dst: Int, n: Int) raises:
         ...
 
+    def argmax_rows(mut self, src: Int, n: Int, kc: Int, labels: Int) raises:
+        """labels (int, n) = each row's `bodies.argmax_row` of src (n x kc)."""
+        ...
+
     def moments(
         mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
     ) raises:

@@ -128,10 +128,6 @@ def _class_array(classes, codes):
 #: A/B arm (lane neighbors-apple2): the k-NN primitive as the two ops it
 #: fuses, `sqdist` then `knn_select` through an n x m matrix. Same bits.
 _UNFUSED_KNN = os.environ.get("MOJOLEARN_XN_UNFUSED_KNN", "") == "1"
-#: A/B arm (lane neighbors-apple2): the fit loops of label propagation /
-#: spreading, PageRank and connected_components in Python, one op per step,
-#: instead of the resident `lp_iterate` / `pr_iterate` / `cc_iterate`.
-_HOST_LOOP_LP = os.environ.get("MOJOLEARN_XN_HOST_LOOPS", "") == "1"
 #: A/B arm: KNNImputer.transform over every cell instead of the missing ones.
 _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 #: A/B arm: the one-item forms these replaced (PolynomialCountSketch's
@@ -412,12 +408,21 @@ class NearestCentroid(_XNeighbors):
             if os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") == "1":
                 self._op("group_mean", [(X, 0), (lab, 0), (cent, 1)], (n, d, C))
         else:
-            rows = X.tolist()
-            med = []
+            # the per-class medians on the device (cpu-gpu-cleanup w2-pyglue,
+            # x_neighbors/sort_items.mojo): a bitonic sort of every feature's
+            # rows by (class, value, row) over a power-of-two pad, then each
+            # class's middle value(s) at its offset; offsets are the class
+            # counts' prefix (integer bookkeeping over the classes)
+            start = [0] * (C + 1)
             for c in range(C):
-                members = [rows[i] for i in range(n) if codes[i] == c]
-                med.append([_median([r[f] for r in members]) for f in range(d)])
-            cent = Array.from_list(med, "<f4")
+                start[c + 1] = start[c] + counts[c]
+            p = 1
+            while p < n:
+                p *= 2
+            lg = p.bit_length() - 1
+            cent = _empty_out((C, d), "<f4")
+            self._op("nc_median", [(X, 0), (lab, 0), (_i32(start, "start"), 0), (cent, 1)],
+                     (n, d, C, p, lg * (lg + 1) // 2))
         stats = _empty_out((d,), "<f4")
         new_cent = _empty_out((C, d), "<f4")
         devs = _empty_out((C, d), "<f4")
@@ -571,10 +576,19 @@ class OneClassSVM(_XNeighbors):
                 raise ValueError("sample_weight and X have different numbers of samples")
             if any(v < 0 for v in w):
                 raise ValueError("negative sample_weight is not supported")
-            rows = [i for i in range(n) if w[i] > 0]
-            if not rows:
+            # libsvm's remove_zero_weight as a device compaction (cpu-gpu-cleanup
+            # w2-pyglue, x_neighbors/sort_items.mojo pos_compact): the rows of
+            # positive weight in row order and their float32 weights
+            wv = Array.from_list(w, "<f4")
+            prow = empty((n,), "<i4")
+            pval = _empty_out((n,), "<f4")
+            pinfo = empty((1,), "<i4")
+            self._op("pos_compact", [(wv, 0), (prow, 1), (pval, 1), (pinfo, 1)], (n,))
+            kept = pinfo.tolist()[0]
+            if not kept:
                 raise ValueError("Invalid input - all samples have zero or negative weights.")
-            cvals = [w[i] for i in rows]
+            rows = prow.tolist()[:kept]
+            cvals = pval.tolist()[:kept]
         m = len(rows)
         if self.kernel == "precomputed":
             self._gamma = 0.0
@@ -746,25 +760,16 @@ class KernelPCA(_XNeighbors):
         # lane hr2-kpca-seq: the dense eigendecomposition is x_decomp's
         # eigh (the pinned round-robin Jacobi, x_decomp/rr.mojo, on the
         # device; the host binding runs the same rounds), never the host
-        # Jacobi of x_neighbors/eigh.mojo inside the GPU binding. A/B arm
-        # until measured: MOJOLEARN_XN_KPCA_XN_EIGH=1 restores the old op.
-        old_eigh = os.environ.get("MOJOLEARN_XN_KPCA_XN_EIGH", "0") == "1"
+        # Jacobi of x_neighbors/eigh.mojo inside the GPU binding.
         c = n if self.n_components is None else min(n, int(self.n_components))
-        if old_eigh:
-            w = _empty_out((n,), "<f4")
-            V = _empty_out((n, n), "<f4")
-            self._op("eigh", [(Kc, 0), (w, 1), (V, 1)], (n,))
-            self._op("svd_flip", [(V, 1)], (n, n))
-            wl = w.tolist()
-        else:
-            import array
-            from ._expansion_decomp import _Kit, _M
-            if kit is None:
-                kit = _Kit(self.numeric_mode_used())
-            store = array.array("f")
-            store.frombytes(Kc.tobytes())
-            wm, Vm = kit.eigh(_M(store, n, n))
-            wl = list(wm.s)
+        import array
+        from ._expansion_decomp import _Kit, _M
+        if kit is None:
+            kit = _Kit(self.numeric_mode_used())
+        store = array.array("f")
+        store.frombytes(Kc.tobytes())
+        wm, Vm = kit.eigh(_M(store, n, n))
+        wl = list(wm.s)
         order = list(range(n - 1, -1, -1))           # descending; equal values: higher index first
         order = order[:c]
         vals = [max(wl[i], 0.0) for i in order]
@@ -773,15 +778,12 @@ class KernelPCA(_XNeighbors):
             order = [order[j] for j in keep]
             vals = [vals[j] for j in keep]
         self.eigenvalues_ = Array.from_list(vals, "<f4")
-        if old_eigh:
-            self.eigenvectors_ = self._take_cols(V, order)
-        else:
-            # sklearn's svd_flip(u, None) on the kept columns: each column's
-            # largest-|.| entry (ties to the lower row) made positive
-            vecs = Vm.take_cols(order)
-            if order:
-                vecs = vecs.neg_cols(kit.absmax_flags(vecs, True))
-            self.eigenvectors_ = Array._from_flat(vecs.s, (n, len(order)), "<f4")
+        # sklearn's svd_flip(u, None) on the kept columns: each column's
+        # largest-|.| entry (ties to the lower row) made positive
+        vecs = Vm.take_cols(order)
+        if order:
+            vecs = vecs.neg_cols(kit.absmax_flags(vecs, True))
+        self.eigenvectors_ = Array._from_flat(vecs.s, (n, len(order)), "<f4")
         self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
         self.n_features_in_ = d
         return self
@@ -1126,9 +1128,8 @@ class _LabelPropagationBase(_XNeighbors):
         code = {c: i for i, c in enumerate(classes)}
         unl = [1 if v == -1 else 0 for v in y]
         ld0 = [[1.0 if (v != -1 and code[v] == j) else 0.0 for j in range(C)] for v in y]
-        if self._variant == "propagation":
-            ys = [[0.0] * C if unl[i] else ld0[i] for i in range(n)]
-        else:
+        ys = None
+        if self._variant != "propagation":
             a = _f32_scalar(1.0 - float(self.alpha))
             ys = [[a * v for v in row] for row in ld0]
         if self.kernel == "knn":
@@ -1138,9 +1139,16 @@ class _LabelPropagationBase(_XNeighbors):
         else:
             G = self._build_graph(X)
         ld = Array.from_list(ld0, "<f4")
-        ystatic = Array.from_list(ys, "<f4")
         unlabeled = _i32(unl, "unlabeled")
-        if not _HOST_LOOP_LP and not isinstance(G, tuple):
+        if ys is None:
+            # propagation's static rows on the device: a labeled row keeps
+            # its one-hot row, an unlabeled row (all zero in ld0) normalizes
+            # to zero (`lp_clamp` with ld as both inputs)
+            ystatic = _empty_out((n, C), "<f4")
+            self._op("lp_clamp", [(ld, 0), (ld, 0), (unlabeled, 0), (ystatic, 1)], (n, C))
+        else:
+            ystatic = Array.from_list(ys, "<f4")
+        if not isinstance(G, tuple):
             # The loop below as ONE resident op (x_neighbors/iter_device.mojo):
             # the same items in the same order, the graph uploaded once, tol
             # passed as its float64 bits so the stopping test is Python's.
@@ -1430,54 +1438,27 @@ class PageRank(_XNeighbors):
         A = _adjacency(A)
         n = A.shape[0]
         binary = self.weight is None or self.weight is False
-        if not _HOST_LOOP_LP:
-            # the iteration over the column lists of the adjacency, built
-            # and iterated on the device (lane hr-graph,
-            # x_neighbors/graph_par.mojo): the dense chains with their zero
-            # terms left out, the dangling mass and |x' - x| blocked folds
-            if self.personalization is None:
-                p = Array.from_list([1.0 / n] * n, "<f4")
-            else:
-                p = self._unit(self.personalization, n, "personalization")
-            dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
-            x = Array.from_list([1.0 / n] * n, "<f4") if self.nstart is None else self._unit(self.nstart, n, "nstart")
-            x = Array.from_list(x.tolist(), "<f4")
-            info = empty((2,), "<i4")
-            thr = struct.unpack("<Q", struct.pack("<d", n * float(self.tol)))[0]
-            self._op("pr_iterate_sparse", [(A, 0), (x, 1), (p, 0), (dw, 0), (info, 1)],
-                     (n, int(self.max_iter), thr >> 32, thr & 0xFFFFFFFF, 1 if binary else 0),
-                     (_f32_scalar(self.alpha),))
-            it, ok = info.tolist()
-            if ok:
-                self.pagerank_ = x
-                self.n_iter_ = int(it)
-                return self
-            raise RuntimeError(f"PageRank: power iteration failed to converge within {self.max_iter} iterations")
-        if binary:
-            A = Array.from_list([[1.0 if v != 0 else 0.0 for v in r] for r in A.tolist()], "<f4")
-        Q = _empty_out((n, n), "<f4")
-        self._op("row_normalize", [(A, 0), (Q, 1)], (n, n))
-        if _OLD_ITEMS:
-            dangling = _i32([1 if all(v == 0 for v in r) else 0 for r in A.tolist()], "dangling")
-        else:
-            dangling = empty((n,), "<i4")
-            self._op("row_all_zero", [(A, 0), (dangling, 1)], (n, n))
+        # the iteration over the column lists of the adjacency, built
+        # and iterated on the device (lane hr-graph,
+        # x_neighbors/graph_par.mojo): the dense chains with their zero
+        # terms left out, the dangling mass and |x' - x| blocked folds
         if self.personalization is None:
             p = Array.from_list([1.0 / n] * n, "<f4")
         else:
             p = self._unit(self.personalization, n, "personalization")
         dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
         x = Array.from_list([1.0 / n] * n, "<f4") if self.nstart is None else self._unit(self.nstart, n, "nstart")
-        s = _empty_out((1,), "<f4")
-        for it in range(int(self.max_iter)):
-            nxt = _empty_out((n,), "<f4")
-            self._op("pagerank_step", [(Q, 0), (x, 0), (p, 0), (dw, 0), (dangling, 0), (nxt, 1)], (n,), (_f32_scalar(self.alpha),))
-            self._op("absdiff_sum", [(nxt, 0), (x, 0), (s, 1)], (n,))
-            x = nxt
-            if s.tolist()[0] < n * float(self.tol):
-                self.pagerank_ = x
-                self.n_iter_ = it + 1
-                return self
+        x = Array.from_list(x.tolist(), "<f4")
+        info = empty((2,), "<i4")
+        thr = struct.unpack("<Q", struct.pack("<d", n * float(self.tol)))[0]
+        self._op("pr_iterate_sparse", [(A, 0), (x, 1), (p, 0), (dw, 0), (info, 1)],
+                 (n, int(self.max_iter), thr >> 32, thr & 0xFFFFFFFF, 1 if binary else 0),
+                 (_f32_scalar(self.alpha),))
+        it, ok = info.tolist()
+        if ok:
+            self.pagerank_ = x
+            self.n_iter_ = int(it)
+            return self
         raise RuntimeError(f"PageRank: power iteration failed to converge within {self.max_iter} iterations")
 
 
@@ -1510,16 +1491,9 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     A = _adjacency(A)
     n = A.shape[0]
     lab = _i32(list(range(n)), "labels")
-    if not _HOST_LOOP_LP:
-        # the loop below as ONE resident op, A uploaded once
-        info = empty((1,), "<i4")
-        est._op("cc_iterate", [(A, 0), (lab, 1), (info, 1)], (n,))
-    while _HOST_LOOP_LP:
-        nxt = empty((n,), "<i4")
-        est._op("cc_step", [(A, 0), (lab, 0), (nxt, 1)], (n,))
-        if nxt.tolist() == lab.tolist():
-            break
-        lab = nxt
+    # the min-label rounds as ONE resident op, A uploaded once
+    info = empty((1,), "<i4")
+    est._op("cc_iterate", [(A, 0), (lab, 1), (info, 1)], (n,))
     return _cc_relabel(lab, return_labels)
 
 

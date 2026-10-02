@@ -15,7 +15,7 @@ from std.python._cpython import GILReleased
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from gaussian_process.host.gpc_oracle import gpc_host_predict
-from gaussian_process.host.gpc_steps import gpc_proba
+from gaussian_process.host.gpc_steps import gpc_ovr_combine_rows, gpc_proba
 from gaussian_process.host.gpr_oracle import (
     GPR_K_CONST,
     GPR_K_MATERN,
@@ -354,3 +354,34 @@ def gpc_predict_binding(
     _ = x_star^
     _ = spec^
     return PythonObject(rc)
+
+
+def gpc_ovr_combine_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """The host column of `bindings/_mojolearn_gp.mojo::gpc_ovr_combine_binding`
+    (DEVIATION 2833's one-vs-rest combine), the same address contract:
+    addrs 0 proba_out (n * k float64, row-major, WRITTEN), 1 codes_out
+    (n int32, WRITTEN), 2..k+1 the class columns (n float64 each, read);
+    params 0 n. Returns 0."""
+    if len(addrs) < 3:
+        raise Error(
+            "gpc_ovr_combine: addrs must contain proba_out, codes_out and at"
+            " least one class column, got "
+            + String(len(addrs))
+            + " addresses"
+        )
+    if len(params) != 1:
+        raise Error(
+            "gpc_ovr_combine: params must contain 1 value (n), got "
+            + String(len(params))
+        )
+    var n = Int(py=params[0])
+    var out_addr = Int(py=addrs[0])
+    var codes_addr = Int(py=addrs[1])
+    var cols = List[Int]()
+    for c in range(2, len(addrs)):
+        cols.append(Int(py=addrs[c]))
+    with GILReleased(Python()):
+        gpc_ovr_combine_rows(cols, out_addr, codes_addr, n)
+    return PythonObject(0)

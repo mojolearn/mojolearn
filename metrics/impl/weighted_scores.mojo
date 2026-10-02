@@ -4,7 +4,7 @@
 arm and cuML 26.08's Python weights both in cupy, so these follow the
 scikit-learn reference definitions on the repository's pinned-sum path
 (`metrics/checks/pinned_sum.mojo`), the same `PINNED_SUM_W = 256` slab tree
-and ascending host fold `r2_score` uses:
+and device partial tree `r2_score` uses:
 
     accuracy_score(y_true, y_pred, sample_weight=w)
         = np.average(y_true == y_pred, weights=w)
@@ -22,8 +22,8 @@ product is flushed (`ftz`), so a subnormal weight or target cannot become a
 normal term on a device without flush-to-zero; each quotient is the
 `identical_div` seam; the R2 ratio is `scores.mojo::r2_epilogue`, the
 unweighted metric's own guards and NaN canonicalization. The chunk totals
-are read back and folded on the host (`host_fold_partials`), so the value
-is a function of `n` and the data only, never of the launch.
+fold on the device as the fixed slab tree (`fold_partials_levels`), so the
+value is a function of `n` and the data only, never of the launch.
 
 The Python surface validates the weights (finite, non-negative, positive
 total) before any launch; a zero total never reaches a division here.
@@ -37,7 +37,10 @@ from metrics.checks.pinned_sum import (
     PINNED_SUM_TPB,
     PINNED_SUM_W,
     chunk_count,
-    host_fold_partials,
+    device_fold_partials,
+    fold_partials_levels,
+    fold_scratch_len,
+    last_level_values,
     linear_block_id,
     physical_block_count,
     virtual_block_sum,
@@ -148,18 +151,20 @@ def weighted_sse_ssto_chunks_kernel[
         chunk += physical_block_count()
 
 
-def weighted_accuracy_finalize_kernel(
+def weighted_accuracy_finalize_kernel[block_size: Int](
     num_partials: MutPointer[Float32, MutAnyOrigin],
+    num_m: Int32,
     den_partials: MutPointer[Float32, MutAnyOrigin],
-    chunks: Int32,
+    den_m: Int32,
     result: MutPointer[Float32, MutAnyOrigin],
 ):
+    """The last level of both partial trees (`<= PINNED_SUM_W` partials
+    each, `fold_partials_levels`), then the quotient on thread 0."""
+    var num = virtual_block_sum[block_size](last_level_values[block_size](num_partials, Int(num_m)))
+    var den = virtual_block_sum[block_size](last_level_values[block_size](den_partials, Int(den_m)))
     if Int(thread_idx.x) == 0:
-        var num = Float32(0)
-        var den = Float32(0)
-        for c in range(Int(chunks)):
-            num = ftz(num + num_partials.unsafe_load(c))
-            den = ftz(den + den_partials.unsafe_load(c))
+        num = ftz(num)
+        den = ftz(den)
         result.unsafe_store(0,ftz(identical_div(num,den)) if den > 0 else Float32(0))
         result.unsafe_store(1,den)
 
@@ -167,14 +172,7 @@ def weighted_accuracy_finalize_kernel(
 def _fold(
     ctx: DeviceContext, mut partials: DeviceBuffer[DType.float32], chunks: Int
 ) raises -> Float32:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](chunks)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=partials)
-    ctx.synchronize()
-    var lst = List[Float32]()
-    for c in range(chunks):
-        lst.append(h.unsafe_ptr().unsafe_load(c))
-    _ = h^
-    return host_fold_partials(lst, chunks)
+    return device_fold_partials(ctx, partials, chunks)
 
 
 def weighted_accuracy_score(
@@ -201,15 +199,29 @@ def weighted_accuracy_score(
         block_dim=(PINNED_SUM_TPB, 1, 1),
     )
     var result = ctx.enqueue_create_buffer[DType.float32](2)
-    ctx.enqueue_function[weighted_accuracy_finalize_kernel](
-        num_p.unsafe_ptr(),den_p.unsafe_ptr(),Int32(chunks),result.unsafe_ptr(),
-        grid_dim=1,block_dim=32,
+    var ns0 = ctx.enqueue_create_buffer[DType.float32](fold_scratch_len(chunks))
+    var ns1 = ctx.enqueue_create_buffer[DType.float32](fold_scratch_len(chunks))
+    var ds0 = ctx.enqueue_create_buffer[DType.float32](fold_scratch_len(chunks))
+    var ds1 = ctx.enqueue_create_buffer[DType.float32](fold_scratch_len(chunks))
+    var nl = fold_partials_levels(
+        ctx, rebind[MutPointer[Float32, MutAnyOrigin]](num_p.unsafe_ptr()), chunks, ns0, ns1
+    )
+    var dl = fold_partials_levels(
+        ctx, rebind[MutPointer[Float32, MutAnyOrigin]](den_p.unsafe_ptr()), chunks, ds0, ds1
+    )
+    ctx.enqueue_function[weighted_accuracy_finalize_kernel[PINNED_SUM_TPB]](
+        nl[0], Int32(nl[1]), dl[0], Int32(dl[1]), result.unsafe_ptr(),
+        grid_dim=chunk_count(nl[1]), block_dim=PINNED_SUM_TPB,
     )
     var host = download_f32(ctx,result,2)
     var score = host[0]
     var den = host[1]
     _ = num_p^
     _ = den_p^
+    _ = ns0^
+    _ = ns1^
+    _ = ds0^
+    _ = ds1^
     _ = result^
     if den <= Float32(0.0):
         raise Error("weighted accuracy_score: the weights must have positive total")

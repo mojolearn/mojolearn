@@ -35,9 +35,8 @@ and copy. The two that touch floating point say below why no bit moves:
     (`<` for min, `>` for max and argmax), same order, same answer.
 
 The per-element helpers (`cast_elements`, `equal_elements`, `gather_i32`)
-split contiguous ranges across the host pool under `MOJOLEARN_CPU_THREADS`
-(`core/host_predict_threads.mojo`); a range is written by one task and no
-element depends on another, so the thread count moves no byte.
+run one SIMD range on the calling thread (cpu-gpu-cleanup c-core: the host
+pool is not used from the GPU binding); no element depends on another.
 """
 from std.math import isfinite
 from std.memory import bitcast
@@ -45,9 +44,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 
-from core.host_parallel import host_parallelize
 
-from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 #: THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` is the core host
 #: binding's existing sabotage define, and `-D MOJOLEARN_HOTPATH_SABOTAGE=1`
@@ -75,9 +72,6 @@ comptime HP_I64 = 3
 comptime HP_U32 = 4
 comptime HP_U8 = 5
 
-#: Below this many elements one task on the calling thread is cheaper than
-#: waking the pool (the threshold `core/forest_inference_model.mojo` uses).
-comptime HP_SERIAL = 1 << 16
 comptime HP_W = 8
 
 
@@ -89,9 +83,9 @@ def _ptr[dt: DType](addr: Int) raises -> MutPointer[Scalar[dt], MutUntrackedOrig
 
 
 def _tasks(n: Int) -> Int:
-    if n < HP_SERIAL:
-        return 1
-    return host_predict_task_count(n)
+    """One task on the calling thread (cpu-gpu-cleanup c-core: the GPU
+    binding runs no host pool; the SIMD loop is a copy/compare)."""
+    return 1
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +159,7 @@ def _cast_run[src: DType, dst: DType](src_addr: Int, dst_addr: Int, n: Int) rais
     var sp = _ptr[src](src_addr)
     var dp = _ptr[dst](dst_addr)
     var tasks = _tasks(n)
-    var chunk = host_predict_chunk(n, tasks)
+    var chunk = n
     var flags = List[Int](length=tasks, fill=0)
     var fp = flags.unsafe_ptr()
 
@@ -194,10 +188,7 @@ def _cast_run[src: DType, dst: DType](src_addr: Int, dst_addr: Int, n: Int) rais
             fp.unsafe_store(c, 1)
 
     with GILReleased(Python()):
-        if tasks == 1:
-            _range(0)
-        else:
-            host_parallelize(_range, tasks)
+        _range(0)
     _ = len(flags)
     for c in range(tasks):
         if flags[c] != 0:
@@ -369,7 +360,7 @@ def _equal[dt: DType](a_addr: Int, b_addr: Int, n: Int, dst_addr: Int) raises:
     var bp = _ptr[dt](b_addr)
     var dp = _ptr[DType.uint8](dst_addr)
     var tasks = _tasks(n)
-    var chunk = host_predict_chunk(n, tasks)
+    var chunk = n
 
     def _range(c: Int) {imm ap, imm bp, imm dp, imm n, imm chunk}:
         var i = c * chunk
@@ -386,10 +377,7 @@ def _equal[dt: DType](a_addr: Int, b_addr: Int, n: Int, dst_addr: Int) raises:
             i += 1
 
     with GILReleased(Python()):
-        if tasks == 1:
-            _range(0)
-        else:
-            host_parallelize(_range, tasks)
+        _range(0)
 
 
 def equal_elements_binding(
@@ -580,7 +568,7 @@ def gather_i32_binding(
                 break
         if not bad:
             var tasks = _tasks(count)
-            var chunk = host_predict_chunk(count, tasks)
+            var chunk = count
 
             def _range(t: Int) {imm tp, imm cp, imm dp, imm count, imm chunk, imm nt}:
                 var lo = t * chunk
@@ -591,10 +579,7 @@ def gather_i32_binding(
                     else:
                         dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load(i))))
 
-            if tasks == 1:
-                _range(0)
-            else:
-                host_parallelize(_range, tasks)
+            _range(0)
     if bad:
         raise Error("gather_i32: code out of range")
     return PythonObject(0)
