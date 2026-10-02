@@ -24,11 +24,14 @@ from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT
-from x_linear.isotonic import iso_predict_one, iso_gather_one, iso_bounds, iso_group, iso_after_unique
+from x_linear.isotonic import iso_predict_one, iso_gather_one, iso_bounds, iso_bounds_from, iso_group, iso_after_unique
 from std.memory import bitcast
 from x_linear.ops import ld, st, fd, i2f
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo
 
 
@@ -260,10 +263,63 @@ def iso_gather_kernel(x: FP, y: FP, n: Int32, perm: IP, fw: FP):
         iso_gather_one(j, x, y, nn, False, perm, fw + 3 * nn, fw + 4 * nn, fw + 5 * nn)
 
 
-def iso_bounds_kernel(fw: FP, n: Int32, iw: IP, mslot: IP):
+# The group bounds (lane/neural-pass117): one thread walked all n sorted
+# rows (M4, istella's 87-value column at 1M rows: 109 ms). A row whose x
+# equals the row before never starts a group, so the walk only needs the
+# rows where x changes: flagged and compacted in order by the grid, then
+# `iso_bounds_from` walks them on one thread (the same starts).
+@always_inline
+def _iso_changed(xs: FP, j: Int, n: Int) -> Int:
+    if j >= 1 and j < n and xs.unsafe_load(j) != xs.unsafe_load(j - 1):
+        return 1
+    return 0
+
+
+def iso_flag_count_kernel(fw: FP, n: Int32, bcnt: IP):
+    var nn = Int(n)
+    var tid = Int(thread_idx.x)
+    var j = Int(block_idx.x) * XG_TPB + tid
+    var sh = stack_allocation[XG_TPB, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    sh[tid] = Int32(_iso_changed(fw + 3 * nn, j, nn))
+    barrier()
+    if tid == 0:
+        var c = Int32(0)
+        for u in range(XG_TPB):
+            c += sh[u]
+        bcnt.unsafe_store(Int(block_idx.x), c)
+
+
+def iso_flag_scan_kernel(bcnt: IP, nb: Int32):
+    """Exclusive prefix of the block counts in place; the total at [nb]."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        var acc = Int32(0)
+        for b in range(Int(nb)):
+            var c = bcnt.unsafe_load(b)
+            bcnt.unsafe_store(b, acc)
+            acc += c
+        bcnt.unsafe_store(Int(nb), acc)
+
+
+def iso_flag_write_kernel(fw: FP, n: Int32, bcnt: IP, cand: IP):
+    var nn = Int(n)
+    var tid = Int(thread_idx.x)
+    var j = Int(block_idx.x) * XG_TPB + tid
+    var sh = stack_allocation[XG_TPB, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var f = _iso_changed(fw + 3 * nn, j, nn)
+    sh[tid] = Int32(f)
+    barrier()
+    if f != 0:
+        var r = Int32(0)
+        for u in range(tid):
+            r += sh[u]
+        cand.unsafe_store(Int(bcnt.unsafe_load(Int(block_idx.x)) + r), Int32(j))
+
+
+def iso_bounds_kernel(fw: FP, n: Int32, iw: IP, mslot: IP, cand: IP, bcnt: IP, nb: Int32):
     if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
         var nn = Int(n)
-        mslot.unsafe_store(0, Int32(iso_bounds(fw + 3 * nn, nn, iw + nn)))
+        var nc = Int(bcnt.unsafe_load(Int(nb)))
+        mslot.unsafe_store(0, Int32(iso_bounds_from(fw + 3 * nn, nn, cand, nc, iw + nn)))
 
 
 def iso_group_kernel(fw: FP, n: Int32, iw: IP, mslot: IP):
@@ -330,7 +386,15 @@ def _iso_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, ip: List[Int32], fp:
     var dm = ctx.enqueue_create_buffer[DType.int32](1)
     ctx.enqueue_function[iso_gather_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), pp, dfw.unsafe_ptr(),
                                             grid_dim=_xg_blocks(n), block_dim=XG_TPB)
-    ctx.enqueue_function[iso_bounds_kernel](dfw.unsafe_ptr(), Int32(n), diw.unsafe_ptr(), dm.unsafe_ptr(), grid_dim=1, block_dim=1)
+    var nbk = _xg_blocks(n)
+    var dbc = ctx.enqueue_create_buffer[DType.int32](nbk + 1)
+    var dcand = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    ctx.enqueue_function[iso_flag_count_kernel](dfw.unsafe_ptr(), Int32(n), dbc.unsafe_ptr(), grid_dim=nbk, block_dim=XG_TPB)
+    ctx.enqueue_function[iso_flag_scan_kernel](dbc.unsafe_ptr(), Int32(nbk), grid_dim=1, block_dim=1)
+    ctx.enqueue_function[iso_flag_write_kernel](dfw.unsafe_ptr(), Int32(n), dbc.unsafe_ptr(), dcand.unsafe_ptr(),
+                                                grid_dim=nbk, block_dim=XG_TPB)
+    ctx.enqueue_function[iso_bounds_kernel](dfw.unsafe_ptr(), Int32(n), diw.unsafe_ptr(), dm.unsafe_ptr(),
+                                            dcand.unsafe_ptr(), dbc.unsafe_ptr(), Int32(nbk), grid_dim=1, block_dim=1)
     ctx.enqueue_function[iso_group_kernel](dfw.unsafe_ptr(), Int32(n), diw.unsafe_ptr(), dm.unsafe_ptr(),
                                            grid_dim=_xg_blocks(n), block_dim=XG_TPB)
     ctx.enqueue_function[iso_after_kernel](Int32(n), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(),
@@ -350,6 +414,8 @@ def _iso_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, ip: List[Int32], fp:
     _ = dkx^
     _ = dky^
     _ = dpa^
+    _ = dbc^
+    _ = dcand^
     _ = dpb^
     _ = dcnt^
     _ = dm^

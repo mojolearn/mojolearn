@@ -177,6 +177,27 @@ def iso_gather_one(j: Int, x: FP, y: FP, n: Int, has_w: Bool, perm: IP, xs: FP, 
     st(ws, j, ld(y, n + r) if has_w else Float32(1))
 
 
+def iso_bounds_from(xs: FP, nk: Int, cand: IP, nc: Int, starts: IP) -> Int:
+    """`iso_bounds` over the candidate rows cand[0:nc] (ascending): the rows
+    whose x differs from the row before. A row with the previous row's x
+    never starts a group (it is 0 above the group's first x or the same
+    distance as the row before), so walking only the candidates takes the
+    same steps and writes the same starts (lane/neural-pass117)."""
+    var m = 0
+    sti(starts, 0, 0)
+    var cx = ld(xs, 0)
+    for q in range(nc):
+        var j = ldi(cand, q)
+        var xj = ld(xs, j)
+        if fs(xj, cx) >= Float32(1e-6):
+            m += 1
+            sti(starts, m, j)
+            cx = xj
+    m += 1
+    sti(starts, m, nk)
+    return m
+
+
 def iso_bounds(xs: FP, nk: Int, starts: IP) -> Int:
     """_make_unique's groups: starts[g] the first sorted row of group g (a row
     starts a group when it is at least 1e-6 above the group's first x),
@@ -208,10 +229,25 @@ def iso_group(g: Int, xs: FP, ys: FP, ws: FP, starts: IP, fw: FP, n: Int):
         cw = ld(ws, lo)
         cy = fm(ld(ys, lo), cw)
         j0 = lo + 1
-    for j in range(j0, hi):
+    var j = j0
+    # 16 rows' loads before their folds (scheduling only; lane/neural-pass117:
+    # one group can hold most of the rows, and its chain waited on a load
+    # per row)
+    while j + 16 <= hi:
+        var bw = SIMD[DType.float32, 16]()
+        var by = SIMD[DType.float32, 16]()
+        comptime for u in range(16):
+            bw[u] = ld(ws, j + u)
+            by[u] = ld(ys, j + u)
+        comptime for u in range(16):
+            cw = fa(cw, bw[u])
+            cy = fmad(by[u], bw[u], cy)
+        j += 16
+    while j < hi:
         var wj = ld(ws, j)
         cw = fa(cw, wj)
         cy = fmad(ld(ys, j), wj, cy)
+        j += 1
     st(fw, g, ld(xs, lo))
     st(fw, 2 * n + g, cw)
     st(fw, n + g, fd(cy, cw))
