@@ -82,13 +82,27 @@ comptime _M64 = SIMD[DType.float32, 64]
 comptime _V2 = SIMD[DType.int64, 2]
 
 
+comptime MQ_BIGD_MAX = 4096
+"""Widest feature axis the chunked arm takes (`fast_mma_bigd_kernel`)."""
+comptime MQ_DC = 32
+"""Feature chunk of the chunked arm's shared tile."""
+
+
+def _bigd_on() -> Bool:
+    """`MOJOLEARN_KNN_FAST_MMA_BIGD=0` turns the chunked arm (more than
+    MQ_MAX_D features) off: the A/B arm, the scalar and tiled arms then."""
+    return getenv("MOJOLEARN_KNN_FAST_MMA_BIGD") != "0"
+
+
 def fast_mma_knn_applies(n_features: Int, k: Int) -> Bool:
     """Whether this build and shape take the matrix-unit arm."""
     comptime if not FAST_MMA_KNN_ENABLED:
         return False
-    return (
-        n_features >= 1 and n_features <= MQ_MAX_D and k >= 1 and k <= MQ_MAX_K
-    )
+    if k < 1 or k > MQ_MAX_K or n_features < 1:
+        return False
+    if n_features <= MQ_MAX_D:
+        return True
+    return n_features <= MQ_BIGD_MAX and _bigd_on()
 
 
 @always_inline
@@ -329,6 +343,201 @@ def fast_mma_partial_kernel[D: Int, K: Int, A: Int, B: Int](
                     part_i[unsafe_offset = o + t] = bi[a * K + t]
 
 
+def fast_mma_norms_kernel(
+    index: MutPointer[Float32, MutAnyOrigin],
+    inorm: MutPointer[Float32, MutAnyOrigin],
+    n_index_in: Int32,
+    d_in: Int32,
+):
+    """||x||^2 of each index row (the chunked arm's tile norms)."""
+    var i = Int(block_idx.x) * 256 + Int(thread_idx.x)
+    if i < Int(n_index_in):
+        var d = Int(d_in)
+        var acc = Float32(0)
+        for c in range(d):
+            var v = index[unsafe_offset = i * d + c]
+            acc += v * v
+        inorm[unsafe_offset = i] = acc
+
+
+def fast_mma_bigd_kernel[K: Int, A: Int](
+    queries: MutPointer[Float32, MutAnyOrigin],
+    index: MutPointer[Float32, MutAnyOrigin],
+    inorm: MutPointer[Float32, MutAnyOrigin],
+    part_d: MutPointer[Float32, MutAnyOrigin],
+    part_i: MutPointer[UInt32, MutAnyOrigin],
+    n_queries_in: Int32,
+    n_index_in: Int32,
+    d_in: Int32,
+    k_in: Int32,
+    slice_rows_in: Int32,
+):
+    """`fast_mma_partial_kernel` past MQ_MAX_D features (lane/apple-fast-
+    classical, 2026-10-02): the shared tile holds MQ_T index rows by MQ_DC
+    features; each simdgroup accumulates its 8A queries against the tile's
+    MQ_T / 8 index blocks over the feature chunks (the query fragments of a
+    chunk read from device memory, the products in registers), then admits
+    the candidates exactly as the narrow kernel does. Norms from
+    `fast_mma_norms_kernel`."""
+    comptime NB = MQ_T // 8
+    comptime KC = MQ_DC // 8
+    comptime GB = 4
+    """Index blocks per admission group (the narrow kernel's MQ_B)."""
+    var nq = Int(n_queries_in)
+    var ni = Int(n_index_in)
+    var d = Int(d_in)
+    var k = Int(k_in)
+    var s = Int(block_idx.y)
+    var tid = Int(thread_idx.x)
+    var sg = tid // 32
+    var lane = tid % 32
+    var qd = lane // 4
+    var frow = (qd & 4) + ((lane // 2) % 4)
+    var fcol = (qd & 2) * 2 + (lane % 2) * 2
+    var sub = (lane & 1) | (((lane >> 3) & 1) << 1)
+    var q0 = (Int(block_idx.x) * MQ_SG + sg) * 8 * A
+
+    var bd = SIMD[DType.float32, K * A](MQ_BIG)
+    var bi = SIMD[DType.uint32, K * A](0xFFFFFFFF)
+    var worst = SIMD[DType.float32, A](MQ_BIG)
+    var thr = SIMD[DType.float32, A](MQ_BIG)
+
+    var lo = s * Int(slice_rows_in)
+    var hi = min(ni, lo + Int(slice_rows_in))
+    var tile = stack_allocation[
+        MQ_T * MQ_DC, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var tnorm = stack_allocation[
+        MQ_T, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    comptime PER = (MQ_T * MQ_DC) // MQ_TPB
+    var base = lo
+    while base < hi:
+        var rows = min(MQ_T, hi - base)
+        var acc = InlineArray[_M64, A * NB](fill=_M64(0))
+        var c0 = 0
+        while c0 < d:
+            barrier()
+            comptime for u in range(PER):
+                var e = tid + u * MQ_TPB
+                var r = e // MQ_DC
+                var c = e - r * MQ_DC
+                var v = Float32(0)
+                if r < rows and c0 + c < d:
+                    v = index[unsafe_offset = (base + r) * d + c0 + c]
+                tile[e] = v
+            if c0 == 0 and tid < MQ_T:
+                tnorm[tid] = inorm[unsafe_offset = base + tid] if tid < rows else MQ_PAD
+            barrier()
+            var qf = InlineArray[_M64, A * KC](fill=_M64(0))
+            comptime for a in range(A):
+                var q = q0 + 8 * a + frow
+                comptime for kk in range(KC):
+                    var v = _M64(0)
+                    comptime for e in range(2):
+                        var c = c0 + 8 * kk + fcol + e
+                        if q < nq and c < d:
+                            v[e] = Float32(-2) * queries[unsafe_offset = q * d + c]
+                    qf[a * KC + kk] = v
+            comptime for b in range(NB):
+                comptime for kk in range(KC):
+                    var xf = _sg_load_t(tile + (8 * b) * MQ_DC + 8 * kk, MQ_DC)
+                    comptime for a in range(A):
+                        acc[a * NB + b] = _sg_mma(qf[a * KC + kk], xf, acc[a * NB + b])
+            c0 += MQ_DC
+        comptime for g in range(NB // GB):
+            # cv[a * 2GB + 2bb + e]: candidate (query a, column 8(g GB + bb) + fcol + e).
+            var cv = SIMD[DType.float32, A * 2 * GB](0)
+            comptime for bb in range(GB):
+                comptime b = g * GB + bb
+                var n2 = (tnorm + 8 * b + fcol).load[width=2]()
+                comptime for a in range(A):
+                    cv[a * 2 * GB + 2 * bb] = n2[0] + acc[a * NB + b][0]
+                    cv[a * 2 * GB + 2 * bb + 1] = n2[1] + acc[a * NB + b][1]
+            comptime for a in range(A):
+                var m = UInt32(0)
+                comptime for j in range(2 * GB):
+                    if cv[a * 2 * GB + j] <= thr[a]:
+                        m |= UInt32(1 << j)
+                while m != 0:
+                    var j = Int(count_trailing_zeros(m))
+                    m &= m - 1
+                    var cd = Float32(0)
+                    comptime for jj in range(2 * GB):
+                        if j == jj:
+                            cd = cv[a * 2 * GB + jj]
+                    if cd <= thr[a]:
+                        var ci = UInt32(base + 8 * (g * GB + (j >> 1)) + fcol + (j & 1))
+                        comptime for t in range(K):
+                            if t < k and _worse(bd[a * K + t], bi[a * K + t], cd, ci):
+                                var td = bd[a * K + t]
+                                var ti = bi[a * K + t]
+                                bd[a * K + t] = cd
+                                bi[a * K + t] = ci
+                                cd = td
+                                ci = ti
+                        comptime for t in range(K):
+                            if t == k - 1:
+                                worst[a] = bd[a * K + t]
+                        thr[a] = min(thr[a], worst[a])
+        var jq = (k + 3) // 4
+        comptime for a in range(A):
+            var w = thr[a]
+            w = min(w, shuffle_xor(w, UInt32(1)))
+            w = min(w, shuffle_xor(w, UInt32(8)))
+            var u = MQ_BIG
+            comptime for t in range(K):
+                if t == jq - 1:
+                    u = bd[a * K + t]
+            u = max(u, shuffle_xor(u, UInt32(1)))
+            u = max(u, shuffle_xor(u, UInt32(8)))
+            thr[a] = min(w, u)
+        base += rows
+
+    comptime for a in range(A):
+        comptime for step in range(2):
+            comptime mask = UInt32(1) if step == 0 else UInt32(8)
+            var od = SIMD[DType.float32, K](0)
+            var oi = SIMD[DType.uint32, K](0)
+            comptime for t in range(K):
+                od[t] = shuffle_xor(bd[a * K + t], mask)
+                oi[t] = shuffle_xor(bi[a * K + t], mask)
+            comptime for t in range(K):
+                var pd = od[K - 1 - t]
+                var pi = oi[K - 1 - t]
+                if _worse(bd[a * K + t], bi[a * K + t], pd, pi):
+                    bd[a * K + t] = pd
+                    bi[a * K + t] = pi
+            comptime h = K // 2
+            comptime for lv in range(5):
+                comptime st = h >> lv
+                comptime if st >= 1:
+                    comptime for t in range(K):
+                        comptime if (t & st) == 0:
+                            if _worse(
+                                bd[a * K + t], bi[a * K + t],
+                                bd[a * K + t + st], bi[a * K + t + st],
+                            ):
+                                var td = bd[a * K + t]
+                                var ti = bi[a * K + t]
+                                bd[a * K + t] = bd[a * K + t + st]
+                                bi[a * K + t] = bi[a * K + t + st]
+                                bd[a * K + t + st] = td
+                                bi[a * K + t + st] = ti
+    comptime for a in range(A):
+        var q = q0 + 8 * a + frow
+        if q < nq and sub == 0:
+            var qn = Float32(0)
+            for c in range(d):
+                var v = queries[unsafe_offset = q * d + c]
+                qn += v * v
+            var o = (s * nq + q) * k
+            comptime for t in range(K):
+                if t < k:
+                    part_d[unsafe_offset = o + t] = max(bd[a * K + t] + qn, Float32(0))
+                    part_i[unsafe_offset = o + t] = bi[a * K + t]
+
+
 def fast_mma_merge_kernel[K: Int](
     part_d: MutPointer[Float32, MutAnyOrigin],
     part_i: MutPointer[UInt32, MutAnyOrigin],
@@ -432,6 +641,8 @@ def fast_mma_knn(
     """Row-major queries and index; `out_*` are `n_queries x k`, each row
     ascending by (distance, index). Waits for its own partials."""
     var a_sel = MQ_A if (k <= 8) else (MQ_A16 if k <= 16 else 1)
+    if n_features > MQ_MAX_D:
+        a_sel = 1
     var QPB = MQ_SG * 8 * a_sel
     var qblocks = (n_queries + QPB - 1) // QPB
     var slices = 480 // qblocks
@@ -449,7 +660,31 @@ def fast_mma_knn(
         t0 = Int(perf_counter_ns())
     var part_d = ctx.enqueue_create_buffer[DType.float32](slices * n_queries * k)
     var part_i = ctx.enqueue_create_buffer[DType.uint32](slices * n_queries * k)
-    if n_features <= 8:
+    var inorm = ctx.enqueue_create_buffer[DType.float32](max(n_index, 1))
+    if n_features > MQ_MAX_D:
+        ctx.enqueue_function[fast_mma_norms_kernel](
+            index.unsafe_ptr(), inorm.unsafe_ptr(), Int32(n_index), Int32(n_features),
+            grid_dim=((n_index + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+        if k <= 8:
+            ctx.enqueue_function[fast_mma_bigd_kernel[8, 1]](
+                queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
+                part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
+                Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
+            )
+        elif k <= 16:
+            ctx.enqueue_function[fast_mma_bigd_kernel[16, 1]](
+                queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
+                part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
+                Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[fast_mma_bigd_kernel[32, 1]](
+                queries.unsafe_ptr(), index.unsafe_ptr(), inorm.unsafe_ptr(), part_d.unsafe_ptr(),
+                part_i.unsafe_ptr(), Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
+                Int32(slice_rows), grid_dim=(qblocks, slices, 1), block_dim=(MQ_TPB, 1, 1),
+            )
+    elif n_features <= 8:
         if k <= 8:
             _launch_partial[8, 8, MQ_A, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
         elif k <= 16:
@@ -482,3 +717,4 @@ def fast_mma_knn(
               + " slices=" + String(slices) + " qblocks=" + String(qblocks))
     _ = part_d^
     _ = part_i^
+    _ = inorm^

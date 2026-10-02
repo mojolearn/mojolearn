@@ -37,7 +37,8 @@ from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
 from x_linear.logcv_grid import logcv_fit_grid
 from x_linear.huber_grid import huber_fit_grid
-from x_linear.dispatch import ALGO_HUBER
+from x_linear.dispatch import ALGO_HUBER, ALGO_ENETCV
+from x_linear.enetcv_fast import enetcv_fast
 from x_linear.tops import X_LINEAR_SERIAL_FOLDS
 from x_linear.dispatch import ALGO_LOGCV
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
@@ -1149,6 +1150,12 @@ def fit_device(
         _fit_on_host(algo, x, y, n, d, ip, fp, n_out, n_fw, n_iw, res)
         return
     var ctx = linear_ctx()
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        # LassoCV / ElasticNetCV with every row pass on the grid
+        # (x_linear/enetcv_fast.mojo, lane/apple-fast-classical); `=0` is the A/B arm
+        if algo == ALGO_ENETCV and n > 0 and String(getenv("MOJOLEARN_X_LINEAR_ENETCV_FAST")) != "0":
+            if enetcv_fast(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res):
+                return
     comptime if not X_LINEAR_SERIAL_FOLDS:
         if algo == ALGO_LOGCV and n > 0 and String(getenv("MOJOLEARN_X_LINEAR_LOGCV_GRID")) != "0":
             logcv_fit_grid(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
@@ -1190,6 +1197,13 @@ def fit_device(
         while len(hip) < 5:
             hip.append(Int32(0))
         hip[4] = Int32(1 if grid_gram else 0)
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        # x_linear/bayes.mojo `X_LINEAR_GRAM_SSE`: ip[5], the sse from the
+        # normal equations (lane/apple-fast-classical); `=0` is the A/B arm
+        if bayes_like:
+            while len(hip) < 6:
+                hip.append(Int32(0))
+            hip[5] = Int32(0 if String(getenv("MOJOLEARN_X_LINEAR_GRAM_SSE")) == "0" else 1)
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](
         team_work(n, team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr()))), team_own(algo, d)))
