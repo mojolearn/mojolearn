@@ -18,6 +18,7 @@ from x_prep.fastred import (
     ii_gram_fast_kernel,
 )
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
+from x_prep.fastnb import NB_CAT_ATOMIC, cat_hist_atomic_kernel, cat_hist_convert_kernel
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.device_store import DeviceStore
 
@@ -31,6 +32,9 @@ comptime OP_CLASS_STATS = 16
 comptime OP_II_MEAN = 53
 comptime OP_II_GRAM = 54
 comptime OP_PT_FOLD = 106
+#: x_prep/blocked.mojo's CategoricalNB histogram stages (x_prep/fastnb.mojo intercepts them)
+comptime OP_CAT_HPART = 133
+comptime OP_CAT_HFOLD = 134
 
 #: op 0 (`sort_cols`) runs as the device sort of x_prep/dsort.mojo, not as
 #: one heapsort thread per column: the same words (a sort under a total
@@ -238,6 +242,28 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 continue
             if fast_folds and op == OP_II_GRAM:
                 ctx.enqueue_function[ii_gram_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGR)
+                continue
+        comptime if NB_CAT_ATOMIC:
+            # lane apple-fast-nb: the (row, feature) atomic count table; W < 0 only
+            # (the weighted fold keeps the units). The dispatcher zeroes block 0
+            # of the histogram scratch, the kernel adds into it, and the fold
+            # stage copies it out (x_prep/fastnb.mojo).
+            if op == OP_CAT_HPART and host_q.unsafe_load(s * STAGE_INTS + 2 + 7) < 0:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                var cells = Int(hq[1]) * Int(hq[2])
+                var words = Int(hq[2]) * Int(hq[4]) * Int(hq[6])
+                if cells > 0 and cells <= 2147483647 and words > 0:
+                    ctx.enqueue_memset(df.create_sub_buffer[DType.float32](Int(hq[8]), words), Float32(0))
+                    ctx.enqueue_function[cat_hist_atomic_kernel](
+                        df.unsafe_ptr(), qp, Int32(cells),
+                        grid_dim=(cells + BLOCK - 1) // BLOCK, block_dim=BLOCK,
+                    )
+                    continue
+            if op == OP_CAT_HFOLD and host_q.unsafe_load(s * STAGE_INTS + 2 + 6) < 0:
+                ctx.enqueue_function[cat_hist_convert_kernel](
+                    df.unsafe_ptr(), qp, Int32(total),
+                    grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
+                )
                 continue
         comptime for k in range(N_OPS):
             if op == k:
