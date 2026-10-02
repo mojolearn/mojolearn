@@ -414,19 +414,33 @@ def _ord_std_lanes_kernel(
     var a1 = Float32(0.0)
     var a2 = Float32(0.0)
     var i = tid
-    # four strides' loads issued together, then added IN ORDER: the same
-    # sequence of adds as the one-stride loop, more loads in flight (the
-    # block is one threadgroup, so its latency is the whole kernel's)
-    comptime STEP = 4 * REDUCE_LANES_BLOCK
-    while i + 3 * REDUCE_LANES_BLOCK < total:
-        var w = SIMD[DType.float32, 4]()
-        var g = SIMD[DType.float32, 4]()
-        var qm = SIMD[DType.uint32, 4]()
-        comptime for k in range(4):
+    # ORD_STD_LANE_STRIDES strides' loads in flight, the NEXT batch issued
+    # before this one is folded (software pipelining; the adds keep the
+    # one-stride loop's order). One warp per SM: its chain waited on DRAM
+    # every few positions (peer's nsys on #122: 13 ms a tree unchanged).
+    comptime SU = ORD_STD_LANE_STRIDES
+    comptime STEP = SU * REDUCE_LANES_BLOCK
+    var w = SIMD[DType.float32, SU]()
+    var g = SIMD[DType.float32, SU]()
+    var qm = SIMD[DType.uint32, SU]()
+    var have = i + (SU - 1) * REDUCE_LANES_BLOCK < total
+    if have:
+        comptime for k in range(SU):
             w[k] = sw.unsafe_load(i + k * REDUCE_LANES_BLOCK)
             g[k] = sg.unsafe_load(i + k * REDUCE_LANES_BLOCK)
             qm[k] = quality.unsafe_load(i + k * REDUCE_LANES_BLOCK)
-        comptime for k in range(4):
+    while have:
+        var nxt = i + STEP
+        var have_next = nxt + (SU - 1) * REDUCE_LANES_BLOCK < total
+        var nw = SIMD[DType.float32, SU]()
+        var ng = SIMD[DType.float32, SU]()
+        var nq = SIMD[DType.uint32, SU]()
+        if have_next:
+            comptime for k in range(SU):
+                nw[k] = sw.unsafe_load(nxt + k * REDUCE_LANES_BLOCK)
+                ng[k] = sg.unsafe_load(nxt + k * REDUCE_LANES_BLOCK)
+                nq[k] = quality.unsafe_load(nxt + k * REDUCE_LANES_BLOCK)
+        comptime for k in range(SU):
             var term = Float32(0.0)
             if qm[k] != UInt32(0):
                 if w[k] > Float32(0.0):
@@ -435,7 +449,11 @@ def _ord_std_lanes_kernel(
             a0 += term
             a1 += abs(w[k])
             a2 += abs(g[k])
-        i += STEP
+        w = nw
+        g = ng
+        qm = nq
+        i = nxt
+        have = have_next
     while i < total:
         var w = sw.unsafe_load(i)
         var g = sg.unsafe_load(i)
@@ -486,6 +504,8 @@ def _ord_std_combine_kernel(
 #: Lanes per block of `_ord_std_lanes_kernel` (one warp: its loads of
 #: positions t .. t + 31 are one contiguous 128-byte line per plane).
 comptime ORD_STD_LANES = 32
+#: Strides a lane of `_ord_std_lanes_kernel` keeps in flight.
+comptime ORD_STD_LANE_STRIDES = 16
 
 
 def _ord_bootstrap_apply_kernel(
