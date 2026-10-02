@@ -19,6 +19,12 @@ Switches (env, read on the host at dispatch time, `Prep2Switches`):
   MOJOLEARN_X_PREP_FAST_II_CONV=1  ii_conv's max over the row sums by one
       threadgroup tree instead of one thread over every row
       (x_prep/iterative.mojo ii_conv_unit; a max is exact, the same word).
+  MOJOLEARN_X_PREP_FAST_EIGH_BLOCK=1  eigh (one cyclic Jacobi per matrix,
+      x_prep/eigh.mojo eigh_unit on ONE thread: IterativeImputer's
+      BayesianRidge runs it once per feature per round, ~465 rotations x 4
+      rows of 31 per sweep, serial) on a 32-thread threadgroup per matrix:
+      the same sweeps and rotations in the same order, each rotation's row
+      and column updates spread over the threads, A and V in shared memory.
   MOJOLEARN_X_PREP_FAST_II_GRAM_TILE=1  ii_gram as a grid over row chunks
       (a shared tile of rows x all d <= 32 columns, every d*d cell
       accumulated from it) plus a tree over the chunks, instead of d*d
@@ -45,7 +51,8 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from x_prep.common import FP, IP, STAGE_INTS, p, ld, ldi, st
-from x_prep.prims import add, sub, mul, div
+from x_prep.prims import add, sub, mul, div, sqrtf
+from x_prep.eigh import MAX_SWEEPS
 from x_prep.target import te_value
 from x_prep.dradix import RUP, radix_word, radix_load_kernel
 
@@ -55,6 +62,7 @@ comptime TGR = 256
 comptime OP_QUANTILE = 2
 comptime OP_TE_GLOBAL = 20
 comptime OP_TE_ENC = 21
+comptime OP_EIGH = 18
 comptime OP_II_GRAM = 54
 comptime OP_II_CONV = 59
 
@@ -70,17 +78,20 @@ struct Prep2Switches(Copyable, Movable):
     var te_enc: Bool
     var ii_conv: Bool
     var ii_gram_tile: Bool
+    var eigh_block: Bool
 
     def __init__(out self):
         self.te_global = False
         self.te_enc = False
         self.ii_conv = False
         self.ii_gram_tile = False
+        self.eigh_block = False
         comptime if PREP2_FAST:
             self.te_global = _on("MOJOLEARN_X_PREP_FAST_TE_GLOBAL")
             self.te_enc = _on("MOJOLEARN_X_PREP_FAST_TE_ENC")
             self.ii_conv = _on("MOJOLEARN_X_PREP_FAST_II_CONV")
             self.ii_gram_tile = _on("MOJOLEARN_X_PREP_FAST_II_GRAM_TILE")
+            self.eigh_block = _on("MOJOLEARN_X_PREP_FAST_EIGH_BLOCK")
 
 
 # ------------------------------------------------------------ TargetEncoder
@@ -344,6 +355,120 @@ def ii_gram_tile_reduce_kernel(f: FP, q: IP, w: RUP, chunks: Int32):
         f[p(q, 6) + cell] = sh[0]
 
 
+# ----------------------------------------------------------- eigh on a block
+#: the widest matrix the block Jacobi takes, and its threads (one simdgroup)
+comptime EIG_MAX = 32
+comptime EIG_TPB = 32
+
+
+def eigh_block_fast_kernel(f: FP, q: IP):
+    """`eigh_unit` for matrix t = block_idx.x on one threadgroup of EIG_TPB
+    threads. The same cyclic sweeps and the same rotations in the same
+    order, each decided by the same value test (every thread reads the same
+    three words and computes the rotation itself); a rotation's updates of
+    rows and columns pp and qq of A and of columns pp and qq of V are
+    independent elements, so the threads take them strided (each element
+    the unit's own expression, so the unit's words). A and V live in shared
+    memory; A is written back destroyed, as the unit leaves it. The
+    descending selection sort of the eigenvalues is a permutation found on
+    thread 0; the columns move out in parallel with the sign rule."""
+    var t = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var m = p(q, 1)
+    var A = p(q, 0) + t * p(q, 2)
+    var W = p(q, 3) + t * m
+    var V = p(q, 4) + t * m * m
+    var sa = stack_allocation[EIG_MAX * EIG_MAX, Float32, address_space = AddressSpace.SHARED]()
+    var sv = stack_allocation[EIG_MAX * EIG_MAX, Float32, address_space = AddressSpace.SHARED]()
+    var perm = stack_allocation[EIG_MAX, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    for e in range(tid, m * m, EIG_TPB):
+        sa[e] = ld(f, A + e)
+        sv[e] = Float32(1) if e // m == e % m else Float32(0)
+    barrier()
+    for _ in range(MAX_SWEEPS):
+        var rotated = False
+        for pp in range(m - 1):
+            for qq in range(pp + 1, m):
+                var apq = sa[pp * m + qq]
+                if apq == Float32(0):
+                    continue
+                var app = sa[pp * m + pp]
+                var aqq = sa[qq * m + qq]
+                var scale = add(abs(app), abs(aqq))
+                if add(scale, mul(abs(apq), Float32(64))) == scale:
+                    # every thread has read apq before it is zeroed
+                    barrier()
+                    if tid == 0:
+                        sa[pp * m + qq] = Float32(0)
+                        sa[qq * m + pp] = Float32(0)
+                    barrier()
+                    continue
+                rotated = True
+                var theta = div(sub(aqq, app), mul(Float32(2), apq))
+                var tt: Float32
+                if abs(theta) > Float32(1.0e18):
+                    tt = div(Float32(0.5), theta)
+                else:
+                    tt = div(Float32(1), add(abs(theta), sqrtf(add(mul(theta, theta), Float32(1)))))
+                    if theta < Float32(0):
+                        tt = sub(Float32(0), tt)
+                var cc = div(Float32(1), sqrtf(add(mul(tt, tt), Float32(1))))
+                var ss = mul(tt, cc)
+                # every thread has read app, aqq and apq
+                barrier()
+                if tid == 0:
+                    sa[pp * m + pp] = sub(app, mul(tt, apq))
+                    sa[qq * m + qq] = add(aqq, mul(tt, apq))
+                    sa[pp * m + qq] = Float32(0)
+                    sa[qq * m + pp] = Float32(0)
+                for r in range(tid, m, EIG_TPB):
+                    if r != pp and r != qq:
+                        var arp = sa[r * m + pp]
+                        var arq = sa[r * m + qq]
+                        var nrp = sub(mul(cc, arp), mul(ss, arq))
+                        var nrq = add(mul(ss, arp), mul(cc, arq))
+                        sa[r * m + pp] = nrp
+                        sa[pp * m + r] = nrp
+                        sa[r * m + qq] = nrq
+                        sa[qq * m + r] = nrq
+                    var vrp = sv[r * m + pp]
+                    var vrq = sv[r * m + qq]
+                    sv[r * m + pp] = sub(mul(cc, vrp), mul(ss, vrq))
+                    sv[r * m + qq] = add(mul(ss, vrp), mul(cc, vrq))
+                barrier()
+        if not rotated:
+            break
+    # the unit's selection sort, descending, stable: as a permutation
+    if tid == 0:
+        for r in range(m):
+            perm[r] = Int32(r)
+        for r in range(m):
+            var best = r
+            for c in range(r + 1, m):
+                var pc = Int(perm[c])
+                var pb = Int(perm[best])
+                if sa[pc * m + pc] > sa[pb * m + pb]:
+                    best = c
+            if best != r:
+                var tmp = perm[r]
+                perm[r] = perm[best]
+                perm[best] = tmp
+    barrier()
+    for e in range(tid, m * m, EIG_TPB):
+        st(f, A + e, sa[e])
+    for r in range(tid, m, EIG_TPB):
+        var src = Int(perm[r])
+        st(f, W + r, sa[src * m + src])
+        var big = 0
+        for c in range(1, m):
+            if abs(sv[c * m + src]) > abs(sv[big * m + src]):
+                big = c
+        var neg = sv[big * m + src] < Float32(0)
+        for c in range(m):
+            var v = sv[c * m + src]
+            st(f, V + c * m + r, sub(Float32(0), v) if neg else v)
+
+
 # ------------------------------------------------- quantile by radix select
 #: the most selection tasks per column one histogram block carries (2 per fraction)
 comptime QS_MAXT = 8
@@ -566,6 +691,9 @@ def prep2_fast_stage(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mu
         return True
     if sw.ii_conv and op == OP_II_CONV and Int(hq[7]) > 0:
         ctx.enqueue_function[ii_conv_fast_kernel](f, qp, grid_dim=1, block_dim=TGR)
+        return True
+    if sw.eigh_block and op == OP_EIGH and Int(hq[1]) <= EIG_MAX:
+        ctx.enqueue_function[eigh_block_fast_kernel](f, qp, grid_dim=total, block_dim=EIG_TPB)
         return True
     if sw.ii_gram_tile and op == OP_II_GRAM and Int(hq[2]) <= IIG_DMAX:
         var chunks = _iig_chunks(Int(hq[1]))

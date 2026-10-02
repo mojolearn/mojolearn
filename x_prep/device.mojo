@@ -154,7 +154,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # bench/x_prep_quality.py and bench/x_prep_speed.py); unset or 1 folds by threadgroup
     var fast_folds = getenv("MOJOLEARN_XPREP_FAST_FOLDS", "1") != "0"
     # lane/apple-fast-prep2 (2026-10-02): FAST + Apple paths behind env switches, each default OFF
-    # (x_prep/fastprep2.mojo: te_global / te_enc / ii_conv / ii_gram by threadgroups, the quantile
+    # (x_prep/fastprep2.mojo: te_global / te_enc / ii_conv / ii_gram / eigh by threadgroups, the quantile
     # stage by radix select). Every field is False outside FAST + Apple.
     var p2 = Prep2Switches()
     comptime if PREP2_FAST:
