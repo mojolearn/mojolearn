@@ -25,6 +25,7 @@ from x_linear.team import Team
 from x_linear.tops import fold_fa, chain_fmad, chain_fmad_scaled, t_fold_fa_staged, _acc_fa, _acc_fmad, _fm
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.sys.info import is_nvidia_gpu, is_amd_gpu, is_apple_gpu
 
 comptime GLM_LINK_IDENTITY = 0
@@ -151,7 +152,7 @@ def _glm_cells_staged(t: Team, x: FP, gr: FP, hr: FP, n: Int, d: Int, m: Int, rr
 
         if chunks > 0:
             stage(0, 0)
-        t.sync()
+        t.sync()  # also orders the zeroed accumulators
         for ci in range(chunks):
             var cur = (ci & 1) * stride
             if ci + 1 < chunks:
@@ -214,7 +215,10 @@ def _glm_cells_staged(t: Team, x: FP, gr: FP, hr: FP, n: Int, d: Int, m: Int, rr
                     st(g, j, acc)
                 else:
                     st(h, j * m + k, acc)
-            t.sync()
+            # the staged words are threadgroup memory and every g / h word
+            # is its own thread's: a threadgroup barrier is enough between chunks
+            barrier()
+        t.sync()
 
 
 def _objective_host(x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link: Int, alpha: Float32,
