@@ -200,7 +200,7 @@ def q_layout(n: Int, d: Int, m: Int) -> InlineArray[Int, 12]:
     o[9] = o[8] + d
     o[10] = o[9] + m
     o[11] = o[10] + d
-    return o
+    return o^
 
 
 def q_start(nf: Float32, sw: Bool, den_sum: Float32, spread_sum: Float32, ysq: Float32) -> InlineArray[Float32, 3]:
@@ -212,7 +212,7 @@ def q_start(nf: Float32, sw: Bool, den_sum: Float32, spread_sum: Float32, ysq: F
     var spread = fmax(fd(spread_sum, nf), Float32(1e-6))
     r[1] = fd(Float32(1), fm(nf, spread))
     r[2] = fsqrt(ysq)
-    return r
+    return r^
 
 
 def q_tail(fw: FP, nd: Int, d: Int, m: Int, beta: Int, rhs: Int, z: Int, v: Int, dq: Int,
