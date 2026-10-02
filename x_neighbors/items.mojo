@@ -21,6 +21,7 @@ the same bits (IDENTITY_PATHS.md "The rule"):
 
 Nothing here imports a GPU module, so the CPU-only host binding compiles it.
 """
+from std.sys.info import is_gpu
 from checks.numerics import (
     ftz,
     identical_mul_add,
