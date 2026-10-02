@@ -2158,7 +2158,7 @@ class Runner:
         return self._out()
 
 
-OURS_ARMS = ("ours", "ours-fast", "ours-cpu")
+OURS_ARMS = ("ours", "ours-fast")
 
 
 def _ours_class(lane):
@@ -2205,7 +2205,6 @@ def _ours_info(lane, est=None):
         info["vendor_used"] = "unavailable (%r)" % (exc,)
     if mode not in (want, "unknown"):
         raise RuntimeError("REFUSED: ours is not %s: the binary reads back %r" % (want.upper(), mode))
-    info.update(_tool("bench_board_probe").ours_cpu_check(ml))
     return info
 
 
@@ -4670,6 +4669,7 @@ def race(args):
     ctd = _tool("classical_two_datasets")
     lane, ds = args.lane, args.dataset
     arms = [a for a in args.arms.split(",") if a]
+    _tool("bench_board_probe").refuse_our_cpu_arms(arms, "bench_board_algos")
     os.makedirs(args.out, exist_ok=True)
     os.makedirs(args.work, exist_ok=True)
     if args.smoke_rows:           # the conductor builds the same seeded arrays as its workers
@@ -4789,9 +4789,6 @@ def race(args):
             w.close()
     try:
         result["quality"] = quality(lane, D, outs)
-        if "ours-cpu" in outs and "ours" in outs:
-            result["quality"].setdefault("ours-cpu", {})["bits_equal_vs_ours_identical"] = \
-                _tool("bench_board_probe").bits_equal(outs["ours-cpu"], outs["ours"])
     except Exception as exc:  # noqa: BLE001
         import traceback
         traceback.print_exc()
