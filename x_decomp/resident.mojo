@@ -36,6 +36,7 @@ from x_decomp.device import (
     launch_gemm,
     launch_rowsum,
     launch_sqdist,
+    launch_trisolve,
     lda_rows_kernel,
     rowsum_scratch,
     TPB,
@@ -233,6 +234,20 @@ def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObje
                 m, k, n, ta, tb)
     pool_free(sid)
     return PythonObject(m * n)
+
+
+def dev_trisolve_py(lu: PythonObject, idx: PythonObject, src: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`trisolve_py` on device ids, enqueued (no sync)."""
+    var n = _n(p, 0)
+    var nrhs = _n(p, 1)
+    var trans = _n(p, 2)
+    if n >= 1 << 24:
+        raise Error("x_decomp: trisolve row numbers exceed float32's exact integers")
+    var sid = pool_alloc(max(n * nrhs, 1))
+    launch_trisolve(xd_ctx(), _ptr(_id(lu), n * n), _ptr(_id(idx), n), _ptr(_id(src), n * nrhs),
+                    _ptr(_id(dst), n * nrhs), _ptr(sid, n * nrhs), n, nrhs, trans)
+    pool_free(sid)
+    return PythonObject(n)
 
 
 def dev_colsum_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:

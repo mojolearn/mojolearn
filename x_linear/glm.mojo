@@ -20,9 +20,13 @@ from x_linear.ops import (
     fill, copy, row_dot, cholesky, chol_solve, mean_of, axpy_acc, par_rows, row_dots,
 )
 from std.sys.info import is_gpu
+from std.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from x_linear.team import Team
-from x_linear.tops import fold_fa, chain_fmad, chain_fmad_scaled
+from x_linear.tops import (
+    fold_fa, chain_fmad, chain_fmad_scaled, t_fold_fa_staged, fold_fa_blocked, chain_fmad_blocked,
+    chain_fmad_scaled_blocked, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS,
+)
 
 comptime GLM_LINK_IDENTITY = 0
 comptime GLM_LINK_LOG = 1
@@ -82,8 +86,10 @@ def _objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Floa
         st(lt, i, l)
     t.sync()
     var f = Float32(0)
+    # the blocked order (lane/neural-pass97); row 1 (d/deta) is free between Hessians
+    var acc0 = t_fold_fa_blocked(t, lt, n, t.row(1))
     if t.lead():
-        var acc = fold_fa(lt, 0, 1, n)
+        var acc = acc0
         var reg = Float32(0)
         for j in range(d):
             var w = ld(theta, toff + j)
@@ -109,9 +115,7 @@ def _objective_host(x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link
             st(ls, i, l)
 
     par_rows(rows_map, n)
-    var acc = Float32(0)
-    for i in range(n):
-        acc = fa(acc, ld(ls, i))
+    var acc = fold_fa_blocked(ls, 0, 1, n)
     var reg = Float32(0)
     for j in range(d):
         var w = ld(theta, toff + j)
@@ -127,6 +131,190 @@ def _objective(t: Team, x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, 
         return _objective_team(t, x, y, n, d, fi, power, link, alpha, theta, toff, eta, sw, den)
     else:
         return _objective_host(x, y, n, d, fi, power, link, alpha, theta, toff, eta, sw, den, ls)
+
+
+@always_inline
+def _glm_deriv_row(y: FP, n: Int, i: Int, power: Float32, link: Int, eta: FP, sw: Bool, gr: FP, hr: FP):
+    """Row i's d/deta and d2/deta2 (weighted) into gr[i], hr[i]."""
+    var e = ld(eta, i)
+    var gi = _unit(power, link, ld(y, i), e, 1)
+    var hi = fmax(Float32(0), _unit(power, link, ld(y, i), e, 2))
+    if sw:
+        gi = fm(ld(y, n + i), gi)
+        hi = fm(ld(y, n + i), hi)
+    st(gr, i, gi)
+    st(hr, i, hi)
+
+
+@always_inline
+def _glm_cell(c: Int, x: FP, gr: FP, hr: FP, n: Int, d: Int, m: Int, g: FP, h: FP):
+    """Cell c's chain over the rows ascending: c < m the gradient (g[c]),
+    else the lower-triangle Hessian cell (j, k) (h[j*m + k])."""
+    if c < m:
+        var acc: Float32
+        if c < d:
+            acc = chain_fmad_blocked(gr, 0, 1, x, c, d, n)
+        else:
+            acc = fold_fa_blocked(gr, 0, 1, n)
+        st(g, c, acc)
+        return
+    # lower-triangle cell (j, k), k <= j, row-major over j
+    var q = c - m
+    var j = 0
+    while (j + 1) * (j + 2) // 2 <= q:
+        j += 1
+    var k = q - j * (j + 1) // 2
+    var acc: Float32
+    if j < d:
+        acc = chain_fmad_scaled_blocked(hr, x, j, k, d, n)
+    elif k < d:
+        acc = chain_fmad_blocked(hr, 0, 1, x, k, d, n)
+    else:
+        acc = fold_fa_blocked(hr, 0, 1, n)
+    st(h, j * m + k, acc)
+
+
+
+@always_inline
+def _glm_cell_rows(c: Int, x: FP, gr: FP, hr: FP, lo: Int, cnt: Int, d: Int, m: Int, g: FP, h: FP):
+    """`_glm_cell`'s chain over rows [lo, lo + cnt) only, continuing from the
+    cell's stored value when lo > 0: an acc is always flushed, so the resumed
+    chain is the whole chain's words (lane/neural-pass89, the Apple slices).
+    The serial order only: the grid driver runs it under
+    X_LINEAR_SERIAL_FOLDS, where `_glm_cell`'s blocked chains are these."""
+    var xs = x + lo * d
+    var grs = gr + lo
+    var hrs = hr + lo
+    if c < m:
+        var init = ld(g, c) if lo > 0 else Float32(0)
+        var acc: Float32
+        if c < d:
+            acc = chain_fmad(grs, 0, 1, xs, c, d, cnt, init)
+        else:
+            acc = fold_fa(grs, 0, 1, cnt, init)
+        st(g, c, acc)
+        return
+    # lower-triangle cell (j, k), k <= j, row-major over j
+    var q = c - m
+    var j = 0
+    while (j + 1) * (j + 2) // 2 <= q:
+        j += 1
+    var k = q - j * (j + 1) // 2
+    var init = ld(h, j * m + k) if lo > 0 else Float32(0)
+    var acc: Float32
+    if j < d:
+        acc = chain_fmad_scaled(hrs, xs, j, k, d, cnt, init)
+    elif k < d:
+        acc = chain_fmad(hrs, 0, 1, xs, k, d, cnt, init)
+    else:
+        acc = fold_fa(hrs, 0, 1, cnt, init)
+    st(h, j * m + k, acc)
+
+
+@always_inline
+def _glm_cell_jk(c: Int, m: Int) -> Tuple[Int, Int]:
+    """Cell c >= m: its lower-triangle (j, k)."""
+    var q = c - m
+    var j = 0
+    while (j + 1) * (j + 2) // 2 <= q:
+        j += 1
+    return (j, q - j * (j + 1) // 2)
+
+
+@always_inline
+def _glm_cell_part(c: Int, x: FP, gr: FP, hr: FP, d: Int, m: Int, lo: Int, cnt: Int) -> Float32:
+    """Cell c's chain over the block of rows [lo, lo + cnt), from zero: the
+    partial `_glm_cell`'s blocked folds combine (lane/neural-pass97)."""
+    if c < m:
+        if c < d:
+            return chain_fmad(gr, lo, 1, x, lo * d + c, d, cnt)
+        return fold_fa(gr, lo, 1, cnt)
+    var jk = _glm_cell_jk(c, m)
+    var j = jk[0]
+    var k = jk[1]
+    if j < d:
+        return chain_fmad_scaled(hr + lo, x + lo * d, j, k, d, cnt)
+    if k < d:
+        return chain_fmad(hr, lo, 1, x, lo * d + k, d, cnt)
+    return fold_fa(hr, lo, 1, cnt)
+
+
+@always_inline
+def _glm_cell_store(c: Int, v: Float32, g: FP, h: FP, m: Int):
+    if c < m:
+        st(g, c, v)
+        return
+    var jk = _glm_cell_jk(c, m)
+    st(h, jk[0] * m + jk[1], v)
+
+
+@always_inline
+def _glm_slot_count(d: Int, m: Int) -> Int:
+    """Slots of the warp-uniform cell layout (see glm_fit)."""
+    var n_hd = d * (d + 1) // 2
+    var n_row = m * (m + 1) // 2 - n_hd
+    var g0 = ((n_hd + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+    var r0 = g0 + ((m + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+    return r0 + n_row
+
+
+@always_inline
+def _glm_slot_cell(sl: Int, d: Int, m: Int) -> Int:
+    """The cell a slot runs, -1 for a pad slot: [Hessian rows j < d][pad]
+    [gradient][pad][Hessian row d]."""
+    var n_hd = d * (d + 1) // 2
+    var g0 = ((n_hd + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+    var r0 = g0 + ((m + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+    if sl < n_hd:
+        return m + sl
+    if sl < g0:
+        return -1
+    if sl < g0 + m:
+        return sl - g0
+    if sl < r0:
+        return -1
+    return m + n_hd + (sl - r0)
+
+
+def _glm_step(g: FP, h: FP, step: FP, res: FP, m: Int, d: Int, alpha: Float32, den: Float32, tol: Float32,
+              it: Int, f: Float32) -> Tuple[Int, Float32]:
+    """The small dense Newton step (m x m) on one thread: (flag, slope), flag
+    0 continue, 1 converged, 2 stop (no descent). glm_fit's lead block,
+    shared with the device's host-driven form (lane/neural-pass89)."""
+    var flag = 0
+    var slope = Float32(0)
+    var inv_n = fd(Float32(1), den)
+    var gmax = Float32(0)
+    for j in range(m):
+        var gj = fm(ld(g, j), inv_n)
+        if j < d:
+            gj = fmad(alpha, ld(res, j), gj)
+        st(g, j, gj)
+        gmax = fmax(gmax, fabs(gj))
+    comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
+        print("GLM_TRACE it", it, "f", f, "gmax", gmax, "tol", tol)
+    if gmax <= tol:
+        flag = 1
+    else:
+        for j in range(m):
+            for k in range(j + 1):
+                var v = fm(ld(h, j * m + k), inv_n)
+                if j == k and j < d:
+                    v = fa(v, alpha)
+                st(h, j * m + k, v)
+                st(h, k * m + j, v)
+        for j in range(m):
+            st(step, j, -ld(g, j))
+        var ok = cholesky(h, 0, m)
+        if ok:
+            chol_solve(h, 0, m, step, 0)
+        for j in range(m):
+            slope = fmad(ld(g, j), ld(step, j), slope)
+        comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
+            print("GLM_TRACE it", it, "slope", slope, "chol_ok", ok, "step0", ld(step, 0), "stepd", ld(step, m - 1))
+        if not (slope < 0):
+            flag = 2
+    return (flag, slope)
 
 
 def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
@@ -194,39 +382,28 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             # each row's two derivatives across the team, then one thread per
             # gradient cell and per lower-triangle Hessian cell, rows ascending
             for i in range(t.tid, n, t.nt):
-                var e = ld(eta, i)
-                var gi = _unit(power, link, ld(y, i), e, 1)
-                var hi = fmax(Float32(0), _unit(power, link, ld(y, i), e, 2))
-                if sw:
-                    gi = fm(ld(y, n + i), gi)
-                    hi = fm(ld(y, n + i), hi)
-                st(gr, i, gi)
-                st(hr, i, hi)
+                _glm_deriv_row(y, n, i, power, link, eta, sw, gr, hr)
             t.sync()
             var cells = m + m * (m + 1) // 2
-            for c in range(t.tid, cells, t.nt):
-                if c < m:
-                    var acc: Float32
-                    if c < d:
-                        acc = chain_fmad(gr, 0, 1, x, c, d, n)
-                    else:
-                        acc = fold_fa(gr, 0, 1, n)
-                    st(g, c, acc)
-                    continue
-                # lower-triangle cell (j, k), k <= j, row-major over j
-                var q = c - m
-                var j = 0
-                while (j + 1) * (j + 2) // 2 <= q:
-                    j += 1
-                var k = q - j * (j + 1) // 2
-                var acc: Float32
-                if j < d:
-                    acc = chain_fmad_scaled(hr, x, j, k, d, n)
-                elif k < d:
-                    acc = chain_fmad(hr, 0, 1, x, k, d, n)
-                else:
-                    acc = fold_fa(hr, 0, 1, n)
-                st(h, j * m + k, acc)
+            # lane/neural-pass88 (2026-10-01): cells laid out so a warp holds
+            # ONE kind of chain. In cell order a warp mixed the gradient
+            # chains, the intercept fold and the scaled Hessian chains, and a
+            # warp runs its divergent branches one after another: three
+            # million-row loops for the warp that held all three (the taxi
+            # block's 90 cells: 107 ms a Newton step on the M4's GPU). The
+            # slots are [Hessian rows j < d][pad][gradient][pad][Hessian row
+            # d]; a slot maps to its cell and runs that cell's chain: the
+            # same words. `-D MOJOLEARN_GLM_CELLS_MIXED=1` restores cell order.
+            var slots = _glm_slot_count(d, m)
+            comptime if is_defined["MOJOLEARN_GLM_CELLS_MIXED"]():
+                slots = cells
+            for sl in range(t.tid, slots, t.nt):
+                var c = sl
+                comptime if not is_defined["MOJOLEARN_GLM_CELLS_MIXED"]():
+                    c = _glm_slot_cell(sl, d, m)
+                    if c < 0:
+                        continue
+                _glm_cell(c, x, gr, hr, n, d, m, g, h)
             t.sync()
         else:
             # gradient and Hessian at res (eta holds the current linear predictor)
@@ -251,69 +428,85 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             # Units: 0..d-1 the Hessian rows, d the intercept's row, d+1 the
             # gradient; a unit owns its accumulators and folds rows ascending,
             # so units may run at once, one row block at a time (lane linear-cpu)
-            var units = d + 2
-            var b0 = 0
-            while b0 < n:
-                var b1 = b0 + GLM_ROW_BLOCK
-                if b1 > n:
-                    b1 = n
+            comptime if X_LINEAR_SERIAL_FOLDS:
+                var units = d + 2
+                var b0 = 0
+                while b0 < n:
+                    var b1 = b0 + GLM_ROW_BLOCK
+                    if b1 > n:
+                        b1 = n
 
-                def units_fold(lo: Int, hi: Int) {imm x, imm d, imm m, imm fi, imm gp, imm hp, imm s1, imm s2,
-                                                  imm b0, imm b1}:
-                    for u in range(lo, hi):
-                        if u < d:
-                            for i in range(b0, b1):
-                                axpy_acc(hp, u * m, fm(ld(s2, i), ld(x, i * d + u)), x, i * d, u + 1)
-                        elif u == d:
-                            if fi:
+                    def units_fold(lo: Int, hi: Int) {imm x, imm d, imm m, imm fi, imm gp, imm hp, imm s1, imm s2,
+                                                      imm b0, imm b1}:
+                        for u in range(lo, hi):
+                            if u < d:
                                 for i in range(b0, b1):
-                                    var hi_ = ld(s2, i)
-                                    axpy_acc(hp, d * m, hi_, x, i * d, d)
-                                    st(hp, d * m + d, fa(ld(hp, d * m + d), hi_))
-                        else:
-                            for i in range(b0, b1):
-                                var gi = ld(s1, i)
-                                axpy_acc(gp, 0, gi, x, i * d, d)
+                                    axpy_acc(hp, u * m, fm(ld(s2, i), ld(x, i * d + u)), x, i * d, u + 1)
+                            elif u == d:
                                 if fi:
-                                    st(gp, d, fa(ld(gp, d), gi))
+                                    for i in range(b0, b1):
+                                        var hi_ = ld(s2, i)
+                                        axpy_acc(hp, d * m, hi_, x, i * d, d)
+                                        st(hp, d * m + d, fa(ld(hp, d * m + d), hi_))
+                            else:
+                                for i in range(b0, b1):
+                                    var gi = ld(s1, i)
+                                    axpy_acc(gp, 0, gi, x, i * d, d)
+                                    if fi:
+                                        st(gp, d, fa(ld(gp, d), gi))
 
-                par_rows(units_fold, units, 1)
-                b0 = b1
+                    par_rows(units_fold, units, 1)
+                    b0 = b1
+            else:
+                # lane/neural-pass97: the blocked order. Every accumulator of
+                # FOLD_BLOCK rows from zero (the units' statements over the
+                # block's rows, blocks at once), then each accumulator's
+                # partials folded blocks ascending.
+                var nb = fold_blocks(n)
+                var words = m + m * m
+                var pl = List[Float32](length=max(nb * words, 1), fill=Float32(0))
+                var pp = FP(unsafe_from_address=Int(pl.unsafe_ptr()))
+
+                def blocks_fold(lo: Int, hi: Int) {imm x, imm d, imm m, imm fi, imm s1, imm s2, imm n, imm pp, imm words}:
+                    for bk in range(lo, hi):
+                        var gpb = pp + bk * words
+                        var hpb = gpb + m
+                        var b0 = bk * FOLD_BLOCK
+                        var b1 = min(n, b0 + FOLD_BLOCK)
+                        for u in range(d + 2):
+                            if u < d:
+                                for i in range(b0, b1):
+                                    axpy_acc(hpb, u * m, fm(ld(s2, i), ld(x, i * d + u)), x, i * d, u + 1)
+                            elif u == d:
+                                if fi:
+                                    for i in range(b0, b1):
+                                        var hi_ = ld(s2, i)
+                                        axpy_acc(hpb, d * m, hi_, x, i * d, d)
+                                        st(hpb, d * m + d, fa(ld(hpb, d * m + d), hi_))
+                            else:
+                                for i in range(b0, b1):
+                                    var gi = ld(s1, i)
+                                    axpy_acc(gpb, 0, gi, x, i * d, d)
+                                    if fi:
+                                        st(gpb, d, fa(ld(gpb, d), gi))
+
+                par_rows(blocks_fold, nb, 1)
+                for q in range(words):
+                    var acc = Float32(0)
+                    for bk in range(nb):
+                        acc = fa(acc, ld(pp, bk * words + q))
+                    if q < m:
+                        st(g, q, acc)
+                    else:
+                        st(h, q - m, acc)
+                _ = pl^
         # the small dense step (m x m) on the lead thread
         var flag = 0  # 0 continue, 1 converged, 2 stop (no descent)
         var slope = Float32(0)
         if t.lead():
-            var inv_n = fd(Float32(1), den)
-            var gmax = Float32(0)
-            for j in range(m):
-                var gj = fm(ld(g, j), inv_n)
-                if j < d:
-                    gj = fmad(alpha, ld(res, j), gj)
-                st(g, j, gj)
-                gmax = fmax(gmax, fabs(gj))
-            comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
-                print("GLM_TRACE it", it, "f", f, "gmax", gmax, "tol", tol)
-            if gmax <= tol:
-                flag = 1
-            else:
-                for j in range(m):
-                    for k in range(j + 1):
-                        var v = fm(ld(h, j * m + k), inv_n)
-                        if j == k and j < d:
-                            v = fa(v, alpha)
-                        st(h, j * m + k, v)
-                        st(h, k * m + j, v)
-                for j in range(m):
-                    st(step, j, -ld(g, j))
-                var ok = cholesky(h, 0, m)
-                if ok:
-                    chol_solve(h, 0, m, step, 0)
-                for j in range(m):
-                    slope = fmad(ld(g, j), ld(step, j), slope)
-                comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
-                    print("GLM_TRACE it", it, "slope", slope, "chol_ok", ok, "step0", ld(step, 0), "stepd", ld(step, m - 1))
-                if not (slope < 0):
-                    flag = 2
+            var fs_ = _glm_step(g, h, step, res, m, d, alpha, den, tol, it, f)
+            flag = fs_[0]
+            slope = fs_[1]
         flag = t.bcast_int(flag, 1)
         if flag == 1:
             converged = True
