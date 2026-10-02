@@ -6,8 +6,7 @@ Times `mojolearn.linalg.matmul` / `matmul_bf16` at the board shape under each
 transport arm of gemm/host_transport.mojo (env read per call), the way the
 board clocks it (host arrays in, result on the host). Prints per arm the
 median wall ms, the output sha (every arm must print the same one: the
-transport moves no bit) and one `GEMM-HOST-TIMING` stage breakdown taken with
-waits between stages. GPU path only; run on the boxes, never the laptop.
+transport moves no bit). GPU path only; run on the boxes, never the laptop.
 
     python3 tools/probe_gemm_host.py [--n 4096] [--reps 5] [--lanes gemm,gemm-bf16]
 """
@@ -48,7 +47,6 @@ def main():
             fn, x, y = linalg.matmul_bf16, linalg.to_bf16(a), linalg.to_bf16(b)
         for arm, env in ARMS.items():
             os.environ.update(env)
-            os.environ["MOJOLEARN_GEMM_HOST_TIMING"] = "0"
             out = fn(x, y)  # warm: pipelines, pool growth
             ts = []
             for _ in range(args.reps):
@@ -58,11 +56,6 @@ def main():
             sha = hashlib.sha256(np.asarray(out).tobytes()).hexdigest()[:16]
             print("GEMM-PROBE lane=%s n=%d arm=%s median_ms=%.2f min_ms=%.2f sha=%s"
                   % (lane, n, arm, statistics.median(ts), min(ts), sha), flush=True)
-            os.environ["MOJOLEARN_GEMM_HOST_TIMING"] = "1"
-            sys.stdout.flush()
-            fn(x, y)
-            os.environ["MOJOLEARN_GEMM_HOST_TIMING"] = "0"
-            sys.stdout.flush()
 
 
 if __name__ == "__main__":

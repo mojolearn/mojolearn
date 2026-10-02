@@ -6,7 +6,7 @@ For each lane: the board's own inputs (tools/bench_board_neural.py make_inputs,
 shape full) and runner (build_runner(lane, "ours")), one warm call, --reps
 timed calls clocked the way the board clocks them (call + sync), then one call
 under the libraries' stage-timing envs (MOJOLEARN_TRANSFORMER_TIMING,
-MOJOLEARN_MAMBA_TIMING, MOJOLEARN_GEMM_HOST_TIMING) and one under cProfile
+MOJOLEARN_MAMBA_TIMING) and one under cProfile
 (top binding calls by cumulative time). GPU lanes only; run on the boxes.
 
     python tools/probe_neural_lanes.py --lanes transformer-forward,samba-forward [--reps 5] [--env K=V ...]
@@ -25,7 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "python"))
 
-TIMING_ENVS = ("MOJOLEARN_TRANSFORMER_TIMING", "MOJOLEARN_MAMBA_TIMING", "MOJOLEARN_GEMM_HOST_TIMING")
+TIMING_ENVS = ("MOJOLEARN_TRANSFORMER_TIMING", "MOJOLEARN_MAMBA_TIMING")
 
 
 def main():
