@@ -54,3 +54,4 @@ Results: (filled as lanes report)
 - tsa2 DONE 22edf8f13: TSA2_VAR/STL/KPSS; 3 taxi-hourly lines
 - prep3 overlap settled 09e7a7520 (carries nb, select, prep2, meta); x_prep superset branch
 - trees-ensembles e9803ee25 (device folds, re-merged), trees-io dfbd3f61f, rfet-scan b272364e4 (re-merged), all clean
+- 22:52Z follow-ups dispatched: lle (new lane, sparse LOBPCG), decomp pass 3 (LU pivot grid), robust pass 2 (MCD device C-steps), nb pass 2 (text NB on CSR); baseline re-run lines for gaussian-rp (kapprox) and ocsvm (robust) pushed
