@@ -110,7 +110,7 @@ forecast, and a model without them does not see it.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the three ARIMA lanes is the measurement.
 """
-from std.math import isfinite, isinf, isnan
+from std.math import inf, isfinite, isinf, isnan
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -790,8 +790,12 @@ def _kalman(
     order: ArimaHostOrder,
     batch_size: Int,
     fc_steps: Int,
+    refuse: Bool = True,
 ) raises -> KalmanHostOut:
-    """`batched_kalman_filter` (`batched_kalman.mojo:722-789`) on TRANSFORMED
+    """`refuse = False` is `batched_loglike_x`'s `infeasible_inf`: a series
+    with either refusal code reads log-likelihood -inf instead of raising.
+
+    `batched_kalman_filter` (`batched_kalman.mojo:722-789`) on TRANSFORMED
     parameters and a differenced order: every series' matrices and initial
     state, the initial-state refusal by name, every series' loop, the
     innovation-variance refusal by name, in that order."""
@@ -963,7 +967,7 @@ def _kalman(
         host_parallelize(_init_series, tasks)
 
     for b in range(batch_size):
-        if info0[b] != Int32(0):
+        if info0[b] != Int32(0) and refuse:
             raise Error(
                 "batched_kalman_filter: series " + String(b) + ": the initial-state system (I - T (x) T, or I - T* for the intercept) is singular at column "
                 + String(info0[b]) + "; a unit-root parameter set is refused by name rather than filtered with a non-finite P0"
@@ -1073,6 +1077,11 @@ def _kalman(
     _ = obs^
     _ = obs_fut^
 
+    if not refuse:
+        for b in range(batch_size):
+            if info0[b] != Int32(0) or info1[b] != Int32(0):
+                loglike[b] = -inf[DType.float32]()
+        return KalmanHostOut(loglike=loglike^, fc=fc^, pred=pred_all^)
     for b in range(batch_size):
         if info1[b] > Int32(0):
             raise Error(
@@ -1099,7 +1108,7 @@ def _loglike_packed(
     filter, the host copy of the log-likelihood."""
     var raw = _unpack(x, order_kf, batch_size)
     var t = _batched_jones(order_kf, batch_size, False, raw)
-    var out = _kalman(y_kf, exog_kf, _zeros(1), n_obs_kf, t, order_kf, batch_size, 0)
+    var out = _kalman(y_kf, exog_kf, _zeros(1), n_obs_kf, t, order_kf, batch_size, 0, False)
     return out.loglike.copy()
 
 
@@ -1123,6 +1132,10 @@ def _eval_batch(
     scale)` and `g = ftz(ftz(-grad) / scale)`."""
     var N = order_kf.complexity()
     var base = _loglike_packed(y_kf, exog_kf, batch_size, n_obs_kf, order_kf, xin)
+    var bad = List[Bool](length=batch_size, fill=False)
+    for b in range(batch_size):
+        if isinf(base[b]) and base[b] < Float32(0.0):
+            bad[b] = True
     var x_pert = xin.copy()
     var grad = _zeros(N * batch_size)
     for i in range(N):
@@ -1130,6 +1143,9 @@ def _eval_batch(
             var idx = N * bid + i
             x_pert[idx] = ftz(ftz(xin[idx]) + h)
         var pert = _loglike_packed(y_kf, exog_kf, batch_size, n_obs_kf, order_kf, x_pert)
+        for bid in range(batch_size):
+            if isinf(pert[bid]) and pert[bid] < Float32(0.0):
+                bad[bid] = True
         for bid in range(batch_size):
             var diff = ftz(ftz(pert[bid]) - ftz(base[bid]))
             grad[N * bid + i] = ftz(diff / h)
@@ -1140,6 +1156,12 @@ def _eval_batch(
         fout[b] = ftz(ftz(-base[b]) / scale)
     for i in range(len(xin)):
         gout[i] = ftz(ftz(-grad[i]) / scale)
+    # `_infeasible_fg` (`batched_fit.mojo`): f = +inf, zero gradient
+    for b in range(batch_size):
+        if bad[b]:
+            fout[b] = inf[DType.float32]()
+            for i in range(N):
+                gout[b * N + i] = Float32(0.0)
 
 
 # ===========================================================================
@@ -1346,7 +1368,12 @@ def _batched_min_lbfgs(
         gnorm[b] = _nrm_max_at(grad, b * n, n)
         if past > 0:
             fx_hist[b * past] = fx[b]
-        if _check_convergence(0, fx[b], gnorm[b], fx_hist, b * past):
+        if isinf(fx[b]):
+            # `batched_min_lbfgs`: an infeasible start stops, NUMERIC_ERROR
+            retcode[b] = Int32(AH_OPT_NUMERIC_ERROR)
+            active[b] = False
+            n_iter[b] = Int32(0)
+        elif _check_convergence(0, fx[b], gnorm[b], fx_hist, b * past):
             retcode[b] = Int32(AH_OPT_SUCCESS)
             active[b] = False
             n_iter[b] = Int32(0)
@@ -1867,7 +1894,7 @@ def arima_host_fit(
 
     # `_loglike_at`: one more pass at the fitted point, trans = false (the
     # `_copy_params` arm, no transform and no floor)
-    var at = _kalman(y_kf, exog_kf, _zeros(1), n_obs_kf, fitted, order_kf, batch_size, 0)
+    var at = _kalman(y_kf, exog_kf, _zeros(1), n_obs_kf, fitted, order_kf, batch_size, 0, False)
     return ArimaHostFit(
         t_x=t_x^, x=res.x.copy(), x0=x0^, loglike=at.loglike.copy(),
         fx=res.fx.copy(), n_iter=res.n_iter.copy(), retcode=res.retcode.copy(),
