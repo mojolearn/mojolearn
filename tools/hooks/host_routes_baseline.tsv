@@ -17,10 +17,6 @@ host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import bin
 host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import bindings/hotpath_helpers.mojo:equal_elements_binding
 host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import bindings/hotpath_helpers.mojo:gather_i32_binding
 host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import core/dense_coo.mojo:knn_affinity_f32
-host-threads	host-threads	hr-small-passes	debt	bindings/_mojolearn.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	hr-small-passes	debt	bindings/_mojolearn.mojo	0	host_parallelize(_center_task, chunks)
-host-threads	host-threads	hr-small-passes	debt	bindings/_mojolearn.mojo	0	host_parallelize(_col_group_task, groups)
-host-threads	host-threads	hr-small-passes	debt	bindings/_mojolearn.mojo	0	host_parallelize(_scale_task, chunks)
 host-call	host-import	gap-lm	debt	bindings/_mojolearn_byte_lm.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	gap-lm	debt	bindings/_mojolearn_byte_lm.mojo	0	return read_f32(address, n)
 host-call	host-import	gap-neural-models	debt	bindings/_mojolearn_embedding.mojo	0	import bindings/hostptr.mojo:read_f32
