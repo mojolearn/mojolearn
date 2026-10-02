@@ -1,0 +1,360 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""THE RESIDENT OPTIMIZER STATE of the sequence lane's torch-style
+optimizers (lane gap-optimizers, 2026-10-02; device binding only).
+
+`optimizer_step` and `lamb_step` took every state slot from the caller's
+host arrays each step: up to three n-float moments uploaded and downloaded
+again around one element-wise launch (Adamax, RMSprop, NAdam: five or six
+64 MB transfers a step at the board's 16,777,216 parameters, against
+torch's zero), and LAMB on top of that downloaded its per-tensor gradient
+norms in the middle of the step to fold the clip on the host. Here a
+Python optimizer opens a handle once: its state slots live on the shared
+sequence context (`sequence_ctx`) across steps, and a step moves only what
+the API must: the parameters and gradients up (each tensor straight into
+its place in the flat device buffer, no host concatenation), ONE
+element-wise launch over every tensor (`opt_step`, the same `op_opt`) or
+LAMB's launch-only `lamb_core`, the parameters down. The same element
+statements on the same values: no bit moves against the per-call entries.
+`opt_resident_get` / `_set` move a slot for a state read or a
+`load_state_dict`. Storage is `std.ffi._Global`, one slot per tier; a
+handle indexes the pool and a closed handle's slot is reused."""
+from std.ffi import _Global
+from std.memory import bitcast
+from std.python import PythonObject
+from max.gpu.host import DeviceBuffer
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from sequence.exec_device import DeviceExec, sequence_ctx
+from sequence.ops import FP
+from sequence.recurrent import OptState, opt_scalars, opt_step
+from sequence.pyapi import fptr, fval, ival, lamb_bias, lamb_core, lamb_offsets, lamb_table, opt_of, opt_slots
+
+#: the handle kinds
+comptime RES_ELEMENTWISE = 1
+comptime RES_LAMB = 2
+
+
+struct _ResPool(Defaultable, Movable):
+    #: the three state slots (a 1-float placeholder for a slot not kept)
+    var s0: List[DeviceBuffer[DType.float32]]
+    var s1: List[DeviceBuffer[DType.float32]]
+    var s2: List[DeviceBuffer[DType.float32]]
+    var used: List[Int]
+    #: LAMB's table (`sequence/pyapi.mojo::lamb_table`), on the device
+    var tab: List[DeviceBuffer[DType.float32]]
+    #: floats per slot (0 marks a free handle), kind, tensors, blocks
+    var n: List[Int]
+    var kind: List[Int]
+    var nt: List[Int]
+    var nb: List[Int]
+    #: LAMB's tensor offsets (nt + 1)
+    var offs: List[List[Int]]
+
+    def __init__(out self):
+        self.s0 = List[DeviceBuffer[DType.float32]]()
+        self.s1 = List[DeviceBuffer[DType.float32]]()
+        self.s2 = List[DeviceBuffer[DType.float32]]()
+        self.used = List[Int]()
+        self.tab = List[DeviceBuffer[DType.float32]]()
+        self.n = List[Int]()
+        self.kind = List[Int]()
+        self.nt = List[Int]()
+        self.nb = List[Int]()
+        self.offs = List[List[Int]]()
+
+
+comptime _RES_NAME = "MojoXSequenceOptResidentIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXSequenceOptResidentFast"
+comptime _RES = _Global[StorageType=_ResPool, name=_RES_NAME, init_fn=_ResPool.__init__]
+
+
+def _slot_buf(n: Int, keep: Bool) raises -> DeviceBuffer[DType.float32]:
+    var ctx = sequence_ctx()
+    var b = ctx.enqueue_create_buffer[DType.float32](n if keep else 1)
+    b.enqueue_fill(Float32(0.0))
+    return b^
+
+
+def _open(kind: Int, n: Int, used: Int, nt: Int, var offs: List[Int], tab: List[Float32]) raises -> Int:
+    var pool = _RES.get_or_create_ptr()
+    var ctx = sequence_ctx()
+    var tb = ctx.enqueue_create_buffer[DType.float32](max(len(tab), 1))
+    if len(tab) > 0:
+        ctx.enqueue_copy(dst_buf=tb, src_ptr=tab.unsafe_ptr())
+    var nb = 0
+    if len(tab) > 0:
+        nb = Int(bitcast[DType.int32](tab[len(tab) - 1]))
+    var h = -1
+    for j in range(len(pool[].n)):
+        if pool[].n[j] == 0 and h < 0:
+            h = j
+    if h < 0:
+        pool[].s0.append(_slot_buf(n, (used & 1) != 0))
+        pool[].s1.append(_slot_buf(n, (used & 2) != 0))
+        pool[].s2.append(_slot_buf(n, (used & 4) != 0))
+        pool[].used.append(used)
+        pool[].tab.append(tb^)
+        pool[].n.append(n)
+        pool[].kind.append(kind)
+        pool[].nt.append(nt)
+        pool[].nb.append(nb)
+        pool[].offs.append(offs^)
+        h = len(pool[].n) - 1
+    else:
+        pool[].s0[h] = _slot_buf(n, (used & 1) != 0)
+        pool[].s1[h] = _slot_buf(n, (used & 2) != 0)
+        pool[].s2[h] = _slot_buf(n, (used & 4) != 0)
+        pool[].used[h] = used
+        pool[].tab[h] = tb^
+        pool[].n[h] = n
+        pool[].kind[h] = kind
+        pool[].nt[h] = nt
+        pool[].nb[h] = nb
+        pool[].offs[h] = offs^
+    # the fills and the table copy are ordered before every later use on
+    # the one in-order context; the table's host list must outlive its copy
+    ctx.synchronize()
+    return h
+
+
+def _handle(handle: PythonObject, kind: Int) raises -> Int:
+    var h = Int(py=handle)
+    var pool = _RES.get_or_create_ptr()
+    if h < 0 or h >= len(pool[].n) or pool[].n[h] == 0:
+        raise Error("optimizer_resident: handle " + String(h) + " is not open")
+    if kind > 0 and pool[].kind[h] != kind:
+        raise Error("optimizer_resident: handle " + String(h) + " belongs to another optimizer kind")
+    return h
+
+
+def _slot_ptr(h: Int, slot: Int) raises -> FP:
+    var pool = _RES.get_or_create_ptr()
+    if slot == 0:
+        return FP(unsafe_from_address=Int(pool[].s0[h].unsafe_ptr()))
+    if slot == 1:
+        return FP(unsafe_from_address=Int(pool[].s1[h].unsafe_ptr()))
+    return FP(unsafe_from_address=Int(pool[].s2[h].unsafe_ptr()))
+
+
+def opt_resident_open_py(ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    """An element-wise optimizer's handle: ip = [n, kind, flags], fp = [lr,
+    f1, f2, eps, weight_decay, f7] (the step's configuration; it decides
+    which slots `op_opt` uses, `opt_slots`, and only those are kept, zero
+    filled). Returns [handle, used slot mask]."""
+    if len(ip) != 3 or len(fp) != 6:
+        raise Error("optimizer_resident_open: requires 3 integer and 6 float parameters")
+    var n = ival(ip, 0)
+    if n < 1:
+        raise Error("optimizer_resident_open: n must be >= 1")
+    var cfg = opt_of(ip, 1, fp, 1)
+    var u = opt_slots(cfg)
+    var used = (1 if u[0] else 0) | (2 if u[1] else 0) | (4 if u[2] else 0)
+    var h = _open(RES_ELEMENTWISE, n, used, 0, List[Int](), List[Float32]())
+    return PythonObject([h, used])
+
+
+def lamb_resident_open_py(ip: PythonObject) raises -> PythonObject:
+    """A LAMB handle: ip = [n_tensors, off_0, ..., off_n]; exp_avg and
+    exp_avg_sq (slots 0 and 1) zero filled, the table on the device.
+    Returns [handle, 3]."""
+    if len(ip) < 3:
+        raise Error("lamb_resident_open: requires n_tensors and n_tensors + 1 offsets")
+    var nt = ival(ip, 0)
+    if nt < 1 or len(ip) != 2 + nt:
+        raise Error("lamb_resident_open: n_tensors >= 1 and n_tensors + 1 offsets")
+    var offs = lamb_offsets(ip, 1, nt)
+    var tab = List[Float32]()
+    _ = lamb_table(offs, tab)
+    var n = offs[nt]
+    var h = _open(RES_LAMB, n, 3, nt, offs^, tab)
+    return PythonObject([h, 3])
+
+
+def opt_resident_close_py(handle: PythonObject) raises -> PythonObject:
+    """Free a handle's slots (after the queue drains)."""
+    var h = _handle(handle, 0)
+    var ctx = sequence_ctx()
+    ctx.synchronize()
+    var pool = _RES.get_or_create_ptr()
+    pool[].s0[h] = ctx.enqueue_create_buffer[DType.float32](1)
+    pool[].s1[h] = ctx.enqueue_create_buffer[DType.float32](1)
+    pool[].s2[h] = ctx.enqueue_create_buffer[DType.float32](1)
+    pool[].tab[h] = ctx.enqueue_create_buffer[DType.float32](1)
+    pool[].offs[h] = List[Int]()
+    pool[].used[h] = 0
+    pool[].n[h] = 0
+    return PythonObject(h)
+
+
+def opt_resident_move_py(handle: PythonObject, slot: PythonObject, addr: PythonObject,
+                         up: PythonObject) raises -> PythonObject:
+    """Slot `slot` (0, 1, 2) to the host array at `addr` (up = 0) or from
+    it (up = 1), n floats. Returns 1, or 0 for a slot the handle does not
+    keep (nothing moves)."""
+    var h = _handle(handle, 0)
+    var s = Int(py=slot)
+    if s < 0 or s > 2:
+        raise Error("optimizer_resident: slot must be 0, 1 or 2")
+    var pool = _RES.get_or_create_ptr()
+    if (pool[].used[h] & (1 << s)) == 0:
+        return PythonObject(0)
+    var hp = fptr(addr, "state")
+    var ctx = sequence_ctx()
+    var to_dev = Int(py=up) != 0
+    if s == 0:
+        if to_dev:
+            ctx.enqueue_copy(dst_buf=pool[].s0[h], src_ptr=hp)
+        else:
+            ctx.enqueue_copy(dst_ptr=hp, src_buf=pool[].s0[h])
+    elif s == 1:
+        if to_dev:
+            ctx.enqueue_copy(dst_buf=pool[].s1[h], src_ptr=hp)
+        else:
+            ctx.enqueue_copy(dst_ptr=hp, src_buf=pool[].s1[h])
+    else:
+        if to_dev:
+            ctx.enqueue_copy(dst_buf=pool[].s2[h], src_ptr=hp)
+        else:
+            ctx.enqueue_copy(dst_ptr=hp, src_buf=pool[].s2[h])
+    ctx.synchronize()
+    return PythonObject(1)
+
+
+def _tensors(addrs: PythonObject, J: Int, sizes: List[Int], n: Int) raises -> Tuple[List[Int], List[Int]]:
+    """The J parameter and J gradient addresses (addrs[0:J], addrs[J:2J]),
+    checked against the sizes that must add up to n."""
+    var tot = 0
+    for j in range(J):
+        if sizes[j] < 1:
+            raise Error("optimizer_resident_step: every tensor holds at least one value")
+        tot += sizes[j]
+    if tot != n:
+        raise Error("optimizer_resident_step: the tensors hold " + String(tot) + " values, the handle " + String(n))
+    var ps = List[Int]()
+    var gs = List[Int]()
+    for j in range(J):
+        ps.append(Int(fptr(addrs[j], "params")))
+        gs.append(Int(fptr(addrs[J + j], "grads")))
+    return (ps^, gs^)
+
+
+def _upload_all(mut ex: DeviceExec, P: FP, G: FP, ps: List[Int], gs: List[Int], sizes: List[Int]) raises:
+    var off = 0
+    for j in range(len(sizes)):
+        ex.upload(P + off, FP(unsafe_from_address=ps[j]), sizes[j])
+        ex.upload(G + off, FP(unsafe_from_address=gs[j]), sizes[j])
+        off += sizes[j]
+
+
+def _download_all(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) raises:
+    var off = 0
+    for j in range(len(sizes)):
+        ex.download_async(FP(unsafe_from_address=ps[j]), P + off, sizes[j])
+        off += sizes[j]
+    ex.sync()
+
+
+def opt_resident_step_py(handle: PythonObject, addrs: PythonObject, ip: PythonObject,
+                         fp: PythonObject) raises -> PythonObject:
+    """One element-wise step with the state on the device.
+    addrs = [param_0 .. param_{J-1}, grad_0 .. grad_{J-1}, scalars];
+    ip = [J, kind, flags, t, t0, size_0 .. size_{J-1}]; fp = [lr, f1, f2,
+    eps, weight_decay, f7]; scalars as `opt_step_py`'s (float32[3] after
+    step t0, advanced through t and written back). Every tensor is updated
+    in place. Returns n."""
+    var h = _handle(handle, RES_ELEMENTWISE)
+    if len(ip) < 6 or len(fp) != 6:
+        raise Error("optimizer_resident_step: requires >= 6 integer and 6 float parameters")
+    var J = ival(ip, 0)
+    if J < 1 or len(ip) != 5 + J or len(addrs) != 2 * J + 1:
+        raise Error("optimizer_resident_step: J >= 1 tensors, 2 J + 1 addresses and J sizes")
+    var t = ival(ip, 3)
+    var t0 = ival(ip, 4)
+    if t < 1 or t0 < 0 or t0 >= t:
+        raise Error("optimizer_resident_step: the one-based step t >= 1 and the scalars' step 0 <= t0 < t")
+    var pool = _RES.get_or_create_ptr()
+    var n = pool[].n[h]
+    var used = pool[].used[h]
+    var sizes = List[Int]()
+    for j in range(J):
+        sizes.append(ival(ip, 5 + j))
+    var pg = _tensors(addrs, J, sizes, n)
+    var cfg = opt_of(ip, 1, fp, 1)
+    var u = opt_slots(cfg)
+    var want = (1 if u[0] else 0) | (2 if u[1] else 0) | (4 if u[2] else 0)
+    if (want & used) != want:
+        raise Error("optimizer_resident_step: the configuration uses a state slot the handle did not open")
+    var sc = fptr(addrs[2 * J], "scalars")
+    var st = OptState()
+    var k0 = 1
+    if t0 > 0:
+        st.pw1 = sc.unsafe_load(0)
+        st.pw2 = sc.unsafe_load(1)
+        st.mu_prod = sc.unsafe_load(2)
+        k0 = t0 + 1
+    for k in range(k0, t):
+        _ = opt_scalars(cfg, st, k, fval(fp, 0))
+    var ex = DeviceExec()
+    var P = ex._alloc(n, False)
+    var G = ex._alloc(n, False)
+    _upload_all(ex, P, G, pg[0], pg[1], sizes)
+    var s1 = _slot_ptr(h, 0) if u[0] else P
+    var s2 = _slot_ptr(h, 1) if u[1] else P
+    var s3 = _slot_ptr(h, 2) if u[2] else P
+    opt_step(ex, cfg, st, t, fval(fp, 0), P, G, s1, s2, s3, n)
+    _download_all(ex, P, pg[0], sizes)
+    sc.unsafe_store(0, st.pw1)
+    sc.unsafe_store(1, st.pw2)
+    sc.unsafe_store(2, st.mu_prod)
+    return PythonObject(n)
+
+
+def lamb_resident_step_py(handle: PythonObject, addrs: PythonObject, ip: PythonObject,
+                          fp: PythonObject) raises -> PythonObject:
+    """One LAMB step with exp_avg / exp_avg_sq and the table on the device
+    (`lamb_core`). addrs = [param_0 .. param_{J-1}, grad_0 .. grad_{J-1},
+    scalars]; ip = [J, t, flags]; fp = [lr, beta1, beta2, eps,
+    weight_decay, max_grad_norm, t0]; scalars as `lamb_step_py`'s. The
+    tensor sizes are the handle's offsets. Returns n."""
+    var h = _handle(handle, RES_LAMB)
+    if len(ip) != 3 or len(fp) != 7:
+        raise Error("lamb_resident_step: requires 3 integer and 7 float parameters")
+    var pool = _RES.get_or_create_ptr()
+    var nt = pool[].nt[h]
+    var n = pool[].n[h]
+    var nb = pool[].nb[h]
+    var J = ival(ip, 0)
+    var t = ival(ip, 1)
+    var flags = ival(ip, 2)
+    if J != nt or len(addrs) != 2 * J + 1 or t < 1:
+        raise Error("lamb_resident_step: the handle's " + String(nt) + " tensors, 2 J + 1 addresses and t >= 1")
+    var sizes = List[Int]()
+    for k in range(nt):
+        sizes.append(pool[].offs[h][k + 1] - pool[].offs[h][k])
+    var pg = _tensors(addrs, J, sizes, n)
+    var t0 = 0
+    if (flags & 8) != 0:
+        t0 = Int(Float64(py=fp[6]))
+        if t0 < 0 or t0 >= t or Float64(t0) != Float64(py=fp[6]):
+            raise Error("lamb_resident_step: the scalars' step t0 must be an integer with 0 <= t0 < t")
+    var sc = fptr(addrs[2 * J], "scalars")
+    var bias = lamb_bias(flags, t, t0, fval(fp, 1), fval(fp, 2), sc, True)
+    var ex = DeviceExec()
+    var P = ex._alloc(n, False)
+    var G = ex._alloc(n, False)
+    _upload_all(ex, P, G, pg[0], pg[1], sizes)
+    var U = ex._alloc(n, False)
+    var partsA = ex._alloc(nb, False)
+    var partsB = ex._alloc(nb, False)
+    var nrm = ex._alloc(nt, False)
+    var ratio = ex._alloc(nt, False)
+    var scal = ex._alloc(1, False)
+    var TAB = FP(unsafe_from_address=Int(pool[].tab[h].unsafe_ptr()))
+    lamb_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), U, TAB, partsA, partsB, nrm, ratio, scal,
+              n, nt, nb, flags, fval(fp, 0), fval(fp, 1), fval(fp, 2), fval(fp, 3), fval(fp, 4),
+              fval(fp, 5), bias[0], bias[1])
+    _download_all(ex, P, pg[0], sizes)
+    if (flags & 8) != 0:
+        sc.unsafe_store(0, bias[2])
+        sc.unsafe_store(1, bias[3])
+    return PythonObject(n)
