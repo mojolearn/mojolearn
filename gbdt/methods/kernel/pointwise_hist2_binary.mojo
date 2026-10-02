@@ -35,7 +35,7 @@ one. Scheduling, not numeric.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import abs
-from std.memory import stack_allocation
+from std.memory import stack_allocation, bitcast
 from std.atomic import Atomic, Ordering
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -54,6 +54,9 @@ from gbdt.methods.kernel.pointwise_hist2_half_byte_template import (
     PW_HB_SMEM_FLOATS,
     PointHistHalfByte,
     pw_hb_binary_sum,
+    PointHistHalfByteInt,
+    pw_hb_binary_sum_int,
+    PW_HB_FIXED,
 )
 from gbdt.methods.kernel.pointwise_hist2_one_byte_templ import PW_WRITE_EPS
 
@@ -75,8 +78,11 @@ def compute_split_properties_b_kernel[
     partition: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     total_feature_count_in: Int32,
+    fixed_scale: Float32,
+    int_slot: Int32,
 ):
-    """`ComputeSplitPropertiesBImpl` (`:23-94`), copied.
+    """`ComputeSplitPropertiesBImpl` (`:23-94`), copied; under the ordered
+    tiers the fixed-point accumulator (lane/neural-pass124).
 
     `feature_folds` is absent from the signature and that is not an
     omission: a binary feature has one fold, so their writeback never reads
@@ -117,6 +123,39 @@ def compute_split_properties_b_kernel[
         return
 
     var ci = cindex.unsafe_offset(cindex_base)
+    comptime if PW_HB_FIXED:
+        var smi = smem.unsafe_bitcast[Int32]()
+        var hi = PointHistHalfByteInt(smi, fixed_scale)
+        comptime if full_pass:
+            compute_histogram_2[PW_HB_BLOCK, 1, 1, m](
+                hi, indices, UInt32(part_offset), UInt32(part_size),
+                target, weight, ci,
+            )
+        else:
+            compute_histogram[PW_HB_BLOCK, 1, 1, 1, m](
+                hi, indices, UInt32(part_offset), UInt32(part_size),
+                target, weight, ci,
+            )
+        barrier()
+        var w_i = tid & 1
+        var fid_i = tid >> 1
+        if fid_i < f_count:
+            var q = pw_hb_binary_sum_int(smi, fid_i, w_i)
+            var at_i = (
+                bin_sums_base
+                + Int(feature_first_fold_index.unsafe_load(f_base + fid_i)) * 2
+                + w_i
+            )
+            comptime if m > 1:
+                bin_sums.unsafe_store(
+                    pw_private_doc_slot[full_pass](at_i, Int(block_idx.x) % m, total_feature_count),
+                    bitcast[DType.float32](q),
+                )
+            else:
+                var val = Float32(Int(q)) / fixed_scale
+                if abs(val) > PW_WRITE_EPS:
+                    bin_sums.unsafe_store(at_i, val)
+        return
     var hist = PointHistHalfByte(smem)
 
     comptime if full_pass:

@@ -44,6 +44,10 @@ trait Exec:
         ...
 
     @staticmethod
+    def trisolve(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, n: Int, nrhs: Int, trans: Int) raises:
+        ...
+
+    @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:
         ...
 
