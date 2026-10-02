@@ -946,6 +946,10 @@ def build_parser():
                         "tail, so 1000000 vs 5000000 is a comparison of "
                         "LOAD and not of two problems. Every line carries "
                         "the row count in shape=.")
+    p.add_argument("--opponents-only", action="store_true",
+                   help="skip our arms: score only the opponents (tools/opp_only_board.py, the "
+                        "missing-opponent fill; opponents are scored once and our time comes "
+                        "from the board)")
     p.add_argument("--ours-only", action="store_true",
                    help="skip the opponents; use when two CUDA runtimes in "
                         "one process will not coexist")
@@ -1083,7 +1087,7 @@ def main(argv=None):
         print("FSPEED-IMPORT-ORDER lane=%s first=opponents" % lane, flush=True)
         opponents = spec.build_opponents(lane, cfg, data, devices, wanted)
     arms = build_ours(lane, cfg, data)
-    if args.ours_ab:
+    if args.ours_ab and not args.opponents_only:
         import ast
         key, _, raw = args.ours_ab.partition("=")
         value = ast.literal_eval(raw)
@@ -1169,6 +1173,12 @@ def main(argv=None):
     spec.emit_seed_note(lane, [a.name for a in arms], seed_draws(lane, cfg, data))
     if not spec.enforce_board_params(lane, arms, skip={p.name for p in proxies}):
         return 2
+    if args.opponents_only:
+        # ours was built for the parameter check (the reference arm) only; it is never fitted
+        arms = [a for a in arms if a.name not in ("ours", "ours-ab")]
+        if not arms:
+            spec.emit_refused(lane, "all", "--opponents-only and no opponent was built")
+            return 1
     # `cfg` reaches the runner so the FIT-EQUIVALENCE check can hold each
     # arm's FITTED tree count against the count this lane asked for. Without
     # it the shapes are still reported and that one check is skipped; an

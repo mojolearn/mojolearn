@@ -158,6 +158,7 @@ def main():
         extra = {}
         if a.family == "trees":
             cmd, extra = bb.tree_cmd(ctx, race)
+            cmd = list(cmd) + ["--opponents-only"]   # never time ours here: our time is the board's
             ceiling = ctx["race_deadline_s"] + 900
         elif a.family == "algos":
             cmd, extra, ceiling = bb.algos_cmd(ctx, race)
