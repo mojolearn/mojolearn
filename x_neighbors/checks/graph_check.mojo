@@ -199,6 +199,7 @@ def main() raises:
     h_louvain(fa(cl), ia(chl), fa(chi), nq, 0, Float32(1), Float32(1e-7))
     same("5204 louvain host two cliques", count_diff_i32(chl, cw))
     same("5204 louvain two cliques modularity device == host", count_diff_f32(cdi, chi))
+    _ = cl^  # the host call read it: keep it alive past the call (seam_util.fa)
 
     # a ring of equal weights (every move a tie) and the weighted two-cluster
     # graph: device == host, labels and [modularity, levels]
@@ -223,6 +224,7 @@ def main() raises:
     h_louvain(fa(wg), ia(whl), fa(whi), n, 0, Float32(1), Float32(1e-7))
     same("5204 louvain weighted labels device == host", count_diff_i32(wdl, whl))
     same("5204 louvain weighted info device == host", count_diff_f32(wdi, whi))
+    _ = wg^
     tr.record_list_i32("x_neighbors.louvain", dl)
 
     # ---- 5205: the SVGP system on 60 rows, 8 inducing points
