@@ -61,6 +61,12 @@ EXPERIMENTS = {
     "s16_regs": {"MOJOLEARN_MAMBA3_S16_QK_ARM": "regs"},
     "s16_regs2": {"MOJOLEARN_MAMBA3_S16_QK_ARM": "regs2"},
     "s16_smem48": {"MOJOLEARN_MAMBA3_S16_QK_ARM": "smem48"},
+    # the S17 tail chain arms (lane/neural-pass5): the default is `shared`
+    # (the S16 pass's kernel); `pipe` prefetches the operand pairs a group
+    # ahead (measured slower on the L4), `dbuf` stages the next tile while
+    # the chain runs; the same chain in the same order on every arm
+    "s17_tail_pipe": {"MOJOLEARN_MAMBA3_S17_TAIL_ARM": "pipe"},
+    "s17_tail_dbuf": {"MOJOLEARN_MAMBA3_S17_TAIL_ARM": "dbuf"},
     # the half-page arms (lane/neural-apple3): the Apple column's default is
     # regs2h (the full pages are over Metal's 32 KB); opt-in elsewhere
     "s16_regs2h": {"MOJOLEARN_MAMBA3_S16_QK_ARM": "regs2h"},
@@ -82,6 +88,8 @@ SETS = {
     # the resident optimizer moments on the training lanes (run with --lane
     # samba-train-step --lane lm-train-step)
     "optimizer": ["baseline", "opt_host"],
+    # the S17 tail arms on the Mamba lanes (--lane mamba3-forward --lane samba-train-step)
+    "s17": ["baseline", "s17_tail_pipe", "s17_tail_dbuf"],
     "default": ["baseline", "no_retain_weights", "no_stage_reset", "speculative_attn",
                 "swiglu_fused", "no_layer_sync", "all_on"],
     "nvidia": ["baseline", "no_retain_weights", "legacy_fresh_entry", "no_stage_reset",
