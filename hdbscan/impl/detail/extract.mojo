@@ -13,32 +13,30 @@ PROBABILITIES. Their `:311` runs `Membership::get_probabilities`
 (`detail/membership.cuh`); here it is `get_probabilities_host` below
 (DEVIATION 5116), host code the bindings call on the fit's output.
 
-======================================================================
-DEVIATION BLOCK -- DEVIATION 1609. `TreeUnionFind::find` IS ITERATIVE.
-======================================================================
-WHAT THEIRS DOES (`extract.cuh:74-79`):
+THE LABELLING RUNS ON THE DEVICE (`do_labelling_device`, lane c-cluster,
+2026-10-02). Theirs (`:88-167`) is a host union-find over the condensed
+edges: `perform_union(parent, child)` for every edge whose child is not a
+selected cluster, then `find(i)` per point. The condensed tree is sorted by
+(parent, child) and every child id is larger than its parent's, so the
+unions run in ascending-parent order: when edge (p, c) is unioned, `c` is
+still a fresh singleton of rank 0 and `p`'s component has rank >= 1 or is
+`p` alone (rank 0, ties keep `x_root = p`). The representative of every
+component is therefore its TOPMOST node: walking up from a point through
+parents, the first node that is a selected cluster or the root. That walk
+is what the device computes, with no union-find:
 
-    value_idx find(value_idx x) {
-      if (data[x * 2] != x) { data[x * 2] = find(data[x * 2]); }
-      return data[x * 2];
-    }
+    next[v] = v                 v selected, the root, or never a child
+    next[v] = parent(v)         otherwise
+    next = next[next]           ceil(log2(n_nodes)) rounds, ping-pong
 
-recursive full path compression: the recursion returns the root and every
-frame writes it into its own slot.
-
-WHAT OURS DOES. Two loops: walk to the root, then walk again writing the
-root into every slot on the path. Identical output for every input --
-same root returned, same fully compressed parent array afterwards -- and
-no recursion, so a pathological chain cannot exhaust a stack. This is
-`hierarchy`'s DEVIATION 622 in a different file with a different reason:
-there the recursion was fine and the INDEXING was out of bounds; here the
-indexing is fine and the depth is unbounded.
-
-GATED, not assumed: `check_hdbscan_labels_vs_oracle` runs this struct
-against a compression-free union-find in the oracle over the same
-condensed tree and requires identical roots for every point, which is the
-control DEVIATION 622 has one lane over.
-======================================================================
+Each round is one grid-wide launch over the nodes reading one buffer and
+writing the other, so no thread reads a value another thread of the same
+round writes, and the fixed round count reaches every chain's end (a chain
+is at most `n_nodes` long). The result is integers, so there is no fold
+order; `parent_lambdas[root]` is a max taken on `weight_order_key` by
+`Atomic.max`, an order-free integer max. The labels equal the host walk's
+(`hdbscan/host/labelling_host.mojo::do_labelling_on_host`, the CPU
+column's, which keeps DEVIATION 1609) for every tree.
 
 THE CLUSTER SET IS A SORTED SET ON BOTH SIDES. Theirs is
 `std::set<value_idx>` (`:281-284`), so iterating it yields ASCENDING
@@ -49,6 +47,8 @@ order without a container. That numbering IS the labels a caller sees, so
 it is part of the answer and not a formatting choice.
 """
 
+from std.atomic import Atomic
+from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE
@@ -61,51 +61,10 @@ from hdbscan.impl.detail.stabilities import (
     STAB_TPB,
     compute_stabilities,
 )
-from hierarchy.checks.edge_order import weight_order_key
+from hierarchy.checks.edge_order import weight_order_key, weight_order_unkey
 from std.math import isinf, isnan
 
 from checks.numerics import ftz, identical_div
-
-
-struct TreeUnionFind(Movable):
-    """`extract.cuh:49-86`. `data[i*2]` is the parent, `data[i*2 + 1]` the
-    rank; union by rank, full path compression (DEVIATION 1609)."""
-
-    var size: Int
-    var data: List[Int32]
-
-    def __init__(out self, size_: Int):
-        """`:52-57`."""
-        self.size = size_
-        self.data = List[Int32](capacity=size_ * 2)
-        for _ in range(size_ * 2):
-            self.data.append(Int32(0))
-        for i in range(size_):
-            self.data[i * 2] = Int32(i)
-
-    def find(mut self, x: Int) -> Int:
-        """`:74-79`, iterative (DEVIATION 1609)."""
-        var root = x
-        while Int(self.data[root * 2]) != root:
-            root = Int(self.data[root * 2])
-        var p = x
-        while p != root:
-            var nxt = Int(self.data[p * 2])
-            self.data[p * 2] = Int32(root)
-            p = nxt
-        return root
-
-    def perform_union(mut self, x: Int, y: Int):
-        """`:59-72`, union by rank, their three branches in their order."""
-        var x_root = self.find(x)
-        var y_root = self.find(y)
-        if self.data[x_root * 2 + 1] < self.data[y_root * 2 + 1]:
-            self.data[x_root * 2] = Int32(y_root)
-        elif self.data[x_root * 2 + 1] > self.data[y_root * 2 + 1]:
-            self.data[y_root * 2] = Int32(x_root)
-        else:
-            self.data[y_root * 2] = Int32(x_root)
-            self.data[x_root * 2 + 1] += Int32(1)
 
 
 @fieldwise_init
@@ -127,108 +86,6 @@ struct ExtractOutput(Copyable, Movable):
     """`n_clusters`, condensed id -> final label, -1 where unselected."""
     var inverse_label_map: List[Int32]
     """`n_selected`, final label -> condensed id."""
-
-
-def do_labelling_on_host(
-    tree: CondensedHierarchy,
-    in_clusters: List[Int32],
-    n_leaves: Int,
-    allow_single_cluster: Bool,
-    cluster_selection_epsilon: Float32,
-) raises -> List[Int32]:
-    """`extract.cuh:88-167`.
-
-    `in_clusters` is their `std::set<value_idx>& clusters` as a MEMBERSHIP
-    ARRAY indexed by node id: `in_clusters[c] != 0` iff `c` is in their
-    set. Same predicate, one indexed load instead of a tree lookup; the
-    set's ORDER is used at `:212` and `:291`, not here, and the callers
-    that need it build it themselves.
-    """
-    var n_edges = tree.n_edges
-    # `:112-115` size = max(parents)
-    var size = Int(tree.parents[0])
-    for i in range(n_edges):
-        if Int(tree.parents[i]) > size:
-            size = Int(tree.parents[i])
-
-    var result = List[Int32](capacity=n_leaves)
-    var parent_lambdas = List[Float32](capacity=size + 1)
-    for _ in range(size + 1):
-        parent_lambdas.append(Float32(0.0))
-
-    var union_find = TreeUnionFind(size + 1)
-
-    # `:122-129`
-    for i in range(n_edges):
-        var child = Int(tree.children[i])
-        var parent = Int(tree.parents[i])
-        if in_clusters[child] == Int32(0):
-            union_find.perform_union(parent, child)
-        # `:128` parent_lambdas[parent] = max(parent_lambdas[parent],
-        # lambda[i]). A float max, so IDENTITY_PATHS row 39 applies and it
-        # is taken on `weight_order_key`, the INTEGER order this fit's MST
-        # already used -- not a hardware max, whose (+0, -0) answer splits
-        # Apple from NVIDIA and AMD. The values here are lambdas
-        # (non-negative or FLT_MAX by DEVIATIONS 1606 and 1607), so the
-        # pin is inert on the default path and the fixture that gives it
-        # teeth plants the value.
-        if weight_order_key(tree.lambdas[i]) > weight_order_key(
-            parent_lambdas[parent]
-        ):
-            parent_lambdas[parent] = tree.lambdas[i]
-
-    # `:131-134`. Their `inverse_cluster_selection_epsilon` is left
-    # UNINITIALIZED when the epsilon is zero and is then not read; ours is
-    # zero then, and likewise never read. `identical_div` (DEVIATION 5115).
-    var inverse_cluster_selection_epsilon = Float32(0.0)
-    if cluster_selection_epsilon != Float32(0.0):
-        inverse_cluster_selection_epsilon = identical_div(
-            Float32(1.0), cluster_selection_epsilon
-        )
-    var n_in_clusters = 0
-    for i in range(len(in_clusters)):
-        if in_clusters[i] != Int32(0):
-            n_in_clusters += 1
-
-    # `:136-164`
-    for i in range(n_leaves):
-        var cluster = union_find.find(i)
-        if cluster < n_leaves:
-            result.append(Int32(-1))
-        elif cluster == n_leaves:
-            # `:141-160` the root. Only reachable as a LABEL when the root
-            # itself was selected, which needs allow_single_cluster.
-            if n_in_clusters == 1 and allow_single_cluster:
-                # `:144-146` find(children_h.begin(), children_h.end(), i)
-                var child_idx = -1
-                for e in range(n_edges):
-                    if Int(tree.children[e]) == i:
-                        child_idx = e
-                        break
-                if child_idx < 0:
-                    raise Error(
-                        "hdbscan.do_labelling_on_host: point " + String(i)
-                        + " does not appear as a child of any condensed"
-                        " edge; their std::find at extract.cuh:144 would"
-                        " return end() and the next line dereferences it"
-                    )
-                var child_lambda = tree.lambdas[child_idx]
-                if cluster_selection_epsilon != Float32(0.0):
-                    # `:148-153`: a point joins the root cluster when it
-                    # left at or above 1 / epsilon.
-                    if child_lambda >= inverse_cluster_selection_epsilon:
-                        result.append(Int32(cluster - n_leaves))
-                    else:
-                        result.append(Int32(-1))
-                elif child_lambda >= parent_lambdas[cluster]:
-                    result.append(Int32(cluster - n_leaves))
-                else:
-                    result.append(Int32(-1))
-            else:
-                result.append(Int32(-1))
-        else:
-            result.append(Int32(cluster - n_leaves))
-    return result^
 
 
 def get_probabilities_host(
@@ -297,6 +154,231 @@ def probabilities_from_labels(
     return get_probabilities_host(tree, raw, n_leaves)
 
 
+comptime LABEL_TPB = 256
+"""Threads per block of the labelling launches. SCHEDULING only: every
+launch writes integers whose values no thread order can move."""
+
+
+def label_init_kernel(
+    nxt: MutPointer[Int32, MutAnyOrigin],
+    child_lambda: MutPointer[Float32, MutAnyOrigin],
+    n_nodes: Int32,
+):
+    """`next[v] = v`, `child_lambda[v] = 0` for every node."""
+    var v = Int(block_dim.x) * Int(block_idx.x) + Int(thread_idx.x)
+    if v >= Int(n_nodes):
+        return
+    nxt.unsafe_store(v, Int32(v))
+    child_lambda.unsafe_store(v, Float32(0.0))
+
+
+def label_edges_kernel(
+    parents: MutPointer[Int32, MutAnyOrigin],
+    children: MutPointer[Int32, MutAnyOrigin],
+    lambdas: MutPointer[Float32, MutAnyOrigin],
+    is_cluster: MutPointer[Int32, MutAnyOrigin],
+    nxt: MutPointer[Int32, MutAnyOrigin],
+    child_lambda: MutPointer[Float32, MutAnyOrigin],
+    root_key: MutPointer[Int32, MutAnyOrigin],
+    n_leaves_in: Int32,
+    n_nodes_in: Int32,
+    n_edges_in: Int32,
+):
+    """`:122-129` per edge. A child that is not a selected cluster points at
+    its parent (their `perform_union(parent, child)`); every child records
+    its edge's lambda (the `std::find` at `:144`, each child has one edge);
+    an edge of the root folds its lambda into `parent_lambdas[root]` by
+    `Atomic.max` on `weight_order_key` (`:128`, an integer max, so the
+    order threads land in cannot move it). Each child slot is written by
+    its one edge only."""
+    var e = Int(block_dim.x) * Int(block_idx.x) + Int(thread_idx.x)
+    if e >= Int(n_edges_in):
+        return
+    var n_leaves = Int(n_leaves_in)
+    var child = Int(children.unsafe_load(e))
+    var parent = Int(parents.unsafe_load(e))
+    var lam = lambdas.unsafe_load(e)
+    if child < 0 or child >= Int(n_nodes_in):
+        return
+    var selected = child >= n_leaves and is_cluster.unsafe_load(
+        child - n_leaves
+    ) != Int32(0)
+    if not selected:
+        nxt.unsafe_store(child, Int32(parent))
+    child_lambda.unsafe_store(child, lam)
+    if parent == n_leaves:
+        _ = Atomic.max(root_key, weight_order_key(lam))
+
+
+def label_jump_kernel(
+    src: MutPointer[Int32, MutAnyOrigin],
+    dst: MutPointer[Int32, MutAnyOrigin],
+    n_nodes: Int32,
+):
+    """One pointer-jumping round, `dst[v] = src[src[v]]`. Reads `src` only
+    and writes `dst` only."""
+    var v = Int(block_dim.x) * Int(block_idx.x) + Int(thread_idx.x)
+    if v >= Int(n_nodes):
+        return
+    dst.unsafe_store(v, src.unsafe_load(Int(src.unsafe_load(v))))
+
+
+def label_points_kernel(
+    rep: MutPointer[Int32, MutAnyOrigin],
+    child_lambda: MutPointer[Float32, MutAnyOrigin],
+    root_key: MutPointer[Int32, MutAnyOrigin],
+    labels: MutPointer[Int32, MutAnyOrigin],
+    n_leaves_in: Int32,
+    root_single: Int32,
+    use_epsilon: Int32,
+    inverse_cluster_selection_epsilon: Float32,
+):
+    """`:136-164` per point, with `cluster = rep[i]` (their `find(i)`)."""
+    var i = Int(block_dim.x) * Int(block_idx.x) + Int(thread_idx.x)
+    var n_leaves = Int(n_leaves_in)
+    if i >= n_leaves:
+        return
+    var cluster = Int(rep.unsafe_load(i))
+    var out = Int32(-1)
+    if cluster > n_leaves:
+        out = Int32(cluster - n_leaves)
+    elif cluster == n_leaves and root_single != Int32(0):
+        # `:141-160`: the root is a label only when it is the one selected
+        # cluster and allow_single_cluster is set.
+        var lam = child_lambda.unsafe_load(i)
+        if use_epsilon != Int32(0):
+            if lam >= inverse_cluster_selection_epsilon:
+                out = Int32(0)
+        elif lam >= weight_order_unkey(root_key.unsafe_load(0)):
+            out = Int32(0)
+    labels.unsafe_store(i, out)
+
+
+def do_labelling_device(
+    ctx: DeviceContext,
+    tree: CondensedHierarchy,
+    mut is_cluster: DeviceBuffer[DType.int32],
+    n_selected: Int,
+    n_leaves: Int,
+    allow_single_cluster: Bool,
+    cluster_selection_epsilon: Float32,
+    tpb: Int = LABEL_TPB,
+) raises -> List[Int32]:
+    """`extract.cuh:88-167` on the device (this file's header). Returns the
+    `n_leaves` condensed cluster ids (or -1), the host walk's integers."""
+    var n_edges = tree.n_edges
+    var n_clusters = tree.n_clusters
+    var n_nodes = n_leaves + n_clusters
+    var d_parents = ctx.enqueue_create_buffer[DType.int32](max(n_edges, 1))
+    var d_children = ctx.enqueue_create_buffer[DType.int32](max(n_edges, 1))
+    var d_lambdas = ctx.enqueue_create_buffer[DType.float32](max(n_edges, 1))
+    var next_a = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var next_b = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var child_lambda = ctx.enqueue_create_buffer[DType.float32](n_nodes)
+    var root_key = ctx.enqueue_create_buffer[DType.int32](1)
+    var d_labels = ctx.enqueue_create_buffer[DType.int32](max(n_leaves, 1))
+    var h_parents = tree.parents.copy()
+    var h_children = tree.children.copy()
+    var h_lambdas = tree.lambdas.copy()
+    if n_edges > 0:
+        ctx.enqueue_copy(
+            dst_buf=d_parents.create_sub_buffer[DType.int32](0, n_edges),
+            src_ptr=h_parents.unsafe_ptr(),
+        )
+        ctx.enqueue_copy(
+            dst_buf=d_children.create_sub_buffer[DType.int32](0, n_edges),
+            src_ptr=h_children.unsafe_ptr(),
+        )
+        ctx.enqueue_copy(
+            dst_buf=d_lambdas.create_sub_buffer[DType.float32](0, n_edges),
+            src_ptr=h_lambdas.unsafe_ptr(),
+        )
+    # `:117` parent_lambdas starts at 0.0f.
+    ctx.enqueue_memset(root_key, weight_order_key(Float32(0.0)))
+
+    var node_grid = max(1, (n_nodes + tpb - 1) // tpb)
+    ctx.enqueue_function[label_init_kernel](
+        next_a.unsafe_ptr(),
+        child_lambda.unsafe_ptr(),
+        Int32(n_nodes),
+        grid_dim=(node_grid, 1, 1),
+        block_dim=(tpb, 1, 1),
+    )
+    if n_edges > 0:
+        ctx.enqueue_function[label_edges_kernel](
+            d_parents.unsafe_ptr(),
+            d_children.unsafe_ptr(),
+            d_lambdas.unsafe_ptr(),
+            is_cluster.unsafe_ptr(),
+            next_a.unsafe_ptr(),
+            child_lambda.unsafe_ptr(),
+            root_key.unsafe_ptr(),
+            Int32(n_leaves),
+            Int32(n_nodes),
+            Int32(n_edges),
+            grid_dim=(max(1, (n_edges + tpb - 1) // tpb), 1, 1),
+            block_dim=(tpb, 1, 1),
+        )
+    # A fixed round count: 2^rounds >= n_nodes reaches every chain's end.
+    var rounds = 1
+    while (1 << rounds) < n_nodes:
+        rounds += 1
+    for r in range(rounds):
+        if r % 2 == 0:
+            ctx.enqueue_function[label_jump_kernel](
+                next_a.unsafe_ptr(),
+                next_b.unsafe_ptr(),
+                Int32(n_nodes),
+                grid_dim=(node_grid, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[label_jump_kernel](
+                next_b.unsafe_ptr(),
+                next_a.unsafe_ptr(),
+                Int32(n_nodes),
+                grid_dim=(node_grid, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
+    var rep_ptr = next_b.unsafe_ptr() if rounds % 2 == 1 else next_a.unsafe_ptr()
+
+    # `:131-134` identical_div (DEVIATION 5115); unread when epsilon is 0.
+    var inverse_cluster_selection_epsilon = Float32(0.0)
+    if cluster_selection_epsilon != Float32(0.0):
+        inverse_cluster_selection_epsilon = identical_div(
+            Float32(1.0), cluster_selection_epsilon
+        )
+    var root_single = Int32(1) if (
+        n_selected == 1 and allow_single_cluster
+    ) else Int32(0)
+    if n_leaves > 0:
+        ctx.enqueue_function[label_points_kernel](
+            rep_ptr,
+            child_lambda.unsafe_ptr(),
+            root_key.unsafe_ptr(),
+            d_labels.unsafe_ptr(),
+            Int32(n_leaves),
+            root_single,
+            Int32(1) if cluster_selection_epsilon != Float32(0.0) else Int32(0),
+            inverse_cluster_selection_epsilon,
+            grid_dim=(max(1, (n_leaves + tpb - 1) // tpb), 1, 1),
+            block_dim=(tpb, 1, 1),
+        )
+    var labels = _download_i32(ctx, d_labels, n_leaves)
+    _ = h_parents^
+    _ = h_children^
+    _ = h_lambdas^
+    _ = d_parents^
+    _ = d_children^
+    _ = d_lambdas^
+    _ = next_a^
+    _ = next_b^
+    _ = child_lambda^
+    _ = root_key^
+    _ = d_labels^
+    return labels^
+
+
 def extract_clusters(
     ctx: DeviceContext,
     tree: CondensedHierarchy,
@@ -347,20 +429,10 @@ def extract_clusters(
             inverse_label_map.append(Int32(i))
             n_selected += 1
 
-    # `do_labelling_on_host`'s membership test is over NODE ids, so the
-    # array is `n_leaves + n_clusters` long and a selected condensed
-    # cluster `i` sits at `i + n_leaves` -- their `clusters.insert(i +
-    # n_leaves)` at `:283`.
-    var in_clusters = List[Int32](capacity=n_leaves + n_clusters)
-    for _ in range(n_leaves + n_clusters):
-        in_clusters.append(Int32(0))
-    for i in range(n_clusters):
-        if h_isc[i] != Int32(0):
-            in_clusters[i + n_leaves] = Int32(1)
-
-    # `:303-309`
-    var labels = do_labelling_on_host(
-        tree, in_clusters, n_leaves, allow_single_cluster,
+    # `:303-309`, on the device: `is_cluster` stays where the selection
+    # left it, and the membership test reads it by condensed id.
+    var labels = do_labelling_device(
+        ctx, tree, is_cluster, n_selected, n_leaves, allow_single_cluster,
         cluster_selection_epsilon,
     )
 
