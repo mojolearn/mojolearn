@@ -4,8 +4,6 @@
 rule	class	owner	state	path	occ	text
 host-threads	host-threads	gap-neural-models	debt	bindings/_mojolearn_embedding.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	gap-neural-models	debt	bindings/_mojolearn_embedding.mojo	0	host_parallelize(_scan, tasks)
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_proba
-host-call	host-import	UNOWNED	debt	bindings/_mojolearn_gp.mojo	0	var p = gpc_proba(lat.mean, lat.variance)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/host/svc_proba.mojo:svc_pair_epilogue_binding
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/host/svc_proba.mojo:svc_platt_train_binding
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/host/svc_proba.mojo:svc_portable_math_binding
@@ -48,11 +46,6 @@ host-threads	host-threads	UNOWNED	debt	core/knn_host_predict.mojo	3	host_paralle
 d2h-loop	d2h-roundtrip	multi-GPU-driver-review	debt	dbscan/impl/multi_gpu.mojo	0	ctx.enqueue_copy(dst_ptr=root_ia.unsafe_ptr(), src_buf=iv)
 host-call	host-import	gap-neural-overhead2	debt	embedding/checks/embedding_oracle.mojo	0	if all_finite(values):
 host-call	host-import	gap-neural-overhead2	debt	embedding/checks/embedding_oracle.mojo	0	import core/host_lanes.mojo:all_finite
-host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	gpc_validate_labels(y, n_train)
-host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	1	gpc_validate_labels(y, n_train)
-host-call	host-import	UNOWNED	debt	gaussian_process/classifier.mojo	0	import gaussian_process/host/gpc_steps.mojo:gpc_validate_labels
-host-threads	host-threads	UNOWNED	debt	gaussian_process/host/gpc_steps.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	UNOWNED	debt	gaussian_process/host/gpc_steps.mojo	0	host_parallelize(_rows, tasks)
 d2h-loop	d2h-roundtrip	UNOWNED	debt	gbdt/methods/doc_parallel_boosting.mojo	0	ctx.enqueue_copy(dst_ptr=h_t.unsafe_ptr(), src_buf=targets)
 host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:fold_balanced_tree
 host-call	host-import	gap-neural-models	debt	gemm/checks/gemm_oracle.mojo	0	import gemm/host/gemm_oracle.mojo:gemm_oracle
@@ -101,7 +94,6 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_trees.py	1	for i in ra
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_trees.py	0	return Array.from_list([i for i in range(n) if not seen[i]], "<i4")
 py-loop	py-numpy	gap-nv-classical2	debt	python/mojolearn/_expansion_trees.py	0	return Array.from_list([raw[c * n + i] for i in range(n) for c in range(K)], "<f8").reshape((n, K))
 py-loop	py-numpy	gap-nv-classical2	debt	python/mojolearn/_expansion_trees.py	0	rows = [i for i in range(n) if uv[i] < frac]
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_impl.py	0	pairs = [(flat[2 * i], flat[2 * i + 1]) for i in range(n)]
 host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	if os.path.exists(_backend.host_module_path(_HOST_INFERENCE_BASENAME)):
 host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	return _backend.load_host_module(_HOST_BASENAME)
 host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	return _backend.load_host_module(_HOST_INFERENCE_BASENAME)
@@ -127,8 +119,6 @@ py-threads	host-threads	gap-lm	debt	python/mojolearn/lm_corpus.py	0	worker = thr
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/model_selection.py	0	for i in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/models/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
 host-module	host-import	UNOWNED	debt	python/mojolearn/neural_inference.py	0	return _backend.load_host_module(_EXTENSION)
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/parallel_gaussian_process.py	0	for row in range(q.shape[0]):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/parallel_gaussian_process.py	1	for row in range(q.shape[0]):
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	module = _backend.load_host_module(_EXTENSION)
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	return _Entries(_backend.load_host_module(_EXTENSION))
 py-loop	py-numpy	gap-lm	debt	python/mojolearn/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]

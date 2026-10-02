@@ -38,12 +38,12 @@ def gp_grad_part_item(t: Int, dual: _P, kinv: _P, dk: _P, n: Int, nb: Int, part:
     part.unsafe_store(t, acc)
 
 
-def gp_grad_fin_item(p: Int, part: _P, nb: Int, half: Float32, out: _P):
+def gp_grad_fin_item(p: Int, part: _P, nb: Int, half: Float32, dst: _P):
     """Parameter p's partials added ascending, times `half` (0.5)."""
     var acc = Float32(0.0)
     for b in range(nb):
         acc = ftz(acc + part.unsafe_load(p * nb + b))
-    out.unsafe_store(p, ftz(identical_mul(half, acc)))
+    dst.unsafe_store(p, ftz(identical_mul(half, acc)))
 
 
 # the kernel tree's node kinds (gaussian_process/host/gp_theta.mojo's _K_*)
