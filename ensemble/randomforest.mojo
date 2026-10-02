@@ -11,6 +11,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.primitives.block import prefix_sum
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
     portable_log2_64,
@@ -136,7 +137,7 @@ comptime ROWS_SORTED_MIN_COLS = 64
 #: IDENTICAL compiles the old launch.
 comptime ROWS_SORT_SCAN_TPB = 256
 comptime ROWS_SORT_SCAN_BLOCK = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_SEG_SCAN_BLOCK"]()
 )

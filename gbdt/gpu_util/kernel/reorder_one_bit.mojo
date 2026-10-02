@@ -62,7 +62,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import prefix_sum
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: FAST on Apple, lane/apple-fast-trees-scan (2026-10-02), OPT-IN
 #: `-D MOJOLEARN_REORDER_FLAGS_SCAN_BLOCK=1`. CAUSE: `launch_reorder_one_bit`
@@ -74,7 +74,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 #: only; no production driver calls `launch_reorder_one_bit`. IDENTICAL
 #: compiles the old launch.
 comptime REORDER_FLAGS_SCAN_BLOCK = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_REORDER_FLAGS_SCAN_BLOCK"]()
 )

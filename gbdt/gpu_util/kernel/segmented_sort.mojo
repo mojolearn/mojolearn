@@ -82,7 +82,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 
 #: FAST on Apple, lane/apple-fast-trees-scan (2026-10-02), OPT-IN
@@ -98,7 +98,7 @@ from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 #: prefix is bit for bit the serial scan's. IDENTICAL compiles the old launch.
 comptime SEG_SCAN_SUMS_TPB = 256
 comptime SEG_SCAN_BLOCK_SUMS = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_SEG_SCAN_BLOCK"]()
 )
