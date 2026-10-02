@@ -2,9 +2,12 @@
 seam answers EXACTLY as the Python routine it stands in for.
 
 The Python routines are the definitions and stay in the package as the
-fallback. `MOJOLEARN_HOTPATH=python` sends every seam down its Python
-routine (the REFERENCE arm); unset, the seam takes the core helper of
-`bindings/hotpath_helpers.mojo` or the C builtin (the NEW arm). Each case
+fallback. The REFERENCE arm (`_python_arm`) makes every helper read as
+absent from the binary, the state `_buffer._native_optional` answers None
+for, and makes every label seam decline (return None), so each seam runs
+its Python routine; the `MOJOLEARN_HOTPATH=python` switch that did this is
+deleted (cpu-gpu-cleanup c-core). The NEW arm takes the core helper of
+`bindings/hotpath_helpers.mojo` or the C builtin. Each case
 runs both arms and holds them to the SAME RESULT, byte for byte, OR THE
 SAME REFUSAL, type and words.
 
@@ -19,6 +22,7 @@ must see every group diverge, which `test_sabotage_build_diverges` asserts.
 NumPy is the input factory here and nothing else. Skips when the loaded
 binary has no hotpath helpers.
 """
+import contextlib
 import math
 import os
 import struct
@@ -38,7 +42,6 @@ _HELPERS = (
     "encode_labels_u8", "encode_labels_f32", "encode_labels_u32",
     "gather_i64", "gather_f64",
 )
-os.environ.pop("MOJOLEARN_HOTPATH", None)
 try:
     for _key in _HELPERS:
         _buffer._native(_key)
@@ -105,21 +108,43 @@ def _outcome(fn):
     return result, [(w.category.__name__, str(w.message)) for w in caught]
 
 
+_LABEL_SEAMS = ("_encode_labels_native", "_decode_labels_native")
+
+
+@contextlib.contextmanager
+def _python_arm():
+    """The reference arm. Every helper of `_HELPERS` reads as missing from
+    the binary (`_native_optional` returns None, as on a binary that
+    predates it) and the label seams decline, so every seam runs its Python
+    routine, the helper's definition. A seam that resolves a helper through
+    `_native` anyway leaves it cached in `_NATIVE`, which `_both` reads back."""
+    saved_native = dict(_buffer._NATIVE)
+    saved_missing = set(_buffer._NATIVE_MISSING)
+    saved_seams = {name: getattr(_labels, name) for name in _LABEL_SEAMS}
+    for key in _HELPERS:
+        _buffer._NATIVE.pop(key, None)
+        _buffer._NATIVE_MISSING.add(key)
+    for name in _LABEL_SEAMS:
+        setattr(_labels, name, lambda *args, **kwargs: None)
+    try:
+        yield
+    finally:
+        for name, real in saved_seams.items():
+            setattr(_labels, name, real)
+        _buffer._NATIVE.clear()
+        _buffer._NATIVE.update(saved_native)
+        _buffer._NATIVE_MISSING.clear()
+        _buffer._NATIVE_MISSING.update(saved_missing)
+
+
 def _both(fn, expect=()):
     """Run `fn` on the reference arm and the new arm. `expect` names the
     helpers the new arm must call; () means the new arm is a C builtin (or a
     deliberate fall back) and only the reference arm's silence is pinned."""
-    os.environ["MOJOLEARN_HOTPATH"] = "python"
-    try:
-        with _Spy() as ref_spy:
-            ref = _outcome(fn)
-    finally:
-        os.environ.pop("MOJOLEARN_HOTPATH", None)
-    hot = set(ref_spy.calls) - {"gather_i64", "gather_f64", "encode_labels_i64",
-                                "encode_labels_f64", "encode_labels_i32",
-                                "encode_labels_u8", "encode_labels_f32",
-                                "encode_labels_u32"}
-    assert not hot, f"the reference arm reached a hotpath helper: {ref_spy.calls}"
+    with _python_arm():
+        ref = _outcome(fn)
+        hot = {key for key in _HELPERS if key in _buffer._NATIVE}
+    assert not hot, f"the reference arm reached a hotpath helper: {sorted(hot)}"
     with _Spy() as new_spy:
         new = _outcome(fn)
     for key in expect:
@@ -644,13 +669,15 @@ class _Count:
 
 
 def _pinned(module, name, fn, answers=True):
-    os.environ["MOJOLEARN_HOTPATH"] = "python"
+    # The reference arm: the seam declines (returns None, its "not taken"
+    # answer), so the caller runs the Python routine it stands in for.
+    real = getattr(module, name)
+    setattr(module, name, lambda *args, **kwargs: None)
     try:
-        with _Count(module, name) as ref_count:
+        with _python_arm():
             ref = _outcome(fn)
     finally:
-        os.environ.pop("MOJOLEARN_HOTPATH", None)
-    assert ref_count.answered == 0, f"the reference arm was answered by {name}"
+        setattr(module, name, real)
     with _Count(module, name) as new_count:
         new = _outcome(fn)
     if answers is not None:
