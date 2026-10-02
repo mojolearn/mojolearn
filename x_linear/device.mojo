@@ -27,7 +27,7 @@ from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, t
 from x_linear.ops import ld, st, fd, i2f, fa, fm, fmad, flog, fill, copy, row_dot, mean_of
 from x_linear.tops import t_fold_fa_staged
 from x_linear.glm import (
-    _unit, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, _glm_step, GLM_LINK_LOG, GLM_STALL_ITERS,
+    _unit, _glm_deriv_row, _glm_cell, _glm_cell_rows, _glm_slot_count, _glm_slot_cell, _glm_step, GLM_LINK_LOG, GLM_STALL_ITERS,
 )
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
@@ -259,15 +259,30 @@ def glm_deriv_kernel(y: FP, n: Int32, power: Float32, link: Int32, sw: Int32, et
         _glm_deriv_row(y, Int(n), i, power, Int(link), eta, sw != 0, gr, hr)
 
 
-def glm_cells_kernel(x: FP, gr: FP, hr: FP, n: Int32, d: Int32, m: Int32, g: FP, h: FP):
-    """One thread a slot of glm_fit's warp-uniform layout."""
+def glm_cells_kernel(x: FP, gr: FP, hr: FP, lo: Int32, cnt: Int32, d: Int32, m: Int32, g: FP, h: FP):
+    """One thread a slot of glm_fit's warp-uniform layout, rows [lo, lo + cnt)."""
     var sl = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
     var mm = Int(m)
     if sl < _glm_slot_count(dd, mm):
         var c = _glm_slot_cell(sl, dd, mm)
         if c >= 0:
-            _glm_cell(c, x, gr, hr, Int(n), dd, mm, g, h)
+            _glm_cell_rows(c, x, gr, hr, Int(lo), Int(cnt), dd, mm, g, h)
+
+
+#: Apple: macOS silently aborts a command buffer that holds the GPU for
+#: seconds and leaves its output partly stale (the M2's GLM grid digests
+#: differed run to run on istella, 24,531 cells of 1M-row chains in ONE
+#: launch, and on taxi under a second Metal job). The cells run in row
+#: slices of at most GLM_APPLE_SLICE_MACS chain steps a launch, each waited
+#: on, every chain resuming from its stored value (the same words).
+comptime GLM_APPLE_SLICE_MACS = 1 << 29
+
+
+def _glm_rows_slice(n: Int, slots: Int) -> Int:
+    comptime if has_apple_gpu_accelerator():
+        return max(64, min(n, (GLM_APPLE_SLICE_MACS // max(slots, 1)) // 64 * 64))
+    return n
 
 
 def glm_step_kernel(g: FP, h: FP, step: FP, res: FP, m: Int32, d: Int32, alpha: Float32, tol: Float32, sc: FP):
@@ -340,6 +355,7 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     dtw.enqueue_fill(Float32(0))
     var rows_grid = _xg_blocks(n)
     var slot_grid = _xg_blocks(m + m * (m + 1) // 2 + 4 * 64)
+    var rows_slice = _glm_rows_slice(n, _glm_slot_count(d, m))
     ctx.enqueue_function[glm_init_kernel](dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), Int32(link), Int32(sw),
                                           dres.unsafe_ptr(), dsc.unsafe_ptr(), grid_dim=1, block_dim=1)
 
@@ -350,8 +366,15 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     for it in range(max_iter):
         ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
                                                dgr.unsafe_ptr(), dhr.unsafe_ptr(), grid_dim=rows_grid, block_dim=XG_TPB)
-        ctx.enqueue_function[glm_cells_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(n), Int32(d),
-                                               Int32(m), dg.unsafe_ptr(), dh.unsafe_ptr(), grid_dim=slot_grid, block_dim=XG_TPB)
+        var lo = 0
+        while lo < n:
+            var cnt = min(rows_slice, n - lo)
+            ctx.enqueue_function[glm_cells_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(lo), Int32(cnt),
+                                                   Int32(d), Int32(m), dg.unsafe_ptr(), dh.unsafe_ptr(),
+                                                   grid_dim=slot_grid, block_dim=XG_TPB)
+            lo += cnt
+            if lo < n and rows_slice < n:
+                ctx.synchronize()
         ctx.enqueue_function[glm_step_kernel](dg.unsafe_ptr(), dh.unsafe_ptr(), dstep.unsafe_ptr(), dres.unsafe_ptr(),
                                               Int32(m), Int32(d), alpha, tol, dsc.unsafe_ptr(), grid_dim=1, block_dim=1)
         ctx.enqueue_copy(dst_ptr=hscp, src_buf=dsc)

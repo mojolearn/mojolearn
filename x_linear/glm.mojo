@@ -148,12 +148,24 @@ def _glm_deriv_row(y: FP, n: Int, i: Int, power: Float32, link: Int, eta: FP, sw
 def _glm_cell(c: Int, x: FP, gr: FP, hr: FP, n: Int, d: Int, m: Int, g: FP, h: FP):
     """Cell c's chain over the rows ascending: c < m the gradient (g[c]),
     else the lower-triangle Hessian cell (j, k) (h[j*m + k])."""
+    _glm_cell_rows(c, x, gr, hr, 0, n, d, m, g, h)
+
+
+@always_inline
+def _glm_cell_rows(c: Int, x: FP, gr: FP, hr: FP, lo: Int, cnt: Int, d: Int, m: Int, g: FP, h: FP):
+    """`_glm_cell`'s chain over rows [lo, lo + cnt) only, continuing from the
+    cell's stored value when lo > 0: an acc is always flushed, so the resumed
+    chain is the whole chain's words (lane/neural-pass89, the Apple slices)."""
+    var xs = x + lo * d
+    var grs = gr + lo
+    var hrs = hr + lo
     if c < m:
+        var init = ld(g, c) if lo > 0 else Float32(0)
         var acc: Float32
         if c < d:
-            acc = chain_fmad(gr, 0, 1, x, c, d, n)
+            acc = chain_fmad(grs, 0, 1, xs, c, d, cnt, init)
         else:
-            acc = fold_fa(gr, 0, 1, n)
+            acc = fold_fa(grs, 0, 1, cnt, init)
         st(g, c, acc)
         return
     # lower-triangle cell (j, k), k <= j, row-major over j
@@ -162,13 +174,14 @@ def _glm_cell(c: Int, x: FP, gr: FP, hr: FP, n: Int, d: Int, m: Int, g: FP, h: F
     while (j + 1) * (j + 2) // 2 <= q:
         j += 1
     var k = q - j * (j + 1) // 2
+    var init = ld(h, j * m + k) if lo > 0 else Float32(0)
     var acc: Float32
     if j < d:
-        acc = chain_fmad_scaled(hr, x, j, k, d, n)
+        acc = chain_fmad_scaled(hrs, xs, j, k, d, cnt, init)
     elif k < d:
-        acc = chain_fmad(hr, 0, 1, x, k, d, n)
+        acc = chain_fmad(hrs, 0, 1, xs, k, d, cnt, init)
     else:
-        acc = fold_fa(hr, 0, 1, n)
+        acc = fold_fa(hrs, 0, 1, cnt, init)
     st(h, j * m + k, acc)
 
 
