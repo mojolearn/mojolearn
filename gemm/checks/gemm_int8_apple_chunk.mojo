@@ -72,8 +72,8 @@ from max.gpu.sync import barrier
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, column_name
 from checks.numerics import dequant_int8_pinned
 from gemm.checks.gemm_identical import _AMMA_M64, _amma_load_t, _amma_mma
-from gemm.host.gemm_lowbit_oracle import INT8_MAX_K
-from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
+from gemm.contract import INT8_MAX_K
+from gemm.contract import gemm_oracle_sabotage_value_flip
 
 #: The largest magnitude of a product of two int8 codes (contract L-4 clamps
 #: a code to [-127, 127]).

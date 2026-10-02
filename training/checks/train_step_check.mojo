@@ -75,7 +75,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import FNV_OFFSET, IdentityTrace, fnv1a64_bytes
 
-from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
+from gemm.contract import OP_NT
+from gemm.checks.gemm_oracle import gemm_oracle
 from gemm.checks.gemm_backward import (
     BWD_DC_LEFT,
     gemm_backward_a_call,

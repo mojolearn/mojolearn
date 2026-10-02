@@ -57,7 +57,7 @@ from gemm.checks.gemm_backward import (
     ANY_BWD_SABOTAGE as GEMM_BWD_SABOTAGE, identical_gemm_backward_a_into,
     identical_gemm_backward_b_into, identical_gemm_backward_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NT, OP_NN
+from gemm.contract import OP_NT, OP_NN
 from embedding.checks.embedding_identical import (
     ANY_EMB_SABOTAGE, emb_run_scratch_ints, identical_embedding_forward_into,
     identical_embedding_backward_into,

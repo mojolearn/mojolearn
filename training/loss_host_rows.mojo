@@ -52,7 +52,7 @@ from core.host_lanes import (
     lanes_are_identical,
 )
 from core.host_parallel import host_parallelize
-from gemm.checks.gemm_oracle import OP_NN
+from gemm.contract import OP_NN
 from gemm.host.gemm_host_rows import gemm_host_rows
 from training.checks.loss_oracle import (
     CeConfig,

@@ -80,7 +80,7 @@ from gemm.host.gemm_host_rows import (
     ghr_panel_count,
     ghr_tile,
 )
-from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, contract_leaf_size, leaf_count
+from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, contract_leaf_size, leaf_count
 from training.checks.loss_oracle import (
     REDUCTION_MEAN,
     CeConfig,

@@ -26,7 +26,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_splitk_fits, choose_gemm_plan,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
+from gemm.contract import OP_NN, OP_NT, OP_TN
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from core.staged_download import download_f32_into
 from x_cnn.ops import (

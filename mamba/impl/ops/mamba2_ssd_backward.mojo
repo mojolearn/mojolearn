@@ -25,7 +25,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NN
+from gemm.contract import OP_NN
 from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
 from mamba.impl.modeling.modeling_mamba import mamba_scratch
 

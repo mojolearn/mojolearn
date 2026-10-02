@@ -17,7 +17,7 @@ doors for the seam check."""
 from std.memory import alloc
 from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
-from gemm.host.identical_gemm import OP_NN, OP_NT, OP_TN
+from gemm.contract import OP_NN, OP_NT, OP_TN
 from x_cnn.host.gemm_host import gemm_host_into, parallel_tasks
 from checks.numerics import ftz
 from x_cnn.ops import (

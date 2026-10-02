@@ -46,7 +46,7 @@ from training.byte_lm import (
 from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into, download_f32_into_scanned
 from core.device_arena import arena_begin, arena_end, arena_release
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
 from std.time import perf_counter_ns

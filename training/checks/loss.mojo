@@ -132,7 +132,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NN
+from gemm.contract import OP_NN
 from core.device_scan import (
     device_classify_nonfinite,
     device_first_nonfinite,

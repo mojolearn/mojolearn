@@ -3,7 +3,8 @@
 """The IDENTICAL FP32 optimizer step, written out, on the host. This file's own `opt_refuse_bad_inputs` is now what the device entry point calls, so both sides fail with the same name (DEVIATION 1496)."""
 
 from core.host_lanes import all_finite
-from gemm.checks.gemm_oracle import OP_NT, contract_leaf_size, gemm_oracle
+from gemm.contract import OP_NT, contract_leaf_size
+from gemm.checks.gemm_oracle import gemm_oracle
 from gemm.host.gemm_host_rows import gemm_host_rows
 from checks.numerics import (
     ftz,

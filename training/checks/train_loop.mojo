@@ -145,7 +145,7 @@ from gemm.checks.gemm_backward import (
     identical_gemm_backward_b_into,
     identical_gemm_backward_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 
 from embedding.checks.embedding_identical import (
     emb_run_scratch_ints,

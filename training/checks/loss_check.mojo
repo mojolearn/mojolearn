@@ -27,7 +27,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.checks.gemm_backward import gemm_backward_sabotage_name
-from gemm.checks.gemm_oracle import OP_NN, contract_leaf_size
+from gemm.contract import OP_NN, contract_leaf_size
 from transformer.checks.transformer_fixture import fixture_splitmix64
 from training.checks.loss import (
     ANY_LOSS_SABOTAGE,

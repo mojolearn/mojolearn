@@ -146,8 +146,8 @@ from gemm.checks.gemm_int15_apple import (
     identical_gemm_int15_apple_into,
 )
 from gemm.checks.gemm_int15_epilogue import INT15_EXPONENT_SABOTAGE
-from gemm.host.gemm_int15_oracle import INT15_MAX_K
-from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
+from gemm.contract import INT15_MAX_K
+from gemm.contract import gemm_oracle_sabotage_value_flip
 
 #: DEVIATION 2973, the value arm: the low-bit family's own define.
 comptime INT15_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_SABOTAGE"]()

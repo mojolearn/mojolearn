@@ -22,7 +22,7 @@ from training.checks.optimizer import OPT_RECORD_INTERMEDIATES
 from training.checks.optimizer_oracle import OptimizerConfig
 from embedding.checks.embedding_oracle import EmbConfig
 from embedding.checks.embedding_identical import identical_embedding_forward_into, identical_embedding_backward_into
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 from gemm.checks.gemm_identical import identical_gemm_into
 from gemm.checks.gemm_backward import identical_gemm_backward_a_into, identical_gemm_backward_b_into
 from training.checks.loss import identical_ce_forward_into, identical_ce_backward_into

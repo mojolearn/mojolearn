@@ -67,7 +67,8 @@ from std.memory import unsafe_memcpy
 from std.os import getenv
 
 from core.host_lanes import host_f32_uninit
-from gemm.host.identical_gemm import OP_NT, gemm_oracle
+from gemm.contract import OP_NT
+from gemm.host.identical_gemm import gemm_oracle
 from gemm.host.gemm_host_rows import gemm_host_rows
 from embedding.checks.embedding_oracle import (
     EmbConfig,
