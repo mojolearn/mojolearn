@@ -74,8 +74,10 @@ from decomposition.checks.jacobi_eigh_device import (
     JACOBI_INFO_UNWRITTEN,
     JACOBI_ROT_TPB,
     JACOBI_SWEEPS,
+    JACOBI_SMEM_NMAX,
     JACOBI_TOL,
     jacobi_eigh_kernel,
+    jacobi_eigh_kernel_smem,
 )
 from decomposition.host.linalg_public import (
     EighHostResult,
@@ -86,6 +88,9 @@ from decomposition.host.linalg_public import (
 )
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 from decomposition.impl.linalg.detail.svd_full import svd_of_r
+from std.sys.compile import is_defined
+from x_decomp.jacobi_par import eigh_rr_on_device
+from x_decomp.rr import LINALG_EIGH_CYCLIC_MAX, LINALG_EIGH_RR_SWEEPS
 
 
 def _upload(
@@ -188,16 +193,44 @@ def device_eigh(ctx: DeviceContext, a: List[Float32], n: Int) raises -> EighHost
     var dinfo = ctx.enqueue_create_buffer[DType.float32](3)
     enqueue_fill(ctx, dinfo, JACOBI_INFO_UNWRITTEN)
     ctx.synchronize()
-    ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
-        da.unsafe_ptr(),
-        dv.unsafe_ptr(),
-        dinfo.unsafe_ptr(),
-        Int32(n),
-        Int32(JACOBI_SWEEPS),
-        Float32(JACOBI_TOL),
-        grid_dim=(1, 1, 1),
-        block_dim=(JACOBI_ROT_TPB, 1, 1),
-    )
+    # lane/neural-pass144: a matrix whose page fits runs the whole cyclic
+    # solve in one threadgroup's shared memory (`jacobi_eigh_kernel_smem`:
+    # the same rotations in the same order, the same bits, one launch and
+    # no device-memory round trip a rotation)
+    comptime if JACOBI_SMEM_NMAX > 0:
+        if n <= JACOBI_SMEM_NMAX:
+            ctx.enqueue_function[jacobi_eigh_kernel_smem[JACOBI_ROT_TPB, JACOBI_SMEM_NMAX]](
+                da.unsafe_ptr(),
+                dv.unsafe_ptr(),
+                dinfo.unsafe_ptr(),
+                Int32(n),
+                Int32(JACOBI_SWEEPS),
+                Float32(JACOBI_TOL),
+                grid_dim=(1, 1, 1),
+                block_dim=(JACOBI_ROT_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
+                da.unsafe_ptr(),
+                dv.unsafe_ptr(),
+                dinfo.unsafe_ptr(),
+                Int32(n),
+                Int32(JACOBI_SWEEPS),
+                Float32(JACOBI_TOL),
+                grid_dim=(1, 1, 1),
+                block_dim=(JACOBI_ROT_TPB, 1, 1),
+            )
+    else:
+        ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
+            da.unsafe_ptr(),
+            dv.unsafe_ptr(),
+            dinfo.unsafe_ptr(),
+            Int32(n),
+            Int32(JACOBI_SWEEPS),
+            Float32(JACOBI_TOL),
+            grid_dim=(1, 1, 1),
+            block_dim=(JACOBI_ROT_TPB, 1, 1),
+        )
     ctx.enqueue_function[sign_flip_kernel](
         dv.unsafe_ptr(),
         Int32(n),
@@ -238,6 +271,39 @@ def device_eigh(ctx: DeviceContext, a: List[Float32], n: Int) raises -> EighHost
     for i in range(n):
         diag.append(work[i * n + i])
     return eigh_ascending(diag, vecs, n, True, Int(info[2]))
+
+
+def device_eigh_public(a: List[Float32], n: Int) raises -> EighHostResult:
+    """`linalg.eigh` on the device (the `_mojolearn_linalg` binding).
+
+    lane/neural-pass144 (Andrew, 2026-10-01: the round-robin Jacobi is the
+    full eigh's order): n > `LINALG_EIGH_CYCLIC_MAX` runs the round-robin
+    two-sided Jacobi across the whole GPU (`eigh_rr_on_device`, two launches
+    a round); a solve it does not converge in `LINALG_EIGH_RR_SWEEPS` sweeps
+    falls back to the cyclic `device_eigh`, still on the device. n at or
+    under it keeps the cyclic order (`device_eigh`, in shared memory where
+    the page fits). The host binding takes the same routes at the same n
+    (`decomposition/host/linalg_public.mojo::host_eigh_public`), so the
+    bits agree on every column. `-D MOJOLEARN_LINALG_EIGH_CYCLIC` keeps the
+    cyclic order at every n (both bindings).
+
+    WHY: the cyclic kernel is ONE block for the whole solve, n (n - 1) / 2
+    rotations a sweep one after the other. At the board's n = 4096 that is
+    8.4 million serial rotations a sweep, and the L40S warmup ran past the
+    board's 1,800 s round limit (1,984 s)."""
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    comptime if not is_defined["MOJOLEARN_LINALG_EIGH_CYCLIC"]():
+        if n > LINALG_EIGH_CYCLIC_MAX:
+            _validate_square(n, "eigh")
+            var da = _upload(ctx, a)
+            var diag = List[Float32]()
+            var vecs = List[Float32]()
+            var got = eigh_rr_on_device(ctx, da, n, LINALG_EIGH_RR_SWEEPS, Float32(JACOBI_TOL), diag, vecs)
+            _ = da^
+            ctx.synchronize()
+            if got[0]:
+                return eigh_ascending(diag, vecs, n, True, got[1])
+    return device_eigh(ctx, a, n)
 
 
 def device_svdvals(

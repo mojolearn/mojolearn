@@ -89,6 +89,8 @@ from decomposition.host.pca_full_oracle import (
     host_one_sided_jacobi_svd,
     host_qr_factor,
 )
+from std.sys.compile import is_defined
+from x_decomp.rr import LINALG_EIGH_CYCLIC_MAX, LINALG_EIGH_RR_SWEEPS, host_eigh_rr
 
 
 def _argsort_desc(key: List[Float32], n: Int) -> List[Int]:
@@ -196,6 +198,29 @@ def host_eigh(a: List[Float32], n: Int) raises -> EighHostResult:
     for i in range(n):
         diag.append(work[i * n + i])
     return eigh_ascending(diag, vecs, n, got.converged, got.executed)
+
+
+def host_eigh_public(a: List[Float32], n: Int) raises -> EighHostResult:
+    """`linalg.eigh` on the host (the `_mojolearn_linalg_host` binding): the
+    device's routes at the same n (`decomposition/linalg_public_device.mojo
+    ::device_eigh_public`). n > `LINALG_EIGH_CYCLIC_MAX`: the round-robin
+    Jacobi (`x_decomp/rr.mojo::host_eigh_rr`, the device driver's rounds,
+    test and Frobenius check), the cyclic `host_eigh` when it does not
+    converge; n at or under it: `host_eigh`. `-D MOJOLEARN_LINALG_EIGH_CYCLIC`
+    keeps the cyclic order at every n."""
+    comptime if not is_defined["MOJOLEARN_LINALG_EIGH_CYCLIC"]():
+        if n > LINALG_EIGH_CYCLIC_MAX:
+            _validate_square(n, "eigh")
+            var work = a.copy()
+            var vecs = List[Float32](length=n * n, fill=Float32(0.0))
+            var got = host_eigh_rr(work, vecs, n, LINALG_EIGH_RR_SWEEPS, Float32(JACOBI_TOL))
+            if got[0]:
+                host_sign_flip(vecs, n)
+                var diag = List[Float32]()
+                for i in range(n):
+                    diag.append(work[i * n + i])
+                return eigh_ascending(diag, vecs, n, True, got[1])
+    return host_eigh(a, n)
 
 
 def eigh_ascending(

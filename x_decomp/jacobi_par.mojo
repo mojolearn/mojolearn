@@ -44,12 +44,17 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
+from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 from decomposition.checks.jacobi_eigh_device import jacobi_rotation_cs
+from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 from x_decomp.cells import F32Ptr
 from x_decomp.rr import pj_first, pj_second, rr_cs, rr_block, rr_vrow, rr_row_off
 
 comptime PJ_TPB = 256
 """Launch width of every kernel here (under the M2 Pro dispatch limit)."""
+comptime PJ_SYNC_ROUNDS = 512
+"""Rounds enqueued between two synchronize() calls (bounds the queue)."""
 
 
 def pj_transpose_kernel(src: F32Ptr, dst: F32Ptr, n_in: Int32):
@@ -220,3 +225,114 @@ def eigh_par_off_kernel(a: F32Ptr, dst: F32Ptr, n_in: Int32):
         dst.unsafe_store(k, o[0])
         dst.unsafe_store(n + k, o[1])
         dst.unsafe_store(2 * n + k, a.unsafe_load(k * n + k))
+
+
+def _pj_grid(count: Int) -> Int:
+    return (count + PJ_TPB - 1) // PJ_TPB if count > 0 else 1
+
+
+def eigh_rr_on_device(
+    ctx: DeviceContext,
+    mut da: DeviceBuffer[DType.float32],
+    n: Int,
+    sweeps: Int,
+    tol: Float32,
+    mut diag: List[Float32],
+    mut vecs: List[Float32],
+) raises -> Tuple[Bool, Int]:
+    """The round-robin two-sided Jacobi on `da` (n x n, symmetric, CONSUMED:
+    its diagonal ends as the eigenvalues), the whole GPU a round: two launches
+    a round, m - 1 rounds a sweep, the cyclic kernel's convergence test
+    (sum of squared off-diagonal cells against tol^2 ||A||_F^2; row partials
+    pinned in `rr_row_off`, added on the host in float64, rows ascending)
+    read once before every sweep, then `sign_flip_kernel` on the basis.
+
+    Returns (converged, sweeps run). Converged: `diag` holds the n diagonal
+    cells and `vecs` the sign-flipped basis (vector i in COLUMN i), the pair
+    `eigh_ascending` takes. Not converged in `sweeps` sweeps, or a solve that
+    moved ||A||_F (J^T A J keeps it): False and nothing stored, so the caller
+    runs the cyclic solver on its own copy of the input.
+
+    `x_decomp/rr.mojo::host_eigh_rr` is this solve on the host, step for step
+    (one writer a cell a round, so its serial order computes these words).
+
+    Moved here from `x_decomp/device.mojo::DevExec._eigh_par` (lane/neural-
+    pass144) so `linalg.eigh` (decomposition/linalg_public_device.mojo) runs
+    the same driver: the same launches, the same order, the same bits."""
+    var m = n + (n % 2)
+    var h = m // 2
+    var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
+    var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
+    var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
+    var hoff = ctx.enqueue_create_host_buffer[DType.float32](3 * n)
+    ctx.enqueue_function[pj_identity_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=_pj_grid(n * n), block_dim=PJ_TPB)
+    var tol2 = Float64(tol) * Float64(tol)
+    var converged = False
+    var executed = 0
+    var fro_in = Float64(-1.0)
+    var fro_now = Float64(0.0)
+    for sweep in range(sweeps + 1):
+        # a sum of squares is never negative: -1 left in the readback is
+        # a dispatch that did not run
+        enqueue_fill(ctx, doff, Float32(-1.0))
+        ctx.enqueue_function[eigh_par_off_kernel](
+            da.unsafe_ptr(), doff.unsafe_ptr(), Int32(n), grid_dim=_pj_grid(n), block_dim=PJ_TPB
+        )
+        ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
+        ctx.synchronize()
+        var off = Float64(0.0)
+        var dg = Float64(0.0)
+        var ran = True
+        for i in range(n):
+            var o = Float64(hoff.unsafe_ptr().unsafe_load(i))
+            var d2 = Float64(hoff.unsafe_ptr().unsafe_load(n + i))
+            if o < 0.0 or d2 < 0.0:
+                ran = False
+            off += o
+            dg += d2
+        if not ran:
+            break
+        fro_now = off + dg
+        if fro_in < 0.0:
+            fro_in = fro_now
+        if off <= tol2 * fro_now:
+            converged = True
+            break
+        if sweep == sweeps:
+            break
+        executed += 1
+        for rd in range(m - 1):
+            ctx.enqueue_function[eigh_par_cs_kernel](
+                da.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                grid_dim=_pj_grid(h), block_dim=PJ_TPB,
+            )
+            ctx.enqueue_function[eigh_par_update_kernel](
+                da.unsafe_ptr(), dv.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                grid_dim=_pj_grid(h * h + n * h), block_dim=PJ_TPB,
+            )
+            if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
+                ctx.synchronize()
+    # J^T A J keeps ||A||_F: a solve that moved it is not an answer
+    if converged and not (abs(fro_now - fro_in) <= 1.0e-3 * fro_in):
+        converged = False
+    if converged:
+        ctx.enqueue_function[sign_flip_kernel](
+            dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
+        )
+        var hv = ctx.enqueue_create_host_buffer[DType.float32](n * n)
+        ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=dv)
+        ctx.synchronize()
+        # the last test's readback holds the diagonal of the converged A
+        diag = List[Float32](capacity=n)
+        for i in range(n):
+            diag.append(hoff.unsafe_ptr().unsafe_load(2 * n + i))
+        vecs = List[Float32](capacity=n * n)
+        for i in range(n * n):
+            vecs.append(hv.unsafe_ptr().unsafe_load(i))
+        _ = hv^
+    _ = dv^
+    _ = dcs^
+    _ = doff^
+    _ = hoff^
+    ctx.synchronize()
+    return (converged, executed)

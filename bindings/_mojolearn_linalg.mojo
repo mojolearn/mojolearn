@@ -75,7 +75,7 @@ comptime _DEVCTX_SLOT = "MojoLinalgContextIdentical" if _DEVCTX_MODE == _DEVCTX_
 
 
 from decomposition.linalg_public_device import (
-    device_eigh,
+    device_eigh_public,
     device_qr_r,
     device_svdvals,
 )
@@ -804,7 +804,7 @@ def qr_r_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
 
 
 def eigh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """`device_eigh(a, n)`. `addrs`: 0 a, 1 w_out (n, ASCENDING), 2 v_out
+    """`device_eigh_public(a, n)`. `addrs`: 0 a, 1 w_out (n, ASCENDING), 2 v_out
     (n x n, eigenvector i in COLUMN i), 3 scalars_out (converged, executed).
     `params`: 0 n. Returns n."""
     if len(addrs) != 4:
@@ -823,7 +823,7 @@ def eigh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
     var n = Int(py=params[0])
     var a = read_f32(Int(py=addrs[0]), max(0, n * n))
     with GILReleased(Python()):
-        var got = device_eigh(a, n)
+        var got = device_eigh_public(a, n)
         for i in range(n):
             wp.unsafe_store(i, got.w[i])
         for i in range(n * n):

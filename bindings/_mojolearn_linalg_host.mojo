@@ -63,7 +63,7 @@ from gemm.host.identical_gemm import (
     gemm_oracle,
 )
 from decomposition.host.linalg_public import (
-    host_eigh,
+    host_eigh_public,
     host_qr_r,
     host_svdvals,
 )
@@ -555,7 +555,7 @@ def qr_r_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
 
 
 def eigh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """`host_eigh(a, n)`. `addrs`: 0 a, 1 w_out (n, ASCENDING), 2 v_out
+    """`host_eigh_public(a, n)`. `addrs`: 0 a, 1 w_out (n, ASCENDING), 2 v_out
     (n x n, eigenvector i in COLUMN i), 3 scalars_out (converged, executed).
     `params`: 0 n. Returns n."""
     if len(addrs) != 4:
@@ -574,7 +574,7 @@ def eigh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
     var n = _index(params[0])
     var a = read_f32(_index(addrs[0]), n * n)
     with GILReleased(Python()):
-        var got = host_eigh(a, n)
+        var got = host_eigh_public(a, n)
         for i in range(n):
             wp.unsafe_store(i, got.w[i])
         for i in range(n * n):

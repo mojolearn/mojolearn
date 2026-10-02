@@ -7,6 +7,16 @@ from decomposition.checks.jacobi_eigh_device import jacobi_rotation_cs
 from x_decomp.cells import F32Ptr
 from checks.numerics import ftz, identical_mul_add, identical_mul, identical_div
 
+comptime LINALG_EIGH_CYCLIC_MAX = 88
+"""`linalg.eigh` (lane/neural-pass144): n at or under this keeps the cyclic
+Jacobi; above it the round-robin solve runs first, on the device and on the
+host alike. One number for every column (88 is the largest n whose matrix
+page fits Apple's 32 KB threadgroup memory, so the cyclic side is one launch
+on every GPU)."""
+comptime LINALG_EIGH_RR_SWEEPS = 30
+"""The round-robin solve's sweep budget in `linalg.eigh` (x_decomp's
+PJ_EIGH_SWEEPS); not converged inside it, the cyclic solve runs."""
+
 
 @always_inline
 def pj_first(r: Int, b: Int, m: Int) -> Int:
