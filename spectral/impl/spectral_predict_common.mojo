@@ -6,6 +6,10 @@ kept state, the result, the constants and the refusals
 and no host-module import, so a GPU binding can take these without reaching
 the host column (lane cgfin-c-cluster, 2026-10-02)."""
 
+from std.memory import bitcast
+
+from checks.numerics import ftz
+
 
 #: DEVIATION 2860: a used column with `|1 + theta_c|` below this is refused.
 comptime SPECTRAL_PREDICT_MIN_ABS_EIGENVALUE = Float32(1e-3)
@@ -89,3 +93,32 @@ def spectral_predict_check_state(
             + String(n_train) + ", n_components=" + String(n_components)
             + ", n_clusters=" + String(n_clusters) + "; refused by name"
         )
+
+
+def spectral_predict_mu(eigenvalues: List[Float32]) raises -> List[Float32]:
+    """`mu_c = ftz(1.0 + theta_c)` per column, refused by name below the
+    DEVIATION 2860 threshold (a NaN fails `>=` and is refused too)."""
+    var out = List[Float32](capacity=len(eigenvalues))
+    for c in range(len(eigenvalues)):
+        var mu = ftz(Float32(1.0) + eigenvalues[c])
+        if not (abs(mu) >= SPECTRAL_PREDICT_MIN_ABS_EIGENVALUE):
+            raise Error(
+                "spectral_predict: embedding column " + String(c)
+                + " has normalized affinity eigenvalue 1 + theta = " + String(mu)
+                + ", |value| below the DEVIATION 2860 threshold "
+                + String(SPECTRAL_PREDICT_MIN_ABS_EIGENVALUE)
+                + "; the Nystrom extension would divide by it, so predict is refused by name"
+            )
+        out.append(mu)
+    return out^
+
+
+@always_inline
+def spectral_affinity_refused(v: Float32) -> Bool:
+    """A precomputed affinity the fit would refuse: NaN, an infinity or a
+    negative value (`-0.0` is accepted), by its bits so a device's float
+    compare cannot differ from the host's."""
+    var u = bitcast[DType.uint32](v)
+    if (u & UInt32(0x7F800000)) == UInt32(0x7F800000):
+        return True
+    return (u & UInt32(0x80000000)) != UInt32(0) and (u & UInt32(0x7FFFFFFF)) != UInt32(0)

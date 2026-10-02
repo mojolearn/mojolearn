@@ -100,7 +100,9 @@ from spectral.impl.spectral_predict_common import (
     SPECTRAL_PREDICT_ONE_WAY_EDGE,
     SpectralPrediction,
     SpectralPredictionState,
+    spectral_affinity_refused,
     spectral_predict_check_state,
+    spectral_predict_mu,
     spectral_predict_validate,
 )
 
@@ -134,24 +136,6 @@ def spectral_keep_embedding_order(
             state.eigenvectors.append(ritz_vectors[(k - 1 - c) * n + p])
 
 
-def spectral_predict_mu(eigenvalues: List[Float32]) raises -> List[Float32]:
-    """`mu_c = ftz(1.0 + theta_c)` per column, refused by name below the
-    DEVIATION 2860 threshold (a NaN fails `>=` and is refused too)."""
-    var out = List[Float32](capacity=len(eigenvalues))
-    for c in range(len(eigenvalues)):
-        var mu = ftz(Float32(1.0) + eigenvalues[c])
-        if not (abs(mu) >= SPECTRAL_PREDICT_MIN_ABS_EIGENVALUE):
-            raise Error(
-                "spectral_predict: embedding column " + String(c)
-                + " has normalized affinity eigenvalue 1 + theta = " + String(mu)
-                + ", |value| below the DEVIATION 2860 threshold "
-                + String(SPECTRAL_PREDICT_MIN_ABS_EIGENVALUE)
-                + "; the Nystrom extension would divide by it, so predict is refused by name"
-            )
-        out.append(mu)
-    return out^
-
-
 def spectral_slots_from_knn(idx: List[UInt32], n_queries: Int, k: Int) -> SpectralSlots:
     """Each query's k neighbor indices sorted ascending (an insertion sort
     on distinct integers), every value the one-way edge weight."""
@@ -182,7 +166,7 @@ def spectral_slots_from_dense(affinity: List[Float32], n_queries: Int, n_train: 
     for q in range(n_queries):
         for j in range(n_train):
             var v = affinity[q * n_train + j]
-            if not (v >= Float32(0.0)) or v == Float32(1.0) / Float32(0.0):
+            if spectral_affinity_refused(v):
                 raise Error(
                     "spectral_predict: the affinity to the training rows has a non-finite or"
                     " negative value at (" + String(q) + ", " + String(j) + "); refused by name"
