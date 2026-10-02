@@ -7,10 +7,11 @@ factored second moment row_var (mean over columns of g^2) and col_var (mean
 over rows), each lerped toward the new mean with weight t^beta2_decay, the
 estimate row_var col_var / max(mean(row_var), eps1); for a vector the full
 second moment; the update g / sqrt(max(estimate, eps1^2)) scaled by
-1 / max(1, RMS(update) / d). One tensor per call; each reduction is one
-thread's ascending loop. torch's norms are sqrt(sum of squares), squared
-back where the reference squares them, and its lerp is torch's two-branch
-formula."""
+1 / max(1, RMS(update) / d). One tensor per call; each row, column and
+mean reduction is one thread's ascending loop, and under IDENTICAL the two
+whole-tensor norms are the blocked order (AF_NORM_BLOCK below). torch's
+norms are sqrt(sum of squares), squared back where the reference squares
+them, and its lerp is torch's two-branch formula."""
 from sequence.ops import FP, Args, add, fma3, ld, lerp, mul, st, sub, sumsq_fold
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_rsqrt, identical_sqrt
 
@@ -53,13 +54,64 @@ def _psum(p: FP, n: Int) -> Float32:
     return s
 
 
+# ------------------------------------------------------------------ IDENTICAL blocked norms
+#: lane hr-adafactor (2026-10-02, docs/plans/HOST_ROUTE_REMOVAL.md): under
+#: IDENTICAL a whole-tensor sum of squares of more than AF_NORM_BLOCK values
+#: is THE BLOCKED ORDER (Andrew's approved fold contract of Oct 1, the one
+#: x_linear's row folds take): the tensor is cut into fixed blocks of
+#: AF_NORM_BLOCK consecutive values, each block's squares are folded
+#: ascending from zero by one chain of fmas (`sumsq_fold`), one block per
+#: GPU thread (`op_af_blk_sumsq`), and the block partials are then added
+#: ascending from zero (`af_fold_parts`). The order is fixed by the element
+#: count alone, so the host walks the same chains and every column gets the
+#: same bits. A tensor of at most AF_NORM_BLOCK values is one block: the one
+#: chain it always was, unchanged bits. Larger tensors get new bits (the
+#: one ascending chain over the whole tensor was a serial walk the GPU ran
+#: at memory latency, or the host route folded it).
+comptime AF_NORM_BLOCK = 4096
+#: partials loaded ahead of the ascending adds
+comptime AF_PART_STAGE = 16
+
+
+def op_af_blk_sumsq(t: Int, a: Args):
+    """Block t: p1[t] = sum of p0[t B + k]^2, k ascending from zero over the
+    block's min(B, i0 - t B) values; i0 numel, i1 B (= AF_NORM_BLOCK)."""
+    var B = a.i1
+    var lo = t * B
+    st(a.p1, t, sumsq_fold(a.p0, lo, min(B, a.i0 - lo), 1))
+
+
+@always_inline
+def af_fold_parts(p: FP, n: Int) -> Float32:
+    """The partials p[0:n] added ascending from zero, AF_PART_STAGE loaded
+    ahead of the adds (the same adds in the same order as `_psum`)."""
+    var s = Float32(0.0)
+    var k = 0
+    while k + AF_PART_STAGE <= n:
+        var v = SIMD[DType.float32, AF_PART_STAGE]()
+        comptime for j in range(AF_PART_STAGE):
+            v[j] = ld(p, k + j)
+        comptime for j in range(AF_PART_STAGE):
+            s = add(s, v[j])
+        k += AF_PART_STAGE
+    while k < n:
+        s = add(s, ld(p, k))
+        k += 1
+    return s
+
+
 @always_inline
 def _sumsq_or_parts(p: FP, start: Int, n: Int, parts: FP, n_parts: Int) -> Float32:
-    """IDENTICAL (n_parts == 0): the one-thread fold. FAST with partials:
-    their ordered sum. An IDENTICAL build compiles only the fold."""
+    """No partials (n_parts == 0): the one-thread fold. FAST with partials:
+    their ordered sum. IDENTICAL with partials (Adafactor's blocked norms;
+    LAMB never passes them under IDENTICAL): the block partials of
+    op_af_blk_sumsq added ascending."""
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         if n_parts > 0:
             return _psum(parts, n_parts)
+    else:
+        if n_parts > 0:
+            return af_fold_parts(parts, n_parts)
     return _sumsq(p, start, n, 1)
 
 

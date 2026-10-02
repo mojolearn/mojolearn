@@ -10,7 +10,7 @@ from std.python import PythonObject
 from std.math import sqrt
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
@@ -21,7 +21,8 @@ from sequence.prophet import MEM, ProphetData, _dot, _fg_prior
 from sequence.prophet import div as _pdiv
 from sequence.ops import add as p_add, fma3 as p_fma3, ld as p_ld, mul as p_mul, st as p_st, sub as p_sub
 from sequence.ops import sumsq_fold as _sumsq_fold_host
-from sequence.adafactor import af_alpha_tail, af_denom_tail
+from sequence.adafactor import AF_NORM_BLOCK, af_alpha_tail, af_denom_tail
+from std.sys.compile import is_defined
 from std.os import getenv as _getenv_seq
 
 
@@ -488,8 +489,39 @@ def _fast_norms() -> Bool:
 comptime HOST_FOLD_MIN = 1 << 16
 
 
+#: lane hr-adafactor (2026-10-02): IDENTICAL's whole-tensor norms are the
+#: blocked order on the device (sequence/adafactor.mojo, AF_NORM_BLOCK):
+#: block partials, one GPU thread per block, then the partials added
+#: ascending; nothing leaves the device and no host fold runs. The A/B
+#: define -D MOJOLEARN_SEQ_AF_SERIAL_NORM=1 restores main's order (the one
+#: ascending chain, folded as before) for the measurement only; the final
+#: commit of the lane deletes it with the old route.
+comptime AF_SERIAL_NORM = is_defined["MOJOLEARN_SEQ_AF_SERIAL_NORM"]()
+
+
+def _blocked_norms() -> Bool:
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL or AF_SERIAL_NORM:
+        return False
+    return True
+
+
+def _blk_sumsq[E: Exec](mut ex: E, src: FP, n: Int, parts: FP) raises -> Int:
+    """IDENTICAL: the ceil(n / AF_NORM_BLOCK) block partials of src[0:n]'s
+    sum of squares into parts[0:]; returns how many."""
+    var nb = (n + AF_NORM_BLOCK - 1) // AF_NORM_BLOCK
+    var c = Args()
+    c.p0 = src
+    c.p1 = parts
+    c.i0 = n
+    c.i1 = AF_NORM_BLOCK
+    ex.launch[OP_AF_BLK_SUMSQ](c, nb)
+    return nb
+
+
 def _host_folds() -> Bool:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        return False
+    comptime if not AF_SERIAL_NORM:
         return False
     return String(_getenv_seq("MOJOLEARN_SEQ_HOST_FOLD")) != "0"
 
@@ -543,7 +575,8 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
         ex.upload(S2, fptr(addrs[3], "col_var"), C)
     var fast = _fast_norms() and n >= FAST_NORM_MIN
     var host_fold = _host_folds() and n >= HOST_FOLD_MIN
-    var parts = ex.alloc(_PARTS if fast else 1)
+    var blocked = _blocked_norms() and n > AF_NORM_BLOCK
+    var parts = ex.alloc(_PARTS if fast else ((n + AF_NORM_BLOCK - 1) // AF_NORM_BLOCK if blocked else 1))
     # the four scalars, mirrored on the host when the folds run there:
     # [unused, alpha, rmean (device only), denom]
     var hsc = List[Float32](length=4, fill=Float32(0.0))
@@ -565,6 +598,9 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
         if fast:
             a.p2 = parts
             a.i2 = _chunk_sumsq(ex, P, 0, n, parts, 0)
+        elif blocked:
+            a.p2 = parts
+            a.i2 = _blk_sumsq(ex, P, n, parts)
         ex.launch[OP_AF_ALPHA](a, 1)
     if wd != Float32(0.0):
         var s = Args()
@@ -629,6 +665,9 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
         if fast:
             d.p2 = parts
             d.i2 = _chunk_sumsq(ex, U, 0, n, parts, 0)
+        elif blocked:
+            d.p2 = parts
+            d.i2 = _blk_sumsq(ex, U, n, parts)
         ex.launch[OP_AF_DENOM](d, 1)
     var ap = Args()
     ap.p0 = P
