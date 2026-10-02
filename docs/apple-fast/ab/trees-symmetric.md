@@ -71,3 +71,32 @@ Switches (FAST + Apple only, default OFF):
 Not done (next): leaf values resident on the device with one readback per fit (the Newton walker's
 per-iteration drains, step 6), and reusing the searcher's own `subsets` partition for the learn
 permutation instead of recomputing bins.
+
+## Pass 3: the Newton walk on the device (`-D MOJOLEARN_SYM_DEVICE_LEAVES`)
+
+`gbdt/methods/leaves_estimation/sym_device_walker.mojo` (new): `SymWalkerScratch` (pool of one in
+`TEstimationWorkspace.sym_walker`), `sym_newton_decide_kernel` (one block of 256 threads: value
+partials folded as a tree, the ANY_IMPROVEMENT test, `_diagonal_direction`, `_move` + `regularize`,
+the cursor shift for the next evaluation) and `sym_device_newton_walk` (per evaluation:
+`add_bin_model_value_kernel` shift, `launch_approximate`, `compute_partition_stats`, decide). The
+estimate lands in `d_est`; `_estimate_and_apply` launches `add_model_value_kernel` from it and reads
+it back once with the tail (the tree's single leaf readback; the model append needs the values on
+the host, so per-fit readback would need the model patched after the loop -- not done).
+
+Gate (runtime, in `_estimate_and_apply`): Newton, approx_dim 1, no sample weights, single-dim
+cursor, diagonal Hessian, no query/pair/YetiRank oracle, <= 256 leaves; the host walker otherwise.
+
+Deviations under the define (FAST only): float32 instead of Float64 for gradient, Hessian, value and
+step; a fixed trip count of `1 + iterations` evaluations (`1` when iterations == 1), where the host
+walker keeps halving up to 100 evaluations when none was accepted (it then returns the start point,
+as this does at `iterations`). Risky compile sites: `fma(Float32, Float32, Float32)` in a kernel;
+`ref ws = pool[0]` then passing `ws.d_*` pointers; `enqueue_copy(dst_buf=HostBuffer, src_buf=...)`
+(the loop's `hm`/`mags` idiom); the `comptime if ... or ...` at the tail drain.
+
+The searcher's own `subsets` partition for the learn permutation was not reused: `_estimate_and_apply`
+and the oracle take host `sizes`/`offsets` lists, and the subsets' partition is one level deeper than
+the structure when `HasSplit` stopped the tree early; the device partition above already removes the
+host passes, leaving one small drain.
+
+Requests: `tsym-leaves-istella` (gbdt-symmetric, istella, 2 pairs); `tsym-all-1000-istella` now carries
+all four defines.

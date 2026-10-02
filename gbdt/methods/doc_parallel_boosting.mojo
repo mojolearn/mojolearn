@@ -45,6 +45,12 @@ from gbdt.methods.leaves_estimation.pointwise_oracle import (
     make_bin_optimized_oracle,
     merge_stage_times,
 )
+from gbdt.methods.leaves_estimation.sym_device_walker import (
+    SYM_DEVICE_LEAVES,
+    SYM_WALK_BLOCK,
+    SymWalkerScratch,
+    sym_device_newton_walk,
+)
 from gbdt.methods.leaves_estimation.step_estimator import (
     BACKTRACKING_ANY_IMPROVEMENT,
     StepEstimator,
@@ -162,6 +168,13 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
 #   buffer the queued work reads is pooled (device scratch from the pool,
 #   no per-tree weight staging, not the Exact method); the next wait is
 #   the next tree's structure drain.
+# * `MOJOLEARN_SYM_DEVICE_LEAVES` (`sym_device_walker.mojo`): the Newton
+#   walk enqueued whole -- per evaluation the shift, the row evaluation,
+#   the per-leaf fold and one decide block -- and the estimate read back
+#   once, with the tail, after the `add_model_value` launch that consumes
+#   it from the device. Diagonal Newton, no sample weights, pointwise
+#   single-dimensional losses, at most `SYM_WALK_BLOCK` leaves; the host
+#   walker otherwise.
 # ====================================================================
 comptime SYM_DEVICE_PARTITION = (
     is_defined["MOJOLEARN_SYM_DEVICE_PARTITION"]()
@@ -689,6 +702,8 @@ struct TEstimationWorkspace(Movable):
     #: one-call path builds
     var arena_scratch: List[OracleDeviceScratch]
     var arena_host: List[OracleHostScratch]
+    #: SYM_DEVICE_LEAVES: the device walk's per-leaf state (pool of one)
+    var sym_walker: List[SymWalkerScratch]
 
     def __init__(
         out self,
@@ -715,6 +730,7 @@ struct TEstimationWorkspace(Movable):
         self.oracle_scratch = OracleScratchPool()
         self.arena_scratch = List[OracleDeviceScratch]()
         self.arena_host = List[OracleHostScratch]()
+        self.sym_walker = List[SymWalkerScratch]()
 
     def __init__(
         out self,
@@ -748,6 +764,7 @@ struct TEstimationWorkspace(Movable):
         self.oracle_scratch = OracleScratchPool()
         self.arena_scratch = List[OracleDeviceScratch]()
         self.arena_host = List[OracleHostScratch]()
+        self.sym_walker = List[SymWalkerScratch]()
 
 
 def _estimate_and_apply(
@@ -1025,7 +1042,34 @@ def _estimate_and_apply(
     # reported once, because the number that matters is whether
     # it is ever nonzero.
     var estimated: List[Float32]
-    if leaf_estimation_method == LEAF_ESTIMATION_EXACT:
+    # SYM_DEVICE_LEAVES: the walk on the device, the estimate read back
+    # once below, after the `add_model_value` launch
+    var sym_dev = False
+    comptime if SYM_DEVICE_LEAVES:
+        sym_dev = (
+            leaf_estimation_method == LEAF_ESTIMATION_NEWTON
+            and approx_dim == 1
+            and target_planes == 1
+            and not has_weights
+            and oracle.single_bin_dim == 1
+            and oracle.cursor_dim == 1
+            and oracle.hessian_block_size() == 1
+            and not oracle.query.__bool__()
+            and not oracle.pairs.__bool__()
+            and not oracle.yeti.__bool__()
+            and n_leaves <= SYM_WALK_BLOCK
+            and iters >= 1
+        )
+    if sym_dev:
+        estimated = List[Float32]()
+        comptime if SYM_DEVICE_LEAVES:
+            stage_times.begin(ctx)
+            sym_device_newton_walk(
+                ctx, oracle, iters, BACKTRACKING_ANY_IMPROVEMENT,
+                est_ws[0].sym_walker, d_est,
+            )
+            stage_times.end(ctx, "est.walk")
+    elif leaf_estimation_method == LEAF_ESTIMATION_EXACT:
         estimated = oracle.estimate_exact()
         trace.record_list_f32(leaf_tag, estimated)
     else:
@@ -1056,9 +1100,10 @@ def _estimate_and_apply(
             zero_bias = -zero_sum / zero_weight
         for i in range(len(estimated)):
             estimated[i] = Float32(Float64(estimated[i]) + zero_bias)
-    leaf_values.clear()
-    for i in range(len(estimated)):
-        leaf_values.append(estimated[i])
+    if not sym_dev:
+        leaf_values.clear()
+        for i in range(len(estimated)):
+            leaf_values.append(estimated[i])
 
     # `AppendModels` for this arm: the ESTIMATED leaves, rescaled,
     # onto the real cursor through the same kernel the RMSE arm
@@ -1069,16 +1114,18 @@ def _estimate_and_apply(
     # `n_leaves * approx_dim` and is BIN-MAJOR, which is the layout
     # `add_model_value_kernel`'s z axis reads.
     var est_len = n_leaves * approx_dim
-    if len(estimated) != est_len:
-        raise Error(
-            "the estimator returned " + String(len(estimated))
-            + " leaf values for " + String(n_leaves) + " leaves x "
-            + String(approx_dim) + " dims"
-        )
+    if not sym_dev:
+        if len(estimated) != est_len:
+            raise Error(
+                "the estimator returned " + String(len(estimated))
+                + " leaf values for " + String(n_leaves) + " leaves x "
+                + String(approx_dim) + " dims"
+            )
     stage_times.begin(ctx)
-    for i in range(est_len):
-        h_est.unsafe_ptr().unsafe_store(i, estimated[i])
-    ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_est.unsafe_ptr())
+    if not sym_dev:
+        for i in range(est_len):
+            h_est.unsafe_ptr().unsafe_store(i, estimated[i])
+        ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_est.unsafe_ptr())
     # MACHINE-SIZED x (the kernel strides): the widest-leaf grid priced
     # every leaf at the largest leaf's block count -- on a skewed depth-8
     # tree, tens of millions of empty threads per launch. Same repair as
@@ -1108,7 +1155,20 @@ def _estimate_and_apply(
     #     would free its exclusive buffers (`d_bins`, `d_shift`, the
     #     Exact path's trailing `move_to` operands) under queued work --
     #     the step-33 race class, device side.
-    comptime if SYM_NO_TAIL_DRAIN:
+    comptime if SYM_DEVICE_LEAVES:
+        if sym_dev:
+            # THE ONE READBACK OF THE TREE'S LEAVES: behind the apply
+            ctx.enqueue_copy(dst_buf=h_est, src_buf=d_est)
+            ctx.synchronize()
+            drain_tail = False
+            estimated.clear()
+            for i in range(est_len):
+                estimated.append(h_est.unsafe_ptr().unsafe_load(i))
+            trace.record_list_f32(leaf_tag, estimated)
+            leaf_values.clear()
+            for i in range(est_len):
+                leaf_values.append(estimated[i])
+    comptime if SYM_NO_TAIL_DRAIN or SYM_DEVICE_LEAVES:
         if drain_tail:
             ctx.synchronize()
     else:
