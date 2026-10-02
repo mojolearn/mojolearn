@@ -604,32 +604,32 @@ def _compact_device(
     var d_ia = ctx.enqueue_create_buffer[DType.int32](n_chunks)
     var d_ib = ctx.enqueue_create_buffer[DType.int32](n_chunks)
     ctx.enqueue_function[cmp_chunk_kernel](
-        d_keep.unsafe_ptr(), Int64(n), Int64(n_chunks), d_a.unsafe_ptr(),
-        d_key.unsafe_ptr(), Int32(1 if has_key else 0), d_ka.unsafe_ptr(), d_ia.unsafe_ptr(),
+        rebind[MutPointer[Int32, MutAnyOrigin]](d_keep.unsafe_ptr()), Int64(n), Int64(n_chunks), rebind[MutPointer[Int32, MutAnyOrigin]](d_a.unsafe_ptr()),
+        rebind[MutPointer[UInt64, MutAnyOrigin]](d_key.unsafe_ptr()), Int32(1 if has_key else 0), rebind[MutPointer[UInt64, MutAnyOrigin]](d_ka.unsafe_ptr()), rebind[MutPointer[Int32, MutAnyOrigin]](d_ia.unsafe_ptr()),
         grid_dim=_blocks(n_chunks), block_dim=OPS_TPB,
     )
     var src_is_a = True
     var s = 1
     while s < n_chunks:
-        var cs = d_a.unsafe_ptr() if src_is_a else d_b.unsafe_ptr()
-        var cd = d_b.unsafe_ptr() if src_is_a else d_a.unsafe_ptr()
+        var cs = rebind[MutPointer[Int32, MutAnyOrigin]](d_a.unsafe_ptr()) if src_is_a else rebind[MutPointer[Int32, MutAnyOrigin]](d_b.unsafe_ptr())
+        var cd = rebind[MutPointer[Int32, MutAnyOrigin]](d_b.unsafe_ptr()) if src_is_a else rebind[MutPointer[Int32, MutAnyOrigin]](d_a.unsafe_ptr())
         ctx.enqueue_function[cnt_scan_step_kernel](
             cs, cd, Int64(n_chunks), Int64(s), grid_dim=_blocks(n_chunks), block_dim=OPS_TPB,
         )
         if has_key:
             ctx.enqueue_function[argmin_scan_step_kernel](
-                d_ka.unsafe_ptr() if src_is_a else d_kb.unsafe_ptr(),
-                d_ia.unsafe_ptr() if src_is_a else d_ib.unsafe_ptr(),
-                d_kb.unsafe_ptr() if src_is_a else d_ka.unsafe_ptr(),
-                d_ib.unsafe_ptr() if src_is_a else d_ia.unsafe_ptr(),
+                rebind[MutPointer[UInt64, MutAnyOrigin]](d_ka.unsafe_ptr()) if src_is_a else rebind[MutPointer[UInt64, MutAnyOrigin]](d_kb.unsafe_ptr()),
+                rebind[MutPointer[Int32, MutAnyOrigin]](d_ia.unsafe_ptr()) if src_is_a else rebind[MutPointer[Int32, MutAnyOrigin]](d_ib.unsafe_ptr()),
+                rebind[MutPointer[UInt64, MutAnyOrigin]](d_kb.unsafe_ptr()) if src_is_a else rebind[MutPointer[UInt64, MutAnyOrigin]](d_ka.unsafe_ptr()),
+                rebind[MutPointer[Int32, MutAnyOrigin]](d_ib.unsafe_ptr()) if src_is_a else rebind[MutPointer[Int32, MutAnyOrigin]](d_ia.unsafe_ptr()),
                 Int64(n_chunks), Int64(s), grid_dim=_blocks(n_chunks), block_dim=OPS_TPB,
             )
         src_is_a = not src_is_a
         s *= 2
-    var p_scan = d_a.unsafe_ptr() if src_is_a else d_b.unsafe_ptr()
+    var p_scan = rebind[MutPointer[Int32, MutAnyOrigin]](d_a.unsafe_ptr()) if src_is_a else rebind[MutPointer[Int32, MutAnyOrigin]](d_b.unsafe_ptr())
     var d_res = ctx.enqueue_create_buffer[DType.int32](n)
     ctx.enqueue_function[cmp_write_kernel](
-        d_keep.unsafe_ptr(), Int64(n), Int64(n_chunks), p_scan, d_res.unsafe_ptr(),
+        rebind[MutPointer[Int32, MutAnyOrigin]](d_keep.unsafe_ptr()), Int64(n), Int64(n_chunks), p_scan, rebind[MutPointer[Int32, MutAnyOrigin]](d_res.unsafe_ptr()),
         grid_dim=_blocks(n_chunks), block_dim=OPS_TPB,
     )
     # the two scalars: the kept count and the fallback row
