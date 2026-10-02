@@ -75,6 +75,16 @@ OPS = [
     ("nc_std", "items", "nc_std_item", "d",
      [("x", "fin", "n * d"), ("lab", "iin", "n"), ("cent", "fin", "n_classes * d"), ("std", "fout", "d"),
       ("n", "int"), ("d", "int"), ("n_classes", "int")]),
+    # lane/neural-pass95: group_mean + nc_std + the dataset centroid in ONE
+    # op over the features (one upload of X); nc_shrink_d takes that centroid
+    ("nc_stats", "items", "nc_stats_item", "d",
+     [("x", "fin", "n * d"), ("lab", "iin", "n"), ("nk", "fin", "n_classes"), ("cent", "fout", "n_classes * d"),
+      ("std", "fout", "d"), ("dsc", "fout", "d"), ("n", "int"), ("d", "int"), ("n_classes", "int")]),
+    ("nc_shrink_d", "items", "nc_shrink_d_item", "n_classes * d",
+     [("dsc", "fin", "d"), ("cent", "fin", "n_classes * d"), ("nk", "fin", "n_classes"), ("std", "fin", "d"),
+      ("res", "fout", "n_classes * d"), ("devs", "fout", "n_classes * d"), ("n", "int"), ("d", "int"),
+      ("n_classes", "int"), ("do_shrink", "int"),
+      ("med", "float"), ("shrink", "float")]),
     ("nc_shrink", "items", "nc_shrink_item", "n_classes * d",
      [("x", "fin", "n * d"), ("cent", "fin", "n_classes * d"), ("nk", "fin", "n_classes"), ("std", "fin", "d"),
       ("res", "fout", "n_classes * d"), ("devs", "fout", "n_classes * d"), ("n", "int"), ("d", "int"),
