@@ -4338,6 +4338,8 @@ class AlternatingLeastSquares(_Base):
             self.training_loss_ = losses
         self.user_factors_m_, self.item_factors_m_ = X, Y
         self.user_factors, self.item_factors = X.out(), Y.out()
+        # sklearn-style fitted names (the board harness and docs read these)
+        self.user_factors_, self.item_factors_ = self.user_factors, self.item_factors
         self.components_m_ = Y
         return self
 
