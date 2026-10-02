@@ -12,8 +12,6 @@ from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import memcpy
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count
 
 from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
@@ -1370,22 +1368,9 @@ def _xd_stage_ptr(ctx: DeviceContext) raises -> F32Ptr:
 
 
 def _xd_read_out(dst: F32Ptr, src: F32Ptr, n: Int):
-    """`memcpy(dst, src, n)` over host tasks: the one read of pinned memory."""
-    var tasks = host_predict_task_count(1 << 30)
-    if tasks > 16:
-        tasks = 16
-    if n < XD_STAGE_MIN or tasks <= 1:
-        memcpy(dest=dst, src=src, count=n)
-        return
-    var chunk = (n + tasks - 1) // tasks
-
-    def _piece(t: Int) {imm dst, imm src, imm n, imm chunk}:
-        var lo = t * chunk
-        var hi = min(lo + chunk, n)
-        if hi > lo:
-            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
-
-    host_parallelize(_piece, tasks)
+    """`memcpy(dst, src, n)`: the one read of pinned memory (one thread;
+    cpu-gpu-cleanup c-decomp removed the host-task split)."""
+    memcpy(dest=dst, src=src, count=n)
 
 
 def _up_into(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], p: F32Ptr, n: Int) raises:
