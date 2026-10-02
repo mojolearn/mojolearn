@@ -132,6 +132,8 @@ _UNFUSED_KNN = os.environ.get("MOJOLEARN_XN_UNFUSED_KNN", "") == "1"
 #: spreading, PageRank and connected_components in Python, one op per step,
 #: instead of the resident `lp_iterate` / `pr_iterate` / `cc_iterate`.
 _HOST_LOOP_LP = os.environ.get("MOJOLEARN_XN_HOST_LOOPS", "") == "1"
+#: SVGP jitter retries (x10 each, up to jitter x 1000: gpytorch psd_safe_cholesky has 3) when the float32 factor fails. More is not offered: on taxi the factor needs jitter 1 to 10 and the held-out R2 falls to 0.13 / -0.04; that system needs float-float statistics (queued), not a ruined model.
+_SVGP_JITTER_TRIES = int(os.environ.get("MOJOLEARN_SVGP_JITTER_TRIES", "3"))
 _PR_SPARSE = os.environ.get("MOJOLEARN_PR_SPARSE", "1") != "0"
 #: A/B arm: KNNImputer.transform over every cell instead of the missing ones.
 _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
@@ -1652,11 +1654,28 @@ class SVGP(_XNeighbors):
         qmu = _empty_out((M,), "<f4")
         qsqrt = _empty_out((M, M), "<f4")
         info = _empty_out((2,), "<f4")
-        self._op("svgp", [(Kuu, 0), (B, 0), (b, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
-                 (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
-        elbo, ok = info.tolist()
-        if ok == 0:
-            raise ValueError("SVGP: the inducing system is not positive definite; raise jitter or noise_variance")
+        # lane/neural-pass102 (Andrew, 2026-10-01): gpytorch's psd_safe_cholesky
+        # behaviour. When the float32 factors fail (taxi: Sigma's eigenvalues
+        # span 1e-6 to 9e5), retry with the jitter times 10, up to
+        # _SVGP_JITTER_TRIES times; the jitter used is `jitter_used_` and a
+        # retry warns. Deterministic (the same sequence on every vendor), and a
+        # system that factors at the requested jitter keeps its bits.
+        jitter = float(self.jitter)
+        for attempt in range(_SVGP_JITTER_TRIES + 1):
+            self._op("svgp", [(Kuu, 0), (B, 0), (b, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
+                     (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(jitter), _f32_scalar(self.kernel_variance)))
+            elbo, ok = info.tolist()
+            if ok != 0:
+                break
+            if attempt == _SVGP_JITTER_TRIES:
+                raise ValueError("SVGP: the inducing system is not positive definite even at jitter "
+                                 f"{jitter:g}; raise noise_variance or use fewer inducing points")
+            jitter *= 10.0
+        if jitter != float(self.jitter):
+            import warnings
+            warnings.warn(f"SVGP: the inducing system was not positive definite at jitter {float(self.jitter):g}; "
+                          f"fitted with jitter {jitter:g} (jitter_used_)", RuntimeWarning, stacklevel=2)
+        self.jitter_used_ = jitter
         self.Z_, self._alpha, self._C = Z, alpha, C
         self.q_mu_ = qmu
         self.q_sqrt_ = qsqrt
