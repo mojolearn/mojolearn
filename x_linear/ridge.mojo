@@ -68,8 +68,8 @@ def _loo_rows(x: FP, y: FP, n: Int, d: Int, fw: FP, ym: Int, xm: Int, rhs: Int, 
 # host and every device. The float32 path stays the default; the fit falls
 # back when its Cholesky fails or a pivot keeps less than 2^-12 of its
 # diagonal (more than 12 bits cancelled). A matrix float-float cannot
-# factor either is refused (status 2). `MOJOLEARN_RIDGE_FF=1` (Python) or
-# `-D MOJOLEARN_RIDGE_FF_ALWAYS=1` takes float-float for every fit.
+# factor either is refused (status 2). `-D MOJOLEARN_RIDGE_FF_ALWAYS=1`
+# takes float-float for every fit (the A/B arm for its cost).
 comptime BIG_ERR = Float32(3.0e38)
 comptime RIDGE_FF_GATE = Float32(0.000244140625)  # 2^-12
 comptime RIDGE_FF_ALWAYS = is_defined["MOJOLEARN_RIDGE_FF_ALWAYS"]()

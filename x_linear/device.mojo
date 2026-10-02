@@ -304,10 +304,10 @@ def ridge_ff_unit_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fi: Int32
         ridge_ff_unit(Int(u0) + u, x, y, Int(n), Int(d), Int(t_n), fi != 0, sw != 0, Int(n) * Int(t_n), sh, sl)
 
 
-def ridge_ff_solve_kernel(d: Int32, t_n: Int32, fi: Int32, alpha: Float32, sh: FP, sl: FP, bh: FP, bl: FP, out: FP):
-    """out: coef T*d | intercept T | ok (1 / 0)."""
-    var ok = ridge_ff_solve(Int(d), Int(t_n), fi != 0, alpha, sh, sl, bh, bl, out)
-    st(out, Int(t_n) * Int(d) + Int(t_n), Float32(1) if ok else Float32(0))
+def ridge_ff_solve_kernel(d: Int32, t_n: Int32, fi: Int32, alpha: Float32, sh: FP, sl: FP, bh: FP, bl: FP, dst: FP):
+    """dst: coef T*d | intercept T | ok (1 / 0)."""
+    var ok = ridge_ff_solve(Int(d), Int(t_n), fi != 0, alpha, sh, sl, bh, bl, dst)
+    st(dst, Int(t_n) * Int(d) + Int(t_n), Float32(1) if ok else Float32(0))
 
 
 def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: Int, fi: Bool, sw: Bool, alpha: Float32,
