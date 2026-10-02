@@ -11,10 +11,9 @@ unchanged.
 
 Not covered by the define: ARD. ARD still fits on the one-block `fit_kernel` -> `ard_fit` (`x_linear/bayes.mojo`), whose
 Gram sse already carries the same delta form and bound (`_t_sse_delta`, commit 79f7ace5f, FAST + Apple, on by default
-with the row pass as its `MOJOLEARN_X_LINEAR_GRAM_SSE=0` arm). The `bayes-ard-guard-istella` line therefore races the
-same code in both arms: it is the quality/spread check of the merged branch's ARD guard against main's ARD numbers
-(main: ARD istella 0.86 s); the row-pass comparison for ARD is `tools/afc_ab.sh ... 1 2 - MOJOLEARN_X_LINEAR_GRAM_SSE=0`
-if the orchestrator wants it under a second tag.
+with the row pass as its `MOJOLEARN_X_LINEAR_GRAM_SSE=0` arm). A define A/B for ARD would race the same code in both
+arms, so `bayes.txt` carries no ARD line; the row-pass comparison for ARD is
+`tools/afc_ab.sh ... 1 2 - MOJOLEARN_X_LINEAR_GRAM_SSE=0` if the orchestrator wants it under its own tag.
 
 The one-block BayesianRidge guard (`bayes_ridge_fit` in `x_linear/bayes.mojo`) is kept: it is reached under main's
 `MOJOLEARN_X_LINEAR_BAYES_GRID=0` / `MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM=0` arms.
@@ -33,4 +32,4 @@ The one-block BayesianRidge guard (`bayes_ridge_fit` in `x_linear/bayes.mojo`) i
 
 - `bayes-br-guard-istella`: bayesian-ridge istella, arm A main's grid Gram sse, arm B the guard. Bar: finite r2 and no
   worse than the row-pass arm.
-- `bayes-ard-guard-istella`: ard istella, both arms the merged branch (see above).
+- no ARD line (see above).

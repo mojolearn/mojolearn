@@ -1,2 +1,1 @@
 CMD lane/apple-fast-bayes bayes-br-guard-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh bayes-br-guard-istella x_linear bayesian-ridge istella 1 2 "" "-D MOJOLEARN_BAYES_GRID_GUARD=1"
-CMD lane/apple-fast-bayes bayes-ard-guard-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh bayes-ard-guard-istella x_linear ard istella 1 2 "" "-D MOJOLEARN_BAYES_GRID_GUARD=1"
