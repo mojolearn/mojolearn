@@ -79,6 +79,67 @@ def _gather_rows_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, dst: FPtr):
             f += Int(block_dim.x)
 
 
+# lane/neural-pass112 (2026-10-02): the pairwise squared distances in tiles.
+# `_sqdist_kernel` is one thread per cell, each reading its two rows from
+# device memory (M4, istella 10K x 220 self-distances for MeanShift's
+# bandwidth: 0.63 s). Here a block owns SQT_B x SQT_B cells and stages
+# SQT_K features of its SQT_B rows of a and of b in threadgroup memory;
+# each thread folds SQT_R x SQT_R cells, every cell its own chain over the
+# features ascending with `sq_dist_rows`' statements (the staged words are
+# already flushed: ftz is idempotent), so every word is the same.
+# `MOJOLEARN_XC_SQDIST_TILED=0` restores the per-cell kernel.
+comptime SQT_R = 4
+comptime SQT_TD = 16
+comptime SQT_B = SQT_R * SQT_TD
+comptime SQT_K = 16
+comptime SQT_BYTES = 2 * SQT_B * SQT_K * 4
+comptime SQDIST_TILED = lib_smem_page_fits_for[TARGET_COLUMN, SQT_BYTES]()
+
+
+def _sqdist_tiled_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):
+    var NA = Int(na)
+    var NB = Int(nb)
+    var D = Int(d)
+    var tid = Int(thread_idx.x)
+    var ti = tid // SQT_TD
+    var tj = tid % SQT_TD
+    var i0 = Int(block_idx.y) * SQT_B
+    var j0 = Int(block_idx.x) * SQT_B
+    var sa = stack_allocation[SQT_B * SQT_K, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sb = stack_allocation[SQT_B * SQT_K, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var acc = SIMD[DType.float32, SQT_R * SQT_R](0)
+    var f0 = 0
+    while f0 < D:
+        var kc = min(SQT_K, D - f0)
+        barrier()
+        for u in range(tid, SQT_B * SQT_K, SQT_TD * SQT_TD):
+            var r = u // SQT_K
+            var k = u % SQT_K
+            var ra = i0 + r
+            var rb = j0 + r
+            var ok = k < kc
+            sa[u] = ftz(a[min(ra, NA - 1) * D + f0 + min(k, kc - 1)]) if (ok and ra < NA) else Float32(0)
+            sb[u] = ftz(b[min(rb, NB - 1) * D + f0 + min(k, kc - 1)]) if (ok and rb < NB) else Float32(0)
+        barrier()
+        for k in range(kc):
+            var av = SIMD[DType.float32, SQT_R]()
+            var bv = SIMD[DType.float32, SQT_R]()
+            comptime for q in range(SQT_R):
+                av[q] = sa[(ti + q * SQT_TD) * SQT_K + k]
+                bv[q] = sb[(tj + q * SQT_TD) * SQT_K + k]
+            comptime for qi in range(SQT_R):
+                comptime for qj in range(SQT_R):
+                    var t = ftz(av[qi] - bv[qj])
+                    acc[qi * SQT_R + qj] = ftz(acc[qi * SQT_R + qj] + ftz(identical_mul(t, t)))
+        f0 += kc
+    comptime for qi in range(SQT_R):
+        comptime for qj in range(SQT_R):
+            var i = i0 + ti + qi * SQT_TD
+            var j = j0 + tj + qj * SQT_TD
+            if i < NA and j < NB:
+                dst[i * NB + j] = acc[qi * SQT_R + qj]
+
+
 def _nearest_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, labels: IPtr, dist: FPtr):
     var t = _tid()
     if t < Int(na):
@@ -1250,6 +1311,14 @@ struct DeviceOps(ClusterOps):
 
     def sqdist(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
         self._ph0()
+        comptime if SQDIST_TILED:
+            if na > 0 and nb > 0 and d > 0 and getenv("MOJOLEARN_XC_SQDIST_TILED") != "0":
+                self.ctx.enqueue_function[_sqdist_tiled_kernel](
+                    self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
+                    grid_dim=((nb + SQT_B - 1) // SQT_B, (na + SQT_B - 1) // SQT_B), block_dim=SQT_TD * SQT_TD,
+                )
+                self._ph1("sqdist")
+                return
         self.ctx.enqueue_function[_sqdist_kernel](
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
             grid_dim=_grid(na * nb), block_dim=TPB,
