@@ -656,9 +656,9 @@ class KernelPCA(_XNeighbors):
 
     Reference: scikit-learn `decomposition/_kernel_pca.py` (1.9.0) with
     `preprocessing.KernelCenterer`: the kernel matrix, centered in their
-    order, the dense eigendecomposition (eigen_solver 'dense'; here the lane's
-    host Jacobi, spectral/checks/symmetric_eig_host.mojo, ascending with
-    pinned signs, then sklearn's `svd_flip(u, None)` sign rule), eigenvalues
+    order, the dense eigendecomposition (eigen_solver 'dense'; here
+    x_decomp's eigh, the round-robin Jacobi on the device, ascending, then
+    sklearn's `svd_flip(u, None)` sign rule), eigenvalues
     below zero set to zero, components sorted by decreasing eigenvalue (equal
     eigenvalues: the higher solver index first, as their reversed argsort),
     zero components removed when n_components is None or remove_zero_eig.
@@ -744,13 +744,29 @@ class KernelPCA(_XNeighbors):
             self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
             self.n_features_in_ = d
             return self
-        w = _empty_out((n,), "<f4")
-        V = _empty_out((n, n), "<f4")
-        self._op("eigh", [(Kc, 0), (w, 1), (V, 1)], (n,))
-        self._op("svd_flip", [(V, 1)], (n, n))
-        wl = w.tolist()
-        order = list(range(n - 1, -1, -1))           # descending; equal values: higher index first
+        # lane hr2-kpca-seq: the dense eigendecomposition is x_decomp's
+        # eigh (the pinned round-robin Jacobi, x_decomp/rr.mojo, on the
+        # device; the host binding runs the same rounds), never the host
+        # Jacobi of x_neighbors/eigh.mojo inside the GPU binding. A/B arm
+        # until measured: MOJOLEARN_XN_KPCA_XN_EIGH=1 restores the old op.
+        old_eigh = os.environ.get("MOJOLEARN_XN_KPCA_XN_EIGH", "0") == "1"
         c = n if self.n_components is None else min(n, int(self.n_components))
+        if old_eigh:
+            w = _empty_out((n,), "<f4")
+            V = _empty_out((n, n), "<f4")
+            self._op("eigh", [(Kc, 0), (w, 1), (V, 1)], (n,))
+            self._op("svd_flip", [(V, 1)], (n, n))
+            wl = w.tolist()
+        else:
+            import array
+            from ._expansion_decomp import _Kit, _M
+            if kit is None:
+                kit = _Kit(self.numeric_mode_used())
+            store = array.array("f")
+            store.frombytes(Kc.tobytes())
+            wm, Vm = kit.eigh(_M(store, n, n))
+            wl = list(wm.s)
+        order = list(range(n - 1, -1, -1))           # descending; equal values: higher index first
         order = order[:c]
         vals = [max(wl[i], 0.0) for i in order]
         if self.n_components is None or self.remove_zero_eig:
@@ -758,7 +774,15 @@ class KernelPCA(_XNeighbors):
             order = [order[j] for j in keep]
             vals = [vals[j] for j in keep]
         self.eigenvalues_ = Array.from_list(vals, "<f4")
-        self.eigenvectors_ = self._take_cols(V, order)
+        if old_eigh:
+            self.eigenvectors_ = self._take_cols(V, order)
+        else:
+            # sklearn's svd_flip(u, None) on the kept columns: each column's
+            # largest-|.| entry (ties to the lower row) made positive
+            vecs = Vm.take_cols(order)
+            if order:
+                vecs = vecs.neg_cols(kit.absmax_flags(vecs, True))
+            self.eigenvectors_ = Array._from_flat(vecs.s, (n, len(order)), "<f4")
         self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
         self.n_features_in_ = d
         return self
