@@ -37,6 +37,10 @@ from x_linear.glm import (
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT
 from x_linear.isotonic import iso_predict_one, iso_gather_one, iso_bounds, iso_bounds_from, iso_group, iso_after_unique
 from std.memory import bitcast
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_ENETCV
+from x_linear.cd_grid import enetcv_fit_grid
+from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross_kernel, mg_tiles
+from x_linear.dispatch import ALGO_RIDGE
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
 from x_linear.logcv_grid import logcv_fit_grid
@@ -170,6 +174,13 @@ def _bayes_grid_gram() -> Bool:
     """`MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM=0` keeps BayesianRidge's and
     ARD's Gram on the team (the A/B arm); default the grid kernel."""
     return String(getenv("MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM")) != "0"
+
+
+def _enetcv_grid() -> Bool:
+    """`MOJOLEARN_X_LINEAR_ENETCV_GRID=0` keeps LassoCV / ElasticNetCV on
+    the one-block team fit (the A/B arm); default the grid form
+    (x_linear/cd_grid.mojo)."""
+    return String(getenv("MOJOLEARN_X_LINEAR_ENETCV_GRID")) != "0"
 
 
 def _fit_on_host(
@@ -1930,6 +1941,9 @@ def fit_device(
         if n >= XB_MIN_ROWS and gram_handles(algo):
             gram_fit(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
             return
+    if algo == ALGO_ENETCV and d > 0 and len(ip) >= 7 and _enetcv_grid():
+        enetcv_fit_grid(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
+        return
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
     var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(fp), 1))
@@ -1940,6 +1954,16 @@ def fit_device(
     # LARS reads ip[4] on the device: 1 when the Gram is already in fw
     # (`xg_gram_kernel` below), 0 when the team computes it.
     var grid_gram = algo == ALGO_LARS and _lars_grid_gram() and d > 0
+    # Ridge: the moments of [X | Y] on the grid (lane/neural-pass120);
+    # ip[4] tells the team they are in fw
+    var ridge_pre = False
+    comptime if MOMENTS_GRID:
+        ridge_pre = (algo == ALGO_RIDGE and d > 0 and n > 0 and len(ip) >= 4 and Int(ip[3]) == 0
+                     and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0")
+    if algo == ALGO_RIDGE:
+        while len(hip) < 5:
+            hip.append(Int32(0))
+        hip[4] = Int32(1 if ridge_pre else 0)
     # lane/neural-pass87 (2026-10-01): BayesianRidge (unweighted) and ARD read
     # the same layout (xm at 0, G at d, ip[1] fit_intercept) and the same
     # centered Gram chains, which the team ran on ONE block (24,310 chains
@@ -1985,6 +2009,21 @@ def fit_device(
         ctx.enqueue_function[xg_gram_kernel](
             dx.unsafe_ptr(), Int32(n), Int32(d), dfw.unsafe_ptr(),
             grid_dim=_xg_blocks(d * (d + 1) // 2), block_dim=XG_TPB,
+        )
+    if ridge_pre:
+        var t_n = Int(hip[0])
+        var r_xm = 0
+        var r_gg = d
+        var r_ym = d + 2 * d * d + d
+        var r_xty = r_ym + t_n
+        ctx.enqueue_function[mg_means_kernel](
+            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), Int32(hip[1]), dfw.unsafe_ptr(),
+            Int32(r_xm), Int32(r_ym), grid_dim=mg_tiles(d, t_n), block_dim=MG_NT,
+        )
+        var tl = mg_tiles(d, t_n)
+        ctx.enqueue_function[mg_cross_kernel](
+            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), dfw.unsafe_ptr(),
+            Int32(r_xm), Int32(r_ym), Int32(r_gg), Int32(r_xty), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
         )
     ctx.enqueue_function[fit_kernel](
         Int32(algo), dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d),
