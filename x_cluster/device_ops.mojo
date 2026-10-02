@@ -25,6 +25,7 @@ from x_cluster.bodies import (
     chain_add,
     cov_final,
     cov_term,
+    argmax_row,
     exp_cell,
     mean_final,
     nk_final,
@@ -568,6 +569,12 @@ def _exp_kernel(src: FPtr, dst: FPtr, n: Int32):
     var t = _tid()
     if t < Int(n):
         exp_cell(src, dst, t)
+
+
+def _argmax_kernel(src: FPtr, n: Int32, kc: Int32, dst: IPtr):
+    var t = _tid()
+    if t < Int(n):
+        argmax_row(src, Int(kc), dst, t)
 
 
 def _nk_kernel(resp: FPtr, n: Int32, kc: Int32, dst: FPtr):
@@ -1728,6 +1735,14 @@ struct DeviceOps(ClusterOps):
             self._fp(src), self._fp(dst), Int32(n), grid_dim=_grid(n), block_dim=TPB,
         )
         self._ph1("exp")
+
+    def argmax_rows(mut self, src: Int, n: Int, kc: Int, labels: Int) raises:
+        self._ph0()
+        if n > 0 and kc > 0:
+            self.ctx.enqueue_function[_argmax_kernel](
+                self._fp(src), Int32(n), Int32(kc), self._ip(labels), grid_dim=_grid(n), block_dim=TPB,
+            )
+        self._ph1("argmax_rows")
 
     def moments(
         mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
