@@ -14,6 +14,7 @@ compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
 from std.memory import bitcast
+from std.atomic import Atomic
 from core.host_lanes import host_row_tasks
 from std.time import perf_counter_ns
 from std.os import getenv
@@ -369,8 +370,76 @@ def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nn
     """lane/neural-pass69: `op_cc_iterate` from a CSR adjacency (indptr n + 1,
     indices nnz): the host walk of x_neighbors/cc_sparse.mojo on every
     column, no dense matrix."""
-    cc_iterate_csr(IP(unsafe_from_address=indptr), IP(unsafe_from_address=indices),
-                   IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n, nnz)
+    comptime if is_defined["MOJOLEARN_XN_CC_HOST"]():
+        cc_iterate_csr(IP(unsafe_from_address=indptr), IP(unsafe_from_address=indices),
+                       IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n, nnz)
+        return
+    _cc_csr_device(indptr, indices, lab, info, n, nnz)
+
+
+# lane/neural-pass95 (2026-10-01): weak connected components of a CSR graph
+# on the device. The output is the min-label fixed point the host rounds
+# reach (every node labelled by the lowest node of its component, which
+# Python numbers in order of appearance), and that fixed point does not
+# depend on how it is reached, so the device reaches it the fast way:
+# hooking (each edge lowers the larger of its two labels' entries to the
+# smaller, an atomic min; labels only fall, each to a node of the same
+# component no larger than itself) and pointer jumping (every node to the
+# root of its label chain), rounds until an edge changes nothing. The
+# labels are integers: the same words on every column. The step count in
+# info is the device's round count (Python reads only the labels).
+# `-D MOJOLEARN_XN_CC_HOST=1` restores the host rounds (x_neighbors/cc_sparse.mojo).
+def cc_hook_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP):
+    var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if u < Int(n):
+        for e in range(Int(indptr.unsafe_load(u)), Int(indptr.unsafe_load(u + 1))):
+            var v = Int(indices.unsafe_load(e))
+            var a = lab.unsafe_load(u)
+            var b = lab.unsafe_load(v)
+            if a != b:
+                var lo = a if a < b else b
+                var hi = b if a < b else a
+                var old = Atomic[DType.int32].min(lab + Int(hi), lo)
+                if old > lo:
+                    changed.unsafe_store(0, Int32(1))
+
+
+def cc_jump_kernel(lab: IP, n: Int32):
+    var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if v < Int(n):
+        var p = Int(lab.unsafe_load(v))
+        while Int(lab.unsafe_load(p)) != p:
+            p = Int(lab.unsafe_load(p))
+        lab.unsafe_store(v, Int32(p))
+
+
+def _cc_csr_device(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
+    var ctx = xn_ctx()
+    var d_ip = _buf_i(ctx, indptr, n + 1, True)
+    var d_ix = _buf_i(ctx, indices, max(nnz, 1), nnz > 0)
+    var d_l = _buf_i(ctx, lab, max(n, 1), True)
+    var d_c = _buf_i(ctx, 0, 1, False)
+    var hc = List[Int32](length=1, fill=Int32(0))
+    var blocks = (n + 255) // 256
+    var rounds = 0
+    while n > 0:
+        rounds += 1
+        d_c.enqueue_fill(Int32(0))
+        ctx.enqueue_function[cc_hook_kernel](d_ip.unsafe_ptr(), d_ix.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n),
+                                             d_c.unsafe_ptr(), grid_dim=blocks, block_dim=256)
+        ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
+        ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=d_c)
+        ctx.synchronize()
+        if hc[0] == 0:
+            break
+    _down_i(ctx, d_l, lab, n)
+    ctx.synchronize()
+    IP(unsafe_from_address=info).unsafe_store(0, Int32(rounds))
+    _ = hc^
+    _ = d_ip^
+    _ = d_ix^
+    _ = d_l^
+    _ = d_c^
 
 
 def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
