@@ -1,1 +1,4 @@
 CMD lane/apple-fast-trees-symmetric tsym-level-istella AFT_OUT=$HOME/aft-ab/tsym-level-istella bash tools/aft_ab.sh gbdt gbdt-symmetric istella 2 "" "-D MOJOLEARN_SYM_DEVICE_LEVEL"
+CMD lane/apple-fast-trees-symmetric tsym-part-istella AFT_OUT=$HOME/aft-ab/tsym-part-istella bash tools/aft_ab.sh gbdt gbdt-symmetric istella 2 "" "-D MOJOLEARN_SYM_DEVICE_PARTITION"
+CMD lane/apple-fast-trees-symmetric tsym-notail-istella AFT_OUT=$HOME/aft-ab/tsym-notail-istella bash tools/aft_ab.sh gbdt gbdt-symmetric istella 2 "" "-D MOJOLEARN_SYM_NO_TAIL_DRAIN"
+CMD lane/apple-fast-trees-symmetric tsym-all-1000-istella AFT_OUT=$HOME/aft-ab/tsym-all-1000-istella bash tools/aft_ab.sh gbdt gbdt-symmetric-1000 istella 2 "" "-D MOJOLEARN_SYM_DEVICE_LEVEL -D MOJOLEARN_SYM_DEVICE_PARTITION -D MOJOLEARN_SYM_NO_TAIL_DRAIN"

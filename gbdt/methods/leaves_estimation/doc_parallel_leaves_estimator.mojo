@@ -396,3 +396,115 @@ struct DeviceLeafPartitioner(Movable):
                 + " for " + String(n_rows) + " rows"
             )
         return LeafPartition(self.vals.copy(), offsets^, sizes^)
+
+
+# ---------------------------------------------------------------------------
+# lane/apple-fast-trees-symmetric: `compute_bins_for_model`'s tables, pooled
+# (used only under `SYM_DEVICE_PARTITION` in doc_parallel_boosting.mojo)
+# ---------------------------------------------------------------------------
+
+
+struct ObliviousBinsTables(Movable):
+    """`compute_bins_for_model`'s five level tables (offset, shift, mask,
+    bin, equality) as a pool of one for the fit: host staging and device
+    copies of `depth_cap` entries, allocated once. The one-shot form
+    allocates ten buffers per tree and drains once to keep them alive past
+    the launch; this one enqueues five copies and the kernel and returns.
+    The host tables are rewritten per tree AFTER the previous tree's
+    partition drained (`DeviceLeafPartitioner.partition` ends on one), so
+    the previous copies from them are complete."""
+
+    var depth_cap: Int
+    var h_off: HostBuffer[DType.uint32]
+    var h_shift: HostBuffer[DType.uint32]
+    var h_mask: HostBuffer[DType.uint32]
+    var h_bin: HostBuffer[DType.uint32]
+    var h_eq: HostBuffer[DType.uint8]
+    var d_off: DeviceBuffer[DType.uint32]
+    var d_shift: DeviceBuffer[DType.uint32]
+    var d_mask: DeviceBuffer[DType.uint32]
+    var d_bin: DeviceBuffer[DType.uint32]
+    var d_eq: DeviceBuffer[DType.uint8]
+
+    def __init__(out self, ctx: DeviceContext, depth_cap: Int) raises:
+        if depth_cap <= 0:
+            raise Error("ObliviousBinsTables: depth_cap must be positive")
+        self.depth_cap = depth_cap
+        self.h_off = ctx.enqueue_create_host_buffer[DType.uint32](depth_cap)
+        self.h_shift = ctx.enqueue_create_host_buffer[DType.uint32](depth_cap)
+        self.h_mask = ctx.enqueue_create_host_buffer[DType.uint32](depth_cap)
+        self.h_bin = ctx.enqueue_create_host_buffer[DType.uint32](depth_cap)
+        self.h_eq = ctx.enqueue_create_host_buffer[DType.uint8](depth_cap)
+        self.d_off = ctx.enqueue_create_buffer[DType.uint32](depth_cap)
+        self.d_shift = ctx.enqueue_create_buffer[DType.uint32](depth_cap)
+        self.d_mask = ctx.enqueue_create_buffer[DType.uint32](depth_cap)
+        self.d_bin = ctx.enqueue_create_buffer[DType.uint32](depth_cap)
+        self.d_eq = ctx.enqueue_create_buffer[DType.uint8](depth_cap)
+        ctx.synchronize()
+
+    def compute(
+        mut self,
+        ctx: DeviceContext,
+        layout: CompressedIndexLayout,
+        splits: List[TBinarySplit],
+        depth: Int,
+        mut cindex: DeviceBuffer[DType.uint32],
+        n_rows: Int,
+        mut out_bins: DeviceBuffer[DType.uint32],
+    ) raises:
+        """`compute_bins_for_model`, record for record, without the drain."""
+        if depth <= 0:
+            raise Error("ObliviousBinsTables: depth must be positive")
+        if depth > self.depth_cap:
+            raise Error(
+                "ObliviousBinsTables: depth " + String(depth)
+                + " above capacity " + String(self.depth_cap)
+            )
+        if len(splits) < depth:
+            raise Error(
+                "ObliviousBinsTables: " + String(len(splits))
+                + " splits for depth " + String(depth)
+            )
+        for level in range(depth):
+            ref cf = layout.features[Int(splits[level].feature_id)]
+            self.h_off.unsafe_ptr().unsafe_store(
+                level, cf.offset * UInt32(n_rows)
+            )
+            self.h_shift.unsafe_ptr().unsafe_store(level, cf.shift)
+            self.h_mask.unsafe_ptr().unsafe_store(level, cf.mask)
+            self.h_bin.unsafe_ptr().unsafe_store(
+                level, UInt32(Int(splits[level].bin_idx))
+            )
+            var take_bin = (
+                Int(splits[level].split_type) == BIN_SPLIT_TAKE_BIN
+            )
+            self.h_eq.unsafe_ptr().unsafe_store(
+                level, UInt8(1) if take_bin else UInt8(0)
+            )
+        ctx.enqueue_copy(dst_buf=self.d_off, src_ptr=self.h_off.unsafe_ptr())
+        ctx.enqueue_copy(
+            dst_buf=self.d_shift, src_ptr=self.h_shift.unsafe_ptr()
+        )
+        ctx.enqueue_copy(
+            dst_buf=self.d_mask, src_ptr=self.h_mask.unsafe_ptr()
+        )
+        ctx.enqueue_copy(dst_buf=self.d_bin, src_ptr=self.h_bin.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.d_eq, src_ptr=self.h_eq.unsafe_ptr())
+        var blocks = (
+            n_rows + COMPUTE_BINS_BLOCK_SIZE - 1
+        ) // COMPUTE_BINS_BLOCK_SIZE
+        if blocks < 1:
+            blocks = 1
+        ctx.enqueue_function[compute_bins_kernel](
+            cindex.unsafe_ptr(),
+            self.d_off.unsafe_ptr(),
+            self.d_shift.unsafe_ptr(),
+            self.d_mask.unsafe_ptr(),
+            self.d_bin.unsafe_ptr(),
+            self.d_eq.unsafe_ptr(),
+            Int32(depth),
+            Int32(n_rows),
+            out_bins.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(COMPUTE_BINS_BLOCK_SIZE, 1, 1),
+        )

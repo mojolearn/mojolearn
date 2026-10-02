@@ -9,6 +9,7 @@ from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 from std.math import isfinite
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from gbdt.methods.kernel_add_model_value import add_model_value_kernel
 from gbdt.metrics.optimal_const_for_loss import (
     calc_one_dimensional_optimum_const_approx,
@@ -112,7 +113,7 @@ from checks.kernel_matrix import (
 )
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from checks.numerics import PIN_DETERMINISM
-from checks.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.bootstrap import (
     bootstrap_grid_blocks,
@@ -135,8 +136,42 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     DEVICE_LEAF_PARTITION,
     DeviceLeafPartitioner,
     LeafPartition,
+    ObliviousBinsTables,
     compute_bins_for_model,
     partition_from_bins,
+)
+
+# ================= lane/apple-fast-trees-symmetric =================
+# FAST + Apple only, default OFF. On the SymmetricTree arm a tree's fixed
+# cost is mostly host waits: `compute_bins_for_model` drains once (to
+# keep ten per-tree buffers alive), `partition_from_bins` downloads every
+# row's leaf, counting-sorts on the host and uploads the order (two
+# drains), the oracle's host staging is allocated per tree, and
+# `_estimate_and_apply` drains at its tail only so those temporaries
+# outlive the queue. At ~0.2 ms per launch-plus-wait on Apple that is the
+# 1000-iteration lane's first cost.
+# * `MOJOLEARN_SYM_DEVICE_PARTITION`: the tree's leaf per row from pooled
+#   level tables (`ObliviousBinsTables`), grouped on the device by the
+#   `DeviceLeafPartitioner` (DEVIATION 2551's stable radix sort; same
+#   `row_index`, `offsets`, `sizes` integers), one drain of
+#   `2 * n_leaves + 1` words instead of three drains and two host passes
+#   over `n_rows`; nothing allocated per tree.
+# * `MOJOLEARN_SYM_NO_TAIL_DRAIN`: the symmetric arm's estimation keeps
+#   the oracle's host staging in the pool (`arena_host`, as the batched
+#   path does) and skips `_estimate_and_apply`'s tail drain when every
+#   buffer the queued work reads is pooled (device scratch from the pool,
+#   no per-tree weight staging, not the Exact method); the next wait is
+#   the next tree's structure drain.
+# ====================================================================
+comptime SYM_DEVICE_PARTITION = (
+    is_defined["MOJOLEARN_SYM_DEVICE_PARTITION"]()
+    and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+)
+comptime SYM_NO_TAIL_DRAIN = (
+    is_defined["MOJOLEARN_SYM_NO_TAIL_DRAIN"]()
+    and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
 )
 from ensemble.instruments import StageTimes as HostStageTimes
 from gbdt.overfitting_detector.overfitting_detector import (
@@ -754,6 +789,7 @@ def _estimate_and_apply(
     # the seed of this task's YetiRank evaluation stream (one draw of the
     # fit's YetiRank stream per tree); read only with `yeti`
     yeti_seed: UInt64 = UInt64(0),
+    tail_drain: Bool = True,
 ) raises:
     """One estimation task: their `TDocParallelLeavesEstimator::Estimate`
     plus the `AppendModels` that follows it, for ONE (dataset, cursor).
@@ -813,6 +849,55 @@ def _estimate_and_apply(
         oracle_ws = est_ws[0].oracle_scratch.take(
             ctx, n_rows, n_leaves, objective, num_classes, est_sm, pair_blocks,
         )
+    # SYM_NO_TAIL_DRAIN: the oracle's host staging (`h_leaves`, `h_shift`,
+    # `h_fv`, `h_part_stats`, ...) from the fit's `arena_host` pool instead
+    # of per-call host buffers, so nothing the queued `move_to` upload
+    # reads dies with the oracle; `drain_tail` is the runtime half of the
+    # gate (pooled device scratch, no weight staging, not Exact).
+    var oracle_hs = Optional[OracleHostScratch]()
+    var drain_tail = True
+    comptime if SYM_NO_TAIL_DRAIN:
+        if not tail_drain:
+            var sdims = _oracle_dims(objective, num_classes)
+            var sfv = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+            if pairs.__bool__():
+                sfv = pairs.value().blocks()
+            var hsi = -1
+            for i in range(len(est_ws[0].arena_host)):
+                if est_ws[0].arena_host[i].matches(
+                    n_leaves, sdims[0], sdims[1], sfv
+                ):
+                    hsi = i
+            if hsi < 0:
+                est_ws[0].arena_host.append(
+                    OracleHostScratch(
+                        n_leaves, sdims[0], sdims[1], sfv,
+                        ctx.enqueue_create_host_buffer[DType.uint32](
+                            n_leaves
+                        ),
+                        ctx.enqueue_create_host_buffer[DType.float32](
+                            n_leaves * sdims[0]
+                        ),
+                        ctx.enqueue_create_host_buffer[DType.float32](sfv),
+                        ctx.enqueue_create_host_buffer[DType.float32](
+                            2 * n_leaves
+                        ),
+                        ctx.enqueue_create_host_buffer[DType.float32](
+                            sdims[1] * n_leaves
+                        ),
+                        ctx.enqueue_create_host_buffer[DType.float32](
+                            2 * n_leaves
+                        ),
+                    )
+                )
+                ctx.synchronize()
+                hsi = len(est_ws[0].arena_host) - 1
+            oracle_hs = Optional(est_ws[0].arena_host[hsi].handles())
+            drain_tail = not (
+                oracle_ws.__bool__()
+                and not has_weights
+                and leaf_estimation_method != LEAF_ESTIMATION_EXACT
+            )
     ref g_target = est_ws[0].g_target
     ref g_weights = est_ws[0].g_weights
     ref g_cursor = est_ws[0].g_cursor
@@ -920,6 +1005,7 @@ def _estimate_and_apply(
         yeti^,
         yeti_seed,
         oracle_ws^,
+        host_scratch=oracle_hs^,
     )
     stage_times.end(ctx, "est.make_oracle")
     # `TDocParallelLeavesEstimator::Estimate`
@@ -1022,7 +1108,11 @@ def _estimate_and_apply(
     #     would free its exclusive buffers (`d_bins`, `d_shift`, the
     #     Exact path's trailing `move_to` operands) under queued work --
     #     the step-33 race class, device side.
-    ctx.synchronize()
+    comptime if SYM_NO_TAIL_DRAIN:
+        if drain_tail:
+            ctx.synchronize()
+    else:
+        ctx.synchronize()
     stage_times.end(ctx, "est.tail_apply")
     _ = oracle^  # past the drain (step-33 race class, device side)
 
@@ -2135,6 +2225,8 @@ def fit_with_test(
     # DEVIATION 2551: the non-symmetric estimator's device partition, the
     # FIT's pool of one (empty and never touched on the default side)
     var leaf_parts = List[DeviceLeafPartitioner]()
+    # SYM_DEVICE_PARTITION: the symmetric arm's pooled level tables
+    var sym_bins_tables = List[ObliviousBinsTables]()
     # FAST Depthwise and Lossguide fits otherwise download and counting-sort
     # every row, then upload the same stable row order once per
     # tree/permutation. The existing device partitioner produces identical
@@ -2805,14 +2897,40 @@ def fit_with_test(
                 seed=tree_seed,
                 one_hot=one_hot,
             )
-            var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-            compute_bins_for_model(
-                ctx, layout_for_test, splits, len(splits), lc, n_rows,
-                d_bins,
-            )
-            var part = partition_from_bins(
-                ctx, d_bins, n_rows, 1 << len(splits)
-            )
+            var part: LeafPartition
+            comptime if SYM_DEVICE_PARTITION:
+                var n_leaves_sym = 1 << len(splits)
+                if (
+                    len(leaf_parts) == 0
+                    or leaf_parts[0].n_rows_cap != n_rows
+                    or leaf_parts[0].n_leaves_cap < n_leaves_sym
+                ):
+                    leaf_parts.clear()
+                    leaf_parts.append(
+                        DeviceLeafPartitioner(ctx, n_rows, 1 << max_depth)
+                    )
+                if (
+                    len(sym_bins_tables) == 0
+                    or sym_bins_tables[0].depth_cap < len(splits)
+                ):
+                    sym_bins_tables.clear()
+                    sym_bins_tables.append(
+                        ObliviousBinsTables(ctx, max_depth)
+                    )
+                sym_bins_tables[0].compute(
+                    ctx, layout_for_test, splits, len(splits), lc, n_rows,
+                    leaf_parts[0].bins,
+                )
+                part = leaf_parts[0].partition(ctx, n_rows, n_leaves_sym)
+            else:
+                var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+                compute_bins_for_model(
+                    ctx, layout_for_test, splits, len(splits), lc, n_rows,
+                    d_bins,
+                )
+                part = partition_from_bins(
+                    ctx, d_bins, n_rows, 1 << len(splits)
+                )
             sizes = part.sizes.copy()
             leaf_offsets = part.offsets.copy()
             row_index = part.row_index.copy()
@@ -2831,6 +2949,7 @@ def fit_with_test(
                     trace, stage_times,
                     _tree_tag(iteration) + ".leaves.estimated",
                     est_ws,
+                    tail_drain=not SYM_NO_TAIL_DRAIN,
                 )
         else:
             var t_sym = loop_times.start()
@@ -2915,6 +3034,7 @@ def fit_with_test(
                         p_est^,
                         y_est^,
                         y_seed,
+                        tail_drain=not SYM_NO_TAIL_DRAIN,
                     )
                 else:
                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
@@ -2944,6 +3064,7 @@ def fit_with_test(
                         _tree_tag(iteration) + ".perm" + String(p)
                         + ".leaves.estimated",
                         est_ws,
+                        tail_drain=not SYM_NO_TAIL_DRAIN,
                     )
                 # the EXPORTED ensemble is the estimation permutation's
                 # (`doc_parallel_boosting.h:526-528`); the others exist to

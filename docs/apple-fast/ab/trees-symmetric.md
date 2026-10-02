@@ -36,3 +36,38 @@ Risky compile sites: struct field assignment inside kernels (`calcer.score = ...
 `block_idx.y` in `pw_sym_score_partial_kernel`.
 
 Request: `tsym-level-istella` (gbdt, gbdt-symmetric, istella, 2 pairs). taxi only after istella wins.
+
+## Pass 2: per-tree fixed cost (SymmetricTree-1000: CatBoost 55 s / 121 s)
+
+Per-tree sequence on the pointwise SymmetricTree arm (`doc_parallel_boosting.mojo`, Plain, one
+permutation), host waits in CAPS:
+1. gradient launch + `fv` copy to host (enqueued, no wait); mags DRAIN only when the fixed-point
+   histogram rows are live (`_needs_magnitudes`, IDENTICAL columns);
+2. structure search: one DRAIN per tree (DEVIATION 207; level loop blind, hist over all parts in
+   one launch, winner/pack/bin-update fused on main as DEVIATION 3111);
+3. `compute_bins_for_model`: ten per-tree buffers + one DRAIN to keep them alive;
+4. `partition_from_bins`: bins DOWNLOADED (DRAIN), two host passes over n_rows (counting sort),
+   row order UPLOADED (DRAIN), three per-tree allocations;
+5. `make_bin_optimized_oracle`: per-tree host staging (h_leaves/h_shift/h_fv/h_part_stats) when no
+   host scratch is passed; a DRAIN only with sample weights;
+6. Newton walker (`descent_helpers.mojo`): its own derivative/value DRAINS per iteration (not
+   touched here);
+7. `_estimate_and_apply` tail: `h_est` upload, `add_model_value_kernel`, one DRAIN to keep the
+   oracle's temporaries alive.
+
+Switches (FAST + Apple only, default OFF):
+
+- `-D MOJOLEARN_SYM_DEVICE_PARTITION` (`SYM_DEVICE_PARTITION`, doc_parallel_boosting.mojo): steps 3-4
+  become pooled level tables (`ObliviousBinsTables`, new, doc_parallel_leaves_estimator.mojo) +
+  `DeviceLeafPartitioner.partition` (main's DEVIATION 2551 stable radix sort, same integers): one
+  DRAIN of 2*n_leaves+1 words, no host row passes, nothing allocated per tree.
+- `-D MOJOLEARN_SYM_NO_TAIL_DRAIN` (`SYM_NO_TAIL_DRAIN`): `_estimate_and_apply(tail_drain=False)` from
+  the symmetric call sites; the oracle's host staging comes from `est_ws.arena_host` (pooled, built
+  with the buffer-taking `OracleHostScratch` init), and the tail drain is skipped when the device
+  scratch is pooled, there are no sample weights and the method is not Exact. Risk: any temporary
+  the Newton walker still has in flight at return; the gate is conservative but unverified here.
+- Both plus `SYM_DEVICE_LEVEL` on `gbdt-symmetric-1000` as `tsym-all-1000-istella`.
+
+Not done (next): leaf values resident on the device with one readback per fit (the Newton walker's
+per-iteration drains, step 6), and reusing the searcher's own `subsets` partition for the learn
+permutation instead of recomputing bins.
