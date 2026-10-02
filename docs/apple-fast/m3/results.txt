@@ -1,0 +1,38 @@
+pos=38 lines=      64
+6:CMD main@62c484f00 m3-mm-rerun rc=0 done
+12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
+13:FETCHFAIL lane/neural-pass130
+14:FETCHFAIL lane/neural-pass130
+15:FETCHFAIL lane/neural-pass130
+16:FETCHFAIL lane/neural-pass130
+17:FETCHFAIL lane/neural-pass131
+18:FETCHFAIL lane/neural-pass131
+19:FETCHFAIL lane/neural-pass131
+20:FETCHFAIL lane/neural-pass131
+21:FETCHFAIL lane/neural-pass131
+22:FETCHFAIL lane/neural-pass131
+23:FETCHFAIL lane/neural-pass112
+24:FETCHFAIL lane/neural-pass112
+25:FETCHFAIL lane/neural-pass108
+26:FETCHFAIL lane/neural-pass108
+27:FETCHFAIL lane/neural-pass133
+28:FETCHFAIL lane/neural-pass133
+34:neural-pass100@156e7c9c4 sparse-pca taxi digest=ee0fbccd median_ms=1976 status=ok witness:clean rc=0  quality={"component_sparsity": 0.48863636363636365, "relative_reconstruction_error": 0.2772263746601304}
+35:neural-pass100@156e7c9c4 sparse-pca istella digest=f6558ab4 median_ms=4677 status=ok witness:clean rc=0  quality={"component_sparsity": 0.30568181818181817, "relative_reconstruction_error": 0.7502098800645421}
+36:neural-pass100@156e7c9c4 svd taxi digest=64f23444 median_ms=52 status=ok witness:clean rc=0  quality={"max_rel_singular_value_error": 6.332289216864066e-07, "relative_reconstruction_error_100k_rows": 8.692553053748501e-07}
+37:neural-pass100@156e7c9c4 svd istella digest=e2faf444 median_ms=16114 status=ok witness:clean rc=0  quality={"max_rel_singular_value_error": 28579.9116572056, "relative_reconstruction_error_100k_rows": 0.0005441025931826263}
+38:neural-pass100@156e7c9c4 lle taxi digest=64c1334b median_ms=17519 status=ok witness:clean rc=0  quality={"trustworthiness_k15": 0.839813980154355}
+39:neural-pass100@156e7c9c4 lle istella digest=ce9dbb91 median_ms=17512 status=ok witness:clean rc=0  quality={"trustworthiness_k15": 0.8724273228425379}
+40:neural-pass100@156e7c9c4 isomap taxi digest= median_ms=0 status=timeout witness:clean rc=1  quality={}
+46:CMD apple-fast-trees2@1331597ee aft-board rc=0 raw-istella.npz
+52:CMD apple-fast-classical@bee6f3844 afc-board rc=0    0.93 algos      select-mutual-info-reg     istella    46533.3   69680.3   50021.4 sklearn-cpu        ok       | n_selected=110 | jaccard_vs_sklearn=1,n_selected=110
+53:CMD apple-fast-trees2@1331597ee aft-probe rc=0 1331597ee tools/aft_board_trees.py: summarize a board's tree rows (ours vs best opponent, ratio, quality)
+54:CMD main@62c484f00 sgddig-main rc=1 FileNotFoundError: [Errno 2] No such file or directory: '/Users/andrewhendel/mojolearn-evidence/board-m4/rows-full/cls-taxi.npz'
+60:CMD neural-pass81@6a483da91 sgddig-neural-pass81 rc=1 FileNotFoundError: [Errno 2] No such file or directory: '/Users/andrewhendel/mojolearn-evidence/board-m4/rows-full/cls-taxi.npz'
+61:CMD apple-fast-classical@bee6f3844 afc-board2 rc=0      394 ~/mq/out/race-afc-board2/race.log
+67:CMD apple-fast-trees2@021e3cfac aft-ab-lg1 rc=0 AFT-MEDIAN arm=B n=2 median_ms=23083.8 all=[22869, 23299] hashes=['13a748ecb89c5611', '2f514bda067bb4fe'] acc={'logloss': [0.149191, 0.14919], 'auc': [0.983713, 0.983713]}
+73:CMD apple-fast-classical@6a642df25 afc-build1 rc=1 AFC-BUILD x_sequence rc=0
+74:CMD apple-fast-classical@6a642df25 afc-base1 rc=0 20
+80:CMD apple-fast-trees2@46f0cf09f aft-ab-if1 rc=0 AFT-MEDIAN arm=B n=5 median_ms=105.4 all=[105, 104, 105, 106, 106] hashes=['45bc3cb4957e1618'] acc={'auc': [0.551846, 0.551846, 0.551846, 0.551846, 0.551846]}
+81:CMD apple-fast-trees2@46f0cf09f aft-st-gbdt1 rc=1 AFT-ST gbdt-ordered:taxi FSPEED-ACC lane=gbdt-ordered arm=ours metric=auc value=0.628716
+87:CMD apple-fast-classical@65957299c afc-base2 rc=0 AFC-AB-SUMMARY afc-base2-pca arm=A lane=pca ds=istella median_of_medians_ms=none runs=[ ] digest= 

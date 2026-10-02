@@ -1,0 +1,64 @@
+     1	CMD main m3-mm-rerun cd ~/mojolearn-wt/steward-m3ultra-b 2>/dev/null; python3 ~/m3_rerun_mm.py algos/adam/synthetic/rows=full algos/adamw/synthetic/rows=full algos/sgd/synthetic/rows=full algos/embedding/synthetic/rows=f
+     2	RACE lane/neural-pass101 knn-imputer istella
+     3	RACE lane/neural-pass130 lasso-lars  taxi
+     4	RACE lane/neural-pass130 lasso-lars  istella
+     5	RACE lane/neural-pass130 ridge-clf  taxi
+     6	RACE lane/neural-pass130 ridge-clf  istella
+     7	RACE lane/neural-pass131 ard  taxi
+     8	RACE lane/neural-pass131 ard  istella
+     9	RACE lane/neural-pass131 lars  taxi
+    10	RACE lane/neural-pass131 lars  istella
+    11	RACE lane/neural-pass131 lasso-lars  taxi
+    12	RACE lane/neural-pass131 lasso-lars  istella
+    13	RACE lane/neural-pass112 bisecting-kmeans  taxi
+    14	RACE lane/neural-pass112 bisecting-kmeans  istella
+    15	RACE lane/neural-pass108 minibatch-kmeans  taxi
+    16	RACE lane/neural-pass108 minibatch-kmeans  istella
+    17	RACE lane/neural-pass133 minibatch-kmeans  taxi
+    18	RACE lane/neural-pass133 minibatch-kmeans  istella
+    19	RACE lane/neural-pass100 sparse-pca taxi 
+    20	RACE lane/neural-pass100 sparse-pca istella 
+    21	RACE lane/neural-pass100 svd taxi 
+    22	RACE lane/neural-pass100 svd istella 
+    23	RACE lane/neural-pass100 lle taxi 
+    24	RACE lane/neural-pass100 lle istella 
+    25	RACE lane/neural-pass100 isomap taxi 
+    26	CMD lane/apple-fast-trees2 aft-board python3 tools/aft_board_trees.py ~/board-0834/board/board.json; ls ~/board-0834/cache/algos-data/rows-full | head -30
+    27	CMD lane/apple-fast-classical afc-board python3 tools/afc_board_summary.py ~/board-0834/board/board.json > ~/afc-board.txt; head -150 ~/afc-board.txt
+    28	CMD lane/apple-fast-trees2 aft-probe pwd; which python3 pixi; echo PP=$PYTHONPATH; env | grep -E "^MOJOLEARN|^GBM|^PIXI|^CONDA_PREFIX" ; ls ~/datasets/gbm-bench/*/ ; ls ~/board-0834/ ~/board-0834/cache; python3 -c "impor
+    29	CMD main sgddig-main MOJOLEARN_VENDOR=cpu MOJOLEARN_CPU_THREADS=4 PYTHONPATH=$PWD/python $HOME/board-0834/cache/venv/bin/python ~/sgd_dig.py
+    30	CMD lane/neural-pass81 sgddig-neural-pass81 MOJOLEARN_VENDOR=cpu MOJOLEARN_CPU_THREADS=4 PYTHONPATH=$PWD/python $HOME/board-0834/cache/venv/bin/python ~/sgd_dig.py
+    31	CMD lane/apple-fast-classical afc-board2 mkdir -p ~/mq/out/race-afc-board2; python3 tools/afc_board_summary.py ~/board-0834/board/board.json > ~/mq/out/race-afc-board2/race.log; wc -l ~/mq/out/race-afc-board2/race.log
+    32	CMD lane/apple-fast-trees2 aft-ab-lg1 AFT_OUT=$HOME/aft-ab/lg1 bash tools/aft_ab.sh gbdt gbdt-lossguide taxi 3 "" "-D MOJOLEARN_GBDT_LG_EXACT_BATCH -D MOJOLEARN_GBDT_NS_INHERIT_PARTITION"; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/
+    33	CMD lane/apple-fast-classical afc-build1 for x in x_linear x_cluster x_neighbors x_prep x_decomp x_sequence; do MOJOLEARN_NUMERIC_MODE=fast pixi run bash bindings/build_$x.sh > ~/afc-build-$x.log 2>&1; echo "AFC-BUILD $x
+    34	CMD lane/apple-fast-classical afc-base1 mkdir -p ~/mq/out/race-afc-base1; for f in ~/afc-build-*.log; do echo "BUILDLOG $f lines=$(wc -l < $f) errors=$(grep -c " error" $f)"; done > ~/mq/out/race-afc-base1/race.log; for 
+    35	CMD lane/apple-fast-trees2 aft-ab-if1 AFT_OUT=$HOME/aft-ab/if1 bash tools/aft_ab.sh svm iforest istella 5 "-D MOJOLEARN_IF_ROWMAJOR_OFF" ""; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/if1 bash tools/aft_ab.sh svm iforest taxi
+    36	CMD lane/apple-fast-trees2 aft-st-gbdt1 bash tools/aft_stage.sh gbdt "" gbdt-rank-yetirank:istellarank gbdt-depthwise:taxi gbdt-lossguide:taxi gbdt-categorical:taxicat gbdt-ordered:taxi
+    37	CMD lane/apple-fast-classical afc-base2 MOJOLEARN_NUMERIC_MODE=fast pixi run bash bindings/build.sh > ~/afc-build-core.log 2>&1; echo "AFC-BUILD core rc=$?"; for p in knn-clf:istella knn-reg:istella nystroem:taxi rbf-sam
+    38	CMD lane/apple-fast-trees2 aft-ab-yeti1 AFT_OUT=$HOME/aft-ab/yeti1 bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 3 "-D MOJOLEARN_3040_YETI_SEQUENTIAL" ""
+    39	CMD lane/apple-fast-classical afc-m1build mkdir -p ~/mq/out/race-afc-m1build; for x in x_linear; do MOJOLEARN_NUMERIC_MODE=fast pixi run bash bindings/build_$x.sh > ~/afc-b-$x.log 2>&1; echo "AFC-BUILD $x rc=$? $(git rev
+    40	CMD lane/apple-fast-classical afc-m1bayes for p in bayesian-ridge:taxi bayesian-ridge:istella ard:taxi ard:istella; do bash tools/afc_ab.sh afc-m1bayes ${p%%:*} ${p##*:} 2 2 - MOJOLEARN_X_LINEAR_GRAM_SSE=0 > /dev/null; d
+    41	CMD lane/apple-fast-classical afc-m1enet for p in enet-cv:taxi lasso-cv:taxi enet-cv:istella lasso-cv:istella; do bash tools/afc_ab.sh afc-m1enet ${p%%:*} ${p##*:} 2 2 - MOJOLEARN_X_LINEAR_ENETCV_FAST=0 > /dev/null; done
+    42	CMD lane/apple-fast-classical afc-m1knn AFC_FAMILY=classical2 bash tools/afc_ab.sh afc-m1knn knn-clf istella 3 3 - MOJOLEARN_KNN_FAST_MMA_BIGD=0 > /dev/null; AFC_FAMILY=classical bash tools/afc_ab.sh afc-m1knn knn istell
+    43	CMD lane/apple-fast-trees2 aft-ab-rf1 AFT_OUT=$HOME/aft-ab/rf1 bash tools/aft_ab.sh rf rf taxi 3 "" "-D MOJOLEARN_RF_NODESPLIT_ZERO_AFTER_READ -D MOJOLEARN_RF_FAST_BATCH16K"; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/rf1 bas
+    44	CMD lane/apple-fast-classical afc-dbg ls -d ~/board-0834/cache/algos-data/* | head; which timeout; bash tools/afc_ab.sh afc-dbg huber taxi 1 1 - ; grep -h AFC-FAIL -A 6 ~/mq/out/race-afc-dbg/race.log | head -12 | tr "
+    45	CMD lane/apple-fast-trees2 aft-ab-if2 AFT_OUT=$HOME/aft-ab/if2 bash tools/aft_ab.sh svm iforest istella 5 "-D MOJOLEARN_IF_ROWMAJOR_OFF" ""; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/if2 bash tools/aft_ab.sh svm iforest taxi
+    46	CMD lane/apple-fast-trees2 aft-ab-lgw64 AFT_OUT=$HOME/aft-ab/lgw64 bash tools/aft_ab.sh gbdt gbdt-lossguide taxi 3 "" "-D MOJOLEARN_GBDT_LG_EXACT_BATCH64"; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/lgw64 bash tools/aft_ab.sh
+    47	CMD lane/apple-fast-trees2 aft-ab-lgw16 AFT_OUT=$HOME/aft-ab/lgw16 bash tools/aft_ab.sh gbdt gbdt-lossguide taxi 3 "" "-D MOJOLEARN_GBDT_LG_EXACT_BATCH16"
+    48	CMD lane/apple-fast-trees2 aft-ab-smx8 AFT_OUT=$HOME/aft-ab/smx8 bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 3 "" "-D MOJOLEARN_GBDT_SM_X8"; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/smx8 bash tools/aft_ab.sh gbdt gbdt-los
+    49	CMD lane/apple-fast-trees2 aft-ab-smx4 AFT_OUT=$HOME/aft-ab/smx4 bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 3 "" "-D MOJOLEARN_GBDT_SM_X4"
+    50	CMD lane/apple-fast-trees2 aft-ab-rfc8 AFT_OUT=$HOME/aft-ab/rfc8 bash tools/aft_ab.sh rf rf taxi 3 "" "-D MOJOLEARN_RF_HIST_COLUMNS8"; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/rfc8 bash tools/aft_ab.sh rf rf istella 2 "" "-
+    51	CMD lane/apple-fast-trees2 aft-ab-rfsn AFT_OUT=$HOME/aft-ab/rfsn bash tools/aft_ab.sh rf rf taxi 3 "" "-D MOJOLEARN_RF_SMALL_NODE_1024"; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/rfsn bash tools/aft_ab.sh rf rf istella 2 "" 
+    52	CMD lane/apple-fast-trees2 aft-ab-etpr AFT_OUT=$HOME/aft-ab/etpr bash tools/aft_ab.sh trees et taxi 3 "" "-D MOJOLEARN_ET_PART_ROWS"; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/etpr bash tools/aft_ab.sh trees et istella 2 "" 
+    53	CMD lane/apple-fast-trees2 aft-ab-ettpb AFT_OUT=$HOME/aft-ab/ettpb bash tools/aft_ab.sh trees et taxi 3 "" "-D MOJOLEARN_ET_TPB_256"; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/ettpb bash tools/aft_ab.sh trees et istella 2 ""
+    54	CMD lane/apple-fast-trees2 aft-ab-etb64 AFT_OUT=$HOME/aft-ab/etb64 bash tools/aft_ab.sh trees et taxi 3 "" "-D MOJOLEARN_ET_DEVICE_BATCH_65536"
+    55	CMD lane/apple-fast-trees2 aft-ab-fin1 AFT_OUT=$HOME/aft-ab/fin1 bash tools/aft_ab.sh base et istella 3 "-D MOJOLEARN_ALL_FINITE_SERIAL" ""; AFT_SKIP_BUILD=1 AFT_OUT=$HOME/aft-ab/fin1 bash tools/aft_ab.sh base rf istella
+    56	CMD lane/apple-fast afc-enet2 for p in enet-cv:taxi lasso-cv:taxi enet-cv:istella lasso-cv:istella; do bash tools/afc_ab.sh afc-enet2 ${p%%:*} ${p##*:} 2 2 - MOJOLEARN_X_LINEAR_ENETCV_FAST=0 > /dev/null; done; grep SUMMA
+    57	CMD lane/apple-fast id-gbdt-lossguide-taxi bash ~/mq/idcheck.sh gbdt-lossguide taxi
+    58	CMD lane/apple-fast id-gbdt-lossguide-istella bash ~/mq/idcheck.sh gbdt-lossguide istella
+    59	CMD lane/apple-fast id-gbdt-depthwise-taxi bash ~/mq/idcheck.sh gbdt-depthwise taxi
+    60	CMD lane/apple-fast id-gbdt-depthwise-istella bash ~/mq/idcheck.sh gbdt-depthwise istella
+    61	CMD lane/apple-fast id-gbdt-rank-yetirank-taxi bash ~/mq/idcheck.sh gbdt-rank-yetirank taxi
+    62	CMD lane/apple-fast id-gbdt-rank-yetirank-istella bash ~/mq/idcheck.sh gbdt-rank-yetirank istella
+    63	CMD lane/apple-fast id-iforest-taxi bash ~/mq/idcheck.sh iforest taxi
+    64	CMD lane/apple-fast id-iforest-istella bash ~/mq/idcheck.sh iforest istella
