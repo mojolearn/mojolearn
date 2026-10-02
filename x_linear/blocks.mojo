@@ -536,7 +536,7 @@ def xq_row_kernel(
     x: FP, y: FP, sd: FP, rw: FP, part: FP, n_in: Int32, d_in: Int32, flags_in: Int32,
 ):
     """`xb_quantile_kernel` what 1 on the device state sd (M | beta | rhs |
-    z | v | scalars | totals): u is first rescaled by the previous
+    z | v | scalars | totals | dsq d, the column equilibration): u is first rescaled by the previous
     iteration's factor. Outputs: the four norms, the m sums of A' dr, the m
     sums of A'(y - r - u), and on every tenth iteration the same m sums
     with u rescaled by 1/2 and by 2 (the residual balancing may pick
@@ -651,6 +651,7 @@ def xq_step_kernel(
     var sc = v + d
     var tot = sc + XQ_SCALARS
     var cells = 4 + 4 * m
+    var dq = tot + cells
     var done = ld(sd, sc + XQ_DONE)
     var tid = Int(thread_idx.x)
     if done == 0:
@@ -688,29 +689,33 @@ def xq_step_kernel(
     var zdiff = Float32(0)
     var wn = Float32(0)
     var zn = Float32(0)
-    var t = fd(alpha, rho)
+    # the column-equilibrated split: threshold alpha / (rho d_j^2), norms of D w, D z, D dz
     for j in range(d):
+        var dj = ld(sd, dq + j)
         var wj = ld(sd, beta + j)
-        wn = fmad(wj, wj, wn)
-        var nz = _soft(fa(wj, ld(sd, v + j)), t)
+        wn = fmad(fm(dj, wj), wj, wn)
+        var nz = _soft(fa(wj, ld(sd, v + j)), fd(alpha, fm(rho, dj)))
         var dz = fs(nz, ld(sd, z + j))
-        zdiff = fmad(dz, dz, zdiff)
+        zdiff = fmad(fm(dj, dz), dz, zdiff)
         st(sd, z + j, nz)
-        zn = fmad(nz, nz, zn)
+        zn = fmad(fm(dj, nz), nz, zn)
     for j in range(d):
         var pj = fs(ld(sd, beta + j), ld(sd, z + j))
-        prim = fmad(pj, pj, prim)
+        prim = fmad(fm(ld(sd, dq + j), pj), pj, prim)
         st(sd, v + j, fa(ld(sd, v + j), pj))
     var dual = zdiff
     for j in range(m):
         var acc = ld(sd, tot + 4 + j)
-        dual = fmad(acc, acc, dual)
+        if j < d:
+            dual = fa(dual, fd(fm(acc, acc), ld(sd, dq + j)))
+        else:
+            dual = fmad(acc, acc, dual)
     var prim_n = fsqrt(prim)
     var dual_n = fm(rho, fsqrt(dual))
     var scale_p = fmax(fmax(fsqrt(abn), fsqrt(rn)), fmax(ynorm, fmax(fsqrt(wn), fsqrt(zn))))
     var eps_p = fa(fm(eps_abs, fsqrt(i2f(n + d))), fm(eps_rel, scale_p))
     for j in range(d):
-        un = fmad(ld(sd, v + j), ld(sd, v + j), un)
+        un = fmad(fm(ld(sd, dq + j), ld(sd, v + j)), ld(sd, v + j), un)
     var eps_d = fa(fm(eps_abs, fsqrt(i2f(m))), fm(fm(eps_rel, rho), fsqrt(un)))
     st(sd, sc + XQ_ITERS, i2f(it + 1))
     if prim_n <= eps_p and dual_n <= eps_d:
@@ -738,7 +743,7 @@ def xq_step_kernel(
     for j in range(m):
         var a = ld(sd, tot + 4 + m + pick * m + j)
         if j < d:
-            a = fa(a, fs(ld(sd, z + j), ld(sd, v + j)))
+            a = fa(a, fm(ld(sd, dq + j), fs(ld(sd, z + j), ld(sd, v + j))))
         st(sd, rhs + j, a)
     chol_solve(sd, mm, m, sd, rhs)
     for j in range(m):
@@ -1348,7 +1353,7 @@ def quantile_fit_blocks(
 ) raises:
     """x_linear/quantile.mojo `_quantile_fit_host` (the scaled-form ADMM),
     its row passes in blocks. res: coef d, intercept, n_iter, converged.
-    Host work: M m*m | beta m | rhs m | z d | v d | next rhs m."""
+    Host work: M m*m | beta m | rhs m | z d | v d | next rhs m | dsq d."""
     var max_iter = Int(ip[0])
     var fi = Int(ip[1]) != 0
     var sw = Int(ip[2]) != 0
@@ -1369,7 +1374,7 @@ def quantile_fit_blocks(
         den = Float32(0)
         for i in range(n):
             den = fa(den, ld(y, n + i))
-    var hw = _zeros(m * m + 3 * m + 2 * d + 1)
+    var hw = _zeros(m * m + 3 * m + 3 * d + 1)
     var fw = _host_fp(hw)
     var mm = 0
     var beta = m * m
@@ -1377,6 +1382,7 @@ def quantile_fit_blocks(
     var z = rhs + m
     var v = z + d
     var nrhs = v + d
+    var dq = nrhs + m
     ctx.enqueue_function[xb_quantile_kernel](
         b.dx.unsafe_ptr(), b.dy.unsafe_ptr(), b.dth.unsafe_ptr(), b.drw.unsafe_ptr(), pg.dev.unsafe_ptr(),
         Int32(n), Int32(d), Int32(b.flags()), Int32(0),
@@ -1387,7 +1393,9 @@ def quantile_fit_blocks(
         for k in range(j + 1):
             var acc = pg.total(j * (j + 1) // 2 + k)
             if j == k and j < d:
-                acc = fa(acc, Float32(1))
+                var dj = acc if acc > Float32(0) else Float32(1)
+                st(fw, dq + j, dj)
+                acc = fa(acc, dj)
             st(fw, mm + j * m + k, acc)
             st(fw, mm + k * m + j, acc)
     _ = cholesky(fw, mm, m)
@@ -1417,7 +1425,7 @@ def quantile_fit_blocks(
                 st(fw, rhs + j, pr.total(j))
             chol_solve(fw, mm, m, fw, rhs)
             var sc = m * m + 2 * m + 2 * d
-            var n_sd = sc + XQ_SCALARS + 4 + 4 * m
+            var n_sd = sc + XQ_SCALARS + 4 + 4 * m + d
             var dsd = ctx.enqueue_create_buffer[DType.float32](n_sd)
             var hsd = ctx.enqueue_create_host_buffer[DType.float32](n_sd)
             var pq = Part(ctx, b.nb, 4 + 4 * m)
@@ -1428,6 +1436,8 @@ def quantile_fit_blocks(
                 hp.unsafe_store(j, ld(fw, mm + j))
             for j in range(m):
                 hp.unsafe_store(m * m + j, ld(fw, rhs + j))
+            for j in range(d):
+                hp.unsafe_store(sc + XQ_SCALARS + 4 + 4 * m + j, ld(fw, dq + j))
             hp.unsafe_store(sc + XQ_RHO, rho)
             hp.unsafe_store(sc + XQ_Q, q)
             hp.unsafe_store(sc + XQ_ALPHA, alpha)
@@ -1497,7 +1507,7 @@ def quantile_fit_blocks(
             for j in range(m):
                 st(fw, rhs + j, pr.total(j))
         for j in range(d):
-            st(fw, rhs + j, fa(ld(fw, rhs + j), fs(ld(fw, z + j), ld(fw, v + j))))
+            st(fw, rhs + j, fa(ld(fw, rhs + j), fm(ld(fw, dq + j), fs(ld(fw, z + j), ld(fw, v + j)))))
         chol_solve(fw, mm, m, fw, rhs)
         copy(fw, beta, fw, rhs, m)
         var kq = fd(Float32(1), fm(den, rho))
@@ -1522,29 +1532,33 @@ def quantile_fit_blocks(
         var zdiff = Float32(0)
         var wn = Float32(0)
         var zn = Float32(0)
-        var t = fd(alpha, rho)
+        # the column-equilibrated split: threshold alpha / (rho d_j^2), norms of D w, D z, D dz
         for j in range(d):
+            var dj = ld(fw, dq + j)
             var wj = ld(fw, beta + j)
-            wn = fmad(wj, wj, wn)
-            var nz = _soft(fa(wj, ld(fw, v + j)), t)
+            wn = fmad(fm(dj, wj), wj, wn)
+            var nz = _soft(fa(wj, ld(fw, v + j)), fd(alpha, fm(rho, dj)))
             var dz = fs(nz, ld(fw, z + j))
-            zdiff = fmad(dz, dz, zdiff)
+            zdiff = fmad(fm(dj, dz), dz, zdiff)
             st(fw, z + j, nz)
-            zn = fmad(nz, nz, zn)
+            zn = fmad(fm(dj, nz), nz, zn)
         for j in range(d):
             var pj = fs(ld(fw, beta + j), ld(fw, z + j))
-            prim = fmad(pj, pj, prim)
+            prim = fmad(fm(ld(fw, dq + j), pj), pj, prim)
             st(fw, v + j, fa(ld(fw, v + j), pj))
         var dual = zdiff
         for j in range(m):
             var acc = ld(fw, rhs + j)
-            dual = fmad(acc, acc, dual)
+            if j < d:
+                dual = fa(dual, fd(fm(acc, acc), ld(fw, dq + j)))
+            else:
+                dual = fmad(acc, acc, dual)
         var prim_n = fsqrt(prim)
         var dual_n = fm(rho, fsqrt(dual))
         var scale_p = fmax(fmax(fsqrt(abn), fsqrt(rn)), fmax(ynorm, fmax(fsqrt(wn), fsqrt(zn))))
         var eps_p = fa(fm(eps_abs, fsqrt(i2f(n + d))), fm(eps_rel, scale_p))
         for j in range(d):
-            un = fmad(ld(fw, v + j), ld(fw, v + j), un)
+            un = fmad(fm(ld(fw, dq + j), ld(fw, v + j)), ld(fw, v + j), un)
         var eps_d = fa(fm(eps_abs, fsqrt(i2f(m))), fm(fm(eps_rel, rho), fsqrt(un)))
         if prim_n <= eps_p and dual_n <= eps_d:
             converged = True

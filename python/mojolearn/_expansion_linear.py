@@ -725,7 +725,7 @@ class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
         yv, has_sw = _with_weights(yv, sample_weight, n)
         vals = _run(self, ALGO_QUANTILE, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), has_sw],
                     [self.quantile, self.alpha, self.tol / 100.0, self.tol], d + 3,
-                    m * m + 3 * m + 4 * n + 2 * d, 1)
+                    m * m + 3 * m + 4 * n + 3 * d, 1)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.n_iter_ = int(vals[d + 1])
