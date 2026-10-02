@@ -288,12 +288,8 @@ def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int) ra
 
 def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
     """lane/neural-pass69: `op_cc_iterate` from a CSR adjacency (indptr n + 1,
-    indices nnz): the host walk of x_neighbors/cc_sparse.mojo on every
-    column, no dense matrix."""
-    comptime if is_defined["MOJOLEARN_XN_CC_HOST"]():
-        cc_iterate_csr(IP(unsafe_from_address=indptr), IP(unsafe_from_address=indices),
-                       IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n, nnz)
-        return
+    indices nnz), no dense matrix: hooking and pointer jumping on the device
+    (`_cc_csr_device`)."""
     _cc_csr_device(indptr, indices, lab, info, n, nnz)
 
 
@@ -308,7 +304,7 @@ def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nn
 # root of its label chain), rounds until an edge changes nothing. The
 # labels are integers: the same words on every column. The step count in
 # info is the device's round count (Python reads only the labels).
-# `-D MOJOLEARN_XN_CC_HOST=1` restores the host rounds (x_neighbors/cc_sparse.mojo).
+# The opt-in host rounds (`-D MOJOLEARN_XN_CC_HOST`) were removed (hr-optin-flags).
 def cc_hook_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP):
     var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if u < Int(n):

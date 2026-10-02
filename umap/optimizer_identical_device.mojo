@@ -38,8 +38,8 @@ are a function of the inputs alone:
   and 256 and compares fingerprints).
 
 The bits differ from the host loops (Jacobi versus Gauss-Seidel), which is
-recorded as a re-baseline of the UMAP cards;
-`-D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER=1` keeps the host loops.
+recorded as a re-baseline of the UMAP cards. The opt-in host-loop switch
+was removed (hr-optin-flags).
 FAST keeps `umap/optimizer_fast.mojo` untouched (one attractive move per
 edge, SplitMix64 negatives, stdlib pow); it is not compared to this.
 """
