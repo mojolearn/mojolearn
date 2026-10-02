@@ -1034,7 +1034,8 @@ def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32,
 
 
 # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
-# env `MOJOLEARN_AFFINITY_FAST_LOOP=1` (read in x_cluster/affinity.mojo):
+# `-D MOJOLEARN_AFFINITY_FAST_LOOP=1` (AP_FAST_LOOP, asked by
+# x_cluster/affinity.mojo under the same define):
 # the AffinityPropagation iteration on the device for AP_LOOP_BATCH
 # iterations per host wait. Cause: the driver's `while it < max_iter`
 # (affinity.mojo) read the n exemplar flags back EVERY iteration
