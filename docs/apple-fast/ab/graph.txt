@@ -1,0 +1,1 @@
+CMD lane/apple-fast-graph graph-cc-fast-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh graph-cc-fast-taxi x_neighbors connected-components taxi 1 2 "" "-D MOJOLEARN_CC_FAST"
