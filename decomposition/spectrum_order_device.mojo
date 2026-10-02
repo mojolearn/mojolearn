@@ -62,7 +62,7 @@ def _eigh_scatter_kernel(key: _F, kstride: Int32, vecs: _F, pos: _I, n: Int32, w
             w_out.unsafe_store(c, key.unsafe_load(i * Int(kstride)))
 
 
-def _desc_scatter_kernel(key: _F, pos: _I, n: Int32, out: _F):
+def _desc_scatter_kernel(key: _F, pos: _I, n: Int32, dst_out: _F):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
         dst_out.unsafe_store(Int(pos.unsafe_load(i)), key.unsafe_load(i))
