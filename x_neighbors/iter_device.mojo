@@ -45,6 +45,7 @@ from x_neighbors.device_ops import (
 from x_neighbors.items import matmul_tn_acc_item, K_RBF, U_IDENTITY
 from x_neighbors.lp_spmm import lp_spmm_kernel
 from core.device_zero import enqueue_fill
+from neighbors.impl.detail.fast_mma_knn import FAST_MMA_KNN_ENABLED, fast_mma_knn, fast_mma_knn_applies
 
 
 def op_lp_iterate(
@@ -737,11 +738,97 @@ def knn_sq_tiled_kernel(
         j0 += rows
 
 
+comptime UP = MutPointer[UInt32, MutAnyOrigin]
+
+
+def knn_drop_self_kernel(cd: FP, ci: UP, dist: FP, idx: IP, n_: Int64, k_: Int64):
+    """Row t of the (k + 1)-candidate lists `cd` / `ci` (ascending by
+    (distance, index)) written as its k-list without the row's own index:
+    the candidate equal to t is dropped, or the last one when t is not
+    among them (a row with more than k exact duplicates of a lower index),
+    which is what `knn_sq_item`'s `exclude_self` skip leaves."""
+    var n = Int(n_)
+    var k = Int(k_)
+    var t = _tid()
+    if t >= n:
+        return
+    var kk = k + 1
+    var drop = k
+    for s in range(kk):
+        if Int(ci.unsafe_load(t * kk + s)) == t:
+            drop = s
+            break
+    var w = 0
+    for s in range(kk):
+        if s == drop:
+            continue
+        dist.unsafe_store(t * k + w, cd.unsafe_load(t * kk + s))
+        idx.unsafe_store(t * k + w, Int32(ci.unsafe_load(t * kk + s)))
+        w += 1
+
+
+def _knn_sq_fast_mma(
+    x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: Int, exclude_self: Int,
+) raises -> Bool:
+    """MOJOLEARN_XN_FAST_MMA_KNN=1 (lane/apple-fast-neighbors2, 2026-10-02;
+    FAST + Apple only, default off): the lane's fused k-NN through
+    neighbors/impl/detail/fast_mma_knn.mojo, the simdgroup-matrix arm the
+    `neighbors` binding's k-NN already takes under FAST. Cause: `knn_sq_tiled`
+    (x_neighbors/iter_device.mojo knn_sq_tiled_kernel) is one thread per
+    query row over scalar fmas against a 64-row shared tile, and d > 64
+    (Istella's 220) falls to `knn_sq_kernel`, one thread per row reading y
+    from device memory; LocalOutlierFactor (k = 20), LabelPropagation and
+    LabelSpreading (k = 7) spend their fit in it. Expected: the knn-clf
+    FAST-vs-tiled ratio (2-4x on the kNN). Squared distances are the arm's
+    expanded form (FAST promises quality, not bits); `exclude_self` asks
+    for k + 1 and drops the row's own index (`knn_drop_self_kernel`).
+    Returns False (nothing done) when off or when the shape is not the
+    arm's (k + 1 > 32, no room for k + 1 candidates, d > 4096)."""
+    comptime if FAST_MMA_KNN_ENABLED:
+        if String(getenv("MOJOLEARN_XN_FAST_MMA_KNN")) != "1":
+            return False
+        var kq = k + 1 if exclude_self != 0 else k
+        if n < 1 or kq < 1 or kq >= m or not fast_mma_knn_applies(d, kq):
+            return False
+        var ctx = xn_ctx()
+        var d_x = _buf(ctx, x, n * d, True)
+        var d_y = _buf(ctx, y, m * d, True)
+        var d_cd = ctx.enqueue_create_buffer[DType.float32](n * kq)
+        var d_ci = ctx.enqueue_create_buffer[DType.uint32](n * kq)
+        fast_mma_knn(ctx, d_x, d_y, d_cd, d_ci, n, m, d, kq, False)
+        if exclude_self != 0:
+            var d_dist = _buf(ctx, 0, n * k, False)
+            var d_idx = _buf_i(ctx, 0, n * k, False)
+            ctx.enqueue_function[knn_drop_self_kernel](
+                d_cd.unsafe_ptr(), d_ci.unsafe_ptr(), d_dist.unsafe_ptr(), d_idx.unsafe_ptr(),
+                Int64(n), Int64(k), grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+            )
+            _down(ctx, d_dist, dist, n * k)
+            _down_i(ctx, d_idx, idx, n * k)
+            ctx.synchronize()
+            _ = d_dist^
+            _ = d_idx^
+        else:
+            _down(ctx, d_cd, dist, n * k)
+            ctx.enqueue_copy(dst_ptr=UP(unsafe_from_address=idx), src_buf=d_ci)
+            ctx.synchronize()
+        _ = d_x^
+        _ = d_y^
+        _ = d_cd^
+        _ = d_ci^
+        _ = ctx^
+        return True
+    else:
+        return False
+
+
 def op_knn_sq_tiled(
     x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: Int, exclude_self: Int,
 ) raises:
     """The fused k-NN (`knn_sq`) with y staged per block; d above
     KNN_TILE_MAX_D takes the one-thread-per-row item kernel."""
+    if _knn_sq_fast_mma(x, y, dist, idx, n, m, d, k, exclude_self):
+        return
     if d > KNN_TILE_MAX_D:
         op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self)
         return
