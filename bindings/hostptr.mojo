@@ -6,7 +6,6 @@ both allocations alive for the entire call. Copies require disjoint spans (or ex
 span); partial overlap is not supported. No pointer is retained.
 """
 from std.memory import memcpy
-from core.host_parallel import host_parallelize
 
 
 def f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -49,33 +48,16 @@ def copy_f32[src_origin: Origin, dst_origin: MutOrigin, //](
         i += 1
 
 
-comptime READ_COPY_GRAIN = 1 << 20
-comptime READ_COPY_TASKS_MAX = 8
-
-
 def read_f32(addr: Int, n: Int) raises -> List[Float32]:
     """An owned copy using the existing Transformer memcpy implementation."""
     var src = f32_ptr(addr)
     if n < 0:
         raise Error("mojolearn: negative float32 copy length")
-    # lane neural-pass35 (2026-10-01): the copy into uninitialized words over
-    # host tasks (the zero fill plus a single-thread memcpy of a 352 MB
-    # dataset read 175 ms on the L40S box: two passes, the first over fresh
-    # pages). A copy: the same words.
+    # one memcpy into uninitialized words (cpu-gpu-cleanup c-core: the copy
+    # over host threads is gone; GPU callers hand the list to one upload)
     var out = List[Float32](unsafe_uninit_length=n)
     if n > 0:
-        if n < 2 * READ_COPY_GRAIN:
-            memcpy(dest=out.unsafe_ptr(), src=src, count=n)
-        else:
-            var dst = out.unsafe_ptr()
-            var tasks = min(READ_COPY_TASKS_MAX, n // READ_COPY_GRAIN)
-            var chunk = (n + tasks - 1) // tasks
-            def _c(i: Int) {imm dst, imm src, imm chunk, imm n}:
-                var lo = i * chunk
-                var hi = min(lo + chunk, n)
-                if hi > lo:
-                    memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
-            host_parallelize(_c, tasks)
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
 
 

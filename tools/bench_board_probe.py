@@ -39,63 +39,38 @@ round's number is that round's peak, not the process's whole life:
 Every sample carries its method string; the board prints it beside the
 number.
 
-OUR CPU ARM (`ours-cpu`)
-------------------------
-The wheel's public CPU switch is MOJOLEARN_VENDOR=cpu before import
-(python/mojolearn/_backend.py): the GPU set is not loaded and the host
-bindings under mojolearn/host/ answer (IDENTICAL only, the only tier they
-build). `ours_cpu_env` sets it for a worker; `ours_cpu_check` reads back
-`mojolearn.vendor()` and refuses BY NAME when the installed wheel did not
-honour the switch (the macOS wheel read it only on the Linux vendor layout
-through 0.8.22), so a Metal or CUDA fit is never timed under the CPU label.
+OUR CPU IS NEVER RACED (Andrew, Oct 2 2026)
+-------------------------------------------
+There is no `ours-cpu` arm. `refuse_our_cpu_arms` stops a driver asked for one
+(or for any arm of ours on the host), by name. The host column is for
+same-bits digests (lq ID, tools/aft_idcheck.sh), CPU-only installs and
+inference, never a race line.
 """
 import os
 import subprocess
 import sys
 
-OURS_CPU_ARM = "ours-cpu"
-#: set in an ours-cpu worker's environment; the drivers' readbacks read it
-OURS_CPU_FLAG = "MOJOLEARN_BOARD_OURS_CPU"
 #: the conductor tells workers which vendor the box is (apple, nvidia, amd)
 VENDOR_ENV = "MOJOLEARN_BOARD_VENDOR"
-CPU_SWITCH = "MOJOLEARN_VENDOR=cpu (set before import; the wheel's public CPU switch)"
+#: one line naming the rule, for every refusal
+OUR_CPU_RULE = ("our CPU is never raced or timed (Andrew, Oct 2 2026); the host column gives "
+                "same-bits digests only (lq ID, tools/aft_idcheck.sh)")
 
 
-def ours_cpu_env(env):
-    """`env` (a dict) made into an ours-cpu worker's environment."""
-    env["MOJOLEARN_VENDOR"] = "cpu"
-    env["MOJOLEARN_NUMERIC_MODE"] = "identical"
-    env[OURS_CPU_FLAG] = "1"
-    env.pop("MOJOLEARN_VENDOR_FORCE", None)
-    return env
+def is_our_cpu_arm(arm):
+    """True for an arm of ours that runs on the host: ours-cpu, ours-host,
+    ours-*-cpu, ours-*-host."""
+    a = str(arm or "")
+    return a.startswith("ours") and (a.endswith("-cpu") or a.endswith("-host")
+                                     or "-cpu-" in a or "-host-" in a)
 
 
-def ours_cpu_requested():
-    return os.environ.get(OURS_CPU_FLAG, "").strip() == "1"
-
-
-def ours_cpu_check(ml):
-    """The readback of an ours-cpu worker: {} when this is not one, else the
-    info fields to merge. Raises (a by-name refusal) unless the wheel loaded
-    its CPU set."""
-    if not ours_cpu_requested():
-        return {}
-    try:
-        said = ml.vendor()
-    except Exception as exc:  # noqa: BLE001
-        said = "unavailable (%r)" % (exc,)
-    how = None
-    try:
-        how = ml._backend.vendor_how()
-    except Exception:  # noqa: BLE001
-        pass
-    if said != "cpu":
-        raise RuntimeError(
-            "REFUSED: ours-cpu: the installed wheel did not load its CPU tier under "
-            "MOJOLEARN_VENDOR=cpu (mojolearn.vendor() = %r; %s). The macOS wheel through "
-            "0.8.22 reads the switch only on the Linux vendor layout." % (said, how))
-    return {"device": "cpu", "vendor_used": "cpu", "cpu_switch": CPU_SWITCH,
-            "vendor_how": how}
+def refuse_our_cpu_arms(arms, tool="bench board"):
+    """SystemExit naming the rule when `arms` holds an arm of ours on the CPU."""
+    bad = [a for a in (arms or ()) if is_our_cpu_arm(a)]
+    if bad:
+        raise SystemExit("%s: refused %s: %s" % (tool, ",".join(bad), OUR_CPU_RULE))
+    return arms
 
 
 def bits_equal(a, b):

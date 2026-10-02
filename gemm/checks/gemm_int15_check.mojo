@@ -79,8 +79,8 @@ from gemm.checks.gemm_int15 import (
     quantize_rows_int15_device,
     split_int15_device,
 )
+from gemm.contract import INT15_MAX_K
 from gemm.host.gemm_int15_oracle import (
-    INT15_MAX_K,
     INT15_MID_BOUND_K,
     INT15_PIECE_BOUND_K,
     Int15Rows,
@@ -95,7 +95,7 @@ from gemm.host.gemm_int15_oracle import (
     quantize_rows_int15,
     split_int15,
 )
-from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE
+from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE
 
 comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime POISON = Float32(-987654.0)

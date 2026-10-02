@@ -24,7 +24,7 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from gemm.checks.gemm_backward import gemm_backward_a_call, gemm_backward_b_call
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
+from gemm.contract import OP_NN, OP_NT, OP_TN
 
 #: `TARGET_SHAPE` in `tools/lm_step_memory_probe.py`: 12 layers, DM 768,
 #: FF 2048, V 50257, L 2048, batch 1.
