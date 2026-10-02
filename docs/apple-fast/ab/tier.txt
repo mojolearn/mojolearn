@@ -11,3 +11,5 @@ CMD lane/apple-fast-tier tier-nys-pinned AFC_FAMILY=classical2 bash tools/afc_ab
 CMD lane/apple-fast-tier tier-theta-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh tier-theta-ident theta taxi-hourly 3 3 -
 CMD lane/apple-fast-tier tier-theta-fast AFC_FAMILY=algos bash tools/afc_ab.sh tier-theta-fast theta taxi-hourly 3 3 -
 CMD lane/apple-fast-tier tier-theta-fma AFC_FAMILY=algos bash tools/afc_ab_def.sh tier-theta-fma x_sequence theta taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_FAST_FMA=1"
+CMD lane/apple-fast-tier tier-theta-reg AFC_FAMILY=algos bash tools/afc_ab_def.sh tier-theta-reg x_sequence theta taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_THETA_REG=1"
+CMD lane/apple-fast-tier tier-theta-regfma AFC_FAMILY=algos bash tools/afc_ab_def.sh tier-theta-regfma x_sequence theta taxi-hourly 3 3 "" "-D MOJOLEARN_SEQ_THETA_REG=1 -D MOJOLEARN_SEQ_FAST_FMA=1"
