@@ -121,7 +121,7 @@ def hf_part_kernel(x: FP, y: FP, n: Int32, d: Int32, p: Int32, cells: Int32, lb:
     witness_end(wf, woff, nonce)
 
 
-def hf_step_kernel(lb: FP, ls: IP, gc: FP, sums: FP, n: Int32, d: Int32, p: Int32, cells: Int32, fi: Int32,
+def hf_step_kernel(lb: FP, ls: IP, gc: FP, sums: FP, nf: Float32, d: Int32, p: Int32, cells: Int32, fi: Int32,
                    sw: Int32, eps: Float32, alpha: Float32, tol: Float32, max_iter: Int32,
                    wf: IP, woff: Int32, nonce: Int32):
     """One block: huber_finish on the folded cells and sums (the gradient at
@@ -133,14 +133,15 @@ def hf_step_kernel(lb: FP, ls: IP, gc: FP, sums: FP, n: Int32, d: Int32, p: Int3
     two-loop direction on the lead thread (ascending dots), the slope and
     its steepest-descent fallback; last, tn = theta + tt * dir across the
     block. The lead's scalar sequence is lbfgs's; the element-wise loops
-    are dealt across the block (one thread per element, the same bits)."""
+    are dealt across the block (one thread per element, the same bits).
+    nf: the row count as a float32 (huber_finish's i2f(n)); this block
+    never walks the rows."""
     var tid = Int(thread_idx.x)
     var nt = Int(block_dim.x)
     var lead = tid == 0
     var run = ldi(ls, 0) == 0
     team_barrier()
     if run:
-        var nn = Int(n)
         var dd = Int(d)
         var pp = Int(p)
         var cc = Int(cells)
@@ -182,7 +183,7 @@ def hf_step_kernel(lb: FP, ls: IP, gc: FP, sums: FP, n: Int32, d: Int32, p: Int3
             var squared_loss = fd(sq, sigma)
             var eps2 = fm(eps, eps)
             var cnt_out = w_out if swb else i2f(n_out)
-            var cnt = w_all if swb else i2f(nn)
+            var cnt = w_all if swb else nf
             var outlier_loss = fs(fm(two_eps, out_abs), fm(fm(sigma, cnt_out), eps2))
             var gsigma = fs(fs(cnt, fm(cnt_out, eps2)), fd(squared_loss, sigma))
             st(lb, GN + pp - 1, fm(gsigma, sigma))
@@ -353,6 +354,7 @@ def huber_fit_fast(
         if tr >= WITNESS_TRIES:
             wit.fail()
     var hls = List[Int32](length=HF_ST, fill=Int32(0))
+    var nf = i2f(n)
     var units = 0
     # lbfgs evaluates the start, then at most HF_TRIES trials per iteration
     var max_units = 1 + HF_TRIES * max(max_iter, 0) + HF_BATCH
@@ -384,7 +386,7 @@ def huber_fit_fast(
                 )
                 wo += b3
                 ctx.enqueue_function[hf_step_kernel](
-                    dlb.unsafe_ptr(), dls.unsafe_ptr(), dgc.unsafe_ptr(), dsums.unsafe_ptr(), Int32(n), Int32(d),
+                    dlb.unsafe_ptr(), dls.unsafe_ptr(), dgc.unsafe_ptr(), dsums.unsafe_ptr(), nf, Int32(d),
                     Int32(p), Int32(cells), Int32(1 if fi else 0), Int32(1 if sw else 0), eps, alpha, tol,
                     Int32(max_iter), wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=LINEAR_TPB,
                 )
