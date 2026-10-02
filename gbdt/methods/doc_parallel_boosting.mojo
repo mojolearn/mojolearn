@@ -2917,11 +2917,13 @@ def fit_with_test(
                     sym_bins_tables.append(
                         ObliviousBinsTables(ctx, max_depth)
                     )
-                sym_bins_tables[0].compute(
+                ref lp_sym = leaf_parts[0]
+                ref bt_sym = sym_bins_tables[0]
+                bt_sym.compute(
                     ctx, layout_for_test, splits, len(splits), lc, n_rows,
-                    leaf_parts[0].bins,
+                    lp_sym.bins,
                 )
-                part = leaf_parts[0].partition(ctx, n_rows, n_leaves_sym)
+                part = lp_sym.partition(ctx, n_rows, n_leaves_sym)
             else:
                 var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
                 compute_bins_for_model(
