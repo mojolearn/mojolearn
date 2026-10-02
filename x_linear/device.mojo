@@ -103,13 +103,14 @@ comptime X_LINEAR_BLOCKS_GRAM = (
 #: FAST on Apple (lane/apple-fast-bayes, 2026-10-02): BayesianRidge's Gram
 #: sse on the grid driver guarded by a reference row pass with an error
 #: bound (`bayes_step_guard_kernel`), the guard x_linear/bayes.mojo
-#: `bayes_ridge_fit` carries on the one-block fit. Opt-in
-#: `-D MOJOLEARN_BAYES_GRID_GUARD=1` until its A/B is on record. IDENTICAL
-#: and the other vendors never compile the branch.
+#: `bayes_ridge_fit` carries on the one-block fit. The FAST default since the
+#: M3 A/B 2026-10-02 (istella: NaN -> finite, r2 equal to the row-pass arm);
+#: `-D MOJOLEARN_BAYES_GRID_GUARD_OFF=1` is main's unguarded Gram sse, the A/B
+#: arm. IDENTICAL and the other vendors never compile the branch.
 comptime BAYES_GRID_GUARD = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_BAYES_GRID_GUARD"]()
+    and not is_defined["MOJOLEARN_BAYES_GRID_GUARD_OFF"]()
 )
 
 
@@ -334,10 +335,10 @@ def bayes_step_gram_kernel(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, yyparts
             bayes_coef(fw, res, dd, r[0], r[1])
     witness_end(wf, woff, nonce)
 
-#: FAST on Apple, `-D MOJOLEARN_BAYES_GRID_GUARD=1` (lane/apple-fast-bayes,
-#: `BAYES_GRID_GUARD`): `bayes_step_gram_kernel`'s sse relative to a
-#: REFERENCE row pass, as x_linear/bayes.mojo `bayes_ridge_fit` guards the
-#: one-block fit. The plain yy - sum_k (2 z_k vty_k - ev_k z_k^2) cancelled
+#: FAST on Apple, the default (`BAYES_GRID_GUARD`, lane/apple-fast-bayes;
+#: `-D MOJOLEARN_BAYES_GRID_GUARD_OFF=1` turns it off):
+#: `bayes_step_gram_kernel`'s sse relative to a REFERENCE row pass, as
+#: x_linear/bayes.mojo `bayes_ridge_fit` guards the one-block fit. The plain yy - sum_k (2 z_k vty_k - ev_k z_k^2) cancelled
 #: to below zero on istella (220 features, near-null Gram directions with
 #: f32 noise eigenvalues, z huge along them): sse clamped to 0, alpha to inf,
 #: coef NaN. With s0 the sse of the last row pass (`bayes_resid_kernel` +
@@ -2900,7 +2901,7 @@ def fit_device(
         var gram_sse = False
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
             gram_sse = sw == 0 and len(hip) > 5 and Int(hip[5]) != 0
-        # FAST on Apple, `-D MOJOLEARN_BAYES_GRID_GUARD=1` (lane/apple-fast-bayes):
+        # FAST on Apple, the default (lane/apple-fast-bayes; `_GUARD_OFF` turns it off):
         # the Gram sse guarded by a reference row pass (`bayes_step_guard_kernel`)
         # takes over gram_sse (no yy pass, no `bayes_step_gram_kernel`); n >= d
         # for z0 in the sse scratch
