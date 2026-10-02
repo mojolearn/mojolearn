@@ -85,7 +85,11 @@ def _host_algos():
     global _HOST_ALGOS
     if _HOST_ALGOS is None:
         _HOST_ALGOS = frozenset() if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1" else frozenset(
-            (ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT))
+            ((ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT)
+             if os.environ.get("MOJOLEARN_X_LINEAR_ISOTONIC_HOST", "") == "1" else ()))
+    # lane/neural-pass107 (GPU-only rule): IsotonicRegression runs on the device
+    # (x_linear/device.mojo: the radix-sorted fit, one thread a predicted
+    # query); MOJOLEARN_X_LINEAR_ISOTONIC_HOST=1 restores the host route
     return _HOST_ALGOS
 
 
@@ -743,8 +747,9 @@ class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
         m = d + 1
         yv, has_sw = _with_weights(yv, sample_weight, n)
         vals = _run(self, ALGO_QUANTILE, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), has_sw],
-                    [self.quantile, self.alpha, self.tol / 100.0, self.tol], d + 3,
-                    m * m + 3 * m + 4 * n + 2 * d, 1)
+                    [self.quantile, self.alpha, self.tol / 100.0, self.tol,
+                     0.0 if os.environ.get("MOJOLEARN_XQ_ABS_BALANCE", "") == "1" else 1.0], d + 3,
+                    m * m + 3 * m + 4 * n + 3 * d, 1)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.n_iter_ = int(vals[d + 1])
@@ -898,7 +903,10 @@ class SGDOneClassSVM(NumericModeMixin):
             self.max_iter, self.tol, 5, self.shuffle, self.random_state, sample_weight,
             batch_size=self.batch_size)
         self.coef_ = coef.reshape((Xm[2],))
-        self.offset_ = Array.from_list([1.0 - intercept.tolist()[0]], "<f4")
+        # the binding returns offset_ itself for one class (lane/neural-pass139:
+        # the per-sample fit carries the intercept near 1 as a float-float,
+        # so 1 - float32(intercept) would drop every bit below 1.2e-7)
+        self.offset_ = Array.from_list([intercept.tolist()[0]], "<f4")
         return self
 
     def decision_function(self, X):
@@ -926,8 +934,14 @@ def _ridge_run(est, a, n, d, Y, T, alphas, sample_weight=None):
         w = _with_weights(zeros((n,), "<f4"), sample_weight, n)[0].tolist()[n:]
         Y = Array.from_list(Y.tolist() + w, "<f4")
         has_sw = 1
-    return _run(est, ALGO_RIDGE, a, n, d, Y, [T, int(bool(est.fit_intercept)), A, has_sw], list(alphas),
-                T * d + T + 2 + A, 3 * d * d + 3 * d + T + d * T + 2 * n, 1)
+    vals = _run(est, ALGO_RIDGE, a, n, d, Y, [T, int(bool(est.fit_intercept)), A, has_sw], list(alphas),
+                T * d + T + 2 + A + 1, 3 * d * d + 3 * d + T + d * T + 2 * n, 1)
+    # lane/neural-pass93: status 2 = X'X + alpha I does not factor even in
+    # float-float (x_linear/ridge.mojo); 1 never leaves a binding
+    if vals[T * d + T + 2 + A] == 2.0:
+        raise ValueError(f"mojolearn {type(est).__name__}: X'X + alpha I is singular even in float-float "
+                         f"(alpha={vals[T * d + T]:g}); rescale X or use a larger alpha")
+    return vals
 
 
 def _ridge_refuse(est):

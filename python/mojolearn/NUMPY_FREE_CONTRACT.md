@@ -84,19 +84,14 @@ versa; a test proves both directions using NumPy installed in the test environme
 ```
 all_finite_f32(addr: Int, n: Int) -> Int     # 1 if every element is finite
 all_finite_f64(addr: Int, n: Int) -> Int
-column_mean_f64(x_addr: Int, rows: Int, cols: Int, out_addr: Int)   # sequential row-order float64 accumulation of a C-contiguous float32 [rows, cols] matrix; out is float64[cols]
 ```
-`linear_model.py` uses `column_mean_f64` where it used `x.mean(axis=0, dtype=np.float64)`
-(and the weighted variant is computed in Python from the same helper applied to the
-weighted copy). That moves OLS/ridge centering off NumPy's blocked reduction and onto
-a defined order; the OLS reference cards are RE-BASELINE OWED and must be rerun on all
-three vendors (recorded in this file's owed list, not hidden).
-DEVIATION 2632 (2026-09-11) threads `column_mean_f64` (column groups, each column's
-chain in its defined row order, task-local totals), `center_columns_f32` and
-`scale_rows_f32` (row chunks) on the host pool, and `linear_model.py` takes their
-destinations from `_output_store` instead of the zero-filled `empty`. The defined order
-above is unchanged, so the bytes are unchanged; the H100 before/after hashes are in
-`bench/results/linear_cluster_speed_2026-09-11/`.
+The centering helpers `column_mean_f64`, `center_columns_f32` and `scale_rows_f32`
+(DEVIATIONS 2324, 2440, 2632) were deleted by lane hr-small-passes (2026-10-02).
+`linear_model.py` now centers OLS/ridge through the estimators binding:
+`lm_col_sums` (each column's EXACT sum, rounded once to float64, so no summation
+order exists to define), `lm_center` and `lm_scale_rows` (one binary32 operation per
+cell, subnormal operands and results flushed), on the device on a GPU install and over
+the same items on the CPU column. The OLS/ridge bits moved with it.
 `ensemble.py` routes the sigmoid of every tier through the existing `gbdt_sigmoid`
 binding (fast/deterministic predict_proba bits move; IDENTICAL does not).
 `randomforest.py` computes `max_features='log2'` from `math.log2` in float64 and then

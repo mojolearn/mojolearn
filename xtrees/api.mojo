@@ -9,9 +9,12 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
-from checks.numerics import identical_log64
+from checks.numerics import identical_log64, GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from std.python import Python
-from xtrees.shap import node_cover, tree_shap, expected_value, mask_expand, block_mean, kernel_solve
+from xtrees.shap import mask_expand, block_mean, kernel_solve
+from xtrees.perm_device import perm_synthetic
 from xtrees.ops import (
     sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
     accumulate_onehot, accumulate_cols, accumulate_rows, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
@@ -568,6 +571,25 @@ def column_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObjec
     return PythonObject(n)
 
 
+#: lane/apple-fast-trees-ensembles (2026-10-02): the build-time FAST switches
+#: of python/mojolearn/_expansion_trees.py as a bit set (`-D
+#: MOJOLEARN_TE_<NAME>`), filled only in the FAST + Apple build; 0 in every
+#: other build, so IDENTICAL and the other vendors never see a switch.
+comptime XTREES_FAST_SWITCHES = 0 if not (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+) else (
+    (1 if is_defined["MOJOLEARN_TE_NATIVE_SPLITS"]() else 0)
+    + (2 if is_defined["MOJOLEARN_TE_ADA_SESSION"]() else 0)
+    + (4 if is_defined["MOJOLEARN_TE_ADA_SESSION_SHARE"]() else 0)
+)
+
+
+def fast_switches_binding() raises -> PythonObject:
+    """`XTREES_FAST_SWITCHES`: bit 1 MOJOLEARN_TE_NATIVE_SPLITS, bit 2
+    MOJOLEARN_TE_ADA_SESSION, bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE."""
+    return PythonObject(XTREES_FAST_SWITCHES)
+
+
 def stratified_folds_binding(codes: PythonObject, folds: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
     """params = [n, n_splits]: folds (int32, n) = each row's test fold, counts
     (int32, n_splits) = fold sizes; returns 1 when the Python routine refuses."""
@@ -600,45 +622,6 @@ def fold_rows_binding(folds: PythonObject, tr: PythonObject, te: PythonObject, p
     return PythonObject(n)
 
 
-def node_cover_binding(
-    offsets: PythonObject, colid: PythonObject, quesval: PythonObject, left: PythonObject,
-    x: PythonObject, cover: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [n, d, n_trees]; cover float64 per node, zeroed."""
-    _need(params, 3, "x_trees_node_cover")
-    var n = _count(_i(params, 0), "x_trees_node_cover")
-    if n > 0:
-        node_cover(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=colid)), f32_ptr(Int(py=quesval)), i32_ptr(Int(py=left)),
-                   f32_ptr(Int(py=x)), n, _i(params, 1), _i(params, 2), f64_ptr(Int(py=cover)))
-    return PythonObject(n)
-
-
-def tree_shap_binding(
-    forest: PythonObject, cover: PythonObject, x: PythonObject, phi: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """forest = [offsets, colid, quesval, left, leaves] addresses;
-    params = [n, d, n_trees, k, scale]; phi float64 n*d*k, accumulated."""
-    _need(params, 5, "x_trees_tree_shap")
-    _need(forest, 5, "x_trees_tree_shap forest")
-    var n = _count(_i(params, 0), "x_trees_tree_shap")
-    if n > 0:
-        tree_shap(i32_ptr(_i(forest, 0)), i32_ptr(_i(forest, 1)), f32_ptr(_i(forest, 2)), i32_ptr(_i(forest, 3)),
-                  f32_ptr(_i(forest, 4)), f64_ptr(Int(py=cover)), f32_ptr(Int(py=x)), n, _i(params, 1),
-                  _i(params, 2), _i(params, 3), _f(params, 4), f64_ptr(Int(py=phi)))
-    return PythonObject(n)
-
-
-def expected_value_binding(
-    offsets: PythonObject, left: PythonObject, leaves: PythonObject, cover: PythonObject, res: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """params = [n_trees, k, scale]; res float64[k], accumulated."""
-    _need(params, 3, "x_trees_expected_value")
-    expected_value(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=left)), f32_ptr(Int(py=leaves)), f64_ptr(Int(py=cover)),
-                   _i(params, 0), _i(params, 1), _f(params, 2), f64_ptr(Int(py=res)))
-    return PythonObject(_i(params, 1))
-
-
 def mask_expand_binding(
     x: PythonObject, bg: PythonObject, masks: PythonObject, res: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
@@ -649,6 +632,20 @@ def mask_expand_binding(
         mask_expand(f32_ptr(Int(py=x)), f32_ptr(Int(py=bg)), _i(params, 0), _i(params, 1), i32_ptr(Int(py=masks)), m,
                     f32_ptr(Int(py=res)))
     return PythonObject(m)
+
+
+def perm_synthetic_binding(
+    x: PythonObject, bg: PythonObject, inv: PythonObject, res: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [nb, d, n_perm]; inv int32 n_perm x d (each permutation's
+    inverse); res float32 (n_perm (2d + 1) nb) * d, on the device
+    (`xtrees/perm_device.mojo`)."""
+    _need(params, 3, "x_trees_perm_synthetic")
+    var n_perm = _count(_i(params, 2), "x_trees_perm_synthetic")
+    if n_perm > 0:
+        perm_synthetic(f32_ptr(Int(py=x)), f32_ptr(Int(py=bg)), i32_ptr(Int(py=inv)), f32_ptr(Int(py=res)),
+                       _i(params, 0), _i(params, 1), n_perm)
+    return PythonObject(n_perm)
 
 
 def block_mean_binding(y: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -721,12 +718,11 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[complement_pairs_binding]("x_trees_complement_pairs")
     m.def_function[indicator_codes_binding]("x_trees_indicator_codes")
     m.def_function[column_f64_binding]("x_trees_column_f64")
+    m.def_function[fast_switches_binding]("x_trees_fast_switches")
     m.def_function[stratified_folds_binding]("x_trees_stratified_folds")
     m.def_function[kfolds_binding]("x_trees_kfolds")
     m.def_function[fold_rows_binding]("x_trees_fold_rows")
-    m.def_function[node_cover_binding]("x_trees_node_cover")
-    m.def_function[tree_shap_binding]("x_trees_tree_shap")
-    m.def_function[expected_value_binding]("x_trees_expected_value")
     m.def_function[mask_expand_binding]("x_trees_mask_expand")
     m.def_function[block_mean_binding]("x_trees_block_mean")
+    m.def_function[perm_synthetic_binding]("x_trees_perm_synthetic")
     m.def_function[kernel_solve_binding]("x_trees_kernel_solve")

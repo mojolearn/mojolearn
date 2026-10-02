@@ -993,93 +993,6 @@ def rf_classifier_fit_weighted_session_binding(
     return _retain_rf_export(export_trees^)
 
 
-def rf_classifier_fit_session_rows_binding(
-    handle: PythonObject, rows_addr: PythonObject, y_addr: PythonObject,
-    params: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    """`rf_classifier_fit_export` on the rows `rows` (int32 row ids of the
-    session's X, `params[0]` of them, repeats allowed) with `y` their int32
-    class codes in that order: the member fit of a bootstrap ensemble
-    (BaggingClassifier; lane/apple-fast-trees-ensembles, 2026-10-02, the
-    classifier twin of `rf_regressor_fit_session_rows_binding`). The rows
-    are gathered ON THE DEVICE from the staged X into a fresh column-major
-    matrix, the bytes a host gather of the same rows stages, and the fit is
-    the unweighted `fit_forest[ClsObj]` on it with its own quantile table:
-    the forest `rf_classifier_fit_rowmajor` returns for the gathered rows.
-    No sample weights (Python routes a weighted member through the old
-    path)."""
-    if len(params) != N_RF_FIT_PARAMS:
-        raise Error(
-            "rf_classifier_fit_session_rows: params must hold "
-            + String(N_RF_FIT_PARAMS)
-            + " values, got "
-            + String(len(params))
-        )
-    var n_rows = Int(py=params[0])
-    var n_cols = Int(py=params[1])
-    var n_classes = Int(py=params[2])
-    if n_classes < 2:
-        raise Error("rf_classifier_fit_session_rows: n_classes must be >= 2")
-    if n_rows <= 0:
-        raise Error("rf_classifier_fit_session_rows: no rows")
-    var rp = _i32_ptr(Int(py=rows_addr))
-    var yp = _i32_ptr(Int(py=y_addr))
-    var crit = Int(py=criterion)
-    _check_criterion("rf_classifier_fit_session_rows", crit, _cls_criteria())
-    var rf_params = _rf_params_from(params, crit)
-    var session_id = Int(py=handle)
-    var reg = RF_SESSIONS.get_or_create_ptr()
-    var si = reg[].find(session_id)
-    var src_rows = reg[].sessions[si].n_rows
-    if reg[].sessions[si].n_cols != n_cols:
-        raise Error("rf_classifier_fit_session_rows: the session holds another column count")
-    for i in range(n_rows):
-        var r = Int(rp[i])
-        if r < 0 or r >= src_rows:
-            raise Error("rf_classifier_fit_session_rows: a row id is outside the session's X")
-
-    var weights = List[Float32]()
-    var forest: RandomForestMetaData[DT, CLT]
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        var hrows = ctx.enqueue_create_host_buffer[CLT](n_rows)
-        var hy = ctx.enqueue_create_host_buffer[CLT](n_rows)
-        ctx.synchronize()
-        memcpy(dest=hrows.unsafe_ptr(), src=rp, count=n_rows)
-        memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
-        var drows = ctx.enqueue_create_buffer[CLT](n_rows)
-        ctx.enqueue_copy(dst_buf=drows, src_ptr=hrows.unsafe_ptr())
-        var dy = ctx.enqueue_create_buffer[CLT](n_rows)
-        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
-        var dsw = ctx.enqueue_create_buffer[DT](1)
-        var dxg = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
-        launch_gather_rows_colmajor(
-            ctx,
-            reg[].sessions[si].dx,
-            drows,
-            dxg,
-            src_rows,
-            n_rows,
-            n_cols,
-        )
-        forest = fit_forest[ClsObj](
-            ctx, dxg, dy, dsw, n_rows, n_cols, n_classes, rf_params,
-            sample_weight_host=weights,
-        )
-        ctx.synchronize()
-        _ = dxg^
-        _ = drows^
-        _ = dy^
-        _ = dsw^
-        _ = hrows^
-        _ = hy^
-        _ = ctx^
-    _ = weights^
-    var export_trees = forest.trees^
-    forest.trees = RFExportTrees()
-    return _retain_rf_export(export_trees^)
-
-
 def rf_regressor_fit_rowmajor_binding[EXPORT: Bool = False](
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject,
@@ -1551,6 +1464,9 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_forest_export_binding]("forest_export")
         m.def_function[rf_forest_export_legacy_binding]("forest_export_legacy")
         m.def_function[rf_forest_export_release_binding]("forest_export_release")
+        # every snapshot prepared here runs on the registry's process context and
+        # borrows its one I/O workspace (core/forest_inference_model.mojo,
+        # FOREST_PER_MODEL_IO; gap-fails2 2026-10-02)
         m.def_function[forest_prepare_gpu_binding[True]]("forest_prepare_gpu")
         m.def_function[forest_predict_resident_gpu_binding[True]]("forest_predict_resident_gpu")
         m.def_function[forest_release_gpu_binding[True]]("forest_release_gpu")
@@ -1563,7 +1479,6 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_regressor_fit_session_binding]("rf_regressor_fit_session_export")
         m.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
         m.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
-        m.def_function[rf_classifier_fit_session_rows_binding]("rf_classifier_fit_session_rows_export")
         m.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         m.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
         return m.finalize()

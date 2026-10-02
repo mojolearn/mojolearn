@@ -508,7 +508,7 @@ def ridge_fit_blocks(
             if a == 0 or err < best_err:  # DEVIATION 5005: the first minimum
                 best = a
                 best_err = err
-    _ridge_solve_best(fpp, res, fw, d, t_n, fi, best, best_err)
+    _ = _ridge_solve_best(fpp, res, fw, d, t_n, fi, best, best_err, a_n)
     ctx.synchronize()
     _ = hw^
     _ = hfp^
