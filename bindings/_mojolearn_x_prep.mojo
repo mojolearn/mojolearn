@@ -11,6 +11,7 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE
 from x_prep.folds import I32P, kfold_folds, strat_folds
+from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -150,6 +151,10 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_prep")
         m.def_function[run_binding]("x_prep_run")
+        comptime if NB_TEXT_CSR:
+            # lane apple-fast-nb: FAST + Apple + -D MOJOLEARN_NB_TEXT_CSR only (x_prep/fastnb_csr.mojo)
+            m.def_function[nb_csr_fit_py]("x_prep_nb_csr_fit")
+            m.def_function[nb_csr_jll_py]("x_prep_nb_csr_jll")
         m.def_function[run_scratch_binding]("x_prep_run_scratch")
         m.def_function[run_out_binding]("x_prep_run_out")
         m.def_function[run_ranges_binding]("x_prep_run_ranges")

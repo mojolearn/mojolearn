@@ -15,6 +15,7 @@ from x_decomp.api import (
 )
 from x_decomp.device import DevExec
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
+from x_decomp.lda_fast import LDA_FUSED_SS, dev_lda_estep_ss_py
 from x_decomp.graph_device import (
     dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py,
     dev_graph_join_py, dev_graph_dijkstra_py,
@@ -89,6 +90,9 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_orth_diag_py]("x_decomp_dev_orth_diag")
         m.def_function[dev_lda_rows_py]("x_decomp_dev_lda_rows")
         m.def_function[dev_lda_bound_py]("x_decomp_dev_lda_bound")
+        comptime if LDA_FUSED_SS:
+            # lane apple-fast-nb: FAST + Apple + -D MOJOLEARN_LDA_FUSED_SS only (x_decomp/lda_fast.mojo)
+            m.def_function[dev_lda_estep_ss_py]("x_decomp_dev_lda_estep_ss")
         # FAST on Apple (lane/apple-fast-lle, 2026-10-02): the sparse LLE
         # eigensolver entry exists only in a build with
         # -D MOJOLEARN_LLE_SPARSE_EIG (x_decomp/lle_sparse.mojo); the Python
