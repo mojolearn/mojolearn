@@ -1079,65 +1079,60 @@ def _agg_argmin_part_kernel(md: FPtr, nn: IPtr, live: IPtr, n: Int32, part: MutP
         part[Int(block_idx.x)] = r
 
 
-def _agg_pick_kernel(
-    part: MutPointer[UInt64, MutAnyOrigin], nb: Int32, dm: FPtr, nn: IPtr, live: IPtr, sz: FPtr, node: IPtr,
-    n: Int32, step: Int32, linkage: Int32, ch: IPtr, dist: FPtr, st: IPtr, stf: FPtr,
+@always_inline
+def _agg_pick(part: MutPointer[UInt64, MutAnyOrigin], nb: Int) -> UInt64:
+    """The step's pick from the argmin partials (a few per thousand rows),
+    read by every thread that needs it."""
+    var r = AGG_NONE
+    for q in range(nb):
+        r = min(r, part[q])
+    return r
+
+
+def _agg_lw_kernel(
+    part: MutPointer[UInt64, MutAnyOrigin], nb: Int32, dm: FPtr, nn: IPtr, live: IPtr, sz: FPtr, n: Int32,
+    linkage: Int32, st: IPtr, stf: FPtr,
 ):
-    """The merge of this step from the partials: a, b = nn[a], the children
-    pair and value; then b dies and a takes the merged size and node id."""
-    var red = stack_allocation[AGG_TPB, UInt64, address_space = AddressSpace.SHARED]()
-    var mine = AGG_NONE
-    for q in range(Int(thread_idx.x), Int(nb), AGG_TPB):
-        mine = min(mine, part[q])
-    var r = _agg_block_min(red, mine)
-    if thread_idx.x == 0:
-        st[2] = 0
-        if st[3] != 0:
-            return
-        if r == AGG_NONE:
-            st[3] = 1
-            return
-        var N = Int(n)
-        var a = Int(UInt32(r & UInt64(0xFFFFFFFF)))
-        var b = Int(nn[a])
-        var dab = dm[a * N + b]
-        var na = node[a]
-        var nbb = node[b]
-        var s = Int(step)
-        ch[2 * s] = na if na < nbb else nbb
-        ch[2 * s + 1] = nbb if na < nbb else na
-        dist[s] = identical_sqrt(dab) if Int(linkage) == LINK_WARD else dab
-        st[0] = Int32(a)
-        st[1] = Int32(b)
-        stf[0] = dab
-        stf[1] = sz[a]
-        stf[2] = sz[b]
-        live[b] = 0
-        nn[b] = -1
-        sz[a] = ftz(sz[a] + sz[b])
-        node[a] = Int32(N + s)
-
-
-def _agg_lw_kernel(dm: FPtr, live: IPtr, sz: FPtr, n: Int32, linkage: Int32, st: IPtr, stf: FPtr):
-    """Row and column a of the matrix: the Lance-Williams value of (a u b)
-    to every live k."""
+    """The merge (a, b = nn[a]) from the partials, then row and column a of
+    the matrix: the Lance-Williams value of (a u b) to every live k other
+    than a and b. Thread 0 records a, b, dab and the two sizes for the
+    kernels after it."""
     var k = _tid()
     var N = Int(n)
-    if k >= N or st[3] != 0:
+    if st[3] != 0:
         return
-    var a = Int(st[0])
-    if k == a or live[k] == 0:
+    var r = _agg_pick(part, Int(nb))
+    if r == AGG_NONE:
+        if k == 0:
+            st[3] = 1
         return
-    var b = Int(st[1])
-    var v = lance_williams(Int(linkage), dm[a * N + k], dm[b * N + k], stf[0], stf[1], stf[2], sz[k], True, True)
+    var a = Int(UInt32(r & UInt64(0xFFFFFFFF)))
+    var b = Int(nn[a])
+    var dab = dm[a * N + b]
+    var na = sz[a]
+    var nbs = sz[b]
+    if k == 0:
+        st[0] = Int32(a)
+        st[1] = Int32(b)
+        st[2] = 0
+        stf[0] = dab
+        stf[1] = na
+        stf[2] = nbs
+    if k >= N or k == a or k == b or live[k] == 0:
+        return
+    var v = lance_williams(Int(linkage), dm[a * N + k], dm[b * N + k], dab, na, nbs, sz[k], True, True)
     dm[a * N + k] = v
     dm[k * N + a] = v
 
 
-def _agg_flag_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: IPtr, lst: IPtr):
-    """Row a, and every live row below b whose partner was a or b, go to the
-    rescan list; a live row below a otherwise takes a when it is nearer (or
-    as near with a lower index)."""
+def _agg_flag_kernel(
+    dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, sz: FPtr, node: IPtr, n: Int32, step: Int32, linkage: Int32,
+    ch: IPtr, dist: FPtr, st: IPtr, stf: FPtr, lst: IPtr,
+):
+    """Thread a books the merge (the children pair and value; b dies; a
+    takes the merged size and node id n + step) and joins the rescan list
+    with every live row below b whose partner was a or b; a live row below
+    a otherwise takes a when it is nearer (or as near with a lower index)."""
     var i = _tid()
     var N = Int(n)
     if i >= N or st[3] != 0:
@@ -1147,6 +1142,17 @@ def _agg_flag_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: IPt
     var go = False
     if i == a:
         go = True
+        var dab = stf[0]
+        var x = node[a]
+        var y = node[b]
+        var s = Int(step)
+        ch[2 * s] = x if x < y else y
+        ch[2 * s + 1] = y if x < y else x
+        dist[s] = identical_sqrt(dab) if Int(linkage) == LINK_WARD else dab
+        live[b] = 0
+        nn[b] = -1
+        sz[a] = ftz(stf[1] + stf[2])
+        node[a] = Int32(N + s)
     elif i < b and live[i] != 0:
         var q = Int(nn[i])
         if q == a or q == b:
@@ -1900,15 +1906,13 @@ struct DeviceOps(ClusterOps):
             ctx.enqueue_function[_agg_argmin_part_kernel](
                 p_md, p_nn, p_live, Int32(n), p_part, p_st, grid_dim=nb, block_dim=AGG_TPB,
             )
-            ctx.enqueue_function[_agg_pick_kernel](
-                p_part, Int32(nb), p_dm, p_nn, p_live, p_sz, p_node, Int32(n), Int32(step), Int32(linkage),
-                p_ch, p_dv, p_st, p_stf, grid_dim=1, block_dim=AGG_TPB,
-            )
             ctx.enqueue_function[_agg_lw_kernel](
-                p_dm, p_live, p_sz, Int32(n), Int32(linkage), p_st, p_stf, grid_dim=_grid(n), block_dim=TPB,
+                p_part, Int32(nb), p_dm, p_nn, p_live, p_sz, Int32(n), Int32(linkage), p_st, p_stf,
+                grid_dim=_grid(n), block_dim=TPB,
             )
             ctx.enqueue_function[_agg_flag_kernel](
-                p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, grid_dim=_grid(n), block_dim=TPB,
+                p_dm, p_live, p_nn, p_md, p_sz, p_node, Int32(n), Int32(step), Int32(linkage), p_ch, p_dv,
+                p_st, p_stf, p_lst, grid_dim=_grid(n), block_dim=TPB,
             )
             ctx.enqueue_function[_agg_rescan_kernel](
                 p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, grid_dim=rb, block_dim=AGG_TPB,
