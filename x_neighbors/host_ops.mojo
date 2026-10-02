@@ -408,13 +408,6 @@ def op_graph_symmetry(a: Int, flags: Int, n: Int) raises:
         graph_symmetry_item(t, _f(a), _i(flags), n)
 
 
-def op_louvain(a: Int, labels: Int, info: Int, n: Int, max_level: Int, resolution: Float32, threshold: Float32) raises:
-    louvain_item_sparse(_f(a), _i(labels), _f(info), n, max_level, resolution, threshold)
-    comptime if X_NEIGHBORS_HOST_SABOTAGE:
-        if (2) > 0:
-            _f(info).unsafe_store(0, _f(info).unsafe_load(0) + Float32(1e-3))
-
-
 def op_svgp(kuu: Int, bmat: Int, b: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32) raises:
     var s_luu = List[Float32](length=(m * m) if (m * m) > 0 else 1, fill=Float32(0))
     var s_ls = List[Float32](length=(m * m) if (m * m) > 0 else 1, fill=Float32(0))

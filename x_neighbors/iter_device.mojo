@@ -287,7 +287,18 @@ def op_pr_iterate_sparse(
     """`op_pr_iterate` over the nonzero cells of the dense adjacency `a`
     (x_neighbors/pr_sparse.mojo): the scan on the host, the iteration on
     the device over the column lists. `x` in: the start, out: the last
-    iterate. info (int32 x 2): iterations run, converged."""
+    iterate. info (int32 x 2): iterations run, converged.
+
+    Lane hr-graph: the column lists are built on the device and the
+    dangling mass and |x' - x| are blocked folds (x_neighbors/graph_par.mojo
+    `pr_drive`); `-D MOJOLEARN_XN_PR_OLD_SCAN` restores the scan below
+    during measurement."""
+    comptime if not is_defined["MOJOLEARN_XN_PR_OLD_SCAN"]():
+        from x_neighbors.graph_dev import pr_iterate_gpu
+
+        pr_iterate_gpu(a, x, p, dw, info, n, max_iter,
+                       bitcast[DType.float64]((UInt64(thr_hi) << UInt64(32)) | UInt64(thr_lo)), binary, alpha)
+        return
     var thr = bitcast[DType.float64]((UInt64(thr_hi) << UInt64(32)) | UInt64(thr_lo))
     var timing = String(getenv("MOJOLEARN_PR_TIMING")) == "1"
     var t_start = perf_counter_ns()

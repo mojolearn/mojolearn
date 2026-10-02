@@ -274,6 +274,15 @@ HOST_ITEM = {
     "louvain": ("louvain_sparse", "louvain_item_sparse"),
 }
 
+#: Ops with hand-written drivers (lane hr-graph, 2026-10-02): op -> (device
+#: module, host module), each defining `op_<name>` with the table's driver
+#: signature. No kernel or driver is generated for them; the bindings import
+#: the two drivers (x_neighbors/graph_par.mojo: the parallel items in a fixed
+#: order, run as threads on the device and in order on the host).
+OWN_DRIVERS = {
+    "louvain": ("graph_dev", "graph_host"),
+}
+
 
 def split(params):
     bufs = [p for p in params if p[1] not in ("int", "float")]
@@ -468,6 +477,8 @@ def _i(addr: Int) -> IP:
     return IP(unsafe_from_address=addr)
 """]
     for name, mod, item, count, params in OPS:
+        if name in OWN_DRIVERS:
+            continue
         bufs, scal = split(params)
         kp = [f"{b[0]}: {'IP' if is_int_buf(b[1]) else 'FP'}" for b in bufs]
         kp += [f"{p[0]}_: {'Int64' if p[1] == 'int' else 'Float32'}" for p in scal]
@@ -536,6 +547,8 @@ def _i(addr: Int) -> IP:
     return IP(unsafe_from_address=addr)
 """]
     for name, mod, item, count, params in OPS:
+        if name in OWN_DRIVERS:
+            continue
         bufs, scal = split(params)
         dp = [f"{b[0]}: Int" for b in bufs if b[1] not in ("fscr", "iscr")]
         dp += [f"{p[0]}: {'Int' if p[1] == 'int' else 'Float32'}" for p in scal]
@@ -658,12 +671,18 @@ from x_neighbors.eigh import op_eigh
 """
 
 
+def own_imports(col):
+    """The bindings' imports of the hand-written drivers (OWN_DRIVERS)."""
+    return "".join(f"from x_neighbors.{mods[col]} import op_{name}\n" for name, mods in OWN_DRIVERS.items())
+
+
 def gpu_binding():
-    ops = ", ".join(f"op_{o[0]}" for o in OPS)
+    ops = ", ".join(f"op_{o[0]}" for o in OPS if o[0] not in OWN_DRIVERS)
     return (HDR + GEN + '"""THE NEIGHBORS EXPANSION LANE\'S GPU BINDING:\nevery export is xn_<op>(addresses, ints, floats) over x_neighbors/device_ops.mojo."""\n'
             + BIND_HEAD + "from checks.vendor import COMPILED_VENDOR\n"
             + f"from x_neighbors.device_ops import {ops}\n"
-            + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + wrappers() + """
+            + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
+            + wrappers() + """
 
 def x_neighbors_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
@@ -682,11 +701,12 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
 
 
 def host_binding():
-    ops = ", ".join(f"op_{o[0]}" for o in OPS)
+    ops = ", ".join(f"op_{o[0]}" for o in OPS if o[0] not in OWN_DRIVERS)
     return (HDR + GEN + '"""CPU binding for `_mojolearn_x_neighbors`: the GPU binding\'s export names and\naddress contract over the host drivers x_neighbors/host_ops.mojo. HOST ONLY."""\n'
             + BIND_HEAD + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
-            + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + wrappers() + """
+            + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
+            + wrappers() + """
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
