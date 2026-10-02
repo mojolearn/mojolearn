@@ -85,25 +85,6 @@ def linear_ctx() raises -> DeviceContext:
     return slot[].ctx.value().copy()
 
 
-#: FAST on Apple (lane/linear-apple3): the fits x_linear/blocks.mojo names run
-#: their row passes on n / 1024 blocks, the control on the host, instead of
-#: one program on ONE block. WIP: opt-in (`-D MOJOLEARN_X_LINEAR_BLOCKS=1`)
-#: until its A/B and paired quality check are on record. IDENTICAL and the
-#: other vendors never compile the branch.
-comptime X_LINEAR_BLOCKS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_X_LINEAR_BLOCKS"]()
-)
-#: The same for the fits that work from the centered Gram
-#: (x_linear/blocks_gram.mojo; WIP, opt-in `-D MOJOLEARN_X_LINEAR_BLOCKS_GRAM=1`).
-comptime X_LINEAR_BLOCKS_GRAM = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_X_LINEAR_BLOCKS_GRAM"]()
-)
-
-
 def fit_kernel(
     algo: Int32, x: FP, y: FP, n: Int32, d: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, tw: FP,
     wf: IP, woff: Int32, nonce: Int32,
@@ -2664,19 +2645,6 @@ def fit_device(
             return
         if algo == ALGO_HUBER and n > 0 and String(getenv("MOJOLEARN_X_LINEAR_HUBER_GRID")) != "0":
             huber_fit_grid(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
-            return
-    comptime if X_LINEAR_BLOCKS:
-        from x_linear.blocks import blocks_handles, blocks_fit
-
-        if blocks_handles(algo, n):
-            blocks_fit(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
-            return
-    comptime if X_LINEAR_BLOCKS_GRAM:
-        from x_linear.blocks import XB_MIN_ROWS
-        from x_linear.blocks_gram import gram_handles, gram_fit
-
-        if n >= XB_MIN_ROWS and gram_handles(algo):
-            gram_fit(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
             return
     if algo == ALGO_ENETCV and d > 0 and len(ip) >= 7 and _enetcv_grid():
         enetcv_fit_grid(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
