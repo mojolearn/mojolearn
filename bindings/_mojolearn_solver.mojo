@@ -90,10 +90,12 @@ def cd_fit_binding(
                                BY NAME by solver/impl/cd.mojo,
                                DEVIATION 611 reserved and not spent)
         8  has_sample_weight  (0/1; 1 is REFUSED BY NAME by the same file)
-        9  row_major          (0/1, OPTIONAL; lane/apple-fast-linear: 1 means
-                               `x_addr` is ROW-MAJOR, which only the FAST
-                               Apple Gram path of solver/impl/cd.mojo serves
-                               and every other path refuses by name)
+        9  row_major          (0/1, OPTIONAL; lane/gap-nv-classical2: 1 means
+                               `x_addr` is C-ORDER and solver/estimator.mojo
+                               transposes it on the device; under FAST on
+                               Apple with -D MOJOLEARN_CD_FAST_ROWMAJOR the
+                               grid Gram path of solver/impl/cd.mojo reads
+                               it row-major as it is)
 
     Slots 7 and 8 are plumbed through rather than hardcoded to 0 so that the
     implemented refusals stay REACHABLE from this surface. A refusal only the
@@ -101,7 +103,7 @@ def cd_fit_binding(
     """
     if len(params) != 9 and len(params) != 10:
         raise Error(
-            "cd_fit: params must contain 9 values, got " + String(len(params))
+            "cd_fit: params must contain 9 or 10 values, got " + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
@@ -116,6 +118,8 @@ def cd_fit_binding(
     var tol = Float32(Float64(py=params[6]))
     var shuffle = Int(py=params[7]) != 0
     var has_sw = Int(py=params[8]) != 0
+    # 9  row_major (0/1, optional): x_addr is C-ORDER and the device
+    #    transposes it (lane/gap-nv-classical2)
     var row_major = False
     if len(params) == 10:
         row_major = Int(py=params[9]) != 0

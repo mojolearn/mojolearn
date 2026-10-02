@@ -12,12 +12,10 @@ These classes are not re-exported from `mojolearn/__init__.py` by this file;
 whoever owns that file decides the public namespace.
 """
 
-import os
-
 from . import _mojolearn_solver, _serialize
 from ._array import Array
 from ._mode import ParamsMixin
-from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty, zeros
+from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty, zeros, _materialize
 from .linear_model import _check_saved_by, _r2_host, _restore_mode, _saved_mode, _shape_of
 
 # cuML's `loss_funct` / DistanceType style codes this surface uses.
@@ -167,9 +165,10 @@ class ElasticNet(ParamsMixin):
                                   and un-centers `input` IN PLACE and does
                                   not restore the bits). False is refused
                                   because this surface cannot offer it.
-        random_state    refused   it only ever selected the `std::shuffle`
-                                  stream, and `selection='random'` is
-                                  refused
+        random_state    accepted  stored for get_params/clone; scikit-learn
+                                  reads it only under selection='random',
+                                  which is refused, so it is inert (as it
+                                  is in scikit-learn under 'cyclic')
         y 2-D           refused   one target only, at this boundary
         n_rows <= 1     refused by name by `cdFit` itself (`cd.cuh:145`),
                         in `fit` AND in `predict` -- so `predict(X[:1])`
@@ -279,12 +278,21 @@ class ElasticNet(ParamsMixin):
                 "never written (DEVIATION 880); there is no in-place arm to "
                 "select"
             )
-        if random_state is not None:
-            raise NotImplementedError(
-                "mojolearn ElasticNet: random_state is refused. It selects "
-                "nothing here -- the only randomness in cdFit is the "
-                "coordinate shuffle, and selection='random' is refused by "
-                "name (DEVIATION 611 reserved)"
+        # random_state is accepted and stored, scikit-learn's semantics:
+        # it seeds the coordinate draw of selection='random' only and is
+        # inert under 'cyclic' (sklearn ElasticNet: "Used when selection ==
+        # 'random'"). 'random' is refused by name above (DEVIATION 611), so
+        # no fit reads it and no output bit depends on it. Refusing it broke
+        # every nested Lasso(random_state=...) (the board's voting-reg and
+        # stacking-reg members), so it is now accepted.
+        if random_state is not None and (
+                isinstance(random_state, bool)
+                or not (isinstance(random_state, int)
+                        or hasattr(random_state, "randint")
+                        or hasattr(random_state, "integers"))):
+            raise ValueError(
+                f"random_state={random_state!r}: None, an int or a "
+                "numpy random state"
             )
         self.alpha = alpha
         self.l1_ratio = l1_ratio
@@ -297,7 +305,7 @@ class ElasticNet(ParamsMixin):
         self.copy_X = True
         self.warm_start = False
         self.positive = False
-        self.random_state = None
+        self.random_state = random_state
 
     def _as_fortran(self, X, name):
         """A float32 column-major Array over X, and whether that cost the
@@ -348,20 +356,18 @@ class ElasticNet(ParamsMixin):
                 "for solver='cd' (elastic_net.py:265-269), and 'qn' is not "
                 "implemented"
             )
-        # lane/apple-fast-linear (2026-10-02): MOJOLEARN_CD_FAST_ROWMAJOR=1 on
-        # the FAST tier hands X ROW-MAJOR (its own layout, no asfortranarray
-        # transpose of 1M x 220 inside the fit) to solver/impl/cd.mojo's FAST
-        # Apple Gram path, which reads row-major tiles and centers them at the
-        # means it computes itself; the shape rule is that path's.
-        row_major = False
-        if os.environ.get("MOJOLEARN_CD_FAST_ROWMAJOR") == "1" and _saved_mode(self) == "fast":
-            work_c, copied_c = as_f32_c(X, name="X")
-            nr_c, nc_c = work_c.shape
-            if nc_c <= 256 and nr_c >= 4 * nc_c:
-                row_major = True
-                work_x, copied = work_c, copied_c
-        if not row_major:
-            work_x, copied = self._as_fortran(X, "X")
+        # lane/gap-nv-classical2: a float32 C-order design crosses AS IT IS
+        # and the device transposes it (`cd_fit_host`'s row_major arm), so
+        # no host transpose sits inside the fit. Every other input takes the
+        # one F-order copy as before.
+        a, a_copied = _materialize(X, "X")
+        row_major = bool(a.ndim == 2 and a.dtype == "<f4" and a.size
+                         and a.order == "C" and not a._both_orders())
+        if row_major:
+            work_x, copied = a, a_copied
+        else:
+            work_x, copied = self._as_fortran(a, "X")
+            copied = copied or a_copied
         self.input_copied_ = copied
         self.fortran_copied_ = copied
         n_rows, n_cols = work_x.shape

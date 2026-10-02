@@ -79,8 +79,9 @@ from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 from std.os import getenv
+from mixture.meanll_order import GMM_MEANLL_CHUNK, gmm_meanll_levels_floats
+from std.sys.info import has_apple_gpu_accelerator
 from std.math import exp as fast_exp, log as fast_log
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -740,6 +741,131 @@ def meanll_kernel(
     out_scalar.unsafe_store(0, ftz(identical_div(acc, Float32(n))))
 
 
+# lane/gap-serial-gpu (2026-10-02): the mean in chunked levels
+# (`mixture/meanll_order.mojo`), one thread a chunk of GMM_MEANLL_CHUNK
+# values per level, then one thread folds the last <= GMM_MEANLL_CHUNK
+# partials and divides. The host column folds the same levels. The one-thread
+# `meanll_kernel` walked all n values each EM iteration;
+# `MOJOLEARN_GMM_MEANLL_SERIAL=1` restores it (A/B arm only: the host column
+# folds the levels).
+def meanll_chunk_kernel(
+    src: MutPointer[Float32, MutAnyOrigin],
+    src_off: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+    dst_off: Int32,
+    cnt: Int32,
+):
+    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var lo = b * GMM_MEANLL_CHUNK
+    if lo >= Int(cnt):
+        return
+    var hi = min(lo + GMM_MEANLL_CHUNK, Int(cnt))
+    var base = Int(src_off)
+    var acc = Float32(0.0)
+    for i in range(lo, hi):
+        acc = ftz(acc + ftz(src.unsafe_load(base + i)))
+    dst.unsafe_store(Int(dst_off) + b, acc)
+
+
+def meanll_chunk_scratch_kernel(
+    buf: MutPointer[Float32, MutAnyOrigin],
+    src_off: Int32,
+    dst_off: Int32,
+    cnt: Int32,
+):
+    """`meanll_chunk_kernel` from one scratch region into a later one."""
+    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var lo = b * GMM_MEANLL_CHUNK
+    if lo >= Int(cnt):
+        return
+    var hi = min(lo + GMM_MEANLL_CHUNK, Int(cnt))
+    var base = Int(src_off)
+    var acc = Float32(0.0)
+    for i in range(lo, hi):
+        acc = ftz(acc + ftz(buf.unsafe_load(base + i)))
+    buf.unsafe_store(Int(dst_off) + b, acc)
+
+
+def meanll_finish_kernel(
+    src: MutPointer[Float32, MutAnyOrigin],
+    src_off: Int32,
+    cnt: Int32,
+    nf: Float32,
+    out_scalar: MutPointer[Float32, MutAnyOrigin],
+):
+    """The last level (cnt <= GMM_MEANLL_CHUNK partials) and the divide."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    var base = Int(src_off)
+    var acc = Float32(0.0)
+    for i in range(Int(cnt)):
+        acc = ftz(acc + ftz(src.unsafe_load(base + i)))
+    out_scalar.unsafe_store(0, ftz(identical_div(acc, nf)))
+
+
+def gmm_meanll_serial() -> Bool:
+    return String(getenv("MOJOLEARN_GMM_MEANLL_SERIAL")) == "1"
+
+
+def gmm_meanll_launch(
+    ctx: DeviceContext,
+    mut lse: DeviceBuffer[DType.float32],
+    mut meanll: DeviceBuffer[DType.float32],
+    mut scratch: DeviceBuffer[DType.float32],
+    n: Int,
+) raises:
+    """`mean(lse[0, n))` into meanll[0] in the chunked levels. scratch holds
+    at least `gmm_meanll_levels_floats(n)` floats and nothing the stream
+    still reads (the E-step's `y`, consumed by then)."""
+    if gmm_meanll_serial():
+        ctx.enqueue_function[meanll_kernel](
+            lse.unsafe_ptr(),
+            meanll.unsafe_ptr(),
+            Int32(n),
+            grid_dim=(1, 1, 1),
+            block_dim=(1, 1, 1),
+        )
+        return
+    if len(scratch) < gmm_meanll_levels_floats(n):
+        raise Error("gmm_meanll_launch: scratch below gmm_meanll_levels_floats")
+    var in_scratch = False
+    var src_off = 0
+    var cnt = n
+    var off = 0
+    while cnt > GMM_MEANLL_CHUNK:
+        var p = (cnt + GMM_MEANLL_CHUNK - 1) // GMM_MEANLL_CHUNK
+        var grid = (p + 255) // 256
+        if in_scratch:
+            ctx.enqueue_function[meanll_chunk_scratch_kernel](
+                scratch.unsafe_ptr(), Int32(src_off), Int32(off), Int32(cnt),
+                grid_dim=(grid, 1, 1), block_dim=(256, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[meanll_chunk_kernel](
+                lse.unsafe_ptr(), Int32(0), scratch.unsafe_ptr(), Int32(off), Int32(cnt),
+                grid_dim=(grid, 1, 1), block_dim=(256, 1, 1),
+            )
+        in_scratch = True
+        src_off = off
+        off += p
+        cnt = p
+    if in_scratch:
+        ctx.enqueue_function[meanll_finish_kernel](
+            scratch.unsafe_ptr(), Int32(src_off), Int32(cnt), Float32(n),
+            meanll.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )
+        return
+    ctx.enqueue_function[meanll_finish_kernel](
+        lse.unsafe_ptr(),
+        Int32(0),
+        Int32(cnt),
+        Float32(n),
+        meanll.unsafe_ptr(),
+        grid_dim=(1, 1, 1),
+        block_dim=(1, 1, 1),
+    )
+
+
 def argmax_kernel(
     wlp: MutPointer[Float32, MutAnyOrigin],
     labels: MutPointer[Int32, MutAnyOrigin],
@@ -839,6 +965,13 @@ comptime GMM_ESTEP_STACK = (
     and not is_defined["MOJOLEARN_GMM_ESTEP_STACK_OFF"]()
 )
 comptime GMM_ESTEP_STACK_MAX_FLOATS = 1 << 28
+#: lane/apple-fast-linear (2026-10-02): `-D MOJOLEARN_GMM_FAST_ESTEP_STACK=1`
+#: takes the stacked form under FAST on Apple too (gmm_e_step below).
+comptime GMM_FAST_ESTEP_STACK = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GMM_FAST_ESTEP_STACK"]()
+)
 
 
 def stack_prec_kernel(
@@ -1035,8 +1168,8 @@ def gmm_e_step(
             and sabotage == GMM_SAB_NONE
             and n * ncomp * d <= GMM_ESTEP_STACK_MAX_FLOATS
         )
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator():
-        # lane/apple-fast-linear (2026-10-02): MOJOLEARN_GMM_FAST_ESTEP_STACK=1
+    comptime if GMM_FAST_ESTEP_STACK:
+        # lane/apple-fast-linear (2026-10-02): -D MOJOLEARN_GMM_FAST_ESTEP_STACK
         # takes the stacked form under FAST too, where it was IDENTICAL-only
         # (GMM_ESTEP_STACK). Cause: past the fused kernel's d <= 32 (Istella
         # is 100,000 x 200, K = 8) the FAST E-step is K GEMMs of X . P_k
@@ -1048,7 +1181,6 @@ def gmm_e_step(
             and not stacked
             and sabotage == GMM_SAB_NONE
             and n * ncomp * d <= GMM_ESTEP_STACK_MAX_FLOATS
-            and String(getenv("MOJOLEARN_GMM_FAST_ESTEP_STACK")) == "1"
         ):
             stacked = True
     if stacked:
@@ -1153,13 +1285,7 @@ def gmm_e_step(
                 block_dim=(FAST_MEANLL_TPB, 1, 1),
             )
         else:
-            ctx.enqueue_function[meanll_kernel](
-                lse.unsafe_ptr(),
-                meanll.unsafe_ptr(),
-                Int32(n),
-                grid_dim=(1, 1, 1),
-                block_dim=(1, 1, 1),
-            )
+            gmm_meanll_launch(ctx, lse, meanll, scratch, n)
         _ = y^
         _ = murow^
         return
@@ -1229,13 +1355,7 @@ def gmm_e_step(
             block_dim=(FAST_MEANLL_TPB, 1, 1),
         )
     else:
-        ctx.enqueue_function[meanll_kernel](
-            lse.unsafe_ptr(),
-            meanll.unsafe_ptr(),
-            Int32(n),
-            grid_dim=(1, 1, 1),
-            block_dim=(1, 1, 1),
-        )
+        gmm_meanll_launch(ctx, lse, meanll, scratch, n)
     trace.record_device(ctx, tag + ".meanll", meanll, 1)
     _ = y^
     _ = murow^

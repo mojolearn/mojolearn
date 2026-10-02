@@ -80,6 +80,17 @@ from decomposition.linalg_public_device import (
     device_svdvals,
 )
 from gemm.host_entry import identical_gemm_host
+from gemm.host_transport import (
+    GemmHostLease,
+    ROLE_A,
+    ROLE_B,
+    ROLE_C,
+    ROLE_X,
+    gemm_down_f32,
+    gemm_up_f32,
+    gemm_up_u16,
+)
+from std.ffi import _Global
 from gemm.checks.gemm_lowbit import (
     LowbitWorkspace,
     bf16_narrow,
@@ -281,6 +292,39 @@ def lowbit_profile_version_binding() raises -> PythonObject:
     return PythonObject(LOWBIT_PROFILE_VERSION)
 
 
+struct _LowbitSlot(Defaultable, Movable):
+    var work: Optional[LowbitWorkspace]
+
+    def __init__(out self):
+        self.work = Optional[LowbitWorkspace]()
+
+
+comptime _LOWBIT_POOL = _Global[StorageType=_LowbitSlot, name="MojoGemmLowbitPool", init_fn=_LowbitSlot.__init__]
+
+
+def _lowbit_run(
+    ctx: DeviceContext,
+    lease: GemmHostLease,
+    mut dc: DeviceBuffer[DType.float32],
+    mut da: DeviceBuffer[DType.float32],
+    mut db: DeviceBuffer[DType.uint16],
+    m: Int, n: Int, k: Int, op: Int,
+) raises:
+    """`identical_gemm_bf16w_into` then a wait, on the pooled workspace when
+    the lease holds the pool (only the lease holder touches the slot)."""
+    if lease.held:
+        var slot = _LOWBIT_POOL.get_or_create_ptr()
+        if not slot[].work:
+            slot[].work = LowbitWorkspace(ctx)
+        identical_gemm_bf16w_into(ctx, dc, da, db, slot[].work.value(), m, n, k, op)
+        ctx.synchronize()
+        return
+    var work = LowbitWorkspace(ctx)
+    identical_gemm_bf16w_into(ctx, dc, da, db, work, m, n, k, op)
+    ctx.synchronize()
+    _ = work^
+
+
 def gemm_bf16_binding(
     c_addr: PythonObject,
     a_addr: PythonObject,
@@ -313,27 +357,28 @@ def gemm_bf16_binding(
     _refuse_lowbit_shape(m, n, k, op, String("gemm_bf16"))
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        var db = _dev_u16(ctx, b_address, n * k)
-        var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
-        var work = LowbitWorkspace(ctx)
+        # lane/gap-neural-models (2026-10-02): pooled buffers and workspace,
+        # staged download (gemm/host_transport.mojo; MOJOLEARN_GEMM_POOL=0
+        # restores fresh buffers). Copies only, the same kernels.
+        var lease = GemmHostLease()
+        var db = lease.u16(ctx, ROLE_B, n * k)
+        gemm_up_u16(ctx, lease, db, u16_ptr(b_address), n * k)
+        var dc = lease.f32(ctx, ROLE_C, m * n)
+        var da = lease.f32(ctx, ROLE_X, m * k)
         if a_bf16:
-            var da_bits = _dev_u16(ctx, a_address, m * k)
-            var da = ctx.enqueue_create_buffer[DType.float32](m * k)
+            var da_bits = lease.u16(ctx, ROLE_A, m * k)
+            gemm_up_u16(ctx, lease, da_bits, u16_ptr(a_address), m * k)
             bf16_widen(ctx, da, da_bits, m * k)
-            identical_gemm_bf16w_into(ctx, dc, da, db, work, m, n, k, op)
-            ctx.synchronize()
+            _lowbit_run(ctx, lease, dc, da, db, m, n, k, op)
             _ = da_bits
-            _ = da
         else:
-            var da2 = _dev_f32(ctx, a_address, m * k)
-            identical_gemm_bf16w_into(ctx, dc, da2, db, work, m, n, k, op)
-            ctx.synchronize()
-            _ = da2
-        ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
-        ctx.synchronize()
+            gemm_up_f32(ctx, lease, da, f32_ptr(a_address), m * k)
+            _lowbit_run(ctx, lease, dc, da, db, m, n, k, op)
+        gemm_down_f32(ctx, lease, dc, f32_ptr(c_address), m * n)
+        lease.release()
         _ = db^
         _ = dc^
-        _ = work^
+        _ = da^
         # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
         # enqueued before this block's end destroys the context. Without it
         # the MAX runtime allocator's lock is left held and the NEXT

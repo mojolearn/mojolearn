@@ -11,6 +11,7 @@ from checks.numerics import (
     ftz, identical_mul_add, identical_mul, identical_div, identical_exp, identical_log, identical_sqrt,
     identical_tanh, identical_cos, identical_sin,
 )
+from x_neighbors.items import XN_FOLD_BLOCK, xn_fold_blocks
 
 
 def _a(x: Float32, y: Float32) -> Float32:
@@ -212,17 +213,54 @@ def o_group_mean(x: List[Float32], lab: List[Int32], n: Int, d: Int, g: Int, var
     return out^
 
 
+def _o_blocked_sum(v: List[Float32], variant: Int = 0) -> Float32:
+    """The lane's blocked fold (items.mojo XN_FOLD_BLOCK): each block of
+    XN_FOLD_BLOCK elements from zero ascending, then the partials from zero
+    ascending. variant 1: every fold descending."""
+    var n = len(v)
+    var nb = xn_fold_blocks(n)
+    var parts = List[Float32](length=nb if nb > 0 else 1, fill=Float32(0))
+    for blk in range(nb):
+        var lo = blk * XN_FOLD_BLOCK
+        var hi = min(lo + XN_FOLD_BLOCK, n)
+        var acc = Float32(0)
+        for q in range(hi - lo):
+            acc = _a(acc, v[hi - 1 - q if variant == 1 else lo + q])
+        parts[blk] = acc
+    var tot = Float32(0)
+    for q in range(nb):
+        tot = _a(tot, parts[nb - 1 - q if variant == 1 else q])
+    return tot
+
+
+def o_absdiff_sum(a: List[Float32], b: List[Float32], variant: Int = 0) -> Float32:
+    """absdiff_part/fin restated: the blocked sum of |a - b|."""
+    var d = List[Float32](capacity=len(a))
+    for i in range(len(a)):
+        d.append(abs(_s(a[i], b[i])))
+    return _o_blocked_sum(d, variant)
+
+
 def o_variance(x: List[Float32], variant: Int = 0) -> Float32:
+    """variance_part/mean/ss_part/fin restated: the blocked sum, one
+    division, then each block's fma fold of squared deviations from zero and
+    the partials' blocked sum, one division."""
     var n = len(x)
-    var acc = Float32(0)
-    for q in range(n):
-        acc = _a(acc, x[n - 1 - q if variant == 1 else q])
-    var mean = ftz(identical_div(acc, Float32(n)))
-    var ss = Float32(0)
-    for q in range(n):
-        var t = _s(x[n - 1 - q if variant == 1 else q], mean)
-        ss = ftz(identical_mul_add(t, t, ss))
-    return ftz(identical_div(ss, Float32(n)))
+    var mean = ftz(identical_div(_o_blocked_sum(x, variant), Float32(n)))
+    var nb = xn_fold_blocks(n)
+    var parts = List[Float32](capacity=nb)
+    for blk in range(nb):
+        var lo = blk * XN_FOLD_BLOCK
+        var hi = min(lo + XN_FOLD_BLOCK, n)
+        var ss = Float32(0)
+        for q in range(hi - lo):
+            var t = _s(x[hi - 1 - q if variant == 1 else lo + q], mean)
+            ss = ftz(identical_mul_add(t, t, ss))
+        parts.append(ss)
+    var tot = Float32(0)
+    for q in range(nb):
+        tot = _a(tot, parts[nb - 1 - q if variant == 1 else q])
+    return ftz(identical_div(tot, Float32(n)))
 
 
 def o_row_normalize(a: List[Float32], n: Int, m: Int, variant: Int = 0) -> List[Float32]:
@@ -823,9 +861,14 @@ def o_svgp(kuu: List[Float32], bmat: List[Float32], b: List[Float32], y: List[Fl
                 s = ftz(identical_mul_add(kj[i * m + k], col[k], s))
             sm[i * m + j] = s
     var qs = o_cholesky(sm, m, variant)
+    # y^T y: the blocked fold (XN_FOLD_BLOCK), fma within a block
+    var nyb = xn_fold_blocks(n)
     var yty = Float32(0)
-    for i in range(n):
-        yty = ftz(identical_mul_add(y[i], y[i], yty))
+    for blk in range(nyb):
+        var acc = Float32(0)
+        for i in range(blk * XN_FOLD_BLOCK, min((blk + 1) * XN_FOLD_BLOCK, n)):
+            acc = ftz(identical_mul_add(y[i], y[i], acc))
+        yty = _a(yty, acc)
     var sb = _chol_solve(ls, m, b)
     var bsb = Float32(0)
     for i in range(m):
@@ -851,122 +894,3 @@ def o_svgp(kuu: List[Float32], bmat: List[Float32], b: List[Float32], y: List[Fl
     out.extend(qs.copy())
     out.append(elbo)
     return out^
-
-
-def _o_modularity(w: List[Float32], comm: List[Int], nn: Int, m: Float32, res: Float32) -> Float32:
-    var tot = List[Float32](length=nn, fill=Float32(0))
-    var inner = List[Float32](length=nn, fill=Float32(0))
-    for u in range(nn):
-        var cu = comm[u]
-        var dg = Float32(0)
-        for v in range(nn):
-            var wv = w[u * nn + v]
-            dg = _a(dg, wv)
-            if v == u:
-                dg = _a(dg, wv)
-                inner[cu] = _a(inner[cu], wv)
-            elif v > u and comm[v] == cu:
-                inner[cu] = _a(inner[cu], wv)
-        tot[cu] = _a(tot[cu], dg)
-    var q = Float32(0)
-    var two_m = ftz(identical_mul(Float32(2), m))
-    for c in range(nn):
-        var fr = ftz(identical_div(tot[c], two_m))
-        q = _a(q, _s(ftz(identical_div(inner[c], m)), ftz(identical_mul(res, ftz(identical_mul(fr, fr))))))
-    return q
-
-
-# DEVIATION 5204: Louvain with the visit order pinned ascending and ties to the lowest
-# community. variant 1: nodes visited in DESCENDING order.
-def o_louvain(a: List[Float32], n: Int, max_level: Int, res: Float32, thr: Float32,
-              variant: Int = 0) -> Tuple[List[Int32], Float32, Int]:
-    var m = Float32(0)
-    for u in range(n):
-        for v in range(u, n):
-            m = _a(m, a[u * n + v])
-    var two_m2 = ftz(identical_mul(Float32(2), ftz(identical_mul(m, m))))
-    var w = a.copy()
-    var nn = n
-    var labels = List[Int](capacity=n)
-    var comm = List[Int](capacity=n)
-    for u in range(n):
-        labels.append(u)
-        comm.append(u)
-    var mod = _o_modularity(w, comm, nn, m, res)
-    var levels = 0
-    while max_level <= 0 or levels < max_level:
-        comm = List[Int](capacity=nn)
-        var deg = List[Float32](capacity=nn)
-        for u in range(nn):
-            comm.append(u)
-            var dg = Float32(0)
-            for v in range(nn):
-                dg = _a(dg, w[u * nn + v])
-            deg.append(_a(dg, w[u * nn + u]))
-        var stot = deg.copy()
-        var improvement = False
-        var moves = 1
-        while moves > 0:
-            moves = 0
-            for qu in range(nn):
-                var u = nn - 1 - qu if variant == 1 else qu
-                var cu = comm[u]
-                var k2c = List[Float32](length=nn, fill=Float32(0))
-                for v in range(nn):
-                    if v != u and w[u * nn + v] != Float32(0):
-                        k2c[comm[v]] = _a(k2c[comm[v]], w[u * nn + v])
-                var du = deg[u]
-                stot[cu] = _s(stot[cu], du)
-                var rc = _a(-ftz(identical_div(k2c[cu], m)),
-                            ftz(identical_div(ftz(identical_mul(res, ftz(identical_mul(stot[cu], du)))), two_m2)))
-                var best = cu
-                var bg = Float32(0)
-                for c in range(nn):
-                    if k2c[c] == Float32(0):
-                        continue
-                    var gain = _s(_a(rc, ftz(identical_div(k2c[c], m))),
-                                  ftz(identical_div(ftz(identical_mul(res, ftz(identical_mul(stot[c], du)))), two_m2)))
-                    if gain > bg:
-                        bg = gain
-                        best = c
-                stot[best] = _a(stot[best], du)
-                if best != cu:
-                    comm[u] = best
-                    moves += 1
-                    improvement = True
-        if levels > 0 and not improvement:
-            break
-        var newid = List[Int](length=nn, fill=-1)
-        var nc = 0
-        for c in range(nn):
-            for u in range(nn):
-                if comm[u] == c:
-                    newid[c] = nc
-                    nc += 1
-                    break
-        for u in range(nn):
-            comm[u] = newid[comm[u]]
-        for u in range(n):
-            labels[u] = comm[labels[u]]
-        levels += 1
-        var new_mod = _o_modularity(w, comm, nn, m, res)
-        if not (_s(new_mod, mod) > thr):
-            break
-        mod = new_mod
-        var w2 = List[Float32](length=nc * nc, fill=Float32(0))
-        for u in range(nn):
-            for v in range(u, nn):
-                var wv = w[u * nn + v]
-                if wv == Float32(0):
-                    continue
-                var c1 = comm[u]
-                var c2 = comm[v]
-                w2[c1 * nc + c2] = _a(w2[c1 * nc + c2], wv)
-                if c1 != c2:
-                    w2[c2 * nc + c1] = _a(w2[c2 * nc + c1], wv)
-        w = w2^
-        nn = nc
-    var lab32 = List[Int32](capacity=n)
-    for u in range(n):
-        lab32.append(Int32(labels[u]))
-    return (lab32^, _o_modularity(a, labels, n, m, res), levels)

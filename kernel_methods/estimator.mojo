@@ -130,23 +130,9 @@ from checks.numerics import ftz, identical_div, identical_sqrt
 from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from svm.impl.svm_parameter import KernelParams
-from x_neighbors.fast_eigh import EigP, symmetric_eig_rows
 
-#: lane neighbors-apple3 (2026-09-28): FAST on Apple solves Nystroem's
-#: n_components x n_components eigenproblem on the host, by the Jacobi of
-#: spectral/checks/symmetric_eig_host.mojo with its rotations as vectors
-#: (x_neighbors/fast_eigh.mojo). The device Jacobi is one block running one
-#: rotation at a time behind a barrier: at 300 components it was most of
-#: the fit (M4 Pro, FAST, 0.64 to 0.74 s). FAST's words move (another
-#: rotation formula and stopping rule, the same decomposition); the paired
-#: quality check is bench/x_neighbors_fast_quality.py (nystroem).
-#: OPT-IN until its A/B and quality check pass: `-D MOJOLEARN_NYS_HOST_EIGH`.
-comptime NYS_HOST_EIGH = (
-    _CTX_MODE == _NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_NYS_HOST_EIGH"]()
-)
-comptime NYS_HOST_EIGH_SWEEPS = 60
+#: The opt-in host Jacobi for Nystroem's eigenproblem (`-D MOJOLEARN_NYS_HOST_EIGH`)
+#: was removed (hr-optin-flags): the eigendecomposition runs on the device.
 
 #: lane neighbors-apple3 (2026-09-28), FAST on Apple, OPT-IN until its A/B
 #: and quality check pass (`-D MOJOLEARN_RBF_FUSED`): RBFSampler.transform
@@ -899,64 +885,7 @@ def nystroem_fit_host(
     var sweeps = 0
     var eig_diag = List[Float32]()
     var vecs = List[Float32]()
-    comptime if NYS_HOST_EIGH:
-        var kh = _download(ctx, dk, q * q)
-        var wh = List[Float32](length=q, fill=Float32(0.0))
-        vecs = List[Float32](length=q * q, fill=Float32(0.0))
-        comptime if is_defined["MOJOLEARN_NYS_HOST_EIGH_TWIN"]():
-            # OPT-IN: the DEVICE solver's own statements on the host
-            # (x_decomp/host_jacobi.mojo `fast_jacobi_eigh`, the row-vector
-            # form of decomposition/host/pca_oracle.mojo `host_jacobi_eigh`,
-            # which replays `jacobi_eigh_kernel`), then `sign_flip_kernel`'s
-            # host statement. The arm that can keep FAST's words.
-            from decomposition.host.pca_oracle import host_sign_flip
-            from x_decomp.host_jacobi import fast_jacobi_eigh
-
-            var tw = fast_jacobi_eigh(kh, q, JACOBI_SWEEPS, Float32(JACOBI_TOL))
-            if not tw.converged:
-                raise Error(
-                    "nystroem_fit_host: the host replay of the device Jacobi did"
-                    " not converge in "
-                    + String(JACOBI_SWEEPS)
-                    + " sweeps at n_components = "
-                    + String(q)
-                )
-            sweeps = tw.executed
-            for c in range(q):
-                wh[c] = kh[c * q + c]
-            vecs = tw.vectors.copy()
-            host_sign_flip(vecs, q)
-        elif is_defined["MOJOLEARN_NYS_HOST_EIGH_QL"]():
-            # OPT-IN: tridiagonal reduction and QL in binary64
-            from x_neighbors.fast_eigh_ql import symmetric_eig_ql
-
-            sweeps = symmetric_eig_ql(
-                EigP(unsafe_from_address=Int(kh.unsafe_ptr())),
-                q,
-                EigP(unsafe_from_address=Int(wh.unsafe_ptr())),
-                EigP(unsafe_from_address=Int(vecs.unsafe_ptr())),
-            )
-        else:
-            sweeps = symmetric_eig_rows(
-                EigP(unsafe_from_address=Int(kh.unsafe_ptr())),
-                q,
-                EigP(unsafe_from_address=Int(wh.unsafe_ptr())),
-                EigP(unsafe_from_address=Int(vecs.unsafe_ptr())),
-                NYS_HOST_EIGH_SWEEPS,
-            )
-        _ = kh^
-        if sweeps >= NYS_HOST_EIGH_SWEEPS:
-            raise Error(
-                "nystroem_fit_host: the host Jacobi did not converge in "
-                + String(NYS_HOST_EIGH_SWEEPS)
-                + " sweeps at n_components = "
-                + String(q)
-            )
-        for c in range(q):
-            eig_diag.append(wh[c])
-        trace.record_list_f32("nys.eigenvectors_flipped", vecs)
-    else:
-        sweeps = _nystroem_device_eigh(ctx, dk, dvec, dinfo, q, sabotage, trace, eig_diag, vecs)
+    sweeps = _nystroem_device_eigh(ctx, dk, dvec, dinfo, q, sabotage, trace, eig_diag, vecs)
 
     # --- the order and the clip, on the host (DEVIATIONS 1669, 1670, 1688) ---
     # THE SVD'S S, NOT THE EIGENVALUE. See `_singular_value_f32`: sklearn's

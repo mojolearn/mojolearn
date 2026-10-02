@@ -863,11 +863,11 @@ def fused_precision_cholesky_kernel(
 # lane/apple-fast-linear (2026-10-02): THE ISTELLA SHAPE (d = 200, K = 8)
 # ===========================================================================
 #
-# Two host env switches, FAST + Apple only, default off. Both arms above
+# Two build defines, FAST + Apple only, default off. Both arms above
 # (`fused_cov_partial_kernel`, `fused_precision_cholesky_kernel`) stop at
 # d = 32 (taxi, d = 16, takes them); Istella's 100,000 x 200 falls to:
 #
-#   MOJOLEARN_GMM_FAST_GRID_COV=1   the covariances. Cause: `gmm_m_step`'s
+#   -D MOJOLEARN_GMM_FAST_GRID_COV=1   the covariances. Cause: `gmm_m_step`'s
 #       per-component loop, `center_scale_kernel` (an n x d `diff` and an
 #       n x d `scaled` written per component) and `identical_gemm_into(...,
 #       d, d, n, OP_TN)`, which under FAST is MAX's matmul at M = N = 200,
@@ -878,7 +878,7 @@ def fused_precision_cholesky_kernel(
 #       a thread, and a second launch folds the chunks, divides by nk and
 #       adds reg_covar (`cov_finish_kernel`'s values).
 #
-#   MOJOLEARN_GMM_FAST_BIG_CHOL=1   the precision Cholesky. Cause:
+#   -D MOJOLEARN_GMM_FAST_BIG_CHOL=1   the precision Cholesky. Cause:
 #       `gmm_precision_cholesky`'s per-component chain at d > 32: a copy,
 #       `potrf_lower` at CHOL_NB_PINNED = 32 (seven panels, each reading
 #       `info` home), `chol_logdet` (a readback), `set_identity`, `trsm_lower`
@@ -900,12 +900,8 @@ def _gmm_dev_barrier():
         barrier()
 
 
-def _gmm_grid_cov_on() -> Bool:
-    return String(getenv("MOJOLEARN_GMM_FAST_GRID_COV")) == "1"
-
-
-def _gmm_big_chol_on() -> Bool:
-    return String(getenv("MOJOLEARN_GMM_FAST_BIG_CHOL")) == "1"
+comptime GMM_FAST_GRID_COV = GMM_FUSED_COV and is_defined["MOJOLEARN_GMM_FAST_GRID_COV"]()
+comptime GMM_FAST_BIG_CHOL = GMM_FUSED_CHOL and is_defined["MOJOLEARN_GMM_FAST_BIG_CHOL"]()
 
 
 comptime GMM_GC_TPB = 256
@@ -1416,15 +1412,14 @@ def gmm_precision_cholesky(
             _ = scal^
             _ = work^
             return GmmMStepRun(fail_info, fail_k)
-    comptime if GMM_FUSED_CHOL:
-        # lane/apple-fast-linear: MOJOLEARN_GMM_FAST_BIG_CHOL=1, d > 32 (see
+    comptime if GMM_FAST_BIG_CHOL:
+        # lane/apple-fast-linear: -D MOJOLEARN_GMM_FAST_BIG_CHOL, d > 32 (see
         # gmm_big_chol_kernel's banner); one launch, one readback of info
         if (
             sabotage == GMM_SAB_NONE
             and not trace.enabled
             and d > GMM_CHOL_MAX_D
             and d <= GMM_CHOL_TPB
-            and _gmm_big_chol_on()
         ):
             var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)
             var h_info = ctx.enqueue_create_host_buffer[DType.int32](ncomp)
@@ -1839,10 +1834,10 @@ def gmm_m_step(
             )
             fast_gram = False
             ncomp_loop = 0
-    comptime if GMM_FUSED_COV:
-        # lane/apple-fast-linear: MOJOLEARN_GMM_FAST_GRID_COV=1 where the
+    comptime if GMM_FAST_GRID_COV:
+        # lane/apple-fast-linear: -D MOJOLEARN_GMM_FAST_GRID_COV where the
         # fused pass does not hold (d > 32; see gmm_grid_cov_kernel's banner)
-        if ncomp_loop > 0 and sabotage == 0 and divide_after != 0 and _gmm_grid_cov_on():
+        if ncomp_loop > 0 and sabotage == 0 and divide_after != 0:
             var gc_nch = (n + GMM_GC_CH - 1) // GMM_GC_CH
             var gc_nt = (d + GMM_GC_TS - 1) // GMM_GC_TS
             var gc_npairs = gc_nt * (gc_nt + 1) // 2

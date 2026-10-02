@@ -139,6 +139,8 @@ from gemm.checks.gemm_identical import (
     identical_gemm_leaf_kernel,
 )
 from solver.impl.linalg.norm import col_norm_l2_squared
+from checks.rtf_seam import rtf_mul_add
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from solver.impl.shuffle import init_shuffle
 from solver.impl.solvers.params import LOSS_SQRD_LOSS, loss_funct_name
 
@@ -280,9 +282,9 @@ def cd_gram_blocks_kernel(
 # lane/apple-fast-linear (2026-10-02): THE CD_FAST_GRAM PRODUCT ON THE GRID
 # ===========================================================================
 #
-# Two host env switches, FAST + Apple only (inside CD_FAST_GRAM), default off:
+# Two build defines, FAST + Apple only (inside CD_FAST_GRAM), default off:
 #
-#   MOJOLEARN_CD_FAST_GRID_GRAM=1   [X ; y]^T [X ; y] as 32 x 32 tiles over
+#   -D MOJOLEARN_CD_FAST_GRID_GRAM=1   [X ; y]^T [X ; y] as 32 x 32 tiles over
 #       8192-row chunks (both operands staged in threadgroup memory, 4 cells
 #       a thread, x_linear/enetcv_fast.mojo ef_gram_kernel's shape), the
 #       chunks folded on the device (`cd_grid_gram_red_kernel`), ONE readback
@@ -294,9 +296,11 @@ def cd_gram_blocks_kernel(
 #       p < 32, `cd_gram_partial_kernel`'s 1024-thread blocks over 256 rows.
 #       Expected: the Gram at memory speed and no copy of X.
 #
-#   MOJOLEARN_CD_FAST_ROWMAJOR=1    (with python/mojolearn/_solver_impl.py)
-#       X arrives ROW-MAJOR as the caller holds it: no `np.asfortranarray`
-#       transpose of 1M x 220 on the host inside the fit, no centering and
+#   -D MOJOLEARN_CD_FAST_ROWMAJOR=1    (with solver/estimator.mojo)
+#       X arrives ROW-MAJOR as the caller holds it (main's `cd_fit_host`
+#       takes a C-order design and transposes it on the device,
+#       lane/gap-nv-classical2; here that transpose is skipped and the grid
+#       Gram reads row-major tiles), no centering and
 #       un-centering passes over X (`pre_process_data` / `post_process_data`,
 #       two read-write passes, the second only to restore a copy nobody
 #       reads), no `colNorm` pass. The column means come from the same
@@ -305,14 +309,20 @@ def cd_gram_blocks_kernel(
 #       host from the means read back beside the Gram. The sweeps are the
 #       Gram sweeps already here (the same words). Refused by name where
 #       CD_FAST_GRAM does not hold (IDENTICAL builds compile the old code).
+comptime CD_FAST_GRID_GRAM = CD_FAST_GRAM and is_defined["MOJOLEARN_CD_FAST_GRID_GRAM"]()
+comptime CD_FAST_ROWMAJOR = CD_FAST_GRAM and is_defined["MOJOLEARN_CD_FAST_ROWMAJOR"]()
 comptime CD_GG_TPB = 256
 comptime CD_GG_CH = 8192
 comptime CD_GG_TS = 32
 comptime CD_GG_RB = 32
 
 
-def _cd_grid_gram_on() -> Bool:
-    return String(getenv("MOJOLEARN_CD_FAST_GRID_GRAM")) == "1"
+def cd_fast_rowmajor_serves(n_rows: Int, n_cols: Int) -> Bool:
+    """CD_FAST_ROWMAJOR: whether `cd_fit_traced` takes this shape row-major
+    (its guard below); False in every other build."""
+    comptime if CD_FAST_ROWMAJOR:
+        return n_cols <= CD_GRAM_MAX_COLS and n_rows >= 4 * n_cols
+    return False
 
 
 @always_inline
@@ -678,6 +688,223 @@ def cd_step_kernel(
         i += stride
 
 
+# ===========================================================================
+# lane/gap-nv-classical2: ONE LAUNCH PER COORDINATE ON NVIDIA AND AMD
+# ===========================================================================
+#
+# Off Apple the sweep ran six launches per coordinate (remember, axpy, the
+# profile dot's split leaf and fold, update, axpy), two of them one thread,
+# and read the 4 MB residual and the column three times. `cd_fused_step_kernel`
+# is `cd_step_kernel` (the fold and update of `prev`, the closing axpy of
+# `prev` and the opening axpy of `ci`) with the dot's LEAVES folded into the
+# same pass: each block owns CD_FUSED_LEAVES consecutive leaves of the
+# contract partition and walks them in windows of CD_FUSED_STEPS rows. The
+# window's rows are updated coalesced (the same two
+# `ftz(identical_mul_add(...))` per row, one store), the updated residual
+# and the flushed column are staged in threadgroup memory, and thread `t`
+# then runs leaf `t`'s chain over the window: `rtf_mul_add(ftz(x), ftz(r),
+# acc)` in ascending row order, exactly `identical_gemm_leaf_kernel`'s chain
+# on the same words. The leaf partials go to the other half of a two-buffer
+# workspace, which the NEXT coordinate's launch folds with the same tree.
+# Every stored word is the same expression of the same words, so no bit
+# moves. -D MOJOLEARN_CD_FUSED_OFF=1 restores the six-launch sweep.
+comptime CD_FUSED_LEAVES = 4
+comptime CD_FUSED_STEPS = 128
+comptime CD_FUSED_TPB = 128
+comptime CD_FUSED_PER_THREAD = CD_FUSED_LEAVES * CD_FUSED_STEPS // CD_FUSED_TPB
+comptime CD_FUSED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and not SAB_SOFT_SWAP
+    and not SAB_ZERO_FOLD_MAX
+    and not SAB_ZERO_FOLD_MAX_SWAPPED
+    and not is_defined["MOJOLEARN_CD_FUSED_OFF"]()
+)
+
+
+def cd_fused_step_kernel(
+    residual: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    ws_in: MutPointer[Float32, MutAnyOrigin],
+    ws_out: MutPointer[Float32, MutAnyOrigin],
+    coef_in: MutPointer[Float32, MutAnyOrigin],
+    coef_out: MutPointer[Float32, MutAnyOrigin],
+    squared: MutPointer[Float32, MutAnyOrigin],
+    conv_in: MutPointer[Float32, MutAnyOrigin],
+    conv_out: MutPointer[Float32, MutAnyOrigin],
+    prev_in: Int32,
+    ci_in: Int32,
+    n_in: Int32,
+    leaf_in: Int32,
+    p_in: Int32,
+    l1_alpha: Float32,
+):
+    var tid = Int(thread_idx.x)
+    var nth = Int(block_dim.x)
+    var bid = Int(block_idx.x)
+    var n = Int(n_in)
+    var prev = Int(prev_in)
+    var ci = Int(ci_in)
+    var leaf = Int(leaf_in)
+    var p_count = Int(p_in)
+    var buf = stack_allocation[
+        2 * CONTRACT_MAX_LEAVES + 1,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var a0 = Float32(0.0)
+    if prev >= 0:
+        # cd_step_kernel's fold of `prev`'s P partials and its update body
+        var cur = 0
+        var nxt = CONTRACT_MAX_LEAVES
+        var q0 = tid
+        while q0 < p_count:
+            buf[unsafe_offset = cur + q0] = ws_in.unsafe_load(q0)
+            q0 += nth
+        barrier()
+        var w = p_count
+        while w > 1:
+            var pairs = w // 2
+            var q = tid
+            while q < pairs:
+                buf[unsafe_offset = nxt + q] = ftz(
+                    ftz(buf[unsafe_offset = cur + 2 * q])
+                    + ftz(buf[unsafe_offset = cur + 2 * q + 1])
+                )
+                q += nth
+            var w_next = pairs
+            if w % 2 == 1:
+                if tid == 0:
+                    buf[unsafe_offset = nxt + pairs] = buf[unsafe_offset = cur + w - 1]
+                w_next = pairs + 1
+            barrier()
+            var swap = cur
+            cur = nxt
+            nxt = swap
+            w = w_next
+        if tid == 0:
+            var root = Float32(0.0)
+            if p_count > 0:
+                root = buf[unsafe_offset=cur]
+            var c = ftz(ftz(root))
+            var r: Float32
+            if c > l1_alpha:
+                r = c - l1_alpha
+            elif c < -l1_alpha:
+                r = c + l1_alpha
+            else:
+                r = Float32(0.0)
+            var sq = ftz(squared.unsafe_load(prev))
+            if sq > CD_SQUARED_GUARD:
+                r = r / sq
+            else:
+                r = Float32(0.0)
+            r = ftz(r)
+            var diff = ftz(abs(ftz(coef_in.unsafe_load(prev)) - r))
+            var dmax = conv_in.unsafe_load(2)
+            if dmax < diff:
+                dmax = diff
+            var absv = abs(r)
+            var cmax = conv_in.unsafe_load(1)
+            if cmax < absv:
+                cmax = absv
+            buf[unsafe_offset = 2 * CONTRACT_MAX_LEAVES] = -r
+            if bid == 0:
+                coef_out.unsafe_store(prev, r)
+                conv_out.unsafe_store(0, -r)
+                conv_out.unsafe_store(1, cmax)
+                conv_out.unsafe_store(2, dmax)
+        barrier()
+        a0 = ftz(buf[unsafe_offset = 2 * CONTRACT_MAX_LEAVES])
+    if ci < 0:
+        # the epoch's last step: `prev`'s closing axpy alone
+        var i = bid * nth + tid
+        var stride = Int(grid_dim.x) * nth
+        while i < n:
+            var r = residual.unsafe_load(i)
+            r = ftz(identical_mul_add(a0, ftz(x.unsafe_load(prev * n + i)), ftz(r)))
+            residual.unsafe_store(i, r)
+            i += stride
+        return
+    var a1 = ftz(coef_in.unsafe_load(ci))
+    comptime SP = CD_FUSED_STEPS + 1
+    var xs = stack_allocation[
+        CD_FUSED_LEAVES * SP, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var rs = stack_allocation[
+        CD_FUSED_LEAVES * SP, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var g0 = bid * CD_FUSED_LEAVES
+    var my_leaf = g0 + tid
+    var mine = tid < CD_FUSED_LEAVES and my_leaf < p_count
+    var my_begin = my_leaf * leaf
+    var my_end = my_begin + leaf
+    if my_end > n:
+        my_end = n
+    var acc = Float32(0.0)
+    # the window's operands, loaded one window ahead of their use
+    var rv = InlineArray[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
+    var pv = InlineArray[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
+    var cv = InlineArray[Float32, CD_FUSED_PER_THREAD](fill=Float32(0.0))
+    var w = 0
+    comptime for u in range(CD_FUSED_PER_THREAD):
+        var e = tid + u * CD_FUSED_TPB
+        var lj = e // CD_FUSED_STEPS
+        var s = e - lj * CD_FUSED_STEPS
+        var lf = g0 + lj
+        var i = lf * leaf + s
+        if lf < p_count and s < leaf and i < n:
+            rv[u] = residual.unsafe_load(i)
+            if prev >= 0:
+                pv[u] = x.unsafe_load(prev * n + i)
+            cv[u] = x.unsafe_load(ci * n + i)
+    while w < leaf:
+        comptime for u in range(CD_FUSED_PER_THREAD):
+            var e = tid + u * CD_FUSED_TPB
+            var lj = e // CD_FUSED_STEPS
+            var s = e - lj * CD_FUSED_STEPS
+            var lf = g0 + lj
+            var i = lf * leaf + w + s
+            if lf < p_count and w + s < leaf and i < n:
+                var r = rv[u]
+                if prev >= 0:
+                    r = ftz(identical_mul_add(a0, ftz(pv[u]), ftz(r)))
+                var xv = ftz(cv[u])
+                r = ftz(identical_mul_add(a1, xv, ftz(r)))
+                residual.unsafe_store(i, r)
+                xs[unsafe_offset = lj * SP + s] = xv
+                rs[unsafe_offset = lj * SP + s] = r
+        barrier()
+        var wn = w + CD_FUSED_STEPS
+        if wn < leaf:
+            comptime for u in range(CD_FUSED_PER_THREAD):
+                var e = tid + u * CD_FUSED_TPB
+                var lj = e // CD_FUSED_STEPS
+                var s = e - lj * CD_FUSED_STEPS
+                var lf = g0 + lj
+                var i = lf * leaf + wn + s
+                if lf < p_count and wn + s < leaf and i < n:
+                    rv[u] = residual.unsafe_load(i)
+                    if prev >= 0:
+                        pv[u] = x.unsafe_load(prev * n + i)
+                    cv[u] = x.unsafe_load(ci * n + i)
+        if mine:
+            var s_end = my_end - (my_begin + w)
+            if s_end > CD_FUSED_STEPS:
+                s_end = CD_FUSED_STEPS
+            var base = tid * SP
+            for s in range(s_end):
+                acc = rtf_mul_add(
+                    ftz(xs[unsafe_offset = base + s]),
+                    ftz(rs[unsafe_offset = base + s]),
+                    acc,
+                )
+        barrier()
+        w = wn
+    if mine:
+        ws_out.unsafe_store(my_leaf, ftz(acc))
+
+
 def cd_fold_update_kernel(
     coef: MutPointer[Float32, MutAnyOrigin],
     ws: MutPointer[Float32, MutAnyOrigin],
@@ -916,9 +1143,9 @@ def cd_fit_traced(
     """`cdFit` with a stage card, a scheduling surface and the residual
     handed out. The dispatch guards first, in their order.
 
-    `row_major` (lane/apple-fast-linear, MOJOLEARN_CD_FAST_ROWMAJOR): `x` is
-    the caller's ROW-MAJOR design; only the CD_FAST_GRAM grid path reads it
-    (the kernels above), so it is refused by name everywhere else."""
+    `row_major` (lane/apple-fast-linear, -D MOJOLEARN_CD_FAST_ROWMAJOR): `x`
+    is the caller's ROW-MAJOR design; only the CD_FAST_GRAM grid path reads
+    it (the kernels above), so it is refused by name everywhere else."""
     if row_major:
         comptime if not CD_FAST_GRAM:
             raise Error(
@@ -1115,7 +1342,7 @@ def cd_fit_traced(
                     _ = gp^
                     _ = hgp^
             var gmu = List[Float64](capacity=p1)
-            if not blocks_done and (row_major or _cd_grid_gram_on()):
+            if not blocks_done and (row_major or CD_FAST_GRID_GRAM):
                 # lane/apple-fast-linear: the product on the grid (see
                 # cd_grid_gram_kernel's banner); row_major also takes the
                 # means from the chunks and centers the tiles at them
@@ -1281,6 +1508,21 @@ def cd_fit_traced(
     var two = False
     comptime if CD_TWO_STEP:
         two = three
+    # lane/gap-nv-classical2: the one-launch coordinate off Apple
+    var fused = False
+    comptime if CD_FUSED:
+        var dcf = String(getenv("MOJOLEARN_SOLVER_DEVICE_COUNT"))
+        fused = (
+            launch.dot_plan < 0
+            and (dcf == "" or dcf == "1")
+            and part[1] > 0
+            and part[1] <= CONTRACT_MAX_LEAVES
+        )
+        if fused:
+            two = True
+    var ws_b = ctx.enqueue_create_buffer[DType.float32](part[1] if fused and part[1] > 0 else 1)
+    var ws_in_a = True  # the next fold reads ws_rows (else ws_b)
+    var fused_blocks = (part[1] + CD_FUSED_LEAVES - 1) // CD_FUSED_LEAVES
     var coef_b = ctx.enqueue_create_buffer[DType.float32](n_cols if two else 1)
     var conv_b = ctx.enqueue_create_buffer[DType.float32](3)
     var in_a = True  # coef_in is `coef` (else coef_b)
@@ -1298,17 +1540,32 @@ def cd_fit_traced(
         for j in range(n_cols + 1):
             var ci = ri[j] if j < n_cols else -1
             var prev = ri[j - 1] if j > 0 else -1
-            ctx.enqueue_function[cd_step_kernel](
-                residual.unsafe_ptr(), x.unsafe_ptr(), ws_rows.unsafe_ptr(),
-                cin, cout, squared.unsafe_ptr(), vin, vout,
-                Int32(prev), Int32(ci), Int32(n_rows), Int32(part[1]), l1_alpha,
-                grid_dim=(step_blocks, 1, 1), block_dim=(CD_STEP_TPB, 1, 1),
-            )
+            if fused:
+                var wa = ws_rows.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                var wb = ws_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                var w_in = wa if ws_in_a else wb
+                var w_out = wb if ws_in_a else wa
+                ctx.enqueue_function[cd_fused_step_kernel](
+                    residual.unsafe_ptr(), x.unsafe_ptr(), w_in, w_out,
+                    cin, cout, squared.unsafe_ptr(), vin, vout,
+                    Int32(prev), Int32(ci), Int32(n_rows), Int32(part[0]),
+                    Int32(part[1]), l1_alpha,
+                    grid_dim=(fused_blocks, 1, 1), block_dim=(CD_FUSED_TPB, 1, 1),
+                )
+                if ci >= 0:
+                    ws_in_a = not ws_in_a
+            else:
+                ctx.enqueue_function[cd_step_kernel](
+                    residual.unsafe_ptr(), x.unsafe_ptr(), ws_rows.unsafe_ptr(),
+                    cin, cout, squared.unsafe_ptr(), vin, vout,
+                    Int32(prev), Int32(ci), Int32(n_rows), Int32(part[1]), l1_alpha,
+                    grid_dim=(step_blocks, 1, 1), block_dim=(CD_STEP_TPB, 1, 1),
+                )
             if prev >= 0:
                 var t = vin
                 vin = vout
                 vout = t
-            if ci >= 0:
+            if ci >= 0 and not fused:
                 ctx.enqueue_function[identical_gemm_leaf_kernel](
                     ws_rows.unsafe_ptr(), x.unsafe_ptr() + ci * n_rows,
                     residual.unsafe_ptr(),
@@ -1459,6 +1716,9 @@ def cd_fit_traced(
     _ = ws_cols^
     _ = ones^
     _ = conv^
+    _ = conv_b^
+    _ = coef_b^
+    _ = ws_b^
     _ = h_conv^
     _ = canon_ws^
     return (n_iter, intercept)

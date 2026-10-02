@@ -73,7 +73,8 @@ that cannot leave a card. The trace is off unless the variable is set.
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
-from solver.impl.cd import CdLaunch, cd_fit_traced, cd_predict
+from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
+from solver.impl.cd import CD_FAST_ROWMAJOR, CdLaunch, cd_fast_rowmajor_serves, cd_fit_traced, cd_predict
 from solver.impl.solvers.params import LOSS_SQRD_LOSS
 
 
@@ -96,10 +97,11 @@ def cd_fit_host(
 ) raises -> Int:
     """`cdFit` over host pointers. Returns `n_iter` (the epochs actually run).
 
-    `row_major` (lane/apple-fast-linear, 2026-10-02, MOJOLEARN_CD_FAST_ROWMAJOR
-    from the Python side): `x_ptr` is the caller's ROW-MAJOR design and the
-    FAST Apple Gram path of `cd_fit_traced` reads it as such (no Fortran copy
-    on the host, no centering passes); refused by name on every other path.
+    `row_major` (lane/gap-nv-classical2): `x_ptr` is the caller's C-ORDER
+    design and is transposed on the device below. Under FAST on Apple with
+    `-D MOJOLEARN_CD_FAST_ROWMAJOR` (lane/apple-fast-linear, 2026-10-02) a
+    shape the grid Gram serves skips that transpose: `cd_fit_traced` reads
+    the row-major tiles as they are (no centering passes either).
 
     `x_ptr` is COLUMN-MAJOR `n_rows x n_cols` float32 (see the module
     docstring); `y_ptr` is `n_rows`; `coef_ptr` receives `n_cols` floats;
@@ -132,10 +134,40 @@ def cd_fit_host(
     var residual_out = ctx.enqueue_create_buffer[DType.float32](1)
     ctx.synchronize()
 
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
-    ctx.enqueue_memset(coef, Float32(0.0))
-    ctx.synchronize()
+    var rm_grid = False
+    comptime if CD_FAST_ROWMAJOR:
+        rm_grid = row_major and cd_fast_rowmajor_serves(n_rows, n_cols)
+    if rm_grid:
+        # lane/apple-fast-linear: the C-order design goes up AS IT IS and the
+        # FAST Apple grid Gram reads its row-major tiles (no transpose pass)
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
+        ctx.enqueue_memset(coef, Float32(0.0))
+        ctx.synchronize()
+    elif row_major:
+        # lane/gap-nv-classical2: a C-order design crosses as it is and is
+        # transposed ON THE DEVICE (`transpose_kernel` moves words, no
+        # arithmetic), instead of a host transpose inside the fit's clock.
+        var xr = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+        ctx.enqueue_copy(dst_buf=xr, src_ptr=x_ptr)
+        ctx.enqueue_function[transpose_kernel](
+            x.unsafe_ptr(), xr.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
+            grid_dim=(
+                (n_cols + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+                min((n_rows + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE, CUDA_MAX_GRID_YZ),
+                1,
+            ),
+            block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+        )
+        ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
+        ctx.enqueue_memset(coef, Float32(0.0))
+        ctx.synchronize()
+        _ = xr^
+    else:
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+        ctx.enqueue_copy(dst_buf=y, src_ptr=y_ptr)
+        ctx.enqueue_memset(coef, Float32(0.0))
+        ctx.synchronize()
 
     # The trace reads MOJOLEARN_IDENTITY_TRACE and is disabled unless it is
     # set. `cd_fit_traced` writes its own header line, so none is written
@@ -147,7 +179,7 @@ def cd_fit_host(
         ctx, x, n_rows, n_cols, y, coef,
         fit_intercept, epochs, LOSS_SQRD_LOSS, alpha, l1_ratio, shuffle,
         tol, has_sample_weight, trace, "cd", CdLaunch.default(),
-        residual_out, False, row_major,
+        residual_out, False, rm_grid,
     )
     var n_iter = out[0]
     var intercept = out[1]

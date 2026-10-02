@@ -45,7 +45,12 @@ reported by its point and refused by name (DEVIATION 1607's rule).
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
+from std.sys.compile import is_defined
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
+from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_mul_add
@@ -142,6 +147,251 @@ def sparse_mr_search_kernel(
     out_j[cell] = SMR_BAD_J if bad else bj
 
 
+# ===========================================================================
+# lane/gap-nv-classical2: THE TILED SEARCH ON NVIDIA AND AMD
+# ===========================================================================
+#
+# `sparse_mr_search_kernel` reads row i's d words from global memory once per
+# candidate j (no reuse), and the Apple launch bound (2^30 multiply-adds)
+# cut istella's first round (m = 100k, d = 220) into ~2,000 launches, each
+# read back whole and folded on the host. Off Apple the search is
+# `sparse_mr_search_tiled_kernel`: a block owns SMR_TI listed points and
+# walks its slice of j in SMR_TJ tiles; both sides are staged SMR_KC
+# features at a time from `xt` (feature-major, coalesced on both sides) and
+# every thread keeps SMR_RI x SMR_RJ cells in registers. Each cell is the
+# SAME chain, `ftz(identical_mul_add(ftz(x_i[f]), ftz(x_j[f]), acc))` with f
+# ascending from 0.0, then `mr_edge_weight`; the per-point minimum is over
+# the total order (key, j), so the merge order of threads, slices and
+# launches cannot move it. `smr_fold_slices_kernel` folds the slices on the
+# device and only n_todo pairs come back. No launch bound off Apple. -D
+# MOJOLEARN_SMR_TILED_OFF=1 restores the per-pair kernel and the bound.
+comptime SMR_TILED = (
+    (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and not is_defined["MOJOLEARN_SMR_TILED_OFF"]()
+)
+comptime SMR_TI = 64
+comptime SMR_TJ = 64
+comptime SMR_KC = 16
+comptime SMR_TX = 16
+comptime SMR_TY = 16
+comptime SMR_RI = SMR_TI // SMR_TY
+comptime SMR_RJ = SMR_TJ // SMR_TX
+comptime SMR_TILED_TPB = SMR_TX * SMR_TY
+comptime SMR_TARGET_BLOCKS = 1024
+
+
+@always_inline
+def _smr_better(ka: Int32, ja: Int32, kb: Int32, jb: Int32) -> Bool:
+    """(ka, ja) strictly before (kb, jb) in the total order (key, j); an
+    empty slot (jb < 0) loses to every real candidate."""
+    if ja < 0:
+        return False
+    if jb < 0:
+        return True
+    if ka != kb:
+        return ka < kb
+    return ja < jb
+
+
+def sparse_mr_search_tiled_kernel(
+    out_key: MutPointer[Int32, MutAnyOrigin],
+    out_j: MutPointer[Int32, MutAnyOrigin],
+    xt: MutPointer[Float32, MutAnyOrigin],
+    norms: MutPointer[Float32, MutAnyOrigin],
+    core: MutPointer[Float32, MutAnyOrigin],
+    comp: MutPointer[Int32, MutAnyOrigin],
+    todo: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+    d_in: Int32,
+    n_todo_in: Int32,
+    j0_in: Int32,
+    j1_in: Int32,
+    slice_in: Int32,
+    inv_alpha: Float32,
+    sabotage: Int32,
+):
+    """Cells `(s, t)` for the SMR_TI listed points of this block: the same
+    answer as `sparse_mr_search_kernel`'s cell, every cell written."""
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var tid = ty * SMR_TX + tx
+    var m = Int(m_in)
+    var d = Int(d_in)
+    var n_todo = Int(n_todo_in)
+    var t0 = Int(block_idx.x) * SMR_TI
+    var s = Int(block_idx.y)
+    var ja = Int(j0_in) + s * Int(slice_in)
+    var jb = ja + Int(slice_in)
+    if jb > Int(j1_in):
+        jb = Int(j1_in)
+    var a_s = stack_allocation[
+        SMR_KC * SMR_TI, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var b_s = stack_allocation[
+        SMR_KC * SMR_TJ, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var ti_s = stack_allocation[
+        SMR_TI, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var cj_s = stack_allocation[
+        SMR_TJ, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var nj_s = stack_allocation[
+        SMR_TJ, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var crj_s = stack_allocation[
+        SMR_TJ, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var rk_s = stack_allocation[
+        SMR_TI * SMR_TX, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var rj_s = stack_allocation[
+        SMR_TI * SMR_TX, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    if tid < SMR_TI:
+        var t = t0 + tid
+        ti_s[unsafe_offset=tid] = todo[t] if t < n_todo else Int32(-1)
+    barrier()
+    var ci = InlineArray[Int32, SMR_RI](fill=Int32(-1))
+    var ni = InlineArray[Float32, SMR_RI](fill=Float32(0.0))
+    var cri = InlineArray[Float32, SMR_RI](fill=Float32(0.0))
+    var bk = InlineArray[Int32, SMR_RI](fill=WEIGHT_KEY_SENTINEL)
+    var bj = InlineArray[Int32, SMR_RI](fill=SMR_NONE_J)
+    var bad = InlineArray[Bool, SMR_RI](fill=False)
+    comptime for r in range(SMR_RI):
+        var i = Int(ti_s[unsafe_offset = ty + r * SMR_TY])
+        if i >= 0:
+            ci[r] = comp[i]
+            ni[r] = norms[i]
+            cri[r] = core[i]
+    var jt = ja
+    while jt < jb:
+        if tid < SMR_TJ:
+            var j = jt + tid
+            if j < jb:
+                cj_s[unsafe_offset=tid] = comp[j]
+                nj_s[unsafe_offset=tid] = norms[j]
+                crj_s[unsafe_offset=tid] = core[j]
+            else:
+                cj_s[unsafe_offset=tid] = Int32(-1)
+        var acc = InlineArray[Float32, SMR_RI * SMR_RJ](fill=Float32(0.0))
+        var k0 = 0
+        while k0 < d:
+            comptime for q in range(SMR_KC * SMR_TI // SMR_TILED_TPB):
+                var e = tid + q * SMR_TILED_TPB
+                var kk = e // SMR_TI
+                var ii = e - kk * SMR_TI
+                var f = k0 + kk
+                var i = Int(ti_s[unsafe_offset=ii])
+                var v = Float32(0.0)
+                if f < d and i >= 0:
+                    v = ftz(xt[f * m + i])
+                a_s[unsafe_offset=e] = v
+            comptime for q in range(SMR_KC * SMR_TJ // SMR_TILED_TPB):
+                var e = tid + q * SMR_TILED_TPB
+                var kk = e // SMR_TJ
+                var jj = e - kk * SMR_TJ
+                var f = k0 + kk
+                var j = jt + jj
+                var v = Float32(0.0)
+                if f < d and j < jb:
+                    v = ftz(xt[f * m + j])
+                b_s[unsafe_offset=e] = v
+            barrier()
+            var kmax = d - k0
+            if kmax > SMR_KC:
+                kmax = SMR_KC
+            for kk in range(kmax):
+                var av = InlineArray[Float32, SMR_RI](fill=Float32(0.0))
+                var bv = InlineArray[Float32, SMR_RJ](fill=Float32(0.0))
+                comptime for r in range(SMR_RI):
+                    av[r] = a_s[unsafe_offset = kk * SMR_TI + ty + r * SMR_TY]
+                comptime for c in range(SMR_RJ):
+                    bv[c] = b_s[unsafe_offset = kk * SMR_TJ + tx + c * SMR_TX]
+                comptime for r in range(SMR_RI):
+                    comptime for c in range(SMR_RJ):
+                        acc[r * SMR_RJ + c] = ftz(
+                            identical_mul_add(av[r], bv[c], acc[r * SMR_RJ + c])
+                        )
+            barrier()
+            k0 += SMR_KC
+        comptime for c in range(SMR_RJ):
+            var jj = tx + c * SMR_TX
+            var j = jt + jj
+            var cj = cj_s[unsafe_offset=jj]
+            if j < jb:
+                comptime for r in range(SMR_RI):
+                    if ci[r] >= 0 and cj != ci[r]:
+                        var v = mr_edge_weight(
+                            acc[r * SMR_RJ + c], ni[r], nj_s[unsafe_offset=jj],
+                            cri[r], crj_s[unsafe_offset=jj], inv_alpha, sabotage,
+                        )
+                        if (bitcast[DType.uint32](v) & 0x7F800000) == 0x7F800000:
+                            bad[r] = True
+                        else:
+                            var key = weight_order_key(v)
+                            if _smr_better(key, Int32(j), bk[r], bj[r]):
+                                bk[r] = key
+                                bj[r] = Int32(j)
+        barrier()
+        jt += SMR_TJ
+    comptime for r in range(SMR_RI):
+        var ii = ty + r * SMR_TY
+        rk_s[unsafe_offset = ii * SMR_TX + tx] = bk[r]
+        rj_s[unsafe_offset = ii * SMR_TX + tx] = SMR_BAD_J if bad[r] else bj[r]
+    barrier()
+    if tid < SMR_TI:
+        var t = t0 + tid
+        if t < n_todo:
+            var fk = WEIGHT_KEY_SENTINEL
+            var fj = SMR_NONE_J
+            var fbad = False
+            for q in range(SMR_TX):
+                var k = rk_s[unsafe_offset = tid * SMR_TX + q]
+                var j = rj_s[unsafe_offset = tid * SMR_TX + q]
+                if j == SMR_BAD_J:
+                    fbad = True
+                elif _smr_better(k, j, fk, fj):
+                    fk = k
+                    fj = j
+            var cell = s * n_todo + t
+            out_key[cell] = fk
+            out_j[cell] = SMR_BAD_J if fbad else fj
+
+
+def smr_fold_slices_kernel(
+    fold_key: MutPointer[Int32, MutAnyOrigin],
+    fold_j: MutPointer[Int32, MutAnyOrigin],
+    out_key: MutPointer[Int32, MutAnyOrigin],
+    out_j: MutPointer[Int32, MutAnyOrigin],
+    n_todo_in: Int32,
+    n_s_in: Int32,
+):
+    """Point `t`'s slices in ascending order under (key, j): the host fold of
+    `_search`, on the device. A poisoned or non-finite cell is passed on as
+    its marker (the first one in slice order) for the host to refuse."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n_todo = Int(n_todo_in)
+    if t >= n_todo:
+        return
+    var fk = WEIGHT_KEY_SENTINEL
+    var fj = SMR_NONE_J
+    for s in range(Int(n_s_in)):
+        var c = s * n_todo + t
+        var jj = out_j[c]
+        if jj == SMR_POISON_J or jj == SMR_BAD_J:
+            fj = jj
+            break
+        if jj < 0:
+            continue
+        var kk = out_key[c]
+        if _smr_better(kk, jj, fk, fj):
+            fk = kk
+            fj = jj
+    fold_key[t] = fk
+    fold_j[t] = fj
+
+
 @fieldwise_init
 struct SparseMst(Movable):
     """The m - 1 tree edges sorted by (weight key, lo, hi), oriented
@@ -159,6 +409,120 @@ struct _Search(Movable):
     var j_d: DeviceBuffer[DType.int32]
     var todo_d: DeviceBuffer[DType.int32]
     var cap: Int
+    var fk_d: DeviceBuffer[DType.int32]
+    var fj_d: DeviceBuffer[DType.int32]
+
+
+def _search_tiled(
+    ctx: DeviceContext,
+    mut sb: _Search,
+    mut xt_d: DeviceBuffer[DType.float32],
+    mut norms_d: DeviceBuffer[DType.float32],
+    mut core_d: DeviceBuffer[DType.float32],
+    mut comp_d: DeviceBuffer[DType.int32],
+    todo: List[Int32],
+    m: Int,
+    d: Int,
+    inv_alpha: Float32,
+    sabotage: Int32,
+    mut pk: List[Int32],
+    mut pj: List[Int32],
+    launch_macs: Int,
+) raises -> Int:
+    """`_search` off Apple: the tiled kernel, the slices folded on the
+    device, n_todo pairs read back per launch. The default bound is lifted
+    (it is the Apple bound); an explicit smaller one (the checks) still
+    splits the j axis, which may move no bit."""
+    var n_todo = len(todo)
+    if n_todo == 0:
+        return 0
+    ctx.enqueue_copy(
+        dst_buf=sb.todo_d.create_sub_buffer[DType.int32](0, n_todo),
+        src_ptr=todo.unsafe_ptr(),
+    )
+    var bk = List[Int32](length=n_todo, fill=WEIGHT_KEY_SENTINEL)
+    var bj = List[Int32](length=n_todo, fill=SMR_NONE_J)
+    var dd = d if d > 0 else 1
+    var span = m
+    if launch_macs < SPARSE_MR_LAUNCH_MACS:
+        span = launch_macs // (n_todo * dd)
+        if span < 1:
+            span = 1
+    var i_tiles = (n_todo + SMR_TI - 1) // SMR_TI
+    var h_key = ctx.enqueue_create_host_buffer[DType.int32](n_todo)
+    var h_j = ctx.enqueue_create_host_buffer[DType.int32](n_todo)
+    ctx.synchronize()
+    var launches = 0
+    var j0 = 0
+    while j0 < m:
+        var j1 = min(m, j0 + span)
+        var width = j1 - j0
+        var n_s = (SMR_TARGET_BLOCKS + i_tiles - 1) // i_tiles
+        n_s = min(n_s, (width + SMR_TJ - 1) // SMR_TJ)
+        if n_s * n_todo > sb.cap:
+            n_s = sb.cap // n_todo
+        n_s = max(1, min(n_s, CUDA_MAX_GRID_YZ))
+        var sl = (width + n_s - 1) // n_s
+        sl = ((sl + SMR_TJ - 1) // SMR_TJ) * SMR_TJ
+        n_s = (width + sl - 1) // sl
+        var cells = n_s * n_todo
+        var vj = sb.j_d.create_sub_buffer[DType.int32](0, cells)
+        ctx.enqueue_memset(vj, SMR_POISON_J)
+        ctx.enqueue_function[sparse_mr_search_tiled_kernel](
+            sb.key_d.unsafe_ptr(), sb.j_d.unsafe_ptr(), xt_d.unsafe_ptr(),
+            norms_d.unsafe_ptr(), core_d.unsafe_ptr(), comp_d.unsafe_ptr(),
+            sb.todo_d.unsafe_ptr(), Int32(m), Int32(d), Int32(n_todo),
+            Int32(j0), Int32(j1), Int32(sl), inv_alpha, sabotage,
+            grid_dim=(i_tiles, n_s, 1), block_dim=(SMR_TX, SMR_TY, 1),
+        )
+        ctx.enqueue_function[smr_fold_slices_kernel](
+            sb.fk_d.unsafe_ptr(), sb.fj_d.unsafe_ptr(), sb.key_d.unsafe_ptr(),
+            sb.j_d.unsafe_ptr(), Int32(n_todo), Int32(n_s),
+            grid_dim=((n_todo + SPARSE_MR_TPB - 1) // SPARSE_MR_TPB, 1, 1),
+            block_dim=(SPARSE_MR_TPB, 1, 1),
+        )
+        ctx.enqueue_copy(
+            dst_ptr=h_key.unsafe_ptr(),
+            src_buf=sb.fk_d.create_sub_buffer[DType.int32](0, n_todo),
+        )
+        ctx.enqueue_copy(
+            dst_ptr=h_j.unsafe_ptr(),
+            src_buf=sb.fj_d.create_sub_buffer[DType.int32](0, n_todo),
+        )
+        ctx.synchronize()
+        launches += 1
+        for t in range(n_todo):
+            var jj = h_j.unsafe_ptr().unsafe_load(t)
+            if jj == SMR_POISON_J:
+                raise Error(
+                    "hdbscan.sparse_mr_mst: a search launch left a cell of "
+                    + String(cells) + " unwritten (the poison survived);"
+                    " refused by name"
+                )
+            if jj == SMR_BAD_J:
+                raise Error(
+                    "hdbscan.build_mr_linkage: a mutual reachability"
+                    " weight from row " + String(Int(todo[t]))
+                    + " is NaN or infinite (a non-finite input row, or"
+                    " rows whose squared difference overflows Float32);"
+                    " refused by name (DEVIATION 623 / 1607,"
+                    " IDENTITY_PATHS row 39)"
+                )
+            if jj < 0:
+                continue
+            var kk = h_key.unsafe_ptr().unsafe_load(t)
+            if bj[t] < 0 or kk < bk[t] or (kk == bk[t] and jj < bj[t]):
+                bk[t] = kk
+                bj[t] = jj
+        _ = vj^
+        j0 = j1
+    for t in range(n_todo):
+        var i = Int(todo[t])
+        pk[i] = bk[t]
+        pj[i] = bj[t]
+    _ = h_key^
+    _ = h_j^
+    return launches
 
 
 def _search(
@@ -180,6 +544,11 @@ def _search(
 ) raises -> Int:
     """Exact cheapest other-component edge of every point in `todo`, into
     `pk` / `pj`. Returns the number of launches."""
+    comptime if SMR_TILED:
+        return _search_tiled(
+            ctx, sb, xt_d, norms_d, core_d, comp_d, todo, m, d, inv_alpha,
+            sabotage, pk, pj, launch_macs,
+        )
     var n_todo = len(todo)
     if n_todo == 0:
         return 0
@@ -287,12 +656,25 @@ def sparse_mr_mst(
         norms_d.unsafe_ptr(), x.unsafe_ptr(), Int32(d), Int32(0),
         grid_dim=(m, 1, 1), block_dim=(NORM_TPB, 1, 1),
     )
-    var xt = List[Float32](length=m * d, fill=Float32(0.0))
-    for i in range(m):
-        for f in range(d):
-            xt[f * m + i] = x_host[i * d + f]
+    var xt = List[Float32]()
     var xt_d = ctx.enqueue_create_buffer[DType.float32](m * d)
-    ctx.enqueue_copy(dst_buf=xt_d, src_ptr=xt.unsafe_ptr())
+    comptime if SMR_TILED:
+        # the feature-major copy on the device (moves words, no arithmetic)
+        ctx.enqueue_function[transpose_kernel](
+            xt_d.unsafe_ptr(), x.unsafe_ptr(), Int32(m), Int32(d),
+            grid_dim=(
+                (d + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+                min((m + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE, CUDA_MAX_GRID_YZ),
+                1,
+            ),
+            block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+        )
+    else:
+        xt = List[Float32](length=m * d, fill=Float32(0.0))
+        for i in range(m):
+            for f in range(d):
+                xt[f * m + i] = x_host[i * d + f]
+        ctx.enqueue_copy(dst_buf=xt_d, src_ptr=xt.unsafe_ptr())
     var comp_d = ctx.enqueue_create_buffer[DType.int32](m)
     var cap = m + SPARSE_MR_TARGET_THREADS
     var sb = _Search(
@@ -300,6 +682,8 @@ def sparse_mr_mst(
         ctx.enqueue_create_buffer[DType.int32](cap),
         ctx.enqueue_create_buffer[DType.int32](m),
         cap,
+        ctx.enqueue_create_buffer[DType.int32](m),
+        ctx.enqueue_create_buffer[DType.int32](m),
     )
     ctx.synchronize()
 

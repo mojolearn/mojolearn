@@ -125,7 +125,8 @@ def cagra_build_binding(addrs: PythonObject, params: PythonObject) raises -> Pyt
 
 def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, graph, queries, out_d, out_i.
-    params: n, d, graph_degree, m, k, itopk_size, search_width, max_iterations, n_seeds."""
+    params: n, d, graph_degree, m, k, itopk_size, search_width, max_iterations, n_seeds[, rs]
+    (rs: 0 the evenly spaced seeds, > 0 random_state's, x_ann/cagra_core.mojo cg_seed_node)."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var deg = p_int(params, 2)
@@ -135,6 +136,9 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var width = p_int(params, 6)
     var max_iter = p_int(params, 7)
     var n_seeds = p_int(params, 8)
+    var rs = p_int(params, 9) if len(params) > 9 else 0
+    if rs < 0:
+        raise Error("CAGRA search: rs must be >= 0")
     if m <= 0 or k <= 0 or L < k or width < 1 or max_iter < 1 or n_seeds < 1 or n_seeds > n:
         raise Error("CAGRA search: need k >= 1, itopk_size >= k, search_width >= 1, max_iterations >= 1, 1 <= n_seeds <= n")
     var x = in_f32(addrs, 0, n * d)
@@ -146,7 +150,7 @@ def cagra_search_binding(addrs: PythonObject, params: PythonObject) raises -> Py
     var od = List[Float32]()
     var oi = List[Int32]()
     with GILReleased(Python()):
-        cagra_search_device(x, n, d, g, deg, q, m, k, L, width, max_iter, n_seeds, od, oi)
+        cagra_search_device(x, n, d, g, deg, q, m, k, L, width, max_iter, n_seeds, od, oi, rs)
     out_f32(od, addrs, 3)
     out_i32(oi, addrs, 4)
     return PythonObject(m)

@@ -691,8 +691,13 @@ def split_subsets_from_desc(
     mut docs_for_bins: DeviceBuffer[DType.uint32],
     mut split_desc: DeviceBuffer[DType.uint32],
     mut subsets: TOptimizationSubsets,
+    bins_done: Bool = False,
 ) raises:
-    """`split_subsets` consuming the winner from the DEVICE descriptor the pack kernel wrote, instead of five host scalars -- DEVIATION 207, the blind level loop's split."""
+    """`split_subsets` consuming the winner from the DEVICE descriptor the pack kernel wrote, instead of five host scalars -- DEVIATION 207, the blind level loop's split.
+
+    `bins_done`: the bin update already ran inside
+    `pw_resolve_pack_bins_kernel` (DEVIATION 3111), so only the sort and
+    the stats follow."""
     var depth = subsets.current_depth + subsets.fold_bits
     if Int(depth) >= 32:
         raise Error(
@@ -707,7 +712,7 @@ def split_subsets_from_desc(
     )
     if num_blocks > SPLIT_MAX_BLOCKS:
         num_blocks = SPLIT_MAX_BLOCKS
-    if num_blocks > 0:
+    if num_blocks > 0 and not bins_done:
         ctx.enqueue_function[update_bins_from_desc_kernel](
             compressed_index.unsafe_ptr(),
             docs_for_bins.unsafe_ptr(),
