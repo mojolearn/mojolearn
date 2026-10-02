@@ -43,3 +43,8 @@ Not changed (reasons):
 - `robust-huber-blk-taxi`: huber taxi, both arms the device L-BFGS, arm B with 512-row partial blocks. Queue after the
   first line wins.
 - RUN OWED after a taxi win: the same two lines on istella (`robust-huber-dev-istella`, `robust-huber-blk-istella`).
+
+## ocsvm baseline re-run (no switch)
+`robust-ocsvm-base-taxi` runs arm A only (afc_ab.sh with no envB): main's current ocsvm FAST route (x_neighbors/ocsvm_dev.mojo, SMO on the
+grid, brought in by the cg-integrate merge) at this branch's head, which carries no ocsvm change. The board row (taxi 246 ms vs sklearn
+181 ms) predates it; this line gives the manager the current FAST time to replace it.
