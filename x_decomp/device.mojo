@@ -93,10 +93,9 @@ from x_decomp.jacobi2 import (
 )
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
 from x_decomp.jacobi_par import (
+    PJ_SYNC_ROUNDS,
     PJ_TPB,
-    eigh_par_cs_kernel,
-    eigh_par_off_kernel,
-    eigh_par_update_kernel,
+    eigh_rr_on_device,
     pj_identity_kernel,
     pj_transpose_kernel,
     svd_par_norm_kernel,
@@ -104,7 +103,13 @@ from x_decomp.jacobi_par import (
 )
 from std.os import getenv
 from core.device_zero import enqueue_fill
-from decomposition.checks.jacobi_eigh_device import JACOBI_INFO_UNWRITTEN, JACOBI_SWEEPS, JACOBI_TOL
+from decomposition.checks.jacobi_eigh_device import (
+    JACOBI_INFO_UNWRITTEN,
+    JACOBI_SMEM_NMAX,
+    JACOBI_SWEEPS,
+    JACOBI_TOL,
+    jacobi_eigh_kernel_smem,
+)
 from decomposition.host.linalg_public import eigh_ascending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 
@@ -123,8 +128,6 @@ def lu_serial_max() -> Int:
 #: does not converge inside its budget is handed to the cyclic solver.
 comptime PJ_EIGH_SWEEPS = 30
 comptime PJ_SVD_SWEEPS = X_DECOMP_SVD_SWEEPS
-#: rounds enqueued between two synchronize() calls
-comptime PJ_SYNC_ROUNDS = 512
 
 
 def pj_eigh_min() -> Int:
@@ -143,7 +146,13 @@ def host_eigh_max() -> Int:
     (FAST builds for Metal only; 0 = never): the same cyclic Jacobi, without
     the upload, launch, readback and sync a device solve of a few hundred
     values is made of (`Kit[E, S]`'s rule for the native drivers).
-    MOJOLEARN_XD_HOST_EIGH_MAX overrides it."""
+    MOJOLEARN_XD_HOST_EIGH_MAX overrides it (timing A/B only).
+
+    Default 0, the device everywhere (lane/neural-pass144): a small eigh is
+    ONE launch now, the whole cyclic solve in one threadgroup's shared
+    memory (`jacobi_eigh_kernel_smem`, n <= `JACOBI_SMEM_NMAX`: 108 on
+    NVIDIA and AMD, 88 on Apple), with no device-memory round trip a
+    rotation; the same rotations in the same order, so the same bits."""
     var v = String(getenv("MOJOLEARN_XD_HOST_EIGH_MAX", "0"))
     try:
         return Int(v)
@@ -1793,97 +1802,25 @@ struct DevExec(Exec):
     @staticmethod
     def _eigh_par(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises -> Bool:
         """The two-sided Jacobi in the round-robin ordering
-        (x_decomp/jacobi_par.mojo; FAST on Metal), then `device_eigh`'s own
-        tail (`sign_flip_kernel`, the ascending permutation). The cyclic
-        kernel's convergence test, taken on the host before every sweep.
-        `a` is not written; False = not converged in PJ_EIGH_SWEEPS sweeps
-        (nothing stored), and the caller runs the cyclic solver."""
+        (x_decomp/jacobi_par.mojo `eigh_rr_on_device`), then `device_eigh`'s
+        ascending permutation. `a` is not written; False = not converged in
+        PJ_EIGH_SWEEPS sweeps (nothing stored), and the caller runs the
+        cyclic solver."""
         var ctx = xd_ctx()
-        var m = n + (n % 2)
-        var h = m // 2
         var da = _up(ctx, a, n * n)
-        var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
-        var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
-        var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
-        var hoff = ctx.enqueue_create_host_buffer[DType.float32](3 * n)
-        ctx.enqueue_function[pj_identity_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
-        var tol2 = Float64(JACOBI_TOL) * Float64(JACOBI_TOL)
-        var converged = False
-        var executed = 0
-        var fro_in = Float64(-1.0)
-        var fro_now = Float64(0.0)
-        for sweep in range(PJ_EIGH_SWEEPS + 1):
-            # a sum of squares is never negative: -1 left in the readback is
-            # a dispatch that did not run
-            enqueue_fill(ctx, doff, Float32(-1.0))
-            ctx.enqueue_function[eigh_par_off_kernel](
-                da.unsafe_ptr(), doff.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n), block_dim=PJ_TPB
-            )
-            ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
-            ctx.synchronize()
-            var off = Float64(0.0)
-            var dg = Float64(0.0)
-            var ran = True
-            for i in range(n):
-                var o = Float64(hoff.unsafe_ptr().unsafe_load(i))
-                var d2 = Float64(hoff.unsafe_ptr().unsafe_load(n + i))
-                if o < 0.0 or d2 < 0.0:
-                    ran = False
-                off += o
-                dg += d2
-            if not ran:
-                break
-            fro_now = off + dg
-            if fro_in < 0.0:
-                fro_in = fro_now
-            if off <= tol2 * fro_now:
-                converged = True
-                break
-            if sweep == PJ_EIGH_SWEEPS:
-                break
-            executed += 1
-            for rd in range(m - 1):
-                ctx.enqueue_function[eigh_par_cs_kernel](
-                    da.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
-                    grid_dim=_pj_blocks(h), block_dim=PJ_TPB,
-                )
-                ctx.enqueue_function[eigh_par_update_kernel](
-                    da.unsafe_ptr(), dv.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
-                    grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
-                )
-                if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
-                    ctx.synchronize()
-        # J^T A J keeps ||A||_F: a solve that moved it is not an answer
-        if converged and not (abs(fro_now - fro_in) <= 1.0e-3 * fro_in):
-            converged = False
-        if converged:
-            ctx.enqueue_function[sign_flip_kernel](
-                dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
-            )
-            var hv = ctx.enqueue_create_host_buffer[DType.float32](n * n)
-            ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=dv)
-            ctx.synchronize()
-            # the last test's readback holds the diagonal of the converged A
-            var diag = List[Float32](capacity=n)
-            for i in range(n):
-                diag.append(hoff.unsafe_ptr().unsafe_load(2 * n + i))
-            var vecs = List[Float32](capacity=n * n)
-            for i in range(n * n):
-                vecs.append(hv.unsafe_ptr().unsafe_load(i))
-            var got = eigh_ascending(diag, vecs, n, True, executed)
+        var diag = List[Float32]()
+        var vecs = List[Float32]()
+        var got_rr = eigh_rr_on_device(ctx, da, n, PJ_EIGH_SWEEPS, Float32(JACOBI_TOL), diag, vecs)
+        if got_rr[0]:
+            var got = eigh_ascending(diag, vecs, n, True, got_rr[1])
             for i in range(n):
                 w.unsafe_store(i, got.w[i])
             for i in range(n * n):
                 v.unsafe_store(i, got.v[i])
-            _ = hv^
         _ = da^
-        _ = dv^
-        _ = dcs^
-        _ = doff^
-        _ = hoff^
         ctx.synchronize()
         _ = ctx^
-        return converged
+        return got_rr[0]
 
     @staticmethod
     def _eigh2(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
@@ -1899,7 +1836,20 @@ struct DevExec(Exec):
         # unroll 1 is the default: m4pro-b 1790619265077, eigh 1500 46.3 s
         # at unroll 1 against 82.7 s at 4 and 98.6 s for the old kernel,
         # every digest equal (MOJOLEARN_XD_J2_U=4 keeps the other one)
-        if String(getenv("MOJOLEARN_XD_J2_U", "1")) != "4":
+        var smem = False
+        comptime if JACOBI_SMEM_NMAX > 0:
+            # lane/neural-pass144: the whole cyclic solve in one threadgroup's
+            # shared memory when the matrix page fits (the same rotations in
+            # the same order, the same folds at J2_TPB: jacobi2's bits)
+            if n <= JACOBI_SMEM_NMAX:
+                smem = True
+                ctx.enqueue_function[jacobi_eigh_kernel_smem[J2_TPB, JACOBI_SMEM_NMAX]](
+                    da.unsafe_ptr(), dv.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(JACOBI_SWEEPS), Float32(JACOBI_TOL),
+                    grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
+                )
+        if smem:
+            pass
+        elif String(getenv("MOJOLEARN_XD_J2_U", "1")) != "4":
             ctx.enqueue_function[jacobi_eigh2_kernel[1]](
                 da.unsafe_ptr(), dv.unsafe_ptr(), dinfo.unsafe_ptr(), dvt.unsafe_ptr(), Int32(n), Int32(JACOBI_SWEEPS), Float32(JACOBI_TOL),
                 grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),

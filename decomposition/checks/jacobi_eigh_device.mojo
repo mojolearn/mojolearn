@@ -7,6 +7,7 @@ from checks.kernel_matrix import (
     K_LIB_JACOBI_EIGH,
     TARGET_COLUMN,
     lib_block_size_for,
+    lib_smem_page_fits_for,
 )
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -439,6 +440,186 @@ def jacobi_eigh_kernel[rot_tpb: Int = JACOBI_ROT_TPB](
                     v.unsafe_store(k * n + q, _rot_add(s, vkp, c, vkq))
                     k += rot_tpb
                 _jacobi_device_barrier()
+
+    if tid == 0:
+        info_out.unsafe_store(0, Float32(1.0) if converged else Float32(0.0))
+        var rel = Float32(0.0)
+        if fro2 > Float32(0.0):
+            rel = ftz(
+                identical_sqrt(ftz(ftz(Float32(2.0) * last_off) / fro2))
+            )
+        info_out.unsafe_store(1, rel)
+        info_out.unsafe_store(2, Float32(executed))
+
+
+#: THE SMALL-n CYCLIC JACOBI IN ONE THREADGROUP (lane/neural-pass144).
+#:
+#: `jacobi_eigh_kernel_smem` is `jacobi_eigh_kernel` with the matrix held in
+#: shared memory for the whole solve: one launch, every rotation's hand-off a
+#: threadgroup barrier instead of a device-memory round trip. Same picks,
+#: same rotations in the same cyclic order, same two folds over the same
+#: `JACOBI_TPB` partials, same spellings: the same bits (SCHEDULING only).
+#: The basis stays in device memory, row k owned by lane k mod rot_tpb from
+#: the identity to the end (the rotation loop already gives row k to that
+#: lane), so no basis word crosses lanes and no device-memory ordering is
+#: needed; the matrix crosses lanes through threadgroup memory only, which
+#: `barrier()` orders on every vendor (Apple included).
+#:
+#: The page is `JACOBI_SMEM_NMAX`^2 floats plus the folds' slabs, gated by
+#: `lib_smem_page_fits_for` per column: 108 (46,656 B) where 48 KB fits
+#: (NVIDIA, AMD), 88 (30,976 B) under Apple's 32 KB, 0 (never) otherwise.
+comptime JACOBI_SMEM_SLACK = 1024
+"""Bytes reserved beside the matrix page: `rot`, the fold slab and broadcast
+slot of `_fold_lead_lanes_and_broadcast` / `pinned_block_sum`."""
+comptime JACOBI_SMEM_NMAX = (
+    108 if lib_smem_page_fits_for[TARGET_COLUMN, 4 * 108 * 108 + JACOBI_SMEM_SLACK]()
+    else (88 if lib_smem_page_fits_for[TARGET_COLUMN, 4 * 88 * 88 + JACOBI_SMEM_SLACK]() else 0)
+)
+"""Largest n `jacobi_eigh_kernel_smem` serves on this build's column."""
+
+
+@always_inline
+def _rotate_pair_block_sh[
+    o: MutOrigin, //
+](
+    a: MutPointer[Float32, o, address_space = AddressSpace.SHARED],
+    n: Int,
+    p: Int,
+    q: Int,
+    c: Float32,
+    s: Float32,
+):
+    """`_rotate_pair_block` on the threadgroup copy: the same loads, the same
+    arithmetic and the same stores in the same order."""
+    var app = ftz(a[p * n + p])
+    var apq = ftz(a[p * n + q])
+    a[p * n + p] = _rot_sub(c, app, s, apq)
+    a[p * n + q] = _rot_add(s, app, c, apq)
+    var aqp = ftz(a[q * n + p])
+    var aqq = ftz(a[q * n + q])
+    a[q * n + p] = _rot_sub(c, aqp, s, aqq)
+    a[q * n + q] = _rot_add(s, aqp, c, aqq)
+    var rpp = ftz(a[p * n + p])
+    var rqp = ftz(a[q * n + p])
+    a[p * n + p] = _rot_sub(c, rpp, s, rqp)
+    a[q * n + p] = _rot_add(s, rpp, c, rqp)
+    var rpq = ftz(a[p * n + q])
+    var rqq = ftz(a[q * n + q])
+    a[p * n + q] = _rot_sub(c, rpq, s, rqq)
+    a[q * n + q] = _rot_add(s, rpq, c, rqq)
+
+
+def jacobi_eigh_kernel_smem[rot_tpb: Int, nmax: Int](
+    a_io: MutPointer[Float32, MutAnyOrigin],
+    v_out: MutPointer[Float32, MutAnyOrigin],
+    info_out: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    max_sweeps_in: Int32,
+    tol_in: Float32,
+):
+    """`jacobi_eigh_kernel[rot_tpb]`'s contract (a_io in: the symmetric
+    matrix, out: the rotated one; v_out the basis, vector i in COLUMN i;
+    info_out as there), for n <= `nmax`, launched as ONE block of exactly
+    `rot_tpb` threads. See `JACOBI_SMEM_NMAX` for why the bits are
+    `jacobi_eigh_kernel[rot_tpb]`'s."""
+    var n = Int(n_in)
+    var tid = Int(thread_idx.x)
+    var a = stack_allocation[
+        nmax * nmax,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var rot = stack_allocation[
+        2,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var v = v_out
+
+    # Copy in (no arithmetic) and the basis, row k by its owning lane.
+    var idx = tid
+    while idx < n * n:
+        a[idx] = a_io.unsafe_load(idx)
+        idx += rot_tpb
+    var k0 = tid
+    while k0 < n:
+        for cc in range(n):
+            v.unsafe_store(k0 * n + cc, Float32(1.0) if k0 == cc else Float32(0.0))
+        k0 += rot_tpb
+    barrier()
+
+    var local_f = Float32(0.0)
+    if tid < JACOBI_TPB:
+        var fe = tid
+        while fe < n * n:
+            var fv = ftz(a[fe])
+            local_f = ftz(identical_mul_add(fv, fv, local_f))
+            fe += JACOBI_TPB
+    var fro2 = _fold_lead_lanes_and_broadcast[JACOBI_TPB, rot_tpb](local_f)
+    var limit = ftz(ftz(tol_in * tol_in) * fro2)
+
+    var executed = 0
+    var converged = False
+    var last_off = Float32(0.0)
+
+    for _sweep in range(Int(max_sweeps_in)):
+        var local_off = Float32(0.0)
+        if tid < JACOBI_TPB:
+            var e = tid
+            while e < n * n:
+                var i = e // n
+                var j = e - i * n
+                if j > i:
+                    var av = ftz(a[e])
+                    local_off = ftz(identical_mul_add(av, av, local_off))
+                e += JACOBI_TPB
+        var off = _fold_lead_lanes_and_broadcast[JACOBI_TPB, rot_tpb](
+            local_off
+        )
+        last_off = off
+        if Float32(2.0) * off <= limit:
+            converged = True
+            break
+        executed += 1
+
+        for p in range(n):
+            for q in range(p + 1, n):
+                if tid == 0:
+                    var cs = jacobi_rotation_cs(
+                        a[p * n + p], a[q * n + q], a[p * n + q]
+                    )
+                    rot[0] = cs[0]
+                    rot[1] = cs[1]
+                barrier()
+
+                var c = rot[0]
+                var s = rot[1]
+
+                var k = tid
+                while k < n:
+                    if k != p and k != q:
+                        var akp = ftz(a[k * n + p])
+                        var akq = ftz(a[k * n + q])
+                        a[k * n + p] = _rot_sub(c, akp, s, akq)
+                        a[k * n + q] = _rot_add(s, akp, c, akq)
+                        var apk = ftz(a[p * n + k])
+                        var aqk = ftz(a[q * n + k])
+                        a[p * n + k] = _rot_sub(c, apk, s, aqk)
+                        a[q * n + k] = _rot_add(s, apk, c, aqk)
+                    elif k == p:
+                        _rotate_pair_block_sh(a, n, p, q, c, s)
+                    var vkp = ftz(v.unsafe_load(k * n + p))
+                    var vkq = ftz(v.unsafe_load(k * n + q))
+                    v.unsafe_store(k * n + p, _rot_sub(c, vkp, s, vkq))
+                    v.unsafe_store(k * n + q, _rot_add(s, vkp, c, vkq))
+                    k += rot_tpb
+                barrier()
+
+    # Copy out: the host reads the eigenvalues off this diagonal.
+    var od = tid
+    while od < n * n:
+        a_io.unsafe_store(od, a[od])
+        od += rot_tpb
 
     if tid == 0:
         info_out.unsafe_store(0, Float32(1.0) if converged else Float32(0.0))

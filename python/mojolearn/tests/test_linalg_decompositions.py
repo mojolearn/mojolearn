@@ -354,3 +354,24 @@ def test_eigh_device_equals_host_byte_for_byte():
     host.eigh([sym.ctypes.data, hw.ctypes.data, hv.ctypes.data, hs.ctypes.data], [5])
     assert dw.tobytes() == hw.tobytes(), "eigenvalues disagree in the bytes"
     assert dv.tobytes() == hv.tobytes(), "eigenvectors disagree in the bytes"
+
+
+@needs_both
+@pytest.mark.parametrize("n", [64, 96])
+def test_eigh_routes_device_equal_host_byte_for_byte(n):
+    """lane/neural-pass144: n = 64 takes the cyclic Jacobi in one
+    threadgroup's shared memory on the device (`jacobi_eigh_kernel_smem`),
+    n = 96 the round-robin Jacobi (above `LINALG_EIGH_CYCLIC_MAX` = 88,
+    `eigh_rr_on_device` against the host's `host_eigh_rr`). Each route must
+    agree with its host twin in the bytes."""
+    a = _matrix(2 * n, n, seed=11)
+    sym = a.T @ a
+    sym = np.ascontiguousarray(((sym + sym.T) * np.float32(0.5)).astype(np.float32))
+    device, host = _both_routes()
+    dw, dv, ds = np.zeros(n, np.float32), np.zeros(n * n, np.float32), np.zeros(2, np.float64)
+    hw, hv, hs = np.zeros(n, np.float32), np.zeros(n * n, np.float32), np.zeros(2, np.float64)
+    device.eigh([sym.ctypes.data, dw.ctypes.data, dv.ctypes.data, ds.ctypes.data], [n])
+    host.eigh([sym.ctypes.data, hw.ctypes.data, hv.ctypes.data, hs.ctypes.data], [n])
+    assert dw.tobytes() == hw.tobytes(), "eigenvalues disagree in the bytes"
+    assert dv.tobytes() == hv.tobytes(), "eigenvectors disagree in the bytes"
+    assert ds[1] == hs[1], "the two routes ran different sweep counts"
