@@ -97,6 +97,7 @@ from gbdt.overfitting_detector.overfitting_detector import (
 )
 from gbdt.gpu_util.kernel.radix_sort import DeviceFloatSorter
 from std.memory import memcpy
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from core.host_parallel import host_parallelize_pool_env
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_sampling import check_feature_fraction
@@ -149,48 +150,45 @@ numeric fit reads changes, so model bits cannot move. `-D
 MOJOLEARN_2634_CTR_PREP_OFF=1` restores the unconditional build (the A/B
 arm)."""
 
-comptime CINDEX_PARALLEL_STAGING_2636 = is_defined[
-    "MOJOLEARN_2636_PARALLEL_STAGING"
-]()
-"""DEVIATION 2636 (2026-09-11, gbdt-finish lane), ours, host staging only.
-MEASURED AND NOT FLIPPED: OPT-IN, the serial fill below is the default.
+def nan_substitute_kernel(
+    x: MutPointer[Float32, MutAnyOrigin], n_in: Int32, sub: Float32
+):
+    """`BinarizeFloats<UseNanSubstitution=true>`'s prologue on the device
+    (cpu-gpu-cleanup t-gbdt): every NaN of one staged column becomes the
+    treatment's substitute (`nan_substitution`), every other value is left
+    alone. The host loop it replaces tested `v != v` per row and stored the
+    same constant; one thread per value, grid-stride, no arithmetic, so the
+    column the binarize kernel reads is the same words."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < n:
+        var v = x.unsafe_load(i)
+        if v != v:
+            x.unsafe_store(i, sub)
+        i += stride
 
-`_build_cindex_from_columns` (every fit without permutation-dependent
-columns) copies each float column into a pinned staging slot of an
-8-slot ring, one column after another on one thread, and uploads it to the
-device binarize kernel. At Istella-S's 220 x 1,000,000 that is 880 MB of
-single-thread memcpy inside the ~100 ms `train_cindex_build` stage. Under
-the switch the fills of one ring revolution (up to 8 columns, disjoint
-slots, host memory only, the device untouched inside the parallel region)
-run in `sync_parallelize`, and then the revolution's uploads and binarize
-kernels are enqueued in the serial loop's order with the same drain before
-the ring is reused. Same bytes into the same kernels in the same order, so
-the compressed index and the model cannot move.
 
-WHY IT IS NOT THE DEFAULT. Timed on an H100 (pod n2ltmel2optel5,
-2026-09-12, 1M rows, our IDENTICAL arm, 3 rounds alternating processes over
-the sets, `both` -> `all` so the ONLY difference is this define) it costs
-`after/before` 1.0006 as the geometric mean of six (policy, dataset) cells,
-with gbdt-depthwise a clear loss at 1.012: symmetric taxi 0.9746, depthwise
-taxi 1.0092, lossguide taxi 0.9723, symmetric Istella-S 1.0248, depthwise
-Istella-S 1.0148, lossguide Istella-S 1.0093. Quality is equal in every
-cell and no model bit moves either way, so this is a pure time verdict and
-CONTRIBUTING.md (Performance claims) refuses it. The reason the parallelism does not
-pay is in the shape: the fills are parallelized but the uploads and the
-binarize kernels still enqueue serially in the same order, so the device
-stays the bottleneck and the host memcpy it removes was not on the critical
-path. DEVIATIONS 2634 and 2635 carry the lane's win without it
-(`baseline` -> `both` is 0.9603 x 0.9913, essentially all of the 0.9526
-measured from `baseline` -> `all`).
+comptime NAN_SUB_BLOCK = 256
+comptime NAN_SUB_MAX_BLOCKS = 4096
 
-`-D MOJOLEARN_2636_PARALLEL_STAGING=1` selects the parallel ring fill (the
-measurement arm). Re-measuring it needs a host whose staging IS on the
-critical path -- more host threads against a slower device than an H100, or
-a column count well above 220."""
 
-comptime BORROW_X_COLUMNS = not is_defined["MOJOLEARN_2550_HOST_COPY"]()
-"""DEVIATION 2550 (2026-09-11), DEFAULT ON in both tiers since 2026-09-11
-(flipped on one dataset, Istella-S on the MI325X; taxi owed). `-D MOJOLEARN_2550_HOST_COPY=1` restores the two host copies below.
+def _enqueue_nan_substitute(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n_rows: Int, sub: Float32
+) raises:
+    ctx.enqueue_function[nan_substitute_kernel](
+        x.unsafe_ptr(), Int32(n_rows), sub,
+        grid_dim=min(
+            (n_rows + NAN_SUB_BLOCK - 1) // NAN_SUB_BLOCK, NAN_SUB_MAX_BLOCKS
+        ),
+        block_dim=NAN_SUB_BLOCK,
+    )
+
+
+comptime BORROW_X_COLUMNS = True
+"""DEVIATION 2550 (2026-09-11), the only path since cpu-gpu-cleanup t-gbdt
+(the `-D MOJOLEARN_2550_HOST_COPY=1` arm that restored the two host copies
+below is deleted; the name stays for `gbdt_per_round_paths`).
 Ours, host bookkeeping only. `gbdt_fit` copied the caller's column-major X
 into a `List` (`gbdt/estimator.mojo`) and `train` copied every raw column
 again into its own `List` before quantization, so a 1M x 220 fit paid two
@@ -408,16 +406,16 @@ def _build_cindex_from_floats(
                     )
             memcpy(dest=hx, src=src, count=n_rows)
         else:
-            for r in range(n_rows):
-                var v = src.unsafe_load(r)
-                if v != v:
-                    v = sub
-                hx.unsafe_store(r, v)
+            # a substituting treatment copies the raw bytes and substitutes
+            # on the device after the upload (cpu-gpu-cleanup t-gbdt)
+            memcpy(dest=hx, src=src, count=n_rows)
         hbo.unsafe_store(0, Float32(len(borders[f])))
         for b in range(len(borders[f])):
             hbo.unsafe_store(1 + b, borders[f][b])
         ctx.enqueue_copy(dst_buf=xdevs[slot], src_ptr=hx)
         ctx.enqueue_copy(dst_buf=bdevs[slot], src_ptr=hbo)
+        if treat != NAN_TREATMENT_AS_IS:
+            _enqueue_nan_substitute(ctx, xdevs[slot], n_rows, sub)
         ctx.enqueue_function[binarize_float_feature_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
             xdevs[slot].unsafe_ptr(), Int32(n_rows),
@@ -512,82 +510,6 @@ def _build_cindex_from_columns(
         bdevs.append(ctx.enqueue_create_buffer[DType.float32](256))
     ctx.synchronize()
     comptime BIN_GRID = BINARIZE_BLOCK_SIZE * BINARIZE_DOCS_PER_THREAD
-    comptime if CINDEX_PARALLEL_STAGING_2636:
-        # DEVIATION 2636 (see `CINDEX_PARALLEL_STAGING_2636`): one ring
-        # revolution at a time, the host fills of its slots run in
-        # parallel, then the revolution's uploads and kernels are enqueued
-        # in the serial loop's order, one feature at a time. The drain
-        # before a revolution reuses slot 0 stands where the serial loop
-        # had it.
-        var active = List[Int](capacity=n_features)
-        var treats = List[Int](capacity=n_features)
-        for f in range(n_features):
-            if len(borders[f]) == 0:
-                continue
-            active.append(f)
-            if len(nan_treatment) == n_features:
-                treats.append(nan_treatment[f])
-            else:
-                treats.append(NAN_TREATMENT_AS_IS)
-        var n_active = len(active)
-        var base = 0
-        while base < n_active:
-            var width = n_active - base
-            if width > _CINDEX_SLOTS:
-                width = _CINDEX_SLOTS
-            if base > 0:
-                # one drain per revolution frees every slot in the ring
-                ctx.synchronize()
-            var hxp = hxs.unsafe_ptr()
-            var colp = cps.unsafe_ptr()
-            var ap = active.unsafe_ptr()
-            var tp = treats.unsafe_ptr()
-            var nr = n_rows
-            var b0 = base
-
-            def _stage_task(
-                j: Int
-            ) {imm hxp, imm colp, imm ap, imm tp, imm nr, imm b0}:
-                var k = b0 + j
-                var dst = hxp[j].unsafe_ptr()
-                var src = colp[ap[k]]
-                var treat = tp[k]
-                if treat == NAN_TREATMENT_AS_IS:
-                    # the serial loop's AS_IS reasoning holds per column
-                    memcpy(dest=dst, src=src, count=nr)
-                else:
-                    var sub = nan_substitution(treat)
-                    for r in range(nr):
-                        var v = src.unsafe_load(r)
-                        if v != v:
-                            v = sub
-                        dst.unsafe_store(r, v)
-
-            host_parallelize_pool_env(_stage_task, width)
-            # the tasks read these planes; they must outlive the join
-            _ = len(active)
-            _ = len(treats)
-            _ = len(cps)
-            for j in range(width):
-                var f = active[base + j]
-                ref cf = lay.features[f]
-                var hbo = hbos[j].unsafe_ptr()
-                hbo.unsafe_store(0, Float32(len(borders[f])))
-                for b in range(len(borders[f])):
-                    hbo.unsafe_store(1 + b, borders[f][b])
-                ctx.enqueue_copy(dst_buf=xdevs[j], src_ptr=hxs[j].unsafe_ptr())
-                ctx.enqueue_copy(dst_buf=bdevs[j], src_ptr=hbo)
-                ctx.enqueue_function[binarize_float_feature_kernel](
-                    Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
-                    xdevs[j].unsafe_ptr(), Int32(n_rows),
-                    bdevs[j].unsafe_ptr(), cindex.unsafe_ptr(),
-                    grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
-                    block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
-                )
-            base += width
-        ctx.synchronize()
-        _ = len(hxs)
-        return cindex^
     var staged = 0
     for f in range(n_features):
         if len(borders[f]) == 0:
@@ -604,24 +526,19 @@ def _build_cindex_from_columns(
         var hx = hxs[slot].unsafe_ptr()
         var hbo = hbos[slot].unsafe_ptr()
         var src = cps[f]
-        if treat == NAN_TREATMENT_AS_IS:
-            # AS_IS means the border build's full-column NaN scan (the
-            # sampled draw's explicit scan, or the full path's
-            # calc_quantization over every value) saw none in THIS SAME
-            # buffer, so a NaN here is unreachable and the checked
-            # element-wise copy is a straight memcpy
-            memcpy(dest=hx, src=src, count=n_rows)
-        else:
-            for r in range(n_rows):
-                var v = src.unsafe_load(r)
-                if v != v:
-                    v = sub
-                hx.unsafe_store(r, v)
+        # the raw column is a byte move into the pinned slot; a treatment
+        # that substitutes NaNs does so on the device after the upload
+        # (cpu-gpu-cleanup t-gbdt). AS_IS means the border build's
+        # full-column NaN scan saw none in THIS SAME buffer, so it needs no
+        # pass at all.
+        memcpy(dest=hx, src=src, count=n_rows)
         hbo.unsafe_store(0, Float32(len(borders[f])))
         for b in range(len(borders[f])):
             hbo.unsafe_store(1 + b, borders[f][b])
         ctx.enqueue_copy(dst_buf=xdevs[slot], src_ptr=hx)
         ctx.enqueue_copy(dst_buf=bdevs[slot], src_ptr=hbo)
+        if treat != NAN_TREATMENT_AS_IS:
+            _enqueue_nan_substitute(ctx, xdevs[slot], n_rows, sub)
         ctx.enqueue_function[binarize_float_feature_kernel](
             Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
             xdevs[slot].unsafe_ptr(), Int32(n_rows),
@@ -804,9 +721,8 @@ def train(
     min_child_hessian: Float64 = -1.0,
     feature_fraction: Float64 = 1.0,
     # DEVIATION 2550: the caller's column-major X read in place, with
-    # `x_colmajor` empty. The binding entry (`gbdt_fit`) passes it by
-    # default (`-D MOJOLEARN_2550_HOST_COPY=1` opts out); every other
-    # caller passes the List.
+    # `x_colmajor` empty. The binding entry (`gbdt_fit`) passes it; every
+    # other caller passes the List.
     x_borrow: Optional[MutPointer[Float32, MutUntrackedOrigin]] = None,
     # THE POOL'S GROUPING, their `TQueriesGrouping` sizes in row order: one
     # entry per query, each the number of CONSECUTIVE rows carrying that
@@ -1559,19 +1475,8 @@ def train(
             # place from the caller's buffer; the default copies it, one
             # flat memcpy per column (the append loop that replaced was
             # ~0.5 s of every train() at 400k x 500).
-            comptime if BORROW_X_COLUMNS:
-                columns.append(List[Float32]())
-                column_src_feature.append(f)
-            else:
-                var raw = List[Float32]()
-                raw.resize(n_rows, Float32(0.0))
-                memcpy(
-                    dest=raw.unsafe_ptr(),
-                    src=x_src + f * n_rows,
-                    count=n_rows,
-                )
-                columns.append(raw^)
-                column_src_feature.append(-1)
+            columns.append(List[Float32]())
+            column_src_feature.append(f)
             column_one_hot.append(flagged_one_hot)
             column_ctr_grid.append(-1)
             continue
