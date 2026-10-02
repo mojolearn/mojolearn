@@ -1,0 +1,66 @@
+lane/apple-fast-ann 59afb759a (main not merged yet) diff-check: 
+lane/apple-fast-bayes 1a0bb2b2b (main not merged yet) diff-check: 
+lane/apple-fast-cluster 1c2edab35 (main not merged yet) diff-check: 
+lane/apple-fast-cluster2 0afe6f98a (main not merged yet) diff-check: 
+lane/apple-fast-core 67258a0df (main not merged yet) diff-check: 
+lane/apple-fast-dart 02362668e (main not merged yet) diff-check: 
+lane/apple-fast-decomp-linalg 514a7f94b tree-check rc=0 findings=0
+lane/apple-fast-decomp-sparse ab9db4ddd tree-check rc=0 findings=0
+lane/apple-fast-depthwise bdc8c10b1 tree-check rc=0 findings=0
+lane/apple-fast-ets e3369d119 (main not merged yet) diff-check: 
+lane/apple-fast-gram 033f6c096 (main not merged yet) diff-check: 
+lane/apple-fast-isotonic-knn 4f4cd51e2 (main not merged yet) diff-check: 
+lane/apple-fast-kapprox 445c124c4 tree-check rc=0 findings=0
+lane/apple-fast-kernel 4e08139d4 (main not merged yet) diff-check: 
+lane/apple-fast-linear 44ec8018d (main not merged yet) diff-check: 
+lane/apple-fast-meta ca91827c0 (main not merged yet) diff-check: 
+lane/apple-fast-neighbors2 39ce8794b tree-check rc=0 findings=0
+lane/apple-fast-ordered 3fa785efc tree-check rc=0 findings=0
+lane/apple-fast-pairlogit 382a1b234 tree-check rc=0 findings=0
+lane/apple-fast-pca-eig 9819970b1 (main not merged yet) diff-check:   decomposition/impl/linalg/detail/pca.mojo:470: [d2h-loop] downloads, synchronizes, loops on the host, then goes back t
+lane/apple-fast-prep 387211293 (main not merged yet) diff-check: 
+lane/apple-fast-prep2 cc3b27d5f (main not merged yet) diff-check: 
+lane/apple-fast-resample 50b96e795 (main not merged yet) diff-check: 
+lane/apple-fast-rfet-scan b0d5b1fab (main not merged yet) diff-check:   bindings/_mojolearn_rf.mojo:1044: [host-call] calls a host-only module from GPU code: if has_nan_f32_threaded(xp, n_ro
+lane/apple-fast-select 4743bb576 (main not merged yet) diff-check: 
+lane/apple-fast-seq 8b3f1d90e (main not merged yet) diff-check: 
+lane/apple-fast-trees-depthwise da8ad083f tree-check rc=0 findings=0
+lane/apple-fast-trees-ensembles d7887faa1 (main not merged yet) diff-check: 
+lane/apple-fast-trees-io 9d916e91f (main not merged yet) diff-check: 
+lane/apple-fast-trees-scan 43430ca0f (main not merged yet) diff-check: 
+lane/apple-fast-trees-symmetric ce517b4b3 tree-check rc=0 findings=0
+lane/apple-fast-tsa 21e28b348 (main not merged yet) diff-check: 
+lane/apple-fast-yetirank c9eb1ce14 (main not merged yet) diff-check: 
+== diff-mode rc per lane (lines the lane adds over its merge-base with main)
+lane/apple-fast-ann rc=0 findings=0
+lane/apple-fast-bayes rc=0 findings=0
+lane/apple-fast-cluster rc=0 findings=0
+lane/apple-fast-cluster2 rc=0 findings=0
+lane/apple-fast-core rc=0 findings=0
+lane/apple-fast-dart rc=0 findings=0
+lane/apple-fast-decomp-linalg rc=1 findings=1
+      python/mojolearn/_expansion_decomp.py:2459: [py-loop] a Python loop over n in a GPU-path module: dead = [all(abs(Yk.s[i * q + j]) < thr for i in range(n)) for
+lane/apple-fast-decomp-sparse rc=1 findings=1
+      python/mojolearn/_expansion_decomp.py:2459: [py-loop] a Python loop over n in a GPU-path module: dead = [all(abs(Yk.s[i * q + j]) < thr for i in range(n)) for
+lane/apple-fast-depthwise rc=0 findings=0
+lane/apple-fast-ets rc=0 findings=0
+lane/apple-fast-gram rc=0 findings=0
+lane/apple-fast-isotonic-knn rc=0 findings=0
+lane/apple-fast-kapprox rc=0 findings=0
+lane/apple-fast-kernel rc=0 findings=0
+lane/apple-fast-linear rc=0 findings=0
+lane/apple-fast-meta rc=0 findings=0
+lane/apple-fast-neighbors2 rc=0 findings=0
+lane/apple-fast-ordered rc=0 findings=0
+lane/apple-fast-pairlogit rc=0 findings=0
+lane/apple-fast-prep rc=0 findings=0
+lane/apple-fast-prep2 rc=0 findings=0
+lane/apple-fast-resample rc=0 findings=0
+lane/apple-fast-select rc=0 findings=0
+lane/apple-fast-trees-depthwise rc=0 findings=0
+lane/apple-fast-trees-ensembles rc=0 findings=0
+lane/apple-fast-trees-io rc=0 findings=0
+lane/apple-fast-trees-scan rc=0 findings=0
+lane/apple-fast-trees-symmetric rc=0 findings=0
+lane/apple-fast-tsa rc=0 findings=0
+lane/apple-fast-yetirank rc=0 findings=0

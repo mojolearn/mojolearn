@@ -16,8 +16,32 @@ Results: (filled as lanes report)
 - kapprox DONE 015510968: KAPPROX_DEVICE (chi2 samplers device fit/transform), 2 lines; gaussian-rp left to decomp-sparse; CHECK overlap with neighbors2/isotonic-knn (x_neighbors gen bindings)
 - select DONE baf8e1681: SELECT_FREG/FCLS/D defines, 4 lines
 - cluster DONE 2d5b3dffa (2 defines, 10 lines); cluster2 DONE 670baf47a (merged cluster; 5 defines, 18 lines; optics serial launch rewritten as per-step grid); trim to one dataset requested
-
-## Paused 2026-10-02 (weekly API limit, resets 22:00Z); user asked: commit and push everything, discard nothing
-Pushed heads: resample 50b96e795, linear 44ec8018d, tsa 21e28b348, bayes 0f7218b29, trees-scan 43430ca0f, trees-depthwise 92e87fe17, core 67258a0df, trees-ensembles d7887faa1, trees-io 9d916e91f, rfet-scan b0d5b1fab, trees-symmetric ae0774468, yetirank c9eb1ce14, trees-yeti b157e5ee0, prep 387211293, prep2 cc3b27d5f, gram 033f6c096, kernel 4e08139d4, kapprox 015510968, cluster 2d5b3dffa, cluster2 670baf47a, select cb5c31a60 (prep2 merged in; merge.log committed as-is), meta 497bcad7d (CALIB_GNB_FOLDS; multioutput-reg not started), decomp-linalg 8fdbdd0e8 and decomp-sparse e021e3498 (main merged; WIP .txt/.md and overlap check not done), ann 59afb759a (main merged; was mid-push), depthwise 341ab92ea (dw_tree_sync.mojo WIP, unreferenced), dart c7fe11e34 (WIP), ets 7433af169 (WIP, unreferenced).
-NOT pushed: neighbors2 local merge 6aff39c27 in ~/mojolearn-wt/neighbors2 (pre-push hook refused 13 host-route findings in x_neighbors/iter_device.mojo:1869-2005 `_buf`/`_down` calls and svgp_fast.mojo:110 one-block launch; origin stays at 67157e40a, unmerged with main). Patch of that head vs origin/main: neighbors2-unpushed-merge.patch beside this file. isotonic-knn 4f4cd51e2 = origin (main merged, pushed by the lane).
-Open follow-ups: cluster/cluster2 request files not yet trimmed to one dataset per change; kapprox x neighbors2/isotonic-knn overlap on x_neighbors gen bindings unchecked; select x prep2 settled by the select lane's merge.
+- RESUMED 22:07Z: ann neighbors decomp depthwise meta dart ets select cluster; new scope trees-symmetric (pass 2 vs CatBoost) and trees-depthwise (categorical CTR); new lanes ordered, pairlogit (origin/main 829c3fb4a). Disk: 30 checkouts x 776 MB bench/results filled the per-session allowance; bench/results sparse-excluded in every worktree (no commits or edits touched), 25 GB free.
+- ann DONE 59afb759a: 8 defines, 15 istella lines (old env-form M3 queue lines 279-297 are no-ops; manager re-reads ann.txt)
+- select DONE 4743bb576: prep2 overlap settled (x_prep/device.mojo:242-262), merge.log removed
+- cluster DONE 1c2edab35 (2 lines), cluster2 DONE 0afe6f98a (9 lines): request files trimmed
+- dart DONE 02362668e: DART_DEVICE (device drop set + one gathered row launch per round), 2 istella lines; one host fit-target copy per round remains (forest session takes host labels)
+- decomp-linalg DONE 8fdbdd0e8 (11 lines; LU switches dropped, main covers); decomp-sparse DONE ad7c6c09b (merged linalg; 9 lines; RP_DIRECT/MDS/ISOMAP dropped, main covers; gaussian-rp needs a board re-run of main, no lane)
+- meta DONE ca91827c0: CALIB_GNB_FOLDS + MULTIOUT_RIDGE, 2 taxi lines; ets DONE e3369d119: ETS_TEAM, ets-team-taxi. main moved to 829c3fb4a (fix-eigh-main, fix-dart-host, NEXT_PASS_TREES.md): decomp-linalg/decomp-sparse/neighbors2 must re-merge
+- neighbors2 DONE 39ce8794b (main 829c3fb4a merged) (pushed; host routes fixed on device, SVGP define, pagerank/MMA switches dropped as main/isotonic-knn cover them; 6 lines); isotonic-knn DONE 4f4cd51e2 (4 lines); both clean vs main 829c3fb4a and vs kapprox
+- decomp-linalg DONE 514a7f94b (main 829c3fb4a merged, EIGH_FAST_RR dropped, 10 lines); decomp-sparse DONE ab9db4ddd (merged main + linalg, 9 lines); gaussian-rp: board re-run of main needed, no lane
+- trees-symmetric pass 2 DONE 0cd00a38d: SYM_DEVICE_PARTITION, SYM_NO_TAIL_DRAIN; 4 istella lines incl. symmetric-1000; pass 3 (Newton walker drains) requested
+- depthwise DONE 5ab885c63: GBDT_DW_TREE_SYNC (dw-tree-taxi); host replay check to be gated
+- depthwise DONE bdc8c10b1: timed arm device-only, host replay under TREE_SYNC_CHECK; dw-tree-taxi + dw-tree-check-taxi
+- trees-depthwise pass 2 DONE da8ad083f: CTR_PERM_BATCH, CTR_PERM_PTRS; owed: device-resident CTR columns (build_ctr_tables host passes)
+- NOTE: the interrupted worktree-removal command had already removed 14 finished-lane checkouts (all pushed, nothing lost); all 14 recreated from origin at the same heads (sparse, no bench/results).
+- Board-gap fan-out (user's Oct 2 table, classical/trees only): NEW lanes shap, prep3, robust, graph, tsa2, nb (from main 829c3fb4a); pass 2 on isotonic-knn (knn-imputer/isotonic/lle), decomp-linalg (cholesky/LU/svd), kapprox (kernel-pca/sparse-rp). Neural rows out of scope. Lanes with queued A/Bs not restarted.
+- trees-symmetric pass 3 DONE ce517b4b3: SYM_DEVICE_LEAVES (Newton walk on device, one leaf readback per tree); 5 istella lines
+- pairlogit DONE 382a1b234: PAIRLOGIT_GROUP_FUSED, PAIRLOGIT_EST_REUSE, MULTICLASS_HESSIAN_BATCH; 3 lines
+- ordered DONE 3fa785efc: ORDERED_FOLD_DERIVS, ORDERED_BATCH_EST; 2 taxi lines
+- kapprox pass 2 DONE 59b2b9ff7: KPCA_RESIDENT, SPARSE_RP_DEVICE; 2 lines
+- GPU-only audit: no_host_routes diff-mode clean on every lane (decomp PLS flag is main's else-branch re-indented); fixes dispatched: core env switches -> defines, trees-ensembles host fold loops -> device, ann csr_offsets one-block scan
+- isotonic-knn pass 2 DONE d7934c6c5: ISOTONIC_FAST_PAR define, PAIRMERGE, XN_FAST_IMPUTE_TILED2; LLE needs a sparse eigensolver (documented, not written); 6 lines
+- 22:34Z main moved to 2d7eade5b (cg-integrate); re-merge dispatched to ann, cluster2, core, decomp pair, gram+kernel, isotonic-knn+neighbors2, kapprox, meta, trees-ensembles/io/rfet-scan, tsa; new lanes told to merge before final push. pca-eig conflict is the peer's branch (not ours).
+- meta re-merged debb5f743 (main 2d7eade5b), clean
+- ann re-merged 68cc6b6bd (main 2d7eade5b), CSR offsets two-level scan, TSNE_FAST_ZSUM dropped (main covers); 14 lines; clean
+- gram re-merged 47ab9b791, kernel re-merged ca0756e50 (main 2d7eade5b), clean
+- cluster re-merged aaef7b261, cluster2 775d5b7be (main 2d7eade5b; stale MB_DEVICE_STEP ref fixed), clean
+- kapprox re-merged 9583fbd26, clean vs main; kapprox x neighbors2 to be settled on neighbors2 (gen.py re-run)
+- graph DONE 1fa36a7ec: CC_FAST (4 hook+jump rounds per wait, device relabel), graph-cc-fast-taxi
+- core re-merged d22a7494c (main 2d7eade5b): env switches -> 6 defines, DEVICE_SCALE dropped (main covers), 7 lines; clean
