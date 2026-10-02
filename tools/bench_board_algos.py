@@ -848,7 +848,7 @@ _add("prophet", xlane="sequence", ours=("ProphetForecaster",), kind="ts",
 
 # ---- lane trees -----------------------------------------------------------
 _add("decision-tree-clf", xlane="trees", ours="DecisionTreeClassifier", task="clf", block="cls",
-     sk="sklearn.tree:DecisionTreeClassifier", params=dict(max_depth=16, random_state=SEED),
+     sk="sklearn.tree:DecisionTreeClassifier", params=dict(max_depth=16, max_features=1.0, random_state=SEED),
      cuml="cuml.ensemble:RandomForestClassifier",
      cuml_params=dict(n_estimators=1, bootstrap=False, max_features=1.0, max_depth=16, n_bins=128,
                       random_state=SEED),
@@ -856,7 +856,7 @@ _add("decision-tree-clf", xlane="trees", ours="DecisionTreeClassifier", task="cl
            "single-tree class exists), n_bins=128 as ours",
            "ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("decision-tree-reg", xlane="trees", ours="DecisionTreeRegressor", task="reg", block="reg",
-     sk="sklearn.tree:DecisionTreeRegressor", params=dict(max_depth=16, random_state=SEED),
+     sk="sklearn.tree:DecisionTreeRegressor", params=dict(max_depth=16, max_features=1.0, random_state=SEED),
      cuml="cuml.ensemble:RandomForestRegressor",
      cuml_params=dict(n_estimators=1, bootstrap=False, max_features=1.0, max_depth=16, n_bins=128,
                       random_state=SEED),
