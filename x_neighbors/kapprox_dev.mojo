@@ -15,7 +15,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_neighbors.items import FP, IP
-from x_neighbors.device_ops import xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK, skew_transform_kernel
+from x_neighbors.device_ops import xn_ctx, _grid, _tid, BLOCK, skew_transform_kernel
 from x_neighbors.kapprox_items import (
     kapprox_check_item,
     kapprox_achi2_item,
@@ -41,6 +41,32 @@ def kapprox_fast_binding() raises -> PythonObject:
 
 def _refuse() raises:
     raise Error("x_neighbors: the kapprox device ops are FAST + Apple only (-D MOJOLEARN_KAPPROX_DEVICE)")
+
+
+# One plain enqueue_copy per buffer on the lane's stream (graph_dev.mojo's
+# shape): no staged host copy, no host threads.
+def _dev_f(ctx: DeviceContext, addr: Int, count: Int, upload: Bool) raises -> DeviceBuffer[DType.float32]:
+    var buf = ctx.enqueue_create_buffer[DType.float32](count if count > 0 else 1)
+    if upload and count > 0:
+        ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
+    return buf^
+
+
+def _dev_i(ctx: DeviceContext, addr: Int, count: Int, upload: Bool) raises -> DeviceBuffer[DType.int32]:
+    var buf = ctx.enqueue_create_buffer[DType.int32](count if count > 0 else 1)
+    if upload and count > 0:
+        ctx.enqueue_copy(dst_buf=buf, src_ptr=IP(unsafe_from_address=addr))
+    return buf^
+
+
+def _back_f(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], addr: Int, count: Int) raises:
+    if count > 0:
+        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=addr), src_buf=buf)
+
+
+def _back_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], addr: Int, count: Int) raises:
+    if count > 0:
+        ctx.enqueue_copy(dst_ptr=IP(unsafe_from_address=addr), src_buf=buf)
 
 
 def kapprox_check_kernel(x: FP, flag: IP, n_: Int64, d_: Int64, strict_: Int64, floor_: Float32):
@@ -84,13 +110,13 @@ def op_kapprox_check(x: Int, flag: Int, n: Int, d: Int, strict: Int, floor: Floa
         _refuse()
         return
     var ctx = xn_ctx()
-    var d_x = _buf(ctx, x, n * d, True)
-    var d_flag = _buf_i(ctx, flag, 1, True)
+    var d_x = _dev_f(ctx, x, n * d, True)
+    var d_flag = _dev_i(ctx, flag, 1, True)
     ctx.enqueue_function[kapprox_check_kernel](
         d_x.unsafe_ptr(), d_flag.unsafe_ptr(), Int64(n), Int64(d), Int64(strict), floor,
         grid_dim=_grid(n * d), block_dim=(BLOCK if n * d > 1 else 1),
     )
-    _down_i(ctx, d_flag, flag, 1)
+    _back_i(ctx, d_flag, flag, 1)
     ctx.synchronize()
     _ = d_x^
     _ = d_flag^
@@ -103,15 +129,15 @@ def op_kapprox_achi2(x: Int, res: Int, flag: Int, n: Int, d: Int, steps: Int, in
         _refuse()
         return
     var ctx = xn_ctx()
-    var d_x = _buf(ctx, x, n * d, True)
-    var d_res = _buf(ctx, res, n * d * (2 * steps - 1), False)
-    var d_flag = _buf_i(ctx, flag, 1, True)
+    var d_x = _dev_f(ctx, x, n * d, True)
+    var d_res = _dev_f(ctx, res, n * d * (2 * steps - 1), False)
+    var d_flag = _dev_i(ctx, flag, 1, True)
     ctx.enqueue_function[kapprox_achi2_kernel](
         d_x.unsafe_ptr(), d_res.unsafe_ptr(), d_flag.unsafe_ptr(), Int64(n), Int64(d), Int64(steps), interval,
         grid_dim=_grid(n * d), block_dim=(BLOCK if n * d > 1 else 1),
     )
-    _down(ctx, d_res, res, n * d * (2 * steps - 1))
-    _down_i(ctx, d_flag, flag, 1)
+    _back_f(ctx, d_res, res, n * d * (2 * steps - 1))
+    _back_i(ctx, d_flag, flag, 1)
     ctx.synchronize()
     _ = d_x^
     _ = d_res^
@@ -127,14 +153,14 @@ def op_kapprox_skew_fit(w: Int, off: Int, d: Int, nc: Int, seed: Int) raises:
         return
     var ctx = xn_ctx()
     var count = d * nc + nc
-    var d_w = _buf(ctx, w, d * nc, False)
-    var d_off = _buf(ctx, off, nc, False)
+    var d_w = _dev_f(ctx, w, d * nc, False)
+    var d_off = _dev_f(ctx, off, nc, False)
     ctx.enqueue_function[kapprox_skew_fit_kernel](
         d_w.unsafe_ptr(), d_off.unsafe_ptr(), Int64(d), Int64(nc), Int64(seed),
         grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
     )
-    _down(ctx, d_w, w, d * nc)
-    _down(ctx, d_off, off, nc)
+    _back_f(ctx, d_w, w, d * nc)
+    _back_f(ctx, d_off, off, nc)
     ctx.synchronize()
     _ = d_w^
     _ = d_off^
@@ -150,12 +176,12 @@ def op_kapprox_skew_transform(x: Int, w: Int, off: Int, res: Int, flag: Int, n: 
         _refuse()
         return
     var ctx = xn_ctx()
-    var d_x = _buf(ctx, x, n * d, True)
-    var d_w = _buf(ctx, w, d * nc, True)
-    var d_off = _buf(ctx, off, nc, True)
-    var d_res = _buf(ctx, res, n * nc, False)
-    var d_flag = _buf_i(ctx, flag, 1, True)
-    var d_lx = _buf(ctx, 0, n * d, False)
+    var d_x = _dev_f(ctx, x, n * d, True)
+    var d_w = _dev_f(ctx, w, d * nc, True)
+    var d_off = _dev_f(ctx, off, nc, True)
+    var d_res = _dev_f(ctx, res, n * nc, False)
+    var d_flag = _dev_i(ctx, flag, 1, True)
+    var d_lx = _dev_f(ctx, 0, n * d, False)
     ctx.enqueue_function[kapprox_skew_log_kernel](
         d_x.unsafe_ptr(), d_lx.unsafe_ptr(), d_flag.unsafe_ptr(), Int64(n * d), skew,
         grid_dim=_grid(n * d), block_dim=(BLOCK if n * d > 1 else 1),
@@ -164,8 +190,8 @@ def op_kapprox_skew_transform(x: Int, w: Int, off: Int, res: Int, flag: Int, n: 
         d_lx.unsafe_ptr(), d_w.unsafe_ptr(), d_off.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(d), Int64(nc),
         grid_dim=_grid(n * nc), block_dim=(BLOCK if n * nc > 1 else 1),
     )
-    _down(ctx, d_res, res, n * nc)
-    _down_i(ctx, d_flag, flag, 1)
+    _back_f(ctx, d_res, res, n * nc)
+    _back_i(ctx, d_flag, flag, 1)
     ctx.synchronize()
     _ = d_x^
     _ = d_w^
