@@ -804,8 +804,10 @@ comptime GBDT_LG_BATCH = 1 if not _LG_FAST_APPLE else (
 #: 256 leaves), alternating A/B, FAST main vs FAST with both: Lossguide taxi
 #: (4.1M rows) 78.2 -> 16.7 s, Istella-S (2.0M rows) 102.0 -> 23.1 s, held-out
 #: logloss and AUC within the run-to-run spread of FAST (whose float-atomic
-#: histograms vary run to run in both arms). Width 32; arms `-D
-#: MOJOLEARN_GBDT_LG_EXACT_BATCH16|64`; `-D MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF`
+#: histograms vary run to run in both arms). Width 64 since aft-ab-lgw64
+#: (M3, vs 32: taxi 16.8 -> 14.9 s, Istella 22.9 -> 20.7 s, quality within
+#: spread; width 16 was slower, 18.1 s taxi); arms `-D
+#: MOJOLEARN_GBDT_LG_EXACT_BATCH32|128`; `-D MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF`
 #: keeps one leaf per iteration (the A/B arm).
 comptime LG_EXACT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -814,8 +816,8 @@ comptime LG_EXACT_BATCH = (
     and not _LG_FAST_APPLE
 )
 comptime LG_EXACT_BATCH_WIDTH = (
-    64 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH64"]() else (
-        16 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH16"]() else 32
+    128 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128"]() else (
+        32 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]() else 64
     )
 )
 
