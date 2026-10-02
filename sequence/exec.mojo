@@ -52,6 +52,7 @@ from sequence.ops import (
     OP_LN_BWD_W,
     OP_SEG_SUMSQ,
     OP_CHUNK_SUMSQ,
+    OP_AF_BLK_SUMSQ,
     OP_LAMB_RATIO,
     OP_STL,
     OP_THETA,
@@ -93,6 +94,8 @@ def _element_weight[OP: Int](a: Args) -> Int:
         return max(a.i0, 1)
     elif OP == OP_LN_BWD_W:
         return max(a.i0, 1)
+    elif OP == OP_AF_BLK_SUMSQ:
+        return max(a.i1, 1)
     elif (
         OP == OP_STL or OP == OP_THETA or OP == OP_CROSTON or OP == OP_ETS
         or OP == OP_GARCH or OP == OP_PROPHET_FIT or OP == OP_CHOLSOLVE
