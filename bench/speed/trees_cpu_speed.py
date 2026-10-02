@@ -17,6 +17,9 @@ float32; held-out rows are the next `--m`. The regression target is a fixed
 function of the columns (host float64, then float32). Without `--data`, a
 seeded Gaussian problem (a smoke only). `--rows name=N,...` caps one
 algorithm's training rows (the O(n^2) or per-row Python wrappers).
+
+OUR CPU IS NEVER TIMED (Andrew, Oct 2 2026): on the host column this script prints digests only: the
+MOJOLEARN_VENDOR=cpu run drops every *_s field and keeps the digests.
 """
 import argparse
 import hashlib
@@ -60,6 +63,19 @@ def load(args):
     return x[:n], x[n:], yc[:n], yr[:n], y3[:n]
 
 
+def _host_column():
+    """True when this process runs our host (CPU) column: MOJOLEARN_VENDOR=cpu
+    or a CPU-only install. Our CPU is never timed (Andrew, Oct 2 2026): there
+    this script prints digests only."""
+    if os.environ.get("MOJOLEARN_VENDOR", "").strip().lower() == "cpu":
+        return True
+    try:
+        import mojolearn
+        return mojolearn.vendor() == "cpu"
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def timed(fn):
     t = time.perf_counter()
     r = fn()
@@ -93,7 +109,13 @@ def main():
     x, xh, yc, yr, y3 = load(args)
     T = args.trees
 
+    host = _host_column()
+    if host:
+        print("%s: %s (no *_s fields)" % ("trees_cpu_speed", "OUR CPU IS NEVER TIMED (Andrew, Oct 2 2026): on the host column this script prints digests only"), flush=True)
+
     def cell(name, **kv):
+        if host:
+            kv = {k_: v_ for k_, v_ in kv.items() if not k_.endswith("_s")}
         rec["cells"][name] = kv
         print(json.dumps({name: kv}), flush=True)
 
