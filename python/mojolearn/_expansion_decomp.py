@@ -3035,14 +3035,38 @@ class LatentDirichletAllocation(_Base):
         else:
             Dt = k.const(1.0, n, nc)
         Et = k.ew("exp", _dirichlet_expectation_2d(k, Dt))
-        Dt, Et = k.lda_rows(X, self._exp_dir, Dt, Et, self.doc_topic_prior_, self.max_doc_update_iter,
-                            self.mean_change_tol)
         ss = None
         if cal_sstats:
+            ss = self._fused_estep_ss(k, X, Dt, Et)     # FAST + Apple + define only, else None
+        if ss is None:
+            Dt, Et = k.lda_rows(X, self._exp_dir, Dt, Et, self.doc_topic_prior_, self.max_doc_update_iter,
+                                self.mean_change_tol)
+        if cal_sstats and ss is None:
             norm_phi = k.ew("adds", k.mm(Et, self._exp_dir), s=_F64_EPS)
             R = k.ew("div", X, norm_phi)
             ss = k.ew("mul", k.mm(Et, R, ta=True), self._exp_dir)
         return Dt, ss
+
+    def _fused_estep_ss(self, k, X, Dt, Et):
+        """FAST only (lane apple-fast-nb): the E-step's document loop and the
+        sufficient statistics in one launch, `x_decomp_dev_lda_estep_ss`
+        (x_decomp/lda_fast.mojo), exported by the GPU binding only when built
+        FAST on Apple with -D MOJOLEARN_LDA_FUSED_SS. Dt and Et are updated in
+        place on the device as `lda_rows` does. None (the caller runs main's
+        chain) under IDENTICAL, without the export, off the resident path, or
+        past the kernel's caps."""
+        if k.mode != "fast" or not X.r or not k._use(X, self._exp_dir, Dt, Et):
+            return None
+        try:
+            fn = getattr(k._raw(), "x_decomp_dev_lda_estep_ss")
+        except Exception:       # the host proxy raises ImportError for an absent export
+            return None
+        nc, v = self._exp_dir.r, self._exp_dir.c
+        ss = k._dout(nc, v)
+        ok = fn(k._did(X), k._did(self._exp_dir), k._did(Dt), k._did(Et), ss._d.id,
+                [X.r, nc, v, int(self.max_doc_update_iter)],
+                [float(self.doc_topic_prior_), float(self.mean_change_tol)])
+        return ss if int(ok) else None
 
     def _em_step(self, k, X, total_samples, batch_update):
         _, ss = self._e_step(k, X, True, True)
