@@ -170,6 +170,13 @@ CUSTOM_OPS = [
      [("q", "fin", "n * n"), ("x", "finout", "n"), ("p", "fin", "n"), ("dw", "fin", "n"), ("dangling", "iin", "n"),
       ("info", "iout", "2"), ("n", "int"), ("max_iter", "int"), ("thr_hi", "int"), ("thr_lo", "int"),
       ("alpha", "float")]),
+    # lane neural-pass30's sparse power iteration (x_neighbors/pr_sparse.mojo).
+    # Its export was added to the generated bindings by hand and the next
+    # regeneration dropped it; the entry lives here now (lane/neural-pass96).
+    ("pr_iterate_sparse",
+     [("a", "fin", "n * n"), ("x", "finout", "n"), ("p", "fin", "n"), ("dw", "fin", "n"), ("info", "iout", "2"),
+      ("n", "int"), ("max_iter", "int"), ("thr_hi", "int"), ("thr_lo", "int"), ("binary", "int"),
+      ("alpha", "float")]),
     ("pcs_resident",
      [("x", "fin", "n * d_in"), ("hidx", "iin", "degree * nf"), ("hbit", "iin", "degree * nf"), ("res", "fout", "n * nc"),
       ("n", "int"), ("d_in", "int"), ("nf", "int"), ("nc", "int"), ("degree", "int"), ("gamma", "float"),
