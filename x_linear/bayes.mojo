@@ -170,6 +170,17 @@ def _t_sse(t: Team, x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, 
 #: is the A/B arm) turns it on. IDENTICAL and the other vendors never compile it.
 comptime X_LINEAR_GRAM_SSE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 
+#: FAST on Apple (lane/apple-fast-kernel, 2026-10-02): ip[6] == 1 says
+#: x_linear/bayes_fast.mojo already wrote xm, G, X'y and, at the `old`
+#: offset, [ym, |y - ym|^2, var(y)] on the grid (chunked 32 x 32 tiles), so
+#: the team skips its row passes (`t_col_means`, `t_mean`, `t_centered_gram`,
+#: the X'y chains, `_var`): one serial float32 chain per cell over a million
+#: rows on ONE block, and the Istella quality cause (the Gram's small
+#: eigenvalues were roundoff). ip[7] == 1 passes the Jacobi a 1e-7 skip
+#: threshold (`t_jacobi_eig`). MOJOLEARN_KERNEL_FAST_BAYES_STATS=1 /
+#: MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1 set them; IDENTICAL never compiles this.
+comptime X_LINEAR_KFAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+
 
 def _t_yy(t: Team, y: FP, n: Int, ym: Float32) -> Float32:
     """|y - ym|^2 on the team: strided per-thread partials in team row 0,
@@ -251,6 +262,14 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
     var sw = ldi(ip, 2) != 0
     var wsum = i2f(n)
     var ym = Float32(0)
+    var kstats = False
+    var jtol = Float32(1e-9)
+    comptime if is_gpu() and X_LINEAR_KFAST:
+        if not sw and ldi(ip, 6) != 0:
+            kstats = True
+            ym = ld(fw, old + 0)
+        if ldi(ip, 7) != 0:
+            jtol = Float32(1e-7)
     comptime if is_gpu():
         if sw:
             wsum = t_sum(t, y + n, n)
@@ -282,7 +301,7 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
                 st(fw, gg + j * d + k, acc)
                 st(fw, gg + k * d + j, acc)
             t.sync()
-        else:
+        elif not kstats:
             if fi:
                 t_col_means(t, x, n, d, fw, xm)
                 ym = t_mean(t, y, n, 1)
@@ -296,18 +315,19 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
                 t_centered_gram(t, x, n, d, fw, xm, fw, gg)
         var yc = ym
         # X'y on centered data
-        for j in range(t.tid, d, t.nt):
-            var acc = Float32(0)
-            var mj = ld(fw, xm + j)
-            if sw:
-                for i in range(n):
-                    var xc = fs(ld(x, i * d + j), mj)
-                    xc = fm(ld(y, n + i), xc)
-                    acc = fmad(xc, fs(ld(y, i), yc), acc)
-            else:
-                acc = chain_cfmad(x, j, d, mj, y, 0, 1, yc, n)
-            st(fw, xty + j, acc)
-        t.sync()
+        if not kstats:
+            for j in range(t.tid, d, t.nt):
+                var acc = Float32(0)
+                var mj = ld(fw, xm + j)
+                if sw:
+                    for i in range(n):
+                        var xc = fs(ld(x, i * d + j), mj)
+                        xc = fm(ld(y, n + i), xc)
+                        acc = fmad(xc, fs(ld(y, i), yc), acc)
+                else:
+                    acc = chain_cfmad(x, j, d, mj, y, 0, 1, yc, n)
+                st(fw, xty + j, acc)
+            t.sync()
     else:
         # the host's row passes: one pass per statistic, vector accumulators
         if sw:
@@ -338,7 +358,7 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
             else:
                 axpy_centered(fw, xty, b, x, i * d, fw, xm, d)
     var alpha = ld(fp, 5)
-    t_jacobi_eig(t, fw, gg, fw, vv, d, 60)
+    t_jacobi_eig(t, fw, gg, fw, vv, d, 60, jtol)
     if t.lead():
         for j in range(d):
             var ev = ld(fw, gg + j * d + j)
@@ -348,7 +368,11 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
                 acc = fmad(ld(fw, vv + k * d + j), ld(fw, xty + k), acc)
             st(fw, vty + j, acc)
         if alpha < 0:
-            var yvar = _var(y, n)
+            var yvar = Float32(0)
+            if kstats:
+                yvar = ld(fw, old + 2)
+            else:
+                yvar = _var(y, n)
             if sw:
                 # np.average((y - y_mean) ** 2, weights=sample_weight)
                 var m = Float32(0)
@@ -568,8 +592,15 @@ def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     var old = lamo + d
     var keep = 0
     var ym = Float32(0)
+    var kstats = False
+    comptime if is_gpu() and X_LINEAR_KFAST:
+        if ldi(ip, 6) != 0:
+            kstats = True
+            ym = ld(fw, old + 0)
     comptime if is_gpu():
-        if fi:
+        if kstats:
+            pass
+        elif fi:
             t_col_means(t, x, n, d, fw, xm)
             ym = t_mean(t, y, n, 1)
         else:
@@ -579,14 +610,18 @@ def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
         # ip[4] (device only, lane/neural-pass87): the grid's Gram is already in fw
         if ldi(ip, 4) == 0:
             t_centered_gram(t, x, n, d, fw, xm, fw, gg)
-        t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
+        if not kstats:
+            t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
     else:
         ym = _center(x, y, n, d, fi, fw, xm, iw)
         centered_gram(x, n, d, fw, xm, fw, gg)
         centered_xty(x, y, n, d, fw, xm, ym, fw, xty)
     var alpha = Float32(0)
     if t.lead():
-        alpha = fd(Float32(1), fa(_var(y, n), Float32(1.1920929e-07)))
+        if kstats:
+            alpha = fd(Float32(1), fa(ld(fw, old + 2), Float32(1.1920929e-07)))
+        else:
+            alpha = fd(Float32(1), fa(_var(y, n), Float32(1.1920929e-07)))
         fill(fw, lamo, d, Float32(1))
         fill(res, 0, d, Float32(0))
         for j in range(d):

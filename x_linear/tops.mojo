@@ -16,6 +16,7 @@ from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from x_linear.ops import fz as _fz
 from x_linear.ops import xmad
 from checks.numerics import identical_mul
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
 @always_inline
@@ -504,7 +505,8 @@ def t_cholesky(t: Team, a: FP, aoff: Int, m: Int) -> Bool:
     return True
 
 
-def t_jacobi_eig(t: Team, a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int):
+def t_jacobi_eig(t: Team, a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps: Int,
+                 skip_tol: Float32 = Float32(1e-9)):
     """`jacobi_eig` (x_linear/ops.mojo) on the team (lane/neural-pass85,
     2026-10-01). A rotation (p, q) is three element-wise passes over k: the
     columns p, q of A, then its rows p, q, then the columns p, q of V; in each
@@ -538,7 +540,17 @@ def t_jacobi_eig(t: Team, a: FP, aoff: Int, v: FP, voff: Int, m: Int, max_sweeps
                 var app = ld(a, aoff + p * m + p)
                 var aqq = ld(a, aoff + q * m + q)
                 var scale = fsqrt(fabs(fm(app, aqq)))
-                if fabs(apq) <= fm(Float32(1e-9), scale) or apq == 0:
+                # lane/apple-fast-kernel (2026-10-02): FAST may pass a skip
+                # threshold (`skip_tol`, BayesianRidge/ARD under
+                # MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1: 1e-7). Float32
+                # roundoff leaves every |a_pq| near 6e-8 * scale, above the
+                # 1e-9 test, so the serial sweeps never stopped early and
+                # the 220 x 220 solve ran all 60 sweeps on one block (about
+                # 5x the sweeps the diagonal needs). IDENTICAL keeps 1e-9.
+                var thr = fm(Float32(1e-9), scale)
+                comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+                    thr = fm(skip_tol, scale)
+                if fabs(apq) <= thr or apq == 0:
                     continue
                 rotated = True
                 var theta = fd(fs(aqq, app), fm(Float32(2), apq))

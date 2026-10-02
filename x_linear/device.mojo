@@ -39,6 +39,7 @@ from x_linear.logcv_grid import logcv_fit_grid
 from x_linear.huber_grid import huber_fit_grid
 from x_linear.dispatch import ALGO_HUBER, ALGO_ENETCV
 from x_linear.enetcv_fast import enetcv_fast
+from x_linear.bayes_fast import bayes_fast_stats
 from x_linear.tops import X_LINEAR_SERIAL_FOLDS
 from x_linear.dispatch import ALGO_LOGCV
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
@@ -1204,6 +1205,26 @@ def fit_device(
             while len(hip) < 6:
                 hip.append(Int32(0))
             hip[5] = Int32(0 if String(getenv("MOJOLEARN_X_LINEAR_GRAM_SSE")) == "0" else 1)
+    # lane/apple-fast-kernel (2026-10-02), FAST on Apple only, both default
+    # off. MOJOLEARN_KERNEL_FAST_BAYES_STATS=1: the means, the centered Gram,
+    # X'y and the target scalars from x_linear/bayes_fast.mojo (chunked
+    # tiles on the grid) instead of `xg_means_kernel` + `xg_gram_kernel`
+    # (one serial million-row chain per cell) and the team's own X'y /
+    # mean / variance passes on one block; ip[6] tells the team to skip
+    # them. MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1 (ip[7]): the team Jacobi
+    # skips rotations below 1e-7 * sqrt(a_pp a_qq) instead of 1e-9, a
+    # threshold float32 roundoff never reaches, so it ran all 60 sweeps.
+    var kstats = False
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        if bayes_like:
+            if n > 0 and d > 0 and String(getenv("MOJOLEARN_KERNEL_FAST_BAYES_STATS")) == "1":
+                kstats = True
+                grid_gram = True
+                hip[4] = Int32(1)
+            while len(hip) < 8:
+                hip.append(Int32(0))
+            hip[6] = Int32(1 if kstats else 0)
+            hip[7] = Int32(1 if String(getenv("MOJOLEARN_KERNEL_FAST_BAYES_JACOBI")) == "1" else 0)
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](
         team_work(n, team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr()))), team_own(algo, d)))
@@ -1220,7 +1241,16 @@ def fit_device(
     dfw.enqueue_fill(Float32(0))
     diw.enqueue_fill(Int32(0))
     dtw.enqueue_fill(Float32(0))
-    if grid_gram:
+    var grid_done = False
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        if kstats:
+            # xm at 0, G at d, X'y at d + d*d; the scalars at the `old`
+            # offset of x_linear/bayes.mojo's layout (3d + 2d^2 for
+            # BayesianRidge, 3d + 3d^2 for ARD), scratch until the loop
+            bayes_fast_stats(ctx, dx, dy, dfw, n, d, Int(hip[1]), d, d + d * d,
+                             3 * d + (2 * d * d if algo == ALGO_BAYES else 3 * d * d))
+            grid_done = True
+    if grid_gram and not grid_done:
         # The means then the centered Gram into fw[0, d + d*d), the layout
         # `lars_fit` reads (xm at 0, G at d); the team recomputes the means
         # itself (the same statements, the same values) and skips the Gram.
