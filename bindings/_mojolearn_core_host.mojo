@@ -57,13 +57,10 @@ file's header names every original by file and line. IT HAS A FOLD AND A
 QUANTIZATION, so the sabotage define reaches it (one extra unit in every
 quantized centroid-sum cell) and `core_host_sabotage()` reports it.
 
-Workstream E (lane/cpu-training-e, 2026-09-14) adds the three centering
-helpers of `linear_model.py` (`column_mean_f64`, `center_columns_f32`,
-`scale_rows_f32`, in `bindings/host_helpers.mojo`), which the ols and ridge
-host fits reach through `_buffer._native` before the estimators host
-binding is called; the seven-runner gate refused both lanes at
-`_mojolearn.column_mean_f64` until they were here. Sequential float64
-chains and per-cell operations, no fold to sabotage.
+Workstream E (lane/cpu-training-e, 2026-09-14) added the three centering
+helpers of `linear_model.py`; lane hr-small-passes (2026-10-02) deleted
+them: the linear models center through the estimators binding on every
+tier (`lm_col_sums`, `lm_center`, `lm_scale_rows`).
 
 `transpose_f32` and `cast_colmajor_f64_to_f32` MIRROR
 `bindings/_mojolearn.mojo::_tiled_transpose_to_f32` (DEVIATIONS 2471,
@@ -90,13 +87,10 @@ from bindings.host_helpers import (
     argmax_rows_f32_binding,
     argmax_rows_f64_binding,
     cast_f64_to_f32_binding,
-    center_columns_f32_binding,
-    column_mean_f64_binding,
     gather_f64_binding,
     gather_i64_binding,
     gather_rows_bytes_binding,
     probability_rows_f32_binding,
-    scale_rows_f32_binding,
 )
 from bindings.hotpath_helpers import (
     HOTPATH_SABOTAGE,
@@ -1383,9 +1377,6 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         module.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
-        module.def_function[column_mean_f64_binding]("column_mean_f64")
-        module.def_function[center_columns_f32_binding]("center_columns_f32")
-        module.def_function[scale_rows_f32_binding]("scale_rows_f32")
         module.def_function[probability_rows_f32_binding]("probability_rows_f32")
         # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
         # of bindings/hotpath_helpers.mojo, and the ORDER RULE's encoder the

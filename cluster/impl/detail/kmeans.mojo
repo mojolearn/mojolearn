@@ -109,7 +109,7 @@ from cluster.impl.detail.kmeans_common import (
 )
 from core.identity_trace import IdentityTrace
 from checks.fixed_point import choose_scale
-from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
+from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN
 from cluster.impl.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
     min_cluster_and_distance_compute,
@@ -291,9 +291,20 @@ def init_random(
     ctx.synchronize()
 
 
+#: lane/gap-nv-classical2: NVIDIA and AMD too (the name kept). Off Apple the
+#: k - 1 picks each synchronized and read the costs back (ivf's 1024-list
+#: coarse quantizer: ~3,000 syncs; IVF-PQ's 55 codebooks: ~42,000). The same
+#: draws and the same first-strict-minimum pick on the device.
+#: -D MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY=1 restores the Apple-only gate.
 comptime KMEANS_FAST_PP_NOSYNC = (
     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and has_apple_gpu_accelerator()
+    and (
+        has_apple_gpu_accelerator()
+        or (
+            (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+            and not is_defined["MOJOLEARN_KMEANS_PP_NOSYNC_APPLE_ONLY"]()
+        )
+    )
     and not is_defined["MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF"]()
 )
 """FAST on Apple: the greedy k-means++ loop draws every pick's uniforms up

@@ -9,7 +9,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from preprocessing.estimator import validate_dimensions, minmax_fit_host, minmax_transform_host_into, validate_standard, standard_fit_host, standard_transform_host_into
+from preprocessing.estimator import validate_dimensions, minmax_fit_host, minmax_transform_host_into, validate_standard, standard_fit_host, standard_transform_host_into, minmax_fit_direct, standard_fit_direct
 
 
 def ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -102,6 +102,43 @@ def standard_transform_binding(
     return PythonObject(n*d)
 
 
+def fit_direct_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """minmax_fit from the caller's own buffer (lane gap-prep2): 1 when the
+    five rows were written, 0 when X holds a NaN or an infinity (nothing
+    written; the caller takes its NaN route). The same kernels and words."""
+    if len(params) != 4:
+        raise Error("minmax_fit_direct: requires 4 parameters")
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var lower = Float32(Float64(py=params[2]))
+    var upper = Float32(Float64(py=params[3]))
+    validate_dimensions(n,d,lower,upper)
+    var x = ptr(Int(py=x_addr))
+    var output = ptr(Int(py=out_addr))
+    var ok = 0
+    with GILReleased(Python()):
+        ok = minmax_fit_direct(x,n,d,lower,upper,output)
+    return PythonObject(ok)
+
+
+def standard_fit_direct_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """standard_fit from the caller's own buffer (lane gap-prep2): 1 when the
+    three rows were written, 0 when X holds a NaN or an infinity."""
+    if len(params) != 4:
+        raise Error("standard_fit_direct: requires 4 parameters")
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var with_mean = Int(py=params[2])
+    var with_std = Int(py=params[3])
+    validate_standard(n,d,with_mean,with_std)
+    var x = ptr(Int(py=x_addr))
+    var output = ptr(Int(py=out_addr))
+    var ok = 0
+    with GILReleased(Python()):
+        ok = standard_fit_direct(x,n,d,with_mean,with_std,output)
+    return PythonObject(ok)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -118,6 +155,8 @@ def PyInit__mojolearn_preprocessing() abi("C") -> PythonObject:
         m.def_function[standard_transform_binding]("standard_transform")
         m.def_function[fit_binding]("minmax_fit")
         m.def_function[transform_binding]("minmax_transform")
+        m.def_function[fit_direct_binding]("minmax_fit_direct")
+        m.def_function[standard_fit_direct_binding]("standard_fit_direct")
         m.def_function[numeric_mode_binding]("preprocessing_numeric_mode")
         m.def_function[vendor_binding]("preprocessing_vendor")
         return m.finalize()

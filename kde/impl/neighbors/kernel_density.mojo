@@ -108,6 +108,7 @@ from std.sys.info import has_apple_gpu_accelerator
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -1978,6 +1979,74 @@ def kde_lse_serial_sum_kernel(
     lse.unsafe_store(i, ftz(identical_log(s) + mx))
 
 
+# ===========================================================================
+# lane/gap-classical-nv (2026-10-02): steps 3 and 4 in ONE kernel, one BLOCK
+# per query. `kde_lse_terms_kernel` read and rewrote the whole 800 MB matrix
+# and `kde_lse_serial_sum_kernel` then put 2,000 threads (16 blocks on a
+# 142-SM L40S) on 100,000-step chains reading it again. Here a block's
+# threads compute a tile of the query's terms (the terms kernel's exact
+# expression, coalesced reads, nothing written back) into shared memory
+# while thread 0 folds the PREVIOUS tile with `ftz(s + t)` in ascending `j`
+# (double buffered, one barrier per tile). The owner sees `t_0 .. t_{n-1}`
+# in the serial kernel's order, so `lse` is that kernel's, bit for bit.
+# `-D MOJOLEARN_KDE_BLOCK_SUM_OFF` restores the two kernels.
+# ===========================================================================
+comptime KDE_BLOCK_SUM = not is_defined["MOJOLEARN_KDE_BLOCK_SUM_OFF"]()
+comptime KDE_BLOCK_SUM_TPB = 256
+comptime KDE_BLOCK_SUM_TILE = 1024
+
+
+def kde_lse_block_sum_kernel(
+    logk: MutPointer[Float32, MutAnyOrigin],
+    rowmax: MutPointer[Float32, MutAnyOrigin],
+    lse: MutPointer[Float32, MutAnyOrigin],
+    n_query_in: Int32,
+    n_train_in: Int32,
+    trans_in: Int32,
+):
+    """Steps 3 + 4 for query `block_idx.x`; `block_dim == KDE_BLOCK_SUM_TPB`."""
+    var q = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var n_query = Int(n_query_in)
+    var n_train = Int(n_train_in)
+    var trans = Int(trans_in) != 0
+    if q >= n_query:
+        return
+    var mx = rowmax.unsafe_load(q)
+    if mx == bitcast[DType.float32](UInt32(0xFF800000)):
+        # block-uniform: no thread reaches a barrier below
+        if tid == 0:
+            lse.unsafe_store(q, mx)
+        return
+    comptime T = KDE_BLOCK_SUM_TILE
+    var sh = stack_allocation[
+        2 * T, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var n_tiles = (n_train + T - 1) // T
+    var s = Float32(0.0)
+    for r in range(n_tiles + 1):
+        if r < n_tiles:
+            var j0 = r * T
+            var buf = (r % 2) * T
+            var i = tid
+            while i < T:
+                var j = j0 + i
+                if j < n_train:
+                    var idx = j * n_query + q if trans else q * n_train + j
+                    sh[buf + i] = ftz(identical_exp(ftz(logk.unsafe_load(idx) - mx)))
+                i += KDE_BLOCK_SUM_TPB
+        if r >= 1 and tid == 0:
+            var pb = ((r - 1) % 2) * T
+            var cnt = n_train - (r - 1) * T
+            if cnt > T:
+                cnt = T
+            for i in range(cnt):
+                s = ftz(s + sh[pb + i])
+        barrier()
+    if tid == 0:
+        lse.unsafe_store(q, ftz(identical_log(s) + mx))
+
+
 def kde_score_samples_tiled_identical(
     ctx: DeviceContext,
     mut train: DeviceBuffer[DType.float32],
@@ -2080,25 +2149,37 @@ def kde_score_samples_tiled_identical(
         grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
         block_dim=(lse_tpb, 1, 1),
     )
-    ctx.enqueue_function[kde_lse_terms_kernel](
-        logk.unsafe_ptr(),
-        rowmax.unsafe_ptr(),
-        Int32(n_query),
-        Int32(n_train),
-        Int32(1 if transposed else 0),
-        grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
-        block_dim=(elem_tpb, 1, 1),
-    )
-    ctx.enqueue_function[kde_lse_serial_sum_kernel](
-        logk.unsafe_ptr(),
-        rowmax.unsafe_ptr(),
-        lse.unsafe_ptr(),
-        Int32(n_query),
-        Int32(n_train),
-        Int32(1 if transposed else 0),
-        grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
-        block_dim=(lse_tpb, 1, 1),
-    )
+    comptime if KDE_BLOCK_SUM:
+        ctx.enqueue_function[kde_lse_block_sum_kernel](
+            logk.unsafe_ptr(),
+            rowmax.unsafe_ptr(),
+            lse.unsafe_ptr(),
+            Int32(n_query),
+            Int32(n_train),
+            Int32(1 if transposed else 0),
+            grid_dim=(n_query, 1, 1),
+            block_dim=(KDE_BLOCK_SUM_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[kde_lse_terms_kernel](
+            logk.unsafe_ptr(),
+            rowmax.unsafe_ptr(),
+            Int32(n_query),
+            Int32(n_train),
+            Int32(1 if transposed else 0),
+            grid_dim=((cells + elem_tpb - 1) // elem_tpb, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
+        ctx.enqueue_function[kde_lse_serial_sum_kernel](
+            logk.unsafe_ptr(),
+            rowmax.unsafe_ptr(),
+            lse.unsafe_ptr(),
+            Int32(n_query),
+            Int32(n_train),
+            Int32(1 if transposed else 0),
+            grid_dim=((n_query + lse_tpb - 1) // lse_tpb, 1, 1),
+            block_dim=(lse_tpb, 1, 1),
+        )
     var log_sw = ftz(identical_log(sum_weights))
     var norm = log_kernel_norm(kernel, bandwidth, n_features)
     ctx.enqueue_function[normalize_scores_kernel](

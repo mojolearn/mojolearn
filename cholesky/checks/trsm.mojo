@@ -65,7 +65,7 @@ correctly-rounded quotient. `CHOL_SAB_TRSM_RECIPROCAL` is that arm.
 with its own banner saying it is unreachable from any identity path here.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -196,9 +196,21 @@ def trsm_upper_kernel(
 # the whole block stage its L column into threadgroup memory, so the chain
 # waits on threadgroup loads instead of strided global ones.
 # ===========================================================================
+#:
+#: EVERY GPU since lane/gap-classical-nv (2026-10-02). Until then the gate
+#: also read `has_apple_gpu_accelerator()`, so NVIDIA and AMD ran
+#: `trsm_lower_kernel` / `trsm_upper_kernel`: ONE THREAD per right-hand
+#: side walking all n rows behind strided global loads, both directions.
+#: KernelRidge's single-target solve at n = 10,000 is 1e8 dependent steps
+#: there (L40S 0.8.25: 4.9 s fit vs cuML 0.33 s; the M3 Ultra, on this
+#: path, spends 0.33 s in cho_solve). The kernels below are the original
+#: chains term for term, so no word moves on any vendor. The diagonal
+#: broadcast names its source lane inside the hardware wave
+#: (`_sweep_src_lane`), so AMD's 64-wide wave reads the right half. FAST on
+#: Apple keeps `fast_cho_solve`; FAST elsewhere takes these (it had only
+#: the serial kernels, whose arithmetic these are).
 comptime CHOL_SWEEP_SOLVES = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    not FAST_CHO_SOLVE
     and not is_defined["MOJOLEARN_CHOL_SWEEP_SOLVES_OFF"]()
 )
 comptime CHOL_SWEEP_NT = 1024
@@ -220,6 +232,14 @@ comptime CHOL_BACK_FMA_NO_FTZ = (
 comptime CHOL_BACK_UNROLL = 1 if is_defined["MOJOLEARN_CHOL_BACK_UNROLL_OFF"]() else (
     64 if is_defined["MOJOLEARN_CHOL_BACK_U64"]() else (16 if is_defined["MOJOLEARN_CHOL_BACK_U16"]() else 32)
 )
+
+
+@always_inline
+def _sweep_src_lane(tid: Int, r: Int) -> UInt32:
+    """The hardware lane holding 32-row group lane `r` for thread `tid`.
+    The sweeps split a block into 32-thread groups; on a 32-wide wave that
+    is `r`, on AMD's 64-wide wave the group may be the upper half."""
+    return UInt32((tid % WARP_SIZE) - (tid % 32) + r)
 
 
 def trsm_lower_sweep_kernel(
@@ -267,7 +287,7 @@ def trsm_lower_sweep_kernel(
                         x = ftz(identical_div(tv, ftz(l.unsafe_load((k0 + r) * ld + k0 + r))))
                         xs[r] = x
                         b.unsafe_store((k0 + r) * nrhs + j, x)
-                    x = shuffle_idx(x, UInt32(r))
+                    x = shuffle_idx(x, _sweep_src_lane(tid, r))
                     if lane > r and ri < n:
                         tv = ftz(identical_mul_add(-ftz(l.unsafe_load(ri * ld + k0 + r)), x, tv))
         barrier()
@@ -291,10 +311,9 @@ def trsm_lower_sweep_kernel(
 #: term, in both numeric modes (the arithmetic is `trsm_lower_kernel`'s,
 #: which FAST's serial column solve also runs), so no word moves. Apple;
 #: `-D MOJOLEARN_CHOL_MULTI_RHS_OFF` keeps one column per block.
-comptime CHOL_MULTI_RHS = (
-    has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_CHOL_MULTI_RHS_OFF"]()
-)
+#: Every GPU since lane/gap-classical-nv (2026-10-02), with
+#: `CHOL_SWEEP_SOLVES`; the same chains, so no word moves.
+comptime CHOL_MULTI_RHS = not is_defined["MOJOLEARN_CHOL_MULTI_RHS_OFF"]()
 #: 256, not the sweep's 1024 (lane/apple-merged, 2026-09-28): with RB-wide
 #: vectors per thread the M2 Pro (no Dynamic Caching) dropped the 1024-thread
 #: dispatch with no error (GP predict(return_std=True) returned 0 for a whole
@@ -353,7 +372,7 @@ def trsm_lower_multi_rhs_kernel(
                             if j0 + c < nrhs:
                                 b.unsafe_store((k0 + r) * nrhs + j0 + c, x[c])
                     comptime for c in range(RB):
-                        x[c] = shuffle_idx(x[c], UInt32(r))
+                        x[c] = shuffle_idx(x[c], _sweep_src_lane(tid, r))
                     if lane > r and ri < n:
                         var lv = ftz(l.unsafe_load(ri * ld + k0 + r))
                         comptime for c in range(RB):
@@ -446,7 +465,7 @@ def trsm_lower_multi_rhs4_kernel(
                             if j0 + c < nrhs:
                                 b.unsafe_store((k0 + r) * nrhs + j0 + c, x[c])
                     comptime for c in range(RB):
-                        x[c] = shuffle_idx(x[c], UInt32(r))
+                        x[c] = shuffle_idx(x[c], _sweep_src_lane(tid, r))
                     if lane > r and ri < n:
                         var lv = ftz(l.unsafe_load(ri * ld + k0 + r))
                         comptime for c in range(RB):

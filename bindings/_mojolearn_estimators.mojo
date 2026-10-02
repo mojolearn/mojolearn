@@ -47,6 +47,8 @@ from decomposition.estimator import (
     tsvd_transform_host,
 )
 from glm.estimator import (
+    OLS_FAST_DEVICE_CENTER,
+    ols_center_tsqr_r_host,
     ols_fit_centered_host,
     ols_fit_host,
     ols_predict_host,
@@ -58,6 +60,7 @@ from glm.estimator import (
     ridge_fit_host,
 )
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
+from glm.impl.center_device import col_sums_device, center_device, scale_rows_device
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -515,6 +518,84 @@ def ols_fit_binding(
     return PythonObject(0)
 
 
+def lm_col_sums_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Lane hr-small-passes: the exact, correctly rounded float64 sum of
+    every column of a float32 [rows, cols] matrix, on the device
+    (glm/impl/center_device.mojo). params: rows, cols. Returns 0."""
+    if len(params) != 2:
+        raise Error("lm_col_sums: params must contain rows, cols")
+    var xa = Int(py=x_addr)
+    var oa = Int(py=out_addr)
+    var nr = Int(py=params[0])
+    var nc = Int(py=params[1])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        col_sums_device(ctx, xa, oa, nr, nc)
+    return PythonObject(0)
+
+
+def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Lane hr-small-passes: out = x - mu per column in float32 on the
+    device, subnormals flushed. params: rows, cols. Returns 0."""
+    if len(params) != 2:
+        raise Error("lm_center: params must contain rows, cols")
+    var xa = Int(py=x_addr)
+    var ma = Int(py=mu_addr)
+    var oa = Int(py=out_addr)
+    var nr = Int(py=params[0])
+    var nc = Int(py=params[1])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        center_device(ctx, xa, ma, oa, nr, nc)
+    return PythonObject(0)
+
+
+def lm_scale_rows_binding(x_addr: PythonObject, w_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Lane hr-small-passes: out = x * w per row in float32 on the device,
+    subnormals flushed. params: rows, cols. Returns 0."""
+    if len(params) != 2:
+        raise Error("lm_scale_rows: params must contain rows, cols")
+    var xa = Int(py=x_addr)
+    var wa = Int(py=w_addr)
+    var oa = Int(py=out_addr)
+    var nr = Int(py=params[0])
+    var nc = Int(py=params[1])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        scale_rows_device(ctx, xa, wa, oa, nr, nc)
+    return PythonObject(0)
+
+
+def ols_center_tsqr_r_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    r_addr: PythonObject,
+    means_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """R of the blocked TSQR of [X - mu | y - mu_y] with RAW X and y uploaded
+    once and centered on the device (-D MOJOLEARN_OLS_FAST_DEVICE_CENTER,
+    lane/apple-fast-core, 2026-10-02; `glm/estimator.mojo::
+    ols_center_tsqr_r_host`). params: n_rows, n_features. `r_addr` receives
+    the (n_features + 1) square float32 R, `means_addr` the n_features
+    float32 column means; returns the mean of y. Registered under FAST +
+    Apple with the define only."""
+    if len(params) != 2:
+        raise Error("ols_center_tsqr_r: params must contain n_rows, n_features")
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var xa = Int(py=x_addr)
+    var ya = Int(py=y_addr)
+    var ra = Int(py=r_addr)
+    var ma = Int(py=means_addr)
+    var y_mean = Float64(0.0)
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        y_mean = ols_center_tsqr_r_host(ctx, xa, ya, ra, ma, nr, nf)
+        ctx.synchronize()
+    return PythonObject(y_mean)
+
+
 def ols_fit_centered_binding(
     x_addr: PythonObject,
     y_addr: PythonObject,
@@ -523,22 +604,23 @@ def ols_fit_centered_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`ols_fit` on RAW X and y with the intercept's centering on the device
-    (MOJOLEARN_OLS_FAST_DEVICE_CENTER=1, lane/apple-fast-core, 2026-10-02;
-    `glm/estimator.mojo::ols_fit_centered_host`). params: n_rows,
-    n_features. `means_addr` receives the n_features float32 column means;
-    returns the mean of y. FAST + Apple only: refused by name elsewhere."""
+    (-D MOJOLEARN_OLS_FAST_DEVICE_CENTER, lane/apple-fast-core, 2026-10-02;
+    `glm/estimator.mojo::ols_fit_centered_host`): the route for the designs
+    the Python layer keeps off the TSQR. params: n_rows, n_features.
+    `means_addr` receives the n_features float32 column means; returns the
+    mean of y. Registered under FAST + Apple with the define only."""
     if len(params) != 2:
         raise Error("ols_fit_centered: params must contain n_rows, n_features")
-    var xp = _f32_ptr(Int(py=x_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    var wp = _f32_ptr(Int(py=coef_addr))
-    var mp = _f32_ptr(Int(py=means_addr))
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
+    var xa = Int(py=x_addr)
+    var ya = Int(py=y_addr)
+    var ca = Int(py=coef_addr)
+    var ma = Int(py=means_addr)
     var y_mean = Float64(0.0)
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        y_mean = ols_fit_centered_host(ctx, xp, yp, wp, mp, nr, nf)
+        y_mean = ols_fit_centered_host(ctx, xa, ya, ca, ma, nr, nf)
         ctx.synchronize()
     return PythonObject(y_mean)
 
@@ -913,7 +995,14 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[tsvd_explained_binding]("tsvd_explained")
         m.def_function[inverse_transform_binding]("inverse_transform")
         m.def_function[ols_fit_binding]("ols_fit")
-        m.def_function[ols_fit_centered_binding]("ols_fit_centered")
+        m.def_function[lm_col_sums_binding]("lm_col_sums")
+        m.def_function[lm_center_binding]("lm_center")
+        m.def_function[lm_scale_rows_binding]("lm_scale_rows")
+        comptime if OLS_FAST_DEVICE_CENTER:
+            # -D MOJOLEARN_OLS_FAST_DEVICE_CENTER, FAST + Apple: the Python
+            # layer takes the device-centering route when these names exist.
+            m.def_function[ols_center_tsqr_r_binding]("ols_center_tsqr_r")
+            m.def_function[ols_fit_centered_binding]("ols_fit_centered")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[ridge_fit_binding]("ridge_fit")
         m.def_function[qn_fit_binding]("qn_fit")
