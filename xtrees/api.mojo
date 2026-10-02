@@ -13,7 +13,10 @@ from checks.numerics import identical_log64
 from std.python import Python
 from xtrees.shap import mask_expand, block_mean, kernel_solve
 from xtrees.perm_device import perm_synthetic
-from xtrees.ops_device import apply_trees_device, gather_f32_device, transpose_f32_device, weighted_sample_device
+from xtrees.ops_device import (
+    apply_trees_device, bag_rows_device, gather_f32_device, transpose_f32_device, transpose_f64_device,
+    unseen_rows_device, weighted_sample_device,
+)
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 
 #: cpu-gpu-cleanup t-gbdt / w2-trees: a GPU build gathers, applies, transposes
@@ -29,6 +32,7 @@ from xtrees.ops import (
     samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, leaf_newton_rows, tree_score_add, uniform,
     onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict, platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes, column_f64,
+    bag_rows, unseen_rows, transpose_f64,
 )
 
 
@@ -405,6 +409,48 @@ def transpose_f32_binding(src: PythonObject, dst: PythonObject, params: PythonOb
     return PythonObject(n * d)
 
 
+def transpose_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """dst (d x n) = src (n x d) transposed, float64 words; params = [n, d]."""
+    _need(params, 2, "x_trees_transpose_f64")
+    var n = _count(_i(params, 0), "x_trees_transpose_f64")
+    var d = _count(_i(params, 1), "x_trees_transpose_f64")
+    if n * d > 0:
+        comptime if XTREES_DEVICE_OPS:
+            transpose_f64_device(f64_ptr(Int(py=src)), n, d, f64_ptr(Int(py=dst)))
+        else:
+            transpose_f64(f64_ptr(Int(py=src)), n, d, f64_ptr(Int(py=dst)))
+    return PythonObject(n * d)
+
+
+def bag_rows_binding(res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """res (int32, n) <- the rows whose draw is below frac, ascending (none:
+    the smallest draw's row); params = [n, seed, stream, frac]; returns the
+    count."""
+    _need(params, 4, "x_trees_bag_rows")
+    var n = _count(_i(params, 0), "x_trees_bag_rows")
+    if n == 0:
+        return PythonObject(0)
+    comptime if XTREES_DEVICE_OPS:
+        return PythonObject(bag_rows_device(i32_ptr(Int(py=res)), n, _i(params, 1), _i(params, 2), _f(params, 3)))
+    else:
+        return PythonObject(bag_rows(i32_ptr(Int(py=res)), n, _i(params, 1), _i(params, 2), _f(params, 3)))
+
+
+def unseen_rows_binding(rows: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """res (int32, n) <- the rows of [0, n) absent from rows (int32, m),
+    ascending; params = [m, n]; returns the count."""
+    _need(params, 2, "x_trees_unseen_rows")
+    var m = _count(_i(params, 0), "x_trees_unseen_rows")
+    var n = _count(_i(params, 1), "x_trees_unseen_rows")
+    if n == 0:
+        return PythonObject(0)
+    var rp = i32_ptr(Int(py=rows)) if m > 0 else i32_ptr(Int(py=res))
+    comptime if XTREES_DEVICE_OPS:
+        return PythonObject(unseen_rows_device(rp, m, n, i32_ptr(Int(py=res))))
+    else:
+        return PythonObject(unseen_rows(rp, m, n, i32_ptr(Int(py=res))))
+
+
 def check_weights_f32_binding(w: PythonObject, params: PythonObject) raises -> PythonObject:
     """params = [n]; returns check_weights_f32's status (0 ok, 1 bad entry, 2 no positive)."""
     _need(params, 1, "x_trees_check_weights_f32")
@@ -647,6 +693,9 @@ def register(mut m: PythonModuleBuilder) raises:
     """The shared export list; both bindings call this."""
     m.def_function[sample_indices_binding]("x_trees_sample_indices")
     m.def_function[weighted_sample_binding]("x_trees_weighted_sample")
+    m.def_function[transpose_f64_binding]("x_trees_transpose_f64")
+    m.def_function[bag_rows_binding]("x_trees_bag_rows")
+    m.def_function[unseen_rows_binding]("x_trees_unseen_rows")
     m.def_function[gather_f32_binding]("x_trees_gather_f32")
     m.def_function[gather_i32_binding]("x_trees_gather_i32")
     m.def_function[accumulate_binding]("x_trees_accumulate")

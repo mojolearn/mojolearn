@@ -106,7 +106,7 @@ def device_has_nan_f32(
     flag.enqueue_fill(Int32(0))
     var blocks = min(ceildiv(n, FOREST_SCAN_TPB), FOREST_SCAN_MAX_BLOCKS)
     ctx.enqueue_function[forest_nan_scan_kernel](
-        x.unsafe_ptr(),
+        rebind[MutPointer[Float32, MutAnyOrigin]](x.unsafe_ptr()),
         Int64(n),
         flag.unsafe_ptr(),
         grid_dim=(blocks, 1, 1),

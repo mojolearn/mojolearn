@@ -10,9 +10,7 @@ from max.gpu.host.device_attribute import DeviceAttribute
 from std.math import isfinite
 from std.sys.compile import is_defined
 from gbdt.methods.kernel_add_model_value import add_model_value_kernel
-from gbdt.metrics.optimal_const_for_loss import (
-    calc_one_dimensional_optimum_const_approx,
-)
+from gbdt.metrics.optimal_const_device import optimum_const_approx_device
 
 from gbdt.gpu_lib.gpu_manager import TCudaManager
 from gbdt.gpu_util.kernel.transform import (
@@ -1782,28 +1780,17 @@ def fit_with_test(
                 "boost_from_average is one-dimensional here; their ENSURE"
                 " list has no MultiClass either"
             )
-        var h_t = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-        ctx.enqueue_copy(dst_ptr=h_t.unsafe_ptr(), src_buf=targets)
-        var h_w = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-        if has_weights:
-            ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=weights)
-        ctx.synchronize()
-        var t_host = List[Float32](capacity=n_rows)
-        var w_host = List[Float32](capacity=n_rows)
-        for i in range(n_rows):
-            t_host.append(h_t.unsafe_ptr().unsafe_load(i))
-        if has_weights:
-            for i in range(n_rows):
-                w_host.append(h_w.unsafe_ptr().unsafe_load(i))
-        starting_approx = calc_one_dimensional_optimum_const_approx(
-            objective, t_host, w_host, has_weights, Float64(estimator_alpha)
+        # on the device: the targets and weights stay put, every row sum
+        # is a fixed-order grid fold (gbdt/metrics/optimal_const_device.mojo,
+        # cpu-gpu-cleanup t-gbdt; was a download and a host loop)
+        starting_approx = optimum_const_approx_device(
+            ctx, objective, targets, weights, has_weights, n_rows,
+            Float64(estimator_alpha),
         )
         # their `modelToExport.SetBias` (`:434`), set here so an early
         # stop or a raise mid-fit cannot produce a seeded-cursor model
         # that forgot to say so.
         model.bias = starting_approx
-        _ = h_t^
-        _ = h_w^
     var start_value = Float32(starting_approx)
     var cursor = ctx.enqueue_create_buffer[DType.float32](
         approx_dim * n_rows

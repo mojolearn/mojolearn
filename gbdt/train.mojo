@@ -87,9 +87,7 @@ from gbdt.data.ordered_plan import (
     ORDERED_MIN_FOLD_SIZE,
     ordered_permutation_block_size,
 )
-from gbdt.metrics.optimal_const_for_loss import (
-    calc_one_dimensional_optimum_const_approx,
-)
+from gbdt.metrics.optimal_const_device import optimum_const_approx_device
 from gbdt.overfitting_detector.overfitting_detector import (
     OD_NONE,
     od_type_from_name,
@@ -2064,24 +2062,14 @@ def train(
         var o_model = TAdditiveModel()
         var o_start = Float64(0.0)
         if bfa:
-            var h_t = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-            var h_w = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-            ctx.enqueue_copy(dst_ptr=h_t.unsafe_ptr(), src_buf=targets)
-            ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=weights)
-            ctx.synchronize()
-            var t_host = List[Float32](capacity=n_rows)
-            var w_host = List[Float32](capacity=n_rows)
-            for i in range(n_rows):
-                t_host.append(h_t.unsafe_ptr().unsafe_load(i))
-                w_host.append(h_w.unsafe_ptr().unsafe_load(i))
             # `StartingPoint = CalcOptimumConstApprox(...)`
-            # (`dynamic_boosting.h:563-573`), the plain fit's own helper
-            o_start = calc_one_dimensional_optimum_const_approx(
-                objective, t_host, w_host, True, Float64(loss_desc.get_alpha())
+            # (`dynamic_boosting.h:563-573`), the plain fit's own device
+            # helper (gbdt/metrics/optimal_const_device.mojo)
+            o_start = optimum_const_approx_device(
+                ctx, objective, targets, weights, True, n_rows,
+                Float64(loss_desc.get_alpha()),
             )
             o_model.bias = o_start
-            _ = h_t^
-            _ = h_w^
         var o_opts = OrderedBoostingOptions(
             objective,
             loss_desc.kernel_alpha(),

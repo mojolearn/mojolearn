@@ -718,7 +718,7 @@ def qn_predict_binary_binding(
 
 def qn_sigmoid_kernel(
     scores: MutPointer[Float32, MutAnyOrigin],
-    out: MutPointer[UInt64, MutAnyOrigin],
+    dst: MutPointer[UInt64, MutAnyOrigin],
     n_rows_in: Int64,
 ):
     """The binary `predict_proba` link on the device, one thread per row,
@@ -727,7 +727,7 @@ def qn_sigmoid_kernel(
     `checks/soft_f64.mojo`'s binary64 (the Apple GPU has no float64;
     `sf64_exp` is `portable_exp64` statement for statement). Under
     IDENTICAL these are the host column's words
-    (`core/classical_host_predict.mojo::host_qn_sigmoid`). `out` receives
+    (`core/classical_host_predict.mojo::host_qn_sigmoid`). `dst` receives
     the binary64 bit patterns, (n_rows, 2) row-major."""
     var n_rows = Int(n_rows_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -735,8 +735,8 @@ def qn_sigmoid_kernel(
     while i < n_rows:
         var nz = sf64_neg(sf64_from_f32(scores.unsafe_load(i)))
         var p = sf64_div(SF64_ONE, sf64_add(SF64_ONE, sf64_exp(nz)))
-        out.unsafe_store(2 * i, sf64_sub(SF64_ONE, p))
-        out.unsafe_store(2 * i + 1, p)
+        dst.unsafe_store(2 * i, sf64_sub(SF64_ONE, p))
+        dst.unsafe_store(2 * i + 1, p)
         i += stride
 
 
@@ -776,7 +776,7 @@ def qn_sigmoid_binding(
 
 def qn_softmax_kernel(
     scores: MutPointer[Float32, MutAnyOrigin],
-    out: MutPointer[UInt64, MutAnyOrigin],
+    dst: MutPointer[UInt64, MutAnyOrigin],
     n_rows_in: Int64,
     n_classes_in: Int64,
 ):
@@ -807,7 +807,7 @@ def qn_softmax_kernel(
             acc = sf64_add(acc, sf64_exp(sf64_sub(z, m)))
         for c in range(nc):
             var z = sf64_from_f32(scores.unsafe_load(base + c))
-            out.unsafe_store(base + c, sf64_div(sf64_exp(sf64_sub(z, m)), acc))
+            dst.unsafe_store(base + c, sf64_div(sf64_exp(sf64_sub(z, m)), acc))
         i += stride
 
 

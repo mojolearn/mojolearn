@@ -711,6 +711,59 @@ def uniform(res: MutPointer[Float64, MutUntrackedOrigin], n: Int, seed: Int, str
         res[unsafe_offset=k] = unit(draw(base, k))
 
 
+def bag_rows(res: MutPointer[Int32, MutUntrackedOrigin], n: Int, seed: Int, stream: Int, frac: Float64) -> Int:
+    """The rows `i` (ascending) whose draw `unit(draw(base, i)) < frac`; none
+    kept: the one row with the smallest (draw, i). Returns the count (>= 1
+    for n >= 1). The CPU column's loop; a GPU install runs
+    `ops_device.bag_rows_device` (cpu-gpu-cleanup t-gbdt)."""
+    var base = stream_base(seed, stream)
+    var k = 0
+    var best = 0
+    var best_key = UInt64.MAX
+    for i in range(n):
+        var r = draw(base, i)
+        if unit(r) < frac:
+            res[unsafe_offset=k] = Int32(i)
+            k += 1
+        if (r >> 11) < best_key:
+            best_key = r >> 11
+            best = i
+    if k == 0 and n > 0:
+        res[unsafe_offset=0] = Int32(best)
+        k = 1
+    return k
+
+
+def unseen_rows(
+    rows: MutPointer[Int32, MutUntrackedOrigin], m: Int, n: Int, res: MutPointer[Int32, MutUntrackedOrigin],
+) raises -> Int:
+    """The rows of `[0, n)` absent from `rows[0, m)`, ascending (sklearn's
+    negated `indices_to_mask`); returns the count. The CPU column's loop; a
+    GPU install runs `ops_device.unseen_rows_device` (cpu-gpu-cleanup t-gbdt)."""
+    var seen = List[Bool](length=n, fill=False)
+    for r in range(m):
+        var i = Int(rows[unsafe_offset=r])
+        if i < 0 or i >= n:
+            raise Error("x_trees unseen_rows: row out of range")
+        seen[i] = True
+    var k = 0
+    for i in range(n):
+        if not seen[i]:
+            res[unsafe_offset=k] = Int32(i)
+            k += 1
+    return k
+
+
+def transpose_f64(
+    src: MutPointer[Float64, MutUntrackedOrigin], n: Int, d: Int, dst: MutPointer[Float64, MutUntrackedOrigin],
+):
+    """dst (d x n) = src (n x d)^T, a copy of each word. The CPU column's
+    loop; a GPU install runs `ops_device.transpose_f64_device`."""
+    for i in range(n):
+        for j in range(d):
+            dst.unsafe_store(j * n + i, src.unsafe_load(i * d + j))
+
+
 def onehot_leaves(
     nodes: MutPointer[Int32, MutUntrackedOrigin], tree_base: MutPointer[Int32, MutUntrackedOrigin],
     node_col: MutPointer[Int32, MutUntrackedOrigin], n: Int, n_trees: Int, n_cols: Int,
