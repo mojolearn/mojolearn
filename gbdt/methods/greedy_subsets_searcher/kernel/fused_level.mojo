@@ -22,10 +22,16 @@ TRANSCRIBED. Nothing here adds, removes or reorders a float operation:
   cell-parallel kernel derived is derived here. The partial blocks run the
   unfused body at the unfused chunk index, block size (`STATS_BLOCK`),
   stride and `pinned_block_sum` fold, so each partial is the same float.
-* `sym_split_count_kernel` is `split_and_make_sequence_kernel`'s flag
-  and sequence stores for one partition chunk, then
-  `partition_count_chunks_kernel`'s count of that chunk -- the flag the
-  count reads is the one this thread just stored. Integer work only.
+* `sym_resolve_split_count_kernel` is `resolve_and_pack_kernel`'s
+  sequential winner scan (every thread, as it already was within its one
+  block), its pack (block (0, 0) only, the same stores), then
+  `split_and_make_sequence_kernel`'s flag and sequence stores for one
+  partition chunk, then `partition_count_chunks_kernel`'s count of that
+  chunk -- the flag the count reads is the one this thread just stored.
+  Integer work only. The winner's descriptor lives in SCALAR registers:
+  binding a whole `CFeature` to a local makes the Metal backend refuse
+  the metallib (split_points.mojo's DEVIATION BLOCK; it broke this
+  binding's Metal build on 2026-10-02 until the local went).
 * `sym_copy_update_kernel` is `copy_histograms(_vec4)_kernel` and
   `update_partitions_and_plan_kernel` in disjoint blocks: a byte copy and
   an integer border search over disjoint buffers, each a grid-stride loop
@@ -46,9 +52,15 @@ from max.gpu.sync import barrier
 from checks.numerics import ftz
 from gbdt.gpu_data.gpu_structures import CFeature
 from gbdt.gpu_util.partitions_reduce import STATS_BLOCK
+from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
+    FLOAT32_MAX,
+)
 from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
     PARTITION_BLOCK,
     SPLIT_BLOCK_SIZE,
+)
+from gbdt.methods.greedy_subsets_searcher.kernel.split_resolve import (
+    WINNER_SENTINEL,
 )
 from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
 
@@ -187,15 +199,31 @@ def sym_scan_sub_pstats_kernel[subtract: Bool, gather: Bool](
         )
 
 
-def sym_split_count_kernel(
+def sym_resolve_split_count_kernel(
+    # ---- `resolve_and_pack_kernel`'s arguments ----
+    out_score: MutPointer[Float32, MutAnyOrigin],
+    out_bin: MutPointer[UInt32, MutAnyOrigin],
+    argmax_blocks_in: Int32,
+    bf_offset: MutPointer[UInt32, MutAnyOrigin],
+    bf_mask: MutPointer[UInt32, MutAnyOrigin],
+    bf_shift: MutPointer[UInt32, MutAnyOrigin],
+    bf_first: MutPointer[UInt32, MutAnyOrigin],
+    bf_folds: MutPointer[UInt32, MutAnyOrigin],
+    bf_one_hot: MutPointer[UInt8, MutAnyOrigin],
+    bf_bin: MutPointer[UInt32, MutAnyOrigin],
+    depth_in: Int32,
+    n_live_in: Int32,
+    winners_score: MutPointer[Float32, MutAnyOrigin],
+    winners_bf: MutPointer[UInt32, MutAnyOrigin],
+    sp_feats: MutPointer[UInt8, MutAnyOrigin],
+    sp_bins: MutPointer[UInt32, MutAnyOrigin],
+    ids_c: MutPointer[UInt32, MutAnyOrigin],
     # ---- `split_and_make_sequence_kernel`'s ----
     compressed_index: MutPointer[UInt32, MutAnyOrigin],
     load_indices: MutPointer[UInt32, MutAnyOrigin],
     part_offset: MutPointer[UInt32, MutAnyOrigin],
     part_size: MutPointer[UInt32, MutAnyOrigin],
     leaf_ids: MutPointer[UInt32, MutAnyOrigin],
-    split_features: MutPointer[CFeature, MutAnyOrigin],
-    split_bins: MutPointer[UInt32, MutAnyOrigin],
     split_flags: MutPointer[UInt8, MutAnyOrigin],
     indices: MutPointer[UInt32, MutAnyOrigin],
     # ---- `partition_count_chunks_kernel`'s ----
@@ -203,29 +231,75 @@ def sym_split_count_kernel(
     max_chunks_in: Int32,
 ):
     """Grid `(chunk_grid, n_live)` at `PARTITION_BLOCK` threads: the
-    partition count's grid. `split_and_make_sequence_kernel`'s flag and
-    sequence stores for one chunk, then `partition_count_chunks_kernel`'s
-    count of it from the flags this thread just stored. The winner comes
-    from `resolve_and_pack_kernel`, one launch earlier, unchanged.
-
-    It was one launch with that resolve too (26 arguments), and the Metal
-    compiler refused the metallib (M2 Pro and M4, 2026-10-02: "Metal
-    Compiler failed to compile metallib"); this shape keeps the resolve
-    as its own launch and the argument list short."""
+    partition count's grid. See the module banner."""
     _assert_block_sizes()
     var tid = Int(thread_idx.x)
+    var argmax_blocks = Int(argmax_blocks_in)
+    var n_live = Int(n_live_in)
+
+    # `resolve_and_pack_kernel`'s scan, VERBATIM: sequential over blocks,
+    # strict `>`, tie to the smaller bin index, on every thread.
+    var best_score = -FLOAT32_MAX
+    var best_bin = WINNER_SENTINEL
+    for bi in range(argmax_blocks):
+        var b_score = out_score.unsafe_load(bi)
+        var b_bin = out_bin.unsafe_load(bi)
+        var take = b_score > best_score
+        if b_score == best_score and b_bin < best_bin:
+            take = True
+        if take:
+            best_score = b_score
+            best_bin = b_bin
+
+    var bf = 0
+    if best_bin != WINNER_SENTINEL:
+        bf = Int(best_bin)
+    # the descriptor as scalars: binding a whole `CFeature` to a local is
+    # what the Metal backend refuses (split_points.mojo's DEVIATION BLOCK)
+    var d_off = bf_offset.unsafe_load(bf)
+    var d_mask = bf_mask.unsafe_load(bf)
+    var d_shift = bf_shift.unsafe_load(bf)
+    var d_first = bf_first.unsafe_load(bf)
+    var d_folds = bf_folds.unsafe_load(bf)
+    var d_one_hot = bf_one_hot.unsafe_load(bf) != UInt8(0)
+    var split_bin = bf_bin.unsafe_load(bf)
+
+    # the pack, by ONE block: the same stores `resolve_and_pack_kernel`
+    # makes, read by later launches only (the level's own split reads the
+    # registers above)
+    if Int(block_idx.x) == 0 and Int(block_idx.y) == 0:
+        if tid == 0:
+            winners_score.unsafe_store(Int(depth_in), best_score)
+            winners_bf.unsafe_store(Int(depth_in), best_bin)
+        var feats = sp_feats.bitcast[CFeature]()
+        var p = tid
+        while p < n_live:
+            feats[unsafe_offset=p] = CFeature(
+                offset=d_off,
+                mask=d_mask,
+                shift=d_shift,
+                first_fold_index=d_first,
+                folds=d_folds,
+                one_hot_feature=d_one_hot,
+            )
+            sp_bins.unsafe_store(p, split_bin)
+            ids_c.unsafe_store(p, UInt32(n_live + p))
+            p += FUSED_LEVEL_BLOCK
+
+    # `split_and_make_sequence_kernel`'s per-row statements on
+    # `partition_count_chunks_kernel`'s chunk walk
     var max_chunks = Int(max_chunks_in)
     var leaf_slot = Int(block_idx.y)
     var leaf_id = Int(leaf_ids.unsafe_load(leaf_slot))
     var size = Int(ldg(part_size + leaf_id))
     var offset = Int(ldg(part_offset + leaf_id))
 
-    var f_offset = Int(split_features[unsafe_offset=leaf_slot].offset)
-    var shift = split_features[unsafe_offset=leaf_slot].shift
-    var bin_idx = UInt32(split_bins.unsafe_load(leaf_slot))
-    var one_hot = split_features[unsafe_offset=leaf_slot].one_hot_feature
+    var f_offset = Int(d_off)
+    var shift = d_shift
+    var bin_idx = UInt32(split_bin)
+    var one_hot = d_one_hot
     var value = bin_idx << shift
-    var mask = split_features[unsafe_offset=leaf_slot].mask << shift
+    var mask = d_mask << shift
 
     var chunk = Int(block_idx.x)
     while chunk * PARTITION_BLOCK < size:
@@ -257,6 +331,8 @@ def sym_split_count_kernel(
             )
         barrier()
         chunk += Int(grid_dim.x)
+
+
 
 
 def sym_copy_update_kernel[vec4: Bool](
