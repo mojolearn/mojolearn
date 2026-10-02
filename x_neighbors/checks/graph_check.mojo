@@ -1,20 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Seams DEVIATION 5216 (the PageRank step), 5217 (the min-label product),
-5204 (Louvain's pinned order) and 5205 (the SVGP system: Cholesky, the
+5204 (Louvain's tie to the smallest community id, lane hr-graph) and 5205 (the SVGP system: Cholesky, the
 substitutions, the collapsed bound) of x_neighbors/items.mojo.
 
     tools/with_identical_mode.sh pixi run mojo run -I . x_neighbors/checks/graph_check.mojo
 
 Pattern as dist_check.mojo."""
 from core.identity_trace import IdentityTrace
-from x_neighbors.checks.oracles import o_pagerank_step, o_cc_step, o_louvain, o_svgp, o_kernel, o_matmul
+from x_neighbors.checks.oracles import o_pagerank_step, o_cc_step, o_svgp, o_kernel, o_matmul
 from x_neighbors.checks.seam_util import (
     seam_fixture, fa, ia, zf, zi, count_diff_f32, count_diff_i32, require_separates, same,
 )
-from x_neighbors.device_ops import op_pagerank_step, op_cc_step, op_louvain, op_svgp
-from x_neighbors.host_ops import (
-    op_pagerank_step as h_pagerank_step, op_cc_step as h_cc_step, op_louvain as h_louvain, op_svgp as h_svgp,
+from x_neighbors.device_ops import op_pagerank_step, op_cc_step, op_svgp
+from x_neighbors.host_ops import op_pagerank_step as h_pagerank_step, op_cc_step as h_cc_step, op_svgp as h_svgp
+from x_neighbors.graph_dev import op_louvain
+from x_neighbors.graph_host import op_louvain as h_louvain, GraphCpu
+from x_neighbors.graph_par import (
+    Lay, LV_MOVE, L_NSLOT, L_G0, L_COMM, L_IC, L_DEG, L_STOT, L_FV, L_EK, L_ORD, _is, _fs, _ls,
 )
 
 
@@ -86,27 +89,102 @@ def main() raises:
     same("5217 cc_step host", count_diff_i32(hc, wc))
     tr.record_list_i32("x_neighbors.cc", dc)
 
-    # a ring of equal weights: every move is a tie, so the visit order decides the partition
+    # ---- 5204: one node with two candidate communities of EQUAL gain (node 0
+    # of the path 1 - 0 - 2, singletons) moves to the smaller id, community 1
+    var lay = Lay(L_NSLOT)
+    for b in range(3):
+        lay.i(L_G0 + 4 * b, 4)
+        lay.i(L_G0 + 4 * b + 1, 4)
+        lay.i(L_G0 + 4 * b + 2, 4)
+        lay.f(L_G0 + 4 * b + 3, 4)
+    lay.i(L_COMM, 3)
+    lay.i(L_IC, 8)
+    lay.f(L_DEG, 3)
+    lay.f(L_STOT, 3)
+    lay.f(L_FV, 4)
+    lay.l(L_EK, 4)
+    lay.l(L_ORD, 3)
+    var ex = GraphCpu(0)
+    var gx = ex.alloc(lay)
+    var gip = _is(gx, L_G0)
+    var gsrc = _is(gx, L_G0 + 1)
+    var gcol = _is(gx, L_G0 + 2)
+    var gval = _fs(gx, L_G0 + 3)
+    var ips: List[Int32] = [0, 2, 3, 4]
+    var srcs: List[Int32] = [0, 0, 1, 2]
+    var cols: List[Int32] = [1, 2, 0, 0]
+    for k in range(4):
+        gip.unsafe_store(k, ips[k])
+        gsrc.unsafe_store(k, srcs[k])
+        gcol.unsafe_store(k, cols[k])
+        gval.unsafe_store(k, Float32(1))
+    var degs: List[Float32] = [2, 1, 1]
+    for k in range(3):
+        _is(gx, L_COMM).unsafe_store(k, Int32(k))
+        _fs(gx, L_DEG).unsafe_store(k, degs[k])
+        _fs(gx, L_STOT).unsafe_store(k, degs[k])
+    _fs(gx, L_FV).unsafe_store(0, Float32(2))
+    _ls(gx, L_ORD).unsafe_store(0, Int64(0))
+    var mq = gx
+    mq.n0 = 3
+    mq.n1 = 0
+    mq.n3 = L_G0
+    mq.x0 = Float32(1)
+    ex.run(LV_MOVE, 1, mq)
+    var tie = zi(1)
+    tie[0] = _is(gx, L_COMM).unsafe_load(0)
+    var want = zi(1)
+    want[0] = Int32(1)
+    var other = zi(1)
+    other[0] = Int32(2)
+    require_separates("5204 louvain tie (smallest id vs largest)", count_diff_i32(want, other))
+    same("5204 louvain tie to the smallest community", count_diff_i32(tie, want))
+    _ = ex^
+
+    # two disconnected 4-cliques: the partition is the two cliques, numbered
+    # by their lowest node; the device and the host agree bit for bit
+    var nq = 8
+    var cl = zf(nq * nq)
+    for i in range(nq):
+        for j in range(nq):
+            if i != j and (i < 4) == (j < 4):
+                cl[i * nq + j] = Float32(1)
+    var cw = zi(nq)
+    for i in range(nq):
+        cw[i] = Int32(0 if i < 4 else 1)
+    var cdl = zi(nq)
+    var cdi = zf(2)
+    op_louvain(fa(cl), ia(cdl), fa(cdi), nq, 0, Float32(1), Float32(1e-7))
+    same("5204 louvain device two cliques", count_diff_i32(cdl, cw))
+    var chl = zi(nq)
+    var chi = zf(2)
+    h_louvain(fa(cl), ia(chl), fa(chi), nq, 0, Float32(1), Float32(1e-7))
+    same("5204 louvain host two cliques", count_diff_i32(chl, cw))
+    same("5204 louvain two cliques modularity device == host", count_diff_f32(cdi, chi))
+
+    # a ring of equal weights (every move a tie) and the weighted two-cluster
+    # graph: device == host, labels and [modularity, levels]
     var ring = zf(n * n)
     for i in range(n):
         ring[i * n + (i + 1) % n] = Float32(1)
         ring[((i + 1) % n) * n + i] = Float32(1)
-    var lw = o_louvain(ring, n, 0, Float32(1), Float32(1e-7))
-    var la = o_louvain(ring, n, 0, Float32(1), Float32(1e-7), 1)
-    require_separates("5204 louvain visit order", count_diff_i32(lw[0], la[0]))
     var dl = zi(n)
     var di = zf(2)
     op_louvain(fa(ring), ia(dl), fa(di), n, 0, Float32(1), Float32(1e-7))
-    same("5204 louvain device labels", count_diff_i32(dl, lw[0]))
-    var wi = zf(2)
-    wi[0] = lw[1]
-    wi[1] = Float32(lw[2])
-    same("5204 louvain device modularity", count_diff_f32(di, wi))
     var hl = zi(n)
     var hi = zf(2)
     h_louvain(fa(ring), ia(hl), fa(hi), n, 0, Float32(1), Float32(1e-7))
-    same("5204 louvain host labels", count_diff_i32(hl, lw[0]))
-    same("5204 louvain host modularity", count_diff_f32(hi, wi))
+    same("5204 louvain ring labels device == host", count_diff_i32(dl, hl))
+    same("5204 louvain ring info device == host", count_diff_f32(di, hi))
+    var wg = _graph(n, 47)
+    var wdl = zi(n)
+    var wdi = zf(2)
+    op_louvain(fa(wg), ia(wdl), fa(wdi), n, 0, Float32(1), Float32(1e-7))
+    var whl = zi(n)
+    var whi = zf(2)
+    h_louvain(fa(wg), ia(whl), fa(whi), n, 0, Float32(1), Float32(1e-7))
+    same("5204 louvain weighted labels device == host", count_diff_i32(wdl, whl))
+    same("5204 louvain weighted info device == host", count_diff_f32(wdi, whi))
     tr.record_list_i32("x_neighbors.louvain", dl)
 
     # ---- 5205: the SVGP system on 60 rows, 8 inducing points

@@ -26,7 +26,7 @@ only moves buffers and keeps exact integer bookkeeping.
 | 5201 | NearestCentroid shrink scale m*s == 0 | deviation 0 instead of a computed NaN | `model_check.mojo`, `5201_shrink_centroid_fold_reversed.patch` |
 | 5202 | KernelPCA centering order, svd_flip sign row; every eigen_solver served by the dense Jacobi | their subtract-subtract-add order; the FIRST row of largest magnitude | `model_check.mojo`, `5202_svd_flip_last_row.patch` |
 | 5203 | PolynomialCountSketch convolution | summed directly, shift ascending (no FFT) | `checks/sketch_check.mojo`, `5203_pcs_shift_reversed.patch` |
-| 5204 | Louvain | sequential, nodes ascending, ties to the lowest community (networkx shuffles by seed) | `checks/graph_check.mojo`, `5204_louvain_order_reversed.patch` |
+| 5204 | Louvain | parallel local moving by graph colouring (x_neighbors/graph_par.mojo), the strictly larger gain in ascending community id, so ties go to the lowest community (networkx shuffles by seed) | `checks/graph_check.mojo`, `5204_louvain_tie_high.patch` |
 | 5205 | SVGP | q(u) at its closed-form optimum for the caller's hyperparameters; Cholesky columns left to right, folds ascending | `graph_check.mojo`, `5205_cholesky_fold_reversed.patch` |
 | 5206 | distances (sqdist, nan_euclidean, L1) | features ascending on the pinned fma; `/present` then `*d` | `checks/dist_check.mojo`, `5206_sqdist_fold_reversed.patch` |
 | 5207 | k-NN selection | strict `<` insertion: equal values keep the lower column | `dist_check.mojo`, `5207_select_tie_high.patch` |

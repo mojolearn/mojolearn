@@ -1550,11 +1550,12 @@ class Louvain(_XNeighbors):
 
     References: networkx `louvain_communities` / `louvain_partitions`
     (`_one_level`, `_gen_graph`, `modularity`) and cuGraph
-    cpp/src/community/louvain_impl.cuh. The whole method is ONE sequential
-    Mojo item (x_neighbors/items.mojo `louvain_item`) with a PINNED order
-    (DEVIATION 5204): nodes in ascending id instead of networkx's `seed`
-    shuffle, candidate communities in ascending id, a strictly larger gain
-    to move, so ties go to the lowest community id. `labels_` numbers the
+    cpp/src/community/louvain_impl.cuh. Parallel local moving in a PINNED
+    order (x_neighbors/graph_par.mojo, DEVIATION 5204): the nodes of one
+    colour of a fixed graph colouring move together instead of networkx's
+    `seed` shuffle, candidate communities in ascending id, a strictly larger
+    gain to move, so ties go to the lowest community id; community totals
+    and the aggregation are fixed-order folds. `labels_` numbers the
     communities by their lowest node; `modularity_` is networkx's
     modularity of that partition, in float32. `seed` is accepted and unused.
     """
