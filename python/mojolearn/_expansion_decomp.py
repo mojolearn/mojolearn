@@ -25,7 +25,7 @@ import sys
 
 from . import _backend
 from . import _portable_math as _pm
-from ._buffer import as_f32_c, as_i32_c, frombytes
+from ._buffer import addr_ro, as_f32_c, as_i32_c, frombytes
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
@@ -390,6 +390,41 @@ def _kit_vendor(kit):
             v = ""
         kit._vendor = v
     return v
+
+
+def _decomp_fast_on(kit, name):
+    """lane/apple-fast-decomp-sparse (2026-10-02): the FAST-tier, Metal-only
+    host switches of this file, MOJOLEARN_DECOMP_FAST_<name>=1, read at
+    dispatch. IDENTICAL kits never take one (their bits never move), nor a
+    kit on another vendor (nothing is measured there)."""
+    if kit.mode != "fast" or _os.environ.get("MOJOLEARN_DECOMP_FAST_" + name) != "1":
+        return False
+    return _kit_vendor(kit) == "metal"
+
+
+def _input_resident(kit, X, name="X"):
+    """`_M.from_input(X)` straight onto the device (MOJOLEARN_DECOMP_FAST_
+    RP_DIRECT, lane/apple-fast-decomp-sparse): the input's own float32
+    C-order buffer is uploaded to a resident matrix, so the whole-input
+    `array.array` copy of `from_input` (880 MB at the board's 1M x 220,
+    the gaussian-rp / sparse-rp transform clock) is not made. Same shape and
+    finiteness refusals; None when this install cannot (a sparse input, a
+    host-only binding, no host finiteness helper): the caller then takes
+    `from_input`."""
+    if _is_sparse(X) or not kit._res():
+        return None
+    a = as_f32_c(X, ndim=2, name=name)[0]
+    if a.ndim != 2 or min(a.shape) == 0:
+        raise ValueError(f"{name}: a nonempty two-dimensional input is required")
+    fin = _host_all_finite(a)
+    if fin is None:
+        return None
+    if fin is False:
+        raise ValueError(f"{name}: input must be finite; NaN/inf are unsupported")
+    n, d = a.shape
+    dev = _DevBuf(kit._raw(), n * d)
+    kit.b.x_decomp_dev_upload(dev.id, addr_ro(a, name=name), n * d)
+    return _M._on_device(dev, n, d)
 
 
 class _FastMetalEigh:
@@ -1035,10 +1070,19 @@ class _RandomProjection(_Base):
 
     def transform(self, X):
         self._check()
-        M = _M.from_input(X)
+        k = self._kit()
+        # MOJOLEARN_DECOMP_FAST_RP_DIRECT=1 (lane/apple-fast-decomp-sparse,
+        # 2026-10-02; FAST on Metal only): the input goes to the device from
+        # its own buffer (`_input_resident`), not through `_M.from_input`'s
+        # array.array copy of every row, a host step of the transform clock
+        # (gaussian-rp / sparse-rp Istella 136 ms on the M3 Ultra against
+        # scikit-learn's 24 for a 1M x 220 x 10 product). Default off.
+        M = _input_resident(k, X) if _decomp_fast_on(k, "RP_DIRECT") else None
+        if M is None:
+            M = _M.from_input(X)
         if M.c != self.n_features_in_:
             raise ValueError(f"X has {M.c} features, but {type(self).__name__} is expecting {self.n_features_in_}")
-        return self._kit().mm(M, self.components_m_, tb=True).out()
+        return k.mm(M, self.components_m_, tb=True).out()
 
     def inverse_transform(self, X):
         self._check()
@@ -2330,11 +2374,49 @@ def _resample_atom(k, Y, seed, counter):
     return k.ew("add", row, noise)
 
 
+def _update_dict_resident(k, D, Y, code, A, B):
+    """`_update_dict` with every atom's step on the device and no host read
+    inside the atom loop (MOJOLEARN_DECOMP_FAST_DICT_UPDATE,
+    lane/apple-fast-decomp-sparse, 2026-10-02). The loop below reads every
+    row of D back (`_vstack(*rows)`), a column of B and a row of A per atom,
+    about 20 downloads each a sync, 16 atoms x 100 iterations for the
+    dict-learning lane and 16 atoms x 3,910 steps for mb-dict-learning
+    (Istella 16.2 s on the M3 Ultra against scikit-learn's 5.0). Here the
+    atom's update is row j of B^T - A D (one product, the other rows
+    masked to 0 by a one-hot column), divided by A[j, j], added, and row j
+    alone renormalized (a select on the one-hot picks its norm, 1 for the
+    rest): 11 resident launches an atom, one A readback a call. Same
+    operations as the loop (a GEMM row instead of a 1 x m GEMM); FAST
+    promises quality, not bits. None (the caller's loop runs) for an unused
+    atom (A[j, j] <= 1e-6: its resample draws on the host) or
+    positive_dict (the clip is per atom there)."""
+    nc = D.r
+    As = A.s
+    diag = [As[j * nc + j] for j in range(nc)]
+    if any(ajj <= 1e-6 for ajj in diag):
+        return None
+    Bt = k.mm(code, Y, ta=True) if B is None else B.T      # nc x m: row j is B[:, j]^T
+    Adiag = _M.of(diag, nc, 1)
+    one = k.const(1.0)
+    for j in range(nc):
+        onehot = _M.of([1.0 if t == j else 0.0 for t in range(nc)], nc, 1)
+        upd = k.ew("sub", Bt, k.mm(A, D))
+        upd = k.ew("div", k.ew("mul", upd, onehot), Adiag)
+        D = k.ew("add", D, upd)
+        nrm = k.ew("maxs", k.ew("sqrt", k.rowsum(k.ew("sq", D))), s=1.0)
+        D = k.ew("div", D, k.ew("select", onehot, nrm, one, s=0.5))
+    return D, code
+
+
 def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=None):
     """sklearn `_dict_learning.py::_update_dict`: block coordinate descent over
     the atoms in order, each projected onto the unit ball. Returns (D, code)."""
     if A is None:
         A = k.mm(code, code, ta=True)
+    if not positive and _decomp_fast_on(k, "DICT_UPDATE"):
+        got = _update_dict_resident(k, D, Y, code, A, B)
+        if got is not None:
+            return got
     if B is None:
         B = k.mm(Y, code, ta=True)
     rows = [D.rows(j, j + 1) for j in range(D.r)]
@@ -2972,6 +3054,24 @@ def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
     return idx, dst
 
 
+def _knn_lists_xn(mode, M, n_neighbors):
+    """`_knn_lists(k, M, M, n_neighbors, True)` (kind 0: SQUARED Euclidean,
+    the queries the training rows, the row's own index dropped) through the
+    neighbors lane's fused device k-NN (x_neighbors `knn_sq_tiled`: the
+    distances and the k smallest per row, ascending by (value, index),
+    selected on the device) -- MOJOLEARN_DECOMP_FAST_ISOMAP_KNN,
+    lane/apple-fast-decomp-sparse (2026-10-02). `_knn_lists` downloads the
+    n x n matrix and runs heapq.nsmallest over every row in Python: 1e8 key
+    calls at the Isomap lane's 10,000 rows, before any geodesic is computed.
+    The neighbors module is imported as a MODULE (see `_sparse_encode`)."""
+    from . import _expansion_neighbors as _xnb
+    helper = _xnb._XNeighbors()       # no own __init__: the mixin's numeric_mode keyword is not wrapped on
+    helper.numeric_mode = mode         # (its `_bind` reads the attribute)
+    X = M.out()
+    sq, idx = helper._knn_sq(X, X, n_neighbors, True)
+    return idx.tolist(), sq.tolist()
+
+
 def _center_kernel(k, K):
     """sklearn KernelCenterer.fit_transform: K - row means - column means + total mean.
     Returns (Kc, column means (1 x n), total mean (1 x 1))."""
@@ -3189,7 +3289,10 @@ class Isomap(_Base):
             nn = None
         else:
             nn = int(self.n_neighbors)
-            idx, dst = _knn_lists(k, M, M, nn, True, kind, pw)
+            if kind == 0 and _decomp_fast_on(k, "ISOMAP_KNN"):
+                idx, dst = _knn_lists_xn(self.numeric_mode_, M, nn)
+            else:
+                idx, dst = _knn_lists(k, M, M, nn, True, kind, pw)
             sq = _M.of([v for row in dst for v in row], n, nn)
             if kind == 0:
                 sq = k.ew("sqrt", sq)
@@ -3436,6 +3539,18 @@ class MDS(_Base):
         d = self._dist(k, Y)
         old = None
         it = 0
+        # MOJOLEARN_DECOMP_FAST_MDS_DIAG=1 (lane/apple-fast-decomp-sparse,
+        # 2026-10-02; FAST on Metal only): the Guttman matrix's diagonal
+        # (its row sums) added on the device, as eye * rs + B, instead of
+        # `B.copy()` (a download of the n x n matrix), n float adds in
+        # Python and the re-upload, every iteration (300 at n = 5,000: 2 x
+        # 100 MB moved and 5,000 Python steps an iteration). The identity is
+        # built once and stays resident. Default off.
+        eye = None
+        if _decomp_fast_on(k, "MDS_DIAG"):
+            eye = _M.zeros(n, n)
+            for i in range(n):
+                eye.s[i * n + i] = 1.0
         for it in range(1, self.max_iter + 1):
             if native:
                 disp = nm(d, it == 1)
@@ -3446,9 +3561,12 @@ class MDS(_Base):
             ratio = k.ew("div", disp, dz)
             B = k.ew("scale", ratio, s=-1.0)
             rs = k.rowsum(ratio)
-            B = B.copy()
-            for i in range(n):
-                B.s[i * n + i] = _f32(B.s[i * n + i] + rs.s[i])
+            if eye is not None:
+                B = k.ew("fma", eye, rs, B)
+            else:
+                B = B.copy()
+                for i in range(n):
+                    B.s[i * n + i] = _f32(B.s[i * n + i] + rs.s[i])
             Y = k.ew("scale", k.mm(B, Y), s=1.0 / n)
             d = self._dist(k, Y)
             stress = k.total(k.ew("sqdiff", d, disp)).s[0] / 2
