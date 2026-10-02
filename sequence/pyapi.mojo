@@ -17,7 +17,7 @@ from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_
 from sequence.ets import ets_scratch
 from sequence.garch import GARCH_SNAP
 from sequence.moe_tiled import TILE_P, TILE_Q
-from sequence.prophet import MEM, ProphetData, _dot, _fg_prior
+from sequence.prophet import MEM, ProphetData, _dot, _fg_prior, prophet_w_floats
 from sequence.prophet import div as _pdiv
 from sequence.ops import add as p_add, fma3 as p_fma3, ld as p_ld, mul as p_mul, st as p_st, sub as p_sub
 from sequence.ops import sumsq_fold as _sumsq_fold_host
@@ -1263,7 +1263,7 @@ def prophet_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp
     if B < 1 or N < 2 or ns < 0 or nh < 0 or K < 0 or S < 0:
         raise Error("prophet_fit: B >= 1, N >= 2 and nonnegative counts")
     var P = 3 + S + K
-    var stride = N + P + (6 + 2 * 5) * P + 2 * 5
+    var stride = N + P + prophet_w_floats(P)
     var X = _prophet_X(ex, addrs[2], addrs[3], addrs[4], N, ns, nh, K)
     var Y = ex.alloc(B * N)
     ex.upload(Y, fptr(addrs[0], "y"), B * N)

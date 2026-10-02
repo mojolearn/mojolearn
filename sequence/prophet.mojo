@@ -19,11 +19,19 @@ the prophet package is at a tolerance (brief).
 Features: sin(2 pi (i+1) frac), cos(...) with frac = (t mod P) / P computed
 by the caller in float64 (exact fmod, one rounding) and the trigonometry by
 the portable float32 seams, so the features are the same bits everywhere."""
+from sequence.fold32 import FOLD_L, tree32, tree32_warp
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_sin, identical_sqrt
 
 comptime TWO_PI: Float32 = 6.283185307179586
 comptime MEM = 5
+
+
+@always_inline
+def prophet_w_floats(P: Int) -> Int:
+    """lbfgs_prophet's scratch: its vectors and pairs, then prophet_fg's
+    fold slots."""
+    return (6 + 2 * MEM) * P + 2 * MEM + FOLD_L * (P + 1)
 
 
 @always_inline
@@ -154,16 +162,142 @@ def _fg_prior(d: ProphetData, th: FP, g: FP, sse: Float32) -> Float32:
     return f
 
 
-def prophet_fg(d: ProphetData, y: FP, th: FP, g: FP) -> Float32:
+@always_inline
+def _point(d: ProphetData, y: FP, th: FP, i: Int, k: Float32, m: Float32, s2: Float32) -> SIMD[DType.float32, 4]:
+    """Point i's (t, residual, trend-side weight, feature-side weight), as
+    _fg_data forms them."""
+    var S = d.S
+    var K = d.K
+    var ti = ld(d.t, i)
+    var tr = fma3(k, ti, m)
+    for j in range(S):
+        var c = ld(d.cp, j)
+        if ti >= c:
+            tr = fma3(ld(th, 2 + j), sub(ti, c), tr)
+    var se = Float32(0.0)
+    for q in range(K):
+        se = fma3(ld(d.X, i * K + q), ld(th, 3 + S + q), se)
+    var yhat: Float32
+    if d.mult:
+        yhat = fma3(tr, se, tr)
+    else:
+        yhat = add(tr, se)
+    var r = sub(ld(y, i), yhat)
+    var w = div(-r, s2)
+    var wt = mul(w, add(Float32(1.0), se)) if d.mult else w
+    var wb = mul(w, tr) if d.mult else w
+    return SIMD[DType.float32, 4](ti, r, wt, wb)
+
+
+@always_inline
+def _chain(d: ProphetData, c: Int, acc: Float32, pv: SIMD[DType.float32, 4], cpc: Float32, i: Int) -> Float32:
+    """Chain c's step at point i: c < P the gradient coordinate, c = P the
+    sse (prophet_fg's fold chains)."""
+    var S = d.S
+    var P = 3 + S + d.K
+    var ti = pv[0]
+    if c == 0:
+        return fma3(pv[2], ti, acc)
+    if c == 1:
+        return add(acc, pv[2])
+    if c < 2 + S:
+        if ti >= cpc:
+            return fma3(pv[2], sub(ti, cpc), acc)
+        return acc
+    if c == 2 + S:
+        return acc
+    if c < P:
+        return fma3(pv[3], ld(d.X, i * d.K + (c - 3 - S)), acc)
+    return fma3(pv[1], pv[1], acc)
+
+
+def prophet_fg(d: ProphetData, y: FP, th: FP, g: FP, sl: FP) -> Float32:
     """-log posterior (up to a constant) at th and its gradient into g.
-    th = [k, m, delta (S), log sigma, beta (K)]. (apple2: the likelihood
-    loop and the priors are two inlined helpers, the same operations in the
-    same order, so FAST's parallel likelihood can share them.)"""
-    var P = 3 + d.S + d.K
-    for j in range(P):
-        st(g, j, Float32(0.0))
-    var sse = _fg_data(d, y, th, g, 0, d.N)
+    th = [k, m, delta (S), log sigma, beta (K)]. The likelihood's P + 1 fold
+    chains (the gradient's P, then the sse) run in sequence/fold32.mojo's
+    order (lane hr2-kpca-seq: prophet_fg_warp's, on every column); sl holds
+    32 slots per chain."""
+    var S = d.S
+    var P = 3 + S + d.K
+    var k = ld(th, 0)
+    var m = ld(th, 1)
+    var sigma = ftz(identical_exp(ld(th, 2 + S)))
+    var s2 = mul(sigma, sigma)
+    for j in range((P + 1) * FOLD_L):
+        st(sl, j, Float32(0.0))
+    for i in range(d.N):
+        var pv = _point(d, y, th, i, k, m, s2)
+        var sj = i % FOLD_L
+        for c in range(P + 1):
+            var cpc = ld(d.cp, c - 2) if c >= 2 and c < 2 + S else Float32(0.0)
+            st(sl, c * FOLD_L + sj, _chain(d, c, ld(sl, c * FOLD_L + sj), pv, cpc, i))
+    var sse = Float32(0.0)
+    for c in range(P + 1):
+        var tv = InlineArray[Float32, FOLD_L](fill=Float32(0.0))
+        comptime for l in range(FOLD_L):
+            tv[l] = ld(sl, c * FOLD_L + l)
+        var v = tree32(tv)
+        if c < P:
+            st(g, c, v)
+        else:
+            sse = v
     return _fg_prior(d, th, g, sse)
+
+
+#: the fold chains a lane carries per pass (prophet_fg_warp)
+comptime PROPHET_CH = 48
+
+
+@always_inline
+def prophet_fg_warp(d: ProphetData, y: FP, th: FP, g: FP, lane: Int) -> Float32:
+    """prophet_fg on one warp (lane hr2-kpca-seq), the same bits: lane l
+    (mod 32) folds the points l, l + 32, ... into every chain (up to
+    PROPHET_CH chains a pass), each point's values formed on its own lane,
+    then each chain's 32 slots by the xor tree; every lane holds every
+    result and stores all of g (identical words). On a 64-lane wavefront
+    both halves run the same 32 lanes."""
+    var S = d.S
+    var P = 3 + S + d.K
+    var NC = P + 1
+    var k = ld(th, 0)
+    var m = ld(th, 1)
+    var sigma = ftz(identical_exp(ld(th, 2 + S)))
+    var s2 = mul(sigma, sigma)
+    var vl = lane % FOLD_L
+    var sse = Float32(0.0)
+    var g0 = 0
+    while g0 < NC:
+        var acc = InlineArray[Float32, PROPHET_CH](fill=Float32(0.0))
+        var cpv = InlineArray[Float32, PROPHET_CH](fill=Float32(0.0))
+        comptime for h in range(PROPHET_CH):
+            var c = g0 + h
+            if c >= 2 and c < 2 + S:
+                cpv[h] = ld(d.cp, c - 2)
+        var i = vl
+        while i < d.N:
+            var pv = _point(d, y, th, i, k, m, s2)
+            comptime for h in range(PROPHET_CH):
+                if g0 + h < NC:
+                    acc[h] = _chain(d, g0 + h, acc[h], pv, cpv[h], i)
+            i += FOLD_L
+        comptime for h in range(PROPHET_CH):
+            var c = g0 + h
+            if c < NC:
+                var v = tree32_warp(acc[h])
+                if c < P:
+                    st(g, c, v)
+                else:
+                    sse = v
+        g0 += PROPHET_CH
+    return _fg_prior(d, th, g, sse)
+
+
+@always_inline
+def prophet_fg_on[W: Int](d: ProphetData, y: FP, th: FP, g: FP, sl: FP, lane: Int) -> Float32:
+    comptime if W == 1:
+        return prophet_fg(d, y, th, g, sl)
+    else:
+        return prophet_fg_warp(d, y, th, g, lane)
 
 
 # ------------------------------------------------------------------ FAST
@@ -202,9 +336,10 @@ def _dot(a: FP, b: FP, n: Int) -> Float32:
     return s
 
 
-def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[Float32, Int]:
+def lbfgs_prophet[W: Int = 1](d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int, lane: Int = 0) -> Tuple[Float32, Int]:
     """Minimise prophet_fg from th (in place). w: scratch of
-    (6 + 2 MEM) P + 2 MEM floats. Returns (f, iterations)."""
+    prophet_w_floats(P) floats. Returns (f, iterations). W > 1: every
+    lane of a warp runs it (prophet_fg_warp shares the likelihood)."""
     var P = 3 + d.S + d.K
     var g = w
     var dvec = g + P
@@ -215,7 +350,8 @@ def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[
     var ym = sm + MEM * P
     var rho = ym + MEM * P
     var al = rho + MEM
-    var f = prophet_fg(d, y, th, g)
+    var sl = al + MEM
+    var f = prophet_fg_on[W](d, y, th, g, sl, lane)
     var npairs = 0
     var head = 0
     var small = 0
@@ -266,7 +402,7 @@ def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[
         for _ in range(40):
             for i in range(P):
                 st(thn, i, fma3(step, ld(dvec, i), ld(th, i)))
-            fnew = prophet_fg(d, y, thn, gn)
+            fnew = prophet_fg_on[W](d, y, thn, gn, sl, lane)
             if fnew <= fma3(mul(Float32(1e-4), step), gd, f):
                 ok = True
                 break
@@ -316,7 +452,15 @@ def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[
 
 
 def op_prophet_fit(t: Int, a: Args):
-    """Series t. p0 y [B, N]; p1 t [N]; p2 X [N, K]; p3 changepoints [S];
+    """Series t on one thread (prophet_series)."""
+    prophet_series[1](t, 0, a)
+
+
+@always_inline
+def prophet_series[W: Int](t: Int, lane: Int, a: Args):
+    """Series t, on one thread (W = 1) or on every lane of a W-lane warp
+    (DeviceExec's warp kernel; the same statements on every lane, identical
+    stores, prophet_fg_warp the shared work). p0 y [B, N]; p1 t [N]; p2 X [N, K]; p3 changepoints [S];
     p4 prior scales [K]; p5 params out [B, P]; p6 info out [B, 4]
     (y_scale, objective, iterations, 0); p7 scratch [B, stride].
     i0 N, i1 K, i2 S, i3 multiplicative, i4 stride, i5 max_iter; f0 tau."""
@@ -347,7 +491,7 @@ def op_prophet_fit(t: Int, a: Args):
     st(th, 1, sub(ld(ys, 0), mul(k, t0)))
     for j in range(S + 1 + K):
         st(th, 2 + j, Float32(0.0))
-    var r = lbfgs_prophet(d, ys, th, w, a.i5)
+    var r = lbfgs_prophet[W](d, ys, th, w, a.i5, lane)
     for j in range(P):
         st(a.p5, t * P + j, ld(th, j))
     var info = a.p6 + t * 4

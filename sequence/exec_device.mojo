@@ -15,14 +15,53 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from sequence.exec import Exec
 from sequence.dispatch import apply
-from sequence.ops import OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
+from sequence.ops import OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ, OP_GARCH, OP_PROPHET_FIT
+from sequence.garch import garch_series
+from sequence.prophet import prophet_series
 from sequence.coop import COOP_W, apply_coop
-from std.sys.info import has_apple_gpu_accelerator
+from std.sys.info import has_amd_gpu_accelerator, has_apple_gpu_accelerator
 
 #: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple only
 comptime SEQ_COOP = has_apple_gpu_accelerator()
 
 comptime TPB = 128
+#: the warp of the series fits' warp kernel (a gfx942 wavefront is 64)
+comptime SEQ_WARP = 64 if has_amd_gpu_accelerator() else 32
+
+
+def seq_warp_fit_on() -> Bool:
+    """GARCH and Prophet fits on one warp per series (lane hr2-kpca-seq).
+    A/B arm until measured: MOJOLEARN_SEQ_WARP_FIT=0 runs the one-thread
+    kernel and lets the binding's old small-batch route back in."""
+    return String(getenv("MOJOLEARN_SEQ_WARP_FIT")) != "0"
+
+
+def warp_kernel[OP: Int](
+    p0: FP, p1: FP, p2: FP, p3: FP, p4: FP, p5: FP,
+    p6: FP, p7: FP, p8: FP, p9: FP, p10: FP, p11: FP,
+    i01: Int64, i23: Int64, i45: Int64, i67: Int64, i89: Int64, i1011: Int64,
+    f01: Int64, f23: Int64, f45: Int64, f67: Int64,
+    n: Int64,
+):
+    """One warp (SEQ_WARP lanes) per series of a GARCH or Prophet fit: every
+    lane runs the series' statements (uniform control flow, identical
+    stores), the likelihood's work shared across the lanes
+    (sequence/garch.mojo garch_nll_warp, sequence/prophet.mojo
+    prophet_fg_warp) in sequence/fold32.mojo's order, the host column's.
+    TPB is a multiple of SEQ_WARP, so a series' lanes are one warp."""
+    var g = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var cell = g // SEQ_WARP
+    if cell < Int(n):
+        var a = Args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11,
+                     _lo(i01), _hi(i01), _lo(i23), _hi(i23), _lo(i45), _hi(i45),
+                     _lo(i67), _hi(i67), _lo(i89), _hi(i89), _lo(i1011), _hi(i1011),
+                     _flo(f01), _fhi(f01), _flo(f23), _fhi(f23),
+                     _flo(f45), _fhi(f45), _flo(f67), _fhi(f67))
+        var lane = g - cell * SEQ_WARP
+        comptime if OP == OP_GARCH:
+            garch_series[SEQ_WARP](cell, lane, a)
+        elif OP == OP_PROPHET_FIT:
+            prophet_series[SEQ_WARP](cell, lane, a)
 
 
 struct _SeqContext(Defaultable, Movable):
@@ -462,6 +501,18 @@ struct DeviceExec(Exec):
                 self.ctx.enqueue_function[moe_combine_kernel](
                     a.p3, a.p5, a.p4, Int32(a.i0), Int32(a.i2), Int32(n),
                     grid_dim=((n + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                )
+                return
+        comptime if OP == OP_GARCH or OP == OP_PROPHET_FIT:
+            if seq_warp_fit_on():
+                self.ctx.enqueue_function[warp_kernel[OP]](
+                    a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+                    _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
+                    _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
+                    _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
+                    Int64(n),
+                    grid_dim=((n * SEQ_WARP + TPB - 1) // TPB, 1, 1),
+                    block_dim=(TPB, 1, 1),
                 )
                 return
         comptime if SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ

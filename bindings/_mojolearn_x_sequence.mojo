@@ -11,7 +11,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from sequence.exec import HostExec
-from sequence.exec_device import DeviceExec
+from sequence.exec_device import DeviceExec, seq_warp_fit_on
 from sequence.pyapi import ival, _getenv_seq, opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
 
 
@@ -114,7 +114,9 @@ def garch_host_max() -> Int:
 
 
 def garch_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    if len(ip) >= 1 and ival(ip, 0) <= garch_host_max():
+    # lane hr2-kpca-seq: every batch on the device (one warp per series);
+    # the old small-batch route only in the A/B arm MOJOLEARN_SEQ_WARP_FIT=0
+    if not seq_warp_fit_on() and len(ip) >= 1 and ival(ip, 0) <= garch_host_max():
         var hx = HostExec()
         return garch_py(hx, addrs, ip)
     var ex = DeviceExec()
@@ -139,7 +141,7 @@ def prophet_host_max() -> Int:
 
 
 def prophet_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    if len(ip) >= 1 and ival(ip, 0) <= prophet_host_max():
+    if not seq_warp_fit_on() and len(ip) >= 1 and ival(ip, 0) <= prophet_host_max():
         var hx = HostExec()
         return prophet_fit_py(hx, addrs, ip, fp)
     var ex = DeviceExec()
