@@ -302,6 +302,79 @@ def _dw_dev_u32(
     )
 
 
+def _dw_ts_blocks(threads: Int) -> Int:
+    """Blocks of `DW_TS_BLOCK` threads covering `threads` (at least one)."""
+    var b = (threads + DW_TS_BLOCK - 1) // DW_TS_BLOCK
+    return b if b > 0 else 1
+
+
+def _dw_ts_check_pairs(
+    level: Int,
+    name: String,
+    host_a: List[UInt32],
+    host_b: List[UInt32],
+    dev: MutPointer[UInt32, MutUntrackedOrigin],
+    dev_b_offset: Int,
+    cap: Int,
+    dummy: UInt32,
+) raises:
+    """DW_TREE_SYNC's replay check: the host's plan pairs `(a, b)` (a
+    compact list) against the device's (dummy-padded, one slot per split
+    pair, `dev[i]` / `dev[dev_b_offset + i]`), as sets keyed on `a` (every
+    id appears once per list, so the key is total). A single list is
+    checked as pairs with itself. A difference is a bookkeeping break, not
+    a data condition."""
+    var keys = List[Int]()
+    var vals = List[Int]()
+    for i in range(cap):
+        var a = dev.unsafe_load(i)
+        if a == dummy:
+            continue
+        keys.append(Int(a))
+        vals.append(Int(dev.unsafe_load(dev_b_offset + i)))
+    if len(keys) != len(host_a):
+        raise Error(
+            String("DW_TREE_SYNC: level ")
+            + String(level)
+            + " "
+            + name
+            + ": device has "
+            + String(len(keys))
+            + " entries, host replay "
+            + String(len(host_a))
+        )
+    for i in range(len(host_a)):
+        var found = False
+        for j in range(len(keys)):
+            if keys[j] == Int(host_a[i]):
+                found = True
+                if vals[j] != Int(host_b[i]):
+                    raise Error(
+                        String("DW_TREE_SYNC: level ")
+                        + String(level)
+                        + " "
+                        + name
+                        + ": pair for id "
+                        + String(Int(host_a[i]))
+                        + " differs (device "
+                        + String(vals[j])
+                        + ", host "
+                        + String(Int(host_b[i]))
+                        + ")"
+                    )
+                break
+        if not found:
+            raise Error(
+                String("DW_TREE_SYNC: level ")
+                + String(level)
+                + " "
+                + name
+                + ": host id "
+                + String(Int(host_a[i]))
+                + " is not in the device list"
+            )
+
+
 def _launch_fused_split_chain[
     GUARD: Bool = False
 ](
@@ -2590,6 +2663,8 @@ def fit_non_symmetric_tree[
         # DW_NO_LEVEL_SYNC: True once this level's split ran behind the
         # fold and its sizes are already home (one wait for the level)
         var level_synced = False
+        # DW_TREE_SYNC: this iteration's level (its record slices)
+        var level = iteration - 1
 
         # ================= ComputeOptimalSplits =====================
         # `greedy_search_helper.cpp:396`. The RNG draw is NOT here; see the
@@ -2719,10 +2794,91 @@ def fit_non_symmetric_tree[
             for i in range(len(visit)):
                 h_visit.unsafe_ptr().unsafe_store(i, UInt32(visit[i]))
             plan_slots.append(IDS_SLOT_VISIT)
-        _upload_id_slots(
-            ctx, d_ids_arena, h_ids_arena_p, ids_host, max_leaves,
-            plan_slots^,
-        )
+        if not tree_sync:
+            _upload_id_slots(
+                ctx, d_ids_arena, h_ids_arena_p, ids_host, max_leaves,
+                plan_slots^,
+            )
+        comptime if DW_TREE_SYNC:
+            if tree_sync:
+                # the replay's plan against the device's lists for this
+                # level (level 0's are the init kernel's: build {0},
+                # visit {0}); past the last level nothing may be planned
+                if level > max_depth and (
+                    len(plan.compute_ids) > 0 or len(visit) > 0
+                ):
+                    raise Error(
+                        String("DW_TREE_SYNC: level ")
+                        + String(level)
+                        + " past max_depth still plans work"
+                    )
+                if level <= max_depth:
+                    var ts_lists_p = h_ts_lists.unsafe_ptr().unsafe_offset(
+                        level * ts_stride
+                    ).unsafe_origin_cast[MutUntrackedOrigin]()
+                    var ts_cap = 1
+                    if level > 0:
+                        ts_cap = 1 << (level - 1)
+                        if ts_cap > max_leaves:
+                            ts_cap = max_leaves
+                    var h_copy_a = List[UInt32]()
+                    var h_copy_b = List[UInt32]()
+                    for i in range(n_copy):
+                        h_copy_a.append(h_copy_src.unsafe_ptr().unsafe_load(i))
+                        h_copy_b.append(h_copy_dst.unsafe_ptr().unsafe_load(i))
+                    _dw_ts_check_pairs(
+                        level, "copy", h_copy_a, h_copy_b,
+                        ts_lists_p.unsafe_offset(DW_TS_L_COPY_SRC * max_leaves),
+                        (DW_TS_L_COPY_DST - DW_TS_L_COPY_SRC) * max_leaves,
+                        ts_cap, ts_dummy,
+                    )
+                    var h_zero = List[UInt32]()
+                    for i in range(zero_count):
+                        h_zero.append(h_zero_ids.unsafe_ptr().unsafe_load(i))
+                    _dw_ts_check_pairs(
+                        level, "zero", h_zero, h_zero,
+                        ts_lists_p.unsafe_offset(DW_TS_L_ZERO * max_leaves),
+                        0, ts_cap, ts_dummy,
+                    )
+                    _dw_ts_check_pairs(
+                        level, "build", non_zero, non_zero,
+                        ts_lists_p.unsafe_offset(DW_TS_L_BUILD * max_leaves),
+                        0, ts_cap, ts_dummy,
+                    )
+                    _dw_ts_check_pairs(
+                        level, "subtract", plan.subtract_from,
+                        plan.subtract_what,
+                        ts_lists_p.unsafe_offset(DW_TS_L_SUB_FROM * max_leaves),
+                        (DW_TS_L_SUB_WHAT - DW_TS_L_SUB_FROM) * max_leaves,
+                        ts_cap, ts_dummy,
+                    )
+                    # the visit list in ORDER: slot order is the right
+                    # children's numbering
+                    var ts_n_visit = Int(
+                        h_ts_counts.unsafe_ptr().unsafe_load(
+                            level * DW_TS_COUNTS + DW_TS_C_VISIT
+                        )
+                    )
+                    if ts_n_visit != len(visit):
+                        raise Error(
+                            String("DW_TREE_SYNC: level ")
+                            + String(level)
+                            + " device scored "
+                            + String(ts_n_visit)
+                            + " leaves, host replay "
+                            + String(len(visit))
+                        )
+                    for i in range(len(visit)):
+                        if Int(
+                            ts_lists_p.unsafe_load(DW_TS_L_VISIT * max_leaves + i)
+                        ) != visit[i]:
+                            raise Error(
+                                String("DW_TREE_SYNC: level ")
+                                + String(level)
+                                + " visit slot "
+                                + String(i)
+                                + " differs"
+                            )
 
         # ============================ DEVIATION 1903 ============================
         # THE PARENT-HISTOGRAM COPY MOVES FROM EVERY SPLIT TO THE PAIRS THAT
@@ -2769,7 +2925,7 @@ def fit_non_symmetric_tree[
         # =======================================================================
         comptime if DEFER_HIST_COPY_1903:
             if len(plan.subtract_from) > 0:
-                if n_copy > 0:
+                if n_copy > 0 and not tree_sync:
                     stage_times.begin(ctx)
                     # DEVIATION 1903 / 261: their own staging pairs, staged
                     # with the plan-time lists above
@@ -2821,7 +2977,7 @@ def fit_non_symmetric_tree[
             # False) -- writing zeros over zeros is the one launch in this
             # step that can be deleted without an argument about the build.
             # (the ZERO set and its count were staged above)
-            if zero_count > 0:
+            if zero_count > 0 and not tree_sync:
                 stage_times.begin(ctx)
                 ctx.enqueue_function[zero_histograms_kernel](
                     d_zero_ids.unsafe_ptr(),
@@ -2837,7 +2993,7 @@ def fit_non_symmetric_tree[
                 mgr.stream_kernel()
                 stage_times.end(ctx, "hist.zero")
 
-        if len(non_zero) > 0:
+        if len(non_zero) > 0 and not tree_sync:
             # their `ComputeSplitProperties(loadPolicy, nonZeroComputeLeaves,
             # subsets)` (`:1347`). `ids` must be the NON-EMPTY set and the
             # call must not happen at all when it is empty -- their
@@ -2955,7 +3111,7 @@ def fit_non_symmetric_tree[
                 len(leaves) * hist_live_stride,
             )
 
-        if len(plan.subtract_from) > 0:
+        if len(plan.subtract_from) > 0 and not tree_sync:
             # their `SubstractHistograms(bigLeaves, smallLeaves, subsets)`
             # (`:1354`): `from - what`, in place, one launch for all pairs.
             stage_times.begin(ctx)
@@ -3049,7 +3205,7 @@ def fit_non_symmetric_tree[
             # reduction.
             # =======================================================================
             # (`run_part_sweep` and the ALL set were staged above)
-            if run_part_sweep:
+            if run_part_sweep and not tree_sync:
                 # their `AllReduceThroughMaster(subsets->CurrentPartStats(),
                 # ...)` (`:443`) over leaves `[0, leafCount)`. See DEVIATION
                 # 352.
@@ -3082,7 +3238,10 @@ def fit_non_symmetric_tree[
 
             # `Random.NextUniformL()`, ONE DRAW PER LAUNCH and not per
             # iteration (`:469`, `:489`, `:510`).
-            var level_seed = level_rand.next_uniform_l()
+            # (DW_TREE_SYNC drew this level's seed in the device loop)
+            var level_seed = UInt64(0)
+            if not tree_sync:
+                level_seed = level_rand.next_uniform_l()
 
             # `numScoreBlocks = leavesToVisit.size()` (`:428-432`), and the
             # kernel is `TComputeOptimalSplitsLeafwiseKernel` (`:470-488`).
@@ -3123,7 +3282,10 @@ def fit_non_symmetric_tree[
                     + " undefined by a poison record is the state that"
                     + " does this."
                 )
-            if lossguide and len(visit) <= 2:
+            if tree_sync:
+                # DW_TREE_SYNC: scored in the device loop
+                pass
+            elif lossguide and len(visit) <= 2:
                 # their two scalars, and `numBlocks.y = partId ==
                 # maybeSecondPartId ? 1 : 2` (`:570`) -- so a single-leaf
                 # iteration passes the SAME id twice and launches one row.
@@ -3233,7 +3395,8 @@ def fit_non_symmetric_tree[
                     grid_dim=(argmax_blocks, len(visit), 1),
                     block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
                 )
-            mgr.stream_kernel()
+            if not tree_sync:
+                mgr.stream_kernel()
             stage_times.end(ctx, "score.kernel")
 
             # ===== HOST WAIT ONE OF TWO: their `bestProps.Read(propsCpu)`
@@ -3354,21 +3517,39 @@ def fit_non_symmetric_tree[
             # nothing. IDENTICAL keeps the host fold byte-for-byte.
             comptime if not SPLIT_COST_IDENTICAL:
                 stage_times.begin(ctx)
-                ctx.enqueue_function[leaf_winner_fold_kernel](
-                    region_score.unsafe_ptr(),
-                    region_bin.unsafe_ptr(),
-                    Int32(argmax_blocks),
-                    Int32(hist_cells_per_leaf),
-                    d_bf_feature.unsafe_ptr(),
-                    d_bf_bin.unsafe_ptr(),
-                    d_bf_one_hot.unsafe_ptr(),
-                    d_bf_folds.unsafe_ptr(),
-                    d_winner.unsafe_ptr(),
-                    grid_dim=(len(visit), 1, 1),
-                    block_dim=(WINNER_FOLD_BLOCK_SIZE, 1, 1),
-                )
-                mgr.stream_kernel()
-                if no_sync_tree:
+                # the winner records this level unpacks: the per-level
+                # readback (`h_winner`), or DW_TREE_SYNC's level slice
+                var wrec = h_winner.unsafe_ptr().unsafe_origin_cast[
+                    MutUntrackedOrigin
+                ]()
+                if not tree_sync:
+                    ctx.enqueue_function[leaf_winner_fold_kernel](
+                        region_score.unsafe_ptr(),
+                        region_bin.unsafe_ptr(),
+                        Int32(argmax_blocks),
+                        Int32(hist_cells_per_leaf),
+                        d_bf_feature.unsafe_ptr(),
+                        d_bf_bin.unsafe_ptr(),
+                        d_bf_one_hot.unsafe_ptr(),
+                        d_bf_folds.unsafe_ptr(),
+                        d_winner.unsafe_ptr(),
+                        grid_dim=(len(visit), 1, 1),
+                        block_dim=(WINNER_FOLD_BLOCK_SIZE, 1, 1),
+                    )
+                    mgr.stream_kernel()
+                if tree_sync:
+                    # DW_TREE_SYNC: folded in the device loop; the
+                    # records of this level are home already
+                    if level >= max_depth:
+                        raise Error(
+                            String("DW_TREE_SYNC: level ")
+                            + String(level)
+                            + " past max_depth still scores leaves"
+                        )
+                    wrec = h_ts_winner.unsafe_ptr().unsafe_offset(
+                        level * WINNER_RECORD_WORDS * max_leaves
+                    ).unsafe_origin_cast[MutUntrackedOrigin]()
+                elif no_sync_tree:
                     # DW_NO_LEVEL_SYNC: selection, payload and the fused
                     # chain go behind the fold with no wait; the winners,
                     # the new sizes and the split count come home in the
@@ -3416,7 +3597,8 @@ def fit_non_symmetric_tree[
                     ctx.enqueue_copy(
                         dst_ptr=h_winner.unsafe_ptr(), src_buf=d_winner
                     )
-                mgr.wait_complete()
+                if not tree_sync:
+                    mgr.wait_complete()
                 stage_times.end(ctx, "score.read")
                 # the identity ladder's records are UNCHANGED: the
                 # per-block score records still sit in the device
@@ -3441,12 +3623,12 @@ def fit_non_symmetric_tree[
                 stage_times.begin(ctx)
                 for i in range(len(visit)):
                     var rec = i * WINNER_RECORD_WORDS
-                    var status = h_winner.unsafe_ptr().unsafe_load(rec + 3)
+                    var status = wrec.unsafe_load(rec + 3)
                     if status == WINNER_STATUS_BIN_OUT_OF_RANGE:
                         raise Error(
                             String("score kernel returned bin-feature ")
                             + String(Int(
-                                h_winner.unsafe_ptr().unsafe_load(rec + 1)
+                                wrec.unsafe_load(rec + 1)
                             ))
                             + " outside the histogram's "
                             + String(hist_cells_per_leaf)
@@ -3455,12 +3637,12 @@ def fit_non_symmetric_tree[
                     var best = TBestSplitProperties()
                     var best_cell = Int32(-1)
                     if status == WINNER_STATUS_DEFINED:
-                        var w_feat = h_winner.unsafe_ptr().unsafe_load(rec)
-                        var w_bin = h_winner.unsafe_ptr().unsafe_load(
+                        var w_feat = wrec.unsafe_load(rec)
+                        var w_bin = wrec.unsafe_load(
                             rec + 1
                         )
                         var gain = bitcast[DType.float32](
-                            h_winner.unsafe_ptr().unsafe_load(rec + 2)
+                            wrec.unsafe_load(rec + 2)
                         )
                         best = TBestSplitProperties(
                             w_feat.cast[DType.int32](),
@@ -3468,7 +3650,7 @@ def fit_non_symmetric_tree[
                             gain,
                             gain,
                         )
-                        best_cell = h_winner.unsafe_ptr().unsafe_load(
+                        best_cell = wrec.unsafe_load(
                             rec + 4
                         ).cast[DType.int32]()
                     leaves[visit[i]].update_best_split(best)
@@ -3617,6 +3799,29 @@ def fit_non_symmetric_tree[
                     + " splits, host selection "
                     + String(len(to_split))
                 )
+        if tree_sync:
+            # DW_TREE_SYNC: the device's split count for this level
+            if level >= max_depth and len(to_split) > 0:
+                raise Error(
+                    String("DW_TREE_SYNC: level ")
+                    + String(level)
+                    + " past max_depth still splits leaves"
+                )
+            if level < max_depth:
+                var dev_n_split = Int(
+                    h_ts_counts.unsafe_ptr().unsafe_load(
+                        level * DW_TS_COUNTS + DW_TS_C_SPLIT
+                    )
+                )
+                if dev_n_split != len(to_split):
+                    raise Error(
+                        String("DW_TREE_SYNC: level ")
+                        + String(level)
+                        + " device selected "
+                        + String(dev_n_split)
+                        + " splits, host replay "
+                        + String(len(to_split))
+                    )
         if len(to_split) > 0:
             # --- MakeSplit's multi-leaf arm, `split_properties_helper
             # .cpp:845-950`. `leftId = leavesToSplit[i]` keeps the parent's
@@ -3796,7 +4001,7 @@ def fit_non_symmetric_tree[
             split_slots.append(IDS_SLOT_RIGHT)
             comptime if not SPLIT_COST_IDENTICAL:
                 split_slots.append(IDS_SLOT_WIN)
-            if not level_synced:
+            if not level_synced and not tree_sync:
                 _upload_id_slots(
                     ctx, d_ids_arena, h_ids_arena_p, ids_host, max_leaves,
                     split_slots^,
@@ -3805,8 +4010,9 @@ def fit_non_symmetric_tree[
             var fused_chain = False
             comptime if DW_FUSED_CHAIN:
                 fused_chain = use_ridx
-            if level_synced:
-                # DW_NO_LEVEL_SYNC: the chain already ran behind the fold
+            if level_synced or tree_sync:
+                # DW_NO_LEVEL_SYNC: the chain already ran behind the fold;
+                # DW_TREE_SYNC: in the device loop
                 pass
             elif fused_chain:
                 # DW_FUSED_CHAIN: the eight-launch chain below in four, same
@@ -3973,11 +4179,19 @@ def fit_non_symmetric_tree[
             # PINNED mirror with no copy; ours copies, for the reason in
             # `gpu_util/gpu_data/partitions.mojo`'s deviation block. =====
             stage_times.begin(ctx)
-            if not level_synced:
+            var szp = h_sz.unsafe_ptr().unsafe_origin_cast[
+                MutUntrackedOrigin
+            ]()
+            if tree_sync:
+                # DW_TREE_SYNC: this level's size snapshot
+                szp = h_ts_sizes.unsafe_ptr().unsafe_offset(
+                    level * n_slots
+                ).unsafe_origin_cast[MutUntrackedOrigin]()
+            elif not level_synced:
                 ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
                 mgr.wait_complete()
             for i in range(len(leaves)):
-                leaves[i].size = Int(h_sz.unsafe_ptr().unsafe_load(i))
+                leaves[i].size = Int(szp.unsafe_load(i))
             stage_times.end(ctx, "split.sizes")
 
             trace.record_list_i32(
@@ -4104,10 +4318,21 @@ def fit_non_symmetric_tree[
             # The partitions moved in the split above, so the stats are
             # recomputed here (DEVIATION 352) before being read.
             stage_times.begin(ctx)
-            for i in range(len(leaves)):
-                h_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
-            ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
-            if use_ridx:
+            var psp = h_part_stats.unsafe_ptr().unsafe_origin_cast[
+                MutUntrackedOrigin
+            ]()
+            if tree_sync:
+                # DW_TREE_SYNC: swept over every slot and home already
+                psp = h_ts_part_stats.unsafe_ptr().unsafe_origin_cast[
+                    MutUntrackedOrigin
+                ]()
+            else:
+                for i in range(len(leaves)):
+                    h_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
+                ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
+            if tree_sync:
+                pass
+            elif use_ridx:
                 # DEVIATION 1902: phase 1 gathers the stationary plane
                 # through the row index; phase 2 and the chunk formula are
                 # the shared kernels unchanged.
@@ -4122,11 +4347,12 @@ def fit_non_symmetric_tree[
                     d_ids, p_off, p_sz, stats, stat_partials, part_stats,
                     sm_count=sm_count,
                 )
-            mgr.stream_kernel()
-            ctx.enqueue_copy(
-                dst_ptr=h_part_stats.unsafe_ptr(), src_buf=part_stats
-            )
-            mgr.wait_complete()
+            if not tree_sync:
+                mgr.stream_kernel()
+                ctx.enqueue_copy(
+                    dst_ptr=h_part_stats.unsafe_ptr(), src_buf=part_stats
+                )
+                mgr.wait_complete()
             stage_times.end(ctx, "leaf.values")
 
             trace.record_device(
@@ -4174,13 +4400,13 @@ def fit_non_symmetric_tree[
                                     continue
                                 for st in range(stat_count):
                                     lg_sums[base + st] += Float64(
-                                        h_part_stats.unsafe_ptr().unsafe_load(
+                                        psp.unsafe_load(
                                             slot * stat_count + st
                                         )
                                     )
             for leaf_id in range(num_leaves):
                 var w = Float64(
-                    h_part_stats.unsafe_ptr().unsafe_load(
+                    psp.unsafe_load(
                         leaf_id * stat_count
                     )
                 )
@@ -4195,7 +4421,7 @@ def fit_non_symmetric_tree[
                     var v = Float32(0.0)
                     if w > 1e-20:
                         var leaf_sum = Float64(
-                            h_part_stats.unsafe_ptr().unsafe_load(
+                            psp.unsafe_load(
                                 leaf_id * stat_count + 1 + approx_id
                             )
                         )
