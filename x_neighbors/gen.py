@@ -269,12 +269,12 @@ CUSTOM_OPS = [
 #: over host tasks like the scratch-free ones. ocsvm, louvain and svgp are
 #: one item each.
 PAR_SCRATCH_OK = {"knn_impute", "knn_impute_cells", "pcs"}
-HOST_RUN = {
-    # long serial folds (one item per class x feature, or per feature):
-    # NearestCentroid's group means and std
-    "group_mean": "MOJOLEARN_XN_SERIAL_GPU",
-    "nc_std": "MOJOLEARN_XN_SERIAL_GPU",
-}
+#: long serial folds (one item per class x feature, or per feature):
+#: NearestCentroid's group means and std. Their HOST driver keeps the
+#: one-thread loop; their GPU driver always launches the items (the host
+#: walk on GPU installs, `-D MOJOLEARN_XN_SERIAL_GPU` off, was removed in
+#: cpu-gpu-cleanup c-xneighbors).
+HOST_SERIAL = {"group_mean", "nc_std"}
 
 BLOCK_OPS = {
     "ocsvm": ("block_ops", "ocsvm_smo_block", "OCSVM_TPB", "MOJOLEARN_XN_SERIAL_SMO"),
@@ -430,14 +430,6 @@ def _i(addr: Int) -> IP:
         dp = [f"{b[0]}: Int" for b in bufs if b[1] not in ("fscr", "iscr")]
         dp += [f"{p[0]}: {'Int' if p[1] == 'int' else 'Float32'}" for p in scal]
         body = "    var ctx = xn_ctx()\n"
-        if name in HOST_RUN:
-            hb = host_loop(item, count, bufs, scal, name)
-            for b in bufs:
-                if b[1] in ("fscr", "iscr"):
-                    hb += f"    _ = s_{b[0]}^\n"
-            body = (f"    comptime if not is_defined[\"{HOST_RUN[name]}\"]():\n"
-                    + "".join("    " + ln + "\n" for ln in hb.rstrip("\n").split("\n"))
-                    + "        return\n" + body)
         for b in bufs:
             up = "True" if b[1] in ("fin", "finout", "iin", "iinout") else "False"
             addr = "0" if b[1] in ("fscr", "iscr") else b[0]
@@ -490,7 +482,7 @@ def _xn_host_serial() -> Bool:
 #: lane/neural-pass72 (2026-10-01): f(t) for t in [0, count), the items cut
 #: over host tasks by count only. An item is one device thread's work and
 #: writes only its own cells, so the task count and the cut move no bit; the
-#: ops with a shared scratch list and the HOST_RUN serial folds keep the
+#: ops with a shared scratch list and the HOST_SERIAL folds keep the
 #: one-thread loop.
 def _items[F: def(Int) -> None](ref f: F, count: Int):
     if count <= 0:
@@ -536,7 +528,7 @@ def _i(addr: Int) -> IP:
 
 def host_loop(item, count, bufs, scal, name=None, par=False):
     """The host driver's body up to the loop: scratch Lists, then the item
-    over every t (shared by the host drivers and HOST_RUN device drivers).
+    over every t (shared by the host drivers).
     """
     if True:
         body = ""
@@ -564,7 +556,7 @@ def host_loop(item, count, bufs, scal, name=None, par=False):
             return body
         call = ", ".join(["t"] + ptrs + [p[0] for p in scal])
         scratch = any(b[1] in ("fscr", "iscr") for b in bufs) and name not in PAR_SCRATCH_OK
-        if par and not scratch and name not in HOST_RUN:
+        if par and not scratch and name not in HOST_SERIAL:
             # lane/neural-pass72: the items over host tasks (`_items`)
             binds = [b[0] for b in bufs]
             for b, ptr in zip(bufs, ptrs):

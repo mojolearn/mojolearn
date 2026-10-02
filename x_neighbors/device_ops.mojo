@@ -358,10 +358,6 @@ def group_mean_kernel(x: FP, labels: IP, res: FP, n_: Int64, d_: Int64, g_: Int6
 
 
 def op_group_mean(x: Int, labels: Int, res: Int, n: Int, d: Int, g: Int) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        for t in range(g * d):
-            group_mean_item(t, _f(x), _i(labels), _f(res), n, d, g)
-        return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
     var d_labels = _buf_i(ctx, labels, n, True)
@@ -690,10 +686,6 @@ def nc_std_kernel(x: FP, lab: IP, cent: FP, std: FP, n_: Int64, d_: Int64, n_cla
 
 
 def op_nc_std(x: Int, lab: Int, cent: Int, std: Int, n: Int, d: Int, n_classes: Int) raises:
-    comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-        for t in range(d):
-            nc_std_item(t, _f(x), _i(lab), _f(cent), _f(std), n, d, n_classes)
-        return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
     var d_lab = _buf_i(ctx, lab, n, True)
