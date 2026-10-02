@@ -23,7 +23,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_BAYES, ALGO_ARD
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_ENETCV, ALGO_BAYES, ALGO_ARD
 from x_linear.ops import ld, st, fd, i2f, fa, fm, fmad, flog, fill, copy, row_dot, mean_of, fs
 from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part
 from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score
@@ -32,6 +32,9 @@ from x_linear.glm import (
     _unit, _glm_deriv_row, _glm_cell, _glm_cell_rows, _glm_slot_count, _glm_slot_cell, _glm_step, GLM_LINK_LOG, GLM_STALL_ITERS,
     _glm_cell_part, _glm_cell_store,
 )
+from x_linear.cd_grid import enetcv_fit_grid
+from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross_kernel, mg_tiles
+from x_linear.dispatch import ALGO_RIDGE
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
 from x_linear.logcv_grid import logcv_fit_grid
@@ -227,6 +230,13 @@ def _lars_grid_gram() -> Bool:
 #: Apple: the longest a guarded x_linear launch runs, in chain steps (the
 #: grid Gram's row slices; x_linear/witness.mojo, lane/neural-pass131).
 comptime XL_APPLE_SLICE_MACS = 1 << 27
+
+
+def _enetcv_grid() -> Bool:
+    """`MOJOLEARN_X_LINEAR_ENETCV_GRID=0` keeps LassoCV / ElasticNetCV on
+    the one-block team fit (the A/B arm); default the grid form
+    (x_linear/cd_grid.mojo)."""
+    return String(getenv("MOJOLEARN_X_LINEAR_ENETCV_GRID")) != "0"
 
 
 def _bayes_grid_gram() -> Bool:
@@ -774,6 +784,9 @@ def fit_device(
         if n >= XB_MIN_ROWS and gram_handles(algo):
             gram_fit(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
             return
+    if algo == ALGO_ENETCV and d > 0 and len(ip) >= 7 and _enetcv_grid():
+        enetcv_fit_grid(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
+        return
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
     var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(fp), 1))
@@ -784,6 +797,16 @@ def fit_device(
     # LARS reads ip[4] on the device: 1 when the Gram is already in fw
     # (`xg_gram_kernel` below), 0 when the team computes it.
     var grid_gram = algo == ALGO_LARS and _lars_grid_gram() and d > 0
+    # Ridge: the moments of [X | Y] on the grid (lane/neural-pass120);
+    # ip[4] tells the team they are in fw
+    var ridge_pre = False
+    comptime if MOMENTS_GRID:
+        ridge_pre = (algo == ALGO_RIDGE and d > 0 and n > 0 and len(ip) >= 4 and Int(ip[3]) == 0
+                     and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0")
+    if algo == ALGO_RIDGE:
+        while len(hip) < 5:
+            hip.append(Int32(0))
+        hip[4] = Int32(1 if ridge_pre else 0)
     # lane/neural-pass87 (2026-10-01): BayesianRidge (unweighted) and ARD read
     # the same layout (xm at 0, G at d, ip[1] fit_intercept) and the same
     # centered Gram chains, which the team ran on ONE block (24,310 chains
@@ -791,10 +814,14 @@ def fit_device(
     var bayes_like = (algo == ALGO_BAYES and len(ip) > 2 and ip[2] == 0) or algo == ALGO_ARD
     if bayes_like and _bayes_grid_gram() and d > 0:
         grid_gram = True
+    var lars_pre = False
+    comptime if MOMENTS_GRID:
+        lars_pre = (algo == ALGO_LARS and grid_gram and n > 0
+                    and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0")
     if algo == ALGO_LARS or bayes_like:
         while len(hip) < 5:
             hip.append(Int32(0))
-        hip[4] = Int32(1 if grid_gram else 0)
+        hip[4] = Int32(2 if lars_pre else (1 if grid_gram else 0))
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](
         team_work(n, team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr()))), team_own(algo, d)))
@@ -817,7 +844,8 @@ def fit_device(
         rows_slice = max(64, min(n, (XL_APPLE_SLICE_MACS // max(cells, 1)) // 64 * 64))
     var nslices = (n + rows_slice - 1) // rows_slice if n > 0 else 1
     var dgs = ctx.enqueue_create_buffer[DType.float32](max(d + d * d, 1) if grid_gram and nslices > 1 else 1)
-    var wit = Witness(ctx, max(_xg_blocks(max(cells, d)), 1) + 1)
+    var mgt = mg_tiles(d, Int(hip[0]) if ridge_pre else 1)
+    var wit = Witness(ctx, max(max(_xg_blocks(max(cells, d)), 1) + 1, mgt + mgt * (mgt + 1) // 2 + 1))
     var bayes_grid = False
     comptime if not X_LINEAR_SERIAL_FOLDS:
         bayes_grid = algo == ALGO_BAYES and n > 0 and d > 0 and String(getenv("MOJOLEARN_X_LINEAR_BAYES_GRID")) != "0"
@@ -829,7 +857,38 @@ def fit_device(
         diw.enqueue_fill(Int32(0))
         dtw.enqueue_fill(Float32(0))
         var good = True
-        if grid_gram:
+        if lars_pre:
+            # lane/neural-pass120's moments of [X | y] (fw: xm 0, G d, X'y
+            # d + d*d, y's mean parked in prev = 2d + d*d)
+            var nonce = wit.begin()
+            var tl = mg_tiles(d, 1)
+            ctx.enqueue_function[mg_means_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), Int32(hip[1]), dfw.unsafe_ptr(),
+                Int32(0), Int32(2 * d + d * d), wit.p(), Int32(0), nonce, grid_dim=tl, block_dim=MG_NT,
+            )
+            ctx.enqueue_function[mg_cross_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), dfw.unsafe_ptr(),
+                Int32(0), Int32(2 * d + d * d), Int32(d), Int32(d + d * d), wit.p(), Int32(tl), nonce,
+                grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
+            )
+            good = wit.ok(ctx, tl + tl * (tl + 1) // 2, "LARS moments")
+        elif grid_gram and bayes_like and MOMENTS_GRID and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0":
+            # lane/neural-pass130: BayesianRidge / ARD's means and centered Gram
+            # from the staged moments kernels (no Y columns), into the layout
+            # `xg_gram_kernel` fills (xm at 0, G at d): the same chains, staged
+            var nonce = wit.begin()
+            var tlb = mg_tiles(d, 0)
+            ctx.enqueue_function[mg_means_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(0), Int32(hip[1]), dfw.unsafe_ptr(),
+                Int32(0), Int32(0), wit.p(), Int32(0), nonce, grid_dim=tlb, block_dim=MG_NT,
+            )
+            ctx.enqueue_function[mg_cross_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(0), dfw.unsafe_ptr(),
+                Int32(0), Int32(0), Int32(d), Int32(0), wit.p(), Int32(tlb), nonce,
+                grid_dim=tlb * (tlb + 1) // 2, block_dim=MG_NT,
+            )
+            good = wit.ok(ctx, tlb + tlb * (tlb + 1) // 2, "Bayes moments")
+        elif grid_gram:
             # The means then the centered Gram into fw[0, d + d*d), the layout
             # `lars_fit` reads (xm at 0, G at d); the team recomputes the means
             # itself (the same statements, the same values) and skips the Gram.
@@ -863,6 +922,24 @@ def fit_device(
                         wit.fail()
                 lo += cnt
                 si += 1
+        if good and ridge_pre:
+            var t_n = Int(hip[0])
+            var r_xm = 0
+            var r_gg = d
+            var r_ym = d + 2 * d * d + d
+            var r_xty = r_ym + t_n
+            var nonce = wit.begin()
+            var tl = mg_tiles(d, t_n)
+            ctx.enqueue_function[mg_means_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), Int32(hip[1]), dfw.unsafe_ptr(),
+                Int32(r_xm), Int32(r_ym), wit.p(), Int32(0), nonce, grid_dim=tl, block_dim=MG_NT,
+            )
+            ctx.enqueue_function[mg_cross_kernel](
+                dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(t_n), dfw.unsafe_ptr(),
+                Int32(r_xm), Int32(r_ym), Int32(r_gg), Int32(r_xty), wit.p(), Int32(tl), nonce,
+                grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
+            )
+            good = wit.ok(ctx, tl + tl * (tl + 1) // 2, "Ridge moments")
         if good:
             var nonce = wit.begin()
             if bayes_grid:

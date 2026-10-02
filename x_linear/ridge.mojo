@@ -108,7 +108,11 @@ def _ridge_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
     var wsum = Float32(0)
     if sw:
         wsum = t_sum(t, y + wo, n)
-    for j in range(t.tid, d + t_n, t.nt):
+    # ip[4] (device only; x_linear/device.mojo always appends it for Ridge):
+    # 1 when x_linear/moments_grid.mojo already wrote the means, the Gram and
+    # X'Y (unweighted), the same words (lane/neural-pass120)
+    var pre = not sw and ldi(ip, 4) != 0
+    for j in range(t.tid, (d + t_n) if not pre else 0, t.nt):
         var acc = Float32(0)
         if j < d:
             if fi:
@@ -126,7 +130,9 @@ def _ridge_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
                     acc = fd(fold_fa(y, c, t_n, n), i2f(n))
             st(fw, ym + c, acc)
     t.sync()
-    if sw:
+    if pre:
+        pass
+    elif sw:
         # sum_i w_i xc_i xc_i' (theirs: the sqrt(w) rescale of _rescale_data)
         var cells = d * (d + 1) // 2
         for c in range(t.tid, cells, t.nt):
@@ -143,7 +149,7 @@ def _ridge_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
         t.sync()
     else:
         t_centered_gram(t, x, n, d, fw + xm, 0, fw, gg)
-    for c in range(t.tid, t_n * d, t.nt):
+    for c in range(t.tid, (t_n * d) if not pre else 0, t.nt):
         var tt = c // d
         var j = c - tt * d
         var ymt = ld(fw, ym + tt)
