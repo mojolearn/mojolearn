@@ -62,11 +62,17 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemm_nt, gemv_n
 from core.pinned_reduce import pinned_block_sum
-from core.strided_walk import APPLE_IDENTICAL_STEP_UNROLL, APPLE_FAST_STEP_UNROLL, strided_ftz_sum
+from core.strided_walk import (
+    APPLE_IDENTICAL_STEP_UNROLL,
+    APPLE_FAST_STEP_UNROLL,
+    NV_AMD_IDENTICAL_STEPS,
+    strided_ftz_sum,
+)
 from core.xtdz_coalesced import (
     xtdz_coalesced,
     xtdz_coalesced_applies,
     xtdz_coalesced_workspace_floats,
+    XTDZ_CO_BLOCK_TARGET,
     XTDZ_CO_MAX_CELLS,
 )
 from glm.impl.qn.glm_linear import (
@@ -112,9 +118,18 @@ restores fast_xtdz."""
 
 def qn_coalesced_applies(d: Int, c: Int) -> Bool:
     """`xtdz_coalesced` serves this gradient: IDENTICAL on Apple (its own
-    rule), or FAST on Apple under QN_FAST_COALESCED."""
+    rule), IDENTICAL on NVIDIA and AMD (NV_AMD_IDENTICAL_STEPS), or FAST on
+    Apple under QN_FAST_COALESCED."""
     if xtdz_coalesced_applies(d, c):
         return True
+    # NVIDIA / AMD IDENTICAL (lane/gap-linear-nv): the same chains and fold,
+    # row-coalesced; xty_kernel / xtdz_multi_kernel read X a column at a
+    # stride of D floats, one block per cell. Pass 1 runs `cells` threads per
+    # block, each holding 2 * STRIDED_UNROLL loads in registers, so the
+    # block is capped at 256 cells here (1024 threads would not get the
+    # registers); wider gradients keep the one-block-per-cell kernels.
+    comptime if NV_AMD_IDENTICAL_STEPS:
+        return d >= 1 and c >= 1 and d * c <= XTDZ_CO_BLOCK_TARGET
     comptime if QN_FAST_COALESCED:
         return d >= 1 and c >= 1 and d * c <= XTDZ_CO_MAX_CELLS
     return False
@@ -226,7 +241,7 @@ def sum_terms_kernel(
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
     var acc = Float32(0.0)
-    comptime if APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL:
+    comptime if APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL or NV_AMD_IDENTICAL_STEPS:
         acc = strided_ftz_sum[STATS_TPB](terms, 1, 0, n, tid, acc)
     else:
         var i = tid
@@ -249,7 +264,7 @@ def mean_kernel(
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
     var acc = Float32(0.0)
-    comptime if APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL:
+    comptime if APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL or NV_AMD_IDENTICAL_STEPS:
         acc = strided_ftz_sum[STATS_TPB](v, 1, 0, n, tid, acc)
     else:
         var i = tid
