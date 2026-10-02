@@ -1,0 +1,34 @@
+CMD lane/apple-fast-decomp-sparse dsp-omp-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-omp-istella sparse-coder istella 3 3 - MOJOLEARN_DECOMP_FAST_OMP_BLOCK=1
+CMD lane/apple-fast-decomp-sparse dsp-omp-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dsp-omp-taxi sparse-coder taxi 3 3 - MOJOLEARN_DECOMP_FAST_OMP_BLOCK=1
+CMD lane/apple-fast-decomp-sparse dsp-omp-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dsp-omp-ident sparse-coder istella 3 3 -
+CMD lane/apple-fast-decomp-sparse dsp-rp-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-rp-istella gaussian-rp istella 3 3 - MOJOLEARN_DECOMP_FAST_RP_DIRECT=1
+CMD lane/apple-fast-decomp-sparse dsp-rp-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dsp-rp-taxi gaussian-rp taxi 3 3 - MOJOLEARN_DECOMP_FAST_RP_DIRECT=1
+CMD lane/apple-fast-decomp-sparse dsp-rp-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dsp-rp-ident gaussian-rp istella 3 3 -
+CMD lane/apple-fast-decomp-sparse dsp-srp-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-srp-istella sparse-rp istella 3 3 - MOJOLEARN_DECOMP_FAST_RP_DIRECT=1
+CMD lane/apple-fast-decomp-sparse dsp-srp-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dsp-srp-taxi sparse-rp taxi 3 3 - MOJOLEARN_DECOMP_FAST_RP_DIRECT=1
+CMD lane/apple-fast-decomp-sparse dsp-srp-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dsp-srp-ident sparse-rp istella 3 3 -
+CMD lane/apple-fast-decomp-sparse dsp-mbdl-upd-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-mbdl-upd-istella mb-dict-learning istella 2 2 - MOJOLEARN_DECOMP_FAST_DICT_UPDATE=1
+CMD lane/apple-fast-decomp-sparse dsp-mbdl-upd-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dsp-mbdl-upd-taxi mb-dict-learning taxi 2 2 - MOJOLEARN_DECOMP_FAST_DICT_UPDATE=1
+CMD lane/apple-fast-decomp-sparse dsp-mbdl-lasso-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-mbdl-lasso-istella mb-dict-learning istella 2 2 - MOJOLEARN_DECOMP_FAST_LASSO_BLOCK=1
+CMD lane/apple-fast-decomp-sparse dsp-mbdl-both-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-mbdl-both-istella mb-dict-learning istella 2 2 - "MOJOLEARN_DECOMP_FAST_DICT_UPDATE=1 MOJOLEARN_DECOMP_FAST_LASSO_BLOCK=1"
+CMD lane/apple-fast-decomp-sparse dsp-mbdl-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dsp-mbdl-ident mb-dict-learning istella 2 2 -
+CMD lane/apple-fast-decomp-sparse dsp-dl-upd-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-dl-upd-istella dict-learning istella 2 2 - MOJOLEARN_DECOMP_FAST_DICT_UPDATE=1
+CMD lane/apple-fast-decomp-sparse dsp-dl-lasso-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-dl-lasso-istella dict-learning istella 2 2 - MOJOLEARN_DECOMP_FAST_LASSO_BLOCK=1
+CMD lane/apple-fast-decomp-sparse dsp-dl-both-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-dl-both-istella dict-learning istella 2 2 - "MOJOLEARN_DECOMP_FAST_DICT_UPDATE=1 MOJOLEARN_DECOMP_FAST_LASSO_BLOCK=1"
+CMD lane/apple-fast-decomp-sparse dsp-dl-both-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dsp-dl-both-taxi dict-learning taxi 2 2 - "MOJOLEARN_DECOMP_FAST_DICT_UPDATE=1 MOJOLEARN_DECOMP_FAST_LASSO_BLOCK=1"
+CMD lane/apple-fast-decomp-sparse dsp-dl-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dsp-dl-ident dict-learning istella 2 2 -
+CMD lane/apple-fast-decomp-sparse dsp-mbspca-upd-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-mbspca-upd-istella mb-sparse-pca istella 2 2 - MOJOLEARN_DECOMP_FAST_DICT_UPDATE=1
+CMD lane/apple-fast-decomp-sparse dsp-mbspca-upd-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dsp-mbspca-upd-taxi mb-sparse-pca taxi 3 3 - MOJOLEARN_DECOMP_FAST_DICT_UPDATE=1
+CMD lane/apple-fast-decomp-sparse dsp-mbspca-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dsp-mbspca-ident mb-sparse-pca istella 2 2 -
+CMD lane/apple-fast-decomp-sparse dsp-spca-both-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dsp-spca-both-taxi sparse-pca taxi 3 3 - "MOJOLEARN_DECOMP_FAST_DICT_UPDATE=1 MOJOLEARN_DECOMP_FAST_LASSO_BLOCK=1"
+CMD lane/apple-fast-decomp-sparse dsp-spca-both-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-spca-both-istella sparse-pca istella 1 1 - "MOJOLEARN_DECOMP_FAST_DICT_UPDATE=1 MOJOLEARN_DECOMP_FAST_LASSO_BLOCK=1"
+CMD lane/apple-fast-decomp-sparse dsp-spca-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dsp-spca-ident sparse-pca istella 1 1 -
+CMD lane/apple-fast-decomp-sparse dsp-ica-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-ica-istella fastica istella 3 3 - MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2=1
+CMD lane/apple-fast-decomp-sparse dsp-ica-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dsp-ica-taxi fastica taxi 3 3 - MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2=1
+CMD lane/apple-fast-decomp-sparse dsp-ica-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dsp-ica-ident fastica istella 3 3 -
+CMD lane/apple-fast-decomp-sparse dsp-mds-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-mds-istella mds istella 3 3 - MOJOLEARN_DECOMP_FAST_MDS_DIAG=1
+CMD lane/apple-fast-decomp-sparse dsp-mds-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dsp-mds-taxi mds taxi 3 3 - MOJOLEARN_DECOMP_FAST_MDS_DIAG=1
+CMD lane/apple-fast-decomp-sparse dsp-mds-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dsp-mds-ident mds istella 3 3 -
+CMD lane/apple-fast-decomp-sparse dsp-iso-istella AFC_FAMILY=algos bash tools/afc_ab.sh dsp-iso-istella isomap istella 2 2 - MOJOLEARN_DECOMP_FAST_ISOMAP_KNN=1
+CMD lane/apple-fast-decomp-sparse dsp-iso-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dsp-iso-taxi isomap taxi 2 2 - MOJOLEARN_DECOMP_FAST_ISOMAP_KNN=1
+CMD lane/apple-fast-decomp-sparse dsp-iso-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dsp-iso-ident isomap istella 1 1 -
