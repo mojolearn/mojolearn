@@ -121,6 +121,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.column_stats import STATS_TPB
 from core.identity_trace import IdentityTrace, first_divergence
 from glm.impl.qn.glm_base import GLMDims, GLMWithData
+from glm.host.qn_oracle import HOST_QN_TILED, host_qnt_sum, host_qnt_xty
 from glm.impl.qn.qn import qn_decision_function, qn_fit_x
 from glm.impl.qn.qn_util import OPT_MAX_ITERS_REACHED, OPT_SUCCESS
 from glm.impl.linear_model.qn import (
@@ -487,6 +488,9 @@ def check_logistic_refuses_by_name() raises:
 
 
 def _host_halving_sum(terms: List[Float32], n: Int) -> Float32:
+    # QN_TILED (lane/gap-linear-nv): the evaluation's sums are tiled
+    comptime if HOST_QN_TILED:
+        return host_qnt_sum(terms, n)
     var red = List[Float32]()
     for t in range(STATS_TPB):
         var acc = Float32(0.0)
@@ -504,6 +508,8 @@ def _host_halving_sum(terms: List[Float32], n: Int) -> Float32:
 
 
 def _host_halving_xty(x: List[Float32], y: List[Float32], n: Int, d: Int, col: Int) -> Float32:
+    comptime if HOST_QN_TILED:
+        return host_qnt_xty(x, y, n, d)[col]
     var red = List[Float32]()
     for t in range(STATS_TPB):
         var acc = Float32(0.0)

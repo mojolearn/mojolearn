@@ -149,34 +149,117 @@ def isotonic_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP,
         st(res, 2, Float32(0))
         return
     _iso_sort(x, y, perm, tmp, nk)
+    iso_fit_sorted(x, y, n, ip, fp, res, fw, iw, perm, nk)
+
+
+def iso_fit_sorted(x: FP, y: FP, n: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, perm: IP, nk: Int):
+    """isotonic_fit after its sort: perm[0, nk) the rows in (x, y, row) order
+    (lane/neural-pass107: the device runs these steps as grid kernels and one
+    thread, x_linear/device.mojo, with the same statements)."""
+    var has_w = ldi(ip, 3) != 0
+    var xs = fw + 3 * n
+    var ys = fw + 4 * n
+    var ws = fw + 5 * n
     for j in range(nk):
-        var r = ldi(perm, j)
-        st(xs, j, ld(x, r))
-        st(ys, j, ld(y, r))
-        st(ws, j, ld(y, n + r) if has_w else Float32(1))
-    # _make_unique
+        iso_gather_one(j, x, y, n, has_w, perm, xs, ys, ws)
+    var starts = iw + n
+    var m = iso_bounds(xs, nk, starts)
+    for g in range(m):
+        iso_group(g, xs, ys, ws, starts, fw, n)
+    iso_after_unique(m, n, ip, fp, res, fw, iw)
+
+
+@always_inline
+def iso_gather_one(j: Int, x: FP, y: FP, n: Int, has_w: Bool, perm: IP, xs: FP, ys: FP, ws: FP):
+    var r = ldi(perm, j)
+    st(xs, j, ld(x, r))
+    st(ys, j, ld(y, r))
+    st(ws, j, ld(y, n + r) if has_w else Float32(1))
+
+
+def iso_bounds_from(xs: FP, nk: Int, cand: IP, nc: Int, starts: IP) -> Int:
+    """`iso_bounds` over the candidate rows cand[0:nc] (ascending): the rows
+    whose x differs from the row before. A row with the previous row's x
+    never starts a group (it is 0 above the group's first x or the same
+    distance as the row before), so walking only the candidates takes the
+    same steps and writes the same starts (lane/neural-pass117)."""
     var m = 0
+    sti(starts, 0, 0)
     var cx = ld(xs, 0)
-    var cy = Float32(0)
-    var cw = Float32(0)
-    for j in range(nk):
+    for q in range(nc):
+        var j = ldi(cand, q)
         var xj = ld(xs, j)
-        var wj = ld(ws, j)
         if fs(xj, cx) >= Float32(1e-6):
-            st(fw, ux + m, cx)
-            st(fw, uw + m, cw)
-            st(fw, uy + m, fd(cy, cw))
             m += 1
+            sti(starts, m, j)
             cx = xj
-            cw = wj
-            cy = fm(ld(ys, j), wj)
-        else:
-            cw = fa(cw, wj)
-            cy = fmad(ld(ys, j), wj, cy)
-    st(fw, ux + m, cx)
-    st(fw, uw + m, cw)
-    st(fw, uy + m, fd(cy, cw))
     m += 1
+    sti(starts, m, nk)
+    return m
+
+
+def iso_bounds(xs: FP, nk: Int, starts: IP) -> Int:
+    """_make_unique's groups: starts[g] the first sorted row of group g (a row
+    starts a group when it is at least 1e-6 above the group's first x),
+    starts[m] = nk; returns m."""
+    var m = 0
+    sti(starts, 0, 0)
+    var cx = ld(xs, 0)
+    for j in range(1, nk):
+        var xj = ld(xs, j)
+        if fs(xj, cx) >= Float32(1e-6):
+            m += 1
+            sti(starts, m, j)
+            cx = xj
+    m += 1
+    sti(starts, m, nk)
+    return m
+
+
+@always_inline
+def iso_group(g: Int, xs: FP, ys: FP, ws: FP, starts: IP, fw: FP, n: Int):
+    """Group g's pooled x, weight and mean: _make_unique's chains (the first
+    group summed from zero, every other started by its first row)."""
+    var lo = ldi(starts, g)
+    var hi = ldi(starts, g + 1)
+    var cw = Float32(0)
+    var cy = Float32(0)
+    var j0 = lo
+    if g > 0:
+        cw = ld(ws, lo)
+        cy = fm(ld(ys, lo), cw)
+        j0 = lo + 1
+    var j = j0
+    # 16 rows' loads before their folds (scheduling only; lane/neural-pass117:
+    # one group can hold most of the rows, and its chain waited on a load
+    # per row)
+    while j + 16 <= hi:
+        var bw = SIMD[DType.float32, 16]()
+        var by = SIMD[DType.float32, 16]()
+        comptime for u in range(16):
+            bw[u] = ld(ws, j + u)
+            by[u] = ld(ys, j + u)
+        comptime for u in range(16):
+            cw = fa(cw, bw[u])
+            cy = fmad(by[u], bw[u], cy)
+        j += 16
+    while j < hi:
+        var wj = ld(ws, j)
+        cw = fa(cw, wj)
+        cy = fmad(ld(ys, j), wj, cy)
+        j += 1
+    st(fw, g, ld(xs, lo))
+    st(fw, 2 * n + g, cw)
+    st(fw, n + g, fd(cy, cw))
+
+
+def iso_after_unique(m: Int, n: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """isotonic_fit after _make_unique: PAVA (reversed for a decreasing fit),
+    the clip and the trim."""
+    var inc = ldi(ip, 0) != 0
+    var ux = 0
+    var uy = n
+    var uw = 2 * n
     # a decreasing fit runs PAVA on the reversed sequence
     if not inc:
         for a in range(m // 2):
@@ -257,32 +340,41 @@ def isotonic_predict(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res:
     # DEVIATION 5006 (IDENTITY_PATHS row 106): the constant word, never 0/0
     var nan = bitcast[DType.float32](UInt32(0x7FC00000))
     for q in range(t.tid, n, t.nt):
-        var tq = ld(x, q)
-        if oob == OOB_CLIP:
-            tq = fmin(fmax(tq, ld(fp, 0)), ld(fp, 1))
-        if m == 1:
-            st(res, q, ld(y, m))
-            continue
-        if tq < ld(y, 0) or tq > ld(y, m - 1):
-            st(res, q, nan)
-            continue
-        # searchsorted(xs, t, 'left'), clamped to [1, m - 1]
-        var lo = 0
-        var hi = m
-        while lo < hi:
-            var mid = (lo + hi) // 2
-            if ld(y, mid) < tq:
-                lo = mid + 1
-            else:
-                hi = mid
-        var idx = lo
-        if idx < 1:
-            idx = 1
-        if idx > m - 1:
-            idx = m - 1
-        var x_lo = ld(y, idx - 1)
-        var x_hi = ld(y, idx)
-        var y_lo = ld(y, m + idx - 1)
-        var y_hi = ld(y, m + idx)
-        var slope = fd(fs(y_hi, y_lo), fs(x_hi, x_lo))
-        st(res, q, fmad(slope, fs(tq, x_lo), y_lo))
+        iso_predict_one(q, x, y, m, oob, fp, res)
+
+
+@always_inline
+def iso_predict_one(q: Int, x: FP, y: FP, m: Int, oob: Int, fp: FP, res: FP):
+    """isotonic_predict for query q (lane/neural-pass107: the device runs one
+    thread a query)."""
+    # DEVIATION 5006 (IDENTITY_PATHS row 106): the constant word, never 0/0
+    var nan = bitcast[DType.float32](UInt32(0x7FC00000))
+    var tq = ld(x, q)
+    if oob == OOB_CLIP:
+        tq = fmin(fmax(tq, ld(fp, 0)), ld(fp, 1))
+    if m == 1:
+        st(res, q, ld(y, m))
+        return
+    if tq < ld(y, 0) or tq > ld(y, m - 1):
+        st(res, q, nan)
+        return
+    # searchsorted(xs, t, 'left'), clamped to [1, m - 1]
+    var lo = 0
+    var hi = m
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if ld(y, mid) < tq:
+            lo = mid + 1
+        else:
+            hi = mid
+    var idx = lo
+    if idx < 1:
+        idx = 1
+    if idx > m - 1:
+        idx = m - 1
+    var x_lo = ld(y, idx - 1)
+    var x_hi = ld(y, idx)
+    var y_lo = ld(y, m + idx - 1)
+    var y_hi = ld(y, m + idx)
+    var slope = fd(fs(y_hi, y_lo), fs(x_hi, x_lo))
+    st(res, q, fmad(slope, fs(tq, x_lo), y_lo))

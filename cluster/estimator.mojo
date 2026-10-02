@@ -564,6 +564,39 @@ def kmeans_fit(
     # 2026-09-18 (lane/kmeans-cosine-capability). The call is kept rather
     # than folded to `Int32(0)` so that this measurement stays on the path
     # of anyone who goes looking for the flag. Do not simplify it away.
+    return _kmeans_fit_tail(
+        ctx, x, x_norm, weights, centroids, labels, min_dist, n_samples, n_features,
+        n_clusters, out_centroids_ptr, out_labels_ptr, max_iter, tol, seed, n_init, init,
+        metric, oversampling_factor, sum_scale, weight_scale,
+    )
+
+
+
+def _kmeans_fit_tail(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut x_norm: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    mut centroids: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut min_dist: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    out_centroids_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_labels_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    max_iter: Int,
+    tol: Float64,
+    seed: UInt64,
+    n_init: Int,
+    init: Int,
+    metric: Int,
+    oversampling_factor: Float64,
+    sum_scale: Float64,
+    weight_scale: Float64,
+) raises -> KMeansFitResult:
+    """`kmeans_fit` from the uploaded design on: the row norms, the fit, the
+    read-back (lane/neural-pass108: shared with `kmeans_fit_rows`)."""
     var take_sqrt = Int32(0)
     if centroid_norms_take_sqrt(metric):
         take_sqrt = Int32(1)
@@ -616,6 +649,98 @@ def kmeans_fit(
         result.inertia, result.n_iter, sum_scale, weight_scale
     )
 
+
+def plan_sum_scale_rows(
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    rows: List[Int],
+    n_features: Int,
+) raises -> Float64:
+    """`plan_sum_scale` of the rows `rows` of `x_ptr` taken in that order
+    (the gathered matrix's rows): the same per-column chains in the same
+    order, read through the row list instead of a gathered copy
+    (lane/neural-pass108)."""
+    var n_samples = len(rows)
+    var totals = List[Float64](length=n_features, fill=Float64(0.0))
+    var tp = totals.unsafe_ptr()
+    var rp = rows.unsafe_ptr()
+    var cells = n_samples * n_features
+    var groups = 1
+    if cells >= (1 << 20) and n_features > 1:
+        groups = min(n_features, 64)
+    var per = (n_features + groups - 1) // groups
+    def _abs_sum_task(g: Int) {imm x_ptr, imm tp, imm rp, imm n_samples, imm n_features, imm per}:
+        var f0 = g * per
+        var f1 = min(n_features, f0 + per)
+        if f1 <= f0:
+            return
+        var local = List[Float64](length=f1 - f0, fill=Float64(0.0))
+        var lp = local.unsafe_ptr()
+        for r in range(n_samples):
+            var row = rp[r] * n_features
+            for f in range(f0, f1):
+                var v = x_ptr.unsafe_load(row + f)
+                lp.unsafe_store(f - f0, lp.unsafe_load(f - f0) + Float64(abs(v)))
+        for f in range(f0, f1):
+            tp.unsafe_store(f, local[f - f0])
+    if groups == 1:
+        _abs_sum_task(0)
+    else:
+        host_parallelize(_abs_sum_task, groups)
+    var worst = Float64(0.0)
+    for f in range(n_features):
+        var column = totals[f]
+        if column > worst:
+            worst = column
+    _ = rows[0]
+    return choose_scale(worst, n_samples)
+
+
+def kmeans_fit_rows(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    host_x: MutPointer[Float32, MutUntrackedOrigin],
+    rows: List[Int],
+    n_features: Int,
+    n_clusters: Int,
+    out_centroids_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_labels_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    max_iter: Int = 300,
+    tol: Float64 = 1e-4,
+    seed: UInt64 = 0,
+    n_init: Int = 1,
+    init: Int = INIT_KMEANS_PLUS_PLUS,
+    metric: Int = METRIC_L2_EXPANDED,
+    oversampling_factor: Float64 = 2.0,
+) raises -> KMeansFitResult:
+    """`kmeans_fit` with unit weights on rows `rows` of the host matrix
+    `host_x`, whose gathered copy (rows in that order) is ALREADY on the
+    device in `x` (lane/neural-pass108: BisectingKMeans gathers each
+    cluster on the device instead of copying and uploading it per split).
+    The same scale (the device's certified one where `kmeans_fit` takes it,
+    else the host pass over the same rows in the same order) and the same
+    tail, so the same words."""
+    var n_samples = len(rows)
+    if n_samples < 1 or n_features < 1 or n_clusters < 1 or n_clusters > n_samples:
+        raise Error("kmeans_fit_rows: bad shape " + String(n_samples) + " x " + String(n_features)
+                    + " for " + String(n_clusters) + " clusters")
+    var sum_scale = Float64(0.0)
+    comptime if KMEANS_DEVICE_SCALE:
+        sum_scale = plan_sum_scale_certified(ctx, x, n_samples, n_features)
+    if sum_scale <= 0.0:
+        sum_scale = plan_sum_scale_rows(host_x, rows, n_features)
+    var weight_scale = choose_scale(Float64(n_samples), n_samples)
+    var cd = n_clusters * n_features
+    var weights = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var centroids = ctx.enqueue_create_buffer[DType.float32](cd)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](n_samples)
+    var x_norm = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    var min_dist = ctx.enqueue_create_buffer[DType.float32](n_samples)
+    enqueue_fill[DType.float32](ctx, weights, Float32(1.0))
+    return _kmeans_fit_tail(
+        ctx, x, x_norm, weights, centroids, labels, min_dist, n_samples, n_features,
+        n_clusters, out_centroids_ptr, out_labels_ptr, max_iter, tol, seed, n_init, init,
+        metric, oversampling_factor, sum_scale, weight_scale,
+    )
 
 def kmeans_predict(
     ctx: DeviceContext,

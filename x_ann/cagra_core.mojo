@@ -88,6 +88,8 @@ def cagra_prune(n: Int, kdeg: Int, knn: List[Int32], deg: Int) raises -> List[In
                         stamp[v] = Int32(-1)
                 for kad in range(kdeg - 1):
                     var d = Int(kp[a * kdeg + kad])
+                    if d < 0 or d >= n:
+                        continue  # no row to walk (prune_kernel skips it too)
                     for kdb in range(kdeg):
                         var cand = Int(kp[d * kdeg + kdb])
                         for kab in range(kad + 1, kdeg):
@@ -181,6 +183,24 @@ def cagra_reverse_merge(n: Int, deg: Int, pruned: List[Int32]) -> List[Int32]:
 
 
 @always_inline
+def cg_seed_node(t: Int, n: Int, n_seeds: Int, rs: Int) -> Int:
+    """Seed node `t` of every query's walk. `rs == 0` (random_state=None):
+    the evenly spaced `(t * n) // n_seeds` (DEVIATION 5824). `rs > 0`
+    (random_state given, gap-fails2 2026-10-02): splitmix64 of
+    `(rs, t)` reduced mod n, the role cuVS's `rand_xor_mask` plays in its
+    seed hash. Integer arithmetic only, so the same node on every device and
+    on the host; a repeated node is skipped by the visited set, as any
+    repeat is."""
+    if rs == 0:
+        return (t * n) // n_seeds
+    var z = UInt64(rs) * UInt64(0x9E3779B97F4A7C15) + UInt64(t + 1) * UInt64(0xD1B54A32D192ED03)
+    z = (z ^ (z >> UInt64(30))) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> UInt64(27))) * UInt64(0x94D049BB133111EB)
+    z = z ^ (z >> UInt64(31))
+    return Int(z % UInt64(n))
+
+
+@always_inline
 def cg_dist(q: F32P, q_off: Int, x: F32P, v: Int, d: Int) -> Float32:
     var acc = Float32(0.0)
     for c in range(d):
@@ -219,17 +239,17 @@ def cg_insert(L: Int, base: Int, d: Float32, id: Int32, bd: F32P, bi: I32P, bx: 
 def cg_search_cell(
     qi: Int, queries: F32P, x: F32P, n: Int, d: Int, graph: I32P, deg: Int, k: Int,
     L: Int, width: Int, max_iter: Int, n_seeds: Int, bd: F32P, bi: I32P, bx: I32P,
-    visited: I32P, words: Int, out_d: F32P, out_i: I32P,
+    visited: I32P, words: Int, out_d: F32P, out_i: I32P, rs: Int = 0,
 ):
     cg_search_row(qi, queries, x, n, d, graph, deg, k, L, width, max_iter, n_seeds, bd, bi, bx, qi * L,
-                  visited, qi * words, words, out_d, out_i)
+                  visited, qi * words, words, out_d, out_i, rs)
 
 
 @always_inline
 def cg_search_row(
     qi: Int, queries: F32P, x: F32P, n: Int, d: Int, graph: I32P, deg: Int, k: Int,
     L: Int, width: Int, max_iter: Int, n_seeds: Int, bd: F32P, bi: I32P, bx: I32P, base: Int,
-    visited: I32P, vbase: Int, words: Int, out_d: F32P, out_i: I32P,
+    visited: I32P, vbase: Int, words: Int, out_d: F32P, out_i: I32P, rs: Int = 0,
 ):
     """`cg_search_cell` with the itopk buffer at `base` and the visited
     bitset at `vbase` (the device gives each query its own; a host task
@@ -244,7 +264,7 @@ def cg_search_row(
     for w in range(words):
         visited.unsafe_store(vbase + w, Int32(0))
     for t in range(n_seeds):
-        var v = (t * n) // n_seeds
+        var v = cg_seed_node(t, n, n_seeds, rs)
         var word = visited.unsafe_load(vbase + v // 32)
         var bit = Int32(1) << Int32(v % 32)
         if (word & bit) != 0:

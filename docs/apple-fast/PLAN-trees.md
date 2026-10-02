@@ -37,6 +37,7 @@ Rejected: threaded host `all_finite_f32` in the base binding: the no-host-routes
 | 53 | aft-ab-ettpb | `-D MOJOLEARN_ET_TPB_256` et taxi + istella |
 | 54 | aft-ab-etb64 | `-D MOJOLEARN_ET_DEVICE_BATCH_65536` et taxi |
 | 55 | aft-ab-fin1 | VOID (see above) |
+| 80 | aft-ab-yreuse1 | lane/apple-fast-yetirank 098e89988: YetiRank estimation reuses the search derivatives (B, default) vs `-D MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF` (A), istellarank, 3 pairs |
 | 84 | aft-ab-rffin | lane apple-fast-rfet-scan: RF device finite scan (item 4) vs `-D MOJOLEARN_FOREST_DEVICE_FINITE_OFF`, taxi + istella, then tools/aft_forest_refusal.py rf |
 | 85 | aft-ab-etfin | same for ET (scan in `upload_dataset`), then aft_forest_refusal.py et |
 | 86 | aft-ab-rfseg | RF block-total scan one 256-thread block per segment (item 5) vs `-D MOJOLEARN_SEG_SUMS_SERIAL`, taxi + istella |

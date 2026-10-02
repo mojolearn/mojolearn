@@ -12,18 +12,10 @@ is `decode_labels(classes_, argmax_rows(vote))` exactly as the GPU classes
 compute it, and on a CPU-only install the base binding that exports them is a
 stub.
 
-Workstream E (lane/cpu-training-e, 2026-09-14) adds the three centering
-helpers `python/mojolearn/linear_model.py` reaches through `_native` on an
-OLS or ridge fit (`column_mean_f64`, `center_columns_f32`, `scale_rows_f32`,
-DEVIATIONS 2324, 2441, 2442): on the seven-runner CPU identity gate the ols
-and ridge lanes REFUSED at `_mojolearn.column_mean_f64` (run 34869406147)
-because the core host binding, which stands in for the base binding on a
-CPU-only install, did not carry them. Their bodies are the base binding's
-definitions spelled on the calling thread: the base binding splits columns
-or rows over the host pool above 2^20 cells (DEVIATION 2632) without
-splitting, merging or reordering any column's chain or any cell's
-operation, so the serial loop here is the same additions in the same
-order and the same bits by construction.
+Workstream E (lane/cpu-training-e, 2026-09-14) added the three centering
+helpers of `linear_model.py` here; lane hr-small-passes (2026-10-02)
+deleted them (the estimators binding's `lm_col_sums`, `lm_center` and
+`lm_scale_rows` replace them on every tier).
 
 Every body here is the base binding's, `bindings/_mojolearn.mojo`, copied
 verbatim (the three DEVIATION 2614 ones as the byte LM host binding carries
@@ -273,97 +265,6 @@ def argmax_rows_f64_binding(
 # The three centering helpers of `linear_model.py` (workstream E): the base
 # binding's definitions on the calling thread.
 # ---------------------------------------------------------------------------
-
-
-def column_mean_f64_binding(
-    x_addr: PythonObject,
-    rows: PythonObject,
-    cols: PythonObject,
-    out_addr: PythonObject,
-) raises -> PythonObject:
-    """`bindings/_mojolearn.mojo::column_mean_f64_binding`, DEVIATION 2324:
-    per column, one binary64 round-to-nearest-even addition of the widened
-    float32 element onto the running total, row by row, then one division
-    by `rows`. No pairwise tree, no lane split, no Kahan term. Returns 0."""
-    var xp = f32_ptr(Int(py=x_addr))
-    var op = f64_ptr(Int(py=out_addr))
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    if nr <= 0:
-        raise Error(
-            "column_mean_f64: rows must be positive, got " + String(nr)
-        )
-    if nc <= 0:
-        raise Error(
-            "column_mean_f64: cols must be positive, got " + String(nc)
-        )
-    with GILReleased(Python()):
-        var acc = List[Float64](length=nc, fill=Float64(0.0))
-        for r in range(nr):
-            var row = r * nc
-            for c in range(nc):
-                acc[c] = acc[c] + Float64(xp.unsafe_load(row + c))
-        for c in range(nc):
-            op.unsafe_store(c, acc[c] / Float64(nr))
-    return PythonObject(0)
-
-
-def center_columns_f32_binding(
-    x_addr: PythonObject,
-    rows: PythonObject,
-    cols: PythonObject,
-    mean_addr: PythonObject,
-    out_addr: PythonObject,
-) raises -> PythonObject:
-    """`bindings/_mojolearn.mojo::center_columns_f32_binding`, DEVIATION
-    2441: `out[r, c] = Float32(Float64(x[r, c]) - mean[c])`, `mean` a
-    float64 buffer the caller already narrowed to float32 values. `out`
-    may alias `x`. Returns 0."""
-    var xp = f32_ptr(Int(py=x_addr))
-    var mp = f64_ptr(Int(py=mean_addr))
-    var op = f32_ptr(Int(py=out_addr))
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    if nr < 0 or nc < 0:
-        raise Error(
-            "center_columns_f32: rows and cols must be non-negative, got "
-            + String(nr) + " x " + String(nc)
-        )
-    with GILReleased(Python()):
-        for r in range(nr):
-            for c in range(nc):
-                var d = Float64(xp.unsafe_load(r * nc + c)) - mp.unsafe_load(c)
-                op.unsafe_store(r * nc + c, Float32(d))
-    return PythonObject(0)
-
-
-def scale_rows_f32_binding(
-    x_addr: PythonObject,
-    rows: PythonObject,
-    cols: PythonObject,
-    w_addr: PythonObject,
-    out_addr: PythonObject,
-) raises -> PythonObject:
-    """`bindings/_mojolearn.mojo::scale_rows_f32_binding`, DEVIATION 2442:
-    `out[r, c] = Float32(Float64(x[r, c]) * Float64(w[r]))`, `w` float32.
-    `out` may alias `x`. Returns 0."""
-    var xp = f32_ptr(Int(py=x_addr))
-    var wp = f32_ptr(Int(py=w_addr))
-    var op = f32_ptr(Int(py=out_addr))
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    if nr < 0 or nc < 0:
-        raise Error(
-            "scale_rows_f32: rows and cols must be non-negative, got "
-            + String(nr) + " x " + String(nc)
-        )
-    with GILReleased(Python()):
-        for r in range(nr):
-            var w = Float64(wp.unsafe_load(r))
-            for c in range(nc):
-                var p = Float64(xp.unsafe_load(r * nc + c)) * w
-                op.unsafe_store(r * nc + c, Float32(p))
-    return PythonObject(0)
 
 
 def probability_rows_f32_binding(

@@ -3347,7 +3347,13 @@ def search_grid(row_blocks: Int, k: Int) -> Tuple[Int, Int, Int]:
 comptime PART_ROWS_PER_THREAD = (
     SEARCH_ROWS_PER_THREAD
     if GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and is_defined["MOJOLEARN_ET_PART_ROWS"]()
+    and (
+        is_defined["MOJOLEARN_ET_PART_ROWS"]()
+        or (
+            has_apple_gpu_accelerator()
+            and not is_defined["MOJOLEARN_ET_PART_ROWS_OFF"]()
+        )
+    )
     else 1
 )
 """FAST: the partition's four kernels fold the search's rows per thread
@@ -3355,9 +3361,10 @@ too, on the SAME `TPB * R` workload tile the search staged, so a plain cycle
 no longer restages `d_wl` and drains before partitioning, and each block
 pays its scans once per `TPB * R` rows instead of per `TPB`. Row order
 within a side stays stable by block and by thread; nothing downstream
-reads it (DEVIATION 203). OPT-IN (`-D MOJOLEARN_ET_PART_ROWS=1`), NOT
-FLIPPED: Apple M4 1M rows, same hashes, taxi 0.979, Istella-S 1.010, taxireg
-1.024 -- a wash."""
+reads it (DEVIATION 203). THE FAST APPLE DEFAULT since 2026-10-02 (M3 Ultra
+board shapes, aft-ab-etpr: taxi 3.87 -> 3.04 s, Istella 4.37 -> 4.14 s, same
+hashes); `-D MOJOLEARN_ET_PART_ROWS_OFF` is the A arm. Elsewhere opt-in
+(`-D MOJOLEARN_ET_PART_ROWS=1`); Apple M4 1M rows was a wash."""
 
 comptime ET_PART_FLAGS = (
     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or has_apple_gpu_accelerator())
