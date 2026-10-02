@@ -734,7 +734,12 @@ def sf64_log(x_in: UInt64) -> UInt64:
 # ---- the GBDT probability links, one row-element each -------------------
 
 
-def sf64_sigmoid_f32(raw: Float32) -> UInt64:
-    """`1 / (1 + exp(-raw))` in double over the exact widening of `raw`."""
-    var e = sf64_exp(sf64_neg(sf64_from_f32(raw)))
+def sf64_sigmoid_f64(raw: UInt64) -> UInt64:
+    """`1 / (1 + exp(-raw))` in double."""
+    var e = sf64_exp(sf64_neg(raw))
     return sf64_div(SF64_ONE, sf64_add(SF64_ONE, e))
+
+
+def sf64_sigmoid_f32(raw: Float32) -> UInt64:
+    """`sf64_sigmoid_f64` over the exact widening of `raw`."""
+    return sf64_sigmoid_f64(sf64_from_f32(raw))

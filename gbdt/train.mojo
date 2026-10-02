@@ -61,6 +61,19 @@ from std.os import getenv
 # DEVIATION 258: the probability links (double, as CatBoost computes them)
 # go through the host-portable exp64 under IDENTICAL; FAST is the stdlib
 from checks.numerics import identical_exp64
+from checks.numerics import ftz as _hr2_ftz
+from checks.soft_f64 import (
+    SF64_ZERO,
+    sf64_add,
+    sf64_div,
+    sf64_exp,
+    sf64_from_f32,
+    sf64_gt,
+    sf64_neg,
+    sf64_sigmoid_f32,
+    sf64_sub,
+    sf64_to_f32,
+)
 from gbdt.methods.doc_parallel_boosting import (
     TAdditiveModel,
     fit_with_test,
@@ -2965,11 +2978,8 @@ def one_vs_all_probabilities(
         )
     var out = List[Float32]()
     for i in range(n_rows * num_classes):
-        out.append(
-            Float32(
-                1.0 / (1.0 + identical_exp64(-Float64(approxes[i])))
-            )
-        )
+        # lane hr2-gbdt-host: soft binary64, `resident_link_kernel`'s words
+        out.append(_hr2_ftz(sf64_to_f32(sf64_sigmoid_f32(approxes[i]))))
     return out^
 
 
@@ -2996,18 +3006,20 @@ def multiclass_probabilities(
         )
     var out = List[Float32]()
     for r in range(n_rows):
-        var mx = Float64(0.0)
+        # lane hr2-gbdt-host: soft binary64, `resident_link_kernel`'s words
+        var mx = SF64_ZERO
         for k in range(eff):
-            var v = Float64(approxes[r * eff + k])
-            if v > mx:
+            var v = sf64_from_f32(approxes[r * eff + k])
+            if sf64_gt(v, mx):
                 mx = v
-        var se = Float64(0.0)
+        var se = SF64_ZERO
         for k in range(eff):
-            se += identical_exp64(Float64(approxes[r * eff + k]) - mx)
-        se += identical_exp64(-mx)
+            se = sf64_add(se, sf64_exp(sf64_sub(sf64_from_f32(approxes[r * eff + k]), mx)))
+        var e_pin = sf64_exp(sf64_neg(mx))
+        se = sf64_add(se, e_pin)
         for k in range(eff):
-            out.append(
-                Float32(identical_exp64(Float64(approxes[r * eff + k]) - mx) / se)
-            )
-        out.append(Float32(identical_exp64(-mx) / se))
+            out.append(_hr2_ftz(sf64_to_f32(sf64_div(
+                sf64_exp(sf64_sub(sf64_from_f32(approxes[r * eff + k]), mx)), se
+            ))))
+        out.append(_hr2_ftz(sf64_to_f32(sf64_div(e_pin, se))))
     return out^
