@@ -113,15 +113,15 @@ def _orient_edges_kernel(
 def _interleave_edges_kernel(
     src: MutPointer[Int32, MutAnyOrigin],
     dst: MutPointer[Int32, MutAnyOrigin],
-    out: MutPointer[Int32, MutAnyOrigin],
+    pairs: MutPointer[Int32, MutAnyOrigin],
     n_edges: Int32,
 ):
-    """`(src[i], dst[i])` at `out[2i], out[2i + 1]`: the trace's edge list."""
+    """`(src[i], dst[i])` at `pairs[2i], pairs[2i + 1]`: the trace's edge list."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(n_edges):
         return
-    out.unsafe_store(2 * i, src.unsafe_load(i))
-    out.unsafe_store(2 * i + 1, dst.unsafe_load(i))
+    pairs.unsafe_store(2 * i, src.unsafe_load(i))
+    pairs.unsafe_store(2 * i + 1, dst.unsafe_load(i))
 
 
 def build_mr_linkage(
