@@ -13,7 +13,9 @@ initialisation (the line through the first and last points).
 The fit is ours: Stan optimises by its L-BFGS; here an L-BFGS (memory 5,
 two-loop recursion, backtracking Armijo line search, the subgradient
 sign(delta)/tau of the Laplace prior) in float32, the log of sigma as the
-free coordinate, one series per GPU thread over shared t and X. Parity with
+free coordinate, one series per GPU warp over shared t and X (the
+likelihood's folds across the lanes in sequence/fold32.mojo's order, the
+host column's too). Parity with
 the prophet package is at a tolerance (brief).
 
 Features: sin(2 pi (i+1) frac), cos(...) with frac = (t mod P) / P computed
