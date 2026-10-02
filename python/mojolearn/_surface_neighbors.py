@@ -97,6 +97,8 @@ FAMILIES = (
             "xn_kpca_transform",
             "xn_kernel_matmul",
             "xn_svgp_stats",
+            "xn_svgp_stats_ff",
+            "xn_svgp_ff",
             "xn_svgp_predict",
             "xn_eigh",
             "x_neighbors_numeric_mode",
