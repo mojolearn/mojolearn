@@ -39,7 +39,7 @@ from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.bayes import bayes_wy_part, bayes_wx_part, bayes_wgram_part, bayes_wxty_part, bayes_wvar_part, bayes_coef_one
 from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part, bayes_eig_prep, bayes_yvar_part, GRAM_SSE_TRUST
-from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score, kf_ff_solve
+from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score, kf_ff_solve, kf_blocks, kf_ysum_part, kf_sq_part, kf_score_final
 from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
 from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
 from x_linear.glm import (
@@ -2024,15 +2024,43 @@ def kf_pred_kernel(x: FP, d: Int32, s: Int32, e: Int32, na: Int32, w: FP, b: FP,
     _kf_pred_kernel_body(x, d, s, e, na, w, b, p, stride)
     witness_end(wf, woff, nonce)
 
+# the held-out r2 on the grid in x_linear/ridgecv.mojo `kf_score`'s blocked
+# order (cgr-linear): the target's block sums, then a thread per (alpha,
+# block) for the two squared sums, then a thread per alpha
+def kf_ysum_kernel(y: FP, s: Int32, e: Int32, yp: FP, wf: IP, woff: Int32, nonce: Int32):
+    var b = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if b < kf_blocks(Int(s), Int(e)):
+        st(yp, b, kf_ysum_part(y, Int(s), Int(e), b))
+    witness_end(wf, woff, nonce)
+
+
+def kf_sq_kernel(y: FP, p: FP, s: Int32, e: Int32, na: Int32, stride: Int32, yp: FP, sp: FP,
+                 wf: IP, woff: Int32, nonce: Int32):
+    var t = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var si = Int(s)
+    var ei = Int(e)
+    var nb = kf_blocks(si, ei)
+    if t < Int(na) * nb:
+        var a = t // nb
+        var b = t % nb
+        var mt = fd(fold_parts(yp, 0, nb), i2f(ei - si))
+        var q = kf_sq_part(y, p + a * Int(stride), si, ei, mt, b)
+        st(sp, (2 * a) * nb + b, q[0])
+        st(sp, (2 * a + 1) * nb + b, q[1])
+    witness_end(wf, woff, nonce)
+
+
 @always_inline
-def _kf_score_kernel_body(y: FP, p: FP, s: Int32, e: Int32, na: Int32, stride: Int32, sums: FP):
+def _kf_score_kernel_body(s: Int32, e: Int32, na: Int32, sp: FP, sums: FP):
     var a = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     if a < Int(na):
-        st(sums, a, fa(ld(sums, a), kf_score(y, p + a * Int(stride), Int(s), Int(e))))
+        var nb = kf_blocks(Int(s), Int(e))
+        var sc = kf_score_final(fold_parts(sp, (2 * a) * nb, nb), fold_parts(sp, (2 * a + 1) * nb, nb))
+        st(sums, a, fa(ld(sums, a), sc))
 
 
-def kf_score_kernel(y: FP, p: FP, s: Int32, e: Int32, na: Int32, stride: Int32, sums: FP, wf: IP, woff: Int32, nonce: Int32):
-    _kf_score_kernel_body(y, p, s, e, na, stride, sums)
+def kf_score_kernel(s: Int32, e: Int32, na: Int32, sp: FP, sums: FP, wf: IP, woff: Int32, nonce: Int32):
+    _kf_score_kernel_body(s, e, na, sp, sums)
     witness_end(wf, woff, nonce)
 
 def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
@@ -2053,6 +2081,9 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     var db = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
     var dp = ctx.enqueue_create_buffer[DType.float32](max(na * stride, 1))
     var dsum = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
+    var kbm = (stride + FOLD_BLOCK - 1) // FOLD_BLOCK
+    var dkyp = ctx.enqueue_create_buffer[DType.float32](max(kbm, 1))
+    var dksp = ctx.enqueue_create_buffer[DType.float32](max(2 * na * kbm, 1))
     var dtr = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
     var htr = List[Float32](length=max(na, 1), fill=Float32(0))
     var ffw = d + 1 + d * d + d
@@ -2078,7 +2109,8 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     # added into the sums) reruns from the sums as they stood before it
     var nt_max = n // k + 1
     var wcap = max(_xg_blocks(d + 1) + _xg_blocks(cells + d) + _xg_blocks(na),
-                   _xg_blocks(d + 1) + _xg_blocks(max(ff_units - (d + 1), 1)) + na + _xg_blocks(nt_max * na) + _xg_blocks(na))
+                   _xg_blocks(d + 1) + _xg_blocks(max(ff_units - (d + 1), 1)) + na + _xg_blocks(nt_max * na) + _xg_blocks(na)
+                   + _xg_blocks(kbm) + _xg_blocks(na * kbm))
     var wit = Witness(ctx, wcap)
     var dsum_save = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
     for f in range(k):
@@ -2140,8 +2172,15 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
                                                  dp.unsafe_ptr(), Int32(stride), wit.p(), Int32(wo), nonce,
                                                  grid_dim=_xg_blocks(nt * na), block_dim=XG_TPB)
             wo += _xg_blocks(nt * na)
-            ctx.enqueue_function[kf_score_kernel](dy.unsafe_ptr(), dp.unsafe_ptr(), s, e, Int32(na), Int32(stride),
-                                                  dsum.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+            var kb = kf_blocks(Int(s), Int(e))
+            ctx.enqueue_function[kf_ysum_kernel](dy.unsafe_ptr(), s, e, dkyp.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                 grid_dim=_xg_blocks(kb), block_dim=XG_TPB)
+            wo += _xg_blocks(kb)
+            ctx.enqueue_function[kf_sq_kernel](dy.unsafe_ptr(), dp.unsafe_ptr(), s, e, Int32(na), Int32(stride),
+                                               dkyp.unsafe_ptr(), dksp.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                               grid_dim=_xg_blocks(na * kb), block_dim=XG_TPB)
+            wo += _xg_blocks(na * kb)
+            ctx.enqueue_function[kf_score_kernel](s, e, Int32(na), dksp.unsafe_ptr(), dsum.unsafe_ptr(), wit.p(), Int32(wo), nonce,
                                                   grid_dim=_xg_blocks(na), block_dim=XG_TPB)
             wo += _xg_blocks(na)
             if wit.ok(ctx, wo, "RidgeCV scores"):
@@ -2168,6 +2207,8 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     _ = db^
     _ = dp^
     _ = dsum^
+    _ = dkyp^
+    _ = dksp^
     _ = dtr^
     _ = htr^
     _ = dsh^
