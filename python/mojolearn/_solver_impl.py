@@ -15,7 +15,7 @@ whoever owns that file decides the public namespace.
 from . import _mojolearn_solver, _serialize
 from ._array import Array
 from ._mode import ParamsMixin
-from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty, zeros
+from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty, zeros, _materialize
 from .linear_model import _check_saved_by, _r2_host, _restore_mode, _saved_mode, _shape_of
 
 # cuML's `loss_funct` / DistanceType style codes this surface uses.
@@ -356,7 +356,18 @@ class ElasticNet(ParamsMixin):
                 "for solver='cd' (elastic_net.py:265-269), and 'qn' is not "
                 "implemented"
             )
-        work_x, copied = self._as_fortran(X, "X")
+        # lane/gap-nv-classical2: a float32 C-order design crosses AS IT IS
+        # and the device transposes it (`cd_fit_host`'s row_major arm), so
+        # no host transpose sits inside the fit. Every other input takes the
+        # one F-order copy as before.
+        a, a_copied = _materialize(X, "X")
+        row_major = bool(a.ndim == 2 and a.dtype == "<f4" and a.size
+                         and a.order == "C" and not a._both_orders())
+        if row_major:
+            work_x, copied = a, a_copied
+        else:
+            work_x, copied = self._as_fortran(a, "X")
+            copied = copied or a_copied
         self.input_copied_ = copied
         self.fortran_copied_ = copied
         n_rows, n_cols = work_x.shape
@@ -379,6 +390,7 @@ class ElasticNet(ParamsMixin):
                 n_rows, n_cols, 1 if self.fit_intercept else 0,
                 int(self.max_iter), float(self.alpha), float(self.l1_ratio),
                 float(self.tol), _SELECTION_SHUFFLE[self.selection], 0,
+                1 if row_major else 0,
             ],
         )
         self.intercept_ = float(info[0])

@@ -9,6 +9,8 @@ from std.time import perf_counter_ns
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
+from std.sys.compile import is_defined
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
@@ -146,6 +148,106 @@ def sum_team_kernel(n: Int32, row_z: F32P, z: F32P):
         z.unsafe_store(0, part[0])
 
 
+# lane/gap-nv-classical2: the repulsion and Z on NVIDIA and AMD. The tiled
+# kernel above runs one row per thread, 20k threads for the whole GPU, each
+# forming every pair's terms (a correctly rounded divide) in its own serial
+# loop. `repulse_split_kernel` forms the terms of RS_ROWS rows x RS_TJ
+# candidates with every thread of the block (`ts_repulse_terms`, the same
+# words) into threadgroup memory, then row i's owner folds them with
+# `ts_repulse_fold`'s statements in ascending j, skipping j == i: the same
+# fold in the same order. `sum_staged_kernel` is `ts_sum_cell`'s serial
+# ascending fold, its operands staged coalesced through threadgroup memory.
+# Both coordinates' steps run in one thread (`step_rows_kernel`, the cell's
+# statements in the cell's order). -D MOJOLEARN_TSNE_SPLIT_OFF=1 restores
+# main's three kernels.
+comptime TS_SPLIT = (
+    (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and not is_defined["MOJOLEARN_TSNE_SPLIT_OFF"]()
+)
+comptime RS_ROWS = 32
+comptime RS_TJ = 64
+comptime RS_TPB = 256
+comptime RS_DS = RS_TJ + 1
+comptime ZS_TPB = 256
+comptime ZS_CHUNK = 2048
+
+
+def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P):
+    var tid = Int(thread_idx.x)
+    var nr = Int(n)
+    var i0 = Int(block_idx.x) * RS_ROWS
+    var ys = stack_allocation[2 * RS_TJ, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var yi_s = stack_allocation[2 * RS_ROWS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var q_s = stack_allocation[RS_ROWS * RS_DS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var a_s = stack_allocation[RS_ROWS * RS_DS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var b_s = stack_allocation[RS_ROWS * RS_DS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    if tid < 2 * RS_ROWS:
+        var v = Float32(0.0)
+        if 2 * i0 + tid < 2 * nr:
+            v = ftz(y.unsafe_load(2 * i0 + tid))
+        yi_s[tid] = v
+    var i = i0 + tid
+    var owner = tid < RS_ROWS and i < nr
+    var z = Float32(0.0)
+    var r0 = Float32(0.0)
+    var r1 = Float32(0.0)
+    var j0 = 0
+    while j0 < nr:
+        if tid < 2 * RS_TJ:
+            var v = Float32(0.0)
+            if 2 * j0 + tid < 2 * nr:
+                v = ftz(y.unsafe_load(2 * j0 + tid))
+            ys[tid] = v
+        barrier()
+        comptime for q in range(RS_ROWS * RS_TJ // RS_TPB):
+            var e = tid + q * RS_TPB
+            var rr = e // RS_TJ
+            var jj = e - rr * RS_TJ
+            var tm = ts_repulse_terms(yi_s[2 * rr], yi_s[2 * rr + 1], ys[2 * jj], ys[2 * jj + 1])
+            q_s[rr * RS_DS + jj] = tm[0]
+            a_s[rr * RS_DS + jj] = tm[1]
+            b_s[rr * RS_DS + jj] = tm[2]
+        barrier()
+        if owner:
+            var jn = RS_TJ if nr - j0 > RS_TJ else nr - j0
+            var row = tid * RS_DS
+            for r in range(jn):
+                if j0 + r != i:
+                    var tm = SIMD[DType.float32, 4](q_s[row + r], a_s[row + r], b_s[row + r], Float32(0.0))
+                    ts_repulse_fold(tm, z, r0, r1)
+        barrier()
+        j0 += RS_TJ
+    if owner:
+        row_z.unsafe_store(i, z)
+        rep.unsafe_store(2 * i, r0)
+        rep.unsafe_store(2 * i + 1, r1)
+
+
+def sum_staged_kernel(n: Int32, row_z: F32P, z: F32P):
+    """`ts_sum_cell`: acc = ftz(acc + row_z[i]), i ascending, one thread
+    folding; the block stages each chunk of row_z coalesced."""
+    var tid = Int(thread_idx.x)
+    var nr = Int(n)
+    var buf = stack_allocation[ZS_CHUNK, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var acc = Float32(0.0)
+    var c0 = 0
+    while c0 < nr:
+        for e in range(tid, ZS_CHUNK, ZS_TPB):
+            var v = Float32(0.0)
+            if c0 + e < nr:
+                v = row_z.unsafe_load(c0 + e)
+            buf[e] = v
+        barrier()
+        if tid == 0:
+            var cn = ZS_CHUNK if nr - c0 > ZS_CHUNK else nr - c0
+            for e in range(cn):
+                acc = ftz(acc + buf[e])
+        barrier()
+        c0 += ZS_CHUNK
+    if tid == 0:
+        z.unsafe_store(0, acc)
+
+
 @always_inline
 def _step_tail(
     e: Int, yi: Float32, attr: Float32, y_new: F32P, rep: F32P, z: F32P, update: F32P, gains: F32P,
@@ -215,6 +317,17 @@ def _ts_iter(
     mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
     lr: Float32,
 ) raises:
+    comptime if TS_SPLIT:
+        ctx.enqueue_function[repulse_split_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                                   grid_dim=(n + RS_ROWS - 1) // RS_ROWS, block_dim=RS_TPB)
+        ctx.enqueue_function[sum_staged_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1,
+                                                block_dim=ZS_TPB)
+        ctx.enqueue_function[step_rows_kernel](
+            Int32(n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
+            dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
+            mom, lr, grid_dim=_grid(n), block_dim=TPB,
+        )
+        return
     ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
                                                grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
     comptime if TS_ZSUM:

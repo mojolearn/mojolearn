@@ -12,6 +12,7 @@ from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
 from checks.numerics import identical_log64
 from std.python import Python
 from xtrees.shap import node_cover, tree_shap, expected_value, mask_expand, block_mean, kernel_solve
+from xtrees.perm_device import perm_synthetic
 from xtrees.ops import (
     sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
     accumulate_onehot, accumulate_cols, accumulate_rows, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
@@ -618,6 +619,20 @@ def mask_expand_binding(
     return PythonObject(m)
 
 
+def perm_synthetic_binding(
+    x: PythonObject, bg: PythonObject, inv: PythonObject, res: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [nb, d, n_perm]; inv int32 n_perm x d (each permutation's
+    inverse); res float32 (n_perm (2d + 1) nb) * d, on the device
+    (`xtrees/perm_device.mojo`)."""
+    _need(params, 3, "x_trees_perm_synthetic")
+    var n_perm = _count(_i(params, 2), "x_trees_perm_synthetic")
+    if n_perm > 0:
+        perm_synthetic(f32_ptr(Int(py=x)), f32_ptr(Int(py=bg)), i32_ptr(Int(py=inv)), f32_ptr(Int(py=res)),
+                       _i(params, 0), _i(params, 1), n_perm)
+    return PythonObject(n_perm)
+
+
 def block_mean_binding(y: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
     """params = [m, nb, k]."""
     _need(params, 3, "x_trees_block_mean")
@@ -693,4 +708,5 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[expected_value_binding]("x_trees_expected_value")
     m.def_function[mask_expand_binding]("x_trees_mask_expand")
     m.def_function[block_mean_binding]("x_trees_block_mean")
+    m.def_function[perm_synthetic_binding]("x_trees_perm_synthetic")
     m.def_function[kernel_solve_binding]("x_trees_kernel_solve")
