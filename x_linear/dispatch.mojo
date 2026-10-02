@@ -19,7 +19,7 @@ from x_linear.quantile import quantile_fit
 from x_linear.ridge import ridge_fit
 from x_linear.cd import enetcv_fit
 from x_linear.logcv import logcv_fit, logcv_team_rows
-from x_linear.isotonic import isotonic_fit, isotonic_predict
+from x_linear.isotonic import isotonic_predict
 from x_linear.ridgecv import ridge_kfold_fit
 from std.sys.info import is_gpu
 
@@ -48,7 +48,7 @@ def team_fit(algo: Int) -> Bool:
     return (algo == ALGO_GLM or algo == ALGO_HUBER or algo == ALGO_LOGCV
             or algo == ALGO_BAYES or algo == ALGO_ARD or algo == ALGO_RIDGE
             or algo == ALGO_ENETCV or algo == ALGO_LARS
-            or algo == ALGO_QUANTILE or algo == ALGO_SGD or algo == ALGO_ISOTONIC
+            or algo == ALGO_QUANTILE or algo == ALGO_SGD
             or algo == ALGO_ISOTONIC_PREDICT)
 
 
@@ -72,9 +72,13 @@ def fit_dispatch(t: Team, algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: F
     """`t` is the team the fit runs on (a team of one for a fit that
     `team_fit` does not name)."""
     if algo == ALGO_SGD:
-        sgd_fit(t, x, y, n, d, ip, fp, res, fw, iw)
+        # the device binding runs SGD, GLM and isotonic on the grid
+        # (x_linear/device.mojo); no device thread reaches these
+        comptime if not is_gpu():
+            sgd_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_GLM:
-        glm_fit(t, x, y, n, d, ip, fp, res, fw, iw)
+        comptime if not is_gpu():
+            glm_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_HUBER:
         huber_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_BAYES:
@@ -92,9 +96,12 @@ def fit_dispatch(t: Team, algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: F
     elif algo == ALGO_LOGCV:
         logcv_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ISOTONIC:
-        isotonic_fit(t, x, y, n, d, ip, fp, res, fw, iw)
+        # the host binding calls `isotonic_fit_host` (x_linear/isotonic_host.mojo)
+        # and the device binding `_iso_fit_grid`; nothing reaches this arm
+        pass
     elif algo == ALGO_ISOTONIC_PREDICT:
-        isotonic_predict(t, x, y, n, d, ip, fp, res, fw, iw)
+        comptime if not is_gpu():
+            isotonic_predict(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_RIDGE_KFOLD:
         # the device binding runs this on the grid (x_linear/device.mojo)
         comptime if not is_gpu():

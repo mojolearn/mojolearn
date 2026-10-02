@@ -66,10 +66,12 @@ from extratrees.checks.fixtures import (
 from extratrees.estimator import (
     ExtraTreesConfig,
     MAX_FEATURES_ALL,
-    fit_extra_trees_classifier_reference,
     fit_extra_trees_classifier_device,
-    fit_extra_trees_regressor_reference,
     fit_extra_trees_regressor_device,
+)
+from extratrees.host_estimator import (
+    fit_extra_trees_classifier_reference,
+    fit_extra_trees_regressor_reference,
 )
 from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_MSE,
@@ -84,6 +86,8 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     BESTFIRST_SAB_UNSCALED_KEY,
     NodeQueue,
     frontier_key,
+)
+from extratrees.impl.decisiontree.batched_levelalgo.host_builder import (
     train_classification_bestfirst,
     train_regression_bestfirst,
 )

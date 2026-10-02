@@ -8,9 +8,9 @@ included) and `bindings/_mojolearn_forecast_host.mojo` (the inference binding
 the wheels ship, no fit) both register `holtwinters_forecast` and
 `holtwinters_predict` from here, so the two binaries answer a saved model
 through the same source. The GPU binding `bindings/_mojolearn_tsa.mojo`
-registers `holtwinters_predict` from here too: the in-sample prediction is
-host arithmetic over the fitted components on every install (its forecast
-stays the device path). Not a binding itself: it registers nothing, and the
+runs its in-sample prediction on the device
+(`holtwinters/estimator.mojo::holtwinters_predict_ptr`, the same cell
+arithmetic) and does not import this file (cpu-gpu-cleanup n-seq). Not a binding itself: it registers nothing, and the
 host surface tests glob only `_mojolearn_*_host.mojo`.
 
 The arithmetic is `holtwinters/host/hw_predict.mojo`, which imports only

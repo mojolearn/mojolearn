@@ -93,30 +93,18 @@ comptime SPECTRAL_PREDICT_HOST_SABOTAGE = (
     or is_defined["MOJOLEARN_SPECTRAL_PREDICT_SABOTAGE"]()
 )
 
-#: DEVIATION 2860: a used column with `|1 + theta_c|` below this is refused.
-comptime SPECTRAL_PREDICT_MIN_ABS_EIGENVALUE = Float32(1e-3)
-
-#: The weight of a query's edge to one of its k nearest training rows: the
-#: fit's `0.5 * (1.0 + 0.0)` for an edge with no reverse edge.
-comptime SPECTRAL_PREDICT_ONE_WAY_EDGE = Float32(0.5)
-
-comptime SPECTRAL_AFFINITY_NEAREST_NEIGHBORS = 0
-comptime SPECTRAL_AFFINITY_PRECOMPUTED = 1
-
-
-struct SpectralPredictionState(Movable):
-    """What predict needs from the fit; see the module docstring."""
-
-    var eigenvalues: List[Float32]
-    var eigenvectors: List[Float32]
-    var diag: List[Float32]
-    var centroids: List[Float32]
-
-    def __init__(out self):
-        self.eigenvalues = List[Float32]()
-        self.eigenvectors = List[Float32]()
-        self.diag = List[Float32]()
-        self.centroids = List[Float32]()
+from spectral.impl.spectral_predict_common import (
+    SPECTRAL_AFFINITY_NEAREST_NEIGHBORS,
+    SPECTRAL_AFFINITY_PRECOMPUTED,
+    SPECTRAL_PREDICT_MIN_ABS_EIGENVALUE,
+    SPECTRAL_PREDICT_ONE_WAY_EDGE,
+    SpectralPrediction,
+    SpectralPredictionState,
+    spectral_affinity_refused,
+    spectral_predict_check_state,
+    spectral_predict_mu,
+    spectral_predict_validate,
+)
 
 
 @fieldwise_init
@@ -127,12 +115,6 @@ struct SpectralSlots(Movable):
     var width: Int
     var cols: List[Int32]
     var vals: List[Float32]
-
-
-@fieldwise_init
-struct SpectralPrediction(Movable):
-    var labels: List[Int32]
-    var embedding: List[Float32]
 
 
 def spectral_keep_embedding_order(
@@ -152,76 +134,6 @@ def spectral_keep_embedding_order(
     for p in range(n):
         for c in range(k):
             state.eigenvectors.append(ritz_vectors[(k - 1 - c) * n + p])
-
-
-def spectral_predict_validate(
-    n_train: Int,
-    n_queries: Int,
-    n_features: Int,
-    n_components: Int,
-    n_clusters: Int,
-    n_neighbors: Int,
-    affinity: Int,
-) raises:
-    """The refusals both bindings raise, in one order and one wording."""
-    if affinity != SPECTRAL_AFFINITY_NEAREST_NEIGHBORS and affinity != SPECTRAL_AFFINITY_PRECOMPUTED:
-        raise Error(
-            "spectral_predict: affinity must be 0 (nearest_neighbors) or 1"
-            " (precomputed), got " + String(affinity)
-        )
-    if n_train < 2:
-        raise Error("spectral_predict: the fitted model holds " + String(n_train) + " training rows")
-    if n_queries < 1:
-        raise Error("spectral_predict: X has no rows; refused by name")
-    if n_components < 1 or n_components >= n_train:
-        raise Error(
-            "spectral_predict: n_components=" + String(n_components)
-            + " must satisfy 1 <= n_components < n_train=" + String(n_train)
-        )
-    if n_clusters < 1 or n_clusters > n_train:
-        raise Error("spectral_predict: n_clusters=" + String(n_clusters) + " is outside [1, n_train]")
-    if affinity == SPECTRAL_AFFINITY_NEAREST_NEIGHBORS:
-        if n_features < 1:
-            raise Error("spectral_predict: X has no features; refused by name")
-        if n_neighbors < 1 or n_neighbors > n_train:
-            raise Error(
-                "spectral_predict: n_neighbors=" + String(n_neighbors)
-                + " must satisfy 1 <= n_neighbors <= n_train=" + String(n_train)
-            )
-
-
-def spectral_predict_check_state(
-    state: SpectralPredictionState, n_train: Int, n_components: Int, n_clusters: Int
-) raises:
-    if (
-        len(state.eigenvalues) != n_components
-        or len(state.eigenvectors) != n_train * n_components
-        or len(state.diag) != n_train
-        or len(state.centroids) != n_clusters * n_components
-    ):
-        raise Error(
-            "spectral_predict: the prediction data does not match n_train="
-            + String(n_train) + ", n_components=" + String(n_components)
-            + ", n_clusters=" + String(n_clusters) + "; refused by name"
-        )
-
-
-def spectral_predict_mu(eigenvalues: List[Float32]) raises -> List[Float32]:
-    """`mu_c = ftz(1.0 + theta_c)` per column, refused by name below the
-    DEVIATION 2860 threshold (a NaN fails `>=` and is refused too)."""
-    var out = List[Float32](capacity=len(eigenvalues))
-    for c in range(len(eigenvalues)):
-        var mu = ftz(Float32(1.0) + eigenvalues[c])
-        if not (abs(mu) >= SPECTRAL_PREDICT_MIN_ABS_EIGENVALUE):
-            raise Error(
-                "spectral_predict: embedding column " + String(c)
-                + " has normalized affinity eigenvalue 1 + theta = " + String(mu)
-                + ", |value| below the DEVIATION 2860 threshold "
-                + String(SPECTRAL_PREDICT_MIN_ABS_EIGENVALUE)
-                + "; the Nystrom extension would divide by it, so predict is refused by name"
-            )
-        out.append(mu)
-    return out^
 
 
 def spectral_slots_from_knn(idx: List[UInt32], n_queries: Int, k: Int) -> SpectralSlots:
@@ -254,7 +166,7 @@ def spectral_slots_from_dense(affinity: List[Float32], n_queries: Int, n_train: 
     for q in range(n_queries):
         for j in range(n_train):
             var v = affinity[q * n_train + j]
-            if not (v >= Float32(0.0)) or v == Float32(1.0) / Float32(0.0):
+            if spectral_affinity_refused(v):
                 raise Error(
                     "spectral_predict: the affinity to the training rows has a non-finite or"
                     " negative value at (" + String(q) + ", " + String(j) + "); refused by name"

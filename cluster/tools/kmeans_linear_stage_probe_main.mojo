@@ -97,11 +97,6 @@ def main() raises:
     _ = bx^
     _ = bi^
 
-    for rep in range(1):
-        var t0 = _now()
-        var s = plan_sum_scale(hx.unsafe_ptr(), rows, cols)
-        print("plan_sum_scale rep=" + String(rep) + " ms=" + String(_ms(t0)) + " scale=" + String(s))
-    var sum_scale = Float32(plan_sum_scale(hx.unsafe_ptr(), rows, cols))
     var weight_scale = Float32(choose_scale(Float64(rows), rows))
 
     var x = ctx.enqueue_create_buffer[DType.float32](cells)
@@ -124,6 +119,9 @@ def main() raises:
     ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
     ctx.synchronize()
     print("upload_x_pinned ms=" + String(_ms(t0)))
+    t0 = _now()
+    var sum_scale = Float32(plan_sum_scale(ctx, x, rows, cols))
+    print("plan_sum_scale ms=" + String(_ms(t0)) + " scale=" + String(sum_scale))
     ctx.enqueue_copy(dst_buf=cur, src_ptr=hi.unsafe_ptr())
     enqueue_fill[DType.float32](ctx, w, Float32(1.0))
     t0 = _now()

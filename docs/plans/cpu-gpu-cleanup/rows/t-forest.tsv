@@ -1,0 +1,52 @@
+rule	class	owner	state	path	occ	text
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	colmajor_from_rowmajor_f32(xp, hxp, n_rows, n_cols)
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	1	colmajor_from_rowmajor_f32(xp, hxp, n_rows, n_cols)
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	2	colmajor_from_rowmajor_f32(xp, hxp, n_rows, n_cols)
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	copy_f32_threaded(xp, hxp, n_rows * n_cols)
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	1	copy_f32_threaded(xp, hxp, n_rows * n_cols)
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	2	copy_f32_threaded(xp, hxp, n_rows * n_cols)
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	if has_nan_f32_threaded(xp, n_rows * n_cols):
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	1	if has_nan_f32_threaded(xp, n_rows * n_cols):
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	2	if has_nan_f32_threaded(xp, n_rows * n_cols):
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	import core/forest_host_predict.mojo:rf_host_predict
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	import ensemble/host_layout.mojo:colmajor_from_rowmajor_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	import ensemble/host_layout.mojo:copy_f32_threaded
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	import ensemble/host_layout.mojo:has_nan_f32_threaded
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	rf_host_predict(trees, rows, n_rows, n_cols, n_trees, 1, preds)
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	rf_host_predict(trees, rows, n_rows, n_cols, n_trees, num_outputs, probs)
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	0	var rows = read_f32(x_address, n_rows * n_cols)
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_rf.mojo	1	var rows = read_f32(x_address, n_rows * n_cols)
+host-threads	host-threads	UNOWNED	debt	ensemble/host_layout.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	ensemble/host_layout.mojo	0	host_parallelize(_block, n_blocks)
+host-threads	host-threads	UNOWNED	debt	ensemble/host_layout.mojo	1	host_parallelize(_block, n_blocks)
+host-threads	host-threads	UNOWNED	debt	ensemble/host_layout.mojo	0	host_parallelize(_chunk, n_chunks)
+host-threads	host-threads	UNOWNED	debt	ensemble/host_layout.mojo	1	host_parallelize(_chunk, n_chunks)
+host-threads	host-threads	UNOWNED	debt	ensemble/host_layout.mojo	2	host_parallelize(_chunk, n_chunks)
+host-call	host-import	UNOWNED	debt	extratrees/estimator.mojo	0	import extratrees/impl/randomforest/randomforest.mojo:fit_forest_exact
+host-call	host-import	UNOWNED	debt	extratrees/estimator.mojo	0	var forest = fit_forest_exact(
+host-call	host-import	UNOWNED	debt	extratrees/estimator.mojo	1	var forest = fit_forest_exact(
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	colmajor_from_rowmajor_f32(source, stage, Int(n_rows), Int(n_cols))
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	copy_f32_threaded(source, stage, count)
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	import ensemble/host_layout.mojo:colmajor_from_rowmajor_f32
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	import ensemble/host_layout.mojo:copy_f32_threaded
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	import extratrees/checks/host_splitter.mojo:node_split_random_gini
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	import extratrees/checks/host_splitter.mojo:node_split_random_mse
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	result = node_split_random_gini[DType.float32](
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	1	result = node_split_random_gini[DType.float32](
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	result = node_split_random_mse[DType.float64](
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	1	result = node_split_random_mse[DType.float64](
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	var result = node_split_random_gini[DType.float32](
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	1	var result = node_split_random_gini[DType.float32](
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	0	var result = node_split_random_mse[DType.float64](
+host-call	host-import	UNOWNED	debt	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo	1	var result = node_split_random_mse[DType.float64](
+host-threads	host-threads	UNOWNED	debt	extratrees/impl/randomforest/randomforest.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	extratrees/impl/randomforest/randomforest.mojo	0	host_parallelize(_tree_task, tasks)
+host-call	host-import	gap-trees-nv/apple-fast-trees2	debt	isolation_forest/impl/isolation_forest.mojo	0	if not colmajor_ftz_from_rowmajor_f32(src, hp, n_rows, n_cols):
+host-call	host-import	gap-trees-nv/apple-fast-trees2	debt	isolation_forest/impl/isolation_forest.mojo	0	import ensemble/host_layout.mojo:colmajor_ftz_from_rowmajor_f32
+tid0-loop	serial-gpu	gap-trees-nv/apple-fast-trees2	debt	isolation_forest/impl/isolation_tree_builder.mojo	0	if tid == 0:
+py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_forest_protocol.py	0	from sklearn.utils import Tags, TargetTags, ClassifierTags, RegressorTags
+py-host-import	host-import	gap-trees-nv/apple-fast-trees2	debt	python/mojolearn/ensemble.py	0	from ._gbdt_host import HostGBDT
+py-host-import	host-import	gap-trees-nv/apple-fast-trees2	debt	python/mojolearn/ensemble.py	0	from ._gbdt_host import parse_model_text
+py-host-import	host-import	UNOWNED	debt	python/mojolearn/ensemble.py	1	from ._gbdt_host import parse_model_text
+route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/ensemble.py	0	GBDT_RESIDENT = os.environ.get("MOJOLEARN_GBDT_RESIDENT", "1").strip() != "0"

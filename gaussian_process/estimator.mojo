@@ -137,12 +137,14 @@ from gaussian_process.checks.kernels import (
     gp_validate_kernel,
 )
 from gaussian_process.checks.kernel_gradient import gp_kernel_matrix_grad
-from gaussian_process.host.gp_theta import gp_free_count, gp_lml_gradient_fold
+from gaussian_process.host.gp_theta import gp_grad_half
+from gaussian_process.gp_grad_items import gp_free_count, gp_grad_blocks, gp_grad_part_item, gp_grad_fin_item
+from std.gpu import block_idx as _gb_idx, thread_idx as _gt_idx
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NN, OP_TN
+from gemm.contract import OP_NN, OP_TN
 from gaussian_process.checks.sample_y import (
     gp_sample_y_add_mean,
     gp_sample_y_check_factor,
@@ -898,6 +900,31 @@ struct GPLmlGrad(Movable):
     var info: Int
 
 
+comptime GP_GRAD_TPB = 128
+
+
+@always_inline
+def _gp(buf: DeviceBuffer[DType.float32]) -> MutPointer[Float32, MutAnyOrigin]:
+    return MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(buf.unsafe_ptr()))
+
+
+def gp_grad_part_kernel(
+    dual: MutPointer[Float32, MutAnyOrigin], kinv: MutPointer[Float32, MutAnyOrigin],
+    dk: MutPointer[Float32, MutAnyOrigin], n: Int32, nb: Int32, total: Int32, part: MutPointer[Float32, MutAnyOrigin],
+):
+    var t = Int(_gb_idx.x) * GP_GRAD_TPB + Int(_gt_idx.x)
+    if t < Int(total):
+        gp_grad_part_item(t, dual, kinv, dk, Int(n), Int(nb), part)
+
+
+def gp_grad_fin_kernel(
+    part: MutPointer[Float32, MutAnyOrigin], nb: Int32, nf: Int32, half: Float32, dst: MutPointer[Float32, MutAnyOrigin],
+):
+    var p = Int(_gb_idx.x) * GP_GRAD_TPB + Int(_gt_idx.x)
+    if p < Int(nf):
+        gp_grad_fin_item(p, part, Int(nb), half, dst)
+
+
 def gpr_lml_grad_host(
     x: List[Float32],
     n_train: Int,
@@ -917,7 +944,7 @@ def gpr_lml_grad_host(
         alpha_  = cho_solve(L, y)                 cholesky_solve_host
         lml     = gp_log_marginal_likelihood_value, fit's own
         K_inv   = cho_solve(L, eye)               cholesky_solve_host, n rhs
-        grad    = gp_lml_gradient_fold            gp_theta.mojo, host serial
+        grad    = gp_grad_part / fin kernels       gp_grad_items.mojo, on the device
 
     K here is bit for bit the K `gpr_fit_host` builds (the same value
     launches), so the likelihood at the optimizer's answer is the fit's.
@@ -945,17 +972,15 @@ def gpr_lml_grad_host(
     )
     ctx.synchronize()
     var k_host = _download(ctx, dk, cells)
-    var g_host = _download(ctx, dgrad, max(n_free * cells, 1))
     _ = dx^
     _ = dls^
     _ = dk^
     _ = dstack^
-    _ = dgrad^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
 
     var factor = cholesky_factor_host(k_host, n, alpha)
     if factor.info != 0:
+        _ = dgrad^
+        _ = ctx^
         return GPLmlGrad(
             Float32(0.0),
             List[Float32](length=n_free, fill=Float32(0.0)),
@@ -969,7 +994,34 @@ def gpr_lml_grad_host(
     for i in range(n):
         eye[i * n + i] = Float32(1.0)
     var kinv = cholesky_solve_host(factor, eye, n)
-    var grad = gp_lml_gradient_fold(dual, kinv, g_host, n, n_free)
+    # the gradient fold on the device, dK_p where the launch left it
+    # (gaussian_process/gp_grad_items.mojo, the host column's items;
+    # cpu-gpu-cleanup c-gp-kernel: every dK_p was downloaded and folded on
+    # the host)
+    var grad = List[Float32](length=n_free, fill=Float32(0.0))
+    if n_free > 0:
+        var nb = gp_grad_blocks(n)
+        var ddual = _upload(ctx, dual)
+        var dkinv = _upload(ctx, kinv)
+        var dpart = ctx.enqueue_create_buffer[DType.float32](max(n_free * nb, 1))
+        var dout = ctx.enqueue_create_buffer[DType.float32](n_free)
+        ctx.enqueue_function[gp_grad_part_kernel](
+            _gp(ddual), _gp(dkinv), _gp(dgrad), Int32(n), Int32(nb), Int32(n_free * nb), _gp(dpart),
+            grid_dim=(n_free * nb + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
+        )
+        ctx.enqueue_function[gp_grad_fin_kernel](
+            _gp(dpart), Int32(nb), Int32(n_free), gp_grad_half(), _gp(dout),
+            grid_dim=(n_free + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=grad.unsafe_ptr(), src_buf=dout)
+        ctx.synchronize()
+        _ = ddual^
+        _ = dkinv^
+        _ = dpart^
+        _ = dout^
+    _ = dgrad^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
     return GPLmlGrad(lml, grad^, 0)
 
 

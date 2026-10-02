@@ -24,11 +24,13 @@ from extratrees.estimator import (
     MAX_FEATURES_LOG2,
     MAX_FEATURES_SQRT,
     count_to_ratio,
-    fit_extra_trees_classifier_reference,
-    fit_extra_trees_regressor_reference,
     refuse_unported,
     resolve,
     resolve_max_features,
+)
+from extratrees.host_estimator import (
+    fit_extra_trees_classifier_reference,
+    fit_extra_trees_regressor_reference,
 )
 from extratrees.checks.fixtures import (
     analytic_separable_gap,

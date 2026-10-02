@@ -89,7 +89,6 @@ from std.ffi import _Global
 from std.memory import memcpy
 from std.sys.compile import is_defined
 
-from core.host_parallel import host_parallelize_pool_env
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -105,7 +104,6 @@ from checks.numerics import (
     identical_exp64,
 )
 from core.device_zero import enqueue_fill
-from core.forest_host_predict import host_worker_count
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS, nan_substitution
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
@@ -133,14 +131,7 @@ from gbdt.models.kernel.resident_link import (
     resident_link_kernel,
     resident_stage_kernel,
 )
-from std.os import getenv
 
-
-def _old_link() -> Bool:
-    """Lane hr2-gbdt-host's A/B switch: `MOJOLEARN_HR2_OLD_LINK=1` takes
-    the previous host staging and host link; unset takes the device ones.
-    Deleted once the gates pass."""
-    return getenv("MOJOLEARN_HR2_OLD_LINK") == "1"
 
 #: `gbdt_resident_predict`'s modes. The first three are
 #: `gbdt/estimator.mojo`'s `PREDICT_RAW`, `PREDICT_SOFTMAX` and
@@ -463,10 +454,6 @@ struct ResidentGbdtModel(Movable):
         self.h_x = None
         self.workspace_rows = 0
         try:
-            if _old_link():
-                self.h_x = self.ctx.enqueue_create_host_buffer[DType.float32](
-                    n_rows * self.n_columns
-                )
             self.d_x = self.ctx.enqueue_create_buffer[DType.float32](
                 n_rows * self.n_columns
             )
@@ -476,47 +463,42 @@ struct ResidentGbdtModel(Movable):
             self.d_cursor = self.ctx.enqueue_create_buffer[DType.float32](
                 self.approx_dim * n_rows
             )
-            if _old_link():
-                self.h_out = self.ctx.enqueue_create_host_buffer[DType.float32](
-                    self.approx_dim * n_rows
+            self.d_raw = self.ctx.enqueue_create_buffer[DType.float32](
+                n_rows * self.n_columns
+            )
+            self.d_out_f32 = self.ctx.enqueue_create_buffer[
+                DType.float32
+            ]((self.approx_dim + 1) * n_rows)
+            self.d_out_u64 = self.ctx.enqueue_create_buffer[DType.uint64](
+                2 * n_rows
+            )
+            self.d_out_i64 = self.ctx.enqueue_create_buffer[DType.int64](
+                n_rows
+            )
+            if not self.d_treat:
+                var ht = self.ctx.enqueue_create_host_buffer[DType.int32](
+                    max(self.n_columns, 1)
                 )
-            else:
-                self.d_raw = self.ctx.enqueue_create_buffer[DType.float32](
-                    n_rows * self.n_columns
+                self.ctx.synchronize()
+                var htp = ht.unsafe_ptr()
+                for f in range(self.n_columns):
+                    var t = Int32(STAGE_SKIP)
+                    if len(self.tm.borders[f]) != 0:
+                        t = Int32(NAN_TREATMENT_AS_IS)
+                        if len(self.tm.nan_treatment) == self.n_columns:
+                            t = Int32(self.tm.nan_treatment[f])
+                    htp.unsafe_store(f, t)
+                var dt = self.ctx.enqueue_create_buffer[DType.int32](
+                    max(self.n_columns, 1)
                 )
-                self.d_out_f32 = self.ctx.enqueue_create_buffer[
-                    DType.float32
-                ]((self.approx_dim + 1) * n_rows)
-                self.d_out_u64 = self.ctx.enqueue_create_buffer[DType.uint64](
-                    2 * n_rows
-                )
-                self.d_out_i64 = self.ctx.enqueue_create_buffer[DType.int64](
-                    n_rows
-                )
-                if not self.d_treat:
-                    var ht = self.ctx.enqueue_create_host_buffer[DType.int32](
-                        max(self.n_columns, 1)
-                    )
-                    self.ctx.synchronize()
-                    var htp = ht.unsafe_ptr()
-                    for f in range(self.n_columns):
-                        var t = Int32(STAGE_SKIP)
-                        if len(self.tm.borders[f]) != 0:
-                            t = Int32(NAN_TREATMENT_AS_IS)
-                            if len(self.tm.nan_treatment) == self.n_columns:
-                                t = Int32(self.tm.nan_treatment[f])
-                        htp.unsafe_store(f, t)
-                    var dt = self.ctx.enqueue_create_buffer[DType.int32](
-                        max(self.n_columns, 1)
-                    )
-                    self.ctx.enqueue_copy(dst_buf=dt, src_buf=ht)
-                    self.d_treat = dt^
-                    self.d_bad = self.ctx.enqueue_create_buffer[DType.int32](1)
-                    self.h_bad = self.ctx.enqueue_create_host_buffer[
-                        DType.int32
-                    ](1)
-                    self.ctx.synchronize()
-                    _ = ht^
+                self.ctx.enqueue_copy(dst_buf=dt, src_buf=ht)
+                self.d_treat = dt^
+                self.d_bad = self.ctx.enqueue_create_buffer[DType.int32](1)
+                self.h_bad = self.ctx.enqueue_create_host_buffer[
+                    DType.int32
+                ](1)
+                self.ctx.synchronize()
+                _ = ht^
         except e:
             self.ctx.synchronize()
             self.d_out_i64 = None
@@ -530,133 +512,6 @@ struct ResidentGbdtModel(Movable):
             self.h_x = None
             raise e
         self.workspace_rows = n_rows
-
-    def _stage(
-        mut self,
-        src: MutPointer[Float32, MutUntrackedOrigin],
-        n_rows: Int,
-        row_major: Bool,
-    ) raises:
-        """The host half of `_build_cindex_from_floats`: every bordered
-        column into the column-major pinned staging buffer after its NaN
-        treatment, same values, same refusal. A NaN on an `AsIs` column
-        is recorded per task and raised after the join for the LOWEST such
-        feature, which is the feature the serial column-order scan raised
-        for. Nothing is enqueued before the refusal, so nothing has to be
-        drained ahead of it. Columns without borders are never read, as
-        the serial loop never read them."""
-        var n_cols = self.n_columns
-        var treats = List[Int](capacity=n_cols)
-        var bordered = List[Int](capacity=n_cols)
-        var active = List[Int]()
-        for f in range(n_cols):
-            var treat = NAN_TREATMENT_AS_IS
-            if len(self.tm.nan_treatment) == n_cols:
-                treat = self.tm.nan_treatment[f]
-            treats.append(treat)
-            if len(self.tm.borders[f]) == 0:
-                bordered.append(0)
-            else:
-                bordered.append(1)
-                active.append(f)
-        var hxp = self.h_x.value().unsafe_ptr()
-        var tp = treats.unsafe_ptr()
-        var bdp = bordered.unsafe_ptr()
-        var ap = active.unsafe_ptr()
-        var n_active = len(active)
-        var workers = host_worker_count()
-        if row_major:
-            # row blocks: a task reads its rows once, contiguously, and
-            # writes one sequential run per bordered column
-            var tasks = (n_rows + STAGE_MIN_ROWS_PER_TASK - 1) // STAGE_MIN_ROWS_PER_TASK
-            if tasks > workers:
-                tasks = workers
-            if tasks < 1:
-                tasks = 1
-            var chunk = (n_rows + tasks - 1) // tasks
-            var bad = List[Int](length=tasks, fill=-1)
-            var bp = bad.unsafe_ptr()
-
-            def _rows_task(c: Int) {imm src, imm hxp, imm tp, imm bdp, imm bp,
-                                    imm chunk, imm n_rows, imm n_cols}:
-                var lo = c * chunk
-                var hi = lo + chunk
-                if hi > n_rows:
-                    hi = n_rows
-                for r in range(lo, hi):
-                    var row = src + r * n_cols
-                    for f in range(n_cols):
-                        if bdp[f] == 0:
-                            continue
-                        var v = row.unsafe_load(f)
-                        if v != v:
-                            var treat = tp[f]
-                            if treat == NAN_TREATMENT_AS_IS:
-                                if bp[c] < 0 or f < bp[c]:
-                                    bp[c] = f
-                                continue
-                            v = nan_substitution(treat)
-                        hxp.unsafe_store(f * n_rows + r, v)
-
-            if tasks == 1:
-                _rows_task(0)
-            else:
-                host_parallelize_pool_env(_rows_task, tasks)
-            var first = -1
-            for c in range(tasks):
-                if bad[c] >= 0 and (first < 0 or bad[c] < first):
-                    first = bad[c]
-            _ = len(treats)
-            _ = len(bordered)
-            if first >= 0:
-                raise Error(
-                    "There are NaNs in feature number " + String(first)
-                    + " but there were no NaNs in the learn dataset"
-                )
-            return
-        # column-major input: one task per bordered column
-        var bad = List[Int](length=max(n_active, 1), fill=-1)
-        var bp = bad.unsafe_ptr()
-
-        def _col_task(j: Int) {imm src, imm hxp, imm tp, imm ap, imm bp, imm n_rows}:
-            var f = ap[j]
-            var col = src + f * n_rows
-            var dst = hxp + f * n_rows
-            var treat = tp[f]
-            if treat == NAN_TREATMENT_AS_IS:
-                for r in range(n_rows):
-                    var v = col.unsafe_load(r)
-                    if v != v:
-                        bp[j] = f
-                        return
-                memcpy(dest=dst, src=col, count=n_rows)
-            else:
-                var sub = nan_substitution(treat)
-                for r in range(n_rows):
-                    var v = col.unsafe_load(r)
-                    if v != v:
-                        v = sub
-                    dst.unsafe_store(r, v)
-
-        if n_active == 0:
-            return
-        if workers == 1 or n_active == 1:
-            for j in range(n_active):
-                _col_task(j)
-        else:
-            host_parallelize_pool_env(_col_task, n_active)
-        var first = -1
-        for j in range(n_active):
-            if bad[j] >= 0 and (first < 0 or bad[j] < first):
-                first = bad[j]
-        _ = len(treats)
-        _ = len(active)
-        _ = len(bordered)
-        if first >= 0:
-            raise Error(
-                "There are NaNs in feature number " + String(first)
-                + " but there were no NaNs in the learn dataset"
-            )
 
     def _apply(mut self, n_rows: Int) raises:
         """`predict`'s device work over the resident pack: the cursor
@@ -920,218 +775,14 @@ struct ResidentGbdtModel(Movable):
                 expanded.unsafe_ptr()
             )
         self._prepare_workspace(n_rows)
-        if not _old_link():
-            var width = self._predict_device(
-                src, n_rows, staged_row_major, out_f32, out_f64, out_i64, mode
-            )
-            _ = len(expanded)
-            return width
-        self._stage(src, n_rows, staged_row_major)
-        ref ctx = self.ctx
-        try:
-            enqueue_fill(ctx, self.d_cindex.value(), UInt32(0))
-            ctx.enqueue_copy(
-                dst_buf=self.d_x.value(), src_ptr=self.h_x.value().unsafe_ptr()
-            )
-            comptime BIN_GRID = BINARIZE_BLOCK_SIZE * BINARIZE_DOCS_PER_THREAD
-            for f in range(self.n_columns):
-                if len(self.tm.borders[f]) == 0:
-                    continue
-                ref cf = self.layout.features[f]
-                ctx.enqueue_function[binarize_float_feature_kernel](
-                    Int32(Int(cf.offset) * n_rows), cf.mask, cf.shift,
-                    self.d_x.value().unsafe_ptr() + f * n_rows, Int32(n_rows),
-                    self.d_borders.unsafe_ptr() + f * BORDER_SLAB,
-                    self.d_cindex.value().unsafe_ptr(),
-                    grid_dim=(n_rows + BIN_GRID - 1) // BIN_GRID,
-                    block_dim=(BINARIZE_BLOCK_SIZE, 1, 1),
-                )
-            self._apply(n_rows)
-            ctx.enqueue_copy(
-                dst_ptr=self.h_out.value().unsafe_ptr(),
-                src_buf=self.d_cursor.value(),
-            )
-            ctx.synchronize()
-        except e:
-            ctx.synchronize()
-            raise e
+        # lane hr2-gbdt-host's device staging and link are the only route
+        # (cpu-gpu-cleanup t-gbdt: the `MOJOLEARN_HR2_OLD_LINK` host staging
+        # and host link across the thread pool are deleted)
+        var width = self._predict_device(
+            src, n_rows, staged_row_major, out_f32, out_f64, out_i64, mode
+        )
         _ = len(expanded)
-        var hc = self.h_out.value().unsafe_ptr()
-        comptime if RESIDENT_SABOTAGE:
-            hc.unsafe_store(0, hc.unsafe_load(0) + Float32(1.0))
-        var dim = self.approx_dim
-        if mode >= RESIDENT_CLASSES_BINARY and mode <= RESIDENT_CLASSES_OVA:
-            var kind = mode - RESIDENT_CLASSES_BINARY
-            if kind == 0 and dim != 1:
-                raise Error("binary class prediction requires one model dimension")
-            var tasks = (n_rows + STAGE_MIN_ROWS_PER_TASK - 1) // STAGE_MIN_ROWS_PER_TASK
-            var workers = host_worker_count()
-            if tasks > workers:
-                tasks = workers
-            if tasks < 1:
-                tasks = 1
-            var chunk = (n_rows + tasks - 1) // tasks
-
-            def _classes_task(c: Int) {imm hc, imm out_i64, imm chunk,
-                                       imm n_rows, imm dim, imm kind}:
-                var lo = c * chunk
-                var hi = min(lo + chunk, n_rows)
-                if kind == 0:
-                    for r in range(lo, hi):
-                        out_i64.unsafe_store(
-                            r, Int64(1) if hc.unsafe_load(r) > Float32(0.0) else Int64(0)
-                        )
-                    return
-                # Reproduce the public Float32 probability cells before the
-                # first-max comparison. Comparing raw logits is not sufficient:
-                # the final narrowing can create a tie between nearby values.
-                for r in range(lo, hi):
-                    var best = 0
-                    var best_value = Float32(0.0)
-                    if kind == 1:
-                        var mx = Float64(0.0)
-                        for k in range(dim):
-                            var raw = Float64(hc.unsafe_load(k * n_rows + r))
-                            if raw > mx:
-                                mx = raw
-                        var se = Float64(0.0)
-                        for k in range(dim):
-                            se += identical_exp64(Float64(hc.unsafe_load(k * n_rows + r)) - mx)
-                        se += identical_exp64(-mx)
-                        best_value = Float32(identical_exp64(Float64(hc.unsafe_load(r)) - mx) / se)
-                        for k in range(1, dim):
-                            var value = Float32(identical_exp64(Float64(hc.unsafe_load(k * n_rows + r)) - mx) / se)
-                            if value > best_value:
-                                best = k
-                                best_value = value
-                        var pinned = Float32(identical_exp64(-mx) / se)
-                        if pinned > best_value:
-                            best = dim
-                    else:
-                        best_value = Float32(1.0 / (1.0 + identical_exp64(-Float64(hc.unsafe_load(r)))))
-                        for k in range(1, dim):
-                            var value = Float32(1.0 / (1.0 + identical_exp64(-Float64(hc.unsafe_load(k * n_rows + r)))))
-                            if value > best_value:
-                                best = k
-                                best_value = value
-                    out_i64.unsafe_store(
-                        r, Int64(best)
-                    )
-
-            if tasks == 1:
-                _classes_task(0)
-            else:
-                host_parallelize_pool_env(_classes_task, tasks)
-            return 1
-        if mode == RESIDENT_RAW:
-            if dim == 1:
-                memcpy(dest=out_f32, src=hc, count=n_rows)
-                return 1
-            # plane-major on the device, row-major out (`predict_multi_floats`)
-            for r in range(n_rows):
-                for d in range(dim):
-                    out_f32.unsafe_store(r * dim + d, hc.unsafe_load(d * n_rows + r))
-            return dim
-        if mode == RESIDENT_SIGMOID_PAIR:
-            if dim != 1:
-                raise Error(
-                    "gbdt_resident_predict: the sigmoid pair is the"
-                    " one-dimensional Logloss / CrossEntropy transform; this"
-                    " model has dim " + String(dim)
-                )
-            # per row, so the rows fan out to host threads; each row's two
-            # statements are `gbdt_sigmoid_pair`'s
-            var tasks = (n_rows + STAGE_MIN_ROWS_PER_TASK - 1) // STAGE_MIN_ROWS_PER_TASK
-            var workers = host_worker_count()
-            if tasks > workers:
-                tasks = workers
-            if tasks < 1:
-                tasks = 1
-            var chunk = (n_rows + tasks - 1) // tasks
-
-            def _pair_task(c: Int) {imm hc, imm out_f64, imm chunk, imm n_rows}:
-                var lo = c * chunk
-                var hi = lo + chunk
-                if hi > n_rows:
-                    hi = n_rows
-                for r in range(lo, hi):
-                    var raw = Float64(hc.unsafe_load(r))
-                    var p = 1.0 / (1.0 + identical_exp64(-raw))
-                    comptime if PAIR_SABOTAGE:
-                        out_f64.unsafe_store(2 * r, p)
-                        out_f64.unsafe_store(2 * r + 1, 1.0 - p)
-                    else:
-                        out_f64.unsafe_store(2 * r, 1.0 - p)
-                        out_f64.unsafe_store(2 * r + 1, p)
-
-            if tasks == 1:
-                _pair_task(0)
-            else:
-                host_parallelize_pool_env(_pair_task, tasks)
-            return 2
-        if dim < 2:
-            raise Error(
-                "gbdt_predict_multi: a probability mode needs a"
-                " multi-dimensional model; this one has dim " + String(dim)
-                + ". A two-class problem's link is the sigmoid, which"
-                " Logloss's own predict_proba applies."
-            )
-        if mode != RESIDENT_SOFTMAX and mode != RESIDENT_SIGMOID:
-            raise Error("gbdt_resident_predict: unknown mode " + String(mode))
-        # The two transforms are per row, so the rows fan out to host
-        # threads; a task's row is `multiclass_probabilities`'s loop body
-        # (`gbdt/train.mojo`, the max seeded at ZERO for the pinned class,
-        # `identical_exp64`, one double division per class) or
-        # `one_vs_all_probabilities`'s element, statement for statement,
-        # reading the plane-major readback where those read the row-major
-        # copy `predict_multi_floats` made.
-        var tasks = (n_rows + STAGE_MIN_ROWS_PER_TASK - 1) // STAGE_MIN_ROWS_PER_TASK
-        var workers = host_worker_count()
-        if tasks > workers:
-            tasks = workers
-        if tasks < 1:
-            tasks = 1
-        var chunk = (n_rows + tasks - 1) // tasks
-        var softmax = mode == RESIDENT_SOFTMAX
-
-        def _rows_task(c: Int) {imm hc, imm out_f32, imm chunk, imm n_rows, imm dim, imm softmax}:
-            var lo = c * chunk
-            var hi = lo + chunk
-            if hi > n_rows:
-                hi = n_rows
-            if softmax:
-                var width = dim + 1
-                for r in range(lo, hi):
-                    var mx = Float64(0.0)
-                    for k in range(dim):
-                        var v = Float64(hc.unsafe_load(k * n_rows + r))
-                        if v > mx:
-                            mx = v
-                    var se = Float64(0.0)
-                    for k in range(dim):
-                        se += identical_exp64(Float64(hc.unsafe_load(k * n_rows + r)) - mx)
-                    se += identical_exp64(-mx)
-                    for k in range(dim):
-                        out_f32.unsafe_store(
-                            r * width + k,
-                            Float32(identical_exp64(Float64(hc.unsafe_load(k * n_rows + r)) - mx) / se),
-                        )
-                    out_f32.unsafe_store(r * width + dim, Float32(identical_exp64(-mx) / se))
-            else:
-                for r in range(lo, hi):
-                    for k in range(dim):
-                        out_f32.unsafe_store(
-                            r * dim + k,
-                            Float32(1.0 / (1.0 + identical_exp64(-Float64(hc.unsafe_load(k * n_rows + r))))),
-                        )
-
-        if tasks == 1:
-            _rows_task(0)
-        else:
-            host_parallelize_pool_env(_rows_task, tasks)
-        if softmax:
-            return dim + 1
-        return dim
+        return width
 
 
 struct GbdtModelRegistry(Movable):

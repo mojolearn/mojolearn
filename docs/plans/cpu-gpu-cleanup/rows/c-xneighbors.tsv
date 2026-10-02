@@ -1,0 +1,33 @@
+rule	class	owner	state	path	occ	text
+host-threads	host-threads	gap-nv-classical2	debt	neighbors/estimator.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	gap-nv-classical2	debt	neighbors/estimator.mojo	0	host_parallelize(_rows, tasks)
+host-env	host-env/threshold	hr-graph	debt	python/mojolearn/_expansion_neighbors.py	0	_HOST_LOOP_LP = os.environ.get("MOJOLEARN_XN_HOST_LOOPS", "") == "1"
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_neighbors.py	0	members = [rows[i] for i in range(n) if codes[i] == c]
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_neighbors.py	0	rows = [i for i in range(n) if w[i] > 0]
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_neighbors.py	0	ys = [[0.0] * C if unl[i] else ld0[i] for i in range(n)]
+host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	0	host_parallelize(_count, tasks)
+host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	1	host_parallelize(_count, tasks)
+host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	0	host_parallelize(_fill, tasks)
+host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	1	host_parallelize(_fill, tasks)
+host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	0	host_parallelize(_round, tasks)
+host-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	0	comptime if is_defined["MOJOLEARN_XN_MAPPED_DOWN"]():
+host-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	0	comptime if is_defined["MOJOLEARN_XN_MAPPED_UP"]():
+host-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	0	if count >= XN_STAGED_MIN:
+host-threads	host-threads	hr-graph	debt	x_neighbors/device_ops.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	x_neighbors/device_ops.mojo	0	host_parallelize(_mpart, mtasks)
+host-threads	host-threads	UNOWNED	debt	x_neighbors/device_ops.mojo	1	host_parallelize(_mpart, mtasks)
+host-threads	host-threads	UNOWNED	debt	x_neighbors/device_ops.mojo	0	host_parallelize(_part, tasks)
+route-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	0	comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
+route-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	1	comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
+serial-launch	serial-gpu	UNOWNED	debt	x_neighbors/device_ops.mojo	0	ctx.enqueue_function[ocsvm_kernel](
+host-call	host-import	UNOWNED	debt	x_neighbors/eigh.mojo	0	import spectral/checks/symmetric_eig_host.mojo:symmetric_eig_host
+host-call	host-import	UNOWNED	debt	x_neighbors/eigh.mojo	0	var sweeps = symmetric_eig_host[DType.float32](m, n, w, v)
+host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	import x_neighbors/device_ops.mojo:_buf
+host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_g = _buf(ctx, g, n * n, True)
+host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_nxt = _buf(ctx, 0, nc, False)
+host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_ring = _buf(ctx, 0, (LP_BATCH + 1) * nc, False)
+host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_ys = _buf(ctx, ystatic, nc, True)
+host-threads	host-threads	PR#106	debt	x_neighbors/svgp_ff.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	PR#106	debt	x_neighbors/svgp_ff.mojo	0	host_parallelize(column, m)
+host-threads	host-threads	PR#106	debt	x_neighbors/svgp_ff.mojo	0	host_parallelize(tcol, m)
