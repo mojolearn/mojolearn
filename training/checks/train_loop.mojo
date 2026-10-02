@@ -117,7 +117,6 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, memcpy
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from core.device_arena import arena_active, arena_take
-from core.host_predict_threads import host_predict_task_count
 from std.os import getenv
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
