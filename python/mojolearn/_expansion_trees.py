@@ -1988,6 +1988,25 @@ class StackingRegressor(_StackingBase):
 # :200, one clone per column of Y; predict stacks the columns;
 # MultiOutputClassifier.predict_proba :500 returns a list). Y is a numeric
 # 2-D buffer; a classifier's labels per column are encoded to codes.
+#: lane apple-fast-meta (-D MOJOLEARN_MULTIOUT_RIDGE, FAST + Apple only):
+#: MultiOutputRegressor(Ridge) fits every target in ONE ridge program
+#: (glm/impl/ridge_multi.mojo: X up once, one eigendecomposition, one U^T b
+#: and one V (S b) per target) and predicts every target in one launch. The
+#: estimators binding built with the define exports ridge_fit_multi; every
+#: other binding takes the per-target route below.
+def _multiout_ridge_entry(est, sample_weight):
+    """The estimators binding when it has the one-program ridge and `est`
+    is a plain Ridge (eig arm, no normalize), else None."""
+    from .linear_model import Ridge
+    if sample_weight is not None or type(est) is not Ridge or est.normalize:
+        return None
+    try:
+        b = est._bind("_mojolearn_estimators")
+        return b if hasattr(b, "ridge_fit_multi") else None
+    except Exception:
+        return None
+
+
 class MultiOutputRegressor(_TreesWrapperBase):
     _estimator_type = "regressor"
 
@@ -1997,11 +2016,55 @@ class MultiOutputRegressor(_TreesWrapperBase):
         self.estimator = estimator
         self.n_jobs = n_jobs
 
+    def _fit_ridge_multi(self, b, Xa, Ya):
+        """The one-program fit: X centered once (Ridge.fit's own device
+        helpers), Y's columns centered and solved on the device, m Ridge
+        objects filled from the words so `estimators_` reads as before."""
+        from .linear_model import _center, _column_means, _round_f32
+        n, d = Xa.shape
+        m = Ya.shape[1]
+        est = self.estimator
+        if est.fit_intercept:
+            mu32 = _column_means(b, Xa, None)
+            work_x = _center(b, Xa, mu32)
+        else:
+            mu32 = [0.0] * d
+            work_x = Xa
+        coef = empty((m * d,), "<f4")
+        ymean = empty((m,), "<f4")
+        b.ridge_fit_multi(addr_ro(work_x, name="X"), addr_ro(Ya, name="Y"), addr(coef, name="coef"),
+                          addr(ymean, name="ymean"), [n, d, m, float(est.alpha), 1 if est.fit_intercept else 0])
+        xm = Array.from_list(mu32, "<f4")
+        icpt = []
+        self.estimators_ = []
+        for j in range(m):
+            e = _trees_clone(est)
+            e.solver_ = "eig"
+            e.coef_ = coef[j * d:(j + 1) * d]
+            e._x_mean = xm
+            e._y_mean = float(ymean[j]) if est.fit_intercept else 0.0
+            if est.fit_intercept:
+                dot = math.fsum(float(a) * float(c) for a, c in zip(mu32, e.coef_.tolist()))
+                e.intercept_ = float(_round_f32(e._y_mean) - dot)
+            else:
+                e.intercept_ = 0.0
+            e.n_features_in_ = d
+            icpt.append(e.intercept_)
+            self.estimators_.append(e)
+        self._multi_ridge = (coef, Array.from_list(icpt, "<f4"), m)
+        self.n_features_in_ = d
+        self._fitted = True
+        return self
+
     def fit(self, X, Y, sample_weight=None):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         Ya, _ = as_f32_c(Y, ndim=2, name="Y")
         if Ya.shape[0] != Xa.shape[0]:
             raise ValueError(f"Y has {Ya.shape[0]} rows, X has {Xa.shape[0]}")
+        self._multi_ridge = None
+        b = _multiout_ridge_entry(self.estimator, sample_weight)
+        if b is not None and Ya.shape[1] > 0:
+            return self._fit_ridge_multi(b, Xa, Ya)
         self.estimators_ = []
         for j in range(Ya.shape[1]):
             e = _trees_clone(self.estimator)
@@ -2015,6 +2078,14 @@ class MultiOutputRegressor(_TreesWrapperBase):
     def predict(self, X):
         Xa = self._check_X(X)
         n, m = Xa.shape[0], len(self.estimators_)
+        mr = getattr(self, "_multi_ridge", None)
+        if mr is not None:
+            coef, icpt, m = mr
+            out = empty((n, m), "<f4")
+            self.estimators_[0]._bind("_mojolearn_estimators").ridge_predict_multi(
+                addr_ro(Xa, name="X"), addr_ro(coef, name="coef"), addr_ro(icpt, name="intercepts"),
+                addr(out, name="predictions"), [n, Xa.shape[1], m])
+            return out
         out = zeros((n * m,), "<f8")
         rows = _trees_arange(n)
         for j, e in enumerate(self.estimators_):
