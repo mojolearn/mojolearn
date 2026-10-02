@@ -96,6 +96,15 @@ from x_decomp.jacobi2 import (
     one_sided_svd2_finish_kernel,
 )
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
+from x_decomp.apple_fast import (
+    LB_TPB,
+    OMP_TPB,
+    lasso_block_kernel,
+    lasso_block_on,
+    omp_block_kernel,
+    omp_block_on,
+    small_eigh_j2_on,
+)
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
@@ -1874,6 +1883,18 @@ struct DevExec(Exec):
         # rounds); a solve it does not converge falls back to the cyclic one,
         # as the host does. `-D MOJOLEARN_XD_EIGH_CYCLIC=1` keeps the cyclic
         # order (and MOJOLEARN_XD_PJ_EIGH_MIN its old opt-in threshold).
+        # MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2=1 (lane/apple-fast-decomp-sparse,
+        # 2026-10-02; FAST on Apple only): an eigh of order at most
+        # SMALL_EIGH_MAX (x_decomp/apple_fast.mojo) takes `_eigh2`, ONE
+        # launch of the cyclic kernel plus one readback, instead of
+        # `_eigh_par` below: n - 1 rounds of two launches per sweep and a
+        # host readback of the off-diagonal norm before every sweep (for
+        # FastICA's 8 x 8 decorrelation, every one of its 200 iterations:
+        # ~130 launches and ~16 syncs for 28 rotations). Default off.
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+            if small_eigh_j2_on(n):
+                DevExec._eigh2(a, w, v, n)
+                return
         comptime if not is_defined["MOJOLEARN_XD_EIGH_CYCLIC"]():
             if n >= 2 and DevExec._eigh_par(a, w, v, n):
                 return
@@ -2184,15 +2205,35 @@ struct DevExec(Exec):
         max_iter: Int, tol: Float32, positive: Bool,
     ) raises:
         var ctx = xd_ctx()
+        # MOJOLEARN_DECOMP_FAST_LASSO_BLOCK=1 (lane/apple-fast-decomp-sparse,
+        # 2026-10-02; FAST on Apple only): one threadgroup per row
+        # (x_decomp/apple_fast.mojo `lasso_block_kernel`) instead of one
+        # thread per row walking its k-wide h strip in global memory for
+        # every coordinate of every sweep (`lasso_rows_kernel` above,
+        # `lasso_row` in x_decomp/cells.mojo: the dict-learning,
+        # mb-dict-learning, sparse-pca and mb-sparse-pca sparse codes).
+        # Expected: the sweep's k x k loads and stores become k parallel
+        # threadgroup updates; no h scratch buffer. Default off.
+        var block = False
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+            if n > 0 and lasso_block_on(k):
+                block = True
         var dg = _up(ctx, g, k * k)
         var dq = _up(ctx, q, n * k)
         var dw = _up(ctx, w, n * k)
-        var dh = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
+        var dh = ctx.enqueue_create_buffer[DType.float32](n * k if (n * k > 0 and not block) else 1)
         var di = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        ctx.enqueue_function[lasso_rows_kernel](
-            dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dh.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
-            alpha, Int32(max_iter), tol, Int32(1 if positive else 0), grid_dim=_blocks(n), block_dim=TPB,
-        )
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+            if block:
+                ctx.enqueue_function[lasso_block_kernel](
+                    dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
+                    alpha, Int32(max_iter), tol, Int32(1 if positive else 0), grid_dim=n, block_dim=LB_TPB,
+                )
+        if not block:
+            ctx.enqueue_function[lasso_rows_kernel](
+                dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dh.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
+                alpha, Int32(max_iter), tol, Int32(1 if positive else 0), grid_dim=_blocks(n), block_dim=TPB,
+            )
         _down(ctx, dw, w, n * k)
         _down(ctx, di, its, n)
         ctx.synchronize()
@@ -2208,15 +2249,36 @@ struct DevExec(Exec):
     def omp_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int, k: Int, nnz: Int) raises:
         var ctx = xd_ctx()
         var per = k * k + 3 * k
+        # MOJOLEARN_DECOMP_FAST_OMP_BLOCK=1 (lane/apple-fast-decomp-sparse,
+        # 2026-10-02; FAST on Apple only): one threadgroup per row
+        # (x_decomp/apple_fast.mojo `omp_block_kernel`), the correlations a
+        # thread per atom and every scratch in threadgroup memory, instead
+        # of one thread per row (`omp_rows_kernel` above, `omp_row` in
+        # x_decomp/cells.mojo) with a k * k + 3k float scratch strip per row
+        # in `ds`: the sparse-coder lane (100,000 rows, 64 atoms, 4 nonzero)
+        # allocated 1.7 GB of device scratch and ran 6.7 s on the M3 Ultra
+        # against scikit-learn's 0.03 s. Expected: no scratch buffer, the
+        # k-wide correlation scan parallel. Default off.
+        var block = False
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+            if n > 0 and omp_block_on(k, nnz):
+                block = True
         var dg = _up(ctx, g, k * k)
         var dq = _up(ctx, q, n * k)
         var dw = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
-        var ds = ctx.enqueue_create_buffer[DType.float32](n * per if n * per > 0 else 1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n * per if (n * per > 0 and not block) else 1)
         var dn = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        ctx.enqueue_function[omp_rows_kernel](
-            dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
-            Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
-        )
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+            if block:
+                ctx.enqueue_function[omp_block_kernel](
+                    dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+                    Int32(nnz), grid_dim=n, block_dim=OMP_TPB,
+                )
+        if not block:
+            ctx.enqueue_function[omp_rows_kernel](
+                dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+                Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
+            )
         _down(ctx, dw, w, n * k)
         _down(ctx, dn, na, n)
         ctx.synchronize()
