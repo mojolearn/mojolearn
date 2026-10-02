@@ -10,7 +10,7 @@ from max.gpu.sync import barrier
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import memcpy
-from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
+from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count
 
@@ -1759,8 +1759,14 @@ struct DevExec(Exec):
         else:
             ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
         var pivot_block = lu_pivot_parallel()
+        # On AMD both default off (the peer's MI325X: lu-factor 868 -> 930 ms,
+        # lu-solve 828 -> 933 with them; the L40S and the M4 gain): =1 opts in.
+        # The same words either way.
         var trail_r4 = String(getenv("MOJOLEARN_XD_LU_TRAIL_R4")) != "0"
         var step_fused = String(getenv("MOJOLEARN_XD_LU_STEP_FUSED")) != "0"
+        comptime if TARGET_COLUMN == COLUMN_AMD:
+            trail_r4 = String(getenv("MOJOLEARN_XD_LU_TRAIL_R4")) == "1"
+            step_fused = String(getenv("MOJOLEARN_XD_LU_STEP_FUSED")) == "1"
         var nb = min(lu_panel_width(), LU_PANEL_NB)
         var dact = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
         if n > lu_serial_max() and nb > 0:
