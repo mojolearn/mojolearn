@@ -80,8 +80,11 @@ from isolation_forest.impl.isolation_tree_builder import (
     IF_SCRATCH_WORDS_PER_NODE,
     IF_STACK_WORDS,
     IF_FAST_ROWMAJOR,
+    IF_SAMPLED_UPLOAD,
     build_isolation_trees_global_kernel,
+    if_chunk_gather_kernel,
     if_finite_scan_kernel,
+    if_sample_rows_kernel,
     compute_path_lengths_global_kernel,
     compute_path_lengths_range_kernel,
 )
@@ -445,6 +448,107 @@ def _upload_rowmajor_fast(
     return buf^
 
 
+#: IF_SAMPLED_UPLOAD: the device stage X streams through, in cells
+#: (64 MB of float32: the chunk the raw host-pointer copy was measured at,
+#: b046c2de7). Bounded device memory whatever X's size.
+comptime IF_SAMPLED_CHUNK_CELLS = 16777216
+
+
+def _upload_sampled_fast(
+    ctx: DeviceContext,
+    src_addr: Int,
+    n_rows: Int,
+    n_cols: Int,
+    n_trees: Int,
+    max_samples: Int,
+    bootstrap: Bool,
+    seed: UInt64,
+    global_tree_start: Int,
+    mut sample_indices: DeviceBuffer[DType.int64],
+    mut tables: XorwowDeviceTables,
+    pad: Int,
+    poison: Float32,
+) raises -> DeviceBuffer[DType.float32]:
+    """IF_SAMPLED_UPLOAD (lane/apple-fast-trees-io): the compact device
+    buffer the build kernel gathers from, entry `t * max_samples + s` =
+    the `n_cols` cells of tree t's s-th sampled row, `pad` tail poisoned.
+    1. `if_sample_rows_kernel` draws every tree's rows into
+       `sample_indices` (the build kernel's own draws, same stream).
+    2. The borrowed ROW-major X streams through one device stage in
+       chunks of at most IF_SAMPLED_CHUNK_CELLS cells (a raw host-pointer
+       copy per chunk, as `_upload_rowmajor_fast` does for the whole
+       block); each chunk runs DEVIATION 680's scan
+       (`if_finite_scan_kernel`, so every cell of X is still refused) and
+       `if_chunk_gather_kernel`. A synchronize before each re-fill of the
+       stage orders the host-pointer copy after the launches that read it.
+    3. One readback: the finite flag. A non-finite cell raises
+       `_upload_rowmajor_as_colmajor`'s message (the named host scan runs
+       only then, to find the index).
+    No device buffer of X's size exists; the host touches no cell."""
+    var n_entries = n_trees * max_samples
+    ctx.enqueue_function[if_sample_rows_kernel](
+        Int64(n_rows),
+        Int32(n_trees),
+        Int32(max_samples),
+        Int32(1) if bootstrap else Int32(0),
+        seed,
+        sample_indices.unsafe_ptr(),
+        tables.sequence.unsafe_ptr(),
+        tables.offset.unsafe_ptr(),
+        Int32(global_tree_start),
+        grid_dim=(n_trees, 1, 1),
+        block_dim=(1, 1, 1),
+    )
+    var compact = _poisoned_f32(ctx, n_entries * n_cols, pad, poison)
+    var flag = ctx.enqueue_create_buffer[DType.int32](1)
+    flag.enqueue_fill(Int32(0))
+    var chunk_rows = max(1, min(n_rows, IF_SAMPLED_CHUNK_CELLS // n_cols))
+    var stage = ctx.enqueue_create_buffer[DType.float32](chunk_rows * n_cols)
+    comptime tpb = 256
+    var gather_blocks = (n_entries * n_cols + tpb - 1) // tpb
+    var r0 = 0
+    while r0 < n_rows:
+        var rows_c = min(chunk_rows, n_rows - r0)
+        var cells = rows_c * n_cols
+        if r0 > 0:
+            ctx.synchronize()
+        var src = MutPointer[Float32, MutUntrackedOrigin](
+            unsafe_from_address=src_addr + r0 * n_cols * 4
+        )
+        ctx.enqueue_copy(
+            dst_buf=stage.create_sub_buffer[DType.float32](0, cells), src_ptr=src
+        )
+        var scan_blocks = min((cells + tpb * 16 - 1) // (tpb * 16), 65535)
+        ctx.enqueue_function[if_finite_scan_kernel](
+            stage.unsafe_ptr(),
+            Int64(cells),
+            Int64(0),
+            poison,
+            flag.unsafe_ptr(),
+            grid_dim=(scan_blocks, 1, 1),
+            block_dim=(tpb, 1, 1),
+        )
+        ctx.enqueue_function[if_chunk_gather_kernel](
+            stage.unsafe_ptr(),
+            Int64(r0),
+            Int64(rows_c),
+            Int32(n_cols),
+            Int64(n_entries),
+            sample_indices.unsafe_ptr(),
+            compact.unsafe_ptr(),
+            grid_dim=(gather_blocks, 1, 1),
+            block_dim=(tpb, 1, 1),
+        )
+        r0 += rows_c
+    var bad = read_i32(ctx, flag, 1)
+    if bad[0] != 0:
+        var src_all = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src_addr)
+        _raise_first_nonfinite_colmajor_view("X", src_all, n_rows, n_cols)
+    _ = flag^
+    _ = stage^
+    return compact^
+
+
 def _upload_u32(
     ctx: DeviceContext, values: List[UInt32], n: Int
 ) raises -> DeviceBuffer[DType.uint32]:
@@ -708,27 +812,9 @@ struct IsolationForest(Movable):
 
         # build_isolation_forest_global (isolation_tree_builder.cuh:377-420)
         var data: DeviceBuffer[DType.float32]
-        comptime if IF_FAST_ROWMAJOR:
-            if src_addr != 0:
-                data = _upload_rowmajor_fast(ctx, src_addr, n_rows, n_cols, pad, poison)
-            else:
-                # A column-major List (the host-List callers, never the
-                # binding): back to row-major for the row-major gather.
-                var x_rows = List[Float32](capacity=n_rows * n_cols)
-                for i in range(n_rows):
-                    for k in range(n_cols):
-                        x_rows.append(input_colmajor[k * n_rows + i])
-                data = _upload_f32(ctx, x_rows, n_rows * n_cols, pad, poison)
-        else:
-            if src_addr != 0:
-                data = _upload_rowmajor_as_colmajor(ctx, src_addr, n_rows, n_cols, pad, poison)
-            else:
-                data = _upload_f32(ctx, input_colmajor, n_rows * n_cols, pad, poison)
-        var subsample_buffer = _poisoned_f32(
-            ctx, n_trees * n_sampled_rows * n_sampled_features, pad, poison
-        )
-        var sample_indices = _poisoned_i64(ctx, n_trees * n_sampled_rows, pad, poison)
-        var work_indices = _poisoned_i32(ctx, n_trees * n_sampled_rows, pad, poison)
+        var subsample_buffer: DeviceBuffer[DType.float32]
+        var sample_indices: DeviceBuffer[DType.int64]
+        var work_indices: DeviceBuffer[DType.int32]
         # One scratch buffer per tree carved into three disjoint slices
         # (stack, per-node decisions, final RNG state). ONE kernel argument:
         # Metal caps a kernel at 31 and this one stands at 25.
@@ -736,8 +822,65 @@ struct IsolationForest(Movable):
             model.max_nodes_per_tree * IF_SCRATCH_WORDS_PER_NODE
             + IF_RNG_STATE_WORDS
         )
-        var stack = _poisoned_i32(ctx, n_trees * scratch_stride, pad, poison)
-        var tables = XorwowDeviceTables(ctx)
+        var stack: DeviceBuffer[DType.int32]
+        var tables: XorwowDeviceTables
+        comptime if IF_SAMPLED_UPLOAD:
+            # lane/apple-fast-trees-io: the sample-index pass needs the
+            # index buffer and the RNG tables before X is uploaded; `data`
+            # is then the compact sampled-rows buffer (`_upload_sampled_fast`).
+            sample_indices = _poisoned_i64(ctx, n_trees * n_sampled_rows, pad, poison)
+            tables = XorwowDeviceTables(ctx)
+            if src_addr != 0:
+                data = _upload_sampled_fast(
+                    ctx, src_addr, n_rows, n_cols, n_trees, n_sampled_rows,
+                    self.params.bootstrap, self.params.seed, global_tree_start,
+                    sample_indices, tables, pad, poison,
+                )
+            else:
+                # A column-major List (the host-List callers, never the
+                # binding): back to row-major, then the same chunked upload.
+                var x_rows = List[Float32](capacity=n_rows * n_cols)
+                for i in range(n_rows):
+                    for k in range(n_cols):
+                        x_rows.append(input_colmajor[k * n_rows + i])
+                var x_rows_ptr = rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                    x_rows.unsafe_ptr()
+                )
+                data = _upload_sampled_fast(
+                    ctx, Int(x_rows_ptr), n_rows, n_cols, n_trees, n_sampled_rows,
+                    self.params.bootstrap, self.params.seed, global_tree_start,
+                    sample_indices, tables, pad, poison,
+                )
+                _ = x_rows^
+            subsample_buffer = _poisoned_f32(
+                ctx, n_trees * n_sampled_rows * n_sampled_features, pad, poison
+            )
+            work_indices = _poisoned_i32(ctx, n_trees * n_sampled_rows, pad, poison)
+            stack = _poisoned_i32(ctx, n_trees * scratch_stride, pad, poison)
+        else:
+            comptime if IF_FAST_ROWMAJOR:
+                if src_addr != 0:
+                    data = _upload_rowmajor_fast(ctx, src_addr, n_rows, n_cols, pad, poison)
+                else:
+                    # A column-major List (the host-List callers, never the
+                    # binding): back to row-major for the row-major gather.
+                    var x_rows = List[Float32](capacity=n_rows * n_cols)
+                    for i in range(n_rows):
+                        for k in range(n_cols):
+                            x_rows.append(input_colmajor[k * n_rows + i])
+                    data = _upload_f32(ctx, x_rows, n_rows * n_cols, pad, poison)
+            else:
+                if src_addr != 0:
+                    data = _upload_rowmajor_as_colmajor(ctx, src_addr, n_rows, n_cols, pad, poison)
+                else:
+                    data = _upload_f32(ctx, input_colmajor, n_rows * n_cols, pad, poison)
+            subsample_buffer = _poisoned_f32(
+                ctx, n_trees * n_sampled_rows * n_sampled_features, pad, poison
+            )
+            sample_indices = _poisoned_i64(ctx, n_trees * n_sampled_rows, pad, poison)
+            work_indices = _poisoned_i32(ctx, n_trees * n_sampled_rows, pad, poison)
+            stack = _poisoned_i32(ctx, n_trees * scratch_stride, pad, poison)
+            tables = XorwowDeviceTables(ctx)
 
         # The card's RNG probe: the first 16 draws of tree 0's state, on the
         # host through the same implementation (a pure function of (seed, 0)).

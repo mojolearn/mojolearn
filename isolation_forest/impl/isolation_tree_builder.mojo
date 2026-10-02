@@ -156,6 +156,28 @@ comptime IF_FAST_ROWMAJOR = (
     and not is_defined["MOJOLEARN_IF_ROWMAJOR_OFF"]()
 )
 
+#: FAST on Apple (lane/apple-fast-trees-io, 2026-10-02), A/B arm
+#: `-D MOJOLEARN_IF_SAMPLED_UPLOAD=1` (default off): THE FIT UPLOADS ONLY
+#: THE ROWS A TREE SAMPLES. Cause: under IF_FAST_ROWMAJOR the whole borrowed
+#: X (Istella: 1.8 GB) is copied into one device buffer of its own size
+#: (`isolation_forest.mojo` `_upload_rowmajor_fast`) for a forest that
+#: gathers n_trees x max_samples rows of it (100 x 256 x 220 cells, 22 MB).
+#: Here `if_sample_rows_kernel` draws every tree's row indices first (the
+#: same XORWOW stream as the build kernel's thread 0, so the same rows and
+#: the same trees), then X streams through ONE bounded device stage in
+#: chunks: each chunk is scanned for non-finite cells (DEVIATION 680's
+#: refusal still covers every cell) and its sampled rows are gathered into
+#: a compact device buffer whose entry `t * max_samples + s` holds the
+#: `n_cols` cells of tree t's s-th sampled row; the build kernel's gather
+#: reads that entry. The host reads back one word (the finite flag). No
+#: device buffer of X's size, no host pass over the cells. Expected: the
+#: 1.8 GB device allocation and its first-touch cost go; the transfer
+#: volume is unchanged (see docs/apple-fast/ab/trees-io.md for the
+#: designs that would cut it and why they are not GPU-only today).
+comptime IF_SAMPLED_UPLOAD = (
+    IF_FAST_ROWMAJOR and is_defined["MOJOLEARN_IF_SAMPLED_UPLOAD"]()
+)
+
 
 comptime EULER_MASCHERONI_F32 = Float32(0.5772156649015329)
 """`T(0.5772156649015329)` with T = float: 0x3f13c468. Printed and gated
@@ -750,10 +772,18 @@ def build_isolation_trees_global_kernel(
             if has_feature_indices:
                 src_col = Int(tree_feature_indices.unsafe_load(f))
             comptime if IF_FAST_ROWMAJOR:
-                local_data.unsafe_store(
-                    s * max_features + f,
-                    data.unsafe_load(src_row * n_cols + src_col),
-                )
+                comptime if IF_SAMPLED_UPLOAD:
+                    # `data` is the compact buffer: entry (tree, s) holds
+                    # row `src_row`'s n_cols cells (`if_chunk_gather_kernel`).
+                    local_data.unsafe_store(
+                        s * max_features + f,
+                        data.unsafe_load((tree_id * max_samples + s) * n_cols + src_col),
+                    )
+                else:
+                    local_data.unsafe_store(
+                        s * max_features + f,
+                        data.unsafe_load(src_row * n_cols + src_col),
+                    )
             else:
                 local_data.unsafe_store(
                     s * max_features + f,
@@ -929,3 +959,82 @@ def if_finite_scan_kernel(
         flag.unsafe_store(0, Int32(1))
     if gid < pad:
         data.unsafe_store(Int(n + gid), poison)
+
+
+def if_sample_rows_kernel(
+    n_rows_in: Int64,
+    n_trees_in: Int32,
+    max_samples_in: Int32,
+    bootstrap_in: Int32,
+    seed: UInt64,
+    sample_indices: MutPointer[Int64, MutAnyOrigin],
+    xorwow_sequence_table: MutPointer[UInt32, MutAnyOrigin],
+    xorwow_offset_table: MutPointer[UInt32, MutAnyOrigin],
+    global_tree_start: Int32,
+):
+    """IF_SAMPLED_UPLOAD's sample-index pass, one block per tree: the row
+    draws of `build_isolation_trees_global_kernel`'s thread 0 (`:291-305`),
+    verbatim, from the same `curand_init(seed, tree_id, 0)` stream, into
+    `sample_indices[tree_id * max_samples + i]`. The build kernel draws the
+    same rows again from the same stream (and so keeps its RNG position),
+    which is why this pass needs no state hand-off. Runs before X is
+    uploaded; `if_chunk_gather_kernel` reads its indices."""
+    var tree_id = Int(block_idx.x)
+    if tree_id >= Int(n_trees_in):
+        return
+    if Int(thread_idx.x) != 0:
+        return
+    var n_rows = Int(n_rows_in)
+    var max_samples = Int(max_samples_in)
+    var rng_state = curandStateXORWOW.zero()
+    curand_init(
+        seed,
+        UInt64(tree_id + Int(global_tree_start)),
+        UInt64(0),
+        rng_state,
+        xorwow_sequence_table,
+        xorwow_offset_table,
+    )
+    var tree_sample_indices = sample_indices.unsafe_offset(tree_id * max_samples)
+    if bootstrap_in != 0:
+        for i in range(max_samples):
+            tree_sample_indices.unsafe_store(
+                i, Int64(sample_bounded(rng_state, UInt64(n_rows)))
+            )
+    else:
+        var start = n_rows - max_samples
+        for i in range(max_samples):
+            var j = start + i
+            var t = Int64(sample_bounded(rng_state, UInt64(j + 1)))
+            if contains_sample(tree_sample_indices, i, t):
+                tree_sample_indices.unsafe_store(i, Int64(j))
+            else:
+                tree_sample_indices.unsafe_store(i, t)
+
+
+def if_chunk_gather_kernel(
+    stage: MutPointer[Float32, MutAnyOrigin],
+    row0: Int64,
+    n_chunk_rows: Int64,
+    n_cols_in: Int32,
+    n_entries: Int64,
+    sample_indices: MutPointer[Int64, MutAnyOrigin],
+    compact: MutPointer[Float32, MutAnyOrigin],
+):
+    """IF_SAMPLED_UPLOAD's gather from one uploaded chunk of X (rows
+    `[row0, row0 + n_chunk_rows)` of the row-major block, in `stage`): one
+    thread per cell of the compact buffer (entry e = tree * max_samples + s,
+    column c); the cell is copied when entry e's sampled row lies in this
+    chunk, else left alone (another chunk's launch writes it). Every entry
+    is written exactly once over the chunk sequence; duplicate rows across
+    trees (bootstrap) are stored once per entry."""
+    var i = Int64(block_idx.x) * Int64(block_dim.x) + Int64(thread_idx.x)
+    var n_cols = Int64(n_cols_in)
+    if i >= n_entries * n_cols:
+        return
+    var e = i // n_cols
+    var c = i - e * n_cols
+    var row = sample_indices.unsafe_load(Int(e)) - row0
+    if row < 0 or row >= n_chunk_rows:
+        return
+    compact.unsafe_store(Int(i), stage.unsafe_load(Int(row * n_cols + c)))
