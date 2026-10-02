@@ -392,6 +392,13 @@ def _kit_vendor(kit):
     return v
 
 
+def _fast_metal_switch(kit, name):
+    """lane/apple-fast-decomp-linalg (2026-10-02): whether the env switch
+    `name` is "1" for a FAST kit bound to a Metal build. False for every
+    IDENTICAL kit, so the default tier never sees these routes."""
+    return kit.mode == "fast" and _os.environ.get(name) == "1" and _kit_vendor(kit) == "metal"
+
+
 class _FastMetalEigh:
     """FAST on Apple runs the kit's eigh on x_decomp/jacobi2.mojo's kernel
     (lane/decomp-apple3; m4-a 1790626766529: eigh 800 8.88 -> 5.36 s, Isomap
@@ -1896,6 +1903,32 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
     B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
     if B.r != n:
         raise ValueError(f"b has {B.r} rows, the factorization has {n}")
+    if _fast_metal_switch(k, "MOJOLEARN_LU_SOLVE_FAST_TRISOLVE"):
+        # MOJOLEARN_LU_SOLVE_FAST_TRISOLVE=1 (lane/apple-fast-decomp-linalg,
+        # 2026-10-02, FAST on Apple only): the solve as the kit's device
+        # `trisolve` (x_decomp/device.mojo launch_trisolve: the pivots
+        # gathered as one permutation, then each triangle in TRS_BLOCK-row
+        # blocks, a block's rows one thread per right-hand side and the
+        # rows it feeds one thread per cell, all on the device). Cause:
+        # `k.lu_solve` at n >= 1024 is `xd_lu_solve_on_host` (x_decomp/
+        # lu_host.mojo), a HOST walk of the n^2 x nrhs chains inside the
+        # board's lu-solve / lu-factor cells (8192 x 8192, 64 right-hand
+        # sides): a CPU step in a GPU fit. The permutation is the swaps
+        # applied in order to the row identity (the `_lle_smallest`
+        # precedent); trans=1 takes its inverse, as `trisolve` documents.
+        perm = list(range(n))
+        for i in range(n):
+            j = pv[i]
+            perm[i], perm[j] = perm[j], perm[i]
+        if trans:
+            inv = [0] * n
+            for i, j in enumerate(perm):
+                inv[j] = i
+            idx = _M.of([float(v) for v in inv], n, 1)
+        else:
+            idx = _M.of([float(v) for v in perm], n, 1)
+        X = k.trisolve(L, idx, B, 1 if trans else 0)
+        return X.out((n,)) if vec else X.out()
     X = k.lu_solve(L, pv, B, trans=1 if trans else 0)
     return X.out((n,)) if vec else X.out()
 

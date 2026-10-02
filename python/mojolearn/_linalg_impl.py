@@ -997,6 +997,25 @@ def _xd_kit():
     return _Kit("identical")
 
 
+def _fast_apple_kit(switch):
+    """lane/apple-fast-decomp-linalg (2026-10-02): the FAST x_decomp kit for
+    one public linalg door, or None (the IDENTICAL kit stands). Three
+    conditions, all host-side: the env switch is "1", the process tier is
+    FAST (`_backend.default_mode()`), and the FAST x_decomp binding is a
+    Metal build (`_kit_vendor`). The public doors otherwise always run the
+    IDENTICAL x_decomp cells, FAST tier or not (`_xd_kit`), which is why
+    the FAST-only device routes behind these switches were unreachable
+    from the board's qr / svd / eigh lanes."""
+    if os.environ.get(switch) != "1":
+        return None
+    from . import _backend
+    if _backend.default_mode() != "fast":
+        return None
+    from ._expansion_decomp import _Kit, _kit_vendor
+    k = _Kit("fast")
+    return k if _kit_vendor(k) == "metal" else None
+
+
 def _xd_matrix(a_arr, rows, cols):
     import array as _array
     from ._expansion_decomp import _M
@@ -1190,6 +1209,20 @@ def eigh(a, UPLO="L"):
     if UPLO not in ("L", "U"):
         raise ValueError("mojolearn.linalg.eigh: UPLO argument must be 'L' or 'U'")
     a_arr = _from_triangle(a_arr, rows, UPLO)
+    kf = _fast_apple_kit("MOJOLEARN_EIGH_FAST_RR")
+    if kf is not None:
+        # MOJOLEARN_EIGH_FAST_RR=1 (lane/apple-fast-decomp-linalg, 2026-10-02,
+        # FAST on Apple only): the x_decomp kit's eigh, whose default route
+        # is the round-robin Jacobi of x_decomp/jacobi_par.mojo (h = n/2
+        # blocks per round, the off-norm convergence test once per sweep)
+        # with the one-block cyclic kernel as its fallback. Cause: the
+        # `_door().eigh` route below is `jacobi_eigh_kernel` on ONE block of
+        # 256 threads for the whole n = 4096 solve (decomposition/
+        # linalg_public_device.mojo device_eigh; the board's eigh lane timed
+        # out on AMD). Same ascending order, same sign pin
+        # (sign_flip_kernel runs in both routes); bits differ (FAST).
+        w, v = kf.eigh(_xd_matrix(a_arr, rows, rows))
+        return w.out((rows,)), v.out()
     w = empty((rows,), "<f4")
     v = empty((rows, rows), "<f4")
     scalars = empty((2,), "<f8")
