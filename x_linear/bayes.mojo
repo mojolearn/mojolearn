@@ -197,7 +197,10 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
                 if t.lead():
                     fill(fw, xm, d, Float32(0))
                 t.sync()
-            t_centered_gram(t, x, n, d, fw, xm, fw, gg)
+            # ip[4] (device only, lane/neural-pass87): 1 when x_linear/device.mojo's
+            # grid kernels already wrote this centered Gram into fw[gg, gg + d*d)
+            if ldi(ip, 4) == 0:
+                t_centered_gram(t, x, n, d, fw, xm, fw, gg)
         var yc = ym
         # X'y on centered data
         for j in range(t.tid, d, t.nt):
@@ -456,7 +459,9 @@ def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             if t.lead():
                 fill(fw, xm, d, Float32(0))
             t.sync()
-        t_centered_gram(t, x, n, d, fw, xm, fw, gg)
+        # ip[4] (device only, lane/neural-pass87): the grid's Gram is already in fw
+        if ldi(ip, 4) == 0:
+            t_centered_gram(t, x, n, d, fw, xm, fw, gg)
         t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
     else:
         ym = _center(x, y, n, d, fi, fw, xm, iw)

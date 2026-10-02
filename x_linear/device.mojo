@@ -23,7 +23,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_ENETCV
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_ENETCV, ALGO_BAYES, ALGO_ARD
 from x_linear.cd_grid import enetcv_fit_grid
 from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross_kernel, mg_tiles
 from x_linear.dispatch import ALGO_RIDGE
@@ -154,6 +154,12 @@ def _enetcv_grid() -> Bool:
     return String(getenv("MOJOLEARN_X_LINEAR_ENETCV_GRID")) != "0"
 
 
+def _bayes_grid_gram() -> Bool:
+    """`MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM=0` keeps BayesianRidge's and
+    ARD's Gram on the team (the A/B arm); default the grid kernel."""
+    return String(getenv("MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM")) != "0"
+
+
 def _fit_on_host(
     algo: Int, x: FP, y: FP, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
@@ -232,11 +238,18 @@ def fit_device(
         while len(hip) < 5:
             hip.append(Int32(0))
         hip[4] = Int32(1 if ridge_pre else 0)
+    # lane/neural-pass87 (2026-10-01): BayesianRidge (unweighted) and ARD read
+    # the same layout (xm at 0, G at d, ip[1] fit_intercept) and the same
+    # centered Gram chains, which the team ran on ONE block (24,310 chains
+    # of every row at 220 features over 256 threads).
+    var bayes_like = (algo == ALGO_BAYES and len(ip) > 2 and ip[2] == 0) or algo == ALGO_ARD
+    if bayes_like and _bayes_grid_gram() and d > 0:
+        grid_gram = True
     var lars_pre = False
     comptime if MOMENTS_GRID:
-        lars_pre = (grid_gram and n > 0
+        lars_pre = (algo == ALGO_LARS and grid_gram and n > 0
                     and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0")
-    if algo == ALGO_LARS:
+    if algo == ALGO_LARS or bayes_like:
         while len(hip) < 5:
             hip.append(Int32(0))
         hip[4] = Int32(2 if lars_pre else (1 if grid_gram else 0))
