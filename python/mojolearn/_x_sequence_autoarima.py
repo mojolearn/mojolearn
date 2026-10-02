@@ -21,8 +21,9 @@ the host from the fit's float32 log-likelihood.
 
 Layout: mojolearn's ARIMA layout, `(batch_size, n_obs)`, one series per row
 (cuML's AutoARIMA takes series in columns; transpose to call it the same way).
-Refused by name: `seasonal_test="seas"` (statsmodels' STL, not a GPU path in
-the reference either; pass `D` as one integer), `method` css / css-ml (this
+`s` of 0, None or 1 is non-seasonal (the reference's `if s is 1: s = None`).
+Refused by name: `seasonal_test="seas"` over a `D` list of two options
+(statsmodels' STL, not a GPU path in the reference either; pass one `D`), `method` css / css-ml (this
 ARIMA fits by `ml`), a `d` option list that is not 0..d_max, `truncate`,
 `h` other than the default, prediction intervals (`level`)."""
 import itertools
@@ -80,13 +81,19 @@ class AutoARIMA:
             raise NotImplementedError("AutoARIMA: this ARIMA fits by 'ml' only; css and css-ml are refused")
         if h != 1e-8 or truncate:
             raise NotImplementedError("AutoARIMA: h and truncate are not carried by mojolearn.ARIMA")
-        s = int(s) if s else 0
+        # the reference's `if s is 1: s = None` (R users pass s=1 for a
+        # non-seasonal series): s <= 1 is non-seasonal, so D = P = Q = 0 and
+        # p, q range over 0..4, not 0..s-1
+        s = int(s) if s and int(s) > 1 else 0
         if s:
-            if not isinstance(D, (int, np.integer)):
+            # the reference's D choice: one option is taken as given; only a
+            # list of several runs the seasonal test
+            D_opts = _options("D", D, 0, 1)
+            if len(D_opts) > 1:
                 raise NotImplementedError(
                     f"AutoARIMA: seasonal_test={seasonal_test!r} (statsmodels' STL in the reference) is "
-                    "not implemented; pass D as one integer")
-            D_ = int(D)
+                    "not implemented; pass D as one value")
+            D_ = D_opts[0]
         else:
             D_ = 0
         d_opts = _options("d", d, 0, 2 - D_)

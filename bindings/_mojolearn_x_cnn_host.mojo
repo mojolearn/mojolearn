@@ -515,8 +515,8 @@ def _csr(csr_addr: PythonObject, params: PythonObject) raises -> Tuple[List[Int3
 
 
 def _csr_ints(csr_addr: PythonObject, n: Int, F: Int, nnz: Int, mode: Int) raises -> Tuple[List[Int32], List[Int32]]:
-    if n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 2:
-        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2}")
+    if n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 3:
+        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2, 3}")
     var csr = read_i32(Int(py=csr_addr), n + 1 + 2 * nnz)
     if Int(csr[0]) != 0 or Int(csr[n]) != nnz:
         raise Error("x_cnn spmm: rowptr must start at 0 and end at nnz")

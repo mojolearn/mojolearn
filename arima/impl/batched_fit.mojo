@@ -143,9 +143,10 @@ from glm.impl.qn.qn_util import (
     LS_MAX_ITERS_REACHED,
     LS_SUCCESS,
     OPT_MAX_ITERS_REACHED,
+    OPT_NUMERIC_ERROR,
     OPT_SUCCESS,
 )
-from std.math import isfinite
+from std.math import inf, isfinite, isinf
 from tsa.impl.timeSeries.arima_helpers import prepare_data
 
 
@@ -285,6 +286,7 @@ def eval_batch(
                 fout[b] = ftz(ftz(-llh[b]) / scale)
             for i in range(len(xin)):
                 gout[i] = ftz(ftz(-gh[i]) / scale)
+            _infeasible_fg(llh, batch_size, len(xin) // max(1, batch_size), fout, gout)
             return
     _upload(ctx, d_x, xin)
     var ll = batched_loglike_grad_x(
@@ -296,6 +298,23 @@ def eval_batch(
         fout[b] = ftz(ftz(-ll[b]) / scale)
     for i in range(len(xin)):
         gout[i] = ftz(ftz(-g[i]) / scale)
+    _infeasible_fg(ll, batch_size, len(xin) // max(1, batch_size), fout, gout)
+
+
+def _infeasible_fg(
+    ll: List[Float32], batch_size: Int, n: Int, mut fout: List[Float32], mut gout: List[Float32]
+):
+    """An INFEASIBLE candidate (`batched_loglike_x`, infeasible_inf: a
+    singular initial-state system or F <= 0 at the base or any
+    forward-difference point) is f = +inf with a zero gradient, both
+    constants: the line search's Armijo test fails and halves the step
+    (cuML's NaN does the same), and no computed NaN reaches a trace. The
+    host column (`arima_oracle._eval_batch`) writes the same."""
+    for b in range(batch_size):
+        if isinf(ll[b]) and ll[b] < Float32(0.0):
+            fout[b] = inf[DType.float32]()
+            for i in range(n):
+                gout[b * n + i] = Float32(0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -481,7 +500,14 @@ def batched_min_lbfgs(
         gnorm[b] = nrm_max_at(grad, b * n, n)
         if past > 0:
             fx_hist[b * past] = fx[b]
-        if check_convergence_at(param, 0, fx[b], gnorm[b], fx_hist, b * past):
+        if isinf(fx[b]):
+            # the start itself is infeasible: stop there, reported by
+            # retcode (the fitted point's log-likelihood is -inf), never a
+            # "minimizer" by a zero gradient
+            retcode[b] = Int32(OPT_NUMERIC_ERROR)
+            active[b] = False
+            n_iter[b] = Int32(0)
+        elif check_convergence_at(param, 0, fx[b], gnorm[b], fx_hist, b * past):
             retcode[b] = Int32(OPT_SUCCESS)
             active[b] = False
             n_iter[b] = Int32(0)

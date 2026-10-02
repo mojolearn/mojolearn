@@ -52,6 +52,7 @@ function of the GPU binding (inverse_transform, ...) is
 deliberately absent, so those surfaces refuse BY NAME through
 `_HostBinding` and never hash something else.
 """
+from glm.host.center_host import col_sums_on_cpu, center_on_cpu, scale_rows_on_cpu
 from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
@@ -407,6 +408,52 @@ def tsvd_explained_binding(
     with GILReleased(Python()):
         host_pca_validate_first(nr, nf, nc)
         host_tsvd_explained(f32_ptr(x_address), f32_ptr(c_address), ep, rp, nr, nf, nc)
+    return PythonObject(0)
+
+
+
+def lm_col_sums_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Lane hr-small-passes: the exact, correctly rounded float64 sum of
+    every column of a float32 [rows, cols] matrix, on the CPU column
+    (glm/host/center_host.mojo). params: rows, cols. Returns 0."""
+    if len(params) != 2:
+        raise Error("lm_col_sums: params must contain rows, cols")
+    var xa = Int(py=x_addr)
+    var oa = Int(py=out_addr)
+    var nr = Int(py=params[0])
+    var nc = Int(py=params[1])
+    with GILReleased(Python()):
+        col_sums_on_cpu(xa, oa, nr, nc)
+    return PythonObject(0)
+
+
+def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Lane hr-small-passes: out = x - mu per column in float32 on the
+    CPU column, subnormals flushed. params: rows, cols. Returns 0."""
+    if len(params) != 2:
+        raise Error("lm_center: params must contain rows, cols")
+    var xa = Int(py=x_addr)
+    var ma = Int(py=mu_addr)
+    var oa = Int(py=out_addr)
+    var nr = Int(py=params[0])
+    var nc = Int(py=params[1])
+    with GILReleased(Python()):
+        center_on_cpu(xa, ma, oa, nr, nc)
+    return PythonObject(0)
+
+
+def lm_scale_rows_binding(x_addr: PythonObject, w_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Lane hr-small-passes: out = x * w per row in float32 on the device,
+    subnormals flushed. params: rows, cols. Returns 0."""
+    if len(params) != 2:
+        raise Error("lm_scale_rows: params must contain rows, cols")
+    var xa = Int(py=x_addr)
+    var wa = Int(py=w_addr)
+    var oa = Int(py=out_addr)
+    var nr = Int(py=params[0])
+    var nc = Int(py=params[1])
+    with GILReleased(Python()):
+        scale_rows_on_cpu(xa, wa, oa, nr, nc)
     return PythonObject(0)
 
 
@@ -1344,6 +1391,9 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[tsvd_fit_binding]("tsvd_fit")
         module.def_function[tsvd_explained_binding]("tsvd_explained")
         module.def_function[ols_fit_binding]("ols_fit")
+        module.def_function[lm_col_sums_binding]("lm_col_sums")
+        module.def_function[lm_center_binding]("lm_center")
+        module.def_function[lm_scale_rows_binding]("lm_scale_rows")
         module.def_function[ridge_fit_binding]("ridge_fit")
         module.def_function[dbscan_fit_binding]("dbscan_fit")
         module.def_function[dbscan_fit_core_binding]("dbscan_fit_core")

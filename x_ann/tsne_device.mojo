@@ -9,6 +9,10 @@ from std.time import perf_counter_ns
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
+from std.sys.compile import is_defined
+from std.atomic import Atomic, Ordering, fence
+from std.gpu import grid_dim
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
@@ -21,7 +25,7 @@ from x_ann.fast_env import tsne_fast_split, tsne_fast_zsum
 from checks.numerics import identical_div, identical_mul
 from x_ann.tsne_core import ts_q
 from x_ann.tsne_core import (
-    F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_repulse_fold, ts_repulse_pair, ts_repulse_terms, ts_step_cell,
+    F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_repulse_fold, ts_repulse_pair, ts_repulse_terms, ts_step_cell, ts_z_add,
     ts_sum_cell, tsne_nn, tsne_symmetrize, tsne_validate,
 )
 
@@ -147,29 +151,32 @@ def sum_team_kernel(n: Int32, row_z: F32P, z: F32P):
         z.unsafe_store(0, part[0])
 
 
-#: stripes of candidate rows per row in the split repulsion
-comptime TS_SPLIT = 8
+#: stripes of candidate rows per row in the FAST-on-Apple striped repulsion
+#: (main's `repulse_split_kernel` / `TS_SPLIT` below are the NVIDIA and AMD
+#: arm; this one is selected at dispatch under FAST on Apple only)
+comptime TS_STRIPES = 8
 
 
-def repulse_split_kernel(n: Int32, y: F32P, part: F32P):
+def repulse_stripe_kernel(n: Int32, y: F32P, part: F32P):
     """FAST on Apple, `MOJOLEARN_TSNE_FAST_SPLIT=1` (lane/apple-fast-ann,
     2026-10-02): `repulse_tiled_kernel` with each row's candidate rows j
-    split into TS_SPLIT stripes, one threadgroup per (row block, stripe):
-    threadgroup (b, s) folds j in [s n / TS_SPLIT, (s + 1) n / TS_SPLIT) for
+    split into TS_STRIPES stripes, one threadgroup per (row block, stripe):
+    threadgroup (b, s) folds j in [s n / TS_STRIPES, (s + 1) n / TS_STRIPES) for
     rows b RTB .. b RTB + RTB - 1 (tiles of RTJ staged rows, the cell's
     `ts_repulse_pair` on ftz(y)) and stores its three partial sums at
-    part[(s n + i) 3 ..]; `repulse_join_kernel` adds the stripes in order.
+    part[(s n + i) 3 ..]; `repulse_stripe_join_kernel` adds the stripes in
+    order.
     Cause: `_ts_iter`'s repulsion ran n / RTB threadgroups (157 at the
     board's 20,000 rows), each thread walking every row, for all 1000
-    iterations, so the GPU was mostly idle; this runs TS_SPLIT times as many
+    iterations, so the GPU was mostly idle; this runs TS_STRIPES times as many
     threadgroups over the same pairs. FAST bits move (a fold per stripe,
     then across stripes): paired trustworthiness / KL check."""
     var t = Int(thread_idx.x)
     var nr = Int(n)
     var s = Int(block_idx.y)
     var i = Int(block_idx.x) * RTB + t
-    var j_lo = (s * nr) // TS_SPLIT
-    var j_hi = ((s + 1) * nr) // TS_SPLIT
+    var j_lo = (s * nr) // TS_STRIPES
+    var j_hi = ((s + 1) * nr) // TS_STRIPES
     var tile = stack_allocation[2 * RTJ, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var live = i < nr
     var y0 = Float32(0.0)
@@ -219,16 +226,16 @@ def repulse_split_kernel(n: Int32, y: F32P, part: F32P):
         part.unsafe_store(o + 2, r1)
 
 
-def repulse_join_kernel(n: Int32, part: F32P, row_z: F32P, rep: F32P):
-    """Row i's z, r0, r1 as the sum of its TS_SPLIT stripe partials in
-    stripe order (the split repulsion's second launch)."""
+def repulse_stripe_join_kernel(n: Int32, part: F32P, row_z: F32P, rep: F32P):
+    """Row i's z, r0, r1 as the sum of its TS_STRIPES stripe partials in
+    stripe order (the striped repulsion's second launch)."""
     var i = _tid()
     if i < Int(n):
         var nr = Int(n)
         var z = Float32(0.0)
         var r0 = Float32(0.0)
         var r1 = Float32(0.0)
-        for s in range(TS_SPLIT):
+        for s in range(TS_STRIPES):
             var o = (s * nr + i) * 3
             z = z + part.unsafe_load(o)
             r0 = ftz(r0 + part.unsafe_load(o + 1))
@@ -242,15 +249,15 @@ def _ts_repulse(
     ctx: DeviceContext, mut ycur: DeviceBuffer[DType.float32], n: Int, mut drz: DeviceBuffer[DType.float32],
     mut drep: DeviceBuffer[DType.float32], split: Bool, mut dpart: DeviceBuffer[DType.float32],
 ) raises:
-    """The repulsion launch: split over stripes under `split` (FAST on
-    Apple, lane/apple-fast-ann), the tiled kernel otherwise."""
+    """The repulsion launch: striped under `split` (FAST on Apple,
+    lane/apple-fast-ann), the tiled kernel otherwise."""
     comptime if _FAST_APPLE:
         if split:
-            ctx.enqueue_function[repulse_split_kernel](
-                Int32(n), ycur.unsafe_ptr(), dpart.unsafe_ptr(), grid_dim=((n + RTB - 1) // RTB, TS_SPLIT),
+            ctx.enqueue_function[repulse_stripe_kernel](
+                Int32(n), ycur.unsafe_ptr(), dpart.unsafe_ptr(), grid_dim=((n + RTB - 1) // RTB, TS_STRIPES),
                 block_dim=RTB,
             )
-            ctx.enqueue_function[repulse_join_kernel](
+            ctx.enqueue_function[repulse_stripe_join_kernel](
                 Int32(n), dpart.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB,
             )
             return
@@ -272,7 +279,157 @@ def _ts_zsum(ctx: DeviceContext, n: Int, mut drz: DeviceBuffer[DType.float32], m
     ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
 
 
+# lane/gap-nv-classical2: the repulsion and Z on NVIDIA and AMD. The tiled
+# kernel above runs one row per thread, 20k threads for the whole GPU, each
+# forming every pair's terms (a correctly rounded divide) in its own serial
+# loop. `repulse_split_kernel` forms the terms of RS_ROWS rows x RS_TJ
+# candidates with every thread of the block (`ts_repulse_terms`, the same
+# words) into threadgroup memory, then row i's owner folds them with
+# `ts_repulse_fold`'s statements in ascending j, skipping j == i: the same
+# fold in the same order. Z is `ts_sum_cell`'s pinned pairwise tree, folded
+# in parallel inside the same kernel (each block's rows, then the parts in
+# the block that finishes last), so no one-block launch remains. Both
+# coordinates' steps run in one thread (`step_rows_kernel`, the cell's
+# statements in the cell's order). -D MOJOLEARN_TSNE_SPLIT_OFF=1 restores
+# main's three kernels.
+comptime TS_SPLIT = (
+    (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD)
+    and not is_defined["MOJOLEARN_TSNE_SPLIT_OFF"]()
+)
+comptime RS_ROWS = 32
+comptime RS_TJ = 64
+comptime RS_TPB = 256
+comptime RS_DS = RS_TJ + 1
+#: the parts folded per pass by the last block (a power of two, <= 8 * RS_TPB)
+comptime ZT_CHUNK = 2048
+comptime ZS_CHUNK = 2048
+
+
+def repulse_split_kernel(n: Int32, y: F32P, row_z: F32P, rep: F32P, z_out: F32P, done: I32P, parts: F32P):
+    var tid = Int(thread_idx.x)
+    var nr = Int(n)
+    var i0 = Int(block_idx.x) * RS_ROWS
+    var ys = stack_allocation[2 * RS_TJ, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var yi_s = stack_allocation[2 * RS_ROWS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var q_s = stack_allocation[RS_ROWS * RS_DS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var a_s = stack_allocation[RS_ROWS * RS_DS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var b_s = stack_allocation[RS_ROWS * RS_DS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    if tid < 2 * RS_ROWS:
+        var v = Float32(0.0)
+        if 2 * i0 + tid < 2 * nr:
+            v = ftz(y.unsafe_load(2 * i0 + tid))
+        yi_s[tid] = v
+    var i = i0 + tid
+    var owner = tid < RS_ROWS and i < nr
+    var z = Float32(0.0)
+    var r0 = Float32(0.0)
+    var r1 = Float32(0.0)
+    var j0 = 0
+    while j0 < nr:
+        if tid < 2 * RS_TJ:
+            var v = Float32(0.0)
+            if 2 * j0 + tid < 2 * nr:
+                v = ftz(y.unsafe_load(2 * j0 + tid))
+            ys[tid] = v
+        barrier()
+        comptime for q in range(RS_ROWS * RS_TJ // RS_TPB):
+            var e = tid + q * RS_TPB
+            var rr = e // RS_TJ
+            var jj = e - rr * RS_TJ
+            var tm = ts_repulse_terms(yi_s[2 * rr], yi_s[2 * rr + 1], ys[2 * jj], ys[2 * jj + 1])
+            q_s[rr * RS_DS + jj] = tm[0]
+            a_s[rr * RS_DS + jj] = tm[1]
+            b_s[rr * RS_DS + jj] = tm[2]
+        barrier()
+        if owner:
+            var jn = RS_TJ if nr - j0 > RS_TJ else nr - j0
+            var row = tid * RS_DS
+            for r in range(jn):
+                if j0 + r != i:
+                    var tm = SIMD[DType.float32, 4](q_s[row + r], a_s[row + r], b_s[row + r], Float32(0.0))
+                    ts_repulse_fold(tm, z, r0, r1)
+        barrier()
+        j0 += RS_TJ
+    if owner:
+        row_z.unsafe_store(i, z)
+        rep.unsafe_store(2 * i, r0)
+        rep.unsafe_store(2 * i + 1, r1)
+        fence[ordering = Ordering.RELEASE]()
+    # Z: `ts_sum_cell`'s pinned pairwise tree, in parallel. This block's
+    # RS_ROWS (a power of two, so the block is an aligned subtree) fold level
+    # by level into parts[b]; the block that finishes last folds the parts,
+    # ZT_CHUNK (aligned) at a time, the same levels in place, until one
+    # node is left. The nodes are the tree's nodes, so the bits are the
+    # host's and Apple's.
+    var zs = stack_allocation[ZT_CHUNK, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var rows_here = RS_ROWS if nr - i0 > RS_ROWS else nr - i0
+    if tid < rows_here:
+        zs[tid] = z
+    var root = _tree_shared(zs, rows_here, tid, RS_TPB)
+    if tid == 0:
+        parts.unsafe_store(Int(block_idx.x), root)
+        fence[ordering = Ordering.RELEASE]()
+    var last = stack_allocation[1, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    barrier()
+    if tid == 0:
+        var old = Atomic.fetch_add(done, Int32(1))
+        last[0] = Int32(1) if Int(old) == Int(grid_dim.x) - 1 else Int32(0)
+    barrier()
+    if last[0] == Int32(0):
+        return
+    fence[ordering = Ordering.ACQUIRE]()
+    var count = Int(grid_dim.x)
+    while count > 1:
+        var c0 = 0
+        var nc = 0
+        while c0 < count:
+            var w = ZT_CHUNK if count - c0 > ZT_CHUNK else count - c0
+            for e in range(tid, w, RS_TPB):
+                zs[e] = parts.unsafe_load(c0 + e)
+            var r = _tree_shared(zs, w, tid, RS_TPB)
+            if tid == 0:
+                parts.unsafe_store(nc, r)
+            barrier()
+            fence[ordering = Ordering.ACQUIRE]()
+            c0 += ZT_CHUNK
+            nc += 1
+        count = nc
+    if tid == 0:
+        z_out.unsafe_store(0, ftz(parts.unsafe_load(0)))
+        done.unsafe_store(0, Int32(0))
+
+
 @always_inline
+def _tree_shared(
+    buf: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED], w_in: Int, tid: Int, nth: Int
+) -> Float32:
+    """The pinned pairwise tree over buf[0 : w_in] in place: level by level
+    node q = ftz(c[2q] + c[2q + 1]), an odd last node carried; returns the
+    root (unflushed when w_in == 1, as the tree carries it). Every thread of
+    the block calls it."""
+    barrier()
+    var w = w_in
+    while w > 1:
+        var pairs = w // 2
+        var vals = InlineArray[Float32, 8](fill=Float32(0.0))
+        var k = 0
+        for q in range(tid, pairs, nth):
+            vals[k] = ts_z_add(buf[2 * q], buf[2 * q + 1])
+            k += 1
+        barrier()
+        k = 0
+        for q in range(tid, pairs, nth):
+            buf[q] = vals[k]
+            k += 1
+        if w % 2 == 1 and tid == 0:
+            buf[pairs] = buf[w - 1]
+        barrier()
+        w = pairs + w % 2
+    var r = buf[0]
+    barrier()
+    return r
+
+
 def _step_tail(
     e: Int, yi: Float32, attr: Float32, y_new: F32P, rep: F32P, z: F32P, update: F32P, gains: F32P,
     exaggeration: Float32, momentum: Float32, learning_rate: Float32,
@@ -339,8 +496,19 @@ def _ts_iter(
     mut dptr: DeviceBuffer[DType.int32], mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32],
     mut drz: DeviceBuffer[DType.float32], mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
     mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
-    lr: Float32, split: Bool, zteam: Bool, mut dpart: DeviceBuffer[DType.float32],
+    lr: Float32, mut dcnt: DeviceBuffer[DType.int32], mut dparts: DeviceBuffer[DType.float32], split: Bool,
+    zteam: Bool, mut dpart: DeviceBuffer[DType.float32],
 ) raises:
+    comptime if TS_SPLIT:
+        ctx.enqueue_function[repulse_split_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                                   dz.unsafe_ptr(), dcnt.unsafe_ptr(), dparts.unsafe_ptr(),
+                                                   grid_dim=(n + RS_ROWS - 1) // RS_ROWS, block_dim=RS_TPB)
+        ctx.enqueue_function[step_rows_kernel](
+            Int32(n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
+            dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
+            mom, lr, grid_dim=_grid(n), block_dim=TPB,
+        )
+        return
     _ts_repulse(ctx, ycur, n, drz, drep, split, dpart)
     _ts_zsum(ctx, n, drz, dz, zteam)
     comptime if TS_STEP_ROWS:
@@ -443,15 +611,19 @@ def tsne_fit_device(
     var drz = ctx.enqueue_create_buffer[DType.float32](n)
     var drep = ctx.enqueue_create_buffer[DType.float32](2 * n)
     var dz = ctx.enqueue_create_buffer[DType.float32](1)
+    var dcnt = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(dcnt, Int32(0))
+    var dparts = ctx.enqueue_create_buffer[DType.float32]((n + RS_ROWS - 1) // RS_ROWS + 1)
     var dkl = ctx.enqueue_create_buffer[DType.float32](n)
     # lane/apple-fast-ann (2026-10-02): the two env switches of the
-    # iteration (x_ann/fast_env.mojo), read once here on the host; the
-    # stripe partials buffer exists only under the split
+    # iteration (x_ann/fast_env.mojo), read once per fit here on the host
+    # before the first launch; the stripe partials buffer exists only under
+    # the striped repulsion
     var split = tsne_fast_split()
     var zteam = tsne_fast_zsum()
     comptime if TS_ZSUM:
         zteam = True
-    var dpart = ctx.enqueue_create_buffer[DType.float32]((TS_SPLIT * n * 3) if split else 1)
+    var dpart = ctx.enqueue_create_buffer[DType.float32]((TS_STRIPES * n * 3) if split else 1)
     st.mark(ctx, "upload_graph")
     var t_rep = 0
     var t_sum = 0
@@ -468,11 +640,11 @@ def tsne_fit_device(
                 _ts_iter_timed(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
                                learning_rate, t_rep, t_sum, t_step, split, zteam, dpart)
         elif it % 2 == 0:
-            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate,
-                     split, zteam, dpart)
+            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt,
+                     dparts, split, zteam, dpart)
         else:
-            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate,
-                     split, zteam, dpart)
+            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt,
+                     dparts, split, zteam, dpart)
     st.mark(ctx, "iterations")
     if st.on:
         print("ANN-STAGE tsne_iter repulse", Float64(t_rep) / 1.0e6)
@@ -483,6 +655,9 @@ def tsne_fit_device(
     else:
         _ts_kl(ctx, dy2, n, dptr, dind, dval, drz, drep, dz, dkl)
     ctx.synchronize()
+    _ = dcnt^
+    _ = dparts^
+    _ = dpart^
     if max_iter % 2 == 0:
         y_out = download_f32(ctx, dy, 2 * n)
     else:
@@ -493,7 +668,6 @@ def tsne_fit_device(
         total = total + kl[i]
     kl_out = total
     st.host("kl_download")
-    _ = dpart^
     _ = dkl^
     _ = dz^
     _ = drep^

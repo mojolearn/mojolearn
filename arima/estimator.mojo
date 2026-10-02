@@ -275,7 +275,9 @@ def _loglike_at(
     already forward transformed, which is the same argument `predict` makes
     at `batched_arima.cu:175`. `check_finite = false`, because
     `batched_fit` already refused a non-finite series once and nothing has
-    written the buffer since."""
+    written the buffer since. `infeasible_inf`: a series the fit stopped
+    at an infeasible start (retcode NUMERIC_ERROR) reads -inf, reported,
+    not raised for the whole batch."""
     var fut = ctx.enqueue_create_buffer[DType.float32](1)
     var n_ser = order.n_exog * batch_size
     if order.need_diff():
@@ -288,7 +290,7 @@ def _loglike_at(
         ctx.synchronize()
         var lld = batched_loglike_x(
             ctx, y_kf, x_kf, fut, batch_size, n_kf, order.without_diff(), params,
-            False, 0, 32, False,
+            False, 0, 32, False, True,
         )
         var got = lld.loglike.copy()
         _ = lld^
@@ -297,7 +299,7 @@ def _loglike_at(
         _ = fut^
         return got^
     var ll = batched_loglike_x(
-        ctx, y, exog, fut, batch_size, n_obs, order, params, False, 0, 32, False
+        ctx, y, exog, fut, batch_size, n_obs, order, params, False, 0, 32, False, True
     )
     var out = ll.loglike.copy()
     _ = ll^
