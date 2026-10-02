@@ -124,5 +124,17 @@ trait Exec:
         ...
 
     @staticmethod
+    def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
+        """R (n x n, n = d + nrhs) of [a | b] by the blocked TSQR
+        (x_decomp/tsqr_core.mojo); `keep` holds the factorization for
+        `tsqr_apply`."""
+        ...
+
+    @staticmethod
+    def tsqr_apply(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
+        """q (m x k) = Q c for the kept factorization (k == 0: release it)."""
+        ...
+
+    @staticmethod
     def vendor() -> String:
         ...

@@ -1047,12 +1047,123 @@ def _qr_q_factor(a_arr, rows, cols):
     return _xd_kit().geqrf(_xd_matrix(a_arr, rows, cols))
 
 
+# ===========================================================================
+# THE BLOCKED TSQR (lane neural-pass140, 2026-10-02): x_decomp/tsqr_core.mojo
+# (the order), x_decomp/tsqr_device.mojo (the kernels), x_decomp/
+# tsqr_host.mojo (their host replay, the whole route on a CPU-only install).
+#
+# A tall matrix (rows >= cols, cols <= _TS_MAX_N) is cut into blocks of 4096
+# rows, each block factored by panel-blocked Householder reflectors in its
+# own threadgroup, the block R factors combined in a fixed binary tree; Q is
+# never formed by itself: `x_decomp_tsqr_q` applies the kept reflectors to a
+# small n x k C (the tree top down, then every block), so `qr` asks for
+# Q diag(+-1) and `svd` for Q U_R in ONE pass over the rows. No Gram matrix
+# anywhere. It replaced (as the default; MOJOLEARN_LINALG_TSQR=0 keeps the
+# old device routes for the A/B) geqrf + orgqr (`qr` 'reduced': one dependent
+# chain of m multiply-adds per column per step) and `_svd_tall` on the whole
+# matrix (a 64-slice QR, then two more for U's orthonormalization): at
+# 1,000,000 x 220 on the L40S, 8.4 s and 15.1 s.
+#
+# SEMANTICS. `qr(mode='reduced')`: R's diagonal is NON-NEGATIVE (each row of R
+# whose diagonal came out negative is negated, and Q's column with it: an
+# exact sign flip). With a full-rank A that is THE QR factorization, a
+# function of A alone; LAPACK's signs (numpy's) come out of its own
+# reflector sequence and differ row by row; neither promises more than
+# A = Q R with Q orthonormal and R upper triangular. A zero diagonal (a
+# dependent column, DEVIATION 588) stays zero. `svd(full_matrices=False)`:
+# S and V from the SVD of R (`_svd_tall` on the n x n R: the QR + one-sided
+# Jacobi and U_R's orthonormalization), U = Q U_R; the signs are the
+# Jacobi's as before.
+# ===========================================================================
+
+#: x_decomp/tsqr_core.mojo TS_MAX_N: the widest matrix the TSQR takes
+_TS_MAX_N = 512
+
+
+def _tsqr_on(rows, cols, extra=0):
+    """Whether the blocked TSQR serves a rows x (cols + extra) factorization:
+    tall, at most _TS_MAX_N wide, and not turned off for the A/B
+    (MOJOLEARN_LINALG_TSQR=0)."""
+    n = cols + extra
+    return (os.environ.get("MOJOLEARN_LINALG_TSQR", "1") != "0"
+            and cols >= 1 and n <= _TS_MAX_N and rows >= n)
+
+
+def _tsqr_r(b, a_arr, rows, cols, keep):
+    """R (cols x cols, an Array) of the TSQR of a_arr; `keep` holds the
+    factorization in the binding for one `_tsqr_q`."""
+    R = empty((cols, cols), "<f4")
+    # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), params
+    # (m, d, nrhs, keep); b is not read when nrhs is 0
+    b.x_decomp_tsqr_r(addr_ro(a_arr, name="a"), addr_ro(a_arr, name="a"), addr(R, name="r_out"),
+                      [int(rows), int(cols), 0, 1 if keep else 0])
+    return R
+
+
+def _tsqr_q(b, C, rows, cols, k):
+    """Q C (rows x k, an Array) for the kept factorization; C is cols x k."""
+    out = empty((rows, k), "<f4")
+    b.x_decomp_tsqr_q(addr_ro(C, name="c"), addr(out, name="q_out"), [int(rows), int(cols), int(k)])
+    return out
+
+
+def _tsqr_release(b):
+    try:
+        one = empty((1,), "<f4")
+        b.x_decomp_tsqr_q(addr_ro(one, name="c"), addr(one, name="q_out"), [1, 1, 0])
+    except Exception:
+        pass
+
+
+def _qr_tsqr(a_arr, rows, cols):
+    """`qr(a, 'reduced')` through the blocked TSQR: (Q, R), R's diagonal
+    non-negative."""
+    import array as _array
+    from ._buffer import frombytes
+    b = _xd_kit().b
+    R = _tsqr_r(b, a_arr, rows, cols, True)
+    try:
+        rs = _array.array("f")
+        rs.frombytes(R.tobytes())
+        sg = [-1.0 if rs[j * cols + j] < 0.0 else 1.0 for j in range(cols)]
+        for j in range(cols):
+            if sg[j] < 0.0:
+                rs[j * cols:(j + 1) * cols] = _array.array("f", [-v for v in rs[j * cols:(j + 1) * cols]])
+        d = _array.array("f", bytes(4 * cols * cols))
+        for j in range(cols):
+            d[j * cols + j] = sg[j]
+        C = frombytes(d.tobytes(), "<f4", (cols, cols))
+    except BaseException:
+        _tsqr_release(b)
+        raise
+    Q = _tsqr_q(b, C, rows, cols, cols)
+    return QRResult(Q, frombytes(rs.tobytes(), "<f4", (cols, cols)))
+
+
+def _svd_tsqr(a_arr, rows, cols):
+    """`svd(a, full_matrices=False)` of a tall a through the blocked TSQR:
+    the SVD of its R, then U = Q U_R."""
+    k = _xd_kit()
+    b = k.b
+    R = _tsqr_r(b, a_arr, rows, cols, True)
+    try:
+        Ur, S, Vt = _svd_tall(k, _xd_matrix(R, cols, cols), False)
+        C = Ur.out()
+    except BaseException:
+        _tsqr_release(b)
+        raise
+    U = _tsqr_q(b, C, rows, cols, cols)
+    return SVDResult(U, S.out((cols,)), Vt.out())
+
+
 def _qr_q(a, mode):
     """numpy.linalg.qr's 'reduced', 'complete' and 'raw' modes: LAPACK geqrf
     (the reflectors kept, dlarfg's signs) and orgqr, through the decomp
     lane's cells (x_decomp/cells.mojo `geqrf_serial`, `orgqr_col`, DEVIATION
     5320; lane/algos-decomp, 2026-09-27). Any shape, wide included."""
     a_arr, rows, cols = _two_d(a, "a")
+    if mode == "reduced" and _tsqr_on(rows, cols):
+        return _qr_tsqr(a_arr, rows, cols)
     k = _xd_kit()
     h, tau = _qr_q_factor(a_arr, rows, cols)
     kk = min(rows, cols)
@@ -1080,7 +1191,10 @@ def qr(a, mode="r"):
         (K, N)), 'complete' (Q (M, M), R (M, N)), 'raw' (h (N, M), tau (K,)),
         K = min(M, N): LAPACK's geqrf with its reflectors kept, dlarfg's sign
         convention, and orgqr for Q, in the decomp lane's cells (IDENTICAL on
-        every column; DEVIATION 5320). 'r' is the TSQR route below (M >= N
+        every column; DEVIATION 5320). EXCEPT 'reduced' of a tall matrix with
+        N <= 512: the blocked TSQR (`_qr_tsqr`, lane neural-pass140), R's
+        diagonal non-negative (see THE BLOCKED TSQR above `_qr_tsqr`);
+        MOJOLEARN_LINALG_TSQR=0 keeps geqrf + orgqr there too. 'r' is the TSQR route below (M >= N
         only), which never forms Q; its R agrees with 'reduced''s to float32
         rounding but is not the same bits (a different reduction tree).
 
@@ -1342,10 +1456,15 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
     eigh (the lower triangle): S = |w| descending, U = v, Vh = (sign(w) v)^T.
     ``compute_uv=False`` returns `svdvals` (of ``a.T`` when wide), as numpy's
     svdvals is svd(compute_uv=False). The signs of U's and V's columns are
-    the Jacobi's, not LAPACK's: numpy promises none either."""
+    the Jacobi's, not LAPACK's: numpy promises none either.
+    ``full_matrices=False`` of a tall A with N <= 512 is the blocked TSQR
+    (`_svd_tsqr`, lane neural-pass140): the same SVD of A's R, U = Q U_R in
+    one pass over the rows (MOJOLEARN_LINALG_TSQR=0 keeps the route above)."""
     a_arr, rows, cols = _two_d(a, "a")
     if not compute_uv:
         return svdvals(a_arr)
+    if not hermitian and not full_matrices and _tsqr_on(rows, cols):
+        return _svd_tsqr(a_arr, rows, cols)
     k = _xd_kit()
     A = _xd_matrix(a_arr, rows, cols)
     if hermitian:

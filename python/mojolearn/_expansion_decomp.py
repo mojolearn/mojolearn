@@ -1982,16 +1982,96 @@ def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normal
     return U.cols(0, kc), S.cols(0, kc), Vt.rows(0, kc)
 
 
+#: x_decomp/tsqr_core.mojo TS_MAX_N: the widest [A | B] the TSQR takes
+_TS_MAX_N = 512
+
+
+def _f32_input(X, name, ndim):
+    """A C-contiguous float32 Array of X (no copy when it already is one),
+    NaN/inf refused as `_M.from_input` refuses them."""
+    if _is_sparse(X):
+        X = X.toarray()
+    a = as_f32_c(X, ndim=ndim, name=name)[0]
+    if min(a.shape) == 0:
+        raise ValueError(f"{name}: a nonempty input is required")
+    fin = _host_all_finite(a)
+    if fin is False:
+        raise ValueError(f"{name}: input must be finite; NaN/inf are unsupported")
+    if fin is None:
+        _M.from_input(a if a.ndim == 2 else a.reshape(a.shape[0], 1), name)
+    return a
+
+
+def _tsqr_lstsq_on(m, nn, nrhs):
+    import os
+    return (os.environ.get("MOJOLEARN_LINALG_TSQR", "1") != "0"
+            and nn >= 1 and nrhs >= 1 and nn + nrhs <= _TS_MAX_N and m >= nn + nrhs)
+
+
+def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond):
+    """(X nn x nrhs, residuals _M 1 x nrhs or None, rank, S 1 x nn) of
+    min ||A X - B|| through the blocked TSQR of [A | B] (lane
+    neural-pass140; x_decomp/tsqr_core.mojo): R_aug = [[R, C], [0, R22]]
+    with C = Q^T B, so no pass over the rows after the factorization and no
+    Gram matrix. The minimum-norm solution is the SVD of the small R
+    (`_svd_tall`: S descending, U_R orthonormal): X = V diag(1/s) U_R^T C,
+    singular values at or below rcond * s_max dropped, as before; the
+    residuals (rank == nn < m only) are the squared column norms of R22,
+    which is ||b - a x||^2 at the least-squares solution."""
+    from ._linalg_impl import _svd_tall
+    from ._buffer import addr_ro
+    n = nn + nrhs
+    Ra = _M.zeros(n, n)
+    # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), (m, d, nrhs, keep)
+    k.b.x_decomp_tsqr_r(addr_ro(a_arr, name="a"), addr_ro(b_arr, name="b"), Ra.addr,
+                        [int(m), int(nn), int(nrhs), 0])
+    top = Ra.rows(0, nn)
+    R, C = top.cols(0, nn), top.cols(nn, n)
+    Ur, S, Vt = _svd_tall(k, R, False)
+    cut = _f32(S.s[0] * rcond)
+    rank = sum(1 for v in S.s if v > cut)
+    inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
+    X = k.mm(Vt, k.ew("mul", k.mm(Ur, C, ta=True), inv.T), ta=True)
+    res = None
+    if rank == nn and m > nn:
+        res = k.colsum(k.ew("sq", Ra.rows(nn, n).cols(nn, n)))
+    return X, res, rank, S
+
+
+def _lstsq_tsqr(k, a, b, vec, rcond):
+    """`lstsq` through the blocked TSQR when it serves the shape (tall,
+    [A | B] at most _TS_MAX_N wide), else None (the SVD route below)."""
+    a_arr = _f32_input(a, "a", 2)
+    m, nn = a_arr.shape
+    b_arr = _f32_input(b, "b", 1 if vec else 2)
+    nrhs = 1 if vec else b_arr.shape[1]
+    if b_arr.shape[0] != m:
+        raise ValueError("Incompatible dimensions")
+    if not _tsqr_lstsq_on(m, nn, nrhs):
+        return None
+    if rcond is None:
+        rcond = _F32_EPS * max(m, nn)
+    X, res, rank, S = _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond)
+    resid = res.out((nrhs,)) if res is not None else _M.zeros(1, 0).out((0,))
+    return (X.out((nn,)) if vec else X.out()), resid, rank, S.out((nn,))
+
+
 def lstsq(a, b, rcond=None, *, numeric_mode=None):
-    """numpy.linalg.lstsq: (x, residuals, rank, s) through the SVD of a
-    (the Gram eigh of the smaller side, singular values descending), singular
-    values at or below rcond * s_max treated as zero (rcond None: float32
-    eps * max(M, N)). residuals are the squared column norms of b - a x when
-    rank == N < M, else empty."""
+    """numpy.linalg.lstsq: (x, residuals, rank, s), singular values
+    descending, those at or below rcond * s_max treated as zero (rcond None:
+    float32 eps * max(M, N)); residuals are the squared column norms of
+    b - a x when rank == N < M, else empty. A tall a with N + nrhs <= 512
+    takes the blocked TSQR of [a | b] and the SVD of its small R
+    (`_tsqr_lstsq_core`, lane neural-pass140; MOJOLEARN_LINALG_TSQR=0 keeps
+    the route below); any other shape the QR + one-sided Jacobi SVD of a (or
+    of a^T)."""
     k = _Kit(_mode(numeric_mode))
+    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
+    got = _lstsq_tsqr(k, a, b, vec, rcond)
+    if got is not None:
+        return got
     A = _M.from_input(a, "a")
     m, nn = A.r, A.c
-    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
     B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
     if B.r != m:
         raise ValueError("Incompatible dimensions")

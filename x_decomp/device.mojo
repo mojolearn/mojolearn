@@ -92,6 +92,7 @@ from x_decomp.jacobi2 import (
     one_sided_svd2_finish_kernel,
 )
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
+from x_decomp.tsqr_device import ts_apply_device, ts_factor_device, ts_free_device, ts_pack_device
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
@@ -2401,6 +2402,39 @@ struct DevExec(Exec):
         var got = device_qr_r(xd_ctx(), w, m, n)
         for t in range(n * n):
             r.unsafe_store(t, got[t])
+
+    @staticmethod
+    def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
+        """The blocked TSQR on the device (x_decomp/tsqr_device.mojo)."""
+        var ctx = xd_ctx()
+        var n = d + nrhs
+        if nrhs == 0:
+            var da = _up(ctx, a, m * n)
+            ts_factor_device(ctx, da, m, n, r, keep)
+            _ = da^
+        else:
+            var ta = _up(ctx, a, m * d)
+            var tb = _up(ctx, b, m * nrhs)
+            var da = ts_pack_device(ctx, ta, tb, m, d, nrhs)
+            ctx.synchronize()
+            _ = ta^
+            _ = tb^
+            ts_factor_device(ctx, da, m, n, r, keep)
+            _ = da^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def tsqr_apply(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
+        if k == 0:
+            ts_free_device()
+            return
+        var ctx = xd_ctx()
+        var dq = ts_apply_device(ctx, c, m, n, k)
+        _down(ctx, dq, q, m * k)
+        ctx.synchronize()
+        _ = dq^
+        _ = ctx^
 
     @staticmethod
     def vendor() -> String:
