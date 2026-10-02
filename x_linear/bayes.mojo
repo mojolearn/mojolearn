@@ -23,7 +23,8 @@ from x_linear.ops import (
     cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
     add_acc, axpy_acc, axpy_centered, par_rows,
 )
-from std.sys.info import is_gpu
+from std.sys.info import is_gpu, has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_linear.team import Team
 from x_linear.tops import fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad, t_jacobi_eig, t_cholesky
 
@@ -157,6 +158,60 @@ def _t_sse(t: Team, x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, 
         else:
             acc = fold_sq(rb, 0, n)
     return t.bcast(acc)
+
+
+#: FAST on Apple (lane/apple-fast-classical, 2026-10-02): the evidence
+#: iteration's sse from the normal equations instead of a pass over the rows.
+#: With yy = |y - ym|^2, q = Xc'yc and G = Xc'Xc already in hand,
+#: |yc - Xc w|^2 = yy - 2 w'q + w'G w: O(d) (BayesianRidge, in the
+#: eigenbasis) or O(d^2) (ARD) an iteration in place of n * d on ONE block
+#: (300 iterations x 1M rows x 220 features of `_t_sse`). Unweighted fits
+#: only; ip[5] (set by x_linear/device.mojo, `MOJOLEARN_X_LINEAR_GRAM_SSE=0`
+#: is the A/B arm) turns it on. IDENTICAL and the other vendors never compile it.
+comptime X_LINEAR_GRAM_SSE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+
+
+def _t_yy(t: Team, y: FP, n: Int, ym: Float32) -> Float32:
+    """|y - ym|^2 on the team: strided per-thread partials in team row 0,
+    the lead folds the nt partials; broadcast."""
+    var acc = Float32(0)
+    if n >= t.nt:
+        var pr = t.row(0)
+        var a = Float32(0)
+        for i in range(t.tid, n, t.nt):
+            var r = fs(ld(y, i), ym)
+            a = fmad(r, r, a)
+        st(pr, t.tid, a)
+        t.sync()
+        if t.lead():
+            for k in range(t.nt):
+                acc = fa(acc, ld(pr, k))
+    elif t.lead():
+        for i in range(n):
+            var r = fs(ld(y, i), ym)
+            acc = fmad(r, r, acc)
+    return t.bcast(acc)
+
+
+def _t_sse_gram(t: Team, fw: FP, gg: Int, xty: Int, res: FP, d: Int, yy: Float32) -> Float32:
+    """yy - 2 w'q + w'G w on the team (G intact at gg, q at xty, w in res):
+    thread j's term w_j (G w)_j - 2 w_j q_j in team row 0, the lead's sum."""
+    var pr = t.row(0)
+    for j in range(t.tid, d, t.nt):
+        var wj = ld(res, j)
+        var g = Float32(0)
+        if wj != 0:
+            for k in range(d):
+                g = fmad(ld(fw, gg + j * d + k), ld(res, k), g)
+        st(pr, j, fs(fm(wj, g), fm(fm(Float32(2), wj), ld(fw, xty + j))))
+    t.sync()
+    var s = Float32(0)
+    if t.lead():
+        var acc = Float32(0)
+        for j in range(d):
+            acc = fa(acc, ld(pr, j))
+        s = fmax(fa(yy, acc), Float32(0))
+    return t.bcast(s)
 
 
 def _var(y: FP, n: Int) -> Float32:
@@ -310,6 +365,12 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
     var lam = ld(fp, 6)
     if lam < 0:
         lam = Float32(1)
+    var gram_sse = False
+    var yy = Float32(0)
+    comptime if is_gpu() and X_LINEAR_GRAM_SSE:
+        if not sw and ldi(ip, 5) != 0:
+            gram_sse = True
+            yy = _t_yy(t, y, n, ym)
     var iters = 0
     for it in range(max_iter + 1):
         # coef = V diag(1/(ev + lam/alpha)) V' X'y
@@ -324,7 +385,25 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
         if it == max_iter:
             break  # the last update after the loop
         iters = it + 1
-        var sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, sw, fw + 3 * d * d + 5 * d)
+        var sse: Float32
+        comptime if is_gpu() and X_LINEAR_GRAM_SSE:
+            if gram_sse:
+                # w = V z, z_k = vty_k / (ev_k+ + lam/alpha); in the eigenbasis
+                # yy - 2 w'q + w'G w = yy - sum_k (2 z_k vty_k - ev_k z_k^2)
+                var s = Float32(0)
+                if t.lead():
+                    var ratio = fd(lam, alpha)
+                    var acc = Float32(0)
+                    for k in range(d):
+                        var v = ld(fw, vty + k)
+                        var z = fd(v, fa(ld(fw, tmp + k), ratio))
+                        acc = fa(acc, fs(fm(fm(Float32(2), z), v), fm(ld(fw, gg + k * d + k), fm(z, z))))
+                    s = fmax(fs(yy, acc), Float32(0))
+                sse = t.bcast(s)
+            else:
+                sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, sw, fw + 3 * d * d + 5 * d)
+        else:
+            sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, sw, fw + 3 * d * d + 5 * d)
         var stop = 0
         if t.lead():
             var gamma = Float32(0)
@@ -513,13 +592,26 @@ def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
         for j in range(d):
             sti(iw, keep + j, 1)
     alpha = t.bcast(alpha, 2)
+    var gram_sse = False
+    var yy = Float32(0)
+    comptime if is_gpu() and X_LINEAR_GRAM_SSE:
+        if ldi(ip, 5) != 0 and n >= d:
+            gram_sse = True
+            yy = _t_yy(t, y, n, ym)
     var iters = 0
     var any_kept = True
     for it in range(max_iter):
         iters = it + 1
         var dk = _t_ard_sigma(t, d, fw, gg, aa, sg, lamo, alpha, iw, keep)
         _t_ard_coef(t, d, dk, fw, sg, xty, alpha, iw, keep, res)
-        var sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, False, fw + 3 * d * d + 4 * d)
+        var sse: Float32
+        comptime if is_gpu() and X_LINEAR_GRAM_SSE:
+            if gram_sse:
+                sse = _t_sse_gram(t, fw, gg, xty, res, d, yy)
+            else:
+                sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, False, fw + 3 * d * d + 4 * d)
+        else:
+            sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, False, fw + 3 * d * d + 4 * d)
         var stop = 0
         if t.lead():
             var gsum = Float32(0)

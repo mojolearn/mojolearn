@@ -1190,6 +1190,13 @@ def fit_device(
         while len(hip) < 5:
             hip.append(Int32(0))
         hip[4] = Int32(1 if grid_gram else 0)
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        # x_linear/bayes.mojo `X_LINEAR_GRAM_SSE`: ip[5], the sse from the
+        # normal equations (lane/apple-fast-classical); `=0` is the A/B arm
+        if bayes_like:
+            while len(hip) < 6:
+                hip.append(Int32(0))
+            hip[5] = Int32(0 if String(getenv("MOJOLEARN_X_LINEAR_GRAM_SSE")) == "0" else 1)
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](
         team_work(n, team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr()))), team_own(algo, d)))
