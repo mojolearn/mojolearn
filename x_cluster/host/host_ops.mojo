@@ -597,3 +597,7 @@ struct HostOps(ClusterOps):
         var pw = self._fp(w)
         for j in range(k):
             mb_center_update(pb, batch, pl, pc, pw, j, d)
+
+    def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
+        self.gather_rows(src, d, idx, m, dst)
+        self.nearest(dst, m, c, k, d, labels, dist)

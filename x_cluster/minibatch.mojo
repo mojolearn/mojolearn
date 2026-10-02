@@ -200,8 +200,7 @@ def minibatch_fit[O: ClusterOps](
             for t in range(batch):
                 bi32.append(Int32(bidx[t]))
             ops.set_i(islot, bi32)
-            ops.gather_rows(xs, d, islot, batch, bslot)
-            ops.nearest(bslot, batch, cslot, k, d, lslot, dslot)
+            ops.mb_assign(xs, d, islot, batch, cslot, k, lslot, dslot, bslot)
             ops.mb_update(bslot, batch, lslot, cslot, wslot, k, d)
             var got = ops.gets([dslot, wslot], [batch, k])
             batch_inertia = sum_f64(got[0], batch)

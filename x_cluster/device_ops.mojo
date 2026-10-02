@@ -18,6 +18,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 from x_cluster.bodies import (
     FPtr,
+    sq_dist_rows,
     IPtr,
     cov_cell,
     chain_add,
@@ -49,6 +50,8 @@ from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_works
 from gemm.checks.gemm_oracle import OP_TN
 from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
 from x_cluster.ops import ClusterOps
+from std.gpu import WARP_SIZE
+from std.gpu.primitives.warp import shuffle_idx
 from x_cluster.minibatch_cells import mb_center_wsum, mb_center_word
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 
@@ -1599,6 +1602,14 @@ struct DeviceOps(ClusterOps):
         self.ctx.enqueue_copy(dst_buf=view, src_ptr=self.pend_i[len(self.pend_i) - 1].unsafe_ptr())
         self._ph1("set_i")
 
+    def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[_mb_assign_kernel](
+            self._fp(src), Int32(d), self._ip(idx), Int32(m), self._fp(c), Int32(k), self._ip(labels),
+            self._fp(dist), self._fp(dst), grid_dim=_grid(m), block_dim=TPB,
+        )
+        self._ph1("mb_assign")
+
     def mb_update(mut self, b: Int, batch: Int, labels: Int, c: Int, w: Int, k: Int, d: Int) raises:
         self._ph0()
         comptime if MB_BLOCK_FITS:
@@ -1673,19 +1684,29 @@ def _mb_centers_block_kernel(b: FPtr, batch: Int32, labels: IPtr, c: FPtr, w: FP
         var t0 = 0
         while t0 < nb:
             var mine = 1 if (t0 + tid < nb and Int(labels[t0 + tid]) == j) else 0
-            barrier()
-            scan[tid] = Int32(mine)
-            barrier()
+            # inclusive scan: within the warp by shuffles, then the warp
+            # totals (integers: any order gives the same counts)
+            var lane = tid % WARP_SIZE
+            var wid = tid // WARP_SIZE
+            var v = Int32(mine)
             var off = 1
-            while off < MB_TPB:
-                var v = Int(scan[tid]) + (Int(scan[tid - off]) if tid >= off else 0)
-                barrier()
-                scan[tid] = Int32(v)
-                barrier()
+            while off < WARP_SIZE:
+                var u = shuffle_idx(v, UInt32(max(lane - off, 0)))
+                if lane >= off:
+                    v += u
                 off *= 2
+            barrier()
+            if lane == WARP_SIZE - 1:
+                scan[wid] = v
+            barrier()
+            var base = Int32(0)
+            for q in range(wid):
+                base += scan[q]
+            var m = 0
+            for q in range(MB_TPB // WARP_SIZE):
+                m += Int(scan[q])
             if mine == 1:
-                sel[Int(scan[tid]) - 1] = Int32(tid)
-            var m = Int(scan[MB_TPB - 1])
+                sel[Int(base + v) - 1] = Int32(tid)
             barrier()
             if f < dd:
                 # the loads of MB_PF rows issued before their adds (the adds
@@ -1711,3 +1732,25 @@ def _mb_centers_block_kernel(b: FPtr, batch: Int32, labels: IPtr, c: FPtr, w: FP
     barrier()
     if tid == 0 and total > 0:
         w[j] = ftz(wj + Float32(total))
+
+
+def _mb_assign_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, c: FPtr, k: Int32, labels: IPtr, dist: FPtr,
+                      dst: FPtr):
+    """One thread a batch row t (lane/neural-pass133): copies row idx[t] of
+    `src` to row t of `dst`, then `nearest_row`'s loop on it (the same
+    `sq_dist_rows` words, the lowest index on a tie)."""
+    var t = _tid()
+    if t < Int(m):
+        var dd = Int(d)
+        var r = Int(idx[t])
+        for f in range(dd):
+            dst[t * dd + f] = src[r * dd + f]
+        var best = sq_dist_rows(dst, t, c, 0, dd)
+        var bi = 0
+        for j in range(1, Int(k)):
+            var v = sq_dist_rows(dst, t, c, j, dd)
+            if v < best:
+                best = v
+                bi = j
+        labels[t] = Int32(bi)
+        dist[t] = best

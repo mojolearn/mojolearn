@@ -204,3 +204,9 @@ trait ClusterOps(Movable):
         host loop's (`c * w`, `+ x` in batch order, `w += wsum`, `* (1 / w)`),
         a center without rows untouched (lane/neural-pass133)."""
         ...
+
+    def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
+        """`gather_rows(src, d, idx, m, dst)` then `nearest(dst, m, c, k, d,
+        labels, dist)`: the device fuses them into one launch (the same words;
+        lane/neural-pass133)."""
+        ...
