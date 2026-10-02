@@ -23,7 +23,8 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_ENETCV
+from x_linear.cd_grid import enetcv_fit_grid
 from x_linear.ops import ld, st, fd, i2f
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
@@ -144,6 +145,13 @@ def _lars_grid_gram() -> Bool:
     return String(getenv("MOJOLEARN_X_LINEAR_LARS_GRID_GRAM")) != "0"
 
 
+def _enetcv_grid() -> Bool:
+    """`MOJOLEARN_X_LINEAR_ENETCV_GRID=0` keeps LassoCV / ElasticNetCV on
+    the one-block team fit (the A/B arm); default the grid form
+    (x_linear/cd_grid.mojo)."""
+    return String(getenv("MOJOLEARN_X_LINEAR_ENETCV_GRID")) != "0"
+
+
 def _fit_on_host(
     algo: Int, x: FP, y: FP, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
@@ -199,6 +207,9 @@ def fit_device(
         if n >= XB_MIN_ROWS and gram_handles(algo):
             gram_fit(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
             return
+    if algo == ALGO_ENETCV and d > 0 and len(ip) >= 7 and _enetcv_grid():
+        enetcv_fit_grid(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
+        return
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
     var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(fp), 1))
