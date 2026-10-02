@@ -4,7 +4,7 @@
 the device (lane/apple-fast-ann, 2026-10-02; x_ann/fast_env.mojo switches,
 each read on the host at dispatch, default off).
 
-`MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1` (`fast_trainset_device`,
+`-D MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1` (`fast_trainset_device`,
 `fast_trainset_scale`): the coarse quantizer's FAST training sample
 (`IVF_FAST_TRAINSET`, 262,144 rows at 1,024 lists) gathered on the device
 from the rows already uploaded, and the fixed-point scale of its centroid
@@ -16,7 +16,7 @@ boundary). Cause (`ivf_flat_build.mojo`): the sample was built on the host
 one float at a time (57.7 M appends on Istella), summed by `plan_quantizer_scale`
 on the host and uploaded a second time beside the whole dataset.
 
-`MOJOLEARN_IVF_FAST_DEVICE_CSR=1` (`fast_list_layout_device`): the CSR
+`-D MOJOLEARN_IVF_FAST_DEVICE_CSR=1` (`fast_list_layout_device`): the CSR
 lists by a device histogram, scan and ranked scatter, the closure condition
 `ivf/checks/list_layout.mojo` states for DEVIATION 1800: `csr_count_kernel`
 (one threadgroup per CSR_ROWS rows: each row's rank among the earlier rows

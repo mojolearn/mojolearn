@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IVF-PQ: every subspace codebook trained by ONE batched Lloyd loop on the
 device (lane/apple-fast-ann, 2026-10-02; FAST on Apple, behind
-`MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1`, x_ann/fast_env.mojo).
+`-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1`, x_ann/fast_env.mojo).
 
 Cause (`x_ann/ivf_pq_device.mojo` `_codebooks`, `ivf_pq_build_device`): the
 n x rot_dim residual matrix was downloaded to the host (352 MB on Istella),

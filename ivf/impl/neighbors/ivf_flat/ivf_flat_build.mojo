@@ -90,14 +90,15 @@ from std.memory import memcpy
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES, ANN3_TRAINSET_COPY
 from x_ann.kpp_seed import kpp_seed
-from x_ann.fast_env import ANN_FAST_APPLE, ivf_fast_device_csr, ivf_fast_device_trainset
+from x_ann.fast_env import FAST_IVF_DEVICE_CSR, FAST_IVF_DEVICE_TRAINSET
 from ivf.impl.neighbors.ivf_flat.fast_build_device import (
     CSR_LISTS_MAX, fast_list_layout_device, fast_trainset_device, fast_trainset_scale,
 )
 
 #: lane/apple-fast-ann (2026-10-02): the device build passes compile under
-#: FAST on Apple and run by env switch (x_ann/fast_env.mojo)
-comptime IVF_FAST_DEVICE = ANN_FAST_APPLE
+#: FAST on Apple, each arm by its build define (x_ann/fast_env.mojo)
+comptime IVF_FAST_TRAINSET = FAST_IVF_DEVICE_TRAINSET
+comptime IVF_FAST_CSR = FAST_IVF_DEVICE_CSR
 
 comptime IVF_FAST_TRAINSET = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -383,7 +384,7 @@ def ivf_flat_build(
     comptime if IVF_FAST_TRAINSET:
         if n_rows > IVF_FAST_ROWS_PER_LIST * n_lists:
             n_train = IVF_FAST_ROWS_PER_LIST * n_lists
-    # FAST on Apple, `MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1` (lane/apple-fast-
+    # FAST on Apple, `-D MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1` (lane/apple-fast-
     # ann, 2026-10-02; fast_build_device.mojo): the sample is gathered on the
     # device from `dx` and its scale comes from device column sums, so no
     # host sample list, no host column pass and no second upload. Cause:
@@ -391,8 +392,8 @@ def ivf_flat_build(
     # over them and the upload of `xt` beside `x`. The scale can differ
     # only at a power-of-two boundary (its docstring): FAST bits may move.
     var dev_train = False
-    comptime if IVF_FAST_DEVICE:
-        dev_train = n_train < n_rows and not trace.enabled and ivf_fast_device_trainset()
+    comptime if IVF_FAST_TRAINSET:
+        dev_train = n_train < n_rows and not trace.enabled
     var xt = List[Float32]()
     var train_rows = List[Int]()
     if n_train < n_rows:
@@ -427,7 +428,7 @@ def ivf_flat_build(
     if n_train == n_rows or dev_train:
         xt.append(Float32(0.0))
     var dxt = upload_f32(ctx, xt)
-    comptime if IVF_FAST_DEVICE:
+    comptime if IVF_FAST_TRAINSET:
         if dev_train:
             dxt = fast_trainset_device(ctx, dx, train_rows, n_train, dim)
             sum_scale = fast_trainset_scale(ctx, dxt, n_train, dim)
@@ -546,21 +547,21 @@ def ivf_flat_build(
     var lay_data = True
     comptime if ANN3_HOST_PASSES:
         lay_data = with_list_data or trace.enabled
-    # FAST on Apple, `MOJOLEARN_IVF_FAST_DEVICE_CSR=1` (lane/apple-fast-ann,
+    # FAST on Apple, `-D MOJOLEARN_IVF_FAST_DEVICE_CSR=1` (lane/apple-fast-ann,
     # 2026-10-02; fast_build_device.mojo): the CSR lists from the device
     # labels by histogram, scan and ranked scatter, the vectors gathered
     # on the device and downloaded once. Cause: `build_list_layout`, three
     # host passes over the rows, the third moving n x dim floats row by
     # row (DEVIATION 1800's stated closure). The same slots: same bits.
     var dev_csr = False
-    comptime if IVF_FAST_DEVICE:
-        dev_csr = ivf_fast_device_csr() and not trace.enabled and n_lists <= CSR_LISTS_MAX
+    comptime if IVF_FAST_CSR:
+        dev_csr = not trace.enabled and n_lists <= CSR_LISTS_MAX
     var layout: ListLayout
     if dev_csr:
         var l_off = List[Int32]()
         var l_ind = List[UInt32]()
         var l_dat = List[Float32]()
-        comptime if IVF_FAST_DEVICE:
+        comptime if IVF_FAST_CSR:
             fast_list_layout_device(ctx, dx, labels, n_rows, dim, n_lists, lay_data, l_off, l_ind, l_dat)
         layout = ListLayout(n_lists, n_rows, dim, l_off^, l_ind^, l_dat^)
     else:

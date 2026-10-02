@@ -1,21 +1,30 @@
 # lane/apple-fast-ann: the ann lanes under FAST on Apple (cagra, ivf-filter, ivf-pq, ivf-rabitq, ivf-refine, ivf-sq, tsne; classical2 ivf)
 
 Written without a Mojo toolchain (cloud peer); the first M3 build is the compile check
-(bindings x_ann and ivf). Every switch is a host env read at dispatch (`x_ann/fast_env.mojo`),
-compiled under FAST + Apple only (`ANN_FAST_APPLE`) and off by default; IDENTICAL compiles the
-old code. Datasets: taxi (400,000 x 11 index rows, 4,000 queries), Istella (400,000 x 220);
-tsne 20,000 stride rows (manifold block).
+(bindings x_ann and ivf). Every switch is a `-D MOJOLEARN_<LANE>_FAST_<NAME>=1` build define in
+`x_ann/fast_env.mojo` (`comptime`, `is_defined`), `True` only under FAST + Apple (`ANN_FAST_APPLE`)
+and off by default; IDENTICAL compiles the old code. No switch is an env read (a `getenv` on a fit
+or search path is a host step), so each A/B builds the binding once per arm (`tools/afc_ab_def.sh`,
+committed here from lane/apple-fast-tier): binding `x_ann` for every algos lane (its IVF-PQ / SQ /
+RaBitQ coarse build reaches `ivf_flat_build` through `ivf_flat_build_host`), binding `ivf` for the
+classical2 `ivf` lane. Datasets: taxi (400,000 x 11 index rows,
+4,000 queries), Istella (400,000 x 220); tsne 20,000 stride rows (manifold block).
+
+Merged with main (2026-10-02): main's `knn_wide_kernel` (rows wider than 64 features, NVIDIA and AMD
+only) and `repulse_split_kernel` / `TS_SPLIT` (t-SNE repulsion with the in-kernel Z tree, NVIDIA and
+AMD only) are separate arms that never compile on Apple; this lane's t-SNE arm is
+`repulse_stripe_kernel` / `repulse_stripe_join_kernel` / `TS_STRIPES`.
 
 | switch | lanes | site | what it changes under FAST on Apple |
 |---|---|---|---|
-| `MOJOLEARN_TSNE_FAST_SPLIT=1` | tsne | `x_ann/tsne_device.mojo` `repulse_split_kernel` + `repulse_join_kernel`, `_ts_repulse` | the exact repulsion with each row's candidate rows split into 8 stripes, one threadgroup per (row block, stripe), partials joined in stripe order: 8x the threadgroups (157 -> 1,256 at 20,000 rows) for 1000 iterations. FAST bits move (fold per stripe) |
-| `MOJOLEARN_TSNE_FAST_ZSUM=1` | tsne | `x_ann/tsne_device.mojo` `_ts_zsum` (the ann-apple3 `sum_team_kernel`) | Z from one threadgroup of 128 threads and a halving tree instead of `sum_kernel`, ONE thread adding the n row sums (20,000 dependent adds per iteration, 1000 iterations). FAST bits move (sum order) |
-| `MOJOLEARN_CAGRA_FAST_TEAM=1` | cagra | `x_ann/cagra_device.mojo` `cagra_search_on` (the ann-apple3 `cg_search_team_kernel`) | one threadgroup of 32 threads per query, the parent's 32 candidate distances formed side by side, instead of one thread per query (63 threadgroups of 64 for 4,000 queries, 220 features each). Expected to move no bit |
-| `MOJOLEARN_ANN_FAST_KNN_BIGD=1` | cagra (build), tsne (affinities) on Istella | `x_ann/knn_device.mojo` `knn_tiled_bigd_kernel`, `knn_enqueue` | the exact k-NN graph for rows wider than 64 features with candidate rows staged in threadgroup memory 32 rows x 32 features at a time, 32 running sums per thread, instead of `knn_cell_kernel` (one thread per row reading every candidate row from device memory, nothing staged; 400,000 x 400,000 x 220). The cell's fold order: same bits expected |
-| `MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1` | ivf-pq, ivf-refine, ivf-filter | `x_ann/pq_kmeans_device.mojo`, `ivf_pq_device.mojo` `ivf_pq_build_device` | every subspace codebook from ONE batched device Lloyd loop over the residuals already on the device (stride sample, seeded sample-row init, 3 launches per iteration, no host sync, fixed-order sums without atomics), instead of downloading the n x rot_dim residuals (352 MB on Istella), gathering each subspace on the host and running cluster/'s `kmeans_fit` once per subspace in series (55 host-driven fits on Istella, each with its k-means‖ seeding rounds and syncs). FAST bits move: paired recall |
-| `MOJOLEARN_IVF_FAST_SCAN_SELECT=1` | ivf-pq, ivf-sq, ivf-rabitq, ivf-refine, ivf-filter (search) | `x_ann/ivf_scan_device.mojo` `ivf_scan_search` (the ann-apple3 `select_group_kernel`) | the top-k of a chunk of queries in one launch (partial lists in threadgroup memory) instead of nine launches per chunk (`select_part_kernel`, seven `select_pair_kernel` levels, `select_merge_kernel`) through device memory. Expected to move no bit |
-| `MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1` | every IVF index (coarse quantizer): ivf-pq, ivf-sq, ivf-rabitq, ivf-refine, ivf-filter, classical2 ivf | `ivf/impl/neighbors/ivf_flat/fast_build_device.mojo` `fast_trainset_device`, `fast_trainset_scale`; `ivf_flat_build.mojo` | the FAST training sample (262,144 rows at 1,024 lists) gathered on the device from the uploaded rows and its fixed-point scale from device column sums, instead of a host gather one float at a time (57.7 M appends on Istella), `plan_quantizer_scale` on the host and a second 230 MB upload. The scale is snapped to a power of two, so it is the same number except within 2^-10 of a boundary: FAST bits may move |
-| `MOJOLEARN_IVF_FAST_DEVICE_CSR=1` | every IVF index; classical2 ivf most (it lays the vectors out) | `fast_build_device.mojo` `fast_list_layout_device` (`csr_count_kernel`, `csr_prefix_kernel`, `csr_offsets_kernel`, `csr_scatter_kernel`, `csr_gather_data_kernel`); `ivf_flat_build.mojo` | the CSR lists by device histogram, scan and ranked scatter (rank within a 1,024-row block from staged labels, no atomics; per-list prefix over blocks; one-threadgroup exclusive scan of the sizes), the permuted vectors gathered on the device and downloaded once, instead of `build_list_layout`'s three host passes (the third moving 352 MB row by row). The closure `ivf/checks/list_layout.mojo` states for DEVIATION 1800: the same slots, same bits |
+| `-D MOJOLEARN_TSNE_FAST_SPLIT=1` (`TS_STRIPED`) | tsne | `x_ann/tsne_device.mojo` `repulse_stripe_kernel` + `repulse_stripe_join_kernel`, `_ts_repulse` | the exact repulsion with each row's candidate rows split into 8 stripes, one threadgroup per (row block, stripe), partials joined in stripe order: 8x the threadgroups (157 -> 1,256 at 20,000 rows) for 1000 iterations. FAST bits move (fold per stripe) |
+| `-D MOJOLEARN_TSNE_FAST_ZSUM=1` (`TS_ZSUM`) | tsne | `x_ann/tsne_device.mojo` `_ts_iter` (the ann-apple3 `sum_team_kernel`; main's launch lines unchanged) | Z from one threadgroup of 128 threads and a halving tree instead of `sum_kernel`, ONE thread adding the n row sums (20,000 dependent adds per iteration, 1000 iterations). FAST bits move (sum order) |
+| `-D MOJOLEARN_CAGRA_FAST_TEAM=1` (`FAST_CAGRA_TEAM`) | cagra | `x_ann/cagra_device.mojo` `cagra_search_on` (the ann-apple3 `cg_search_team_kernel`) | one threadgroup of 32 threads per query, the parent's 32 candidate distances formed side by side, instead of one thread per query (63 threadgroups of 64 for 4,000 queries, 220 features each). Expected to move no bit |
+| `-D MOJOLEARN_ANN_FAST_KNN_BIGD=1` (`FAST_KNN_BIGD`) | cagra (build), tsne (affinities) on Istella | `x_ann/knn_device.mojo` `knn_tiled_bigd_kernel`, `knn_enqueue` | the exact k-NN graph for rows wider than 64 features with candidate rows staged in threadgroup memory 32 rows x 32 features at a time, 32 running sums per thread, instead of `knn_cell_kernel` (one thread per row reading every candidate row from device memory, nothing staged; 400,000 x 400,000 x 220). The cell's fold order: same bits expected |
+| `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1` (`FAST_IVFPQ_DEVICE_CODEBOOKS`) | ivf-pq, ivf-refine, ivf-filter | `x_ann/pq_kmeans_device.mojo`, `ivf_pq_device.mojo` `ivf_pq_build_device` | every subspace codebook from ONE batched device Lloyd loop over the residuals already on the device (stride sample, seeded sample-row init, 3 launches per iteration, no host sync, fixed-order sums without atomics), instead of downloading the n x rot_dim residuals (352 MB on Istella), gathering each subspace on the host and running cluster/'s `kmeans_fit` once per subspace in series (55 host-driven fits on Istella, each with its k-means‖ seeding rounds and syncs). FAST bits move: paired recall |
+| `-D MOJOLEARN_IVF_FAST_SCAN_SELECT=1` (`FAST_IVF_SCAN_SELECT`) | ivf-pq, ivf-sq, ivf-rabitq, ivf-refine, ivf-filter (search) | `x_ann/ivf_scan_device.mojo` `ivf_scan_search` (the ann-apple3 `select_group_kernel`) | the top-k of a chunk of queries in one launch (partial lists in threadgroup memory) instead of nine launches per chunk (`select_part_kernel`, seven `select_pair_kernel` levels, `select_merge_kernel`) through device memory. Expected to move no bit |
+| `-D MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1` (`FAST_IVF_DEVICE_TRAINSET`) | every IVF index (coarse quantizer): ivf-pq, ivf-sq, ivf-rabitq, ivf-refine, ivf-filter, classical2 ivf | `ivf/impl/neighbors/ivf_flat/fast_build_device.mojo` `fast_trainset_device`, `fast_trainset_scale`; `ivf_flat_build.mojo` | the FAST training sample (262,144 rows at 1,024 lists) gathered on the device from the uploaded rows and its fixed-point scale from device column sums, instead of a host gather one float at a time (57.7 M appends on Istella), `plan_quantizer_scale` on the host and a second 230 MB upload. The scale is snapped to a power of two, so it is the same number except within 2^-10 of a boundary: FAST bits may move |
+| `-D MOJOLEARN_IVF_FAST_DEVICE_CSR=1` (`FAST_IVF_DEVICE_CSR`) | every IVF index; classical2 ivf most (it lays the vectors out) | `fast_build_device.mojo` `fast_list_layout_device` (`csr_count_kernel`, `csr_prefix_kernel`, `csr_offsets_kernel`, `csr_scatter_kernel`, `csr_gather_data_kernel`); `ivf_flat_build.mojo` | the CSR lists by device histogram, scan and ranked scatter (rank within a 1,024-row block from staged labels, no atomics; per-list prefix over blocks; one-threadgroup exclusive scan of the sizes), the permuted vectors gathered on the device and downloaded once, instead of `build_list_layout`'s three host passes (the third moving 352 MB row by row). The closure `ivf/checks/list_layout.mojo` states for DEVIATION 1800: the same slots, same bits |
 
 Why these: the ann builds are device launches wrapped in host passes. IVF-PQ's codebook training was
 the largest (the residual download plus 11 or 55 serial host-driven k-means fits); the coarse build's
@@ -49,6 +58,14 @@ Not done (shape, estimated cost, where):
 
 Keep rule: a switch becomes the FAST default when its arm is faster on the M3 and held-out quality
 (recall@10 for the index lanes, trustworthiness / KL for tsne) stays within FAST's run-to-run spread;
-then the env read goes and the arm is the code. The `ann-*-ident-istella` rows are the IDENTICAL
-baselines of each changed lane. Two switches of one lane are combined in a later round, after each
-has been read alone (afc_ab.sh takes a quoted space-separated list as one arm).
+then the define goes and the arm is the code. ann.txt is the light form: old FAST vs new FAST, one
+alternation (1 rep, 2 rounds), Istella first for every switch (taxi follows once Istella wins), one
+tag per lane x dataset x switch, no IDENTICAL rows (the IDENTICAL bits are the M3 manager's
+`tools/aft_idcheck.sh`, not an A/B). Two switches of one lane are combined in a later round, after
+each has been read alone (afc_ab_def.sh takes several `-D` in one quoted arm).
+
+Risky compile sites (no toolchain here): `x_ann/tsne_device.mojo` `_ts_iter` / `_ts_iter_timed` now take
+`dpart` beside main's `dcnt` / `dparts`; `knn_device.mojo` `knn_enqueue` returns from inside `comptime if
+FAST_KNN_BIGD`; `ivf_flat_build.mojo` `IVF_FAST_TRAINSET` / `IVF_FAST_CSR` gate the device arms whose
+`else` is main's host code; `pq_kmeans_device.mojo` and `fast_build_device.mojo` are new files (kernels
+launched with the file's `buf.unsafe_ptr()` form; no helper takes a pointer parameter).

@@ -1,25 +1,15 @@
-CMD lane/apple-fast-ann ann-tsne-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ann-tsne-ident-istella tsne istella 3 3 -
-CMD lane/apple-fast-ann ann-tsne-zsum-istella AFC_FAMILY=algos bash tools/afc_ab.sh ann-tsne-zsum-istella tsne istella 3 3 - MOJOLEARN_TSNE_FAST_ZSUM=1
-CMD lane/apple-fast-ann ann-tsne-split-istella AFC_FAMILY=algos bash tools/afc_ab.sh ann-tsne-split-istella tsne istella 3 3 - MOJOLEARN_TSNE_FAST_SPLIT=1
-CMD lane/apple-fast-ann ann-tsne-split-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ann-tsne-split-taxi tsne taxi 3 3 - MOJOLEARN_TSNE_FAST_SPLIT=1
-CMD lane/apple-fast-ann ann-cagra-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ann-cagra-ident-istella cagra istella 3 3 -
-CMD lane/apple-fast-ann ann-cagra-team-istella AFC_FAMILY=algos bash tools/afc_ab.sh ann-cagra-team-istella cagra istella 3 3 - MOJOLEARN_CAGRA_FAST_TEAM=1
-CMD lane/apple-fast-ann ann-cagra-team-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ann-cagra-team-taxi cagra taxi 3 3 - MOJOLEARN_CAGRA_FAST_TEAM=1
-CMD lane/apple-fast-ann ann-cagra-knnbigd-istella AFC_FAMILY=algos bash tools/afc_ab.sh ann-cagra-knnbigd-istella cagra istella 3 3 - MOJOLEARN_ANN_FAST_KNN_BIGD=1
-CMD lane/apple-fast-ann ann-ivfpq-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ann-ivfpq-ident-istella ivf-pq istella 3 3 -
-CMD lane/apple-fast-ann ann-ivfpq-devcb-istella AFC_FAMILY=algos bash tools/afc_ab.sh ann-ivfpq-devcb-istella ivf-pq istella 3 3 - MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1
-CMD lane/apple-fast-ann ann-ivfpq-devcb-taxi AFC_FAMILY=algos bash tools/afc_ab.sh ann-ivfpq-devcb-taxi ivf-pq taxi 3 3 - MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1
-CMD lane/apple-fast-ann ann-ivfpq-select-istella AFC_FAMILY=algos bash tools/afc_ab.sh ann-ivfpq-select-istella ivf-pq istella 3 3 - MOJOLEARN_IVF_FAST_SCAN_SELECT=1
-CMD lane/apple-fast-ann ann-ivfpq-trainset-istella AFC_FAMILY=algos bash tools/afc_ab.sh ann-ivfpq-trainset-istella ivf-pq istella 3 3 - MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1
-CMD lane/apple-fast-ann ann-ivfpq-csr-istella AFC_FAMILY=algos bash tools/afc_ab.sh ann-ivfpq-csr-istella ivf-pq istella 3 3 - MOJOLEARN_IVF_FAST_DEVICE_CSR=1
-CMD lane/apple-fast-ann ann-ivfrefine-devcb-istella AFC_FAMILY=algos bash tools/afc_ab.sh ann-ivfrefine-devcb-istella ivf-refine istella 3 3 - MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1
-CMD lane/apple-fast-ann ann-ivffilter-devcb-istella AFC_FAMILY=algos bash tools/afc_ab.sh ann-ivffilter-devcb-istella ivf-filter istella 3 3 - MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1
-CMD lane/apple-fast-ann ann-ivfsq-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ann-ivfsq-ident-istella ivf-sq istella 3 3 -
-CMD lane/apple-fast-ann ann-ivfsq-trainset-istella AFC_FAMILY=algos bash tools/afc_ab.sh ann-ivfsq-trainset-istella ivf-sq istella 3 3 - MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1
-CMD lane/apple-fast-ann ann-ivfsq-select-istella AFC_FAMILY=algos bash tools/afc_ab.sh ann-ivfsq-select-istella ivf-sq istella 3 3 - MOJOLEARN_IVF_FAST_SCAN_SELECT=1
-CMD lane/apple-fast-ann ann-ivfrq-ident-istella AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh ann-ivfrq-ident-istella ivf-rabitq istella 3 3 -
-CMD lane/apple-fast-ann ann-ivfrq-select-istella AFC_FAMILY=algos bash tools/afc_ab.sh ann-ivfrq-select-istella ivf-rabitq istella 3 3 - MOJOLEARN_IVF_FAST_SCAN_SELECT=1
-CMD lane/apple-fast-ann ann-ivf-ident-istella AFC_ARM=ours AFC_FAMILY=classical2 bash tools/afc_ab.sh ann-ivf-ident-istella ivf istella 3 3 -
-CMD lane/apple-fast-ann ann-ivf-csr-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh ann-ivf-csr-istella ivf istella 3 3 - MOJOLEARN_IVF_FAST_DEVICE_CSR=1
-CMD lane/apple-fast-ann ann-ivf-csr-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh ann-ivf-csr-taxi ivf taxi 3 3 - MOJOLEARN_IVF_FAST_DEVICE_CSR=1
-CMD lane/apple-fast-ann ann-ivf-trainset-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh ann-ivf-trainset-istella ivf istella 3 3 - MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1
+CMD lane/apple-fast-ann ann-tsne-zsum-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-tsne-zsum-istella x_ann tsne istella 1 2 "" "-D MOJOLEARN_TSNE_FAST_ZSUM=1"
+CMD lane/apple-fast-ann ann-tsne-split-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-tsne-split-istella x_ann tsne istella 1 2 "" "-D MOJOLEARN_TSNE_FAST_SPLIT=1"
+CMD lane/apple-fast-ann ann-cagra-team-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-cagra-team-istella x_ann cagra istella 1 2 "" "-D MOJOLEARN_CAGRA_FAST_TEAM=1"
+CMD lane/apple-fast-ann ann-cagra-knnbigd-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-cagra-knnbigd-istella x_ann cagra istella 1 2 "" "-D MOJOLEARN_ANN_FAST_KNN_BIGD=1"
+CMD lane/apple-fast-ann ann-ivfpq-devcb-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-ivfpq-devcb-istella x_ann ivf-pq istella 1 2 "" "-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1"
+CMD lane/apple-fast-ann ann-ivfpq-select-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-ivfpq-select-istella x_ann ivf-pq istella 1 2 "" "-D MOJOLEARN_IVF_FAST_SCAN_SELECT=1"
+CMD lane/apple-fast-ann ann-ivfpq-trainset-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-ivfpq-trainset-istella x_ann ivf-pq istella 1 2 "" "-D MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1"
+CMD lane/apple-fast-ann ann-ivfpq-csr-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-ivfpq-csr-istella x_ann ivf-pq istella 1 2 "" "-D MOJOLEARN_IVF_FAST_DEVICE_CSR=1"
+CMD lane/apple-fast-ann ann-ivfrefine-devcb-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-ivfrefine-devcb-istella x_ann ivf-refine istella 1 2 "" "-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1"
+CMD lane/apple-fast-ann ann-ivffilter-devcb-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-ivffilter-devcb-istella x_ann ivf-filter istella 1 2 "" "-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1"
+CMD lane/apple-fast-ann ann-ivfsq-trainset-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-ivfsq-trainset-istella x_ann ivf-sq istella 1 2 "" "-D MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1"
+CMD lane/apple-fast-ann ann-ivfsq-select-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-ivfsq-select-istella x_ann ivf-sq istella 1 2 "" "-D MOJOLEARN_IVF_FAST_SCAN_SELECT=1"
+CMD lane/apple-fast-ann ann-ivfrq-select-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-ivfrq-select-istella x_ann ivf-rabitq istella 1 2 "" "-D MOJOLEARN_IVF_FAST_SCAN_SELECT=1"
+CMD lane/apple-fast-ann ann-ivf-csr-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh ann-ivf-csr-istella ivf ivf istella 1 2 "" "-D MOJOLEARN_IVF_FAST_DEVICE_CSR=1"
+CMD lane/apple-fast-ann ann-ivf-trainset-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh ann-ivf-trainset-istella ivf ivf istella 1 2 "" "-D MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1"

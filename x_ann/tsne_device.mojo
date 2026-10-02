@@ -21,7 +21,7 @@ from metrics.checks.device_io import upload_f32, upload_i32, download_f32, downl
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_log
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_TSNE_RB32, ANN3_TSNE_RB64, ANN3_TSNE_STEP_ROWS, ANN3_TSNE_ZSUM
-from x_ann.fast_env import tsne_fast_split, tsne_fast_zsum
+from x_ann.fast_env import FAST_TSNE_SPLIT, FAST_TSNE_ZSUM
 from checks.numerics import identical_div, identical_mul
 from x_ann.tsne_core import ts_q
 from x_ann.tsne_core import (
@@ -122,7 +122,11 @@ def sum_kernel(n: Int32, row_z: F32P, z: F32P):
 
 #: threads of the FAST Z sum
 comptime ZT = 128
-comptime TS_ZSUM = _FAST_APPLE and ANN3_TSNE_ZSUM
+# lane/apple-fast-ann (2026-10-02): `-D MOJOLEARN_TSNE_FAST_ZSUM=1` selects the
+# ann-apple3 team Z sum too. Cause: `sum_kernel` is ONE thread adding the n
+# row sums, 20,000 dependent adds per iteration for 1000 iterations. FAST
+# bits move (the order of a float sum): paired trustworthiness / KL check.
+comptime TS_ZSUM = _FAST_APPLE and (ANN3_TSNE_ZSUM or FAST_TSNE_ZSUM)
 comptime TS_STEP_ROWS = _FAST_APPLE and ANN3_TSNE_STEP_ROWS
 
 
@@ -151,14 +155,15 @@ def sum_team_kernel(n: Int32, row_z: F32P, z: F32P):
         z.unsafe_store(0, part[0])
 
 
-#: stripes of candidate rows per row in the FAST-on-Apple striped repulsion
-#: (main's `repulse_split_kernel` / `TS_SPLIT` below are the NVIDIA and AMD
-#: arm; this one is selected at dispatch under FAST on Apple only)
+#: stripes of candidate rows per row in the FAST-on-Apple striped repulsion,
+#: `-D MOJOLEARN_TSNE_FAST_SPLIT=1` (main's `repulse_split_kernel` / `TS_SPLIT`
+#: below are the NVIDIA and AMD arm; this one never compiles there)
+comptime TS_STRIPED = _FAST_APPLE and FAST_TSNE_SPLIT
 comptime TS_STRIPES = 8
 
 
 def repulse_stripe_kernel(n: Int32, y: F32P, part: F32P):
-    """FAST on Apple, `MOJOLEARN_TSNE_FAST_SPLIT=1` (lane/apple-fast-ann,
+    """FAST on Apple, `-D MOJOLEARN_TSNE_FAST_SPLIT=1` (lane/apple-fast-ann,
     2026-10-02): `repulse_tiled_kernel` with each row's candidate rows j
     split into TS_STRIPES stripes, one threadgroup per (row block, stripe):
     threadgroup (b, s) folds j in [s n / TS_STRIPES, (s + 1) n / TS_STRIPES) for
@@ -245,38 +250,24 @@ def repulse_stripe_join_kernel(n: Int32, part: F32P, row_z: F32P, rep: F32P):
         rep.unsafe_store(2 * i + 1, r1)
 
 
+
 def _ts_repulse(
     ctx: DeviceContext, mut ycur: DeviceBuffer[DType.float32], n: Int, mut drz: DeviceBuffer[DType.float32],
-    mut drep: DeviceBuffer[DType.float32], split: Bool, mut dpart: DeviceBuffer[DType.float32],
+    mut drep: DeviceBuffer[DType.float32], mut dpart: DeviceBuffer[DType.float32],
 ) raises:
-    """The repulsion launch: striped under `split` (FAST on Apple,
+    """The repulsion launch: striped under TS_STRIPED (FAST on Apple,
     lane/apple-fast-ann), the tiled kernel otherwise."""
-    comptime if _FAST_APPLE:
-        if split:
-            ctx.enqueue_function[repulse_stripe_kernel](
-                Int32(n), ycur.unsafe_ptr(), dpart.unsafe_ptr(), grid_dim=((n + RTB - 1) // RTB, TS_STRIPES),
-                block_dim=RTB,
-            )
-            ctx.enqueue_function[repulse_stripe_join_kernel](
-                Int32(n), dpart.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB,
-            )
-            return
-    ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
-                                               grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
-
-
-def _ts_zsum(ctx: DeviceContext, n: Int, mut drz: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
-             zteam: Bool) raises:
-    """The Z launch: `sum_team_kernel` under `zteam` (the ann-apple3 define
-    or `MOJOLEARN_TSNE_FAST_ZSUM=1`, lane/apple-fast-ann, 2026-10-02; cause:
-    `sum_kernel` is ONE thread adding the n row sums, 20,000 dependent adds
-    per iteration for 1000 iterations), the one-thread sum otherwise. FAST
-    bits move (the order of a float sum): paired trustworthiness / KL check."""
-    comptime if _FAST_APPLE:
-        if zteam:
-            ctx.enqueue_function[sum_team_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=ZT)
-            return
-    ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
+    comptime if TS_STRIPED:
+        ctx.enqueue_function[repulse_stripe_kernel](
+            Int32(n), ycur.unsafe_ptr(), dpart.unsafe_ptr(), grid_dim=((n + RTB - 1) // RTB, TS_STRIPES),
+            block_dim=RTB,
+        )
+        ctx.enqueue_function[repulse_stripe_join_kernel](
+            Int32(n), dpart.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB,
+        )
+    else:
+        ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                                   grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
 
 
 # lane/gap-nv-classical2: the repulsion and Z on NVIDIA and AMD. The tiled
@@ -496,8 +487,8 @@ def _ts_iter(
     mut dptr: DeviceBuffer[DType.int32], mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32],
     mut drz: DeviceBuffer[DType.float32], mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
     mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
-    lr: Float32, mut dcnt: DeviceBuffer[DType.int32], mut dparts: DeviceBuffer[DType.float32], split: Bool,
-    zteam: Bool, mut dpart: DeviceBuffer[DType.float32],
+    lr: Float32, mut dcnt: DeviceBuffer[DType.int32], mut dparts: DeviceBuffer[DType.float32],
+    mut dpart: DeviceBuffer[DType.float32],
 ) raises:
     comptime if TS_SPLIT:
         ctx.enqueue_function[repulse_split_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
@@ -509,8 +500,11 @@ def _ts_iter(
             mom, lr, grid_dim=_grid(n), block_dim=TPB,
         )
         return
-    _ts_repulse(ctx, ycur, n, drz, drep, split, dpart)
-    _ts_zsum(ctx, n, drz, dz, zteam)
+    _ts_repulse(ctx, ycur, n, drz, drep, dpart)
+    comptime if TS_ZSUM:
+        ctx.enqueue_function[sum_team_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=ZT)
+    else:
+        ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
     comptime if TS_STEP_ROWS:
         ctx.enqueue_function[step_rows_kernel](
             Int32(n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
@@ -530,17 +524,19 @@ def _ts_iter_timed(
     mut dptr: DeviceBuffer[DType.int32], mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32],
     mut drz: DeviceBuffer[DType.float32], mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
     mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
-    lr: Float32, mut t_rep: Int, mut t_sum: Int, mut t_step: Int, split: Bool, zteam: Bool,
-    mut dpart: DeviceBuffer[DType.float32],
+    lr: Float32, mut t_rep: Int, mut t_sum: Int, mut t_step: Int, mut dpart: DeviceBuffer[DType.float32],
 ) raises:
     """`_ts_iter` for the stage pass only (MOJOLEARN_ANN_STAGES, lane
     ann-apple3): the same three launches, drained one by one, their wall
     times added to t_rep / t_sum / t_step (ns)."""
     var t0 = Int(perf_counter_ns())
-    _ts_repulse(ctx, ycur, n, drz, drep, split, dpart)
+    _ts_repulse(ctx, ycur, n, drz, drep, dpart)
     ctx.synchronize()
     var t1 = Int(perf_counter_ns())
-    _ts_zsum(ctx, n, drz, dz, zteam)
+    comptime if TS_ZSUM:
+        ctx.enqueue_function[sum_team_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=ZT)
+    else:
+        ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
     ctx.synchronize()
     var t2 = Int(perf_counter_ns())
     comptime if TS_STEP_ROWS:
@@ -615,15 +611,8 @@ def tsne_fit_device(
     ctx.enqueue_memset(dcnt, Int32(0))
     var dparts = ctx.enqueue_create_buffer[DType.float32]((n + RS_ROWS - 1) // RS_ROWS + 1)
     var dkl = ctx.enqueue_create_buffer[DType.float32](n)
-    # lane/apple-fast-ann (2026-10-02): the two env switches of the
-    # iteration (x_ann/fast_env.mojo), read once per fit here on the host
-    # before the first launch; the stripe partials buffer exists only under
-    # the striped repulsion
-    var split = tsne_fast_split()
-    var zteam = tsne_fast_zsum()
-    comptime if TS_ZSUM:
-        zteam = True
-    var dpart = ctx.enqueue_create_buffer[DType.float32]((TS_STRIPES * n * 3) if split else 1)
+    # lane/apple-fast-ann: the stripe partials, one word unless TS_STRIPED
+    var dpart = ctx.enqueue_create_buffer[DType.float32]((TS_STRIPES * n * 3) if TS_STRIPED else 1)
     st.mark(ctx, "upload_graph")
     var t_rep = 0
     var t_sum = 0
@@ -635,16 +624,16 @@ def tsne_fit_device(
             # the stage pass: each launch drained and timed (ann-apple3)
             if it % 2 == 0:
                 _ts_iter_timed(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
-                               learning_rate, t_rep, t_sum, t_step, split, zteam, dpart)
+                               learning_rate, t_rep, t_sum, t_step, dpart)
             else:
                 _ts_iter_timed(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
-                               learning_rate, t_rep, t_sum, t_step, split, zteam, dpart)
+                               learning_rate, t_rep, t_sum, t_step, dpart)
         elif it % 2 == 0:
             _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt,
-                     dparts, split, zteam, dpart)
+                     dparts, dpart)
         else:
             _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt,
-                     dparts, split, zteam, dpart)
+                     dparts, dpart)
     st.mark(ctx, "iterations")
     if st.on:
         print("ANN-STAGE tsne_iter repulse", Float64(t_rep) / 1.0e6)

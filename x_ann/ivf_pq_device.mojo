@@ -15,7 +15,7 @@ from x_ann.switches import (
     ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_HOST_RESIDUALS, ANN3_PQ_SEED, ANN3_ROW_THREADS,
 )
 from x_ann.kpp_seed import kpp_seed
-from x_ann.fast_env import ANN_FAST_APPLE, ivfpq_fast_device_codebooks
+from x_ann.fast_env import FAST_IVFPQ_DEVICE_CODEBOOKS
 from x_ann.pq_kmeans_device import PQK_CODES_MAX, PQK_LEN_MAX, pq_codebooks_device
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.ivf_scan_device import ivf_scan_search
@@ -299,7 +299,7 @@ def ivf_pq_build_device(
     var host_sample = False
     comptime if PQ_FAST_TRAINSET and ANN3_PQ_HOST_RESIDUALS:
         host_sample = n > PQ_FAST_ROWS_PER_CODE * n_codes
-    # FAST on Apple, `MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1` (lane/apple-
+    # FAST on Apple, `-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1` (lane/apple-
     # fast-ann, 2026-10-02; x_ann/pq_kmeans_device.mojo): the codebooks of
     # every subspace from one batched device Lloyd loop over the residuals
     # already in `dr`, on the same sample size as `_codebooks` (a stride
@@ -310,8 +310,8 @@ def ivf_pq_build_device(
     # device codebooks are downloaded once for the index; the encode reads
     # them where they are. Moves FAST bits: paired recall check.
     var dev_cb = False
-    comptime if ANN_FAST_APPLE:
-        dev_cb = ivfpq_fast_device_codebooks() and pq_len <= PQK_LEN_MAX and n_codes <= PQK_CODES_MAX
+    comptime if FAST_IVFPQ_DEVICE_CODEBOOKS:
+        dev_cb = pq_len <= PQK_LEN_MAX and n_codes <= PQK_CODES_MAX
     var codebooks = List[Float32]()
     var dcb: DeviceBuffer[DType.float32]
     if dev_cb:
