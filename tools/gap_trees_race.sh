@@ -27,6 +27,18 @@ set -u
 cd "$(dirname "$0")/.."
 arms=$1 rounds=$2 rows=$3; shift 3
 L=${GAPTREES_LOG:-$PWD/gaptrees-logs}; mkdir -p "$L"
+# the vendor the driver checks the binding against (cuda, hip or metal), from the box
+if [ "$(uname)" = Darwin ]; then vend=metal
+else case "${MOJOLEARN_TARGET_COLUMN:-}" in amd*) vend=hip;; nvidia) vend=cuda;; *) command -v nvidia-smi > /dev/null && vend=cuda || vend=hip;; esac; fi
+export MOJOLEARN_SPEED_EXPECTED_VENDOR=${MOJOLEARN_SPEED_EXPECTED_VENDOR:-$vend}
+# the CMD tree is raw source: the base binding (host helpers every estimator imports) and, for the
+# host column, the core host binding, once per job
+bash bindings/build.sh > "$L/build-base.log" 2>&1 \
+  || echo "GAPTREES build base FAILED: $(grep -m 1 -i error "$L/build-base.log" | cut -c1-200)"
+if [ "$rows" != full ]; then
+  env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_TARGET_COLUMN=cpu bash bindings/build_core_host.sh > "$L/build-core_host.log" 2>&1 \
+    || echo "GAPTREES build core_host FAILED: $(grep -m 1 -i error "$L/build-core_host.log" | cut -c1-200)"
+fi
 need="gbdt"; case "$*" in *iforest*) need="gbdt svm";; esac
 [ "$need" = "gbdt svm" ] && case " $* " in *" gbdt-"*) ;; *) need="svm";; esac
 for arm in ${arms//,/ }; do
