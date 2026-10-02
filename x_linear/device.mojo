@@ -55,7 +55,8 @@ from x_linear.enetcv_fast import enetcv_fast
 from x_linear.tops import X_LINEAR_SERIAL_FOLDS
 from x_linear.dispatch import ALGO_LOGCV
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
-from x_linear.dispatch import ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT
+from x_linear.dispatch import ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_QUANTILE
+from x_linear.quantile_grid import quantile_fit_grid
 from x_linear.isotonic import iso_predict_one, iso_gather_one, iso_group, iso_after_unique
 from std.memory import bitcast
 from std.memory import stack_allocation
@@ -2905,6 +2906,11 @@ def fit_device(
         return
     if algo == ALGO_RIDGE_KFOLD:
         _ridge_kfold_grid(x, n_x, y, n_y, n, d, ip, fp, res)
+        return
+    if algo == ALGO_QUANTILE and n > 0:
+        # cgr-linear: QuantileRegressor's ADMM with every row pass on the grid
+        # (x_linear/quantile_grid.mojo), no longer the one-block fit kernel
+        quantile_fit_grid(linear_ctx(), x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
     if algo == ALGO_SGD and len(ip) > 12 and sgd_mb_on(Int(ip[12]), Int(ip[0]), Int(ip[3])):
         _sgd_mb_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
