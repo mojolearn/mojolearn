@@ -94,65 +94,22 @@ from gaussian_process.gpc_device_var import (
 from gaussian_process.host.gpc_steps import (
     GPCBinaryFit,
     GPCLatent,
-    gpc_a_vector,
-    gpc_latent_var,
-    gpc_lml,
     gpc_neg_inf32,
-    gpc_newton_rhs,
-    gpc_residual,
-    gpc_scale,
-    gpc_scale_rows,
     gpc_stop,
     gpc_validate_labels,
     gpc_validate_max_iter,
-    gpc_weights,
 )
+from gaussian_process.gpc_items import (
+    gpc_weight_item, gpc_rhs_item, gpc_scale_item, gpc_a_item, gpc_residual_item, gpc_lml_part_item, gpc_lml_fin,
+    gpc_fold_blocks,
+)
+from std.atomic import Atomic
+from core.device_zero import enqueue_fill
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
 from gemm.checks.gemm_oracle import OP_TN
-
-
-def _gpc_kernel_self(
-    x: List[Float32], n_train: Int, n_features: Int, kernel: GPKernelSpec
-) raises -> List[Float32]:
-    """`K = kernel(X)` on the device (`_gpc.py:261`), is_self True, so a
-    WhiteKernel adds its noise to the diagonal as in the regressor."""
-    var trace = IdentityTrace()
-    var ctx = _family_ctx()
-    var dx = _upload(ctx, x)
-    var dls = _upload(ctx, _length_scale_table(kernel))
-    var dk = ctx.enqueue_create_buffer[DType.float32](n_train * n_train)
-    var dstack = ctx.enqueue_create_buffer[DType.float32](
-        gp_kernel_stack_floats(n_train, n_train)
-    )
-    ctx.synchronize()
-    gp_kernel_matrix(
-        ctx,
-        dk,
-        dx,
-        dx,
-        dls,
-        dstack,
-        n_train,
-        n_train,
-        n_features,
-        kernel,
-        True,
-        trace,
-        "gpc.kernel",
-        GP_ELEM_TPB,
-        GP_SAB_NONE,
-    )
-    var k_host = _download(ctx, dk, n_train * n_train)
-    _ = dx^
-    _ = dls^
-    _ = dk^
-    _ = dstack^
-    # DEVIATION 1946: the context dies LAST.
-    _ = ctx^
-    return k_host^
 
 
 #: lane/neighbors-apple (2026-09-28): the Laplace Newton loop keeps K, B and
@@ -171,24 +128,14 @@ def _gpc_kernel_self(
 comptime GPC_B_TPB = 256
 
 
-#: lane neighbors-apple3 (2026-09-28), FAST on Apple, OPT-IN until its A/B
-#: and quality check pass (`-D MOJOLEARN_GPC_DEVICE_VAR`): the latent
-#: variance stays on the device. `gpc_scale_rows` and `gpc_latent_var` as
+#: lane neighbors-apple3 (2026-09-28), the default on every column since
+#: cpu-gpu-cleanup c-gp-kernel (2026-10-02; was a FAST-on-Apple opt-in): the
+#: latent variance stays on the device. `gpc_scale_rows` and `gpc_latent_var` as
 #: kernels (their statements, the fold over i ascending, one thread per
 #: column), so the n_train x n_star cross covariance is not read back,
 #: scaled on the host, uploaded, read back again and folded on the host.
-comptime GPC_DEVICE_VAR = (
-    _CTX_MODE == _NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GPC_DEVICE_VAR"]()
-)
-#: OPT-IN (`-D MOJOLEARN_GPC_RESIDENT_K`): the device Newton loop takes K
-#: from the kernel launch's own buffer, not from a download and an upload.
-comptime GPC_RESIDENT_K = (
-    _CTX_MODE == _NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GPC_RESIDENT_K"]()
-)
+#: The Newton loop takes K from the kernel launch's own buffer
+#: (`_gpc_kernel_self_dev`), not from a download and an upload.
 
 
 def gpc_b_matrix_kernel(
@@ -210,22 +157,70 @@ def gpc_b_matrix_kernel(
     b[unsafe_offset = e] = cell
 
 
-def _gpc_matvec_dev(
-    ctx: DeviceContext, mut dk: DeviceBuffer[DType.float32], v: List[Float32], n: Int
-) raises -> List[Float32]:
-    """`_gpc_matvec` against the resident K."""
-    var dv = _upload(ctx, v)
-    var dc = ctx.enqueue_create_buffer[DType.float32](n)
-    var dws = ctx.enqueue_create_buffer[DType.float32](
-        identical_gemm_workspace_max_floats(n, 1, n)
-    )
-    ctx.synchronize()
-    identical_gemm_into(ctx, dc, dk, dv, dws, n, 1, n, OP_TN)
-    var out = _download(ctx, dc, n)
-    _ = dv^
-    _ = dc^
-    _ = dws^
-    return out^
+comptime _GP = MutPointer[Float32, MutAnyOrigin]
+comptime _GI = MutPointer[Int32, MutAnyOrigin]
+comptime GPC_STEP_TPB = 256
+
+
+@always_inline
+def _gtid() -> Int:
+    return Int(block_idx.x) * GPC_STEP_TPB + Int(thread_idx.x)
+
+
+@always_inline
+def _gblocks(count: Int) -> Int:
+    return (count + GPC_STEP_TPB - 1) // GPC_STEP_TPB if count > 0 else 1
+
+
+@always_inline
+def _dp(buf: DeviceBuffer[DType.float32]) -> _GP:
+    return _GP(unsafe_from_address=Int(buf.unsafe_ptr()))
+
+
+def gpc_w_kernel(f: _GP, pi: _GP, w: _GP, wsr: _GP, n: Int32):
+    var i = _gtid()
+    if i < Int(n):
+        gpc_weight_item(i, f, pi, w, wsr)
+
+
+def gpc_rhs_kernel(w: _GP, f: _GP, y: _GP, pi: _GP, out: _GP, n: Int32):
+    var i = _gtid()
+    if i < Int(n):
+        gpc_rhs_item(i, w, f, y, pi, out)
+
+
+def gpc_scale_nan_kernel(wsr: _GP, v: _GP, out: _GP, nan_at: _GI, n: Int32):
+    """`gpc_scale`, and the lowest index whose value is NaN (DEVIATION 1638's
+    refusal of a NaN right-hand side) by an atomic min."""
+    var i = _gtid()
+    if i < Int(n):
+        gpc_scale_item(i, wsr, v, out)
+        var c = out.unsafe_load(i)
+        if c != c:
+            _ = Atomic[DType.int32].min(nan_at, Int32(i))
+
+
+def gpc_a_kernel(b: _GP, wsr: _GP, x: _GP, out: _GP, n: Int32):
+    var i = _gtid()
+    if i < Int(n):
+        gpc_a_item(i, b, wsr, x, out)
+
+
+def gpc_residual_kernel(y: _GP, pi: _GP, out: _GP, n: Int32):
+    var i = _gtid()
+    if i < Int(n):
+        gpc_residual_item(i, y, pi, out)
+
+
+def gpc_lml_part_kernel(a: _GP, f: _GP, y: _GP, n: Int32, pdot: _GP, pt2: _GP, nb: Int32):
+    var b = _gtid()
+    if b < Int(nb):
+        gpc_lml_part_item(b, a, f, y, Int(n), pdot, pt2)
+
+
+def gpc_lml_fin_kernel(pdot: _GP, pt2: _GP, nb: Int32, logdet: Float32, out: _GP):
+    if _gtid() == 0:
+        out.unsafe_store(0, gpc_lml_fin(pdot, pt2, Int(nb), logdet))
 
 
 def _gpc_fit_binary_device(
@@ -236,63 +231,64 @@ def _gpc_fit_binary_device(
     kernel: GPKernelSpec,
     max_iter_predict: Int,
 ) raises -> GPCBinaryFit:
-    # MOJOLEARN_STAGE_TIMES=1: wall per phase (every phase drains on its
-    # own), printed once. Timing only.
+    """The Laplace Newton loop with every step on the device
+    (cpu-gpu-cleanup c-gp-kernel, 2026-10-02): K from the kernel launch's own
+    buffer, the weights, B, its factor and log-determinant, the right-hand
+    side, both products, the solve, `a` and the likelihood
+    (gaussian_process/gpc_items.mojo, the host column's items); only the
+    likelihood and the NaN guard's index cross back per iteration, for the
+    stop test. The last factor, pi and W_sr are read back once."""
     var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var t_k0 = Int(perf_counter_ns())
     var n = n_train
     var ctx = _family_ctx()
-    var dk: DeviceBuffer[DType.float32]
-    comptime if GPC_RESIDENT_K:
-        dk = _gpc_kernel_self_dev(ctx, x, n_train, n_features, kernel)
-    else:
-        var k = _gpc_kernel_self(x, n_train, n_features, kernel)
-        dk = _upload(ctx, k)
+    var dk = _gpc_kernel_self_dev(ctx, x, n_train, n_features, kernel)
     var t_kernel = Int(perf_counter_ns()) - t_k0
-    var t_b = 0
-    var t_f = 0
-    var t_ld = 0
-    var t_mv = 0
-    var t_s = 0
     var db = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var dwsr = ctx.enqueue_create_buffer[DType.float32](n)
-    var hwsr = ctx.enqueue_create_host_buffer[DType.float32](n)
     var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
     var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
     var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+    var dy = _upload(ctx, y)
+    var df = ctx.enqueue_create_buffer[DType.float32](n)
+    var dpi = ctx.enqueue_create_buffer[DType.float32](n)
+    var dw = ctx.enqueue_create_buffer[DType.float32](n)
+    var dwsr = ctx.enqueue_create_buffer[DType.float32](n)
+    var dbv = ctx.enqueue_create_buffer[DType.float32](n)
+    var dkb = ctx.enqueue_create_buffer[DType.float32](n)
+    var dc = ctx.enqueue_create_buffer[DType.float32](n)
+    var da = ctx.enqueue_create_buffer[DType.float32](n)
+    var nbf = gpc_fold_blocks(n)
+    var dpd = ctx.enqueue_create_buffer[DType.float32](max(nbf, 1))
+    var dpt = ctx.enqueue_create_buffer[DType.float32](max(nbf, 1))
+    var dlml = ctx.enqueue_create_buffer[DType.float32](1)
+    var dnan = ctx.enqueue_create_buffer[DType.int32](1)
+    var dgw = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(n, 1, n))
+    var hlml = ctx.enqueue_create_host_buffer[DType.float32](1)
+    var hnan = ctx.enqueue_create_host_buffer[DType.int32](1)
+    enqueue_fill(ctx, df, Float32(0.0))
     ctx.synchronize()
     var trace = IdentityTrace()
-    var f = List[Float32](capacity=n)
-    for _i in range(n):
-        f.append(Float32(0.0))
     var previous = gpc_neg_inf32()
     var n_iter = 0
-    var last_pi = List[Float32]()
-    var last_wsr = List[Float32]()
     var nb = 0
+    var t_f = 0
     # Resolve the kernel once; dispatch its handle without ambiguous generic overloads.
     var b_kernel = ctx.compile_function[gpc_b_matrix_kernel]()
     for it in range(max_iter_predict):
         var s0 = Int(perf_counter_ns())
-        var wt = gpc_weights(f)
-        for i in range(n):
-            hwsr.unsafe_ptr().unsafe_store(i, wt.wsr[i])
-        ctx.enqueue_copy(dst_buf=dwsr, src_ptr=hwsr.unsafe_ptr())
+        ctx.enqueue_function[gpc_w_kernel](
+            _dp(df), _dp(dpi), _dp(dw), _dp(dwsr), Int32(n), grid_dim=_gblocks(n), block_dim=GPC_STEP_TPB
+        )
         ctx.enqueue_function(
             b_kernel, db.unsafe_ptr(), dk.unsafe_ptr(), dwsr.unsafe_ptr(), Int32(n),
             grid_dim=Dim((n * n + GPC_B_TPB - 1) // GPC_B_TPB, 1, 1),
             block_dim=Dim(GPC_B_TPB, 1, 1),
         )
         add_jitter(ctx, db, n, Float32(0.0), CHOL_ELEM_TPB)
-        if st_on:
-            ctx.synchronize()
-        var s1 = Int(perf_counter_ns())
         var run = potrf_lower(
             ctx, db, ws, n, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB
         )
-        var s2 = Int(perf_counter_ns())
-        t_b += s1 - s0
-        t_f += s2 - s1
+        t_f += Int(perf_counter_ns()) - s0
         if run.info != 0:
             raise Error(
                 "gpc_fit_host: the factorization of B = I + W_sr K W_sr failed"
@@ -304,54 +300,73 @@ def _gpc_fit_binary_device(
                 " matrix, so this means a non-finite latent value"
             )
         var logdet = chol_logdet(ctx, db, dwork, n, trace, CHOL_ELEM_TPB)
-        var s3 = Int(perf_counter_ns())
-        var bvec = gpc_newton_rhs(wt.w, f, y, wt.pi)
-        var kb = _gpc_matvec_dev(ctx, dk, bvec, n)
-        var s4 = Int(perf_counter_ns())
-        t_ld += s3 - s2
-        t_mv += s4 - s3
-        var c = gpc_scale(wt.wsr, kb)
-        for i in range(n):
-            var v = c[i]
-            if v != v:
-                raise Error(
-                    "cholesky_solve_host: the right-hand side contains NaN at"
-                    " flat index "
-                    + String(i)
-                    + "; refused by name (DEVIATION 1638)"
-                )
-        var dc = _upload(ctx, c)
+        ctx.enqueue_function[gpc_rhs_kernel](
+            _dp(dw), _dp(df), _dp(dy), _dp(dpi), _dp(dbv), Int32(n), grid_dim=_gblocks(n), block_dim=GPC_STEP_TPB
+        )
+        identical_gemm_into(ctx, dkb, dk, dbv, dgw, n, 1, n, OP_TN)
+        enqueue_fill(ctx, dnan, Int32(n))
+        ctx.enqueue_function[gpc_scale_nan_kernel](
+            _dp(dwsr), _dp(dkb), _dp(dc), _GI(unsafe_from_address=Int(dnan.unsafe_ptr())), Int32(n),
+            grid_dim=_gblocks(n), block_dim=GPC_STEP_TPB,
+        )
         cho_solve(ctx, db, dc, n, 1, trace, CHOL_SOLVE_TPB)
+        ctx.enqueue_function[gpc_a_kernel](
+            _dp(dbv), _dp(dwsr), _dp(dc), _dp(da), Int32(n), grid_dim=_gblocks(n), block_dim=GPC_STEP_TPB
+        )
+        identical_gemm_into(ctx, df, dk, da, dgw, n, 1, n, OP_TN)
+        if nbf > 0:
+            ctx.enqueue_function[gpc_lml_part_kernel](
+                _dp(da), _dp(df), _dp(dy), Int32(n), _dp(dpd), _dp(dpt), Int32(nbf),
+                grid_dim=_gblocks(nbf), block_dim=GPC_STEP_TPB,
+            )
+        ctx.enqueue_function[gpc_lml_fin_kernel](
+            _dp(dpd), _dp(dpt), Int32(nbf), logdet, _dp(dlml), grid_dim=1, block_dim=1
+        )
+        ctx.enqueue_copy(dst_ptr=hlml.unsafe_ptr(), src_buf=dlml)
+        ctx.enqueue_copy(dst_ptr=hnan.unsafe_ptr(), src_buf=dnan)
         ctx.synchronize()
-        var xs = _download(ctx, dc, n)
-        _ = dc^
-        var s5 = Int(perf_counter_ns())
-        var a = gpc_a_vector(bvec, wt.wsr, xs)
-        f = _gpc_matvec_dev(ctx, dk, a, n)
-        t_s += s5 - s4
-        t_mv += Int(perf_counter_ns()) - s5
-        var lml = gpc_lml(a, f, y, logdet)
+        var nan_at = Int(hnan.unsafe_ptr().unsafe_load(0))
+        if nan_at < n:
+            raise Error(
+                "cholesky_solve_host: the right-hand side contains NaN at"
+                " flat index "
+                + String(nan_at)
+                + "; refused by name (DEVIATION 1638)"
+            )
+        var lml = hlml.unsafe_ptr().unsafe_load(0)
         n_iter = it + 1
-        last_pi = wt.pi.copy()
-        last_wsr = wt.wsr.copy()
         nb = run.nb
         if gpc_stop(lml, previous):
             break
         previous = lml
     var t_l0 = Int(perf_counter_ns())
     var last_l = _download(ctx, db, n * n)
+    var last_pi = _download(ctx, dpi, n)
+    var last_wsr = _download(ctx, dwsr, n)
     if st_on:
         print("GPC_FIT_DEVICE_STAGES iters=" + String(n_iter) + " kernel_ms=" + String(t_kernel // 1000000)
-              + " b_matrix_ms=" + String(t_b // 1000000) + " factor_ms=" + String(t_f // 1000000)
-              + " logdet_ms=" + String(t_ld // 1000000) + " matvec_host_ms=" + String(t_mv // 1000000)
-              + " solve_ms=" + String(t_s // 1000000)
-              + " read_l_ms=" + String((Int(perf_counter_ns()) - t_l0) // 1000000))
+              + " b_and_factor_ms=" + String(t_f // 1000000)
+              + " read_ms=" + String((Int(perf_counter_ns()) - t_l0) // 1000000))
     _ = dk^
     _ = db^
-    _ = dwsr^
-    _ = hwsr^
     _ = ws^
     _ = dwork^
+    _ = dy^
+    _ = df^
+    _ = dpi^
+    _ = dw^
+    _ = dwsr^
+    _ = dbv^
+    _ = dkb^
+    _ = dc^
+    _ = da^
+    _ = dpd^
+    _ = dpt^
+    _ = dlml^
+    _ = dnan^
+    _ = dgw^
+    _ = hlml^
+    _ = hnan^
     return GPCBinaryFit(last_l^, last_pi^, last_wsr^, previous, n_iter, nb)
 
 
@@ -431,14 +446,19 @@ def gpc_predict_binary_host(
     gp_validate_kernel(kernel, n_features)
     gpc_validate_model(y, pi, wsr, l, n_train)
     var kss = gp_kernel_diag(kernel)
-    var r = gpc_residual(y, pi)
 
     var trace = IdentityTrace()
     var ctx = _family_ctx()
     var dx = _upload(ctx, x_train)
     var dxs = _upload(ctx, x_star)
     var dls = _upload(ctx, _length_scale_table(kernel))
-    var dr = _upload(ctx, r)
+    # y - pi on the device (gpc_items.gpc_residual_item, the host column's)
+    var dyt = _upload(ctx, y)
+    var dpit = _upload(ctx, pi)
+    var dr = ctx.enqueue_create_buffer[DType.float32](n_train)
+    ctx.enqueue_function[gpc_residual_kernel](
+        _dp(dyt), _dp(dpit), _dp(dr), Int32(n_train), grid_dim=_gblocks(n_train), block_dim=GPC_STEP_TPB
+    )
     var dkc = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
     var dstack = ctx.enqueue_create_buffer[DType.float32](
         gp_kernel_stack_floats(n_train, n_star)
@@ -471,37 +491,26 @@ def gpc_predict_binary_host(
     var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var t_v0 = Int(perf_counter_ns())
     if want_variance:
-        comptime if GPC_DEVICE_VAR:
-            var dwv = _upload(ctx, wsr)
-            var dv2 = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
-            var dvar = ctx.enqueue_create_buffer[DType.float32](n_star)
-            ctx.enqueue_function[gpc_scale_rows_kernel](
-                dv2.unsafe_ptr(), dkc.unsafe_ptr(), dwv.unsafe_ptr(), Int32(n_train), Int32(n_star),
-                grid_dim=((n_train * n_star + GPC_VAR_TPB - 1) // GPC_VAR_TPB, 1, 1),
-                block_dim=(GPC_VAR_TPB, 1, 1),
-            )
-            var dl2 = _upload(ctx, l)
-            trsm_lower(ctx, dl2, dv2, n_train, n_star, trace, "gpc.v", CHOL_SOLVE_TPB)
-            ctx.enqueue_function[gpc_latent_var_kernel](
-                dvar.unsafe_ptr(), dv2.unsafe_ptr(), Int32(n_train), Int32(n_star), kss,
-                grid_dim=((n_star + GPC_VAR_TPB - 1) // GPC_VAR_TPB, 1, 1),
-                block_dim=(GPC_VAR_TPB, 1, 1),
-            )
-            variance = _download(ctx, dvar, n_star)
-            _ = dwv^
-            _ = dv2^
-            _ = dvar^
-            _ = dl2^
-        else:
-            var kc = _download(ctx, dkc, n_train * n_star)
-            var scaled = gpc_scale_rows(kc, wsr, n_train, n_star)
-            var dv = _upload(ctx, scaled)
-            var dl = _upload(ctx, l)
-            trsm_lower(ctx, dl, dv, n_train, n_star, trace, "gpc.v", CHOL_SOLVE_TPB)
-            var v = _download(ctx, dv, n_train * n_star)
-            variance = gpc_latent_var(v, n_train, n_star, kss)
-            _ = dv^
-            _ = dl^
+        var dwv = _upload(ctx, wsr)
+        var dv2 = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
+        var dvar = ctx.enqueue_create_buffer[DType.float32](n_star)
+        ctx.enqueue_function[gpc_scale_rows_kernel](
+            dv2.unsafe_ptr(), dkc.unsafe_ptr(), dwv.unsafe_ptr(), Int32(n_train), Int32(n_star),
+            grid_dim=((n_train * n_star + GPC_VAR_TPB - 1) // GPC_VAR_TPB, 1, 1),
+            block_dim=(GPC_VAR_TPB, 1, 1),
+        )
+        var dl2 = _upload(ctx, l)
+        trsm_lower(ctx, dl2, dv2, n_train, n_star, trace, "gpc.v", CHOL_SOLVE_TPB)
+        ctx.enqueue_function[gpc_latent_var_kernel](
+            dvar.unsafe_ptr(), dv2.unsafe_ptr(), Int32(n_train), Int32(n_star), kss,
+            grid_dim=((n_star + GPC_VAR_TPB - 1) // GPC_VAR_TPB, 1, 1),
+            block_dim=(GPC_VAR_TPB, 1, 1),
+        )
+        variance = _download(ctx, dvar, n_star)
+        _ = dwv^
+        _ = dv2^
+        _ = dvar^
+        _ = dl2^
     if st_on:
         print("GPC_PREDICT_STAGES n_star=" + String(n_star) + " variance_ms="
               + String((Int(perf_counter_ns()) - t_v0) // 1000000))
@@ -509,6 +518,8 @@ def gpc_predict_binary_host(
     _ = dxs^
     _ = dls^
     _ = dr^
+    _ = dyt^
+    _ = dpit^
     _ = dkc^
     _ = dstack^
     _ = dmean^

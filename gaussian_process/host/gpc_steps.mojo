@@ -97,6 +97,15 @@ from core.host_predict_threads import (
     host_predict_chunk,
     host_predict_task_count,
 )
+from gaussian_process.gpc_items import (
+    gpc_weight_item, gpc_rhs_item, gpc_scale_item, gpc_a_item, gpc_residual_item, gpc_lml_part_item, gpc_lml_fin,
+    gpc_fold_blocks,
+)
+
+
+@always_inline
+def _lp(l: List[Float32]) -> MutPointer[Float32, MutAnyOrigin]:
+    return MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(l.unsafe_ptr()))
 
 #: DEVIATION 2830: float32(1e-10), the reference's tolerance at this width.
 comptime GPC_LML_TOL_BITS: UInt32 = 0x2EDBE6FF
@@ -218,16 +227,11 @@ def gpc_validate_max_iter(max_iter_predict: Int) raises:
 def gpc_weights(f: List[Float32]) -> GPCWeights:
     """`pi = expit(f)`, `W = pi (1 - pi)`, `W_sr = sqrt(W)`."""
     var n = len(f)
-    var pi = List[Float32](capacity=n)
-    var w = List[Float32](capacity=n)
-    var wsr = List[Float32](capacity=n)
+    var pi = List[Float32](length=n, fill=Float32(0))
+    var w = List[Float32](length=n, fill=Float32(0))
+    var wsr = List[Float32](length=n, fill=Float32(0))
     for i in range(n):
-        var p = ftz(identical_sigmoid(ftz(f[i])))
-        var one_minus = ftz(Float32(1.0) - p)
-        var wi = ftz(identical_mul(p, one_minus))
-        pi.append(p)
-        w.append(wi)
-        wsr.append(ftz(identical_sqrt(wi)))
+        gpc_weight_item(i, _lp(f), _lp(pi), _lp(w), _lp(wsr))
     return GPCWeights(pi^, w^, wsr^)
 
 
@@ -250,20 +254,18 @@ def gpc_newton_rhs(
 ) -> List[Float32]:
     """`b = W f + (y - pi)`."""
     var n = len(f)
-    var out = List[Float32](capacity=n)
+    var out = List[Float32](length=n, fill=Float32(0))
     for i in range(n):
-        var wf = ftz(identical_mul(ftz(w[i]), ftz(f[i])))
-        var r = ftz(ftz(y[i]) - ftz(pi[i]))
-        out.append(ftz(wf + r))
+        gpc_rhs_item(i, _lp(w), _lp(f), _lp(y), _lp(pi), _lp(out))
     return out^
 
 
 def gpc_scale(wsr: List[Float32], v: List[Float32]) -> List[Float32]:
     """`W_sr_i * v_i`."""
     var n = len(v)
-    var out = List[Float32](capacity=n)
+    var out = List[Float32](length=n, fill=Float32(0))
     for i in range(n):
-        out.append(ftz(identical_mul(ftz(wsr[i]), ftz(v[i]))))
+        gpc_scale_item(i, _lp(wsr), _lp(v), _lp(out))
     return out^
 
 
@@ -272,10 +274,9 @@ def gpc_a_vector(
 ) -> List[Float32]:
     """`a = b - W_sr x`, where `x = cho_solve(L, W_sr K b)`."""
     var n = len(b)
-    var out = List[Float32](capacity=n)
+    var out = List[Float32](length=n, fill=Float32(0))
     for i in range(n):
-        var s = ftz(identical_mul(ftz(wsr[i]), ftz(x[i])))
-        out.append(ftz(ftz(b[i]) - s))
+        gpc_a_item(i, _lp(b), _lp(wsr), _lp(x), _lp(out))
     return out^
 
 
@@ -283,21 +284,15 @@ def gpc_lml(
     a: List[Float32], f: List[Float32], y: List[Float32], logdet_b: Float32
 ) -> Float32:
     """`-0.5 a.f - sum log1p(exp(-(2y - 1) f)) - sum log diag L`
-    (`_gpc.py:483-487`) in DEVIATION 2831's order."""
+    (`_gpc.py:483-487`) in DEVIATION 2831's order; the two folds in
+    GPC_FOLD-row blocks (gaussian_process/gpc_items.mojo), the device's."""
     var n = len(a)
-    var dot = Float32(0.0)
-    for i in range(n):
-        dot = ftz(identical_mul_add(ftz(a[i]), ftz(f[i]), dot))
-    var t1 = ftz(identical_mul(Float32(-0.5), dot))
-    var t2 = Float32(0.0)
-    for i in range(n):
-        # -(2y - 1) f is -f for y = 1 and +f for y = 0, an exact negation.
-        var z = ftz(f[i])
-        if y[i] == Float32(1.0):
-            z = -z
-        t2 = ftz(t2 + ftz(identical_softplus(z)))
-    var t3 = ftz(identical_mul(Float32(0.5), ftz(logdet_b)))
-    return ftz(ftz(t1 - t2) - t3)
+    var nb = gpc_fold_blocks(n)
+    var pdot = List[Float32](length=max(nb, 1), fill=Float32(0))
+    var pt2 = List[Float32](length=max(nb, 1), fill=Float32(0))
+    for b in range(nb):
+        gpc_lml_part_item(b, _lp(a), _lp(f), _lp(y), n, _lp(pdot), _lp(pt2))
+    return gpc_lml_fin(_lp(pdot), _lp(pt2), nb, logdet_b)
 
 
 def gpc_stop(lml: Float32, previous: Float32) -> Bool:
@@ -313,9 +308,9 @@ def gpc_stop(lml: Float32, previous: Float32) -> Bool:
 def gpc_residual(y: List[Float32], pi: List[Float32]) -> List[Float32]:
     """`y_train_ - pi_`, the right-hand side of the latent mean."""
     var n = len(y)
-    var out = List[Float32](capacity=n)
+    var out = List[Float32](length=n, fill=Float32(0))
     for i in range(n):
-        out.append(ftz(ftz(y[i]) - ftz(pi[i])))
+        gpc_residual_item(i, _lp(y), _lp(pi), _lp(out))
     return out^
 
 
