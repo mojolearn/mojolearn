@@ -410,6 +410,14 @@ def _mode():
     return _backend.default_mode()
 
 
+def _fast_on(name, mode):
+    """lane/apple-fast-prep (2026-10-02): the A/B switch
+    MOJOLEARN_X_PREP_FAST_<NAME>=1, read here, FAST tier only (`mode` is the
+    estimator's numeric mode, `_backend.default_mode`). Off, or on another
+    tier, every route below is the old one."""
+    return mode == "fast" and os.environ.get("MOJOLEARN_X_PREP_FAST_" + name, "0") == "1"
+
+
 def encode_labels(y):
     """(classes, int32 codes) under `_labels`' order rule: `_labels.encode_labels`,
     the native encoder (the base binding, or `_mojolearn_core_host` on a
@@ -578,7 +586,24 @@ def _fit_categories(mode, arr):
     uo = pr.alloc(n * d)
     co = pr.alloc(d)
     pr.stage("sort_cols", d, xo, n, d, so, 1)
-    pr.stage("unique_cols", d, so, n, d, uo, co)
+    if _fast_on("UNIQUE", mode):
+        # lane/apple-fast-prep (2026-10-02), MOJOLEARN_X_PREP_FAST_UNIQUE=1:
+        # `unique_cols` (x_prep/prims.mojo unique_cols_unit) is ONE thread per
+        # column walking every sorted row (taxi onehot / ordinal fit: 5
+        # threads over 1M rows each, after a parallel sort). Here each column
+        # takes the labels' chunked run scan (x_prep/labels.mojo uniq_count /
+        # uniq_scan / uniq_write, ~sqrt(n) rows a thread): the same words
+        # (`key` equality on the sorted column, the first word of every run,
+        # the count as a float at co[c]).
+        ch = _label_chunk(n)
+        nch = -(-n // ch)
+        for c in range(d):
+            cnt, off = pr.work(nch), pr.work(nch)
+            pr.stage("uniq_count", nch, so + c * n, n, ch, cnt)
+            pr.stage("uniq_scan", 1, cnt, nch, off, co + c)
+            pr.stage("uniq_write", nch, so + c * n, n, ch, off, uo + c * n)
+    else:
+        pr.stage("unique_cols", d, so, n, d, uo, co)
     pr.run(mode)
     counts = [int(v) for v in pr.values(co, d)]
     return [pr.get(uo + c * n, counts[c]) for c in range(d)]
@@ -626,16 +651,24 @@ def _category_block(pr, categories):
     return pr.put_list(block), kmax
 
 
-def _codes(pr, arr, categories):
+def _codes(pr, arr, categories, neg=True):
     """Stages that write each element's category index (or -1) and each
-    column's unknown count. Returns (codes offset, unknown-count offset)."""
+    column's unknown count. Returns (codes offset, unknown-count offset).
+    neg=False (lane apple-fast-prep, MOJOLEARN_X_PREP_FAST_NONEG=1): no
+    count, the offset None. `count_neg` (x_prep/prims.mojo count_neg_unit)
+    is ONE thread per column over every row; the encoders read it only under
+    handle_unknown='error' / 'warn' or with a drop, so the board's
+    OneHotEncoder(handle_unknown='ignore') and
+    OrdinalEncoder(handle_unknown='use_encoded_value') never did."""
     n, d = arr.shape
     xo = pr.put(arr)
     uo, kmax = _category_block(pr, categories)
     co = pr.put_list([c.size for c in categories])
     codes = pr.alloc(n * d)
-    neg = pr.alloc(d)
     pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
+    if not neg:
+        return codes, None
+    neg = pr.alloc(d)
     pr.stage("count_neg", d, codes, n, d, neg)
     return codes, neg
 
@@ -869,7 +902,8 @@ class OrdinalEncoder(_PrepBase):
         self._check_width(arr)
         n, d = arr.shape
         pr = _Prog()
-        codes, neg = _codes(pr, arr, self.categories_)
+        codes, neg = _codes(pr, arr, self.categories_,
+                            neg=self.handle_unknown == "error" or not _fast_on("NONEG", self.numeric_mode_))
         out = codes
         if self._grouping is not None:
             out = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping), _NONE)
@@ -1022,7 +1056,9 @@ class OneHotEncoder(_PrepBase):
         starts = [sum(widths[:j]) for j in range(d)]
         W = sum(widths)
         pr = _Prog()
-        codes, neg = _codes(pr, arr, self.categories_)
+        codes, neg = _codes(pr, arr, self.categories_,
+                            neg=self.handle_unknown in ("error", "warn") or self.drop is not None
+                            or not _fast_on("NONEG", self.numeric_mode_))
         if self._grouping is not None:
             unk = self._unknown_to()
             codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping),
