@@ -364,7 +364,17 @@ def _dual_times_sv(dual_coef, support_vectors):
 #: `svc_pair_epilogue` modes (svm/impl/svc_rows.mojo): the epilogues
 #: (lane/py-dn-svm, 2026-09-28) and the row glue (cgfin-c-svm, 2026-10-02)
 (_EPI_OVO, _EPI_OVR, _EPI_VOTES, _EPI_PROBA, _EPI_LOG_PROBA, _EPI_BINARY,
- _GLUE_GATHER, _GLUE_SELECT, _GLUE_C_ROWS) = range(9)
+ _GLUE_GATHER, _GLUE_SELECT, _GLUE_C_ROWS, _GLUE_FOLD, _GLUE_FOLD_FINISH) = range(11)
+
+
+def _native_perm_array(binding, n, seed):
+    """`_native_perm` into an int32 Array (the fold glue reads it at its
+    address)."""
+    out = empty((max(n, 1),), "<i4")
+    seed &= 0xFFFFFFFFFFFFFFFF
+    if n:
+        binding.svc_splitmix_perm(addr(out, name="shuffle"), n, seed & 0xFFFFFFFF, seed >> 32)
+    return out
 
 
 def _native_perm(binding, n, seed):
@@ -864,53 +874,72 @@ class SVC(NumericModeMixin):
         if not self.probability:
             return
         k = len(self.classes_)
-        cb = None if c_rows is None else c_rows.tolist()
         seed = 0 if self.random_state is None else int(self.random_state)
         precomputed = self.kernel == "precomputed"
         native = self._bind(_EXT_NAME)
         ab = []
         pair_no = 0
+        n_all = codes.shape[0]
+        c_col = None if c_rows is None else c_rows.reshape((n_all, 1))
         for ci in range(k):
             for cj in range(ci + 1, k):
                 # the pair's rows in row order, selected in the binding (a
                 # device compaction on a GPU install); libsvm's +1 is class ci
                 idx_a, lab_a, _ = _pair_select(native, codes, ci, cj)
-                idx = idx_a.tolist()
-                n = len(idx)
-                labels = [1.0 if v == 0.0 else -1.0 for v in lab_a.tolist()]
-                perm = _native_perm(native, n, seed ^ ((pair_no * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF))
-                dec = [0.0] * n
+                n = idx_a.shape[0]
+                perm = _native_perm_array(native, n, seed ^ ((pair_no * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF))
+                # the decisions in shuffle order; each fold's machine writes
+                # its held block in place (lane/cgr-kernel: the fold rows,
+                # labels and the unshuffle run in the binding, on the device
+                # on a GPU install; no Python list over the rows)
+                dec_perm = zeros((max(n, 1),), "<f4")
+                consts = [0.0] * 10
                 for f in range(5):
                     begin = f * n // 5
                     end = (f + 1) * n // 5
-                    train = perm[:begin] + perm[end:]
-                    held = perm[begin:end]
-                    n_pos = sum(1 for m in train if labels[m] > 0)
-                    n_neg = len(train) - n_pos
+                    h = end - begin
+                    nt = n - h
+                    rows_held = empty((max(n, 1),), "<i4")
+                    lab = empty((max(nt, 1),), "<f4")
+                    n_pos = int(native.svc_pair_epilogue(
+                        addr_ro(idx_a, name="pair rows"), addr_ro(perm, name="shuffle"),
+                        addr_ro(lab_a, name="pair labels"), addr(rows_held, name="fold rows"),
+                        [_GLUE_FOLD, n, begin, end, addr(lab, name="fold labels")])) if n else 0
+                    n_neg = nt - n_pos
                     if n_pos == 0 or n_neg == 0:
-                        v = 0.0 if not train else (1.0 if n_pos > 0 else -1.0)
-                        for m in held:
-                            dec[m] = v
+                        consts[2 * f] = 1.0
+                        consts[2 * f + 1] = 0.0 if nt == 0 else (1.0 if n_pos > 0 else -1.0)
                         continue
-                    if not held:
+                    if h == 0:
                         continue
-                    rows = [idx[m] for m in train]
-                    hrows = [idx[m] for m in held]
+                    rows = rows_held[:nt]
+                    hrows = rows_held[nt:n]
+                    lab = lab[:nt]
                     sub = _gather(native, x, rows, rows) if precomputed else _gather(native, x, rows)
-                    lab = Array.from_list([0.0 if labels[m] > 0 else 1.0 for m in train], "<f4")
-                    sub_c = None if cb is None else Array.from_list([cb[r] for r in rows], "<f4")
+                    sub_c = None if c_col is None else _gather(native, c_col, rows).reshape((nt,))
                     n_sv, dual, support, sv, info = self._solve(sub, lab, gamma, sub_c)
                     q = _gather(native, x, hrows, rows) if precomputed else _gather(native, x, hrows)
                     cols = sub.shape[1]
-                    d = self._machine(q, dual[:n_sv].reshape((1, n_sv)),
-                                      sv[:n_sv * cols].reshape((n_sv, cols)), n_sv,
-                                      _round_f32(info[0]), 0.0, 1.0, False,
-                                      support[:n_sv].tolist()).tolist()
-                    for pos, m in enumerate(held):
-                        # libsvm's orientation: positive toward class i (+1)
-                        dec[m] = -float(d[pos])
-                a, b = _native_sigmoid_train(native, dec, labels)
-                ab.append((a, b))
+                    self._machine(q, dual[:n_sv].reshape((1, n_sv)),
+                                  sv[:n_sv * cols].reshape((n_sv, cols)), n_sv,
+                                  _round_f32(info[0]), 0.0, 1.0, False,
+                                  support[:n_sv].tolist(), out_addr=addr(dec_perm, name="decisions") + 4 * begin)
+                # libsvm's orientation (positive toward class i) and +1/-1
+                # labels, back in pair row order, float64
+                dec = empty((max(n, 1),), "<f8")
+                labels = empty((max(n, 1),), "<f8")
+                cst = Array.from_list(consts, "<f4")
+                if n:
+                    native.svc_pair_epilogue(
+                        addr_ro(dec_perm, name="decisions"), addr_ro(perm, name="shuffle"),
+                        addr_ro(lab_a, name="pair labels"), addr(dec, name="pair decisions"),
+                        [_GLUE_FOLD_FINISH, n, addr_ro(cst, name="fold constants"),
+                         addr(labels, name="pair +1/-1 labels"), 0])
+                ab_out = array.array("d", [0.0, 0.0])
+                native.svc_platt_train(addr_ro(dec, name="pair decisions") if n else 0,
+                                       addr_ro(labels, name="pair labels") if n else 0,
+                                       ab_out.buffer_info()[0], n)
+                ab.append((ab_out[0], ab_out[1]))
                 pair_no += 1
         self._prob_ab = ab
         self.probA_ = Array.from_list([a for a, _ in ab], "<f8")
