@@ -3491,6 +3491,48 @@ class LabelBinarizer(_PrepBase):
         return _classes_array([self._classes[i] for i in idx])
 
 
+def _mlb_buffer(y):
+    """lane/apple-fast-prep (2026-10-02), MOJOLEARN_X_PREP_FAST_MULTILABEL=1:
+    a MultiLabelBinarizer input of int / float labels as (rows, _LabelBuf of
+    the labels' float64 words, owner floats Array, label count), built with
+    no Python-level loop over the labels, or None for the old route (str or
+    bool labels, no labels, more than 2**24 rows). The old route (fit and
+    transform each) flattens the rows in Python, tests the floats exact in
+    float32 (`_numeric_labels`), builds the float32 Array of the labels and
+    the owner list, and in transform does it all again: about eight passes
+    of Python objects over n*k labels (board multilabel-binarizer 5.4-5.6x
+    behind scikit-learn, whose own transform is one Python pass). Here the
+    passes are C-level: `len` per row, one type set, one array('d'), one
+    chained repeat for the owners; the float32 exactness test is `lab_load`
+    on the device (an inexact label is NaN, sorted last, which sends fit
+    back to the old route as `_label_fit_device` does)."""
+    import itertools
+    rows = y if isinstance(y, list) else list(y)
+    n = len(rows)
+    if n == 0 or n > 2 ** 24:
+        return None
+    try:
+        kinds = set(map(type, itertools.chain.from_iterable(rows)))
+    except TypeError:
+        return None
+    if not kinds or not kinds <= _INT_FLOAT:
+        return None
+    try:
+        dbl = array.array("d", itertools.chain.from_iterable(rows))
+    except (TypeError, OverflowError, ValueError):
+        return None
+    m = len(dbl)
+    if m == 0 or 2 * m > 2 ** 30:
+        return None
+    lens = array.array("i", map(len, rows))
+    owner = array.array("f", itertools.chain.from_iterable(map(itertools.repeat, itertools.count(), lens)))
+    store = _raw_store_type("i", 2 * m).from_address(dbl.buffer_info()[0])
+    store._keep = dbl
+    words = Array._owned(store, (2 * m,), "<i4", "C")
+    lb = _LabelBuf(4, words, m, float in kinds, dbl)
+    return rows, lb, Array._owned(owner, (m,), "<f4", "C"), m
+
+
 class MultiLabelBinarizer(_PrepBase):
     """sklearn.preprocessing.MultiLabelBinarizer: classes_ the sorted union
     of every sample's labels (or `classes` as given, in that order), transform
@@ -3513,13 +3555,51 @@ class MultiLabelBinarizer(_PrepBase):
             self._given = True
             self._cats = None
         else:
+            if _fast_on("MULTILABEL", self.numeric_mode_):
+                y = y if isinstance(y, list) else list(y)
+                got = _mlb_buffer(y)
+                if got is not None and self._fit_buffer(got[1]):
+                    return self
             flat = [v for row in y for v in row]
             self._classes, self._cats = _label_classes(self.numeric_mode_, flat) if flat else ([], None)
             self._given = False
         self.classes_ = _classes_array(self._classes)
         return self
 
+    def _fit_buffer(self, lb):
+        """The fast route's fit (lane apple-fast-prep): one program, the
+        labels' sorted distinct words. False when a label has no exact
+        float32 word (the caller takes the old route)."""
+        got = _label_fit_device(self.numeric_mode_, lb)
+        if got is None:
+            return False
+        self._classes, self._cats = got[0], got[1]
+        self._given = False
+        self.classes_ = _classes_array(self._classes)
+        return True
+
+    def _transform_buffer(self, lb, owner, n):
+        """The fast route's transform (lane apple-fast-prep): the raw words
+        up, the codes and the indicator on the device."""
+        K = len(self._classes)
+        pr = _Prog()
+        codes = _label_codes_device(pr, lb, self._cats)
+        ro = pr.put(owner)
+        out = pr.output(n * max(K, 1), "i")
+        pr.stage("scatter_ones", lb.n, codes, ro, K, out)
+        pr.run(self.numeric_mode_)
+        return pr.get_i32(out, (n, K))
+
     def fit_transform(self, y):
+        if self.classes is None and not self.sparse_output and _fast_on("MULTILABEL", _mode()):
+            # lane apple-fast-prep: the rows flattened once, two programs
+            y = y if isinstance(y, list) else list(y)
+            got = _mlb_buffer(y)
+            if got is not None:
+                _rows, lb, owner, _m = got
+                self.numeric_mode_ = _mode()
+                if self._fit_buffer(lb):
+                    return self._transform_buffer(lb, owner, len(y))
         y = [list(row) for row in y]
         return self.fit(y).transform(y)
 
@@ -3529,6 +3609,11 @@ class MultiLabelBinarizer(_PrepBase):
 
     def transform(self, y):
         self._check_fitted()
+        if self._cats is not None and _fast_on("MULTILABEL", self.numeric_mode_):
+            y = y if isinstance(y, list) else list(y)
+            got = _mlb_buffer(y)
+            if got is not None:
+                return self._transform_buffer(got[1], got[2], len(y))
         rows = [list(r) for r in y]
         n, K = len(rows), len(self._classes)
         flat = [v for r in rows for v in r]
