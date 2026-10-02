@@ -1599,8 +1599,8 @@ def _eigh_par_test(
     ctx: DeviceContext,
     da: DeviceBuffer[DType.float32],
     doff: DeviceBuffer[DType.float32],
-    dpart: DeviceBuffer[DType.float32],
-    dfold: DeviceBuffer[DType.float32],
+    mut dpart: DeviceBuffer[DType.float32],
+    mut dfold: DeviceBuffer[DType.float32],
     hfold: HostBuffer[DType.float32],
     n: Int,
 ) raises -> SIMD[DType.float32, 4]:
