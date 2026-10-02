@@ -408,7 +408,13 @@ def gemm_nt(
     comptime if APPLE_FAST_GEMM_SWITCHES:
         if n > 4 and apple_fast_switch_on("MOJOLEARN_APPLE_FAST_GEMM_NT_TILED"):
             _apple_fast_gemm_nt_tiled(
-                ctx, z.unsafe_ptr(), x.unsafe_ptr(), y.unsafe_ptr(), m, n, k
+                ctx,
+                z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                m,
+                n,
+                k,
             )
             return
     var tz = TileTensor(z, row_major(m, n))
@@ -478,7 +484,13 @@ def gemm_nt_gram(
         if apple_fast_switch_on("MOJOLEARN_APPLE_FAST_GEMM_NT_TILED"):
             var xtm = xt
             _apple_fast_gemm_nt_tiled(
-                ctx, z.unsafe_ptr(), xtm.unsafe_ptr(), xtm.unsafe_ptr(), m, n, k
+                ctx,
+                z.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                xtm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                xtm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                m,
+                n,
+                k,
             )
             return
     var tz = TileTensor(z, row_major(m, n))
