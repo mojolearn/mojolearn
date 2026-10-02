@@ -24,9 +24,9 @@ control flow and data movement only:
   `(wmax * n) * eps` in double then rounded once to float32, exactly as
   `_f32` and the binding boundary round them.
 
-The executors (a GPU call for an operand of at least `dev` elements, the
-host executor below that; the same bits either way) are
-`x_decomp/kit.mojo`'s; `dev` is MOJOLEARN_XD_RES_DEV_MIN (default 65536).
+The CPU column runs this file on `x_decomp/kit.mojo`; the GPU binding runs
+x_decomp/kit_device.mojo's `fast_mcd_dev`, the same search with every
+matrix resident on the device.
 """
 from std.memory import bitcast
 from std.builtin.sort import sort
@@ -168,13 +168,13 @@ def _order_by_det(est: List[Est], keep: Int) raises -> List[Int]:
     return out^
 
 
-struct Mcd[E: Exec, S: Exec]:
-    var k: Kit[Self.E, Self.S]
+struct Mcd[E: Exec]:
+    var k: Kit[Self.E]
     var seed: Int
     var draws: Int
 
-    def __init__(out self, dev: Int, seed: Int):
-        self.k = Kit[Self.E, Self.S](dev)
+    def __init__(out self, seed: Int):
+        self.k = Kit[Self.E]()
         self.seed = seed
         self.draws = 0
 
@@ -328,8 +328,8 @@ struct Mcd[E: Exec, S: Exec]:
         return out^
 
 
-def fast_mcd[E: Exec, S: Exec](
-    X: Mat, p: List[Int], dev: Int, loc_out: F32Ptr, cov_out: F32Ptr, sup_out: I32Ptr, dist_out: F32Ptr,
+def fast_mcd[E: Exec](
+    X: Mat, p: List[Int], loc_out: F32Ptr, cov_out: F32Ptr, sup_out: I32Ptr, dist_out: F32Ptr,
 ) raises:
     """`MinCovDet._fast_mcd` for p >= 2. `p` = [n, n_features, h, seed,
     n_sub, n_ss, h_sub, n_trials, n_m, h_m, n_best_m], every integer the
@@ -339,7 +339,7 @@ def fast_mcd[E: Exec, S: Exec](
     var n = p[0]
     var d = p[1]
     var h = p[2]
-    var run = Mcd[E, S](dev, p[3])
+    var run = Mcd[E](p[3])
     var best: Est
     var support = List[Int32](length=n, fill=Int32(0))
     var dist = List[Float32](length=n, fill=Float32(0))

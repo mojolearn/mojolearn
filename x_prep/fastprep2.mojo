@@ -19,7 +19,8 @@ Switches (env, read on the host at dispatch time, `Prep2Switches`):
   MOJOLEARN_X_PREP_FAST_II_CONV=1  ii_conv's max over the row sums by one
       threadgroup tree instead of one thread over every row
       (x_prep/iterative.mojo ii_conv_unit; a max is exact, the same word).
-  MOJOLEARN_X_PREP_FAST_EIGH_BLOCK=1  eigh (one cyclic Jacobi per matrix,
+  -D MOJOLEARN_PREP2_FAST_EIGH_BLOCK  (a build define, `PREP2_FAST_EIGH_BLOCK`;
+      the kernel compiles only under it)  eigh (one cyclic Jacobi per matrix,
       x_prep/eigh.mojo eigh_unit on ONE thread: IterativeImputer's
       BayesianRidge runs it once per feature per round, ~465 rotations x 4
       rows of 31 per sweep, serial) on a 32-thread threadgroup per matrix:
@@ -45,11 +46,12 @@ from std.atomic import Atomic
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
+from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
 from x_prep.common import FP, IP, STAGE_INTS, p, ld, ldi, st
 from x_prep.prims import add, sub, mul, div, sqrtf
 from x_prep.eigh import MAX_SWEEPS
@@ -57,7 +59,9 @@ from x_prep.target import te_value
 from x_prep.dradix import RUP, radix_word, radix_load_kernel
 
 #: FAST on Apple only
-comptime PREP2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+comptime PREP2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+#: eigh on a 32-thread block: a build define (-D MOJOLEARN_PREP2_FAST_EIGH_BLOCK), FAST + Apple only
+comptime PREP2_FAST_EIGH_BLOCK = PREP2_FAST and is_defined["MOJOLEARN_PREP2_FAST_EIGH_BLOCK"]()
 comptime TGR = 256
 comptime OP_QUANTILE = 2
 comptime OP_TE_GLOBAL = 20
@@ -72,8 +76,9 @@ def _on(name: String) -> Bool:
 
 
 struct Prep2Switches(Copyable, Movable):
-    """The lane's env switches, read once per program on the host (every
-    field False outside FAST + Apple)."""
+    """The lane's switches, read once per program on the host (every field
+    False outside FAST + Apple): env switches, and `eigh_block` the build
+    define PREP2_FAST_EIGH_BLOCK."""
     var te_global: Bool
     var te_enc: Bool
     var ii_conv: Bool
@@ -85,13 +90,12 @@ struct Prep2Switches(Copyable, Movable):
         self.te_enc = False
         self.ii_conv = False
         self.ii_gram_tile = False
-        self.eigh_block = False
+        self.eigh_block = PREP2_FAST_EIGH_BLOCK
         comptime if PREP2_FAST:
             self.te_global = _on("MOJOLEARN_X_PREP_FAST_TE_GLOBAL")
             self.te_enc = _on("MOJOLEARN_X_PREP_FAST_TE_ENC")
             self.ii_conv = _on("MOJOLEARN_X_PREP_FAST_II_CONV")
             self.ii_gram_tile = _on("MOJOLEARN_X_PREP_FAST_II_GRAM_TILE")
-            self.eigh_block = _on("MOJOLEARN_X_PREP_FAST_EIGH_BLOCK")
 
 
 # ------------------------------------------------------------ TargetEncoder
@@ -692,9 +696,10 @@ def prep2_fast_stage(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mu
     if sw.ii_conv and op == OP_II_CONV and Int(hq[7]) > 0:
         ctx.enqueue_function[ii_conv_fast_kernel](f, qp, grid_dim=1, block_dim=TGR)
         return True
-    if sw.eigh_block and op == OP_EIGH and Int(hq[1]) <= EIG_MAX:
-        ctx.enqueue_function[eigh_block_fast_kernel](f, qp, grid_dim=total, block_dim=EIG_TPB)
-        return True
+    comptime if PREP2_FAST_EIGH_BLOCK:
+        if sw.eigh_block and op == OP_EIGH and Int(hq[1]) <= EIG_MAX:
+            ctx.enqueue_function[eigh_block_fast_kernel](f, qp, grid_dim=total, block_dim=EIG_TPB)
+            return True
     if sw.ii_gram_tile and op == OP_II_GRAM and Int(hq[2]) <= IIG_DMAX:
         var chunks = _iig_chunks(Int(hq[1]))
         ctx.enqueue_function[ii_gram_tile_kernel](f, qp, w, grid_dim=chunks, block_dim=TGR)

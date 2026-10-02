@@ -3,8 +3,9 @@
 Written without a Mojo toolchain (cloud peer); the first M3 build is the compile check
 (binding x_prep: `bindings/build_x_prep.sh`, new file `x_prep/fastprep2.mojo`, 3 lines in
 `x_prep/device.mojo`, Python `_expansion_prep.py` `_prep2_qselect` + SimpleImputer / RobustScaler fit).
-Every switch is compiled under FAST + Apple only (`PREP2_FAST`) and defaults OFF; IDENTICAL compiles
-the old code. Lanes: target-encoder, simple-imputer, robust-scaler, iterative-imputer (the others of the
+Every switch is compiled under FAST + Apple only (`PREP2_FAST` = FAST mode and Apple) and defaults OFF;
+IDENTICAL compiles main's code unchanged. Merged with origin/main 2026-10-02 (RobustScaler's stats stage
+is main's `_col_stats(var=False)` on both arms). Lanes: target-encoder, simple-imputer, robust-scaler, iterative-imputer (the others of the
 family are already element-parallel, see "Not changed").
 
 | switch | kind | site | what it changes under FAST on Apple |
@@ -12,9 +13,9 @@ family are already element-parallel, see "Not changed").
 | `MOJOLEARN_X_PREP_FAST_TE_GLOBAL=1` | env, host at dispatch (`Prep2Switches`) | `x_prep/fastprep2.mojo` te_global_fast_kernel, dispatched in `prep2_fast_stage` | te_global by a 256-thread threadgroup per (fold, target) with a tree (count+sum, then squared deviations) |
 | `MOJOLEARN_X_PREP_FAST_TE_ENC=1` | env | te_enc_fast_kernel | te_enc by a threadgroup per (fold, column, category, target) over the category's gathered bucket (needs BK and GB > 0, the default program; else the unit runs) |
 | `MOJOLEARN_X_PREP_FAST_II_CONV=1` | env | ii_conv_fast_kernel | the inf-norm max over `ii_rowabs`' row sums by one threadgroup tree (a max is exact: the same word) |
-| `MOJOLEARN_X_PREP_FAST_EIGH_BLOCK=1` | env | eigh_block_fast_kernel (m <= 32, else the unit) | the cyclic Jacobi of `eigh` on a 32-thread threadgroup per matrix: same sweeps, same rotation order and tests, each rotation's row/column updates strided over the threads, A and V in shared memory (each element the unit's own expression: the unit's words) |
+| `-D MOJOLEARN_PREP2_FAST_EIGH_BLOCK` (`PREP2_FAST_EIGH_BLOCK`, binding `x_prep`) | build define; the dispatch and the kernel compile only under it | eigh_block_fast_kernel (m <= 32, else the unit) | the cyclic Jacobi of `eigh` on a 32-thread threadgroup per matrix: same sweeps, same rotation order and tests, each rotation's row/column updates strided over the threads, A and V in shared memory (each element the unit's own expression: the unit's words) |
 | `MOJOLEARN_X_PREP_FAST_II_GRAM_TILE=1` | env | ii_gram_tile_kernel + ii_gram_tile_reduce_kernel (d <= 32, else the existing fold) | ii_gram as a grid of 512-row blocks, each tile of 128 rows x d columns loaded into shared memory once, every thread 4 of the d*d cells, partials reduced by a tree per cell (scratch: chunks x d*d words) |
-| `MOJOLEARN_X_PREP_FAST_QSELECT=1` | env, read in Python on the FAST tier of a Metal binding (`_prep2_qselect`) | `_expansion_prep.py` SimpleImputer.fit (median), RobustScaler.fit; device `qselect_device` (the `quantile` stage with SELECT = 1 as its 8th parameter) | the median / the three quantiles by a device radix select over `dradix.mojo`'s keys (one strided key load, then per 8-bit pass a histogram per (column, chunk of 16384 rows) carrying both order statistics of every fraction, a pick per task, then the unit's lerp) instead of sort_cols + quantile; no sort, no n*d sorted scratch; the same order statistics, so the same words |
+| `MOJOLEARN_X_PREP_FAST_QSELECT=1` | env, read once at import in Python, honoured on the FAST tier of a Metal binding (`_prep2_qselect`) | `_expansion_prep.py` SimpleImputer.fit (median), RobustScaler.fit; device `qselect_device` (the `quantile` stage with SELECT = 1 as its 8th parameter) | the median / the three quantiles by a device radix select over `dradix.mojo`'s keys (one strided key load, then per 8-bit pass a histogram per (column, chunk of 16384 rows) carrying both order statistics of every fraction, a pick per task, then the unit's lerp) instead of sort_cols + quantile; no sort, no n*d sorted scratch; the same order statistics, so the same words |
 
 ## Causes (file:line on origin/lane/apple-fast f5f61bde)
 
@@ -47,8 +48,11 @@ Apple FAST; II_GRAM_TILE may move the last bits.
 ## Keep rule
 
 A switch becomes the FAST default when its arm is faster on the M3 and held-out quality stays within
-FAST's run-to-run spread; then the env read goes and the arm is the code. The `prep2-*-ident-istella`
-lines are the IDENTICAL baselines (AFC_ARM=ours) for the "FAST slower than IDENTICAL" test.
+FAST's run-to-run spread; then the switch goes and the arm is the code. Light A/Bs: one dataset per
+change (taxi for target-encoder and iterative-imputer, istella for the two sort-free quantile lanes).
+Risky compile sites: `x_prep/fastprep2.mojo` `comptime if PREP2_FAST_EIGH_BLOCK:` around the eigh
+dispatch (inside a def returning Bool), the shared-memory `stack_allocation` sizes of
+eigh_block_fast_kernel and ii_gram_tile_kernel, `Prep2Switches.__init__` assigning a comptime Bool.
 
 ## Not changed (listed with shape and cost estimate)
 

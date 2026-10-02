@@ -140,3 +140,20 @@ def chunk_neg_unit(t: Int, f: FP, q: IP):
         if ld(f, C + i) < Float32(0):
             k += 1
     sti(f, p(q, 3) + t, k)
+
+
+def row_ones_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, OFF, W, OUT]; t = row (MultiLabelBinarizer's indicator,
+    lane gap-prep2): int32 1 at OUT[t*W + code] for each known code of the
+    row's entries [OFF[t], OFF[t+1]) (OFF int32 words, `ldi`). The words of
+    `scatter_ones` with ROWS[j] = t, with no per-entry row vector built on
+    the host."""
+    var C = p(q, 0)
+    var W = p(q, 2)
+    var O = p(q, 3) + t * W
+    var lo = ldi(f, p(q, 1) + t)
+    var hi = ldi(f, p(q, 1) + t + 1)
+    for j in range(lo, hi):
+        var code = Int(ld(f, C + j))
+        if code >= 0:
+            sti(f, O + code, 1)
