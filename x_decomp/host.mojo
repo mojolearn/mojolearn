@@ -20,7 +20,6 @@ from decomposition.host.pca_oracle import host_sign_flip
 from checks.numerics import ftz
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
-    XD_LU_SOLVE_GETRS,
     lu_perm_src,
     trs_tri_cols,
     trisolve_serial,
@@ -43,14 +42,12 @@ from x_decomp.cells import (
     gamma_cell,
     lasso_row,
     omp_row,
-    lu_solve_serial,
     orth_diag_cell,
     orth_rank_guard,
     trsm_row,
     rand_cell,
     pdist_cell,
 )
-from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_serial
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_serial
@@ -341,15 +338,7 @@ struct HostExec(Exec):
 
     @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
-        comptime if not XD_LU_SOLVE_GETRS:
-            lu_solve_rl(lu, piv, b, n, nrhs, trans)
-            return
-        # lane neural-pass39: the block-interleaved walk of the same cells
-        # (x_decomp/lu_host.mojo); MOJOLEARN_XD_LU_SOLVE_SERIAL=1 keeps the loop
-        if xd_lu_solve_serial():
-            lu_solve_serial(lu, piv, b, n, nrhs, trans)
-        else:
-            lu_solve_host_rows(lu, piv, b, n, nrhs, trans)
+        lu_solve_rl(lu, piv, b, n, nrhs, trans)
 
     @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:

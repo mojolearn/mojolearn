@@ -20,9 +20,7 @@ from decomposition.impl.linalg.detail.svd_full import svd_of_r
 from decomposition.linalg_public_device import device_eigh, device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.cells import (
-    XD_LU_SOLVE_GETRS,
     lu_perm_src,
-    lu_solve_col,
     trs_block_col,
     trs_coef,
     trs_divides,
@@ -79,7 +77,6 @@ from x_decomp.cells import (
     lu_swap_elem,
     lu_update_elem,
     omp_row,
-    lu_solve_serial,
     orth_diag_cell,
     orth_rank_guard,
     trsm_row,
@@ -88,7 +85,6 @@ from x_decomp.cells import (
     pdist_cell,
     sqdist_cell,
 )
-from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_on_host
 from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_on_host
 from x_decomp.exec_trait import Exec
 from x_decomp.host import HostExec
@@ -418,16 +414,6 @@ def lu_pivot_parallel() -> Bool:
     return String(getenv("MOJOLEARN_XD_LU_PIVOT_SERIAL")) != "1"
 
 
-def lu_solve_cols_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, trans: Int32):
-    """One thread per right-hand side column (`lu_solve_col`): the columns
-    are independent in every statement of the serial solve, so the bits are
-    the serial solve's. The serial solve was one thread for n^2 * nrhs
-    dependent multiply-adds: 616 s at 8192 x 64 on an MI325X."""
-    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if c < Int(nrhs):
-        lu_solve_col(lu, piv, b, Int(n), Int(nrhs), Int(trans), c)
-
-
 def lu_swap_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
     var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if j < Int(n):
@@ -578,11 +564,6 @@ def lu_trail_tiled_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32
             if acts[kp] != Float32(0):
                 acc = ftz(identical_mul_add(-ls[r * width + kp], us[kp * LU_TILE + c], ftz(acc)))
         a.unsafe_store(i * nn + j, acc)
-
-
-def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, trans: Int32):
-    if block_idx.x == 0 and thread_idx.x == 0:
-        lu_solve_serial(lu, piv, b, Int(n), Int(nrhs), Int(trans))
 
 
 def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
@@ -1890,52 +1871,24 @@ struct DevExec(Exec):
 
     @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
-        comptime if not XD_LU_SOLVE_GETRS:
-            if n <= 0 or nrhs <= 0:
-                return
-            var cx = xd_ctx()
-            var ul = _up(cx, lu, n * n)
-            var up = _up_i(cx, piv, n)
-            var ub = _up(cx, b, n * nrhs)
-            var ui = cx.enqueue_create_buffer[DType.float32](n)
-            var ud = cx.enqueue_create_buffer[DType.float32](n * nrhs)
-            launch_lu_solve(cx, _p(ul), I32Ptr(unsafe_from_address=Int(up.unsafe_ptr())), _p(ub), _p(ui), _p(ud), n, nrhs, trans)
-            _down(cx, ud, b, n * nrhs)
-            cx.synchronize()
-            _ = ul^
-            _ = up^
-            _ = ub^
-            _ = ui^
-            _ = ud^
-            cx.synchronize()
-            _ = cx^
+        if n <= 0 or nrhs <= 0:
             return
-        if xd_lu_solve_on_host(n):
-            # lane neural-pass39: the host walk of the same cells (the device
-            # ran one thread per column of B: 64 threads on the whole GPU)
-            lu_solve_host_rows(lu, piv, b, n, nrhs, trans)
-            return
-        var ctx = xd_ctx()
-        var dl = _up(ctx, lu, n * n)
-        var dp = _up_i(ctx, piv, n)
-        var db = _up(ctx, b, n * nrhs)
-        if String(getenv("MOJOLEARN_XD_LU_SOLVE_SERIAL")) == "1":
-            ctx.enqueue_function[lu_solve_kernel](
-                dl.unsafe_ptr(), dp.unsafe_ptr(), db.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(trans), grid_dim=1, block_dim=1
-            )
-        else:
-            # One thread per right-hand side (lane/neural-net-experiment).
-            ctx.enqueue_function[lu_solve_cols_kernel](
-                dl.unsafe_ptr(), dp.unsafe_ptr(), db.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(trans),
-                grid_dim=_blocks(nrhs), block_dim=TPB,
-            )
-        _down(ctx, db, b, n * nrhs)
-        ctx.synchronize()
-        _ = dl^
-        _ = dp^
-        _ = db^
-        ctx.synchronize()
-        _ = ctx^
+        var cx = xd_ctx()
+        var ul = _up(cx, lu, n * n)
+        var up = _up_i(cx, piv, n)
+        var ub = _up(cx, b, n * nrhs)
+        var ui = cx.enqueue_create_buffer[DType.float32](n)
+        var ud = cx.enqueue_create_buffer[DType.float32](n * nrhs)
+        launch_lu_solve(cx, _p(ul), I32Ptr(unsafe_from_address=Int(up.unsafe_ptr())), _p(ub), _p(ui), _p(ud), n, nrhs, trans)
+        _down(cx, ud, b, n * nrhs)
+        cx.synchronize()
+        _ = ul^
+        _ = up^
+        _ = ub^
+        _ = ui^
+        _ = ud^
+        cx.synchronize()
+        _ = cx^
 
     @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:
