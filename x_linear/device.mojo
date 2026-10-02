@@ -23,7 +23,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_ENETCV, ALGO_BAYES, ALGO_ARD
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_ENETCV, ALGO_BAYES, ALGO_ARD, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT
 from x_linear.ops import ld, st, fd, i2f, fa, fm, fmad, flog, fill, copy, row_dot, mean_of, fs, fabs, shuffle
 from x_linear.sgd import sgd_mb_on, mb_row, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part
@@ -35,6 +35,11 @@ from x_linear.glm import (
     _glm_cell_part, _glm_cell_store,
 )
 from x_linear.cd_grid import enetcv_fit_grid
+from x_linear.isotonic import iso_predict_one, iso_gather_one, iso_bounds, iso_bounds_from, iso_group, iso_after_unique
+from std.memory import bitcast, stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
+from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from x_linear.moments_grid import MOMENTS_GRID, MG_NT, mg_means_kernel, mg_cross_kernel, mg_tiles
 from x_linear.dispatch import ALGO_RIDGE
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
@@ -1215,10 +1220,540 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     _ = dbs^
     _ = wit^
 
+
+# ------------------------------------------------ isotonic on the grid (lane/neural-pass107)
+# The fit's sort as an LSD radix sort on the device: the rows start in index
+# order and are stably sorted by y's key, then by x's key (8-bit digits, four
+# passes each; a pass is a count per tile of ISO_TILE rows, one scan and a
+# stable scatter per tile). The keys order exactly as the host's comparison
+# (`_iso_less`: x, then y, then the row): IEEE order with -0 folded onto +0
+# (the comparison has -0 == +0). The order (x, y, row) is total, so the
+# permutation is the host sort's whatever the algorithm, and so is every
+# word after it (`iso_fit_sorted` on one thread). Predict: one thread a query.
+comptime ISO_TILE = 4096
+comptime ISO_RADIX = 256
+
+
+@always_inline
+def _iso_key(v: Float32) -> UInt32:
+    var b = bitcast[DType.uint32](v)
+    if (b & UInt32(0x7FFFFFFF)) == UInt32(0):
+        b = UInt32(0)
+    if (b & UInt32(0x80000000)) != UInt32(0):
+        return ~b
+    return b | UInt32(0x80000000)
+
+
+@always_inline
+def _iso_keys_kernel_body(x: FP, y: FP, kx: IP, ky: IP, perm: IP, n: Int32):
+    var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if i < Int(n):
+        kx.unsafe_store(i, bitcast[DType.int32](_iso_key(x.unsafe_load(i))))
+        ky.unsafe_store(i, bitcast[DType.int32](_iso_key(y.unsafe_load(i))))
+        perm.unsafe_store(i, Int32(i))
+
+
+def iso_keys_kernel(x: FP, y: FP, kx: IP, ky: IP, perm: IP, n: Int32, wf: IP, woff: Int32, nonce: Int32):
+    _iso_keys_kernel_body(x, y, kx, ky, perm, n)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _digit(keys: IP, row: Int, shift: Int) -> Int:
+    return Int((bitcast[DType.uint32](keys.unsafe_load(row)) >> UInt32(shift)) & UInt32(ISO_RADIX - 1))
+
+
+@always_inline
+def _iso_count_kernel_body(keys: IP, perm: IP, n: Int32, shift: Int32, counts: IP, ntiles: Int32):
+    var tl = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if tl < Int(ntiles):
+        for dg in range(ISO_RADIX):
+            counts.unsafe_store(dg * Int(ntiles) + tl, Int32(0))
+        var lo = tl * ISO_TILE
+        var hi = min(Int(n), lo + ISO_TILE)
+        for i in range(lo, hi):
+            var dg = _digit(keys, Int(perm.unsafe_load(i)), Int(shift))
+            var o = dg * Int(ntiles) + tl
+            counts.unsafe_store(o, counts.unsafe_load(o) + 1)
+
+
+def iso_count_kernel(keys: IP, perm: IP, n: Int32, shift: Int32, counts: IP, ntiles: Int32, wf: IP, woff: Int32, nonce: Int32):
+    _iso_count_kernel_body(keys, perm, n, shift, counts, ntiles)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _iso_scan_kernel_body(counts: IP, total: Int32):
+    """counts (digit-major, tile-minor) -> their exclusive prefix, in place: one thread."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        var acc = Int32(0)
+        for i in range(Int(total)):
+            var c = counts.unsafe_load(i)
+            counts.unsafe_store(i, acc)
+            acc += c
+
+
+def iso_scan_kernel(counts: IP, total: Int32, wf: IP, woff: Int32, nonce: Int32):
+    _iso_scan_kernel_body(counts, total)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _iso_scatter_kernel_body(keys: IP, src: IP, dst: IP, n: Int32, shift: Int32, offs: IP, ntiles: Int32):
+    var tl = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if tl < Int(ntiles):
+        var lo = tl * ISO_TILE
+        var hi = min(Int(n), lo + ISO_TILE)
+        for i in range(lo, hi):
+            var r = src.unsafe_load(i)
+            var o = _digit(keys, Int(r), Int(shift)) * Int(ntiles) + tl
+            var at = offs.unsafe_load(o)
+            dst.unsafe_store(Int(at), r)
+            offs.unsafe_store(o, at + 1)
+
+
+def iso_scatter_kernel(keys: IP, src: IP, dst: IP, n: Int32, shift: Int32, offs: IP, ntiles: Int32, wf: IP, woff: Int32, nonce: Int32):
+    _iso_scatter_kernel_body(keys, src, dst, n, shift, offs, ntiles)
+    witness_end(wf, woff, nonce)
+
+# ---------------------------------------------- block radix (lane/neural-pass118)
+# The sort above ran one thread per 4096-row tile with its digit counters
+# in device memory (M4, 1M rows: 70 ms). Here a pass is three launches:
+# block b (RS_NT threads x RS_IPT contiguous rows) counts each thread's
+# rows per 4-bit digit in threadgroup memory and publishes the block's
+# per-digit totals; one thread scans those (digit-major, block-minor) and
+# notes a pass whose rows all share one digit; block b recounts, scans its
+# thread counters (digit-major, thread-minor) and writes each row to its
+# digit's global offset + its thread's offset + its rank within the
+# thread: the stable order, so the LSD passes give the (x, y, row) order
+# (a total order: any correct sort gives this one permutation, so the
+# words downstream are unchanged). A one-digit pass is a copy.
+# `MOJOLEARN_X_LINEAR_ISO_BLOCK_RADIX=0` restores the tile sort.
+comptime RS_BITS = 4
+comptime RS_D = 1 << RS_BITS
+comptime RS_NT = 256
+comptime RS_IPT = 16
+comptime RS_TILE = RS_NT * RS_IPT
+comptime RS_BYTES = (RS_D * RS_NT + RS_NT) * 4
+comptime ISO_BLOCK_RADIX = lib_smem_page_fits_for[TARGET_COLUMN, RS_BYTES]()
+
+
+@always_inline
+def _rdig(keys: IP, row: Int, shift: Int) -> Int:
+    return Int((bitcast[DType.uint32](keys.unsafe_load(row)) >> UInt32(shift)) & UInt32(RS_D - 1))
+
+
+@always_inline
+def _rs_count_kernel_body(keys: IP, src: IP, n: Int32, shift: Int32, btot: IP, nb: Int32):
+    var cnt = stack_allocation[RS_D * RS_NT, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    for d in range(RS_D):
+        cnt[d * RS_NT + tid] = Int32(0)
+    var lo0 = Int(block_idx.x) * RS_TILE + tid * RS_IPT
+    for u in range(RS_IPT):
+        var i = lo0 + u
+        if i < Int(n):
+            var d = _rdig(keys, Int(src.unsafe_load(i)), Int(shift))
+            cnt[d * RS_NT + tid] = cnt[d * RS_NT + tid] + 1
+    barrier()
+    if tid < RS_D:
+        var c = Int32(0)
+        for t in range(RS_NT):
+            c += cnt[tid * RS_NT + t]
+        btot.unsafe_store(tid * Int(nb) + Int(block_idx.x), c)
+
+
+def rs_count_kernel(keys: IP, src: IP, n: Int32, shift: Int32, btot: IP, nb: Int32, wf: IP, woff: Int32, nonce: Int32):
+    _rs_count_kernel_body(keys, src, n, shift, btot, nb)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _rs_scan_kernel_body(btot: IP, nb: Int32, n: Int32, flag: IP):
+    """Exclusive prefix of btot (digit-major, block-minor) in place; flag[0]
+    = 1 when one digit holds every row (the pass is a copy)."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        var acc = Int32(0)
+        var one = Int32(0)
+        for d in range(RS_D):
+            var dt = Int32(0)
+            for b in range(Int(nb)):
+                var c = btot.unsafe_load(d * Int(nb) + b)
+                btot.unsafe_store(d * Int(nb) + b, acc)
+                acc += c
+                dt += c
+            if dt == n:
+                one = 1
+        flag.unsafe_store(0, one)
+
+
+def rs_scan_kernel(btot: IP, nb: Int32, n: Int32, flag: IP, wf: IP, woff: Int32, nonce: Int32):
+    _rs_scan_kernel_body(btot, nb, n, flag)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _rs_scatter_kernel_body(keys: IP, src: IP, dst: IP, n: Int32, shift: Int32, btot: IP, nb: Int32, flag: IP):
+    var nn = Int(n)
+    var tid = Int(thread_idx.x)
+    var lo = Int(block_idx.x) * RS_TILE + tid * RS_IPT
+    if flag.unsafe_load(0) != 0:
+        for u in range(RS_IPT):
+            var i = lo + u
+            if i < nn:
+                dst.unsafe_store(i, src.unsafe_load(i))
+        return
+    var cnt = stack_allocation[RS_D * RS_NT, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var part = stack_allocation[RS_NT, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    for d in range(RS_D):
+        cnt[d * RS_NT + tid] = Int32(0)
+    var lo0 = Int(block_idx.x) * RS_TILE + tid * RS_IPT
+    for u in range(RS_IPT):
+        var i = lo0 + u
+        if i < Int(n):
+            var d = _rdig(keys, Int(src.unsafe_load(i)), Int(shift))
+            cnt[d * RS_NT + tid] = cnt[d * RS_NT + tid] + 1
+    barrier()
+    # exclusive scan of cnt (digit-major, thread-minor) within the block:
+    # thread t owns the RS_D consecutive entries [t * RS_D, t * RS_D + RS_D)
+    var own = SIMD[DType.int32, RS_D]()
+    var s = Int32(0)
+    comptime for q in range(RS_D):
+        own[q] = cnt[tid * RS_D + q]
+        s += own[q]
+    part[tid] = s
+    barrier()
+    var off = 1
+    while off < RS_NT:
+        var v = part[tid] + (part[tid - off] if tid >= off else Int32(0))
+        barrier()
+        part[tid] = v
+        barrier()
+        off *= 2
+    var base = part[tid] - s
+    barrier()
+    comptime for q in range(RS_D):
+        cnt[tid * RS_D + q] = base
+        base += own[q]
+    barrier()
+    # the block's in-tile offset of (digit d, thread t) is cnt[d * RS_NT + t]
+    # minus the block's first offset of digit d, which is cnt[d * RS_NT]
+    var run = SIMD[DType.int32, RS_D](0)
+    for u in range(RS_IPT):
+        var i = lo + u
+        if i < nn:
+            var r = src.unsafe_load(i)
+            var d = _rdig(keys, Int(r), Int(shift))
+            var at = btot.unsafe_load(d * Int(nb) + Int(block_idx.x)) + (cnt[d * RS_NT + tid] - cnt[d * RS_NT]) + run[d]
+            dst.unsafe_store(Int(at), r)
+            run[d] += 1
+
+
+def rs_scatter_kernel(keys: IP, src: IP, dst: IP, n: Int32, shift: Int32, btot: IP, nb: Int32, flag: IP, wf: IP, woff: Int32, nonce: Int32):
+    _rs_scatter_kernel_body(keys, src, dst, n, shift, btot, nb, flag)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _iso_gather_kernel_body(x: FP, y: FP, n: Int32, perm: IP, fw: FP):
+    var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    if j < nn:
+        iso_gather_one(j, x, y, nn, False, perm, fw + 3 * nn, fw + 4 * nn, fw + 5 * nn)
+
+
+def iso_gather_kernel(x: FP, y: FP, n: Int32, perm: IP, fw: FP, wf: IP, woff: Int32, nonce: Int32):
+    _iso_gather_kernel_body(x, y, n, perm, fw)
+    witness_end(wf, woff, nonce)
+
+# The group bounds (lane/neural-pass117): one thread walked all n sorted
+# rows (M4, istella's 87-value column at 1M rows: 109 ms). A row whose x
+# equals the row before never starts a group, so the walk only needs the
+# rows where x changes: flagged and compacted in order by the grid, then
+# `iso_bounds_from` walks them on one thread (the same starts).
+@always_inline
+def _iso_changed(xs: FP, j: Int, n: Int) -> Int:
+    if j >= 1 and j < n and xs.unsafe_load(j) != xs.unsafe_load(j - 1):
+        return 1
+    return 0
+
+
+@always_inline
+def _iso_flag_count_kernel_body(fw: FP, n: Int32, bcnt: IP):
+    var nn = Int(n)
+    var tid = Int(thread_idx.x)
+    var j = Int(block_idx.x) * XG_TPB + tid
+    var sh = stack_allocation[XG_TPB, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    sh[tid] = Int32(_iso_changed(fw + 3 * nn, j, nn))
+    barrier()
+    if tid == 0:
+        var c = Int32(0)
+        for u in range(XG_TPB):
+            c += sh[u]
+        bcnt.unsafe_store(Int(block_idx.x), c)
+
+
+def iso_flag_count_kernel(fw: FP, n: Int32, bcnt: IP, wf: IP, woff: Int32, nonce: Int32):
+    _iso_flag_count_kernel_body(fw, n, bcnt)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _iso_flag_scan_kernel_body(bcnt: IP, nb: Int32):
+    """Exclusive prefix of the block counts in place; the total at [nb]."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        var acc = Int32(0)
+        for b in range(Int(nb)):
+            var c = bcnt.unsafe_load(b)
+            bcnt.unsafe_store(b, acc)
+            acc += c
+        bcnt.unsafe_store(Int(nb), acc)
+
+
+def iso_flag_scan_kernel(bcnt: IP, nb: Int32, wf: IP, woff: Int32, nonce: Int32):
+    _iso_flag_scan_kernel_body(bcnt, nb)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _iso_flag_write_kernel_body(fw: FP, n: Int32, bcnt: IP, cand: IP):
+    var nn = Int(n)
+    var tid = Int(thread_idx.x)
+    var j = Int(block_idx.x) * XG_TPB + tid
+    var sh = stack_allocation[XG_TPB, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var f = _iso_changed(fw + 3 * nn, j, nn)
+    sh[tid] = Int32(f)
+    barrier()
+    if f != 0:
+        var r = Int32(0)
+        for u in range(tid):
+            r += sh[u]
+        cand.unsafe_store(Int(bcnt.unsafe_load(Int(block_idx.x)) + r), Int32(j))
+
+
+def iso_flag_write_kernel(fw: FP, n: Int32, bcnt: IP, cand: IP, wf: IP, woff: Int32, nonce: Int32):
+    _iso_flag_write_kernel_body(fw, n, bcnt, cand)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _iso_bounds_kernel_body(fw: FP, n: Int32, iw: IP, mslot: IP, cand: IP, bcnt: IP, nb: Int32):
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        var nn = Int(n)
+        var nc = Int(bcnt.unsafe_load(Int(nb)))
+        mslot.unsafe_store(0, Int32(iso_bounds_from(fw + 3 * nn, nn, cand, nc, iw + nn)))
+
+
+def iso_bounds_kernel(fw: FP, n: Int32, iw: IP, mslot: IP, cand: IP, bcnt: IP, nb: Int32, wf: IP, woff: Int32, nonce: Int32):
+    _iso_bounds_kernel_body(fw, n, iw, mslot, cand, bcnt, nb)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _iso_group_kernel_body(fw: FP, n: Int32, iw: IP, mslot: IP):
+    var g = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    if g < Int(mslot.unsafe_load(0)):
+        iso_group(g, fw + 3 * nn, fw + 4 * nn, fw + 5 * nn, iw + nn, fw, nn)
+
+
+def iso_group_kernel(fw: FP, n: Int32, iw: IP, mslot: IP, wf: IP, woff: Int32, nonce: Int32):
+    _iso_group_kernel_body(fw, n, iw, mslot)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _iso_after_kernel_body(n: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, mslot: IP):
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        iso_after_unique(Int(mslot.unsafe_load(0)), Int(n), ip, fp, res, fw, iw)
+
+
+def iso_after_kernel(n: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, mslot: IP, wf: IP, woff: Int32, nonce: Int32):
+    _iso_after_kernel_body(n, ip, fp, res, fw, iw, mslot)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _iso_predict_kernel_body(x: FP, thr: FP, n: Int32, m: Int32, oob: Int32, fp: FP, res: FP):
+    var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if q < Int(n):
+        iso_predict_one(q, x, thr, Int(m), Int(oob), fp, res)
+
+
+def iso_predict_kernel(x: FP, thr: FP, n: Int32, m: Int32, oob: Int32, fp: FP, res: FP, wf: IP, woff: Int32, nonce: Int32):
+    _iso_predict_kernel_body(x, thr, n, m, oob, fp, res)
+    witness_end(wf, woff, nonce)
+
+def ISO_WIT_CAP(n: Int) -> Int:
+    """The witness words of one isotonic fit (an upper bound over both sorts)."""
+    var nb = max((n + RS_TILE - 1) // RS_TILE, 1)
+    var nt = (n + ISO_TILE - 1) // ISO_TILE
+    return 2 * (32 // RS_BITS) * (2 * nb + 1) + 8 * (2 * _xg_blocks(nt) + 1) + 6 * _xg_blocks(n) + 16
+
+
+def _iso_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, ip: List[Int32], fp: List[Float32], n_out: Int,
+                  n_fw: Int, n_iw: Int, res: FP) raises:
+    var ctx = linear_ctx()
+    var hip = ip.copy()
+    var hfp = fp.copy()
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+    var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
+    var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
+    var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(hfp), 1))
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
+    var dfw = ctx.enqueue_create_buffer[DType.float32](max(n_fw, 1))
+    var diw = ctx.enqueue_create_buffer[DType.int32](max(n_iw, 1))
+    var dkx = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var dky = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var dpa = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var dpb = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var ntiles = (n + ISO_TILE - 1) // ISO_TILE
+    var dcnt = ctx.enqueue_create_buffer[DType.int32](ISO_RADIX * ntiles)
+    if n_x > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    if n_y > 0:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    ctx.enqueue_copy(dst_buf=dip, src_ptr=hip.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
+    var dm = ctx.enqueue_create_buffer[DType.int32](1)
+    var nbk = _xg_blocks(n)
+    var dbc = ctx.enqueue_create_buffer[DType.int32](nbk + 1)
+    var dcand = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    # the whole isotonic fit as ONE guarded unit from zeroed scratch (x_linear/witness.mojo)
+    var wit = Witness(ctx, ISO_WIT_CAP(n))
+    var tries = 0
+    while True:
+        var nonce = wit.begin()
+        var wo = 0
+        dout.enqueue_fill(Float32(0))
+        dfw.enqueue_fill(Float32(0))
+        diw.enqueue_fill(Int32(0))
+        ctx.enqueue_function[iso_keys_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), dkx.unsafe_ptr(), dky.unsafe_ptr(),
+                                              dpa.unsafe_ptr(), Int32(n), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(n), block_dim=XG_TPB)
+        wo += _xg_blocks(n)
+        var cur_a = True
+        var block_radix = False
+        comptime if ISO_BLOCK_RADIX:
+            block_radix = String(getenv("MOJOLEARN_X_LINEAR_ISO_BLOCK_RADIX")) != "0"
+        if block_radix:
+            var nb = max((n + RS_TILE - 1) // RS_TILE, 1)
+            var dbt = ctx.enqueue_create_buffer[DType.int32](RS_D * nb)
+            var dfl = ctx.enqueue_create_buffer[DType.int32](1)
+            for key in range(2):
+                for pas in range(32 // RS_BITS):
+                    var shift = Int32(RS_BITS * pas)
+                    var kp = IP(unsafe_from_address=Int(dky.unsafe_ptr()) if key == 0 else Int(dkx.unsafe_ptr()))
+                    var src = IP(unsafe_from_address=Int(dpa.unsafe_ptr()) if cur_a else Int(dpb.unsafe_ptr()))
+                    var dst = IP(unsafe_from_address=Int(dpb.unsafe_ptr()) if cur_a else Int(dpa.unsafe_ptr()))
+                    ctx.enqueue_function[rs_count_kernel](kp, src, Int32(n), shift, dbt.unsafe_ptr(), Int32(nb),
+                                                          wit.p(), Int32(wo), nonce, grid_dim=nb, block_dim=RS_NT)
+                    wo += nb
+                    ctx.enqueue_function[rs_scan_kernel](dbt.unsafe_ptr(), Int32(nb), Int32(n), dfl.unsafe_ptr(),
+                                                         wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
+                    wo += 1
+                    ctx.enqueue_function[rs_scatter_kernel](kp, src, dst, Int32(n), shift, dbt.unsafe_ptr(), Int32(nb),
+                                                            dfl.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=nb, block_dim=RS_NT)
+                    wo += nb
+                    cur_a = not cur_a
+            ctx.synchronize()
+            _ = dbt^
+            _ = dfl^
+        for key in range(2 if not block_radix else 0):
+            for pas in range(4):
+                var shift = Int32(8 * pas)
+                var kp = IP(unsafe_from_address=Int(dky.unsafe_ptr()) if key == 0 else Int(dkx.unsafe_ptr()))
+                var src = IP(unsafe_from_address=Int(dpa.unsafe_ptr()) if cur_a else Int(dpb.unsafe_ptr()))
+                var dst = IP(unsafe_from_address=Int(dpb.unsafe_ptr()) if cur_a else Int(dpa.unsafe_ptr()))
+                ctx.enqueue_function[iso_count_kernel](kp, src, Int32(n), shift, dcnt.unsafe_ptr(), Int32(ntiles),
+                                                       wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ntiles), block_dim=XG_TPB)
+                wo += _xg_blocks(ntiles)
+                ctx.enqueue_function[iso_scan_kernel](dcnt.unsafe_ptr(), Int32(ISO_RADIX * ntiles), wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
+                wo += 1
+                ctx.enqueue_function[iso_scatter_kernel](kp, src, dst, Int32(n), shift, dcnt.unsafe_ptr(), Int32(ntiles),
+                                                         wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ntiles), block_dim=XG_TPB)
+                wo += _xg_blocks(ntiles)
+                cur_a = not cur_a
+        var pp = IP(unsafe_from_address=Int(dpa.unsafe_ptr()) if cur_a else Int(dpb.unsafe_ptr()))
+        ctx.enqueue_function[iso_gather_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), pp, dfw.unsafe_ptr(),
+                                                wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(n), block_dim=XG_TPB)
+        wo += _xg_blocks(n)
+        ctx.enqueue_function[iso_flag_count_kernel](dfw.unsafe_ptr(), Int32(n), dbc.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=nbk, block_dim=XG_TPB)
+        wo += nbk
+        ctx.enqueue_function[iso_flag_scan_kernel](dbc.unsafe_ptr(), Int32(nbk), wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
+        wo += 1
+        ctx.enqueue_function[iso_flag_write_kernel](dfw.unsafe_ptr(), Int32(n), dbc.unsafe_ptr(), dcand.unsafe_ptr(),
+                                                    wit.p(), Int32(wo), nonce, grid_dim=nbk, block_dim=XG_TPB)
+        wo += nbk
+        ctx.enqueue_function[iso_bounds_kernel](dfw.unsafe_ptr(), Int32(n), diw.unsafe_ptr(), dm.unsafe_ptr(),
+                                                dcand.unsafe_ptr(), dbc.unsafe_ptr(), Int32(nbk), wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
+        wo += 1
+        ctx.enqueue_function[iso_group_kernel](dfw.unsafe_ptr(), Int32(n), diw.unsafe_ptr(), dm.unsafe_ptr(),
+                                               wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(n), block_dim=XG_TPB)
+        wo += _xg_blocks(n)
+        ctx.enqueue_function[iso_after_kernel](Int32(n), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(),
+                                               diw.unsafe_ptr(), dm.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
+        wo += 1
+        if n_out > 0:
+            ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
+        if wit.ok(ctx, wo, "isotonic fit"):
+            break
+        tries += 1
+        if tries >= WITNESS_TRIES:
+            wit.fail()
+    ctx.synchronize()
+    _ = hip^
+    _ = hfp^
+    _ = dx^
+    _ = dy^
+    _ = dip^
+    _ = dfp^
+    _ = dout^
+    _ = dfw^
+    _ = diw^
+    _ = dkx^
+    _ = dky^
+    _ = dpa^
+    _ = dbc^
+    _ = dcand^
+    _ = dpb^
+    _ = dcnt^
+    _ = dm^
+    _ = wit^
+
+
+def _iso_predict_grid(x: FP, n_x: Int, thr: FP, n_thr: Int, n: Int, ip: List[Int32], fp: List[Float32], res: FP) raises:
+    var ctx = linear_ctx()
+    var hfp = fp.copy()
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+    var dt = ctx.enqueue_create_buffer[DType.float32](max(n_thr, 1))
+    var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(hfp), 1))
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    ctx.enqueue_copy(dst_buf=dt, src_ptr=thr)
+    ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
+    # the whole isotonic predict as ONE guarded unit from zeroed scratch (x_linear/witness.mojo)
+    var wit = Witness(ctx, _xg_blocks(n))
+    var tries = 0
+    while True:
+        var nonce = wit.begin()
+        var wo = 0
+        ctx.enqueue_function[iso_predict_kernel](dx.unsafe_ptr(), dt.unsafe_ptr(), Int32(n), ip[0], ip[1], dfp.unsafe_ptr(),
+                                                 dout.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(n), block_dim=XG_TPB)
+        wo += _xg_blocks(n)
+        ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
+        if wit.ok(ctx, wo, "isotonic predict"):
+            break
+        tries += 1
+        if tries >= WITNESS_TRIES:
+            wit.fail()
+    ctx.synchronize()
+    _ = hfp^
+    _ = dx^
+    _ = dt^
+    _ = dfp^
+    _ = dout^
+    _ = wit^
+
 def fit_device(
     algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
 ) raises:
+    # lane/neural-pass107: isotonic on the grid (the radix sort, then the fit on
+    # one thread; one thread a predicted query); weighted fits keep the team form
+    if algo == ALGO_ISOTONIC and len(ip) > 3 and Int(ip[3]) == 0 and n > 0:
+        _iso_fit_grid(x, n_x, y, n_y, n, ip, fp, n_out, n_fw, n_iw, res)
+        return
+    if algo == ALGO_ISOTONIC_PREDICT and n > 0:
+        _iso_predict_grid(x, n_x, y, n_y, n, ip, fp, res)
+        return
     if algo == ALGO_GLM and _glm_grid() and n > 0:
         _glm_fit_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
