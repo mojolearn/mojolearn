@@ -6,12 +6,7 @@ from checks.numerics import identical_mul
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
-from gemm.checks.gemm_oracle import (
-    OP_NN,
-    OP_NT,
-    contract_leaf_size,
-    leaf_count,
-)
+from gemm.contract import OP_NN, OP_NT, contract_leaf_size, leaf_count
 from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats
 from gemm.checks.gemm_backward import (
     gemm_backward_a_call,

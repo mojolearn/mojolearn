@@ -66,7 +66,7 @@ from training.checks.optimizer import (
     identical_optimizer_step,
     identical_optimizer_workspace_floats,
 )
-from training.checks.optimizer_oracle import OPT_ADAMW, OptimizerConfig
+from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
 from training.byte_lm import (
     ByteTrainer,
     byte_glue_update_launch,

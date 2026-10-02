@@ -107,7 +107,8 @@ from std.math import min
 from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
-from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
+from gemm.contract import OP_NT
+from gemm.checks.gemm_oracle import gemm_oracle
 # lane/lowbit-blocks (2026-09-29): the profile's host answer, Lane C's.
 from gemm.host.gemm_int15_oracle import gemm_int15_from_f32_oracle
 from std.time import perf_counter_ns
