@@ -108,6 +108,17 @@ from x_decomp.apple_fast import (
     omp_block_on,
     small_eigh_j2_on,
 )
+from x_decomp.fast_gemm import FG_TPB, fast_gemm_on, fg_gemm_tiled_kernel, fg_tiles
+from x_decomp.fast_qr import (
+    FQ_TPB,
+    fast_qr_on,
+    fq_dot_blocks,
+    fq_geqrf_dot_kernel,
+    fq_head_blocks,
+    fq_head_finish_kernel,
+    fq_head_part_kernel,
+    fq_orgqr_dot_kernel,
+)
 from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
 from x_decomp.tsqr_device import ts_apply_device, ts_factor_device, ts_free_device, ts_pack_device
 from x_decomp.jacobi_par import (
@@ -1660,6 +1671,23 @@ def launch_gemm(
     """C = op(A) op(B) on device pointers, enqueued (no sync): FOLD_BLOCK
     partial sums then the fold past one block (DEVIATIONS 5300/5301)."""
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
+    comptime if XD_FAST_APPLE:
+        # -D MOJOLEARN_DECOMP_FAST_GEMM_TILED (lane/apple-fast-decomp-linalg,
+        # 2026-10-02, FAST on Apple only): the threadgroup-tiled kernel of
+        # x_decomp/fast_gemm.mojo, 32 x 32 output tiles with the k axis
+        # staged 16 deep, the same FOLD_BLOCK partials (grid z) and fold.
+        # Cause: `gemm_kernel` / `gemm_part_kernel` are one thread per
+        # output cell reading the whole k axis from device memory (every
+        # operand word re-read once per output row or column it feeds).
+        if fast_gemm_on() and m > 0 and n > 0 and k > 0:
+            ctx.enqueue_function[fg_gemm_tiled_kernel](
+                a, b, p if nb > 1 else c, Int32(m), Int32(k), Int32(n),
+                Int32(1 if ta else 0), Int32(1 if tb else 0), Int32(nb),
+                grid_dim=(fg_tiles(n), fg_tiles(m), nb), block_dim=(FG_TPB, 1, 1),
+            )
+            if nb > 1:
+                ctx.enqueue_function[fold_kernel](p, c, Int32(m * n), Int32(nb), grid_dim=_blocks(m * n), block_dim=TPB)
+            return
     if nb > 1:
         ctx.enqueue_function[gemm_part_kernel](
             a, b, p, Int32(m), Int32(k), Int32(n),
@@ -1960,11 +1988,68 @@ def orth_on_device_diag(
     var r_buf = ctx.enqueue_create_buffer[DType.float32](l * l if l > 0 else 1)
     var r = List[Float32](length=l * l if l > 0 else 1, fill=Float32(0))
     var dev_guard = String(getenv("MOJOLEARN_XD_ORTH_DEV", "1")) != "0"
+    # -D MOJOLEARN_SVD_FAST_CHOLQR (lane/apple-fast-decomp-linalg, 2026-10-02,
+    # FAST on Apple only, the `with_diag` caller = linalg.svd's U): each pass
+    # as CholeskyQR, G = A^T A on the kit's split-K gemm (a grid), L = chol(G)
+    # by the per-column kernels, R = L^T, then the same row-parallel A R^-1;
+    # two passes = CholeskyQR2. Cause: a pass here is a sliced Householder
+    # TSQR over the 1,000,000 x d matrix (64 slices x 32 threads, every load
+    # a column at stride d), and svd runs two of them on A V / s, whose
+    # columns are already near-orthonormal, so the Gram is well conditioned.
+    # Guard (quality never lowered): the pass falls back to the TSQR when the
+    # factorization fails (info != 0) or the factor's diagonal spans more
+    # than 2^8 (cond(A) past CholeskyQR2's float32 bound); read once per
+    # pass on the host, where the pass waits anyway.
+    var cholqr = False
+    comptime if XD_FAST_APPLE:
+        cholqr = with_diag and l > 0 and m >= l and is_defined["MOJOLEARN_SVD_FAST_CHOLQR"]()
+    var gcells = l * l if l > 0 else 1
+    var gscr_n = gemm_scratch(l, m, l) if cholqr else 0
+    var dg = ctx.enqueue_create_buffer[DType.float32](gcells)
+    var dinfo = ctx.enqueue_create_buffer[DType.float32](1)
+    var gscr = ctx.enqueue_create_buffer[DType.float32](gscr_n if gscr_n > 0 else 1)
+    var hg = ctx.enqueue_create_host_buffer[DType.float32](gcells)
+    var hinfo = ctx.enqueue_create_host_buffer[DType.float32](1)
     for p in range(2):
         var src = da if p == 0 else dq
         var dst = dq if p == 0 else da
-        ctx.enqueue_copy(dst_buf=dw, src_buf=src)
-        if dev_guard:
+        var done = False
+        if cholqr:
+            launch_gemm(ctx, src.unsafe_ptr(), src.unsafe_ptr(), dg.unsafe_ptr(), gscr.unsafe_ptr(), l, m, l, True, False)
+            ctx.enqueue_function[lu_info_init_kernel](dinfo.unsafe_ptr(), grid_dim=1, block_dim=1)
+            for j in range(l):
+                ctx.enqueue_function[chol_diag_kernel](
+                    dg.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(j), Int32(l), grid_dim=1, block_dim=1
+                )
+                if l - j - 1 > 0:
+                    ctx.enqueue_function[chol_col_kernel](
+                        dg.unsafe_ptr(), Int32(j), Int32(l), grid_dim=_blocks(l - j - 1), block_dim=TPB
+                    )
+            ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+            ctx.enqueue_copy(dst_ptr=hg.unsafe_ptr(), src_buf=dg)
+            ctx.synchronize()
+            var ok = hinfo.unsafe_ptr().unsafe_load(0) == Float32(0)
+            var dmax = Float32(0)
+            var dmin = Float32(0)
+            for j in range(l):
+                var d = hg.unsafe_ptr().unsafe_load(j * l + j)
+                if not (d > Float32(0)):
+                    ok = False
+                if j == 0 or d > dmax:
+                    dmax = d
+                if j == 0 or d < dmin:
+                    dmin = d
+            if ok and not (dmin * Float32(256.0) >= dmax):
+                ok = False
+            if ok:
+                ctx.enqueue_function[pj_transpose_kernel](
+                    dg.unsafe_ptr(), r_buf.unsafe_ptr(), Int32(l), grid_dim=_pj_blocks(l * l), block_dim=PJ_TPB
+                )
+                done = True
+        if done:
+            pass
+        elif dev_guard:
+            ctx.enqueue_copy(dst_buf=dw, src_buf=src)
             # lane/decomp-apple2: the guard cell on one device thread, in
             # stream order after the R it reads (the same cell the host ran;
             # IDENTICAL cells are bit-equal on both), so R never leaves the
@@ -1972,6 +2057,7 @@ def orth_on_device_diag(
             _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
             ctx.enqueue_function[orth_guard_kernel](r_buf.unsafe_ptr(), Int32(l), grid_dim=1, block_dim=1)
         else:
+            ctx.enqueue_copy(dst_buf=dw, src_buf=src)
             ctx.synchronize()
             _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
             _down(ctx, r_buf, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
@@ -1992,6 +2078,11 @@ def orth_on_device_diag(
     _ = dw^
     _ = scratch^
     _ = r_buf^
+    _ = dg^
+    _ = dinfo^
+    _ = gscr^
+    _ = hg^
+    _ = hinfo^
     ctx.synchronize()
 
 
@@ -2907,6 +2998,13 @@ struct DevExec(Exec):
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
         """Every fold over slices of rows, a fixed tree (x_decomp/
         qr_sliced.mojo; lane hr-qr), on every column at every size."""
+        comptime if XD_FAST_APPLE:
+            # -D MOJOLEARN_QR_FAST_DEV (lane/apple-fast-decomp-linalg, 2026-10-02):
+            # the grid-fold route of x_decomp/fast_qr.mojo, on the device,
+            # ahead of the sliced route below. FAST on Apple only.
+            if fast_qr_on():
+                DevExec._geqrf_fast(a, tau, m, n)
+                return
         var ctx = xd_ctx()
         var kk = m if m < n else n
         var da = _up(ctx, a, m * n)
@@ -2921,6 +3019,11 @@ struct DevExec(Exec):
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        comptime if XD_FAST_APPLE:
+            # -D MOJOLEARN_QR_FAST_DEV (lane/apple-fast-decomp-linalg): see geqrf.
+            if fast_qr_on():
+                DevExec._orgqr_fast(h, tau, q, m, n, kk, qc)
+                return
         var ctx = xd_ctx()
         var dh = _up(ctx, h, m * n)
         var dt = _up(ctx, tau, kk if kk > 0 else 1)
@@ -2931,6 +3034,106 @@ struct DevExec(Exec):
         _ = dh^
         _ = dt^
         _ = dq^
+        _ = ctx^
+
+    @staticmethod
+    def _geqrf_fast(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+        """`geqrf` with every fold a grid reduction (x_decomp/fast_qr.mojo;
+        -D MOJOLEARN_QR_FAST_DEV, FAST on Apple, lane/apple-fast-decomp-linalg
+        2026-10-02). Written against the host walk the Apple column once
+        took (7.7 s on the M3 Ultra for the board's qr lane at 1,000,000
+        x d; gone from main with lane hr-qr): the A/B arm now races main's
+        sliced device route below and, from the linalg door, the blocked
+        TSQR (x_decomp/tsqr_device.mojo). Step k: the
+        norm's (scale, ssq) pairs over `fq_head_blocks` blocks and a
+        one-block fold of the pairs (dlarfg's tau and beta on its thread 0), the scale kernel, the
+        reflector products as row-chunk partials folded by `fold_kernel`,
+        then the elementwise update: 5 launches a column, all grid."""
+        var ctx = xd_ctx()
+        var kk = m if m < n else n
+        var da = _up(ctx, a, m * n)
+        var dt = ctx.enqueue_create_buffer[DType.float32](kk if kk > 0 else 1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](2)
+        var dw = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        var nbh = fq_head_blocks(m)
+        var dph = ctx.enqueue_create_buffer[DType.float32](2 * nbh)
+        var nbd = fq_dot_blocks(m, 0)
+        var dpd = ctx.enqueue_create_buffer[DType.float32](nbd * n if n > 0 else 1)
+        for k in range(kk):
+            ctx.enqueue_function[fq_head_part_kernel](
+                da.unsafe_ptr(), dph.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(nbh),
+                grid_dim=nbh, block_dim=FQ_TPB,
+            )
+            ctx.enqueue_function[fq_head_finish_kernel](
+                da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dph.unsafe_ptr(), Int32(k), Int32(k * n + k), Int32(nbh),
+                grid_dim=1, block_dim=FQ_TPB,
+            )
+            if m - k - 1 > 0:
+                ctx.enqueue_function[geqrf_scale_kernel](
+                    da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=_blocks(m - k - 1), block_dim=TPB
+                )
+            if n - k - 1 > 0:
+                var nb = fq_dot_blocks(m, k)
+                ctx.enqueue_function[fq_geqrf_dot_kernel](
+                    da.unsafe_ptr(), ds.unsafe_ptr(), dpd.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                    grid_dim=nb, block_dim=FQ_TPB,
+                )
+                ctx.enqueue_function[fold_kernel](
+                    dpd.unsafe_ptr(), dw.unsafe_ptr(), Int32(n), Int32(nb), grid_dim=_blocks(n), block_dim=TPB
+                )
+                ctx.enqueue_function[geqrf_update_kernel](
+                    da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                    grid_dim=_blocks((m - k) * (n - k - 1)), block_dim=TPB,
+                )
+        _down(ctx, da, a, m * n)
+        _down(ctx, dt, tau, kk)
+        ctx.synchronize()
+        _ = da^
+        _ = dt^
+        _ = ds^
+        _ = dw^
+        _ = dph^
+        _ = dpd^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def _orgqr_fast(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        """`orgqr` with the reflector products as row-chunk grid partials
+        (`fq_orgqr_dot_kernel` + `fold_kernel`); the init and update kernels
+        are the shipped ones. -D MOJOLEARN_QR_FAST_DEV, FAST on Apple
+        (lane/apple-fast-decomp-linalg, 2026-10-02); cause as `_geqrf_fast`."""
+        var ctx = xd_ctx()
+        var dh = _up(ctx, h, m * n)
+        var dt = _up(ctx, tau, kk if kk > 0 else 1)
+        var dq = ctx.enqueue_create_buffer[DType.float32](m * qc if m * qc > 0 else 1)
+        var dw = ctx.enqueue_create_buffer[DType.float32](qc if qc > 0 else 1)
+        var nbd = fq_dot_blocks(m, 0)
+        var dpd = ctx.enqueue_create_buffer[DType.float32](nbd * qc if qc > 0 else 1)
+        ctx.enqueue_function[orgqr_init_kernel](dq.unsafe_ptr(), Int32(m), Int32(qc), grid_dim=_blocks(m * qc), block_dim=TPB)
+        for r in range(kk):
+            var k = kk - 1 - r
+            if qc > 0:
+                var nb = fq_dot_blocks(m, k)
+                ctx.enqueue_function[fq_orgqr_dot_kernel](
+                    dh.unsafe_ptr(), dq.unsafe_ptr(), dpd.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                    grid_dim=nb, block_dim=FQ_TPB,
+                )
+                ctx.enqueue_function[fold_kernel](
+                    dpd.unsafe_ptr(), dw.unsafe_ptr(), Int32(qc), Int32(nb), grid_dim=_blocks(qc), block_dim=TPB
+                )
+            ctx.enqueue_function[orgqr_update_kernel](
+                dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                grid_dim=_blocks((m - k) * qc), block_dim=TPB,
+            )
+        _down(ctx, dq, q, m * qc)
+        ctx.synchronize()
+        _ = dh^
+        _ = dt^
+        _ = dq^
+        _ = dw^
+        _ = dpd^
+        ctx.synchronize()
         _ = ctx^
 
     @staticmethod
@@ -2960,6 +3163,30 @@ struct DevExec(Exec):
 
     @staticmethod
     def qr_r(a: F32Ptr, m: Int, n: Int, r: F32Ptr) raises:
+        comptime if XD_FAST_APPLE:
+            # -D MOJOLEARN_FA_FAST_QRR (lane/apple-fast-decomp-linalg, 2026-10-02,
+            # FAST on Apple only): the matrix uploaded straight from the
+            # caller's floats and `qr_factor` run on it, R downloaded once.
+            # Cause: the route below copies all m x n values into a host
+            # List one `append` at a time (FactorAnalysis's `k.qr_r(Xc)` at
+            # 1,000,000 x 220: 220 million host appends), and
+            # `device_qr_r` then uploads that copy. Same kernels, same
+            # slice count; only the host copy goes.
+            if is_defined["MOJOLEARN_FA_FAST_QRR"]() and m >= n and n > 0:
+                var ctx = xd_ctx()
+                var da = _up(ctx, a, m * n)
+                var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
+                var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
+                ctx.synchronize()
+                _ = qr_factor(ctx, da, scratch, r_buf, m, n)
+                _down(ctx, r_buf, r, n * n)
+                ctx.synchronize()
+                _ = da^
+                _ = scratch^
+                _ = r_buf^
+                ctx.synchronize()
+                _ = ctx^
+                return
         var w = List[Float32](capacity=m * n)
         for t in range(m * n):
             w.append(a.unsafe_load(t))
