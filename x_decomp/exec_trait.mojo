@@ -44,6 +44,10 @@ trait Exec:
         ...
 
     @staticmethod
+    def knn_select(dmat: F32Ptr, dist: F32Ptr, idx: F32Ptr, n: Int, m: Int, k: Int, exclude_self: Int) raises:
+        ...
+
+    @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:
         ...
 

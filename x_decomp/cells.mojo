@@ -1323,6 +1323,36 @@ def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans
 comptime ORTH_RANK_TOL2 = Float32(2.3283064365386963e-10)
 
 
+# ------------------------------------------------------------------ knn select
+def knn_select_row(dmat: F32Ptr, dist: F32Ptr, idx: F32Ptr, t: Int, m: Int, k: Int, exclude_self: Int):
+    """Row t's k smallest entries of the row-major (. x m) distance matrix,
+    ascending by (value, column): a candidate enters only when STRICTLY
+    smaller than the entry it passes, so an equal value keeps the lower
+    column first (Python's stable `heapq.nsmallest`, x_neighbors
+    `knn_select_item`). exclude_self != 0 skips column t. idx holds the
+    columns as floats (exact below 2^24); an unfilled slot holds +inf and
+    -1. Comparisons only: every vendor and the host pick the same entries."""
+    var inf = bitcast[DType.float32](UInt32(0x7F800000))
+    for s in range(k):
+        dist.unsafe_store(t * k + s, inf)
+        idx.unsafe_store(t * k + s, Float32(-1))
+    var worst = inf
+    for j in range(m):
+        if exclude_self != 0 and j == t:
+            continue
+        var v = dmat.unsafe_load(t * m + j)
+        if not (v < worst):
+            continue
+        var s = k - 1
+        while s > 0 and v < dist.unsafe_load(t * k + s - 1):
+            dist.unsafe_store(t * k + s, dist.unsafe_load(t * k + s - 1))
+            idx.unsafe_store(t * k + s, idx.unsafe_load(t * k + s - 1))
+            s -= 1
+        dist.unsafe_store(t * k + s, v)
+        idx.unsafe_store(t * k + s, Float32(j))
+        worst = dist.unsafe_load(t * k + k - 1)
+
+
 def orth_rank_guard(R: F32Ptr, l: Int):
     """Zero R[j, j] for every numerically dependent column j (DEVIATION
     5318), so trsm_row's div0 makes its Q column 0. The column is scaled by

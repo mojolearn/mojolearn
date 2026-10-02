@@ -21,6 +21,7 @@ from decomposition.linalg_public_device import device_eigh, device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.cells import (
     lu_solve_col,
+    knn_select_row,
     div0,
     sqrt0,
     sub,
@@ -1369,6 +1370,22 @@ def colsum_scratch(n: Int, d: Int) -> Int:
     return nb * d if nb > 1 else 0
 
 
+def knn_select_kernel(dmat: F32Ptr, dist: F32Ptr, idx: F32Ptr, n: Int32, m: Int32, k: Int32, exclude_self: Int32):
+    """`knn_select_row`, one thread per row."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(n):
+        knn_select_row(dmat, dist, idx, t, Int(m), Int(k), Int(exclude_self))
+
+
+def launch_knn_select(
+    ctx: DeviceContext, dmat: F32Ptr, dist: F32Ptr, idx: F32Ptr, n: Int, m: Int, k: Int, exclude_self: Int
+) raises:
+    if n > 0 and k > 0:
+        ctx.enqueue_function[knn_select_kernel](
+            dmat, dist, idx, Int32(n), Int32(m), Int32(k), Int32(exclude_self), grid_dim=_blocks(n), block_dim=TPB
+        )
+
+
 def launch_colsum(ctx: DeviceContext, a: F32Ptr, dst: F32Ptr, p: F32Ptr, n: Int, d: Int) raises:
     var nb = (n + FOLD_BLOCK - 1) // FOLD_BLOCK
     if nb > 1:
@@ -1690,6 +1707,22 @@ struct DevExec(Exec):
         _ = di^
         _ = ds^
         _ = dact^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def knn_select(dmat: F32Ptr, dist: F32Ptr, idx: F32Ptr, n: Int, m: Int, k: Int, exclude_self: Int) raises:
+        var ctx = xd_ctx()
+        var dd = _up(ctx, dmat, n * m)
+        var ds = ctx.enqueue_create_buffer[DType.float32](max(n * k, 1))
+        var di = ctx.enqueue_create_buffer[DType.float32](max(n * k, 1))
+        launch_knn_select(ctx, _p(dd), _p(ds), _p(di), n, m, k, exclude_self)
+        _down(ctx, ds, dist, n * k)
+        _down(ctx, di, idx, n * k)
+        ctx.synchronize()
+        _ = dd^
+        _ = ds^
+        _ = di^
         ctx.synchronize()
         _ = ctx^
 

@@ -36,6 +36,7 @@ from x_decomp.device import (
     launch_gemm,
     launch_rowsum,
     launch_sqdist,
+    launch_knn_select,
     lda_rows_kernel,
     rowsum_scratch,
     TPB,
@@ -233,6 +234,18 @@ def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObje
                 m, k, n, ta, tb)
     pool_free(sid)
     return PythonObject(m * n)
+
+
+def dev_knn_select_py(dmat: PythonObject, dist: PythonObject, idx: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`knn_select_py` on device ids, enqueued (no sync)."""
+    var n = _n(p, 0)
+    var m = _n(p, 1)
+    var k = _n(p, 2)
+    var ex = _n(p, 3)
+    if m >= 1 << 24 or n * m > 2147483647:
+        raise Error("x_decomp: knn_select exceeds the index bounds")
+    launch_knn_select(xd_ctx(), _ptr(_id(dmat), n * m), _ptr(_id(dist), n * k), _ptr(_id(idx), n * k), n, m, k, ex)
+    return PythonObject(n)
 
 
 def dev_colsum_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:

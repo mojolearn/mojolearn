@@ -20,6 +20,7 @@ from decomposition.host.pca_oracle import host_sign_flip
 from checks.numerics import ftz
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
+    knn_select_row,
     F32Ptr,
     absmax_sign_cell,
     FOLD_BLOCK,
@@ -280,6 +281,13 @@ struct HostExec(Exec):
                 lu_rows(a, n, k, d, k + 1 + t * LU_ROWS, k + 1 + min(rows, (t + 1) * LU_ROWS))
 
             xd_parallel(elim, (rows + LU_ROWS - 1) // LU_ROWS)
+
+    @staticmethod
+    def knn_select(dmat: F32Ptr, dist: F32Ptr, idx: F32Ptr, n: Int, m: Int, k: Int, exclude_self: Int) raises:
+        def row(t: Int) {imm dmat, imm dist, imm idx, imm m, imm k, imm exclude_self}:
+            knn_select_row(dmat, dist, idx, t, m, k, exclude_self)
+
+        xd_parallel(row, n)
 
     @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
