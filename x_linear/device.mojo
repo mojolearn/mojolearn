@@ -23,7 +23,9 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT
+from x_linear.isotonic import iso_fit_sorted, iso_predict_one
+from std.memory import bitcast
 from x_linear.ops import ld, st, fd, i2f
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
@@ -178,10 +180,187 @@ def _fit_on_host(
     _ = tw^
 
 
+
+# ------------------------------------------------ isotonic on the grid (lane/neural-pass107)
+# The fit's sort as an LSD radix sort on the device: the rows start in index
+# order and are stably sorted by y's key, then by x's key (8-bit digits, four
+# passes each; a pass is a count per tile of ISO_TILE rows, one scan and a
+# stable scatter per tile). The keys order exactly as the host's comparison
+# (`_iso_less`: x, then y, then the row): IEEE order with -0 folded onto +0
+# (the comparison has -0 == +0). The order (x, y, row) is total, so the
+# permutation is the host sort's whatever the algorithm, and so is every
+# word after it (`iso_fit_sorted` on one thread). Predict: one thread a query.
+comptime ISO_TILE = 4096
+comptime ISO_RADIX = 256
+
+
+@always_inline
+def _iso_key(v: Float32) -> UInt32:
+    var b = bitcast[DType.uint32](v)
+    if (b & UInt32(0x7FFFFFFF)) == UInt32(0):
+        b = UInt32(0)
+    if (b & UInt32(0x80000000)) != UInt32(0):
+        return ~b
+    return b | UInt32(0x80000000)
+
+
+def iso_keys_kernel(x: FP, y: FP, kx: IP, ky: IP, perm: IP, n: Int32):
+    var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if i < Int(n):
+        kx.unsafe_store(i, bitcast[DType.int32](_iso_key(x.unsafe_load(i))))
+        ky.unsafe_store(i, bitcast[DType.int32](_iso_key(y.unsafe_load(i))))
+        perm.unsafe_store(i, Int32(i))
+
+
+@always_inline
+def _digit(keys: IP, row: Int, shift: Int) -> Int:
+    return Int((bitcast[DType.uint32](keys.unsafe_load(row)) >> UInt32(shift)) & UInt32(ISO_RADIX - 1))
+
+
+def iso_count_kernel(keys: IP, perm: IP, n: Int32, shift: Int32, counts: IP, ntiles: Int32):
+    var tl = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if tl < Int(ntiles):
+        for dg in range(ISO_RADIX):
+            counts.unsafe_store(dg * Int(ntiles) + tl, Int32(0))
+        var lo = tl * ISO_TILE
+        var hi = min(Int(n), lo + ISO_TILE)
+        for i in range(lo, hi):
+            var dg = _digit(keys, Int(perm.unsafe_load(i)), Int(shift))
+            var o = dg * Int(ntiles) + tl
+            counts.unsafe_store(o, counts.unsafe_load(o) + 1)
+
+
+def iso_scan_kernel(counts: IP, total: Int32):
+    """counts (digit-major, tile-minor) -> their exclusive prefix, in place: one thread."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        var acc = Int32(0)
+        for i in range(Int(total)):
+            var c = counts.unsafe_load(i)
+            counts.unsafe_store(i, acc)
+            acc += c
+
+
+def iso_scatter_kernel(keys: IP, src: IP, dst: IP, n: Int32, shift: Int32, offs: IP, ntiles: Int32):
+    var tl = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if tl < Int(ntiles):
+        var lo = tl * ISO_TILE
+        var hi = min(Int(n), lo + ISO_TILE)
+        for i in range(lo, hi):
+            var r = src.unsafe_load(i)
+            var o = _digit(keys, Int(r), Int(shift)) * Int(ntiles) + tl
+            var at = offs.unsafe_load(o)
+            dst.unsafe_store(Int(at), r)
+            offs.unsafe_store(o, at + 1)
+
+
+def iso_fit_kernel(x: FP, y: FP, n: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, perm: IP):
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        iso_fit_sorted(x, y, Int(n), ip, fp, res, fw, iw, perm, Int(n))
+
+
+def iso_predict_kernel(x: FP, thr: FP, n: Int32, m: Int32, oob: Int32, fp: FP, res: FP):
+    var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if q < Int(n):
+        iso_predict_one(q, x, thr, Int(m), Int(oob), fp, res)
+
+
+def _iso_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, ip: List[Int32], fp: List[Float32], n_out: Int,
+                  n_fw: Int, n_iw: Int, res: FP) raises:
+    var ctx = linear_ctx()
+    var hip = ip.copy()
+    var hfp = fp.copy()
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+    var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
+    var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
+    var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(hfp), 1))
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
+    var dfw = ctx.enqueue_create_buffer[DType.float32](max(n_fw, 1))
+    var diw = ctx.enqueue_create_buffer[DType.int32](max(n_iw, 1))
+    var dkx = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var dky = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var dpa = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var dpb = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var ntiles = (n + ISO_TILE - 1) // ISO_TILE
+    var dcnt = ctx.enqueue_create_buffer[DType.int32](ISO_RADIX * ntiles)
+    if n_x > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    if n_y > 0:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    ctx.enqueue_copy(dst_buf=dip, src_ptr=hip.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
+    dout.enqueue_fill(Float32(0))
+    dfw.enqueue_fill(Float32(0))
+    diw.enqueue_fill(Int32(0))
+    ctx.enqueue_function[iso_keys_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), dkx.unsafe_ptr(), dky.unsafe_ptr(),
+                                          dpa.unsafe_ptr(), Int32(n), grid_dim=_xg_blocks(n), block_dim=XG_TPB)
+    var cur_a = True
+    for key in range(2):
+        for pas in range(4):
+            var shift = Int32(8 * pas)
+            var kp = dky.unsafe_ptr() if key == 0 else dkx.unsafe_ptr()
+            var src = dpa.unsafe_ptr() if cur_a else dpb.unsafe_ptr()
+            var dst = dpb.unsafe_ptr() if cur_a else dpa.unsafe_ptr()
+            ctx.enqueue_function[iso_count_kernel](kp, src, Int32(n), shift, dcnt.unsafe_ptr(), Int32(ntiles),
+                                                   grid_dim=_xg_blocks(ntiles), block_dim=XG_TPB)
+            ctx.enqueue_function[iso_scan_kernel](dcnt.unsafe_ptr(), Int32(ISO_RADIX * ntiles), grid_dim=1, block_dim=1)
+            ctx.enqueue_function[iso_scatter_kernel](kp, src, dst, Int32(n), shift, dcnt.unsafe_ptr(), Int32(ntiles),
+                                                     grid_dim=_xg_blocks(ntiles), block_dim=XG_TPB)
+            cur_a = not cur_a
+    var pp = dpa.unsafe_ptr() if cur_a else dpb.unsafe_ptr()
+    ctx.enqueue_function[iso_fit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), dip.unsafe_ptr(), dfp.unsafe_ptr(),
+                                         dout.unsafe_ptr(), dfw.unsafe_ptr(), diw.unsafe_ptr(), pp, grid_dim=1, block_dim=1)
+    if n_out > 0:
+        ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
+    ctx.synchronize()
+    _ = hip^
+    _ = hfp^
+    _ = dx^
+    _ = dy^
+    _ = dip^
+    _ = dfp^
+    _ = dout^
+    _ = dfw^
+    _ = diw^
+    _ = dkx^
+    _ = dky^
+    _ = dpa^
+    _ = dpb^
+    _ = dcnt^
+
+
+def _iso_predict_grid(x: FP, n_x: Int, thr: FP, n_thr: Int, n: Int, ip: List[Int32], fp: List[Float32], res: FP) raises:
+    var ctx = linear_ctx()
+    var hfp = fp.copy()
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+    var dt = ctx.enqueue_create_buffer[DType.float32](max(n_thr, 1))
+    var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(hfp), 1))
+    var dout = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    ctx.enqueue_copy(dst_buf=dt, src_ptr=thr)
+    ctx.enqueue_copy(dst_buf=dfp, src_ptr=hfp.unsafe_ptr())
+    ctx.enqueue_function[iso_predict_kernel](dx.unsafe_ptr(), dt.unsafe_ptr(), Int32(n), ip[0], ip[1], dfp.unsafe_ptr(),
+                                             dout.unsafe_ptr(), grid_dim=_xg_blocks(n), block_dim=XG_TPB)
+    ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
+    ctx.synchronize()
+    _ = hfp^
+    _ = dx^
+    _ = dt^
+    _ = dfp^
+    _ = dout^
+
+
 def fit_device(
     algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
 ) raises:
+    # lane/neural-pass107: isotonic on the grid (the radix sort, then the fit on
+    # one thread; one thread a predicted query); weighted fits keep the team form
+    if algo == ALGO_ISOTONIC and len(ip) > 3 and Int(ip[3]) == 0 and n > 0:
+        _iso_fit_grid(x, n_x, y, n_y, n, ip, fp, n_out, n_fw, n_iw, res)
+        return
+    if algo == ALGO_ISOTONIC_PREDICT and n > 0:
+        _iso_predict_grid(x, n_x, y, n_y, n, ip, fp, res)
+        return
     if algo == ALGO_SGD and _sgd_on_host():
         _fit_on_host(algo, x, y, n, d, ip, fp, n_out, n_fw, n_iw, res)
         return

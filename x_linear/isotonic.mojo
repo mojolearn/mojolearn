@@ -149,6 +149,20 @@ def isotonic_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP,
         st(res, 2, Float32(0))
         return
     _iso_sort(x, y, perm, tmp, nk)
+    iso_fit_sorted(x, y, n, ip, fp, res, fw, iw, perm, nk)
+
+
+def iso_fit_sorted(x: FP, y: FP, n: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, perm: IP, nk: Int):
+    """isotonic_fit after its sort: perm[0, nk) the rows in (x, y, row) order
+    (lane/neural-pass107: the device sorts them on the grid, x_linear/device.mojo)."""
+    var inc = ldi(ip, 0) != 0
+    var has_w = ldi(ip, 3) != 0
+    var ux = 0
+    var uy = n
+    var uw = 2 * n
+    var xs = fw + 3 * n
+    var ys = fw + 4 * n
+    var ws = fw + 5 * n
     for j in range(nk):
         var r = ldi(perm, j)
         st(xs, j, ld(x, r))
@@ -257,32 +271,41 @@ def isotonic_predict(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res:
     # DEVIATION 5006 (IDENTITY_PATHS row 106): the constant word, never 0/0
     var nan = bitcast[DType.float32](UInt32(0x7FC00000))
     for q in range(t.tid, n, t.nt):
-        var tq = ld(x, q)
-        if oob == OOB_CLIP:
-            tq = fmin(fmax(tq, ld(fp, 0)), ld(fp, 1))
-        if m == 1:
-            st(res, q, ld(y, m))
-            continue
-        if tq < ld(y, 0) or tq > ld(y, m - 1):
-            st(res, q, nan)
-            continue
-        # searchsorted(xs, t, 'left'), clamped to [1, m - 1]
-        var lo = 0
-        var hi = m
-        while lo < hi:
-            var mid = (lo + hi) // 2
-            if ld(y, mid) < tq:
-                lo = mid + 1
-            else:
-                hi = mid
-        var idx = lo
-        if idx < 1:
-            idx = 1
-        if idx > m - 1:
-            idx = m - 1
-        var x_lo = ld(y, idx - 1)
-        var x_hi = ld(y, idx)
-        var y_lo = ld(y, m + idx - 1)
-        var y_hi = ld(y, m + idx)
-        var slope = fd(fs(y_hi, y_lo), fs(x_hi, x_lo))
-        st(res, q, fmad(slope, fs(tq, x_lo), y_lo))
+        iso_predict_one(q, x, y, m, oob, fp, res)
+
+
+@always_inline
+def iso_predict_one(q: Int, x: FP, y: FP, m: Int, oob: Int, fp: FP, res: FP):
+    """isotonic_predict for query q (lane/neural-pass107: the device runs one
+    thread a query)."""
+    # DEVIATION 5006 (IDENTITY_PATHS row 106): the constant word, never 0/0
+    var nan = bitcast[DType.float32](UInt32(0x7FC00000))
+    var tq = ld(x, q)
+    if oob == OOB_CLIP:
+        tq = fmin(fmax(tq, ld(fp, 0)), ld(fp, 1))
+    if m == 1:
+        st(res, q, ld(y, m))
+        return
+    if tq < ld(y, 0) or tq > ld(y, m - 1):
+        st(res, q, nan)
+        return
+    # searchsorted(xs, t, 'left'), clamped to [1, m - 1]
+    var lo = 0
+    var hi = m
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if ld(y, mid) < tq:
+            lo = mid + 1
+        else:
+            hi = mid
+    var idx = lo
+    if idx < 1:
+        idx = 1
+    if idx > m - 1:
+        idx = m - 1
+    var x_lo = ld(y, idx - 1)
+    var x_hi = ld(y, idx)
+    var y_lo = ld(y, m + idx - 1)
+    var y_hi = ld(y, m + idx)
+    var slope = fd(fs(y_hi, y_lo), fs(x_hi, x_lo))
+    st(res, q, fmad(slope, fs(tq, x_lo), y_lo))
