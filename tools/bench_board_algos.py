@@ -296,7 +296,13 @@ _add("bayesian-gmm", xlane="cluster", ours="BayesianGaussianMixture", task="gmm"
      sub={"X": SUB["mid"], "Xq": SUB["small"]}, sk="sklearn.mixture:BayesianGaussianMixture",
      params=dict(n_components=8, covariance_type="full", max_iter=100, tol=1e-3, reg_covar=1e-6,
                  init_params="kmeans", random_state=SEED),
-     notes=["constant columns dropped: the columns constant on the fit rows (Istella-S: 20 of 220 on the 100,000 fit rows) are removed from X and Xq before the clock, the same for every arm; a full covariance over them is singular, and on the raw float32 rows ours, scikit-learn float32 and both Bayesian mixtures refused (ill-defined empirical covariance) where only scikit-learn float64 fitted (m3ultra-b, 2026-09-29, tools/gmm_istella_probe.py)"])
+     dataset_params={"istella": dict(reg_covar=3e-3)},
+     notes=["reg_covar 3e-3 on Istella-S (taxi keeps 1e-6), for every arm on every vendor: at 1e-6 "
+            "every arm refused on the constant-dropped Istella rows (ours and ours-fast on 0.8.29 "
+            "with the GEMM moments, and scikit-learn: ill-defined empirical covariance, "
+            "m3ultra-b 2026-09-29; again ours and scikit-learn on the 0.8.34 L40S and MI300X boards), and 3e-3 is the smallest value at which the arms fitted "
+            "(tools/gmm_istella_probe.py), the value classical2/gmm uses on Istella-S (GMM_REG_COVAR)",
+            "constant columns dropped: the columns constant on the fit rows (Istella-S: 20 of 220 on the 100,000 fit rows) are removed from X and Xq before the clock, the same for every arm; a full covariance over them is singular, and on the raw float32 rows ours, scikit-learn float32 and both Bayesian mixtures refused (ill-defined empirical covariance) where only scikit-learn float64 fitted (m3ultra-b, 2026-09-29, tools/gmm_istella_probe.py)"])
 
 # ---- lane neighbors + kernel ---------------------------------------------
 _add("lof", xlane="neighbors", ours="LocalOutlierFactor", task="outlier", block="cls",
@@ -543,7 +549,10 @@ for _slug, _cls, _kw, _blk, _cu in (
         ("robust-scaler", "RobustScaler", {}, "raw", True),
         ("maxabs-scaler", "MaxAbsScaler", {}, "raw", True),
         ("quantile-transformer", "QuantileTransformer",
-         dict(n_quantiles=1000, output_distribution="uniform", subsample=None, random_state=SEED),
+         # subsample 10**9 on every arm: every row (above the 1,000,000 fit rows, so no draw),
+         # the value cuML needs (it takes no None); None on ours and scikit-learn only refused
+         # the race (a library default is not a matched value, L40S 0.8.34 board)
+         dict(n_quantiles=1000, output_distribution="uniform", subsample=10 ** 9, random_state=SEED),
          "raw", True),
         ("power-transformer", "PowerTransformer", dict(method="yeo-johnson", standardize=True),
          "raw", True),
@@ -566,7 +575,7 @@ for _slug, _cls, _kw, _blk, _cu in (
     _cukw = {k: v for k, v in _kw.items() if k not in ("subsample", "quantile_method")
              and not (_cls == "KBinsDiscretizer" and k == "random_state")}
     if _cls == "QuantileTransformer":
-        _cukw["subsample"] = 10 ** 9      # cuML takes no None: every row, as scikit-learn's None
+        _cukw["subsample"] = _kw["subsample"]      # the same 10**9 (every row) as ours and scikit-learn
     _add(_slug, xlane="prep", ours=_cls, task="transform", block=_blk, quality="vs-sklearn",
          sk=("sklearn.feature_selection:" if _cls == "VarianceThreshold" else "sklearn.preprocessing:")
          + _cls, params=_kw, cuml=(_CUP + _cls) if _cu else None, cuml_params=_cukw,
@@ -848,7 +857,7 @@ _add("prophet", xlane="sequence", ours=("ProphetForecaster",), kind="ts",
 
 # ---- lane trees -----------------------------------------------------------
 _add("decision-tree-clf", xlane="trees", ours="DecisionTreeClassifier", task="clf", block="cls",
-     sk="sklearn.tree:DecisionTreeClassifier", params=dict(max_depth=16, random_state=SEED),
+     sk="sklearn.tree:DecisionTreeClassifier", params=dict(max_depth=16, max_features=1.0, random_state=SEED),
      cuml="cuml.ensemble:RandomForestClassifier",
      cuml_params=dict(n_estimators=1, bootstrap=False, max_features=1.0, max_depth=16, n_bins=128,
                       random_state=SEED),
@@ -856,7 +865,7 @@ _add("decision-tree-clf", xlane="trees", ours="DecisionTreeClassifier", task="cl
            "single-tree class exists), n_bins=128 as ours",
            "ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("decision-tree-reg", xlane="trees", ours="DecisionTreeRegressor", task="reg", block="reg",
-     sk="sklearn.tree:DecisionTreeRegressor", params=dict(max_depth=16, random_state=SEED),
+     sk="sklearn.tree:DecisionTreeRegressor", params=dict(max_depth=16, max_features=1.0, random_state=SEED),
      cuml="cuml.ensemble:RandomForestRegressor",
      cuml_params=dict(n_estimators=1, bootstrap=False, max_features=1.0, max_depth=16, n_bins=128,
                       random_state=SEED),
@@ -1374,6 +1383,8 @@ def lane_config(lane):
         cfg["cuml"] = s["cuml"]
     if s["sub"]:
         cfg["stride_subsets"] = dict(s["sub"])
+    if s.get("dataset_params"):
+        cfg["dataset_params"] = _jsonable(s["dataset_params"])
     return cfg
 
 
@@ -2082,6 +2093,9 @@ def _derived_params(lane, D, params):
     np = _np()
     s = LANES[lane]
     p = dict(params)
+    # a per-dataset value (s["dataset_params"]), the same for every arm: this
+    # process's dataset is the one _load_block read
+    p.update(s.get("dataset_params", {}).get(_DATASET, {}))
     X = D.get("X")
     d = X.shape[1] if X is not None and X.ndim == 2 else 1
     for k, v in list(p.items()):
@@ -4181,7 +4195,14 @@ def _build_svgp(lane, arm, D):
 # worker process
 # ---------------------------------------------------------------------------
 
+#: the dataset this process races (set by _load_block; each worker and
+#: conductor handles one), read by _derived_params for s["dataset_params"]
+_DATASET = None
+
+
 def _load_block(lane, dataset, data):
+    global _DATASET
+    _DATASET = dataset
     np = _np()
     name = block_file(lane, dataset)
     if name is None:
