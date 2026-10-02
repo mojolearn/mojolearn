@@ -389,6 +389,10 @@ EXCEPTIONS = [
     ("algos/sgd-reg", "tol", "cuml-gpu", "cuML MBSGD tol=0.0 is its no-early-stop value; ours "
      "and scikit-learn tol=None"),
     ("algos/sgd-reg", "loss", "cuml-gpu", "cuML spells squared error 'squared_loss'"),
+    ("algos/qn-reg", "loss", "cuml-gpu", "cuML QN spells squared error 'l2'"),
+    ("algos/qn-reg", "tol", "sklearn-cpu", "scikit-learn LinearRegression's tol is read only by "
+     "the sparse lsqr path; on dense X it solves in closed form (scipy lstsq) and has no "
+     "stopping tolerance"),
 ]
 
 
