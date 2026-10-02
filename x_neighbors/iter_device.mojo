@@ -18,6 +18,7 @@ from std.atomic import Atomic
 from core.host_lanes import host_row_tasks
 from std.time import perf_counter_ns
 from std.os import getenv
+from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
@@ -1436,6 +1437,135 @@ def nc_std_kernel(x: FP, lab: IP, cent: FP, std: FP, n_: Int64, d_: Int64, nc_: 
             std.unsafe_store(f, ftz(identical_sqrt(ftz(identical_div(ss, Float32(n - ncl))))))
 
 
+#: FAST on Apple (lane/apple-fast-classical, 2026-10-02): the staged chains
+#: above split over row chunks as well as feature tiles. `nc_means_kernel`
+#: and `nc_std_kernel` run one block per 16 features (14 blocks at Istella's
+#: 220), each walking every row; here a block is (16 features, NCC_ROWS rows)
+#: and a second launch sums the chunk partials. FAST's words move (the sums
+#: are chunked); `MOJOLEARN_XN_NC_CHUNKS=0` is the A/B arm.
+comptime XN_NC_CHUNKED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime NCC_ROWS = 16384
+
+
+def nc_means_part_kernel(x: FP, lab: IP, psum: FP, pcnt: FP, n_: Int64, d_: Int64, nc_: Int64, tiles_: Int64):
+    """Block b: features [16 t, 16 t + 16) (t = b % tiles) over chunk
+    b // tiles; chain q = g * 16 + c as `nc_means_kernel`'s, its sum (and
+    count) into the chunk's partials."""
+    var n = Int(n_)
+    var d = Int(d_)
+    var ncl = Int(nc_)
+    var tiles = Int(tiles_)
+    var tid = Int(thread_idx.x)
+    var b = Int(block_idx.x)
+    var c0 = (b % tiles) * NCS_TC
+    var ch = b // tiles
+    var lo = ch * NCC_ROWS
+    var hi = min(n, lo + NCC_ROWS)
+    var xs = stack_allocation[NCS_TR * NCS_TC, Float32, address_space=AddressSpace.SHARED]()
+    var ls = stack_allocation[NCS_TR, Int32, address_space=AddressSpace.SHARED]()
+    var chains = (ncl + 1) * NCS_TC
+    comptime MAXC = 8
+    var acc = SIMD[DType.float32, MAXC](0)
+    var cnt = SIMD[DType.int32, MAXC](0)
+    var r0 = lo
+    while r0 < hi:
+        barrier()
+        _ncs_stage(x, lab, n, d, c0, r0, xs, ls)
+        barrier()
+        var rows = min(NCS_TR, hi - r0)
+        comptime for k in range(MAXC):
+            var q = tid + k * NCS_NT
+            if q < chains:
+                var g = q // NCS_TC
+                var c = q % NCS_TC
+                if c0 + c < d:
+                    var a = acc[k]
+                    var m = cnt[k]
+                    for r in range(rows):
+                        if g >= ncl or Int(ls[r]) == g:
+                            a += xs[r * NCS_TC + c]
+                            m += 1
+                    acc[k] = a
+                    cnt[k] = m
+        r0 += NCS_TR
+    comptime for k in range(MAXC):
+        var q = tid + k * NCS_NT
+        if q < chains:
+            var g = q // NCS_TC
+            var c = q % NCS_TC
+            var f = c0 + c
+            if f < d:
+                psum.unsafe_store((ch * (ncl + 1) + g) * d + f, acc[k])
+                pcnt.unsafe_store((ch * (ncl + 1) + g) * d + f, Float32(Int(cnt[k])))
+
+
+def nc_means_red_kernel(psum: FP, pcnt: FP, cent: FP, dsc: FP, n_: Int64, d_: Int64, nc_: Int64, nch_: Int64):
+    """Thread (g, f): the chunk partials summed; class g's mean of feature f
+    (g == classes: the centroid of every row)."""
+    var d = Int(d_)
+    var ncl = Int(nc_)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < (ncl + 1) * d:
+        var g = t // d
+        var f = t - g * d
+        var a = Float32(0)
+        var m = Float32(0)
+        for ch in range(Int(nch_)):
+            a += psum.unsafe_load((ch * (ncl + 1) + g) * d + f)
+            m += pcnt.unsafe_load((ch * (ncl + 1) + g) * d + f)
+        if g < ncl:
+            cent.unsafe_store(g * d + f, a / m if m > 0 else Float32(0))
+        else:
+            dsc.unsafe_store(f, a / Float32(Int(n_)))
+
+
+def nc_std_part_kernel(x: FP, lab: IP, cent: FP, pss: FP, n_: Int64, d_: Int64, tiles_: Int64):
+    """Block (16 features, a chunk): thread c < 16 the chunk's squared
+    deviations of feature 16 t + c from its class mean."""
+    var n = Int(n_)
+    var d = Int(d_)
+    var tiles = Int(tiles_)
+    var tid = Int(thread_idx.x)
+    var b = Int(block_idx.x)
+    var c0 = (b % tiles) * NCS_TC
+    var ch = b // tiles
+    var lo = ch * NCC_ROWS
+    var hi = min(n, lo + NCC_ROWS)
+    var xs = stack_allocation[NCS_TR * NCS_TC, Float32, address_space=AddressSpace.SHARED]()
+    var ls = stack_allocation[NCS_TR, Int32, address_space=AddressSpace.SHARED]()
+    var f = c0 + tid
+    var live = tid < NCS_TC and f < d
+    var ss = Float32(0)
+    var r0 = lo
+    while r0 < hi:
+        barrier()
+        _ncs_stage(x, lab, n, d, c0, r0, xs, ls)
+        barrier()
+        if live:
+            var rows = min(NCS_TR, hi - r0)
+            for r in range(rows):
+                var df = xs[r * NCS_TC + tid] - cent.unsafe_load(Int(ls[r]) * d + f)
+                ss += df * df
+        r0 += NCS_TR
+    if live:
+        pss.unsafe_store(ch * d + f, ss)
+
+
+def nc_std_red_kernel(pss: FP, std: FP, n_: Int64, d_: Int64, nc_: Int64, nch_: Int64):
+    var d = Int(d_)
+    var f = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if f < d:
+        var ss = Float32(0)
+        for ch in range(Int(nch_)):
+            ss += pss.unsafe_load(ch * d + f)
+        var dof = Int(n_) - Int(nc_)
+        std.unsafe_store(f, sqrt(ss / Float32(dof)) if dof > 0 else Float32(0))
+
+
+def _nc_chunked_on() -> Bool:
+    return String(getenv("MOJOLEARN_XN_NC_CHUNKS")) != "0"
+
+
 def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int) raises:
     if (n_classes + 1) * NCS_TC > 8 * NCS_NT:
         raise Error("nc_stats: more classes than the staged kernel's chains (" + String(n_classes) + ")")
@@ -1446,6 +1576,42 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
     var d_std = _buf(ctx, std, d, False)
     var d_dsc = _buf(ctx, dsc, d, False)
     var tiles = (d + NCS_TC - 1) // NCS_TC
+    comptime if XN_NC_CHUNKED:
+        if _nc_chunked_on() and n > NCC_ROWS:
+            var nch = (n + NCC_ROWS - 1) // NCC_ROWS
+            var cells = (n_classes + 1) * d
+            var d_ps = ctx.enqueue_create_buffer[DType.float32](nch * cells)
+            var d_pc = ctx.enqueue_create_buffer[DType.float32](nch * cells)
+            var d_pss = ctx.enqueue_create_buffer[DType.float32](nch * d)
+            ctx.enqueue_function[nc_means_part_kernel](
+                d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_ps.unsafe_ptr(), d_pc.unsafe_ptr(),
+                Int64(n), Int64(d), Int64(n_classes), Int64(tiles), grid_dim=tiles * nch, block_dim=NCS_NT,
+            )
+            ctx.enqueue_function[nc_means_red_kernel](
+                d_ps.unsafe_ptr(), d_pc.unsafe_ptr(), d_cent.unsafe_ptr(), d_dsc.unsafe_ptr(),
+                Int64(n), Int64(d), Int64(n_classes), Int64(nch), grid_dim=(cells + 255) // 256, block_dim=256,
+            )
+            ctx.enqueue_function[nc_std_part_kernel](
+                d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_cent.unsafe_ptr(), d_pss.unsafe_ptr(),
+                Int64(n), Int64(d), Int64(tiles), grid_dim=tiles * nch, block_dim=NCS_NT,
+            )
+            ctx.enqueue_function[nc_std_red_kernel](
+                d_pss.unsafe_ptr(), d_std.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(nch),
+                grid_dim=(d + 255) // 256, block_dim=256,
+            )
+            _down(ctx, d_cent, cent, n_classes * d)
+            _down(ctx, d_std, std, d)
+            _down(ctx, d_dsc, dsc, d)
+            ctx.synchronize()
+            _ = d_ps^
+            _ = d_pc^
+            _ = d_pss^
+            _ = d_x^
+            _ = d_lab^
+            _ = d_cent^
+            _ = d_std^
+            _ = d_dsc^
+            return
     ctx.enqueue_function[nc_means_kernel](
         d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_cent.unsafe_ptr(), d_dsc.unsafe_ptr(),
         Int64(n), Int64(d), Int64(n_classes), grid_dim=max(tiles, 1), block_dim=NCS_NT,
