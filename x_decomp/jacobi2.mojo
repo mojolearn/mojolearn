@@ -362,7 +362,7 @@ def one_sided_svd2_kernel(
                 var np_ = ftz(identical_sqrt(app))
                 var nq_ = ftz(identical_sqrt(aqq))
                 var thresh = ftz(tol_in * ftz(np_ * nq_))
-                var rotate = abs(apq) > thresh
+                var rotate = abs(apq) > thresh and svd_rotation_significant(app, aqq)  # Andrew 2026-10-01: insignificant rotations skipped
                 var c = Float32(1.0)
                 var s = Float32(0.0)
                 if rotate:
@@ -580,7 +580,7 @@ def one_sided_svd2_chunk_kernel(
         var np_ = ftz(identical_sqrt(app))
         var nq_ = ftz(identical_sqrt(aqq))
         var thresh = ftz(tol_in * ftz(np_ * nq_))
-        var rotate = abs(apq) > thresh
+        var rotate = abs(apq) > thresh and svd_rotation_significant(app, aqq)  # Andrew 2026-10-01: insignificant rotations skipped
         var c = Float32(1.0)
         var s = Float32(0.0)
         if rotate:
