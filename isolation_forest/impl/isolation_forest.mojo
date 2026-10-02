@@ -75,6 +75,7 @@ from isolation_forest.impl.rng.xorwow import (
 )
 from isolation_forest.impl.isolation_tree_builder import (
     IF_BUILD_TPB,
+    IF_BUILD_TPB_MAX,
     IF_DECISION_WORDS,
     IF_PATH_TPB,
     IF_RNG_STATE_WORDS,
@@ -782,7 +783,14 @@ struct IsolationForest(Movable):
             ctx, n_trees * n_sampled_rows * n_sampled_features, pad, poison
         )
         var sample_indices = _poisoned_i64(ctx, n_trees * n_sampled_rows, pad, poison)
-        var work_indices = _poisoned_i32(ctx, n_trees * n_sampled_rows, pad, poison)
+        # two halves per tree: the partition order and its scratch (the
+        # block-parallel stable partition, `isolation_tree_builder.mojo`)
+        var work_indices = _poisoned_i32(ctx, 2 * n_trees * n_sampled_rows, pad, poison)
+        if knobs.build_tpb < 1 or knobs.build_tpb > IF_BUILD_TPB_MAX:
+            raise Error(
+                "isolation forest: build_tpb must be in [1, "
+                + String(IF_BUILD_TPB_MAX) + "], got " + String(knobs.build_tpb)
+            )
         # One scratch buffer per tree carved into three disjoint slices
         # (stack, per-node decisions, final RNG state). ONE kernel argument:
         # Metal caps a kernel at 31 and this one stands at 25.
