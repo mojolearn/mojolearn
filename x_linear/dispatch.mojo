@@ -72,9 +72,13 @@ def fit_dispatch(t: Team, algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: F
     """`t` is the team the fit runs on (a team of one for a fit that
     `team_fit` does not name)."""
     if algo == ALGO_SGD:
-        sgd_fit(t, x, y, n, d, ip, fp, res, fw, iw)
+        # the device binding runs SGD, GLM and isotonic on the grid
+        # (x_linear/device.mojo); no device thread reaches these
+        comptime if not is_gpu():
+            sgd_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_GLM:
-        glm_fit(t, x, y, n, d, ip, fp, res, fw, iw)
+        comptime if not is_gpu():
+            glm_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_HUBER:
         huber_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_BAYES:
@@ -92,9 +96,11 @@ def fit_dispatch(t: Team, algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: F
     elif algo == ALGO_LOGCV:
         logcv_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ISOTONIC:
-        isotonic_fit(t, x, y, n, d, ip, fp, res, fw, iw)
+        comptime if not is_gpu():
+            isotonic_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ISOTONIC_PREDICT:
-        isotonic_predict(t, x, y, n, d, ip, fp, res, fw, iw)
+        comptime if not is_gpu():
+            isotonic_predict(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_RIDGE_KFOLD:
         # the device binding runs this on the grid (x_linear/device.mojo)
         comptime if not is_gpu():
