@@ -3,14 +3,8 @@
 # state debt = on main; inflight = pre-authorized lines of an open PR.
 rule	class	owner	state	path	occ	text
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_array.py	0	return (self[i] for i in range(self.shape[0]))
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bpe_trainer.py	0	word = "".join(_SYLLABLES[next(rng) % len(_SYLLABLES)] for _ in range(n))
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	0	for s in range(n_rows):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	1	for s in range(n_rows):
-py-loop	py-numpy	gap-lm	debt	python/mojolearn/_byte_lm_impl.py	0	for layer in range(n)]
-py-loop	py-numpy	gap-lm	debt	python/mojolearn/_byte_lm_impl.py	1	for layer in range(n)]
-py-loop	py-numpy	gap-lm	debt	python/mojolearn/_byte_lm_impl.py	2	for layer in range(n)]
-py-loop	py-numpy	gap-lm	debt	python/mojolearn/_byte_lm_impl.py	0	values = [int(info[12 + 3 * layer + offset]) for layer in range(n)]
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_causal_lm_fixtures.py	0	for _ in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	big = max(abs(ls[i * n + i]) for i in range(n))
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	diag = _M.of([lu.s[i * n + i] for i in range(n)], 1, n)
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	for i in range(n):
@@ -34,13 +28,11 @@ py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	from c
 py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	self._threads = ThreadPoolExecutor(max_workers=len(self.devices))
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_svm_impl.py	0	for i in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_svm_impl.py	0	for r in range(n_rows):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_tokenizer_synthetic.py	0	word = "".join(_SYLLABLES[next(rng) % len(_SYLLABLES)] for _ in range(n))
 py-numpy	py-numpy	UNOWNED	debt	python/mojolearn/_x_sequence_prophet.py	0	cp = np.sort(_days(self.changepoints))
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/cross_vendor.py	0	for i in range(n):
 py-threads	host-threads	gap-lm	debt	python/mojolearn/lm_corpus.py	0	worker = threading.Thread(target=produce, name="mojolearn-token-prefetch", daemon=True)
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/model_selection.py	0	for i in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/models/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
-host-module	host-import	UNOWNED	debt	python/mojolearn/neural_inference.py	0	return _backend.load_host_module(_EXTENSION)
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	module = _backend.load_host_module(_EXTENSION)
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	return _Entries(_backend.load_host_module(_EXTENSION))
 py-loop	py-numpy	gap-lm	debt	python/mojolearn/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
