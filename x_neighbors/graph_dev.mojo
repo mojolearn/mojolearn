@@ -6,7 +6,7 @@ launches in order on the lane's one stream. Only the driver's control
 values (counts, flags, the convergence sum, the modularity) cross back."""
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_neighbors.items import FP, IP
-from x_neighbors.device_ops import xn_ctx, _buf, _grid, _tid, BLOCK
+from x_neighbors.device_ops import xn_ctx, _grid, _tid, BLOCK
 from x_neighbors.graph_par import GA, GExec, Lay, LP, GP_NST, gp_item, pr_drive, lv_drive
 
 
@@ -38,7 +38,10 @@ struct GraphDev(GExec):
         self.bi = ctx.enqueue_create_buffer[DType.int32](1)
         self.bl = ctx.enqueue_create_buffer[DType.int64](1)
         self.blay = ctx.enqueue_create_buffer[DType.int64](1)
-        self.ba = _buf(ctx, a, a_count, a != 0)
+        # the dense input: one plain copy on the lane's stream, no host threads
+        self.ba = ctx.enqueue_create_buffer[DType.float32](max(a_count, 1))
+        if a != 0 and a_count > 0:
+            ctx.enqueue_copy(dst_buf=self.ba, src_ptr=FP(unsafe_from_address=a))
         self.off = List[Int64]()
         self.ctx = ctx^
 
