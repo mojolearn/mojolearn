@@ -32,6 +32,7 @@ from std.os import getenv
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo
 
 
@@ -256,6 +257,127 @@ def iso_scatter_kernel(keys: IP, src: IP, dst: IP, n: Int32, shift: Int32, offs:
             offs.unsafe_store(o, at + 1)
 
 
+
+# ---------------------------------------------- block radix (lane/neural-pass118)
+# The sort above ran one thread per 4096-row tile with its digit counters
+# in device memory (M4, 1M rows: 70 ms). Here a pass is three launches:
+# block b (RS_NT threads x RS_IPT contiguous rows) counts each thread's
+# rows per 4-bit digit in threadgroup memory and publishes the block's
+# per-digit totals; one thread scans those (digit-major, block-minor) and
+# notes a pass whose rows all share one digit; block b recounts, scans its
+# thread counters (digit-major, thread-minor) and writes each row to its
+# digit's global offset + its thread's offset + its rank within the
+# thread: the stable order, so the LSD passes give the (x, y, row) order
+# (a total order: any correct sort gives this one permutation, so the
+# words downstream are unchanged). A one-digit pass is a copy.
+# `MOJOLEARN_X_LINEAR_ISO_BLOCK_RADIX=0` restores the tile sort.
+comptime RS_BITS = 4
+comptime RS_D = 1 << RS_BITS
+comptime RS_NT = 256
+comptime RS_IPT = 16
+comptime RS_TILE = RS_NT * RS_IPT
+comptime RS_BYTES = (RS_D * RS_NT + RS_NT) * 4
+comptime ISO_BLOCK_RADIX = lib_smem_page_fits_for[TARGET_COLUMN, RS_BYTES]()
+
+
+@always_inline
+def _rdig(keys: IP, row: Int, shift: Int) -> Int:
+    return Int((bitcast[DType.uint32](keys.unsafe_load(row)) >> UInt32(shift)) & UInt32(RS_D - 1))
+
+
+def rs_count_kernel(keys: IP, src: IP, n: Int32, shift: Int32, btot: IP, nb: Int32):
+    var cnt = stack_allocation[RS_D * RS_NT, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    for d in range(RS_D):
+        cnt[d * RS_NT + tid] = Int32(0)
+    var lo0 = Int(block_idx.x) * RS_TILE + tid * RS_IPT
+    for u in range(RS_IPT):
+        var i = lo0 + u
+        if i < Int(n):
+            var d = _rdig(keys, Int(src.unsafe_load(i)), Int(shift))
+            cnt[d * RS_NT + tid] = cnt[d * RS_NT + tid] + 1
+    barrier()
+    if tid < RS_D:
+        var c = Int32(0)
+        for t in range(RS_NT):
+            c += cnt[tid * RS_NT + t]
+        btot.unsafe_store(tid * Int(nb) + Int(block_idx.x), c)
+
+
+def rs_scan_kernel(btot: IP, nb: Int32, n: Int32, flag: IP):
+    """Exclusive prefix of btot (digit-major, block-minor) in place; flag[0]
+    = 1 when one digit holds every row (the pass is a copy)."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        var acc = Int32(0)
+        var one = Int32(0)
+        for d in range(RS_D):
+            var dt = Int32(0)
+            for b in range(Int(nb)):
+                var c = btot.unsafe_load(d * Int(nb) + b)
+                btot.unsafe_store(d * Int(nb) + b, acc)
+                acc += c
+                dt += c
+            if dt == n:
+                one = 1
+        flag.unsafe_store(0, one)
+
+
+def rs_scatter_kernel(keys: IP, src: IP, dst: IP, n: Int32, shift: Int32, btot: IP, nb: Int32, flag: IP):
+    var nn = Int(n)
+    var tid = Int(thread_idx.x)
+    var lo = Int(block_idx.x) * RS_TILE + tid * RS_IPT
+    if flag.unsafe_load(0) != 0:
+        for u in range(RS_IPT):
+            var i = lo + u
+            if i < nn:
+                dst.unsafe_store(i, src.unsafe_load(i))
+        return
+    var cnt = stack_allocation[RS_D * RS_NT, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var part = stack_allocation[RS_NT, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    for d in range(RS_D):
+        cnt[d * RS_NT + tid] = Int32(0)
+    var lo0 = Int(block_idx.x) * RS_TILE + tid * RS_IPT
+    for u in range(RS_IPT):
+        var i = lo0 + u
+        if i < Int(n):
+            var d = _rdig(keys, Int(src.unsafe_load(i)), Int(shift))
+            cnt[d * RS_NT + tid] = cnt[d * RS_NT + tid] + 1
+    barrier()
+    # exclusive scan of cnt (digit-major, thread-minor) within the block:
+    # thread t owns the RS_D consecutive entries [t * RS_D, t * RS_D + RS_D)
+    var own = SIMD[DType.int32, RS_D]()
+    var s = Int32(0)
+    comptime for q in range(RS_D):
+        own[q] = cnt[tid * RS_D + q]
+        s += own[q]
+    part[tid] = s
+    barrier()
+    var off = 1
+    while off < RS_NT:
+        var v = part[tid] + (part[tid - off] if tid >= off else Int32(0))
+        barrier()
+        part[tid] = v
+        barrier()
+        off *= 2
+    var base = part[tid] - s
+    barrier()
+    comptime for q in range(RS_D):
+        cnt[tid * RS_D + q] = base
+        base += own[q]
+    barrier()
+    # the block's in-tile offset of (digit d, thread t) is cnt[d * RS_NT + t]
+    # minus the block's first offset of digit d, which is cnt[d * RS_NT]
+    var run = SIMD[DType.int32, RS_D](0)
+    for u in range(RS_IPT):
+        var i = lo + u
+        if i < nn:
+            var r = src.unsafe_load(i)
+            var d = _rdig(keys, Int(r), Int(shift))
+            var at = btot.unsafe_load(d * Int(nb) + Int(block_idx.x)) + (cnt[d * RS_NT + tid] - cnt[d * RS_NT]) + run[d]
+            dst.unsafe_store(Int(at), r)
+            run[d] += 1
+
+
 def iso_gather_kernel(x: FP, y: FP, n: Int32, perm: IP, fw: FP):
     var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var nn = Int(n)
@@ -370,7 +492,30 @@ def _iso_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, ip: List[Int32], fp:
     ctx.enqueue_function[iso_keys_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), dkx.unsafe_ptr(), dky.unsafe_ptr(),
                                           dpa.unsafe_ptr(), Int32(n), grid_dim=_xg_blocks(n), block_dim=XG_TPB)
     var cur_a = True
-    for key in range(2):
+    var block_radix = False
+    comptime if ISO_BLOCK_RADIX:
+        block_radix = String(getenv("MOJOLEARN_X_LINEAR_ISO_BLOCK_RADIX")) != "0"
+    if block_radix:
+        var nb = max((n + RS_TILE - 1) // RS_TILE, 1)
+        var dbt = ctx.enqueue_create_buffer[DType.int32](RS_D * nb)
+        var dfl = ctx.enqueue_create_buffer[DType.int32](1)
+        for key in range(2):
+            for pas in range(32 // RS_BITS):
+                var shift = Int32(RS_BITS * pas)
+                var kp = IP(unsafe_from_address=Int(dky.unsafe_ptr()) if key == 0 else Int(dkx.unsafe_ptr()))
+                var src = IP(unsafe_from_address=Int(dpa.unsafe_ptr()) if cur_a else Int(dpb.unsafe_ptr()))
+                var dst = IP(unsafe_from_address=Int(dpb.unsafe_ptr()) if cur_a else Int(dpa.unsafe_ptr()))
+                ctx.enqueue_function[rs_count_kernel](kp, src, Int32(n), shift, dbt.unsafe_ptr(), Int32(nb),
+                                                      grid_dim=nb, block_dim=RS_NT)
+                ctx.enqueue_function[rs_scan_kernel](dbt.unsafe_ptr(), Int32(nb), Int32(n), dfl.unsafe_ptr(),
+                                                     grid_dim=1, block_dim=1)
+                ctx.enqueue_function[rs_scatter_kernel](kp, src, dst, Int32(n), shift, dbt.unsafe_ptr(), Int32(nb),
+                                                        dfl.unsafe_ptr(), grid_dim=nb, block_dim=RS_NT)
+                cur_a = not cur_a
+        ctx.synchronize()
+        _ = dbt^
+        _ = dfl^
+    for key in range(2 if not block_radix else 0):
         for pas in range(4):
             var shift = Int32(8 * pas)
             var kp = IP(unsafe_from_address=Int(dky.unsafe_ptr()) if key == 0 else Int(dkx.unsafe_ptr()))
