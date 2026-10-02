@@ -98,6 +98,8 @@ from core.host_predict_threads import host_predict_task_count
 from core.host_parallel import host_parallelize
 from std.time import perf_counter_ns
 
+from core.staged_download import download_f32_into
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.checks.loss import (
     identical_ce_backward_into,
     identical_ce_forward_into,
@@ -112,6 +114,7 @@ from training.checks.loss_oracle import (
     ce_count,
     ce_ones,
     ce_refuse_inputs,
+    ce_refuse_shape,
 )
 from training.checks.optimizer import (
     OPT_RECORD_INTERMEDIATES,
@@ -850,6 +853,32 @@ def identical_ce_admit_call(reduction: Int, want_grad: Int, n_rows: Int) raises:
         )
 
 
+# ---- per-call overhead of the CE host entry (lane neural-pass138, 2026-10-02)
+# The board's cross-entropy cell (logits 8,192 x 8,192, mean, the gradient)
+# read 516 ms on the L40S against torch eager's 7.5 ms. Besides the PCIe
+# copies the host contract needs (256 MB of logits up, 256 MB of dlogits
+# down), this entry built a host `List` mirror of ALL the logits by
+# appending them ONE AT A TIME (67,108,864 appends, with the List's
+# regrowth copies) only to hand it to `ce_refuse_inputs`, whose non-finite
+# scan and targets walk `identical_ce_forward_into` then ran AGAIN on the
+# device as its first statement (`ce_refuse_device_inputs`, DEVIATION 2514
+# step 2, which also retired the same mirror from the LM step). The mirror
+# is gone: the shape refusal runs here, the scan and the targets walk run
+# once, on the device, with the oracle's messages (loss_check clause (f)
+# asserts the device message EQUALS the host one), and dlogits come down
+# through `core/staged_download.mojo::download_f32_into` (pooled pinned
+# stages; MOJOLEARN_DOWNLOAD_STAGE=0 is the raw copy). A NaN or a bad target
+# is now refused after the upload instead of before it, still before any
+# recorded stage; nothing is written to the caller's outputs on a refusal.
+# MOJOLEARN_CE_HOST_MIRROR=1 restores the List mirror and the raw download
+# for A/B. No bit moves: the same kernels read the same uploaded bytes.
+comptime _CE_STAGE_POOL = "MojoDownloadStagesTrainingIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesTrainingFast"
+
+
+def ce_host_mirror() -> Bool:
+    return String(getenv("MOJOLEARN_CE_HOST_MIRROR")) == "1"
+
+
 def identical_ce_loss_host(
     ctx: DeviceContext,
     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -919,33 +948,38 @@ def identical_ce_loss_host(
     per chunk and concatenates, and under `REDUCTION_NONE` the answer is
     bit-identical to the unsplit call.
 
-    THE REFUSAL COSTS A HOST COPY OF `logits`, AND IT IS NAMED RATHER THAN
-    HIDDEN. `ce_refuse_inputs` covers the shape refusals, the configuration
-    refusals, the non-finite scan and the target-range scan in ONE function
-    and cannot be split, so calling it before any device work means
-    materializing `logits` as a host `List`. Restating half of it here would
-    be a second copy of a refusal, which is the mistake DEVIATION 1495
-    exists to undo, and the certified forward then scans the same values a
-    second time after the upload. A pointer-taking overload of
-    `ce_refuse_inputs` in `loss_oracle.mojo` would remove both copies; that
-    file is this lane's and the change is OWED, not made here, because it
-    would edit a file both gates import.
+    THE REFUSALS RUN ON THE DEVICE (lane neural-pass138). The host `List`
+    mirror of `logits` this entry built for `ce_refuse_inputs` is gone (the
+    block comment above this function); the shape third runs here and the
+    non-finite scan and the targets walk are `identical_ce_forward_into`'s
+    first statement, with the oracle's messages. MOJOLEARN_CE_HOST_MIRROR=1
+    restores the mirror.
     """
     identical_ce_admit_call(reduction, want_grad, n_rows)
 
     var cfg = CeConfig(vocab, ignore_index, reduction, label_smoothing, num_items)
+    var legacy = ce_host_mirror()
 
-    # ---- The refusals, BEFORE any device work, through the oracle's own
-    # function. The host copy this needs is the cost named in the docstring.
-    var h_logits = List[Float32]()
-    var h_targets = List[Int32]()
-    for i in range(n_rows):
-        h_targets.append(targets_ptr.unsafe_load(i))
-    for i in range(n_rows * vocab):
-        h_logits.append(logits_ptr.unsafe_load(i))
-    _ = ce_refuse_inputs(h_logits, h_targets, cfg)
+    # The targets as a host List (N int32: one memcpy), for `ce_count`.
+    var h_targets = List[Int32](length=n_rows, fill=Int32(0))
+    memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
+    if legacy:
+        # ---- The refusals, BEFORE any device work, through the oracle's
+        # own function, over a host List mirror of `logits`.
+        var h_logits = List[Float32]()
+        for i in range(n_rows * vocab):
+            h_logits.append(logits_ptr.unsafe_load(i))
+        _ = ce_refuse_inputs(h_logits, h_targets, cfg)
+        _ = h_logits^
+    else:
+        # The shape third of `ce_refuse_inputs` here, before any buffer is
+        # sized from N * V; the non-finite scan and the targets walk are the
+        # first statement of `identical_ce_forward_into`
+        # (`ce_refuse_device_inputs`: the oracle's shape check, scan order,
+        # first index and message, gated equal by loss_check clause (f)),
+        # and they run before any recorded stage.
+        ce_refuse_shape(n_rows, n_rows * vocab, cfg)
     var count = ce_count(h_targets, ignore_index)
-    _ = h_logits^
     _ = h_targets^
 
     var cells = n_rows * vocab
@@ -966,8 +1000,11 @@ def identical_ce_loss_host(
         reduction, want_grad, cfg,
     )
     if want_grad != 0:
-        ctx.enqueue_copy(dst_ptr=dlogits_ptr, src_buf=dlogits)
-        ctx.synchronize()
+        if legacy:
+            ctx.enqueue_copy(dst_ptr=dlogits_ptr, src_buf=dlogits)
+            ctx.synchronize()
+        else:
+            download_f32_into[_CE_STAGE_POOL](ctx, dlogits, cells, dlogits_ptr)
     _ = logits^
     _ = targets^
     _ = dlogits^

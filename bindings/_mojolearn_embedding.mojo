@@ -40,8 +40,14 @@ from core.host_predict_threads import host_predict_task_count
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
+from core.device_scan import device_first_nonfinite
+from core.staged_download import download_f32_into
+from std.os import getenv
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralEmbeddingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralEmbeddingContextFast"
+# The pinned stages of this binding's downloads (core/staged_download.mojo),
+# one pool per binding and tier like the context above.
+comptime _STAGE_POOL = "MojoDownloadStagesEmbeddingIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesEmbeddingFast"
 from checks.vendor import COMPILED_VENDOR
 from embedding.checks.embedding_identical import (
     identical_embedding_backward_into,
@@ -78,6 +84,64 @@ def embedding_vendor_binding() raises -> PythonObject:
 # pinned memory and a read out over host tasks (one thread reads pinned
 # memory at ~3 GB/s, four or more at 10 GB/s and more). Copies: no bit moves.
 comptime EMB_COPY_TASKS_MAX = 16
+
+# ---- per-call overhead (lane neural-pass138, 2026-10-02) ---------------------------------
+# The board's embedding cell (V = 32,768, d = 1,024, T = 32,768; one forward
+# and one dense backward) read 208 ms on the L40S against torch eager's
+# 2.2 ms. Per call this binding paid, besides the PCIe copies the host
+# contract needs (W and dY up, Y and dW down, 128 MB each):
+#   * a NEW pinned host buffer of the whole output in every download
+#     (`_download_into`: 128 MB pinned, then freed, twice per cell); on CUDA
+#     a pinned allocation of that size costs tens of ms (lane neural-pass40
+#     measured 64 MB pinned allocations dominating the L40S layernorm cell);
+#   * a host scan of all of W (forward) and all of dY (backward) for
+#     non-finite values, 128 MB of host reads each.
+# Now: downloads go through `core/staged_download.mojo::download_f32_into`
+# (two pooled pinned stages, a chunk pipeline, the copy-out over host tasks;
+# MOJOLEARN_DOWNLOAD_STAGE=0 is the raw host-pointer copy), and the non-
+# finite scan runs ON THE DEVICE over the uploaded buffer
+# (`core/device_scan.device_first_nonfinite`); only a hit pays the host
+# scan, which raises the oracle's own message for the same first index, so
+# the refusal (name, index, order: dY before the carried dW) is unchanged.
+# MOJOLEARN_EMB_LEGACY_TRANSPORT=1 restores the per-call pinned download and
+# the host scans for A/B. Copies and a read-only scan: no bit moves.
+
+
+def _legacy_transport() -> Bool:
+    return String(getenv("MOJOLEARN_EMB_LEGACY_TRANSPORT")) == "1"
+
+
+def _download_out(
+    ctx: DeviceContext,
+    mut buf: DeviceBuffer[DType.float32],
+    dst: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    legacy: Bool,
+) raises:
+    if legacy:
+        _download_into(ctx, buf, dst, n)
+    elif n > 0:
+        download_f32_into[_STAGE_POOL](ctx, buf, n, dst)
+
+
+def _refuse_nonfinite_device(
+    ctx: DeviceContext,
+    name: String,
+    mut buf: DeviceBuffer[DType.float32],
+    p: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+) raises:
+    """The non-finite refusal of the caller's `p[0:n]`, scanned on its
+    device copy `buf`. A hit re-runs the host refusal on `p` (the same
+    bytes), so the error is the oracle's message at the same first index."""
+    var idx = device_first_nonfinite(ctx, buf, n)
+    if idx < 0:
+        return
+    _refuse_nonfinite_ptr(name, p, n)
+    raise Error(
+        String("embedding: the device scan found a non-finite value in ") + name
+        + " at flat index " + String(idx) + " that the host scan did not (a scan defect)"
+    )
 
 
 def _upload_f32_ptr(
@@ -230,18 +294,21 @@ def _forward_run(
     n_positions: Int,
     cfg: EmbConfig,
     yp: MutPointer[Float32, MutUntrackedOrigin],
+    legacy: Bool,
 ) raises:
     var cells = n_positions * cfg.width
     if cells <= 0:
         return
     var ctx = neural_ctx[_NEURAL_CTX]()
     var d_w = _upload_f32_ptr(ctx, wp, cfg.vocab * cfg.width)
+    if not legacy:
+        _refuse_nonfinite_device(ctx, String("W"), d_w, wp, cfg.vocab * cfg.width)
     var d_ids = _upload_i32(ctx, ids)
     var d_y = ctx.enqueue_create_buffer[DType.float32](cells)
     ctx.synchronize()
     identical_embedding_forward_into(ctx, d_y, d_w, d_ids, n_positions, cfg)
     ctx.synchronize()
-    _download_into(ctx, d_y, yp, cells)
+    _download_out(ctx, d_y, yp, cells, legacy)
     _ = d_w^
     _ = d_ids^
     _ = d_y^
@@ -255,6 +322,7 @@ def _backward_run(
     cfg: EmbConfig,
     dwp: MutPointer[Float32, MutUntrackedOrigin],
     plan: Int,
+    legacy: Bool,
 ) raises:
     var cells = cfg.vocab * cfg.width
     if cells <= 0:
@@ -268,6 +336,11 @@ def _backward_run(
     else:
         d_dw = _zero_f32(ctx, cells)
     var d_dy = _upload_f32_ptr(ctx, dyp, n_positions * cfg.width)
+    if not legacy:
+        # dY first, then the carried dW: the host refusals' order
+        _refuse_nonfinite_device(ctx, String("dY"), d_dy, dyp, n_positions * cfg.width)
+        if cfg.accumulate:
+            _refuse_nonfinite_device(ctx, String("the carried dW"), d_dw, dwp, cells)
     var d_ids = _upload_i32(ctx, ids)
     var counts = _upload_i32(ctx, _zeros_i32(cfg.vocab))
     var run_begin = _upload_i32(ctx, _zeros_i32(cfg.vocab + 1))
@@ -276,7 +349,7 @@ def _backward_run(
         ctx, d_dw, d_dy, d_ids, counts, run_begin, perm, n_positions, cfg, plan
     )
     ctx.synchronize()
-    _download_into(ctx, d_dw, dwp, cells)
+    _download_out(ctx, d_dw, dwp, cells, legacy)
     _ = d_dw^
     _ = d_dy^
     _ = d_ids^
@@ -322,9 +395,14 @@ def embedding_forward_binding(
     var ids = read_i32(Int(py=addrs[1]), n_positions)
     emb_refuse_ids(ids, cfg)
     var yp = f32_ptr(Int(py=addrs[2]))
+    # the W scan runs on the device copy unless the legacy transport is on
+    # or there is nothing to gather (then nothing is uploaded)
+    var legacy = _legacy_transport()
+    var host_scan = legacy or n_positions * width <= 0
     with GILReleased(Python()):
-        _refuse_nonfinite_ptr(String("W"), wp, vocab * width)
-        _forward_run(wp, ids, n_positions, cfg, yp)
+        if host_scan:
+            _refuse_nonfinite_ptr(String("W"), wp, vocab * width)
+        _forward_run(wp, ids, n_positions, cfg, yp, legacy)
     return PythonObject(n_positions * width)
 
 
@@ -387,11 +465,14 @@ def embedding_backward_binding(
     var ids = read_i32(Int(py=addrs[1]), n_positions)
     emb_refuse_ids(ids, cfg)
     var dwp = f32_ptr(Int(py=addrs[2]))
+    var legacy = _legacy_transport()
+    var host_scan = legacy or vocab * width <= 0
     with GILReleased(Python()):
-        _refuse_nonfinite_ptr(String("dY"), dyp, n_positions * width)
-        if cfg.accumulate:
-            _refuse_nonfinite_ptr(String("the carried dW"), dwp, vocab * width)
-        _backward_run(dyp, ids, n_positions, cfg, dwp, plan)
+        if host_scan:
+            _refuse_nonfinite_ptr(String("dY"), dyp, n_positions * width)
+            if cfg.accumulate:
+                _refuse_nonfinite_ptr(String("the carried dW"), dwp, vocab * width)
+        _backward_run(dyp, ids, n_positions, cfg, dwp, plan, legacy)
     return PythonObject(vocab * width)
 
 
