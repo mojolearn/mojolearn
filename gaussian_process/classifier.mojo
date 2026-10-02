@@ -109,7 +109,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_TN
+from gemm.contract import OP_TN
 
 
 #: lane/neighbors-apple (2026-09-28): the Laplace Newton loop keeps K, B and

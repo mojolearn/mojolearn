@@ -49,12 +49,8 @@ from gemm.checks.gemm_identical import (
     choose_gemm_plan,
     GEMM_PLAN_COUNT,
 )
-from gemm.checks.gemm_oracle import (
-    OP_NT,
-    contract_leaf_size,
-    gemm_oracle_cell,
-    gemm_oracle_serial_cell,
-)
+from gemm.contract import OP_NT, contract_leaf_size
+from gemm.checks.gemm_oracle import gemm_oracle_cell, gemm_oracle_serial_cell
 
 
 def profile_dot_workspace_floats(k: Int) -> Int:

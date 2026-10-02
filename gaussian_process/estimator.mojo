@@ -144,7 +144,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NN, OP_TN
+from gemm.contract import OP_NN, OP_TN
 from gaussian_process.checks.sample_y import (
     gp_sample_y_add_mean,
     gp_sample_y_check_factor,
