@@ -83,6 +83,8 @@ FAMILIES = (
             "xn_graph_symmetry",
             "xn_svgp",
             "xn_svgp_var",
+            "xn_nc_median",
+            "xn_pos_compact",
             "xn_nc_stats",
             "xn_lp_knn_graph",
             "xn_lp_knn_product",

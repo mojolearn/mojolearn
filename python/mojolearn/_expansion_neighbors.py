@@ -408,12 +408,21 @@ class NearestCentroid(_XNeighbors):
             if os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") == "1":
                 self._op("group_mean", [(X, 0), (lab, 0), (cent, 1)], (n, d, C))
         else:
-            rows = X.tolist()
-            med = []
+            # the per-class medians on the device (cpu-gpu-cleanup w2-pyglue,
+            # x_neighbors/sort_items.mojo): a bitonic sort of every feature's
+            # rows by (class, value, row) over a power-of-two pad, then each
+            # class's middle value(s) at its offset; offsets are the class
+            # counts' prefix (integer bookkeeping over the classes)
+            start = [0] * (C + 1)
             for c in range(C):
-                members = [rows[i] for i in range(n) if codes[i] == c]
-                med.append([_median([r[f] for r in members]) for f in range(d)])
-            cent = Array.from_list(med, "<f4")
+                start[c + 1] = start[c] + counts[c]
+            p = 1
+            while p < n:
+                p *= 2
+            lg = p.bit_length() - 1
+            cent = _empty_out((C, d), "<f4")
+            self._op("nc_median", [(X, 0), (lab, 0), (_i32(start, "start"), 0), (cent, 1)],
+                     (n, d, C, p, lg * (lg + 1) // 2))
         stats = _empty_out((d,), "<f4")
         new_cent = _empty_out((C, d), "<f4")
         devs = _empty_out((C, d), "<f4")
@@ -567,10 +576,19 @@ class OneClassSVM(_XNeighbors):
                 raise ValueError("sample_weight and X have different numbers of samples")
             if any(v < 0 for v in w):
                 raise ValueError("negative sample_weight is not supported")
-            rows = [i for i in range(n) if w[i] > 0]
-            if not rows:
+            # libsvm's remove_zero_weight as a device compaction (cpu-gpu-cleanup
+            # w2-pyglue, x_neighbors/sort_items.mojo pos_compact): the rows of
+            # positive weight in row order and their float32 weights
+            wv = Array.from_list(w, "<f4")
+            prow = empty((n,), "<i4")
+            pval = _empty_out((n,), "<f4")
+            pinfo = empty((1,), "<i4")
+            self._op("pos_compact", [(wv, 0), (prow, 1), (pval, 1), (pinfo, 1)], (n,))
+            kept = pinfo.tolist()[0]
+            if not kept:
                 raise ValueError("Invalid input - all samples have zero or negative weights.")
-            cvals = [w[i] for i in rows]
+            rows = prow.tolist()[:kept]
+            cvals = pval.tolist()[:kept]
         m = len(rows)
         if self.kernel == "precomputed":
             self._gamma = 0.0

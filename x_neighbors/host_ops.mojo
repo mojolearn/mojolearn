@@ -7,6 +7,7 @@ from std.os import getenv
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_init_item, svgp_chol2_item, svgp_fix2_item, svgp_solve_item, svgp_mid_item, svgp_qchol_item, svgp_qfix_item, svgp_ypart_item, svgp_fin_item, svgp_var_item
+from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, pos_count_item, pos_scan_item, pos_emit_item
 
 #: the host gate's negative control (`MOJOLEARN_HOST_SABOTAGE`): every op's
 #: first float output moves by 1e-3 in its first element
@@ -680,3 +681,32 @@ def op_svgp_var(ksu: Int, cmat: Int, res: Int, n: Int, m: Int, kdiag: Float32) r
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n) > 0:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
+
+
+def op_nc_median(x: Int, lab: Int, start: Int, cent: Int, n: Int, d: Int, n_classes: Int, p: Int, n_steps: Int) raises:
+    var s_perm = List[Int32](length=(d * p) if (d * p) > 0 else 1, fill=Int32(0))
+    for t in range(d * p):
+        nc_median_init_item(t, _f(x), _i(lab), _i(start), _f(cent), IP(unsafe_from_address=Int(s_perm.unsafe_ptr())), n, d, n_classes, p, n_steps)
+    for lj in range(n_steps):
+        for t in range(d * (p // 2)):
+            nc_median_step_item(t, lj, _f(x), _i(lab), _i(start), _f(cent), IP(unsafe_from_address=Int(s_perm.unsafe_ptr())), n, d, n_classes, p, n_steps)
+    for t in range(n_classes * d):
+        nc_median_pick_item(t, _f(x), _i(lab), _i(start), _f(cent), IP(unsafe_from_address=Int(s_perm.unsafe_ptr())), n, d, n_classes, p, n_steps)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (n_classes * d) > 0:
+            _f(cent).unsafe_store(0, _f(cent).unsafe_load(0) + Float32(1e-3))
+    _ = s_perm^
+
+
+def op_pos_compact(w: Int, rows: Int, vals: Int, info: Int, n: Int) raises:
+    var s_part = List[Int32](length=(xn_fold_blocks(n)) if (xn_fold_blocks(n)) > 0 else 1, fill=Int32(0))
+    for t in range(xn_fold_blocks(n)):
+        pos_count_item(t, _f(w), _i(rows), _f(vals), _i(info), IP(unsafe_from_address=Int(s_part.unsafe_ptr())), n)
+    for t in range(1):
+        pos_scan_item(t, _f(w), _i(rows), _f(vals), _i(info), IP(unsafe_from_address=Int(s_part.unsafe_ptr())), n)
+    for t in range(xn_fold_blocks(n)):
+        pos_emit_item(t, _f(w), _i(rows), _f(vals), _i(info), IP(unsafe_from_address=Int(s_part.unsafe_ptr())), n)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (n) > 0:
+            _f(vals).unsafe_store(0, _f(vals).unsafe_load(0) + Float32(1e-3))
+    _ = s_part^
