@@ -13,7 +13,7 @@ same values; only the stopping sum crosses back, one float per iteration,
 compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from std.atomic import Atomic
 from core.host_lanes import host_row_tasks
 from std.time import perf_counter_ns
@@ -416,12 +416,33 @@ def cc_jump_kernel(lab: IP, n: Int32):
 
 
 def _cc_csr_device(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
+    # Every host side of a copy is ONE pinned host buffer (lane/neural-pass95,
+    # 2026-10-02): the peer's MI325X paid ~100 ms on the first fit after any
+    # fork / posix_spawn in the process (ps, a notebook's subprocess) when
+    # the CSR, the labels and the per-round flag went through pageable
+    # memory, which fork's copy-on-write unmaps from the GPU's view; pinned
+    # host memory is excluded from fork (MADV_DONTFORK). Copies only.
     var ctx = xn_ctx()
-    var d_ip = _buf_i(ctx, indptr, n + 1, True)
-    var d_ix = _buf_i(ctx, indices, max(nnz, 1), nnz > 0)
-    var d_l = _buf_i(ctx, lab, max(n, 1), True)
-    var d_c = _buf_i(ctx, 0, 1, False)
-    var hc = List[Int32](length=1, fill=Int32(0))
+    var o_ix = n + 1
+    var o_l = o_ix + max(nnz, 1)
+    var o_c = o_l + max(n, 1)
+    var hb = ctx.enqueue_create_host_buffer[DType.int32](o_c + 1)
+    ctx.synchronize()
+    var hp = hb.unsafe_ptr()
+    memcpy(dest=hp, src=IP(unsafe_from_address=indptr), count=n + 1)
+    if nnz > 0:
+        memcpy(dest=hp + o_ix, src=IP(unsafe_from_address=indices), count=nnz)
+    if n > 0:
+        memcpy(dest=hp + o_l, src=IP(unsafe_from_address=lab), count=n)
+    var d_ip = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var d_ix = ctx.enqueue_create_buffer[DType.int32](max(nnz, 1))
+    var d_l = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var d_c = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=d_ip, src_ptr=hp)
+    if nnz > 0:
+        ctx.enqueue_copy(dst_buf=d_ix, src_ptr=hp + o_ix)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=d_l, src_ptr=hp + o_l)
     var blocks = (n + 255) // 256
     var rounds = 0
     while n > 0:
@@ -430,14 +451,16 @@ def _cc_csr_device(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: 
         ctx.enqueue_function[cc_hook_kernel](d_ip.unsafe_ptr(), d_ix.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n),
                                              d_c.unsafe_ptr(), grid_dim=blocks, block_dim=256)
         ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
-        ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=d_c)
+        ctx.enqueue_copy(dst_ptr=hp + o_c, src_buf=d_c)
         ctx.synchronize()
-        if hc[0] == 0:
+        if hp[o_c] == 0:
             break
-    _down_i(ctx, d_l, lab, n)
-    ctx.synchronize()
+    if n > 0:
+        ctx.enqueue_copy(dst_ptr=hp + o_l, src_buf=d_l)
+        ctx.synchronize()
+        memcpy(dest=IP(unsafe_from_address=lab), src=hp + o_l, count=n)
     IP(unsafe_from_address=info).unsafe_store(0, Int32(rounds))
-    _ = hc^
+    _ = hb^
     _ = d_ip^
     _ = d_ix^
     _ = d_l^
