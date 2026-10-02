@@ -10,7 +10,8 @@
 #       them itself): one line per family batch (at most N lane x dataset pairs,
 #       default 18, so `lq log`'s 40-line tail holds a whole batch), plus one
 #       `opp` line that dumps the M3 0.8.34 board's FAST and opponent quality.
-#       Selection: tools/lane_select.py --changed-since origin/main (the identity
+#       Selection: tools/lane_select.py --changed-since <merge base with
+#       origin/main> (so main's own later moves are not counted; the identity
 #       registry lanes whose code reaches a changed file), intersected by name
 #       with the board lanes of the classical drivers (bench_board_algos,
 #       bench_board_more, classical_two_datasets) and the trees driver
@@ -176,7 +177,7 @@ SEL=
 if [ -z "$LANES" ]; then
   mkdir -p "$HOME/mojolearn-evidence/apple-fast-board"
   SEL=$HOME/mojolearn-evidence/apple-fast-board/lanesel-$(git rev-parse --short HEAD).json
-  [ -s "$SEL" ] || python3 tools/lane_select.py --changed-since origin/main --json "$SEL" > /dev/null 2>&1 \
+  [ -s "$SEL" ] || python3 tools/lane_select.py --changed-since "$(git merge-base origin/main HEAD)" --json "$SEL" > /dev/null 2>&1 \
     || { echo "lane_select failed" >&2; exit 1; }
 fi
 PYTHONPATH=$here/tools python3 tools/af_board_merge.py select --branch "$BR" --batch "$BATCH" \
