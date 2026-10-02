@@ -1234,6 +1234,21 @@ def matmul_tn_acc_ff_kernel(a: FP, b: FP, rh: FP, rl: FP, rows_: Int64, n_: Int6
         matmul_tn_acc_ff_item(t, a, b, rh, rl, Int(rows_), Int(n_), Int(m_))
 
 
+def _up_direct(ctx: DeviceContext, addr: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
+    """A device buffer with `count` floats copied straight from the host
+    pointer by the device copy engine (no host-thread staging)."""
+    var buf = ctx.enqueue_create_buffer[DType.float32](max(count, 1))
+    if count > 0:
+        ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
+    return buf^
+
+
+def _down_direct(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], addr: Int, count: Int) raises:
+    """`count` floats of `buf` (sized `count`) copied straight to the host pointer."""
+    if count > 0:
+        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=addr), src_buf=buf)
+
+
 def op_svgp_stats_ff(
     x: Int, z: Int, y: Int, bh: Int, bl: Int, bvh: Int, bvl: Int, n: Int, m: Int, d: Int, gamma: Float32,
     variance: Float32,
@@ -1241,20 +1256,20 @@ def op_svgp_stats_ff(
     """`op_svgp_stats` with B and b accumulated in float-float (lane/neural-pass106,
     x_neighbors/svgp_ff.mojo): the same Kfu tiles, the same rows ascending."""
     var ctx = xn_ctx()
-    var d_x = _buf(ctx, x, n * d, True)
-    var d_z = _buf(ctx, z, m * d, True)
-    var d_y = _buf(ctx, y, n, True)
-    var d_bh = _buf(ctx, 0, m * m, False)
-    var d_bl = _buf(ctx, 0, m * m, False)
-    var d_vh = _buf(ctx, 0, m, False)
-    var d_vl = _buf(ctx, 0, m, False)
+    var d_x = _up_direct(ctx, x, n * d)
+    var d_z = _up_direct(ctx, z, m * d)
+    var d_y = _up_direct(ctx, y, n)
+    var d_bh = ctx.enqueue_create_buffer[DType.float32](max(m * m, 1))
+    var d_bl = ctx.enqueue_create_buffer[DType.float32](max(m * m, 1))
+    var d_vh = ctx.enqueue_create_buffer[DType.float32](max(m, 1))
+    var d_vl = ctx.enqueue_create_buffer[DType.float32](max(m, 1))
     enqueue_fill(ctx, d_bh, Float32(0))
     enqueue_fill(ctx, d_bl, Float32(0))
     enqueue_fill(ctx, d_vh, Float32(0))
     enqueue_fill(ctx, d_vl, Float32(0))
     var tr = _tile_rows(n, m)
-    var d_k = _buf(ctx, 0, tr * m, False)
-    var d_ks = _buf(ctx, 0, tr * m, False)
+    var d_k = ctx.enqueue_create_buffer[DType.float32](max(tr * m, 1))
+    var d_ks = ctx.enqueue_create_buffer[DType.float32](max(tr * m, 1))
     var xp: FP = _p(d_x)
     var yp: FP = _p(d_y)
     var r0 = 0
@@ -1270,10 +1285,10 @@ def op_svgp_stats_ff(
             grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
         )
         r0 += rows
-    _down(ctx, d_bh, bh, m * m)
-    _down(ctx, d_bl, bl, m * m)
-    _down(ctx, d_vh, bvh, m)
-    _down(ctx, d_vl, bvl, m)
+    _down_direct(ctx, d_bh, bh, m * m)
+    _down_direct(ctx, d_bl, bl, m * m)
+    _down_direct(ctx, d_vh, bvh, m)
+    _down_direct(ctx, d_vl, bvl, m)
     ctx.synchronize()
     _ = d_x^
     _ = d_z^
