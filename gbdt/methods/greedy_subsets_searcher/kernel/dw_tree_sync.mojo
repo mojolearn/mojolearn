@@ -87,6 +87,10 @@ comptime DW_TS_L_SUB_WHAT = 5
 comptime DW_TS_L_VISIT = 6
 comptime DW_TS_LISTS = 7
 
+#: The per-level split records the host builds the tree from: per split
+#: slot the left leaf id, the feature id and the bin.
+comptime DW_TS_SPLIT_WORDS = 3
+
 
 def dw_ts_init_kernel(
     state: MutPointer[UInt32, MutAnyOrigin],
@@ -141,6 +145,7 @@ def dw_ts_select_kernel(
     state: MutPointer[UInt32, MutAnyOrigin],
     n_slots_in: Int32,
     mark_undefined_terminal_in: Int32,
+    split_recs: MutPointer[UInt32, MutAnyOrigin],
 ):
     """`dw_select_splits_kernel` with the visit count and the leaf count
     read from this level's counters, plus the host's two record-driven
@@ -149,7 +154,10 @@ def dw_ts_select_kernel(
     terminal. One thread per visit slot; the grid is the level's cap and
     slots past the count return. The last scored slot writes the split
     count. Same selection, same payload, same slot order (ascending id)
-    as the host's `select_leaves_to_split` + `MakeSplit`."""
+    as the host's `select_leaves_to_split` + `MakeSplit`. `split_recs` is
+    this level's split record slice the host builds the tree from after
+    the one wait: `DW_TS_SPLIT_WORDS` words per split slot (the left
+    leaf, the feature, the bin)."""
     var n_visit = Int(counts.unsafe_load(DW_TS_C_VISIT))
     var leaves_count = Int(counts.unsafe_load(DW_TS_C_LEAVES))
     var n_slots = Int(n_slots_in)
@@ -188,6 +196,13 @@ def dw_ts_select_kernel(
                 rank * DW_FEAT_WORDS + w,
                 feat_table.unsafe_load(feat * DW_FEAT_WORDS + w),
             )
+        split_recs.unsafe_store(rank * DW_TS_SPLIT_WORDS, UInt32(leaf))
+        split_recs.unsafe_store(
+            rank * DW_TS_SPLIT_WORDS + 1, winner.unsafe_load(base)
+        )
+        split_recs.unsafe_store(
+            rank * DW_TS_SPLIT_WORDS + 2, winner.unsafe_load(base + 1)
+        )
     if v == n_visit - 1:
         counts.unsafe_store(
             DW_TS_C_SPLIT, UInt32(rank + (1 if selected else 0))

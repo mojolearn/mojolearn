@@ -9,6 +9,7 @@ tree-sync step, with the level-sync arm as A so the pair isolates it.
 |---|---|---|---|
 | `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN` | build define | `greedy_search_helper_depthwise.mojo` `DW_FUSED_CHAIN`, `kernel/split_chain_fused.mojo` | the per-level split chain in four launches instead of eight (same permutation, partitions, stats) |
 | `-D MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC` | build define (needs the chain) | `DW_NO_LEVEL_SYNC`, `dw_select_splits_kernel` | one host wait per level: selection and split payload on the device, chain guarded by the device split count |
+| `-D MOJOLEARN_GBDT_DW_TREE_SYNC_CHECK` | build define (inside TREE_SYNC; check build, NOT timed) | `DW_TREE_SYNC_CHECK`, the `tree_sync` branches of the level loop, `_dw_ts_check_pairs` | the host also replays its own plan / visit / selection / terminal marks from the per-level records and raises on any difference from the device's lists (`dw-tree-check-taxi`, one pair, run once) |
 | `-D MOJOLEARN_GBDT_DW_TREE_SYNC` | build define (implies both above) | `DW_TREE_SYNC`, `kernel/dw_tree_sync.mojo`, the device loop before `result_paths` and the `tree_sync` branches of the level loop | ONE host wait per tree: every level enqueued back to back, the next level's plan / terminal marks / visit list / leaf count on the device, one readback after the end-of-tree sweep, host bookkeeping replayed from the records and checked against the device's lists |
 
 Tree sync, the mechanism. Each level's launches keep a HOST grid (the cap `min(2^level, max_leaves)` on leaves
@@ -20,9 +21,13 @@ zero histogram and zero partition stats, so every padded block is a no-op (size-
 `dummy - dummy`, copy onto itself, a scored dummy writes records nobody reads). Per-leaf state (depth, terminal,
 defined, histograms type, dirty slot) lives in five device planes; per-level outputs (winner records, visit and
 plan lists, size snapshots, counters) go to level-indexed slices. The end-of-tree partition-stats sweep runs over
-every pool slot (the host does not yet know the leaf count), then one wait brings everything home. The host loop
-then runs its unchanged bookkeeping with no launch and no wait, reading each level's winner slice and size slice,
-and raises on any difference between its plan/visit/split lists and the device's.
+every pool slot (the host does not yet know the leaf count), then one wait brings everything home. Without
+`DW_TREE_SYNC_CHECK` (the TIMED arm, `dw-tree-taxi`) the host does no level decision at all: after the wait it
+consumes the device's per-level split records (left leaf, feature, bin; `h_ts_splits`) through `split_leaf` for
+the paths, takes the final partition sizes, and goes straight to the leaf values. With `DW_TREE_SYNC_CHECK`
+(`dw-tree-check-taxi`) the host loop instead replays its unchanged bookkeeping with no launch and no wait,
+reading each level's winner slice and size slice, and raises on any difference between its plan/visit/split
+lists and the device's -- host compute inside the fit, so that build is never the timed one.
 Taken when: row-index-only schedule, Depthwise (not Lossguide), `min_split_gain < 0`, `random_strength == 0`
 (the per-level score noise is drawn per level on the host; with no noise the draw is inert and is taken in the
 device loop so the stream advances as before), no identity trace, `1 <= max_depth < 30`.
