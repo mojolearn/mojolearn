@@ -117,3 +117,4 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-02T02:49:35Z	measurements/2026-10-02/nc96-nvidia-lane-nvc2.tar.gz	6608d5d665e7dc80787ac7991780c132973cd5c6f9a714ed09d569ee593c96c6	8818	793b70358047	/root/nc96-nvidia-lane
 2026-10-02T02:49:38Z	measurements/2026-10-02/nc96-nvidia-main-nvc2.tar.gz	2adde58197aa8d9f7b22c324ecbe0c58f8cb08a56c1b157e154c6b06957311af	10907	793b70358047	/root/nc96-nvidia-main
 2026-10-02T02:49:42Z	measurements/2026-10-02/ridgecv94-nvidia-nvc2.tar.gz	2664f3fa37040a073838fc67c0b445f291621786bd178030657b6255b0b3ea62	8664	793b70358047	/root/ridgecv94-nvidia
+2026-10-02T03:01:07Z	measurements/2026-10-02/pr88-metal.tar.gz	cbc2d19ed99fdb70a126c1702e2f4f80b07f4d726992b4fa3502180b8aa1a84f	29258	ip-172-31-45-205.ec2.internal	/Users/ec2-user/pr88-metal
