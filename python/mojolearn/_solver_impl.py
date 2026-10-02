@@ -12,10 +12,12 @@ These classes are not re-exported from `mojolearn/__init__.py` by this file;
 whoever owns that file decides the public namespace.
 """
 
+import os
+
 from . import _mojolearn_solver, _serialize
 from ._array import Array
 from ._mode import ParamsMixin
-from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty, zeros
+from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty, zeros, _materialize
 from .linear_model import _check_saved_by, _r2_host, _restore_mode, _saved_mode, _shape_of
 
 # cuML's `loss_funct` / DistanceType style codes this surface uses.
@@ -346,7 +348,22 @@ class ElasticNet(ParamsMixin):
                 "for solver='cd' (elastic_net.py:265-269), and 'qn' is not "
                 "implemented"
             )
-        work_x, copied = self._as_fortran(X, "X")
+        # lane/gap-nv-classical2: a float32 C-order design crosses AS IT IS
+        # and the device transposes it (`cd_fit_host`'s row_major arm), so
+        # no host transpose sits inside the fit. Every other input takes the
+        # one F-order copy as before. MOJOLEARN_CD_HOST_TRANSPOSE=1 restores
+        # the host transpose for every input.
+        row_major = False
+        if os.environ.get("MOJOLEARN_CD_HOST_TRANSPOSE", "0") != "1":
+            a, a_copied = _materialize(X, "X")
+            if (a.ndim == 2 and a.dtype == "<f4" and a.size
+                    and a.order == "C" and not a._both_orders()):
+                work_x, row_major, copied = a, True, a_copied
+            else:
+                work_x, copied = self._as_fortran(a, "X")
+                copied = copied or a_copied
+        else:
+            work_x, copied = self._as_fortran(X, "X")
         self.input_copied_ = copied
         self.fortran_copied_ = copied
         n_rows, n_cols = work_x.shape
@@ -369,6 +386,7 @@ class ElasticNet(ParamsMixin):
                 n_rows, n_cols, 1 if self.fit_intercept else 0,
                 int(self.max_iter), float(self.alpha), float(self.l1_ratio),
                 float(self.tol), _SELECTION_SHUFFLE[self.selection], 0,
+                1 if row_major else 0,
             ],
         )
         self.intercept_ = float(info[0])
