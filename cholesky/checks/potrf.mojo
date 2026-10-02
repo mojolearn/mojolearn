@@ -353,8 +353,10 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 from std.sys.info import has_apple_gpu_accelerator
+from x_decomp.cells import F32Ptr
+from x_decomp.fast_chol import CH_FITS, CH_NB, launch_chol_blocked
 from std.sys.compile import is_defined
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -403,6 +405,20 @@ comptime CHOL_FAST_APPLE = (
 comptime CHOL_TRSM_INV = CHOL_FAST_APPLE and not is_defined[
     "MOJOLEARN_CHOL_TRSM_INV_OFF"
 ]()
+comptime CHOL_FAST_BLOCKED = CHOL_FAST_APPLE and is_defined["MOJOLEARN_CHOL_FAST_BLOCKED"]() and CH_FITS
+"""lane/apple-fast-decomp-linalg (2026-10-02, pass 2), -D MOJOLEARN_CHOL_FAST_BLOCKED:
+the whole factorization as x_decomp/fast_chol.mojo's blocked right-looking
+route (32-column panels: one fixed-size block for the diagonal block, one
+thread per row for the solve below it, a register-blocked 64 x 64 tile
+kernel for the trailing symmetric update; 3 n / 32 launches, no vendor
+GEMM, no workspace). An A/B arm against the route below (CHOL_FAST_NB-wide
+panels, `fast_diag_factor`, `fast_panel_solve_inv` and the core GEMM's
+fused subtract), whose trailing update rides core/gemm's Apple speed. Taken
+only without a sabotage, a trace or a multi-GPU owner set (the exclusions
+of the strips and left-looking routes) and past one panel; a non-positive
+pivot sets info = k + 1 and the factorization continues with that pivot
+taken as 1 (x_decomp's `chol_serial` rule), so the partial factor past the
+failing column is not the stopped one the route below leaves."""
 """CHOL_FAST_APPLE: the panel solve `L21 = A21 L11^{-T}` as `L11^{-1}`
 (blocked forward solve against the identity) and one vendor GEMM
 (`fast_panel_solve_inv`), instead of a simdgroup per row walking the
@@ -1776,6 +1792,30 @@ def _potrf_lower_strips(
     return CholRun(info, CS_NB, n_panels)
 
 
+def _potrf_lower_fast_blocked(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    n: Int,
+) raises -> CholRun:
+    """`potrf_lower` through x_decomp/fast_chol.mojo `launch_chol_blocked`
+    (CHOL_FAST_BLOCKED): the launches enqueued, `info` read once after
+    them. The panel width that ran is CH_NB."""
+    var dinfo = ctx.enqueue_create_buffer[DType.float32](1)
+    var hinfo = ctx.enqueue_create_host_buffer[DType.float32](1)
+    launch_chol_blocked(
+        ctx,
+        F32Ptr(unsafe_from_address=Int(a.unsafe_ptr())),
+        F32Ptr(unsafe_from_address=Int(dinfo.unsafe_ptr())),
+        n,
+    )
+    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+    ctx.synchronize()
+    var info = Int(hinfo.unsafe_ptr().unsafe_load(0))
+    _ = dinfo^
+    _ = hinfo^
+    return CholRun(info, CH_NB, (n + CH_NB - 1) // CH_NB)
+
+
 def potrf_lower(
     ctx: DeviceContext,
     mut a: DeviceBuffer[DType.float32],
@@ -1872,6 +1912,14 @@ def potrf_lower(
             and String(getenv("MOJOLEARN_CHOL_STRIP_OFF")) != "1"
         ):
             return _potrf_lower_strips(ctx, a, n, elem_tpb, trace)
+    comptime if CHOL_FAST_BLOCKED:
+        if (
+            sabotage == CHOL_SAB_NONE
+            and not trace.enabled
+            and chol_device_count() == 1
+            and n > CH_NB
+        ):
+            return _potrf_lower_fast_blocked(ctx, a, n)
 
     var nt_max = n - nb
     if nt_max < 0:

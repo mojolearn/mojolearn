@@ -99,11 +99,7 @@ def transform_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, invers
         parts = pool.map(requests)
     finally:
         pool.close()
-    merged = empty((n, d), '<f4')
-    destination = addr(merged, name='output')
-    for (start, end), part in zip(ranges, parts):
-        source = addr_ro(part, name='output shard')
-        width = end - start
-        for row in range(n):
-            memcopy(destination + (row * d + start) * 4, source + row * width * 4, width * 4)
-    return merged
+    # the shards' column blocks joined into one row-major matrix by the
+    # device (x_prep `colblock`), not row by row in Python
+    from ._expansion_prep import join_column_blocks
+    return join_column_blocks(parts, ranges, n, d)

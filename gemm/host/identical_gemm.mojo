@@ -15,7 +15,7 @@ device implementation in one churn-heavy rename.  Checks may continue to use
 diagnostic reference specifically.
 """
 
-from gemm.host.gemm_oracle import (
+from gemm.contract import (
     CONTRACT_K_LEAF_MIN,
     CONTRACT_MAX_LEAVES,
     GEMM_ORACLE_HOST_SABOTAGE,
@@ -24,23 +24,25 @@ from gemm.host.gemm_oracle import (
     OP_TN,
     contract_leaf_count,
     contract_leaf_size,
-    fold_balanced_tree,
     fold_level_base,
     fold_level_count,
     fold_level_width,
     fold_node_addr,
     fold_node_is_carry,
     fold_node_total,
+    leaf_begin,
+    leaf_count,
+    leaf_end,
+    op_name,
+)
+from gemm.host.gemm_oracle import (
+    fold_balanced_tree,
     gemm_oracle,
     gemm_oracle_at_leaf,
     gemm_oracle_cell,
     gemm_oracle_right_zero_padded,
     gemm_oracle_serial,
     gemm_oracle_serial_cell,
-    leaf_begin,
-    leaf_count,
-    leaf_end,
-    op_name,
     oracle_leaf_partial,
     oracle_leaf_partial_right_zero_padded,
 )

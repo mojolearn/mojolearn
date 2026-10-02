@@ -37,9 +37,10 @@ SHIPPING kernels and downloads:
                      svd_full.mojo::svd_of_r`, which is `pca_fit_full`'s
                      tall arm with the centering left out.
 
-THE PERMUTATION IS NOT REPEATED HERE EITHER. `eigh_ascending` and
-`svdvals_descending` live in the host twin and BOTH routes call them, so
-there is one order per public name in this tree and not two. That matters
+THE PERMUTATION is one definition: the host twin's `_argsort_desc` and the
+device's `enqueue_eigh_ascending` / `enqueue_svdvals_descending`
+(decomposition/spectrum_order_device.mojo) both rank by `spectrum_rank_desc`,
+so there is one order per public name in this tree and not two. That matters
 more than it looks: the host and the device can agree on every fold and
 still disagree on the ANSWER if one of them sorts differently, and a hash
 would report that as a divergence without saying which half moved.
@@ -77,13 +78,8 @@ from decomposition.checks.jacobi_eigh_device import (
     JACOBI_TOL,
     jacobi_eigh_kernel,
 )
-from decomposition.host.linalg_public import (
-    EighHostResult,
-    _validate_shape,
-    _validate_square,
-    eigh_ascending,
-    svdvals_descending,
-)
+from decomposition.linalg_types import EighHostResult, _validate_shape, _validate_square
+from decomposition.spectrum_order_device import enqueue_eigh_ascending, enqueue_svdvals_descending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 from decomposition.impl.linalg.detail.svd_full import svd_of_r
 
@@ -206,12 +202,6 @@ def device_eigh(ctx: DeviceContext, a: List[Float32], n: Int) raises -> EighHost
     )
     ctx.synchronize()
     var info = _download(ctx, dinfo, 3)
-    var work = _download(ctx, da, n * n)
-    var vecs = _download(ctx, dv, n * n)
-    _ = da^
-    _ = dv^
-    _ = dinfo^
-    ctx.synchronize()
 
     if info[0] == JACOBI_INFO_UNWRITTEN:
         raise Error(
@@ -234,10 +224,24 @@ def device_eigh(ctx: DeviceContext, a: List[Float32], n: Int) raises -> EighHost
             " cuSOLVER's syevj has"
         )
 
-    var diag = List[Float32]()
-    for i in range(n):
-        diag.append(work[i * n + i])
-    return eigh_ascending(diag, vecs, n, True, Int(info[2]))
+    # the ascending order on the device (decomposition/spectrum_order_device.mojo,
+    # cpu-gpu-cleanup c-decomp): the converged A's diagonal and the basis
+    var dw = ctx.enqueue_create_buffer[DType.float32](n)
+    var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
+    var dpos = ctx.enqueue_create_buffer[DType.int32](n)
+    enqueue_eigh_ascending(
+        ctx, da.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n + 1, dv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        n, dpos, dw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dvo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+    )
+    var w = _download(ctx, dw, n)
+    var v = _download(ctx, dvo, n * n)
+    _ = da^
+    _ = dv^
+    _ = dinfo^
+    _ = dw^
+    _ = dvo^
+    _ = dpos^
+    return EighHostResult(w^, v^, True, Int(info[2]))
 
 
 def device_svdvals(
@@ -266,7 +270,16 @@ def device_svdvals(
     ctx.synchronize()
     _ = qr_factor(ctx, da, scratch, r_buf, n_rows, n_cols)
     svd_of_r(ctx, r_buf, v_buf, s_buf, n_cols)
-    var s = _download(ctx, s_buf, n_cols)
+    # descending on the device (decomposition/spectrum_order_device.mojo)
+    var so = ctx.enqueue_create_buffer[DType.float32](n_cols)
+    var spos = ctx.enqueue_create_buffer[DType.int32](n_cols)
+    enqueue_svdvals_descending(
+        ctx, s_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_cols, spos,
+        so.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+    )
+    var s = _download(ctx, so, n_cols)
+    _ = so^
+    _ = spos^
     _ = da^
     _ = scratch^
     _ = r_buf^
@@ -274,4 +287,4 @@ def device_svdvals(
     _ = s_buf^
     ctx.synchronize()
     _ = ctx^
-    return svdvals_descending(s, n_cols)
+    return s^

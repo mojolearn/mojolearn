@@ -30,7 +30,8 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from checks.fixture_rng import splitmix_triple
-from gemm.host.gemm_oracle import OP_NN, OP_NT, OP_TN, gemm_oracle, gemm_oracle_right_zero_padded
+from gemm.contract import OP_NN, OP_NT, OP_TN
+from gemm.host.gemm_oracle import gemm_oracle, gemm_oracle_right_zero_padded
 from gemm.host.gemm_host_rows import gemm_host_rows, gemm_host_rows_right_zero_padded
 
 comptime KIND_UNIFORM = 0

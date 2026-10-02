@@ -120,6 +120,77 @@ def _frs_scatter_kernel(
         out_vals[dst] = vals[i]
 
 
+#: elements of one block's segment of the multi-block scan
+comptime FRS_SCAN_SEG = FRS_SCAN_TPB * 4
+
+
+def frs_scan_blocks(m: Int) -> Int:
+    return (m + FRS_SCAN_SEG - 1) // FRS_SCAN_SEG
+
+
+def _frs_scan_seg_kernel(counts: MutPointer[Int32, MutAnyOrigin], m: Int32, bsum: MutPointer[Int32, MutAnyOrigin]):
+    """Block b's exclusive scan of its segment of `counts` in place; its
+    total to bsum[b]. Integer adds: exact in any grouping."""
+    var t = Int(thread_idx.x)
+    var b = Int(block_idx.x)
+    var base = b * FRS_SCAN_SEG
+    var n = min(Int(m) - base, FRS_SCAN_SEG)
+    var per = FRS_SCAN_SEG // FRS_SCAN_TPB
+    var lo = t * per
+    var hi = lo + per
+    if hi > n:
+        hi = n
+    var s = Int32(0)
+    for j in range(lo, hi):
+        s += counts[base + j]
+    var sh = stack_allocation[FRS_SCAN_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    sh[t] = s
+    barrier()
+    var off = 1
+    while off < FRS_SCAN_TPB:
+        var add = Int32(0)
+        if t >= off:
+            add = sh[t - off]
+        barrier()
+        sh[t] += add
+        barrier()
+        off *= 2
+    var run = sh[t] - s
+    for j in range(lo, hi):
+        var c = counts[base + j]
+        counts[base + j] = run
+        run += c
+    if t == FRS_SCAN_TPB - 1:
+        bsum[b] = sh[t]
+
+
+def _frs_scan_add_kernel(counts: MutPointer[Int32, MutAnyOrigin], m: Int32, bsum: MutPointer[Int32, MutAnyOrigin]):
+    """counts[j] += the exclusive scan of the segment totals (bsum)."""
+    var j = Int(block_idx.x) * FRS_SCAN_TPB + Int(thread_idx.x)
+    if j < Int(m):
+        counts[j] += bsum[j // FRS_SCAN_SEG]
+
+
+def frs_exclusive_scan(
+    ctx: DeviceContext, mut counts: DeviceBuffer[DType.int32], m: Int, mut bsum: DeviceBuffer[DType.int32]
+) raises:
+    """Exclusive scan of counts[0:m] over every block (cpu-gpu-cleanup c-core,
+    2026-10-02; was one block over all m): segment scans, the segment totals
+    scanned (`_frs_scan_kernel`, nb = m / FRS_SCAN_SEG values), the totals
+    added back. `bsum` holds at least frs_scan_blocks(m) slots."""
+    if m <= 0:
+        return
+    var nb = frs_scan_blocks(m)
+    ctx.enqueue_function[_frs_scan_seg_kernel](
+        counts.unsafe_ptr(), Int32(m), bsum.unsafe_ptr(), grid_dim=nb, block_dim=FRS_SCAN_TPB,
+    )
+    ctx.enqueue_function[_frs_scan_kernel](bsum.unsafe_ptr(), Int32(nb), grid_dim=1, block_dim=FRS_SCAN_TPB)
+    ctx.enqueue_function[_frs_scan_add_kernel](
+        counts.unsafe_ptr(), Int32(m), bsum.unsafe_ptr(), grid_dim=(m + FRS_SCAN_TPB - 1) // FRS_SCAN_TPB,
+        block_dim=FRS_SCAN_TPB,
+    )
+
+
 def fast_radix_sort_pairs_u32(
     ctx: DeviceContext,
     size: Int,
@@ -136,6 +207,7 @@ def fast_radix_sort_pairs_u32(
         return
     var n_tiles = (size + FRS_TILE - 1) // FRS_TILE
     var m = FRS_BINS * n_tiles
+    var bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(m))
     for p in range(4):
         var shift = Int32(8 * p)
         if p % 2 == 0:
@@ -148,9 +220,7 @@ def fast_radix_sort_pairs_u32(
                 temp_keys.unsafe_ptr(), counts.unsafe_ptr(), Int32(size), shift,
                 Int32(n_tiles), grid_dim=n_tiles, block_dim=FRS_TILE,
             )
-        ctx.enqueue_function[_frs_scan_kernel](
-            counts.unsafe_ptr(), Int32(m), grid_dim=1, block_dim=FRS_SCAN_TPB,
-        )
+        frs_exclusive_scan(ctx, counts, m, bsum)
         if p % 2 == 0:
             ctx.enqueue_function[_frs_scatter_kernel](
                 keys.unsafe_ptr(), values.unsafe_ptr(), temp_keys.unsafe_ptr(),
@@ -163,3 +233,4 @@ def fast_radix_sort_pairs_u32(
                 values.unsafe_ptr(), counts.unsafe_ptr(), Int32(size),
                 shift, Int32(n_tiles), grid_dim=n_tiles, block_dim=FRS_TILE,
             )
+    _ = bsum^
