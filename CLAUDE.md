@@ -41,6 +41,6 @@ The orchestrator saves every lane brief as `~/mojolearn-evidence/briefs-<date>/<
 ## GPU rules (summary; the plans in docs/plans/ have the details)
 
 - The GPU path is GPU only and parallel. No host steps inside a GPU fit, transform or predict, and no serial one-thread, one-block or per-sample default.
-- Same bits on NVIDIA, AMD, Apple and the host column.
+- Same bits on NVIDIA, AMD, Apple and the host column, within one version. Bits may change between versions: when a parallel kernel needs a different fold order, change the order on every vendor and in the host column together. Never keep a serial chain to preserve old bits.
 - Never time a CPU or host route. The CPU is for verification digests, CPU-only installs and inference.
 - Never add, rent, extend or release an Apple machine.
