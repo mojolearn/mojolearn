@@ -1953,12 +1953,14 @@ def update_partition_props(
 #      node tile) owns a calcer, `add_leaf`s its tile's nodes (left and
 #      right, exactly the one-launch body) and stores the calcer's two
 #      running sums;
-#   2. `pw_sym_score_fold_kernel`, grid ceil(binFeatures / 128): one
-#      thread per bin feature `combine`s the tiles in tile order, takes
-#      `get_score`, the gain, and the block argmin (`_block_argmin_and_
-#      store`, unchanged) into `result_*[2 * block]` -- so the result
-#      records are one per 128-bin-feature block, UNCAPPED, and
-#      `pw_fold_winner_block_kernel` folds them.
+#   2. `pw_sym_score_fold_kernel`, the one-launch kernel's grid
+#      (`result_blocks`, <= 32) and grid-stride loop: per bin feature it
+#      `combine`s the tiles in tile order (at most 8 contiguous pairs),
+#      takes `get_score`, the gain, and the block argmin
+#      (`_block_argmin_and_store`, unchanged) into `result_*[2 * block]`.
+#      The record count stays `result_blocks`, so the winner fold --
+#      main's fused `pw_resolve_pack_bins_kernel`, which re-runs the
+#      record fold in every thread of the bin update -- is untouched.
 #
 # BITS: the per-candidate score is the same sum in a different order
 # (tile partials added instead of one left-to-right chain over nodes), so
@@ -1993,9 +1995,9 @@ def pw_sym_leaf_tiles(part_count: Int) -> Int:
     return t
 
 
-def pw_sym_result_blocks(bin_feature_count: Int) -> Int:
-    """The uncapped block count: one result record per
-    `POINTWISE_SCORE_BLOCK` bin features (at least 1)."""
+def pw_sym_partial_blocks(bin_feature_count: Int) -> Int:
+    """Stage 1's x grid: one block per `POINTWISE_SCORE_BLOCK` bin
+    features, uncapped (at least 1)."""
     var n = (
         bin_feature_count + POINTWISE_SCORE_BLOCK - 1
     ) // POINTWISE_SCORE_BLOCK
@@ -2095,12 +2097,12 @@ def pw_sym_score_fold_kernel[
     result_ids: MutPointer[UInt32, MutAnyOrigin],
     result_scores: MutPointer[Float32, MutAnyOrigin],
 ):
-    """Stage 2: one bin feature per thread, the tiles combined in tile
-    order, then `get_score`, the gain (same fused form as the one-launch
-    kernel) and the block argmin. Every thread reaches
-    `_block_argmin_and_store` (it barriers), so there is no early return:
-    a thread past the end or on a skipped bin feature carries the
-    `FLOAT32_MAX` defaults in."""
+    """Stage 2: the one-launch kernel's grid-stride walk over the bin
+    features (same grid, `result_blocks`), each candidate's tiles combined
+    in tile order, then `get_score`, the gain (the same fused form) and
+    the unchanged block argmin, so the result records are the one-launch
+    kernel's. Every thread reaches `_block_argmin_and_store` (it
+    barriers); the skip is a `continue`, as in the one-launch kernel."""
     var bin_feature_count = Int(bin_feature_count_in)
     var tiles = Int(tiles_in)
     var score_before_split = score_before.unsafe_load(0)
@@ -2109,38 +2111,47 @@ def pw_sym_score_fold_kernel[
     var best_gain = FLOAT32_MAX
     var best_index = 0
     var tid = Int(thread_idx.x)
-    var b = Int(block_idx.x) * block_size + tid
 
-    if b < bin_feature_count:
-        if bf.unsafe_load(3 * b + 2) == UInt32(0):
-            var calcer = make_score_calcer[score_function](
-                lambda_l2,
-                meta_exponent,
-                normalize_in != Int32(0),
-                score_std_dev,
-                global_seed,
+    var calcer = make_score_calcer[score_function](
+        lambda_l2,
+        meta_exponent,
+        normalize_in != Int32(0),
+        score_std_dev,
+        global_seed,
+    )
+
+    var i = Int(block_idx.x) * block_size
+    while i < bin_feature_count:
+        if i + tid >= bin_feature_count:
+            break
+        var b = i + tid
+        if bf.unsafe_load(3 * b + 2) != UInt32(0):
+            i += block_size * Int(grid_dim.x)
+            continue
+
+        calcer.next_feature(bf.unsafe_load(3 * b))
+        # tile 0 holds the seeded sums; the rest add on
+        calcer.score = partials.unsafe_load(2 * b)
+        calcer.denum_sqr = partials.unsafe_load(2 * b + 1)
+        for t in range(1, tiles):
+            var o = 2 * (t * bin_feature_count + b)
+            calcer.combine(
+                partials.unsafe_load(o), partials.unsafe_load(o + 1)
             )
-            calcer.next_feature(bf.unsafe_load(3 * b))
-            # tile 0 holds the seeded sums; the rest add on
-            calcer.score = partials.unsafe_load(2 * b)
-            calcer.denum_sqr = partials.unsafe_load(2 * b + 1)
-            for t in range(1, tiles):
-                var o = 2 * (t * bin_feature_count + b)
-                calcer.combine(
-                    partials.unsafe_load(o), partials.unsafe_load(o + 1)
-                )
-            var score = calcer.get_score()
+        var score = calcer.get_score()
 
-            var feature_id = Int(bf.unsafe_load(3 * b))
-            var cat_w = ldg(cat_features_weights.unsafe_offset(feature_id))
-            var gain = fma(score, cat_w, -score_before_split)
-            score *= cat_w
-            gain *= ldg(bin_features_weights.unsafe_offset(feature_id))
+        var feature_id = Int(bf.unsafe_load(3 * b))
+        var cat_w = ldg(cat_features_weights.unsafe_offset(feature_id))
+        var gain = fma(score, cat_w, -score_before_split)
+        score *= cat_w
+        gain *= ldg(bin_features_weights.unsafe_offset(feature_id))
 
-            if gain < best_gain:
-                best_score = score
-                best_gain = gain
-                best_index = b
+        if gain < best_gain:
+            best_score = score
+            best_gain = gain
+            best_index = b
+
+        i += block_size * Int(grid_dim.x)
 
     _block_argmin_and_store[block_size](
         tid, best_score, best_gain, best_index, bf, bin_feature_count,
@@ -2171,9 +2182,11 @@ def _launch_sym_two_stage[
     mut result_scores: DeviceBuffer[DType.float32],
     result_size: Int,
 ) raises:
-    """The two launches of the node-tiled pass; `result_size` is
-    `pw_sym_result_blocks(binary_feature_count)` (the caller sized the
-    result buffers by it) and `tiles` is `pw_sym_leaf_tiles(p_count)`."""
+    """The two launches of the node-tiled pass: stage 1 over
+    (`pw_sym_partial_blocks`, `tiles`) blocks, stage 2 over `result_size`
+    (the helper's `result_blocks`, which sized the result buffers);
+    `tiles` is `pw_sym_leaf_tiles(p_count)`."""
+    var partial_blocks = pw_sym_partial_blocks(binary_feature_count)
     ctx.enqueue_function[
         pw_sym_score_partial_kernel[POINTWISE_SCORE_BLOCK, score_function]
     ](
@@ -2188,7 +2201,7 @@ def _launch_sym_two_stage[
         score_std_dev,
         seed,
         partials.unsafe_ptr(),
-        grid_dim=(result_size, tiles, 1),
+        grid_dim=(partial_blocks, tiles, 1),
         block_dim=(POINTWISE_SCORE_BLOCK, 1, 1),
     )
     ctx.enqueue_function[

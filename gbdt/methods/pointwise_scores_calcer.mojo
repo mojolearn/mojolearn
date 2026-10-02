@@ -73,11 +73,9 @@ from gbdt.methods.kernel.pointwise_scores import (
     find_optimal_split,
     find_optimal_split_sym,
     pw_sym_leaf_tiles,
-    pw_sym_result_blocks,
 )
 from gbdt.methods.kernel.pointwise_split_resolve import (
     launch_pw_fold_winner,
-    launch_pw_fold_winner_block,
     launch_pw_seed_sentinel,
 )
 from gbdt.methods.pointwise_kernels import FoldsHistogram, compute_hist2
@@ -339,10 +337,6 @@ struct PolicyScoreHelper(Movable):
         var blocks_n = (total + 127) // 128
         if blocks_n > 32:
             blocks_n = 32
-        comptime if SYM_DEVICE_LEVEL:
-            # one record per 128 bin features, uncapped: the node-tiled
-            # fold kernel writes `result_*[2 * block]` for every block
-            blocks_n = pw_sym_result_blocks(total)
         if blocks_n < 1:
             blocks_n = 1
         self.result_blocks = blocks_n
@@ -732,27 +726,15 @@ struct ScoresCalcerOnCompressedDataSet(Movable):
         for i in range(len(self.helpers)):
             if self.helpers[i].feature_count == 0:
                 continue
-            comptime if SYM_DEVICE_LEVEL:
-                # uncapped record count: one block folds it
-                launch_pw_fold_winner_block(
-                    ctx,
-                    self.helpers[i].d_result_ids,
-                    self.helpers[i].d_result_scores,
-                    self.helpers[i].result_blocks,
-                    first,
-                    best_ids,
-                    best_scores,
-                )
-            else:
-                launch_pw_fold_winner(
-                    ctx,
-                    self.helpers[i].d_result_ids,
-                    self.helpers[i].d_result_scores,
-                    self.helpers[i].result_blocks,
-                    first,
-                    best_ids,
-                    best_scores,
-                )
+            launch_pw_fold_winner(
+                ctx,
+                self.helpers[i].d_result_ids,
+                self.helpers[i].d_result_scores,
+                self.helpers[i].result_blocks,
+                first,
+                best_ids,
+                best_scores,
+            )
             first = False
         if first:
             # no helper has features: the host fold would return the
