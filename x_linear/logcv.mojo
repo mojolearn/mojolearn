@@ -302,18 +302,55 @@ def _logistic_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
     var rows = 0
     var wrows = Float32(0)
     var acc = Float32(0)
-    for i in range(n):
-        if fold >= 0 and Int(ld(y, n + i)) == fold:
-            continue
-        rows += 1
-        if sw:
-            wrows = fa(wrows, ld(y, 2 * n + i))
-        acc = fa(acc, ld(sl, i))
-        for k in range(kp):
-            var r = ld(sr, i * kp + k)
-            axpy_acc(g, goff + k * stride, r, x, i * d, d)
-            if fi:
-                st(g, goff + k * stride + d, fa(ld(g, goff + k * stride + d), r))
+    comptime if X_LINEAR_SERIAL_FOLDS:
+        for i in range(n):
+            if fold >= 0 and Int(ld(y, n + i)) == fold:
+                continue
+            rows += 1
+            if sw:
+                wrows = fa(wrows, ld(y, 2 * n + i))
+            acc = fa(acc, ld(sl, i))
+            for k in range(kp):
+                var r = ld(sr, i * kp + k)
+                axpy_acc(g, goff + k * stride, r, x, i * d, d)
+                if fi:
+                    st(g, goff + k * stride + d, fa(ld(g, goff + k * stride + d), r))
+    else:
+        # the blocked order (lane/neural-pass97): every accumulator from zero
+        # over FOLD_BLOCK training rows, folded into its total at each block's
+        # end (the team's partials, folded blocks ascending)
+        var pl = List[Float32](length=max(p, 1), fill=Float32(0))
+        var pg = FP(unsafe_from_address=Int(pl.unsafe_ptr()))
+        var pacc = Float32(0)
+        var pw = Float32(0)
+        for i in range(n):
+            if fold >= 0 and Int(ld(y, n + i)) == fold:
+                continue
+            if rows > 0 and rows % FOLD_BLOCK == 0:
+                for o in range(p):
+                    st(g, goff + o, fa(ld(g, goff + o), ld(pg, o)))
+                    st(pg, o, Float32(0))
+                acc = fa(acc, pacc)
+                pacc = Float32(0)
+                if sw:
+                    wrows = fa(wrows, pw)
+                    pw = Float32(0)
+            rows += 1
+            if sw:
+                pw = fa(pw, ld(y, 2 * n + i))
+            pacc = fa(pacc, ld(sl, i))
+            for k in range(kp):
+                var r = ld(sr, i * kp + k)
+                axpy_acc(pg, k * stride, r, x, i * d, d)
+                if fi:
+                    st(pg, k * stride + d, fa(ld(pg, k * stride + d), r))
+        if rows > 0:
+            for o in range(p):
+                st(g, goff + o, fa(ld(g, goff + o), ld(pg, o)))
+            acc = fa(acc, pacc)
+            if sw:
+                wrows = fa(wrows, pw)
+        _ = pl^
     var cnt = wrows if sw else i2f(rows)
     var inv_n = fd(Float32(1), cnt)
     var lam = fd(Float32(1), fm(c, cnt))
