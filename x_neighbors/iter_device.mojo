@@ -981,12 +981,174 @@ def knn_impute_tiled_kernel(
         knn_impute_finish(t, fx, bd, bi, res, m, d, k, Int(weights_), n_donors)
 
 
+#: FAST on Apple (lane/apple-fast-isotonic-knn, pass 2): KNNImputer's donor
+#: search as a 2-D register-tiled kernel, `-D MOJOLEARN_XN_FAST_IMPUTE_TILED2=1`
+#: (default off). Cause: `knn_impute_split_kernel` gives each missing cell 8
+#: scalar threads that stream every fit row (the board: 100,000 of them)
+#: from a threadgroup tile, one feature per shared load; the board's row is
+#: 43x behind scikit-learn. Here a block owns IMP2_TX missing cells and, per
+#: IMP2_TY fit rows, builds the cells x rows tile of nan_euclidean partial
+#: sums with the item's chain (both-present features ascending, IMP2_FC of
+#: them staged at a time, each thread IMP2_R x IMP2_R pairs in registers,
+#: the present count beside the sum), then the cell's thread offers the
+#: tile's rows whose cell column is present to the item's strict-< insertion
+#: in ascending row order: the same distances and the same lists. The tail
+#: is `knn_impute_finish`. Any d; k <= IMPS_KMAX.
+comptime IMP2_TX = 32
+comptime IMP2_TY = 64
+comptime IMP2_FC = 16
+comptime IMP2_TPB = 128
+comptime IMP2_R = 4
+comptime IMP2_XS = IMP2_FC + 1
+comptime IMP2_SMEM_BYTES = 4 * (
+    IMP2_TX * IMP2_XS + IMP2_TY * IMP2_XS + 2 * IMP2_TX * (IMP2_TY + 1) + 2 * IMP2_TX * IMPS_KMAX + 2 * IMP2_TX
+)
+
+
+def knn_impute_tiled2_kernel(
+    cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
+    n_: Int64, m_: Int64, d_: Int64, k_: Int64, weights_: Int64, nc_: Int64,
+):
+    var m = Int(m_)
+    var d = Int(d_)
+    var k = Int(k_)
+    var nc = Int(nc_)
+    var tid = Int(thread_idx.x)
+    var q0 = Int(block_idx.x) * IMP2_TX
+    var xs = stack_allocation[IMP2_TX * IMP2_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var ys = stack_allocation[IMP2_TY * IMP2_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var dt = stack_allocation[IMP2_TX * (IMP2_TY + 1), Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var ct = stack_allocation[IMP2_TX * (IMP2_TY + 1), Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var pd = stack_allocation[IMP2_TX * IMPS_KMAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var pi = stack_allocation[IMP2_TX * IMPS_KMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var rr = stack_allocation[IMP2_TX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var cc = stack_allocation[IMP2_TX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var inf = _bc[DType.float32](UInt32(0x7F800000))
+    var nan = _bc[DType.float32](UInt32(0x7FC00000))
+    var owner = tid < IMP2_TX and q0 + tid < nc
+    if tid < IMP2_TX:
+        var t0 = 0
+        if q0 + tid < nc:
+            t0 = Int(cells.unsafe_load(q0 + tid))
+        var r0 = t0 // d
+        rr[tid] = Int32(r0)
+        cc[tid] = Int32(t0 - r0 * d)
+        for s in range(k):
+            pd[tid * IMPS_KMAX + s] = inf
+            pi[tid * IMPS_KMAX + s] = Int32(-1)
+    barrier()
+    var ta = tid // 16
+    var tb = tid - ta * 16
+    var n_donors = 0
+    var j0 = 0
+    while j0 < m:
+        var rows = min(IMP2_TY, m - j0)
+        var acc = InlineArray[Float32, IMP2_R * IMP2_R](fill=Float32(0))
+        var cnt = InlineArray[Float32, IMP2_R * IMP2_R](fill=Float32(0))
+        var f0 = 0
+        while f0 < d:
+            var fc = min(IMP2_FC, d - f0)
+            var q = tid
+            while q < IMP2_TY * IMP2_FC:
+                var r = q // IMP2_FC
+                var f = q - r * IMP2_FC
+                ys[r * IMP2_XS + f] = fx.unsafe_load((j0 + r) * d + f0 + f) if (r < rows and f < fc) else nan
+                if r < IMP2_TX:
+                    xs[r * IMP2_XS + f] = x.unsafe_load(Int(rr[r]) * d + f0 + f) if f < fc else nan
+                q += IMP2_TPB
+            barrier()
+            for f in range(fc):
+                var xv = InlineArray[Float32, IMP2_R](fill=Float32(0))
+                var yv = InlineArray[Float32, IMP2_R](fill=Float32(0))
+                comptime for i in range(IMP2_R):
+                    xv[i] = xs[(ta + 8 * i) * IMP2_XS + f]
+                    yv[i] = ys[(tb + 16 * i) * IMP2_XS + f]
+                comptime for i in range(IMP2_R):
+                    comptime for jj in range(IMP2_R):
+                        var a = xv[i]
+                        var b = yv[jj]
+                        if a == a and b == b:
+                            var df = _sub(a, b)
+                            acc[i * IMP2_R + jj] = ftz(identical_mul_add(df, df, acc[i * IMP2_R + jj]))
+                            cnt[i * IMP2_R + jj] = cnt[i * IMP2_R + jj] + Float32(1)
+            barrier()
+            f0 += IMP2_FC
+        comptime for i in range(IMP2_R):
+            comptime for jj in range(IMP2_R):
+                dt[(ta + 8 * i) * (IMP2_TY + 1) + tb + 16 * jj] = acc[i * IMP2_R + jj]
+                ct[(ta + 8 * i) * (IMP2_TY + 1) + tb + 16 * jj] = cnt[i * IMP2_R + jj]
+        barrier()
+        if owner:
+            var c = Int(cc[tid])
+            var lb = tid * IMPS_KMAX
+            for bb in range(rows):
+                var j = j0 + bb
+                var dv = fx.unsafe_load(j * d + c)
+                if dv != dv:
+                    continue
+                n_donors += 1
+                var present = ct[tid * (IMP2_TY + 1) + bb]
+                if present == Float32(0):
+                    continue
+                var sq = ftz(identical_mul(ftz(identical_div(dt[tid * (IMP2_TY + 1) + bb], present)), Float32(d)))
+                var dist = ftz(identical_sqrt(sq))
+                if not (dist < pd[lb + k - 1]):
+                    continue
+                var s = k - 1
+                while s > 0 and dist < pd[lb + s - 1]:
+                    pd[lb + s] = pd[lb + s - 1]
+                    pi[lb + s] = pi[lb + s - 1]
+                    s -= 1
+                pd[lb + s] = dist
+                pi[lb + s] = Int32(j)
+        barrier()
+        j0 += rows
+    if owner:
+        var t = Int(rr[tid]) * d + Int(cc[tid])
+        var bd = best_d + t * k
+        var bi = best_i + t * k
+        for s in range(k):
+            bd.unsafe_store(s, pd[tid * IMPS_KMAX + s])
+            bi.unsafe_store(s, pi[tid * IMPS_KMAX + s])
+        knn_impute_finish(t, fx, bd, bi, res, m, d, k, Int(weights_), n_donors)
+
+
 def op_knn_impute_tiled(
     cells: Int, x: Int, fx: Int, res: Int,
     n: Int, m: Int, d: Int, k: Int, weights: Int, nc: Int,
 ) raises:
     """`knn_impute_cells` with the fit rows staged per block; d above
     IMP_MAX_D takes the per-cell item kernel."""
+    comptime if (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                 and is_defined["MOJOLEARN_XN_FAST_IMPUTE_TILED2"]()
+                 and lib_smem_page_fits_for[TARGET_COLUMN, IMP2_SMEM_BYTES]()):
+        if k <= IMPS_KMAX and nc > 0 and n > 0 and m > 0 and d > 0:
+            # direct device copies in and out (no host-thread staging)
+            var ctx2 = xn_ctx()
+            var d_cells2 = _buf_i(ctx2, cells, nc, True)
+            var d_x2 = ctx2.enqueue_create_buffer[DType.float32](n * d)
+            ctx2.enqueue_copy(dst_buf=d_x2, src_ptr=FP(unsafe_from_address=x))
+            var d_fx2 = ctx2.enqueue_create_buffer[DType.float32](m * d)
+            ctx2.enqueue_copy(dst_buf=d_fx2, src_ptr=FP(unsafe_from_address=fx))
+            var d_bd2 = ctx2.enqueue_create_buffer[DType.float32](n * d * k)
+            var d_bi2 = _buf_i(ctx2, 0, n * d * k, False)
+            var d_res2 = ctx2.enqueue_create_buffer[DType.float32](n * d)
+            ctx2.enqueue_copy(dst_buf=d_res2, src_ptr=FP(unsafe_from_address=res))
+            ctx2.enqueue_function[knn_impute_tiled2_kernel](
+                d_cells2.unsafe_ptr(), d_x2.unsafe_ptr(), d_fx2.unsafe_ptr(), d_bd2.unsafe_ptr(), d_bi2.unsafe_ptr(),
+                d_res2.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(weights), Int64(nc),
+                grid_dim=(nc + IMP2_TX - 1) // IMP2_TX, block_dim=IMP2_TPB,
+            )
+            ctx2.enqueue_copy(dst_ptr=FP(unsafe_from_address=res), src_buf=d_res2)
+            ctx2.synchronize()
+            _ = d_cells2^
+            _ = d_x2^
+            _ = d_fx2^
+            _ = d_bd2^
+            _ = d_bi2^
+            _ = d_res2^
+            _ = ctx2^
+            return
     if d > IMP_MAX_D:
         op_knn_impute_cells(cells, x, fx, res, n, m, d, k, weights, nc)
         return

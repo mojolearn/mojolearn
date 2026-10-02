@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IsotonicRegression, FAST on Apple: the whole fit on the grid
-(lane/apple-fast-isotonic-knn, 2026-10-02). Switch: MOJOLEARN_ISOTONIC_FAST_PAR=1
-(read on the host at dispatch, bindings/_mojolearn_x_linear.mojo); IDENTICAL
-never compiles this module.
+(lane/apple-fast-isotonic-knn, 2026-10-02). Switch: the binding built with
+`-D MOJOLEARN_ISOTONIC_FAST_PAR=1` (bindings/_mojolearn_x_linear.mojo, FAST +
+Apple only; no env read); IDENTICAL never compiles this module.
+`-D MOJOLEARN_ISOTONIC_FAST_PAIRMERGE=1` on top replaces step 6's boundary
+rounds with parallel pairwise pool merges (below).
 
 Cause: x_linear/isotonic.mojo `isotonic_fit` runs on the lead thread of ONE
 block (isotonic.mojo:129 `if not t.lead(): return`): the merge sort of a
@@ -30,7 +32,13 @@ Here, every step is a grid launch over the rows or the pooled points:
   6. PAVA on blocks of 256 pooled points in parallel (the serial code
      itself on each range), then log2 rounds merging adjacent ranges at
      their boundary pools: the L2 isotonic fit is unique, so any order of
-     adjacent-violator merges gives the same pools;
+     adjacent-violator merges gives the same pools. The last rounds are a
+     few threads each walking one boundary outward. PAIRMERGE instead runs
+     2 log2 n + 4 rounds in which EVERY pool start of the round's rank
+     parity (rank by a scan of the start flags) merges with its right
+     neighbour when it violates (a thread per pool, disjoint pairs), then a
+     grid check writes meta[4] when a violation is left: the caller then
+     runs the team fit, so an unconverged answer never leaves;
   7. each pool's value to its points (pool starts by a max-scan), the clip,
      the trim's keep flags and their scan, the scatter into res.
 
@@ -38,8 +46,8 @@ Weighted means and pool means sum in another order than the serial chains:
 FAST promises quality, not bits. Layout of res / fw as `isotonic_fit`.
 """
 from std.gpu import block_idx, thread_idx
+from std.sys.compile import is_defined
 from std.memory import bitcast, stack_allocation
-from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -51,11 +59,6 @@ comptime IF_PART = 4096
 #: Pooled points per PAVA block (step 6).
 comptime IF_PAVA_L = 256
 comptime KP = MutPointer[UInt64, MutAnyOrigin]
-
-
-def isotonic_fast_on() -> Bool:
-    """`MOJOLEARN_ISOTONIC_FAST_PAR=1` takes the grid fit (host read)."""
-    return String(getenv("MOJOLEARN_ISOTONIC_FAST_PAR")) == "1"
 
 
 def _ifb(count: Int) -> Int:
@@ -478,6 +481,69 @@ def if_pava_merge_kernel(fw: FP, n: Int32, meta: IP, iw: IP, span: Int32):
         _pava_merge(fw + nn, fw + 2 * nn, iw, lo, mid, hi)
 
 
+# ---------------------------------------------------------------- pair merge
+def if_pm_flag_kernel(iw: IP, meta: IP, n: Int32, flag: IP):
+    """flag[p] = 1 when p starts a pool (its end links back to it), else 0:
+    the scan gives every pool its rank."""
+    var m = ldi(meta, 2)
+    var p = _gid()
+    if p < Int(n):
+        var v = 0
+        if p < m:
+            var e = ldi(iw, p)
+            if e >= p and ldi(iw, e) == p:
+                v = 1
+        sti(flag, p, v)
+
+
+def if_pm_merge_kernel(fw: FP, n: Int32, meta: IP, iw: IP, scan: IP, parity: Int32):
+    """Thread p, a pool start whose rank (the inclusive scan of the start
+    flags) has the round's parity: when its value is not below the next
+    pool's, the two become one pool (mean, weight, links), the statements of
+    `_pava_merge`'s one step. A pool's right neighbour has the other parity,
+    so no two merges of a round touch the same pool."""
+    var nn = Int(n)
+    var m = ldi(meta, 2)
+    var p = _gid()
+    if p >= m:
+        return
+    var e = ldi(iw, p)
+    if e < p or ldi(iw, e) != p:
+        return
+    if (ldi(scan, p) & 1) != Int(parity):
+        return
+    var rs = e + 1
+    if rs >= m:
+        return
+    var uy = fw + nn
+    var uw = fw + 2 * nn
+    if ld(uy, p) < ld(uy, rs):
+        return
+    var re = ldi(iw, rs)
+    var wl = ld(uw, p)
+    var wr = ld(uw, rs)
+    var sw = fa(wl, wr)
+    var swy = fmad(wr, ld(uy, rs), fm(wl, ld(uy, p)))
+    st(uy, p, fd(swy, sw))
+    st(uw, p, sw)
+    sti(iw, p, re)
+    sti(iw, re, p)
+
+
+def if_pm_check_kernel(fw: FP, n: Int32, meta: IP, iw: IP):
+    """meta[4] = 1 when some pool still violates with its right neighbour."""
+    var nn = Int(n)
+    var m = ldi(meta, 2)
+    var p = _gid()
+    if p >= m:
+        return
+    var e = ldi(iw, p)
+    if e < p or ldi(iw, e) != p or e + 1 >= m:
+        return
+    if not (ld(fw + nn, p) < ld(fw + nn, e + 1)):
+        sti(meta, 4, 1)
+
+
 # ---------------------------------------------------------------- output
 def if_startflag_kernel(iw: IP, meta: IP, n: Int32, flag: IP):
     """flag[p] = p when p starts a pool (its end links back to it), else -1:
@@ -641,12 +707,28 @@ def isotonic_fast(
     ctx.enqueue_function[if_pava_block_kernel](
         dfw.unsafe_ptr(), Int32(n), dmeta.unsafe_ptr(), diw.unsafe_ptr(),
         grid_dim=_ifb((n + IF_PAVA_L - 1) // IF_PAVA_L), block_dim=IF_TPB)
-    var span = IF_PAVA_L
-    while span < n:
-        ctx.enqueue_function[if_pava_merge_kernel](
-            dfw.unsafe_ptr(), Int32(n), dmeta.unsafe_ptr(), diw.unsafe_ptr(), Int32(span),
-            grid_dim=_ifb((n + 2 * span - 1) // (2 * span)), block_dim=IF_TPB)
-        span *= 2
+    comptime if is_defined["MOJOLEARN_ISOTONIC_FAST_PAIRMERGE"]():
+        var rounds = 4
+        var t2 = 1
+        while t2 < n:
+            t2 *= 2
+            rounds += 2
+        for rd in range(rounds):
+            ctx.enqueue_function[if_pm_flag_kernel](
+                diw.unsafe_ptr(), dmeta.unsafe_ptr(), Int32(n), dflag.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+            _if_scan[False](ctx, dflag, dscan, dblk, n)
+            ctx.enqueue_function[if_pm_merge_kernel](
+                dfw.unsafe_ptr(), Int32(n), dmeta.unsafe_ptr(), diw.unsafe_ptr(), dscan.unsafe_ptr(), Int32(rd & 1),
+                grid_dim=nb, block_dim=IF_TPB)
+        ctx.enqueue_function[if_pm_check_kernel](
+            dfw.unsafe_ptr(), Int32(n), dmeta.unsafe_ptr(), diw.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+    else:
+        var span = IF_PAVA_L
+        while span < n:
+            ctx.enqueue_function[if_pava_merge_kernel](
+                dfw.unsafe_ptr(), Int32(n), dmeta.unsafe_ptr(), diw.unsafe_ptr(), Int32(span),
+                grid_dim=_ifb((n + 2 * span - 1) // (2 * span)), block_dim=IF_TPB)
+            span *= 2
     # 7. the values, the clip, the trim, the output
     ctx.enqueue_function[if_startflag_kernel](
         diw.unsafe_ptr(), dmeta.unsafe_ptr(), Int32(n), dflag.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
@@ -664,7 +746,7 @@ def isotonic_fast(
     ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
     ctx.enqueue_copy(dst_ptr=hmeta.unsafe_ptr(), src_buf=dmeta)
     ctx.synchronize()
-    var good = hmeta[1] == 0
+    var good = hmeta[1] == 0 and hmeta[4] == 0
     _ = hfp^
     _ = hmeta^
     _ = dx^
