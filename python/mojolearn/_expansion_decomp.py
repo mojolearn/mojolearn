@@ -1001,6 +1001,24 @@ def _pinv_rows(k, C):
     return k.lu_solve(lu, piv, C).T
 
 
+def _rp_tiled():
+    """The A/B switch MOJOLEARN_XD_RP_TILED (lane gap-nb-maxabs-grp; unset or
+    anything but "0": on): the random projections draw their matrix on the
+    device (`x_decomp_dev_rand`, the same Philox words as `x_decomp_rand`)
+    and transform through the tiled projection kernel."""
+    return _os.environ.get("MOJOLEARN_XD_RP_TILED", "1").strip() != "0"
+
+
+def _rp_rand(k, r, c, seed, stream, kind, dev):
+    """`k.rand`'s matrix; with dev, drawn into a device matrix by the same
+    kernel (enqueued, nothing downloaded)."""
+    if not (dev and r * c):
+        return k.rand(r, c, seed, stream, kind)
+    out = k._dout(r, c)
+    k.b.x_decomp_dev_rand(out._d.id, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
+    return out
+
+
 class _RandomProjection(_Base):
     """sklearn `random_projection.py::BaseRandomProjection`. The matrix is
     drawn from the lane's counter-based Philox stream (x_decomp/cells.mojo
@@ -1027,8 +1045,18 @@ class _RandomProjection(_Base):
         k = self._kit()
         self.n_components_ = kc
         self.n_features_in_ = d
-        self.components_m_ = self._make(k, kc, d, _seed_of(self.random_state))
-        self.components_ = self.components_m_.out()
+        dev = _rp_tiled() and k._res()
+        self.components_m_ = self._make(k, kc, d, _seed_of(self.random_state), dev)
+        if dev and self.components_m_._d is not None:
+            # MOJOLEARN_XD_RP_TILED: the matrix was drawn on the device and
+            # stays there for transform; components_ is a copy of its words
+            # (one download, the device matrix kept)
+            C = self.components_m_
+            res = array.array("f", [0.0]) * (kc * d)
+            k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], kc * d)
+            self.components_ = Array._owned(res, (kc, d), "<f4", "C")
+        else:
+            self.components_ = self.components_m_.out()
         if self.compute_inverse_components:
             self.inverse_m_ = _pinv_rows(k, self.components_m_)
             self.inverse_components_ = self.inverse_m_.out()
@@ -1036,7 +1064,7 @@ class _RandomProjection(_Base):
 
     def transform(self, X):
         self._check()
-        if _os.environ.get("MOJOLEARN_XD_RP_TILED", "1").strip() != "0" and not _is_sparse(X):
+        if _rp_tiled() and not _is_sparse(X):
             out = self._project(X)
             if out is not None:
                 return out
@@ -1096,8 +1124,8 @@ class GaussianRandomProjection(_RandomProjection):
         self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
         self.numeric_mode = numeric_mode
 
-    def _make(self, k, kc, d, seed):
-        return k.ew("scale", k.rand(kc, d, seed, 1, 1), s=1.0 / math.sqrt(kc))
+    def _make(self, k, kc, d, seed, dev=False):
+        return k.ew("scale", _rp_rand(k, kc, d, seed, 1, 1, dev), s=1.0 / math.sqrt(kc))
 
 
 class SparseRandomProjection(_RandomProjection):
@@ -1115,13 +1143,13 @@ class SparseRandomProjection(_RandomProjection):
         self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
         self.numeric_mode = numeric_mode
 
-    def _make(self, k, kc, d, seed):
+    def _make(self, k, kc, d, seed, dev=False):
         dens = 1.0 / math.sqrt(d) if self.density == "auto" else float(self.density)
         if not 0 < dens <= 1:
             raise ValueError(f"Expected density in range ]0, 1], got: {dens}")
         self.density_ = dens
-        u = k.rand(kc, d, seed, 2, 0)
-        sgn = k.ew("scale", k.rand(kc, d, seed, 3, 2), s=math.sqrt(1.0 / dens) / math.sqrt(kc))
+        u = _rp_rand(k, kc, d, seed, 2, 0, dev)
+        sgn = k.ew("scale", _rp_rand(k, kc, d, seed, 3, 2, dev), s=math.sqrt(1.0 / dens) / math.sqrt(kc))
         if dens == 1:
             return sgn
         # u < density keeps the signed value, else 0 (select: x > s -> y else z)

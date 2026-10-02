@@ -40,6 +40,7 @@ from x_decomp.device import (
     launch_sqdist,
     launch_trisolve,
     lda_rows_kernel,
+    rand_kernel,
     rowsum_scratch,
     TPB,
     _blocks,
@@ -260,6 +261,23 @@ def dev_project_py(a: PythonObject, b: PythonObject, c: PythonObject, flag: Pyth
     enqueue_fill(ctx, pool[].bufs[_id(flag)], Float32(0))
     launch_project(ctx, pa, pb, pc, pf, m, k, n)
     return PythonObject(m * n)
+
+
+def dev_rand_py(dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """p = [count, seed, stream, kind]: `rand_py`'s draws (x_decomp/cells.mojo
+    `rand_cell`, the counter-based Philox stream) written into the device
+    matrix, enqueued (no sync, no download): the random projections' matrix
+    is made where transform reads it (lane gap-nb-maxabs-grp)."""
+    var count = _n(p, 0)
+    var seed = UInt32(Int(py=p[1]) & 0xFFFFFFFF)
+    var stream = UInt32(Int(py=p[2]) & 0xFFFFFFFF)
+    var kind = Int(py=p[3])
+    if count == 0:
+        return PythonObject(0)
+    xd_ctx().enqueue_function[rand_kernel](
+        _ptr(_id(dst), count), Int32(count), seed, stream, Int32(kind), grid_dim=_blocks(count), block_dim=TPB
+    )
+    return PythonObject(count)
 
 
 def dev_trisolve_py(lu: PythonObject, idx: PythonObject, src: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
