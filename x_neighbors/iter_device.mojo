@@ -6,18 +6,17 @@
 (`_LabelPropagationBase.fit` in python/mojolearn/_expansion_neighbors.py) on
 the device with the graph uploaded ONCE. The Python loop called three ops per
 iteration, and each op uploaded its inputs: the n x n graph crossed to the
-device on every iteration. Here the same kernels (`absdiff_sum_kernel`,
+device on every iteration. Here the same kernels (`absdiff_sum_k0` / `_k1`,
 `matmul_kernel`, `lp_clamp_kernel` / `ls_clamp_kernel`, the generated
 one-item-per-thread drivers of the same items) run in the same order on the
 same values; only the stopping sum crosses back, one float per iteration,
 compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
+from checks.kernel_matrix import lib_smem_page_fits_for, TARGET_COLUMN
+from x_neighbors.svgp_ff import matmul_tn_acc_ff_item, svgp_ff_solve
 from std.memory import bitcast, memcpy
 from std.atomic import Atomic
-from core.host_lanes import host_row_tasks
-from std.time import perf_counter_ns
-from std.os import getenv
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
@@ -30,14 +29,14 @@ from std.sys.info import has_apple_gpu_accelerator
 
 from std.sys.compile import is_defined
 from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
-from x_neighbors.nan_cells import nan_cells_host
-from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
-from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, _add, knn_sq_item, knn_impute_finish
+from x_neighbors.nan_cells_device import nan_cells_device
+from x_neighbors.graph_dev import pr_iterate_gpu
+from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
     xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK,
-    absdiff_sum_kernel, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
+    absdiff_sum_k0, absdiff_sum_k1, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
     pagerank_step_kernel, cc_step_kernel,
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
     kernel_kernel, rowsum_kernel, scale_div_kernel, kpca_center_kernel, unary_kernel, svgp_var_kernel,
@@ -45,6 +44,17 @@ from x_neighbors.device_ops import (
 from x_neighbors.items import matmul_tn_acc_item, K_RBF, U_IDENTITY
 from x_neighbors.lp_spmm import lp_spmm_kernel
 from core.device_zero import enqueue_fill
+
+
+def _absdiff_launch(ctx: DeviceContext, a: FP, b: FP, s: FP, part: FP, count: Int) raises:
+    """The `absdiff_sum` op's two stages on resident buffers: one thread per
+    XN_FOLD_BLOCK block into `part`, then the partials ascending into s[0]
+    (the bits of `absdiff_sum_item`, the host column's fold)."""
+    var nb = xn_fold_blocks(count)
+    ctx.enqueue_function[absdiff_sum_k0](
+        a, b, s, part, Int64(count), grid_dim=_grid(nb), block_dim=(BLOCK if nb > 1 else 1),
+    )
+    ctx.enqueue_function[absdiff_sum_k1](a, b, s, part, Int64(count), grid_dim=1, block_dim=1)
 
 
 def op_lp_iterate(
@@ -73,6 +83,7 @@ def op_lp_iterate(
     var d_ys = _buf(ctx, ystatic, nc, True)
     var d_unl = _buf_i(ctx, unlabeled, n, True)
     var d_s = _buf(ctx, 0, 1, False)
+    var d_part = ctx.enqueue_create_buffer[DType.float32](max(xn_fold_blocks(nc), 1))
     var hs = List[Float32](length=1, fill=Float32(0))
     var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var prev: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -123,9 +134,7 @@ def op_lp_iterate(
     for it in range(max_iter):
         n_iter = it
         comptime if is_defined["MOJOLEARN_XN_LP_DEVICE_FOLD"]():
-            ctx.enqueue_function[absdiff_sum_kernel](
-                cur, prev, d_s.unsafe_ptr(), Int64(nc), grid_dim=1, block_dim=1,
-            )
+            _absdiff_launch(ctx, cur, prev, _p(d_s), _p(d_part), nc)
             ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
             ctx.synchronize()
         else:
@@ -203,6 +212,7 @@ def op_lp_iterate(
     _ = d_ys^
     _ = d_unl^
     _ = d_s^
+    _ = d_part^
     _ = ctx^
 
 
@@ -223,6 +233,7 @@ def op_pr_iterate(
     var d_dw = _buf(ctx, dw, n, True)
     var d_dg = _buf_i(ctx, dangling, n, True)
     var d_s = _buf(ctx, 0, 1, False)
+    var d_part = ctx.enqueue_create_buffer[DType.float32](max(xn_fold_blocks(n), 1))
     var hs = List[Float32](length=1, fill=Float32(0))
     var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var nxt: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -234,9 +245,7 @@ def op_pr_iterate(
             d_q.unsafe_ptr(), cur, d_p.unsafe_ptr(), d_dw.unsafe_ptr(), d_dg.unsafe_ptr(), nxt,
             Int64(n), alpha, grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
         )
-        ctx.enqueue_function[absdiff_sum_kernel](
-            nxt, cur, d_s.unsafe_ptr(), Int64(n), grid_dim=1, block_dim=1,
-        )
+        _absdiff_launch(ctx, nxt, cur, _p(d_s), _p(d_part), n)
         ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
         ctx.synchronize()
         var t = cur
@@ -263,118 +272,38 @@ def op_pr_iterate(
     _ = d_dw^
     _ = d_dg^
     _ = d_s^
+    _ = d_part^
     _ = ctx^
 
-
-
-def pr_dangling_sum_kernel(x: FP, dangling: IP, res: FP, n_: Int64):
-    """ONE thread: the item's dangling-mass chain, once per iteration."""
-    if _tid() == 0:
-        res.unsafe_store(0, pagerank_dangling_sum(x, dangling, Int(n_)))
-
-
-def pagerank_step_sparse_kernel(
-    indptr: IP, rows: IP, vals: FP, x: FP, p: FP, dw: FP, dsum: FP, res: FP, n_: Int64, alpha_: Float32,
-):
-    var t = _tid()
-    if t < Int(n_):
-        pagerank_step_sparse_item(t, indptr, rows, vals, x, p, dw, dsum.unsafe_load(0), res, alpha_)
 
 
 def op_pr_iterate_sparse(
     a: Int, x: Int, p: Int, dw: Int, info: Int,
     n: Int, max_iter: Int, thr_hi: Int, thr_lo: Int, binary: Int, alpha: Float32,
 ) raises:
-    """`op_pr_iterate` over the nonzero cells of the dense adjacency `a`
-    (x_neighbors/pr_sparse.mojo): the scan on the host, the iteration on
-    the device over the column lists. `x` in: the start, out: the last
-    iterate. info (int32 x 2): iterations run, converged."""
-    var thr = bitcast[DType.float64]((UInt64(thr_hi) << UInt64(32)) | UInt64(thr_lo))
-    var timing = String(getenv("MOJOLEARN_PR_TIMING")) == "1"
-    var t_start = perf_counter_ns()
-    var g = pr_graph_from_dense(FP(unsafe_from_address=a), n, binary != 0)
-    if timing:
-        print("pr_iterate_sparse: scan", (perf_counter_ns() - t_start) // 1000000, "ms, nnz", g.nnz,
-              "tasks", host_row_tasks(n, 2 * n))
-        t_start = perf_counter_ns()
-    var ctx = xn_ctx()
-    var d_ip = _buf_i(ctx, Int(g.indptr.unsafe_ptr()), n + 1, True)
-    var d_rows = _buf_i(ctx, Int(g.rows.unsafe_ptr()), g.nnz, True)
-    var d_vals = _buf(ctx, Int(g.vals.unsafe_ptr()), g.nnz, True)
-    var d_dg = _buf_i(ctx, Int(g.dangling.unsafe_ptr()), n, True)
-    var d_a = _buf(ctx, x, n, True)
-    var d_b = _buf(ctx, 0, n, False)
-    var d_p = _buf(ctx, p, n, True)
-    var d_dw = _buf(ctx, dw, n, True)
-    var d_s = _buf(ctx, 0, 1, False)
-    var d_ds = _buf(ctx, 0, 1, False)
-    var hs = List[Float32](length=1, fill=Float32(0))
-    var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var nxt: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var cur_is_a = True
-    var n_iter = 0
-    var converged = False
-    for it in range(max_iter):
-        ctx.enqueue_function[pr_dangling_sum_kernel](
-            cur, d_dg.unsafe_ptr(), d_ds.unsafe_ptr(), Int64(n), grid_dim=1, block_dim=1,
-        )
-        ctx.enqueue_function[pagerank_step_sparse_kernel](
-            d_ip.unsafe_ptr(), d_rows.unsafe_ptr(), d_vals.unsafe_ptr(), cur, d_p.unsafe_ptr(), d_dw.unsafe_ptr(),
-            d_ds.unsafe_ptr(), nxt, Int64(n), alpha, grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
-        )
-        ctx.enqueue_function[absdiff_sum_kernel](
-            nxt, cur, d_s.unsafe_ptr(), Int64(n), grid_dim=1, block_dim=1,
-        )
-        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
-        ctx.synchronize()
-        var t = cur
-        cur = nxt
-        nxt = t
-        cur_is_a = not cur_is_a
-        n_iter = it + 1
-        if Float64(hs[0]) < thr:
-            converged = True
-            break
-    if cur_is_a:
-        _down(ctx, d_a, x, n)
-    else:
-        _down(ctx, d_b, x, n)
-    ctx.synchronize()
-    if timing:
-        print("pr_iterate_sparse: device", (perf_counter_ns() - t_start) // 1000000, "ms,", n_iter, "iterations")
-    var inf = IP(unsafe_from_address=info)
-    inf.unsafe_store(0, Int32(n_iter))
-    inf.unsafe_store(1, Int32(1 if converged else 0))
-    _ = hs^
-    _ = d_ip^
-    _ = d_rows^
-    _ = d_vals^
-    _ = d_dg^
-    _ = d_a^
-    _ = d_b^
-    _ = d_p^
-    _ = d_dw^
-    _ = d_s^
-    _ = d_ds^
-    _ = g^
-    _ = ctx^
+    """`op_pr_iterate` over the column lists of the dense adjacency `a`, all
+    on the device (lane hr-graph, x_neighbors/graph_par.mojo `pr_drive`):
+    the row sums, column lists and offsets built from `a`, the step one
+    thread per node over its column ascending, the dangling mass and
+    |x' - x| blocked folds. `x` in: the start, out: the last iterate. info
+    (int32 x 2): iterations run, converged."""
+    pr_iterate_gpu(a, x, p, dw, info, n, max_iter,
+                   bitcast[DType.float64]((UInt64(thr_hi) << UInt64(32)) | UInt64(thr_lo)), binary, alpha)
 
 def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int) raises:
     """lane/neural-pass71: the NaN cells of x (n x d): flat indices
     ascending into `cells`, the NaN count per column, the total in info[0].
-    The host pass on every column (x_neighbors/nan_cells.mojo)."""
-    nan_cells_host(FP(unsafe_from_address=x), IP(unsafe_from_address=cells),
-                   IP(unsafe_from_address=colmiss), IP(unsafe_from_address=info), n, d)
+    lane hr-small-passes (2026-10-02): a device NaN mask and a deterministic
+    prefix-sum compaction (x_neighbors/nan_cells_device.mojo), the same
+    integers in the same order as the CPU column's pass
+    (x_neighbors/nan_cells.mojo)."""
+    nan_cells_device(x, cells, colmiss, info, n, d)
 
 
 def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
     """lane/neural-pass69: `op_cc_iterate` from a CSR adjacency (indptr n + 1,
-    indices nnz): the host walk of x_neighbors/cc_sparse.mojo on every
-    column, no dense matrix."""
-    comptime if is_defined["MOJOLEARN_XN_CC_HOST"]():
-        cc_iterate_csr(IP(unsafe_from_address=indptr), IP(unsafe_from_address=indices),
-                       IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n, nnz)
-        return
+    indices nnz), no dense matrix: hooking and pointer jumping on the device
+    (`_cc_csr_device`)."""
     _cc_csr_device(indptr, indices, lab, info, n, nnz)
 
 
@@ -389,7 +318,7 @@ def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nn
 # root of its label chain), rounds until an edge changes nothing. The
 # labels are integers: the same words on every column. The step count in
 # info is the device's round count (Python reads only the labels).
-# `-D MOJOLEARN_XN_CC_HOST=1` restores the host rounds (x_neighbors/cc_sparse.mojo).
+# The opt-in host rounds (`-D MOJOLEARN_XN_CC_HOST`) were removed (hr-optin-flags).
 def cc_hook_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP):
     var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if u < Int(n):
@@ -468,65 +397,69 @@ def _cc_csr_device(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: 
     _ = d_c^
 
 
+def cc_hook_dense_kernel(a: FP, lab: IP, n: Int32, changed: IP):
+    """`cc_hook_kernel` on the dense matrix (lane hr2-graph-embed): thread v
+    walks COLUMN v (a warp reads one row's consecutive cells: coalesced), and
+    every nonzero a[t, v] hooks t and v. Hooking is symmetric in its two
+    ends, so the columns cover both directions of weak connectivity."""
+    var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nn = Int(n)
+    if v < nn:
+        for t in range(nn):
+            if a.unsafe_load(t * nn + v) != Float32(0):
+                var x = lab.unsafe_load(t)
+                var y = lab.unsafe_load(v)
+                if x != y:
+                    var lo = x if x < y else y
+                    var hi = y if x < y else x
+                    if lab.unsafe_load(Int(hi)) > lo:
+                        _ = Atomic[DType.int32].min(lab + Int(hi), lo)
+                        changed.unsafe_store(0, Int32(1))
+
+
+def cc_label_init_kernel(lab: IP, n: Int32):
+    var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if v < Int(n):
+        lab.unsafe_store(v, Int32(v))
+
+
 def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
-    """connected_components' min-label iteration (`cc_step` until the labels
-    stop changing) with A resident; the labels come back each step (n
-    integers) for the host's equality test, as Python compared them.
-    `lab` in: 0..n-1, out: the fixed point. info (int32 x 1): steps.
-    Lane neural-pass22: unless MOJOLEARN_XN_CC_GPU is defined, the rounds run
-    on the HOST as the sparse walk of x_neighbors/cc_sparse.mojo (the same
-    labels and round count; the dense rounds here read row t and column t
-    of the matrix for every node in every round, 800 million cells a round
-    at the board's 20,000 nodes); the resident loop below stays the device
-    body and the reference."""
-    comptime if not is_defined["MOJOLEARN_XN_CC_GPU"]():
-        cc_iterate_sparse(FP(unsafe_from_address=a), IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n)
-        return
+    """connected_components on a dense adjacency, on the device (lane
+    hr2-graph-embed, 2026-10-02; before, the default was the host's sparse
+    walk, x_neighbors/cc_sparse.mojo): A uploaded once, then hooking
+    (`cc_hook_dense_kernel`) and pointer jumping (`cc_jump_kernel`) rounds
+    until no edge lowers a label, from the identity labels. The result is
+    the unique min-label fixed point (every node labelled by the lowest node
+    of its weak component), the host column's rounds word for word; info
+    holds the device's round count (Python reads only the labels)."""
     var ctx = xn_ctx()
     var d_a = _buf(ctx, a, n * n, True)
-    var d_l0 = _buf_i(ctx, lab, n, True)
-    var d_l1 = _buf_i(ctx, 0, n, False)
-    var cur_host = List[Int32](length=n if n > 0 else 1, fill=Int32(0))
-    var nxt_host = List[Int32](length=n if n > 0 else 1, fill=Int32(0))
-    var pl = IP(unsafe_from_address=lab)
-    for i in range(n):
-        cur_host[i] = pl.unsafe_load(i)
-    var cur: IP = d_l0.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var nxt: IP = d_l1.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var nxt_is_1 = True
-    var steps = 0
-    while True:
-        ctx.enqueue_function[cc_step_kernel](
-            d_a.unsafe_ptr(), cur, nxt, Int64(n),
-            grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
-        )
-        if nxt_is_1:
-            ctx.enqueue_copy(dst_ptr=nxt_host.unsafe_ptr(), src_buf=d_l1)
-        else:
-            ctx.enqueue_copy(dst_ptr=nxt_host.unsafe_ptr(), src_buf=d_l0)
+    var d_l = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var d_c = ctx.enqueue_create_buffer[DType.int32](1)
+    var hb = ctx.enqueue_create_host_buffer[DType.int32](max(n, 1))
+    var blocks = (n + 255) // 256
+    var rounds = 0
+    if n > 0:
+        ctx.enqueue_function[cc_label_init_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
+    while n > 0:
+        rounds += 1
+        d_c.enqueue_fill(Int32(0))
+        ctx.enqueue_function[cc_hook_dense_kernel](d_a.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n), d_c.unsafe_ptr(),
+                                                   grid_dim=blocks, block_dim=256)
+        ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
+        ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_c)
         ctx.synchronize()
-        steps += 1
-        var same = True
-        for i in range(n):
-            if nxt_host[i] != cur_host[i]:
-                same = False
-                break
-        if same:
+        if hb.unsafe_ptr()[0] == 0:
             break
-        for i in range(n):
-            cur_host[i] = nxt_host[i]
-        var t = cur
-        cur = nxt
-        nxt = t
-        nxt_is_1 = not nxt_is_1
-    for i in range(n):
-        pl.unsafe_store(i, cur_host[i])
-    IP(unsafe_from_address=info).unsafe_store(0, Int32(steps))
-    _ = cur_host^
-    _ = nxt_host^
+    if n > 0:
+        ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_l)
+        ctx.synchronize()
+        memcpy(dest=IP(unsafe_from_address=lab), src=hb.unsafe_ptr(), count=n)
+    IP(unsafe_from_address=info).unsafe_store(0, Int32(rounds))
+    _ = hb^
     _ = d_a^
-    _ = d_l0^
-    _ = d_l1^
+    _ = d_l^
+    _ = d_c^
     _ = ctx^
 
 
@@ -740,19 +673,17 @@ def knn_sq_tiled_kernel(
 #: FAST on Apple (lane/apple-fast-isotonic-knn, 2026-10-02): the fused k-NN
 #: (`knn_sq_tiled`, one scalar thread per query row walking every y row,
 #: iter_device.mojo `knn_sq_tiled_kernel`) through the simdgroup-matrix
-#: arm neighbors/impl/detail/fast_mma_knn.mojo when
-#: MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1 (host read) and
-#: `fast_mma_knn_applies(d, k + exclude_self)`: k + 1 candidates when the
+#: arm neighbors/impl/detail/fast_mma_knn.mojo when the binding is built
+#: with `-D MOJOLEARN_XN_FAST_MMA_ROUTE=1` (tools/afc_ab_def.sh; no env
+#: read) and `fast_mma_knn_applies(d, k + exclude_self)`: k + 1 candidates when the
 #: query's own row is excluded, the row dropped after. Same k, the same
 #: ascending (distance, index) order; squared distances by the expanded
 #: form (clamped at 0): FAST promises quality, not bits. Takers: LOF,
 #: LabelPropagation / LabelSpreading's knn graphs, LLE's neighbour lists
 #: under MOJOLEARN_LLE_FAST_KNN=1 (python/mojolearn/_expansion_decomp.py).
-comptime XN_MMA_ROUTE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-
-
-def _mma_route_on() -> Bool:
-    return String(getenv("MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE")) == "1"
+comptime XN_MMA_ROUTE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_XN_FAST_MMA_ROUTE"]()
+)
 
 
 def knn_mma_finish_kernel(
@@ -786,6 +717,99 @@ def knn_mma_finish_kernel(
         dist.unsafe_store(t * k + s, inf)
         idx.unsafe_store(t * k + s, Int32(-1))
         s += 1
+# lane/neural-pass101 (2026-10-01): the fused k-NN for any d, tiled in two
+# dimensions. A block owns KNN2_TX rows of x; per KNN2_TY rows of y it builds
+# the KNN2_TX x KNN2_TY distance tile, every pair's chain over the features
+# ascending (KNN2_FC features of both rows staged in threadgroup memory at a
+# time, each thread KNN2_PT pairs in registers), with knn_sq_item's
+# statements, then the x row's thread offers the tile's columns in ascending
+# order to the item's strict-< insertion. The same values in the same order,
+# so the same lists. The one-thread-per-row kernel this replaces for d above
+# KNN_TILE_MAX_D read every y row from device memory in every thread
+# (LabelPropagation on istella, 220 features: 23 s at 20,000 rows on the M4).
+# `-D MOJOLEARN_XN_KNN_ROWWISE=1` restores it.
+comptime KNN2_TX = 64
+comptime KNN2_TY = 64
+comptime KNN2_FC = 16
+comptime KNN2_TPB = 256
+#: a thread's register block: KNN2_R x rows by KNN2_R y rows (16 x 16 threads)
+comptime KNN2_R = 4
+comptime KNN2_XS = KNN2_FC + 1  # padded rows (bank spread)
+comptime KNN2_SMEM_BYTES = 4 * (KNN2_TX * KNN2_XS + KNN2_TY * KNN2_XS + KNN2_TX * (KNN2_TY + 1))
+
+
+def knn_sq_tiled2_kernel(
+    x: FP, y: FP, dist: FP, idx: IP, n_: Int64, m_: Int64, d_: Int64, k_: Int64, ex_: Int64,
+):
+    var n = Int(n_)
+    var m = Int(m_)
+    var d = Int(d_)
+    var k = Int(k_)
+    var ex = Int(ex_)
+    var tid = Int(thread_idx.x)
+    var x0 = Int(block_idx.x) * KNN2_TX
+    var xs = stack_allocation[KNN2_TX * KNN2_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var ys = stack_allocation[KNN2_TY * KNN2_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var dt = stack_allocation[KNN2_TX * (KNN2_TY + 1), Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var inf = _bc[DType.float32](UInt32(0x7F800000))
+    var t = x0 + tid
+    var owner = tid < KNN2_TX and t < n
+    var worst = inf
+    if owner:
+        for s in range(k):
+            dist.unsafe_store(t * k + s, inf)
+            idx.unsafe_store(t * k + s, Int32(-1))
+    var ta = tid // 16
+    var tb = tid - ta * 16
+    var j0 = 0
+    while j0 < m:
+        var rows = min(KNN2_TY, m - j0)
+        var acc = InlineArray[Float32, KNN2_R * KNN2_R](fill=Float32(0))
+        var f0 = 0
+        while f0 < d:
+            var fc = min(KNN2_FC, d - f0)
+            var q = tid
+            while q < KNN2_TX * KNN2_FC:
+                var r = q // KNN2_FC
+                var f = q - r * KNN2_FC
+                xs[r * KNN2_XS + f] = x.unsafe_load((x0 + r) * d + f0 + f) if (x0 + r < n and f < fc) else Float32(0)
+                ys[r * KNN2_XS + f] = y.unsafe_load((j0 + r) * d + f0 + f) if (r < rows and f < fc) else Float32(0)
+                q += KNN2_TPB
+            barrier()
+            for f in range(fc):
+                var xv = InlineArray[Float32, KNN2_R](fill=Float32(0))
+                var yv = InlineArray[Float32, KNN2_R](fill=Float32(0))
+                comptime for i in range(KNN2_R):
+                    xv[i] = xs[(ta + 16 * i) * KNN2_XS + f]
+                    yv[i] = ys[(tb + 16 * i) * KNN2_XS + f]
+                comptime for i in range(KNN2_R):
+                    comptime for jj in range(KNN2_R):
+                        var df = _sub(xv[i], yv[jj])
+                        acc[i * KNN2_R + jj] = ftz(identical_mul_add(df, df, acc[i * KNN2_R + jj]))
+            barrier()
+            f0 += KNN2_FC
+        comptime for i in range(KNN2_R):
+            comptime for jj in range(KNN2_R):
+                dt[(ta + 16 * i) * (KNN2_TY + 1) + tb + 16 * jj] = acc[i * KNN2_R + jj]
+        barrier()
+        if owner:
+            for bb in range(rows):
+                var j = j0 + bb
+                if ex != 0 and j == t:
+                    continue
+                var v = dt[tid * (KNN2_TY + 1) + bb]
+                if not (v < worst):
+                    continue
+                var s = k - 1
+                while s > 0 and v < dist.unsafe_load(t * k + s - 1):
+                    dist.unsafe_store(t * k + s, dist.unsafe_load(t * k + s - 1))
+                    idx.unsafe_store(t * k + s, idx.unsafe_load(t * k + s - 1))
+                    s -= 1
+                dist.unsafe_store(t * k + s, v)
+                idx.unsafe_store(t * k + s, Int32(j))
+                worst = dist.unsafe_load(t * k + k - 1)
+        barrier()
+        j0 += rows
 
 
 def op_knn_sq_tiled(
@@ -797,13 +821,17 @@ def op_knn_sq_tiled(
         from neighbors.impl.detail.fast_mma_knn import fast_mma_knn, fast_mma_knn_applies
 
         var kk = k + (1 if exclude_self != 0 else 0)
-        if _mma_route_on() and n > 0 and m > 0 and kk <= m and fast_mma_knn_applies(d, kk):
+        if n > 0 and m > 0 and kk <= m and fast_mma_knn_applies(d, kk):
+            # direct device copies in and out (no host-thread staging), as
+            # the 2-D tiled branch below
             var ctx = xn_ctx()
-            var d_x = _buf(ctx, x, n * d, True)
-            var d_y = _buf(ctx, y, m * d, True)
+            var d_x = ctx.enqueue_create_buffer[DType.float32](n * d)
+            var d_y = ctx.enqueue_create_buffer[DType.float32](m * d)
+            ctx.enqueue_copy(dst_buf=d_x, src_ptr=FP(unsafe_from_address=x))
+            ctx.enqueue_copy(dst_buf=d_y, src_ptr=FP(unsafe_from_address=y))
             var c_d = ctx.enqueue_create_buffer[DType.float32](n * kk)
             var c_i = ctx.enqueue_create_buffer[DType.uint32](n * kk)
-            var d_dist = _buf(ctx, 0, n * k, False)
+            var d_dist = ctx.enqueue_create_buffer[DType.float32](n * k)
             var d_idx = _buf_i(ctx, 0, n * k, False)
             fast_mma_knn(ctx, d_x, d_y, c_d, c_i, n, m, d, kk, False)
             ctx.enqueue_function[knn_mma_finish_kernel](
@@ -811,7 +839,7 @@ def op_knn_sq_tiled(
                 Int64(n), Int64(k), Int64(kk), Int64(exclude_self),
                 grid_dim=(n + KNN_TILE_TPB - 1) // KNN_TILE_TPB, block_dim=KNN_TILE_TPB,
             )
-            _down(ctx, d_dist, dist, n * k)
+            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=dist), src_buf=d_dist)
             _down_i(ctx, d_idx, idx, n * k)
             ctx.synchronize()
             _ = d_x^
@@ -823,7 +851,35 @@ def op_knn_sq_tiled(
             _ = ctx^
             return
     if d > KNN_TILE_MAX_D:
-        op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self)
+        # the 2-D tiled kernel's threadgroup pages (25,344 bytes) under every
+        # column's limit, or the row kernel (every shared page has a fits gate)
+        comptime if is_defined["MOJOLEARN_XN_KNN_ROWWISE"]() or not lib_smem_page_fits_for[TARGET_COLUMN, KNN2_SMEM_BYTES]():
+            op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self)
+            return
+        # direct device copies in and out (no host-thread staging)
+        var ctx2 = xn_ctx()
+        var d_x2 = ctx2.enqueue_create_buffer[DType.float32](max(n * d, 1))
+        var d_y2 = ctx2.enqueue_create_buffer[DType.float32](max(m * d, 1))
+        if n * d > 0:
+            ctx2.enqueue_copy(dst_buf=d_x2, src_ptr=FP(unsafe_from_address=x))
+        if m * d > 0:
+            ctx2.enqueue_copy(dst_buf=d_y2, src_ptr=FP(unsafe_from_address=y))
+        var d_dist2 = ctx2.enqueue_create_buffer[DType.float32](max(n * k, 1))
+        var d_idx2 = _buf_i(ctx2, 0, n * k, False)
+        ctx2.enqueue_function[knn_sq_tiled2_kernel](
+            d_x2.unsafe_ptr(), d_y2.unsafe_ptr(), d_dist2.unsafe_ptr(), d_idx2.unsafe_ptr(),
+            Int64(n), Int64(m), Int64(d), Int64(k), Int64(exclude_self),
+            grid_dim=(n + KNN2_TX - 1) // KNN2_TX, block_dim=KNN2_TPB,
+        )
+        if n * k > 0:
+            ctx2.enqueue_copy(dst_ptr=FP(unsafe_from_address=dist), src_buf=d_dist2)
+        _down_i(ctx2, d_idx2, idx, n * k)
+        ctx2.synchronize()
+        _ = d_x2^
+        _ = d_y2^
+        _ = d_dist2^
+        _ = d_idx2^
+        _ = ctx2^
         return
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d, True)
@@ -1306,6 +1362,91 @@ def op_svgp_stats(
     _ = d_k^
     _ = d_ks^
     _ = ctx^
+
+
+def matmul_tn_acc_ff_kernel(a: FP, b: FP, rh: FP, rl: FP, rows_: Int64, n_: Int64, m_: Int64):
+    var t = _tid()
+    if t < Int(n_) * Int(m_):
+        matmul_tn_acc_ff_item(t, a, b, rh, rl, Int(rows_), Int(n_), Int(m_))
+
+
+def _up_direct(ctx: DeviceContext, addr: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
+    """A device buffer with `count` floats copied straight from the host
+    pointer by the device copy engine (no host-thread staging)."""
+    var buf = ctx.enqueue_create_buffer[DType.float32](max(count, 1))
+    if count > 0:
+        ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
+    return buf^
+
+
+def _down_direct(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], addr: Int, count: Int) raises:
+    """`count` floats of `buf` (sized `count`) copied straight to the host pointer."""
+    if count > 0:
+        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=addr), src_buf=buf)
+
+
+def op_svgp_stats_ff(
+    x: Int, z: Int, y: Int, bh: Int, bl: Int, bvh: Int, bvl: Int, n: Int, m: Int, d: Int, gamma: Float32,
+    variance: Float32,
+) raises:
+    """`op_svgp_stats` with B and b accumulated in float-float (lane/neural-pass106,
+    x_neighbors/svgp_ff.mojo): the same Kfu tiles, the same rows ascending."""
+    var ctx = xn_ctx()
+    var d_x = _up_direct(ctx, x, n * d)
+    var d_z = _up_direct(ctx, z, m * d)
+    var d_y = _up_direct(ctx, y, n)
+    var d_bh = ctx.enqueue_create_buffer[DType.float32](max(m * m, 1))
+    var d_bl = ctx.enqueue_create_buffer[DType.float32](max(m * m, 1))
+    var d_vh = ctx.enqueue_create_buffer[DType.float32](max(m, 1))
+    var d_vl = ctx.enqueue_create_buffer[DType.float32](max(m, 1))
+    enqueue_fill(ctx, d_bh, Float32(0))
+    enqueue_fill(ctx, d_bl, Float32(0))
+    enqueue_fill(ctx, d_vh, Float32(0))
+    enqueue_fill(ctx, d_vl, Float32(0))
+    var tr = _tile_rows(n, m)
+    var d_k = ctx.enqueue_create_buffer[DType.float32](max(tr * m, 1))
+    var d_ks = ctx.enqueue_create_buffer[DType.float32](max(tr * m, 1))
+    var xp: FP = _p(d_x)
+    var yp: FP = _p(d_y)
+    var r0 = 0
+    while r0 < n:
+        var rows = min(tr, n - r0)
+        _launch_scaled_rbf(ctx, xp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
+        ctx.enqueue_function[matmul_tn_acc_ff_kernel](
+            _p(d_ks), _p(d_ks), _p(d_bh), _p(d_bl), Int64(rows), Int64(m), Int64(m),
+            grid_dim=_grid(m * m), block_dim=(BLOCK if m * m > 1 else 1),
+        )
+        ctx.enqueue_function[matmul_tn_acc_ff_kernel](
+            _p(d_ks), yp + r0, _p(d_vh), _p(d_vl), Int64(rows), Int64(m), Int64(1),
+            grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
+        )
+        r0 += rows
+    _down_direct(ctx, d_bh, bh, m * m)
+    _down_direct(ctx, d_bl, bl, m * m)
+    _down_direct(ctx, d_vh, bvh, m)
+    _down_direct(ctx, d_vl, bvl, m)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_z^
+    _ = d_y^
+    _ = d_bh^
+    _ = d_bl^
+    _ = d_vh^
+    _ = d_vl^
+    _ = d_k^
+    _ = d_ks^
+    _ = ctx^
+
+
+def op_svgp_ff(
+    kuu: Int, bh: Int, bl: Int, bvh: Int, bvl: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int,
+    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+) raises:
+    """The float-float SVGP solve on the host, as svgp's item runs (HOST_RUN)."""
+    svgp_ff_solve(FP(unsafe_from_address=kuu), FP(unsafe_from_address=bh), FP(unsafe_from_address=bl),
+                  FP(unsafe_from_address=bvh), FP(unsafe_from_address=bvl), FP(unsafe_from_address=y),
+                  FP(unsafe_from_address=alpha), FP(unsafe_from_address=cmat), FP(unsafe_from_address=qmu),
+                  FP(unsafe_from_address=qsqrt), FP(unsafe_from_address=info), m, n, noise, jitter, kdiag)
 
 
 def op_svgp_predict(

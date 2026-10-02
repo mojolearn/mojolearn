@@ -133,6 +133,13 @@ class _AnnSaved:
     _SAVE_FITTED = ()      # fitted int attributes
     _SAVE_ARRAYS = ()      # (attribute, typestr)
 
+    def _save_param(self, p):
+        return _ann_int(type(self).__name__, p, getattr(self, p))
+
+    @classmethod
+    def _load_param(cls, p, v):
+        return v
+
     def save(self, path):
         from . import _serialize
         from ._array import Array
@@ -144,7 +151,7 @@ class _AnnSaved:
             "format": self._SAVE_FORMAT,
             "estimator": type(self).__name__,
             "numeric_mode": _saved_mode(self),
-            "params": Array.from_list([_ann_int(type(self).__name__, p, getattr(self, p)) for p in self._SAVE_PARAMS], "<i8"),
+            "params": Array.from_list([self._save_param(p) for p in self._SAVE_PARAMS], "<i8"),
             "fitted": Array.from_list([int(getattr(self, a)) for a in self._SAVE_FITTED], "<i8"),
         }
         for attr, _dtype in self._SAVE_ARRAYS:
@@ -161,7 +168,7 @@ class _AnnSaved:
         fitted = _serialize.exact(arrays, "fitted", "<i8")
         if params.size != len(cls._SAVE_PARAMS) or fitted.size != len(cls._SAVE_FITTED):
             raise ValueError(f"mojolearn: {path!r} does not hold {cls.__name__}'s parameters")
-        obj = cls(**{p: int(params[i]) for i, p in enumerate(cls._SAVE_PARAMS)})
+        obj = cls(**{p: cls._load_param(p, int(params[i])) for i, p in enumerate(cls._SAVE_PARAMS)})
         _restore_mode(obj, arrays)
         for i, a in enumerate(cls._SAVE_FITTED):
             setattr(obj, a, int(fitted[i]))
@@ -421,23 +428,27 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     search_width : int, default 1
     max_iterations : int, default 0 (auto: itopk_size)
     n_seeds : int, default 0
-        Evenly spaced start nodes; 0 is cuVS's pick-up count, itopk_size +
-        search_width * graph_degree (their random seeds are refused: the
-        seed set here is a function of n alone).
+        Start nodes; 0 is cuVS's pick-up count, itopk_size +
+        search_width * graph_degree.
+    random_state : int or None, default None
+        The start nodes' seed, the role of cuVS's `rand_xor_mask`: None
+        takes evenly spaced nodes (t * n) // n_seeds; an int r >= 0 takes
+        splitmix64 of (r + 1, t) mod n (x_ann/cagra_core.mojo cg_seed_node),
+        the same nodes for every query and on every device.
 
     `search(queries)` returns squared L2 distances float32 `(m, k)` and int32
     ids `(m, k)`; the index keeps a copy of the dataset, as cuVS's does.
     """
 
     _BINDING = "_mojolearn_x_ann"
-    _SAVE_FORMAT = "mojolearn-cagra-1"
+    _SAVE_FORMAT = "mojolearn-cagra-2"
     _SAVE_PARAMS = ("graph_degree", "intermediate_graph_degree", "n_neighbors", "itopk_size", "search_width",
-                    "max_iterations", "n_seeds")
+                    "max_iterations", "n_seeds", "random_state")
     _SAVE_FITTED = ("n_features_in_", "n_rows_", "graph_degree_")
     _SAVE_ARRAYS = (("dataset_", "<f4"), ("graph_", "<i4"))
 
     def __init__(self, graph_degree=32, intermediate_graph_degree=64, n_neighbors=8, itopk_size=64,
-                 search_width=1, max_iterations=0, n_seeds=0):
+                 search_width=1, max_iterations=0, n_seeds=0, random_state=None):
         self.graph_degree = graph_degree
         self.intermediate_graph_degree = intermediate_graph_degree
         self.n_neighbors = n_neighbors
@@ -445,11 +456,34 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         self.search_width = search_width
         self.max_iterations = max_iterations
         self.n_seeds = n_seeds
+        self.random_state = random_state
 
     _KIND = 3
 
     def _p(self, name):
         return _ann_int("CagraIndex", name, getattr(self, name))
+
+    def _rs(self):
+        """The kernels' seed word: 0 for None, r + 1 for random_state r
+        (reduced into the int31 range the kernel argument holds)."""
+        r = self.random_state
+        if r is None:
+            return 0
+        r = _ann_int("CagraIndex", "random_state", r)
+        if r < 0:
+            raise ValueError("mojolearn CagraIndex: random_state must be None or >= 0")
+        return r % 2147483646 + 1
+
+    def _save_param(self, p):
+        if p == "random_state":
+            return -1 if self.random_state is None else self._rs() - 1
+        return super()._save_param(p)
+
+    @classmethod
+    def _load_param(cls, p, v):
+        if p == "random_state":
+            return None if v < 0 else v
+        return v
 
     def _resident_arrays(self):
         n, deg = self.n_rows_, self.graph_degree_
@@ -509,16 +543,16 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
                 handle,
                 # queries, out_d, out_i (x_ann/resident.mojo)
                 [addr_ro(q, name="queries"), addr(dist, name="distances"), addr(idx, name="indices")],
-                # m, k, itopk_size, search_width, max_iterations, n_seeds
-                [m, k, L, self._p("search_width"), max_iter, n_seeds],
+                # m, k, itopk_size, search_width, max_iterations, n_seeds, rs
+                [m, k, L, self._p("search_width"), max_iter, n_seeds, self._rs()],
             )
             return dist.reshape((m, k)), idx.reshape((m, k))
         native.x_ann_cagra_search(
             # x, graph, queries, out_d, out_i
             [addr_ro(self.dataset_, name="dataset_"), addr_ro(self.graph_.reshape((n * deg,)), name="graph_"),
              addr_ro(q, name="queries"), addr(dist, name="distances"), addr(idx, name="indices")],
-            # n, d, graph_degree, m, k, itopk_size, search_width, max_iterations, n_seeds
-            [n, d, deg, m, k, L, self._p("search_width"), max_iter, n_seeds],
+            # n, d, graph_degree, m, k, itopk_size, search_width, max_iterations, n_seeds, rs
+            [n, d, deg, m, k, L, self._p("search_width"), max_iter, n_seeds, self._rs()],
         )
         return dist.reshape((m, k)), idx.reshape((m, k))
 

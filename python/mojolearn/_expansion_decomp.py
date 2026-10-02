@@ -25,7 +25,8 @@ import sys
 
 from . import _backend
 from . import _portable_math as _pm
-from ._buffer import as_f32_c, as_i32_c, frombytes
+from ._array import Array
+from ._buffer import addr_ro, as_f32_c, as_i32_c, frombytes
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
@@ -334,6 +335,11 @@ _DEV_ONE = {}
 #: 0.129 / 0.124 s)
 import os as _os
 _RES_MIN = int(_os.environ.get("MOJOLEARN_XD_RES_MIN", "1"))
+#: A/B arm (lane hr2-graph-embed, 2026-10-02): Isomap's / LLE's kNN by
+#: heapq, their graphs, component walk and joins in Python, and the
+#: host-built Dijkstra arcs, instead of the graph cells
+#: (x_decomp/graph_cells.mojo) on device-resident matrices.
+_PY_GRAPH = _os.environ.get("MOJOLEARN_XD_PY_GRAPH", "") == "1"
 
 
 def _dev_one(kit):
@@ -514,6 +520,22 @@ class _Kit:
     def const(self, v, r=1, c=1):
         return _M.of([v] * (r * c), r, c)
 
+    def diag_mask(self, n):
+        """The n x n identity as a device matrix (1 on the diagonal, 0 off
+        it), made on the device by ONE `copyb` launch: the n * n buffer read
+        as rows of n + 1, whose first column is exactly the diagonal, takes
+        e = [1, 0, ..., 0] (length n + 1) as a row-vector broadcast. None on
+        a binding without the resident entries."""
+        if n < 1 or not self._res():
+            return None
+        out = self._dout(n, n)
+        e = _M.of([1.0] + [0.0] * n, 1, n + 1)
+        one = _M._dev_one(self)
+        did = out._d.id
+        self.b.x_decomp_dev_ew(did, self._did(e), one, did,
+                               [_OP["copyb"], n * n, n + 1, n + 1, 1, 1, 3], 0.0)
+        return out
+
     # ---- reductions and products
     def mm(self, A, B, ta=False, tb=False):
         m, k = (A.c, A.r) if ta else (A.r, A.c)
@@ -611,6 +633,20 @@ class _Kit:
             self.b.x_decomp_trisolve(lu.addr, idx.addr, B.addr, out.addr, [n, w, int(trans)])
         return out
 
+    def knn_select(self, D, k, exclude_self):
+        """(indices as floats, values) of each row's k smallest entries of D,
+        ascending by (value, column), column r skipped in row r when
+        exclude_self (x_decomp/cells.mojo `knn_select_row`)."""
+        n, m = D.r, D.c
+        if n * k and self._use(D):
+            I, V = self._dout(n, k), self._dout(n, k)
+            self.b.x_decomp_dev_knn_select(self._did(D), V._d.id, I._d.id, [n, m, k, int(bool(exclude_self))])
+            return I, V
+        I, V = _M.zeros(n, k), _M.zeros(n, k)
+        if n * k:
+            self.b.x_decomp_knn_select(D.addr, V.addr, I.addr, [n, m, k, int(bool(exclude_self))])
+        return I, V
+
     def lu_solve(self, lu, piv, B, trans=0):
         out = B.copy()
         p = [lu.r, B.c, trans] if trans else [lu.r, B.c]
@@ -697,24 +733,126 @@ class _Kit:
 
     def dijkstra(self, W):
         """All-pairs shortest paths on a dense undirected graph (0 = no edge),
-        one source per thread; -1 marks an unreachable pair."""
+        one source per thread; -1 marks an unreachable pair. The GPU binding
+        keeps W and the result resident and compresses the arcs on the
+        device (x_decomp/graph_device.mojo); MOJOLEARN_XD_PY_GRAPH=1 (A/B,
+        lane hr2-graph-embed) restores the host-address entry."""
         n = W.r
-        dist, reached = _M.zeros(n, n), _M.zeros(n, 1)
-        self.b.x_decomp_dijkstra_rows(W.addr, dist.addr, reached.addr, [n])
+        if _PY_GRAPH:
+            dist, reached = _M.zeros(n, n), _M.zeros(n, 1)
+            self.b.x_decomp_dijkstra_rows(W.addr, dist.addr, reached.addr, [n])
+            return dist
+        if self._res():
+            dist = self._dout(n, n)
+            self.b.x_decomp_dev_graph_dijkstra(self._did(W), dist._d.id, [n])
+            return dist
+        dist = _M.zeros(n, n)
+        self.b.x_decomp_graph_dijkstra(W.addr, dist.addr, [n])
         return dist
+
+    # ---- neighbor graphs (x_decomp/graph_cells.mojo, lane hr2-graph-embed):
+    # resident on the GPU binding, the same cells on the host binding
+    def graph_knn(self, D, nn, exclude_self):
+        """(idx, dst), n x nn each: the nn smallest of every row of D, ties
+        to the lower column, `exclude_self` dropping column i; idx holds the
+        column numbers as exact floats."""
+        n, m = D.r, D.c
+        p = [n, m, nn, int(bool(exclude_self))]
+        if self._res():
+            idx, dst = self._dout(n, nn), self._dout(n, nn)
+            if n * nn:
+                self.b.x_decomp_dev_graph_knn(self._did(D), idx._d.id, dst._d.id, p)
+            return idx, dst
+        idx, dst = _M.zeros(n, nn), _M.zeros(n, nn)
+        if n * nn:
+            self.b.x_decomp_graph_knn(D.addr, idx.addr, dst.addr, p)
+        return idx, dst
+
+    def graph_knn_dense(self, idx, w, n):
+        """The dense n x n graph W[i, idx[i, a]] = w[i, a] (1e-10 for 0)."""
+        nn = idx.c
+        if self._res():
+            out = self._dout(n, n)
+            self.b.x_decomp_dev_graph_knn_dense(self._did(idx), self._did(w), out._d.id, [n, nn])
+            return out
+        out = _M.zeros(n, n)
+        self.b.x_decomp_graph_knn_dense(idx.addr, w.addr, out.addr, [n, nn])
+        return out
+
+    def graph_radius(self, D, r):
+        """W[i, j] = D[i, j] (1e-10 for 0) where j != i and D[i, j] <= r."""
+        n = D.r
+        if self._res():
+            out = self._dout(n, n)
+            self.b.x_decomp_dev_graph_radius(self._did(D), out._d.id, [n], float(r))
+            return out
+        out = _M.zeros(n, n)
+        self.b.x_decomp_graph_radius(D.addr, out.addr, [n], float(r))
+        return out
+
+    def graph_lle_iw(self, idx, wb, n):
+        """LLE's dense I - W from the kNN lists and barycenter weights."""
+        nn = idx.c
+        if self._res():
+            out = self._dout(n, n)
+            self.b.x_decomp_dev_graph_lle_iw(self._did(idx), self._did(wb), out._d.id, [n, nn])
+            return out
+        out = _M.zeros(n, n)
+        self.b.x_decomp_graph_lle_iw(idx.addr, wb.addr, out.addr, [n, nn])
+        return out
+
+    def graph_components(self, W):
+        """(comp n x 1, C): the weak components of W (nonzero either way),
+        numbered by their lowest node."""
+        n = W.r
+        if self._res():
+            comp = self._dout(n, 1)
+            c = self.b.x_decomp_dev_graph_components(self._did(W), comp._d.id, [n])
+            return comp, int(c)
+        comp = _M.zeros(n, 1)
+        c = self.b.x_decomp_graph_components(W.addr, comp.addr, [n])
+        return comp, int(c)
+
+    def graph_join(self, W, D, comp, C):
+        """sklearn `_fix_connected_components`, W changed in place."""
+        n = W.r
+        if self._res():
+            self.b.x_decomp_dev_graph_join(self._did(W), self._did(D), self._did(comp), [n, C])
+            return W
+        self.b.x_decomp_graph_join(W.addr, D.addr, comp.addr, [n, C])
+        return W
 
     def barycenter(self, X, Y, nbr, reg):
         """sklearn barycenter_weights: (n x k) weights of each row of X on
         its k neighbors in Y (`nbr`: n lists of k indices)."""
-        n, k = X.r, len(nbr[0])
-        idx = _M.of([float(j) for row in nbr for j in row], n, k)
+        if isinstance(nbr, _M):
+            n, k, idx = X.r, nbr.c, nbr
+        else:
+            n, k = X.r, len(nbr[0])
+            idx = _M.of([float(j) for row in nbr for j in row], n, k)
         W, flags = _M.zeros(n, k), _M.zeros(n, 1)
         self.b.x_decomp_barycenter_rows(X.addr, Y.addr, idx.addr, W.addr, flags.addr, [n, Y.r, X.c, k], float(reg))
         return W
 
-    def als(self, C, Y, reg):
+    def als_resident(self, C):
+        """Whether `als` runs on the device with C resident (the GPU binding
+        with x_decomp_dev_als_rows): the item half-sweep then reads C through
+        strides (`trans=True`), so no transpose is built."""
+        return self._use(C) and hasattr(self._raw(), "x_decomp_dev_als_rows")
+
+    def als(self, C, Y, reg, trans=False):
         """One implicit least_squares half-sweep: every row's factor from the
-        confidences C (n x m) and the other side's factors Y (m x f)."""
+        confidences C (n x m; with trans, the rows are C's columns) and the
+        other side's factors Y (m x f). trans needs `als_resident(C)`."""
+        if trans or self.als_resident(C):
+            n, m = (C.c, C.r) if trans else (C.r, C.c)
+            f = Y.c
+            YtY = self.mm(Y, Y, ta=True)
+            X, flags = self._dout(n, f), self._dout(n, 1)
+            su, si = (1, C.c) if trans else (C.c, 1)
+            self.b.x_decomp_dev_als_rows(self._did(C), self._did(Y), self._did(YtY), X._d.id, flags._d.id,
+                                         [n, m, f, su, si, C.r * C.c], float(reg))
+            return X
         n, f = C.r, Y.c
         YtY = self.mm(Y, Y, ta=True)
         X, flags = _M.zeros(n, f), _M.zeros(n, 1)
@@ -724,7 +862,7 @@ class _Kit:
     def geqrf(self, A):
         """(h, tau): LAPACK geqrf's factored form of A (m x n, any shape): R on
         and above the diagonal, the reflectors' tails below it, tau
-        (1 x min(m, n)) their scalars (x_decomp/cells.mojo `geqrf_serial`,
+        (1 x min(m, n)) their scalars (x_decomp/qr_sliced.mojo's order,
         DEVIATION 5320)."""
         h = A.copy()
         kk = min(A.r, A.c)
@@ -734,7 +872,7 @@ class _Kit:
 
     def orgqr(self, h, tau, qc):
         """The first qc columns of Q = H_0 ... H_{k-1} (m x qc) from geqrf's
-        (h, tau), one column per thread (`orgqr_col`)."""
+        (h, tau), in x_decomp/qr_sliced.mojo's order."""
         Q = _M.zeros(h.r, qc)
         self.b.x_decomp_orgqr(h.addr, tau.addr, Q.addr, [h.r, h.c, tau.c, qc])
         return Q
@@ -1000,6 +1138,24 @@ def _pinv_rows(k, C):
     return k.lu_solve(lu, piv, C).T
 
 
+def _rp_tiled():
+    """The A/B switch MOJOLEARN_XD_RP_TILED (lane gap-nb-maxabs-grp; unset or
+    anything but "0": on): the random projections draw their matrix on the
+    device (`x_decomp_dev_rand`, the same Philox words as `x_decomp_rand`)
+    and transform through the tiled projection kernel."""
+    return _os.environ.get("MOJOLEARN_XD_RP_TILED", "1").strip() != "0"
+
+
+def _rp_rand(k, r, c, seed, stream, kind, dev):
+    """`k.rand`'s matrix; with dev, drawn into a device matrix by the same
+    kernel (enqueued, nothing downloaded)."""
+    if not (dev and r * c):
+        return k.rand(r, c, seed, stream, kind)
+    out = k._dout(r, c)
+    k.b.x_decomp_dev_rand(out._d.id, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
+    return out
+
+
 class _RandomProjection(_Base):
     """sklearn `random_projection.py::BaseRandomProjection`. The matrix is
     drawn from the lane's counter-based Philox stream (x_decomp/cells.mojo
@@ -1026,8 +1182,18 @@ class _RandomProjection(_Base):
         k = self._kit()
         self.n_components_ = kc
         self.n_features_in_ = d
-        self.components_m_ = self._make(k, kc, d, _seed_of(self.random_state))
-        self.components_ = self.components_m_.out()
+        dev = _rp_tiled() and k._res()
+        self.components_m_ = self._make(k, kc, d, _seed_of(self.random_state), dev)
+        if dev and self.components_m_._d is not None:
+            # MOJOLEARN_XD_RP_TILED: the matrix was drawn on the device and
+            # stays there for transform; components_ is a copy of its words
+            # (one download, the device matrix kept)
+            C = self.components_m_
+            res = array.array("f", [0.0]) * (kc * d)
+            k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], kc * d)
+            self.components_ = Array._owned(res, (kc, d), "<f4", "C")
+        else:
+            self.components_ = self.components_m_.out()
         if self.compute_inverse_components:
             self.inverse_m_ = _pinv_rows(k, self.components_m_)
             self.inverse_components_ = self.inverse_m_.out()
@@ -1035,10 +1201,46 @@ class _RandomProjection(_Base):
 
     def transform(self, X):
         self._check()
+        if _rp_tiled() and not _is_sparse(X):
+            out = self._project(X)
+            if out is not None:
+                return out
         M = _M.from_input(X)
         if M.c != self.n_features_in_:
             raise ValueError(f"X has {M.c} features, but {type(self).__name__} is expecting {self.n_features_in_}")
         return self._kit().mm(M, self.components_m_, tb=True).out()
+
+    def _project(self, X):
+        """transform on the GPU binding (lane gap-nb-maxabs-grp; the A/B
+        switch MOJOLEARN_XD_RP_TILED=0 keeps the path above): X goes up from
+        its own buffer (no host copy into a store, no host finiteness pass),
+        x_decomp_dev_project's tiled kernel computes `mm(X, components, tb)`'s
+        words and flags a non-finite entry of X on the device, and the result
+        comes down once into the returned array. None on the host binding
+        (or a column without the tile): the caller takes the path above."""
+        k = self._kit()
+        if not k._res():
+            return None
+        a = as_f32_c(X, ndim=2, name="X")[0]
+        if a.ndim != 2 or min(a.shape) == 0:
+            raise ValueError("X: a nonempty two-dimensional input is required")
+        m, d = a.shape
+        if d != self.n_features_in_:
+            raise ValueError(f"X has {d} features, but {type(self).__name__} is expecting {self.n_features_in_}")
+        B = self.components_m_
+        nc = B.r
+        A = _M._on_device(_DevBuf(k._raw(), a.size), m, d)
+        k.b.x_decomp_dev_upload(A._d.id, addr_ro(a, name="X"), a.size)
+        C, flag = k._dout(m, nc), k._dout(1, 1)
+        if int(k.b.x_decomp_dev_project(A._d.id, k._did(B), C._d.id, flag._d.id, [m, d, nc])) < 0:
+            return None
+        res = array.array("f", [0.0]) * (m * nc)
+        k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], m * nc)
+        bad = array.array("f", [0.0])
+        k.b.x_decomp_dev_download(flag._d.id, bad.buffer_info()[0], 1)
+        if bad[0] != 0:
+            raise ValueError("X: input must be finite; NaN/inf are unsupported")
+        return Array._owned(res, (m, nc), "<f4", "C")
 
     def inverse_transform(self, X):
         self._check()
@@ -1059,8 +1261,8 @@ class GaussianRandomProjection(_RandomProjection):
         self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
         self.numeric_mode = numeric_mode
 
-    def _make(self, k, kc, d, seed):
-        return k.ew("scale", k.rand(kc, d, seed, 1, 1), s=1.0 / math.sqrt(kc))
+    def _make(self, k, kc, d, seed, dev=False):
+        return k.ew("scale", _rp_rand(k, kc, d, seed, 1, 1, dev), s=1.0 / math.sqrt(kc))
 
 
 class SparseRandomProjection(_RandomProjection):
@@ -1078,13 +1280,13 @@ class SparseRandomProjection(_RandomProjection):
         self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
         self.numeric_mode = numeric_mode
 
-    def _make(self, k, kc, d, seed):
+    def _make(self, k, kc, d, seed, dev=False):
         dens = 1.0 / math.sqrt(d) if self.density == "auto" else float(self.density)
         if not 0 < dens <= 1:
             raise ValueError(f"Expected density in range ]0, 1], got: {dens}")
         self.density_ = dens
-        u = k.rand(kc, d, seed, 2, 0)
-        sgn = k.ew("scale", k.rand(kc, d, seed, 3, 2), s=math.sqrt(1.0 / dens) / math.sqrt(kc))
+        u = _rp_rand(k, kc, d, seed, 2, 0, dev)
+        sgn = k.ew("scale", _rp_rand(k, kc, d, seed, 3, 2, dev), s=math.sqrt(1.0 / dens) / math.sqrt(kc))
         if dens == 1:
             return sgn
         # u < density keeps the signed value, else 0 (select: x > s -> y else z)
@@ -1998,16 +2200,96 @@ def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normal
     return U.cols(0, kc), S.cols(0, kc), Vt.rows(0, kc)
 
 
+#: x_decomp/tsqr_core.mojo TS_MAX_N: the widest [A | B] the TSQR takes
+_TS_MAX_N = 512
+
+
+def _f32_input(X, name, ndim):
+    """A C-contiguous float32 Array of X (no copy when it already is one),
+    NaN/inf refused as `_M.from_input` refuses them."""
+    if _is_sparse(X):
+        X = X.toarray()
+    a = as_f32_c(X, ndim=ndim, name=name)[0]
+    if min(a.shape) == 0:
+        raise ValueError(f"{name}: a nonempty input is required")
+    fin = _host_all_finite(a)
+    if fin is False:
+        raise ValueError(f"{name}: input must be finite; NaN/inf are unsupported")
+    if fin is None:
+        _M.from_input(a if a.ndim == 2 else a.reshape(a.shape[0], 1), name)
+    return a
+
+
+def _tsqr_lstsq_on(m, nn, nrhs):
+    import os
+    return (os.environ.get("MOJOLEARN_LINALG_TSQR", "1") != "0"
+            and nn >= 1 and nrhs >= 1 and nn + nrhs <= _TS_MAX_N and m >= nn + nrhs)
+
+
+def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond):
+    """(X nn x nrhs, residuals _M 1 x nrhs or None, rank, S 1 x nn) of
+    min ||A X - B|| through the blocked TSQR of [A | B] (lane
+    neural-pass140; x_decomp/tsqr_core.mojo): R_aug = [[R, C], [0, R22]]
+    with C = Q^T B, so no pass over the rows after the factorization and no
+    Gram matrix. The minimum-norm solution is the SVD of the small R
+    (`_svd_tall`: S descending, U_R orthonormal): X = V diag(1/s) U_R^T C,
+    singular values at or below rcond * s_max dropped, as before; the
+    residuals (rank == nn < m only) are the squared column norms of R22,
+    which is ||b - a x||^2 at the least-squares solution."""
+    from ._linalg_impl import _svd_tall
+    from ._buffer import addr_ro
+    n = nn + nrhs
+    Ra = _M.zeros(n, n)
+    # ORDER MATCHES x_decomp/api.mojo tsqr_r_py: (a, b, r_out), (m, d, nrhs, keep)
+    k.b.x_decomp_tsqr_r(addr_ro(a_arr, name="a"), addr_ro(b_arr, name="b"), Ra.addr,
+                        [int(m), int(nn), int(nrhs), 0])
+    top = Ra.rows(0, nn)
+    R, C = top.cols(0, nn), top.cols(nn, n)
+    Ur, S, Vt = _svd_tall(k, R, False)
+    cut = _f32(S.s[0] * rcond)
+    rank = sum(1 for v in S.s if v > cut)
+    inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
+    X = k.mm(Vt, k.ew("mul", k.mm(Ur, C, ta=True), inv.T), ta=True)
+    res = None
+    if rank == nn and m > nn:
+        res = k.colsum(k.ew("sq", Ra.rows(nn, n).cols(nn, n)))
+    return X, res, rank, S
+
+
+def _lstsq_tsqr(k, a, b, vec, rcond):
+    """`lstsq` through the blocked TSQR when it serves the shape (tall,
+    [A | B] at most _TS_MAX_N wide), else None (the SVD route below)."""
+    a_arr = _f32_input(a, "a", 2)
+    m, nn = a_arr.shape
+    b_arr = _f32_input(b, "b", 1 if vec else 2)
+    nrhs = 1 if vec else b_arr.shape[1]
+    if b_arr.shape[0] != m:
+        raise ValueError("Incompatible dimensions")
+    if not _tsqr_lstsq_on(m, nn, nrhs):
+        return None
+    if rcond is None:
+        rcond = _F32_EPS * max(m, nn)
+    X, res, rank, S = _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond)
+    resid = res.out((nrhs,)) if res is not None else _M.zeros(1, 0).out((0,))
+    return (X.out((nn,)) if vec else X.out()), resid, rank, S.out((nn,))
+
+
 def lstsq(a, b, rcond=None, *, numeric_mode=None):
-    """numpy.linalg.lstsq: (x, residuals, rank, s) through the SVD of a
-    (the Gram eigh of the smaller side, singular values descending), singular
-    values at or below rcond * s_max treated as zero (rcond None: float32
-    eps * max(M, N)). residuals are the squared column norms of b - a x when
-    rank == N < M, else empty."""
+    """numpy.linalg.lstsq: (x, residuals, rank, s), singular values
+    descending, those at or below rcond * s_max treated as zero (rcond None:
+    float32 eps * max(M, N)); residuals are the squared column norms of
+    b - a x when rank == N < M, else empty. A tall a with N + nrhs <= 512
+    takes the blocked TSQR of [a | b] and the SVD of its small R
+    (`_tsqr_lstsq_core`, lane neural-pass140; MOJOLEARN_LINALG_TSQR=0 keeps
+    the route below); any other shape the QR + one-sided Jacobi SVD of a (or
+    of a^T)."""
     k = _Kit(_mode(numeric_mode))
+    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
+    got = _lstsq_tsqr(k, a, b, vec, rcond)
+    if got is not None:
+        return got
     A = _M.from_input(a, "a")
     m, nn = A.r, A.c
-    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
     B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
     if B.r != m:
         raise ValueError("Incompatible dimensions")
@@ -2798,8 +3080,7 @@ class LatentDirichletAllocation(_Base):
             [M.r, v, nc, bs, int(self.max_doc_update_iter), int(self._seed) & 0xFFFFFFFF, self._draw,
              self.n_batch_iter_],
             [float(self.doc_topic_prior_), float(self.topic_word_prior_), float(self.learning_offset),
-             float(self.learning_decay), float(self.mean_change_tol), float(total_samples)],
-            int(_os.environ.get("MOJOLEARN_XD_RES_DEV_MIN", "65536")))
+             float(self.learning_decay), float(self.mean_change_tol), float(total_samples)])
 
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
@@ -2870,16 +3151,24 @@ class LatentDirichletAllocation(_Base):
         nc = self.components_m_.r
         ddt = _dirichlet_expectation_2d(k, Dt)             # n x k
         dcomp = _dirichlet_expectation_2d(k, self.components_m_)   # k x v
-        zero = _M.zeros(n, v)
-        terms = [k.ew("add", k.ew("add", zero, ddt.cols(t, t + 1)), dcomp.rows(t, t + 1)) for t in range(nc)]
-        mx = terms[0]
-        for t in range(1, nc):
-            mx = k.ew("max", mx, terms[t])
-        acc = _M.zeros(n, v)
-        for t in range(nc):
-            acc = k.ew("add", acc, k.ew("exp", k.ew("sub", terms[t], mx)))
-        lse = k.ew("add", k.ew("logs", acc, s=1.1754943508222875e-38), mx)
-        score = k.total(k.ew("mul", M, lse)).s[0]
+        floor = 1.1754943508222875e-38
+        if n * v and k._use(M, ddt, dcomp) and hasattr(k._raw(), "x_decomp_dev_lda_bound"):
+            # lane gap-lda-als: the same ew cells per (i, w) in one kernel,
+            # no n x v term matrix per topic (the L40S text-block OOM)
+            P = k._dout(n, v)
+            k.b.x_decomp_dev_lda_bound(k._did(M), k._did(ddt), k._did(dcomp), P._d.id, [n, nc, v], [floor])
+            score = k.total(P).s[0]
+        else:
+            zero = _M.zeros(n, v)
+            terms = [k.ew("add", k.ew("add", zero, ddt.cols(t, t + 1)), dcomp.rows(t, t + 1)) for t in range(nc)]
+            mx = terms[0]
+            for t in range(1, nc):
+                mx = k.ew("max", mx, terms[t])
+            acc = _M.zeros(n, v)
+            for t in range(nc):
+                acc = k.ew("add", acc, k.ew("exp", k.ew("sub", terms[t], mx)))
+            lse = k.ew("add", k.ew("logs", acc, s=floor), mx)
+            score = k.total(k.ew("mul", M, lse)).s[0]
         score += self._loglik(k, self.doc_topic_prior_, Dt, ddt, nc)
         if sub_sampling:
             score *= float(self.total_samples) / n
@@ -2950,21 +3239,20 @@ def _dist(k, A, B, kind, pw, same=False):
 
 
 #: FAST on Apple (lane/apple-fast-isotonic-knn, 2026-10-02): LLE's neighbour
-#: lists on the device. `_knn_lists` downloads the n x n squared distances
-#: and runs heapq.nsmallest over every row in Python (10,000 rows: 1e8
-#: key calls; the board's lle row is 14x (taxi) / 6.3x (Istella) behind
-#: scikit-learn). MOJOLEARN_LLE_FAST_KNN=1 takes the x_neighbors lane's
-#: fused k-NN (`xn_knn_sq_tiled`: ascending by (squared distance, index),
-#: the query's own row dropped; with MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1
-#: that reaches fast_mma_knn). FAST tier only; the same lists up to the
-#: distance rounding of the fused item.
+#: lists from the x_neighbors lane's fused k-NN. Main selects them with the
+#: `graph_knn` cell over the n x n squared-distance matrix (`_knn_mats`,
+#: lane hr2-graph-embed); MOJOLEARN_LLE_FAST_KNN=1 takes `xn_knn_sq_tiled`
+#: instead: ascending by (squared distance, index), the query's own row
+#: dropped, no n x n matrix (with `-D MOJOLEARN_XN_FAST_MMA_ROUTE=1` the
+#: binding routes it through fast_mma_knn). FAST tier only; the same lists
+#: up to the distance rounding of the fused item.
 _LLE_FAST_KNN = _os.environ.get("MOJOLEARN_LLE_FAST_KNN", "") == "1"
 
 
-def _knn_lists_device(k, Q, X, n_neighbors, exclude_self):
-    """`_knn_lists` (kind 0) through the x_neighbors binding: (indices,
-    squared distances) as lists; None when the binding or the shape is not
-    there (the caller runs the host lists)."""
+def _knn_fused_device(k, Q, X, n_neighbors, exclude_self):
+    """(indices array('i'), squared distances array('f')), n x n_neighbors
+    row-major, from the x_neighbors binding's `xn_knn_sq_tiled`; None when
+    the binding or the shape is not there (the caller runs main's path)."""
     try:
         fn = getattr(_backend.binding("_mojolearn_x_neighbors", k.mode), "xn_knn_sq_tiled")
     except Exception:
@@ -2978,9 +3266,38 @@ def _knn_lists_device(k, Q, X, n_neighbors, exclude_self):
     idx = array.array("i", [0]) * (n * nn)
     fn([Q.addr, X.addr, dist.buffer_info()[0], idx.buffer_info()[0]],
        [n, m, d, nn, 1 if exclude_self else 0], [])
-    il = idx.tolist()
-    dl = dist.tolist()
-    return ([il[i * nn:(i + 1) * nn] for i in range(n)], [dl[i * nn:(i + 1) * nn] for i in range(n)])
+    return idx, dist
+
+
+def _knn_mats_device(k, Q, X, n_neighbors, exclude_self):
+    """`_knn_mats` (kind 0) through `_knn_fused_device`: the index matrix
+    holds the column numbers as exact floats, as `graph_knn` writes them
+    (one C-level cast of the int32 store, no Python loop); None when the
+    fused k-NN is not there."""
+    got = _knn_fused_device(k, Q, X, n_neighbors, exclude_self)
+    if got is None:
+        return None
+    nn = int(n_neighbors)
+    return _M(array.array("f", got[0]), Q.r, nn), _M(got[1], Q.r, nn)
+
+
+def _knn_lists_device(k, Q, X, n_neighbors, exclude_self):
+    """`_knn_lists` (kind 0) through `_knn_fused_device`."""
+    got = _knn_fused_device(k, Q, X, n_neighbors, exclude_self)
+    if got is None:
+        return None
+    nn = int(n_neighbors)
+    il = got[0].tolist()
+    dl = got[1].tolist()
+    return ([il[i * nn:(i + 1) * nn] for i in range(Q.r)], [dl[i * nn:(i + 1) * nn] for i in range(Q.r)])
+
+
+def _knn_mats(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
+    """`_knn_lists` as two matrices (indices as exact floats, distances),
+    n x n_neighbors, selected by the `graph_knn` cell (resident on the GPU
+    binding)."""
+    D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
+    return k.graph_knn(D, n_neighbors, exclude_self)
 
 
 def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0, device_ok=False):
@@ -2993,20 +3310,22 @@ def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0, device_ok=Fal
         got = _knn_lists_device(k, Q, X, n_neighbors, exclude_self)
         if got is not None:
             return got
+    if not _PY_GRAPH:
+        im, dm = _knn_mats(k, Q, X, n_neighbors, exclude_self, kind, pw)
+        nn = n_neighbors
+        iv, dv = im.s, dm.s
+        return ([[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)],
+                [list(dv[i * nn:(i + 1) * nn]) for i in range(Q.r)])
     D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
-    idx, dst = [], []
-    take = n_neighbors + (1 if exclude_self else 0)
-    for i in range(Q.r):
-        row = D.row(i)
-        # the `take` smallest, exactly sorted(range(X.r), key=(row[j], j))[:take]
-        # (nsmallest is stable: ties to the lower index), O(n) per row
-        # instead of the full sort (lane/lle-timeout: 51 s of a 10,000-row fit)
-        order = _heapq.nsmallest(take, range(X.r), key=row.__getitem__)
-        if exclude_self:
-            order = [j for j in order if j != i]
-        sel = order[:n_neighbors]
-        idx.append(sel)
-        dst.append([row[j] for j in sel])
+    # each row's n_neighbors smallest by (value, column), its own column
+    # skipped: exactly nsmallest(n_neighbors + 1) less the row itself, on the
+    # device beside D (lane neural-pass142; the host heap walk was 5.5 s of a
+    # 10,000-row LocallyLinearEmbedding fit on the M4)
+    nn = min(n_neighbors, X.r - (1 if exclude_self else 0))
+    I, V = k.knn_select(D, nn, exclude_self)
+    iv, vv = I.s, V.s
+    idx = [[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)]
+    dst = [list(vv[i * nn:(i + 1) * nn]) for i in range(Q.r)]
     return idx, dst
 
 
@@ -3212,6 +3531,51 @@ class Isomap(_Base):
         k = self._kit()
         M = _M.from_input(X)
         n = M.r
+        if not _PY_GRAPH:
+            Wg, nn = self._graph(k, M, n, kind, pw)
+        else:
+            Wg, nn = self._py_graph(k, M, n, kind, pw)
+        D = k.dijkstra(Wg)
+        self.dist_matrix_m_ = D
+        self.dist_matrix_ = D.out()
+        G = k.ew("scale", k.ew("sq", D), s=-0.5)
+        Kc, self._k_col, self._k_all = _center_kernel(k, G)
+        w, V = _top_eig(k, Kc, int(self.n_components), topk=self.eigen_solver in ("auto", "arpack"))
+        self.eigenvalues_m_ = w
+        self.eigenvectors_m_ = V
+        self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
+        self.embedding_ = self.embedding_m_.out()
+        self._fit_X, self._knn = M, nn
+        self.n_features_in_ = M.c
+        self._Kc = Kc
+        return self
+
+    def _graph(self, k, M, n, kind, pw):
+        """The neighbor graph, its components joined (sklearn
+        `_fix_connected_components`), all as graph cells (lane
+        hr2-graph-embed): resident on the GPU binding."""
+        if self.radius is not None:
+            D = _dist(k, M, M, kind, pw, same=True)
+            Wg = k.graph_radius(D, _f32(float(self.radius)))
+            nn = None
+        else:
+            nn = int(self.n_neighbors)
+            idx, sq = _knn_mats(k, M, M, nn, True, kind, pw)
+            if kind == 0:
+                sq = k.ew("sqrt", sq)
+            Wg = k.graph_knn_dense(idx, sq, n)
+        comp, C = k.graph_components(Wg)
+        self.n_connected_components_ = C
+        if C > 1:
+            import warnings
+            warnings.warn(f"The number of connected components of the neighbors graph is {C} > 1. "
+                          "Completing the graph to fit Isomap might be slow.", stacklevel=3)
+            D = _dist(k, M, M, kind, pw, same=True)
+            k.graph_join(Wg, D, comp, C)
+        return Wg, nn
+
+    def _py_graph(self, k, M, n, kind, pw):
+        """MOJOLEARN_XD_PY_GRAPH=1 (A/B): the Python graph build."""
         Wg = _M.zeros(n, n)
         adj = [[] for _ in range(n)]      # neighbors either way, for the component walk
         if self.radius is not None:
@@ -3238,20 +3602,7 @@ class Isomap(_Base):
                     adj[i].append(j)
                     adj[j].append(i)
         Wg, self.n_connected_components_ = _fix_components(k, M, Wg, kind, pw, adj)
-        D = k.dijkstra(Wg)
-        self.dist_matrix_m_ = D
-        self.dist_matrix_ = D.out()
-        G = k.ew("scale", k.ew("sq", D), s=-0.5)
-        Kc, self._k_col, self._k_all = _center_kernel(k, G)
-        w, V = _top_eig(k, Kc, int(self.n_components), topk=self.eigen_solver in ("auto", "arpack"))
-        self.eigenvalues_m_ = w
-        self.eigenvectors_m_ = V
-        self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
-        self.embedding_ = self.embedding_m_.out()
-        self._fit_X, self._knn = M, nn
-        self.n_features_in_ = M.c
-        self._Kc = Kc
-        return self
+        return Wg, nn
 
     def fit_transform(self, X, y=None):
         return self.fit(X).embedding_
@@ -3474,19 +3825,32 @@ class MDS(_Base):
         d = self._dist(k, Y)
         old = None
         it = 0
+        # The Guttman transform's diagonal on the device (lane hr2-mds-agglo):
+        # B's diagonal gets the row sums by fma(I, rs, B) (1 * rs + B, one
+        # rounding: the add the host loop did; 0 * rs + B is B off it), so
+        # the n x n matrix stays resident; the host loop read all of B and
+        # wrote it back every iteration. MOJOLEARN_XD_MDS_DIAG_V0=1 is the
+        # old loop (the A/B switch).
+        eye = None
+        if _os.environ.get("MOJOLEARN_XD_MDS_DIAG_V0") != "1":
+            eye = k.diag_mask(n)
+        floor = k.const(1e-5)
         for it in range(1, self.max_iter + 1):
             if native:
                 disp = nm(d, it == 1)
             elif nonmetric:
                 flat = dis_w if it == 1 else ir.fit_transform(dis_w, [d.s[q] for q in pos]).tolist()
                 disp = self._disparities(k, n, pos, flat)
-            dz = k.ew("select", d, d, k.const(1e-5), s=0.0)
+            dz = k.ew("select", d, d, floor, s=0.0)
             ratio = k.ew("div", disp, dz)
             B = k.ew("scale", ratio, s=-1.0)
             rs = k.rowsum(ratio)
-            B = B.copy()
-            for i in range(n):
-                B.s[i * n + i] = _f32(B.s[i * n + i] + rs.s[i])
+            if eye is not None:
+                B = k.ew("fma", eye, rs, B)
+            else:
+                B = B.copy()
+                for i in range(n):
+                    B.s[i * n + i] = _f32(B.s[i * n + i] + rs.s[i])
             Y = k.ew("scale", k.mm(B, Y), s=1.0 / n)
             d = self._dist(k, Y)
             stress = k.total(k.ew("sqdiff", d, disp)).s[0] / 2
@@ -3752,8 +4116,24 @@ class LocallyLinearEmbedding(_Base):
                              "[n_components * (n_components + 3) / 2]")
         if self.method == "modified" and nn < nc:
             raise ValueError("modified LLE requires n_neighbors >= n_components")
-        idx, _ = _knn_lists(k, M, M, nn, True, device_ok=True)
-        if self.method == "ltsa":
+        if self.method == "standard" and not _PY_GRAPH:
+            # lane hr2-graph-embed: the kNN, the barycenter weights and I - W
+            # as cells, I - W resident on the GPU binding
+            idm = None
+            if _LLE_FAST_KNN and k.mode == "fast":
+                # FAST on Apple (lane/apple-fast-isotonic-knn): the fused
+                # k-NN's index matrix, no n x n distance matrix built
+                got = _knn_mats_device(k, M, M, nn, True)
+                idm = got[0] if got is not None else None
+            if idm is None:
+                idm, _ = _knn_mats(k, M, M, nn, True)
+            IW = k.graph_lle_iw(idm, k.barycenter(M, M, idm, self.reg), n)
+            idx = None
+        else:
+            idx, _ = _knn_lists(k, M, M, nn, True, device_ok=True)
+        if idx is None:
+            pass
+        elif self.method == "ltsa":
             IW = self._ltsa_factor(k, M, idx, nn, nc)
         elif self.method == "hessian":
             IW = self._hessian_factor(k, M, idx, nn, nc)
@@ -4126,8 +4506,7 @@ class MinCovDet(_Base):
         loc, cov, dist = _M.zeros(1, p), _M.zeros(p, p), _M.zeros(n, 1)
         sup = array.array("i", [0]) * n
         k.b.x_decomp_mcd(X.addr, loc.addr, cov.addr, sup.buffer_info()[0], dist.addr,
-                         [n, p, h, int(self._seed) & 0xFFFFFFFF] + plan,
-                         int(_os.environ.get("MOJOLEARN_XD_RES_DEV_MIN", "65536")))
+                         [n, p, h, int(self._seed) & 0xFFFFFFFF] + plan)
         return loc, cov, [v != 0 for v in sup], dist
 
     def _fast_mcd(self, k, X):
@@ -4328,7 +4707,10 @@ class AlternatingLeastSquares(_Base):
         R = _M.from_input(user_items, "user_items")
         n, m = R.r, R.c
         C = R if self.alpha == 1.0 else k.ew("scale", R, s=self.alpha)
-        Ct = C.T
+        # resident (lane gap-lda-als): C stays on the device and the item
+        # half-sweep reads it through strides; the host column transposes
+        res = not self.use_cg and k.als_resident(C)
+        Ct = None if res else C.T
         seed = _seed_of(self.random_state)
         f = int(self.factors)
         X = k.ew("scale", k.rand(n, f, seed, 80, 0), s=0.01)
@@ -4342,13 +4724,15 @@ class AlternatingLeastSquares(_Base):
                 Y = k.als_cg(Ct, X, Y, self.regularization, self.cg_steps)
             else:
                 X = k.als(C, Y, self.regularization)
-                Y = k.als(Ct, X, self.regularization)
+                Y = k.als(C, X, self.regularization, trans=True) if res else k.als(Ct, X, self.regularization)
             if self.calculate_training_loss:
                 losses.append(self._loss(k, C, X, Y))
         if self.calculate_training_loss:
             self.training_loss_ = losses
         self.user_factors_m_, self.item_factors_m_ = X, Y
         self.user_factors, self.item_factors = X.out(), Y.out()
+        # sklearn-style fitted names (the board harness and docs read these)
+        self.user_factors_, self.item_factors_ = self.user_factors, self.item_factors
         self.components_m_ = Y
         return self
 

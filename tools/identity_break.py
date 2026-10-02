@@ -497,16 +497,6 @@ import numpy as np
 from contextlib import contextmanager
 from pathlib import Path
 
-# A GPU COLUMN MEASURES THE GPU (perf/gbdt-small-round2, 2026-09-22).
-# `GradientBoosting.fit` trains a small IDENTICAL pool on the CPU host
-# binding (`ensemble._small_pool_host`); every lane here fits small
-# fixtures, so without this pin the GPU columns of the gbdt lanes would
-# quietly hash the host fit the CPU column already hashes. Worker
-# processes inherit it. On a CPU-only install the route is the host
-# binding whatever this says.
-os.environ["MOJOLEARN_GBDT_ROUTE"] = "device"
-
-
 def atomic_json(path, value):
     path = Path(path)
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
@@ -1701,8 +1691,8 @@ def _(ml, X, yc, yr, Xh=None):
     the fixture's with the flags folded in (below), so the flags decide
     splits.
 
-    The fits are the configurations the small-pool host route takes
-    (`GradientBoosting._small_pool_host`): Plain and Ordered, Logloss and
+    The fits are the configurations the small-pool host route took before
+    lane hr-gbdt-small deleted it: Plain and Ordered, Logloss and
     RMSE, at `_gbdt`'s recorded options, 20 depth-6 trees each; the Ordered
     RMSE fit again at CatBoost's GPU defaults for the bootstrap and the
     noise (Bayesian, random_strength 1), which is what an unset
@@ -6118,11 +6108,9 @@ def _(ml, X, yc, yr, Xh=None):
     """resample.permutation_test between the fixture's two label groups
     of yr (the first 512 rows of each), 2048 permutations, three
     alternatives: the pooled Philox permutation map, the between-group
-    fold and the conservative p-value (DEVIATION 1702). The pooled sample
-    is at most 1024 = PERM_MAX_POOLED (resample/checks/index_map.mojo, a
-    comptime limit, refused by name above it); with 2048 per group the
-    lane read REFUSED on the M4 on every fixture (2026-09-14 night) and so
-    on every vendor."""
+    fold and the conservative p-value (DEVIATION 1702). 512 rows per group
+    (the pooled sample was bounded at 1024 = PERM_MAX_POOLED until the
+    radix-select kernel lifted it on 2026-10-02; the fixture is kept)."""
     rs = ml.resample
     a = np.ascontiguousarray(yr[:4096][yc[:4096] == 0][:512])
     b = np.ascontiguousarray(yr[:4096][yc[:4096] == 1][:512])

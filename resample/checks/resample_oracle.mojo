@@ -222,6 +222,20 @@ def oracle_permutation_statistic_f32(
     is replayed here is the MASKED FOLD.
     """
     var ranks = permutation_ranks_host(key, r, n_pooled)
+    return oracle_permutation_statistic_from_ranks(
+        pooled, ranks, n_pooled, n_x, stat
+    )
+
+
+def oracle_permutation_statistic_from_ranks(
+    pooled: List[Float32],
+    ranks: List[Int32],
+    n_pooled: Int,
+    n_x: Int,
+    stat: Int,
+) raises -> Float32:
+    """The masked fold of `oracle_permutation_statistic_f32` over a given
+    rank vector (`rank < n_x` is the first group)."""
     var n_y = n_pooled - n_x
     var vx = List[Float32]()
     var vy = List[Float32]()
