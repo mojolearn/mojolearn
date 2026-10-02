@@ -708,7 +708,7 @@ class _Kit:
     def geqrf(self, A):
         """(h, tau): LAPACK geqrf's factored form of A (m x n, any shape): R on
         and above the diagonal, the reflectors' tails below it, tau
-        (1 x min(m, n)) their scalars (x_decomp/cells.mojo `geqrf_serial`,
+        (1 x min(m, n)) their scalars (x_decomp/qr_sliced.mojo's order,
         DEVIATION 5320)."""
         h = A.copy()
         kk = min(A.r, A.c)
@@ -718,7 +718,7 @@ class _Kit:
 
     def orgqr(self, h, tau, qc):
         """The first qc columns of Q = H_0 ... H_{k-1} (m x qc) from geqrf's
-        (h, tau), one column per thread (`orgqr_col`)."""
+        (h, tau), in x_decomp/qr_sliced.mojo's order."""
         Q = _M.zeros(h.r, qc)
         self.b.x_decomp_orgqr(h.addr, tau.addr, Q.addr, [h.r, h.c, tau.c, qc])
         return Q

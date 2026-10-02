@@ -49,15 +49,6 @@ from x_decomp.cells import (
     add,
     mul,
     als_cg_row,
-    geqrf_dot,
-    geqrf_head,
-    geqrf_scale_elem,
-    geqrf_serial,
-    geqrf_update_elem,
-    orgqr_col,
-    orgqr_dot,
-    orgqr_init_elem,
-    orgqr_update_elem,
     barycenter_row,
     dijkstra_arc_count,
     dijkstra_arcs,
@@ -82,7 +73,6 @@ from x_decomp.cells import (
     sqdist_cell,
 )
 from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_on_host
-from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_on_host
 from x_decomp.exec_trait import Exec
 from x_decomp.host import HostExec
 from x_decomp.jacobi2 import (
@@ -92,7 +82,6 @@ from x_decomp.jacobi2 import (
     one_sided_svd2_finish_kernel,
 )
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
-from x_decomp.qr_sliced import XD_QR_SLICED
 from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
 from x_decomp.tsqr_device import ts_apply_device, ts_factor_device, ts_free_device, ts_pack_device
 from x_decomp.jacobi_par import (
@@ -757,264 +746,6 @@ def als_cg_kernel(
     var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if u < Int(n):
         steps.unsafe_store(u, als_cg_row(c, y, yty, x, s, u, Int(m), Int(f), reg, Int(cg)))
-
-
-def geqrf_kernel(a: F32Ptr, tau: F32Ptr, m: Int32, n: Int32):
-    if block_idx.x == 0 and thread_idx.x == 0:
-        geqrf_serial(a, tau, Int(m), Int(n))
-
-
-def geqrf_head_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, k: Int32, m: Int32, n: Int32):
-    if block_idx.x == 0 and thread_idx.x == 0:
-        geqrf_head(a, tau, scal, Int(k), Int(m), Int(n))
-
-
-def geqrf_scale_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, m: Int32, n: Int32):
-    var i = Int(k) + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(m):
-        geqrf_scale_elem(a, scal, Int(k), i, Int(n))
-
-
-def geqrf_dot_kernel(a: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32):
-    var j = Int(k) + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if j < Int(n):
-        w.unsafe_store(j, geqrf_dot(a, scal, Int(k), j, Int(m), Int(n)))
-
-
-def geqrf_update_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32):
-    var cols = Int(n) - Int(k) - 1
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cols > 0 and t < (Int(m) - Int(k)) * cols:
-        var i = Int(k) + t // cols
-        var j = Int(k) + 1 + t % cols
-        geqrf_update_elem(a, tau, scal, Int(k), i, j, Int(n), w.unsafe_load(j))
-
-
-def orgqr_init_kernel(q: F32Ptr, m: Int32, qc: Int32):
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t < Int(m) * Int(qc):
-        orgqr_init_elem(q, t // Int(qc), t % Int(qc), Int(qc))
-
-
-def orgqr_dot_kernel(h: F32Ptr, tau: F32Ptr, q: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32, qc: Int32):
-    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if j < Int(qc):
-        w.unsafe_store(j, orgqr_dot(h, tau, q, Int(k), j, Int(m), Int(n), Int(qc)))
-
-
-def orgqr_update_kernel(h: F32Ptr, tau: F32Ptr, q: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32, qc: Int32):
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t < (Int(m) - Int(k)) * Int(qc):
-        var i = Int(k) + t // Int(qc)
-        var j = t % Int(qc)
-        orgqr_update_elem(h, tau, q, Int(k), i, j, Int(n), Int(qc), w.unsafe_load(j))
-
-
-def orgqr_kernel(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int32, n: Int32, kk: Int32, qc: Int32):
-    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if j < Int(qc):
-        orgqr_col(h, tau, q, j, Int(m), Int(n), Int(kk), Int(qc))
-
-
-# ---- STAGED SERIAL FOLDS (lane decomp-apple, 2026-09-28). geqrf and orgqr
-# fold a column of an m x n row-major matrix in ONE thread, rows ascending
-# (their bits are that order). A lone GPU thread walking a strided column
-# pays a cache line per element: 7 s for linalg.qr at 200k x 28 on the M4
-# Pro. Here the whole block LOADS the column in chunks of STAGE rows into
-# threadgroup memory, and thread 0 folds each chunk from there: the same
-# cells' arithmetic on the same values in the same order, only the loads are
-# shared. Block STAGE_TPB threads; 2 x STAGE floats = 16 KB of threadgroup
-# memory.
-comptime STAGE = 2048
-comptime STAGE_TPB = 256
-
-
-@always_inline
-def _chain_fma(
-    sh: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED], lo: Int, cnt: Int, off: Int, acc0: Float32
-) -> Float32:
-    """acc = ftz(fma(x_u, y_u, acc)) for u in lo .. lo + cnt - 1, x from `sh[u]`
-    and y from `sh[off + u]` (both already flushed by the staging threads),
-    the one serial chain of `geqrf_dot` / `orgqr_dot` (lane neural-pass18):
-    the same operations in the same order, written eight steps at a time so
-    the sixteen shared loads of a group issue before the eight dependent
-    multiply-adds (the chain's latency is the fma's, not the load's); the
-    tail runs one step at a time."""
-    var acc = acc0
-    var u = lo
-    var end = lo + cnt
-    var body = end - (cnt % 8)
-    while u < body:
-        var x0 = sh[u]
-        var x1 = sh[u + 1]
-        var x2 = sh[u + 2]
-        var x3 = sh[u + 3]
-        var x4 = sh[u + 4]
-        var x5 = sh[u + 5]
-        var x6 = sh[u + 6]
-        var x7 = sh[u + 7]
-        var y0 = sh[off + u]
-        var y1 = sh[off + u + 1]
-        var y2 = sh[off + u + 2]
-        var y3 = sh[off + u + 3]
-        var y4 = sh[off + u + 4]
-        var y5 = sh[off + u + 5]
-        var y6 = sh[off + u + 6]
-        var y7 = sh[off + u + 7]
-        acc = ftz(identical_mul_add(x0, y0, acc))
-        acc = ftz(identical_mul_add(x1, y1, acc))
-        acc = ftz(identical_mul_add(x2, y2, acc))
-        acc = ftz(identical_mul_add(x3, y3, acc))
-        acc = ftz(identical_mul_add(x4, y4, acc))
-        acc = ftz(identical_mul_add(x5, y5, acc))
-        acc = ftz(identical_mul_add(x6, y6, acc))
-        acc = ftz(identical_mul_add(x7, y7, acc))
-        u += 8
-    while u < end:
-        acc = ftz(identical_mul_add(sh[u], sh[off + u], acc))
-        u += 1
-    return acc
-
-
-def geqrf_head_staged_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, k: Int32, m: Int32, n: Int32):
-    """`geqrf_head` (with its `reflector_norm`), the folds staged. Lane
-    neural-pass18: the xmax scan is a maximum, exact in any order, so every
-    thread scans its own rows (seeded 0, `if v > local`, so a NaN never
-    enters, as in the serial scan) and the block folds the locals with the
-    same comparison; the norm chain's per-row division (independent of the
-    accumulator) is done by the staging threads into shared memory, and the
-    chain runs through `_chain_fma`."""
-    var sh = stack_allocation[STAGE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var red = stack_allocation[STAGE_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var bc = stack_allocation[2, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var tid = Int(thread_idx.x)
-    var K = Int(k)
-    var M = Int(m)
-    var N = Int(n)
-    var alpha = ftz(a.unsafe_load(K * N + K))
-    # pass 1: xmax over rows k+1.. (geqrf_head's scan): the maximum of the
-    # |values|, which every order gives alike; each thread scans a strided
-    # share of the rows, the block folds the shares
-    var local = Float32(0)
-    var i = K + 1 + tid
-    while i < M:
-        var v = abs(ftz(a.unsafe_load(i * N + K)))
-        if v > local:
-            local = v
-        i += STAGE_TPB
-    red[tid] = local
-    barrier()
-    var half = STAGE_TPB // 2
-    while half > 0:
-        if tid < half:
-            var other = red[tid + half]
-            if other > red[tid]:
-                red[tid] = other
-        barrier()
-        half //= 2
-    var xmax = red[0]
-    barrier()
-    if xmax == Float32(0):
-        if tid == 0:
-            tau.unsafe_store(K, Float32(0))
-            scal.unsafe_store(0, Float32(1))
-            scal.unsafe_store(1, Float32(0))
-        return
-    # reflector_norm(a, k, k, m, n): its scan of rows k.. is |alpha| then
-    # the rows above in order, the same maximum
-    var mx = Float32(0)
-    if abs(alpha) > mx:
-        mx = abs(alpha)
-    if xmax > mx:
-        mx = xmax
-    var acc = Float32(0)
-    var c0 = K
-    while c0 < M:
-        var cnt = min(STAGE, M - c0)
-        var t = tid
-        while t < cnt:
-            # v = ftz(x / mx), the chain's operand, flushed here
-            sh[t] = ftz(identical_div(ftz(a.unsafe_load((c0 + t) * N + K)), mx))
-            t += STAGE_TPB
-        barrier()
-        if tid == 0:
-            acc = _chain_fma(sh, 0, cnt, 0, acc)
-        barrier()
-        c0 += STAGE
-    if tid == 0:
-        var nrm = ftz(identical_mul(sqrt0(acc), mx))
-        var beta = -nrm if alpha >= Float32(0) else nrm
-        tau.unsafe_store(K, div0(sub(beta, alpha), beta))
-        scal.unsafe_store(0, sub(alpha, beta))
-        scal.unsafe_store(1, Float32(1))
-        a.unsafe_store(K * N + K, beta)
-
-
-def geqrf_dot_staged_kernel(a: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32):
-    """`geqrf_dot` for column j = k + 1 + block, the fold staged."""
-    var sh = stack_allocation[2 * STAGE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var tid = Int(thread_idx.x)
-    var K = Int(k)
-    var M = Int(m)
-    var N = Int(n)
-    var j = K + 1 + Int(block_idx.x)
-    if j >= N:
-        return
-    if scal.unsafe_load(1) == Float32(0):
-        if tid == 0:
-            w.unsafe_store(j, Float32(0))
-        return
-    var acc = ftz(a.unsafe_load(K * N + j))
-    var c0 = K + 1
-    while c0 < M:
-        var cnt = min(STAGE, M - c0)
-        var t = tid
-        while t < cnt:
-            sh[t] = ftz(a.unsafe_load((c0 + t) * N + K))
-            sh[STAGE + t] = ftz(a.unsafe_load((c0 + t) * N + j))
-            t += STAGE_TPB
-        barrier()
-        if tid == 0:
-            acc = _chain_fma(sh, 0, cnt, STAGE, acc)
-        barrier()
-        c0 += STAGE
-    if tid == 0:
-        w.unsafe_store(j, acc)
-
-
-def orgqr_dot_staged_kernel(
-    h: F32Ptr, tau: F32Ptr, q: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32, qc: Int32
-):
-    """`orgqr_dot` for column j = block, the fold staged."""
-    var sh = stack_allocation[2 * STAGE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var tid = Int(thread_idx.x)
-    var K = Int(k)
-    var M = Int(m)
-    var N = Int(n)
-    var QC = Int(qc)
-    var j = Int(block_idx.x)
-    if j >= QC:
-        return
-    if ftz(tau.unsafe_load(K)) == Float32(0):
-        if tid == 0:
-            w.unsafe_store(j, Float32(0))
-        return
-    var acc = ftz(q.unsafe_load(K * QC + j))
-    var c0 = K + 1
-    while c0 < M:
-        var cnt = min(STAGE, M - c0)
-        var t = tid
-        while t < cnt:
-            sh[t] = ftz(h.unsafe_load((c0 + t) * N + K))
-            sh[STAGE + t] = ftz(q.unsafe_load((c0 + t) * QC + j))
-            t += STAGE_TPB
-        barrier()
-        if tid == 0:
-            acc = _chain_fma(sh, 0, cnt, STAGE, acc)
-        barrier()
-        c0 += STAGE
-    if tid == 0:
-        w.unsafe_store(j, acc)
 
 
 def _blocks(count: Int) -> Int:
@@ -2297,106 +2028,32 @@ struct DevExec(Exec):
 
     @staticmethod
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
-        comptime if XD_QR_SLICED:
-            # lane hr-qr: every fold over slices of rows, a fixed tree
-            # (x_decomp/qr_sliced.mojo), on every column at every size
-            var sctx = xd_ctx()
-            var skk = m if m < n else n
-            var sa = _up(sctx, a, m * n)
-            var st = sctx.enqueue_create_buffer[DType.float32](skk if skk > 0 else 1)
-            qs_geqrf_device(sctx, sa, st, m, n)
-            _down(sctx, sa, a, m * n)
-            _down(sctx, st, tau, skk)
-            sctx.synchronize()
-            _ = sa^
-            _ = st^
-            _ = sctx^
-            return
-        if xd_qr_on_host(m):
-            # lane neural-pass37: the row-streaming host walk of the same cells
-            geqrf_host_rows(a, tau, m, n)
-            return
+        """Every fold over slices of rows, a fixed tree (x_decomp/
+        qr_sliced.mojo; lane hr-qr), on every column at every size."""
         var ctx = xd_ctx()
         var kk = m if m < n else n
         var da = _up(ctx, a, m * n)
         var dt = ctx.enqueue_create_buffer[DType.float32](kk if kk > 0 else 1)
-        var ds = ctx.enqueue_create_buffer[DType.float32](2)
-        var dw = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        # step k: the reflector (one thread: its folds ascending), then v scaled
-        # (rows), w = v^T A[k:, j] (one thread per column, rows ascending), then
-        # A[k:, k+1:] updated (one thread per cell): geqrf_serial's cells, in
-        # its order per column, with no host round trip between the steps
-        for k in range(kk):
-            ctx.enqueue_function[geqrf_head_staged_kernel](
-                da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=1, block_dim=STAGE_TPB
-            )
-            if m - k - 1 > 0:
-                ctx.enqueue_function[geqrf_scale_kernel](
-                    da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=_blocks(m - k - 1), block_dim=TPB
-                )
-            if n - k - 1 > 0:
-                ctx.enqueue_function[geqrf_dot_staged_kernel](
-                    da.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
-                    grid_dim=n - k - 1, block_dim=STAGE_TPB,
-                )
-                ctx.enqueue_function[geqrf_update_kernel](
-                    da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
-                    grid_dim=_blocks((m - k) * (n - k - 1)), block_dim=TPB,
-                )
+        qs_geqrf_device(ctx, da, dt, m, n)
         _down(ctx, da, a, m * n)
         _down(ctx, dt, tau, kk)
         ctx.synchronize()
         _ = da^
         _ = dt^
-        _ = ds^
-        _ = dw^
-        ctx.synchronize()
         _ = ctx^
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
-        comptime if XD_QR_SLICED:
-            var sctx = xd_ctx()
-            var sh = _up(sctx, h, m * n)
-            var st = _up(sctx, tau, kk if kk > 0 else 1)
-            var sq = sctx.enqueue_create_buffer[DType.float32](m * qc if m * qc > 0 else 1)
-            qs_orgqr_device(sctx, sh, st, sq, m, n, kk, qc)
-            _down(sctx, sq, q, m * qc)
-            sctx.synchronize()
-            _ = sh^
-            _ = st^
-            _ = sq^
-            _ = sctx^
-            return
-        if xd_qr_on_host(m):
-            orgqr_host_rows(h, tau, q, m, n, kk, qc)
-            return
         var ctx = xd_ctx()
         var dh = _up(ctx, h, m * n)
         var dt = _up(ctx, tau, kk if kk > 0 else 1)
         var dq = ctx.enqueue_create_buffer[DType.float32](m * qc if m * qc > 0 else 1)
-        var dw = ctx.enqueue_create_buffer[DType.float32](qc if qc > 0 else 1)
-        # orgqr_col's cells: e_j, then H_k for k descending (w per column, rows
-        # ascending; then every cell of the rows k.. updated)
-        ctx.enqueue_function[orgqr_init_kernel](dq.unsafe_ptr(), Int32(m), Int32(qc), grid_dim=_blocks(m * qc), block_dim=TPB)
-        for r in range(kk):
-            var k = kk - 1 - r
-            if qc > 0:
-                ctx.enqueue_function[orgqr_dot_staged_kernel](
-                    dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
-                    grid_dim=qc, block_dim=STAGE_TPB,
-                )
-            ctx.enqueue_function[orgqr_update_kernel](
-                dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
-                grid_dim=_blocks((m - k) * qc), block_dim=TPB,
-            )
+        qs_orgqr_device(ctx, dh, dt, dq, m, n, kk, qc)
         _down(ctx, dq, q, m * qc)
         ctx.synchronize()
         _ = dh^
         _ = dt^
         _ = dq^
-        _ = dw^
-        ctx.synchronize()
         _ = ctx^
 
     @staticmethod

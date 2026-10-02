@@ -1159,8 +1159,8 @@ def _svd_tsqr(a_arr, rows, cols):
 def _qr_q(a, mode):
     """numpy.linalg.qr's 'reduced', 'complete' and 'raw' modes: LAPACK geqrf
     (the reflectors kept, dlarfg's signs) and orgqr, through the decomp
-    lane's cells (x_decomp/cells.mojo `geqrf_serial`, `orgqr_col`, DEVIATION
-    5320; lane/algos-decomp, 2026-09-27). Any shape, wide included."""
+    lane's sliced order (x_decomp/qr_sliced.mojo, DEVIATION 5320;
+    lane/algos-decomp, 2026-09-27; sliced by lane hr-qr, 2026-10-02). Any shape, wide included."""
     a_arr, rows, cols = _two_d(a, "a")
     if mode == "reduced" and _tsqr_on(rows, cols):
         return _qr_tsqr(a_arr, rows, cols)

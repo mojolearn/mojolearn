@@ -23,7 +23,7 @@ from checks.numerics import (
 )
 from core.philox import philox4x32_10
 from decomposition.host.linalg_public import host_qr_r
-from x_decomp.qr_sliced import QS_ROWS, XD_QR_SLICED
+from x_decomp.qr_sliced import QS_ROWS
 
 
 #: The fold block, restated (x_decomp/cells.mojo FOLD_BLOCK).
@@ -850,8 +850,8 @@ def _o_sliced_dot(xv: List[Float32], xs: Int, xc: Int, yv: List[Float32], ys: In
     return o_add(yv[k * ys + yc], _o_tree(parts))
 
 
-def oracle_geqrf_sliced(a_in: List[Float32], m: Int, n: Int, alt: Int = 0) -> Tuple[List[Float32], List[Float32]]:
-    """geqrf in x_decomp/qr_sliced.mojo's order, restated: the norm from the
+def oracle_geqrf(a_in: List[Float32], m: Int, n: Int, alt: Int = 0) -> Tuple[List[Float32], List[Float32]]:
+    """LAPACK geqrf (DEVIATION 5320) in x_decomp/qr_sliced.mojo's order, restated: the norm from the
     slices' (scale, sum of squares) pairs by the tree, alpha's pair last;
     every reflector product by slices, the tree, the seed added last (alt 1:
     every slice's chain descending)."""
@@ -897,7 +897,7 @@ def oracle_geqrf_sliced(a_in: List[Float32], m: Int, n: Int, alt: Int = 0) -> Tu
     return (a^, tau^)
 
 
-def oracle_orgqr_sliced(h: List[Float32], tau: List[Float32], m: Int, n: Int, kk: Int, qc: Int, alt: Int = 0) -> List[Float32]:
+def oracle_orgqr(h: List[Float32], tau: List[Float32], m: Int, n: Int, kk: Int, qc: Int, alt: Int = 0) -> List[Float32]:
     """orgqr in the sliced order, restated (alt 1: slice chains descending;
     alt 2: H_0 first)."""
     var q = List[Float32](length=m * qc, fill=Float32(0))
@@ -910,82 +910,6 @@ def oracle_orgqr_sliced(h: List[Float32], tau: List[Float32], m: Int, n: Int, kk
             if t == Float32(0):
                 continue
             var w = _o_sliced_dot(h, n, k, x, 1, 0, k, m, alt)
-            var tw = o_mul(t, w)
-            x[k] = o_sub(x[k], tw)
-            for i in range(k + 1, m):
-                x[i] = o_fma(-tw, h[i * n + k], x[i])
-        for i in range(m):
-            q[i * qc + j] = x[i]
-    return q^
-
-
-def oracle_geqrf(a_in: List[Float32], m: Int, n: Int, alt: Int = 0) -> Tuple[List[Float32], List[Float32]]:
-    """LAPACK geqrf restated (DEVIATION 5320): per column k, dlarfg on
-    (a[k, k], a[k+1:, k]) with the norm scaled by the largest |entry|, its
-    squares ascending (alt 1: descending), beta = -sign(alpha) ||.||, then
-    H_k applied to every later column with w = a[k, j] + sum_{i>k} v_i
-    a[i, j] ascending (alt 1: descending). Returns (h, tau). The sliced
-    order (lane hr-qr) unless -D MOJOLEARN_XD_QR_CHAIN."""
-    comptime if XD_QR_SLICED:
-        return oracle_geqrf_sliced(a_in, m, n, alt)
-    var a = a_in.copy()
-    var kk = m if m < n else n
-    var tau = List[Float32](length=kk, fill=Float32(0))
-    for k in range(kk):
-        var alpha = ftz(a[k * n + k])
-        var xmax = Float32(0)
-        for i in range(k + 1, m):
-            if abs(ftz(a[i * n + k])) > xmax:
-                xmax = abs(ftz(a[i * n + k]))
-        if xmax == Float32(0):
-            continue
-        var mx = Float32(0)
-        for i in range(k, m):
-            if abs(ftz(a[i * n + k])) > mx:
-                mx = abs(ftz(a[i * n + k]))
-        var acc = Float32(0)
-        for ii in range(m - k):
-            var i = (m - 1 - ii) if alt == 1 else (k + ii)
-            var v = ftz(identical_div(ftz(a[i * n + k]), mx))
-            acc = o_fma(v, v, acc)
-        var nrm = ftz(identical_mul(o_sqrt0(acc), mx))
-        var beta = -nrm if alpha >= Float32(0) else nrm
-        tau[k] = o_div0(o_sub(beta, alpha), beta)
-        var scale = o_sub(alpha, beta)
-        for i in range(k + 1, m):
-            a[i * n + k] = o_div0(a[i * n + k], scale)
-        a[k * n + k] = beta
-        for j in range(k + 1, n):
-            var w = ftz(a[k * n + j])
-            for ii in range(m - k - 1):
-                var i = (m - 1 - ii) if alt == 1 else (k + 1 + ii)
-                w = o_fma(a[i * n + k], a[i * n + j], w)
-            var tw = o_mul(tau[k], w)
-            a[k * n + j] = o_sub(a[k * n + j], tw)
-            for i in range(k + 1, m):
-                a[i * n + j] = o_fma(-tw, a[i * n + k], a[i * n + j])
-    return (a^, tau^)
-
-
-def oracle_orgqr(h: List[Float32], tau: List[Float32], m: Int, n: Int, kk: Int, qc: Int, alt: Int = 0) -> List[Float32]:
-    """orgqr restated (DEVIATION 5320): column j of Q is e_j with H_{kk-1},
-    ..., H_0 applied in that order (alt 2: H_0 first), each w = x[k] + sum
-    v_i x[i] ascending (alt 1: descending)."""
-    comptime if XD_QR_SLICED:
-        return oracle_orgqr_sliced(h, tau, m, n, kk, qc, alt)
-    var q = List[Float32](length=m * qc, fill=Float32(0))
-    for j in range(qc):
-        var x = List[Float32](length=m, fill=Float32(0))
-        x[j] = Float32(1)
-        for r in range(kk):
-            var k = r if alt == 2 else kk - 1 - r
-            var t = ftz(tau[k])
-            if t == Float32(0):
-                continue
-            var w = ftz(x[k])
-            for ii in range(m - k - 1):
-                var i = (m - 1 - ii) if alt == 1 else (k + 1 + ii)
-                w = o_fma(h[i * n + k], x[i], w)
             var tw = o_mul(t, w)
             x[k] = o_sub(x[k], tw)
             for i in range(k + 1, m):

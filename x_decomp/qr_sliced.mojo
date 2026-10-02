@@ -10,8 +10,8 @@ WHY. `geqrf_serial` / `orgqr_col` folded every reflector norm and every
 reflector product w = v^T x as ONE dependent chain over all the rows below
 the diagonal: on the device one thread per column per step, m dependent
 multiply-adds long (17 s at 200,000 x 220 on the M4, 16.7 s on the MI325X
-at the board's istella shape), which is why AMD and Apple handed the whole
-factorization to a host walk for m >= 65,536.
+at the board's istella shape). This order replaced it on every column and
+retired the host walk AMD and Apple had taken for m >= 65,536.
 
 THE ORDER, a pure function of the shape (m, k) and of nothing on the
 machine. At step k the rows below the diagonal, k + 1 .. m - 1, are cut
@@ -42,7 +42,6 @@ thread on the device. Reflectors go to A in order k ascending, to Q's
 columns in order k descending.
 """
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
-from std.sys.compile import is_defined
 from x_decomp.cells import F32Ptr, div0, sqrt0, sub
 
 #: rows per slice of a reflector fold
@@ -50,10 +49,6 @@ comptime QS_ROWS = 512
 #: multiply-adds per device launch (macOS silently cuts a long Metal
 #: command buffer; every launch is sliced to about this much work)
 comptime QS_LAUNCH_CELLS = 1 << 27
-#: The A/B arm during measurement: -D MOJOLEARN_XD_QR_CHAIN keeps the old
-#: one-chain-per-column order (and its routes); the default is the sliced
-#: order on every column.
-comptime XD_QR_SLICED = not is_defined["MOJOLEARN_XD_QR_CHAIN"]()
 
 
 @always_inline
