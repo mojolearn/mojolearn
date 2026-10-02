@@ -193,15 +193,6 @@ from gbdt.targets.kernel.query_rmse import (
 from gbdt.gpu_data.kernel.query_helper import launch_inverse_permutation
 
 
-comptime FAST_DEPTHWISE_DEVICE_PARTITION = not is_defined[
-    "MOJOLEARN_GBDT_FAST_DEPTHWISE_HOST_PARTITION"
-]()
-"""Use the existing stable device leaf partition for FAST Depthwise and
-Lossguide fits.
-
-The define restores the former host materialization for performance A/Bs;
-it is not a second production policy.
-"""
 
 
 @fieldwise_init
@@ -2141,10 +2132,12 @@ def fit_with_test(
     # integer partitions and is already the IDENTICAL default. Symmetric
     # routing is unchanged (its learn permutation keeps the searcher's own
     # partition).
+    # (cpu-gpu-cleanup t-gbdt: the host-partition A/B define is gone;
+    # `partition_from_bins` itself now partitions on the device, so the
+    # flag only picks the fit's pooled partitioner over a per-call one.)
     var device_leaf_partition = DEVICE_LEAF_PARTITION or (
         HIST_BUILD_MODE == NUMERIC_FAST
         and (grow_policy == GROW_DEPTHWISE or grow_policy == GROW_LOSSGUIDE)
-        and FAST_DEPTHWISE_DEVICE_PARTITION
     )
 
     # `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`.
