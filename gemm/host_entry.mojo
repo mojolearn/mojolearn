@@ -55,7 +55,6 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.host_transport import (
-    GemmClock,
     GemmHostLease,
     ROLE_A,
     ROLE_B,
@@ -121,7 +120,6 @@ def identical_gemm_host(
     # (gemm/host_transport.mojo; MOJOLEARN_GEMM_POOL=0 and
     # MOJOLEARN_GEMM_STAGE_DOWN/UP=0 restore the old transport). The kernels
     # and their plan are the same; copies only, no bit moves.
-    var clock = GemmClock("m=" + String(m) + " n=" + String(n) + " k=" + String(k))
     var lease = GemmHostLease()
     var a = lease.f32(ctx, ROLE_A, m * k)
     var b = lease.f32(ctx, ROLE_B, n * k)
@@ -130,22 +128,17 @@ def identical_gemm_host(
     gemm_up_f32(ctx, lease, b, b_ptr, n * k)
     # NO WAIT AFTER THE UPLOADS (lane/apple-mlp-fused, 2026-09-30): the
     # uploads and the GEMM's launches sit on one in-order context.
-    clock.mark(ctx, "upload_ms")
 
     # THE ONE LINE THAT COMPUTES ANYTHING. Everything above is transport and
     # everything below is transport.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var ws = lease.f32(ctx, ROLE_WS, identical_gemm_workspace_max_floats(m, n, k))
         identical_gemm_into(ctx, c, a, b, ws, m, n, k, op)
-        clock.mark(ctx, "kernel_ms")
         gemm_down_f32(ctx, lease, c, c_ptr, m * n)
         _ = ws
     else:
         identical_gemm(ctx, c, a, b, m, n, k, op)
-        clock.mark(ctx, "kernel_ms")
         gemm_down_f32(ctx, lease, c, c_ptr, m * n)
-    clock.mark(ctx, "download_ms")
-    clock.done()
     lease.release()
     _ = a
     _ = b

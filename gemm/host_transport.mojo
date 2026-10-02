@@ -14,11 +14,9 @@ host surfaces:
   * POOLED DEVICE BUFFERS: grow-only process slots, one per role, reused by
     every call. A busy flag guards them; a concurrent second caller (two
     Python threads, the GIL is released) takes fresh buffers instead.
-  * A STAGED DOWNLOAD: DMA into a pinned host stage, then a memcpy out over
-    host tasks, double-buffered so the next chunk's DMA overlaps this chunk's
-    copy. A pinned buffer DMAs at full speed on every vendor, and the read
-    over 4+ threads avoids Apple's ~3 GB/s single-thread read of
-    write-combined memory.
+  * A STAGED DOWNLOAD: DMA into a pinned host stage, then one memcpy out,
+    double-buffered so the next chunk's DMA overlaps this chunk's copy. A
+    pinned buffer DMAs at full speed on every vendor.
   * A STAGED UPLOAD (same stage, the other direction), off by default on
     Apple where a raw host-pointer upload is already 1.6-2.4 ms per 64 MB.
 
@@ -26,21 +24,16 @@ A/B (runtime, one build serves both arms):
   MOJOLEARN_GEMM_POOL=0        fresh buffers every call (the old path)
   MOJOLEARN_GEMM_STAGE_DOWN=0|1   staged download off/on (default on)
   MOJOLEARN_GEMM_STAGE_UP=0|1     staged upload off/on (default: on except Apple)
-  MOJOLEARN_GEMM_HOST_TIMING=1 prints `GEMM-HOST-TIMING` lines with a wait
-                               after every stage (device stage timing only).
 """
 
 from std.atomic import Atomic, Ordering
 from std.ffi import _Global
 from std.memory import memcpy
 from std.os import getenv
-from std.time import perf_counter_ns
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -98,10 +91,6 @@ def gemm_stage_up_on() -> Bool:
     comptime if TARGET_COLUMN == COLUMN_APPLE:
         return _env_flag("MOJOLEARN_GEMM_STAGE_UP", False)
     return _env_flag("MOJOLEARN_GEMM_STAGE_UP", True)
-
-
-def gemm_host_timing_on() -> Bool:
-    return _env_flag("MOJOLEARN_GEMM_HOST_TIMING", False)
 
 
 struct GemmHostLease(Movable):
@@ -164,22 +153,9 @@ struct GemmHostLease(Movable):
 
 
 def _par_copy(dst: F32P, src: F32P, n: Int):
-    """`memcpy(dst, src, n)` over host tasks (a transport copy, no arithmetic)."""
-    var tasks = host_predict_task_count(1 << 30)
-    if tasks > 16:
-        tasks = 16
-    if tasks <= 1 or n < GEMM_STAGE_MIN:
-        memcpy(dest=dst, src=src, count=n)
-        return
-    var chunk = (n + tasks - 1) // tasks
-
-    def _piece(t: Int) {imm dst, imm src, imm n, imm chunk}:
-        var lo = t * chunk
-        var hi = min(lo + chunk, n)
-        if hi > lo:
-            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
-
-    host_parallelize(_piece, tasks)
+    """One `memcpy(dst, src, n)`: the stage's single host copy (transport, no
+    arithmetic, no host threads)."""
+    memcpy(dest=dst, src=src, count=n)
 
 
 def gemm_up_f32(ctx: DeviceContext, lease: GemmHostLease, mut dst: DeviceBuffer[DType.float32], src: F32P, n: Int) raises:
@@ -245,28 +221,3 @@ def gemm_down_f32(ctx: DeviceContext, lease: GemmHostLease, src: DeviceBuffer[DT
         off += cnt
         i += 1
     _par_copy(dst + prev_off, stage + ((i - 1) % 2) * GEMM_STAGE_FLOATS, prev_cnt)
-
-
-struct GemmClock(Movable):
-    """`MOJOLEARN_GEMM_HOST_TIMING=1`: wait, then stamp, at each stage."""
-
-    var on: Bool
-    var t: Int
-    var line: String
-
-    def __init__(out self, who: String):
-        self.on = gemm_host_timing_on()
-        self.t = Int(perf_counter_ns())
-        self.line = "GEMM-HOST-TIMING " + who
-
-    def mark(mut self, ctx: DeviceContext, stage: String) raises:
-        if not self.on:
-            return
-        ctx.synchronize()
-        var now = Int(perf_counter_ns())
-        self.line += " " + stage + "=" + String(Float64(now - self.t) / 1.0e6)
-        self.t = now
-
-    def done(self):
-        if self.on:
-            print(self.line)

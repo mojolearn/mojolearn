@@ -81,7 +81,6 @@ from decomposition.linalg_public_device import (
 )
 from gemm.host_entry import identical_gemm_host
 from gemm.host_transport import (
-    GemmClock,
     GemmHostLease,
     ROLE_A,
     ROLE_B,
@@ -361,7 +360,6 @@ def gemm_bf16_binding(
         # lane/gap-neural-models (2026-10-02): pooled buffers and workspace,
         # staged download (gemm/host_transport.mojo; MOJOLEARN_GEMM_POOL=0
         # restores fresh buffers). Copies only, the same kernels.
-        var clock = GemmClock("bf16 m=" + String(m) + " n=" + String(n) + " k=" + String(k))
         var lease = GemmHostLease()
         var db = lease.u16(ctx, ROLE_B, n * k)
         gemm_up_u16(ctx, lease, db, u16_ptr(b_address), n * k)
@@ -370,18 +368,13 @@ def gemm_bf16_binding(
         if a_bf16:
             var da_bits = lease.u16(ctx, ROLE_A, m * k)
             gemm_up_u16(ctx, lease, da_bits, u16_ptr(a_address), m * k)
-            clock.mark(ctx, "upload_ms")
             bf16_widen(ctx, da, da_bits, m * k)
             _lowbit_run(ctx, lease, dc, da, db, m, n, k, op)
             _ = da_bits
         else:
             gemm_up_f32(ctx, lease, da, f32_ptr(a_address), m * k)
-            clock.mark(ctx, "upload_ms")
             _lowbit_run(ctx, lease, dc, da, db, m, n, k, op)
-        clock.mark(ctx, "kernel_ms")
         gemm_down_f32(ctx, lease, dc, f32_ptr(c_address), m * n)
-        clock.mark(ctx, "download_ms")
-        clock.done()
         lease.release()
         _ = db^
         _ = dc^
