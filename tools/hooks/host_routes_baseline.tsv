@@ -69,7 +69,6 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_array.py	0	return (self[i] for i
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bpe_trainer.py	0	word = "".join(_SYLLABLES[next(rng) % len(_SYLLABLES)] for _ in range(n))
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	0	for s in range(n_rows):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	1	for s in range(n_rows):
-route-switch	host-env/threshold	gap-trees-nv/apple-fast-trees2	debt	python/mojolearn/_buffer.py	0	_HOTPATH_ENV = "MOJOLEARN_HOTPATH"
 py-loop	py-numpy	gap-lm	debt	python/mojolearn/_byte_lm_impl.py	0	for layer in range(n)]
 py-loop	py-numpy	gap-lm	debt	python/mojolearn/_byte_lm_impl.py	1	for layer in range(n)]
 py-loop	py-numpy	gap-lm	debt	python/mojolearn/_byte_lm_impl.py	2	for layer in range(n)]
@@ -111,15 +110,12 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_gp_impl.py	0	pairs = [(flat[2 * 
 host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	if os.path.exists(_backend.host_module_path(_HOST_INFERENCE_BASENAME)):
 host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	return _backend.load_host_module(_HOST_BASENAME)
 host-module	host-import	UNOWNED	debt	python/mojolearn/_gpc_impl.py	0	return _backend.load_host_module(_HOST_INFERENCE_BASENAME)
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_labels.py	0	for r in range(n_rows):
 host-module	host-import	UNOWNED	debt	python/mojolearn/_linalg_impl.py	0	_host_binding_cache = _backend.load_host_module(_LINALG_HOST_BASENAME)
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_linalg_impl.py	0	for i in range(n):
 route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/_metrics_impl.py	0	if os.environ.get("MOJOLEARN_MSEL3") != "1":
 py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
 py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	from concurrent.futures import ThreadPoolExecutor
 py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	self._threads = ThreadPoolExecutor(max_workers=len(self.devices))
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_portable_math.py	0	for i in range(n):
-route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/_portable_math.py	0	if _environ.get("MOJOLEARN_HOTPATH", "").strip().lower() != "python":
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_svm_impl.py	0	for i in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_svm_impl.py	0	for r in range(n_rows):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_svm_impl.py	0	idx = [r for r in range(len(codes)) if codes[r] == ci or codes[r] == cj]
