@@ -325,14 +325,16 @@ struct PooledForest(Movable):
         owners scan their input rows on the device (`contribution`), and
         the finished outputs are scanned where they land: no host scan
         and no host staging list (cpu-gpu-cleanup w2-core-scope)."""
-        ref ctx = self.owners[0].ctx.value()
-        var dout = ctx.enqueue_create_buffer[DType.float32](rows * self.outputs)
+        # `collect_items` borrows self mutably, so owner 0's context is
+        # re-borrowed after each call instead of held across the loop.
+        var dout = self.owners[0].ctx.value().enqueue_create_buffer[DType.float32](rows * self.outputs)
         # Bound both rows and output cells: even wide vector leaves never
         # create more than 4096*32 canonical reduction cells on any device.
         var tile = min(4096, 64 * self.outputs)
         for first in range(0, rows * self.outputs, tile):
             var items = min(tile, rows * self.outputs - first)
             var totals = self.collect_items[RF_INPUT](x, first, items)
+            ref ctx = self.owners[0].ctx.value()
             var dt = ctx.enqueue_create_buffer[DType.float32](len(totals))
             try:
                 ctx.enqueue_copy(dst_buf=dt, src_ptr=totals.unsafe_ptr())
@@ -348,7 +350,7 @@ struct PooledForest(Movable):
                 raise e
             _ = totals^
             _ = dt^
-        if not device_all_finite(ctx, dout, rows * self.outputs):
+        if not device_all_finite(self.owners[0].ctx.value(), dout, rows * self.outputs):
             _ = dout^
             raise Error("forest inference prototype requires finite Float32 values")
         return dout^
