@@ -14,7 +14,8 @@ compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
 from checks.kernel_matrix import lib_smem_page_fits_for, TARGET_COLUMN
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
+from std.atomic import Atomic
 from core.host_lanes import host_row_tasks
 from std.time import perf_counter_ns
 from std.os import getenv
@@ -31,7 +32,7 @@ from std.sys.compile import is_defined
 from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
 from x_neighbors.nan_cells import nan_cells_host
 from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
-from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, knn_sq_item, knn_impute_finish
+from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, _add, knn_sq_item, knn_impute_finish
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
@@ -370,8 +371,101 @@ def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nn
     """lane/neural-pass69: `op_cc_iterate` from a CSR adjacency (indptr n + 1,
     indices nnz): the host walk of x_neighbors/cc_sparse.mojo on every
     column, no dense matrix."""
-    cc_iterate_csr(IP(unsafe_from_address=indptr), IP(unsafe_from_address=indices),
-                   IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n, nnz)
+    comptime if is_defined["MOJOLEARN_XN_CC_HOST"]():
+        cc_iterate_csr(IP(unsafe_from_address=indptr), IP(unsafe_from_address=indices),
+                       IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n, nnz)
+        return
+    _cc_csr_device(indptr, indices, lab, info, n, nnz)
+
+
+# lane/neural-pass95 (2026-10-01): weak connected components of a CSR graph
+# on the device. The output is the min-label fixed point the host rounds
+# reach (every node labelled by the lowest node of its component, which
+# Python numbers in order of appearance), and that fixed point does not
+# depend on how it is reached, so the device reaches it the fast way:
+# hooking (each edge lowers the larger of its two labels' entries to the
+# smaller, an atomic min; labels only fall, each to a node of the same
+# component no larger than itself) and pointer jumping (every node to the
+# root of its label chain), rounds until an edge changes nothing. The
+# labels are integers: the same words on every column. The step count in
+# info is the device's round count (Python reads only the labels).
+# `-D MOJOLEARN_XN_CC_HOST=1` restores the host rounds (x_neighbors/cc_sparse.mojo).
+def cc_hook_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP):
+    var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if u < Int(n):
+        for e in range(Int(indptr.unsafe_load(u)), Int(indptr.unsafe_load(u + 1))):
+            var v = Int(indices.unsafe_load(e))
+            var a = lab.unsafe_load(u)
+            var b = lab.unsafe_load(v)
+            if a != b:
+                var lo = a if a < b else b
+                var hi = b if a < b else a
+                # a racing read only costs a spare round: the flag is set
+                # whenever this edge could still lower an entry
+                if lab.unsafe_load(Int(hi)) > lo:
+                    Atomic[DType.int32].min(lab + Int(hi), lo)
+                    changed.unsafe_store(0, Int32(1))
+
+
+def cc_jump_kernel(lab: IP, n: Int32):
+    var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if v < Int(n):
+        var p = Int(lab.unsafe_load(v))
+        while Int(lab.unsafe_load(p)) != p:
+            p = Int(lab.unsafe_load(p))
+        lab.unsafe_store(v, Int32(p))
+
+
+def _cc_csr_device(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
+    # Every host side of a copy is ONE pinned host buffer (lane/neural-pass95,
+    # 2026-10-02): the peer's MI325X paid ~100 ms on the first fit after any
+    # fork / posix_spawn in the process (ps, a notebook's subprocess) when
+    # the CSR, the labels and the per-round flag went through pageable
+    # memory, which fork's copy-on-write unmaps from the GPU's view; pinned
+    # host memory is excluded from fork (MADV_DONTFORK). Copies only.
+    var ctx = xn_ctx()
+    var o_ix = n + 1
+    var o_l = o_ix + max(nnz, 1)
+    var o_c = o_l + max(n, 1)
+    var hb = ctx.enqueue_create_host_buffer[DType.int32](o_c + 1)
+    ctx.synchronize()
+    var hp = hb.unsafe_ptr()
+    memcpy(dest=hp, src=IP(unsafe_from_address=indptr), count=n + 1)
+    if nnz > 0:
+        memcpy(dest=hp + o_ix, src=IP(unsafe_from_address=indices), count=nnz)
+    if n > 0:
+        memcpy(dest=hp + o_l, src=IP(unsafe_from_address=lab), count=n)
+    var d_ip = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var d_ix = ctx.enqueue_create_buffer[DType.int32](max(nnz, 1))
+    var d_l = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var d_c = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=d_ip, src_ptr=hp)
+    if nnz > 0:
+        ctx.enqueue_copy(dst_buf=d_ix, src_ptr=hp + o_ix)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=d_l, src_ptr=hp + o_l)
+    var blocks = (n + 255) // 256
+    var rounds = 0
+    while n > 0:
+        rounds += 1
+        d_c.enqueue_fill(Int32(0))
+        ctx.enqueue_function[cc_hook_kernel](d_ip.unsafe_ptr(), d_ix.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n),
+                                             d_c.unsafe_ptr(), grid_dim=blocks, block_dim=256)
+        ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
+        ctx.enqueue_copy(dst_ptr=hp + o_c, src_buf=d_c)
+        ctx.synchronize()
+        if hp[o_c] == 0:
+            break
+    if n > 0:
+        ctx.enqueue_copy(dst_ptr=hp + o_l, src_buf=d_l)
+        ctx.synchronize()
+        memcpy(dest=IP(unsafe_from_address=lab), src=hp + o_l, count=n)
+    IP(unsafe_from_address=info).unsafe_store(0, Int32(rounds))
+    _ = hb^
+    _ = d_ip^
+    _ = d_ix^
+    _ = d_l^
+    _ = d_c^
 
 
 def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
@@ -1317,3 +1411,173 @@ def op_lp_knn_product(cols: Int, vals: Int, x: Int, res: Int, n: Int, m: Int, k:
             grid_dim=_grid(n * c), block_dim=(BLOCK if n * c > 1 else 1))
     _down(ctx, dr, res, n * c)
     ctx.synchronize()
+
+
+# lane/neural-pass95 follow-up (2026-10-02): NearestCentroid's statistics
+# with the rows staged. nc_stats_item ran one thread per feature through
+# every class's mean chain, the std chain and the centroid chain, each a
+# million rows read at a stride of d words (MI325X taxi 1M x 11: 351 ms on
+# 11 threads; main's nc_shrink 177). Here a block takes 16 features and
+# stages NCS_TR rows of them (and the labels) in threadgroup memory; every
+# (class, feature) mean chain and the feature's centroid chain is its own
+# thread (`nc_means_kernel`), then the std chains (`nc_std_kernel`, which
+# needs the means). Each chain keeps nc_stats_item's statements and rows
+# ascending: the same words.
+comptime NCS_TR = 128
+comptime NCS_TC = 16
+comptime NCS_NT = 256
+comptime NCS_RU = 16
+
+
+@always_inline
+def _ncs_stage(x: FP, lab: IP, n: Int, d: Int, c0: Int, r0: Int, xs: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED], ls: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED]):
+    var tid = Int(thread_idx.x)
+    var cnt = min(NCS_TR, n - r0)
+    for u in range(tid, NCS_TR * NCS_TC, NCS_NT):
+        var r = u // NCS_TC
+        var c = c0 + u % NCS_TC
+        var v = Float32(0)
+        if r < cnt and c < d:
+            v = x.unsafe_load((r0 + r) * d + c)
+        xs[u] = v
+    for u in range(tid, NCS_TR, NCS_NT):
+        ls[u] = lab.unsafe_load(r0 + u) if u < cnt else Int32(-1)
+
+
+def nc_means_kernel(x: FP, lab: IP, cent: FP, dsc: FP, n_: Int64, d_: Int64, nc_: Int64):
+    """Block b: features [16b, 16b + 16). Chain q = g * 16 + c (g < classes)
+    is class g's mean of feature 16b + c; chain classes * 16 + c is the
+    feature's centroid chain."""
+    var n = Int(n_)
+    var d = Int(d_)
+    var ncl = Int(nc_)
+    var tid = Int(thread_idx.x)
+    var c0 = Int(block_idx.x) * NCS_TC
+    var xs = stack_allocation[NCS_TR * NCS_TC, Float32, address_space=AddressSpace.SHARED]()
+    var ls = stack_allocation[NCS_TR, Int32, address_space=AddressSpace.SHARED]()
+    var chains = (ncl + 1) * NCS_TC
+    # each thread runs chains tid, tid + NT, ... (at most a few)
+    comptime MAXC = 8
+    var acc = SIMD[DType.float32, MAXC](0)
+    var cnt = SIMD[DType.int32, MAXC](0)
+    var r0 = 0
+    while r0 < n:
+        barrier()
+        _ncs_stage(x, lab, n, d, c0, r0, xs, ls)
+        barrier()
+        var rows = min(NCS_TR, n - r0)
+        comptime for k in range(MAXC):
+            var q = tid + k * NCS_NT
+            if q < chains:
+                var g = q // NCS_TC
+                var c = q % NCS_TC
+                if c0 + c < d:
+                    var a = acc[k]
+                    var m = cnt[k]
+                    var r = 0
+                    while r + NCS_RU <= rows:
+                        var bv = SIMD[DType.float32, NCS_RU]()
+                        var bl = SIMD[DType.int32, NCS_RU]()
+                        comptime for u in range(NCS_RU):
+                            bv[u] = xs[(r + u) * NCS_TC + c]
+                            bl[u] = ls[r + u]
+                        comptime for u in range(NCS_RU):
+                            if g >= ncl or Int(bl[u]) == g:
+                                a = _add(a, bv[u])
+                                if g < ncl:
+                                    m += 1
+                        r += NCS_RU
+                    while r < rows:
+                        if g >= ncl or Int(ls[r]) == g:
+                            a = _add(a, xs[r * NCS_TC + c])
+                            if g < ncl:
+                                m += 1
+                        r += 1
+                    acc[k] = a
+                    cnt[k] = m
+        r0 += NCS_TR
+    comptime for k in range(MAXC):
+        var q = tid + k * NCS_NT
+        if q < chains:
+            var g = q // NCS_TC
+            var c = q % NCS_TC
+            var f = c0 + c
+            if f < d:
+                if g < ncl:
+                    if cnt[k] == 0:
+                        cent.unsafe_store(g * d + f, Float32(0))
+                    else:
+                        cent.unsafe_store(g * d + f, ftz(identical_div(acc[k], Float32(Int(cnt[k])))))
+                else:
+                    dsc.unsafe_store(f, ftz(identical_div(acc[k], Float32(n))))
+
+
+def nc_std_kernel(x: FP, lab: IP, cent: FP, std: FP, n_: Int64, d_: Int64, nc_: Int64):
+    """Block b: features [16b, 16b + 16), thread c < 16 the std chain."""
+    var n = Int(n_)
+    var d = Int(d_)
+    var ncl = Int(nc_)
+    var tid = Int(thread_idx.x)
+    var c0 = Int(block_idx.x) * NCS_TC
+    var xs = stack_allocation[NCS_TR * NCS_TC, Float32, address_space=AddressSpace.SHARED]()
+    var ls = stack_allocation[NCS_TR, Int32, address_space=AddressSpace.SHARED]()
+    var f = c0 + tid
+    var live = tid < NCS_TC and f < d
+    var ss = Float32(0)
+    var r0 = 0
+    while r0 < n:
+        barrier()
+        _ncs_stage(x, lab, n, d, c0, r0, xs, ls)
+        barrier()
+        if live:
+            var rows = min(NCS_TR, n - r0)
+            var r = 0
+            while r + NCS_RU <= rows:
+                var bv = SIMD[DType.float32, NCS_RU]()
+                var bc = SIMD[DType.float32, NCS_RU]()
+                comptime for u in range(NCS_RU):
+                    bv[u] = xs[(r + u) * NCS_TC + tid]
+                    bc[u] = cent.unsafe_load(Int(ls[r + u]) * d + f)
+                comptime for u in range(NCS_RU):
+                    var df = _sub(bv[u], bc[u])
+                    ss = ftz(identical_mul_add(df, df, ss))
+                r += NCS_RU
+            while r < rows:
+                var df = _sub(xs[r * NCS_TC + tid], cent.unsafe_load(Int(ls[r]) * d + f))
+                ss = ftz(identical_mul_add(df, df, ss))
+                r += 1
+        r0 += NCS_TR
+    if live:
+        if n - ncl <= 0:
+            std.unsafe_store(f, Float32(0))
+        else:
+            std.unsafe_store(f, ftz(identical_sqrt(ftz(identical_div(ss, Float32(n - ncl))))))
+
+
+def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int) raises:
+    if (n_classes + 1) * NCS_TC > 8 * NCS_NT:
+        raise Error("nc_stats: more classes than the staged kernel's chains (" + String(n_classes) + ")")
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_lab = _buf_i(ctx, lab, n, True)
+    var d_cent = _buf(ctx, cent, n_classes * d, False)
+    var d_std = _buf(ctx, std, d, False)
+    var d_dsc = _buf(ctx, dsc, d, False)
+    var tiles = (d + NCS_TC - 1) // NCS_TC
+    ctx.enqueue_function[nc_means_kernel](
+        d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_cent.unsafe_ptr(), d_dsc.unsafe_ptr(),
+        Int64(n), Int64(d), Int64(n_classes), grid_dim=max(tiles, 1), block_dim=NCS_NT,
+    )
+    ctx.enqueue_function[nc_std_kernel](
+        d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_cent.unsafe_ptr(), d_std.unsafe_ptr(),
+        Int64(n), Int64(d), Int64(n_classes), grid_dim=max(tiles, 1), block_dim=NCS_NT,
+    )
+    _down(ctx, d_cent, cent, n_classes * d)
+    _down(ctx, d_std, std, d)
+    _down(ctx, d_dsc, dsc, d)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_lab^
+    _ = d_cent^
+    _ = d_std^
+    _ = d_dsc^

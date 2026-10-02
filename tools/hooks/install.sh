@@ -12,3 +12,7 @@ for h in pre-commit pre-push; do
     chmod +x "$hooks/$h"
     echo "installed $hooks/$h"
 done
+# pre-push runs this beside itself, so branches that predate it are checked too
+cp "$here/no_host_routes.py" "$hooks/no_host_routes.py"
+chmod +x "$hooks/no_host_routes.py"
+echo "installed $hooks/no_host_routes.py"
