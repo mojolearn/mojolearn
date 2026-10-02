@@ -136,10 +136,12 @@ gates BOTH sides of it by construction rather than by luck of the fixture.
 =================================================================
 """
 
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import floor
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
+from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.sync import barrier
 
 from metrics.checks.pinned_sum import (
@@ -765,8 +767,8 @@ def perm_stat_kernel[stat: Int, tpb: Int](
     `index_map.mojo::draw_permutation_key`.
 
     COST: `O(N^2)` compares per replicate, `8*N` bytes of threadgroup
-    memory. `PERM_MAX_POOLED` bounds both and `validate_pooled` refuses
-    above it by name with the closure.
+    memory. `PERM_MAX_POOLED` bounds both; above it (and by default at
+    every length) `perm_select_stat_kernel` computes the same null.
 
     NO ATOMIC, NO WARP PRIMITIVE, NO FLOAT COMPARE ANYWHERE IN THE RANK. The
     keys are UInt64 and the tie-break is an Int compare, so the permutation
@@ -853,6 +855,222 @@ def perm_stat_kernel[stat: Int, tpb: Int](
                 var i2 = c2 * PINNED_SUM_W + tid + lane * tpb
                 if i2 < n_pooled:
                     if Int(ranks[unsafe_offset=i2]) < n_x:
+                        var dv = ftz(ftz(pooled.unsafe_load(i2)) - mx)
+                        vs[lane] = ftz(identical_mul(dv, dv))
+            var ts = virtual_block_sum[tpb](vs)
+            if tid == 0:
+                ssd = ftz(ssd + ts)
+        if tid == 0:
+            value = ftz(
+                identical_sqrt(ftz(identical_div(ssd, Float32(n_x - 1))))
+            )
+
+    if tid == 0:
+        null_dist.unsafe_store(rr, canonicalize_nan(value))
+
+
+comptime PERM_SELECT_BUCKETS = 256
+
+
+@always_inline
+def _perm_select_digit[
+    tpb: Int, ho: MutOrigin, so: MutOrigin
+](
+    hist: MutPointer[Int32, ho, address_space = AddressSpace.SHARED],
+    sel: MutPointer[Int32, so, address_space = AddressSpace.SHARED],
+    need: Int,
+    tid: Int,
+):
+    """The bucket of `hist` (256 integer counts) holding the `need`-th
+    element (1-based) in ascending bucket order: `sel[0]` the bucket,
+    `sel[1]` the `need` left inside it, `sel[2]` its count. Each thread owns
+    `256 / tpb` consecutive buckets; one block scan of their sums. Integer
+    counts, so the answer is the same in any summation order."""
+    comptime per = PERM_SELECT_BUCKETS // tpb
+    var local = Int32(0)
+    comptime for b in range(per):
+        local += hist[tid * per + b]
+    var incl = block_prefix_sum[block_size=tpb](local)
+    var run = Int(incl - local)
+    comptime for b in range(per):
+        var c = Int(hist[tid * per + b])
+        if run < need and run + c >= need:
+            sel[0] = Int32(tid * per + b)
+            sel[1] = Int32(need - run)
+            sel[2] = Int32(c)
+        run += c
+    barrier()
+
+
+@always_inline
+def _perm_in_first[
+    key_mask: UInt64
+](key: UInt64, r: Int, j: Int, kstar: UInt64, jstar: Int) -> Bool:
+    """Position `j` lands in the first group of replicate `r`: its
+    `(key, j)` is at or below the threshold `(kstar, jstar)` in
+    `permutation_key_lt`'s total order, i.e. its rank is below `n_x`."""
+    var k = draw_permutation_key(key, r, j) & key_mask
+    return k < kstar or (k == kstar and j <= jstar)
+
+
+def perm_select_stat_kernel[
+    stat: Int, tpb: Int, key_mask: UInt64 = ~UInt64(0)
+](
+    null_dist: MutPointer[Float32, MutAnyOrigin],
+    pooled: MutPointer[Float32, MutAnyOrigin],
+    lo_bits: Int32,
+    hi_bits: Int32,
+    r_first_in: Int32,
+    n_replicates_in: Int32,
+    n_pooled_in: Int32,
+    n_x_in: Int32,
+):
+    """`perm_stat_kernel`'s `null_dist[r]`, bit for bit, at any pooled
+    length: the same membership mask (`rank < n_x` under the total order
+    `(draw_permutation_key(key, r, j), j)`) and the same two pinned folds.
+
+    The statistic needs only WHICH positions fall in the first group, not
+    the full rank vector, so this kernel does not rank. It SELECTS the
+    order's `n_x`-th smallest element `(kstar, jstar)` by radix select: 8
+    byte passes over the 64-bit key (a 256-bucket integer histogram per
+    pass, the keys regenerated from `(key, r, j)` each pass, nothing stored
+    per position), then -- only when several positions share the key
+    `kstar` and the threshold falls among them -- 4 byte passes over the
+    position among those ties. A position is in the first group exactly
+    when its `(key, j) <= (kstar, jstar)`, which is `rank < n_x`.
+
+    ONE BLOCK PER REPLICATE, `O(N)` work per pass and 1 KB of threadgroup
+    memory at every `N` (the counting rank was `O(N^2)` and `8 N` bytes,
+    which bounded it at `PERM_MAX_POOLED`). The histogram adds are integer
+    atomics: a count is the same in every arrival order, so the selected
+    threshold is a pure function of the keys on every vendor.
+
+    `key_mask` is the check's tie probe (`check_permutation_select`): a
+    narrow mask makes most keys collide so the position passes run. The
+    shipped kernel keeps every bit.
+    """
+    comptime assert (
+        stat == STAT_MEAN or stat == STAT_STD or stat == STAT_DIFF_MEANS
+    ), "perm_select_stat_kernel: mean, std and diff_means are the implemented arms"
+    comptime assert PERM_SELECT_BUCKETS % tpb == 0, "tpb must divide 256"
+    comptime lanes = PINNED_SUM_W // tpb
+    comptime per = PERM_SELECT_BUCKETS // tpb
+    var rr = Int(block_idx.x)
+    if rr >= Int(n_replicates_in):
+        return
+    var r = Int(r_first_in) + rr
+    var tid = Int(thread_idx.x)
+    var key = key_join(lo_bits, hi_bits)
+    var n_pooled = Int(n_pooled_in)
+    var n_x = Int(n_x_in)
+    var n_y = n_pooled - n_x
+
+    var hist = stack_allocation[
+        PERM_SELECT_BUCKETS,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sel = stack_allocation[
+        4,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    # The key passes: kstar is the n_x-th smallest key, `need` how many of
+    # the positions holding exactly kstar the first group takes.
+    var need = n_x
+    var kstar = UInt64(0)
+    var eq_count = 0
+    for p in range(8):
+        var shift = 56 - 8 * p
+        comptime for b in range(per):
+            hist[tid * per + b] = Int32(0)
+        barrier()
+        var j = tid
+        while j < n_pooled:
+            var k = draw_permutation_key(key, r, j) & key_mask
+            var live = True
+            if p > 0:
+                live = (k >> UInt64(shift + 8)) == (kstar >> UInt64(shift + 8))
+            if live:
+                _ = Atomic.fetch_add(
+                    hist.unsafe_offset(Int((k >> UInt64(shift)) & UInt64(255))),
+                    Int32(1),
+                )
+            j += tpb
+        barrier()
+        _perm_select_digit[tpb](hist, sel, need, tid)
+        kstar = kstar | (UInt64(Int(sel[0])) << UInt64(shift))
+        need = Int(sel[1])
+        eq_count = Int(sel[2])
+        barrier()
+
+    # The tie passes, only when the threshold splits a run of equal keys
+    # (probability ~ N^2 / 2^65 per replicate): select the need-th smallest
+    # position among the positions holding kstar.
+    var jstar = n_pooled
+    if eq_count != need:
+        var jpre = 0
+        for p in range(4):
+            var shift = 24 - 8 * p
+            comptime for b in range(per):
+                hist[tid * per + b] = Int32(0)
+            barrier()
+            var j = tid
+            while j < n_pooled:
+                if (draw_permutation_key(key, r, j) & key_mask) == kstar:
+                    var live = True
+                    if p > 0:
+                        live = (j >> (shift + 8)) == (jpre >> (shift + 8))
+                    if live:
+                        _ = Atomic.fetch_add(
+                            hist.unsafe_offset((j >> shift) & 255), Int32(1)
+                        )
+                j += tpb
+            barrier()
+            _perm_select_digit[tpb](hist, sel, need, tid)
+            jpre = jpre | (Int(sel[0]) << shift)
+            need = Int(sel[1])
+            barrier()
+        jstar = jpre
+
+    # Phase 3, `perm_stat_kernel`'s folds with the mask regenerated.
+    var chunks = chunk_count(n_pooled)
+    var sum_x = Float32(0.0)
+    var sum_y = Float32(0.0)
+    for c in range(chunks):
+        var vx = SIMD[DType.float32, lanes](0.0)
+        var vy = SIMD[DType.float32, lanes](0.0)
+        comptime for lane in range(lanes):
+            var i = c * PINNED_SUM_W + tid + lane * tpb
+            if i < n_pooled:
+                var v = ftz(pooled.unsafe_load(i))
+                if _perm_in_first[key_mask](key, r, i, kstar, jstar):
+                    vx[lane] = v
+                else:
+                    vy[lane] = v
+        var tx = virtual_block_sum[tpb](vx)
+        var ty = virtual_block_sum[tpb](vy)
+        if tid == 0:
+            sum_x = ftz(sum_x + tx)
+            sum_y = ftz(sum_y + ty)
+
+    var value = Float32(0.0)
+    comptime if stat == STAT_DIFF_MEANS:
+        if tid == 0:
+            value = ftz(_mean_of_sum(sum_x, n_x) - _mean_of_sum(sum_y, n_y))
+    comptime if stat == STAT_MEAN:
+        if tid == 0:
+            value = _mean_of_sum(sum_x, n_x)
+    comptime if stat == STAT_STD:
+        var mx = _block_broadcast[tpb](_mean_of_sum(sum_x, n_x))
+        var ssd = Float32(0.0)
+        for c2 in range(chunks):
+            var vs = SIMD[DType.float32, lanes](0.0)
+            comptime for lane in range(lanes):
+                var i2 = c2 * PINNED_SUM_W + tid + lane * tpb
+                if i2 < n_pooled:
+                    if _perm_in_first[key_mask](key, r, i2, kstar, jstar):
                         var dv = ftz(ftz(pooled.unsafe_load(i2)) - mx)
                         vs[lane] = ftz(identical_mul(dv, dv))
             var ts = virtual_block_sum[tpb](vs)

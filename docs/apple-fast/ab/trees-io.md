@@ -1,6 +1,11 @@
 # lane/apple-fast-trees-io: IsolationForest fit upload (PLAN-trees.md next-experiment 3)
 
-Written without a Mojo toolchain (cloud peer); the first M3 build is the compile check.
+Merged onto origin/main 2026-10-02 (eabeff395): main's row-major upload + device finite scan
+(`IF_FAST_ROWMAJOR`, `iforest_device_scan`) and its NVIDIA/AMD `IF_DEVICE_TRANSPOSE` arm are
+kept as main has them; this branch adds only the two defines below on top. Light A/Bs: one
+dataset per define first (istella for SAMPLED_UPLOAD, where the 1.8 GB upload is; the taxi
+line only after it wins), 2 pairs. Written without a Mojo toolchain (cloud peer); the first M3
+build is the compile check.
 The switch is compiled under FAST + Apple only (`IF_FAST_ROWMAJOR`) and defaults OFF;
 IDENTICAL compiles the old code. PLAN-trees next-experiment 4 (RF/ET device finite scan)
 is NOT on this branch: lane/apple-fast-rfet-scan has it.

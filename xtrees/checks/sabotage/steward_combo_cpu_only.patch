@@ -111,16 +111,6 @@ index 1304504fd..0676dc0a2 100644
      return PythonObject(n)
  
  
-@@ -391,7 +409,8 @@ def tree_shap_binding(
-     if n > 0:
-         tree_shap(i32_ptr(_i(forest, 0)), i32_ptr(_i(forest, 1)), f32_ptr(_i(forest, 2)), i32_ptr(_i(forest, 3)),
-                   f32_ptr(_i(forest, 4)), f64_ptr(Int(py=cover)), f32_ptr(Int(py=x)), n, _i(params, 1),
--                  _i(params, 2), _i(params, 3), _f(params, 4), f64_ptr(Int(py=phi)))
-+                  _i(params, 2), _i(params, 3), _f(params, 4) * (1.0000001 if is_defined["MOJOLEARN_COLUMN_CPU"]() else 1.0),
-+                  f64_ptr(Int(py=phi)))  # COLUMN SABOTAGE: the CPU column only
-     return PythonObject(n)
- 
- 
 @@ -427,6 +446,10 @@ def block_mean_binding(y: PythonObject, res: PythonObject, params: PythonObject)
          raise Error("x_trees_block_mean: nb must be >= 1")
      if m > 0:
@@ -193,3 +183,15 @@ diff --git a/gbdt/host/gbdt_oracle_multiclass.mojo b/gbdt/host/gbdt_oracle_multi
                          der[(plane_base + d) * n_rows + idx] = dd
                          var ad = abs(dd)
                          if ad > max_abs:
+diff --git a/xtrees/shap_host.mojo b/xtrees/shap_host.mojo
+index b009ce79c..c7dc0f361 100644
+--- a/xtrees/shap_host.mojo
++++ b/xtrees/shap_host.mojo
+@@ -132,5 +132,7 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
+         r0 += rc
+     if fo.meta[SHAP_META_BAD] != 0:
+         raise Error("x_trees tree_shap: malformed tree")
++    for q in range(n * d * k):
++        out[unsafe_offset=q] = out[unsafe_offset=q] * Float32(1.0000001)  # COLUMN SABOTAGE: the CPU column only
+     _ = buf^
+     _ = fo^

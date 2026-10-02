@@ -293,11 +293,13 @@ def test_tree_explainer_matches_shap_recursion():
     phi = np.asarray(ex.shap_values(Xb[:40]))
     # additivity: sum of values + expected value == the forest's probability
     np.testing.assert_allclose(phi.sum(1) + np.asarray(ex.expected_value), np.asarray(m.predict_proba(Xb[:40])),
-                               atol=2e-6)
+                               atol=1e-5)
     # the same recursion in the shap package, on our trees and our cover
-    arrays, k, scale, cover = ex._parts[0]
-    off, col, q, left, leaves = (np.asarray(a) for a in arrays)
-    cover = np.asarray(cover)
+    # (ours is float32 per-leaf paths; theirs float64 recursion)
+    off, col, q, left, leaves = (np.asarray(a) for a in ex._forest)
+    k = ex.n_outputs_
+    tscale = np.asarray(ex._tscale).astype(np.float64)
+    cover = np.asarray(ex._cover).astype(np.float64)
     trees = []
     for t in range(len(off) - 1):
         lo, hi = off[t], off[t + 1]
@@ -305,13 +307,13 @@ def test_tree_explainer_matches_shap_recursion():
         trees.append(dict(children_left=lc, children_right=np.where(lc == -1, -1, lc + 1),
                           children_default=lc, features=np.where(lc == -1, -2, col[lo:hi]).astype(np.int64),
                           thresholds=q[lo:hi].astype(np.float64),
-                          values=leaves[lo * k:hi * k].reshape(hi - lo, k).astype(np.float64) * scale,
+                          values=leaves[lo * k:hi * k].reshape(hi - lo, k).astype(np.float64) * tscale[t],
                           node_sample_weight=cover[lo:hi]))
     ref = shap.TreeExplainer(dict(trees=trees, base_offset=0), feature_perturbation="tree_path_dependent")
     rv = np.asarray(ref.shap_values(Xb[:40].astype(np.float64), check_additivity=False))
     if rv.shape != phi.shape:
         rv = np.moveaxis(rv, 0, -1)
-    np.testing.assert_allclose(phi, rv, rtol=1e-9, atol=1e-12)
+    np.testing.assert_allclose(phi, rv, rtol=1e-4, atol=1e-5)
     Xr, Xrb, yra, yrb = _reg()
     d = ml.DARTRegressor(n_estimators=20, random_state=0).fit(Xr, yra)
     e = ml.TreeExplainer(d, data=Xr[:200])

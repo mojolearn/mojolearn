@@ -59,6 +59,7 @@ Spelling only; gated by `check_if_refusals` over n = 1..4097.
 from std.math import log2
 from std.memory import bitcast
 from std.sys import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -389,6 +390,76 @@ def _raise_first_nonfinite_colmajor_view(
                 + " values (DEVIATION 680)"
             )
     raise Error("Input " + name + ": the threaded finite scan and the named scan disagree")
+
+
+#: Lane gap-trees-nv: the fit's training matrix goes to the device as the
+#: caller's ROW-major bytes, straight from the borrowed address, and one
+#: kernel writes the column-major plane (`ftz` per cell, the same function
+#: the host pass applies, so the same words) and raises a flag on a
+#: non-finite cell. The host pass it replaces allocated an `n x n_cols` pinned
+#: stage per fit and transposed on the CPU; the refusal's message still comes
+#: from the named host scan, which now runs only after the flag is up.
+#: NVIDIA and AMD; Apple keeps the pinned stage (a raw host-pointer upload
+#: costs more there). OPT-IN until its A/B: `-D MOJOLEARN_IFOREST_DEVICE_TRANSPOSE`.
+comptime IF_DEVICE_TRANSPOSE = is_defined["MOJOLEARN_IFOREST_DEVICE_TRANSPOSE"]() and not has_apple_gpu_accelerator()
+
+
+def _if_transpose_ftz_kernel(
+    src: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    n_rows: Int64,
+    n_cols: Int32,
+    bad: MutPointer[Int32, MutAnyOrigin],
+):
+    """`dst[c * n_rows + r] = ftz(src[r * n_cols + c])`, one thread per row;
+    `bad[0] = 1` when any cell of the row is NaN or infinity."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nr = Int(n_rows)
+    if r >= nr:
+        return
+    var nc = Int(n_cols)
+    var flag = False
+    for c in range(nc):
+        var v = src.unsafe_load(r * nc + c)
+        if (bitcast[DType.uint32](v) & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            flag = True
+        dst.unsafe_store(c * nr + r, ftz(v))
+    if flag:
+        bad.unsafe_store(0, Int32(1))
+
+
+def _upload_rowmajor_as_colmajor_device(
+    ctx: DeviceContext, src_addr: Int, n_rows: Int, n_cols: Int, pad: Int, poison: Float32
+) raises -> DeviceBuffer[DType.float32]:
+    """`_upload_rowmajor_as_colmajor`'s buffer (the same words, `poison` in the
+    `pad` tail), transposed on the device (`IF_DEVICE_TRANSPOSE`)."""
+    var n = n_rows * n_cols
+    var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src_addr)
+    var raw = ctx.enqueue_create_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_buf=raw, src_ptr=src)
+    var buf = ctx.enqueue_create_buffer[DType.float32](n + pad)
+    if pad > 0:
+        buf.enqueue_fill(poison)
+    var bad = ctx.enqueue_create_buffer[DType.int32](1)
+    bad.enqueue_fill(Int32(0))
+    ctx.enqueue_function[_if_transpose_ftz_kernel](
+        raw.unsafe_ptr(),
+        buf.unsafe_ptr(),
+        Int64(n_rows),
+        Int32(n_cols),
+        bad.unsafe_ptr(),
+        grid_dim=((n_rows + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    var hb = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=bad)
+    ctx.synchronize()
+    if hb.unsafe_ptr().unsafe_load(0) != Int32(0):
+        _raise_first_nonfinite_colmajor_view("X", src, n_rows, n_cols)
+    _ = raw^
+    _ = bad^
+    _ = hb^
+    return buf^
 
 
 def _upload_rowmajor_as_colmajor(
@@ -845,9 +916,7 @@ struct IsolationForest(Movable):
                 for i in range(n_rows):
                     for k in range(n_cols):
                         x_rows.append(input_colmajor[k * n_rows + i])
-                var x_rows_ptr = rebind[MutPointer[Float32, MutUntrackedOrigin]](
-                    x_rows.unsafe_ptr()
-                )
+                var x_rows_ptr = x_rows.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
                 data = _upload_sampled_fast(
                     ctx, Int(x_rows_ptr), n_rows, n_cols, n_trees, n_sampled_rows,
                     self.params.bootstrap, self.params.seed, global_tree_start,
@@ -860,6 +929,9 @@ struct IsolationForest(Movable):
             work_indices = _poisoned_i32(ctx, n_trees * n_sampled_rows, pad, poison)
             stack = _poisoned_i32(ctx, n_trees * scratch_stride, pad, poison)
         else:
+            # lane apple-fast-trees2: IF_FAST_ROWMAJOR (FAST on Apple) keeps X
+            # row-major on the device; lane gap-trees-nv: IF_DEVICE_TRANSPOSE
+            # (opt-in, NVIDIA/AMD) transposes on the device. Both kept.
             comptime if IF_FAST_ROWMAJOR:
                 if src_addr != 0:
                     data = _upload_rowmajor_fast(ctx, src_addr, n_rows, n_cols, pad, poison)
@@ -871,6 +943,13 @@ struct IsolationForest(Movable):
                         for k in range(n_cols):
                             x_rows.append(input_colmajor[k * n_rows + i])
                     data = _upload_f32(ctx, x_rows, n_rows * n_cols, pad, poison)
+            elif IF_DEVICE_TRANSPOSE:
+                if src_addr != 0:
+                    data = _upload_rowmajor_as_colmajor_device(
+                        ctx, src_addr, n_rows, n_cols, pad, poison
+                    )
+                else:
+                    data = _upload_f32(ctx, input_colmajor, n_rows * n_cols, pad, poison)
             else:
                 if src_addr != 0:
                     data = _upload_rowmajor_as_colmajor(ctx, src_addr, n_rows, n_cols, pad, poison)

@@ -45,8 +45,8 @@ for r in $(seq 1 $REPS); do
   done
 done
 for a in $arms; do
-  ms=$(grep "AFC-AB $TAG arm=$a " $LOG | grep -o 'median_ms=[0-9.]*' | cut -d= -f2 | sort -n | tr '\n' ' ')
+  ms=$(grep "AFC-AB $TAG arm=$a rep=[0-9]* lane=$LANE ds=$DS " $LOG | grep -o 'median_ms=[0-9.]*' | cut -d= -f2 | sort -n | tr '\n' ' ')
   md=$(echo $ms | tr ' ' '\n' | grep . | awk '{v[NR]=$1} END{if(NR==0)print "none"; else if(NR%2)print v[(NR+1)/2]; else print (v[NR/2]+v[NR/2+1])/2}')
-  dg=$(grep "AFC-AB $TAG arm=$a " $LOG | grep -o 'digest=[0-9a-f]*' | sort -u | tr '\n' ' ')
+  dg=$(grep "AFC-AB $TAG arm=$a rep=[0-9]* lane=$LANE ds=$DS " $LOG | grep -o 'digest=[0-9a-f]*' | sort -u | tr '\n' ' ')
   echo "AFC-AB-SUMMARY $TAG arm=$a lane=$LANE ds=$DS median_of_medians_ms=$md runs=[$ms] $dg" | tee -a $LOG
 done

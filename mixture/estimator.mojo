@@ -1373,19 +1373,18 @@ def gaussian_mixture_score(
 ) raises -> Float32:
     """`score(X)`, `_base.py:375-393`: the mean of `score_samples`.
 
-    Folded ASCENDING through `ftz` and divided by `n` with one
-    `identical_div`, which is `meanll_kernel`'s arithmetic on the host. It is
+    Folded in the chunked levels (`mixture/meanll_order.mojo`), the E-step
+    mean's arithmetic on the host. It is
     on the host because `bic` and `aic` need the value as a host scalar and
     a second device fold for a number that is about to be read back is a fold
     shape nobody needs.
     """
     from checks.numerics import identical_div
 
+    from mixture.meanll_order import gmm_meanll_host
+
     var s = gaussian_mixture_score_samples(model, x, n_samples)
-    var acc = Float32(0.0)
-    for i in range(n_samples):
-        acc = ftz(acc + ftz(s[i]))
-    return ftz(identical_div(acc, Float32(n_samples)))
+    return gmm_meanll_host(s, n_samples)
 
 
 def gaussian_mixture_bic(

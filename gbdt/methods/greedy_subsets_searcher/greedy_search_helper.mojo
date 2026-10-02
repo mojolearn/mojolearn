@@ -222,6 +222,54 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
 from gbdt.gpu_util.kernel.reorder_single_pass import (
     launch_stable_partition_routed,
 )
+from gbdt.gpu_util.kernel.reorder_one_bit import FAST_SORT_SIZE
+from gbdt.gpu_util.partitions_reduce import partition_stats_finish_kernel
+from gbdt.methods.greedy_subsets_searcher.kernel.split_points import (
+    partition_place_kernel,
+    partition_scan_chunks_kernel,
+)
+from gbdt.methods.greedy_subsets_searcher.kernel.fused_level import (
+    FUSED_LEVEL_BLOCK,
+    sym_copy_update_kernel,
+    sym_resolve_split_count_kernel,
+    sym_scan_sub_pstats_kernel,
+)
+
+# ================= DEVIATION 3110 (scheduling only) =================
+# THE SYMMETRIC LEVEL IN FEWER LAUNCHES AND THE TREE IN ONE DRAIN (lane
+# hr-gbdt-small, docs/plans/HOST_ROUTE_REMOVAL.md). A small pool was launch
+# and sync bound on the GPU (Apple M4, 320 to 20,000 rows: 4 to 5 ms a Plain
+# tree), which is what the deleted small-pool host route papered over. Per
+# planned level the unfused schedule launches
+#     hist (H) + scan + subtract + pstats partial + pstats finish + score
+#     + resolve + flags + partition count + partition scan + place
+#     + reorder (1 or 2) + parent copy + partition update  = H + 13 (14)
+# and the fused one
+#     hist (H) + [scan + subtract + pstats partial] + pstats finish + score
+#     + [resolve + flags + partition count] + partition scan + place
+#     + reorder (1 or 2) + [parent copy + partition update] = H + 8 (9)
+# (depth 0 has no subtract: H + 12 -> H + 8). `kernel/fused_level.mojo`
+# carries the argument that every fused kernel writes the unfused bytes.
+# The tree's two drains (winners, then sizes) become one when the tree grows
+# to full depth: the leaf tail is enqueued before the winner drain and only
+# `AppendModels` (the cursor add) waits for the gates; a rare early stop
+# takes the unfused tail after its rollback, exactly as before.
+#
+# DEFAULT ON. `-D MOJOLEARN_GBDT_FUSED_LEVEL_OFF` restores the unfused
+# schedule for the A/B; a partition the single-pass route would take
+# (`max_live_rows > FAST_SORT_SIZE`) keeps the unfused split chain.
+# ====================================================================
+comptime SYM_FUSED_LEVEL = not is_defined["MOJOLEARN_GBDT_FUSED_LEVEL_OFF"]()
+# per-fusion switches under the umbrella, for bisecting one fused kernel
+comptime SYM_FUSED_SCAN = SYM_FUSED_LEVEL and not is_defined[
+    "MOJOLEARN_GBDT_FUSED_SCAN_OFF"
+]()
+comptime SYM_FUSED_SPLIT = SYM_FUSED_LEVEL and not is_defined[
+    "MOJOLEARN_GBDT_FUSED_SPLIT_OFF"
+]()
+comptime SYM_FUSED_COPY = SYM_FUSED_LEVEL and not is_defined[
+    "MOJOLEARN_GBDT_FUSED_COPY_OFF"
+]()
 
 
 def compute_target_std_dev(
@@ -4065,6 +4113,250 @@ def enqueue_symmetric_partition_update(
     )
 
 
+def enqueue_fused_scan_sub_pstats(
+    ctx: DeviceContext,
+    use_ridx: Bool,
+    subtract: Bool,
+    level_ids: MutPointer[UInt32, MutAnyOrigin],
+    mut sub_from: DeviceBuffer[DType.uint32],
+    mut flat_first: DeviceBuffer[DType.uint32],
+    mut flat_folds: DeviceBuffer[DType.uint32],
+    mut flat_one_hot: DeviceBuffer[DType.uint8],
+    n_features: Int,
+    hist_cells_per_leaf: Int,
+    mut hist: DeviceBuffer[DType.float32],
+    n_compute: Int,
+    n_live: Int,
+    stat_count: Int,
+    n_rows: Int,
+    mut dense_ids: DeviceBuffer[DType.uint32],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut stats: DeviceBuffer[DType.float32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut stat_partials: DeviceBuffer[DType.float32],
+    mut part_stats: DeviceBuffer[DType.float32],
+    sm_count: Int,
+) raises -> Int:
+    """DEVIATION 3110: `scan_histograms_kernel`, `substract_histograms(_vec4)
+    _kernel` (when `subtract`) and phase 1 of `compute_partition_stats(
+    _gather)` as ONE launch, then its phase 2. The partial chunk count is
+    `partition_stats_chunks`, the one formula both unfused launchers read,
+    so the partials and their fold are the unfused ones. Returns the launch
+    count."""
+    var sm = sm_count
+    if sm < 0:
+        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    var max_chunks = partition_stats_chunks(sm, stat_count)
+    var scan_blocks = (n_features + FUSED_LEVEL_BLOCK - 1) // FUSED_LEVEL_BLOCK
+    var grid = (scan_blocks + max_chunks, n_live, stat_count)
+    if subtract:
+        if use_ridx:
+            ctx.enqueue_function[sym_scan_sub_pstats_kernel[True, True]](
+                level_ids, sub_from.unsafe_ptr(), flat_first.unsafe_ptr(),
+                flat_folds.unsafe_ptr(), flat_one_hot.unsafe_ptr(),
+                Int32(n_features), Int32(hist_cells_per_leaf),
+                hist.unsafe_ptr(), Int32(scan_blocks), Int32(n_compute),
+                dense_ids.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+                stats.unsafe_ptr(), row_index.unsafe_ptr(), Int32(n_rows),
+                stat_partials.unsafe_ptr(), Int32(max_chunks),
+                grid_dim=grid, block_dim=(FUSED_LEVEL_BLOCK, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[sym_scan_sub_pstats_kernel[True, False]](
+                level_ids, sub_from.unsafe_ptr(), flat_first.unsafe_ptr(),
+                flat_folds.unsafe_ptr(), flat_one_hot.unsafe_ptr(),
+                Int32(n_features), Int32(hist_cells_per_leaf),
+                hist.unsafe_ptr(), Int32(scan_blocks), Int32(n_compute),
+                dense_ids.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+                stats.unsafe_ptr(), row_index.unsafe_ptr(), Int32(n_rows),
+                stat_partials.unsafe_ptr(), Int32(max_chunks),
+                grid_dim=grid, block_dim=(FUSED_LEVEL_BLOCK, 1, 1),
+            )
+    else:
+        if use_ridx:
+            ctx.enqueue_function[sym_scan_sub_pstats_kernel[False, True]](
+                level_ids, sub_from.unsafe_ptr(), flat_first.unsafe_ptr(),
+                flat_folds.unsafe_ptr(), flat_one_hot.unsafe_ptr(),
+                Int32(n_features), Int32(hist_cells_per_leaf),
+                hist.unsafe_ptr(), Int32(scan_blocks), Int32(n_compute),
+                dense_ids.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+                stats.unsafe_ptr(), row_index.unsafe_ptr(), Int32(n_rows),
+                stat_partials.unsafe_ptr(), Int32(max_chunks),
+                grid_dim=grid, block_dim=(FUSED_LEVEL_BLOCK, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[sym_scan_sub_pstats_kernel[False, False]](
+                level_ids, sub_from.unsafe_ptr(), flat_first.unsafe_ptr(),
+                flat_folds.unsafe_ptr(), flat_one_hot.unsafe_ptr(),
+                Int32(n_features), Int32(hist_cells_per_leaf),
+                hist.unsafe_ptr(), Int32(scan_blocks), Int32(n_compute),
+                dense_ids.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+                stats.unsafe_ptr(), row_index.unsafe_ptr(), Int32(n_rows),
+                stat_partials.unsafe_ptr(), Int32(max_chunks),
+                grid_dim=grid, block_dim=(FUSED_LEVEL_BLOCK, 1, 1),
+            )
+    ctx.enqueue_function[partition_stats_finish_kernel](
+        dense_ids.unsafe_ptr(),
+        stat_partials.unsafe_ptr(),
+        part_stats.unsafe_ptr(),
+        Int32(max_chunks),
+        Int32(max_chunks),
+        grid_dim=(1, n_live, stat_count),
+        block_dim=(STATS_BLOCK, 1, 1),
+    )
+    return 2
+
+
+def fused_split_chain_ok(max_live_rows: Int) -> Bool:
+    """Whether DEVIATION 3110's fused split chain stands in for
+    `launch_stable_partition_routed`: only where the router takes the
+    three-phase path, which it always does at or under `FAST_SORT_SIZE`."""
+    return SYM_FUSED_LEVEL and max_live_rows <= FAST_SORT_SIZE
+
+
+def enqueue_fused_resolve_split_partition(
+    ctx: DeviceContext,
+    mut out_score: DeviceBuffer[DType.float32],
+    mut out_bin: DeviceBuffer[DType.uint32],
+    argmax_blocks: Int,
+    mut bfr_off: DeviceBuffer[DType.uint32],
+    mut bfr_mask: DeviceBuffer[DType.uint32],
+    mut bfr_shift: DeviceBuffer[DType.uint32],
+    mut bfr_first: DeviceBuffer[DType.uint32],
+    mut bfr_folds: DeviceBuffer[DType.uint32],
+    mut bfr_oh: DeviceBuffer[DType.uint8],
+    mut bfr_bin: DeviceBuffer[DType.uint32],
+    level: Int,
+    n_live: Int,
+    mut winners_score: DeviceBuffer[DType.float32],
+    mut winners_bf: DeviceBuffer[DType.uint32],
+    mut sp_feats: DeviceBuffer[DType.uint8],
+    mut sp_bins: DeviceBuffer[DType.uint32],
+    mut ids_c: DeviceBuffer[DType.uint32],
+    mut cindex: DeviceBuffer[DType.uint32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut dense_ids: DeviceBuffer[DType.uint32],
+    mut flags: DeviceBuffer[DType.uint8],
+    mut seq: DeviceBuffer[DType.uint32],
+    max_live_rows: Int,
+    mut chunk_zeros: DeviceBuffer[DType.uint32],
+    mut chunk_offsets: DeviceBuffer[DType.uint32],
+    mut leaf_zeros: DeviceBuffer[DType.uint32],
+    mut gather_map: DeviceBuffer[DType.uint32],
+    mut sorted_flags: DeviceBuffer[DType.uint8],
+    sm_count: Int,
+) raises -> Int:
+    """DEVIATION 3110: `enqueue_symmetric_level_winner`,
+    `enqueue_symmetric_split_flags` and phase 1 of `launch_stable_partition`
+    as ONE launch on phase 1's grid, then phases 2 and 3 exactly as
+    `launch_stable_partition` launches them (same `max_chunks`, same
+    machine-sized chunk grid). Returns the launch count."""
+    var max_chunks = (max_live_rows + PARTITION_BLOCK - 1) // PARTITION_BLOCK
+    if max_chunks < 1:
+        max_chunks = 1
+    var chunk_grid = max_chunks
+    if sm_count > 0:
+        var target = split_points_grid_x(n_live, sm_count)
+        if target < chunk_grid:
+            chunk_grid = target
+    ctx.enqueue_function[sym_resolve_split_count_kernel](
+        out_score.unsafe_ptr(), out_bin.unsafe_ptr(), Int32(argmax_blocks),
+        bfr_off.unsafe_ptr(), bfr_mask.unsafe_ptr(), bfr_shift.unsafe_ptr(),
+        bfr_first.unsafe_ptr(), bfr_folds.unsafe_ptr(), bfr_oh.unsafe_ptr(),
+        bfr_bin.unsafe_ptr(), Int32(level), Int32(n_live),
+        winners_score.unsafe_ptr(), winners_bf.unsafe_ptr(),
+        sp_feats.unsafe_ptr(), sp_bins.unsafe_ptr(), ids_c.unsafe_ptr(),
+        cindex.unsafe_ptr(), row_index.unsafe_ptr(),
+        p_off.unsafe_ptr(), p_sz.unsafe_ptr(), dense_ids.unsafe_ptr(),
+        flags.unsafe_ptr(), seq.unsafe_ptr(),
+        chunk_zeros.unsafe_ptr(), Int32(max_chunks),
+        grid_dim=(chunk_grid, n_live, 1),
+        block_dim=(PARTITION_BLOCK, 1, 1),
+    )
+    ctx.enqueue_function[partition_scan_chunks_kernel](
+        dense_ids.unsafe_ptr(),
+        p_sz.unsafe_ptr(),
+        chunk_zeros.unsafe_ptr(),
+        chunk_offsets.unsafe_ptr(),
+        leaf_zeros.unsafe_ptr(),
+        Int32(max_chunks),
+        grid_dim=(1, n_live, 1),
+        block_dim=(PARTITION_BLOCK, 1, 1),
+    )
+    ctx.enqueue_function[partition_place_kernel](
+        dense_ids.unsafe_ptr(),
+        p_off.unsafe_ptr(),
+        p_sz.unsafe_ptr(),
+        flags.unsafe_ptr(),
+        chunk_offsets.unsafe_ptr(),
+        leaf_zeros.unsafe_ptr(),
+        gather_map.unsafe_ptr(),
+        sorted_flags.unsafe_ptr(),
+        Int32(max_chunks),
+        grid_dim=(chunk_grid, n_live, 1),
+        block_dim=(PARTITION_BLOCK, 1, 1),
+    )
+    return 3
+
+
+def enqueue_fused_copy_update(
+    ctx: DeviceContext,
+    mut dense_ids: DeviceBuffer[DType.uint32],
+    mut right_leaf_ids: DeviceBuffer[DType.uint32],
+    stat_count: Int,
+    hist_cells_per_leaf: Int,
+    n_live: Int,
+    mut hist: DeviceBuffer[DType.float32],
+    mut sorted_flags: DeviceBuffer[DType.uint8],
+    mut p_off: DeviceBuffer[DType.uint32],
+    mut p_sz: DeviceBuffer[DType.uint32],
+    mut hp_off: DeviceBuffer[DType.uint32],
+    mut hp_sz: DeviceBuffer[DType.uint32],
+    mut ids_compute: DeviceBuffer[DType.uint32],
+    mut sub_from: DeviceBuffer[DType.uint32],
+    mut sub_what: DeviceBuffer[DType.uint32],
+    sm_count: Int,
+) raises -> Int:
+    """DEVIATION 3110: `enqueue_symmetric_parent_histogram_copy` and
+    `enqueue_symmetric_partition_update` as ONE launch, the same width
+    dispatch (4-wide when the slot is a multiple of 4 floats) and the
+    update's machine-sized block count. Returns the launch count."""
+    var total = hist_cells_per_leaf * stat_count
+    var update_blocks = split_points_grid_x(n_live, sm_count)
+    if total % 4 == 0:
+        var copy_blocks = (total // 4 + FUSED_LEVEL_BLOCK - 1) // FUSED_LEVEL_BLOCK
+        if copy_blocks < 1:
+            copy_blocks = 1
+        ctx.enqueue_function[sym_copy_update_kernel[True]](
+            Int32(stat_count), Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
+            Int32(copy_blocks),
+            dense_ids.unsafe_ptr(), right_leaf_ids.unsafe_ptr(),
+            sorted_flags.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+            hp_off.unsafe_ptr(), hp_sz.unsafe_ptr(), ids_compute.unsafe_ptr(),
+            sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
+            grid_dim=(copy_blocks + update_blocks, n_live, 1),
+            block_dim=(FUSED_LEVEL_BLOCK, 1, 1),
+        )
+    else:
+        var copy_blocks = (total + FUSED_LEVEL_BLOCK - 1) // FUSED_LEVEL_BLOCK
+        if copy_blocks < 1:
+            copy_blocks = 1
+        ctx.enqueue_function[sym_copy_update_kernel[False]](
+            Int32(stat_count), Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
+            Int32(copy_blocks),
+            dense_ids.unsafe_ptr(), right_leaf_ids.unsafe_ptr(),
+            sorted_flags.unsafe_ptr(), p_off.unsafe_ptr(), p_sz.unsafe_ptr(),
+            hp_off.unsafe_ptr(), hp_sz.unsafe_ptr(), ids_compute.unsafe_ptr(),
+            sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
+            grid_dim=(copy_blocks + update_blocks, n_live, 1),
+            block_dim=(FUSED_LEVEL_BLOCK, 1, 1),
+        )
+    return 1
+
+
 struct TSynchronizedSymmetricLevelState(Movable):
     """Persistent workspace and host winner boundary for tensor search.
 
@@ -5378,85 +5670,108 @@ def run_tree_layout_traced[
                     )
         mgr.stream_kernel()
 
-        # their `TScanHistogramsKernel` (`:1262`), over the computed set;
-        # a prefix sum is linear, so the derived sibling needs no scan.
-        ctx.enqueue_function[scan_histograms_kernel](
-            level_ids,
-            flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
-            flat_one_hot.unsafe_ptr(),
-            Int32(len(active_fold_counts)), Int32(hist_cells_per_leaf),
-            hist.unsafe_ptr(),
-            grid_dim=(
-                (len(active_fold_counts) + 255) // 256, n_compute, stat_count
-            ),
-            block_dim=(256, 1, 1),
-        )
-        mgr.stream_kernel()
-
-        # their `SubstractHistograms(bigLeaves, smallLeaves, subsets)`
-        # (`:1354`). `from - what`, in place, one launch for all pairs:
-        # from = the right children (`dense_ids + half`, whose slots hold
-        # the parent via `copy_histograms`), what = the computed left.
-        if planned and half > 0:
-            if hist_cells_per_leaf % 4 == 0:
-                ctx.enqueue_function[substract_histograms_vec4_kernel](
-                    sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
-                    Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
-                    grid_dim=(
-                        (hist_cells_per_leaf // 4 + 255) // 256,
-                        half, stat_count
-                    ),
-                    block_dim=(256, 1, 1),
+        comptime if SYM_FUSED_SCAN:
+            # DEVIATION 3110: scan (+ subtract) and pstats phase 1 in one
+            # launch, then phase 2; the same bytes as the branch below.
+            var fused_launches = enqueue_fused_scan_sub_pstats(
+                ctx, use_ridx, planned and half > 0,
+                rebind[MutPointer[UInt32, MutAnyOrigin]](level_ids), sub_from,
+                flat_first, flat_folds, flat_one_hot,
+                len(active_fold_counts), hist_cells_per_leaf, hist,
+                n_compute, n_live, stat_count, n_rows,
+                dense_ids, p_off, p_sz, stats, row_index,
+                stat_partials, part_stats, sm_count,
+            )
+            for _ in range(fused_launches):
+                mgr.stream_kernel()
+            times.end(ctx, "sym.hist")
+            if trace.enabled:
+                trace.record_device(
+                    ctx,
+                    tree_tag + ".depth" + _sym_dd2(depth) + ".hist",
+                    hist,
+                    count=n_live * stat_count * hist_cells_per_leaf,
                 )
-            else:
-                ctx.enqueue_function[substract_histograms_kernel](
-                    sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
-                    Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
-                    grid_dim=(
-                        (hist_cells_per_leaf + 255) // 256,
-                        half, stat_count
-                    ),
-                    block_dim=(256, 1, 1),
-                )
+        else:
+            # their `TScanHistogramsKernel` (`:1262`), over the computed set;
+            # a prefix sum is linear, so the derived sibling needs no scan.
+            ctx.enqueue_function[scan_histograms_kernel](
+                level_ids,
+                flat_first.unsafe_ptr(), flat_folds.unsafe_ptr(),
+                flat_one_hot.unsafe_ptr(),
+                Int32(len(active_fold_counts)), Int32(hist_cells_per_leaf),
+                hist.unsafe_ptr(),
+                grid_dim=(
+                    (len(active_fold_counts) + 255) // 256, n_compute, stat_count
+                ),
+                block_dim=(256, 1, 1),
+            )
             mgr.stream_kernel()
 
-        times.end(ctx, "sym.hist")
+            # their `SubstractHistograms(bigLeaves, smallLeaves, subsets)`
+            # (`:1354`). `from - what`, in place, one launch for all pairs:
+            # from = the right children (`dense_ids + half`, whose slots hold
+            # the parent via `copy_histograms`), what = the computed left.
+            if planned and half > 0:
+                if hist_cells_per_leaf % 4 == 0:
+                    ctx.enqueue_function[substract_histograms_vec4_kernel](
+                        sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
+                        Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
+                        grid_dim=(
+                            (hist_cells_per_leaf // 4 + 255) // 256,
+                            half, stat_count
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[substract_histograms_kernel](
+                        sub_from.unsafe_ptr(), sub_what.unsafe_ptr(),
+                        Int32(hist_cells_per_leaf), hist.unsafe_ptr(),
+                        grid_dim=(
+                            (hist_cells_per_leaf + 255) // 256,
+                            half, stat_count
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
+                mgr.stream_kernel()
 
-        # ---- identity checkpoint: this depth's REDUCED histograms ----
-        # `hist` is `[leaf][stat][binFeature]` leaf-major, and at this
-        # point slots 0..n_live-1 hold the level's SCANNED histograms
-        # (computed or sibling-derived); the tail holds deeper slots'
-        # stale cells, so only the live prefix is hashed (identity_trace
-        # rule 3). Records drain -- a traced run is not a timing (rule 4)
-        # -- and sit OUTSIDE the timed regions.
-        if trace.enabled:
-            trace.record_device(
-                ctx,
-                tree_tag + ".depth" + _sym_dd2(depth) + ".hist",
-                hist,
-                count=n_live * stat_count * hist_cells_per_leaf,
-            )
+            times.end(ctx, "sym.hist")
 
-        # their `AllReduceThroughMaster(subsets->CurrentPartStats(), ...)`
-        times.begin(ctx)
-        # DEVIATION 2031: with stationary stats, phase 1 gathers through
-        # `row_index`; the walk order over positions is unchanged, so the
-        # value sequence entering every partial is identical.
-        if use_ridx:
-            compute_partition_stats_gather(
-                ctx, n_live, max_live_rows, stat_count, n_rows,
-                dense_ids, p_off, p_sz, stats, row_index,
-                stat_partials, part_stats,
-                sm_count=sm_count,
-            )
-        else:
-            compute_partition_stats(
-                ctx, n_live, max_live_rows, stat_count, n_rows,
-                dense_ids, p_off, p_sz, stats, stat_partials, part_stats,
-                sm_count=sm_count,
-            )
-        mgr.stream_kernel()
-        times.end(ctx, "sym.pstats")
+            # ---- identity checkpoint: this depth's REDUCED histograms ----
+            # `hist` is `[leaf][stat][binFeature]` leaf-major, and at this
+            # point slots 0..n_live-1 hold the level's SCANNED histograms
+            # (computed or sibling-derived); the tail holds deeper slots'
+            # stale cells, so only the live prefix is hashed (identity_trace
+            # rule 3). Records drain -- a traced run is not a timing (rule 4)
+            # -- and sit OUTSIDE the timed regions.
+            if trace.enabled:
+                trace.record_device(
+                    ctx,
+                    tree_tag + ".depth" + _sym_dd2(depth) + ".hist",
+                    hist,
+                    count=n_live * stat_count * hist_cells_per_leaf,
+                )
+
+            # their `AllReduceThroughMaster(subsets->CurrentPartStats(), ...)`
+            times.begin(ctx)
+            # DEVIATION 2031: with stationary stats, phase 1 gathers through
+            # `row_index`; the walk order over positions is unchanged, so the
+            # value sequence entering every partial is identical.
+            if use_ridx:
+                compute_partition_stats_gather(
+                    ctx, n_live, max_live_rows, stat_count, n_rows,
+                    dense_ids, p_off, p_sz, stats, row_index,
+                    stat_partials, part_stats,
+                    sm_count=sm_count,
+                )
+            else:
+                compute_partition_stats(
+                    ctx, n_live, max_live_rows, stat_count, n_rows,
+                    dense_ids, p_off, p_sz, stats, stat_partials, part_stats,
+                    sm_count=sm_count,
+                )
+            mgr.stream_kernel()
+            times.end(ctx, "sym.pstats")
 
         # ---- identity checkpoint: the level's per-leaf totals ---------
         # `part_stats` is the REDUCED `[leaf][stat]` result the score
@@ -5546,36 +5861,58 @@ def run_tree_layout_traced[
         # to the smaller bin-feature), same descriptors; the gates their
         # host applies BEFORE splitting are applied by ours AFTER the
         # drain, with a one-level rollback on the rare stop.
-        times.begin(ctx)
-        enqueue_symmetric_level_winner(
-            ctx, out_score, out_bin, argmax_blocks,
-            bfr_off, bfr_mask, bfr_shift, bfr_first, bfr_folds,
-            bfr_oh, bfr_bin, depth, n_live,
-            winners_score, winners_bf, sp_feats, sp_bins, ids_c,
-        )
-        mgr.stream_kernel()
-        times.end(ctx, "sym.winner")
+        var take_fused_split = False
+        comptime if SYM_FUSED_SPLIT:
+            take_fused_split = fused_split_chain_ok(max_live_rows)
+        if take_fused_split:
+            comptime if SYM_FUSED_SPLIT:
+                # DEVIATION 3110: resolve + pack + flags + partition phase 1 in
+                # one launch, then partition phases 2 and 3.
+                times.begin(ctx)
+                var split_launches = enqueue_fused_resolve_split_partition(
+                    ctx, out_score, out_bin, argmax_blocks,
+                    bfr_off, bfr_mask, bfr_shift, bfr_first, bfr_folds,
+                    bfr_oh, bfr_bin, depth, n_live,
+                    winners_score, winners_bf, sp_feats, sp_bins, ids_c,
+                    active_cindex, row_index, p_off, p_sz, dense_ids,
+                    flags, seq, max_live_rows,
+                    chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
+                    sm_count,
+                )
+                for _ in range(split_launches):
+                    mgr.stream_kernel()
+                times.end(ctx, "sym.split.partition")
+        else:
+            times.begin(ctx)
+            enqueue_symmetric_level_winner(
+                ctx, out_score, out_bin, argmax_blocks,
+                bfr_off, bfr_mask, bfr_shift, bfr_first, bfr_folds,
+                bfr_oh, bfr_bin, depth, n_live,
+                winners_score, winners_bf, sp_feats, sp_bins, ids_c,
+            )
+            mgr.stream_kernel()
+            times.end(ctx, "sym.winner")
 
-        times.begin(ctx)
-        # `numBlocks.x = (leavesCount > 4 ? 2 : 4) * TArchProps::SMCount()`
-        # (`split_points.cu:563`): MACHINE-sized, like every strided grid in
-        # their file; `wide` was data-sized and is not what their grid x
-        # means.
-        enqueue_symmetric_split_flags(
-            ctx, active_cindex, row_index, p_off, p_sz, dense_ids,
-            sp_feats, sp_bins, flags, seq, n_live, sm_count,
-        )
-        mgr.stream_kernel()
-        times.end(ctx, "sym.split.flags")
-        times.begin(ctx)
+            times.begin(ctx)
+            # `numBlocks.x = (leavesCount > 4 ? 2 : 4) * TArchProps::SMCount()`
+            # (`split_points.cu:563`): MACHINE-sized, like every strided grid in
+            # their file; `wide` was data-sized and is not what their grid x
+            # means.
+            enqueue_symmetric_split_flags(
+                ctx, active_cindex, row_index, p_off, p_sz, dense_ids,
+                sp_feats, sp_bins, flags, seq, n_live, sm_count,
+            )
+            mgr.stream_kernel()
+            times.end(ctx, "sym.split.flags")
+            times.begin(ctx)
 
-        launch_stable_partition_routed[HIST_BUILD_MODE == NUMERIC_IDENTICAL](
-            ctx, n_live, max_live_rows, dense_ids, p_off, p_sz, flags,
-            chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
-            sm_count=sm_count,
-        )
-        mgr.stream_kernel()
-        times.end(ctx, "sym.split.partition")
+            launch_stable_partition_routed[HIST_BUILD_MODE == NUMERIC_IDENTICAL](
+                ctx, n_live, max_live_rows, dense_ids, p_off, p_sz, flags,
+                chunk_zeros, chunk_offsets, leaf_zeros, gmap, sflags,
+                sm_count=sm_count,
+            )
+            mgr.stream_kernel()
+            times.end(ctx, "sym.split.partition")
         times.begin(ctx)
 
         # their `TSplitPointsKernel::Run` (`split_points.cpp:64-136`), the
@@ -5627,44 +5964,55 @@ def run_tree_layout_traced[
         times.end(ctx, "sym.split.reorder")
         times.begin(ctx)
 
-        # their `CopyHistogram(LeafIdToSplit, RightLeafIdAfterSplit, ...)`
-        # (`split_points.cpp:326`), issued right before the partition update
-        # exactly where they issue it.
-        #
-        # The left child kept the parent's slot so it already holds the parent
-        # histogram; this puts the same histogram in the right child's slot.
-        # Both children are then `PreviousPath`, which is what lets the next
-        # level pair them and derive one by subtraction whichever is smaller.
-        # WIDTH DISPATCH, see `copy_histograms_vec4_kernel`'s deviation
-        # block. MEASURED 11.0 -> 65.2 GB/s at a depth-6 level's shape.
-        enqueue_symmetric_parent_histogram_copy(
-            ctx, dense_ids, ids_c, stat_count, hist_cells_per_leaf,
-            n_live, hist,
-        )
-        mgr.stream_kernel()
+        comptime if SYM_FUSED_COPY:
+            # DEVIATION 3110: the parent copy and the partition update (with
+            # next level's plan) in one launch; disjoint buffers.
+            var cu_launches = enqueue_fused_copy_update(
+                ctx, dense_ids, ids_c, stat_count, hist_cells_per_leaf,
+                n_live, hist, sflags, p_off, p_sz, hp_off, hp_sz,
+                ids_compute, sub_from, sub_what, sm_count,
+            )
+            for _ in range(cu_launches):
+                mgr.stream_kernel()
+        else:
+            # their `CopyHistogram(LeafIdToSplit, RightLeafIdAfterSplit, ...)`
+            # (`split_points.cpp:326`), issued right before the partition update
+            # exactly where they issue it.
+            #
+            # The left child kept the parent's slot so it already holds the parent
+            # histogram; this puts the same histogram in the right child's slot.
+            # Both children are then `PreviousPath`, which is what lets the next
+            # level pair them and derive one by subtraction whichever is smaller.
+            # WIDTH DISPATCH, see `copy_histograms_vec4_kernel`'s deviation
+            # block. MEASURED 11.0 -> 65.2 GB/s at a depth-6 level's shape.
+            enqueue_symmetric_parent_histogram_copy(
+                ctx, dense_ids, ids_c, stat_count, hist_cells_per_leaf,
+                n_live, hist,
+            )
+            mgr.stream_kernel()
 
-        # their `UpdatePartitionsAfterSplit` (`split_points.cu:387`), reached
-        # with NO host arithmetic in front of it because the left child kept
-        # the parent's slot.
-        #
-        # `hp_off` / `hp_size` are their `partsCpu`
-        # (`split_properties_helper.h:49`), which on their side is
-        # `EPtrType::CudaHost` and is READ BY THE HOST with no copy at all
-        # (`split_points.cpp:56-62`, `split_points.cu:667`). Ours are
-        # ordinary device buffers that nothing reads, so the kernel pays
-        # their write and we collect none of their benefit. That is a
-        # deviation forced by the toolchain, not a choice; the search that
-        # established it is the DEVIATION BLOCK in
-        # `gbdt/gpu_util/gpu_data/partitions.mojo`.
-        # their `:397`, the same machine-sized expression. The fused
-        # variant (DEVIATION 210) also writes next level's compute plan
-        # from the border thread's registers, retiring the per-level
-        # `plan_level_kernel` launch above.
-        enqueue_symmetric_partition_update(
-            ctx, dense_ids, ids_c, n_live, sflags, p_off, p_sz,
-            hp_off, hp_sz, ids_compute, sub_from, sub_what, sm_count,
-        )
-        mgr.stream_kernel()
+            # their `UpdatePartitionsAfterSplit` (`split_points.cu:387`), reached
+            # with NO host arithmetic in front of it because the left child kept
+            # the parent's slot.
+            #
+            # `hp_off` / `hp_size` are their `partsCpu`
+            # (`split_properties_helper.h:49`), which on their side is
+            # `EPtrType::CudaHost` and is READ BY THE HOST with no copy at all
+            # (`split_points.cpp:56-62`, `split_points.cu:667`). Ours are
+            # ordinary device buffers that nothing reads, so the kernel pays
+            # their write and we collect none of their benefit. That is a
+            # deviation forced by the toolchain, not a choice; the search that
+            # established it is the DEVIATION BLOCK in
+            # `gbdt/gpu_util/gpu_data/partitions.mojo`.
+            # their `:397`, the same machine-sized expression. The fused
+            # variant (DEVIATION 210) also writes next level's compute plan
+            # from the border thread's registers, retiring the per-level
+            # `plan_level_kernel` launch above.
+            enqueue_symmetric_partition_update(
+                ctx, dense_ids, ids_c, n_live, sflags, p_off, p_sz,
+                hp_off, hp_sz, ids_compute, sub_from, sub_what, sm_count,
+            )
+            mgr.stream_kernel()
         times.end(ctx, "sym.split")
 
         n_live = n_live * 2
@@ -5717,10 +6065,59 @@ def run_tree_layout_traced[
     # drain that failed to deliver them must not be walked.
     for i in range(max_depth + 1):
         h_wbf.unsafe_ptr().unsafe_store(i, DEAD_DEVICE_POISON)
+    # DEVIATION 3110: SPECULATE THAT THE TREE GROWS TO FULL DEPTH, which is
+    # every tree whose gates all pass. The leaf tail that needs no gate (the
+    # final level's stats, the leaf values, their readback) and the offsets
+    # export are enqueued BEFORE the drain, so a full tree drains once
+    # instead of two or three times; only `AppendModels` (the cursor add)
+    # waits for the gates, enqueued after them with no drain of its own.
+    # The kernels and their inputs are the unspeculated tail's: the
+    # structure is final when the loop ends, and a full tree changes no
+    # partition after it. A rare early stop clears `spec_tail` and takes the
+    # unspeculated tail after its rollback, recomputing every value the
+    # speculation wrote.
+    #
+    # THE DRAIN IS `ctx.synchronize()`, NOT `mgr.wait_complete()`, on this
+    # arm. DEVIATION 2009 (below) read a stale `h_off` because the manager
+    # drains only streams a recorded launch marked active, and that arm had
+    # recorded none since the previous drain; a full-queue synchronize
+    # covers every copy enqueued before it whatever the manager recorded.
+    # The manager is per call, so the activity it still records dies here.
+    var spec_tail = SYM_FUSED_LEVEL
+    if spec_tail and apply_to_cursor:
+        if use_ridx:
+            compute_partition_stats_gather(
+                ctx, n_live, max_live_rows, stat_count, n_rows,
+                dense_ids, p_off, p_sz, stats, row_index,
+                stat_partials, part_stats,
+                sm_count=sm_count,
+            )
+        else:
+            compute_partition_stats(
+                ctx, n_live, max_live_rows, stat_count, n_rows,
+                dense_ids, p_off, p_sz, stats, stat_partials, part_stats,
+                sm_count=sm_count,
+            )
+        mgr.stream_kernel()
+        ctx.enqueue_function[compute_leaf_values_kernel](
+            part_stats.unsafe_ptr(), Int32(stat_count), Int32(n_live),
+            l2_leaf_reg, leaf_values.unsafe_ptr(),
+            grid_dim=(n_live + LEAF_BLOCK - 1) // LEAF_BLOCK,
+            block_dim=LEAF_BLOCK,
+        )
+        mgr.stream_kernel()
+        ctx.enqueue_copy(
+            dst_ptr=h_leaf_values.unsafe_ptr(), src_buf=leaf_values
+        )
+    if spec_tail and export_offsets:
+        ctx.enqueue_copy(dst_ptr=h_off.unsafe_ptr(), src_buf=p_off)
     ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
     ctx.enqueue_copy(dst_ptr=h_wsc.unsafe_ptr(), src_buf=winners_score)
     ctx.enqueue_copy(dst_ptr=h_wbf.unsafe_ptr(), src_buf=winners_bf)
-    mgr.wait_complete()
+    if spec_tail:
+        ctx.synchronize()
+    else:
+        mgr.wait_complete()
     times.end(ctx, "sym.drain")
 
     # ---- DEVIATION 2002: the end-of-fit validation, before anything
@@ -5796,6 +6193,8 @@ def run_tree_layout_traced[
         grown += 1
 
     if grown < max_depth:
+        # the speculative tail (DEVIATION 3110) assumed a full tree
+        spec_tail = False
         # merge the final sizes pairwise once per discarded level
         var live = n_live
         for _ in range(max_depth - grown):
@@ -5820,7 +6219,20 @@ def run_tree_layout_traced[
     # that order, and so does this. The structure is final at this point;
     # nothing below changes which rows are in which leaf.
     # ================================================================
-    if apply_to_cursor:
+    if apply_to_cursor and spec_tail:
+        # DEVIATION 3110: the leaf values are already home; `AppendModels`
+        # alone, now that the gates have passed.
+        times.begin(ctx)
+        ctx.enqueue_function[add_model_value_kernel](
+            p_off.unsafe_ptr(), p_sz.unsafe_ptr(), row_index.unsafe_ptr(),
+            leaf_values.unsafe_ptr(), learning_rate, cursor.unsafe_ptr(),
+            Int32(1), Int32(0),
+            grid_dim=(split_points_grid_x(n_live, sm_count), n_live, 1),
+            block_dim=(256, 1, 1),
+        )
+        mgr.stream_kernel()
+        times.end(ctx, "sym.leaves")
+    elif apply_to_cursor:
         # The final level's stats were never computed: the loop computes them
         # BEFORE each split, and the last split has no level after it.
         # `ids_a` still holds the LAST level's ids, and `n_live` has doubled
@@ -5890,8 +6302,9 @@ def run_tree_layout_traced[
     # own sync) instead of reusing `h_sz`, so the two host reads cannot
     # race each other. Drain count is back to the pre-2009 three.
     # ============================================================
-    ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
-    mgr.wait_complete()
+    if not spec_tail:
+        ctx.enqueue_copy(dst_ptr=h_sz.unsafe_ptr(), src_buf=p_sz)
+        mgr.wait_complete()
     # ---- DEVIATION 2002: the root-coverage invariant, the model-shape
     # half of the validation. The root partition was seeded to cover
     # `n_rows` and every split MOVES rows between leaves and creates
@@ -5958,8 +6371,9 @@ def run_tree_layout_traced[
         # The pre-2009 form (copy after the drain, its own sync) --
         # DEVIATION 2009's revert; `h_off` destination kept so the
         # offsets and sizes reads use distinct host buffers.
-        ctx.enqueue_copy(dst_ptr=h_off.unsafe_ptr(), src_buf=p_off)
-        ctx.synchronize()
+        if not spec_tail:
+            ctx.enqueue_copy(dst_ptr=h_off.unsafe_ptr(), src_buf=p_off)
+            ctx.synchronize()
         out_leaf_offsets.clear()
         for i in range(n_live):
             out_leaf_offsets.append(Int(h_off.unsafe_ptr().unsafe_load(i)))

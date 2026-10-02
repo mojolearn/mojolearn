@@ -32,6 +32,7 @@ from std.math import ceildiv, fma
 from std.sys.info import simd_width_of
 
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
+from x_decomp.cells import svd_rotation_significant
 from decomposition.host.pca_full_oracle import SVD_TPB
 from decomposition.host.pca_oracle import PCA_ORACLE_HOST_SABOTAGE, _host_jacobi_fold, host_jacobi_rotation_cs
 from x_decomp.cells import F32Ptr
@@ -165,7 +166,9 @@ def fast_one_sided_jacobi_svd(r: List[Float32], n: Int, max_sweeps: Int, tol: Fl
                 var np_ = ftz(identical_sqrt(app))
                 var nq_ = ftz(identical_sqrt(aqq))
                 var thresh = ftz(tol * ftz(np_ * nq_))
-                if abs(apq) > thresh:
+                # Andrew, 2026-10-01: an insignificant rotation (a column below
+                # float32 resolution of its partner) is skipped outright
+                if abs(apq) > thresh and svd_rotation_significant(app, aqq):
                     rots += 1
                     var cs = host_jacobi_rotation_cs(app, aqq, apq)
                     _rotate(rp, rq, n, cs[0], cs[1])
