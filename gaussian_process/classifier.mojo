@@ -15,11 +15,13 @@ matrix-vector products per Newton iteration and the latent mean
 (`gemm/checks/gemm_identical.mojo::identical_gemm_into` at `OP_TN`), and the
 triangular solve for the latent variance (`cholesky/checks/trsm.mojo::
 trsm_lower`). The per-row steps (the sigmoid, the weights, `B`'s cells, the
-Newton right-hand side, the likelihood and the stop test, the variance fold
-and the float64 probability) are `gaussian_process/host/gpc_steps.mojo`, the
-same source the CPU host oracle compiles. DEVIATIONS 2830 (the stop rule),
-2831 (the pinned float32 orders) and 2832 (the float64 probability and its
-erf) are written there.
+Newton right-hand side, the likelihood and the variance fold) are
+`gaussian_process/gpc_items.mojo` kernels, the float64 probability and the
+one-vs-rest combine are `gaussian_process/gpc_proba64.mojo` kernels in
+software binary64, and the stop test is `gaussian_process/gpc_common.mojo`;
+the CPU host oracle (`gaussian_process/host/gpc_steps.mojo`) compiles the
+same statements. DEVIATIONS 2830 (the stop rule), 2831 (the pinned float32
+orders) and 2832 (the float64 probability and its erf) are written there.
 
 NO OPTIMIZER. As for the regressor (DEVIATION 1761), the kernel is the
 kernel passed in; `optimizer`, `n_restarts_optimizer` and `warm_start` are
@@ -48,6 +50,7 @@ from cholesky.checks.trsm import cho_solve
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
 from std.time import perf_counter_ns
+from std.memory import memcpy
 from std.os import getenv
 from std.sys.compile import is_defined
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
@@ -91,7 +94,7 @@ from gaussian_process.gpc_device_var import (
     gpc_latent_var_kernel,
     gpc_scale_rows_kernel,
 )
-from gaussian_process.host.gpc_steps import (
+from gaussian_process.gpc_common import (
     GPCBinaryFit,
     GPCLatent,
     gpc_neg_inf32,
@@ -99,6 +102,7 @@ from gaussian_process.host.gpc_steps import (
     gpc_validate_labels,
     gpc_validate_max_iter,
 )
+from gaussian_process.gpc_proba64 import gpc_ovr_combine_row, gpc_pi_star_sf64
 from gaussian_process.gpc_items import (
     gpc_weight_item, gpc_rhs_item, gpc_scale_item, gpc_a_item, gpc_residual_item, gpc_lml_part_item, gpc_lml_fin,
     gpc_fold_blocks,
@@ -221,6 +225,72 @@ def gpc_lml_part_kernel(a: _GP, f: _GP, y: _GP, n: Int32, pdot: _GP, pt2: _GP, n
 def gpc_lml_fin_kernel(pdot: _GP, pt2: _GP, nb: Int32, logdet: Float32, out: _GP):
     if _gtid() == 0:
         out.unsafe_store(0, gpc_lml_fin(pdot, pt2, Int(nb), logdet))
+
+
+comptime _GU = MutPointer[UInt64, MutAnyOrigin]
+
+
+def gpc_proba_kernel(mean: _GP, variance: _GP, out: _GU, n: Int32):
+    """DEVIATION 2832's class-1 probability, one query row per thread, as
+    the float64 word (`gpc_proba64.mojo::gpc_pi_star_sf64`, the host
+    column's `gpc_pi_star` in software binary64)."""
+    var t = _gtid()
+    if t < Int(n):
+        out.unsafe_store(t, gpc_pi_star_sf64(mean.unsafe_load(t), variance.unsafe_load(t)))
+
+
+def gpc_ovr_combine_kernel(cols: _GU, out: _GU, codes: _GI, n: Int32, k: Int32):
+    """DEVIATION 2833's one-vs-rest normalization and argmax, one query row
+    per thread (`gpc_proba64.mojo::gpc_ovr_combine_row`)."""
+    var t = _gtid()
+    if t < Int(n):
+        gpc_ovr_combine_row(cols, out, codes, t, Int(n), Int(k))
+
+
+def gpc_ovr_combine_host(col_addrs: List[Int], out_addr: Int, codes_addr: Int, n: Int) raises:
+    """The one-vs-rest combine of k = len(col_addrs) class columns on the
+    device. Column c's address holds the n float64 class-1 probabilities of
+    class c (staged class-major, `cols[c * n + t]`); `out_addr` receives the
+    normalized rows row-major (n * k float64) and `codes_addr` the n int32
+    argmax codes."""
+    var k = len(col_addrs)
+    if n <= 0 or k <= 0:
+        raise Error(
+            "gpc_ovr_combine: n and k must be positive, got n="
+            + String(n)
+            + " k="
+            + String(k)
+        )
+    var ctx = _family_ctx()
+    var hin = ctx.enqueue_create_host_buffer[DType.uint64](n * k)
+    for c in range(k):
+        memcpy(dest=hin.unsafe_ptr() + c * n, src=_GU(unsafe_from_address=col_addrs[c]), count=n)
+    var din = ctx.enqueue_create_buffer[DType.uint64](n * k)
+    ctx.enqueue_copy(dst_buf=din, src_ptr=hin.unsafe_ptr())
+    var dout = ctx.enqueue_create_buffer[DType.uint64](n * k)
+    var dcodes = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_function[gpc_ovr_combine_kernel](
+        _GU(unsafe_from_address=Int(din.unsafe_ptr())),
+        _GU(unsafe_from_address=Int(dout.unsafe_ptr())),
+        _GI(unsafe_from_address=Int(dcodes.unsafe_ptr())),
+        Int32(n),
+        Int32(k),
+        grid_dim=_gblocks(n),
+        block_dim=GPC_STEP_TPB,
+    )
+    var hout = ctx.enqueue_create_host_buffer[DType.uint64](n * k)
+    var hcodes = ctx.enqueue_create_host_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
+    ctx.enqueue_copy(dst_ptr=hcodes.unsafe_ptr(), src_buf=dcodes)
+    ctx.synchronize()
+    memcpy(dest=_GU(unsafe_from_address=out_addr), src=hout.unsafe_ptr(), count=n * k)
+    memcpy(dest=_GI(unsafe_from_address=codes_addr), src=hcodes.unsafe_ptr(), count=n)
+    _ = hin^
+    _ = din^
+    _ = dout^
+    _ = dcodes^
+    _ = hout^
+    _ = hcodes^
 
 
 def _gpc_fit_binary_device(
@@ -488,6 +558,7 @@ def gpc_predict_binary_host(
     identical_gemm_into(ctx, dmean, dkc, dr, dws, n_star, 1, n_train, OP_TN)
     var mean = _download(ctx, dmean, n_star)
     var variance = List[Float32]()
+    var proba = List[Float64]()
     var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var t_v0 = Int(perf_counter_ns())
     if want_variance:
@@ -506,7 +577,24 @@ def gpc_predict_binary_host(
             grid_dim=((n_star + GPC_VAR_TPB - 1) // GPC_VAR_TPB, 1, 1),
             block_dim=(GPC_VAR_TPB, 1, 1),
         )
+        # DEVIATION 2832's probability from the resident mean and variance
+        var dpr = ctx.enqueue_create_buffer[DType.uint64](n_star)
+        ctx.enqueue_function[gpc_proba_kernel](
+            _dp(dmean), _dp(dvar), _GU(unsafe_from_address=Int(dpr.unsafe_ptr())), Int32(n_star),
+            grid_dim=_gblocks(n_star), block_dim=GPC_STEP_TPB,
+        )
         variance = _download(ctx, dvar, n_star)
+        var hpr = ctx.enqueue_create_host_buffer[DType.uint64](n_star)
+        ctx.enqueue_copy(dst_ptr=hpr.unsafe_ptr(), src_buf=dpr)
+        ctx.synchronize()
+        proba = List[Float64](unsafe_uninit_length=n_star)
+        memcpy(
+            dest=MutPointer[UInt64, MutAnyOrigin](unsafe_from_address=Int(proba.unsafe_ptr())),
+            src=hpr.unsafe_ptr(),
+            count=n_star,
+        )
+        _ = dpr^
+        _ = hpr^
         _ = dwv^
         _ = dv2^
         _ = dvar^
@@ -526,4 +614,4 @@ def gpc_predict_binary_host(
     _ = dws^
     # DEVIATION 1946: the context dies LAST.
     _ = ctx^
-    return GPCLatent(mean^, variance^)
+    return GPCLatent(mean^, variance^, proba^)
