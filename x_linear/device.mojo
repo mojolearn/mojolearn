@@ -716,16 +716,16 @@ def glm_init_parts_kernel(y: FP, n: Int32, nb: Int32, sw: Int32, parts: FP, wf: 
             st(parts, nbb + b, fold_fa(y, lo, 1, cnt))
     witness_end(wf, woff, nonce)
 
-def glm_init_finish_kernel(parts: FP, n: Int32, nb: Int32, d: Int32, fi: Int32, link: Int32, sw: Int32,
+def glm_init_finish_kernel(parts: FP, nf: Float32, nb: Int32, d: Int32, fi: Int32, link: Int32, sw: Int32,
                            res: FP, sc: FP, wf: IP, woff: Int32, nonce: Int32):
     """The partials folded ascending: den (sc[0]) and the intercept start."""
     var nbb = Int(nb)
     var dd = Int(d)
-    var den = fold_parts(parts, 0, nbb) if sw != 0 else i2f(Int(n))
+    var den = fold_parts(parts, 0, nbb) if sw != 0 else nf
     st(sc, 0, den)
     fill(res, 0, dd + 3, Float32(0))
     if fi != 0:
-        st(res, dd, glm_start_of(fold_parts(parts, nbb, nbb), Int(n), den, Int(link), sw != 0))
+        st(res, dd, glm_start_of(fold_parts(parts, nbb, nbb), nf, den, Int(link), sw != 0))
     witness_end(wf, woff, nonce)
 
 def glm_obj_map_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, power: Float32, link: Int32, sw: Int32,
@@ -962,7 +962,7 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
             var nbi = fold_blocks(n)
             ctx.enqueue_function[glm_init_parts_kernel](dy.unsafe_ptr(), Int32(n), Int32(nbi), Int32(sw), dfparts.unsafe_ptr(),
                                                         wit.p(), Int32(0), nonce, grid_dim=_xg_blocks(nbi), block_dim=XG_TPB)
-            ctx.enqueue_function[glm_init_finish_kernel](dfparts.unsafe_ptr(), Int32(n), Int32(nbi), Int32(d), Int32(fi),
+            ctx.enqueue_function[glm_init_finish_kernel](dfparts.unsafe_ptr(), i2f(n), Int32(nbi), Int32(d), Int32(fi),
                                                          Int32(link), Int32(sw), dres.unsafe_ptr(), dsc.unsafe_ptr(),
                                                          wit.p(), Int32(_xg_blocks(nbi)), nonce, grid_dim=1, block_dim=1)
             count0 = _xg_blocks(nbi) + 1

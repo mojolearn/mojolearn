@@ -50,15 +50,15 @@ def glm_den(y: FP, n: Int, sw: Bool) -> Float32:
     return i2f(n)
 
 
-def glm_start_of(sum_y: Float32, n: Int, den: Float32, link: Int, sw: Bool) -> Float32:
-    """The intercept start from the fold sum_y (sum y, or sum w y)."""
-    var ym = fd(sum_y, den) if sw else fd(sum_y, i2f(n))
+def glm_start_of(sum_y: Float32, nf: Float32, den: Float32, link: Int, sw: Bool) -> Float32:
+    """The intercept start from the fold sum_y (sum y, or sum w y); nf = i2f(n)."""
+    var ym = fd(sum_y, den) if sw else fd(sum_y, nf)
     return flog(ym) if link == GLM_LINK_LOG else ym
 
 
 def glm_start(y: FP, n: Int, den: Float32, link: Int, sw: Bool) -> Float32:
     var acc = chain_fmad_blocked(y, n, 1, y, 0, 1, n) if sw else fold_fa_blocked(y, 0, 1, n)
-    return glm_start_of(acc, n, den, link, sw)
+    return glm_start_of(acc, i2f(n), den, link, sw)
 
 
 def _unit(power: Float32, link: Int, y: Float32, eta: Float32, what: Int) -> Float32:
