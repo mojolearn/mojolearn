@@ -66,6 +66,13 @@ from checks.kernel_matrix import (
 )
 
 from gbdt.methods.kernel.compute_point_hist2_loop import PointHist2
+from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    hist2_dither,
+    hist2_quantize,
+)
+from std.atomic import Atomic, Ordering
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.info import is_apple_gpu
 
 
 #: 512 on Apple against CatBoost's 768. See the module docstring.
@@ -324,4 +331,165 @@ def pw_hb_binary_sum[
     for i in range(16):
         if (i & f_mask) == 0:
             acc += smem.unsafe_load(i * 16 + 2 * group_id + w)
+    return acc
+
+
+# ================= lane/neural-pass124 (2026-10-02) =================
+# THE HALF-BYTE AND BINARY HISTOGRAMS IN FIXED POINT under the ordered
+# tiers. `PointHistHalfByte` adds floats between two barriers per add (16
+# barriers a point) so its slices never collide, and float sums tie the
+# cell to that order: one block per feature group, every document in one
+# block (L40S Ordered taxi 4.1M: the depth-0 half-byte and binary launches
+# 7.6 and 7.8 ms a tree on 32 blocks of a 142-SM part). Here, as the 8-bit
+# accumulator does (DEVIATION 93), each point's two stats are quantized on
+# entry (`hist2_quantize`, the dither keyed on the row) and added as Int32
+# with a shared atomic into the reduced layout itself,
+# `[value * 16 + 2 * nibble + stat]`: an integer sum is the same in any
+# order, so no slices, no turn-taking barriers, no warp fold, and the
+# document axis may be split across blocks (the slots fold as integers).
+# NEW BITS for the ordered tiers' half-byte and binary cells (the host
+# oracle sums the same quantized integers); FAST keeps CatBoost's floats.
+comptime PW_HB_FIXED = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
+
+
+comptime PW_HBI_WARPS = PW_HB_BLOCK // 32
+#: Apple's threadgroup atomics cost more than the turn-taking barriers
+#: (M4: 272 vs 209 ms of pw.hist at taxi 1M), so there the integer
+#: accumulator keeps `PointHistHalfByte`'s slices, rotation and two barriers
+#: an add, and adds Int32; elsewhere one copy per warp with shared atomics.
+#: Integer sums either way: the same cells.
+comptime PW_HBI_ATOMIC = not is_apple_gpu()
+
+
+struct PointHistHalfByteInt[origin: MutOrigin](PointHist2):
+    var base: MutPointer[Int32, Self.origin, address_space = AddressSpace.SHARED]
+    var root: MutPointer[Int32, Self.origin, address_space = AddressSpace.SHARED]
+    var scale: Float32
+
+    def __init__(
+        out self,
+        buff: MutPointer[Int32, Self.origin, address_space = AddressSpace.SHARED],
+        scale: Float32,
+    ):
+        comptime assert PW_HBI_WARPS * PW_HB_OUT_FLOATS <= PW_HB_SMEM_FLOATS, "the warp copies outgrow the half-byte page"
+        var tid = Int(thread_idx.x)
+        var i = tid
+        while i < PW_HB_SMEM_FLOATS:
+            buff.unsafe_store(i, Int32(0))
+            i += PW_HB_BLOCK
+        comptime if PW_HBI_ATOMIC:
+            self.base = buff + (tid // 32) * PW_HB_OUT_FLOATS
+        else:
+            self.base = buff + pw_hb_slice_offset(tid)
+        self.root = buff
+        self.scale = scale
+        barrier()
+
+    def add_point(mut self, ci: UInt32, t: Float32, w: Float32, row: UInt32):
+        var u = hist2_dither(Int(row))
+        var qw = hist2_quantize(w, self.scale, u)
+        var qt = hist2_quantize(t, self.scale, u)
+        comptime if PW_HBI_ATOMIC:
+            if qw == Int32(0) and qt == Int32(0):
+                return
+            comptime for i in range(8):
+                var at = Int((ci >> UInt32(28 - 4 * i)) & 15) * 16 + 2 * i
+                if qw != Int32(0):
+                    _ = Atomic.fetch_add[ordering = Ordering.RELAXED](self.base.unsafe_offset(at), qw)
+                if qt != Int32(0):
+                    _ = Atomic.fetch_add[ordering = Ordering.RELAXED](self.base.unsafe_offset(at + 1), qt)
+        else:
+            # `PointHistHalfByte.add_point`'s windows, Int32 adds
+            var tid = Int(thread_idx.x)
+            var flag = (tid & 1) != 0
+            var add_first = qt if flag else qw
+            var add_second = qw if flag else qt
+            var shift = tid & 14
+            var bins = rotate_right(ci, 2 * shift)
+            comptime for i in range(8):
+                var f = (shift + (i << 1)) & 14
+                var offset = Int((bins >> UInt32(28 - 4 * i)) & 15)
+                offset <<= 5
+                offset += f
+                barrier()
+                var a1 = offset + (1 if flag else 0)
+                self.base.unsafe_store(a1, self.base.unsafe_load(a1) + add_first)
+                barrier()
+                var a2 = offset + (0 if flag else 1)
+                self.base.unsafe_store(a2, self.base.unsafe_load(a2) + add_second)
+
+    def add_point_2(
+        mut self,
+        ci: SIMD[DType.uint32, 2],
+        t: SIMD[DType.float32, 2],
+        w: SIMD[DType.float32, 2],
+        rows: SIMD[DType.uint32, 2],
+    ):
+        self.add_point(ci[0], t[0], w[0], rows[0])
+        self.add_point(ci[1], t[1], w[1], rows[1])
+
+    def add_point_4(
+        mut self,
+        ci: SIMD[DType.uint32, 4],
+        t: SIMD[DType.float32, 4],
+        w: SIMD[DType.float32, 4],
+        rows: SIMD[DType.uint32, 4],
+    ):
+        self.add_point(ci[0], t[0], w[0], rows[0])
+        self.add_point(ci[1], t[1], w[1], rows[1])
+        self.add_point(ci[2], t[2], w[2], rows[2])
+        self.add_point(ci[3], t[3], w[3], rows[3])
+
+    def reduce(mut self):
+        """Onto `root[0:256]` as `[value * 16 + 2 * nibble + stat]`: the
+        warp copies summed (atomic form), or `PointHistHalfByte.reduce`'s
+        two stages in Int32 (turn-taking form)."""
+        var tid = Int(thread_idx.x)
+        comptime if PW_HBI_ATOMIC:
+            barrier()
+            var acc = Int32(0)
+            if tid < PW_HB_OUT_FLOATS:
+                for wv in range(PW_HBI_WARPS):
+                    acc = acc + self.root.unsafe_load(wv * PW_HB_OUT_FLOATS + tid)
+            barrier()
+            if tid < PW_HB_OUT_FLOATS:
+                self.root.unsafe_store(tid, acc)
+            barrier()
+        else:
+            var fold = (tid >> 5) & 15
+            var sum_offset = tid & 31
+            var acc = Int32(0)
+            if tid < 512:
+                comptime for warp_id in range(PW_HBI_WARPS):
+                    acc = acc + self.root.unsafe_load(PW_HB_WARP_SLICE * warp_id + sum_offset + 32 * fold)
+            barrier()
+            if tid < 512:
+                self.root.unsafe_store(tid, acc)
+            barrier()
+            var fold2 = (tid >> 4) & 15
+            var acc2 = Int32(0)
+            if tid < 256:
+                var e = tid & 15
+                acc2 = self.root.unsafe_load(32 * fold2 + e) + self.root.unsafe_load(32 * fold2 + e + 16)
+            barrier()
+            if tid < 256:
+                self.root.unsafe_store(tid, acc2)
+            barrier()
+
+
+@always_inline
+def pw_hb_binary_sum_int[
+    origin: MutOrigin, //
+](
+    smem: MutPointer[Int32, origin, address_space = AddressSpace.SHARED],
+    fid: Int,
+    w: Int,
+) -> Int32:
+    """`pw_hb_binary_sum` over the Int32 cells (an integer sum)."""
+    var group_id = fid // 4
+    var f_mask = 1 << (3 - (fid & 3))
+    var acc = Int32(0)
+    for i in range(16):
+        if (i & f_mask) == 0:
+            acc = acc + smem.unsafe_load(i * 16 + 2 * group_id + w)
     return acc

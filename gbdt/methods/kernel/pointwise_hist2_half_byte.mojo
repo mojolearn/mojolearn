@@ -47,7 +47,7 @@ binary kernel.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import abs
-from std.memory import stack_allocation
+from std.memory import stack_allocation, bitcast
 from std.atomic import Atomic, Ordering
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -66,6 +66,9 @@ from gbdt.methods.kernel.pointwise_hist2_half_byte_template import (
     PW_HB_SMEM_FLOATS,
     PointHistHalfByte,
     pw_hb_half_byte_slot,
+    PointHistHalfByteInt,
+    pw_hb_binary_sum_int,
+    PW_HB_FIXED,
 )
 from gbdt.methods.kernel.pointwise_hist2_one_byte_templ import PW_WRITE_EPS
 
@@ -88,8 +91,12 @@ def compute_split_properties_half_byte_kernel[
     partition: MutPointer[UInt32, MutAnyOrigin],
     bin_sums: MutPointer[Float32, MutAnyOrigin],
     total_feature_count_in: Int32,
+    fixed_scale: Float32,
+    int_slot: Int32,
 ):
-    """`ComputeSplitPropertiesHalfByteImpl` (`:23-94`), copied."""
+    """`ComputeSplitPropertiesHalfByteImpl` (`:23-94`), copied; under the
+    ordered tiers the fixed-point accumulator (`PointHistHalfByteInt`,
+    lane/neural-pass124)."""
     var tid = Int(thread_idx.x)
     var total_feature_count = Int(total_feature_count_in)
 
@@ -124,6 +131,42 @@ def compute_split_properties_half_byte_kernel[
         return
 
     var ci = cindex.unsafe_offset(cindex_base)
+    comptime if PW_HB_FIXED:
+        var smi = smem.unsafe_bitcast[Int32]()
+        var hi = PointHistHalfByteInt(smi, fixed_scale)
+        comptime if full_pass:
+            compute_histogram_2[PW_HB_BLOCK, 1, 1, m](
+                hi, indices, UInt32(part_offset), UInt32(part_size),
+                target, weight, ci,
+            )
+        else:
+            compute_histogram[PW_HB_BLOCK, 1, 1, 1, m](
+                hi, indices, UInt32(part_offset), UInt32(part_size),
+                target, weight, ci,
+            )
+        barrier()
+        var fid_i = tid // 32
+        var fold_i = (tid // 2) & 15
+        var w_i = tid & 1
+        if fid_i < f_count:
+            var folds_i = Int(feature_folds.unsafe_load(f_base + fid_i))
+            if fold_i < folds_i:
+                var q = smi.unsafe_load(pw_hb_half_byte_slot(fid_i, fold_i, w_i))
+                var at_i = (
+                    bin_sums_base
+                    + (Int(feature_first_fold_index.unsafe_load(f_base + fid_i)) + fold_i) * 2
+                    + w_i
+                )
+                comptime if m > 1:
+                    bin_sums.unsafe_store(
+                        pw_private_doc_slot[full_pass](at_i, Int(block_idx.x) % m, total_feature_count),
+                        bitcast[DType.float32](q),
+                    )
+                else:
+                    var val = Float32(Int(q)) / fixed_scale
+                    if abs(val) > PW_WRITE_EPS:
+                        bin_sums.unsafe_store(at_i, val)
+        return
     var hist = PointHistHalfByte(smem)
 
     comptime if full_pass:
