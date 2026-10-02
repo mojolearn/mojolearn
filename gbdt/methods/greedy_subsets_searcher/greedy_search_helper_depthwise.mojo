@@ -75,6 +75,28 @@ from gbdt.gpu_util.kernel.reorder_single_pass import (
 from gbdt.methods.greedy_subsets_searcher.kernel.split_points_ridx import (
     launch_reorder_index_only,
 )
+from gbdt.methods.greedy_subsets_searcher.kernel.dw_tree_sync import (
+    DW_TS_BLOCK,
+    DW_TS_COUNTS,
+    DW_TS_C_LEAVES,
+    DW_TS_C_SPLIT,
+    DW_TS_C_VISIT,
+    DW_TS_LISTS,
+    DW_TS_L_BUILD,
+    DW_TS_L_COPY_DST,
+    DW_TS_L_COPY_SRC,
+    DW_TS_L_SUB_FROM,
+    DW_TS_L_SUB_WHAT,
+    DW_TS_L_VISIT,
+    DW_TS_L_ZERO,
+    DW_TS_STATE_PLANES,
+    dw_ts_init_kernel,
+    dw_ts_plan_kernel,
+    dw_ts_select_kernel,
+    dw_ts_snapshot_sizes_kernel,
+    dw_ts_split_state_kernel,
+    dw_ts_visit_kernel,
+)
 from gbdt.methods.greedy_subsets_searcher.kernel.split_chain_fused import (
     FUSED_CHAIN_BLOCK,
     FUSED_COPY_BLOCK,
@@ -244,9 +266,40 @@ comptime DW_FUSED_CHAIN = (
 #: tree bit for bit. Lossguide, `min_split_gain >= 0` and a level with
 #: nothing to score keep the two-wait schedule.
 #: `-D MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC` is the B arm (with the chain define).
-comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and is_defined[
-    "MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC"
+comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and (
+    is_defined["MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC"]()
+    or is_defined["MOJOLEARN_GBDT_DW_TREE_SYNC"]()
+)
+
+#: FAST on Apple, opt-in, stacked on DW_NO_LEVEL_SYNC (lane
+#: apple-fast-depthwise, third pass): a Depthwise TREE takes ONE host wait.
+#: The next level's plan (sibling choice, zero/build/subtract/copy lists,
+#: visit list), the terminal marks and the leaf count stay on the device
+#: (`kernel/dw_tree_sync.mojo`), every level is enqueued back to back with
+#: host-side caps and device-side counts, and the winners, sizes, lists
+#: and counters of every level come home with the end-of-tree partition
+#: stats in one wait; the host replays its bookkeeping from them and
+#: checks the device's lists against its own. Integer moves only: the
+#: same tree. Taken when the level-sync arm would be, with
+#: `random_strength == 0` (the per-level score noise is drawn per level on
+#: the host) and no identity trace. `-D MOJOLEARN_GBDT_DW_TREE_SYNC` is the
+#: B arm (it implies the level-sync and chain defines).
+comptime DW_TREE_SYNC = DW_NO_LEVEL_SYNC and is_defined[
+    "MOJOLEARN_GBDT_DW_TREE_SYNC"
 ]()
+
+
+def _dw_dev_u32(
+    buf: DeviceBuffer[DType.uint32], offset: Int
+) -> MutPointer[UInt32, MutAnyOrigin]:
+    """A device buffer's pointer, `offset` elements in, as the kernel
+    parameter type (`enqueue_fill`'s address idiom)."""
+    return (
+        MutPointer[UInt32, MutAnyOrigin](
+            unsafe_from_address=Int(buf.unsafe_ptr())
+        )
+        + offset
+    )
 
 
 def _launch_fused_split_chain[
@@ -276,7 +329,7 @@ def _launch_fused_split_chain[
     mut slot_sz: DeviceBuffer[DType.uint32],
     mut hist: DeviceBuffer[DType.float32],
     mut part_stats: DeviceBuffer[DType.float32],
-    mut n_split_dev: DeviceBuffer[DType.uint32],
+    n_split_dev: MutPointer[UInt32, MutAnyOrigin],
 ) raises:
     """DW_FUSED_CHAIN's four launches. Grids as the chain they replace: the
     chunk grid is `launch_stable_partition`'s (`max_chunks` off `n_rows`,
@@ -304,7 +357,7 @@ def _launch_fused_split_chain[
         flags.unsafe_ptr(),
         chunk_zeros.unsafe_ptr(),
         Int32(max_chunks),
-        n_split_dev.unsafe_ptr(),
+        n_split_dev,
         grid_dim=(chunk_grid, n_split, 1),
         block_dim=(FUSED_CHAIN_BLOCK, 1, 1),
     )
@@ -325,7 +378,7 @@ def _launch_fused_split_chain[
         hist.unsafe_ptr(),
         part_stats.unsafe_ptr(),
         Int32(max_chunks),
-        n_split_dev.unsafe_ptr(),
+        n_split_dev,
         grid_dim=(1, n_split, 1),
         block_dim=(FUSED_CHAIN_BLOCK, 1, 1),
     )
@@ -338,7 +391,7 @@ def _launch_fused_split_chain[
         row_index.unsafe_ptr(),
         temp_index.unsafe_ptr(),
         Int32(max_chunks),
-        n_split_dev.unsafe_ptr(),
+        n_split_dev,
         grid_dim=(chunk_grid, n_split, 1),
         block_dim=(FUSED_CHAIN_BLOCK, 1, 1),
     )
@@ -347,7 +400,7 @@ def _launch_fused_split_chain[
         slot_sz.unsafe_ptr(),
         temp_index.unsafe_ptr(),
         row_index.unsafe_ptr(),
-        n_split_dev.unsafe_ptr(),
+        n_split_dev,
         grid_dim=(grid_x, n_split, 1),
         block_dim=(FUSED_COPY_BLOCK, 1, 1),
     )
@@ -679,6 +732,28 @@ struct TDepthwiseWorkspace(Movable):
     var h_feat_table: HostBuffer[DType.uint32]
     var d_nsplit: DeviceBuffer[DType.uint32]
     var h_nsplit: HostBuffer[DType.uint32]
+    # DW_TREE_SYNC: the per-leaf state planes (`DW_TS_STATE_PLANES` x
+    # `n_slots`, the pool's slots including the dummy), the per-level
+    # counters, id lists, winner records and size snapshots (level-indexed
+    # slices, read back once per tree), the build list of each level as a
+    # sub-buffer (the histogram launchers take a buffer), the all-slots id
+    # list of the end-of-tree sweep, and a part-stats mirror sized to the
+    # pool's slots. `max_depth` joins the key (levels and slots derive from
+    # it). One word each when the arm is compiled out.
+    var max_depth_key: Int
+    var d_ts_state: DeviceBuffer[DType.uint32]
+    var d_ts_counts: DeviceBuffer[DType.uint32]
+    var h_ts_counts: HostBuffer[DType.uint32]
+    var d_ts_lists: DeviceBuffer[DType.uint32]
+    var h_ts_lists: HostBuffer[DType.uint32]
+    var d_ts_winner: DeviceBuffer[DType.uint32]
+    var h_ts_winner: HostBuffer[DType.uint32]
+    var d_ts_sizes: DeviceBuffer[DType.uint32]
+    var h_ts_sizes: HostBuffer[DType.uint32]
+    var d_ts_build: List[DeviceBuffer[DType.uint32]]
+    var d_ts_all: DeviceBuffer[DType.uint32]
+    var h_ts_all: HostBuffer[DType.uint32]
+    var h_ts_part_stats: HostBuffer[DType.float32]
 
     def __init__(
         out self,
@@ -690,9 +765,61 @@ struct TDepthwiseWorkspace(Movable):
         n_rows: Int,
         qh_live: Bool,
         n_features: Int,
+        max_depth: Int = 0,
     ) raises:
         self.max_leaves_key = max_leaves
         self.n_features_key = n_features
+        self.max_depth_key = max_depth
+        var ts_levels = 1
+        var ts_slots = 1
+        var ts_leaves = 1
+        comptime if DW_TREE_SYNC:
+            if max_depth >= 1 and max_depth < 30:
+                ts_levels = max_depth
+                ts_slots = 2 << max_depth
+                ts_leaves = max_leaves
+        self.d_ts_state = ctx.enqueue_create_buffer[DType.uint32](
+            DW_TS_STATE_PLANES * ts_slots
+        )
+        self.d_ts_counts = ctx.enqueue_create_buffer[DType.uint32](
+            DW_TS_COUNTS * (ts_levels + 1)
+        )
+        self.h_ts_counts = ctx.enqueue_create_host_buffer[DType.uint32](
+            DW_TS_COUNTS * (ts_levels + 1)
+        )
+        self.d_ts_lists = ctx.enqueue_create_buffer[DType.uint32](
+            DW_TS_LISTS * ts_leaves * (ts_levels + 1)
+        )
+        self.h_ts_lists = ctx.enqueue_create_host_buffer[DType.uint32](
+            DW_TS_LISTS * ts_leaves * (ts_levels + 1)
+        )
+        self.d_ts_winner = ctx.enqueue_create_buffer[DType.uint32](
+            WINNER_RECORD_WORDS * ts_leaves * ts_levels
+        )
+        self.h_ts_winner = ctx.enqueue_create_host_buffer[DType.uint32](
+            WINNER_RECORD_WORDS * ts_leaves * ts_levels
+        )
+        self.d_ts_sizes = ctx.enqueue_create_buffer[DType.uint32](
+            ts_slots * ts_levels
+        )
+        self.h_ts_sizes = ctx.enqueue_create_host_buffer[DType.uint32](
+            ts_slots * ts_levels
+        )
+        self.d_ts_build = List[DeviceBuffer[DType.uint32]]()
+        for lvl in range(ts_levels + 1):
+            self.d_ts_build.append(
+                self.d_ts_lists.create_sub_buffer[DType.uint32](
+                    (lvl * DW_TS_LISTS + DW_TS_L_BUILD) * ts_leaves, ts_leaves
+                )
+            )
+        self.d_ts_all = ctx.enqueue_create_buffer[DType.uint32](ts_slots)
+        self.h_ts_all = ctx.enqueue_create_host_buffer[DType.uint32](ts_slots)
+        for i in range(ts_slots):
+            self.h_ts_all.unsafe_ptr().unsafe_store(i, UInt32(i))
+        ctx.enqueue_copy(dst_buf=self.d_ts_all, src_ptr=self.h_ts_all.unsafe_ptr())
+        self.h_ts_part_stats = ctx.enqueue_create_host_buffer[DType.float32](
+            ts_slots * stat_count
+        )
         var feat_records = 1
         comptime if DW_NO_LEVEL_SYNC:
             if n_features > 1:
@@ -1603,12 +1730,15 @@ def fit_non_symmetric_tree[
         or dws[0].qh_key != qh_ok
         # DW_NO_LEVEL_SYNC: the feature table is one record per feature
         or dws[0].n_features_key != len(layout.features)
+        # DW_TREE_SYNC: levels and slots derive from the depth
+        or dws[0].max_depth_key != max_depth
     ):
         dws.clear()
         dws.append(
             TDepthwiseWorkspace(
                 ctx, max_leaves, stat_count, argmax_blocks,
                 hist_cells_per_leaf, n_rows, qh_ok, len(layout.features),
+                max_depth,
             )
         )
 
@@ -2850,7 +2980,8 @@ def fit_non_symmetric_tree[
                         hist_cells_per_leaf, cindex, row_index, new_index,
                         p_off, p_sz, d_left, d_right, d_win_cells, sp_feats,
                         sp_bins, flags, chunk_zeros, chunk_offsets,
-                        leaf_zeros, hp_off, hp_sz, hist, part_stats, d_nsplit,
+                        leaf_zeros, hp_off, hp_sz, hist, part_stats,
+                        _dw_dev_u32(d_nsplit, 0),
                     )
                     for _ in range(4):
                         mgr.stream_kernel()
@@ -3266,7 +3397,7 @@ def fit_non_symmetric_tree[
                     hist_cells_per_leaf, cindex, row_index, new_index, p_off, p_sz,
                     d_left, d_right, d_win_cells, sp_feats, sp_bins, flags,
                     chunk_zeros, chunk_offsets, leaf_zeros, hp_off, hp_sz, hist,
-                    part_stats, d_nsplit,
+                    part_stats, _dw_dev_u32(d_nsplit, 0),
                 )
                 for _ in range(4):
                     mgr.stream_kernel()
