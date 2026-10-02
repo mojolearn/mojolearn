@@ -88,10 +88,16 @@ optics (`x_cluster/optics.mojo::optics_graph`, n = 10,000):
 ## Keep rule
 A switch becomes the FAST default when its arm is faster on the M3 and held-out quality stays within
 FAST's run-to-run spread (the "same" rows must also keep the digest); then the define goes and the
-arm is the code. The queue (docs/apple-fast/ab/cluster2.txt) is the light form: `tools/afc_ab_def.sh`
-(two FAST builds of `x_cluster`, "" vs the define), `1 2`, one tag per lane x dataset, no -ident lines;
-`cluster2-bgmm-phases-istella` prints the `XCPHASE` table (`MOJOLEARN_XC_PHASES=1`, main's diagnostic
-read) so the host M-step's share is known before the Cholesky item above is taken.
+arm is the code. The queue (docs/apple-fast/ab/cluster2.txt, 9 lines) is the light form: `tools/afc_ab_def.sh`
+(two FAST builds of `x_cluster`, "" vs the define), `1 2`, one tag per lane x dataset, no -ident lines, ONE
+dataset per define: Istella where the gap table lists the lane on Istella (affinity-prop, bisecting-kmeans,
+optics), taxi for bayesian-gmm (listed on taxi only), except `BGMM_FAST_MOMENTS_GEMM`, which only runs past
+MOM_MAX_D = 64 features and is a no-op on taxi, so its one line is Istella. After a win, the other dataset of
+the same define, the same form: `cluster2-ap-loop-taxi`, `cluster2-bgmm-mahal-istella`, `cluster2-bgmm-ent-istella`,
+`cluster2-bisect-resident-taxi`, `cluster2-optics-devorder-taxi`; and the combined arms (`cluster2-ap-all-*`,
+`cluster2-bgmm-all-istella`) once each define has won alone. Dropped: the single-arm `XCPHASE` diagnostic
+(`cluster2-bgmm-phases-istella`, `MOJOLEARN_XC_PHASES=1`, main's read): ask for it separately if the host
+M-step's share is needed before the Cholesky item above is taken.
 
 ## Compile risks to watch (first M3 build)
 `_apl_*` kernels call the plain kernels (`_ap_r_kernel`, `_ap_a_kernel`, `_apf_*`) as device functions;
