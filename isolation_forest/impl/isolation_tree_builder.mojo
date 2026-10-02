@@ -118,8 +118,9 @@ discipline, same push order (right then left). Spelling only.
 from std.memory import bitcast
 
 from std.sys import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
-from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.sync import barrier
 
 from isolation_forest.impl.rng.xorwow import (
@@ -128,7 +129,32 @@ from isolation_forest.impl.rng.xorwow import (
     curand_init,
     curand_uniform,
 )
-from checks.numerics import ftz, identical_log, identical_mul_add
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    ftz,
+    identical_log,
+    identical_mul_add,
+)
+
+
+#: FAST on Apple (lane apple-fast-trees2): THE FIT'S X STAYS ROW-MAJOR ON THE
+#: DEVICE. The IDENTICAL fit uploads the column-major transpose cuML's
+#: `fit` takes (`order="F"`), which the binding builds on the host: a
+#: threaded transpose of all n x d cells into an n x d pinned stage, then a
+#: blit, for a forest that reads max_samples rows per tree (256 x 100 of a
+#: million). Under FAST the binding's borrowed row-major block is copied to
+#: the device as it is (a raw host-pointer copy, the fastest Metal upload
+#: measured, b046c2de7), the finiteness refusal runs as a device scan of the
+#: same cells, and the gather below reads `data[row * n_cols + col]`: the
+#: same cell values (`ftz` is a no-op under FAST), the same trees, a
+#: coalesced read of each sampled row. `-D MOJOLEARN_IF_ROWMAJOR_OFF` keeps
+#: the column-major upload (the A/B arm).
+comptime IF_FAST_ROWMAJOR = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_IF_ROWMAJOR_OFF"]()
+)
 
 
 comptime EULER_MASCHERONI_F32 = Float32(0.5772156649015329)
@@ -723,10 +749,16 @@ def build_isolation_trees_global_kernel(
             var src_col = f
             if has_feature_indices:
                 src_col = Int(tree_feature_indices.unsafe_load(f))
-            local_data.unsafe_store(
-                s * max_features + f,
-                data.unsafe_load(src_row + src_col * n_rows),
-            )
+            comptime if IF_FAST_ROWMAJOR:
+                local_data.unsafe_store(
+                    s * max_features + f,
+                    data.unsafe_load(src_row * n_cols + src_col),
+                )
+            else:
+                local_data.unsafe_store(
+                    s * max_features + f,
+                    data.unsafe_load(src_row + src_col * n_rows),
+                )
             f += n_threads
     barrier()
     comptime if DIAG_GATHER_ONLY:
@@ -870,3 +902,30 @@ def compute_path_lengths_range_kernel(
     if finalize != 0:
         total_path = ftz(total_path / Float32(n_global_trees))
     path_lengths.unsafe_store(sample_idx, total_path)
+
+
+def if_finite_scan_kernel(
+    data: MutPointer[Float32, MutAnyOrigin],
+    n: Int64,
+    pad: Int64,
+    poison: Float32,
+    flag: MutPointer[Int32, MutAnyOrigin],
+):
+    """IF_FAST_ROWMAJOR's device half of DEVIATION 680's finiteness scan:
+    every thread walks the cells `i = gid, gid + grid, ...` of `[0, n)`
+    and stores 1 to `flag` on a non-finite one (every writer stores the
+    same word), and writes `poison` into the `pad` tail the column-major
+    stage wrote on the host."""
+    var gid = Int64(block_idx.x) * Int64(block_dim.x) + Int64(thread_idx.x)
+    var stride = Int64(grid_dim.x) * Int64(block_dim.x)
+    var bad = False
+    var i = gid
+    while i < n:
+        var bits = bitcast[DType.uint32](data.unsafe_load(Int(i)))
+        if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            bad = True
+        i += stride
+    if bad:
+        flag.unsafe_store(0, Int32(1))
+    if gid < pad:
+        data.unsafe_store(Int(n + gid), poison)

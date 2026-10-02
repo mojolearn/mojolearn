@@ -79,7 +79,9 @@ from isolation_forest.impl.isolation_tree_builder import (
     IF_RNG_STATE_WORDS,
     IF_SCRATCH_WORDS_PER_NODE,
     IF_STACK_WORDS,
+    IF_FAST_ROWMAJOR,
     build_isolation_trees_global_kernel,
+    if_finite_scan_kernel,
     compute_path_lengths_global_kernel,
     compute_path_lengths_range_kernel,
 )
@@ -410,6 +412,39 @@ def _upload_rowmajor_as_colmajor(
     return buf^
 
 
+def _upload_rowmajor_fast(
+    ctx: DeviceContext, src_addr: Int, n_rows: Int, n_cols: Int, pad: Int, poison: Float32
+) raises -> DeviceBuffer[DType.float32]:
+    """IF_FAST_ROWMAJOR: the borrowed ROW-major block copied to the device
+    as it is (one raw host-pointer copy, no host pass over the cells), the
+    `pad` tail poisoned and DEVIATION 680's scan run on the device. A
+    non-finite cell raises `_upload_rowmajor_as_colmajor`'s message (the
+    named host scan runs only then, to find the index)."""
+    var n = n_rows * n_cols
+    var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=src_addr)
+    var buf = ctx.enqueue_create_buffer[DType.float32](n + pad)
+    var flag = ctx.enqueue_create_buffer[DType.int32](1)
+    flag.enqueue_fill(Int32(0))
+    ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, n), src_ptr=src)
+    comptime tpb = 256
+    var blocks = min((n + tpb * 16 - 1) // (tpb * 16), 65535)
+    blocks = max(blocks, (pad + tpb - 1) // tpb)
+    ctx.enqueue_function[if_finite_scan_kernel](
+        buf.unsafe_ptr(),
+        Int64(n),
+        Int64(pad),
+        poison,
+        flag.unsafe_ptr(),
+        grid_dim=(blocks, 1, 1),
+        block_dim=(tpb, 1, 1),
+    )
+    var bad = read_i32(ctx, flag, 1)
+    if bad[0] != 0:
+        _raise_first_nonfinite_colmajor_view("X", src, n_rows, n_cols)
+    _ = flag^
+    return buf^
+
+
 def _upload_u32(
     ctx: DeviceContext, values: List[UInt32], n: Int
 ) raises -> DeviceBuffer[DType.uint32]:
@@ -673,10 +708,22 @@ struct IsolationForest(Movable):
 
         # build_isolation_forest_global (isolation_tree_builder.cuh:377-420)
         var data: DeviceBuffer[DType.float32]
-        if src_addr != 0:
-            data = _upload_rowmajor_as_colmajor(ctx, src_addr, n_rows, n_cols, pad, poison)
+        comptime if IF_FAST_ROWMAJOR:
+            if src_addr != 0:
+                data = _upload_rowmajor_fast(ctx, src_addr, n_rows, n_cols, pad, poison)
+            else:
+                # A column-major List (the host-List callers, never the
+                # binding): back to row-major for the row-major gather.
+                var x_rows = List[Float32](capacity=n_rows * n_cols)
+                for i in range(n_rows):
+                    for k in range(n_cols):
+                        x_rows.append(input_colmajor[k * n_rows + i])
+                data = _upload_f32(ctx, x_rows, n_rows * n_cols, pad, poison)
         else:
-            data = _upload_f32(ctx, input_colmajor, n_rows * n_cols, pad, poison)
+            if src_addr != 0:
+                data = _upload_rowmajor_as_colmajor(ctx, src_addr, n_rows, n_cols, pad, poison)
+            else:
+                data = _upload_f32(ctx, input_colmajor, n_rows * n_cols, pad, poison)
         var subsample_buffer = _poisoned_f32(
             ctx, n_trees * n_sampled_rows * n_sampled_features, pad, poison
         )
