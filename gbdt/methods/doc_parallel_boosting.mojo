@@ -9,6 +9,7 @@ from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 from std.math import isfinite
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from gbdt.methods.kernel_add_model_value import add_model_value_kernel
 from gbdt.metrics.optimal_const_for_loss import (
     calc_one_dimensional_optimum_const_approx,
@@ -112,7 +113,32 @@ from checks.kernel_matrix import (
 )
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from checks.numerics import PIN_DETERMINISM
-from checks.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+
+#: lane/apple-fast-trees-depthwise (2026-10-02, family `trees-ctr`),
+#: `-D MOJOLEARN_GBDT_CTR_PERM_BATCH=1`, FAST + Apple only, default OFF.
+#: CAUSE: with CTR-bearing categorical features the fit keeps
+#: `permutation_count` (4) column sets, and the non-symmetric per-tree loop
+#: below (`for p in range(perm_count)`) runs each permutation's leaf
+#: estimation ONE AFTER THE OTHER through `_estimate_and_apply`: per
+#: permutation a partition drain, every Newton evaluation's drain
+#: (`leaf_estimation_iterations` rounds plus line search) and the tail
+#: drain. gbdt-categorical taxi (Logloss, 4 permutations, ~500 trees) pays
+#: 4x that per tree. EFFECT: the four tasks run the lock-step walk
+#: `ordered_boosting.mojo` already runs (`_estimate_prepare`,
+#: `estimate_advance`, `_estimate_complete`): one partitioner per
+#: permutation enqueued back to back behind ONE drain, one drain per walker
+#: round for all four, one closing drain per tree. Each task runs the same
+#: kernels on the same inputs in the same order as its serial run, so the
+#: leaf values are the serial loop's; only the drains are shared. Taken
+#: only when `estimate_can_batch` holds (single-dim pointwise loss, Newton
+#: or Gradient) and the device partitioner is on; IDENTICAL compiles the
+#: serial loop unchanged.
+comptime CTR_PERM_BATCH = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_CTR_PERM_BATCH"]()
+)
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.bootstrap import (
     bootstrap_grid_blocks,
@@ -2135,6 +2161,12 @@ def fit_with_test(
     # DEVIATION 2551: the non-symmetric estimator's device partition, the
     # FIT's pool of one (empty and never touched on the default side)
     var leaf_parts = List[DeviceLeafPartitioner]()
+    # CTR_PERM_BATCH: one partitioner and one estimation workspace per
+    # permutation (every task's buffers live at once), and the arena the
+    # batched path carves them from. Empty under IDENTICAL.
+    var perm_leaf_parts = List[DeviceLeafPartitioner]()
+    var perm_est_ws = List[List[TEstimationWorkspace]]()
+    var perm_arena = BufferArena()
     # FAST Depthwise and Lossguide fits otherwise download and counting-sort
     # every row, then upload the same stable row order once per
     # tree/permutation. The existing device partitioner produces identical
@@ -2642,7 +2674,105 @@ def fit_with_test(
                             ns_max_leaves if ns_max_leaves > n_bins else n_bins,
                         )
                     )
-            for p in range(perm_count):
+            var perm_batched = False
+            comptime if CTR_PERM_BATCH:
+                if (
+                    perm_count > 1
+                    and device_leaf_partition
+                    and approx_dim == 1
+                    and estimate_can_batch(
+                        objective, leaf_estimation_method,
+                        leaf_estimation_iterations,
+                    )
+                ):
+                    perm_batched = True
+                    var cap = ns_max_leaves if ns_max_leaves > n_bins else n_bins
+                    if (
+                        len(perm_leaf_parts) != perm_count
+                        or perm_leaf_parts[0].n_rows_cap != n_rows
+                        or perm_leaf_parts[0].n_leaves_cap < n_bins
+                    ):
+                        perm_leaf_parts.clear()
+                        for _ in range(perm_count):
+                            perm_leaf_parts.append(
+                                DeviceLeafPartitioner(ctx, n_rows, cap)
+                            )
+                    while len(perm_est_ws) < perm_count:
+                        perm_est_ws.append(List[TEstimationWorkspace]())
+                    # bins for the model and the partition of every
+                    # permutation, enqueued back to back
+                    var t_bins_b = loop_times.start()
+                    for p in range(perm_count):
+                        ref lp = perm_leaf_parts[p]
+                        if p == learn_p:
+                            compute_non_symmetric_bins_for_model(
+                                ctx, layout_for_test, tree.model_structure,
+                                lc, n_rows, lp.bins,
+                            )
+                        else:
+                            compute_non_symmetric_bins_for_model(
+                                ctx, layout_for_test, tree.model_structure,
+                                perm_cindexes[p], n_rows, lp.bins,
+                            )
+                        lp.partition_enqueue(ctx, n_rows, n_bins)
+                    loop_times.stop_host("iter_bins_for_model", t_bins_b)
+                    var t_part_b = loop_times.start()
+                    # ONE drain settles every permutation's leaf bounds
+                    ctx.synchronize()
+                    var parts = List[LeafPartition]()
+                    for p in range(perm_count):
+                        parts.append(
+                            perm_leaf_parts[p].partition_collect(
+                                ctx, n_rows, n_bins
+                            )
+                        )
+                    loop_times.stop_host("iter_partition", t_part_b)
+                    var t_est_b = loop_times.start()
+                    # the walks: prepared back to back, advanced in lock
+                    # step behind one drain per round, completed in order
+                    var pend = List[PendingEstimation]()
+                    for p in range(perm_count):
+                        pend.append(
+                            _estimate_prepare(
+                                ctx, n_rows, n_bins,
+                                parts[p].sizes, parts[p].offsets,
+                                parts[p].row_index, targets, weights,
+                                has_weights, cursors[p],
+                                objective, alpha, estimator_alpha,
+                                logloss_border, l2_leaf_reg, est_sm,
+                                leaf_estimation_method,
+                                perm_est_ws[p], perm_arena, stage_times,
+                                iterations=leaf_estimation_iterations,
+                            )
+                        )
+                    var walking = True
+                    while walking:
+                        ctx.synchronize()
+                        walking = False
+                        for p in range(perm_count):
+                            if pend[p].phase != 2:
+                                if estimate_advance(pend[p]):
+                                    walking = True
+                    for p in range(perm_count):
+                        var pv_b = List[Float32]()
+                        _estimate_complete(
+                            ctx, pend[p], parts[p].row_index, cursors[p],
+                            learning_rate, pv_b, not_pd_total, trace,
+                            stage_times,
+                            _tree_tag(iteration) + ".perm" + String(p)
+                            + ".leaves.estimated",
+                            perm_est_ws[p],
+                        )
+                        if p == est_p:
+                            leaf_values.clear()
+                            for i in range(len(pv_b)):
+                                leaf_values.append(pv_b[i])
+                    # the batch's closing drain: one per tree
+                    ctx.synchronize()
+                    _ = parts^  # past the drain (step-33 race class)
+                    _ = pend^  # past the drain (step-33 race class)
+                    loop_times.stop_host("iter_estimate_apply", t_est_b)
+            for p in range(0 if perm_batched else perm_count):
                 var pv = List[Float32]()
                 var t_bins = loop_times.start()
                 var part: LeafPartition
