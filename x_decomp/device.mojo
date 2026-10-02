@@ -16,7 +16,7 @@ from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_sm
 from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
 from decomposition.impl.linalg.detail.svd_full import svd_of_r
-from decomposition.linalg_public_device import device_eigh, device_qr_r
+from decomposition.linalg_public_device import device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.cells import (
     lu_perm_src,
@@ -84,12 +84,12 @@ from x_decomp.exec_trait import Exec
 from x_decomp.jacobi2 import (
     J2_TPB,
     dev_barrier,
-    jacobi_eigh2_kernel,
     one_sided_svd2_chunk_kernel,
     one_sided_svd2_finish_kernel,
 )
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
-from x_decomp.rr import RR_OFF_TPB
+from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
+from x_decomp.rr_batch import rr_batch_kernel, rrb_cs_len, rrb_part_len
 from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
 from x_decomp.tsqr_device import ts_apply_device, ts_factor_device, ts_free_device, ts_pack_device
 from x_decomp.jacobi_par import (
@@ -100,62 +100,17 @@ from x_decomp.jacobi_par import (
     eigh_par_update_kernel,
     pj_identity_kernel,
     pj_transpose_kernel,
+    sym_from_triangle_kernel,
 )
 from std.os import getenv
 from core.device_zero import enqueue_fill
-from decomposition.checks.jacobi_eigh_device import JACOBI_INFO_UNWRITTEN, JACOBI_SWEEPS, JACOBI_TOL
+from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import enqueue_eigh_ascending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 
 
-#: Sweep budgets of the round-robin solvers (FAST on Metal). A solve that
-#: does not converge inside its budget is handed to the cyclic solver.
-comptime PJ_EIGH_SWEEPS = 30
 #: rounds enqueued between two synchronize() calls
 comptime PJ_SYNC_ROUNDS = 512
-
-
-def pj_eigh_min() -> Int:
-    """Smallest n whose eigh takes the round-robin solver of
-    x_decomp/jacobi_par.mojo (FAST builds for Metal only; 0 = never).
-    MOJOLEARN_XD_PJ_EIGH_MIN overrides it."""
-    var v = String(getenv("MOJOLEARN_XD_PJ_EIGH_MIN", "0"))
-    try:
-        return Int(v)
-    except:
-        return 0
-
-
-def jacobi2_eigh_on() -> Bool:
-    """Whether the kit's eigh runs `jacobi_eigh2_kernel` (x_decomp/jacobi2.mojo)
-    in place of `device_eigh`. MOJOLEARN_XD_JACOBI_EIGH=1 / =2 names the
-    kernel outright (the eigh only; timing A/B).
-
-    Metal, IDENTICAL: `device_eigh`, main's choice after the 2026-09-28 M4
-    consolidated check crashed MTLCompilerService in five eigh callers
-    (METAL SIGABRT, "cannot select: 113 7, 1" in agc.main). That build held
-    the FENCED jacobi2 (5c144678d: an atomic fence, then barrier()); the
-    kernel in this tree orders device memory with `llvm.air.wg.barrier(3, 1)`
-    (bd6af0c4b) and builds and runs on M4 (m4-a 1790626766529, every digest
-    equal to `device_eigh`'s). MOJOLEARN_XD_JACOBI=2 opts in; the default
-    stays until the consolidated check qualifies it.
-
-    Metal, FAST: jacobi2 (lane/decomp-apple3, m4-a 1790626766529: eigh 800
-    8.88 -> 5.36 s, Isomap 1000 rows 20.2 -> 10.5 s, ClassicalMDS 11.1 ->
-    5.66 s, the same output bytes as `device_eigh`).
-
-    CUDA/HIP keep their default. The SVD default is `jacobi2_on`'s."""
-    var e = String(getenv("MOJOLEARN_XD_JACOBI_EIGH", "0"))
-    if e == "1":
-        return False
-    if e == "2":
-        return True
-    comptime if COMPILED_VENDOR == "metal":
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-            return jacobi2_on()
-        return String(getenv("MOJOLEARN_XD_JACOBI", "1")) != "1"
-    else:
-        return jacobi2_on()
 
 
 def jacobi2_on() -> Bool:
@@ -2286,48 +2241,36 @@ struct DevExec(Exec):
         _ = ctx^
 
     @staticmethod
-    def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
-        # lane/neural-net-experiment (2026-09-30), hr-kit: the host eigh
-        # route (MOJOLEARN_XD_HOST_EIGH_MAX) is deleted; MOJOLEARN_XD_PJ_EIGH_MIN
-        # stays the old opt-in threshold under the cyclic define below.
-        # lane/neural-pass104 (Andrew, 2026-10-01): the round-robin Jacobi is
-        # THE eigh order (x_decomp/rr.mojo, pinned; the host runs the same
-        # rounds); a solve it does not converge falls back to the cyclic one,
-        # as the host does. `-D MOJOLEARN_XD_EIGH_CYCLIC=1` keeps the cyclic
-        # order (and MOJOLEARN_XD_PJ_EIGH_MIN its old opt-in threshold).
-        comptime if not is_defined["MOJOLEARN_XD_EIGH_CYCLIC"]():
-            if n >= 2 and DevExec._eigh_par(a, w, v, n):
-                return
-        else:
-            var lo = pj_eigh_min()
-            if lo > 0 and n >= lo:
-                if DevExec._eigh_par(a, w, v, n):
-                    return
-        if jacobi2_eigh_on():
-            DevExec._eigh2(a, w, v, n)
-            return
-        var m = List[Float32](capacity=n * n)
-        for i in range(n * n):
-            m.append(a.unsafe_load(i))
-        var got = device_eigh(xd_ctx(), m, n)
-        for i in range(n):
-            w.unsafe_store(i, got.w[i])
-        for i in range(n * n):
-            v.unsafe_store(i, got.v[i])
+    def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
+        """THE eigh at every size: the round-robin Jacobi (x_decomp/rr.mojo,
+        x_decomp/jacobi_par.mojo; the host runs the same rounds). cgr-decomp
+        (2026-10-03): the one-block cyclic solvers it fell back to
+        (`device_eigh`, `jacobi_eigh2_kernel`) and the cyclic define are
+        deleted; a solve that does not converge in RR_EIGH_SWEEPS raises.
+        uplo 1 / 2 reads the lower / upper triangle (numpy's UPLO), mirrored
+        on the device; 0 the whole matrix."""
+        var ctx = xd_ctx()
+        var da = _up(ctx, a, n * n)
+        if uplo != 0:
+            ctx.enqueue_function[sym_from_triangle_kernel](
+                da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
+            )
+        DevExec._eigh_par_on(ctx, da, w, v, n)
+        _ = da^
+        ctx.synchronize()
+        _ = ctx^
 
     @staticmethod
-    def _eigh_par(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises -> Bool:
-        """The two-sided Jacobi in the round-robin ordering
-        (x_decomp/jacobi_par.mojo; FAST on Metal), then `device_eigh`'s own
-        tail (`sign_flip_kernel`, the ascending permutation). The cyclic
-        kernel's convergence test before every sweep, its sums folded on the
-        device (`_eigh_par_test`); the host reads three scalars.
-        `a` is not written; False = not converged in PJ_EIGH_SWEEPS sweeps
-        (nothing stored), and the caller runs the cyclic solver."""
-        var ctx = xd_ctx()
+    def _eigh_par_on(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int) raises:
+        """The two-sided Jacobi in the round-robin ordering on the device
+        copy in `da` (consumed): `eigh_par_cs_kernel` / `eigh_par_update_kernel`
+        per round, the convergence test before every sweep folded on the
+        device (`_eigh_par_test`, three scalars read), then
+        `sign_flip_kernel` and the ascending permutation; w (n) and v (n x n)
+        out to host memory. The resident kit (x_decomp/kit_device.mojo)
+        hands its own copy here."""
         var m = n + (n % 2)
         var h = m // 2
-        var da = _up(ctx, a, n * n)
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
         var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
@@ -2335,24 +2278,27 @@ struct DevExec(Exec):
         var dfold = ctx.enqueue_create_buffer[DType.float32](3)
         var hfold = ctx.enqueue_create_host_buffer[DType.float32](3)
         ctx.enqueue_function[pj_identity_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
-        var tol2 = Float64(JACOBI_TOL) * Float64(JACOBI_TOL)
         var converged = False
         var executed = 0
-        var fro_in = Float64(-1.0)
-        var fro_now = Float64(0.0)
-        for sweep in range(PJ_EIGH_SWEEPS + 1):
+        var fro_in = Float32(-1.0)
+        var fro_now = Float32(0.0)
+        var off_last = Float32(0.0)
+        for sweep in range(RR_EIGH_SWEEPS + 1):
             var tst = _eigh_par_test(ctx, da, doff, dpart, dfold, hfold, n)
             if not (tst[2] >= Float32(0.0)):
-                break
-            var off = Float64(tst[0])
-            var dg = Float64(tst[1])
-            fro_now = off + dg
-            if fro_in < 0.0:
+                raise Error(
+                    "eigh: a block of the round-robin Jacobi's convergence test did not run (its mark is"
+                    " still -1): a launch failure, not a convergence failure. Check that the binding is"
+                    " built for this device."
+                )
+            off_last = tst[0]
+            fro_now = ftz(tst[0] + tst[1])
+            if fro_in < Float32(0.0):
                 fro_in = fro_now
-            if off <= tol2 * fro_now:
+            if rr_converged(tst[0], tst[1], Float32(JACOBI_TOL)):
                 converged = True
                 break
-            if sweep == PJ_EIGH_SWEEPS:
+            if sweep == RR_EIGH_SWEEPS:
                 break
             executed += 1
             for rd in range(m - 1):
@@ -2367,102 +2313,25 @@ struct DevExec(Exec):
                 if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
                     ctx.synchronize()
         # J^T A J keeps ||A||_F: a solve that moved it is not an answer
-        if converged and not (abs(fro_now - fro_in) <= 1.0e-3 * fro_in):
+        if converged and not rr_fro_kept(fro_in, fro_now):
             converged = False
-        if converged:
-            ctx.enqueue_function[sign_flip_kernel](
-                dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
-            )
-            # the last test's kernel left the diagonal of the converged A in
-            # doff[2n, 3n); the ascending order on the device
-            # (decomposition/spectrum_order_device.mojo), then w and v out
-            var dw = ctx.enqueue_create_buffer[DType.float32](n)
-            var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
-            var dpos = ctx.enqueue_create_buffer[DType.int32](n)
-            enqueue_eigh_ascending(ctx, _p(doff) + 2 * n, 1, _p(dv), n, dpos, _p(dw), _p(dvo))
-            _down(ctx, dw, w, n)
-            _down(ctx, dvo, v, n * n)
-            ctx.synchronize()
-            _ = dw^
-            _ = dvo^
-            _ = dpos^
-        _ = da^
-        _ = dv^
-        _ = dcs^
-        _ = doff^
-        _ = dpart^
-        _ = dfold^
-        _ = hfold^
-        ctx.synchronize()
-        _ = ctx^
-        return converged
-
-    @staticmethod
-    def _eigh2(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
-        """`device_eigh` with `jacobi_eigh2_kernel` in place of
-        `jacobi_eigh_kernel`: same launch pair (the sweep, then
-        `sign_flip_kernel`), same refusals, same ascending permutation."""
-        var ctx = xd_ctx()
-        var da = _up(ctx, a, n * n)
-        DevExec._eigh2_on(ctx, da, w, v, n)
-        _ = da^
-
-    @staticmethod
-    def _eigh2_on(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int) raises:
-        """`_eigh2` on a device copy of the matrix already in `da` (consumed):
-        w (n) and v (n x n) out to host memory, after one sync. The resident
-        kit (x_decomp/kit_device.mojo) hands its own copy here."""
-        var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
-        var dinfo = ctx.enqueue_create_buffer[DType.float32](3)
-        enqueue_fill(ctx, dinfo, JACOBI_INFO_UNWRITTEN)
-        var dvt = ctx.enqueue_create_buffer[DType.float32](n * n)
-        # unroll 1 is the default: m4pro-b 1790619265077, eigh 1500 46.3 s
-        # at unroll 1 against 82.7 s at 4 and 98.6 s for the old kernel,
-        # every digest equal (MOJOLEARN_XD_J2_U=4 keeps the other one)
-        if String(getenv("MOJOLEARN_XD_J2_U", "1")) != "4":
-            ctx.enqueue_function[jacobi_eigh2_kernel[1]](
-                da.unsafe_ptr(), dv.unsafe_ptr(), dinfo.unsafe_ptr(), dvt.unsafe_ptr(), Int32(n), Int32(JACOBI_SWEEPS), Float32(JACOBI_TOL),
-                grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
-            )
-        else:
-            ctx.enqueue_function[jacobi_eigh2_kernel[4]](
-                da.unsafe_ptr(), dv.unsafe_ptr(), dinfo.unsafe_ptr(), dvt.unsafe_ptr(), Int32(n), Int32(JACOBI_SWEEPS), Float32(JACOBI_TOL),
-                grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
-            )
-        ctx.enqueue_function[sign_flip_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1))
-        var hinfo = ctx.enqueue_create_host_buffer[DType.float32](3)
-        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
-        ctx.synchronize()
-        var i0 = hinfo.unsafe_ptr().unsafe_load(0)
-        var i1 = hinfo.unsafe_ptr().unsafe_load(1)
-        var i2 = hinfo.unsafe_ptr().unsafe_load(2)
-        if i0 == JACOBI_INFO_UNWRITTEN:
+        if not converged:
             raise Error(
-                "eigh: the device Jacobi eigensolver DID NOT WRITE its info"
-                " buffer, so it never ran or its launch failed. This is NOT a"
-                " convergence failure and must not be reported as one: -1.0 is a"
-                " value the kernel never stores. Check that the binding is built"
-                " for this device."
+                "eigh: the round-robin Jacobi did not converge in " + String(RR_EIGH_SWEEPS)
+                + " sweeps at n = " + String(n) + " (off-diagonal mass " + String(off_last)
+                + " of " + String(fro_now) + "). An unconverged decomposition is not returned as if"
+                " it were one (DEVIATION 590)."
             )
-        if i0 == Float32(0.0):
-            raise Error(
-                "eigh: the Jacobi eigensolver did not converge in "
-                + String(JACOBI_SWEEPS)
-                + " sweeps at n = "
-                + String(n)
-                + ": ||offdiag(A)||_F / ||A||_F is still "
-                + String(i1)
-                + ". An unconverged decomposition is not returned as if it were"
-                " one; see DEVIATION 590. The remedy is more sweeps, the same one"
-                " cuSOLVER's syevj has"
-            )
-        # the ascending order on the device (the converged A's diagonal,
-        # decomposition/spectrum_order_device.mojo), then w and v out
-        _ = i2
+        ctx.enqueue_function[sign_flip_kernel](
+            dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
+        )
+        # the last test's kernel left the diagonal of the converged A in
+        # doff[2n, 3n); the ascending order on the device
+        # (decomposition/spectrum_order_device.mojo), then w and v out
         var dw = ctx.enqueue_create_buffer[DType.float32](n)
         var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dpos = ctx.enqueue_create_buffer[DType.int32](n)
-        enqueue_eigh_ascending(ctx, _p(da), n + 1, _p(dv), n, dpos, _p(dw), _p(dvo))
+        enqueue_eigh_ascending(ctx, _p(doff) + 2 * n, 1, _p(dv), n, dpos, _p(dw), _p(dvo))
         _down(ctx, dw, w, n)
         _down(ctx, dvo, v, n * n)
         ctx.synchronize()
@@ -2470,10 +2339,57 @@ struct DevExec(Exec):
         _ = dvo^
         _ = dpos^
         _ = dv^
-        _ = dinfo^
-        _ = dvt^
-        _ = hinfo^
+        _ = dcs^
+        _ = doff^
+        _ = dpart^
+        _ = dfold^
+        _ = hfold^
+
+    @staticmethod
+    def eigh_batch(a: F32Ptr, w: F32Ptr, v: F32Ptr, batch: Int, n: Int) raises:
+        """`eigh` of `batch` n x n problems stacked in `a`, one block each
+        (x_decomp/rr_batch.mojo): w batch x n ascending, v batch x n x n
+        (vectors in columns); the same words `eigh` gives each one."""
+        if batch <= 0:
+            return
+        var ctx = xd_ctx()
+        var da = _up(ctx, a, batch * n * n)
+        var dv = ctx.enqueue_create_buffer[DType.float32](batch * n * n)
+        var dcs = ctx.enqueue_create_buffer[DType.float32](batch * rrb_cs_len(n))
+        var dpart = ctx.enqueue_create_buffer[DType.float32](batch * rrb_part_len(n))
+        var ddg = ctx.enqueue_create_buffer[DType.float32](batch * n)
+        var dinfo = ctx.enqueue_create_buffer[DType.float32](2 * batch)
+        enqueue_fill(ctx, dinfo, Float32(-1.0))
+        var dw = ctx.enqueue_create_buffer[DType.float32](batch * n)
+        var dvo = ctx.enqueue_create_buffer[DType.float32](batch * n * n)
+        ctx.enqueue_function[rr_batch_kernel](
+            _p(da), _p(dv), _p(dcs), _p(dpart), _p(ddg), _p(dinfo), _p(dw), _p(dvo), Int32(n),
+            Int32(RR_EIGH_SWEEPS), Float32(JACOBI_TOL), grid_dim=batch, block_dim=RR_OFF_TPB,
+        )
+        var hinfo = List[Float32](length=2 * batch, fill=Float32(0.0))
+        _down(ctx, dinfo, F32Ptr(unsafe_from_address=Int(hinfo.unsafe_ptr())), 2 * batch)
+        _down(ctx, dw, w, batch * n)
+        _down(ctx, dvo, v, batch * n * n)
         ctx.synchronize()
+        _ = da^
+        _ = dv^
+        _ = dcs^
+        _ = dpart^
+        _ = ddg^
+        _ = dinfo^
+        _ = dw^
+        _ = dvo^
+        _ = ctx^
+        for b in range(batch):
+            if hinfo[2 * b] < Float32(0.0):
+                raise Error("eigh_batch: a block of the batched Jacobi did not run (a launch failure)")
+            if hinfo[2 * b] == Float32(0.0):
+                raise Error(
+                    "eigh_batch: problem " + String(b) + " of " + String(batch) + " (n = " + String(n)
+                    + ") did not converge in " + String(RR_EIGH_SWEEPS) + " sweeps. An unconverged"
+                    " decomposition is not returned as if it were one (DEVIATION 590)."
+                )
+        _ = hinfo^
 
     @staticmethod
     def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:

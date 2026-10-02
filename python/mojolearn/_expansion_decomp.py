@@ -393,34 +393,6 @@ def _kit_vendor(kit):
     return v
 
 
-class _FastMetalEigh:
-    """FAST on Apple runs the kit's eigh on x_decomp/jacobi2.mojo's kernel
-    (lane/decomp-apple3; m4-a 1790626766529: eigh 800 8.88 -> 5.36 s, Isomap
-    and ClassicalMDS at 1000 rows 1.9x, the SAME output bytes as the kernel
-    it replaces). The binding picks that kernel from MOJOLEARN_XD_JACOBI at
-    each call, and on Metal its own default is the older kernel, so this
-    sets the variable to 2 for the length of one FAST eigh call on a Metal
-    binding and puts back what was there. A value the user set wins (1 keeps
-    the older kernel). IDENTICAL calls never come through here."""
-
-    __slots__ = ("on",)
-
-    def __init__(self, kit):
-        self.on = False
-        if kit.mode == "fast" and "MOJOLEARN_XD_JACOBI" not in _os.environ:
-            self.on = _kit_vendor(kit) == "metal"
-
-    def __enter__(self):
-        if self.on:
-            _os.environ["MOJOLEARN_XD_JACOBI"] = "2"
-        return self
-
-    def __exit__(self, *exc):
-        if self.on:
-            _os.environ.pop("MOJOLEARN_XD_JACOBI", None)
-        return False
-
-
 class _Kit:
     """The binding's cells, called on `_M` matrices."""
 
@@ -596,13 +568,25 @@ class _Kit:
         return out
 
     # ---- small dense linear algebra
-    def eigh(self, A):
-        """Ascending eigenvalues (1 x n) and eigenvectors in COLUMNS (n x n)."""
+    def eigh(self, A, uplo=0):
+        """Ascending eigenvalues (1 x n) and eigenvectors in COLUMNS (n x n):
+        the round-robin Jacobi at every size. uplo 1 / 2 reads only the
+        lower / upper triangle (numpy's UPLO, mirrored by the binding on the
+        device), 0 the whole matrix."""
         n = A.r
         w, v = _M.zeros(1, n), _M.zeros(n, n)
-        with _FastMetalEigh(self):
-            self.b.x_decomp_eigh(A.addr, w.addr, v.addr, [n])
+        self.b.x_decomp_eigh(A.addr, w.addr, v.addr, [n, int(uplo)])
         return w, v
+
+    def eigh_batch(self, A, batch, n):
+        """`eigh` of `batch` n x n problems stacked in A (batch n x n), one
+        device block each (x_decomp/rr_batch.mojo): (W batch x n ascending,
+        V batch n x n, problem b's vectors in the COLUMNS of rows b n ..
+        (b + 1) n)."""
+        W, V = _M.zeros(batch, n), _M.zeros(batch * n, n)
+        if batch:
+            self.b.x_decomp_eigh_batch(A.addr, W.addr, V.addr, [int(batch), int(n)])
+        return W, V
 
     def lu(self, A):
         n = A.r

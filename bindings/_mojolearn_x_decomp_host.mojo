@@ -11,7 +11,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_decomp.api import (
-    cd_rows_py, chol_py, colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
+    cd_rows_py, chol_py, colsum_py, eigh_py, eigh_batch_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
     geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, als_cg_rows_py, mcd_py, lda_online_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
     rowsum_py, sqdist_py, vendor_py,
 )
@@ -59,6 +59,7 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
         m.def_function[knn_select_py[HostExec]]("x_decomp_knn_select")
         m.def_function[chol_py[HostExec]]("x_decomp_chol")
         m.def_function[eigh_py[HostExec]]("x_decomp_eigh")
+        m.def_function[eigh_batch_py[HostExec]]("x_decomp_eigh_batch")
         m.def_function[cd_rows_py[HostExec]]("x_decomp_cd_rows")
         m.def_function[orth_py[HostExec]]("x_decomp_orth")
         m.def_function[orth_diag_py[HostExec]]("x_decomp_orth_diag")

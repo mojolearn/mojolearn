@@ -11,13 +11,11 @@ writes outputs no other task writes; the O(n^3) cells (gemm, sqdist), the
 QR slices and the shortest-path rows have the host spellings of
 x_decomp/host_simd.mojo, host_qr.mojo and host_graph.mojo (same words).
 So the bits are the same at every thread count."""
-from x_decomp.rr import host_eigh_rr
-
-comptime RR_EIGH_SWEEPS = 30  # x_decomp/device.mojo PJ_EIGH_SWEEPS
+from x_decomp.rr import RR_EIGH_SWEEPS, host_eigh_rr
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
+from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.host.linalg_public import eigh_ascending, host_eigh, host_qr_r
 from decomposition.host.pca_oracle import host_sign_flip
 from checks.numerics import ftz
@@ -56,7 +54,7 @@ from core.host_parallel import host_parallelize
 from x_decomp.exec_trait import Exec
 from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
 from x_decomp.qr_sliced_host import qs_geqrf_host, qs_orgqr_host
-from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
+from x_decomp.host_jacobi import fast_one_sided_jacobi_svd
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
 from x_decomp.host_ew import ew_range
 from x_decomp.host_lda import lda_doc_row_host, lda_pack_t
@@ -369,53 +367,28 @@ struct HostExec(Exec):
         chol_serial(a, n, info)
 
     @staticmethod
-    def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
+    def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
         if n < 1 or n > 46340:
             _ = host_eigh(List[Float32](), n)  # refuses the size, by name
         var m = List[Float32](capacity=n * n)
         for i in range(n * n):
             m.append(a.unsafe_load(i))
-        # lane/neural-pass104: the round-robin Jacobi first, the device's
-        # rounds and test (x_decomp/rr.mojo); the cyclic solve below when it
-        # does not converge (the device's fallback too)
-        comptime if not is_defined["MOJOLEARN_XD_EIGH_CYCLIC"]():
-            if n >= 2:
-                var ar = m.copy()
-                var vr = List[Float32](length=n * n, fill=Float32(0.0))
-                var rr = host_eigh_rr(ar, vr, n, RR_EIGH_SWEEPS, Float32(JACOBI_TOL))
-                if rr[0]:
-                    host_sign_flip(vr, n)
-                    var diag_rr = List[Float32]()
-                    for i in range(n):
-                        diag_rr.append(ar[i * n + i])
-                    var got_rr = eigh_ascending(diag_rr, vr, n, True, rr[1])
-                    for i in range(n):
-                        w.unsafe_store(i, got_rr.w[i])
-                    for i in range(n * n):
-                        v.unsafe_store(i, got_rr.v[i])
-                    return
-        # host_eigh's steps, the rotations of x_decomp/host_jacobi.mojo
-        var fe = fast_jacobi_eigh(m, n, JACOBI_SWEEPS, Float32(JACOBI_TOL))
-        if not fe.converged:
-            raise Error(
-                "eigh: the Jacobi eigensolver did not converge in "
-                + String(JACOBI_SWEEPS)
-                + " sweeps at n = "
-                + String(n)
-                + ". An unconverged decomposition is not returned as if it were"
-                " one; see DEVIATION 590. The remedy is more sweeps, the same one"
-                " cuSOLVER's syevj has"
-            )
-        var vecs = fe.vectors.copy()
-        host_sign_flip(vecs, n)
-        var diag = List[Float32]()
+        # numpy's UPLO (the device's `sym_from_triangle_kernel`)
         for i in range(n):
-            diag.append(m[i * n + i])
-        var got = eigh_ascending(diag, vecs, n, fe.converged, fe.executed)
-        for i in range(n):
-            w.unsafe_store(i, got.w[i])
-        for i in range(n * n):
-            v.unsafe_store(i, got.v[i])
+            for j in range(n):
+                if (uplo == 1 and i < j) or (uplo == 2 and i > j):
+                    m[i * n + j] = m[j * n + i]
+        _host_eigh_rr_one(m, w, v, n)
+
+    @staticmethod
+    def eigh_batch(a: F32Ptr, w: F32Ptr, v: F32Ptr, batch: Int, n: Int) raises:
+        """x_decomp/rr_batch.mojo's problems one after another: each is
+        `eigh`'s solve (the same words)."""
+        for b in range(batch):
+            var m = List[Float32](capacity=n * n)
+            for i in range(n * n):
+                m.append(a.unsafe_load(b * n * n + i))
+            _host_eigh_rr_one(m, w + b * n, v + b * n * n, n)
 
     @staticmethod
     def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:
@@ -592,3 +565,27 @@ struct HostExec(Exec):
     @staticmethod
     def vendor() -> String:
         return String("cpu")
+
+
+def _host_eigh_rr_one(mut m: List[Float32], w: F32Ptr, v: F32Ptr, n: Int) raises:
+    """The round-robin Jacobi of x_decomp/rr.mojo on `m` (consumed), then
+    host_sign_flip and eigh_ascending: DevExec.eigh's and rr_batch_kernel's
+    words. Not converged in RR_EIGH_SWEEPS raises (cgr-decomp: no cyclic
+    fallback)."""
+    var vr = List[Float32](length=n * n, fill=Float32(0.0))
+    var rr = host_eigh_rr(m, vr, n, RR_EIGH_SWEEPS, Float32(JACOBI_TOL))
+    if not rr[0]:
+        raise Error(
+            "eigh: the round-robin Jacobi did not converge in " + String(RR_EIGH_SWEEPS)
+            + " sweeps at n = " + String(n) + ". An unconverged decomposition is not returned"
+            " as if it were one (DEVIATION 590)."
+        )
+    host_sign_flip(vr, n)
+    var diag = List[Float32]()
+    for i in range(n):
+        diag.append(m[i * n + i])
+    var got = eigh_ascending(diag, vr, n, True, rr[1])
+    for i in range(n):
+        w.unsafe_store(i, got.w[i])
+    for i in range(n * n):
+        v.unsafe_store(i, got.v[i])

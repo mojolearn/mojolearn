@@ -56,7 +56,11 @@ trait Exec:
         ...
 
     @staticmethod
-    def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
+    def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
+        ...
+
+    @staticmethod
+    def eigh_batch(a: F32Ptr, w: F32Ptr, v: F32Ptr, batch: Int, n: Int) raises:
         ...
 
     @staticmethod

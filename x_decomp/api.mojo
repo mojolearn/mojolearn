@@ -196,11 +196,36 @@ def eigh_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: Pytho
     var n = _n(p, 0)
     if n <= 0:
         raise Error("x_decomp: eigh needs n >= 1")
+    # p[1] (optional): numpy's UPLO, 1 the lower triangle, 2 the upper, 0
+    # (absent) the whole matrix; mirrored by the executor (on the device)
+    var uplo = 0
+    if len(p) > 1:
+        uplo = _n(p, 1)
+    if uplo < 0 or uplo > 2:
+        raise Error("x_decomp: eigh uplo is 0, 1 (L) or 2 (U)")
     var pa = _f(a)
     var pw = _f(w)
     var pv = _f(v)
-    E.eigh(pa, pw, pv, n)
+    E.eigh(pa, pw, pv, n, uplo)
     return PythonObject(n)
+
+
+def eigh_batch_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+    """p = [batch, n]: `batch` n x n symmetric problems stacked in `a`; w
+    (batch x n, ascending) and v (batch x n x n, vectors in columns), each
+    the words `eigh` gives it (x_decomp/rr_batch.mojo)."""
+    var batch = _n(p, 0)
+    var n = _n(p, 1)
+    if n <= 0 or batch < 0:
+        raise Error("x_decomp: eigh_batch needs n >= 1, batch >= 0")
+    if batch * n * n > 2147483647:
+        raise Error("x_decomp: eigh_batch exceeds the Int32 index bound")
+    var pa = _f(a)
+    var pw = _f(w)
+    var pv = _f(v)
+    with GILReleased(Python()):
+        E.eigh_batch(pa, pw, pv, batch, n)
+    return PythonObject(batch)
 
 
 def cd_rows_py[E: Exec](
