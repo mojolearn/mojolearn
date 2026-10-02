@@ -20,7 +20,7 @@ from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM
@@ -280,6 +280,25 @@ def glm_accept_kernel(res: FP, trial: FP, m: Int32):
     copy(res, 0, trial, 0, Int(m))
 
 
+def _glm_grid_objective(
+    mut ctx: DeviceContext, theta: FP, x: FP, y: FP, eta: FP, lt: FP, tw: FP, sc: FP,
+    sc_buf: DeviceBuffer[DType.float32], hsc: FP,
+    n: Int, d: Int, fi: Int, power: Float32, link: Int, sw: Int, alpha: Float32, rows_grid: Int,
+) raises -> Float32:
+    """`_objective_team` at theta on the grid (map) and one block (fold); eta
+    holds its linear predictor afterwards."""
+    ctx.enqueue_function[glm_obj_map_kernel](x, y, Int32(n), Int32(d), Int32(fi), power, Int32(link), Int32(sw),
+                                             theta, eta, lt, grid_dim=rows_grid, block_dim=XG_TPB)
+    ctx.enqueue_function[glm_obj_fold_kernel](tw, lt, Int32(n), Int32(d), theta, alpha, sc, Int32(1),
+                                              grid_dim=1, block_dim=LINEAR_TPB)
+    ctx.synchronize()
+    var v = Float32(0)
+    ctx.enqueue_copy(dst_ptr=hsc, src_buf=sc_buf)
+    ctx.synchronize()
+    v = hsc.unsafe_load(1)
+    return v
+
+
 def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
                   n_out: Int, res: FP) raises:
     var ctx = linear_ctx()
@@ -304,7 +323,8 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     var dtrial = ctx.enqueue_create_buffer[DType.float32](m)
     var dsc = ctx.enqueue_create_buffer[DType.float32](8)
     var dtw = ctx.enqueue_create_buffer[DType.float32](team_work(n, 3, 0))
-    var hsc = ctx.enqueue_create_host_buffer[DType.float32](8)
+    var hsc_l = List[Float32](length=8, fill=Float32(0))
+    var hscp = FP(unsafe_from_address=Int(hsc_l.unsafe_ptr()))
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     if n_y > 0:
@@ -317,21 +337,9 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     ctx.enqueue_function[glm_init_kernel](dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), Int32(link), Int32(sw),
                                           dres.unsafe_ptr(), dsc.unsafe_ptr(), grid_dim=1, block_dim=1)
 
-    @always_inline
-    def objective(theta: FP) raises -> Float32 {mut ctx, imm dx, imm dy, imm deta, imm dlt, imm dtw, imm dsc, imm hsc,
-                                                imm n, imm d, imm fi, imm power, imm link, imm sw, imm alpha, imm rows_grid}:
-        ctx.enqueue_function[glm_obj_map_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), power,
-                                                 Int32(link), Int32(sw), theta, deta.unsafe_ptr(), dlt.unsafe_ptr(),
-                                                 grid_dim=rows_grid, block_dim=XG_TPB)
-        ctx.enqueue_function[glm_obj_fold_kernel](dtw.unsafe_ptr(), dlt.unsafe_ptr(), Int32(n), Int32(d), theta, alpha,
-                                                  dsc.unsafe_ptr(), Int32(1), grid_dim=1, block_dim=LINEAR_TPB)
-        ctx.enqueue_copy(dst_buf=hsc, src_buf=dsc)
-        ctx.synchronize()
-        return hsc[1]
-
     var iters = 0
     var converged = False
-    var f = objective(dres.unsafe_ptr())
+    var f = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dres.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid)
     var stall = 0
     for it in range(max_iter):
         ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
@@ -340,10 +348,10 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
                                                Int32(m), dg.unsafe_ptr(), dh.unsafe_ptr(), grid_dim=slot_grid, block_dim=XG_TPB)
         ctx.enqueue_function[glm_step_kernel](dg.unsafe_ptr(), dh.unsafe_ptr(), dstep.unsafe_ptr(), dres.unsafe_ptr(),
                                               Int32(m), Int32(d), alpha, tol, dsc.unsafe_ptr(), grid_dim=1, block_dim=1)
-        ctx.enqueue_copy(dst_buf=hsc, src_buf=dsc)
+        ctx.enqueue_copy(dst_ptr=hscp, src_buf=dsc)
         ctx.synchronize()
-        var flag = Int(hsc[2])
-        var slope = hsc[3]
+        var flag = Int(hscp.unsafe_load(2))
+        var slope = hscp.unsafe_load(3)
         if flag == 1:
             converged = True
             break
@@ -355,7 +363,7 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
         for _ in range(40):
             ctx.enqueue_function[glm_trial_kernel](dstep.unsafe_ptr(), dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m), tt,
                                                    grid_dim=1, block_dim=1)
-            var ft = objective(dtrial.unsafe_ptr())
+            var ft = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dtrial.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid)
             if ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
                 ctx.enqueue_function[glm_accept_kernel](dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m),
                                                         grid_dim=1, block_dim=1)
@@ -368,7 +376,7 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
                 break
             tt = fm(tt, Float32(0.5))
         if not accepted:
-            f = objective(dres.unsafe_ptr())
+            f = _glm_grid_objective(ctx, FP(unsafe_from_address=Int(dres.unsafe_ptr())), FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), FP(unsafe_from_address=Int(deta.unsafe_ptr())), FP(unsafe_from_address=Int(dlt.unsafe_ptr())), FP(unsafe_from_address=Int(dtw.unsafe_ptr())), FP(unsafe_from_address=Int(dsc.unsafe_ptr())), dsc, hscp, n, d, fi, power, link, sw, alpha, rows_grid)
             break
         if stall >= GLM_STALL_ITERS:
             converged = True
@@ -392,7 +400,7 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     _ = dtrial^
     _ = dsc^
     _ = dtw^
-    _ = hsc^
+    _ = hsc_l^
 
 
 def fit_device(
