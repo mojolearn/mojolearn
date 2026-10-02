@@ -76,18 +76,99 @@ def chunked_lm_head_v2_rows_kernel(
     )
 
 
-def chunked_lm_head_v2_total_kernel(
+#: The mean loss's row fold (lane n-train-mamba, cpu-gpu-cleanup 2026-10-02):
+#: leaves of LM_HEAD_V2_LOSS_LEAF rows, each folded ascending from +0.0 with
+#: every add flushed, then the fixed balanced tree over the leaf partials in
+#: ascending leaf order (pairs `ftz(ftz(l) + ftz(r))`, an odd tail carried bit
+#: for bit), then `ftz(total / rows)`. The CPU oracle
+#: (`training/checks/chunked_lm_head_oracle.mojo::lm_head_v2_loss_fold`) folds
+#: the same way. At rows <= LM_HEAD_V2_LOSS_LEAF it is the old serial chain.
+comptime LM_HEAD_V2_LOSS_LEAF = 256
+
+
+def chunked_lm_head_v2_loss_leaf_kernel(
     loss: MutPointer[Float32, MutAnyOrigin],
+    partials: MutPointer[Float32, MutAnyOrigin],
     row_loss: MutPointer[Float32, MutAnyOrigin],
     rows_in: Int32,
 ):
-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
-        return
+    """One thread per leaf: its rows ascending. A single leaf writes the mean."""
     var rows = Int(rows_in)
-    var total = Float32(0.0)
-    for row in range(rows):
-        total = ftz(total + row_loss.unsafe_load(row))
-    loss.unsafe_store(0, ftz(identical_div(total, Float32(rows))))
+    var leaves = (rows + LM_HEAD_V2_LOSS_LEAF - 1) // LM_HEAD_V2_LOSS_LEAF
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j >= leaves:
+        return
+    var lo = j * LM_HEAD_V2_LOSS_LEAF
+    var hi = min(lo + LM_HEAD_V2_LOSS_LEAF, rows)
+    var acc = Float32(0.0)
+    for row in range(lo, hi):
+        acc = ftz(acc + row_loss.unsafe_load(row))
+    partials.unsafe_store(j, acc)
+    if leaves == 1:
+        loss.unsafe_store(0, ftz(identical_div(acc, Float32(rows))))
+
+
+def chunked_lm_head_v2_loss_level_kernel(
+    loss: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    width_in: Int32,
+    rows_in: Int32,
+):
+    """One tree level, one thread per output node. The level that leaves one
+    node writes the mean."""
+    var width = Int(width_in)
+    var out_width = (width + 1) // 2
+    var q = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if q >= out_width:
+        return
+    var node: Float32
+    if 2 * q + 1 < width:
+        node = ftz(ftz(src.unsafe_load(2 * q)) + ftz(src.unsafe_load(2 * q + 1)))
+    else:
+        node = src.unsafe_load(2 * q)
+    dst.unsafe_store(q, node)
+    if out_width == 1:
+        loss.unsafe_store(0, ftz(identical_div(ftz(node), Float32(Int(rows_in)))))
+
+
+def _enqueue_loss_total(
+    ctx: DeviceContext,
+    mut loss: DeviceBuffer[DType.float32],
+    mut row_loss: DeviceBuffer[DType.float32],
+    rows: Int,
+) raises:
+    """`loss[0]` = the mean of `row_loss[0:rows]` in the fixed fold above:
+    one grid-wide leaf launch, then one launch per tree level."""
+    var leaves = (rows + LM_HEAD_V2_LOSS_LEAF - 1) // LM_HEAD_V2_LOSS_LEAF
+    var a = ctx.enqueue_create_buffer[DType.float32](max(1, leaves))
+    var b = ctx.enqueue_create_buffer[DType.float32](max(1, (leaves + 1) // 2))
+    ctx.enqueue_function[chunked_lm_head_v2_loss_leaf_kernel](
+        loss.unsafe_ptr(), a.unsafe_ptr(), row_loss.unsafe_ptr(), Int32(rows),
+        grid_dim=(leaves + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB,
+        block_dim=LM_HEAD_V2_TPB,
+    )
+    var width = leaves
+    var from_a = True
+    while width > 1:
+        var out_width = (width + 1) // 2
+        var grid = (out_width + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB
+        if from_a:
+            ctx.enqueue_function[chunked_lm_head_v2_loss_level_kernel](
+                loss.unsafe_ptr(), b.unsafe_ptr(), a.unsafe_ptr(),
+                Int32(width), Int32(rows),
+                grid_dim=grid, block_dim=LM_HEAD_V2_TPB,
+            )
+        else:
+            ctx.enqueue_function[chunked_lm_head_v2_loss_level_kernel](
+                loss.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+                Int32(width), Int32(rows),
+                grid_dim=grid, block_dim=LM_HEAD_V2_TPB,
+            )
+        from_a = not from_a
+        width = out_width
+    _ = a^
+    _ = b^
 
 
 def chunked_lm_head_v2_dhidden_kernel(
@@ -203,10 +284,7 @@ def chunked_lm_head_v2_loss_host(
         Int32(rows), Int32(vocab), Int32(width),
         grid_dim=grid, block_dim=LM_HEAD_V2_TPB,
     )
-    ctx.enqueue_function[chunked_lm_head_v2_total_kernel](
-        loss.unsafe_ptr(), row_loss.unsafe_ptr(), Int32(rows),
-        grid_dim=1, block_dim=1,
-    )
+    _enqueue_loss_total(ctx, loss, row_loss, rows)
     ctx.enqueue_copy(dst_ptr=loss_out, src_buf=loss)
     ctx.enqueue_copy(dst_ptr=max_out, src_buf=maxima)
     ctx.enqueue_copy(dst_ptr=denom_out, src_buf=denom)
@@ -259,9 +337,7 @@ def chunked_lm_head_v2_train_host(
         Int32(rows), Int32(vocab), Int32(width), grid_dim=row_grid,
         block_dim=LM_HEAD_V2_TPB,
     )
-    ctx.enqueue_function[chunked_lm_head_v2_total_kernel](
-        loss.unsafe_ptr(), row_loss.unsafe_ptr(), Int32(rows), grid_dim=1, block_dim=1,
-    )
+    _enqueue_loss_total(ctx, loss, row_loss, rows)
     ctx.enqueue_function[chunked_lm_head_v2_dhidden_kernel](
         d_hidden.unsafe_ptr(), hidden.unsafe_ptr(), weight.unsafe_ptr(),
         targets.unsafe_ptr(), maxima.unsafe_ptr(), denom.unsafe_ptr(),
@@ -300,9 +376,7 @@ def chunked_lm_head_v2_forward_into(
         Int32(rows), Int32(vocab), Int32(width), grid_dim=row_grid,
         block_dim=LM_HEAD_V2_TPB,
     )
-    ctx.enqueue_function[chunked_lm_head_v2_total_kernel](
-        loss.unsafe_ptr(), row_loss.unsafe_ptr(), Int32(rows), grid_dim=1, block_dim=1,
-    )
+    _enqueue_loss_total(ctx, loss, row_loss, rows)
 
 
 def chunked_lm_head_v2_backward_into(
@@ -412,7 +486,7 @@ def chunked_lm_head_v2_gemm_forward_into(ctx: DeviceContext, mut loss: DeviceBuf
         ctx.enqueue_function[_chunk_denom_kernel](denom.unsafe_ptr(), row_loss.unsafe_ptr(), chunk.unsafe_ptr(), maxima.unsafe_ptr(), targets.unsafe_ptr(), Int32(rows), Int32(n), Int32(chunk0), grid_dim=grid, block_dim=LM_HEAD_V2_TPB)
         _ = wb
     ctx.enqueue_function[_chunk_loss_kernel](row_loss.unsafe_ptr(), denom.unsafe_ptr(), Int32(rows), grid_dim=grid, block_dim=LM_HEAD_V2_TPB)
-    ctx.enqueue_function[chunked_lm_head_v2_total_kernel](loss.unsafe_ptr(), row_loss.unsafe_ptr(), Int32(rows), grid_dim=1, block_dim=1)
+    _enqueue_loss_total(ctx, loss, row_loss, rows)
 
 
 def chunked_lm_head_v2_gemm_backward_into(ctx: DeviceContext, mut d_hidden: DeviceBuffer[DType.float32], mut d_weight: DeviceBuffer[DType.float32], mut chunk: DeviceBuffer[DType.float32], mut ws: DeviceBuffer[DType.float32], mut hidden: DeviceBuffer[DType.float32], mut weight: DeviceBuffer[DType.float32], mut targets: DeviceBuffer[DType.int32], mut maxima: DeviceBuffer[DType.float32], mut denom: DeviceBuffer[DType.float32], rows: Int, vocab: Int, width: Int) raises:

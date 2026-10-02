@@ -38,6 +38,41 @@ comptime LM_HEAD_V2_VOCAB_CHUNK = 256
 comptime CHUNKED_LM_HEAD_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
+#: The mean loss's row fold, shared with the device
+#: (`training/chunked_lm_head_v2.mojo::_enqueue_loss_total`, cpu-gpu-cleanup
+#: n-train-mamba 2026-10-02): leaves of this many rows, each folded ascending
+#: from +0.0 with every add flushed; then the fixed balanced tree over the
+#: leaf partials in ascending leaf order (pairs `ftz(ftz(l) + ftz(r))`, an
+#: odd tail carried bit for bit); then `ftz(total / rows)`. At rows <= the
+#: leaf it is the serial chain the profile had before.
+comptime LM_HEAD_V2_LOSS_LEAF = 256
+
+
+def lm_head_v2_loss_fold(row_loss: List[Float32], rows: Int) -> Float32:
+    """The mean of `row_loss[0:rows]` in the fold above. The sabotage arm
+    feeds the rows DESCENDING into the same structure."""
+    var leaves = (rows + LM_HEAD_V2_LOSS_LEAF - 1) // LM_HEAD_V2_LOSS_LEAF
+    var level = List[Float32](length=leaves, fill=Float32(0.0))
+    for j in range(leaves):
+        var acc = Float32(0.0)
+        for r in range(j * LM_HEAD_V2_LOSS_LEAF, min((j + 1) * LM_HEAD_V2_LOSS_LEAF, rows)):
+            var row = r
+            comptime if CHUNKED_LM_HEAD_HOST_SABOTAGE:
+                row = rows - 1 - r
+            acc = ftz(acc + row_loss[row])
+        level[j] = acc
+    while len(level) > 1:
+        var width = len(level)
+        var nxt = List[Float32](length=(width + 1) // 2, fill=Float32(0.0))
+        for q in range(len(nxt)):
+            if 2 * q + 1 < width:
+                nxt[q] = ftz(ftz(level[2 * q]) + ftz(level[2 * q + 1]))
+            else:
+                nxt[q] = level[2 * q]
+        level = nxt^
+    return ftz(identical_div(ftz(level[0]), Float32(rows)))
+
+
 def chunked_lm_head_v2_peak_scratch_floats(rows: Int) -> Int:
     """Production upper bound: one logits chunk plus max and denominator."""
     return rows * (LM_HEAD_V2_VOCAB_CHUNK + 2)
@@ -116,13 +151,7 @@ def chunked_lm_head_v2_oracle_forward(
         var logdenom = ftz(identical_log(ftz(total)))
         row_loss[row] = neg_by_bits(ftz(ftz(target_shift) - ftz(logdenom)))
 
-    var loss_total = Float32(0.0)
-    for r in range(rows):
-        var row = r
-        comptime if CHUNKED_LM_HEAD_HOST_SABOTAGE:
-            row = rows - 1 - r
-        loss_total = ftz(loss_total + row_loss[row])
-    var loss = ftz(identical_div(loss_total, Float32(rows)))
+    var loss = lm_head_v2_loss_fold(row_loss, rows)
     return ChunkedLMHeadV2Result(
         loss, maxima^, denom^, List[Float32](), List[Float32]()
     )
