@@ -56,10 +56,11 @@ from gemm.host.gemm_oracle import (
     gemm_oracle_sabotage_value_flip,
 )
 
-#: The largest `k` the int8 profile accepts: `127 * 127 * k < 2^31` holds
-#: up to 133,152, and the profile stops at the power of two below it so the
-#: bound is a number a reader can check. Contract L-7.
-comptime INT8_MAX_K = 131072
+#: The largest `k` the int8 profile accepts (`127 * 127 * k < 2^31` holds
+#: up to 133,152; the profile stops at the power of two below it, contract
+#: L-7) and the profile version: in gemm/contract.mojo, which the device
+#: kernels import instead of this oracle.
+from gemm.contract import INT8_MAX_K, LOWBIT_PROFILE_VERSION
 
 #: THE CONVERSION SEAMS' OWN NEGATIVE CONTROL (lane/laneless-public-classes,
 #: 2026-09-19). The four functions below -- `widen_bf16`, `narrow_bf16`,
@@ -87,11 +88,6 @@ comptime INT8_MAX_K = 131072
 # define as `is_defined["<NAME>"]`, and a wrapped call makes that probe
 # return nothing forever while reading exactly like a pass.
 comptime LOWBIT_CONVERT_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_CONVERT_SABOTAGE"]()
-
-#: The profile version the bindings read back. The leaf rule and fold
-#: topology are fp32.v1's; the low-bit seams are this file's; a change to
-#: either makes v2.
-comptime LOWBIT_PROFILE_VERSION = 1
 
 
 # ===========================================================================

@@ -43,12 +43,14 @@ from extratrees.impl.decisiontree.decisiontree import DecisionTreeParams
 from extratrees.impl.decisiontree.flatnode import predict_leaf
 from extratrees.impl.randomforest.randomforest import (
     Forest,
-    fit_classification,
-    fit_regression,
     forest_vote,
     predict_class_forest,
     predict_regression_forest,
     row_sample_for,
+)
+from extratrees.impl.randomforest.host_forest import (
+    fit_classification,
+    fit_regression,
 )
 from extratrees.checks.pcg_rng import row_sample_seed
 

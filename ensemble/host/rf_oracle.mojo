@@ -122,7 +122,8 @@ from core.host_parallel import host_parallelize
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_log, identical_mul_add
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
-from ensemble.host_layout import RF_NAN_REFUSAL, has_nan_f32_threaded
+from ensemble.host_layout import has_nan_f32_threaded
+from ensemble.nan_refusal import RF_NAN_REFUSAL
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).

@@ -11,7 +11,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.step_phase import step_counts_now
 from core.device_scan_check import upload
 from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm_workspace_max_floats
-from gemm.checks.gemm_oracle import gemm_oracle, OP_NN, OP_NT, OP_TN
+from gemm.contract import OP_NN, OP_NT, OP_TN
+from gemm.checks.gemm_oracle import gemm_oracle
 
 
 def values(n: Int, salt: Int) -> List[Float32]:

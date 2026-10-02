@@ -17,7 +17,7 @@ from x_decomp.api import (
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
 from x_decomp.graph_host import (
-    graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_lle_iw_py, graph_components_py, graph_join_py,
+    graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_radius_geo_py, graph_lle_iw_py, graph_components_py, graph_join_py,
     graph_dijkstra_py,
 )
 
@@ -87,6 +87,7 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
         m.def_function[graph_knn_py]("x_decomp_graph_knn")
         m.def_function[graph_knn_dense_py]("x_decomp_graph_knn_dense")
         m.def_function[graph_radius_py]("x_decomp_graph_radius")
+        m.def_function[graph_radius_geo_py]("x_decomp_graph_radius_geo")
         m.def_function[graph_lle_iw_py]("x_decomp_graph_lle_iw")
         m.def_function[graph_components_py]("x_decomp_graph_components")
         m.def_function[graph_join_py]("x_decomp_graph_join")

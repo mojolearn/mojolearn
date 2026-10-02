@@ -113,8 +113,9 @@ from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_
 from core.dense_coo import (
     nonzero_f32_count as dense_nonzero_f32_count,
     nonzero_f32_fill as dense_nonzero_f32_fill,
-    knn_affinity_f32 as dense_knn_affinity_f32,
 )
+from core.dense_coo_host import knn_affinity_f32 as dense_knn_affinity_f32
+from core.label_encode import host_unique_inverse
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -1341,6 +1342,33 @@ def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -
     return PythonObject(0)
 
 
+def unique_inverse_binding(
+    src_addr: PythonObject, n: PythonObject, kind: PythonObject,
+    classes_addr: PythonObject, codes_addr: PythonObject,
+) raises -> PythonObject:
+    """The GPU binding's `unique_inverse` (its contract and refusals) over
+    the host twin `core/label_encode.mojo::host_unique_inverse`, the same
+    statements as `core/label_encode_device.mojo` (cpu-gpu-cleanup
+    w2-pyglue). Integers and bit moves: the same bytes."""
+    var count = Int(py=n)
+    var k_ind = Int(py=kind)
+    if count < 1:
+        raise Error("unique_inverse: n must be positive, got " + String(count))
+    if k_ind != 0 and k_ind != 1:
+        raise Error("unique_inverse: kind must be 0 (float64) or 1 (int64)")
+    if Int(py=src_addr) == 0 or Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
+        raise Error("unique_inverse: null buffer address")
+    var sp = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr))
+    var cp = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=classes_addr))
+    var dp = i32_ptr(Int(py=codes_addr))
+    var k: Int
+    with GILReleased(Python()):
+        k = host_unique_inverse(sp, count, k_ind, cp, dp)
+    if k == -2:
+        raise Error("mojolearn: y contains a NaN label; NaN is not a class")
+    return PythonObject(k)
+
+
 @export
 def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
     try:
@@ -1369,6 +1397,7 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[nonzero_f32_count_binding]("nonzero_f32_count")
         module.def_function[nonzero_f32_fill_binding]("nonzero_f32_fill")
         module.def_function[knn_affinity_f32_binding]("knn_affinity_f32")
+        module.def_function[unique_inverse_binding]("unique_inverse")
         module.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")
         module.def_function[all_finite_f32_binding]("all_finite_f32")
         module.def_function[all_finite_f64_binding]("all_finite_f64")

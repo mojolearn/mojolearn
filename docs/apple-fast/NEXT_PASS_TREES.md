@@ -20,10 +20,10 @@ you start: it is the baseline).
 
 | lane | dataset | best opponent on the M3 | ours IDENTICAL Metal | notes |
 |---|---|---|---|---|
-| gbdt-symmetric | taxi / istella | CatBoost 28.2 s / 60.1 s | pending (afb3) | oblivious trees; `lane/apple-fast-trees-symmetric` has one A/B (`-D MOJOLEARN_SYM_DEVICE_LEVEL`, queued) |
-| gbdt-symmetric-1000 | taxi / istella | CatBoost 55.3 s / 120.8 s | pending (afb3) | same code, 1000 iterations: per-iteration overhead dominates |
+| gbdt-symmetric | taxi / istella | CatBoost 28.2 s / 60.1 s | FAST 11.3 s / 17.0 s (already 2.5x / 3.5x faster) | oblivious trees; `lane/apple-fast-trees-symmetric` has one A/B (`-D MOJOLEARN_SYM_DEVICE_LEVEL`, queued) |
+| gbdt-symmetric-1000 | taxi / istella | CatBoost 55.3 s / 120.8 s | FAST 22.4 s / 32.9 s (2.5x / 3.7x faster) | same code, 1000 iterations: per-iteration overhead dominates |
 | gbdt-categorical | taxi | LightGBM 58.9 s | 84.4 s | CTR stages (gbdt/ctrs/) |
-| gbdt-ordered | taxi / istella | CatBoost 99.3 s / > 300 s cap (uncapped rerun queued) | pending (afb3) | ordered boosting (gbdt/methods/ordered_boosting.mojo, gbdt/data/ordered_plan.mojo) |
+| gbdt-ordered | taxi / istella | CatBoost 99.3 s / > 300 s cap (uncapped rerun queued) | **FAST 275.1 s / > 300 s cap: 2.8x SLOWER, the biggest trees gap. Do this lane first.** | ordered boosting (gbdt/methods/ordered_boosting.mojo, gbdt/data/ordered_plan.mojo) |
 | gbdt-multiclass | taxi / istella | XGBoost 45.5 s / capped (rerun queued) | 22.5 s (taxi) | already ahead on taxi; istella unknown |
 | gbdt-rank-pairlogit | istellarank | XGBoost 8.4 s | not measured | pairwise ranking loss |
 | dart / dart-reg | istella | LightGBM ~2x faster | board 0.8.34 | `lane/apple-fast-dart` exists (peer, pushed 2026-10-02): continue it, do not restart |

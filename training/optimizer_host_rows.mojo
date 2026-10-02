@@ -47,15 +47,15 @@ from core.host_lanes import (
     sqrt_lanes,
 )
 from core.host_parallel import host_parallelize
-from training.checks.optimizer_oracle import (
+from training.checks.optimizer_contract import (
     OPT_ADAMW,
     OPT_SGD,
     OptimizerConfig,
     StepScalars,
-    adam_element_oracle,
     refuse_nonfinite,
     step_scalars,
 )
+from training.checks.optimizer_oracle import adam_element_oracle
 
 #: Scalar operations per element, for the task split only (a schedule knob).
 comptime ADAM_ELEMENT_WORK = 24
