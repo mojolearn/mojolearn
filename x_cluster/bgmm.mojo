@@ -21,8 +21,8 @@ its triangular inverse, digamma and log-gamma (series on the portable
 from std.math import sqrt
 from std.os import getenv
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, identical_log64, identical_mul64
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS
 from x_cluster.bodies import SplitMix64
@@ -52,7 +52,7 @@ comptime BGMM_ESTEP1 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOL
 # `MOJOLEARN_BGMM_FAST_ESTEP1=1`: the BGMM_ESTEP1 arm (the E-step's three
 #   kernels as one launch, a row per thread) without the build define.
 # `MOJOLEARN_BGMM_FAST_MOMENTS_GEMM=1` is read in device_ops.mojo `moments`.
-comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE
 
 comptime LOG2 = 0.6931471805599453
 comptime LOG_2PI = 1.8378770664093453

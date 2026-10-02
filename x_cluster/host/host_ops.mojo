@@ -566,28 +566,31 @@ struct HostOps(ClusterOps):
     ) raises:
         # the host column never takes the FAST device paths (`fast_device`):
         # the same steps in plain loops, for the trait's sake
+        var pc = self._ip(cnt)
+        var pg = self._ip(ring)
         for q in range(n_it):
             var it = it0 + q
-            if self.i[cnt][done_off] != Int32(0):
+            if pc[done_off] != Int32(0):
                 return
             if it >= conv_iter + 1:
                 var prev = it - 1
-                if Int(self.i[cnt][2 * prev]) == n and self.i[cnt][2 * prev + 1] > Int32(0):
-                    self.i[cnt][done_off] = Int32(1)
-                    self.i[cnt][done_off + 1] = Int32(prev)
+                if Int(pc[2 * prev]) == n and pc[2 * prev + 1] > Int32(0):
+                    pc[done_off] = Int32(1)
+                    pc[done_off + 1] = Int32(prev)
                     return
             self.ap_r(s, a, r, n, damping)
             self.ap_a(r, a, n, damping)
             self.ap_e(a, r, n, e)
+            var pe = self._ip(e)
             for i in range(n):
-                var ei = self.i[e][i]
-                self.i[ring][i * conv_iter + it % conv_iter] = ei
+                var ei = pe[i]
+                pg[i * conv_iter + it % conv_iter] = ei
                 var se = Int32(0)
                 for c in range(conv_iter):
-                    se += self.i[ring][i * conv_iter + c]
+                    se += pg[i * conv_iter + c]
                 if se == Int32(conv_iter) or se == Int32(0):
-                    self.i[cnt][2 * it] += Int32(1)
-                self.i[cnt][2 * it + 1] += ei
+                    pc[2 * it] = pc[2 * it] + Int32(1)
+                pc[2 * it + 1] = pc[2 * it + 1] + ei
 
     def optics_order(
         mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
@@ -595,33 +598,39 @@ struct HostOps(ClusterOps):
         # the host column never takes the FAST device paths (`fast_device`):
         # the driver's serial loop over the slots, for the trait's sake
         var inf = Float32.MAX * Float32(2)
+        var pd = self._fp(dm)
+        var pcore = self._fp(core)
+        var po = self._ip(ordering)
+        var pr = self._fp(reach)
+        var pp = self._ip(pred)
+        var pq = self._ip(proc)
         for j in range(n):
-            self.f[reach][j] = inf
-            self.i[pred][j] = Int32(-1)
-            self.i[proc][j] = Int32(0)
+            pr[j] = inf
+            pp[j] = Int32(-1)
+            pq[j] = Int32(0)
         for step in range(n):
             var point = -1
             var best = inf
             for j in range(n):
-                if self.i[proc][j] != Int32(0):
+                if pq[j] != Int32(0):
                     continue
-                if point < 0 or self.f[reach][j] < best:
+                if point < 0 or pr[j] < best:
                     point = j
-                    best = self.f[reach][j]
-            self.i[proc][point] = Int32(1)
-            self.i[ordering][step] = Int32(point)
-            var cp = self.f[core][point]
+                    best = pr[j]
+            pq[point] = Int32(1)
+            po[step] = Int32(point)
+            var cp = pcore[point]
             if cp <= max_eps and cp != inf:
                 for o in range(n):
-                    if self.i[proc][o] != Int32(0):
+                    if pq[o] != Int32(0):
                         continue
-                    var dd = self.f[dm][point * n + o]
+                    var dd = pd[point * n + o]
                     if not (dd <= max_eps):
                         continue
                     var rd = dd if dd > cp else cp
-                    if rd < self.f[reach][o]:
-                        self.f[reach][o] = rd
-                        self.i[pred][o] = Int32(point)
+                    if rd < pr[o]:
+                        pr[o] = rd
+                        pp[o] = Int32(point)
 
     def gauss_q_gemm(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
         # the host column never takes the FAST device paths (`fast_device`)
@@ -632,7 +641,8 @@ struct HostOps(ClusterOps):
         var pa = self._fp(a)
         var pb = self._fp(b)
         var po = self._fp(dst)
+        var pw = self._ip(rows)
         for i in range(na):
-            var ri = Int(self.i[rows][i])
+            var ri = Int(pw[i])
             for j in range(nb):
                 po[i * nb + j] = sq_dist_rows(pa, ri, pb, j, d)

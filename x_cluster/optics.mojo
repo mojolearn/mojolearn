@@ -19,8 +19,8 @@ decimals=precision)` of the core and reach distances is not carried
 from std.math import sqrt
 from std.os import getenv
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, identical_mul64
 from x_cluster.bodies import FPtr, IPtr
 from x_cluster.ops import ClusterOps
@@ -50,7 +50,7 @@ comptime _OW = 8
 # n cells. On the device the step stays serial, its two walks are one
 # threadgroup wide, and nothing n^2 crosses to the host. Same picks, same
 # reachability and predecessors (compares and selects only).
-comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE
 
 
 def dist_slot[O: ClusterOps](mut ops: O, n: Int) raises -> Int:

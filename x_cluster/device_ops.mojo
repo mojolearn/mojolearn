@@ -8,14 +8,13 @@ from std.atomic import Atomic, Ordering
 from std.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 from std.time import perf_counter_ns
 from std.ffi import _Global
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_sqrt
 
 from x_cluster.bodies import (
@@ -966,7 +965,7 @@ def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32,
 # exemplar arithmetic is the plain kernels', cell for cell: the same bits
 # and the same n_iter; only the waits go. Expected: the per-iteration host
 # wait (the dominant cost of a 5,000-row iteration on Metal) once per batch.
-comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE
 
 
 def _apl_r_kernel(

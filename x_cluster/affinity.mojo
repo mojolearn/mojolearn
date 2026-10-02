@@ -19,8 +19,8 @@ exemplar flags; the convergence window, the exemplar refinement and the
 labels are the reference's host logic from one source."""
 from std.os import getenv
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul
 from x_cluster.ops import ClusterOps
 from x_cluster.optics import dist_slot
@@ -50,7 +50,7 @@ comptime AP_SPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEAR
 #   device's distances (no second n^2 host copy, no n^2 upload), the two
 #   final diagonals gathered on the device (not two n^2 readbacks), the
 #   equal-similarities scan stopped at its first difference. Same values.
-comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE
 comptime AP_LOOP_BATCH = 16
 
 

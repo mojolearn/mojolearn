@@ -17,8 +17,8 @@ inertia ('biggest_inertia') or size ('largest_cluster'). Leaves in
 depth-first order are the labels; `predict` descends the tree on the device
 (`bodies.tree_descend`)."""
 from std.os import getenv
-from std.sys.info import has_apple_gpu_accelerator
 
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, INIT_RANDOM
 from x_cluster.bodies import SplitMix64
@@ -36,7 +36,7 @@ from x_cluster.ops import ClusterOps
 # floats) and the inertia reuses the resident x. Same bits. What stays:
 # the gather and the upload inside `ops.kmeans` (cluster/estimator.mojo
 # kmeans_fit takes host rows), listed in docs/apple-fast/ab/cluster2.md.
-comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE
 
 
 struct BisectTree(Movable):
