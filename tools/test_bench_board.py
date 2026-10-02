@@ -1390,3 +1390,31 @@ def test_full_board_starts_after_a_smoke_pass(env):
     assert _run(env, "--rows", "full") == 0
     res = json.loads((env["out"] / "board.json").read_text())
     assert res["config"]["smoke_gate"].startswith("passed")
+
+
+# --- GPU-only board (Andrew, Oct 2 2026): locked in code, no switch -----------
+
+@pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
+def test_board_races_only_our_gpu(vendor):
+    races = bb.plan_races(vendor, bb.modes_for(vendor), cpu_arm=True)   # cpu_arm is ignored
+    for r in races:
+        assert not any(bb._ours_runs_on_cpu(r["family"], r["lane"], a) for a in r["our_arms"]), r["id"]
+        opp = r["opponents"]
+        assert not (any(bb._is_cpu_arm(a) for a in opp) and any(not bb._is_cpu_arm(a) for a in opp)), r["id"]
+
+
+def test_gpu_only_guard_refuses_cpu_races():
+    with pytest.raises(SystemExit, match="our arm ours-cpu runs on the CPU"):
+        bb.enforce_gpu_only([{"id": "x", "family": "algos", "lane": "pca",
+                              "our_arms": {"ours": "identical", "ours-cpu": "identical"},
+                              "opponents": ["cuml-gpu"]}])
+    with pytest.raises(SystemExit, match="race beside GPU ones"):
+        bb.enforce_gpu_only([{"id": "x", "family": "algos", "lane": "pca",
+                              "our_arms": {"ours": "identical"},
+                              "opponents": ["cuml-gpu", "sklearn-cpu"]}])
+    with pytest.raises(SystemExit, match="runs on the CPU"):
+        bb.enforce_gpu_only([{"id": "x", "family": "neural", "lane": "mamba2-infer",
+                              "our_arms": {"ours": "identical"}, "opponents": []}])
+    with pytest.raises(SystemExit, match="our CPU never races"):
+        bb.base_cell({"vendor": "nvidia"}, {"id": "x", "family": "algos", "lane": "pca"},
+                     "ours-cpu", "identical")
