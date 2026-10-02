@@ -1595,9 +1595,10 @@ class SVGP(_XNeighbors):
     not optimized (DEVIATION 5205: GPflow trains them and q by gradient
     steps). q_mu / q_sqrt are the non-whitened parameters. Inducing points:
     `inducing_points`, or `n_inducing` training rows evenly spaced
-    (row i * n // M). The m x m system is ONE sequential item
-    (x_neighbors/items.mojo `svgp_item`); the kernel matrices and products are
-    parallel items. Float32 throughout.
+    (row i * n // M). The m x m system runs as staged items
+    (x_neighbors/items.mojo `svgp_*_item`: a Cholesky column per launch, one
+    triangular solve per right-hand side); the kernel matrices and products
+    are parallel items. Float32 throughout.
     """
 
     def __init__(self, n_inducing=32, *, inducing_points=None, kernel_variance=1.0, lengthscale=1.0,

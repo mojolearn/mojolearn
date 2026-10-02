@@ -6,7 +6,7 @@
 (`_LabelPropagationBase.fit` in python/mojolearn/_expansion_neighbors.py) on
 the device with the graph uploaded ONCE. The Python loop called three ops per
 iteration, and each op uploaded its inputs: the n x n graph crossed to the
-device on every iteration. Here the same kernels (`absdiff_sum_kernel`,
+device on every iteration. Here the same kernels (`absdiff_sum_k0` / `_k1`,
 `matmul_kernel`, `lp_clamp_kernel` / `ls_clamp_kernel`, the generated
 one-item-per-thread drivers of the same items) run in the same order on the
 same values; only the stopping sum crosses back, one float per iteration,
@@ -32,12 +32,12 @@ from std.sys.compile import is_defined
 from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
 from x_neighbors.nan_cells_device import nan_cells_device
 from x_neighbors.graph_dev import pr_iterate_gpu
-from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, _add, knn_sq_item, knn_impute_finish
+from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
     xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK,
-    absdiff_sum_kernel, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
+    absdiff_sum_k0, absdiff_sum_k1, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
     pagerank_step_kernel, cc_step_kernel,
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
     kernel_kernel, rowsum_kernel, scale_div_kernel, kpca_center_kernel, unary_kernel, svgp_var_kernel,
@@ -45,6 +45,17 @@ from x_neighbors.device_ops import (
 from x_neighbors.items import matmul_tn_acc_item, K_RBF, U_IDENTITY
 from x_neighbors.lp_spmm import lp_spmm_kernel
 from core.device_zero import enqueue_fill
+
+
+def _absdiff_launch(ctx: DeviceContext, a: FP, b: FP, s: FP, part: FP, count: Int) raises:
+    """The `absdiff_sum` op's two stages on resident buffers: one thread per
+    XN_FOLD_BLOCK block into `part`, then the partials ascending into s[0]
+    (the bits of `absdiff_sum_item`, the host column's fold)."""
+    var nb = xn_fold_blocks(count)
+    ctx.enqueue_function[absdiff_sum_k0](
+        a, b, s, part, Int64(count), grid_dim=_grid(nb), block_dim=(BLOCK if nb > 1 else 1),
+    )
+    ctx.enqueue_function[absdiff_sum_k1](a, b, s, part, Int64(count), grid_dim=1, block_dim=1)
 
 
 def op_lp_iterate(
@@ -73,6 +84,7 @@ def op_lp_iterate(
     var d_ys = _buf(ctx, ystatic, nc, True)
     var d_unl = _buf_i(ctx, unlabeled, n, True)
     var d_s = _buf(ctx, 0, 1, False)
+    var d_part = _buf(ctx, 0, xn_fold_blocks(nc), False)
     var hs = List[Float32](length=1, fill=Float32(0))
     var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var prev: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -123,9 +135,7 @@ def op_lp_iterate(
     for it in range(max_iter):
         n_iter = it
         comptime if is_defined["MOJOLEARN_XN_LP_DEVICE_FOLD"]():
-            ctx.enqueue_function[absdiff_sum_kernel](
-                cur, prev, d_s.unsafe_ptr(), Int64(nc), grid_dim=1, block_dim=1,
-            )
+            _absdiff_launch(ctx, cur, prev, _p(d_s), _p(d_part), nc)
             ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
             ctx.synchronize()
         else:
@@ -203,6 +213,7 @@ def op_lp_iterate(
     _ = d_ys^
     _ = d_unl^
     _ = d_s^
+    _ = d_part^
     _ = ctx^
 
 
@@ -223,6 +234,7 @@ def op_pr_iterate(
     var d_dw = _buf(ctx, dw, n, True)
     var d_dg = _buf_i(ctx, dangling, n, True)
     var d_s = _buf(ctx, 0, 1, False)
+    var d_part = _buf(ctx, 0, xn_fold_blocks(n), False)
     var hs = List[Float32](length=1, fill=Float32(0))
     var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var nxt: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -234,9 +246,7 @@ def op_pr_iterate(
             d_q.unsafe_ptr(), cur, d_p.unsafe_ptr(), d_dw.unsafe_ptr(), d_dg.unsafe_ptr(), nxt,
             Int64(n), alpha, grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
         )
-        ctx.enqueue_function[absdiff_sum_kernel](
-            nxt, cur, d_s.unsafe_ptr(), Int64(n), grid_dim=1, block_dim=1,
-        )
+        _absdiff_launch(ctx, nxt, cur, _p(d_s), _p(d_part), n)
         ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
         ctx.synchronize()
         var t = cur
@@ -263,6 +273,7 @@ def op_pr_iterate(
     _ = d_dw^
     _ = d_dg^
     _ = d_s^
+    _ = d_part^
     _ = ctx^
 
 
