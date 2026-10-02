@@ -28,7 +28,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 
 from std.sys.compile import is_defined
-from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
+from x_neighbors.cc_sparse import cc_iterate_csr
 from x_neighbors.nan_cells import nan_cells_host
 from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
 from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, _add, knn_sq_item, knn_impute_finish
@@ -467,65 +467,69 @@ def _cc_csr_device(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: 
     _ = d_c^
 
 
+def cc_hook_dense_kernel(a: FP, lab: IP, n: Int32, changed: IP):
+    """`cc_hook_kernel` on the dense matrix (lane hr2-graph-embed): thread v
+    walks COLUMN v (a warp reads one row's consecutive cells: coalesced), and
+    every nonzero a[t, v] hooks t and v. Hooking is symmetric in its two
+    ends, so the columns cover both directions of weak connectivity."""
+    var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nn = Int(n)
+    if v < nn:
+        for t in range(nn):
+            if a.unsafe_load(t * nn + v) != Float32(0):
+                var x = lab.unsafe_load(t)
+                var y = lab.unsafe_load(v)
+                if x != y:
+                    var lo = x if x < y else y
+                    var hi = y if x < y else x
+                    if lab.unsafe_load(Int(hi)) > lo:
+                        _ = Atomic[DType.int32].min(lab + Int(hi), lo)
+                        changed.unsafe_store(0, Int32(1))
+
+
+def cc_label_init_kernel(lab: IP, n: Int32):
+    var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if v < Int(n):
+        lab.unsafe_store(v, Int32(v))
+
+
 def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
-    """connected_components' min-label iteration (`cc_step` until the labels
-    stop changing) with A resident; the labels come back each step (n
-    integers) for the host's equality test, as Python compared them.
-    `lab` in: 0..n-1, out: the fixed point. info (int32 x 1): steps.
-    Lane neural-pass22: unless MOJOLEARN_XN_CC_GPU is defined, the rounds run
-    on the HOST as the sparse walk of x_neighbors/cc_sparse.mojo (the same
-    labels and round count; the dense rounds here read row t and column t
-    of the matrix for every node in every round, 800 million cells a round
-    at the board's 20,000 nodes); the resident loop below stays the device
-    body and the reference."""
-    comptime if not is_defined["MOJOLEARN_XN_CC_GPU"]():
-        cc_iterate_sparse(FP(unsafe_from_address=a), IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n)
-        return
+    """connected_components on a dense adjacency, on the device (lane
+    hr2-graph-embed, 2026-10-02; before, the default was the host's sparse
+    walk, x_neighbors/cc_sparse.mojo): A uploaded once, then hooking
+    (`cc_hook_dense_kernel`) and pointer jumping (`cc_jump_kernel`) rounds
+    until no edge lowers a label, from the identity labels. The result is
+    the unique min-label fixed point (every node labelled by the lowest node
+    of its weak component), the host column's rounds word for word; info
+    holds the device's round count (Python reads only the labels)."""
     var ctx = xn_ctx()
     var d_a = _buf(ctx, a, n * n, True)
-    var d_l0 = _buf_i(ctx, lab, n, True)
-    var d_l1 = _buf_i(ctx, 0, n, False)
-    var cur_host = List[Int32](length=n if n > 0 else 1, fill=Int32(0))
-    var nxt_host = List[Int32](length=n if n > 0 else 1, fill=Int32(0))
-    var pl = IP(unsafe_from_address=lab)
-    for i in range(n):
-        cur_host[i] = pl.unsafe_load(i)
-    var cur: IP = d_l0.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var nxt: IP = d_l1.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var nxt_is_1 = True
-    var steps = 0
-    while True:
-        ctx.enqueue_function[cc_step_kernel](
-            d_a.unsafe_ptr(), cur, nxt, Int64(n),
-            grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
-        )
-        if nxt_is_1:
-            ctx.enqueue_copy(dst_ptr=nxt_host.unsafe_ptr(), src_buf=d_l1)
-        else:
-            ctx.enqueue_copy(dst_ptr=nxt_host.unsafe_ptr(), src_buf=d_l0)
+    var d_l = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var d_c = ctx.enqueue_create_buffer[DType.int32](1)
+    var hb = ctx.enqueue_create_host_buffer[DType.int32](max(n, 1))
+    var blocks = (n + 255) // 256
+    var rounds = 0
+    if n > 0:
+        ctx.enqueue_function[cc_label_init_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
+    while n > 0:
+        rounds += 1
+        d_c.enqueue_fill(Int32(0))
+        ctx.enqueue_function[cc_hook_dense_kernel](d_a.unsafe_ptr(), d_l.unsafe_ptr(), Int32(n), d_c.unsafe_ptr(),
+                                                   grid_dim=blocks, block_dim=256)
+        ctx.enqueue_function[cc_jump_kernel](d_l.unsafe_ptr(), Int32(n), grid_dim=blocks, block_dim=256)
+        ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_c)
         ctx.synchronize()
-        steps += 1
-        var same = True
-        for i in range(n):
-            if nxt_host[i] != cur_host[i]:
-                same = False
-                break
-        if same:
+        if hb.unsafe_ptr()[0] == 0:
             break
-        for i in range(n):
-            cur_host[i] = nxt_host[i]
-        var t = cur
-        cur = nxt
-        nxt = t
-        nxt_is_1 = not nxt_is_1
-    for i in range(n):
-        pl.unsafe_store(i, cur_host[i])
-    IP(unsafe_from_address=info).unsafe_store(0, Int32(steps))
-    _ = cur_host^
-    _ = nxt_host^
+    if n > 0:
+        ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=d_l)
+        ctx.synchronize()
+        memcpy(dest=IP(unsafe_from_address=lab), src=hb.unsafe_ptr(), count=n)
+    IP(unsafe_from_address=info).unsafe_store(0, Int32(rounds))
+    _ = hb^
     _ = d_a^
-    _ = d_l0^
-    _ = d_l1^
+    _ = d_l^
+    _ = d_c^
     _ = ctx^
 
 
