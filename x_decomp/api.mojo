@@ -342,6 +342,27 @@ def lasso_rows_py[E: Exec](
     return PythonObject(n)
 
 
+def lars_rows_py[E: Exec](
+    g: PythonObject, q: PythonObject, w: PythonObject, na: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """p = [n, k, m, nnz]: sparse_encode 'lars' on the Gram G (k x k) and Q =
+    X D^T (n x k), m the samples of each row's problem (x_decomp/cells.mojo
+    `lars_row`, one thread a row)."""
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var m = _n(p, 2)
+    var nnz = _n(p, 3)
+    if n * (k * k + 7 * k) > 2147483647:
+        raise Error("x_decomp: lars_rows exceeds the Int32 index bound")
+    var pg = _f(g)
+    var pq = _f(q)
+    var pw = _f(w)
+    var pn = _f(na)
+    with GILReleased(Python()):
+        E.lars_rows(pg, pq, pw, pn, n, k, m, nnz)
+    return PythonObject(n)
+
+
 def omp_rows_py[E: Exec](
     g: PythonObject, q: PythonObject, w: PythonObject, na: PythonObject, p: PythonObject
 ) raises -> PythonObject:

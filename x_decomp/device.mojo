@@ -72,6 +72,8 @@ from x_decomp.cells import (
     lu_swap_elem,
     lu_update_elem,
     omp_row,
+    lars_row,
+    LARS_ROW_EXTRA,
     orth_diag_cell,
     orth_rank_guard,
     trsm_row,
@@ -909,6 +911,12 @@ def lasso_rows_kernel(
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
         its.unsafe_store(i, lasso_row(g, q, w, h, i, Int(k), alpha, Int(max_iter), tol, positive != 0))
+
+
+def lars_rows_kernel(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int32, k: Int32, m: Int32, nnz: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        na.unsafe_store(i, lars_row(g, q, w, s, i, Int(k), Int(m), Int(nnz)))
 
 
 def omp_rows_kernel(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int32, k: Int32, nnz: Int32):
@@ -2675,6 +2683,30 @@ struct DevExec(Exec):
         _ = dh^
         _ = di^
         ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def lars_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, na: F32Ptr, n: Int, k: Int, m: Int, nnz: Int) raises:
+        """sparse_encode 'lars': one thread a row (`lars_row`)."""
+        var ctx = xd_ctx()
+        var per = k * k + LARS_ROW_EXTRA * k
+        var dg = _up(ctx, g, k * k)
+        var dq = _up(ctx, q, n * k)
+        var dw = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n * per if n * per > 0 else 1)
+        var dn = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        ctx.enqueue_function[lars_rows_kernel](
+            dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+            Int32(m), Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
+        )
+        _down(ctx, dw, w, n * k)
+        _down(ctx, dn, na, n)
+        ctx.synchronize()
+        _ = dg^
+        _ = dq^
+        _ = dw^
+        _ = ds^
+        _ = dn^
         _ = ctx^
 
     @staticmethod

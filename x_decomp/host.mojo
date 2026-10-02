@@ -59,6 +59,8 @@ from x_decomp.cells import (
     gamma_cell,
     lasso_row,
     omp_row,
+    lars_row,
+    LARS_ROW_EXTRA,
     orth_diag_cell,
     orth_rank_guard,
     trsm_row,
@@ -587,6 +589,17 @@ struct HostExec(Exec):
             its.unsafe_store(i, lasso_row(g, q, w, h, i, k, alpha, max_iter, tol, positive))
 
         xd_parallel(row, n)
+
+    @staticmethod
+    def lars_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, na: F32Ptr, n: Int, k: Int, m: Int, nnz: Int) raises:
+        var sl = List[Float32](length=max(n * (k * k + LARS_ROW_EXTRA * k), 1), fill=Float32(0))
+        var s = F32Ptr(unsafe_from_address=Int(sl.unsafe_ptr()))
+
+        def row(i: Int) {imm g, imm q, imm w, imm s, imm na, imm k, imm m, imm nnz}:
+            na.unsafe_store(i, lars_row(g, q, w, s, i, k, m, nnz))
+
+        xd_parallel(row, n)
+        _ = sl^
 
     @staticmethod
     def omp_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int, k: Int, nnz: Int) raises:

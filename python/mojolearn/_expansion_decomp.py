@@ -702,6 +702,15 @@ class _Kit:
         self.b.x_decomp_lle_local(M.addr, idm.addr, B.addr, [int(method), n, d, int(nn), int(nc)], [float(tol)])
         return B
 
+    def lars_rows(self, G, Q, m, nnz):
+        """Row-parallel Lars on the Gram (x_decomp/cells.mojo `lars_row`): the
+        n x k coefficients, m the samples of each row's problem."""
+        W = _M.zeros(Q.r, Q.c)
+        na = _M.zeros(Q.r, 1)
+        if Q.r * Q.c:
+            self.b.x_decomp_lars_rows(G.addr, Q.addr, W.addr, na.addr, [Q.r, Q.c, int(m), int(nnz)])
+        return W
+
     def omp_rows(self, G, Q, nnz):
         W = _M.zeros(Q.r, Q.c)
         na = _M.zeros(Q.r, 1)
@@ -2567,8 +2576,8 @@ def _sparse_encode(k, X, D, algorithm, alpha=None, n_nonzero_coefs=None, init=No
     from zero: the Lasso optimum does not depend on the path taken to it);
     'lasso_cd' warm-starts from `init`; 'omp' and 'threshold' as sklearn.
     'lars' is sklearn's Lars(fit_intercept=False, n_nonzero_coefs) of each
-    row on the dictionary's columns, through the linear lane's LARS
-    (x_linear/lars.mojo), one row at a time."""
+    row on the dictionary's columns, on the Gram, every row at once
+    (x_decomp/cells.mojo `lars_row`, x_linear/lars.mojo's lar path)."""
     if algorithm not in _SPARSE_ALGOS:
         raise ValueError(f"algorithm={algorithm!r} is not carried; one of {_SPARSE_ALGOS}")
     n, m = X.r, X.c
@@ -2578,19 +2587,10 @@ def _sparse_encode(k, X, D, algorithm, alpha=None, n_nonzero_coefs=None, init=No
     else:
         reg = alpha if alpha is not None else 1.0
     if algorithm == "lars":
-        # The linear lane's Lars, imported as a MODULE: the lane selector
-        # reads a module import as a door the lane runs whole, so the x_linear
-        # binding is declared for every x_decomp lane and a clean box builds
-        # it (a name import left it undeclared: 1790542293472 on m4pro-a).
-        from . import _expansion_linear as _xlin
-        Lars = _xlin.Lars
-        Dt = D.T.out()
-        code = _M.zeros(n, kc)
-        for i in range(n):
-            coef = Lars(fit_intercept=False, n_nonzero_coefs=int(reg),
-                        numeric_mode=k.mode).fit(Dt, X.row(i)).coef_
-            code.s[i * kc:(i + 1) * kc] = array.array("f", coef.tolist())
-        return code
+        # cgr-decomp (2026-10-03): every row's Lars on the Gram at once, one
+        # device thread a row (x_decomp/cells.mojo `lars_row`), in place of
+        # the linear lane's Lars fitted one row at a time from Python
+        return k.lars_rows(k.mm(D, D, tb=True), k.mm(X, D, tb=True), m, int(reg))
     Q = k.mm(X, D, tb=True)                      # n x k: row i is D x_i
     if algorithm == "threshold":
         code = k.ew("soft", Q, s=reg)

@@ -680,6 +680,133 @@ def omp_row(G: F32Ptr, Q: F32Ptr, W: F32Ptr, S: F32Ptr, i: Int, k: Int, nnz: Int
     return Float32(na)
 
 
+comptime LARS_ROW_EXTRA = 7
+"""Per-row scratch of `lars_row`: k * k + LARS_ROW_EXTRA * k floats."""
+
+
+@always_inline
+def _chol_inplace(S: F32Ptr, L: Int, p: Int) -> Bool:
+    """The Cholesky factor of the p x p S[L ..] (row major, stride p) in its
+    lower triangle, sums ascending; False at a non-positive pivot."""
+    for j in range(p):
+        var s = ftz(S.unsafe_load(L + j * p + j))
+        for t in range(j):
+            var x = ftz(S.unsafe_load(L + j * p + t))
+            s = ftz(identical_mul_add(-x, x, s))
+        if not (s > Float32(0)):
+            return False
+        var dj = sqrt0(s)
+        S.unsafe_store(L + j * p + j, dj)
+        for r in range(j + 1, p):
+            var acc = ftz(S.unsafe_load(L + r * p + j))
+            for t in range(j):
+                acc = ftz(identical_mul_add(-ftz(S.unsafe_load(L + r * p + t)), ftz(S.unsafe_load(L + j * p + t)), acc))
+            S.unsafe_store(L + r * p + j, div0(acc, dj))
+    return True
+
+
+def lars_row(G: F32Ptr, Q: F32Ptr, W: F32Ptr, S: F32Ptr, i: Int, k: Int, m: Int, nnz: Int) -> Float32:
+    """sklearn's Lars(fit_intercept=False, n_nonzero_coefs=nnz) of ONE row on
+    the Gram (sparse_encode 'lars': Gram = D D^T, Xy = D x_i; m samples, the
+    dictionary's columns): x_linear/lars.mojo `lars_fit`'s lar path (alpha_min
+    0, max_iter nnz, the degenerate-regressor skip at a pivot under 1e-7,
+    ties in argmax |cov| to the lower atom, the Cholesky of G_AA refactored
+    each step), here in the decomp lane's arithmetic, one thread a row. W's
+    row gets the coefficients. S: k * k + LARS_ROW_EXTRA * k floats of this
+    row's scratch. Returns the number of active atoms."""
+    var sb = i * (k * k + LARS_ROW_EXTRA * k)
+    var cov = sb
+    var ll = cov + k
+    var ls = ll + k * k
+    var sgn = ls + k
+    var st = sgn + k
+    var act = st + k
+    var base = i * k
+    var eq_tol = Float32(1.1920929e-07)
+    var tiny = Float32(1.1754944e-38)
+    for j in range(k):
+        W.unsafe_store(base + j, Float32(0))
+        S.unsafe_store(st + j, Float32(0))
+    var na = 0
+    var n_iter = 0
+    var guard = 0
+    while guard < 4 * k + 4 * nnz + 8:
+        guard += 1
+        for j in range(k):
+            var acc = ftz(Q.unsafe_load(base + j))
+            for l in range(k):
+                acc = sub(acc, mul(G.unsafe_load(j * k + l), W.unsafe_load(base + l)))
+            S.unsafe_store(cov + j, acc)
+        var c_idx = -1
+        var cbig = Float32(0)
+        for j in range(k):
+            if S.unsafe_load(st + j) == Float32(0):
+                var a = abs(S.unsafe_load(cov + j))
+                if c_idx < 0 or a > cbig:
+                    c_idx = j
+                    cbig = a
+        var alpha = div0(cbig, Float32(m))
+        if alpha <= eq_tol:
+            break
+        if n_iter >= nnz or na >= k or c_idx < 0:
+            break
+        S.unsafe_store(act + na, Float32(c_idx))
+        S.unsafe_store(sgn + na, Float32(1) if S.unsafe_load(cov + c_idx) >= Float32(0) else Float32(-1))
+        var p = na + 1
+        for a in range(p):
+            for b in range(p):
+                var ja = Int(S.unsafe_load(act + a))
+                var jb = Int(S.unsafe_load(act + b))
+                S.unsafe_store(ll + a * p + b, G.unsafe_load(ja * k + jb))
+        if not _chol_inplace(S, ll, p) or S.unsafe_load(ll + na * p + na) < Float32(1e-7):
+            S.unsafe_store(st + c_idx, Float32(2))  # their degenerate-regressor skip
+            continue
+        S.unsafe_store(st + c_idx, Float32(1))
+        na = p
+        # the equiangular direction: L L^T ls = sgn (the factor just made)
+        for a in range(na):
+            var acc = ftz(S.unsafe_load(sgn + a))
+            for t in range(a):
+                acc = ftz(identical_mul_add(-ftz(S.unsafe_load(ll + a * na + t)), ftz(S.unsafe_load(ls + t)), acc))
+            S.unsafe_store(ls + a, div0(acc, S.unsafe_load(ll + a * na + a)))
+        for aa in range(na):
+            var a = na - 1 - aa
+            var acc = ftz(S.unsafe_load(ls + a))
+            for t in range(a + 1, na):
+                acc = ftz(identical_mul_add(-ftz(S.unsafe_load(ll + t * na + a)), ftz(S.unsafe_load(ls + t)), acc))
+            S.unsafe_store(ls + a, div0(acc, S.unsafe_load(ll + a * na + a)))
+        var aq: Float32
+        if na == 1 and S.unsafe_load(ls) == Float32(0):
+            S.unsafe_store(ls, Float32(1))
+            aq = Float32(1)
+        else:
+            var sm = Float32(0)
+            for a in range(na):
+                sm = ftz(identical_mul_add(ftz(S.unsafe_load(ls + a)), ftz(S.unsafe_load(sgn + a)), sm))
+            aq = div0(Float32(1), sqrt0(sm))
+            for a in range(na):
+                S.unsafe_store(ls + a, mul(S.unsafe_load(ls + a), aq))
+        var gamma = div0(cbig, aq)
+        for j in range(k):
+            if S.unsafe_load(st + j) != Float32(0):
+                continue
+            var cj = Float32(0)
+            for a in range(na):
+                cj = ftz(identical_mul_add(ftz(G.unsafe_load(j * k + Int(S.unsafe_load(act + a)))), ftz(S.unsafe_load(ls + a)), cj))
+            var cv = S.unsafe_load(cov + j)
+            var g1 = div0(sub(cbig, cv), add(sub(aq, cj), tiny))
+            if g1 > Float32(0) and g1 < gamma:
+                gamma = g1
+            var g2 = div0(add(cbig, cv), add(add(aq, cj), tiny))
+            if g2 > Float32(0) and g2 < gamma:
+                gamma = g2
+        n_iter += 1
+        for a in range(na):
+            var j = Int(S.unsafe_load(act + a))
+            W.unsafe_store(base + j, ftz(identical_mul_add(gamma, ftz(S.unsafe_load(ls + a)), ftz(W.unsafe_load(base + j)))))
+    return Float32(na)
+
+
 def gamma_cell(i: Int, seed: UInt32, stream: UInt32, shape: Float32) -> Float32:
     """Gamma(shape, 1) for shape >= 1 by Marsaglia and Tsang (2000): attempt
     j draws a normal and a uniform from Philox counter (i, stream, j); the
