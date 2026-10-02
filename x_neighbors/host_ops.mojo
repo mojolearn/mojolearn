@@ -6,7 +6,7 @@ from std.sys.compile import is_defined
 from std.os import getenv
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
-from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_item, louvain_item, svgp_item, svgp_var_item
+from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_item, louvain_item, svgp_item, svgp_var_item
 from x_neighbors.louvain_sparse import louvain_item_sparse
 
 #: the host gate's negative control (`MOJOLEARN_HOST_SABOTAGE`): every op's
@@ -299,6 +299,21 @@ def op_nc_std(x: Int, lab: Int, cent: Int, std: Int, n: Int, d: Int, n_classes: 
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (d) > 0:
             _f(std).unsafe_store(0, _f(std).unsafe_load(0) + Float32(1e-3))
+
+
+def op_nc_shrink_d(dsc: Int, cent: Int, nk: Int, std: Int, res: Int, devs: Int, n: Int, d: Int, n_classes: Int, do_shrink: Int, med: Float32, shrink: Float32) raises:
+    var p_dsc = _f(dsc)
+    var p_cent = _f(cent)
+    var p_nk = _f(nk)
+    var p_std = _f(std)
+    var p_res = _f(res)
+    var p_devs = _f(devs)
+    def _item(t: Int) {imm p_dsc, imm p_cent, imm p_nk, imm p_std, imm p_res, imm p_devs, imm n, imm d, imm n_classes, imm do_shrink, imm med, imm shrink}:
+        nc_shrink_d_item(t, p_dsc, p_cent, p_nk, p_std, p_res, p_devs, n, d, n_classes, do_shrink, med, shrink)
+    _items(_item, n_classes * d)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (n_classes * d) > 0:
+            _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
 
 
 def op_nc_shrink(x: Int, cent: Int, nk: Int, std: Int, res: Int, devs: Int, n: Int, d: Int, n_classes: Int, do_shrink: Int, med: Float32, shrink: Float32) raises:

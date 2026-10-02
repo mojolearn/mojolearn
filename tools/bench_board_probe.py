@@ -234,12 +234,32 @@ class MemProbe(object):
             return None, "unavailable"
 
     def _children_mb(self):
-        """Resident MB of this process's descendants now, or None."""
-        try:
-            out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,rss="], capture_output=True,
-                                 text=True, timeout=20, check=False).stdout
-        except (OSError, subprocess.SubprocessError):
-            return None
+        """Resident MB of this process's descendants now, or None.
+
+        Linux reads /proc directly: spawning `ps` (any fork or posix_spawn) after a round made the
+        NEXT timed GPU fit on the MI325X pay ~100 ms (host memory registered with the GPU is
+        revalidated after a fork), so the probe must never start a process between rounds."""
+        if sys.platform.startswith("linux"):
+            rows = []
+            for d in os.listdir("/proc"):
+                if not d.isdigit():
+                    continue
+                try:
+                    with open("/proc/%s/stat" % d) as fh:
+                        st = fh.read()
+                    with open("/proc/%s/statm" % d) as fh:
+                        pages = int(fh.read().split()[1])
+                except (OSError, ValueError, IndexError):
+                    continue
+                ppid = st.rsplit(")", 1)[-1].split()[1]
+                rows.append("%s %s %d" % (d, ppid, pages * os.sysconf("SC_PAGE_SIZE") // 1024))
+            out = "\n".join(rows)
+        else:
+            try:
+                out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,rss="], capture_output=True,
+                                     text=True, timeout=20, check=False).stdout
+            except (OSError, subprocess.SubprocessError):
+                return None
         kids, rss = {}, {}
         for line in out.splitlines():
             f = line.split()
@@ -313,6 +333,21 @@ class MemProbe(object):
             return None, ("nvidia-smi lists no compute app with this pid (a container's pid "
                           "namespace hides it, or no context was opened)")
         if self.vendor == "amd":
+            # The KFD's own per-process counters first: no subprocess. Running rocm-smi after every round
+            # disturbed the GPU for ~0.5 s, so the NEXT timed fit paid 25-100 ms (a 2.2 ms connected-
+            # components fit read 97 ms on the MI325X board, 2026-10-02).
+            kfd = "/sys/class/kfd/kfd/proc/%d" % pid
+            try:
+                names = [n for n in os.listdir(kfd) if n.startswith("vram_")]
+            except OSError:
+                names = []
+            if names:
+                used = 0
+                for n in names:
+                    with open(os.path.join(kfd, n)) as fh:
+                        used += int(fh.read().strip() or 0)
+                return (used / float(_MB), "KFD %s/vram_* bytes for this pid at the round's end "
+                        "(not a peak)" % kfd + total)
             try:
                 out = subprocess.run(["rocm-smi", "--showpids"], capture_output=True, text=True,
                                      timeout=30, check=False).stdout

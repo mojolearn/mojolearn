@@ -47,6 +47,7 @@ reach.
 from std.math import floor, fma, max, min
 from std.memory import bitcast
 from std.sys.info import simd_width_of
+from std.sys.compile import is_defined
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -69,8 +70,17 @@ from core.host_lanes import (
     fmax_fold_span,
     ftz_lanes,
     silu_lanes,
+    host_f32_uninit,
 )
-from gemm.host.identical_gemm import contract_leaf_size, leaf_count
+from gemm.host.gemm_host_rows import (
+    GHR_G,
+    GhrPtr,
+    ghr_pack_a,
+    ghr_pack_b,
+    ghr_panel_count,
+    ghr_tile,
+)
+from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, contract_leaf_size, leaf_count
 from training.checks.loss_oracle import (
     REDUCTION_MEAN,
     CeConfig,
@@ -99,6 +109,21 @@ comptime U32V = SIMD[DType.uint32, HOST_FW]
 #: its own cell's chain, so it changes no bit. On the M4 at one thread, 16
 #: chains measured 18% slower than 8 at [32, 32].
 comptime GEMM_CHAINS = 8
+
+#: lane/neural-pass73 (2026-10-01): the inference weights are packed into
+#: `gemm/host/gemm_host_rows.mojo` panels (`[k x GHR_G]` column panels that
+#: stay in L1 while every row of a task walks them) and every weight GEMM
+#: runs `ghr_tile`: the oracle's leaves, chains and fold, the deferred flush
+#: of that kernel. Same bits as `gemm_nt_rows`, which rebuilt the leaf
+#: partials through a scratch round trip at every step for k above the
+#: leaf. The sabotage builds keep the legacy kernel (its reversed fold is
+#: DEVIATION 2612's control); `-D MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM=1`
+#: restores it in any build.
+comptime BYTE_HOST_GHR = (
+    not is_defined["MOJOLEARN_BYTE_LM_HOST_SABOTAGE"]()
+    and not GEMM_ORACLE_HOST_SABOTAGE
+    and not is_defined["MOJOLEARN_BYTE_LM_HOST_LEGACY_GEMM"]()
+)
 
 
 def _identical_build_only():
@@ -186,6 +211,78 @@ def pack_nt_span(values: List[Float32], lo: Int, n: Int, k: Int) -> List[Float32
         for p in range(k):
             op.unsafe_store(p * n + j, ftz(sp.unsafe_load(src + p)))
     return out^
+
+
+def packed_w_len(n: Int, k: Int) -> Int:
+    """Length of `pack_w(_, _, n, k)`: panels under BYTE_HOST_GHR, else n*k."""
+    comptime if BYTE_HOST_GHR:
+        return ghr_panel_count(n) * k * GHR_G
+    return n * k
+
+
+def pack_w_range(src: GhrPtr, n: Int, k: Int, dst: GhrPtr, lo: Int, hi: Int):
+    """Part of `pack_w` into `dst` (`packed_w_len(n, k)` values), from the
+    `[n x k]` row-major weight at `src`: panels `[lo, hi)` under
+    BYTE_HOST_GHR, else output columns `[lo, hi)` of the `[k x n]` layout.
+    Ranges are disjoint, so they may run on different threads."""
+    comptime if BYTE_HOST_GHR:
+        ghr_pack_b(src, OP_NT, n, k, dst, lo, hi)
+        return
+    for j in range(lo, hi):
+        var base = j * k
+        for p in range(k):
+            dst.unsafe_store(p * n + j, ftz(src.unsafe_load(base + p)))
+
+
+def pack_w_units(n: Int) -> Int:
+    """How many `pack_w_range` units a weight of `n` rows has."""
+    comptime if BYTE_HOST_GHR:
+        return ghr_panel_count(n)
+    return n
+
+
+def pack_w(values: List[Float32], lo: Int, n: Int, k: Int) -> List[Float32]:
+    """The `[n x k]` weight at `values[lo : lo + n * k]`, flushed and laid
+    out for `gemm_w`."""
+    _identical_build_only()
+    var out = host_f32_uninit(packed_w_len(n, k))
+    pack_w_range(rebind[GhrPtr](values.unsafe_ptr()).unsafe_offset(lo), n, k,
+                 rebind[GhrPtr](out.unsafe_ptr()), 0, pack_w_units(n))
+    return out^
+
+
+def gemm_w(
+    a: List[Float32],
+    w: List[Float32],
+    n: Int,
+    k: Int,
+    lo: Int,
+    hi: Int,
+    mut c: List[Float32],
+    reverse: Bool = False,
+) raises:
+    """`gemm_nt_rows(a, pack_nt(W), n, k, lo, hi, c, reverse)` with `w` from
+    `pack_w`: rows `[lo, hi)` of `A . W^T` at `c[(i - lo) * n + j]`."""
+    comptime if BYTE_HOST_GHR:
+        if reverse:
+            raise Error("byte LM host kernels: the reversed fold needs the legacy kernel")
+        if hi < lo or len(c) < (hi - lo) * n:
+            raise Error("byte LM host kernels: GEMM output span too short")
+        var rows = hi - lo
+        if rows == 0 or n == 0:
+            return
+        if len(a) < hi * k:
+            raise Error("byte LM host kernels: GEMM left operand too short")
+        if len(w) < packed_w_len(n, k):
+            raise Error("byte LM host kernels: a weight packed for another kernel")
+        var ap_l = host_f32_uninit(max(rows * k, 1))
+        var ap = rebind[GhrPtr](ap_l.unsafe_ptr())
+        ghr_pack_a(rebind[GhrPtr](a.unsafe_ptr()).unsafe_offset(lo * k), OP_NT, rows, k, ap)
+        ghr_tile(ap, rebind[GhrPtr](w.unsafe_ptr()), rebind[GhrPtr](c.unsafe_ptr()), n, k,
+                 0, rows, 0, ghr_panel_count(n))
+        _ = ap_l^
+        return
+    gemm_nt_rows(a, w, n, k, lo, hi, c, reverse)
 
 
 def pack_nt(b: List[Float32], n: Int, k: Int) -> List[Float32]:
@@ -760,9 +857,9 @@ def block_fast(
     var q = List[Float32](length=m * qw, fill=Float32(0.0))
     var k = List[Float32](length=m * kw, fill=Float32(0.0))
     var v = List[Float32](length=m * kw, fill=Float32(0.0))
-    gemm_nt_rows(n1, tensors[tb + 1], qw, dm, 0, m, q)
-    gemm_nt_rows(n1, tensors[tb + 2], kw, dm, 0, m, k)
-    gemm_nt_rows(n1, tensors[tb + 3], kw, dm, 0, m, v)
+    gemm_w(n1, tensors[tb + 1], qw, dm, 0, m, q)
+    gemm_w(n1, tensors[tb + 2], kw, dm, 0, m, k)
+    gemm_w(n1, tensors[tb + 3], kw, dm, 0, m, v)
 
     # S9, S10. The key span is this call's own tokens: key j is token j.
     var qr = rope_fast(q, nh, hd, l, rope)
@@ -801,16 +898,16 @@ def block_fast(
 
     # S5 o_proj, S22; S1-S4 again; the MLP (S5, S20, S21, S5); S23.
     var o = List[Float32](length=m * dm, fill=Float32(0.0))
-    gemm_nt_rows(ctx, tensors[tb + 4], dm, qw, 0, m, o)
+    gemm_w(ctx, tensors[tb + 4], dm, qw, 0, m, o)
     var r1 = _residual_add(x, o)
     var n2 = rms_norm_fast(r1, tensors[tb + 5], m, dm)
     var gate = List[Float32](length=m * inter, fill=Float32(0.0))
     var up = List[Float32](length=m * inter, fill=Float32(0.0))
-    gemm_nt_rows(n2, tensors[tb + 6], inter, dm, 0, m, gate)
-    gemm_nt_rows(n2, tensors[tb + 7], inter, dm, 0, m, up)
+    gemm_w(n2, tensors[tb + 6], inter, dm, 0, m, gate)
+    gemm_w(n2, tensors[tb + 7], inter, dm, 0, m, up)
     var gated = _silu_gated(gate, up)
     var down = List[Float32](length=m * dm, fill=Float32(0.0))
-    gemm_nt_rows(gated, tensors[tb + 8], dm, inter, 0, m, down)
+    gemm_w(gated, tensors[tb + 8], dm, inter, 0, m, down)
     return _residual_add(r1, down)
 
 

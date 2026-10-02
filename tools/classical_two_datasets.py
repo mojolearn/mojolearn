@@ -386,8 +386,10 @@ def construct_tolerant(cls, kw, info):
             for k in bad:
                 info.setdefault("params_not_in_this_build", {})[k] = repr(kw.pop(k))
 
-THREAD_ENV = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
-              "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
+_cq_spec = importlib.util.spec_from_file_location("cpu_quota", os.path.join(HERE, "cpu_quota.py"))
+_cq = importlib.util.module_from_spec(_cq_spec)
+_cq_spec.loader.exec_module(_cq)
+THREAD_ENV, cpu_quota_threads, apply_cpu_quota = _cq.THREAD_ENV, _cq.cpu_quota_threads, _cq.apply_cpu_quota
 
 
 # ---------------------------------------------------------------------------
@@ -2379,6 +2381,7 @@ def _worker_env(arm, root):
     env = dict(os.environ)
     for k in THREAD_ENV:
         env.pop(k, None)
+    apply_cpu_quota(env)
     if arm in ("ours", "ours-base", "ours-fast", "ours-cpu"):
         env["MOJOLEARN_NUMERIC_MODE"] = "fast" if arm == "ours-fast" else "identical"
         if arm == "ours-cpu":

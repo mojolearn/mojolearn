@@ -20,9 +20,10 @@ from x_linear.ops import (
     fill, copy, row_dot, cholesky, chol_solve, mean_of, axpy_acc, par_rows, row_dots,
 )
 from std.sys.info import is_gpu
+from std.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from x_linear.team import Team
-from x_linear.tops import fold_fa, chain_fmad, chain_fmad_scaled
+from x_linear.tops import fold_fa, chain_fmad, chain_fmad_scaled, t_fold_fa_staged
 
 comptime GLM_LINK_IDENTITY = 0
 comptime GLM_LINK_LOG = 1
@@ -82,8 +83,9 @@ def _objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Floa
         st(lt, i, l)
     t.sync()
     var f = Float32(0)
+    var acc0 = t_fold_fa_staged(t, lt, 0, n)
     if t.lead():
-        var acc = fold_fa(lt, 0, 1, n)
+        var acc = acc0
         var reg = Float32(0)
         for j in range(d):
             var w = ld(theta, toff + j)
@@ -204,7 +206,35 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                 st(hr, i, hi)
             t.sync()
             var cells = m + m * (m + 1) // 2
-            for c in range(t.tid, cells, t.nt):
+            # lane/neural-pass88 (2026-10-01): cells laid out so a warp holds
+            # ONE kind of chain. In cell order a warp mixed the gradient
+            # chains, the intercept fold and the scaled Hessian chains, and a
+            # warp runs its divergent branches one after another: three
+            # million-row loops for the warp that held all three (the taxi
+            # block's 90 cells: 107 ms a Newton step on the M4's GPU). The
+            # slots are [Hessian rows j < d][pad][gradient][pad][Hessian row
+            # d]; a slot maps to its cell and runs that cell's chain: the
+            # same words. `-D MOJOLEARN_GLM_CELLS_MIXED=1` restores cell order.
+            var n_hd = d * (d + 1) // 2
+            var n_row = m * (m + 1) // 2 - n_hd
+            var g0 = ((n_hd + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+            var r0 = g0 + ((m + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+            var slots = r0 + n_row
+            comptime if is_defined["MOJOLEARN_GLM_CELLS_MIXED"]():
+                slots = cells
+            for sl in range(t.tid, slots, t.nt):
+                var c = sl
+                comptime if not is_defined["MOJOLEARN_GLM_CELLS_MIXED"]():
+                    if sl < n_hd:
+                        c = m + sl
+                    elif sl < g0:
+                        continue
+                    elif sl < g0 + m:
+                        c = sl - g0
+                    elif sl < r0:
+                        continue
+                    else:
+                        c = m + n_hd + (sl - r0)
                 if c < m:
                     var acc: Float32
                     if c < d:

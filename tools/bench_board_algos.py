@@ -230,10 +230,10 @@ _add("bayesian-ridge", xlane="linear", ours="BayesianRidge", task="reg", block="
 _add("ard", xlane="linear", ours="ARDRegression", task="reg", block="reg", sub={"X": SUB["mid"]},
      sk="sklearn.linear_model:ARDRegression", params=dict(max_iter=300, tol=1e-3))
 _add("lars", xlane="linear", ours="Lars", task="reg", block="reg",
-     sk="sklearn.linear_model:Lars", params=dict(n_nonzero_coefs=500, fit_intercept=True,
+     sk="sklearn.linear_model:Lars", params=dict(n_nonzero_coefs=500, fit_intercept=True, eps=2.220446049250313e-16,
                                                  random_state=SEED),
-     cuml="cuml.experimental.linear_model:Lars",
-     cuml_params=dict(n_nonzero_coefs=500, fit_intercept=True))
+     cuml="cuml.experimental.linear_model:Lars",   # eps set on every arm: a default is not a matched value
+     cuml_params=dict(n_nonzero_coefs=500, fit_intercept=True, eps=2.220446049250313e-16))
 _add("lasso-lars", xlane="linear", ours="LassoLars", task="reg", block="reg",
      sk="sklearn.linear_model:LassoLars", params=dict(alpha=0.01, max_iter=500, random_state=SEED))
 _add("quantile", xlane="linear", ours="QuantileRegressor", task="reg", block="reg",
@@ -391,11 +391,13 @@ _add("gaussian-rp", xlane="decomp", ours="GaussianRandomProjection", task="trans
      block="tsvd", quality="distortion", sk="sklearn.random_projection:GaussianRandomProjection",
      params=dict(n_components=10, random_state=SEED),   # cuML benchmark GaussianRandomProjection
      cuml="cuml.random_projection:GaussianRandomProjection",
+     cuml_host_input=True,
      notes=["n_components = 10, the cuML benchmark's"])
 _add("sparse-rp", xlane="decomp", ours="SparseRandomProjection", task="transform", block="tsvd",
      quality="distortion", sk="sklearn.random_projection:SparseRandomProjection",
      params=dict(n_components=10, density="auto", random_state=SEED),  # cuML benchmark
      cuml="cuml.random_projection:SparseRandomProjection",
+     cuml_host_input=True,
      notes=["n_components = 10, the cuML benchmark's"])
 _add("nmf", xlane="decomp", ours="NMF", task="transform", block="nonneg", quality="nmf",
      sk="sklearn.decomposition:NMF",
@@ -2160,6 +2162,13 @@ def _ours_class(lane):
         getattr(ml, "__version__", "?"), ", ".join(s["ours"])))
 
 
+# The binding each function/optimizer lane's mode is read back from when there is no estimator to ask:
+# these modules do not load "_mojolearn_x_<xlane>" (resample.py, model_selection.py _SPLIT_BINDING,
+# _training_impl.py _EXT_NAME).
+_READBACK_BINDING = {"resample": "_mojolearn_resample", "model_selection": "_mojolearn_x_metrics",
+                     "training": "_mojolearn_training"}
+
+
 def _ours_info(lane, est=None):
     import mojolearn as ml
     more = _tool("bench_board_more")
@@ -2169,7 +2178,8 @@ def _ours_info(lane, est=None):
             "module_path": getattr(ml, "__file__", None), "pre_clock_fit": False,
             "input_home": "host"}
     try:
-        mode, how = more._mode_readback(ml, est, "_mojolearn_x_" + LANES[lane]["xlane"])
+        mode, how = more._mode_readback(ml, est, LANES[lane].get("binding") or _READBACK_BINDING.get(
+            LANES[lane]["xlane"], "_mojolearn_x_" + LANES[lane]["xlane"]))
     except Exception as exc:  # noqa: BLE001
         mode, how = "unknown", "readback failed (%r)" % (exc,)
     info.update(numeric_mode_used=mode, numeric_mode_how=how)
@@ -2316,7 +2326,13 @@ def _build_est(lane, arm, D):
     make, what, params = _est_factory(lane, arm, D)
     S = {}
     sync = None
-    if arm == "cuml-gpu":
+    if arm == "cuml-gpu" and s.get("cuml_host_input"):
+        # Host input on both arms: cuML gets the numpy arrays, so its upload (and the numpy result's
+        # download) sits inside the clock exactly as ours does (Andrew, Oct 1: random projection).
+        _, info, sync = _cuml_up({})
+        dev = D
+        info.update(input_home="host", upload_ms_untimed=None)
+    elif arm == "cuml-gpu":
         keys = [k for k in ("X", "y", "Xq") if k in D]
         dev, info, sync = _cuml_up({k: D[k] for k in keys})
         if t == "clf" and "y" in dev:
