@@ -11,7 +11,7 @@ from std.python.bindings import PythonModuleBuilder
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
 from checks.numerics import identical_log64
 from std.python import Python
-from xtrees.shap import node_cover, tree_shap, expected_value, mask_expand, block_mean, kernel_solve
+from xtrees.shap import mask_expand, block_mean, kernel_solve
 from xtrees.ops import (
     sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
     accumulate_onehot, accumulate_cols, accumulate_rows, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
@@ -567,45 +567,6 @@ def column_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObjec
     return PythonObject(n)
 
 
-def node_cover_binding(
-    offsets: PythonObject, colid: PythonObject, quesval: PythonObject, left: PythonObject,
-    x: PythonObject, cover: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """params = [n, d, n_trees]; cover float64 per node, zeroed."""
-    _need(params, 3, "x_trees_node_cover")
-    var n = _count(_i(params, 0), "x_trees_node_cover")
-    if n > 0:
-        node_cover(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=colid)), f32_ptr(Int(py=quesval)), i32_ptr(Int(py=left)),
-                   f32_ptr(Int(py=x)), n, _i(params, 1), _i(params, 2), f64_ptr(Int(py=cover)))
-    return PythonObject(n)
-
-
-def tree_shap_binding(
-    forest: PythonObject, cover: PythonObject, x: PythonObject, phi: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """forest = [offsets, colid, quesval, left, leaves] addresses;
-    params = [n, d, n_trees, k, scale]; phi float64 n*d*k, accumulated."""
-    _need(params, 5, "x_trees_tree_shap")
-    _need(forest, 5, "x_trees_tree_shap forest")
-    var n = _count(_i(params, 0), "x_trees_tree_shap")
-    if n > 0:
-        tree_shap(i32_ptr(_i(forest, 0)), i32_ptr(_i(forest, 1)), f32_ptr(_i(forest, 2)), i32_ptr(_i(forest, 3)),
-                  f32_ptr(_i(forest, 4)), f64_ptr(Int(py=cover)), f32_ptr(Int(py=x)), n, _i(params, 1),
-                  _i(params, 2), _i(params, 3), _f(params, 4), f64_ptr(Int(py=phi)))
-    return PythonObject(n)
-
-
-def expected_value_binding(
-    offsets: PythonObject, left: PythonObject, leaves: PythonObject, cover: PythonObject, res: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """params = [n_trees, k, scale]; res float64[k], accumulated."""
-    _need(params, 3, "x_trees_expected_value")
-    expected_value(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=left)), f32_ptr(Int(py=leaves)), f64_ptr(Int(py=cover)),
-                   _i(params, 0), _i(params, 1), _f(params, 2), f64_ptr(Int(py=res)))
-    return PythonObject(_i(params, 1))
-
-
 def mask_expand_binding(
     x: PythonObject, bg: PythonObject, masks: PythonObject, res: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
@@ -688,9 +649,6 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[complement_pairs_binding]("x_trees_complement_pairs")
     m.def_function[indicator_codes_binding]("x_trees_indicator_codes")
     m.def_function[column_f64_binding]("x_trees_column_f64")
-    m.def_function[node_cover_binding]("x_trees_node_cover")
-    m.def_function[tree_shap_binding]("x_trees_tree_shap")
-    m.def_function[expected_value_binding]("x_trees_expected_value")
     m.def_function[mask_expand_binding]("x_trees_mask_expand")
     m.def_function[block_mean_binding]("x_trees_block_mean")
     m.def_function[kernel_solve_binding]("x_trees_kernel_solve")
