@@ -1,4 +1,4 @@
-# Apple FAST handoff (final state, 2026-10-03 ~01:00Z; cloud code session)
+# Apple FAST handoff (final state, 2026-10-03 ~03:00Z; cloud code session)
 
 For the next code session or the M3 manager. Rules unchanged (CLAUDE.md, docs/apple-fast/NEXT_PASS.md, NEXT_PASS_TREES.md on
 origin/main). Lane briefs, the gap table and the GPU-only audit output are in this directory on branch
@@ -21,27 +21,28 @@ CPU: the audit found and fixed three leftovers (core env switches, trees-ensembl
 | cluster2 | 775d5b7be | 9 |
 | core | d22a7494c | 7 |
 | dart | 02362668e | 2 |
-| decomp-linalg | 227bf57cc | 9 |
-| decomp-sparse | 0f168b374 | 9 |
+| decomp-linalg | f231ebab4 | 11 |
+| decomp-sparse | 1b2c8f955 | 9 |
 | depthwise | bdc8c10b1 | 2 |
 | ets | e3369d119 | 1 |
 | gram | 47ab9b791 | 6 |
 | graph | 1fa36a7ec | 1 |
 | isotonic-knn | fd9ebd32a | 6 |
-| kapprox | 9583fbd26 | 4 |
+| kapprox | 2157ed10b | 6 |
 | kernel | ca0756e50 | 4 |
 | linear | 44ec8018d | 15 |
+| lle | f2ea1ecb5 | 1 |
 | meta | debb5f743 | 2 |
-| nb | 89b9a0694 | 2 |
+| nb | 9f2b71471 | 4 |
 | neighbors2 | 6d9c7b1f1 | 6 |
 | ordered | 3fa785efc | 2 |
 | pairlogit | 382a1b234 | 3 |
 | prep | 387211293 | 5 |
 | prep2 | cc3b27d5f | 7 |
-| prep3 | 09e7a7520 | 5 |
+| prep3 | ec65873e3 | 5 |
 | resample | 50b96e795 | 7 |
 | rfet-scan | b272364e4 | 0 |
-| robust | fdc8259e0 | 2 |
+| robust | cfdb95e48 | 5 |
 | select | 4743bb576 | 4 |
 | shap | 13343dd51 | 3 |
 | trees-depthwise | da8ad083f | 5 |
@@ -67,12 +68,27 @@ kmeans device scale (core), TSNE Z sum (ann), PLS dead columns and EIGH_FAST_RR 
 MDS diag / Isomap kNN (decomp-sparse), pagerank reduce and MMA kNN (neighbors2; the MMA route lives on isotonic-knn), BAG_SESSION
 (trees-ensembles), MINMAX/MULTILABEL env arms (prep). gaussian-rp and ocsvm need a board re-run of main, not a lane.
 
-## Documented but not written (next passes)
-LLE's dense n x n LU in `_lle_smallest` needs a sparse shift-invert/LOBPCG solver (isotonic-knn.md). LU pivot search as a two-launch
-grid (decomp-linalg.md). Device-resident CTR columns and `build_ctr_tables` passes (trees-depthwise.md). MCD/elliptic-envelope
-resident C-steps, perceptron/sgd-ocsvm (robust.md). Text naive Bayes is upload-bound (nb.md). Symmetric: searcher `subsets`
-reuse (trees-symmetric.md). Ordered: score-std readback and per-permutation partition sorts (ordered.md). kernel-shap's O(q^3)
-host elimination (shap.md). Neural-network rows on the board are out of this session's scope.
+## Follow-up passes done after the first handoff
+- lle (new lane, carries isotonic-knn and nb): sparse LOBPCG for LocallyLinearEmbedding, no dense n x n (`-D MOJOLEARN_LLE_SPARSE_EIG`); if it
+  does not settle in 600 iterations the fit falls back to main's dense route (time loss only). Next step if the A/B shows the fallback: a
+  CG-based preconditioner or a larger block (lle.md).
+- decomp-linalg: main already had the two-launch grid pivot; `-D MOJOLEARN_LU_FAST_PIVOT_GRID` fuses the pivot finish into the swap grid.
+- robust: `-D MOJOLEARN_MCD_DEVICE_CSTEPS`, every MCD candidate's C-steps on the device; the Python reweighting tail stays main's.
+- nb: `-D MOJOLEARN_NB_TEXT_CSR`, text naive Bayes fit and scoring on the CSR arrays (no densified upload). The bench driver now hands CSR
+  to every sparse-capable arm; **the stored sklearn text-NB times were measured on the dense block and must be re-run on CSR** (flagged at
+  the top of nb.txt).
+- gaussian-rp and ocsvm: baseline-only request lines (arm A, no switch) on kapprox.txt and robust.txt re-measure main's existing device
+  routes; the board rows predate them.
+
+## Still open (documented, not written)
+Device-resident CTR columns (trees-depthwise.md); perceptron / sgd-ocsvm (robust.md: SGD's serial batch chain); symmetric searcher
+`subsets` reuse (trees-symmetric.md); ordered score-std readback and per-permutation partition sorts (ordered.md); kernel-shap's O(q^3)
+host elimination (shap.md); MCD's Python reweighting tail (robust.md). Neural-network rows on the board are out of this session's scope.
+
+## Superset branches, updated
+prep3 > nb > select > prep2 (+ meta); lle > isotonic-knn (+ nb's x_decomp registrations); kernel > gram; cluster2 > cluster;
+decomp-sparse > decomp-linalg; neighbors2 > kapprox; yetirank > trees-yeti. The installed git hook copy in .git/hooks must match main's
+tools/hooks (reinstall with tools/hooks/install.sh after main moves; a stale copy refused main itself once).
 
 ## After the M3 builds
 Read `origin/lane/apple-fast-results:docs/apple-fast/m3/build-errors.txt` first (grep, never cat), then results.txt. Every

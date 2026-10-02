@@ -55,3 +55,10 @@ Results: (filled as lanes report)
 - prep3 overlap settled 09e7a7520 (carries nb, select, prep2, meta); x_prep superset branch
 - trees-ensembles e9803ee25 (device folds, re-merged), trees-io dfbd3f61f, rfet-scan b272364e4 (re-merged), all clean
 - 22:52Z follow-ups dispatched: lle (new lane, sparse LOBPCG), decomp pass 3 (LU pivot grid), robust pass 2 (MCD device C-steps), nb pass 2 (text NB on CSR); baseline re-run lines for gaussian-rp (kapprox) and ocsvm (robust) pushed
+- 22:58Z hook copy in .git/hooks was stale vs main 78635cfc4 (refused main itself); reinstalled from origin/main tools/hooks via install.sh; decomp pushes unblocked. decomp-linalg local f231ebab4: LU_FAST_PIVOT_GRID (main already has the 2-launch pivot; this fuses finish+swap), 11 lines
+- decomp-linalg pass 3 pushed f231ebab4, decomp-sparse 1b2c8f955 (main 37c65a3af), clean
+- nb pass 2 65b0cd73d: NB_TEXT_CSR; bench driver fairness fix requested (CSR to all sparse-capable arms + opponent-rerun note); prep3 to re-merge nb
+- nb fairness fix pushed 9f2b71471 (CSR to every sparse-capable arm; opponent rerun flagged)
+- prep3 re-merged nb ec65873e3; x_prep superset clean
+- robust pass 2 DONE cfdb95e48: MCD_DEVICE_CSTEPS (all candidates step together on the device); robust-mcd-taxi, robust-ee-taxi
+- lle DONE 1923588bd (carries isotonic-knn): LLE_SPARSE_EIG (sparse LOBPCG, no dense n x n); lle-sparse-taxi
