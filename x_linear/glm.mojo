@@ -131,6 +131,116 @@ def _objective(t: Team, x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, 
         return _objective_host(x, y, n, d, fi, power, link, alpha, theta, toff, eta, sw, den, ls)
 
 
+@always_inline
+def _glm_deriv_row(y: FP, n: Int, i: Int, power: Float32, link: Int, eta: FP, sw: Bool, gr: FP, hr: FP):
+    """Row i's d/deta and d2/deta2 (weighted) into gr[i], hr[i]."""
+    var e = ld(eta, i)
+    var gi = _unit(power, link, ld(y, i), e, 1)
+    var hi = fmax(Float32(0), _unit(power, link, ld(y, i), e, 2))
+    if sw:
+        gi = fm(ld(y, n + i), gi)
+        hi = fm(ld(y, n + i), hi)
+    st(gr, i, gi)
+    st(hr, i, hi)
+
+
+@always_inline
+def _glm_cell(c: Int, x: FP, gr: FP, hr: FP, n: Int, d: Int, m: Int, g: FP, h: FP):
+    """Cell c's chain over the rows ascending: c < m the gradient (g[c]),
+    else the lower-triangle Hessian cell (j, k) (h[j*m + k])."""
+    if c < m:
+        var acc: Float32
+        if c < d:
+            acc = chain_fmad(gr, 0, 1, x, c, d, n)
+        else:
+            acc = fold_fa(gr, 0, 1, n)
+        st(g, c, acc)
+        return
+    # lower-triangle cell (j, k), k <= j, row-major over j
+    var q = c - m
+    var j = 0
+    while (j + 1) * (j + 2) // 2 <= q:
+        j += 1
+    var k = q - j * (j + 1) // 2
+    var acc: Float32
+    if j < d:
+        acc = chain_fmad_scaled(hr, x, j, k, d, n)
+    elif k < d:
+        acc = chain_fmad(hr, 0, 1, x, k, d, n)
+    else:
+        acc = fold_fa(hr, 0, 1, n)
+    st(h, j * m + k, acc)
+
+
+@always_inline
+def _glm_slot_count(d: Int, m: Int) -> Int:
+    """Slots of the warp-uniform cell layout (see glm_fit)."""
+    var n_hd = d * (d + 1) // 2
+    var n_row = m * (m + 1) // 2 - n_hd
+    var g0 = ((n_hd + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+    var r0 = g0 + ((m + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+    return r0 + n_row
+
+
+@always_inline
+def _glm_slot_cell(sl: Int, d: Int, m: Int) -> Int:
+    """The cell a slot runs, -1 for a pad slot: [Hessian rows j < d][pad]
+    [gradient][pad][Hessian row d]."""
+    var n_hd = d * (d + 1) // 2
+    var g0 = ((n_hd + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+    var r0 = g0 + ((m + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+    if sl < n_hd:
+        return m + sl
+    if sl < g0:
+        return -1
+    if sl < g0 + m:
+        return sl - g0
+    if sl < r0:
+        return -1
+    return m + n_hd + (sl - r0)
+
+
+def _glm_step(g: FP, h: FP, step: FP, res: FP, m: Int, d: Int, alpha: Float32, den: Float32, tol: Float32,
+              it: Int, f: Float32) -> Tuple[Int, Float32]:
+    """The small dense Newton step (m x m) on one thread: (flag, slope), flag
+    0 continue, 1 converged, 2 stop (no descent). glm_fit's lead block,
+    shared with the device's host-driven form (lane/neural-pass89)."""
+    var flag = 0
+    var slope = Float32(0)
+    var inv_n = fd(Float32(1), den)
+    var gmax = Float32(0)
+    for j in range(m):
+        var gj = fm(ld(g, j), inv_n)
+        if j < d:
+            gj = fmad(alpha, ld(res, j), gj)
+        st(g, j, gj)
+        gmax = fmax(gmax, fabs(gj))
+    comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
+        print("GLM_TRACE it", it, "f", f, "gmax", gmax, "tol", tol)
+    if gmax <= tol:
+        flag = 1
+    else:
+        for j in range(m):
+            for k in range(j + 1):
+                var v = fm(ld(h, j * m + k), inv_n)
+                if j == k and j < d:
+                    v = fa(v, alpha)
+                st(h, j * m + k, v)
+                st(h, k * m + j, v)
+        for j in range(m):
+            st(step, j, -ld(g, j))
+        var ok = cholesky(h, 0, m)
+        if ok:
+            chol_solve(h, 0, m, step, 0)
+        for j in range(m):
+            slope = fmad(ld(g, j), ld(step, j), slope)
+        comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
+            print("GLM_TRACE it", it, "slope", slope, "chol_ok", ok, "step0", ld(step, 0), "stepd", ld(step, m - 1))
+        if not (slope < 0):
+            flag = 2
+    return (flag, slope)
+
+
 def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [max_iter, fit_intercept, link, sample_weight]; fp: [power, alpha, tol].
     With sample_weight, y = targets n | weights n and the objective is
@@ -196,14 +306,7 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             # each row's two derivatives across the team, then one thread per
             # gradient cell and per lower-triangle Hessian cell, rows ascending
             for i in range(t.tid, n, t.nt):
-                var e = ld(eta, i)
-                var gi = _unit(power, link, ld(y, i), e, 1)
-                var hi = fmax(Float32(0), _unit(power, link, ld(y, i), e, 2))
-                if sw:
-                    gi = fm(ld(y, n + i), gi)
-                    hi = fm(ld(y, n + i), hi)
-                st(gr, i, gi)
-                st(hr, i, hi)
+                _glm_deriv_row(y, n, i, power, link, eta, sw, gr, hr)
             t.sync()
             var cells = m + m * (m + 1) // 2
             # lane/neural-pass88 (2026-10-01): cells laid out so a warp holds
@@ -215,48 +318,16 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             # slots are [Hessian rows j < d][pad][gradient][pad][Hessian row
             # d]; a slot maps to its cell and runs that cell's chain: the
             # same words. `-D MOJOLEARN_GLM_CELLS_MIXED=1` restores cell order.
-            var n_hd = d * (d + 1) // 2
-            var n_row = m * (m + 1) // 2 - n_hd
-            var g0 = ((n_hd + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
-            var r0 = g0 + ((m + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
-            var slots = r0 + n_row
+            var slots = _glm_slot_count(d, m)
             comptime if is_defined["MOJOLEARN_GLM_CELLS_MIXED"]():
                 slots = cells
             for sl in range(t.tid, slots, t.nt):
                 var c = sl
                 comptime if not is_defined["MOJOLEARN_GLM_CELLS_MIXED"]():
-                    if sl < n_hd:
-                        c = m + sl
-                    elif sl < g0:
+                    c = _glm_slot_cell(sl, d, m)
+                    if c < 0:
                         continue
-                    elif sl < g0 + m:
-                        c = sl - g0
-                    elif sl < r0:
-                        continue
-                    else:
-                        c = m + n_hd + (sl - r0)
-                if c < m:
-                    var acc: Float32
-                    if c < d:
-                        acc = chain_fmad(gr, 0, 1, x, c, d, n)
-                    else:
-                        acc = fold_fa(gr, 0, 1, n)
-                    st(g, c, acc)
-                    continue
-                # lower-triangle cell (j, k), k <= j, row-major over j
-                var q = c - m
-                var j = 0
-                while (j + 1) * (j + 2) // 2 <= q:
-                    j += 1
-                var k = q - j * (j + 1) // 2
-                var acc: Float32
-                if j < d:
-                    acc = chain_fmad_scaled(hr, x, j, k, d, n)
-                elif k < d:
-                    acc = chain_fmad(hr, 0, 1, x, k, d, n)
-                else:
-                    acc = fold_fa(hr, 0, 1, n)
-                st(h, j * m + k, acc)
+                _glm_cell(c, x, gr, hr, n, d, m, g, h)
             t.sync()
         else:
             # gradient and Hessian at res (eta holds the current linear predictor)
@@ -313,37 +384,9 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
         var flag = 0  # 0 continue, 1 converged, 2 stop (no descent)
         var slope = Float32(0)
         if t.lead():
-            var inv_n = fd(Float32(1), den)
-            var gmax = Float32(0)
-            for j in range(m):
-                var gj = fm(ld(g, j), inv_n)
-                if j < d:
-                    gj = fmad(alpha, ld(res, j), gj)
-                st(g, j, gj)
-                gmax = fmax(gmax, fabs(gj))
-            comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
-                print("GLM_TRACE it", it, "f", f, "gmax", gmax, "tol", tol)
-            if gmax <= tol:
-                flag = 1
-            else:
-                for j in range(m):
-                    for k in range(j + 1):
-                        var v = fm(ld(h, j * m + k), inv_n)
-                        if j == k and j < d:
-                            v = fa(v, alpha)
-                        st(h, j * m + k, v)
-                        st(h, k * m + j, v)
-                for j in range(m):
-                    st(step, j, -ld(g, j))
-                var ok = cholesky(h, 0, m)
-                if ok:
-                    chol_solve(h, 0, m, step, 0)
-                for j in range(m):
-                    slope = fmad(ld(g, j), ld(step, j), slope)
-                comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
-                    print("GLM_TRACE it", it, "slope", slope, "chol_ok", ok, "step0", ld(step, 0), "stepd", ld(step, m - 1))
-                if not (slope < 0):
-                    flag = 2
+            var fs_ = _glm_step(g, h, step, res, m, d, alpha, den, tol, it, f)
+            flag = fs_[0]
+            slope = fs_[1]
         flag = t.bcast_int(flag, 1)
         if flag == 1:
             converged = True
