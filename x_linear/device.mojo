@@ -23,11 +23,12 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_BAYES, ALGO_ARD
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_BAYES, ALGO_ARD
 from x_linear.ops import ld, st, fd, i2f, fa, fm, fmad, flog, fill, copy, row_dot, mean_of
+from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score
 from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
 from x_linear.glm import (
-    _unit, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, _glm_step, GLM_LINK_LOG, GLM_STALL_ITERS,
+    _unit, _glm_deriv_row, _glm_cell, _glm_cell_rows, _glm_slot_count, _glm_slot_cell, _glm_step, GLM_LINK_LOG, GLM_STALL_ITERS,
     _glm_cell_part, _glm_cell_store,
 )
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
@@ -263,20 +264,44 @@ def glm_deriv_kernel(y: FP, n: Int32, power: Float32, link: Int32, sw: Int32, et
         _glm_deriv_row(y, Int(n), i, power, Int(link), eta, sw != 0, gr, hr)
 
 
-def glm_cells_kernel(x: FP, gr: FP, hr: FP, n: Int32, d: Int32, m: Int32, g: FP, h: FP):
-    """One thread a slot of glm_fit's warp-uniform layout."""
+def glm_cells_kernel(x: FP, gr: FP, hr: FP, lo: Int32, cnt: Int32, d: Int32, m: Int32, g: FP, h: FP):
+    """One thread a slot of glm_fit's warp-uniform layout, rows [lo, lo + cnt)."""
     var sl = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
     var mm = Int(m)
     if sl < _glm_slot_count(dd, mm):
         var c = _glm_slot_cell(sl, dd, mm)
         if c >= 0:
-            _glm_cell(c, x, gr, hr, Int(n), dd, mm, g, h)
+            _glm_cell_rows(c, x, gr, hr, Int(lo), Int(cnt), dd, mm, g, h)
 
 
-def glm_cell_parts_kernel(x: FP, gr: FP, hr: FP, n: Int32, d: Int32, m: Int32, nb: Int32, parts: FP):
+#: Apple: macOS silently aborts a command buffer that holds the GPU for
+#: seconds and leaves its output partly stale (the M2's GLM grid digests
+#: differed run to run on istella, 24,531 cells of 1M-row chains in ONE
+#: launch, and on taxi under a second Metal job). The cells run in row
+#: slices of at most GLM_APPLE_SLICE_MACS chain steps a launch, each waited
+#: on, every chain resuming from its stored value (the same words).
+comptime GLM_APPLE_SLICE_MACS = 1 << 29
+
+
+def _glm_rows_slice(n: Int, slots: Int) -> Int:
+    comptime if has_apple_gpu_accelerator():
+        return max(64, min(n, (GLM_APPLE_SLICE_MACS // max(slots, 1)) // 64 * 64))
+    return n
+
+
+def _glm_blocks_slice(nb: Int, slots: Int) -> Int:
+    """The row blocks a parts launch takes: all of them off Apple."""
+    comptime if has_apple_gpu_accelerator():
+        return max(1, min(nb, GLM_APPLE_SLICE_MACS // (max(slots, 1) * FOLD_BLOCK)))
+    return nb
+
+
+def glm_cell_parts_kernel(x: FP, gr: FP, hr: FP, n: Int32, d: Int32, m: Int32, nb: Int32, b0: Int32, bcnt: Int32,
+                          parts: FP):
     """lane/neural-pass97: one thread a (slot, row block): the slot's cell
-    chain over the block from zero into parts[slot * nb + block]."""
+    chain over the block from zero into parts[slot * nb + block]; the row
+    blocks [b0, b0 + bcnt) only (the Apple slices, `_glm_blocks_slice`)."""
     var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
     var mm = Int(m)
@@ -284,9 +309,10 @@ def glm_cell_parts_kernel(x: FP, gr: FP, hr: FP, n: Int32, d: Int32, m: Int32, n
     # block-major: neighbouring threads are neighbouring slots over the same
     # rows, so their x words share cache lines (and a warp keeps one kind)
     var slots = _glm_slot_count(dd, mm)
-    var b = q // slots
-    var sl = q - b * slots
-    if b < nbb:
+    var bq = q // slots
+    var sl = q - bq * slots
+    var b = Int(b0) + bq
+    if bq < Int(bcnt) and b < nbb:
         var c = _glm_slot_cell(sl, dd, mm)
         if c >= 0:
             var lo = b * FOLD_BLOCK
@@ -377,6 +403,8 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     var slot_grid = _xg_blocks(slot_ub)
     var nb = fold_blocks(n)
     var dparts = ctx.enqueue_create_buffer[DType.float32](max(slot_ub * nb, 1))
+    var rows_slice = _glm_rows_slice(n, _glm_slot_count(d, m))
+    var blocks_slice = _glm_blocks_slice(nb, _glm_slot_count(d, m))
     ctx.enqueue_function[glm_init_kernel](dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), Int32(link), Int32(sw),
                                           dres.unsafe_ptr(), dsc.unsafe_ptr(), grid_dim=1, block_dim=1)
 
@@ -388,12 +416,25 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
         ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
                                                dgr.unsafe_ptr(), dhr.unsafe_ptr(), grid_dim=rows_grid, block_dim=XG_TPB)
         comptime if X_LINEAR_SERIAL_FOLDS:
-            ctx.enqueue_function[glm_cells_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(n), Int32(d),
-                                                   Int32(m), dg.unsafe_ptr(), dh.unsafe_ptr(), grid_dim=slot_grid, block_dim=XG_TPB)
+            var lo = 0
+            while lo < n:
+                var cnt = min(rows_slice, n - lo)
+                ctx.enqueue_function[glm_cells_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(lo), Int32(cnt),
+                                                       Int32(d), Int32(m), dg.unsafe_ptr(), dh.unsafe_ptr(),
+                                                       grid_dim=slot_grid, block_dim=XG_TPB)
+                lo += cnt
+                if lo < n and rows_slice < n:
+                    ctx.synchronize()
         else:
-            ctx.enqueue_function[glm_cell_parts_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(n), Int32(d),
-                                                        Int32(m), Int32(nb), dparts.unsafe_ptr(),
-                                                        grid_dim=_xg_blocks(slot_ub * nb), block_dim=XG_TPB)
+            var b0 = 0
+            while b0 < nb:
+                var bc = min(blocks_slice, nb - b0)
+                ctx.enqueue_function[glm_cell_parts_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(n), Int32(d),
+                                                            Int32(m), Int32(nb), Int32(b0), Int32(bc), dparts.unsafe_ptr(),
+                                                            grid_dim=_xg_blocks(slot_ub * bc), block_dim=XG_TPB)
+                b0 += bc
+                if b0 < nb and blocks_slice < nb:
+                    ctx.synchronize()
             ctx.enqueue_function[glm_cell_combine_kernel](dparts.unsafe_ptr(), Int32(d), Int32(m), Int32(nb), dg.unsafe_ptr(),
                                                           dh.unsafe_ptr(), grid_dim=slot_grid, block_dim=XG_TPB)
         ctx.enqueue_function[glm_step_kernel](dg.unsafe_ptr(), dh.unsafe_ptr(), dstep.unsafe_ptr(), dres.unsafe_ptr(),
@@ -454,12 +495,130 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     _ = hsc_l^
 
 
+
+# ------------------------------------------------ k-fold RidgeCV on the grid (lane/neural-pass91)
+# x_linear/ridgecv.mojo's chains, one thread each: the training means (d + 1
+# threads), the centered Gram cells and X'y (one thread a cell), the solves
+# (one thread an alpha, its own scratch), the held-out predictions (one
+# thread a row and alpha) and the fold scores (one thread an alpha, summed
+# folds ascending). The same helpers as the host fit, so the same words.
+def kf_means_kernel(x: FP, y: FP, n: Int32, d: Int32, s: Int32, e: Int32, fi: Int32, xm: FP):
+    var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    if j < dd:
+        st(xm, j, kf_mean(x, dd, j, Int(n), Int(s), Int(e)) if fi != 0 else Float32(0))
+    elif j == dd:
+        st(xm, dd, kf_mean(y, 1, 0, Int(n), Int(s), Int(e)) if fi != 0 else Float32(0))
+
+
+def kf_cells_kernel(x: FP, y: FP, n: Int32, d: Int32, s: Int32, e: Int32, xm: FP, g: FP, xty: FP):
+    var c = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    var cells = dd * (dd + 1) // 2
+    if c < cells:
+        var jk = upper_cell(c, dd)
+        var j = jk[0]
+        var k = jk[1]
+        var v = kf_cross(x, dd, j, ld(xm, j), x, dd, k, ld(xm, k), Int(n), Int(s), Int(e))
+        st(g, j * dd + k, v)
+        st(g, k * dd + j, v)
+    elif c < cells + dd:
+        var j = c - cells
+        st(xty, j, kf_cross(x, dd, j, ld(xm, j), y, 1, 0, ld(xm, dd), Int(n), Int(s), Int(e)))
+
+
+def kf_solve_kernel(g: FP, xty: FP, xm: FP, d: Int32, alphas: FP, na: Int32, fi: Int32, aw: FP, w: FP, b: FP):
+    var a = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    if a < Int(na):
+        st(b, a, kf_solve(g, xty, xm, ld(xm, dd), dd, ld(alphas, a), fi != 0, aw + a * dd * dd, w + a * dd))
+
+
+def kf_pred_kernel(x: FP, d: Int32, s: Int32, e: Int32, na: Int32, w: FP, b: FP, p: FP, stride: Int32):
+    var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nt = Int(e) - Int(s)
+    if q < nt * Int(na):
+        var a = q // nt
+        var r = q - a * nt
+        st(p, a * Int(stride) + r, kf_pred(x, Int(s) + r, Int(d), w + a * Int(d), ld(b, a)))
+
+
+def kf_score_kernel(y: FP, p: FP, s: Int32, e: Int32, na: Int32, stride: Int32, sums: FP):
+    var a = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if a < Int(na):
+        st(sums, a, fa(ld(sums, a), kf_score(y, p + a * Int(stride), Int(s), Int(e))))
+
+
+def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
+                      res: FP) raises:
+    var ctx = linear_ctx()
+    var k = Int(ip[0])
+    var fi = Int(ip[1])
+    var na = Int(ip[2])
+    var stride = n // k + 1
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+    var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
+    var dal = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
+    var dxm = ctx.enqueue_create_buffer[DType.float32](d + 1)
+    var dg = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+    var dxty = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var daw = ctx.enqueue_create_buffer[DType.float32](max(na * d * d, 1))
+    var dw = ctx.enqueue_create_buffer[DType.float32](max(na * d, 1))
+    var db = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
+    var dp = ctx.enqueue_create_buffer[DType.float32](max(na * stride, 1))
+    var dsum = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
+    var hfp = fp.copy()
+    if n_x > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    if n_y > 0:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    ctx.enqueue_copy(dst_buf=dal, src_ptr=hfp.unsafe_ptr())
+    dsum.enqueue_fill(Float32(0))
+    var cells = d * (d + 1) // 2
+    for f in range(k):
+        var s = Int32(kf_start(n, k, f))
+        var e = Int32(kf_end(n, k, f))
+        ctx.enqueue_function[kf_means_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, Int32(fi),
+                                              dxm.unsafe_ptr(), grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
+        ctx.enqueue_function[kf_cells_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, dxm.unsafe_ptr(),
+                                              dg.unsafe_ptr(), dxty.unsafe_ptr(), grid_dim=_xg_blocks(cells + d), block_dim=XG_TPB)
+        ctx.enqueue_function[kf_solve_kernel](dg.unsafe_ptr(), dxty.unsafe_ptr(), dxm.unsafe_ptr(), Int32(d), dal.unsafe_ptr(),
+                                              Int32(na), Int32(fi), daw.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
+                                              grid_dim=_xg_blocks(na), block_dim=XG_TPB)
+        var nt = Int(e) - Int(s)
+        ctx.enqueue_function[kf_pred_kernel](dx.unsafe_ptr(), Int32(d), s, e, Int32(na), dw.unsafe_ptr(), db.unsafe_ptr(),
+                                             dp.unsafe_ptr(), Int32(stride), grid_dim=_xg_blocks(nt * na), block_dim=XG_TPB)
+        ctx.enqueue_function[kf_score_kernel](dy.unsafe_ptr(), dp.unsafe_ptr(), s, e, Int32(na), Int32(stride),
+                                              dsum.unsafe_ptr(), grid_dim=_xg_blocks(na), block_dim=XG_TPB)
+    var hs = List[Float32](length=max(na, 1), fill=Float32(0))
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=dsum)
+    ctx.synchronize()
+    for a in range(na):
+        res.unsafe_store(a, fd(hs[a], i2f(k)))
+    _ = hfp^
+    _ = hs^
+    _ = dx^
+    _ = dy^
+    _ = dal^
+    _ = dxm^
+    _ = dg^
+    _ = dxty^
+    _ = daw^
+    _ = dw^
+    _ = db^
+    _ = dp^
+    _ = dsum^
+
+
 def fit_device(
     algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
 ) raises:
     if algo == ALGO_GLM and _glm_grid() and n > 0:
         _glm_fit_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
+        return
+    if algo == ALGO_RIDGE_KFOLD:
+        _ridge_kfold_grid(x, n_x, y, n_y, n, d, ip, fp, res)
         return
     if algo == ALGO_SGD and _sgd_on_host():
         _fit_on_host(algo, x, y, n, d, ip, fp, n_out, n_fw, n_iw, res)
