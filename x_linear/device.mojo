@@ -33,6 +33,8 @@ from x_linear.glm import (
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
 from x_linear.logcv_grid import logcv_fit_grid
+from x_linear.huber_grid import huber_fit_grid
+from x_linear.dispatch import ALGO_HUBER
 from x_linear.tops import X_LINEAR_SERIAL_FOLDS
 from x_linear.dispatch import ALGO_LOGCV
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo
@@ -468,6 +470,9 @@ def fit_device(
     comptime if not X_LINEAR_SERIAL_FOLDS:
         if algo == ALGO_LOGCV and n > 0 and String(getenv("MOJOLEARN_X_LINEAR_LOGCV_GRID")) != "0":
             logcv_fit_grid(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
+            return
+        if algo == ALGO_HUBER and n > 0 and String(getenv("MOJOLEARN_X_LINEAR_HUBER_GRID")) != "0":
+            huber_fit_grid(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
             return
     comptime if X_LINEAR_BLOCKS:
         from x_linear.blocks import blocks_handles, blocks_fit
