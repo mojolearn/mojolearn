@@ -226,7 +226,7 @@ d2h-loop	d2h-roundtrip	gap-classical-nv	debt	cholesky/checks/trsm.mojo	0	ctx.enq
 d2h-loop	d2h-roundtrip	gap-classical-nv	debt	cholesky/checks/trsm.mojo	0	s.ctx.enqueue_copy(dst_ptr=result.unsafe_ptr(), src_buf=s.b)
 host-threads	host-threads	PR#126	debt	cluster/estimator.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	PR#126	debt	cluster/estimator.mojo	0	host_parallelize(_abs_sum_task, groups)
-host-threads	host-threads	PR#126	inflight@9901c6a91a8d8c8aa3e5162024c7b1acacd7bc37	cluster/estimator.mojo	1	host_parallelize(_abs_sum_task, groups)
+host-threads	host-threads	PR#126	debt	cluster/estimator.mojo	1	host_parallelize(_abs_sum_task, groups)
 host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	host_cells(_chunk, n_chunks, 4 * ACCUMULATE_CHUNK * (d + 1))
 host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	host_cells(_lane, n_trials * PLUS_PLUS_TPB, 8 * (n // PLUS_PLUS_TPB + 1))
 host-call	host-import	UNOWNED	debt	cluster/host/kmeans_oracle.mojo	0	host_cells(_row, n, 3 * k * d)
