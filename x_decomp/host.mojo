@@ -11,7 +11,7 @@ writes outputs no other task writes; the O(n^3) cells (gemm, sqdist), the
 QR slices and the shortest-path rows have the host spellings of
 x_decomp/host_simd.mojo, host_qr.mojo and host_graph.mojo (same words).
 So the bits are the same at every thread count."""
-from x_decomp.rr import RR_EIGH_SWEEPS, host_eigh_rr
+from x_decomp.rr_solve import host_eigh_rr_sorted
 from std.memory import bitcast
 from std.builtin.sort import sort
 from x_decomp.lle_local import (
@@ -31,9 +31,7 @@ from x_decomp.lle_local import (
 )
 from std.sys.compile import is_defined
 
-from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
-from decomposition.host.linalg_public import eigh_ascending, host_eigh, host_qr_r
-from decomposition.host.pca_oracle import host_sign_flip
+from decomposition.host.linalg_public import host_eigh, host_qr_r
 from checks.numerics import ftz
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
@@ -730,24 +728,12 @@ struct HostExec(Exec):
 
 
 def _host_eigh_rr_one(mut m: List[Float32], w: F32Ptr, v: F32Ptr, n: Int) raises:
-    """The round-robin Jacobi of x_decomp/rr.mojo on `m` (consumed), then
-    host_sign_flip and eigh_ascending: DevExec.eigh's and rr_batch_kernel's
-    words. Not converged in RR_EIGH_SWEEPS raises (cgr-decomp: no cyclic
-    fallback)."""
-    var vr = List[Float32](length=n * n, fill=Float32(0.0))
-    var rr = host_eigh_rr(m, vr, n, RR_EIGH_SWEEPS, Float32(JACOBI_TOL))
-    if not rr[0]:
-        raise Error(
-            "eigh: the round-robin Jacobi did not converge in " + String(RR_EIGH_SWEEPS)
-            + " sweeps at n = " + String(n) + ". An unconverged decomposition is not returned"
-            " as if it were one (DEVIATION 590)."
-        )
-    host_sign_flip(vr, n)
-    var diag = List[Float32]()
+    """`host_eigh_rr_sorted` (x_decomp/rr_solve.mojo) into w and v:
+    DevExec.eigh's and rr_batch_kernel's words."""
+    var wl = List[Float32]()
+    var vl = List[Float32]()
+    _ = host_eigh_rr_sorted(m, n, wl, vl)
     for i in range(n):
-        diag.append(m[i * n + i])
-    var got = eigh_ascending(diag, vr, n, True, rr[1])
-    for i in range(n):
-        w.unsafe_store(i, got.w[i])
+        w.unsafe_store(i, wl[i])
     for i in range(n * n):
-        v.unsafe_store(i, got.v[i])
+        v.unsafe_store(i, vl[i])

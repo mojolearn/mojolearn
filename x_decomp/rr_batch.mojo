@@ -21,13 +21,15 @@ Launch: grid = batch, block = RR_OFF_TPB. Scratch per problem: cs 2 h
 info[2 b] = 1 converged / 0 not, info[2 b + 1] = sweeps run."""
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
+from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 
 from checks.numerics import ftz
+from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import spectrum_rank_desc
 from x_decomp.cells import F32Ptr
 from x_decomp.jacobi2 import dev_barrier
-from x_decomp.rr import RR_OFF_TPB, rr_block, rr_converged, rr_cs, rr_fro_kept, rr_row_off, rr_vrow
+from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_block, rr_converged, rr_cs, rr_fro_kept, rr_row_off, rr_vrow
 
 
 @always_inline
@@ -172,3 +174,55 @@ def rr_batch_kernel(
         for r in range(n):
             vo.unsafe_store(r * n + c, v.unsafe_load(r * n + i2))
         i2 += RR_OFF_TPB
+
+
+def device_eigh_rr_small(
+    ctx: DeviceContext, a: List[Float32], n: Int, mut w: List[Float32], mut v: List[Float32]
+) raises -> Int:
+    """ONE small symmetric problem (a Lanczos projected matrix) on the device
+    by `rr_batch_kernel` (one block, every round's pairs, blocks and V rows
+    across its threads): w ascending, v row major with vector c in COLUMN c,
+    the words `host_eigh_rr_sorted` (x_decomp/rr_solve.mojo) gives. An
+    unconverged solve raises. Returns the sweeps run."""
+    var da = ctx.enqueue_create_buffer[DType.float32](n * n)
+    ctx.enqueue_copy(dst_buf=da, src_ptr=a.unsafe_ptr())
+    var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
+    var dcs = ctx.enqueue_create_buffer[DType.float32](rrb_cs_len(n))
+    var dpart = ctx.enqueue_create_buffer[DType.float32](rrb_part_len(n))
+    var ddg = ctx.enqueue_create_buffer[DType.float32](n)
+    var dinfo = ctx.enqueue_create_buffer[DType.float32](2)
+    var dw = ctx.enqueue_create_buffer[DType.float32](n)
+    var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
+    ctx.enqueue_memset(dinfo, Float32(-1.0))
+    ctx.enqueue_function[rr_batch_kernel](
+        _bp(da), _bp(dv), _bp(dcs), _bp(dpart), _bp(ddg), _bp(dinfo), _bp(dw), _bp(dvo), Int32(n),
+        Int32(RR_EIGH_SWEEPS), Float32(JACOBI_TOL), grid_dim=1, block_dim=RR_OFF_TPB,
+    )
+    var hinfo = List[Float32](length=2, fill=Float32(0.0))
+    w = List[Float32](length=n, fill=Float32(0.0))
+    v = List[Float32](length=n * n, fill=Float32(0.0))
+    ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+    ctx.enqueue_copy(dst_ptr=w.unsafe_ptr(), src_buf=dw)
+    ctx.enqueue_copy(dst_ptr=v.unsafe_ptr(), src_buf=dvo)
+    ctx.synchronize()
+    _ = da^
+    _ = dv^
+    _ = dcs^
+    _ = dpart^
+    _ = ddg^
+    _ = dinfo^
+    _ = dw^
+    _ = dvo^
+    if hinfo[0] < Float32(0.0):
+        raise Error("eigh: the round-robin Jacobi kernel did not run (a launch failure, not a convergence failure)")
+    if hinfo[0] == Float32(0.0):
+        raise Error(
+            "eigh: the round-robin Jacobi did not converge in " + String(RR_EIGH_SWEEPS) + " sweeps at n = "
+            + String(n) + " (DEVIATION 590)."
+        )
+    return Int(hinfo[1])
+
+
+@always_inline
+def _bp(buf: DeviceBuffer[DType.float32]) -> F32Ptr:
+    return F32Ptr(unsafe_from_address=Int(buf.unsafe_ptr()))

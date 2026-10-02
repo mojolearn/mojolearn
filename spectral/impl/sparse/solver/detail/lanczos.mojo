@@ -185,8 +185,9 @@ from spectral.checks.symmetric_eig_host import (
     SAB_ROTATE_UNFUSED,
     SAB_SWEEP_CAP,
     SAB_TIE_REVERSE,
-    symmetric_eig_host,
+    pin_column_signs,
 )
+from x_decomp.rr_batch import device_eigh_rr_small
 from spectral.impl.sparse.linalg.detail.laplacian import DeviceCoo
 from spectral.impl.sparse.matrix.detail.diagonal import SAB_LAPLACIAN_SEAM
 from spectral.impl.sparse.solver.lanczos_types import (
@@ -1733,7 +1734,22 @@ def _step_tag(step: Int, what: StringSlice) -> String:
 # ---------------------------------------------------------------------------
 
 
+def lanczos_which_first(which: Int, ncv: Int, k: Int) raises -> Int:
+    """The first of the k ascending Ritz values `which` selects (SA 0, LA
+    ncv - k); `SM`/`LM` are refused by name (`:196-243`)."""
+    if which == LANCZOS_SA:
+        return 0
+    if which == LANCZOS_LA:
+        return ncv - k
+    raise Error(
+        "lanczos: which=" + lanczos_which_name(which)
+        + " is not implemented (a thrust sort by magnitude cuVS never reaches);"
+        " LA and SA are"
+    )
+
+
 def lanczos_solve_ritz(
+    ctx: DeviceContext,
     alpha: List[Float32],
     beta: List[Float32],
     beta_k: List[Float32],
@@ -1746,8 +1762,12 @@ def lanczos_solve_ritz(
 ) raises -> Int:
     """`lanczos_solve_ritz`: the projected matrix (`alpha` on the diagonal,
     `beta[0..ncv-2]` on both off-diagonals, `beta_k[0..k)` in row `k` and
-    column `k` after a restart, `:148-169`), `eig_dc` (here the host solve,
-    DEVIATION 771), then the `which` slice (`:182-195`). `eigenvectors_k`
+    column `k` after a restart, `:148-169`), `eig_dc` (here the round-robin
+    Jacobi ON THE DEVICE, x_decomp/rr_batch.mojo `device_eigh_rr_small`, one
+    block, every round's rotations across its threads; cgr-decomp 2026-10-03
+    replaced the host solve of DEVIATION 771; the host column's oracle runs
+    the same rounds, x_decomp/rr_solve.mojo), the column signs pinned by
+    DEVIATION 770's rule, then the `which` slice (`:182-195`). `eigenvectors_k`
     comes back `ncv x k` ROW-MAJOR (`E[j * k + c]` = component `j` of
     selected vector `c`), `eigenvalues_k` ascending. Returns the solver's
     sweep count. `SM`/`LM` are refused by name: they are a `thrust::sort`
@@ -1769,20 +1789,13 @@ def lanczos_solve_ritz(
         for tid in range(k):
             t[k * ncv + tid] = beta_k[tid]
             t[tid * ncv + k] = beta_k[tid]
+    var first = lanczos_which_first(which, ncv, k)
     var evals = List[Float32]()
     var evecs = List[Float32]()
-    var sweeps = symmetric_eig_host[DType.float32](t, ncv, evals, evecs)
-    var first: Int
-    if which == LANCZOS_SA:
-        first = 0
-    elif which == LANCZOS_LA:
-        first = ncv - k
-    else:
-        raise Error(
-            "lanczos: which=" + lanczos_which_name(which)
-            + " is not implemented (a thrust sort by magnitude cuVS never reaches);"
-            " LA and SA are"
-        )
+    var sweeps = device_eigh_rr_small(ctx, t, ncv, evals, evecs)
+    # DEVIATION 770: the first nonzero component of each column positive
+    # (comparisons and negations only: the same words on every column)
+    pin_column_signs[DType.float32](evecs, ncv, ncv)
     eigenvalues_k.clear()
     eigenvectors_k.clear()
     for c in range(k):
@@ -1886,7 +1899,7 @@ def lanczos_smallest(
     for _ in range(k):
         beta_k.append(Float32(0.0))
     var sweeps = lanczos_solve_ritz(
-        alpha, beta, beta_k, False, k, which, ncv, eigenvalues_k, eigenvectors_k
+        ctx, alpha, beta, beta_k, False, k, which, ncv, eigenvalues_k, eigenvectors_k
     )
 
     # ritz = V^T E_k  (:501-507): ours `E_k^T V`, k x n row-major
@@ -1922,7 +1935,7 @@ def lanczos_smallest(
                 )
                 iter += ncv - k
                 sweeps = lanczos_solve_ritz(
-                    alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k,
+                    ctx, alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k,
                     eigenvectors_k,
                 )
                 var E3 = upload_f32(ctx, eigenvectors_k)
@@ -1937,7 +1950,7 @@ def lanczos_smallest(
             )
             iter += ncv - k
             sweeps = lanczos_solve_ritz(
-                alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k,
+                ctx, alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k,
                 eigenvectors_k,
             )
             res = _residual(ctx, beta[ncv - 1], eigenvectors_k, k, ncv, beta_k)
@@ -2024,7 +2037,7 @@ def lanczos_smallest(
         iter += ncv - k
         # solve_ritz with beta_k  (:703-716)
         sweeps = lanczos_solve_ritz(
-            alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k, eigenvectors_k
+            ctx, alpha, beta, beta_k, True, k, which, ncv, eigenvalues_k, eigenvectors_k
         )
         var E2 = upload_f32(ctx, eigenvectors_k)
         identical_gemm(ctx, ritz, E2, V, k, n, ncv, OP_TN)
