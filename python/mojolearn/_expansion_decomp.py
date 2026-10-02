@@ -2949,12 +2949,50 @@ def _dist(k, A, B, kind, pw, same=False):
     return D
 
 
-def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
+#: FAST on Apple (lane/apple-fast-isotonic-knn, 2026-10-02): LLE's neighbour
+#: lists on the device. `_knn_lists` downloads the n x n squared distances
+#: and runs heapq.nsmallest over every row in Python (10,000 rows: 1e8
+#: key calls; the board's lle row is 14x (taxi) / 6.3x (Istella) behind
+#: scikit-learn). MOJOLEARN_LLE_FAST_KNN=1 takes the x_neighbors lane's
+#: fused k-NN (`xn_knn_sq_tiled`: ascending by (squared distance, index),
+#: the query's own row dropped; with MOJOLEARN_X_NEIGHBORS_FAST_MMA_ROUTE=1
+#: that reaches fast_mma_knn). FAST tier only; the same lists up to the
+#: distance rounding of the fused item.
+_LLE_FAST_KNN = _os.environ.get("MOJOLEARN_LLE_FAST_KNN", "") == "1"
+
+
+def _knn_lists_device(k, Q, X, n_neighbors, exclude_self):
+    """`_knn_lists` (kind 0) through the x_neighbors binding: (indices,
+    squared distances) as lists; None when the binding or the shape is not
+    there (the caller runs the host lists)."""
+    try:
+        fn = getattr(_backend.binding("_mojolearn_x_neighbors", k.mode), "xn_knn_sq_tiled")
+    except Exception:
+        return None
+    n, d = Q.r, Q.c
+    m = X.r
+    nn = int(n_neighbors)
+    if X.c != d or nn < 1 or nn + (1 if exclude_self else 0) > m:
+        return None
+    dist = array.array("f", [0.0]) * (n * nn)
+    idx = array.array("i", [0]) * (n * nn)
+    fn([Q.addr, X.addr, dist.buffer_info()[0], idx.buffer_info()[0]],
+       [n, m, d, nn, 1 if exclude_self else 0], [])
+    il = idx.tolist()
+    dl = dist.tolist()
+    return ([il[i * nn:(i + 1) * nn] for i in range(n)], [dl[i * nn:(i + 1) * nn] for i in range(n)])
+
+
+def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0, device_ok=False):
     """(indices, distances) of the n_neighbors nearest rows of X for every
     row of Q, ascending, ties to the lower index; `exclude_self` drops the
     query's own index (queries ARE the training rows). kind 0 returns
     SQUARED Euclidean distances (the callers take the root); any other kind
     the `_dist` distances themselves."""
+    if kind == 0 and device_ok and _LLE_FAST_KNN and k.mode == "fast":
+        got = _knn_lists_device(k, Q, X, n_neighbors, exclude_self)
+        if got is not None:
+            return got
     D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
     idx, dst = [], []
     take = n_neighbors + (1 if exclude_self else 0)
@@ -3714,7 +3752,7 @@ class LocallyLinearEmbedding(_Base):
                              "[n_components * (n_components + 3) / 2]")
         if self.method == "modified" and nn < nc:
             raise ValueError("modified LLE requires n_neighbors >= n_components")
-        idx, _ = _knn_lists(k, M, M, nn, True)
+        idx, _ = _knn_lists(k, M, M, nn, True, device_ok=True)
         if self.method == "ltsa":
             IW = self._ltsa_factor(k, M, idx, nn, nc)
         elif self.method == "hessian":
