@@ -29,7 +29,8 @@ r2_score, THEIRS (:46-73):
 
 Three float reductions over n. DEVIATION 653: under IDENTICAL each is ONE
 fixed tree (`metrics/checks/pinned_sum.mojo`): `PINNED_SUM_W` chunks
-folded as a halving tree, chunk totals folded ascending on the host, every
+folded as a halving tree, chunk totals folded on the device by the same
+tree level by level (`fold_partials_levels`), every
 stored partial through `ftz`. `thrust::reduce`'s shape is whatever the
 vendor's CUB does; `stats::mean`'s is a block fold plus `atomicAdd`
 (`raft/stats/detail/mean.cuh`). Under FAST the per-chunk fold is
@@ -90,7 +91,7 @@ from metrics.checks.pinned_sum import (
     PINNED_SUM_W,
     canonicalize_nan,
     chunk_count,
-    host_fold_partials,
+    device_fold_partials,
     linear_block_id,
     physical_block_count,
     virtual_block_sum,
@@ -212,7 +213,7 @@ def sse_ssto_chunks_kernel[
 ):
     """`sse = sum((y - y_hat)^2)` and `ssto = sum((y - y_bar)^2)` as two
     trees of the same shape, one pass over the data. `y_bar` is the scalar
-    the host folded from `sum_chunks_kernel` (theirs keeps it in a device
+    the device tree folded from `sum_chunks_kernel` (theirs keeps it in a device
     scalar and reads it in `subtractDevScalar`; same bits, one fewer
     launch)."""
     comptime R = PINNED_SUM_W // block_size
@@ -241,14 +242,7 @@ def sse_ssto_chunks_kernel[
 def _fold_partials(
     ctx: DeviceContext, mut partials: DeviceBuffer[DType.float32], chunks: Int
 ) raises -> Float32:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](chunks)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=partials)
-    ctx.synchronize()
-    var lst = List[Float32]()
-    for c in range(chunks):
-        lst.append(h.unsafe_ptr().unsafe_load(c))
-    _ = h^
-    return host_fold_partials(lst, chunks)
+    return device_fold_partials(ctx, partials, chunks)
 
 
 def r2_score(

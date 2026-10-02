@@ -85,6 +85,7 @@ from std.math import exp, fma, log
 from std.memory import bitcast
 from checks.numerics import ftz, identical_mul_add
 from gbdt.data.permutation import TRandom
+from gbdt.metrics.optimal_const_for_loss import calculate_weighted_target_average
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.grid_policy import (
@@ -140,16 +141,17 @@ struct GbdtRmseHostFit(Movable):
 def _rmse_starting_approx(targets: List[Float32], n_rows: Int) raises -> Float64:
     """`calculate_weighted_target_average` on the unweighted branch, through
     the RMSE arm of `calc_one_dimensional_optimum_const_approx`
-    (`optimal_const_for_loss.mojo:52-111`): `summary_weight` is the exact
-    row count, the target sum accumulates in Float64 in row order, the
+    (`optimal_const_for_loss.mojo`): `summary_weight` is the exact row
+    count, the target sum is `bfa_tree_sum`'s fixed tree in Float64, the
     quotient narrows to Float32 at the return and widens back."""
     if n_rows == 0:
         raise Error("optimal const approx: empty target")
-    var summary_weight = Float64(n_rows)
-    var target_sum = Float64(0.0)
-    for i in range(n_rows):
-        target_sum += Float64(targets[i])
-    return Float64(Float32(target_sum / summary_weight))
+    if len(targets) != n_rows:
+        raise Error("optimal const approx: " + String(len(targets)) + " targets for " + String(n_rows) + " rows")
+    # the shared unweighted arm: `bfa_tree_sum`'s fold order, the device's
+    return Float64(
+        calculate_weighted_target_average(targets, List[Float32](), False)
+    )
 
 
 # ===========================================================================

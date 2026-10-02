@@ -72,13 +72,9 @@ from gemm.checks.gemm_int8_mma_tuned import (
     int8_pieces_plan_name,
     int8_pieces_sabotage_name,
 )
-from gemm.host.gemm_int15_oracle import (
-    INT15_MAX_K,
-    Int15Rows,
-    gemm_int15_oracle,
-    quantize_rows_int15,
-)
-from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE
+from gemm.contract import INT15_MAX_K
+from gemm.host.gemm_int15_oracle import Int15Rows, gemm_int15_oracle, quantize_rows_int15
+from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE
 
 comptime HAS_UNIT = lib_int8_matrix_unit_for[TARGET_COLUMN]()
 

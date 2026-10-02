@@ -1,24 +1,11 @@
-diff --git a/x_neighbors/block_ops.mojo b/x_neighbors/block_ops.mojo
-index 59ad2e684..8c60b3e14 100644
---- a/x_neighbors/block_ops.mojo
-+++ b/x_neighbors/block_ops.mojo
-@@ -104,7 +104,7 @@ def ocsvm_smo_block(
-         var bi = Int32(-1)
-         var t = tid
-         while t < n:
--            if alpha.unsafe_load(t) < cv.unsafe_load(t):
-+            if alpha.unsafe_load(t) < Float32(1):
-                 var ng = -g.unsafe_load(t)
-                 if ng >= bv:
-                     bv = ng
 diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
-index cbffeab89..a9ee9e03c 100644
+index dfc69d1d9..1093a9fc5 100644
 --- a/x_neighbors/items.mojo
 +++ b/x_neighbors/items.mojo
-@@ -356,8 +356,8 @@ def ocsvm_update(q: FP, cv: FP, alpha: FP, g: FP, n: Int, i: Int, j: Int) -> Tup
+@@ -359,8 +359,8 @@ def ocsvm_pair(
      if quad <= Float32(0):
          quad = SMO_TAU
-     var delta = ftz(identical_div(_sub(g.unsafe_load(i), g.unsafe_load(j)), quad))
+     var delta = ftz(identical_div(_sub(g_i, g_j), quad))
 -    var ci = cv.unsafe_load(i)
 -    var cj = cv.unsafe_load(j)
 +    var ci = Float32(1)
@@ -26,8 +13,8 @@ index cbffeab89..a9ee9e03c 100644
      var total = _add(old_ai, old_aj)
      var ai = _sub(old_ai, delta)
      var aj = _add(old_aj, delta)
-@@ -403,7 +403,7 @@ def ocsvm_rho(g: FP, alpha: FP, cv: FP, n: Int) -> Float32:
-     for i in range(n):
+@@ -419,7 +419,7 @@ def ocsvm_rho_part(g: FP, alpha: FP, cv: FP, n: Int, b: Int) -> Tuple[Float32, F
+     for i in range(lo, hi):
          var yg = g.unsafe_load(i)
          var a = alpha.unsafe_load(i)
 -        if a >= cv.unsafe_load(i):
@@ -35,7 +22,7 @@ index cbffeab89..a9ee9e03c 100644
              if yg > lb:
                  lb = yg
          elif a <= Float32(0):
-@@ -439,7 +439,7 @@ def ocsvm_smo_item(t: Int, q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP,
+@@ -513,7 +513,7 @@ def ocsvm_smo_item(t: Int, q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP,
          var gmax = neg_inf
          var gi = -1
          for t in range(n):
@@ -44,3 +31,16 @@ index cbffeab89..a9ee9e03c 100644
                  var ng = -g.unsafe_load(t)
                  if ng >= gmax:
                      gmax = ng
+diff --git a/x_neighbors/ocsvm_dev.mojo b/x_neighbors/ocsvm_dev.mojo
+index b0b15cbf5..ba1796c36 100644
+--- a/x_neighbors/ocsvm_dev.mojo
++++ b/x_neighbors/ocsvm_dev.mojo
+@@ -140,7 +140,7 @@ def ocsvm_sel_i_kernel(
+     var ri = stack_allocation[OCSVM_TPB, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+     var bv = _ninf()
+     var bi = Int32(-1)
+-    if t < n and alpha.unsafe_load(t) < cv.unsafe_load(t):
++    if t < n and alpha.unsafe_load(t) < Float32(1):
+         var ng = -g.unsafe_load(t)
+         if ng >= _ninf():
+             bv = ng
