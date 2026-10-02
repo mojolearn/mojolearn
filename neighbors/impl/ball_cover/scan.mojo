@@ -29,10 +29,13 @@ scanning past `SCAN_TPB * chunk` elements and produced a truncated CSR, which
 that file records as a bug found by audit rather than by a test.
 """
 
-from std.gpu import block_idx, thread_idx
-from max.gpu.host import HostBuffer
+from std.gpu import block_dim, block_idx, thread_idx
+from std.os import getenv
+from std.sys.info import has_apple_gpu_accelerator
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.primitives.block import max as block_max
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
 comptime RBC_SCAN_TPB = 256
@@ -147,3 +150,164 @@ def rbc_clamp_kernel(
     var v = vd.unsafe_load(i)
     if v > max_k_in:
         vd.unsafe_store(i, max_k_in)
+
+
+# ---------------------------------------------------------------------------
+# MOJOLEARN_DBSCAN_FAST_SCAN=1 (lane/apple-fast-core, 2026-10-02): THE CSR
+# OFFSET SCAN ON THE WHOLE DEVICE
+# ---------------------------------------------------------------------------
+# Cause: `rbc_exclusive_scan_kernel` is ONE BLOCK of `RBC_SCAN_TPB` threads
+# over every query row of the batch (`registers.mojo::rbc_eps_pass_count`,
+# `rbc_eps_pass_fill`'s caller and `rbc_eps_pass_max_k`): on the board's
+# DBSCAN block (1,000,000 rows, one ball-cover batch) each thread folds
+# about 3,900 degrees serially, twice per batch, while the rest of the GPU
+# idles. Here the scan is three launches: a block-local scan of 2,048-row
+# chunks with the chunk totals out, one small block scanning the chunk
+# totals, and an add of each chunk's offset. Integer adds in Int32 with the
+# same wrap as the one-block kernel, so `ex_scan[n]` is the same value
+# (`rbc_exact_edge_total` reads it the same way). FAST + Apple only,
+# default off.
+comptime RBC_PSCAN_PER_THREAD = 8
+comptime RBC_PSCAN_CHUNK = RBC_SCAN_TPB * RBC_PSCAN_PER_THREAD
+
+
+def rbc_fast_scan_on() -> Bool:
+    comptime if not (
+        GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+    ):
+        return False
+    return String(getenv("MOJOLEARN_DBSCAN_FAST_SCAN")) == "1"
+
+
+def rbc_pscan_local_kernel(
+    ex_scan: MutPointer[Int32, MutAnyOrigin],
+    chunk_tot: MutPointer[Int32, MutAnyOrigin],
+    counts: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """Block `b`: the exclusive scan of `counts[b * CHUNK, +CHUNK)` relative
+    to the chunk start into `ex_scan`, and the chunk's total into
+    `chunk_tot[b]`. Every thread of the block calls the block scan."""
+    var n = Int(n_in)
+    var tid = Int(thread_idx.x)
+    var begin = Int(block_idx.x) * RBC_PSCAN_CHUNK + tid * RBC_PSCAN_PER_THREAD
+    var end = begin + RBC_PSCAN_PER_THREAD
+    if begin > n:
+        begin = n
+    if end > n:
+        end = n
+    var total = Int32(0)
+    var i = begin
+    while i < end:
+        total += counts.unsafe_load(i)
+        i += 1
+    var offset = block_prefix_sum[block_size=RBC_SCAN_TPB, exclusive=True](
+        total
+    )
+    var running = offset
+    i = begin
+    while i < end:
+        ex_scan.unsafe_store(i, running)
+        running += counts.unsafe_load(i)
+        i += 1
+    if tid == RBC_SCAN_TPB - 1:
+        chunk_tot.unsafe_store(Int(block_idx.x), offset + total)
+
+
+def rbc_pscan_chunks_kernel(
+    chunk_tot: MutPointer[Int32, MutAnyOrigin],
+    n_chunks_in: Int32,
+):
+    """One block: `chunk_tot[0 .. n_chunks)` exclusive-scanned in place,
+    `chunk_tot[n_chunks]` the grand total (`rbc_exclusive_scan_kernel`'s
+    shape over the chunk totals, at most a few thousand of them)."""
+    var n = Int(n_chunks_in)
+    var tid = Int(thread_idx.x)
+    var chunk = (n + RBC_SCAN_TPB - 1) // RBC_SCAN_TPB
+    var begin = tid * chunk
+    var end = min(begin + chunk, n)
+    if begin > n:
+        begin = n
+    if end < begin:
+        end = begin
+    var total = Int32(0)
+    var i = begin
+    while i < end:
+        total += chunk_tot.unsafe_load(i)
+        i += 1
+    var offset = block_prefix_sum[block_size=RBC_SCAN_TPB, exclusive=True](
+        total
+    )
+    var running = offset
+    i = begin
+    while i < end:
+        var v = chunk_tot.unsafe_load(i)
+        chunk_tot.unsafe_store(i, running)
+        running += v
+        i += 1
+    if tid == RBC_SCAN_TPB - 1:
+        chunk_tot.unsafe_store(n, offset + total)
+
+
+def rbc_pscan_add_kernel(
+    ex_scan: MutPointer[Int32, MutAnyOrigin],
+    chunk_tot: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    n_chunks_in: Int32,
+):
+    """Thread `i < n`: `ex_scan[i] += chunk_tot[i // CHUNK]`; thread `n`
+    writes the grand total, as the one-block kernel's last thread does."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < n:
+        ex_scan.unsafe_store(
+            i, ex_scan.unsafe_load(i) + chunk_tot.unsafe_load(i // RBC_PSCAN_CHUNK)
+        )
+    elif i == n:
+        ex_scan.unsafe_store(n, chunk_tot.unsafe_load(Int(n_chunks_in)))
+
+
+def rbc_exclusive_scan_launch(
+    ctx: DeviceContext,
+    mut ex_scan: DeviceBuffer[DType.int32],
+    mut counts: DeviceBuffer[DType.int32],
+    n: Int,
+) raises:
+    """`rbc_exclusive_scan_kernel` over `counts[0 .. n)` into `ex_scan[0 ..
+    n]`: the one-block kernel, or the three-launch device-wide scan under
+    `MOJOLEARN_DBSCAN_FAST_SCAN=1`."""
+    if rbc_fast_scan_on() and n > RBC_PSCAN_CHUNK:
+        var n_chunks = (n + RBC_PSCAN_CHUNK - 1) // RBC_PSCAN_CHUNK
+        var chunk_tot = ctx.enqueue_create_buffer[DType.int32](n_chunks + 1)
+        ctx.enqueue_function[rbc_pscan_local_kernel](
+            ex_scan.unsafe_ptr(),
+            chunk_tot.unsafe_ptr(),
+            counts.unsafe_ptr(),
+            Int32(n),
+            grid_dim=(n_chunks, 1, 1),
+            block_dim=(RBC_SCAN_TPB, 1, 1),
+        )
+        ctx.enqueue_function[rbc_pscan_chunks_kernel](
+            chunk_tot.unsafe_ptr(),
+            Int32(n_chunks),
+            grid_dim=(1, 1, 1),
+            block_dim=(RBC_SCAN_TPB, 1, 1),
+        )
+        ctx.enqueue_function[rbc_pscan_add_kernel](
+            ex_scan.unsafe_ptr(),
+            chunk_tot.unsafe_ptr(),
+            Int32(n),
+            Int32(n_chunks),
+            grid_dim=((n + 1 + RBC_SCAN_TPB - 1) // RBC_SCAN_TPB, 1, 1),
+            block_dim=(RBC_SCAN_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        _ = chunk_tot^
+        return
+    ctx.enqueue_function[rbc_exclusive_scan_kernel](
+        ex_scan.unsafe_ptr(),
+        counts.unsafe_ptr(),
+        Int32(n),
+        grid_dim=(1, 1, 1),
+        block_dim=(RBC_SCAN_TPB, 1, 1),
+    )
