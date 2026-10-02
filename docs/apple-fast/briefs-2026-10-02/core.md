@@ -1,0 +1,5 @@
+# core
+Worktree ~/mojolearn-wt/core, branch lane/apple-fast-core (5 commits ahead of main; conflicts in bindings/_mojolearn_estimators.mojo).
+1. `git merge origin/main`, resolve bindings/_mojolearn_estimators.mojo (main's IDENTICAL code and host-route removals win; re-express the FAST hooks on top). Commit, push.
+2. Finish the WIP commit 20b2cda13 (glm/estimator.mojo +253, bindings/_mojolearn_estimators.mojo, python/mojolearn/linear_model.py). Inspect it with `git show 20b2cda13 --stat` and `git show 20b2cda13 -- glm/estimator.mojo | grep -n -E '^\+.*(comptime|is_defined|def |fn |TODO|WIP)'` to find what it was doing, then complete it behind one `-D MOJOLEARN_<NAME>` define, FAST + Apple only, GPU only. If part of it cannot be finished GPU-only, remove that part rather than leave a host step.
+3. The manager already queued A/Bs for the four finished switches (dbscan scan/cc-batch, kde slices, knn k64, kmeans x3): do not re-request those. Create docs/apple-fast/ab/core.txt with lines only for the new glm switch (one dataset first) and docs/apple-fast/ab/core.md.

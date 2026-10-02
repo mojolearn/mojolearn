@@ -1,0 +1,7 @@
+# kapprox: kernel approximation gaps (new branch from main)
+Worktree ~/mojolearn-wt/kapprox, branch lane/apple-fast-kapprox (= origin/main).
+Gaps: skewed-chi2 taxi 4.5x, additive-chi2 istella 2.9x, gaussian-rp taxi 3.7x / istella 2.4x (`grep -E 'chi2|gaussian-rp' docs/apple-fast/m3-gaps-0834.tsv`).
+1. First check origin/lane/apple-fast-decomp-sparse for gaussian-rp (`git diff origin/main origin/lane/apple-fast-decomp-sparse --stat; git diff origin/main origin/lane/apple-fast-decomp-sparse | grep -n -i -m 10 'gaussian'`). If it already moves gaussian-rp to a device path, leave gaussian-rp to that lane and do only the chi2 samplers.
+2. Find the samplers (python/mojolearn/kernel_approximation*.py and the Mojo behind them; board lanes via `grep -n -E 'chi2|gaussian-rp' tools/bench_board_more.py tools/classical_two_datasets.py`). Read where the time goes: the transform is usually one elementwise/GEMM pass; a 4.5x gap means a host step (NumPy math, a per-feature loop, a host random draw per fit, or a host round trip) or a one-block launch.
+3. Implement FAST + Apple only changes behind `-D MOJOLEARN_KAPPROX_<NAME>`, GPU only: the random projection / feature map generated and applied on the device in grid launches; log/cos/sqrt maps fused into one kernel; no host loops.
+4. docs/apple-fast/ab/kapprox.txt: one afc_ab_def.sh line per lane (skewed-chi2 taxi, additive-chi2 istella, gaussian-rp taxi if you own it), plus kapprox.md. Copy tools/afc_ab_def.sh from origin/lane/apple-fast-tier (see COMMON.md).

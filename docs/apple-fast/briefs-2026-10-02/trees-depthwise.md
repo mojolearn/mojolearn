@@ -1,0 +1,6 @@
+# trees-depthwise (+ trees-scan overlap)
+Two worktrees: ~/mojolearn-wt/trees-depthwise (lane/apple-fast-trees-depthwise: gbdt-categorical CTR prep scan/freq switches; conflicts in gbdt/train.mojo) and ~/mojolearn-wt/trees-scan (lane/apple-fast-trees-scan: GBDT segmented sort scans, RF bootstrap sort, CTR vector scan; merges main cleanly).
+1. In trees-scan: `git merge origin/main` (clean), push.
+2. In trees-depthwise: `git merge origin/main`, resolve gbdt/train.mojo (main wins; FAST re-expressed), commit, push.
+3. Settle the overlap (NEXT_PASS item 6): both branches parallelise `launch_scan_vector_u32` in gbdt/gpu_util/kernel/scan.mojo under different defines. Read both versions (`git diff origin/main lane/apple-fast-trees-scan -- gbdt/gpu_util/kernel/scan.mojo` and the same for trees-depthwise). Keep ONE: prefer the one that is a true parallel scan (no one-block launch over runtime sizes) and has the cleaner guard; in the other branch drop its scan variant and make its CTR prep use the kept define. Then `git merge-tree --write-tree` the two heads; if they still conflict, merge trees-scan into trees-depthwise and resolve. Push both.
+4. Both ab files in the light form (aft_ab.sh for tree bindings, define-based; no -ident lines).

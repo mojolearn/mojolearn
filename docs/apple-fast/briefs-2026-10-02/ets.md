@@ -1,0 +1,6 @@
+# ets: damped-ets gap (new branch from main)
+Worktree ~/mojolearn-wt/ets, branch lane/apple-fast-ets (= origin/main).
+Gap: damped-ets taxi-hourly 3.3x (`grep -E 'ets' docs/apple-fast/m3-gaps-0834.tsv`).
+1. Find the ETS path (`grep -rn -il -E 'damped|holt|ets' tsa sequence x_sequence python/mojolearn 2>/dev/null | head`; the lane name in tools/bench_board_algos.py). Read how the damped-trend fit runs on the device: the parameter search (grid or L-BFGS over alpha, beta, phi) and the per-candidate SSE recurrence. Typical costs: one series per thread with a serial recurrence (fine) but a host loop over the parameter grid with a sync per candidate, or a one-block launch over runtime sizes, or the recurrence re-reading the series from global memory per candidate.
+2. Implement FAST + Apple only changes behind `-D MOJOLEARN_ETS_<NAME>`, GPU only: all candidates x series in one grid launch with the series in registers/shared memory, the argmin per series on the device, one host wait for the fit. Same model equations, so quality holds. Main's arima FIT_COMPACT / batched evaluation patterns (arima/impl/batched_fit.mojo) show the house style.
+3. docs/apple-fast/ab/ets.txt: one afc_ab_def.sh line (AFC_FAMILY=algos, lane damped-ets, taxi-hourly) with the define, plus ets.md. Copy tools/afc_ab_def.sh from origin/lane/apple-fast-tier (see COMMON.md).

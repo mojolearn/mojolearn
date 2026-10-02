@@ -1,0 +1,6 @@
+# decomp (decomp-linalg + decomp-sparse)
+Two worktrees: ~/mojolearn-wt/decomp-linalg (lane/apple-fast-decomp-linalg: eigh, lu-solve, qr, svd CholeskyQR2, tiled kit gemm, fused LU panel, pls, fa, tiled lstsq arm; WIP commit fab0562ed adding decomp-linalg.txt; conflicts in x_decomp/device.mojo, python/mojolearn/_linalg_impl.py) and ~/mojolearn-wt/decomp-sparse (lane/apple-fast-decomp-sparse: sparse-coder, dict-learning, sparse-pca, fastica, mds, isomap, gaussian-rp, sparse-rp; conflicts in x_decomp/device.mojo, python/mojolearn/_expansion_decomp.py).
+1. In decomp-linalg: `git merge origin/main`, resolve, commit, push. Then finish its WIP: complete docs/apple-fast/ab/decomp-linalg.txt (light form, one dataset first; include the tiled lstsq arm on istella: lstsq is 1.9x behind the best opponent there) and write decomp-linalg.md.
+2. In decomp-sparse: `git merge origin/main`, resolve, commit, push. Check its ab file follows the light form.
+3. Settle the overlap: `git merge-tree --write-tree lane/apple-fast-decomp-linalg lane/apple-fast-decomp-sparse`; if it conflicts, in decomp-sparse `git merge lane/apple-fast-decomp-linalg` and resolve. Push.
+4. Report in your reply whether decomp-sparse's gaussian-rp change covers the gap (gaussian-rp taxi 3.7x / istella 2.4x): another lane (kapprox) is told to check that before adding its own.

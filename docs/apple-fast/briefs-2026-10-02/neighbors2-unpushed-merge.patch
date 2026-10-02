@@ -1,0 +1,1073 @@
+diff --git a/bindings/_mojolearn_x_neighbors.mojo b/bindings/_mojolearn_x_neighbors.mojo
+index 3bf2e35a7..646bad27a 100644
+--- a/bindings/_mojolearn_x_neighbors.mojo
++++ b/bindings/_mojolearn_x_neighbors.mojo
+@@ -11,7 +11,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
+ from x_neighbors.eigh import op_eigh
+ from checks.vendor import COMPILED_VENDOR
+ from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_ocsvm, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp, op_svgp_var
+-from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_stats, op_svgp_stats_ff, op_svgp_ff, op_svgp_predict
++from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_stats, op_svgp_stats_ff, op_svgp_ff, op_svgp_predict, op_lp_iterate_knn, op_kernel_tiled
+ from x_neighbors.graph_dev import op_louvain
+ 
+ 
+@@ -954,6 +954,42 @@ def svgp_predict_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) r
+     return PythonObject(None)
+ 
+ 
++def lp_iterate_knn_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_cols = _a(a_, 0)
++    var v_vals = _a(a_, 1)
++    var v_ld = _a(a_, 2)
++    var v_ystatic = _a(a_, 3)
++    var v_unlabeled = _a(a_, 4)
++    var v_info = _a(a_, 5)
++    var v_n = _n(i_, 0)
++    var v_k = _n(i_, 1)
++    var v_c = _n(i_, 2)
++    var v_max_iter = _n(i_, 3)
++    var v_variant = _n(i_, 4)
++    var v_tol_hi = _n(i_, 5)
++    var v_tol_lo = _n(i_, 6)
++    var v_alpha = _f(f_, 0)
++    with GILReleased(Python()):
++        op_lp_iterate_knn(v_cols, v_vals, v_ld, v_ystatic, v_unlabeled, v_info, v_n, v_k, v_c, v_max_iter, v_variant, v_tol_hi, v_tol_lo, v_alpha)
++    return PythonObject(None)
++
++
++def kernel_tiled_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_x = _a(a_, 0)
++    var v_y = _a(a_, 1)
++    var v_res = _a(a_, 2)
++    var v_n = _n(i_, 0)
++    var v_m = _n(i_, 1)
++    var v_d = _n(i_, 2)
++    var v_kind = _n(i_, 3)
++    var v_gamma = _f(f_, 0)
++    var v_coef0 = _f(f_, 1)
++    var v_degree = _n(i_, 4)
++    with GILReleased(Python()):
++        op_kernel_tiled(v_x, v_y, v_res, v_n, v_m, v_d, v_kind, v_gamma, v_coef0, v_degree)
++    return PythonObject(None)
++
++
+ def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+     var v_a = _a(a_, 0)
+     var v_labels = _a(a_, 1)
+@@ -1036,6 +1072,8 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
+     m.def_function[svgp_stats_ff_binding]("xn_svgp_stats_ff")
+     m.def_function[svgp_ff_binding]("xn_svgp_ff")
+     m.def_function[svgp_predict_binding]("xn_svgp_predict")
++    m.def_function[lp_iterate_knn_binding]("xn_lp_iterate_knn")
++    m.def_function[kernel_tiled_binding]("xn_kernel_tiled")
+     m.def_function[louvain_binding]("xn_louvain")
+     m.def_function[eigh_binding]("xn_eigh")
+     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
+diff --git a/bindings/_mojolearn_x_neighbors_host.mojo b/bindings/_mojolearn_x_neighbors_host.mojo
+index 0417da5d3..86a973dbf 100644
+--- a/bindings/_mojolearn_x_neighbors_host.mojo
++++ b/bindings/_mojolearn_x_neighbors_host.mojo
+@@ -11,7 +11,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
+ from x_neighbors.eigh import op_eigh
+ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
+ from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_ocsvm, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp, op_svgp_var
+-from x_neighbors.iter_host import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_stats, op_svgp_stats_ff, op_svgp_ff, op_svgp_predict
++from x_neighbors.iter_host import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_stats, op_svgp_stats_ff, op_svgp_ff, op_svgp_predict, op_lp_iterate_knn, op_kernel_tiled
+ from x_neighbors.graph_host import op_louvain
+ 
+ 
+@@ -954,6 +954,42 @@ def svgp_predict_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) r
+     return PythonObject(None)
+ 
+ 
++def lp_iterate_knn_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_cols = _a(a_, 0)
++    var v_vals = _a(a_, 1)
++    var v_ld = _a(a_, 2)
++    var v_ystatic = _a(a_, 3)
++    var v_unlabeled = _a(a_, 4)
++    var v_info = _a(a_, 5)
++    var v_n = _n(i_, 0)
++    var v_k = _n(i_, 1)
++    var v_c = _n(i_, 2)
++    var v_max_iter = _n(i_, 3)
++    var v_variant = _n(i_, 4)
++    var v_tol_hi = _n(i_, 5)
++    var v_tol_lo = _n(i_, 6)
++    var v_alpha = _f(f_, 0)
++    with GILReleased(Python()):
++        op_lp_iterate_knn(v_cols, v_vals, v_ld, v_ystatic, v_unlabeled, v_info, v_n, v_k, v_c, v_max_iter, v_variant, v_tol_hi, v_tol_lo, v_alpha)
++    return PythonObject(None)
++
++
++def kernel_tiled_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
++    var v_x = _a(a_, 0)
++    var v_y = _a(a_, 1)
++    var v_res = _a(a_, 2)
++    var v_n = _n(i_, 0)
++    var v_m = _n(i_, 1)
++    var v_d = _n(i_, 2)
++    var v_kind = _n(i_, 3)
++    var v_gamma = _f(f_, 0)
++    var v_coef0 = _f(f_, 1)
++    var v_degree = _n(i_, 4)
++    with GILReleased(Python()):
++        op_kernel_tiled(v_x, v_y, v_res, v_n, v_m, v_d, v_kind, v_gamma, v_coef0, v_degree)
++    return PythonObject(None)
++
++
+ def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+     var v_a = _a(a_, 0)
+     var v_labels = _a(a_, 1)
+@@ -1036,6 +1072,8 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
+     m.def_function[svgp_stats_ff_binding]("xn_svgp_stats_ff")
+     m.def_function[svgp_ff_binding]("xn_svgp_ff")
+     m.def_function[svgp_predict_binding]("xn_svgp_predict")
++    m.def_function[lp_iterate_knn_binding]("xn_lp_iterate_knn")
++    m.def_function[kernel_tiled_binding]("xn_kernel_tiled")
+     m.def_function[louvain_binding]("xn_louvain")
+     m.def_function[eigh_binding]("xn_eigh")
+     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
+diff --git a/neighbors/estimator.mojo b/neighbors/estimator.mojo
+index d7f5e7a81..dd377d171 100644
+--- a/neighbors/estimator.mojo
++++ b/neighbors/estimator.mojo
+@@ -124,6 +124,8 @@ from core.identity_trace import IdentityTrace
+ from neighbors.impl.multi_gpu import knn_device_count, parallel_knn_rows
+ from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from std.os import getenv
++from std.sys.info import has_apple_gpu_accelerator
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from neighbors.impl.knn.knn import (
+@@ -1706,6 +1708,63 @@ def _rbc_index_and_count(
+     return nnz
+ 
+ 
++def _rbc_index_only(
++    ctx: DeviceContext,
++    mut x: DeviceBuffer[DType.float32],
++    mut r: DeviceBuffer[DType.float32],
++    mut x_reordered: DeviceBuffer[DType.float32],
++    mut r_indptr: DeviceBuffer[DType.int32],
++    mut r_1nn_cols: DeviceBuffer[DType.int32],
++    mut r_1nn_dists: DeviceBuffer[DType.float32],
++    mut r_radius: DeviceBuffer[DType.float32],
++    n_index: Int,
++    n_features: Int,
++    n_landmarks: Int,
++    metric: Int = RBC_METRIC_DEFAULT,
++    metric_arg: Float32 = Float32(2.0),
++) raises:
++    """`_rbc_index_and_count`'s index build without its count pass
++    (lane/apple-fast-neighbors2, 2026-10-02): the same `rbc_build_index`
++    call over the same scratch, for a fill whose row offsets the caller
++    already holds."""
++    var landmark_ids = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
++    var slot_cols = ctx.enqueue_create_buffer[DType.int32](n_index)
++    var slot_dists = ctx.enqueue_create_buffer[DType.float32](n_index)
++    var nearest = ctx.enqueue_create_buffer[DType.int32](n_index)
++    var nearest_dist = ctx.enqueue_create_buffer[DType.float32](n_index)
++    var counts = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
++    ctx.synchronize()
++    rbc_build_index(
++        ctx,
++        x,
++        r,
++        x_reordered,
++        landmark_ids,
++        slot_cols,
++        slot_dists,
++        nearest,
++        nearest_dist,
++        r_indptr,
++        r_1nn_cols,
++        r_1nn_dists,
++        r_radius,
++        counts,
++        n_index,
++        n_features,
++        n_landmarks,
++        UInt64(12345),
++        metric,
++        metric_arg,
++    )
++    ctx.synchronize()
++    _ = landmark_ids^
++    _ = slot_cols^
++    _ = slot_dists^
++    _ = nearest^
++    _ = nearest_dist^
++    _ = counts^
++
++
+ def _radius_check_shapes(
+     n_index: Int, n_queries: Int, n_features: Int, radius: Float32, who: String
+ ) raises:
+@@ -1873,26 +1932,62 @@ def radius_neighbors_fill(
+     ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
+     ctx.synchronize()
+ 
+-    var nnz = _rbc_index_and_count(
+-        ctx,
+-        x,
+-        queries,
+-        r,
+-        x_reordered,
+-        r_indptr,
+-        r_1nn_cols,
+-        r_1nn_dists,
+-        r_radius,
+-        adj_ia,
+-        vd,
+-        n_index,
+-        n_queries,
+-        n_features,
+-        n_landmarks,
+-        radius,
+-        metric,
+-        metric_arg,
+-    )
++    var nnz = 0
++    var reuse_count = False
++    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator():
++        # MOJOLEARN_RADIUS_FAST_REUSE_COUNT=1 (lane/apple-fast-neighbors2,
++        # 2026-10-02; FAST + Apple only, default off): the fill pass takes
++        # the row offsets the count pass wrote into `out_indptr_ptr` (the
++        # same array, handed back by python/mojolearn/neighbors.py
++        # radius_neighbors) and `nnz_capacity` (the count pass's total)
++        # instead of re-running the count. Cause: `radius_neighbors_fill`
++        # rebuilt the ball-cover index AND ran the whole eps query a second
++        # time in counting mode (`_rbc_index_and_count` above) before its
++        # own fill query: three eps passes and two index builds per
++        # radius_neighbors call. Here the index is built once more (the
++        # fill needs it) and the count pass is skipped. Same CSR: the
++        # offsets are the count pass's own.
++        if String(getenv("MOJOLEARN_RADIUS_FAST_REUSE_COUNT")) == "1":
++            reuse_count = True
++            _rbc_index_only(
++                ctx,
++                x,
++                r,
++                x_reordered,
++                r_indptr,
++                r_1nn_cols,
++                r_1nn_dists,
++                r_radius,
++                n_index,
++                n_features,
++                n_landmarks,
++                metric,
++                metric_arg,
++            )
++            ctx.enqueue_copy(dst_buf=adj_ia, src_ptr=out_indptr_ptr)
++            ctx.synchronize()
++            nnz = nnz_capacity
++    if not reuse_count:
++        nnz = _rbc_index_and_count(
++            ctx,
++            x,
++            queries,
++            r,
++            x_reordered,
++            r_indptr,
++            r_1nn_cols,
++            r_1nn_dists,
++            r_radius,
++            adj_ia,
++            vd,
++            n_index,
++            n_queries,
++            n_features,
++            n_landmarks,
++            radius,
++            metric,
++            metric_arg,
++        )
+     if nnz > nnz_capacity:
+         raise Error(
+             "radius_neighbors_fill: the search found "
+diff --git a/python/mojolearn/_expansion_neighbors.py b/python/mojolearn/_expansion_neighbors.py
+index 8beac624b..b3cae574d 100644
+--- a/python/mojolearn/_expansion_neighbors.py
++++ b/python/mojolearn/_expansion_neighbors.py
+@@ -138,6 +138,12 @@ _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
+ #: per-row `pcs`, LabelSpreading's per-cell-degree `ls_laplacian`, PageRank's
+ #: dangling rows in Python).
+ _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
++#: lane/apple-fast-neighbors2 (2026-10-02), FAST tier only, both default off:
++#: the rbf kernel matrix from staged tiles (`kernel_tiled`; OneClassSVM's
++#: Gram), and LabelPropagation / LabelSpreading's kNN-graph loop as one
++#: resident op (`lp_iterate_knn`) instead of three binding calls per step.
++_FAST_TILED_RBF = os.environ.get("MOJOLEARN_XN_FAST_TILED_RBF", "") == "1"
++_LP_FAST_RESIDENT = os.environ.get("MOJOLEARN_LP_FAST_RESIDENT", "") == "1"
+ 
+ 
+ class _XNeighbors(NumericModeMixin):
+@@ -165,11 +171,20 @@ class _XNeighbors(NumericModeMixin):
+         self._op("l1dist", [(A, 0), (B, 0), (out, 1)], (n, m, d))
+         return out
+ 
++    def _fast_tier(self):
++        """True on the FAST tier (the lane/apple-fast-neighbors2 switches
++        apply there only; IDENTICAL keeps its ops)."""
++        try:
++            return self.numeric_mode_used() == "fast"
++        except Exception:
++            return False
++
+     def _kernel(self, A, B, kind, gamma, coef0, degree):
+         n, d = A.shape
+         m = B.shape[0]
+         out = _empty_out((n, m), "<f4")
+-        self._op("kernel", [(A, 0), (B, 0), (out, 1)], (n, m, d, _KERNELS[kind], int(degree)),
++        op = "kernel_tiled" if (_FAST_TILED_RBF and kind == "rbf" and self._fast_tier()) else "kernel"
++        self._op(op, [(A, 0), (B, 0), (out, 1)], (n, m, d, _KERNELS[kind], int(degree)),
+                  (_f32_scalar(gamma), _f32_scalar(coef0)))
+         return out
+ 
+@@ -1140,6 +1155,20 @@ class _LabelPropagationBase(_XNeighbors):
+         ld = Array.from_list(ld0, "<f4")
+         ystatic = Array.from_list(ys, "<f4")
+         unlabeled = _i32(unl, "unlabeled")
++        if _LP_FAST_RESIDENT and not _HOST_LOOP_LP and isinstance(G, tuple) and self._fast_tier():
++            # lane/apple-fast-neighbors2: the loop below over the compact kNN
++            # graph as ONE resident op (x_neighbors/iter_device.mojo
++            # op_lp_iterate_knn), the graph uploaded once, the stopping sum
++            # and test on the device
++            cols, vals, _ = G
++            info = empty((2,), "<i4")
++            tol_bits = struct.unpack("<Q", struct.pack("<d", float(self.tol)))[0]
++            self._op("lp_iterate_knn", [(cols, 0), (vals, 0), (ld, 1), (ystatic, 0), (unlabeled, 0), (info, 1)],
++                     (n, cols.shape[1], C, int(self.max_iter), 0 if self._variant == "propagation" else 1,
++                      tol_bits >> 32, tol_bits & 0xFFFFFFFF),
++                     (_f32_scalar(self.alpha) if self._variant != "propagation" else 0.0,))
++            n_iter = int(info.tolist()[0])
++            return self._finish_fit(X, classes, ld, n, C, n_iter)
+         if not _HOST_LOOP_LP and not isinstance(G, tuple):
+             # The loop below as ONE resident op (x_neighbors/iter_device.mojo):
+             # the same items in the same order, the graph uploaded once, tol
+@@ -1676,6 +1705,9 @@ class SVGP(_XNeighbors):
+         qmu = _empty_out((M,), "<f4")
+         qsqrt = _empty_out((M, M), "<f4")
+         info = _empty_out((2,), "<f4")
++        # FAST on Apple with `-D MOJOLEARN_SVGP_FAST_GPU=1` (lane/apple-fast-neighbors2):
++        # the binding's `svgp` driver runs x_neighbors/svgp_fast.mojo instead
++        # (gen.py FAST_ALT); no switch here
+         self._op("svgp", [(Kuu, 0), (B, 0), (b, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
+                  (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
+         elbo, ok = info.tolist()
+diff --git a/python/mojolearn/_surface_neighbors.py b/python/mojolearn/_surface_neighbors.py
+index 56cf51fc5..f25301b29 100644
+--- a/python/mojolearn/_surface_neighbors.py
++++ b/python/mojolearn/_surface_neighbors.py
+@@ -101,6 +101,8 @@ FAMILIES = (
+             "xn_svgp_stats_ff",
+             "xn_svgp_ff",
+             "xn_svgp_predict",
++            "xn_lp_iterate_knn",
++            "xn_kernel_tiled",
+             "xn_louvain",
+             "xn_eigh",
+             "x_neighbors_numeric_mode",
+diff --git a/x_neighbors/device_ops.mojo b/x_neighbors/device_ops.mojo
+index dfacac89e..0e469cae1 100644
+--- a/x_neighbors/device_ops.mojo
++++ b/x_neighbors/device_ops.mojo
+@@ -9,7 +9,8 @@ from std.sys.compile import is_defined
+ from bindings.hostptr import copy_f32
+ from core.host_parallel import host_parallelize
+ from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
++from std.sys.info import has_apple_gpu_accelerator
+ from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_init_item, svgp_chol2_item, svgp_fix2_item, svgp_solve_item, svgp_mid_item, svgp_qchol_item, svgp_qfix_item, svgp_ypart_item, svgp_fin_item, svgp_var_item
+ from x_neighbors.block_ops import ocsvm_smo_block, OCSVM_TPB
+ 
+@@ -1626,6 +1627,10 @@ def svgp_k8(kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt
+ 
+ 
+ def op_svgp(kuu: Int, bmat: Int, b: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32) raises:
++    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SVGP_FAST_GPU"]():
++        from x_neighbors.svgp_fast import svgp_solve_device
++        svgp_solve_device(kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, m, n, noise, jitter, kdiag)
++        return
+     var ctx = xn_ctx()
+     var d_kuu = _buf(ctx, kuu, m * m, True)
+     var d_bmat = _buf(ctx, bmat, m * m, True)
+diff --git a/x_neighbors/gen.py b/x_neighbors/gen.py
+index cd621768e..f1fb374cf 100644
+--- a/x_neighbors/gen.py
++++ b/x_neighbors/gen.py
+@@ -254,6 +254,19 @@ CUSTOM_OPS = [
+      [("q", "fin", "n * d"), ("z", "fin", "m * d"), ("alpha", "fin", "m"), ("cmat", "fin", "m * m"),
+       ("mean", "fout", "n"), ("var_", "fout", "n"),
+       ("n", "int"), ("m", "int"), ("d", "int"), ("gamma", "float"), ("variance", "float"), ("kdiag", "float")]),
++    # lane/apple-fast-neighbors2 (2026-10-02), FAST tier only: LabelPropagation
++    # / LabelSpreading's fit loop over the compact kNN graph (cols, vals of
++    # lp_knn_graph) resident on the device (MOJOLEARN_LP_FAST_RESIDENT=1)
++    ("lp_iterate_knn",
++     [("cols", "iin", "n * k"), ("vals", "fin", "n * k"), ("ld", "finout", "n * c"), ("ystatic", "fin", "n * c"),
++      ("unlabeled", "iin", "n"), ("info", "iout", "2"), ("n", "int"), ("k", "int"), ("c", "int"), ("max_iter", "int"),
++      ("variant", "int"), ("tol_hi", "int"), ("tol_lo", "int"), ("alpha", "float")]),
++    # lane/apple-fast-neighbors2, FAST tier only: `kernel` with x and y tiles
++    # staged in threadgroup memory (rbf; other kinds take `kernel`),
++    # MOJOLEARN_XN_FAST_TILED_RBF=1
++    ("kernel_tiled",
++     [("x", "fin", "n * d"), ("y", "fin", "m * d"), ("res", "fout", "n * m"), ("n", "int"), ("m", "int"), ("d", "int"),
++      ("kind", "int"), ("gamma", "float"), ("coef0", "float"), ("degree", "int")]),
+ ]
+ 
+ #: Ops whose GPU driver runs a threadgroup form of the (sequential) item
+@@ -276,6 +289,17 @@ HOST_RUN = {
+     "nc_std": "MOJOLEARN_XN_SERIAL_GPU",
+ }
+ 
++#: lane/apple-fast-neighbors2 (2026-10-02): a FAST + Apple alternate for a
++#: generated GPU driver, compiled only under its `-D <define>`
++#: (tools/afc_ab_def.sh), default off: op -> (module, function, define).
++#: The function takes op_<name>'s whole signature (no scratch) and replaces
++#: the body; the host driver keeps the item, IDENTICAL compiles the driver
++#: unchanged. svgp: the m x m solve through the cholesky lane's potrf /
++#: solve (x_neighbors/svgp_fast.mojo) instead of the staged items.
++FAST_ALT = {
++    "svgp": ("svgp_fast", "svgp_solve_device", "MOJOLEARN_SVGP_FAST_GPU"),
++}
++
+ BLOCK_OPS = {
+     "ocsvm": ("block_ops", "ocsvm_smo_block", "OCSVM_TPB", "MOJOLEARN_XN_SERIAL_SMO"),
+ }
+@@ -333,7 +357,8 @@ def device():
+          "from bindings.hostptr import copy_f32\n",
+          "from core.host_parallel import host_parallelize\n",
+          "from core.host_predict_threads import host_predict_chunk, host_predict_task_count\n",
+-         "from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL\n", imports("device"),
++         "from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST\n",
++         "from std.sys.info import has_apple_gpu_accelerator\n", imports("device"),
+          "".join(f"from x_neighbors.{m} import {f}, {c}\n" for m, f, c, _ in BLOCK_OPS.values()), """
+ comptime BLOCK = 128
+ 
+@@ -526,6 +551,12 @@ def _i(addr: Int) -> IP:
+             body = (f"    comptime if not is_defined[\"{HOST_RUN[name]}\"]():\n"
+                     + "".join("    " + ln + "\n" for ln in hb.rstrip("\n").split("\n"))
+                     + "        return\n" + body)
++        if name in FAST_ALT:
++            am, af, ad = FAST_ALT[name]
++            al = ", ".join([b[0] for b in bufs if b[1] not in ("fscr", "iscr")] + [p[0] for p in scal])
++            body = (f"    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined[\"{ad}\"]():\n"
++                    f"        from x_neighbors.{am} import {af}\n"
++                    f"        {af}({al})\n        return\n" + body)
+         for b in bufs:
+             up = "True" if b[1] in ("fin", "finout", "iin", "iinout") else "False"
+             addr = "0" if b[1] in ("fscr", "iscr") else b[0]
+diff --git a/x_neighbors/iter_device.mojo b/x_neighbors/iter_device.mojo
+index 86185bdc4..ac164fb01 100644
+--- a/x_neighbors/iter_device.mojo
++++ b/x_neighbors/iter_device.mojo
+@@ -35,7 +35,7 @@ from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _a
+ from checks.numerics import identical_mul, identical_div, identical_sqrt
+ from std.memory import bitcast as _bc
+ from x_neighbors.device_ops import (
+-    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK,
++    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK, op_kernel,
+     absdiff_sum_k0, absdiff_sum_k1, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
+     pagerank_step_kernel, cc_step_kernel,
+     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
+@@ -44,6 +44,10 @@ from x_neighbors.device_ops import (
+ from x_neighbors.items import matmul_tn_acc_item, K_RBF, U_IDENTITY
+ from x_neighbors.lp_spmm import lp_spmm_kernel
+ from core.device_zero import enqueue_fill
++from core.pinned_reduce import pinned_block_sum
++from checks.numerics import NUMERIC_IDENTICAL
++from checks.numerics import identical_exp
++from x_neighbors.items import lp_clamp_item, ls_clamp_item
+ 
+ 
+ def _absdiff_launch(ctx: DeviceContext, a: FP, b: FP, s: FP, part: FP, count: Int) raises:
+@@ -1761,3 +1765,248 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
+     _ = d_cent^
+     _ = d_std^
+     _ = d_dsc^
++
++
++# ---------------------------------------------------------------- lp_iterate_knn
++#: MOJOLEARN_LP_FAST_RESIDENT=1 (lane/apple-fast-neighbors2, 2026-10-02; FAST
++#: tier only, Python-side switch, default off): LabelPropagation /
++#: LabelSpreading's fit loop over the compact kNN graph as ONE resident op.
++#: Cause: with kernel='knn' `_LabelPropagationBase.fit`
++#: (python/mojolearn/_expansion_neighbors.py) runs the loop in Python, three
++#: binding calls per iteration: `absdiff_sum` (a one-item serial fold over
++#: n x C on the host), `lp_knn_product` (uploads cols, vals and the
++#: distributions, downloads the product) and `lp_clamp` / `ls_clamp` (upload,
++#: download) -- about 10 MB across the boundary and two drains per iteration
++#: at the board's 200,000 rows, for up to 1,000 iterations. Here the graph
++#: goes up once, the stopping sum is block partials + a one-block fold on the
++#: device (`pinned_block_sum`, FAST's block sum), the stopping test sets a
++#: device flag the later kernels of the batch honour, and LPK_BATCH iterations
++#: are enqueued per drain. The product is the finite-x item (a kNN graph's
++#: values and the distributions are finite); the fold order differs from the
++#: item's ascending chain (FAST promises quality, not bits); tol is compared
++#: in float32 on the device. Expected: the per-iteration boundary crossings
++#: gone (LabelPropagation taxi runs its 1,000 steps).
++comptime LPK_TPB = 256
++comptime LPK_BATCH = 16
++comptime LPK_FAST_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
++
++
++def lpk_absdiff_partial_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
++    """Block partials of sum |a - b|; nothing once the flag is set."""
++    if flag.unsafe_load(0) != 0:
++        return
++    var tid = Int(thread_idx.x)
++    var i = Int(block_idx.x) * LPK_TPB + tid
++    var v = Float32(0)
++    if i < Int(count_):
++        v = abs(a.unsafe_load(i) - b.unsafe_load(i))
++    var s = pinned_block_sum[LPK_TPB](v)
++    if tid == 0:
++        part.unsafe_store(Int(block_idx.x), s)
++
++
++def lpk_check_kernel(part: FP, nparts_: Int64, flag: IP, iters: IP, tol_: Float32):
++    """ONE block of LPK_TPB threads: the partials folded; below tol the flag
++    is set (the loop stops before this step), else the step is counted."""
++    if flag.unsafe_load(0) != 0:
++        return
++    var tid = Int(thread_idx.x)
++    var acc = Float32(0)
++    var i = tid
++    while i < Int(nparts_):
++        acc += part.unsafe_load(i)
++        i += LPK_TPB
++    var s = pinned_block_sum[LPK_TPB](acc)
++    if tid == 0:
++        if s < tol_:
++            flag.unsafe_store(0, 1)
++        else:
++            iters.unsafe_store(0, iters.unsafe_load(0) + 1)
++
++
++def lpk_product_kernel(cols: IP, vals: FP, x: FP, res: FP, flag: IP, n_: Int64, k_: Int64, c_: Int64):
++    """`lp_knn_product_item` (finite x); nothing once the flag is set."""
++    if flag.unsafe_load(0) != 0:
++        return
++    var t = _tid()
++    if t < Int(n_) * Int(c_):
++        lp_knn_product_item(t, cols, vals, x, res, Int(n_), Int(n_), Int(k_), Int(c_), True)
++
++
++def lpk_clamp_kernel(
++    ld: FP, ystatic: FP, unlabeled: IP, res: FP, flag: IP, n_: Int64, c_: Int64, variant_: Int64, alpha_: Float32,
++):
++    """variant 0 `lp_clamp_item` per row, 1 `ls_clamp_item` per cell;
++    nothing once the flag is set."""
++    if flag.unsafe_load(0) != 0:
++        return
++    var t = _tid()
++    var n = Int(n_)
++    var c = Int(c_)
++    if variant_ == 0:
++        if t < n:
++            lp_clamp_item(t, ld, ystatic, unlabeled, res, n, c)
++    else:
++        if t < n * c:
++            ls_clamp_item(t, ld, ystatic, res, n * c, alpha_)
++
++
++def op_lp_iterate_knn(
++    cols: Int, vals: Int, ld: Int, ystatic: Int, unlabeled: Int, info: Int,
++    n: Int, k: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int, alpha: Float32,
++) raises:
++    """The Python loop of `_LabelPropagationBase.fit` over the compact kNN
++    graph, resident (see LPK_TPB above). `ld` in: the initial distributions,
++    out: the last. info (int32 x 2): n_iter_, converged. tol is Python's
++    float64 bits."""
++    comptime if not LPK_FAST_BUILD:
++        raise Error("lp_iterate_knn: the FAST tier only (MOJOLEARN_LP_FAST_RESIDENT=1)")
++    else:
++        var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
++        var nc = n * c
++        var ctx = xn_ctx()
++        var d_cols = _buf_i(ctx, cols, n * k, True)
++        var d_vals = _buf(ctx, vals, n * k, True)
++        var d_a = _buf(ctx, ld, nc, True)
++        var d_b = _buf(ctx, 0, nc, False)
++        ctx.enqueue_memset(d_b, Float32(0))
++        var d_nxt = _buf(ctx, 0, nc, False)
++        var d_ys = _buf(ctx, ystatic, nc, True)
++        var d_unl = _buf_i(ctx, unlabeled, n, True)
++        var nparts = max(1, (nc + LPK_TPB - 1) // LPK_TPB)
++        var d_part = _buf(ctx, 0, nparts, False)
++        var h_fl = List[Int32](length=2, fill=Int32(0))
++        var d_fl = _buf_i(ctx, Int(h_fl.unsafe_ptr()), 2, True)
++        var flp: IP = d_fl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++        var itp: IP = flp + 1
++        var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++        var prev: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++        var tol32 = Float32(tol)
++        var done = 0
++        var converged = False
++        while done < max_iter and not converged:
++            var steps = min(LPK_BATCH, max_iter - done)
++            for _ in range(steps):
++                ctx.enqueue_function[lpk_absdiff_partial_kernel](
++                    cur, prev, d_part.unsafe_ptr(), flp, Int64(nc),
++                    grid_dim=nparts, block_dim=LPK_TPB,
++                )
++                ctx.enqueue_function[lpk_check_kernel](
++                    d_part.unsafe_ptr(), Int64(nparts), flp, itp, tol32,
++                    grid_dim=1, block_dim=LPK_TPB,
++                )
++                ctx.enqueue_function[lpk_product_kernel](
++                    d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), flp,
++                    Int64(n), Int64(k), Int64(c), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
++                )
++                # prev = ld; ld = clamp(nxt): the clamp writes over the buffer
++                # the old prev held, then the two names swap (op_lp_iterate)
++                ctx.enqueue_function[lpk_clamp_kernel](
++                    d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), prev, flp,
++                    Int64(n), Int64(c), Int64(variant), alpha,
++                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
++                )
++                var t = cur
++                cur = prev
++                prev = t
++            ctx.enqueue_copy(dst_ptr=h_fl.unsafe_ptr(), src_buf=d_fl)
++            ctx.synchronize()
++            converged = h_fl[0] != 0
++            done += steps
++        # steps taken: the loop's n_iter_ whether it converged (it) or ran out
++        var n_iter = Int(h_fl[1])
++        if n_iter % 2 == 0:
++            _down(ctx, d_a, ld, nc)
++        else:
++            _down(ctx, d_b, ld, nc)
++        ctx.synchronize()
++        var inf = IP(unsafe_from_address=info)
++        inf.unsafe_store(0, Int32(n_iter))
++        inf.unsafe_store(1, Int32(1 if converged else 0))
++        _ = h_fl^
++        _ = d_fl^
++        _ = d_part^
++        _ = d_cols^
++        _ = d_vals^
++        _ = d_a^
++        _ = d_b^
++        _ = d_nxt^
++        _ = d_ys^
++        _ = d_unl^
++        _ = ctx^
++
++
++# ---------------------------------------------------------------- kernel_tiled
++#: MOJOLEARN_XN_FAST_TILED_RBF=1 (lane/apple-fast-neighbors2, 2026-10-02; FAST
++#: tier only, Python-side switch, default off): the rbf kernel matrix from
++#: KT_T x KT_T tiles whose x and y rows are staged in threadgroup memory.
++#: Cause: `kernel_kernel` (x_neighbors/device_ops.mojo, one thread per cell)
++#: streams both rows from device memory for every cell: OneClassSVM's
++#: 10,000 x 10,000 Gram at Istella's 220 features reads each y row 10,000
++#: times (88 GB of traffic for 400 MB of output). Here a block reads its 16
++#: x rows and 16 y rows once and folds 256 cells from threadgroup memory.
++#: Same values up to FAST's fma/exp spellings. d <= KT_MAX_D; other kinds
++#: and wider rows take `kernel`.
++comptime KT_T = 16
++comptime KT_TPB = KT_T * KT_T
++comptime KT_MAX_D = 224
++
++
++def kernel_rbf_tiled_kernel(x: FP, y: FP, res: FP, n_: Int64, m_: Int64, d_: Int64, gamma_: Float32):
++    var n = Int(n_)
++    var m = Int(m_)
++    var d = Int(d_)
++    var tid = Int(thread_idx.x)
++    var i0 = Int(block_idx.y) * KT_T
++    var j0 = Int(block_idx.x) * KT_T
++    var xs = stack_allocation[KT_T * KT_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
++    var ys = stack_allocation[KT_T * KT_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
++    var q = tid
++    while q < KT_T * d:
++        var r = q // d
++        var f = q - r * d
++        var xv = Float32(0)
++        var yv = Float32(0)
++        if i0 + r < n:
++            xv = x.unsafe_load((i0 + r) * d + f)
++        if j0 + r < m:
++            yv = y.unsafe_load((j0 + r) * d + f)
++        xs[q] = xv
++        ys[q] = yv
++        q += KT_TPB
++    barrier()
++    var ti = tid // KT_T
++    var tj = tid - ti * KT_T
++    var i = i0 + ti
++    var j = j0 + tj
++    if i < n and j < m:
++        var acc = Float32(0)
++        for f in range(d):
++            var df = xs[ti * d + f] - ys[tj * d + f]
++            acc = identical_mul_add(df, df, acc)
++        res.unsafe_store(i * m + j, identical_exp(-gamma_ * acc))
++
++
++def op_kernel_tiled(
++    x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma: Float32, coef0: Float32, degree: Int,
++) raises:
++    """`kernel` from staged tiles for the rbf kind (see KT_T above); every
++    other kind, and d > KT_MAX_D, is `op_kernel` itself."""
++    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++        if kind == K_RBF and d >= 1 and d <= KT_MAX_D and n > 0 and m > 0:
++            var ctx = xn_ctx()
++            var d_x = _buf(ctx, x, n * d, True)
++            var d_y = _buf(ctx, y, m * d, True)
++            var d_res = _buf(ctx, 0, n * m, False)
++            ctx.enqueue_function[kernel_rbf_tiled_kernel](
++                d_x.unsafe_ptr(), d_y.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), gamma,
++                grid_dim=((m + KT_T - 1) // KT_T, (n + KT_T - 1) // KT_T, 1), block_dim=(KT_TPB, 1, 1),
++            )
++            _down(ctx, d_res, res, n * m)
++            ctx.synchronize()
++            _ = d_x^
++            _ = d_y^
++            _ = d_res^
++            _ = ctx^
++            return
++    op_kernel(x, y, res, n, m, d, kind, gamma, coef0, degree)
+diff --git a/x_neighbors/iter_host.mojo b/x_neighbors/iter_host.mojo
+index fe4760a2d..a8a1c9f0d 100644
+--- a/x_neighbors/iter_host.mojo
++++ b/x_neighbors/iter_host.mojo
+@@ -15,7 +15,7 @@ from x_neighbors.items import (
+     pagerank_step_item, cc_step_item, pcs_item, knn_sq_item, nc_stats_item,
+ )
+ 
+-from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE
++from x_neighbors.host_ops import op_knn_impute_cells, op_kernel, op_svgp, X_NEIGHBORS_HOST_SABOTAGE
+ from x_neighbors.items import (
+     kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
+     matmul_tn_acc_item, K_RBF, U_IDENTITY,
+@@ -486,3 +486,66 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
+     comptime if X_NEIGHBORS_HOST_SABOTAGE:
+         if (n_classes * d) > 0:
+             cp.unsafe_store(0, cp.unsafe_load(0) + Float32(1e-3))
++
++
++def op_lp_iterate_knn(
++    cols: Int, vals: Int, ld: Int, ystatic: Int, unlabeled: Int, info: Int,
++    n: Int, k: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int, alpha: Float32,
++) raises:
++    """The CPU column of the resident kNN-graph loop (lane/apple-fast-neighbors2):
++    `_LabelPropagationBase.fit`'s Python loop over the same items
++    (absdiff_sum, lp_knn_product, lp_clamp / ls_clamp)."""
++    var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
++    var nc = n * c
++    var pc = IP(unsafe_from_address=cols)
++    var pv = FP(unsafe_from_address=vals)
++    var pld = FP(unsafe_from_address=ld)
++    var pys = FP(unsafe_from_address=ystatic)
++    var pun = IP(unsafe_from_address=unlabeled)
++    var cur = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
++    var prev = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
++    var nxt = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
++    var hs = List[Float32](length=1, fill=Float32(0))
++    var p_cur = FP(unsafe_from_address=Int(cur.unsafe_ptr()))
++    var p_prev = FP(unsafe_from_address=Int(prev.unsafe_ptr()))
++    var p_nxt = FP(unsafe_from_address=Int(nxt.unsafe_ptr()))
++    var p_hs = FP(unsafe_from_address=Int(hs.unsafe_ptr()))
++    for q in range(nc):
++        cur[q] = pld.unsafe_load(q)
++    var n_iter = 0
++    var converged = False
++    for it in range(max_iter):
++        n_iter = it
++        absdiff_sum_item(0, p_cur, p_prev, p_hs, nc)
++        if Float64(hs[0]) < tol:
++            converged = True
++            break
++        for q in range(nc):
++            prev[q] = cur[q]
++        var finite = lp_knn_finite(p_cur, nc)
++        for t in range(nc):
++            lp_knn_product_item(t, pc, pv, p_cur, p_nxt, n, n, k, c, finite)
++        if variant == 0:
++            for t in range(n):
++                lp_clamp_item(t, p_nxt, pys, pun, p_cur, n, c)
++        else:
++            for t in range(nc):
++                ls_clamp_item(t, p_nxt, pys, p_cur, nc, alpha)
++    if not converged:
++        n_iter += 1
++    for q in range(nc):
++        pld.unsafe_store(q, cur[q])
++    var inf = IP(unsafe_from_address=info)
++    inf.unsafe_store(0, Int32(n_iter))
++    inf.unsafe_store(1, Int32(1 if converged else 0))
++    _ = cur^
++    _ = prev^
++    _ = nxt^
++    _ = hs^
++
++
++def op_kernel_tiled(
++    x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma: Float32, coef0: Float32, degree: Int,
++) raises:
++    """The CPU column of `kernel_tiled`: `kernel` itself."""
++    op_kernel(x, y, res, n, m, d, kind, gamma, coef0, degree)
+diff --git a/x_neighbors/svgp_fast.mojo b/x_neighbors/svgp_fast.mojo
+new file mode 100644
+index 000000000..4e22b40a1
+--- /dev/null
++++ b/x_neighbors/svgp_fast.mojo
+@@ -0,0 +1,251 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""SVGP's m x m solve on the device (lane/apple-fast-neighbors2, 2026-10-02;
++FAST + Apple only, under `-D MOJOLEARN_SVGP_FAST_GPU=1` from the generated
++`op_svgp` driver (x_neighbors/gen.py FAST_ALT), default off).
++
++Cause: `svgp` is a HOST_RUN op (x_neighbors/gen.py): `svgp_item` runs on the
++host, three serial m x m Cholesky factorizations (m = 512 on the board) and
++column solves over the host pool, a host step inside the fit between two
++device ops (`svgp_stats`, `svgp_predict`). Here the same quantities come
++from the cholesky lane's device factorization and solve (`potrf_lower`,
++`cho_solve`, `chol_logdet` in cholesky/checks/) and elementwise / matmul
++kernels of this lane, with only five scalars read back for the collapsed
++bound. Same algebra as `svgp_item`: Sigma = Kuu + jitter I + B / noise,
++alpha = Sigma^-1 b / noise, C = Kuu^-1 - Sigma^-1, q_mu = Kuu alpha,
++q_sqrt = chol(Kuu Sigma^-1 Kuu), elbo as the item's formula; FAST promises
++quality, not the item's bits (the blocked factorization and the solves fold
++in their own order).
++"""
++from std.gpu import block_idx, thread_idx
++from std.math import log
++from max.gpu.host import DeviceBuffer, DeviceContext
++from core.identity_trace import IdentityTrace
++from core.pinned_reduce import pinned_block_sum
++from cholesky.checks.potrf import (
++    potrf_lower,
++    chol_workspace_floats,
++    chol_nb_for,
++    chol_default_nb_hint,
++    chol_logdet,
++    CHOL_PANEL_TPB,
++    CHOL_ELEM_TPB,
++)
++from cholesky.checks.trsm import cho_solve, CHOL_SOLVE_TPB
++from x_neighbors.items import FP
++from x_neighbors.device_ops import xn_ctx, _grid, _tid, BLOCK, matmul_kernel
++
++comptime SVF_TPB = 256
++
++
++def svf_ew_kernel(a: FP, b: FP, dst: FP, count_: Int64, m_: Int64, mode_: Int64, s_: Float32):
++    """Elementwise over `count` cells of an m x m (or m x 1) buffer:
++    0 dst = a; 1 dst = a + s on the diagonal (jitter); 2 dst = a + b / s;
++    3 dst = a - b; 4 dst = I; 5 dst = a / s."""
++    var t = _tid()
++    if t >= Int(count_):
++        return
++    var m = Int(m_)
++    var i = t // m
++    var j = t - i * m
++    var v = Float32(0)
++    if mode_ == 0:
++        v = a.unsafe_load(t)
++    elif mode_ == 1:
++        v = a.unsafe_load(t)
++        if i == j:
++            v = v + s_
++    elif mode_ == 2:
++        v = a.unsafe_load(t) + b.unsafe_load(t) / s_
++    elif mode_ == 3:
++        v = a.unsafe_load(t) - b.unsafe_load(t)
++    elif mode_ == 4:
++        v = Float32(1) if i == j else Float32(0)
++    else:
++        v = a.unsafe_load(t) / s_
++    dst.unsafe_store(t, v)
++
++
++def svf_fold_kernel(a: FP, b: FP, dst: FP, count_: Int64, m_: Int64, mode_: Int64):
++    """ONE block of SVF_TPB threads, a strided fold then the block sum:
++    0 sum a[i] * b[i]; 1 sum of the diagonal of the m x m a; 2 sum of the
++    `count` partials in a."""
++    var tid = Int(thread_idx.x)
++    var acc = Float32(0)
++    var i = tid
++    while i < Int(count_):
++        if mode_ == 0:
++            acc += a.unsafe_load(i) * b.unsafe_load(i)
++        elif mode_ == 1:
++            acc += a.unsafe_load(i * Int(m_) + i)
++        else:
++            acc += a.unsafe_load(i)
++        i += SVF_TPB
++    var s = pinned_block_sum[SVF_TPB](acc)
++    if tid == 0:
++        dst.unsafe_store(0, s)
++
++
++def svf_sq_partial_kernel(y: FP, part: FP, n_: Int64):
++    """Block partials of sum y^2 over n."""
++    var tid = Int(thread_idx.x)
++    var i = Int(block_idx.x) * SVF_TPB + tid
++    var v = Float32(0)
++    if i < Int(n_):
++        var yv = y.unsafe_load(i)
++        v = yv * yv
++    var s = pinned_block_sum[SVF_TPB](v)
++    if tid == 0:
++        part.unsafe_store(Int(block_idx.x), s)
++
++
++def _ew(ctx: DeviceContext, a: FP, b: FP, dst: FP, count: Int, m: Int, mode: Int, s: Float32) raises:
++    ctx.enqueue_function[svf_ew_kernel](
++        a, b, dst, Int64(count), Int64(m), Int64(mode), s,
++        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
++    )
++
++
++def _fold(ctx: DeviceContext, a: FP, b: FP, dst: FP, count: Int, m: Int, mode: Int) raises:
++    ctx.enqueue_function[svf_fold_kernel](
++        a, b, dst, Int64(count), Int64(m), Int64(mode), grid_dim=1, block_dim=SVF_TPB,
++    )
++
++
++def _ptr(mut buf: DeviceBuffer[DType.float32]) -> FP:
++    return buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++
++
++def svgp_solve_device(
++    kuu: Int, bmat: Int, b: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int,
++    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
++) raises:
++    """`svgp_item` on the device (module note). info = [elbo, ok]; on a
++    failed factorization info = [0, 0] and the other outputs are not
++    written, as the item leaves them."""
++    var ctx = xn_ctx()
++    var mm = m * m
++    var d_kuu = ctx.enqueue_create_buffer[DType.float32](mm)
++    ctx.enqueue_copy(dst_buf=d_kuu, src_ptr=FP(unsafe_from_address=kuu))
++    var d_bm = ctx.enqueue_create_buffer[DType.float32](mm)
++    ctx.enqueue_copy(dst_buf=d_bm, src_ptr=FP(unsafe_from_address=bmat))
++    var d_b = ctx.enqueue_create_buffer[DType.float32](m)
++    ctx.enqueue_copy(dst_buf=d_b, src_ptr=FP(unsafe_from_address=b))
++    var d_y = ctx.enqueue_create_buffer[DType.float32](n)
++    ctx.enqueue_copy(dst_buf=d_y, src_ptr=FP(unsafe_from_address=y))
++    var d_kj = ctx.enqueue_create_buffer[DType.float32](mm)
++    var d_luu = ctx.enqueue_create_buffer[DType.float32](mm)
++    var d_ls = ctx.enqueue_create_buffer[DType.float32](mm)
++    var d_t = ctx.enqueue_create_buffer[DType.float32](mm)
++    var d_e2 = ctx.enqueue_create_buffer[DType.float32](mm)
++    var d_c = ctx.enqueue_create_buffer[DType.float32](mm)
++    var d_s = ctx.enqueue_create_buffer[DType.float32](mm)
++    var d_al = ctx.enqueue_create_buffer[DType.float32](m)
++    var d_col = ctx.enqueue_create_buffer[DType.float32](m)
++    var d_qmu = ctx.enqueue_create_buffer[DType.float32](m)
++    var nparts = max(1, (n + SVF_TPB - 1) // SVF_TPB)
++    var d_part = ctx.enqueue_create_buffer[DType.float32](nparts)
++    var d_sc = ctx.enqueue_create_buffer[DType.float32](4)
++    var nb = chol_nb_for(m, chol_default_nb_hint())
++    var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(m, nb))
++    var dwork = ctx.enqueue_create_buffer[DType.float32](m + 1)
++    var trace = IdentityTrace()
++    trace.header("svgp_fast: m=" + String(m) + " n=" + String(n))
++    var pkj = _ptr(d_kj)
++    var pluu = _ptr(d_luu)
++    var pls = _ptr(d_ls)
++    var pt = _ptr(d_t)
++    var pe2 = _ptr(d_e2)
++    var pc = _ptr(d_c)
++    var ps = _ptr(d_s)
++    var pal = _ptr(d_al)
++    var pcol = _ptr(d_col)
++    var psc = _ptr(d_sc)
++    var pb = _ptr(d_b)
++    var pbm = _ptr(d_bm)
++    # Kuu + jitter I, its copy to factor, Sigma = Kuu_j + B / noise
++    _ew(ctx, _ptr(d_kuu), pkj, pkj, mm, m, 1, jitter)
++    _ew(ctx, pkj, pkj, pluu, mm, m, 0, Float32(0))
++    _ew(ctx, pkj, pbm, pls, mm, m, 2, noise)
++    var run1 = potrf_lower(ctx, d_luu, ws, m, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
++    var run2 = potrf_lower(ctx, d_ls, ws, m, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
++    var inf = FP(unsafe_from_address=info)
++    if run1.info != 0 or run2.info != 0:
++        ctx.synchronize()
++        inf.unsafe_store(0, Float32(0))
++        inf.unsafe_store(1, Float32(0))
++    else:
++        # alpha = Sigma^-1 b / noise; bsb = b . Sigma^-1 b
++        _ew(ctx, pb, pb, pcol, m, 1, 0, Float32(0))
++        cho_solve(ctx, d_ls, d_col, m, 1, trace, CHOL_SOLVE_TPB)
++        _ew(ctx, pcol, pcol, pal, m, 1, 5, noise)
++        _fold(ctx, pb, pcol, psc, m, m, 0)
++        # C = Kuu_j^-1 - Sigma^-1
++        _ew(ctx, pt, pt, pt, mm, m, 4, Float32(0))
++        _ew(ctx, pe2, pe2, pe2, mm, m, 4, Float32(0))
++        cho_solve(ctx, d_luu, d_t, m, m, trace, CHOL_SOLVE_TPB)
++        cho_solve(ctx, d_ls, d_e2, m, m, trace, CHOL_SOLVE_TPB)
++        _ew(ctx, pt, pe2, pc, mm, m, 3, Float32(0))
++        # q_mu = Kuu_j alpha
++        ctx.enqueue_function[matmul_kernel](
++            pkj, pal, _ptr(d_qmu), Int64(m), Int64(m), Int64(1),
++            grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
++        )
++        # S = Kuu_j Sigma^-1 Kuu_j, then its Cholesky
++        _ew(ctx, pkj, pkj, pt, mm, m, 0, Float32(0))
++        cho_solve(ctx, d_ls, d_t, m, m, trace, CHOL_SOLVE_TPB)
++        ctx.enqueue_function[matmul_kernel](
++            pkj, pt, ps, Int64(m), Int64(m), Int64(m),
++            grid_dim=_grid(mm), block_dim=(BLOCK if mm > 1 else 1),
++        )
++        var run3 = potrf_lower(ctx, d_s, ws, m, trace, chol_default_nb_hint(), CHOL_PANEL_TPB, CHOL_ELEM_TPB)
++        # tr(Kuu_j^-1 B): the diagonal of Luu^-T Luu^-1 B
++        _ew(ctx, pbm, pbm, pt, mm, m, 0, Float32(0))
++        cho_solve(ctx, d_luu, d_t, m, m, trace, CHOL_SOLVE_TPB)
++        _fold(ctx, pt, pt, psc + 1, m, m, 1)
++        # y . y
++        ctx.enqueue_function[svf_sq_partial_kernel](
++            _ptr(d_y), _ptr(d_part), Int64(n), grid_dim=nparts, block_dim=SVF_TPB,
++        )
++        _fold(ctx, _ptr(d_part), _ptr(d_part), psc + 2, nparts, m, 2)
++        ctx.synchronize()
++        var ld_ls = chol_logdet(ctx, d_ls, dwork, m, trace, CHOL_ELEM_TPB)
++        var ld_luu = chol_logdet(ctx, d_luu, dwork, m, trace, CHOL_ELEM_TPB)
++        var hs = List[Float32](length=4, fill=Float32(0))
++        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_sc)
++        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=alpha), src_buf=d_al)
++        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=cmat), src_buf=d_c)
++        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=qmu), src_buf=d_qmu)
++        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=qsqrt), src_buf=d_s)
++        ctx.synchronize()
++        var bsb = hs[0]
++        var trq = hs[1]
++        var yty = hs[2]
++        var nf = Float32(n)
++        var quad = yty / noise - bsb / (noise * noise)
++        var logdet = (ld_ls - ld_luu) + nf * log(noise)
++        var trace_term = (nf * kdiag - trq) / noise
++        var log2pi = Float32(1.8378770664093453)
++        var elbo = -(Float32(0.5) * ((nf * log2pi + logdet) + (quad + trace_term)))
++        inf.unsafe_store(0, elbo)
++        inf.unsafe_store(1, Float32(1) if run3.info == 0 else Float32(0))
++        _ = hs^
++    _ = d_kuu^
++    _ = d_bm^
++    _ = d_b^
++    _ = d_y^
++    _ = d_kj^
++    _ = d_luu^
++    _ = d_ls^
++    _ = d_t^
++    _ = d_e2^
++    _ = d_c^
++    _ = d_s^
++    _ = d_al^
++    _ = d_col^
++    _ = d_qmu^
++    _ = d_part^
++    _ = d_sc^
++    _ = ws^
++    _ = dwork^
++    _ = ctx^
