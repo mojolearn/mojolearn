@@ -65,7 +65,7 @@ def _eigh_scatter_kernel(key: _F, kstride: Int32, vecs: _F, pos: _I, n: Int32, w
 def _desc_scatter_kernel(key: _F, pos: _I, n: Int32, out: _F):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
-        out.unsafe_store(Int(pos.unsafe_load(i)), key.unsafe_load(i))
+        dst_out.unsafe_store(Int(pos.unsafe_load(i)), key.unsafe_load(i))
 
 
 def _gather_diag_kernel(a: _F, n: Int32, diag: _F):
@@ -110,12 +110,12 @@ def _desc_copy_kernel(src: _F, n: Int32, dst: _F):
 
 
 def enqueue_svdvals_descending(
-    ctx: DeviceContext, s: _F, n: Int, mut pos: DeviceBuffer[DType.int32], out: _F
+    ctx: DeviceContext, s: _F, n: Int, mut pos: DeviceBuffer[DType.int32], dst_out: _F
 ) raises:
     """`svdvals_descending` on device pointers, enqueued: `s` (n) into device
-    `out` (n, not `s`), descending."""
+    `dst_out` (n, not `s`), descending."""
     if n <= 0:
         return
     var pp = pos.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     ctx.enqueue_function[_rank_kernel](s, Int32(n), pp, grid_dim=_blocks(n), block_dim=_TPB)
-    ctx.enqueue_function[_desc_scatter_kernel](s, pp, Int32(n), out, grid_dim=_blocks(n), block_dim=_TPB)
+    ctx.enqueue_function[_desc_scatter_kernel](s, pp, Int32(n), dst_out, grid_dim=_blocks(n), block_dim=_TPB)
