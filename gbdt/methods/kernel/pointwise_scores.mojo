@@ -969,6 +969,10 @@ def find_optimal_split_single_fold_kernel[
 # ---------------------------------------------------------------------------
 
 
+#: (leaf, fold pair) steps a cosine-score thread loads ahead (lane/neural-pass126).
+comptime CS_U = 4
+
+
 def find_optimal_split_cosine_kernel[
     block_size: Int
 ](
@@ -1037,76 +1041,90 @@ def find_optimal_split_cosine_kernel[
         var denum_sqr = Float32(1e-20)
         var current = 2 * b
 
-        for leaf in range(p_count):
-            var fold = 0
-            while fold < fold_count:
-                var learn_off = Int(
-                    helper.data_partition_offset(UInt32(leaf), UInt32(fold))
-                )
-                var test_off = Int(
-                    helper.data_partition_offset(UInt32(leaf), UInt32(fold + 1))
-                )
-                var part_learn_weight = ldg(parts.unsafe_offset(3 * learn_off + 0))
-                var part_learn_sum = ldg(parts.unsafe_offset(3 * learn_off + 1))
-                var part_test_weight = ldg(parts.unsafe_offset(3 * test_off + 0))
-                var part_test_sum = ldg(parts.unsafe_offset(3 * test_off + 1))
-
-                var h_learn = (
-                    bin_feature_count
-                    * Int(helper.histogram_offset(UInt32(leaf), UInt32(fold)))
-                    * 2
-                )
-                var h_test = (
-                    bin_feature_count
-                    * Int(
-                        helper.histogram_offset(UInt32(leaf), UInt32(fold + 1))
+        # (lane/neural-pass126) the (leaf, fold pair) steps flattened and
+        # taken CS_U at a time: every step's eight loads issued first, then
+        # the steps folded IN ORDER with the same statements, so the same
+        # words; one thread per bin feature waited on memory every step
+        # (L40S Ordered taxi 4.1M: 517 us a launch at depth 6)
+        var pairs = (fold_count + 1) // 2
+        var steps = p_count * pairs
+        var k0 = 0
+        while k0 < steps:
+            var cnt = min(CS_U, steps - k0)
+            var plw = SIMD[DType.float32, CS_U](0)
+            var pls = SIMD[DType.float32, CS_U](0)
+            var ptw = SIMD[DType.float32, CS_U](0)
+            var pts = SIMD[DType.float32, CS_U](0)
+            var wel = SIMD[DType.float32, CS_U](0)
+            var sel = SIMD[DType.float32, CS_U](0)
+            var wtl = SIMD[DType.float32, CS_U](0)
+            var stl = SIMD[DType.float32, CS_U](0)
+            comptime for u in range(CS_U):
+                if u < cnt:
+                    var kk = k0 + u
+                    var leaf = kk // pairs
+                    var fold = 2 * (kk - leaf * pairs)
+                    var learn_off = Int(
+                        helper.data_partition_offset(UInt32(leaf), UInt32(fold))
                     )
-                    * 2
-                )
+                    var test_off = Int(
+                        helper.data_partition_offset(UInt32(leaf), UInt32(fold + 1))
+                    )
+                    plw[u] = ldg(parts.unsafe_offset(3 * learn_off + 0))
+                    pls[u] = ldg(parts.unsafe_offset(3 * learn_off + 1))
+                    ptw[u] = ldg(parts.unsafe_offset(3 * test_off + 0))
+                    pts[u] = ldg(parts.unsafe_offset(3 * test_off + 1))
+                    var h_learn = (
+                        bin_feature_count
+                        * Int(helper.histogram_offset(UInt32(leaf), UInt32(fold)))
+                        * 2
+                    )
+                    var h_test = (
+                        bin_feature_count
+                        * Int(helper.histogram_offset(UInt32(leaf), UInt32(fold + 1)))
+                        * 2
+                    )
+                    wel[u] = bin_sums.unsafe_load(current + h_learn)
+                    sel[u] = bin_sums.unsafe_load(current + h_learn + 1)
+                    wtl[u] = bin_sums.unsafe_load(current + h_test)
+                    stl[u] = bin_sums.unsafe_load(current + h_test + 1)
+            comptime for u in range(CS_U):
+                if u < cnt:
+                    var part_learn_weight = plw[u]
+                    var part_learn_sum = pls[u]
+                    var part_test_weight = ptw[u]
+                    var part_test_sum = pts[u]
+                    var weight_estimate_left = wel[u]
+                    var weight_estimate_right = max(
+                        part_learn_weight - weight_estimate_left, Float32(0.0)
+                    )
+                    var sum_estimate_left = sel[u]
+                    var sum_estimate_right = part_learn_sum - sum_estimate_left
+                    var weight_test_left = wtl[u]
+                    var weight_test_right = max(
+                        part_test_weight - weight_test_left, Float32(0.0)
+                    )
+                    var sum_test_left = stl[u]
+                    var sum_test_right = part_test_sum - sum_test_left
 
-                var weight_estimate_left = bin_sums.unsafe_load(
-                    current + h_learn
-                )
-                var weight_estimate_right = max(
-                    part_learn_weight - weight_estimate_left, Float32(0.0)
-                )
+                    var lam_l = l2
+                    if normalize:
+                        lam_l = l2 * weight_estimate_left
+                    var mu_l = Float32(0.0)
+                    if weight_estimate_left > Float32(0.0):
+                        mu_l = sum_estimate_left / (weight_estimate_left + lam_l)
+                    score = identical_mul_add(sum_test_left, mu_l, score)
+                    denum_sqr = identical_mul_add(weight_test_left * mu_l, mu_l, denum_sqr)
 
-                var sum_estimate_left = bin_sums.unsafe_load(
-                    current + h_learn + 1
-                )
-                var sum_estimate_right = part_learn_sum - sum_estimate_left
-
-                var weight_test_left = bin_sums.unsafe_load(current + h_test)
-                var weight_test_right = max(
-                    part_test_weight - weight_test_left, Float32(0.0)
-                )
-
-                var sum_test_left = bin_sums.unsafe_load(current + h_test + 1)
-                var sum_test_right = part_test_sum - sum_test_left
-
-                var lam_l = l2
-                if normalize:
-                    lam_l = l2 * weight_estimate_left
-                var mu_l = Float32(0.0)
-                if weight_estimate_left > Float32(0.0):
-                    mu_l = sum_estimate_left / (weight_estimate_left + lam_l)
-                # the four accumulates in ONE rounding each, the fusion every
-                # default (contract=fast) build formed, written out; the host
-                # oracle (`gbdt_oracle_ordered._dynamic_cosine_candidates`)
-                # spells the same (lane/explicit-fma-contract-proof, 2026-09-26)
-                score = identical_mul_add(sum_test_left, mu_l, score)
-                denum_sqr = identical_mul_add(weight_test_left * mu_l, mu_l, denum_sqr)
-
-                var lam_r = l2
-                if normalize:
-                    lam_r = l2 * weight_estimate_right
-                var mu_r = Float32(0.0)
-                if weight_estimate_right > Float32(0.0):
-                    mu_r = sum_estimate_right / (weight_estimate_right + lam_r)
-                score = identical_mul_add(sum_test_right, mu_r, score)
-                denum_sqr = identical_mul_add(weight_test_right * mu_r, mu_r, denum_sqr)
-
-                fold += 2
+                    var lam_r = l2
+                    if normalize:
+                        lam_r = l2 * weight_estimate_right
+                    var mu_r = Float32(0.0)
+                    if weight_estimate_right > Float32(0.0):
+                        mu_r = sum_estimate_right / (weight_estimate_right + lam_r)
+                    score = identical_mul_add(sum_test_right, mu_r, score)
+                    denum_sqr = identical_mul_add(weight_test_right * mu_r, mu_r, denum_sqr)
+            k0 += cnt
 
         # `:381`
         if denum_sqr > Float32(1e-15):
