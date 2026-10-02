@@ -24,6 +24,7 @@ serial loop raised.
 from std.ffi import _Global
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv
+from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
@@ -461,3 +462,292 @@ def weighted_sample_device(
     _ = h_flag^
     _ = h_total^
     _ = d_last^
+
+
+# ---------------------------------------------------------------------------
+# Row compaction on the device (cpu-gpu-cleanup t-gbdt): the bagged rows of
+# a DART / GOSS-free boosting round (`ops.bag_rows`) and a member's
+# out-of-bag rows (`ops.unseen_rows`). A keep flag per row, one thread per
+# chunk of `WS_CHUNK` rows counts its keeps, a Hillis-Steele scan of the
+# chunk counts gives each chunk its offset, and each chunk writes its kept
+# rows in index order: the serial loop's list, ascending. Integer work only.
+# ---------------------------------------------------------------------------
+
+
+def unseen_mark_kernel(
+    keep: MutPointer[Int32, MutAnyOrigin], rows: MutPointer[Int32, MutAnyOrigin], m: Int64, n: Int64,
+    flag: MutPointer[Int32, MutAnyOrigin],
+):
+    """keep[rows[r]] = 0 for every drawn row (the same word from every
+    writer); flag[0] = 1 on a row out of range."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while r < Int(m):
+        var i = Int(rows.unsafe_load(r))
+        if i < 0 or i >= Int(n):
+            flag.unsafe_store(0, Int32(1))
+        else:
+            keep.unsafe_store(i, Int32(0))
+        r += stride
+
+
+def bag_mark_kernel(
+    keep: MutPointer[Int32, MutAnyOrigin], key: MutPointer[UInt64, MutAnyOrigin], n: Int64, base: UInt64,
+    frac: UInt64,
+):
+    """keep[i] = unit(draw(base, i)) < frac (`ops.unit` in binary64 words:
+    the top 53 bits times 2^-53, exact); key[i] = the top 53 bits, the
+    fallback's order (`unit` is monotone in them)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < Int(n):
+        var top = draw(base, i) >> 11
+        var u = sf64_mul(sf64_from_int(Int(top)), _TWO_M53)
+        keep.unsafe_store(i, Int32(1) if sf64_lt(u, frac) else Int32(0))
+        key.unsafe_store(i, top)
+        i += stride
+
+
+def cmp_chunk_kernel(
+    keep: MutPointer[Int32, MutAnyOrigin], n: Int64, n_chunks: Int64, cnt: MutPointer[Int32, MutAnyOrigin],
+    key: MutPointer[UInt64, MutAnyOrigin], has_key: Int32,
+    ck: MutPointer[UInt64, MutAnyOrigin], ci: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread per chunk: its keep count, and (has_key) its smallest
+    (key, row) in index order."""
+    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while c < Int(n_chunks):
+        var i1 = min((c + 1) * WS_CHUNK, Int(n))
+        var k = Int32(0)
+        var bk = UInt64.MAX
+        var bi = Int32(c * WS_CHUNK)
+        for i in range(c * WS_CHUNK, i1):
+            k += keep.unsafe_load(i)
+            if has_key != 0:
+                var ki = key.unsafe_load(i)
+                if ki < bk:
+                    bk = ki
+                    bi = Int32(i)
+        cnt.unsafe_store(c, k)
+        if has_key != 0:
+            ck.unsafe_store(c, bk)
+            ci.unsafe_store(c, bi)
+        c += stride
+
+
+def cnt_scan_step_kernel(
+    src: MutPointer[Int32, MutAnyOrigin], dst: MutPointer[Int32, MutAnyOrigin], m: Int64, s: Int64,
+):
+    """One Hillis-Steele pass over the chunk counts (inclusive)."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while j < Int(m):
+        if j >= Int(s):
+            dst.unsafe_store(j, src.unsafe_load(j) + src.unsafe_load(j - Int(s)))
+        else:
+            dst.unsafe_store(j, src.unsafe_load(j))
+        j += stride
+
+
+def argmin_scan_step_kernel(
+    sk: MutPointer[UInt64, MutAnyOrigin], si: MutPointer[Int32, MutAnyOrigin],
+    dk: MutPointer[UInt64, MutAnyOrigin], di: MutPointer[Int32, MutAnyOrigin], m: Int64, s: Int64,
+):
+    """One Hillis-Steele pass of the prefix (key, row) minimum: the
+    lexicographic minimum is unique, so the last cell is the serial scan's."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while j < Int(m):
+        var k = sk.unsafe_load(j)
+        var i = si.unsafe_load(j)
+        if j >= Int(s):
+            var k2 = sk.unsafe_load(j - Int(s))
+            var i2 = si.unsafe_load(j - Int(s))
+            if k2 < k or (k2 == k and i2 < i):
+                k = k2
+                i = i2
+        dk.unsafe_store(j, k)
+        di.unsafe_store(j, i)
+        j += stride
+
+
+def cmp_write_kernel(
+    keep: MutPointer[Int32, MutAnyOrigin], n: Int64, n_chunks: Int64, scan: MutPointer[Int32, MutAnyOrigin],
+    res: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread per chunk writes its kept rows from its scanned offset."""
+    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while c < Int(n_chunks):
+        var off = 0 if c == 0 else Int(scan.unsafe_load(c - 1))
+        var i1 = min((c + 1) * WS_CHUNK, Int(n))
+        for i in range(c * WS_CHUNK, i1):
+            if keep.unsafe_load(i) != 0:
+                res.unsafe_store(off, Int32(i))
+                off += 1
+        c += stride
+
+
+def _compact_device(
+    ctx: DeviceContext, d_keep: DeviceBuffer[DType.int32], n: Int, res: MutPointer[Int32, MutUntrackedOrigin],
+    d_key: DeviceBuffer[DType.uint64], has_key: Bool,
+) raises -> Int:
+    """The kept rows of `d_keep` into `res`, ascending; returns the count.
+    With `has_key` and nothing kept, `res[0]` is the smallest (key, row)
+    and the count is 1."""
+    var n_chunks = ceildiv(n, WS_CHUNK)
+    var d_a = ctx.enqueue_create_buffer[DType.int32](n_chunks)
+    var d_b = ctx.enqueue_create_buffer[DType.int32](n_chunks)
+    var d_ka = ctx.enqueue_create_buffer[DType.uint64](n_chunks)
+    var d_kb = ctx.enqueue_create_buffer[DType.uint64](n_chunks)
+    var d_ia = ctx.enqueue_create_buffer[DType.int32](n_chunks)
+    var d_ib = ctx.enqueue_create_buffer[DType.int32](n_chunks)
+    ctx.enqueue_function[cmp_chunk_kernel](
+        d_keep.unsafe_ptr(), Int64(n), Int64(n_chunks), d_a.unsafe_ptr(),
+        d_key.unsafe_ptr(), Int32(1 if has_key else 0), d_ka.unsafe_ptr(), d_ia.unsafe_ptr(),
+        grid_dim=_blocks(n_chunks), block_dim=OPS_TPB,
+    )
+    var src_is_a = True
+    var s = 1
+    while s < n_chunks:
+        var cs = d_a.unsafe_ptr() if src_is_a else d_b.unsafe_ptr()
+        var cd = d_b.unsafe_ptr() if src_is_a else d_a.unsafe_ptr()
+        ctx.enqueue_function[cnt_scan_step_kernel](
+            cs, cd, Int64(n_chunks), Int64(s), grid_dim=_blocks(n_chunks), block_dim=OPS_TPB,
+        )
+        if has_key:
+            ctx.enqueue_function[argmin_scan_step_kernel](
+                d_ka.unsafe_ptr() if src_is_a else d_kb.unsafe_ptr(),
+                d_ia.unsafe_ptr() if src_is_a else d_ib.unsafe_ptr(),
+                d_kb.unsafe_ptr() if src_is_a else d_ka.unsafe_ptr(),
+                d_ib.unsafe_ptr() if src_is_a else d_ia.unsafe_ptr(),
+                Int64(n_chunks), Int64(s), grid_dim=_blocks(n_chunks), block_dim=OPS_TPB,
+            )
+        src_is_a = not src_is_a
+        s *= 2
+    var p_scan = d_a.unsafe_ptr() if src_is_a else d_b.unsafe_ptr()
+    var d_res = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_function[cmp_write_kernel](
+        d_keep.unsafe_ptr(), Int64(n), Int64(n_chunks), p_scan, d_res.unsafe_ptr(),
+        grid_dim=_blocks(n_chunks), block_dim=OPS_TPB,
+    )
+    # the two scalars: the kept count and the fallback row
+    var h_tot = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var h_best = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var sub_tot = d_a.create_sub_buffer[DType.int32](n_chunks - 1, 1) if src_is_a else d_b.create_sub_buffer[DType.int32](n_chunks - 1, 1)
+    var sub_best = d_ia.create_sub_buffer[DType.int32](n_chunks - 1, 1) if src_is_a else d_ib.create_sub_buffer[DType.int32](n_chunks - 1, 1)
+    ctx.enqueue_copy(dst_buf=h_tot, src_buf=sub_tot)
+    ctx.enqueue_copy(dst_buf=h_best, src_buf=sub_best)
+    ctx.synchronize()
+    var total = Int(h_tot.unsafe_ptr().unsafe_load(0))
+    if total > 0:
+        var sub_res = d_res.create_sub_buffer[DType.int32](0, total)
+        ctx.enqueue_copy(dst_ptr=res, src_buf=sub_res)
+        ctx.synchronize()
+        _ = sub_res^
+    elif has_key:
+        res.unsafe_store(0, h_best.unsafe_ptr().unsafe_load(0))
+        total = 1
+    _ = d_a^
+    _ = d_b^
+    _ = d_ka^
+    _ = d_kb^
+    _ = d_ia^
+    _ = d_ib^
+    _ = d_res^
+    _ = h_tot^
+    _ = h_best^
+    _ = sub_tot^
+    _ = sub_best^
+    return total
+
+
+def bag_rows_device(
+    res: MutPointer[Int32, MutUntrackedOrigin], n: Int, seed: Int, stream: Int, frac: Float64,
+) raises -> Int:
+    """`ops.bag_rows` on the device: the draws are made where they are
+    compared (no host draw list), the kept rows come back once."""
+    if n <= 0:
+        return 0
+    var ctx = _ctx()
+    var d_keep = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_key = ctx.enqueue_create_buffer[DType.uint64](n)
+    ctx.enqueue_function[bag_mark_kernel](
+        d_keep.unsafe_ptr(), d_key.unsafe_ptr(), Int64(n), stream_base(seed, stream),
+        bitcast[DType.uint64](frac), grid_dim=_blocks(n), block_dim=OPS_TPB,
+    )
+    var k = _compact_device(ctx, d_keep, n, res, d_key, True)
+    _ = d_keep^
+    _ = d_key^
+    return k
+
+
+def unseen_rows_device(
+    rows: MutPointer[Int32, MutUntrackedOrigin], m: Int, n: Int, res: MutPointer[Int32, MutUntrackedOrigin],
+) raises -> Int:
+    """`ops.unseen_rows` on the device: the drawn rows go up once, every row
+    starts kept and each draw clears its row, the kept rows come back once."""
+    if n <= 0:
+        return 0
+    var ctx = _ctx()
+    var d_keep = ctx.enqueue_create_buffer[DType.int32](n)
+    d_keep.enqueue_fill(Int32(1))
+    var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
+    d_flag.enqueue_fill(Int32(0))
+    var d_key = ctx.enqueue_create_buffer[DType.uint64](1)
+    if m > 0:
+        var d_rows = ctx.enqueue_create_buffer[DType.int32](m)
+        ctx.enqueue_copy(dst_buf=d_rows, src_ptr=rows)
+        ctx.enqueue_function[unseen_mark_kernel](
+            d_keep.unsafe_ptr(), d_rows.unsafe_ptr(), Int64(m), Int64(n), d_flag.unsafe_ptr(),
+            grid_dim=_blocks(m), block_dim=OPS_TPB,
+        )
+        var h_flag = ctx.enqueue_create_host_buffer[DType.int32](1)
+        ctx.enqueue_copy(dst_buf=h_flag, src_buf=d_flag)
+        ctx.synchronize()
+        if h_flag.unsafe_ptr().unsafe_load(0) != Int32(0):
+            raise Error("x_trees unseen_rows: row out of range")
+        _ = d_rows^
+        _ = h_flag^
+    var k = _compact_device(ctx, d_keep, n, res, d_key, False)
+    _ = d_keep^
+    _ = d_flag^
+    _ = d_key^
+    return k
+
+
+def transpose_f64_kernel(
+    dst: MutPointer[UInt64, MutAnyOrigin], src: MutPointer[UInt64, MutAnyOrigin], n: Int64, d: Int64,
+):
+    """dst[j * n + i] = src[i * d + j], one thread per cell (a word copy)."""
+    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    var total = Int(n) * Int(d)
+    while c < total:
+        var i = c // Int(d)
+        var j = c - i * Int(d)
+        dst.unsafe_store(j * Int(n) + i, src.unsafe_load(c))
+        c += stride
+
+
+def transpose_f64_device(
+    src: MutPointer[Float64, MutUntrackedOrigin], n: Int, d: Int,
+    dst: MutPointer[Float64, MutUntrackedOrigin],
+) raises:
+    """`ops.transpose_f64` on the device: binary64 words moved, not computed
+    (the Apple GPU has no float64; a word is a word)."""
+    if n <= 0 or d <= 0:
+        return
+    var ctx = _ctx()
+    var d_src = ctx.enqueue_create_buffer[DType.uint64](n * d)
+    ctx.enqueue_copy(dst_buf=d_src, src_ptr=src.bitcast[UInt64]())
+    var d_dst = ctx.enqueue_create_buffer[DType.uint64](n * d)
+    ctx.enqueue_function[transpose_f64_kernel](
+        d_dst.unsafe_ptr(), d_src.unsafe_ptr(), Int64(n), Int64(d),
+        grid_dim=_blocks(n * d), block_dim=OPS_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=dst.bitcast[UInt64](), src_buf=d_dst)
+    ctx.synchronize()
+    _ = d_src^
+    _ = d_dst^
