@@ -11,7 +11,7 @@ from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from umap.curve import fit_umap_curve
 from umap.graph import fuzzy_simplicial_graph
-from umap.sparse_graph import sparse_fuzzy_simplicial_graph
+from umap.host.sparse_graph_host import sparse_fuzzy_simplicial_graph
 from umap.optimizer import optimize_layout_identical
 from umap.sparse_optimizer import optimize_sparse_layout_identical, sparse_weight_at
 from umap.transform import transform_memberships, initialize_transform, refine_transform

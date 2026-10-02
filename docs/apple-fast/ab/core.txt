@@ -1,1 +1,7 @@
 CMD lane/apple-fast-core core-ols-dcenter-taxi AFC_FAMILY=classical bash tools/afc_ab_def.sh core-ols-dcenter-taxi estimators ols taxi 1 2 "" "-D MOJOLEARN_OLS_FAST_DEVICE_CENTER=1"
+CMD lane/apple-fast-core core-kmeans-rownorm-taxi AFC_FAMILY=classical bash tools/afc_ab_def.sh core-kmeans-rownorm-taxi base kmeans taxi 1 2 "" "-D MOJOLEARN_KMEANS_FAST_ROWNORM=1"
+CMD lane/apple-fast-core core-kmeans-skippred-taxi AFC_FAMILY=classical bash tools/afc_ab_def.sh core-kmeans-skippred-taxi base kmeans taxi 1 2 "" "-D MOJOLEARN_KMEANS_FAST_SKIP_PREDICT=1"
+CMD lane/apple-fast-core core-knn-k64-istella AFC_FAMILY=classical bash tools/afc_ab_def.sh core-knn-k64-istella base knn istella 1 2 "" "-D MOJOLEARN_KNN_FAST_MMA_K64=1"
+CMD lane/apple-fast-core core-kde-slices-istella AFC_FAMILY=classical bash tools/afc_ab_def.sh core-kde-slices-istella estimators kde istella 1 2 "" "-D MOJOLEARN_KDE_FAST_SLICES=1"
+CMD lane/apple-fast-core core-dbscan-scan-taxi AFC_FAMILY=classical bash tools/afc_ab_def.sh core-dbscan-scan-taxi estimators dbscan taxi 1 2 "" "-D MOJOLEARN_DBSCAN_FAST_SCAN=1"
+CMD lane/apple-fast-core core-dbscan-ccbatch-taxi AFC_FAMILY=classical bash tools/afc_ab_def.sh core-dbscan-ccbatch-taxi estimators dbscan taxi 1 2 "" "-D MOJOLEARN_DBSCAN_FAST_CC_BATCH=1"

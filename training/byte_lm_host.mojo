@@ -52,7 +52,8 @@ from core.host_parallel import host_parallelize
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from embedding.checks.embedding_oracle import EmbConfig, emb_forward_oracle, refuse_nonfinite
 from gemm.host.gemm_host_rows import GhrPtr
-from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, gemm_oracle
+from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT
+from gemm.host.identical_gemm import gemm_oracle
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_kernels import (
     all_finite_span,
@@ -73,7 +74,8 @@ from training.byte_lm_host_kernels import (
     rms_norm_fast,
     rope_rows,
 )
-from training.checks.loss_oracle import CeConfig, ce_forward_oracle
+from training.checks.loss_contract import CeConfig
+from training.checks.loss_oracle import ce_forward_oracle
 from transformer.checks.transformer_fixture import (
     attention_scale,
     mask_fill,

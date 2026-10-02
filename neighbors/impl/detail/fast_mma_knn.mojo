@@ -106,7 +106,13 @@ def _k64_on() -> Bool:
     FAST arms). The lists are the same sorted (distance, index) insertions,
     twice as long per thread; the bitonic fold gets a sixth level (a no-op
     for `K <= 32`)."""
-    return getenv("MOJOLEARN_KNN_FAST_MMA_K64") == "1"
+    comptime if not (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+        and is_defined["MOJOLEARN_KNN_FAST_MMA_K64"]()
+    ):
+        return False
+    else:
+        return True
 
 
 def fast_mma_knn_applies(n_features: Int, k: Int) -> Bool:

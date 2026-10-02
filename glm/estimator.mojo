@@ -40,7 +40,6 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from x_decomp.tsqr_device import ts_factor_device
-from core.host_parallel import host_parallelize
 
 from core.gemm import gemv_n
 from core.identity_trace import IdentityTrace
@@ -62,11 +61,7 @@ from glm.impl.linear_model.qn import (
     QN_LOSS_SVR_L2,
     QNParams,
 )
-from checks.numerics import ftz, identical_exp64
-from core.host_predict_threads import (
-    host_predict_chunk,
-    host_predict_task_count,
-)
+from checks.numerics import ftz
 
 
 def _add_scalar_kernel(
@@ -506,80 +501,6 @@ def qn_predict_binary_host(
             else Int64(0),
         )
     _ = hs^
-
-
-def qn_sigmoid_host(
-    scores_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    out_ptr: MutPointer[Float64, MutUntrackedOrigin],
-    n_rows: Int,
-):
-    """The binary `predict_proba` link, `p = 1 / (1 + exp(-z))`.
-
-    DEVIATION 549. cuML's Python layer computes this in cupy on the device
-    in float32 (`logistic_regression.py:612-616`, `cp.exp` on float32
-    scores) and stores it into a float64 array. Here it is computed ON THE
-    HOST in Float64 through `identical_exp64` -- `portable_exp64` under
-    IDENTICAL, the repository's standing rule for a probability link (the
-    GBDT lane's Logloss sigmoid, `checks/numerics.mojo`), because each
-    host libm rounds double `exp` differently in the last bit and numpy's
-    `np.exp` would carry the host's bit into the answer (E2 round 1's
-    finding). The output dtype is float64, as cuML's and scikit-learn's
-    are. `1 - p` for class 0 is one subtraction."""
-    for i in range(n_rows):
-        var z = Float64(scores_ptr.unsafe_load(i))
-        var p = 1.0 / (1.0 + identical_exp64(-z))
-        out_ptr.unsafe_store(2 * i, 1.0 - p)
-        out_ptr.unsafe_store(2 * i + 1, p)
-
-
-def qn_softmax_host(
-    scores_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    out_ptr: MutPointer[Float64, MutUntrackedOrigin],
-    n_rows: Int,
-    n_classes: Int,
-):
-    """The multinomial `predict_proba` link (lane/logistic-multiclass,
-    2026-09-14), the softmax of each row of the `(n_rows, n_classes)`
-    float32 decision function, computed ON THE HOST in Float64 through
-    `identical_exp64`, the standing rule for a probability link
-    (`qn_sigmoid_host` above, DEVIATION 549; cuML's Python layer takes the
-    softmax in cupy float32 on the device, `logistic_regression.py`). Per
-    row: `m` is the first maximum under a strict `>` from the first entry
-    (the positional rule of `softmax_row_max`, so a tie and a signed zero
-    are decided by index, never by a hardware max); `s` is the serial
-    ascending sum of `exp(z_c - m)`; `p_c = exp(z_c - m) / s`, one
-    correctly rounded division per cell. No `log`, no fused multiply-add
-    site. `core/classical_host_predict.mojo::host_qn_softmax` spells the
-    same statements for the CPU binding and the gate holds the two to a
-    bit. Rows are split into the shared host-prediction task count; no fold
-    crosses a row, and one task executes all three loops of its row."""
-    var tasks = host_predict_task_count(n_rows)
-    var chunk = host_predict_chunk(n_rows, tasks)
-
-    def _rows(c: Int) {imm scores_ptr, imm out_ptr, imm chunk, imm n_rows, imm n_classes}:
-        var lo = c * chunk
-        var hi = min(lo + chunk, n_rows)
-        for i in range(lo, hi):
-            var base = i * n_classes
-            var m = Float64(scores_ptr.unsafe_load(base))
-            for k in range(1, n_classes):
-                var v = Float64(scores_ptr.unsafe_load(base + k))
-                if v > m:
-                    m = v
-            var s = 0.0
-            for k in range(n_classes):
-                var z = Float64(scores_ptr.unsafe_load(base + k))
-                s = s + identical_exp64(z - m)
-            for k in range(n_classes):
-                var z = Float64(scores_ptr.unsafe_load(base + k))
-                out_ptr.unsafe_store(base + k, identical_exp64(z - m) / s)
-
-    if tasks == 1:
-        _rows(0)
-    else:
-        host_parallelize(_rows, tasks)
-
-
 # ---------------------------------------------------------------------------
 # -D MOJOLEARN_OLS_FAST_DEVICE_CENTER (lane/apple-fast-core, 2026-10-02): THE
 # INTERCEPT'S CENTERING ON THE DEVICE, ONE UPLOAD

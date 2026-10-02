@@ -30,7 +30,7 @@ that file records as a bug found by audit rather than by a test.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.os import getenv
+from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
@@ -174,9 +174,11 @@ comptime RBC_PSCAN_CHUNK = RBC_SCAN_TPB * RBC_PSCAN_PER_THREAD
 def rbc_fast_scan_on() -> Bool:
     comptime if not (
         GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+        and is_defined["MOJOLEARN_DBSCAN_FAST_SCAN"]()
     ):
         return False
-    return String(getenv("MOJOLEARN_DBSCAN_FAST_SCAN")) == "1"
+    else:
+        return True
 
 
 def rbc_pscan_local_kernel(

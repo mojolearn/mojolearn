@@ -68,7 +68,7 @@ from checks.numerics import (
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.os import getenv
+from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
 
@@ -80,9 +80,11 @@ comptime WEAK_CC_FAST_BATCH = 4
 def weak_cc_fast_batch_on() -> Bool:
     comptime if not (
         GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+        and is_defined["MOJOLEARN_DBSCAN_FAST_CC_BATCH"]()
     ):
         return False
-    return String(getenv("MOJOLEARN_DBSCAN_FAST_CC_BATCH")) == "1"
+    else:
+        return True
 comptime MAX_LABEL = Int32(2147483647)
 
 

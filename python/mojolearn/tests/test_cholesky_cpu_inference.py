@@ -22,7 +22,8 @@ import numpy as np
 import pytest
 
 from mojolearn import _backend, host_surface
-from mojolearn._cholesky_impl import _CHOLESKY_FORMAT, Cholesky, HostCholesky
+from mojolearn._cholesky_impl import _CHOLESKY_FORMAT, Cholesky
+from mojolearn._classical_host import HostCholesky
 
 ROOT = Path(__file__).resolve().parents[3]
 

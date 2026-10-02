@@ -81,9 +81,8 @@ _NOT = bytes((1, 0)) + bytes(range(2, 256))
 
 def _helper(key, size):
     """The core helper `key` for a block of `size` elements, or None when
-    the block is small, the binary lacks the helper, or
-    `MOJOLEARN_HOTPATH=python` is set; the caller then runs its Python
-    routine, which is the helper's definition."""
+    the block is small or the binary lacks the helper; the caller then
+    runs its Python routine, which is the helper's definition."""
     if size < _NATIVE_MIN:
         return None
     from . import _buffer
@@ -875,8 +874,6 @@ def _block_store(a, offset, length):
     if length < _NATIVE_MIN:
         return None  # a short run: the per-element copy is as fast as the detour
     from . import _buffer
-    if not _buffer.hotpath_enabled():
-        return None
     raw = a._mv[offset:offset + length].cast("B")
     return _buffer._same_dtype_store(raw, a.dtype)
 
@@ -889,9 +886,6 @@ def _flatten_fast(nested):
     anything else (a ragged block, a NumPy scalar, a nested Array, rank 3),
     which `_flatten` then walks and, where it must, refuses in its words."""
     if type(nested) not in _ROW_TYPES or not nested:
-        return None
-    from . import _buffer
-    if not _buffer.hotpath_enabled():
         return None
     kinds = set(map(type, nested))
     if kinds <= _SCALAR_TYPES:

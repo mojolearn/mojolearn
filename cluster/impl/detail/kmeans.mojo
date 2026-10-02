@@ -1361,7 +1361,7 @@ def kmeans_fit_main_traced(
     # expanded identity never has to be recomputed, only the centroid side.
     if params.needs_row_norms():
         if kmeans_fast_rownorm_on(n_features):
-            # MOJOLEARN_KMEANS_FAST_ROWNORM=1 (lane/apple-fast-core,
+            # -D MOJOLEARN_KMEANS_FAST_ROWNORM (lane/apple-fast-core,
             # 2026-10-02, FAST + Apple only): one thread per row instead
             # of one block per row (`detail/kmeans_fast.mojo`).
             launch_fast_row_sqnorm(ctx, x_norm, x, n_samples, n_features)

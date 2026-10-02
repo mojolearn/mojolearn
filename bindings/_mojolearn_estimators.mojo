@@ -55,9 +55,12 @@ from glm.estimator import (
     qn_decision_function_host,
     qn_fit_host,
     qn_predict_binary_host,
-    qn_sigmoid_host,
-    qn_softmax_host,
     ridge_fit_host,
+)
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from checks.soft_f64 import (
+    SF64_ONE, SF64_ZERO, sf64_add, sf64_div, sf64_exp, sf64_from_f32, sf64_gt, sf64_neg,
+    sf64_sub,
 )
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from glm.impl.center_device import col_sums_device, center_device, scale_rows_device
@@ -775,21 +778,103 @@ def qn_predict_binary_binding(
     return PythonObject(0)
 
 
+def qn_sigmoid_kernel(
+    scores: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[UInt64, MutAnyOrigin],
+    n_rows_in: Int64,
+):
+    """The binary `predict_proba` link on the device, one thread per row,
+    grid-stride (cpu-gpu-cleanup w2-core-scope; was `qn_sigmoid_host` on
+    the host, DEVIATION 549): `p1 = 1 / (1 + exp(-z))`, `p0 = 1 - p1` over
+    `checks/soft_f64.mojo`'s binary64 (the Apple GPU has no float64;
+    `sf64_exp` is `portable_exp64` statement for statement). Under
+    IDENTICAL these are the host column's words
+    (`core/classical_host_predict.mojo::host_qn_sigmoid`). `dst` receives
+    the binary64 bit patterns, (n_rows, 2) row-major."""
+    var n_rows = Int(n_rows_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < n_rows:
+        var nz = sf64_neg(sf64_from_f32(scores.unsafe_load(i)))
+        var p = sf64_div(SF64_ONE, sf64_add(SF64_ONE, sf64_exp(nz)))
+        dst.unsafe_store(2 * i, sf64_sub(SF64_ONE, p))
+        dst.unsafe_store(2 * i + 1, p)
+        i += stride
+
+
 def qn_sigmoid_binding(
     scores_addr: PythonObject,
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """The binary predict_proba link on the host through identical_exp64
-    (DEVIATION 549): out is float64 (n_rows, 2)."""
+    """The binary predict_proba link ON THE DEVICE (cpu-gpu-cleanup
+    w2-core-scope; was `qn_sigmoid_host` on the host, DEVIATION 549):
+    scores is float32 (n_rows,), out is float64 (n_rows, 2). See
+    `qn_sigmoid_kernel`."""
     if len(params) != 1:
         raise Error("qn_sigmoid: params must contain n_rows")
     var sp = _f32_ptr(Int(py=scores_addr))
     var op = _f64_ptr(Int(py=out_addr))
     var nr = Int(py=params[0])
+    if nr <= 0:
+        return PythonObject(0)
     with GILReleased(Python()):
-        qn_sigmoid_host(sp, op, nr)
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var d_scores = ctx.enqueue_create_buffer[DType.float32](nr)
+        ctx.enqueue_copy(dst_buf=d_scores, src_ptr=sp)
+        var d_out = ctx.enqueue_create_buffer[DType.uint64](2 * nr)
+        ctx.enqueue_function[qn_sigmoid_kernel](
+            d_scores.unsafe_ptr(), d_out.unsafe_ptr(), Int64(nr),
+            grid_dim=min((nr + QN_SOFTMAX_TPB - 1) // QN_SOFTMAX_TPB, QN_SOFTMAX_MAX_BLOCKS),
+            block_dim=QN_SOFTMAX_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
+        ctx.synchronize()
+        _ = d_scores^
+        _ = d_out^
+        _ = ctx^
     return PythonObject(0)
+
+
+def qn_softmax_kernel(
+    scores: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[UInt64, MutAnyOrigin],
+    n_rows_in: Int64,
+    n_classes_in: Int64,
+):
+    """The multinomial `predict_proba` link on the device, one thread per
+    row, grid-stride (cpu-gpu-cleanup t-gbdt). `qn_softmax_host`'s
+    statements (`glm/estimator.mojo`, lane/logistic-multiclass) over
+    `checks/soft_f64.mojo`'s binary64 (the Apple GPU has no float64; the
+    soft ops are IEEE round-to-nearest, `sf64_exp` is `portable_exp64`
+    statement for statement): `m` the first maximum under a strict `>` from
+    the first entry, `s` the serial ascending sum of `exp(z_c - m)`,
+    `p_c = exp(z_c - m) / s`. Under IDENTICAL these are the host column's
+    words (`core/classical_host_predict.mojo::host_qn_softmax`). `out`
+    receives the binary64 bit patterns."""
+    var n_rows = Int(n_rows_in)
+    var nc = Int(n_classes_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < n_rows:
+        var base = i * nc
+        var m = sf64_from_f32(scores.unsafe_load(base))
+        for c in range(1, nc):
+            var v = sf64_from_f32(scores.unsafe_load(base + c))
+            if sf64_gt(v, m):
+                m = v
+        var acc = SF64_ZERO
+        for c in range(nc):
+            var z = sf64_from_f32(scores.unsafe_load(base + c))
+            acc = sf64_add(acc, sf64_exp(sf64_sub(z, m)))
+        for c in range(nc):
+            var z = sf64_from_f32(scores.unsafe_load(base + c))
+            dst.unsafe_store(base + c, sf64_div(sf64_exp(sf64_sub(z, m)), acc))
+        i += stride
+
+
+comptime QN_SOFTMAX_TPB = 128
+comptime QN_SOFTMAX_MAX_BLOCKS = 65535
 
 
 def qn_softmax_binding(
@@ -797,10 +882,10 @@ def qn_softmax_binding(
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """The multinomial predict_proba link on the host through
-    identical_exp64 (lane/logistic-multiclass, 2026-09-14,
-    `qn_softmax_host`): scores is float32 (n_rows, n_classes) row-major,
-    out is float64 (n_rows, n_classes). params: n_rows, n_classes."""
+    """The multinomial predict_proba link ON THE DEVICE (cpu-gpu-cleanup
+    t-gbdt; was `qn_softmax_host` on host threads): scores is float32
+    (n_rows, n_classes) row-major, out is float64 (n_rows, n_classes).
+    params: n_rows, n_classes. See `qn_softmax_kernel`."""
     if len(params) != 2:
         raise Error("qn_softmax: params must contain n_rows, n_classes")
     var sp = _f32_ptr(Int(py=scores_addr))
@@ -809,8 +894,24 @@ def qn_softmax_binding(
     var nc = Int(py=params[1])
     if nc < 3:
         raise Error("qn_softmax: n_classes must be at least 3; the binary link is qn_sigmoid")
+    if nr <= 0:
+        return PythonObject(0)
     with GILReleased(Python()):
-        qn_softmax_host(sp, op, nr, nc)
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var n = nr * nc
+        var d_scores = ctx.enqueue_create_buffer[DType.float32](n)
+        ctx.enqueue_copy(dst_buf=d_scores, src_ptr=sp)
+        var d_out = ctx.enqueue_create_buffer[DType.uint64](n)
+        ctx.enqueue_function[qn_softmax_kernel](
+            d_scores.unsafe_ptr(), d_out.unsafe_ptr(), Int64(nr), Int64(nc),
+            grid_dim=min((nr + QN_SOFTMAX_TPB - 1) // QN_SOFTMAX_TPB, QN_SOFTMAX_MAX_BLOCKS),
+            block_dim=QN_SOFTMAX_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
+        ctx.synchronize()
+        _ = d_scores^
+        _ = d_out^
+        _ = ctx^
     return PythonObject(0)
 
 

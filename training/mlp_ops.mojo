@@ -26,21 +26,16 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
-from training.checks.loss_oracle import (
-    CeConfig,
-    IGNORE_INDEX_DEFAULT,
-    REDUCTION_MEAN,
-    ce_count,
-    ce_refuse_inputs,
-)
+from gemm.contract import OP_NN, OP_NT, OP_TN
+from training.checks.loss_contract import CeConfig, IGNORE_INDEX_DEFAULT, REDUCTION_MEAN
+from core.device_scan import device_first_nonfinite
 from training.checks.optimizer import (
     OPT_RECORD_INTERMEDIATES,
     SAB_CHUNKS,
     identical_optimizer_step,
     identical_optimizer_workspace_floats,
 )
-from training.checks.optimizer_oracle import OPT_ADAMW, OptimizerConfig
+from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
 from training.estimator import (
     _refuse_hyperparameters,
     identical_ce_admit_call,
@@ -294,9 +289,8 @@ def mlp_train_step_host(
         forward     pre1 = x . w1^T (OP_NT), act = relu(pre1 + b1),
                     pre2 = act . w2^T (OP_NT), logits = pre2 + b2
         loss        mean cross-entropy over classes 0..2 with its gradient
-                    (`identical_ce_loss_resident`, after `ce_refuse_inputs`
-                    on the downloaded logits, as `identical_ce_loss_host`
-                    and `samba_head_loss_host` do)
+                    (`identical_ce_loss_resident`, after `ce_refuse_inputs`'s
+                    refusals, the logits' non-finite scan on the device)
         backward    dw2 = dlogits^T . act (OP_TN), db2 = sum_rows(dlogits),
                     incoming = dlogits . w2 (OP_NN), dhidden = relu'(act)
                     incoming, dw1 = dhidden^T . x (OP_TN), db1 =
@@ -404,16 +398,17 @@ def mlp_train_step_host(
         ctx, pre2.unsafe_ptr(), p_d.unsafe_ptr() + MLP_OFF_B2, logits.unsafe_ptr(),
         rows, MLP_OUT, 0,
     )
-    # The logits come down once: they are a result, and the loss's refusal
-    # scan reads them on the host (`identical_ce_loss_host` pays the same
-    # copy).
+    # The loss's refusal scan of the logits runs on the device (one scan
+    # launch and its partials read back; cpu-gpu-cleanup n-train-mamba), and
+    # the logits come down once, as a result, behind it on the same queue.
+    if device_first_nonfinite(ctx, logits, rows * MLP_OUT) >= 0:
+        raise Error("small MLP operation has nonfinite input or output")
     ctx.enqueue_copy(dst_ptr=logits_ptr, src_buf=logits)
-    ctx.synchronize()
-    _finite(logits_ptr, rows * MLP_OUT)
     info_ptr.unsafe_store(0, Float32(0.0))
     info_ptr.unsafe_store(1, Float32(0.0))
     info_ptr.unsafe_store(2, Float32(0.0))
     if mode == MLP_STEP_FORWARD:
+        ctx.synchronize()
         _ = x_d^
         _ = y_d^
         _ = w1_v^
@@ -430,23 +425,15 @@ def mlp_train_step_host(
 
     # ---- Loss: `_training_impl.cross_entropy(logits, y, reduction='mean',
     # return_grad=True)`, which is `ce_loss_binding` -> `identical_ce_loss_host`:
-    # the admit, the host refusal scan, `ce_count`, then the resident half
-    # with `dlogits` left on the device.
+    # the admit, the refusals, `ce_count`, then the resident half with
+    # `dlogits` left on the device. The refusals ran above: the logits' scan on
+    # the device, the shape by construction (`rows x 3` against `rows`), the
+    # targets as classes 0..2. So no target equals the ignore index and
+    # `ce_count` is `rows`, exactly.
     identical_ce_admit_call(REDUCTION_MEAN, 1, rows)
     var cfg = CeConfig(MLP_OUT, IGNORE_INDEX_DEFAULT, REDUCTION_MEAN, Float32(0.0), 0)
-    var h_logits = List[Float32](capacity=rows * MLP_OUT)
-    for i in range(rows * MLP_OUT):
-        h_logits.append(logits_ptr.unsafe_load(i))
-    var h_targets = List[Int32](capacity=rows)
-    for i in range(rows):
-        h_targets.append(y_ptr.unsafe_load(i))
-    _ = ce_refuse_inputs(h_logits, h_targets, cfg)
-    var count = ce_count(h_targets, IGNORE_INDEX_DEFAULT)
-    _ = h_logits^
-    _ = h_targets^
-    var h_row = List[Float32](capacity=rows)
-    for _ in range(rows):
-        h_row.append(Float32(0.0))
+    var count = rows
+    var h_row = List[Float32](length=rows, fill=Float32(0.0))
     var dlogits = ctx.enqueue_create_buffer[DType.float32](rows * MLP_OUT)
     identical_ce_loss_resident(
         ctx, loss_ptr, h_row.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),

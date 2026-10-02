@@ -1,18 +1,11 @@
 """FAST + Apple opt-in switches for the k-means fit (lane/apple-fast-core,
-2026-10-02). Every switch is an env variable read on the HOST at dispatch
-time and defaults OFF; nothing here is compiled under IDENTICAL, whose bits
-never move.
+2026-10-02). Every switch is a `-D MOJOLEARN_<NAME>` define read with
+`is_defined` inside `KMEANS_FAST_APPLE` (no env read: that was a host step)
+and defaults OFF; nothing here is compiled under IDENTICAL, whose bits never
+move. The device-scale switch this file first carried is gone: main's
+`plan_sum_scale(ctx, x, ...)` forms the fixed-point scale on the device.
 
-    MOJOLEARN_KMEANS_FAST_DEVICE_SCALE=1
-        `cluster/estimator.mojo::kmeans_fit`: the fixed-point `sum_scale`
-        from the certified device magnitude (`plan_sum_scale_certified`,
-        DEVIATION 3081, NVIDIA's default) instead of `plan_sum_scale`, a
-        HOST pass over every value of X before the fit (4,000,000 x 11 on
-        taxi; 156-711 ms on the x86 pod it was measured on). The certificate
-        names the host's scale exactly or returns 0.0, in which case the
-        host pass still runs, so the scale (and every bit after it) is the
-        same either way.
-    MOJOLEARN_KMEANS_FAST_ROWNORM=1
+    -D MOJOLEARN_KMEANS_FAST_ROWNORM
         `row_norm_kernel` is launched ONE BLOCK PER ROW (`grid_dim=(n_samples,
         1, 1)`, `NORM_TPB` threads folding `d` values): 4,000,000 blocks of
         128 threads for 11 features each, three times per fit
@@ -23,7 +16,7 @@ never move.
         (`take_sqrt == 0`) norms, which is every shipped metric. The fold
         order differs from the block tree, so the norm bits can move within
         FAST; the assignment argmin is unchanged except on exact ties.
-    MOJOLEARN_KMEANS_FAST_SKIP_PREDICT=1
+    -D MOJOLEARN_KMEANS_FAST_SKIP_PREDICT
         `kmeans_fit` runs `fit_predict`: the fit, whose loop already ends
         with a fresh assignment against the FINAL centroids
         (`kmeans_fit_main_traced`, `:500-537`), then `predict`, the same
@@ -34,7 +27,7 @@ never move.
 """
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
-from std.os import getenv
+from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
@@ -46,24 +39,18 @@ comptime KMEANS_FAST_ROWNORM_TPB = 256
 comptime KMEANS_FAST_ROWNORM_MAX_D = 64
 
 
-def kmeans_fast_device_scale_on() -> Bool:
-    comptime if not KMEANS_FAST_APPLE:
-        return False
-    return String(getenv("MOJOLEARN_KMEANS_FAST_DEVICE_SCALE")) == "1"
-
-
 def kmeans_fast_rownorm_on(n_features: Int) -> Bool:
-    comptime if not KMEANS_FAST_APPLE:
+    comptime if not (KMEANS_FAST_APPLE and is_defined["MOJOLEARN_KMEANS_FAST_ROWNORM"]()):
         return False
-    if n_features < 1 or n_features > KMEANS_FAST_ROWNORM_MAX_D:
-        return False
-    return String(getenv("MOJOLEARN_KMEANS_FAST_ROWNORM")) == "1"
+    else:
+        return n_features >= 1 and n_features <= KMEANS_FAST_ROWNORM_MAX_D
 
 
 def kmeans_fast_skip_predict_on() -> Bool:
-    comptime if not KMEANS_FAST_APPLE:
+    comptime if not (KMEANS_FAST_APPLE and is_defined["MOJOLEARN_KMEANS_FAST_SKIP_PREDICT"]()):
         return False
-    return String(getenv("MOJOLEARN_KMEANS_FAST_SKIP_PREDICT")) == "1"
+    else:
+        return True
 
 
 def fast_row_sqnorm_kernel(

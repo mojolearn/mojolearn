@@ -103,7 +103,6 @@ is not this lane's.
 
 from std.math import log, pi, sqrt
 from std.memory import bitcast
-from std.os import getenv
 from std.sys.info import has_apple_gpu_accelerator
 
 from std.gpu import block_dim, block_idx, thread_idx
@@ -2793,9 +2792,11 @@ comptime KDE_SLICE_MAX = 256
 def kde_fast_slices_on() -> Bool:
     comptime if not (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+        and is_defined["MOJOLEARN_KDE_FAST_SLICES"]()
     ):
         return False
-    return String(getenv("MOJOLEARN_KDE_FAST_SLICES")) == "1"
+    else:
+        return True
 
 
 def kde_fused_slice_kernel[DPAD: Int](
