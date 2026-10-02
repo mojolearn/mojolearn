@@ -22,7 +22,10 @@ from x_linear.ops import (
 from std.sys.info import is_gpu
 from std.sys.compile import is_defined
 from x_linear.team import Team
-from x_linear.tops import fold_fa, chain_fmad, chain_fmad_scaled, t_fold_fa_staged
+from x_linear.tops import fold_fa, chain_fmad, chain_fmad_scaled, t_fold_fa_staged, _acc_fa, _acc_fmad, _fm
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from std.sys.info import is_nvidia_gpu, is_amd_gpu, is_apple_gpu
 
 comptime GLM_LINK_IDENTITY = 0
 comptime GLM_LINK_LOG = 1
@@ -91,6 +94,98 @@ def _objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Floa
             reg = fmad(w, w, reg)
         f = fa(fd(acc, den), fm(fm(Float32(0.5), alpha), reg))
     return t.bcast(f)
+
+
+#: lane/neural-pass88 (2026-10-01): the gradient and Hessian cells from
+#: threadgroup memory. Each cell is ONE thread's chain over the rows
+#: ascending (its bits); a device thread fetched its rows' x words from
+#: global memory at a stride of d words, so the chains waited on memory:
+#: 107 ms a Newton step for the 90 cells of the taxi block (1,000,000 x 11)
+#: on the M4's GPU, the GLM fit's largest cost. Here the team stages chunks
+#: of rr rows (x rows, d/deta, d2/deta2: contiguous, coalesced, double
+#: buffered) and every cell thread folds the chunk from threadgroup memory
+#: with its chain's own step, carrying its accumulator in g / h between
+#: chunks. Same steps, same order, same words.
+#: `-D MOJOLEARN_GLM_CELLS_UNSTAGED=1` restores the global-memory chains.
+comptime GLM_STAGE_WORDS = 2048  # a buffer; two buffers = 16 KB (Apple's limit is 32 KB)
+
+
+@always_inline
+def _glm_cell_kind(c: Int, d: Int, m: Int) -> Tuple[Int, Int, Int, Int]:
+    """(kind, j, k, out index): kind 0 grad x_c, 1 grad intercept, 2 hess
+    (j, k) j < d, 3 hess (d, k < d), 4 hess (d, d)."""
+    if c < m:
+        return (0 if c < d else 1, c, 0, c)
+    var q = c - m
+    var j = 0
+    while (j + 1) * (j + 2) // 2 <= q:
+        j += 1
+    var k = q - j * (j + 1) // 2
+    var kind = 2 if j < d else (3 if k < d else 4)
+    return (kind, j, k, m + j * m + k)
+
+
+def _glm_cells_staged(t: Team, x: FP, gr: FP, hr: FP, n: Int, d: Int, m: Int, rr: Int, g: FP, h: FP):
+    comptime if is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu():
+        var buf = stack_allocation[2 * GLM_STAGE_WORDS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+        var cells = m + m * (m + 1) // 2
+        # g and h hold the accumulators between chunks (h is g + m in fw)
+        for c in range(t.tid, cells, t.nt):
+            var kc = _glm_cell_kind(c, d, m)
+            if kc[0] <= 1:
+                st(g, kc[3], Float32(0))
+            else:
+                st(h, kc[1] * m + kc[2], Float32(0))
+        var chunks = (n + rr - 1) // rr
+        var stride = rr * (d + 2)
+
+        @always_inline
+        def stage(ci: Int, dstoff: Int) {imm t, imm x, imm gr, imm hr, imm n, imm d, imm rr, imm buf}:
+            var i0 = ci * rr
+            var cnt = min(rr, n - i0)
+            for u in range(t.tid, cnt * d, t.nt):
+                buf[dstoff + u] = ld(x, i0 * d + u)
+            for u in range(t.tid, cnt, t.nt):
+                buf[dstoff + rr * d + u] = ld(gr, i0 + u)
+                buf[dstoff + rr * d + rr + u] = ld(hr, i0 + u)
+
+        if chunks > 0:
+            stage(0, 0)
+        t.sync()
+        for ci in range(chunks):
+            var cur = (ci & 1) * stride
+            if ci + 1 < chunks:
+                stage(ci + 1, ((ci + 1) & 1) * stride)
+            var cnt = min(rr, n - ci * rr)
+            var xs = cur
+            var gs = cur + rr * d
+            var hs = gs + rr
+            for c in range(t.tid, cells, t.nt):
+                var kc = _glm_cell_kind(c, d, m)
+                var kind = kc[0]
+                var j = kc[1]
+                var k = kc[2]
+                var acc = ld(g, j) if kind <= 1 else ld(h, j * m + k)
+                if kind == 0:
+                    for r in range(cnt):
+                        acc = _acc_fmad(buf[gs + r], buf[xs + r * d + j], acc)
+                elif kind == 1:
+                    for r in range(cnt):
+                        acc = _acc_fa(acc, buf[gs + r])
+                elif kind == 2:
+                    for r in range(cnt):
+                        acc = _acc_fmad(_fm(buf[hs + r], buf[xs + r * d + j]), buf[xs + r * d + k], acc)
+                elif kind == 3:
+                    for r in range(cnt):
+                        acc = _acc_fmad(buf[hs + r], buf[xs + r * d + k], acc)
+                else:
+                    for r in range(cnt):
+                        acc = _acc_fa(acc, buf[hs + r])
+                if kind <= 1:
+                    st(g, j, acc)
+                else:
+                    st(h, j * m + k, acc)
+            t.sync()
 
 
 def _objective_host(x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link: Int, alpha: Float32,
@@ -205,29 +300,34 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                 st(hr, i, hi)
             t.sync()
             var cells = m + m * (m + 1) // 2
-            for c in range(t.tid, cells, t.nt):
-                if c < m:
+            var rr = GLM_STAGE_WORDS // (d + 2)
+            comptime if not is_defined["MOJOLEARN_GLM_CELLS_UNSTAGED"]():
+                if rr >= 1:
+                    _glm_cells_staged(t, x, gr, hr, n, d, m, rr, g, h)
+            if rr < 1 or is_defined["MOJOLEARN_GLM_CELLS_UNSTAGED"]():
+                for c in range(t.tid, cells, t.nt):
+                    if c < m:
+                        var acc: Float32
+                        if c < d:
+                            acc = chain_fmad(gr, 0, 1, x, c, d, n)
+                        else:
+                            acc = fold_fa(gr, 0, 1, n)
+                        st(g, c, acc)
+                        continue
+                    # lower-triangle cell (j, k), k <= j, row-major over j
+                    var q = c - m
+                    var j = 0
+                    while (j + 1) * (j + 2) // 2 <= q:
+                        j += 1
+                    var k = q - j * (j + 1) // 2
                     var acc: Float32
-                    if c < d:
-                        acc = chain_fmad(gr, 0, 1, x, c, d, n)
+                    if j < d:
+                        acc = chain_fmad_scaled(hr, x, j, k, d, n)
+                    elif k < d:
+                        acc = chain_fmad(hr, 0, 1, x, k, d, n)
                     else:
-                        acc = fold_fa(gr, 0, 1, n)
-                    st(g, c, acc)
-                    continue
-                # lower-triangle cell (j, k), k <= j, row-major over j
-                var q = c - m
-                var j = 0
-                while (j + 1) * (j + 2) // 2 <= q:
-                    j += 1
-                var k = q - j * (j + 1) // 2
-                var acc: Float32
-                if j < d:
-                    acc = chain_fmad_scaled(hr, x, j, k, d, n)
-                elif k < d:
-                    acc = chain_fmad(hr, 0, 1, x, k, d, n)
-                else:
-                    acc = fold_fa(hr, 0, 1, n)
-                st(h, j * m + k, acc)
+                        acc = fold_fa(hr, 0, 1, n)
+                    st(h, j * m + k, acc)
             t.sync()
         else:
             # gradient and Hessian at res (eta holds the current linear predictor)
