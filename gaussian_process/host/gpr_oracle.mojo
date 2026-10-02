@@ -65,6 +65,7 @@ trailing update and the posterior mean move as well through
 `gemm_oracle`'s own descending leaf.
 """
 
+from gaussian_process.gpc_items import gpr_ydot_host
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -857,11 +858,13 @@ def gpr_host_fit(
         dual = chol_host_solve(factor, y, 1)
         # _logdet_of: the factor's own value (cholesky_logdet_host).
         logdet = factor.logdet
-        # _y_dot_alpha: i ascending.
-        var acc = Float32(0.0)
-        for i in range(n_train):
-            acc = ftz(identical_mul_add(ftz(y[i]), ftz(dual[i]), acc))
-        ydotalpha = ftz(acc)
+        # y^T alpha_: the device's GPC_FOLD blocks, partials ascending
+        # (gpc_items.gpr_ydot_*, lane/cgr-kernel)
+        ydotalpha = gpr_ydot_host(
+            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(y.unsafe_ptr())),
+            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(dual.unsafe_ptr())),
+            n_train,
+        )
         lml = gpr_host_lml(ydotalpha, logdet, n_train)
     else:
         for _i in range(n_train):
