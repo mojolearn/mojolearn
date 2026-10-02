@@ -809,28 +809,36 @@ def gmm_meanll_launch(
         return
     if len(scratch) < gmm_meanll_levels_floats(n):
         raise Error("gmm_meanll_launch: scratch below gmm_meanll_levels_floats")
-    var src = lse.unsafe_ptr()
+    var in_scratch = False
     var src_off = 0
     var cnt = n
     var off = 0
     while cnt > GMM_MEANLL_CHUNK:
         var p = (cnt + GMM_MEANLL_CHUNK - 1) // GMM_MEANLL_CHUNK
-        ctx.enqueue_function[meanll_chunk_kernel](
-            src,
-            Int32(src_off),
-            scratch.unsafe_ptr(),
-            Int32(off),
-            Int32(cnt),
-            grid_dim=((p + 255) // 256, 1, 1),
-            block_dim=(256, 1, 1),
-        )
-        src = scratch.unsafe_ptr()
+        var grid = (p + 255) // 256
+        if in_scratch:
+            ctx.enqueue_function[meanll_chunk_kernel](
+                scratch.unsafe_ptr(), Int32(src_off), scratch.unsafe_ptr(), Int32(off), Int32(cnt),
+                grid_dim=(grid, 1, 1), block_dim=(256, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[meanll_chunk_kernel](
+                lse.unsafe_ptr(), Int32(0), scratch.unsafe_ptr(), Int32(off), Int32(cnt),
+                grid_dim=(grid, 1, 1), block_dim=(256, 1, 1),
+            )
+        in_scratch = True
         src_off = off
         off += p
         cnt = p
+    if in_scratch:
+        ctx.enqueue_function[meanll_finish_kernel](
+            scratch.unsafe_ptr(), Int32(src_off), Int32(cnt), Float32(n),
+            meanll.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )
+        return
     ctx.enqueue_function[meanll_finish_kernel](
-        src,
-        Int32(src_off),
+        lse.unsafe_ptr(),
+        Int32(0),
         Int32(cnt),
         Float32(n),
         meanll.unsafe_ptr(),
