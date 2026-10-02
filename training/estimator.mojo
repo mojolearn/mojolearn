@@ -100,6 +100,9 @@ from core.host_predict_threads import host_predict_task_count
 from core.host_parallel import host_parallelize
 from std.time import perf_counter_ns
 
+from core.staged_download import download_f32_into
+from core.device_pool import pool_give, pool_take
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.checks.loss import (
     identical_ce_backward_into,
     identical_ce_forward_into,
@@ -114,6 +117,7 @@ from training.checks.loss_oracle import (
     ce_count,
     ce_ones,
     ce_refuse_inputs,
+    ce_refuse_shape,
 )
 from training.checks.optimizer import (
     OPT_RECORD_INTERMEDIATES,
@@ -1078,6 +1082,37 @@ def identical_ce_admit_call(reduction: Int, want_grad: Int, n_rows: Int) raises:
         )
 
 
+# ---- per-call overhead of the CE host entry (lane neural-pass138, 2026-10-02)
+# The board's cross-entropy cell (logits 8,192 x 8,192, mean, the gradient)
+# read 516 ms on the L40S against torch eager's 7.5 ms. Besides the PCIe
+# copies the host contract needs (256 MB of logits up, 256 MB of dlogits
+# down), this entry built a host `List` mirror of ALL the logits by
+# appending them ONE AT A TIME (67,108,864 appends, with the List's
+# regrowth copies) only to hand it to `ce_refuse_inputs`, whose non-finite
+# scan and targets walk `identical_ce_forward_into` then ran AGAIN on the
+# device as its first statement (`ce_refuse_device_inputs`, DEVIATION 2514
+# step 2, which also retired the same mirror from the LM step). The mirror
+# is gone: the shape refusal runs here, the scan and the targets walk run
+# once, on the device, with the oracle's messages (loss_check clause (f)
+# asserts the device message EQUALS the host one), and dlogits come down
+# through `core/staged_download.mojo::download_f32_into` (pooled pinned
+# stages; MOJOLEARN_DOWNLOAD_STAGE=0 is the raw copy). A NaN or a bad target
+# is now refused after the upload instead of before it, still before any
+# recorded stage; nothing is written to the caller's outputs on a refusal.
+# The A/B switch back to the mirror is removed (lane gap-neural-overhead2).
+# No bit moves: the same kernels read the same uploaded bytes.
+comptime _CE_STAGE_POOL = "MojoDownloadStagesTrainingIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesTrainingFast"
+# The N * V device buffers of the host entry (logits, dlogits, shift, expo,
+# weights, the smoothing logp) and the GEMM workspace are kept between calls
+# in this pool (core/device_pool.mojo, lane gap-neural-overhead2) instead of
+# allocated and freed per call. Every kernel writes each cell of its output
+# before any read (ce_shift_exp, ce_logp, ce_weights, ce_dlogits store every
+# cell, ignored rows included), the logits are uploaded whole, and the
+# workspace is gated dirty-safe (`identical_ce_workspace_max_floats`): a
+# buffer's previous words never reach a result. Storage only: no bit moves.
+comptime _CE_DEV_POOL = "MojoDevPoolCeIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDevPoolCeFast"
+
+
 def identical_ce_loss_host(
     ctx: DeviceContext,
     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -1147,39 +1182,33 @@ def identical_ce_loss_host(
     per chunk and concatenates, and under `REDUCTION_NONE` the answer is
     bit-identical to the unsplit call.
 
-    THE REFUSAL COSTS A HOST COPY OF `logits`, AND IT IS NAMED RATHER THAN
-    HIDDEN. `ce_refuse_inputs` covers the shape refusals, the configuration
-    refusals, the non-finite scan and the target-range scan in ONE function
-    and cannot be split, so calling it before any device work means
-    materializing `logits` as a host `List`. Restating half of it here would
-    be a second copy of a refusal, which is the mistake DEVIATION 1495
-    exists to undo, and the certified forward then scans the same values a
-    second time after the upload. A pointer-taking overload of
-    `ce_refuse_inputs` in `loss_oracle.mojo` would remove both copies; that
-    file is this lane's and the change is OWED, not made here, because it
-    would edit a file both gates import.
+    THE REFUSALS RUN ON THE DEVICE (lane neural-pass138). The host `List`
+    mirror of `logits` this entry built for `ce_refuse_inputs` is gone (the
+    block comment above this function); the shape third runs here and the
+    non-finite scan and the targets walk are `identical_ce_forward_into`'s
+    first statement, with the oracle's messages.
     """
     identical_ce_admit_call(reduction, want_grad, n_rows)
 
     var cfg = CeConfig(vocab, ignore_index, reduction, label_smoothing, num_items)
 
-    # ---- The refusals, BEFORE any device work, through the oracle's own
-    # function. The host copy this needs is the cost named in the docstring.
-    var h_logits = List[Float32]()
-    var h_targets = List[Int32]()
-    for i in range(n_rows):
-        h_targets.append(targets_ptr.unsafe_load(i))
-    for i in range(n_rows * vocab):
-        h_logits.append(logits_ptr.unsafe_load(i))
-    _ = ce_refuse_inputs(h_logits, h_targets, cfg)
+    # The targets as a host List (N int32: one memcpy), for `ce_count`.
+    var h_targets = List[Int32](length=n_rows, fill=Int32(0))
+    memcpy(dest=h_targets.unsafe_ptr(), src=targets_ptr, count=n_rows)
+    # The shape third of `ce_refuse_inputs` here, before any buffer is
+    # sized from N * V; the non-finite scan and the targets walk are the
+    # first statement of `identical_ce_forward_into`
+    # (`ce_refuse_device_inputs`: the oracle's shape check, scan order,
+    # first index and message, gated equal by loss_check clause (f)), and
+    # they run before any recorded stage.
+    ce_refuse_shape(n_rows, n_rows * vocab, cfg)
     var count = ce_count(h_targets, ignore_index)
-    _ = h_logits^
     _ = h_targets^
 
     var cells = n_rows * vocab
 
     # ---- Transport in.
-    var logits = ctx.enqueue_create_buffer[DType.float32](cells)
+    var logits = pool_take[_CE_DEV_POOL](ctx, cells)
     var targets = ctx.enqueue_create_buffer[DType.int32](n_rows)
     ctx.enqueue_copy(dst_buf=logits, src_ptr=logits_ptr)
     ctx.enqueue_copy(dst_buf=targets, src_ptr=targets_ptr)
@@ -1188,21 +1217,37 @@ def identical_ce_loss_host(
     var grad_cells = 1
     if want_grad != 0:
         grad_cells = cells
-    var dlogits = ctx.enqueue_create_buffer[DType.float32](grad_cells)
-    identical_ce_loss_resident(
+    var dlogits = pool_take[_CE_DEV_POOL](ctx, grad_cells)
+    identical_ce_loss_resident[_CE_DEV_POOL](
         ctx, loss_ptr, row_ptr, dlogits, logits, targets, n_rows, count,
         reduction, want_grad, cfg,
     )
     if want_grad != 0:
-        ctx.enqueue_copy(dst_ptr=dlogits_ptr, src_buf=dlogits)
-        ctx.synchronize()
-    _ = logits^
+        download_f32_into[_CE_STAGE_POOL](ctx, dlogits, cells, dlogits_ptr)
+    # every use of both is behind the download's (or the resident body's
+    # final) synchronize
+    pool_give[_CE_DEV_POOL](logits^)
+    pool_give[_CE_DEV_POOL](dlogits^)
     _ = targets^
-    _ = dlogits^
     return count
 
 
-def identical_ce_loss_resident(
+def _ce_buf[pool: StaticString](ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """A pooled buffer when `pool` names one, else a fresh allocation (the
+    resident callers `samba_head_loss_host` and the MLP head keep theirs)."""
+    comptime if pool == "":
+        return ctx.enqueue_create_buffer[DType.float32](n)
+    return pool_take[pool](ctx, n)
+
+
+def _ce_ret[pool: StaticString](var b: DeviceBuffer[DType.float32]) raises:
+    comptime if pool == "":
+        _ = b^
+        return
+    pool_give[pool](b^)
+
+
+def identical_ce_loss_resident[pool: StaticString = ""](
     ctx: DeviceContext,
     loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
     row_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -1233,13 +1278,13 @@ def identical_ce_loss_resident(
         smooth_rows = n_rows
 
     var max_v = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var shift = ctx.enqueue_create_buffer[DType.float32](cells)
-    var expo = ctx.enqueue_create_buffer[DType.float32](cells)
+    var shift = _ce_buf[pool](ctx, cells)
+    var expo = _ce_buf[pool](ctx, cells)
     var denom = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var logdenom = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var logp_target = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var nll = ctx.enqueue_create_buffer[DType.float32](n_rows)
-    var logp = ctx.enqueue_create_buffer[DType.float32](smooth_cells)
+    var logp = _ce_buf[pool](ctx, smooth_cells)
     var logp_sum = ctx.enqueue_create_buffer[DType.float32](smooth_rows)
     var smooth = ctx.enqueue_create_buffer[DType.float32](smooth_rows)
     var row = ctx.enqueue_create_buffer[DType.float32](n_rows)
@@ -1255,8 +1300,8 @@ def identical_ce_loss_resident(
     ctx.enqueue_copy(dst_buf=ones, src_ptr=h_ones.unsafe_ptr())
 
     # THE WORKSPACE COMES FROM THE CERTIFIED SIZER, NEVER FROM A GUESS.
-    var ws = ctx.enqueue_create_buffer[DType.float32](
-        identical_ce_workspace_max_floats(n_rows, vocab, reduction)
+    var ws = _ce_buf[pool](
+        ctx, identical_ce_workspace_max_floats(n_rows, vocab, reduction)
     )
     ctx.synchronize()
 
@@ -1288,7 +1333,7 @@ def identical_ce_loss_resident(
     var grad_cells = 1
     if want_grad != 0:
         grad_cells = cells
-    var weights = ctx.enqueue_create_buffer[DType.float32](grad_cells)
+    var weights = _ce_buf[pool](ctx, grad_cells)
     if want_grad != 0:
         # Enqueued behind the forward on the SAME context, which MAX runs in
         # order, so `expo` and `denom` are the forward's own values by the
@@ -1319,18 +1364,19 @@ def identical_ce_loss_resident(
 
     _ = h_ones^
     _ = max_v
-    _ = shift
-    _ = expo
     _ = denom
     _ = logdenom
     _ = logp_target
     _ = nll
-    _ = logp
     _ = logp_sum
     _ = smooth
     _ = row
     _ = total
     _ = loss
     _ = ones
-    _ = ws
-    _ = weights
+    # every use is behind the synchronize above
+    _ce_ret[pool](shift^)
+    _ce_ret[pool](expo^)
+    _ce_ret[pool](logp^)
+    _ce_ret[pool](ws^)
+    _ce_ret[pool](weights^)

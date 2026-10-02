@@ -21,7 +21,6 @@ host-call	host-import	gap-lm	debt	bindings/_mojolearn_byte_lm.mojo	0	import bind
 host-call	host-import	gap-lm	debt	bindings/_mojolearn_byte_lm.mojo	0	return read_f32(address, n)
 host-call	host-import	gap-neural-models	debt	bindings/_mojolearn_embedding.mojo	0	import bindings/hostptr.mojo:read_f32
 host-threads	host-threads	gap-neural-models	debt	bindings/_mojolearn_embedding.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	gap-neural-overhead2	debt	bindings/_mojolearn_embedding.mojo	0	host_parallelize(_piece, tasks)
 host-threads	host-threads	gap-neural-models	debt	bindings/_mojolearn_embedding.mojo	0	host_parallelize(_scan, tasks)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	import bindings/hostptr.mojo:read_f32
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_estimators.mojo	0	import glm/estimator.mojo:qn_softmax_host
@@ -457,7 +456,6 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_causal_lm_fixtures.py	0	for _ in
 host-module	host-import	UNOWNED	debt	python/mojolearn/_cholesky_impl.py	0	return _backend.load_host_module(_HOST_BASENAME), "linalg_numeric_mode"
 py-loop	py-numpy	gap-optimizers	debt	python/mojolearn/_expansion_cluster.py	0	for r in range(n):
 py-loop	py-numpy	PR#111	debt	python/mojolearn/_expansion_cluster.py	0	labels = [max(range(k), key=lambda j: (lr[r * k + j], -j)) for r in range(n)]
-py-numpy	py-numpy	gap-neural-overhead2	debt	python/mojolearn/_expansion_cnn.py	0	deg = np.bincount(g.dst, minlength=n).astype(np.float32)
 py-numpy	py-numpy	gap-neural-overhead2	debt	python/mojolearn/_expansion_cnn.py	0	ptr[1:] = np.bincount(rows, minlength=self.n)[:self.n]
 py-numpy	py-numpy	gap-neural-overhead2	debt	python/mojolearn/_expansion_cnn.py	0	return np.ascontiguousarray(np.concatenate([np.cumsum(ptr), cols, rows]).astype(np.int32))
 py-numpy	py-numpy	gap-neural-overhead2	debt	python/mojolearn/_expansion_cnn.py	0	self.classes_, yi = np.unique(y, return_inverse=True)
@@ -636,7 +634,6 @@ host-call	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	impor
 host-import	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	var out = gemm_host_rows(g, g, OP_NT, 1, 1, count)
 host-import	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	var tot = gemm_host_rows(norms_copy, norms_copy, OP_NT, 1, 1, j_count)
 host-threads	host-threads	UNOWNED	debt	training/checks/train_loop.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	UNOWNED	debt	training/checks/train_loop.mojo	0	host_parallelize(_chunk, tasks)
 serial-launch	serial-gpu	UNOWNED	debt	training/chunked_lm_head_v2.mojo	0	ctx.enqueue_function[chunked_lm_head_v2_total_kernel](
 serial-launch	serial-gpu	UNOWNED	debt	training/chunked_lm_head_v2.mojo	1	ctx.enqueue_function[chunked_lm_head_v2_total_kernel](
 serial-launch	serial-gpu	UNOWNED	debt	training/chunked_lm_head_v2.mojo	2	ctx.enqueue_function[chunked_lm_head_v2_total_kernel](
