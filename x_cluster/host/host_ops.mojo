@@ -401,6 +401,31 @@ struct HostOps(ClusterOps):
             labels.append(Int32(lab[t]))
         return r.inertia
 
+    def gather_rows(mut self, src: Int, d: Int, idx: Int, m: Int, dst: Int) raises:
+        var ps = self._fp(src)
+        var pi = self._ip(idx)
+        var pd = self._fp(dst)
+        for t in range(m):
+            var r = Int(pi[t])
+            for f in range(d):
+                pd[t * d + f] = ps[r * d + f]
+
+    def kmeans_rows(
+        mut self, sub: Int, x: List[Float32], rows: List[Int], d: Int, k: Int, max_iter: Int,
+        tol: Float64, seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32],
+        mut labels: List[Int32],
+    ) raises -> Float64:
+        var g = List[Float32](length=len(rows) * d, fill=Float32(0))
+        for t in range(len(rows)):
+            memcpy(dest=g.unsafe_ptr() + t * d, src=x.unsafe_ptr() + rows[t] * d, count=d)
+        return self.kmeans(g, len(rows), d, k, max_iter, tol, seed, n_init, init, centers, labels)
+
+    def shrink(mut self, slot: Int) raises:
+        self.f[slot] = List[Float32](length=1, fill=Float32(0))
+
+    def empty(mut self, n: Int) raises -> Int:
+        return self.zeros(n)
+
     def gauss_q(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
         var px = self._fp(x)
         var pm = self._fp(means)

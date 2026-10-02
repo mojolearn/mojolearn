@@ -98,6 +98,30 @@ trait ClusterOps(Movable):
         bit for bit. Returns the inertia; `centers` k x d and `labels` n."""
         ...
 
+    def gather_rows(mut self, src: Int, d: Int, idx: Int, m: Int, dst: Int) raises:
+        """dst[t * d + f] = src[idx[t] * d + f], t < m (lane/neural-pass108)."""
+        ...
+
+    def kmeans_rows(
+        mut self, sub: Int, x: List[Float32], rows: List[Int], d: Int, k: Int, max_iter: Int,
+        tol: Float64, seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32],
+        mut labels: List[Int32],
+    ) raises -> Float64:
+        """`kmeans` (unit weights) of the rows `rows` of the host matrix `x`
+        in that order, whose gathered copy is the slot `sub` (the device
+        fits it in place; the host gathers `x`). The same words as `kmeans`
+        on the gathered list (lane/neural-pass108)."""
+        ...
+
+    def shrink(mut self, slot: Int) raises:
+        """Releases a float slot's storage (its index stays valid, one word)."""
+        ...
+
+    def empty(mut self, n: Int) raises -> Int:
+        """A float slot of n words with no defined contents (the caller
+        writes every word before reading one)."""
+        ...
+
     def gauss_q(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
         """dst (n x kc) = the Mahalanobis squares (`bodies.gauss_q_cell`)."""
         ...
