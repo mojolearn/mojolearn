@@ -242,8 +242,8 @@ def lle_local_py[E: Exec](
     var nn = _n(p, 3)
     var nc = _n(p, 4)
     var tol = Float32(Float64(py=f[0]))
-    if method < 0 or method > 2 or n < 1 or d < 1 or nn < 1 or nc < 1 or nn - 1 - nc < 1:
-        raise Error("x_decomp: lle_local needs method 0..2, n, d >= 1 and n_neighbors > n_components + 1")
+    if method < 0 or method > 2 or n < 1 or d < 1 or nn < 1 or nc < 1 or (method == 1 and nn - 1 - nc < 1):
+        raise Error("x_decomp: lle_local needs method 0..2, n, d, n_neighbors, n_components >= 1 (hessian: n_neighbors > n_components + 1)")
     if n * nn * n > 2147483647 or n * nn * nn > 2147483647 or n >= 16777216:
         raise Error("x_decomp: lle_local exceeds the Int32 index bound")
     var px = _f(x)
