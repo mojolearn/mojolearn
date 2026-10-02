@@ -173,6 +173,18 @@ OPS = [
       ("m", "int"), ("n", "int"), ("noise", "float"), ("jitter", "float"), ("kdiag", "float")]),
     ("svgp_var", "items", "svgp_var_item", "n",
      [("ksu", "fin", "n * m"), ("cmat", "fin", "m * m"), ("res", "fout", "n"), ("n", "int"), ("m", "int"), ("kdiag", "float")]),
+    # cpu-gpu-cleanup w2-pyglue: NearestCentroid's manhattan medians by a
+    # segmented (bitonic) sort per feature, and OneClassSVM's positive-weight
+    # rows by a blocked flag/scan compaction (x_neighbors/sort_items.mojo)
+    ("nc_median", "sort_items",
+     [("nc_median_init_item", "d * p"), ("nc_median_step_item", "d * (p // 2)", "n_steps"),
+      ("nc_median_pick_item", "n_classes * d")], None,
+     [("x", "fin", "n * d"), ("lab", "iin", "n"), ("start", "iin", "n_classes + 1"), ("cent", "fout", "n_classes * d"),
+      ("perm", "iscr", "d * p"), ("n", "int"), ("d", "int"), ("n_classes", "int"), ("p", "int"), ("n_steps", "int")]),
+    ("pos_compact", "sort_items",
+     [("pos_count_item", "xn_fold_blocks(n)"), ("pos_scan_item", "1"), ("pos_emit_item", "xn_fold_blocks(n)")], None,
+     [("w", "fin", "n"), ("rows", "iout", "n"), ("vals", "fout", "n"), ("info", "iout", "1"),
+      ("part", "iscr", "xn_fold_blocks(n)"), ("n", "int")]),
 ]
 
 #: Hand-written resident drivers (x_neighbors/iter_device.mojo on the GPU,
@@ -316,7 +328,8 @@ def imports(kind):
             mods.setdefault(mod, []).append(it)
     lines = []
     for mod, items in mods.items():
-        lines.append(f"from x_neighbors.{mod} import FP, IP, {', '.join(items)}")
+        # FP and IP once, from the first module (every item module defines the same two)
+        lines.append(f"from x_neighbors.{mod} import {'' if lines else 'FP, IP, '}{', '.join(items)}")
     return "\n".join(lines) + "\n"
 
 

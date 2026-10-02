@@ -8,6 +8,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_init_item, svgp_chol2_item, svgp_fix2_item, svgp_solve_item, svgp_mid_item, svgp_qchol_item, svgp_qfix_item, svgp_ypart_item, svgp_fin_item, svgp_var_item
+from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, pos_count_item, pos_scan_item, pos_emit_item
 from x_neighbors.block_ops import ocsvm_smo_block, OCSVM_TPB
 
 comptime BLOCK = 128
@@ -1631,4 +1632,120 @@ def op_svgp_var(ksu: Int, cmat: Int, res: Int, n: Int, m: Int, kdiag: Float32) r
     _ = d_ksu^
     _ = d_cmat^
     _ = d_res^
+    _ = ctx^
+
+
+def nc_median_k0(x: FP, lab: IP, start: IP, cent: FP, perm: IP, n_: Int64, d_: Int64, n_classes_: Int64, p_: Int64, n_steps_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var n_classes = Int(n_classes_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var t = _tid()
+    if t < d * p:
+        nc_median_init_item(t, x, lab, start, cent, perm, n, d, n_classes, p, n_steps)
+
+
+def nc_median_k1(x: FP, lab: IP, start: IP, cent: FP, perm: IP, n_: Int64, d_: Int64, n_classes_: Int64, p_: Int64, n_steps_: Int64, lj_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var n_classes = Int(n_classes_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var lj = Int(lj_)
+    var t = _tid()
+    if t < d * (p // 2):
+        nc_median_step_item(t, lj, x, lab, start, cent, perm, n, d, n_classes, p, n_steps)
+
+
+def nc_median_k2(x: FP, lab: IP, start: IP, cent: FP, perm: IP, n_: Int64, d_: Int64, n_classes_: Int64, p_: Int64, n_steps_: Int64):
+    var n = Int(n_)
+    var d = Int(d_)
+    var n_classes = Int(n_classes_)
+    var p = Int(p_)
+    var n_steps = Int(n_steps_)
+    var t = _tid()
+    if t < n_classes * d:
+        nc_median_pick_item(t, x, lab, start, cent, perm, n, d, n_classes, p, n_steps)
+
+
+def op_nc_median(x: Int, lab: Int, start: Int, cent: Int, n: Int, d: Int, n_classes: Int, p: Int, n_steps: Int) raises:
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_lab = _buf_i(ctx, lab, n, True)
+    var d_start = _buf_i(ctx, start, n_classes + 1, True)
+    var d_cent = _buf(ctx, cent, n_classes * d, False)
+    var d_perm = _buf_i(ctx, 0, d * p, False)
+    ctx.enqueue_function[nc_median_k0](
+        d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_start.unsafe_ptr(), d_cent.unsafe_ptr(), d_perm.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(p), Int64(n_steps),
+        grid_dim=_grid(d * p), block_dim=(BLOCK if d * p > 1 else 1),
+    )
+    for lj in range(n_steps):
+        ctx.enqueue_function[nc_median_k1](
+            d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_start.unsafe_ptr(), d_cent.unsafe_ptr(), d_perm.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(p), Int64(n_steps), Int64(lj),
+            grid_dim=_grid(d * (p // 2)), block_dim=(BLOCK if d * (p // 2) > 1 else 1),
+        )
+    ctx.enqueue_function[nc_median_k2](
+        d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_start.unsafe_ptr(), d_cent.unsafe_ptr(), d_perm.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(p), Int64(n_steps),
+        grid_dim=_grid(n_classes * d), block_dim=(BLOCK if n_classes * d > 1 else 1),
+    )
+    _down(ctx, d_cent, cent, n_classes * d)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_lab^
+    _ = d_start^
+    _ = d_cent^
+    _ = d_perm^
+    _ = ctx^
+
+
+def pos_compact_k0(w: FP, rows: IP, vals: FP, info: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < xn_fold_blocks(n):
+        pos_count_item(t, w, rows, vals, info, part, n)
+
+
+def pos_compact_k1(w: FP, rows: IP, vals: FP, info: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < 1:
+        pos_scan_item(t, w, rows, vals, info, part, n)
+
+
+def pos_compact_k2(w: FP, rows: IP, vals: FP, info: IP, part: IP, n_: Int64):
+    var n = Int(n_)
+    var t = _tid()
+    if t < xn_fold_blocks(n):
+        pos_emit_item(t, w, rows, vals, info, part, n)
+
+
+def op_pos_compact(w: Int, rows: Int, vals: Int, info: Int, n: Int) raises:
+    var ctx = xn_ctx()
+    var d_w = _buf(ctx, w, n, True)
+    var d_rows = _buf_i(ctx, rows, n, False)
+    var d_vals = _buf(ctx, vals, n, False)
+    var d_info = _buf_i(ctx, info, 1, False)
+    var d_part = _buf_i(ctx, 0, xn_fold_blocks(n), False)
+    ctx.enqueue_function[pos_compact_k0](
+        d_w.unsafe_ptr(), d_rows.unsafe_ptr(), d_vals.unsafe_ptr(), d_info.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(xn_fold_blocks(n)), block_dim=(BLOCK if xn_fold_blocks(n) > 1 else 1),
+    )
+    ctx.enqueue_function[pos_compact_k1](
+        d_w.unsafe_ptr(), d_rows.unsafe_ptr(), d_vals.unsafe_ptr(), d_info.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+    )
+    ctx.enqueue_function[pos_compact_k2](
+        d_w.unsafe_ptr(), d_rows.unsafe_ptr(), d_vals.unsafe_ptr(), d_info.unsafe_ptr(), d_part.unsafe_ptr(), Int64(n),
+        grid_dim=_grid(xn_fold_blocks(n)), block_dim=(BLOCK if xn_fold_blocks(n) > 1 else 1),
+    )
+    _down_i(ctx, d_rows, rows, n)
+    _down(ctx, d_vals, vals, n)
+    _down_i(ctx, d_info, info, 1)
+    ctx.synchronize()
+    _ = d_w^
+    _ = d_rows^
+    _ = d_vals^
+    _ = d_info^
+    _ = d_part^
     _ = ctx^
