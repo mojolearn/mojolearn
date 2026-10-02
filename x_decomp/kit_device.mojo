@@ -352,7 +352,7 @@ struct DKit(Movable):
         var da = self.ctx.enqueue_create_buffer[DType.float32](max(n * n, 1))
         if n > 0:
             self.ctx.enqueue_copy(dst_buf=da.create_sub_buffer[DType.float32](0, n * n), src_buf=self._sub(A))
-        DevExec._eigh_par_on(self.ctx, da, wh.p(), vh.p(), n)
+        _ = DevExec._eigh_par_on(self.ctx, da, wh.p(), vh.p(), n)
         _ = da^
         self.hold_f.clear()
         self.hold_i.clear()

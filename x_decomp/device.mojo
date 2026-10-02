@@ -2202,20 +2202,21 @@ struct DevExec(Exec):
             ctx.enqueue_function[sym_from_triangle_kernel](
                 da.unsafe_ptr(), Int32(n), Int32(uplo), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
             )
-        DevExec._eigh_par_on(ctx, da, w, v, n)
+        _ = DevExec._eigh_par_on(ctx, da, w, v, n)
         _ = da^
         ctx.synchronize()
         _ = ctx^
 
     @staticmethod
-    def _eigh_par_on(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int) raises:
+    def _eigh_par_on(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int) raises -> Int:
         """The two-sided Jacobi in the round-robin ordering on the device
         copy in `da` (consumed): `eigh_par_cs_kernel` / `eigh_par_update_kernel`
         per round, the convergence test before every sweep folded on the
         device (`_eigh_par_test`, three scalars read), then
         `sign_flip_kernel` and the ascending permutation; w (n) and v (n x n)
         out to host memory. The resident kit (x_decomp/kit_device.mojo)
-        hands its own copy here."""
+        hands its own copy here, the Lanczos projected solve too. Returns the
+        sweeps run."""
         var m = n + (n % 2)
         var h = m // 2
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
@@ -2291,6 +2292,7 @@ struct DevExec(Exec):
         _ = dpart^
         _ = dfold^
         _ = hfold^
+        return executed
 
     @staticmethod
     def _rr_batch_on(

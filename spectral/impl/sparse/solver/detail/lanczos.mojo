@@ -185,9 +185,9 @@ from spectral.checks.symmetric_eig_host import (
     SAB_ROTATE_UNFUSED,
     SAB_SWEEP_CAP,
     SAB_TIE_REVERSE,
-    pin_column_signs,
 )
-from x_decomp.rr_batch import device_eigh_rr_small
+from x_decomp.cells import F32Ptr
+from x_decomp.device import DevExec
 from spectral.impl.sparse.linalg.detail.laplacian import DeviceCoo
 from spectral.impl.sparse.matrix.detail.diagonal import SAB_LAPLACIAN_SEAM
 from spectral.impl.sparse.solver.lanczos_types import (
@@ -1762,12 +1762,13 @@ def lanczos_solve_ritz(
 ) raises -> Int:
     """`lanczos_solve_ritz`: the projected matrix (`alpha` on the diagonal,
     `beta[0..ncv-2]` on both off-diagonals, `beta_k[0..k)` in row `k` and
-    column `k` after a restart, `:148-169`), `eig_dc` (here the round-robin
-    Jacobi ON THE DEVICE, x_decomp/rr_batch.mojo `device_eigh_rr_small`, one
-    block, every round's rotations across its threads; cgr-decomp 2026-10-03
-    replaced the host solve of DEVIATION 771; the host column's oracle runs
-    the same rounds, x_decomp/rr_solve.mojo), the column signs pinned by
-    DEVIATION 770's rule, then the `which` slice (`:182-195`). `eigenvectors_k`
+    column `k` after a restart, `:148-169`), `eig_dc` (here x_decomp's
+    round-robin Jacobi ON THE DEVICE, `DevExec._eigh_par_on`: every round's
+    disjoint rotations at once; cgr-decomp 2026-10-03 replaced the host solve
+    of DEVIATION 771, and the column signs are now `sign_flip_kernel`'s rule,
+    the largest |component| positive, in place of DEVIATION 770's first
+    nonzero; the host column's oracle runs the same rounds and rule,
+    x_decomp/rr_solve.mojo), then the `which` slice (`:182-195`). `eigenvectors_k`
     comes back `ncv x k` ROW-MAJOR (`E[j * k + c]` = component `j` of
     selected vector `c`), `eigenvalues_k` ascending. Returns the solver's
     sweep count. `SM`/`LM` are refused by name: they are a `thrust::sort`
@@ -1790,12 +1791,14 @@ def lanczos_solve_ritz(
             t[k * ncv + tid] = beta_k[tid]
             t[tid * ncv + k] = beta_k[tid]
     var first = lanczos_which_first(which, ncv, k)
-    var evals = List[Float32]()
-    var evecs = List[Float32]()
-    var sweeps = device_eigh_rr_small(ctx, t, ncv, evals, evecs)
-    # DEVIATION 770: the first nonzero component of each column positive
-    # (comparisons and negations only: the same words on every column)
-    pin_column_signs[DType.float32](evecs, ncv, ncv)
+    var evals = List[Float32](length=ncv, fill=Float32(0.0))
+    var evecs = List[Float32](length=ncv * ncv, fill=Float32(0.0))
+    var dt = upload_f32(ctx, t)
+    var sweeps = DevExec._eigh_par_on(
+        ctx, dt, F32Ptr(unsafe_from_address=Int(evals.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(evecs.unsafe_ptr())),
+        ncv,
+    )
+    _ = dt^
     eigenvalues_k.clear()
     eigenvectors_k.clear()
     for c in range(k):
