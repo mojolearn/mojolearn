@@ -548,6 +548,34 @@ def gpu_opponents_first(opp):
     return gpu if gpu else list(opp)
 
 
+def _ours_runs_on_cpu(family, lane, arm):
+    """True when a planned `ours*` arm would time our CPU: the ours-cpu arm, or a
+    neural lane whose public class is the host binding."""
+    if arm == CPU_ARM:
+        return True
+    return arm_library(arm) == "mojolearn" and family == "neural" and \
+        NEURAL.DEVICE_OF.get(lane) == "cpu"
+
+
+def enforce_gpu_only(races):
+    """LOCKED (Andrew, Oct 2 2026): the board races only OUR GPU, and our GPU races
+    GPU opponents only unless a race has no GPU opponent at all. Any plan that
+    breaks this stops the board before anything runs. There is no switch."""
+    bad = []
+    for r in races:
+        for a in r["our_arms"]:
+            if _ours_runs_on_cpu(r["family"], r["lane"], a):
+                bad.append("%s: our arm %s runs on the CPU" % (r["id"], a))
+        opp = r.get("opponents") or []
+        if any(_is_cpu_arm(a) for a in opp) and any(not _is_cpu_arm(a) for a in opp):
+            bad.append("%s: CPU opponents %s race beside GPU ones" % (
+                r["id"], ",".join(a for a in opp if _is_cpu_arm(a))))
+    if bad:
+        raise SystemExit("bench_board: GPU-only board violated (our CPU never races; CPU "
+                         "opponents only where no GPU opponent exists):\n  " + "\n  ".join(bad))
+    return races
+
+
 def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, rows=None,
                neural_shape="full", cpu_arm=False):
     check_neural_modes(families, modes)
@@ -614,7 +642,7 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                     "opponents": list(opp),
                     "arms": list(ours) + list(opp),
                 })
-    return races
+    return enforce_gpu_only(races)
 
 
 def plan_summary(races):
@@ -1797,6 +1825,9 @@ def classical_cells(ctx, race, r):
 
 def base_cell(ctx, race, arm, mode):
     lib = arm_library(arm)
+    if _ours_runs_on_cpu(race["family"], race["lane"], arm):
+        raise SystemExit("bench_board: refusing to record %s for %s: our CPU never races "
+                         "(GPU-only board, Andrew Oct 2 2026)" % (arm, race["id"]))
     return {
         "family": race["family"], "lane": race["lane"], "dataset": race["dataset"],
         "rows": race["rows"], "rows_tag": rows_tag(race["rows"]),
