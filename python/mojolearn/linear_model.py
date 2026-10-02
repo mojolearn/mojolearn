@@ -486,8 +486,41 @@ def _check_sample_weight(sample_weight, n_rows, estimator):
     return w
 
 
+def _ols_tsqr_on(rows, cols):
+    """Whether `LinearRegression.fit` takes the blocked TSQR: a tall design
+    (rows >= cols + 1, cols + 1 <= 512) and MOJOLEARN_LINALG_TSQR not 0."""
+    from ._expansion_decomp import _tsqr_lstsq_on
+    return _tsqr_lstsq_on(rows, cols, 1)
+
+
+def _ols_tsqr(x, y, rows, cols, mode):
+    """coef_ (float32, cols) of min ||x w - y|| (x and y already centered and
+    weighted as `fit` prepares them) through the blocked TSQR of [x | y]
+    (x_decomp/tsqr_core.mojo, lane neural-pass140): R_aug = [[R, Q^T y],
+    [0, rho]] in one pass over the rows, then the minimum-norm solution from
+    the SVD of the small R (`_expansion_decomp._tsqr_lstsq_core`). No Gram
+    matrix, so the condition number is not squared. A singular value at or
+    below cols * eps32 * s_max is dropped (the dependent directions of a
+    rank-deficient design, a constant column centered to zero among them,
+    get no weight: the minimum-norm solution). DEVIATION from the normal
+    equations route (DEVIATIONS 2620, 2621): no column equilibration, so a
+    column's units can move that cutoff where they could not before; the
+    cutoff is on singular values, not on squared ones."""
+    from ._expansion_decomp import _F32_EPS, _Kit, _mode, _tsqr_lstsq_core
+    k = _Kit(_mode(mode))
+    X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols)
+    return X.out((cols,))
+
+
 class LinearRegression(NumericModeMixin):
-    """Ordinary least squares through normal equations on the GPU.
+    """Ordinary least squares on the GPU.
+
+    THE DEFAULT ROUTE (lane neural-pass140, 2026-10-02) is the blocked TSQR
+    of [X | y] and the SVD of its small R (`_ols_tsqr`: no Gram matrix, the
+    condition number not squared) for every tall design with at most 511
+    features; the centering, weights and intercept below are unchanged.
+    MOJOLEARN_LINALG_TSQR=0 (and any design the TSQR does not take) keeps
+    the normal-equations solver this docstring describes from here on.
 
     This is the eigendecomposition solver (reference: cuML's `algorithm='eig'`, `lstsqEig`, RAFT), which forms
     ``X.T @ X`` and so squares the condition number. It is less robust than
@@ -633,12 +666,18 @@ class LinearRegression(NumericModeMixin):
             root = [_round_f32(math.sqrt(v)) for v in weights.tolist()]
             work_x = _scale_rows(work_x, root)
             work_y = _scale_rows(work_y, root)
-        self.coef_ = empty((cols,), "<f4")
-        self._bind("_mojolearn_estimators").ols_fit(
-            addr_ro(work_x, name="X"), addr_ro(work_y, name="y"),
-            addr(self.coef_, name="coef_"),
-            [rows, cols],
-        )
+        if _ols_tsqr_on(rows, cols):
+            # lane neural-pass140: the blocked TSQR of [X | y] and the SVD of
+            # its small R (_ols_tsqr); MOJOLEARN_LINALG_TSQR=0 keeps the
+            # normal equations below
+            self.coef_ = _ols_tsqr(work_x, work_y, rows, cols, getattr(self, "numeric_mode", None))
+        else:
+            self.coef_ = empty((cols,), "<f4")
+            self._bind("_mojolearn_estimators").ols_fit(
+                addr_ro(work_x, name="X"), addr_ro(work_y, name="y"),
+                addr(self.coef_, name="coef_"),
+                [rows, cols],
+            )
         if self.fit_intercept:
             dot = math.fsum(
                 float(a) * float(b)

@@ -735,11 +735,13 @@ host-import	host-import	hr-qr	debt	x_decomp/device.mojo	0	geqrf_host_rows(a, tau
 host-import	host-import	hr-qr	debt	x_decomp/device.mojo	0	if xd_qr_on_host(m):
 host-import	host-import	hr-qr	debt	x_decomp/device.mojo	1	if xd_qr_on_host(m):
 host-import	host-import	hr-qr	debt	x_decomp/device.mojo	0	orgqr_host_rows(h, tau, q, m, n, kk, qc)
+host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	import x_decomp/lu_host.mojo:lu_solve_host_rows
+host-import	host-import	hr-lu	debt	x_decomp/device.mojo	0	if xd_lu_solve_on_host(n):
+host-import	host-import	hr-lu	debt	x_decomp/device.mojo	0	lu_solve_host_rows(lu, piv, b, n, nrhs, trans)
 host-threads	host-threads	hr-qr	debt	x_decomp/device.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	x_decomp/device.mojo	0	host_parallelize(_piece, tasks)
 serial-launch	serial-gpu	UNOWNED	debt	x_decomp/device.mojo	0	ctx.enqueue_function[chol_diag_kernel](
 serial-launch	serial-gpu	UNOWNED	debt	x_decomp/device.mojo	0	ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
-serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_function[geqrf_head_staged_kernel](
 serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_function[lu_diag_kernel](
 serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	1	ctx.enqueue_function[lu_diag_kernel](
 serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_function[lu_pivot_block_kernel](
@@ -757,6 +759,14 @@ host-threshold	host-env/threshold	hr-qr	debt	x_decomp/qr_host.mojo	0	return m >=
 route-switch	host-env/threshold	hr-qr	debt	x_decomp/qr_host.mojo	0	comptime XD_QR_HOST_MIN = 1 << 16
 route-switch	host-env/threshold	hr-qr	debt	x_decomp/qr_host.mojo	0	return m >= XD_QR_HOST_MIN
 route-switch	host-env/threshold	hr-qr	debt	x_decomp/qr_host.mojo	0	var v = String(getenv("MOJOLEARN_XD_QR_HOST"))
+host-env	host-env/threshold	hr-lu	debt	x_decomp/lu_host.mojo	0	var v = String(getenv("MOJOLEARN_XD_LU_SOLVE_HOST"))
+host-threads	host-threads	hr-lu	debt	x_decomp/lu_host.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	hr-lu	debt	x_decomp/lu_host.mojo	0	host_parallelize(_run, used)
+host-threshold	host-env/threshold	hr-lu	debt	x_decomp/lu_host.mojo	0	comptime XD_LU_SOLVE_HOST_MIN = 1024
+host-threshold	host-env/threshold	hr-lu	debt	x_decomp/lu_host.mojo	0	return n >= XD_LU_SOLVE_HOST_MIN
+route-switch	host-env/threshold	hr-lu	debt	x_decomp/lu_host.mojo	0	comptime XD_LU_SOLVE_HOST_MIN = 1024
+route-switch	host-env/threshold	hr-lu	debt	x_decomp/lu_host.mojo	0	return n >= XD_LU_SOLVE_HOST_MIN
+route-switch	host-env/threshold	hr-lu	debt	x_decomp/lu_host.mojo	0	var v = String(getenv("MOJOLEARN_XD_LU_SOLVE_HOST"))
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/bayes.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/bayes.mojo	0	par_rows(rows_map, n)
 serial-launch	serial-gpu	UNOWNED	debt	x_linear/blocks.mojo	0	ctx.enqueue_function[xq_step_kernel](

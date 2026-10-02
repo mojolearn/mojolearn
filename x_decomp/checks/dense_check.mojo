@@ -24,6 +24,7 @@ from x_decomp.checks.seam_util import (
 )
 from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
 from x_decomp.cells import X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
+from x_decomp.qr_sliced import QS_ROWS
 from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
 from decomposition.host.pca_oracle import host_jacobi_eigh
 from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
@@ -220,10 +221,13 @@ def main() raises:
     HostExec.orth(ptr(qh), mm, l)
     same("5309 orth host", count_diff_f32(qh, wq))
     tr.record_list_f32("x_decomp.orth", qd)
-    # ---- 5320 geqrf + orgqr, a tall, a wide and a rank-deficient matrix
-    for shape in range(3):
-        var gm = 23 if shape != 1 else 5
+    # ---- 5320 geqrf + orgqr, a tall, a wide and a rank-deficient matrix,
+    # and (lane hr-qr) a tall one of several slices (x_decomp/qr_sliced.mojo)
+    for shape in range(4):
+        var gm = 23 if shape == 0 or shape == 2 else (5 if shape == 1 else 3 * QS_ROWS + 37)
         var gn = 6 if shape != 1 else 9
+        if shape == 3:
+            gn = 5
         var ga = seam_fixture(gm, gn, UInt64(31 + shape))
         for t in range(len(ga)):
             if abs(ga[t]) > Float32(100):
@@ -232,6 +236,7 @@ def main() raises:
             for t in range(gm):
                 ga[t * gn + 3] = ga[t * gn + 1]          # a duplicated column
         var kk = gm if gm < gn else gn
+        var gq = gm if shape != 3 else gn          # Q's columns (the slices' case: the thin Q)
         var want_f = oracle_geqrf(ga, gm, gn)
         require_separates("5320 geqrf fold order", count_diff_f32(want_f[0], oracle_geqrf(ga, gm, gn, 1)[0]))
         var hd = ga.copy()
@@ -244,13 +249,13 @@ def main() raises:
         HostExec.geqrf(ptr(hh), ptr(th), gm, gn)
         same("5320 geqrf host h", count_diff_f32(hh, want_f[0]))
         same("5320 geqrf host tau", count_diff_f32(th, want_f[1]))
-        var want_q = oracle_orgqr(want_f[0], want_f[1], gm, gn, kk, gm)
-        require_separates("5320 orgqr fold order", count_diff_f32(want_q, oracle_orgqr(want_f[0], want_f[1], gm, gn, kk, gm, 1)))
-        var qgd = zeros(gm * gm)
-        DevExec.orgqr(ptr(want_f[0]), ptr(want_f[1]), ptr(qgd), gm, gn, kk, gm)
+        var want_q = oracle_orgqr(want_f[0], want_f[1], gm, gn, kk, gq)
+        require_separates("5320 orgqr fold order", count_diff_f32(want_q, oracle_orgqr(want_f[0], want_f[1], gm, gn, kk, gq, 1)))
+        var qgd = zeros(gm * gq)
+        DevExec.orgqr(ptr(want_f[0]), ptr(want_f[1]), ptr(qgd), gm, gn, kk, gq)
         same("5320 orgqr device", count_diff_f32(qgd, want_q))
-        var qgh = zeros(gm * gm)
-        HostExec.orgqr(ptr(want_f[0]), ptr(want_f[1]), ptr(qgh), gm, gn, kk, gm)
+        var qgh = zeros(gm * gq)
+        HostExec.orgqr(ptr(want_f[0]), ptr(want_f[1]), ptr(qgh), gm, gn, kk, gq)
         same("5320 orgqr host", count_diff_f32(qgh, want_q))
         tr.record_list_f32("x_decomp.geqrf", hd)
         tr.record_list_f32("x_decomp.orgqr", qgd)

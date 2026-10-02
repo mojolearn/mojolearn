@@ -40,8 +40,6 @@ from x_decomp.cells import (
     chol_serial,
     als_row,
     als_cg_row,
-    geqrf_serial,
-    orgqr_col,
     barycenter_row,
     gamma_cell,
     lasso_row,
@@ -54,8 +52,9 @@ from x_decomp.cells import (
 )
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
-from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_serial
 from x_decomp.exec_trait import Exec
+from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
+from x_decomp.qr_sliced_host import qs_geqrf_host, qs_orgqr_host
 from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
 from x_decomp.host_ew import ew_range
@@ -549,21 +548,12 @@ struct HostExec(Exec):
 
     @staticmethod
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
-        # lane neural-pass37: the row-streaming walk of the same cells
-        # (x_decomp/qr_host.mojo); MOJOLEARN_XD_QR_SERIAL=1 keeps the
-        # column-by-column serial loop (the A/B arm)
-        if xd_qr_serial():
-            geqrf_serial(a, tau, m, n)
-        else:
-            geqrf_host_rows(a, tau, m, n)
+        """The sliced order's host replay (x_decomp/qr_sliced_host.mojo)."""
+        qs_geqrf_host(a, tau, m, n)
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
-        if xd_qr_serial():
-            for j in range(qc):
-                orgqr_col(h, tau, q, j, m, n, kk, qc)
-        else:
-            orgqr_host_rows(h, tau, q, m, n, kk, qc)
+        qs_orgqr_host(h, tau, q, m, n, kk, qc)
 
     @staticmethod
     def als_cg_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, steps: F32Ptr, n: Int, m: Int, f: Int, reg: Float32, cg: Int) raises:
@@ -578,6 +568,18 @@ struct HostExec(Exec):
         var got = HostExec._qr_r(a, m, n)
         for t in range(n * n):
             r.unsafe_store(t, got[t])
+
+    @staticmethod
+    def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
+        """The blocked TSQR's host replay (x_decomp/tsqr_host.mojo)."""
+        ts_factor_host(a, b, r, m, d, nrhs, keep)
+
+    @staticmethod
+    def tsqr_apply(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
+        if k == 0:
+            ts_free_host()
+            return
+        ts_apply_host(c, q, m, n, k)
 
     @staticmethod
     def vendor() -> String:
