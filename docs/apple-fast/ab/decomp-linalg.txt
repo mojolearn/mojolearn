@@ -1,0 +1,35 @@
+CMD lane/apple-fast-decomp-linalg dlin-eigh-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dlin-eigh-ident eigh synthetic 3 3 -
+CMD lane/apple-fast-decomp-linalg dlin-eigh-rr AFC_FAMILY=algos bash tools/afc_ab.sh dlin-eigh-rr eigh synthetic 3 3 - MOJOLEARN_EIGH_FAST_RR=1
+CMD lane/apple-fast-decomp-linalg dlin-lusolve-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dlin-lusolve-ident lu-solve synthetic 3 3 -
+CMD lane/apple-fast-decomp-linalg dlin-lusolve-tri AFC_FAMILY=algos bash tools/afc_ab.sh dlin-lusolve-tri lu-solve synthetic 3 3 - MOJOLEARN_LU_SOLVE_FAST_TRISOLVE=1
+CMD lane/apple-fast-decomp-linalg dlin-lufac-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dlin-lufac-ident lu-factor synthetic 3 3 -
+CMD lane/apple-fast-decomp-linalg dlin-lufac-tri AFC_FAMILY=algos bash tools/afc_ab.sh dlin-lufac-tri lu-factor synthetic 3 3 - MOJOLEARN_LU_SOLVE_FAST_TRISOLVE=1
+CMD lane/apple-fast-decomp-linalg dlin-lufac-fused AFC_FAMILY=algos bash tools/afc_ab.sh dlin-lufac-fused lu-factor synthetic 3 3 - MOJOLEARN_LU_FACTOR_FAST_FUSED=1
+CMD lane/apple-fast-decomp-linalg dlin-lufac-both AFC_FAMILY=algos bash tools/afc_ab.sh dlin-lufac-both lu-factor synthetic 3 3 - "MOJOLEARN_LU_FACTOR_FAST_FUSED=1 MOJOLEARN_LU_SOLVE_FAST_TRISOLVE=1"
+CMD lane/apple-fast-decomp-linalg dlin-qr-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dlin-qr-ident qr istella 3 3 -
+CMD lane/apple-fast-decomp-linalg dlin-qr-dev-istella AFC_FAMILY=algos bash tools/afc_ab.sh dlin-qr-dev-istella qr istella 3 3 - MOJOLEARN_QR_FAST_DEV=1
+CMD lane/apple-fast-decomp-linalg dlin-qr-dev-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dlin-qr-dev-taxi qr taxi 3 3 - MOJOLEARN_QR_FAST_DEV=1
+CMD lane/apple-fast-decomp-linalg dlin-svd-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dlin-svd-ident svd istella 3 3 -
+CMD lane/apple-fast-decomp-linalg dlin-svd-cholqr-istella AFC_FAMILY=algos bash tools/afc_ab.sh dlin-svd-cholqr-istella svd istella 3 3 - MOJOLEARN_SVD_FAST_CHOLQR=1
+CMD lane/apple-fast-decomp-linalg dlin-svd-cholqr-tiled AFC_FAMILY=algos bash tools/afc_ab.sh dlin-svd-cholqr-tiled svd istella 3 3 - "MOJOLEARN_SVD_FAST_CHOLQR=1 MOJOLEARN_DECOMP_FAST_GEMM_TILED=1"
+CMD lane/apple-fast-decomp-linalg dlin-svd-cholqr-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dlin-svd-cholqr-taxi svd taxi 3 3 - "MOJOLEARN_SVD_FAST_CHOLQR=1 MOJOLEARN_DECOMP_FAST_GEMM_TILED=1"
+CMD lane/apple-fast-decomp-linalg dlin-lstsq-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dlin-lstsq-ident lstsq istella 3 3 -
+CMD lane/apple-fast-decomp-linalg dlin-lstsq-tiled AFC_FAMILY=algos bash tools/afc_ab.sh dlin-lstsq-tiled lstsq istella 3 3 - MOJOLEARN_DECOMP_FAST_GEMM_TILED=1
+CMD lane/apple-fast-decomp-linalg dlin-rsvd-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dlin-rsvd-ident randomized-svd istella 3 3 -
+CMD lane/apple-fast-decomp-linalg dlin-rsvd-tiled AFC_FAMILY=algos bash tools/afc_ab.sh dlin-rsvd-tiled randomized-svd istella 3 3 - MOJOLEARN_DECOMP_FAST_GEMM_TILED=1
+CMD lane/apple-fast-decomp-linalg dlin-nmf-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dlin-nmf-ident nmf istella 3 3 -
+CMD lane/apple-fast-decomp-linalg dlin-nmf-tiled-istella AFC_FAMILY=algos bash tools/afc_ab.sh dlin-nmf-tiled-istella nmf istella 3 3 - MOJOLEARN_DECOMP_FAST_GEMM_TILED=1
+CMD lane/apple-fast-decomp-linalg dlin-nmf-tiled-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dlin-nmf-tiled-taxi nmf taxi 3 3 - MOJOLEARN_DECOMP_FAST_GEMM_TILED=1
+CMD lane/apple-fast-decomp-linalg dlin-als-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dlin-als-ident als taxi-zones 3 3 -
+CMD lane/apple-fast-decomp-linalg dlin-als-tiled AFC_FAMILY=algos bash tools/afc_ab.sh dlin-als-tiled als taxi-zones 3 3 - MOJOLEARN_DECOMP_FAST_GEMM_TILED=1
+CMD lane/apple-fast-decomp-linalg dlin-pls-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dlin-pls-ident pls istella 3 3 -
+CMD lane/apple-fast-decomp-linalg dlin-pls-dead AFC_FAMILY=algos bash tools/afc_ab.sh dlin-pls-dead pls istella 3 3 - MOJOLEARN_PLS_FAST_DEADCOLS=1
+CMD lane/apple-fast-decomp-linalg dlin-pls-dead-tiled AFC_FAMILY=algos bash tools/afc_ab.sh dlin-pls-dead-tiled pls istella 3 3 - "MOJOLEARN_PLS_FAST_DEADCOLS=1 MOJOLEARN_DECOMP_FAST_GEMM_TILED=1"
+CMD lane/apple-fast-decomp-linalg dlin-plsc-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dlin-plsc-ident pls-canonical istella 3 3 -
+CMD lane/apple-fast-decomp-linalg dlin-plsc-dead AFC_FAMILY=algos bash tools/afc_ab.sh dlin-plsc-dead pls-canonical istella 3 3 - MOJOLEARN_PLS_FAST_DEADCOLS=1
+CMD lane/apple-fast-decomp-linalg dlin-cca-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dlin-cca-ident cca istella 3 3 -
+CMD lane/apple-fast-decomp-linalg dlin-cca-dead AFC_FAMILY=algos bash tools/afc_ab.sh dlin-cca-dead cca istella 3 3 - MOJOLEARN_PLS_FAST_DEADCOLS=1
+CMD lane/apple-fast-decomp-linalg dlin-cca-dead-taxi AFC_FAMILY=algos bash tools/afc_ab.sh dlin-cca-dead-taxi cca taxi 3 3 - MOJOLEARN_PLS_FAST_DEADCOLS=1
+CMD lane/apple-fast-decomp-linalg dlin-fa-ident AFC_ARM=ours AFC_FAMILY=algos bash tools/afc_ab.sh dlin-fa-ident factor-analysis istella 3 3 -
+CMD lane/apple-fast-decomp-linalg dlin-fa-qrr AFC_FAMILY=algos bash tools/afc_ab.sh dlin-fa-qrr factor-analysis istella 3 3 - MOJOLEARN_FA_FAST_QRR=1
+CMD lane/apple-fast-decomp-linalg dlin-fa-qrr-tiled AFC_FAMILY=algos bash tools/afc_ab.sh dlin-fa-qrr-tiled factor-analysis istella 3 3 - "MOJOLEARN_FA_FAST_QRR=1 MOJOLEARN_DECOMP_FAST_GEMM_TILED=1"
