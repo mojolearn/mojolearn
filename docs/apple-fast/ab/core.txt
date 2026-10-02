@@ -1,0 +1,1 @@
+CMD lane/apple-fast-core core-ols-dcenter-taxi AFC_FAMILY=classical bash tools/afc_ab_def.sh core-ols-dcenter-taxi estimators ols taxi 1 2 "" "-D MOJOLEARN_OLS_FAST_DEVICE_CENTER=1"
