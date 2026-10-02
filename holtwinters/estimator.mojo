@@ -27,6 +27,9 @@ from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+from checks.numerics import ftz
+from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast
 
 #: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
 #: lane/devctx-lifetime): a context per call exhausts Metal command queues.
@@ -43,7 +46,7 @@ from holtwinters.impl.runner import (
     holtwinters_validate_data,
     holtwinters_validate_params,
 )
-from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
+from holtwinters.impl.tsa.holtwinters_params import SEASONAL_ADDITIVE, seasonal_from_name
 
 
 struct HWFit(Movable):
@@ -452,3 +455,108 @@ def holtwinters_forecast_ptr(
         out_ptr.unsafe_store(i, fc[i])
     _ = fitted^
     return h * batch_size
+
+
+# =============================================================================
+# THE IN-SAMPLE PREDICTION ON THE DEVICE (cpu-gpu-cleanup n-seq, 2026-10-02)
+# =============================================================================
+# `holtwinters/host/hw_predict.mojo::hw_predict_in_sample_ptr`'s arithmetic,
+# one GPU thread per output cell (step k, series s): the same three loads,
+# the same two flushed operations, the canonical quiet NaN where
+# `t < 2 * frequency`. Each cell is independent, so the device and the host
+# column (the CPU-only install's binding) write the same bits. The GPU
+# binding registers `holtwinters_predict` from here; it used to call the host
+# walk.
+
+comptime HW_PREDICT_TPB = 256
+
+
+def hw_predict_in_sample_kernel(
+    out: MutPointer[Float32, MutAnyOrigin],
+    comps: MutPointer[Float32, MutAnyOrigin],
+    components_len_in: Int64,
+    bs_in: Int64,
+    f_in: Int64,
+    start_in: Int64,
+    ld_in: Int64,
+    additive_in: Int32,
+):
+    var bs = Int(bs_in)
+    var total = Int(ld_in) * bs
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx >= total:
+        return
+    var f = Int(f_in)
+    var cl = Int(components_len_in)
+    var k = idx // bs
+    var s = idx - k * bs
+    var t = Int(start_in) + k
+    if t < 2 * f:
+        out.unsafe_store(idx, bitcast[DType.float32](UInt32(0x7FC00000)))
+        return
+    var i = t - f
+    var leveltrend = ftz(
+        comps.unsafe_load(s + (i - 1) * bs) + comps.unsafe_load(cl + s + (i - 1) * bs)
+    )
+    var stmp = comps.unsafe_load(2 * cl + s + (i - f) * bs)
+    if additive_in != 0:
+        out.unsafe_store(idx, ftz(leveltrend + stmp))
+    else:
+        out.unsafe_store(idx, ftz(leveltrend * stmp))
+
+
+def holtwinters_predict_ptr(
+    comps_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    batch_size: Int,
+    frequency: Int,
+    seasonal: String,
+    start: Int,
+    end: Int,
+) raises -> Int:
+    """The in-sample one-step predictions at times `[start, end)` on the
+    device. Returns `(end - start) * batch_size`. `comps_ptr` is the packed
+    components `holtwinters_fit_ptr` wrote; `out_ptr` is written TIME-MAJOR.
+    The guards are the host entry's (`bindings/holtwinters_host_predict.mojo`),
+    in its words and order."""
+    var st = seasonal_from_name(seasonal)
+    if n <= frequency:
+        raise Error(
+            "holtwinters predict: n (" + String(n) + ") must exceed frequency ("
+            + String(frequency) + "); there would be no fitted components"
+        )
+    if batch_size < 1:
+        raise Error(
+            "holtwinters predict: batch_size must be >= 1 (batch_size="
+            + String(batch_size) + ")"
+        )
+    if start < 0 or end <= start:
+        raise Error(
+            "holtwinters predict: need 0 <= start < end (start="
+            + String(start) + ", end=" + String(end) + ")"
+        )
+    if end > n:
+        raise Error(
+            "holtwinters predict: the in-sample prediction ends at n (end="
+            + String(end) + ", n=" + String(n) + "); later times are the forecast's"
+        )
+    var components_len = (n - frequency) * batch_size
+    var ld = end - start
+    var total = ld * batch_size
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var comps_d = ctx.enqueue_create_buffer[DType.float32](3 * components_len)
+    var out_d = ctx.enqueue_create_buffer[DType.float32](total)
+    ctx.enqueue_copy(dst_buf=comps_d, src_ptr=comps_ptr)
+    ctx.enqueue_function[hw_predict_in_sample_kernel](
+        out_d.unsafe_ptr(), comps_d.unsafe_ptr(),
+        Int64(components_len), Int64(batch_size), Int64(frequency),
+        Int64(start), Int64(ld), Int32(1 if st == SEASONAL_ADDITIVE else 0),
+        grid_dim=(total + HW_PREDICT_TPB - 1) // HW_PREDICT_TPB,
+        block_dim=HW_PREDICT_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out_d)
+    ctx.synchronize()
+    _ = comps_d^
+    _ = out_d^
+    return total
