@@ -96,8 +96,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.memory import memcpy
 from std.os import getenv
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
-from core.host_predict_threads import host_predict_task_count
-from core.host_parallel import host_parallelize
 from std.time import perf_counter_ns
 
 from core.staged_download import download_f32_into
@@ -416,25 +414,14 @@ def opt_download_staged() -> Bool:
 
 
 def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int):
-    """`memcpy(dst, src, n)` in contiguous chunks over host tasks (lane
-    neural-pass26): the one leg of the resident optimizer step that reads
-    pinned (write-combined) host memory, where one thread's reads are
-    latency-bound and several threads' are not."""
-    var tasks = host_predict_task_count(1 << 30)
-    if n < (1 << 20) or tasks <= 1:
+    """`memcpy(dst, src, n)`: the transport copy between a pinned stage and the
+    caller's host buffer. One copy on the calling thread: no host task pool
+    on a GPU install (cpu-gpu-cleanup n-train-mamba, 2026-10-02; the copy
+    over host tasks of lane neural-pass26 is gone). The pipelined transport
+    below overlaps this copy with the DMA of the other stage half. A
+    transport choice: no bit moves."""
+    if n > 0:
         memcpy(dest=dst, src=src, count=n)
-        return
-    if tasks > 16:
-        tasks = 16
-    var chunk = (n + tasks - 1) // tasks
-
-    def _chunk(t: Int) {imm dst, imm src, imm n, imm chunk}:
-        var lo = t * chunk
-        var hi = min(lo + chunk, n)
-        if hi > lo:
-            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
-
-    host_parallelize(_chunk, tasks)
 
 
 # ===========================================================================
@@ -450,7 +437,7 @@ def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPoi
 # copies of pageable memory ran at about a third of the link, one after the
 # other. Here every transfer goes in chunks of `opt_pipe_floats()` through
 # TWO pinned stage halves: on the way up the host copies chunk i into one
-# half (over host tasks) while the DMA of chunk i - 1 runs out of the other;
+# half while the DMA of chunk i - 1 runs out of the other;
 # on the way down the DMA of chunk i runs into one half while the host copies
 # chunk i - 1 out of the other. One in-order context, so every ordering below
 # is a `ctx.synchronize()`; nothing computes here and no bit moves.
@@ -791,9 +778,8 @@ def identical_optimizer_step_resident_host(
             ctx.enqueue_copy(dst_buf=g_stage, src_buf=g_buf)
         ctx.synchronize()
         _step_timing_tick(ctx, rton, rtk, "resident.dma_down")
-        # the reads out of pinned memory go over host tasks: a single thread
-        # reads write-combined memory at about 3 GB/s here (26 ms per 64 MB),
-        # four or more read it at 10 GB/s and more (6 ms); a copy, no bit moves
+        # one copy out of the pinned stage on the calling thread (no host task
+        # pool on a GPU install); a copy, no bit moves
         _parallel_copy_out(param_ptr, p_stage.unsafe_ptr(), n_total)
         if max_norm > Float32(0.0):
             _parallel_copy_out(grad_ptr, g_stage.unsafe_ptr(), n_total)
