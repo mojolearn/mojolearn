@@ -24,10 +24,10 @@ from std.memory import bitcast
 from std.os import getenv
 from std.time import perf_counter_ns
 
-from core.gemm import gemm_nt, gemm_tn, gemv_n
+from core.gemm import PINNED_GEMM_TPB, gemm_nt, gemm_tn, gemv_n, pinned_gemv_n_kernel
 from core.column_stats import STATS_TPB, xty_kernel
 from checks.numerics import numeric_mode_name
-from glm.impl.qn.glm_base import mean_kernel, sum_terms_kernel
+from glm.impl.qn.glm_base import mean_kernel, qn_coalesced_applies, sum_terms_kernel
 from glm.impl.qn.glm_softmax import xtdz_multi_kernel
 from core.xtdz_coalesced import (
     xtdz_coalesced,
@@ -135,6 +135,35 @@ def gemv_arm(ctx: DeviceContext, n: Int, d: Int) raises:
     _ = z^
 
 
+def pgemv_arm(ctx: DeviceContext, n: Int, d: Int) raises:
+    """`pinned_gemv_n_kernel` launched directly: main's IDENTICAL gemv, so its
+    hash is the reference the `gemv.` arm (the dispatched kernel) must equal."""
+    var name = "pgemv." + String(n) + "x" + String(d)
+    if not _want(name):
+        return
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var w = ctx.enqueue_create_buffer[DType.float32](d)
+    var z = ctx.enqueue_create_buffer[DType.float32](n)
+    _fill(ctx, x, n * d, 1)
+    _fill(ctx, w, d, 2)
+    var times = List[Float64]()
+    for rep in range(_reps() + 1):
+        var t0 = perf_counter_ns()
+        for _b in range(_batch()):
+            ctx.enqueue_function[pinned_gemv_n_kernel](
+                z.unsafe_ptr(), x.unsafe_ptr(), w.unsafe_ptr(), Int32(n), Int32(d),
+                grid_dim=((n + PINNED_GEMM_TPB - 1) // PINNED_GEMM_TPB, 1, 1),
+                block_dim=(PINNED_GEMM_TPB, 1, 1),
+            )
+        ctx.synchronize()
+        if rep > 0:
+            times.append(Float64(perf_counter_ns() - t0) / 1.0e6 / Float64(_batch()))
+    _report(name, times, _hash(ctx, z, n))
+    _ = x^
+    _ = w^
+    _ = z^
+
+
 def xty_arm(ctx: DeviceContext, n: Int, d: Int) raises:
     var name = "xty." + String(n) + "x" + String(d)
     if not _want(name):
@@ -229,7 +258,7 @@ def xtdz_co_arm(ctx: DeviceContext, n: Int, d: Int, c: Int, salt_x: Int, salt_z:
     )
     if not _want(name):
         return
-    if not xtdz_coalesced_applies(d, c):
+    if not (xtdz_coalesced_applies(d, c) or qn_coalesced_applies(d, c)):
         print("STEP", name, "not applicable in this build")
         return
     var x = ctx.enqueue_create_buffer[DType.float32](n * d)
@@ -306,6 +335,17 @@ def main() raises:
     with DeviceContext() as ctx:
         print("STEPS mode", numeric_mode_name(), "device", ctx.name())
         # logistic regression per evaluation (taxi 11 columns, a wider 64)
+        # lane/gap-linear-nv: the board's QN shapes (taxi 1M x 11, Istella-S
+        # 1M x 220); pgemv is main's kernel launched directly, gemv the
+        # dispatched one, xty main's X^T dZ, co.xty the coalesced one.
+        pgemv_arm(ctx, 1_000_000, 11)
+        pgemv_arm(ctx, 1_000_000, 220)
+        gemv_arm(ctx, 1_000_000, 11)
+        xty_arm(ctx, 1_000_000, 11)
+        xtdz_co_arm(ctx, 1_000_000, 11, 1, 3, 4)
+        reduce_arm(ctx, 1_000_000, 0)
+        reduce_arm(ctx, 1_000_000, 1)
+        pgemv_arm(ctx, 4_000_000, 11)
         gemv_arm(ctx, 4_000_000, 11)
         gemv_arm(ctx, 1_000_000, 64)
         gemv_arm(ctx, 1_000_000, 220)

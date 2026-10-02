@@ -29,7 +29,11 @@ NVIDIA, AMD and CPU columns compile the unchanged loop.
 """
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from std.sys.info import (
+    has_amd_gpu_accelerator,
+    has_apple_gpu_accelerator,
+    has_nvidia_gpu_accelerator,
+)
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -60,6 +64,20 @@ comptime APPLE_FAST_STEP_UNROLL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF"]()
+)
+
+#: IDENTICAL on NVIDIA and AMD (lane/gap-linear-nv, 2026-10-02): the same
+#: unrolled walks, the row-coalesced `X^T dZ` (`core/xtdz_coalesced.mojo`)
+#: in the QN objective, and the shared-memory-staged one-thread-per-row
+#: `gemv_n` (`core/gemm.mojo::pinned_gemv_n_tiled_kernel`). Every one keeps
+#: its chain and fold, so the words are main's; only the loads move. The
+#: host column compiles none of it, so the device-vs-host ID check compares
+#: the new kernels against the old ones. `-D MOJOLEARN_NV_AMD_STEPS_OFF=1`
+#: restores main's kernels (the A/B define).
+comptime NV_AMD_IDENTICAL_STEPS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and (has_nvidia_gpu_accelerator() or has_amd_gpu_accelerator())
+    and not is_defined["MOJOLEARN_NV_AMD_STEPS_OFF"]()
 )
 
 comptime STRIDED_UNROLL = 32

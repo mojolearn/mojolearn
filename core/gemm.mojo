@@ -38,6 +38,7 @@ from gemm.checks.gemm_identical import (
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from core.gram_multi_gpu import pinned_gemm_nt_gram_kernel, parallel_gram_outputs
+from core.strided_walk import NV_AMD_IDENTICAL_STEPS
 
 from gemm.checks.gemm_identical import (
     identical_gemm,
@@ -303,6 +304,68 @@ def pinned_gemv_n_kernel(
     z.unsafe_store(i, ftz(Float32(0.0) + ftz(acc)))
 
 
+#: `pinned_gemv_n_tiled_kernel`: rows per block (one thread each) and the
+#: column window staged per pass; the shared page is padded one float per
+#: row so the per-thread row walk is bank-conflict free.
+comptime GEMV_TILE_ROWS = 256
+comptime GEMV_TILE_K = 32
+comptime GEMV_TILE_STRIDE = GEMV_TILE_K + 1
+
+
+def pinned_gemv_n_tiled_kernel(
+    z: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    k_in: Int32,
+):
+    """`pinned_gemv_n_kernel`'s value, its loads coalesced (lane/gap-linear-nv,
+    NVIDIA and AMD IDENTICAL). Thread `t` of block `b` still owns row
+    `i = b * GEMV_TILE_ROWS + t` and runs the one chain
+    `acc = rtf_mul_add(ftz(x[i, p]), ftz(y[p]), acc)`, p ascending, closed by
+    `ftz(0 + ftz(acc))`. What moves: the block first copies the window
+    `x[rows, p0 : p0 + GEMV_TILE_K]` into shared memory with consecutive
+    threads on consecutive words, so a warp reads whole lines of X once,
+    where the plain kernel's warp touched 32 rows' lines per column and
+    re-read them from L2 (X does not fit in L1). Same chain, same bits.
+    Launch `grid = ceil(m / GEMV_TILE_ROWS)`, `block = GEMV_TILE_ROWS`."""
+    var m = Int(m_in)
+    var k = Int(k_in)
+    var tid = Int(thread_idx.x)
+    var i0 = Int(block_idx.x) * GEMV_TILE_ROWS
+    var i = i0 + tid
+    var rows = min(GEMV_TILE_ROWS, m - i0)
+    var xs = stack_allocation[
+        GEMV_TILE_ROWS * GEMV_TILE_STRIDE,
+        Scalar[DType.float32],
+        address_space=AddressSpace.SHARED,
+    ]()
+    var ys = stack_allocation[
+        GEMV_TILE_K, Scalar[DType.float32], address_space=AddressSpace.SHARED
+    ]()
+    var acc = Float32(0.0)
+    var p0 = 0
+    while p0 < k:
+        var kt = min(GEMV_TILE_K, k - p0)
+        var t = tid
+        var total = rows * kt
+        while t < total:
+            var r = t // kt
+            var c = t - r * kt
+            xs[r * GEMV_TILE_STRIDE + c] = ftz(x.unsafe_load((i0 + r) * k + p0 + c))
+            t += GEMV_TILE_ROWS
+        if tid < kt:
+            ys[tid] = ftz(y.unsafe_load(p0 + tid))
+        barrier()
+        if tid < rows:
+            for pp in range(kt):
+                acc = rtf_mul_add(xs[tid * GEMV_TILE_STRIDE + pp], ys[pp], acc)
+        barrier()
+        p0 += GEMV_TILE_K
+    if i < m:
+        z.unsafe_store(i, ftz(Float32(0.0) + ftz(acc)))
+
+
 comptime GEMM_IDENT_SWAP_537 = is_defined["MOJOLEARN_537_GEMM_IDENT_SWAP"]()
 
 
@@ -558,6 +621,20 @@ def gemv_n(
 ) raises:
     """`z[m] = x[m x k] ."""
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        # NVIDIA / AMD: the same chain per row, X staged through shared
+        # memory (NV_AMD_IDENTICAL_STEPS; -D MOJOLEARN_NV_AMD_STEPS_OFF=1
+        # restores the plain kernel).
+        comptime if NV_AMD_IDENTICAL_STEPS:
+            ctx.enqueue_function[pinned_gemv_n_tiled_kernel](
+                z.unsafe_ptr(),
+                x.unsafe_ptr(),
+                y.unsafe_ptr(),
+                Int32(m),
+                Int32(k),
+                grid_dim=((m + GEMV_TILE_ROWS - 1) // GEMV_TILE_ROWS, 1, 1),
+                block_dim=(GEMV_TILE_ROWS, 1, 1),
+            )
+            return
         ctx.enqueue_function[pinned_gemv_n_kernel](
             z.unsafe_ptr(),
             x.unsafe_ptr(),
