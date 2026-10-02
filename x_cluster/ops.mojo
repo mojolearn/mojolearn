@@ -192,3 +192,21 @@ trait ClusterOps(Movable):
         kc Mahalanobis squares, its log-sum-exp and its responsibilities by
         the same bodies in the same order (the same values)."""
         ...
+
+    def set_i(mut self, slot: Int, v: List[Int32]) raises:
+        """Writes v into the first len(v) words of the int slot (lane/neural-pass133)."""
+        ...
+
+    def mb_update(mut self, b: Int, batch: Int, labels: Int, c: Int, w: Int, k: Int, d: Int) raises:
+        """MiniBatchKMeans' `update_center_dense` with unit weights for every
+        center, in place: the centers `c` (k x d) and counts `w` (k) from the
+        batch rows `b` (batch x d) and their labels, each center's chain the
+        host loop's (`c * w`, `+ x` in batch order, `w += wsum`, `* (1 / w)`),
+        a center without rows untouched (lane/neural-pass133)."""
+        ...
+
+    def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
+        """`gather_rows(src, d, idx, m, dst)` then `nearest(dst, m, c, k, d,
+        labels, dist)`: the device fuses them into one launch (the same words;
+        lane/neural-pass133)."""
+        ...
