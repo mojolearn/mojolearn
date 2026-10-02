@@ -46,6 +46,8 @@ from x_neighbors.items import matmul_tn_acc_item, K_RBF, U_IDENTITY
 from x_neighbors.lp_spmm import lp_spmm_kernel
 from core.device_zero import enqueue_fill
 from neighbors.impl.detail.fast_mma_knn import FAST_MMA_KNN_ENABLED, fast_mma_knn, fast_mma_knn_applies
+from core.pinned_reduce import pinned_block_sum
+from checks.numerics import NUMERIC_IDENTICAL
 
 
 def op_lp_iterate(
@@ -282,6 +284,147 @@ def pagerank_step_sparse_kernel(
         pagerank_step_sparse_item(t, indptr, rows, vals, x, p, dw, dsum.unsafe_load(0), res, alpha_)
 
 
+#: MOJOLEARN_PAGERANK_FAST_REDUCE=1 (lane/apple-fast-neighbors2, 2026-10-02;
+#: FAST + Apple only, default off): PageRank's power iteration with its two
+#: per-iteration reductions parallel and several iterations per drain.
+#: Cause: `op_pr_iterate_sparse` runs `pr_dangling_sum_kernel` and
+#: `absdiff_sum_kernel` on ONE thread each (a serial chain over the n = 20,000
+#: nodes, twice per iteration), then copies the sum back and synchronizes
+#: before the next step (x_neighbors/iter_device.mojo op_pr_iterate_sparse's
+#: loop). Here each reduction is a grid of PR_TPB-thread block partials and a
+#: one-block fold of the partials (`pinned_block_sum`, FAST's block sum), the
+#: stopping test runs on the device (flag + iteration count), and PR_BATCH
+#: iterations are enqueued per drain; a kernel whose flag is set does nothing,
+#: so the converged iterate is the one the serial loop stops at. Expected:
+#: the two serial chains and the drain gone from every iteration (most of the
+#: iteration at 300,000 edges). The fold order differs from the item's
+#: ascending chain (FAST promises quality, not bits); the threshold n * tol
+#: is compared in float32 on the device.
+comptime PR_TPB = 256
+comptime PR_BATCH = 8
+comptime PR_FAST_REDUCE_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+
+
+def pr_partial_kernel(x: FP, dangling: IP, b: FP, part: FP, flag: IP, n_: Int64, mode_: Int64):
+    """Block partials: mode 0 the dangling mass (x over the dangling nodes),
+    mode 1 sum |x - b|. Nothing once the flag is set."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var n = Int(n_)
+    var tid = Int(thread_idx.x)
+    var i = Int(block_idx.x) * PR_TPB + tid
+    var v = Float32(0)
+    if i < n:
+        if mode_ == 0:
+            if dangling.unsafe_load(i) != 0:
+                v = x.unsafe_load(i)
+        else:
+            v = abs(x.unsafe_load(i) - b.unsafe_load(i))
+    var s = pinned_block_sum[PR_TPB](v)
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), s)
+
+
+def pr_fold_kernel(part: FP, nparts_: Int64, dst: FP, flag: IP, iters: IP, thr_: Float32, mode_: Int64):
+    """ONE block of PR_TPB threads over the block partials. mode 0 writes
+    the dangling mass to dst[0]; mode 1 is the stopping test: one more
+    iteration counted, the flag set when the sum is below thr."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var tid = Int(thread_idx.x)
+    var acc = Float32(0)
+    var i = tid
+    while i < Int(nparts_):
+        acc += part.unsafe_load(i)
+        i += PR_TPB
+    var s = pinned_block_sum[PR_TPB](acc)
+    if tid == 0:
+        if mode_ == 0:
+            dst.unsafe_store(0, s)
+        else:
+            iters.unsafe_store(0, iters.unsafe_load(0) + 1)
+            if s < thr_:
+                flag.unsafe_store(0, 1)
+
+
+def pagerank_step_sparse_flag_kernel(
+    indptr: IP, rows: IP, vals: FP, x: FP, p: FP, dw: FP, dsum: FP, res: FP, flag: IP, n_: Int64, alpha_: Float32,
+):
+    """`pagerank_step_sparse_kernel`, nothing once the flag is set."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var t = _tid()
+    if t < Int(n_):
+        pagerank_step_sparse_item(t, indptr, rows, vals, x, p, dw, dsum.unsafe_load(0), res, alpha_)
+
+
+def _pr_sparse_fast_loop(
+    ctx: DeviceContext,
+    mut d_ip: DeviceBuffer[DType.int32], mut d_rows: DeviceBuffer[DType.int32],
+    mut d_vals: DeviceBuffer[DType.float32], mut d_dg: DeviceBuffer[DType.int32],
+    mut d_a: DeviceBuffer[DType.float32], mut d_b: DeviceBuffer[DType.float32],
+    mut d_p: DeviceBuffer[DType.float32], mut d_dw: DeviceBuffer[DType.float32],
+    mut d_ds: DeviceBuffer[DType.float32],
+    x: Int, info: Int, n: Int, max_iter: Int, thr: Float64, alpha: Float32,
+) raises:
+    """The MOJOLEARN_PAGERANK_FAST_REDUCE=1 loop (see PR_TPB above): the
+    iterate after the device's n_iter steps is in `d_a` for even n_iter,
+    `d_b` for odd (the start is in `d_a`)."""
+    var nparts = (n + PR_TPB - 1) // PR_TPB
+    var d_part = _buf(ctx, 0, nparts, False)
+    var h_fl = List[Int32](length=2, fill=Int32(0))
+    var d_fl = _buf_i(ctx, Int(h_fl.unsafe_ptr()), 2, True)
+    var flp: IP = d_fl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var itp: IP = flp + 1
+    var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var nxt: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var thr32 = Float32(thr)
+    var done = 0
+    var converged = False
+    while done < max_iter and not converged:
+        var steps = min(PR_BATCH, max_iter - done)
+        for _ in range(steps):
+            ctx.enqueue_function[pr_partial_kernel](
+                cur, d_dg.unsafe_ptr(), cur, d_part.unsafe_ptr(), flp, Int64(n), Int64(0),
+                grid_dim=nparts, block_dim=PR_TPB,
+            )
+            ctx.enqueue_function[pr_fold_kernel](
+                d_part.unsafe_ptr(), Int64(nparts), d_ds.unsafe_ptr(), flp, itp, thr32, Int64(0),
+                grid_dim=1, block_dim=PR_TPB,
+            )
+            ctx.enqueue_function[pagerank_step_sparse_flag_kernel](
+                d_ip.unsafe_ptr(), d_rows.unsafe_ptr(), d_vals.unsafe_ptr(), cur, d_p.unsafe_ptr(), d_dw.unsafe_ptr(),
+                d_ds.unsafe_ptr(), nxt, flp, Int64(n), alpha, grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+            )
+            ctx.enqueue_function[pr_partial_kernel](
+                nxt, d_dg.unsafe_ptr(), cur, d_part.unsafe_ptr(), flp, Int64(n), Int64(1),
+                grid_dim=nparts, block_dim=PR_TPB,
+            )
+            ctx.enqueue_function[pr_fold_kernel](
+                d_part.unsafe_ptr(), Int64(nparts), d_ds.unsafe_ptr(), flp, itp, thr32, Int64(1),
+                grid_dim=1, block_dim=PR_TPB,
+            )
+            var t = cur
+            cur = nxt
+            nxt = t
+        ctx.enqueue_copy(dst_ptr=h_fl.unsafe_ptr(), src_buf=d_fl)
+        ctx.synchronize()
+        converged = h_fl[0] != 0
+        done += steps
+    var n_iter = Int(h_fl[1])
+    if n_iter % 2 == 0:
+        _down(ctx, d_a, x, n)
+    else:
+        _down(ctx, d_b, x, n)
+    ctx.synchronize()
+    var inf = IP(unsafe_from_address=info)
+    inf.unsafe_store(0, Int32(n_iter))
+    inf.unsafe_store(1, Int32(1 if converged else 0))
+    _ = h_fl^
+    _ = d_fl^
+    _ = d_part^
+
+
 def op_pr_iterate_sparse(
     a: Int, x: Int, p: Int, dw: Int, info: Int,
     n: Int, max_iter: Int, thr_hi: Int, thr_lo: Int, binary: Int, alpha: Float32,
@@ -310,6 +453,26 @@ def op_pr_iterate_sparse(
     var d_s = _buf(ctx, 0, 1, False)
     var d_ds = _buf(ctx, 0, 1, False)
     var hs = List[Float32](length=1, fill=Float32(0))
+    comptime if PR_FAST_REDUCE_BUILD:
+        if String(getenv("MOJOLEARN_PAGERANK_FAST_REDUCE")) == "1" and n > 0:
+            _pr_sparse_fast_loop(ctx, d_ip, d_rows, d_vals, d_dg, d_a, d_b, d_p, d_dw, d_ds,
+                                 x, info, n, max_iter, thr, alpha)
+            if timing:
+                print("pr_iterate_sparse: device (fast reduce)", (perf_counter_ns() - t_start) // 1000000, "ms")
+            _ = hs^
+            _ = d_ip^
+            _ = d_rows^
+            _ = d_vals^
+            _ = d_dg^
+            _ = d_a^
+            _ = d_b^
+            _ = d_p^
+            _ = d_dw^
+            _ = d_s^
+            _ = d_ds^
+            _ = g^
+            _ = ctx^
+            return
     var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var nxt: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var cur_is_a = True
