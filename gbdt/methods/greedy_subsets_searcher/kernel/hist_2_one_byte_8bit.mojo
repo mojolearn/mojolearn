@@ -53,7 +53,7 @@ from std.sys import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_dither,
@@ -107,7 +107,35 @@ comptime H8_SLICE = 2048
 comptime H8_SLICES = H8_BLOCK // 128
 comptime H8_SMEM = H8_SLICE * H8_SLICES
 comptime H8_LANE = 32
-comptime H8_UNROLL = 4
+
+
+def _h8_unroll_for[column: Int]() -> Int:
+    """The main loop's unroll: 4 aligned warp loads (16 points) per trip.
+
+    `-D MOJOLEARN_YETI_SYM_HIST_UNROLL8=1` (lane/apple-fast-yetirank,
+    2026-10-02, layered on `MOJOLEARN_SYM_HIST_FAST`'s 512 block), FAST on
+    Apple only: 8 loads (32 points) per trip. Cause: with one 32 KB block
+    per core the kernel hides its global latency with the loads a thread
+    has in flight before its atomics, and a trip issues them all before the
+    first `h8_add_point`; doubling the trip doubles the bytes in flight per
+    thread and halves the trip count and its `active` checks. Grid, stripe
+    and alignment follow (`H8_POINTS`, `H8_MIN_DOCS`, `ALIGN_SIZE`), so
+    every point is still read exactly once at the same position. Same
+    bits: the addends are the same position-dithered Int32 values and
+    every sum is an Int32 atomic sum. Risk: the three `H8_POINTS` register
+    arrays double; on a part whose `maxTotalThreadsPerThreadgroup` falls
+    with register use the 512 block would not launch (the cap's note in
+    `kernel_matrix.mojo`). IDENTICAL keeps 4; its bits never move."""
+    comptime if (
+        is_defined["MOJOLEARN_YETI_SYM_HIST_UNROLL8"]()
+        and column == COLUMN_APPLE
+        and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    ):
+        return 8
+    return 4
+
+
+comptime H8_UNROLL = _h8_unroll_for[TARGET_COLUMN]()
 comptime H8_LOAD = 4
 comptime H8_POINTS = H8_UNROLL * H8_LOAD
 
