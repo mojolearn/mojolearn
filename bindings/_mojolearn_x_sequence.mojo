@@ -12,6 +12,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from sequence.exec_device import DeviceExec
 from sequence.fit_team_py import garch_team_py, prophet_fit_team_py
+from sequence.ets_team import ETS_TEAM
+from sequence.ets_team_py import ets_team_applies, ets_team_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
@@ -124,6 +126,11 @@ def croston_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObjec
 
 def ets_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
+    comptime if ETS_TEAM:
+        # Apple FAST, -D MOJOLEARN_ETS_TEAM: ETS(A, A|Ad, N) one series per
+        # block (sequence/ets_team.mojo); every other model keeps ets_py
+        if ets_team_applies(ip):
+            return ets_team_py(ex, addrs, ip, fp)
     return ets_py(ex, addrs, ip, fp)
 
 
