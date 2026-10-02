@@ -72,22 +72,22 @@ def xg_knn_kernel(
         knn_select_row(d, i, Int(m), Int(take), Int(excl) != 0, Int(nn), sv, si, idx, dst)
 
 
-def xg_knn_dense_kernel(idx: F32Ptr, w: F32Ptr, out: F32Ptr, n: Int32, nn: Int32):
+def xg_knn_dense_kernel(idx: F32Ptr, w: F32Ptr, wout: F32Ptr, n: Int32, nn: Int32):
     var i = _t()
     if i < Int(n):
-        knn_dense_row(i, idx, w, Int(n), Int(nn), out)
+        knn_dense_row(i, idx, w, Int(n), Int(nn), wout)
 
 
-def xg_radius_kernel(d: F32Ptr, out: F32Ptr, n: Int32, r: Float32):
+def xg_radius_kernel(d: F32Ptr, wout: F32Ptr, n: Int32, r: Float32):
     var t = _t()
     if t < Int(n) * Int(n):
-        radius_cell(t, d, Int(n), r, out)
+        radius_cell(t, d, Int(n), r, wout)
 
 
-def xg_lle_iw_kernel(idx: F32Ptr, wb: F32Ptr, out: F32Ptr, n: Int32, nn: Int32):
+def xg_lle_iw_kernel(idx: F32Ptr, wb: F32Ptr, wout: F32Ptr, n: Int32, nn: Int32):
     var i = _t()
     if i < Int(n):
-        lle_iw_row(i, idx, wb, Int(n), Int(nn), out)
+        lle_iw_row(i, idx, wb, Int(n), Int(nn), wout)
 
 
 def xg_label_init_kernel(lab: I32Ptr, n: Int32):
@@ -279,13 +279,13 @@ def dev_graph_knn_py(d: PythonObject, idx: PythonObject, dst: PythonObject, p: P
     return PythonObject(n)
 
 
-def dev_graph_knn_dense_py(idx: PythonObject, w: PythonObject, out: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_graph_knn_dense_py(idx: PythonObject, w: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:
     var n = _n(p, 0)
     var nn = _n(p, 1)
     if n * n > 2147483647:
         raise Error("x_decomp: graph exceeds the Int32 index bound")
     var ctx = xd_ctx()
-    var po = _ptr(_id(out), n * n)
+    var po = _ptr(_id(wout), n * n)
     _zero(ctx, po, n * n)
     if n > 0 and nn > 0:
         ctx.enqueue_function[xg_knn_dense_kernel](
@@ -294,25 +294,25 @@ def dev_graph_knn_dense_py(idx: PythonObject, w: PythonObject, out: PythonObject
     return PythonObject(n)
 
 
-def dev_graph_radius_py(d: PythonObject, out: PythonObject, p: PythonObject, r: PythonObject) raises -> PythonObject:
+def dev_graph_radius_py(d: PythonObject, wout: PythonObject, p: PythonObject, r: PythonObject) raises -> PythonObject:
     var n = _n(p, 0)
     if n * n > 2147483647:
         raise Error("x_decomp: graph exceeds the Int32 index bound")
     if n > 0:
         xd_ctx().enqueue_function[xg_radius_kernel](
-            _ptr(_id(d), n * n), _ptr(_id(out), n * n), Int32(n), Float32(Float64(py=r)),
+            _ptr(_id(d), n * n), _ptr(_id(wout), n * n), Int32(n), Float32(Float64(py=r)),
             grid_dim=_blocks(n * n), block_dim=TPB,
         )
     return PythonObject(n)
 
 
-def dev_graph_lle_iw_py(idx: PythonObject, wb: PythonObject, out: PythonObject, p: PythonObject) raises -> PythonObject:
+def dev_graph_lle_iw_py(idx: PythonObject, wb: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:
     var n = _n(p, 0)
     var nn = _n(p, 1)
     if n * n > 2147483647:
         raise Error("x_decomp: graph exceeds the Int32 index bound")
     var ctx = xd_ctx()
-    var po = _ptr(_id(out), n * n)
+    var po = _ptr(_id(wout), n * n)
     _zero(ctx, po, n * n)
     if n > 0:
         ctx.enqueue_function[xg_lle_iw_kernel](

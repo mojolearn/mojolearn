@@ -103,13 +103,13 @@ def graph_knn_py(d: PythonObject, idx: PythonObject, dst: PythonObject, p: Pytho
     return PythonObject(n)
 
 
-def graph_knn_dense_py(idx: PythonObject, w: PythonObject, out: PythonObject, p: PythonObject) raises -> PythonObject:
+def graph_knn_dense_py(idx: PythonObject, w: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:
     # p = [n, nn]; out (n x n) is written whole
     var n = _ni(p, 0)
     var nn = _ni(p, 1)
     var pi = _f(idx)
     var pw = _f(w)
-    var po = _f(out)
+    var po = _f(wout)
     with GILReleased(Python()):
         for t in range(n * n):
             po.unsafe_store(t, Float32(0))
@@ -118,23 +118,23 @@ def graph_knn_dense_py(idx: PythonObject, w: PythonObject, out: PythonObject, p:
     return PythonObject(n)
 
 
-def graph_radius_py(d: PythonObject, out: PythonObject, p: PythonObject, r: PythonObject) raises -> PythonObject:
+def graph_radius_py(d: PythonObject, wout: PythonObject, p: PythonObject, r: PythonObject) raises -> PythonObject:
     var n = _ni(p, 0)
     var rr = Float32(Float64(py=r))
     var pd = _f(d)
-    var po = _f(out)
+    var po = _f(wout)
     with GILReleased(Python()):
         for t in range(n * n):
             radius_cell(t, pd, n, rr, po)
     return PythonObject(n)
 
 
-def graph_lle_iw_py(idx: PythonObject, wb: PythonObject, out: PythonObject, p: PythonObject) raises -> PythonObject:
+def graph_lle_iw_py(idx: PythonObject, wb: PythonObject, wout: PythonObject, p: PythonObject) raises -> PythonObject:
     var n = _ni(p, 0)
     var nn = _ni(p, 1)
     var pi = _f(idx)
     var pw = _f(wb)
-    var po = _f(out)
+    var po = _f(wout)
     with GILReleased(Python()):
         for t in range(n * n):
             po.unsafe_store(t, Float32(0))

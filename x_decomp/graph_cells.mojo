@@ -93,10 +93,10 @@ def radius_cell(t: Int, D: F32Ptr, n: Int, r: Float32, W: F32Ptr):
     var i = t // n
     var j = t - i * n
     var v = D.unsafe_load(t)
-    var out = Float32(0)
+    var o = Float32(0)
     if j != i and ftz(v) <= r:
-        out = v if ftz(v) != Float32(0) else GRAPH_TINY
-    W.unsafe_store(t, out)
+        o = v if ftz(v) != Float32(0) else GRAPH_TINY
+    W.unsafe_store(t, o)
 
 
 @always_inline
