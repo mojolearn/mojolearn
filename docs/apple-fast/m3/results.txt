@@ -1,4 +1,4 @@
-pos=38 lines=      64
+pos=46 lines=      79
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -36,3 +36,11 @@ pos=38 lines=      64
 80:CMD apple-fast-trees2@46f0cf09f aft-ab-if1 rc=0 AFT-MEDIAN arm=B n=5 median_ms=105.4 all=[105, 104, 105, 106, 106] hashes=['45bc3cb4957e1618'] acc={'auc': [0.551846, 0.551846, 0.551846, 0.551846, 0.551846]}
 81:CMD apple-fast-trees2@46f0cf09f aft-st-gbdt1 rc=1 AFT-ST gbdt-ordered:taxi FSPEED-ACC lane=gbdt-ordered arm=ours metric=auc value=0.628716
 87:CMD apple-fast-classical@65957299c afc-base2 rc=0 AFC-AB-SUMMARY afc-base2-pca arm=A lane=pca ds=istella median_of_medians_ms=none runs=[ ] digest= 
+93:CMD apple-fast-trees2@bfd1d7cc6 aft-ab-yeti1 rc=0 AFT-MEDIAN arm=B n=3 median_ms=8290.0 all=[8273, 8308, 8290] hashes=['367a995c9a45c1d8'] acc={'ndcg10': [0.680812, 0.680812, 0.680812], 'ndcg5': [0.614959, 0.614959, 0.614959], 'map': [0.81442, 0.81442, 0.81442]}
+94:CMD apple-fast-classical@65957299c afc-m1build rc=2 bash: -c: line 1: syntax error: unexpected end of file
+95:CMD apple-fast-classical@65957299c afc-m1bayes rc=2 bash: -c: line 1: syntax error: unexpected end of file
+96:CMD apple-fast-classical@65957299c afc-m1enet rc=2 bash: -c: line 1: syntax error: unexpected end of file
+97:CMD apple-fast-classical@65957299c afc-m1knn rc=2 bash: -c: line 1: syntax error: unexpected end of file
+98:CMD apple-fast-trees2@bfd1d7cc6 aft-ab-rf1 rc=0 AFT-MEDIAN arm=B n=3 median_ms=14311.9 all=[14313, 14307, 14312] hashes=['46ef5c27f84cf904'] acc={'logloss': [0.182017, 0.182017, 0.182017], 'auc': [0.945385, 0.945385, 0.945385]}
+99:CMD apple-fast-classical@65957299c afc-dbg rc=2 bash: -c: line 1: syntax error: unexpected end of file
+100:CMD apple-fast-trees2@bfd1d7cc6 aft-ab-if2 rc=0 AFT-REFUSAL finite fit ok [-0.41429999470710754, -0.4821000099182129, -0.4223000109195709, -0.4000000059604645, -0.41819998621940613]
