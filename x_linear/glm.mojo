@@ -166,50 +166,21 @@ def _glm_cells_staged(t: Team, x: FP, gr: FP, hr: FP, n: Int, d: Int, m: Int, rr
                 var j = kc[1]
                 var k = kc[2]
                 var acc = ld(g, j) if kind <= 1 else ld(h, j * m + k)
-                var r = 0
-                # 16 rows' words into registers ahead of the chain (a thread
-                # waits once per block, not once per step), then the steps
-                while r + 16 <= cnt:
-                    var pa = SIMD[DType.float32, 16]()
-                    var pb = SIMD[DType.float32, 16]()
-                    comptime for u in range(16):
-                        if kind == 0:
-                            pa[u] = buf[gs + r + u]
-                            pb[u] = buf[xs + (r + u) * d + j]
-                        elif kind == 1:
-                            pa[u] = buf[gs + r + u]
-                        elif kind == 2:
-                            pa[u] = buf[xs + (r + u) * d + j]
-                            pb[u] = buf[xs + (r + u) * d + k]
-                        else:
-                            pa[u] = buf[hs + r + u]
-                            if kind == 3:
-                                pb[u] = buf[xs + (r + u) * d + k]
-                    if kind == 2:
-                        var ph = SIMD[DType.float32, 16]()
-                        comptime for u in range(16):
-                            ph[u] = buf[hs + r + u]
-                        comptime for u in range(16):
-                            acc = _acc_fmad(_fm(ph[u], pa[u]), pb[u], acc)
-                    elif kind == 0 or kind == 3:
-                        comptime for u in range(16):
-                            acc = _acc_fmad(pa[u], pb[u], acc)
-                    else:
-                        comptime for u in range(16):
-                            acc = _acc_fa(acc, pa[u])
-                    r += 16
-                while r < cnt:
-                    if kind == 0:
+                if kind == 0:
+                    for r in range(cnt):
                         acc = _acc_fmad(buf[gs + r], buf[xs + r * d + j], acc)
-                    elif kind == 1:
+                elif kind == 1:
+                    for r in range(cnt):
                         acc = _acc_fa(acc, buf[gs + r])
-                    elif kind == 2:
+                elif kind == 2:
+                    for r in range(cnt):
                         acc = _acc_fmad(_fm(buf[hs + r], buf[xs + r * d + j]), buf[xs + r * d + k], acc)
-                    elif kind == 3:
+                elif kind == 3:
+                    for r in range(cnt):
                         acc = _acc_fmad(buf[hs + r], buf[xs + r * d + k], acc)
-                    else:
+                else:
+                    for r in range(cnt):
                         acc = _acc_fa(acc, buf[hs + r])
-                    r += 1
                 if kind <= 1:
                     st(g, j, acc)
                 else:
