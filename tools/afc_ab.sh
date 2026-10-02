@@ -32,7 +32,7 @@ for r in $(seq 1 $REPS); do
   for a in $arms; do
     E=$EA; [ $a = B ] && E=$EB; [ "$E" = - ] && E=
     d=$OUT/$a-$r; rm -rf $d; mkdir -p $d
-    env $E MOJOLEARN_BENCH_INSTALLED=0 PYTHONPATH=$PWD/python timeout 3600 \
+    env $E MOJOLEARN_BENCH_INSTALLED=0 PYTHONPATH=$PWD/python \
       $VP $DRV race --lane $LANE --dataset $DS --data $DATA --arms ${AFC_ARM:-ours-fast} \
       --rounds $ROUNDS --out $d/res --work $d/work $XARGS > $d/race.txt 2>&1
     rm -rf $d/work
@@ -41,7 +41,7 @@ for r in $(seq 1 $REPS); do
     q=$(grep -o "$PFX lane=.*" $d/race.txt | grep -o 'quality=.*' | tail -1 | cut -c1-200)
     g=$(grep -o 'digest=[0-9a-f]*' $d/race.txt | tail -1 | cut -d= -f2 | cut -c1-16)
     echo "AFC-AB $TAG arm=$a rep=$r lane=$LANE ds=$DS status=${st:-none} median_ms=${m:-none} digest=${g:-none} env='$E' $q" | tee -a $LOG
-    [ -z "$m" ] && grep -E -m 5 'Error|error|REFUSED|Traceback' $d/race.txt | cut -c1-300 | tee -a $LOG
+    [ -z "$m" ] && { echo "AFC-FAIL $TAG arm=$a B=${B:-none} VP=$VP DATA=$DATA"; grep -E -m 5 'Error|error|REFUSED|SKIPPED|Traceback' $d/race.txt; tail -n 4 $d/race.txt; } | cut -c1-300 | tee -a $LOG
   done
 done
 for a in $arms; do
