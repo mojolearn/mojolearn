@@ -71,7 +71,7 @@ and its file is not assigned there; otherwise leave it to that plan.
 - trees: `dart` / `dart-reg` istella ~2x vs LightGBM; `gbdt-categorical` taxi 1.35x (CTR stages)
 - `lstsq` istella 1.9x (also touched by decomp-linalg), `damped-ets` taxi-hourly 3.3x, `select-d` 2.1x
 
-Everything else on the gap list (`~/` on the manager box: m3-gaps-0834.tsv) already has a branch with A/Bs queued:
+Everything else on the gap list (`docs/apple-fast/m3-gaps-0834.tsv`, ratio first) already has a branch with A/Bs queued:
 huber/BayesianRidge/ARD (kernel), isotonic/knn-imputer/LLE (isotonic-knn), connected-components/meanshift/minibatch-kmeans
 (cluster), label/onehot/ordinal/minmax/multilabel encoders (prep), lars/lasso-lars/ridge-clf/lda/qda (gram), pca/ipca
 (pca-eig), knn family (core, neighbors2). Do not start those again; wait for their results on the results branch.
