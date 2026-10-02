@@ -47,7 +47,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
 from core.segmented_sort import float_to_sortable
 from metrics.checks.pinned_sum import canonicalize_nan
 from resample.checks.index_map import (
@@ -60,10 +60,12 @@ from resample.checks.index_map import (
 from resample.checks.statistics import STAT_DIFF_MEANS, STAT_MEAN, _mean_of_sum
 
 
-#: FAST on Apple only. IDENTICAL (and every other column) compiles the old
-#: code in `resample/estimator.mojo`; nothing below is instantiated there.
+#: FAST on Apple only. IDENTICAL and DETERMINISTIC (and every other vendor)
+#: compile the old code in `resample/estimator.mojo`; nothing below is
+#: instantiated there. Each switch is a build-time define on top of this
+#: (estimator.mojo, `RESAMPLE_FAST_*`).
 comptime RESAMPLE_FAST_APPLE = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 )
 
 #: Threads per block of the map-shaped kernels here (rank sort, gather).

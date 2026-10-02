@@ -5,7 +5,7 @@
 
 A separate extension module, for `bindings/_mojolearn_gp.mojo`'s reason.
 `resample/estimator.mojo`'s three host surfaces are reached and nothing is
-re-decided: every refusal (`validate_positions`, `validate_pooled`, the
+re-decided: every refusal (`validate_positions`, the
 statistic and method codes, the BCa refusal DEVIATION 1699, the non-finite
 cell, the sort-cell ceiling) is raised one layer down by name. This file
 refuses a null address, a list of the wrong length and an integrand id
@@ -37,6 +37,7 @@ from resample.estimator import (
     monte_carlo_integrate_host,
     permutation_samples_host,
     permutation_test_host,
+    resample_fast_defines,
     resample_gather_fast_host,
     resample_indices_fast_into,
     resample_indices_host,
@@ -55,6 +56,16 @@ def resample_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER as the `NUMERIC_*` code: 0 FAST, 1 IDENTICAL, 2
     DETERMINISTIC."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
+
+
+def resample_fast_defines_binding() raises -> PythonObject:
+    """The FAST + Apple switches this build was compiled with
+    (lane/apple-fast-resample, 2026-10-02): a bit mask, 0 unless the build
+    is FAST on Apple and a `-D MOJOLEARN_RESAMPLE_FAST_*` / `-D
+    MOJOLEARN_CV_FAST_*` define was given (resample/estimator.mojo
+    `resample_fast_defines` lists the bits). The Python layer switches on
+    this, never on an environment variable."""
+    return PythonObject(resample_fast_defines())
 
 
 def resample_vendor_binding() raises -> PythonObject:
@@ -540,6 +551,7 @@ def PyInit__mojolearn_resample() abi("C") -> PythonObject:
         m.def_function[resample_ranges_parallel_available]("resample_ranges_parallel_available")
         m.def_function[resample_vendor_binding]("resample_vendor")
         m.def_function[resample_numeric_mode_binding]("resample_numeric_mode")
+        m.def_function[resample_fast_defines_binding]("resample_fast_defines")
         m.def_function[bootstrap_binding]("bootstrap")
         m.def_function[bootstrap_unpaired_binding]("bootstrap_unpaired")
         m.def_function[permutation_test_binding]("permutation_test")

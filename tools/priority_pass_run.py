@@ -23,7 +23,6 @@ ROWS = [
     ('svd', {'MOJOLEARN_LINALG_LEGACY_SIGN': '1'}),
     ('qr', {'MOJOLEARN_LINALG_LEGACY_SIGN': '1'}),
     ('lr-warmup-cosine', {'MOJOLEARN_LR_EXACT_ONLY': '1'}),
-    ('adafactor', {'MOJOLEARN_SEQ_HOST_FOLD': '0'}),
     ('clip-grad-norm', {'MOJOLEARN_CLIP_PACKED': '1'}),
 ]
 phase = 'setup'

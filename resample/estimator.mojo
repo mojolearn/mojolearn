@@ -86,7 +86,7 @@ from resample.checks.index_map import (
     key_lo,
     monte_carlo_point_kernel,
     resample_key,
-    validate_pooled,
+    PERM_MAX_POOLED,
     validate_positions,
 )
 from resample.checks.intervals import (
@@ -126,6 +126,7 @@ from resample.checks.statistics import (
     monte_carlo_chunk_kernel,
     mc_finish_host,
     order_stat_kernel,
+    perm_select_stat_kernel,
     perm_stat_kernel,
     quantile_of_sorted_host,
     stat_columns_needed,
@@ -150,41 +151,81 @@ comptime RESAMPLE_MAP_TPB = 256
 
 
 # ===========================================================================
-# FAST + Apple switches (lane/apple-fast-resample, 2026-10-02). Read on the
-# host at dispatch; every one defaults OFF and is compiled under
-# `RESAMPLE_FAST_APPLE` only (resample/fast_apple.mojo has the kernels and
-# the causes). IDENTICAL compiles the old path exactly.
+# FAST + Apple switches (lane/apple-fast-resample, 2026-10-02): build-time
+# defines (`-D MOJOLEARN_RESAMPLE_FAST_<NAME>`, no env read on any path),
+# every one OFF by default and compiled under `RESAMPLE_FAST_APPLE` only
+# (resample/fast_apple.mojo has the kernels and the causes). IDENTICAL
+# compiles the old path exactly, whatever is defined.
 # ===========================================================================
 
+#: `-D MOJOLEARN_RESAMPLE_FAST_RANK_SORT`: the bootstrap distribution sorted
+#: by one rank launch instead of `_sort_segments` (130 launches, 32 of them
+#: one-thread scans, for one segment of n_resamples keys).
+comptime RESAMPLE_FAST_RANK_SORT = (
+    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_RESAMPLE_FAST_RANK_SORT"]()
+)
 
-def _fast_rank_sort_on() -> Bool:
-    """MOJOLEARN_RESAMPLE_FAST_RANK_SORT=1: the bootstrap distribution sorted
-    by one rank launch instead of `_sort_segments` (130 launches, 32 of them
-    one-thread scans, for one segment of n_resamples keys)."""
-    comptime if RESAMPLE_FAST_APPLE:
-        return String(getenv("MOJOLEARN_RESAMPLE_FAST_RANK_SORT")) == "1"
-    else:
-        return False
+#: `-D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD`: mean / diff_means replicates folded
+#: once per block (registers, then block.sum) instead of once per 256-draw
+#: chunk (`_chunked_sum`'s virtual_block_sum per chunk).
+comptime RESAMPLE_FAST_ONE_FOLD = (
+    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_RESAMPLE_FAST_ONE_FOLD"]()
+)
+
+#: `-D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT`: the permutation null by
+#: fast_apple.mojo's 4-bit radix select (16 per-thread counters, no
+#: atomics, FAST's own fold) instead of main's `perm_select_stat_kernel`
+#: (8 byte passes with a 256-bucket atomic histogram, the pinned fold).
+comptime RESAMPLE_FAST_PERM_SELECT = (
+    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_RESAMPLE_FAST_PERM_SELECT"]()
+)
+
+#: `-D MOJOLEARN_RESAMPLE_FAST_IDX_BULK`: `resample_indices`' drawn indices
+#: copied out in one device-to-host copy and one store loop.
+comptime RESAMPLE_FAST_IDX_BULK = (
+    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_RESAMPLE_FAST_IDX_BULK"]()
+)
+
+#: `-D MOJOLEARN_RESAMPLE_FAST_GATHER`: `resample`'s draw and row gathers on
+#: the device (`resample_gather` binding).
+comptime RESAMPLE_FAST_GATHER = (
+    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_RESAMPLE_FAST_GATHER"]()
+)
+
+#: The two cross-val-score switches are Python only
+#: (python/mojolearn/model_selection.py); the binding reports them from
+#: this build's defines so the Python layer reads no environment.
+comptime CV_FAST_SLICE = (
+    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_CV_FAST_SLICE"]()
+)
+comptime CV_FAST_TRUST_FOLDS = (
+    RESAMPLE_FAST_APPLE and is_defined["MOJOLEARN_CV_FAST_TRUST_FOLDS"]()
+)
 
 
-def _fast_one_fold_on() -> Bool:
-    """MOJOLEARN_RESAMPLE_FAST_ONE_FOLD=1: mean / diff_means replicates folded
-    once per block (registers, then block.sum) instead of once per 256-draw
-    chunk (`_chunked_sum`'s virtual_block_sum per chunk)."""
-    comptime if RESAMPLE_FAST_APPLE:
-        return String(getenv("MOJOLEARN_RESAMPLE_FAST_ONE_FOLD")) == "1"
-    else:
-        return False
-
-
-def _fast_perm_select_on() -> Bool:
-    """MOJOLEARN_RESAMPLE_FAST_PERM_SELECT=1: the permutation null by radix
-    select, no PERM_MAX_POOLED (perm_stat_kernel's O(N^2) counting rank and
-    its 1024-position threadgroup bound refuse the board's 40,000)."""
-    comptime if RESAMPLE_FAST_APPLE:
-        return String(getenv("MOJOLEARN_RESAMPLE_FAST_PERM_SELECT")) == "1"
-    else:
-        return False
+def resample_fast_defines() -> Int:
+    """The FAST + Apple switches this build was compiled with, as a bit
+    mask (0 on every IDENTICAL build and on every non-Apple build):
+    1 RANK_SORT, 2 ONE_FOLD, 4 PERM_SELECT, 8 IDX_BULK, 16 GATHER,
+    32 CV_SLICE, 64 CV_TRUST_FOLDS. Read by the `resample_fast_defines`
+    binding; python/mojolearn/resample.py and model_selection.py switch on
+    it instead of an environment variable."""
+    var m = 0
+    comptime if RESAMPLE_FAST_RANK_SORT:
+        m |= 1
+    comptime if RESAMPLE_FAST_ONE_FOLD:
+        m |= 2
+    comptime if RESAMPLE_FAST_PERM_SELECT:
+        m |= 4
+    comptime if RESAMPLE_FAST_IDX_BULK:
+        m |= 8
+    comptime if RESAMPLE_FAST_GATHER:
+        m |= 16
+    comptime if CV_FAST_SLICE:
+        m |= 32
+    comptime if CV_FAST_TRUST_FOLDS:
+        m |= 64
+    return m
 
 
 # ===========================================================================
@@ -411,6 +452,17 @@ def _launch_bootstrap_stat(
         )
 
 
+#: A/B (gap-fails2, 2026-10-02): `-D MOJOLEARN_PERM_COUNT_RANK` keeps main's
+#: counting-rank kernel up to `PERM_MAX_POOLED`; the default selects the
+#: first group's threshold by radix select at every pooled length. Same
+#: membership mask, same folds, so the same bits.
+comptime PERM_COUNT_RANK_AB = is_defined["MOJOLEARN_PERM_COUNT_RANK"]()
+
+
+def perm_uses_select(n_pooled: Int) -> Bool:
+    return not PERM_COUNT_RANK_AB or n_pooled > PERM_MAX_POOLED
+
+
 def _launch_perm_stat_at[
     tpb: Int
 ](
@@ -423,49 +475,95 @@ def _launch_perm_stat_at[
     n_pooled: Int,
     n_x: Int,
     stat: Int,
+    select: Bool,
 ) raises:
     if stat == STAT_DIFF_MEANS:
-        comptime kern = perm_stat_kernel[STAT_DIFF_MEANS, tpb]
-        ctx.enqueue_function[kern](
-            null_dist.unsafe_ptr(),
-            pooled.unsafe_ptr(),
-            key_lo(key),
-            key_hi(key),
-            Int32(r_first),
-            Int32(n_replicates),
-            Int32(n_pooled),
-            Int32(n_x),
-            grid_dim=(n_replicates, 1, 1),
-            block_dim=(tpb, 1, 1),
-        )
+        if select:
+            comptime kern = perm_select_stat_kernel[STAT_DIFF_MEANS, tpb]
+            ctx.enqueue_function[kern](
+                null_dist.unsafe_ptr(),
+                pooled.unsafe_ptr(),
+                key_lo(key),
+                key_hi(key),
+                Int32(r_first),
+                Int32(n_replicates),
+                Int32(n_pooled),
+                Int32(n_x),
+                grid_dim=(n_replicates, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
+        else:
+            comptime kern = perm_stat_kernel[STAT_DIFF_MEANS, tpb]
+            ctx.enqueue_function[kern](
+                null_dist.unsafe_ptr(),
+                pooled.unsafe_ptr(),
+                key_lo(key),
+                key_hi(key),
+                Int32(r_first),
+                Int32(n_replicates),
+                Int32(n_pooled),
+                Int32(n_x),
+                grid_dim=(n_replicates, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
     elif stat == STAT_MEAN:
-        comptime kern2 = perm_stat_kernel[STAT_MEAN, tpb]
-        ctx.enqueue_function[kern2](
-            null_dist.unsafe_ptr(),
-            pooled.unsafe_ptr(),
-            key_lo(key),
-            key_hi(key),
-            Int32(r_first),
-            Int32(n_replicates),
-            Int32(n_pooled),
-            Int32(n_x),
-            grid_dim=(n_replicates, 1, 1),
-            block_dim=(tpb, 1, 1),
-        )
+        if select:
+            comptime kern = perm_select_stat_kernel[STAT_MEAN, tpb]
+            ctx.enqueue_function[kern](
+                null_dist.unsafe_ptr(),
+                pooled.unsafe_ptr(),
+                key_lo(key),
+                key_hi(key),
+                Int32(r_first),
+                Int32(n_replicates),
+                Int32(n_pooled),
+                Int32(n_x),
+                grid_dim=(n_replicates, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
+        else:
+            comptime kern = perm_stat_kernel[STAT_MEAN, tpb]
+            ctx.enqueue_function[kern](
+                null_dist.unsafe_ptr(),
+                pooled.unsafe_ptr(),
+                key_lo(key),
+                key_hi(key),
+                Int32(r_first),
+                Int32(n_replicates),
+                Int32(n_pooled),
+                Int32(n_x),
+                grid_dim=(n_replicates, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
     elif stat == STAT_STD:
-        comptime kern3 = perm_stat_kernel[STAT_STD, tpb]
-        ctx.enqueue_function[kern3](
-            null_dist.unsafe_ptr(),
-            pooled.unsafe_ptr(),
-            key_lo(key),
-            key_hi(key),
-            Int32(r_first),
-            Int32(n_replicates),
-            Int32(n_pooled),
-            Int32(n_x),
-            grid_dim=(n_replicates, 1, 1),
-            block_dim=(tpb, 1, 1),
-        )
+        if select:
+            comptime kern = perm_select_stat_kernel[STAT_STD, tpb]
+            ctx.enqueue_function[kern](
+                null_dist.unsafe_ptr(),
+                pooled.unsafe_ptr(),
+                key_lo(key),
+                key_hi(key),
+                Int32(r_first),
+                Int32(n_replicates),
+                Int32(n_pooled),
+                Int32(n_x),
+                grid_dim=(n_replicates, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
+        else:
+            comptime kern = perm_stat_kernel[STAT_STD, tpb]
+            ctx.enqueue_function[kern](
+                null_dist.unsafe_ptr(),
+                pooled.unsafe_ptr(),
+                key_lo(key),
+                key_hi(key),
+                Int32(r_first),
+                Int32(n_replicates),
+                Int32(n_pooled),
+                Int32(n_x),
+                grid_dim=(n_replicates, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
     else:
         raise Error(
             "permutation_test: statistic '"
@@ -492,18 +590,24 @@ def _launch_perm_stat(
     n_x: Int,
     stat: Int,
     tpb: Int,
+    force_count: Bool = False,
 ) raises:
+    """`force_count`: main's counting-rank kernel (a check's A arm; it holds
+    only up to `PERM_MAX_POOLED`, above which the select kernel runs)."""
+    var use = (
+        perm_uses_select(n_pooled) and not force_count
+    ) or n_pooled > PERM_MAX_POOLED
     if tpb == 256:
         _launch_perm_stat_at[256](
-            ctx, null_dist, pooled, key, r_first, n_replicates, n_pooled, n_x, stat
+            ctx, null_dist, pooled, key, r_first, n_replicates, n_pooled, n_x, stat, use
         )
     elif tpb == 128:
         _launch_perm_stat_at[128](
-            ctx, null_dist, pooled, key, r_first, n_replicates, n_pooled, n_x, stat
+            ctx, null_dist, pooled, key, r_first, n_replicates, n_pooled, n_x, stat, use
         )
     elif tpb == 64:
         _launch_perm_stat_at[64](
-            ctx, null_dist, pooled, key, r_first, n_replicates, n_pooled, n_x, stat
+            ctx, null_dist, pooled, key, r_first, n_replicates, n_pooled, n_x, stat, use
         )
     else:
         raise Error(
@@ -833,18 +937,16 @@ def _bootstrap_theta(
         _ = vals^
         _ = svals^
     else:
-        # lane/apple-fast-resample (2026-10-02), MOJOLEARN_RESAMPLE_FAST_ONE_FOLD=1:
+        # lane/apple-fast-resample (2026-10-02), -D MOJOLEARN_RESAMPLE_FAST_ONE_FOLD:
         # `bootstrap_stat_kernel` folds every 256-draw chunk through
         # `virtual_block_sum` (resample/checks/statistics.mojo `_chunked_sum`),
         # 79 block folds per replicate at n = 20,000; the FAST kernel folds a
         # replicate once. Same draws, FAST's own summation order.
         var folded = False
-        comptime if RESAMPLE_FAST_APPLE:
+        comptime if RESAMPLE_FAST_ONE_FOLD:
             if (
-                (statistic == STAT_MEAN or statistic == STAT_DIFF_MEANS)
-                and tpb == 256
-                and _fast_one_fold_on()
-            ):
+                statistic == STAT_MEAN or statistic == STAT_DIFF_MEANS
+            ) and tpb == 256:
                 bootstrap_mean_fast(
                     ctx, theta, dx, key, r_first, n_resamples, n, n_features,
                     statistic,
@@ -1206,13 +1308,11 @@ def bootstrap_host(
     # launches each, one of them `seg_scan_block_sums_kernel` on ONE thread)
     # over this single segment of n_resamples keys: 130 launches for 9,999
     # floats, the bootstrap's Apple cost (M3 16 ms vs 2 ms on the L40S).
-    # The rank launch produces the same order and the same bits.
-    var ranked = False
-    comptime if RESAMPLE_FAST_APPLE:
-        if _fast_rank_sort_on():
-            rank_sort_f32(ctx, theta, sorted_buf, n_resamples)
-            ranked = True
-    if not ranked:
+    # The rank launch produces the same order and the same bits
+    # (-D MOJOLEARN_RESAMPLE_FAST_RANK_SORT).
+    comptime if RESAMPLE_FAST_RANK_SORT:
+        rank_sort_f32(ctx, theta, sorted_buf, n_resamples)
+    else:
         _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
     trace.record_device(ctx, "resample.sorted", sorted_buf, n_resamples)
     var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
@@ -1374,13 +1474,10 @@ def bootstrap_unpaired_host(
     var theta = _upload(ctx, dist)
     var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
-    # MOJOLEARN_RESAMPLE_FAST_RANK_SORT=1: see bootstrap_host.
-    var ranked = False
-    comptime if RESAMPLE_FAST_APPLE:
-        if _fast_rank_sort_on():
-            rank_sort_f32(ctx, theta, sorted_buf, n_resamples)
-            ranked = True
-    if not ranked:
+    # -D MOJOLEARN_RESAMPLE_FAST_RANK_SORT: see bootstrap_host.
+    comptime if RESAMPLE_FAST_RANK_SORT:
+        rank_sort_f32(ctx, theta, sorted_buf, n_resamples)
+    else:
         _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
     var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
 
@@ -1486,21 +1583,6 @@ def permutation_test_host(
         )
     validate_positions(n_resamples, n_pooled)
     validate_positions(r_first + n_resamples, n_pooled)
-    # lane/apple-fast-resample (2026-10-02), MOJOLEARN_RESAMPLE_FAST_PERM_SELECT=1:
-    # `perm_stat_kernel` ranks the pooled positions by counting a total
-    # order (O(N^2) per replicate, 8 N bytes of threadgroup memory), so
-    # `validate_pooled` refuses N > PERM_MAX_POOLED = 1024 and the board's
-    # 20,000 + 20,000 row is REFUSED. The radix select (fast_apple.mojo)
-    # finds the same n_x smallest keys with no bound.
-    var fast_perm = False
-    comptime if RESAMPLE_FAST_APPLE:
-        fast_perm = (
-            (statistic == STAT_MEAN or statistic == STAT_DIFF_MEANS)
-            and tpb == 256
-            and _fast_perm_select_on()
-        )
-    if not fast_perm:
-        validate_pooled(n_pooled)
     if statistic == STAT_STD and n_x < 2:
         raise Error(
             "permutation_test: statistic 'std' is ddof=1 and needs at least"
@@ -1544,9 +1626,18 @@ def permutation_test_host(
     var null_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
     var owners = resample_device_count()
+    # lane/apple-fast-resample (2026-10-02), -D MOJOLEARN_RESAMPLE_FAST_PERM_SELECT:
+    # main's null is `perm_select_stat_kernel` at every pooled length (8
+    # byte passes, a 256-bucket atomic histogram, the pinned fold). The
+    # FAST select (fast_apple.mojo) takes 4-bit digits with 16 per-thread
+    # counters and no atomics, and folds each group once per thread then
+    # block.sum: the same n_x smallest keys, FAST's own fold. Mean and
+    # diff_means at tpb 256; everything else takes main's launch.
     var selected = False
-    comptime if RESAMPLE_FAST_APPLE:
-        if fast_perm:
+    comptime if RESAMPLE_FAST_PERM_SELECT:
+        if (
+            statistic == STAT_MEAN or statistic == STAT_DIFF_MEANS
+        ) and tpb == 256:
             perm_select_fast(
                 ctx, null_buf, dpool, key, r_first, n_resamples, n_pooled, n_x,
                 statistic,
@@ -2005,13 +2096,13 @@ def resample_indices_fast_into(
     out: MutPointer[Int32, MutUntrackedOrigin],
     tpb: Int = 256,
 ) raises -> Bool:
-    """MOJOLEARN_RESAMPLE_FAST_IDX_BULK=1 (FAST + Apple, replace=True only):
+    """-D MOJOLEARN_RESAMPLE_FAST_IDX_BULK (FAST + Apple, replace=True only):
     `resample_indices_host` with the indices copied out in bulk instead of
     `_download_i32`'s per-element List append plus the binding's
     per-element store (two host loops over n_samples = 1,000,000 on the
     board). Same draws, same bytes. False: the caller takes the old path."""
-    comptime if RESAMPLE_FAST_APPLE:
-        if not replace or String(getenv("MOJOLEARN_RESAMPLE_FAST_IDX_BULK")) != "1":
+    comptime if RESAMPLE_FAST_IDX_BULK:
+        if not replace:
             return False
         utils_validate(n, count, replace)
         var ctx = process_ctx[_DEVCTX_SLOT]()
@@ -2036,7 +2127,7 @@ def resample_gather_fast_host(
     widths: List[Int],
     tpb: Int = 256,
 ) raises -> Bool:
-    """MOJOLEARN_RESAMPLE_FAST_GATHER=1 (FAST + Apple, replace=True only):
+    """-D MOJOLEARN_RESAMPLE_FAST_GATHER (FAST + Apple, replace=True only):
     `sklearn.utils.resample(*arrays)` for float32 row-major arrays with the
     draw AND the gathers on the device. `srcs[a]` / `dsts[a]` are the host
     addresses of array `a` (`n x widths[a]` in, `count x widths[a]` out);
@@ -2046,8 +2137,8 @@ def resample_gather_fast_host(
     `gather_rows_f32_kernel`, instead of the host's per-element index
     loops and numpy's fancy-index gather of 1,000,000 rows (the timed part
     of the board's resample row). False: the caller takes the old path."""
-    comptime if RESAMPLE_FAST_APPLE:
-        if not replace or String(getenv("MOJOLEARN_RESAMPLE_FAST_GATHER")) != "1":
+    comptime if RESAMPLE_FAST_GATHER:
+        if not replace:
             return False
         if len(srcs) != len(dsts) or len(srcs) != len(widths) or len(srcs) == 0:
             raise Error("resample: the gather takes one (src, dst, width) per array")

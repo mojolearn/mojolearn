@@ -522,7 +522,7 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
     if isinstance(scoring, str):
         scoring = get_scorer(scoring)
     X, y, folds = _prepare_folds(estimator, X, y, cv, scoring, groups, error_score)
-    # lane/apple-fast-resample (2026-10-02), MOJOLEARN_CV_FAST_SLICE=1, FAST
+    # lane/apple-fast-resample (2026-10-02), -D MOJOLEARN_CV_FAST_SLICE, FAST
     # tier only: the default unshuffled folds are contiguous row ranges, so
     # each fold's test rows are a zero-copy view and its training rows two
     # memcpys, instead of `_take_rows`' per-row byte gather of every row of
@@ -569,7 +569,7 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
         if getattr(groups, "ndim", 1) != 1 or len(groups) != len(X):
             raise ValueError('groups must be 1-D and match X rows')
     folds = []
-    # lane/apple-fast-resample (2026-10-02), MOJOLEARN_CV_FAST_TRUST_FOLDS=1,
+    # lane/apple-fast-resample (2026-10-02), -D MOJOLEARN_CV_FAST_TRUST_FOLDS,
     # FAST tier only: the default folds from `_native_default_folds`
     # (`fold_ids` + `select_fold_i64`) are a partition by construction, so
     # the `_indices` range/duplicate pass and the `_overlap` pass over every
@@ -595,12 +595,17 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
 
 
 def _cv_fast_on(name):
-    """An Apple FAST experiment switch (lane/apple-fast-resample): `name`=1 in
-    the environment AND the library's default tier is 'fast'."""
-    if os.environ.get(name) != '1':
-        return False
-    from ._backend import default_mode
-    return default_mode() == 'fast'
+    """An Apple FAST experiment switch (lane/apple-fast-resample): `name` is
+    `-D MOJOLEARN_CV_FAST_SLICE` or `-D MOJOLEARN_CV_FAST_TRUST_FOLDS`,
+    read from the FAST + Apple resample binding's `resample_fast_defines`
+    mask (resample/estimator.mojo), never from the environment. Off on
+    every other tier and build."""
+    from . import resample as _resample
+    bit = {
+        'MOJOLEARN_CV_FAST_SLICE': _resample.FAST_DEFINE_CV_SLICE,
+        'MOJOLEARN_CV_FAST_TRUST_FOLDS': _resample.FAST_DEFINE_CV_TRUST_FOLDS,
+    }[name]
+    return bool(_resample.fast_defines() & bit)
 
 
 def _row_range_view(arr, a, b):

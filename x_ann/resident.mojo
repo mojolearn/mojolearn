@@ -35,7 +35,7 @@ THE ADDRESSES (mirrored in python/mojolearn/_expansion_ann.py):
     IVF kinds       addrs queries, out_d, out_i, out_n[, filter (n int32)]
                     params m, k, n_probes
     CAGRA           addrs queries, out_d, out_i
-                    params m, k, itopk_size, search_width, max_iterations, n_seeds
+                    params m, k, itopk_size, search_width, max_iterations, n_seeds[, rs]
   release(handle)
 """
 from std.ffi import _Global
@@ -240,10 +240,13 @@ def x_ann_index_search_binding(handle: PythonObject, addrs: PythonObject, params
         var width = p_int(params, 3)
         var max_iter = p_int(params, 4)
         var n_seeds = p_int(params, 5)
+        var rs = p_int(params, 6) if len(params) > 6 else 0
+        if rs < 0:
+            raise Error("CAGRA search: rs must be >= 0")
         if m <= 0 or k <= 0 or L < k or width < 1 or max_iter < 1 or n_seeds < 1 or n_seeds > e.n:
             raise Error("CAGRA search: need k >= 1, itopk_size >= k, search_width >= 1, max_iterations >= 1, 1 <= n_seeds <= n")
         var q = in_f32(addrs, 0, m * e.dim)
-        cagra_search_on(ctx, _p(e.f0), e.n, e.dim, _p(e.i0), e.a, q, m, k, L, width, max_iter, n_seeds, od, oi)
+        cagra_search_on(ctx, _p(e.f0), e.n, e.dim, _p(e.i0), e.a, q, m, k, L, width, max_iter, n_seeds, od, oi, rs)
         out_f32(od, addrs, 1)
         out_i32(oi, addrs, 2)
         _ = ctx^

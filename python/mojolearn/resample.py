@@ -363,15 +363,35 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
     return out[0] if len(out) == 1 else out
 
 
+#: Bits of the binding's `resample_fast_defines()` mask (resample/estimator.mojo).
+FAST_DEFINE_GATHER = 16
+FAST_DEFINE_CV_SLICE = 32
+FAST_DEFINE_CV_TRUST_FOLDS = 64
+
+
+def fast_defines(numeric_mode=None):
+    """The FAST + Apple switches the resample binding was built with
+    (`-D MOJOLEARN_RESAMPLE_FAST_*`, `-D MOJOLEARN_CV_FAST_*`), as the
+    binding's bit mask; 0 off the FAST tier, on a build without the
+    function, or when the binding cannot be loaded. No environment read."""
+    if (numeric_mode or _backend.default_mode()) != "fast":
+        return 0
+    try:
+        mod = _backend.binding("_mojolearn_resample", numeric_mode)
+    except Exception:
+        return 0
+    fn = getattr(mod, "resample_fast_defines", None)
+    if fn is None:
+        return 0
+    return int(fn())
+
+
 def _fast_gather_on(numeric_mode):
-    """MOJOLEARN_RESAMPLE_FAST_GATHER=1 on the FAST tier (lane/apple-fast-resample,
-    2026-10-02): the draw and the row gathers of `resample` on the device.
-    The binding answers 0 unless it is a FAST + Apple build, so every other
-    build takes `resample_indices` and the host gather as before."""
-    import os
-    if os.environ.get("MOJOLEARN_RESAMPLE_FAST_GATHER") != "1":
-        return False
-    return (numeric_mode or _backend.default_mode()) == "fast"
+    """`-D MOJOLEARN_RESAMPLE_FAST_GATHER` in a FAST + Apple build of the
+    resample binding (lane/apple-fast-resample, 2026-10-02): the draw and
+    the row gathers of `resample` on the device. Every other build takes
+    `resample_indices` and the host gather as before."""
+    return bool(fast_defines(numeric_mode) & FAST_DEFINE_GATHER)
 
 
 def _gather_device(arrays, n, n_samples, random_state, numeric_mode):
