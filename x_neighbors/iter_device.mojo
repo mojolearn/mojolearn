@@ -653,11 +653,14 @@ def knn_sq_tiled_kernel(
 # KNN_TILE_MAX_D read every y row from device memory in every thread
 # (LabelPropagation on istella, 220 features: 23 s at 20,000 rows on the M4).
 # `-D MOJOLEARN_XN_KNN_ROWWISE=1` restores it.
-comptime KNN2_TX = 32
-comptime KNN2_TY = 32
-comptime KNN2_FC = 32
+comptime KNN2_TX = 64
+comptime KNN2_TY = 64
+comptime KNN2_FC = 16
 comptime KNN2_TPB = 256
-comptime KNN2_PT = (KNN2_TX * KNN2_TY) // KNN2_TPB
+#: a thread's register block: KNN2_R x rows by KNN2_R y rows (16 x 16 threads)
+comptime KNN2_R = 4
+comptime KNN2_XS = KNN2_FC + 1  # padded rows (bank spread)
+comptime KNN2_SMEM_BYTES = 4 * (KNN2_TX * KNN2_XS + KNN2_TY * KNN2_XS + KNN2_TX * (KNN2_TY + 1))
 
 
 def knn_sq_tiled2_kernel(
@@ -670,8 +673,8 @@ def knn_sq_tiled2_kernel(
     var ex = Int(ex_)
     var tid = Int(thread_idx.x)
     var x0 = Int(block_idx.x) * KNN2_TX
-    var xs = stack_allocation[KNN2_TX * KNN2_FC, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-    var ys = stack_allocation[KNN2_TY * KNN2_FC, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var xs = stack_allocation[KNN2_TX * KNN2_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var ys = stack_allocation[KNN2_TY * KNN2_XS, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var dt = stack_allocation[KNN2_TX * (KNN2_TY + 1), Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var inf = _bc[DType.float32](UInt32(0x7F800000))
     var t = x0 + tid
@@ -681,45 +684,45 @@ def knn_sq_tiled2_kernel(
         for s in range(k):
             dist.unsafe_store(t * k + s, inf)
             idx.unsafe_store(t * k + s, Int32(-1))
+    var ta = tid // 16
+    var tb = tid - ta * 16
     var j0 = 0
     while j0 < m:
         var rows = min(KNN2_TY, m - j0)
-        var acc = InlineArray[Float32, KNN2_PT](fill=Float32(0))
+        var acc = InlineArray[Float32, KNN2_R * KNN2_R](fill=Float32(0))
         var f0 = 0
         while f0 < d:
             var fc = min(KNN2_FC, d - f0)
             var q = tid
             while q < KNN2_TX * KNN2_FC:
-                var a = q // KNN2_FC
-                var f = q - a * KNN2_FC
-                xs[q] = x.unsafe_load((x0 + a) * d + f0 + f) if (x0 + a < n and f < fc) else Float32(0)
-                var b = a
-                ys[q] = y.unsafe_load((j0 + b) * d + f0 + f) if (b < rows and f < fc) else Float32(0)
+                var r = q // KNN2_FC
+                var f = q - r * KNN2_FC
+                xs[r * KNN2_XS + f] = x.unsafe_load((x0 + r) * d + f0 + f) if (x0 + r < n and f < fc) else Float32(0)
+                ys[r * KNN2_XS + f] = y.unsafe_load((j0 + r) * d + f0 + f) if (r < rows and f < fc) else Float32(0)
                 q += KNN2_TPB
             barrier()
-            comptime for r in range(KNN2_PT):
-                var p = tid + r * KNN2_TPB
-                var a = p // KNN2_TY
-                var b = p - a * KNN2_TY
-                var ac = acc[r]
-                for f in range(fc):
-                    var df = _sub(xs[a * KNN2_FC + f], ys[b * KNN2_FC + f])
-                    ac = ftz(identical_mul_add(df, df, ac))
-                acc[r] = ac
+            for f in range(fc):
+                var xv = InlineArray[Float32, KNN2_R](fill=Float32(0))
+                var yv = InlineArray[Float32, KNN2_R](fill=Float32(0))
+                comptime for i in range(KNN2_R):
+                    xv[i] = xs[(ta + 16 * i) * KNN2_XS + f]
+                    yv[i] = ys[(tb + 16 * i) * KNN2_XS + f]
+                comptime for i in range(KNN2_R):
+                    comptime for jj in range(KNN2_R):
+                        var df = _sub(xv[i], yv[jj])
+                        acc[i * KNN2_R + jj] = ftz(identical_mul_add(df, df, acc[i * KNN2_R + jj]))
             barrier()
             f0 += KNN2_FC
-        comptime for r in range(KNN2_PT):
-            var p = tid + r * KNN2_TPB
-            var a = p // KNN2_TY
-            var b = p - a * KNN2_TY
-            dt[a * (KNN2_TY + 1) + b] = acc[r]
+        comptime for i in range(KNN2_R):
+            comptime for jj in range(KNN2_R):
+                dt[(ta + 16 * i) * (KNN2_TY + 1) + tb + 16 * jj] = acc[i * KNN2_R + jj]
         barrier()
         if owner:
-            for b in range(rows):
-                var j = j0 + b
+            for bb in range(rows):
+                var j = j0 + bb
                 if ex != 0 and j == t:
                     continue
-                var v = dt[tid * (KNN2_TY + 1) + b]
+                var v = dt[tid * (KNN2_TY + 1) + bb]
                 if not (v < worst):
                     continue
                 var s = k - 1
