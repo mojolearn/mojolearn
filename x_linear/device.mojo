@@ -24,7 +24,8 @@ from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS
-from x_linear.ops import ld, st, fd, i2f
+from x_linear.ops import ld, st, fd, i2f, fa, fs, fm, fabs, shuffle
+from x_linear.sgd import sgd_mb_on, mb_row, mb_part, mb_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo
@@ -178,10 +179,218 @@ def _fit_on_host(
     _ = tw^
 
 
+
+# ------------------------------------------------ minibatch SGD on the grid (lane/neural-pass103)
+# x_linear/sgd.mojo `sgd_mb_one` with each batch as three launches: the rows'
+# loss derivatives (one thread a row), the gradient partials (one thread a
+# (sub-block, column), sub-block-major so neighbouring threads read one row's
+# words), the step (one thread a weight, the intercept and the objective).
+# The shuffle, the rate schedule and the stopping run on the host with the
+# same statements; an epoch's batches are enqueued without a sync.
+def sgd_mb_rows_kernel(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
+                       eps: Float32, swp: FP, has_sw: Int32, wpos: Float32, wneg: Float32, has_cw: Int32,
+                       dlv: FP, lv: FP):
+    var r = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if r < Int(bs):
+        var i = Int(idx.unsafe_load(Int(start) + r))
+        var o = mb_row(x, ys, i, Int(d), w, 0, ld(bias, 0), Int(loss), eps, swp, has_sw != 0, wpos, wneg, has_cw != 0)
+        st(dlv, r, o[0])
+        st(lv, r, o[1])
+
+
+def sgd_mb_parts_kernel(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP, bs: Int32, nsub: Int32, parts: FP):
+    var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    var subs = mb_subs(Int(bs))
+    var s = q // (dd + 2)
+    var j = q - s * (dd + 2)
+    if s < subs:
+        st(parts, j * Int(nsub) + s, mb_part(x, dd, idx, Int(start), dlv, lv, j, s, Int(bs)))
+
+
+def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias: FP, obj: FP, eta: Float32,
+                       alpha: Float32, l1r: Float32, penalty: Int32, fi: Int32, need_obj: Int32):
+    var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    var subs = mb_subs(Int(bs))
+    if j > dd + 1:
+        return
+    var g = Float32(0)
+    for s in range(subs):
+        g = fa(g, ld(parts, j * Int(nsub) + s))
+    if j < dd:
+        st(w, j, mb_step(ld(w, j), g, Int(bs), eta, alpha, l1r, Int(penalty)))
+    elif j == dd:
+        if fi != 0:
+            st(bias, 0, fs(ld(bias, 0), fm(eta, fd(g, i2f(Int(bs))))))
+    elif need_obj != 0:
+        st(obj, 0, fa(ld(obj, 0), g))
+
+
+def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
+                 n_out: Int, res: FP) raises:
+    var ctx = linear_ctx()
+    var k = Int(ip[0])
+    var loss = Int(ip[1])
+    var penalty = Int(ip[2])
+    var lr = Int(ip[3])
+    var fi = Int(ip[4]) != 0
+    var max_iter = Int(ip[5])
+    var nic = Int(ip[6])
+    var do_shuffle = Int(ip[7]) != 0
+    var seed = (UInt64(UInt32(ip[9])) << 32) | UInt64(UInt32(ip[8]))
+    var has_sw = Int(ip[10]) != 0
+    var has_cw = Int(ip[11]) != 0
+    var batch = Int(ip[12])
+    var alpha = fp[0]
+    var l1r = fp[1]
+    var eta0 = fp[2]
+    var power_t = fp[3]
+    var eps = fp[4]
+    var tol = fp[5]
+    if penalty == P_L2:
+        l1r = Float32(0)
+    elif penalty == P_L1:
+        l1r = Float32(1)
+    var problems = k if k > 2 else 1
+    var nsub = mb_subs(batch)
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+    var dys = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var dsw = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var didx = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var ddl = ctx.enqueue_create_buffer[DType.float32](batch)
+    var dlv = ctx.enqueue_create_buffer[DType.float32](batch)
+    var dparts = ctx.enqueue_create_buffer[DType.float32]((d + 2) * nsub)
+    var dw = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dbias = ctx.enqueue_create_buffer[DType.float32](1)
+    var dobj = ctx.enqueue_create_buffer[DType.float32](1)
+    if n_x > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    if has_sw:
+        ctx.enqueue_copy(dst_buf=dsw, src_ptr=y + n)
+    var ys = List[Float32](length=max(n, 1), fill=Float32(0))
+    var idx = List[Int32](length=max(n, 1), fill=Int32(0))
+    var hw = List[Float32](length=max(d, 1), fill=Float32(0))
+    var hb = List[Float32](length=1, fill=Float32(0))
+    var ho = List[Float32](length=1, fill=Float32(0))
+    var need_obj = tol > Float32(-3.0e38)
+    var max_epochs = 0
+    var status = 0
+    for c in range(problems):
+        for i in range(n):
+            var v = y.unsafe_load(i)
+            if k == 0:
+                ys[i] = v
+            elif k == 2:
+                ys[i] = Float32(1) if v == Float32(1) else Float32(-1)
+            else:
+                ys[i] = Float32(1) if v == i2f(c) else Float32(-1)
+            idx[i] = Int32(i)
+        ctx.enqueue_copy(dst_buf=dys, src_ptr=ys.unsafe_ptr())
+        dw.enqueue_fill(Float32(0))
+        dbias.enqueue_fill(Float32(0))
+        var wpos = fp[6 + c] if has_cw else Float32(1)
+        var wneg = fp[6 + problems + c] if has_cw else Float32(1)
+        var rng = seed + UInt64(1000003) * UInt64(c)
+        var eta = eta0
+        var opt_init = mb_optimal_init(loss, alpha, eps) if lr == LR_OPTIMAL else Float32(0)
+        var t = 1
+        var best = Float32(3.0e38)
+        var no_improve = 0
+        var epochs = 0
+        var failed = False
+        var ipp = IP(unsafe_from_address=Int(idx.unsafe_ptr()))
+        for epoch in range(max_iter):
+            epochs = epoch + 1
+            if do_shuffle:
+                shuffle(ipp, n, rng)
+            ctx.enqueue_copy(dst_buf=didx, src_ptr=idx.unsafe_ptr())
+            dobj.enqueue_fill(Float32(0))
+            var start = 0
+            while start < n:
+                var bs = min(batch, n - start)
+                var et = mb_eta(lr, eta, eta0, alpha, power_t, opt_init, t)
+                ctx.enqueue_function[sgd_mb_rows_kernel](
+                    dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(start), Int32(bs), Int32(d),
+                    dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, dsw.unsafe_ptr(), Int32(1 if has_sw else 0),
+                    wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
+                    grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
+                )
+                ctx.enqueue_function[sgd_mb_parts_kernel](
+                    dx.unsafe_ptr(), Int32(d), didx.unsafe_ptr(), Int32(start), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
+                    Int32(bs), Int32(nsub), dparts.unsafe_ptr(), grid_dim=_xg_blocks((d + 2) * mb_subs(bs)), block_dim=XG_TPB,
+                )
+                ctx.enqueue_function[sgd_mb_step_kernel](
+                    dparts.unsafe_ptr(), Int32(nsub), Int32(bs), Int32(d), dw.unsafe_ptr(), dbias.unsafe_ptr(),
+                    dobj.unsafe_ptr(), et, alpha, l1r, Int32(penalty), Int32(1 if fi else 0), Int32(1 if need_obj else 0),
+                    grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
+                )
+                t += 1
+                start += bs
+            ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=dw)
+            ctx.enqueue_copy(dst_ptr=hb.unsafe_ptr(), src_buf=dbias)
+            ctx.enqueue_copy(dst_ptr=ho.unsafe_ptr(), src_buf=dobj)
+            ctx.synchronize()
+            var bias = hb[0]
+            var finite = bias == bias and fabs(bias) < Float32(3.0e38)
+            for j in range(d):
+                var wj = hw[j]
+                if not (wj == wj and fabs(wj) < Float32(3.0e38)):
+                    finite = False
+            if not finite:
+                failed = True
+                break
+            if need_obj:
+                var mean_obj = fa(fd(ho[0], i2f(n)), mb_penalty(FP(unsafe_from_address=Int(hw.unsafe_ptr())), 0, d, alpha, l1r, penalty))
+                if mean_obj > fs(best, tol):
+                    no_improve += 1
+                else:
+                    no_improve = 0
+                if mean_obj < best:
+                    best = mean_obj
+                if no_improve >= nic:
+                    if lr == LR_ADAPTIVE and eta > Float32(1e-6):
+                        eta = fd(eta, Float32(5))
+                        no_improve = 0
+                    else:
+                        break
+        if failed:
+            status = -1
+            for j in range(d):
+                res.unsafe_store(c * d + j, Float32(0))
+            res.unsafe_store(problems * d + c, Float32(0))
+        else:
+            for j in range(d):
+                res.unsafe_store(c * d + j, hw[j])
+            res.unsafe_store(problems * d + c, hb[0])
+            if epochs > max_epochs:
+                max_epochs = epochs
+    res.unsafe_store(problems * d + problems, i2f(max_epochs))
+    res.unsafe_store(problems * d + problems + 1, i2f(status))
+    _ = ys^
+    _ = idx^
+    _ = hw^
+    _ = hb^
+    _ = ho^
+    _ = dx^
+    _ = dys^
+    _ = dsw^
+    _ = didx^
+    _ = ddl^
+    _ = dlv^
+    _ = dparts^
+    _ = dw^
+    _ = dbias^
+    _ = dobj^
+
+
 def fit_device(
     algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
 ) raises:
+    if algo == ALGO_SGD and len(ip) > 12 and sgd_mb_on(Int(ip[12]), Int(ip[0]), Int(ip[3])):
+        _sgd_mb_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
+        return
     if algo == ALGO_SGD and _sgd_on_host():
         _fit_on_host(algo, x, y, n, d, ip, fp, n_out, n_fw, n_iw, res)
         return
