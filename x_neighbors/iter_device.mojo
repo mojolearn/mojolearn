@@ -13,6 +13,7 @@ same values; only the stopping sum crosses back, one float per iteration,
 compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
+from checks.kernel_matrix import lib_smem_page_fits_for, TARGET_COLUMN
 from std.memory import bitcast
 from core.host_lanes import host_row_tasks
 from std.time import perf_counter_ns
@@ -743,7 +744,9 @@ def op_knn_sq_tiled(
     """The fused k-NN (`knn_sq`) with y staged per block; d above
     KNN_TILE_MAX_D takes the one-thread-per-row item kernel."""
     if d > KNN_TILE_MAX_D:
-        comptime if is_defined["MOJOLEARN_XN_KNN_ROWWISE"]():
+        # the 2-D tiled kernel's threadgroup pages (25,344 bytes) under every
+        # column's limit, or the row kernel (every shared page has a fits gate)
+        comptime if is_defined["MOJOLEARN_XN_KNN_ROWWISE"]() or not lib_smem_page_fits_for[TARGET_COLUMN, KNN2_SMEM_BYTES]():
             op_knn_sq(x, y, dist, idx, n, m, d, k, exclude_self)
             return
         var ctx2 = xn_ctx()
