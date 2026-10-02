@@ -81,7 +81,7 @@ from gemm.host.gemm_host_rows import (
     ghr_tile,
 )
 from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, contract_leaf_size, leaf_count
-from training.checks.loss_oracle import (
+from training.checks.loss_contract import (
     REDUCTION_MEAN,
     CeConfig,
     ce_count,

@@ -27,11 +27,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.contract import OP_NN, OP_NT, OP_TN
-from training.checks.loss_oracle import (
-    CeConfig,
-    IGNORE_INDEX_DEFAULT,
-    REDUCTION_MEAN,
-)
+from training.checks.loss_contract import CeConfig, IGNORE_INDEX_DEFAULT, REDUCTION_MEAN
 from core.device_scan import device_first_nonfinite
 from training.checks.optimizer import (
     OPT_RECORD_INTERMEDIATES,
@@ -39,7 +35,7 @@ from training.checks.optimizer import (
     identical_optimizer_step,
     identical_optimizer_workspace_floats,
 )
-from training.checks.optimizer_oracle import OPT_ADAMW, OptimizerConfig
+from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
 from training.estimator import (
     _refuse_hyperparameters,
     identical_ce_admit_call,

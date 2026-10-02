@@ -8,7 +8,7 @@ from gemm.checks.gemm_backward import identical_gemm_backward_workspace_max_floa
 from gemm.contract import OP_NT
 from embedding.checks.embedding_identical import emb_run_scratch_ints
 from training.checks.loss import identical_ce_ones_floats, identical_ce_workspace_max_floats
-from training.checks.loss_oracle import REDUCTION_MEAN
+from training.checks.loss_contract import REDUCTION_MEAN
 
 
 struct BytePooledHead(Movable):

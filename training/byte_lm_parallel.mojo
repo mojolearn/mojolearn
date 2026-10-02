@@ -31,7 +31,7 @@ from training.byte_lm import (
 from training.byte_lm_optimizer_pool import pool_snapshot, pool_update, pool_restore, pool_maybe_fault
 from training.checks.optimizer import OPT_RECORD_INTERMEDIATES
 from training.byte_lm_config import ByteConfig
-from training.checks.optimizer_oracle import OptimizerConfig
+from training.checks.optimizer_contract import OptimizerConfig
 from training.checks.train_loop import _copy_into, _upload, download_f32, download_f32_into
 from core.multi_gpu import transfer_bytes
 

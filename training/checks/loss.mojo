@@ -137,7 +137,7 @@ from core.device_scan import (
     device_classify_nonfinite,
     device_first_nonfinite,
 )
-from training.checks.loss_oracle import (
+from training.checks.loss_contract import (
     CE_NEG_INF_BITS,
     CeConfig,
     REDUCTION_NONE,

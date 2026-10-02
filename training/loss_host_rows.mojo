@@ -54,18 +54,17 @@ from core.host_lanes import (
 from core.host_parallel import host_parallelize
 from gemm.contract import OP_NN
 from gemm.host.gemm_host_rows import gemm_host_rows
-from training.checks.loss_oracle import (
+from training.checks.loss_contract import (
     CeConfig,
     REDUCTION_NONE,
-    _row_max,
     ce_count,
     ce_divisor,
-    ce_fold,
-    ce_ones,
     ce_refuse_inputs,
     ce_smoothing_targets,
     neg_by_bits,
 )
+from training.checks.loss_contract import ce_ones
+from training.checks.loss_oracle import _row_max, ce_fold
 
 
 def ce_host_rows(

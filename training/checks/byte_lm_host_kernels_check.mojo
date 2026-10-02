@@ -40,7 +40,8 @@ from training.byte_lm_host_kernels import (
     rms_norm_fast,
     rope_fast,
 )
-from training.checks.loss_oracle import CeConfig, IGNORE_INDEX_DEFAULT, ce_forward_oracle
+from training.checks.loss_contract import CeConfig, IGNORE_INDEX_DEFAULT
+from training.checks.loss_oracle import ce_forward_oracle
 from transformer.checks.transformer_fixture import ScorePlant, TransformerDims, TransformerWeights
 from transformer.checks.transformer_oracle import (
     TransformerKVCache,

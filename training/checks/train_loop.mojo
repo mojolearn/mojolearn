@@ -117,7 +117,6 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, memcpy
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from core.device_arena import arena_active, arena_take
-from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count
 from std.os import getenv
 from std.ffi import _Global
@@ -160,13 +159,13 @@ from training.checks.loss import (
     identical_ce_ones_floats,
     identical_ce_workspace_max_floats,
 )
-from training.checks.loss_oracle import REDUCTION_MEAN, CeConfig
+from training.checks.loss_contract import REDUCTION_MEAN, CeConfig
 from training.checks.optimizer import (
     SAB_CHUNKS,
     identical_optimizer_step,
     identical_optimizer_workspace_floats,
 )
-from training.checks.optimizer_oracle import OPT_ADAMW, OptimizerConfig
+from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
 
 from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,

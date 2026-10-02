@@ -68,7 +68,7 @@ from training.checks.loss import (
     ANY_LOSS_SABOTAGE, identical_ce_forward_into, identical_ce_backward_into,
     identical_ce_ones_floats, identical_ce_workspace_max_floats,
 )
-from training.checks.loss_oracle import REDUCTION_MEAN, CeConfig
+from training.checks.loss_contract import REDUCTION_MEAN, CeConfig
 from training.chunked_lm_head_v2 import (
     LM_HEAD_V2_CHUNK,
     chunked_lm_head_v2_gemm_forward_into, chunked_lm_head_v2_gemm_backward_into,
@@ -80,7 +80,7 @@ from training.checks.optimizer import (
     OPT_TPB, _grid_for as _opt_grid_for, adam_update_kernel, adam_update_oop_kernel,
     device_step_scalars, opt_refuse_device_inputs,
 )
-from training.checks.optimizer_oracle import OPT_ADAMW, OPT_SGD, OptimizerConfig
+from training.checks.optimizer_contract import OPT_ADAMW, OPT_SGD, OptimizerConfig
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, byte_lm_release_eager_for
 from core.device_arena import arena_begin, arena_end, arena_release
 from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, FUSED_CORNER, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ, attention_estash_memory_grant

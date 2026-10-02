@@ -8,7 +8,7 @@ from checks.numerics import (
     ftz, identical_div, identical_exp, identical_fmax, identical_log,
     identical_mul_add,
 )
-from training.checks.loss_oracle import CE_NEG_INF_BITS, neg_by_bits
+from training.checks.loss_contract import CE_NEG_INF_BITS, neg_by_bits
 from std.memory import bitcast
 from gemm.checks.gemm_identical import identical_gemm_into
 from gemm.contract import OP_NT

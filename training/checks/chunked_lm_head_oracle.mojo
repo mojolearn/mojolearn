@@ -20,7 +20,7 @@ from checks.numerics import (
     identical_log,
     identical_mul_add,
 )
-from training.checks.loss_oracle import CE_NEG_INF_BITS, neg_by_bits, refuse_nonfinite
+from training.checks.loss_contract import CE_NEG_INF_BITS, neg_by_bits, refuse_nonfinite
 
 
 comptime LM_HEAD_V2_VOCAB_CHUNK = 256

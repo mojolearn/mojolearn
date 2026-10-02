@@ -268,17 +268,19 @@ from training.checks.optimizer_fixture import (
     opt_splitmix64,
     opt_total,
 )
-from training.checks.optimizer_oracle import (
+from training.checks.optimizer_contract import (
     OPT_ADAM,
     OPT_ADAMW,
     OPT_SGD,
     OptimizerConfig,
-    OptimizerStages,
     microbatch_split_is_identical,
-    optimizer_step_oracle,
     refuse_nonfinite,
-    sched_field_name,
     step_scalars,
+)
+from training.checks.optimizer_oracle import (
+    OptimizerStages,
+    optimizer_step_oracle,
+    sched_field_name,
 )
 
 

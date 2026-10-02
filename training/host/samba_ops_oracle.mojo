@@ -90,7 +90,7 @@ from gemm.checks.gemm_backward import (
 from gemm.contract import OP_NN, OP_NT, GEMM_ORACLE_HOST_SABOTAGE
 from gemm.host.identical_gemm import gemm_oracle
 from gemm.host.gemm_host_rows import gemm_host_rows
-from training.checks.optimizer_oracle import microbatch_split_is_identical
+from training.checks.optimizer_contract import microbatch_split_is_identical
 
 
 #: `transformer/checks/transformer_backward.mojo:85-86`.

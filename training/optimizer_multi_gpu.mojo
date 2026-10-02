@@ -18,7 +18,7 @@ from training.estimator import (
     identical_clip_grad_norm_host,
     _offsets_from_ptr, _refuse_hyperparameters,
 )
-from training.checks.optimizer_oracle import OptimizerConfig, OPT_SGD, OPT_ADAM, OPT_ADAMW
+from training.checks.optimizer_contract import OptimizerConfig, OPT_SGD, OPT_ADAM, OPT_ADAMW
 
 
 @fieldwise_init

@@ -7,7 +7,8 @@ from training.checks.chunked_lm_head_oracle import (
     chunked_lm_head_v2_oracle,
     chunked_lm_head_v2_peak_scratch_floats,
 )
-from training.checks.loss_oracle import CE_NEG_INF_BITS, CeConfig, ce_backward_oracle, ce_forward_oracle, neg_by_bits
+from training.checks.loss_contract import CE_NEG_INF_BITS, CeConfig, neg_by_bits
+from training.checks.loss_oracle import ce_backward_oracle, ce_forward_oracle
 from std.memory import bitcast
 
 

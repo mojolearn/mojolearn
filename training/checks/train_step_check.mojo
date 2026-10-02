@@ -92,11 +92,8 @@ from embedding.checks.embedding_oracle import (
 )
 
 from training.checks.loss import loss_sabotage_name
-from training.checks.loss_oracle import (
-    CeConfig,
-    ce_backward_oracle,
-    ce_forward_oracle,
-)
+from training.checks.loss_contract import CeConfig
+from training.checks.loss_oracle import ce_backward_oracle, ce_forward_oracle
 from training.checks.optimizer import optimizer_sabotage_name
 from training.checks.optimizer_oracle import optimizer_step_oracle
 

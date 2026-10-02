@@ -154,7 +154,7 @@ from checks.numerics import (
     identical_rsqrt,
     identical_sqrt,
 )
-from training.checks.optimizer_oracle import (
+from training.checks.optimizer_contract import (
     OPT_ADAMW,
     OPT_SGD,
     OptimizerConfig,

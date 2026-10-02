@@ -33,8 +33,8 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.contract import OP_NT
-from training.checks.optimizer_oracle import microbatch_split_is_identical
-from training.checks.loss_oracle import CeConfig, ce_count, ce_refuse_inputs
+from training.checks.optimizer_contract import microbatch_split_is_identical
+from training.checks.loss_contract import CeConfig, ce_count, ce_refuse_inputs
 from training.estimator import identical_ce_admit_call, identical_ce_loss_resident
 from transformer.checks.transformer_backward import bwd_rms_norm
 from transformer.impl.llama.modeling_llama import (

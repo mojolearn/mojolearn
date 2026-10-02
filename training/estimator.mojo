@@ -107,16 +107,16 @@ from training.checks.loss import (
     identical_ce_ones_floats,
     identical_ce_workspace_max_floats,
 )
-from training.checks.loss_oracle import (
+from training.checks.loss_contract import (
     REDUCTION_MEAN,
     REDUCTION_NONE,
     REDUCTION_SUM,
     CeConfig,
     ce_count,
-    ce_ones,
     ce_refuse_inputs,
     ce_refuse_shape,
 )
+from training.checks.loss_contract import ce_ones
 from training.checks.optimizer import (
     OPT_RECORD_INTERMEDIATES,
     SAB_CHUNKS,
@@ -127,7 +127,7 @@ from training.checks.optimizer import (
     _step_timing_on,
     _step_timing_tick,
 )
-from training.checks.optimizer_oracle import (
+from training.checks.optimizer_contract import (
     OPT_ADAM,
     OPT_ADAMW,
     OPT_SGD,
