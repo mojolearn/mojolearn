@@ -15,7 +15,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from sequence.exec import Exec
 from sequence.dispatch import apply
-from sequence.ops import OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
+from sequence.ops import OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
 from std.sys.info import has_apple_gpu_accelerator
 
@@ -465,7 +465,7 @@ struct DeviceExec(Exec):
                 )
                 return
         comptime if SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
-                                  or OP == OP_LAMB_RATIO or OP == OP_GEMM):
+                                  or OP == OP_LAMB_RATIO or OP == OP_GEMM or OP == OP_AF_BLK_SUMSQ):
             var coop = True
             comptime if OP == OP_GEMM:
                 coop = a.i0 * a.i1 <= 1024 and a.i2 >= 32768

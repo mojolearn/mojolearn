@@ -12,6 +12,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
+from sequence.opt_resident import lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from sequence.pyapi import ival, _getenv_seq, opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
 
 
@@ -40,6 +41,33 @@ def rnn_n_params_binding(ip: PythonObject) raises -> PythonObject:
 def optimizer_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     return opt_step_py(ex, addrs, ip, fp)
+
+
+def optimizer_resident_open_binding(ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    return opt_resident_open_py(ip, fp)
+
+
+def lamb_resident_open_binding(ip: PythonObject) raises -> PythonObject:
+    return lamb_resident_open_py(ip)
+
+
+def optimizer_resident_close_binding(handle: PythonObject) raises -> PythonObject:
+    return opt_resident_close_py(handle)
+
+
+def optimizer_resident_move_binding(handle: PythonObject, slot: PythonObject, addr: PythonObject,
+                                    up: PythonObject) raises -> PythonObject:
+    return opt_resident_move_py(handle, slot, addr, up)
+
+
+def optimizer_resident_step_binding(handle: PythonObject, addrs: PythonObject, ip: PythonObject,
+                                    fp: PythonObject) raises -> PythonObject:
+    return opt_resident_step_py(handle, addrs, ip, fp)
+
+
+def lamb_resident_step_binding(handle: PythonObject, addrs: PythonObject, ip: PythonObject,
+                               fp: PythonObject) raises -> PythonObject:
+    return lamb_resident_step_py(handle, addrs, ip, fp)
 
 
 def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
@@ -173,6 +201,13 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[mlp_predict_binding]("mlp_predict")
         m.def_function[adafactor_step_binding]("adafactor_step")
         m.def_function[lamb_step_binding]("lamb_step")
+        # the resident optimizer state (sequence/opt_resident.mojo)
+        m.def_function[optimizer_resident_open_binding]("optimizer_resident_open")
+        m.def_function[lamb_resident_open_binding]("lamb_resident_open")
+        m.def_function[optimizer_resident_close_binding]("optimizer_resident_close")
+        m.def_function[optimizer_resident_move_binding]("optimizer_resident_move")
+        m.def_function[optimizer_resident_step_binding]("optimizer_resident_step")
+        m.def_function[lamb_resident_step_binding]("lamb_resident_step")
         m.def_function[layer_norm_binding]("layer_norm")
         m.def_function[theta_binding]("theta")
         m.def_function[croston_binding]("croston")
