@@ -2179,6 +2179,9 @@ FAMILIES = (
             "rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export",
             "rf_classifier_fit_shard", "rf_regressor_fit_shard",
             "forest_prepare_gpu", "forest_predict_resident_reuse_gpu", "forest_release_gpu",
+            "rf_data_session_open", "rf_data_session_close",
+            "rf_regressor_fit_session_export", "rf_regressor_fit_session_rows_export",
+            "rf_classifier_fit_weighted_session_export",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
