@@ -85,6 +85,12 @@ _OPS = dict(
     lab_load=119, uniq_count=120, uniq_scan=121, uniq_write=122, chunk_neg=123,
     colb_part=124, colb_fold=125, colb_ss=126, colb_var=127, maxabs_fold=128, csb_part=129, csb_fold=130, csb_ss=131, csb_var=132, cat_hpart=133, cat_hfold=134,
     row_ones=135,
+    # lane apple-fast-meta (x_prep/calib.mojo): only the FAST + Apple binding built with
+    # -D MOJOLEARN_CALIB_GNB_FOLDS runs them (it exports x_prep_calib_folds); nothing stages
+    # them otherwise
+    cal_fold_part=136, cal_fold_scan=137, cal_fold_rank=138, cal_fold_assign=139, cal_lofo_merge=140,
+    cal_eps_folds=141, cal_params_folds=142, cal_jll_folds=143, cal_platt_init=144, cal_platt_setup=145,
+    cal_platt_part=146, cal_platt_step=147, cal_platt_ls_part=148, cal_platt_ls_pick=149, cal_sigmoid_avg=150,
 )
 _PARAMS = 14
 _NONE = -1

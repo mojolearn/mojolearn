@@ -57,8 +57,6 @@ comptime CALIB_FOLDS = (
 comptime CAL_ST = 10
 #: the Platt line search's step lengths 1, 1/2, .., 2^-(CAL_LS - 1)
 comptime CAL_LS = 16
-#: the Platt stop: |grad| < CAL_TOL * (rows of the fold)
-comptime CAL_TOL = Float32(1e-5)
 #: the Newton Hessian's diagonal start (platt_fit's 1e-12 is below float32)
 comptime CAL_HDIAG = Float32(1e-12)
 

@@ -2170,6 +2170,35 @@ def _cal_native(est):
     return _CAL_NATIVE and hotpath_enabled() and hasattr(est._bind(), "x_trees_platt_apply_strided")
 
 
+#: lane apple-fast-meta (-D MOJOLEARN_CALIB_GNB_FOLDS, FAST + Apple only):
+#: CalibratedClassifierCV(GaussianNB, method="sigmoid", ensemble=True, cv=int)
+#: as ONE x_prep program per fit and one per predict (x_prep/calib.mojo: the
+#: folds, every fold's statistics, the held-out scores and Platt's sigmoids on
+#: the device, X uploaded once). The binding built with the define exports
+#: x_prep_calib_folds; every other binding takes the reference route below.
+_CAL_XB = 2048      # rows per block of the fold-assignment partials
+_CAL_PB = 512       # rows per block of the Platt partials
+_CAL_ITERS = 40     # Newton iterations unrolled (platt_fit's cap is 100; a stopped problem's stages are no-ops)
+_CAL_TOL = 1e-5     # |gradient| / rows of the fold below this stops a problem
+
+
+def _cal_fast_consts(base, method, ensemble, cv, sample_weight):
+    """[CAL_ST, CAL_LS] of the x_prep binding's calibration program, or None
+    when the binding lacks it or the request is outside what it covers."""
+    from ._expansion_prep import GaussianNB, _mode, _optional_prep_entry, _prep_binding
+    if sample_weight is not None or method != "sigmoid" or not ensemble or not isinstance(base, GaussianNB):
+        return None
+    if base.priors is not None or not isinstance(_trees_cv(cv), int):
+        return None
+    try:
+        entry = _optional_prep_entry(_prep_binding(_mode()), "x_prep_calib_folds")
+    except Exception:
+        return None
+    if entry is None:
+        return None
+    return [int(v) for v in entry()]
+
+
 class CalibratedClassifierCV(_TreesWrapperBase):
     _estimator_type = "classifier"
 
@@ -2334,6 +2363,10 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         if base is None:
             from .svm import LinearSVC
             base = LinearSVC()
+        self._cal_fast = None
+        consts = _cal_fast_consts(base, self.method, self.ensemble, self.cv, sample_weight)
+        if consts is not None:
+            return self._fit_fast(Xa, codes, base, consts)
         splits = _trees_splits(self.cv, X, y, n, codes=codes.tolist(), partition=not self.ensemble)
         cols = _trees_arange(d)
         self.calibrated_classifiers_ = []
@@ -2360,8 +2393,116 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         self._fitted = True
         return self
 
+    def _fit_fast(self, Xa, codes, base, consts):
+        """The one-program fit (x_prep/calib.mojo, lane apple-fast-meta): the
+        members are GaussianNB objects filled from the program's per-fold
+        words, so the reference `calibrated_classifiers_` route still reads
+        them; `_cal_fast` holds the words the one-program predict uploads."""
+        from ._expansion_prep import _NONE, _Prog, _class_stats, _mode
+        cal_st, cal_ls = consts
+        n, d = Xa.shape
+        K = len(self.classes_)
+        F = _trees_cv(self.cv)
+        c = 1 if K == 2 else K
+        FK, FC = F * K, F * c
+        nb = (n + _CAL_XB - 1) // _CAL_XB
+        nbp = (n + _CAL_PB - 1) // _CAL_PB
+        pr = _Prog()
+        xo = pr.put(Xa)
+        co = pr.put_words(codes)
+        # StratifiedKFold(shuffle=False)'s test fold of every row
+        pcnt, pmin = pr.work(nb * K), pr.work(nb * K)
+        pr.stage("cal_fold_part", nb * K, co, n, K, _CAL_XB, pcnt, pmin)
+        ccnt, cfirst, prefix = pr.alloc(K), pr.alloc(K), pr.work(nb * K)
+        pr.stage("cal_fold_scan", K, pcnt, pmin, nb, K, ccnt, cfirst, prefix)
+        rank = pr.work(n)
+        pr.stage("cal_fold_rank", nb * K, co, n, K, _CAL_XB, prefix, rank)
+        fold, pcode, foldf = pr.work(n), pr.work(n), pr.work(n)
+        pr.stage("cal_fold_assign", n, co, rank, n, K, ccnt, cfirst, F, fold, pcode, foldf)
+        # per (fold, class) and per fold column statistics -> each fold's train statistics
+        cnt_fk, mean_fk, var_fk = pr.work(FK), pr.work(FK * d), pr.work(FK * d)
+        _class_stats(pr, None, FK * d, xo, n, d, pcode, FK, cnt_fk, mean_fk, var_fk, _NONE)
+        cnt_f, mean_f, var_f = pr.work(F), pr.work(F * d), pr.work(F * d)
+        _class_stats(pr, None, F * d, xo, n, d, foldf, F, cnt_f, mean_f, var_f, _NONE)
+        tcnt, theta, var = pr.alloc(FK), pr.alloc(FK * d), pr.alloc(FK * d)
+        pr.stage("cal_lofo_merge", FK * d, cnt_fk, mean_fk, var_fk, F, K, d, tcnt, theta, var)
+        ntr, cmean, cvar = pr.work(F), pr.work(F * d), pr.work(F * d)
+        pr.stage("cal_lofo_merge", F * d, cnt_f, mean_f, var_f, F, 1, d, ntr, cmean, cvar)
+        eps, vs = pr.alloc(F), pr.put_scalar(base.var_smoothing)
+        pr.stage("cal_eps_folds", F, cvar, F, d, eps, vs)
+        prior, const = pr.alloc(FK), pr.alloc(FK)
+        pr.stage("cal_params_folds", FK, tcnt, var, K, d, ntr, eps, prior, const)
+        # every row scored by the model that left it out
+        jll, proba = pr.work(n * K), pr.work(n * K)
+        pr.stage("cal_jll_folds", n * K, xo, n, d, theta, var, const, K, fold, jll, F)
+        pr.stage("row_softmax", n, jll, n, K, _NONE, proba)
+        # Platt's sigmoid per (fold, column): Newton with a T-step line search
+        part2 = pr.work(nbp * FC * 2)
+        pr.stage("cal_platt_init", nbp * FC, co, fold, n, F, c, _CAL_PB, part2)
+        state = pr.alloc(FC * cal_st)
+        pr.stage("cal_platt_setup", FC, part2, nbp, F, c, state)
+        part6, part_ls, tol = pr.work(nbp * FC * 6), pr.work(nbp * FC * cal_ls), pr.put_scalar(_CAL_TOL)
+        for _ in range(_CAL_ITERS):
+            pr.stage("cal_platt_part", nbp * FC, proba, K, co, fold, n, F, c, _CAL_PB, state, part6)
+            pr.stage("cal_platt_step", FC, part6, nbp, F, c, state, tol)
+            pr.stage("cal_platt_ls_part", nbp * FC, proba, K, co, fold, n, F, c, _CAL_PB, state, part_ls, cal_ls)
+            pr.stage("cal_platt_ls_pick", FC, part_ls, nbp, F, c, state, cal_ls)
+        mode = _mode()
+        pr.run(mode)
+        counts = pr.get_i32(ccnt, K).tolist()
+        if F > max(counts):
+            raise ValueError(f"n_splits={F} cannot be greater than the number of members in each class")
+        theta_a, var_a = pr.get(theta, (FK * d,)), pr.get(var, (FK * d,))
+        const_a, prior_a, tcnt_a = pr.get(const, (FK,)), pr.get(prior, (FK,)), pr.get(tcnt, (FK,))
+        eps_a, st = pr.get(eps, (F,)), pr.get(state, (FC * cal_st,))
+        self.calibrated_classifiers_ = []
+        for fo in range(F):
+            e = _trees_clone(base)
+            e.classes_ = list(range(K))
+            e.theta_ = theta_a[fo * K * d:(fo + 1) * K * d].reshape((K, d))
+            e.var_ = var_a[fo * K * d:(fo + 1) * K * d].reshape((K, d))
+            e.class_count_ = tcnt_a[fo * K:(fo + 1) * K]
+            e.class_prior_ = prior_a[fo * K:(fo + 1) * K]
+            e.epsilon_ = float(eps_a[fo])
+            e._const = const_a[fo * K:(fo + 1) * K]
+            e._raw_var = e.var_
+            e.numeric_mode_, e.n_features_in_ = mode, d
+            cals = [("sigmoid", (float(st[(fo * c + j) * cal_st]), float(st[(fo * c + j) * cal_st + 1])))
+                    for j in range(c)]
+            self.calibrated_classifiers_.append((e, cals))
+        self._cal_fast = dict(F=F, c=c, K=K, theta=theta_a, var=var_a, const=const_a, state=st)
+        self.n_features_in_ = d
+        self._fitted = True
+        return self
+
+    def _predict_proba_fast(self, Xa, want):
+        """The one-program predict: every member's joint log likelihood of
+        every row, softmax, the members' sigmoids averaged; `want` "proba"
+        gives the (n, K) float32 block, "predict" the int32 argmax codes."""
+        from ._expansion_prep import _NONE, _Prog, _mode
+        cf = self._cal_fast
+        F, c, K = cf["F"], cf["c"], cf["K"]
+        n, d = Xa.shape
+        pr = _Prog()
+        xo = pr.put(Xa)
+        th, va, co, sto = pr.put(cf["theta"]), pr.put(cf["var"]), pr.put(cf["const"]), pr.put(cf["state"])
+        jll, proba = pr.work(n * F * K), pr.work(n * F * K)
+        pr.stage("cal_jll_folds", n * F * K, xo, n, d, th, va, co, K, _NONE, jll, F)
+        pr.stage("row_softmax", n * F, jll, n * F, K, _NONE, proba)
+        out = pr.alloc(n * K)
+        pr.stage("cal_sigmoid_avg", n, proba, n, F, K, sto, c, out)
+        am = pr.alloc(n) if want == "predict" else _NONE
+        if am != _NONE:
+            pr.stage("row_argmax", n, out, n, K, am)
+        pr.run(_mode())
+        if want == "predict":
+            return pr.get_i32(am, n)
+        return pr.get(out, (n, K))
+
     def predict_proba(self, X):
         Xa = self._check_X(X)
+        if getattr(self, "_cal_fast", None) is not None:
+            return self._predict_proba_fast(Xa, "proba")
         n, k = Xa.shape[0], len(self.classes_)
         acc = zeros((n * k,), "<f8")
         for e, cals in self.calibrated_classifiers_:
@@ -2371,6 +2512,8 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         return acc.reshape((n, k))
 
     def predict(self, X):
+        if getattr(self, "_cal_fast", None) is not None:
+            return decode_labels(self.classes_, self._predict_proba_fast(self._check_X(X), "predict"))
         p = self.predict_proba(X)
         return decode_labels(self.classes_, self._argmax(p, p.shape[0], len(self.classes_)))
 
