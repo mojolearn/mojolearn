@@ -18,6 +18,7 @@ from sequence.ops import (
     FP,
     Args,
     OP_AF_ALPHA,
+    OP_AF_BLK_SUMSQ,
     OP_AF_DENOM,
     OP_GEMM,
     OP_LAMB_RATIO,
@@ -107,6 +108,12 @@ def apply_coop[OP: Int](cell: Int, lane: Int, a: Args):
         var ss = coop_sumsq(a.p0, 0, a.i0, lane)
         if lane == 0:
             af_denom_tail(a, ss)
+    elif OP == OP_AF_BLK_SUMSQ:
+        # op_af_blk_sumsq's block chain on the simdgroup
+        var lo = cell * a.i1
+        var ss = coop_sumsq(a.p0, lo, min(a.i1, a.i0 - lo), lane)
+        if lane == 0:
+            st(a.p1, cell, ss)
     elif OP == OP_SEG_SUMSQ:
         if a.i0 != 0:
             if lane == 0:

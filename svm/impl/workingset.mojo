@@ -80,9 +80,13 @@ comptime SAB_WS_TIE = is_defined["MOJOLEARN_SVM_SABOTAGE_WS_TIE"]()
 #: (8-bit digits, 12 launches) instead of the one-bit sort (128 launches).
 #: Both are stable sorts by the full key, so the order is the same.
 #: `-D MOJOLEARN_SVM_FAST_SORT_OFF` restores the one-bit sort.
+#: EVERY GPU since lane/gap-classical-nv (2026-10-02): NVIDIA and AMD ran
+#: the one-bit sort (128 launches per working-set pick) and the host-counted
+#: gathers (a drain per gather). Same stable sort by the full key, same
+#: picks, so no bit moves. `fws_walk_kernel` ballots at the hardware wave
+#: width (AMD wave64).
 comptime FAST_WS_SORT = (
     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_FAST_SORT_OFF"]()
 )
 #: FAST on Apple: the three gathers keep their counts on the device
@@ -90,6 +94,7 @@ comptime FAST_WS_SORT = (
 #: `-D MOJOLEARN_SVM_FAST_WS_SELECT_OFF` restores the host-counted gathers.
 comptime SVM_WS_MAX = 2048 if (
     FAST_WS_SORT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_WS1024"]()
 ) else 1024
 """FAST on Apple: a working set of up to 2048 (the block solve's

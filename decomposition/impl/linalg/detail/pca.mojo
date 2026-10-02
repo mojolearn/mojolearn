@@ -16,9 +16,9 @@ from std.memory import stack_allocation
 from core.gemm import gemm_nt, gemm_tn
 from checks.numerics import ftz, identical_div, identical_mul
 from core.gram_splitk import gram_centered_splitk_into, gram_splitk_applies
+from core.xtdz_coalesced import column_mean_launch
 from core.column_stats import (
     STATS_TPB,
-    column_mean_kernel,
     scale_in_place_kernel,
     shift_columns_kernel,
 )
@@ -54,14 +54,9 @@ def compute_covariance(
     restore_input: Bool = True,
 ) raises:
     """Steps 1, 2, 3 and 6. The branch below must take the fused arm exactly when `gemm_tn` would take split-K for this shape, so it asks the SAME `gram_splitk_applies(m, n, k)` that `gemm_tn` asks -- one predicate, both readers, no target test of our own."""
-    ctx.enqueue_function[column_mean_kernel](
-        mu.unsafe_ptr(),
-        x.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_cols),
-        grid_dim=(n_cols, 1, 1),
-        block_dim=(STATS_TPB, 1, 1),
-    )
+    # column_mean_kernel's value, read row-coalesced where it applies
+    # (core/xtdz_coalesced.mojo::column_mean_launch).
+    column_mean_launch(ctx, mu, x, n_rows, n_cols)
     var cells = n_rows * n_cols
     var fused = gram_splitk_applies(n_cols, n_cols, n_rows)
     if fused:

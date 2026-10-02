@@ -132,7 +132,6 @@ _UNFUSED_KNN = os.environ.get("MOJOLEARN_XN_UNFUSED_KNN", "") == "1"
 #: spreading, PageRank and connected_components in Python, one op per step,
 #: instead of the resident `lp_iterate` / `pr_iterate` / `cc_iterate`.
 _HOST_LOOP_LP = os.environ.get("MOJOLEARN_XN_HOST_LOOPS", "") == "1"
-_PR_SPARSE = os.environ.get("MOJOLEARN_PR_SPARSE", "1") != "0"
 #: A/B arm: KNNImputer.transform over every cell instead of the missing ones.
 _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 #: A/B arm: the one-item forms these replaced (PolynomialCountSketch's
@@ -656,9 +655,9 @@ class KernelPCA(_XNeighbors):
 
     Reference: scikit-learn `decomposition/_kernel_pca.py` (1.9.0) with
     `preprocessing.KernelCenterer`: the kernel matrix, centered in their
-    order, the dense eigendecomposition (eigen_solver 'dense'; here the lane's
-    host Jacobi, spectral/checks/symmetric_eig_host.mojo, ascending with
-    pinned signs, then sklearn's `svd_flip(u, None)` sign rule), eigenvalues
+    order, the dense eigendecomposition (eigen_solver 'dense'; here
+    x_decomp's eigh, the round-robin Jacobi on the device, ascending, then
+    sklearn's `svd_flip(u, None)` sign rule), eigenvalues
     below zero set to zero, components sorted by decreasing eigenvalue (equal
     eigenvalues: the higher solver index first, as their reversed argsort),
     zero components removed when n_components is None or remove_zero_eig.
@@ -744,13 +743,29 @@ class KernelPCA(_XNeighbors):
             self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
             self.n_features_in_ = d
             return self
-        w = _empty_out((n,), "<f4")
-        V = _empty_out((n, n), "<f4")
-        self._op("eigh", [(Kc, 0), (w, 1), (V, 1)], (n,))
-        self._op("svd_flip", [(V, 1)], (n, n))
-        wl = w.tolist()
-        order = list(range(n - 1, -1, -1))           # descending; equal values: higher index first
+        # lane hr2-kpca-seq: the dense eigendecomposition is x_decomp's
+        # eigh (the pinned round-robin Jacobi, x_decomp/rr.mojo, on the
+        # device; the host binding runs the same rounds), never the host
+        # Jacobi of x_neighbors/eigh.mojo inside the GPU binding. A/B arm
+        # until measured: MOJOLEARN_XN_KPCA_XN_EIGH=1 restores the old op.
+        old_eigh = os.environ.get("MOJOLEARN_XN_KPCA_XN_EIGH", "0") == "1"
         c = n if self.n_components is None else min(n, int(self.n_components))
+        if old_eigh:
+            w = _empty_out((n,), "<f4")
+            V = _empty_out((n, n), "<f4")
+            self._op("eigh", [(Kc, 0), (w, 1), (V, 1)], (n,))
+            self._op("svd_flip", [(V, 1)], (n, n))
+            wl = w.tolist()
+        else:
+            import array
+            from ._expansion_decomp import _Kit, _M
+            if kit is None:
+                kit = _Kit(self.numeric_mode_used())
+            store = array.array("f")
+            store.frombytes(Kc.tobytes())
+            wm, Vm = kit.eigh(_M(store, n, n))
+            wl = list(wm.s)
+        order = list(range(n - 1, -1, -1))           # descending; equal values: higher index first
         order = order[:c]
         vals = [max(wl[i], 0.0) for i in order]
         if self.n_components is None or self.remove_zero_eig:
@@ -758,7 +773,15 @@ class KernelPCA(_XNeighbors):
             order = [order[j] for j in keep]
             vals = [vals[j] for j in keep]
         self.eigenvalues_ = Array.from_list(vals, "<f4")
-        self.eigenvectors_ = self._take_cols(V, order)
+        if old_eigh:
+            self.eigenvectors_ = self._take_cols(V, order)
+        else:
+            # sklearn's svd_flip(u, None) on the kept columns: each column's
+            # largest-|.| entry (ties to the lower row) made positive
+            vecs = Vm.take_cols(order)
+            if order:
+                vecs = vecs.neg_cols(kit.absmax_flags(vecs, True))
+            self.eigenvectors_ = Array._from_flat(vecs.s, (n, len(order)), "<f4")
         self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
         self.n_features_in_ = d
         return self
@@ -1407,11 +1430,11 @@ class PageRank(_XNeighbors):
         A = _adjacency(A)
         n = A.shape[0]
         binary = self.weight is None or self.weight is False
-        if _PR_SPARSE and not _HOST_LOOP_LP:
-            # lane neural-pass30: the iteration over the nonzero cells of
-            # the adjacency (x_neighbors/pr_sparse.mojo), the same chains
-            # with their zero terms left out; MOJOLEARN_PR_SPARSE=0 keeps
-            # the dense route below
+        if not _HOST_LOOP_LP:
+            # the iteration over the column lists of the adjacency, built
+            # and iterated on the device (lane hr-graph,
+            # x_neighbors/graph_par.mojo): the dense chains with their zero
+            # terms left out, the dangling mass and |x' - x| blocked folds
             if self.personalization is None:
                 p = Array.from_list([1.0 / n] * n, "<f4")
             else:
@@ -1445,20 +1468,6 @@ class PageRank(_XNeighbors):
             p = self._unit(self.personalization, n, "personalization")
         dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
         x = Array.from_list([1.0 / n] * n, "<f4") if self.nstart is None else self._unit(self.nstart, n, "nstart")
-        if not _HOST_LOOP_LP:
-            # The loop below as ONE resident op (x_neighbors/iter_device.mojo),
-            # Q uploaded once; n * tol passed as its float64 bits.
-            info = empty((2,), "<i4")
-            thr = struct.unpack("<Q", struct.pack("<d", n * float(self.tol)))[0]
-            x = Array.from_list(x.tolist(), "<f4")
-            self._op("pr_iterate", [(Q, 0), (x, 1), (p, 0), (dw, 0), (dangling, 0), (info, 1)],
-                     (n, int(self.max_iter), thr >> 32, thr & 0xFFFFFFFF), (_f32_scalar(self.alpha),))
-            it, ok = info.tolist()
-            if ok:
-                self.pagerank_ = x
-                self.n_iter_ = int(it)
-                return self
-            raise RuntimeError(f"PageRank: power iteration failed to converge within {self.max_iter} iterations")
         s = _empty_out((1,), "<f4")
         for it in range(int(self.max_iter)):
             nxt = _empty_out((n,), "<f4")
@@ -1550,11 +1559,12 @@ class Louvain(_XNeighbors):
 
     References: networkx `louvain_communities` / `louvain_partitions`
     (`_one_level`, `_gen_graph`, `modularity`) and cuGraph
-    cpp/src/community/louvain_impl.cuh. The whole method is ONE sequential
-    Mojo item (x_neighbors/items.mojo `louvain_item`) with a PINNED order
-    (DEVIATION 5204): nodes in ascending id instead of networkx's `seed`
-    shuffle, candidate communities in ascending id, a strictly larger gain
-    to move, so ties go to the lowest community id. `labels_` numbers the
+    cpp/src/community/louvain_impl.cuh. Parallel local moving in a PINNED
+    order (x_neighbors/graph_par.mojo, DEVIATION 5204): the nodes of one
+    colour of a fixed graph colouring move together instead of networkx's
+    `seed` shuffle, candidate communities in ascending id, a strictly larger
+    gain to move, so ties go to the lowest community id; community totals
+    and the aggregation are fixed-order folds. `labels_` numbers the
     communities by their lowest node; `modularity_` is networkx's
     modularity of that partition, in float32. `seed` is accepted and unused.
     """
@@ -1609,9 +1619,10 @@ class SVGP(_XNeighbors):
     not optimized (DEVIATION 5205: GPflow trains them and q by gradient
     steps). q_mu / q_sqrt are the non-whitened parameters. Inducing points:
     `inducing_points`, or `n_inducing` training rows evenly spaced
-    (row i * n // M). The m x m system is ONE sequential item
-    (x_neighbors/items.mojo `svgp_item`); the kernel matrices and products are
-    parallel items. Float32 throughout.
+    (row i * n // M). The m x m system runs as staged items
+    (x_neighbors/items.mojo `svgp_*_item`: a Cholesky column per launch, one
+    triangular solve per right-hand side); the kernel matrices and products
+    are parallel items. Float32 throughout.
     """
 
     def __init__(self, n_inducing=32, *, inducing_points=None, kernel_variance=1.0, lengthscale=1.0,
@@ -1668,6 +1679,21 @@ class SVGP(_XNeighbors):
         self._op("svgp", [(Kuu, 0), (B, 0), (b, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
                  (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
         elbo, ok = info.tolist()
+        self.precision_ = "float32"
+        if ok == 0 and os.environ.get("MOJOLEARN_SVGP_FF", "1") != "0":
+            # lane/neural-pass106 (best accuracy, Andrew's standing order): the
+            # statistics and the solve in float-float (x_neighbors/svgp_ff.mojo).
+            # Taxi's Sigma (eigenvalues 1e-6 .. 9e5) defeats float32: B's
+            # float32 accumulation error alone exceeds its smallest eigenvalue.
+            bh, bl = _empty_out((M, M), "<f4"), _empty_out((M, M), "<f4")
+            bvh, bvl = _empty_out((M,), "<f4"), _empty_out((M,), "<f4")
+            self._op("svgp_stats_ff", [(X, 0), (Z, 0), (yv, 0), (bh, 1), (bl, 1), (bvh, 1), (bvl, 1)], (n, M, d),
+                     (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance)))
+            self._op("svgp_ff", [(Kuu, 0), (bh, 0), (bl, 0), (bvh, 0), (bvl, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1),
+                                 (qsqrt, 1), (info, 1)],
+                     (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
+            elbo, ok = info.tolist()
+            self.precision_ = "float-float"
         if ok == 0:
             raise ValueError("SVGP: the inducing system is not positive definite; raise jitter or noise_variance")
         self.Z_, self._alpha, self._C = Z, alpha, C

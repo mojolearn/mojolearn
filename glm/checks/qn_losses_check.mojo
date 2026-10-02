@@ -72,6 +72,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.column_stats import STATS_TPB
 from core.identity_trace import IdentityTrace, first_divergence
+from glm.host.qn_oracle import HOST_QN_TILED, host_qnt_sum, host_qnt_xty
 from glm.checks.multinomial_check import (
     _download,
     _hex32,
@@ -607,6 +608,15 @@ def _host_evaluate(
         g[k] = Float32(0.0)
     var reg_h = _host_tikhonov(hw, d, l2, g)
     var alpha = Float32(1.0 / Float64(n))
+    # QN_TILED (lane/gap-linear-nv): the C == 1 evaluation's sums are tiled
+    comptime if HOST_QN_TILED:
+        loss_h = host_qnt_sum(terms, n)
+        var xt = host_qnt_xty(xh, dz, n, d)
+        for k in range(d):
+            var st = ftz(alpha * xt[k])
+            g[k] = ftz(st + g[k])
+        g[d] = ftz(host_qnt_sum(dz, n) * (Float32(1.0) / Float32(n)))
+        return ftz(loss_h + reg_h)
     for k in range(d):
         var red = List[Float32]()
         for t in range(STATS_TPB):

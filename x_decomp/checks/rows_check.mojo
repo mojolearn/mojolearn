@@ -175,6 +175,27 @@ def main() raises:
     same("5313 lda_rows host == device, 6 iterations (E)", count_diff_f32(eh2, ed2))
     same("5313 lda_rows host == device, 6 iterations (its)", count_diff_f32(ith, itd))
     tr.record_list_f32("x_decomp.lda_rows_k19", dd2)
+    # past LDA_NNZ_CAP nonzero words: the block kernel's per-word scan
+    # through the scratch row (lane gap-lda-als), 4 iterations
+    var v3 = 2400
+    var k3 = 3
+    var C3 = positive_fixture(n, v3, 16)
+    var EW3 = positive_fixture(k3, v3, 17)
+    var D3 = positive_fixture(n, k3, 18)
+    var E3 = positive_fixture(n, k3, 19)
+    for t in range(len(D3)):
+        D3[t] = D3[t] + Float32(0.1)
+        E3[t] = E3[t] + Float32(0.1)
+    var dd3 = D3.copy()
+    var ed3 = E3.copy()
+    var dh3 = D3.copy()
+    var eh3 = E3.copy()
+    var sl3 = zeros(n * (v3 + k3))
+    var it3 = zeros(n)
+    DevExec.lda_rows(ptr(C3), ptr(EW3), ptr(dd3), ptr(ed3), ptr(sl3), ptr(it3), n, k3, v3, Float32(0.2), 4, Float32(1e-3))
+    HostExec.lda_rows(ptr(C3), ptr(EW3), ptr(dh3), ptr(eh3), ptr(sl3), ptr(it3), n, k3, v3, Float32(0.2), 4, Float32(1e-3))
+    same("5313 lda_rows past the nonzero cap host == device (D)", count_diff_f32(dh3, dd3))
+    same("5313 lda_rows past the nonzero cap host == device (E)", count_diff_f32(eh3, ed3))
     # ---- 5316 ALS row solve
     var m = 23
     var f = 4
@@ -194,6 +215,17 @@ def main() raises:
     HostExec.als_rows(ptr(Cf), ptr(Y), ptr(YtY), ptr(xh), ptr(fl), n, m, f, Float32(0.1))
     same("5316 als_rows host", count_diff_f32(xh, wa))
     tr.record_list_f32("x_decomp.als_rows", xa)
+    # the block kernel (lane gap-lda-als) at f = 64 (cells in threadgroup
+    # memory, the fits gate's edge) and f = 65 (cells in device scratch)
+    for fb in range(64, 66):
+        var Yb = tame(seam_fixture(m, fb, 15))
+        var YtYb = oracle_gemm(Yb, Yb, fb, m, fb, True, False)
+        var xbd = zeros(n * fb)
+        var xbh = zeros(n * fb)
+        var flb = zeros(n)
+        DevExec.als_rows(ptr(Cf), ptr(Yb), ptr(YtYb), ptr(xbd), ptr(flb), n, m, fb, Float32(0.1))
+        HostExec.als_rows(ptr(Cf), ptr(Yb), ptr(YtYb), ptr(xbh), ptr(flb), n, m, fb, Float32(0.1))
+        same(String("5316 als_rows block f ", fb, " host == device"), count_diff_f32(xbd, xbh))
     # ---- 5321 ALS conjugate-gradient rows, from the exact solve's factors
     # perturbed (so the residual is not ~0) and from zero for three steps
     var x0 = wa.copy()

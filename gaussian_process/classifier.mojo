@@ -67,7 +67,6 @@ def _family_ctx() raises -> DeviceContext:
     return neural_ctx[_FAMILY_CTX]()
 
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
-from cholesky.estimator import cholesky_factor_host, cholesky_solve_host
 from core.identity_trace import IdentityTrace
 from gaussian_process.checks.gp_sabotage import GP_SAB_NONE
 from gaussian_process.checks.kernels import (
@@ -96,7 +95,6 @@ from gaussian_process.host.gpc_steps import (
     GPCBinaryFit,
     GPCLatent,
     gpc_a_vector,
-    gpc_b_matrix,
     gpc_latent_var,
     gpc_lml,
     gpc_neg_inf32,
@@ -157,28 +155,6 @@ def _gpc_kernel_self(
     return k_host^
 
 
-def _gpc_matvec(k: List[Float32], v: List[Float32], n: Int) raises -> List[Float32]:
-    """`K v` through the pinned gemm at `OP_TN` (`K` is symmetric by bits,
-    so `K^T v` is `K v`), the host oracle's `gemm_oracle(k, v, OP_TN, n, 1,
-    n)` on the device."""
-    var ctx = _family_ctx()
-    var dk = _upload(ctx, k)
-    var dv = _upload(ctx, v)
-    var dc = ctx.enqueue_create_buffer[DType.float32](n)
-    var dws = ctx.enqueue_create_buffer[DType.float32](
-        identical_gemm_workspace_max_floats(n, 1, n)
-    )
-    ctx.synchronize()
-    identical_gemm_into(ctx, dc, dk, dv, dws, n, 1, n, OP_TN)
-    var out = _download(ctx, dc, n)
-    _ = dk^
-    _ = dv^
-    _ = dc^
-    _ = dws^
-    _ = ctx^
-    return out^
-
-
 #: lane/neighbors-apple (2026-09-28): the Laplace Newton loop keeps K, B and
 #: the factor on the device -- B = I + W_sr K W_sr built by a kernel with
 #: `gpc_b_matrix`'s arithmetic (the weights multiplied first, each product
@@ -190,8 +166,8 @@ def _gpc_matvec(k: List[Float32], v: List[Float32], n: Int) raises -> List[Float
 #: `cholesky_solve_host`'s (`cho_solve`) in their order; its host
 #: validation cannot refuse here (K is a validated finite kernel matrix and
 #: B is symmetric by construction). The last factor is read back once.
-#: `-D MOJOLEARN_GPC_HOST_NEWTON` keeps the host round trips.
-comptime GPC_DEVICE_NEWTON = not is_defined["MOJOLEARN_GPC_HOST_NEWTON"]()
+#: The opt-in host round trips (`-D MOJOLEARN_GPC_HOST_NEWTON`) were removed
+#: (hr-optin-flags).
 comptime GPC_B_TPB = 256
 
 
@@ -399,74 +375,7 @@ def gpc_fit_binary_host(
     gp_validate_kernel(kernel, n_features)
     gpc_validate_max_iter(max_iter_predict)
 
-    comptime if GPC_DEVICE_NEWTON:
-        return _gpc_fit_binary_device(x, n_train, n_features, y, kernel, max_iter_predict)
-    var k = _gpc_kernel_self(x, n_train, n_features, kernel)
-    var f = List[Float32](capacity=n_train)
-    for _i in range(n_train):
-        f.append(Float32(0.0))
-    var previous = gpc_neg_inf32()
-    var n_iter = 0
-    var last_pi = List[Float32]()
-    var last_wsr = List[Float32]()
-    var last_l = List[Float32]()
-    var nb = 0
-    # MOJOLEARN_STAGE_TIMES=1: wall per phase of the Newton loop (every
-    # phase drains on its own), printed once. Timing only.
-    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
-    var t_b = 0
-    var t_f = 0
-    var t_mv = 0
-    var t_s = 0
-    var t_h = 0
-    for it in range(max_iter_predict):
-        var t0 = Int(perf_counter_ns())
-        var wt = gpc_weights(f)
-        var bmat = gpc_b_matrix(k, wt.wsr, n_train)
-        var t1 = Int(perf_counter_ns())
-        var factor = cholesky_factor_host(bmat, n_train, Float32(0.0))
-        var t2 = Int(perf_counter_ns())
-        t_b += t1 - t0
-        t_f += t2 - t1
-        if factor.info != 0:
-            raise Error(
-                "gpc_fit_host: the factorization of B = I + W_sr K W_sr failed"
-                " at Newton iteration "
-                + String(it + 1)
-                + " (info="
-                + String(factor.info)
-                + "). B's eigenvalues are at least 1 for any finite kernel"
-                " matrix, so this means a non-finite latent value"
-            )
-        var bvec = gpc_newton_rhs(wt.w, f, y, wt.pi)
-        var t3 = Int(perf_counter_ns())
-        var kb = _gpc_matvec(k, bvec, n_train)
-        var t4 = Int(perf_counter_ns())
-        var c = gpc_scale(wt.wsr, kb)
-        var xs = cholesky_solve_host(factor, c, 1)
-        var t5 = Int(perf_counter_ns())
-        var a = gpc_a_vector(bvec, wt.wsr, xs)
-        var t6 = Int(perf_counter_ns())
-        f = _gpc_matvec(k, a, n_train)
-        var t7 = Int(perf_counter_ns())
-        var lml = gpc_lml(a, f, y, factor.logdet)
-        n_iter = it + 1
-        last_pi = wt.pi.copy()
-        last_wsr = wt.wsr.copy()
-        last_l = factor.l.copy()
-        nb = factor.nb
-        var t8 = Int(perf_counter_ns())
-        t_mv += (t4 - t3) + (t7 - t6)
-        t_s += t5 - t4
-        t_h += (t3 - t2) + (t6 - t5) + (t8 - t7)
-        if gpc_stop(lml, previous):
-            break
-        previous = lml
-    if st_on:
-        print("GPC_FIT_STAGES iters=" + String(n_iter) + " b_matrix_ms=" + String(t_b // 1000000)
-              + " factor_ms=" + String(t_f // 1000000) + " matvec_ms=" + String(t_mv // 1000000)
-              + " solve_ms=" + String(t_s // 1000000) + " host_ms=" + String(t_h // 1000000))
-    return GPCBinaryFit(last_l^, last_pi^, last_wsr^, previous, n_iter, nb)
+    return _gpc_fit_binary_device(x, n_train, n_features, y, kernel, max_iter_predict)
 
 
 def gpc_validate_model(

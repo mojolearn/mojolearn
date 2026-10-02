@@ -203,12 +203,11 @@ comptime RESAMPLE_MAX_REPLICATES = 1 << 32
 #: The same for the position within a replicate.
 comptime RESAMPLE_MAX_POSITION = 1 << 32
 
-#: The pooled length a permutation replicate may have. The rank pass keys the
-#: whole pooled sample into threadgroup memory (8 bytes each, 8 KB at this
-#: bound, under the 16 KB floor every column in `checks/kernel_matrix.mojo`
-#: declares) and ranks by COUNTING a total order, which is O(N^2) per
-#: replicate. Above the bound the answer would still be correct and the cost
-#: would stop being reasonable, so it RAISES and names the closure.
+#: The pooled length main's COUNTING rank kernel (`perm_stat_kernel`, kept
+#: behind `-D MOJOLEARN_PERM_COUNT_RANK`) keys into threadgroup memory (8
+#: bytes each) and ranks in O(N^2) per replicate. It is no longer a refusal:
+#: above it (and by default at every length) `perm_select_stat_kernel`
+#: selects the first group's threshold by radix select, O(N) per pass.
 comptime PERM_MAX_POOLED = 1024
 
 
@@ -445,25 +444,6 @@ def validate_positions(n_resamples: Int, n: Int) raises:
             + String(n)
             + ". The position index occupies the LOW 32 bits of the Philox"
             " subsequence; see n_resamples above for the closure."
-        )
-
-
-def validate_pooled(n_pooled: Int) raises:
-    """`PERM_MAX_POOLED`, refused by name with its closure."""
-    if n_pooled > PERM_MAX_POOLED:
-        raise Error(
-            "permutation_test: the pooled sample length "
-            + String(n_pooled)
-            + " exceeds PERM_MAX_POOLED = "
-            + String(PERM_MAX_POOLED)
-            + ". The rank pass keys the pooled sample into threadgroup"
-            " memory and ranks by counting a total order, which is O(N^2)"
-            " per replicate and 8*N bytes of threadgroup memory. To close"
-            " this refusal, replace the counting rank with a pinned"
-            " segmented sort over the 64-bit composite key -- the same"
-            " construction neighbors/checks/select_radix_identical.mojo"
-            " uses for its (distance, index) key -- and re-gate"
-            " check_permutation_separable at the larger size."
         )
 
 
