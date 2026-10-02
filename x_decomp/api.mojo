@@ -342,6 +342,28 @@ def lasso_rows_py[E: Exec](
     return PythonObject(n)
 
 
+def lu_aux_py[E: Exec](
+    lu: PythonObject, piv: PythonObject, pm: PythonObject, im: PythonObject, diag: PythonObject,
+    stats: PythonObject, p: PythonObject,
+) raises -> PythonObject:
+    """p = [n, clamp]: an LU factor's row order (pm), its inverse (im), its
+    diagonal, (max |u_ii|, zero, negative pivots, swaps) and, with clamp,
+    the tiny pivots floored in lu."""
+    var n = _n(p, 0)
+    var clamp = _n(p, 1)
+    if n < 1 or n >= 16777216:
+        raise Error("x_decomp: lu_aux needs 1 <= n < 2^24")
+    var pl = _f(lu)
+    var pv = _i(piv)
+    var p1 = _f(pm)
+    var p2 = _f(im)
+    var pd = _f(diag)
+    var ps = _f(stats)
+    with GILReleased(Python()):
+        E.lu_aux(pl, pv, p1, p2, pd, ps, n, clamp)
+    return PythonObject(n)
+
+
 def lars_rows_py[E: Exec](
     g: PythonObject, q: PythonObject, w: PythonObject, na: PythonObject, p: PythonObject
 ) raises -> PythonObject:

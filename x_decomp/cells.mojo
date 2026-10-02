@@ -1493,6 +1493,47 @@ def lu_perm_src(piv: I32Ptr, i: Int) -> Int:
     return p
 
 
+@always_inline
+def lu_aux_val(lu: F32Ptr, piv: I32Ptr, i: Int, n: Int) -> SIMD[DType.float32, 4]:
+    """Row i's share of `lu_aux`'s statistics: (|u_ii|, u_ii == 0, u_ii < 0,
+    piv[i] != i)."""
+    var d = lu.unsafe_load(i * n + i)
+    return SIMD[DType.float32, 4](
+        abs(d),
+        Float32(1) if d == Float32(0) else Float32(0),
+        Float32(1) if d < Float32(0) else Float32(0),
+        Float32(1) if Int(piv.unsafe_load(i)) != i else Float32(0),
+    )
+
+
+@always_inline
+def lu_aux_join(a: SIMD[DType.float32, 4], b: SIMD[DType.float32, 4]) -> SIMD[DType.float32, 4]:
+    """Joins two shares: the max (a NaN wins: order-free), and the counts
+    (integers, exact in float32 to 2^24: order-free)."""
+    var m: Float32
+    if a[0] != a[0]:
+        m = a[0]
+    elif b[0] != b[0]:
+        m = b[0]
+    else:
+        m = max(a[0], b[0])
+    return SIMD[DType.float32, 4](m, a[1] + b[1], a[2] + b[2], a[3] + b[3])
+
+
+@always_inline
+def lu_aux_clamp(lu: F32Ptr, diag: F32Ptr, big: Float32, i: Int, n: Int, clamp: Bool):
+    """diag[i] = u_ii; with `clamp` a pivot under float32 resolution (|u_ii|
+    < eps * max |u_jj|) is set to that floor with its sign, in lu as well
+    (inverse iteration's usual perturbation, LAPACK stein/hsein)."""
+    var d = lu.unsafe_load(i * n + i)
+    if clamp:
+        var tiny = mul(Float32(1.1920928955078125e-07), big)
+        if abs(d) < tiny:
+            d = -tiny if d < Float32(0) else tiny
+            lu.unsafe_store(i * n + i, d)
+    diag.unsafe_store(i, d)
+
+
 def trisolve_serial(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, tmp: F32Ptr, n: Int, nrhs: Int, trans: Int):
     """trans 0: dst = U^-1 L^-1 (src gathered by idx), F0^-1 B with idx the
     pivots' row order; trans 1: tmp = L^-T U^-T src, dst = tmp gathered by

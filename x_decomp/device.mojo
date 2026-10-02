@@ -20,6 +20,9 @@ from decomposition.linalg_public_device import device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.cells import (
     lu_perm_src,
+    lu_aux_clamp,
+    lu_aux_join,
+    lu_aux_val,
     trs_block_col,
     trs_coef,
     trs_divides,
@@ -1799,6 +1802,72 @@ def lu_perm_kernel(piv: I32Ptr, idx: F32Ptr, n: Int32, trans: Int32):
             idx.unsafe_store(p, Float32(i))
 
 
+def lu_aux_part_kernel(lu: F32Ptr, piv: I32Ptr, part: F32Ptr, n_in: Int32):
+    """Block b's join of rows b RR_OFF_TPB .. (`lu_aux_val`, `lu_aux_join`,
+    a pairwise tree) to part[4 b ..]."""
+    var n = Int(n_in)
+    var b = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var sh = stack_allocation[4 * RR_OFF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var i = b * RR_OFF_TPB + tid
+    var v = SIMD[DType.float32, 4](0.0, 0.0, 0.0, 0.0)
+    if i < n:
+        v = lu_aux_val(lu, piv, i, n)
+    for c in range(4):
+        sh[4 * tid + c] = v[c]
+    barrier()
+    var w = RR_OFF_TPB // 2
+    while w > 0:
+        if tid < w:
+            var x = lu_aux_join(
+                SIMD[DType.float32, 4](sh[4 * tid], sh[4 * tid + 1], sh[4 * tid + 2], sh[4 * tid + 3]),
+                SIMD[DType.float32, 4](sh[4 * (tid + w)], sh[4 * (tid + w) + 1], sh[4 * (tid + w) + 2], sh[4 * (tid + w) + 3]),
+            )
+            for c in range(4):
+                sh[4 * tid + c] = x[c]
+        barrier()
+        w = w // 2
+    if tid == 0:
+        for c in range(4):
+            part.unsafe_store(4 * b + c, sh[c])
+
+
+def lu_aux_fold_kernel(part: F32Ptr, stats: F32Ptr, nb_in: Int32):
+    """ONE block over the nb block shares (nb = ceil(n / RR_OFF_TPB), a
+    k-sized fold past the parallel part)."""
+    var nb = Int(nb_in)
+    var tid = Int(thread_idx.x)
+    var sh = stack_allocation[4 * RR_OFF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var v = SIMD[DType.float32, 4](0.0, 0.0, 0.0, 0.0)
+    var b = tid
+    while b < nb:
+        v = lu_aux_join(v, SIMD[DType.float32, 4](part.unsafe_load(4 * b), part.unsafe_load(4 * b + 1), part.unsafe_load(4 * b + 2), part.unsafe_load(4 * b + 3)))
+        b += RR_OFF_TPB
+    for c in range(4):
+        sh[4 * tid + c] = v[c]
+    barrier()
+    var w = RR_OFF_TPB // 2
+    while w > 0:
+        if tid < w:
+            var x = lu_aux_join(
+                SIMD[DType.float32, 4](sh[4 * tid], sh[4 * tid + 1], sh[4 * tid + 2], sh[4 * tid + 3]),
+                SIMD[DType.float32, 4](sh[4 * (tid + w)], sh[4 * (tid + w) + 1], sh[4 * (tid + w) + 2], sh[4 * (tid + w) + 3]),
+            )
+            for c in range(4):
+                sh[4 * tid + c] = x[c]
+        barrier()
+        w = w // 2
+    if tid == 0:
+        for c in range(4):
+            stats.unsafe_store(c, sh[c])
+
+
+def lu_aux_clamp_kernel(lu: F32Ptr, diag: F32Ptr, stats: F32Ptr, n: Int32, clamp: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        lu_aux_clamp(lu, diag, stats.unsafe_load(0), i, Int(n), Int(clamp) != 0)
+
+
 def launch_lu_solve(
     ctx: DeviceContext, lu: F32Ptr, piv: I32Ptr, b: F32Ptr, idx: F32Ptr, dst: F32Ptr, n: Int, nrhs: Int, trans: Int
 ) raises:
@@ -2683,6 +2752,47 @@ struct DevExec(Exec):
         _ = dh^
         _ = di^
         ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def lu_aux(
+        lu: F32Ptr, piv: I32Ptr, pm: F32Ptr, im: F32Ptr, diag: F32Ptr, stats: F32Ptr, n: Int, clamp: Int
+    ) raises:
+        """An LU factor's companions on the device: pm / im the swaps' row
+        order and its inverse (`lu_perm_kernel`), stats = (max |u_ii|, zero
+        pivots, negative pivots, swaps), diag = u_ii, and with `clamp` the
+        pivots under eps max |u_jj| floored (lu written back)."""
+        var ctx = xd_ctx()
+        var nb = _pj_off_blocks(n)
+        var dl = _up(ctx, lu, n * n)
+        var dp = _up_i(ctx, piv, n)
+        var dpm = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+        var dim = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+        var dd = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+        var dpart = ctx.enqueue_create_buffer[DType.float32](4 * nb)
+        var dst = ctx.enqueue_create_buffer[DType.float32](4)
+        var pp = I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr()))
+        ctx.enqueue_function[lu_perm_kernel](pp, _p(dpm), Int32(n), Int32(0), grid_dim=_blocks(n), block_dim=TPB)
+        ctx.enqueue_function[lu_perm_kernel](pp, _p(dim), Int32(n), Int32(1), grid_dim=_blocks(n), block_dim=TPB)
+        ctx.enqueue_function[lu_aux_part_kernel](_p(dl), pp, _p(dpart), Int32(n), grid_dim=nb, block_dim=RR_OFF_TPB)
+        ctx.enqueue_function[lu_aux_fold_kernel](_p(dpart), _p(dst), Int32(nb), grid_dim=1, block_dim=RR_OFF_TPB)
+        ctx.enqueue_function[lu_aux_clamp_kernel](
+            _p(dl), _p(dd), _p(dst), Int32(n), Int32(clamp), grid_dim=_blocks(n), block_dim=TPB
+        )
+        _down(ctx, dpm, pm, n)
+        _down(ctx, dim, im, n)
+        _down(ctx, dd, diag, n)
+        _down(ctx, dst, stats, 4)
+        if clamp != 0:
+            _down(ctx, dl, lu, n * n)
+        ctx.synchronize()
+        _ = dl^
+        _ = dp^
+        _ = dpm^
+        _ = dim^
+        _ = dd^
+        _ = dpart^
+        _ = dst^
         _ = ctx^
 
     @staticmethod

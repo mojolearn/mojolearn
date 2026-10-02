@@ -39,6 +39,9 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
     lu_perm_src,
+    lu_aux_clamp,
+    lu_aux_join,
+    lu_aux_val,
     trs_tri_cols,
     trisolve_serial,
     knn_select_row,
@@ -589,6 +592,21 @@ struct HostExec(Exec):
             its.unsafe_store(i, lasso_row(g, q, w, h, i, k, alpha, max_iter, tol, positive))
 
         xd_parallel(row, n)
+
+    @staticmethod
+    def lu_aux(
+        lu: F32Ptr, piv: I32Ptr, pm: F32Ptr, im: F32Ptr, diag: F32Ptr, stats: F32Ptr, n: Int, clamp: Int
+    ) raises:
+        var v = SIMD[DType.float32, 4](0.0, 0.0, 0.0, 0.0)
+        for i in range(n):
+            var p = lu_perm_src(piv, i)
+            pm.unsafe_store(i, Float32(p))
+            im.unsafe_store(p, Float32(i))
+            v = lu_aux_join(v, lu_aux_val(lu, piv, i, n))
+        for c in range(4):
+            stats.unsafe_store(c, v[c])
+        for i in range(n):
+            lu_aux_clamp(lu, diag, v[0], i, n, clamp != 0)
 
     @staticmethod
     def lars_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, na: F32Ptr, n: Int, k: Int, m: Int, nnz: Int) raises:

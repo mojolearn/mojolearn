@@ -702,6 +702,18 @@ class _Kit:
         self.b.x_decomp_lle_local(M.addr, idm.addr, B.addr, [int(method), n, d, int(nn), int(nc)], [float(tol)])
         return B
 
+    def lu_aux(self, lu, piv, clamp=False):
+        """An LU factor's companions, computed by the binding (on the device
+        where there is one; x_decomp/cells.mojo `lu_aux_*`): (stats = [max
+        |u_ii|, zero pivots, negative pivots, swaps], diag 1 x n, pm n x 1
+        the swaps' row order, im n x 1 its inverse). clamp floors the pivots
+        under eps * max |u_ii| in `lu` itself."""
+        n = lu.r
+        pm, im, diag, st = _M.zeros(n, 1), _M.zeros(n, 1), _M.zeros(1, n), _M.zeros(1, 4)
+        self.b.x_decomp_lu_aux(lu.addr, piv.buffer_info()[0], pm.addr, im.addr, diag.addr, st.addr,
+                               [n, int(bool(clamp))])
+        return [float(v) for v in st.s], diag, pm, im
+
     def lars_rows(self, G, Q, m, nnz):
         """Row-parallel Lars on the Gram (x_decomp/cells.mojo `lars_row`): the
         n x k coefficients, m the samples of each row's problem."""
@@ -1841,10 +1853,11 @@ def _inv(k, A):
 
 
 def _eye(n):
-    E = _M.zeros(n, n)
-    for i in range(n):
-        E.s[i * n + i] = 1.0
-    return E
+    """The n x n identity, built whole (row major, a 1 every n + 1 words):
+    no per-row loop. The resident kit's `diag_mask` makes it on the device."""
+    if n < 1:
+        return _M.zeros(0, 0)
+    return _M(array.array("f", [1.0] + [0.0] * n) * (n - 1) + array.array("f", [1.0]), n, n)
 
 
 def _logdet(k, A):
@@ -3822,28 +3835,16 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     floor = _LLE_NULL_FLOOR * _F32_EPS * rms
     F0 = _hstack(Fhat, un)
     lu, piv, _ = k.lu(F0)
-    ls = lu.s
     # a pivot under float32 resolution (an exactly zero one skipped its
     # step) is set to eps times the largest: inverse iteration's usual
     # perturbation (LAPACK's stein/hsein); the factor is only the spectral
-    # transform, the Rayleigh-Ritz step below uses F^ itself
-    big = max(abs(ls[i * n + i]) for i in range(n))
+    # transform, the Rayleigh-Ritz step below uses F^ itself. The floor and
+    # the swaps' row order (and its inverse) are cells (`lu_aux`), no host
+    # loop over the rows.
+    st, _, pm, im = k.lu_aux(lu, piv, clamp=True)
+    big = st[0]
     if not (big > 0.0 and math.isfinite(big)):
         return None
-    tiny = _f32(_F32_EPS * big)
-    for i in range(n):
-        d = ls[i * n + i]
-        if abs(d) < tiny:
-            ls[i * n + i] = -tiny if d < 0 else tiny
-    perm = list(range(n))
-    for i in range(n):
-        j = int(piv[i])
-        perm[i], perm[j] = perm[j], perm[i]
-    inv = [0] * n
-    for i, j in enumerate(perm):
-        inv[j] = i
-    pm = _M.of([float(v) for v in perm], n, 1)
-    im = _M.of([float(v) for v in inv], n, 1)
 
     def solve(B):               # F0^-1 B = U^-1 L^-1 P B
         return k.trisolve(lu, pm, B)
@@ -4006,12 +4007,11 @@ def _pinvh(k, A):
 
 def _slogdet(k, A):
     """(sign, log|det|) from the LU factorization (getrf; sums ascending)."""
-    n = A.r
     lu, piv, info = k.lu(A)
-    diag = _M.of([lu.s[i * n + i] for i in range(n)], 1, n)
-    if any(v == 0 for v in diag.s):
+    st, diag, _, _ = k.lu_aux(lu, piv)
+    if st[1] > 0:
         return 0.0, -math.inf
-    neg = sum(1 for v in diag.s if v < 0) + sum(1 for i, p in enumerate(piv) if p != i)
+    neg = int(st[2]) + int(st[3])
     ld = k.total(k.ew("logs", k.ew("abs", diag), s=1.1754943508222875e-38)).s[0]
     return (-1.0 if neg % 2 else 1.0), ld
 

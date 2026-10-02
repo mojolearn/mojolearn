@@ -30,7 +30,7 @@ FAMILIES = (
         exports=(
             "x_decomp_host_numeric_mode", "x_decomp_host_vendor", "x_decomp_host_column", "x_decomp_host_sabotage",
             "x_decomp_gemm", "x_decomp_ew", "x_decomp_colsum", "x_decomp_rowsum", "x_decomp_sqdist",
-            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_chol", "x_decomp_eigh", "x_decomp_eigh_batch", "x_decomp_lle_local", "x_decomp_lle_apply", "x_decomp_cd_rows", "x_decomp_orth", "x_decomp_orth_diag", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_lars_rows", "x_decomp_rand_gamma", "x_decomp_lda_rows", "x_decomp_dijkstra_rows", "x_decomp_barycenter_rows", "x_decomp_als_rows", "x_decomp_absmax_sign", "x_decomp_qr_r", "x_decomp_geqrf", "x_decomp_orgqr", "x_decomp_tsqr_r", "x_decomp_tsqr_q", "x_decomp_als_cg_rows",
+            "x_decomp_rand", "x_decomp_lu", "x_decomp_lu_solve", "x_decomp_chol", "x_decomp_eigh", "x_decomp_eigh_batch", "x_decomp_lle_local", "x_decomp_lle_apply", "x_decomp_cd_rows", "x_decomp_orth", "x_decomp_orth_diag", "x_decomp_svd", "x_decomp_lasso_rows", "x_decomp_omp_rows", "x_decomp_lars_rows", "x_decomp_lu_aux", "x_decomp_rand_gamma", "x_decomp_lda_rows", "x_decomp_dijkstra_rows", "x_decomp_barycenter_rows", "x_decomp_als_rows", "x_decomp_absmax_sign", "x_decomp_qr_r", "x_decomp_geqrf", "x_decomp_orgqr", "x_decomp_tsqr_r", "x_decomp_tsqr_q", "x_decomp_als_cg_rows",
             # lane py-decomp-nbrs (2026-09-28): fast_mcd, LDA online and the MDS / Isomap moves
             "x_decomp_mcd", "x_decomp_lda_online", "x_decomp_gather", "x_decomp_scatter", "x_decomp_triu_nonzero",
             "x_decomp_argsort_f32", "x_decomp_iso_order",

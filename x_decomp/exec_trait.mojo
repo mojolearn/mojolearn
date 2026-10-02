@@ -97,6 +97,12 @@ trait Exec:
         ...
 
     @staticmethod
+    def lu_aux(
+        lu: F32Ptr, piv: I32Ptr, pm: F32Ptr, im: F32Ptr, diag: F32Ptr, stats: F32Ptr, n: Int, clamp: Int
+    ) raises:
+        ...
+
+    @staticmethod
     def lars_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, na: F32Ptr, n: Int, k: Int, m: Int, nnz: Int) raises:
         ...
 
