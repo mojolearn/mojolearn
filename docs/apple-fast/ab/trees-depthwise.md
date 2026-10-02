@@ -39,3 +39,20 @@ reorder dispatch). Folding `split.sizes` into the next level's `score.read` need
 child ids; that is the symmetric driver's blind level loop ported to the non-symmetric driver, too large to write
 without a toolchain. Host loops that remain in the CTR prep: `dense_category_code` per row, the per-config
 column read-back (`visit_cat_feature_ctr`), `build_ctr_tables` (model tables), the CTR column quantization.
+
+## Settled overlap: the u32 `ScanVector` block-sums scan (NEXT_PASS item 6, 2026-10-02)
+
+`lane/apple-fast-trees-scan` had its own copy of the one-block u32 block-sums scan in `scan.mojo`
+(`-D MOJOLEARN_SCAN_U32_BLOCK`, guard `!= NUMERIC_IDENTICAL`). This copy is the one kept: the
+`GLOBAL_NUMERIC_MODE == NUMERIC_FAST` guard NEXT_PASS asks for, and the integer-only segmented-scan
+arm beside it under the same define. trees-scan dropped its copy, so `MOJOLEARN_GBDT_CTR_FAST_SCAN`
+is the only u32 scan switch and the two branches no longer touch the same file.
+
+Neither copy was a multi-block scan: phase 2 is still one launch of one 256-thread block over
+`n / 512` runtime totals (a stripe per thread, one `prefix_sum` for the carries). A two-level scan
+would need a second-level `block_sums` buffer in all three callers (`ctr_bins_builder.mojo:494`,
+`ctr_calcers.mojo:~1004`, `checks/ctr_device_check.mojo:210`), which size it at exactly
+`ceil(n / SCAN_BLOCK)`; left for after this A/B.
+
+Light form: three tags on `gbdt-categorical taxi` (scan, freq, both), 2 pairs each; the istella row
+(`tdw-cat-both-istella`) is deferred until the taxi rows win.
