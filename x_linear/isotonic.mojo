@@ -19,9 +19,6 @@ computed NaN, so its bits are the same on every target).
 from std.memory import bitcast
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fmax, fmin, ld, st, ldi, sti, i2f, copy
 from x_linear.team import Team
-from core.host_lanes import host_row_tasks
-from core.host_parallel import host_parallelize
-from std.sys.info import is_gpu
 
 comptime OOB_NAN = 0
 comptime OOB_CLIP = 1
@@ -42,7 +39,7 @@ def _iso_less(x: FP, y: FP, a: Int, b: Int) -> Bool:
     return a < b
 
 
-def _iso_merge_passes(x: FP, y: FP, perm: IP, tmp: IP, lo: Int, hi: Int, width0: Int):
+def iso_merge_passes(x: FP, y: FP, perm: IP, tmp: IP, lo: Int, hi: Int, width0: Int):
     """Bottom-up merge sort of perm[lo, hi) by `_iso_less`, starting from
     sorted runs of `width0` (1 = unsorted); the result lands in `perm`."""
     var width = width0
@@ -90,72 +87,12 @@ def _iso_merge_passes(x: FP, y: FP, perm: IP, tmp: IP, lo: Int, hi: Int, width0:
             sti(perm, i, ldi(src, i))
 
 
-def _iso_sort(x: FP, y: FP, perm: IP, tmp: IP, nk: Int):
-    """perm[0, nk) sorted by (x, y, index): chunks over host tasks, then the
-    merge passes over the sorted chunks; one pass on a device thread."""
-    comptime if is_gpu():
-        _iso_merge_passes(x, y, perm, tmp, 0, nk, 1)
-    else:
-        var tasks = host_row_tasks(nk, 64)
-        if tasks > 64:
-            tasks = 64
-        if tasks <= 1 or nk < 4096:
-            _iso_merge_passes(x, y, perm, tmp, 0, nk, 1)
-            return
-        var chunk = (nk + tasks - 1) // tasks
-        def _sort_chunk(task: Int) {imm x, imm y, imm perm, imm tmp, imm nk, imm chunk}:
-            var lo = task * chunk
-            var hi = lo + chunk
-            if hi > nk:
-                hi = nk
-            if lo < hi:
-                _iso_merge_passes(x, y, perm, tmp, lo, hi, 1)
-        host_parallelize(_sort_chunk, tasks)
-        _iso_merge_passes(x, y, perm, tmp, 0, nk, chunk)
-
-
-def isotonic_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
-    """x: n values (d == 1), ANY order; y: targets n | weights n (when
-    ip[3] is set; otherwise weights 1).
-    ip: [increasing, has_y_min, has_y_max, has_weights]; fp: [y_min, y_max].
-    res: m | X_min | X_max | xs n | ys n.
-    fw: ux n | uy n | uw n | sx n | sy n | sw n.  iw: target n | perm n | tmp n.
-    lane/neural-pass70 (2026-10-01): the rows with a positive weight are
-    sorted here by (x, y, row), the stable sort by (x, y) the Python layer
-    did over a list of a million pairs (0.5 s of its 1.25 s on the board's
-    taxi block, the fit itself 0.03 s), then pool-adjacent-violators over
-    the sorted copies: the same order, the same chains, the same bits.
-    Sequential after the sort: the lead thread alone."""
-    if not t.lead():
-        return
-    var inc = ldi(ip, 0) != 0
-    var has_w = ldi(ip, 3) != 0
-    var ux = 0
-    var uy = n
-    var uw = 2 * n
-    var xs = fw + 3 * n
-    var ys = fw + 4 * n
-    var ws = fw + 5 * n
-    var perm = iw + n
-    var tmp = iw + 2 * n
-    var nk = 0
-    for i in range(n):
-        if not has_w or ld(y, n + i) > Float32(0):
-            sti(perm, nk, i)
-            nk += 1
-    if nk < 1:
-        st(res, 0, Float32(0))
-        st(res, 1, Float32(0))
-        st(res, 2, Float32(0))
-        return
-    _iso_sort(x, y, perm, tmp, nk)
-    iso_fit_sorted(x, y, n, ip, fp, res, fw, iw, perm, nk)
-
-
 def iso_fit_sorted(x: FP, y: FP, n: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, perm: IP, nk: Int):
-    """isotonic_fit after its sort: perm[0, nk) the rows in (x, y, row) order
-    (lane/neural-pass107: the device runs these steps as grid kernels and one
-    thread, x_linear/device.mojo, with the same statements)."""
+    """The fit after its sort: perm[0, nk) the rows in (x, y, row) order. The
+    host column's entry is `isotonic_fit_host` (x_linear/isotonic_host.mojo,
+    the sort on host threads); the device runs these steps as grid kernels
+    (x_linear/device.mojo `_iso_fit_grid`: the same gathers, starts, group
+    chains and PAVA statements, so the same words)."""
     var has_w = ldi(ip, 3) != 0
     var xs = fw + 3 * n
     var ys = fw + 4 * n

@@ -59,7 +59,7 @@ from extratrees.impl.decisiontree.flatnode import (
     predict_leaf,
     predict_regression,
 )
-from extratrees.impl.decisiontree.batched_levelalgo.builder import (
+from extratrees.impl.decisiontree.batched_levelalgo.host_builder import (
     train_classification,
     train_regression,
 )

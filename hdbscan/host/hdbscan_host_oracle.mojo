@@ -42,7 +42,7 @@ restated beside the device line they mirror:
                             cluster_stability_kernel
     selection               select.mojo::excess_of_mass (and perform_bfs's
                             negation) or leaf
-    labels                  extract.mojo::do_labelling_on_host and the
+    labels                  labelling_host.mojo::do_labelling_on_host and the
                             label map
 
 WHAT IS REFUSED, BY NAME, AS ON THE DEVICE: fewer than two rows, no column,
@@ -75,7 +75,7 @@ from hdbscan.impl.prediction_data import (
     refuse_soft_clustering_inputs,
 )
 from hdbscan.impl.detail.condense import _add_edge, _collapse, bfs_from_node
-from hdbscan.impl.detail.extract import do_labelling_on_host
+from hdbscan.host.labelling_host import do_labelling_on_host
 from hdbscan.impl.detail.sparse_mr import (
     boruvka_rounds_on_tree,
     mr_edge_weight,

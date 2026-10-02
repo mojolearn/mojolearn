@@ -242,4 +242,7 @@ if __name__ == "__main__":
     ap.add_argument("cmd", choices=("equal", "time"))
     ap.add_argument("--n", type=int, default=1_000_000)
     a = ap.parse_args()
+    if a.cmd == "time" and (os.environ.get("MOJOLEARN_VENDOR", "").strip().lower() == "cpu"
+                            or ml.vendor() == "cpu"):
+        sys.exit("check.py time: refused on the host column: our CPU is never timed (Andrew, Oct 2 2026)")
     sys.exit(equal() if a.cmd == "equal" else time_all(a.n) or 0)

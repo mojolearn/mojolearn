@@ -6,8 +6,9 @@ over a 200k-row design in ONE GPU thread, with every matrix materialized in
 scratch. Here a threadgroup owns a series and never builds a matrix: each
 thread reads its rows straight from `y` (the lagged columns are shifted
 reads, the MA columns are the AR pre-fit residual recomputed from `y`) and
-folds them into a private `R` and `Q'b` with Givens rotations; thread 0
-merges the per-thread `R`s the same way and back-substitutes. Orthogonal
+folds them into a private `R` and `Q'b` with Givens rotations; the
+per-thread `R`s merge the same way in a fixed pairwise tree, and thread 0
+back-substitutes. Orthogonal
 updates keep the conditioning of the QR, not of the normal equations.
 
 Same nine steps as the reference, same rank test (`|R_jj| <= LS_RANK_TOL *
@@ -68,42 +69,58 @@ def _fls_solve[so: MutOrigin, xo: MutOrigin, io: MutOrigin](
     x_out: MutPointer[Float32, xo, address_space = AddressSpace.SHARED],
     info_out: MutPointer[Int32, io, address_space = AddressSpace.SHARED],
 ):
-    """Every thread publishes its `R`, thread 0 merges them, checks the
-    rank and back-substitutes into `x_out`; `info_out[0]` is 0 or `j + 1`
-    for the first rank-deficient column. Ends on a barrier."""
+    """Every thread publishes its `R`; the per-thread `R`s merge in a fixed
+    pairwise tree (round `d`: thread `t` with `t % 2^(d+1) == 0` folds thread
+    `t + 2^d`'s rows into its own by Givens rotations, log2(FLS_TPB) rounds,
+    cpu-gpu-cleanup n-seq 2026-10-02; it was one thread folding the other 63
+    in turn). Thread 0 then checks the rank and back-substitutes the at most
+    FLS_MAX_COLS unknowns into `x_out`; `info_out[0]` is 0 or `j + 1` for the
+    first rank-deficient column. Ends on a barrier."""
     comptime for t in range(FLS_MAX_COLS * FLS_MAX_COLS):
         sh[tid * FLS_RSZ + t] = r[t]
     comptime for t in range(FLS_MAX_COLS):
         sh[tid * FLS_RSZ + FLS_MAX_COLS * FLS_MAX_COLS + t] = qb[t]
     barrier()
+    var a = InlineArray[Float32, FLS_MAX_COLS](fill=0.0)
+    var stride = 1
+    while stride < FLS_TPB:
+        if tid % (2 * stride) == 0:
+            var o = tid + stride
+            comptime for row in range(FLS_MAX_COLS):
+                if row < n:
+                    comptime for c in range(FLS_MAX_COLS):
+                        a[c] = sh[o * FLS_RSZ + row * FLS_MAX_COLS + c]
+                    _givens_row(
+                        r, qb, a,
+                        sh[o * FLS_RSZ + FLS_MAX_COLS * FLS_MAX_COLS + row], n,
+                    )
+            comptime for t in range(FLS_MAX_COLS * FLS_MAX_COLS):
+                sh[tid * FLS_RSZ + t] = r[t]
+            comptime for t in range(FLS_MAX_COLS):
+                sh[tid * FLS_RSZ + FLS_MAX_COLS * FLS_MAX_COLS + t] = qb[t]
+        barrier()
+        stride *= 2
     if tid == 0:
-        var a = InlineArray[Float32, FLS_MAX_COLS](fill=0.0)
-        for o in range(1, FLS_TPB):
-            for row in range(n):
-                comptime for c in range(FLS_MAX_COLS):
-                    a[c] = sh[o * FLS_RSZ + row * FLS_MAX_COLS + c]
-                _givens_row(
-                    r, qb, a,
-                    sh[o * FLS_RSZ + FLS_MAX_COLS * FLS_MAX_COLS + row], n,
-                )
         var rmax = Float32(0.0)
-        for j in range(n):
-            rmax = max(rmax, abs(r[j * FLS_MAX_COLS + j]))
+        comptime for j in range(FLS_MAX_COLS):
+            if j < n:
+                rmax = max(rmax, abs(r[j * FLS_MAX_COLS + j]))
         var info = Int32(0)
         if rmax == Float32(0.0):
             info = Int32(1)
         else:
-            for j in range(n):
-                if info == 0 and abs(r[j * FLS_MAX_COLS + j]) <= LS_RANK_TOL * rmax:
+            comptime for j in range(FLS_MAX_COLS):
+                if j < n and info == 0 and abs(r[j * FLS_MAX_COLS + j]) <= LS_RANK_TOL * rmax:
                     info = Int32(j + 1)
         if info == 0:
-            var j = n - 1
-            while j >= 0:
-                var acc = qb[j]
-                for l in range(j + 1, n):
-                    acc -= r[j * FLS_MAX_COLS + l] * x_out[l]
-                x_out[j] = acc / r[j * FLS_MAX_COLS + j]
-                j -= 1
+            comptime for jj in range(FLS_MAX_COLS):
+                comptime j = FLS_MAX_COLS - 1 - jj
+                if j < n:
+                    var acc = qb[j]
+                    comptime for l in range(j + 1, FLS_MAX_COLS):
+                        if l < n:
+                            acc -= r[j * FLS_MAX_COLS + l] * x_out[l]
+                    x_out[j] = acc / r[j * FLS_MAX_COLS + j]
         info_out[0] = info
     barrier()
 

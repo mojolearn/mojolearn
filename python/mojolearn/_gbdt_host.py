@@ -722,3 +722,19 @@ class HostGBDT:
         self._binding.forest_host_gbdt_sigmoid(addr_ro(raw, name='raw'), addr(p1, name='p1'), n_rows)
         pv = flat_view(p1, 'd')
         return Array.from_list([[1.0 - p, p] for p in pv], '<f8')
+
+
+# CPU-only entries the gbdt `_HostBinding` serves beside the host binding's
+# own (`_backend._HOST_PY_ENTRIES`): a CPU-trained model with CTR records,
+# whose records the host binding's parser refuses by name. GPU-path modules
+# reach these only through a CPU-vendor binding, never by import.
+def gbdt_ctr_model_dim(text):
+    """The approx dim of a CTR model text, read by `parse_model_text`."""
+    return int(parse_model_text(str(text))['dim'])
+
+
+def gbdt_ctr_predict(X, *, loss, text, n_features_in, approx_dim, n_classes, estimator):
+    """`HostGBDT(...).predict(X)` for a CTR model text."""
+    return HostGBDT(loss=loss, text=text, n_features_in=n_features_in,
+                    approx_dim=approx_dim, n_classes=n_classes,
+                    estimator=estimator).predict(X)

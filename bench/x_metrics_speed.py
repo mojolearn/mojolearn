@@ -13,10 +13,11 @@ IDENTICAL show the same bits by eye (the lane check proves it by column).
 
 Data: GBM_BENCH_DATA (default ~/datasets/gbm-bench), staged from R2 with
 `tools/dataset_store.sh stage` (taxi/taxi_speed.npz, higgs/higgs_speed.npz).
-Lines: `XMSPEED <case> <seconds> <digest>`. The CPU board (phase 5) is the
-same script under MOJOLEARN_VENDOR=cpu, at MOJOLEARN_CPU_THREADS=1 and at the
-default (one task per physical core): every digest must match across thread
-counts and match the GPU's.
+Lines: `XMSPEED <case> <seconds> <digest>`. Under MOJOLEARN_VENDOR=cpu (the
+host column) the script runs each case once, untimed, and prints `-` for the
+seconds: OUR CPU IS NEVER TIMED (Andrew, Oct 2 2026). Its digests, at
+MOJOLEARN_CPU_THREADS=1 and at the default, must match across thread counts
+and match the GPU's.
 """
 import argparse
 import hashlib
@@ -204,6 +205,22 @@ def _profile(name, fn, top):
             print("XMPROFILE %s | %s" % (name, line), flush=True)
 
 
+NOTE_HOST = "OUR CPU IS NEVER TIMED (Andrew, Oct 2 2026): on the host column this script prints digests only"
+
+
+def _host_column():
+    """True when this process runs our host (CPU) column: MOJOLEARN_VENDOR=cpu
+    or a CPU-only install. Our CPU is never timed (Andrew, Oct 2 2026): there
+    this script prints digests only."""
+    if os.environ.get("MOJOLEARN_VENDOR", "").strip().lower() == "cpu":
+        return True
+    try:
+        import mojolearn
+        return mojolearn.vendor() == "cpu"
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rows", type=int, default=1_000_000)
@@ -215,10 +232,15 @@ def main():
     ap.add_argument("--extra", type=int, default=0,
                     help="1: the extra cases after the board (XMSPEED-X lines, outside the total); 2: only them")
     a = ap.parse_args()
+    host = _host_column()
+    if host:
+        # our CPU is never timed: one untimed run per case, its digest only
+        a.reps, a.cprofile = 0, 0
+        print("XMSPEED-NOTE %s (time fields are '-')" % NOTE_HOST, flush=True)
     t0 = time.time()
     d = data(a.rows)
-    print("XMSPEED-DATA rows=%d load_s=%.2f mode=%s vendor=%s cpu_threads=%s" % (
-        a.rows, time.time() - t0, os.environ.get("MOJOLEARN_NUMERIC_MODE", "default"),
+    print("XMSPEED-DATA rows=%d load_s=%s mode=%s vendor=%s cpu_threads=%s" % (
+        a.rows, "-" if host else "%.2f" % (time.time() - t0), os.environ.get("MOJOLEARN_NUMERIC_MODE", "default"),
         os.environ.get("MOJOLEARN_VENDOR", "auto"), os.environ.get("MOJOLEARN_CPU_THREADS", "cores")), flush=True)
     # the inputs' digests: a case digest that differs between two boxes is a
     # defect only when these agree (the inputs use numpy lstsq and exp)
@@ -236,13 +258,13 @@ def main():
                 t = time.perf_counter()
                 v = fn()
                 best = min(best, time.perf_counter() - t)
-            total += best
-            print("XMSPEED %-28s %9.4f %s" % (name, best, _digest(v)), flush=True)
+            total += 0.0 if host else best
+            print("XMSPEED %-28s %9s %s" % (name, "-" if host else "%.4f" % best, _digest(v)), flush=True)
             if a.cprofile:
                 _profile(name, fn, a.cprofile)
         except Exception as e:  # a case that fails is reported, never hidden
             print("XMSPEED %-28s   FAILED %s: %s" % (name, type(e).__name__, str(e)[:160]), flush=True)
-    if a.extra != 2:
+    if a.extra != 2 and not host:
         print("XMSPEED-TOTAL %.4f" % total, flush=True)
     xtotal = 0.0
     for name, fn in (extra_cases(d) if a.extra else []):
@@ -255,13 +277,13 @@ def main():
                 t = time.perf_counter()
                 v = fn()
                 best = min(best, time.perf_counter() - t)
-            xtotal += best
-            print("XMSPEED-X %-28s %9.4f %s" % (name, best, _digest(v)), flush=True)
+            xtotal += 0.0 if host else best
+            print("XMSPEED-X %-28s %9s %s" % (name, "-" if host else "%.4f" % best, _digest(v)), flush=True)
             if a.cprofile:
                 _profile(name, fn, a.cprofile)
         except Exception as e:
             print("XMSPEED-X %-28s   FAILED %s: %s" % (name, type(e).__name__, str(e)[:160]), flush=True)
-    if a.extra:
+    if a.extra and not host:
         print("XMSPEED-XTOTAL %.4f" % xtotal, flush=True)
 
 

@@ -2,6 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATION 2637: threaded host layout moves for the forest fit boundaries.
 
+CPU-ONLY INSTALL CODE (cpu-gpu-cleanup t-forest). No GPU binding imports this
+module any more: the GPU fits upload the caller's bytes as they are and
+transpose / scan them on the device (`ensemble/device_layout.mojo`,
+`isolation_forest/impl/isolation_forest.mojo`). What remains here serves the
+host oracles (`ensemble/host/rf_oracle.mojo`). The refusal string moved to
+`ensemble/nan_refusal.mojo` so both sides share it.
+
 Lane forest-speed, 2026-09-11. The RandomForest and ExtraTrees fits took a
 C-order float32 X, transposed it to column-major in ONE thread
 (`_buffer.as_f32_colmajor` -> `transpose_f32`), and the binding then copied
@@ -184,13 +191,6 @@ def copy_ftz_f32_threaded(
             all_finite = False
     _ = flags^
     return all_finite
-
-
-comptime RF_NAN_REFUSAL = (
-    "X contains NaN; the forest has no missing-value arm (a NaN bins left"
-    " but partitions right, and the fit would not terminate)"
-)
-"""The RandomForest builders' NaN refusal, host and GPU bindings alike."""
 
 
 def has_nan_f32_threaded(
