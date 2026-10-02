@@ -549,7 +549,10 @@ for _slug, _cls, _kw, _blk, _cu in (
         ("robust-scaler", "RobustScaler", {}, "raw", True),
         ("maxabs-scaler", "MaxAbsScaler", {}, "raw", True),
         ("quantile-transformer", "QuantileTransformer",
-         dict(n_quantiles=1000, output_distribution="uniform", subsample=None, random_state=SEED),
+         # subsample 10**9 on every arm: every row (above the 1,000,000 fit rows, so no draw),
+         # the value cuML needs (it takes no None); None on ours and scikit-learn only refused
+         # the race (a library default is not a matched value, L40S 0.8.34 board)
+         dict(n_quantiles=1000, output_distribution="uniform", subsample=10 ** 9, random_state=SEED),
          "raw", True),
         ("power-transformer", "PowerTransformer", dict(method="yeo-johnson", standardize=True),
          "raw", True),
@@ -572,7 +575,7 @@ for _slug, _cls, _kw, _blk, _cu in (
     _cukw = {k: v for k, v in _kw.items() if k not in ("subsample", "quantile_method")
              and not (_cls == "KBinsDiscretizer" and k == "random_state")}
     if _cls == "QuantileTransformer":
-        _cukw["subsample"] = 10 ** 9      # cuML takes no None: every row, as scikit-learn's None
+        _cukw["subsample"] = _kw["subsample"]      # the same 10**9 (every row) as ours and scikit-learn
     _add(_slug, xlane="prep", ours=_cls, task="transform", block=_blk, quality="vs-sklearn",
          sk=("sklearn.feature_selection:" if _cls == "VarianceThreshold" else "sklearn.preprocessing:")
          + _cls, params=_kw, cuml=(_CUP + _cls) if _cu else None, cuml_params=_cukw,
