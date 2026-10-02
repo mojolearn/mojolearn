@@ -1649,6 +1649,25 @@ def fit_non_symmetric_tree[
                 else:
                     lg_room_bound = True
 
+    # DW_TREE_SYNC: whether this tree takes one host wait (the define's
+    # note). Decided before the pools: the pool then carries one extra
+    # leaf slot, the DUMMY every padded id list names.
+    var tree_sync = False
+    comptime if DW_TREE_SYNC:
+        tree_sync = (
+            use_ridx
+            and not lossguide
+            and options.min_split_gain < Float64(0)
+            and options.random_strength == Float32(0.0)
+            and not trace.enabled
+            and max_depth >= 1
+            and max_depth < 30
+        )
+    var pool_depth = max_depth
+    if tree_sync:
+        pool_depth = max_depth + 1
+        ws_leaves_key = 1 << pool_depth
+
     var layout = build_layout(fold_counts, one_hot)
     var blocks = blocks_for(layout, n_rows)
     var hist_cells_per_leaf = layout.hist_cells
@@ -1689,10 +1708,12 @@ def fit_non_symmetric_tree[
         ws.clear()
         ws.append(
             TTreeWorkspace(
-                ctx, layout, blocks, n_rows, stat_count, max_depth,
+                ctx, layout, blocks, n_rows, stat_count, pool_depth,
                 _ACC_LIVE,
             )
         )
+    # DW_TREE_SYNC: the pool's partition slots, the dummy last
+    var n_slots = ws[0].max_leaves_key
     # DEVIATION 2007a: no override, so the pool's cached machine constant.
     if sm_count <= 0:
         sm_count = ws[0].sm_count
@@ -1947,7 +1968,7 @@ def fit_non_symmetric_tree[
     # `split_properties_helper.cpp:1043-1080`: zero the partitions, write
     # the root partition over every row, zero the stats and the histograms,
     # push ONE leaf, then `RebuildLeavesSizes`.
-    for i in range(max_leaves):
+    for i in range(n_slots if tree_sync else max_leaves):
         h_off.unsafe_ptr().unsafe_store(i, UInt32(0))
         h_sz.unsafe_ptr().unsafe_store(i, UInt32(0))
     h_sz.unsafe_ptr().unsafe_store(0, UInt32(n_rows))
@@ -2104,6 +2125,405 @@ def fit_non_symmetric_tree[
                 multiclass_optimization, sm_count,
             )
         )
+
+    # ============ DW_TREE_SYNC: THE WHOLE TREE, ENQUEUED, ONE WAIT ============
+    # Every level's launches, back to back, with host caps and device
+    # counts (`kernel/dw_tree_sync.mojo` has the design); then the
+    # end-of-tree sweep over every pool slot and the one readback. The
+    # host loop below then REPLAYS its bookkeeping from the records
+    # (no launch, no wait) and checks the device's lists against its own.
+    ref h_ts_counts = dws[0].h_ts_counts
+    ref h_ts_lists = dws[0].h_ts_lists
+    ref h_ts_winner = dws[0].h_ts_winner
+    ref h_ts_sizes = dws[0].h_ts_sizes
+    ref h_ts_part_stats = dws[0].h_ts_part_stats
+    var ts_dummy = UInt32(n_slots - 1)
+    var ts_stride = DW_TS_LISTS * max_leaves
+    comptime if DW_TREE_SYNC:
+        if tree_sync:
+            stage_times.begin(ctx)
+            ref d_ts_state = dws[0].d_ts_state
+            ref d_ts_counts = dws[0].d_ts_counts
+            ref d_ts_lists = dws[0].d_ts_lists
+            ref d_ts_winner = dws[0].d_ts_winner
+            ref d_ts_sizes = dws[0].d_ts_sizes
+            ref d_ts_all = dws[0].d_ts_all
+            var min_leaf_rows = -1
+            if options.min_leaf_size >= Float64(0):
+                min_leaf_rows = Int(options.min_leaf_size)
+            var mark_undefined = (
+                Int32(1) if options.min_child_hessian >= 0 else Int32(0)
+            )
+            var init_threads = n_slots
+            if max_leaves > init_threads:
+                init_threads = max_leaves
+            # the dummy's partition stats are read by the padded scorer:
+            # zero (the slots past the tree hold the previous tree's sums)
+            enqueue_fill(ctx, part_stats, Float32(0.0))
+            ctx.enqueue_function[dw_ts_init_kernel](
+                d_ts_state.unsafe_ptr(),
+                Int32(n_slots),
+                d_ts_counts.unsafe_ptr(),
+                d_ts_lists.unsafe_ptr(),
+                Int32(max_leaves),
+                grid_dim=(_dw_ts_blocks(init_threads), 1, 1),
+                block_dim=(DW_TS_BLOCK, 1, 1),
+            )
+            # the FAST arm's one partition-stats sweep (iteration 1, the
+            # root, the index still the identity); the previous tree's
+            # wait settled the last copy from `h_all_ids`
+            h_all_ids.unsafe_ptr().unsafe_store(0, UInt32(0))
+            ctx.enqueue_copy(dst_buf=d_all_ids, src_ptr=h_all_ids.unsafe_ptr())
+            compute_partition_stats_gather(
+                ctx, 1, n_rows, stat_count, n_rows,
+                d_all_ids, p_off, p_sz, stats, row_index,
+                stat_partials, part_stats, sm_count=sm_count,
+            )
+            mgr.stream_kernel()
+            for level in range(max_depth):
+                # caps: at most min(2^level, max_leaves) leaves are scored
+                # or split at a level; the plan lists of this level hold
+                # one slot per split pair of the previous level
+                var cap_v = 1 << level
+                if cap_v > max_leaves:
+                    cap_v = max_leaves
+                var cap_p = 1
+                if level > 0:
+                    cap_p = 1 << (level - 1)
+                    if cap_p > max_leaves:
+                        cap_p = max_leaves
+                var cap_vn = 1 << (level + 1)
+                if cap_vn > max_leaves:
+                    cap_vn = max_leaves
+                var lists = level * ts_stride
+                var l_copy_src = _dw_dev_u32(
+                    d_ts_lists, lists + DW_TS_L_COPY_SRC * max_leaves
+                )
+                var l_copy_dst = _dw_dev_u32(
+                    d_ts_lists, lists + DW_TS_L_COPY_DST * max_leaves
+                )
+                var l_zero = _dw_dev_u32(
+                    d_ts_lists, lists + DW_TS_L_ZERO * max_leaves
+                )
+                var l_build = _dw_dev_u32(
+                    d_ts_lists, lists + DW_TS_L_BUILD * max_leaves
+                )
+                var l_sub_from = _dw_dev_u32(
+                    d_ts_lists, lists + DW_TS_L_SUB_FROM * max_leaves
+                )
+                var l_sub_what = _dw_dev_u32(
+                    d_ts_lists, lists + DW_TS_L_SUB_WHAT * max_leaves
+                )
+                var l_visit = _dw_dev_u32(
+                    d_ts_lists, lists + DW_TS_L_VISIT * max_leaves
+                )
+                var l_visit_next = _dw_dev_u32(
+                    d_ts_lists, lists + ts_stride + DW_TS_L_VISIT * max_leaves
+                )
+                var l_lists_next = _dw_dev_u32(d_ts_lists, lists + ts_stride)
+                var c_this = _dw_dev_u32(d_ts_counts, level * DW_TS_COUNTS)
+                var c_next = _dw_dev_u32(
+                    d_ts_counts, (level + 1) * DW_TS_COUNTS
+                )
+                var c_split = _dw_dev_u32(
+                    d_ts_counts, level * DW_TS_COUNTS + DW_TS_C_SPLIT
+                )
+                var w_level = _dw_dev_u32(
+                    d_ts_winner, level * WINNER_RECORD_WORDS * max_leaves
+                )
+                var sz_level = _dw_dev_u32(d_ts_sizes, level * n_slots)
+
+                # DEVIATION 1903's deferred parent-histogram copy, over
+                # the pairs whose derived sibling is the right child
+                if (hist_cells_per_leaf * stat_count) % 4 == 0:
+                    ctx.enqueue_function[copy_histograms_vec4_kernel](
+                        l_copy_src,
+                        l_copy_dst,
+                        Int32(stat_count),
+                        Int32(hist_cells_per_leaf),
+                        hist.unsafe_ptr(),
+                        grid_dim=(
+                            (hist_cells_per_leaf * stat_count // 4 + 255)
+                            // 256,
+                            cap_p,
+                            1,
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[copy_histograms_kernel](
+                        l_copy_src,
+                        l_copy_dst,
+                        Int32(stat_count),
+                        Int32(hist_cells_per_leaf),
+                        hist.unsafe_ptr(),
+                        grid_dim=(
+                            (hist_cells_per_leaf * stat_count + 255) // 256,
+                            cap_p,
+                            1,
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
+                mgr.stream_kernel()
+                # the ZERO set (dirty compute slots)
+                ctx.enqueue_function[zero_histograms_kernel](
+                    l_zero,
+                    Int32(hist_cells_per_leaf),
+                    hist.unsafe_ptr(),
+                    grid_dim=(
+                        (hist_cells_per_leaf + 255) // 256,
+                        cap_p,
+                        stat_count,
+                    ),
+                    block_dim=(256, 1, 1),
+                )
+                mgr.stream_kernel()
+                # the BUILD set (non-empty compute slots), same launchers
+                var ts_quantized = False
+                comptime if QUANTIZED_HIST_LIVE:
+                    if qh_ok:
+                        launch_quantized_histograms[True](
+                            ctx, dblocks, level, cap_p, n_rows,
+                            stat_count, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz,
+                            dws[0].d_ts_build[level],
+                            d_qstats, d_qacc, hist, hist_cells_per_leaf,
+                        )
+                        ts_quantized = True
+                if not ts_quantized:
+                    comptime if NONSYM_GROUP_WIDTH_2661:
+                        launch_histograms_for_blocks[
+                            hist2_smem_mode, True, False, True
+                        ](
+                            ctx, dblocks, level, cap_p, n_rows,
+                            stat_count, max_leaves, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz,
+                            dws[0].d_ts_build[level],
+                            dense_ids, hist, acc_i32, block_hist,
+                            hist_cells_per_leaf,
+                            width_plans=ws[0].width_plans,
+                        )
+                    else:
+                        launch_histograms_for_blocks[hist2_smem_mode, True](
+                            ctx, dblocks, level, cap_p, n_rows,
+                            stat_count, max_leaves, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz,
+                            dws[0].d_ts_build[level],
+                            dense_ids, hist, acc_i32, block_hist,
+                            hist_cells_per_leaf,
+                        )
+                mgr.stream_kernel()
+                ctx.enqueue_function[scan_histograms_kernel](
+                    l_build,
+                    flat_first.unsafe_ptr(),
+                    flat_folds.unsafe_ptr(),
+                    flat_one_hot.unsafe_ptr(),
+                    Int32(len(fold_counts)),
+                    Int32(hist_cells_per_leaf),
+                    hist.unsafe_ptr(),
+                    grid_dim=(
+                        (len(fold_counts) + 255) // 256,
+                        cap_p,
+                        stat_count,
+                    ),
+                    block_dim=(256, 1, 1),
+                )
+                mgr.stream_kernel()
+                # the SUBTRACT pairs, `big -= small`
+                if hist_cells_per_leaf % 4 == 0:
+                    ctx.enqueue_function[substract_histograms_vec4_kernel](
+                        l_sub_from,
+                        l_sub_what,
+                        Int32(hist_cells_per_leaf),
+                        hist.unsafe_ptr(),
+                        grid_dim=(
+                            (hist_cells_per_leaf // 4 + 255) // 256,
+                            cap_p,
+                            stat_count,
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[substract_histograms_kernel](
+                        l_sub_from,
+                        l_sub_what,
+                        Int32(hist_cells_per_leaf),
+                        hist.unsafe_ptr(),
+                        grid_dim=(
+                            (hist_cells_per_leaf + 255) // 256,
+                            cap_p,
+                            stat_count,
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
+                mgr.stream_kernel()
+                # the scorer over the visit list (dummy-padded to the cap);
+                # the per-level draw is inert at random_strength 0 and is
+                # taken here so the stream advances as the host loop's
+                var level_seed = level_rand.next_uniform_l()
+                if (
+                    options.score_function == SCORE_FUNCTION_L2
+                    or options.score_function == SCORE_FUNCTION_NEWTON_L2
+                ):
+                    ctx.enqueue_function[
+                        compute_optimal_splits_region_kernel[SCORE_FUNCTION_L2]
+                    ](
+                        skip.unsafe_ptr(),
+                        Int32(hist_cells_per_leaf),
+                        bff.unsafe_ptr(),
+                        ffw.unsafe_ptr(),
+                        hist.unsafe_ptr(),
+                        part_stats.unsafe_ptr(),
+                        Int32(stat_count),
+                        l_visit,
+                        Int32(1) if multiclass_optimization else Int32(0),
+                        options.l2_reg,
+                        Float32(0.0),
+                        level_seed,
+                        region_score.unsafe_ptr(),
+                        region_bin.unsafe_ptr(),
+                        min_child_hessian,
+                        grid_dim=(argmax_blocks, cap_v, 1),
+                        block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[
+                        compute_optimal_splits_region_kernel[
+                            SCORE_FUNCTION_COSINE
+                        ]
+                    ](
+                        skip.unsafe_ptr(),
+                        Int32(hist_cells_per_leaf),
+                        bff.unsafe_ptr(),
+                        ffw.unsafe_ptr(),
+                        hist.unsafe_ptr(),
+                        part_stats.unsafe_ptr(),
+                        Int32(stat_count),
+                        l_visit,
+                        Int32(1) if multiclass_optimization else Int32(0),
+                        options.l2_reg,
+                        score_std_dev,
+                        level_seed,
+                        region_score.unsafe_ptr(),
+                        region_bin.unsafe_ptr(),
+                        min_child_hessian,
+                        grid_dim=(argmax_blocks, cap_v, 1),
+                        block_dim=(LEAFWISE_SCORE_BLOCK_SIZE, 1, 1),
+                    )
+                mgr.stream_kernel()
+                # DEVIATION 1904's fold, into this level's record slice
+                ctx.enqueue_function[leaf_winner_fold_kernel](
+                    region_score.unsafe_ptr(),
+                    region_bin.unsafe_ptr(),
+                    Int32(argmax_blocks),
+                    Int32(hist_cells_per_leaf),
+                    d_bf_feature.unsafe_ptr(),
+                    d_bf_bin.unsafe_ptr(),
+                    d_bf_one_hot.unsafe_ptr(),
+                    d_bf_folds.unsafe_ptr(),
+                    w_level,
+                    grid_dim=(cap_v, 1, 1),
+                    block_dim=(WINNER_FOLD_BLOCK_SIZE, 1, 1),
+                )
+                mgr.stream_kernel()
+                # the selection and the split payload, the device count
+                ctx.enqueue_function[dw_ts_select_kernel](
+                    w_level,
+                    l_visit,
+                    c_this,
+                    d_feat_table.unsafe_ptr(),
+                    d_left.unsafe_ptr(),
+                    d_right.unsafe_ptr(),
+                    sp_feats.unsafe_ptr(),
+                    sp_bins.unsafe_ptr(),
+                    d_win_cells.unsafe_ptr(),
+                    d_ts_state.unsafe_ptr(),
+                    Int32(n_slots),
+                    mark_undefined,
+                    grid_dim=(_dw_ts_blocks(cap_v), 1, 1),
+                    block_dim=(DW_TS_BLOCK, 1, 1),
+                )
+                mgr.stream_kernel()
+                # the fused chain over a grid of the cap, guarded by the count
+                _launch_fused_split_chain[True](
+                    ctx, cap_v, n_rows, sm_count, stat_count,
+                    hist_cells_per_leaf, cindex, row_index, new_index,
+                    p_off, p_sz, d_left, d_right, d_win_cells, sp_feats,
+                    sp_bins, flags, chunk_zeros, chunk_offsets,
+                    leaf_zeros, hp_off, hp_sz, hist, part_stats, c_split,
+                )
+                for _ in range(4):
+                    mgr.stream_kernel()
+                # MakeSplit's leaf state, RebuildLeavesSizes, MarkTerminal
+                ctx.enqueue_function[dw_ts_split_state_kernel](
+                    d_left.unsafe_ptr(),
+                    d_right.unsafe_ptr(),
+                    c_this,
+                    p_sz.unsafe_ptr(),
+                    d_ts_state.unsafe_ptr(),
+                    Int32(n_slots),
+                    Int32(min_leaf_rows),
+                    Int32(max_depth),
+                    grid_dim=(_dw_ts_blocks(cap_v), 1, 1),
+                    block_dim=(DW_TS_BLOCK, 1, 1),
+                )
+                mgr.stream_kernel()
+                ctx.enqueue_function[dw_ts_snapshot_sizes_kernel](
+                    p_sz.unsafe_ptr(),
+                    sz_level,
+                    Int32(n_slots),
+                    grid_dim=(_dw_ts_blocks(n_slots), 1, 1),
+                    block_dim=(DW_TS_BLOCK, 1, 1),
+                )
+                mgr.stream_kernel()
+                # the next level's plan and visit list
+                ctx.enqueue_function[dw_ts_plan_kernel](
+                    d_left.unsafe_ptr(),
+                    d_right.unsafe_ptr(),
+                    c_this,
+                    c_next,
+                    p_sz.unsafe_ptr(),
+                    d_ts_state.unsafe_ptr(),
+                    Int32(n_slots),
+                    l_lists_next,
+                    Int32(max_leaves),
+                    Int32(cap_v),
+                    grid_dim=(_dw_ts_blocks(cap_v), 1, 1),
+                    block_dim=(DW_TS_BLOCK, 1, 1),
+                )
+                mgr.stream_kernel()
+                ctx.enqueue_function[dw_ts_visit_kernel](
+                    c_this,
+                    c_next,
+                    d_ts_state.unsafe_ptr(),
+                    Int32(n_slots),
+                    l_visit_next,
+                    Int32(cap_vn),
+                    Int32(options.max_leaves),
+                    grid_dim=(_dw_ts_blocks(cap_vn), 1, 1),
+                    block_dim=(DW_TS_BLOCK, 1, 1),
+                )
+                mgr.stream_kernel()
+            # the end-of-tree sweep (DEVIATION 352) over EVERY pool slot --
+            # the leaf count is not known to the host yet; an unused slot
+            # has size 0 and sums to zero
+            compute_partition_stats_gather(
+                ctx, n_slots, n_rows, stat_count, n_rows,
+                d_ts_all, p_off, p_sz, stats, row_index,
+                stat_partials, part_stats, sm_count=sm_count,
+            )
+            mgr.stream_kernel()
+            # ===== THE ONE HOST WAIT OF THE TREE =====
+            ctx.enqueue_copy(
+                dst_ptr=h_ts_part_stats.unsafe_ptr(), src_buf=part_stats
+            )
+            ctx.enqueue_copy(dst_ptr=h_ts_winner.unsafe_ptr(), src_buf=d_ts_winner)
+            ctx.enqueue_copy(dst_ptr=h_ts_sizes.unsafe_ptr(), src_buf=d_ts_sizes)
+            ctx.enqueue_copy(dst_ptr=h_ts_lists.unsafe_ptr(), src_buf=d_ts_lists)
+            ctx.enqueue_copy(dst_ptr=h_ts_counts.unsafe_ptr(), src_buf=d_ts_counts)
+            mgr.wait_complete()
+            stage_times.end(ctx, "tree.device")
+    # ==========================================================================
 
     var result_paths = List[TLeafPath]()
     var result_weights = List[Float64]()
