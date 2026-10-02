@@ -1,0 +1,60 @@
+rule	class	owner	state	path	occ	text
+host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	dense_knn_affinity_f32(dense, rp, cp, vp, nnz, sparse, n, k, aff, status)
+host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import bindings/hotpath_helpers.mojo:cast_elements_binding
+host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import bindings/hotpath_helpers.mojo:equal_elements_binding
+host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import bindings/hotpath_helpers.mojo:gather_i32_binding
+host-call	host-import	hr-small-passes	debt	bindings/_mojolearn.mojo	0	import core/dense_coo.mojo:knn_affinity_f32
+host-threads	host-threads	UNOWNED	debt	bindings/hostptr.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	bindings/hostptr.mojo	0	host_parallelize(_c, tasks)
+host-threads	host-threads	UNOWNED	debt	bindings/hotpath_helpers.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	gap-neural-overhead2	debt	bindings/hotpath_helpers.mojo	0	host_parallelize(_range, tasks)
+host-threads	host-threads	UNOWNED	debt	bindings/hotpath_helpers.mojo	1	host_parallelize(_range, tasks)
+host-threads	host-threads	UNOWNED	debt	bindings/hotpath_helpers.mojo	2	host_parallelize(_range, tasks)
+host-threads	host-threads	UNOWNED	debt	core/classical_host_predict.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	core/classical_host_predict.mojo	0	host_parallelize(_rows, t)
+host-threads	host-threads	UNOWNED	debt	core/classical_host_predict.mojo	1	host_parallelize(_rows, t)
+host-threads	host-threads	UNOWNED	debt	core/classical_host_predict.mojo	2	host_parallelize(_rows, t)
+host-threads	host-threads	UNOWNED	debt	core/classical_host_predict.mojo	3	host_parallelize(_rows, t)
+host-threads	host-threads	gap-neural-overhead2	debt	core/dense_coo.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	gap-neural-overhead2	debt	core/dense_coo.mojo	0	host_parallelize(_rows, tasks)
+serial-launch	serial-gpu	gap-classical-nv	debt	core/fast_radix_sort.mojo	0	ctx.enqueue_function[_frs_scan_kernel](
+host-threads	host-threads	UNOWNED	debt	core/forest_host_predict.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	core/forest_host_predict.mojo	0	host_parallelize(_rows_task, tasks)
+host-threads	host-threads	UNOWNED	debt	core/forest_host_predict.mojo	1	host_parallelize(_rows_task, tasks)
+host-threshold	host-env/threshold	UNOWNED	debt	core/forest_host_predict.mojo	0	comptime FOREST_HOST_MAX_THREADS = 1024
+host-threshold	host-env/threshold	UNOWNED	debt	core/forest_host_predict.mojo	0	comptime FOREST_HOST_MIN_ROWS_PER_TASK = 64
+host-threshold	host-env/threshold	UNOWNED	debt	core/forest_host_predict.mojo	0	if count > FOREST_HOST_MAX_THREADS:
+host-threshold	host-env/threshold	UNOWNED	debt	core/forest_host_predict.mojo	0	return FOREST_HOST_MAX_THREADS
+host-threshold	host-env/threshold	UNOWNED	debt	core/forest_host_predict.mojo	0	var tasks = (n_rows + FOREST_HOST_MIN_ROWS_PER_TASK - 1) // FOREST_HOST_MIN_ROWS_PER_TASK
+host-threads	host-threads	UNOWNED	debt	core/forest_inference_model.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	core/forest_inference_model.mojo	0	host_parallelize(_chunk, chunks)
+host-threads	host-threads	UNOWNED	debt	core/host_lanes.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	core/host_lanes.mojo	0	host_parallelize(_copy, tasks)
+host-threshold	host-env/threshold	UNOWNED	debt	core/host_lanes.mojo	0	comptime HOST_COPY_TASK_MIN = 1 << 20
+host-threshold	host-env/threshold	UNOWNED	debt	core/host_lanes.mojo	0	comptime HOST_ROW_TASK_MIN_WORK = 1 << 16
+host-threshold	host-env/threshold	UNOWNED	debt	core/host_lanes.mojo	0	if n >= 2 * HOST_COPY_TASK_MIN:
+host-threshold	host-env/threshold	UNOWNED	debt	core/host_lanes.mojo	0	if rows <= 1 or work < 2 * HOST_ROW_TASK_MIN_WORK:
+host-threshold	host-env/threshold	UNOWNED	debt	core/host_lanes.mojo	0	return max(1, min(host_predict_task_count(rows), work // HOST_ROW_TASK_MIN_WORK))
+host-threshold	host-env/threshold	UNOWNED	debt	core/host_lanes.mojo	0	tasks = max(1, min(host_predict_task_count(n // HOST_COPY_TASK_MIN), n // HOST_COPY_TASK_MIN))
+host-threshold	host-env/threshold	UNOWNED	debt	core/host_predict_threads.mojo	0	comptime HOST_PREDICT_MAX_TASKS = 1024
+host-threshold	host-env/threshold	UNOWNED	debt	core/host_predict_threads.mojo	0	if workers > HOST_PREDICT_MAX_TASKS:
+host-threshold	host-env/threshold	UNOWNED	debt	core/host_predict_threads.mojo	0	workers = HOST_PREDICT_MAX_TASKS
+host-env	host-env/threshold	UNOWNED	debt	core/host_simd_identical.mojo	0	comptime HOST_SIMD_SABOTAGE = is_defined["MOJOLEARN_HOST_SIMD_SABOTAGE"]()
+host-threads	host-threads	UNOWNED	debt	core/knn_host_predict.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	core/knn_host_predict.mojo	0	host_parallelize(_rows, tasks)
+host-threads	host-threads	UNOWNED	debt	core/knn_host_predict.mojo	1	host_parallelize(_rows, tasks)
+host-threads	host-threads	UNOWNED	debt	core/knn_host_predict.mojo	2	host_parallelize(_rows, tasks)
+host-threads	host-threads	UNOWNED	debt	core/knn_host_predict.mojo	3	host_parallelize(_rows, tasks)
+py-host-import	host-import	UNOWNED	debt	python/mojolearn/__init__.py	0	from ._forest_host import HostForest, host_model, host_predict, host_predict_proba
+py-host-import	host-import	UNOWNED	debt	python/mojolearn/__init__.py	0	from ._gbdt_host import HostGBDT
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_array.py	0	return (self[i] for i in range(self.shape[0]))
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	0	for s in range(n_rows):
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	1	for s in range(n_rows):
+route-switch	host-env/threshold	gap-trees-nv/apple-fast-trees2	debt	python/mojolearn/_buffer.py	0	_HOTPATH_ENV = "MOJOLEARN_HOTPATH"
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_labels.py	0	for r in range(n_rows):
+py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
+py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	from concurrent.futures import ThreadPoolExecutor
+py-threads	host-threads	UNOWNED	debt	python/mojolearn/_parallel_pool.py	0	self._threads = ThreadPoolExecutor(max_workers=len(self.devices))
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_portable_math.py	0	for i in range(n):
+route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/_portable_math.py	0	if _environ.get("MOJOLEARN_HOTPATH", "").strip().lower() != "python":
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/cross_vendor.py	0	for i in range(n):

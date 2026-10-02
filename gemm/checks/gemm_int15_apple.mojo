@@ -99,8 +99,8 @@ from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, column_name
 from checks.numerics_int15 import dequant_int15_pinned, int15_recombine
 from gemm.checks.gemm_identical import _AMMA_M64, _amma_load_t, _amma_mma
 from gemm.checks.gemm_int15_epilogue import INT15_EXPONENT_SABOTAGE
-from gemm.host.gemm_int15_oracle import INT15_MAX_K
-from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
+from gemm.contract import INT15_MAX_K
+from gemm.contract import gemm_oracle_sabotage_value_flip
 
 #: The largest magnitude of one product of this plan: a whole code times a
 #: high piece.

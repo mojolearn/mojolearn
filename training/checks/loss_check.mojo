@@ -27,7 +27,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.checks.gemm_backward import gemm_backward_sabotage_name
-from gemm.checks.gemm_oracle import OP_NN, contract_leaf_size
+from gemm.contract import OP_NN, contract_leaf_size
 from transformer.checks.transformer_fixture import fixture_splitmix64
 from training.checks.loss import (
     ANY_LOSS_SABOTAGE,
@@ -83,22 +83,24 @@ from training.checks.loss_fixture import (
     row_max_seeded_zero,
     row_max_topk_prefix,
 )
-from training.checks.loss_oracle import (
+from training.checks.loss_contract import (
     CeConfig,
     IGNORE_INDEX_DEFAULT,
     REDUCTION_MEAN,
     REDUCTION_NONE,
     REDUCTION_SUM,
-    ce_backward_oracle,
     ce_count,
     ce_divisor,
+    ce_refuse_inputs,
+    ce_smoothing_targets,
+)
+from training.checks.loss_contract import ce_ones
+from training.checks.loss_oracle import (
+    ce_backward_oracle,
     ce_exact_saturating_gradient,
     ce_exact_uniform_gradient,
     ce_forward_f64,
     ce_forward_oracle,
-    ce_ones,
-    ce_refuse_inputs,
-    ce_smoothing_targets,
 )
 
 

@@ -96,7 +96,7 @@ from spectral.estimator import (
     spectral_fit_predict_graph_host_keep,
     spectral_predict_host,
 )
-from spectral.host.spectral_predict_host import (
+from spectral.impl.spectral_predict_common import (
     SpectralPredictionState,
     spectral_predict_check_state,
 )

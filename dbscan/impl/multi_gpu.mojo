@@ -14,6 +14,7 @@ the define rather than to the second device. Owed a two-device column
 (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
 """
 from max.gpu.host import DeviceContext, DeviceBuffer
+from std.gpu import block_dim, block_idx, thread_idx
 from core.host_parallel import host_parallelize
 from std.os import getenv
 from std.sys.compile import is_defined
@@ -77,6 +78,42 @@ struct RBCShard(Movable):
         _ = self.ctx^
 
 
+comptime _OFFSET_TPB = 256
+
+
+def _rebase_offsets_kernel(
+    dst: MutPointer[Int32, MutAnyOrigin],
+    src: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`dst[i] = src[i] - src[0]`: a shard's slice of the root CSR offsets
+    made local (integer, exact)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        dst[i] = src[i] - src[0]
+
+
+def _shift_offsets_kernel(
+    buf: MutPointer[Int32, MutAnyOrigin],
+    add: Int32,
+    n_in: Int32,
+):
+    """`buf[i] += add`: a shard's local offsets moved to its place in the
+    root CSR (integer, exact)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        buf[i] = buf[i] + add
+
+
+def _read_i32(ctx: DeviceContext, mut buf: DeviceBuffer[DType.int32], at: Int) raises -> Int:
+    """One offset (a scalar read)."""
+    var host = ctx.enqueue_create_host_buffer[DType.int32](1)
+    var cell = buf.create_sub_buffer[DType.int32](at, 1)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=cell)
+    ctx.synchronize()
+    return Int(host.unsafe_ptr()[0])
+
+
 def _rbc_rows(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32], mut q: DeviceBuffer[DType.float32],
@@ -88,12 +125,11 @@ def _rbc_rows(
     mode: Int, max_k: Int, metric: Int, metric_arg: Float32, count: Int,
 ) raises -> Int:
     # mode 0=count, 1=fill, 2=bounded one-pass. Integer offsets alone merge.
+    # The CSR offsets merge on the devices: a shard's slice of the root
+    # offsets is copied peer to peer and rebased by a kernel (fill), and a
+    # shard's local offsets are copied into the root and shifted by a kernel
+    # (count, bounded). Only the scalar boundaries cross to the host.
     ctx.synchronize()
-    var root_ia = ctx.enqueue_create_host_buffer[DType.int32](rows + 1)
-    if mode == 1:
-        var iv = ia.create_sub_buffer[DType.int32](0, rows + 1)
-        ctx.enqueue_copy(dst_ptr=root_ia.unsafe_ptr(), src_buf=iv)
-        ctx.synchronize()
     var shards = List[RBCShard]()
     for rank in range(count):
         var first = rows * rank // count
@@ -114,7 +150,7 @@ def _rbc_rows(
         var local_radius = peer_clone(ctx, device, radius)
         var edges = 0
         if mode == 1:
-            edges = Int(root_ia.unsafe_ptr()[first + nr]) - Int(root_ia.unsafe_ptr()[first])
+            edges = _read_i32(ctx, ia, first + nr) - _read_i32(ctx, ia, first)
         var local_ia = device.enqueue_create_buffer[DType.int32](nr + 1)
         var local_ja = device.enqueue_create_buffer[DType.int32](max(1, nr * max_k if mode == 2 else edges))
         var local_vd = device.enqueue_create_buffer[DType.int32](nr + 1)
@@ -122,11 +158,17 @@ def _rbc_rows(
         var local_scratch = device.enqueue_create_buffer[DType.int32](1)
         device.synchronize()
         if mode == 1:
-            var local_ptr = device.enqueue_create_host_buffer[DType.int32](nr + 1)
-            for i in range(nr + 1):
-                local_ptr.unsafe_ptr()[i] = root_ia.unsafe_ptr()[first + i] - root_ia.unsafe_ptr()[first]
-            device.enqueue_copy(dst_buf=local_ia, src_ptr=local_ptr.unsafe_ptr())
+            var slice = ia.create_sub_buffer[DType.int32](first, nr + 1)
+            var root_slice = peer_clone(ctx, device, slice)
+            device.enqueue_function[_rebase_offsets_kernel](
+                local_ia.unsafe_ptr(),
+                root_slice.unsafe_ptr(),
+                Int32(nr + 1),
+                grid_dim=((nr + 1 + _OFFSET_TPB - 1) // _OFFSET_TPB, 1, 1),
+                block_dim=(_OFFSET_TPB, 1, 1),
+            )
             device.synchronize()
+            _ = root_slice^
         shards.append(RBCShard(device^, local_x^, local_q^, local_r^, local_ip^, local_cols^, local_dist^, local_radius^, local_ia^, local_ja^, local_vd^, local_tmp^, local_scratch^, first, nr, edges, 0))
     var failures = List[Int](length=count, fill=0)
     var sp = rebind[MutPointer[RBCShard, MutUntrackedOrigin]](shards.unsafe_ptr())
@@ -178,11 +220,18 @@ def _rbc_rows(
             raise Error("DBSCAN shard edge count exceeds int32 CSR capacity")
         longest = max(longest, s.longest)
         if mode != 1:
-            var ptr = s.ctx.enqueue_create_host_buffer[DType.int32](s.rows + 1)
-            s.ctx.enqueue_copy(dst_ptr=ptr.unsafe_ptr(), src_buf=s.ia)
+            var local = s.ia.create_sub_buffer[DType.int32](0, s.rows + 1)
+            var place = ia.create_sub_buffer[DType.int32](s.first, s.rows + 1)
+            local.enqueue_copy_to(place)
             s.ctx.synchronize()
-            for i in range(s.rows + 1):
-                root_ia.unsafe_ptr()[s.first + i] = ptr.unsafe_ptr()[i] + Int32(total)
+            ctx.enqueue_function[_shift_offsets_kernel](
+                place.unsafe_ptr(),
+                Int32(total),
+                Int32(s.rows + 1),
+                grid_dim=((s.rows + 1 + _OFFSET_TPB - 1) // _OFFSET_TPB, 1, 1),
+                block_dim=(_OFFSET_TPB, 1, 1),
+            )
+            ctx.synchronize()
             var source = s.vd.create_sub_buffer[DType.int32](0, s.rows)
             var target = vd.create_sub_buffer[DType.int32](s.first, s.rows)
             source.enqueue_copy_to(target)
@@ -194,10 +243,9 @@ def _rbc_rows(
             s.ctx.synchronize()
         total += s.edges
     if mode != 1:
-        var iv = ia.create_sub_buffer[DType.int32](0, rows + 1)
-        ctx.enqueue_copy(dst_buf=iv, src_ptr=root_ia.unsafe_ptr())
+        var last = ia.create_sub_buffer[DType.int32](rows, 1)
         var tail = vd.create_sub_buffer[DType.int32](rows, 1)
-        ctx.enqueue_copy(dst_buf=tail, src_ptr=root_ia.unsafe_ptr() + rows)
+        ctx.enqueue_copy(dst_buf=tail, src_buf=last)
         ctx.synchronize()
     _ = shards^
     ctx.synchronize()

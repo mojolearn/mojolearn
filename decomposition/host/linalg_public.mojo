@@ -79,6 +79,8 @@ oracles first, which is exactly why they came out with no GPU column at all
 purpose: the fold order is the oracles' business, the ORDER a public name
 promises is settled once, here.
 """
+from decomposition.spectrum_order_device import spectrum_rank_desc
+from decomposition.linalg_types import EighHostResult, _validate_shape, _validate_square
 from decomposition.host.pca_oracle import (
     JACOBI_SWEEPS,
     JACOBI_TOL,
@@ -92,56 +94,18 @@ from decomposition.host.pca_full_oracle import (
 
 
 def _argsort_desc(key: List[Float32], n: Int) -> List[Int]:
-    """`host_order_truncate_spectrum`'s selection sort on `>`, over indices.
-
-    THE SAME COMPARISON, deliberately: a spectrum ordered two ways in one
-    tree is two answers to one question. Ties keep the lower index, which is
-    what `>` (not `>=`) gives and what the oracle's loop gives.
-    """
-    var order = List[Int]()
+    """Indices in DESCENDING order of `spectrum_key` (the float bits made
+    monotone, -0.0 keyed as +0.0), ties to the LOWER index: a strict total
+    order, so each index lands at its rank. The device twin
+    (decomposition/spectrum_order_device.mojo) forms the same ranks
+    (cpu-gpu-cleanup c-decomp, 2026-10-02: was an exchange sort on `>`,
+    whose tie order was not the lower index and which the device could not
+    run in parallel)."""
+    var order = List[Int](length=n, fill=0)
+    var kp = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(key.unsafe_ptr()))
     for i in range(n):
-        order.append(i)
-    for i in range(n):
-        for j in range(i + 1, n):
-            if key[order[j]] > key[order[i]]:
-                var t = order[i]
-                order[i] = order[j]
-                order[j] = t
+        order[spectrum_rank_desc(kp, n, i)] = i
     return order^
-
-
-def _validate_square(n: Int, who: String) raises:
-    if n < 1 or n > 46340:
-        raise Error(
-            who
-            + ": n must be in [1, 46340] so n * n cells stay addressable, got "
-            + String(n)
-        )
-
-
-def _validate_shape(n_rows: Int, n_cols: Int, who: String) raises:
-    if n_cols < 1 or n_cols > 46340:
-        raise Error(
-            who
-            + ": n_cols must be in [1, 46340] so n_cols * n_cols cells stay"
-            " addressable, got "
-            + String(n_cols)
-        )
-    if n_rows < 1:
-        raise Error(who + ": n_rows must be at least 1, got " + String(n_rows))
-    if n_rows < n_cols:
-        raise Error(
-            who
-            + ": needs at least as many rows as columns, got "
-            + String(n_rows)
-            + " x "
-            + String(n_cols)
-            + ". The route for a wide matrix is an LQ factorization of the"
-            " transpose, which this tree does not carry (DEVIATION 593,"
-            " decomposition/impl/linalg/detail/svd_full.mojo). REFUSED BY"
-            " NAME rather than transposed silently, because the singular"
-            " values of the transpose are the same and the VECTORS are not"
-        )
 
 
 def host_qr_r(a: List[Float32], n_rows: Int, n_cols: Int) raises -> List[Float32]:
@@ -154,17 +118,6 @@ def host_qr_r(a: List[Float32], n_rows: Int, n_cols: Int) raises -> List[Float32
     _validate_shape(n_rows, n_cols, "qr")
     var work = a.copy()
     return host_qr_factor(work, n_rows, n_cols)
-
-
-@fieldwise_init
-struct EighHostResult(Movable):
-    """`numpy.linalg.eigh`'s pair: `w` ascending, eigenvector `i` in COLUMN
-    `i` of `v` (`n x n`, row major), plus the solver's own info."""
-
-    var w: List[Float32]
-    var v: List[Float32]
-    var converged: Bool
-    var executed: Int
 
 
 def host_eigh(a: List[Float32], n: Int) raises -> EighHostResult:
