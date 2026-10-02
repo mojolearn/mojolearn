@@ -34,6 +34,7 @@ from . import _portable_math as math
 from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this door resolves; name NO other (lane_select counts > 3 as a registry)
 from ._array import Array
 from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f64_c, as_i32_c, empty, frombytes, full, zeros
+from ._buffer import memory_at
 from ._labels import decode_labels, encode_labels, is_bool
 from ._mode import NumericModeMixin
 from ._forest_protocol import (forest_estimator, _forest_fit_arrays, _forest_fit_function,
@@ -493,12 +494,12 @@ def _trees_switch(est, bit):
 
 
 def _trees_native_glue(est):
-    """`est` when MOJOLEARN_TE_NATIVE_SPLITS selects the native cv
+    """`est` when MOJOLEARN_TE_NATIVE_SPLITS selects the device cv
     bookkeeping for it (FAST tier, a binding that carries
-    `x_trees_fold_rows`), else None."""
+    `x_trees_device_folds`), else None."""
     if not _trees_switch(est, _TE_NATIVE_SPLITS):
         return None
-    return est if callable(getattr(est._bind(), "x_trees_fold_rows", None)) else None
+    return est if callable(getattr(est._bind(), "x_trees_device_folds", None)) else None
 
 
 def _trees_ada_session_default(est):
@@ -1707,44 +1708,61 @@ def _trees_fold_rows(folds, i):
     return Array.from_list(tr, "<i4"), Array.from_list(te, "<i4")
 
 
-def _trees_native_folds(est, n_splits, n, codes):
+class _FoldRows(list):
+    """The [(train rows, test rows)] of `_trees_native_folds`: int32 views into
+    the one buffer the device filled, kept alive here."""
+    __slots__ = ("_owner",)
+
+
+def _trees_native_folds(est, n_splits, n, codes, n_classes=0):
     """`_trees_splits` for an int cv with the fold assignment and the fold
-    row lists made natively (xtrees/ops.mojo `stratified_folds`, `kfolds`,
-    `fold_rows`: the same index bookkeeping, no Python row loop), under
-    `-D MOJOLEARN_TE_NATIVE_SPLITS` (lane/apple-fast-trees-ensembles,
-    2026-10-02). `codes` is an int32 code Array (stratified) or None (KFold)."""
+    row lists made on the device (xtrees/folds_device.mojo through
+    `x_trees_device_folds`: sklearn's unshuffled StratifiedKFold / KFold law,
+    the same folds `_trees_stratified_folds` / `_trees_kfolds` build, no
+    Python row loop and no host row loop), under `-D MOJOLEARN_TE_NATIVE_SPLITS`
+    (lane/apple-fast-trees-ensembles, 2026-10-02). `codes` is an int32 code
+    Array in [0, n_classes) (stratified) or None (KFold). The lists are
+    zero-copy int32 views into one downloaded buffer: fold i's rows outside
+    it, ascending, then inside it, ascending."""
     b = est._bind()
-    folds, counts = empty((n,), "<i4"), empty((n_splits,), "<i4")
+    counts = empty((n_splits + 1,), "<i4")
+    rows = empty((n_splits * n,), "<i4")
     if codes is not None:
         c32 = as_i32_c(codes, ndim=1, name="codes")[0]
-        if int(b.x_trees_stratified_folds(addr_ro(c32, name="codes"), addr(folds, name="folds"),
-                                          addr(counts, name="counts"), [n, n_splits])) != 0:
-            raise ValueError(f"n_splits={n_splits} cannot be greater than the number of members in each class")
+        k = int(n_classes)
     else:
-        b.x_trees_kfolds(addr(folds, name="folds"), addr(counts, name="counts"), [n, n_splits])
-    cnt = [int(v) for v in counts.tolist()]
+        c32, k = counts, 0
+    status = int(b.x_trees_device_folds(addr_ro(c32, name="codes"), addr(rows, name="rows"),
+                                        addr(counts, name="counts"), [n, n_splits, k]))
+    if status == 1:
+        raise ValueError(f"n_splits={n_splits} cannot be greater than the number of members in each class")
+    if status != 0:
+        raise ValueError("y codes outside [0, n_classes)")
+    cnt = [int(v) for v in counts.tolist()[:n_splits]]
     used = max([i for i in range(n_splits) if cnt[i] > 0] or [0]) + 1
-    out = []
+    out = _FoldRows()
+    out._owner = rows
     for i in range(used):
-        tr, te = empty((n - cnt[i],), "<i4"), empty((cnt[i],), "<i4")
-        b.x_trees_fold_rows(addr_ro(folds, name="folds"), addr(tr, name="train"), addr(te, name="test"),
-                            [n, i, cnt[i]])
+        base = rows._addr + 4 * i * n
+        tr = memory_at(base, 4 * (n - cnt[i]), writable=False).cast("i")
+        te = memory_at(base + 4 * (n - cnt[i]), 4 * cnt[i], writable=False).cast("i")
         out.append((tr, te))
     return out
 
 
-def _trees_splits(cv, X, y, n, codes=None, partition=False, native=None):
+def _trees_splits(cv, X, y, n, codes=None, partition=False, native=None, n_classes=0):
     """[(train rows, test rows)] as int32 Arrays. An int is sklearn's
     unshuffled StratifiedKFold (with `codes`) or KFold; a splitter object's
     `split(X, y)` and an iterable of pairs are taken as given (sklearn
     `check_cv`), their indices in the order they come. `partition`: every row
     must be in exactly one test set (sklearn cross_val_predict). `native`:
-    the estimator whose binding builds an int cv's folds
-    (`_trees_native_folds`; `codes` is then an int32 Array), else None."""
+    the estimator whose binding builds an int cv's folds on the device
+    (`_trees_native_folds`; `codes` is then an int32 Array in
+    [0, n_classes)), else None."""
     c = _trees_cv(cv)
     if isinstance(c, int):
         if native is not None:
-            return _trees_native_folds(native, c, n, codes)
+            return _trees_native_folds(native, c, n, codes, n_classes)
         folds = _trees_stratified_folds(codes, c) if codes is not None else _trees_kfolds(n, c)
         return [_trees_fold_rows(folds, i) for i in range(max(folds) + 1)]
     pairs = c.split(X, y) if hasattr(c, "split") else c
@@ -2054,7 +2072,7 @@ class StackingClassifier(_StackingBase):
         self._binary = len(self.classes_) == 2
         nat = _trees_native_glue(self)
         splits = _trees_splits(self.cv, X, y, len(codes), codes=codes if nat is not None else codes.tolist(),
-                               partition=True, native=nat)
+                               partition=True, native=nat, n_classes=len(self.classes_))
         final = self.final_estimator
         if final is None:
             from .linear_model import LogisticRegression
@@ -2480,7 +2498,7 @@ class CalibratedClassifierCV(_TreesWrapperBase):
             base = LinearSVC()
         nat = _trees_native_glue(self)
         splits = _trees_splits(self.cv, X, y, n, codes=codes if nat is not None else codes.tolist(),
-                               partition=not self.ensemble, native=nat)
+                               partition=not self.ensemble, native=nat, n_classes=len(self.classes_))
         cols = _trees_arange(d)
         self.calibrated_classifiers_ = []
         if self.ensemble:

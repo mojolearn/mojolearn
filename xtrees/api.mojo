@@ -15,6 +15,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from std.python import Python
 from xtrees.shap import mask_expand, block_mean, kernel_solve
 from xtrees.perm_device import perm_synthetic
+from xtrees.folds_device import device_folds
 from xtrees.ops_device import (
     apply_trees_device, bag_rows_device, gather_f32_device, transpose_f32_device, transpose_f64_device,
     unseen_rows_device, weighted_sample_device,
@@ -34,7 +35,7 @@ from xtrees.ops import (
     samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, leaf_newton_rows, tree_score_add, uniform,
     onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict, platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes, column_f64,
-    stratified_folds, kfolds, fold_rows, bag_rows, unseen_rows, transpose_f64,
+    bag_rows, unseen_rows, transpose_f64,
 )
 
 
@@ -658,36 +659,25 @@ def fast_switches_binding() raises -> PythonObject:
     return PythonObject(XTREES_FAST_SWITCHES)
 
 
-def stratified_folds_binding(codes: PythonObject, folds: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, n_splits]: folds (int32, n) = each row's test fold, counts
-    (int32, n_splits) = fold sizes; returns 1 when the Python routine refuses."""
-    _need(params, 2, "x_trees_stratified_folds")
-    var n = _count(_i(params, 0), "x_trees_stratified_folds")
+def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, n_splits, n_classes]: the cv folds on the device
+    (xtrees/folds_device.mojo; `-D MOJOLEARN_TE_NATIVE_SPLITS`, FAST + Apple
+    only). n_classes > 0: StratifiedKFold over `codes` (int32, n, in
+    [0, n_classes)); 0: KFold, codes unread. counts (int32, n_splits + 1) =
+    the fold sizes then the status word; rows (int32, n_splits * n): per fold
+    i the rows outside it, ascending, then the rows inside it, ascending.
+    Returns the status: 0, 1 (the Python refusal: n_splits above every class
+    count) or 2 (a code outside [0, n_classes))."""
+    _need(params, 3, "x_trees_device_folds")
+    var n = _count(_i(params, 0), "x_trees_device_folds")
+    var n_splits = _i(params, 1)
+    var k = _count(_i(params, 2), "x_trees_device_folds")
+    if n_splits < 2:
+        raise Error("x_trees_device_folds: n_splits must be >= 2")
     var status = 0
     if n > 0:
-        status = stratified_folds(i32_ptr(Int(py=codes)), n, _i(params, 1), i32_ptr(Int(py=folds)), i32_ptr(Int(py=counts)))
+        status = device_folds(i32_ptr(Int(py=codes)), n, k, n_splits, i32_ptr(Int(py=rows)), i32_ptr(Int(py=counts)))
     return PythonObject(status)
-
-
-def kfolds_binding(folds: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, n_splits]."""
-    _need(params, 2, "x_trees_kfolds")
-    var n = _count(_i(params, 0), "x_trees_kfolds")
-    kfolds(n, _i(params, 1), i32_ptr(Int(py=folds)), i32_ptr(Int(py=counts)))
-    return PythonObject(n)
-
-
-def fold_rows_binding(folds: PythonObject, tr: PythonObject, te: PythonObject, params: PythonObject) raises -> PythonObject:
-    """params = [n, i, n_te]: tr (int32, n - n_te) and te (int32, n_te), the
-    rows outside and inside fold i, ascending."""
-    _need(params, 3, "x_trees_fold_rows")
-    var n = _count(_i(params, 0), "x_trees_fold_rows")
-    var n_te = _count(_i(params, 2), "x_trees_fold_rows")
-    if n_te > n:
-        raise Error("x_trees_fold_rows: n_te exceeds n")
-    if n > 0:
-        fold_rows(i32_ptr(Int(py=folds)), n, _i(params, 1), n_te, i32_ptr(Int(py=tr)), i32_ptr(Int(py=te)))
-    return PythonObject(n)
 
 
 def mask_expand_binding(
@@ -790,9 +780,7 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[indicator_codes_binding]("x_trees_indicator_codes")
     m.def_function[column_f64_binding]("x_trees_column_f64")
     m.def_function[fast_switches_binding]("x_trees_fast_switches")
-    m.def_function[stratified_folds_binding]("x_trees_stratified_folds")
-    m.def_function[kfolds_binding]("x_trees_kfolds")
-    m.def_function[fold_rows_binding]("x_trees_fold_rows")
+    m.def_function[device_folds_binding]("x_trees_device_folds")
     m.def_function[mask_expand_binding]("x_trees_mask_expand")
     m.def_function[block_mean_binding]("x_trees_block_mean")
     m.def_function[perm_synthetic_binding]("x_trees_perm_synthetic")

@@ -1,9 +1,8 @@
 # lane/apple-fast-trees-ensembles: the tools/bench_board_algos.py xlane="trees" ensemble lanes under FAST
 
 Merged onto origin/main 2026-10-02 (eabeff395). Written without a Mojo toolchain (cloud peer); the first
-M3 build is the compile check (binding x_trees only: four new exports `x_trees_fast_switches`,
-`x_trees_stratified_folds`, `x_trees_kfolds`, `x_trees_fold_rows`; no existing export changed, no
-other binding touched). Every switch is a BUILD-TIME define of the x_trees binding (`-D
+M3 build is the compile check (binding x_trees only: two new exports `x_trees_fast_switches` and
+`x_trees_device_folds`; no existing export changed, no other binding touched). Every switch is a BUILD-TIME define of the x_trees binding (`-D
 MOJOLEARN_TE_<NAME>`), FAST + Apple build only, default OFF: `xtrees/api.mojo` folds the defines into
 one comptime bit set (`XTREES_FAST_SWITCHES`, 0 unless `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and
 has_apple_gpu_accelerator()`), and `python/mojolearn/_expansion_trees.py` `_trees_switch` reads it
@@ -12,7 +11,7 @@ through the binding once per fit (no env read). IDENTICAL compiles main's code u
 
 | define | site | lanes | what it changes under FAST |
 |---|---|---|---|
-| `MOJOLEARN_TE_NATIVE_SPLITS` | `_trees_native_folds`, `_trees_splits(native=)`, `OneVsRestClassifier._indicator`, `MultiOutputClassifier.fit`; `xtrees/ops.mojo` `stratified_folds`, `kfolds`, `fold_rows` | stacking-clf, stacking-reg, calibrated, ovr, multioutput-clf | the cv=5 fold assignment and the ten fold row lists built natively instead of by Python loops over every row; ovr's k one-vs-rest 0/1 targets through `x_trees_indicator_codes`; each label column of a float Y through `x_trees_column_f64` instead of `Y.tolist()` plus a per-column comprehension. Index bookkeeping only: same folds, same bits (digest must match) |
+| `MOJOLEARN_TE_NATIVE_SPLITS` | `_trees_native_folds`, `_trees_splits(native=)`, `OneVsRestClassifier._indicator`, `MultiOutputClassifier.fit`; `xtrees/folds_device.mojo` (`x_trees_device_folds`) | stacking-clf, stacking-reg, calibrated, ovr, multioutput-clf | the cv=5 fold assignment and the ten fold row lists built ON THE DEVICE (class histogram and first rows by atomics, per-class flag-and-scan ranks, a row-per-thread fold assignment in sklearn's unshuffled StratifiedKFold / KFold law, per-fold flag-and-scan compaction, one download of the sizes and the lists) instead of by Python loops over every row; ovr's k one-vs-rest 0/1 targets through `x_trees_indicator_codes`; each label column of a float Y through `x_trees_column_f64` instead of `Y.tolist()` plus a per-column comprehension. Index bookkeeping only: same folds, same bits (digest must match) |
 | `MOJOLEARN_TE_ADA_SESSION` | `_trees_ada_session_default`; `AdaBoostClassifier.fit`, `AdaBoostRegressor.fit` pass `default="1"` to `_trees_member_session` | adaboost-clf, adaboost-reg | the members' X staged on the device once (main's exact `ForestDataSession`, the default DART already uses) instead of per member (transposition, NaN scan, upload per member otherwise). Each member still draws its own quantile sample: same bits |
 | `MOJOLEARN_TE_ADA_SESSION_SHARE` | with the above: `default="share"` | adaboost-clf | later members reuse the first member's quantile table: may move bits, keep only with held-out quality within FAST run-to-run spread |
 
@@ -43,4 +42,4 @@ A define becomes the FAST default (define deleted) when its arm is faster on the
 ## Compile risks for the local session to watch
 
 - `xtrees/api.mojo` `XTREES_FAST_SWITCHES`: a comptime expression over `GLOBAL_NUMERIC_MODE`, `has_apple_gpu_accelerator()` and three `is_defined[...]()` (the form of `RF_FAST_BATCH` in `bindings/_mojolearn_rf.mojo`); `fast_switches_binding` is a zero-argument `def ... raises -> PythonObject` (the form of `mojolearn_numeric_mode_binding`). Both the GPU and the host x_trees binding call `register`, so both carry the export (0 on the host build).
-- `xtrees/ops.mojo` `stratified_folds` returns `Int` from a `def ... raises -> Int`.
+- `xtrees/folds_device.mojo`: `prefix_sum[block_size=FOLD_SCAN_BLOCK, exclusive=True]` on Int32 (the form of gbdt/gpu_util/kernel/scan.mojo), `Atomic.fetch_add` / `Atomic.min` / `Atomic.max` on `MutPointer[Int32, MutAnyOrigin].unsafe_offset(i)` (the forms of hierarchy/impl), a `struct FoldScanWorkspace(Movable)` of DeviceBuffers built from `ctx`, `process_ctx["MojoXTreesPermContext"]()` (perm_device.mojo's slot), `comptime if TE_DEVICE_FOLDS: ... return` / `else: raise` in `device_folds`. Python reads the lists as `memory_at(...).cast("i")` views (`_buffer.memory_at`).
