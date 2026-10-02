@@ -814,8 +814,8 @@ def _nystroem_rr_eigh(
     filled, and the sweep count is returned; otherwise -1 and nothing is
     written but `dvec`."""
     var n = q
-    var m = n + (n % 2)
-    var h = m // 2
+    var even_q = n + (n % 2)
+    var h = even_q // 2
     var da = ctx.enqueue_create_buffer[DType.float32](n * n)
     var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
     var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
@@ -858,13 +858,13 @@ def _nystroem_rr_eigh(
         if sweep == NYS_RR_SWEEPS:
             break
         executed += 1
-        for rd in range(m - 1):
+        for rd in range(even_q - 1):
             ctx.enqueue_function[eigh_par_cs_kernel](
-                da.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                da.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(even_q), Int32(rd),
                 grid_dim=_pj_blocks(h), block_dim=PJ_TPB,
             )
             ctx.enqueue_function[eigh_par_update_kernel](
-                da.unsafe_ptr(), dvec.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                da.unsafe_ptr(), dvec.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(even_q), Int32(rd),
                 grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
             )
     # J^T A J keeps ||A||_F: a solve that moved it is not an answer
