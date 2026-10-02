@@ -482,8 +482,8 @@ def down(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], dst: FP, n: Int) 
     the caller's pageable memory per call. Copies only: no bit moves."""
     if n <= 0:
         return
-    var b = view(ctx, buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), len(buf))
-    download_f32_into[_XCNN_STAGE_POOL](ctx, b, n, dst.unsafe_origin_cast[MutUntrackedOrigin]())
+    var b = view(ctx, FP(unsafe_from_address=Int(buf.unsafe_ptr())), len(buf))
+    download_f32_into[_XCNN_STAGE_POOL](ctx, b, n, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(dst)))
     _ = b^
 
 
@@ -493,9 +493,9 @@ def down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], dst: IP, n: Int) 
     converted)."""
     if n <= 0:
         return
-    var b = view(ctx, buf.unsafe_ptr().bitcast[Float32]().unsafe_origin_cast[MutAnyOrigin](), len(buf))
+    var b = view(ctx, FP(unsafe_from_address=Int(buf.unsafe_ptr())), len(buf))
     download_f32_into[_XCNN_STAGE_POOL](
-        ctx, b, n, dst.bitcast[Float32]().unsafe_origin_cast[MutUntrackedOrigin]()
+        ctx, b, n, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(dst))
     )
     _ = b^
 
