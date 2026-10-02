@@ -12,8 +12,6 @@ from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import memcpy
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count
 
 from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
@@ -51,9 +49,7 @@ from x_decomp.cells import (
     I32Ptr,
     bidx,
     cd_row,
-    chol_serial,
     chol_diag,
-    chol_col_elem,
     colsum_cell,
     ew_cell,
     gemm_cell,
@@ -111,29 +107,28 @@ from x_decomp.fast_qr import (
     fq_head_part_kernel,
     fq_orgqr_dot_kernel,
 )
+from x_decomp.rr import RR_OFF_TPB
 from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
 from x_decomp.tsqr_device import ts_apply_device, ts_factor_device, ts_free_device, ts_pack_device
 from x_decomp.jacobi_par import (
     PJ_TPB,
     eigh_par_cs_kernel,
-    eigh_par_off_kernel,
+    eigh_par_off_fold_kernel,
+    eigh_par_off_part_kernel,
     eigh_par_update_kernel,
     pj_identity_kernel,
     pj_transpose_kernel,
-    svd_par_norm_kernel,
-    svd_par_round_kernel,
 )
 from std.os import getenv
 from core.device_zero import enqueue_fill
 from decomposition.checks.jacobi_eigh_device import JACOBI_INFO_UNWRITTEN, JACOBI_SWEEPS, JACOBI_TOL
-from decomposition.host.linalg_public import eigh_ascending
+from decomposition.spectrum_order_device import enqueue_eigh_ascending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
 
 
 #: Sweep budgets of the round-robin solvers (FAST on Metal). A solve that
 #: does not converge inside its budget is handed to the cyclic solver.
 comptime PJ_EIGH_SWEEPS = 30
-comptime PJ_SVD_SWEEPS = X_DECOMP_SVD_SWEEPS
 #: rounds enqueued between two synchronize() calls
 comptime PJ_SYNC_ROUNDS = 512
 
@@ -143,15 +138,6 @@ def pj_eigh_min() -> Int:
     x_decomp/jacobi_par.mojo (FAST builds for Metal only; 0 = never).
     MOJOLEARN_XD_PJ_EIGH_MIN overrides it."""
     var v = String(getenv("MOJOLEARN_XD_PJ_EIGH_MIN", "0"))
-    try:
-        return Int(v)
-    except:
-        return 0
-
-
-def pj_svd_min() -> Int:
-    """`pj_eigh_min` for the one-sided SVD (MOJOLEARN_XD_PJ_SVD_MIN)."""
-    var v = String(getenv("MOJOLEARN_XD_PJ_SVD_MIN", "0"))
     try:
         return Int(v)
     except:
@@ -441,23 +427,38 @@ def lu_info_init_kernel(info: F32Ptr):
 
 
 comptime LU_PIVOT_TPB = 256
+#: most blocks of the pivot search, and rows a thread scans before another
+#: block is added
+comptime LU_PIV_MAXB = 64
+comptime LU_PIV_ROWS = 8
+#: floats of the LU step scratch `scal`: [d, acts] then the pivot search's
+#: partial values and rows (as floats: exact below 2^24 rows)
+comptime LU_SCAL_LEN = 2 + 2 * LU_PIV_MAXB
 
 
-def lu_pivot_block_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
-    """`lu_pivot` on ONE BLOCK of LU_PIVOT_TPB threads (lane/neural-net-
-    experiment, 2026-09-30, the classical pass): the largest |a[i, k]| for
-    i >= k, ties to the LOWEST row. Comparisons only, no arithmetic, so the
-    result is the serial scan's by construction: every thread starts from
-    (|a[k, k]|, k) and takes a later row only on a STRICT greater value,
-    exactly as the serial scan does, and the tree combine prefers the
-    greater value and, on equal values, the lower row. A NaN never wins a
-    strict compare, so it is skipped as the serial scan skips it; a NaN at
-    row k makes every compare false and keeps row k, as the serial scan
-    does. The serial scan was one thread walking a column of n strided
-    loads per step: at n = 8192 on an MI325X that was most of a 600 s
-    factorization (bench_board 0.8.25, `lu-factor`)."""
+def lu_pivot_blocks(k: Int, n: Int) -> Int:
+    """Blocks of step k's pivot search: one per LU_PIVOT_TPB * LU_PIV_ROWS
+    rows below the diagonal, at least one, at most LU_PIV_MAXB."""
+    var rows = n - k - 1
+    var g = (rows + LU_PIVOT_TPB * LU_PIV_ROWS - 1) // (LU_PIVOT_TPB * LU_PIV_ROWS)
+    return max(1, min(g, LU_PIV_MAXB))
+
+
+def lu_pivot_part_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32, g: Int32):
+    """`lu_pivot` over every block (cpu-gpu-cleanup c-decomp, 2026-10-02;
+    was ONE block): the largest |a[i, k]| for i >= k, ties to the LOWEST
+    row. Comparisons only, so the result is the serial scan's by
+    construction: every thread starts from (|a[k, k]|, k) and takes a later
+    row only on a STRICT greater value, exactly as the serial scan does, and
+    every combine (here and in `lu_pivot_fin_kernel`) prefers the greater
+    value and, on equal values, the lower row. A NaN never wins a strict
+    compare, so it is skipped as the serial scan skips it; a NaN at row k
+    makes every compare false and keeps row k, as the serial scan does.
+    Block b's best goes to scal[2 + b] (value) and scal[2 + LU_PIV_MAXB + b]
+    (row)."""
     var kk = Int(k)
     var nn = Int(n)
+    var gg = Int(g)
     var rv = stack_allocation[
         LU_PIVOT_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
     ]()
@@ -465,15 +466,16 @@ def lu_pivot_block_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
         LU_PIVOT_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
     ]()
     var tid = Int(thread_idx.x)
+    var b = Int(block_idx.x)
     var best = abs(ftz(a.unsafe_load(kk * nn + kk)))
     var p = kk
-    var i = kk + 1 + tid
+    var i = kk + 1 + b * LU_PIVOT_TPB + tid
     while i < nn:
         var v = abs(ftz(a.unsafe_load(i * nn + kk)))
         if v > best:
             best = v
             p = i
-        i += LU_PIVOT_TPB
+        i += gg * LU_PIVOT_TPB
     rv.unsafe_store(tid, best)
     ri.unsafe_store(tid, Int32(p))
     barrier()
@@ -490,52 +492,70 @@ def lu_pivot_block_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
         barrier()
         active = active // 2
     if tid == 0:
-        piv.unsafe_store(kk, ri.unsafe_load(0))
+        scal.unsafe_store(2 + b, rv.unsafe_load(0))
+        scal.unsafe_store(2 + LU_PIV_MAXB + b, Float32(Int(ri.unsafe_load(0))))
 
 
-def lu_swap_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
+def lu_pivot_fin_kernel(scal: F32Ptr, piv: I32Ptr, k: Int32, g: Int32):
+    """The g block partials of `lu_pivot_part_kernel` combined by the same
+    rule (greater value, then lower row) into piv[k]."""
+    var rv = stack_allocation[
+        LU_PIVOT_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var ri = stack_allocation[
+        LU_PIVOT_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var tid = Int(thread_idx.x)
+    var gg = Int(g)
+    var cv = Float32(0)
+    var ci = Int32(-1)
+    var b = tid
+    while b < gg:
+        var ov = scal.unsafe_load(2 + b)
+        var oi = Int32(Int(scal.unsafe_load(2 + LU_PIV_MAXB + b)))
+        if ci < 0 or ov > cv or (ov == cv and oi < ci):
+            cv = ov
+            ci = oi
+        b += LU_PIVOT_TPB
+    rv.unsafe_store(tid, cv)
+    ri.unsafe_store(tid, ci)
+    barrier()
+    var active = LU_PIVOT_TPB // 2
+    while active > 0:
+        if tid < active:
+            var ov = rv.unsafe_load(tid + active)
+            var oi = ri.unsafe_load(tid + active)
+            var c2 = rv.unsafe_load(tid)
+            var i2 = ri.unsafe_load(tid)
+            if oi >= 0 and (i2 < 0 or ov > c2 or (ov == c2 and oi < i2)):
+                rv.unsafe_store(tid, ov)
+                ri.unsafe_store(tid, oi)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        piv.unsafe_store(Int(k), ri.unsafe_load(0))
+
+
+def enqueue_lu_pivot(ctx: DeviceContext, a: F32Ptr, piv: I32Ptr, scal: F32Ptr, k: Int, n: Int) raises:
+    """Step k's pivot row into piv[k]: the block partials, then their combine."""
+    var g = lu_pivot_blocks(k, n)
+    ctx.enqueue_function[lu_pivot_part_kernel](
+        a, scal, Int32(k), Int32(n), Int32(g), grid_dim=g, block_dim=LU_PIVOT_TPB
+    )
+    ctx.enqueue_function[lu_pivot_fin_kernel](scal, piv, Int32(k), Int32(g), grid_dim=1, block_dim=LU_PIVOT_TPB)
+
+
+def lu_swap_kernel(a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, k: Int32, n: Int32):
+    """`lu_swap_elem` for every column; column k's thread then runs step
+    k's `lu_diag` (and act[k] = scal[1]) on the swapped pivot: the cell no
+    other thread of the launch touches (cpu-gpu-cleanup c-decomp: was its
+    own one-thread launch)."""
     var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if j < Int(n):
         lu_swap_elem(a, piv, Int(k), j, Int(n))
-
-
-def lu_diag_kernel(a: F32Ptr, info: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
-    if block_idx.x == 0 and thread_idx.x == 0:
-        lu_diag(a, info, scal, Int(k), Int(n))
-
-
-# lane/apple-fast-decomp-linalg (2026-10-02, pass 2): -D MOJOLEARN_LU_FAST_PANEL4,
-# FAST on Apple only. main's `launch_lu` is already blocked with a tiled,
-# register-blocked trailing update; its panel is six launches a column,
-# two of them one thread (`lu_diag_kernel`, `lu_act_kernel`). This fuses
-# those two into the multipliers' grid launch: every thread reads the
-# pivot a[k, k] (final after the swap) and skips a zero pivot as
-# `lu_l_elem` does through scal; thread 0 of block 0 writes scal, act and
-# info as `lu_diag` + `lu_act_kernel` did, for the update and trail
-# kernels that follow. Four launches a column (8192: 16,384 fewer).
-comptime LU_FAST_PANEL4 = XD_FAST_APPLE and is_defined["MOJOLEARN_LU_FAST_PANEL4"]()
-
-
-def lu_l_diag_kernel(a: F32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, k: Int32, n: Int32):
-    """`lu_diag` + `lu_act_kernel` + `lu_l_kernel` in one grid launch (see
-    above). The multipliers read the pivot directly, not scal, so no thread
-    depends on thread 0's stores."""
-    var kk = Int(k)
-    var nn = Int(n)
-    var d = ftz(a.unsafe_load(kk * nn + kk))
-    if block_idx.x == 0 and thread_idx.x == 0:
-        scal.unsafe_store(0, d)
-        if d == Float32(0):
-            if info.unsafe_load(0) == Float32(0):
-                info.unsafe_store(0, Float32(kk + 1))
-            scal.unsafe_store(1, Float32(0))
-            act.unsafe_store(kk, Float32(0))
-        else:
-            scal.unsafe_store(1, Float32(1))
-            act.unsafe_store(kk, Float32(1))
-    var i = kk + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < nn and d != Float32(0):
-        a.unsafe_store(i * nn + kk, div0(a.unsafe_load(i * nn + kk), d))
+        if j == Int(k):
+            lu_diag(a, info, scal, Int(k), Int(n))
+            act.unsafe_store(Int(k), scal.unsafe_load(1))
 
 
 def lu_l_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
@@ -571,13 +591,20 @@ def lu_panel_width() -> Int:
         return LU_PANEL_NB
 
 
-def lu_swap_cols_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32, col_lo: Int32, col_hi: Int32):
+def lu_swap_cols_kernel(
+    a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, k: Int32, n: Int32, col_lo: Int32, col_hi: Int32
+):
     """`lu_swap_elem` over the columns [col_lo, col_hi) of rows k and
     piv[k]: the panel's steps swap the panel's and the left columns at once,
-    the trailing columns later, in the same order (`lu_apply_swaps_kernel`)."""
+    the trailing columns later, in the same order (`lu_apply_swaps_kernel`).
+    Column k's thread then runs step k's `lu_diag` and act[k] = scal[1]
+    (cpu-gpu-cleanup c-decomp: were two one-thread launches)."""
     var j = Int(col_lo) + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if j < Int(col_hi):
         lu_swap_elem(a, piv, Int(k), j, Int(n))
+        if j == Int(k):
+            lu_diag(a, info, scal, Int(k), Int(n))
+            act.unsafe_store(Int(k), scal.unsafe_load(1))
 
 
 def lu_update_panel_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32, col_hi: Int32):
@@ -589,13 +616,6 @@ def lu_update_panel_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32, col_hi: 
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if w > 0 and h > 0 and t < h * w:
         lu_update_elem(a, scal, kk, kk + 1 + t // w, kk + 1 + t % w, Int(n))
-
-
-def lu_act_kernel(scal: F32Ptr, act: F32Ptr, k: Int32):
-    """act[k] = scal[1]: whether step k eliminated (a zero pivot skips its
-    step, and the trailing kernels skip it the same way)."""
-    if block_idx.x == 0 and thread_idx.x == 0:
-        act.unsafe_store(Int(k), scal.unsafe_load(1))
 
 
 def lu_apply_swaps_kernel(a: F32Ptr, piv: I32Ptr, k0: Int32, k1: Int32, n: Int32):
@@ -886,33 +906,33 @@ def lu_trail_rb_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, n
 comptime CHOL_FAST_BLOCKED = XD_FAST_APPLE and is_defined["MOJOLEARN_CHOL_FAST_BLOCKED"]() and CH_FITS
 
 
-def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
-    if block_idx.x == 0 and thread_idx.x == 0:
-        chol_serial(a, Int(n), info)
-
-
-def chol_diag_kernel(a: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
-    if block_idx.x == 0 and thread_idx.x == 0:
-        chol_diag(a, info, Int(j), Int(n))
-
-
-def chol_col_kernel(a: F32Ptr, j: Int32, n: Int32):
+def chol_step_kernel(a: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
+    """Column step j of `chol_serial`, one thread per row i >= j. Row j's
+    thread is `chol_diag` (the info store, a[j, j] = sqrt(acc)); every row
+    i > j forms the same pivot chain itself (the same fma chain, so the same
+    d that `chol_diag` stores) and runs `chol_col_elem`'s statements with
+    it. Reads only columns 0..j-1, final since their own steps; a[j, j] is
+    written by row j's thread and read by none."""
     var jj = Int(j)
-    var i = jj + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n):
-        chol_col_elem(a, jj, i, Int(n))
-
-
-def chol_serial_max() -> Int:
-    """Largest n whose Cholesky runs as ONE `chol_kernel` launch on one
-    thread (MOJOLEARN_XD_CHOL_SERIAL, default 16; timing only: the column
-    driver below stores the same cells in the same order). A value at or
-    above every n restores the one-thread kernel for the A/B."""
-    var v = String(getenv("MOJOLEARN_XD_CHOL_SERIAL", "16"))
-    try:
-        return Int(v)
-    except:
-        return 16
+    var nn = Int(n)
+    var i = jj + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= nn:
+        return
+    if i == jj:
+        chol_diag(a, info, jj, nn)
+        return
+    var acc = ftz(a.unsafe_load(jj * nn + jj))
+    for p in range(jj):
+        var l = ftz(a.unsafe_load(jj * nn + p))
+        acc = ftz(identical_mul_add(-l, l, acc))
+    if not (acc > Float32(0)):
+        acc = Float32(1)
+    var d = sqrt0(acc)
+    var s = ftz(a.unsafe_load(i * nn + jj))
+    for p in range(jj):
+        s = ftz(identical_mul_add(-ftz(a.unsafe_load(i * nn + p)), ftz(a.unsafe_load(jj * nn + p)), s))
+    a.unsafe_store(i * nn + jj, div0(s, d))
+    a.unsafe_store(jj * nn + i, Float32(0))
 
 
 def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int32, k: Int32):
@@ -1432,22 +1452,9 @@ def _xd_stage_ptr(ctx: DeviceContext) raises -> F32Ptr:
 
 
 def _xd_read_out(dst: F32Ptr, src: F32Ptr, n: Int):
-    """`memcpy(dst, src, n)` over host tasks: the one read of pinned memory."""
-    var tasks = host_predict_task_count(1 << 30)
-    if tasks > 16:
-        tasks = 16
-    if n < XD_STAGE_MIN or tasks <= 1:
-        memcpy(dest=dst, src=src, count=n)
-        return
-    var chunk = (n + tasks - 1) // tasks
-
-    def _piece(t: Int) {imm dst, imm src, imm n, imm chunk}:
-        var lo = t * chunk
-        var hi = min(lo + chunk, n)
-        if hi > lo:
-            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
-
-    host_parallelize(_piece, tasks)
+    """`memcpy(dst, src, n)`: the one read of pinned memory (one thread;
+    cpu-gpu-cleanup c-decomp removed the host-task split)."""
+    memcpy(dest=dst, src=src, count=n)
 
 
 def _up_into(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], p: F32Ptr, n: Int) raises:
@@ -1612,87 +1619,37 @@ def _pj_blocks(count: Int) -> Int:
     return (count + PJ_TPB - 1) // PJ_TPB if count > 0 else 1
 
 
-def _svd_par_of_r(
+def _pj_off_blocks(n: Int) -> Int:
+    return max((n + RR_OFF_TPB - 1) // RR_OFF_TPB, 1)
+
+
+def _eigh_par_test(
     ctx: DeviceContext,
-    mut r: DeviceBuffer[DType.float32],
-    mut v: DeviceBuffer[DType.float32],
-    mut s: DeviceBuffer[DType.float32],
+    mut da: DeviceBuffer[DType.float32],
+    mut doff: DeviceBuffer[DType.float32],
+    mut dpart: DeviceBuffer[DType.float32],
+    mut dfold: DeviceBuffer[DType.float32],
+    mut hfold: HostBuffer[DType.float32],
     n: Int,
-) raises -> Bool:
-    """The one-sided Jacobi SVD of R in the round-robin ordering
-    (x_decomp/jacobi_par.mojo; FAST on Metal): `v` and `s` as `svd_of_r`
-    leaves them. `r` is NOT written, so on False (no convergence in
-    PJ_SVD_SWEEPS sweeps) the caller runs the cyclic solver on it."""
-    var m = n + (n % 2)
-    var h = m // 2
-    var rt = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var flags = ctx.enqueue_create_buffer[DType.float32](2 * h)
-    var hflags = ctx.enqueue_create_host_buffer[DType.float32](2 * h)
-    var hs = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_function[pj_transpose_kernel](
-        r.unsafe_ptr(), rt.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
+) raises -> SIMD[DType.float32, 4]:
+    """The round-robin eigh's convergence test on the device: the block
+    trees of the rows' off-diagonal squares and a_kk^2 (a_kk left in
+    doff[2 n, 3 n)), then the tree past the blocks (x_decomp/rr.mojo
+    `rr_off_fold`, the host column's order). Returns (off, diag, ran, 0);
+    ran < 0 is a dispatch that did not run (the buffers are filled -1)."""
+    var nb = _pj_off_blocks(n)
+    enqueue_fill(ctx, dpart, Float32(-1.0))
+    enqueue_fill(ctx, dfold, Float32(-1.0))
+    ctx.enqueue_function[eigh_par_off_part_kernel](
+        da.unsafe_ptr(), doff.unsafe_ptr(), dpart.unsafe_ptr(), Int32(n), grid_dim=nb, block_dim=RR_OFF_TPB
     )
-    ctx.enqueue_function[pj_identity_kernel](vt.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
-    # ||R||_F^2 before the sweeps (the rotations keep it): the column norms
-    ctx.enqueue_function[svd_par_norm_kernel](
-        rt.unsafe_ptr(), s.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(PJ_TPB, 1, 1)
+    ctx.enqueue_function[eigh_par_off_fold_kernel](
+        dpart.unsafe_ptr(), dfold.unsafe_ptr(), Int32(nb), grid_dim=1, block_dim=RR_OFF_TPB
     )
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s)
+    ctx.enqueue_copy(dst_ptr=hfold.unsafe_ptr(), src_buf=dfold)
     ctx.synchronize()
-    var fro_in = Float64(0.0)
-    for i in range(n):
-        var x = Float64(hs.unsafe_ptr().unsafe_load(i))
-        fro_in += x * x
-    var converged = False
-    var ran = True
-    for _sweep in range(PJ_SVD_SWEEPS):
-        enqueue_fill(ctx, flags, Float32(0.0))
-        for rd in range(m - 1):
-            ctx.enqueue_function[svd_par_round_kernel](
-                rt.unsafe_ptr(), vt.unsafe_ptr(), flags.unsafe_ptr(), Int32(n), Int32(m), Int32(rd), X_DECOMP_SVD_TOL,
-                grid_dim=(h, 1, 1), block_dim=(PJ_TPB, 1, 1),
-            )
-            if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
-                ctx.synchronize()
-        ctx.enqueue_copy(dst_ptr=hflags.unsafe_ptr(), src_buf=flags)
-        ctx.synchronize()
-        var rots = 0
-        for i in range(h):
-            if hflags.unsafe_ptr().unsafe_load(i) != Float32(0.0):
-                rots += 1
-            # every block of the sweep's last round wrote its round number
-            if hflags.unsafe_ptr().unsafe_load(h + i) != Float32(m - 1):
-                ran = False
-        if not ran:
-            break
-        if rots == 0:
-            converged = True
-            break
-    if converged:
-        ctx.enqueue_function[svd_par_norm_kernel](
-            rt.unsafe_ptr(), s.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(PJ_TPB, 1, 1)
-        )
-        ctx.enqueue_function[pj_transpose_kernel](
-            vt.unsafe_ptr(), v.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
-        )
-        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s)
-        ctx.synchronize()
-        # the rotations are orthogonal: sum of s^2 is ||R||_F^2, or the
-        # solve is not an answer (a dropped dispatch, a wrong launch)
-        var fro_out = Float64(0.0)
-        for i in range(n):
-            var x = Float64(hs.unsafe_ptr().unsafe_load(i))
-            fro_out += x * x
-        if not (abs(fro_out - fro_in) <= 1.0e-3 * fro_in):
-            converged = False
-    ctx.synchronize()
-    _ = rt^
-    _ = vt^
-    _ = flags^
-    _ = hflags^
-    _ = hs^
-    return converged
+    var p = hfold.unsafe_ptr()
+    return SIMD[DType.float32, 4](p.unsafe_load(0), p.unsafe_load(1), p.unsafe_load(2), Float32(0.0))
 
 
 def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
@@ -2061,15 +2018,13 @@ def orth_on_device_diag(
                     launch_chol_blocked(ctx, _p(dg), _p(dinfo), l)
                     gblocked = True
             if not gblocked:
+                # main's column driver (c-decomp): one `chol_step_kernel`
+                # launch a column of the l x l Gram
                 ctx.enqueue_function[lu_info_init_kernel](dinfo.unsafe_ptr(), grid_dim=1, block_dim=1)
                 for j in range(l):
-                    ctx.enqueue_function[chol_diag_kernel](
-                        dg.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(j), Int32(l), grid_dim=1, block_dim=1
+                    ctx.enqueue_function[chol_step_kernel](
+                        dg.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(j), Int32(l), grid_dim=_blocks(l - j), block_dim=TPB
                     )
-                    if l - j - 1 > 0:
-                        ctx.enqueue_function[chol_col_kernel](
-                            dg.unsafe_ptr(), Int32(j), Int32(l), grid_dim=_blocks(l - j - 1), block_dim=TPB
-                        )
             ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
             ctx.enqueue_copy(dst_ptr=hg.unsafe_ptr(), src_buf=dg)
             ctx.synchronize()
@@ -2135,11 +2090,12 @@ def launch_lu(
     ctx: DeviceContext, a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, n: Int
 ) raises:
     """DevExec.lu's launches on device pointers, enqueued (no sync): `a`
-    (n x n) factored in place, `piv` (n), `info` (1), `scal` (2) and `act`
+    (n x n) factored in place, `piv` (n), `info` (1), `scal` (LU_SCAL_LEN) and `act`
     (n) scratch. DevExec.lu and the resident kit (x_decomp/kit_device.mojo)
     both call it, so the two run one launch sequence."""
-    # lu_serial's cells, step by step at every n: the pivot search on one
-    # block (a parallel reduction, `lu_pivot`'s choice), the swap, the
+    # lu_serial's cells, step by step at every n: the pivot search over
+    # every block (a parallel reduction, `lu_pivot`'s choice), the swap (with
+    # the diagonal step on column k's thread), the
     # multipliers and the trailing update one thread per cell. (The
     # one-thread `lu_kernel` for n <= MOJOLEARN_XD_LU_SERIAL and the
     # one-thread pivot scan are deleted: the same cells in the same order.)
@@ -2166,26 +2122,15 @@ def launch_lu(
         while k0 < n:
             var k1 = min(k0 + nb, n)
             for k in range(k0, k1):
-                ctx.enqueue_function[lu_pivot_block_kernel](
-                    a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
-                )
+                enqueue_lu_pivot(ctx, a, piv, scal, k, n)
                 ctx.enqueue_function[lu_swap_cols_kernel](
-                    a, piv, Int32(k), Int32(n), Int32(0), Int32(k1),
+                    a, piv, info, scal, act, Int32(k), Int32(n), Int32(0), Int32(k1),
                     grid_dim=_blocks(k1), block_dim=TPB,
                 )
-                comptime if LU_FAST_PANEL4:
-                    ctx.enqueue_function[lu_l_diag_kernel](
-                        a, info, scal, act, Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
+                if n - k - 1 > 0:
+                    ctx.enqueue_function[lu_l_kernel](
+                        a, scal, Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
                     )
-                else:
-                    ctx.enqueue_function[lu_diag_kernel](
-                        a, info, scal, Int32(k), Int32(n), grid_dim=1, block_dim=1
-                    )
-                    ctx.enqueue_function[lu_act_kernel](scal, act, Int32(k), grid_dim=1, block_dim=1)
-                    if n - k - 1 > 0:
-                        ctx.enqueue_function[lu_l_kernel](
-                            a, scal, Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
-                        )
                 if k1 - k - 1 > 0 and n - k - 1 > 0:
                     ctx.enqueue_function[lu_update_panel_kernel](
                         a, scal, Int32(k), Int32(n), Int32(k1),
@@ -2232,14 +2177,9 @@ def launch_lu(
                     )
             k0 = k1
     for k in range(n if nb == 0 else 0):
-        ctx.enqueue_function[lu_pivot_block_kernel](
-            a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
-        )
+        enqueue_lu_pivot(ctx, a, piv, scal, k, n)
         ctx.enqueue_function[lu_swap_kernel](
-            a, piv, Int32(k), Int32(n), grid_dim=_blocks(n), block_dim=TPB
-        )
-        ctx.enqueue_function[lu_diag_kernel](
-            a, info, scal, Int32(k), Int32(n), grid_dim=1, block_dim=1
+            a, piv, info, scal, act, Int32(k), Int32(n), grid_dim=_blocks(n), block_dim=TPB
         )
         if n - k - 1 > 0:
             ctx.enqueue_function[lu_l_kernel](
@@ -2357,7 +2297,7 @@ struct DevExec(Exec):
         var da = _up(ctx, a, n * n)
         var dp = ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
         var di = ctx.enqueue_create_buffer[DType.float32](1)
-        var ds = ctx.enqueue_create_buffer[DType.float32](2)
+        var ds = ctx.enqueue_create_buffer[DType.float32](LU_SCAL_LEN)
         var dact = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
         launch_lu(
             ctx, _p(da), I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr())), _p(di), _p(ds), _p(dact), n
@@ -2451,20 +2391,12 @@ struct DevExec(Exec):
             if n > CH_NB:
                 launch_chol_blocked(ctx, _p(da), _p(di), n)
                 blocked = True
-        if blocked:
-            pass
-        elif n <= chol_serial_max():
-            ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
-        else:
+        if not blocked:
             ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
             for j in range(n):
-                ctx.enqueue_function[chol_diag_kernel](
-                    da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=1, block_dim=1
+                ctx.enqueue_function[chol_step_kernel](
+                    da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j), block_dim=TPB
                 )
-                if n - j - 1 > 0:
-                    ctx.enqueue_function[chol_col_kernel](
-                        da.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j - 1), block_dim=TPB
-                    )
         _down(ctx, da, a, n * n)
         _down(ctx, di, info, 1)
         ctx.synchronize()
@@ -2508,7 +2440,8 @@ struct DevExec(Exec):
         """The two-sided Jacobi in the round-robin ordering
         (x_decomp/jacobi_par.mojo; FAST on Metal), then `device_eigh`'s own
         tail (`sign_flip_kernel`, the ascending permutation). The cyclic
-        kernel's convergence test, taken on the host before every sweep.
+        kernel's convergence test before every sweep, its sums folded on the
+        device (`_eigh_par_test`); the host reads three scalars.
         `a` is not written; False = not converged in PJ_EIGH_SWEEPS sweeps
         (nothing stored), and the caller runs the cyclic solver."""
         var ctx = xd_ctx()
@@ -2518,7 +2451,9 @@ struct DevExec(Exec):
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
         var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
-        var hoff = ctx.enqueue_create_host_buffer[DType.float32](3 * n)
+        var dpart = ctx.enqueue_create_buffer[DType.float32](3 * _pj_off_blocks(n))
+        var dfold = ctx.enqueue_create_buffer[DType.float32](3)
+        var hfold = ctx.enqueue_create_host_buffer[DType.float32](3)
         ctx.enqueue_function[pj_identity_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
         var tol2 = Float64(JACOBI_TOL) * Float64(JACOBI_TOL)
         var converged = False
@@ -2526,26 +2461,11 @@ struct DevExec(Exec):
         var fro_in = Float64(-1.0)
         var fro_now = Float64(0.0)
         for sweep in range(PJ_EIGH_SWEEPS + 1):
-            # a sum of squares is never negative: -1 left in the readback is
-            # a dispatch that did not run
-            enqueue_fill(ctx, doff, Float32(-1.0))
-            ctx.enqueue_function[eigh_par_off_kernel](
-                da.unsafe_ptr(), doff.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n), block_dim=PJ_TPB
-            )
-            ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
-            ctx.synchronize()
-            var off = Float64(0.0)
-            var dg = Float64(0.0)
-            var ran = True
-            for i in range(n):
-                var o = Float64(hoff.unsafe_ptr().unsafe_load(i))
-                var d2 = Float64(hoff.unsafe_ptr().unsafe_load(n + i))
-                if o < 0.0 or d2 < 0.0:
-                    ran = False
-                off += o
-                dg += d2
-            if not ran:
+            var tst = _eigh_par_test(ctx, da, doff, dpart, dfold, hfold, n)
+            if not (tst[2] >= Float32(0.0)):
                 break
+            var off = Float64(tst[0])
+            var dg = Float64(tst[1])
             fro_now = off + dg
             if fro_in < 0.0:
                 fro_in = fro_now
@@ -2573,27 +2493,26 @@ struct DevExec(Exec):
             ctx.enqueue_function[sign_flip_kernel](
                 dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
             )
-            var hv = ctx.enqueue_create_host_buffer[DType.float32](n * n)
-            ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=dv)
+            # the last test's kernel left the diagonal of the converged A in
+            # doff[2n, 3n); the ascending order on the device
+            # (decomposition/spectrum_order_device.mojo), then w and v out
+            var dw = ctx.enqueue_create_buffer[DType.float32](n)
+            var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
+            var dpos = ctx.enqueue_create_buffer[DType.int32](n)
+            enqueue_eigh_ascending(ctx, _p(doff) + 2 * n, 1, _p(dv), n, dpos, _p(dw), _p(dvo))
+            _down(ctx, dw, w, n)
+            _down(ctx, dvo, v, n * n)
             ctx.synchronize()
-            # the last test's readback holds the diagonal of the converged A
-            var diag = List[Float32](capacity=n)
-            for i in range(n):
-                diag.append(hoff.unsafe_ptr().unsafe_load(2 * n + i))
-            var vecs = List[Float32](capacity=n * n)
-            for i in range(n * n):
-                vecs.append(hv.unsafe_ptr().unsafe_load(i))
-            var got = eigh_ascending(diag, vecs, n, True, executed)
-            for i in range(n):
-                w.unsafe_store(i, got.w[i])
-            for i in range(n * n):
-                v.unsafe_store(i, got.v[i])
-            _ = hv^
+            _ = dw^
+            _ = dvo^
+            _ = dpos^
         _ = da^
         _ = dv^
         _ = dcs^
         _ = doff^
-        _ = hoff^
+        _ = dpart^
+        _ = dfold^
+        _ = hfold^
         ctx.synchronize()
         _ = ctx^
         return converged
@@ -2632,10 +2551,7 @@ struct DevExec(Exec):
             )
         ctx.enqueue_function[sign_flip_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1))
         var hinfo = ctx.enqueue_create_host_buffer[DType.float32](3)
-        var hwork = ctx.enqueue_create_host_buffer[DType.float32](n * n)
         ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
-        ctx.enqueue_copy(dst_ptr=hwork.unsafe_ptr(), src_buf=da.create_sub_buffer[DType.float32](0, n * n))
-        _down(ctx, dv, v, n * n)
         ctx.synchronize()
         var i0 = hinfo.unsafe_ptr().unsafe_load(0)
         var i1 = hinfo.unsafe_ptr().unsafe_load(1)
@@ -2660,22 +2576,23 @@ struct DevExec(Exec):
                 " one; see DEVIATION 590. The remedy is more sweeps, the same one"
                 " cuSOLVER's syevj has"
             )
-        var diag = List[Float32](capacity=n)
-        for i in range(n):
-            diag.append(hwork.unsafe_ptr().unsafe_load(i * n + i))
-        var vecs = List[Float32](capacity=n * n)
-        for i in range(n * n):
-            vecs.append(v.unsafe_load(i))
-        var got = eigh_ascending(diag, vecs, n, True, Int(i2))
-        for i in range(n):
-            w.unsafe_store(i, got.w[i])
-        for i in range(n * n):
-            v.unsafe_store(i, got.v[i])
+        # the ascending order on the device (the converged A's diagonal,
+        # decomposition/spectrum_order_device.mojo), then w and v out
+        _ = i2
+        var dw = ctx.enqueue_create_buffer[DType.float32](n)
+        var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dpos = ctx.enqueue_create_buffer[DType.int32](n)
+        enqueue_eigh_ascending(ctx, _p(da), n + 1, _p(dv), n, dpos, _p(dw), _p(dvo))
+        _down(ctx, dw, w, n)
+        _down(ctx, dvo, v, n * n)
+        ctx.synchronize()
+        _ = dw^
+        _ = dvo^
+        _ = dpos^
         _ = dv^
         _ = dinfo^
         _ = dvt^
         _ = hinfo^
-        _ = hwork^
         ctx.synchronize()
 
     @staticmethod
@@ -2754,17 +2671,9 @@ struct DevExec(Exec):
         var nan = Float32(0.0) / Float32(0.0)
         enqueue_fill(ctx, s_buf, nan)
         enqueue_fill(ctx, v_buf, nan)
-        var done = False
-        # MOJOLEARN_XD_PJ_SVD_MIN=n: the round-robin one-sided Jacobi from n
-        # up, on every vendor and tier (lane/neural-net-experiment; it was
-        # Metal FAST only). Default 0: never. NOT the pinned cyclic order's
-        # bits under IDENTICAL: an experiment the digest check reports.
-        var lo_svd = pj_svd_min()
-        if lo_svd > 0 and n >= lo_svd:
-            done = _svd_par_of_r(ctx, r_buf, v_buf, s_buf, n)
-        if done:
-            pass
-        elif jacobi2_on() and n >= J2_BOUNDED_MIN_N:
+        # cgfin-c-decomp: the MOJOLEARN_XD_PJ_SVD_MIN round-robin SVD
+        # experiment (default never) is deleted with its host sums
+        if jacobi2_on() and n >= J2_BOUNDED_MIN_N:
             # measured (m4pro-b 1790606245923): 0.45x at n = 28, 1.07x at
             # 256, 1.21x at 800 (one launch); from 64 columns the bounded
             # chunk route (lane/lle-timeout), the old one launch below

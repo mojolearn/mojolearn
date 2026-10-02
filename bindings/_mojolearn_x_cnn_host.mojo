@@ -30,6 +30,7 @@ from x_cnn.host.ops_host import pad2d_forward_host as pad2d_forward_impl
 from x_cnn.host.ops_host import pad2d_backward_host as pad2d_backward_impl
 from x_cnn.host.ops_host import spmm_host as spmm_impl
 from x_cnn.host.ops_host import gcn_norm_host as gcn_norm_impl
+from x_cnn.host.ops_host import csr_build_host_binding
 
 
 def fp(addr: PythonObject) raises -> FP:
@@ -988,6 +989,7 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         m.def_function[x_cnn_host_numeric_mode_binding]("x_cnn_host_numeric_mode")
         m.def_function[x_cnn_host_vendor_binding]("x_cnn_host_vendor")
         m.def_function[x_cnn_host_column_binding]("x_cnn_host_column")
+        m.def_function[csr_build_host_binding]("x_cnn_csr_build")
         m.def_function[x_cnn_host_sabotage_binding]("x_cnn_host_sabotage")
         m.def_function[gemm_binding]("x_cnn_gemm")
         m.def_function[conv2d_forward_binding]("x_cnn_conv2d_forward")

@@ -56,7 +56,7 @@ from gemm.host.gemm_int15_oracle import (
     gemm_int15_oracle,
     quantize_rows_int15,
 )
-from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE
+from gemm.contract import GEMM_ORACLE_HOST_SABOTAGE
 
 comptime SIM_MAGIC = 0x35314951
 comptime SIM_VERSION = 1

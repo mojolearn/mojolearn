@@ -637,8 +637,6 @@ def fast_defines_py() raises -> PythonObject:
             s += "MOJOLEARN_DECOMP_FAST_GEMM_TILED,"
         comptime if is_defined["MOJOLEARN_FA_FAST_QRR"]():
             s += "MOJOLEARN_FA_FAST_QRR,"
-        comptime if is_defined["MOJOLEARN_PLS_FAST_DEADCOLS"]():
-            s += "MOJOLEARN_PLS_FAST_DEADCOLS,"
         comptime if is_defined["MOJOLEARN_DECOMP_FAST_OMP_BLOCK"]():
             s += "MOJOLEARN_DECOMP_FAST_OMP_BLOCK,"
         comptime if is_defined["MOJOLEARN_DECOMP_FAST_LASSO_BLOCK"]():

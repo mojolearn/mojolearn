@@ -126,6 +126,8 @@ from decomposition.checks.jacobi_eigh_device import (
 from glm.impl.linalg.detail.lstsq import (
     OLS_ELEM_TPB,
     ols_equilibration_scale,
+    ols_scale_kernel,
+    ols_device_abs_max,
     ols_pinv_threshold,
 )
 from glm.impl.matrix.math import (
@@ -235,20 +237,10 @@ def lstsq_min_norm_traced(
         grid_dim=((n_rows + elem_tpb - 1) // elem_tpb, 1, 1),
         block_dim=(elem_tpb, 1, 1),
     )
-    var h_diag = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_ptr=h_diag.unsafe_ptr(), src_buf=s_vec)
-    ctx.synchronize()
-    var h_scale = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    ctx.synchronize()
-    for i in range(n_rows):
-        h_scale.unsafe_ptr().unsafe_store(
-            i, ols_equilibration_scale(h_diag.unsafe_ptr().unsafe_load(i))
-        )
-    ctx.enqueue_copy(dst_buf=scale, src_ptr=h_scale.unsafe_ptr())
-    ctx.synchronize()
-    # `[[mojo-buffer-freed-at-last-use]]`
-    _ = h_diag^
-    _ = h_scale^
+    ctx.enqueue_function[ols_scale_kernel](
+        s_vec.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), scale.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n_rows), grid_dim=((n_rows + elem_tpb - 1) // elem_tpb, 1, 1), block_dim=(elem_tpb, 1, 1),
+    )
     var cells = n_rows * n_rows
     ctx.enqueue_function[row_vector_binary_mult_kernel](
         gram.unsafe_ptr(),
@@ -333,17 +325,8 @@ def lstsq_min_norm_traced(
     # route's DEVIATION 2621. The absolute 1e-10 this route used scaled with
     # the square of the data: the same design had a different rank in other
     # units, and an eigenvalue that is only float32 rounding was divided by.
-    var h_eig = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_ptr=h_eig.unsafe_ptr(), src_buf=s_vec)
-    ctx.synchronize()
-    var max_abs = Float32(0.0)
-    for i in range(n_rows):
-        var mag = abs(h_eig.unsafe_ptr().unsafe_load(i))
-        if mag > max_abs:
-            max_abs = mag
+    var max_abs = ols_device_abs_max(ctx, s_vec, n_rows, elem_tpb)
     var thresh = ols_pinv_threshold(max_abs, n_rows)
-    # `[[mojo-buffer-freed-at-last-use]]`
-    _ = h_eig^
     _record_rank(ctx, trace, s_vec, n_rows, thresh)
 
     # STEP 3. QS <- Q invS, `DivideByNonZero` on the eigenvalues of A A^T.

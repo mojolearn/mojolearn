@@ -420,14 +420,21 @@ def o_ocsvm(q: List[Float32], cv: List[Float32], alpha0: List[Float32], n: Int, 
     var lb = ninf
     var nf = 0
     var sf = Float32(0)
-    for i in range(n):
-        if alpha[i] >= c[i]:
-            lb = g[i] if g[i] > lb else lb
-        elif alpha[i] <= Float32(0):
-            ub = g[i] if g[i] < ub else ub
-        else:
-            nf += 1
-            sf = _a(sf, g[i])
+    # calculate_rho's free sum as the lane's blocked fold: 2048-sample blocks
+    # summed from zero, the block sums folded from zero, ascending
+    var b0 = 0
+    while b0 < n:
+        var bs = Float32(0)
+        for i in range(b0, min(b0 + 2048, n)):
+            if alpha[i] >= c[i]:
+                lb = g[i] if g[i] > lb else lb
+            elif alpha[i] <= Float32(0):
+                ub = g[i] if g[i] < ub else ub
+            else:
+                nf += 1
+                bs = _a(bs, g[i])
+        sf = _a(sf, bs)
+        b0 += 2048
     var rho = ftz(identical_div(sf, Float32(nf))) if nf > 0 else ftz(identical_mul(_a(ub, lb), Float32(0.5)))
     return (alpha^, rho, it)
 

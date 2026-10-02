@@ -26,7 +26,8 @@ from std.sys import size_of
 
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count
-from gemm.host.identical_gemm import OP_TN, gemm_oracle
+from gemm.contract import OP_TN
+from gemm.host.identical_gemm import gemm_oracle
 from gemm.host.gemm_host_rows import gemm_host_rows
 # the device GEMM file's host-safe fold helpers, lifted verbatim
 from mamba.host.gen.gemm_identical_parts import (

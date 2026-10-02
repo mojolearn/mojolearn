@@ -1,0 +1,35 @@
+rule	class	owner	state	path	occ	text
+d2h-loop	d2h-roundtrip	gap-classical-nv	debt	cholesky/checks/trsm.mojo	0	ctx.enqueue_copy(dst_ptr=host_l.unsafe_ptr(), src_buf=lv)
+d2h-loop	d2h-roundtrip	gap-classical-nv	debt	cholesky/checks/trsm.mojo	0	s.ctx.enqueue_copy(dst_ptr=result.unsafe_ptr(), src_buf=s.b)
+host-threads	host-threads	UNOWNED	debt	glm/estimator.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	UNOWNED	debt	glm/estimator.mojo	0	host_parallelize(_rows, tasks)
+d2h-loop	d2h-roundtrip	UNOWNED	debt	glm/impl/linalg/detail/lstsq_min_norm.mojo	0	ctx.enqueue_copy(dst_ptr=h_diag.unsafe_ptr(), src_buf=s_vec)
+d2h-loop	d2h-roundtrip	UNOWNED	debt	glm/impl/linalg/detail/lstsq_min_norm.mojo	0	ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
+host-module	host-import	UNOWNED	debt	python/mojolearn/_cholesky_impl.py	0	return _backend.load_host_module(_HOST_BASENAME), "linalg_numeric_mode"
+host-env	host-env/threshold	PR#116	debt	python/mojolearn/_expansion_linear.py	0	if os.environ.get("MOJOLEARN_X_LINEAR_ISOTONIC_HOST", "") == "1" else ()))
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	for i in range(n):
+route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	_HOST_ALGOS = frozenset() if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1" else frozenset(
+route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	if os.environ.get("MOJOLEARN_SGD_PER_SAMPLE", "") == "1":
+route-table	host-env/threshold	PR#116	debt	python/mojolearn/_expansion_linear.py	0	_HOST_ALGOS = None
+route-table	host-env/threshold	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	_HOST_ALGOS = frozenset() if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1" else frozenset(
+route-table	host-env/threshold	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	global _HOST_ALGOS
+route-table	host-env/threshold	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	if _HOST_ALGOS is None:
+route-table	host-env/threshold	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	return _HOST_ALGOS
+host-module	host-import	UNOWNED	debt	python/mojolearn/_linalg_impl.py	0	_host_binding_cache = _backend.load_host_module(_LINALG_HOST_BASENAME)
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_linalg_impl.py	0	for i in range(n):
+serial-launch	serial-gpu	UNOWNED	debt	x_linear/blocks.mojo	0	ctx.enqueue_function[xq_step_kernel](
+tid0-loop	serial-gpu	UNOWNED	debt	x_linear/blocks_gram.mojo	0	if tid == 0:
+serial-launch	serial-gpu	gap-nv-classical2	debt	x_linear/device.mojo	0	ctx.enqueue_function[fit_kernel](
+serial-launch	serial-gpu	UNOWNED	debt	x_linear/device.mojo	0	ctx.enqueue_function[glm_accept_kernel](dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m),
+serial-launch	serial-gpu	UNOWNED	debt	x_linear/device.mojo	0	ctx.enqueue_function[glm_init_kernel](dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), Int32(link), Int32(sw),
+serial-launch	serial-gpu	UNOWNED	debt	x_linear/device.mojo	0	ctx.enqueue_function[glm_obj_fold_kernel](tw, lt, Int32(n), Int32(d), theta, alpha, sc, Int32(1),
+serial-launch	serial-gpu	UNOWNED	debt	x_linear/device.mojo	0	ctx.enqueue_function[glm_step_kernel](dg.unsafe_ptr(), dh.unsafe_ptr(), dstep.unsafe_ptr(), dres.unsafe_ptr(),
+serial-launch	serial-gpu	UNOWNED	debt	x_linear/device.mojo	0	ctx.enqueue_function[glm_trial_kernel](dstep.unsafe_ptr(), dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m), tt,
+serial-launch	serial-gpu	PR#116	debt	x_linear/device.mojo	0	ctx.enqueue_function[iso_after_kernel](Int32(n), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(),
+serial-launch	serial-gpu	PR#116	debt	x_linear/device.mojo	0	ctx.enqueue_function[iso_bounds_kernel](dfw.unsafe_ptr(), Int32(n), diw.unsafe_ptr(), dm.unsafe_ptr(),
+serial-launch	serial-gpu	PR#116	debt	x_linear/device.mojo	0	ctx.enqueue_function[rs_scan_kernel](dbt.unsafe_ptr(), Int32(nb), Int32(n), dfl.unsafe_ptr(),
+host-call	host-import	UNOWNED	debt	x_linear/dispatch.mojo	0	import x_linear/isotonic.mojo:isotonic_fit
+host-call	host-import	UNOWNED	debt	x_linear/dispatch.mojo	0	isotonic_fit(t, x, y, n, d, ip, fp, res, fw, iw)
+host-threads	host-threads	PR#116	debt	x_linear/isotonic.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	PR#116	debt	x_linear/isotonic.mojo	0	host_parallelize(_sort_chunk, tasks)
+tid0-loop	serial-gpu	UNOWNED	debt	x_linear/sgd.mojo	0	if lane == 0:

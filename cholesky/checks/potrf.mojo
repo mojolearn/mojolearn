@@ -353,7 +353,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 from std.sys.info import has_apple_gpu_accelerator
 from x_decomp.cells import F32Ptr
 from x_decomp.fast_chol import CH_FITS, CH_NB, launch_chol_blocked

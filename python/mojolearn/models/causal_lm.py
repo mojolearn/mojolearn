@@ -192,7 +192,10 @@ class _CpuPrimitives:
     name = "_mojolearn_neural_host"
 
     def __init__(self):
-        self._ext = _backend.load_host_module(self.name)
+        # The one loader of `_mojolearn_neural_host` (the CPU inference
+        # module's), not a second host-module load site in this module.
+        from ..neural_inference import _binding
+        self._ext = _binding()
 
     def embedding(self, table, ids_flat):
         n = int(ids_flat.size)

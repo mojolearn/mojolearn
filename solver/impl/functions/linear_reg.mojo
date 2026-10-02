@@ -33,7 +33,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from core.column_stats import TRANSPOSE_TILE, transpose_kernel
 from core.gemm import gemv_n
 from gemm.checks.gemm_identical import identical_gemm
-from gemm.checks.gemm_oracle import OP_TN
+from gemm.contract import OP_TN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 
 comptime LINREG_ELEM_TPB = 256

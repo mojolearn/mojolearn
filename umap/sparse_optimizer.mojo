@@ -424,15 +424,8 @@ def optimize_sparse_layout(
             n_epochs, initial_learning_rate, negative_sample_rate,
             repulsion_strength, a, b, seed,
         )
-    # Kernel launch and graph-upload overhead dominates small layouts on the
-    # currently supported devices.  Keep FAST on the serial reference below
-    # the measured crossover instead of making the "fast" API slower.
-    if n_samples < 1024:
-        return optimize_sparse_layout_identical(
-            initial_embedding, graph, n_samples, n_components, n_epochs,
-            initial_learning_rate, negative_sample_rate, repulsion_strength,
-            a, b, seed,
-        )
+    # FAST runs the device Jacobi optimizer at every size (no serial host
+    # layout below a row threshold; cpu-gpu-cleanup c-cluster).
     return optimize_sparse_layout_fast(
         ctx, initial_embedding, graph, n_samples, n_components, n_epochs,
         initial_learning_rate, negative_sample_rate, repulsion_strength,

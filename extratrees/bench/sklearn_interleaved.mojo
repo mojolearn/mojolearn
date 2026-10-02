@@ -52,8 +52,10 @@ from extratrees.bench.bench_data import (
 from extratrees.estimator import (
     ExtraTreesConfig,
     resolve_max_features,
-    fit_extra_trees_classifier_reference,
     fit_extra_trees_classifier_device,
+)
+from extratrees.host_estimator import (
+    fit_extra_trees_classifier_reference,
 )
 from extratrees.checks.fixed_point import choose_scale, quantize
 from extratrees.impl.randomforest.randomforest import fit_regression_device
