@@ -2425,6 +2425,31 @@ class _AgnosticExplainer(_TreesEnsembleBase):
         b.x_trees_block_mean(addr_ro(out, name="y"), addr(ey, name="ey"), [m, nb, k])
         return masks, ey
 
+    def _perm_synthetic(self, x_row, inv, n_perm, syn):
+        """Every permutation coalition over every background row, written on
+        the device (`xtrees/perm_device.mojo`) into `syn` (allocated on the
+        first row, reused after)."""
+        bg = self._bg
+        nb, d = bg.shape
+        total = n_perm * (2 * d + 1) * nb * d
+        if syn is None or syn.shape[0] != total:
+            syn = empty((total,), "<f4")
+        inv_a = Array.from_list(inv, "<i4")
+        self._bind().x_trees_perm_synthetic(addr_ro(x_row, name="x"), addr_ro(bg, name="data"),
+                                            addr_ro(inv_a, name="inv"), addr(syn, name="synthetic"),
+                                            [nb, d, n_perm])
+        return syn
+
+    def _mean_over_background(self, syn, m):
+        """`_coalitions`'s model call and background mean over a written
+        synthetic matrix of m coalitions."""
+        nb, d = self._bg.shape
+        out = self._eval(syn.reshape((m * nb, d)))
+        k = out.shape[1]
+        ey = empty((m * k,), "<f8")
+        self._bind().x_trees_block_mean(addr_ro(out, name="y"), addr(ey, name="ey"), [m, nb, k])
+        return ey
+
     def _check(self, X):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         if Xa.shape[1] != self.n_features_in_:
@@ -2604,27 +2629,30 @@ class PermutationExplainer(_AgnosticExplainer):
         seed = _trees_seed(self.random_state)
         rows = []
         cols = _trees_arange(d)
+        syn = None
         for i in range(n):
             x_row = self._gather(Xa, Array.from_list([i], "<i4"), cols).reshape((d,))
             u = empty((max(1, npermutations * d),), "<f8")
             self._bind().x_trees_uniform(addr(u, name="u"), [npermutations * d, seed, i])
             uv = u.tolist()
-            masks, perms = [], []
+            perms, inv = [], []
             for p in range(int(npermutations)):
                 perm = list(range(d))
                 for a in range(d - 1, 0, -1):
                     j = int(uv[p * d + a] * (a + 1))
                     perm[a], perm[j] = perm[j], perm[a]
                 perms.append(perm)
-                cur = [0] * d
-                masks.append(list(cur))
-                for f in perm:
-                    cur[f] = 1
-                    masks.append(list(cur))
-                for f in perm:
-                    cur[f] = 0
-                    masks.append(list(cur))
-            _, ey = self._coalitions(x_row, masks)
+                iv = [0] * d
+                for pos, f in enumerate(perm):
+                    iv[f] = pos
+                inv.extend(iv)
+            # lane/gap-nv-classical2: the coalitions (all features off, the
+            # forward walk adding perm's features, the backward walk removing
+            # them) are written on the device from the inverses, into one
+            # buffer reused across rows; the same words as the mask lists
+            # through `mask_expand`.
+            syn = self._perm_synthetic(x_row, inv, int(npermutations), syn)
+            ey = self._mean_over_background(syn, int(npermutations) * (2 * d + 1))
             e = ey.tolist()
             val = [0.0] * (d * k)
             step = 2 * d + 1
