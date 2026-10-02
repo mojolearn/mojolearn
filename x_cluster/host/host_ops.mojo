@@ -621,3 +621,7 @@ struct HostOps(ClusterOps):
                     if rd < self.f[reach][o]:
                         self.f[reach][o] = rd
                         self.i[pred][o] = Int32(point)
+
+    def gauss_q_gemm(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
+        # the host column never takes the FAST device paths (`fast_device`)
+        self.gauss_q(x, n, d, means, pchol, kc, dst)

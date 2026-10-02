@@ -190,3 +190,8 @@ trait ClusterOps(Movable):
         reachability (n floats, +inf unreached), predecessor (n ints, -1
         none); `proc` n ints of scratch. The host loop's picks and updates."""
         ...
+
+    def gauss_q_gemm(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
+        """FAST (lane cluster2): `gauss_q` by the plain mixture's GEMM route
+        (X . P_k, mu_k . P_k, the row fold of their difference squared)."""
+        ...

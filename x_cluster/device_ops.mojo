@@ -48,7 +48,8 @@ from x_cluster.bodies import (
 from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
-from gemm.checks.gemm_oracle import OP_TN
+from gemm.checks.gemm_oracle import OP_NN, OP_TN
+from mixture.checks.estep import mahal_kernel
 from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
 from x_cluster.ops import ClusterOps
 
@@ -1196,6 +1197,9 @@ struct DeviceOps(ClusterOps):
     var mpart: DeviceBuffer[DType.float32]
     """FAST moments' per-slice partials, grown once per fit."""
     var mpart_n: Int
+    var escr: DeviceBuffer[DType.float32]
+    """Lane cluster2: the E-step GEMM scratch (`gauss_q_gemm`), grown once per fit."""
+    var escr_n: Int
     var ph_on: Bool
     """MOJOLEARN_XC_PHASES=1 (a diagnostic, lane cluster-apple3): every
     primitive drains the stream when it returns and its wall time is added to
@@ -1214,6 +1218,8 @@ struct DeviceOps(ClusterOps):
         self.pend_i = List[List[Int32]]()
         self.mpart = self.ctx.enqueue_create_buffer[DType.float32](1)
         self.mpart_n = 1
+        self.escr = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.escr_n = 1
         self.ph_on = getenv("MOJOLEARN_XC_PHASES") == "1"
         self.ph_t = Int(perf_counter_ns())
         self.ph_names = List[String]()
@@ -1566,6 +1572,20 @@ struct DeviceOps(ClusterOps):
             self._moments_gemm(resp, x, n, d, kc, reg, nk, means, cov)
             self._ph1("moments")
             return
+        # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple,
+        # env `MOJOLEARN_BGMM_FAST_MOMENTS_GEMM=1`: past MOM_MAX_D features
+        # (Istella-S: 200) FAST fell through every grid path below to the
+        # three ONE-THREAD-PER-CELL kernels (`_nk_kernel`, `_xk_kernel`,
+        # `_cov_kernel`: kc d^2 threads each walking all n rows, n kc d^2 =
+        # 3e10 dependent loads an iteration at 100,000 x 200 x 8). The
+        # IDENTICAL column's `_moments_gemm` (resp^T X and the kc centered
+        # Grams through `identical_gemm_into`, whose FAST arm is the vendor
+        # GEMM) is taken instead: the same addends, the GEMM's fold order.
+        comptime if XC2_FAST:
+            if d > MOM_MAX_D and getenv("MOJOLEARN_BGMM_FAST_MOMENTS_GEMM") == "1":
+                self._moments_gemm(resp, x, n, d, kc, reg, nk, means, cov)
+                self._ph1("moments")
+                return
         comptime if MOMS:
             if d <= MOMS_MAX_D and n > 0:
                 var G = (n + MOMS_ROWS - 1) // MOMS_ROWS
@@ -1867,3 +1887,52 @@ struct DeviceOps(ClusterOps):
         else:
             raise Error("x_cluster: optics_order is the FAST Apple device path (MOJOLEARN_OPTICS_FAST_DEVICE_ORDER)")
         self._ph1("optics_order")
+
+    def gauss_q_gemm(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
+        """Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple,
+        env `MOJOLEARN_BGMM_FAST_MAHAL_GEMM=1` (read in x_cluster/bgmm.mojo):
+        the E-step's Mahalanobis squares as the plain GaussianMixture forms
+        them (mixture/checks/estep.mojo, wrapped, not changed): per component
+        y = X . P_k and murow = mu_k . P_k through `identical_gemm_into`
+        (FAST: the vendor GEMM), then `mahal_kernel`'s row fold of (y -
+        murow)^2, one thread per sample. Cause: `_gauss_q_kernel` is one
+        thread per (sample, component) cell folding the d x d upper
+        triangle itself (n kc d^2 / 2 = 1.6e9 multiply-adds an E-step at
+        100,000 x 200 x 8, every P read from global memory). Bits move
+        (product first, not the difference); the paired quality check."""
+        self._ph0()
+        comptime if XC2_FAST:
+            var wsn = identical_gemm_workspace_max_floats(n, d, d)
+            var w2 = identical_gemm_workspace_max_floats(1, d, d)
+            if w2 > wsn:
+                wsn = w2
+            if wsn < 1:
+                wsn = 1
+            var need = n * d + d + wsn
+            if need > self.escr_n:
+                self.escr = self.ctx.enqueue_create_buffer[DType.float32](need)
+                self.escr_n = need
+            var y = self.escr.create_sub_buffer[DType.float32](0, n * d)
+            var murow = self.escr.create_sub_buffer[DType.float32](n * d, d)
+            var ws = self.escr.create_sub_buffer[DType.float32](n * d + d, wsn)
+            var xb = self.f[x].copy()
+            for k in range(kc):
+                var pk = self.f[pchol].create_sub_buffer[DType.float32](k * d * d, d * d)
+                var muk = self.f[means].create_sub_buffer[DType.float32](k * d, d)
+                identical_gemm_into(self.ctx, y, xb, pk, ws, n, d, d, OP_NN)
+                identical_gemm_into(self.ctx, murow, muk, pk, ws, 1, d, d, OP_NN)
+                self.ctx.enqueue_function[mahal_kernel](
+                    y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    murow.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), self._fp(dst),
+                    Int32(n), Int32(d), Int32(k), Int32(kc), grid_dim=_grid(n), block_dim=TPB,
+                )
+                _ = pk^
+                _ = muk^
+            # the handles outlive every launch that holds their pointers
+            _ = xb^
+            _ = y^
+            _ = murow^
+            _ = ws^
+        else:
+            raise Error("x_cluster: gauss_q_gemm is the FAST Apple device path (MOJOLEARN_BGMM_FAST_MAHAL_GEMM)")
+        self._ph1("gauss_q_gemm")

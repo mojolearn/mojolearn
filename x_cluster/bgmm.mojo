@@ -19,9 +19,11 @@ its triangular inverse, digamma and log-gamma (series on the portable
 `identical_mul64`. The k-means start is this library's KMeans through
 `ClusterOps.kmeans`. Only covariance_type='full' (NOT_IMPLEMENTED.tsv)."""
 from std.math import sqrt
+from std.os import getenv
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_log64, identical_mul64
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, identical_log64, identical_mul64
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS
 from x_cluster.bodies import SplitMix64
 from x_cluster.common import greedy_kmeans_pp_indices
@@ -37,6 +39,20 @@ comptime BGMM_ENT_G = 4
 # `-D MOJOLEARN_BGMM_ESTEP1=1` (FAST, the GPU binding): the E-step's three
 # kernels as one launch, a row per thread (`ops.estep`; the same values).
 comptime BGMM_ESTEP1 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_BGMM_ESTEP1"]()
+# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple, the
+# GPU binding only, host-read env switches that default OFF:
+# `MOJOLEARN_BGMM_FAST_MAHAL_GEMM=1`: the E-step's Mahalanobis squares by
+#   the plain mixture's GEMM route (`ops.gauss_q_gemm`, device_ops.mojo).
+#   Cause: `gauss_q` is one thread per (row, component) folding the d x d
+#   triangle itself. Bits move; the paired quality check.
+# `MOJOLEARN_BGMM_FAST_ENT=1`: the BGMM_ENT arm (the entropy's n kc products
+#   on the device, the host adds ceil(n kc / 4) partials) without the build
+#   define. Cause: the lower bound read 2 n kc floats back an iteration
+#   (6.4 MB at 100,000 x 8) and formed n kc Float64 products on the host.
+# `MOJOLEARN_BGMM_FAST_ESTEP1=1`: the BGMM_ESTEP1 arm (the E-step's three
+#   kernels as one launch, a row per thread) without the build define.
+# `MOJOLEARN_BGMM_FAST_MOMENTS_GEMM=1` is read in device_ops.mojo `moments`.
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
 
 comptime LOG2 = 0.6931471805599453
 comptime LOG_2PI = 1.8378770664093453
@@ -470,6 +486,14 @@ def bgmm_fit[O: ClusterOps](
     var estep1 = False
     comptime if BGMM_ESTEP1:
         estep1 = ops.fast_device()
+    var mahal_gemm = False
+    comptime if XC2_FAST:
+        if ops.fast_device():
+            if String(getenv("MOJOLEARN_BGMM_FAST_ENT")) == "1":
+                ent_dev = pr.variational
+            if String(getenv("MOJOLEARN_BGMM_FAST_ESTEP1")) == "1":
+                estep1 = True
+            mahal_gemm = String(getenv("MOJOLEARN_BGMM_FAST_MAHAL_GEMM")) == "1"
     var n_ent = (n * kc + BGMM_ENT_G - 1) // BGMM_ENT_G
     var es = ops.zeros(n_ent if ent_dev else 1)
     var max_lb = Float64(0)
@@ -553,7 +577,11 @@ def bgmm_fit[O: ClusterOps](
             ops.set(ms, _f32(st.means))
             ops.set(ps, _f32(st.pchol))
             ops.set(cs, bgmm_constants(pr, st))
-            if estep1:
+            if mahal_gemm:
+                ops.gauss_q_gemm(xs, n, d, ms, ps, kc, qs)
+                ops.resp(qs, cs, n, kc, lpn)
+                ops.exp(qs, rs, n * kc)
+            elif estep1:
                 ops.estep(xs, n, d, ms, ps, cs, kc, qs, rs, lpn)
             else:
                 ops.gauss_q(xs, n, d, ms, ps, kc, qs)
