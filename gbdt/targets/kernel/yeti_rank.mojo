@@ -95,6 +95,7 @@ the block kernel, the order this DEVIATION must not change.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -187,6 +188,34 @@ def yeti_est_reuse_search_for[column: Int]() -> Bool:
 
 
 comptime YETI_EST_REUSE_SEARCH = yeti_est_reuse_search_for[TARGET_COLUMN]()
+
+
+def yeti_fast_sort_for[column: Int]() -> Bool:
+    """FAST Apple (lane apple-fast-yetirank, opt-in): the block kernel's
+    per-round 1024-key sort as (1) a bitonic sort of 128 keys per simdgroup
+    in registers (32 lanes x 4 contiguous keys, `shuffle_xor` across lanes,
+    no shared memory and no barrier), then (2) three merge-path passes
+    (widths 128, 256, 512) in which each thread finds the co-rank of its 4
+    contiguous outputs with ONE binary search and merges them in order.
+    The ten-pass rank merge it replaces did a binary search per element per
+    pass (45 dependent shared loads per element) and ten barriers a round.
+
+    SAME BITS. The composites are distinct (the position is in them), so
+    every correct ascending sort yields the one permutation the merge gave;
+    no float is computed. Apple simdgroups are 32 lanes and the block is
+    256 threads = 8 simdgroups x 128 keys = YETI_TASK_POSITIONS.
+
+    `-D MOJOLEARN_YETI_FAST_SORT=1` turns it on (B arm); default off."""
+    comptime if not is_defined["MOJOLEARN_YETI_FAST_SORT"]():
+        return False
+    comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        return True
+    return False
+
+
+comptime YETI_FAST_SORT = yeti_fast_sort_for[TARGET_COLUMN]()
+comptime YETI_SIMD_W = 32
+comptime YETI_SIMD_RUN = YETI_SIMD_W * YETI_LANES
 
 
 def _advance_seed32(seed: UInt32) -> UInt32:
@@ -528,40 +557,131 @@ def yeti_rank_task_block_kernel(
             sh_keys.unsafe_store(p, composite)
         barrier()
 
-        # the two stable radix passes as a ten-pass merge: every element
-        # finds its output slot by a binary search of the sibling run (the
-        # composites are distinct, so "strictly below" needs no tie rule).
-        # Ten passes, so the order ends where it began, at `sh_keys[0:1024]`.
         var src = 0
-        var dst = YETI_TASK_POSITIONS
-        var width = 1
-        while width < YETI_TASK_POSITIONS:
-            for k in range(YETI_LANES):
-                var i = tid + YETI_THREADS * k
-                var lo = (i // (2 * width)) * (2 * width)
-                var mid = lo + width
-                var sibling = mid
-                var own_rank = i - lo
-                if i >= mid:
-                    sibling = lo
-                    own_rank = i - mid
-                var key = sh_keys.unsafe_load(src + i)
-                var base = 0
-                var length = width
-                while length > 1:
-                    var half = length // 2
-                    if sh_keys.unsafe_load(src + sibling + base + half - 1) < key:
-                        base += half
-                    length -= half
-                var below = base
-                if sh_keys.unsafe_load(src + sibling + base) < key:
-                    below += 1
-                sh_keys.unsafe_store(dst + lo + own_rank + below, key)
+        comptime if YETI_FAST_SORT:
+            comptime assert YETI_THREADS * YETI_LANES == YETI_TASK_POSITIONS
+            comptime assert YETI_THREADS % YETI_SIMD_W == 0
+            # (1) a bitonic sort of each simdgroup's 128 contiguous keys in
+            # registers: element e = lane * 4 + r of the simdgroup's run
+            var ln = tid % YETI_SIMD_W
+            var run_base = (tid // YETI_SIMD_W) * YETI_SIMD_RUN + ln * YETI_LANES
+            var v = SIMD[DType.uint64, YETI_LANES](0)
+            comptime for r in range(YETI_LANES):
+                v[r] = sh_keys.unsafe_load(run_base + r)
+            comptime for kk in range(1, 8):
+                comptime k = 1 << kk
+                comptime for t in range(kk):
+                    comptime jj = kk - 1 - t
+                    comptime j = 1 << jj
+                    comptime if j < YETI_LANES:
+                        comptime for r in range(YETI_LANES):
+                            comptime if (r & j) == 0:
+                                var a = v[r]
+                                var b = v[r | j]
+                                var asc = ((ln * YETI_LANES + r) & k) == 0
+                                if (a > b) == asc:
+                                    v[r] = b
+                                    v[r | j] = a
+                    else:
+                        comptime m = j // YETI_LANES
+                        var lower = (ln & m) == 0
+                        comptime for r in range(YETI_LANES):
+                            var x = v[r]
+                            var o_hi = shuffle_xor(UInt32(x >> UInt64(32)), UInt32(m))
+                            var o_lo = shuffle_xor(
+                                UInt32(x & UInt64(0xFFFFFFFF)), UInt32(m)
+                            )
+                            var o = (UInt64(o_hi) << UInt64(32)) | UInt64(o_lo)
+                            var asc = ((ln * YETI_LANES + r) & k) == 0
+                            if lower == asc:
+                                v[r] = min(x, o)
+                            else:
+                                v[r] = max(x, o)
+            comptime for r in range(YETI_LANES):
+                sh_keys.unsafe_store(run_base + r, v[r])
             barrier()
-            var swap = src
-            src = dst
-            dst = swap
-            width = width * 2
+            # (2) merge-path passes: thread tid writes outputs 4 * tid .. +3
+            # of the merged pair of runs; one co-rank binary search, then a
+            # sequential merge with the run heads in registers. UInt64.MAX
+            # is a sentinel no composite reaches (they are below 2^52).
+            var dst = YETI_TASK_POSITIONS
+            var width = YETI_SIMD_RUN
+            var o0 = tid * YETI_LANES
+            while width < YETI_TASK_POSITIONS:
+                var lo = (o0 // (2 * width)) * (2 * width)
+                var d = o0 - lo
+                var a_base = src + lo
+                var b_base = a_base + width
+                var i_lo = max(0, d - width)
+                var i_hi = min(d, width)
+                while i_lo < i_hi:
+                    var mid = (i_lo + i_hi) // 2
+                    if sh_keys.unsafe_load(a_base + mid) < sh_keys.unsafe_load(
+                        b_base + d - mid - 1
+                    ):
+                        i_lo = mid + 1
+                    else:
+                        i_hi = mid
+                var ia = i_lo
+                var ib = d - i_lo
+                var va = UInt64.MAX
+                if ia < width:
+                    va = sh_keys.unsafe_load(a_base + ia)
+                var vb = UInt64.MAX
+                if ib < width:
+                    vb = sh_keys.unsafe_load(b_base + ib)
+                comptime for t in range(YETI_LANES):
+                    if va < vb:
+                        sh_keys.unsafe_store(dst + o0 + t, va)
+                        ia += 1
+                        va = UInt64.MAX
+                        if ia < width:
+                            va = sh_keys.unsafe_load(a_base + ia)
+                    else:
+                        sh_keys.unsafe_store(dst + o0 + t, vb)
+                        ib += 1
+                        vb = UInt64.MAX
+                        if ib < width:
+                            vb = sh_keys.unsafe_load(b_base + ib)
+                barrier()
+                var swap = src
+                src = dst
+                dst = swap
+                width = width * 2
+        else:
+            # the two stable radix passes as a ten-pass merge: every element
+            # finds its output slot by a binary search of the sibling run (the
+            # composites are distinct, so "strictly below" needs no tie rule).
+            # Ten passes, so the order ends where it began, at `sh_keys[0:1024]`.
+            var dst = YETI_TASK_POSITIONS
+            var width = 1
+            while width < YETI_TASK_POSITIONS:
+                for k in range(YETI_LANES):
+                    var i = tid + YETI_THREADS * k
+                    var lo = (i // (2 * width)) * (2 * width)
+                    var mid = lo + width
+                    var sibling = mid
+                    var own_rank = i - lo
+                    if i >= mid:
+                        sibling = lo
+                        own_rank = i - mid
+                    var key = sh_keys.unsafe_load(src + i)
+                    var base = 0
+                    var length = width
+                    while length > 1:
+                        var half = length // 2
+                        if sh_keys.unsafe_load(src + sibling + base + half - 1) < key:
+                            base += half
+                        length -= half
+                    var below = base
+                    if sh_keys.unsafe_load(src + sibling + base) < key:
+                        below += 1
+                    sh_keys.unsafe_store(dst + lo + own_rank + below, key)
+                barrier()
+                var swap = src
+                src = dst
+                dst = swap
+                width = width * 2
 
         # the pairs (`:130-168`): for each lane, phase 1 then phase 2
         for k in range(YETI_LANES):
