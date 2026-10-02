@@ -180,7 +180,6 @@ def xg_gram_kernel(x: FP, n: Int32, d: Int32, fw: FP, lo: Int32, cnt: Int32, src
 # a thread per block its partial (`_sse_part`), and one thread folds them
 # (`fold_parts`) and runs `bayes_step` (and the next coefficients); the
 # host reads the stop word. `bayes_ridge_fit`'s statements in its order.
-# `MOJOLEARN_X_LINEAR_BAYES_GRID=0` restores the one-block fit.
 def bayes_yparts_kernel(y: FP, n: Int32, yparts: FP, state: FP, wf: IP, woff: Int32, nonce: Int32):
     """Thread b: row block b's target sum from zero (`fold_fa`, rows
     ascending), the partials `bayes_ymean` folds blocks ascending; thread 0
@@ -396,28 +395,9 @@ def bayes_finish_kernel(fw: FP, res: FP, d: Int32, fi: Int32, state: FP, iters: 
         bayes_finish(fw, res, Int(d), fi != 0, ld(state, 2), ld(state, 0), ld(state, 1), Int(iters))
     witness_end(wf, woff, nonce)
 
-def _lars_grid_gram() -> Bool:
-    """`MOJOLEARN_X_LINEAR_LARS_GRID_GRAM=0` keeps the Gram on the team
-    (the A/B arm); default the grid kernel."""
-    return String(getenv("MOJOLEARN_X_LINEAR_LARS_GRID_GRAM")) != "0"
-
-
-def _enetcv_grid() -> Bool:
-    """`MOJOLEARN_X_LINEAR_ENETCV_GRID=0` keeps LassoCV / ElasticNetCV on
-    the one-block team fit (the A/B arm); default the grid form
-    (x_linear/cd_grid.mojo)."""
-    return String(getenv("MOJOLEARN_X_LINEAR_ENETCV_GRID")) != "0"
-
-
 #: Apple: the longest a guarded x_linear launch runs, in chain steps (the
 #: grid Gram's row slices; x_linear/witness.mojo, lane/neural-pass131).
 comptime XL_APPLE_SLICE_MACS = 1 << 27
-
-
-def _bayes_grid_gram() -> Bool:
-    """`MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM=0` keeps BayesianRidge's and
-    ARD's Gram on the team (the A/B arm); default the grid kernel."""
-    return String(getenv("MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM")) != "0"
 
 
 # ------------------------------------------------ minibatch SGD on the grid (lane/neural-pass103)
@@ -2940,13 +2920,13 @@ def fit_device(
             if enetcv_fast(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res):
                 return
     comptime if not X_LINEAR_SERIAL_FOLDS:
-        if algo == ALGO_LOGCV and n > 0 and String(getenv("MOJOLEARN_X_LINEAR_LOGCV_GRID")) != "0":
+        if algo == ALGO_LOGCV and n > 0:
             logcv_fit_grid(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
             return
-        if algo == ALGO_HUBER and n > 0 and String(getenv("MOJOLEARN_X_LINEAR_HUBER_GRID")) != "0":
+        if algo == ALGO_HUBER and n > 0:
             huber_fit_grid(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, n_fw, n_iw, res)
             return
-    if algo == ALGO_ENETCV and d > 0 and len(ip) >= 7 and _enetcv_grid():
+    if algo == ALGO_ENETCV and d > 0 and len(ip) >= 7:
         enetcv_fit_grid(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
@@ -2958,13 +2938,12 @@ def fit_device(
     var hip = ip.copy()
     # LARS reads ip[4] on the device: 1 when the Gram is already in fw
     # (`xg_gram_kernel` below), 0 when the team computes it.
-    var grid_gram = algo == ALGO_LARS and _lars_grid_gram() and d > 0
+    var grid_gram = algo == ALGO_LARS and d > 0
     # Ridge: the moments of [X | Y] on the grid (lane/neural-pass120);
     # ip[4] tells the team they are in fw
     var ridge_pre = False
     comptime if MOMENTS_GRID:
-        ridge_pre = (algo == ALGO_RIDGE and d > 0 and n > 0 and len(ip) >= 4 and Int(ip[3]) == 0
-                     and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0")
+        ridge_pre = algo == ALGO_RIDGE and d > 0 and n > 0 and len(ip) >= 4 and Int(ip[3]) == 0
     if algo == ALGO_RIDGE:
         while len(hip) < 5:
             hip.append(Int32(0))
@@ -2974,12 +2953,11 @@ def fit_device(
     # centered Gram chains, which the team ran on ONE block (24,310 chains
     # of every row at 220 features over 256 threads).
     var bayes_like = (algo == ALGO_BAYES and len(ip) > 2 and ip[2] == 0) or algo == ALGO_ARD
-    if bayes_like and _bayes_grid_gram() and d > 0:
+    if bayes_like and d > 0:
         grid_gram = True
     var lars_pre = False
     comptime if MOMENTS_GRID:
-        lars_pre = (algo == ALGO_LARS and grid_gram and n > 0
-                    and String(getenv("MOJOLEARN_X_LINEAR_MOMENTS_GRID")) != "0")
+        lars_pre = algo == ALGO_LARS and grid_gram and n > 0
     if algo == ALGO_LARS or bayes_like:
         while len(hip) < 5:
             hip.append(Int32(0))
@@ -3016,7 +2994,7 @@ def fit_device(
     var bayes_grid = False
     comptime if not X_LINEAR_SERIAL_FOLDS:
         # unweighted, with the grid Gram: every row pass on grid kernels
-        bayes_grid = algo == ALGO_BAYES and n > 0 and d > 0 and grid_gram and String(getenv("MOJOLEARN_X_LINEAR_BAYES_GRID")) != "0"
+        bayes_grid = algo == ALGO_BAYES and n > 0 and d > 0 and grid_gram
     var ynb = fold_blocks(n)
     var prep_blocks = 2 * _xg_blocks(ynb) + _xg_blocks(d) + 1
     var wit = Witness(ctx, max(max(_xg_blocks(max(cells, d)), 1) + 1, prep_blocks))
