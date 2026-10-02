@@ -275,7 +275,7 @@ def _spectral_refuse_slots(
     q: Int,
     affinity: Int,
     input: List[Float32],
-    h_idx: MutPointer[UInt32, MutAnyOrigin],
+    h_idx: MutPointer[UInt32, MutUntrackedOrigin],
     n_train: Int,
     n_neighbors: Int,
 ) raises:
