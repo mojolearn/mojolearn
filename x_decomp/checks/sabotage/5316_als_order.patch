@@ -1,8 +1,8 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index 4b4c2cedf..99582bcc8 100644
+index 33b6551..cc86e09 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -800,7 +800,8 @@ def als_row(
+@@ -974,7 +974,8 @@ def als_row(
      for j in range(f):
          S.unsafe_store(ab + j * f + j, add(S.unsafe_load(ab + j * f + j), reg))
          S.unsafe_store(bb + j, Float32(0))
@@ -10,5 +10,19 @@ index 4b4c2cedf..99582bcc8 100644
 +    for ii in range(m):
 +        var i = m - 1 - ii  # SABOTAGE 5316: the items folded descending
          var conf = ftz(C.unsafe_load(u * m + i))
+         if conf == Float32(0):
+             continue
+diff --git a/x_decomp/device.mojo b/x_decomp/device.mojo
+index 7a13eb9..59c5416 100644
+--- a/x_decomp/device.mojo
++++ b/x_decomp/device.mojo
+@@ -776,7 +776,8 @@ def als_block_kernel[SH: Bool](
+         cc += ALS_BLK_TPB
+     var cb = u * Int(su)
+     var cs = Int(si)
+-    for i in range(mm):
++    for ii in range(mm):
++        var i = mm - 1 - ii  # SABOTAGE 5316: the items folded descending
+         var conf = ftz(c.unsafe_load(cb + i * cs))
          if conf == Float32(0):
              continue

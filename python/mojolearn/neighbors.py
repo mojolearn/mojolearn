@@ -1035,13 +1035,22 @@ class KNeighborsClassifier(NearestNeighbors):
         # through the O(rows * n_outputs) label loop the contract permits
         # (DEVIATION 2374), which also narrows int64 -> int32 exactly after
         # the range check above.
-        rows = ya.tolist() if n_out > 1 else None
-        if n_out == 1:
-            cols = [ya.reshape((n,)).tolist()]
-        else:
-            cols = [[row[j] for row in rows] for j in range(n_out)]
-        self._y_cols = Array.from_list(cols, "<i4")
         self.outputs_2d_ = len(shape) == 2 and shape[1] != 1
+        if n_out == 1:
+            # lane/gap-linear-nv: one output is already its own contiguous
+            # column. The int64 -> int32 narrowing is a C-level copy (exact
+            # after the range check above) and the classes come from the
+            # native encoder on that buffer: the same ints, in the same
+            # sorted order, the list path below produced through a 2 x n
+            # Python-object round trip (tolist, from_list) that cost more
+            # than the GPU search on the board's 200,000-row index.
+            y32 = ya.reshape((n,)).astype("<i4")
+            self._y_cols = y32.reshape((1, n))
+            self._classes_list = [encode_labels(y32)[0]]
+            return self
+        rows = ya.tolist()
+        cols = [[row[j] for row in rows] for j in range(n_out)]
+        self._y_cols = Array.from_list(cols, "<i4")
         # `np.unique` per column, under the package-wide classes_ ORDER
         # RULE (`_labels.sorted_classes`, DEVIATION 2340): a Python list
         # per output; int labels, so a sort by value.

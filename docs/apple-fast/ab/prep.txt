@@ -1,17 +1,5 @@
-CMD lane/apple-fast-prep prep-minmax-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-minmax-istella minmax-scaler istella 3 3 - MOJOLEARN_X_PREP_FAST_MINMAX=1
-CMD lane/apple-fast-prep prep-minmax-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-minmax-taxi minmax-scaler taxi 3 3 - MOJOLEARN_X_PREP_FAST_MINMAX=1
-CMD lane/apple-fast-prep prep-onehot-uniq-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-uniq-taxi onehot taxi 3 3 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
-CMD lane/apple-fast-prep prep-onehot-noneg-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-noneg-taxi onehot taxi 3 3 - MOJOLEARN_X_PREP_FAST_NONEG=1
-CMD lane/apple-fast-prep prep-onehot-both-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-both-taxi onehot taxi 3 3 - 'MOJOLEARN_X_PREP_FAST_UNIQUE=1 MOJOLEARN_X_PREP_FAST_NONEG=1'
-CMD lane/apple-fast-prep prep-onehot-uniq-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-uniq-istella onehot istella 3 3 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
-CMD lane/apple-fast-prep prep-onehot-noneg-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-noneg-istella onehot istella 3 3 - MOJOLEARN_X_PREP_FAST_NONEG=1
-CMD lane/apple-fast-prep prep-ordinal-uniq-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-uniq-taxi ordinal taxi 3 3 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
-CMD lane/apple-fast-prep prep-ordinal-noneg-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-noneg-taxi ordinal taxi 3 3 - MOJOLEARN_X_PREP_FAST_NONEG=1
-CMD lane/apple-fast-prep prep-ordinal-uniq-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-uniq-istella ordinal istella 3 3 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
-CMD lane/apple-fast-prep prep-ordinal-noneg-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-noneg-istella ordinal istella 3 3 - MOJOLEARN_X_PREP_FAST_NONEG=1
-CMD lane/apple-fast-prep prep-mlb-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-mlb-taxi multilabel-binarizer taxi 3 3 - MOJOLEARN_X_PREP_FAST_MULTILABEL=1
-CMD lane/apple-fast-prep prep-mlb-istella AFC_FAMILY=algos bash tools/afc_ab.sh prep-mlb-istella multilabel-binarizer istella 3 3 - MOJOLEARN_X_PREP_FAST_MULTILABEL=1
-CMD lane/apple-fast-prep prep-labenc-base-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-labenc-base-taxi label-encoder taxi 3 3 -
-CMD lane/apple-fast-prep prep-labenc-prof-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-labenc-prof-taxi label-encoder taxi 1 1 MOJOLEARN_XPREP_PROFILE=1
-CMD lane/apple-fast-prep prep-labbin-base-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-labbin-base-taxi label-binarizer taxi 3 3 -
-CMD lane/apple-fast-prep prep-labbin-prof-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-labbin-prof-taxi label-binarizer taxi 1 1 MOJOLEARN_XPREP_PROFILE=1
+CMD lane/apple-fast-prep prep-minmax-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh prep-minmax-istella preprocessing minmax-scaler istella 1 2 "" "-D MOJOLEARN_PREP_FAST_MINMAX"
+CMD lane/apple-fast-prep prep-onehot-uniq-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-uniq-taxi onehot taxi 1 2 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
+CMD lane/apple-fast-prep prep-onehot-noneg-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-onehot-noneg-taxi onehot taxi 1 2 - MOJOLEARN_X_PREP_FAST_NONEG=1
+CMD lane/apple-fast-prep prep-ordinal-uniq-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-uniq-taxi ordinal taxi 1 2 - MOJOLEARN_X_PREP_FAST_UNIQUE=1
+CMD lane/apple-fast-prep prep-ordinal-noneg-taxi AFC_FAMILY=algos bash tools/afc_ab.sh prep-ordinal-noneg-taxi ordinal taxi 1 2 - MOJOLEARN_X_PREP_FAST_NONEG=1

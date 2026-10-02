@@ -1,24 +1,26 @@
-# lane/apple-fast-prep: preprocessing host overhead (PLAN.md item 10, PLAN-classical next-experiments 7)
+# lane/apple-fast-prep: minmax-scaler, onehot, ordinal (merged with origin/main 2026-10-02)
 
-Written without a Mojo toolchain (cloud peer); the first M3 build is the compile check
-(bindings: `preprocessing` for the minmax switch; the three x_prep switches are Python only, no rebuild).
-Every switch defaults OFF and reads only on the FAST tier; IDENTICAL compiles and runs the old code.
-connected-components is a neighbors (cluster) lane, left alone.
+Written without a Mojo toolchain; the first M3 build is the compile check. Every switch is
+default OFF; IDENTICAL compiles main's code unchanged.
 
-| switch | kind | site | what it changes under FAST |
+| switch | kind | files | what it changes under FAST on Apple |
 |---|---|---|---|
-| `MOJOLEARN_X_PREP_FAST_MINMAX=1` | env, host Mojo (`preprocessing/estimator.mojo` minmax_fast_on) + Python (`preprocessing.py` _fast_minmax) | `bindings/_mojolearn_preprocessing.mojo` fit_binding / transform_binding; `preprocessing/estimator.mojo` minmax_fit_fast_addr / minmax_transform_fast_addr; `preprocessing/minmax.mojo` extrema_rows_fast_kernel; `python/mojolearn/preprocessing.py` MinMaxScaler.fit / _transform | the n*d words go up from the caller's address (no `load` List copy, no one-thread `finite_values`, no second copy in `upload_f32`), the finite test is `device_first_nonfinite`, the extrema a coalesced row-tiled kernel with the same (chunk, column) partials and finalize; Python skips its own one-thread `all_finite` walks of input and output (a binding refusal triggers the input walk, to tell the NaN route from an overflow) |
-| `MOJOLEARN_X_PREP_FAST_UNIQUE=1` | env, Python | `_expansion_prep.py` _fit_categories (OneHot / Ordinal fit, `_label_classes`) | per column the labels' chunked run scan (`uniq_count` / `uniq_scan` / `uniq_write`, x_prep/labels.mojo) instead of `unique_cols` (x_prep/prims.mojo: ONE thread per column over every sorted row); same words |
-| `MOJOLEARN_X_PREP_FAST_NONEG=1` | env, Python | `_expansion_prep.py` _codes, OrdinalEncoder.transform, OneHotEncoder.transform | the `count_neg` stage (one thread per column over every row) is left out when no caller reads it: OneHot handle_unknown 'ignore' / 'infrequent_if_exist' with drop=None, Ordinal 'use_encoded_value' (the board's settings) |
-| `MOJOLEARN_X_PREP_FAST_MULTILABEL=1` | env, Python | `_expansion_prep.py` _mlb_buffer, MultiLabelBinarizer.fit / fit_transform / transform | int / float label rows flattened at C speed (`array('d')` from an itertools chain, `len` per row, owners from chained `repeat`), the labels up as their float64 words (`lab_load` kind 4 does the float32 exactness test, as LabelEncoder's buffer route), fit = `_label_fit_device`, transform = `lookup` + `scatter_ones`; str / bool labels, `classes=` and inexact labels keep the old route |
+| `-D MOJOLEARN_PREP_FAST_MINMAX` (`PREP_FAST_MINMAX`, FAST + Apple + define) | define, binding `preprocessing` | `preprocessing/minmax.mojo` extrema_rows_fast_kernel / minmax_fit_fast; `preprocessing/estimator.mojo` minmax_fit_direct, minmax_transform_direct; `bindings/_mojolearn_preprocessing.mojo` transform_direct_binding (registered only under the define); `python/mojolearn/preprocessing.py` MinMaxScaler._transform | fit: main's direct fit (X up from its own buffer, device finite scan) with the extrema by a coalesced row-tiled kernel (block = chunk x column group, a simdgroup reads consecutive words of one row) instead of one column per block; same (chunk, column) partials, same finalize, same words. transform: `minmax_transform_direct` (X, scale, min up from their addresses, the output scanned on the device, 0 = nonfinite output) instead of the List route's three host passes over n*d plus Python's `all_finite` walks of input and output |
+| `MOJOLEARN_X_PREP_FAST_UNIQUE=1` | env read once at import, Python, FAST only | `_expansion_prep.py` _fit_categories (OneHot / Ordinal fit) | per column the labels' chunked run scan (uniq_count / uniq_scan / uniq_write, x_prep/labels.mojo) instead of `unique_cols` (one thread per column over every sorted row); same words |
+| `MOJOLEARN_X_PREP_FAST_NONEG=1` | env read once at import, Python, FAST only | `_expansion_prep.py` _codes, OrdinalEncoder.transform, OneHotEncoder.transform | the `count_neg` stage (one thread per column over every row) left out when no caller reads its count: OneHot handle_unknown 'ignore' / 'infrequent_if_exist' with drop=None, Ordinal 'use_encoded_value' (the board's settings) |
 
-Causes (board 0834, FAST ms / scikit-learn ms):
-- minmax-scaler Istella 5.7x: `bindings/_mojolearn_preprocessing.mojo:33` `load` (hostptr read_f32 List copy of 880 MB), `preprocessing/estimator.mojo:27` finite_values (one thread over 220M words), `metrics/checks/device_io.mojo:14` `values.copy()` before the device copy, `python/mojolearn/preprocessing.py` `_input` all_finite (bindings all_finite_f32, one thread); then `preprocessing/minmax.mojo:33` extrema_chunks_kernel reads one column per block (256 words d apart per block, a cache line each).
-- onehot / ordinal taxi 3.6-3.8x: fit's `unique_cols` (`x_prep/prims.mojo:238`, 5 threads over 1M sorted rows each) after the parallel radix sort; transform's `count_neg` (`x_prep/prims.mojo:322`, one thread per column) whose count the board's handle_unknown settings never read. The lookup, onehot and output stages are already one thread per element.
-- multilabel-binarizer 5.4-5.6x: `MultiLabelBinarizer.fit` / `transform` build `flat`, `owner`, `_numeric_labels` (twice), `Array._from_flat` (twice) and `put_list(owner)` in Python, about eight passes of Python objects over n*k labels; scikit-learn's transform is one.
-- label-encoder 11-13x, label-binarizer 10-12x: at head their int64 buffers already take the device route (lane neural-pass137: lab_load, radix sort, chunked run scan, lookup; no Python loop per label remains). The board predates that change. Two baseline lines and two `MOJOLEARN_XPREP_PROFILE=1` lines (XPPROG / XPPHASE per program and stage, in the run's race.txt) measure head; if label-binarizer is still far behind, the suspect is its 1 GB int32 output region (1M x ~260 classes: `_zero_words` mmap, device memset, device-to-host copy), not host arithmetic.
+Dropped at the merge: `MOJOLEARN_X_PREP_FAST_MULTILABEL` (main's lane gap-prep2 `_mlb_flat` / `row_ones`
+already takes MultiLabelBinarizer's int labels through the device) and the old env MINMAX arms
+(main's `minmax_fit_direct` already uploads from the caller's buffer and scans on the device; the
+remaining FAST delta is the define above).
 
-Semantics kept: classes_ order and dtype, handle_unknown behaviour, int32 / float32 outputs. Under MINMAX a float32 overflow in transform is refused by the binding's own message instead of `_transform`'s ValueError text.
+Causes (board 0834): minmax-scaler Istella 5.7x: `preprocessing/minmax.mojo` extrema_chunks_kernel
+reads one column per block (256 words d apart, a cache line each) and the transform's List route
+(`bindings/_mojolearn_preprocessing.mojo` transform_binding `load`, `preprocessing/estimator.mojo`
+minmax_transform_host_into finite_values + upload_f32). onehot / ordinal taxi 3.6-3.8x:
+`x_prep/prims.mojo` unique_cols_unit and count_neg_unit, one thread per column over 1M rows.
 
-Keep rule: a switch becomes the FAST default when its arm is faster on the M3 and the outputs agree with scikit-learn (the lanes' quality is exact agreement / vs-sklearn); then the env read goes and the arm is the code.
-Compile risks for the local session to watch: `preprocessing/minmax.mojo` extrema_rows_fast_kernel (2-D grid `grid_dim=(chunks, cgroups)`, runtime `block_dim=tpb`), `preprocessing/estimator.mojo` `MutPointer[Float32, MutAnyOrigin](unsafe_from_address=...)` as `enqueue_copy` src_ptr (the x_prep/device.mojo pattern), `comptime if` env read in minmax_fast_on.
+Risky compile sites: `preprocessing/minmax.mojo` `comptime if not PREP_FAST_MINMAX: return ...`
+inside minmax_fit_fast (two comptime branches each returning), the 2-D `grid_dim=(chunks, cgroups)`
+with runtime `block_dim=tpb`; `bindings/_mojolearn_preprocessing.mojo` `comptime if` inside PyInit's
+try block; `preprocessing/estimator.mojo` minmax_transform_direct's comptime branches.

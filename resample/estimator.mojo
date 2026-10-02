@@ -78,7 +78,7 @@ from resample.checks.index_map import (
     key_lo,
     monte_carlo_point_kernel,
     resample_key,
-    validate_pooled,
+    PERM_MAX_POOLED,
     validate_positions,
 )
 from resample.checks.intervals import (
@@ -118,6 +118,7 @@ from resample.checks.statistics import (
     monte_carlo_chunk_kernel,
     mc_finish_host,
     order_stat_kernel,
+    perm_select_stat_kernel,
     perm_stat_kernel,
     quantile_of_sorted_host,
     stat_columns_needed,
@@ -365,6 +366,17 @@ def _launch_bootstrap_stat(
         )
 
 
+#: A/B (gap-fails2, 2026-10-02): `-D MOJOLEARN_PERM_COUNT_RANK` keeps main's
+#: counting-rank kernel up to `PERM_MAX_POOLED`; the default selects the
+#: first group's threshold by radix select at every pooled length. Same
+#: membership mask, same folds, so the same bits.
+comptime PERM_COUNT_RANK_AB = is_defined["MOJOLEARN_PERM_COUNT_RANK"]()
+
+
+def perm_uses_select(n_pooled: Int) -> Bool:
+    return not PERM_COUNT_RANK_AB or n_pooled > PERM_MAX_POOLED
+
+
 def _launch_perm_stat_at[
     tpb: Int
 ](
@@ -377,49 +389,95 @@ def _launch_perm_stat_at[
     n_pooled: Int,
     n_x: Int,
     stat: Int,
+    select: Bool,
 ) raises:
     if stat == STAT_DIFF_MEANS:
-        comptime kern = perm_stat_kernel[STAT_DIFF_MEANS, tpb]
-        ctx.enqueue_function[kern](
-            null_dist.unsafe_ptr(),
-            pooled.unsafe_ptr(),
-            key_lo(key),
-            key_hi(key),
-            Int32(r_first),
-            Int32(n_replicates),
-            Int32(n_pooled),
-            Int32(n_x),
-            grid_dim=(n_replicates, 1, 1),
-            block_dim=(tpb, 1, 1),
-        )
+        if select:
+            comptime kern = perm_select_stat_kernel[STAT_DIFF_MEANS, tpb]
+            ctx.enqueue_function[kern](
+                null_dist.unsafe_ptr(),
+                pooled.unsafe_ptr(),
+                key_lo(key),
+                key_hi(key),
+                Int32(r_first),
+                Int32(n_replicates),
+                Int32(n_pooled),
+                Int32(n_x),
+                grid_dim=(n_replicates, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
+        else:
+            comptime kern = perm_stat_kernel[STAT_DIFF_MEANS, tpb]
+            ctx.enqueue_function[kern](
+                null_dist.unsafe_ptr(),
+                pooled.unsafe_ptr(),
+                key_lo(key),
+                key_hi(key),
+                Int32(r_first),
+                Int32(n_replicates),
+                Int32(n_pooled),
+                Int32(n_x),
+                grid_dim=(n_replicates, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
     elif stat == STAT_MEAN:
-        comptime kern2 = perm_stat_kernel[STAT_MEAN, tpb]
-        ctx.enqueue_function[kern2](
-            null_dist.unsafe_ptr(),
-            pooled.unsafe_ptr(),
-            key_lo(key),
-            key_hi(key),
-            Int32(r_first),
-            Int32(n_replicates),
-            Int32(n_pooled),
-            Int32(n_x),
-            grid_dim=(n_replicates, 1, 1),
-            block_dim=(tpb, 1, 1),
-        )
+        if select:
+            comptime kern = perm_select_stat_kernel[STAT_MEAN, tpb]
+            ctx.enqueue_function[kern](
+                null_dist.unsafe_ptr(),
+                pooled.unsafe_ptr(),
+                key_lo(key),
+                key_hi(key),
+                Int32(r_first),
+                Int32(n_replicates),
+                Int32(n_pooled),
+                Int32(n_x),
+                grid_dim=(n_replicates, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
+        else:
+            comptime kern = perm_stat_kernel[STAT_MEAN, tpb]
+            ctx.enqueue_function[kern](
+                null_dist.unsafe_ptr(),
+                pooled.unsafe_ptr(),
+                key_lo(key),
+                key_hi(key),
+                Int32(r_first),
+                Int32(n_replicates),
+                Int32(n_pooled),
+                Int32(n_x),
+                grid_dim=(n_replicates, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
     elif stat == STAT_STD:
-        comptime kern3 = perm_stat_kernel[STAT_STD, tpb]
-        ctx.enqueue_function[kern3](
-            null_dist.unsafe_ptr(),
-            pooled.unsafe_ptr(),
-            key_lo(key),
-            key_hi(key),
-            Int32(r_first),
-            Int32(n_replicates),
-            Int32(n_pooled),
-            Int32(n_x),
-            grid_dim=(n_replicates, 1, 1),
-            block_dim=(tpb, 1, 1),
-        )
+        if select:
+            comptime kern = perm_select_stat_kernel[STAT_STD, tpb]
+            ctx.enqueue_function[kern](
+                null_dist.unsafe_ptr(),
+                pooled.unsafe_ptr(),
+                key_lo(key),
+                key_hi(key),
+                Int32(r_first),
+                Int32(n_replicates),
+                Int32(n_pooled),
+                Int32(n_x),
+                grid_dim=(n_replicates, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
+        else:
+            comptime kern = perm_stat_kernel[STAT_STD, tpb]
+            ctx.enqueue_function[kern](
+                null_dist.unsafe_ptr(),
+                pooled.unsafe_ptr(),
+                key_lo(key),
+                key_hi(key),
+                Int32(r_first),
+                Int32(n_replicates),
+                Int32(n_pooled),
+                Int32(n_x),
+                grid_dim=(n_replicates, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
     else:
         raise Error(
             "permutation_test: statistic '"
@@ -446,18 +504,24 @@ def _launch_perm_stat(
     n_x: Int,
     stat: Int,
     tpb: Int,
+    force_count: Bool = False,
 ) raises:
+    """`force_count`: main's counting-rank kernel (a check's A arm; it holds
+    only up to `PERM_MAX_POOLED`, above which the select kernel runs)."""
+    var use = (
+        perm_uses_select(n_pooled) and not force_count
+    ) or n_pooled > PERM_MAX_POOLED
     if tpb == 256:
         _launch_perm_stat_at[256](
-            ctx, null_dist, pooled, key, r_first, n_replicates, n_pooled, n_x, stat
+            ctx, null_dist, pooled, key, r_first, n_replicates, n_pooled, n_x, stat, use
         )
     elif tpb == 128:
         _launch_perm_stat_at[128](
-            ctx, null_dist, pooled, key, r_first, n_replicates, n_pooled, n_x, stat
+            ctx, null_dist, pooled, key, r_first, n_replicates, n_pooled, n_x, stat, use
         )
     elif tpb == 64:
         _launch_perm_stat_at[64](
-            ctx, null_dist, pooled, key, r_first, n_replicates, n_pooled, n_x, stat
+            ctx, null_dist, pooled, key, r_first, n_replicates, n_pooled, n_x, stat, use
         )
     else:
         raise Error(
@@ -1403,7 +1467,6 @@ def permutation_test_host(
         )
     validate_positions(n_resamples, n_pooled)
     validate_positions(r_first + n_resamples, n_pooled)
-    validate_pooled(n_pooled)
     if statistic == STAT_STD and n_x < 2:
         raise Error(
             "permutation_test: statistic 'std' is ddof=1 and needs at least"

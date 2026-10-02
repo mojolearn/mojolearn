@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """GPU preprocessing with explicit Float32 and numeric-mode contracts."""
 import ctypes
-import os
 import struct
 from . import _portable_math as math
 import numbers
@@ -52,18 +51,6 @@ def _scaler_header(arrays, path, cls, fields):
 def _prep():
     from . import _expansion_prep
     return _expansion_prep
-
-
-def _fast_minmax(mode):
-    """lane/apple-fast-prep (2026-10-02): MOJOLEARN_X_PREP_FAST_MINMAX=1 on
-    the FAST tier only (`_backend.default_mode`). The binding then takes
-    the words from their own address and tests them finite on the device
-    (preprocessing/estimator.mojo minmax_fit_fast_addr), so the host's
-    `all_finite` walk of every input word (bindings all_finite_f32, one
-    thread) and of every output word are skipped here: a NaN or infinity
-    makes the binding refuse, and the input walk runs only then, to tell
-    the NaN route from a refusal."""
-    return mode == "fast" and os.environ.get("MOJOLEARN_X_PREP_FAST_MINMAX", "0") == "1"
 
 
 def _refuse_inf(pr, st, d):
@@ -175,6 +162,21 @@ def _write_back(copy, copied, values, X, output):
     return X
 
 
+def _direct_entry(binding, name):
+    """The binding's direct fit entry (lane gap-prep2: X goes up from its own
+    buffer and the device scans it for a nonfinite value; the same kernels
+    and words as the List route), or None: an older binary, the host
+    binding, or MOJOLEARN_SCALER_DIRECT=0 (the A/B switch: the host scan and
+    the binding's List copies, as before)."""
+    import os
+    if os.environ.get("MOJOLEARN_SCALER_DIRECT", "1").strip() == "0":
+        return None
+    try:
+        return getattr(binding, name)
+    except (AttributeError, ImportError):
+        return None
+
+
 def _per_feature_int(seen, d):
     if isinstance(seen, Array):
         return [int(v) for v in seen.tolist()]
@@ -188,9 +190,10 @@ class _ScalerProtocol:
         reference's `ensure_all_finite='allow-nan'`) and the second value
         says whether every entry is finite; +-inf is refused by the NaN path's
         own scan. `with_copied`: also whether that cost a copy (copy=False
-        writes in place only into the caller's own buffer). `scan=False`
-        (lane apple-fast-prep, `_fast_minmax`): the finite walk is left to
-        the binding and the second value is None."""
+        writes in place only into the caller's own buffer). `scan=False` (a
+        direct entry: lane gap-prep2's fits, lane apple-fast-prep's
+        transform): the finite walk is the device's and the second value is
+        None."""
         values, copied = materialize_f32_lists(X, "input")
         if values.dtype != "<f4":
             raise TypeError('Scaler input must have dtype float32')
@@ -198,8 +201,10 @@ class _ScalerProtocol:
             raise ValueError('Scaler requires a nonempty two-dimensional input')
         if values.size > 2147483647:
             raise ValueError('Scaler exceeds the native Int32 indexing bound')
+        # scan=False (a direct fit, lane gap-prep2): the device scans X for
+        # a NaN or an infinity, so `finite` is None (not known here)
         finite = all_finite(values) if scan or not allow_nan else None
-        if scan and not finite and not allow_nan:
+        if not finite and not allow_nan:
             raise ValueError('Scaler input must be finite; NaN/inf are unsupported')
         values, c2 = as_f32_c(values, ndim=values.ndim, name="values")
         if not allow_nan:
@@ -305,6 +310,11 @@ class MinMaxScaler(_ScalerProtocol):
         output = empty((5, d), '<f4')
         binding.minmax_fit(_addr_ro(values), _addr(output),
                            [n, d, float(lower), float(upper)])
+        self._keep_extrema(output, colnan)
+
+    def _keep_extrema(self, output, colnan):
+        """The five fitted rows from `output` (5, d), NaN for the columns in
+        `colnan`."""
         if not all_finite(output) or output[3].min() <= 0:
             raise ValueError('MinMaxScaler fitted statistics overflowed or scale is not positive in Float32')
         rows = [output[i].tolist() for i in range(5)]
@@ -326,27 +336,26 @@ class MinMaxScaler(_ScalerProtocol):
         if sample_weight is not None:
             raise NotImplementedError('MinMaxScaler does not support sample_weight')
         mode = (self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()).strip().lower()
-        fast = _fast_minmax(mode)
-        values, finite = self._input(X, allow_nan=True, scan=not fast)
-        n, d = values.shape
         binding = self._binding(mode)
+        direct = _direct_entry(binding, "minmax_fit_direct")
+        values, finite = self._input(X, allow_nan=True, scan=direct is None)
+        n, d = values.shape
         colnan = [False] * d
         if finite is None:
-            # lane apple-fast-prep: the binding's device scan; a refusal of a
-            # finite input is the binding's own (re-raised), else the NaN route
-            try:
-                self._fit_extrema(binding, values, lower, upper, colnan)
+            output = empty((5, d), '<f4')
+            if int(direct(_addr_ro(values), _addr(output), [n, d, float(lower), float(upper)])):
+                self._keep_extrema(output, colnan)
                 finite = True
-            except Exception:
-                finite = all_finite(values)
-                if finite:
-                    raise
+            else:
+                finite = False
+        elif finite:
+            self._fit_extrema(binding, values, lower, upper, colnan)
         if not finite:
             # NaN -> the column's own minimum: min and max are those of its
             # non-NaN entries, and the binding's arithmetic is unchanged.
             values, counts = _nan_scan_fill(mode, values, 3)
             colnan = [c == 0 for c in counts]
-        self._fit_extrema(binding, values, lower, upper, colnan)
+            self._fit_extrema(binding, values, lower, upper, colnan)
         self.n_features_in_ = d
         self.n_samples_seen_ = n
         self.numeric_mode_ = mode
@@ -390,8 +399,13 @@ class MinMaxScaler(_ScalerProtocol):
             except ImportError:
                 NotFittedError = RuntimeError
             raise NotFittedError('MinMaxScaler is not fitted')
-        fast = _fast_minmax(self.numeric_mode_)
-        values, finite, copied = self._input(X, allow_nan=True, with_copied=True, scan=not fast)
+        binding = self._binding(self.numeric_mode_)
+        # lane apple-fast-prep: the FAST Apple binding built with
+        # -D MOJOLEARN_PREP_FAST_MINMAX has `minmax_transform_direct` (X up from
+        # its own buffer, the device scans the output); any other binding, the
+        # List route with the host scans, as before
+        direct = _direct_entry(binding, "minmax_transform_direct")
+        values, finite, copied = self._input(X, allow_nan=True, with_copied=True, scan=direct is None)
         n, d = values.shape
         if d != self.n_features_in_:
             raise ValueError('MinMaxScaler input feature count differs from fit')
@@ -414,23 +428,22 @@ class MinMaxScaler(_ScalerProtocol):
             raise ValueError("MinMaxScaler scale_ must remain positive")
         params = [n, d, int(inverse), int(self.clip_),
                   float(self.feature_range_[0]), float(self.feature_range_[1])]
-        binding = self._binding(self.numeric_mode_)
         output = empty(values.shape, '<f4')
+        done = False
         if finite is None:
-            # lane apple-fast-prep: the binding scans its output on the device;
-            # a refusal of a finite input is its own (re-raised), else the NaN route
-            try:
-                binding.minmax_transform(_addr_ro(values), _addr_ro(scale), _addr_ro(offset), _addr(output), params)
-                finite = True
-            except Exception:
+            # 0: a nonfinite output word. A finite input overflowed (refused as
+            # the List route's output scan does); else the NaN route below.
+            if int(direct(_addr_ro(values), _addr_ro(scale), _addr_ro(offset), _addr(output), params)):
+                finite = done = True
+            else:
                 finite = all_finite(values)
                 if finite:
-                    raise
-        if not finite:
-            source = _nan_scan_fill(self.numeric_mode_, values, None)[0]
+                    raise ValueError('MinMaxScaler transform overflowed in Float32')
+        if not done:
+            source = values if finite else _nan_scan_fill(self.numeric_mode_, values, None)[0]
             binding.minmax_transform(_addr_ro(source), _addr_ro(scale), _addr_ro(offset), _addr(output), params)
-        if not fast and not all_finite(output):
-            raise ValueError('MinMaxScaler transform overflowed in Float32')
+            if not all_finite(output):
+                raise ValueError('MinMaxScaler transform overflowed in Float32')
         if not finite or any(colnan):
             output = _nan_keep(self.numeric_mode_, values, output, colnan)
         return _write_back(self.copy, copied, values, X, output)
@@ -541,13 +554,20 @@ class StandardScaler(_ScalerProtocol):
         for name in list(self.__dict__):
             if name.endswith('_'):
                 del self.__dict__[name]
-        values, finite = self._input(X, allow_nan=True)
-        n, d = values.shape
         mode = (self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()).strip().lower()
-        if finite and sample_weight is None:
+        direct = _direct_entry(self._binding(mode), "standard_fit_direct") if sample_weight is None else None
+        values, finite = self._input(X, allow_nan=True, scan=direct is None)
+        n, d = values.shape
+        output = None
+        if finite is None:
+            output = empty((3, d), '<f4')
+            finite = bool(int(direct(_addr_ro(values), _addr(output),
+                                     [n, d, int(self.with_mean), int(self.with_std)])))
+        elif finite and sample_weight is None:
             output = empty((3, d), '<f4')
             self._binding(mode).standard_fit(_addr_ro(values), _addr(output),
                 [n, d, int(self.with_mean), int(self.with_std)])
+        if finite and sample_weight is None:
             if not all_finite(output) or output[1].min() < 0 or output[2].min() <= 0:
                 raise ValueError('StandardScaler statistics are nonfinite, variance negative, or scale nonpositive in Float32')
             self._keep(output[0].copy(), output[1].copy(), output[2].copy(), n, d, mode)

@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/graph_par.mojo b/x_neighbors/graph_par.mojo
+index 9f8e3e9fe..87b7fefa3 100644
+--- a/x_neighbors/graph_par.mojo
++++ b/x_neighbors/graph_par.mojo
+@@ -737,7 +737,7 @@ def lv_move_item(t: Int, g: GA):
+             _add(remove_cost, ftz(identical_div(kc, m))),
+             ftz(identical_div(ftz(identical_mul(res, ftz(identical_mul(sc, du)))), two_m2)),
+         )
+-        if gain > best_gain:
++        if gain >= best_gain and gain > Float32(0):
+             best_gain = gain
+             best = c
+     if best != cu:
