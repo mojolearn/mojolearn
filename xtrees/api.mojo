@@ -13,6 +13,14 @@ from checks.numerics import identical_log64
 from std.python import Python
 from xtrees.shap import mask_expand, block_mean, kernel_solve
 from xtrees.perm_device import perm_synthetic
+from xtrees.ops_device import apply_trees_device, gather_f32_device, transpose_f32_device
+from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
+
+#: cpu-gpu-cleanup t-gbdt: a GPU build gathers, applies and transposes on
+#: the device (`xtrees/ops_device.mojo`); the host binding (the CPU column,
+#: `-D MOJOLEARN_COLUMN_CPU`) keeps `xtrees/ops.mojo`'s serial loops. Fixed
+#: at build time, never a runtime route.
+comptime XTREES_DEVICE_OPS = TARGET_COLUMN != COLUMN_CPU
 from xtrees.ops import (
     sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
     accumulate_onehot, accumulate_cols, accumulate_rows, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
@@ -71,8 +79,12 @@ def gather_f32_binding(
     var n_rows = _count(_i(params, 2), "x_trees_gather_f32")
     var n_cols = _count(_i(params, 3), "x_trees_gather_f32")
     if n_rows * n_cols > 0:
-        gather_f32(f32_ptr(Int(py=src)), _i(params, 0), _i(params, 1), i32_ptr(Int(py=rows)), n_rows,
-                   i32_ptr(Int(py=cols)), n_cols, f32_ptr(Int(py=dst)))
+        comptime if XTREES_DEVICE_OPS:
+            gather_f32_device(f32_ptr(Int(py=src)), _i(params, 0), _i(params, 1), i32_ptr(Int(py=rows)), n_rows,
+                              i32_ptr(Int(py=cols)), n_cols, f32_ptr(Int(py=dst)))
+        else:
+            gather_f32(f32_ptr(Int(py=src)), _i(params, 0), _i(params, 1), i32_ptr(Int(py=rows)), n_rows,
+                       i32_ptr(Int(py=cols)), n_cols, f32_ptr(Int(py=dst)))
     return PythonObject(n_rows * n_cols)
 
 
@@ -274,8 +286,12 @@ def apply_binding(
     if t1 <= t0:
         raise Error("x_trees_apply: need t1 > t0")
     if n > 0:
-        apply_trees(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=colid)), f32_ptr(Int(py=quesval)),
-                    i32_ptr(Int(py=left)), f32_ptr(Int(py=x)), n, _i(params, 1), t0, t1, i32_ptr(Int(py=res)))
+        comptime if XTREES_DEVICE_OPS:
+            apply_trees_device(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=colid)), f32_ptr(Int(py=quesval)),
+                               i32_ptr(Int(py=left)), f32_ptr(Int(py=x)), n, _i(params, 1), t0, t1, i32_ptr(Int(py=res)))
+        else:
+            apply_trees(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=colid)), f32_ptr(Int(py=quesval)),
+                        i32_ptr(Int(py=left)), f32_ptr(Int(py=x)), n, _i(params, 1), t0, t1, i32_ptr(Int(py=res)))
     return PythonObject(n)
 
 
@@ -378,7 +394,10 @@ def transpose_f32_binding(src: PythonObject, dst: PythonObject, params: PythonOb
     var n = _count(_i(params, 0), "x_trees_transpose_f32")
     var d = _count(_i(params, 1), "x_trees_transpose_f32")
     if n * d > 0:
-        transpose_f32(f32_ptr(Int(py=src)), n, d, f32_ptr(Int(py=dst)))
+        comptime if XTREES_DEVICE_OPS:
+            transpose_f32_device(f32_ptr(Int(py=src)), n, d, f32_ptr(Int(py=dst)))
+        else:
+            transpose_f32(f32_ptr(Int(py=src)), n, d, f32_ptr(Int(py=dst)))
     return PythonObject(n * d)
 
 
