@@ -18,7 +18,7 @@ from x_neighbors.items import (
 from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE
 from x_neighbors.items import (
     kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
-    matmul_tn_acc_item, K_RBF, U_IDENTITY,
+    K_RBF, U_IDENTITY,
 )
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
@@ -354,38 +354,6 @@ def _scaled_rbf_rows(q: FP, z: FP, kp: FP, ksp: FP, rows: Int, m: Int, d: Int, g
     def f(t: Int) {imm kp, imm ksp, imm rows, imm m, imm variance}:
         unary_item(t, kp, ksp, rows * m, U_IDENTITY, variance, Float32(0))
     _cells(f, rows * m)
-
-
-def op_svgp_stats(
-    x: Int, z: Int, y: Int, bmat: Int, bvec: Int, n: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
-) raises:
-    var tr = _tile_rows(n, m)
-    var kb = List[Float32](length=max(tr * m, 1), fill=Float32(0))
-    var ksb = List[Float32](length=max(tr * m, 1), fill=Float32(0))
-    var kp = FP(unsafe_from_address=Int(kb.unsafe_ptr()))
-    var ksp = FP(unsafe_from_address=Int(ksb.unsafe_ptr()))
-    var bp = FP(unsafe_from_address=bmat)
-    var bvp = FP(unsafe_from_address=bvec)
-    for t in range(m * m):
-        bp.unsafe_store(t, Float32(0))
-    for t in range(m):
-        bvp.unsafe_store(t, Float32(0))
-    var r0 = 0
-    while r0 < n:
-        var rows = min(tr, n - r0)
-        _scaled_rbf_rows(FP(unsafe_from_address=x) + r0 * d, FP(unsafe_from_address=z), kp, ksp, rows, m, d, gamma,
-                         variance)
-        var yp = FP(unsafe_from_address=y) + r0
-
-        def bb(t: Int) {imm ksp, imm bp, imm rows, imm m}:
-            matmul_tn_acc_item(t, ksp, ksp, bp, rows, m, m)
-        _cells(bb, m * m)
-        for t in range(m):
-            matmul_tn_acc_item(t, ksp, yp, bvp, rows, m, 1)
-        r0 += rows
-    _hsab(bmat, m * m)
-    _ = kb^
-    _ = ksb^
 
 
 def op_svgp_fit_ff(

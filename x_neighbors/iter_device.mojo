@@ -44,7 +44,7 @@ from x_neighbors.device_ops import (
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
     kernel_kernel, rowsum_kernel, scale_div_kernel, kpca_center_kernel, unary_kernel, svgp_var_kernel,
 )
-from x_neighbors.items import matmul_tn_acc_item, K_RBF, U_IDENTITY
+from x_neighbors.items import K_RBF, U_IDENTITY
 from x_neighbors.lp_spmm import lp_ell_fill_kernel, lp_nonfinite_kernel, lp_prod_kernel, lp_rowcount_kernel
 from core.device_zero import enqueue_fill
 
@@ -1041,7 +1041,7 @@ def knn_impute_split_kernel(
 # that stay on the device, and download only the final output. Every item
 # computes its cells from its own row, so a row tile changes no statement.
 # The one carried fold (SVGP's Kuf Kfu and Kuf y) continues each cell's
-# float32 accumulator from tile to tile: `matmul_tn_acc_item`.
+# float-float accumulator from tile to tile: `matmul_tn_acc_ff_item`.
 # -D MOJOLEARN_XN_FUSED_SABOTAGE adds 1e-3 to the first output cell of each
 # fused device driver (the new device path's negative control).
 # ============================================================================
@@ -1060,12 +1060,6 @@ def _p(mut b: DeviceBuffer[DType.float32]) -> FP:
 def _tile_rows(n: Int, width: Int) -> Int:
     var t = XN_FUSED_CELLS // max(width, 1)
     return max(1, min(n, t))
-
-
-def matmul_tn_acc_kernel(a: FP, b: FP, res: FP, rows_: Int64, n_: Int64, m_: Int64):
-    var t = _tid()
-    if t < Int(n_) * Int(m_):
-        matmul_tn_acc_item(t, a, b, res, Int(rows_), Int(n_), Int(m_))
 
 
 def _fused_sabotage(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], count: Int) raises:
@@ -1206,53 +1200,6 @@ def _launch_scaled_rbf(
         kbuf, dst, Int64(cells), Int64(U_IDENTITY), variance, Float32(0),
         grid_dim=_grid(cells), block_dim=(BLOCK if cells > 1 else 1),
     )
-
-
-def op_svgp_stats(
-    x: Int, z: Int, y: Int, bmat: Int, bvec: Int, n: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
-) raises:
-    """SVGP.fit's B = Kuf Kfu (m x m) and b = Kuf y (m): Kfu = variance *
-    rbf(x, z) per row tile on the device, both products carried over the
-    tiles (`matmul_tn_acc_item`); Kuf is never formed (it is Kfu^T bit for
-    bit: the rbf item squares x - z, and IEEE subtraction is antisymmetric)."""
-    var ctx = xn_ctx()
-    var d_x = _buf(ctx, x, n * d, True)
-    var d_z = _buf(ctx, z, m * d, True)
-    var d_y = _buf(ctx, y, n, True)
-    var d_b = _buf(ctx, 0, m * m, False)
-    var d_bv = _buf(ctx, 0, m, False)
-    enqueue_fill(ctx, d_b, Float32(0))
-    enqueue_fill(ctx, d_bv, Float32(0))
-    var tr = _tile_rows(n, m)
-    var d_k = _buf(ctx, 0, tr * m, False)
-    var d_ks = _buf(ctx, 0, tr * m, False)
-    var xp: FP = _p(d_x)
-    var yp: FP = _p(d_y)
-    var r0 = 0
-    while r0 < n:
-        var rows = min(tr, n - r0)
-        _launch_scaled_rbf(ctx, xp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
-        ctx.enqueue_function[matmul_tn_acc_kernel](
-            _p(d_ks), _p(d_ks), _p(d_b), Int64(rows), Int64(m), Int64(m),
-            grid_dim=_grid(m * m), block_dim=(BLOCK if m * m > 1 else 1),
-        )
-        ctx.enqueue_function[matmul_tn_acc_kernel](
-            _p(d_ks), yp + r0, _p(d_bv), Int64(rows), Int64(m), Int64(1),
-            grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
-        )
-        r0 += rows
-    _fused_sabotage(ctx, d_b, m * m)
-    _down(ctx, d_b, bmat, m * m)
-    _down(ctx, d_bv, bvec, m)
-    ctx.synchronize()
-    _ = d_x^
-    _ = d_z^
-    _ = d_y^
-    _ = d_b^
-    _ = d_bv^
-    _ = d_k^
-    _ = d_ks^
-    _ = ctx^
 
 
 def matmul_tn_acc_ff_kernel(a: FP, b: FP, rh: FP, rl: FP, rows_: Int64, n_: Int64, m_: Int64):
