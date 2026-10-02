@@ -122,7 +122,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -138,8 +138,12 @@ from gemm.checks.gemm_identical import (
 )
 from gemm.checks.gemm_oracle import OP_NT
 from core.device_scan import (
+    NONFINITE_NONE,
+    SCAN_TPB,
+    _scan_blocks,
     device_classify_nonfinite,
     device_first_nonfinite,
+    nonfinite_partial_kernel,
 )
 from checks.numerics import (
     ftz,
@@ -1189,6 +1193,61 @@ def identical_clip_grad_norm(
     return coef
 
 
+def identical_clip_grad_norm_batched(
+    ctx: DeviceContext,
+    mut grad: DeviceBuffer[DType.float32],
+    mut sumsq: DeviceBuffer[DType.float32],
+    mut norms: DeviceBuffer[DType.float32],
+    mut total_cell: DeviceBuffer[DType.float32],
+    mut out2: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    mut sab_partials: DeviceBuffer[DType.float32],
+    offsets: List[Int],
+    max_norm: Float32,
+) raises -> Float32:
+    """`identical_clip_grad_norm` with its owed batched launcher (lane
+    gap-train-utils, 2026-10-02): the SAME per-tensor
+    `identical_gemm_into(..., 1, 1, N_j, OP_NT)` calls in `param_id` order
+    on the same views and workspace, then the same coefficient and scale,
+    with the J per-tensor waits removed. The views are held in one list
+    across the coefficient's first wait (the reason the original waits per
+    tensor), and the one in-order queue already orders each GEMM's use of
+    `ws` after the previous one's. The same launches in the same order: the
+    same bits. Any clip sabotage build takes the original."""
+    comptime if SAB_CLIP_PARAM_ORDER or SAB_CLIP_SERIAL_FOLD or SAB_CLIP_BLOCK_PARTITION:
+        return identical_clip_grad_norm(
+            ctx, grad, sumsq, norms, total_cell, out2, ws, sab_partials, offsets, max_norm
+        )
+    var j_count = len(offsets) - 1
+    if j_count <= 0:
+        return Float32(0.0)
+    var keep = List[DeviceBuffer[DType.float32]]()
+    for j in range(j_count):
+        var begin = offsets[j]
+        var count = offsets[j + 1] - begin
+        var ga = grad.create_sub_buffer[DType.float32](begin, count)
+        var gb = grad.create_sub_buffer[DType.float32](begin, count)
+        var cv = sumsq.create_sub_buffer[DType.float32](j, 1)
+        identical_gemm_into(ctx, cv, ga, gb, ws, 1, 1, count, OP_NT)
+        keep.append(ga^)
+        keep.append(gb^)
+        keep.append(cv^)
+    var coef = identical_clip_coefficient(ctx, sumsq, norms, total_cell, out2,
+                                           ws, j_count, max_norm)
+    # (the coefficient waited before it read its two floats back)
+    _ = keep^
+
+    step_count_launch()
+    ctx.enqueue_function[clip_scale_kernel](
+        grad.unsafe_ptr(),
+        Int32(offsets[j_count]),
+        coef,
+        grid_dim=(_grid_for(offsets[j_count]), 1, 1),
+        block_dim=(OPT_TPB, 1, 1),
+    )
+    return coef
+
+
 # ===========================================================================
 # THE HOST-VISIBLE ENTRY POINT
 # ===========================================================================
@@ -1259,6 +1318,86 @@ def _opt_refuse_device_buffer(
     raise Error(opt_nonfinite_message(name, idx, is_nan))
 
 
+def _scan_launch(
+    ctx: DeviceContext, mut part: DeviceBuffer[DType.int32], k: Int, blocks: Int,
+    mut buf: DeviceBuffer[DType.float32], n: Int,
+) raises:
+    step_count_launch()
+    ctx.enqueue_function[nonfinite_partial_kernel](
+        part.unsafe_ptr() + k * blocks,
+        buf.unsafe_ptr(),
+        Int32(n),
+        grid_dim=(blocks, 1, 1),
+        block_dim=(SCAN_TPB, 1, 1),
+    )
+
+
+def _opt_refuse_device_fused(
+    ctx: DeviceContext,
+    mut param: DeviceBuffer[DType.float32],
+    mut grad: DeviceBuffer[DType.float32],
+    mut m_state: DeviceBuffer[DType.float32],
+    mut v_state: DeviceBuffer[DType.float32],
+    n: Int,
+    is_sgd: Bool,
+) raises:
+    """The three or four scans of `opt_refuse_device_inputs` as ONE wait
+    (lane gap-train-utils, 2026-10-02): the same `nonfinite_partial_kernel`
+    launches at the same shape, each into its own slice of one partials
+    buffer, ONE readback, and the host fold buffer by buffer in the
+    oracle's order. The first buffer with a hit and its smallest index are
+    what the four separate scans found, so the same refusal and the same
+    message; on clean inputs nothing moves. MOJOLEARN_OPT_SCAN_FUSED=0
+    keeps the separate scans (the A/B)."""
+    var blocks = _scan_blocks(n)
+    var count = 3 if is_sgd else 4
+    var part = ctx.enqueue_create_buffer[DType.int32](4 * blocks)
+    _scan_launch(ctx, part, 0, blocks, param, n)
+    _scan_launch(ctx, part, 1, blocks, grad, n)
+    _scan_launch(ctx, part, 2, blocks, m_state, n)
+    if not is_sgd:
+        _scan_launch(ctx, part, 3, blocks, v_state, n)
+    step_count_host_alloc()
+    var host = ctx.enqueue_create_host_buffer[DType.int32](4 * blocks)
+    step_count_d2h()
+    ctx.enqueue_copy(
+        dst_ptr=host.unsafe_ptr(), src_buf=part.create_sub_buffer[DType.int32](0, count * blocks)
+    )
+    step_count_sync()
+    ctx.synchronize()
+    var hit_k = -1
+    var hit_i = -1
+    for k in range(count):
+        var best = NONFINITE_NONE
+        for i in range(blocks):
+            var v = host.unsafe_ptr().unsafe_load(k * blocks + i)
+            if v < best:
+                best = v
+        if best != NONFINITE_NONE:
+            hit_k = k
+            hit_i = Int(best)
+            break
+    _ = host^
+    _ = part^
+    if hit_k < 0:
+        return
+    var is_nan: Bool
+    var name: String
+    if hit_k == 0:
+        is_nan = device_classify_nonfinite(ctx, param, hit_i)
+        name = String("param")
+    elif hit_k == 1:
+        is_nan = device_classify_nonfinite(ctx, grad, hit_i)
+        name = String("grad")
+    elif hit_k == 2:
+        is_nan = device_classify_nonfinite(ctx, m_state, hit_i)
+        name = String("momentum_buffer") if is_sgd else String("exp_avg")
+    else:
+        is_nan = device_classify_nonfinite(ctx, v_state, hit_i)
+        name = String("exp_avg_sq")
+    raise Error(opt_nonfinite_message(name, hit_i, is_nan))
+
+
 def opt_refuse_device_inputs(
     ctx: DeviceContext,
     mut param: DeviceBuffer[DType.float32],
@@ -1315,6 +1454,9 @@ def opt_refuse_device_inputs(
         return
     var n = offsets[len(offsets) - 1] if len(offsets) > 0 else 0
     if n <= 0:
+        return
+    if String(getenv("MOJOLEARN_OPT_SCAN_FUSED")) != "0":
+        _opt_refuse_device_fused(ctx, param, grad, m_state, v_state, n, cfg.kind == OPT_SGD)
         return
     # ORDER MATCHES THE ORACLE'S so the two sides name the SAME buffer first
     # on an input that is bad in more than one place.

@@ -399,12 +399,14 @@ class IsolationForest(NumericModeMixin):
                 "(cuML raises UnsupportedOnGPU for it too)"
             )
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        # FAST on Apple (lane apple-fast-trees2): the binding's fit scans the
-        # training X for non-finite cells on the device (IF_FAST_ROWMAJOR),
-        # so the one-thread host scan of every cell here is not repeated;
-        # the device scan's refusal is raised as the same ValueError.
-        scan = getattr(self._bind("_mojolearn_svm"), "iforest_device_finite_scan", None)
-        device_scan = scan is not None and int(scan()) == 1
+        # A binary that scans the uploaded matrix on the device refuses a
+        # non-finite X inside the fit, so the host scan here would be the same
+        # refusal twice: `iforest_device_scan` (lane gap-trees-nv,
+        # IF_DEVICE_TRANSPOSE) or `iforest_device_finite_scan` (lane
+        # apple-fast-trees2, IF_FAST_ROWMAJOR, FAST on Apple).
+        b = self._bind("_mojolearn_svm")
+        scans = [getattr(b, n, None) for n in ("iforest_device_scan", "iforest_device_finite_scan")]
+        device_scan = any(f is not None and int(f()) == 1 for f in scans)
         if not device_scan and not all_finite(x):
             # was a bare Exception from the native fit; scikit-learn raises
             # ValueError for the same input
@@ -414,8 +416,9 @@ class IsolationForest(NumericModeMixin):
         self.n_features_in_ = x.shape[1]
         try:
             self._run(x[:1], _WANT_SCORE_SAMPLES)  # one row, an `Array` copy
-        except Exception as exc:
-            if device_scan and "does not accept non-finite" in str(exc):
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc)
+            if device_scan and ("Input X contains" in msg or "does not accept non-finite" in msg):
                 for k in ("_x", "n_features_in_"):
                     self.__dict__.pop(k, None)
                 self.__dict__.update(had)

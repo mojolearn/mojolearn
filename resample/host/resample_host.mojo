@@ -87,7 +87,6 @@ from resample.checks.index_map import (
     draw_row_index,
     draw_uniform_in,
     resample_key,
-    validate_pooled,
     validate_positions,
 )
 from resample.checks.intervals import (
@@ -902,7 +901,6 @@ def host_permutation_test(
         )
     validate_positions(n_resamples, n_pooled)
     validate_positions(r_first + n_resamples, n_pooled)
-    validate_pooled(n_pooled)
     if statistic == STAT_STD and n_x < 2:
         raise Error(
             "permutation_test: statistic 'std' is ddof=1 and needs at least"

@@ -23,6 +23,7 @@ from checks.numerics import (
 )
 from core.philox import philox4x32_10
 from decomposition.host.linalg_public import host_qr_r
+from x_decomp.qr_sliced import QS_ROWS
 
 
 #: The fold block, restated (x_decomp/cells.mojo FOLD_BLOCK).
@@ -438,7 +439,10 @@ def oracle_lu(a: List[Float32], n: Int, alt: Int = 0) -> Tuple[List[Float32], Li
 
 
 def oracle_lu_solve(lu: List[Float32], piv: List[Int32], b: List[Float32], n: Int, nrhs: Int, alt: Int = 0) -> List[Float32]:
-    """getrs; alt 1 folds each substitution's inner sum descending."""
+    """lu_solve in DEVIATION 5308's order, written left-looking: the swaps,
+    then forward substitution with unit L folded ascending in j and back
+    substitution with U folded DESCENDING in j (getrs folds it ascending);
+    alt 1 reverses each fold (alt 1's back substitution is getrs's)."""
     var x = b.copy()
     for k in range(n):
         var p = Int(piv[k])
@@ -458,16 +462,17 @@ def oracle_lu_solve(lu: List[Float32], piv: List[Int32], b: List[Float32], n: In
             var i = n - 1 - ii
             var acc = ftz(x[i * nrhs + c])
             for q in range(n - i - 1):
-                var j = n - 1 - q if alt == 1 else i + 1 + q
+                var j = i + 1 + q if alt == 1 else n - 1 - q
                 acc = o_fma(-lu[i * n + j], x[j * nrhs + c], acc)
             x[i * nrhs + c] = o_div0(acc, lu[i * n + i])
     return x^
 
 
 def oracle_lu_solve_t(lu: List[Float32], piv: List[Int32], b: List[Float32], n: Int, nrhs: Int, alt: Int = 0) -> List[Float32]:
-    """getrs 'T' (A^T X = B), written independently of the cell: U^T forward,
-    unit L^T back, the swaps undone last to first; alt 1 folds each inner sum
-    descending."""
+    """lu_solve 'T' (A^T X = B) in DEVIATION 5308's order, written
+    independently of the cell: U^T forward folded ascending, unit L^T back
+    folded DESCENDING, the swaps undone last to first; alt 1 reverses each
+    fold."""
     var x = b.copy()
     for c in range(nrhs):
         for i in range(n):
@@ -480,7 +485,7 @@ def oracle_lu_solve_t(lu: List[Float32], piv: List[Int32], b: List[Float32], n: 
             var i = n - 1 - ii
             var acc = ftz(x[i * nrhs + c])
             for q in range(n - i - 1):
-                var j = n - 1 - q if alt == 1 else i + 1 + q
+                var j = i + 1 + q if alt == 1 else n - 1 - q
                 acc = o_fma(-lu[j * n + i], x[j * nrhs + c], acc)
             x[i * nrhs + c] = acc
     var k = n - 1
@@ -774,33 +779,113 @@ def oracle_als(c: List[Float32], y: List[Float32], n: Int, m: Int, f: Int, reg: 
     return out^
 
 
+def _o_tree(p_in: List[Float32]) -> Float32:
+    """x_decomp/qr_sliced.mojo's tree restated: stride h = 1, 2, 4, ..., p[a]
+    absorbs p[a + h] for a = 0, 2h, ...; 0 for no partials."""
+    var p = p_in.copy()
+    var ns = len(p)
+    if ns == 0:
+        return Float32(0)
+    var h = 1
+    while h < ns:
+        var a = 0
+        while a + h < ns:
+            p[a] = o_add(p[a], p[a + h])
+            a += 2 * h
+        h *= 2
+    return p[0]
+
+
+def _o_pair(s1: Float32, q1: Float32, s2: Float32, q2: Float32) -> Tuple[Float32, Float32]:
+    """dlassq's combine: the larger scale kept (a tie keeps the left)."""
+    var bs = s1
+    var bq = q1
+    var ss = s2
+    var sq = q2
+    if s2 > s1:
+        bs = s2
+        bq = q2
+        ss = s1
+        sq = q1
+    if ss == Float32(0):
+        return (bs, bq)
+    var r = o_div0(ss, bs)
+    return (bs, o_fma(o_mul(r, r), sq, bq))
+
+
+def _o_pair_tree(s_in: List[Float32], q_in: List[Float32]) -> Tuple[Float32, Float32]:
+    var s = s_in.copy()
+    var q = q_in.copy()
+    var ns = len(s)
+    if ns == 0:
+        return (Float32(0), Float32(0))
+    var h = 1
+    while h < ns:
+        var a = 0
+        while a + h < ns:
+            var r = _o_pair(s[a], q[a], s[a + h], q[a + h])
+            s[a] = r[0]
+            q[a] = r[1]
+            a += 2 * h
+        h *= 2
+    return (s[0], q[0])
+
+
+def _o_slice_rows(k: Int, c: Int, m: Int, alt: Int) -> List[Int]:
+    """Slice c's rows at step k, ascending (alt 1: descending)."""
+    var lo = k + 1 + c * QS_ROWS
+    var hi = min(k + 1 + (c + 1) * QS_ROWS, m)
+    var out = List[Int]()
+    for t in range(hi - lo):
+        out.append((hi - 1 - t) if alt == 1 else (lo + t))
+    return out^
+
+
+def _o_sliced_dot(xv: List[Float32], xs: Int, xc: Int, yv: List[Float32], ys: Int, yc: Int, k: Int, m: Int, alt: Int) -> Float32:
+    """w = y[k] + sum_{i>k} x[i] y[i] in the sliced order: each slice's chain
+    from 0, the tree, then the seed added."""
+    var ns = (m - k - 1 + QS_ROWS - 1) // QS_ROWS if m - k - 1 > 0 else 0
+    var parts = List[Float32]()
+    for c in range(ns):
+        var acc = Float32(0)
+        for i in _o_slice_rows(k, c, m, alt):
+            acc = o_fma(xv[i * xs + xc], yv[i * ys + yc], acc)
+        parts.append(acc)
+    return o_add(yv[k * ys + yc], _o_tree(parts))
+
+
 def oracle_geqrf(a_in: List[Float32], m: Int, n: Int, alt: Int = 0) -> Tuple[List[Float32], List[Float32]]:
-    """LAPACK geqrf restated (DEVIATION 5320): per column k, dlarfg on
-    (a[k, k], a[k+1:, k]) with the norm scaled by the largest |entry|, its
-    squares ascending (alt 1: descending), beta = -sign(alpha) ||.||, then
-    H_k applied to every later column with w = a[k, j] + sum_{i>k} v_i
-    a[i, j] ascending (alt 1: descending). Returns (h, tau)."""
+    """LAPACK geqrf (DEVIATION 5320) in x_decomp/qr_sliced.mojo's order, restated: the norm from the
+    slices' (scale, sum of squares) pairs by the tree, alpha's pair last;
+    every reflector product by slices, the tree, the seed added last (alt 1:
+    every slice's chain descending)."""
     var a = a_in.copy()
     var kk = m if m < n else n
     var tau = List[Float32](length=kk, fill=Float32(0))
     for k in range(kk):
         var alpha = ftz(a[k * n + k])
-        var xmax = Float32(0)
-        for i in range(k + 1, m):
-            if abs(ftz(a[i * n + k])) > xmax:
-                xmax = abs(ftz(a[i * n + k]))
-        if xmax == Float32(0):
+        var ns = (m - k - 1 + QS_ROWS - 1) // QS_ROWS if m - k - 1 > 0 else 0
+        var ps = List[Float32]()
+        var pq = List[Float32]()
+        for c in range(ns):
+            var rows = _o_slice_rows(k, c, m, alt)
+            var mx = Float32(0)
+            for i in rows:
+                if abs(ftz(a[i * n + k])) > mx:
+                    mx = abs(ftz(a[i * n + k]))
+            var acc = Float32(0)
+            if mx != Float32(0):
+                for i in rows:
+                    var v = o_div0(a[i * n + k], mx)
+                    acc = o_fma(v, v, acc)
+            ps.append(mx)
+            pq.append(acc)
+        var t = _o_pair_tree(ps, pq)
+        if t[0] == Float32(0):
             continue
-        var mx = Float32(0)
-        for i in range(k, m):
-            if abs(ftz(a[i * n + k])) > mx:
-                mx = abs(ftz(a[i * n + k]))
-        var acc = Float32(0)
-        for ii in range(m - k):
-            var i = (m - 1 - ii) if alt == 1 else (k + ii)
-            var v = ftz(identical_div(ftz(a[i * n + k]), mx))
-            acc = o_fma(v, v, acc)
-        var nrm = ftz(identical_mul(o_sqrt0(acc), mx))
+        var aa = abs(alpha)
+        var f = _o_pair(t[0], t[1], aa, Float32(1) if aa != Float32(0) else Float32(0))
+        var nrm = o_mul(o_sqrt0(f[1]), f[0])
         var beta = -nrm if alpha >= Float32(0) else nrm
         tau[k] = o_div0(o_sub(beta, alpha), beta)
         var scale = o_sub(alpha, beta)
@@ -808,10 +893,7 @@ def oracle_geqrf(a_in: List[Float32], m: Int, n: Int, alt: Int = 0) -> Tuple[Lis
             a[i * n + k] = o_div0(a[i * n + k], scale)
         a[k * n + k] = beta
         for j in range(k + 1, n):
-            var w = ftz(a[k * n + j])
-            for ii in range(m - k - 1):
-                var i = (m - 1 - ii) if alt == 1 else (k + 1 + ii)
-                w = o_fma(a[i * n + k], a[i * n + j], w)
+            var w = _o_sliced_dot(a, n, k, a, n, j, k, m, alt)
             var tw = o_mul(tau[k], w)
             a[k * n + j] = o_sub(a[k * n + j], tw)
             for i in range(k + 1, m):
@@ -820,9 +902,8 @@ def oracle_geqrf(a_in: List[Float32], m: Int, n: Int, alt: Int = 0) -> Tuple[Lis
 
 
 def oracle_orgqr(h: List[Float32], tau: List[Float32], m: Int, n: Int, kk: Int, qc: Int, alt: Int = 0) -> List[Float32]:
-    """orgqr restated (DEVIATION 5320): column j of Q is e_j with H_{kk-1},
-    ..., H_0 applied in that order (alt 2: H_0 first), each w = x[k] + sum
-    v_i x[i] ascending (alt 1: descending)."""
+    """orgqr in the sliced order, restated (alt 1: slice chains descending;
+    alt 2: H_0 first)."""
     var q = List[Float32](length=m * qc, fill=Float32(0))
     for j in range(qc):
         var x = List[Float32](length=m, fill=Float32(0))
@@ -832,10 +913,7 @@ def oracle_orgqr(h: List[Float32], tau: List[Float32], m: Int, n: Int, kk: Int, 
             var t = ftz(tau[k])
             if t == Float32(0):
                 continue
-            var w = ftz(x[k])
-            for ii in range(m - k - 1):
-                var i = (m - 1 - ii) if alt == 1 else (k + 1 + ii)
-                w = o_fma(h[i * n + k], x[i], w)
+            var w = _o_sliced_dot(h, n, k, x, 1, 0, k, m, alt)
             var tw = o_mul(t, w)
             x[k] = o_sub(x[k], tw)
             for i in range(k + 1, m):

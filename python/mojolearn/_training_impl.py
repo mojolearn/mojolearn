@@ -105,7 +105,9 @@ from . import _portable_math as math
 from . import _numeric_profile
 from fractions import Fraction
 
+import array
 import ctypes
+import operator
 import os
 import numbers
 import struct
@@ -517,8 +519,20 @@ class _Optimizer(NumericModeMixin):
         #: signature for both and one state pair means a checkpoint has one
         #: shape (optimizer contract, `optimizer_step_oracle`). Both are
         #: `mojolearn.Array` (DEVIATION 2404).
-        self._m = zeros((self.n_total,), "<f4")
-        self._v = zeros((self.n_total,), "<f4")
+        #: lane gap-train-utils (2026-10-02): the host pair is allocated on
+        #: first need (a read, an assignment, the per-call step), not here,
+        #: and a pair nobody has touched is not uploaded when the resident
+        #: handle opens (its device pair is created zero filled): at the
+        #: board's 16.8M parameters that was two 64 MB host fills and a
+        #: 128 MB upload of zeros per optimizer, the same zeros either way.
+        #: MOJOLEARN_OPT_LAZY_MOMENTS=0 restores the eager pair and upload
+        #: (the A/B).
+        self._m = None
+        self._v = None
+        self._pristine = True
+        if os.environ.get("MOJOLEARN_OPT_LAZY_MOMENTS") == "0":
+            self._host_moments()
+            self._pristine = False
         #: SGD's per-tensor `buf_initialized` flag, contract 7.3b. 0 means
         #: this tensor's momentum buffer has never been written, so the first
         #: step COPIES the gradient into it instead of running the
@@ -539,18 +553,28 @@ class _Optimizer(NumericModeMixin):
         self.clip_coef_ = None
 
     # -- the moments: host arrays, or a resident pair mirrored on access ----
+    def _host_moments(self):
+        """The host pair, allocated (zero filled) on first need."""
+        if self._m is None:
+            self._m = zeros((self.n_total,), "<f4")
+        if self._v is None:
+            self._v = zeros((self.n_total,), "<f4")
+        return self._m, self._v
+
     def _download(self):
         if self._res is not None and not self._host_fresh:
+            m, v = self._host_moments()
             self._res_binding.optimizer_resident_download(
-                self._res, addr(self._m, name="exp_avg"),
-                addr(self._v, name="exp_avg_sq"), int(self.n_total))
+                self._res, addr(m, name="exp_avg"),
+                addr(v, name="exp_avg_sq"), int(self.n_total))
             self._host_fresh = True
 
     def _upload(self):
         if self._res is not None:
+            m, v = self._host_moments()
             self._res_binding.optimizer_resident_upload(
-                self._res, addr(self._m, name="exp_avg"),
-                addr(self._v, name="exp_avg_sq"), int(self.n_total))
+                self._res, addr(m, name="exp_avg"),
+                addr(v, name="exp_avg_sq"), int(self.n_total))
             self._host_fresh = True
 
     @property
@@ -559,22 +583,27 @@ class _Optimizer(NumericModeMixin):
         of `n_total` floats. With the moments resident this is a download
         on access, so read it once per use, not per element."""
         self._download()
-        return self._m
+        # the caller may write into what it gets: no longer pristine
+        self._pristine = False
+        return self._host_moments()[0]
 
     @exp_avg.setter
     def exp_avg(self, value):
         self._m = value
+        self._pristine = False
         self._upload()
 
     @property
     def exp_avg_sq(self):
         """Adam's second moment; see `exp_avg`."""
         self._download()
-        return self._v
+        self._pristine = False
+        return self._host_moments()[1]
 
     @exp_avg_sq.setter
     def exp_avg_sq(self, value):
         self._v = value
+        self._pristine = False
         self._upload()
 
     def _open_resident(self, binding):
@@ -587,7 +616,12 @@ class _Optimizer(NumericModeMixin):
             return
         self._res_binding = binding
         self._res = int(binding.optimizer_resident_open(int(self.n_total)))
-        self._upload()
+        if self._pristine:
+            # the device pair is created zero filled: the untouched host
+            # pair holds the same zeros (no transfer, the same bits)
+            self._host_fresh = True
+        else:
+            self._upload()
 
     @property
     def resident_(self):
@@ -792,8 +826,8 @@ class _Optimizer(NumericModeMixin):
             binding.optimizer_step(
                 addr(flat_p, name="params"),
                 addr(flat_g, name="grads"),
-                addr(self._m, name="exp_avg"),
-                addr(self._v, name="exp_avg_sq"),
+                addr(self._host_moments()[0], name="exp_avg"),
+                addr(self._host_moments()[1], name="exp_avg_sq"),
                 addr_ro(self.offsets, name="offsets"),
                 addr(self.buf_initialized, name="buf_initialized"),
                 addr(info, name="info"),
@@ -1724,7 +1758,144 @@ def _decide_f32(fn):
     )
 
 
-class _Schedule(object):
+# lane gap-train-utils (2026-10-02): THE SCHEDULE TABLE. A schedule's value
+# at step t is DEFINED as the float32 nearest an exact rational (the routes
+# below), and that definition does not change. What changes is how a run of
+# consecutive steps is answered: `_LrTable.lr_at` evaluates a block of
+# _LR_BLOCK steps at once in binary64, each value with a rigorous error
+# bound, and keeps a value only when BOTH ends of its error interval round
+# to the same float32 (rounding is monotone, so the exact value, inside the
+# interval, rounds there too); every other step of the block takes the
+# exact route. The cosine of a block is a rotation recurrence from one
+# Taylor anchor (`_cos_pi_run`), not a series per step. The answer is the
+# exact route's float32 at every step; what moved is the cost (the board's
+# 100,000-step lanes spent 9 to 18 us a step in Fraction arithmetic, where
+# torch's scheduler spends about 1.5). MOJOLEARN_LR_TABLE=0 (or
+# MOJOLEARN_LR_EXACT_ONLY=1) keeps the per-step routes (the A/B, read when
+# the schedule is built).
+_LR_SHIFT = 8
+_LR_BLOCK = 1 << _LR_SHIFT
+_LR_MASK = _LR_BLOCK - 1
+_F32_MIN_NORMAL_F = 2.0 ** -126
+_F32_MAX_F = float.fromhex("0x1.fffffep+127")
+_EPS53 = 2.0 ** -53
+
+
+def _lr_table_wanted():
+    return (os.environ.get("MOJOLEARN_LR_TABLE") != "0"
+            and os.environ.get("MOJOLEARN_LR_EXACT_ONLY") != "1")
+
+
+def _f32_decide_many(vs, errs):
+    """Per value: the float32 every real in [v - e, v + e] rounds to (ties
+    to even), or None when the two ends round apart or the value is not a
+    normal positive float32 (the exact route's flush and overflow rules
+    decide those). `array('f')` is the IEEE binary64 -> binary32
+    conversion, correctly rounded; `e` carries the rounding of `v - e` and
+    `v + e` themselves in its margin."""
+    lo = array.array("f", map(operator.sub, vs, errs))
+    hi = array.array("f", map(operator.add, vs, errs))
+    return [a if (a == b and _F32_MIN_NORMAL_F <= a <= _F32_MAX_F) else None
+            for a, b in zip(lo, hi)]
+
+
+def _cos_sin_pi_f64(q):
+    """(cos(pi q), sin(pi q)) in binary64 for a float q in [0, 1], each
+    within _COS_SIN_ERR of the true values at the float q: the Taylor
+    series of both on x = pi q' with q' = q or 1 - q in [0, 1/2] (exact,
+    Sterbenz), 26 terms (truncation under 1e-58 at x <= pi/2). Argument
+    roundings (pi, the product) are under 2^-50 and pass through with slope
+    at most 1; the sums' roundings are under 2^-46. No libm."""
+    flip = q > 0.5
+    if flip:
+        q = 1.0 - q
+    x = math.pi * q
+    x2 = x * x
+    c = 0.0
+    sn = 0.0
+    tc = 1.0
+    ts = x
+    for k in range(_COS_F64_TERMS):
+        c += tc
+        sn += ts
+        tc = -tc * x2 / ((2 * k + 1) * (2 * k + 2))
+        ts = -ts * x2 / ((2 * k + 2) * (2 * k + 3))
+    return (-c if flip else c), sn
+
+
+#: bound on each of `_cos_sin_pi_f64`'s two values (2^-46 analysed, 4x margin)
+_COS_SIN_ERR = 2.0 ** -44
+
+
+def _cos_pi_run(n0, den, count):
+    """cos(pi (n0 + k) / den) for k = 0 .. count - 1 (n0, den floats, every
+    (n0 + k) / den in [0, 1]) and a bound on each value's error, as two
+    lists; None when the step angle pi / den exceeds 1/2.
+
+    One anchor (`_cos_sin_pi_f64(n0 / den)`, error under 2^-44 plus the
+    quotient's rounding, under 2^-51 of angle), then the rotation
+    (c, s) <- (c cp - s sp, s cp + c sp) by the step angle x = pi (1 / den)
+    in binary64, whose cosine and sine (`_cos_sin_pi_f64`, x <= 1/2: partial
+    sums under 1, error under 2^-47 each) perturb an isometry by at most
+    2^-46 in the 2-norm; each step's three roundings add under 2^-51. So
+    step k's error is under 2^-44 + 2^-49 (the step angle's own rounding,
+    accumulated over k / den <= 1) + k (2^-46 + 2^-51): the bound used is
+    2^-43 + k 2^-45."""
+    step = 1.0 / den
+    if not (math.pi * step <= 0.5):
+        return None
+    c, sn = _cos_sin_pi_f64(n0 / den)
+    cp, sp = _cos_sin_pi_f64(step)
+    out = []
+    for _ in range(count):
+        out.append(c)
+        c, sn = c * cp - sn * sp, sn * cp + c * sp
+    errs = [2.0 ** -43 + k * 2.0 ** -45 for k in range(count)]
+    return out, errs
+
+
+class _LrTable(object):
+    """`lr_at` through blocks of _LR_BLOCK consecutive steps (see the section
+    comment above). A subclass sets, through `_table_setup`, the first step
+    of its constant tail and that value (or None), and provides
+    `_fast_values(t0, t1)` (values and error bounds of steps t0 .. t1 - 1,
+    entries None where it has no fast value, or None for the whole block)
+    and `_lr_at_slow(t)` (the exact route)."""
+
+    def _table_setup(self, tail_t, tail_v):
+        self._fast = _lr_table_wanted()
+        self._tail_t = tail_t
+        self._tail_v = tail_v
+        self._tb = -1
+        self._tbv = None
+
+    def _lr_block(self, b):
+        t0 = (b << _LR_SHIFT) + 1
+        t1 = min(t0 + _LR_BLOCK, self._tail_t)
+        got = self._fast_values(t0, t1)
+        if got is None:
+            return [self._lr_at_slow(t) for t in range(t0, t1)]
+        vals = _f32_decide_many(*got)
+        for i, f in enumerate(vals):
+            if f is None:
+                vals[i] = self._lr_at_slow(t0 + i)
+        return vals
+
+    def lr_at(self, t):
+        """The float32 learning rate of ONE-BASED step `t`, as a float."""
+        if self._fast and type(t) is int and t >= 1:
+            if t < self._tail_t:
+                b = (t - 1) >> _LR_SHIFT
+                if b != self._tb:
+                    self._tbv = self._lr_block(b)
+                    self._tb = b
+                return self._tbv[(t - 1) & _LR_MASK]
+            if self._tail_v is not None:
+                return self._tail_v
+        return self._lr_at_slow(t)
+
+
+class _Schedule(_LrTable):
     """Shared half of the schedules. `t` is the optimizer's ONE-BASED step
     counter, so `lr_at(1)` is the first step's learning rate."""
 
@@ -1748,6 +1919,11 @@ class _Schedule(object):
             raise ValueError(
                 "mojolearn.%s: total_steps must be >= max(1, warmup_steps), "
                 "got %r" % (type(self).__name__, self.total_steps))
+        # the constant tail: peak after the warmup without total_steps,
+        # min_lr from total_steps on
+        w = self.warmup_steps
+        tail_t = w + 1 if self.total_steps is None else max(self.total_steps, w + 1)
+        self._table_setup(tail_t, self._lr_at_slow(tail_t))
 
     def config(self):
         return {"kind": self.kind, "peak_lr": self.peak_lr,
@@ -1782,12 +1958,37 @@ class _Schedule(object):
     def _decay(self, p):
         raise NotImplementedError
 
-    def lr_at(self, t):
-        """The float32 learning rate of ONE-BASED step `t`, as a float."""
+    def _lr_at_slow(self, t):
         p, value = self._progress(t)
         if p is None:
             return _f32_round(value)
         return self._decay(p)
+
+    def _decay_values(self, k0, k1):
+        """Values and error bounds of decay steps t = warmup + k, k0 <= k <
+        k1 (0 < k < total - warmup), or None."""
+        return None
+
+    def _fast_values(self, t0, t1):
+        w = self.warmup_steps
+        vs, es = [], []
+        b = min(t1, w + 1)
+        if t0 < b:
+            if w >= (1 << 29):
+                return None
+            # peak t is exact (a float32 times an integer under 2^29), the
+            # division rounds once: under 2^-53 of v; bound 2^-50 of v
+            peak = self.peak_lr
+            vs = [peak * t / w for t in range(t0, b)]
+            es = [v * 2.0 ** -50 for v in vs]
+        a = max(t0, w + 1)
+        if a < t1:
+            got = self._decay_values(a - w, t1 - w)
+            if got is None:
+                return None
+            vs += got[0]
+            es += got[1]
+        return vs, es
 
     def bits_at(self, t):
         """`lr_at(t)` as its float32 bit pattern, for fixtures."""
@@ -1814,6 +2015,20 @@ class WarmupLinearLR(_Schedule):
     def _decay(self, p):
         peak, lo = Fraction(self.peak_lr), Fraction(self.min_lr)
         return _f32_round(peak + (lo - peak) * p)
+
+    def _decay_values(self, k0, k1):
+        span = self.total_steps - self.warmup_steps
+        if span >= (1 << 29):
+            return None
+        peak, lo = self.peak_lr, self.min_lr
+        d = lo - peak
+        # d (one rounding at most), d k, / span, peak + : four roundings,
+        # each under 2^-53 of an operand no larger than peak + |lo| + |v|;
+        # bound 2^-50 of that sum (a factor of two over)
+        vs = [peak + d * k / span for k in range(k0, k1)]
+        base = peak + abs(lo)
+        es = [(base + abs(v)) * 2.0 ** -50 for v in vs]
+        return vs, es
 
 
 # lane/neural-net-experiment (2026-09-30): the cosine schedule's value is
@@ -1905,6 +2120,21 @@ class WarmupCosineLR(_Schedule):
             b = lo + (peak - lo) * (1 + c_hi) / 2
             return (a, b) if a <= b else (b, a)
         return _decide_f32(interval)
+
+    def _decay_values(self, k0, k1):
+        span_steps = self.total_steps - self.warmup_steps
+        peak, lo = self.peak_lr, self.min_lr
+        span = peak - lo
+        if not (span > 0.0) or span_steps >= (1 << 52):
+            return None
+        got = _cos_pi_run(float(k0), float(span_steps), k1 - k0)
+        if got is None:
+            return None
+        cs, ce = got
+        # `_decay`'s expression and bound with the run's cosine bound
+        vs = [lo + span * (1.0 + c) / 2.0 for c in cs]
+        es = [span * e + 8.0 * _F64_EPS * (peak + abs(v)) for v, e in zip(vs, ce)]
+        return vs, es
 
     def _decay(self, p):
         if os.environ.get("MOJOLEARN_LR_EXACT_ONLY") == "1":
