@@ -758,9 +758,6 @@ host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	1	host
 host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	0	host_parallelize(_fill, tasks)
 host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	1	host_parallelize(_fill, tasks)
 host-threads	host-threads	gap-optin-flags	debt	x_neighbors/cc_sparse.mojo	0	host_parallelize(_round, tasks)
-host-call	host-import	hr-graph	debt	x_neighbors/device_ops.mojo	0	import x_neighbors/items.mojo:svgp_item
-host-call	host-import	PR#106	debt	x_neighbors/device_ops.mojo	0	svgp_item(t, _f(kuu), _f(bmat), _f(b), _f(y), _f(alpha), _f(cmat), _f(qmu), _f(qsqrt), _f(info), FP(unsafe_from_address=Int(s_luu.unsafe_ptr())), FP(unsafe_from_address=Int(s_ls.unsafe_ptr())), FP(unsafe_from_address=Int(s_e.unsafe_ptr())), FP(unsafe_from_address=Int(s_col.unsafe_ptr())), m, n, noise, jitter, kdiag)
-host-call	host-import	PR#106	debt	x_neighbors/device_ops.mojo	0	svgp_item(t, kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, luu, ls, e, col, m, n, noise, jitter, kdiag)
 host-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	0	comptime if is_defined["MOJOLEARN_XN_MAPPED_DOWN"]():
 host-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	0	comptime if is_defined["MOJOLEARN_XN_MAPPED_UP"]():
 host-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	0	if count >= XN_STAGED_MIN:
@@ -770,16 +767,9 @@ host-threads	host-threads	UNOWNED	debt	x_neighbors/device_ops.mojo	1	host_parall
 host-threads	host-threads	UNOWNED	debt	x_neighbors/device_ops.mojo	0	host_parallelize(_part, tasks)
 route-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	0	comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
 route-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	1	comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-route-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	2	comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-route-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	3	comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-route-switch	host-env/threshold	hr-graph	debt	x_neighbors/device_ops.mojo	4	comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
-route-switch	host-env/threshold	PR#106	debt	x_neighbors/device_ops.mojo	5	comptime if not is_defined["MOJOLEARN_XN_SERIAL_GPU"]():
 serial-launch	serial-gpu	UNOWNED	debt	x_neighbors/device_ops.mojo	0	ctx.enqueue_function[ocsvm_kernel](
 host-call	host-import	UNOWNED	debt	x_neighbors/eigh.mojo	0	import spectral/checks/symmetric_eig_host.mojo:symmetric_eig_host
 host-call	host-import	UNOWNED	debt	x_neighbors/eigh.mojo	0	var sweeps = symmetric_eig_host[DType.float32](m, n, w, v)
-host-threads	host-threads	PR#106	debt	x_neighbors/items.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	PR#106	debt	x_neighbors/items.mojo	0	host_parallelize(task, 2 * m)
-host-threads	host-threads	PR#106	debt	x_neighbors/items.mojo	0	host_parallelize(task, m)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	_down(ctx, d_a, ld, nc)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	_down(ctx, d_a, res, cells)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	_down(ctx, d_a, x, n)
@@ -882,6 +872,7 @@ host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	var dx = _buf(
 host-env	host-env/threshold	hr-small-passes	debt	x_neighbors/iter_device.mojo	0	comptime if is_defined["MOJOLEARN_XN_CC_HOST"]():
 route-switch	host-env/threshold	UNOWNED	debt	x_neighbors/iter_device.mojo	0	comptime if not is_defined["MOJOLEARN_XN_CC_GPU"]():
 serial-launch	serial-gpu	hr-graph	debt	x_neighbors/iter_device.mojo	0	ctx.enqueue_function[absdiff_sum_kernel](
+serial-launch	serial-gpu	hr-graph	debt	x_neighbors/iter_device.mojo	0	ctx.enqueue_function[pr_dangling_sum_kernel](
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	import x_neighbors/device_ops.mojo:_buf
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_g = _buf(ctx, g, n * n, True)
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_nxt = _buf(ctx, 0, nc, False)
