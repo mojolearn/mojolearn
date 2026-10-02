@@ -10,8 +10,6 @@ host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/hos
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/host/svc_proba.mojo:svc_platt_train_binding
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/host/svc_proba.mojo:svc_portable_math_binding
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_svm.mojo	0	import svm/host/svc_proba.mojo:svc_splitmix_perm_binding
-d2h-loop	d2h-roundtrip	gap-classical-nv	debt	cholesky/checks/trsm.mojo	0	ctx.enqueue_copy(dst_ptr=host_l.unsafe_ptr(), src_buf=lv)
-d2h-loop	d2h-roundtrip	gap-classical-nv	debt	cholesky/checks/trsm.mojo	0	s.ctx.enqueue_copy(dst_ptr=result.unsafe_ptr(), src_buf=s.b)
 host-threads	host-threads	PR#126	debt	cluster/estimator.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	PR#126	debt	cluster/estimator.mojo	0	host_parallelize(_abs_sum_task, groups)
 host-threads	host-threads	PR#126	debt	cluster/estimator.mojo	1	host_parallelize(_abs_sum_task, groups)
