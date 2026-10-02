@@ -13,6 +13,7 @@ same values; only the stopping sum crosses back, one float per iteration,
 compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
+from x_neighbors.svgp_ff import matmul_tn_acc_ff_item, svgp_ff_solve
 from checks.kernel_matrix import lib_smem_page_fits_for, TARGET_COLUMN
 from std.memory import bitcast, memcpy
 from std.atomic import Atomic
@@ -1261,6 +1262,76 @@ def op_svgp_stats(
     _ = d_k^
     _ = d_ks^
     _ = ctx^
+
+
+def matmul_tn_acc_ff_kernel(a: FP, b: FP, rh: FP, rl: FP, rows_: Int64, n_: Int64, m_: Int64):
+    var t = _tid()
+    if t < Int(n_) * Int(m_):
+        matmul_tn_acc_ff_item(t, a, b, rh, rl, Int(rows_), Int(n_), Int(m_))
+
+
+def op_svgp_stats_ff(
+    x: Int, z: Int, y: Int, bh: Int, bl: Int, bvh: Int, bvl: Int, n: Int, m: Int, d: Int, gamma: Float32,
+    variance: Float32,
+) raises:
+    """`op_svgp_stats` with B and b accumulated in float-float (lane/neural-pass106,
+    x_neighbors/svgp_ff.mojo): the same Kfu tiles, the same rows ascending."""
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_z = _buf(ctx, z, m * d, True)
+    var d_y = _buf(ctx, y, n, True)
+    var d_bh = _buf(ctx, 0, m * m, False)
+    var d_bl = _buf(ctx, 0, m * m, False)
+    var d_vh = _buf(ctx, 0, m, False)
+    var d_vl = _buf(ctx, 0, m, False)
+    enqueue_fill(ctx, d_bh, Float32(0))
+    enqueue_fill(ctx, d_bl, Float32(0))
+    enqueue_fill(ctx, d_vh, Float32(0))
+    enqueue_fill(ctx, d_vl, Float32(0))
+    var tr = _tile_rows(n, m)
+    var d_k = _buf(ctx, 0, tr * m, False)
+    var d_ks = _buf(ctx, 0, tr * m, False)
+    var xp: FP = _p(d_x)
+    var yp: FP = _p(d_y)
+    var r0 = 0
+    while r0 < n:
+        var rows = min(tr, n - r0)
+        _launch_scaled_rbf(ctx, xp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
+        ctx.enqueue_function[matmul_tn_acc_ff_kernel](
+            _p(d_ks), _p(d_ks), _p(d_bh), _p(d_bl), Int64(rows), Int64(m), Int64(m),
+            grid_dim=_grid(m * m), block_dim=(BLOCK if m * m > 1 else 1),
+        )
+        ctx.enqueue_function[matmul_tn_acc_ff_kernel](
+            _p(d_ks), yp + r0, _p(d_vh), _p(d_vl), Int64(rows), Int64(m), Int64(1),
+            grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
+        )
+        r0 += rows
+    _down(ctx, d_bh, bh, m * m)
+    _down(ctx, d_bl, bl, m * m)
+    _down(ctx, d_vh, bvh, m)
+    _down(ctx, d_vl, bvl, m)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_z^
+    _ = d_y^
+    _ = d_bh^
+    _ = d_bl^
+    _ = d_vh^
+    _ = d_vl^
+    _ = d_k^
+    _ = d_ks^
+    _ = ctx^
+
+
+def op_svgp_ff(
+    kuu: Int, bh: Int, bl: Int, bvh: Int, bvl: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int,
+    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+) raises:
+    """The float-float SVGP solve on the host, as svgp's item runs (HOST_RUN)."""
+    svgp_ff_solve(FP(unsafe_from_address=kuu), FP(unsafe_from_address=bh), FP(unsafe_from_address=bl),
+                  FP(unsafe_from_address=bvh), FP(unsafe_from_address=bvl), FP(unsafe_from_address=y),
+                  FP(unsafe_from_address=alpha), FP(unsafe_from_address=cmat), FP(unsafe_from_address=qmu),
+                  FP(unsafe_from_address=qsqrt), FP(unsafe_from_address=info), m, n, noise, jitter, kdiag)
 
 
 def op_svgp_predict(
