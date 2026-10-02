@@ -61,12 +61,21 @@ _RULES = [
     ("host-threshold", True,
      re.compile(r"\b\w*HOST\w*_(MIN|MAX)(_\w+)?\b|\bHOST_(MIN|MAX)\b"),
      "a size threshold that picks the host"),
+    ("host-threads", True,
+     re.compile(r"\bhost_parallel\w*\s*[\[(]"
+                r"|^\s*from\s+core\.host_parallel\s+import\b"),
+     "runs a step on CPU threads inside GPU code (put it on the GPU; a "
+     "CPU-only path lives in a *host* file)"),
     ("route-table", False,
      re.compile(r"\b(_HOST_ALGOS|_HOST_ROUTE_LANES|_HOST_ROUTE_MAX_CELLS"
                 r"|_HOST_ONE_BORDER_\w+|_glm_host|_small_pool_host"
                 r"|_fit_on_host|_sgd_on_host|HOST_RUN)\b"),
      "touches an existing host route (remove it, don't extend it)"),
 ]
+
+# Files whose host threads only drive one GPU each (multi-GPU dispatch):
+# the host-threads rule skips them, every other rule still reads them.
+_DRIVES_GPUS = re.compile(r"(^|/)[^/]*multi_gpu[^/]*$")
 
 # Six PRs in flight when the check went in (Andrew, Oct 2: everything in
 # flight lands). Exactly the lines each PR had added up to this pinned head
@@ -139,6 +148,8 @@ def findings(diff_text, exempt=frozenset()):
         for name, scoped, pat, why in _RULES:
             if scoped and scoped_skip:
                 continue
+            if name == "host-threads" and _DRIVES_GPUS.search(path):
+                continue
             hits = [m.group(0) for m in pat.finditer(text)]
             if name == "host-env":
                 hits = [h for h in hits if not _HOST_PLUMBING.fullmatch(h)]
@@ -161,8 +172,17 @@ def main(argv):
             diff = f.read()
         exempt = frozenset()
     elif len(argv) == 3:
+        base = argv[1]
+        if main_ref:
+            # count what the tip adds over main (the CI check's range): from
+            # merge-base(main, tip). A push that merges main into a lane then
+            # is not charged with main's own lines, which were checked when
+            # they landed; every line the lane itself adds is still read.
+            mb = _git("merge-base", main_ref, argv[2])
+            if mb.returncode == 0:
+                base = mb.stdout.strip()
         r = _git("diff", "-U0", "--no-color", "--no-ext-diff",
-                 "--diff-filter=AMR", argv[1], argv[2])
+                 "--diff-filter=AMR", base, argv[2])
         if r.returncode != 0:
             print(r.stderr, file=sys.stderr)
             return 2
