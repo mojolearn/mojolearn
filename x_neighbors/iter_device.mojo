@@ -399,8 +399,10 @@ def cc_hook_kernel(indptr: IP, indices: IP, lab: IP, n: Int32, changed: IP):
             if a != b:
                 var lo = a if a < b else b
                 var hi = b if a < b else a
-                var old = Atomic[DType.int32].min(lab + Int(hi), lo)
-                if old > lo:
+                # a racing read only costs a spare round: the flag is set
+                # whenever this edge could still lower an entry
+                if lab.unsafe_load(Int(hi)) > lo:
+                    Atomic[DType.int32].min(lab + Int(hi), lo)
                     changed.unsafe_store(0, Int32(1))
 
 
