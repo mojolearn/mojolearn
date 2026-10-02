@@ -1610,8 +1610,6 @@ class SimpleImputer(_PrepBase):
         return pr.get(hc, (n, dout + m))
 
 
-
-
 # ---------------------------------------------------------------- discretizer
 def _gather_rows(arr, rows):
     """A new float32 Array of the given rows of a C-order 2-D Array (a byte
