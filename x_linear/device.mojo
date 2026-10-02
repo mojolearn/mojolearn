@@ -25,7 +25,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM
 from x_linear.ops import ld, st, fd, i2f, fa, fm, fmad, flog, fill, copy, row_dot, mean_of
-from x_linear.tops import t_fold_fa_staged
+from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked
 from x_linear.glm import (
     _unit, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, _glm_step, GLM_LINK_LOG, GLM_STALL_ITERS,
 )
@@ -238,7 +238,7 @@ def glm_obj_map_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, power: Float
 def glm_obj_fold_kernel(tw: FP, lt: FP, n: Int32, d: Int32, theta: FP, alpha: Float32, sc: FP, slot: Int32):
     """`_objective_team`'s fold and value on one block: sc[slot] = f."""
     var t = device_team(tw, Int(n), 3, 0)
-    var acc = t_fold_fa_staged(t, lt, 0, Int(n))
+    var acc = t_fold_fa_blocked(t, lt, Int(n), t.row(1))
     if t.lead():
         var reg = Float32(0)
         for j in range(Int(d)):
