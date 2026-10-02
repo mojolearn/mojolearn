@@ -88,7 +88,6 @@ from x_decomp.cells import (
 from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_on_host
 from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_on_host
 from x_decomp.exec_trait import Exec
-from x_decomp.host import HostExec
 from x_decomp.jacobi2 import (
     J2_TPB,
     jacobi_eigh2_kernel,
@@ -136,19 +135,6 @@ def pj_eigh_min() -> Int:
     x_decomp/jacobi_par.mojo (FAST builds for Metal only; 0 = never).
     MOJOLEARN_XD_PJ_EIGH_MIN overrides it."""
     var v = String(getenv("MOJOLEARN_XD_PJ_EIGH_MIN", "0"))
-    try:
-        return Int(v)
-    except:
-        return 0
-
-
-def host_eigh_max() -> Int:
-    """Largest n whose eigh runs on the host executor inside the GPU binding
-    (FAST builds for Metal only; 0 = never): the same cyclic Jacobi, without
-    the upload, launch, readback and sync a device solve of a few hundred
-    values is made of (`Kit[E, S]`'s rule for the native drivers).
-    MOJOLEARN_XD_HOST_EIGH_MAX overrides it."""
-    var v = String(getenv("MOJOLEARN_XD_HOST_EIGH_MAX", "0"))
     try:
         return Int(v)
     except:
@@ -1567,6 +1553,97 @@ def orth_on_device_diag(
     ctx.synchronize()
 
 
+def launch_lu(
+    ctx: DeviceContext, a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, n: Int
+) raises:
+    """DevExec.lu's launches on device pointers, enqueued (no sync): `a`
+    (n x n) factored in place, `piv` (n), `info` (1), `scal` (2) and `act`
+    (n) scratch. DevExec.lu and the resident kit (x_decomp/kit_device.mojo)
+    both call it, so the two run one launch sequence."""
+    # lu_serial's cells, step by step: the pivot search one thread, the
+    # swap, the multipliers and the trailing update one thread per cell
+    if n <= lu_serial_max():
+        # A small matrix: lu_serial itself on one device thread, the
+        # same cells in the same order as the step-by-step launches
+        # below (which exist for large n), in ONE launch instead of 5n.
+        ctx.enqueue_function[lu_kernel](a, piv, info, Int32(n), grid_dim=1, block_dim=1)
+    else:
+        ctx.enqueue_function[lu_info_init_kernel](info, grid_dim=1, block_dim=1)
+    var pivot_block = lu_pivot_parallel()
+    var nb = min(lu_panel_width(), LU_PANEL_NB)
+    if n > lu_serial_max() and nb > 0:
+        # The blocked route (lane neural-pass32): the panel's steps run
+        # the per-step kernels over the panel's columns; the trailing
+        # columns then get the panel's swaps in order, the U rows
+        # brought up to date, and every trailing cell the panel's
+        # steps in order through tiles. The same cells in the same
+        # order as the per-step route below.
+        var k0 = 0
+        while k0 < n:
+            var k1 = min(k0 + nb, n)
+            for k in range(k0, k1):
+                if pivot_block:
+                    ctx.enqueue_function[lu_pivot_block_kernel](
+                        a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
+                    )
+                else:
+                    ctx.enqueue_function[lu_pivot_kernel](a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=1)
+                ctx.enqueue_function[lu_swap_cols_kernel](
+                    a, piv, Int32(k), Int32(n), Int32(0), Int32(k1),
+                    grid_dim=_blocks(k1), block_dim=TPB,
+                )
+                ctx.enqueue_function[lu_diag_kernel](
+                    a, info, scal, Int32(k), Int32(n), grid_dim=1, block_dim=1
+                )
+                ctx.enqueue_function[lu_act_kernel](scal, act, Int32(k), grid_dim=1, block_dim=1)
+                if n - k - 1 > 0:
+                    ctx.enqueue_function[lu_l_kernel](
+                        a, scal, Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
+                    )
+                if k1 - k - 1 > 0 and n - k - 1 > 0:
+                    ctx.enqueue_function[lu_update_panel_kernel](
+                        a, scal, Int32(k), Int32(n), Int32(k1),
+                        grid_dim=_blocks((n - k - 1) * (k1 - k - 1)), block_dim=TPB,
+                    )
+            if k1 < n:
+                ctx.enqueue_function[lu_apply_swaps_kernel](
+                    a, piv, Int32(k0), Int32(k1), Int32(n),
+                    grid_dim=_blocks(n - k1), block_dim=TPB,
+                )
+                if k1 - k0 > 1:
+                    ctx.enqueue_function[lu_trsm_kernel](
+                        a, act, Int32(k0), Int32(k1), Int32(n),
+                        grid_dim=_blocks(n - k1), block_dim=TPB,
+                    )
+                var tiles = (n - k1 + LU_TILE - 1) // LU_TILE
+                ctx.enqueue_function[lu_trail_tiled_kernel](
+                    a, act, Int32(k0), Int32(k1), Int32(n), Int32(k1 - k0),
+                    grid_dim=(tiles, tiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
+                )
+            k0 = k1
+    for k in range(n if n > lu_serial_max() and nb == 0 else 0):
+        if pivot_block:
+            ctx.enqueue_function[lu_pivot_block_kernel](
+                a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
+            )
+        else:
+            ctx.enqueue_function[lu_pivot_kernel](a, piv, Int32(k), Int32(n), grid_dim=1, block_dim=1)
+        ctx.enqueue_function[lu_swap_kernel](
+            a, piv, Int32(k), Int32(n), grid_dim=_blocks(n), block_dim=TPB
+        )
+        ctx.enqueue_function[lu_diag_kernel](
+            a, info, scal, Int32(k), Int32(n), grid_dim=1, block_dim=1
+        )
+        if n - k - 1 > 0:
+            ctx.enqueue_function[lu_l_kernel](
+                a, scal, Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
+            )
+            ctx.enqueue_function[lu_update_kernel](
+                a, scal, Int32(k), Int32(n),
+                grid_dim=_blocks((n - k - 1) * (n - k - 1)), block_dim=TPB,
+            )
+
+
 @fieldwise_init
 struct DevExec(Exec):
     @staticmethod
@@ -1674,89 +1751,10 @@ struct DevExec(Exec):
         var dp = ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
         var di = ctx.enqueue_create_buffer[DType.float32](1)
         var ds = ctx.enqueue_create_buffer[DType.float32](2)
-        # lu_serial's cells, step by step: the pivot search one thread, the
-        # swap, the multipliers and the trailing update one thread per cell
-        if n <= lu_serial_max():
-            # A small matrix: lu_serial itself on one device thread, the
-            # same cells in the same order as the step-by-step launches
-            # below (which exist for large n), in ONE launch instead of 5n.
-            ctx.enqueue_function[lu_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
-        else:
-            ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
-        var pivot_block = lu_pivot_parallel()
-        var nb = min(lu_panel_width(), LU_PANEL_NB)
         var dact = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        if n > lu_serial_max() and nb > 0:
-            # The blocked route (lane neural-pass32): the panel's steps run
-            # the per-step kernels over the panel's columns; the trailing
-            # columns then get the panel's swaps in order, the U rows
-            # brought up to date, and every trailing cell the panel's
-            # steps in order through tiles. The same cells in the same
-            # order as the per-step route below.
-            var k0 = 0
-            while k0 < n:
-                var k1 = min(k0 + nb, n)
-                for k in range(k0, k1):
-                    if pivot_block:
-                        ctx.enqueue_function[lu_pivot_block_kernel](
-                            da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
-                        )
-                    else:
-                        ctx.enqueue_function[lu_pivot_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1)
-                    ctx.enqueue_function[lu_swap_cols_kernel](
-                        da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), Int32(0), Int32(k1),
-                        grid_dim=_blocks(k1), block_dim=TPB,
-                    )
-                    ctx.enqueue_function[lu_diag_kernel](
-                        da.unsafe_ptr(), di.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1
-                    )
-                    ctx.enqueue_function[lu_act_kernel](ds.unsafe_ptr(), dact.unsafe_ptr(), Int32(k), grid_dim=1, block_dim=1)
-                    if n - k - 1 > 0:
-                        ctx.enqueue_function[lu_l_kernel](
-                            da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
-                        )
-                    if k1 - k - 1 > 0 and n - k - 1 > 0:
-                        ctx.enqueue_function[lu_update_panel_kernel](
-                            da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), Int32(k1),
-                            grid_dim=_blocks((n - k - 1) * (k1 - k - 1)), block_dim=TPB,
-                        )
-                if k1 < n:
-                    ctx.enqueue_function[lu_apply_swaps_kernel](
-                        da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n),
-                        grid_dim=_blocks(n - k1), block_dim=TPB,
-                    )
-                    if k1 - k0 > 1:
-                        ctx.enqueue_function[lu_trsm_kernel](
-                            da.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n),
-                            grid_dim=_blocks(n - k1), block_dim=TPB,
-                        )
-                    var tiles = (n - k1 + LU_TILE - 1) // LU_TILE
-                    ctx.enqueue_function[lu_trail_tiled_kernel](
-                        da.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n), Int32(k1 - k0),
-                        grid_dim=(tiles, tiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
-                    )
-                k0 = k1
-        for k in range(n if n > lu_serial_max() and nb == 0 else 0):
-            if pivot_block:
-                ctx.enqueue_function[lu_pivot_block_kernel](
-                    da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
-                )
-            else:
-                ctx.enqueue_function[lu_pivot_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1)
-            ctx.enqueue_function[lu_swap_kernel](
-                da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=_blocks(n), block_dim=TPB
-            )
-            ctx.enqueue_function[lu_diag_kernel](
-                da.unsafe_ptr(), di.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1
-            )
-            if n - k - 1 > 0:
-                ctx.enqueue_function[lu_l_kernel](
-                    da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
-                )
-                ctx.enqueue_function[lu_update_kernel](
-                    da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n),
-                    grid_dim=_blocks((n - k - 1) * (n - k - 1)), block_dim=TPB,
-                )
+        launch_lu(
+            ctx, _p(da), I32Ptr(unsafe_from_address=Int(dp.unsafe_ptr())), _p(di), _p(ds), _p(dact), n
+        )
         _down(ctx, da, a, n * n)
         _down_i(ctx, dp, piv, n)
         _down(ctx, di, info, 1)
@@ -1852,23 +1850,9 @@ struct DevExec(Exec):
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
-        # lane/neural-net-experiment (2026-09-30): the two routes below were
-        # compiled for Metal FAST only. Both envs are honoured on every
-        # vendor and tier now, with their defaults unchanged (0: never),
-        # so a box can A/B them:
-        #   MOJOLEARN_XD_HOST_EIGH_MAX=n  the host executor's cyclic Jacobi
-        #     for n at or under it: the host column's own arithmetic, held
-        #     bit for bit to the device kernels by the identity gates.
-        #   MOJOLEARN_XD_PJ_EIGH_MIN=n  the round-robin ordering
-        #     (x_decomp/jacobi_par.mojo) from n up: NOT the pinned cyclic
-        #     order, so NOT the identical tier's bits -- an experiment the
-        #     digest check must report as MOVED. It is the only route here
-        #     whose rotations run across the GPU: the cyclic kernels are one
-        #     block of 256 threads for the whole solve (eigh at n = 4096
-        #     timed out on the AMD board).
-        if n <= host_eigh_max():
-            HostExec.eigh(a, w, v, n)
-            return
+        # lane/neural-net-experiment (2026-09-30), hr-kit: the host eigh
+        # route (MOJOLEARN_XD_HOST_EIGH_MAX) is deleted; MOJOLEARN_XD_PJ_EIGH_MIN
+        # stays the old opt-in threshold under the cyclic define below.
         # lane/neural-pass104 (Andrew, 2026-10-01): the round-robin Jacobi is
         # THE eigh order (x_decomp/rr.mojo, pinned; the host runs the same
         # rounds); a solve it does not converge falls back to the cyclic one,
@@ -1996,6 +1980,14 @@ struct DevExec(Exec):
         `sign_flip_kernel`), same refusals, same ascending permutation."""
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
+        DevExec._eigh2_on(ctx, da, w, v, n)
+        _ = da^
+
+    @staticmethod
+    def _eigh2_on(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], w: F32Ptr, v: F32Ptr, n: Int) raises:
+        """`_eigh2` on a device copy of the matrix already in `da` (consumed):
+        w (n) and v (n x n) out to host memory, after one sync. The resident
+        kit (x_decomp/kit_device.mojo) hands its own copy here."""
         var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dinfo = ctx.enqueue_create_buffer[DType.float32](3)
         enqueue_fill(ctx, dinfo, JACOBI_INFO_UNWRITTEN)
@@ -2054,14 +2046,12 @@ struct DevExec(Exec):
             w.unsafe_store(i, got.w[i])
         for i in range(n * n):
             v.unsafe_store(i, got.v[i])
-        _ = da^
         _ = dv^
         _ = dinfo^
         _ = dvt^
         _ = hinfo^
         _ = hwork^
         ctx.synchronize()
-        _ = ctx^
 
     @staticmethod
     def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:

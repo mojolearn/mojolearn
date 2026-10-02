@@ -33,7 +33,6 @@ source "$T/tools/py_consolidated/job_status.sh"
 export MOJOLEARN_BUILD_LOCK_HELD=1 MOJOLEARN_COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-6}
 # the py-decomp-nbrs Kit sends a call to the GPU executor only above this many
 # elements; 1 makes the lanes' small fixtures really take the device path
-export MOJOLEARN_XD_RES_DEV_MIN=1
 export MOJOLEARN_LANE_CHECK_ARM_TIMEOUT=${MOJOLEARN_LANE_CHECK_ARM_TIMEOUT:-1800}
 cd "$T" || exit 1
 LANES=$(grep -v '^#' tools/py_consolidated/lanes.txt | grep . | paste -sd, -)
