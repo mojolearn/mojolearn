@@ -45,3 +45,12 @@ Results: (filled as lanes report)
 - kapprox re-merged 9583fbd26, clean vs main; kapprox x neighbors2 to be settled on neighbors2 (gen.py re-run)
 - graph DONE 1fa36a7ec: CC_FAST (4 hook+jump rounds per wait, device relabel), graph-cc-fast-taxi
 - core re-merged d22a7494c (main 2d7eade5b): env switches -> 6 defines, DEVICE_SCALE dropped (main covers), 7 lines; clean
+- isotonic-knn re-merged fd9ebd32a, neighbors2 6d9c7b1f1 (main 2d7eade5b + kapprox, gen.py output); all x_neighbors cross-checks clean
+- tsa re-merged 9ee4a2ed2 (main's device L-BFGS; EVAL_WS/LLONLY re-expressed), clean
+- robust DONE fdc8259e0: HUBER_DEVICE_LBFGS, HUBER_FAST_BLOCK512; 2 huber taxi lines; perceptron/sgd-ocsvm/ocsvm/mcd left (reasons in robust.md)
+- nb DONE 89b9a0694 (merged main + select): NB_CAT_ATOMIC, LDA_FUSED_SS; 2 lines; text NBs are upload-bound (no change)
+- prep3 DONE b73458c56 (main + prep2 merged): PREP3_LABELS/MAXABS/SPLINE; 5 lines
+- decomp-linalg pass 2 DONE 227bf57cc (CHOL_FAST_BLOCKED, PLS dead-cols dropped, 9 lines; LU has no arm left: main is blocked already); decomp-sparse 0f168b374 (carries linalg)
+- tsa2 DONE 22edf8f13: TSA2_VAR/STL/KPSS; 3 taxi-hourly lines
+- prep3 overlap settled 09e7a7520 (carries nb, select, prep2, meta); x_prep superset branch
+- trees-ensembles e9803ee25 (device folds, re-merged), trees-io dfbd3f61f, rfet-scan b272364e4 (re-merged), all clean
