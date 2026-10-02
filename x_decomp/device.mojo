@@ -1566,7 +1566,6 @@ def orth_on_device_diag(
     ctx.synchronize()
 
 
-@fieldwise_init
 def launch_lu(
     ctx: DeviceContext, a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, n: Int
 ) raises:
@@ -1658,6 +1657,7 @@ def launch_lu(
             )
 
 
+@fieldwise_init
 struct DevExec(Exec):
     @staticmethod
     def gemm(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises:
