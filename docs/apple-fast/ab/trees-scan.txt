@@ -1,0 +1,6 @@
+CMD lane/apple-fast-trees-scan trees-scan-dw-taxi AFT_OUT=$HOME/aft-ab/trees-scan-dw-taxi bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1 -D MOJOLEARN_SCAN_U32_BLOCK=1 -D MOJOLEARN_REORDER_FLAGS_SCAN_BLOCK=1"
+CMD lane/apple-fast-trees-scan trees-scan-lg-taxi AFT_OUT=$HOME/aft-ab/trees-scan-lg-taxi bash tools/aft_ab.sh gbdt gbdt-lossguide taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1 -D MOJOLEARN_SCAN_U32_BLOCK=1 -D MOJOLEARN_REORDER_FLAGS_SCAN_BLOCK=1"
+CMD lane/apple-fast-trees-scan trees-scan-cat-taxi AFT_OUT=$HOME/aft-ab/trees-scan-cat-taxi bash tools/aft_ab.sh gbdt gbdt-categorical taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1 -D MOJOLEARN_SCAN_U32_BLOCK=1 -D MOJOLEARN_REORDER_FLAGS_SCAN_BLOCK=1"
+CMD lane/apple-fast-trees-scan trees-scan-rf-taxi AFT_OUT=$HOME/aft-ab/trees-scan-rf-taxi bash tools/aft_ab.sh rf rf taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1"
+CMD lane/apple-fast-trees-scan trees-scan-rf-istella AFT_OUT=$HOME/aft-ab/trees-scan-rf-istella bash tools/aft_ab.sh rf rf istella 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1"
+CMD lane/apple-fast-trees-scan trees-scan-et-taxi AFT_OUT=$HOME/aft-ab/trees-scan-et-taxi bash tools/aft_ab.sh trees et taxi 3 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1"
