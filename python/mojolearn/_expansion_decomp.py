@@ -2798,8 +2798,7 @@ class LatentDirichletAllocation(_Base):
             [M.r, v, nc, bs, int(self.max_doc_update_iter), int(self._seed) & 0xFFFFFFFF, self._draw,
              self.n_batch_iter_],
             [float(self.doc_topic_prior_), float(self.topic_word_prior_), float(self.learning_offset),
-             float(self.learning_decay), float(self.mean_change_tol), float(total_samples)],
-            int(_os.environ.get("MOJOLEARN_XD_RES_DEV_MIN", "65536")))
+             float(self.learning_decay), float(self.mean_change_tol), float(total_samples)])
 
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
@@ -4088,8 +4087,7 @@ class MinCovDet(_Base):
         loc, cov, dist = _M.zeros(1, p), _M.zeros(p, p), _M.zeros(n, 1)
         sup = array.array("i", [0]) * n
         k.b.x_decomp_mcd(X.addr, loc.addr, cov.addr, sup.buffer_info()[0], dist.addr,
-                         [n, p, h, int(self._seed) & 0xFFFFFFFF] + plan,
-                         int(_os.environ.get("MOJOLEARN_XD_RES_DEV_MIN", "65536")))
+                         [n, p, h, int(self._seed) & 0xFFFFFFFF] + plan)
         return loc, cov, [v != 0 for v in sup], dist
 
     def _fast_mcd(self, k, X):
