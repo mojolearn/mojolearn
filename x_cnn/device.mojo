@@ -2024,18 +2024,22 @@ def _csr_gather_kernel(csr: IP, order: IP, ids: UP, rows: IP, cols: IP, n: Int32
 
 
 def _csr_rowptr_kernel(csr: IP, sorted_rows: UP, n_in: Int32, nnz: Int32):
-    """`rowptr[r]` = the first sorted position whose row is >= r. Position
-    `i` (0..nnz) writes the rows strictly after the previous position's row
-    up to its own (`n` past the end), so each slot is written once."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var m = Int(nnz)
+    """`rowptr[r]` = the first sorted position whose row is >= r, one thread
+    per row `r` in [0, n] by a binary search of the sorted rows (no thread
+    walks a run of empty rows, so a skewed graph costs no serial tail)."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var n = Int(n_in)
-    if i > m:
+    if r > n:
         return
-    var r = n if i == m else Int(sorted_rows[i])
-    var prev = -1 if i == 0 else Int(sorted_rows[i - 1])
-    for rr in range(prev + 1, r + 1):
-        csr[rr] = Int32(i)
+    var lo = 0
+    var hi = Int(nnz)
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if Int(sorted_rows[mid]) < r:
+            lo = mid + 1
+        else:
+            hi = mid
+    csr[r] = Int32(lo)
 
 
 def csr_build_device(rows_h: IP, cols_h: IP, nnz: Int, n: Int, csr_out: IP, order_out: IP) raises:
@@ -2075,7 +2079,7 @@ def csr_build_device(rows_h: IP, cols_h: IP, nnz: Int, n: Int, csr_out: IP, orde
         )
     ctx.enqueue_function[_csr_rowptr_kernel](
         csr_d.unsafe_ptr(), keys.unsafe_ptr(), Int32(n), Int32(nnz),
-        grid_dim=(nnz + 1 + TPB - 1) // TPB, block_dim=TPB,
+        grid_dim=(n + 1 + TPB - 1) // TPB, block_dim=TPB,
     )
     ctx.enqueue_copy(dst_ptr=csr_out, src_buf=csr_d)
     if nnz > 0:
