@@ -16,7 +16,11 @@ These come from Andrew's standing rules in memory; read the full rules there.
 
 - **GPU only.** A lane that wins by keeping or moving work to the host is rejected. Never use `--no-verify` or `gh pr merge --admin` to get past the check.
 - **Same bits on NVIDIA, AMD, Apple and the CPU column within a release.** New digests versus the last release are fine. Accuracy must not drop: compare against the opponent (sklearn, statsmodels, prophet, networkx, catboost) on the board data.
-- **Merge gate:** same bits on all vendors, and NVIDIA and AMD at least as fast as main AND as fast as the old host route at the board shapes. Apple speed is informational. Apple identity comes from the M4 Metal digests.
+- **Merge gate:** same bits on NVIDIA, AMD, Apple and the CPU column, and sklearn-level quality.
+  - Speed is gated only where main's default already ran the GPU: there, NVIDIA and AMD must beat main's GPU kernel.
+  - Where main's default was a CPU route, there is no main time. The lane must complete, match digests and match quality, and its time against the opponents is recorded from the board.
+  - Apple speed is informational. Apple identity comes from the M4 Metal digests.
+- **Never time a CPU or host route** (Andrew, Oct 2): no `MOJOLEARN_VENDOR=cpu` timings and no host-speed numbers anywhere. The CPU is only for verification digests, CPU-only installs and inference.
 - **One change per PR.** During measurement the old route stays reachable only through an A/B define. The final commit of the PR deletes the define, the route and its tests together.
 - **Subagents write code only.** Each subagent works in its own worktree `~/mojolearn-wt/hr-<lane>` on branch `lane/hr-<lane>` and commits after every edit.
   - It may compile with `nice -n 19` and `-j 1`, for sm_89 and gfx942.
@@ -48,12 +52,7 @@ These come from Andrew's standing rules in memory; read the full rules there.
 
 2. **Re-run the route sweep on the new main.** Grep for `HostExec`, `_on_host`, `_host_rows`, `MOJOLEARN_*HOST*`, `HOST_MIN`/`HOST_MAX`, `_HOST_ALGOS`, `_HOST_ROUTE_*` and `HOST_RUN` in non-host files. Then update the lane table below.
 
-3. **Record "before" numbers for each route** on L40S and MI325X, at board shapes plus one small and one large shape. Record three times:
-   - (a) the host route time;
-   - (b) the current GPU time, with the route forced off by its env switch;
-   - (c) the opponent time.
-
-   These numbers are the bar each lane must clear. They also show where each GPU path loses time: launches, syncs, one block or one thread. Put that diagnosis in each lane's brief.
+3. **Take GPU-only stage timings** of each route's GPU path, with the route forced off by its env switch, on L40S and MI325X at the board shapes. Never time the host route. These timings are a diagnosis, not a bar: they show where the GPU path loses time (launches, syncs, one block or one thread). Put that diagnosis in each lane's brief. Opponent times come from the board's opponent store.
 
 ## Wave 1: size-based routes
 
@@ -90,12 +89,13 @@ The in-flight PRs own GLM, Isotonic, SGD and connected components. If any of the
    - the A/B define;
    - the RUN OWED commands.
 2. **Orchestrator:** run the Metal build and the host-vs-Metal identity on the M4, one job at a time.
-3. **Orchestrator or peer:** measure on L40S and MI325X. Compare four things:
+3. **Orchestrator or peer:** measure on L40S and MI325X, GPU only. Check three things:
    - the bits on NVIDIA, AMD, Apple and the CPU column;
-   - the time against main;
-   - the time against the old host route;
-   - accuracy against the opponent.
-4. **If the GPU path still loses to the old host route:** send the subagent back with the stage timing. Never keep the route. If a fully optimized kernel provably still loses, report the numbers to Andrew; don't keep the route on your own.
+   - the time against main's GPU kernel, only where main's default already ran the GPU;
+   - quality against the opponent.
+
+   Record the time against the opponents from the board.
+4. **If the stage timing still shows waste** (launch-bound, one block, serial chains), send the subagent back with it. Never keep the route.
 5. **When it passes:** the subagent's final commit deletes the A/B define, the route, its env switch, its threshold, its host import and its route-only tests. Run the check (`python3 tools/hooks/no_host_routes.py $(git merge-base origin/main HEAD) HEAD`). Then the peer opens the PR and merges.
 6. **Log it:** one line per lane in lane-pass-log-oct1 (PR, before/after on L40S and MI325X, digest).
 
