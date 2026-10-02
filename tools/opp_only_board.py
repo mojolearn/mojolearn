@@ -4,7 +4,7 @@
 """Score the MISSING opponents of a finished board, once, opponents only.
 
     <board venv python> tools/opp_only_board.py --family algos \\
-        --races gamma:taxi,gamma:istella --rounds 3 --tag opp-algos
+        --races gamma:taxi,gamma:istella --tag opp-algos
 
 The races are planned by tools/bench_board.py's own plan_races (the vendor's
 roster, gpu_opponents_first, enforce_gpu_only) and run through its own
@@ -92,14 +92,15 @@ def main():
     p.add_argument("--family", required=True, choices=("algos", "classical", "classical2", "trees"))
     p.add_argument("--races", required=True, help="lane:dataset,lane:dataset,...")
     p.add_argument("--tag", required=True)
-    p.add_argument("--rounds", type=int, default=3)
+    p.add_argument("--rounds", type=int, default=1)   # the M3 0.8.34 board ran --rounds 1
     p.add_argument("--board", default=os.path.expanduser("~/board-0834"))
     p.add_argument("--vendor", default="apple")
     # the M3 0.8.34 board's own caps (board-0834-kit/m3-0834-config.json): --round-seconds 300
     p.add_argument("--round-seconds", type=int, default=300)
-    # trees: tools/bench_board.py's defaults (the 0.8.34 M3 board planned no trees race)
-    p.add_argument("--arm-budget-s", type=int, default=3600)
-    p.add_argument("--race-deadline-s", type=int, default=6 * 3600)
+    # trees: the same M3 board caps (--arm-budget-s 300 --race-deadline-s 900); an arm
+    # that hits a cap is recorded as "> cap", a result
+    p.add_argument("--arm-budget-s", type=int, default=300)
+    p.add_argument("--race-deadline-s", type=int, default=900)
     p.add_argument("--no-infer", action="store_true")
     p.add_argument("--dry-run", action="store_true")
     a = p.parse_args()
