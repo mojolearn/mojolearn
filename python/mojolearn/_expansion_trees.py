@@ -1264,8 +1264,15 @@ class _DARTBase(_TreesEnsembleBase):
                 RandomForestRegressor(n_estimators=1, numeric_mode=self.numeric_mode), Xa, True,
                 default="1")
         try:
-            self._boost_loop(Xa, y32, K, b, seed, drop_seed, score, g, h, target, lr, l1, mds, lam,
-                             max_depth, all_cols, session)
+            if self._dart_device(b, session, K):
+                # lane/apple-fast-dart: the round on the device (FAST + Apple
+                # binaries built with -D MOJOLEARN_DART_DEVICE expose the
+                # x_trees_dart_* entries; every other binary takes main's loop)
+                self._boost_loop_device(Xa, y32, K, b, seed, drop_seed, inits, lr, l1, mds, lam, max_depth,
+                                        session)
+            else:
+                self._boost_loop(Xa, y32, K, b, seed, drop_seed, score, g, h, target, lr, l1, mds, lam,
+                                 max_depth, all_cols, session)
         finally:
             if session is not None:
                 session.close()
@@ -1363,6 +1370,107 @@ class _DARTBase(_TreesEnsembleBase):
                     self.tree_weights_[i] *= factor
             self.tree_weights_.append(shrink)
             sum_w += shrink
+
+    # -------------------------------------------- lane/apple-fast-dart
+    # The boosting round on the device (xtrees/dart_device.mojo): FAST +
+    # Apple only, behind -D MOJOLEARN_DART_DEVICE, which is the only build
+    # that registers x_trees_dart_open. Same drop set, shrink factors and
+    # tree fits as `_boost_loop`; the score, gradients and leaf values are
+    # float32 on the device and the dropped trees come off and go back as
+    # one gathered sum per row (the docstring of dart_device.mojo).
+    _DART_VALUES_CAP = 1 << 26
+
+    def _dart_device(self, b, session, K):
+        if session is None or not callable(getattr(b, "x_trees_dart_open", None)):
+            return False
+        node_cap = 2 * int(self.num_leaves) - 1
+        return 1 <= node_cap <= 65535 and int(self.n_estimators) * K * node_cap <= self._DART_VALUES_CAP
+
+    @staticmethod
+    def _dart_thr(v):
+        """ceil(v * 2^53) as an int: `u < v` for a counter draw u = m / 2^53
+        (m the top 53 bits) is exactly `m < ceil(v * 2^53)`."""
+        if not v > 0.0:
+            return 0
+        if v >= 1.0:
+            return 1 << 53
+        return int(math.ceil(v * 9007199254740992.0))
+
+    def _boost_loop_device(self, Xa, y32, K, b, seed, drop_seed, inits, lr, l1, mds, lam, max_depth, session):
+        n, d = Xa.shape
+        n_iters = int(self.n_estimators)
+        node_cap = 2 * int(self.num_leaves) - 1
+        inits32 = Array.from_list([float(v) for v in inits], "<f4")
+        skip_thr = self._dart_thr(float(self.skip_drop))
+        bad = empty((1,), "<i4")
+        handle = b.x_trees_dart_open(addr_ro(Xa, name="X"), addr_ro(y32, name="y"), addr_ro(inits32, name="inits"),
+                                     [n, d, K, self._KIND, n_iters, node_cap])
+        try:
+            sum_w = 0.0
+            for it in range(n_iters):
+                t = len(self.tree_weights_)
+                thr = [0] * t
+                if t:
+                    rate = float(self.drop_rate)
+                    if not self.uniform_drop:
+                        inv_avg = t / sum_w if sum_w > 0 else 0.0
+                        if int(self.max_drop) > 0 and sum_w > 0:
+                            rate = min(rate, int(self.max_drop) * inv_avg / sum_w)
+                        thr = [self._dart_thr(rate * self.tree_weights_[i] * inv_avg) for i in range(t)]
+                    else:
+                        if int(self.max_drop) > 0:
+                            rate = min(rate, int(self.max_drop) / t)
+                        thr = [self._dart_thr(rate)] * t
+                coef32 = Array.from_list([float(v) for v in self.tree_coefs_] or [0.0], "<f4")
+                thr64 = Array.from_list(thr or [0], "<i8")
+                flags = empty((max(t, 1),), "<i4")
+                targets = [empty((n,), "<f4") for _ in range(K)]
+                b.x_trees_dart_step(handle, addr_ro(coef32, name="coef"), addr_ro(thr64, name="thr"),
+                                    addr(flags, name="flags"), addr(bad, name="bad"),
+                                    [addr(tg, name="target") for tg in targets], [t, drop_seed, it, skip_thr])
+                if bad.tolist()[0]:
+                    raise RuntimeError("x_trees dart: a tree walk left its tree (child or column out of range)")
+                fl = flags.tolist()
+                drop = [i for i in range(t) if fl[i]]
+                k = len(drop)
+                if not self.xgboost_dart_mode:
+                    shrink = lr / (1.0 + k)
+                    factor = k / (k + 1.0)
+                    wdiv = 1.0 / (k + 1.0)
+                else:
+                    shrink = lr if k == 0 else lr / (lr + k)
+                    factor = k / (k + lr)
+                    wdiv = 1.0 / (k + lr)
+                for c in range(K):
+                    j = it * K + c
+                    tree = RandomForestRegressor(
+                        n_estimators=1, bootstrap=False, max_features=1.0, max_depth=max_depth,
+                        max_leaves=int(self.num_leaves), min_samples_leaf=int(self.min_child_samples),
+                        n_bins=int(self.max_bin), random_state=_trees_sub_seed(seed, j), n_streams=1,
+                        numeric_mode=self.numeric_mode)
+                    tree._fit_in_session(session, targets[c])
+                    offs = tree._offsets.tolist()
+                    lo, n_nodes = int(offs[0]), int(offs[1]) - int(offs[0])
+                    values = empty((n_nodes,), "<f4")
+                    b.x_trees_dart_add(handle, addr_ro(tree._colid, name="colid"),
+                                       addr_ro(tree._quesval, name="quesval"), addr_ro(tree._left_child, name="left"),
+                                       addr(values, name="values"),
+                                       [j, c, lo, n_nodes, float(shrink), float(factor), lam, l1, mds])
+                    self.trees_.append(tree)
+                    self.tree_values_.append(values)
+                    self.tree_coefs_.append(shrink)
+                for i in drop:
+                    for c in range(K):
+                        self.tree_coefs_[i * K + c] *= factor
+                    if not self.uniform_drop:
+                        sum_w -= self.tree_weights_[i] * wdiv
+                        self.tree_weights_[i] *= factor
+                self.tree_weights_.append(shrink)
+                sum_w += shrink
+        finally:
+            b.x_trees_dart_close(handle, addr(bad, name="bad"))
+        if bad.tolist()[0]:
+            raise RuntimeError("x_trees dart: a tree walk left its tree (child or column out of range)")
 
     def _raw(self, X):
         """Class-major raw scores (K * n) float64; K = 1 is (n,)."""
