@@ -26,7 +26,7 @@ from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_RIDGE_KFOLD, ALGO_RIDGE
 from x_linear.ops import ld, st, fd, i2f, fa
 from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
-from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score
+from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score, kf_ff_solve
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo
@@ -212,11 +212,27 @@ def kf_cells_kernel(x: FP, y: FP, n: Int32, d: Int32, s: Int32, e: Int32, xm: FP
         st(xty, j, kf_cross(x, dd, j, ld(xm, j), y, 1, 0, ld(xm, dd), Int(n), Int(s), Int(e)))
 
 
-def kf_solve_kernel(g: FP, xty: FP, xm: FP, d: Int32, alphas: FP, na: Int32, fi: Int32, aw: FP, w: FP, b: FP):
+def kf_solve_kernel(g: FP, xty: FP, xm: FP, d: Int32, alphas: FP, na: Int32, fi: Int32, aw: FP, w: FP, b: FP,
+                    trust: FP):
     var a = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
     if a < Int(na):
-        st(b, a, kf_solve(g, xty, xm, ld(xm, dd), dd, ld(alphas, a), fi != 0, aw + a * dd * dd, w + a * dd))
+        var r = kf_solve(g, xty, xm, ld(xm, dd), dd, ld(alphas, a), fi != 0, aw + a * dd * dd, w + a * dd)
+        st(b, a, r[0])
+        st(trust, a, Float32(1) if r[1] else Float32(0))
+
+
+def kf_ff_unit_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, s: Int32, e: Int32, u0: Int32, count: Int32,
+                      sh: FP, sl: FP):
+    var u = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if u < Int(count):
+        ridge_ff_unit(Int(u0) + u, x, y, Int(n), Int(d), 1, fi != 0, False, Int(n), sh, sl, Int(s), Int(e))
+
+
+def kf_ff_solve_kernel(d: Int32, fi: Int32, alpha: Float32, sh: FP, sl: FP, bh: FP, bl: FP, fh: FP, fl: FP, tmp: FP,
+                       w: FP, b: FP, a: Int32):
+    var dd = Int(d)
+    st(b, Int(a), kf_ff_solve(dd, fi != 0, alpha, sh, sl, bh, bl, fh, fl, tmp, w + Int(a) * dd))
 
 
 def kf_pred_kernel(x: FP, d: Int32, s: Int32, e: Int32, na: Int32, w: FP, b: FP, p: FP, stride: Int32):
@@ -252,6 +268,17 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     var db = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
     var dp = ctx.enqueue_create_buffer[DType.float32](max(na * stride, 1))
     var dsum = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
+    var dtr = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
+    var htr = List[Float32](length=max(na, 1), fill=Float32(0))
+    var ffw = d + 1 + d * d + d
+    var ff_units = ridge_ff_units(n, d, 1)
+    var dsh = ctx.enqueue_create_buffer[DType.float32](ffw)
+    var dsl = ctx.enqueue_create_buffer[DType.float32](ffw)
+    var dbh = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dbl = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dfh = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+    var dfl = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+    var dtmp = ctx.enqueue_create_buffer[DType.float32](d + 1)
     var hfp = fp.copy()
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
@@ -269,7 +296,26 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
                                               dg.unsafe_ptr(), dxty.unsafe_ptr(), grid_dim=_xg_blocks(cells + d), block_dim=XG_TPB)
         ctx.enqueue_function[kf_solve_kernel](dg.unsafe_ptr(), dxty.unsafe_ptr(), dxm.unsafe_ptr(), Int32(d), dal.unsafe_ptr(),
                                               Int32(na), Int32(fi), daw.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
-                                              grid_dim=_xg_blocks(na), block_dim=XG_TPB)
+                                              dtr.unsafe_ptr(), grid_dim=_xg_blocks(na), block_dim=XG_TPB)
+        # lane/neural-pass93: the alphas whose float32 factor is not trusted, in float-float
+        ctx.enqueue_copy(dst_ptr=htr.unsafe_ptr(), src_buf=dtr)
+        ctx.synchronize()
+        var have_ff = False
+        for a in range(na):
+            if htr[a] == Float32(1):
+                continue
+            if not have_ff:
+                ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
+                                                        Int32(0), Int32(d + 1), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                        grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
+                ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
+                                                        Int32(d + 1), Int32(ff_units - (d + 1)), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                        grid_dim=_xg_blocks(ff_units - (d + 1)), block_dim=XG_TPB)
+                have_ff = True
+            ctx.enqueue_function[kf_ff_solve_kernel](Int32(d), Int32(fi), hfp[a], dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                     dbh.unsafe_ptr(), dbl.unsafe_ptr(), dfh.unsafe_ptr(), dfl.unsafe_ptr(),
+                                                     dtmp.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(), Int32(a),
+                                                     grid_dim=1, block_dim=1)
         var nt = Int(e) - Int(s)
         ctx.enqueue_function[kf_pred_kernel](dx.unsafe_ptr(), Int32(d), s, e, Int32(na), dw.unsafe_ptr(), db.unsafe_ptr(),
                                              dp.unsafe_ptr(), Int32(stride), grid_dim=_xg_blocks(nt * na), block_dim=XG_TPB)
@@ -293,6 +339,15 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     _ = db^
     _ = dp^
     _ = dsum^
+    _ = dtr^
+    _ = htr^
+    _ = dsh^
+    _ = dsl^
+    _ = dbh^
+    _ = dbl^
+    _ = dfh^
+    _ = dfl^
+    _ = dtmp^
 
 
 
