@@ -1866,15 +1866,18 @@ def op_lp_iterate_knn(
         var nc = n * c
         var ctx = xn_ctx()
         var d_cols = _buf_i(ctx, cols, n * k, True)
-        var d_vals = _buf(ctx, vals, n * k, True)
-        var d_a = _buf(ctx, ld, nc, True)
-        var d_b = _buf(ctx, 0, nc, False)
+        var d_vals = ctx.enqueue_create_buffer[DType.float32](n * k)
+        ctx.enqueue_copy(dst_buf=d_vals, src_ptr=FP(unsafe_from_address=vals))
+        var d_a = ctx.enqueue_create_buffer[DType.float32](nc)
+        ctx.enqueue_copy(dst_buf=d_a, src_ptr=FP(unsafe_from_address=ld))
+        var d_b = ctx.enqueue_create_buffer[DType.float32](nc)
         ctx.enqueue_memset(d_b, Float32(0))
-        var d_nxt = _buf(ctx, 0, nc, False)
-        var d_ys = _buf(ctx, ystatic, nc, True)
+        var d_nxt = ctx.enqueue_create_buffer[DType.float32](nc)
+        var d_ys = ctx.enqueue_create_buffer[DType.float32](nc)
+        ctx.enqueue_copy(dst_buf=d_ys, src_ptr=FP(unsafe_from_address=ystatic))
         var d_unl = _buf_i(ctx, unlabeled, n, True)
         var nparts = max(1, (nc + LPK_TPB - 1) // LPK_TPB)
-        var d_part = _buf(ctx, 0, nparts, False)
+        var d_part = ctx.enqueue_create_buffer[DType.float32](nparts)
         var h_fl = List[Int32](length=2, fill=Int32(0))
         var d_fl = _buf_i(ctx, Int(h_fl.unsafe_ptr()), 2, True)
         var flp: IP = d_fl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -1916,9 +1919,9 @@ def op_lp_iterate_knn(
         # steps taken: the loop's n_iter_ whether it converged (it) or ran out
         var n_iter = Int(h_fl[1])
         if n_iter % 2 == 0:
-            _down(ctx, d_a, ld, nc)
+            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=ld), src_buf=d_a)
         else:
-            _down(ctx, d_b, ld, nc)
+            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=ld), src_buf=d_b)
         ctx.synchronize()
         var inf = IP(unsafe_from_address=info)
         inf.unsafe_store(0, Int32(n_iter))
@@ -1995,14 +1998,16 @@ def op_kernel_tiled(
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         if kind == K_RBF and d >= 1 and d <= KT_MAX_D and n > 0 and m > 0:
             var ctx = xn_ctx()
-            var d_x = _buf(ctx, x, n * d, True)
-            var d_y = _buf(ctx, y, m * d, True)
-            var d_res = _buf(ctx, 0, n * m, False)
+            var d_x = ctx.enqueue_create_buffer[DType.float32](n * d)
+            ctx.enqueue_copy(dst_buf=d_x, src_ptr=FP(unsafe_from_address=x))
+            var d_y = ctx.enqueue_create_buffer[DType.float32](m * d)
+            ctx.enqueue_copy(dst_buf=d_y, src_ptr=FP(unsafe_from_address=y))
+            var d_res = ctx.enqueue_create_buffer[DType.float32](n * m)
             ctx.enqueue_function[kernel_rbf_tiled_kernel](
                 d_x.unsafe_ptr(), d_y.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), gamma,
                 grid_dim=((m + KT_T - 1) // KT_T, (n + KT_T - 1) // KT_T, 1), block_dim=(KT_TPB, 1, 1),
             )
-            _down(ctx, d_res, res, n * m)
+            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=res), src_buf=d_res)
             ctx.synchronize()
             _ = d_x^
             _ = d_y^

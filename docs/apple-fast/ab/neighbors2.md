@@ -1,22 +1,32 @@
 # lane/apple-fast-neighbors2: the neighbors lanes not taken by other families (lof, radius-neighbors, label-propagation, label-spreading, ocsvm, svgp, louvain, pagerank, additive-chi2, skewed-chi2, poly-count-sketch)
 
 Written without a Mojo toolchain (cloud peer); the first M3 build is the compile check. Every switch
-defaults OFF and is compiled under FAST only (Apple where the code is Apple-specific); IDENTICAL
-compiles the old code. Bindings: `build_x_neighbors.sh` for every switch but the radius one, which
-is in the `_mojolearn` binding (`bindings/build.sh`, `base`). `x_neighbors/gen.py` was re-run (three
-new custom ops: `lp_iterate_knn`, `kernel_tiled`, `svgp_gpu`; the generated files are committed).
+defaults OFF and is compiled under FAST + Apple only; IDENTICAL compiles main's code unchanged. Bindings:
+`build_x_neighbors.sh` for every switch but the radius one, which is in the `_mojolearn` binding
+(`bindings/build.sh`, `base`). `x_neighbors/gen.py` was re-run (two custom ops: `lp_iterate_knn`,
+`kernel_tiled`; the FAST_ALT table; the generated files are committed).
+
+Merged with origin/main (hr2 / hr-graph lanes) on 2026-10-02, main winning:
+- pagerank: main's `pr_iterate_gpu` (x_neighbors/graph_par.mojo) already folds the dangling mass and the
+  stopping sum in blocks on the device, which is what `MOJOLEARN_PAGERANK_FAST_REDUCE` did: switch and lines dropped.
+- the fused k-NN through fast_mma_knn: this branch's `_knn_sq_fast_mma` / `MOJOLEARN_XN_FAST_MMA_KNN` dropped;
+  the route lives on lane/apple-fast-isotonic-knn as `-D MOJOLEARN_XN_FAST_MMA_ROUTE=1` (its `ik-lof-mma-taxi`
+  line measures it on lof; the two branches merge cleanly, `git merge-tree` checked).
+- svgp: the env switch and the `svgp_gpu` op became the define below; main's `op_svgp` is the staged device
+  items (no longer HOST_RUN), so the A/B is FAST vs FAST.
+- new device code uses `enqueue_create_buffer` / `enqueue_copy` directly (the pre-push hook refuses `_buf` /
+  `_down`, which stage through host threads) and no one-block launch over a runtime size (the svgp folds are
+  SVF_FOLD_BLOCKS partials then one block over that fixed count).
 
 | switch | kind | site | lanes | what it changes under FAST |
 |---|---|---|---|---|
-| `MOJOLEARN_XN_FAST_MMA_KNN=1` | env, read in the op driver | `x_neighbors/iter_device.mojo` `_knn_sq_fast_mma` (called first by `op_knn_sq_tiled`) | lof, label-propagation, label-spreading | the lane's fused k-NN through `neighbors/impl/detail/fast_mma_knn.mojo` (Apple simdgroup MMA, the `neighbors` binding's FAST arm); `exclude_self` asks for k + 1 and `knn_drop_self_kernel` drops the row's own index |
-| `MOJOLEARN_PAGERANK_FAST_REDUCE=1` | env | `iter_device.mojo` `_pr_sparse_fast_loop` (from `op_pr_iterate_sparse`) | pagerank | the dangling-mass and stopping sums as block partials + a one-block fold (`pinned_block_sum`), the stopping test on the device (flag + count), PR_BATCH = 8 iterations per drain; kernels after the flag do nothing, so the answer is the serial loop's iterate |
 | `MOJOLEARN_LP_FAST_RESIDENT=1` | env, Python (FAST tier) | `python/mojolearn/_expansion_neighbors.py` `_LabelPropagationBase.fit`; `iter_device.mojo` `op_lp_iterate_knn`; CPU column `iter_host.mojo` | label-propagation, label-spreading | the kernel='knn' fit loop as one resident op: cols/vals uploaded once, device stopping sum and flag, LPK_BATCH = 16 iterations per drain, the finite-x product item |
 | `MOJOLEARN_XN_FAST_TILED_RBF=1` | env, Python (FAST tier) | `_expansion_neighbors.py` `_XNeighbors._kernel`; `iter_device.mojo` `op_kernel_tiled` / `kernel_rbf_tiled_kernel` | ocsvm (any rbf `_kernel` caller when set) | the rbf kernel matrix from 16 x 16 tiles with the x and y rows staged in threadgroup memory (d <= 224); other kinds and wider rows are `kernel` |
-| `MOJOLEARN_SVGP_FAST_GPU=1` | env, Python (FAST tier) | `_expansion_neighbors.py` `SVGP.fit`; `x_neighbors/svgp_fast.mojo` `svgp_solve_device` (op `svgp_gpu`) | svgp | the m x m solve on the device: `potrf_lower` / `cho_solve` / `chol_logdet` of cholesky/checks/ for the three factorizations and the column solves, this lane's elementwise and matmul kernels, five scalars read back for the bound |
+| `-D MOJOLEARN_SVGP_FAST_GPU=1` | build define (x_neighbors binding, tools/afc_ab_def.sh) | `x_neighbors/gen.py` FAST_ALT -> the generated `op_svgp` (`device_ops.mojo`) runs `x_neighbors/svgp_fast.mojo` `svgp_solve_device` under FAST + Apple + the define | svgp | the m x m solve through `potrf_lower` / `cho_solve` / `chol_logdet` of cholesky/checks/ for the three factorizations and the column solves, this lane's elementwise and matmul kernels, five scalars read back for the bound |
 | `MOJOLEARN_RADIUS_FAST_REUSE_COUNT=1` | env | `neighbors/estimator.mojo` `radius_neighbors_fill` (`_rbc_index_only`) | radius-neighbors | the fill pass takes the count pass's row offsets (the caller's `indptr`) and total instead of re-running the eps query in counting mode; the index is still rebuilt |
 | `-D MOJOLEARN_XN_PCS_SPARSE=1` | build define (existing opt-in, lane neighbors-apple3) | `iter_device.mojo` `op_pcs_resident` -> `x_neighbors/pcs_sparse.mojo` | poly-count-sketch | the convolution over the running product's nonzero components only |
 
-## Causes (file:line at lane/apple-fast's head f5f61bde)
+## Causes (file:line at lane/apple-fast's head f5f61bde; pagerank and the kNN route: see the merge note above)
 
 - lof / label-propagation / label-spreading kNN: `x_neighbors/iter_device.mojo:684` `knn_sq_tiled_kernel` is one
   thread per query row over scalar fmas against a 64-row shared tile, and d > 64 (Istella 220) falls to
@@ -85,5 +95,6 @@ new custom ops: `lp_iterate_knn`, `kernel_tiled`, `svgp_gpu`; the generated file
 ## Keep rule
 
 A switch becomes the FAST default when its arm is faster on the M3 and held-out quality stays within FAST's
-run-to-run spread (the `AFC_ARM=ours` lines are the IDENTICAL baselines on Istella); then the env read goes
-and the arm is the code. Queue lines: `docs/apple-fast/ab/neighbors2.txt` (27 lines).
+run-to-run spread; then the switch goes and the arm is the code. Request lines: `docs/apple-fast/ab/neighbors2.txt`
+(light form, `1 2`, one dataset per change first, no -ident lines): n2-lp-res-taxi, n2-ls-res-taxi,
+n2-ocsvm-tiled-istella (d = 220 is the tiled rbf's case), n2-svgp-gpu-taxi, n2-radius-reuse-taxi, n2-pcs-sparse-taxi.
