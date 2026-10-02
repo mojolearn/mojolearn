@@ -2160,6 +2160,13 @@ def _ours_class(lane):
         getattr(ml, "__version__", "?"), ", ".join(s["ours"])))
 
 
+# The binding each function/optimizer lane's mode is read back from when there is no estimator to ask:
+# these modules do not load "_mojolearn_x_<xlane>" (resample.py, model_selection.py _SPLIT_BINDING,
+# _training_impl.py _EXT_NAME).
+_READBACK_BINDING = {"resample": "_mojolearn_resample", "model_selection": "_mojolearn_x_metrics",
+                     "training": "_mojolearn_training"}
+
+
 def _ours_info(lane, est=None):
     import mojolearn as ml
     more = _tool("bench_board_more")
@@ -2169,7 +2176,8 @@ def _ours_info(lane, est=None):
             "module_path": getattr(ml, "__file__", None), "pre_clock_fit": False,
             "input_home": "host"}
     try:
-        mode, how = more._mode_readback(ml, est, "_mojolearn_x_" + LANES[lane]["xlane"])
+        mode, how = more._mode_readback(ml, est, LANES[lane].get("binding") or _READBACK_BINDING.get(
+            LANES[lane]["xlane"], "_mojolearn_x_" + LANES[lane]["xlane"]))
     except Exception as exc:  # noqa: BLE001
         mode, how = "unknown", "readback failed (%r)" % (exc,)
     info.update(numeric_mode_used=mode, numeric_mode_how=how)
