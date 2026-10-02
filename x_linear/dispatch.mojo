@@ -20,6 +20,8 @@ from x_linear.ridge import ridge_fit
 from x_linear.cd import enetcv_fit
 from x_linear.logcv import logcv_fit, logcv_team_rows
 from x_linear.isotonic import isotonic_fit, isotonic_predict
+from x_linear.ridgecv import ridge_kfold_fit
+from std.sys.info import is_gpu
 
 comptime ALGO_SGD = 1
 comptime ALGO_GLM = 2
@@ -33,6 +35,7 @@ comptime ALGO_ENETCV = 9
 comptime ALGO_LOGCV = 10
 comptime ALGO_ISOTONIC = 11
 comptime ALGO_ISOTONIC_PREDICT = 12
+comptime ALGO_RIDGE_KFOLD = 13
 
 comptime LINK_IDENTITY = 0
 comptime LINK_EXP = 1
@@ -92,6 +95,10 @@ def fit_dispatch(t: Team, algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: F
         isotonic_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ISOTONIC_PREDICT:
         isotonic_predict(t, x, y, n, d, ip, fp, res, fw, iw)
+    elif algo == ALGO_RIDGE_KFOLD:
+        # the device binding runs this on the grid (x_linear/device.mojo)
+        comptime if not is_gpu():
+            ridge_kfold_fit(x, y, n, d, ip, fp, res, fw)
 
 
 def decision_one(x: FP, i: Int, d: Int, wb: FP, c: Int, link: Int) -> Float32:

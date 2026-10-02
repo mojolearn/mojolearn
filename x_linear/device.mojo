@@ -23,7 +23,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_RIDGE_KFOLD, ALGO_BAYES, ALGO_ARD
 from x_linear.ops import ld, st, ldi, sti, fd, i2f, fa, fs, fm, fabs, fmad, fmax, fmin, shuffle
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
@@ -32,6 +32,7 @@ from x_linear.sgd import (
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
+from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
@@ -150,6 +151,12 @@ def _lars_grid_gram() -> Bool:
     """`MOJOLEARN_X_LINEAR_LARS_GRID_GRAM=0` keeps the Gram on the team
     (the A/B arm); default the grid kernel."""
     return String(getenv("MOJOLEARN_X_LINEAR_LARS_GRID_GRAM")) != "0"
+
+
+def _bayes_grid_gram() -> Bool:
+    """`MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM=0` keeps BayesianRidge's and
+    ARD's Gram on the team (the A/B arm); default the grid kernel."""
+    return String(getenv("MOJOLEARN_X_LINEAR_BAYES_GRID_GRAM")) != "0"
 
 
 def _fit_on_host(
@@ -1062,10 +1069,127 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     _ = wit^
 
 
+# ------------------------------------------------ k-fold RidgeCV on the grid (lane/neural-pass91)
+# x_linear/ridgecv.mojo's chains, one thread each: the training means (d + 1
+# threads), the centered Gram cells and X'y (one thread a cell), the solves
+# (one thread an alpha, its own scratch), the held-out predictions (one
+# thread a row and alpha) and the fold scores (one thread an alpha, summed
+# folds ascending). The same helpers as the host fit, so the same words.
+def kf_means_kernel(x: FP, y: FP, n: Int32, d: Int32, s: Int32, e: Int32, fi: Int32, xm: FP):
+    var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    if j < dd:
+        st(xm, j, kf_mean(x, dd, j, Int(n), Int(s), Int(e)) if fi != 0 else Float32(0))
+    elif j == dd:
+        st(xm, dd, kf_mean(y, 1, 0, Int(n), Int(s), Int(e)) if fi != 0 else Float32(0))
+
+
+def kf_cells_kernel(x: FP, y: FP, n: Int32, d: Int32, s: Int32, e: Int32, xm: FP, g: FP, xty: FP):
+    var c = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    var cells = dd * (dd + 1) // 2
+    if c < cells:
+        var jk = upper_cell(c, dd)
+        var j = jk[0]
+        var k = jk[1]
+        var v = kf_cross(x, dd, j, ld(xm, j), x, dd, k, ld(xm, k), Int(n), Int(s), Int(e))
+        st(g, j * dd + k, v)
+        st(g, k * dd + j, v)
+    elif c < cells + dd:
+        var j = c - cells
+        st(xty, j, kf_cross(x, dd, j, ld(xm, j), y, 1, 0, ld(xm, dd), Int(n), Int(s), Int(e)))
+
+
+def kf_solve_kernel(g: FP, xty: FP, xm: FP, d: Int32, alphas: FP, na: Int32, fi: Int32, aw: FP, w: FP, b: FP):
+    var a = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    if a < Int(na):
+        st(b, a, kf_solve(g, xty, xm, ld(xm, dd), dd, ld(alphas, a), fi != 0, aw + a * dd * dd, w + a * dd))
+
+
+def kf_pred_kernel(x: FP, d: Int32, s: Int32, e: Int32, na: Int32, w: FP, b: FP, p: FP, stride: Int32):
+    var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nt = Int(e) - Int(s)
+    if q < nt * Int(na):
+        var a = q // nt
+        var r = q - a * nt
+        st(p, a * Int(stride) + r, kf_pred(x, Int(s) + r, Int(d), w + a * Int(d), ld(b, a)))
+
+
+def kf_score_kernel(y: FP, p: FP, s: Int32, e: Int32, na: Int32, stride: Int32, sums: FP):
+    var a = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if a < Int(na):
+        st(sums, a, fa(ld(sums, a), kf_score(y, p + a * Int(stride), Int(s), Int(e))))
+
+
+def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
+                      res: FP) raises:
+    var ctx = linear_ctx()
+    var k = Int(ip[0])
+    var fi = Int(ip[1])
+    var na = Int(ip[2])
+    var stride = n // k + 1
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+    var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
+    var dal = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
+    var dxm = ctx.enqueue_create_buffer[DType.float32](d + 1)
+    var dg = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+    var dxty = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var daw = ctx.enqueue_create_buffer[DType.float32](max(na * d * d, 1))
+    var dw = ctx.enqueue_create_buffer[DType.float32](max(na * d, 1))
+    var db = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
+    var dp = ctx.enqueue_create_buffer[DType.float32](max(na * stride, 1))
+    var dsum = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
+    var hfp = fp.copy()
+    if n_x > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    if n_y > 0:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    ctx.enqueue_copy(dst_buf=dal, src_ptr=hfp.unsafe_ptr())
+    dsum.enqueue_fill(Float32(0))
+    var cells = d * (d + 1) // 2
+    for f in range(k):
+        var s = Int32(kf_start(n, k, f))
+        var e = Int32(kf_end(n, k, f))
+        ctx.enqueue_function[kf_means_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, Int32(fi),
+                                              dxm.unsafe_ptr(), grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
+        ctx.enqueue_function[kf_cells_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, dxm.unsafe_ptr(),
+                                              dg.unsafe_ptr(), dxty.unsafe_ptr(), grid_dim=_xg_blocks(cells + d), block_dim=XG_TPB)
+        ctx.enqueue_function[kf_solve_kernel](dg.unsafe_ptr(), dxty.unsafe_ptr(), dxm.unsafe_ptr(), Int32(d), dal.unsafe_ptr(),
+                                              Int32(na), Int32(fi), daw.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
+                                              grid_dim=_xg_blocks(na), block_dim=XG_TPB)
+        var nt = Int(e) - Int(s)
+        ctx.enqueue_function[kf_pred_kernel](dx.unsafe_ptr(), Int32(d), s, e, Int32(na), dw.unsafe_ptr(), db.unsafe_ptr(),
+                                             dp.unsafe_ptr(), Int32(stride), grid_dim=_xg_blocks(nt * na), block_dim=XG_TPB)
+        ctx.enqueue_function[kf_score_kernel](dy.unsafe_ptr(), dp.unsafe_ptr(), s, e, Int32(na), Int32(stride),
+                                              dsum.unsafe_ptr(), grid_dim=_xg_blocks(na), block_dim=XG_TPB)
+    var hs = List[Float32](length=max(na, 1), fill=Float32(0))
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=dsum)
+    ctx.synchronize()
+    for a in range(na):
+        res.unsafe_store(a, fd(hs[a], i2f(k)))
+    _ = hfp^
+    _ = hs^
+    _ = dx^
+    _ = dy^
+    _ = dal^
+    _ = dxm^
+    _ = dg^
+    _ = dxty^
+    _ = daw^
+    _ = dw^
+    _ = db^
+    _ = dp^
+    _ = dsum^
+
+
 def fit_device(
     algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
 ) raises:
+    if algo == ALGO_RIDGE_KFOLD:
+        _ridge_kfold_grid(x, n_x, y, n_y, n, d, ip, fp, res)
+        return
     if algo == ALGO_SGD and len(ip) > 12 and sgd_mb_on(Int(ip[12]), Int(ip[0]), Int(ip[3])):
         _sgd_mb_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
@@ -1099,7 +1223,14 @@ def fit_device(
     # LARS reads ip[4] on the device: 1 when the Gram is already in fw
     # (`xg_gram_kernel` below), 0 when the team computes it.
     var grid_gram = algo == ALGO_LARS and _lars_grid_gram() and d > 0
-    if algo == ALGO_LARS:
+    # lane/neural-pass87 (2026-10-01): BayesianRidge (unweighted) and ARD read
+    # the same layout (xm at 0, G at d, ip[1] fit_intercept) and the same
+    # centered Gram chains, which the team ran on ONE block (24,310 chains
+    # of every row at 220 features over 256 threads).
+    var bayes_like = (algo == ALGO_BAYES and len(ip) > 2 and ip[2] == 0) or algo == ALGO_ARD
+    if bayes_like and _bayes_grid_gram() and d > 0:
+        grid_gram = True
+    if algo == ALGO_LARS or bayes_like:
         while len(hip) < 5:
             hip.append(Int32(0))
         hip[4] = Int32(1 if grid_gram else 0)
