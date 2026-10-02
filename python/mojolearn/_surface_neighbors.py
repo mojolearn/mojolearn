@@ -102,6 +102,7 @@ FAMILIES = (
             "xn_svgp_predict",
             "xn_lp_iterate_knn",
             "xn_kernel_tiled",
+            "xn_svgp_gpu",
             "xn_eigh",
             "x_neighbors_numeric_mode",
             "x_neighbors_vendor",

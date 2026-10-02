@@ -15,7 +15,7 @@ from x_neighbors.items import (
     pagerank_step_item, cc_step_item, pcs_item, knn_sq_item, nc_stats_item,
 )
 
-from x_neighbors.host_ops import op_knn_impute_cells, op_kernel, X_NEIGHBORS_HOST_SABOTAGE
+from x_neighbors.host_ops import op_knn_impute_cells, op_kernel, op_svgp, X_NEIGHBORS_HOST_SABOTAGE
 from x_neighbors.items import (
     kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
     matmul_tn_acc_item, K_RBF, U_IDENTITY,
@@ -544,3 +544,11 @@ def op_kernel_tiled(
 ) raises:
     """The CPU column of `kernel_tiled`: `kernel` itself."""
     op_kernel(x, y, res, n, m, d, kind, gamma, coef0, degree)
+
+
+def op_svgp_gpu(
+    kuu: Int, bmat: Int, b: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int,
+    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+) raises:
+    """The CPU column of `svgp_gpu`: `svgp` itself."""
+    op_svgp(kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, m, n, noise, jitter, kdiag)

@@ -2117,3 +2117,22 @@ def op_kernel_tiled(
             _ = ctx^
             return
     op_kernel(x, y, res, n, m, d, kind, gamma, coef0, degree)
+
+
+# ---------------------------------------------------------------- svgp_gpu
+def op_svgp_gpu(
+    kuu: Int, bmat: Int, b: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int,
+    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+) raises:
+    """MOJOLEARN_SVGP_FAST_GPU=1 (lane/apple-fast-neighbors2, 2026-10-02; FAST
+    tier only, Python-side switch, default off): `svgp_item`'s m x m solve on
+    the device, x_neighbors/svgp_fast.mojo (its module note has the cause:
+    `svgp` is a HOST_RUN op, three serial host Cholesky factorizations at
+    m = 512 inside the fit)."""
+    # Imports at function scope, as x_neighbors/lp_batched.mojo's caller does.
+    from x_neighbors.svgp_fast import svgp_solve_device
+
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        raise Error("svgp_gpu: the FAST tier only (MOJOLEARN_SVGP_FAST_GPU=1)")
+    else:
+        svgp_solve_device(kuu, bmat, b, y, alpha, cmat, qmu, qsqrt, info, m, n, noise, jitter, kdiag)

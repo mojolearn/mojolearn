@@ -244,6 +244,13 @@ CUSTOM_OPS = [
     ("kernel_tiled",
      [("x", "fin", "n * d"), ("y", "fin", "m * d"), ("res", "fout", "n * m"), ("n", "int"), ("m", "int"), ("d", "int"),
       ("kind", "int"), ("gamma", "float"), ("coef0", "float"), ("degree", "int")]),
+    # lane/apple-fast-neighbors2, FAST tier only: `svgp` (a HOST_RUN item) on
+    # the device through the cholesky lane's potrf / solve
+    # (x_neighbors/svgp_fast.mojo), MOJOLEARN_SVGP_FAST_GPU=1
+    ("svgp_gpu",
+     [("kuu", "fin", "m * m"), ("bmat", "fin", "m * m"), ("b", "fin", "m"), ("y", "fin", "n"), ("alpha", "fout", "m"),
+      ("cmat", "fout", "m * m"), ("qmu", "fout", "m"), ("qsqrt", "fout", "m * m"), ("info", "fout", "2"),
+      ("m", "int"), ("n", "int"), ("noise", "float"), ("jitter", "float"), ("kdiag", "float")]),
 ]
 
 #: Ops whose GPU driver runs a threadgroup form of the (sequential) item

@@ -145,6 +145,10 @@ _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
 #: resident op (`lp_iterate_knn`) instead of three binding calls per step.
 _FAST_TILED_RBF = os.environ.get("MOJOLEARN_XN_FAST_TILED_RBF", "") == "1"
 _LP_FAST_RESIDENT = os.environ.get("MOJOLEARN_LP_FAST_RESIDENT", "") == "1"
+#: lane/apple-fast-neighbors2, FAST tier only, default off: SVGP's m x m
+#: solve on the device (`svgp_gpu`, x_neighbors/svgp_fast.mojo) instead of
+#: the host-run `svgp` item.
+_SVGP_FAST_GPU = os.environ.get("MOJOLEARN_SVGP_FAST_GPU", "") == "1"
 
 
 class _XNeighbors(NumericModeMixin):
@@ -1694,7 +1698,8 @@ class SVGP(_XNeighbors):
         qmu = _empty_out((M,), "<f4")
         qsqrt = _empty_out((M, M), "<f4")
         info = _empty_out((2,), "<f4")
-        self._op("svgp", [(Kuu, 0), (B, 0), (b, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
+        svgp_op = "svgp_gpu" if (_SVGP_FAST_GPU and self._fast_tier()) else "svgp"
+        self._op(svgp_op, [(Kuu, 0), (B, 0), (b, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
                  (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
         elbo, ok = info.tolist()
         if ok == 0:
