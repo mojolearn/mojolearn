@@ -19,7 +19,13 @@ from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
 from decomposition.impl.linalg.detail.svd_full import svd_of_r
 from decomposition.linalg_public_device import device_eigh, device_qr_r
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
+from std.sys.info import has_apple_gpu_accelerator
+
+# lane/apple-fast-decomp-linalg and -sparse (2026-10-02): the FAST + Apple
+# guard of every `-D MOJOLEARN_..._FAST_...` switch in this file. Compiled
+# only there; IDENTICAL and every other vendor compile main's code unchanged.
+comptime XD_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 from x_decomp.cells import (
     lu_perm_src,
     trs_block_col,
@@ -1656,8 +1662,8 @@ def launch_gemm(
     """C = op(A) op(B) on device pointers, enqueued (no sync): FOLD_BLOCK
     partial sums then the fold past one block (DEVIATIONS 5300/5301)."""
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
-        # MOJOLEARN_DECOMP_FAST_GEMM_TILED=1 (lane/apple-fast-decomp-linalg,
+    comptime if XD_FAST_APPLE:
+        # -D MOJOLEARN_DECOMP_FAST_GEMM_TILED (lane/apple-fast-decomp-linalg,
         # 2026-10-02, FAST on Apple only): the threadgroup-tiled kernel of
         # x_decomp/fast_gemm.mojo, 32 x 32 output tiles with the k axis
         # staged 16 deep, the same FOLD_BLOCK partials (grid z) and fold.
@@ -1973,7 +1979,7 @@ def orth_on_device_diag(
     var r_buf = ctx.enqueue_create_buffer[DType.float32](l * l if l > 0 else 1)
     var r = List[Float32](length=l * l if l > 0 else 1, fill=Float32(0))
     var dev_guard = String(getenv("MOJOLEARN_XD_ORTH_DEV", "1")) != "0"
-    # MOJOLEARN_SVD_FAST_CHOLQR=1 (lane/apple-fast-decomp-linalg, 2026-10-02,
+    # -D MOJOLEARN_SVD_FAST_CHOLQR (lane/apple-fast-decomp-linalg, 2026-10-02,
     # FAST on Apple only, the `with_diag` caller = linalg.svd's U): each pass
     # as CholeskyQR, G = A^T A on the kit's split-K gemm (a grid), L = chol(G)
     # by the per-column kernels, R = L^T, then the same row-parallel A R^-1;
@@ -1986,8 +1992,8 @@ def orth_on_device_diag(
     # than 2^8 (cond(A) past CholeskyQR2's float32 bound); read once per
     # pass on the host, where the pass waits anyway.
     var cholqr = False
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
-        cholqr = with_diag and l > 0 and m >= l and String(getenv("MOJOLEARN_SVD_FAST_CHOLQR")) == "1"
+    comptime if XD_FAST_APPLE:
+        cholqr = with_diag and l > 0 and m >= l and is_defined["MOJOLEARN_SVD_FAST_CHOLQR"]()
     var gcells = l * l if l > 0 else 1
     var gscr_n = gemm_scratch(l, m, l) if cholqr else 0
     var dg = ctx.enqueue_create_buffer[DType.float32](gcells)
@@ -2930,8 +2936,8 @@ struct DevExec(Exec):
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
         """Every fold over slices of rows, a fixed tree (x_decomp/
         qr_sliced.mojo; lane hr-qr), on every column at every size."""
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
-            # MOJOLEARN_QR_FAST_DEV=1 (lane/apple-fast-decomp-linalg, 2026-10-02):
+        comptime if XD_FAST_APPLE:
+            # -D MOJOLEARN_QR_FAST_DEV (lane/apple-fast-decomp-linalg, 2026-10-02):
             # the grid-fold route of x_decomp/fast_qr.mojo, on the device,
             # ahead of the sliced route below. FAST on Apple only.
             if fast_qr_on():
@@ -2951,8 +2957,8 @@ struct DevExec(Exec):
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
-            # MOJOLEARN_QR_FAST_DEV=1 (lane/apple-fast-decomp-linalg): see geqrf.
+        comptime if XD_FAST_APPLE:
+            # -D MOJOLEARN_QR_FAST_DEV (lane/apple-fast-decomp-linalg): see geqrf.
             if fast_qr_on():
                 DevExec._orgqr_fast(h, tau, q, m, n, kk, qc)
                 return
@@ -2971,14 +2977,14 @@ struct DevExec(Exec):
     @staticmethod
     def _geqrf_fast(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
         """`geqrf` with every fold a grid reduction (x_decomp/fast_qr.mojo;
-        MOJOLEARN_QR_FAST_DEV=1, FAST on Apple, lane/apple-fast-decomp-linalg
+        -D MOJOLEARN_QR_FAST_DEV, FAST on Apple, lane/apple-fast-decomp-linalg
         2026-10-02). Written against the host walk the Apple column once
         took (7.7 s on the M3 Ultra for the board's qr lane at 1,000,000
         x d; gone from main with lane hr-qr): the A/B arm now races main's
         sliced device route below and, from the linalg door, the blocked
         TSQR (x_decomp/tsqr_device.mojo). Step k: the
         norm's (scale, ssq) pairs over `fq_head_blocks` blocks and a
-        one-thread finish (dlarfg's tau, beta), the scale kernel, the
+        one-block fold of the pairs (dlarfg's tau and beta on its thread 0), the scale kernel, the
         reflector products as row-chunk partials folded by `fold_kernel`,
         then the elementwise update: 5 launches a column, all grid."""
         var ctx = xd_ctx()
@@ -2997,8 +3003,8 @@ struct DevExec(Exec):
                 grid_dim=nbh, block_dim=FQ_TPB,
             )
             ctx.enqueue_function[fq_head_finish_kernel](
-                da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dph.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(nbh),
-                grid_dim=1, block_dim=1,
+                da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dph.unsafe_ptr(), Int32(k), Int32(k * n + k), Int32(nbh),
+                grid_dim=1, block_dim=FQ_TPB,
             )
             if m - k - 1 > 0:
                 ctx.enqueue_function[geqrf_scale_kernel](
@@ -3033,7 +3039,7 @@ struct DevExec(Exec):
     def _orgqr_fast(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
         """`orgqr` with the reflector products as row-chunk grid partials
         (`fq_orgqr_dot_kernel` + `fold_kernel`); the init and update kernels
-        are the shipped ones. MOJOLEARN_QR_FAST_DEV=1, FAST on Apple
+        are the shipped ones. -D MOJOLEARN_QR_FAST_DEV, FAST on Apple
         (lane/apple-fast-decomp-linalg, 2026-10-02); cause as `_geqrf_fast`."""
         var ctx = xd_ctx()
         var dh = _up(ctx, h, m * n)
@@ -3095,8 +3101,8 @@ struct DevExec(Exec):
 
     @staticmethod
     def qr_r(a: F32Ptr, m: Int, n: Int, r: F32Ptr) raises:
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
-            # MOJOLEARN_FA_FAST_QRR=1 (lane/apple-fast-decomp-linalg, 2026-10-02,
+        comptime if XD_FAST_APPLE:
+            # -D MOJOLEARN_FA_FAST_QRR (lane/apple-fast-decomp-linalg, 2026-10-02,
             # FAST on Apple only): the matrix uploaded straight from the
             # caller's floats and `qr_factor` run on it, R downloaded once.
             # Cause: the route below copies all m x n values into a host
@@ -3104,7 +3110,7 @@ struct DevExec(Exec):
             # 1,000,000 x 220: 220 million host appends), and
             # `device_qr_r` then uploads that copy. Same kernels, same
             # slice count; only the host copy goes.
-            if String(getenv("MOJOLEARN_FA_FAST_QRR")) == "1" and m >= n and n > 0:
+            if is_defined["MOJOLEARN_FA_FAST_QRR"]() and m >= n and n > 0:
                 var ctx = xd_ctx()
                 var da = _up(ctx, a, m * n)
                 var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)

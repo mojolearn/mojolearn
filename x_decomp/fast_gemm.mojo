@@ -4,7 +4,7 @@
 kit's gemm as a threadgroup-tiled kernel. NOT an IDENTICAL path:
 `x_decomp/device.mojo` `launch_gemm` reaches it only under
 `GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL` on the Apple column, and only
-when `MOJOLEARN_DECOMP_FAST_GEMM_TILED=1` (host env, read at dispatch).
+when built with `-D MOJOLEARN_DECOMP_FAST_GEMM_TILED` (no env read).
 
 Cause: `gemm_kernel` / `gemm_part_kernel` (x_decomp/device.mojo) are one
 thread per output cell walking the whole k axis from device memory, so
@@ -21,7 +21,7 @@ they do today. Same products, a different sum order.
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
-from std.os import getenv
+from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -34,8 +34,8 @@ comptime FG_TPB = 256
 
 
 def fast_gemm_on() -> Bool:
-    """`MOJOLEARN_DECOMP_FAST_GEMM_TILED=1` turns the tiled kernel on (default off)."""
-    return String(getenv("MOJOLEARN_DECOMP_FAST_GEMM_TILED")) == "1"
+    """`-D MOJOLEARN_DECOMP_FAST_GEMM_TILED` compiles the tiled kernel in (default off; no env read)."""
+    return is_defined["MOJOLEARN_DECOMP_FAST_GEMM_TILED"]()
 
 
 def fg_tiles(count: Int) -> Int:

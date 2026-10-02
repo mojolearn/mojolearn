@@ -398,11 +398,22 @@ def _kit_vendor(kit):
     return v
 
 
-def _fast_metal_switch(kit, name):
-    """lane/apple-fast-decomp-linalg (2026-10-02): whether the env switch
-    `name` is "1" for a FAST kit bound to a Metal build. False for every
-    IDENTICAL kit, so the default tier never sees these routes."""
-    return kit.mode == "fast" and _os.environ.get(name) == "1" and _kit_vendor(kit) == "metal"
+def _kit_fast_define(kit, name):
+    """lane/apple-fast-decomp-linalg and -sparse (2026-10-02): whether the
+    kit's binding is a FAST Metal build compiled with `-D <name>` (asked of
+    the binding's `x_decomp_fast_defines` once per kit; no env read). False
+    for every IDENTICAL kit, for another vendor and for a binding without
+    the entry, so the default tier never takes one of these routes."""
+    if kit.mode != "fast" or _kit_vendor(kit) != "metal":
+        return False
+    d = kit.__dict__.get("_fast_defines")
+    if d is None:
+        try:
+            d = str(kit._raw().x_decomp_fast_defines()).split(",")
+        except Exception:
+            d = []
+        kit._fast_defines = d
+    return name in d
 
 
 class _FastMetalEigh:
@@ -2427,11 +2438,11 @@ class _PLS(_Base):
         xw_c, yw_c, xs_c, ys_c, xl_c, yl_c = [], [], [], [], [], []
         self.n_iter_ = []
         thr = 10 * _F32_EPS
-        dead_dev = _fast_metal_switch(k, "MOJOLEARN_PLS_FAST_DEADCOLS")
+        dead_dev = _kit_fast_define(k, "MOJOLEARN_PLS_FAST_DEADCOLS")
         for _c in range(nc):
             # Yk columns that are all below 10 eps are set to zero
             if dead_dev:
-                # MOJOLEARN_PLS_FAST_DEADCOLS=1 (lane/apple-fast-decomp-linalg,
+                # -D MOJOLEARN_PLS_FAST_DEADCOLS (lane/apple-fast-decomp-linalg,
                 # 2026-10-02, FAST on Apple only): the scan on the device, per
                 # column the count of |Yk| above the threshold (two
                 # elementwise kernels and a column sum, q floats read back).

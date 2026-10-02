@@ -4,13 +4,14 @@
 kit's geqrf / orgqr folds as GRID reductions. NOT an IDENTICAL path:
 `x_decomp/device.mojo` reaches these kernels only under
 `GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL` on the Apple column, and only
-when `MOJOLEARN_QR_FAST_DEV=1` (host env, read at dispatch).
+when built with `-D MOJOLEARN_QR_FAST_DEV` (no env read).
 
 Cause: `DevExec.geqrf` / `DevExec.orgqr` run every fold of a column (the
 reflector norm, and w = v^T a_j for each trailing column) as ONE thread's
-chain, rows ascending, so the IDENTICAL bits hold; on Apple the kit then
-takes `xd_qr_on_host` (x_decomp/qr_host.mojo), a HOST walk of the whole
-factorization inside the board's qr cell (1,000,000 x d). Here the norm is
+chain, rows ascending, so the IDENTICAL bits hold; on Apple the kit once
+handed the whole factorization to a host walk (gone from main with lane
+hr-qr: the A/B arm now races main's sliced device route and, from the
+linalg door, the blocked TSQR of x_decomp/tsqr_device.mojo). Here the norm is
 a scaled sum of squares over a grid of blocks (LAPACK dlassq's running
 scale, combined pairwise), and the reflector products are row-chunk
 partials (block b owns FQ_ROWS rows, thread t a column, so the loads of a
@@ -21,7 +22,7 @@ and update steps keep their elementwise grid kernels. Same algorithm
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 from std.memory import stack_allocation
-from std.os import getenv
+from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -36,8 +37,8 @@ comptime FQ_MAX_BLOCKS = 1024
 
 
 def fast_qr_on() -> Bool:
-    """`MOJOLEARN_QR_FAST_DEV=1` turns the grid folds on (default off)."""
-    return String(getenv("MOJOLEARN_QR_FAST_DEV")) == "1"
+    """`-D MOJOLEARN_QR_FAST_DEV` compiles the grid folds in (default off; no env read)."""
+    return is_defined["MOJOLEARN_QR_FAST_DEV"]()
 
 
 def fq_dot_blocks(m: Int, k: Int) -> Int:
@@ -118,22 +119,43 @@ def fq_head_part_kernel(a: F32Ptr, part: F32Ptr, k: Int32, m: Int32, n: Int32, n
         part.unsafe_store(2 * b + 1, sq[0])
 
 
-def fq_head_finish_kernel(
-    a: F32Ptr, tau: F32Ptr, scal: F32Ptr, part: F32Ptr, k: Int32, m: Int32, n: Int32, nblk: Int32
-):
-    """`geqrf_head`'s tail on one thread from the blocks' pairs: xmax is the
-    merged scale of the rows below the diagonal (0: tau = 0, the step
-    skipped, as dlarfg); the norm then takes alpha in too. tau[k], scal =
-    [alpha - beta, 1], beta on the diagonal."""
-    if block_idx.x != 0 or thread_idx.x != 0:
-        return
-    var K = Int(k)
-    var N = Int(n)
+def fq_head_finish_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, part: F32Ptr, k: Int32, diag: Int32, nblk: Int32):
+    """`geqrf_head`'s tail on ONE block of FQ_TPB threads: the blocks' (scale,
+    ssq) pairs merged by a tree (thread t folds pairs t, t + FQ_TPB, ...,
+    then the block's tree, as `fq_head_part_kernel`), and thread 0 finishes:
+    xmax is the merged scale of the rows below the diagonal (0: tau = 0, the
+    step skipped, as dlarfg); the norm then takes alpha = a[diag] in.
+    tau[k], scal = [alpha - beta, 1], beta on the diagonal. `diag` is the
+    diagonal's offset k * n + k, so the launch carries no row count."""
+    var tid = Int(thread_idx.x)
+    var ss = stack_allocation[FQ_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sq = stack_allocation[FQ_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var scale = Float32(0)
     var ssq = Float32(0)
-    for b in range(Int(nblk)):
+    var b = tid
+    while b < Int(nblk):
         _ssq_merge(scale, ssq, part.unsafe_load(2 * b), part.unsafe_load(2 * b + 1))
-    var alpha = a.unsafe_load(K * N + K)
+        b += FQ_TPB
+    ss[tid] = scale
+    sq[tid] = ssq
+    barrier()
+    var half = FQ_TPB // 2
+    while half > 0:
+        if tid < half:
+            var s1 = ss[tid]
+            var q1 = sq[tid]
+            _ssq_merge(s1, q1, ss[tid + half], sq[tid + half])
+            ss[tid] = s1
+            sq[tid] = q1
+        barrier()
+        half //= 2
+    if tid != 0:
+        return
+    var K = Int(k)
+    var D = Int(diag)
+    scale = ss[0]
+    ssq = sq[0]
+    var alpha = a.unsafe_load(D)
     if scale == Float32(0):
         tau.unsafe_store(K, Float32(0))
         scal.unsafe_store(0, Float32(1))
@@ -145,7 +167,7 @@ def fq_head_finish_kernel(
     tau.unsafe_store(K, (beta - alpha) / beta)
     scal.unsafe_store(0, alpha - beta)
     scal.unsafe_store(1, Float32(1))
-    a.unsafe_store(K * N + K, beta)
+    a.unsafe_store(D, beta)
 
 
 def fq_geqrf_dot_kernel(a: F32Ptr, scal: F32Ptr, part: F32Ptr, k: Int32, m: Int32, n: Int32):

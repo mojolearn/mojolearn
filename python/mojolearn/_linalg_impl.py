@@ -1000,20 +1000,18 @@ def _xd_kit():
 def _fast_apple_kit(switch):
     """lane/apple-fast-decomp-linalg (2026-10-02): the FAST x_decomp kit for
     one public linalg door, or None (the IDENTICAL kit stands). Three
-    conditions, all host-side: the env switch is "1", the process tier is
-    FAST (`_backend.default_mode()`), and the FAST x_decomp binding is a
-    Metal build (`_kit_vendor`). The public doors otherwise always run the
+    conditions: the process tier is FAST (`_backend.default_mode()`), the
+    FAST x_decomp binding is a Metal build, and it was built with
+    `-D <switch>` (`_kit_fast_define`; no env read). The public doors otherwise always run the
     IDENTICAL x_decomp cells, FAST tier or not (`_xd_kit`), which is why
     the FAST-only device routes behind these switches were unreachable
     from the board's qr / svd / eigh lanes."""
-    if os.environ.get(switch) != "1":
-        return None
     from . import _backend
     if _backend.default_mode() != "fast":
         return None
-    from ._expansion_decomp import _Kit, _kit_vendor
+    from ._expansion_decomp import _Kit, _kit_fast_define
     k = _Kit("fast")
-    return k if _kit_vendor(k) == "metal" else None
+    return k if _kit_fast_define(k, switch) else None
 
 
 def _xd_matrix(a_arr, rows, cols):
@@ -1181,10 +1179,10 @@ def _qr_q(a, mode):
     lane's sliced order (x_decomp/qr_sliced.mojo, DEVIATION 5320;
     lane/algos-decomp, 2026-09-27; sliced by lane hr-qr, 2026-10-02). Any shape, wide included."""
     a_arr, rows, cols = _two_d(a, "a")
-    # MOJOLEARN_QR_FAST_DEV=1 (lane/apple-fast-decomp-linalg, 2026-10-02, FAST
+    # -D MOJOLEARN_QR_FAST_DEV (lane/apple-fast-decomp-linalg, 2026-10-02, FAST
     # on Apple only): the FAST x_decomp kit, whose DevExec.geqrf / orgqr then
-    # take the grid-fold device route of x_decomp/fast_qr.mojo (the same env
-    # read there), ahead of the blocked TSQR. The A/B arm is that route
+    # take the grid-fold device route of x_decomp/fast_qr.mojo (the same define
+    # there), ahead of the blocked TSQR. The A/B arm is that route
     # against main's TSQR (lane neural-pass140, the default here), which
     # replaced the host walk this switch was first written against
     # (xd_qr_on_host, removed by lane hr-qr).
@@ -1333,7 +1331,7 @@ def eigh(a, UPLO="L"):
     a_arr = _from_triangle(a_arr, rows, UPLO)
     kf = _fast_apple_kit("MOJOLEARN_EIGH_FAST_RR")
     if kf is not None:
-        # MOJOLEARN_EIGH_FAST_RR=1 (lane/apple-fast-decomp-linalg, 2026-10-02,
+        # -D MOJOLEARN_EIGH_FAST_RR (lane/apple-fast-decomp-linalg, 2026-10-02,
         # FAST on Apple only): the x_decomp kit's eigh, whose default route
         # is the round-robin Jacobi of x_decomp/jacobi_par.mojo (h = n/2
         # blocks per round, the off-norm convergence test once per sweep)
@@ -1504,11 +1502,11 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
     a_arr, rows, cols = _two_d(a, "a")
     if not compute_uv:
         return svdvals(a_arr)
-    # MOJOLEARN_SVD_FAST_CHOLQR=1 (lane/apple-fast-decomp-linalg, 2026-10-02,
+    # -D MOJOLEARN_SVD_FAST_CHOLQR (lane/apple-fast-decomp-linalg, 2026-10-02,
     # FAST on Apple only): the FAST x_decomp kit on the whole-matrix route
     # below (`_svd_tall`: k.svd, A V / s, orth_diag), whose `orth_diag` then
     # takes the CholeskyQR2 route of x_decomp/device.mojo orth_on_device_diag
-    # (the same env read there) instead of two sliced Householder passes.
+    # (the same define there) instead of two sliced Householder passes.
     # The A/B arm is that route against main's blocked TSQR (`_svd_tsqr`,
     # lane neural-pass140, the default here: one TSQR pass, the SVD of its
     # R, U = Q U_R in one more pass), which the switch bypasses.
