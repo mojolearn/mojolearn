@@ -6,7 +6,8 @@ n % k one row longer, no shuffle), the scores their GridSearchCV ranks
 (scoring None: Ridge.score, r2_score). The Python side takes the first best
 alpha and refits Ridge on every row (their refit=True).
 
-Per fold f, every value is one chain in a fixed order, the same on the host
+Per fold f, every value is one chain in a fixed order (the means and the
+Gram / X'y cells compensated, `_two_sum`, since lane/gap-board-refusals), the same on the host
 and on every device: the training means (rows ascending, the fold's rows
 skipped), the centered Gram and X'y cells (fmad of the centered words, rows
 ascending), the solve (G + alpha I by `cholesky` / `chol_solve`), the
@@ -14,7 +15,7 @@ held-out predictions (`row_dot` plus the intercept ym - xm.w) and the R^2
 folds over the held-out rows ascending; the fold scores are summed folds
 ascending and divided by k. Without an intercept nothing is centered.
 """
-from x_linear.ops import FP, IP, fa, fs, fd, fmad, ld, st, ldi, i2f, fill, cholesky, chol_solve, row_dot, par_rows
+from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, cholesky, chol_solve, row_dot, par_rows
 
 
 @always_inline
@@ -27,25 +28,45 @@ def kf_end(n: Int, k: Int, f: Int) -> Int:
     return kf_start(n, k, f) + n // k + (1 if f < n % k else 0)
 
 
+@always_inline
+def _two_sum(mut s: Float32, mut c: Float32, v: Float32):
+    """s += v with the rounding error carried in c (Knuth's TwoSum, every
+    step one rounded fa/fs, branch-free): the k-fold chains run over up to
+    n rows, and a plain float32 chain loses ~n*eps of the cell (Istella-S,
+    800,000 training rows: 5e-4 of a Gram diagonal, hundreds of units, so
+    G + alpha I was indefinite in float32 for every alpha). The compensated
+    chain keeps the cell to a few rounding errors."""
+    var t = fa(s, v)
+    var bp = fs(t, s)
+    var ap = fs(t, bp)
+    c = fa(c, fa(fs(s, ap), fs(v, bp)))
+    s = t
+
+
 def kf_mean(v: FP, step: Int, off: Int, n: Int, s: Int, e: Int) -> Float32:
-    """The mean of v[off + i*step] over the rows outside [s, e), ascending."""
+    """The mean of v[off + i*step] over the rows outside [s, e), ascending
+    (the compensated chain `_two_sum`)."""
     var acc = Float32(0)
+    var cc = Float32(0)
     for i in range(s):
-        acc = fa(acc, ld(v, off + i * step))
+        _two_sum(acc, cc, ld(v, off + i * step))
     for i in range(e, n):
-        acc = fa(acc, ld(v, off + i * step))
-    return fd(acc, i2f(n - (e - s)))
+        _two_sum(acc, cc, ld(v, off + i * step))
+    return fd(fa(acc, cc), i2f(n - (e - s)))
 
 
 def kf_cross(a: FP, astep: Int, aoff: Int, ma: Float32, b: FP, bstep: Int, boff: Int, mb: Float32,
              n: Int, s: Int, e: Int) -> Float32:
-    """acc = fmad(a_i - ma, b_i - mb, acc) over the rows outside [s, e), ascending."""
+    """The sum of (a_i - ma)(b_i - mb) over the rows outside [s, e),
+    ascending: each product rounded once (fm), summed by the compensated
+    chain `_two_sum`."""
     var acc = Float32(0)
+    var cc = Float32(0)
     for i in range(s):
-        acc = fmad(fs(ld(a, aoff + i * astep), ma), fs(ld(b, boff + i * bstep), mb), acc)
+        _two_sum(acc, cc, fm(fs(ld(a, aoff + i * astep), ma), fs(ld(b, boff + i * bstep), mb)))
     for i in range(e, n):
-        acc = fmad(fs(ld(a, aoff + i * astep), ma), fs(ld(b, boff + i * bstep), mb), acc)
-    return acc
+        _two_sum(acc, cc, fm(fs(ld(a, aoff + i * astep), ma), fs(ld(b, boff + i * bstep), mb)))
+    return fa(acc, cc)
 
 
 def kf_solve(g: FP, xty: FP, xm: FP, ym: Float32, d: Int, alpha: Float32, fi: Bool, aw: FP, w: FP) -> Float32:
@@ -61,8 +82,9 @@ def kf_solve(g: FP, xty: FP, xm: FP, ym: Float32, d: Int, alpha: Float32, fi: Bo
     if cholesky(aw, 0, d):
         chol_solve(aw, 0, d, w, 0)
     else:
-        # G + alpha I is not positive definite in float32 (istella: G's
-        # eigenvalues span 7.6e17 with 21 zero columns): no solution word;
+        # G + alpha I is not positive definite in float32 (Istella-S
+        # standardized: the centered G's eigenvalues span 2.4e7 down to 0,
+        # 19 zero columns; alpha 1e-3 and 1e-2 fail even on the exact G): no solution word;
         # the alpha's fold score is NaN and the Python side skips it
         var nan = Float32(0) / Float32(0)
         for j in range(d):
