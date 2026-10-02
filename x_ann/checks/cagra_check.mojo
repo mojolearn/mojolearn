@@ -13,7 +13,7 @@ from std.sys import exit
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_ann.cagra_device import cagra_build_device, cagra_search_device, _launch_prune
-from x_ann.cagra_core import cagra_prune
+from x_ann.host.cagra_host import cagra_prune
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.io import upload_i32, download_i32
 from x_ann.checks.cagra_oracle import co_prune, co_reverse_merge, co_search
