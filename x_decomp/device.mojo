@@ -1597,11 +1597,11 @@ def _pj_off_blocks(n: Int) -> Int:
 
 def _eigh_par_test(
     ctx: DeviceContext,
-    da: DeviceBuffer[DType.float32],
-    doff: DeviceBuffer[DType.float32],
+    mut da: DeviceBuffer[DType.float32],
+    mut doff: DeviceBuffer[DType.float32],
     mut dpart: DeviceBuffer[DType.float32],
     mut dfold: DeviceBuffer[DType.float32],
-    hfold: HostBuffer[DType.float32],
+    mut hfold: HostBuffer[DType.float32],
     n: Int,
 ) raises -> SIMD[DType.float32, 4]:
     """The round-robin eigh's convergence test on the device: the block
