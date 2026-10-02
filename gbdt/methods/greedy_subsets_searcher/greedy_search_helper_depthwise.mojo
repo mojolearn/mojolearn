@@ -804,9 +804,14 @@ comptime GBDT_LG_BATCH = 1 if not _LG_FAST_APPLE else (
 #: waits and launches instead of max_leaves - 1. Leaves split ahead of time
 #: need slots, so the leaf capacity is min(2 * max_leaves, 1 << max_depth)
 #: and a round never takes a slot the certain splits still to come may need.
-#: OPT-IN until its A/B and quality check pass: `-D
-#: MOJOLEARN_GBDT_LG_EXACT_BATCH`; width 32, arms `-D
-#: MOJOLEARN_GBDT_LG_EXACT_BATCH16|64`.
+#: THE FAST APPLE DEFAULT since lane apple-fast-trees2 (2026-10-02), with
+#: NS_INHERIT_PARTITION below. M3 Ultra, board shapes (500 trees, depth 8,
+#: 256 leaves), alternating A/B, FAST main vs FAST with both: Lossguide taxi
+#: (4.1M rows) 78.2 -> 16.7 s, Istella-S (2.0M rows) 102.0 -> 23.1 s, held-out
+#: logloss and AUC within the run-to-run spread of FAST (whose float-atomic
+#: histograms vary run to run in both arms). Width 32; arms `-D
+#: MOJOLEARN_GBDT_LG_EXACT_BATCH16|64`; `-D MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF`
+#: keeps one leaf per iteration (the A/B arm).
 #:
 #: IDENTICAL, every GPU (lane gap-trees-nv): the same rounds under `-D
 #: MOJOLEARN_GBDT_LG_EXACT_ID`. Same bits as one leaf per iteration because
@@ -829,7 +834,7 @@ comptime LG_EXACT_ID = (
 comptime LG_EXACT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH"]()
+    and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF"]()
     and not _LG_FAST_APPLE
 ) or LG_EXACT_ID
 comptime LG_EXACT_BATCH_WIDTH = (
@@ -850,8 +855,10 @@ comptime LG_EXACT_BATCH_WIDTH = (
 #: tree), and it is what CatBoost's estimator inherits for the permutation
 #: the tree was grown on. The fit records the leaves' ranges here and
 #: `doc_parallel_boosting` hands them to the estimator when the fit has one
-#: permutation. OPT-IN until its A/B passes: `-D
-#: MOJOLEARN_GBDT_NS_INHERIT_PARTITION`.
+#: permutation. THE FAST APPLE DEFAULT since lane apple-fast-trees2
+#: (2026-10-02): M3 Ultra, Depthwise taxi at the board shape 17.3 -> 14.9 s
+#: in an alternating A/B, held-out logloss and AUC within FAST's run-to-run
+#: spread. `-D MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF` is the A/B arm.
 #:
 #: IDENTICAL, every GPU (lane gap-trees-nv): `-D MOJOLEARN_GBDT_NS_INHERIT_ID`.
 #: The same rows in the same order per leaf as the rebuild (a stable radix
@@ -861,7 +868,7 @@ comptime LG_EXACT_BATCH_WIDTH = (
 comptime NS_INHERIT_PARTITION = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GBDT_NS_INHERIT_PARTITION"]()
+    and not is_defined["MOJOLEARN_GBDT_NS_INHERIT_PARTITION_OFF"]()
 ) or (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and is_defined["MOJOLEARN_GBDT_NS_INHERIT_ID"]()

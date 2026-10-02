@@ -399,23 +399,31 @@ class IsolationForest(NumericModeMixin):
                 "(cuML raises UnsupportedOnGPU for it too)"
             )
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        # A binary that scans the uploaded matrix on the device
-        # (`iforest_device_scan`, lane gap-trees-nv) refuses a non-finite X
-        # inside the fit; the host scan here would be the same refusal twice.
-        scan = getattr(self._bind("_mojolearn_svm"), "iforest_device_scan", None)
-        device_scan = scan is not None and int(scan()) == 1
+        # A binary that scans the uploaded matrix on the device refuses a
+        # non-finite X inside the fit, so the host scan here would be the same
+        # refusal twice: `iforest_device_scan` (lane gap-trees-nv,
+        # IF_DEVICE_TRANSPOSE) or `iforest_device_finite_scan` (lane
+        # apple-fast-trees2, IF_FAST_ROWMAJOR, FAST on Apple).
+        b = self._bind("_mojolearn_svm")
+        scans = [getattr(b, n, None) for n in ("iforest_device_scan", "iforest_device_finite_scan")]
+        device_scan = any(f is not None and int(f()) == 1 for f in scans)
         if not device_scan and not all_finite(x):
             # was a bare Exception from the native fit; scikit-learn raises
             # ValueError for the same input
             raise ValueError("mojolearn IsolationForest: X contains NaN or infinity")
+        had = {k: self.__dict__[k] for k in ("_x", "n_features_in_") if k in self.__dict__}
         self._x = x  # kept alive; every scoring call refits from it
         self.n_features_in_ = x.shape[1]
         try:
             self._run(x[:1], _WANT_SCORE_SAMPLES)  # one row, an `Array` copy
         except Exception as exc:  # noqa: BLE001
-            if device_scan and "Input X contains" in str(exc):
-                del self._x, self.n_features_in_
-                raise ValueError("mojolearn IsolationForest: X contains NaN or infinity") from None
+            if device_scan and "does not accept non-finite" in str(exc):
+                for k in ("_x", "n_features_in_"):
+                    self.__dict__.pop(k, None)
+                self.__dict__.update(had)
+                raise ValueError(
+                    "mojolearn IsolationForest: X contains NaN or infinity"
+                ) from None
             raise
         return self
 

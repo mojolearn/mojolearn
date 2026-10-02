@@ -54,6 +54,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from isolation_forest.impl.isolation_forest import IF_DEVICE_TRANSPOSE
 
+from isolation_forest.impl.isolation_tree_builder import IF_FAST_ROWMAJOR
 from isolation_forest.estimator import (
     IF_WANT_PREDICT,
     IFRunOutputs,
@@ -590,6 +591,13 @@ def svm_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
 
+def iforest_device_finite_scan_binding() raises -> PythonObject:
+    """1 when this build's IsolationForest fit refuses a non-finite training
+    cell through a device scan (IF_FAST_ROWMAJOR, FAST on Apple), so the
+    Python layer skips its host scan of the same cells; 0 otherwise."""
+    return PythonObject(1 if IF_FAST_ROWMAJOR else 0)
+
+
 def iforest_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
@@ -622,6 +630,7 @@ def PyInit__mojolearn_svm() abi("C") -> PythonObject:
         m.def_function[svr_predict_binding]("svr_predict")
         m.def_function[iforest_run_binding]("iforest_run")
         m.def_function[iforest_device_scan_binding]("iforest_device_scan")
+        m.def_function[iforest_device_finite_scan_binding]("iforest_device_finite_scan")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_svm: ", e))
