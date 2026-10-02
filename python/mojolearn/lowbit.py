@@ -23,8 +23,10 @@ int8 weight a coarser one. Not a lower-precision matrix unit: the arithmetic
 is the fp32 profile's. Not a speed claim.
 
 WHERE THE MATERIALIZATION RUNS. Through the linalg extension's conversion
-kernels on a GPU column, through `_mojolearn_linalg_host` on a CPU column,
-and through the pure-Python spelling below when neither is loaded (an
+kernels on a GPU install (only there: a GPU install never converts on the
+host), through `_mojolearn_linalg_host` on a CPU-only install (the selector
+installs it under the linalg binding's canonical name, so `mojolearn.linalg`
+reaches it the same way), and through the pure-Python spelling below when neither is loaded (an
 install with no binding at all). All three are the same exact integer
 construction -- the pure-Python one is `checks/numerics.mojo`'s six seams
 (`ftz`, `f32_to_bf16_bits_rne`, `bf16_bits_to_f32`, `int8_row_exponent`,
@@ -64,7 +66,7 @@ import struct
 from . import _backend
 from ._array import Array
 from ._buffer import (
-    addr as _addr_w, addr_ro as _addr_r, as_f32_c, as_i8_c, as_i32_c, as_u16_c, empty,
+    as_f32_c, as_i8_c, as_i32_c, as_u16_c,
 )
 from ._bufcheck import base_format, dtype_name, is_native_f32, probe
 
@@ -162,20 +164,19 @@ def _f32_2d(value, name):
 
 
 def _conversion_backend():
-    """Which exact spelling materializes: "gpu" (the linalg extension's
-    kernels), "host" (the linalg host binding) or "python"."""
+    """Which exact spelling materializes: "linalg" (the linalg binding this
+    install SELECTED: the GPU extension's kernels on a GPU install, the
+    linalg host binding installed under the same canonical name on a
+    CPU-only install) or "python" (an install with no linalg binding at all).
+    A GPU install never converts on the host (cpu-gpu-cleanup n-pyneural,
+    2026-10-02): a GPU binding that refuses, for instance a FAST tier, raises
+    by name from `linalg` rather than falling back to the host binding."""
     try:
         from . import linalg
-        if _backend.vendor() != "cpu":
-            linalg.require_identical()
-            return "gpu"
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        _backend.load_host_module("_mojolearn_linalg_host")
-        return "host"
-    except Exception:  # noqa: BLE001
+        linalg._load()
+    except ImportError:
         return "python"
+    return "linalg"
 
 
 # ------------------------------------------------- the pure-Python spelling
@@ -329,15 +330,9 @@ def widen_bf16(bits):
     widens 1-D norm weights and the embedding table through this; the 2-D
     projections go through `BF16Weight` and `materialize_one`."""
     b, _ = as_u16_c(bits, ndim=None, name="bits")
-    where = _conversion_backend()
-    if where == "gpu":
+    if _conversion_backend() == "linalg":
         from . import linalg
         return linalg.from_bf16(b)
-    if where == "host":
-        h = _backend.load_host_module("_mojolearn_linalg_host")
-        out = empty(tuple(b.shape), "<f4")
-        h.from_bf16(_addr_w(out, name="out"), _addr_r(b, name="bits"), [int(b.size)])
-        return out
     return _from_bf16_py(b)
 
 
@@ -352,25 +347,13 @@ def pack_one(value, fmt, name="weight"):
         return a.copy()
     where = _conversion_backend()
     if fmt == "bfloat16":
-        if where == "gpu":
+        if where == "linalg":
             from . import linalg
             return BF16Weight(linalg.to_bf16(a))
-        if where == "host":
-            h = _backend.load_host_module("_mojolearn_linalg_host")
-            out = empty(tuple(a.shape), "<u2")
-            h.to_bf16(_addr_w(out, name="out"), _addr_r(a, name=name), [int(a.size)])
-            return BF16Weight(out)
         return BF16Weight(_to_bf16_py(a))
-    if where == "gpu":
+    if where == "linalg":
         from . import linalg
         q, e = linalg.quantize_int8(a)
-        return Int8Weight(q, e)
-    if where == "host":
-        h = _backend.load_host_module("_mojolearn_linalg_host")
-        q = empty(tuple(a.shape), "<i1")
-        e = empty((a.shape[0],), "<i4")
-        h.quantize_int8(_addr_w(q, name="codes"), _addr_w(e, name="exponents"),
-                        _addr_r(a, name=name), [int(a.shape[0]), int(a.shape[1])])
         return Int8Weight(q, e)
     q, e = _quantize_int8_py(a)
     return Int8Weight(q, e)
@@ -379,28 +362,14 @@ def pack_one(value, fmt, name="weight"):
 def materialize_one(value, name="weight"):
     """A packed tensor as float32 (exact), or a float32 tensor as itself."""
     if isinstance(value, BF16Weight):
-        where = _conversion_backend()
-        if where == "gpu":
+        if _conversion_backend() == "linalg":
             from . import linalg
             return linalg.from_bf16(value.bits)
-        if where == "host":
-            h = _backend.load_host_module("_mojolearn_linalg_host")
-            out = empty(value.shape, "<f4")
-            h.from_bf16(_addr_w(out, name="out"), _addr_r(value.bits, name=name), [int(value.bits.size)])
-            return out
         return _from_bf16_py(value.bits)
     if isinstance(value, Int8Weight):
-        where = _conversion_backend()
-        if where == "gpu":
+        if _conversion_backend() == "linalg":
             from . import linalg
             return linalg.dequantize_int8(value.codes, value.exponents)
-        if where == "host":
-            h = _backend.load_host_module("_mojolearn_linalg_host")
-            out = empty(value.shape, "<f4")
-            h.dequantize_int8(_addr_w(out, name="out"), _addr_r(value.codes, name=name),
-                              _addr_r(value.exponents, name=name),
-                              [int(value.shape[0]), int(value.shape[1])])
-            return out
         return _dequantize_int8_py(value.codes, value.exponents)
     return value
 
