@@ -8,6 +8,7 @@ unchanged. Branch cut from origin/main and merged with main at 2d7eade5b (the la
 |---|---|---|---|
 | `-D MOJOLEARN_HUBER_DEVICE_LBFGS=1` | define, `HUBER_DEVICE_LBFGS` comptime alias in `x_linear/huber_fast.mojo` (FAST and `has_apple_gpu_accelerator()` and the define) | `fit_device` in `x_linear/device.mojo`, inside the existing `comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()` block, before main's `huber_fit_grid` dispatch | main's grid fit (`x_linear/huber_grid.mojo`) runs `lbfgs` on the host and pays two host waits per objective evaluation (theta upload, three launches, gradient and sums home, the witness read, `synchronize`), up to 41 evaluations per iteration for 100 iterations. The board row (taxi 168 s, 8x IDENTICAL's CPU) predates the grid fit; the grid fit's taxi time is unknown (the `afc-dbg` line failed on a quoting error). Here the minimizer's state (theta, trial point, g, gn, dir, the 10-pair ring, rho, alpha, f, slope, tt) lives in one device buffer; an evaluation is four launches (`hf_map_kernel` a thread per row, `hf_part_kernel` a thread per (FOLD_BLOCK block, task), main's `hg_fold_kernel`, `hf_step_kernel` one block of 256: huber_finish, the Armijo / noise + curvature decision, the pair update, the two-loop direction on the lead with ascending `_dot`s, `tn = theta + tt dir` across the block). The host enqueues HF_BATCH = 16 evaluations and reads the 8-word state once per batch; evaluations after the stop are no-ops. The objective, folds and dots are the grid fit's statements in the same order, so the coefficients should be the grid fit's bits. A batch is one Metal witness unit with a device-side snapshot and restore (x_linear/device.mojo `_sgd_ps_grid`'s pattern). |
 | `-D MOJOLEARN_HUBER_FAST_BLOCK512=1` (with the define above) | define, `HF_FOLD` comptime in `x_linear/huber_fast.mojo` | `hf_part_kernel` / `hf_fold_blocks` | the partials over 512-row blocks instead of FOLD_BLOCK = 4096: eight times the threads of the partials launch (taxi: (d + 6) tasks x n / 4096 blocks is a few thousand threads, each a 4096-row serial chain); a different fold order (FAST bits only, quality is the bar). |
+| `-D MOJOLEARN_MCD_DEVICE_CSTEPS=1` | define, `MCD_DEVICE_CSTEPS` comptime alias in `x_decomp/mcd_fast.mojo` (FAST and `has_apple_gpu_accelerator()` and the define) | the top of `fast_mcd_dev` in `x_decomp/kit_device.mojo` (the GPU binding's `x_decomp_mcd`); `fast_mcd_fast` returns False for d > 64 and main's search runs | main's `fast_mcd_dev` runs mcd.mojo's search one candidate and one C-step at a time, each C-step 10-15 kit launches with host syncs for the distances (the h-smallest selection on the host), the LU log determinant and the Jacobi eigenpairs: on taxi (100,000 x 16, mid subsample) 333 subsets x 10 trials x 2 steps, then 3,330 candidates x up to 30 steps on 1,500 rows, then 10 x 30 on all rows. Here the search is three phases of candidates stepping together on the device: the two `_perm`s by a bitonic sort of the draws' (float image, index) keys (`mf_keys_kernel`, `mf_bitonic_kernel`); per step the masked moments per (candidate, 256-row tile, feature) and (candidate, tile, feature pair) with a fold per (candidate, cell) (`colmean`, `emp_cov`'s 1/h); one thread per candidate for `fast_logdet` (partial-pivot LU, the sign rule, logs floored at FLT_MIN) and the C-step control (`det < prev_det and iters > 0 and det != -inf`, sklearn's `use_prev`) recording the chosen parity; one thread per candidate for `pinvh` (cyclic Jacobi, the `|w| > max|w| d eps` cut, V diag(1/w) V^T); one thread per (candidate, row) for `mahal`; one block per candidate for the h smallest by (distance image, index) (8-pass radix select over the 32-bit image, then a block scan taking the first `need` ties in index order) as the next parity's mask; the stop word read once per step; `_order_by_det` as one thread per candidate counting the keys below its own; the kept candidates' (mean, covariance) handed to the next phase in rank order; the best candidate's support and distances scattered on the device. Same statements as mcd.mojo within float32 (blocked folds, a one-thread Jacobi instead of the kit's eigh, the cut in float32 since Metal has no float64): not bit for bit. X uploaded once; NaN distances and a no-pinvh stop raise as mcd.mojo does (error words read at the end). Not moved: the Python reweighting after `_fast_mcd` (`_consistency_factor`, `_chi2_quantile`, `_masked_cov`, `_pinvh`, `_mahal`: a dozen resident-kit calls) and EllipticEnvelope's host percentile of `dist_`. |
 
 Not changed (reasons):
 
@@ -19,11 +20,19 @@ Not changed (reasons):
   changes the algorithm, not a host route. Left alone.
 - ocsvm (taxi 1.4x): main now runs the one-class SMO on the grid (`x_neighbors/ocsvm_dev.mojo`, c-svm, state read once
   per OCSVM_CHUNK iterations); the board row predates it. Needs a re-run before any further change.
-- elliptic-envelope / min-cov-det (taxi 1.2x): `x_decomp/mcd.mojo` runs every C-step through the Kit on host-resident
-  `Mat`s (`smallest_sorted`, `take_rows`, `_order_by_det` on the host; each Kit op a round trip). A resident C-step
-  (Mahalanobis, h-smallest select, subset moments on the device) is a new module; not started in this pass.
+- elliptic-envelope / min-cov-det: see the `MCD_DEVICE_CSTEPS` row (pass 2). EllipticEnvelope is MinCovDet's fit
+  plus a host percentile of `dist_`; both lanes race the same device search.
 
 ## Risky compile sites
+
+- `x_decomp/mcd_fast.mojo`: `struct MfPhase(Movable)` holds DeviceBuffer fields (the witness.mojo idiom) and is built from a
+  borrowed `DeviceContext`; kernels take `F32Ptr` / `I32Ptr` / `U64Ptr` (`MutPointer[.., MutAnyOrigin]`) built from
+  `buf.unsafe_ptr()` addresses (x_decomp/device.mojo `_p`'s idiom); `mf_select_kernel` uses
+  `stack_allocation[MF_SH_INT, Scalar[DType.int32], address_space = AddressSpace.SHARED]()` (17.5 KB, the ALS kernel's
+  idiom) and `barrier()`; `InlineArray[Int32, 16](fill=Int32(0))` and `InlineArray[Float32, 64]` per thread; the
+  Jacobi/LU use plain Float32 ops and `sqrt0` (no Float64 in any kernel); `DeviceBuffer[DType.uint64]` for the sort keys;
+  `_down` / `_down_i` imported from x_decomp/device.mojo for the outputs; `mf_select_kernel` returns early per block
+  (uniform) before its barriers.
 
 - `x_linear/huber_fast.mojo` `hf_step_kernel`: `var gamma: Float32` assigned in both branches (lbfgs's idiom); `var k`
   declared in several sibling scopes; `_dot` and `LBFGS_M` imported from `x_linear/lbfgs.mojo` (an underscore name);
@@ -43,6 +52,10 @@ Not changed (reasons):
 - `robust-huber-blk-taxi`: huber taxi, both arms the device L-BFGS, arm B with 512-row partial blocks. Queue after the
   first line wins.
 - RUN OWED after a taxi win: the same two lines on istella (`robust-huber-dev-istella`, `robust-huber-blk-istella`).
+- `robust-mcd-taxi`, `robust-ee-taxi`: min-cov-det and elliptic-envelope taxi, arm A main's resident search, arm B the
+  device C-steps (binding `x_decomp`). Bar: faster; `covariance_` / `support_` / `dist_` within float32 of arm A
+  (the selection is a total order on (distance, index), so the supports should match exactly unless a distance tie
+  moves under the blocked folds).
 
 ## ocsvm baseline re-run (no switch)
 `robust-ocsvm-base-taxi` runs arm A only (afc_ab.sh with no envB): main's current ocsvm FAST route (x_neighbors/ocsvm_dev.mojo, SMO on the
