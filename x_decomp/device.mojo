@@ -3,6 +3,7 @@
 """DevExec: the decomp lane's cells on the GPU. One thread per output, the
 cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
+from std.sys.compile import is_defined
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -1849,18 +1850,22 @@ struct DevExec(Exec):
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
-        # lane/neural-net-experiment (2026-09-30): MOJOLEARN_XD_PJ_EIGH_MIN=n
-        # takes the round-robin ordering (x_decomp/jacobi_par.mojo) from n
-        # up on every vendor and tier, default 0 (never), so a box can A/B
-        # it: NOT the pinned cyclic order, so NOT the identical tier's bits
-        # -- an experiment the digest check must report as MOVED. It is the
-        # only route here whose rotations run across the GPU: the cyclic
-        # kernels are one block of 256 threads for the whole solve (eigh at
-        # n = 4096 timed out on the AMD board).
-        var lo = pj_eigh_min()
-        if lo > 0 and n >= lo:
-            if DevExec._eigh_par(a, w, v, n):
+        # lane/neural-net-experiment (2026-09-30), hr-kit: the host eigh
+        # route (MOJOLEARN_XD_HOST_EIGH_MAX) is deleted; MOJOLEARN_XD_PJ_EIGH_MIN
+        # stays the old opt-in threshold under the cyclic define below.
+        # lane/neural-pass104 (Andrew, 2026-10-01): the round-robin Jacobi is
+        # THE eigh order (x_decomp/rr.mojo, pinned; the host runs the same
+        # rounds); a solve it does not converge falls back to the cyclic one,
+        # as the host does. `-D MOJOLEARN_XD_EIGH_CYCLIC=1` keeps the cyclic
+        # order (and MOJOLEARN_XD_PJ_EIGH_MIN its old opt-in threshold).
+        comptime if not is_defined["MOJOLEARN_XD_EIGH_CYCLIC"]():
+            if n >= 2 and DevExec._eigh_par(a, w, v, n):
                 return
+        else:
+            var lo = pj_eigh_min()
+            if lo > 0 and n >= lo:
+                if DevExec._eigh_par(a, w, v, n):
+                    return
         if jacobi2_eigh_on():
             DevExec._eigh2(a, w, v, n)
             return
