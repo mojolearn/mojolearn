@@ -118,7 +118,6 @@ from x_decomp.jacobi_par import (
     pj_transpose_kernel,
     sym_from_triangle_kernel,
 )
-from std.os import getenv
 from core.device_zero import enqueue_fill
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import enqueue_eigh_ascending
@@ -529,13 +528,9 @@ comptime LU_TILE_TPB = LU_TILE * LU_TILE
 
 
 def lu_panel_width() -> Int:
-    """The blocked LU's panel width: MOJOLEARN_XD_LU_PANEL (0 = the
-    per-step route, the A/B arm), default LU_PANEL_NB."""
-    var v = String(getenv("MOJOLEARN_XD_LU_PANEL", String(LU_PANEL_NB)))
-    try:
-        return max(0, Int(v))
-    except:
-        return LU_PANEL_NB
+    """The blocked LU's panel width, LU_PANEL_NB (cgr-decomp: the
+    MOJOLEARN_XD_LU_PANEL A/B switch is deleted)."""
+    return LU_PANEL_NB
 
 
 def lu_swap_cols_kernel(
@@ -738,10 +733,10 @@ comptime LU_RB_FITS = lib_smem_page_fits_for[TARGET_COLUMN, LU_RB_SMEM_BYTES]()
 def lu_swaps_trsm_on() -> Bool:
     """Whether the trailing columns' swaps and U rows run as ONE
     `lu_swaps_trsm_kernel` launch (lane neural-pass135): MOJOLEARN_XD_LU_PANEL1=0
-    restores `lu_apply_swaps_kernel` + `lu_trsm_kernel` (the A/B arm).
-    (np135's one-block `lu_panel1_kernel` is not on main: a new one-block
-    launch, refused by tools/hooks/no_host_routes.py.)"""
-    return String(getenv("MOJOLEARN_XD_LU_PANEL1", "1")) != "0"
+    restored `lu_apply_swaps_kernel` + `lu_trsm_kernel` (the A/B arm,
+    deleted by cgr-decomp). (np135's one-block `lu_panel1_kernel` is not on
+    main: a new one-block launch, refused by tools/hooks/no_host_routes.py.)"""
+    return True
 
 
 def lu_trail_rb_on() -> Bool:
@@ -750,9 +745,7 @@ def lu_trail_rb_on() -> Bool:
     a column whose shared limit cannot hold its page keeps it too)."""
     comptime if not LU_RB_FITS:
         return False
-    if String(getenv("MOJOLEARN_XD_LU_PANEL1", "1")) == "0":
-        return False
-    return String(getenv("MOJOLEARN_XD_LU_TRAIL_RB", "1")) != "0"
+    return True
 
 
 def lu_swaps_trsm_kernel(a: F32Ptr, piv: I32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32):
@@ -1115,14 +1108,8 @@ def launch_als_rows(
     f: Int, su: Int, si: Int, reg: Float32,
 ) raises:
     """Every row's `als_row`, one block per row (`als_block_kernel`).
-    MOJOLEARN_XD_ALS_BLOCK=0 runs the one-thread-per-row `als_kernel`
-    (contiguous rows only; A/B, the same bits)."""
+    (cgr-decomp: the MOJOLEARN_XD_ALS_BLOCK=0 A/B arm is deleted.)"""
     if n <= 0:
-        return
-    if String(getenv("MOJOLEARN_XD_ALS_BLOCK", "1")) == "0" and si == 1 and su == m:
-        ctx.enqueue_function[als_kernel](
-            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), reg, grid_dim=_blocks(n), block_dim=TPB,
-        )
         return
     if f * f + f <= ALS_SH_CELLS:
         comptime k_sh = als_block_kernel[True]
@@ -1286,11 +1273,10 @@ def launch_lda_rows(
 ) raises:
     """Every document's `lda_doc_row`: one block per document
     (`lda_block_kernel`) for k <= LDA_K_CAP, else one thread per document.
-    MOJOLEARN_XD_LDA_BLOCK=0 runs `lda_rows_kernel` (A/B, the same bits).
     s: n * (v + k) floats of scratch."""
     if n <= 0:
         return
-    if k <= LDA_K_CAP and String(getenv("MOJOLEARN_XD_LDA_BLOCK", "1")) != "0":
+    if k <= LDA_K_CAP:
         ctx.enqueue_function[lda_block_kernel](
             x, ew, d, e, s, its, Int32(n), Int32(k), Int32(v), prior, Int32(max_iter), tol,
             grid_dim=n, block_dim=LDA_BLK_TPB,
@@ -1379,10 +1365,9 @@ comptime X_DECOMP_STAGE = _Global[StorageType=_XdStage, name="MojoXDecompStageId
 def _xd_staged(n: Int) -> Bool:
     if n < XD_STAGE_MIN:
         return False
-    var v = String(getenv("MOJOLEARN_XD_STAGE"))
     comptime if TARGET_COLUMN == COLUMN_APPLE:
-        return v != "0"
-    return v == "1"
+        return True
+    return False
 
 
 def _xd_stage_ptr(ctx: DeviceContext) raises -> F32Ptr:
@@ -1861,26 +1846,16 @@ def orth_on_device_diag(
     var dw = ctx.enqueue_create_buffer[DType.float32](cells)
     var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, l) * l * l if l > 0 else 1)
     var r_buf = ctx.enqueue_create_buffer[DType.float32](l * l if l > 0 else 1)
-    var r = List[Float32](length=l * l if l > 0 else 1, fill=Float32(0))
-    var dev_guard = String(getenv("MOJOLEARN_XD_ORTH_DEV", "1")) != "0"
     for p in range(2):
         var src = da if p == 0 else dq
         var dst = dq if p == 0 else da
         ctx.enqueue_copy(dst_buf=dw, src_buf=src)
-        if dev_guard:
-            # lane/decomp-apple2: the guard cell on one device thread, in
-            # stream order after the R it reads (the same cell the host ran;
-            # IDENTICAL cells are bit-equal on both), so R never leaves the
-            # device and the pass waits once, not three times.
-            _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
-            ctx.enqueue_function[orth_guard_kernel](r_buf.unsafe_ptr(), Int32(l), grid_dim=1, block_dim=1)
-        else:
-            ctx.synchronize()
-            _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
-            _down(ctx, r_buf, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
-            ctx.synchronize()
-            orth_rank_guard(F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l)
-            ctx.enqueue_copy(dst_buf=r_buf.create_sub_buffer[DType.float32](0, l * l), src_ptr=F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())))
+        # lane/decomp-apple2: the guard cell (k-sized: the l x l R) on one
+        # device thread, in stream order after the R it reads, so R never
+        # leaves the device (cgr-decomp: the MOJOLEARN_XD_ORTH_DEV=0 host
+        # round trip is deleted)
+        _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
+        ctx.enqueue_function[orth_guard_kernel](r_buf.unsafe_ptr(), Int32(l), grid_dim=1, block_dim=1)
         if with_diag and l > 0:
             ctx.enqueue_function[orth_diag_kernel](
                 r_buf.unsafe_ptr(), ddiag.unsafe_ptr(), Int32(l), grid_dim=_blocks(l), block_dim=TPB
@@ -1917,9 +1892,9 @@ def launch_lu(
     # =1 opts in. The same words either way. (np115's fused one-block step,
     # MOJOLEARN_XD_LU_STEP_FUSED, is not on main: a new one-block launch,
     # refused by tools/hooks/no_host_routes.py.)
-    var trail_r4 = String(getenv("MOJOLEARN_XD_LU_TRAIL_R4")) != "0"
+    var trail_r4 = True
     comptime if TARGET_COLUMN == COLUMN_AMD:
-        trail_r4 = String(getenv("MOJOLEARN_XD_LU_TRAIL_R4")) == "1"
+        trail_r4 = False
     var swaps_trsm = lu_swaps_trsm_on()
     var trail_rb = lu_trail_rb_on()
     var nb = min(lu_panel_width(), LU_PANEL_NB)
@@ -2873,8 +2848,7 @@ struct DevExec(Exec):
         var dy = _up(ctx, y, m * f)
         var dg = _up(ctx, yty, f * f)
         var dx = ctx.enqueue_create_buffer[DType.float32](n * f if n * f > 0 else 1)
-        var full = String(getenv("MOJOLEARN_XD_ALS_BLOCK", "1")) == "0"
-        var ns = n * (f * f + f) if full else als_scratch(n, f)
+        var ns = als_scratch(n, f)
         var ds = ctx.enqueue_create_buffer[DType.float32](ns if ns > 0 else 1)
         var df = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
         launch_als_rows(ctx, _p(dc), _p(dy), _p(dg), _p(dx), _p(ds), _p(df), n, m, f, m, 1, reg)
