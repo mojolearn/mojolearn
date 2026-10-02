@@ -545,6 +545,73 @@ def lu_pivot_fin_kernel(scal: F32Ptr, piv: I32Ptr, k: Int32, g: Int32):
         piv.unsafe_store(Int(k), ri.unsafe_load(0))
 
 
+# lane/apple-fast-decomp-linalg (2026-10-02, pass 3): -D MOJOLEARN_LU_FAST_PIVOT_GRID,
+# FAST on Apple only. main's pivot search is already two grid launches
+# (`lu_pivot_part_kernel` over up to LU_PIV_MAXB blocks, `lu_pivot_fin_kernel`
+# over their partials) and its swap a third (`lu_swap_cols_kernel`, with
+# step k's diag and act folded in). Here the finish and the swap are ONE
+# grid launch: every block of the swap grid re-derives the winner from the
+# <= LU_PIV_MAXB partials in threadgroup memory (the same compare and tie
+# rule as `lu_pivot_fin_kernel`: the largest |value|, the lowest row among
+# equals, so the same pivot), block 0's thread 0 records it in piv[k], and
+# each thread swaps its column of rows k and the winner; column k's thread
+# then runs `lu_diag` and act[k]. Two launches a column instead of three
+# (8192: 8,192 fewer), no one-block launch over a runtime size, no host
+# step. The trailing columns' swaps read piv[k] later, as before.
+comptime LU_FAST_PIVOT_GRID = XD_FAST_APPLE and is_defined["MOJOLEARN_LU_FAST_PIVOT_GRID"]()
+
+
+def lu_pivot_swap_kernel(
+    a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, k: Int32, n: Int32, col_lo: Int32, col_hi: Int32, g: Int32
+):
+    """`lu_pivot_fin_kernel` in every block, then `lu_swap_cols_kernel`'s
+    work with the winner from threadgroup memory (see above). TPB >=
+    LU_PIV_MAXB, so each thread folds at most one partial."""
+    var rv = stack_allocation[TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ri = stack_allocation[TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var gg = Int(g)
+    var cv = Float32(0)
+    var ci = Int32(-1)
+    var b = tid
+    while b < gg:
+        var ov = scal.unsafe_load(2 + b)
+        var oi = Int32(Int(scal.unsafe_load(2 + LU_PIV_MAXB + b)))
+        if ci < 0 or ov > cv or (ov == cv and oi < ci):
+            cv = ov
+            ci = oi
+        b += TPB
+    rv.unsafe_store(tid, cv)
+    ri.unsafe_store(tid, ci)
+    barrier()
+    var active = TPB // 2
+    while active > 0:
+        if tid < active:
+            var ov = rv.unsafe_load(tid + active)
+            var oi = ri.unsafe_load(tid + active)
+            var c2 = rv.unsafe_load(tid)
+            var i2 = ri.unsafe_load(tid)
+            if oi >= 0 and (i2 < 0 or ov > c2 or (ov == c2 and oi < i2)):
+                rv.unsafe_store(tid, ov)
+                ri.unsafe_store(tid, oi)
+        barrier()
+        active = active // 2
+    var kk = Int(k)
+    var nn = Int(n)
+    var p = Int(ri.unsafe_load(0))
+    if block_idx.x == 0 and tid == 0:
+        piv.unsafe_store(kk, Int32(p))
+    var j = Int(col_lo) + Int(block_idx.x) * Int(block_dim.x) + tid
+    if j < Int(col_hi):
+        if p != kk:
+            var t = a.unsafe_load(kk * nn + j)
+            a.unsafe_store(kk * nn + j, a.unsafe_load(p * nn + j))
+            a.unsafe_store(p * nn + j, t)
+        if j == kk:
+            lu_diag(a, info, scal, kk, nn)
+            act.unsafe_store(kk, scal.unsafe_load(1))
+
+
 def enqueue_lu_pivot(ctx: DeviceContext, a: F32Ptr, piv: I32Ptr, scal: F32Ptr, k: Int, n: Int) raises:
     """Step k's pivot row into piv[k]: the block partials, then their combine."""
     var g = lu_pivot_blocks(k, n)
@@ -2131,11 +2198,21 @@ def launch_lu(
         while k0 < n:
             var k1 = min(k0 + nb, n)
             for k in range(k0, k1):
-                enqueue_lu_pivot(ctx, a, piv, scal, k, n)
-                ctx.enqueue_function[lu_swap_cols_kernel](
-                    a, piv, info, scal, act, Int32(k), Int32(n), Int32(0), Int32(k1),
-                    grid_dim=_blocks(k1), block_dim=TPB,
-                )
+                comptime if LU_FAST_PIVOT_GRID:
+                    var g = lu_pivot_blocks(k, n)
+                    ctx.enqueue_function[lu_pivot_part_kernel](
+                        a, scal, Int32(k), Int32(n), Int32(g), grid_dim=g, block_dim=LU_PIVOT_TPB
+                    )
+                    ctx.enqueue_function[lu_pivot_swap_kernel](
+                        a, piv, info, scal, act, Int32(k), Int32(n), Int32(0), Int32(k1), Int32(g),
+                        grid_dim=_blocks(k1), block_dim=TPB,
+                    )
+                else:
+                    enqueue_lu_pivot(ctx, a, piv, scal, k, n)
+                    ctx.enqueue_function[lu_swap_cols_kernel](
+                        a, piv, info, scal, act, Int32(k), Int32(n), Int32(0), Int32(k1),
+                        grid_dim=_blocks(k1), block_dim=TPB,
+                    )
                 if n - k - 1 > 0:
                     ctx.enqueue_function[lu_l_kernel](
                         a, scal, Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
