@@ -203,24 +203,25 @@ def q_layout(n: Int, d: Int, m: Int) -> InlineArray[Int, 12]:
     return o
 
 
-def q_start(n: Int, sw: Bool, den_sum: Float32, spread_sum: Float32, ysq: Float32) -> InlineArray[Float32, 3]:
-    """(den, rho, ||y||) from the folded sums: den = n or sum(w), rho = 1 /
-    (n * max(mean |y - ym|, 1e-6)), the target norm."""
+def q_start(nf: Float32, sw: Bool, den_sum: Float32, spread_sum: Float32, ysq: Float32) -> InlineArray[Float32, 3]:
+    """(den, rho, ||y||) from the folded sums (nf = the row count as a
+    float): den = n or sum(w), rho = 1 / (n * max(mean |y - ym|, 1e-6)),
+    the target norm."""
     var r = InlineArray[Float32, 3](fill=Float32(0))
-    r[0] = den_sum if sw else i2f(n)
-    var spread = fmax(fd(spread_sum, i2f(n)), Float32(1e-6))
-    r[1] = fd(Float32(1), fm(i2f(n), spread))
+    r[0] = den_sum if sw else nf
+    var spread = fmax(fd(spread_sum, nf), Float32(1e-6))
+    r[1] = fd(Float32(1), fm(nf, spread))
     r[2] = fsqrt(ysq)
     return r
 
 
-def q_tail(fw: FP, n: Int, d: Int, m: Int, beta: Int, rhs: Int, z: Int, v: Int, dq: Int,
+def q_tail(fw: FP, nd: Int, d: Int, m: Int, beta: Int, rhs: Int, z: Int, v: Int, dq: Int,
            abn: Float32, rn: Float32, prim_rows: Float32, un_rows: Float32, ynorm: Float32, rho: Float32,
            alpha: Float32, eps_abs: Float32, eps_rel: Float32, rel_bal: Bool, it: Int) -> Tuple[Int, Float32]:
     """One iteration after its row folds (A' dr folded into rhs): the z- and
     v-updates, the residuals, the stop rule and the balancing. Returns
     (0 go on | 1 converged | 2 rescaled, the rho factor); a rescale has
-    already scaled v by 1 / factor (the caller scales u and rho)."""
+    already scaled v by 1 / factor (the caller scales u and rho). nd = n + d."""
     var zdiff = Float32(0)
     var wn = Float32(0)
     var zn = Float32(0)
@@ -251,7 +252,7 @@ def q_tail(fw: FP, n: Int, d: Int, m: Int, beta: Int, rhs: Int, z: Int, v: Int, 
     var prim_n = fsqrt(prim)
     var dual_n = fm(rho, fsqrt(dual))
     var scale_p = fmax(fmax(fsqrt(abn), fsqrt(rn)), fmax(ynorm, fmax(fsqrt(wn), fsqrt(zn))))
-    var eps_p = fa(fm(eps_abs, fsqrt(i2f(n + d))), fm(eps_rel, scale_p))
+    var eps_p = fa(fm(eps_abs, fsqrt(i2f(nd))), fm(eps_rel, scale_p))
     var un = un_rows
     for j in range(d):
         un = fmad(fm(ld(fw, dq + j), ld(fw, v + j)), ld(fw, v + j), un)
@@ -340,7 +341,7 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
         spread_sum = fa(spread_sum, q_spread_part(y, ym, lo, cnt))
         ysq = fa(ysq, fold_sq(y, lo, cnt))
         lo += FOLD_BLOCK
-    var s3 = q_start(n, sw, den_sum, spread_sum, ysq)
+    var s3 = q_start(i2f(n), sw, den_sum, spread_sum, ysq)
     var den = s3[0]
     var rho = s3[1]
     var ynorm = s3[2]
@@ -436,7 +437,7 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
             add_acc(fw, nrhs, pp, m, m)
             lo = hi
         rhs_ready = True
-        var tl = q_tail(fw, n, d, m, beta, rhs, z, v, dq, abn, rn, prim, un, ynorm, rho,
+        var tl = q_tail(fw, n + d, d, m, beta, rhs, z, v, dq, abn, rn, prim, un, ynorm, rho,
                         alpha, eps_abs, eps_rel, rel_bal, it)
         if tl[0] == 1:
             converged = True
