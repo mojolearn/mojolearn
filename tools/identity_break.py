@@ -6108,11 +6108,9 @@ def _(ml, X, yc, yr, Xh=None):
     """resample.permutation_test between the fixture's two label groups
     of yr (the first 512 rows of each), 2048 permutations, three
     alternatives: the pooled Philox permutation map, the between-group
-    fold and the conservative p-value (DEVIATION 1702). The pooled sample
-    is at most 1024 = PERM_MAX_POOLED (resample/checks/index_map.mojo, a
-    comptime limit, refused by name above it); with 2048 per group the
-    lane read REFUSED on the M4 on every fixture (2026-09-14 night) and so
-    on every vendor."""
+    fold and the conservative p-value (DEVIATION 1702). 512 rows per group
+    (the pooled sample was bounded at 1024 = PERM_MAX_POOLED until the
+    radix-select kernel lifted it on 2026-10-02; the fixture is kept)."""
     rs = ml.resample
     a = np.ascontiguousarray(yr[:4096][yc[:4096] == 0][:512])
     b = np.ascontiguousarray(yr[:4096][yc[:4096] == 1][:512])

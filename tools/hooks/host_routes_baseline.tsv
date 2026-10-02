@@ -655,7 +655,6 @@ host-call	host-import	UNOWNED	debt	x_ann/abi.mojo	0	return read_f32(a_int(addrs,
 host-call	host-import	gap-fails2	debt	x_ann/cagra_core.mojo	0	ann_tasks(task, tasks)
 host-call	host-import	gap-fails2	debt	x_ann/cagra_core.mojo	1	ann_tasks(task, tasks)
 host-call	host-import	gap-fails2	debt	x_ann/cagra_core.mojo	0	import x_ann/host/ann_host_cells.mojo:ann_tasks
-host-env	host-env/threshold	gap-fails2	debt	x_ann/cagra_device.mojo	0	var on_device = kdeg <= PRUNE_KMAX and deg <= kdeg and not is_defined["MOJOLEARN_CAGRA_HOST_PRUNE"]()
 host-threads	host-threads	UNOWNED	debt	x_ann/host/ann_host_cells.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	x_ann/host/ann_host_cells.mojo	0	host_parallelize(body, tasks)
 host-env	host-env/threshold	gap-nv-classical2	debt	x_ann/switches.mojo	0	comptime ANN3_HOST_PASSES = not is_defined["MOJOLEARN_ANN3_HOST_PASSES_OFF"]()
