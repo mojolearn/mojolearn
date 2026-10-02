@@ -1,0 +1,2 @@
+CMD lane/apple-fast-trees-scan trees-scan-rf-istella AFT_OUT=$HOME/aft-ab/trees-scan-rf-istella bash tools/aft_ab.sh rf rf istella 2 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1"
+CMD lane/apple-fast-trees-scan trees-scan-dw-taxi AFT_OUT=$HOME/aft-ab/trees-scan-dw-taxi bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 2 "" "-D MOJOLEARN_SEG_SCAN_BLOCK=1 -D MOJOLEARN_REORDER_FLAGS_SCAN_BLOCK=1"
