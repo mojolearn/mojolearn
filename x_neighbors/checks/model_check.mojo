@@ -14,9 +14,11 @@ from x_neighbors.checks.oracles import (
 from x_neighbors.checks.seam_util import (
     seam_fixture, fa, ia, zf, zi, count_diff_f32, count_diff_i32, require_separates, same,
 )
-from x_neighbors.device_ops import op_ocsvm, op_nc_std, op_nc_shrink, op_nc_decision, op_kpca_center, op_svd_flip
+from x_neighbors.ocsvm_dev import op_ocsvm
+from x_neighbors.ocsvm_host import op_ocsvm as h_ocsvm
+from x_neighbors.device_ops import op_nc_std, op_nc_shrink, op_nc_decision, op_kpca_center, op_svd_flip
 from x_neighbors.host_ops import (
-    op_ocsvm as h_ocsvm, op_nc_std as h_nc_std, op_nc_shrink as h_nc_shrink, op_nc_decision as h_nc_decision,
+    op_nc_std as h_nc_std, op_nc_shrink as h_nc_shrink, op_nc_decision as h_nc_decision,
     op_kpca_center as h_kpca_center, op_svd_flip as h_svd_flip,
 )
 
