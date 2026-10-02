@@ -28,7 +28,7 @@ from x_linear.ops import ld, st, fd, i2f, fa, fm, fmad, flog, fill, copy, row_do
 from x_linear.bayes import bayes_prep, bayes_coef, bayes_step, bayes_finish, _sse_part
 from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
 from x_linear.glm import (
-    _unit, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, _glm_step, GLM_LINK_LOG, GLM_STALL_ITERS,
+    _unit, _glm_deriv_row, _glm_cell, _glm_cell_rows, _glm_slot_count, _glm_slot_cell, _glm_step, GLM_LINK_LOG, GLM_STALL_ITERS,
     _glm_cell_part, _glm_cell_store,
 )
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
@@ -320,20 +320,44 @@ def glm_deriv_kernel(y: FP, n: Int32, power: Float32, link: Int32, sw: Int32, et
         _glm_deriv_row(y, Int(n), i, power, Int(link), eta, sw != 0, gr, hr)
 
 
-def glm_cells_kernel(x: FP, gr: FP, hr: FP, n: Int32, d: Int32, m: Int32, g: FP, h: FP):
-    """One thread a slot of glm_fit's warp-uniform layout."""
+def glm_cells_kernel(x: FP, gr: FP, hr: FP, lo: Int32, cnt: Int32, d: Int32, m: Int32, g: FP, h: FP):
+    """One thread a slot of glm_fit's warp-uniform layout, rows [lo, lo + cnt)."""
     var sl = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
     var mm = Int(m)
     if sl < _glm_slot_count(dd, mm):
         var c = _glm_slot_cell(sl, dd, mm)
         if c >= 0:
-            _glm_cell(c, x, gr, hr, Int(n), dd, mm, g, h)
+            _glm_cell_rows(c, x, gr, hr, Int(lo), Int(cnt), dd, mm, g, h)
 
 
-def glm_cell_parts_kernel(x: FP, gr: FP, hr: FP, n: Int32, d: Int32, m: Int32, nb: Int32, parts: FP):
+#: Apple: macOS silently aborts a command buffer that holds the GPU for
+#: seconds and leaves its output partly stale (the M2's GLM grid digests
+#: differed run to run on istella, 24,531 cells of 1M-row chains in ONE
+#: launch, and on taxi under a second Metal job). The cells run in row
+#: slices of at most GLM_APPLE_SLICE_MACS chain steps a launch, each waited
+#: on, every chain resuming from its stored value (the same words).
+comptime GLM_APPLE_SLICE_MACS = 1 << 29
+
+
+def _glm_rows_slice(n: Int, slots: Int) -> Int:
+    comptime if has_apple_gpu_accelerator():
+        return max(64, min(n, (GLM_APPLE_SLICE_MACS // max(slots, 1)) // 64 * 64))
+    return n
+
+
+def _glm_blocks_slice(nb: Int, slots: Int) -> Int:
+    """The row blocks a parts launch takes: all of them off Apple."""
+    comptime if has_apple_gpu_accelerator():
+        return max(1, min(nb, GLM_APPLE_SLICE_MACS // (max(slots, 1) * FOLD_BLOCK)))
+    return nb
+
+
+def glm_cell_parts_kernel(x: FP, gr: FP, hr: FP, n: Int32, d: Int32, m: Int32, nb: Int32, b0: Int32, bcnt: Int32,
+                          parts: FP):
     """lane/neural-pass97: one thread a (slot, row block): the slot's cell
-    chain over the block from zero into parts[slot * nb + block]."""
+    chain over the block from zero into parts[slot * nb + block]; the row
+    blocks [b0, b0 + bcnt) only (the Apple slices, `_glm_blocks_slice`)."""
     var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
     var mm = Int(m)
@@ -341,9 +365,10 @@ def glm_cell_parts_kernel(x: FP, gr: FP, hr: FP, n: Int32, d: Int32, m: Int32, n
     # block-major: neighbouring threads are neighbouring slots over the same
     # rows, so their x words share cache lines (and a warp keeps one kind)
     var slots = _glm_slot_count(dd, mm)
-    var b = q // slots
-    var sl = q - b * slots
-    if b < nbb:
+    var bq = q // slots
+    var sl = q - bq * slots
+    var b = Int(b0) + bq
+    if bq < Int(bcnt) and b < nbb:
         var c = _glm_slot_cell(sl, dd, mm)
         if c >= 0:
             var lo = b * FOLD_BLOCK
@@ -434,6 +459,8 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
     var slot_grid = _xg_blocks(slot_ub)
     var nb = fold_blocks(n)
     var dparts = ctx.enqueue_create_buffer[DType.float32](max(slot_ub * nb, 1))
+    var rows_slice = _glm_rows_slice(n, _glm_slot_count(d, m))
+    var blocks_slice = _glm_blocks_slice(nb, _glm_slot_count(d, m))
     ctx.enqueue_function[glm_init_kernel](dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), Int32(link), Int32(sw),
                                           dres.unsafe_ptr(), dsc.unsafe_ptr(), grid_dim=1, block_dim=1)
 
@@ -445,12 +472,25 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
         ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
                                                dgr.unsafe_ptr(), dhr.unsafe_ptr(), grid_dim=rows_grid, block_dim=XG_TPB)
         comptime if X_LINEAR_SERIAL_FOLDS:
-            ctx.enqueue_function[glm_cells_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(n), Int32(d),
-                                                   Int32(m), dg.unsafe_ptr(), dh.unsafe_ptr(), grid_dim=slot_grid, block_dim=XG_TPB)
+            var lo = 0
+            while lo < n:
+                var cnt = min(rows_slice, n - lo)
+                ctx.enqueue_function[glm_cells_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(lo), Int32(cnt),
+                                                       Int32(d), Int32(m), dg.unsafe_ptr(), dh.unsafe_ptr(),
+                                                       grid_dim=slot_grid, block_dim=XG_TPB)
+                lo += cnt
+                if lo < n and rows_slice < n:
+                    ctx.synchronize()
         else:
-            ctx.enqueue_function[glm_cell_parts_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(n), Int32(d),
-                                                        Int32(m), Int32(nb), dparts.unsafe_ptr(),
-                                                        grid_dim=_xg_blocks(slot_ub * nb), block_dim=XG_TPB)
+            var b0 = 0
+            while b0 < nb:
+                var bc = min(blocks_slice, nb - b0)
+                ctx.enqueue_function[glm_cell_parts_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(n), Int32(d),
+                                                            Int32(m), Int32(nb), Int32(b0), Int32(bc), dparts.unsafe_ptr(),
+                                                            grid_dim=_xg_blocks(slot_ub * bc), block_dim=XG_TPB)
+                b0 += bc
+                if b0 < nb and blocks_slice < nb:
+                    ctx.synchronize()
             ctx.enqueue_function[glm_cell_combine_kernel](dparts.unsafe_ptr(), Int32(d), Int32(m), Int32(nb), dg.unsafe_ptr(),
                                                           dh.unsafe_ptr(), grid_dim=slot_grid, block_dim=XG_TPB)
         ctx.enqueue_function[glm_step_kernel](dg.unsafe_ptr(), dh.unsafe_ptr(), dstep.unsafe_ptr(), dres.unsafe_ptr(),
