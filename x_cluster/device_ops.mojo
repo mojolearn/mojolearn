@@ -41,6 +41,7 @@ from x_cluster.bodies import (
     meanshift_seed,
     nearest_row,
     sq_dist_rows,
+    SplitMix64,
     sqdist_cell,
     sqrt_cell,
     tree_descend,
@@ -55,6 +56,8 @@ from gemm.checks.gemm_oracle import OP_NN, OP_TN
 from mixture.checks.estep import mahal_kernel
 from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
 from x_cluster.ops import ClusterOps
+from x_cluster.meanshift_fast import MEANSHIFT_FAST_GRID, meanshift_fast_grid
+from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, minibatch_fast_steps
 from std.gpu import WARP_SIZE
 from std.gpu.primitives.warp import shuffle_idx
 from x_cluster.minibatch_cells import mb_center_wsum, mb_center_word
@@ -1779,6 +1782,19 @@ struct DeviceOps(ClusterOps):
         centers: Int, ns: Int, scratch: Int, intensity: Int, iters: Int,
     ) raises:
         self._ph0()
+        # lane/apple-fast-cluster (2026-10-02), FAST on Apple, OFF by default:
+        # `-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1` (MEANSHIFT_FAST_GRID) runs
+        # every shift on a grid of (seed, row chunk) blocks
+        # (x_cluster/meanshift_fast.mojo) instead of `_meanshift_team_kernel`
+        # below, ONE block per seed walking all n rows (Istella 10k x 220 with
+        # bin seeding: 18 blocks for the whole fit).
+        comptime if MEANSHIFT_FAST_GRID:
+            if meanshift_fast_grid(
+                self.ctx, self._fp(x), n, d, bw, stop, max_iter, self._fp(centers), ns,
+                self._ip(intensity), self._ip(iters),
+            ):
+                self._ph1("meanshift")
+                return
         comptime if MEANSHIFT_BLOCK:
             if d <= MSB_MAX_D and ns > 0:
                 self.ctx.enqueue_function[_meanshift_block_kernel](
@@ -2444,6 +2460,24 @@ struct DeviceOps(ClusterOps):
         else:
             raise Error("x_cluster: sqdist_rows is the FAST Apple device path (MOJOLEARN_BISECT_FAST_RESIDENT)")
         self._ph1("sqdist_rows")
+
+    def minibatch_fast(
+        mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
+        ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
+        mut steps_done: Int,
+    ) raises -> Bool:
+        # lane/apple-fast-cluster (2026-10-02), FAST on Apple only, built with
+        # `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` (MINIBATCH_FAST_DEV); the
+        # driver (x_cluster/minibatch.mojo) asks under the same define
+        comptime if MINIBATCH_FAST_DEV:
+            self._ph0()
+            var took = minibatch_fast_steps(
+                self.ctx, self._fp(xs), n, d, k, batch, n_steps, max_no_improvement, ratio, seed, rng, c, w,
+                steps_done,
+            )
+            self._ph1("minibatch_fast")
+            return took
+        return False
 
     def set_i(mut self, slot: Int, v: List[Int32]) raises:
         self._ph0()

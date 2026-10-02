@@ -1,0 +1,10 @@
+CMD lane/apple-fast-cluster cluster-ms-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh cluster-ms-istella x_cluster meanshift istella 1 2 "" "-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1"
+CMD lane/apple-fast-cluster cluster-ms-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh cluster-ms-taxi x_cluster meanshift taxi 1 2 "" "-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1"
+CMD lane/apple-fast-cluster cluster-mb-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh cluster-mb-istella x_cluster minibatch-kmeans istella 1 2 "" "-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1"
+CMD lane/apple-fast-cluster cluster-mb-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh cluster-mb-taxi x_cluster minibatch-kmeans taxi 1 2 "" "-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1"
+CMD lane/apple-fast-cluster cluster-cc-fast-istella AFC_FAMILY=algos bash tools/afc_ab.sh cluster-cc-fast-istella connected-components istella 1 2 -
+CMD lane/apple-fast-cluster cluster-cc-fast-taxi AFC_FAMILY=algos bash tools/afc_ab.sh cluster-cc-fast-taxi connected-components taxi 1 2 -
+CMD lane/apple-fast-cluster cluster-aggl-fast-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-aggl-fast-istella agglomerative istella 1 2 -
+CMD lane/apple-fast-cluster cluster-aggl-fast-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-aggl-fast-taxi agglomerative taxi 1 2 -
+CMD lane/apple-fast-cluster cluster-spec-fast-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-spec-fast-istella spectral istella 1 2 -
+CMD lane/apple-fast-cluster cluster-spec-fast-taxi AFC_FAMILY=classical2 bash tools/afc_ab.sh cluster-spec-fast-taxi spectral taxi 1 2 -
