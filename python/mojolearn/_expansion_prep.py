@@ -1413,8 +1413,16 @@ class TargetEncoder(_PrepBase):
         if fold is None or -1 in fold or len(splits) < 1:
             raise ValueError("mojolearn: Validation indices from `cv` must cover each sample index exactly once "
                              "with no overlap. Pass a splitter with non-overlapping validation folds as `cv`.")
+        sizes = [0] * len(splits)
+        for k in fold:
+            sizes[k] += 1
         for k, (train, _test) in enumerate(splits):
-            if sorted(idx(train)) != [i for i in range(n) if fold[i] != k]:
+            # the training rows are every row outside fold k exactly once: as
+            # many as there are, distinct, in range and none in fold k (the
+            # folds already cover each row once)
+            tr = idx(train)
+            if (len(tr) != n - sizes[k] or len(set(tr)) != len(tr)
+                    or any(not 0 <= i < n or fold[i] == k for i in tr)):
                 raise NotImplementedError("mojolearn: TargetEncoder cv folds whose training rows are not every "
                                           "row outside the test fold are not implemented")
         return fold, len(splits)
