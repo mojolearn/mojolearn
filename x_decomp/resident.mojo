@@ -37,7 +37,10 @@ from x_decomp.device import (
     launch_rowsum,
     launch_sqdist,
     launch_trisolve,
-    lda_rows_kernel,
+    als_scratch,
+    launch_als_rows,
+    launch_lda_bound,
+    launch_lda_rows,
     rowsum_scratch,
     TPB,
     _blocks,
@@ -368,10 +371,54 @@ def dev_lda_rows_py(
         return PythonObject(0)
     var sid = pool_alloc(n * (v + k))
     var iid = pool_alloc(n)
-    xd_ctx().enqueue_function[lda_rows_kernel](
-        px, pw, pd, pe, _ptr(sid, n * (v + k)), _ptr(iid, n),
-        Int32(n), Int32(k), Int32(v), prior, Int32(max_iter), tol, grid_dim=_blocks(n), block_dim=TPB,
-    )
+    launch_lda_rows(xd_ctx(), px, pw, pd, pe, _ptr(sid, n * (v + k)), _ptr(iid, n), n, k, v, prior, max_iter, tol)
     pool_free(sid)
     pool_free(iid)
+    return PythonObject(n)
+
+
+def dev_lda_bound_py(
+    x: PythonObject, ddt: PythonObject, dcomp: PythonObject, dst: PythonObject, p: PythonObject, f: PythonObject
+) raises -> PythonObject:
+    """LatentDirichletAllocation._approx_bound's word-term cells on device
+    matrices (lane gap-lda-als): dst (n x v) = x * logsumexp_t(ddt[:, t] +
+    dcomp[t, :]) through the same `ew_cell` chain the composed path runs, with
+    no n x v term matrix per topic. p = [n, k, v], f = [floor]."""
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var v = _n(p, 2)
+    if n * v > 2147483647:
+        raise Error("x_decomp: lda_bound exceeds the Int32 index bound")
+    var floor = Float32(Float64(py=f[0]))
+    launch_lda_bound(
+        xd_ctx(), _ptr(_id(x), n * v), _ptr(_id(ddt), n * k), _ptr(_id(dcomp), k * v), _ptr(_id(dst), n * v),
+        n, k, v, floor,
+    )
+    return PythonObject(n * v)
+
+
+def dev_als_rows_py(
+    c: PythonObject, y: PythonObject, yty: PythonObject, x: PythonObject, flags: PythonObject, p: PythonObject,
+    reg: PythonObject,
+) raises -> PythonObject:
+    """`x_decomp_als_rows` on device matrices (lane gap-lda-als): every row's
+    `als_row` into x (n x f) and flags (n), one block per row; element (u, i)
+    of the confidences at c[u * su + i * si], so the item half-sweep reads the
+    resident user x item matrix with su = 1, si = items (no transpose).
+    p = [n, m, f, su, si, c_len]."""
+    var n = _n(p, 0)
+    var m = _n(p, 1)
+    var f = _n(p, 2)
+    var su = _n(p, 3)
+    var si = _n(p, 4)
+    var cl = _n(p, 5)
+    if n == 0:
+        return PythonObject(0)
+    var ns = als_scratch(n, f)
+    var sid = pool_alloc(ns if ns > 0 else 1)
+    launch_als_rows(
+        xd_ctx(), _ptr(_id(c), cl), _ptr(_id(y), m * f), _ptr(_id(yty), f * f), _ptr(_id(x), n * f),
+        _ptr(sid, ns if ns > 0 else 1), _ptr(_id(flags), n), n, m, f, su, si, Float32(Float64(py=reg)),
+    )
+    pool_free(sid)
     return PythonObject(n)

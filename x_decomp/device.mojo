@@ -69,6 +69,14 @@ from x_decomp.cells import (
     gamma_cell,
     lasso_row,
     lda_doc_row,
+    digamma,
+    exp_c,
+    OP_ADD,
+    OP_SUB,
+    OP_MUL,
+    OP_EXP,
+    OP_LOGS,
+    OP_MAX,
     lu_diag,
     lu_l_elem,
     lu_pivot,
@@ -91,6 +99,7 @@ from x_decomp.exec_trait import Exec
 from x_decomp.host import HostExec
 from x_decomp.jacobi2 import (
     J2_TPB,
+    dev_barrier,
     jacobi_eigh2_kernel,
     one_sided_svd2_chunk_kernel,
     one_sided_svd2_finish_kernel,
@@ -694,39 +703,81 @@ def als_kernel(
         flags.unsafe_store(u, als_row(c, y, yty, x, s, u, Int(m), Int(f), reg))
 
 
-comptime ALS_TEAM_TPB = 256
-#: Largest f*f + f the team kernel keeps in threadgroup memory (f <= 63).
-comptime ALS_TEAM_CELLS = 4096
-
-
-def als_team_kernel(
-    c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, flags: F32Ptr, n: Int32, m: Int32, f: Int32, reg: Float32
+def als_cg_kernel(
+    c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, steps: F32Ptr, n: Int32, m: Int32, f: Int32, reg: Float32,
+    cg: Int32,
 ):
-    """`als_row` for user `block_idx.x`, by a block (lane/decomp-apple2):
-    thread t owns cells t, t + 256, ... of the user's f*f + f accumulators
-    (A row-major, then b) and runs, for each of them, exactly `als_row`'s
-    sequence (the YtY value, + reg on the diagonal, then one fused
-    multiply-add per item with c_ui != 0, items ascending), in threadgroup
-    memory. Thread 0 then writes them to the row's scratch and runs
-    `als_row_solve`, `als_row`'s own tail. No device word crosses threads."""
+    var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if u < Int(n):
+        steps.unsafe_store(u, als_cg_row(c, y, yty, x, s, u, Int(m), Int(f), reg, Int(cg)))
+
+
+# ---- ALS and LDA, one block per row (lane gap-lda-als, 2026-10-02)
+#
+# The board's als (factors=64) ran `als_kernel`, ONE THREAD per user/item:
+# f*f + f = 4160 cells is past the team kernel's 4096-cell cap, so every row
+# fell back to the serial accumulation, and the item half-sweep (4096 text
+# columns over 86,626 users) timed out on every vendor. `als_block_kernel`
+# is one block per row for any f: the cells accumulate in threadgroup memory
+# when they fit (ALS_SH_CELLS, f <= 64: 16,640 B), else in the row's device
+# scratch, each cell's sequence exactly `als_row`'s; the Cholesky runs column
+# by column with the rows below the diagonal in parallel (each element's sum
+# exactly `als_row_solve`'s, p ascending), the two triangular solves on one
+# thread. C is read through strides (su, si), so the item half-sweep reads
+# the user x item matrix in place (no transpose). Same bits as `als_row`.
+comptime ALS_BLK_TPB = 256
+#: Largest f*f + f kept in threadgroup memory (f <= 64): 16,640 B, the fits
+#: gate of the threadgroup page (Apple allows 32 KB).
+comptime ALS_SH_CELLS = 4160
+
+comptime ShF32 = UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED]
+
+
+@always_inline
+def _ald[SH: Bool](sh: ShF32, g: F32Ptr, o: Int, q: Int) -> Float32:
+    comptime if SH:
+        return sh[q]
+    else:
+        return g.unsafe_load(o + q)
+
+
+@always_inline
+def _ast[SH: Bool](sh: ShF32, g: F32Ptr, o: Int, q: Int, v: Float32):
+    comptime if SH:
+        sh[q] = v
+    else:
+        g.unsafe_store(o + q, v)
+
+
+def als_block_kernel[SH: Bool](
+    c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, flags: F32Ptr, n: Int32, m: Int32, f: Int32,
+    su: Int32, si: Int32, reg: Float32,
+):
+    """`als_row` for row u = block_idx.x of C (element (u, i) at c[u * su +
+    i * si]), by a block of ALS_BLK_TPB threads; SH: the f*f + f cells in
+    threadgroup memory, else at s[u * (f*f + f)]."""
     var u = Int(block_idx.x)
     var tid = Int(thread_idx.x)
     var ff = Int(f)
     var mm = Int(m)
     var cells = ff * ff + ff
-    var sh = stack_allocation[ALS_TEAM_CELLS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var o = u * cells
+    var sh = stack_allocation[ALS_SH_CELLS if SH else 1, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var bad = stack_allocation[1, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var cc = tid
     while cc < cells:
         if cc < ff * ff:
             var v = yty.unsafe_load(cc)
             if cc // ff == cc % ff:
                 v = add(v, reg)
-            sh[cc] = v
+            _ast[SH](sh, s, o, cc, v)
         else:
-            sh[cc] = Float32(0)
-        cc += ALS_TEAM_TPB
+            _ast[SH](sh, s, o, cc, Float32(0))
+        cc += ALS_BLK_TPB
+    var cb = u * Int(su)
+    var cs = Int(si)
     for i in range(mm):
-        var conf = ftz(c.unsafe_load(u * mm + i))
+        var conf = ftz(c.unsafe_load(cb + i * cs))
         if conf == Float32(0):
             continue
         var pos = conf > Float32(0)
@@ -738,26 +789,300 @@ def als_team_kernel(
                 var j = cc // ff
                 var l = cc - j * ff
                 var t = mul(cm1, y.unsafe_load(i * ff + j))
-                sh[cc] = ftz(identical_mul_add(t, ftz(y.unsafe_load(i * ff + l)), ftz(sh[cc])))
+                _ast[SH](sh, s, o, cc, ftz(identical_mul_add(t, ftz(y.unsafe_load(i * ff + l)), ftz(_ald[SH](sh, s, o, cc)))))
             elif pos:
                 var j = cc - ff * ff
-                sh[cc] = ftz(identical_mul_add(conf, ftz(y.unsafe_load(i * ff + j)), ftz(sh[cc])))
-            cc += ALS_TEAM_TPB
+                _ast[SH](sh, s, o, cc, ftz(identical_mul_add(conf, ftz(y.unsafe_load(i * ff + j)), ftz(_ald[SH](sh, s, o, cc)))))
+            cc += ALS_BLK_TPB
+    if tid == 0:
+        bad[0] = Float32(0)
+    dev_barrier()
+    # Cholesky (lower, left-looking): the diagonal on thread 0, then the rows
+    # below it in parallel; every element's sum p ascending, as als_row_solve
+    for j in range(ff):
+        if tid == 0:
+            var acc = ftz(_ald[SH](sh, s, o, j * ff + j))
+            for p in range(j):
+                var l = ftz(_ald[SH](sh, s, o, j * ff + p))
+                acc = ftz(identical_mul_add(-l, l, acc))
+            if not (acc > Float32(0)):
+                bad[0] = Float32(1)
+            else:
+                _ast[SH](sh, s, o, j * ff + j, sqrt0(acc))
+        dev_barrier()
+        if bad[0] != Float32(0):
+            break
+        var dj = _ald[SH](sh, s, o, j * ff + j)
+        var r = j + 1 + tid
+        while r < ff:
+            var acc2 = ftz(_ald[SH](sh, s, o, r * ff + j))
+            for p in range(j):
+                acc2 = ftz(identical_mul_add(-ftz(_ald[SH](sh, s, o, r * ff + p)), ftz(_ald[SH](sh, s, o, j * ff + p)), acc2))
+            _ast[SH](sh, s, o, r * ff + j, div0(acc2, dj))
+            r += ALS_BLK_TPB
+        dev_barrier()
+    if tid != 0:
+        return
+    if bad[0] != Float32(0):
+        for q in range(ff):
+            x.unsafe_store(u * ff + q, Float32(0))
+        flags.unsafe_store(u, Float32(1))
+        return
+    var bb = ff * ff
+    for a in range(ff):
+        var acc = ftz(_ald[SH](sh, s, o, bb + a))
+        for p in range(a):
+            acc = ftz(identical_mul_add(-ftz(_ald[SH](sh, s, o, a * ff + p)), ftz(_ald[SH](sh, s, o, bb + p)), acc))
+        _ast[SH](sh, s, o, bb + a, div0(acc, _ald[SH](sh, s, o, a * ff + a)))
+    for aa in range(ff):
+        var a = ff - 1 - aa
+        var acc = ftz(_ald[SH](sh, s, o, bb + a))
+        for p in range(a + 1, ff):
+            acc = ftz(identical_mul_add(-ftz(_ald[SH](sh, s, o, p * ff + a)), ftz(_ald[SH](sh, s, o, bb + p)), acc))
+        _ast[SH](sh, s, o, bb + a, div0(acc, _ald[SH](sh, s, o, a * ff + a)))
+    for q in range(ff):
+        x.unsafe_store(u * ff + q, _ald[SH](sh, s, o, bb + q))
+    flags.unsafe_store(u, Float32(0))
+
+
+def als_scratch(n: Int, f: Int) -> Int:
+    """Device scratch floats `launch_als_rows` needs: none when the cells fit
+    threadgroup memory, else f*f + f per row."""
+    var cells = f * f + f
+    return 0 if cells <= ALS_SH_CELLS else n * cells
+
+
+def launch_als_rows(
+    ctx: DeviceContext, c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, flags: F32Ptr, n: Int, m: Int,
+    f: Int, su: Int, si: Int, reg: Float32,
+) raises:
+    """Every row's `als_row`, one block per row (`als_block_kernel`).
+    MOJOLEARN_XD_ALS_BLOCK=0 runs the one-thread-per-row `als_kernel`
+    (contiguous rows only; A/B, the same bits)."""
+    if n <= 0:
+        return
+    if String(getenv("MOJOLEARN_XD_ALS_BLOCK", "1")) == "0" and si == 1 and su == m:
+        ctx.enqueue_function[als_kernel](
+            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), reg, grid_dim=_blocks(n), block_dim=TPB,
+        )
+        return
+    if f * f + f <= ALS_SH_CELLS:
+        comptime k_sh = als_block_kernel[True]
+        ctx.enqueue_function[k_sh](
+            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg,
+            grid_dim=n, block_dim=ALS_BLK_TPB,
+        )
+    else:
+        comptime k_g = als_block_kernel[False]
+        ctx.enqueue_function[k_g](
+            c, y, yty, x, s, flags, Int32(n), Int32(m), Int32(f), Int32(su), Int32(si), reg,
+            grid_dim=n, block_dim=ALS_BLK_TPB,
+        )
+
+
+# The board's lda/text (86,626 documents x 4,096 bins) ran `lda_rows_kernel`,
+# ONE THREAD per document scanning all v words twice per inner iteration
+# (550 s on MI325X, the race ceiling on Apple). `lda_block_kernel` is one
+# block per document: the document's nonzero words (ftz(x) != 0, ascending)
+# compacted once into threadgroup memory, norm_phi per word in parallel (its
+# topic fold ascending, as `lda_doc_row`), each topic's word fold on its own
+# thread over the compacted words ascending (the cell's skip of zero counts,
+# so the same sequence), the total, digamma and change on thread 0 in topic
+# order. Same bits as `lda_doc_row`. A document past LDA_NNZ_CAP nonzeros
+# keeps the per-word scan through its device scratch row (same sequence).
+comptime LDA_BLK_TPB = 128
+#: Nonzero words kept in threadgroup memory (index + norm_phi ratio: 16 KB).
+comptime LDA_NNZ_CAP = 2048
+#: Largest n_components the block kernel carries (3 x 1 KB of topic state).
+comptime LDA_K_CAP = 256
+
+
+def lda_block_kernel(
+    x: F32Ptr, ew: F32Ptr, d: F32Ptr, e: F32Ptr, s: F32Ptr, its: F32Ptr, n: Int32, k: Int32, v: Int32,
+    prior: Float32, max_iter: Int32, tol: Float32,
+):
+    var i = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var kk = Int(k)
+    var vv = Int(v)
+    var base = i * kk
+    var sb = i * (vv + kk)
+    var xb = i * vv
+    var eps = Float32(2.220446049250313e-16)
+    var idx = stack_allocation[LDA_NNZ_CAP, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var sw = stack_allocation[LDA_NNZ_CAP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ds = stack_allocation[LDA_K_CAP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var es = stack_allocation[LDA_K_CAP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dif = stack_allocation[LDA_K_CAP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var cnt = stack_allocation[LDA_BLK_TPB + 1, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var misc = stack_allocation[2, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var t0 = tid
+    while t0 < kk:
+        ds[t0] = d.unsafe_load(base + t0)
+        es[t0] = e.unsafe_load(base + t0)
+        t0 += LDA_BLK_TPB
+    # the nonzero words, ascending: contiguous segments, counts, offsets
+    var seg = (vv + LDA_BLK_TPB - 1) // LDA_BLK_TPB
+    var lo = tid * seg
+    var hi = lo + seg
+    if hi > vv:
+        hi = vv
+    var mine = 0
+    for w in range(lo, hi):
+        if ftz(x.unsafe_load(xb + w)) != Float32(0):
+            mine += 1
+    cnt[tid] = Int32(mine)
     barrier()
     if tid == 0:
-        var ab = u * cells
-        for q in range(cells):
-            s.unsafe_store(ab + q, sh[q])
-        flags.unsafe_store(u, als_row_solve(x, s, u, ff))
+        var run = 0
+        for t in range(LDA_BLK_TPB):
+            var cn = Int(cnt[t])
+            cnt[t] = Int32(run)
+            run += cn
+        cnt[LDA_BLK_TPB] = Int32(run)
+    barrier()
+    var nnz = Int(cnt[LDA_BLK_TPB])
+    var compact = nnz <= LDA_NNZ_CAP
+    if compact:
+        var at = Int(cnt[tid])
+        for w in range(lo, hi):
+            if ftz(x.unsafe_load(xb + w)) != Float32(0):
+                idx[at] = Int32(w)
+                at += 1
+    barrier()
+    var it = 0
+    for _ in range(Int(max_iter)):
+        it += 1
+        # norm_phi per word (topics ascending), x_w / (norm_phi_w + eps)
+        if compact:
+            var j = tid
+            while j < nnz:
+                var w = Int(idx[j])
+                var xw = ftz(x.unsafe_load(xb + w))
+                var acc = Float32(0)
+                for t in range(kk):
+                    acc = ftz(identical_mul_add(ftz(es[t]), ftz(ew.unsafe_load(t * vv + w)), acc))
+                sw[j] = div0(xw, add(acc, eps))
+                j += LDA_BLK_TPB
+        else:
+            var w = tid
+            while w < vv:
+                var xw = ftz(x.unsafe_load(xb + w))
+                if xw != Float32(0):
+                    var acc = Float32(0)
+                    for t in range(kk):
+                        acc = ftz(identical_mul_add(ftz(es[t]), ftz(ew.unsafe_load(t * vv + w)), acc))
+                    s.unsafe_store(sb + w, div0(xw, add(acc, eps)))
+                w += LDA_BLK_TPB
+        dev_barrier()
+        # each topic's fold over the words ascending
+        var t = tid
+        while t < kk:
+            var acc = Float32(0)
+            var eb = t * vv
+            if compact:
+                for j in range(nnz):
+                    acc = ftz(identical_mul_add(ftz(sw[j]), ftz(ew.unsafe_load(eb + Int(idx[j]))), acc))
+            else:
+                for w in range(vv):
+                    if ftz(x.unsafe_load(xb + w)) == Float32(0):
+                        continue
+                    acc = ftz(identical_mul_add(ftz(s.unsafe_load(sb + w)), ftz(ew.unsafe_load(eb + w)), acc))
+            var dt = add(mul(es[t], acc), prior)
+            var old = ds[t]
+            ds[t] = dt
+            dif[t] = abs(sub(old, dt))
+            t += LDA_BLK_TPB
+        barrier()
+        if tid == 0:
+            var total = Float32(0)
+            for q in range(kk):
+                total = add(total, ds[q])
+            misc[0] = digamma(total)
+            var change = Float32(0)
+            for q in range(kk):
+                change = add(change, dif[q])
+            misc[1] = Float32(1) if div0(change, Float32(kk)) < tol else Float32(0)
+        barrier()
+        var psi_total = misc[0]
+        t = tid
+        while t < kk:
+            es[t] = exp_c(sub(digamma(ds[t]), psi_total))
+            t += LDA_BLK_TPB
+        var stop = misc[1] != Float32(0)
+        barrier()
+        if stop:
+            break
+    t0 = tid
+    while t0 < kk:
+        d.unsafe_store(base + t0, ds[t0])
+        e.unsafe_store(base + t0, es[t0])
+        t0 += LDA_BLK_TPB
+    if tid == 0:
+        its.unsafe_store(i, Float32(it))
 
 
-def als_cg_kernel(
-    c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, steps: F32Ptr, n: Int32, m: Int32, f: Int32, reg: Float32,
-    cg: Int32,
+def launch_lda_rows(
+    ctx: DeviceContext, x: F32Ptr, ew: F32Ptr, d: F32Ptr, e: F32Ptr, s: F32Ptr, its: F32Ptr, n: Int, k: Int, v: Int,
+    prior: Float32, max_iter: Int, tol: Float32,
+) raises:
+    """Every document's `lda_doc_row`: one block per document
+    (`lda_block_kernel`) for k <= LDA_K_CAP, else one thread per document.
+    MOJOLEARN_XD_LDA_BLOCK=0 runs `lda_rows_kernel` (A/B, the same bits).
+    s: n * (v + k) floats of scratch."""
+    if n <= 0:
+        return
+    if k <= LDA_K_CAP and String(getenv("MOJOLEARN_XD_LDA_BLOCK", "1")) != "0":
+        ctx.enqueue_function[lda_block_kernel](
+            x, ew, d, e, s, its, Int32(n), Int32(k), Int32(v), prior, Int32(max_iter), tol,
+            grid_dim=n, block_dim=LDA_BLK_TPB,
+        )
+    else:
+        ctx.enqueue_function[lda_rows_kernel](
+            x, ew, d, e, s, its, Int32(n), Int32(k), Int32(v), prior, Int32(max_iter), tol,
+            grid_dim=_blocks(n), block_dim=TPB,
+        )
+
+
+# LatentDirichletAllocation._approx_bound's word term built 16 n x v term
+# matrices plus their max, exp sums and logs (about 22 n x v buffers live:
+# 31 GB at the text block, the L40S CUDA_ERROR_OUT_OF_MEMORY). This cell is
+# the same chain of `ew_cell` calls per (i, w) with nothing stored but the
+# product: terms_t = (0 + ddt[i, t]) + dcomp[t, w], their running max over t
+# ascending, acc = sum_t exp(term_t - max) (t ascending, from 0), then
+# x * (log_floor(acc, floor) + max). The caller folds it with the kit's own
+# total (rowsum, then colsum), so the bound is the same bits.
+def lda_bound_kernel(
+    x: F32Ptr, ddt: F32Ptr, dcomp: F32Ptr, dst: F32Ptr, n: Int32, k: Int32, v: Int32, floor: Float32
 ):
-    var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if u < Int(n):
-        steps.unsafe_store(u, als_cg_row(c, y, yty, x, s, u, Int(m), Int(f), reg, Int(cg)))
+    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var vv = Int(v)
+    var kk = Int(k)
+    if c >= Int(n) * vv:
+        return
+    var i = c // vv
+    var w = c - i * vv
+    var z = Float32(0)
+    var mx = Float32(0)
+    for t in range(kk):
+        var term = ew_cell(OP_ADD, ew_cell(OP_ADD, z, ddt.unsafe_load(i * kk + t), z, z), dcomp.unsafe_load(t * vv + w), z, z)
+        mx = term if t == 0 else ew_cell(OP_MAX, mx, term, z, z)
+    var acc = Float32(0)
+    for t in range(kk):
+        var term = ew_cell(OP_ADD, ew_cell(OP_ADD, z, ddt.unsafe_load(i * kk + t), z, z), dcomp.unsafe_load(t * vv + w), z, z)
+        acc = ew_cell(OP_ADD, acc, ew_cell(OP_EXP, ew_cell(OP_SUB, term, mx, z, z), z, z, z), z, z)
+    var lse = ew_cell(OP_ADD, ew_cell(OP_LOGS, acc, z, z, floor), mx, z, z)
+    dst.unsafe_store(c, ew_cell(OP_MUL, x.unsafe_load(c), lse, z, z))
+
+
+def launch_lda_bound(
+    ctx: DeviceContext, x: F32Ptr, ddt: F32Ptr, dcomp: F32Ptr, dst: F32Ptr, n: Int, k: Int, v: Int, floor: Float32
+) raises:
+    if n * v <= 0:
+        return
+    ctx.enqueue_function[lda_bound_kernel](
+        x, ddt, dcomp, dst, Int32(n), Int32(k), Int32(v), floor, grid_dim=_blocks(n * v), block_dim=TPB,
+    )
 
 
 def geqrf_kernel(a: F32Ptr, tau: F32Ptr, m: Int32, n: Int32):
@@ -2253,10 +2578,7 @@ struct DevExec(Exec):
         var de = _up(ctx, e, n * k)
         var ds = ctx.enqueue_create_buffer[DType.float32](n * (v + k) if n > 0 else 1)
         var di = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        ctx.enqueue_function[lda_rows_kernel](
-            dx.unsafe_ptr(), dw.unsafe_ptr(), dd.unsafe_ptr(), de.unsafe_ptr(), ds.unsafe_ptr(), di.unsafe_ptr(),
-            Int32(n), Int32(k), Int32(v), prior, Int32(max_iter), tol, grid_dim=_blocks(n), block_dim=TPB,
-        )
+        launch_lda_rows(ctx, _p(dx), _p(dw), _p(dd), _p(de), _p(ds), _p(di), n, k, v, prior, max_iter, tol)
         _down(ctx, dd, d, n * k)
         _down(ctx, de, e, n * k)
         _down(ctx, di, its, n)
@@ -2355,18 +2677,11 @@ struct DevExec(Exec):
         var dy = _up(ctx, y, m * f)
         var dg = _up(ctx, yty, f * f)
         var dx = ctx.enqueue_create_buffer[DType.float32](n * f if n * f > 0 else 1)
-        var ds = ctx.enqueue_create_buffer[DType.float32](n * (f * f + f) if n > 0 else 1)
+        var full = String(getenv("MOJOLEARN_XD_ALS_BLOCK", "1")) == "0"
+        var ns = n * (f * f + f) if full else als_scratch(n, f)
+        var ds = ctx.enqueue_create_buffer[DType.float32](ns if ns > 0 else 1)
         var df = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        if n > 0 and f * f + f <= ALS_TEAM_CELLS and String(getenv("MOJOLEARN_XD_ALS_TEAM", "1")) != "0":
-            ctx.enqueue_function[als_team_kernel](
-                dc.unsafe_ptr(), dy.unsafe_ptr(), dg.unsafe_ptr(), dx.unsafe_ptr(), ds.unsafe_ptr(), df.unsafe_ptr(),
-                Int32(n), Int32(m), Int32(f), reg, grid_dim=n, block_dim=ALS_TEAM_TPB,
-            )
-        else:
-            ctx.enqueue_function[als_kernel](
-                dc.unsafe_ptr(), dy.unsafe_ptr(), dg.unsafe_ptr(), dx.unsafe_ptr(), ds.unsafe_ptr(), df.unsafe_ptr(),
-                Int32(n), Int32(m), Int32(f), reg, grid_dim=_blocks(n), block_dim=TPB,
-            )
+        launch_als_rows(ctx, _p(dc), _p(dy), _p(dg), _p(dx), _p(ds), _p(df), n, m, f, m, 1, reg)
         _down(ctx, dx, x, n * f)
         _down(ctx, df, flags, n)
         ctx.synchronize()
