@@ -35,8 +35,10 @@ from extratrees.checks.fixtures import (
 from extratrees.estimator import (
     ExtraTreesConfig,
     MAX_FEATURES_ALL,
-    fit_extra_trees_classifier_reference,
     fit_extra_trees_classifier_device,
+)
+from extratrees.host_estimator import (
+    fit_extra_trees_classifier_reference,
 )
 from extratrees.impl.randomforest.randomforest import Forest
 

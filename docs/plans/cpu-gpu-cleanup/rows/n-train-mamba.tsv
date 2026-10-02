@@ -1,0 +1,44 @@
+rule	class	owner	state	path	occ	text
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mamba.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mamba.mojo	0	return read_f32(addr, max(0, n))
+host-call	host-import	UNOWNED	debt	bindings/_mojolearn_mamba.mojo	0	return read_f32(addr, n)
+host-call	host-import	gap-train-utils	debt	bindings/_mojolearn_training.mojo	0	count = parallel_accumulate_host(
+host-call	host-import	gap-train-utils	debt	bindings/_mojolearn_training.mojo	0	import training/accumulate_multi_gpu.mojo:parallel_accumulate_host
+host-call	host-import	gap-train-utils	debt	bindings/_mojolearn_training.mojo	0	import training/optimizer_multi_gpu.mojo:parallel_optimizer_step_host
+host-call	host-import	gap-train-utils	debt	bindings/_mojolearn_training.mojo	0	n_total = parallel_optimizer_step_host(
+host-call	host-import	gap-train-utils	debt	bindings/_mojolearn_training.mojo	1	n_total = parallel_optimizer_step_host(
+host-call	host-import	gap-neural-models	debt	bindings/_mojolearn_transformer.mojo	0	import bindings/hostptr.mojo:read_f32
+host-call	host-import	gap-neural-models	debt	bindings/_mojolearn_transformer.mojo	0	return read_f32(addr, n)
+host-call	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	if all_finite(values):
+host-call	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	import core/host_lanes.mojo:all_finite
+host-call	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	import gemm/host/gemm_host_rows.mojo:gemm_host_rows
+host-import	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	st.dt_proj = gemm_host_rows(dt_low, w.w_dt, OP_NT, m, di, r)
+host-import	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	st.in_proj = gemm_host_rows(st.norm_out, w.w_in, OP_NT, m, 2 * di, dm)
+host-import	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	st.out_proj = gemm_host_rows(st.gate_out, w.w_out, OP_NT, m, dm, di)
+host-import	host-import	UNOWNED	debt	mamba/checks/mamba_oracle.mojo	0	st.x_proj = gemm_host_rows(st.silu_out, w.w_x, OP_NT, m, xr, di)
+host-env	host-env/threshold	UNOWNED	debt	mamba/impl/modules/mamba3_transfer.mojo	0	comptime M3_BULK_TRANSFER = not is_defined["MOJOLEARN_MAMBA3_LEGACY_HOST_COPY"]()
+host-call	host-import	UNOWNED	debt	mamba/impl/modules/mamba_simple.mojo	0	import mamba/checks/mamba_oracle.mojo:mamba_block_oracle
+host-call	host-import	UNOWNED	debt	mamba/impl/modules/mamba_simple.mojo	0	return mamba_block_oracle(w, x, b, l, state)
+host-threads	host-threads	multi-GPU-driver-review	debt	training/accumulate_multi_gpu.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	multi-GPU-driver-review	debt	training/accumulate_multi_gpu.mojo	0	host_parallelize(_reduce,devices)
+host-threads	host-threads	gap-lm	debt	training/byte_lm_parallel.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	gap-lm	debt	training/byte_lm_parallel.mojo	0	host_parallelize(_gradient_task, active)
+host-call	host-import	UNOWNED	debt	training/checks/loss_oracle.mojo	0	if all_finite(values):
+host-call	host-import	UNOWNED	debt	training/checks/loss_oracle.mojo	0	import core/host_lanes.mojo:all_finite
+host-call	host-import	UNOWNED	debt	training/checks/loss_oracle.mojo	0	import gemm/host/gemm_host_rows.mojo:gemm_host_rows
+host-import	host-import	UNOWNED	debt	training/checks/loss_oracle.mojo	0	var out = gemm_host_rows(row, ones, OP_NN, 1, 1, count)
+host-call	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	if all_finite(values):
+host-call	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	import core/host_lanes.mojo:all_finite
+host-call	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	import gemm/host/gemm_host_rows.mojo:gemm_host_rows
+host-import	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	var out = gemm_host_rows(g, g, OP_NT, 1, 1, count)
+host-import	host-import	UNOWNED	debt	training/checks/optimizer_oracle.mojo	0	var tot = gemm_host_rows(norms_copy, norms_copy, OP_NT, 1, 1, j_count)
+host-threads	host-threads	UNOWNED	debt	training/checks/train_loop.mojo	0	from core.host_parallel import host_parallelize
+serial-launch	serial-gpu	UNOWNED	debt	training/chunked_lm_head_v2.mojo	0	ctx.enqueue_function[chunked_lm_head_v2_total_kernel](
+serial-launch	serial-gpu	UNOWNED	debt	training/chunked_lm_head_v2.mojo	1	ctx.enqueue_function[chunked_lm_head_v2_total_kernel](
+serial-launch	serial-gpu	UNOWNED	debt	training/chunked_lm_head_v2.mojo	2	ctx.enqueue_function[chunked_lm_head_v2_total_kernel](
+serial-launch	serial-gpu	UNOWNED	debt	training/chunked_lm_head_v2.mojo	0	ctx.enqueue_function[chunked_lm_head_v2_total_kernel](loss.unsafe_ptr(), row_loss.unsafe_ptr(), Int32(rows), grid_dim=1, block_dim=1)
+host-threads	host-threads	gap-train-utils	debt	training/estimator.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	gap-train-utils	debt	training/estimator.mojo	0	host_parallelize(_chunk, tasks)
+d2h-loop	d2h-roundtrip	gap-neural-models	debt	training/mlp_ops.mojo	0	ctx.enqueue_copy(dst_ptr=logits_ptr, src_buf=logits)
+host-threads	host-threads	multi-GPU-driver-review	debt	training/optimizer_multi_gpu.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	multi-GPU-driver-review	debt	training/optimizer_multi_gpu.mojo	0	host_parallelize(_update,devices)

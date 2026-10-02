@@ -24,7 +24,7 @@ from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.gp_host_predict import gpc_predict_binding, gpr_predict_binding
+from bindings.gp_host_predict import gpc_ovr_combine_binding, gpc_predict_binding, gpr_predict_binding
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -77,6 +77,7 @@ def PyInit__mojolearn_gp_infer_host() abi("C") -> PythonObject:
         module.def_function[gp_numeric_mode_binding]("gp_numeric_mode")
         module.def_function[gpr_predict_binding]("gpr_predict")
         module.def_function[gpc_predict_binding]("gpc_predict")
+        module.def_function[gpc_ovr_combine_binding]("gpc_ovr_combine")
         return module.finalize()
     except e:
         abort(String("failed to create _mojolearn_gp_infer_host: ", e))

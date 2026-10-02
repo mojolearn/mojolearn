@@ -19,7 +19,7 @@ team with two device steps in place of its team ones:
 The L-BFGS iterations, the fold lists and the counts are logcv_fit's own
 code on the host (the x_linear host and device columns already share
 every word). The same statements on the same rows in the same order: the
-same words. `MOJOLEARN_X_LINEAR_LOGCV_GRID=0` restores the team fit.
+same words.
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global

@@ -14,7 +14,8 @@ from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.checks.gemm_device_check import _run_device
 from gemm.checks.gemm_identical import GEMM_PLAN_COUNT, PLAN_FLAT, TUNED_STAGE_FTZ, gemm_plan_name
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN, gemm_oracle
+from gemm.contract import OP_NN, OP_NT, OP_TN
+from gemm.checks.gemm_oracle import gemm_oracle
 
 
 def _small(outer: Int, p: Int) -> Float32:

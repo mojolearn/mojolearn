@@ -17,8 +17,8 @@ overload; the double one is refused, NOT_IMPLEMENTED.tsv).
 
 DEVIATION 653 (pinned_sum.mojo's banner): the `mapThenSumReduce` fold --
 a 256-thread CUB block sum plus `atomicAdd` of the block partials -- is
-under IDENTICAL one fixed slab tree over `n` with the host folding the
-chunk totals ascending. The per-term map runs on the device: the two logs
+under IDENTICAL one fixed slab tree over `n` with the device folding the
+chunk totals by the same tree (`fold_partials_levels`). The per-term map runs on the device: the two logs
 through `identical_log` (row 12), their difference stored through `ftz`,
 the product `p * diff` one multiply stored through `ftz` (no addition in
 the term, so no contraction seam; the tree's additions are separate).
@@ -70,7 +70,7 @@ from metrics.checks.pinned_sum import (
     PINNED_SUM_W,
     canonicalize_nan,
     chunk_count,
-    host_fold_partials,
+    device_fold_partials,
     linear_block_id,
     physical_block_count,
     virtual_block_sum,
@@ -206,18 +206,11 @@ def kl_divergence_launch_traced[
         grid_dim=(gx, gy, 1),
         block_dim=(block_size, 1, 1),
     )
-    var h = ctx.enqueue_create_host_buffer[DType.float32](chunks)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=partials)
-    ctx.synchronize()
-    var lst = List[Float32]()
-    for c in range(chunks):
-        lst.append(h.unsafe_ptr().unsafe_load(c))
-    _ = h^
     trace.record_device[DType.float32](
         ctx, "metrics.kl.partials", partials, chunks
     )
+    var raw = device_fold_partials(ctx, partials, chunks)
     _ = partials^
-    var raw = host_fold_partials(lst, chunks)
     trace.record_scalar_f32("metrics.kl.sum_raw", raw)
     # DEVIATION 658 (2): a NaN (only from an out-of-contract negative or
     # non-finite entry) leaves with ONE payload.

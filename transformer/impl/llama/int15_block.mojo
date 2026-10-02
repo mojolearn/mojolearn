@@ -53,7 +53,7 @@ from gemm.checks.gemm_int15_tuned import (
     identical_gemm_int15_tuned_into,
 )
 from gemm.checks.gemm_int8_mma_tuned import INT8_DECODE_AVAILABLE, INT8_DECODE_MAX_M
-from gemm.host.gemm_int15_oracle import INT15_MAX_K
+from gemm.contract import INT15_MAX_K
 
 # WHICH PLAN (clause W-8, W-13: every plan is the same bits, so this is
 # scheduling). By default `identical_gemm_int15_planes_into`: the reference

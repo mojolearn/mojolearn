@@ -741,24 +741,22 @@ class BayesianGaussianMixture(_XCluster):
         vals = []
         for arr in (self.means_, self._full_pchol, self._log_consts):
             vals += [float(v) for v in _buffer.flat_bytes(arr).cast("f")]
-        f, _, _ = self._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
-        return f[0], f[1], n, k
+        f, i, _ = self._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
+        return f[0], f[1], n, k, i[0]
 
     def predict(self, X):
-        lr, _, n, k = self._score(X)
-        out = []
-        for r in range(n):
-            row = lr[r * k:(r + 1) * k]
-            out.append(max(range(k), key=lambda j: (row[j], -j)))
-        return Array._from_flat(out, (n,), "<i4")
+        # the labels come from the device score (`bodies.argmax_row`: the
+        # first largest log responsibility, the lowest index on a tie)
+        _, _, n, _, labels = self._score(X)
+        return Array._from_flat(labels, (n,), "<i4")
 
     def predict_proba(self, X):
-        lr, _, n, k = self._score(X)
+        lr, _, n, k, _ = self._score(X)
         # DEVIATION 6900: the pinned exp (the fit's E-step exp is pinned too, 5109)
         return Array._from_flat(_pm.exp_array(lr), (n, k), "<f4")
 
     def score_samples(self, X):
-        _, lpn, n, _ = self._score(X)
+        _, lpn, n, _, _ = self._score(X)
         return Array._from_flat(lpn, (n,), "<f4")
 
     def score(self, X, y=None):
@@ -872,9 +870,8 @@ def _gmm_ext_score(est, X):
     vals = []
     for arr in (est.means_, ext["pchol"], ext["consts"]):
         vals += [float(v) for v in _buffer.flat_bytes(arr).cast("f")]
-    f, _, _ = ext["call"]._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
-    lr, lpn = f[0], f[1]
-    labels = [max(range(k), key=lambda j: (lr[r * k + j], -j)) for r in range(n)]
+    f, i, _ = ext["call"]._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
+    lr, lpn, labels = f[0], f[1], i[0]
     return (lr, Array._from_flat(lpn, (n,), "<f4"), Array._from_flat(_pm.exp_array(lr), (n, k), "<f4"),
             Array._from_flat(labels, (n,), "<i4"))
 

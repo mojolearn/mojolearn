@@ -60,7 +60,7 @@ from . import _backend, _serialize
 from ._iforest_impl import IsolationForest, _IFOREST_FORMAT
 from ._arima_impl import ARIMA, _ARIMA_FORMAT, _ARIMA_FORMAT_EXOG
 from ._tsa_impl import ExponentialSmoothing, _HW_FORMAT
-from ._cholesky_impl import _CHOLESKY_FORMAT, HostCholesky
+from ._cholesky_impl import _CHOLESKY_FORMAT, Cholesky
 from ._ivf_impl import IVFIndex, _IVF_FORMAT
 from .embedding import Embedding, _EMBEDDING_FORMAT
 from ._gpc_impl import _GPC_FORMAT, HostGaussianProcessClassifier
@@ -289,6 +289,35 @@ class HostHDBSCAN(_HostBound, HDBSCAN):
     """A saved HDBSCAN that `mojolearn.hdbscan.approximate_predict` accepts,
     predicting through the inference-only hdbscan binding."""
     _HOST_ARRAYS = ("_raw_data", "core_distances_", "labels_")
+
+
+_LINALG_HOST_BASENAME = "_mojolearn_linalg_host"
+
+
+class HostCholesky(Cholesky):
+    """`Cholesky` bound to `_mojolearn_linalg_host` on any box, a GPU box
+    included, so a GPU factor and a CPU solve can be compared in one
+    process (`mojolearn.host_model` returns this for a saved factor).
+    IDENTICAL only. (It lived in `_cholesky_impl` until cpu-gpu-cleanup
+    c-linear, 2026-10-02: a GPU-path module never loads a host binding.)"""
+
+    _HOST_INFERENCE_ONLY = True
+
+    def _door(self):
+        mode = getattr(self, "numeric_mode", None)
+        if mode is not None and mode != "identical":
+            raise ValueError(
+                f"mojolearn: HostCholesky runs IDENTICAL only on the host; this "
+                f"factor was saved {mode!r}"
+            )
+        return _backend.load_host_module(_LINALG_HOST_BASENAME), "linalg_numeric_mode"
+
+    def _host_refusals(self):
+        """Nothing beyond `load`'s own checks: the host binding carries all
+        three door names."""
+
+    def vendor_used(self):
+        return "cpu"
 
 
 class _HostKNN(_HostBound):

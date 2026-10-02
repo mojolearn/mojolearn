@@ -15,6 +15,7 @@ first imported, after the package, so both may rely on every module existing:
                                its `_HostBound`; never import it at module level
 """
 from . import _backend
+from ._labels import unique_inverse
 from . import _portable_math as _pm
 
 __all__ = ["Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d",
@@ -804,7 +805,10 @@ class CNNClassifier(_Layer):
         np = _np()
         x = self._images(X)
         y = np.asarray(y)
-        self.classes_, yi = np.unique(y, return_inverse=True)
+        # sorted classes and inverse codes on the device (_labels.unique_inverse)
+        cls, yi = unique_inverse(y)
+        self.classes_ = np.asarray(cls).astype(y.dtype, copy=False) if y.dtype.kind in "biuf" else np.asarray(cls)
+        yi = np.asarray(yi)
         yi = yi.astype(np.int32)
         self._build(len(self.classes_))
         b = self._binding()
@@ -1521,34 +1525,34 @@ def _gemm(binding, a, b, m, n, k, op):
 
 
 class _Graph:
-    """Two CSR views of one edge list (integer work only, in NumPy): rows =
-    targets for the forward propagation, rows = sources for its transpose;
-    entries in ascending column order within a row. `vals_t(v)` carries
-    per-entry values of the forward view onto the transposed one."""
+    """Two CSR views of one edge list: rows = targets for the forward
+    propagation, rows = sources for its transpose; entries in ascending
+    column order within a row, ties in edge order. `vals_t(v)` carries
+    per-entry values of the forward view onto the transposed one.
 
-    def __init__(self, src, dst, n):
+    The views are built by the binding (`x_cnn_csr_build`: two stable radix
+    sorts, a gather and a row-pointer kernel on the device; the host twin on
+    a CPU-only install), not by a NumPy sort of the edge list on the host
+    (cpu-gpu-cleanup n-pyneural, 2026-10-02). Integer work: the same words
+    on every backend."""
+
+    def __init__(self, src, dst, n, binding):
         np = _np()
         self.n = int(n)
         self.src, self.dst = np.asarray(src, np.int64), np.asarray(dst, np.int64)
-        # lane/cnn-apple2: a stable argsort of the one int64 key (row * n +
-        # col, both in [0, n)) is lexsort's order exactly, at about a third
-        # of its time on 1M edges (host work that dominated the forward)
-        nn = max(self.n, 1)
-        if _LEGACY_STEP:
-            self.order_f = np.lexsort((self.src, self.dst))
-            self.order_t = np.lexsort((self.dst, self.src))
-        else:
-            self.order_f = np.argsort(self.dst * nn + self.src, kind="stable")
-            self.order_t = np.argsort(self.src * nn + self.dst, kind="stable")
-        self.csr_f = self._csr(self.dst[self.order_f], self.src[self.order_f])
-        self.csr_t = self._csr(self.src[self.order_t], self.dst[self.order_t])
         self.nnz = len(self.src)
+        s32 = np.ascontiguousarray(self.src, np.int32)
+        d32 = np.ascontiguousarray(self.dst, np.int32)
+        self.csr_f, self.order_f = self._build(binding, d32, s32)
+        self.csr_t, self.order_t = self._build(binding, s32, d32)
 
-    def _csr(self, rows, cols):
+    def _build(self, binding, rows, cols):
         np = _np()
-        ptr = np.zeros(self.n + 1, np.int64)
-        ptr[1:] = np.bincount(rows, minlength=self.n)[:self.n]
-        return np.ascontiguousarray(np.concatenate([np.cumsum(ptr), cols, rows]).astype(np.int32))
+        csr = np.empty(self.n + 1 + 2 * self.nnz, np.int32)
+        order = np.empty(max(self.nnz, 1), np.int32)
+        binding.x_cnn_csr_build(rows.ctypes.data, cols.ctypes.data, csr.ctypes.data, order.ctypes.data,
+                                [self.n, self.nnz])
+        return csr, order[:self.nnz]
 
     def vals_t(self, vals_f):
         np = _np()
@@ -1673,7 +1677,7 @@ class GCNConv(_Layer):
             src = np.concatenate([src[keep], np.arange(n)])
             dst = np.concatenate([dst[keep], np.arange(n)])
             w = np.concatenate([w[keep], loop_w]).astype(np.float32)
-        g = _Graph(src, dst, n)
+        g = _Graph(src, dst, n, self._binding())
         wf = np.ascontiguousarray(w[g.order_f])
         if self.normalize:
             vals = np.empty(g.nnz, np.float32)
@@ -1827,7 +1831,7 @@ class SAGEConv(_Layer):
             g = hit[1]
         else:
             src, dst = _edges(edge_index, n)
-            g = _Graph(src, dst, n)
+            g = _Graph(src, dst, n, self._binding())
             if key is not None:
                 self._gcache = (key, g)
         if (_mixed(b) and not _LEGACY_STEP and not self.project and not self.normalize
