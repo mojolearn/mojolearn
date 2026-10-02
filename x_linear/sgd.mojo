@@ -13,7 +13,13 @@ by five) and the loss classes at the top of that file. Differences, named:
   * the shuffle is Fisher-Yates over splitmix64 (x_linear/ops.mojo), not
     their `SequentialDataset.shuffle` over numpy's MT19937, so a fit agrees
     with theirs in quality, not in bits; the OvR problem c is seeded
-    `seed + 1000003 * c`.
+    `seed + 1000003 * c`;
+  * (lane/neural-pass139) each sample's predictor w . x_i is MB_DBLK-column
+    blocks, each a chain from zero, folded ascending (`mb_dot` with
+    MB_DBLK), and the objective's penalty norms the same blocks
+    (`sgd_reg_blocked`): the host's `sgd_one` and the device's
+    team-parallel per-sample kernel (x_linear/device.mojo `_sgd_ps_grid`)
+    run the same chains.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fexp, flog, fabs, fmax, fmin,
@@ -177,7 +183,10 @@ def sgd_one(
         for r in range(n):
             var i = ldi(idx, r)
             var y = ld(ys, i)
-            var p = fa(row_dot(x, i, d, w, woff), intercept)
+            # lane/neural-pass139: the predictor as MB_DBLK-column blocks,
+            # each from zero, folded ascending (`mb_dot`; the device's
+            # team-parallel per-sample kernel takes the same words)
+            var p = fa(mb_dot(x, i, d, w, woff, MB_DBLK), intercept)
             if lr == LR_OPTIMAL:
                 eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
             elif lr == LR_INVSCALING:
@@ -185,13 +194,12 @@ def sgd_one(
             var cur = sgd_loss(loss, y, p, eps)
             objective = fa(objective, cur)
             if lr != LR_PA1 and lr != LR_PA2:
-                if penalty != P_NONE:
-                    var n2 = Float32(0)
-                    var n1 = Float32(0)
-                    for j in range(d):
-                        var wj = ld(w, woff + j)
-                        n2 = fmad(wj, wj, n2)
-                        n1 = fa(n1, fabs(wj))
+                if penalty != P_NONE and tol > Float32(-3.0e38):
+                    # lane/neural-pass139: the norms as MB_DBLK-weight blocks
+                    # (`sgd_reg_blocked`); only `tol` reads the objective
+                    var nrm = sgd_reg_blocked(w, woff, d)
+                    var n2 = nrm[0]
+                    var n1 = nrm[1]
                     var reg = fa(fm(fm(fs(Float32(1), l1_ratio), Float32(0.5)), n2), fm(l1_ratio, n1))
                     objective = fa(objective, fm(alpha, reg))
                 if one_class:
@@ -288,6 +296,10 @@ def sgd_one(
 #     which the loop that filled it computed the same way).
 # No lane reads a device word another lane wrote. `sgd_one` stays the host's
 # and the fallback for d > SGD_WARP_MAX_CHUNKS * W.
+# lane/neural-pass139: the device binding no longer reaches this form (or
+# the thread form) for SGD: the per-sample fit runs x_linear/device.mojo
+# `_sgd_ps_grid`, whose blocked dot `sgd_one` now shares; this form keeps
+# the single `row_dot` chain of before.
 
 comptime SGD_WARP_MAX_CHUNKS = 8
 
@@ -1039,6 +1051,40 @@ def mb_block_dot(x: FP, i: Int, d: Int, w: FP, woff: Int, blk: Int) -> Float32:
         if u < m:
             acc = fmad(xv[u], wv[u], acc)
     return acc
+
+
+@always_inline
+def sgd_reg_block(w: FP, woff: Int, d: Int, blk: Int) -> Tuple[Float32, Float32]:
+    """Block blk (MB_DBLK weights) of sgd_one's penalty norms from zero
+    (lane/neural-pass139): (the fmad chain of w_j^2, the fa chain of |w_j|),
+    j ascending, with all the block's loads issued first."""
+    var j0 = blk * MB_DBLK
+    var m = min(MB_DBLK, d - j0)
+    var wv = SIMD[DType.float32, MB_DBLK]()
+    comptime for u in range(MB_DBLK):
+        if u < m:
+            wv[u] = ld(w, woff + j0 + u)
+    var n2 = Float32(0)
+    var n1 = Float32(0)
+    comptime for u in range(MB_DBLK):
+        if u < m:
+            n2 = fmad(wv[u], wv[u], n2)
+            n1 = fa(n1, fabs(wv[u]))
+    return (n2, n1)
+
+
+@always_inline
+def sgd_reg_blocked(w: FP, woff: Int, d: Int) -> Tuple[Float32, Float32]:
+    """sgd_one's (sum w_j^2, sum |w_j|): the `sgd_reg_block` partials folded
+    ascending from zero with fa, as the device folds them."""
+    var nb = (d + MB_DBLK - 1) // MB_DBLK
+    var n2 = Float32(0)
+    var n1 = Float32(0)
+    for b in range(nb):
+        var pr = sgd_reg_block(w, woff, d, b)
+        n2 = fa(n2, pr[0])
+        n1 = fa(n1, pr[1])
+    return (n2, n1)
 
 
 @always_inline

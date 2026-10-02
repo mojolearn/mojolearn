@@ -24,9 +24,14 @@ from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS
-from x_linear.ops import ld, st, ldi, fd, i2f, fa, fs, fm, fabs, shuffle
+from x_linear.ops import ld, st, ldi, sti, fd, i2f, fa, fs, fm, fabs, fmad, fmax, fmin, shuffle
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
+from x_linear.sgd import (
+    sgd_loss, sgd_dloss, sgd_reg_block, _sgd_target, _clip_one,
+    L_HINGE, LR_INVSCALING, P_NONE, P_EN,
+)
+from checks.numerics import identical_pow
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
@@ -135,9 +140,10 @@ def xg_gram_kernel(x: FP, n: Int32, d: Int32, fw: FP):
 
 
 def _sgd_on_host() -> Bool:
-    """`MOJOLEARN_X_LINEAR_SGD_HOST=0` keeps SGD on its one device thread
-    (the A/B arm); default the host."""
-    return String(getenv("MOJOLEARN_X_LINEAR_SGD_HOST")) != "0"
+    """`MOJOLEARN_X_LINEAR_SGD_HOST=1` runs the per-sample SGD fit on the host
+    inside the device binding (the A/B arm); by default (lane/neural-pass139,
+    GPU-only rule) it runs on the device, `_sgd_ps_grid`."""
+    return String(getenv("MOJOLEARN_X_LINEAR_SGD_HOST")) == "1"
 
 
 def _lars_grid_gram() -> Bool:
@@ -644,6 +650,418 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     _ = wit^
 
 
+# ------------------------------------------------ per-sample SGD on the grid (lane/neural-pass139)
+# x_linear/sgd.mojo `sgd_one` (their plain SGD: one sample after the next, the
+# order is the algorithm) with each sample spread over a block (GPU-only
+# rule: the one-thread team form took 630 s for a million istella rows on an
+# L40S, so the device binding ran it on the host). One block a one-vs-rest
+# problem (grid_dim = P); per sample, in order:
+#   A. one task a MB_DBLK-column block of the predictor (`mb_block_dot`, its
+#      loads all in flight before its chain) and, when `tol` reads the
+#      objective, one a block of the penalty norms (`sgd_reg_block`);
+#      the partials to device words, then a device-ordering barrier;
+#   B. EVERY thread folds the blocks ascending from zero (`mb_dot`'s words)
+#      and runs sgd_one's scalar statements (the rate, the loss, the PA step
+#      from the |x_i|^2 of `mb_rowsq`, the clip, the class and sample
+#      weights, the decay factor, the intercept and the cumulative L1 u) in
+#      registers: the same words in every thread, so no barrier is needed
+#      before C and the control flow is uniform;
+#   C. thread j applies sgd_one's per-weight statements to w_j (the decay
+#      `fm(w_j, scale)`, the step `fmad(update, x_ij, w_j)`, Tsuruoka's clip
+#      with q_j), then a barrier.
+# A launch runs SGD_PS_CHUNK samples of the epoch; the epoch is ONE witness-
+# guarded unit (x_linear/witness.mojo): w, q, the scalar state and t are
+# restored from their epoch-start copies and the epoch replays on a rerun.
+# The shuffle, the finite check, the stopping and the adaptive rate run on
+# the host with sgd_one's statements. `MOJOLEARN_X_LINEAR_SGD_HOST=1` runs
+# the fit on the host instead (the A/B arm).
+comptime SGD_PS_CHUNK = 2048
+
+
+def _sgd_ps_kernel_body(
+    x: FP, lab: FP, swp: FP, idx: IP, w: FP, q: FP, sqp: FP, part: FP,
+    ps: FP, pt: IP, act: IP, pf: FP, ci: IP, cf: FP, start: Int32, cnt: Int32,
+):
+    """ci: n, d, loss, penalty, lr, fit_intercept, need_obj, one_class, has_sw,
+    has_cw, k, has_sq; cf: alpha, l1_ratio (the penalty's), eta0, power_t,
+    eps, optimal_init, decay_factor; per problem c: pf[3c..] eta, wpos, wneg;
+    ps[4c..] intercept, u, objective; pt[c] t; act[c] 1 while it trains."""
+    var c = Int(block_idx.x)
+    if ldi(act, c) == 0:
+        return
+    var nn = ldi(ci, 0)
+    var d = ldi(ci, 1)
+    var loss = ldi(ci, 2)
+    var penalty = ldi(ci, 3)
+    var lr = ldi(ci, 4)
+    var fi = ldi(ci, 5) != 0
+    var need_obj = ldi(ci, 6) != 0
+    var one_class = ldi(ci, 7) != 0
+    var has_sw = ldi(ci, 8) != 0
+    var has_cw = ldi(ci, 9) != 0
+    var k = ldi(ci, 10)
+    var alpha = ld(cf, 0)
+    var l1_ratio = ld(cf, 1)
+    var eta0 = ld(cf, 2)
+    var power_t = ld(cf, 3)
+    var eps = ld(cf, 4)
+    var optimal_init = ld(cf, 5)
+    var decay_factor = ld(cf, 6)
+    var pa_rate = lr == LR_PA1 or lr == LR_PA2
+    var tid = Int(thread_idx.x)
+    var nt = Int(block_dim.x)
+    var nb = (d + MB_DBLK - 1) // MB_DBLK
+    var need_reg = need_obj and penalty != P_NONE and not pa_rate
+    var ntask = 2 * nb if need_reg else nb
+    var woff = c * d
+    var poff = c * 3 * nb
+    var do_decay = penalty == P_L2 or penalty == P_EN
+    var do_l1 = penalty == P_L1 or penalty == P_EN
+    var intercept = ld(ps, 4 * c)
+    var u = ld(ps, 4 * c + 1)
+    var objective = Float32(0) if Int(start) == 0 else ld(ps, 4 * c + 2)
+    var t = ldi(pt, c)
+    var eta = ld(pf, 3 * c)
+    var wpos = ld(pf, 3 * c + 1)
+    var wneg = ld(pf, 3 * c + 2)
+    for r in range(Int(start), Int(start) + Int(cnt)):
+        var i = ldi(idx, c * nn + r)
+        # A: the blocks
+        for qq in range(tid, ntask, nt):
+            if qq < nb:
+                st(part, poff + qq, mb_block_dot(x, i, d, w, woff, qq))
+            else:
+                var rb = sgd_reg_block(w, woff, d, qq - nb)
+                st(part, poff + qq, rb[0])
+                st(part, poff + nb + qq, rb[1])
+        team_barrier()
+        # B: sgd_one's scalar statements, in every thread
+        var dot = Float32(0)
+        for b in range(nb):
+            dot = fa(dot, ld(part, poff + b))
+        var y = _sgd_target(k, c, ld(lab, i))
+        var p = fa(dot, intercept)
+        if lr == LR_OPTIMAL:
+            eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
+        elif lr == LR_INVSCALING:
+            eta = fd(eta0, identical_pow(i2f(t), power_t))
+        var cur = sgd_loss(loss, y, p, eps)
+        if need_obj:
+            objective = fa(objective, cur)
+            if not pa_rate:
+                if penalty != P_NONE:
+                    var n2 = Float32(0)
+                    var n1 = Float32(0)
+                    for b in range(nb):
+                        n2 = fa(n2, ld(part, poff + nb + b))
+                        n1 = fa(n1, ld(part, poff + 2 * nb + b))
+                    var reg = fa(fm(fm(fs(Float32(1), l1_ratio), Float32(0.5)), n2), fm(l1_ratio, n1))
+                    objective = fa(objective, fm(alpha, reg))
+                if one_class:
+                    objective = fa(objective, fm(intercept, alpha))
+        var skip = False
+        var update = Float32(0)
+        if pa_rate:
+            var sq = ld(sqp, i)
+            if lr == LR_PA1:
+                if sq == 0:
+                    skip = True
+                else:
+                    update = fmin(eta0, fd(cur, sq))
+            else:
+                update = fd(cur, fa(sq, fd(Float32(0.5), eta0)))
+            if not skip:
+                if loss == L_HINGE:
+                    update = fm(update, y)
+                elif fs(y, p) < 0:
+                    update = -update
+        else:
+            var dl = sgd_dloss(loss, y, p, eps)
+            if dl < Float32(-1e12):
+                dl = Float32(-1e12)
+            elif dl > Float32(1e12):
+                dl = Float32(1e12)
+            update = fm(-eta, dl)
+        if not skip:
+            if has_cw or has_sw:
+                var cwv = Float32(1)
+                if has_cw:
+                    cwv = wpos if y > 0 else wneg
+                var swi = ld(swp, i) if has_sw else Float32(1)
+                update = fm(update, fm(cwv, swi))
+            var scale = Float32(1)
+            if do_decay:
+                scale = fmax(Float32(0), fs(Float32(1), fm(decay_factor, eta)))
+            if fi:
+                var iu = update
+                if one_class:
+                    iu = fs(iu, fm(eta, alpha))
+                if iu != 0:
+                    intercept = fa(intercept, iu)
+            if do_l1:
+                u = fa(u, fm(fm(l1_ratio, eta), alpha))
+            # C: the weights, thread j
+            var ixd = i * d
+            for j in range(tid, d, nt):
+                var wj = ld(w, woff + j)
+                if do_decay:
+                    wj = fm(wj, scale)
+                if update != 0:
+                    wj = fmad(update, ld(x, ixd + j), wj)
+                if do_l1:
+                    var qj = ld(q, woff + j)
+                    var nz = _clip_one(wj, fa(u, qj), fs(u, qj))
+                    st(q, woff + j, fa(qj, fs(nz, wj)))
+                    wj = nz
+                st(w, woff + j, wj)
+            t += 1
+        team_barrier()
+    if tid == 0:
+        st(ps, 4 * c, intercept)
+        st(ps, 4 * c + 1, u)
+        st(ps, 4 * c + 2, objective)
+        sti(pt, c, t)
+
+
+def sgd_ps_kernel(
+    x: FP, lab: FP, swp: FP, idx: IP, w: FP, q: FP, sqp: FP, part: FP,
+    ps: FP, pt: IP, act: IP, pf: FP, ci: IP, cf: FP, start: Int32, cnt: Int32,
+    wf: IP, woff: Int32, nonce: Int32,
+):
+    _sgd_ps_kernel_body(x, lab, swp, idx, w, q, sqp, part, ps, pt, act, pf, ci, cf, start, cnt)
+    witness_end(wf, woff, nonce)
+
+
+def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
+                 n_out: Int, res: FP) raises:
+    """The per-sample fit (batch_size 0) on the device: `sgd_fit` with every
+    problem's `sgd_one` as `sgd_ps_kernel` launches; the same words."""
+    var ctx = linear_ctx()
+    var k = Int(ip[0])
+    var loss = Int(ip[1])
+    var penalty = Int(ip[2])
+    var lr = Int(ip[3])
+    var fi = Int(ip[4]) != 0
+    var max_iter = Int(ip[5])
+    var nic = Int(ip[6])
+    var do_shuffle = Int(ip[7]) != 0
+    var seed = (UInt64(UInt32(ip[9])) << 32) | UInt64(UInt32(ip[8]))
+    var has_sw = Int(ip[10]) != 0
+    var has_cw = Int(ip[11]) != 0
+    var alpha = fp[0]
+    var l1_ratio = fp[1]
+    var eta0 = fp[2]
+    var power_t = fp[3]
+    var eps = fp[4]
+    var tol = fp[5]
+    if penalty == P_L2:
+        l1_ratio = Float32(0)
+    elif penalty == P_L1:
+        l1_ratio = Float32(1)
+    var problems = k if k > 2 else 1
+    var one_class = k == 1
+    var pa_rate = lr == LR_PA1 or lr == LR_PA2
+    var need_obj = tol > Float32(-3.0e38)
+    var nb = (d + MB_DBLK - 1) // MB_DBLK
+    var optimal_init = mb_optimal_init(loss, alpha, eps) if lr == LR_OPTIMAL else Float32(0)
+    var decay_factor = fm(fs(Float32(1), l1_ratio), alpha)
+    var chunk = SGD_PS_CHUNK
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+    var dlab = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var dsw = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var didx = ctx.enqueue_create_buffer[DType.int32](max(problems * n, 1))
+    var dw = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
+    var dq = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
+    var dsq = ctx.enqueue_create_buffer[DType.float32](max(n, 1) if pa_rate else 1)
+    var dpart = ctx.enqueue_create_buffer[DType.float32](max(problems * 3 * nb, 1))
+    var dps = ctx.enqueue_create_buffer[DType.float32](4 * problems)
+    var dpt = ctx.enqueue_create_buffer[DType.int32](problems)
+    var dact = ctx.enqueue_create_buffer[DType.int32](problems)
+    var dpf = ctx.enqueue_create_buffer[DType.float32](3 * problems)
+    var dci = ctx.enqueue_create_buffer[DType.int32](12)
+    var dcf = ctx.enqueue_create_buffer[DType.float32](7)
+    var dws = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
+    var dqs = ctx.enqueue_create_buffer[DType.float32](max(problems * d, 1))
+    var dpss = ctx.enqueue_create_buffer[DType.float32](4 * problems)
+    var dpts = ctx.enqueue_create_buffer[DType.int32](problems)
+    var launches = (n + chunk - 1) // chunk
+    var wit = Witness(ctx, max(launches * problems + (_xg_blocks(n) if pa_rate else 0), 1))
+    var hci = List[Int32](length=12, fill=Int32(0))
+    hci[0] = Int32(n)
+    hci[1] = Int32(d)
+    hci[2] = Int32(loss)
+    hci[3] = Int32(penalty)
+    hci[4] = Int32(lr)
+    hci[5] = Int32(1 if fi else 0)
+    hci[6] = Int32(1 if need_obj else 0)
+    hci[7] = Int32(1 if one_class else 0)
+    hci[8] = Int32(1 if has_sw else 0)
+    hci[9] = Int32(1 if has_cw else 0)
+    hci[10] = Int32(k)
+    hci[11] = Int32(1 if pa_rate else 0)
+    var hcf = List[Float32](length=7, fill=Float32(0))
+    hcf[0] = alpha
+    hcf[1] = l1_ratio
+    hcf[2] = eta0
+    hcf[3] = power_t
+    hcf[4] = eps
+    hcf[5] = optimal_init
+    hcf[6] = decay_factor
+    var hidx = List[Int32](length=max(problems * n, 1), fill=Int32(0))
+    var hw = List[Float32](length=max(problems * d, 1), fill=Float32(0))
+    var hps = List[Float32](length=4 * problems, fill=Float32(0))
+    var hpt = List[Int32](length=problems, fill=Int32(1))
+    var hact = List[Int32](length=problems, fill=Int32(1))
+    var hpf = List[Float32](length=3 * problems, fill=Float32(0))
+    var rngs = List[UInt64](length=problems, fill=UInt64(0))
+    var etas = List[Float32](length=problems, fill=eta0)
+    var bests = List[Float32](length=problems, fill=Float32(3.0e38))
+    var no_imp = List[Int](length=problems, fill=0)
+    var epochs = List[Int](length=problems, fill=0)
+    var failed = List[Bool](length=problems, fill=False)
+    for c in range(problems):
+        for i in range(n):
+            hidx[c * n + i] = Int32(i)
+        hps[4 * c] = Float32(1) if one_class else Float32(0)
+        rngs[c] = seed + UInt64(1000003) * UInt64(c)
+        hpf[3 * c + 1] = fp[6 + c] if has_cw else Float32(1)
+        hpf[3 * c + 2] = fp[6 + problems + c] if has_cw else Float32(1)
+    if n_x > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    ctx.enqueue_copy(dst_buf=dlab, src_ptr=y)
+    if has_sw:
+        ctx.enqueue_copy(dst_buf=dsw, src_ptr=y + n)
+    ctx.enqueue_copy(dst_buf=dci, src_ptr=hci.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dcf, src_ptr=hcf.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dps, src_ptr=hps.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=dpt, src_ptr=hpt.unsafe_ptr())
+    dw.enqueue_fill(Float32(0))
+    dq.enqueue_fill(Float32(0))
+    for epoch in range(max_iter):
+        var live = False
+        for c in range(problems):
+            if hact[c] != 0:
+                live = True
+                epochs[c] = epoch + 1
+                if do_shuffle:
+                    shuffle(IP(unsafe_from_address=Int(hidx.unsafe_ptr())) + c * n, n, rngs[c])
+                hpf[3 * c] = etas[c]
+        if not live:
+            break
+        ctx.enqueue_copy(dst_buf=dact, src_ptr=hact.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=dpf, src_ptr=hpf.unsafe_ptr())
+        # the epoch as ONE guarded unit: it updates w, q, the scalar state
+        # and t in place, so a cut epoch restores them and replays
+        ctx.enqueue_copy(dst_buf=dws, src_buf=dw)
+        ctx.enqueue_copy(dst_buf=dqs, src_buf=dq)
+        ctx.enqueue_copy(dst_buf=dpss, src_buf=dps)
+        ctx.enqueue_copy(dst_buf=dpts, src_buf=dpt)
+        var tries = 0
+        while True:
+            var nonce = wit.begin()
+            var wo = 0
+            ctx.enqueue_copy(dst_buf=didx, src_ptr=hidx.unsafe_ptr())
+            if pa_rate:
+                ctx.enqueue_function[sgd_rowsq_kernel](
+                    dx.unsafe_ptr(), Int32(n), Int32(d), dsq.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                    grid_dim=_xg_blocks(n), block_dim=XG_TPB,
+                )
+                wo += _xg_blocks(n)
+            var start = 0
+            while start < n:
+                var cnt = min(chunk, n - start)
+                ctx.enqueue_function[sgd_ps_kernel](
+                    dx.unsafe_ptr(), dlab.unsafe_ptr(), dsw.unsafe_ptr(), didx.unsafe_ptr(), dw.unsafe_ptr(),
+                    dq.unsafe_ptr(), dsq.unsafe_ptr(), dpart.unsafe_ptr(), dps.unsafe_ptr(), dpt.unsafe_ptr(),
+                    dact.unsafe_ptr(), dpf.unsafe_ptr(), dci.unsafe_ptr(), dcf.unsafe_ptr(), Int32(start), Int32(cnt),
+                    wit.p(), Int32(wo), nonce, grid_dim=problems, block_dim=XG_TPB,
+                )
+                wo += problems
+                start += cnt
+            ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=dw)
+            ctx.enqueue_copy(dst_ptr=hps.unsafe_ptr(), src_buf=dps)
+            if wit.ok(ctx, wo, "SGD per-sample epoch"):
+                break
+            tries += 1
+            if tries >= WITNESS_TRIES:
+                wit.fail()
+            ctx.enqueue_copy(dst_buf=dw, src_buf=dws)
+            ctx.enqueue_copy(dst_buf=dq, src_buf=dqs)
+            ctx.enqueue_copy(dst_buf=dps, src_buf=dpss)
+            ctx.enqueue_copy(dst_buf=dpt, src_buf=dpts)
+        ctx.synchronize()
+        for c in range(problems):
+            if hact[c] == 0:
+                continue
+            # sgd_one's floating-point under-/overflow check
+            var intercept = hps[4 * c]
+            var finite = intercept == intercept and fabs(intercept) < Float32(3.0e38)
+            for j in range(d):
+                var wj = hw[c * d + j]
+                if not (wj == wj and fabs(wj) < Float32(3.0e38)):
+                    finite = False
+            if not finite:
+                failed[c] = True
+                hact[c] = 0
+                continue
+            var mean_obj = fd(hps[4 * c + 2], i2f(n))
+            if need_obj and mean_obj > fs(bests[c], tol):
+                no_imp[c] += 1
+            else:
+                no_imp[c] = 0
+            if mean_obj < bests[c]:
+                bests[c] = mean_obj
+            if no_imp[c] >= nic:
+                if lr == LR_ADAPTIVE and etas[c] > Float32(1e-6):
+                    etas[c] = fd(etas[c], Float32(5))
+                    no_imp[c] = 0
+                else:
+                    hact[c] = 0
+    var max_epochs = 0
+    var status = 0
+    for c in range(problems):
+        if failed[c]:
+            status = -1
+            for j in range(d):
+                res.unsafe_store(c * d + j, Float32(0))
+            res.unsafe_store(problems * d + c, Float32(0))
+        else:
+            for j in range(d):
+                res.unsafe_store(c * d + j, hw[c * d + j])
+            res.unsafe_store(problems * d + c, hps[4 * c])
+            if epochs[c] > max_epochs:
+                max_epochs = epochs[c]
+    res.unsafe_store(problems * d + problems, i2f(max_epochs))
+    res.unsafe_store(problems * d + problems + 1, i2f(status))
+    _ = hci^
+    _ = hcf^
+    _ = hidx^
+    _ = hw^
+    _ = hps^
+    _ = hpt^
+    _ = hact^
+    _ = hpf^
+    _ = dx^
+    _ = dlab^
+    _ = dsw^
+    _ = didx^
+    _ = dw^
+    _ = dq^
+    _ = dsq^
+    _ = dpart^
+    _ = dps^
+    _ = dpt^
+    _ = dact^
+    _ = dpf^
+    _ = dci^
+    _ = dcf^
+    _ = dws^
+    _ = dqs^
+    _ = dpss^
+    _ = dpts^
+    _ = wit^
+
+
 def fit_device(
     algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
@@ -651,8 +1069,11 @@ def fit_device(
     if algo == ALGO_SGD and len(ip) > 12 and sgd_mb_on(Int(ip[12]), Int(ip[0]), Int(ip[3])):
         _sgd_mb_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
-    if algo == ALGO_SGD and _sgd_on_host():
-        _fit_on_host(algo, x, y, n, d, ip, fp, n_out, n_fw, n_iw, res)
+    if algo == ALGO_SGD:
+        if _sgd_on_host():
+            _fit_on_host(algo, x, y, n, d, ip, fp, n_out, n_fw, n_iw, res)
+        else:
+            _sgd_ps_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
     var ctx = linear_ctx()
     comptime if X_LINEAR_BLOCKS:
