@@ -17,6 +17,7 @@ Reference: scikit-learn `sklearn/linear_model/_bayes.py`:
 Centering (fit_intercept) is their `_preprocess_data`: column means and the
 target mean, rows ascending. float32 throughout.
 """
+from std.sys.compile import is_defined
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, ld, st, ldi, sti, i2f, fill, copy,
     cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
@@ -24,7 +25,7 @@ from x_linear.ops import (
 )
 from std.sys.info import is_gpu
 from x_linear.team import Team
-from x_linear.tops import upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad
+from x_linear.tops import t_cholesky, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad, t_jacobi_eig
 
 
 def _center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, iw: IP) -> Float32:
@@ -196,7 +197,10 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
                 if t.lead():
                     fill(fw, xm, d, Float32(0))
                 t.sync()
-            t_centered_gram(t, x, n, d, fw, xm, fw, gg)
+            # ip[4] (device only, lane/neural-pass87): 1 when x_linear/device.mojo's
+            # grid kernels already wrote this centered Gram into fw[gg, gg + d*d)
+            if ldi(ip, 4) == 0:
+                t_centered_gram(t, x, n, d, fw, xm, fw, gg)
         var yc = ym
         # X'y on centered data
         for j in range(t.tid, d, t.nt):
@@ -241,8 +245,8 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
             else:
                 axpy_centered(fw, xty, b, x, i * d, fw, xm, d)
     var alpha = ld(fp, 5)
+    t_jacobi_eig(t, fw, gg, fw, vv, d, 60)
     if t.lead():
-        jacobi_eig(fw, gg, fw, vv, d, 60)
         for j in range(d):
             var ev = ld(fw, gg + j * d + j)
             st(fw, tmp + j, fmax(Float32(0), ev))
@@ -343,6 +347,76 @@ def _ard_sigma(d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Floa
     return dk
 
 
+comptime ARD_TEAM_MIN = 32
+
+
+def _t_ard_sigma(t: Team, d: Int, fw: FP, gg: Int, aa: Int, sg: Int, lamo: Int, alpha: Float32, iw: IP, keep: Int) -> Int:
+    """`_ard_sigma` on the team (lane/neural-pass86, 2026-10-01): the kept
+    list on the lead, the rows of diag(lambda) + alpha G split across the
+    team, the Cholesky by `t_cholesky`, then the dk columns of the inverse,
+    each its own `chol_solve` reading only the factor, split across the team.
+    Every word is `_ard_sigma`'s. On the device the whole of it ran on the
+    lead thread every iteration (ARD at 220 features: about 57 ms an
+    iteration on the M4's GPU). `-D MOJOLEARN_X_LINEAR_ARD_LEAD=1` restores
+    the lead-only call."""
+    comptime if is_defined["MOJOLEARN_X_LINEAR_ARD_LEAD"]():
+        var dk0 = 0
+        if t.lead():
+            dk0 = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+        t.sync()
+        return dk0
+    if t.nt <= 1:
+        return _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+    # below ARD_TEAM_MIN features the column barriers of `t_cholesky` cost
+    # more than the lead's serial factor (ARD taxi, 11 features: 32.6 to
+    # 36.7 ms on the L40S); the lead runs `_ard_sigma`, the same words
+    if d < ARD_TEAM_MIN:
+        var dk1 = 0
+        if t.lead():
+            dk1 = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+        return t.bcast_int(dk1, 0)
+    var dk = 0
+    if t.lead():
+        for j in range(d):
+            if ldi(iw, keep + j) != 0:
+                sti(iw, keep + d + dk, j)
+                dk += 1
+    dk = t.bcast_int(dk, 0)
+    for a in range(t.tid, dk, t.nt):
+        var ja = ldi(iw, keep + d + a)
+        for b in range(dk):
+            var jb = ldi(iw, keep + d + b)
+            var v = fm(alpha, ld(fw, gg + ja * d + jb))
+            if a == b:
+                v = fa(v, ld(fw, lamo + ja))
+            st(fw, aa + a * dk + b, v)
+    t.sync()
+    _ = t_cholesky(t, fw, aa, dk)
+    for c in range(t.tid, dk, t.nt):
+        for r in range(dk):
+            st(fw, sg + c * dk + r, Float32(1) if r == c else Float32(0))
+        chol_solve(fw, aa, dk, fw, sg + c * dk)
+    t.sync()
+    return dk
+
+
+def _t_ard_coef(t: Team, d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
+    """`_ard_coef` with its dk outputs split across the team (each its own
+    chain over b ascending); the same words."""
+    if t.nt <= 1:
+        _ard_coef(d, dk, fw, sg, xty, alpha, iw, keep, res)
+        return
+    for j in range(t.tid, d, t.nt):
+        st(res, j, Float32(0))
+    t.sync()
+    for a in range(t.tid, dk, t.nt):
+        var acc = Float32(0)
+        for b in range(dk):
+            acc = fmad(ld(fw, sg + b * dk + a), ld(fw, xty + ldi(iw, keep + d + b)), acc)
+        st(res, ldi(iw, keep + d + a), fm(alpha, acc))
+    t.sync()
+
+
 def _ard_coef(d: Int, dk: Int, fw: FP, sg: Int, xty: Int, alpha: Float32, iw: IP, keep: Int, res: FP):
     fill(res, 0, d, Float32(0))
     for a in range(dk):
@@ -385,7 +459,9 @@ def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             if t.lead():
                 fill(fw, xm, d, Float32(0))
             t.sync()
-        t_centered_gram(t, x, n, d, fw, xm, fw, gg)
+        # ip[4] (device only, lane/neural-pass87): the grid's Gram is already in fw
+        if ldi(ip, 4) == 0:
+            t_centered_gram(t, x, n, d, fw, xm, fw, gg)
         t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
     else:
         ym = _center(x, y, n, d, fi, fw, xm, iw)
@@ -403,11 +479,8 @@ def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     var any_kept = True
     for it in range(max_iter):
         iters = it + 1
-        var dk = 0
-        if t.lead():
-            dk = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
-            _ard_coef(d, dk, fw, sg, xty, alpha, iw, keep, res)
-        t.sync()
+        var dk = _t_ard_sigma(t, d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+        _t_ard_coef(t, d, dk, fw, sg, xty, alpha, iw, keep, res)
         var sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, False, fw + 3 * d * d + 4 * d)
         var stop = 0
         if t.lead():
@@ -440,12 +513,14 @@ def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
         alpha = t.bcast(alpha, 2)
         if t.bcast_int(stop, 3) == 1:
             break
+    # the lead's any_kept (the other threads never computed it)
+    any_kept = t.bcast_int(1 if any_kept else 0, 0) == 1
+    if any_kept:
+        var dk = _t_ard_sigma(t, d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+        _t_ard_coef(t, d, dk, fw, sg, xty, alpha, iw, keep, res)
     if not t.lead():
         return
-    if any_kept:
-        var dk = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
-        _ard_coef(d, dk, fw, sg, xty, alpha, iw, keep, res)
-    else:
+    if not any_kept:
         fill(res, 0, d, Float32(0))
     st(res, d, _intercept(d, fw, xm, ym, res, 0) if fi else Float32(0))
     st(res, d + 1, alpha)
