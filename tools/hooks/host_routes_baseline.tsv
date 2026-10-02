@@ -543,7 +543,6 @@ host-env	host-env/threshold	hr-graph	debt	python/mojolearn/_expansion_neighbors.
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_neighbors.py	0	members = [rows[i] for i in range(n) if codes[i] == c]
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_neighbors.py	0	rows = [i for i in range(n) if w[i] > 0]
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_neighbors.py	0	ys = [[0.0] * C if unl[i] else ld0[i] for i in range(n)]
-route-switch	host-env/threshold	hr-graph	debt	python/mojolearn/_expansion_neighbors.py	0	_PR_SPARSE = os.environ.get("MOJOLEARN_PR_SPARSE", "1") != "0"
 py-loop	py-numpy	gap-prep2/gap-nb-maxabs-grp	debt	python/mojolearn/_expansion_prep.py	0	for i in range(n):
 py-loop	py-numpy	gap-prep2/gap-nb-maxabs-grp	debt	python/mojolearn/_expansion_prep.py	0	if sorted(idx(train)) != [i for i in range(n) if fold[i] != k]:
 py-loop	py-numpy	gap-prep2/gap-nb-maxabs-grp	debt	python/mojolearn/_expansion_prep.py	0	mis = [i for i in range(n) if mask[i][j]]
@@ -922,12 +921,10 @@ host-threads	host-threads	PR#106	debt	x_neighbors/items.mojo	0	host_parallelize(
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	_down(ctx, d_a, ld, nc)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	_down(ctx, d_a, res, cells)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	_down(ctx, d_a, x, n)
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	1	_down(ctx, d_a, x, n)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	_down(ctx, d_b, bmat, m * m)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	_down(ctx, d_b, ld, nc)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	_down(ctx, d_b, res, cells)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	_down(ctx, d_b, x, n)
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	1	_down(ctx, d_b, x, n)
 host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/iter_device.mojo	0	_down(ctx, d_bh, bh, m * m)
 host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/iter_device.mojo	0	_down(ctx, d_bl, bl, m * m)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	_down(ctx, d_bv, bvec, m)
@@ -949,21 +946,18 @@ host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neig
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/cc_sparse.mojo:cc_iterate_sparse
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/device_ops.mojo:_buf
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/device_ops.mojo:_down
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	import x_neighbors/pr_sparse.mojo:pr_graph_from_dense
 host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/iter_device.mojo	0	import x_neighbors/svgp_ff.mojo:svgp_ff_solve
 host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/iter_device.mojo	0	svgp_ff_solve(FP(unsafe_from_address=kuu), FP(unsafe_from_address=bh), FP(unsafe_from_address=bl),
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_a = _buf(ctx, 0, n * nc, False)
 host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	var d_a = _buf(ctx, a, n * n, True)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_a = _buf(ctx, ld, nc, True)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_a = _buf(ctx, x, n, True)
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	1	var d_a = _buf(ctx, x, n, True)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_al = _buf(ctx, alpha, m, True)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_al = _buf(ctx, alphas, nf * c, True)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_all = _buf(ctx, fit_all, 1, True)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_b = _buf(ctx, 0, m * m, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_b = _buf(ctx, 0, n * nc, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_b = _buf(ctx, 0, n, False)
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	1	var d_b = _buf(ctx, 0, n, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_b = _buf(ctx, 0, nc, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_bd = _buf(ctx, 0, n * d * k, False)
 host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/iter_device.mojo	0	var d_bh = _buf(ctx, 0, m * m, False)
@@ -973,10 +967,8 @@ host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_c = _bu
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_cent = _buf(ctx, cent, n_classes * d, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_cols = _buf(ctx, fit_cols, nf, True)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_dist = _buf(ctx, 0, n * k, False)
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_ds = _buf(ctx, 0, 1, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_dsc = _buf(ctx, dsc, d, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_dw = _buf(ctx, dw, n, True)
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	1	var d_dw = _buf(ctx, dw, n, True)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_fx = _buf(ctx, fitx, 0 if pre else nf * d, not pre)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_fx = _buf(ctx, fx, m * d, True)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_g = _buf(ctx, g, n * n, True)
@@ -992,7 +984,6 @@ host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_mean = _buf(ctx, 0, n, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_nxt = _buf(ctx, 0, nc, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_p = _buf(ctx, p, n, True)
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	1	var d_p = _buf(ctx, p, n, True)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_pr = _buf(ctx, 0, tr, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_q = _buf(ctx, q, n * d, True)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	1	var d_q = _buf(ctx, q, n * d, True)
@@ -1004,10 +995,8 @@ host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_res = _
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_rs = _buf(ctx, 0, tr, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_s = _buf(ctx, 0, 1, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	1	var d_s = _buf(ctx, 0, 1, False)
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	2	var d_s = _buf(ctx, 0, 1, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_sk = _buf(ctx, 0, n * degree * nc, False)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_std = _buf(ctx, std, d, False)
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_vals = _buf(ctx, Int(g.vals.unsafe_ptr()), g.nnz, True)
 host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var d_var = _buf(ctx, 0, n, False)
 host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/iter_device.mojo	0	var d_vh = _buf(ctx, 0, m, False)
 host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/iter_device.mojo	0	var d_vl = _buf(ctx, 0, m, False)
@@ -1028,20 +1017,14 @@ host-call	host-import	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x
 host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	var dr = _buf(ctx, 0, n * c, False)
 host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	var dv = _buf(ctx, vals, n * k, True)
 host-call	host-import	UNOWNED	debt	x_neighbors/iter_device.mojo	0	var dx = _buf(ctx, x, m * c, True)
-host-call	host-import	hr-graph	debt	x_neighbors/iter_device.mojo	0	var g = pr_graph_from_dense(FP(unsafe_from_address=a), n, binary != 0)
 host-env	host-env/threshold	hr-small-passes	debt	x_neighbors/iter_device.mojo	0	comptime if is_defined["MOJOLEARN_XN_CC_HOST"]():
 route-switch	host-env/threshold	UNOWNED	debt	x_neighbors/iter_device.mojo	0	comptime if not is_defined["MOJOLEARN_XN_CC_GPU"]():
 serial-launch	serial-gpu	hr-graph	debt	x_neighbors/iter_device.mojo	0	ctx.enqueue_function[absdiff_sum_kernel](
-serial-launch	serial-gpu	hr-graph	debt	x_neighbors/iter_device.mojo	1	ctx.enqueue_function[absdiff_sum_kernel](
-serial-launch	serial-gpu	hr-graph	debt	x_neighbors/iter_device.mojo	0	ctx.enqueue_function[pr_dangling_sum_kernel](
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	import x_neighbors/device_ops.mojo:_buf
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_g = _buf(ctx, g, n * n, True)
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_nxt = _buf(ctx, 0, nc, False)
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_ring = _buf(ctx, 0, (LP_BATCH + 1) * nc, False)
 host-call	host-import	UNOWNED	debt	x_neighbors/lp_batched.mojo	0	var d_ys = _buf(ctx, ystatic, nc, True)
-host-threads	host-threads	hr-graph	debt	x_neighbors/pr_sparse.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	hr-graph	debt	x_neighbors/pr_sparse.mojo	0	host_parallelize(_count, tasks)
-host-threads	host-threads	hr-graph	debt	x_neighbors/pr_sparse.mojo	0	host_parallelize(_fill, tasks)
 host-threads	host-threads	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/svgp_ff.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/svgp_ff.mojo	0	host_parallelize(column, m)
 host-threads	host-threads	PR#106	inflight@e2128048602c358e3a3c402fc70ea718c7a01d64	x_neighbors/svgp_ff.mojo	0	host_parallelize(tcol, m)
