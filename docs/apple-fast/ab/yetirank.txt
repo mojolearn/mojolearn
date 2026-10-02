@@ -1,0 +1,2 @@
+CMD lane/apple-fast-yetirank yeti-scoregrid AFT_OUT=$HOME/aft-ab/yeti-scoregrid bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 2 "" "-D MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID=1"
+CMD lane/apple-fast-yetirank yeti-h8unroll AFT_OUT=$HOME/aft-ab/yeti-h8unroll bash tools/aft_ab.sh gbdt gbdt-rank-yetirank istellarank 2 "-D MOJOLEARN_SYM_HIST_FAST=1" "-D MOJOLEARN_SYM_HIST_FAST=1 -D MOJOLEARN_YETI_SYM_HIST_UNROLL8=1"
