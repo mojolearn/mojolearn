@@ -1,11 +1,12 @@
 # lane/apple-fast-decomp-sparse: the decomp lane's sparse, manifold, covariance and projection rows (FAST on Apple)
 
 Written without a Mojo toolchain (cloud peer); the first M3 build is the compile check
-(bindings/build_x_decomp.sh FAST, and x_neighbors for the Isomap switch).
-Every switch is a host env read at dispatch, defaults OFF, and runs under FAST on Apple only:
-the Mojo ones behind `comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE`
-(x_decomp/device.mojo), the Python ones behind `_decomp_fast_on` (kit mode `fast` and a Metal binding).
-IDENTICAL compiles and runs the old code.
+(bindings/build_x_decomp.sh FAST, each define through MOJOLEARN_MOJO_BUILD_FLAGS as tools/afc_ab_def.sh does).
+Every switch is a `-D` build define, default off, compiled only under `XD_FAST_APPLE` (x_decomp/device.mojo:
+`GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()`); the Python one learns the build's defines
+from the binding (`x_decomp_fast_defines` in x_decomp/api.mojo, `_kit_fast_define` in
+python/mojolearn/_expansion_decomp.py, asked once per kit), so nothing reads an env variable.
+IDENTICAL compiles and runs main's code unchanged. Merged with origin/main (98f0ff53e).
 
 M3 Ultra board 0831 (ours FAST ms / scikit-learn ms): sparse-coder Istella 6,669 / 29 (228x), taxi 4,995 / 42;
 gaussian-rp Istella 136 / 24, sparse-rp 135 / 25; mb-sparse-pca Istella 9,817 / 2,006; mb-dict-learning
@@ -15,13 +16,16 @@ isomap and classical-mds: no M3 row.
 
 | switch | kind | site | lanes | what it changes under FAST on Apple |
 |---|---|---|---|---|
-| `MOJOLEARN_DECOMP_FAST_OMP_BLOCK=1` | env (Mojo) | `x_decomp/device.mojo` DevExec.omp_rows -> `x_decomp/apple_fast.mojo` omp_block_kernel | sparse-coder | one threadgroup (128 threads) per row: a thread per atom for the residual correlations, a fold on (value, index) for the pick (ties to the LOWER atom, the scan's pick), the Cholesky row and the two solves on thread 0 in threadgroup memory. Replaces `omp_rows_kernel`: one thread per row with a k*k + 3k float scratch strip in a device buffer of n times that (1.7 GB at 100,000 rows x 64 atoms). Bound: k <= 128, nnz <= 32, else the old kernel. |
-| `MOJOLEARN_DECOMP_FAST_LASSO_BLOCK=1` | env (Mojo) | `x_decomp/device.mojo` DevExec.lasso_rows -> `lasso_block_kernel` | dict-learning, mb-dict-learning (fit and lasso_cd transform), sparse-pca, mb-sparse-pca | one simdgroup per row: G, w, q, h in threadgroup memory; every thread computes the coordinate update, thread l applies it to h[l]. Replaces `lasso_rows_kernel` / `lasso_row` (x_decomp/cells.mojo:539): one thread per row, each coordinate a k-long read-modify-write of the row's h strip in global memory, rows 4k bytes apart. Bound: k <= 32. |
-| `MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2=1` | env (Mojo) | `x_decomp/device.mojo` DevExec.eigh | fastica (and every kit eigh of order <= 64: MinCovDet's pinvh at taxi's p = 11 when it runs on the device executor) | an eigh of order <= 64 takes `_eigh2` (one launch of the cyclic jacobi2 kernel, one readback) instead of `_eigh_par`: n - 1 rounds of two launches per sweep and a host readback of the off-diagonal norm before each sweep (FastICA's 8 x 8 symmetric decorrelation, every one of up to 200 iterations: ~130 launches and ~16 syncs for 28 rotations). |
-| `MOJOLEARN_DECOMP_FAST_DICT_UPDATE=1` | env (Python) | `python/mojolearn/_expansion_decomp.py` `_update_dict` -> `_update_dict_resident` | dict-learning, mb-dict-learning, sparse-pca, mb-sparse-pca | the atom loop on resident matrices: row j's update as a masked row of B^T - A D (one GEMM, a one-hot column), divided by A[j, j], added, row j alone renormalized through a select on the one-hot; 11 launches an atom, no sync. Replaces the loop that downloads every row of D (`_vstack(*rows)`), a column of B and a row of A per atom (~20 syncs an atom; 16 atoms x 100 iterations for dict-learning, 16 x 3,910 steps for mb-dict-learning). Falls back to the loop for an unused atom (A[j,j] <= 1e-6, a host Philox resample) and for positive_dict. |
-| `MOJOLEARN_DECOMP_FAST_RP_DIRECT=1` | env (Python) | `_RandomProjection.transform` -> `_input_resident` | gaussian-rp, sparse-rp | the input is uploaded to a resident matrix from its own float32 C-order buffer; `_M.from_input`'s `array.array` copy of every row (880 MB at 1M x 220) is not made. Same shape and finiteness refusals (the host `all_finite` helper). |
-| `MOJOLEARN_DECOMP_FAST_MDS_DIAG=1` | env (Python) | `MDS._single` | mds | the Guttman matrix's diagonal (its row sums) added on the device as `fma(eye, rs, B)` with a resident identity built once; replaces `B.copy()` (download of the n x n), n float adds in Python and the re-upload, every one of up to 300 iterations (2 x 100 MB and 5,000 Python steps an iteration at the lane's 5,000 rows). |
-| `MOJOLEARN_DECOMP_FAST_ISOMAP_KNN=1` | env (Python) | `Isomap.fit` -> `_knn_lists_xn` | isomap | the kNN graph (euclidean) through the neighbors lane's fused device k-NN (`_XNeighbors._knn_sq`, x_neighbors knn_sq_tiled, used as-is: distances and the k smallest per row by (value, index), the row's own index dropped) instead of `_knn_lists`: the n x n distance matrix downloaded and `heapq.nsmallest` over every row in Python (1e8 key calls at 10,000 rows). |
+| `MOJOLEARN_DECOMP_FAST_OMP_BLOCK` | define (Mojo) | `x_decomp/device.mojo` DevExec.omp_rows -> `x_decomp/apple_fast.mojo` omp_block_kernel | sparse-coder | one threadgroup (128 threads) per row: a thread per atom for the residual correlations, a fold on (value, index) for the pick (ties to the LOWER atom, the scan's pick), the Cholesky row and the two solves on thread 0 in threadgroup memory. Replaces `omp_rows_kernel`: one thread per row with a k*k + 3k float scratch strip in a device buffer of n times that (1.7 GB at 100,000 rows x 64 atoms). Bound: k <= 128, nnz <= 32, else the old kernel. |
+| `MOJOLEARN_DECOMP_FAST_LASSO_BLOCK` | define (Mojo) | `x_decomp/device.mojo` DevExec.lasso_rows -> `lasso_block_kernel` | dict-learning, mb-dict-learning (fit and lasso_cd transform), sparse-pca, mb-sparse-pca | one simdgroup per row: G, w, q, h in threadgroup memory; every thread computes the coordinate update, thread l applies it to h[l]. Replaces `lasso_rows_kernel` / `lasso_row` (x_decomp/cells.mojo:539): one thread per row, each coordinate a k-long read-modify-write of the row's h strip in global memory, rows 4k bytes apart. Bound: k <= 32. |
+| `MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2` | define (Mojo) | `x_decomp/device.mojo` DevExec.eigh | fastica (and every kit eigh of order <= 64: MinCovDet's pinvh at taxi's p = 11 when it runs on the device executor) | an eigh of order <= 64 takes `_eigh2` (one launch of the cyclic jacobi2 kernel, one readback) instead of `_eigh_par`: n - 1 rounds of two launches per sweep and a host readback of the off-diagonal norm before each sweep (FastICA's 8 x 8 symmetric decorrelation, every one of up to 200 iterations: ~130 launches and ~16 syncs for 28 rotations). |
+| `MOJOLEARN_DECOMP_FAST_DICT_UPDATE` | define (Python, read from the binding) | `python/mojolearn/_expansion_decomp.py` `_update_dict` -> `_update_dict_resident` | dict-learning, mb-dict-learning, sparse-pca, mb-sparse-pca | the atom loop on resident matrices: row j's update as a masked row of B^T - A D (one GEMM, a one-hot column), divided by A[j, j], added, row j alone renormalized through a select on the one-hot; 11 launches an atom, no sync. Replaces the loop that downloads every row of D (`_vstack(*rows)`), a column of B and a row of A per atom (~20 syncs an atom; 16 atoms x 100 iterations for dict-learning, 16 x 3,910 steps for mb-dict-learning). Falls back to the loop for an unused atom (A[j,j] <= 1e-6, a host Philox resample) and for positive_dict. |
+
+Dropped at the merge, main's replacement does what they did: MOJOLEARN_DECOMP_FAST_RP_DIRECT (main's
+`_RandomProjection._project`, MOJOLEARN_XD_RP_TILED default on: X uploaded from its own buffer, a tiled
+`x_decomp_dev_project`, one download), MOJOLEARN_DECOMP_FAST_MDS_DIAG (main's MDS adds the Guttman diagonal on the
+device by default, `k.diag_mask` + fma, lane hr2-mds-agglo) and MOJOLEARN_DECOMP_FAST_ISOMAP_KNN (main's Isomap builds
+the kNN graph on the device, `_graph` / `graph_knn`, and `_knn_lists` selects beside D on the device).
 
 Cause summary, per lane (the whole FAST fit path read; `_RES_MIN` = 1, so every kit `ew`/`mm`/`rowsum` is a
 resident launch and every `.s`, `.copy()`, `.T`, `.rows/.cols`, `_vstack` is a download and a sync):
@@ -36,15 +40,15 @@ resident launch and every `.s`, `.copy()`, `.T`, `.rows/.cols`, `_vstack` is a d
   `k.svd(X.T)` (QR + one-sided Jacobi of the n x 220, stays); the final `est._encode` is one lasso_rows call.
 - fastica: per iteration ~14 resident launches, one `lim` readback (stays: the stop rule), and the 8 x 8
   `_sym_decorrelation` eigh at ~130 launches + ~16 syncs through `_eigh_par` (fixed by the small-eigh switch).
-- mds: `B.copy()` + Python diagonal per iteration (fixed); `stress` and `ssd` scalar readbacks (stay).
-- isomap: kNN in Python heapq over the downloaded n x n (fixed); `Wg` built on the host and `dijkstra_arcs`
+- mds: `B.copy()` + Python diagonal per iteration (fixed on main: `diag_mask` + fma); `stress` and `ssd` scalar readbacks (stay).
+- isomap: kNN in Python heapq over the downloaded n x n (fixed on main: the graph built on the device); `Wg` built on the host and `dijkstra_arcs`
   (x_decomp/cells.mojo:765) a serial O(n^2) host pass (~0.2 s at 10,000; stays); `dijkstra_row` one thread
   per source with a binary heap in global memory (stays, see below); `_fix_components` host walk over the
   adjacency lists (cheap); `_lanczos_top` (see classical-mds).
 - classical-mds: `sqdist` + `_center_kernel` resident; `_lanczos_top`: every Lanczos step rebuilds the basis
   `_M(QT[:], j + 1, n)` on the host and uploads it twice (j x n floats), a `.s` download of q, and each
   restart runs `k.eigh` on the j x j tridiagonal T (j up to 600) through `_eigh_par`; see below.
-- gaussian-rp / sparse-rp: fit draws kc x d on the device (tiny); transform = `from_input` copy (fixed) +
+- gaussian-rp / sparse-rp: fit draws kc x d on the device (tiny); transform = `from_input` copy (fixed on main: `_project`) +
   upload + one GEMM (MAX matmul under FAST: the tier family's `MOJOLEARN_APPLE_FAST_GEMM_NT_TILED` covers
   it) + download of n x 10.
 - min-cov-det / elliptic-envelope: `x_decomp/mcd.mojo` fast_mcd drives 333 subsets x 10 trials x 2 C-steps
@@ -81,9 +85,18 @@ Not done (shape and cost estimate), for the local session or a next lane:
 5. The host-address entries `lasso_rows` / `omp_rows` (x_decomp/api.mojo) upload G, Q, W and download W
    each call: a resident form (`dev_lasso_rows`, as `dev_lda_rows` is) saves 3 uploads + 2 downloads per
    `_sparse_encode` (3,910 calls for mb-dict-learning). ~40 lines of binding + Python.
-6. gaussian-rp / sparse-rp: after the direct upload the clock is upload (880 MB) + GEMM + download; the
-   GEMM is the tier family's; nothing else of ours is in it.
+6. gaussian-rp / sparse-rp: on main the transform is `x_decomp_dev_project` (X uploaded from its own buffer,
+   C = X W^T by 64 x 16 tiles through shared memory, one download): upload (880 MB at 1M x 220) + the tiled
+   product + download, all on the device; nothing of this lane is left in it. Whether that closes the M3 gap
+   (gaussian-rp taxi 3.7x, Istella 2.4x on the 0834 board, measured before main's kernel landed) is a board
+   re-run of main, not an A/B of this branch.
 
 Keep rule: a switch becomes the FAST default when its arm is faster on the M3 and held-out quality (the
 lane's board quality column) stays within FAST's run-to-run spread; then the env read goes and the arm
-is the code. `AFC_ARM=ours` lines are the IDENTICAL baselines of the changed lanes at this head.
+is the code.
+
+Risky compile sites (no toolchain here): x_decomp/api.mojo `fast_defines_py` (nested `comptime if` on
+`is_defined[...]()`, `String +=`), x_decomp/device.mojo `comptime XD_FAST_APPLE` (`has_apple_gpu_accelerator`, the tier
+branch's idiom), x_decomp/apple_fast.mojo `omp_block_kernel` / `lasso_block_kernel` (SHARED `stack_allocation`
+strips, the `ns`-bounded in-block Cholesky on thread 0) and `_eigh2_on`, and the `_eigh2` route's single readback.
+Request lines: docs/apple-fast/ab/decomp-sparse.txt (light form: one dataset per change, afc_ab_def.sh, binding x_decomp).
