@@ -10,7 +10,7 @@ from bindings.hostptr import copy_f32
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_stats_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_item, louvain_item, svgp_item, svgp_var_item
+from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_item, louvain_item, svgp_item, svgp_var_item
 from x_neighbors.louvain_sparse import louvain_item_sparse
 from x_neighbors.block_ops import ocsvm_smo_block, OCSVM_TPB
 
@@ -767,40 +767,6 @@ def op_nc_std(x: Int, lab: Int, cent: Int, std: Int, n: Int, d: Int, n_classes: 
     _ = d_lab^
     _ = d_cent^
     _ = d_std^
-    _ = ctx^
-
-
-def nc_stats_kernel(x: FP, lab: IP, nk: FP, cent: FP, std: FP, dsc: FP, n_: Int64, d_: Int64, n_classes_: Int64):
-    var n = Int(n_)
-    var d = Int(d_)
-    var n_classes = Int(n_classes_)
-    var t = _tid()
-    if t < d:
-        nc_stats_item(t, x, lab, nk, cent, std, dsc, n, d, n_classes)
-
-
-def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int, d: Int, n_classes: Int) raises:
-    var ctx = xn_ctx()
-    var d_x = _buf(ctx, x, n * d, True)
-    var d_lab = _buf_i(ctx, lab, n, True)
-    var d_nk = _buf(ctx, nk, n_classes, True)
-    var d_cent = _buf(ctx, cent, n_classes * d, False)
-    var d_std = _buf(ctx, std, d, False)
-    var d_dsc = _buf(ctx, dsc, d, False)
-    ctx.enqueue_function[nc_stats_kernel](
-        d_x.unsafe_ptr(), d_lab.unsafe_ptr(), d_nk.unsafe_ptr(), d_cent.unsafe_ptr(), d_std.unsafe_ptr(), d_dsc.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes),
-        grid_dim=_grid(d), block_dim=(BLOCK if d > 1 else 1),
-    )
-    _down(ctx, d_cent, cent, n_classes * d)
-    _down(ctx, d_std, std, d)
-    _down(ctx, d_dsc, dsc, d)
-    ctx.synchronize()
-    _ = d_x^
-    _ = d_lab^
-    _ = d_nk^
-    _ = d_cent^
-    _ = d_std^
-    _ = d_dsc^
     _ = ctx^
 
 
