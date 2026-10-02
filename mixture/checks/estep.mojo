@@ -80,6 +80,7 @@ from std.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
+from std.os import getenv
 from std.math import exp as fast_exp, log as fast_log
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -1034,6 +1035,22 @@ def gmm_e_step(
             and sabotage == GMM_SAB_NONE
             and n * ncomp * d <= GMM_ESTEP_STACK_MAX_FLOATS
         )
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator():
+        # lane/apple-fast-linear (2026-10-02): MOJOLEARN_GMM_FAST_ESTEP_STACK=1
+        # takes the stacked form under FAST too, where it was IDENTICAL-only
+        # (GMM_ESTEP_STACK). Cause: past the fused kernel's d <= 32 (Istella
+        # is 100,000 x 200, K = 8) the FAST E-step is K GEMMs of X . P_k
+        # (n x d by d x d, MAX's matmul) and K `mahal_kernel` launches, each
+        # writing and re-reading an n x d scratch; stacked it is one GEMM
+        # against [P_1 .. P_K] (d x K d) and one fold a (row, component).
+        if (
+            not fused
+            and not stacked
+            and sabotage == GMM_SAB_NONE
+            and n * ncomp * d <= GMM_ESTEP_STACK_MAX_FLOATS
+            and String(getenv("MOJOLEARN_GMM_FAST_ESTEP_STACK")) == "1"
+        ):
+            stacked = True
     if stacked:
         var kd = ncomp * d
         var pstack = ctx.enqueue_create_buffer[DType.float32](d * kd)

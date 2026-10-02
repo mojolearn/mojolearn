@@ -122,7 +122,8 @@ from std.math import log, sqrt
 from std.sys.compile import is_defined
 from std.os import getenv
 from std.time import perf_counter_ns
-from std.sys.info import has_apple_gpu_accelerator
+from std.sys.info import has_apple_gpu_accelerator, is_apple_gpu
+from std.sys import llvm_intrinsic
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -858,6 +859,278 @@ def fused_precision_cholesky_kernel(
         log_det_chol.unsafe_store(k, -sl)
 
 
+# ===========================================================================
+# lane/apple-fast-linear (2026-10-02): THE ISTELLA SHAPE (d = 200, K = 8)
+# ===========================================================================
+#
+# Two host env switches, FAST + Apple only, default off. Both arms above
+# (`fused_cov_partial_kernel`, `fused_precision_cholesky_kernel`) stop at
+# d = 32 (taxi, d = 16, takes them); Istella's 100,000 x 200 falls to:
+#
+#   MOJOLEARN_GMM_FAST_GRID_COV=1   the covariances. Cause: `gmm_m_step`'s
+#       per-component loop, `center_scale_kernel` (an n x d `diff` and an
+#       n x d `scaled` written per component) and `identical_gemm_into(...,
+#       d, d, n, OP_TN)`, which under FAST is MAX's matmul at M = N = 200,
+#       K = 100,000 -- 16 output tiles, no split-K on Apple
+#       (`core/gram_splitk.mojo` refuses d > 128) -- eight times an
+#       iteration. Here ONE launch over (component, 8192-row chunk, 32 x 32
+#       tile pair) stages sqrt(resp_ik) (x_i - mu_k) straight from X, 4 cells
+#       a thread, and a second launch folds the chunks, divides by nk and
+#       adds reg_covar (`cov_finish_kernel`'s values).
+#
+#   MOJOLEARN_GMM_FAST_BIG_CHOL=1   the precision Cholesky. Cause:
+#       `gmm_precision_cholesky`'s per-component chain at d > 32: a copy,
+#       `potrf_lower` at CHOL_NB_PINNED = 32 (seven panels, each reading
+#       `info` home), `chol_logdet` (a readback), `set_identity`, `trsm_lower`
+#       (d right-hand sides), a transpose -- some ten drains a component,
+#       eighty an iteration, each one serialising the queue. Here every
+#       component is one block of `gmm_big_chol_kernel`, the fused kernel's
+#       algorithm with the matrix in device memory (its own `chol_l` slot)
+#       behind a device-memory barrier, and ONE readback of the pivot flags.
+#       d <= GMM_CHOL_TPB (a thread per column of L^{-1}).
+
+
+@always_inline
+def _gmm_dev_barrier():
+    """A block barrier that also orders DEVICE memory (Apple's `barrier()`
+    orders threadgroup memory only; x_linear/team.mojo `team_barrier`)."""
+    comptime if is_apple_gpu():
+        llvm_intrinsic["llvm.air.wg.barrier", NoneType](Int32(3), Int32(1))
+    else:
+        barrier()
+
+
+def _gmm_grid_cov_on() -> Bool:
+    return String(getenv("MOJOLEARN_GMM_FAST_GRID_COV")) == "1"
+
+
+def _gmm_big_chol_on() -> Bool:
+    return String(getenv("MOJOLEARN_GMM_FAST_BIG_CHOL")) == "1"
+
+
+comptime GMM_GC_TPB = 256
+comptime GMM_GC_CH = 8192
+comptime GMM_GC_TS = 32
+
+
+@always_inline
+def _gmm_gc_pair(pr: Int, nt: Int) -> Tuple[Int, Int]:
+    """The pr-th upper tile pair (tj <= tk), row-major."""
+    var q = pr
+    var tj = 0
+    while q >= nt - tj:
+        q -= nt - tj
+        tj += 1
+    return (tj, tj + q)
+
+
+def gmm_grid_cov_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    means: MutPointer[Float32, MutAnyOrigin],
+    resp: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    ncomp_in: Int32,
+    nch_in: Int32,
+    npairs_in: Int32,
+    nt_in: Int32,
+):
+    """MOJOLEARN_GMM_FAST_GRID_COV: block b = (component k, chunk ch, tile
+    pair pr): the pair's 32 x 32 cells of sum_i sqrt(r_ik)(x_i - mu_k)
+    (sqrt(r_ik)(x_i - mu_k))^T over the chunk's rows, 4 cells a thread."""
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var ncomp = Int(ncomp_in)
+    var nch = Int(nch_in)
+    var npairs = Int(npairs_in)
+    var b = Int(block_idx.x)
+    var k = b // (nch * npairs)
+    var rem = b - k * nch * npairs
+    var ch = rem // npairs
+    var pr = rem - ch * npairs
+    var tjk = _gmm_gc_pair(pr, Int(nt_in))
+    var j0 = tjk[0] * GMM_GC_TS
+    var k0 = tjk[1] * GMM_GC_TS
+    var lo = ch * GMM_GC_CH
+    var cnt = n - lo
+    if cnt > GMM_GC_CH:
+        cnt = GMM_GC_CH
+    var tid = Int(thread_idx.x)
+    var sa = stack_allocation[
+        GMM_GC_TS * GMM_GC_TS, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var sb = stack_allocation[
+        GMM_GC_TS * GMM_GC_TS, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var r = tid // 8
+    var c0 = (tid % 8) * 4
+    var acc = SIMD[DType.float32, 4](0)
+    var rb = 0
+    while rb < cnt:
+        comptime for u in range((GMM_GC_TS * GMM_GC_TS) // GMM_GC_TPB):
+            var e = tid + u * GMM_GC_TPB
+            var rr = e // GMM_GC_TS
+            var cc = e - rr * GMM_GC_TS
+            var row = rb + rr
+            var va = Float32(0)
+            var vb = Float32(0)
+            if row < cnt:
+                var i = lo + row
+                var w = resp[i * ncomp + k]
+                var sw = sqrt(w) if w > Float32(0) else Float32(0)
+                var ja = j0 + cc
+                var kb = k0 + cc
+                if ja < d:
+                    va = sw * (x[i * d + ja] - means[k * d + ja])
+                if kb < d:
+                    vb = sw * (x[i * d + kb] - means[k * d + kb])
+            sa[rr * GMM_GC_TS + cc] = va
+            sb[rr * GMM_GC_TS + cc] = vb
+        barrier()
+        comptime for rr in range(GMM_GC_TS):
+            var a = sa[rr * GMM_GC_TS + r]
+            var bv = (sb + rr * GMM_GC_TS + c0).load[width=4]()
+            acc += a * bv
+        barrier()
+        rb += GMM_GC_TS
+    var o = b * (GMM_GC_TS * GMM_GC_TS) + r * GMM_GC_TS + c0
+    comptime for e in range(4):
+        part[o + e] = acc[e]
+
+
+def gmm_grid_cov_red_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    nk: MutPointer[Float32, MutAnyOrigin],
+    cov: MutPointer[Float32, MutAnyOrigin],
+    d_in: Int32,
+    ncomp_in: Int32,
+    nch_in: Int32,
+    npairs_in: Int32,
+    nt_in: Int32,
+    reg_covar: Float32,
+):
+    """Thread (k, pair, cell): the cell summed over the chunks, over nk[k],
+    plus reg_covar on the diagonal, both triangles of cov[k]."""
+    var d = Int(d_in)
+    var dd = d * d
+    var nch = Int(nch_in)
+    var npairs = Int(npairs_in)
+    comptime TT = GMM_GC_TS * GMM_GC_TS
+    var t = Int(block_idx.x) * GMM_GC_TPB + Int(thread_idx.x)
+    if t < Int(ncomp_in) * npairs * TT:
+        var k = t // (npairs * TT)
+        var rem = t - k * npairs * TT
+        var pr = rem // TT
+        var cell = rem - pr * TT
+        var tjk = _gmm_gc_pair(pr, Int(nt_in))
+        var j = tjk[0] * GMM_GC_TS + cell // GMM_GC_TS
+        var jj = tjk[1] * GMM_GC_TS + cell % GMM_GC_TS
+        if j < d and jj < d:
+            var s = Float32(0)
+            for ch in range(nch):
+                s += part[((k * nch + ch) * npairs + pr) * TT + cell]
+            var v = s / nk[k]
+            if j == jj:
+                v = v + reg_covar
+            cov[k * dd + j * d + jj] = v
+            cov[k * dd + jj * d + j] = v
+
+
+def gmm_big_chol_kernel(
+    cov: MutPointer[Float32, MutAnyOrigin],
+    chol_l: MutPointer[Float32, MutAnyOrigin],
+    linv: MutPointer[Float32, MutAnyOrigin],
+    prec: MutPointer[Float32, MutAnyOrigin],
+    log_det_chol: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    d_in: Int32,
+):
+    """MOJOLEARN_GMM_FAST_BIG_CHOL, block k = component k:
+    `fused_precision_cholesky_kernel`'s algorithm with the working matrix in
+    chol_l[k] (device memory) and the inverse built in linv[k], for d up to
+    GMM_CHOL_TPB: `L L^T = cov_k` right-looking (`info = j + 1` at the first
+    pivot that is not positive), `linv = L^{-1}` one column a thread,
+    `prec = linv^T`, `log_det_chol = -sum log L_jj`."""
+    var d = Int(d_in)
+    var dd = d * d
+    var k = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var base = k * dd
+    var flag = stack_allocation[
+        1, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var e = t
+    while e < dd:
+        var v = cov[base + e]
+        if e // d == e % d:
+            v = ftz(v + GMM_CHOL_JITTER)
+        chol_l[base + e] = v
+        e += GMM_CHOL_TPB
+    if t == 0:
+        flag[0] = 0
+    _gmm_dev_barrier()
+    for j in range(d):
+        if t == 0:
+            var pv = chol_l[base + j * d + j]
+            if pv > Float32(0):
+                chol_l[base + j * d + j] = sqrt(pv)
+            else:
+                flag[0] = Int32(j + 1)
+        _gmm_dev_barrier()
+        if flag[0] != 0:
+            break
+        var pj = chol_l[base + j * d + j]
+        var i = j + 1 + t
+        while i < d:
+            chol_l[base + i * d + j] = chol_l[base + i * d + j] / pj
+            i += GMM_CHOL_TPB
+        _gmm_dev_barrier()
+        var m = d - 1 - j
+        var cell = t
+        while cell < m * m:
+            var r = j + 1 + cell // m
+            var c = j + 1 + cell % m
+            if c <= r:
+                chol_l[base + r * d + c] = (
+                    chol_l[base + r * d + c] - chol_l[base + r * d + j] * chol_l[base + c * d + j]
+                )
+            cell += GMM_CHOL_TPB
+        _gmm_dev_barrier()
+    var bad = flag[0]
+    if t == 0:
+        info[k] = bad
+    if bad != 0:
+        return
+    if t < d:
+        # column t of L^{-1} by forward substitution; this thread alone
+        # writes and reads its column
+        var c = t
+        for i in range(d):
+            var v = Float32(0.0)
+            if i == c:
+                v = Float32(1.0) / chol_l[base + i * d + i]
+            elif i > c:
+                for m2 in range(c, i):
+                    v -= chol_l[base + i * d + m2] * linv[base + m2 * d + c]
+                v = v / chol_l[base + i * d + i]
+            linv[base + i * d + c] = v
+    _gmm_dev_barrier()
+    e = t
+    while e < dd:
+        var r = e // d
+        var c = e - r * d
+        if c > r:
+            chol_l[base + e] = Float32(0)
+        prec[base + c * d + r] = linv[base + e]
+        e += GMM_CHOL_TPB
+    if t == 0:
+        var sl = Float32(0)
+        for j in range(d):
+            sl += log(chol_l[base + j * d + j])
+        log_det_chol[k] = -sl
+
+
 def center_sqrt_scale_kernel(
     x: MutPointer[Float32, MutAnyOrigin],
     means: MutPointer[Float32, MutAnyOrigin],
@@ -1123,6 +1396,39 @@ def gmm_precision_cholesky(
             var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)
             var h_info = ctx.enqueue_create_host_buffer[DType.int32](ncomp)
             ctx.enqueue_function[fused_precision_cholesky_kernel](
+                cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
+                prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
+                d_info.unsafe_ptr(), Int32(d),
+                grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=d_info)
+            ctx.synchronize()
+            var fail_k = -1
+            var fail_info = 0
+            for kc in range(ncomp):
+                var inf_k = Int(h_info.unsafe_ptr().unsafe_load(kc))
+                if inf_k != 0 and fail_k < 0:
+                    fail_k = kc
+                    fail_info = inf_k
+            _ = d_info^
+            _ = h_info^
+            _ = identity^
+            _ = scal^
+            _ = work^
+            return GmmMStepRun(fail_info, fail_k)
+    comptime if GMM_FUSED_CHOL:
+        # lane/apple-fast-linear: MOJOLEARN_GMM_FAST_BIG_CHOL=1, d > 32 (see
+        # gmm_big_chol_kernel's banner); one launch, one readback of info
+        if (
+            sabotage == GMM_SAB_NONE
+            and not trace.enabled
+            and d > GMM_CHOL_MAX_D
+            and d <= GMM_CHOL_TPB
+            and _gmm_big_chol_on()
+        ):
+            var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)
+            var h_info = ctx.enqueue_create_host_buffer[DType.int32](ncomp)
+            ctx.enqueue_function[gmm_big_chol_kernel](
                 cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
                 prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
                 d_info.unsafe_ptr(), Int32(d),
@@ -1531,6 +1837,35 @@ def gmm_m_step(
                 grid_dim=((cells + 255) // 256, 1, 1),
                 block_dim=(256, 1, 1),
             )
+            fast_gram = False
+            ncomp_loop = 0
+    comptime if GMM_FUSED_COV:
+        # lane/apple-fast-linear: MOJOLEARN_GMM_FAST_GRID_COV=1 where the
+        # fused pass does not hold (d > 32; see gmm_grid_cov_kernel's banner)
+        if ncomp_loop > 0 and sabotage == 0 and divide_after != 0 and _gmm_grid_cov_on():
+            var gc_nch = (n + GMM_GC_CH - 1) // GMM_GC_CH
+            var gc_nt = (d + GMM_GC_TS - 1) // GMM_GC_TS
+            var gc_npairs = gc_nt * (gc_nt + 1) // 2
+            var gc_blocks = ncomp * gc_nch * gc_npairs
+            var gc_part = ctx.enqueue_create_buffer[DType.float32](
+                gc_blocks * GMM_GC_TS * GMM_GC_TS
+            )
+            ctx.enqueue_function[gmm_grid_cov_kernel](
+                x.unsafe_ptr(), means.unsafe_ptr(), resp.unsafe_ptr(),
+                gc_part.unsafe_ptr(), Int32(n), Int32(d), Int32(ncomp),
+                Int32(gc_nch), Int32(gc_npairs), Int32(gc_nt),
+                grid_dim=(gc_blocks, 1, 1), block_dim=(GMM_GC_TPB, 1, 1),
+            )
+            var gc_cells = ncomp * gc_npairs * GMM_GC_TS * GMM_GC_TS
+            ctx.enqueue_function[gmm_grid_cov_red_kernel](
+                gc_part.unsafe_ptr(), nk.unsafe_ptr(), cov.unsafe_ptr(),
+                Int32(d), Int32(ncomp), Int32(gc_nch), Int32(gc_npairs),
+                Int32(gc_nt), reg_covar,
+                grid_dim=((gc_cells + GMM_GC_TPB - 1) // GMM_GC_TPB, 1, 1),
+                block_dim=(GMM_GC_TPB, 1, 1),
+            )
+            ctx.synchronize()
+            _ = gc_part^
             fast_gram = False
             ncomp_loop = 0
     for kc in range(ncomp_loop):
