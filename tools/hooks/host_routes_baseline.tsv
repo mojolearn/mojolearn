@@ -852,8 +852,6 @@ host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	gather_f32(f32_ptr(Int(py=s
 host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	import xtrees/ops.mojo:apply_trees
 host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	import xtrees/ops.mojo:gather_f32
 host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	import xtrees/ops.mojo:weighted_sample
-host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	import xtrees/shap.mojo:tree_shap
-host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	tree_shap(i32_ptr(_i(forest, 0)), i32_ptr(_i(forest, 1)), f32_ptr(_i(forest, 2)), i32_ptr(_i(forest, 3)),
 host-call	host-import	UNOWNED	debt	xtrees/api.mojo	0	weighted_sample(f64_ptr(Int(py=w_addr)), n, i32_ptr(Int(py=out_addr)), n_draw, _i(params, 2), _i(params, 3))
 host-call	host-import	UNOWNED	debt	xtrees/ops.mojo	0	colmajor_from_rowmajor_f32(src, dst, n, d)
 host-call	host-import	UNOWNED	debt	xtrees/ops.mojo	0	import ensemble/host_layout.mojo:colmajor_from_rowmajor_f32
@@ -861,5 +859,3 @@ host-threads	host-threads	UNOWNED	debt	xtrees/ops.mojo	0	from core.host_parallel
 host-threads	host-threads	UNOWNED	debt	xtrees/ops.mojo	0	host_parallelize(_block, n_blocks)
 host-threads	host-threads	UNOWNED	debt	xtrees/ops.mojo	1	host_parallelize(_block, n_blocks)
 host-threads	host-threads	gap-nv-classical2	debt	xtrees/ops.mojo	2	host_parallelize(_block, n_blocks)
-host-threads	host-threads	gap-treeshap	debt	xtrees/shap.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	gap-treeshap	debt	xtrees/shap.mojo	0	host_parallelize(_rows, tasks)
