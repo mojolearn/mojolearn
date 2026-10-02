@@ -18,6 +18,10 @@ from x_prep.fastred import (
     ii_gram_fast_kernel,
 )
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
+from x_prep.prep3 import PREP3_LABELS
+from x_prep.fastlabels import (
+    TGL, uniq_count_fast_kernel, uniq_scan_fast_kernel, uniq_write_fast_kernel, chunk_neg_fast_kernel,
+)
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.device_store import DeviceStore
 
@@ -31,6 +35,13 @@ comptime OP_CLASS_STATS = 16
 comptime OP_II_MEAN = 53
 comptime OP_II_GRAM = 54
 comptime OP_PT_FOLD = 106
+
+#: FAST on Apple with -D MOJOLEARN_PREP3_LABELS only: the labels' run scan and
+#: chunk_neg by flag-and-scan threadgroups (x_prep/fastlabels.mojo, the same words)
+comptime OP_UNIQ_COUNT = 120
+comptime OP_UNIQ_SCAN = 121
+comptime OP_UNIQ_WRITE = 122
+comptime OP_CHUNK_NEG = 123
 
 #: op 0 (`sort_cols`) runs as the device sort of x_prep/dsort.mojo, not as
 #: one heapsort thread per column: the same words (a sort under a total
@@ -239,6 +250,21 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             if fast_folds and op == OP_II_GRAM:
                 ctx.enqueue_function[ii_gram_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGR)
                 continue
+            comptime if PREP3_LABELS:
+                # lane/apple-fast-prep3: one threadgroup per chunk (uniq_scan: one
+                # threadgroup over the chunk counts), the serial units' words
+                if op == OP_UNIQ_COUNT:
+                    ctx.enqueue_function[uniq_count_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGL)
+                    continue
+                if op == OP_UNIQ_SCAN:
+                    ctx.enqueue_function[uniq_scan_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGL)
+                    continue
+                if op == OP_UNIQ_WRITE:
+                    ctx.enqueue_function[uniq_write_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGL)
+                    continue
+                if op == OP_CHUNK_NEG:
+                    ctx.enqueue_function[chunk_neg_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=TGL)
+                    continue
         comptime for k in range(N_OPS):
             if op == k:
                 ctx.enqueue_function[prep_kernel[k]](
