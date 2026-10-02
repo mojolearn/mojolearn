@@ -18,6 +18,10 @@ from x_prep.fastred import (
     ii_gram_fast_kernel,
 )
 from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
+from x_prep.select_fast import (
+    SELECT_FREG, SELECT_FCLS, OP_F_CLASSIF, OP_F_REGRESSION, program_has_op, select_scratch_words,
+    select_freg_device, select_fcls_device, select_cstats_device,
+)
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.device_store import DeviceStore
 
@@ -149,6 +153,14 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             scratch = max(scratch, sort_scratch_words(Int(sq[1]), units))
             if radix and Int(sq[1]) >= RADIX_MIN_ROWS:
                 scratch = max(scratch, radix_scratch_words(Int(sq[1]), units, radix_rows))
+    comptime if SELECT_FREG or SELECT_FCLS:
+        # FAST on Apple (lane/apple-fast-select, -D MOJOLEARN_SELECT_FREG / _FCLS): the
+        # f_regression / f_classif tiles' partials live in the sort scratch (x_prep/select_fast.mojo)
+        var sel_fcls = program_has_op(host_q, stages, OP_F_CLASSIF)
+        for s in range(stages):
+            var sq = host_q + (s * STAGE_INTS + 2)
+            scratch = max(scratch, select_scratch_words(Int(host_q.unsafe_load(s * STAGE_INTS)), Int(sq[1]),
+                                                        Int(sq[2]), Int(sq[4]), sel_fcls))
     # FAST: MOJOLEARN_XPREP_FAST_FOLDS=0 keeps the row-order units (the A/B arm of
     # bench/x_prep_quality.py and bench/x_prep_speed.py); unset or 1 folds by threadgroup
     var fast_folds = getenv("MOJOLEARN_XPREP_FAST_FOLDS", "1") != "0"
@@ -220,6 +232,26 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 sort_cols_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
                                  Int(hq[3]), Int(hq[4]))
             continue
+        comptime if SELECT_FREG:
+            # FAST on Apple (lane/apple-fast-select): f_regression as row x feature tiles
+            if op == OP_F_REGRESSION:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                if select_freg_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
+                                      Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8])):
+                    continue
+        comptime if SELECT_FCLS:
+            # FAST on Apple (lane/apple-fast-select): f_classif, and the class_stats ahead of
+            # it in the same program, as row x feature tiles
+            if op == OP_F_CLASSIF:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                if select_fcls_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
+                                      Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8])):
+                    continue
+            if op == OP_CLASS_STATS and program_has_op(host_q, stages, OP_F_CLASSIF):
+                var hq = host_q + (s * STAGE_INTS + 2)
+                if select_cstats_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
+                                        Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8]), Int(hq[9])):
+                    continue
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if fast_folds and op == OP_COL_STATS:
                 var hq = host_q + (s * STAGE_INTS + 2)
