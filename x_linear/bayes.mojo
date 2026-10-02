@@ -25,7 +25,7 @@ from x_linear.ops import (
 )
 from std.sys.info import is_gpu
 from x_linear.team import Team
-from x_linear.tops import fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad, t_jacobi_eig, t_cholesky
+from x_linear.tops import fold_parts, fold_blocks, fold_fa_blocked, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS, upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad, t_jacobi_eig, t_cholesky
 
 
 def _center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, iw: IP) -> Float32:
@@ -168,6 +168,69 @@ def _var(y: FP, n: Int) -> Float32:
     return fd(acc, i2f(n))
 
 
+def bayes_ymean(y: FP, n: Int, fi: Bool) -> Float32:
+    """BayesianRidge's target mean (0 without an intercept) in the blocked
+    order: FOLD_BLOCK rows from zero, the partials folded blocks ascending
+    (the grid driver folds the same partials, x_linear/device.mojo)."""
+    if not fi:
+        return Float32(0)
+    return fd(fold_fa_blocked(y, 0, 1, n), i2f(n))
+
+
+@always_inline
+def bayes_yvar_part(y: FP, m: Float32, lo: Int, cnt: Int) -> Float32:
+    """sum (y_i - m)^2 over rows [lo, lo + cnt) from zero, rows ascending."""
+    var acc = Float32(0)
+    for i in range(lo, lo + cnt):
+        var r = fs(ld(y, i), m)
+        acc = fmad(r, r, acc)
+    return acc
+
+
+def bayes_yvar(y: FP, n: Int) -> Float32:
+    """`_var` (the starting alpha's target variance) in the blocked order:
+    the blocked mean, each block's squared deviations from zero, the
+    partials folded blocks ascending."""
+    comptime if X_LINEAR_SERIAL_FOLDS:
+        return _var(y, n)
+    var m = fd(fold_fa_blocked(y, 0, 1, n), i2f(n))
+    var acc = Float32(0)
+    var lo = 0
+    while lo < n:
+        acc = fa(acc, bayes_yvar_part(y, m, lo, min(FOLD_BLOCK, n - lo)))
+        lo += FOLD_BLOCK
+    return fd(acc, i2f(n))
+
+
+def bayes_eig_prep(t: Team, fw: FP, fp: FP, d: Int, yvar: Float32) -> Tuple[Float32, Float32]:
+    """The d x d half of `bayes_prep` (no row passes): the eigendecomposition
+    of G on the team, the lead's eigenvalues and V'X'y, the starting alpha
+    (the lead's, from yvar, when alpha_init is none) and lambda."""
+    var gg = d
+    var xty = gg + d * d
+    var vv = xty + d
+    var vty = vv + d * d
+    var old = vty + d
+    var tmp = old + d
+    var alpha = ld(fp, 5)
+    t_jacobi_eig(t, fw, gg, fw, vv, d, 60)
+    if t.lead():
+        for j in range(d):
+            var ev = ld(fw, gg + j * d + j)
+            st(fw, tmp + j, fmax(Float32(0), ev))
+            var acc = Float32(0)
+            for k in range(d):
+                acc = fmad(ld(fw, vv + k * d + j), ld(fw, xty + k), acc)
+            st(fw, vty + j, acc)
+        if alpha < 0:
+            alpha = fd(Float32(1), fa(yvar, Float32(1.1920929e-07)))
+    alpha = t.bcast(alpha, 2)
+    var lam = ld(fp, 6)
+    if lam < 0:
+        lam = Float32(1)
+    return (alpha, lam)
+
+
 def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP) -> Tuple[Float32, Float32, Float32, Float32]:
     """ip: [max_iter, fit_intercept, sample_weight]; fp: [tol, alpha_1, alpha_2, lambda_1,
     lambda_2, alpha_init (<0: none), lambda_init (<0: none)].
@@ -230,7 +293,9 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
         else:
             if fi:
                 t_col_means(t, x, n, d, fw, xm)
-                ym = t_mean(t, y, n, 1)
+                if t.lead():
+                    ym = bayes_ymean(y, n, True)
+                ym = t.bcast(ym, 1)
             else:
                 if t.lead():
                     fill(fw, xm, d, Float32(0))
@@ -271,7 +336,8 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
                 for k in range(j + 1, d):
                     st(fw, gg + k * d + j, ld(fw, gg + j * d + k))
         else:
-            ym = _center(x, y, n, d, fi, fw, xm, iw)
+            _ = _center(x, y, n, d, fi, fw, xm, iw)
+            ym = bayes_ymean(y, n, fi)
             centered_gram(x, n, d, fw, xm, fw, gg)
         var yc = ym
         # X'y on centered data
@@ -282,34 +348,24 @@ def bayes_prep(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
                 axpy_centered[True](fw, xty, b, x, i * d, fw, xm, d, ld(y, n + i))
             else:
                 axpy_centered(fw, xty, b, x, i * d, fw, xm, d)
-    var alpha = ld(fp, 5)
-    t_jacobi_eig(t, fw, gg, fw, vv, d, 60)
-    if t.lead():
-        for j in range(d):
-            var ev = ld(fw, gg + j * d + j)
-            st(fw, tmp + j, fmax(Float32(0), ev))
+    var yvar = Float32(0)
+    if t.lead() and ld(fp, 5) < 0:
+        if sw:
+            # np.average((y - y_mean) ** 2, weights=sample_weight)
+            var m = Float32(0)
+            for i in range(n):
+                m = fmad(ld(y, n + i), ld(y, i), m)
+            m = fd(m, wsum)
             var acc = Float32(0)
-            for k in range(d):
-                acc = fmad(ld(fw, vv + k * d + j), ld(fw, xty + k), acc)
-            st(fw, vty + j, acc)
-        if alpha < 0:
-            var yvar = _var(y, n)
-            if sw:
-                # np.average((y - y_mean) ** 2, weights=sample_weight)
-                var m = Float32(0)
-                for i in range(n):
-                    m = fmad(ld(y, n + i), ld(y, i), m)
-                m = fd(m, wsum)
-                var acc = Float32(0)
-                for i in range(n):
-                    var r = fs(ld(y, i), m)
-                    acc = fmad(fm(ld(y, n + i), r), r, acc)
-                yvar = fd(acc, wsum)
-            alpha = fd(Float32(1), fa(yvar, Float32(1.1920929e-07)))
-    alpha = t.bcast(alpha, 2)
-    var lam = ld(fp, 6)
-    if lam < 0:
-        lam = Float32(1)
+            for i in range(n):
+                var r = fs(ld(y, i), m)
+                acc = fmad(fm(ld(y, n + i), r), r, acc)
+            yvar = fd(acc, wsum)
+        else:
+            yvar = bayes_yvar(y, n)
+    var al = bayes_eig_prep(t, fw, fp, d, yvar)
+    var alpha = al[0]
+    var lam = al[1]
     return (alpha, lam, ym, wsum)
 
 
