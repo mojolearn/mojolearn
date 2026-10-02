@@ -23,11 +23,12 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_BAYES, ALGO_ARD
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM, ALGO_RIDGE_KFOLD, ALGO_RIDGE, ALGO_BAYES, ALGO_ARD
 from x_linear.ops import ld, st, ldi, fd, i2f, fa, fs, fm, fabs, shuffle, fmad, flog, fill, copy, row_dot, mean_of
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
-from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score
+from x_linear.ridgecv import kf_start, kf_end, kf_mean, kf_cross, kf_solve, kf_pred, kf_score, kf_ff_solve
+from x_linear.ridge import ridge_ff_unit, ridge_ff_units, ridge_ff_solve
 from x_linear.tops import t_fold_fa_staged, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
 from x_linear.glm import (
     _unit, _glm_deriv_row, _glm_cell, _glm_cell_rows, _glm_slot_count, _glm_slot_cell, _glm_step, GLM_LINK_LOG, GLM_STALL_ITERS,
@@ -1025,7 +1026,8 @@ def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int
 # (one thread an alpha, its own scratch), the held-out predictions (one
 # thread a row and alpha) and the fold scores (one thread an alpha, summed
 # folds ascending). The same helpers as the host fit, so the same words.
-def kf_means_kernel(x: FP, y: FP, n: Int32, d: Int32, s: Int32, e: Int32, fi: Int32, xm: FP):
+@always_inline
+def _kf_means_kernel_body(x: FP, y: FP, n: Int32, d: Int32, s: Int32, e: Int32, fi: Int32, xm: FP):
     var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
     if j < dd:
@@ -1034,7 +1036,12 @@ def kf_means_kernel(x: FP, y: FP, n: Int32, d: Int32, s: Int32, e: Int32, fi: In
         st(xm, dd, kf_mean(y, 1, 0, Int(n), Int(s), Int(e)) if fi != 0 else Float32(0))
 
 
-def kf_cells_kernel(x: FP, y: FP, n: Int32, d: Int32, s: Int32, e: Int32, xm: FP, g: FP, xty: FP):
+def kf_means_kernel(x: FP, y: FP, n: Int32, d: Int32, s: Int32, e: Int32, fi: Int32, xm: FP, wf: IP, woff: Int32, nonce: Int32):
+    _kf_means_kernel_body(x, y, n, d, s, e, fi, xm)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _kf_cells_kernel_body(x: FP, y: FP, n: Int32, d: Int32, s: Int32, e: Int32, xm: FP, g: FP, xty: FP):
     var c = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
     var cells = dd * (dd + 1) // 2
@@ -1050,14 +1057,53 @@ def kf_cells_kernel(x: FP, y: FP, n: Int32, d: Int32, s: Int32, e: Int32, xm: FP
         st(xty, j, kf_cross(x, dd, j, ld(xm, j), y, 1, 0, ld(xm, dd), Int(n), Int(s), Int(e)))
 
 
-def kf_solve_kernel(g: FP, xty: FP, xm: FP, d: Int32, alphas: FP, na: Int32, fi: Int32, aw: FP, w: FP, b: FP):
+def kf_cells_kernel(x: FP, y: FP, n: Int32, d: Int32, s: Int32, e: Int32, xm: FP, g: FP, xty: FP, wf: IP, woff: Int32, nonce: Int32):
+    _kf_cells_kernel_body(x, y, n, d, s, e, xm, g, xty)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _kf_solve_kernel_body(g: FP, xty: FP, xm: FP, d: Int32, alphas: FP, na: Int32, fi: Int32, aw: FP, w: FP, b: FP,
+                    trust: FP):
     var a = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
     if a < Int(na):
-        st(b, a, kf_solve(g, xty, xm, ld(xm, dd), dd, ld(alphas, a), fi != 0, aw + a * dd * dd, w + a * dd))
+        var r = kf_solve(g, xty, xm, ld(xm, dd), dd, ld(alphas, a), fi != 0, aw + a * dd * dd, w + a * dd)
+        st(b, a, r[0])
+        st(trust, a, Float32(1) if r[1] else Float32(0))
 
 
-def kf_pred_kernel(x: FP, d: Int32, s: Int32, e: Int32, na: Int32, w: FP, b: FP, p: FP, stride: Int32):
+def kf_solve_kernel(g: FP, xty: FP, xm: FP, d: Int32, alphas: FP, na: Int32, fi: Int32, aw: FP, w: FP, b: FP,
+                    trust: FP, wf: IP, woff: Int32, nonce: Int32):
+    _kf_solve_kernel_body(g, xty, xm, d, alphas, na, fi, aw, w, b, trust)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _kf_ff_unit_kernel_body(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, s: Int32, e: Int32, u0: Int32, count: Int32,
+                      sh: FP, sl: FP):
+    var u = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if u < Int(count):
+        ridge_ff_unit(Int(u0) + u, x, y, Int(n), Int(d), 1, fi != 0, False, Int(n), sh, sl, Int(s), Int(e))
+
+
+def kf_ff_unit_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, s: Int32, e: Int32, u0: Int32, count: Int32,
+                      sh: FP, sl: FP, wf: IP, woff: Int32, nonce: Int32):
+    _kf_ff_unit_kernel_body(x, y, n, d, fi, s, e, u0, count, sh, sl)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _kf_ff_solve_kernel_body(d: Int32, fi: Int32, alpha: Float32, sh: FP, sl: FP, bh: FP, bl: FP, fh: FP, fl: FP, tmp: FP,
+                       w: FP, b: FP, a: Int32):
+    var dd = Int(d)
+    st(b, Int(a), kf_ff_solve(dd, fi != 0, alpha, sh, sl, bh, bl, fh, fl, tmp, w + Int(a) * dd))
+
+
+def kf_ff_solve_kernel(d: Int32, fi: Int32, alpha: Float32, sh: FP, sl: FP, bh: FP, bl: FP, fh: FP, fl: FP, tmp: FP,
+                       w: FP, b: FP, a: Int32, wf: IP, woff: Int32, nonce: Int32):
+    _kf_ff_solve_kernel_body(d, fi, alpha, sh, sl, bh, bl, fh, fl, tmp, w, b, a)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _kf_pred_kernel_body(x: FP, d: Int32, s: Int32, e: Int32, na: Int32, w: FP, b: FP, p: FP, stride: Int32):
     var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var nt = Int(e) - Int(s)
     if q < nt * Int(na):
@@ -1066,11 +1112,20 @@ def kf_pred_kernel(x: FP, d: Int32, s: Int32, e: Int32, na: Int32, w: FP, b: FP,
         st(p, a * Int(stride) + r, kf_pred(x, Int(s) + r, Int(d), w + a * Int(d), ld(b, a)))
 
 
-def kf_score_kernel(y: FP, p: FP, s: Int32, e: Int32, na: Int32, stride: Int32, sums: FP):
+def kf_pred_kernel(x: FP, d: Int32, s: Int32, e: Int32, na: Int32, w: FP, b: FP, p: FP, stride: Int32, wf: IP, woff: Int32, nonce: Int32):
+    _kf_pred_kernel_body(x, d, s, e, na, w, b, p, stride)
+    witness_end(wf, woff, nonce)
+
+@always_inline
+def _kf_score_kernel_body(y: FP, p: FP, s: Int32, e: Int32, na: Int32, stride: Int32, sums: FP):
     var a = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     if a < Int(na):
         st(sums, a, fa(ld(sums, a), kf_score(y, p + a * Int(stride), Int(s), Int(e))))
 
+
+def kf_score_kernel(y: FP, p: FP, s: Int32, e: Int32, na: Int32, stride: Int32, sums: FP, wf: IP, woff: Int32, nonce: Int32):
+    _kf_score_kernel_body(y, p, s, e, na, stride, sums)
+    witness_end(wf, woff, nonce)
 
 def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
                       res: FP) raises:
@@ -1090,6 +1145,17 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     var db = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
     var dp = ctx.enqueue_create_buffer[DType.float32](max(na * stride, 1))
     var dsum = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
+    var dtr = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
+    var htr = List[Float32](length=max(na, 1), fill=Float32(0))
+    var ffw = d + 1 + d * d + d
+    var ff_units = ridge_ff_units(n, d, 1)
+    var dsh = ctx.enqueue_create_buffer[DType.float32](ffw)
+    var dsl = ctx.enqueue_create_buffer[DType.float32](ffw)
+    var dbh = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dbl = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dfh = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+    var dfl = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+    var dtmp = ctx.enqueue_create_buffer[DType.float32](d + 1)
     var hfp = fp.copy()
     if n_x > 0:
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
@@ -1098,21 +1164,84 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     ctx.enqueue_copy(dst_buf=dal, src_ptr=hfp.unsafe_ptr())
     dsum.enqueue_fill(Float32(0))
     var cells = d * (d + 1) // 2
+    # lane/neural-pass93 + the Metal witness (x_linear/witness.mojo): per
+    # fold, unit A (means, Gram, solves and the trust flags home) rebuilds
+    # from the data; unit B (float-float re-solves, predictions, the score
+    # added into the sums) reruns from the sums as they stood before it
+    var nt_max = n // k + 1
+    var wcap = max(_xg_blocks(d + 1) + _xg_blocks(cells + d) + _xg_blocks(na),
+                   _xg_blocks(d + 1) + _xg_blocks(max(ff_units - (d + 1), 1)) + na + _xg_blocks(nt_max * na) + _xg_blocks(na))
+    var wit = Witness(ctx, wcap)
+    var dsum_save = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
     for f in range(k):
         var s = Int32(kf_start(n, k, f))
         var e = Int32(kf_end(n, k, f))
-        ctx.enqueue_function[kf_means_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, Int32(fi),
-                                              dxm.unsafe_ptr(), grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
-        ctx.enqueue_function[kf_cells_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, dxm.unsafe_ptr(),
-                                              dg.unsafe_ptr(), dxty.unsafe_ptr(), grid_dim=_xg_blocks(cells + d), block_dim=XG_TPB)
-        ctx.enqueue_function[kf_solve_kernel](dg.unsafe_ptr(), dxty.unsafe_ptr(), dxm.unsafe_ptr(), Int32(d), dal.unsafe_ptr(),
-                                              Int32(na), Int32(fi), daw.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
-                                              grid_dim=_xg_blocks(na), block_dim=XG_TPB)
-        var nt = Int(e) - Int(s)
-        ctx.enqueue_function[kf_pred_kernel](dx.unsafe_ptr(), Int32(d), s, e, Int32(na), dw.unsafe_ptr(), db.unsafe_ptr(),
-                                             dp.unsafe_ptr(), Int32(stride), grid_dim=_xg_blocks(nt * na), block_dim=XG_TPB)
-        ctx.enqueue_function[kf_score_kernel](dy.unsafe_ptr(), dp.unsafe_ptr(), s, e, Int32(na), Int32(stride),
-                                              dsum.unsafe_ptr(), grid_dim=_xg_blocks(na), block_dim=XG_TPB)
+        var ta = 0
+        while True:
+            var nonce = wit.begin()
+            var wo = 0
+            ctx.enqueue_function[kf_means_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, Int32(fi),
+                                                  dxm.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                  grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
+            wo += _xg_blocks(d + 1)
+            ctx.enqueue_function[kf_cells_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), s, e, dxm.unsafe_ptr(),
+                                                  dg.unsafe_ptr(), dxty.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                  grid_dim=_xg_blocks(cells + d), block_dim=XG_TPB)
+            wo += _xg_blocks(cells + d)
+            ctx.enqueue_function[kf_solve_kernel](dg.unsafe_ptr(), dxty.unsafe_ptr(), dxm.unsafe_ptr(), Int32(d), dal.unsafe_ptr(),
+                                                  Int32(na), Int32(fi), daw.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(),
+                                                  dtr.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                  grid_dim=_xg_blocks(na), block_dim=XG_TPB)
+            wo += _xg_blocks(na)
+            # lane/neural-pass93: the alphas whose float32 factor is not trusted, in float-float
+            ctx.enqueue_copy(dst_ptr=htr.unsafe_ptr(), src_buf=dtr)
+            if wit.ok(ctx, wo, "RidgeCV fold"):
+                break
+            ta += 1
+            if ta >= WITNESS_TRIES:
+                wit.fail()
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_buf=dsum_save, src_buf=dsum)
+        var tb = 0
+        while True:
+            var nonce = wit.begin()
+            var wo = 0
+            var have_ff = False
+            for a in range(na):
+                if htr[a] == Float32(1):
+                    continue
+                if not have_ff:
+                    ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
+                                                            Int32(0), Int32(d + 1), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                            wit.p(), Int32(wo), nonce,
+                                                            grid_dim=_xg_blocks(d + 1), block_dim=XG_TPB)
+                    wo += _xg_blocks(d + 1)
+                    ctx.enqueue_function[kf_ff_unit_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), s, e,
+                                                            Int32(d + 1), Int32(ff_units - (d + 1)), dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                            wit.p(), Int32(wo), nonce,
+                                                            grid_dim=_xg_blocks(ff_units - (d + 1)), block_dim=XG_TPB)
+                    wo += _xg_blocks(ff_units - (d + 1))
+                    have_ff = True
+                ctx.enqueue_function[kf_ff_solve_kernel](Int32(d), Int32(fi), hfp[a], dsh.unsafe_ptr(), dsl.unsafe_ptr(),
+                                                         dbh.unsafe_ptr(), dbl.unsafe_ptr(), dfh.unsafe_ptr(), dfl.unsafe_ptr(),
+                                                         dtmp.unsafe_ptr(), dw.unsafe_ptr(), db.unsafe_ptr(), Int32(a),
+                                                         wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
+                wo += 1
+            var nt = Int(e) - Int(s)
+            ctx.enqueue_function[kf_pred_kernel](dx.unsafe_ptr(), Int32(d), s, e, Int32(na), dw.unsafe_ptr(), db.unsafe_ptr(),
+                                                 dp.unsafe_ptr(), Int32(stride), wit.p(), Int32(wo), nonce,
+                                                 grid_dim=_xg_blocks(nt * na), block_dim=XG_TPB)
+            wo += _xg_blocks(nt * na)
+            ctx.enqueue_function[kf_score_kernel](dy.unsafe_ptr(), dp.unsafe_ptr(), s, e, Int32(na), Int32(stride),
+                                                  dsum.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                  grid_dim=_xg_blocks(na), block_dim=XG_TPB)
+            wo += _xg_blocks(na)
+            if wit.ok(ctx, wo, "RidgeCV scores"):
+                break
+            tb += 1
+            if tb >= WITNESS_TRIES:
+                wit.fail()
+            ctx.enqueue_copy(dst_buf=dsum, src_buf=dsum_save)
     var hs = List[Float32](length=max(na, 1), fill=Float32(0))
     ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=dsum)
     ctx.synchronize()
@@ -1131,6 +1260,93 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
     _ = db^
     _ = dp^
     _ = dsum^
+    _ = dtr^
+    _ = htr^
+    _ = dsh^
+    _ = dsl^
+    _ = dbh^
+    _ = wit^
+    _ = dsum_save^
+    _ = dbl^
+    _ = dfh^
+    _ = dfl^
+    _ = dtmp^
+
+
+
+# ------------------------------------------------ Ridge's float-float refit on the grid (lane/neural-pass93)
+def ridge_ff_unit_kernel(x: FP, y: FP, n: Int32, d: Int32, t_n: Int32, fi: Int32, sw: Int32, u0: Int32, count: Int32,
+                         sh: FP, sl: FP, wf: IP, woff: Int32, nonce: Int32):
+    var u = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if u < Int(count):
+        ridge_ff_unit(Int(u0) + u, x, y, Int(n), Int(d), Int(t_n), fi != 0, sw != 0, Int(n) * Int(t_n), sh, sl)
+    witness_end(wf, woff, nonce)
+
+
+def ridge_ff_solve_kernel(d: Int32, t_n: Int32, fi: Int32, alpha: Float32, sh: FP, sl: FP, bh: FP, bl: FP, dst: FP,
+                          fh: FP, fl: FP, wf: IP, woff: Int32, nonce: Int32):
+    """dst: coef T*d | intercept T | ok (1 / 0)."""
+    var ok = ridge_ff_solve(Int(d), Int(t_n), fi != 0, alpha, sh, sl, bh, bl, dst, fh, fl)
+    st(dst, Int(t_n) * Int(d) + Int(t_n), Float32(1) if ok else Float32(0))
+    witness_end(wf, woff, nonce)
+
+
+def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: Int, fi: Bool, sw: Bool, alpha: Float32,
+                   res: FP, sidx: Int) raises:
+    var nm = d + t_n
+    var units = ridge_ff_units(n, d, t_n)
+    var words = d + t_n + d * d + d * t_n
+    var dsh = ctx.enqueue_create_buffer[DType.float32](words)
+    var dsl = ctx.enqueue_create_buffer[DType.float32](words)
+    var dbh = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dbl = ctx.enqueue_create_buffer[DType.float32](max(d, 1))
+    var dout = ctx.enqueue_create_buffer[DType.float32](t_n * d + t_n + 1)
+    var dfh = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+    var dfl = ctx.enqueue_create_buffer[DType.float32](max(d * d, 1))
+    # lane/neural-xlw: the refit as ONE guarded unit from zeroed sums (the M2
+    # under load returned an all-zero RidgeClassifier from a cut unit launch)
+    var h = List[Float32](length=t_n * d + t_n + 1, fill=Float32(0))
+    var b1 = _xg_blocks(nm)
+    var b2 = _xg_blocks(units - nm)
+    var wit = Witness(ctx, b1 + b2 + 1)
+    var tries = 0
+    while True:
+        var nonce = wit.begin()
+        dsh.enqueue_fill(Float32(0))
+        dsl.enqueue_fill(Float32(0))
+        ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
+                                                   Int32(1 if sw else 0), Int32(0), Int32(nm), dsh.unsafe_ptr(),
+                                                   dsl.unsafe_ptr(), wit.p(), Int32(0), nonce,
+                                                   grid_dim=b1, block_dim=XG_TPB)
+        ctx.enqueue_function[ridge_ff_unit_kernel](x, y, Int32(n), Int32(d), Int32(t_n), Int32(1 if fi else 0),
+                                                   Int32(1 if sw else 0), Int32(nm), Int32(units - nm), dsh.unsafe_ptr(),
+                                                   dsl.unsafe_ptr(), wit.p(), Int32(b1), nonce,
+                                                   grid_dim=b2, block_dim=XG_TPB)
+        ctx.enqueue_function[ridge_ff_solve_kernel](Int32(d), Int32(t_n), Int32(1 if fi else 0), alpha, dsh.unsafe_ptr(),
+                                                    dsl.unsafe_ptr(), dbh.unsafe_ptr(), dbl.unsafe_ptr(), dout.unsafe_ptr(),
+                                                    dfh.unsafe_ptr(), dfl.unsafe_ptr(), wit.p(), Int32(b1 + b2), nonce,
+                                                    grid_dim=1, block_dim=1)
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dout)
+        if wit.ok(ctx, b1 + b2 + 1, "Ridge float-float refit"):
+            break
+        tries += 1
+        if tries >= WITNESS_TRIES:
+            wit.fail()
+    ctx.synchronize()
+    _ = wit^
+    var ok = h[t_n * d + t_n] == Float32(1)
+    if ok:
+        for i in range(t_n * d + t_n):
+            res.unsafe_store(i, h[i])
+    res.unsafe_store(sidx, Float32(0) if ok else Float32(2))
+    _ = h^
+    _ = dsh^
+    _ = dsl^
+    _ = dbh^
+    _ = dbl^
+    _ = dout^
+    _ = dfh^
+    _ = dfl^
 
 
 def fit_device(
@@ -1241,6 +1457,15 @@ def fit_device(
     if n_out > 0:
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
     ctx.synchronize()
+    if algo == ALGO_RIDGE:
+        # lane/neural-pass93: the float-float refit when the float32 factor
+        # was not trusted (x_linear/ridge.mojo, status 1), on the grid
+        var t_n = Int(ip[0])
+        var a_n = Int(ip[2])
+        var sidx = t_n * d + t_n + 2 + a_n
+        if n_out > sidx and res.unsafe_load(sidx) == Float32(1):
+            _ridge_ff_grid(ctx, FP(unsafe_from_address=Int(dx.unsafe_ptr())), FP(unsafe_from_address=Int(dy.unsafe_ptr())), n, d, t_n, Int(ip[1]) != 0, len(ip) > 3 and Int(ip[3]) != 0,
+                           res.unsafe_load(t_n * d + t_n), res, sidx)
     _ = hip^
     _ = hfp^
     _ = dx^
