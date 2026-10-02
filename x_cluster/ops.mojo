@@ -210,3 +210,25 @@ trait ClusterOps(Movable):
         labels, dist)`: the device fuses them into one launch (the same words;
         lane/neural-pass133)."""
         ...
+
+    def agglo_on_device(self) -> Bool:
+        """True on the GPU column: `agglo_merge` runs the unconstrained
+        agglomerative merge loop on the device (lane hr2-mds-agglo). The
+        host column answers False and `agglo.agglo_tree` runs its loop."""
+        ...
+
+    def agglo_mirror(mut self, x: Int, n: Int, dst: Int) raises:
+        """dst (n x n) = the precomputed matrix x's UPPER triangle mirrored
+        below the diagonal, a zero diagonal; raises unless every upper value
+        is finite and non-negative."""
+        ...
+
+    def agglo_merge(
+        mut self, dm: Int, n: Int, linkage: Int, n_merges: Int, mut children: List[Int32], mut dist: List[Float32]
+    ) raises:
+        """The first n_merges merges of the unconstrained agglomerative loop
+        (`agglo.agglo_tree`'s order: the live row with the lowest nearest
+        value, the lowest row on a tie; its nearest partner, the lowest
+        column on a tie; Lance-Williams by `bodies.lance_williams`) on the
+        n x n dissimilarity slot `dm`, which it overwrites."""
+        ...

@@ -515,6 +515,22 @@ class _Kit:
     def const(self, v, r=1, c=1):
         return _M.of([v] * (r * c), r, c)
 
+    def diag_mask(self, n):
+        """The n x n identity as a device matrix (1 on the diagonal, 0 off
+        it), made on the device by ONE `copyb` launch: the n * n buffer read
+        as rows of n + 1, whose first column is exactly the diagonal, takes
+        e = [1, 0, ..., 0] (length n + 1) as a row-vector broadcast. None on
+        a binding without the resident entries."""
+        if n < 1 or not self._res():
+            return None
+        out = self._dout(n, n)
+        e = _M.of([1.0] + [0.0] * n, 1, n + 1)
+        one = _M._dev_one(self)
+        did = out._d.id
+        self.b.x_decomp_dev_ew(did, self._did(e), one, did,
+                               [_OP["copyb"], n * n, n + 1, n + 1, 1, 1, 3], 0.0)
+        return out
+
     # ---- reductions and products
     def mm(self, A, B, ta=False, tb=False):
         m, k = (A.c, A.r) if ta else (A.r, A.c)
@@ -3614,19 +3630,32 @@ class MDS(_Base):
         d = self._dist(k, Y)
         old = None
         it = 0
+        # The Guttman transform's diagonal on the device (lane hr2-mds-agglo):
+        # B's diagonal gets the row sums by fma(I, rs, B) (1 * rs + B, one
+        # rounding: the add the host loop did; 0 * rs + B is B off it), so
+        # the n x n matrix stays resident; the host loop read all of B and
+        # wrote it back every iteration. MOJOLEARN_XD_MDS_DIAG_V0=1 is the
+        # old loop (the A/B switch).
+        eye = None
+        if _os.environ.get("MOJOLEARN_XD_MDS_DIAG_V0") != "1":
+            eye = k.diag_mask(n)
+        floor = k.const(1e-5)
         for it in range(1, self.max_iter + 1):
             if native:
                 disp = nm(d, it == 1)
             elif nonmetric:
                 flat = dis_w if it == 1 else ir.fit_transform(dis_w, [d.s[q] for q in pos]).tolist()
                 disp = self._disparities(k, n, pos, flat)
-            dz = k.ew("select", d, d, k.const(1e-5), s=0.0)
+            dz = k.ew("select", d, d, floor, s=0.0)
             ratio = k.ew("div", disp, dz)
             B = k.ew("scale", ratio, s=-1.0)
             rs = k.rowsum(ratio)
-            B = B.copy()
-            for i in range(n):
-                B.s[i * n + i] = _f32(B.s[i * n + i] + rs.s[i])
+            if eye is not None:
+                B = k.ew("fma", eye, rs, B)
+            else:
+                B = B.copy()
+                for i in range(n):
+                    B.s[i * n + i] = _f32(B.s[i * n + i] + rs.s[i])
             Y = k.ew("scale", k.mm(B, Y), s=1.0 / n)
             d = self._dist(k, Y)
             stress = k.total(k.ew("sqdiff", d, disp)).s[0] / 2

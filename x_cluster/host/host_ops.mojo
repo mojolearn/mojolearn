@@ -578,6 +578,17 @@ struct HostOps(ClusterOps):
     def alloc(mut self, n: Int) raises -> Int:
         return self.zeros(n)
 
+    def agglo_on_device(self) -> Bool:
+        return False
+
+    def agglo_mirror(mut self, x: Int, n: Int, dst: Int) raises:
+        raise Error("x_cluster: agglo_mirror is the GPU column's (the host column runs agglo_tree's loop)")
+
+    def agglo_merge(
+        mut self, dm: Int, n: Int, linkage: Int, n_merges: Int, mut children: List[Int32], mut dist: List[Float32]
+    ) raises:
+        raise Error("x_cluster: agglo_merge is the GPU column's (the host column runs agglo_tree's loop)")
+
     def estep(
         mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
     ) raises:
