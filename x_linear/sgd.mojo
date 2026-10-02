@@ -826,7 +826,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                 var ep: Int
                 if sgd_mb_on(batch, k, lr):
                     # lane/neural-pass103: the minibatch form (x_linear/sgd_mb.mojo)
-                    var sl = List[Float32](length=2 * batch + (d + 2) * mb_subs(batch), fill=Float32(0))
+                    var sl = List[Float32](length=2 * batch + (d + 2) * mb_subs(batch, mb_sub_size(batch)), fill=Float32(0))
                     ep = sgd_mb_one(
                         x, ys, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
                         fit_intercept, max_iter, tol, nic, do_shuffle,
@@ -952,8 +952,30 @@ comptime MB_SUB = 256
 
 
 @always_inline
-def mb_subs(bs: Int) -> Int:
-    return (bs + MB_SUB - 1) // MB_SUB
+def mb_subs(bs: Int, sub: Int = MB_SUB) -> Int:
+    return (bs + sub - 1) // sub
+
+
+# lane/neural-pass135 (2026-10-02; new bits for batch <= MB_SMALL_BATCH, the
+# Perceptron / PA / opt-in one-class defaults): the column partials over
+# MB_SUB_SMALL-row sub-blocks and each row's linear predictor as MB_DBLK-
+# column blocks, each from zero, folded ascending. Every dependent chain is
+# about 8x shorter (the peer's MI325X ran these one-block batches
+# latency-bound: perceptron istella 10.7 s against the host's 9.6).
+# SGDClassifier / SGDRegressor at their batch 4096 keep #103's chains.
+comptime MB_SMALL_BATCH = 256
+comptime MB_SUB_SMALL = 32
+comptime MB_DBLK = 32
+
+
+@always_inline
+def mb_sub_size(batch: Int) -> Int:
+    return MB_SUB_SMALL if batch <= MB_SMALL_BATCH else MB_SUB
+
+
+@always_inline
+def mb_dblk(batch: Int) -> Int:
+    return MB_DBLK if batch <= MB_SMALL_BATCH else 0
 
 
 @always_inline
@@ -982,11 +1004,11 @@ def mb_eta(lr: Int, eta: Float32, eta0: Float32, alpha: Float32, power_t: Float3
 @always_inline
 def mb_row(x: FP, ys: FP, i: Int, d: Int, w: FP, woff: Int, b: Float32, loss: Int, eps: Float32,
            swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool,
-           lr: Int, eta0: Float32) -> Tuple[Float32, Float32]:
+           lr: Int, eta0: Float32, dblk: Int = 0) -> Tuple[Float32, Float32]:
     """(dl_i weighted, loss_i) of row i at (w, b); with a PA rate dl_i is minus
     the row's PA step (sgd_one's statements, eta0 = C)."""
     var y = ld(ys, i)
-    var p = fa(mb_dot(x, i, d, w, woff), b)
+    var p = fa(mb_dot(x, i, d, w, woff, dblk), b)
     var dl: Float32
     if lr == LR_PA1 or lr == LR_PA2:
         var cur = sgd_loss(loss, y, p, eps)
@@ -1024,9 +1046,29 @@ comptime MB_PF = 16
 
 
 @always_inline
-def mb_dot(x: FP, i: Int, d: Int, w: FP, woff: Int) -> Float32:
+def mb_dot(x: FP, i: Int, d: Int, w: FP, woff: Int, blk: Int = 0) -> Float32:
     """`row_dot` (j ascending, one fmad a term) with MB_PF terms' loads in
-    flight on the device (lane/neural-pass134); the host's is row_dot."""
+    flight on the device (lane/neural-pass134); the host's is row_dot.
+    blk > 0 (lane/neural-pass135): blk-column blocks, each from zero, folded
+    ascending; up to 8 blocks advance together (independent chains), each
+    block's terms in column order: host and device the same words."""
+    if blk > 0:
+        var base = i * d
+        var nb = (d + blk - 1) // blk
+        var total = Float32(0)
+        var g0 = 0
+        while g0 < nb:
+            var accs = SIMD[DType.float32, 8](0)
+            for k in range(blk):
+                comptime for b in range(8):
+                    var j = (g0 + b) * blk + k
+                    if g0 + b < nb and j < d:
+                        accs[b] = fmad(ld(x, base + j), ld(w, woff + j), accs[b])
+            comptime for b in range(8):
+                if g0 + b < nb:
+                    total = fa(total, accs[b])
+            g0 += 8
+        return total
     comptime if is_gpu():
         var acc = Float32(0)
         var j = 0
@@ -1048,12 +1090,13 @@ def mb_dot(x: FP, i: Int, d: Int, w: FP, woff: Int) -> Float32:
 
 
 @always_inline
-def mb_part(x: FP, d: Int, idx: IP, start: Int, dlv: FP, lv: FP, j: Int, s: Int, bs: Int) -> Float32:
-    """Sub-block s of the batch at position `start` (bs rows), from zero:
-    j < d the column j's dl x chain, j == d the intercept's dl fold, j == d + 1
-    the loss fold. dlv / lv are indexed by batch position."""
-    var lo = s * MB_SUB
-    var hi = min(bs, lo + MB_SUB)
+def mb_part(x: FP, d: Int, idx: IP, start: Int, dlv: FP, lv: FP, j: Int, s: Int, bs: Int,
+            sub: Int = MB_SUB) -> Float32:
+    """Sub-block s (`sub` rows) of the batch at position `start` (bs rows),
+    from zero: j < d the column j's dl x chain, j == d the intercept's dl
+    fold, j == d + 1 the loss fold. dlv / lv are indexed by batch position."""
+    var lo = s * sub
+    var hi = min(bs, lo + sub)
     var acc = Float32(0)
     if j < d:
         var r = lo
@@ -1155,7 +1198,9 @@ def sgd_mb_one(
     var dlv = scratch
     var lv = scratch + batch
     var parts = lv + batch
-    var nsub = mb_subs(batch)
+    var sub = mb_sub_size(batch)
+    var dblk = mb_dblk(batch)
+    var nsub = mb_subs(batch, sub)
     fill(w, woff, d, Float32(0))
     var bias = Float32(1) if one_class else Float32(0)
     for i in range(n):
@@ -1178,13 +1223,13 @@ def sgd_mb_one(
             var bs = min(batch, n - start)
             for r in range(bs):
                 var dl_l = mb_row(x, ys, Int(ldi(idx, start + r)), d, w, woff, bias, loss, eps, swp, has_sw, wpos, wneg, has_cw,
-                                  lr, eta0)
+                                  lr, eta0, dblk)
                 st(dlv, r, dl_l[0])
                 st(lv, r, dl_l[1])
-            var subs = mb_subs(bs)
+            var subs = mb_subs(bs, sub)
             for j in range(d + 2):
                 for s in range(subs):
-                    st(parts, j * nsub + s, mb_part(x, d, idx, start, dlv, lv, j, s, bs))
+                    st(parts, j * nsub + s, mb_part(x, d, idx, start, dlv, lv, j, s, bs, sub))
             var et = mb_eta(lr, eta, eta0, alpha, power_t, opt_init, t)
             for j in range(d):
                 var g = Float32(0)

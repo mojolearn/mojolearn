@@ -26,7 +26,7 @@ from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS
 from x_linear.ops import ld, st, ldi, fd, i2f, fa, fs, fm, fabs, shuffle
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
-from x_linear.sgd import sgd_mb_on, mb_row, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
+from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
@@ -191,44 +191,47 @@ def _fit_on_host(
 @always_inline
 def _sgd_mb_rows_kernel_body(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
                        eps: Float32, swp: FP, has_sw: Int32, wpos: Float32, wneg: Float32, has_cw: Int32,
-                       dlv: FP, lv: FP, lr: Int32, eta0: Float32):
+                       dlv: FP, lv: FP, lr: Int32, eta0: Float32, dblk: Int32):
     var r = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     if r < Int(bs):
         var i = Int(idx.unsafe_load(Int(start) + r))
         var o = mb_row(x, ys, i, Int(d), w, 0, ld(bias, 0), Int(loss), eps, swp, has_sw != 0, wpos, wneg, has_cw != 0,
-                       Int(lr), eta0)
+                       Int(lr), eta0, Int(dblk))
         st(dlv, r, o[0])
         st(lv, r, o[1])
 
 
 def sgd_mb_rows_kernel(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
                        eps: Float32, swp: FP, has_sw: Int32, wpos: Float32, wneg: Float32, has_cw: Int32,
-                       dlv: FP, lv: FP, lr: Int32, eta0: Float32, wf: IP, woff: Int32, nonce: Int32):
-    _sgd_mb_rows_kernel_body(x, ys, idx, start, bs, d, w, bias, loss, eps, swp, has_sw, wpos, wneg, has_cw, dlv, lv, lr, eta0)
+                       dlv: FP, lv: FP, lr: Int32, eta0: Float32, dblk: Int32, wf: IP, woff: Int32, nonce: Int32):
+    _sgd_mb_rows_kernel_body(x, ys, idx, start, bs, d, w, bias, loss, eps, swp, has_sw, wpos, wneg, has_cw, dlv, lv, lr, eta0,
+                             dblk)
     witness_end(wf, woff, nonce)
 
 @always_inline
-def _sgd_mb_parts_kernel_body(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP, bs: Int32, nsub: Int32, parts: FP):
+def _sgd_mb_parts_kernel_body(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP, bs: Int32, nsub: Int32, parts: FP,
+                              sub: Int32):
     var q = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
-    var subs = mb_subs(Int(bs))
+    var subs = mb_subs(Int(bs), Int(sub))
     var s = q // (dd + 2)
     var j = q - s * (dd + 2)
     if s < subs:
-        st(parts, j * Int(nsub) + s, mb_part(x, dd, idx, Int(start), dlv, lv, j, s, Int(bs)))
+        st(parts, j * Int(nsub) + s, mb_part(x, dd, idx, Int(start), dlv, lv, j, s, Int(bs), Int(sub)))
 
 
-def sgd_mb_parts_kernel(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP, bs: Int32, nsub: Int32, parts: FP, wf: IP, woff: Int32, nonce: Int32):
-    _sgd_mb_parts_kernel_body(x, d, idx, start, dlv, lv, bs, nsub, parts)
+def sgd_mb_parts_kernel(x: FP, d: Int32, idx: IP, start: Int32, dlv: FP, lv: FP, bs: Int32, nsub: Int32, parts: FP,
+                        sub: Int32, wf: IP, woff: Int32, nonce: Int32):
+    _sgd_mb_parts_kernel_body(x, d, idx, start, dlv, lv, bs, nsub, parts, sub)
     witness_end(wf, woff, nonce)
 
 @always_inline
 def _sgd_mb_step_kernel_body(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias: FP, obj: FP, eta: Float32,
                        alpha: Float32, l1r: Float32, penalty: Int32, fi: Int32, need_obj: Int32, one_class: Int32,
-                       bsum: Int32):
+                       bsum: Int32, sub: Int32):
     var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
     var dd = Int(d)
-    var subs = mb_subs(Int(bs))
+    var subs = mb_subs(Int(bs), Int(sub))
     if j > dd + 1:
         return
     var g = Float32(0)
@@ -245,8 +248,8 @@ def _sgd_mb_step_kernel_body(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP,
 
 def sgd_mb_step_kernel(parts: FP, nsub: Int32, bs: Int32, d: Int32, w: FP, bias: FP, obj: FP, eta: Float32,
                        alpha: Float32, l1r: Float32, penalty: Int32, fi: Int32, need_obj: Int32, one_class: Int32,
-                       bsum: Int32, wf: IP, woff: Int32, nonce: Int32):
-    _sgd_mb_step_kernel_body(parts, nsub, bs, d, w, bias, obj, eta, alpha, l1r, penalty, fi, need_obj, one_class, bsum)
+                       bsum: Int32, sub: Int32, wf: IP, woff: Int32, nonce: Int32):
+    _sgd_mb_step_kernel_body(parts, nsub, bs, d, w, bias, obj, eta, alpha, l1r, penalty, fi, need_obj, one_class, bsum, sub)
     witness_end(wf, woff, nonce)
 
 
@@ -281,6 +284,8 @@ def _sgd_mb_chunk_kernel_body(
     var need_obj = ldi(ci, 10) != 0
     var one_class = ldi(ci, 11) != 0
     var bsum = ldi(ci, 12) != 0
+    var sub = ldi(ci, 13)
+    var dblk = ldi(ci, 14)
     var eps = ld(cf, 0)
     var wpos = ld(cf, 1)
     var wneg = ld(cf, 2)
@@ -301,15 +306,15 @@ def _sgd_mb_chunk_kernel_body(
         var et = mb_eta(lr, eta, eta0, alpha, power_t, opt_init, t)
         for r in range(tid, bs, nt):
             var i = Int(idx.unsafe_load(start + r))
-            var o = mb_row(x, ys, i, dd, w, 0, ld(bias, 0), loss, eps, swp, has_sw, wpos, wneg, has_cw, lr, eta0)
+            var o = mb_row(x, ys, i, dd, w, 0, ld(bias, 0), loss, eps, swp, has_sw, wpos, wneg, has_cw, lr, eta0, dblk)
             st(dlv, r, o[0])
             st(lv, r, o[1])
         team_barrier()
-        var subs = mb_subs(bs)
+        var subs = mb_subs(bs, sub)
         for q in range(tid, (dd + 2) * subs, nt):
             var sb = q // (dd + 2)
             var j = q - sb * (dd + 2)
-            st(parts, j * nsub + sb, mb_part(x, dd, idx, start, dlv, lv, j, sb, bs))
+            st(parts, j * nsub + sb, mb_part(x, dd, idx, start, dlv, lv, j, sb, bs, sub))
         team_barrier()
         for j in range(tid, dd + 2, nt):
             var g = Float32(0)
@@ -372,7 +377,9 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
         l1r = Float32(1)
     var problems = k if k > 2 else 1
     var one_class = k == 1
-    var nsub = mb_subs(batch)
+    var sub = mb_sub_size(batch)
+    var dblk = mb_dblk(batch)
+    var nsub = mb_subs(batch, sub)
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dys = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
     var dsw = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
@@ -389,13 +396,13 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var ws0 = 0
     while ws0 < n:
         var wbs = min(batch, n - ws0)
-        wcap += _xg_blocks(wbs) + _xg_blocks((d + 2) * mb_subs(wbs)) + _xg_blocks(d + 2)
+        wcap += _xg_blocks(wbs) + _xg_blocks((d + 2) * mb_subs(wbs, sub)) + _xg_blocks(d + 2)
         ws0 += wbs
     var wit = Witness(ctx, max(wcap, 1))
     var chunk = _sgd_chunk()
-    var dci = ctx.enqueue_create_buffer[DType.int32](13)
+    var dci = ctx.enqueue_create_buffer[DType.int32](15)
     var dcf = ctx.enqueue_create_buffer[DType.float32](9)
-    var hci = List[Int32](length=13, fill=Int32(0))
+    var hci = List[Int32](length=15, fill=Int32(0))
     var hcf = List[Float32](length=9, fill=Float32(0))
     hci[0] = Int32(n)
     hci[1] = Int32(batch)
@@ -408,6 +415,8 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     hci[8] = Int32(penalty)
     hci[9] = Int32(1 if fi else 0)
     hci[12] = Int32(1 if bsum else 0)
+    hci[13] = Int32(sub)
+    hci[14] = Int32(dblk)
     hcf[0] = eps
     hcf[3] = eta0
     hcf[5] = alpha
@@ -504,20 +513,20 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                         ctx.enqueue_function[sgd_mb_rows_kernel](
                             dx.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(start), Int32(bs), Int32(d),
                             dw.unsafe_ptr(), dbias.unsafe_ptr(), Int32(loss), eps, dsw.unsafe_ptr(), Int32(1 if has_sw else 0),
-                            wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0,
+                            wpos, wneg, Int32(1 if has_cw else 0), ddl.unsafe_ptr(), dlv.unsafe_ptr(), Int32(lr), eta0, Int32(dblk),
                             wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(bs), block_dim=XG_TPB,
                         )
                         wo += _xg_blocks(bs)
                         ctx.enqueue_function[sgd_mb_parts_kernel](
                             dx.unsafe_ptr(), Int32(d), didx.unsafe_ptr(), Int32(start), ddl.unsafe_ptr(), dlv.unsafe_ptr(),
-                            Int32(bs), Int32(nsub), dparts.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                            grid_dim=_xg_blocks((d + 2) * mb_subs(bs)), block_dim=XG_TPB,
+                            Int32(bs), Int32(nsub), dparts.unsafe_ptr(), Int32(sub), wit.p(), Int32(wo), nonce,
+                            grid_dim=_xg_blocks((d + 2) * mb_subs(bs, sub)), block_dim=XG_TPB,
                         )
-                        wo += _xg_blocks((d + 2) * mb_subs(bs))
+                        wo += _xg_blocks((d + 2) * mb_subs(bs, sub))
                         ctx.enqueue_function[sgd_mb_step_kernel](
                             dparts.unsafe_ptr(), Int32(nsub), Int32(bs), Int32(d), dw.unsafe_ptr(), dbias.unsafe_ptr(),
                             dobj.unsafe_ptr(), et, alpha, l1r, Int32(penalty), Int32(1 if fi else 0), Int32(1 if need_obj else 0),
-                            Int32(1 if one_class else 0), Int32(1 if bsum else 0), wit.p(), Int32(wo), nonce,
+                            Int32(1 if one_class else 0), Int32(1 if bsum else 0), Int32(sub), wit.p(), Int32(wo), nonce,
                             grid_dim=_xg_blocks(d + 2), block_dim=XG_TPB,
                         )
                         wo += _xg_blocks(d + 2)
