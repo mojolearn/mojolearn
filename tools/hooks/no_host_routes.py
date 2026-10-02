@@ -161,8 +161,17 @@ def main(argv):
             diff = f.read()
         exempt = frozenset()
     elif len(argv) == 3:
+        base = argv[1]
+        if main_ref:
+            # count what the tip adds over main (the CI check's range): from
+            # merge-base(main, tip). A push that merges main into a lane then
+            # is not charged with main's own lines, which were checked when
+            # they landed; every line the lane itself adds is still read.
+            mb = _git("merge-base", main_ref, argv[2])
+            if mb.returncode == 0:
+                base = mb.stdout.strip()
         r = _git("diff", "-U0", "--no-color", "--no-ext-diff",
-                 "--diff-filter=AMR", argv[1], argv[2])
+                 "--diff-filter=AMR", base, argv[2])
         if r.returncode != 0:
             print(r.stderr, file=sys.stderr)
             return 2
