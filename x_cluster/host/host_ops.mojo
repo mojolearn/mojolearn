@@ -558,3 +558,32 @@ struct HostOps(ClusterOps):
         self.gauss_q(x, n, d, means, pchol, kc, q)
         self.resp(q, c, n, kc, lpn)
         self.exp(q, r, n * kc)
+
+    def ap_loop(
+        mut self, s: Int, a: Int, r: Int, e: Int, n: Int, damping: Float32, conv_iter: Int, it0: Int, n_it: Int,
+        ring: Int, cnt: Int, done_off: Int, split: Bool,
+    ) raises:
+        # the host column never takes the FAST device paths (`fast_device`):
+        # the same steps in plain loops, for the trait's sake
+        for q in range(n_it):
+            var it = it0 + q
+            if self.i[cnt][done_off] != Int32(0):
+                return
+            if it >= conv_iter + 1:
+                var prev = it - 1
+                if Int(self.i[cnt][2 * prev]) == n and self.i[cnt][2 * prev + 1] > Int32(0):
+                    self.i[cnt][done_off] = Int32(1)
+                    self.i[cnt][done_off + 1] = Int32(prev)
+                    return
+            self.ap_r(s, a, r, n, damping)
+            self.ap_a(r, a, n, damping)
+            self.ap_e(a, r, n, e)
+            for i in range(n):
+                var ei = self.i[e][i]
+                self.i[ring][i * conv_iter + it % conv_iter] = ei
+                var se = Int32(0)
+                for c in range(conv_iter):
+                    se += self.i[ring][i * conv_iter + c]
+                if se == Int32(conv_iter) or se == Int32(0):
+                    self.i[cnt][2 * it] += Int32(1)
+                self.i[cnt][2 * it + 1] += ei

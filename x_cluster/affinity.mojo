@@ -17,9 +17,11 @@ thread for the responsibilities, a column per thread for the availabilities,
 every fold ascending, the lowest index on an argmax tie) and one for the
 exemplar flags; the convergence window, the exemplar refinement and the
 labels are the reference's host logic from one source."""
+from std.os import getenv
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul
 from x_cluster.ops import ClusterOps
 from x_cluster.optics import dist_slot
 
@@ -31,6 +33,25 @@ from x_cluster.optics import dist_slot
 # sums folded over row slices (bits move; the paired quality check).
 comptime AP_EXACT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_EXACT"]()
 comptime AP_SPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_SPLIT"]()
+
+# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple, the
+# GPU binding only, three host-read env switches that default OFF:
+# `MOJOLEARN_AFFINITY_FAST_LOOP=1`: the iteration loop on the device,
+#   AP_LOOP_BATCH iterations per host wait, the convergence window and its
+#   counts kept there (`ops.ap_loop`, device_ops.mojo). Cause: `ops.get_i(e_s,
+#   n)` below drained the stream and crossed to the host EVERY iteration (up
+#   to max_iter = 200 waits of a few ms each on Metal). Same bits, same n_iter.
+# `MOJOLEARN_AFFINITY_FAST_SPLIT=1`: `ops.ap_a_split` (the availability
+#   column sums over row slices on every block of the grid) without the
+#   build define AP_SPLIT. Cause: `ap_a` is ONE THREAD PER COLUMN, n threads
+#   walking n rows twice. Bits move (the fold order); the paired quality check.
+# `MOJOLEARN_AFFINITY_FAST_EXACT=1`: the driver half of AP_EXACT without
+#   the build define: the median by `kth_flat` over the grid from the
+#   device's distances (no second n^2 host copy, no n^2 upload), the two
+#   final diagonals gathered on the device (not two n^2 readbacks), the
+#   equal-similarities scan stopped at its first difference. Same values.
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+comptime AP_LOOP_BATCH = 16
 
 
 def affinity_fit[O: ClusterOps](
@@ -48,6 +69,14 @@ def affinity_fit[O: ClusterOps](
     var fast_exact = False
     comptime if AP_EXACT:
         fast_exact = ops.fast_device()
+    var dev_loop = False
+    var env_split = False
+    comptime if XC2_FAST:
+        if ops.fast_device():
+            if String(getenv("MOJOLEARN_AFFINITY_FAST_EXACT")) == "1":
+                fast_exact = True
+            dev_loop = String(getenv("MOJOLEARN_AFFINITY_FAST_LOOP")) == "1"
+            env_split = String(getenv("MOJOLEARN_AFFINITY_FAST_SPLIT")) == "1"
     var dm_slot = -1
     if precomputed:
         s_m = x.copy()
@@ -160,10 +189,33 @@ def affinity_fit[O: ClusterOps](
     var e = List[Int32]()
     var it = 0
     var never_converged = True
-    var split = False
+    var split = env_split
     comptime if AP_SPLIT:
         split = ops.fast_device()
-    while it < max_iter:
+    if dev_loop:
+        # lane cluster2: the window, the counts and the done flag on the
+        # device; one host read of 2 max_iter + 2 ints per batch
+        var ring_s = ops.zeros_i(n * conv_iter)
+        var cnt_s = ops.zeros_i(2 * max_iter + 2)
+        var done_off = 2 * max_iter
+        while it < max_iter:
+            var n_it = max_iter - it
+            if n_it > AP_LOOP_BATCH:
+                n_it = AP_LOOP_BATCH
+            ops.ap_loop(ss, a_s, r_s, e_s, n, damping, conv_iter, it, n_it, ring_s, cnt_s, done_off, split)
+            var last = it + n_it - 1
+            var c = ops.get_i(cnt_s, 2 * max_iter + 2)
+            if c[done_off] != Int32(0):
+                it = Int(c[done_off + 1])
+                never_converged = False
+                break
+            if last >= conv_iter and Int(c[2 * last]) == n and c[2 * last + 1] > Int32(0):
+                it = last
+                never_converged = False
+                break
+            it += n_it
+        e = ops.get_i(e_s, n)
+    while not dev_loop and it < max_iter:
         ops.ap_r(ss, a_s, r_s, n, damping)
         if split:
             ops.ap_a_split(r_s, a_s, n, damping)

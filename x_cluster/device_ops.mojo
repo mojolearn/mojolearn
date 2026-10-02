@@ -4,10 +4,11 @@
 GPU. Each primitive is one kernel whose thread `t` calls the `x_cluster/
 bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from std.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from std.time import perf_counter_ns
 from std.ffi import _Global
 from std.memory import bitcast, stack_allocation
@@ -949,6 +950,90 @@ def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32,
     a[i * N + k] = ftz(ftz(identical_mul(old, damping)) + ftz(identical_mul(nw, one_minus)))
 
 
+# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
+# env `MOJOLEARN_AFFINITY_FAST_LOOP=1` (read in x_cluster/affinity.mojo):
+# the AffinityPropagation iteration on the device for AP_LOOP_BATCH
+# iterations per host wait. Cause: the driver's `while it < max_iter`
+# (affinity.mojo) read the n exemplar flags back EVERY iteration
+# (`ops.get_i(e_s, n)`: a stream drain and a host round trip per iteration,
+# up to 200 of them) and kept the convergence window on the host. Here
+# `_apl_e_kernel` keeps the window (`ring`, n x convergence_iter) and its
+# two counts (settled rows, exemplars) on the device, the NEXT iteration's
+# `_apl_r_kernel` reads the counts and raises `done`, and every later kernel
+# of the batch returns at once. The responsibility, availability and
+# exemplar arithmetic is the plain kernels', cell for cell: the same bits
+# and the same n_iter; only the waits go. Expected: the per-iteration host
+# wait (the dominant cost of a 5,000-row iteration on Metal) once per batch.
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator()
+
+
+def _apl_r_kernel(
+    s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32, cnt: IPtr, it: Int32, check: Int32, done: IPtr,
+):
+    """`_ap_r_kernel` for iteration `it`, after the convergence test of
+    iteration it - 1 (`check` != 0 when it - 1 >= convergence_iter): every
+    block reads the same two complete counts and takes the same branch, so
+    either every row updates or none does."""
+    if done[0] != Int32(0):
+        return
+    if check != Int32(0):
+        var prev = Int(it) - 1
+        if cnt[2 * prev] == n and cnt[2 * prev + 1] > Int32(0):
+            done[0] = Int32(1)
+            done[1] = Int32(prev)
+            return
+    _ap_r_kernel(s, a, r, n, damping)
+
+
+def _apl_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32, done: IPtr):
+    if done[0] != Int32(0):
+        return
+    _ap_a_kernel(r, a, n, damping)
+
+
+def _apl_a_part_kernel(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr, done: IPtr):
+    if done[0] != Int32(0):
+        return
+    _apf_part_kernel(r, n, n_tiles, part)
+
+
+def _apl_a_sum_kernel(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr, done: IPtr):
+    if done[0] != Int32(0):
+        return
+    _apf_sum_kernel(part, n, n_slices, colsum)
+
+
+def _apl_a_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32, damping: Float32, done: IPtr):
+    if done[0] != Int32(0):
+        return
+    _apf_update_kernel(r, a, colsum, n, n_tiles, damping)
+
+
+def _apl_e_kernel(
+    a: FPtr, r: FPtr, n: Int32, e: IPtr, ring: IPtr, conv: Int32, it: Int32, cnt: IPtr, done: IPtr,
+):
+    """Row i's exemplar flag (`ap_exemplar_cell`), its slot of the window
+    `ring[i, it % conv]`, and the two counts of iteration `it`: cnt[2 it]
+    += (the row's window all ones or all zeros), cnt[2 it + 1] += e[i].
+    Integer adds: every interleaving gives the same counts."""
+    if done[0] != Int32(0):
+        return
+    var i = _tid()
+    var N = Int(n)
+    if i >= N:
+        return
+    ap_exemplar_cell(a, r, N, e, i)
+    var C = Int(conv)
+    var ei = e[i]
+    ring[i * C + Int(it) % C] = ei
+    var se = Int32(0)
+    for c in range(C):
+        se += ring[i * C + c]
+    var settled = Int32(1) if (se == conv or se == Int32(0)) else Int32(0)
+    _ = Atomic.fetch_add[ordering = Ordering.RELAXED](cnt.unsafe_offset(2 * Int(it)), settled)
+    _ = Atomic.fetch_add[ordering = Ordering.RELAXED](cnt.unsafe_offset(2 * Int(it) + 1), ei)
+
+
 comptime WNN_TPB = 256
 
 
@@ -1648,3 +1733,50 @@ struct DeviceOps(ClusterOps):
             self._fp(q), self._fp(r), self._fp(lpn), grid_dim=_grid(n), block_dim=TPB,
         )
         self._ph1("estep")
+
+    def ap_loop(
+        mut self, s: Int, a: Int, r: Int, e: Int, n: Int, damping: Float32, conv_iter: Int, it0: Int, n_it: Int,
+        ring: Int, cnt: Int, done_off: Int, split: Bool,
+    ) raises:
+        self._ph0()
+        comptime if XC2_FAST:
+            var pc = self._ip(cnt)
+            var pd = pc + done_off
+            var n_tiles = (n + APF_TPB - 1) // APF_TPB
+            var n_slices = (n + APF_ROWS - 1) // APF_ROWS
+            if split:
+                var need = n_slices * n + n
+                if need > self.mpart_n:
+                    self.mpart = self.ctx.enqueue_create_buffer[DType.float32](need)
+                    self.mpart_n = need
+            var pp = self.mpart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var cp = pp + n_slices * n
+            for q in range(n_it):
+                var it = it0 + q
+                var check = Int32(1) if it >= conv_iter + 1 else Int32(0)
+                self.ctx.enqueue_function[_apl_r_kernel](
+                    self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, pc, Int32(it), check, pd,
+                    grid_dim=n if n > 0 else 1, block_dim=AP_TPB,
+                )
+                if split:
+                    self.ctx.enqueue_function[_apl_a_part_kernel](
+                        self._fp(r), Int32(n), Int32(n_tiles), pp, pd, grid_dim=n_slices * n_tiles, block_dim=APF_TPB,
+                    )
+                    self.ctx.enqueue_function[_apl_a_sum_kernel](
+                        pp, Int32(n), Int32(n_slices), cp, pd, grid_dim=_grid(n), block_dim=TPB,
+                    )
+                    self.ctx.enqueue_function[_apl_a_update_kernel](
+                        self._fp(r), self._fp(a), cp, Int32(n), Int32(n_tiles), damping, pd,
+                        grid_dim=n * n_tiles, block_dim=APF_TPB,
+                    )
+                else:
+                    self.ctx.enqueue_function[_apl_a_kernel](
+                        self._fp(r), self._fp(a), Int32(n), damping, pd, grid_dim=_grid(n), block_dim=TPB,
+                    )
+                self.ctx.enqueue_function[_apl_e_kernel](
+                    self._fp(a), self._fp(r), Int32(n), self._ip(e), self._ip(ring), Int32(conv_iter), Int32(it), pc, pd,
+                    grid_dim=_grid(n), block_dim=TPB,
+                )
+        else:
+            raise Error("x_cluster: ap_loop is the FAST Apple device path (MOJOLEARN_AFFINITY_FAST_LOOP)")
+        self._ph1("ap_loop")

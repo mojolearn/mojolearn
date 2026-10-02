@@ -168,3 +168,16 @@ trait ClusterOps(Movable):
         kc Mahalanobis squares, its log-sum-exp and its responsibilities by
         the same bodies in the same order (the same values)."""
         ...
+
+    def ap_loop(
+        mut self, s: Int, a: Int, r: Int, e: Int, n: Int, damping: Float32, conv_iter: Int, it0: Int, n_it: Int,
+        ring: Int, cnt: Int, done_off: Int, split: Bool,
+    ) raises:
+        """FAST (lane cluster2): iterations it0 .. it0 + n_it - 1 of the
+        affinity propagation loop (`ap_r`, `ap_a` or `ap_a_split`, `ap_e`)
+        without a host wait: the convergence window `ring` (n x conv_iter
+        ints) and, per iteration, the settled-row count at cnt[2 it] and the
+        exemplar count at cnt[2 it + 1]; the iteration after a converged one
+        writes 1 and that iteration's index at cnt[done_off], cnt[done_off +
+        1] and does nothing more, nor does anything after it."""
+        ...
