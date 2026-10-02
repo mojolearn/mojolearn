@@ -712,9 +712,25 @@ class _Kit:
         self.b.x_decomp_barycenter_rows(X.addr, Y.addr, idx.addr, W.addr, flags.addr, [n, Y.r, X.c, k], float(reg))
         return W
 
-    def als(self, C, Y, reg):
+    def als_resident(self, C):
+        """Whether `als` runs on the device with C resident (the GPU binding
+        with x_decomp_dev_als_rows): the item half-sweep then reads C through
+        strides (`trans=True`), so no transpose is built."""
+        return self._use(C) and hasattr(self._raw(), "x_decomp_dev_als_rows")
+
+    def als(self, C, Y, reg, trans=False):
         """One implicit least_squares half-sweep: every row's factor from the
-        confidences C (n x m) and the other side's factors Y (m x f)."""
+        confidences C (n x m; with trans, the rows are C's columns) and the
+        other side's factors Y (m x f). trans needs `als_resident(C)`."""
+        if trans or self.als_resident(C):
+            n, m = (C.c, C.r) if trans else (C.r, C.c)
+            f = Y.c
+            YtY = self.mm(Y, Y, ta=True)
+            X, flags = self._dout(n, f), self._dout(n, 1)
+            su, si = (1, C.c) if trans else (C.c, 1)
+            self.b.x_decomp_dev_als_rows(self._did(C), self._did(Y), self._did(YtY), X._d.id, flags._d.id,
+                                         [n, m, f, su, si, C.r * C.c], float(reg))
+            return X
         n, f = C.r, Y.c
         YtY = self.mm(Y, Y, ta=True)
         X, flags = _M.zeros(n, f), _M.zeros(n, 1)
@@ -2949,16 +2965,24 @@ class LatentDirichletAllocation(_Base):
         nc = self.components_m_.r
         ddt = _dirichlet_expectation_2d(k, Dt)             # n x k
         dcomp = _dirichlet_expectation_2d(k, self.components_m_)   # k x v
-        zero = _M.zeros(n, v)
-        terms = [k.ew("add", k.ew("add", zero, ddt.cols(t, t + 1)), dcomp.rows(t, t + 1)) for t in range(nc)]
-        mx = terms[0]
-        for t in range(1, nc):
-            mx = k.ew("max", mx, terms[t])
-        acc = _M.zeros(n, v)
-        for t in range(nc):
-            acc = k.ew("add", acc, k.ew("exp", k.ew("sub", terms[t], mx)))
-        lse = k.ew("add", k.ew("logs", acc, s=1.1754943508222875e-38), mx)
-        score = k.total(k.ew("mul", M, lse)).s[0]
+        floor = 1.1754943508222875e-38
+        if n * v and k._use(M, ddt, dcomp) and hasattr(k._raw(), "x_decomp_dev_lda_bound"):
+            # lane gap-lda-als: the same ew cells per (i, w) in one kernel,
+            # no n x v term matrix per topic (the L40S text-block OOM)
+            P = k._dout(n, v)
+            k.b.x_decomp_dev_lda_bound(k._did(M), k._did(ddt), k._did(dcomp), P._d.id, [n, nc, v], [floor])
+            score = k.total(P).s[0]
+        else:
+            zero = _M.zeros(n, v)
+            terms = [k.ew("add", k.ew("add", zero, ddt.cols(t, t + 1)), dcomp.rows(t, t + 1)) for t in range(nc)]
+            mx = terms[0]
+            for t in range(1, nc):
+                mx = k.ew("max", mx, terms[t])
+            acc = _M.zeros(n, v)
+            for t in range(nc):
+                acc = k.ew("add", acc, k.ew("exp", k.ew("sub", terms[t], mx)))
+            lse = k.ew("add", k.ew("logs", acc, s=floor), mx)
+            score = k.total(k.ew("mul", M, lse)).s[0]
         score += self._loglik(k, self.doc_topic_prior_, Dt, ddt, nc)
         if sub_sampling:
             score *= float(self.total_samples) / n
@@ -4368,7 +4392,10 @@ class AlternatingLeastSquares(_Base):
         R = _M.from_input(user_items, "user_items")
         n, m = R.r, R.c
         C = R if self.alpha == 1.0 else k.ew("scale", R, s=self.alpha)
-        Ct = C.T
+        # resident (lane gap-lda-als): C stays on the device and the item
+        # half-sweep reads it through strides; the host column transposes
+        res = not self.use_cg and k.als_resident(C)
+        Ct = None if res else C.T
         seed = _seed_of(self.random_state)
         f = int(self.factors)
         X = k.ew("scale", k.rand(n, f, seed, 80, 0), s=0.01)
@@ -4382,7 +4409,7 @@ class AlternatingLeastSquares(_Base):
                 Y = k.als_cg(Ct, X, Y, self.regularization, self.cg_steps)
             else:
                 X = k.als(C, Y, self.regularization)
-                Y = k.als(Ct, X, self.regularization)
+                Y = k.als(C, X, self.regularization, trans=True) if res else k.als(Ct, X, self.regularization)
             if self.calculate_training_loss:
                 losses.append(self._loss(k, C, X, Y))
         if self.calculate_training_loss:

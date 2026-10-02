@@ -1,8 +1,8 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index 4b4c2cedf..fec5f4392 100644
+index 33b6551..189a414 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -643,7 +643,8 @@ def lda_doc_row(
+@@ -727,7 +727,8 @@ def lda_doc_row(
          var total = Float32(0)
          for t in range(k):
              var acc = Float32(0)
@@ -12,3 +12,22 @@ index 4b4c2cedf..fec5f4392 100644
                  if ftz(X.unsafe_load(i * v + w)) == Float32(0):
                      continue
                  acc = ftz(identical_mul_add(ftz(S.unsafe_load(sb + w)), ftz(EW.unsafe_load(t * v + w)), acc))
+diff --git a/x_decomp/device.mojo b/x_decomp/device.mojo
+index 7a13eb9..87d6c57 100644
+--- a/x_decomp/device.mojo
++++ b/x_decomp/device.mojo
+@@ -981,10 +981,12 @@ def lda_block_kernel(
+             var acc = Float32(0)
+             var eb = t * vv
+             if compact:
+-                for j in range(nnz):
++                for jj in range(nnz):
++                    var j = nnz - 1 - jj  # SABOTAGE 5313: the word fold descending
+                     acc = ftz(identical_mul_add(ftz(sw[j]), ftz(ew.unsafe_load(eb + Int(idx[j]))), acc))
+             else:
+-                for w in range(vv):
++                for ww in range(vv):
++                    var w = vv - 1 - ww
+                     if ftz(x.unsafe_load(xb + w)) == Float32(0):
+                         continue
+                     acc = ftz(identical_mul_add(ftz(s.unsafe_load(sb + w)), ftz(ew.unsafe_load(eb + w)), acc))
