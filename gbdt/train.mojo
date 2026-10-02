@@ -37,7 +37,11 @@ from gbdt.ctrs.ctr_binarization import (
     build_target_borders,
     compute_ctr_borders,
 )
-from gbdt.ctrs.ctr_calcers import compute_simple_ctrs, compute_simple_ctrs_gpu
+from gbdt.ctrs.ctr_calcers import (
+    compute_simple_ctrs,
+    compute_simple_ctrs_device,
+    compute_simple_ctrs_gpu,
+)
 from gbdt.data.permutation import (
     DEFAULT_PERMUTATION_COUNT,
     ctrs_estimation_permutation,
@@ -60,7 +64,7 @@ from std.os import getenv
 
 # DEVIATION 258: the probability links (double, as CatBoost computes them)
 # go through the host-portable exp64 under IDENTICAL; FAST is the stdlib
-from checks.numerics import identical_exp64
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_exp64
 from gbdt.methods.doc_parallel_boosting import (
     TAdditiveModel,
     fit_with_test,
@@ -86,6 +90,24 @@ from core.host_parallel import host_parallelize_pool_env
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_sampling import check_feature_fraction
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+
+#: lane/apple-fast-trees-depthwise (2026-10-02), `-D MOJOLEARN_GBDT_CTR_FAST_FREQ=1`,
+#: FAST + Apple only, default OFF. The permutation-INDEPENDENT simple CTR
+#: (the GPU default's FeatureFreq / Counter column) was computed on the
+#: HOST inside the fit: `compute_simple_ctrs` (`ctrs/ctr_calcers.mojo:81`)
+#: runs `TCtrBinBuilder`'s host stable sort of every row by category and
+#: the host frequency calcer, once per cat feature, at the categorical
+#: lane's 4.1M taxi rows. The arm takes `compute_simple_ctrs_device`
+#: (`ctrs/ctr_calcers.mojo:1065`, their own device calcer, wired here as
+#: its docstring asks) under the default `counter_calc_method` (SkipTest);
+#: the `Full` method keeps the host calcer (no device arm). Same columns:
+#: the device freq calcer's sums are integer counts, exact in any order.
+comptime CTR_FAST_FREQ = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_CTR_FAST_FREQ"]()
+)
 from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BAYESIAN,
     BOOTSTRAP_KERNEL_BERNOULLI,
@@ -1614,13 +1636,24 @@ def train(
         if len(independent_configs) > 0:
             # their `writeCtrs(..., permutationIndependent)` (`:229`),
             # over the identity `ctrEstimationOrder` (`:206`)
-            var indep = compute_simple_ctrs(
-                codes,
-                unique_values,
-                independent_configs,
-                List[UInt8](),
-                cat_params.counter_calc_method == COUNTER_CALC_FULL,
-            )
+            var indep: List[List[Float32]]
+            var indep_on_device = False
+            comptime if CTR_FAST_FREQ:
+                indep_on_device = (
+                    cat_params.counter_calc_method != COUNTER_CALC_FULL
+                )
+            if indep_on_device:
+                indep = compute_simple_ctrs_device(
+                    ctx, codes, unique_values, independent_configs
+                )
+            else:
+                indep = compute_simple_ctrs(
+                    codes,
+                    unique_values,
+                    independent_configs,
+                    List[UInt8](),
+                    cat_params.counter_calc_method == COUNTER_CALC_FULL,
+                )
             for c in range(len(independent_slots)):
                 ctr_columns[independent_slots[c]] = indep[c].copy()
 
