@@ -635,11 +635,6 @@ host-threads	host-threads	UNOWNED	debt	sequence/exec.mojo	0	host_parallelize(_ch
 host-threads	host-threads	UNOWNED	debt	sequence/exec.mojo	0	host_parallelize(_rows, tasks)
 host-threads	host-threads	gap-neural-models	debt	sequence/exec_device.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	gap-neural-models	debt	sequence/exec_device.mojo	0	host_parallelize(_c, tasks)
-host-env	host-env/threshold	UNOWNED	debt	sequence/pyapi.mojo	0	return String(_getenv_seq("MOJOLEARN_SEQ_HOST_FOLD")) != "0"
-host-threshold	host-env/threshold	UNOWNED	debt	sequence/pyapi.mojo	0	comptime HOST_FOLD_MIN = 1 << 16
-host-threshold	host-env/threshold	UNOWNED	debt	sequence/pyapi.mojo	0	var host_fold = _host_folds() and n >= HOST_FOLD_MIN
-route-switch	host-env/threshold	UNOWNED	debt	sequence/pyapi.mojo	0	comptime HOST_FOLD_MIN = 1 << 16
-route-switch	host-env/threshold	UNOWNED	debt	sequence/pyapi.mojo	0	var host_fold = _host_folds() and n >= HOST_FOLD_MIN
 host-call	host-import	UNOWNED	debt	spectral/host/spectral_predict_host.mojo	0	host_kmeans_predict(emb, n_queries, k, state.centroids, n_clusters, METRIC_L2_EXPANDED, u_labels)
 host-call	host-import	UNOWNED	debt	spectral/host/spectral_predict_host.mojo	0	host_knn_search(
 host-call	host-import	UNOWNED	debt	spectral/host/spectral_predict_host.mojo	0	import cluster/host/kmeans_oracle.mojo:host_kmeans_predict
