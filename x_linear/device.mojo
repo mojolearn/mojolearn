@@ -23,8 +23,12 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS
-from x_linear.ops import ld, st, fd, i2f
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS, ALGO_GLM
+from x_linear.ops import ld, st, fd, i2f, fa, fm, fmad, flog, fill, copy, row_dot, mean_of
+from x_linear.tops import t_fold_fa_staged
+from x_linear.glm import (
+    _unit, _glm_deriv_row, _glm_cell, _glm_slot_count, _glm_slot_cell, _glm_step, GLM_LINK_LOG, GLM_STALL_ITERS,
+)
 from x_linear.tops import upper_cell, fold_fa, chain_cfmad
 from std.os import getenv
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo
@@ -178,10 +182,226 @@ def _fit_on_host(
     _ = tw^
 
 
+
+# ------------------------------------------------ GLM on the grid (lane/neural-pass89)
+# The GLM Newton loop driven from the host, each pass a kernel over the whole
+# grid: the rows' derivatives and loss terms (one thread a row) and the
+# gradient / Hessian cells (one thread a cell chain over the rows ascending,
+# in glm_fit's warp-uniform slots). The folds that define the objective run on
+# one block (`t_fold_fa_staged`), the m x m step on one thread
+# (`_glm_step`), and the control (the line search, the stall count) on the
+# host with the same fa / fm words. Every value is glm_fit's: the same
+# helpers, the same order. glm_fit ran all of it on ONE block: istella's
+# 24,531 cells were ~96 million-row chains a thread (the L40S board timed
+# out). `MOJOLEARN_X_LINEAR_GLM_GRID=0` restores the one-block fit.
+def _glm_grid() -> Bool:
+    return String(getenv("MOJOLEARN_X_LINEAR_GLM_GRID")) != "0"
+
+
+def glm_init_kernel(y: FP, n: Int32, d: Int32, fi: Int32, link: Int32, sw: Int32, res: FP, sc: FP):
+    """glm_fit's prologue on one thread: den (sc[0]) and the intercept start."""
+    var nn = Int(n)
+    var dd = Int(d)
+    var den = i2f(nn)
+    if sw != 0:
+        den = Float32(0)
+        for i in range(nn):
+            den = fa(den, ld(y, nn + i))
+    st(sc, 0, den)
+    fill(res, 0, dd + 3, Float32(0))
+    if fi != 0:
+        var ym = mean_of(y, nn)
+        if sw != 0:
+            var acc = Float32(0)
+            for i in range(nn):
+                acc = fmad(ld(y, nn + i), ld(y, i), acc)
+            ym = fd(acc, den)
+        st(res, dd, flog(ym) if Int(link) == GLM_LINK_LOG else ym)
+
+
+def glm_obj_map_kernel(x: FP, y: FP, n: Int32, d: Int32, fi: Int32, power: Float32, link: Int32, sw: Int32,
+                       theta: FP, eta: FP, lt: FP):
+    """`_objective_team`'s row statements, one thread a row."""
+    var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    if i < nn:
+        var dd = Int(d)
+        var b = ld(theta, dd) if fi != 0 else Float32(0)
+        var e = fa(row_dot(x, i, dd, theta, 0), b)
+        st(eta, i, e)
+        var l = _unit(power, Int(link), ld(y, i), e, 0)
+        if sw != 0:
+            l = fm(ld(y, nn + i), l)
+        st(lt, i, l)
+
+
+def glm_obj_fold_kernel(tw: FP, lt: FP, n: Int32, d: Int32, theta: FP, alpha: Float32, sc: FP, slot: Int32):
+    """`_objective_team`'s fold and value on one block: sc[slot] = f."""
+    var t = device_team(tw, Int(n), 3, 0)
+    var acc = t_fold_fa_staged(t, lt, 0, Int(n))
+    if t.lead():
+        var reg = Float32(0)
+        for j in range(Int(d)):
+            var w = ld(theta, j)
+            reg = fmad(w, w, reg)
+        st(sc, Int(slot), fa(fd(acc, ld(sc, 0)), fm(fm(Float32(0.5), alpha), reg)))
+
+
+def glm_deriv_kernel(y: FP, n: Int32, power: Float32, link: Int32, sw: Int32, eta: FP, gr: FP, hr: FP):
+    var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if i < Int(n):
+        _glm_deriv_row(y, Int(n), i, power, Int(link), eta, sw != 0, gr, hr)
+
+
+def glm_cells_kernel(x: FP, gr: FP, hr: FP, n: Int32, d: Int32, m: Int32, g: FP, h: FP):
+    """One thread a slot of glm_fit's warp-uniform layout."""
+    var sl = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var dd = Int(d)
+    var mm = Int(m)
+    if sl < _glm_slot_count(dd, mm):
+        var c = _glm_slot_cell(sl, dd, mm)
+        if c >= 0:
+            _glm_cell(c, x, gr, hr, Int(n), dd, mm, g, h)
+
+
+def glm_step_kernel(g: FP, h: FP, step: FP, res: FP, m: Int32, d: Int32, alpha: Float32, tol: Float32, sc: FP):
+    """The dense step on one thread: sc[2] flag, sc[3] slope."""
+    var fs_ = _glm_step(g, h, step, res, Int(m), Int(d), alpha, ld(sc, 0), tol, 0, Float32(0))
+    st(sc, 2, i2f(fs_[0]))
+    st(sc, 3, fs_[1])
+
+
+def glm_trial_kernel(step: FP, res: FP, trial: FP, m: Int32, tt: Float32):
+    for j in range(Int(m)):
+        st(trial, j, fmad(tt, ld(step, j), ld(res, j)))
+
+
+def glm_accept_kernel(res: FP, trial: FP, m: Int32):
+    copy(res, 0, trial, 0, Int(m))
+
+
+def _glm_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int32], fp: List[Float32],
+                  n_out: Int, res: FP) raises:
+    var ctx = linear_ctx()
+    var max_iter = Int(ip[0])
+    var fi = Int(ip[1])
+    var link = Int(ip[2])
+    var sw = Int(ip[3])
+    var power = fp[0]
+    var alpha = fp[1]
+    var tol = fp[2]
+    var m = d + 1 if fi != 0 else d
+    var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+    var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
+    var dres = ctx.enqueue_create_buffer[DType.float32](max(n_out, d + 3))
+    var deta = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var dlt = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var dgr = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var dhr = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var dg = ctx.enqueue_create_buffer[DType.float32](m)
+    var dh = ctx.enqueue_create_buffer[DType.float32](m * m)
+    var dstep = ctx.enqueue_create_buffer[DType.float32](m)
+    var dtrial = ctx.enqueue_create_buffer[DType.float32](m)
+    var dsc = ctx.enqueue_create_buffer[DType.float32](8)
+    var dtw = ctx.enqueue_create_buffer[DType.float32](team_work(n, 3, 0))
+    var hsc = ctx.enqueue_create_host_buffer[DType.float32](8)
+    if n_x > 0:
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    if n_y > 0:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    dsc.enqueue_fill(Float32(0))
+    dh.enqueue_fill(Float32(0))
+    dtw.enqueue_fill(Float32(0))
+    var rows_grid = _xg_blocks(n)
+    var slot_grid = _xg_blocks(m + m * (m + 1) // 2 + 4 * 64)
+    ctx.enqueue_function[glm_init_kernel](dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), Int32(link), Int32(sw),
+                                          dres.unsafe_ptr(), dsc.unsafe_ptr(), grid_dim=1, block_dim=1)
+
+    @always_inline
+    def objective(theta: FP) raises -> Float32 {mut ctx, imm dx, imm dy, imm deta, imm dlt, imm dtw, imm dsc, imm hsc,
+                                                imm n, imm d, imm fi, imm power, imm link, imm sw, imm alpha, imm rows_grid}:
+        ctx.enqueue_function[glm_obj_map_kernel](dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(fi), power,
+                                                 Int32(link), Int32(sw), theta, deta.unsafe_ptr(), dlt.unsafe_ptr(),
+                                                 grid_dim=rows_grid, block_dim=XG_TPB)
+        ctx.enqueue_function[glm_obj_fold_kernel](dtw.unsafe_ptr(), dlt.unsafe_ptr(), Int32(n), Int32(d), theta, alpha,
+                                                  dsc.unsafe_ptr(), Int32(1), grid_dim=1, block_dim=LINEAR_TPB)
+        ctx.enqueue_copy(dst_buf=hsc, src_buf=dsc)
+        ctx.synchronize()
+        return hsc[1]
+
+    var iters = 0
+    var converged = False
+    var f = objective(dres.unsafe_ptr())
+    var stall = 0
+    for it in range(max_iter):
+        ctx.enqueue_function[glm_deriv_kernel](dy.unsafe_ptr(), Int32(n), power, Int32(link), Int32(sw), deta.unsafe_ptr(),
+                                               dgr.unsafe_ptr(), dhr.unsafe_ptr(), grid_dim=rows_grid, block_dim=XG_TPB)
+        ctx.enqueue_function[glm_cells_kernel](dx.unsafe_ptr(), dgr.unsafe_ptr(), dhr.unsafe_ptr(), Int32(n), Int32(d),
+                                               Int32(m), dg.unsafe_ptr(), dh.unsafe_ptr(), grid_dim=slot_grid, block_dim=XG_TPB)
+        ctx.enqueue_function[glm_step_kernel](dg.unsafe_ptr(), dh.unsafe_ptr(), dstep.unsafe_ptr(), dres.unsafe_ptr(),
+                                              Int32(m), Int32(d), alpha, tol, dsc.unsafe_ptr(), grid_dim=1, block_dim=1)
+        ctx.enqueue_copy(dst_buf=hsc, src_buf=dsc)
+        ctx.synchronize()
+        var flag = Int(hsc[2])
+        var slope = hsc[3]
+        if flag == 1:
+            converged = True
+            break
+        iters = it + 1
+        if flag == 2:
+            break
+        var tt = Float32(1)
+        var accepted = False
+        for _ in range(40):
+            ctx.enqueue_function[glm_trial_kernel](dstep.unsafe_ptr(), dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m), tt,
+                                                   grid_dim=1, block_dim=1)
+            var ft = objective(dtrial.unsafe_ptr())
+            if ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
+                ctx.enqueue_function[glm_accept_kernel](dres.unsafe_ptr(), dtrial.unsafe_ptr(), Int32(m),
+                                                        grid_dim=1, block_dim=1)
+                if ft == f:
+                    stall += 1
+                else:
+                    stall = 0
+                f = ft
+                accepted = True
+                break
+            tt = fm(tt, Float32(0.5))
+        if not accepted:
+            f = objective(dres.unsafe_ptr())
+            break
+        if stall >= GLM_STALL_ITERS:
+            converged = True
+            break
+    ctx.enqueue_copy(dst_ptr=res, src_buf=dres)
+    ctx.synchronize()
+    if fi == 0:
+        res.unsafe_store(d, Float32(0))
+    res.unsafe_store(d + 1, i2f(iters))
+    res.unsafe_store(d + 2, Float32(1) if converged else Float32(0))
+    _ = dx^
+    _ = dy^
+    _ = dres^
+    _ = deta^
+    _ = dlt^
+    _ = dgr^
+    _ = dhr^
+    _ = dg^
+    _ = dh^
+    _ = dstep^
+    _ = dtrial^
+    _ = dsc^
+    _ = dtw^
+    _ = hsc^
+
+
 def fit_device(
     algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
 ) raises:
+    if algo == ALGO_GLM and _glm_grid() and n > 0:
+        _glm_fit_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
+        return
     if algo == ALGO_SGD and _sgd_on_host():
         _fit_on_host(algo, x, y, n, d, ip, fp, n_out, n_fw, n_iw, res)
         return
