@@ -123,6 +123,24 @@ comptime CTR_FAST_FREQ = (
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_GBDT_CTR_FAST_FREQ"]()
 )
+
+#: lane/apple-fast-trees-depthwise (2026-10-02, family `trees-ctr`),
+#: `-D MOJOLEARN_GBDT_CTR_PERM_PTRS=1`, FAST + Apple only, default OFF.
+#: CAUSE: with permutation-dependent CTR columns every permutation's
+#: cindex is built from a HOST FLAT PACK (`flat.append` over
+#: `n_columns x n_rows`, the loop before `_build_cindex_from_floats` in
+#: `train`): at taxi 4.1M rows x 4 permutations that is four 200M-element
+#: host copies of columns the device could read in place. EFFECT: the
+#: permutation's column set is handed to `_build_cindex_from_columns` as
+#: POINTERS (the dependent columns into `dep_by_perm[p]`, the rest the
+#: `column_ptrs` the no-dependent path already uses), the builder that is
+#: bit-identical to the flat path and drains once per staging ring
+#: instead of once per feature. IDENTICAL compiles the flat pack unchanged.
+comptime CTR_PERM_PTRS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_CTR_PERM_PTRS"]()
+)
 from gbdt.gpu_util.kernel.bootstrap import (
     BOOTSTRAP_KERNEL_BAYESIAN,
     BOOTSTRAP_KERNEL_BERNOULLI,
@@ -1806,6 +1824,34 @@ def train(
                     column_ptrs=column_ptrs,
                 )
             )
+            continue
+        comptime if CTR_PERM_PTRS:
+            # the permutation's column set as pointers: the dependent
+            # columns point into `dep_by_perm[p]`, the rest are the owned
+            # or borrowed columns `column_ptrs` already resolves
+            var ptrs_p = List[MutPointer[Float32, MutUntrackedOrigin]](
+                capacity=n_columns
+            )
+            for c in range(n_columns):
+                var ord_p = dep_ordinal_of_column[c]
+                if ord_p >= 0:
+                    ptrs_p.append(
+                        rebind[MutPointer[Float32, MutUntrackedOrigin]](
+                            dep_by_perm[p][ord_p].unsafe_ptr()
+                        )
+                    )
+                else:
+                    ptrs_p.append(column_ptrs[c])
+            cindexes.append(
+                _build_cindex_from_columns(
+                    ctx, columns, n_rows, borders, fold_counts,
+                    column_nan_treatment,
+                    column_ptrs=ptrs_p,
+                )
+            )
+            # DEVIATION 2550: `ptrs_p` points into `dep_by_perm` and
+            # `columns`; the builder drains before it returns
+            _ = len(ptrs_p)
             continue
         var flat = List[Float32]()
         for c in range(n_columns):
