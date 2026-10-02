@@ -62,11 +62,18 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemm_nt, gemv_n
 from core.pinned_reduce import pinned_block_sum
-from core.strided_walk import APPLE_IDENTICAL_STEP_UNROLL, APPLE_FAST_STEP_UNROLL, strided_ftz_sum
+from core.strided_walk import (
+    APPLE_IDENTICAL_STEP_UNROLL,
+    APPLE_FAST_STEP_UNROLL,
+    NV_AMD_IDENTICAL_STEPS,
+    strided_ftz_sum,
+    strided_mul_add,
+)
 from core.xtdz_coalesced import (
     xtdz_coalesced,
     xtdz_coalesced_applies,
     xtdz_coalesced_workspace_floats,
+    XTDZ_CO_BLOCK_TARGET,
     XTDZ_CO_MAX_CELLS,
 )
 from glm.impl.qn.glm_linear import (
@@ -85,7 +92,7 @@ from std.sys.info import is_apple_gpu
 from max.gpu.sync import barrier
 from glm.impl.qn.multi_gpu import gradient_columns
 from glm.impl.qn.fast_xtdz import fast_xtdz, fast_xtdz_applies, fast_xtdz_into, fast_xtdz_workspace_floats
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 
@@ -112,9 +119,18 @@ restores fast_xtdz."""
 
 def qn_coalesced_applies(d: Int, c: Int) -> Bool:
     """`xtdz_coalesced` serves this gradient: IDENTICAL on Apple (its own
-    rule), or FAST on Apple under QN_FAST_COALESCED."""
+    rule), IDENTICAL on NVIDIA and AMD (NV_AMD_IDENTICAL_STEPS), or FAST on
+    Apple under QN_FAST_COALESCED."""
     if xtdz_coalesced_applies(d, c):
         return True
+    # NVIDIA / AMD IDENTICAL (lane/gap-linear-nv): the same chains and fold,
+    # row-coalesced; xty_kernel / xtdz_multi_kernel read X a column at a
+    # stride of D floats, one block per cell. Pass 1 runs `cells` threads per
+    # block, each holding 2 * STRIDED_UNROLL loads in registers, so the
+    # block is capped at 256 cells here (1024 threads would not get the
+    # registers); wider gradients keep the one-block-per-cell kernels.
+    comptime if NV_AMD_IDENTICAL_STEPS:
+        return d >= 1 and c >= 1 and d * c <= XTDZ_CO_BLOCK_TARGET
     comptime if QN_FAST_COALESCED:
         return d >= 1 and c >= 1 and d * c <= XTDZ_CO_MAX_CELLS
     return False
@@ -226,7 +242,7 @@ def sum_terms_kernel(
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
     var acc = Float32(0.0)
-    comptime if APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL:
+    comptime if APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL or NV_AMD_IDENTICAL_STEPS:
         acc = strided_ftz_sum[STATS_TPB](terms, 1, 0, n, tid, acc)
     else:
         var i = tid
@@ -249,7 +265,7 @@ def mean_kernel(
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
     var acc = Float32(0.0)
-    comptime if APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL:
+    comptime if APPLE_IDENTICAL_STEP_UNROLL or APPLE_FAST_STEP_UNROLL or NV_AMD_IDENTICAL_STEPS:
         acc = strided_ftz_sum[STATS_TPB](v, 1, 0, n, tid, acc)
     else:
         var i = tid
@@ -421,6 +437,117 @@ def qn_block_fold_kernel(
             g.unsafe_store(d, s * alpha)
     else:
         slots.unsafe_store(0, s)
+
+
+# ---------------------------------------------------------------------------
+# QN_TILED (lane/gap-linear-nv, 2026-10-02): the IDENTICAL `C == 1` objective's
+# sums in a parallel order, on every GPU and in the host column.
+#
+# The loss sum, the bias mean and every cell of `X^T dZ` were ONE block of
+# STATS_TPB lanes each, lane t folding rows t, t + 256, ... over all N rows:
+# 256 serial chains per output, one block for the loss and the bias. Here
+# the rows are cut into tiles of QNT_ROWS; pass 1 runs one chain per (tile,
+# output), rows ascending from 0.0 (`identical_mul_add(x[r, j], dz[r], acc)`
+# for a gradient cell, `ftz(acc + v[r])` for the dZ and loss sums), so
+# ceil(N / QNT_ROWS) * (D + 2) chains run at once with X read once, row-
+# coalesced; pass 2 folds each output's tile partials as the old kernels
+# folded rows: lane t takes tiles t, t + 256, ... (`ftz(acc + p)`), then the
+# pinned halving tree. The epilogues (cuBLAS's alpha/beta, the bias
+# `sum * (1 / N)`, the loss store) are unchanged. The words differ from the
+# 256-chain order and are the same on NVIDIA, AMD, Apple and the host column
+# (`glm/host/qn_oracle.mojo::host_qnt_*`). `-D MOJOLEARN_QN_TILED_OFF=1`
+# restores the 256-chain kernels (the A/B define; pass it to the host build
+# too).
+# ---------------------------------------------------------------------------
+
+comptime QN_TILED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_QN_TILED_OFF"]()
+)
+comptime QNT_ROWS = 256
+comptime QNT_TPB = 256
+
+
+def qn_tiled_applies(c: Int) -> Bool:
+    comptime if QN_TILED:
+        return c == 1
+    return False
+
+
+def qnt_tiles(n: Int) -> Int:
+    return (n + QNT_ROWS - 1) // QNT_ROWS
+
+
+def qnt_workspace_floats(n: Int, d: Int) -> Int:
+    return qnt_tiles(n) * (d + 2)
+
+
+def qnt_partial_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    dz: MutPointer[Float32, MutAnyOrigin],
+    terms: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    tiles_in: Int32,
+):
+    """Pass 1: thread `(k, o)`, `o` fastest, `o < D` the `X^T dZ` cell `o`,
+    `o == D` the dZ sum, `o == D + 1` the loss-term sum, over tile `k`'s rows
+    ascending. Stores `part[o * tiles + k]`."""
+    var n = Int(n_in)
+    var D = Int(d_in)
+    var tiles = Int(tiles_in)
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var k = gid // (D + 2)
+    var o = gid - k * (D + 2)
+    if k >= tiles:
+        return
+    var r0 = k * QNT_ROWS
+    var r1 = min(n, r0 + QNT_ROWS)
+    var acc = Float32(0.0)
+    if o < D:
+        acc = strided_mul_add[1](x, D, o, dz, 1, 0, r1, r0)
+    elif o == D:
+        acc = strided_ftz_sum[1](dz, 1, 0, r1, r0, Float32(0.0))
+    else:
+        acc = strided_ftz_sum[1](terms, 1, 0, r1, r0, Float32(0.0))
+    part.unsafe_store(o * tiles + k, acc)
+
+
+def qnt_fold_kernel(
+    g: MutPointer[Float32, MutAnyOrigin],
+    slots: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    tiles_in: Int32,
+    alpha: Float32,
+    beta_is_one: Int32,
+    fit_intercept: Int32,
+):
+    """Pass 2: block `o`, STATS_TPB lanes, the pinned fold of output `o`'s
+    tile partials, then its epilogue: `g[o] = ftz(alpha * s)` (`+ g[o]`,
+    rounded, when `beta_is_one`) for a gradient cell, `g[D] = ftz(s * (1 /
+    N))` for the bias, `slots[0] = s` for the loss."""
+    var D = Int(d_in)
+    var tiles = Int(tiles_in)
+    var o = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var acc = strided_ftz_sum[STATS_TPB](part, 1, o * tiles, tiles, tid, Float32(0.0))
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
+    if tid == 0:
+        if o < D:
+            var sc = ftz(alpha * s0)
+            if beta_is_one != 0:
+                g.unsafe_store(o, ftz(sc + g.unsafe_load(o)))
+            else:
+                g.unsafe_store(o, sc)
+        elif o == D:
+            if fit_intercept != 0:
+                var ratio = Float32(1.0) / Float32(Int(n_in))
+                g.unsafe_store(D, ftz(s0 * ratio))
+        else:
+            slots.unsafe_store(0, s0)
 
 
 def linear_fwd(
@@ -627,6 +754,8 @@ struct GLMWithData(Movable):
         comptime if QN_FAST_BLOCKS:
             if qn_blocks_applies(dims.D, dims.C):
                 ws_floats = max(ws_floats, ((n_rows + QNB_ROWS - 1) // QNB_ROWS) * (dims.D + 2))
+        if qn_tiled_applies(dims.C):
+            ws_floats = max(ws_floats, qnt_workspace_floats(n_rows, dims.D))
         self.xtdz_ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
         self.w_weights = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
         self.scalar = ctx.enqueue_create_buffer[DType.float32](1)
@@ -644,7 +773,10 @@ struct GLMWithData(Movable):
         return _read_scalar(ctx, self.scalar)
 
     def enqueue_loss_and_dz(
-        mut self, ctx: DeviceContext, out_v: MutPointer[Float32, MutAnyOrigin]
+        mut self,
+        ctx: DeviceContext,
+        out_v: MutPointer[Float32, MutAnyOrigin],
+        with_sum: Bool = True,
     ) raises:
         """`GLMBase::getLossAndDZ`, the unweighted arm (`glm_base.cuh:
         152-165`): `loss = sum lz(y, Z) * normalization`, `Z = dlz(y, Z)`;
@@ -711,6 +843,8 @@ struct GLMWithData(Movable):
                 "qn: loss id " + String(self.loss) + " has no getLossAndDZ"
                 " here (glm/NOT_IMPLEMENTED.tsv)"
             )
+        if not with_sum:
+            return  # the tiled objective folds the terms itself
         ctx.enqueue_function[sum_terms_kernel](
             out_v, self.loss_terms.unsafe_ptr(), Int32(n),
             grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
@@ -769,9 +903,12 @@ struct GLMWithData(Movable):
         var s2 = self.slots.create_sub_buffer[DType.float32](2, 1)
         var s3 = self.slots.create_sub_buffer[DType.float32](3, 1)
         var blocks = qn_blocks_applies(self.dims.D, self.dims.C)
+        var tiled = qn_tiled_applies(self.dims.C)
         if self.l2 == Float32(0.0):
             if blocks:
                 self.enqueue_blocks(ctx, w, g, True)
+            elif tiled:
+                self.enqueue_tiled(ctx, w, g, True)
             else:
                 linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
                 self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
@@ -789,6 +926,8 @@ struct GLMWithData(Movable):
             )
             if blocks:
                 self.enqueue_blocks(ctx, w, g, False)
+            elif tiled:
+                self.enqueue_tiled(ctx, w, g, False)
             else:
                 linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
                 self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
@@ -828,6 +967,40 @@ struct GLMWithData(Movable):
             return loss_host
         var reg_host = self.stage.unsafe_ptr().unsafe_load(1)
         return ftz(loss_host + reg_host)
+
+    def enqueue_tiled(
+        mut self,
+        ctx: DeviceContext,
+        mut w: DeviceBuffer[DType.float32],
+        mut g: DeviceBuffer[DType.float32],
+        set_zero: Bool,
+    ) raises:
+        """QN_TILED (`C == 1`, IDENTICAL, every GPU): the forward, the loss
+        map, then `qnt_partial_kernel` (every row tile's chain of every
+        output) and `qnt_fold_kernel` (the tiles' fold, the gradient
+        epilogue, the bias mean and the loss into slots[0]). The host column
+        walks the same tiles (`glm/host/qn_oracle.mojo`)."""
+        var n = self.n_rows
+        var d = self.dims.D
+        var tiles = qnt_tiles(n)
+        var cells = tiles * (d + 2)
+        linear_fwd(ctx, self.z, self.x, w, self.w_weights, n, self.dims)
+        self.enqueue_loss_and_dz(
+            ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False
+        )
+        ctx.enqueue_function[qnt_partial_kernel](
+            self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(), self.z.unsafe_ptr(),
+            self.loss_terms.unsafe_ptr(), Int32(n), Int32(d), Int32(tiles),
+            grid_dim=((cells + QNT_TPB - 1) // QNT_TPB, 1, 1),
+            block_dim=(QNT_TPB, 1, 1),
+        )
+        ctx.enqueue_function[qnt_fold_kernel](
+            g.unsafe_ptr(), self.slots.unsafe_ptr(), self.xtdz_ws.unsafe_ptr(),
+            Int32(n), Int32(d), Int32(tiles), Float32(1.0 / Float64(n)),
+            Int32(0) if set_zero else Int32(1),
+            Int32(1) if self.dims.fit_intercept else Int32(0),
+            grid_dim=(d + 2, 1, 1), block_dim=(STATS_TPB, 1, 1),
+        )
 
     def enqueue_blocks(
         mut self,

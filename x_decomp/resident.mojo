@@ -34,10 +34,17 @@ from x_decomp.device import (
     launch_colsum,
     launch_ew,
     launch_gemm,
+    launch_project,
+    PROJECT_TILED,
     launch_rowsum,
     launch_sqdist,
     launch_trisolve,
-    lda_rows_kernel,
+    launch_knn_select,
+    rand_kernel,
+    als_scratch,
+    launch_als_rows,
+    launch_lda_bound,
+    launch_lda_rows,
     rowsum_scratch,
     TPB,
     _blocks,
@@ -236,6 +243,47 @@ def dev_gemm_py(a: PythonObject, b: PythonObject, c: PythonObject, p: PythonObje
     return PythonObject(m * n)
 
 
+def dev_project_py(a: PythonObject, b: PythonObject, c: PythonObject, flag: PythonObject, p: PythonObject) raises -> PythonObject:
+    """c = a b^T (a m x k, b n x k; `dev_gemm` with tb=1's words) by the
+    tiled projection kernel, enqueued (no sync), and flag[0] = 1 when an
+    entry of a is not finite, else 0 (the random projection's transform;
+    lane gap-nb-maxabs-grp). Returns -1, launching nothing, on a column
+    whose shared memory does not hold the tile."""
+    var m = _n(p, 0)
+    var k = _n(p, 1)
+    var n = _n(p, 2)
+    if m * n > 2147483647 or m * k > 2147483647 or k * n > 2147483647:
+        raise Error("x_decomp: projection exceeds the Int32 index bound")
+    comptime if not PROJECT_TILED:
+        return PythonObject(-1)
+    var pf = _ptr(_id(flag), 1)
+    var pa = _ptr(_id(a), m * k)
+    var pb = _ptr(_id(b), k * n)
+    var pc = _ptr(_id(c), m * n)
+    var ctx = xd_ctx()
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    enqueue_fill(ctx, pool[].bufs[_id(flag)], Float32(0))
+    launch_project(ctx, pa, pb, pc, pf, m, k, n)
+    return PythonObject(m * n)
+
+
+def dev_rand_py(dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """p = [count, seed, stream, kind]: `rand_py`'s draws (x_decomp/cells.mojo
+    `rand_cell`, the counter-based Philox stream) written into the device
+    matrix, enqueued (no sync, no download): the random projections' matrix
+    is made where transform reads it (lane gap-nb-maxabs-grp)."""
+    var count = _n(p, 0)
+    var seed = UInt32(Int(py=p[1]) & 0xFFFFFFFF)
+    var stream = UInt32(Int(py=p[2]) & 0xFFFFFFFF)
+    var kind = Int(py=p[3])
+    if count == 0:
+        return PythonObject(0)
+    xd_ctx().enqueue_function[rand_kernel](
+        _ptr(_id(dst), count), Int32(count), seed, stream, Int32(kind), grid_dim=_blocks(count), block_dim=TPB
+    )
+    return PythonObject(count)
+
+
 def dev_trisolve_py(lu: PythonObject, idx: PythonObject, src: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
     """`trisolve_py` on device ids, enqueued (no sync)."""
     var n = _n(p, 0)
@@ -247,6 +295,18 @@ def dev_trisolve_py(lu: PythonObject, idx: PythonObject, src: PythonObject, dst:
     launch_trisolve(xd_ctx(), _ptr(_id(lu), n * n), _ptr(_id(idx), n), _ptr(_id(src), n * nrhs),
                     _ptr(_id(dst), n * nrhs), _ptr(sid, n * nrhs), n, nrhs, trans)
     pool_free(sid)
+    return PythonObject(n)
+
+
+def dev_knn_select_py(dmat: PythonObject, dist: PythonObject, idx: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`knn_select_py` on device ids, enqueued (no sync)."""
+    var n = _n(p, 0)
+    var m = _n(p, 1)
+    var k = _n(p, 2)
+    var ex = _n(p, 3)
+    if m >= 1 << 24 or n * m > 2147483647:
+        raise Error("x_decomp: knn_select exceeds the index bounds")
+    launch_knn_select(xd_ctx(), _ptr(_id(dmat), n * m), _ptr(_id(dist), n * k), _ptr(_id(idx), n * k), n, m, k, ex)
     return PythonObject(n)
 
 
@@ -368,10 +428,54 @@ def dev_lda_rows_py(
         return PythonObject(0)
     var sid = pool_alloc(n * (v + k))
     var iid = pool_alloc(n)
-    xd_ctx().enqueue_function[lda_rows_kernel](
-        px, pw, pd, pe, _ptr(sid, n * (v + k)), _ptr(iid, n),
-        Int32(n), Int32(k), Int32(v), prior, Int32(max_iter), tol, grid_dim=_blocks(n), block_dim=TPB,
-    )
+    launch_lda_rows(xd_ctx(), px, pw, pd, pe, _ptr(sid, n * (v + k)), _ptr(iid, n), n, k, v, prior, max_iter, tol)
     pool_free(sid)
     pool_free(iid)
+    return PythonObject(n)
+
+
+def dev_lda_bound_py(
+    x: PythonObject, ddt: PythonObject, dcomp: PythonObject, dst: PythonObject, p: PythonObject, f: PythonObject
+) raises -> PythonObject:
+    """LatentDirichletAllocation._approx_bound's word-term cells on device
+    matrices (lane gap-lda-als): dst (n x v) = x * logsumexp_t(ddt[:, t] +
+    dcomp[t, :]) through the same `ew_cell` chain the composed path runs, with
+    no n x v term matrix per topic. p = [n, k, v], f = [floor]."""
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var v = _n(p, 2)
+    if n * v > 2147483647:
+        raise Error("x_decomp: lda_bound exceeds the Int32 index bound")
+    var floor = Float32(Float64(py=f[0]))
+    launch_lda_bound(
+        xd_ctx(), _ptr(_id(x), n * v), _ptr(_id(ddt), n * k), _ptr(_id(dcomp), k * v), _ptr(_id(dst), n * v),
+        n, k, v, floor,
+    )
+    return PythonObject(n * v)
+
+
+def dev_als_rows_py(
+    c: PythonObject, y: PythonObject, yty: PythonObject, x: PythonObject, flags: PythonObject, p: PythonObject,
+    reg: PythonObject,
+) raises -> PythonObject:
+    """`x_decomp_als_rows` on device matrices (lane gap-lda-als): every row's
+    `als_row` into x (n x f) and flags (n), one block per row; element (u, i)
+    of the confidences at c[u * su + i * si], so the item half-sweep reads the
+    resident user x item matrix with su = 1, si = items (no transpose).
+    p = [n, m, f, su, si, c_len]."""
+    var n = _n(p, 0)
+    var m = _n(p, 1)
+    var f = _n(p, 2)
+    var su = _n(p, 3)
+    var si = _n(p, 4)
+    var cl = _n(p, 5)
+    if n == 0:
+        return PythonObject(0)
+    var ns = als_scratch(n, f)
+    var sid = pool_alloc(ns if ns > 0 else 1)
+    launch_als_rows(
+        xd_ctx(), _ptr(_id(c), cl), _ptr(_id(y), m * f), _ptr(_id(yty), f * f), _ptr(_id(x), n * f),
+        _ptr(sid, ns if ns > 0 else 1), _ptr(_id(flags), n), n, m, f, su, si, Float32(Float64(py=reg)),
+    )
+    pool_free(sid)
     return PythonObject(n)

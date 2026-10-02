@@ -58,6 +58,7 @@ initialization.
 """
 
 from std.memory import bitcast
+from mixture.meanll_order import gmm_meanll_host
 
 from checks.numerics import (
     ftz,
@@ -591,10 +592,7 @@ def gmmh_e_step(
     if output_level == 2:
         return GmmHostEStep(wlp^, lse^, logresp^, Float32(0.0))
 
-    var acc = Float32(0.0)
-    for i in range(n):
-        acc = ftz(acc + ftz(lse[i]))
-    var meanll = ftz(identical_div(acc, Float32(n)))
+    var meanll = gmm_meanll_host(lse, n)
     return GmmHostEStep(wlp^, lse^, logresp^, meanll)
 
 
@@ -796,10 +794,7 @@ def gmmh_score_bic_aic(
     on the device path, and the score is a pure function of its inputs, so
     one computation serves all three."""
     var s = gmmh_score_samples(weights, means, prec, log_det_chol, ncomp, d, x, n)
-    var acc = Float32(0.0)
-    for i in range(n):
-        acc = ftz(acc + ftz(s[i]))
-    var sc = ftz(identical_div(acc, Float32(n)))
+    var sc = gmm_meanll_host(s, n)
     var p = gmmh_n_parameters(d, ncomp)
     var a = ftz(
         identical_mul(Float32(-2.0), ftz(identical_mul(sc, Float32(n))))

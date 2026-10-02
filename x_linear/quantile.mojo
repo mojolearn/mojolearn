@@ -18,6 +18,17 @@ tau = 2) and the stopping rule of section 3.3.1 (eps_abs, eps_rel). Every
 iteration runs in the same fixed order; the answer is w = z (exact zeros)
 and b from beta. It reaches the LP's optimum to ADMM precision, not to a
 vertex, so coefficients agree with theirs to a tolerance, not exactly.
+
+COLUMN EQUILIBRATION (lane/gap-board-refusals, 2026-10-02): the w = z
+split is D w = D z with D = diag(||x_j||) (1 for a zero column), the
+ADMM above on the column-scaled problem A D^-1 mapped back: E = D^2 in the
+beta system, rhs gets D^2 (z - v), z <- soft(w + v, alpha / (rho d_j^2)),
+and the residuals and norms are the scaled problem's (D (w - z), D w, D z,
+D v, D dz and the d feature rows of A' dr divided by d_j). With E = I the
+float32 system A'A + I lost the 1 on large or collinear columns (Istella:
+a non-positive Cholesky pivot, NaN through every iteration); A'A + D^2 is
+A'A + diag(A'A) on the weights: column-scaled, the columns' cosine matrix
+plus I, every eigenvalue at least 1 there.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmax, ld, st, ldi, i2f, fill, copy,
@@ -37,13 +48,32 @@ def _soft(a: Float32, t: Float32) -> Float32:
     return Float32(0)
 
 
+@always_inline
+def _balance(prim_n: Float32, dual_n: Float32, eps_p: Float32, eps_d: Float32, rel: Bool) -> Float32:
+    """The residual balancing's rho factor (2, 1/2 or 0 = keep). rel (the
+    default, fp[4] = 1): the residuals RELATIVE to their stopping
+    tolerances, prim/eps_p against dual/eps_d (OSQP's rule); the absolute
+    rule (prim against dual, fp[4] = 0, MOJOLEARN_XQ_ABS_BALANCE=1) compares
+    two norms in different units and on standardized Istella-S and taxi
+    doubled rho to ~4000x its start, where float32 ADMM drifts off the LP
+    optimum (Istella-S r2 -1.7e11) and never meets the tolerance (5000 iterations)."""
+    var p = fm(prim_n, eps_d) if rel else prim_n
+    var dl = fm(dual_n, eps_p) if rel else dual_n
+    if p > fm(Float32(10), dl):
+        return Float32(2)
+    if dl > fm(Float32(10), p):
+        return Float32(0.5)
+    return Float32(0)
+
+
 def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """The team schedule (see quantile_fit).
     ip: [max_iter, fit_intercept, sample_weight]; fp: [quantile, alpha, eps_abs, eps_rel].
     With sample_weight, y = targets n | weights n and the loss is
     (1/sum w) sum w_i rho_q(r_i) (theirs: sum w rho + alpha sum(w) |w|_1).
     res: coef d, intercept, n_iter, converged.
-    fw: M m*m | beta m | rhs m | r n | u n | ab n | tmp n | z d | v d.
+    fw: M m*m | beta m | rhs m | r n | u n | ab n | tmp n | z d | v d |
+    (next rhs m, the host's) | dsq d (d_j^2, the column equilibration).
     Team form: the per-row updates across the team, one thread per cell of
     A'A and of each A' product; every norm fold, the solve and the z/v
     updates on the lead (team row buffer 0 holds the primal residuals)."""
@@ -53,6 +83,7 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
     var alpha = ld(fp, 1)
     var eps_abs = ld(fp, 2)
     var eps_rel = ld(fp, 3)
+    var rel_bal = ld(fp, 4) != Float32(0)
     var sw = ldi(ip, 2) != 0
     var den = i2f(n)
     if sw:
@@ -67,6 +98,7 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
     var tmp = ab + n
     var z = tmp + n
     var v = z + d
+    var dq = v + d + m
     var prb = t.row(0)
     # M = A'A + E, rows ascending
     var cells = m * (m + 1) // 2
@@ -83,7 +115,9 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
             var ak = ld(x, i * d + k) if k < d else Float32(1)
             acc = fmad(aj, ak, acc)
         if j == k and j < d:
-            acc = fa(acc, Float32(1))
+            var dj = acc if acc > Float32(0) else Float32(1)
+            st(fw, dq + j, dj)
+            acc = fa(acc, dj)
         st(fw, mm + j * m + k, acc)
         st(fw, mm + k * m + j, acc)
     for i in range(t.tid, n, t.nt):
@@ -133,7 +167,7 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
             for j in range(t.tid, m, t.nt):
                 var acc = ld(nx, j)
                 if j < d:
-                    acc = fa(acc, fs(ld(fw, z + j), ld(fw, v + j)))
+                    acc = fa(acc, fm(ld(fw, dq + j), fs(ld(fw, z + j), ld(fw, v + j))))
                 st(fw, rhs + j, acc)
             t.sync()
         else:
@@ -143,7 +177,7 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
             for j in range(t.tid, m, t.nt):
                 var acc = chain_fmad(x, j, d, vb, 0, 1, n) if j < d else fold_one_fmad(vb, 0, n)
                 if j < d:
-                    acc = fa(acc, fs(ld(fw, z + j), ld(fw, v + j)))
+                    acc = fa(acc, fm(ld(fw, dq + j), fs(ld(fw, z + j), ld(fw, v + j))))
                 st(fw, rhs + j, acc)
             t.sync()
         if t.lead():
@@ -213,41 +247,41 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
             var zdiff = Float32(0)
             var wn = Float32(0)
             var zn = Float32(0)
-            var tt = fd(alpha, rho)
+            # the column-equilibrated split: threshold alpha / (rho d_j^2), norms of D w, D z, D dz
             for j in range(d):
+                var dj = ld(fw, dq + j)
                 var wj = ld(fw, beta + j)
-                wn = fmad(wj, wj, wn)
-                var nz = _soft(fa(wj, ld(fw, v + j)), tt)
+                wn = fmad(fm(dj, wj), wj, wn)
+                var nz = _soft(fa(wj, ld(fw, v + j)), fd(alpha, fm(rho, dj)))
                 var dz = fs(nz, ld(fw, z + j))
-                zdiff = fmad(dz, dz, zdiff)
+                zdiff = fmad(fm(dj, dz), dz, zdiff)
                 st(fw, z + j, nz)
-                zn = fmad(nz, nz, zn)
+                zn = fmad(fm(dj, nz), nz, zn)
             var prim = ld(sl, 10) if roles else fold_sq(prb, 0, n)
             for j in range(d):
                 var pr = fs(ld(fw, beta + j), ld(fw, z + j))
-                prim = fmad(pr, pr, prim)
+                prim = fmad(fm(ld(fw, dq + j), pr), pr, prim)
                 st(fw, v + j, fa(ld(fw, v + j), pr))
-            # dual residual rho * || [A' dr ; dz] ||
+            # dual residual rho * || [D^-1 A' dr ; D dz] ||
             var dual = zdiff
             for j in range(m):
                 var acc = ld(fw, rhs + j)
-                dual = fmad(acc, acc, dual)
+                if j < d:
+                    dual = fa(dual, fd(fm(acc, acc), ld(fw, dq + j)))
+                else:
+                    dual = fmad(acc, acc, dual)
             var prim_n = fsqrt(prim)
             var dual_n = fm(rho, fsqrt(dual))
             var scale_p = fmax(fmax(fsqrt(abn), fsqrt(rn)), fmax(ynorm, fmax(fsqrt(wn), fsqrt(zn))))
             var eps_p = fa(fm(eps_abs, fsqrt(i2f(n + d))), fm(eps_rel, scale_p))
             var un = ld(sl, 11) if roles else fold_sq(fw, u, n)
             for j in range(d):
-                un = fmad(ld(fw, v + j), ld(fw, v + j), un)
+                un = fmad(fm(ld(fw, dq + j), ld(fw, v + j)), ld(fw, v + j), un)
             var eps_d = fa(fm(eps_abs, fsqrt(i2f(m))), fm(fm(eps_rel, rho), fsqrt(un)))
             if prim_n <= eps_p and dual_n <= eps_d:
                 flag = 1
             elif (it + 1) % 10 == 0:
-                var factor = Float32(0)
-                if prim_n > fm(Float32(10), dual_n):
-                    factor = Float32(2)
-                elif dual_n > fm(Float32(10), prim_n):
-                    factor = Float32(0.5)
+                var factor = _balance(prim_n, dual_n, eps_p, eps_d, rel_bal)
                 if factor != 0:
                     rho = fm(rho, factor)
                     inv = fd(Float32(1), factor)
@@ -280,13 +314,15 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
     With sample_weight, y = targets n | weights n and the loss is
     (1/sum w) sum w_i rho_q(r_i) (theirs: sum w rho + alpha sum(w) |w|_1).
     res: coef d, intercept, n_iter, converged.
-    fw: M m*m | beta m | rhs m | r n | u n | ab n | tmp n | z d | v d | next rhs m."""
+    fw: M m*m | beta m | rhs m | r n | u n | ab n | tmp n | z d | v d | next rhs m |
+    dsq d (d_j^2, the column equilibration)."""
     var max_iter = ldi(ip, 0)
     var fi = ldi(ip, 1) != 0
     var q = ld(fp, 0)
     var alpha = ld(fp, 1)
     var eps_abs = ld(fp, 2)
     var eps_rel = ld(fp, 3)
+    var rel_bal = ld(fp, 4) != Float32(0)
     var sw = ldi(ip, 2) != 0
     var den = i2f(n)
     if sw:
@@ -304,6 +340,7 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
     var z = tmp + n
     var v = z + d
     var nrhs = v + d
+    var dq = nrhs + m
     var rhs_ready = False
     # M = A'A + E, rows ascending: each entry of the lower triangle is its
     # own accumulator (lane linear-cpu: one pass over the rows, not one per entry)
@@ -318,7 +355,9 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
         for k in range(j + 1):
             var acc = ld(fw, mm + j * m + k)
             if j == k and j < d:
-                acc = fa(acc, Float32(1))
+                var dj = acc if acc > Float32(0) else Float32(1)
+                st(fw, dq + j, dj)
+                acc = fa(acc, dj)
             st(fw, mm + j * m + k, acc)
             st(fw, mm + k * m + j, acc)
     _ = cholesky(fw, mm, m)
@@ -353,7 +392,7 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
                 if fi:
                     st(fw, rhs + d, fmad(Float32(1), t, ld(fw, rhs + d)))
         for j in range(d):
-            st(fw, rhs + j, fa(ld(fw, rhs + j), fs(ld(fw, z + j), ld(fw, v + j))))
+            st(fw, rhs + j, fa(ld(fw, rhs + j), fm(ld(fw, dq + j), fs(ld(fw, z + j), ld(fw, v + j)))))
         chol_solve(fw, mm, m, fw, rhs)
         copy(fw, beta, fw, rhs, m)
         var b = ld(fw, beta + d) if fi else Float32(0)
@@ -420,42 +459,42 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
         var zdiff = Float32(0)
         var wn = Float32(0)
         var zn = Float32(0)
-        var t = fd(alpha, rho)
+        # the column-equilibrated split: threshold alpha / (rho d_j^2), norms of D w, D z, D dz
         for j in range(d):
+            var dj = ld(fw, dq + j)
             var wj = ld(fw, beta + j)
-            wn = fmad(wj, wj, wn)
-            var nz = _soft(fa(wj, ld(fw, v + j)), t)
+            wn = fmad(fm(dj, wj), wj, wn)
+            var nz = _soft(fa(wj, ld(fw, v + j)), fd(alpha, fm(rho, dj)))
             var dz = fs(nz, ld(fw, z + j))
-            zdiff = fmad(dz, dz, zdiff)
+            zdiff = fmad(fm(dj, dz), dz, zdiff)
             st(fw, z + j, nz)
-            zn = fmad(nz, nz, zn)
+            zn = fmad(fm(dj, nz), nz, zn)
         # dual updates and the primal residual (the row parts folded above)
         for j in range(d):
             var pr = fs(ld(fw, beta + j), ld(fw, z + j))
-            prim = fmad(pr, pr, prim)
+            prim = fmad(fm(ld(fw, dq + j), pr), pr, prim)
             st(fw, v + j, fa(ld(fw, v + j), pr))
-        # dual residual rho * || [A' dr ; dz] ||
+        # dual residual rho * || [D^-1 A' dr ; D dz] ||
         var dual = zdiff
         # the m sums of A' dr were folded above into rhs
         for j in range(m):
             var acc = ld(fw, rhs + j)
-            dual = fmad(acc, acc, dual)
+            if j < d:
+                dual = fa(dual, fd(fm(acc, acc), ld(fw, dq + j)))
+            else:
+                dual = fmad(acc, acc, dual)
         var prim_n = fsqrt(prim)
         var dual_n = fm(rho, fsqrt(dual))
         var scale_p = fmax(fmax(fsqrt(abn), fsqrt(rn)), fmax(ynorm, fmax(fsqrt(wn), fsqrt(zn))))
         var eps_p = fa(fm(eps_abs, fsqrt(i2f(n + d))), fm(eps_rel, scale_p))
         for j in range(d):
-            un = fmad(ld(fw, v + j), ld(fw, v + j), un)
+            un = fmad(fm(ld(fw, dq + j), ld(fw, v + j)), ld(fw, v + j), un)
         var eps_d = fa(fm(eps_abs, fsqrt(i2f(m))), fm(fm(eps_rel, rho), fsqrt(un)))
         if prim_n <= eps_p and dual_n <= eps_d:
             converged = True
             break
         if (it + 1) % 10 == 0:
-            var factor = Float32(0)
-            if prim_n > fm(Float32(10), dual_n):
-                factor = Float32(2)
-            elif dual_n > fm(Float32(10), prim_n):
-                factor = Float32(0.5)
+            var factor = _balance(prim_n, dual_n, eps_p, eps_d, rel_bal)
             if factor != 0:
                 rho = fm(rho, factor)
                 var inv = fd(Float32(1), factor)
@@ -470,8 +509,8 @@ def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
     st(res, d + 2, Float32(1) if converged else Float32(0))
 def quantile_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [max_iter, fit_intercept, sample_weight]; fp: [quantile, alpha, eps_abs, eps_rel].
-    fw: M m*m | beta m | rhs m | r n | u n | ab n | tmp n | z d | v d | next rhs m
-    (next rhs: the host schedule's). The device runs the team schedule, the
+    fw: M m*m | beta m | rhs m | r n | u n | ab n | tmp n | z d | v d | next rhs m |
+    dsq d (next rhs: the host schedule's; dsq: d_j^2, both schedules). The device runs the team schedule, the
     host the map-then-fold schedule; the same bits either way."""
     comptime if is_gpu():
         _quantile_fit_team(t, x, y, n, d, ip, fp, res, fw, iw)

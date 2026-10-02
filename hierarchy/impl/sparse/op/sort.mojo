@@ -115,61 +115,6 @@ def merge_sort_u64_with_index(
         width *= 2
 
 
-def coo_sort_by_weight(
-    ctx: DeviceContext,
-    mut rows: DeviceBuffer[DType.int32],
-    mut cols: DeviceBuffer[DType.int32],
-    mut data: DeviceBuffer[DType.float32],
-    nnz: Int,
-    sabotage: Int32 = LINK_SAB_NONE,
-) raises:
-    """`sort.h:94-102`, in place on the three device arrays, total order
-    (DEVIATION 621). `sabotage == LINK_SAB_SORT_WEIGHT_ONLY` keys on the
-    weight alone with ties in REVERSE discovery order, for the check."""
-    if nnz <= 1:
-        return
-    var h_rows = ctx.enqueue_create_host_buffer[DType.int32](nnz)
-    var h_cols = ctx.enqueue_create_host_buffer[DType.int32](nnz)
-    var h_data = ctx.enqueue_create_host_buffer[DType.float32](nnz)
-    ctx.synchronize()
-    var v_rows = rows.create_sub_buffer[DType.int32](0, nnz)
-    var v_cols = cols.create_sub_buffer[DType.int32](0, nnz)
-    var v_data = data.create_sub_buffer[DType.float32](0, nnz)
-    ctx.enqueue_copy(dst_ptr=h_rows.unsafe_ptr(), src_buf=v_rows)
-    ctx.enqueue_copy(dst_ptr=h_cols.unsafe_ptr(), src_buf=v_cols)
-    ctx.enqueue_copy(dst_ptr=h_data.unsafe_ptr(), src_buf=v_data)
-    ctx.synchronize()
-
-    var keys = List[UInt64](capacity=nnz)
-    var idx = List[Int](capacity=nnz)
-    for i in range(nnz):
-        var u = h_rows.unsafe_ptr().unsafe_load(i)
-        var v = h_cols.unsafe_ptr().unsafe_load(i)
-        var wk = weight_order_key(h_data.unsafe_ptr().unsafe_load(i))
-        if sabotage == LINK_SAB_SORT_WEIGHT_ONLY:
-            # weight only; reverse discovery order among ties
-            keys.append(pack_edge_key(wk, Int32(0), Int32(0)) | UInt64(nnz - 1 - i))
-        else:
-            keys.append(pack_edge_key(wk, edge_lo(u, v), edge_hi(u, v)))
-        idx.append(i)
-    merge_sort_u64_with_index(keys, idx)
-
-    var s_rows = ctx.enqueue_create_host_buffer[DType.int32](nnz)
-    var s_cols = ctx.enqueue_create_host_buffer[DType.int32](nnz)
-    var s_data = ctx.enqueue_create_host_buffer[DType.float32](nnz)
-    ctx.synchronize()
-    for k in range(nnz):
-        var i = idx[k]
-        s_rows.unsafe_ptr().unsafe_store(k, h_rows.unsafe_ptr().unsafe_load(i))
-        s_cols.unsafe_ptr().unsafe_store(k, h_cols.unsafe_ptr().unsafe_load(i))
-        s_data.unsafe_ptr().unsafe_store(k, h_data.unsafe_ptr().unsafe_load(i))
-    ctx.enqueue_copy(dst_buf=v_rows, src_ptr=s_rows.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=v_cols, src_ptr=s_cols.unsafe_ptr())
-    ctx.enqueue_copy(dst_buf=v_data, src_ptr=s_data.unsafe_ptr())
-    ctx.synchronize()
-    _ = h_rows^
-    _ = h_cols^
-    _ = h_data^
-    _ = s_rows^
-    _ = s_cols^
-    _ = s_data^
+# `coo_sort_by_weight` runs on the device since lane hr2-mds-agglo
+# (`hierarchy/impl/cluster/detail/dendrogram_device.mojo`
+# `coo_sort_by_weight_device`): the same keys, ranked in parallel.

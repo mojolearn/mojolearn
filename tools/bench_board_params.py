@@ -371,6 +371,10 @@ EXCEPTIONS = [
      "samples rows; ours and faiss get 7")
     for lane in ("ivf-pq", "ivf-sq", "ivf-refine", "cagra")
 ] + [
+    ("algos/decision-tree-*", "max_leaves", "cuml-gpu", "no leaf cap on any arm: ours and "
+     "scikit-learn max_leaf_nodes None (a value would switch both to best-first growth; ours "
+     "refuses it with splitter='best'), cuML max_leaves -1, its unlimited sentinel "
+     "(decisiontree.hpp); depth 16 bounds every arm"),
     ("algos/dart", "max_leaves", "xgboost-*", "XGBoost DART grows depth-wise (max_depth 8, no "
      "leaf cap); ours and LightGBM leaf-wise with num_leaves 255"),
     ("algos/dart-reg", "max_leaves", "xgboost-*", "XGBoost DART grows depth-wise (max_depth 8, "
@@ -389,6 +393,10 @@ EXCEPTIONS = [
     ("algos/sgd-reg", "tol", "cuml-gpu", "cuML MBSGD tol=0.0 is its no-early-stop value; ours "
      "and scikit-learn tol=None"),
     ("algos/sgd-reg", "loss", "cuml-gpu", "cuML spells squared error 'squared_loss'"),
+    ("algos/qn-reg", "loss", "cuml-gpu", "cuML QN spells squared error 'l2'"),
+    ("algos/qn-reg", "tol", "sklearn-cpu", "scikit-learn LinearRegression's tol is read only by "
+     "the sparse lsqr path; on dense X it solves in closed form (scipy lstsq) and has no "
+     "stopping tolerance"),
 ]
 
 

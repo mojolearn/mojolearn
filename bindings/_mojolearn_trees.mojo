@@ -662,6 +662,9 @@ def PyInit__mojolearn_trees() abi("C") -> PythonObject:
         m.def_function[et_forest_export_binding]("forest_export")
         m.def_function[et_forest_export_legacy_binding]("forest_export_legacy")
         m.def_function[et_forest_export_release_binding]("forest_export_release")
+        # every snapshot prepared here runs on the registry's process context and
+        # borrows its one I/O workspace (core/forest_inference_model.mojo,
+        # FOREST_PER_MODEL_IO; gap-fails2 2026-10-02)
         m.def_function[forest_prepare_gpu_binding[False]]("forest_prepare_gpu")
         m.def_function[forest_predict_resident_gpu_binding[False]]("forest_predict_resident_gpu")
         m.def_function[forest_release_gpu_binding[False]]("forest_release_gpu")
