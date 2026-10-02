@@ -37,7 +37,6 @@ from bindings.hostptr import copy_f32
 from std.math import ceildiv
 from std.os import getenv
 from std.sys.compile import is_defined
-from std.memory import memcpy
 from bindings.hostptr import f32_ptr, i32_ptr
 from max.gpu.host import DeviceBuffer, DeviceContext
 from resample.fast_apple import (
@@ -1987,12 +1986,14 @@ def _copy_rows_out(
     out: MutPointer[Int32, MutUntrackedOrigin],
 ) raises:
     """The drawn indices to the caller's int32 buffer in ONE device-to-host
-    copy and one memcpy (the old path appends them one by one into a List
-    and the binding stores them one by one again)."""
+    copy and one tight store loop (the old path appends them one by one
+    into a List and the binding stores them one by one again)."""
     var host = ctx.enqueue_create_host_buffer[DType.int32](count)
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=rows)
     ctx.synchronize()
-    memcpy(dest=out, src=host.unsafe_ptr(), count=count)
+    var hp = host.unsafe_ptr()
+    for i in range(count):
+        out.unsafe_store(i, hp.unsafe_load(i))
     _ = host^
 
 
