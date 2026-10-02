@@ -1542,11 +1542,68 @@ def orth_on_device_diag(
     var r_buf = ctx.enqueue_create_buffer[DType.float32](l * l if l > 0 else 1)
     var r = List[Float32](length=l * l if l > 0 else 1, fill=Float32(0))
     var dev_guard = String(getenv("MOJOLEARN_XD_ORTH_DEV", "1")) != "0"
+    # MOJOLEARN_SVD_FAST_CHOLQR=1 (lane/apple-fast-decomp-linalg, 2026-10-02,
+    # FAST on Apple only, the `with_diag` caller = linalg.svd's U): each pass
+    # as CholeskyQR, G = A^T A on the kit's split-K gemm (a grid), L = chol(G)
+    # by the per-column kernels, R = L^T, then the same row-parallel A R^-1;
+    # two passes = CholeskyQR2. Cause: a pass here is a sliced Householder
+    # TSQR over the 1,000,000 x d matrix (64 slices x 32 threads, every load
+    # a column at stride d), and svd runs two of them on A V / s, whose
+    # columns are already near-orthonormal, so the Gram is well conditioned.
+    # Guard (quality never lowered): the pass falls back to the TSQR when the
+    # factorization fails (info != 0) or the factor's diagonal spans more
+    # than 2^8 (cond(A) past CholeskyQR2's float32 bound); read once per
+    # pass on the host, where the pass waits anyway.
+    var cholqr = False
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+        cholqr = with_diag and l > 0 and m >= l and String(getenv("MOJOLEARN_SVD_FAST_CHOLQR")) == "1"
+    var gcells = l * l if l > 0 else 1
+    var gscr_n = gemm_scratch(l, m, l) if cholqr else 0
+    var dg = ctx.enqueue_create_buffer[DType.float32](gcells)
+    var dinfo = ctx.enqueue_create_buffer[DType.float32](1)
+    var gscr = ctx.enqueue_create_buffer[DType.float32](gscr_n if gscr_n > 0 else 1)
+    var hg = ctx.enqueue_create_host_buffer[DType.float32](gcells)
+    var hinfo = ctx.enqueue_create_host_buffer[DType.float32](1)
     for p in range(2):
         var src = da if p == 0 else dq
         var dst = dq if p == 0 else da
-        ctx.enqueue_copy(dst_buf=dw, src_buf=src)
-        if dev_guard:
+        var done = False
+        if cholqr:
+            launch_gemm(ctx, src.unsafe_ptr(), src.unsafe_ptr(), dg.unsafe_ptr(), gscr.unsafe_ptr(), l, m, l, True, False)
+            ctx.enqueue_function[lu_info_init_kernel](dinfo.unsafe_ptr(), grid_dim=1, block_dim=1)
+            for j in range(l):
+                ctx.enqueue_function[chol_diag_kernel](
+                    dg.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(j), Int32(l), grid_dim=1, block_dim=1
+                )
+                if l - j - 1 > 0:
+                    ctx.enqueue_function[chol_col_kernel](
+                        dg.unsafe_ptr(), Int32(j), Int32(l), grid_dim=_blocks(l - j - 1), block_dim=TPB
+                    )
+            ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+            ctx.enqueue_copy(dst_ptr=hg.unsafe_ptr(), src_buf=dg)
+            ctx.synchronize()
+            var ok = hinfo.unsafe_ptr().unsafe_load(0) == Float32(0)
+            var dmax = Float32(0)
+            var dmin = Float32(0)
+            for j in range(l):
+                var d = hg.unsafe_ptr().unsafe_load(j * l + j)
+                if not (d > Float32(0)):
+                    ok = False
+                if j == 0 or d > dmax:
+                    dmax = d
+                if j == 0 or d < dmin:
+                    dmin = d
+            if ok and not (dmin * Float32(256.0) >= dmax):
+                ok = False
+            if ok:
+                ctx.enqueue_function[pj_transpose_kernel](
+                    dg.unsafe_ptr(), r_buf.unsafe_ptr(), Int32(l), grid_dim=_pj_blocks(l * l), block_dim=PJ_TPB
+                )
+                done = True
+        if done:
+            pass
+        elif dev_guard:
+            ctx.enqueue_copy(dst_buf=dw, src_buf=src)
             # lane/decomp-apple2: the guard cell on one device thread, in
             # stream order after the R it reads (the same cell the host ran;
             # IDENTICAL cells are bit-equal on both), so R never leaves the
@@ -1554,6 +1611,7 @@ def orth_on_device_diag(
             _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
             ctx.enqueue_function[orth_guard_kernel](r_buf.unsafe_ptr(), Int32(l), grid_dim=1, block_dim=1)
         else:
+            ctx.enqueue_copy(dst_buf=dw, src_buf=src)
             ctx.synchronize()
             _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
             _down(ctx, r_buf, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
@@ -1574,6 +1632,11 @@ def orth_on_device_diag(
     _ = dw^
     _ = scratch^
     _ = r_buf^
+    _ = dg^
+    _ = dinfo^
+    _ = gscr^
+    _ = hg^
+    _ = hinfo^
     ctx.synchronize()
 
 
