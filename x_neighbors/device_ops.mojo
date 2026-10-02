@@ -10,8 +10,7 @@ from bindings.hostptr import copy_f32
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_item, louvain_item, svgp_item, svgp_var_item
-from x_neighbors.louvain_sparse import louvain_item_sparse
+from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_item, svgp_item, svgp_var_item
 from x_neighbors.block_ops import ocsvm_smo_block, OCSVM_TPB
 
 comptime BLOCK = 128
@@ -1473,53 +1472,6 @@ def op_graph_symmetry(a: Int, flags: Int, n: Int) raises:
     ctx.synchronize()
     _ = d_a^
     _ = d_flags^
-    _ = ctx^
-
-
-def louvain_kernel(a: FP, labels: IP, info: FP, w: FP, w2: FP, comm: IP, node_of: IP, deg: FP, stot: FP, k2c: FP, tmp: FP, n_: Int64, max_level_: Int64, resolution_: Float32, threshold_: Float32):
-    var n = Int(n_)
-    var max_level = Int(max_level_)
-    var resolution = resolution_
-    var threshold = threshold_
-    var t = _tid()
-    if t < 1:
-        louvain_item(t, a, labels, info, w, w2, comm, node_of, deg, stot, k2c, tmp, n, max_level, resolution, threshold)
-
-
-def op_louvain(a: Int, labels: Int, info: Int, n: Int, max_level: Int, resolution: Float32, threshold: Float32) raises:
-    comptime if not is_defined["MOJOLEARN_XN_LOUVAIN_GPU"]():
-        louvain_item_sparse(_f(a), _i(labels), _f(info), n, max_level, resolution, threshold)
-        return
-    var ctx = xn_ctx()
-    var d_a = _buf(ctx, a, n * n, True)
-    var d_labels = _buf_i(ctx, labels, n, False)
-    var d_info = _buf(ctx, info, 2, False)
-    var d_w = _buf(ctx, 0, n * n, False)
-    var d_w2 = _buf(ctx, 0, n * n, False)
-    var d_comm = _buf_i(ctx, 0, n, False)
-    var d_node_of = _buf_i(ctx, 0, n, False)
-    var d_deg = _buf(ctx, 0, n, False)
-    var d_stot = _buf(ctx, 0, n, False)
-    var d_k2c = _buf(ctx, 0, n, False)
-    var d_tmp = _buf(ctx, 0, n, False)
-    ctx.enqueue_function[louvain_kernel](
-        d_a.unsafe_ptr(), d_labels.unsafe_ptr(), d_info.unsafe_ptr(), d_w.unsafe_ptr(), d_w2.unsafe_ptr(), d_comm.unsafe_ptr(), d_node_of.unsafe_ptr(), d_deg.unsafe_ptr(), d_stot.unsafe_ptr(), d_k2c.unsafe_ptr(), d_tmp.unsafe_ptr(), Int64(n), Int64(max_level), resolution, threshold,
-        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
-    )
-    _down_i(ctx, d_labels, labels, n)
-    _down(ctx, d_info, info, 2)
-    ctx.synchronize()
-    _ = d_a^
-    _ = d_labels^
-    _ = d_info^
-    _ = d_w^
-    _ = d_w2^
-    _ = d_comm^
-    _ = d_node_of^
-    _ = d_deg^
-    _ = d_stot^
-    _ = d_k2c^
-    _ = d_tmp^
     _ = ctx^
 
 

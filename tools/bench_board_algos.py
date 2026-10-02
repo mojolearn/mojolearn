@@ -366,7 +366,7 @@ _add("louvain", xlane="neighbors", ours=("Louvain",), kind="graph", task="louvai
      params=dict(resolution=1.0, seed=SEED),
      other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"},
      mism=["networkx louvain_communities(seed=7) and cuGraph louvain (max_level=100) are "
-           "order-dependent; ours pins the vertex sweep (lowest id first)", _GRAPH_MISM])
+           "order-dependent; ours pins a colour-batched move order (a fixed hash colouring, ties to the smallest community id)", _GRAPH_MISM])
 _add("svgp", xlane="neighbors", ours=("SVGP", "SparseVariationalGP"), kind="svgp", task="reg",
      block="reg", sub={"X": SUB["mid"], "Xq": SUB["small"]},
      params=dict(n_inducing=512, kernel_variance=1.0, lengthscale=1.0, noise_variance=1.0,

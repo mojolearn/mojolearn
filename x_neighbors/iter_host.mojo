@@ -9,7 +9,6 @@ from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
 from x_neighbors.nan_cells import nan_cells_host
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
-from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
 from x_neighbors.items import (
     FP, IP, absdiff_sum_item, matmul_item, lp_clamp_item, ls_clamp_item,
     pagerank_step_item, cc_step_item, pcs_item, knn_sq_item, nc_stats_item,
@@ -131,55 +130,13 @@ def op_pr_iterate_sparse(
     a: Int, x: Int, p: Int, dw: Int, info: Int,
     n: Int, max_iter: Int, thr_hi: Int, thr_lo: Int, binary: Int, alpha: Float32,
 ) raises:
-    """`op_pr_iterate` over the nonzero cells of the dense adjacency
-    (x_neighbors/pr_sparse.mojo), the nodes of a step over host tasks."""
+    """`op_pr_iterate` over the column lists of the dense adjacency: the
+    host column of the device's items in the same order
+    (x_neighbors/graph_par.mojo `pr_drive`, lane hr-graph)."""
+    from x_neighbors.graph_host import pr_iterate_cpu
+
     var thr = bitcast[DType.float64]((UInt64(thr_hi) << UInt64(32)) | UInt64(thr_lo))
-    var g = pr_graph_from_dense(FP(unsafe_from_address=a), n, binary != 0)
-    var va = List[Float32](length=n if n > 0 else 1, fill=Float32(0))
-    var vb = List[Float32](length=n if n > 0 else 1, fill=Float32(0))
-    var s = List[Float32](length=1, fill=Float32(0))
-    var px = FP(unsafe_from_address=x)
-    for i in range(n):
-        va[i] = px.unsafe_load(i)
-    var cur = FP(unsafe_from_address=Int(va.unsafe_ptr()))
-    var nxt = FP(unsafe_from_address=Int(vb.unsafe_ptr()))
-    var ps = FP(unsafe_from_address=Int(s.unsafe_ptr()))
-    var pp = FP(unsafe_from_address=p)
-    var pdw = FP(unsafe_from_address=dw)
-    var pip = IP(unsafe_from_address=Int(g.indptr.unsafe_ptr()))
-    var prow = IP(unsafe_from_address=Int(g.rows.unsafe_ptr()))
-    var pval = FP(unsafe_from_address=Int(g.vals.unsafe_ptr()))
-    var pdg = IP(unsafe_from_address=Int(g.dangling.unsafe_ptr()))
-    var tasks = host_row_tasks(n, 4 * (g.nnz // max(n, 1) + 1))
-    var chunk = (n + tasks - 1) // tasks
-    var n_iter = 0
-    var converged = False
-    for it in range(max_iter):
-        var dsum = pagerank_dangling_sum(cur, pdg, n)
-        def _step(task: Int) {imm pip, imm prow, imm pval, imm cur, imm pp, imm pdw, imm dsum, imm nxt, imm alpha, imm n, imm chunk}:
-            for t in range(task * chunk, min((task + 1) * chunk, n)):
-                pagerank_step_sparse_item(t, pip, prow, pval, cur, pp, pdw, dsum, nxt, alpha)
-        if tasks <= 1:
-            _step(0)
-        else:
-            host_parallelize(_step, tasks)
-        absdiff_sum_item(0, nxt, cur, ps, n)
-        var tmp = cur
-        cur = nxt
-        nxt = tmp
-        n_iter = it + 1
-        if Float64(ps.unsafe_load(0)) < thr:
-            converged = True
-            break
-    for i in range(n):
-        px.unsafe_store(i, cur.unsafe_load(i))
-    var inf = IP(unsafe_from_address=info)
-    inf.unsafe_store(0, Int32(n_iter))
-    inf.unsafe_store(1, Int32(1 if converged else 0))
-    _ = va^
-    _ = vb^
-    _ = s^
-    _ = g^
+    pr_iterate_cpu(a, x, p, dw, info, n, max_iter, thr, binary, alpha)
 
 def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int) raises:
     """lane/neural-pass71: the NaN cells of x (n x d): flat indices
