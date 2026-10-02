@@ -144,8 +144,8 @@ def _ts_z(
     after Z), then the root. cpu-gpu-cleanup c-ann (2026-10-02): replaces
     the one-thread chain (`sum_kernel`) and Apple's opt-in one-threadgroup
     sum; the same nodes as the host column's stack form."""
-    var src = drz.unsafe_ptr()
-    var dst = dzs.unsafe_ptr()
+    var src: F32P = drz.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var dst: F32P = dzs.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var ln = n
     while ln > 1:
         var h = (ln + 1) // 2
