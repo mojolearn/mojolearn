@@ -57,7 +57,7 @@ from x_linear.dispatch import ALGO_LOGCV
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
 from x_linear.dispatch import ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_QUANTILE
 from x_linear.quantile_grid import quantile_fit_grid
-from x_linear.isotonic import iso_predict_one, iso_gather_one, iso_group, iso_after_unique
+from x_linear.isotonic import iso_predict_one, iso_gather_one, iso_group, ISO_CHUNK, iso_pava_chunk, iso_pava_merge, iso_pava_levels, iso_reverse_one, iso_clip_one, iso_keep
 from std.memory import bitcast
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -2161,8 +2161,8 @@ def _ridge_ff_grid(mut ctx: DeviceContext, x: FP, y: FP, n: Int, d: Int, t_n: In
 # The order (x, y, row) is total, so the first nk rows of the permutation
 # are the host sort's (x_linear/isotonic_host.mojo, the rows of positive
 # weight) whatever the algorithm, and so is every word after it. The group
-# bounds, the groups and the trim are grid launches; PAVA itself runs on one
-# thread (`iso_after_kernel`, the row it leaves). Predict: one thread a query.
+# bounds, the groups, PAVA (chunked then merged, cgr-linear) and the trim are
+# grid launches. Predict: one thread a query.
 #
 # cpu-gpu-cleanup c-linear (2026-10-02): every scan is a parallel block scan
 # (the one-thread scans of the block totals are gone), the 4096-row tile
@@ -2646,20 +2646,166 @@ def iso_group_kernel(fw: FP, n: Int32, iw: IP, mslot: IP, wf: IP, woff: Int32, n
     _iso_group_kernel_body(fw, n, iw, mslot)
     witness_end(wf, woff, nonce)
 
+# PAVA on the grid (cgr-linear): x_linear/isotonic.mojo's chunked-then-merged
+# order, a thread a chunk, then a thread a segment pair per level; each group
+# finds its block's start by pointer jumping over the start flags (iw + n);
+# the trim compacts through a block scan. Every launch reads m from mslot and
+# sizes itself by n.
 @always_inline
-def _iso_after_kernel_body(n: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, mslot: IP):
-    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
-        var m = Int(mslot.unsafe_load(0))
+def _iso_m(mslot: IP) -> Int:
+    return Int(mslot.unsafe_load(0))
+
+
+@always_inline
+def _iso_rev_kernel_body(n: Int32, fw: FP, mslot: IP, both: Int32):
+    var a = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var m = _iso_m(mslot)
+    if a < m // 2:
+        iso_reverse_one(a, m, Int(n), fw, both != 0)
+
+
+def iso_rev_kernel(n: Int32, fw: FP, mslot: IP, both: Int32, wf: IP, woff: Int32, nonce: Int32):
+    """Thread a: groups a and m - 1 - a swapped (uy, and uw with both)."""
+    _iso_rev_kernel_body(n, fw, mslot, both)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _iso_chunk_kernel_body(n: Int32, fw: FP, iw: IP, mslot: IP):
+    var c = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var m = _iso_m(mslot)
+    if c * ISO_CHUNK < m:
+        iso_pava_chunk(c, m, Int(n), fw, iw)
+
+
+def iso_chunk_kernel(n: Int32, fw: FP, iw: IP, mslot: IP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread c: PAVA over chunk c's ISO_CHUNK groups."""
+    _iso_chunk_kernel_body(n, fw, iw, mslot)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _iso_merge_kernel_body(lvl: Int32, n: Int32, fw: FP, iw: IP, mslot: IP):
+    var p = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var m = _iso_m(mslot)
+    if p * (2 * ISO_CHUNK << Int(lvl)) < m:
+        iso_pava_merge(Int(lvl), p, m, Int(n), fw, iw)
+
+
+def iso_merge_kernel(lvl: Int32, n: Int32, fw: FP, iw: IP, mslot: IP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread p: segment pair p of level lvl pooled at its seam."""
+    _iso_merge_kernel_body(lvl, n, fw, iw, mslot)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _iso_start_init_kernel_body(n: Int32, iw: IP, mslot: IP, pt: IP):
+    var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if j < _iso_m(mslot):
+        pt.unsafe_store(j, Int32(j) if iw.unsafe_load(Int(n) + j) != 0 else Int32(j - 1))
+
+
+def iso_start_init_kernel(n: Int32, iw: IP, mslot: IP, pt: IP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread j: itself when it starts a block, else the group before it."""
+    _iso_start_init_kernel_body(n, iw, mslot, pt)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _iso_start_jump_kernel_body(mslot: IP, pc: IP, pn: IP):
+    var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if j < _iso_m(mslot):
+        pn.unsafe_store(j, pc.unsafe_load(Int(pc.unsafe_load(j))))
+
+
+def iso_start_jump_kernel(mslot: IP, pc: IP, pn: IP, wf: IP, woff: Int32, nonce: Int32):
+    """P = P o P: after enough rounds every group points at its block's start."""
+    _iso_start_jump_kernel_body(mslot, pc, pn)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _iso_fill_kernel_body(n: Int32, fw: FP, iw: IP, mslot: IP, pt: IP):
+    var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    if j < _iso_m(mslot) and iw.unsafe_load(nn + j) == 0:
+        st(fw, nn + j, ld(fw, nn + Int(pt.unsafe_load(j))))
+
+
+def iso_fill_kernel(n: Int32, fw: FP, iw: IP, mslot: IP, pt: IP, wf: IP, woff: Int32, nonce: Int32):
+    """Thread j (not a start): its block's pooled value."""
+    _iso_fill_kernel_body(n, fw, iw, mslot, pt)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _iso_clip_kernel_body(n: Int32, ip: IP, fp: FP, fw: FP, mslot: IP):
+    var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if j < _iso_m(mslot):
+        iso_clip_one(j, Int(n), ip, fp, fw)
+
+
+def iso_clip_kernel(n: Int32, ip: IP, fp: FP, fw: FP, mslot: IP, wf: IP, woff: Int32, nonce: Int32):
+    _iso_clip_kernel_body(n, ip, fp, fw, mslot)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _iso_keep_flag(n: Int, fw: FP, m: Int, j: Int) -> Int:
+    return 1 if (j < m and iso_keep(j, m, n, fw)) else 0
+
+
+@always_inline
+def _iso_keep_count_kernel_body(n: Int32, fw: FP, mslot: IP, bcnt: IP):
+    var tid = Int(thread_idx.x)
+    var j = Int(block_idx.x) * XG_TPB + tid
+    var sh = stack_allocation[XG_TPB, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    sh[tid] = Int32(_iso_keep_flag(Int(n), fw, _iso_m(mslot), j))
+    barrier()
+    if tid == 0:
+        var c = Int32(0)
+        for u in range(XG_TPB):
+            c += sh[u]
+        bcnt.unsafe_store(Int(block_idx.x), c)
+
+
+def iso_keep_count_kernel(n: Int32, fw: FP, mslot: IP, bcnt: IP, wf: IP, woff: Int32, nonce: Int32):
+    """Block b: how many of its groups the trim keeps."""
+    _iso_keep_count_kernel_body(n, fw, mslot, bcnt)
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _iso_keep_write_kernel_body(n: Int32, fw: FP, mslot: IP, bcnt: IP, nbk: Int32, res: FP):
+    var nn = Int(n)
+    var m = _iso_m(mslot)
+    var tid = Int(thread_idx.x)
+    var j = Int(block_idx.x) * XG_TPB + tid
+    var sh = stack_allocation[XG_TPB, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var f = _iso_keep_flag(nn, fw, m, j)
+    sh[tid] = Int32(f)
+    barrier()
+    if f != 0:
+        var r = Int32(0)
+        for u in range(tid):
+            r += sh[u]
+        var at = Int(bcnt.unsafe_load(Int(block_idx.x)) + r)
+        st(res, 3 + at, ld(fw, j))
+        st(res, 3 + nn + at, ld(fw, nn + j))
+    if j == 0:
         if m > 0:
-            iso_after_unique(m, Int(n), ip, fp, res, fw, iw)
+            st(res, 0, i2f(Int(bcnt.unsafe_load(Int(nbk)))))
+            st(res, 1, ld(fw, 0))
+            st(res, 2, ld(fw, m - 1))
         else:
             st(res, 0, Float32(0))
             st(res, 1, Float32(0))
             st(res, 2, Float32(0))
 
 
-def iso_after_kernel(n: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, mslot: IP, wf: IP, woff: Int32, nonce: Int32):
-    _iso_after_kernel_body(n, ip, fp, res, fw, iw, mslot)
+def iso_keep_write_kernel(n: Int32, fw: FP, mslot: IP, bcnt: IP, nbk: Int32, res: FP, wf: IP, woff: Int32, nonce: Int32):
+    """The kept groups' x and value at their scanned slots; res[0:3]."""
+    _iso_keep_write_kernel_body(n, fw, mslot, bcnt, nbk, res)
     witness_end(wf, woff, nonce)
 
 @always_inline
@@ -2678,7 +2824,9 @@ def ISO_WIT_CAP(n: Int) -> Int:
     var nb = max((n + RS_TILE - 1) // RS_TILE, 1)
     var passes = 2 * (32 // RS_BITS) + 1
     var nodes = _xg_blocks(n + 1)
-    return passes * (2 * nb + RS_D) + 6 * _xg_blocks(n) + (2 * iso_rounds(n) + 3) * nodes + 16
+    var chunks = max((n + ISO_CHUNK - 1) // ISO_CHUNK, 1)
+    var pava = (iso_rounds(n) + 6) * _xg_blocks(n) + (iso_pava_levels(n) + 1) * _xg_blocks(chunks) + 2 * _xg_blocks(max(n // 2, 1)) + 1
+    return passes * (2 * nb + RS_D) + 6 * _xg_blocks(n) + (2 * iso_rounds(n) + 3) * nodes + pava + 16
 
 
 def _iso_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, ip: List[Int32], fp: List[Float32], n_out: Int,
@@ -2730,6 +2878,12 @@ def _iso_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, ip: List[Int32], fp:
     var nkp = dnk.unsafe_ptr()
     var ncp = dnc.unsafe_ptr()
     var rounds = iso_rounds(n)
+    var inc = len(hip) < 1 or Int(hip[0]) != 0
+    var clip = len(hip) > 2 and (Int(hip[1]) != 0 or Int(hip[2]) != 0)
+    var chunks = max((n + ISO_CHUNK - 1) // ISO_CHUNK, 1)
+    var levels = iso_pava_levels(n)
+    var nbh = _xg_blocks(max(n // 2, 1))
+    var nbc = _xg_blocks(chunks)
     # the whole isotonic fit as ONE guarded unit from zeroed scratch (x_linear/witness.mojo)
     var wit = Witness(ctx, ISO_WIT_CAP(n))
     var tries = 0
@@ -2812,9 +2966,54 @@ def _iso_fit_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, ip: List[Int32], fp:
         ctx.enqueue_function[iso_group_kernel](dfw.unsafe_ptr(), Int32(n), diw.unsafe_ptr(), dm.unsafe_ptr(),
                                                wit.p(), Int32(wo), nonce, grid_dim=nbk, block_dim=XG_TPB)
         wo += nbk
-        ctx.enqueue_function[iso_after_kernel](Int32(n), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(),
-                                               diw.unsafe_ptr(), dm.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
+        # PAVA, chunked then merged (x_linear/isotonic.mojo), then the fill,
+        # the clip and the trim, every step a grid launch
+        var fwq = dfw.unsafe_ptr()
+        var iwq = diw.unsafe_ptr()
+        if not inc:
+            ctx.enqueue_function[iso_rev_kernel](Int32(n), fwq, dm.unsafe_ptr(), Int32(1), wit.p(), Int32(wo), nonce,
+                                                 grid_dim=nbh, block_dim=XG_TPB)
+            wo += nbh
+        ctx.enqueue_function[iso_chunk_kernel](Int32(n), fwq, iwq, dm.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                               grid_dim=nbc, block_dim=XG_TPB)
+        wo += nbc
+        for l in range(levels):
+            var g = _xg_blocks((chunks + (2 << l) - 1) // (2 << l))
+            ctx.enqueue_function[iso_merge_kernel](Int32(l), Int32(n), fwq, iwq, dm.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                   grid_dim=g, block_dim=XG_TPB)
+            wo += g
+        ctx.enqueue_function[iso_start_init_kernel](Int32(n), iwq, dm.unsafe_ptr(), dna.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                    grid_dim=nbk, block_dim=XG_TPB)
+        wo += nbk
+        var s_a = True
+        for _ in range(rounds):
+            var pcur = IP(unsafe_from_address=Int(dna.unsafe_ptr()) if s_a else Int(dnb.unsafe_ptr()))
+            var pnext = IP(unsafe_from_address=Int(dnb.unsafe_ptr()) if s_a else Int(dna.unsafe_ptr()))
+            ctx.enqueue_function[iso_start_jump_kernel](dm.unsafe_ptr(), pcur, pnext, wit.p(), Int32(wo), nonce,
+                                                        grid_dim=nbk, block_dim=XG_TPB)
+            wo += nbk
+            s_a = not s_a
+        var pfin = IP(unsafe_from_address=Int(dna.unsafe_ptr()) if s_a else Int(dnb.unsafe_ptr()))
+        ctx.enqueue_function[iso_fill_kernel](Int32(n), fwq, iwq, dm.unsafe_ptr(), pfin, wit.p(), Int32(wo), nonce,
+                                              grid_dim=nbk, block_dim=XG_TPB)
+        wo += nbk
+        if not inc:
+            ctx.enqueue_function[iso_rev_kernel](Int32(n), fwq, dm.unsafe_ptr(), Int32(0), wit.p(), Int32(wo), nonce,
+                                                 grid_dim=nbh, block_dim=XG_TPB)
+            wo += nbh
+        if clip:
+            ctx.enqueue_function[iso_clip_kernel](Int32(n), dip.unsafe_ptr(), dfp.unsafe_ptr(), fwq, dm.unsafe_ptr(),
+                                                  wit.p(), Int32(wo), nonce, grid_dim=nbk, block_dim=XG_TPB)
+            wo += nbk
+        ctx.enqueue_function[iso_keep_count_kernel](Int32(n), fwq, dm.unsafe_ptr(), dkc.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                    grid_dim=nbk, block_dim=XG_TPB)
+        wo += nbk
+        ctx.enqueue_function[iso_scan1_kernel](dkc.unsafe_ptr(), Int32(nbk), dmt.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                               grid_dim=1, block_dim=SC_NT)
         wo += 1
+        ctx.enqueue_function[iso_keep_write_kernel](Int32(n), fwq, dm.unsafe_ptr(), dkc.unsafe_ptr(), Int32(nbk),
+                                                    dout.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=nbk, block_dim=XG_TPB)
+        wo += nbk
         if n_out > 0:
             ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
         if wit.ok(ctx, wo, "isotonic fit"):
@@ -2892,9 +3091,9 @@ def fit_device(
     algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
 ) raises:
-    # lane/neural-pass107: isotonic on the grid (the radix sort, the bounds and
-    # the groups on the grid, PAVA on one thread; one thread a predicted
-    # query); weighted fits too (cpu-gpu-cleanup c-linear)
+    # lane/neural-pass107: isotonic on the grid (the radix sort, the bounds,
+    # the groups and PAVA on the grid; one thread a predicted query);
+    # weighted fits too (cpu-gpu-cleanup c-linear)
     if algo == ALGO_ISOTONIC and n > 0:
         _iso_fit_grid(x, n_x, y, n_y, n, ip, fp, n_out, n_fw, n_iw, res)
         return
