@@ -113,8 +113,8 @@ from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_
 from core.dense_coo import (
     nonzero_f32_count as dense_nonzero_f32_count,
     nonzero_f32_fill as dense_nonzero_f32_fill,
-    knn_affinity_f32 as dense_knn_affinity_f32,
 )
+from core.dense_coo_host import knn_affinity_f32 as dense_knn_affinity_f32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,

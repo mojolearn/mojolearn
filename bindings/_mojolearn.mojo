@@ -81,8 +81,8 @@ from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
 from core.dense_coo import (
     nonzero_f32_count as dense_nonzero_f32_count,
     nonzero_f32_fill as dense_nonzero_f32_fill,
-    knn_affinity_f32 as dense_knn_affinity_f32,
 )
+from core.dense_coo_device import knn_affinity_f32_device
 from bindings.hotpath_helpers import (
     cast_elements_binding,
     check_indices_i64_binding,
@@ -1639,21 +1639,24 @@ def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -
     var sparse = Int(py=params[3]) != 0
     if n < 1 or k < 0 or nnz < 0:
         raise Error("knn_affinity_f32: n must be positive, k and nnz non-negative")
-    var aff = f32_ptr(Int(py=addrs[4]))
-    var status = i32_ptr(Int(py=addrs[5]))
-    var dense = aff
-    var rp = status
-    var cp = status
-    var vp = aff
+    var aff = Int(f32_ptr(Int(py=addrs[4])))
+    var status = Int(i32_ptr(Int(py=addrs[5])))
+    var dense = 0
+    var rp = 0
+    var cp = 0
+    var vp = 0
     if sparse:
         if nnz > 0:
-            rp = i32_ptr(Int(py=addrs[1]))
-            cp = i32_ptr(Int(py=addrs[2]))
-            vp = f32_ptr(Int(py=addrs[3]))
+            rp = Int(i32_ptr(Int(py=addrs[1])))
+            cp = Int(i32_ptr(Int(py=addrs[2])))
+            vp = Int(f32_ptr(Int(py=addrs[3])))
     else:
-        dense = f32_ptr(Int(py=addrs[0]))
+        dense = Int(f32_ptr(Int(py=addrs[0])))
+    # the GPU binding's work on the device (core/dense_coo_device.mojo,
+    # cpu-gpu-cleanup c-core); the CPU route keeps core/dense_coo.mojo
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     with GILReleased(Python()):
-        dense_knn_affinity_f32(dense, rp, cp, vp, nnz, sparse, n, k, aff, status)
+        knn_affinity_f32_device(ctx, dense, rp, cp, vp, nnz, sparse, n, k, aff, status)
     return PythonObject(0)
 
 
