@@ -41,6 +41,7 @@ import bisect
 import copy
 import ctypes
 import inspect
+import itertools
 from . import _portable_math as math
 import mmap
 import numbers
@@ -83,6 +84,7 @@ _OPS = dict(
     te_hist=115, te_hsum=116, te_hstart=117, te_hscatter=118,
     lab_load=119, uniq_count=120, uniq_scan=121, uniq_write=122, chunk_neg=123,
     colb_part=124, colb_fold=125, colb_ss=126, colb_var=127, maxabs_fold=128, csb_part=129, csb_fold=130, csb_ss=131, csb_var=132, cat_hpart=133, cat_hfold=134,
+    row_ones=135,
 )
 _PARAMS = 14
 _NONE = -1
@@ -576,7 +578,9 @@ class RobustScaler(_PrepBase):
         center = pr.alloc(d)
         scale = pr.alloc(d)
         pr.stage("sort_cols", d, xo, n, d, so, 0)
-        pr.stage("col_stats", d, xo, n, d, st)
+        # the quantile stage reads the count row only: an exact integer in
+        # the blocked order too (lane gap-prep2), so the same words
+        _col_stats(pr, xo, n, d, st, var=False)
         pr.stage("quantile", 3 * d, so, n, d, qf, 3, q, st)
         pr.stage("scale_params", d, q, 3, d, center, scale, 0, 0, 2, 1)
         if self.unit_variance:
@@ -3562,6 +3566,49 @@ class LabelBinarizer(_PrepBase):
         return _classes_array([self._classes[i] for i in idx])
 
 
+#: lane gap-prep2 (2026-10-02): MultiLabelBinarizer's int label sets cross as
+#: ONE int64 buffer (two C-speed passes over the sets) and the rest is the
+#: device's: lab_load + the run scan for classes_ (LabelEncoder's route),
+#: lookup for the codes and one unit per row (`row_ones`) for the indicator.
+#: The Python route flattened the sets three times, converted every label to
+#: a float twice and built a float row-owner vector on the host. The same
+#: classes and the same int32 words. MOJOLEARN_MLB_DEVICE=0: the Python route.
+_MLB_ROW_TYPES = frozenset((list, tuple, set, frozenset))
+
+
+class _MLBFlat:
+    __slots__ = ("n", "lb", "offs")
+
+    def __init__(self, n, lb, offs):
+        self.n, self.lb, self.offs = n, lb, offs
+
+
+def _mlb_flat(y):
+    """y's label sets as one int64 label buffer and int32 row offsets, or
+    None (the Python route): rows that are not lists, tuples or sets, a
+    label that is not a plain int (bool, float, str, numpy scalars), no
+    label at all, or MOJOLEARN_MLB_DEVICE=0."""
+    if os.environ.get("MOJOLEARN_MLB_DEVICE", "1").strip() == "0":
+        return None
+    rows = y if isinstance(y, (list, tuple)) else None
+    if not rows or not set(map(type, rows)) <= _MLB_ROW_TYPES:
+        return None
+    if set(map(type, itertools.chain.from_iterable(rows))) != _INT_ONLY:
+        return None
+    try:
+        flat = array.array("q", itertools.chain.from_iterable(rows))
+    except OverflowError:
+        return None
+    if not flat or len(flat) > 2 ** 30:
+        return None
+    lb = _label_buffer(flat)
+    if lb is None:
+        return None
+    offs = Array._owned(array.array("i", itertools.accumulate(map(len, rows), initial=0)), (len(rows) + 1,),
+                        "<i4", "C")
+    return _MLBFlat(len(rows), lb, offs)
+
+
 class MultiLabelBinarizer(_PrepBase):
     """sklearn.preprocessing.MultiLabelBinarizer: classes_ the sorted union
     of every sample's labels (or `classes` as given, in that order), transform
@@ -3583,14 +3630,44 @@ class MultiLabelBinarizer(_PrepBase):
             nums = _numeric_labels(self._classes)
             self._given = True
             self._cats = None
-        else:
+        elif not self._fit_flat(_mlb_flat(y)):
             flat = [v for row in y for v in row]
             self._classes, self._cats = _label_classes(self.numeric_mode_, flat) if flat else ([], None)
             self._given = False
         self.classes_ = _classes_array(self._classes)
         return self
 
+    def _fit_flat(self, fl):
+        """classes_ from the device route (`_mlb_flat`); False when it does
+        not apply (the caller takes the Python route)."""
+        if fl is None:
+            return False
+        got = _label_fit_device(self.numeric_mode_, fl.lb)
+        if got is None:
+            return False
+        self._classes, self._cats = got[0], got[1]
+        self._given = False
+        return True
+
+    def _transform_flat(self, fl):
+        """The int32 indicator from the device route: one program."""
+        n, K = fl.n, len(self._classes)
+        pr = _Prog()
+        codes = _label_codes_device(pr, fl.lb, self._cats)
+        offs = pr.put_words(fl.offs)
+        out = pr.output(n * max(K, 1), "i")
+        pr.stage("row_ones", n, codes, offs, K, out)
+        pr.run(self.numeric_mode_)
+        return pr.get_i32(out, (n, K))
+
     def fit_transform(self, y):
+        if self.classes is None and not self.sparse_output:
+            fl = _mlb_flat(y)
+            if fl is not None:
+                self.numeric_mode_ = _mode()
+                if self._fit_flat(fl):
+                    self.classes_ = _classes_array(self._classes)
+                    return self._transform_flat(fl)
         y = [list(row) for row in y]
         return self.fit(y).transform(y)
 
@@ -3600,6 +3677,10 @@ class MultiLabelBinarizer(_PrepBase):
 
     def transform(self, y):
         self._check_fitted()
+        if self._cats is not None and self._classes:
+            fl = _mlb_flat(y)
+            if fl is not None:
+                return self._transform_flat(fl)
         rows = [list(r) for r in y]
         n, K = len(rows), len(self._classes)
         flat = [v for r in rows for v in r]

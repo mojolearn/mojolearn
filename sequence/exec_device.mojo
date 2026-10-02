@@ -17,6 +17,8 @@ from sequence.exec import Exec
 from sequence.dispatch import apply
 from sequence.ops import OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
+from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST
+from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
 from std.sys.info import has_apple_gpu_accelerator
 
 #: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple only
@@ -84,6 +86,13 @@ def _fhi(w: Int64) -> Float32:
 
 def _moe_tiled_on() -> Bool:
     return String(getenv("MOJOLEARN_SEQ_MOE_TILED")) != "0"
+
+
+def _var_block_on() -> Bool:
+    """VAR's Cholesky solve and forecast on one threadgroup
+    (sequence/vecar_block.mojo, lane gap-prep2); MOJOLEARN_SEQ_VAR_BLOCK=0
+    keeps the one-thread ops (the A/B arm)."""
+    return String(getenv("MOJOLEARN_SEQ_VAR_BLOCK")) != "0"
 
 
 def seq_kernel[OP: Int](
@@ -462,6 +471,22 @@ struct DeviceExec(Exec):
                 self.ctx.enqueue_function[moe_combine_kernel](
                     a.p3, a.p5, a.p4, Int32(a.i0), Int32(a.i2), Int32(n),
                     grid_dim=((n + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                )
+                return
+        # VAR's one-thread ops on one threadgroup (sequence/vecar_block.mojo):
+        # the same chain per cell, so the same words
+        comptime if OP == OP_CHOLSOLVE:
+            if a.i0 * a.i0 + a.i0 * a.i1 <= VAR_SMEM and _var_block_on():
+                self.ctx.enqueue_function[var_chol_block_kernel](
+                    a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1),
+                    grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
+                )
+                return
+        comptime if OP == OP_VAR_FORECAST:
+            if (a.i1 + a.i3) * a.i0 <= VAR_SMEM and _var_block_on():
+                self.ctx.enqueue_function[var_forecast_block_kernel](
+                    a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
+                    grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
                 return
         comptime if SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ

@@ -34,7 +34,7 @@ from x_prep.iterative import (
     ii_mean_unit, ii_gram_unit, ii_sub_unit, ii_br_unit, ii_predict_unit, ii_snapshot_unit, ii_conv_unit,
     nan_mask_unit, ii_sigma_unit, ii_post_unit, ii_rowabs_unit,
 )
-from x_prep.labels import lab_load_unit, uniq_count_unit, uniq_scan_unit, uniq_write_unit, chunk_neg_unit
+from x_prep.labels import lab_load_unit, uniq_count_unit, uniq_scan_unit, uniq_write_unit, chunk_neg_unit, row_ones_unit
 from x_prep.stats import f_classif_unit, f_regression_unit, chi2_unit
 from x_prep.mutual_info import mi_colscale_unit, mi_noise_unit, mi_cc_unit, mi_cd_unit, mi_reduce_unit, mi_dc_unit, mi_dd_unit
 from x_prep.blocked import (
@@ -46,7 +46,7 @@ from naive_bayes.da import (
     da_shrink_unit, da_pool_unit, sym_fn_unit, da_intercept_unit, evr_unit,
 )
 
-comptime N_OPS = 135
+comptime N_OPS = 136
 
 
 @always_inline
@@ -321,3 +321,5 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         cat_hpart_unit(t, f, q)
     comptime if OP == 134:
         cat_hfold_unit(t, f, q)
+    comptime if OP == 135:
+        row_ones_unit(t, f, q)
