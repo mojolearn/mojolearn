@@ -87,9 +87,13 @@ def pinned_gemm_nt_kernel(
 
 
 
+#: EVERY GPU since lane/gap-classical-nv (2026-10-02), the name kept:
+#: NVIDIA and AMD ran `pinned_gemm_nt_kernel`, one thread per cell with
+#: untiled global loads (Ridge's U = A V at 1M x 220 x 220, PCA's
+#: transform). The tiled kernel is plain shared memory and barriers; the
+#: simdgroup-matrix arm (`APPLE_GEMM_NT_MMA`) stays Apple-only via APPLE_MMA.
 comptime APPLE_GEMM_NT_TILED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_APPLE_GEMM_NT_TILED_OFF"]()
 )
 """IDENTICAL on Apple: `gemm_nt` stages x and y tiles in threadgroup memory

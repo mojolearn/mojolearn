@@ -139,9 +139,12 @@ comptime FAST_SMO_SYNCS = (
         GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
         and not is_defined["MOJOLEARN_SVM_IDENTICAL_SYNCS_OFF"]()
     ))
-    and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_FAST_SYNCS_OFF"]()
 )
+#: EVERY GPU since lane/gap-classical-nv (2026-10-02): NVIDIA and AMD read
+#: the fold order back, sorted it on the host and uploaded it, and drained
+#: the stream for the NaN flag, every outer SMO iteration. The argument above
+#: (bit-preserving by construction) does not depend on the vendor.
 
 
 #: FAST on Apple: a 1024-wide working set solves in
@@ -152,7 +155,7 @@ comptime FAST_SMO_SYNCS = (
 comptime FAST_EPT = 4 if is_defined["MOJOLEARN_SVM_FAST_EPT4"]() else (
     8 if is_defined["MOJOLEARN_SVM_FAST_EPT8"]() else 2
 )
-comptime SVM_FUSED_UPDATE_F = FAST_SMO_SYNCS and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined[
+comptime SVM_FUSED_UPDATE_F = FAST_SMO_SYNCS and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined[
     "MOJOLEARN_SVM_FUSED_UPDATE_F_OFF"
 ]()
 """FAST on Apple: the gradient update computes each kernel value where it
@@ -166,9 +169,13 @@ tile and reading it back; RBF and linear kernels, n_cols <= 64."""
 #: The opt-in host block solve (`-D MOJOLEARN_SVM_HOST_BLOCK_SOLVE`) was
 #: removed (hr-optin-flags).
 
+#: EVERY GPU since lane/gap-classical-nv (2026-10-02): NVIDIA refuses the
+#: warp-lane0 schedule at width 1024, so its 1024 working set ran the fused
+#: tree (~26 barriers per inner iteration, up to 10,000 inner iterations per
+#: outer one). 512 threads x 2 elements fold through `fast_smo_reduce` at
+#: the hardware wave width; same total order, same per-element arithmetic.
 comptime FAST_EPT_ON = (
     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_FAST_SYNCS_OFF"]()
     and not is_defined["MOJOLEARN_SVM_FAST_EPT_OFF"]()
 )
