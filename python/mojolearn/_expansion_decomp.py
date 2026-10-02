@@ -2171,9 +2171,25 @@ class _PLS(_Base):
         xw_c, yw_c, xs_c, ys_c, xl_c, yl_c = [], [], [], [], [], []
         self.n_iter_ = []
         thr = 10 * _F32_EPS
+        dead_dev = _fast_metal_switch(k, "MOJOLEARN_PLS_FAST_DEADCOLS")
         for _c in range(nc):
             # Yk columns that are all below 10 eps are set to zero
-            dead = [all(abs(Yk.s[i * q + j]) < thr for i in range(n)) for j in range(q)]
+            if dead_dev:
+                # MOJOLEARN_PLS_FAST_DEADCOLS=1 (lane/apple-fast-decomp-linalg,
+                # 2026-10-02, FAST on Apple only): the scan on the device, per
+                # column the count of |Yk| above the threshold (two
+                # elementwise kernels and a column sum, q floats read back).
+                # Cause: the line below reads the WHOLE n x q Yk back to the
+                # host (`Yk.s`, which also evicts it from the device, so the
+                # next kernel re-uploads it) and compares n * q values in a
+                # Python loop, once per component: at the board's istella
+                # shape (1,000,000 x 110) a hundred million Python
+                # comparisons per component inside the fit. (|v| == thr
+                # exactly counts as dead here and as live below.)
+                cnt = k.colsum(k.ew("gts", k.ew("abs", Yk), s=thr)).s
+                dead = [v == 0.0 for v in cnt]
+            else:
+                dead = [all(abs(Yk.s[i * q + j]) < thr for i in range(n)) for j in range(q)]
             if any(dead):
                 Yk = k.ew("mul", Yk, _M.of([0.0 if d else 1.0 for d in dead], 1, q))
             try:

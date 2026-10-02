@@ -2792,6 +2792,30 @@ struct DevExec(Exec):
 
     @staticmethod
     def qr_r(a: F32Ptr, m: Int, n: Int, r: F32Ptr) raises:
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+            # MOJOLEARN_FA_FAST_QRR=1 (lane/apple-fast-decomp-linalg, 2026-10-02,
+            # FAST on Apple only): the matrix uploaded straight from the
+            # caller's floats and `qr_factor` run on it, R downloaded once.
+            # Cause: the route below copies all m x n values into a host
+            # List one `append` at a time (FactorAnalysis's `k.qr_r(Xc)` at
+            # 1,000,000 x 220: 220 million host appends), and
+            # `device_qr_r` then uploads that copy. Same kernels, same
+            # slice count; only the host copy goes.
+            if String(getenv("MOJOLEARN_FA_FAST_QRR")) == "1" and m >= n and n > 0:
+                var ctx = xd_ctx()
+                var da = _up(ctx, a, m * n)
+                var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
+                var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
+                ctx.synchronize()
+                _ = qr_factor(ctx, da, scratch, r_buf, m, n)
+                _down(ctx, r_buf, r, n * n)
+                ctx.synchronize()
+                _ = da^
+                _ = scratch^
+                _ = r_buf^
+                ctx.synchronize()
+                _ = ctx^
+                return
         var w = List[Float32](capacity=m * n)
         for t in range(m * n):
             w.append(a.unsafe_load(t))
