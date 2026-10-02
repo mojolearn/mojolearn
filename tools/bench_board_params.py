@@ -371,6 +371,10 @@ EXCEPTIONS = [
      "samples rows; ours and faiss get 7")
     for lane in ("ivf-pq", "ivf-sq", "ivf-refine", "cagra")
 ] + [
+    ("algos/decision-tree-*", "max_leaves", "cuml-gpu", "no leaf cap on any arm: ours and "
+     "scikit-learn max_leaf_nodes None (a value would switch both to best-first growth; ours "
+     "refuses it with splitter='best'), cuML max_leaves -1, its unlimited sentinel "
+     "(decisiontree.hpp); depth 16 bounds every arm"),
     ("algos/dart", "max_leaves", "xgboost-*", "XGBoost DART grows depth-wise (max_depth 8, no "
      "leaf cap); ours and LightGBM leaf-wise with num_leaves 255"),
     ("algos/dart-reg", "max_leaves", "xgboost-*", "XGBoost DART grows depth-wise (max_depth 8, "
