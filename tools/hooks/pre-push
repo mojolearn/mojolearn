@@ -8,13 +8,32 @@
 # file (see tools/hooks/pre-commit for the record). Reading the blob sizes
 # takes seconds; the upload took hours.
 #
+# The third fence (2026-10-02): no_host_routes.py --tree scans every file a
+# GPU install runs at the pushed commit (Mojo modules the GPU bindings reach
+# through their imports, GPU-path Python) and refuses any CPU work in GPU code
+# that is not in tools/hooks/host_routes_baseline.tsv, and any baseline row
+# that no longer matches (the baseline only shrinks). It prints the debt per
+# class and per owner. A branch that predates the baseline is judged on what
+# it adds over its merge-base with main, against main's baseline.
+#
 # Arguments and stdin follow git's pre-push contract:
 #   $1 remote name, $2 remote URL; stdin lines "<local ref> <local sha> <remote ref> <remote sha>".
 
 limit=$((100 * 1024 * 1024))
 zero=0000000000000000000000000000000000000000
 bad=0
-while read -r local_ref local_sha remote_ref remote_sha; do
+refs=$(cat)
+here=$(dirname "$0")
+echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
+    [ -z "$local_sha" ] && continue
+    [ "$local_sha" = "$zero" ] && continue
+    [ -f "$here/no_host_routes.py" ] || continue
+    case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac
+    python3 "$here/no_host_routes.py" --tree "$local_sha" || exit 4
+done
+[ $? -eq 4 ] && bad=1
+echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
+    [ -z "$local_sha" ] && continue
     [ "$local_sha" = "$zero" ] && continue        # deleting a remote ref
     if [ "$remote_sha" = "$zero" ]; then
         range="$local_sha --not --remotes=$1"
@@ -31,6 +50,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
             echo "   the commit that added it must be rewritten before this ref can be pushed" >&2
             exit 3
         done
-    [ $? -eq 3 ] && bad=1
+    [ $? -eq 3 ] && exit 3
 done
+[ $? -eq 3 ] && bad=1
 exit $bad

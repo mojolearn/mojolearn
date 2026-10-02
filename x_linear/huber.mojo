@@ -12,9 +12,9 @@ x_linear/lbfgs.mojo (the same minimizer; a different path).
 """
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot, axpy_acc, par_rows, row_dots
 from std.sys.info import is_gpu
-from x_linear.lbfgs import lbfgs, lbfgs_work
+from x_linear.lbfgs import lbfgs, lbfgs_work, Objective
 from x_linear.team import Team
-from x_linear.tops import chain_fmad, fold_fa
+from x_linear.tops import chain_fmad, fold_fa, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS
 from std.memory import bitcast
 from std.gpu import WARP_SIZE
 
@@ -78,6 +78,86 @@ def _fold_outliers(rr: FP, y: FP, n: Int, thr: Float32, sw: Bool) -> Tuple[Float
     return (out_abs, n_out, w_out)
 
 
+# ------------------------------------------------ the blocked order (lane/neural-pass97 order)
+@always_inline
+def _huber_part(o: Int, cells: Int, d: Int, x: FP, y: FP, n: Int, cr: FP, rr: FP, thr: Float32, sw: Bool,
+                lo: Int, cnt: Int) -> Float32:
+    """Task o of the block [lo, lo + cnt) from zero: o < cells a gradient cell
+    (o == d the intercept), then the inlier sum, the outlier |r| sum, the
+    outlier weight, the total weight and the outlier count (its bits)."""
+    if o < cells:
+        if o < d:
+            return chain_fmad(cr, lo, 1, x, lo * d + o, d, cnt)
+        return fold_fa(cr, lo, 1, cnt)
+    var q = o - cells
+    var acc = Float32(0)
+    var k = 0
+    for i in range(lo, lo + cnt):
+        var r = ld(rr, i)
+        var ar = fabs(r)
+        var wi = ld(y, n + i) if sw else Float32(1)
+        if q == 0:
+            if not (ar > thr):
+                acc = fmad(fm(wi, r), r, acc) if sw else fmad(r, r, acc)
+        elif q == 1:
+            if ar > thr:
+                acc = fmad(wi, ar, acc) if sw else fa(acc, ar)
+        elif q == 2:
+            if sw and ar > thr:
+                acc = fa(acc, wi)
+        elif q == 3:
+            if sw:
+                acc = fa(acc, wi)
+        else:
+            if not sw and ar > thr:
+                k += 1
+    if q == 4:
+        return bitcast[DType.float32](Int32(k))
+    return acc
+
+
+
+@always_inline
+def huber_map_row(i: Int, x: FP, y: FP, n: Int, d: Int, th: FP, toff: Int, b: Float32, thr: Float32,
+                  two_over_sigma: Float32, two_eps: Float32, sw: Bool, cr: FP, rr: FP):
+    """Row i's residual (rr) and gradient coefficient (cr): the team map's
+    statements (lane/neural-pass129: the grid objective runs them too)."""
+    var r = fs(fs(ld(y, i), row_dot(x, i, d, th, toff)), b)
+    var ar = fabs(r)
+    var coefv: Float32
+    if sw:
+        var wi = ld(y, n + i)
+        if ar > thr:
+            coefv = fm(wi, -two_eps if r > 0 else two_eps)
+        else:
+            coefv = fm(-two_over_sigma, fm(wi, r))
+    elif ar > thr:
+        coefv = -two_eps if r > 0 else two_eps
+    else:
+        coefv = fm(-two_over_sigma, r)
+    st(rr, i, r)
+    st(cr, i, coefv)
+
+
+def huber_finish(g: FP, goff: Int, th: FP, toff: Int, d: Int, p: Int, n: Int, eps: Float32, alpha: Float32,
+                 sigma: Float32, two_eps: Float32, sw: Bool, sq: Float32, out_abs: Float32, n_out: Int,
+                 w_out: Float32, w_all: Float32) -> Float32:
+    """The team lead's last statements on the folded sums."""
+    var wn = Float32(0)
+    for j in range(d):
+        var w = ld(th, toff + j)
+        wn = fmad(w, w, wn)
+        st(g, goff + j, fmad(fm(Float32(2), alpha), w, ld(g, goff + j)))
+    var squared_loss = fd(sq, sigma)
+    var eps2 = fm(eps, eps)
+    var cnt_out = w_out if sw else i2f(n_out)
+    var cnt = w_all if sw else i2f(n)
+    var outlier_loss = fs(fm(two_eps, out_abs), fm(fm(sigma, cnt_out), eps2))
+    var gsigma = fs(fs(cnt, fm(cnt_out, eps2)), fd(squared_loss, sigma))
+    st(g, goff + p - 1, fm(gsigma, sigma))
+    return fa(fa(fa(fm(cnt, sigma), squared_loss), outlier_loss), fm(alpha, wn))
+
+
 def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int) -> Float32:
     """Team form: each row's residual and gradient coefficient across the
     team; the lead folds the loss sums in ascending row order; one thread
@@ -96,21 +176,7 @@ def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP,
     var cr = t.row(0)
     var rr = t.row(1)
     for i in range(t.tid, n, t.nt):
-        var r = fs(fs(ld(y, i), row_dot(x, i, d, th, toff)), b)
-        var ar = fabs(r)
-        var coefv: Float32
-        if sw:
-            var wi = ld(y, n + i)
-            if ar > thr:
-                coefv = fm(wi, -two_eps if r > 0 else two_eps)
-            else:
-                coefv = fm(-two_over_sigma, fm(wi, r))
-        elif ar > thr:
-            coefv = -two_eps if r > 0 else two_eps
-        else:
-            coefv = fm(-two_over_sigma, r)
-        st(rr, i, r)
-        st(cr, i, coefv)
+        huber_map_row(i, x, y, n, d, th, toff, b, thr, two_over_sigma, two_eps, sw, cr, rr)
     t.sync()
     var cells = d + 1 if fi else d
     # lane/linear-apple2: the loss sums the lead folded over the rows are
@@ -123,28 +189,53 @@ def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP,
     # the chains would run after them, not beside them)
     var base = ((cells + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
     var roles = t.nt >= base + 3 * WARP_SIZE
-    for c in range(t.tid, cells, t.nt):
-        var acc: Float32
-        if c < d:
-            acc = chain_fmad(cr, 0, 1, x, c, d, n)
+    var nbk = fold_blocks(n)
+    var ntask = cells + 5
+    var scr = t.row(2)
+    var fits = ntask * nbk <= n
+    comptime if X_LINEAR_SERIAL_FOLDS:
+        for c in range(t.tid, cells, t.nt):
+            var acc: Float32
+            if c < d:
+                acc = chain_fmad(cr, 0, 1, x, c, d, n)
+            else:
+                acc = fold_fa(cr, 0, 1, n)
+            st(g, goff + c, acc)
+        if roles and t.tid >= base and (t.tid - base) % WARP_SIZE == 0:
+            var role = (t.tid - base) // WARP_SIZE
+            if role == 0:
+                st(sl, 8, _fold_inliers(rr, y, n, thr, sw))
+            elif role == 1:
+                var o = _fold_outliers(rr, y, n, thr, sw)
+                st(sl, 9, o[0])
+                st(sl, 10, bitcast[DType.float32](Int32(o[1])))
+                st(sl, 11, o[2])
+            elif role == 2 and sw:
+                var w_all = Float32(0)
+                for i in range(n):
+                    w_all = fa(w_all, ld(y, n + i))
+                st(sl, 12, w_all)
+        t.sync()
+    else:
+        # the blocked order (lane/neural-pass97): (task, block) work across the
+        # team into team row 2, then each gradient cell's partials folded
+        if fits:
+            for q in range(t.tid, ntask * nbk, t.nt):
+                var bk = q // ntask
+                var o = q - bk * ntask
+                var lo = bk * FOLD_BLOCK
+                st(scr, o * nbk + bk, _huber_part(o, cells, d, x, y, n, cr, rr, thr, sw, lo, min(FOLD_BLOCK, n - lo)))
+            t.sync()
+            for o in range(t.tid, cells, t.nt):
+                st(g, goff + o, fold_parts(scr, o * nbk, nbk))
         else:
-            acc = fold_fa(cr, 0, 1, n)
-        st(g, goff + c, acc)
-    if roles and t.tid >= base and (t.tid - base) % WARP_SIZE == 0:
-        var role = (t.tid - base) // WARP_SIZE
-        if role == 0:
-            st(sl, 8, _fold_inliers(rr, y, n, thr, sw))
-        elif role == 1:
-            var o = _fold_outliers(rr, y, n, thr, sw)
-            st(sl, 9, o[0])
-            st(sl, 10, bitcast[DType.float32](Int32(o[1])))
-            st(sl, 11, o[2])
-        elif role == 2 and sw:
-            var w_all = Float32(0)
-            for i in range(n):
-                w_all = fa(w_all, ld(y, n + i))
-            st(sl, 12, w_all)
-    t.sync()
+            for o in range(t.tid, cells, t.nt):
+                var accb = Float32(0)
+                for bk in range(nbk):
+                    var lo = bk * FOLD_BLOCK
+                    accb = fa(accb, _huber_part(o, cells, d, x, y, n, cr, rr, thr, sw, lo, min(FOLD_BLOCK, n - lo)))
+                st(g, goff + o, accb)
+        t.sync()
     var out = Float32(0)
     if t.lead():
         var sq: Float32
@@ -152,35 +243,51 @@ def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP,
         var n_out: Int
         var w_out: Float32
         var w_all = Float32(0)
-        if roles:
-            sq = ld(sl, 8)
-            out_abs = ld(sl, 9)
-            n_out = Int(bitcast[DType.int32](ld(sl, 10)))
-            w_out = ld(sl, 11)
-            if sw:
-                w_all = ld(sl, 12)
+        comptime if X_LINEAR_SERIAL_FOLDS:
+            if roles:
+                sq = ld(sl, 8)
+                out_abs = ld(sl, 9)
+                n_out = Int(bitcast[DType.int32](ld(sl, 10)))
+                w_out = ld(sl, 11)
+                if sw:
+                    w_all = ld(sl, 12)
+            else:
+                sq = _fold_inliers(rr, y, n, thr, sw)
+                var o = _fold_outliers(rr, y, n, thr, sw)
+                out_abs = o[0]
+                n_out = o[1]
+                w_out = o[2]
+                if sw:
+                    for i in range(n):
+                        w_all = fa(w_all, ld(y, n + i))
         else:
-            sq = _fold_inliers(rr, y, n, thr, sw)
-            var o = _fold_outliers(rr, y, n, thr, sw)
-            out_abs = o[0]
-            n_out = o[1]
-            w_out = o[2]
+            var p0 = Float32(0)
+            var p1 = Float32(0)
+            var p2 = Float32(0)
+            var p3 = Float32(0)
+            var kn = 0
+            for bk in range(nbk):
+                var lo = bk * FOLD_BLOCK
+                var cnt = min(FOLD_BLOCK, n - lo)
+                if fits:
+                    p0 = fa(p0, ld(scr, cells * nbk + bk))
+                    p1 = fa(p1, ld(scr, (cells + 1) * nbk + bk))
+                    p2 = fa(p2, ld(scr, (cells + 2) * nbk + bk))
+                    p3 = fa(p3, ld(scr, (cells + 3) * nbk + bk))
+                    kn += Int(bitcast[DType.int32](ld(scr, (cells + 4) * nbk + bk)))
+                else:
+                    p0 = fa(p0, _huber_part(cells, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt))
+                    p1 = fa(p1, _huber_part(cells + 1, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt))
+                    p2 = fa(p2, _huber_part(cells + 2, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt))
+                    p3 = fa(p3, _huber_part(cells + 3, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt))
+                    kn += Int(bitcast[DType.int32](_huber_part(cells + 4, cells, d, x, y, n, cr, rr, thr, sw, lo, cnt)))
+            sq = p0
+            out_abs = p1
+            w_out = p2
             if sw:
-                for i in range(n):
-                    w_all = fa(w_all, ld(y, n + i))
-        var wn = Float32(0)
-        for j in range(d):
-            var w = ld(th, toff + j)
-            wn = fmad(w, w, wn)
-            st(g, goff + j, fmad(fm(Float32(2), alpha), w, ld(g, goff + j)))
-        var squared_loss = fd(sq, sigma)
-        var eps2 = fm(eps, eps)
-        var cnt_out = w_out if sw else i2f(n_out)
-        var cnt = w_all if sw else i2f(n)
-        var outlier_loss = fs(fm(two_eps, out_abs), fm(fm(sigma, cnt_out), eps2))
-        var gsigma = fs(fs(cnt, fm(cnt_out, eps2)), fd(squared_loss, sigma))
-        st(g, goff + p - 1, fm(gsigma, sigma))
-        out = fa(fa(fa(fm(cnt, sigma), squared_loss), outlier_loss), fm(alpha, wn))
+                w_all = p3
+            n_out = kn
+        out = huber_finish(g, goff, th, toff, d, p, n, eps, alpha, sigma, two_eps, sw, sq, out_abs, n_out, w_out, w_all)
     return t.bcast(out)
 
 
@@ -210,31 +317,86 @@ def _huber_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, 
             st(sc, i, fs(fs(ld(y, i), ld(sc, i)), b))
 
     par_rows(rows_map, n)
-    for i in range(n):
-        var r = ld(sc, i)
-        var ar = fabs(r)
-        var coefv: Float32
-        if sw:
-            # their weighted form: each term times w_i, n becomes sum w
-            var wi = ld(y, n + i)
-            w_all = fa(w_all, wi)
-            if ar > thr:
-                w_out = fa(w_out, wi)
-                out_abs = fmad(wi, ar, out_abs)
-                coefv = fm(wi, -two_eps if r > 0 else two_eps)
+    comptime if X_LINEAR_SERIAL_FOLDS:
+        for i in range(n):
+            var r = ld(sc, i)
+            var ar = fabs(r)
+            var coefv: Float32
+            if sw:
+                # their weighted form: each term times w_i, n becomes sum w
+                var wi = ld(y, n + i)
+                w_all = fa(w_all, wi)
+                if ar > thr:
+                    w_out = fa(w_out, wi)
+                    out_abs = fmad(wi, ar, out_abs)
+                    coefv = fm(wi, -two_eps if r > 0 else two_eps)
+                else:
+                    sq = fmad(fm(wi, r), r, sq)
+                    coefv = fm(-two_over_sigma, fm(wi, r))
+            elif ar > thr:
+                n_out += 1
+                out_abs = fa(out_abs, ar)
+                coefv = -two_eps if r > 0 else two_eps
             else:
-                sq = fmad(fm(wi, r), r, sq)
-                coefv = fm(-two_over_sigma, fm(wi, r))
-        elif ar > thr:
-            n_out += 1
-            out_abs = fa(out_abs, ar)
-            coefv = -two_eps if r > 0 else two_eps
-        else:
-            sq = fmad(r, r, sq)
-            coefv = fm(-two_over_sigma, r)
-        axpy_acc(g, goff, coefv, x, i * d, d)
-        if fi:
-            st(g, goff + d, fa(ld(g, goff + d), coefv))
+                sq = fmad(r, r, sq)
+                coefv = fm(-two_over_sigma, r)
+            axpy_acc(g, goff, coefv, x, i * d, d)
+            if fi:
+                st(g, goff + d, fa(ld(g, goff + d), coefv))
+    else:
+        # the blocked order (lane/neural-pass97): every sum from zero over
+        # FOLD_BLOCK rows, folded into its total at the block's end
+        var cells = d + 1 if fi else d
+        var pl = List[Float32](length=max(cells, 1), fill=Float32(0))
+        var pg = FP(unsafe_from_address=Int(pl.unsafe_ptr()))
+        var psq = Float32(0)
+        var pout = Float32(0)
+        var pwo = Float32(0)
+        var pwa = Float32(0)
+        for i in range(n):
+            if i > 0 and i % FOLD_BLOCK == 0:
+                for o in range(cells):
+                    st(g, goff + o, fa(ld(g, goff + o), ld(pg, o)))
+                    st(pg, o, Float32(0))
+                sq = fa(sq, psq)
+                out_abs = fa(out_abs, pout)
+                w_out = fa(w_out, pwo)
+                w_all = fa(w_all, pwa)
+                psq = Float32(0)
+                pout = Float32(0)
+                pwo = Float32(0)
+                pwa = Float32(0)
+            var r = ld(sc, i)
+            var ar = fabs(r)
+            var coefv: Float32
+            if sw:
+                var wi = ld(y, n + i)
+                pwa = fa(pwa, wi)
+                if ar > thr:
+                    pwo = fa(pwo, wi)
+                    pout = fmad(wi, ar, pout)
+                    coefv = fm(wi, -two_eps if r > 0 else two_eps)
+                else:
+                    psq = fmad(fm(wi, r), r, psq)
+                    coefv = fm(-two_over_sigma, fm(wi, r))
+            elif ar > thr:
+                n_out += 1
+                pout = fa(pout, ar)
+                coefv = -two_eps if r > 0 else two_eps
+            else:
+                psq = fmad(r, r, psq)
+                coefv = fm(-two_over_sigma, r)
+            axpy_acc(pg, 0, coefv, x, i * d, d)
+            if fi:
+                st(pg, d, fa(ld(pg, d), coefv))
+        if n > 0:
+            for o in range(cells):
+                st(g, goff + o, fa(ld(g, goff + o), ld(pg, o)))
+            sq = fa(sq, psq)
+            out_abs = fa(out_abs, pout)
+            w_out = fa(w_out, pwo)
+            w_all = fa(w_all, pwa)
+        _ = pl^
     var wn = Float32(0)
     for j in range(d):
         var w = ld(th, toff + j)
@@ -259,7 +421,7 @@ def huber_objective(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
         return _huber_objective_host(x, y, n, d, ip, fp, th, toff, g, goff, sc)
 
 
-def huber_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+def huber_fit[obj: Objective = huber_objective](t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [max_iter, fit_intercept, sample_weight]; fp: [epsilon, alpha, tol].
     With sample_weight, y = targets n | weights n (their weighted objective).
     res: coef d, intercept 1, scale 1, n_iter 1 | theta scratch (P).
@@ -270,7 +432,7 @@ def huber_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
     if t.lead():
         fill(res, th, p, Float32(0))
     t.sync()
-    var it = lbfgs[huber_objective](t, x, y, n, d, ip, fp, res, th, p, ldi(ip, 0), ld(fp, 2), fw, 0, fw + lbfgs_work(p))
+    var it = lbfgs[obj](t, x, y, n, d, ip, fp, res, th, p, ldi(ip, 0), ld(fp, 2), fw, 0, fw + lbfgs_work(p))
     if not t.lead():
         return
     for j in range(d):

@@ -130,9 +130,11 @@ def _download(
     var h = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
+    # one copy into a list of the final length (lane/neural-pass113): the
+    # element-by-element append regrew the list and cost 0.43 s of a 1.1 s
+    # 8192 factorization on the M4
+    var out = List[Float32](length=n, fill=Float32(0))
+    copy_f32(h.unsafe_ptr(), out.unsafe_ptr(), n)
     _ = h^
     return out^
 

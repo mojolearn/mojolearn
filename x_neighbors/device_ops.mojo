@@ -10,7 +10,7 @@ from bindings.hostptr import copy_f32
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, louvain_item, svgp_init_item, svgp_chol2_item, svgp_fix2_item, svgp_solve_item, svgp_mid_item, svgp_qchol_item, svgp_qfix_item, svgp_ypart_item, svgp_fin_item, svgp_var_item
+from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, louvain_item, svgp_init_item, svgp_chol2_item, svgp_fix2_item, svgp_solve_item, svgp_mid_item, svgp_qchol_item, svgp_qfix_item, svgp_ypart_item, svgp_fin_item, svgp_var_item
 from x_neighbors.louvain_sparse import louvain_item_sparse
 from x_neighbors.block_ops import ocsvm_smo_block, OCSVM_TPB
 
@@ -798,6 +798,42 @@ def op_nc_std(x: Int, lab: Int, cent: Int, std: Int, n: Int, d: Int, n_classes: 
     _ = d_lab^
     _ = d_cent^
     _ = d_std^
+    _ = ctx^
+
+
+def nc_shrink_d_kernel(dsc: FP, cent: FP, nk: FP, std: FP, res: FP, devs: FP, n_: Int64, d_: Int64, n_classes_: Int64, do_shrink_: Int64, med_: Float32, shrink_: Float32):
+    var n = Int(n_)
+    var d = Int(d_)
+    var n_classes = Int(n_classes_)
+    var do_shrink = Int(do_shrink_)
+    var med = med_
+    var shrink = shrink_
+    var t = _tid()
+    if t < n_classes * d:
+        nc_shrink_d_item(t, dsc, cent, nk, std, res, devs, n, d, n_classes, do_shrink, med, shrink)
+
+
+def op_nc_shrink_d(dsc: Int, cent: Int, nk: Int, std: Int, res: Int, devs: Int, n: Int, d: Int, n_classes: Int, do_shrink: Int, med: Float32, shrink: Float32) raises:
+    var ctx = xn_ctx()
+    var d_dsc = _buf(ctx, dsc, d, True)
+    var d_cent = _buf(ctx, cent, n_classes * d, True)
+    var d_nk = _buf(ctx, nk, n_classes, True)
+    var d_std = _buf(ctx, std, d, True)
+    var d_res = _buf(ctx, res, n_classes * d, False)
+    var d_devs = _buf(ctx, devs, n_classes * d, False)
+    ctx.enqueue_function[nc_shrink_d_kernel](
+        d_dsc.unsafe_ptr(), d_cent.unsafe_ptr(), d_nk.unsafe_ptr(), d_std.unsafe_ptr(), d_res.unsafe_ptr(), d_devs.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(do_shrink), med, shrink,
+        grid_dim=_grid(n_classes * d), block_dim=(BLOCK if n_classes * d > 1 else 1),
+    )
+    _down(ctx, d_res, res, n_classes * d)
+    _down(ctx, d_devs, devs, n_classes * d)
+    ctx.synchronize()
+    _ = d_dsc^
+    _ = d_cent^
+    _ = d_nk^
+    _ = d_std^
+    _ = d_res^
+    _ = d_devs^
     _ = ctx^
 
 

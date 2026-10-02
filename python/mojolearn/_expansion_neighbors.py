@@ -410,7 +410,8 @@ class NearestCentroid(_XNeighbors):
         lab = _i32(codes, "y")
         if self.metric == "euclidean":
             cent = _empty_out((C, d), "<f4")
-            self._op("group_mean", [(X, 0), (lab, 0), (cent, 1)], (n, d, C))
+            if os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") == "1":
+                self._op("group_mean", [(X, 0), (lab, 0), (cent, 1)], (n, d, C))
         else:
             rows = X.tolist()
             med = []
@@ -421,16 +422,28 @@ class NearestCentroid(_XNeighbors):
         stats = _empty_out((d,), "<f4")
         new_cent = _empty_out((C, d), "<f4")
         devs = _empty_out((C, d), "<f4")
-        self._op("nc_std", [(X, 0), (lab, 0), (cent, 0), (stats, 1)], (n, d, C))
+        nk = Array.from_list([float(c) for c in counts], "<f4")
+        dsc = None
+        if self.metric == "euclidean" and os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") != "1":
+            # lane/neural-pass95: the class means, the within-class std and the
+            # dataset centroid in one op (x_neighbors/items.mojo nc_stats_item):
+            # X goes to the device once; MOJOLEARN_NC_SPLIT_OPS=1 restores the three ops
+            dsc = _empty_out((d,), "<f4")
+            self._op("nc_stats", [(X, 0), (lab, 0), (nk, 0), (cent, 1), (stats, 1), (dsc, 1)], (n, d, C))
+        else:
+            self._op("nc_std", [(X, 0), (lab, 0), (cent, 0), (stats, 1)], (n, d, C))
         std = stats.tolist()
         if all(v == 0.0 for v in std) and self._ptp_zero(X):
             raise ValueError("All features have zero variance. Division by zero.")
         std_sorted = sorted(std)
         med_std = _f32_scalar(_median(std_sorted))
-        nk = Array.from_list([float(c) for c in counts], "<f4")
         shrink = float(self.shrink_threshold) if self.shrink_threshold else 0.0
-        self._op("nc_shrink", [(X, 0), (cent, 0), (nk, 0), (stats, 0), (new_cent, 1), (devs, 1)],
-                 (n, d, C, 1 if shrink else 0), (med_std, shrink))
+        if dsc is not None:
+            self._op("nc_shrink_d", [(dsc, 0), (cent, 0), (nk, 0), (stats, 0), (new_cent, 1), (devs, 1)],
+                     (n, d, C, 1 if shrink else 0), (med_std, shrink))
+        else:
+            self._op("nc_shrink", [(X, 0), (cent, 0), (nk, 0), (stats, 0), (new_cent, 1), (devs, 1)],
+                     (n, d, C, 1 if shrink else 0), (med_std, shrink))
         self.centroids_ = new_cent
         self.deviations_ = devs
         self.within_class_std_dev_ = stats

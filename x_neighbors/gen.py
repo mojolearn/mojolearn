@@ -88,6 +88,13 @@ OPS = [
     ("nc_std", "items", "nc_std_item", "d",
      [("x", "fin", "n * d"), ("lab", "iin", "n"), ("cent", "fin", "n_classes * d"), ("std", "fout", "d"),
       ("n", "int"), ("d", "int"), ("n_classes", "int")]),
+    # lane/neural-pass95: group_mean + nc_std + the dataset centroid in ONE
+    # op over the features (one upload of X); nc_shrink_d takes that centroid
+    ("nc_shrink_d", "items", "nc_shrink_d_item", "n_classes * d",
+     [("dsc", "fin", "d"), ("cent", "fin", "n_classes * d"), ("nk", "fin", "n_classes"), ("std", "fin", "d"),
+      ("res", "fout", "n_classes * d"), ("devs", "fout", "n_classes * d"), ("n", "int"), ("d", "int"),
+      ("n_classes", "int"), ("do_shrink", "int"),
+      ("med", "float"), ("shrink", "float")]),
     ("nc_shrink", "items", "nc_shrink_item", "n_classes * d",
      [("x", "fin", "n * d"), ("cent", "fin", "n_classes * d"), ("nk", "fin", "n_classes"), ("std", "fin", "d"),
       ("res", "fout", "n_classes * d"), ("devs", "fout", "n_classes * d"), ("n", "int"), ("d", "int"),
@@ -176,6 +183,12 @@ OPS = [
 #: x_neighbors/iter_host.mojo on the CPU): loops of the items above that keep
 #: their buffers on the device between steps. Exported like any op.
 CUSTOM_OPS = [
+    # lane/neural-pass95: group_mean + nc_std + the dataset centroid (one
+    # upload of X); a custom op since the follow-up so the device stages
+    # rows for every (class, feature) chain (MI325X taxi: 351 ms on 11
+    # threads, main 177)
+    ("nc_stats", [("x", "fin", "n * d"), ("lab", "iin", "n"), ("nk", "fin", "n_classes"), ("cent", "fout", "n_classes * d"),
+     ("std", "fout", "d"), ("dsc", "fout", "d"), ("n", "int"), ("d", "int"), ("n_classes", "int")]),
     ("lp_knn_graph", [("idx", "iin", "n * k"), ("cols", "iout", "n * k"), ("vals", "fout", "n * k"),
      ("n", "int"), ("m", "int"), ("k", "int"), ("variant", "int")]),
     ("lp_knn_product", [("cols", "iin", "n * k"), ("vals", "fin", "n * k"), ("x", "fin", "m * c"), ("res", "fout", "n * c"),
@@ -245,6 +258,12 @@ CUSTOM_OPS = [
 #: that one GPU thread runs far slower than one CPU core; the host column is
 #: the same statements): op -> the define that restores the one-thread GPU
 #: launch.
+#: lane/neural-pass72: scratch ops whose item slices the scratch by its own
+#: index (knn_impute: best_d + t * k; knn_impute_cells: per cell; pcs: scr
+#: + t * 2 * nc), so the shared list is per-item storage and the items run
+#: over host tasks like the scratch-free ones. ocsvm, louvain and svgp are
+#: one item each.
+PAR_SCRATCH_OK = {"knn_impute", "knn_impute_cells", "pcs"}
 HOST_RUN = {
     "louvain": "MOJOLEARN_XN_LOUVAIN_GPU",
     # long serial folds (one item per class x feature, or per feature):
@@ -543,10 +562,41 @@ def _i(addr: Int) -> IP:
 
 def host():
     s = [HDR, GEN, '"""The neighbors lane\'s CPU drivers: host loops over the SAME items (see x_neighbors/gen.py)."""\n',
-         "from std.sys.compile import is_defined\n", imports("host"), """
+         "from std.sys.compile import is_defined\n",
+         "from std.os import getenv\n",
+         "from core.host_parallel import host_parallelize\n",
+         "from core.host_predict_threads import host_predict_chunk, host_predict_task_count\n", imports("host"), """
 #: the host gate's negative control (`MOJOLEARN_HOST_SABOTAGE`): every op's
 #: first float output moves by 1e-3 in its first element
 comptime X_NEIGHBORS_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
+
+#: MOJOLEARN_XN_HOST_SERIAL=1: every op's items one after another on one
+#: thread (the loop before lane/neural-pass72)
+def _xn_host_serial() -> Bool:
+    return String(getenv("MOJOLEARN_XN_HOST_SERIAL")) == "1"
+
+
+#: lane/neural-pass72 (2026-10-01): f(t) for t in [0, count), the items cut
+#: over host tasks by count only. An item is one device thread's work and
+#: writes only its own cells, so the task count and the cut move no bit; the
+#: ops with a shared scratch list and the HOST_RUN serial folds keep the
+#: one-thread loop.
+def _items[F: def(Int) -> None](ref f: F, count: Int):
+    if count <= 0:
+        return
+    var tasks = host_predict_task_count(count)
+    if tasks <= 1 or _xn_host_serial():
+        for t in range(count):
+            f(t)
+        return
+    var part = host_predict_chunk(count, tasks)
+    def _task(k: Int) {imm f, imm part, imm count}:
+        var lo = k * part
+        var hi = min(lo + part, count)
+        for t in range(lo, hi):
+            f(t)
+    host_parallelize(_task, tasks)
 
 
 @always_inline
@@ -562,7 +612,7 @@ def _i(addr: Int) -> IP:
         bufs, scal = split(params)
         dp = [f"{b[0]}: Int" for b in bufs if b[1] not in ("fscr", "iscr")]
         dp += [f"{p[0]}: {'Int' if p[1] == 'int' else 'Float32'}" for p in scal]
-        body = host_loop(item, count, bufs, scal, name)
+        body = host_loop(item, count, bufs, scal, name, par=True)
         outs = [b for b in bufs if b[1] in ("fout", "finout")]
         if outs:
             b = outs[0]
@@ -575,7 +625,7 @@ def _i(addr: Int) -> IP:
     return "".join(s)
 
 
-def host_loop(item, count, bufs, scal, name=None):
+def host_loop(item, count, bufs, scal, name=None, par=False):
     """The host driver's body up to the loop: scratch Lists, then the item
     over every t (shared by the host drivers and HOST_RUN device drivers).
     An op in HOST_ITEM calls its sparse item once over the non-scratch
@@ -599,12 +649,28 @@ def host_loop(item, count, bufs, scal, name=None):
                 ptrs.append(f"IP(unsafe_from_address=Int(s_{b[0]}.unsafe_ptr()))")
             else:
                 ptrs.append(f"_i({b[0]})" if is_int_buf(b[1]) else f"_f({b[0]})")
-        for it, ct, lp in stages(item, count):
-            call = ", ".join(["t"] + (["lj"] if lp else []) + ptrs + [p[0] for p in scal])
-            if lp:
-                body += f"    for lj in range({lp}):\n        for t in range({ct}):\n            {it}({call})\n"
-            else:
-                body += f"    for t in range({ct}):\n        {it}({call})\n"
+        if not isinstance(item, str):
+            # a staged op: its stages' items in order, the device's order
+            for it, ct, lp in stages(item, count):
+                call = ", ".join(["t"] + (["lj"] if lp else []) + ptrs + [p[0] for p in scal])
+                if lp:
+                    body += f"    for lj in range({lp}):\n        for t in range({ct}):\n            {it}({call})\n"
+                else:
+                    body += f"    for t in range({ct}):\n        {it}({call})\n"
+            return body
+        call = ", ".join(["t"] + ptrs + [p[0] for p in scal])
+        scratch = any(b[1] in ("fscr", "iscr") for b in bufs) and name not in PAR_SCRATCH_OK
+        if par and not scratch and name not in HOST_RUN:
+            # lane/neural-pass72: the items over host tasks (`_items`)
+            binds = [b[0] for b in bufs]
+            for b, ptr in zip(bufs, ptrs):
+                body += f"    var p_{b[0]} = {ptr}\n"
+            caps = ", ".join([f"imm p_{b}" for b in binds] + [f"imm {p[0]}" for p in scal])
+            pcall = ", ".join(["t"] + [f"p_{b}" for b in binds] + [p[0] for p in scal])
+            body += f"    def _item(t: Int) {{{caps}}}:\n        {item}({pcall})\n"
+            body += f"    _items(_item, {count})\n"
+            return body
+        body += f"    for t in range({count}):\n        {item}({call})\n"
         return body
 
 
