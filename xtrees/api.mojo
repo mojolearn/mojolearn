@@ -13,6 +13,10 @@ from checks.numerics import identical_log64
 from std.python import Python
 from xtrees.shap import mask_expand, block_mean, kernel_solve
 from xtrees.perm_device import perm_synthetic
+from xtrees.shap_fast import (
+    SHAP_KERNEL_DEV, SHAP_PERM_CACHE, kernel_draws, kernel_gather, kernel_solve_device, mask_expand_device,
+    perm_synthetic_cached,
+)
 from xtrees.ops_device import (
     apply_trees_device, bag_rows_device, gather_f32_device, transpose_f32_device, transpose_f64_device,
     unseen_rows_device, weighted_sample_device,
@@ -658,8 +662,12 @@ def perm_synthetic_binding(
     _need(params, 3, "x_trees_perm_synthetic")
     var n_perm = _count(_i(params, 2), "x_trees_perm_synthetic")
     if n_perm > 0:
-        perm_synthetic(f32_ptr(Int(py=x)), f32_ptr(Int(py=bg)), i32_ptr(Int(py=inv)), f32_ptr(Int(py=res)),
-                       _i(params, 0), _i(params, 1), n_perm)
+        comptime if SHAP_PERM_CACHE:
+            perm_synthetic_cached(f32_ptr(Int(py=x)), f32_ptr(Int(py=bg)), i32_ptr(Int(py=inv)),
+                                  f32_ptr(Int(py=res)), _i(params, 0), _i(params, 1), n_perm)
+        else:
+            perm_synthetic(f32_ptr(Int(py=x)), f32_ptr(Int(py=bg)), i32_ptr(Int(py=inv)), f32_ptr(Int(py=res)),
+                           _i(params, 0), _i(params, 1), n_perm)
     return PythonObject(n_perm)
 
 
@@ -686,6 +694,62 @@ def kernel_solve_binding(
         raise Error("x_trees_kernel_solve: d must be >= 1")
     kernel_solve(i32_ptr(Int(py=masks)), f64_ptr(Int(py=w)), _count(_i(params, 0), "x_trees_kernel_solve"), d,
                  f64_ptr(Int(py=ey)), _i(params, 2), f64_ptr(Int(py=fx)), f64_ptr(Int(py=fnull)), f64_ptr(Int(py=phi)))
+    return PythonObject(d)
+
+
+# lane/apple-fast-shap (FAST + Apple, -D MOJOLEARN_SHAP_KERNEL_DEV): the
+# KernelExplainer's device entry points, registered only under the define,
+# so the Python layer takes the branch when the binding offers them.
+def kernel_draws_binding(cdf: PythonObject, size: PythonObject, dup: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n_draw, M, n_cdf, num_full, seed, stream]; size and dup
+    int32 n_draw (`xtrees/shap_fast.mojo`)."""
+    _need(params, 6, "x_trees_kernel_draws")
+    var n_draw = _count(_i(params, 0), "x_trees_kernel_draws")
+    if n_draw > 0:
+        kernel_draws(f64_ptr(Int(py=cdf)), i32_ptr(Int(py=size)), i32_ptr(Int(py=dup)), n_draw, _i(params, 1),
+                     _i(params, 2), _i(params, 3), _i(params, 4), _i(params, 5))
+    return PythonObject(n_draw)
+
+
+def kernel_gather_binding(
+    fixed: PythonObject, sel: PythonObject, neg: PythonObject, out: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [nfixed, n_sel, M]; out int32 (nfixed + n_sel) x M."""
+    _need(params, 3, "x_trees_kernel_gather")
+    var nfixed = _count(_i(params, 0), "x_trees_kernel_gather")
+    var n_sel = _count(_i(params, 1), "x_trees_kernel_gather")
+    if nfixed + n_sel > 0:
+        kernel_gather(i32_ptr(Int(py=fixed)), i32_ptr(Int(py=sel)), i32_ptr(Int(py=neg)), i32_ptr(Int(py=out)),
+                      nfixed, n_sel, _i(params, 2))
+    return PythonObject(nfixed + n_sel)
+
+
+def mask_expand_dev_binding(
+    x: PythonObject, bg: PythonObject, masks: PythonObject, res: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`x_trees_mask_expand` on the device; params = [nb, d, m]."""
+    _need(params, 3, "x_trees_mask_expand_dev")
+    var m = _count(_i(params, 2), "x_trees_mask_expand_dev")
+    if m > 0:
+        mask_expand_device(f32_ptr(Int(py=x)), f32_ptr(Int(py=bg)), i32_ptr(Int(py=masks)), f32_ptr(Int(py=res)),
+                           _i(params, 0), _i(params, 1), m)
+    return PythonObject(m)
+
+
+def kernel_solve_dev_binding(
+    masks: PythonObject, w: PythonObject, ey: PythonObject, fx: PythonObject, fnull: PythonObject,
+    phi: PythonObject, grp: PythonObject, wval: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`x_trees_kernel_solve` with the normal equations' counts on the
+    device; grp int32 m (weight group per coalition), wval float64 n_grp;
+    params = [m, d, k, n_grp]; phi float64 d*k."""
+    _need(params, 4, "x_trees_kernel_solve_dev")
+    var d = _i(params, 1)
+    if d < 1:
+        raise Error("x_trees_kernel_solve_dev: d must be >= 1")
+    kernel_solve_device(i32_ptr(Int(py=masks)), f64_ptr(Int(py=w)), _count(_i(params, 0), "x_trees_kernel_solve_dev"),
+                        d, f64_ptr(Int(py=ey)), _i(params, 2), f64_ptr(Int(py=fx)), f64_ptr(Int(py=fnull)),
+                        f64_ptr(Int(py=phi)), i32_ptr(Int(py=grp)), f64_ptr(Int(py=wval)), _i(params, 3))
     return PythonObject(d)
 
 
@@ -740,3 +804,8 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[block_mean_binding]("x_trees_block_mean")
     m.def_function[perm_synthetic_binding]("x_trees_perm_synthetic")
     m.def_function[kernel_solve_binding]("x_trees_kernel_solve")
+    comptime if SHAP_KERNEL_DEV:
+        m.def_function[kernel_draws_binding]("x_trees_kernel_draws")
+        m.def_function[kernel_gather_binding]("x_trees_kernel_gather")
+        m.def_function[mask_expand_dev_binding]("x_trees_mask_expand_dev")
+        m.def_function[kernel_solve_dev_binding]("x_trees_kernel_solve_dev")

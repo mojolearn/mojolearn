@@ -2726,6 +2726,116 @@ class KernelExplainer(_AgnosticExplainer):
                 weights[nfixed:] = [w * (weight_left / s) for w in weights[nfixed:]]
         return masks, weights
 
+    # lane/apple-fast-shap (FAST + Apple build with -D MOJOLEARN_SHAP_KERNEL_DEV
+    # only; the binding registers these entry points under that define, so
+    # the probe is the whole switch): the coalition draws, the mask matrix,
+    # the synthetic rows and the normal equations on the device
+    # (`xtrees/shap_fast.mojo`); the Python side keeps the enumeration of
+    # the small subset sizes and the sequential bookkeeping of the draws.
+    def _masks_dev(self, M, nsamples, seed, row, draws, gather):
+        """`_masks` with the sampling on the device: (masks Array int32
+        m x M, weights list, m)."""
+        import itertools
+        masks, weights = [], []
+        num_subset_sizes = (M - 1 + 1) // 2 if M > 1 else 0
+        num_paired = (M - 1) // 2
+        wv = [(M - 1.0) / (i * (M - i)) for i in range(1, num_subset_sizes + 1)]
+        for i in range(num_paired):
+            wv[i] *= 2
+        tot = math.fsum(wv)
+        wv = [w / tot for w in wv]
+        num_full = 0
+        left = nsamples
+        rem = list(wv)
+        for size in range(1, num_subset_sizes + 1):
+            nsub = self._binom(M, size) * (2 if size <= num_paired else 1)
+            if left * rem[size - 1] / nsub >= 1.0 - 1e-8:
+                num_full += 1
+                left -= nsub
+                if rem[size - 1] < 1.0:
+                    r0 = rem[size - 1]
+                    rem = [v / (1 - r0) for v in rem]
+                w = wv[size - 1] / self._binom(M, size)
+                if size <= num_paired:
+                    w /= 2.0
+                for inds in itertools.combinations(range(M), size):
+                    mk = [0] * M
+                    for i in inds:
+                        mk[i] = 1
+                    masks.append(mk)
+                    weights.append(w)
+                    if size <= num_paired:
+                        masks.append([1 - v for v in mk])
+                        weights.append(w)
+            else:
+                break
+        nfixed = len(masks)
+        samples_left = nsamples - nfixed
+        sel, neg = [], []
+        if num_full != num_subset_sizes and samples_left > 0:
+            rw = list(wv)
+            for i in range(num_paired):
+                rw[i] /= 2
+            rw = rw[num_full:]
+            t = math.fsum(rw)
+            rw = [v / t for v in rw]
+            cdf, run = [], 0.0
+            for v in rw:
+                run += v
+                cdf.append(run)
+            n_draw = 4 * samples_left
+            cdf_a = Array.from_list(cdf, "<f8")
+            size_a = empty((n_draw,), "<i4")
+            dup_a = empty((n_draw,), "<i4")
+            draws(addr_ro(cdf_a, name="cdf"), addr(size_a, name="size"), addr(dup_a, name="dup"),
+                  [n_draw, M, len(cdf), num_full, seed, row])
+            sz = size_a.tolist()
+            dp = dup_a.tolist()
+            used = {}
+            pos = 0
+            while samples_left > 0 and pos < n_draw:
+                p = pos
+                pos += 1
+                size = sz[p]
+                q = dp[p]
+                new = q < 0
+                if new:
+                    used[p] = nfixed + len(sel)
+                    samples_left -= 1
+                    sel.append(p)
+                    neg.append(0)
+                    weights.append(1.0)
+                else:
+                    weights[used[q]] += 1.0
+                if samples_left > 0 and size <= num_paired:
+                    if new:
+                        samples_left -= 1
+                        sel.append(p)
+                        neg.append(1)
+                        weights.append(1.0)
+                    else:
+                        weights[used[q] + 1] += 1.0
+            weight_left = math.fsum(wv[num_full:])
+            s = math.fsum(weights[nfixed:])
+            if s > 0:
+                weights[nfixed:] = [w * (weight_left / s) for w in weights[nfixed:]]
+        m = nfixed + len(sel)
+        fixed = Array.from_list([v for mk in masks for v in mk] or [0], "<i4")
+        out = empty((max(1, m * M),), "<i4")
+        gather(addr_ro(fixed, name="fixed"), addr_ro(Array.from_list(sel or [0], "<i4"), name="sel"),
+               addr_ro(Array.from_list(neg or [0], "<i4"), name="neg"), addr(out, name="masks"), [nfixed, len(sel), M])
+        return out, weights, m
+
+    def _coalitions_dev(self, x_row, masks, m, expand):
+        """`_coalitions` over a mask Array, the synthetic rows written on
+        the device: float64 (m, k) means."""
+        bg = self._bg
+        nb, d = bg.shape
+        syn = empty((m * nb * d,), "<f4")
+        expand(addr_ro(x_row, name="x"), addr_ro(bg, name="data"), addr_ro(masks, name="masks"),
+               addr(syn, name="synthetic"), [nb, d, m])
+        return self._mean_over_background(syn, m)
+
     def shap_values(self, X, nsamples="auto", l1_reg="auto"):
         if l1_reg not in ("auto", False, 0):
             _refuse(f"l1_reg={l1_reg!r}", "no l1 feature selection is carried.")
@@ -2738,6 +2848,7 @@ class KernelExplainer(_AgnosticExplainer):
         seed = _trees_seed(self.random_state)
         k = self.n_outputs_
         b = self._bind()
+        dev = getattr(b, "x_trees_kernel_solve_dev", None)
         rows = []
         cols = _trees_arange(d)
         for i in range(n):
@@ -2749,6 +2860,23 @@ class KernelExplainer(_AgnosticExplainer):
             phi = zeros((d * k,), "<f8")
             if M == 1 or ns < 1:
                 phi = Array.from_list([fx.tolist()[j] - self._fnull.tolist()[j] for j in range(k)], "<f8")
+            elif dev is not None:
+                masks, wlist, m = self._masks_dev(M, ns, seed, i, b.x_trees_kernel_draws, b.x_trees_kernel_gather)
+                ey = self._coalitions_dev(x_row, masks, m, b.x_trees_mask_expand_dev)
+                self._link(ey)
+                w = Array.from_list(wlist, "<f8")
+                vals = {}
+                grp = [vals.setdefault(v, len(vals)) for v in wlist]
+                if len(vals) <= 16:
+                    grp_a = Array.from_list(grp, "<i4")
+                    wval = Array.from_list(list(vals.keys()), "<f8")
+                    dev(addr_ro(masks, name="masks"), addr_ro(w, name="w"), addr_ro(ey, name="ey"),
+                        addr_ro(fx, name="fx"), addr_ro(self._fnull, name="fnull"), addr(phi, name="phi"),
+                        addr_ro(grp_a, name="grp"), addr_ro(wval, name="wval"), [m, d, k, len(vals)])
+                else:
+                    b.x_trees_kernel_solve(addr_ro(masks, name="masks"), addr_ro(w, name="w"), addr_ro(ey, name="ey"),
+                                           addr_ro(fx, name="fx"), addr_ro(self._fnull, name="fnull"),
+                                           addr(phi, name="phi"), [m, d, k])
             else:
                 mlist, wlist = self._masks(M, ns, seed, i)
                 masks, ey = self._coalitions(x_row, mlist)
