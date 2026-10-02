@@ -8,11 +8,13 @@
 # file (see tools/hooks/pre-commit for the record). Reading the blob sizes
 # takes seconds; the upload took hours.
 #
-# The third fence (2026-10-02): no_host_routes.py reads only the lines the
-# push adds and refuses any that add or touch a CPU route on GPU installs
-# (a host binding loaded from GPU code, HostExec in a GPU binding, a
-# MOJOLEARN_*HOST* switch, a host size threshold, or a named host route
-# table). There is no allowlist: the routes on main can only be removed.
+# The third fence (2026-10-02): no_host_routes.py --tree scans every file a
+# GPU install runs at the pushed commit (Mojo modules the GPU bindings reach
+# through their imports, GPU-path Python) and refuses any CPU work in GPU code
+# that is not in tools/hooks/host_routes_baseline.tsv, and any baseline row
+# that no longer matches (the baseline only shrinks). It prints the debt per
+# class and per owner. A branch that predates the baseline is judged on what
+# it adds over its merge-base with main, against main's baseline.
 #
 # Arguments and stdin follow git's pre-push contract:
 #   $1 remote name, $2 remote URL; stdin lines "<local ref> <local sha> <remote ref> <remote sha>".
@@ -26,13 +28,8 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     [ -z "$local_sha" ] && continue
     [ "$local_sha" = "$zero" ] && continue
     [ -f "$here/no_host_routes.py" ] || continue
-    if [ "$remote_sha" = "$zero" ]; then
-        base=$(git merge-base "$local_sha" "refs/remotes/$1/main" 2>/dev/null) || continue
-    else
-        base=$remote_sha
-        git cat-file -e "$base^{commit}" 2>/dev/null || continue
-    fi
-    python3 "$here/no_host_routes.py" "$base" "$local_sha" --main "refs/remotes/$1/main" || exit 4
+    case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac
+    python3 "$here/no_host_routes.py" --tree "$local_sha" || exit 4
 done
 [ $? -eq 4 ] && bad=1
 echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do

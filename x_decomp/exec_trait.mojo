@@ -48,6 +48,10 @@ trait Exec:
         ...
 
     @staticmethod
+    def knn_select(dmat: F32Ptr, dist: F32Ptr, idx: F32Ptr, n: Int, m: Int, k: Int, exclude_self: Int) raises:
+        ...
+
+    @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:
         ...
 
@@ -125,6 +129,18 @@ trait Exec:
 
     @staticmethod
     def als_cg_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, steps: F32Ptr, n: Int, m: Int, f: Int, reg: Float32, cg: Int) raises:
+        ...
+
+    @staticmethod
+    def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
+        """R (n x n, n = d + nrhs) of [a | b] by the blocked TSQR
+        (x_decomp/tsqr_core.mojo); `keep` holds the factorization for
+        `tsqr_apply`."""
+        ...
+
+    @staticmethod
+    def tsqr_apply(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
+        """q (m x k) = Q c for the kept factorization (k == 0: release it)."""
         ...
 
     @staticmethod
