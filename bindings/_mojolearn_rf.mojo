@@ -1251,8 +1251,8 @@ def _rf_predict_ordered(
     try:
         resident_predict_into[True](
             handle,
-            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=x_address),
-            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=out_address),
+            _f32_ptr(x_address).unsafe_origin_cast[MutAnyOrigin](),
+            _f32_ptr(out_address).unsafe_origin_cast[MutAnyOrigin](),
             n_rows, n_cols, num_outputs, True,
         )
     except e:
