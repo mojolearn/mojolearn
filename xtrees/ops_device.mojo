@@ -27,6 +27,8 @@ from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
+from checks.soft_f64 import SF64_SIGN, SF64_ZERO, sf64_add, sf64_from_int, sf64_gt, sf64_is_nan, sf64_lt, sf64_mul
+from xtrees.ops import WS_CHUNK, draw, stream_base
 
 comptime OPS_TPB = 256
 comptime OPS_MAX_BLOCKS = 65535
@@ -36,6 +38,9 @@ comptime OPS_MAX_BLOCKS = 65535
 comptime APPLY_BAD_COLUMN = Int32(-1)
 comptime APPLY_BAD_CHILD = Int32(-2)
 comptime APPLY_CYCLE = Int32(-3)
+
+#: 2^-53 as a binary64 word: `ops.unit`'s scale (exact).
+comptime _TWO_M53 = UInt64(0x3CA0000000000000)
 
 
 struct _OpsContext(Defaultable, Movable):
@@ -298,3 +303,161 @@ def transpose_f32_device(
     ctx.synchronize()
     _ = d_src^
     _ = d_dst^
+
+
+# ---------------------------------------------------------------------------
+# weighted_sample on the device (cpu-gpu-cleanup w2-trees). The binary64
+# arithmetic is `checks/soft_f64.mojo`'s integer spelling (the Apple GPU has
+# no float64), each operation the IEEE result the CPU column's native double
+# returns, so the cdf and the draws are `ops.weighted_sample`'s on every
+# vendor: the same chunks, the same in-chunk order, the same fixed tree.
+# ---------------------------------------------------------------------------
+
+
+def ws_chunk_kernel(
+    w: MutPointer[UInt64, MutAnyOrigin], n: Int64, n_chunks: Int64,
+    cdf: MutPointer[UInt64, MutAnyOrigin], tot: MutPointer[UInt64, MutAnyOrigin],
+    flag: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread per chunk of `WS_CHUNK` rows, grid-stride: the in-chunk
+    cumulative sum in index order (cdf), the chunk total (tot), flag[0] = 1
+    on a negative or NaN weight."""
+    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while c < Int(n_chunks):
+        var run = SF64_ZERO
+        var i1 = min((c + 1) * WS_CHUNK, Int(n))
+        for i in range(c * WS_CHUNK, i1):
+            var wi = w.unsafe_load(i)
+            if sf64_is_nan(wi) or sf64_lt(wi, SF64_ZERO):
+                flag.unsafe_store(0, Int32(1))
+            run = sf64_add(run, wi)
+            cdf.unsafe_store(i, run)
+        tot.unsafe_store(c, run)
+        c += stride
+
+
+def ws_scan_step_kernel(
+    src: MutPointer[UInt64, MutAnyOrigin], dst: MutPointer[UInt64, MutAnyOrigin], m: Int64, s: Int64,
+):
+    """One Hillis-Steele pass of `ops.ws_tree_scan`: dst[j] = src[j] +
+    src[j - s] for j >= s, else src[j]. One thread per chunk total."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while j < Int(m):
+        if j >= Int(s):
+            dst.unsafe_store(j, sf64_add(src.unsafe_load(j), src.unsafe_load(j - Int(s))))
+        else:
+            dst.unsafe_store(j, src.unsafe_load(j))
+        j += stride
+
+
+def ws_offset_kernel(
+    cdf: MutPointer[UInt64, MutAnyOrigin], scan: MutPointer[UInt64, MutAnyOrigin], n: Int64,
+):
+    """cdf[i] = scan[chunk(i) - 1] + cdf[i] for every row past chunk 0."""
+    var i = WS_CHUNK + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < Int(n):
+        cdf.unsafe_store(i, sf64_add(scan.unsafe_load(i // WS_CHUNK - 1), cdf.unsafe_load(i)))
+        i += stride
+
+
+def ws_draw_kernel(
+    w: MutPointer[UInt64, MutAnyOrigin], cdf: MutPointer[UInt64, MutAnyOrigin], n: Int64,
+    base: UInt64, n_draw: Int64, res: MutPointer[Int32, MutAnyOrigin],
+):
+    """One thread per draw: `ops.weighted_sample`'s draw body (u = unit *
+    total, the first i with cdf[i] > u, stepped back over trailing zero
+    weights)."""
+    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    var total = cdf.unsafe_load(Int(n) - 1)
+    while k < Int(n_draw):
+        var r = draw(base, k)
+        var u = sf64_mul(sf64_mul(sf64_from_int(Int(r >> 11)), _TWO_M53), total)
+        var lo = 0
+        var hi = Int(n) - 1
+        while lo < hi:
+            var mid = (lo + hi) // 2
+            if sf64_gt(cdf.unsafe_load(mid), u):
+                hi = mid
+            else:
+                lo = mid + 1
+        while lo > 0 and (w.unsafe_load(lo) & ~SF64_SIGN) == 0:  # u landed on a flat step at the end
+            lo -= 1
+        res.unsafe_store(k, Int32(lo))
+        k += stride
+
+
+def weighted_sample_device(
+    w: MutPointer[Float64, MutUntrackedOrigin], n: Int,
+    res: MutPointer[Int32, MutUntrackedOrigin], n_draw: Int, seed: Int, stream: Int,
+) raises:
+    """`ops.weighted_sample` on the device: the weights go up once, the cdf
+    is built by the chunk kernel, ceil(log2(chunks)) fixed-tree scan passes
+    and the offset kernel, one thread per draw searches it, the indices come
+    back once. The same refusals; nothing written to `res` on a refusal."""
+    if n <= 0:
+        raise Error("x_trees weighted_sample: weights must have a positive total")
+    var ctx = _ctx()
+    var n_chunks = ceildiv(n, WS_CHUNK)
+    var d_w = ctx.enqueue_create_buffer[DType.uint64](n)
+    ctx.enqueue_copy(dst_buf=d_w, src_ptr=w.bitcast[UInt64]())
+    var d_cdf = ctx.enqueue_create_buffer[DType.uint64](n)
+    var d_a = ctx.enqueue_create_buffer[DType.uint64](n_chunks)
+    var d_b = ctx.enqueue_create_buffer[DType.uint64](n_chunks)
+    var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
+    d_flag.enqueue_fill(Int32(0))
+    ctx.enqueue_function[ws_chunk_kernel](
+        d_w.unsafe_ptr(), Int64(n), Int64(n_chunks), d_cdf.unsafe_ptr(), d_a.unsafe_ptr(), d_flag.unsafe_ptr(),
+        grid_dim=_blocks(n_chunks), block_dim=OPS_TPB,
+    )
+    var src_is_a = True
+    var s = 1
+    while s < n_chunks:
+        if src_is_a:
+            ctx.enqueue_function[ws_scan_step_kernel](
+                d_a.unsafe_ptr(), d_b.unsafe_ptr(), Int64(n_chunks), Int64(s),
+                grid_dim=_blocks(n_chunks), block_dim=OPS_TPB,
+            )
+        else:
+            ctx.enqueue_function[ws_scan_step_kernel](
+                d_b.unsafe_ptr(), d_a.unsafe_ptr(), Int64(n_chunks), Int64(s),
+                grid_dim=_blocks(n_chunks), block_dim=OPS_TPB,
+            )
+        src_is_a = not src_is_a
+        s *= 2
+    if n > WS_CHUNK:
+        ctx.enqueue_function[ws_offset_kernel](
+            d_cdf.unsafe_ptr(), d_a.unsafe_ptr() if src_is_a else d_b.unsafe_ptr(), Int64(n),
+            grid_dim=_blocks(n - WS_CHUNK), block_dim=OPS_TPB,
+        )
+    var h_flag = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=h_flag, src_buf=d_flag)
+    var h_total = ctx.enqueue_create_host_buffer[DType.uint64](1)
+    var d_last = d_cdf.create_sub_buffer[DType.uint64](n - 1, 1)
+    ctx.enqueue_copy(dst_buf=h_total, src_buf=d_last)
+    ctx.synchronize()
+    if h_flag.unsafe_ptr().unsafe_load(0) != Int32(0):
+        raise Error("x_trees weighted_sample: weights must be nonnegative")
+    if not sf64_gt(h_total.unsafe_ptr().unsafe_load(0), SF64_ZERO):
+        raise Error("x_trees weighted_sample: weights must have a positive total")
+    if n_draw > 0:
+        var d_res = ctx.enqueue_create_buffer[DType.int32](n_draw)
+        ctx.enqueue_function[ws_draw_kernel](
+            d_w.unsafe_ptr(), d_cdf.unsafe_ptr(), Int64(n), stream_base(seed, stream), Int64(n_draw),
+            d_res.unsafe_ptr(),
+            grid_dim=_blocks(n_draw), block_dim=OPS_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=res, src_buf=d_res)
+        ctx.synchronize()
+        _ = d_res^
+    _ = d_w^
+    _ = d_cdf^
+    _ = d_a^
+    _ = d_b^
+    _ = d_flag^
+    _ = h_flag^
+    _ = h_total^
+    _ = d_last^

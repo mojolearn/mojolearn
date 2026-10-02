@@ -28,18 +28,15 @@ THE SEAMS (IDENTITY_PATHS rows 160-165; the gate is
 xtrees/checks/glue_check.mojo, one sabotage arm each):
   DEVIATION 5600  draws: SplitMix64 as a counter, index = draw mod n.
   DEVIATION 5601  products meeting an add: `identical_mul64`.
-  DEVIATION 5602  folds: sequential in index order.
+  DEVIATION 5602  folds: sequential in index order (weighted_sample's cdf:
+                  sequential per WS_CHUNK, the chunks joined by a fixed
+                  Hillis-Steele tree, the device's order; w2-trees).
   DEVIATION 5603  exp / log / pow: the pinned binary64 polynomials.
   DEVIATION 5604  ties: the lower index; stable sorts.
   DEVIATION 5605  a zero row normalises to uniform 1 / k, never 0 / 0.
 """
 from std.sys.compile import is_defined
-from core.host_parallel import host_parallelize
 from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
-
-#: Draws per host task of `weighted_sample` (was `ensemble/host_layout.mojo`'s
-#: block, which this module no longer imports).
-comptime HOST_LAYOUT_BLOCK_ROWS = 4096
 
 #: The host gate's negative control (`-D MOJOLEARN_HOST_SABOTAGE=1`, host builds
 #: only): `scale_f64` divides by a perturbed divisor, so every vote average moves.
@@ -99,57 +96,75 @@ def sample_indices(
         res[unsafe_offset=k] = perm[k]
 
 
+#: `weighted_sample`'s scan chunk: each chunk's cumulative sum is sequential
+#: in index order; the chunk totals are joined by `ws_tree_scan`'s fixed tree.
+#: `xtrees/ops_device.mojo::weighted_sample_device` uses the same chunk, so
+#: the CPU column and every GPU column build one cdf.
+comptime WS_CHUNK = 256
+
+
+def ws_tree_scan(mut tot: List[Float64]):
+    """Inclusive scan of the chunk totals in place, by the fixed Hillis-Steele
+    tree: pass s (s = 1, 2, 4, ...) sets t[j] = t_prev[j] + t_prev[j - s]
+    for j >= s. The device runs the same passes, one launch each."""
+    var m = len(tot)
+    var s = 1
+    while s < m:
+        var prev = tot.copy()
+        for j in range(s, m):
+            tot[j] = prev[j] + prev[j - s]
+        s *= 2
+
+
 def weighted_sample(
     w: MutPointer[Float64, MutUntrackedOrigin], n: Int,
     res: MutPointer[Int32, MutUntrackedOrigin], n_draw: Int, seed: Int, stream: Int,
 ) raises:
     """`n_draw` indices drawn with replacement with probability w[i] / sum(w)
-    (numpy's `choice(p=...)` question): the cumulative sum in index order,
-    then the first i with cdf[i] > u * total. A zero-weight row is never
-    drawn."""
-    var cdf = List[Float64](length=n, fill=0.0)
-    var total: Float64 = 0.0
+    (numpy's `choice(p=...)` question): the cumulative sum, then the first i
+    with cdf[i] > u * total. A zero-weight row is never drawn.
+
+    THE CDF (cpu-gpu-cleanup w2-trees; the old one was one sequential sum):
+    rows fall in chunks of `WS_CHUNK`; inside a chunk the sum is sequential
+    in index order; the chunk totals are scanned by `ws_tree_scan`'s fixed
+    tree; cdf[i] = scan[chunk - 1] + local[i] (chunk 0 adds nothing); the
+    total is cdf[n - 1]. This is the CPU column's spelling of
+    `ops_device.weighted_sample_device`, operation for operation."""
     for i in range(n):
         if not (w[unsafe_offset=i] >= 0.0):
             raise Error("x_trees weighted_sample: weights must be nonnegative")
-        total = total + w[unsafe_offset=i]
-        cdf[i] = total
+    var n_chunks = (n + WS_CHUNK - 1) // WS_CHUNK
+    var cdf = List[Float64](length=n, fill=0.0)
+    var tot = List[Float64](length=n_chunks, fill=0.0)
+    for c in range(n_chunks):
+        var run: Float64 = 0.0
+        for i in range(c * WS_CHUNK, min((c + 1) * WS_CHUNK, n)):
+            run = run + w[unsafe_offset=i]
+            cdf[i] = run
+        tot[c] = run
+    ws_tree_scan(tot)
+    for i in range(WS_CHUNK, n):
+        cdf[i] = tot[i // WS_CHUNK - 1] + cdf[i]
+    var total = cdf[n - 1]
     if not (total > 0.0):
         raise Error("x_trees weighted_sample: weights must have a positive total")
     var base = stream_base(seed, stream)
-    # DEVIATION 5607: the draws run across the host pool in blocks. Draw k is
-    # a pure function of (base, k, cdf, w) written to res[k] alone (no
-    # arithmetic crosses two draws), so the indices are the serial loop's
-    # whatever order the blocks run in. The cdf above stays one sequential
-    # sum. AdaBoostRegressor spent 81 ms of each 1,000,000-row member here
-    # on the M3 Ultra (2026-09-28, trees-apple profile).
     var cp = cdf.unsafe_ptr()
-    var wp = w
-    var rp = res
-
-    def _block(b: Int) {imm cp, imm wp, imm rp, imm base, imm total, imm n, imm n_draw}:
-        var k0 = b * HOST_LAYOUT_BLOCK_ROWS
-        var k1 = min(k0 + HOST_LAYOUT_BLOCK_ROWS, n_draw)
-        for k in range(k0, k1):
-            var u = identical_mul64(unit(draw(base, k)), total)
-            var lo = 0
-            var hi = n - 1
-            while lo < hi:
-                var mid = (lo + hi) // 2
-                if cp[unsafe_offset=mid] > u:
-                    hi = mid
-                else:
-                    lo = mid + 1
-            while lo > 0 and wp[unsafe_offset=lo] == 0.0:  # u landed on a flat step at the end
-                lo -= 1
-            rp[unsafe_offset=k] = Int32(lo)
-
-    var n_blocks = (n_draw + HOST_LAYOUT_BLOCK_ROWS - 1) // HOST_LAYOUT_BLOCK_ROWS
-    if n_blocks <= 1 or n_draw < HOST_LAYOUT_BLOCK_ROWS * 4:
-        for b in range(n_blocks):
-            _block(b)
-    else:
-        host_parallelize(_block, n_blocks)
+    for k in range(n_draw):
+        # Draw k is a pure function of (base, k, cdf, w); the device runs one
+        # thread per draw with this body (`ws_draw_kernel`).
+        var u = identical_mul64(unit(draw(base, k)), total)
+        var lo = 0
+        var hi = n - 1
+        while lo < hi:
+            var mid = (lo + hi) // 2
+            if cp[unsafe_offset=mid] > u:
+                hi = mid
+            else:
+                lo = mid + 1
+        while lo > 0 and w[unsafe_offset=lo] == 0.0:  # u landed on a flat step at the end
+            lo -= 1
+        res[unsafe_offset=k] = Int32(lo)
     _ = cdf^
 
 

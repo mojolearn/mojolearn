@@ -13,10 +13,11 @@ from checks.numerics import identical_log64
 from std.python import Python
 from xtrees.shap import mask_expand, block_mean, kernel_solve
 from xtrees.perm_device import perm_synthetic
-from xtrees.ops_device import apply_trees_device, gather_f32_device, transpose_f32_device
+from xtrees.ops_device import apply_trees_device, gather_f32_device, transpose_f32_device, weighted_sample_device
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 
-#: cpu-gpu-cleanup t-gbdt: a GPU build gathers, applies and transposes on
+#: cpu-gpu-cleanup t-gbdt / w2-trees: a GPU build gathers, applies, transposes
+#: and draws weighted samples on
 #: the device (`xtrees/ops_device.mojo`); the host binding (the CPU column,
 #: `-D MOJOLEARN_COLUMN_CPU`) keeps `xtrees/ops.mojo`'s serial loops. Fixed
 #: at build time, never a runtime route.
@@ -67,7 +68,10 @@ def weighted_sample_binding(w_addr: PythonObject, out_addr: PythonObject, params
     if n <= 0:
         raise Error("x_trees_weighted_sample: n must be positive")
     var n_draw = _count(_i(params, 1), "x_trees_weighted_sample")
-    weighted_sample(f64_ptr(Int(py=w_addr)), n, i32_ptr(Int(py=out_addr)), n_draw, _i(params, 2), _i(params, 3))
+    comptime if XTREES_DEVICE_OPS:
+        weighted_sample_device(f64_ptr(Int(py=w_addr)), n, i32_ptr(Int(py=out_addr)), n_draw, _i(params, 2), _i(params, 3))
+    else:
+        weighted_sample(f64_ptr(Int(py=w_addr)), n, i32_ptr(Int(py=out_addr)), n_draw, _i(params, 2), _i(params, 3))
     return PythonObject(n_draw)
 
 
