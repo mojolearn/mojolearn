@@ -201,7 +201,7 @@ from gbdt.methods.kernel.pointwise_hist2_one_byte_5bit import (
     PW_HIST2_BLOCK,
     PW_HIST2_FLOAT_BLOCK,
 )
-from gbdt.methods.kernel.pointwise_hist2_half_byte_template import PW_HB_BLOCK
+from gbdt.methods.kernel.pointwise_hist2_half_byte_template import PW_HB_BLOCK, PW_HB_FIXED
 from gbdt.methods.kernel.pointwise_hist2_one_byte_templ import (
     compute_split_properties_nb_kernel,
     PW_WRITE_EPS,
@@ -1253,6 +1253,7 @@ def run_compute_hist2_binary_kernel[
     nx: Int,
     ny: Int,
     nz: Int,
+    fixed_scale: Float32 = Float32(1.0),
 ) raises:
     """`RunComputeHist2BinaryKernel` (`:98-124`), copied."""
     if full_pass:
@@ -1269,6 +1270,8 @@ def run_compute_hist2_binary_kernel[
             partition,
             bin_sums,
             Int32(total_feature_count),
+            fixed_scale,
+            Int32(0),
             grid_dim=(nx, ny, nz),
             block_dim=(PW_HB_BLOCK, 1, 1),
         )
@@ -1286,6 +1289,8 @@ def run_compute_hist2_binary_kernel[
             partition,
             bin_sums,
             Int32(total_feature_count),
+            fixed_scale,
+            Int32(0),
             grid_dim=(nx, ny, nz),
             block_dim=(PW_HB_BLOCK, 1, 1),
         )
@@ -1317,6 +1322,7 @@ def compute_hist2_binary[
     total_feature_count: Int,
     bin_sums: MutPointer[Float32, o9],
     sm_count: Int,
+    fixed_scale: Float32 = Float32(1.0),
 ) raises:
     """`ComputeHist2Binary` (`:128-179`), copied line for line.
 
@@ -1347,6 +1353,24 @@ def compute_hist2_binary[
     var nz = fold_count
 
     var multiplier = pw_block_multiplier(nx, ny, nz, size, sm_count)
+    var int_slots = False
+    comptime if PW_HB_FIXED and not PW_PRIVATE_DOC_SLOTS:
+        # lane/neural-pass124: the fixed-point cells are exact in any order,
+        # so the documents split at the device's estimate (as 8-bit's)
+        multiplier = 1
+        if pw_int_slots_on():
+            var est = estimate_block_per_feature_multiplier(nx, ny, nz, size, sm_count)
+            var force = String(getenv("MOJOLEARN_PW_INT_SLOTS_FORCE"))
+            if force != "":
+                try:
+                    est = Int(force)
+                except:
+                    pass
+            if est > PW_MAX_MULTIPLIER:
+                est = PW_MAX_MULTIPLIER
+            if est > 1 and (est & (est - 1)) == 0:
+                multiplier = est
+                int_slots = True
     nx *= multiplier
     if is_grid_empty(nx, ny, nz):
         return
@@ -1354,6 +1378,18 @@ def compute_hist2_binary[
     if b_count == 0:
         return
 
+    if int_slots:
+        var stride_i = ny * nz * 2 * total_feature_count
+        var slots_i = ctx.enqueue_create_buffer[DType.float32](multiplier * stride_i)
+        enqueue_fill(ctx, slots_i, Float32(0.0))
+        binary_multiplier_ladder(
+            ctx, feature_offset, feature_first_fold_index, b_count, cindex,
+        target, weight, indices, partition, slots_i.unsafe_ptr(), total_feature_count,
+        full_pass, multiplier, nx, ny, nz, fixed_scale,
+        )
+        launch_pw_fold_int_slots(ctx, slots_i, bin_sums, full_pass, stride_i, multiplier, fixed_scale)
+        _ = slots_i^
+        return
     comptime if PW_PRIVATE_DOC_SLOTS:
         if multiplier > 1:
             # DEVIATION 2670: see `compute_hist2_non_binary`
@@ -1376,7 +1412,7 @@ def compute_hist2_binary[
     binary_multiplier_ladder(
         ctx, feature_offset, feature_first_fold_index, b_count, cindex,
         target, weight, indices, partition, bin_sums, total_feature_count,
-        full_pass, multiplier, nx, ny, nz,
+        full_pass, multiplier, nx, ny, nz, fixed_scale,
     )
 
 
@@ -1406,6 +1442,7 @@ def binary_multiplier_ladder[
     nx: Int,
     ny: Int,
     nz: Int,
+    fixed_scale: Float32 = Float32(1.0),
 ) raises:
     """`ComputeHist2Binary`'s multiplier ladder, lifted out unchanged for
     DEVIATION 2670."""
@@ -1413,43 +1450,43 @@ def binary_multiplier_ladder[
         run_compute_hist2_binary_kernel[1](
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
-            total_feature_count, full_pass, nx, ny, nz,
+            total_feature_count, full_pass, nx, ny, nz, fixed_scale,
         )
     elif multiplier == 2:
         run_compute_hist2_binary_kernel[2](
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
-            total_feature_count, full_pass, nx, ny, nz,
+            total_feature_count, full_pass, nx, ny, nz, fixed_scale,
         )
     elif multiplier == 4:
         run_compute_hist2_binary_kernel[4](
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
-            total_feature_count, full_pass, nx, ny, nz,
+            total_feature_count, full_pass, nx, ny, nz, fixed_scale,
         )
     elif multiplier == 8:
         run_compute_hist2_binary_kernel[8](
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
-            total_feature_count, full_pass, nx, ny, nz,
+            total_feature_count, full_pass, nx, ny, nz, fixed_scale,
         )
     elif multiplier == 16:
         run_compute_hist2_binary_kernel[16](
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
-            total_feature_count, full_pass, nx, ny, nz,
+            total_feature_count, full_pass, nx, ny, nz, fixed_scale,
         )
     elif multiplier == 32:
         run_compute_hist2_binary_kernel[32](
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
-            total_feature_count, full_pass, nx, ny, nz,
+            total_feature_count, full_pass, nx, ny, nz, fixed_scale,
         )
     elif multiplier == 64:
         run_compute_hist2_binary_kernel[64](
             ctx, feature_offset, feature_first_fold_index, b_count, cindex,
             target, weight, indices, partition, bin_sums,
-            total_feature_count, full_pass, nx, ny, nz,
+            total_feature_count, full_pass, nx, ny, nz, fixed_scale,
         )
     else:
         # DEVIATION 101: theirs is `exit(1)` (`:174`)
@@ -1493,6 +1530,7 @@ def run_compute_hist2_half_byte_kernel[
     nx: Int,
     ny: Int,
     nz: Int,
+    fixed_scale: Float32 = Float32(1.0),
 ) raises:
     """`RunComputeHist2HalfByteKernel` (`:99-127`), copied."""
     if full_pass:
@@ -1512,6 +1550,8 @@ def run_compute_hist2_half_byte_kernel[
             partition,
             bin_sums,
             Int32(bin_feature_count),
+            fixed_scale,
+            Int32(0),
             grid_dim=(nx, ny, nz),
             block_dim=(PW_HB_BLOCK, 1, 1),
         )
@@ -1532,6 +1572,8 @@ def run_compute_hist2_half_byte_kernel[
             partition,
             bin_sums,
             Int32(bin_feature_count),
+            fixed_scale,
+            Int32(0),
             grid_dim=(nx, ny, nz),
             block_dim=(PW_HB_BLOCK, 1, 1),
         )
@@ -1565,6 +1607,7 @@ def compute_hist2_half_byte[
     hist_line_size: Int,
     bin_sums: MutPointer[Float32, o9],
     sm_count: Int,
+    fixed_scale: Float32 = Float32(1.0),
 ) raises:
     """`ComputeHist2HalfByte` (`:130-180`), copied line for line.
 
@@ -1580,6 +1623,24 @@ def compute_hist2_half_byte[
     var nz = fold_count
 
     var multiplier = pw_block_multiplier(nx, ny, nz, size, sm_count)
+    var int_slots = False
+    comptime if PW_HB_FIXED and not PW_PRIVATE_DOC_SLOTS:
+        # lane/neural-pass124: the fixed-point cells are exact in any order,
+        # so the documents split at the device's estimate (as 8-bit's)
+        multiplier = 1
+        if pw_int_slots_on():
+            var est = estimate_block_per_feature_multiplier(nx, ny, nz, size, sm_count)
+            var force = String(getenv("MOJOLEARN_PW_INT_SLOTS_FORCE"))
+            if force != "":
+                try:
+                    est = Int(force)
+                except:
+                    pass
+            if est > PW_MAX_MULTIPLIER:
+                est = PW_MAX_MULTIPLIER
+            if est > 1 and (est & (est - 1)) == 0:
+                multiplier = est
+                int_slots = True
     nx *= multiplier
     if is_grid_empty(nx, ny, nz):
         return
@@ -1587,6 +1648,19 @@ def compute_hist2_half_byte[
     if half_byte_features_count == 0:
         return
 
+    if int_slots:
+        var stride_i = ny * nz * 2 * hist_line_size
+        var slots_i = ctx.enqueue_create_buffer[DType.float32](multiplier * stride_i)
+        enqueue_fill(ctx, slots_i, Float32(0.0))
+        half_byte_multiplier_ladder(
+            ctx, feature_offset, feature_first_fold_index, feature_folds,
+        half_byte_features_count, cindex, target, weight, indices,
+        partition, slots_i.unsafe_ptr(), hist_line_size, full_pass, multiplier,
+        nx, ny, nz, fixed_scale,
+        )
+        launch_pw_fold_int_slots(ctx, slots_i, bin_sums, full_pass, stride_i, multiplier, fixed_scale)
+        _ = slots_i^
+        return
     comptime if PW_PRIVATE_DOC_SLOTS:
         if multiplier > 1:
             # DEVIATION 2670: see `compute_hist2_non_binary`
@@ -1610,7 +1684,7 @@ def compute_hist2_half_byte[
         ctx, feature_offset, feature_first_fold_index, feature_folds,
         half_byte_features_count, cindex, target, weight, indices,
         partition, bin_sums, hist_line_size, full_pass, multiplier,
-        nx, ny, nz,
+        nx, ny, nz, fixed_scale,
     )
 
 
@@ -1642,6 +1716,7 @@ def half_byte_multiplier_ladder[
     nx: Int,
     ny: Int,
     nz: Int,
+    fixed_scale: Float32 = Float32(1.0),
 ) raises:
     """`ComputeHist2HalfByte`'s multiplier ladder, lifted out unchanged for
     DEVIATION 2670."""
@@ -1649,43 +1724,43 @@ def half_byte_multiplier_ladder[
         run_compute_hist2_half_byte_kernel[1](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
-            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz,
+            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
         )
     elif multiplier == 2:
         run_compute_hist2_half_byte_kernel[2](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
-            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz,
+            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
         )
     elif multiplier == 4:
         run_compute_hist2_half_byte_kernel[4](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
-            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz,
+            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
         )
     elif multiplier == 8:
         run_compute_hist2_half_byte_kernel[8](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
-            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz,
+            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
         )
     elif multiplier == 16:
         run_compute_hist2_half_byte_kernel[16](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
-            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz,
+            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
         )
     elif multiplier == 32:
         run_compute_hist2_half_byte_kernel[32](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
-            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz,
+            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
         )
     elif multiplier == 64:
         run_compute_hist2_half_byte_kernel[64](
             ctx, feature_offset, feature_first_fold_index, feature_folds,
             half_byte_features_count, cindex, target, weight, indices,
-            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz,
+            partition, bin_sums, hist_line_size, full_pass, nx, ny, nz, fixed_scale,
         )
     else:
         # DEVIATION 101: theirs is `exit(1)` (`:175`)
@@ -1784,6 +1859,7 @@ def compute_hist2[
             hist_line_size,
             bin_sums,
             sm_count,
+            fixed_scale,
         )
     elif policy == POLICY_HALF_BYTE:
         compute_hist2_half_byte(
@@ -1804,6 +1880,7 @@ def compute_hist2[
             hist_line_size,
             bin_sums,
             sm_count,
+            fixed_scale,
         )
     elif policy == POLICY_ONE_BYTE:
         # `DISPATCH_ONE_BYTE(ComputeHist2NonBinary, 4, 5)` and the three
