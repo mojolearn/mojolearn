@@ -20,6 +20,7 @@ from decomposition.host.pca_oracle import host_sign_flip
 from checks.numerics import ftz
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
+    trisolve_serial,
     F32Ptr,
     absmax_sign_cell,
     FOLD_BLOCK,
@@ -280,6 +281,12 @@ struct HostExec(Exec):
                 lu_rows(a, n, k, d, k + 1 + t * LU_ROWS, k + 1 + min(rows, (t + 1) * LU_ROWS))
 
             xd_parallel(elim, (rows + LU_ROWS - 1) // LU_ROWS)
+
+    @staticmethod
+    def trisolve(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, n: Int, nrhs: Int, trans: Int) raises:
+        var tmp = List[Float32](unsafe_uninit_length=max(n * nrhs, 1))
+        trisolve_serial(lu, idx, src, dst, F32Ptr(unsafe_from_address=Int(tmp.unsafe_ptr())), n, nrhs, trans)
+        _ = tmp^
 
     @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
