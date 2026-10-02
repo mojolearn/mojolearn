@@ -10,7 +10,9 @@ statement: `_e_step(random_init=True)`, the (offset + n_batch_iter)^-decay
 weight through the cells' logs and exp, the blend of `components_` and the
 new `exp_dirichlet_component_`, with the same cells, broadcast modes, draw
 streams (61 + draw) and float32 scalars (each Python double rounded once,
-as the binding boundary rounds it). The executors are `x_decomp/kit.mojo`'s.
+as the binding boundary rounds it). The CPU column runs it on
+`x_decomp/kit.mojo`; the GPU binding runs x_decomp/kit_device.mojo's
+`lda_online_dev`, the same statements on resident matrices.
 """
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import (
@@ -21,20 +23,20 @@ from x_decomp.kit import (
 comptime _F64_EPS: Float64 = 2.220446049250313e-16
 
 
-def dirichlet_expectation_2d[E: Exec, S: Exec](k: Kit[E, S], A: Mat) raises -> Mat:
+def dirichlet_expectation_2d[E: Exec](k: Kit[E], A: Mat) raises -> Mat:
     """psi(A) - psi(rowsum(A))."""
     return k.ew2(OP_SUB, k.ew1(OP_DIGAMMA, A, 0.0), k.ew1(OP_DIGAMMA, k.rowsum(A), 0.0))
 
 
-def lda_online_pass[E: Exec, S: Exec](
+def lda_online_pass[E: Exec](
     X: Mat, mut comps: Mat, mut exp_dir: Mat, bs: Int, max_doc_iter: Int, seed: Int, mut draw: Int,
     mut n_batch_iter: Int, doc_prior: Float64, topic_prior: Float64, offset: Float64, decay: Float64,
-    tol: Float64, total_samples: Float64, dev: Int,
+    tol: Float64, total_samples: Float64,
 ) raises:
     """One `for a in range(0, n, bs): self._em_step(k, M.rows(a, b), total, False)`
     pass. `comps` (k x v) and `exp_dir` are replaced; `draw` and
     `n_batch_iter` advance as the Python attributes did."""
-    var k = Kit[E, S](dev)
+    var k = Kit[E]()
     var n = X.r
     var nc = comps.r
     var a = 0

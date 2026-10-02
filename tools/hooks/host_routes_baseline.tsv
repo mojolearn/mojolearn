@@ -186,9 +186,6 @@ host-call	host-import	gap-neural-overhead2	debt	bindings/_mojolearn_x_cnn.mojo	0
 host-call	host-import	gap-neural-overhead2	debt	bindings/_mojolearn_x_cnn.mojo	0	var b = read_f32(Int(py=b_addr), n * F) if kind == 1 or kind == 3 else a.copy()
 host-call	host-import	gap-neural-overhead2	debt	bindings/_mojolearn_x_cnn.mojo	0	var src = read_f32(Int(py=in_addr), n_read)
 host-call	host-import	gap-neural-overhead2	debt	bindings/_mojolearn_x_cnn.mojo	0	var w = read_f32(Int(py=w_addr), nnz)
-host-exec	hostexec	UNOWNED	debt	bindings/_mojolearn_x_decomp.mojo	0	from x_decomp.host import HostExec
-host-exec	hostexec	UNOWNED	debt	bindings/_mojolearn_x_decomp.mojo	0	m.def_function[lda_online_py[DevExec, HostExec]]("x_decomp_lda_online")
-host-exec	hostexec	UNOWNED	debt	bindings/_mojolearn_x_decomp.mojo	0	m.def_function[mcd_py[DevExec, HostExec]]("x_decomp_mcd")
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_linear.mojo	0	fit_device(a, x, n_x, y, n_y, n, d, ipl, fpl, n_out, n_fw, n_iw, out)
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_linear.mojo	0	import x_linear/device.mojo:fit_device
 host-call	host-import	UNOWNED	debt	bindings/_mojolearn_x_metrics.mojo	0	import x_metrics/epilogue.mojo:encode_small_i64
@@ -522,8 +519,6 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	ia = [i fo
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	ib = [i for i in range(n) if labels[i] == b]
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	js = [j for j in range(n) if Dq.s[i * n + j] <= r]
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	pos = [i * n + j for i in range(n) for j in range(i + 1, n) if Dis.s[i * n + j] != 0]
-route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	int(_os.environ.get("MOJOLEARN_XD_RES_DEV_MIN", "65536")))
-route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	1	int(_os.environ.get("MOJOLEARN_XD_RES_DEV_MIN", "65536")))
 host-env	host-env/threshold	PR#116	inflight@28671ad0e1bdb7e1c59d7ee7925e1fccf1fb204a	python/mojolearn/_expansion_linear.py	0	if os.environ.get("MOJOLEARN_X_LINEAR_ISOTONIC_HOST", "") == "1" else ()))
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	for i in range(n):
 route-switch	host-env/threshold	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	_HOST_ALGOS = frozenset() if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1" else frozenset(
@@ -737,9 +732,6 @@ host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	import x_decomp/qr_host.
 host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	import x_decomp/qr_host.mojo:orgqr_host_rows
 host-call	host-import	hr-qr	debt	x_decomp/device.mojo	0	var got = eigh_ascending(diag, vecs, n, True, Int(i2))
 host-call	host-import	UNOWNED	debt	x_decomp/device.mojo	0	var got = eigh_ascending(diag, vecs, n, True, executed)
-host-env	host-env/threshold	hr-qr	debt	x_decomp/device.mojo	0	var v = String(getenv("MOJOLEARN_XD_HOST_EIGH_MAX", "0"))
-host-exec	hostexec	hr-kit	debt	x_decomp/device.mojo	0	HostExec.eigh(a, w, v, n)
-host-exec	hostexec	hr-qr	debt	x_decomp/device.mojo	0	from x_decomp.host import HostExec
 host-import	host-import	hr-qr	debt	x_decomp/device.mojo	0	geqrf_host_rows(a, tau, m, n)
 host-import	host-import	hr-lu	debt	x_decomp/device.mojo	0	if xd_lu_solve_on_host(n):
 host-import	host-import	hr-qr	debt	x_decomp/device.mojo	0	if xd_qr_on_host(m):
@@ -748,81 +740,17 @@ host-import	host-import	hr-lu	debt	x_decomp/device.mojo	0	lu_solve_host_rows(lu,
 host-import	host-import	hr-qr	debt	x_decomp/device.mojo	0	orgqr_host_rows(h, tau, q, m, n, kk, qc)
 host-threads	host-threads	hr-qr	debt	x_decomp/device.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	UNOWNED	debt	x_decomp/device.mojo	0	host_parallelize(_piece, tasks)
-host-threshold	host-env/threshold	hr-qr	debt	x_decomp/device.mojo	0	var v = String(getenv("MOJOLEARN_XD_HOST_EIGH_MAX", "0"))
 serial-launch	serial-gpu	UNOWNED	debt	x_decomp/device.mojo	0	ctx.enqueue_function[chol_diag_kernel](
 serial-launch	serial-gpu	UNOWNED	debt	x_decomp/device.mojo	0	ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
 serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_function[geqrf_head_staged_kernel](
 serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_function[lu_diag_kernel](
 serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	1	ctx.enqueue_function[lu_diag_kernel](
-serial-launch	serial-gpu	hr-kit	debt	x_decomp/device.mojo	0	ctx.enqueue_function[lu_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
 serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_function[lu_pivot_block_kernel](
 serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	1	ctx.enqueue_function[lu_pivot_block_kernel](
-serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_function[lu_pivot_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1)
-serial-launch	serial-gpu	hr-qr	debt	x_decomp/device.mojo	1	ctx.enqueue_function[lu_pivot_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1)
 serial-launch	serial-gpu	hr-lu	debt	x_decomp/device.mojo	0	ctx.enqueue_function[lu_solve_kernel](
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	_ = host_eigh(List[Float32](), n) # refuses the size, by name
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	colsum_rows(a, dst, d, 0, n)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	colsum_rows(a, pp.unsafe_offset(bl * d), d, bl * FOLD_BLOCK, min(n, (bl + 1) * FOLD_BLOCK))
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	ew_range(op, a, b, bm, c, cm, dst, t * EW_CHUNK, min(count, (t + 1) * EW_CHUNK), d, s)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	fast_qr_finish(ps, pr, ns, n)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	gemm_fold_rows(i, c, pp, m, n, nb)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	gemm_task(t, a, b, c, pp, m, k, n, ta, tb)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	host_sign_flip(vecs, n)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	host_sign_flip(vr, n)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import decomposition/host/linalg_public.mojo:eigh_ascending
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import decomposition/host/linalg_public.mojo:host_eigh
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import decomposition/host/pca_oracle.mojo:host_sign_flip
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_ew.mojo:ew_range
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_graph.mojo:dijkstra_heap_row
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_jacobi.mojo:fast_jacobi_eigh
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_jacobi.mojo:fast_one_sided_jacobi_svd
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_lda.mojo:lda_doc_row_host
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_lda.mojo:lda_pack_t
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_qr.mojo:fast_qr_finish
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_qr.mojo:qr_slice
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:colsum_rows
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:gemm_fold_rows
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:gemm_task
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:lu_rows
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:rowdot_task
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:rowsum_rows
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:sqdist_prepare
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/host_simd.mojo:sqdist_task
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/lu_host.mojo:lu_solve_host_rows
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/qr_host.mojo:geqrf_host_rows
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	import x_decomp/qr_host.mojo:orgqr_host_rows
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	its.unsafe_store(i, lda_doc_row_host(x, ew, pt, d, e, i, k, v, prior, max_iter, tol))
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	lu_rows(a, n, k, d, k + 1 + t * LU_ROWS, k + 1 + min(rows, (t + 1) * LU_ROWS))
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	qr_slice(pw, pr, m, n, 1, 0)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	qr_slice(pw, ps, m, n, ns, b)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	reached.unsafe_store(i, dijkstra_heap_row(g, dist, i, n))
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	rowdot_task(t, a, b, c, m, k)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	rowsum_rows(a, dst, d, t * ROW_CHUNK, min(n, (t + 1) * ROW_CHUNK))
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	sqdist_task(t, a, pbt, dst, na, nb, d)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	var bt = sqdist_prepare(b, nb, d)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	var ewt = lda_pack_t(ew, k, v)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	var fe = fast_jacobi_eigh(m, n, JACOBI_SWEEPS, Float32(JACOBI_TOL))
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	var got = eigh_ascending(diag, vecs, n, fe.converged, fe.executed)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	var got = fast_one_sided_jacobi_svd(r, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
-host-call	host-import	hr-kit	debt	x_decomp/host.mojo	0	var got_rr = eigh_ascending(diag_rr, vr, n, True, rr[1])
-host-env	host-env/threshold	hr-kit	debt	x_decomp/host.mojo	0	comptime if is_defined["MOJOLEARN_XDECOMP_HOST_SERIAL"]():
-host-exec	hostexec	hr-kit	debt	x_decomp/host.mojo	0	HostExec._gemm_simd(a, b, c, m, k, n, ta, tb)
-host-exec	hostexec	hr-kit	debt	x_decomp/host.mojo	0	HostExec._gemm_simd(b, a, pct, n, k, m, not tb, not ta)
-host-exec	hostexec	hr-kit	debt	x_decomp/host.mojo	0	HostExec._orth_passes(a, m, l, F32Ptr(unsafe_from_address=Int(none.unsafe_ptr())), False)
-host-exec	hostexec	hr-kit	debt	x_decomp/host.mojo	0	HostExec._orth_passes(a, m, l, diag, True)
-host-exec	hostexec	hr-kit	debt	x_decomp/host.mojo	0	var got = HostExec._qr_r(a, m, n)
-host-exec	hostexec	hr-kit	debt	x_decomp/host.mojo	0	var r = HostExec._qr_r(F32Ptr(unsafe_from_address=Int(w.unsafe_ptr())), m, l)
-host-exec	hostexec	hr-kit	debt	x_decomp/host.mojo	0	var r = HostExec._qr_r(a, m, n)
-host-import	host-import	hr-kit	debt	x_decomp/host.mojo	0	geqrf_host_rows(a, tau, m, n)
-host-import	host-import	hr-kit	debt	x_decomp/host.mojo	0	lu_solve_host_rows(lu, piv, b, n, nrhs, trans)
-host-import	host-import	hr-kit	debt	x_decomp/host.mojo	0	orgqr_host_rows(h, tau, q, m, n, kk, qc)
-host-threads	host-threads	hr-kit	debt	x_decomp/host.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	hr-kit	debt	x_decomp/host.mojo	0	host_parallelize(group, groups)
 host-call	host-import	UNOWNED	debt	x_decomp/host_jacobi.mojo	0	import decomposition/host/pca_oracle.mojo:_host_jacobi_fold
 host-call	host-import	UNOWNED	debt	x_decomp/host_jacobi.mojo	0	var fro2 = _host_jacobi_fold(a, n, False)
 host-call	host-import	UNOWNED	debt	x_decomp/host_jacobi.mojo	0	var off = _host_jacobi_fold(a, n, True)
-host-call	host-import	UNOWNED	debt	x_decomp/host_qr.mojo	0	import decomposition/host/pca_full_oracle.mojo:host_qr_slice_count
-host-call	host-import	UNOWNED	debt	x_decomp/host_qr.mojo	0	return host_qr_slice_count(m, n)
 host-env	host-env/threshold	hr-lu	debt	x_decomp/lu_host.mojo	0	var v = String(getenv("MOJOLEARN_XD_LU_SOLVE_HOST"))
 host-threads	host-threads	hr-lu	debt	x_decomp/lu_host.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	hr-lu	debt	x_decomp/lu_host.mojo	0	host_parallelize(_run, used)
