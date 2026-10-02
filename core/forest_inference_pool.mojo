@@ -185,7 +185,7 @@ struct ForestGroveOwner(Movable):
 
     def contribution[RF_INPUT: Bool](mut self,
         x: MutPointer[Float32, MutAnyOrigin], first_item: Int, items: Int,
-        features: Int, outputs: Int,
+        features: Int, outputs: Int, scan_input: Bool = False,
     ) raises -> List[Float32]:
         var first_row = first_item // outputs
         var rows = (first_item + items + outputs - 1) // outputs - first_row
@@ -196,6 +196,9 @@ struct ForestGroveOwner(Movable):
         var host = ctx.enqueue_create_host_buffer[DType.float32](items * 32)
         try:
             ctx.enqueue_copy(dst_buf=dx, src_ptr=x.unsafe_offset(first_row * features))
+            if scan_input and not device_ptr_all_finite(
+                    ctx, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows * features):
+                raise Error("resident forest requires finite Float32 values")
             ctx.enqueue_function[forest_owned_groves_kernel[RF_INPUT, FOREST_PACKED_NODES]](
                 self.offsets.value().unsafe_ptr(), self.columns.value().unsafe_ptr(),
                 self.thresholds.value().unsafe_ptr(), self.left.value().unsafe_ptr(),
@@ -304,7 +307,8 @@ struct PooledForest(Movable):
         var totals = List[Float32](length=items * 32, fill=Float32(0.0))
         for rank in range(len(self.owners)):
             ref owner = self.owners[rank]
-            var local = owner.contribution[RF_INPUT](x, first_item, items, self.features, self.outputs)
+            var local = owner.contribution[RF_INPUT](x, first_item, items, self.features, self.outputs,
+                                                     rank == 0)
             for item in range(items):
                 for g in range(len(owner.groves)):
                     var grove = owner.groves[g]
