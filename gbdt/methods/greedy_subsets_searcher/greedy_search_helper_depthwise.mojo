@@ -802,12 +802,31 @@ comptime GBDT_LG_BATCH = 1 if not _LG_FAST_APPLE else (
 #: OPT-IN until its A/B and quality check pass: `-D
 #: MOJOLEARN_GBDT_LG_EXACT_BATCH`; width 32, arms `-D
 #: MOJOLEARN_GBDT_LG_EXACT_BATCH16|64`.
+#:
+#: IDENTICAL, every GPU (lane gap-trees-nv): the same rounds under `-D
+#: MOJOLEARN_GBDT_LG_EXACT_ID`. Same bits as one leaf per iteration because
+#: (1) a leaf's score reads only its own histogram and partition stats: the
+#: histogram is the order-free fixed-point sum or the subtraction its sibling
+#: pair fixes, the stats are the pinned per-leaf fold, both independent of
+#: which other leaves share the launch, and the two-leaf and region kernels
+#: run the same `_leafwise_scan_part`; (2) the replay picks the leaves
+#: best-first picks, in its leaf order, so the model is the same tree; (3) a
+#: leaf split ahead of time and folded back takes the partition stats it had
+#: when it was scored (`lg_node_stats`, read at that iteration's score wait),
+#: which are the reduction best-first's end-of-tree sweep forms over the same
+#: rows in the same order, instead of the sum of its children's. Only the
+#: per-level score noise (`random_strength` with a Cosine score) draws per
+#: round, so a fit with noise grows one leaf per iteration.
+comptime LG_EXACT_ID = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_GBDT_LG_EXACT_ID"]()
+)
 comptime LG_EXACT_BATCH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH"]()
     and not _LG_FAST_APPLE
-)
+) or LG_EXACT_ID
 comptime LG_EXACT_BATCH_WIDTH = (
     64 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH64"]() else (
         16 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH16"]() else 32
@@ -1268,6 +1287,16 @@ def fit_non_symmetric_tree[
         )
     var lossguide = options.policy == GROW_LOSSGUIDE
     options.check()
+    # LG_EXACT_BATCH, per fit: the per-round score noise (a Cosine score with
+    # random_strength) would draw once per round instead of once per leaf
+    # split, so such a fit keeps one leaf per iteration.
+    var lg_exact = False
+    comptime if LG_EXACT_BATCH:
+        lg_exact = lossguide and (
+            options.random_strength == Float32(0.0)
+            or options.score_function == SCORE_FUNCTION_L2
+            or options.score_function == SCORE_FUNCTION_NEWTON_L2
+        )
 
     var min_child_hessian = child_hessian_threshold(options.min_child_hessian, options.policy, options.score_function)
     var stat_count = 1 + approx_dim
@@ -1282,7 +1311,7 @@ def fit_non_symmetric_tree[
     # certain splits still to come.
     var lg_room_bound = False
     comptime if LG_EXACT_BATCH:
-        if lossguide:
+        if lg_exact:
             var depth_leaves = options.max_leaves
             if max_depth < 30:
                 depth_leaves = 1 << max_depth
@@ -1639,7 +1668,12 @@ def fit_non_symmetric_tree[
     var lg_node_state = List[Int]()
     var lg_node_path = List[TLeafPath]()
     var lg_final = List[Int]()
+    # LG_EXACT_ID: each node's partition stats as of its score wait, the
+    # stats a folded-back leaf keeps (`stat_count` per node)
+    var lg_node_stats = List[Float32]()
     comptime if LG_EXACT_BATCH:
+        for _ in range(stat_count):
+            lg_node_stats.append(Float32(0.0))
         lg_leaf_node.append(0)
         lg_node_leaf.append(0)
         lg_node_left.append(-1)
@@ -2290,7 +2324,7 @@ def fit_non_symmetric_tree[
                 lossguide
                 and len(visit) > 2
                 and GBDT_LG_BATCH == 1
-                and not LG_EXACT_BATCH
+                and not lg_exact
             ):
                 raise Error(
                     String("Lossguide scored ")
@@ -2423,6 +2457,12 @@ def fit_non_symmetric_tree[
                 ctx.enqueue_copy(
                     dst_ptr=h_region_bin.unsafe_ptr(), src_buf=region_bin
                 )
+                comptime if LG_EXACT_ID:
+                    if lg_exact:
+                        ctx.enqueue_copy(
+                            dst_ptr=h_part_stats.unsafe_ptr(),
+                            src_buf=part_stats,
+                        )
                 mgr.wait_complete()
                 stage_times.end(ctx, "score.read")
                 trace.record_device(
@@ -2613,7 +2653,7 @@ def fit_non_symmetric_tree[
                         leaves[visit[i]].is_terminal = True
 
             comptime if LG_EXACT_BATCH:
-                if lossguide:
+                if lg_exact:
                     for i in range(len(visit)):
                         var vn = lg_leaf_node[visit[i]]
                         if leaves[visit[i]].best_split.defined:
@@ -2662,57 +2702,61 @@ def fit_non_symmetric_tree[
                 to_split = _lossguide_top_b(
                     leaves, GBDT_LG_BATCH if GBDT_LG_BATCH < room else room
                 )
-            elif LG_EXACT_BATCH:
-                # how many leaves this round may split: the width, the free
-                # slots, and (capacity below the depth bound) the slots the
-                # certain splits still to come may need
-                var lg_limit = LG_EXACT_BATCH_WIDTH
-                if max_leaves - len(leaves) < lg_limit:
-                    lg_limit = max_leaves - len(leaves)
-                var lg_plan = _lg_exact_plan(
-                    lg_node_left, lg_node_right, lg_node_gain, lg_node_state,
-                    options.max_leaves, options.min_split_gain, 1,
-                )
-                if lg_plan.blocked:
-                    raise Error(
-                        "Lossguide exact batch: a leaf has no score at the"
-                        " selection (every nonterminal leaf is scored"
-                        " before it)"
-                    )
-                to_split = List[Int]()
-                if lg_plan.complete:
-                    lg_final = lg_plan.final_nodes.copy()
-                else:
-                    if lg_room_bound:
-                        var lg_safe = (
-                            max_leaves + 2 - options.max_leaves
-                            - len(leaves) + lg_plan.exact_picks
-                        )
-                        if lg_safe < lg_limit:
-                            lg_limit = lg_safe
-                    if lg_limit < 1:
-                        raise Error(
-                            String("Lossguide exact batch: no slot for a")
-                            + " certain split; leaves="
-                            + String(len(leaves))
-                            + " capacity="
-                            + String(max_leaves)
-                        )
-                    if lg_limit > 1:
-                        lg_plan = _lg_exact_plan(
-                            lg_node_left, lg_node_right, lg_node_gain,
-                            lg_node_state, options.max_leaves,
-                            options.min_split_gain, lg_limit,
-                        )
-                    for i in range(len(lg_plan.expand)):
-                        to_split.append(lg_node_leaf[lg_plan.expand[i]])
-                    # the multi-leaf MakeSplit numbers right children by
-                    # position: ascending ids, as `_lossguide_top_b`
-                    sort(to_split)
             else:
-                to_split = lossguide_select_leaves_to_split_traced(
-                    leaves, trace, d_tag
-                )
+                to_split = List[Int]()
+                var lg_done = False
+                comptime if LG_EXACT_BATCH:
+                    if lg_exact:
+                        lg_done = True
+                        # how many leaves this round may split: the width, the free
+                        # slots, and (capacity below the depth bound) the slots the
+                        # certain splits still to come may need
+                        var lg_limit = LG_EXACT_BATCH_WIDTH
+                        if max_leaves - len(leaves) < lg_limit:
+                            lg_limit = max_leaves - len(leaves)
+                        var lg_plan = _lg_exact_plan(
+                            lg_node_left, lg_node_right, lg_node_gain, lg_node_state,
+                            options.max_leaves, options.min_split_gain, 1,
+                        )
+                        if lg_plan.blocked:
+                            raise Error(
+                                "Lossguide exact batch: a leaf has no score at the"
+                                " selection (every nonterminal leaf is scored"
+                                " before it)"
+                            )
+                        if lg_plan.complete:
+                            lg_final = lg_plan.final_nodes.copy()
+                        else:
+                            if lg_room_bound:
+                                var lg_safe = (
+                                    max_leaves + 2 - options.max_leaves
+                                    - len(leaves) + lg_plan.exact_picks
+                                )
+                                if lg_safe < lg_limit:
+                                    lg_limit = lg_safe
+                            if lg_limit < 1:
+                                raise Error(
+                                    String("Lossguide exact batch: no slot for a")
+                                    + " certain split; leaves="
+                                    + String(len(leaves))
+                                    + " capacity="
+                                    + String(max_leaves)
+                                )
+                            if lg_limit > 1:
+                                lg_plan = _lg_exact_plan(
+                                    lg_node_left, lg_node_right, lg_node_gain,
+                                    lg_node_state, options.max_leaves,
+                                    options.min_split_gain, lg_limit,
+                                )
+                            for i in range(len(lg_plan.expand)):
+                                to_split.append(lg_node_leaf[lg_plan.expand[i]])
+                            # the multi-leaf MakeSplit numbers right children by
+                            # position: ascending ids, as `_lossguide_top_b`
+                            sort(to_split)
+                if not lg_done:
+                    to_split = lossguide_select_leaves_to_split_traced(
+                        leaves, trace, d_tag
+                    )
         else:
             to_split = select_leaves_to_split(leaves)
 
@@ -2869,15 +2913,24 @@ def fit_non_symmetric_tree[
                 # clean. The left slot keeps its parent's True.
                 hist_slot_dirty.append(False)
                 comptime if LG_EXACT_BATCH:
-                    if lossguide:
+                    if lg_exact:
                         var pn = lg_leaf_node[left_id]
                         lg_node_path[pn] = parent.path.copy()
+                        comptime if LG_EXACT_ID:
+                            for st in range(stat_count):
+                                lg_node_stats[pn * stat_count + st] = (
+                                    h_part_stats.unsafe_ptr().unsafe_load(
+                                        left_id * stat_count + st
+                                    )
+                                )
                         var cn = len(lg_node_leaf)
                         lg_node_left[pn] = cn
                         lg_node_right[pn] = cn + 1
                         lg_node_leaf.append(left_id)
                         lg_node_leaf.append(right_id)
                         for _ in range(2):
+                            for _ in range(stat_count):
+                                lg_node_stats.append(Float32(0.0))
                             lg_node_left.append(-1)
                             lg_node_right.append(-1)
                             lg_node_gain.append(Float32.MAX)
@@ -3131,7 +3184,7 @@ def fit_non_symmetric_tree[
                     leaves[right_id], options
                 )
                 comptime if LG_EXACT_BATCH:
-                    if lossguide:
+                    if lg_exact:
                         # a terminal child is never scored, so it is never
                         # a candidate
                         if leaves[left_id].is_terminal:
@@ -3149,7 +3202,7 @@ def fit_non_symmetric_tree[
 
         var terminate = False
         comptime if LG_EXACT_BATCH:
-            if lossguide:
+            if lg_exact:
                 if len(to_split) == 0:
                     # the replay ended inside the known tree (or nothing
                     # passed min_split_gain): `lg_final` is the tree
@@ -3220,7 +3273,7 @@ def fit_non_symmetric_tree[
             # the rows of each result leaf (NS_INHERIT_PARTITION)
             var final_rows = List[Int]()
             comptime if LG_EXACT_BATCH:
-                if lossguide:
+                if lg_exact:
                     num_leaves = len(lg_final)
                     for fi in range(num_leaves):
                         var stack = List[Int]()
@@ -3229,6 +3282,17 @@ def fit_non_symmetric_tree[
                         for _ in range(stat_count):
                             lg_sums.append(Float64(0.0))
                         final_rows.append(0)
+                        var lg_kept = False
+                        comptime if LG_EXACT_ID:
+                            # folded back: the stats it was scored with
+                            if lg_node_left[lg_final[fi]] >= 0:
+                                for st in range(stat_count):
+                                    lg_sums[base + st] = Float64(
+                                        lg_node_stats[
+                                            lg_final[fi] * stat_count + st
+                                        ]
+                                    )
+                                lg_kept = True
                         while len(stack) > 0:
                             var node = stack.pop()
                             if lg_node_left[node] >= 0:
@@ -3237,6 +3301,8 @@ def fit_non_symmetric_tree[
                             else:
                                 var slot = lg_node_leaf[node]
                                 final_rows[fi] += leaves[slot].size
+                                if lg_kept:
+                                    continue
                                 for st in range(stat_count):
                                     lg_sums[base + st] += Float64(
                                         h_part_stats.unsafe_ptr().unsafe_load(
@@ -3250,7 +3316,7 @@ def fit_non_symmetric_tree[
                     )
                 )
                 comptime if LG_EXACT_BATCH:
-                    if lossguide:
+                    if lg_exact:
                         w = lg_sums[leaf_id * stat_count]
                 result_weights.append(w)
 
@@ -3265,7 +3331,7 @@ def fit_non_symmetric_tree[
                             )
                         )
                         comptime if LG_EXACT_BATCH:
-                            if lossguide:
+                            if lg_exact:
                                 leaf_sum = lg_sums[
                                     leaf_id * stat_count + 1 + approx_id
                                 ]
@@ -3298,7 +3364,7 @@ def fit_non_symmetric_tree[
                 result_values.append(values^)
                 var lg_path_done = False
                 comptime if LG_EXACT_BATCH:
-                    if lossguide:
+                    if lg_exact:
                         var fnode = lg_final[leaf_id]
                         if lg_node_left[fnode] >= 0:
                             result_paths.append(lg_node_path[fnode].copy())
