@@ -160,10 +160,17 @@ def garch_nll_warp[W: Int](par: FP, src: FP, mu: Float32, n: Int, p: Int, o: Int
     log-likelihood terms are computed on their own lanes and folded in
     sequence/fold32.mojo's order: lane l's slot, then the xor tree. On a
     64-lane wavefront both halves run the same 32 lanes."""
-    var pr = InlineArray[Float32, GARCH_RING](fill=Float32(0.0))
+    var omega = ld(par, 0)
+    var ap = InlineArray[Float32, GARCH_RING](fill=Float32(0.0))
+    var ao = InlineArray[Float32, GARCH_RING](fill=Float32(0.0))
+    var aq = InlineArray[Float32, GARCH_RING](fill=Float32(0.0))
     comptime for j in range(GARCH_RING):
-        if j < 1 + p + o + q:
-            pr[j] = ld(par, j)
+        if j < p:
+            ap[j] = ld(par, 1 + j)
+        if j < o:
+            ao[j] = ld(par, 1 + p + j)
+        if j < q:
+            aq[j] = ld(par, 1 + p + o + j)
     # lag rings: index j holds lag j + 1
     var rsq = InlineArray[Float32, GARCH_RING](fill=backcast)
     var oterm = InlineArray[Float32, GARCH_RING](fill=mul(Float32(0.5), backcast))
@@ -184,17 +191,17 @@ def garch_nll_warp[W: Int](par: FP, src: FP, mu: Float32, n: Int, p: Int, o: Int
             hil = ld(vb, 2 * ti + 1)
         var myv = Float32(1.0)
         for tt in range(cnt):
-            var v = pr[0]
+            var v = omega
             comptime for j in range(GARCH_RING):
                 if j < p:
-                    v = fma3(pr[1 + j], rsq[j], v)
+                    v = fma3(ap[j], rsq[j], v)
             comptime for j in range(GARCH_RING):
                 if j < o:
                     if oon[j]:
-                        v = fma3(pr[1 + p + j], oterm[j], v)
+                        v = fma3(ao[j], oterm[j], v)
             comptime for j in range(GARCH_RING):
                 if j < q:
-                    v = fma3(pr[1 + p + o + j], sg[j], v)
+                    v = fma3(aq[j], sg[j], v)
             var lo = shuffle_idx(lol, UInt32(tt))
             var hi = shuffle_idx(hil, UInt32(tt))
             if not (v == v):
@@ -282,19 +289,19 @@ struct GarchObj[W: Int = 1](Objective):
         if s > Float32(1.0):
             return Float32(1e30)
         var mu = ld(x, 0) if self.has_mean else Float32(0.0)
-        comptime if W == 1:
+        comptime if Self.W == 1:
             for t in range(self.n):
                 st(self.r, t, sub(ld(self.y, t), mu))
             return garch_nll(vol, self.r, self.n, self.p, self.o, self.q, self.backcast, self.vb, self.s2)
         else:
             self.last_mu = mu
-            return garch_nll_warp[W](vol, self.y, mu, self.n, self.p, self.o, self.q, self.backcast, self.vb,
+            return garch_nll_warp[Self.W](vol, self.y, mu, self.n, self.p, self.o, self.q, self.backcast, self.vb,
                                      self.s2, self.lane)
 
     @always_inline
     def settle_r(self):
         """W > 1: r as the serial evals leave it (y - the last mean)."""
-        comptime if W > 1:
+        comptime if Self.W > 1:
             for t in range(self.n):
                 st(self.r, t, sub(ld(self.y, t), self.last_mu))
 
