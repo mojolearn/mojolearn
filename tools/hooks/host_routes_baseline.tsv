@@ -78,10 +78,7 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_causal_lm_fixtures.py	0	for _ in
 host-module	host-import	UNOWNED	debt	python/mojolearn/_cholesky_impl.py	0	return _backend.load_host_module(_HOST_BASENAME), "linalg_numeric_mode"
 py-loop	py-numpy	gap-optimizers	debt	python/mojolearn/_expansion_cluster.py	0	for r in range(n):
 py-loop	py-numpy	PR#111	debt	python/mojolearn/_expansion_cluster.py	0	labels = [max(range(k), key=lambda j: (lr[r * k + j], -j)) for r in range(n)]
-py-loop	py-numpy	hr-kit	debt	python/mojolearn/_expansion_decomp.py	0	Xm = M.take_rows([i for i in range(n) if mask[i]])
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	big = max(abs(ls[i * n + i]) for i in range(n))
-py-loop	py-numpy	hr-kit	debt	python/mojolearn/_expansion_decomp.py	0	cov = _emp_cov(k, M.take_rows([i for i in range(n) if support[i]]), assume_centered=True)
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	dead = [all(abs(Yk.s[i * q + j]) < thr for i in range(n)) for j in range(q)]
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	diag = _M.of([lu.s[i * n + i] for i in range(n)], 1, n)
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	for i in range(n):
 py-loop	py-numpy	gap-nv-classical2	debt	python/mojolearn/_expansion_decomp.py	1	for i in range(n):
@@ -92,9 +89,6 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	5	for i in r
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	6	for i in range(n):
 py-loop	py-numpy	gap-neural-overhead2	debt	python/mojolearn/_expansion_decomp.py	7	for i in range(n):
 py-loop	py-numpy	gap-neural-overhead2	debt	python/mojolearn/_expansion_decomp.py	8	for i in range(n):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	9	for i in range(n):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	js = [j for j in range(n) if Dq.s[i * n + j] <= r]
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	0	pos = [i * n + j for i in range(n) for j in range(i + 1, n) if Dis.s[i * n + j] != 0]
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	for i in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_metrics.py	0	flags = Array.from_list([1 if cl[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_metrics.py	1	flags = Array.from_list([1 if cl[r] == c else 0 for r in range(n) for c in range(k)], "<i4")
@@ -162,8 +156,6 @@ host-threads	host-threads	UNOWNED	debt	svm/host/svc_proba.mojo	0	from core.host_
 host-threads	host-threads	UNOWNED	debt	svm/host/svc_proba.mojo	0	host_parallelize(_rows, tasks)
 host-threads	host-threads	gap-lm	debt	training/byte_lm_parallel.mojo	0	from core.host_parallel import host_parallelize
 host-threads	host-threads	gap-lm	debt	training/byte_lm_parallel.mojo	0	host_parallelize(_gradient_task, active)
-d2h-loop	d2h-roundtrip	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
-d2h-loop	d2h-roundtrip	hr-qr	debt	x_decomp/device.mojo	0	ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s)
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/bayes.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/bayes.mojo	0	par_rows(rows_map, n)
 serial-launch	serial-gpu	gap-nv-classical2	debt	x_linear/device.mojo	0	ctx.enqueue_function[fit_kernel](
