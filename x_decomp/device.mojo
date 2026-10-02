@@ -503,6 +503,40 @@ def lu_diag_kernel(a: F32Ptr, info: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
         lu_diag(a, info, scal, Int(k), Int(n))
 
 
+# lane/apple-fast-decomp-linalg (2026-10-02, pass 2): -D MOJOLEARN_LU_FAST_PANEL4,
+# FAST on Apple only. main's `launch_lu` is already blocked with a tiled,
+# register-blocked trailing update; its panel is six launches a column,
+# two of them one thread (`lu_diag_kernel`, `lu_act_kernel`). This fuses
+# those two into the multipliers' grid launch: every thread reads the
+# pivot a[k, k] (final after the swap) and skips a zero pivot as
+# `lu_l_elem` does through scal; thread 0 of block 0 writes scal, act and
+# info as `lu_diag` + `lu_act_kernel` did, for the update and trail
+# kernels that follow. Four launches a column (8192: 16,384 fewer).
+comptime LU_FAST_PANEL4 = XD_FAST_APPLE and is_defined["MOJOLEARN_LU_FAST_PANEL4"]()
+
+
+def lu_l_diag_kernel(a: F32Ptr, info: F32Ptr, scal: F32Ptr, act: F32Ptr, k: Int32, n: Int32):
+    """`lu_diag` + `lu_act_kernel` + `lu_l_kernel` in one grid launch (see
+    above). The multipliers read the pivot directly, not scal, so no thread
+    depends on thread 0's stores."""
+    var kk = Int(k)
+    var nn = Int(n)
+    var d = ftz(a.unsafe_load(kk * nn + kk))
+    if block_idx.x == 0 and thread_idx.x == 0:
+        scal.unsafe_store(0, d)
+        if d == Float32(0):
+            if info.unsafe_load(0) == Float32(0):
+                info.unsafe_store(0, Float32(kk + 1))
+            scal.unsafe_store(1, Float32(0))
+            act.unsafe_store(kk, Float32(0))
+        else:
+            scal.unsafe_store(1, Float32(1))
+            act.unsafe_store(kk, Float32(1))
+    var i = kk + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < nn and d != Float32(0):
+        a.unsafe_store(i * nn + kk, div0(a.unsafe_load(i * nn + kk), d))
+
+
 def lu_l_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
     var i = Int(k) + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n):
@@ -839,6 +873,199 @@ def lu_trail_rb_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, n
             var j = j0 + tx + LU_TILE * c
             if i < nn and j < nn:
                 a.unsafe_store(i * nn + j, acc[r * LU_RB + c])
+
+
+# lane/apple-fast-decomp-linalg (2026-10-02, pass 2): the blocked
+# right-looking Cholesky, FAST on Apple only, behind -D MOJOLEARN_CHOL_FAST_BLOCKED
+# (`CHOL_FAST_BLOCKED` below; IDENTICAL and every other column compile the
+# column driver unchanged). Cause: the column driver is 2n launches, and
+# column j's cells are each a j-long serial chain per thread (8192 x 8192:
+# 16,384 launches, the last columns 8,192 dependent fmas a thread; 960 ms on
+# the M3 Ultra against torch's 110). Here a panel of CH_NB columns runs as
+# three launches: its diagonal block factored in threadgroup memory by one
+# block of fixed size (`chol_panel_kernel`), the rows below it solved
+# against that block one thread per row (`chol_trsm_kernel`, the mirror
+# cells zeroed there), and the trailing symmetric update as the
+# register-blocked tile kernel of the LU trail (`chol_trail_rb_kernel`:
+# 64 x 64 cells a block, 4 x 4 a thread, the tiles above the diagonal
+# skipped). 3 n / CH_NB launches; the trailing update is the LU trail's
+# GEMM shape. Lower factor, upper triangle zero, info as `chol_serial`.
+comptime CH_NB = LU_PANEL_NB
+comptime CH_TPB = 256
+comptime CH_SMEM_BYTES = (2 * LU_RB_TILE * CH_NB) * 4
+comptime CHOL_FAST_BLOCKED = (
+    XD_FAST_APPLE and is_defined["MOJOLEARN_CHOL_FAST_BLOCKED"]()
+    and lib_smem_page_fits_for[TARGET_COLUMN, CH_SMEM_BYTES]()
+)
+
+
+def chol_panel_kernel(a: F32Ptr, info: F32Ptr, k0: Int32, ld: Int32, w: Int32):
+    """The w x w (w <= CH_NB, a fixed panel width) diagonal block at (k0, k0)
+    of the ld-strided matrix, already trailing-updated by the panels before
+    it, factored in threadgroup memory: column j's diagonal on thread 0
+    (its j-long chain inside the block, `chol_diag`'s statements and info
+    rule), then its rows below one thread each (`chol_col_elem`'s chain
+    inside the block). Written back with the block's upper cells zero. One
+    block over a fixed size: nothing here grows with the matrix."""
+    var kk0 = Int(k0)
+    var nn = Int(ld)
+    var ww = Int(w)
+    var tid = Int(thread_idx.x)
+    var sb = stack_allocation[CH_NB * CH_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var q = tid
+    while q < ww * ww:
+        var r = q // ww
+        var c = q - r * ww
+        sb[r * CH_NB + c] = a.unsafe_load((kk0 + r) * nn + kk0 + c)
+        q += CH_TPB
+    barrier()
+    for j in range(ww):
+        if tid == 0:
+            var acc = ftz(sb[j * CH_NB + j])
+            for p in range(j):
+                var l = ftz(sb[j * CH_NB + p])
+                acc = ftz(identical_mul_add(-l, l, acc))
+            if not (acc > Float32(0)):
+                if info.unsafe_load(0) == Float32(0):
+                    info.unsafe_store(0, Float32(kk0 + j + 1))
+                acc = Float32(1)
+            sb[j * CH_NB + j] = sqrt0(acc)
+        barrier()
+        var i = j + 1 + tid
+        while i < ww:
+            var d = sb[j * CH_NB + j]
+            var acc = ftz(sb[i * CH_NB + j])
+            for p in range(j):
+                acc = ftz(identical_mul_add(-ftz(sb[i * CH_NB + p]), ftz(sb[j * CH_NB + p]), acc))
+            sb[i * CH_NB + j] = div0(acc, d)
+            i += CH_TPB
+        barrier()
+    q = tid
+    while q < ww * ww:
+        var r = q // ww
+        var c = q - r * ww
+        a.unsafe_store((kk0 + r) * nn + kk0 + c, sb[r * CH_NB + c] if c <= r else Float32(0))
+        q += CH_TPB
+
+
+def chol_trsm_kernel(a: F32Ptr, k0: Int32, k1: Int32, n: Int32):
+    """Row i >= k1 of the panel's columns [k0, k1): a[i, j] = (a[i, j] -
+    sum_{k0 <= p < j} a[i, p] L[j, p]) / L[j, j] over j ascending, L the
+    factored diagonal block staged in threadgroup memory; the mirror cells
+    a[j, i] zeroed. One thread per row, reading only its own row and the
+    block."""
+    var kk0 = Int(k0)
+    var kk1 = Int(k1)
+    var nn = Int(n)
+    var ww = kk1 - kk0
+    var tid = Int(thread_idx.x)
+    var lb = stack_allocation[CH_NB * CH_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var q = tid
+    while q < ww * ww:
+        var r = q // ww
+        var c = q - r * ww
+        lb[r * CH_NB + c] = a.unsafe_load((kk0 + r) * nn + kk0 + c)
+        q += Int(block_dim.x)
+    barrier()
+    var i = kk1 + Int(block_idx.x) * Int(block_dim.x) + tid
+    if i < nn:
+        for jj in range(ww):
+            var acc = ftz(a.unsafe_load(i * nn + kk0 + jj))
+            for p in range(jj):
+                acc = ftz(identical_mul_add(-ftz(a.unsafe_load(i * nn + kk0 + p)), ftz(lb[jj * CH_NB + p]), acc))
+            a.unsafe_store(i * nn + kk0 + jj, div0(acc, lb[jj * CH_NB + jj]))
+            a.unsafe_store((kk0 + jj) * nn + i, Float32(0))
+
+
+def chol_trail_rb_kernel(a: F32Ptr, k0: Int32, k1: Int32, n: Int32):
+    """The trailing cells (i, j), i >= j >= k1: a[i, j] -= sum_{k0 <= p < k1}
+    a[i, p] a[j, p] (the panel's columns, final), `lu_trail_rb_kernel`'s
+    shape with the U slab the panel rows' transpose: each thread LU_RB x
+    LU_RB cells of a 64 x 64 tile, the slabs through threadgroup memory. A
+    tile wholly above the diagonal returns at once; the cells above the
+    diagonal of a diagonal tile are computed and later zeroed by the panel
+    and trsm kernels that own them."""
+    var nn = Int(n)
+    var kk0 = Int(k0)
+    var kk1 = Int(k1)
+    var width = kk1 - kk0
+    var i0 = kk1 + Int(block_idx.y) * LU_RB_TILE
+    var j0 = kk1 + Int(block_idx.x) * LU_RB_TILE
+    if j0 > i0:
+        return
+    var tid = Int(thread_idx.x)
+    var ty = tid // LU_TILE
+    var tx = tid - ty * LU_TILE
+    var ls = stack_allocation[CH_NB * LU_RB_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var us = stack_allocation[CH_NB * LU_RB_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var q = tid
+    while q < LU_RB_TILE * width:
+        var rr = q // width
+        var cc = q - rr * width
+        var v = Float32(0)
+        if i0 + rr < nn:
+            v = ftz(a.unsafe_load((i0 + rr) * nn + kk0 + cc))
+        ls[cc * LU_RB_TILE + rr] = v
+        q += LU_TILE_TPB
+    q = tid
+    while q < LU_RB_TILE * width:
+        var rr = q // width
+        var cc = q - rr * width
+        var v = Float32(0)
+        if j0 + rr < nn:
+            v = ftz(a.unsafe_load((j0 + rr) * nn + kk0 + cc))
+        us[cc * LU_RB_TILE + rr] = v
+        q += LU_TILE_TPB
+    barrier()
+    var acc = InlineArray[Float32, LU_RB * LU_RB](fill=Float32(0))
+    comptime for r in range(LU_RB):
+        comptime for c in range(LU_RB):
+            var i = i0 + ty + LU_TILE * r
+            var j = j0 + tx + LU_TILE * c
+            if i < nn and j < nn:
+                acc[r * LU_RB + c] = ftz(a.unsafe_load(i * nn + j))
+    for kp in range(width):
+        var lv = InlineArray[Float32, LU_RB](fill=Float32(0))
+        var uv = InlineArray[Float32, LU_RB](fill=Float32(0))
+        comptime for r in range(LU_RB):
+            lv[r] = ls[kp * LU_RB_TILE + ty + LU_TILE * r]
+        comptime for c in range(LU_RB):
+            uv[c] = us[kp * LU_RB_TILE + tx + LU_TILE * c]
+        comptime for r in range(LU_RB):
+            comptime for c in range(LU_RB):
+                acc[r * LU_RB + c] = ftz(identical_mul_add(-lv[r], uv[c], ftz(acc[r * LU_RB + c])))
+    comptime for r in range(LU_RB):
+        comptime for c in range(LU_RB):
+            var i = i0 + ty + LU_TILE * r
+            var j = j0 + tx + LU_TILE * c
+            if i < nn and j < nn:
+                a.unsafe_store(i * nn + j, acc[r * LU_RB + c])
+
+
+def launch_chol_blocked(ctx: DeviceContext, a: F32Ptr, info: F32Ptr, n: Int) raises:
+    """The blocked Cholesky's launches on device pointers, enqueued (no
+    sync): info cleared, then per panel of CH_NB columns the panel block,
+    the rows below it and the trailing update (see the kernels above)."""
+    ctx.enqueue_function[lu_info_init_kernel](info, grid_dim=1, block_dim=1)
+    # the panel block's launch carries the row stride and the panel width
+    # (at most CH_NB): its one block covers a fixed-size diagonal block,
+    # not the matrix
+    var ld = n
+    var k0 = 0
+    while k0 < n:
+        var k1 = min(k0 + CH_NB, n)
+        ctx.enqueue_function[chol_panel_kernel](
+            a, info, Int32(k0), Int32(ld), Int32(k1 - k0), grid_dim=1, block_dim=CH_TPB
+        )
+        if k1 < n:
+            ctx.enqueue_function[chol_trsm_kernel](
+                a, Int32(k0), Int32(k1), Int32(n), grid_dim=_blocks(n - k1), block_dim=TPB
+            )
+            var tiles = (n - k1 + LU_RB_TILE - 1) // LU_RB_TILE
+            ctx.enqueue_function[chol_trail_rb_kernel](
+                a, Int32(k0), Int32(k1), Int32(n), grid_dim=(tiles, tiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
+            )
+        k0 = k1
 
 
 def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
@@ -2007,15 +2234,24 @@ def orth_on_device_diag(
         var done = False
         if cholqr:
             launch_gemm(ctx, src.unsafe_ptr(), src.unsafe_ptr(), dg.unsafe_ptr(), gscr.unsafe_ptr(), l, m, l, True, False)
-            ctx.enqueue_function[lu_info_init_kernel](dinfo.unsafe_ptr(), grid_dim=1, block_dim=1)
-            for j in range(l):
-                ctx.enqueue_function[chol_diag_kernel](
-                    dg.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(j), Int32(l), grid_dim=1, block_dim=1
-                )
-                if l - j - 1 > 0:
-                    ctx.enqueue_function[chol_col_kernel](
-                        dg.unsafe_ptr(), Int32(j), Int32(l), grid_dim=_blocks(l - j - 1), block_dim=TPB
+            var gblocked = False
+            comptime if CHOL_FAST_BLOCKED:
+                # pass 2: the l x l Cholesky of the Gram as the blocked
+                # launch (3 l / CH_NB launches) instead of 2 l one-thread
+                # and column launches (l = 220: 440 a pass, 880 an svd).
+                if l > CH_NB:
+                    launch_chol_blocked(ctx, _p(dg), _p(dinfo), l)
+                    gblocked = True
+            if not gblocked:
+                ctx.enqueue_function[lu_info_init_kernel](dinfo.unsafe_ptr(), grid_dim=1, block_dim=1)
+                for j in range(l):
+                    ctx.enqueue_function[chol_diag_kernel](
+                        dg.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(j), Int32(l), grid_dim=1, block_dim=1
                     )
+                    if l - j - 1 > 0:
+                        ctx.enqueue_function[chol_col_kernel](
+                            dg.unsafe_ptr(), Int32(j), Int32(l), grid_dim=_blocks(l - j - 1), block_dim=TPB
+                        )
             ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
             ctx.enqueue_copy(dst_ptr=hg.unsafe_ptr(), src_buf=dg)
             ctx.synchronize()
@@ -2119,14 +2355,19 @@ def launch_lu(
                     a, piv, Int32(k), Int32(n), Int32(0), Int32(k1),
                     grid_dim=_blocks(k1), block_dim=TPB,
                 )
-                ctx.enqueue_function[lu_diag_kernel](
-                    a, info, scal, Int32(k), Int32(n), grid_dim=1, block_dim=1
-                )
-                ctx.enqueue_function[lu_act_kernel](scal, act, Int32(k), grid_dim=1, block_dim=1)
-                if n - k - 1 > 0:
-                    ctx.enqueue_function[lu_l_kernel](
-                        a, scal, Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
+                comptime if LU_FAST_PANEL4:
+                    ctx.enqueue_function[lu_l_diag_kernel](
+                        a, info, scal, act, Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
                     )
+                else:
+                    ctx.enqueue_function[lu_diag_kernel](
+                        a, info, scal, Int32(k), Int32(n), grid_dim=1, block_dim=1
+                    )
+                    ctx.enqueue_function[lu_act_kernel](scal, act, Int32(k), grid_dim=1, block_dim=1)
+                    if n - k - 1 > 0:
+                        ctx.enqueue_function[lu_l_kernel](
+                            a, scal, Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
+                        )
                 if k1 - k - 1 > 0 and n - k - 1 > 0:
                     ctx.enqueue_function[lu_update_panel_kernel](
                         a, scal, Int32(k), Int32(n), Int32(k1),
@@ -2384,7 +2625,17 @@ struct DevExec(Exec):
         # same chain `chol_serial` walks for that cell, reading only cells
         # final before the step), and the mirror cell zeroed there. Same
         # cells, same order per cell, same bits; 2n launches.
-        if n <= chol_serial_max():
+        var blocked = False
+        comptime if CHOL_FAST_BLOCKED:
+            # -D MOJOLEARN_CHOL_FAST_BLOCKED (lane/apple-fast-decomp-linalg,
+            # pass 2): `launch_chol_blocked` (see the kernels), FAST on
+            # Apple only; a matrix within one panel keeps the driver below.
+            if n > CH_NB:
+                launch_chol_blocked(ctx, _p(da), _p(di), n)
+                blocked = True
+        if blocked:
+            pass
+        elif n <= chol_serial_max():
             ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
         else:
             ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
