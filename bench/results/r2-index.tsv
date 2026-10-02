@@ -101,3 +101,13 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-02T00:32:25Z	measurements/2026-10-02/board-0834-hotaisle-mi300x.tar.gz	f8a5b7a5a53f1955b4264631049c731d9c9e31df2a096eff930b5d4c95e90d72	360305	enc1-gpuvm005	/root/board-0834
 2026-10-02T01:03:23Z	measurements/2026-10-02/board-0834-nvc1-l40s.tar.gz	2f8ae0dd82d831059bb6d498642215ffa63fb821559406d9f6c9c9674785781a	21780185	b07640402f07	/root/board-0834
 2026-10-02T01:03:25Z	measurements/2026-10-02/board-0834-hotaisle-mi300x.tar.gz	d7266879c910f20c20431846166b419d7c781c1a112076a1f3aaf83c42a47514	372382	enc1-gpuvm005	/root/board-0834
+2026-10-02T01:34:17Z	measurements/2026-10-02/bayes88-amd-main.tar.gz	e54c85654657b45fe48f93567d3e4f9ac9bd1427ea5c1c7d784eef31c6f39ac7	10397	mojolearn-steward-do-amd	/root/bayes88-amd-main
+2026-10-02T01:34:18Z	measurements/2026-10-02/bayes88-amd-p85.tar.gz	7bf9dfa17ee0e2ef7166b25a2a91a5678a9c18d1310aebb421b02e4e8621e69d	8634	mojolearn-steward-do-amd	/root/bayes88-amd-p85
+2026-10-02T01:34:19Z	measurements/2026-10-02/bayes88-amd-p86.tar.gz	1605e2193d6ce8c960bba988cb2bc5a82810ef0586fccb60a687214dd5133f27	8634	mojolearn-steward-do-amd	/root/bayes88-amd-p86
+2026-10-02T01:34:20Z	measurements/2026-10-02/bayes88-amd-p87.tar.gz	d292c065fbd9a655f86e1e3e46b80b387ebc3896c6e4bce4a31581dc9053fb34	8664	mojolearn-steward-do-amd	/root/bayes88-amd-p87
+2026-10-02T01:34:21Z	measurements/2026-10-02/glm91-amd-main.tar.gz	aeb569e9dc57749fbfcd7f2371533b8e6efb654ed57eb676ceac2843eb1d03f7	9407	mojolearn-steward-do-amd	/root/glm91-amd-main
+2026-10-02T01:34:22Z	measurements/2026-10-02/glm91-amd-lane.tar.gz	c679a738da6fd685060683922c0fe08e0fb9628b0537fc36d77fa85447b86f41	8339	mojolearn-steward-do-amd	/root/glm91-amd-lane
+2026-10-02T01:34:24Z	measurements/2026-10-02/board-0834-nvc1-l40s.tar.gz	4248cc6fd6de74f16666feaaf49ca75f871a030454781c8be071582d5d8fb2c8	21936278	b07640402f07	/root/board-0834
+2026-10-02T01:34:27Z	measurements/2026-10-02/board-0834-hotaisle-mi300x.tar.gz	a0b100cd5f0a668e30fff9a93d556a2de0a8c6aba3570871046c2fd068dc4713	389065	enc1-gpuvm005	/root/board-0834
+2026-10-02T02:05:25Z	measurements/2026-10-02/board-0834-nvc1-l40s.tar.gz	02a0a1f64e1c2c8fdb4c33b2cd9b0c2af0a3cba0ce0bec3f6c2e3e40e8296608	22136401	b07640402f07	/root/board-0834
+2026-10-02T02:05:28Z	measurements/2026-10-02/board-0834-hotaisle-mi300x.tar.gz	99ea3c98ec7856edcad903beaea64ec9ef56bc6dd3848484da4c696c07eb4928	421547	enc1-gpuvm005	/root/board-0834
