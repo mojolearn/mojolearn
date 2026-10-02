@@ -610,6 +610,17 @@ class MaxAbsScaler(_PrepBase):
         arr = _x2d(X)
         n, d = arr.shape
         mode = _mode()
+        # lane/apple-fast-prep3: `x_prep_maxabs_fit_direct` exists in the FAST
+        # Apple build with -D MOJOLEARN_PREP3_MAXABS only (x_prep/fastmaxabs.mojo):
+        # X up once from its own buffer, the same max_abs_ and scale_ words
+        direct = _optional_prep_entry(_prep_binding(mode), "x_prep_maxabs_fit_direct")
+        if direct is not None:
+            out = Array((2 * d,), "<f4")
+            direct(addr_ro(arr, name="X"), out._addr, [n, d])
+            self.max_abs_ = Array._from_flat(out.tolist()[:d], (d,), "<f4")
+            self.scale_ = Array._from_flat(out.tolist()[d:], (d,), "<f4")
+            self.numeric_mode_, self.n_features_in_, self.n_samples_seen_ = mode, d, n
+            return self
         pr = _Prog()
         xo = pr.put(arr)
         scale = pr.alloc(d)

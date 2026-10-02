@@ -12,6 +12,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE
 from x_prep.folds import I32P, kfold_folds, strat_folds
 from x_prep.user_host import F32P, F64P, ii_rows, ii_gather, ii_scatter, ii_conv
+from x_prep.prep3 import PREP3_MAXABS, PREP3_SPLINE
+from x_prep.fastmaxabs import maxabs_fit_direct
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -137,6 +139,32 @@ def kfold_folds_binding(out_addr: PythonObject, ints: PythonObject, seed: Python
     return PythonObject(0)
 
 
+# lane/apple-fast-prep3 (FAST on Apple, each behind its own define; registered
+# under the define only, so Python's `_optional_prep_entry` probe finds them in
+# no other build and takes main's route there).
+
+
+def maxabs_fit_direct_binding(x_addr: PythonObject, out_addr: PythonObject, ints: PythonObject) raises -> PythonObject:
+    """-D MOJOLEARN_PREP3_MAXABS: MaxAbsScaler's max_abs_ then scale_ (2 d
+    words at out_addr) from the n x d float32 X at x_addr (x_prep/fastmaxabs.mojo).
+    ints = (n, d). Returns 2 d."""
+    var xa = Int(py=x_addr)
+    var oa = Int(py=out_addr)
+    var n = Int(py=ints[0])
+    var d = Int(py=ints[1])
+    if xa == 0 or oa == 0 or n <= 0 or d <= 0 or n > (2 ** 31 - 1) // d:
+        raise Error("x_prep maxabs_fit_direct: invalid buffers or shape")
+    with GILReleased(Python()):
+        maxabs_fit_direct(xa, n, d, oa)
+    return PythonObject(2 * d)
+
+
+def prep3_spline_binding() raises -> PythonObject:
+    """-D MOJOLEARN_PREP3_SPLINE: present (1) in the build that takes
+    SplineTransformer's prep3 route (python/mojolearn/_expansion_prep.py)."""
+    return PythonObject(1)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -233,6 +261,10 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[ii_gather_binding]("x_prep_ii_gather")
         m.def_function[ii_scatter_binding]("x_prep_ii_scatter")
         m.def_function[ii_conv_binding]("x_prep_ii_conv")
+        comptime if PREP3_MAXABS:
+            m.def_function[maxabs_fit_direct_binding]("x_prep_maxabs_fit_direct")
+        comptime if PREP3_SPLINE:
+            m.def_function[prep3_spline_binding]("x_prep_prep3_spline")
         m.def_function[numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[vendor_binding]("x_prep_vendor")
         return m.finalize()
