@@ -167,6 +167,11 @@ def main(argv):
         i = argv.index("--main")
         main_ref = argv[i + 1]
         argv = argv[:i] + argv[i + 2:]
+        # a push to a URL or a mirror has no refs/remotes/<remote>/main: read
+        # the range against origin/main then, or every line main gained since
+        # the mirror's old tip is charged to the push
+        if _git("rev-parse", "--verify", "-q", main_ref).returncode != 0:
+            main_ref = "origin/main"
     if len(argv) == 3 and argv[1] == "--diff":
         with open(argv[2], encoding="utf-8", errors="replace") as f:
             diff = f.read()
