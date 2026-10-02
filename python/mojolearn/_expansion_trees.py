@@ -33,7 +33,7 @@ import os
 from . import _portable_math as math
 from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this door resolves; name NO other (lane_select counts > 3 as a registry)
 from ._array import Array
-from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f64_c, as_i32_c, empty, full, zeros
+from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f64_c, as_i32_c, empty, frombytes, full, zeros
 from ._labels import decode_labels, encode_labels, is_bool
 from ._mode import NumericModeMixin
 from ._forest_protocol import (forest_estimator, _forest_fit_arrays, _forest_fit_function,
@@ -442,6 +442,15 @@ def _trees_member_session(member, X, row_major, x_finite=False, default="0"):
                                     default=default)
 
 
+def _class_major_fill(inits, n):
+    """K * n float64, class c's block all `inits[c]` (class-major), built
+    from one native fill per class, not a Python loop over the rows."""
+    if len(inits) == 1:
+        return full((n,), inits[0], "<f8")
+    raw = b"".join(full((n,), float(v), "<f8").tobytes() for v in inits)
+    return frombytes(raw, "<f8", (len(inits) * n,))
+
+
 def _trees_arange(n):
     return Array.from_list(list(range(n)), "<i4")
 
@@ -760,9 +769,10 @@ class BaggingClassifier(_BaggingBase):
         acc, _ = self._oob_outputs(Xa, k, self._member_proba)
         self._bind().x_trees_normalize_rows(addr(acc, name="oob"), [n, k])
         self.oob_decision_function_ = acc.reshape((n, k))
-        pred = self._argmax(acc, n, k).tolist()
-        y = codes.tolist()
-        self.oob_score_ = sum(1 for i in range(n) if pred[i] == y[i]) / n
+        # the per-row match is the native elementwise compare (two int32
+        # Arrays), not a Python loop over the rows
+        hits = self._argmax(acc, n, k) == as_i32_c(codes, ndim=1, name="codes")[0]
+        self.oob_score_ = hits.sum() / n
 
     def predict_proba(self, X):
         Xa = self._check_X(X)
@@ -1236,8 +1246,7 @@ class _DARTBase(_TreesEnsembleBase):
                 counts[int(v)] += 1
             inits = [float(b.x_trees_log64(max(1e-15, cnt / n))) for cnt in counts]
         self.init_score_ = inits[0] if K == 1 else inits
-        score = (full((n,), inits[0], "<f8") if K == 1
-                 else Array.from_list([v for v in inits for _ in range(n)], "<f8"))
+        score = _class_major_fill(inits, n)
         g, h, target = empty((K * n,), "<f8"), empty((K * n,), "<f8"), empty((K * n,), "<f4")
         lr = float(self.learning_rate)
         l1, mds, lam = float(self.reg_alpha), float(self.max_delta_step), float(self.reg_lambda)
@@ -1373,7 +1382,7 @@ class _DARTBase(_TreesEnsembleBase):
             raise ValueError(f"X has {Xa.shape[1]} features, fit saw {self.n_features_in_}")
         n, K = Xa.shape[0], int(getattr(self, "n_classes_", 1))
         inits = [self.init_score_] if K == 1 else list(self.init_score_)
-        score = Array.from_list([v for v in inits for _ in range(n)], "<f8")
+        score = _class_major_fill(inits, n)
         for j, (tree, values, coef) in enumerate(zip(self.trees_, self.tree_values_, self.tree_coefs_)):
             self._add(score, self._tree_nodes(tree, Xa), values, coef, j % K)
         return score
