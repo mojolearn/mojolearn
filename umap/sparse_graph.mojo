@@ -627,15 +627,22 @@ def sparse_fuzzy_simplicial_graph_device(
         )
     # The union merge: count, scan, write.
     var mcount = ctx.enqueue_create_buffer[DType.int32](n)
+    # the count pass reads neither `moff` nor the outputs: one-cell dummies
+    var no_off = ctx.enqueue_create_buffer[DType.int32](1)
+    var no_col = ctx.enqueue_create_buffer[DType.uint32](1)
+    var no_val = ctx.enqueue_create_buffer[DType.float32](1)
     ctx.enqueue_function[ug_merge_kernel[False]](
         doff.unsafe_ptr(), dcol.unsafe_ptr(), dval.unsafe_ptr(),
         toff.unsafe_ptr(), tcol.unsafe_ptr(), tval.unsafe_ptr(),
-        mcount.unsafe_ptr(), mcount.unsafe_ptr(), tcol.unsafe_ptr(), tval.unsafe_ptr(),
+        no_off.unsafe_ptr(), mcount.unsafe_ptr(), no_col.unsafe_ptr(), no_val.unsafe_ptr(),
         Int32(n), set_op_mix_ratio,
         grid_dim=rg, block_dim=UG_TPB,
     )
     var moff = _ug_scan(ctx, mcount, n)
     var mnz = Int(_ug_get_i32(ctx, moff, n, 1)[0])
+    _ = no_off^
+    _ = no_col^
+    _ = no_val^
     var ocol = ctx.enqueue_create_buffer[DType.uint32](max(mnz, 1))
     var oval = ctx.enqueue_create_buffer[DType.float32](max(mnz, 1))
     ctx.enqueue_function[ug_merge_kernel[True]](

@@ -27,14 +27,12 @@ extension can pass buffer addresses straight through.
 THE POLICY CHOICES
 ------------------
 
-1. **THE SCALE IS COMPUTED FROM THE CALLER'S DATA, AND IT COSTS A HOST PASS.**
+1. **THE SCALE IS COMPUTED FROM THE CALLER'S DATA, ON THE DEVICE.**
    `choose_scale` needs `sum over rows of abs(value)` for the plane being
-   accumulated, and the bound that matters is the worst column. So this file
-   walks all `n_samples * n_features` values on the host before anything is
-   uploaded. At the benchmark's 4,000,000 x 32 that is 128 million reads.
-   It is not free and it is not hidden: `KMeansFitResult` reports the scale
-   that was chosen, and `plan_sum_scale` is exposed separately so a caller
-   who already knows their data's bound can compute it once and reuse it.
+   accumulated, and the bound that matters is the worst column. `plan_sum_scale`
+   folds every column on the device in one fixed order (blocked chunks, then a
+   halving tree; `cluster/impl/sum_scale_plan.mojo`), the host column restates
+   the same fold, and `KMeansFitResult` reports the scale that was chosen.
 
    The alternative was a fixed scale, which is what an implementation does
    when it does not want to admit this cost. A fixed scale is a silent wrong
@@ -110,12 +108,8 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
   `python/mojolearn/cluster.py`); this sentence used to say it did not.
 """
 
-from std.math import fma
-from core.host_parallel import host_parallelize
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
-from std.math import isfinite
-from std.sys.compile import is_defined
 
 from cluster.impl.detail.kmeans_common import (
     centroid_norms_take_sqrt,
@@ -138,8 +132,17 @@ from cluster.impl.kmeans_params import (
     METRIC_L2_EXPANDED,
     weighted_sum_scale_cap,
 )
+from cluster.impl.sum_scale_plan import (
+    SUM_SCALE_CHUNK,
+    SUM_SCALE_TPB,
+    sum_scale_from_columns,
+    sum_scale_inf,
+    sum_scale_is_finite,
+    sum_scale_n_chunks,
+    sum_scale_term,
+)
 from checks.fixed_point import choose_scale
-from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
+from core.pinned_reduce import halving_block_sum
 
 
 @fieldwise_init
@@ -162,119 +165,35 @@ struct KMeansFitResult(Copyable, ImplicitlyCopyable, Movable):
     var weight_scale: Float64
 
 
-def plan_sum_scale(
-    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    n_samples: Int,
-    n_features: Int,
-) raises -> Float64:
-    """The fixed-point multiplier for this data, from the worst column.
-
-    `choose_scale` bounds a partial sum over any SUBSET of rows, so the bound
-    it needs is `sum over rows of abs(value)` for the plane being accumulated.
-    The centroid accumulation forms one such sum per feature, so the binding
-    constraint is the largest of them and that is what is returned.
-
-    Separated out so a caller can pay the host pass once across several fits
-    of the same data, and so a check can assert the policy without running a
-    fit. This mirrors `plan_query_tile` in `neighbors/estimator.mojo` for the
-    same two reasons.
-    """
-    # DEVIATION 2633 (2026-09-11, linear-cluster-speed): THE SAME PER-COLUMN
-    # SUMS, IN THE SAME ORDER, ON THE HOST POOL AND ROW-MAJOR. The loop here
-    # walked the matrix column by column, so every column pass strode the
-    # whole buffer (at 2,043,304 x 220 that is 220 passes over 1.64 GB on one
-    # thread). Each column total is still its own sequential float64 chain
-    # `column += abs(x[r, f])` over r = 0, 1, 2, ...; the columns are split
-    # into groups, one task per group walks its rows in order and adds every
-    # column of its group per row, and no chain is split, merged or
-    # reordered. The worst column is then chosen by the same sequential
-    # comparison over f as before, so `worst` (and the scale) keeps its bits
-    # by construction. SCHEDULING only: `groups` cannot reach any sum.
-    var totals = List[Float64](length=n_features, fill=Float64(0.0))
-    var tp = totals.unsafe_ptr()
-    var cells = n_samples * n_features
-    var groups = 1
-    if cells >= (1 << 20) and n_features > 1:
-        groups = min(n_features, 64)
-    var per = (n_features + groups - 1) // groups
-
-    def _abs_sum_task(g: Int) {imm x_ptr, imm tp, imm n_samples, imm n_features, imm per}:
-        var f0 = g * per
-        var f1 = min(n_features, f0 + per)
-        if f1 <= f0:
-            return
-        # Task-local totals, copied out once: no two tasks store into one
-        # cache line per row (false sharing). Same chains, same order.
-        var local = List[Float64](length=f1 - f0, fill=Float64(0.0))
-        var lp = local.unsafe_ptr()
-        for r in range(n_samples):
-            var row = r * n_features
-            for f in range(f0, f1):
-                var v = x_ptr.unsafe_load(row + f)
-                lp.unsafe_store(f - f0, lp.unsafe_load(f - f0) + Float64(abs(v)))
-        for f in range(f0, f1):
-            tp.unsafe_store(f, local[f - f0])
-
-    if groups == 1:
-        _abs_sum_task(0)
-    else:
-        host_parallelize(_abs_sum_task, groups)
-    var worst = Float64(0.0)
-    # `totals` is read after the join ([[mojo-parallelize-frees-captured-owner]]).
-    for f in range(n_features):
-        var column = totals[f]
-        if column > worst:
-            worst = column
-    return choose_scale(worst, n_samples)
-
-
-#: DEVIATION 3081 (2026-09-17, lane kmeans-linear-speed): `sum_scale` from a
-#: CERTIFIED DEVICE MAGNITUDE, the host pass kept as the fallback. ON for
-#: NVIDIA since 2026-09-18 (with 3080: taxi 264 to 100 ms; the host pass was
-#: 156 to 711 ms of every fit); `-D MOJOLEARN_EXPERIMENTAL_KMEANS_DEVICE_SCALE=1`
-#: forces it on any column, `-D MOJOLEARN_KMEANS_DEVICE_SCALE_OFF=1` forces it
-#: off. Apple and AMD keep the host pass until their columns are taken (the
-#: certificate needs IEEE NaN propagation checked there). See
-#: `plan_sum_scale_certified`.
-comptime KMEANS_DEVICE_SCALE = (
-    not is_defined["MOJOLEARN_KMEANS_DEVICE_SCALE_OFF"]()
-    and (is_defined["MOJOLEARN_EXPERIMENTAL_KMEANS_DEVICE_SCALE"]() or TARGET_COLUMN == COLUMN_NVIDIA)
-)
-#: The reach control for 3081: the device magnitude is multiplied by 4 before
-#: it is certified, so the scale moves two binades. NEVER a shipping define.
-comptime KMEANS_DEVICE_SCALE_SABOTAGE = is_defined[
-    "MOJOLEARN_KMEANS_DEVICE_SCALE_SABOTAGE"
-]()
-
-#: Rows one thread folds serially. The certificate's relative error bound is
-#: proportional to `DEVICE_SCALE_CHUNK + ceil(n / DEVICE_SCALE_CHUNK)`.
-comptime DEVICE_SCALE_CHUNK = 2048
-comptime DEVICE_SCALE_TPB = 256
-
-
 def abs_chunk_sums_kernel(
     dst: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
     n_rows_in: Int32,
     n_features_in: Int32,
 ):
-    """Thread `(chunk b, feature f)`: the float32 sum of `abs(x[r, f])` over
-    the chunk's rows, serially. A BOUND's input, never a model's: see
-    `plan_sum_scale_certified`."""
+    """Stage 1 of the scale fold (`cluster/impl/sum_scale_plan.mojo`):
+    thread `(chunk b, feature f)` folds `sum_scale_term(x[r, f])` over the
+    chunk's rows in row order; a non-finite term makes the sum +inf."""
     var n_rows = Int(n_rows_in)
     var n_features = Int(n_features_in)
     var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var b = gid // n_features
     var f = gid - b * n_features
-    var r0 = b * DEVICE_SCALE_CHUNK
+    var r0 = b * SUM_SCALE_CHUNK
     if r0 >= n_rows:
         return
-    var r1 = r0 + DEVICE_SCALE_CHUNK
+    var r1 = r0 + SUM_SCALE_CHUNK
     if r1 > n_rows:
         r1 = n_rows
     var acc = Float32(0.0)
+    var bad = False
     for row in range(r0, r1):
-        acc = acc + abs(x.unsafe_load(row * n_features + f))
+        var a = sum_scale_term(x.unsafe_load(row * n_features + f))
+        if not sum_scale_is_finite(a):
+            bad = True
+        acc = acc + a
+    if bad:
+        acc = sum_scale_inf()
     dst.unsafe_store(gid, acc)
 
 
@@ -284,122 +203,70 @@ def abs_fold_chunks_kernel(
     n_chunks_in: Int32,
     n_features_in: Int32,
 ):
-    """Thread `f`: the serial float32 fold of feature `f`'s chunk sums."""
+    """Stage 2: block `f` folds feature `f`'s chunk sums, thread `t` the
+    chunks `t, t + TPB, ...` in order, then the halving tree. A non-finite
+    chunk sum makes the column +inf."""
     var n_chunks = Int(n_chunks_in)
     var n_features = Int(n_features_in)
-    var f = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if f >= n_features:
-        return
+    var f = Int(block_idx.x)
+    var t = Int(thread_idx.x)
     var acc = Float32(0.0)
-    for b in range(n_chunks):
-        acc = acc + chunk_sums.unsafe_load(b * n_features + f)
-    dst.unsafe_store(f, acc)
+    var bad = Float32(0.0)
+    var b = t
+    while b < n_chunks:
+        var v = chunk_sums.unsafe_load(b * n_features + f)
+        if sum_scale_is_finite(v):
+            acc = acc + v
+        else:
+            bad = Float32(1.0)
+        b += SUM_SCALE_TPB
+    var total = halving_block_sum[SUM_SCALE_TPB](acc)
+    var n_bad = halving_block_sum[SUM_SCALE_TPB](bad)
+    if t == 0:
+        if n_bad > Float32(0.0) or not sum_scale_is_finite(total):
+            total = sum_scale_inf()
+        dst.unsafe_store(f, total)
 
 
-def plan_sum_scale_certified(
+def plan_sum_scale(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
     n_samples: Int,
     n_features: Int,
 ) raises -> Float64:
-    """DEVIATION 3081. `plan_sum_scale`'s answer from the design ALREADY ON
-    THE DEVICE, or 0.0 when the device cannot CERTIFY it (the caller then
-    runs the host pass, which is the definition).
-
-    WHAT WAS MEASURED FIRST (RTX 4090 pod, EPYC 7642 host, 2026-09-17): the
-    host pass is 606 to 711 ms at Istella-S 2,043,304 x 220 and 156 to 215 ms
-    at taxi 4,000,000 x 11, against 9.3 ms and 1.8 ms for one fused
-    assignment. It is a walk over every value of a matrix the fit is about
-    to upload anyway.
-
-    WHY NO BIT MOVES. The fit never consumes the magnitude, only
-    `choose_scale(worst, n)`, and `choose_scale` is a STEP function: the
-    largest power of two `s` with `worst * s <= limit`, non-increasing in
-    `worst`. So any interval `[lo, hi]` that provably contains the host's
-    `worst` and satisfies `choose_scale(lo) == choose_scale(hi)` names the
-    host's scale exactly. The interval comes from float32 device sums `W_f`
-    of `abs(x[:, f])` formed by a reduction of height `h = DEVICE_SCALE_CHUNK
-    + n_chunks` (a serial chunk fold, then a serial fold of the chunk sums).
-    Every term is non-negative, so each rounded addition is the exact one
-    times `(1 + e)`, `|e| <= u = 2^-24`, and `W_f` lies within `[(1 - u)^h,
-    (1 + u)^h]` of the exact real sum; the host's sequential float64 chain
-    lies within `n * 2^-52` of the same real sum; flushed denormals move
-    either by less than `2 n * 2^-126` in absolute terms. `delta` below is
-    twice the sum of those bounds and the interval is `W * (1 -+ 2 delta)`,
-    `W = max_f W_f` (the host's `worst` is the max of the per-column chains,
-    each inside its own column's interval). REFUSALS, each a return of 0.0:
-    any `W_f` not finite (on an IEEE device a NaN or an infinity in column
-    `f`, or a float32 overflow of the sum, makes `W_f` non-finite, so a
-    finite vector also certifies every input finite); `W < 2^-40` (the
-    all-zero plane and the range where the flush bound stops being
-    negligible); `delta >= 2^-4`; and the two ends of the interval
-    disagreeing, which is a magnitude within `2 delta` of a power-of-two
-    boundary.
-
-    NVIDIA ONLY until another column's NaN propagation through `abs` and
-    `+` is verified: the certificate's finiteness clause needs IEEE
-    semantics on the device.
-    """
-    var n_chunks = (n_samples + DEVICE_SCALE_CHUNK - 1) // DEVICE_SCALE_CHUNK
-    var height = DEVICE_SCALE_CHUNK + n_chunks
-    # the second product fused into the first sum, as the default build did (lane/pinned-mul-contract-free)
-    var delta = (
-        fma(
-            2.0 * Float64(n_samples),
-            2.220446049250313e-16,
-            2.0 * (2.0 * Float64(height) * 5.9604644775390625e-08),
-        )
-        + 9.5367431640625e-07
-    )
-    if delta >= 0.0625:
-        return 0.0
+    """The fixed-point multiplier for the design `x` already on the device,
+    from the worst column (`cluster/impl/sum_scale_plan.mojo`: the fold, its
+    order and the bound). Two grid-wide launches and one `n_features` read;
+    the host column restates it in `cluster/host/kmeans_oracle.mojo::
+    host_plan_sum_scale`, add for add."""
+    var n_chunks = sum_scale_n_chunks(n_samples)
     var chunk_sums = ctx.enqueue_create_buffer[DType.float32](
         n_chunks * n_features
     )
     var col = ctx.enqueue_create_buffer[DType.float32](n_features)
-    var h_col = ctx.enqueue_create_host_buffer[DType.float32](n_features)
     var threads = n_chunks * n_features
     ctx.enqueue_function[abs_chunk_sums_kernel](
         chunk_sums.unsafe_ptr(),
         x.unsafe_ptr(),
         Int32(n_samples),
         Int32(n_features),
-        grid_dim=((threads + DEVICE_SCALE_TPB - 1) // DEVICE_SCALE_TPB, 1, 1),
-        block_dim=(DEVICE_SCALE_TPB, 1, 1),
+        grid_dim=((threads + SUM_SCALE_TPB - 1) // SUM_SCALE_TPB, 1, 1),
+        block_dim=(SUM_SCALE_TPB, 1, 1),
     )
     ctx.enqueue_function[abs_fold_chunks_kernel](
         col.unsafe_ptr(),
         chunk_sums.unsafe_ptr(),
         Int32(n_chunks),
         Int32(n_features),
-        grid_dim=(
-            (n_features + DEVICE_SCALE_TPB - 1) // DEVICE_SCALE_TPB, 1, 1
-        ),
-        block_dim=(DEVICE_SCALE_TPB, 1, 1),
+        grid_dim=(n_features, 1, 1),
+        block_dim=(SUM_SCALE_TPB, 1, 1),
     )
-    ctx.enqueue_copy(dst_ptr=h_col.unsafe_ptr(), src_buf=col)
+    var cols = List[Float32](length=n_features, fill=Float32(0.0))
+    ctx.enqueue_copy(dst_ptr=cols.unsafe_ptr(), src_buf=col)
     ctx.synchronize()
-    var worst = Float64(0.0)
-    for f in range(n_features):
-        var v = h_col.unsafe_ptr().unsafe_load(f)
-        if not isfinite(v):
-            return 0.0
-        if Float64(v) > worst:
-            worst = Float64(v)
     _ = chunk_sums^
     _ = col^
-    _ = h_col^
-    comptime if KMEANS_DEVICE_SCALE_SABOTAGE:
-        worst = worst * 4.0
-    if worst < 9.094947017729282e-13:
-        return 0.0
-    var lo = worst * (1.0 - 2.0 * delta)
-    var hi = worst * (1.0 + 2.0 * delta)
-    var s_hi = choose_scale(lo, n_samples)
-    var s_lo = choose_scale(hi, n_samples)
-    if s_hi != s_lo:
-        return 0.0
-    return s_lo
+    return sum_scale_from_columns(cols, n_samples)
 
 
 def kmeans_fit(
@@ -431,8 +298,8 @@ def kmeans_fit(
 
     `n_weights` is 0 for unit weights, in which case `weights_ptr` is never
     read and any pointer will do; otherwise it must equal `n_samples`.
-    `requested_sum_scale` of 0.0 means compute it from the data; pass a value
-    from `plan_sum_scale` to skip the host pass.
+    `requested_sum_scale` of 0.0 means compute it from the data on the
+    device (`plan_sum_scale`); a positive value is used as given.
 
     `oversampling_factor` is cuVS's (`kmeans.hpp`, default 2.0) and is an
     ALGORITHM SWITCH, not a knob: `0.0` selects the classic sequential
@@ -468,9 +335,6 @@ def kmeans_fit(
         )
 
     var sum_scale = requested_sum_scale
-    comptime if not KMEANS_DEVICE_SCALE:
-        if sum_scale <= 0.0:
-            sum_scale = plan_sum_scale(x_ptr, n_samples, n_features)
     # THE WEIGHT BOUND IS NOT ALWAYS n_samples. Unit weights sum to exactly
     # that, but caller-supplied weights can sum to anything, and using
     # n_samples for them would understate the bound and overflow the
@@ -508,13 +372,10 @@ def kmeans_fit(
 
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
 
-    # DEVIATION 3081: the scale from the design now on the device, certified
-    # equal to the host pass's, which remains the fallback and the definition.
-    comptime if KMEANS_DEVICE_SCALE:
-        if sum_scale <= 0.0:
-            sum_scale = plan_sum_scale_certified(ctx, x, n_samples, n_features)
-        if sum_scale <= 0.0:
-            sum_scale = plan_sum_scale(x_ptr, n_samples, n_features)
+    # The scale from the design on the device (`plan_sum_scale`, one
+    # fixed-order fold on every vendor and in the host column).
+    if sum_scale <= 0.0:
+        sum_scale = plan_sum_scale(ctx, x, n_samples, n_features)
     # DEVIATION 5112: weights above one outgrow the unweighted bound
     # (`weighted_sum_scale_cap`, cluster/impl/kmeans_params.mojo)
     if n_weights != 0 and requested_sum_scale <= 0.0:
@@ -596,7 +457,7 @@ def _kmeans_fit_tail(
     weight_scale: Float64,
 ) raises -> KMeansFitResult:
     """`kmeans_fit` from the uploaded design on: the row norms, the fit, the
-    read-back (lane/neural-pass108: shared with `kmeans_fit_rows`)."""
+    read-back (shared with `kmeans_fit_rows`)."""
     var take_sqrt = Int32(0)
     if centroid_norms_take_sqrt(metric):
         take_sqrt = Int32(1)
@@ -650,51 +511,6 @@ def _kmeans_fit_tail(
     )
 
 
-def plan_sum_scale_rows(
-    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    rows: List[Int],
-    n_features: Int,
-) raises -> Float64:
-    """`plan_sum_scale` of the rows `rows` of `x_ptr` taken in that order
-    (the gathered matrix's rows): the same per-column chains in the same
-    order, read through the row list instead of a gathered copy
-    (lane/neural-pass108)."""
-    var n_samples = len(rows)
-    var totals = List[Float64](length=n_features, fill=Float64(0.0))
-    var tp = totals.unsafe_ptr()
-    var rp = rows.unsafe_ptr()
-    var cells = n_samples * n_features
-    var groups = 1
-    if cells >= (1 << 20) and n_features > 1:
-        groups = min(n_features, 64)
-    var per = (n_features + groups - 1) // groups
-    def _abs_sum_task(g: Int) {imm x_ptr, imm tp, imm rp, imm n_samples, imm n_features, imm per}:
-        var f0 = g * per
-        var f1 = min(n_features, f0 + per)
-        if f1 <= f0:
-            return
-        var local = List[Float64](length=f1 - f0, fill=Float64(0.0))
-        var lp = local.unsafe_ptr()
-        for r in range(n_samples):
-            var row = rp[r] * n_features
-            for f in range(f0, f1):
-                var v = x_ptr.unsafe_load(row + f)
-                lp.unsafe_store(f - f0, lp.unsafe_load(f - f0) + Float64(abs(v)))
-        for f in range(f0, f1):
-            tp.unsafe_store(f, local[f - f0])
-    if groups == 1:
-        _abs_sum_task(0)
-    else:
-        host_parallelize(_abs_sum_task, groups)
-    var worst = Float64(0.0)
-    for f in range(n_features):
-        var column = totals[f]
-        if column > worst:
-            worst = column
-    _ = rows[0]
-    return choose_scale(worst, n_samples)
-
-
 def kmeans_fit_rows(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -716,18 +532,13 @@ def kmeans_fit_rows(
     `host_x`, whose gathered copy (rows in that order) is ALREADY on the
     device in `x` (lane/neural-pass108: BisectingKMeans gathers each
     cluster on the device instead of copying and uploading it per split).
-    The same scale (the device's certified one where `kmeans_fit` takes it,
-    else the host pass over the same rows in the same order) and the same
-    tail, so the same words."""
+    The same device scale over the gathered copy (`plan_sum_scale`) and the
+    same tail, so the same words; `host_x` is not read."""
     var n_samples = len(rows)
     if n_samples < 1 or n_features < 1 or n_clusters < 1 or n_clusters > n_samples:
         raise Error("kmeans_fit_rows: bad shape " + String(n_samples) + " x " + String(n_features)
                     + " for " + String(n_clusters) + " clusters")
-    var sum_scale = Float64(0.0)
-    comptime if KMEANS_DEVICE_SCALE:
-        sum_scale = plan_sum_scale_certified(ctx, x, n_samples, n_features)
-    if sum_scale <= 0.0:
-        sum_scale = plan_sum_scale_rows(host_x, rows, n_features)
+    var sum_scale = plan_sum_scale(ctx, x, n_samples, n_features)
     var weight_scale = choose_scale(Float64(n_samples), n_samples)
     var cd = n_clusters * n_features
     var weights = ctx.enqueue_create_buffer[DType.float32](n_samples)
@@ -741,6 +552,7 @@ def kmeans_fit_rows(
         n_clusters, out_centroids_ptr, out_labels_ptr, max_iter, tol, seed, n_init, init,
         metric, oversampling_factor, sum_scale, weight_scale,
     )
+
 
 def kmeans_predict(
     ctx: DeviceContext,
