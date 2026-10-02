@@ -53,7 +53,9 @@ labels agree with the team kernel's up to the summation order; minibatch-kmeans:
 spread, the reassignment stream differs by design) holds; then the define goes and the arm is the code. Rows that are
 "FAST slower than IDENTICAL" in the baselines are the next thing to look at, not these switches.
 
-## Queue (docs/apple-fast/ab/cluster.txt, 10 lines, the light form: 1 2, no -ident lines)
+## Queue (docs/apple-fast/ab/cluster.txt, 2 lines, the light form: 1 2, no -ident lines, one dataset per define)
 
-meanshift and minibatch-kmeans: `tools/afc_ab_def.sh` (two FAST builds of `x_cluster`, "" vs the define) on Istella and
-taxi, one tag per lane x dataset. connected-components, agglomerative, spectral: a FAST baseline per dataset, no switch.
+meanshift and minibatch-kmeans: `tools/afc_ab_def.sh` (two FAST builds of `x_cluster`, "" vs the define) on Istella
+(the gap table lists both lanes on Istella), one tag per lane x dataset. After a win: the taxi line of the same define
+(`cluster-ms-taxi`, `cluster-mb-taxi`, the same form). The switch-less FAST baselines (connected-components,
+agglomerative, spectral) are dropped: baselines and opponents are never re-run; the board has them.
