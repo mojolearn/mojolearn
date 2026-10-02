@@ -11,6 +11,7 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE
 from x_prep.folds import I32P, kfold_folds, strat_folds
+from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
 from x_prep.user_host import F32P, F64P, ii_rows, ii_gather, ii_scatter, ii_conv
 
 
@@ -145,6 +146,16 @@ def vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+def calib_folds_binding() raises -> PythonObject:
+    """Lane apple-fast-meta (-D MOJOLEARN_CALIB_GNB_FOLDS, FAST + Apple only):
+    the CalibratedClassifierCV(GaussianNB) program's constants [words per
+    Platt problem, line-search steps]; registered only when the ops exist."""
+    var out = Python.list()
+    out.append(PythonObject(CAL_ST))
+    out.append(PythonObject(CAL_LS))
+    return out
+
+
 
 # lane py-misc-prep: IterativeImputer(estimator=...) host plumbing (x_prep/user_host.mojo),
 # the same entries in the GPU binding and its host twin (host memory both ways).
@@ -235,6 +246,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[ii_conv_binding]("x_prep_ii_conv")
         m.def_function[numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[vendor_binding]("x_prep_vendor")
+        comptime if CALIB_FOLDS:
+            m.def_function[calib_folds_binding]("x_prep_calib_folds")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_prep: ", e))

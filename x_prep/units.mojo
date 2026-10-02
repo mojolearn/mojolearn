@@ -45,8 +45,16 @@ from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
     da_shrink_unit, da_pool_unit, sym_fn_unit, da_intercept_unit, evr_unit,
 )
+from x_prep.calib import (
+    CALIB_FOLDS, cal_fold_part_unit, cal_fold_scan_unit, cal_fold_rank_unit, cal_fold_assign_unit,
+    cal_lofo_merge_unit, cal_eps_folds_unit, cal_params_folds_unit, cal_jll_folds_unit, cal_platt_init_unit,
+    cal_platt_setup_unit, cal_platt_part_unit, cal_platt_step_unit, cal_platt_ls_part_unit, cal_platt_ls_pick_unit,
+    cal_sigmoid_avg_unit,
+)
 
-comptime N_OPS = 136
+#: ops 136-150 (x_prep/calib.mojo) exist only under CALIB_FOLDS (FAST + Apple +
+#: -D MOJOLEARN_CALIB_GNB_FOLDS); every other binding keeps the 136-op table.
+comptime N_OPS = 151 if CALIB_FOLDS else 136
 
 
 @always_inline
@@ -323,3 +331,34 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         cat_hfold_unit(t, f, q)
     comptime if OP == 135:
         row_ones_unit(t, f, q)
+    comptime if CALIB_FOLDS:
+        comptime if OP == 136:
+            cal_fold_part_unit(t, f, q)
+        comptime if OP == 137:
+            cal_fold_scan_unit(t, f, q)
+        comptime if OP == 138:
+            cal_fold_rank_unit(t, f, q)
+        comptime if OP == 139:
+            cal_fold_assign_unit(t, f, q)
+        comptime if OP == 140:
+            cal_lofo_merge_unit(t, f, q)
+        comptime if OP == 141:
+            cal_eps_folds_unit(t, f, q)
+        comptime if OP == 142:
+            cal_params_folds_unit(t, f, q)
+        comptime if OP == 143:
+            cal_jll_folds_unit(t, f, q)
+        comptime if OP == 144:
+            cal_platt_init_unit(t, f, q)
+        comptime if OP == 145:
+            cal_platt_setup_unit(t, f, q)
+        comptime if OP == 146:
+            cal_platt_part_unit(t, f, q)
+        comptime if OP == 147:
+            cal_platt_step_unit(t, f, q)
+        comptime if OP == 148:
+            cal_platt_ls_part_unit(t, f, q)
+        comptime if OP == 149:
+            cal_platt_ls_pick_unit(t, f, q)
+        comptime if OP == 150:
+            cal_sigmoid_avg_unit(t, f, q)
