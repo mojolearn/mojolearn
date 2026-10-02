@@ -1,0 +1,12 @@
+CMD lane/apple-fast-pca-eig pca-eig-ident AFC_ARM=ours AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-ident pca istella 3 3 -
+CMD lane/apple-fast-pca-eig pca-eig-eig-istella AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-eig-istella pca istella 3 3 - MOJOLEARN_PCA_FAST_EIG=1
+CMD lane/apple-fast-pca-eig pca-eig-topk-istella AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-topk-istella pca istella 3 3 - MOJOLEARN_PCA_FAST_TOPK=1
+CMD lane/apple-fast-pca-eig pca-eig-noalias-istella AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-noalias-istella pca istella 3 3 - MOJOLEARN_PCA_FAST_NO_ALIAS=1
+CMD lane/apple-fast-pca-eig pca-eig-all-istella AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-all-istella pca istella 3 3 - 'MOJOLEARN_PCA_FAST_EIG=1 MOJOLEARN_PCA_FAST_TOPK=1 MOJOLEARN_PCA_FAST_NO_ALIAS=1'
+CMD lane/apple-fast-pca-eig pca-eig-eig-taxi AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-eig-taxi pca taxi 3 3 - MOJOLEARN_PCA_FAST_EIG=1
+CMD lane/apple-fast-pca-eig pca-eig-topk-taxi AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-topk-taxi pca taxi 3 3 - MOJOLEARN_PCA_FAST_TOPK=1
+CMD lane/apple-fast-pca-eig pca-eig-noalias-taxi AFC_FAMILY=classical bash tools/afc_ab.sh pca-eig-noalias-taxi pca taxi 3 3 - MOJOLEARN_PCA_FAST_NO_ALIAS=1
+CMD lane/apple-fast-pca-eig pca-eig-tsvd-eig-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh pca-eig-tsvd-eig-istella tsvd istella 3 3 - MOJOLEARN_PCA_FAST_EIG=1
+CMD lane/apple-fast-pca-eig pca-eig-tsvd-topk-istella AFC_FAMILY=classical2 bash tools/afc_ab.sh pca-eig-tsvd-topk-istella tsvd istella 3 3 - MOJOLEARN_PCA_FAST_TOPK=1
+CMD lane/apple-fast-pca-eig pca-eig-ipca-istella AFC_FAMILY=algos bash tools/afc_ab.sh pca-eig-ipca-istella incremental-pca istella 3 3 - MOJOLEARN_PCA_FAST_EIG=1
+CMD lane/apple-fast-pca-eig pca-eig-ipca-taxi AFC_FAMILY=algos bash tools/afc_ab.sh pca-eig-ipca-taxi incremental-pca taxi 3 3 - MOJOLEARN_PCA_FAST_EIG=1
