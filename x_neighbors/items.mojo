@@ -613,11 +613,26 @@ def nc_std_item(t: Int, x: FP, lab: IP, cent: FP, std: FP, n: Int, d: Int, n_cla
 # (HOST_RUN), each a walk over all of X at a stride of d words: 5.2 s of
 # a 5.7 s istella fit on the M4.
 def nc_stats_item(t: Int, x: FP, lab: IP, nk: FP, cent: FP, std: FP, dsc: FP, n: Int, d: Int, n_classes: Int):
+    # on a device each pass loads NC_U rows ahead of its chain (a thread then
+    # waits on memory once a block, not once a row); the adds keep their order
+    comptime U = 32 if is_gpu() else 1
     var f = t
     for g in range(n_classes):
         var acc = Float32(0)
         var cnt = 0
-        for i in range(n):
+        var i0 = 0
+        while i0 + U <= n:
+            var xs = SIMD[DType.float32, U]()
+            var ls = SIMD[DType.int32, U]()
+            comptime for u in range(U):
+                xs[u] = x.unsafe_load((i0 + u) * d + f)
+                ls[u] = lab.unsafe_load(i0 + u)
+            comptime for u in range(U):
+                if Int(ls[u]) == g:
+                    acc = _add(acc, xs[u])
+                    cnt += 1
+            i0 += U
+        for i in range(i0, n):
             if Int(lab.unsafe_load(i)) == g:
                 acc = _add(acc, x.unsafe_load(i * d + f))
                 cnt += 1
@@ -627,7 +642,19 @@ def nc_stats_item(t: Int, x: FP, lab: IP, nk: FP, cent: FP, std: FP, dsc: FP, n:
             cent.unsafe_store(g * d + f, ftz(identical_div(acc, Float32(cnt))))
     var ss = Float32(0)
     var all_ = Float32(0)
-    for i in range(n):
+    var i0 = 0
+    while i0 + U <= n:
+        var xs = SIMD[DType.float32, U]()
+        var cs = SIMD[DType.float32, U]()
+        comptime for u in range(U):
+            xs[u] = x.unsafe_load((i0 + u) * d + f)
+            cs[u] = cent.unsafe_load(Int(lab.unsafe_load(i0 + u)) * d + f)
+        comptime for u in range(U):
+            var df = _sub(xs[u], cs[u])
+            ss = ftz(identical_mul_add(df, df, ss))
+            all_ = _add(all_, xs[u])
+        i0 += U
+    for i in range(i0, n):
         var xv = x.unsafe_load(i * d + f)
         var df = _sub(xv, cent.unsafe_load(Int(lab.unsafe_load(i)) * d + f))
         ss = ftz(identical_mul_add(df, df, ss))
