@@ -1,15 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
-"""CPU softmax row parallelism preserves every probability bit."""
+"""CPU softmax row parallelism preserves every probability bit.
+
+The production host links are `core/classical_host_predict.mojo`'s
+`host_qn_sigmoid_into` / `host_qn_softmax_into` (the CPU binding's
+predict_proba; the GPU binding computes them on the device). The duplicate
+`glm/estimator.mojo` copies were deleted (cpu-gpu-cleanup c-linear)."""
 
 from std.time import perf_counter_ns
 
 from checks.numerics import identical_exp64
-from glm.estimator import qn_sigmoid_host, qn_softmax_host
+from core.classical_host_predict import host_qn_sigmoid_into, host_qn_softmax_into
+from core.host_predict_threads import HostF32Ptr, HostF64Ptr, host_predict_task_count
 
 
-comptime F32Ptr = MutPointer[Float32, MutUntrackedOrigin]
-comptime F64Ptr = MutPointer[Float64, MutUntrackedOrigin]
 
 
 def _sigmoid_serial(scores: List[Float32], mut dst: List[Float64]):
@@ -54,7 +58,8 @@ def main() raises:
     _sigmoid_serial(binary, bs)
     var serial_sigmoid_ms = Float64(perf_counter_ns() - t0) / 1.0e6
     t0 = perf_counter_ns()
-    qn_sigmoid_host(rebind[F32Ptr](binary.unsafe_ptr()), rebind[F64Ptr](bp.unsafe_ptr()), rows)
+    host_qn_sigmoid_into(rebind[HostF32Ptr](binary.unsafe_ptr()), rebind[HostF64Ptr](bp.unsafe_ptr()), rows,
+                         host_predict_task_count(rows))
     var parallel_sigmoid_ms = Float64(perf_counter_ns() - t0) / 1.0e6
     for i in range(2 * rows):
         if bs[i] != bp[i]:
@@ -64,7 +69,8 @@ def main() raises:
     _softmax_serial(multi, ms, rows, classes)
     var serial_softmax_ms = Float64(perf_counter_ns() - t0) / 1.0e6
     t0 = perf_counter_ns()
-    qn_softmax_host(rebind[F32Ptr](multi.unsafe_ptr()), rebind[F64Ptr](mp.unsafe_ptr()), rows, classes)
+    host_qn_softmax_into(rebind[HostF32Ptr](multi.unsafe_ptr()), rebind[HostF64Ptr](mp.unsafe_ptr()), rows, classes,
+                         host_predict_task_count(rows))
     var parallel_softmax_ms = Float64(perf_counter_ns() - t0) / 1.0e6
     for i in range(rows * classes):
         if ms[i] != mp[i]:
