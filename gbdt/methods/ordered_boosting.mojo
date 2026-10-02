@@ -116,6 +116,7 @@ on the host for the CPU column.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.os import getenv
 from std.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite, sqrt
 from std.memory import stack_allocation
@@ -394,6 +395,119 @@ def _ord_std_and_mags_kernel(
             dst.unsafe_store(lane, red[lane * REDUCE_LANES_BLOCK])
 
 
+def _ord_std_lanes_kernel(
+    sw: MutPointer[Float32, MutAnyOrigin],
+    sg: MutPointer[Float32, MutAnyOrigin],
+    quality: MutPointer[UInt32, MutAnyOrigin],
+    total_in: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """`_ord_std_and_mags_kernel`'s lane chains, spread over blocks
+    (lane/neural-pass122): lane t = block * block_dim + thread runs the same
+    loop over positions t, t + 256, ... and stores its three sums at
+    dst[t], dst[256 + t], dst[512 + t]; `_ord_std_combine_kernel` folds
+    them with the same shared tree. The one block streamed every plane
+    through one SM (L40S taxi 4.1M: 13 ms a tree, the largest kernel)."""
+    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var total = Int(total_in)
+    var a0 = Float32(0.0)
+    var a1 = Float32(0.0)
+    var a2 = Float32(0.0)
+    var i = tid
+    # ORD_STD_LANE_STRIDES strides' loads in flight, the NEXT batch issued
+    # before this one is folded (software pipelining; the adds keep the
+    # one-stride loop's order). One warp per SM: its chain waited on DRAM
+    # every few positions (peer's nsys on #122: 13 ms a tree unchanged).
+    comptime SU = ORD_STD_LANE_STRIDES
+    comptime STEP = SU * REDUCE_LANES_BLOCK
+    var w = SIMD[DType.float32, SU]()
+    var g = SIMD[DType.float32, SU]()
+    var qm = SIMD[DType.uint32, SU]()
+    var have = i + (SU - 1) * REDUCE_LANES_BLOCK < total
+    if have:
+        comptime for k in range(SU):
+            w[k] = sw.unsafe_load(i + k * REDUCE_LANES_BLOCK)
+            g[k] = sg.unsafe_load(i + k * REDUCE_LANES_BLOCK)
+            qm[k] = quality.unsafe_load(i + k * REDUCE_LANES_BLOCK)
+    while have:
+        var nxt = i + STEP
+        var have_next = nxt + (SU - 1) * REDUCE_LANES_BLOCK < total
+        var nw = SIMD[DType.float32, SU]()
+        var ng = SIMD[DType.float32, SU]()
+        var nq = SIMD[DType.uint32, SU]()
+        if have_next:
+            comptime for k in range(SU):
+                nw[k] = sw.unsafe_load(nxt + k * REDUCE_LANES_BLOCK)
+                ng[k] = sg.unsafe_load(nxt + k * REDUCE_LANES_BLOCK)
+                nq[k] = quality.unsafe_load(nxt + k * REDUCE_LANES_BLOCK)
+        comptime for k in range(SU):
+            var term = Float32(0.0)
+            if qm[k] != UInt32(0):
+                if w[k] > Float32(0.0):
+                    var q = ftz(g[k] / w[k])
+                    term = ftz(ftz(q * q) * w[k])
+            a0 += term
+            a1 += abs(w[k])
+            a2 += abs(g[k])
+        w = nw
+        g = ng
+        qm = nq
+        i = nxt
+        have = have_next
+    while i < total:
+        var w = sw.unsafe_load(i)
+        var g = sg.unsafe_load(i)
+        var term = Float32(0.0)
+        if quality.unsafe_load(i) != UInt32(0):
+            if w > Float32(0.0):
+                var q = ftz(g / w)
+                term = ftz(ftz(q * q) * w)
+        a0 += term
+        a1 += abs(w)
+        a2 += abs(g)
+        i += REDUCE_LANES_BLOCK
+    dst.unsafe_store(tid, a0)
+    dst.unsafe_store(REDUCE_LANES_BLOCK + tid, a1)
+    dst.unsafe_store(2 * REDUCE_LANES_BLOCK + tid, a2)
+
+
+def _ord_std_combine_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """ONE block of `REDUCE_LANES_BLOCK`: `_ord_std_and_mags_kernel`'s
+    shared tree over the lanes' sums from `_ord_std_lanes_kernel`."""
+    var tid = Int(thread_idx.x)
+    var red = stack_allocation[
+        3 * REDUCE_LANES_BLOCK,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    comptime for lane in range(3):
+        red[lane * REDUCE_LANES_BLOCK + tid] = part.unsafe_load(lane * REDUCE_LANES_BLOCK + tid)
+    barrier()
+    var step = REDUCE_LANES_BLOCK // 2
+    while step > 0:
+        if tid < step:
+            comptime for lane in range(3):
+                red[lane * REDUCE_LANES_BLOCK + tid] = (
+                    red[lane * REDUCE_LANES_BLOCK + tid]
+                    + red[lane * REDUCE_LANES_BLOCK + tid + step]
+                )
+        barrier()
+        step //= 2
+    if tid == 0:
+        comptime for lane in range(3):
+            dst.unsafe_store(lane, red[lane * REDUCE_LANES_BLOCK])
+
+
+#: Lanes per block of `_ord_std_lanes_kernel` (one warp: its loads of
+#: positions t .. t + 31 are one contiguous 128-byte line per plane).
+comptime ORD_STD_LANES = 32
+#: Strides a lane of `_ord_std_lanes_kernel` keeps in flight.
+comptime ORD_STD_LANE_STRIDES = 16
+
+
 def _ord_bootstrap_apply_kernel(
     sw: MutPointer[Float32, MutAnyOrigin],
     sg: MutPointer[Float32, MutAnyOrigin],
@@ -574,6 +688,54 @@ def _ord_leaf_scan_kernel(
         totals.unsafe_store(b, run)
 
 
+
+#: Threads of `_ord_leaf_scan_block_kernel`'s block (one block a leaf).
+comptime ORD_SCAN_TPB = 256
+
+
+def _ord_leaf_scan_block_kernel(
+    counts: MutPointer[UInt32, MutAnyOrigin],
+    prefix: MutPointer[UInt32, MutAnyOrigin],
+    totals: MutPointer[UInt32, MutAnyOrigin],
+    n_chunks_in: Int32,
+    n_leaves_in: Int32,
+):
+    """`_ord_leaf_scan_kernel` with ONE BLOCK per leaf (lane/neural-pass125):
+    thread i scans a contiguous run of the leaf's chunk counts, a shared
+    scan of the runs' totals gives each run its start, and the run writes
+    its exclusive prefixes. Integer sums: the same prefixes. The one-thread
+    form walked ~3,200 chunks per leaf on ONE block of 64 threads (L40S
+    taxi 4.1M: 0.75 ms a launch, 4 a tree)."""
+    var b = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var nc = Int(n_chunks_in)
+    if b >= Int(n_leaves_in):
+        return
+    var per = (nc + ORD_SCAN_TPB - 1) // ORD_SCAN_TPB
+    var lo = min(nc, tid * per)
+    var hi = min(nc, lo + per)
+    var row = b * nc
+    var s = UInt32(0)
+    for t in range(lo, hi):
+        s += counts.unsafe_load(row + t)
+    var sh = stack_allocation[ORD_SCAN_TPB, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
+    sh[tid] = s
+    barrier()
+    var off = 1
+    while off < ORD_SCAN_TPB:
+        var v = sh[tid] + (sh[tid - off] if tid >= off else UInt32(0))
+        barrier()
+        sh[tid] = v
+        barrier()
+        off *= 2
+    var run = sh[tid] - s
+    for t in range(lo, hi):
+        prefix.unsafe_store(row + t, run)
+        run += counts.unsafe_load(row + t)
+    if tid == ORD_SCAN_TPB - 1:
+        totals.unsafe_store(b, sh[tid])
+
+
 def _ord_seg_start_kernel(
     totals: MutPointer[UInt32, MutAnyOrigin],
     seg_start: MutPointer[UInt32, MutAnyOrigin],
@@ -647,7 +809,9 @@ def _ord_chunk_scatter_kernel(
 #: the per-(leaf, chunk) count matrix is capped at this many cells; the
 #: chunk grows to fit (depth 16 has 65,536 leaves)
 comptime ORDERED_PART_CELLS = 1 << 22
-comptime ORDERED_PART_CHUNK = 1024
+# (lane/neural-pass125: 256, was 1024 -- the count and scatter kernels
+# run one thread a chunk; the stable sort's output does not depend on it)
+comptime ORDERED_PART_CHUNK = 256
 
 
 struct _PermPartition(Movable):
@@ -791,10 +955,10 @@ struct _PermPartition(Movable):
             self.d_starts.unsafe_ptr(), Int32(n_chunks), Int32(n_leaves),
             grid_dim=(_grid(n_chunks), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
         )
-        ctx.enqueue_function[_ord_leaf_scan_kernel](
+        ctx.enqueue_function[_ord_leaf_scan_block_kernel](
             counts.unsafe_ptr(), prefix.unsafe_ptr(), self.d_tot.unsafe_ptr(),
             Int32(n_chunks), Int32(n_leaves),
-            grid_dim=(_grid(n_leaves), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+            grid_dim=(n_leaves, 1, 1), block_dim=(ORD_SCAN_TPB, 1, 1),
         )
         ctx.enqueue_function[_ord_seg_start_kernel](
             self.d_tot.unsafe_ptr(), self.d_seg.unsafe_ptr(), Int32(n_leaves),
@@ -1491,13 +1655,26 @@ def fit_ordered(
         var m0 = Float64(0.0)
         var m1 = Float64(0.0)
         if fused_sums:
-            ctx.enqueue_function[_ord_std_and_mags_kernel](
-                sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
-                Int32(total), d_sums.unsafe_ptr(),
-                grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
-            )
+            var part = ctx.enqueue_create_buffer[DType.float32](3 * REDUCE_LANES_BLOCK)
+            if String(getenv("MOJOLEARN_ORD_STD_SPLIT")) != "0":
+                ctx.enqueue_function[_ord_std_lanes_kernel](
+                    sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
+                    Int32(total), part.unsafe_ptr(),
+                    grid_dim=REDUCE_LANES_BLOCK // ORD_STD_LANES, block_dim=ORD_STD_LANES,
+                )
+                ctx.enqueue_function[_ord_std_combine_kernel](
+                    part.unsafe_ptr(), d_sums.unsafe_ptr(),
+                    grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
+                )
+            else:
+                ctx.enqueue_function[_ord_std_and_mags_kernel](
+                    sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
+                    Int32(total), d_sums.unsafe_ptr(),
+                    grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
+                )
             ctx.enqueue_copy(dst_buf=h_sums, src_buf=d_sums)
             ctx.synchronize()
+            _ = part^
             m0 = Float64(h_sums[1])
             m1 = Float64(h_sums[2])
             var count = 0
