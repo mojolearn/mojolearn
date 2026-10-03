@@ -29,7 +29,8 @@ column mean (b_i = 1/n, feasible since nu <= 1), each iteration is
      every row below tau, the remaining mass spread evenly over the rows AT
      tau (a masked column sum over X, per-block partials folded ascending)
   4. gap g = <u, u - s> (the certified duality gap / nu); stop when
-     g <= SF_EPS * max(|u|^2, |s|^2) or after the iteration cap; else
+     min(g, |u|^2 / 2) <= SF_EPS * max(|u|^2, |s|^2) (|u|^2 / 2 certifies
+     the zero primal) or after the iteration cap; else
      u += gamma (s - u), gamma = clip(g / |u - s|^2, 0, 1).
 
 Every pass is a grid kernel; the small d-vector step is one block (O(d)
@@ -344,7 +345,10 @@ def sf_step_kernel(sums: FP, d: Int32, n: Int32, nu: Float32, r_rank: Int32, u: 
     var t_g = sh[3 * SF_TPB]
     var t_dm = sh[4 * SF_TPB]
     var it = Int(ld(stt, 1))
-    if not (t_g <= SF_EPS * max(t_uu, t_ss) or it >= Int(cap) or t_dm <= Float32(0)):
+    # stop on either certificate: the gap g (the primal at t u) or |u|^2 / 2
+    # (the primal (0, 0): J(0, 0) - J* <= nu |u|^2 / 2 since the dual at u is
+    # nu - nu |u|^2 / 2), relative to the hull's scale
+    if not (min(t_g, Float32(0.5) * t_uu) <= SF_EPS * max(t_uu, t_ss) or it >= Int(cap) or t_dm <= Float32(0)):
         gamma = min(Float32(1), max(Float32(0), t_g / t_dm))
         go = True
     barrier()
