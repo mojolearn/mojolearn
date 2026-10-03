@@ -54,7 +54,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from isolation_forest.impl.isolation_forest import IF_DEVICE_TRANSPOSE
 
-from isolation_forest.impl.isolation_tree_builder import IF_FAST_ROWMAJOR
+from isolation_forest.impl.isolation_tree_builder import IF_FAST_ROWMAJOR, IF_QUERY_RAW
 from isolation_forest.estimator import (
     IF_WANT_PREDICT,
     IFRunOutputs,
@@ -553,8 +553,15 @@ def iforest_run_binding(
     # appended cell by cell into a List and transposed again cell by cell.
     var train = List[Float32]()
     var query = List[Float32]()
-    for i in range(n_query * n_features):
-        query.append(qp.unsafe_load(i))
+    var query_lent_addr = 0
+    comptime if IF_QUERY_RAW:
+        # lane/apple-fast-trees-io: the query is LENT by address too (the
+        # caller keeps it alive through this synchronous call); no
+        # one-thread append of its cells.
+        query_lent_addr = Int(qp)
+    else:
+        for i in range(n_query * n_features):
+            query.append(qp.unsafe_load(i))
     var res = IFRunOutputs()
     with GILReleased(Python()):
         res = iforest_run_host(
@@ -562,7 +569,7 @@ def iforest_run_binding(
             max_samples_mode, max_samples_int, max_samples_frac, max_depth,
             max_features_mode, max_features_int, max_features_frac,
             bootstrap, random_state, contamination_auto, contamination,
-            want, train_addr=Int(tp),
+            want, train_addr=Int(tp), query_addr=query_lent_addr,
         )
     if want == IF_WANT_PREDICT:
         var oi = _i32_ptr(Int(py=out_i32_addr))

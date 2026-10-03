@@ -1,0 +1,62 @@
+# lane/apple-fast-trees-io: IsolationForest fit upload (PLAN-trees.md next-experiment 3)
+
+Merged onto origin/main 2026-10-02 (eabeff395): main's row-major upload + device finite scan
+(`IF_FAST_ROWMAJOR`, `iforest_device_scan`) and its NVIDIA/AMD `IF_DEVICE_TRANSPOSE` arm are
+kept as main has them; this branch adds only the two defines below on top. Light A/Bs: one
+dataset per define first (istella for SAMPLED_UPLOAD, where the 1.8 GB upload is; the taxi
+line only after it wins), 2 pairs. Written without a Mojo toolchain (cloud peer); the first M3
+build is the compile check.
+The switch is compiled under FAST + Apple only (`IF_FAST_ROWMAJOR`) and defaults OFF;
+IDENTICAL compiles the old code. PLAN-trees next-experiment 4 (RF/ET device finite scan)
+is NOT on this branch: lane/apple-fast-rfet-scan has it.
+
+| switch | kind | site | what it changes under FAST on Apple |
+|---|---|---|---|
+| `-D MOJOLEARN_IF_QUERY_RAW=1` | build define (binding svm) | `isolation_tree_builder.mojo` `IF_QUERY_RAW`; `bindings/_mojolearn_svm.mojo` iforest_run_binding (query lent by address); `isolation_forest/estimator.mojo` `iforest_run_host`, `score_samples` / `decision_function` / `predict` (`src_addr`); `isolation_forest.mojo` `_score_samples_device` | the score / decision_function / predict query goes up as the FAST fit's X does: a raw host-pointer copy of the borrowed block and DEVIATION 680's scan on the device (`_upload_rowmajor_fast`), instead of three one-thread host passes over every query cell (the binding's cell-by-cell List append, `check_finite_by_name`, `_upload_f32`'s per-cell `ftz` store into the pinned stage). `ftz` is a no-op under FAST: the same cells reach the traversal, same scores. Not on the lane clock (the fit scores one row); measured by `tools/aft_if_score_ab.sh` + `tools/aft_if_score.py` (score_samples over the training rows, forest rebuild included in both arms). |
+| `-D MOJOLEARN_IF_SAMPLED_UPLOAD=1` | build define (binding svm) | `isolation_forest/impl/isolation_tree_builder.mojo` `IF_SAMPLED_UPLOAD`, `if_sample_rows_kernel`, `if_chunk_gather_kernel`, the build kernel's gather; `isolation_forest/impl/isolation_forest.mojo` `_upload_sampled_fast`, `fit` | the fit no longer allocates and fills a device buffer of X's size (Istella 1.8 GB). A device sample-index pass draws every tree's rows first (the build kernel's own XORWOW draws, same stream, same trees); X then streams through one 64 MB device stage in chunks, each chunk scanned for non-finite cells and its sampled rows gathered into a 22 MB compact buffer (entry `tree * max_samples + s`); the build kernel gathers from that entry. One readback (the finite flag). |
+
+Cause: `_upload_rowmajor_fast` (commit 8d79e4d70) copies the whole borrowed X into a fresh
+device buffer of its size and scans it there, for a forest that reads n_trees x max_samples
+rows (100 x 256 of ~2 M on Istella). PLAN-trees.md names that upload as what keeps Istella
+at 383 ms against sklearn's 282. The transfer volume is unchanged here (every cell still
+crosses once, so DEVIATION 680's refusal covers every cell: a NaN in an unsampled row is
+still refused, which `tools/aft_if_refusal.py` checks); what goes is the 1.8 GB device
+allocation, its first-touch, and the single huge copy, replaced by a bounded stage.
+
+Why the brief's "upload only the sampled rows" is not GPU-only within today's upload API,
+and what would make it so (not implemented):
+1. Per-row copies from the device-side index set (the host reads count + index list once,
+   then `enqueue_copy` of each sampled row from the borrowed pointer): no cell of an
+   unsampled row ever reaches the device, so the finiteness refusal would cover sampled
+   rows only (the refusal check would be probabilistic: a NaN at row 4321 of 5000 is
+   sampled by 10 trees x 256 rows about 40% of the time), unless a host pass scans X (the
+   one-thread scan this lane removes, or host threads the push hook refuses). It also
+   issues n_trees x max_samples (25,600) copy commands of 880 bytes; unmeasured on Metal.
+2. The real fix is a device read of the borrowed host block itself (Apple's memory is
+   unified): a kernel-visible view of the Python array with no copy. `DeviceContext` offers
+   no constructor over an existing host pointer (`enqueue_create_host_buffer` allocates its
+   own pinned block, and filling it is a 1.8 GB host memcpy). Needs an API probe on the M3.
+3. The chunked stream here is the design that keeps the full refusal and bounded memory;
+   two stages were not used (one in-order stream; a `synchronize` before each re-fill of the
+   stage orders the host-pointer copy after the launches that read it; 28 syncs on Istella).
+
+Other steps in isolation_forest/ read for this lane, left alone: the per-tree gather inside
+the build kernel (one block per tree, all threads gather, reads the compact rows now:
+coalesced per sampled row); the score path's `compute_path_lengths_global_kernel` (one
+thread per query row over 100 trees: the standard shape; the lane clock is the fit). The
+`sample_rows` pass is one thread per tree (the RNG stream is sequential by construction,
+exactly the build kernel's thread 0), n_trees blocks in parallel.
+
+Keep rule: the arm becomes the FAST Apple default when its A/B is faster on the M3 with the
+same FSPEED hash and held-out quality within FAST's run-to-run spread, and
+`tools/aft_if_refusal.py` still raises ValueError for NaN and inf; then the define goes.
+
+Queue (docs/apple-fast/ab/trees-io.txt), in order: (1) `trees-io-ifq-build` builds the
+IF_QUERY_RAW pair (one fit pair on taxi, a by-product); (2-3) `aft_if_score_ab.sh`
+alternates those two .so files timing score_samples over istella and taxi training rows;
+(4) the refusal check against the query-raw build (fit NaN/inf and now query NaN/inf,
+`tools/aft_if_refusal.py` extended); (5-6) the sampled-upload A/B istella, taxi (binding
+svm owns iforest, tools/aft_ab.sh leaves arm B's .so installed); (7) the refusal check
+again, against the sampled-upload build. Keep rule applies to each switch separately. Watch the first build for: deferred `var tables:
+XorwowDeviceTables` init inside `comptime if`, `rebind` of `x_rows.unsafe_ptr()`, and
+`create_sub_buffer` on the stage inside the chunk loop.
