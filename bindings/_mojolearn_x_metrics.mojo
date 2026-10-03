@@ -9,7 +9,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.memory import bitcast
-from x_metrics.epilogue import binary_auc, binary_ap, roc_arrays, expected_mi, row_sum_range
+from x_metrics.epilogue import roc_arrays, expected_mi, row_sum_range
 from x_metrics.epilogue import scatter_rows, first_rows_i32, ovo_pair
 from x_metrics.epilogue import (
     pr_arrays, det_arrays, ndcg_mean, class_sums, auc_xy, mi_contingency, centroids_f32, ch_extra,
@@ -93,18 +93,6 @@ def dev_free_binding(id: PythonObject) raises -> PythonObject:
 
 def dev_live_binding() raises -> PythonObject:
     return PythonObject(X_METRICS_STORE.get_or_create_ptr()[].live)
-
-
-def curve_auc_binding(arena: PythonObject, fps: PythonObject, tps: PythonObject, keep: PythonObject,
-                      c: PythonObject, max_fpr_bits: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo binary_auc (lane metrics-apple2)."""
-    var mf = bitcast[DType.float64](Int64(Int(py=max_fpr_bits)))
-    return PythonObject(binary_auc(Int(py=arena), Int(py=fps), Int(py=tps), Int(py=keep), Int(py=c), mf))
-
-
-def curve_ap_binding(arena: PythonObject, fps: PythonObject, tps: PythonObject, c: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo binary_ap (lane metrics-apple2)."""
-    return PythonObject(binary_ap(Int(py=arena), Int(py=fps), Int(py=tps), Int(py=c)))
 
 
 def curve_roc_binding(arena: PythonObject, offs: PythonObject, c: PythonObject, drop: PythonObject,
@@ -230,8 +218,6 @@ def PyInit__mojolearn_x_metrics() abi("C") -> PythonObject:
         m.def_function[dev_put_binding]("x_metrics_dev_put")
         m.def_function[dev_free_binding]("x_metrics_dev_free")
         m.def_function[dev_live_binding]("x_metrics_dev_live")
-        m.def_function[curve_auc_binding]("x_metrics_curve_auc")
-        m.def_function[curve_ap_binding]("x_metrics_curve_ap")
         m.def_function[curve_roc_binding]("x_metrics_curve_roc")
         m.def_function[expected_mi_binding]("x_metrics_expected_mi")
         m.def_function[row_sum_range_binding]("x_metrics_row_sum_range")

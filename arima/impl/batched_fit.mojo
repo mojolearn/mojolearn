@@ -116,7 +116,9 @@ from arima.impl.batched_arima import (
     perturb_kernel,
     reset_param_kernel,
 )
+from arima.impl.batched_kalman import KALMAN_FAST_EVAL_WS
 from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
+from arima.impl.fast_eval_ws import FastEvalWS
 from arima.impl.lbfgs_device import (
     LBFGS_TPB,
     arima_eval_finish_kernel,
@@ -483,6 +485,13 @@ def batched_min_lbfgs(
     var d_grad = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
     var d_x_pert = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
     var scratch = ARIMAParams(ctx, order_kf, bs)
+    # lane/apple-fast-tsa: the stacked evaluation's buffers, held for the
+    # whole solve (`-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`, FAST on Apple, no
+    # exog; `arima/impl/fast_eval_ws.mojo`). `None` in every other build.
+    var ews = Optional[FastEvalWS]()
+    comptime if KALMAN_FAST_EVAL_WS:
+        if order_kf.n_exog == 0:
+            ews = FastEvalWS(ctx, d_y_kf, bs, n_obs_kf, order_kf)
     var x = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
     var xp = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
     var grad = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
@@ -537,10 +546,16 @@ def batched_min_lbfgs(
 
     # `min_lbfgs:161-173`: evaluate at x0, and exit early per series if it
     # is already a minimizer.
-    eval_batch_device(
-        ctx, d_y_kf, d_exog_kf, bs, n_obs_kf, order_kf, d_x, d_grad, d_x_pert,
-        scratch, h, scale, fx, grad, bad,
-    )
+    var ev0_done = False
+    comptime if KALMAN_FAST_EVAL_WS:
+        if ews:
+            ews.value().eval(ctx, order_kf, h, scale, d_x, d_grad, d_x_pert, fx, grad, bad)
+            ev0_done = True
+    if not ev0_done:
+        eval_batch_device(
+            ctx, d_y_kf, d_exog_kf, bs, n_obs_kf, order_kf, d_x, d_grad, d_x_pert,
+            scratch, h, scale, fx, grad, bad,
+        )
     var n_eval = 1
     if trace.enabled:
         trace.record_list_f32("fit.init.x", _download(ctx, x, b_n))
@@ -584,10 +599,18 @@ def batched_min_lbfgs(
                 step.unsafe_ptr(), searching.unsafe_ptr(), Int32(bs), Int32(n),
                 grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
             )
-            eval_batch_device(
-                ctx, d_y_kf, d_exog_kf, bs, n_obs_kf, order_kf, d_x, d_grad, d_x_pert,
-                scratch, h, scale, fxc, gradc, bad,
-            )
+            var ev_done = False
+            comptime if KALMAN_FAST_EVAL_WS:
+                if ews:
+                    ews.value().eval(
+                        ctx, order_kf, h, scale, d_x, d_grad, d_x_pert, fxc, gradc, bad
+                    )
+                    ev_done = True
+            if not ev_done:
+                eval_batch_device(
+                    ctx, d_y_kf, d_exog_kf, bs, n_obs_kf, order_kf, d_x, d_grad, d_x_pert,
+                    scratch, h, scale, fxc, gradc, bad,
+                )
             n_eval += 1
             ctx.enqueue_function[lbfgs_accept_kernel](
                 x.unsafe_ptr(), grad.unsafe_ptr(), fx.unsafe_ptr(), d_x.unsafe_ptr(),
@@ -630,6 +653,7 @@ def batched_min_lbfgs(
     _ = d_grad^
     _ = d_x_pert^
     _ = scratch^
+    _ = ews^
     _ = x^
     _ = xp^
     _ = grad^

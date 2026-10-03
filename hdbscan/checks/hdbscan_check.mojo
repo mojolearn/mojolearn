@@ -275,7 +275,7 @@ def _staged_graph(
     var knn_i = ctx.enqueue_create_buffer[DType.int32](m * k)
     ctx.synchronize()
     compute_core_dists(
-        ctx, trace, x_host, core, m, d, DISTANCE_L2_SQRT_EXPANDED, k,
+        ctx, trace, x, core, m, d, DISTANCE_L2_SQRT_EXPANDED, k,
         knn_d, knn_i, core_tpb, sabotage,
     )
     var nnz = m * m

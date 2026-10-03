@@ -56,7 +56,21 @@ trait Exec:
         ...
 
     @staticmethod
-    def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
+    def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
+        ...
+
+    @staticmethod
+    def eigh_batch(a: F32Ptr, w: F32Ptr, v: F32Ptr, batch: Int, n: Int) raises:
+        ...
+
+    @staticmethod
+    def lle_apply(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, dst: F32Ptr, nq: Int, nf: Int, nn: Int, nc: Int) raises:
+        ...
+
+    @staticmethod
+    def lle_local(
+        x: F32Ptr, idx: F32Ptr, bmat: F32Ptr, method: Int, n: Int, d: Int, nn: Int, nc: Int, tol: Float32
+    ) raises:
         ...
 
     @staticmethod
@@ -80,6 +94,16 @@ trait Exec:
         g: F32Ptr, q: F32Ptr, w: F32Ptr, h: F32Ptr, its: F32Ptr, n: Int, k: Int, alpha: Float32,
         max_iter: Int, tol: Float32, positive: Bool,
     ) raises:
+        ...
+
+    @staticmethod
+    def lu_aux(
+        lu: F32Ptr, piv: I32Ptr, pm: F32Ptr, im: F32Ptr, diag: F32Ptr, stats: F32Ptr, n: Int, clamp: Int
+    ) raises:
+        ...
+
+    @staticmethod
+    def lars_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, na: F32Ptr, n: Int, k: Int, m: Int, nnz: Int) raises:
         ...
 
     @staticmethod

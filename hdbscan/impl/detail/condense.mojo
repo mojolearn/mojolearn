@@ -7,7 +7,15 @@ Reference: `cuml-v26.08.00/cpp/src/hdbscan/detail/condense.cuh`
 (`:91-212`) and `build_condensed_hierarchy` (`:237-286`), with the
 reference branches in the reference order.
 
-THIS IS A HOST FUNCTION ON THEIR SIDE TOO, and that is worth stating
+ON THE DEVICE FOR OUR DEVICE FIT (lane cgr2-hdbscan, 2026-10-03):
+`build_condensed_hierarchy` below hands off to
+`tree_device.mojo::build_condensed_device`, which computes the walk's
+result in closed form by pointer jumping and a radix sort. The walk in this
+file (`bfs_from_node`, `_collapse`, `_add_edge`) is the CPU column's
+(`hdbscan_host_oracle.mojo::hdbh_condense`), and the two trees are equal
+element for element.
+
+THEIR CONDENSE IS A HOST FUNCTION, and that is worth stating
 because the file name says `.cuh`. cuML 26.08 rewrote condense as a
 serial host walk over `std::vector`s -- their own comment at `:69` says
 "This implementation is based on scikit-learn's _condense_tree
@@ -90,13 +98,15 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from hdbscan.checks.hdbscan_sabotage import (
     HDB_SAB_CONDENSE_DFS,
-    HDB_SAB_LAMBDA_STD_DIV,
     HDB_SAB_NONE,
 )
-from hdbscan.checks.mutual_reachability_dense import refuse_nonfinite_host
 from hdbscan.impl.condensed_hierarchy import CondensedHierarchy
-from hierarchy.impl.cluster.detail.connectivities import FLOAT32_MAX
-from checks.numerics import identical_div
+from hdbscan.impl.detail.tree_device import (
+    DeviceTree,
+    build_condensed_device,
+    td_download_f32,
+    td_download_i32,
+)
 
 
 def bfs_from_node(
@@ -187,181 +197,29 @@ def build_condensed_hierarchy(
     min_cluster_size: Int,
     n_leaves: Int,
     sabotage: Int32 = HDB_SAB_NONE,
+) raises -> DeviceTree:
+    """`condense.cuh:237-286` for the device fit: built on the device
+    (`tree_device.mojo::build_condensed_device`, the closed form of the
+    walk below). The walk (`bfs_from_node`, `_collapse`, `_add_edge`) is
+    the CPU column's (`hdbh_condense`)."""
+    return build_condensed_device(
+        ctx, children, delta, sizes, min_cluster_size, n_leaves, sabotage
+    )
+
+
+def download_condensed(
+    ctx: DeviceContext, mut tree: DeviceTree
 ) raises -> CondensedHierarchy:
-    """`condense.cuh:237-286`, with `_build_condensed_hierarchy`
-    (`:91-212`) inlined behind it exactly as their call at `:274-283`
-    puts it -- one Mojo function for their pair.
-
-    Returns the condensed hierarchy their `condensed_tree.condense(...)`
-    at `:285` populates.
-    """
-    if n_leaves < 2:
-        raise Error(
-            "hdbscan.build_condensed_hierarchy: n_leaves=" + String(n_leaves)
-            + " < 2 refused by name; their root index 2 * (n_leaves - 1)"
-            " is not a node below that"
-        )
-    if min_cluster_size < 2:
-        raise Error(
-            "hdbscan.build_condensed_hierarchy: min_cluster_size="
-            + String(min_cluster_size)
-            + " refused by name; it must be at least 2. At 1 every leaf is"
-            " its own cluster, their case-1 branch fires at every merge,"
-            " and the condensed tree is the dendrogram with a different"
-            " numbering -- an answer, but not HDBSCAN's"
-        )
-    if min_cluster_size > n_leaves:
-        raise Error(
-            "hdbscan.build_condensed_hierarchy: min_cluster_size="
-            + String(min_cluster_size) + " > n_rows=" + String(n_leaves)
-            + " refused by name; no subtree can reach that size, so every"
-            " branch takes their case 2, nothing survives the size != -1"
-            " filter and CondensedHierarchy.condense would read an empty"
-            " minmax range"
-        )
-
-    # `:250` Root is the last edge in the dendrogram
-    var root = 2 * (n_leaves - 1)
-    var n_edges = root
-    var n_samples = n_leaves
-
-    # `:108-116` Copy data to host
-    var h_children = _copy_i32(ctx, children, n_edges)
-    var h_delta = _copy_f32(ctx, delta, n_leaves - 1)
-    var h_sizes = _copy_i32(ctx, sizes, n_leaves - 1)
-
-    # `:252-261` n_vertices = max(children) + 1, then RAFT_EXPECTS
-    # n_vertices == root. Their message, kept.
-    var max_child = Int32(-1)
-    for i in range(n_edges):
-        if h_children[i] > max_child:
-            max_child = h_children[i]
-    var n_vertices = Int(max_child) + 1
-    if n_vertices != root:
-        raise Error(
-            "hdbscan.build_condensed_hierarchy: Multiple components found"
-            " in MST or MST is invalid. Cannot find single-linkage"
-            " solution. Found " + String(n_vertices) + " vertices total"
-            " (expected " + String(root) + ")"
-        )
-
-    # NOT THEIRS. DEVIATION 1607: `delta` is the MST weight column and
-    # every lambda below is `1 / delta`, so a non-finite here becomes a
-    # non-finite in a recorded stage.
-    refuse_nonfinite_host(
-        h_delta, "hdbscan.build_condensed_hierarchy", "dendrogram deltas",
-        sabotage,
+    """The device tree as host lists, once, for the fit's outputs."""
+    return CondensedHierarchy(
+        tree.n_leaves,
+        tree.n_edges,
+        tree.n_clusters,
+        td_download_i32(ctx, tree.parents, tree.n_edges),
+        td_download_i32(ctx, tree.children, tree.n_edges),
+        td_download_f32(ctx, tree.lambdas, tree.n_edges),
+        td_download_i32(ctx, tree.sizes, tree.n_edges),
     )
-
-    # `:104-106`
-    var next_label = n_samples + 1
-
-    # `:131-133` Get BFS ordering from root
-    var node_list = List[Int32]()
-    bfs_from_node(root, n_samples, h_children, node_list, sabotage)
-
-    # `:135-137`. Their `ignore` is sized `node_list.size()` and indexed
-    # by NODE; for a valid dendrogram those are the same number
-    # (`2 * n_leaves - 1 == root + 1`), which the RAFT_EXPECTS above has
-    # just established. Sized `root + 1` here so the indexing is right by
-    # construction rather than by coincidence -- the same value, and the
-    # note is here because a reader diffing the two lines will see the
-    # difference and is owed the reason.
-    var relabel = List[Int](capacity=root + 1)
-    var ignore = List[Int](capacity=root + 1)
-    for _ in range(root + 1):
-        relabel.append(0)
-        ignore.append(0)
-    relabel[root] = n_samples
-
-    var out_parent = List[Int32]()
-    var out_child = List[Int32]()
-    var out_lambda = List[Float32]()
-    var out_size = List[Int32]()
-
-    # `:140-203` Process nodes in BFS order
-    for idx in range(len(node_list)):
-        var node = Int(node_list[idx])
-
-        # `:144` Skip if already processed or is a leaf
-        if ignore[node] != 0 or node < n_samples:
-            continue
-
-        # `:146-152`
-        var left = Int(h_children[(node - n_samples) * 2])
-        var right = Int(h_children[(node - n_samples) * 2 + 1])
-        var distance = h_delta[node - n_samples]
-        var lambda_value = FLOAT32_MAX
-        if distance > Float32(0.0):
-            if sabotage == HDB_SAB_LAMBDA_STD_DIV:
-                lambda_value = Float32(1.0) / distance
-            else:
-                lambda_value = identical_div(Float32(1.0), distance)
-
-        var left_count = 1
-        if left >= n_samples:
-            left_count = Int(h_sizes[left - n_samples])
-        var right_count = 1
-        if right >= n_samples:
-            right_count = Int(h_sizes[right - n_samples])
-
-        if left_count >= min_cluster_size and right_count >= min_cluster_size:
-            # `:154-160` Case 1: Both children are large enough
-            relabel[left] = next_label
-            next_label += 1
-            _add_edge(
-                out_parent, out_child, out_lambda, out_size,
-                relabel[node], relabel[left], lambda_value, left_count,
-            )
-            relabel[right] = next_label
-            next_label += 1
-            _add_edge(
-                out_parent, out_child, out_lambda, out_size,
-                relabel[node], relabel[right], lambda_value, right_count,
-            )
-        elif left_count < min_cluster_size and right_count < min_cluster_size:
-            # `:161-178` Case 2: Both children are too small
-            _collapse(
-                left, node, n_samples, h_children, relabel, ignore,
-                out_parent, out_child, out_lambda, out_size, lambda_value,
-                sabotage,
-            )
-            _collapse(
-                right, node, n_samples, h_children, relabel, ignore,
-                out_parent, out_child, out_lambda, out_size, lambda_value,
-                sabotage,
-            )
-        elif left_count < min_cluster_size:
-            # `:180-190` Case 3: Only left child is too small
-            relabel[right] = relabel[node]
-            _collapse(
-                left, node, n_samples, h_children, relabel, ignore,
-                out_parent, out_child, out_lambda, out_size, lambda_value,
-                sabotage,
-            )
-        else:
-            # `:192-202` Case 4: Only right child is too small
-            relabel[left] = relabel[node]
-            _collapse(
-                right, node, n_samples, h_children, relabel, ignore,
-                out_parent, out_child, out_lambda, out_size, lambda_value,
-                sabotage,
-            )
-
-    # `:263-272` their output arrays are `(root + 1) * 2` slots filled
-    # with -1 and then written densely from the front; `condense()`
-    # filters on `size != -1`. Ours appends only the live edges, which is
-    # the same set in the same order -- the -1 fill exists on their side
-    # because a DEVICE array has to be sized before it is written, and
-    # ours is a host `List`. `condense()` still filters, so a caller that
-    # passes a padded array behaves as theirs does.
-    var tree = CondensedHierarchy(n_leaves)
-    tree.condense(out_parent, out_child, out_lambda, out_size)
-    refuse_nonfinite_host(
-        tree.lambdas, "hdbscan.build_condensed_hierarchy",
-        "condensed tree lambdas", sabotage,
-    )
-    return tree^
 
 
 def _add_edge(
@@ -414,35 +272,3 @@ def _collapse(
                 relabel[node], sub_node, lambda_value, 1,
             )
         ignore[sub_node] = 1
-
-
-def _copy_i32(
-    ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int
-) raises -> List[Int32]:
-    var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-    ctx.synchronize()
-    var v = buf.create_sub_buffer[DType.int32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
-    ctx.synchronize()
-    var out = List[Int32](capacity=n)
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    _ = v^
-    return out^
-
-
-def _copy_f32(
-    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
-) raises -> List[Float32]:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.synchronize()
-    var v = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
-    ctx.synchronize()
-    var out = List[Float32](capacity=n)
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    _ = v^
-    return out^

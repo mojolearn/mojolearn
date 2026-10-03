@@ -36,6 +36,15 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from x_linear.ops import FP, IP, ld, st
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+
+#: `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM` (FAST on Apple, default off): Ridge's
+#: unweighted moments (x_linear/ridge_grid.mojo) and k-fold RidgeCV's fold
+#: Grams (x_linear/device.mojo) from `fast_gram_into`.
+comptime XL_RIDGE_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                               and is_defined["MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM"]())
 
 comptime FG_TPB = 256
 comptime FG_CH = 8192
@@ -250,10 +259,10 @@ def fg_red_kernel(part_g: FP, nch_in: Int32, d_in: Int32, t_in: Int32, npairs_in
                 st(xty, (j - d) * d + k, s)
 
 
-def fg_red_sym_kernel(part_g: FP, nch_in: Int32, m_in: Int32, npairs_in: Int32, nt_in: Int32, out: FP,
+def fg_red_sym_kernel(part_g: FP, nch_in: Int32, m_in: Int32, npairs_in: Int32, nt_in: Int32, dst: FP,
                       div: FP, use_div: Int32):
     """Thread (pair, cell): the cell's sum over the chunks, divided by
-    div[0] when use_div != 0, into out[j * m + k] and out[k * m + j]."""
+    div[0] when use_div != 0, into dst[j * m + k] and dst[k * m + j]."""
     var m = Int(m_in)
     var npairs = Int(npairs_in)
     var t = Int(block_idx.x) * FG_TPB + Int(thread_idx.x)
@@ -269,8 +278,8 @@ def fg_red_sym_kernel(part_g: FP, nch_in: Int32, m_in: Int32, npairs_in: Int32, 
                 s += ld(part_g, (ch * npairs + p) * FG_TT + cell)
             if use_div != 0:
                 s = s / ld(div, 0)
-            st(out, j * m + k, s)
-            st(out, k * m + j, s)
+            st(dst, j * m + k, s)
+            st(dst, k * m + j, s)
 
 
 def fast_gram_into(
@@ -309,11 +318,11 @@ def fast_gram_into(
 
 def fast_sym_gram_into(
     mut ctx: DeviceContext, x: FP, lo: Int, cnt: Int, d: Int, mu: FP, use_mu: Bool, lab: FP, cls: Int,
-    part_g: FP, out: FP, div: FP, use_div: Bool,
+    part_g: FP, dst: FP, div: FP, use_div: Bool,
 ) raises:
     """Rows [lo, lo + cnt) of X (n x d, device): sum_i (x_i - mu)(x_i - mu)'
     over the rows whose label lab[i] is cls (every row when cls < 0),
-    uncentered when not use_mu, divided by div[0] when use_div, into out
+    uncentered when not use_mu, divided by div[0] when use_div, into dst
     (d x d, both triangles). part_g: caller's scratch of at least
     `fg_part_words(cnt, d)` words. Enqueues only (no wait)."""
     var nt = fg_tiles(d)
@@ -324,5 +333,5 @@ def fast_sym_gram_into(
         x, x, Int32(d), Int32(0), Int32(lo), Int32(cnt), Int32(crows), mu, Int32(1 if use_mu else 0),
         lab, Int32(cls), part_g, Int32(npairs), Int32(nt), grid_dim=nch * npairs, block_dim=FG_TPB)
     ctx.enqueue_function[fg_red_sym_kernel](
-        part_g, Int32(nch), Int32(d), Int32(npairs), Int32(nt), out, div, Int32(1 if use_div else 0),
+        part_g, Int32(nch), Int32(d), Int32(npairs), Int32(nt), dst, div, Int32(1 if use_div else 0),
         grid_dim=fg_blocks(npairs * FG_TT), block_dim=FG_TPB)

@@ -260,10 +260,10 @@ def main() raises:
         tr.record_list_f32("x_decomp.geqrf", hd)
         tr.record_list_f32("x_decomp.orgqr", qgd)
     # ---- the device SVD BOUNDED IN WORK PER LAUNCH (lane/lle-timeout): the
-    # QR in column ranges (x_decomp/qr_bounded.mojo), the Jacobi sweeps in
-    # chunks of pairs, poisoned and read back whole: == the host replay at
-    # the default cut, and the same bits cut small (one QR column and 61
-    # pairs per launch); one slice square, one slice tall, two TSQR slices
+    # QR in column ranges (x_decomp/qr_bounded.mojo), the round-robin Jacobi
+    # one launch a round (x_decomp/rr_svd.mojo): == the host replay at the
+    # default cut, and the same bits with the QR cut small; one slice
+    # square, one slice tall, two TSQR slices
     var bshapes = [150, 150, 300, 150, 1200, 96]
     for sh in range(len(bshapes) // 2):
         var bm = bshapes[2 * sh]
@@ -292,7 +292,7 @@ def main() raises:
         var bc = ba.copy()
         var s_c = zeros(bn)
         var v_c = zeros(bn * bn)
-        DevExec.svd_cells(ptr(bc), bm, bn, ptr(s_c), ptr(v_c), 4096, 61 * bn)
+        DevExec.svd_cells(ptr(bc), bm, bn, ptr(s_c), ptr(v_c), 4096)
         same("bounded device svd values cut small " + tag, count_diff_f32(s_c, s_h))
         same("bounded device svd vectors cut small " + tag, count_diff_f32(v_c, v_h))
         tr.record_list_f32("x_decomp.svd_bounded", v_d)
