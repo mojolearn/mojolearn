@@ -134,20 +134,22 @@ def gp_white_dev_kernel(out_k: _P, n_in: Int32, par: _P, node: Int32):
         out_k.unsafe_store(t, Float32(0.0))
 
 
-def gp_lml_dev_kernel(ydot: _P, work: _P, n: Int32, dst: _P):
-    """`gp_log_marginal_likelihood_value(y^T alpha_, log|K|, n)`, one scalar
-    (the likelihood's three terms; not a loop)."""
-    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
-        dst.unsafe_store(0, gp_log_marginal_likelihood_value(ydot.unsafe_load(0), work.unsafe_load(Int(n)), Int(n)))
-
-
 def gp_opt_init_kernel(
     st: _P, si: _I, tmap: _I, bnd: _P, dpar: _P, dls: _P, t: Int32, run: Int32, s0: UInt32, s1: UInt32
 ):
     gp_opt_init_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, tmap, bnd, dpar, dls, Int(run), s0, s1)
 
 
-def gp_opt_step_kernel(st: _P, si: _I, tmap: _I, dpar: _P, dls: _P, lml: _P, graw: _P, t: Int32, info: Int32):
+def gp_opt_step_kernel(
+    st: _P, si: _I, tmap: _I, dpar: _P, dls: _P, ydot: _P, work: _P, n: Int32, lml: _P, graw: _P,
+    t: Int32, info: Int32,
+):
+    """The optimizer's step after an evaluation. Thread 0 first combines the
+    likelihood's three scalar terms (`gp_log_marginal_likelihood_value(y^T
+    alpha_, log|K| at work[n], n)`, the fit's own) into `lml`; thread 0 is
+    also the only reader of it in the step."""
+    if Int(thread_idx.x) == 0 and Int(info) == 0:
+        lml.unsafe_store(0, gp_log_marginal_likelihood_value(ydot.unsafe_load(0), work.unsafe_load(Int(n)), Int(n)))
     gp_opt_step_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, tmap, dpar, dls, lml, graw, Int(info))
 
 
@@ -375,6 +377,9 @@ def gpr_optimize_device(
     _ = htmap^
 
     var ctrace = IdentityTrace()
+    # the likelihood's `n` (its `(n/2) log(2 pi)` term and log|K|'s slot in
+    # dwork): a constant of the step's scalar combine, never a loop bound
+    var lml_n = Int32(n)
     var eval_cap = GP_OPT_MAX_ITER * (GP_OPT_MAX_LS + 1) + 2
     for run in range(n_runs):
         ctx.enqueue_function[gp_opt_init_kernel](
@@ -412,7 +417,6 @@ def gpr_optimize_device(
                         grid_dim=(nbf + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
                     )
                 ctx.enqueue_function[gpr_ydot_fin_kernel](_gp(dypart), Int32(nbf), _gp(dyd), grid_dim=1, block_dim=1)
-                ctx.enqueue_function[gp_lml_dev_kernel](_gp(dyd), _gp(dwork), Int32(n), _gp(dlml), grid_dim=1, block_dim=1)
                 enqueue_fill(ctx, dkinv, Float32(0.0))
                 ctx.enqueue_function[gp_eye_kernel](
                     _gp(dkinv), Int32(n), grid_dim=(n + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB
@@ -427,8 +431,8 @@ def gpr_optimize_device(
                     grid_dim=(nt + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
                 )
             ctx.enqueue_function[gp_opt_step_kernel](
-                _gp(dst), _gi(dsi), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dlml), _gp(dgraw),
-                Int32(nt), Int32(info),
+                _gp(dst), _gi(dsi), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dyd), _gp(dwork), lml_n,
+                _gp(dlml), _gp(dgraw), Int32(nt), Int32(info),
                 grid_dim=1, block_dim=GP_OPT_TPB,
             )
             # the one word home per evaluation: the stop word
