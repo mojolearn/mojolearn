@@ -8,10 +8,10 @@ nothing is retained after the call."""
 from std.python import PythonObject
 
 from std.math import sqrt
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec_trait import Exec
-from sequence.ops import TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
+from sequence.ops import SEQ_FAST_VAR_ONECOPY, SEQ_FAST_VAR_SPEC, VAR_SPEC_H, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
 from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
@@ -418,7 +418,15 @@ def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
     sigma_u (K, K), resid (n - p, K)], each output written; ip = [n, K, p,
     k_trend]. Returns 0, or 1 + the design column whose Cholesky pivot was
     not positive (nothing is written then)."""
-    if len(addrs) != 4 or len(ip) != 4:
+    var spec_h = 0
+    comptime if SEQ_FAST_VAR_SPEC:
+        # lane/apple-fast-gap-tsa: a fifth address and integer ask for the
+        # speculative forecast rows (var_spec_steps)
+        if len(addrs) == 5 and len(ip) == 5:
+            spec_h = ival(ip, 4)
+            if spec_h < 1 or spec_h > VAR_SPEC_H:
+                raise Error("var_fit: the speculative horizon must be 1 .. " + String(VAR_SPEC_H))
+    if spec_h == 0 and (len(addrs) != 4 or len(ip) != 4):
         raise Error("var_fit: requires 4 addresses and 4 integer parameters")
     var n = ival(ip, 0)
     var K = ival(ip, 1)
@@ -431,7 +439,7 @@ def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
     if R - m < 1:
         raise Error("var_fit: too few observations for the lag order (need n - p > k_trend + K p)")
     comptime if TSA2_VAR:
-        return _var_fit_queued(ex, addrs, n, K, p, kt, R, m)
+        return _var_fit_queued(ex, addrs, n, K, p, kt, R, m, spec_h)
     var y = ex.alloc(n * K)
     ex.upload(y, fptr(addrs[0], "y"), n * K)
     var Z = ex.alloc(R * m)
@@ -499,7 +507,7 @@ def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
 
 
 def _var_fit_queued[E: Exec](
-    mut ex: E, addrs: PythonObject, n: Int, K: Int, p: Int, kt: Int, R: Int, m: Int,
+    mut ex: E, addrs: PythonObject, n: Int, K: Int, p: Int, kt: Int, R: Int, m: Int, spec_h: Int = 0,
 ) raises -> PythonObject:
     """`var_fit_py` under -D MOJOLEARN_TSA2_VAR (FAST + Apple): one upload (no
     zero fill), one workspace (one fill for nine), eight launches queued
@@ -512,7 +520,7 @@ def _var_fit_queued[E: Exec](
     main's untouched zeros). The residual and sigma_u products fuse their
     epilogues (`op_var_resid`, `op_var_sigma`: the same chains)."""
     var y = ex.bind(fptr(addrs[0], "y"), n * K)
-    var ws = ex.alloc(R * m + R * K + m + m * m + m * K + R * K + K * K + 1)
+    var ws = ex.alloc(R * m + R * K + m + m * m + m * K + R * K + K * K + 1 + spec_h * K)
     var Z = ws
     var Ys = Z + R * m
     var sc = Ys + R * K
@@ -565,6 +573,36 @@ def _var_fit_queued[E: Exec](
     f.p1 = sc
     f.i1 = K
     ex.launch[OP_ROWSCALE](f, m * K)
+    # lane/apple-fast-gap-tsa SEQ_FAST_VAR_SPEC: the forecast recursion from
+    # the bound endog's last p rows under the final params, queued here
+    var Fs = status + 1
+    if spec_h > 0:
+        var g = Args()
+        g.p0 = y + (n - p) * K
+        g.p1 = Bm
+        g.p2 = Fs
+        g.i0 = K
+        g.i1 = p
+        g.i2 = kt
+        g.i3 = spec_h
+        ex.launch[OP_VAR_FORECAST](g, 1)
+    comptime if SEQ_FAST_VAR_ONECOPY:
+        # params | resid | sigma_u | status | speculative rows: one span, one copy
+        var span = m * K + R * K + K * K + 1 + spec_h * K
+        var tmp = List[Float32](length=span, fill=Float32(0.0))
+        var tp = FP(unsafe_from_address=Int(tmp.unsafe_ptr()))
+        ex.download_async(tp, Bm, span)
+        ex.sync()
+        memcpy(dest=fptr(addrs[1], "params"), src=tp, count=m * K)
+        memcpy(dest=fptr(addrs[3], "resid"), src=tp + m * K, count=R * K)
+        memcpy(dest=fptr(addrs[2], "sigma_u"), src=tp + m * K + R * K, count=K * K)
+        var code = Int(tp.unsafe_load(m * K + R * K + K * K))
+        if spec_h > 0:
+            memcpy(dest=fptr(addrs[4], "spec"), src=tp + m * K + R * K + K * K + 1, count=spec_h * K)
+        _ = tmp^
+        return PythonObject(code)
+    if spec_h > 0:
+        ex.download_async(fptr(addrs[4], "spec"), Fs, spec_h * K)
     var st = List[Float32](length=1, fill=Float32(0.0))
     ex.download_async(FP(unsafe_from_address=Int(st.unsafe_ptr())), status, 1)
     ex.download_async(fptr(addrs[1], "params"), Bm, m * K)
@@ -572,6 +610,20 @@ def _var_fit_queued[E: Exec](
     ex.download_async(fptr(addrs[3], "resid"), Rs, R * K)
     ex.sync()
     return PythonObject(Int(st[0]))
+
+
+def var_spec_steps_py(ip: PythonObject) raises -> PythonObject:
+    """The speculative forecast rows `var_fit` can return for ip = [K, p]
+    (0 unless SEQ_FAST_VAR_SPEC): VAR_SPEC_H, or fewer so that (p + rows) K
+    fits the threadgroup forecast kernel's 4096 words."""
+    comptime if SEQ_FAST_VAR_SPEC:
+        var K = ival(ip, 0)
+        var p = ival(ip, 1)
+        if K < 1 or p < 1:
+            return PythonObject(0)
+        var rows = min(VAR_SPEC_H, 4096 // K - p)
+        return PythonObject(rows if rows > 0 else 0)
+    return PythonObject(0)
 
 
 def var_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:

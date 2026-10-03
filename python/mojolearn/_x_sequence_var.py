@@ -41,6 +41,12 @@ class VARResults:
         y = np.ascontiguousarray(np.asarray(y, dtype=np.float32)[-self.k_ar:])
         if y.shape != (self.k_ar, self.neqs):
             raise ValueError(f"forecast: y needs at least {self.k_ar} rows of {self.neqs} columns")
+        spec = getattr(self, "_spec", None)
+        if (spec is not None and 1 <= int(steps) <= spec.shape[0]
+                and y.tobytes() == self.endog[-self.k_ar:].tobytes()):
+            # the rows the fit computed from the same last rows under the same
+            # params (SEQ_FAST_VAR_SPEC, lane/apple-fast-gap-tsa): the same words
+            return spec[:int(steps)].copy()
         out = np.zeros((int(steps), self.neqs), dtype=np.float32)
         p = np.ascontiguousarray(self.params, dtype=np.float32)
         _backend.binding("_mojolearn_x_sequence", self._numeric_mode).var_forecast(
@@ -76,9 +82,23 @@ class VAR:
         params = np.zeros((m, K), dtype=np.float32)
         sigma = np.zeros((K, K), dtype=np.float32)
         resid = np.zeros((max(n - p, 1), K), dtype=np.float32)
-        code = _backend.binding("_mojolearn_x_sequence", self.numeric_mode).var_fit(
-            [self.endog.ctypes.data, params.ctypes.data, sigma.ctypes.data, resid.ctypes.data], [n, K, p, kt])
+        mod = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
+        # SEQ_FAST_VAR_SPEC builds (lane/apple-fast-gap-tsa) also return the
+        # forecast rows from the endog's last p rows; others report 0
+        steps_fn = getattr(mod, "var_spec_steps", None)
+        spec_h = int(steps_fn([K, p])) if steps_fn is not None else 0
+        spec = None
+        if spec_h > 0:
+            spec = np.zeros((spec_h, K), dtype=np.float32)
+            code = mod.var_fit(
+                [self.endog.ctypes.data, params.ctypes.data, sigma.ctypes.data, resid.ctypes.data,
+                 spec.ctypes.data], [n, K, p, kt, spec_h])
+        else:
+            code = mod.var_fit(
+                [self.endog.ctypes.data, params.ctypes.data, sigma.ctypes.data, resid.ctypes.data], [n, K, p, kt])
         if int(code):
             raise np.linalg.LinAlgError(
                 f"VAR.fit: the lagged design is rank deficient (Cholesky pivot of column {int(code) - 1})")
-        return VARResults(self.endog, params, sigma, resid, p, kt, self.numeric_mode)
+        res = VARResults(self.endog, params, sigma, resid, p, kt, self.numeric_mode)
+        res._spec = spec
+        return res

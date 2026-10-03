@@ -76,6 +76,22 @@ comptime SEQUENCE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 comptime _TSA2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime TSA2_VAR = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_VAR_OFF"]()
 comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"]()
+#: lane/apple-fast-gap-tsa (docs/apple-fast/notes/gap-tsa.md), on the
+#: TSA2_VAR fit, default OFF, FAST + Apple only.
+#: SEQ_FAST_VAR_SPEC (-D MOJOLEARN_SEQ_FAST_VAR_SPEC): the fit also queues
+#: the forecast recursion from the last p rows of the bound endog under the
+#: final params (`var_spec_steps` rows) and brings it down on the fit's one
+#: wait; VARResults.forecast hands those rows back when it is asked for at
+#: most that many steps from the same last rows, bit for bit (the same
+#: kernel on the same words), else runs its own call as before.
+#: SEQ_FAST_VAR_ONECOPY (-D MOJOLEARN_SEQ_FAST_VAR_ONECOPY): params,
+#: resid, sigma_u, the status word (and the speculative rows) lie in one
+#: span of the workspace, so one device-to-host copy replaces four (five).
+comptime SEQ_FAST_VAR_SPEC = TSA2_VAR and is_defined["MOJOLEARN_SEQ_FAST_VAR_SPEC"]()
+comptime SEQ_FAST_VAR_ONECOPY = TSA2_VAR and is_defined["MOJOLEARN_SEQ_FAST_VAR_ONECOPY"]()
+#: the speculative horizon (rows), capped so (p + rows) K fits the
+#: threadgroup forecast kernel's 4096 words (sequence/vecar_block.mojo)
+comptime VAR_SPEC_H = 64
 
 # ------------------------------------------------------------------ op codes
 comptime OP_GEMM = 1
