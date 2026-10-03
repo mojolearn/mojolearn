@@ -16,7 +16,6 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	5	for i in r
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_decomp.py	6	for i in range(n):
 py-loop	py-numpy	gap-neural-overhead2	debt	python/mojolearn/_expansion_decomp.py	7	for i in range(n):
 py-loop	py-numpy	gap-neural-overhead2	debt	python/mojolearn/_expansion_decomp.py	8	for i in range(n):
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_linear.py	0	for i in range(n):
 py-loop	py-numpy	gap-treeshap	debt	python/mojolearn/_expansion_trees.py	0	for i in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_expansion_trees.py	1	for i in range(n):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_linalg_impl.py	0	for i in range(n):
@@ -35,8 +34,6 @@ host-call	host-import	gap-neural-overhead2	debt	spectral/impl/sparse/solver/deta
 host-call	host-import	gap-neural-overhead2	debt	spectral/impl/sparse/solver/detail/lanczos.mojo	0	var sweeps = symmetric_eig_host[DType.float32](t, ncv, evals, evecs)
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/bayes.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/bayes.mojo	0	par_rows(rows_map, n)
-serial-launch	serial-gpu	gap-nv-classical2	debt	x_linear/device.mojo	0	ctx.enqueue_function[fit_kernel](
-serial-launch	serial-gpu	PR#116	debt	x_linear/device.mojo	0	ctx.enqueue_function[iso_after_kernel](Int32(n), dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(),
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/glm.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/glm.mojo	0	par_rows(rows_gh, n)
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/glm.mojo	0	par_rows(rows_map, n)

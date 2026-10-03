@@ -25,7 +25,7 @@ from std.sys.compile import is_defined
 from x_linear.team import Team
 from x_linear.tops import (
     fold_fa, chain_fmad, chain_fmad_scaled, t_fold_fa_staged, fold_fa_blocked, chain_fmad_blocked,
-    chain_fmad_scaled_blocked, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK, X_LINEAR_SERIAL_FOLDS,
+    chain_fmad_scaled_blocked, t_fold_fa_blocked, fold_parts, fold_blocks, FOLD_BLOCK,
 )
 
 comptime GLM_LINK_IDENTITY = 0
@@ -41,8 +41,7 @@ comptime GLM_STALL_ITERS = 3
 # and the intercept start) in the blocked order (x_linear/tops.mojo, Andrew
 # 2026-10-01), so a device computes the FOLD_BLOCK partials at once
 # (x_linear/device.mojo glm_init_parts_kernel) and folds them ascending: the
-# same words as these. `-D MOJOLEARN_X_LINEAR_SERIAL_FOLDS=1` restores the
-# serial chains.
+# same words as these.
 def glm_den(y: FP, n: Int, sw: Bool) -> Float32:
     """The objective's denominator: n, or sum w (y = targets n | weights n)."""
     if sw:
@@ -204,8 +203,7 @@ def _glm_cell_rows(c: Int, x: FP, gr: FP, hr: FP, lo: Int, cnt: Int, d: Int, m: 
     """`_glm_cell`'s chain over rows [lo, lo + cnt) only, continuing from the
     cell's stored value when lo > 0: an acc is always flushed, so the resumed
     chain is the whole chain's words (lane/neural-pass89, the Apple slices).
-    The serial order only: the grid driver runs it under
-    X_LINEAR_SERIAL_FOLDS, where `_glm_cell`'s blocked chains are these."""
+    (lane/neural-pass89 slices)."""
     var xs = x + lo * d
     var grs = gr + lo
     var hrs = hr + lo
@@ -531,78 +529,48 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             # Units: 0..d-1 the Hessian rows, d the intercept's row, d+1 the
             # gradient; a unit owns its accumulators and folds rows ascending,
             # so units may run at once, one row block at a time (lane linear-cpu)
-            comptime if X_LINEAR_SERIAL_FOLDS:
-                var units = d + 2
-                var b0 = 0
-                while b0 < n:
-                    var b1 = b0 + GLM_ROW_BLOCK
-                    if b1 > n:
-                        b1 = n
+            # lane/neural-pass97: the blocked order. Every accumulator of
+            # FOLD_BLOCK rows from zero (the units' statements over the
+            # block's rows, blocks at once), then each accumulator's
+            # partials folded blocks ascending.
+            var nb = fold_blocks(n)
+            var words = m + m * m
+            var pl = List[Float32](length=max(nb * words, 1), fill=Float32(0))
+            var pp = FP(unsafe_from_address=Int(pl.unsafe_ptr()))
 
-                    def units_fold(lo: Int, hi: Int) {imm x, imm d, imm m, imm fi, imm gp, imm hp, imm s1, imm s2,
-                                                      imm b0, imm b1}:
-                        for u in range(lo, hi):
-                            if u < d:
+            def blocks_fold(lo: Int, hi: Int) {imm x, imm d, imm m, imm fi, imm s1, imm s2, imm n, imm pp, imm words}:
+                for bk in range(lo, hi):
+                    var gpb = pp + bk * words
+                    var hpb = gpb + m
+                    var b0 = bk * FOLD_BLOCK
+                    var b1 = min(n, b0 + FOLD_BLOCK)
+                    for u in range(d + 2):
+                        if u < d:
+                            for i in range(b0, b1):
+                                axpy_acc(hpb, u * m, fm(ld(s2, i), ld(x, i * d + u)), x, i * d, u + 1)
+                        elif u == d:
+                            if fi:
                                 for i in range(b0, b1):
-                                    axpy_acc(hp, u * m, fm(ld(s2, i), ld(x, i * d + u)), x, i * d, u + 1)
-                            elif u == d:
+                                    var hi_ = ld(s2, i)
+                                    axpy_acc(hpb, d * m, hi_, x, i * d, d)
+                                    st(hpb, d * m + d, fa(ld(hpb, d * m + d), hi_))
+                        else:
+                            for i in range(b0, b1):
+                                var gi = ld(s1, i)
+                                axpy_acc(gpb, 0, gi, x, i * d, d)
                                 if fi:
-                                    for i in range(b0, b1):
-                                        var hi_ = ld(s2, i)
-                                        axpy_acc(hp, d * m, hi_, x, i * d, d)
-                                        st(hp, d * m + d, fa(ld(hp, d * m + d), hi_))
-                            else:
-                                for i in range(b0, b1):
-                                    var gi = ld(s1, i)
-                                    axpy_acc(gp, 0, gi, x, i * d, d)
-                                    if fi:
-                                        st(gp, d, fa(ld(gp, d), gi))
+                                    st(gpb, d, fa(ld(gpb, d), gi))
 
-                    par_rows(units_fold, units, 1)
-                    b0 = b1
-            else:
-                # lane/neural-pass97: the blocked order. Every accumulator of
-                # FOLD_BLOCK rows from zero (the units' statements over the
-                # block's rows, blocks at once), then each accumulator's
-                # partials folded blocks ascending.
-                var nb = fold_blocks(n)
-                var words = m + m * m
-                var pl = List[Float32](length=max(nb * words, 1), fill=Float32(0))
-                var pp = FP(unsafe_from_address=Int(pl.unsafe_ptr()))
-
-                def blocks_fold(lo: Int, hi: Int) {imm x, imm d, imm m, imm fi, imm s1, imm s2, imm n, imm pp, imm words}:
-                    for bk in range(lo, hi):
-                        var gpb = pp + bk * words
-                        var hpb = gpb + m
-                        var b0 = bk * FOLD_BLOCK
-                        var b1 = min(n, b0 + FOLD_BLOCK)
-                        for u in range(d + 2):
-                            if u < d:
-                                for i in range(b0, b1):
-                                    axpy_acc(hpb, u * m, fm(ld(s2, i), ld(x, i * d + u)), x, i * d, u + 1)
-                            elif u == d:
-                                if fi:
-                                    for i in range(b0, b1):
-                                        var hi_ = ld(s2, i)
-                                        axpy_acc(hpb, d * m, hi_, x, i * d, d)
-                                        st(hpb, d * m + d, fa(ld(hpb, d * m + d), hi_))
-                            else:
-                                for i in range(b0, b1):
-                                    var gi = ld(s1, i)
-                                    axpy_acc(gpb, 0, gi, x, i * d, d)
-                                    if fi:
-                                        st(gpb, d, fa(ld(gpb, d), gi))
-
-                par_rows(blocks_fold, nb, 1)
-                for q in range(words):
-                    var acc = Float32(0)
-                    for bk in range(nb):
-                        acc = fa(acc, ld(pp, bk * words + q))
-                    if q < m:
-                        st(g, q, acc)
-                    else:
-                        st(h, q - m, acc)
-                _ = pl^
+            par_rows(blocks_fold, nb, 1)
+            for q in range(words):
+                var acc = Float32(0)
+                for bk in range(nb):
+                    acc = fa(acc, ld(pp, bk * words + q))
+                if q < m:
+                    st(g, q, acc)
+                else:
+                    st(h, q - m, acc)
+            _ = pl^
         # the small dense step (m x m) on the lead thread
         var flag = 0  # 0 continue, 1 converged, 2 stop (no descent)
         var slope = Float32(0)
