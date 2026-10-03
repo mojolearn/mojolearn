@@ -1148,8 +1148,21 @@ def _native_classification_labels(values):
     from ._buffer import _has_buffer, hotpath_enabled
     from ._labels import _encode_labels_native
 
-    if isinstance(values, (list, tuple, str, bytes)) or not hotpath_enabled():
+    if isinstance(values, (str, bytes)) or not hotpath_enabled():
         return None
+    if type(values) in (list, tuple):
+        # lane apple-fast-py2mojo-core: a flat list of exact Python ints is
+        # packed into an int64 buffer in C and encoded like one (the list
+        # route's `[int(v) for v in labels]` and its dict per row are gone
+        # for it); str, bool, nested or mixed lists keep the list route
+        if not values or set(map(type, values)) != {int}:
+            return None
+        import array
+        try:
+            store = array.array("q", values)
+        except OverflowError:
+            return None
+        values = Array._owned(store, (len(store),), "<i8", "C")
     if not isinstance(values, Array) and not _has_buffer(values):
         return None
     if len(_shape_of(values)) != 1:
