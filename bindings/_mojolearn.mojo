@@ -101,6 +101,8 @@ from bindings.hotpath_helpers import (
     next_combination_i64_binding,
     ic_running_min_f64_binding,
     fold_pair_f32_binding,
+    threshold_labels_i64_binding,
+    scale_shift_ftz_f32_binding,
 )
 from std.os import abort
 from std.math import isfinite
@@ -1764,6 +1766,8 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[next_combination_i64_binding]("next_combination_i64")
         m.def_function[ic_running_min_f64_binding]("ic_running_min_f64")
         m.def_function[fold_pair_f32_binding]("fold_pair_f32")
+        m.def_function[threshold_labels_i64_binding]("threshold_labels_i64")
+        m.def_function[scale_shift_ftz_f32_binding]("scale_shift_ftz_f32")
         m.def_function[gather_i64_binding]("gather_i64")
         m.def_function[gather_f64_binding]("gather_f64")
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")

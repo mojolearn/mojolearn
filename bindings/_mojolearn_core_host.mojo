@@ -116,6 +116,8 @@ from bindings.hotpath_helpers import (
     next_combination_i64_binding,
     ic_running_min_f64_binding,
     fold_pair_f32_binding,
+    threshold_labels_i64_binding,
+    scale_shift_ftz_f32_binding,
 )
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_ptr
 from core.dense_coo import (
@@ -1441,6 +1443,8 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[next_combination_i64_binding]("next_combination_i64")
         module.def_function[ic_running_min_f64_binding]("ic_running_min_f64")
         module.def_function[fold_pair_f32_binding]("fold_pair_f32")
+        module.def_function[threshold_labels_i64_binding]("threshold_labels_i64")
+        module.def_function[scale_shift_ftz_f32_binding]("scale_shift_ftz_f32")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))

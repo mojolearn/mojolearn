@@ -38,7 +38,7 @@ The per-element helpers (`cast_elements`, `equal_elements`, `gather_i32`)
 run one SIMD range on the calling thread (cpu-gpu-cleanup c-core: the host
 pool is not used from the GPU binding); no element depends on another.
 """
-from std.math import isfinite
+from std.math import isfinite, sqrt
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -1004,4 +1004,72 @@ def fold_pair_f32_binding(dst_addr: PythonObject, src_addr: PythonObject, n: Pyt
             comptime if HOTPATH_SABOTAGE:
                 s = -s
             dp.unsafe_store(i, s)
+    return PythonObject(0)
+
+
+def threshold_labels_i64_binding(
+    src_addr: PythonObject, code: PythonObject, n: PythonObject, thr: PythonObject,
+    strict: PythonObject, below: PythonObject, above: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """dst[i] = above if src[i] > thr (strict) / >= thr (not strict), else
+    below; int64 out from a float32 (code 0) or float64 (code 1) score (lane
+    cgr4-py-compute: the predict label maps that were Python
+    comprehensions). A NaN score compares false and takes `below`."""
+    var count = Int(py=n)
+    if count < 0:
+        raise Error("threshold_labels_i64: n must be non-negative")
+    if count == 0:
+        return PythonObject(0)
+    var c = Int(py=code)
+    var t = Float64(py=thr)
+    var st = Int(py=strict) != 0
+    var lo = Int64(Int(py=below))
+    var hi = Int64(Int(py=above))
+    var dp = _ptr[DType.int64](Int(py=dst_addr))
+    if c != HP_F32 and c != HP_F64:
+        raise Error("threshold_labels_i64: float32 or float64 scores only")
+    var fp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr))
+    var gp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr))
+    with GILReleased(Python()):
+        for i in range(count):
+            var v = Float64(fp.unsafe_load(i)) if c == HP_F32 else gp.unsafe_load(i)
+            var up = v > t if st else v >= t
+            comptime if HOTPATH_SABOTAGE:
+                up = not up
+            dp.unsafe_store(i, hi if up else lo)
+    return PythonObject(0)
+
+
+def scale_shift_ftz_f32_binding(
+    src_addr: PythonObject, n: PythonObject, a: PythonObject, b: PythonObject,
+    op: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """Elementwise float32, each step one rounding then `ftz` (lane
+    cgr4-py-compute: the GP un-normalization that was a Python
+    comprehension): op 0 dst = ftz(ftz(a * v) + b); op 1 dst =
+    ftz(sqrt(ftz(v * a))); op 2 dst = ftz(v * a). `a`, `b` are float32
+    values. src and dst may be the same buffer."""
+    var count = Int(py=n)
+    var o = Int(py=op)
+    if count < 0 or o < 0 or o > 2:
+        raise Error("scale_shift_ftz_f32: bad n or op")
+    if count == 0:
+        return PythonObject(0)
+    var fa = Float32(Float64(py=a))
+    var fb = Float32(Float64(py=b))
+    var sp = _ptr[DType.float32](Int(py=src_addr))
+    var dp = _ptr[DType.float32](Int(py=dst_addr))
+    with GILReleased(Python()):
+        for i in range(count):
+            var v = sp.unsafe_load(i)
+            var r: Float32
+            if o == 0:
+                r = _ftz_bits(_ftz_bits(fa * v) + fb)
+            elif o == 1:
+                r = _ftz_bits(sqrt(_ftz_bits(v * fa)))
+            else:
+                r = _ftz_bits(v * fa)
+            comptime if HOTPATH_SABOTAGE:
+                r = -r
+            dp.unsafe_store(i, r)
     return PythonObject(0)
