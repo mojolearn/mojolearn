@@ -135,6 +135,7 @@ from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 from std.sys.info import is_amd_gpu
 from core.apple_air import simdgroup_load_legacy_air
+from gemm.afn_apple_fast import AFN_GEMM_FP32_MMA, afn_gemm_fp32_into
 from std.ffi import _Global, external_call
 from std.time import perf_counter_ns
 
@@ -4692,6 +4693,16 @@ def identical_gemm_into[allow_vendor: Bool = True](
     # arm declines return False and FALL THROUGH to the pinned plan exactly
     # as 1876 does. Under IDENTICAL this branch is not compiled at all:
     # bit-unchanged by construction.
+    # lane/apple-fast-neural-gemm (2026-10-03): the Apple FAST simdgroup
+    # route (gemm/afn_apple_fast.mojo), ahead of the vendor route and of the
+    # pinned plans. Full fp32 products and f32 accumulation, so it also
+    # serves the callers that closed the vendor route for its precision cut
+    # (`allow_vendor=False`). Compiled only under FAST on an Apple build with
+    # a MOJOLEARN_AFN_GEMM_* define; IDENTICAL compiles the lines below
+    # unchanged.
+    comptime if AFN_GEMM_FP32_MMA:
+        if afn_gemm_fp32_into(ctx, c, a, b, m, n, k, op):
+            return
     comptime if allow_vendor and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         var vendor = True
         comptime if TARGET_COLUMN == COLUMN_APPLE:
@@ -8867,6 +8878,16 @@ def identical_gemm[allow_vendor: Bool = True](
     # IDENTICAL this branch is not compiled at all. Read `_fast_vendor_gemm`
     # before changing anything here; the `n == 1` clause in it is a
     # correctness requirement and not an optimization.
+    # lane/apple-fast-neural-gemm (2026-10-03): the Apple FAST simdgroup
+    # route (gemm/afn_apple_fast.mojo), ahead of the vendor route and of the
+    # pinned plans. Full fp32 products and f32 accumulation, so it also
+    # serves the callers that closed the vendor route for its precision cut
+    # (`allow_vendor=False`). Compiled only under FAST on an Apple build with
+    # a MOJOLEARN_AFN_GEMM_* define; IDENTICAL compiles the lines below
+    # unchanged.
+    comptime if AFN_GEMM_FP32_MMA:
+        if afn_gemm_fp32_into(ctx, c, a, b, m, n, k, op):
+            return
     comptime if allow_vendor and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         var vendor = True
         comptime if TARGET_COLUMN == COLUMN_APPLE:
