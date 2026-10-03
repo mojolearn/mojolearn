@@ -556,3 +556,13 @@ Fixes of UNOWNED rows of `tools/hooks/host_routes_baseline.tsv`. Arm A of each A
 | no switch | HDBSCAN / single linkage FAST (Boruvka, m > 4096) | lane/apple-fast-purity2 @ 6f1ad9cf7 | purity2-boruvka-check | - | merged | every Boruvka round on the device (atomic-min edge passes, scan, label propagation, radix sort); same MST by construction; correctness CMD queued |
 | no switch | x_trees apply refusal, tsqr NaN refusal | lane/apple-fast-purity2 @ 6f1ad9cf7 | none | - | merged | error-path scans on the device (atomic min of the first bad key) |
 | no switch | potrf panel / strip diag / sabotage arms, householder QR leaves | lane/apple-fast-purity2 @ 6f1ad9cf7 | none | - | merged | small-launch notes: the launches factor a w x w block (n is the row stride) or one TSQR leaf |
+
+## Gap kapprox2 (lane/apple-fast-gap-kapprox2 and its sub-branches, Oct 3)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `KSHAP_FAST_BATCH` | kernel-shap / istella | lane/apple-fast-gap-kapprox2 @ 4fd464a43 | kap2-kshap-batch-istella | 27005 -> ? | OPEN | regression cause: 57a297161 moved the explainers to the device with one row per chunk (synthetic matrix 180 MB/row: fresh device buffer + ~3 GB/s download into a fresh zero-filled host array, then 2(d-1) pivot/elim launches per row). Fix: pooled device synthetic buffer, one host buffer reused across chunks, means per chunk and one solve sweep per ~74 rows; bit-inert |
+| `KSHAP_FAST_BATCH` | permutation-shap / istella | lane/apple-fast-gap-kapprox2 @ 4fd464a43 | kap2-pshap-batch-istella | 34210 -> ? | OPEN | same cause (388 MB synthetic matrix per row); pooled device buffer + reused host buffer; bit-inert |
+| `KSHAP_FAST_SIGNGRAM` | kernel-shap / istella | lane/apple-fast-gap-kapprox2 @ 4fd464a43 | kap2-kshap-sign-istella (A = BATCH) | ? | OPEN | normal matrix / rhs add +-w (+-w y2) instead of soft-f64 products by e in {-1,0,1}; exact, same words |
+| `ACHI2_FAST_DEVCHECK` | additive-chi2 / istella, taxi; skewed-chi2 transform | lane/apple-fast-gap-kapprox2 @ 4fd464a43 | kap2-achi2-devcheck-{istella,taxi} | 12.3, 0.7 -> ? | OPEN | the timed fit is only the X < 0 check: a serial host X.min() pass; now one device flag (xn_any_below) |
+| `SCHI2_FAST_DEVRNG` | skewed-chi2 / istella, taxi | lane/apple-fast-gap-kapprox2 @ 4fd464a43 | kap2-schi2-devrng-{istella,taxi} | 7.3, 1.6 -> ? | OPEN | the fit drew d x 256 MT19937 doubles in Python and built the weights list in Python; now one device launch (counter stream, same laws, not sklearn's numbers: quality gate on kernel_rel_error) |
