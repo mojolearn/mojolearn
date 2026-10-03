@@ -198,6 +198,16 @@ def _emit_keys_kernel(keys: _U32P, flag: _I32P, scan: _I32P, n_in: Int32, out: _
         )
 
 
+def _scan_input_kernel(src: _I32P, dst: _I32P, n_in: Int32):
+    """dst[i] = src[i] for i < n and dst[n] = 0 (src may be dst)."""
+    var i = Int(block_idx.x) * SCAN_TPB + Int(thread_idx.x)
+    var n = Int(n_in)
+    if i < n:
+        dst.unsafe_store(i, src.unsafe_load(i))
+    elif i == n:
+        dst.unsafe_store(n, Int32(0))
+
+
 # ------------------------------------------------------------ host side ----
 
 
@@ -425,3 +435,21 @@ def device_sorted_unique_i32(
     _ = vals^
     _ = keys^
     return out^
+
+
+def device_exclusive_scan_total(
+    ctx: DeviceContext, src: MutPointer[Int32, MutAnyOrigin], mut out: DeviceBuffer[DType.int32], n: Int
+) raises:
+    """out[0 .. n) = the exclusive scan of src[0 .. n), out[n] = the total,
+    over the whole device (`frs_exclusive_scan`). Int32 adds with the usual
+    wrap, so every value is the one a one-block scan gives. `src` may be
+    `out`'s own pointer (an in-place scan)."""
+    if n < 0:
+        return
+    ctx.enqueue_function[_scan_input_kernel](
+        src, out.unsafe_ptr(), Int32(n),
+        grid_dim=(_grid(n + 1), 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    var bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n + 1))
+    frs_exclusive_scan(ctx, out, n + 1, bsum)
+    _ = bsum^
