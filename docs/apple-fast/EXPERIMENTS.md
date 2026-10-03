@@ -140,7 +140,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 
 | define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
-| `SGD_FAST_PS_SIMD` | sgd-ocsvm / istella | lane/apple-fast-gap-clus3 @ 2ac0505fc | clus3-sgdoc-simd-istella | 75,506 -> 106,443 | DROPPED-slower | +41%, quality identical; code removed from main; recover at lane/apple-fast-gap-clus3@2ac0505fc. One simdgroup a problem leaves the GPU one simdgroup busy per sample; the 0.8.34 time (~10 s) was the HOST CPU route (`_sgd_on_host`, default on in 0.8.34 x_linear/device.mojo fit_device), not a GPU form |
+| `SGD_FAST_PS_SIMD` | sgd-ocsvm / taxi, istella | lane/apple-fast-gap-clus3 @ 2ac0505fc | clus3-sgdoc-simd-taxi, clus3-sgdoc-simd-istella | taxi 58,334 -> 42,252; istella 75,506 -> 106,443 | KEPT (small d only), FAST+Apple default for d <= 32 (`_OFF` off) | taxi -27.6%, fraction_flagged .05557 identical; istella +41% so d > 32 keeps the block form. The 0.8.34 time (~10 s istella) was the HOST CPU route (`_sgd_on_host`), not a GPU form; the istella regression stays open |
 | `BAYES_GRID_GUARD` | bayesian-ridge / istella | lane/apple-fast-bayes @ 1a0bb2b2b | bayes-br-guard-istella | bayesian-ridge istella 2,630 (NaN) -> 3,040 (finite) | KEPT 6d4d55c99 | correctness: FAST grid path gave NaN |
 | `CALIB_GNB_FOLDS` | calibrated / taxi | lane/apple-fast-meta @ 17b317ae6 | meta-calib-taxi | calibrated taxi 839.9 -> 49.8 | KEPT 24ed76679 | -94%; acc identical |
 | `CD_FAST_GRID_GRAM` | elasticnet / istella; lasso / istella | lane/apple-fast-linear @ 1c7c213f8 | linear-lasso-gg-istella, linear-enet-gg-istella | lasso istella 276 -> 201; enet 262 -> 196 | KEPT 0ae9c28cd | -27% / -25% |
