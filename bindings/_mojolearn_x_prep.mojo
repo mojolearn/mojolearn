@@ -3,6 +3,7 @@
 """THE PREP LANE'S GPU BINDING (preprocessing additions, naive Bayes and
 discriminant analysis). One entry runs a program of units on the device
 (x_prep/common.mojo); the host binding runs the same units on the CPU."""
+from x_prep.cat_cls2 import CAT_CLS2_PACK, CAT_CLS2_PRESENT
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -13,7 +14,9 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE
 from x_prep.folds import I32P, kfold_folds, strat_folds
+from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py
 from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
+from x_prep.py2mojo import PY2MOJO_PREP
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -168,6 +171,15 @@ def fast_unique_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
+def cls2_cat_binding() raises -> PythonObject:
+    """lane/apple-fast-gap-cls2 (x_prep/cat_cls2.mojo): bit 1 PACK, bit 2
+    PRESENT; registered only under CAT_CLS2_PACK."""
+    var f = 1
+    comptime if CAT_CLS2_PRESENT:
+        f |= 2
+    return PythonObject(f)
+
+
 def calib_folds_binding() raises -> PythonObject:
     """Lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
     the CalibratedClassifierCV(GaussianNB) program's constants [words per
@@ -178,12 +190,21 @@ def calib_folds_binding() raises -> PythonObject:
     return out
 
 
+def py2mojo_binding() raises -> PythonObject:
+    """Lane apple-fast-py2mojo-prep: present unless -D MOJOLEARN_PY2MOJO_prep_OFF
+    (x_prep/py2mojo.mojo); Python then takes its old loops."""
+    return PythonObject(1)
+
 
 @export
 def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_prep")
         m.def_function[run_binding]("x_prep_run")
+        comptime if NB_TEXT_CSR:
+            # lane apple-fast-nb: FAST + Apple + -D MOJOLEARN_NB_TEXT_CSR only (x_prep/fastnb_csr.mojo)
+            m.def_function[nb_csr_fit_py]("x_prep_nb_csr_fit")
+            m.def_function[nb_csr_jll_py]("x_prep_nb_csr_jll")
         m.def_function[run_scratch_binding]("x_prep_run_scratch")
         m.def_function[run_out_binding]("x_prep_run_out")
         m.def_function[run_ranges_binding]("x_prep_run_ranges")
@@ -196,8 +217,12 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[vendor_binding]("x_prep_vendor")
         comptime if X_PREP_FAST_UNIQUE:
             m.def_function[fast_unique_binding]("x_prep_fast_unique")
+        comptime if CAT_CLS2_PACK:
+            m.def_function[cls2_cat_binding]("x_prep_cls2_cat")
         comptime if CALIB_FOLDS:
             m.def_function[calib_folds_binding]("x_prep_calib_folds")
+        comptime if PY2MOJO_PREP:
+            m.def_function[py2mojo_binding]("x_prep_py2mojo")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_prep: ", e))

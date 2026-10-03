@@ -9,6 +9,8 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from x_ann.filter_topk import filter_topk_device
+from x_ann.tsne_init import TSNE_INIT_GIVEN, TSNE_INIT_RANDOM, X_ANN_PY2MOJO, tsne_init_y0
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_ann.abi import a_int, check_search, in_f32, in_i32, out_f32, out_i32, p_int
@@ -88,7 +90,9 @@ def ivf_pq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
 
 def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: x, y0, y_out, kl_out (one float32).
-    params: n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate."""
+    params: n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate
+    [, init mode, random_state low 32 bits, high 32 bits] (lane apple-fast-py2mojo-cluster: mode 1
+    random, 2 the PCA embedding in y0 scaled, x_ann/tsne_init.mojo; 0 or absent y0 as given)."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var max_iter = p_int(params, 2)
@@ -97,7 +101,13 @@ def tsne_fit_binding(addrs: PythonObject, params: PythonObject) raises -> Python
     var exaggeration = Float32(Float64(py=params[5]))
     var lr = Float32(Float64(py=params[6]))
     var x = in_f32(addrs, 0, n * d)
-    var y0 = in_f32(addrs, 1, n * 2)
+    var mode = p_int(params, 7) if len(params) > 7 else TSNE_INIT_GIVEN
+    var seed = UInt64(0)
+    if len(params) > 9:
+        seed = (UInt64(p_int(params, 9)) << 32) | UInt64(p_int(params, 8))
+    var y0 = tsne_init_y0(
+        mode, in_f32(addrs, 1, n * 2) if mode != TSNE_INIT_RANDOM else List[Float32](), n, seed
+    )
     var y = List[Float32]()
     var kl = Float32(0.0)
     with GILReleased(Python()):
@@ -222,12 +232,14 @@ def ivf_sq_search_binding(addrs: PythonObject, params: PythonObject) raises -> P
 
 def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """addrs: dataset, queries, candidates (int32 m x k0, < 0 = padding), out_d, out_i.
-    params: n, d, m, k0, k."""
+    params: n, d, m, k0, k[, root] (root 1: the euclidean metric's square
+    roots of the kept distances, lane apple-fast-py2mojo-cluster)."""
     var n = p_int(params, 0)
     var d = p_int(params, 1)
     var m = p_int(params, 2)
     var k0 = p_int(params, 3)
     var k = p_int(params, 4)
+    var root = len(params) > 5 and p_int(params, 5) != 0
     if n <= 0 or d <= 0 or m <= 0 or k0 <= 0 or k <= 0 or k > k0:
         raise Error("refine: need positive shapes and 1 <= k <= n_candidates")
     var x = in_f32(addrs, 0, n * d)
@@ -236,7 +248,7 @@ def refine_binding(addrs: PythonObject, params: PythonObject) raises -> PythonOb
     var od = List[Float32]()
     var oi = List[Int32]()
     with GILReleased(Python()):
-        refine_device(x, n, d, q, m, cand, k0, k, od, oi)
+        refine_device(x, n, d, q, m, cand, k0, k, od, oi, root)
     out_f32(od, addrs, 3)
     out_i32(oi, addrs, 4)
     return PythonObject(m)
@@ -307,6 +319,35 @@ def ivf_rabitq_search_binding(addrs: PythonObject, params: PythonObject) raises 
     return PythonObject(m)
 
 
+def filter_topk_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """CAGRA's filtered compaction (x_ann/filter_topk.mojo, lane
+    apple-fast-py2mojo-cluster). addrs: itopk distances (m x L), itopk ids
+    (m x L int32), keep (n int32), out_d, out_i (m x k). params: m, n, L, k."""
+    var m = p_int(params, 0)
+    var n = p_int(params, 1)
+    var L = p_int(params, 2)
+    var k = p_int(params, 3)
+    if m <= 0 or n <= 0 or k <= 0 or L < k:
+        raise Error("CAGRA filtered search: need m, n, k >= 1 and itopk_size >= k")
+    var bd = in_f32(addrs, 0, m * L)
+    var bi = in_i32(addrs, 1, m * L)
+    var keep = in_i32(addrs, 2, n)
+    var od = List[Float32]()
+    var oi = List[Int32]()
+    with GILReleased(Python()):
+        filter_topk_device(bd, bi, keep, m, n, L, k, od, oi)
+    out_f32(od, addrs, 3)
+    out_i32(oi, addrs, 4)
+    return PythonObject(m)
+
+
+def py2mojo_binding() raises -> PythonObject:
+    """1: TSNE's start, refine's euclidean roots and CAGRA's filtered
+    compaction run in this binding (lane apple-fast-py2mojo-cluster); 0 under
+    `-D MOJOLEARN_PY2MOJO_cluster_OFF`, and `_expansion_ann.py` runs them."""
+    return PythonObject(1 if X_ANN_PY2MOJO else 0)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -327,6 +368,8 @@ def PyInit__mojolearn_x_ann() abi("C") -> PythonObject:
         m.def_function[ivf_sq_build_binding]("x_ann_ivf_sq_build")
         m.def_function[ivf_sq_search_binding]("x_ann_ivf_sq_search")
         m.def_function[refine_binding]("x_ann_refine")
+        m.def_function[py2mojo_binding]("x_ann_py2mojo")
+        m.def_function[filter_topk_binding]("x_ann_filter_topk")
         m.def_function[ivf_rabitq_build_binding]("x_ann_ivf_rabitq_build")
         m.def_function[ivf_rabitq_search_binding]("x_ann_ivf_rabitq_search")
         m.def_function[x_ann_index_prepare_binding]("x_ann_index_prepare")

@@ -119,6 +119,10 @@ from arima.impl.batched_arima import (
 from arima.impl.batched_kalman import KALMAN_FAST_EVAL_WS
 from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
 from arima.impl.fast_eval_ws import FastEvalWS
+from arima.impl.fast_lbfgs_async import (
+    ARIMA_FAST_ASYNC,
+    async_min_lbfgs,
+)
 from arima.impl.lbfgs_device import (
     LBFGS_TPB,
     arima_eval_finish_kernel,
@@ -492,6 +496,24 @@ def batched_min_lbfgs(
     comptime if KALMAN_FAST_EVAL_WS:
         if order_kf.n_exog == 0:
             ews = FastEvalWS(ctx, d_y_kf, bs, n_obs_kf, order_kf)
+    comptime if ARIMA_FAST_ASYNC:
+        # every series on its own schedule (fast_lbfgs_async.mojo); the
+        # per-iteration card needs the lock-step shape, so a trace keeps it
+        if ews and not trace.enabled:
+            var ar = async_min_lbfgs(ctx, ews.value(), bs, scale, order_kf, x0, param, h)
+            trace.record_list_f32("fit.x", ar.x)
+            trace.record_list_f32("fit.loss", ar.fx)
+            trace.record_list_i32("fit.n_iter", ar.n_iter)
+            trace.record_list_i32("fit.retcode", ar.retcode)
+            _ = d_x^
+            _ = d_grad^
+            _ = d_x_pert^
+            _ = scratch^
+            _ = ews^
+            return BatchedLBFGSResult(
+                x=ar.x.copy(), fx=ar.fx.copy(), n_iter=ar.n_iter.copy(),
+                retcode=ar.retcode.copy(), n_eval=ar.n_eval,
+            )
     var x = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
     var xp = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))
     var grad = ctx.enqueue_create_buffer[DType.float32](max(1, b_n))

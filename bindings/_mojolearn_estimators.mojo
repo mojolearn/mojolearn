@@ -14,6 +14,9 @@ from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from bindings.py2mojo_cluster_est import dbscan_core_arrays_binding, estimators_py2mojo_cluster_binding
+from core.py2mojo_rows import py2mojo_rows_device_binding
+from core.py2mojo_linear import py2mojo_linear_flags
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -34,6 +37,20 @@ comptime OLS_FAST_NORMAL_EQ = (
     GLOBAL_NUMERIC_MODE == _OLS_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF"]()
+)
+
+#: Lane apple-fast-ridgespeed (2026-10-03): Ridge.fit with X and y uploaded
+#: once (`ridge_fit_resident`) instead of the four host trips of the Python
+#: centering route. FAST on Apple only; same kernels and words. Read by
+#: Python through `ridge_resident_default`. Default since the M3 A/B
+#: (lane/apple-fast-ridgespeed e3ef68416, n=1, r2 identical .909 / .3287:
+#: taxi 57.1 -> 24.5 ms, istella 1,405 -> 724 ms). Off with
+#: -D MOJOLEARN_RIDGE_RESIDENT_OFF (which also turns RIDGE_NO_U off); the
+#: old -D MOJOLEARN_RIDGE_RESIDENT define is now harmless.
+comptime RIDGE_FAST_RESIDENT = (
+    GLOBAL_NUMERIC_MODE == _OLS_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"]()
 )
 
 from max.gpu.host import DeviceContext
@@ -72,6 +89,7 @@ from glm.estimator import (
     qn_fit_host,
     qn_predict_binary_host,
     ridge_fit_host,
+    ridge_fit_resident_host,
 )
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from checks.soft_f64 import (
@@ -670,6 +688,46 @@ def ridge_fit_binding(
     return PythonObject(0)
 
 
+def ridge_resident_default_binding() raises -> PythonObject:
+    """True when this build routes Ridge.fit through `ridge_fit_resident`
+    (`RIDGE_FAST_RESIDENT`, lane apple-fast-ridgespeed)."""
+    return PythonObject(RIDGE_FAST_RESIDENT)
+
+
+def ridge_fit_resident_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    mu_addr: PythonObject,
+    ymean_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Lane apple-fast-ridgespeed: Ridge's fit with X and y uploaded once
+    (glm/estimator.mojo `ridge_fit_resident_host`). params: n_rows,
+    n_features, alpha, center (0/1). With center, mu (float32 [n_features])
+    and ymean (float64 [1]) are written. Returns 0."""
+    comptime if not RIDGE_FAST_RESIDENT:
+        raise Error("ridge_fit_resident: only the FAST Apple build without -D MOJOLEARN_RIDGE_RESIDENT_OFF has this route")
+    if len(params) != 4:
+        raise Error("ridge_fit_resident: params must contain n_rows, n_features, alpha, center")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var wp = _f32_ptr(Int(py=coef_addr))
+    var mp = _f32_ptr(Int(py=mu_addr))
+    var ymp = _f64_ptr(Int(py=ymean_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var alpha = Float32(Float64(py=params[2]))
+    var center = Int(py=params[3]) != 0
+    if nr <= 0 or nf <= 0:
+        raise Error("ridge_fit_resident: n_rows and n_features must be positive")
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        ridge_fit_resident_host(ctx, xp, yp, wp, mp, ymp, nr, nf, alpha, center)
+        ctx.synchronize()
+    return PythonObject(0)
+
+
 def ridge_fit_multi_binding(
     x_addr: PythonObject,
     y_addr: PythonObject,
@@ -1120,6 +1178,18 @@ def estimators_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+
+def py2mojo_rows_binding(mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject,
+                         params: PythonObject) raises -> PythonObject:
+    """lane/apple-fast-py2mojo-linear: per-row probability glue on the
+    device (`core/py2mojo_rows.mojo`)."""
+    return py2mojo_rows_device_binding(process_ctx[_DEVCTX_SLOT](), mode, src_addr, dst_addr, params)
+
+
+def py2mojo_linear_flags_binding() raises -> PythonObject:
+    return PythonObject(py2mojo_linear_flags())
+
+
 @export
 def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
     try:
@@ -1131,8 +1201,12 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[glm_parallel_available_binding]("glm_parallel_available")
         m.def_function[estimators_vendor_binding]("estimators_vendor")
         m.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
+        m.def_function[py2mojo_rows_binding]("py2mojo_rows")
+        m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         m.def_function[dbscan_fit_binding]("dbscan_fit")
         m.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
+        m.def_function[dbscan_core_arrays_binding]("dbscan_core_arrays")
+        m.def_function[estimators_py2mojo_cluster_binding]("estimators_py2mojo_cluster")
         m.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         m.def_function[kde_score_samples_binding]("kde_score_samples")
         m.def_function[kde_fit_prepare_binding]("kde_fit_prepare")
@@ -1155,6 +1229,8 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[ridge_fit_binding]("ridge_fit")
+        m.def_function[ridge_fit_resident_binding]("ridge_fit_resident")
+        m.def_function[ridge_resident_default_binding]("ridge_resident_default")
         comptime if MULTIOUT_RIDGE:
             m.def_function[ridge_fit_multi_binding]("ridge_fit_multi")
             m.def_function[ridge_predict_multi_binding]("ridge_predict_multi")

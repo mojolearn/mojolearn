@@ -24,7 +24,7 @@ from ._buffer import (
 )
 from ._labels import (
     argmax_rows, classes_from_member, classes_member, decode_labels,
-    encode_labels, flatten_labels, sorted_classes,
+    encode_labels, flatten_labels, sorted_classes, threshold_codes,
 )
 from ._mode import NumericModeMixin
 
@@ -447,8 +447,19 @@ def _ols_normal_eq_default(b):
     equilibrated normal equations instead of the TSQR (lane
     apple-fast-olsne: FAST on Apple, the comptime OLS_FAST_NORMAL_EQ read
     back through `ols_normal_eq_default`; False on a binding without it)."""
-    q = getattr(b, "ols_normal_eq_default", None)
+    q = _optional_export(b, "ols_normal_eq_default")
     return bool(q()) if q is not None else False
+
+
+def _optional_export(b, name):
+    """`name` from binding `b`, or None when it does not export it. A host
+    binding's stand-in raises ImportError (by name) for a missing export
+    rather than AttributeError, so a plain getattr default never applies on a
+    CPU-only install, and LinearRegression.fit raised there."""
+    try:
+        return getattr(b, name, None)
+    except ImportError:
+        return None
 
 
 def _ols_tsqr(x, y, rows, cols, mode):
@@ -595,7 +606,7 @@ class LinearRegression(NumericModeMixin):
         b = self._bind("_mojolearn_estimators")
         fast_ne = _ols_normal_eq_default(b)
         normal_eq = not _ols_tsqr_on(rows, cols) or fast_ne
-        resident = getattr(b, "ols_fit_resident", None)
+        resident = _optional_export(b, "ols_fit_resident")
         if fast_ne and weights is None and resident is not None:
             # lane apple-fast-olsne: FAST Apple builds only (the binding's
             # compiled OLS_FAST_NORMAL_EQ): the normal equations with X and y
@@ -798,10 +809,31 @@ class Ridge(NumericModeMixin):
             "mojolearn Ridge currently requires one target",
             "mojolearn Ridge X and y lengths differ",
         )
-        if self.fit_intercept:
+        b = self._bind("_mojolearn_estimators")
+        q = getattr(b, "ridge_resident_default", None)
+        resident = getattr(b, "ridge_fit_resident", None)
+        use_resident = q is not None and resident is not None and bool(q())
+        if use_resident:
+            # lane apple-fast-ridgespeed: FAST Apple builds (default unless
+            # -D MOJOLEARN_RIDGE_RESIDENT_OFF): X and y uploaded once, the same
+            # column sums, center and ridgeEig on the resident buffers (the
+            # same words as the route below).
+            self.coef_ = empty((cols,), "<f4")
+            mu = empty((cols,), "<f4")
+            ymean = empty((1,), "<f8")
+            resident(addr_ro(x, name="X"), addr_ro(target, name="y"),
+                     addr(self.coef_, name="coef_"), addr(mu, name="column means"),
+                     addr(ymean, name="y mean"),
+                     [rows, cols, float(self.alpha), 1 if self.fit_intercept else 0])
+            if self.fit_intercept:
+                self._x_mean = mu
+                self._y_mean = float(ymean.tolist()[0])
+            else:
+                self._x_mean = zeros((cols,), "<f4")
+                self._y_mean = 0.0
+        elif self.fit_intercept:
             # The same centering as LinearRegression, for the same
             # reasons; read that class's fit.
-            b = self._bind("_mojolearn_estimators")
             mu32 = _column_means(b, x, None)
             self._x_mean = Array.from_list(mu32, "<f4")
             self._y_mean = _vector_mean(b, target, None)
@@ -811,12 +843,13 @@ class Ridge(NumericModeMixin):
             work_x, work_y = x, target
             self._x_mean = zeros((cols,), "<f4")
             self._y_mean = 0.0
-        self.coef_ = empty((cols,), "<f4")
-        self._bind("_mojolearn_estimators").ridge_fit(
-            addr_ro(work_x, name="X"), addr_ro(work_y, name="y"),
-            addr(self.coef_, name="coef_"),
-            [rows, cols, float(self.alpha)],
-        )
+        if not use_resident:
+            self.coef_ = empty((cols,), "<f4")
+            b.ridge_fit(
+                addr_ro(work_x, name="X"), addr_ro(work_y, name="y"),
+                addr(self.coef_, name="coef_"),
+                [rows, cols, float(self.alpha)],
+            )
         if self.fit_intercept:
             dot = math.fsum(
                 float(a) * float(b)
@@ -904,6 +937,17 @@ def _coef_from_w(w, cols, n_targets, fit_intercept):
     intercept = (Array.from_list([values[c + n_targets * cols] for c in range(n_targets)], "<f4")
                  if fit_intercept else zeros((n_targets,), "<f4"))
     return coef, intercept
+
+
+#: lane/apple-fast-py2mojo-linear: `py2mojo_rows` modes (core/py2mojo_rows.mojo)
+#: and the `py2mojo_linear_flags` bit that routes them
+_ROWS_LOG, _ROWS_SGD_PROBA, _ROWS_LRCV_PROBA = 1, 2, 3
+_PY2MOJO_ROWS = 2
+
+
+def _py2mojo_flags(binding):
+    fn = getattr(binding, "py2mojo_linear_flags", None)
+    return int(fn()) if fn is not None else 0
 
 
 def _log_or_inf(p):
@@ -1189,16 +1233,16 @@ class LogisticRegression(NumericModeMixin):
             codes = empty((x.shape[0],), "<i8")
             binding = self._bind("_mojolearn_estimators")
             native = getattr(binding, "qn_predict_binary", None)
-            if native is not None:
-                native(
-                    addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
-                    addr(codes, name="codes"),
-                    [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
-                )
-                return decode_labels(self.classes_, codes)
-            scores = self.decision_function(x)
-            return decode_labels(self.classes_,
-                                 [1 if s > 0.0 else 0 for s in scores.tolist()])
+            if native is None:
+                raise RuntimeError(
+                    "mojolearn LogisticRegression: the estimators binding has no "
+                    "qn_predict_binary; rebuild it")
+            native(
+                addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
+                addr(codes, name="codes"),
+                [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
+            )
+            return decode_labels(self.classes_, codes)
         scores = self.decision_function(X)
         return decode_labels(self.classes_, argmax_rows(scores))
 
@@ -1230,9 +1274,19 @@ class LogisticRegression(NumericModeMixin):
         (`qn_sigmoid` could return the log form directly). Routed there
         later; recorded here so it is not mistaken for a design.
         """
+        proba = self.predict_proba(X)
+        binding = self._bind("_mojolearn_estimators")
+        if _py2mojo_flags(binding) & _PY2MOJO_ROWS:
+            # lane/apple-fast-py2mojo-linear: `_log_or_inf` of every cell in
+            # the binding (core/py2mojo_rows.mojo ROWS_LOG, the same log)
+            out = empty(proba.shape, "<f8")
+            if proba.size:
+                binding.py2mojo_rows(_ROWS_LOG, addr_ro(proba, name="proba"),
+                                     addr(out, name="log proba"), [proba.size, 1])
+            return out
         return Array.from_list(
             [[_log_or_inf(p) for p in row]
-             for row in self.predict_proba(X).tolist()],
+             for row in proba.tolist()],
             "<f8",
         )
 

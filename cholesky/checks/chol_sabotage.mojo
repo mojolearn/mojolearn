@@ -78,6 +78,7 @@ from std.math import sqrt
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from cholesky.logdet_fold import logdet_serial
 
 from checks.numerics import (
     ftz,
@@ -415,7 +416,5 @@ def sabotage_logdet_kernel(
         out_scalar.unsafe_store(0, ftz(identical_mul(Float32(2.0), acc_p)))
         return
 
-    var acc = Float32(0.0)
-    for j in range(n):
-        acc = ftz(acc + ftz(identical_log(ftz(diag.unsafe_load(j)))))
-    out_scalar.unsafe_store(0, ftz(identical_mul(Float32(2.0), acc)))
+    # every other arm: the real order (cholesky/logdet_fold.mojo)
+    out_scalar.unsafe_store(0, logdet_serial(diag, n))

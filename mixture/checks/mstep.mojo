@@ -122,7 +122,8 @@ from std.math import log, sqrt
 from std.sys.compile import is_defined
 from std.os import getenv
 from std.time import perf_counter_ns
-from std.sys.info import has_apple_gpu_accelerator
+from std.sys.info import has_apple_gpu_accelerator, is_apple_gpu
+from std.sys import llvm_intrinsic
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -858,6 +859,138 @@ def fused_precision_cholesky_kernel(
         log_det_chol.unsafe_store(k, -sl)
 
 
+# ===========================================================================
+# lane/apple-fast-linear (2026-10-02): THE ISTELLA SHAPE (d = 200, K = 8)
+# ===========================================================================
+#
+# One build define, FAST + Apple only (BIG_CHOL, default on). Both arms above
+# (`fused_cov_partial_kernel`, `fused_precision_cholesky_kernel`) stop at
+# d = 32 (taxi, d = 16, takes them); Istella's 100,000 x 200 falls to:
+#
+#   -D MOJOLEARN_GMM_FAST_BIG_CHOL=1   the precision Cholesky. Cause:
+#       `gmm_precision_cholesky`'s per-component chain at d > 32: a copy,
+#       `potrf_lower` at CHOL_NB_PINNED = 32 (seven panels, each reading
+#       `info` home), `chol_logdet` (a readback), `set_identity`, `trsm_lower`
+#       (d right-hand sides), a transpose -- some ten drains a component,
+#       eighty an iteration, each one serialising the queue. Here every
+#       component is one block of `gmm_big_chol_kernel`, the fused kernel's
+#       algorithm with the matrix in device memory (its own `chol_l` slot)
+#       behind a device-memory barrier, and ONE readback of the pivot flags.
+#       d <= GMM_CHOL_TPB (a thread per column of L^{-1}).
+
+
+@always_inline
+def _gmm_dev_barrier():
+    """A block barrier that also orders DEVICE memory (Apple's `barrier()`
+    orders threadgroup memory only; x_linear/team.mojo `team_barrier`)."""
+    comptime if is_apple_gpu():
+        llvm_intrinsic["llvm.air.wg.barrier", NoneType](Int32(3), Int32(1))
+    else:
+        barrier()
+
+
+# GMM_FAST_BIG_CHOL: default on (FAST + Apple) since the M3 A/B (istella
+# n=1: GMM 6,560 -> 5,894 ms, bic same). `-D MOJOLEARN_GMM_FAST_BIG_CHOL_OFF`
+# keeps the per-component chain; the old `-D MOJOLEARN_GMM_FAST_BIG_CHOL`
+# name is harmless. The opt-in GMM_FAST_GRID_COV covariance arm was
+# DROPPED-slower (lane/apple-fast-linear @ 1c7c213f8).
+comptime GMM_FAST_BIG_CHOL = GMM_FUSED_CHOL and not is_defined["MOJOLEARN_GMM_FAST_BIG_CHOL_OFF"]()
+
+
+def gmm_big_chol_kernel(
+    cov: MutPointer[Float32, MutAnyOrigin],
+    chol_l: MutPointer[Float32, MutAnyOrigin],
+    linv: MutPointer[Float32, MutAnyOrigin],
+    prec: MutPointer[Float32, MutAnyOrigin],
+    log_det_chol: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    d_in: Int32,
+):
+    """MOJOLEARN_GMM_FAST_BIG_CHOL, block k = component k:
+    `fused_precision_cholesky_kernel`'s algorithm with the working matrix in
+    chol_l[k] (device memory) and the inverse built in linv[k], for d up to
+    GMM_CHOL_TPB: `L L^T = cov_k` right-looking (`info = j + 1` at the first
+    pivot that is not positive), `linv = L^{-1}` one column a thread,
+    `prec = linv^T`, `log_det_chol = -sum log L_jj`."""
+    var d = Int(d_in)
+    var dd = d * d
+    var k = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var base = k * dd
+    var flag = stack_allocation[
+        1, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var e = t
+    while e < dd:
+        var v = cov[base + e]
+        if e // d == e % d:
+            v = ftz(v + GMM_CHOL_JITTER)
+        chol_l[base + e] = v
+        e += GMM_CHOL_TPB
+    if t == 0:
+        flag[0] = 0
+    _gmm_dev_barrier()
+    for j in range(d):
+        if t == 0:
+            var pv = chol_l[base + j * d + j]
+            if pv > Float32(0):
+                chol_l[base + j * d + j] = sqrt(pv)
+            else:
+                flag[0] = Int32(j + 1)
+        _gmm_dev_barrier()
+        if flag[0] != 0:
+            break
+        var pj = chol_l[base + j * d + j]
+        var i = j + 1 + t
+        while i < d:
+            chol_l[base + i * d + j] = chol_l[base + i * d + j] / pj
+            i += GMM_CHOL_TPB
+        _gmm_dev_barrier()
+        var m = d - 1 - j
+        var cell = t
+        while cell < m * m:
+            var r = j + 1 + cell // m
+            var c = j + 1 + cell % m
+            if c <= r:
+                chol_l[base + r * d + c] = (
+                    chol_l[base + r * d + c] - chol_l[base + r * d + j] * chol_l[base + c * d + j]
+                )
+            cell += GMM_CHOL_TPB
+        _gmm_dev_barrier()
+    var bad = flag[0]
+    if t == 0:
+        info[k] = bad
+    if bad != 0:
+        return
+    if t < d:
+        # column t of L^{-1} by forward substitution; this thread alone
+        # writes and reads its column
+        var c = t
+        for i in range(d):
+            var v = Float32(0.0)
+            if i == c:
+                v = Float32(1.0) / chol_l[base + i * d + i]
+            elif i > c:
+                for m2 in range(c, i):
+                    v -= chol_l[base + i * d + m2] * linv[base + m2 * d + c]
+                v = v / chol_l[base + i * d + i]
+            linv[base + i * d + c] = v
+    _gmm_dev_barrier()
+    e = t
+    while e < dd:
+        var r = e // d
+        var c = e - r * d
+        if c > r:
+            chol_l[base + e] = Float32(0)
+        prec[base + c * d + r] = linv[base + e]
+        e += GMM_CHOL_TPB
+    if t == 0:
+        var sl = Float32(0)
+        for j in range(d):
+            sl += log(chol_l[base + j * d + j])
+        log_det_chol[k] = -sl
+
+
 def center_sqrt_scale_kernel(
     x: MutPointer[Float32, MutAnyOrigin],
     means: MutPointer[Float32, MutAnyOrigin],
@@ -1123,6 +1256,38 @@ def gmm_precision_cholesky(
             var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)
             var h_info = ctx.enqueue_create_host_buffer[DType.int32](ncomp)
             ctx.enqueue_function[fused_precision_cholesky_kernel](
+                cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
+                prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
+                d_info.unsafe_ptr(), Int32(d),
+                grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=d_info)
+            ctx.synchronize()
+            var fail_k = -1
+            var fail_info = 0
+            for kc in range(ncomp):
+                var inf_k = Int(h_info.unsafe_ptr().unsafe_load(kc))
+                if inf_k != 0 and fail_k < 0:
+                    fail_k = kc
+                    fail_info = inf_k
+            _ = d_info^
+            _ = h_info^
+            _ = identity^
+            _ = scal^
+            _ = work^
+            return GmmMStepRun(fail_info, fail_k)
+    comptime if GMM_FAST_BIG_CHOL:
+        # lane/apple-fast-linear: -D MOJOLEARN_GMM_FAST_BIG_CHOL, d > 32 (see
+        # gmm_big_chol_kernel's banner); one launch, one readback of info
+        if (
+            sabotage == GMM_SAB_NONE
+            and not trace.enabled
+            and d > GMM_CHOL_MAX_D
+            and d <= GMM_CHOL_TPB
+        ):
+            var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)
+            var h_info = ctx.enqueue_create_host_buffer[DType.int32](ncomp)
+            ctx.enqueue_function[gmm_big_chol_kernel](
                 cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
                 prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
                 d_info.unsafe_ptr(), Int32(d),

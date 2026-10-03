@@ -23,7 +23,6 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_CAGRA_TEAM
-from x_ann.fast_env import FAST_CAGRA_TEAM
 
 comptime TPB = 64
 
@@ -52,9 +51,7 @@ def cg_search_kernel(
 comptime CG_T = 32
 comptime CG_LMAX = 128
 comptime CG_CMAX = 128
-#: the team search compiles under FAST on Apple; it runs when the ann-apple3
-#: define or the env switch below asks (lane/apple-fast-ann)
-comptime CAGRA_TEAM = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime CAGRA_TEAM = ANN3_CAGRA_TEAM and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 
 
 def cg_search_team_kernel(
@@ -597,18 +594,10 @@ def cagra_search_on(
     var vis = ctx.enqueue_create_buffer[DType.int32](m * words)
     var od = ctx.enqueue_create_buffer[DType.float32](m * k)
     var oi = ctx.enqueue_create_buffer[DType.int32](m * k)
-    # lane ann-apple3, FAST on Apple, OPT-IN: a threadgroup per query.
-    # lane/apple-fast-ann (2026-10-02): `-D MOJOLEARN_CAGRA_FAST_TEAM=1`
-    # (a build define, x_ann/fast_env.mojo `FAST_CAGRA_TEAM`; no env read on
-    # the search path) selects the same kernel. Cause:
-    # the default `cg_search_kernel` is one thread per query, 4,000 queries
-    # = 63 threadgroups of 64 threads on an 80-core GPU, each thread forming
-    # every candidate distance (220 features on Istella) alone; the team
-    # kernel forms a parent's 32 distances side by side. Expected to move no
-    # bit (its docstring); the A/B is the measurement.
+    # lane ann-apple3, FAST on Apple, OPT-IN: a threadgroup per query
     var team = False
     comptime if CAGRA_TEAM:
-        if (ANN3_CAGRA_TEAM or FAST_CAGRA_TEAM) and L <= CG_LMAX and deg <= CG_CMAX:
+        if L <= CG_LMAX and deg <= CG_CMAX:
             team = True
             ctx.enqueue_function[cg_search_team_kernel](
                 dq.unsafe_ptr(), dx, Int32(n), Int32(d), dg, Int32(deg), Int32(k), Int32(L), Int32(width),

@@ -218,7 +218,7 @@ def dot(
     mut scalar: DeviceBuffer[DType.float32],
 ) raises -> Float32:
     """`dot(u, v, tmp_dev, stream)`, `dense.hpp:288`."""
-    ctx.enqueue_function[dot_kernel](
+    ctx.enqueue_function[dot_kernel](  # small-launch(n: parameter count n_param, the coefficient vector): an L-BFGS vector phase over d-sized data, never rows
         scalar.unsafe_ptr(), u.unsafe_ptr(), v.unsafe_ptr(), Int32(n),
         grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
     )
@@ -232,7 +232,7 @@ def squared_norm(
     mut scalar: DeviceBuffer[DType.float32],
 ) raises -> Float32:
     """`squaredNorm(u) = dot(u, u)`, `dense.hpp:300`."""
-    ctx.enqueue_function[dot_self_kernel](
+    ctx.enqueue_function[dot_self_kernel](  # small-launch(n: parameter count n_param, the coefficient vector): an L-BFGS vector phase over d-sized data, never rows
         scalar.unsafe_ptr(), u.unsafe_ptr(), Int32(n),
         grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
     )
@@ -246,7 +246,7 @@ def nrm_max(
     mut scalar: DeviceBuffer[DType.float32],
 ) raises -> Float32:
     """`nrmMax(u)`, `dense.hpp:306`."""
-    ctx.enqueue_function[nrm_max_kernel](
+    ctx.enqueue_function[nrm_max_kernel](  # small-launch(n: parameter count n_param, the coefficient vector): an L-BFGS vector phase over d-sized data, never rows
         scalar.unsafe_ptr(), u.unsafe_ptr(), Int32(n),
         grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
     )

@@ -120,6 +120,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.sync import barrier
 from std.memory import bitcast
 from core.identity_trace import IdentityTrace
+from core.device_fold import device_sum_i32
 from neighbors.impl.multi_gpu import knn_device_count, parallel_knn_rows
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -2250,12 +2251,8 @@ def rbc_knn_search(
     ctx.enqueue_copy(dst_ptr=out_dist_ptr, src_buf=out_dists)
     ctx.synchronize()
 
-    var hc = ctx.enqueue_create_host_buffer[DType.int32](n_queries)
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=dist_count)
-    ctx.synchronize()
-    var total = 0
-    for i in range(n_queries):
-        total += Int(hc.unsafe_ptr().unsafe_load(i))
+    # lane cgr4-download-loop: the distance count folds on the device (exact)
+    var total = Int(device_sum_i32(ctx, dist_count, n_queries))
 
     _ = x^
     _ = queries^
@@ -2274,7 +2271,6 @@ def rbc_knn_search(
     _ = out_inds^
     _ = out_dists^
     _ = dist_count^
-    _ = hc^
     return total
 
 

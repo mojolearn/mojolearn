@@ -14,7 +14,10 @@ from x_decomp.exec_trait import Exec
 from x_decomp.kit import mat_from
 from x_decomp.mcd import fast_mcd
 from x_decomp.lda_online import lda_online_pass
-from x_decomp.moves import argsort_f32, gather, iso_order, scatter, triu_nonzero
+from x_decomp.moves import (
+    F64Ptr, PY2MOJO_DECOMP, accuracy, argmin_all, argsort_f32, dsum_sq, gather, iso_order, move_host, order_f, pca_mle_pa,
+    pca_mle_terms, scatter, select_smallest, sign_labels, topn_desc, triu_nonzero,
+)
 from x_decomp.tsqr_core import TS_MAX_N
 
 
@@ -722,6 +725,130 @@ def iso_order_py(
     var po = _i(order)
     iso_order(px, py_, pxo, n, po)
     return PythonObject(n)
+
+
+# ---- lane apple-fast-py2mojo-decomp (2026-10-03): host buffers, both bindings
+def py2mojo_py() raises -> PythonObject:
+    """1: the Mojo data path; 0: built with -D MOJOLEARN_PY2MOJO_decomp_OFF (the A/B arm)."""
+    return PythonObject(1 if PY2MOJO_DECOMP else 0)
+
+
+def _d(addr: PythonObject) raises -> F64Ptr:
+    var a = Int(py=addr)
+    if a == 0:
+        raise Error("x_decomp: null float64 buffer address")
+    return F64Ptr(unsafe_from_address=a)
+
+
+def move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """x_decomp/moves.mojo `move` on host buffers; p = [op, count, a1, a2, a3,
+    ist, ioff, nsrc, ndst, nidx], every index checked."""
+    var op = Int(py=p[0])
+    var count = _n(p, 1)
+    var nsrc = _n(p, 7)
+    var ndst = _n(p, 8)
+    var ps = _f(src)
+    var pi = _f(idx)
+    var pd = _f(dst)
+    var a1 = _n(p, 2)
+    var a2 = _n(p, 3)
+    var a3 = _n(p, 4)
+    var ist = _n(p, 5)
+    var ioff = _n(p, 6)
+    var nidx = _n(p, 9)
+    if op == 0 and count > 0 and (count - 1) // max(a1, 1) * ist + ioff >= nidx:
+        raise Error("x_decomp: take_rows reads past its index list")
+    with GILReleased(Python()):
+        move_host(op, ps, pi, pd, count, a1, a2, a3, ist, ioff, nsrc, ndst)
+    return PythonObject(count)
+
+
+def dsum_sq_py(x: PythonObject, m: PythonObject) raises -> PythonObject:
+    """The in-order float64 sum of the squares of m float32 values."""
+    var n = Int(py=m)
+    if n <= 0:
+        return PythonObject(Float64(0))
+    var px = _f(x)
+    var t = Float64(0)
+    with GILReleased(Python()):
+        t = dsum_sq(px, n)
+    return PythonObject(t)
+
+
+def order_f_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
+    """The stable order of x (m float32 values) as exact floats; NaN refused."""
+    var n = Int(py=m)
+    if n > 0:
+        order_f(_f(x), n, _f(dst))
+    return PythonObject(n)
+
+
+def select_smallest_py(x: PythonObject, p: PythonObject, sel: PythonObject, mask: PythonObject) raises -> PythonObject:
+    """p = [m, h]: the h smallest of x by (value, index), ascending by index,
+    as exact floats, and the int32 membership of every row."""
+    var m = _n(p, 0)
+    var h = _n(p, 1)
+    if m > 0:
+        select_smallest(_f(x), m, h, _f(sel), _i(mask))
+    return PythonObject(h)
+
+
+def argmin_all_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
+    """The positions (exact floats) of every value equal to the minimum; their count."""
+    var n = Int(py=m)
+    if n <= 0:
+        return PythonObject(0)
+    return PythonObject(argmin_all(_f(x), n, _f(dst)))
+
+
+def sign_labels_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
+    """int32 1 where x >= 0, else -1."""
+    var n = Int(py=m)
+    if n > 0:
+        sign_labels(_f(x), n, _i(dst))
+    return PythonObject(n)
+
+
+def accuracy_py(y: PythonObject, pred: PythonObject, w: PythonObject, m: PythonObject) raises -> PythonObject:
+    """(matches, total): float64 labels against int32 predictions; w = 0
+    for unweighted, else a float64 weight address (sums in order)."""
+    var n = Int(py=m)
+    var weighted = Int(py=w) != 0
+    if n <= 0:
+        return Python.tuple(Float64(0), Float64(0))
+    var pw = _d(w) if weighted else _d(y)
+    var r = accuracy(_d(y), _i(pred), pw, weighted, n)
+    return Python.tuple(r[0], r[1])
+
+
+def pca_mle_rank_terms_py(sp: PythonObject, p: PythonObject, v: PythonObject, dst: PythonObject) raises -> PythonObject:
+    """p = [d, rank]: the float32 cross terms of Minka's rank `rank`; their count."""
+    var d = _n(p, 0)
+    var rank = _n(p, 1)
+    if rank < 1 or rank >= d:
+        raise Error("x_decomp: pca_mle rank out of range")
+    return PythonObject(pca_mle_terms(_d(sp), d, rank, Float64(py=v), _f(dst)))
+
+
+def pca_mle_pa_py(lt: PythonObject, m: PythonObject, logn: PythonObject) raises -> PythonObject:
+    """sum over t of (t + logn) in order, float64."""
+    var n = Int(py=m)
+    if n <= 0:
+        return PythonObject(Float64(0))
+    return PythonObject(pca_mle_pa(_f(lt), n, Float64(py=logn)))
+
+
+def topn_desc_py(x: PythonObject, p: PythonObject, skip: PythonObject, dst: PythonObject) raises -> PythonObject:
+    """p = [m, n]: the n best positions by (-x, index), skipping the nonzero
+    entries of the float32 row at `skip` (0: none); their count."""
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    if m == 0 or n == 0:
+        return PythonObject(0)
+    var has = Int(py=skip) != 0
+    var px = _f(x)
+    var ps = _f(skip) if has else px
+    return PythonObject(topn_desc(px, m, ps, has, n, _i(dst)))
 
 
 def numeric_mode_py() raises -> PythonObject:

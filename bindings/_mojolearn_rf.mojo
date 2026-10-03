@@ -219,13 +219,12 @@ def _check_criterion(
 #: default width (4096) is widened, only for trees without a leaf budget
 #: (max_leaves -1) that may grow past 12 levels, and only as far as `RF_FAST_BATCH_BYTES` of histogram
 #: workspace per stream allows. OPT-IN until its A/B passes: `-D
-#: MOJOLEARN_RF_FAST_BATCH16K` or `-D MOJOLEARN_RF_FAST_BATCH32K`.
+#: MOJOLEARN_RF_FAST_BATCH32K` (the 16K arm was DROPPED-noise,
+#: lane/apple-fast-trees2 @ bfd1d7cc6).
 comptime RF_FAST_BATCH = 0 if not (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 ) else (
-    32768 if is_defined["MOJOLEARN_RF_FAST_BATCH32K"]() else (
-        16384 if is_defined["MOJOLEARN_RF_FAST_BATCH16K"]() else 0
-    )
+    32768 if is_defined["MOJOLEARN_RF_FAST_BATCH32K"]() else 0
 )
 comptime RF_FAST_BATCH_BYTES = 536870912
 comptime RF_CUML_DEFAULT_BATCH = 4096

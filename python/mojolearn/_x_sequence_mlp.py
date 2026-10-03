@@ -96,8 +96,13 @@ class _BaseMLP:
         for fi, fo in zip(sizes[:-1], sizes[1:]):
             factor = 2.0 if self.activation == "logistic" else 6.0
             bound = np.sqrt(factor / (fi + fo))
-            coefs.append(rng.uniform(-bound, bound, (fi, fo)).astype(np.float32))
-            intercepts.append(rng.uniform(-bound, bound, fo).astype(np.float32))
+            # drawn in Mojo from the seeded stream (`_buffer.InitStream`)
+            w = np.empty((fi, fo), dtype=np.float32)
+            rng.fill_uniform(w.ctypes.data, w.size, -float(bound), float(bound))
+            b = np.empty(fo, dtype=np.float32)
+            rng.fill_uniform(b.ctypes.data, b.size, -float(bound), float(bound))
+            coefs.append(w)
+            intercepts.append(b)
         return coefs, intercepts
 
     def _pack(self):
@@ -119,9 +124,10 @@ class _BaseMLP:
         O = Y.shape[1]
         hidden = self._hidden()
         sizes = [D] + hidden + [O]
-        rng = np.random.RandomState(self.random_state)
+        from ._buffer import InitStream
+        rng = InitStream(None if self.random_state is None else int(self.random_state))
         self.coefs_, self.intercepts_ = self._init(sizes, rng)
-        seed = int(rng.randint(0, 2**31 - 1))
+        seed = rng.child_seed() % (2 ** 31 - 1)
         bs = min(200, N) if self.batch_size == "auto" else int(np.clip(self.batch_size, 1, N))
         self.n_outputs_ = O
         self.n_layers_ = len(sizes)

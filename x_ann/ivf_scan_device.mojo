@@ -33,7 +33,6 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_SCAN_SELECT
-from x_ann.fast_env import FAST_IVF_SCAN_SELECT
 from x_ann.ivf_pq_core import (
     F32P, I32P, ivf_row_removed, pq_better, pq_coarse_dist, pq_inf, pq_insert, pq_lut_entry, pq_probe_takes,
 )
@@ -548,9 +547,9 @@ def select_merge_kernel(
 
 #: the widest k of the one-launch top-k (16 KB of threadgroup memory)
 comptime SEL_KM = 16
-#: the one-launch top-k compiles under FAST on Apple; it runs when the
-#: ann-apple3 define or the env switch asks (lane/apple-fast-ann)
-comptime SCAN_SELECT_GROUP = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime SCAN_SELECT_GROUP = (
+    ANN3_SCAN_SELECT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+)
 
 
 def select_group_kernel(
@@ -736,17 +735,9 @@ def ivf_scan_search[KIND: Int](
     # lane ann-apple3, FAST on Apple, OPT-IN: the top-k of a chunk in one
     # launch when k fits (`select_group_kernel`); the partial lists then live
     # in threadgroup memory and these device buffers are one word
-    # lane/apple-fast-ann (2026-10-02): `-D MOJOLEARN_IVF_FAST_SCAN_SELECT=1`
-    # (a build define, x_ann/fast_env.mojo `FAST_IVF_SCAN_SELECT`; no env
-    # read on the search path) selects the one-launch top-k.
-    # Cause: the default select is nine launches per chunk of
-    # queries (`select_part_kernel`, seven `select_pair_kernel` levels,
-    # `select_merge_kernel`), their partial lists in device memory, for
-    # every IVF-PQ / SQ / RaBitQ search. Same k least entries (a total
-    # order), so expected to move no bit.
     var grouped = False
     comptime if SCAN_SELECT_GROUP:
-        grouped = (ANN3_SCAN_SELECT or FAST_IVF_SCAN_SELECT) and k <= SEL_KM
+        grouped = k <= SEL_KM
     var no_parts = SERIAL or grouped
     var dpd = ctx.enqueue_create_buffer[DType.float32](1 if no_parts else mc * SEL_T * k)
     var dpi = ctx.enqueue_create_buffer[DType.int32](1 if no_parts else mc * SEL_T * k)

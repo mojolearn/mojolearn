@@ -107,7 +107,7 @@ comptime KBC = 32
 
 
 def knn_tiled_bigd_kernel(n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F32P, nn_i: I32P):
-    """FAST on Apple, `-D MOJOLEARN_ANN_FAST_KNN_BIGD=1` (lane/apple-fast-ann,
+    """FAST on Apple default (off: `-D MOJOLEARN_ANN_FAST_KNN_BIGD_OFF`; lane/apple-fast-ann,
     2026-10-02): the tiled k-NN for rows wider than 64 features. One thread
     per row i (KTB per threadgroup); the candidate rows arrive in tiles of
     KBJ rows, each tile staged KBC features at a time (a KBJ x KBC slab of
@@ -279,7 +279,7 @@ def knn_enqueue(
 ) raises:
     """Enqueue the k-NN graph of the n x d rows in dx (no sync)."""
     var blocks = (n + KTB - 1) // KTB
-    # lane/apple-fast-ann: the chunked arm for wide rows, by build define
+    # lane/apple-fast-ann: the chunked arm for wide rows, FAST+Apple default since the M3 A/B (CAGRA istella -88%)
     comptime if FAST_KNN_BIGD:
         if d > 64:
             ctx.enqueue_function[knn_tiled_bigd_kernel](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(nn),

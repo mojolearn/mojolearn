@@ -456,42 +456,51 @@ def _logits_ids(ids, shape):
     if batch <= 0 or not 0 < length <= shape.length:
         raise ValueError(f'ids must be [batch, 1..{shape.length}]')
     vocab = shape.vocab_size
-    # Native min/max admits the common case in one pass; the scan below runs
-    # only to name the first offending id.
+    # Native min/max admits the common case in one pass. On a refusal the
+    # first offending id is located natively too (pyglue-text-io, Oct 3): two
+    # `threshold_labels_i64` masks (id < 0, id >= vocab) and a native
+    # first-max argmax of each; Python reads only the one offending value.
     if tokens.size and tokens.min() >= 0 and tokens.max() < vocab:
         return tokens, copied
-    flat = flat_view(tokens, 'i')
-    for r in range(batch):
-        base = r * length
-        for c in range(length):
-            v = flat[base + c]
-            if not 0 <= v < vocab:
-                raise ValueError(f'ids must be byte values in [0, {vocab}); got {v} at row {r}, position {c}')
-    return tokens, copied
+    from ._labels import threshold_codes
+    flat = tokens.reshape((batch * length,))
+    first = batch * length
+    for mask in (threshold_codes(flat, -0.5, strict=True, below=1, above=0),
+                 threshold_codes(flat, vocab - 0.5, strict=True, below=0, above=1)):
+        if mask.max() == 1:
+            first = min(first, int(mask.argmax()))
+    r, c = divmod(first, length)
+    raise ValueError(f'ids must be byte values in [0, {vocab}); got {int(flat[first])} at row {r}, position {c}')
+
+
+def _last_position_rows(logits, batch, length, vocab):
+    """`(batch, vocab)` float32: each row's LAST position of float32 logits
+    `[batch, length, vocab]`, copied by the base binding's row gather
+    (`gather_rows_bytes`), so no Python loop touches the logits."""
+    if length == 1:
+        return logits.reshape((batch, vocab))
+    import array as _pyarray
+    rows = empty((batch, vocab), '<f4')
+    index = _pyarray.array('q', range(length - 1, batch * length, length))
+    _buffers._native('gather_rows_bytes')(addr_ro(logits, name='logits'), addr(rows, name='rows'),
+                                          index.buffer_info()[0], batch * length, batch, vocab * 4)
+    return rows
 
 
 def _greedy_next_bytes(logits):
     """The greedy next byte after each row of float32 logits
     `[batch, length, vocab]`, read at the last position; ties go to the
     lowest byte value (the base binding's `argmax_rows_f32`: strict `>` from
-    index 0, so ties keep the lowest byte and a NaN never replaces)."""
+    index 0, so ties keep the lowest byte and a NaN never replaces). The
+    last-position gather and the scan are both native (pyglue-text-io)."""
+    logits, _ = as_f32_c(logits, ndim=3, name='logits')
     batch, length, vocab = logits.shape
-    flat = flat_view(logits, 'f')
-    if batch and vocab and hasattr(logits, '_addr'):
-        from ._labels import argmax_rows
-        last = b''.join(bytes(flat[((b * length) + length - 1) * vocab:((b * length) + length) * vocab])
-                        for b in range(batch))
-        rows = frombytes(last, '<f4', (batch, vocab))
-        return [int(i) for i in flat_view(argmax_rows(rows), 'q')]
-    result = []
-    for b in range(batch):
-        base = ((b * length) + length - 1) * vocab
-        best = 0
-        for v in range(1, vocab):
-            if flat[base + v] > flat[base + best]:
-                best = v
-        result.append(best)
-    return result
+    if not batch:
+        return []
+    if not vocab:
+        return [0] * batch
+    from ._labels import argmax_rows
+    return argmax_rows(_last_position_rows(logits, batch, length, vocab)).tolist()
 
 
 def _gpu_logits_ids(ids, shape):

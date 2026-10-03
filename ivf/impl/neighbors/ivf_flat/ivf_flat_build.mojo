@@ -75,6 +75,7 @@ from cluster.impl.kmeans_params import (
 from core.identity_trace import IdentityTrace
 from core.row_norms import NORM_TPB, row_norm_kernel
 from ivf.checks.list_layout import ListLayout, build_list_layout, extend_list_layout
+from ivf.impl.neighbors.ivf_flat.ivf_group_device import ivf_list_layout_device
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     IvfFlatIndex,
     IvfFlatIndexParams,
@@ -90,15 +91,6 @@ from std.memory import memcpy
 from x_ann.stage_timer import AnnStages
 from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES, ANN3_TRAINSET_COPY
 from x_ann.kpp_seed import kpp_seed
-from x_ann.fast_env import FAST_IVF_DEVICE_CSR, FAST_IVF_DEVICE_TRAINSET
-from ivf.impl.neighbors.ivf_flat.fast_build_device import (
-    CSR_LISTS_MAX, fast_list_layout_device, fast_trainset_device, fast_trainset_scale,
-)
-
-#: lane/apple-fast-ann (2026-10-02): the device build passes compile under
-#: FAST on Apple, each arm by its build define (x_ann/fast_env.mojo)
-comptime IVF_FAST_DEVICE_TRAINSET = FAST_IVF_DEVICE_TRAINSET
-comptime IVF_FAST_CSR = FAST_IVF_DEVICE_CSR
 
 comptime IVF_FAST_TRAINSET = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -384,37 +376,23 @@ def ivf_flat_build(
     comptime if IVF_FAST_TRAINSET:
         if n_rows > IVF_FAST_ROWS_PER_LIST * n_lists:
             n_train = IVF_FAST_ROWS_PER_LIST * n_lists
-    # FAST on Apple, `-D MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1` (lane/apple-fast-
-    # ann, 2026-10-02; fast_build_device.mojo): the sample is gathered on the
-    # device from `dx` and its scale comes from device column sums, so no
-    # host sample list, no host column pass and no second upload. Cause:
-    # the loops below (57.7 M appends on Istella), `plan_quantizer_scale`
-    # over them and the upload of `xt` beside `x`. The scale can differ
-    # only at a power-of-two boundary (its docstring): FAST bits may move.
-    var dev_train = False
-    comptime if IVF_FAST_DEVICE_TRAINSET:
-        dev_train = n_train < n_rows and not trace.enabled
     var xt = List[Float32]()
-    var train_rows = List[Int]()
     if n_train < n_rows:
-        train_rows = ivf_trainset_rows(n_rows, n_train, UInt64(params.seed))
-        if not dev_train:
-            comptime if ANN3_TRAINSET_COPY:
-                # lane ann-apple3, OPT-IN: one memcpy per sampled row
-                xt = List[Float32](length=n_train * dim, fill=Float32(0.0))
-                for r in range(n_train):
-                    memcpy(dest=xt.unsafe_ptr() + r * dim, src=x.unsafe_ptr() + train_rows[r] * dim, count=dim)
-            else:
-                xt = List[Float32](capacity=n_train * dim)
-                for r in range(n_train):
-                    var b = train_rows[r] * dim
-                    for c in range(dim):
-                        xt.append(x[b + c])
+        var rows = ivf_trainset_rows(n_rows, n_train, UInt64(params.seed))
+        comptime if ANN3_TRAINSET_COPY:
+            # lane ann-apple3, OPT-IN: one memcpy per sampled row
+            xt = List[Float32](length=n_train * dim, fill=Float32(0.0))
+            for r in range(n_train):
+                memcpy(dest=xt.unsafe_ptr() + r * dim, src=x.unsafe_ptr() + rows[r] * dim, count=dim)
+        else:
+            xt = List[Float32](capacity=n_train * dim)
+            for r in range(n_train):
+                var b = rows[r] * dim
+                for c in range(dim):
+                    xt.append(x[b + c])
 
-    var sum_scale: Float64 = 1.0
-    if dev_train:
-        pass
-    elif n_train < n_rows:
+    var sum_scale: Float64
+    if n_train < n_rows:
         sum_scale = plan_quantizer_scale(xt, n_train, dim)
     else:
         sum_scale = plan_quantizer_scale(x, n_rows, dim)
@@ -425,14 +403,9 @@ def ivf_flat_build(
     st.host("trainset_scale")
 
     var dx = upload_f32(ctx, x)
-    if n_train == n_rows or dev_train:
+    if n_train == n_rows:
         xt.append(Float32(0.0))
     var dxt = upload_f32(ctx, xt)
-    comptime if IVF_FAST_DEVICE_TRAINSET:
-        if dev_train:
-            dxt = fast_trainset_device(ctx, dx, train_rows, n_train, dim)
-            sum_scale = fast_trainset_scale(ctx, dxt, n_train, dim)
-            st.host("device_trainset")
     var weights = ctx.enqueue_create_buffer[DType.float32](n_train)
     weights.enqueue_fill(Float32(1.0))
     var centroids = ctx.enqueue_create_buffer[DType.float32](n_lists * dim)
@@ -465,8 +438,7 @@ def ivf_flat_build(
     kp.n_init = 1
 
     comptime if IVF_FAST_SEED:
-        # (not under the device sample: the host seeds read `xt`)
-        if not trace.enabled and n_train >= n_lists and not dev_train:
+        if not trace.enabled and n_train >= n_lists:
             var seeds = List[Float32](length=n_lists * dim, fill=Float32(0.0))
             if n_train < n_rows:
                 kpp_seed(xt, n_train, dim, n_lists, params.seed, 8, seeds)
@@ -547,25 +519,17 @@ def ivf_flat_build(
     var lay_data = True
     comptime if ANN3_HOST_PASSES:
         lay_data = with_list_data or trace.enabled
-    # FAST on Apple, `-D MOJOLEARN_IVF_FAST_DEVICE_CSR=1` (lane/apple-fast-ann,
-    # 2026-10-02; fast_build_device.mojo): the CSR lists from the device
-    # labels by histogram, scan and ranked scatter, the vectors gathered
-    # on the device and downloaded once. Cause: `build_list_layout`, three
-    # host passes over the rows, the third moving n x dim floats row by
-    # row (DEVIATION 1800's stated closure). The same slots: same bits.
-    var dev_csr = False
-    comptime if IVF_FAST_CSR:
-        dev_csr = not trace.enabled and n_lists <= CSR_LISTS_MAX
-    var layout: ListLayout
-    if dev_csr:
-        var l_off = List[Int32]()
-        var l_ind = List[UInt32]()
-        var l_dat = List[Float32]()
-        comptime if IVF_FAST_CSR:
-            fast_list_layout_device(ctx, dx, labels, n_rows, dim, n_lists, lay_data, l_off, l_ind, l_dat)
-        layout = ListLayout(n_lists, n_rows, dim, l_off^, l_ind^, l_dat^)
-    else:
-        layout = build_list_layout(host_labels, x, n_rows, dim, n_lists, with_data=lay_data)
+    # lane cgr4-download-loop: the CSR is built on the device (stable radix
+    # sort by label, histogram, scan, gather); the host pass is kept only to
+    # name a bad label's first row (an error path)
+    var dev_layout = ivf_list_layout_device(ctx, labels, dx, n_rows, dim, n_lists, lay_data)
+    if n_rows > 0 and Int(dev_layout[3]) >= n_lists:
+        _ = build_list_layout(host_labels, x, n_rows, dim, n_lists, with_data=False)
+        raise Error("build_list_layout: a label lies outside [0, n_lists)")
+    var layout = ListLayout(
+        n_lists, n_rows, dim, dev_layout[0].copy(), dev_layout[1].copy(), dev_layout[2].copy()
+    )
+    _ = dev_layout^
     st.host("layout")
 
     if trace.enabled:

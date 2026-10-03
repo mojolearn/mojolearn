@@ -41,6 +41,38 @@ comptime THETA_REG = (
     and not is_defined["MOJOLEARN_SEQ_THETA_REG_OFF"]()
 )
 
+#: lane apple-fast-regress (2026-10-03; docs/apple-fast/notes/regress-oct3.md).
+#: Since SEQ_FAST_FMA became the FAST + Apple default (95a09d1fd), the
+#: board's dynamic-optimized-theta taxi-hourly row went 727 -> 2,087 ms
+#: while synthetic went 485 -> 377: the fused fmas move the objective's
+#: last bits; the likely cause (the -D MOJOLEARN_SEQ_FAST_FMA_OFF arm
+#: confirms it) is that on taxi-hourly Nelder-Mead's simplex no longer
+#: settles on a fixed point and a series runs on toward the 1,000-iteration
+#: cap, cycling.
+#: MOJOLEARN_SEQ_FAST_THETA_SNAP hands the theta fits the cycle watch GARCH
+#: already uses (sequence/nm.mojo, `snap`): a state that returns bit for bit
+#: to an earlier one runs only the iterations left of its last lap, the
+#: same final state, best vertex and iteration count as running them all
+#: (no result moves). The snapshot is 16 floats of the 64 the row reserves
+#: for Nelder-Mead (k <= 3 coordinates use at most 28). Default on FAST +
+#: Apple since the M3 A/B (n=3, digests identical): dynamic-optimized-theta
+#: taxi-hourly 2,087.7 -> 561.9 ms, rmse the same. SEQ_FAST_FMA stays on.
+#: -D MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF restores the plain run; the old
+#: -D MOJOLEARN_SEQ_FAST_THETA_SNAP=1 is harmless.
+comptime THETA_SNAP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF"]()
+)
+#: the snapshot's offset in the Nelder-Mead scratch (after the (k + 1) k +
+#: (k + 1) + 4 k <= 28 floats of k <= 3; (k + 1) k + (k + 1) <= 16 floats)
+comptime THETA_SNAP_OFF = 32
+
+#: lane/apple-fast-gap-tsa: the opt-in THETA_HOIST arm of this file
+#: (`theta_invariants` + `theta_sse_hoisted` in the Nelder-Mead objective,
+#: -D MOJOLEARN_SEQ_FAST_THETA_HOIST) was DROPPED-noise on top of THETA_SPEC
+#: (lane/apple-fast-gap-tsa @ e9da47064); both helpers stay for theta_spec.
+
 comptime STM = 0
 comptime OTM = 1
 comptime DSTM = 2
@@ -192,6 +224,72 @@ def theta_run_reg(
     var mean_y = div(sa, Float32(n))
     if mean_y < Float32(1e-10):
         mean_y = Float32(1e-10)
+    return div(sse, mean_y)
+
+
+@always_inline
+def theta_invariants(y: FP, n: Int) -> Tuple[Float32, Float32, Float32]:
+    """(A, B, mean_y): `theta_run_reg`'s static-model A and B and its
+    max(mean|y|, 1e-10), the same chains in the same order."""
+    var s = Float32(0.0)
+    var w = Float32(0.0)
+    for i in range(n):
+        var v = ld(y, i)
+        s = add(s, v)
+        w = fma3(v, Float32(i + 1), w)
+    var ym = div(s, Float32(n))
+    var wa = div(w, Float32(n))
+    var B = div(mul(Float32(6.0), sub(mul(Float32(2.0), wa), mul(Float32(n + 1), ym))),
+                Float32(n * n - 1))
+    var A = sub(ym, div(mul(Float32(n + 1), B), Float32(2.0)))
+    var sa = Float32(0.0)
+    for i in range(n):
+        sa = add(sa, abs(ld(y, i)))
+    var mean_y = div(sa, Float32(n))
+    if mean_y < Float32(1e-10):
+        mean_y = Float32(1e-10)
+    return (A, B, mean_y)
+
+
+@always_inline
+def theta_sse_hoisted[DYN: Bool](
+    y: FP, n: Int, level0: Float32, alpha: Float32, theta: Float32, A0: Float32, B0: Float32, mean_y: Float32,
+) -> Float32:
+    """`theta_run_reg`'s return value from `theta_invariants`' words: the
+    error chain of the same operations in the same order, nothing stored,
+    the running mean only for the dynamic models (DYN) that read it."""
+    var y0 = ld(y, 0)
+    var k = sub(Float32(1.0), div(Float32(1.0), theta))
+    var An: Float32
+    var Bn: Float32
+    comptime if DYN:
+        An = y0
+        Bn = Float32(0.0)
+    else:
+        An = A0
+        Bn = B0
+    var oma = sub(Float32(1.0), alpha)
+    var lev = fma3(alpha, y0, mul(oma, level0))
+    var my = y0
+    var sse = Float32(0.0)
+    var pw = oma
+    for i in range(1, n):
+        var pw1 = mul(pw, oma)
+        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+        var yi = ld(y, i)
+        var ei = sub(yi, m)
+        if i >= 3:
+            sse = fma3(ei, ei, sse)
+        var lev2 = fma3(alpha, yi, mul(oma, lev))
+        comptime if DYN:
+            var my2 = div(fma3(Float32(i), my, yi), Float32(i + 1))
+            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
+                         Float32(i + 2))
+            Bn = b2
+            An = sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0)))
+            my = my2
+        lev = lev2
+        pw = pw1
     return div(sse, mean_y)
 
 
@@ -461,7 +559,11 @@ def op_theta(t: Int, a: Args):
             k += 1
         var it = 0
         if k > 0:
-            it = nelder_mead(obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4))
+            comptime if THETA_SNAP:
+                it = nelder_mead(obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4),
+                                 nm_scr + THETA_SNAP_OFF)
+            else:
+                it = nelder_mead(obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4))
         var p = obj.params(x)
         var mse = Float32(0.0)
         comptime if THETA_REG:
