@@ -37,6 +37,7 @@ from bindings.hostptr import copy_f32
 from std.math import ceildiv
 from std.os import getenv
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
@@ -58,6 +59,7 @@ from metrics.checks.pinned_sum import (
 )
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
     identical_div,
@@ -1984,6 +1986,40 @@ def mc_closed_form_for[
 # ===========================================================================
 # ENTRY POINT: sklearn.utils.resample's row indices (2026-09-28)
 # ===========================================================================
+
+
+# lane/apple-fast-gap-manprep (2026-10-03): resample(replace=True)'s draw
+# copied the device rows into a host buffer, then appended them one by one
+# into a List, then the binding stored them one by one into the caller's
+# Array (1,000,000 rows at the board). With
+# MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT (FAST + Apple) the device rows go
+# straight into the caller's int32 buffer in one copy. The same integers.
+comptime RESAMPLE_IDX_DIRECT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                                and is_defined["MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT"]())
+
+
+def resample_indices_replace_into(
+    n: Int, count: Int, seed: UInt64, dst: MutPointer[Int32, MutUntrackedOrigin], tpb: Int = 256
+) raises:
+    """`resample_indices_host(n, count, True, seed)` written into `dst`
+    (count int32 slots) by one device-to-host copy."""
+    utils_validate(n, count, True)
+    var key = resample_key(seed, RESAMPLE_KIND_UTILS_REPLACE)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var rows = ctx.enqueue_create_buffer[DType.int32](max(count, 1))
+    var keys = ctx.enqueue_create_buffer[DType.uint64](1)
+    if count > 0:
+        ctx.enqueue_function[utils_draw_kernel](
+            rows.unsafe_ptr(), keys.unsafe_ptr(), key_lo(key), key_hi(key),
+            Int32(n), Int32(count), Int32(1),
+            grid_dim=(ceildiv(count, tpb), 1, 1), block_dim=(tpb, 1, 1),
+        )
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=rows.create_sub_buffer[DType.int32](0, count))
+    ctx.synchronize()
+    _ = rows^
+    _ = keys^
+    # DEVIATION 1946: the context dies LAST.
+    _ = ctx^
 
 
 def resample_indices_host(

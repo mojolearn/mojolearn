@@ -1465,15 +1465,17 @@ class KNNImputer(_XNeighbors):
         if self.weights not in ("uniform", "distance"):
             raise NotImplementedError("KNNImputer: weights must be 'uniform' or 'distance'")
 
-    def _nan_cells(self, X):
+    def _nan_cells(self, X, colmiss_only=0):
         """(cells, colmiss, count): the flat indices of the NaN cells of X
         ascending (an int32 Array of n * d slots, the first `count` used), the
-        NaN count per column as a list, and the count (xn_nan_cells)."""
+        NaN count per column as a list, and the count (xn_nan_cells).
+        colmiss_only=1 (fit): a build with MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY
+        may skip the cell list; the counts are the same integers."""
         n, d = X.shape
         cells = empty((max(n * d, 1),), "<i4")
         colmiss = empty((max(d, 1),), "<i4")
         info = empty((1,), "<i4")
-        self._op("nan_cells", [(X, 0), (cells, 1), (colmiss, 1), (info, 1)], (n, d))
+        self._op("nan_cells", [(X, 0), (cells, 1), (colmiss, 1), (info, 1)], (n, d, colmiss_only))
         return cells, colmiss.tolist(), int(info.tolist()[0])
 
     def _masked(self, X):
@@ -1491,7 +1493,7 @@ class KNNImputer(_XNeighbors):
         n, d = X.shape
         # lane/neural-pass71 (2026-10-01): the column flags from one native
         # pass over the cells (xn_nan_cells), no list of the matrix
-        cm = self._nan_cells(X)[1]
+        cm = self._nan_cells(X, 1)[1]
         self._valid = [cm[f] < n for f in range(d)]
         self._miss_cols = [f for f in range(d) if cm[f] > 0]
         self._fit_X = X

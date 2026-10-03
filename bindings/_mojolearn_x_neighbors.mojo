@@ -1013,8 +1013,9 @@ def nan_cells_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) rais
     var v_info = _a(a_, 3)
     var v_n = _n(i_, 0)
     var v_d = _n(i_, 1)
+    var v_only = _n(i_, 2) if len(i_) > 2 else 0
     with GILReleased(Python()):
-        op_nan_cells(v_x, v_cells, v_colmiss, v_info, v_n, v_d)
+        op_nan_cells(v_x, v_cells, v_colmiss, v_info, v_n, v_d, v_only)
     return PythonObject(None)
 
 
