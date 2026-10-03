@@ -36,7 +36,7 @@ from x_linear.sgd import (
 )
 from checks.numerics import identical_pow
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
-from x_linear.sgd_end import sgd_mb_end_kernel, sgd_mb_res_kernel, sgd_ps_end_kernel, sgd_ps_res_kernel, SGD_END_ST, SGD_END_TPB, SGD_MB_FLAGS, SGD_MB_WORDS
+from x_linear.sgd_end import sgd_ys_kernel, sgd_iota_kernel, sgd_perm_kernel, sgd_mb_end_kernel, sgd_mb_res_kernel, sgd_ps_end_kernel, sgd_ps_res_kernel, SGD_END_ST, SGD_END_TPB, SGD_MB_FLAGS, SGD_MB_WORDS
 from x_linear.vfold import vscratch
 from x_linear.sgd import LR_INVSCALING
 from x_linear.sgd import sgd_mb_on, mb_sub_size, mb_dblk, mb_row, mb_row_dot, mb_rowsq, mb_block_dot, MB_DBLK, LR_PA1, LR_PA2, mb_part, mb_step, mb_bias_step, mb_subs, mb_eta, mb_optimal_init, mb_penalty, LR_OPTIMAL, LR_ADAPTIVE, P_L2, P_L1
@@ -573,8 +573,9 @@ def _ridge_fast_gram() -> Bool:
 # loss derivatives (one thread a row), the gradient partials (one thread a
 # (sub-block, column), sub-block-major so neighbouring threads read one row's
 # words), the step (one thread a weight, the intercept and the objective).
-# The shuffle, the rate schedule and the stopping run on the host with the
-# same statements; an epoch's batches are enqueued without a sync.
+# The epoch order (`sgd_perm_kernel`), the targets and the epoch end
+# (x_linear/sgd_end.mojo) are the device's; the host enqueues an epoch's
+# batches without a sync and reads two stop words.
 @always_inline
 def _sgd_mb_rows_kernel_body(x: FP, ys: FP, idx: IP, start: Int32, bs: Int32, d: Int32, w: FP, bias: FP, loss: Int32,
                        eps: Float32, swp: FP, has_sw: Int32, wpos: Float32, wneg: Float32, has_cw: Int32,
@@ -853,8 +854,11 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
         ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
     if has_sw:
         ctx.enqueue_copy(dst_buf=dsw, src_ptr=y + n)
-    var ys = List[Float32](length=max(n, 1), fill=Float32(0))
-    var idx = List[Int32](length=max(n, 1), fill=Int32(0))
+    var dy = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    if not one_class and n > 0:
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
+    var seed_lo = Int32(Int(UInt32(seed & UInt64(0xFFFFFFFF))))
+    var seed_hi = Int32(Int(UInt32(seed >> 32)))
     # the epoch end on the device (x_linear/sgd_end.mojo): its state, the
     # penalty fold's scratch, the result words
     var dstt = ctx.enqueue_create_buffer[DType.float32](SGD_MB_WORDS)
@@ -868,24 +872,15 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var max_epochs = 0
     var status = 0
     for c in range(problems):
-        for i in range(n):
-            if one_class:
-                ys[i] = Float32(1)  # sgd_fit's one-class target (y is not read)
-            else:
-                var v = y.unsafe_load(i)
-                if k == 0:
-                    ys[i] = v
-                elif k == 2:
-                    ys[i] = Float32(1) if v == Float32(1) else Float32(-1)
-                else:
-                    ys[i] = Float32(1) if v == i2f(c) else Float32(-1)
-            idx[i] = Int32(i)
-        ctx.enqueue_copy(dst_buf=dys, src_ptr=ys.unsafe_ptr())
+        # the targets and the identity order on the device (sgd_fit's statements)
+        ctx.enqueue_function[sgd_ys_kernel](
+            dy.unsafe_ptr(), dys.unsafe_ptr(), didx.unsafe_ptr(), Int32(n), Int32(k), Int32(c),
+            Int32(1 if one_class else 0), grid_dim=_xg_blocks(n), block_dim=XG_TPB,
+        )
         dw.enqueue_fill(Float32(0))
         dbias.enqueue_fill(Float32(1) if one_class else Float32(0))
         var wpos = fp[6 + c] if has_cw else Float32(1)
         var wneg = fp[6 + problems + c] if has_cw else Float32(1)
-        var rng = seed + UInt64(1000003) * UInt64(c)
         var eta = eta0
         var opt_init = mb_optimal_init(loss, alpha, eps) if lr == LR_OPTIMAL else Float32(0)
         var t = 1
@@ -903,12 +898,9 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
         hci[11] = Int32(1 if one_class else 0)
         ctx.enqueue_copy(dst_buf=dci, src_ptr=hci.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=dcf, src_ptr=hcf.unsafe_ptr())
-        var ipp = IP(unsafe_from_address=Int(idx.unsafe_ptr()))
         for epoch in range(max_iter):
             epochs = epoch + 1
             var par = epoch % 2
-            if do_shuffle:
-                shuffle(ipp, n, rng)
             # the epoch as ONE guarded unit (x_linear/witness.mojo): its steps
             # update the weights in place, so a cut epoch restores the weights
             # it started from and replays the same batches
@@ -920,7 +912,12 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
                 var nonce = wit.begin()
                 var wo = 0
                 t = t_start
-                ctx.enqueue_copy(dst_buf=didx, src_ptr=idx.unsafe_ptr())
+                if do_shuffle:
+                    # the epoch's order on the device (a thread a row; idempotent)
+                    ctx.enqueue_function[sgd_perm_kernel](
+                        didx.unsafe_ptr(), Int32(n), seed_lo, seed_hi, Int32(epoch), Int32(c), Int32(1),
+                        grid_dim=_xg_blocks(n), block_dim=XG_TPB,
+                    )
                 dobj.enqueue_fill(Float32(0))
                 var start = 0
                 if chunk > 1 and batch <= XG_TPB and d + 2 <= XG_TPB:
@@ -1017,8 +1014,7 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     ctx.synchronize()
     res.unsafe_store(problems * d + problems, i2f(max_epochs))
     res.unsafe_store(problems * d + problems + 1, i2f(status))
-    _ = ys^
-    _ = idx^
+    _ = dy^
     _ = hst^
     _ = hfl^
     _ = dstt^
@@ -1067,9 +1063,9 @@ def _sgd_mb_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
 # guarded unit (x_linear/witness.mojo): w, q, the scalar state (wscale
 # included) and t are
 # restored from their epoch-start copies and the epoch replays on a rerun.
-# The shuffle, the finite check, the stopping and the adaptive rate run on
-# the host with sgd_one's statements (main merge: the host fit arm,
-# MOJOLEARN_X_LINEAR_SGD_HOST, is removed: GPU-only rule).
+# The epoch order (`sgd_perm_kernel`), the finite check, the stopping and
+# the adaptive rate are the device's (x_linear/sgd_end.mojo, sgd_one's
+# statements); the host reads the live problem count once an epoch.
 comptime SGD_PS_CHUNK = 2048
 # the per-problem scalar state ps[SGD_PS_ST c ..]: intercept, u, objective,
 # the one-class intercept's low word, wscale hi, wscale lo
@@ -1334,12 +1330,12 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     hcf[4] = eps
     hcf[5] = optimal_init
     hcf[6] = decay_factor
-    var hidx = List[Int32](length=max(problems * n, 1), fill=Int32(0))
+    var seed_lo = Int32(Int(UInt32(seed & UInt64(0xFFFFFFFF))))
+    var seed_hi = Int32(Int(UInt32(seed >> 32)))
     var hps = List[Float32](length=SGD_PS_ST * problems, fill=Float32(0))
     var hpt = List[Int32](length=problems, fill=Int32(1))
     var hact = List[Int32](length=problems, fill=Int32(1))
     var hpf = List[Float32](length=3 * problems, fill=Float32(0))
-    var rngs = List[UInt64](length=problems, fill=UInt64(0))
     # the epoch end's state on the device (x_linear/sgd_end.mojo), parity 0
     # at the start: best, no-improve, eta, active, epochs, failed
     var hst = List[Float32](length=2 * problems * SGD_END_ST, fill=Float32(0))
@@ -1349,11 +1345,8 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     var dres = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
     dres.enqueue_fill(Float32(0))
     for c in range(problems):
-        for i in range(n):
-            hidx[c * n + i] = Int32(i)
         hps[SGD_PS_ST * c] = Float32(1) if one_class else Float32(0)
         hps[SGD_PS_ST * c + 4] = Float32(1)
-        rngs[c] = seed + UInt64(1000003) * UInt64(c)
         hpf[3 * c] = eta0
         hpf[3 * c + 1] = fp[6 + c] if has_cw else Float32(1)
         hpf[3 * c + 2] = fp[6 + problems + c] if has_cw else Float32(1)
@@ -1374,14 +1367,13 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
     ctx.enqueue_copy(dst_buf=dstt, src_ptr=hst.unsafe_ptr())
     dw.enqueue_fill(Float32(0))
     dq.enqueue_fill(Float32(0))
+    ctx.enqueue_function[sgd_iota_kernel](didx.unsafe_ptr(), Int32(n), Int32(problems),
+                                          grid_dim=_xg_blocks(problems * n), block_dim=XG_TPB)
     var fin_par = 0
     for epoch in range(max_iter):
-        # every problem's order advances (a stopped one's is never read):
-        # which problems still run is the device's (dact)
+        # which problems still run is the device's (dact); every problem's
+        # order is written (a stopped one's is never read)
         var par = epoch % 2
-        if do_shuffle:
-            for c in range(problems):
-                shuffle(IP(unsafe_from_address=Int(hidx.unsafe_ptr())) + c * n, n, rngs[c])
         # the epoch as ONE guarded unit: it updates w, q, the scalar state
         # and t in place, so a cut epoch restores them and replays
         ctx.enqueue_copy(dst_buf=dws, src_buf=dw)
@@ -1392,7 +1384,11 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
         while True:
             var nonce = wit.begin()
             var wo = 0
-            ctx.enqueue_copy(dst_buf=didx, src_ptr=hidx.unsafe_ptr())
+            if do_shuffle:
+                ctx.enqueue_function[sgd_perm_kernel](
+                    didx.unsafe_ptr(), Int32(n), seed_lo, seed_hi, Int32(epoch), Int32(0), Int32(problems),
+                    grid_dim=_xg_blocks(problems * n), block_dim=XG_TPB,
+                )
             if pa_rate:
                 ctx.enqueue_function[sgd_rowsq_kernel](
                     dx.unsafe_ptr(), Int32(n), Int32(d), dsq.unsafe_ptr(), wit.p(), Int32(wo), nonce,
@@ -1451,7 +1447,6 @@ def _sgd_ps_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List[Int3
 
     _ = hci^
     _ = hcf^
-    _ = hidx^
     _ = hst^
     _ = hlive^
     _ = dstt^

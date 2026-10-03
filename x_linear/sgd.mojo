@@ -33,7 +33,7 @@ by five) and the loss classes at the top of that file. Differences, named:
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fexp, flog, fabs, fmax, fmin,
-    ld, st, ldi, sti, i2f, fill, row_dot, shuffle, axpy_acc, scale_acc, ftzv, par_rows, fz, xmad, fsign,
+    ld, st, ldi, sti, i2f, fill, row_dot, shuffle, perm_fill, perm_key, axpy_acc, scale_acc, ftzv, par_rows, fz, xmad, fsign,
     X_LINEAR_HOST_SABOTAGE,
 )
 from std.memory import bitcast
@@ -279,7 +279,7 @@ def sgd_one(
         epochs = epoch + 1
         var objective = Float32(0)
         if do_shuffle:
-            shuffle(idx, n, rng)
+            perm_fill(idx, n, perm_key(seed, epoch))
         for r in range(n):
             var i = ldi(idx, r)
             var y = ld(ys, i)
@@ -1085,7 +1085,7 @@ def sgd_mb_one(
     for epoch in range(max_iter):
         epochs = epoch + 1
         if do_shuffle:
-            shuffle(idx, n, rng)
+            perm_fill(idx, n, perm_key(seed, epoch))
         var objective = Float32(0)
         var start = 0
         while start < n:

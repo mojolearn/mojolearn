@@ -24,7 +24,7 @@ from std.memory import bitcast, stack_allocation
 from std.atomic import Atomic
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from x_linear.ops import FP, IP, ld, st, fa, fs, fm, fd, fabs, i2f
+from x_linear.ops import FP, IP, ld, st, fa, fs, fm, fd, fabs, i2f, perm_at, perm_key
 from x_linear.team import team_at, team_barrier
 from x_linear.sgd import mb_penalty_t, ws_mul, oc_offset, LR_ADAPTIVE
 from x_linear.witness import witness_end
@@ -215,3 +215,46 @@ def sgd_ps_res_kernel(w: FP, ps: FP, stt: FP, res: FP, d: Int32, problems: Int32
                 mx = max(mx, _int(ld(stt, base + 4)))
         st(res, q, i2f(mx))
         st(res, q + 1, i2f(status))
+
+
+# ------------------------------------------------ the epoch order and the targets on the device
+def sgd_ys_kernel(y: FP, ys: FP, idx: IP, n: Int32, k: Int32, c: Int32, one_class: Int32):
+    """Problem c's +-1 targets (sgd_fit's statements) and the identity order,
+    a thread a row."""
+    var i = Int(block_idx.x) * SGD_END_TPB + Int(thread_idx.x)
+    if i < Int(n):
+        var v: Float32
+        if one_class != 0:
+            v = Float32(1)  # sgd_fit's one-class target (y is not read)
+        else:
+            var yv = ld(y, i)
+            if Int(k) == 0:
+                v = yv
+            elif Int(k) == 2:
+                v = Float32(1) if yv == Float32(1) else Float32(-1)
+            else:
+                v = Float32(1) if yv == i2f(Int(c)) else Float32(-1)
+        st(ys, i, v)
+        idx.unsafe_store(i, Int32(i))
+
+
+def sgd_iota_kernel(idx: IP, n: Int32, problems: Int32):
+    """Every problem's identity order: idx[c n + i] = i."""
+    var q = Int(block_idx.x) * SGD_END_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    if q < nn * Int(problems):
+        idx.unsafe_store(q, Int32(q % nn))
+
+
+def sgd_perm_kernel(idx: IP, n: Int32, seed_lo: Int32, seed_hi: Int32, epoch: Int32, c0: Int32, problems: Int32):
+    """The epoch order of problems c0 .. c0 + problems - 1 (seed + 1000003 c),
+    a thread a row: `perm_at` (x_linear/ops.mojo, DEVIATION 5004 revised),
+    the host column's `perm_fill` order."""
+    var q = Int(block_idx.x) * SGD_END_TPB + Int(thread_idx.x)
+    var nn = Int(n)
+    if q < nn * Int(problems):
+        var cl = q // nn
+        var i = q - cl * nn
+        var seed = (UInt64(UInt32(seed_hi)) << 32) | UInt64(UInt32(seed_lo))
+        var sc = seed + UInt64(1000003) * UInt64(Int(c0) + cl)
+        idx.unsafe_store(q, Int32(perm_at(i, nn, perm_key(sc, Int(epoch)))))
