@@ -1,4 +1,4 @@
-pos=326 lines=     486
+pos=332 lines=     487
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -403,3 +403,12 @@ pos=326 lines=     486
 505:CMD apple-fast-ldaqda@ef187d37b lq-dectile-qda rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=15913.8 all=[15914] quality=['{"accuracy":'] defines='-D MOJOLEARN_LDAQDA_DEC_TILE'
 506:CMD apple-fast-ldaqda@ef187d37b lq-all3-lda-clf rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=536.3 all=[536] quality=['{"accuracy":'] defines='-D MOJOLEARN_LDAQDA_RR_EIGH -D MOJOLEARN_LDAQDA_PAR_STAGES -D MOJOLEARN_LDAQDA_DEC_TILE'
 507:CMD apple-fast-ldaqda@ef187d37b lq-all3-qda rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=424.6 all=[425] quality=['{"accuracy":'] defines='-D MOJOLEARN_LDAQDA_RR_EIGH -D MOJOLEARN_LDAQDA_PAR_STAGES -D MOJOLEARN_LDAQDA_DEC_TILE'
+508:FBUILD lane/apple-fast@64c3ee4e1 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+509:CMD apple-fast@64c3ee4e1 ridge-fastgram-off-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=54.8 all=[55] quality=['{"finite":'] defines=''
+510:FBUILD lane/apple-fast@b2dd5dfe5 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+511:CMD apple-fast@b2dd5dfe5 ridge-fastgram-off-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1413.3 all=[1413] quality=['{"finite":'] defines=''
+512:CMD apple-fast@b2dd5dfe5 ridge-tnv1-off-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=56.1 all=[56] quality=['{"finite":'] defines=''
+513:CMD apple-fast@b2dd5dfe5 ridge-tnv1-off-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1403.6 all=[1404] quality=['{"finite":'] defines=''
+514:FBUILD lane/apple-fast-garchspeed@5bc97d9d7 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0 
+515:CMD apple-fast-garchspeed@5bc97d9d7 garchcoop-synthetic rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=15.1 all=[15] quality=['{"mean_llf":'] defines='-D MOJOLEARN_GARCH_COOP'
+516:CMD apple-fast-garchspeed@5bc97d9d7 garchcoop-taxi-hourly rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=31.0 all=[31] quality=['{"mean_llf":'] defines='-D MOJOLEARN_GARCH_COOP'
