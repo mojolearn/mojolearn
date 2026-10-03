@@ -1,4 +1,4 @@
-pos=817 lines=     955
+pos=821 lines=    1130
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -958,3 +958,8 @@ pos=817 lines=     955
 1066:CMD apple-fast-batch@3150d75c1 linsvr-slim-taxi-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=95.3 all=[95] quality=['{"finite":'] defines='-D MOJOLEARN_LSVR_EVAL_SLIM'
 1067:CMD apple-fast-batch@3150d75c1 linsvr-fix-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=222.3 all=[222] quality=['{"finite":'] defines='-D MOJOLEARN_LSVR_FASTPATH_FIX'
 1068:CMD apple-fast-batch@3150d75c1 linsvr-all-istella-x rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=236.4 all=[236] quality=['{"finite":'] defines='-D MOJOLEARN_LSVR_ALL'
+1069:CMD apple-fast-batch@3150d75c1 sym-ordered-fbo-taxi-x rc=0 AFT-MEDIAN arm=B n=1 median_ms=55738.8 all=[55739] hashes=['628551a9b51533c6'] acc={'logloss': [0.529058], 'auc': [0.629002]}
+1070:CMD apple-fast-batch@3150d75c1 sym-ordered-fidx-taxi-x rc=0 AFT-MEDIAN arm=B n=1 median_ms=53086.2 all=[53086] hashes=['3c4b0d10c874f4ae'] acc={'logloss': [0.529215], 'auc': [0.628572]}
+1071:FBUILD lane/apple-fast-gap-linalg2@19fb05674 core=0 ibase=0 estimators=0 gp=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1072:CMD apple-fast-gap-linalg2@19fb05674 gl2-lu-step1-synthetic rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=977.3 all=[977] quality=['{"relative_residual":'] defines='-D MOJOLEARN_LU_FAST_STEP1'
+1073:CMD apple-fast-gap-linalg2@19fb05674 gl2-lusolve-step1-synthetic rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=971.1 all=[971] quality=['{"relative_residual":'] defines='-D MOJOLEARN_LU_FAST_STEP1'
