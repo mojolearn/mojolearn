@@ -231,3 +231,4 @@ pos=196 lines=     404
 315:CMD apple-fast-trees-ensembles@09a978f4c te-adareg-taxi-c rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1958.8 all=[1959] quality=['{"finite":'] defines='-D MOJOLEARN_TE_ADA_SESSION'
 316:CMD apple-fast-trees-ensembles@09a978f4c te-adaclf-share-taxi-c rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1607.6 all=[1608] quality=['{"accuracy":'] defines='-D MOJOLEARN_TE_ADA_SESSION -D MOJOLEARN_TE_ADA_SESSION_SHARE'
 317:CMD apple-fast-trees-ensembles@09a978f4c te-stackreg-istella-d rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=10308.8 all=[10309] quality=['{"finite":'] defines='-D MOJOLEARN_TE_NATIVE_SPLITS'
+318:FBUILD lane/apple-fast@24ed76679 core=0 ibase=0 embedding=0 estimators=0 gbdt=0 gp=0 training=0 x_ann=0 x_cluster=0 x_cnn=0 x_decomp=0 x_linear=0 x_metrics=0 x_neighbors=0 x_prep=0 x_sequence=0
