@@ -405,6 +405,10 @@ comptime CHOL_FAST_APPLE = (
 comptime CHOL_TRSM_INV = CHOL_FAST_APPLE and not is_defined[
     "MOJOLEARN_CHOL_TRSM_INV_OFF"
 ]()
+"""CHOL_FAST_APPLE: the panel solve `L21 = A21 L11^{-T}` as `L11^{-1}`
+(blocked forward solve against the identity) and one vendor GEMM
+(`fast_panel_solve_inv`), instead of a simdgroup per row walking the
+panel's columns in sequence."""
 comptime CHOL_FAST_BLOCKED = CHOL_FAST_APPLE and is_defined["MOJOLEARN_CHOL_FAST_BLOCKED"]() and CH_FITS
 """lane/apple-fast-decomp-linalg (2026-10-02, pass 2), -D MOJOLEARN_CHOL_FAST_BLOCKED:
 the whole factorization as x_decomp/fast_chol.mojo's blocked right-looking
@@ -419,10 +423,6 @@ of the strips and left-looking routes) and past one panel; a non-positive
 pivot sets info = k + 1 and the factorization continues with that pivot
 taken as 1 (x_decomp's `chol_serial` rule), so the partial factor past the
 failing column is not the stopped one the route below leaves."""
-"""CHOL_FAST_APPLE: the panel solve `L21 = A21 L11^{-T}` as `L11^{-1}`
-(blocked forward solve against the identity) and one vendor GEMM
-(`fast_panel_solve_inv`), instead of a simdgroup per row walking the
-panel's columns in sequence."""
 comptime CHOL_RECURSIVE_PANEL = CHOL_TRSM_INV and not is_defined[
     "MOJOLEARN_CHOL_RECURSIVE_PANEL_OFF"
 ]()
