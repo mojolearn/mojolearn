@@ -383,6 +383,20 @@ class DBSCAN(NumericModeMixin):
         """Keep the core rows, their training indices and their labels, in
         ascending training index, from the fit's own core mask."""
         d = int(x.shape[1])
+        b = self._bind("_mojolearn_estimators")
+        on = getattr(b, "estimators_py2mojo_cluster", None)
+        if on is not None and int(on()) == 1:
+            # the three arrays in the binding (bindings/py2mojo_cluster_est.mojo,
+            # lane apple-fast-py2mojo-cluster): the mask check, the compaction
+            # and the row copies in one Mojo loop
+            idx, comp, lab = b.dbscan_core_arrays(
+                addr_ro(x, name="x"), addr_ro(labels, name="labels"), addr_ro(core, name="core"),
+                [int(x.shape[0]), d])
+            m = len(idx)
+            self.core_sample_indices_ = frombytes(idx.tobytes(), "<i4", (m,)) if m else empty((0,), "<i4")
+            self.components_ = frombytes(comp.tobytes(), "<f4", (m, d))
+            self._core_labels = frombytes(lab.tobytes(), "<i4", (m,)) if m else empty((0,), "<i4")
+            return
         raw = bytes(x.tobytes())
         width = 4 * d
         if not hotpath_enabled():

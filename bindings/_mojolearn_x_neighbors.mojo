@@ -17,6 +17,7 @@ from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain
 from x_neighbors.kapprox_dev import kpca_resident_binding
 from x_neighbors.iter_device import lp_fast_resident_binding
+from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES, ocsvm_resident_binding
 from x_neighbors.sort_items import purity_flags_binding
 
 
@@ -1209,6 +1210,10 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
+        # lane/apple-fast-gap-cls2: OneClassSVM's Gram kept on the device
+        # (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_RES; FAST + Apple default)
+        comptime if OCSVM_CLS2_RES:
+            m.def_function[ocsvm_resident_binding]("x_neighbors_ocsvm_resident")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors: ", e))

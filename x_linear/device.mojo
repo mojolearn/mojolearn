@@ -57,6 +57,10 @@ from x_linear.huber_grid import huber_fit_grid
 from x_linear.dispatch import ALGO_HUBER, ALGO_ENETCV
 from x_linear.enetcv_fast import enetcv_fast
 from x_linear.fast_gram import fast_gram_into, XL_RIDGE_FAST_GRAM
+from x_linear.cls1_fast import (
+    C1_TPB, C1_BATCH, C1_BAYES_STATE, BAYES_CLS1_STATS, BAYES_CLS1_PARTS, BAYES_CLS1_BATCH,
+    RIDGE_CLS1_CODES, c1_sq_parts_kernel, c1_sum_parts_kernel, c1_dev_parts_kernel, c1_codes_targets_kernel,
+)
 from x_linear.dispatch import ALGO_LOGCV
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
 from x_linear.dispatch import ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_QUANTILE
@@ -132,6 +136,19 @@ def _ridge_device(
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     var dxp = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
     var dyp = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
+    # lane/apple-fast-gap-cls1 RIDGE_CLS1_CODES: ip[4] == 1 means y holds the
+    # n int32 class codes (RidgeClassifier, unweighted); the +-1 targets are
+    # built here on the device (x_linear/cls1_fast.mojo)
+    var dyt = ctx.enqueue_create_buffer[DType.float32](1)
+    comptime if RIDGE_CLS1_CODES:
+        if len(ip) > 4 and Int(ip[4]) == 1 and n > 0:
+            var t_c = Int(ip[0])
+            dyt = ctx.enqueue_create_buffer[DType.float32](n * t_c)
+            ctx.enqueue_function[c1_codes_targets_kernel](
+                dy.unsafe_ptr().bitcast[Int32](), Int32(n), Int32(t_c), dyt.unsafe_ptr(),
+                grid_dim=(n + C1_TPB - 1) // C1_TPB, block_dim=C1_TPB,
+            )
+            dyp = FP(unsafe_from_address=Int(dyt.unsafe_ptr()))
     ridge_fit_grid(ctx.copy(), dxp, dyp, n, d, ip, fp, n_out, res)
     # lane/neural-pass93: the float-float refit on the grid
     var t_n = Int(ip[0])
@@ -143,6 +160,7 @@ def _ridge_device(
     ctx.synchronize()
     _ = dx^
     _ = dy^
+    _ = dyt^
 
 
 def decision_kernel(x: FP, wb: FP, n: Int32, d: Int32, k: Int32, link: Int32, res: FP):
@@ -478,6 +496,59 @@ def bayes_step_guard_kernel(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, parts:
     the trusted candidate), `bayes_step_kernel`'s update, then the candidate
     for the new coefficients into state[6] (1 = trusted) and state[7]."""
     if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        _bayes_step_guard_body(fw, res, fp, d, nb, parts, state, it, fresh)
+    witness_end(wf, woff, nonce)
+
+
+def c1_bayes_step_kernel(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, parts: FP, state: FP,
+                         wf: IP, woff: Int32, nonce: Int32):
+    """lane/apple-fast-gap-cls1 BAYES_CLS1_BATCH: `bayes_step_guard_kernel`
+    with the stop (state[5]), the row-pass verdict (state[6] == 0: fresh)
+    and the iteration count (state[8]) read on the device, so iterations
+    queue in batches; a stopped fit no-ops."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0 and ld(state, 5) == Float32(0):
+        var it = Int(ld(state, 8))
+        var fresh = Int32(1) if ld(state, 6) == Float32(0) else Int32(0)
+        _bayes_step_guard_body(fw, res, fp, d, nb, parts, state, Int32(it), fresh)
+        st(state, 8, i2f(it + 1))
+    witness_end(wf, woff, nonce)
+
+
+def c1_bayes_state_init_kernel(state: FP):
+    """BAYES_CLS1_BATCH: the first iteration makes the row pass (state[6] =
+    0), no reference yet, the iteration count 0."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        st(state, 6, Float32(0))
+        st(state, 7, Float32(0))
+        st(state, 8, Float32(0))
+
+
+def c1_bayes_resid_kernel(x: FP, y: FP, n: Int32, d: Int32, fw: FP, res: FP, state: FP, rows: FP,
+                          wf: IP, woff: Int32, nonce: Int32):
+    """BAYES_CLS1_BATCH: `bayes_resid_kernel` gated on the device (live
+    while not stopped and the next sse is not trusted)."""
+    var i = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if i < Int(n) and ld(state, 5) == Float32(0) and ld(state, 6) == Float32(0):
+        var dd = Int(d)
+        var p = Float32(0)
+        for j in range(dd):
+            p = fmad(fs(ld(x, i * dd + j), ld(fw, j)), ld(res, j), p)
+        st(rows, i, fs(fs(ld(y, i), ld(state, 2)), p))
+    witness_end(wf, woff, nonce)
+
+
+def c1_bayes_finish_kernel(fw: FP, res: FP, d: Int32, fi: Int32, state: FP, wf: IP, woff: Int32, nonce: Int32):
+    """BAYES_CLS1_BATCH: `bayes_finish_kernel` with the count from state[8]."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        bayes_finish(fw, res, Int(d), fi != 0, ld(state, 2), ld(state, 0), ld(state, 1), Int(ld(state, 8)))
+    witness_end(wf, woff, nonce)
+
+
+@always_inline
+def _bayes_step_guard_body(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, parts: FP, state: FP, it: Int32,
+                           fresh: Int32):
+    """`bayes_step_guard_kernel`'s statements (one thread)."""
+    if True:
         var dd = Int(d)
         var gg = dd
         var vty = gg + dd * dd + dd + dd * dd
@@ -522,7 +593,6 @@ def bayes_step_guard_kernel(fw: FP, res: FP, fp: FP, d: Int32, nb: Int32, parts:
                 trusted = Float32(1)
         st(state, 6, trusted)
         st(state, 7, s)
-    witness_end(wf, woff, nonce)
 
 def bayes_finish_kernel(fw: FP, res: FP, d: Int32, fi: Int32, state: FP, iters: Int32, wf: IP, woff: Int32, nonce: Int32):
     if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
@@ -3313,6 +3383,28 @@ def fit_device(
             if fast_gram:
                 grid_gram = False
                 lars_pre = False
+    # lane/apple-fast-kernel (2026-10-02), FAST on Apple only: the means, the
+    # centered Gram, X'y from x_linear/fast_gram.mojo (the gram lane's shared
+    # grid Gram, chunked tiles on the grid) instead of `xg_means_kernel` +
+    # `xg_gram_kernel` (one serial million-row chain per cell) and the team's
+    # own X'y / mean / variance passes on one block (after the 2026-10-02
+    # merge: in place of main's moments grid, one block per 16-column tile
+    # pair with one serial chain per cell, and main's `bayes_xty_kernel`; the
+    # y partials stay main's). Taken under BAYES_CLS1_STATS (the KEPT
+    # lane/apple-fast-gap-cls1 default); its own opt-in define
+    # MOJOLEARN_KERNEL_FAST_BAYES_STATS and the Jacobi threshold arm
+    # MOJOLEARN_KERNEL_FAST_BAYES_JACOBI were dropped (lane/apple-fast-kernel
+    # @ 9e851777c).
+    var kstats = False
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        if bayes_like:
+            # STATS: BayesianRidge (unweighted) on main's grid driver only;
+            # ARD keeps main's moments grid (its X'y pass is the team's)
+            # lane/apple-fast-gap-cls1: BAYES_CLS1_STATS (FAST + Apple default) turns the same path on
+            if algo == ALGO_BAYES and n > 0 and d > 0 and BAYES_CLS1_STATS:
+                kstats = True
+                grid_gram = True
+                hip[4] = Int32(1)
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](team_work(0, 3, 0))
     var hfp = fp.copy()
@@ -3346,15 +3438,19 @@ def fit_device(
     bayes_w = algo == ALGO_BAYES and n > 0 and d > 0 and len(ip) > 2 and ip[2] != 0
     if bayes_w:
         bayes_grid = True
+    # lane/apple-fast-kernel BAYES_STATS: unweighted BayesianRidge on the grid only
+    kstats = kstats and bayes_grid and not bayes_w
     var ynb = fold_blocks(n)
     var prep_blocks = 2 * _xg_blocks(ynb) + _xg_blocks(d) + 1
+    comptime if BAYES_CLS1_PARTS:
+        prep_blocks = 2 * ynb + _xg_blocks(d) + 1
     if bayes_w:
         prep_blocks = 2 * _xg_blocks(ynb) + _xg_blocks(d * ynb) + _xg_blocks(d) + _xg_blocks((cells + d) * ynb) + _xg_blocks(cells + d) + 1
     var dwparts = ctx.enqueue_create_buffer[DType.float32](max(ynb, 1) if bayes_w else 1)
     var dmparts = ctx.enqueue_create_buffer[DType.float32](max(d * ynb, 1) if bayes_w else 1)
     var dgparts = ctx.enqueue_create_buffer[DType.float32](max((cells + d) * ynb, 1) if bayes_w else 1)
     var wit = Witness(ctx, max(max(_xg_blocks(max(cells, d)), 1) + 1, prep_blocks))
-    var dstate = ctx.enqueue_create_buffer[DType.float32](8)
+    var dstate = ctx.enqueue_create_buffer[DType.float32](C1_BAYES_STATE)
     var dyparts = ctx.enqueue_create_buffer[DType.float32](max(ynb, 1) if bayes_grid else 1)
     var dvparts = ctx.enqueue_create_buffer[DType.float32](max(ynb, 1) if bayes_grid else 1)
     var setup_tries = 0
@@ -3377,6 +3473,16 @@ def fit_device(
                 # holds the y mean (lars_fit zeroes it)
                 var xty_o = d + d * d
                 fast_gram_into(ctx, px, py, 0, n, d, 1, hip[1] != 0, pfw, pfw + (xty_o + d), pfw + d, pfw + xty_o)
+            elif kstats:
+                # BayesianRidge on main's grid driver: xm at 0, G at d, X'y at
+                # d + d*d; the y mean parked at the `old` offset (3d + 2d^2),
+                # scratch until the first step (the driver's own y partials
+                # give it ym). Waits for its own launches (unwitnessed); the
+                # witnessed eig unit follows
+                var pfw = FP(unsafe_from_address=Int(dfw.unsafe_ptr()))
+                var px = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
+                var py = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
+                fast_gram_into(ctx, px, py, 0, n, d, 1, hip[1] != 0, pfw, pfw + (3 * d + 2 * d * d), pfw + d, pfw + (d + d * d))
         if lars_pre:
             # lane/neural-pass120's moments of [X | y] (fw: xm 0, G d, X'y
             # d + d*d, y's mean parked in prev = 2d + d*d)
@@ -3389,6 +3495,8 @@ def fit_device(
                 dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), dfw.unsafe_ptr(),
                 Int32(0), Int32(2 * d + d * d), Int32(d), Int32(d + d * d), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
             )
+        elif kstats:
+            pass
         elif grid_gram and bayes_like:
             # lane/neural-pass130: BayesianRidge / ARD's means and centered Gram
             # from the staged moments kernels (no Y columns), into the layout
@@ -3477,21 +3585,38 @@ def fit_device(
                     )
                     wo += _xg_blocks(cells + d)
                 else:
-                    ctx.enqueue_function[bayes_yparts_kernel](
-                        dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dstate.unsafe_ptr(),
-                        wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
-                    )
-                    wo += _xg_blocks(ynb)
-                    ctx.enqueue_function[bayes_yvar_parts_kernel](
-                        dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dvparts.unsafe_ptr(),
-                        wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
-                    )
-                    wo += _xg_blocks(ynb)
-                    ctx.enqueue_function[bayes_xty_kernel](
-                        dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(hip[1]), dfw.unsafe_ptr(),
-                        dyparts.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(d), block_dim=XG_TPB,
-                    )
-                    wo += _xg_blocks(d)
+                    var c1p = False
+                    comptime if BAYES_CLS1_PARTS:
+                        # lane/apple-fast-gap-cls1: a block per row block
+                        c1p = True
+                        ctx.enqueue_function[c1_sum_parts_kernel](
+                            dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dstate.unsafe_ptr(), Int32(3),
+                            wit.p(), Int32(wo), nonce, grid_dim=ynb, block_dim=C1_TPB,
+                        )
+                        wo += ynb
+                        ctx.enqueue_function[c1_dev_parts_kernel](
+                            dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dvparts.unsafe_ptr(),
+                            wit.p(), Int32(wo), nonce, grid_dim=ynb, block_dim=C1_TPB,
+                        )
+                        wo += ynb
+                    if not c1p:
+                        ctx.enqueue_function[bayes_yparts_kernel](
+                            dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dstate.unsafe_ptr(),
+                            wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
+                        )
+                        wo += _xg_blocks(ynb)
+                        ctx.enqueue_function[bayes_yvar_parts_kernel](
+                            dy.unsafe_ptr(), Int32(n), dyparts.unsafe_ptr(), dvparts.unsafe_ptr(),
+                            wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
+                        )
+                        wo += _xg_blocks(ynb)
+                    if not kstats:
+                        # BAYES_STATS: X'y came from the fast grid Gram
+                        ctx.enqueue_function[bayes_xty_kernel](
+                            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(hip[1]), dfw.unsafe_ptr(),
+                            dyparts.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(d), block_dim=XG_TPB,
+                        )
+                        wo += _xg_blocks(d)
                 ctx.enqueue_function[bayes_eig_kernel](
                     dfw.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dip.unsafe_ptr(), Int32(d), Int32(ynb),
                     dyparts.unsafe_ptr(), dvparts.unsafe_ptr(), dtw.unsafe_ptr(), dstate.unsafe_ptr(),
@@ -3513,8 +3638,14 @@ def fit_device(
     if bayes_grid:
         var drows = ctx.enqueue_create_buffer[DType.float32](n)
         var dparts = ctx.enqueue_create_buffer[DType.float32](max(fold_blocks(n), 1))
-        var hst = List[Float32](length=8, fill=Float32(0))
-        var wit2 = Witness(ctx, max(_xg_blocks(n) + _xg_blocks(fold_blocks(n)), _xg_blocks(d)) + 1)
+        var hst = List[Float32](length=C1_BAYES_STATE, fill=Float32(0))
+        # lane/apple-fast-gap-cls1 BAYES_CLS1_PARTS: the iteration's partials
+        # a block per row block (unweighted fits)
+        var c1parts = False
+        comptime if BAYES_CLS1_PARTS:
+            c1parts = Int(hip[2]) == 0 if len(hip) > 2 else True
+        var pblocks = fold_blocks(n) if c1parts else _xg_blocks(fold_blocks(n))
+        var wit2 = Witness(ctx, max(_xg_blocks(n) + pblocks, _xg_blocks(d)) + 1)
         var max_iter = Int(hip[0])
         var sw = Int(hip[2]) if len(hip) > 2 else 0
         var gram_sse = False
@@ -3544,8 +3675,52 @@ def fit_device(
                 if tr >= WITNESS_TRIES:
                     wit2.fail()
         var iters = 0
-        comptime if BAYES_GRID_GUARD:
+        var dev_iters = False
+        comptime if BAYES_CLS1_BATCH:
             if guard:
+                # lane/apple-fast-gap-cls1: C1_BATCH guarded iterations per
+                # witness check; the row pass, the step and the count gate on
+                # the device's state words; one synchronize per batch (the
+                # state read rides on the witness wait). A cut launch raises
+                # (the step updates in place), as a cut step does on main.
+                var g_r = _xg_blocks(n)
+                var g_p = fold_blocks(n)
+                var per = g_r + g_p + 1
+                var wit3 = Witness(ctx, C1_BATCH * per + 1)
+                ctx.enqueue_function[c1_bayes_state_init_kernel](dstate.unsafe_ptr(), grid_dim=1, block_dim=1)
+                var done_it = 0
+                while done_it < max_iter:
+                    var nbt = min(C1_BATCH, max_iter - done_it)
+                    var nc = wit3.begin()
+                    var wo = 0
+                    for _b in range(nbt):
+                        ctx.enqueue_function[c1_bayes_resid_kernel](
+                            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), dfw.unsafe_ptr(), dout.unsafe_ptr(),
+                            dstate.unsafe_ptr(), drows.unsafe_ptr(), wit3.p(), Int32(wo), nc,
+                            grid_dim=g_r, block_dim=XG_TPB,
+                        )
+                        wo += g_r
+                        ctx.enqueue_function[c1_sq_parts_kernel](
+                            drows.unsafe_ptr(), Int32(n), dstate.unsafe_ptr(), Int32(5), Int32(6), Int32(0),
+                            dparts.unsafe_ptr(), wit3.p(), Int32(wo), nc, grid_dim=g_p, block_dim=C1_TPB,
+                        )
+                        wo += g_p
+                        ctx.enqueue_function[c1_bayes_step_kernel](
+                            dfw.unsafe_ptr(), dout.unsafe_ptr(), dfp.unsafe_ptr(), Int32(d), Int32(ynb), dparts.unsafe_ptr(),
+                            dstate.unsafe_ptr(), wit3.p(), Int32(wo), nc, grid_dim=1, block_dim=1,
+                        )
+                        wo += 1
+                    ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dstate.create_sub_buffer[DType.float32](0, 8))
+                    if not wit3.ok(ctx, wo, "Bayes batch"):
+                        wit3.fail()
+                    done_it += nbt
+                    if hst[5] != Float32(0):
+                        break
+                _ = wit3^
+                dev_iters = True
+                max_iter = 0  # the loops below ran here
+        comptime if BAYES_GRID_GUARD:
+            if guard and not dev_iters:
                 # the first iteration makes the row pass (no reference yet);
                 # after each step the stop word's read also brings the verdict
                 # on the next iteration's Gram sse (state[6])
@@ -3561,11 +3736,18 @@ def fit_device(
                                 dstate.unsafe_ptr(), drows.unsafe_ptr(), wit2.p(), Int32(0), nonce,
                                 grid_dim=_xg_blocks(n), block_dim=XG_TPB,
                             )
-                            ctx.enqueue_function[bayes_part_kernel](
-                                drows.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(sw), dparts.unsafe_ptr(),
-                                wit2.p(), Int32(_xg_blocks(n)), nonce, grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
-                            )
-                            if wit2.ok(ctx, _xg_blocks(n) + _xg_blocks(fold_blocks(n)), "Bayes residuals"):
+                            if c1parts:
+                                ctx.enqueue_function[c1_sq_parts_kernel](
+                                    drows.unsafe_ptr(), Int32(n), dstate.unsafe_ptr(), Int32(-1), Int32(0), Int32(0),
+                                    dparts.unsafe_ptr(), wit2.p(), Int32(_xg_blocks(n)), nonce,
+                                    grid_dim=fold_blocks(n), block_dim=C1_TPB,
+                                )
+                            else:
+                                ctx.enqueue_function[bayes_part_kernel](
+                                    drows.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(sw), dparts.unsafe_ptr(),
+                                    wit2.p(), Int32(_xg_blocks(n)), nonce, grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
+                                )
+                            if wit2.ok(ctx, _xg_blocks(n) + pblocks, "Bayes residuals"):
                                 break
                             tr += 1
                             if tr >= WITNESS_TRIES:
@@ -3609,11 +3791,18 @@ def fit_device(
                     dstate.unsafe_ptr(), drows.unsafe_ptr(), wit2.p(), Int32(0), nonce,
                     grid_dim=_xg_blocks(n), block_dim=XG_TPB,
                 )
-                ctx.enqueue_function[bayes_part_kernel](
-                    drows.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(sw), dparts.unsafe_ptr(),
-                    wit2.p(), Int32(_xg_blocks(n)), nonce, grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
-                )
-                if wit2.ok(ctx, _xg_blocks(n) + _xg_blocks(fold_blocks(n)), "Bayes residuals"):
+                if c1parts:
+                    ctx.enqueue_function[c1_sq_parts_kernel](
+                        drows.unsafe_ptr(), Int32(n), dstate.unsafe_ptr(), Int32(-1), Int32(0), Int32(0),
+                        dparts.unsafe_ptr(), wit2.p(), Int32(_xg_blocks(n)), nonce,
+                        grid_dim=fold_blocks(n), block_dim=C1_TPB,
+                    )
+                else:
+                    ctx.enqueue_function[bayes_part_kernel](
+                        drows.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(sw), dparts.unsafe_ptr(),
+                        wit2.p(), Int32(_xg_blocks(n)), nonce, grid_dim=_xg_blocks(fold_blocks(n)), block_dim=XG_TPB,
+                    )
+                if wit2.ok(ctx, _xg_blocks(n) + pblocks, "Bayes residuals"):
                     break
                 tr += 1
                 if tr >= WITNESS_TRIES:
@@ -3634,10 +3823,16 @@ def fit_device(
             if hst[5] != Float32(0):
                 break
         var nf = wit2.begin()
-        ctx.enqueue_function[bayes_finish_kernel](
-            dfw.unsafe_ptr(), dout.unsafe_ptr(), Int32(d), Int32(hip[1]), dstate.unsafe_ptr(), Int32(iters),
-            wit2.p(), Int32(0), nf, grid_dim=1, block_dim=1,
-        )
+        if dev_iters:
+            ctx.enqueue_function[c1_bayes_finish_kernel](
+                dfw.unsafe_ptr(), dout.unsafe_ptr(), Int32(d), Int32(hip[1]), dstate.unsafe_ptr(),
+                wit2.p(), Int32(0), nf, grid_dim=1, block_dim=1,
+            )
+        else:
+            ctx.enqueue_function[bayes_finish_kernel](
+                dfw.unsafe_ptr(), dout.unsafe_ptr(), Int32(d), Int32(hip[1]), dstate.unsafe_ptr(), Int32(iters),
+                wit2.p(), Int32(0), nf, grid_dim=1, block_dim=1,
+            )
         if not wit2.ok(ctx, 1, "Bayes finish"):
             wit2.fail()
         ctx.synchronize()

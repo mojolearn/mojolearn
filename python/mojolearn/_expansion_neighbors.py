@@ -154,6 +154,16 @@ def _labels_of(y):
     return classes, [code[v] for v in y]
 
 
+def _nc_cls1_flags(est):
+    """lane/apple-fast-gap-cls1: the bound binary's NearestCentroid switches
+    (`x_neighbors_cls1_flags`; 0 without them: main's path)."""
+    try:
+        fn = getattr(est._bind(), "x_neighbors_cls1_flags", None)
+        return int(fn()) if fn is not None else 0
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def _purity_flags(est):
     """lane apple-fast-purity: the bound binary's switches
     (`x_neighbors_purity_flags`; 0 without them: the Python passes).
@@ -542,15 +552,36 @@ class NearestCentroid(_XNeighbors):
             raise ValueError("NearestCentroid: metric must be 'euclidean' or 'manhattan'")
         X = _f32(X)
         n, d = X.shape
-        classes, codes = _labels_of(y)
-        if len(codes) != n:
-            raise ValueError("X and y have different numbers of rows")
-        C = len(classes)
-        if C < 2:
-            raise ValueError(f"The number of classes has to be greater than one; got {C} class")
-        counts = [0] * C
-        for c in codes:
-            counts[c] += 1
+        lab = None
+        if _nc_cls1_flags(self) & 1:
+            # lane/apple-fast-gap-cls1 NC_FAST_CLS1_LABELS (FAST + Apple
+            # default, off with -D MOJOLEARN_NC_FAST_CLS1_LABELS_OFF): the
+            # native encoder's int32 codes as they are, the class counts from
+            # the device (x_neighbors/nc_cls1.mojo); no Python pass over the rows
+            from ._labels import encode_labels
+            classes, lab = encode_labels(y)
+            if lab.size != n:
+                raise ValueError("X and y have different numbers of rows")
+            C = len(classes)
+            if C < 2:
+                raise ValueError(f"The number of classes has to be greater than one; got {C} class")
+            if C <= 256:
+                nkc = _empty_out((C,), "<f4")
+                self._op("nc_counts", [(lab, 0), (nkc, 1)], (n, C))
+                counts = [int(v) for v in nkc.tolist()]
+            else:
+                lab = None
+        if lab is None:
+            classes, codes = _labels_of(y)
+            if len(codes) != n:
+                raise ValueError("X and y have different numbers of rows")
+            C = len(classes)
+            if C < 2:
+                raise ValueError(f"The number of classes has to be greater than one; got {C} class")
+            counts = [0] * C
+            for c in codes:
+                counts[c] += 1
+            lab = _i32(codes, "y")
         if self.priors == "empirical":
             prior = [c / float(n) for c in counts]
         elif self.priors == "uniform":
@@ -565,7 +596,6 @@ class NearestCentroid(_XNeighbors):
             if not math.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
                 prior = [p / tot for p in prior]
         self.class_prior_ = Array.from_list(prior, "<f8")
-        lab = _i32(codes, "y")
         if self.metric == "euclidean":
             cent = _empty_out((C, d), "<f4")
             if os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") == "1":
@@ -775,7 +805,11 @@ class OneClassSVM(_XNeighbors):
         else:
             self._gamma = _f32_scalar(_resolve_gamma(self.gamma, self.kernel, X, self))
             Xw = X if m == n else self._take_rows(X, rows)
-            Q = self._kernel(Xw, Xw, self.kernel, self._gamma, self.coef0, self.degree)
+            # lane/apple-fast-gap-cls2 (FAST + Apple default; -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF off):
+            # the binding forms the same Gram on the device and solves over it
+            # there (no 400 MB download into a fresh host array and upload back)
+            res_fn = getattr(self._bind(), "x_neighbors_ocsvm_resident", None) if self._fast_tier() else None
+            Q = None if res_fn is not None else self._kernel(Xw, Xw, self.kernel, self._gamma, self.coef0, self.degree)
         cv = Array.from_list(cvals, "<f4")
         cf = cv.tolist()                                  # libsvm's C_i as the solver sees them
         nl = float(self.nu) * m                            # solve_one_class: nu_l = sum(C_i * nu) ...
@@ -793,7 +827,14 @@ class OneClassSVM(_XNeighbors):
         info = _empty_out((1,), "<f4")
         iters = empty((1,), "<i4")
         cap = 10_000_000 if int(self.max_iter) < 0 else int(self.max_iter)
-        self._op("ocsvm", [(Q, 0), (cv, 0), (alpha, 1), (info, 1), (iters, 1)], (m, cap), (_f32_scalar(self.tol),), )
+        if Q is None:
+            res_fn([addr_ro(Xw, name="xn_ocsvm X"), addr_ro(cv, name="xn_ocsvm cv"),
+                    addr(alpha, name="xn_ocsvm alpha"), addr(info, name="xn_ocsvm info"),
+                    addr(iters, name="xn_ocsvm iters")],
+                   [m, d, _KERNELS[self.kernel], int(self.degree), cap],
+                   [float(self._gamma), float(_f32_scalar(self.coef0)), float(_f32_scalar(self.tol))])
+        else:
+            self._op("ocsvm", [(Q, 0), (cv, 0), (alpha, 1), (info, 1), (iters, 1)], (m, cap), (_f32_scalar(self.tol),), )
         # the op's scalar order is (n, eps, max_iter): ints (n, max_iter), floats (eps,)
         rho = info.tolist()[0]
         a = alpha.tolist()
