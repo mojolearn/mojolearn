@@ -23,7 +23,7 @@ from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.device_store import DeviceStore
 from x_linear.fast_gram import fast_sym_gram_into, fg_part_words
-from x_prep.rr_eigh import RRE_STATE, rr_eigh_into, rre_words
+from x_prep.rr_eigh import rr_eigh_into, rre_words
 
 #: FAST on Apple, -D MOJOLEARN_LDAQDA_RR_EIGH (lane/apple-fast-ldaqda): the
 #: `eigh` stage (op 18) as x_prep/rr_eigh.mojo's round-robin Jacobi on the
@@ -215,7 +215,6 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                     cov_words = max(cov_words, fg_part_words(Int(cq[8]), Int(cq[7])))
     # the round-robin eigh's scratch and done marks, sized over the program
     var rre_scr = 1
-    var rre_st = 1
     comptime if RR_EIGH:
         for s in range(stages):
             if Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_EIGH:
@@ -223,12 +222,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 var en = Int(host_q.unsafe_load(s * STAGE_INTS + 3))
                 if eb > 0 and en > 0:
                     rre_scr = max(rre_scr, rre_words(en, eb))
-                    rre_st = max(rre_st, eb * RRE_STATE)
     var ctx = x_prep_ctx()
     var dcg = ctx.enqueue_create_buffer[DType.float32](cov_words)
     var dre = ctx.enqueue_create_buffer[DType.float32](rre_scr)
-    var dres = ctx.enqueue_create_buffer[DType.float32](rre_st)
-    var hres = List[Float32](length=rre_st, fill=Float32(0.0))
     var dmw = ctx.enqueue_create_buffer[DType.uint64](mi_w if mi_sorted else 1)
     var dmu = ctx.enqueue_create_buffer[DType.uint32](mi_u if mi_sorted else 1)
     var out_n = out_len if out_addr != 0 and out_len > 0 else 0
@@ -293,8 +289,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 var hq = host_q + (s * STAGE_INTS + 2)
                 var pf = FP(unsafe_from_address=Int(df.unsafe_ptr()))
                 var pr = FP(unsafe_from_address=Int(dre.unsafe_ptr()))
-                rr_eigh_into(ctx, pf, Int(hq[0]), Int(hq[1]), Int(hq[2]), total, Int(hq[3]), Int(hq[4]), pr, hres,
-                             dres)
+                rr_eigh_into(ctx, pf, Int(hq[0]), Int(hq[1]), Int(hq[2]), total, Int(hq[3]), Int(hq[4]), pr)
                 continue
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if cov_grid and op == OP_QDA_COV:
@@ -374,8 +369,6 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     _ = dmu^
     _ = dcg^
     _ = dre^
-    _ = dres^
-    _ = hres^
     _ = dq^
     _ = df^
     _ = ctx^

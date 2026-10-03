@@ -14,12 +14,19 @@ every (row, pair) of V J on its own thread (`rr_cs`, `rr_block`, `rr_vrow`,
 the cells of x_decomp/jacobi_par.mojo), for every matrix of the batch in
 the same launch.
 
+ONE launch a round: A ping-pongs between the arena and a scratch copy, so
+every thread takes the (c, s) it needs from the round's source (`rr_cs`,
+the same words as x_decomp's separate cs launch) and writes its cells of
+the destination; V is updated in place (each cell one reader and writer).
+
 Convergence: x_decomp's test (off-diagonal squares against tol^2 ||A||_F^2,
 `rr_off_fold`'s order) before every sweep, decided ON THE DEVICE per matrix
-into a done mark; every later kernel of a done matrix returns at once, so
-the host enqueues sweeps ahead and reads the marks only every
-RRE_POLL_SWEEPS sweeps (no per-sweep wait). A matrix that has not converged
-in RR_EIGH_SWEEPS stops there, as `eigh_unit` stops at its sweep cap.
+into a done mark; every later kernel of a done matrix returns at once. No
+host step: the host enqueues a fixed budget of RRE_SWEEPS sweeps and never
+reads the marks (a converged matrix's remaining launches return at once).
+The test also leaves the diagonal of its source in dg, so the tail reads
+the eigenvalues from dg, wherever the matrix stopped. A matrix that has not
+converged in RRE_SWEEPS stops there, as `eigh_unit` stops at its cap.
 
 The tail is `eigh_unit`'s contract: eigenvalues DESCENDING (index order on
 a tie, `spectrum_rank_desc`), each vector's largest-magnitude component
@@ -29,22 +36,25 @@ the round-robin order is not the cyclic order, so the words differ from
 """
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.numerics import ftz
+from checks.numerics import ftz, identical_div, identical_mul
 from decomposition.checks.jacobi_eigh_device import JACOBI_TOL
 from decomposition.spectrum_order_device import spectrum_rank_desc
-from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_block, rr_converged, rr_cs, rr_row_off, rr_vrow
+from x_decomp.rr import RR_OFF_TPB, pj_first, pj_second, rr_add, rr_converged, rr_cs, rr_row_off, rr_sub
 from x_prep.common import FP
 
 comptime RRE_TPB = 256
 """Launch width of the per-cell kernels."""
-comptime RRE_POLL_SWEEPS = 2
-"""Sweeps enqueued between two reads of the done marks."""
-comptime RRE_STATE = 4
-"""State words a matrix: [done, fro_in, tests, converged]."""
+comptime RRE_SWEEPS = 32
+"""Sweep budget (enqueued whole; a converged matrix's launches return at once)."""
+comptime RRE_SYNC_ROUNDS = 512
+"""Rounds enqueued between two waits (x_decomp/device.mojo PJ_SYNC_ROUNDS;
+a wait only, nothing is read)."""
+comptime RRE_STATE = 2
+"""State words a matrix: [done, tests]."""
 
 
 @always_inline
@@ -59,9 +69,9 @@ def rre_nb(n: Int) -> Int:
 
 @always_inline
 def rre_words(n: Int, batch: Int) -> Int:
-    """Scratch words for `rr_eigh_into`: V, cs, partials, diagonal, state."""
-    var m = rre_m(n)
-    return batch * (n * n + m + 2 * rre_nb(n) + n + RRE_STATE)
+    """Scratch words for `rr_eigh_into`: A's ping-pong copy, V, partials,
+    diagonal, state."""
+    return batch * (2 * n * n + 2 * rre_nb(n) + n + RRE_STATE)
 
 
 @always_inline
@@ -70,7 +80,7 @@ def _blocks(t: Int) -> Int:
 
 
 def rre_init_kernel(v: FP, stt: FP, n_in: Int32, batch_in: Int32):
-    """V = I for every matrix; state = [0, -1, 0, 0]."""
+    """V = I for every matrix; state = [0, 0]."""
     var n = Int(n_in)
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var batch = Int(batch_in)
@@ -80,15 +90,14 @@ def rre_init_kernel(v: FP, stt: FP, n_in: Int32, batch_in: Int32):
         v.unsafe_store(t, Float32(1.0) if i * n + i == c else Float32(0.0))
     if t < batch:
         stt.unsafe_store(t * RRE_STATE, Float32(0.0))
-        stt.unsafe_store(t * RRE_STATE + 1, Float32(-1.0))
-        stt.unsafe_store(t * RRE_STATE + 2, Float32(0.0))
-        stt.unsafe_store(t * RRE_STATE + 3, Float32(0.0))
+        stt.unsafe_store(t * RRE_STATE + 1, Float32(0.0))
 
 
-def rre_part_kernel(f: FP, a_off: Int32, astride: Int32, part: FP, dg: FP, stt: FP, n_in: Int32):
-    """Block g = b nb + blk: rows blk RR_OFF_TPB .. of matrix b, the
-    pairwise tree of their off-diagonal squares and a_kk^2 into part[b][2
-    blk ..], the diagonal into dg[b n + k] (`eigh_par_off_part_kernel`)."""
+def rre_part_kernel(a0: FP, astride: Int32, part: FP, dg: FP, stt: FP, n_in: Int32):
+    """Block g = b nb + blk: rows blk RR_OFF_TPB .. of matrix b (at a0 + b
+    astride), the pairwise tree of their off-diagonal squares and a_kk^2
+    into part[b][2 blk ..], the diagonal into dg[b n + k]
+    (`eigh_par_off_part_kernel`)."""
     var n = Int(n_in)
     var nb = rre_nb(n)
     var g = Int(block_idx.x)
@@ -96,7 +105,7 @@ def rre_part_kernel(f: FP, a_off: Int32, astride: Int32, part: FP, dg: FP, stt: 
     var blk = g - b * nb
     if stt.unsafe_load(b * RRE_STATE) != Float32(0.0):
         return
-    var a = f + (Int(a_off) + b * Int(astride))
+    var a = a0 + b * Int(astride)
     var tid = Int(thread_idx.x)
     var k = blk * RR_OFF_TPB + tid
     var so = stack_allocation[RR_OFF_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
@@ -104,7 +113,7 @@ def rre_part_kernel(f: FP, a_off: Int32, astride: Int32, part: FP, dg: FP, stt: 
     var o = SIMD[DType.float32, 2](0.0, 0.0)
     if k < n:
         o = rr_row_off(a, n, k)
-        dg.unsafe_store(b * n + k, a.unsafe_load(k * n + k))
+        dg.unsafe_store(b * n + k, ftz(a.unsafe_load(k * n + k)))
     so[tid] = o[0]
     sd[tid] = o[1]
     barrier()
@@ -150,42 +159,26 @@ def rre_fold_kernel(part: FP, stt: FP, n_in: Int32, sweeps_in: Int32, tol: Float
         barrier()
         w = w // 2
     if tid == 0:
-        var off = so[0]
-        var dd = sd[0]
-        var fro = ftz(off + dd)
-        if stt.unsafe_load(s0 + 1) < Float32(0.0):
-            stt.unsafe_store(s0 + 1, fro)
-        var tests = stt.unsafe_load(s0 + 2) + Float32(1.0)
-        stt.unsafe_store(s0 + 2, tests)
-        if rr_converged(off, dd, tol):
-            stt.unsafe_store(s0 + 3, Float32(1.0))
-            stt.unsafe_store(s0, Float32(1.0))
-        elif Int(tests) > Int(sweeps_in):
+        var tests = Int(stt.unsafe_load(s0 + 1)) + 1
+        stt.unsafe_store(s0 + 1, Float32(tests))
+        if rr_converged(so[0], sd[0], tol) or tests > Int(sweeps_in):
             stt.unsafe_store(s0, Float32(1.0))
 
 
-def rre_cs_kernel(f: FP, a_off: Int32, astride: Int32, cs: FP, stt: FP, n_in: Int32, rd: Int32, batch_in: Int32):
-    """Thread b h + p: pair p of round rd of matrix b, its (c, s) (`rr_cs`)."""
-    var n = Int(n_in)
-    var m = rre_m(n)
-    var h = m // 2
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t >= Int(batch_in) * h:
-        return
-    var b = t // h
-    var pp = t - b * h
-    if stt.unsafe_load(b * RRE_STATE) != Float32(0.0):
-        return
-    var a = f + (Int(a_off) + b * Int(astride))
-    var got = rr_cs(a, n, m, Int(rd), pp)
-    cs.unsafe_store(b * m + 2 * pp, got[0])
-    cs.unsafe_store(b * m + 2 * pp + 1, got[1])
+@always_inline
+def _pair(r: Int, b: Int, m: Int) -> Tuple[Int, Int]:
+    var x0 = pj_first(r, b, m)
+    var x1 = pj_second(r, b, m)
+    return (min(x0, x1), max(x0, x1))
 
 
-def rre_update_kernel(f: FP, a_off: Int32, astride: Int32, v: FP, cs: FP, stt: FP, n_in: Int32, rd: Int32,
-                      batch_in: Int32):
-    """Thread b U + u, U = h h + n h: J^T A J by 2 x 2 blocks (`rr_block`),
-    then V J by (row, pair) (`rr_vrow`), matrix b, round rd."""
+def rre_round_kernel(src0: FP, sstride: Int32, dst0: FP, dstride: Int32, v: FP, stt: FP, n_in: Int32, rd: Int32,
+                     batch_in: Int32):
+    """Thread b U + u, U = h h + n h, round rd of matrix b: units below h h
+    the 2 x 2 blocks (i, j), i <= j, of J^T A J from src into dst (and the
+    mirror; the pair's own block in closed form, a bye's diagonal copied),
+    the rest V J by (row, pair) in place: x_decomp/rr.mojo's `rr_block` /
+    `rr_vrow` with each (c, s) taken by `rr_cs` from src."""
     var n = Int(n_in)
     var m = rre_m(n)
     var h = m // 2
@@ -197,22 +190,88 @@ def rre_update_kernel(f: FP, a_off: Int32, astride: Int32, v: FP, cs: FP, stt: F
     var u = t - b * units
     if stt.unsafe_load(b * RRE_STATE) != Float32(0.0):
         return
-    var a = f + (Int(a_off) + b * Int(astride))
-    var c = cs + b * m
-    if u < h * h:
-        var i = u // h
-        var j = u - i * h
-        if i <= j:
-            rr_block(a, c, n, m, Int(rd), i, j)
-    else:
+    var r = Int(rd)
+    var src = src0 + b * Int(sstride)
+    if u >= h * h:
         var x = u - h * h
         var k = x // h
-        rr_vrow(v + b * n * n, c, n, m, Int(rd), k, x - k * h)
+        var j = x - k * h
+        var pq = _pair(r, j, m)
+        if pq[1] < n:
+            var cs = rr_cs(src, n, m, r, j)
+            var vb = v + b * n * n
+            var vkp = vb.unsafe_load(k * n + pq[0])
+            var vkq = vb.unsafe_load(k * n + pq[1])
+            vb.unsafe_store(k * n + pq[0], rr_sub(cs[0], vkp, cs[1], vkq))
+            vb.unsafe_store(k * n + pq[1], rr_add(cs[1], vkp, cs[0], vkq))
+        return
+    var i = u // h
+    var j = u - i * h
+    if i > j:
+        return
+    var dst = dst0 + b * Int(dstride)
+    var ip = _pair(r, i, m)
+    var pi = ip[0]
+    var qi = ip[1]
+    var csi = rr_cs(src, n, m, r, i)
+    var ci = csi[0]
+    var si = csi[1]
+    if i == j:
+        if qi < n:
+            var app = src.unsafe_load(pi * n + pi)
+            var aqq = src.unsafe_load(qi * n + qi)
+            var apq = src.unsafe_load(pi * n + qi)
+            var tt = ftz(identical_div(si, ci))
+            var dlt = ftz(identical_mul(tt, apq))
+            dst.unsafe_store(pi * n + pi, ftz(app - dlt))
+            dst.unsafe_store(qi * n + qi, ftz(aqq + dlt))
+            dst.unsafe_store(pi * n + qi, Float32(0.0))
+            dst.unsafe_store(qi * n + pi, Float32(0.0))
+        else:
+            dst.unsafe_store(pi * n + pi, src.unsafe_load(pi * n + pi))
+        return
+    var jp = _pair(r, j, m)
+    var pj = jp[0]
+    var qj = jp[1]
+    var csj = rr_cs(src, n, m, r, j)
+    var cj = csj[0]
+    var sj = csj[1]
+    var vi = qi < n
+    var vj = qj < n
+    var b00 = src.unsafe_load(pi * n + pj)
+    var b01 = Float32(0.0)
+    var b10 = Float32(0.0)
+    var b11 = Float32(0.0)
+    if vj:
+        b01 = src.unsafe_load(pi * n + qj)
+    if vi:
+        b10 = src.unsafe_load(qi * n + pj)
+    if vi and vj:
+        b11 = src.unsafe_load(qi * n + qj)
+    var t00 = rr_sub(cj, b00, sj, b01)
+    var t01 = rr_add(sj, b00, cj, b01)
+    var t10 = rr_sub(cj, b10, sj, b11)
+    var t11 = rr_add(sj, b10, cj, b11)
+    var n00 = rr_sub(ci, t00, si, t10)
+    var n01 = rr_sub(ci, t01, si, t11)
+    var n10 = rr_add(si, t00, ci, t10)
+    var n11 = rr_add(si, t01, ci, t11)
+    dst.unsafe_store(pi * n + pj, n00)
+    dst.unsafe_store(pj * n + pi, n00)
+    if vj:
+        dst.unsafe_store(pi * n + qj, n01)
+        dst.unsafe_store(qj * n + pi, n01)
+    if vi:
+        dst.unsafe_store(qi * n + pj, n10)
+        dst.unsafe_store(pj * n + qi, n10)
+    if vi and vj:
+        dst.unsafe_store(qi * n + qj, n11)
+        dst.unsafe_store(qj * n + qi, n11)
 
 
-def rre_sign_kernel(f: FP, a_off: Int32, astride: Int32, v: FP, dg: FP, n_in: Int32, batch_in: Int32):
+def rre_sign_kernel(v: FP, n_in: Int32, batch_in: Int32):
     """Thread b n + col: column col of V made positive at its largest-magnitude
-    component (first on a tie; comparisons only); dg = the diagonal of A."""
+    component (first on a tie; comparisons only)."""
     var n = Int(n_in)
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t >= Int(batch_in) * n:
@@ -230,8 +289,6 @@ def rre_sign_kernel(f: FP, a_off: Int32, astride: Int32, v: FP, dg: FP, n_in: In
     if vb.unsafe_load(first * n + col) < Float32(0.0):
         for r in range(n):
             vb.unsafe_store(r * n + col, -vb.unsafe_load(r * n + col))
-    var a = f + (Int(a_off) + b * Int(astride))
-    dg.unsafe_store(b * n + col, ftz(a.unsafe_load(col * n + col)))
 
 
 def rre_order_kernel(f: FP, dg: FP, v: FP, w_off: Int32, v_off: Int32, n_in: Int32, batch_in: Int32):
@@ -253,50 +310,48 @@ def rre_order_kernel(f: FP, dg: FP, v: FP, w_off: Int32, v_off: Int32, n_in: Int
 
 
 def rr_eigh_into(mut ctx: DeviceContext, f: FP, a_off: Int, n: Int, astride: Int, batch: Int, w_off: Int,
-                 v_off: Int, scratch: FP, mut host_state: List[Float32],
-                 mut state_buf: DeviceBuffer[DType.float32]) raises:
+                 v_off: Int, scratch: FP) raises:
     """`eigh_unit`'s stage q = [A, n, astride, EVAL, EVEC] for `batch`
     matrices, on the arena f (device): A destroyed, EVAL / EVEC as
-    `eigh_unit` writes them. scratch: `rre_words(n, batch)` words minus the
-    state (kept in state_buf, batch * RRE_STATE words, read back every
-    RRE_POLL_SWEEPS sweeps into host_state)."""
+    `eigh_unit` writes them. scratch: `rre_words(n, batch)` device words.
+    Enqueues (a wait every RRE_SYNC_ROUNDS rounds, nothing read)."""
     if n <= 0 or batch <= 0:
         return
     var m = rre_m(n)
     var h = m // 2
     var nb = rre_nb(n)
-    var v = scratch
-    var cs = v + batch * n * n
-    var part = cs + batch * m
+    var a1 = scratch
+    var v = a1 + batch * n * n
+    var part = v + batch * n * n
     var dg = part + batch * 2 * nb
-    var stt = FP(unsafe_from_address=Int(state_buf.unsafe_ptr()))
+    var stt = dg + batch * n
+    var a0 = f + a_off
     ctx.enqueue_function[rre_init_kernel](v, stt, Int32(n), Int32(batch), grid_dim=_blocks(batch * n * n),
                                           block_dim=RRE_TPB)
     var units = h * h + n * h
-    for sweep in range(RR_EIGH_SWEEPS + 1):
-        ctx.enqueue_function[rre_part_kernel](f, Int32(a_off), Int32(astride), part, dg, stt, Int32(n),
-                                              grid_dim=batch * nb, block_dim=RR_OFF_TPB)
-        ctx.enqueue_function[rre_fold_kernel](part, stt, Int32(n), Int32(RR_EIGH_SWEEPS), Float32(JACOBI_TOL),
+    var rounds = 0
+    for sweep in range(RRE_SWEEPS + 1):
+        # every matrix not yet done sits in the same buffer: rounds so far mod 2
+        var cur = a0 if rounds % 2 == 0 else a1
+        var cst = astride if rounds % 2 == 0 else n * n
+        ctx.enqueue_function[rre_part_kernel](cur, Int32(cst), part, dg, stt, Int32(n), grid_dim=batch * nb,
+                                              block_dim=RR_OFF_TPB)
+        ctx.enqueue_function[rre_fold_kernel](part, stt, Int32(n), Int32(RRE_SWEEPS), Float32(JACOBI_TOL),
                                               grid_dim=batch, block_dim=RR_OFF_TPB)
-        if sweep % RRE_POLL_SWEEPS == RRE_POLL_SWEEPS - 1 or sweep == RR_EIGH_SWEEPS:
-            ctx.enqueue_copy(dst_ptr=host_state.unsafe_ptr(),
-                             src_buf=state_buf.create_sub_buffer[DType.float32](0, batch * RRE_STATE))
-            ctx.synchronize()
-            var all_done = True
-            for b in range(batch):
-                if host_state[b * RRE_STATE] == Float32(0.0):
-                    all_done = False
-            if all_done:
-                break
-        if sweep == RR_EIGH_SWEEPS:
+        if sweep == RRE_SWEEPS:
             break
         for rd in range(m - 1):
-            ctx.enqueue_function[rre_cs_kernel](f, Int32(a_off), Int32(astride), cs, stt, Int32(n), Int32(rd),
-                                                Int32(batch), grid_dim=_blocks(batch * h), block_dim=RRE_TPB)
-            ctx.enqueue_function[rre_update_kernel](f, Int32(a_off), Int32(astride), v, cs, stt, Int32(n),
-                                                    Int32(rd), Int32(batch), grid_dim=_blocks(batch * units),
-                                                    block_dim=RRE_TPB)
-    ctx.enqueue_function[rre_sign_kernel](f, Int32(a_off), Int32(astride), v, dg, Int32(n), Int32(batch),
-                                          grid_dim=_blocks(batch * n), block_dim=RRE_TPB)
+            var even = rounds % 2 == 0
+            var sp = FP(unsafe_from_address=Int(a0) if even else Int(a1))
+            var dp = FP(unsafe_from_address=Int(a1) if even else Int(a0))
+            ctx.enqueue_function[rre_round_kernel](
+                sp, Int32(astride if even else n * n), dp, Int32(n * n if even else astride), v, stt, Int32(n),
+                Int32(rd), Int32(batch), grid_dim=_blocks(batch * units), block_dim=RRE_TPB,
+            )
+            rounds += 1
+            if rounds % RRE_SYNC_ROUNDS == 0:
+                ctx.synchronize()
+    ctx.enqueue_function[rre_sign_kernel](v, Int32(n), Int32(batch), grid_dim=_blocks(batch * n),
+                                          block_dim=RRE_TPB)
     ctx.enqueue_function[rre_order_kernel](f, dg, v, Int32(w_off), Int32(v_off), Int32(n), Int32(batch),
                                            grid_dim=_blocks(batch * n), block_dim=RRE_TPB)
