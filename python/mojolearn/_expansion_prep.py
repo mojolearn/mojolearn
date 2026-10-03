@@ -3809,7 +3809,8 @@ def _label_buffer(y):
 def _label_chunk(n):
     """Rows per chunk of the run scan and the unknown count (bookkeeping
     only: every chunking writes the same words)."""
-    return max(1024, int(n ** 0.5) + 1)
+    from math import isqrt  # exact integer square root, no platform pow
+    return max(1024, isqrt(int(n)) + 1)
 
 
 def _label_load(pr, lb):
