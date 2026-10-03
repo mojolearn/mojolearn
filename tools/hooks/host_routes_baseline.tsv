@@ -61,5 +61,3 @@ host-call	host-import	PR#86	debt	x_linear/ridge.mojo	0	par_rows(rows_loo, n)
 host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	par_rows(run_problems, problems, 1)
 host-env	host-env/threshold	PR#85	inflight@6a483da91d76ae2560b5316910738e7b3328e375	x_linear/sgd.mojo	0	and not is_defined["MOJOLEARN_SGD_HOST_LEGACY"]()
-# why: error path only: runs after the device flag reported a bad tree, to name the first refusal; the success path never loops
-d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	xtrees/ops_device.mojo	0	for i in range(n):
