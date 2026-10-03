@@ -2649,7 +2649,7 @@ def fit_with_test(
                     ctx.synchronize()
                     wmag = hm[0]
                     gmag = hm[1]
-                _ = hm^  # past the drain
+                    _ = hm^  # past the drain
             loop_times.stop_host("iter_mags_drain", t_mags)
             # ====================== DEVIATION 260 ======================
             # THE hist_2 ACCUMULATION MODE IS THE KERNEL MATRIX'S
