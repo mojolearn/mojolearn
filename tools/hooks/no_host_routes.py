@@ -885,10 +885,11 @@ def tree_findings(tree, paths=None):
 # ------------------------------------------------------------- baseline ----
 
 _HDR = "rule\tclass\towner\tstate\tpath\tocc\ttext"
-# `owed` is `debt` for a rule added after the 2026-10-02 hooks were
+# `owed2` is the same for a rule added after the 2026-10-03 hooks
+# (block-per-n). `owed` is `debt` for a rule added after the 2026-10-02 hooks were
 # installed: those hooks skip a state they do not know, so the row neither
 # fails them as stale nor needs them to know the rule.
-_DEBT_STATES = ("debt", "owed")
+_DEBT_STATES = ("debt", "owed", "owed2")
 # rules added after the baseline was first written; a baseline with no row of
 # one predates it (see check_tree)
 _LATE_RULES = ("d2h-host-work", "one-block-n", "block-per-n")
