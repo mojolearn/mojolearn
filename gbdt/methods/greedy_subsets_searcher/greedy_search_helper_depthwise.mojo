@@ -1358,10 +1358,22 @@ comptime LG_EXACT_BATCH = (
     and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF"]()
     and not _LG_FAST_APPLE
 ) or LG_EXACT_ID
-#: FAST: width 64 (arms 32|128). IDENTICAL (`LG_EXACT_ID`) keeps main's
-#: width 32 (arms 16|64).
+#: FAST on Apple: width 128, THE DEFAULT since lane apple-fast-lgw128
+#: (2026-10-03): M3 Ultra A/B aft-ab-lgw128 on main 5f5eadcde, lossguide taxi,
+#: n=2: 13,148 -> 12,921 ms (-1.7%), AUC .6320 unchanged.
+#: `-D MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF` is the A/B arm (back to 64); the
+#: old `-D MOJOLEARN_GBDT_LG_EXACT_BATCH128` stays harmless. FAST elsewhere:
+#: width 64 (arms 32|128). IDENTICAL (`LG_EXACT_ID`) keeps main's width 32
+#: (arms 16|64). Lossguide only; depthwise never reads the width.
+comptime _LG_EXACT_BATCH128 = (
+    is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128"]()
+    or (
+        has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]()
+    )
+) and not is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF"]()
 comptime LG_EXACT_BATCH_WIDTH = (
-    128 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH128"]() else (
+    128 if _LG_EXACT_BATCH128 else (
         32 if is_defined["MOJOLEARN_GBDT_LG_EXACT_BATCH32"]() else 64
     )
 ) if GLOBAL_NUMERIC_MODE == NUMERIC_FAST else (
