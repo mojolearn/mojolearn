@@ -28,6 +28,7 @@ from . import _portable_math as math
 import os
 import struct
 
+from ._labels import threshold_codes
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, zeros
 from ._lazy_out import _empty_out
@@ -82,16 +83,11 @@ def _prefixed_names(est, count):
 
 
 def _accuracy(y_true, y_pred, sample_weight=None):
-    """sklearn's accuracy_score: the (weighted) fraction of exact label matches,
-    in IEEE double on labels compared exactly."""
-    t = y_true.tolist() if hasattr(y_true, "tolist") else list(y_true)
-    p = y_pred.tolist() if hasattr(y_pred, "tolist") else list(y_pred)
-    if len(t) != len(p):
-        raise ValueError("y_true and y_pred have different lengths")
-    if sample_weight is None:
-        return math.fsum(1.0 for a, b in zip(t, p) if a == b) / len(t)
-    w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else sample_weight)]
-    return math.fsum(wi for a, b, wi in zip(t, p, w) if a == b) / math.fsum(w)
+    """sklearn's accuracy_score: the (weighted) fraction of exact label
+    matches (`_expansion_metrics.accuracy_fraction`: grouped sums in the
+    x_metrics binding, no per-row Python)."""
+    from ._expansion_metrics import accuracy_fraction
+    return accuracy_fraction(y_true, y_pred, sample_weight)
 
 
 def _f32_1d(x, name):
@@ -520,7 +516,7 @@ class LocalOutlierFactor(_XNeighbors):
             lab = empty((score.size,), "<i4")
             self._op("p2m_sign_label", [(score, 0), (lab, 1)], (score.size, 0), (off,))
             return lab.astype("<i8")
-        return Array.from_list([-1 if s < off else 1 for s in score.tolist()], "<i8")
+        return threshold_codes(score, off, strict=False, below=-1, above=1)
 
     def _novelty(self, what):
         if not self.novelty:
@@ -549,7 +545,7 @@ class LocalOutlierFactor(_XNeighbors):
             lab = empty((dec.size,), "<i4")
             self._op("p2m_sign_label", [(dec, 0), (lab, 1)], (dec.size, 1), (0.0,))
             return lab.astype("<i8")
-        return Array.from_list([1 if v >= 0 else -1 for v in dec.tolist()], "<i8")
+        return threshold_codes(dec, 0.0, strict=False, below=-1, above=1)
 
 
 # ====================================================================== NearestCentroid
@@ -872,7 +868,7 @@ class OneClassSVM(_XNeighbors):
         return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
 
     def predict(self, X):
-        return Array.from_list([1 if v > 0 else -1 for v in self.decision_function(X).tolist()], "<i8")
+        return threshold_codes(self.decision_function(X), 0.0, strict=True, below=-1, above=1)
 
     def fit_predict(self, X, y=None):
         return self.fit(X).predict(X)

@@ -50,7 +50,7 @@ import time
 from . import _backend
 from . import _portable_math as _pm
 from ._array import Array
-from ._buffer import as_f32_c, addr_ro, addr as _addr_rw, _as_typed
+from ._buffer import as_f32_c, as_i32_c, addr_ro, addr as _addr_rw, _as_typed, empty, full
 from . import _labels
 from . import _arena_io
 from ._labels import flatten_labels, sorted_classes, label_kind
@@ -101,6 +101,12 @@ _NONE = -1
 #: x_prep/transform.mojo PT_EVALS (PT_ITERS + 2) and PT_STATE
 _PT_EVALS = 50
 _PT_STATE = 10
+
+
+def _native_helper(key):
+    """The base binding's host helper `key` (`_buffer._native`)."""
+    from ._buffer import _native
+    return _native(key)
 
 
 def _prep_binding(mode):
@@ -1347,7 +1353,8 @@ def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0, as_array=F
                                 (n, n_classes, n_folds, 1 if shuffle else 0), halves) != 0:
             raise ValueError(f"mojolearn: n_splits={n_folds} cannot be greater than the number of members in each class")
     if as_array:
-        return Array._owned(out, (len(out),), "<i4", "C")
+        return Array._owned(out, (len(out),), "<i4", "C") if len(out) == n else \
+            Array._owned(array.array("i", out[:n]), (n,), "<i4", "C")
     return out[:n].tolist()
 
 
@@ -1363,22 +1370,41 @@ def _target_binary_codes(y, target_type):
     return classes, codes
 
 
+def _numeric_target(y):
+    """y as a flat numeric Array, or None for labels that are not numbers
+    (strings, objects, bools)."""
+    from ._buffer import _materialize
+    try:
+        arr, _ = _materialize(y, "y")
+    except (TypeError, ValueError):
+        return None
+    if arr.dtype not in ("<f4", "<f8", "<i4", "<i8", "<u4", "<u1", "<i2", "<u2", "<i1"):
+        return None
+    return arr.reshape((arr.size,))
+
+
 def _target_kind(y, target_type):
-    """(kind, classes, Y rows as a flat float list with T columns, T)."""
-    labels = flatten_labels(y)
-    if target_type == "continuous" or (target_type == "auto" and labels and all(
-            isinstance(v, numbers.Real) and not isinstance(v, bool) for v in labels)
-            and any(float(v) != int(float(v)) for v in labels)):
-        return "continuous", None, [float(v) for v in labels], 1
-    classes, codes = encode_labels(labels)
-    codes = [int(c) for c in codes]
+    """(kind, classes, targets, T): targets are a float32 Array (continuous)
+    or the int32 class codes (binary, multiclass; the device makes their
+    float and one-hot words). Lane cgr4-py-compute: the kind test (any
+    non-integer value) is the base binding's `reduce_stat` integral check,
+    not a per-label Python test, and no per-row target list is built."""
+    num = _numeric_target(y)
+    continuous = target_type == "continuous"
+    if not continuous and target_type == "auto" and num is not None and num.size \
+            and num.dtype in ("<f4", "<f8"):
+        continuous = not bool(_native_helper("reduce_stat")(num._addr, 0 if num.dtype == "<f4" else 1,
+                                                            num.size, 4))
+    if continuous:
+        if num is None:
+            raise ValueError("mojolearn: a continuous TargetEncoder target must be numeric")
+        return "continuous", None, num.astype("<f4") if num.dtype != "<f4" else num, 1
+    classes, codes = encode_labels(y if num is None else num)
+    if not (isinstance(codes, Array) and codes.dtype == "<i4"):
+        codes = as_i32_c(codes, ndim=1, name="codes")[0]
     if target_type == "binary" or (target_type == "auto" and len(classes) <= 2):
-        return "binary", classes, [float(c) for c in codes], 1
-    K = len(classes)
-    flat = [0.0] * (len(codes) * K)
-    for i, c in enumerate(codes):
-        flat[i * K + c] = 1.0
-    return "multiclass", classes, flat, K
+        return "binary", classes, codes, 1
+    return "multiclass", classes, codes, len(classes)
 
 
 def _target_arrays(y, target_type):
@@ -1463,13 +1489,11 @@ class TargetEncoder(_PrepBase):
             target = _target_arrays(y, self.target_type)
         if target is not None:
             kind, classes, tgt, T = target
-            yflat, rows = None, tgt.size * T
         elif binary is None:
-            kind, classes, yflat, T = _target_kind(y, self.target_type)
-            rows = len(yflat)
+            kind, classes, tgt, T = _target_kind(y, self.target_type)
         else:
-            kind, classes, yflat, T = "binary", binary[0], None, 1
-            rows = binary[1].size
+            kind, classes, tgt, T = "binary", binary[0], binary[1], 1
+        rows = tgt.size * T
         if rows != n * T:
             raise ValueError("mojolearn: X and y have different numbers of rows")
         cats = (_fit_categories(mode, arr) if _is_auto(self.categories) else
@@ -1478,27 +1502,23 @@ class TargetEncoder(_PrepBase):
         F = n_folds
         pr = _Prog()
         codes, _neg = _codes(pr, arr, cats)
-        if target is not None:
-            if kind == "continuous":
-                yo = pr.put(tgt)
-            elif T == 1:
-                yo = pr.put_codes(tgt)
-            else:
-                # the one-hot rows: word 1.0f (bits 0x3F800000) where row i's code is c, else 0.0f
-                co, yo = pr.put_codes(tgt), pr.alloc(n * T)
-                pr.stage("label_binarize", n * T, co, n, T, 0, 0, 0x3F800000, T, yo)
-            if isinstance(folds, Array):
-                fo = pr.put_codes(folds)
-            elif folds is not None:
-                fo = pr.put_list(folds)
-            else:
-                fo = pr.put(Array._owned(array.array("f", [-1.0]) * n, (n,), "<f4", "C"))
-        elif binary is None:
-            yo = pr.put_list(yflat)
-            fo = pr.put_list(folds if folds is not None else [-1] * n)
+        # the target's words as arrays (lane apple-fast-py2mojo-prep /
+        # cgr4-py-compute): continuous float32, codes through i2f, the
+        # one-hot rows built on the device
+        if kind == "continuous":
+            yo = pr.put(tgt)
+        elif T == 1:
+            yo = pr.put_codes(tgt)
         else:
-            yo = pr.put_codes(binary[1])
-            fo = pr.put_codes(folds)
+            # the one-hot rows: word 1.0f (bits 0x3F800000) where row i's code is c, else 0.0f
+            co, yo = pr.put_codes(tgt), pr.alloc(n * T)
+            pr.stage("label_binarize", n * T, co, n, T, 0, 0, 0x3F800000, T, yo)
+        if folds is None:
+            folds = full((max(n, 1),), -1, "<i4")
+        elif not isinstance(folds, Array):
+            store = array.array("i", folds)
+            folds = Array._owned(store, (len(store),), "<i4", "C")
+        fo = pr.put_codes(folds)
         nco = pr.put_list([c.size for c in cats])
         meta = pr.alloc(2 * (F + 1) * T)
         smo = pr.put_scalar(-1.0 if self.smooth == "auto" else float(self.smooth))
@@ -1553,31 +1573,37 @@ class TargetEncoder(_PrepBase):
         return self
 
     def _splitter_folds(self, X, y, n):
-        """Row -> fold from a splitter object or (train, test) iterable."""
+        """Row -> fold (an int32 Array) from a splitter object or (train,
+        test) iterable, checked by the base binding's helpers (lane
+        cgr4-py-compute: no per-row Python): the test folds cover every row
+        exactly once, and each fold's training rows are every other row."""
+        from ._buffer import as_index_i64
         splits = list(self.cv.split(X, y) if hasattr(self.cv, "split") else self.cv)
-        idx = lambda a: [int(i) for i in (a.tolist() if hasattr(a, "tolist") else a)]
-        fold = [-1] * n
-        for k, (_train, test) in enumerate(splits):
-            for i in idx(test):
-                if not 0 <= i < n or fold[i] != -1:
-                    fold = None
-                    break
-                fold[i] = k
-            if fold is None:
-                break
-        if fold is None or -1 in fold or len(splits) < 1:
-            raise ValueError("mojolearn: Validation indices from `cv` must cover each sample index exactly once "
-                             "with no overlap. Pass a splitter with non-overlapping validation folds as `cv`.")
-        sizes = [0] * len(splits)
-        for k in fold:
-            sizes[k] += 1
-        for k, (train, _test) in enumerate(splits):
-            # the training rows are every row outside fold k exactly once: as
-            # many as there are, distinct, in range and none in fold k (the
-            # folds already cover each row once)
-            tr = idx(train)
-            if (len(tr) != n - sizes[k] or len(set(tr)) != len(tr)
-                    or any(not 0 <= i < n or fold[i] == k for i in tr)):
+        cover = ("mojolearn: Validation indices from `cv` must cover each sample index exactly once "
+                 "with no overlap. Pass a splitter with non-overlapping validation folds as `cv`.")
+        if len(splits) < 1:
+            raise ValueError(cover)
+        fold = full((n,), -1, "<i4")
+        assign = _native_helper("assign_fold_i64")
+        trains = []
+        for k, (train, test) in enumerate(splits):
+            te = as_index_i64(test, name="test")
+            if int(assign(addr_ro(te, name="test") if te.size else 0, te.size, n, k,
+                          _addr_rw(fold, name="folds"))) != 0:
+                raise ValueError(cover)
+            trains.append(as_index_i64(train, name="train"))
+        if fold.min() < 0:
+            raise ValueError(cover)
+        sizes = _class_counts(fold, len(splits))
+        check = _native_helper("check_indices_i64")
+        hits = _native_helper("count_fold_hits_i64")
+        for k, tr in enumerate(trains):
+            # every row outside fold k exactly once: as many as there are,
+            # distinct, in range and none in fold k
+            if (tr.size != n - sizes[k]
+                    or tr.size and (int(check(addr_ro(tr, name="train"), tr.size, n)) != 0
+                                    or int(hits(addr_ro(tr, name="train"), tr.size, addr_ro(fold, name="folds"),
+                                                n, k)) != 0)):
                 raise NotImplementedError("mojolearn: TargetEncoder cv folds whose training rows are not every "
                                           "row outside the test fold are not implemented")
         return fold, len(splits)
@@ -1600,25 +1626,18 @@ class TargetEncoder(_PrepBase):
             folds = _native_folds(n, cv, seed, bool(self.shuffle), binary[1], len(binary[0]), as_array=True)
             if folds is not None:
                 return self._run(arr, y, folds, cv, True, binary=binary)
+        # the target and the folds as arrays (`_target_arrays`, lane
+        # apple-fast-py2mojo-prep; else `_target_kind`'s arrays, lane
+        # cgr4-py-compute): no per-row Python either way
         target = _target_arrays(y, self.target_type) if _p2m(_mode()) else None
-        if target is not None:
-            # lane apple-fast-py2mojo-prep: the target and the folds as arrays
-            kind, classes, tgt, _T = target
-            if tgt.size != n:
-                raise ValueError("mojolearn: X and y have different numbers of rows")
-            folds = (_native_folds(n, cv, seed, bool(self.shuffle), as_array=True) if kind == "continuous" else
-                     _native_folds(n, cv, seed, bool(self.shuffle), tgt, len(classes), as_array=True))
-            return self._run(arr, y, folds, cv, True, target=target)
-        kind, _classes, _yflat, _T = _target_kind(y, self.target_type)
-        if kind == "continuous":
-            folds = _native_folds(n, cv, seed, bool(self.shuffle))
-        else:
-            labels = flatten_labels(y)
-            if len(labels) != n:
-                raise ValueError("mojolearn: X and y have different numbers of rows")
-            classes, codes = encode_labels(labels)
-            folds = _native_folds(n, cv, seed, bool(self.shuffle), codes.tolist(), len(classes))
-        return self._run(arr, y, folds, cv, True)
+        if target is None:
+            target = _target_kind(y, self.target_type)
+        kind, classes, tgt, _T = target
+        if tgt.size != n:
+            raise ValueError("mojolearn: X and y have different numbers of rows")
+        folds = (_native_folds(n, cv, seed, bool(self.shuffle), as_array=True) if kind == "continuous" else
+                 _native_folds(n, cv, seed, bool(self.shuffle), tgt, len(classes), as_array=True))
+        return self._run(arr, y, folds, cv, True, target=target)
 
     def transform(self, X):
         self._check_fitted()
@@ -1755,13 +1774,20 @@ class SimpleImputer(_PrepBase):
         """strategy=<callable>: the reference's `strategy(masked_X[:, j].compressed())`
         per column over the missing-marked X (NaN = missing). kept (lane
         apple-fast-py2mojo-prep): the columns' non-NaN words already compacted
-        by the program, one float32 Array per column; else the old transpose
-        and filter of `marked`."""
+        by the program, one float32 Array per column; else each column's
+        non-NaN values compacted by the base binding (`compact_notnan_f32`)."""
         if kept is None:
             n, d = marked.shape
-            cols = [list(c) for c in zip(*marked.tolist())]
-            kept = [Array.from_list([x for x in cols[j] if x == x], "<f4") if counts[j] else Array((0,), "<f4")
-                    for j in range(d)]
+            mk, _ = as_f32_c(marked, ndim=2, name="X")
+            compact = _native_helper("compact_notnan_f32")
+            kept = []
+            for j in range(d):
+                v = Array((0,), "<f4")
+                if counts[j]:
+                    buf = empty((n,), "<f4")
+                    m = int(compact(addr_ro(mk, name="X") + 4 * j, n, d, _addr_rw(buf, name="column")))
+                    v = buf[:m]
+                kept.append(v)
         stats = []
         for j in range(d):
             stats.append(float(self.strategy(kept[j])))
@@ -1816,10 +1842,13 @@ def _gather_rows(arr, rows):
     """A new float32 Array of the given rows of a C-order 2-D Array (a byte
     copy per row; no arithmetic)."""
     n, d = arr.shape
-    out = Array((len(rows), d), "<f4")
-    src, dst, rb = addr_ro(arr, name="X"), out._addr, 4 * d
-    for k, r in enumerate(rows):
-        ctypes.memmove(dst + k * rb, src + r * rb, rb)
+    if not (isinstance(rows, Array) and rows.dtype == "<i8"):
+        store = array.array("q", rows)
+        rows = Array._owned(store, (len(store),), "<i8", "C")
+    out = Array((rows.size, d), "<f4")
+    if rows.size and d:
+        _native_helper("gather_rows_bytes")(addr_ro(arr, name="X"), out._addr, addr_ro(rows, name="rows"),
+                                            n, rows.size, 4 * d)
     return out
 
 
@@ -2089,22 +2118,21 @@ class _Classifier(_PrepBase):
         return pr.get(o["jll"], (n, K))
 
     def score(self, X, y):
-        pred = self.predict(X)
-        truth = list(y.tolist() if hasattr(y, "tolist") else y)
-        pred = list(pred.tolist() if hasattr(pred, "tolist") else pred)
-        return sum(1 for a, b in zip(pred, truth) if a == b) / max(len(truth), 1)
+        from ._expansion_metrics import accuracy_fraction
+        return accuracy_fraction(y, self.predict(X))
 
 
 def _nb_weights(pr, sample_weight, n):
     """sample_weight -> its arena offset (None when not given)."""
     if sample_weight is None:
         return None
-    w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else sample_weight)]
-    if len(w) != n:
-        raise ValueError(f"mojolearn: sample_weight has {len(w)} entries, expected {n}")
-    if any(v != v or v in (float("inf"), float("-inf")) for v in w):
+    w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
+    if w.shape[0] != n:
+        raise ValueError(f"mojolearn: sample_weight has {w.shape[0]} entries, expected {n}")
+    from ._buffer import all_finite
+    if n and not all_finite(w):
         raise ValueError("mojolearn: sample_weight must be finite")
-    return pr.put_list(w)
+    return pr.put(w)
 
 
 def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums):
@@ -2545,10 +2573,13 @@ def _class_counts(codes, K):
     mode = _mode()
     n = int(codes.size)
     if not _p2m(mode) or n == 0 or K <= 0:
-        counts = [0] * K
-        for c in codes.tolist():
-            counts[c] += 1
-        return counts
+        # the base binding's bincount (lane cgr4-py-compute)
+        c32, _ = as_i32_c(codes, ndim=1, name="codes")
+        cnt = Array((max(K, 1),), "<i8")
+        if K > 0:
+            _native_helper("bincount_i64")(addr_ro(c32, name="codes"), 2, c32.size, K,
+                                           _addr_rw(cnt, name="counts"), 0)
+        return cnt.tolist()[:K]
     pr = _Prog()
     _ro, tot = _p2m_class_rows(pr, pr.put_codes(codes), n, K, rows=False)
     pr.run(mode)
@@ -2591,8 +2622,18 @@ def _estimator_covs(est, arr, codes, K, who):
     elif codes is None:
         blocks = [arr.copy()]
     else:
-        code_list = [int(c) for c in codes.tolist()]
-        blocks = [_gather_rows(arr, [i for i, c in enumerate(code_list) if c == k]) for k in range(K)]
+        # each class's ascending rows by the base binding's select, then one
+        # byte gather (lane cgr4-py-compute)
+        c32, _ = as_i32_c(codes, ndim=1, name="codes")
+        sizes = _class_counts(c32, K)
+        select = _native_helper("select_fold_i64")
+        scratch = Array((max(n, 1),), "<i8")
+        blocks = []
+        for k in range(K):
+            rows = Array((sizes[k],), "<i8")
+            select(addr_ro(c32, name="codes"), n, k, _addr_rw(rows, name="rows") if sizes[k] else
+                   _addr_rw(scratch, name="rows"), _addr_rw(scratch, name="rows"))
+            blocks.append(_gather_rows(arr, rows))
     out = []
     for k in range(K):
         est.fit(blocks[k])

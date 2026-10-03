@@ -129,9 +129,14 @@ class _RecurrentBase:
         return out + [("head.weight", (self.n_outputs_, H)), ("head.bias", (self.n_outputs_,))]
 
     def _init_params(self, rng):
-        k = 1.0 / np.sqrt(float(self.hidden_size))
-        parts = [rng.uniform(-k, k, size=int(np.prod(s))).astype(np.float32) for _, s in self._layout()]
-        return np.ascontiguousarray(np.concatenate(parts), dtype=np.float32)
+        """Every parameter U(-1/sqrt(H), 1/sqrt(H)) in layout order, one flat
+        float32 block drawn in Mojo from the seeded stream (`_buffer.InitStream`;
+        lane cgr4-py-compute: it was numpy's Generator)."""
+        k = 1.0 / float(np.sqrt(float(self.hidden_size)))
+        total = sum(int(np.prod(s)) for _, s in self._layout())
+        out = np.empty(total, dtype=np.float32)
+        rng.fill_uniform(out.ctypes.data, total, -k, k)
+        return out
 
     def state_dict(self):
         """{torch name: array}: `nn.LSTM`/`nn.GRU`/`nn.RNN` names for the
@@ -174,13 +179,17 @@ class _RecurrentBase:
         epochs = int(self.max_epochs)
         if epochs * n >= 2 ** 31 - 1:
             raise ValueError(f"max_epochs * n_samples must be below 2^31 - 1, got {epochs} * {n}")
-        order = [rng.permutation(n) if self.shuffle else np.arange(n) for _ in range(epochs)]
-        order = np.ascontiguousarray(np.concatenate(order), dtype=np.int32)
-        starts = np.arange(0, n, bs, dtype=np.int64)
-        counts = np.minimum(bs, n - starts)
-        offsets = (np.arange(epochs, dtype=np.int64)[:, None] * n + starts[None, :]).ravel()
-        steps = np.stack([offsets, np.tile(counts, epochs)], axis=1).ravel()
-        return order, np.ascontiguousarray(steps, dtype=np.int32)
+        # one 64-bit seed from the estimator's stream; every epoch's order and
+        # every step's (offset, count) built in Mojo (`epoch_schedule`,
+        # sequence/schedule.mojo; lane cgr4-py-compute)
+        seed = rng.child_seed() if hasattr(rng, "child_seed") else int(rng.integers(0, 2 ** 63, dtype=np.int64))
+        per = -(-n // bs)
+        order = np.empty(max(epochs * n, 1), dtype=np.int32)
+        steps = np.empty(max(2 * epochs * per, 2), dtype=np.int32)
+        got = binding(self.numeric_mode).epoch_schedule(
+            [order.ctypes.data, steps.ctypes.data],
+            [n, epochs, bs, int(bool(self.shuffle)), seed & 0xFFFFFFFF, seed >> 32])
+        return order[:epochs * n], steps[:2 * got]
 
     def _lrs(self, n_steps):
         """The learning rate of every optimizer step: `lr_schedule.lr_at(t)`
@@ -194,7 +203,8 @@ class _RecurrentBase:
         n, T = int(X.shape[0]), int(X.shape[1])
         if n < 1 or T < 1:
             raise ValueError("X needs at least one sample and one time step")
-        rng = np.random.default_rng(self.random_state)
+        from ._buffer import InitStream
+        rng = InitStream(None if self.random_state is None else int(self.random_state))
         self.params_ = self._init_params(rng)
         order, steps = self._schedule(n, rng)
         n_steps = len(steps) // 2

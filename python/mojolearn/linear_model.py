@@ -24,7 +24,7 @@ from ._buffer import (
 )
 from ._labels import (
     argmax_rows, classes_from_member, classes_member, decode_labels,
-    encode_labels, flatten_labels, sorted_classes,
+    encode_labels, flatten_labels, sorted_classes, threshold_codes,
 )
 from ._mode import NumericModeMixin
 
