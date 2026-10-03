@@ -13,8 +13,9 @@ Difference: the golden section also stops after 200 iterations (the
 reference's |b - a| >= 1e-12 is below float32 resolution near alpha, so the
 float32 loop ends at the fc == fd exit or the cap)."""
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 #: lane/apple-fast-seq (2026-10-02). `op_croston` compacts the positive
 #: demands and the intervals into the thread's device scratch (2 n floats
@@ -27,10 +28,14 @@ from std.sys.compile import is_defined
 #: folds the smoothing into the scan over y: the same operations in the
 #: same order, nothing stored. The optimized variant (golden section,
 #: repeated passes) keeps the stored path. FAST only; IDENTICAL compiles
-#: the stored code.
+#: the stored code. Default on FAST + Apple since the M3 A/B
+#: (lane/apple-fast-seq 8b3f1d90e, n=1, quality identical): croston taxi-hourly
+#: 3.0 -> 2.4 ms, synthetic 2.7 -> 1.8 ms. -D MOJOLEARN_SEQ_CROSTON_REG_OFF
+#: restores the stored code; the old -D MOJOLEARN_SEQ_CROSTON_REG=1 is harmless.
 comptime CROSTON_REG = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_SEQ_CROSTON_REG"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEQ_CROSTON_REG_OFF"]()
 )
 
 comptime CROSTON_CLASSIC = 0

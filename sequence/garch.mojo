@@ -16,8 +16,9 @@ with the constraint's violators scored +1e30, restarted once from its optimum.
 The maximum is the same point when it is interior; the path is not."""
 from sequence.nm import Objective, nelder_mead
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_log, identical_pow, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_log, identical_pow, identical_sqrt
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 #: lane/apple-fast-seq (2026-10-02). `GarchObj.eval` writes the n residuals
 #: to the thread's device scratch, `garch_sigma2` writes sigma2_t and reads
@@ -30,10 +31,14 @@ from std.sys.compile import is_defined
 #: `-D MOJOLEARN_SEQ_GARCH_REG=1` keeps the recursion in registers for the
 #: optimiser's evaluations (`garch_nll_reg`): the same operations in the
 #: same order, nothing stored; the final evaluation still stores sigma2
-#: (the sigma output and the forecast read it). FAST only.
+#: (the sigma output and the forecast read it). FAST only. Default on FAST +
+#: Apple since the M3 A/B (lane/apple-fast-seq 8b3f1d90e, n=1, mean_llf
+#: identical): garch taxi-hourly 2,770 -> 968 ms. -D MOJOLEARN_SEQ_GARCH_REG_OFF
+#: restores the stored code; the old -D MOJOLEARN_SEQ_GARCH_REG=1 is harmless.
 comptime GARCH_REG = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_SEQ_GARCH_REG"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEQ_GARCH_REG_OFF"]()
 )
 #: lane/apple-fast-seq (2026-10-02). `op_garch`'s starting values are the
 #: best of arch's 4 x 4 x 4 grid, 64 serial `garch_nll` passes over the
@@ -44,10 +49,15 @@ comptime GARCH_REG = (
 #: of B x 64 elements before the fit, and the fit's thread takes the argmin
 #: over the 64 values in candidate order with the serial loop's strict `<`
 #: (the first lowest wins), so the chosen candidate and its bits are the
-#: serial loop's. FAST only; IDENTICAL compiles the serial grid.
+#: serial loop's. FAST only; IDENTICAL compiles the serial grid. Default on
+#: FAST + Apple since the M3 A/B (lane/apple-fast-seq 8b3f1d90e, n=1, mean_llf
+#: identical): with GARCH_REG, taxi-hourly 2,769 -> 905 ms, synthetic 1,525 ->
+#: 528 ms. -D MOJOLEARN_SEQ_GARCH_GRID_OFF restores the serial grid; the old
+#: -D MOJOLEARN_SEQ_GARCH_GRID=1 is harmless.
 comptime GARCH_GRID = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_SEQ_GARCH_GRID"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEQ_GARCH_GRID_OFF"]()
 )
 comptime GARCH_GRID_N = 64
 
