@@ -76,6 +76,14 @@ comptime SEQUENCE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 comptime _TSA2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime TSA2_VAR = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_VAR_OFF"]()
 comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"]()
+#: lane/apple-fast-gap-tsa (docs/apple-fast/notes/gap-tsa.md), on the
+#: TSA2_VAR fit, FAST + Apple only.
+#: SEQ_FAST_VAR_ONECOPY: params, resid, sigma_u and the status word lie in
+#: one span of the workspace, so one device-to-host copy replaces four.
+#: Default since the M3 A/B (n=1, quality identical; var taxi-hourly
+#: 5.9 -> 5.1 ms, synthetic 6.2 -> 5.0 ms); -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF
+#: restores the four copies; the old -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY is harmless.
+comptime SEQ_FAST_VAR_ONECOPY = TSA2_VAR and not is_defined["MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF"]()
 
 # ------------------------------------------------------------------ op codes
 comptime OP_GEMM = 1

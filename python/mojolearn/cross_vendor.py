@@ -78,19 +78,10 @@ class CrossVendorMismatch(RuntimeError):
 
 
 # ------------------------------------------------------------ the fold
-_EXP, _MAN, _SIGN = 0x7F800000, 0x007FFFFF, 0x80000000
 
 
 def _f32(payload):
     return flat_bytes(payload, name="gradient").cast("f")
-
-
-def _flush(bits, i):
-    """checks/numerics.mojo `ftz` on element i of a uint32 view: a subnormal
-    becomes a zero of the same sign."""
-    b = bits[i]
-    if not b & _EXP and b & _MAN:
-        bits[i] = b & _SIGN
 
 
 def fold_pair(total, shard):
@@ -99,25 +90,20 @@ def fold_pair(total, shard):
     (training/byte_lm_parallel.mojo `_ordered_add_kernel`, fma(1, a, b)).
     Both are float32 buffers of the same length; returns bytes.
 
-    Exact in pure Python: a float64 sum of two float32 values, rounded once
-    to float32 on the store, is the float32 sum (53 >= 2*24 + 2). The shipped
-    package imports nothing but the standard library and its own bindings
-    (packaging/portable_math/wheel.py), so there is no NumPy spelling here;
-    a live worker folds on its device (`ParallelByteLanguageModelTrainer`
-    `fold_*`), which is the fast path at training size."""
+    The fold runs in Mojo, the base binding's `fold_pair_f32` (the core
+    host binding on a CPU-only coordinator); a live worker folds on its
+    device (`ParallelByteLanguageModelTrainer` `fold_*`), which is the fast
+    path at training size."""
     t, g = _f32(total), _f32(shard)
     if len(t) != len(g):
         raise ValueError("fold_pair: gradients differ in length")
-    n = len(t)
-    out = array.array("f", t)
-    sh = array.array("f", g)
-    obits = memoryview(out).cast("B").cast("I")
-    sbits = memoryview(sh).cast("B").cast("I")
-    for i in range(n):
-        _flush(obits, i)
-        _flush(sbits, i)
-        out[i] = out[i] + sh[i]
-        _flush(obits, i)
+    out, sh = array.array("f"), array.array("f")
+    out.frombytes(t.cast("B"))
+    sh.frombytes(g.cast("B"))
+    # the elementwise fold in Mojo (the base binding's `fold_pair_f32`;
+    # lane cgr4-py-compute: no Python element loop)
+    from ._buffer import _native
+    _native("fold_pair_f32")(out.buffer_info()[0], sh.buffer_info()[0], len(out))
     return out.tobytes()
 
 

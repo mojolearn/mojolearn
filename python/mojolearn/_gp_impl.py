@@ -123,12 +123,35 @@ def _as_length_scale(length_scale, what):
 _FLT_MIN = 1.1754943508222875e-38
 
 
+def _gp_py2mojo(ext):
+    """True when the binding `ext` applies normalize_y's un-normalization
+    itself (lane apple-fast-py2mojo-cluster: the mean, std, covariance and
+    sample_y draws, `gaussian_process/unnorm.mojo`). A
+    `-D MOJOLEARN_PY2MOJO_cluster_OFF` build answers 0 and the Python loops
+    below run (the A/B switch)."""
+    fn = getattr(ext, "gp_py2mojo", None)
+    return fn is not None and int(fn()) == 1
+
+
 def _ftz(x):
     """`checks/numerics.mojo::ftz` on a binary32 value held in a Python
     float: a subnormal becomes a zero of the same sign."""
     if x != 0.0 and abs(x) < _FLT_MIN:
         return math.copysign(0.0, x)
     return x
+
+def _scale_shift(arr, a, b, op):
+    """A new float32 Array of `scale_shift_ftz_f32` over `arr` (op 0
+    ftz(ftz(a v) + b), 1 ftz(sqrt(ftz(v a))), 2 ftz(v a)): each step one
+    binary32 rounding then `ftz`, the same bits the Python comprehension
+    gave, in Mojo (lane cgr4-py-compute)."""
+    from ._buffer import _native, as_f32_c, empty
+    src, _ = as_f32_c(arr, ndim=None, name="values")
+    out = empty(src.shape, "<f4")
+    if src.size:
+        _native("scale_shift_ftz_f32")(src._addr, src.size, float(a), float(b), int(op), out._addr)
+    return out
+
 
 
 #: scikit-learn's default hyperparameter bounds, `kernels.py` (every leaf).
@@ -881,7 +904,11 @@ class GaussianProcessRegressor(NumericModeMixin):
         xt = self.X_train_
         lf = self.L_
         dual = self.alpha_
-        n_clamped = self._extension().gpr_predict(
+        ext = self._extension()
+        norm = bool(getattr(self, "normalize_y_", False))
+        in_mojo = norm and _gp_py2mojo(ext)
+        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
+        n_clamped = ext.gpr_predict(
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
             # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls,
             # mean_out, var_out, std_out, clamped_out
@@ -902,9 +929,9 @@ class GaussianProcessRegressor(NumericModeMixin):
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
             # n_train, n_features, n_star, n_nodes, n_ls, return_std, info
             [n_train, self.n_features_in_, n_star, int(kinds.shape[0]),
-             n_ls, 1 if return_std else 0, self.info_],
+             n_ls, 1 if return_std else 0, self.info_] + tail,
         )
-        if getattr(self, "normalize_y_", False):
+        if norm and not in_mojo:
             # sklearn `_gpr.py:450` and `:494`: y_mean = std * y_mean + mean;
             # y_var = y_var * std**2, then sqrt. Each is ONE correctly
             # rounded binary32 operation on the host (the product or sum of
@@ -914,13 +941,10 @@ class GaussianProcessRegressor(NumericModeMixin):
             # computes the same bits.
             s_ = self._y_train_std
             mu = self._y_train_mean
-            mean = Array.from_list(
-                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in mean.tolist()], "<f4")
+            mean = _scale_shift(mean, s_, mu, 0)
             if return_std:
                 s2 = _ftz(_round_f32(s_ * s_))
-                std = Array.from_list(
-                    [_ftz(_round_f32(math.sqrt(_ftz(_round_f32(v * s2))))) for v in var.tolist()],
-                    "<f4")
+                std = _scale_shift(var, s2, 0.0, 1)
         if return_std:
             self.clamped_ = clamped
             self.n_clamped_ = int(n_clamped)
@@ -958,6 +982,9 @@ class GaussianProcessRegressor(NumericModeMixin):
             )
         mean = empty((max(n_star, 1),), "<f4")
         cov = empty((max(n_star * n_star, 1),), "<f4")
+        norm = bool(getattr(self, "normalize_y_", False))
+        in_mojo = norm and _gp_py2mojo(ext)
+        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
         xt = self.X_train_
         lf = self.L_
         dual = self.alpha_
@@ -977,15 +1004,15 @@ class GaussianProcessRegressor(NumericModeMixin):
                 addr(cov, name="cov"),
             ],
             # n_train, n_features, n_star, n_nodes, n_ls, info
-            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls, self.info_],
+            # (+ normalize_y, y_std, y_mean: the binding un-normalizes)
+            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls, self.info_] + tail,
         )
-        if getattr(self, "normalize_y_", False):
+        if norm and not in_mojo:
             s_ = self._y_train_std
             mu = self._y_train_mean
-            mean = Array.from_list(
-                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in mean.tolist()], "<f4")
+            mean = _scale_shift(mean, s_, mu, 0)
             s2 = _ftz(_round_f32(s_ * s_))
-            cov = Array.from_list([_ftz(_round_f32(v * s2)) for v in cov.tolist()], "<f4")
+            cov = _scale_shift(cov, s2, 0.0, 2)
         return mean[:n_star], cov[:n_star * n_star].reshape((n_star, n_star))
 
     # -- saved models -----------------------------------------------------------
@@ -1172,7 +1199,11 @@ class GaussianProcessRegressor(NumericModeMixin):
         xt = self.X_train_
         lf = self.L_
         dual = self.alpha_
-        self._extension().gpr_sample_y(
+        ext = self._extension()
+        norm = bool(getattr(self, "normalize_y_", False))
+        in_mojo = norm and _gp_py2mojo(ext)
+        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
+        ext.gpr_sample_y(
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_sample_y_binding.
             # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, y_out
             [
@@ -1189,15 +1220,14 @@ class GaussianProcessRegressor(NumericModeMixin):
             # n_train, n_features, n_star, n_nodes, n_ls, info, n_samples,
             # random_state low 32 bits, random_state high 32 bits
             [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls,
-             self.info_, n, seed & 0xFFFFFFFF, seed >> 32],
+             self.info_, n, seed & 0xFFFFFFFF, seed >> 32] + tail,
         )
-        if getattr(self, "normalize_y_", False):
+        if norm and not in_mojo:
             # predict's un-normalization of the mean, applied to every draw:
             # std * (mean + L z) + y_mean, so the covariance is std**2 C.
             s_ = self._y_train_std
             mu = self._y_train_mean
-            out = Array.from_list(
-                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in out.tolist()], "<f4")
+            out = _scale_shift(out, s_, mu, 0)
         return out.reshape((n_star, n))
 
     def score(self, X, y):

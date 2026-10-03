@@ -25,8 +25,9 @@ import os
 from . import _portable_math as _pm
 from . import _backend
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
-from ._labels import decode_labels, encode_labels
+from ._buffer import addr, addr_ro, as_f32_c, empty, full, zeros
+from ._bufcheck import memcopy
+from ._labels import argmax_rows, decode_labels, encode_labels, threshold_codes
 from ._mode import NumericModeMixin
 
 __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
@@ -106,20 +107,35 @@ def _decision(est, X, coef_rows, intercepts, link=LINK_IDENTITY):
     return out
 
 
+def _weights_f32(sample_weight, n):
+    """The checked float32 sample weights: finite-or-infinite non-negative
+    with a positive sum (scikit-learn's _check_sample_weight), tested by the
+    base binding's reductions (a NaN fails the sum test), no row loop here."""
+    if isinstance(sample_weight, (int, float)):
+        w = full((n,), float(sample_weight), "<f4")
+    else:
+        w = _vector(sample_weight, n, "sample_weight")
+    if n == 0 or not (w.min() >= 0) or not (w.sum() > 0):
+        raise ValueError("mojolearn: sample_weight must be non-negative with a positive sum")
+    return w
+
+
+def _concat_f32(a, b):
+    """a's then b's float32 elements as one flat float32 Array (two byte
+    copies)."""
+    out = empty((a.size + b.size,), "<f4")
+    o = addr(out, name="y")
+    memcopy(o, addr_ro(a, name="y"), 4 * a.size)
+    memcopy(o + 4 * a.size, addr_ro(b, name="y"), 4 * b.size)
+    return out
+
+
 def _with_weights(yv, sample_weight, n):
     """(targets | weights, 1) with a sample_weight, (targets, 0) without:
-    the kernels take the weights as the second half of y. Weights must be
-    finite and non-negative with a positive sum (scikit-learn's
-    _check_sample_weight)."""
+    the kernels take the weights as the second half of y."""
     if sample_weight is None:
         return yv, 0
-    if isinstance(sample_weight, (int, float)):
-        w = [float(sample_weight)] * n
-    else:
-        w = _vector(sample_weight, n, "sample_weight").tolist()
-    if any(not (v >= 0) for v in w) or not sum(w) > 0:
-        raise ValueError("mojolearn: sample_weight must be non-negative with a positive sum")
-    return Array.from_list(yv.tolist() + w, "<f4"), 1
+    return _concat_f32(yv, _weights_f32(sample_weight, n)), 1
 
 
 #: lane/apple-fast-py2mojo-linear: `py2mojo_rows` modes (core/py2mojo_rows.mojo)
@@ -140,6 +156,20 @@ def _py2mojo_proba(est, mode, scores, k):
     if n:
         b.py2mojo_rows(mode, addr_ro(scores, name="scores"), addr(out, name="proba"), [n, k])
     return out
+
+
+_CLS1_RIDGE_CODES = 1
+
+
+def _cls1_flags(est):
+    """lane/apple-fast-gap-cls1: the bound binary's build-time switches
+    (`x_linear_cls1_flags`; 0 on IDENTICAL, the host binding or a build
+    without them, which is main's path)."""
+    try:
+        fn = getattr(est._bind(_BINDING), "x_linear_cls1_flags", None)
+        return int(fn()) if fn is not None else 0
+    except Exception:  # noqa: BLE001  (a binary without the entry: main's path)
+        return 0
 
 
 def _rows(values, k, d):
@@ -169,7 +199,7 @@ def _classes(est, y, n):
         raise ValueError(f"mojolearn {type(est).__name__}: X and y lengths differ")
     if len(classes) < 2:
         raise ValueError(f"mojolearn {type(est).__name__}: y has one class")
-    return classes, Array.from_list([float(c) for c in codes.tolist()], "<f4")
+    return classes, codes.astype("<f4")
 
 
 class _LinearClassifierMixin:
@@ -186,17 +216,12 @@ class _LinearClassifierMixin:
 
     def predict(self, X):
         scores = self.decision_function(X)
-        if scores.ndim == 1:
-            codes = [1 if v > 0 else 0 for v in scores.tolist()]
-        else:
-            codes = [max(range(len(r)), key=lambda c, r=r: (r[c], -c)) for r in scores.tolist()]
+        codes = threshold_codes(scores) if scores.ndim == 1 else argmax_rows(scores)
         return decode_labels(self.classes_, codes)
 
     def score(self, X, y):
-        pred = self.predict(X)
-        pred = pred.tolist() if hasattr(pred, "tolist") else list(pred)
-        truth = y.tolist() if hasattr(y, "tolist") else list(y)
-        return sum(1 for a, b in zip(pred, truth) if a == b) / max(len(truth), 1)
+        from ._expansion_metrics import accuracy_fraction
+        return accuracy_fraction(y, self.predict(X))
 
 
 class _LinearRegressorMixin:
@@ -211,12 +236,11 @@ class _LinearRegressorMixin:
         return out.reshape((out.shape[0],))
 
     def score(self, X, y):
-        pred = self.predict(X).tolist()
-        truth = y.tolist() if hasattr(y, "tolist") else list(y)
-        mean = _pm.nsum(truth) / len(truth)
-        ss_res = _pm.nsum((a - b) * (a - b) for a, b in zip(truth, pred))
-        ss_tot = _pm.nsum((a - mean) * (a - mean) for a in truth)
-        return 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+        # R^2 on the device (the metrics binding's pinned-sum r2_score)
+        from ._metrics_impl import r2_score
+        pred, _ = as_f32_c(self.predict(X), ndim=1, name="prediction")
+        truth, _ = as_f32_c(y, ndim=1, name="y")
+        return r2_score(truth, pred)
 
 
 # ---------------------------------------------------------------------- SGD
@@ -907,21 +931,21 @@ class SGDOneClassSVM(NumericModeMixin):
         return out.reshape((out.shape[0],))
 
     def predict(self, X):
-        return Array.from_list([1 if v >= 0 else -1 for v in self.decision_function(X).tolist()], "<i8")
+        return threshold_codes(self.decision_function(X), 0.0, strict=False, below=-1, above=1)
 
 
 # ------------------------------------------------------------------- Ridge
 # Reference: scikit-learn sklearn/linear_model/_ridge.py (`_solve_cholesky`,
 # `_RidgeGCV`); kernel x_linear/ridge.mojo.
 
-def _ridge_run(est, a, n, d, Y, T, alphas, sample_weight=None):
+def _ridge_run(est, a, n, d, Y, T, alphas, sample_weight=None, codes_mode=False):
     A = len(alphas)
     has_sw = 0
     if sample_weight is not None:
-        w = _with_weights(zeros((n,), "<f4"), sample_weight, n)[0].tolist()[n:]
-        Y = Array.from_list(Y.tolist() + w, "<f4")
+        Y = _concat_f32(Y, _weights_f32(sample_weight, n))
         has_sw = 1
-    vals = _run(est, ALGO_RIDGE, a, n, d, Y, [T, int(bool(est.fit_intercept)), A, has_sw], list(alphas),
+    ip = [T, int(bool(est.fit_intercept)), A, has_sw] + ([1] if codes_mode else [])
+    vals = _run(est, ALGO_RIDGE, a, n, d, Y, ip, list(alphas),
                 T * d + T + 2 + A + 1, 3 * d * d + 3 * d + T + d * T + 2 * n, 1)
     # lane/neural-pass93: status 2 = X'X + alpha I does not factor even in
     # float-float (x_linear/ridge.mojo); 1 never leaves a binding
@@ -955,6 +979,25 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
         if not self.alpha >= 0:
             raise ValueError("mojolearn RidgeClassifier: alpha must be >= 0")
         a, n, d = _matrix(X)
+        if (sample_weight is None and self.class_weight is None
+                and _cls1_flags(self) & _CLS1_RIDGE_CODES):
+            # lane/apple-fast-gap-cls1 RIDGE_FAST_CLS1_CODES (FAST + Apple
+            # default, off with -D MOJOLEARN_RIDGE_FAST_CLS1_CODES_OFF): the
+            # int32 codes go to the binding as they are and the
+            # +-1 targets are built on the device (x_linear/cls1_fast.mojo)
+            classes, icodes = encode_labels(y)
+            if icodes.size != n:
+                raise ValueError("mojolearn RidgeClassifier: X and y lengths differ")
+            if len(classes) < 2:
+                raise ValueError("mojolearn RidgeClassifier: y has one class")
+            k = len(classes)
+            T = 1 if k == 2 else k
+            vals = _ridge_run(self, a, n, d, icodes, T, [self.alpha], None, codes_mode=True)
+            self.classes_ = classes
+            self.coef_ = Array.from_list(_rows(vals, T, d), "<f4")
+            self.intercept_ = Array.from_list(vals[T * d:T * d + T], "<f4")
+            self.n_features_in_ = d
+            return self
         classes, codes = _classes(self, y, n)
         k = len(classes)
         T = 1 if k == 2 else k
@@ -974,6 +1017,7 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.intercept_ = Array.from_list(vals[T * d:T * d + T], "<f4")
         self.n_features_in_ = d
         return self
+
 
 
 class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
@@ -1047,18 +1091,20 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
 # (LinearModelCV.fit, _alpha_grid, _path_residuals) and _cd_fast.pyx
 # (enet_coordinate_descent_gram); kernel x_linear/cd.mojo.
 
-def _kfold_ids(n, k):
-    """scikit-learn's KFold(n_splits=k, shuffle=False): contiguous folds,
-    the first n % k of them one row longer."""
+def _kfold_ids_f32(n, k):
+    """scikit-learn's KFold(n_splits=k, shuffle=False) fold of every row as
+    float32: contiguous folds, the first n % k of them one row longer
+    (the base binding's `fold_ids`, cast by `cast_elements`; lane
+    cgr4-py-compute)."""
     if not isinstance(k, int) or isinstance(k, bool) or k < 2 or k > n:
         raise ValueError("mojolearn: cv must be None or an int in [2, n_samples]")
-    ids, start = [0] * n, 0
-    for f in range(k):
-        size = n // k + (1 if f < n % k else 0)
-        for i in range(start, start + size):
-            ids[i] = f
-        start += size
-    return ids
+    from ._buffer import _native
+    ids = empty((n,), "<i4")
+    counts = empty((k,), "<i8")
+    _native("fold_ids")(0, n, 0, k, 0, addr(ids, name="folds"), addr(counts, name="folds"))
+    out = empty((n,), "<f4")
+    _native("cast_elements")(addr_ro(ids, name="folds"), 2, addr(out, name="folds"), 0, n)
+    return out
 
 
 def _enetcv_fit(est, X, y, l1_ratios):
@@ -1070,7 +1116,7 @@ def _enetcv_fit(est, X, y, l1_ratios):
     a, n, d = _matrix(X)
     yv = _vector(y, n)
     folds = 5 if est.cv is None else est.cv
-    ids = _kfold_ids(n, folds)
+    ids = _kfold_ids_f32(n, folds)
     alphas = est.alphas
     n_alphas = getattr(est, "n_alphas", None)
     if isinstance(alphas, int) and not isinstance(alphas, bool):
@@ -1083,7 +1129,7 @@ def _enetcv_fit(est, X, y, l1_ratios):
         grid = len(values)
     if grid < 1:
         raise ValueError(f"mojolearn {name}: at least one alpha is required")
-    yy = Array.from_list(yv.tolist() + [float(f) for f in ids], "<f4")
+    yy = _concat_f32(yv, ids)
     L = len(l1_ratios)
     fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])
     ip = [est.max_iter, int(bool(est.fit_intercept)), grid, folds, L, int(explicit), int(bool(est.positive))]

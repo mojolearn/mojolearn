@@ -13,6 +13,7 @@ from checks.numerics import identical_log64, GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.python import Python
+from std.memory import bitcast
 from xtrees.folds_device import device_folds, leaf_numbering
 from xtrees.glue_device import (
     binary_proba_device, indicator_codes_device, stack_w64_device, class_counts_device, remap_cols_device,
@@ -868,6 +869,79 @@ def fast_switches_binding() raises -> PythonObject:
     return PythonObject(XTREES_FAST_SWITCHES)
 
 
+def _host_folds(
+    codes: MutPointer[Int32, MutUntrackedOrigin], n: Int, k: Int, n_splits: Int,
+    rows: MutPointer[Int32, MutUntrackedOrigin], counts: MutPointer[Int32, MutUntrackedOrigin],
+) -> Int:
+    """The host column's `device_folds` (lane cgr4-py-compute: the same law
+    and the same output layout, so a CPU-only install no longer runs the
+    Python fold routines): fold id per row (KFold when k == 0, else
+    StratifiedKFold over first-seen classes), then per fold the rows
+    outside it ascending, then inside it ascending; counts[f] = fold f's
+    size, counts[n_splits] = the status."""
+    var fold = List[Int](length=n, fill=0)
+    var sizes = List[Int](length=n_splits, fill=0)
+    if k == 0:
+        var off = 0
+        for f in range(n_splits):
+            var size = n // n_splits + (1 if f < n % n_splits else 0)
+            for r in range(off, off + size):
+                fold[r] = f
+            sizes[f] = size
+            off += size
+    else:
+        var cnt = List[Int](length=k, fill=0)
+        var order = List[Int]()
+        for r in range(n):
+            var c = Int(codes[r])
+            if c < 0 or c >= k:
+                counts[n_splits] = 2
+                return 2
+            if cnt[c] == 0:
+                order.append(c)
+            cnt[c] += 1
+        var mx = 0
+        for c in range(k):
+            mx = max(mx, cnt[c])
+        if n_splits > mx:
+            counts[n_splits] = 1
+            return 1
+        # alloc[c * n_splits + f]: positions p of class c's block [s, s + cnt)
+        # of the sorted labels with p mod n_splits == f
+        var alloc = List[Int](length=k * n_splits, fill=0)
+        var start = 0
+        for j in range(len(order)):
+            var c = order[j]
+            var e = start + cnt[c]
+            for f in range(n_splits):
+                alloc[c * n_splits + f] = (e - 1 - f) // n_splits - (start - 1 - f) // n_splits
+            start = e
+        var cur = List[Int](length=k, fill=0)
+        for r in range(n):
+            var c = Int(codes[r])
+            var f = cur[c]
+            while alloc[c * n_splits + f] == 0:
+                f += 1
+            alloc[c * n_splits + f] -= 1
+            cur[c] = f
+            fold[r] = f
+            sizes[f] += 1
+    for f in range(n_splits):
+        var base = f * n
+        var a = 0
+        var b = n - sizes[f]
+        for r in range(n):
+            if fold[r] == f:
+                rows[base + b] = Int32(r)
+                b += 1
+            else:
+                rows[base + a] = Int32(r)
+                a += 1
+        counts[f] = Int32(sizes[f])
+    counts[n_splits] = 0
+    return 0
+
+
 def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
     """params = [n, n_splits, n_classes]: the cv folds on the device
     (xtrees/folds_device.mojo: the device on every GPU build, `ops.folds_serial`
@@ -885,7 +959,12 @@ def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: Python
         raise Error("x_trees_device_folds: n_splits must be >= 2")
     var status = 0
     if n > 0:
-        status = device_folds(i32_ptr(Int(py=codes)), n, k, n_splits, i32_ptr(Int(py=rows)), i32_ptr(Int(py=counts)))
+        comptime if XTREES_DEVICE_OPS:
+            status = device_folds(i32_ptr(Int(py=codes)), n, k, n_splits, i32_ptr(Int(py=rows)),
+                                  i32_ptr(Int(py=counts)))
+        else:
+            status = _host_folds(i32_ptr(Int(py=codes)), n, k, n_splits, i32_ptr(Int(py=rows)),
+                                 i32_ptr(Int(py=counts)))
     return PythonObject(status)
 
 
@@ -921,6 +1000,120 @@ def _kshap_check(p: List[Int], who: String) raises:
         raise Error(who + ": needs background rows, features and samples >= fixed samples")
     if p[4] > p[3] and p[6] < 1:
         raise Error(who + ": sampled coalitions need a size distribution")
+
+
+def normalized_weights_binding(w: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """AdaBoost's initial weights (lane cgr4-py-compute, out of Python):
+    out[i] = w[i] / sum(w) in float64 from float32 w, the sum in row order.
+    Returns 0, 1 when an entry is not finite or is negative, 2 when the
+    total is not positive (out then unspecified). params = [n]."""
+    _need(params, 1, "x_trees_normalized_weights")
+    var n = _count(_i(params, 0), "x_trees_normalized_weights")
+    if n == 0:
+        return PythonObject(2)
+    var wp = f32_ptr(Int(py=w))
+    var op = f64_ptr(Int(py=dst))
+    var total = Float64(0)
+    for i in range(n):
+        var v = Float64(wp[i])
+        if not (v >= 0 and v <= 1.7976931348623157e308):
+            return PythonObject(1)
+        total += v
+    if not (total > 0):
+        return PythonObject(2)
+    for i in range(n):
+        op[i] = Float64(wp[i]) / total
+    return PythonObject(0)
+
+
+def _kshap_binom(M: Int, r: Int) -> Float64:
+    """C(M, r) in float64 by the multiplicative recurrence; every step is an
+    exact integer while C(M, r) * M < 2^53, which holds for every size the
+    schedule enumerates in full (nsub <= nsamples)."""
+    var c = Float64(1)
+    for i in range(r):
+        c = c * Float64(M - i) / Float64(i + 1)
+    return c
+
+
+def kshap_schedule_binding(tables: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """KernelExplainer's coalition schedule (shap `KernelExplainer.explain`
+    over subset SIZES; lane cgr4-py-compute moved it out of Python): params
+    = [M, nsamples] with M > 1; tables = (size_off Int64 M // 2 + 1, size_w
+    float64 max(1, M // 2), cdf float64 max(1, M // 2)); out = Int64 6:
+    [m, nfixed, nfull, npaired, L, wrand_bits] (`dst`). The sums run in index
+    order (one fixed fold, the same on every column)."""
+    _need(params, 2, "x_trees_kshap_schedule")
+    var M = _i(params, 0)
+    var nsamples = _count(_i(params, 1), "x_trees_kshap_schedule")
+    if M < 2:
+        raise Error("x_trees_kshap_schedule: needs M > 1")
+    var off = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=tables[0]))
+    var sw = f64_ptr(Int(py=tables[1]))
+    var cdf = f64_ptr(Int(py=tables[2]))
+    var res = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=dst))
+    var nss = M // 2
+    var npaired = (M - 1) // 2
+    var wv = List[Float64](length=nss, fill=0.0)
+    var tot = Float64(0)
+    for i in range(1, nss + 1):
+        var w = Float64(M - 1) / Float64(i * (M - i))
+        if i - 1 < npaired:
+            w *= 2.0
+        wv[i - 1] = w
+        tot += w
+    for i in range(nss):
+        wv[i] = wv[i] / tot
+    var rem = wv.copy()
+    var nfull = 0
+    var left = nsamples
+    var acc = 0
+    off[0] = 0
+    for size in range(1, nss + 1):
+        var b = _kshap_binom(M, size)
+        var nsub = b * (2.0 if size <= npaired else 1.0)
+        if Float64(left) * rem[size - 1] / nsub >= 1.0 - 1e-8:
+            var nsub_i = Int(nsub)
+            nfull += 1
+            left -= nsub_i
+            if rem[size - 1] < 1.0:
+                var r0 = rem[size - 1]
+                for j in range(nss):
+                    rem[j] = rem[j] / (1.0 - r0)
+            var w = wv[size - 1] / b
+            if size <= npaired:
+                w /= 2.0
+            acc += nsub_i
+            off[size] = Int64(acc)
+            sw[size - 1] = w
+        else:
+            break
+    var nfixed = acc
+    var samples_left = nsamples - nfixed
+    var L = 0
+    var wrand = Float64(0)
+    if nfull != nss and samples_left > 0:
+        var t = Float64(0)
+        for i in range(nfull, nss):
+            t += wv[i] / 2.0 if i < npaired else wv[i]
+        var run = Float64(0)
+        for i in range(nfull, nss):
+            run += (wv[i] / 2.0 if i < npaired else wv[i]) / t
+            cdf[L] = run
+            L += 1
+        var tail = Float64(0)
+        for i in range(nfull, nss):
+            tail += wv[i]
+        wrand = tail / Float64(samples_left)
+    else:
+        samples_left = 0
+    res[0] = Int64(nfixed + samples_left)
+    res[1] = Int64(nfixed)
+    res[2] = Int64(nfull)
+    res[3] = Int64(npaired)
+    res[4] = Int64(L)
+    res[5] = bitcast[DType.int64](wrand)
+    return PythonObject(nfull)
 
 
 def kshap_synth_binding(x: PythonObject, bg: PythonObject, tables: PythonObject, syn: PythonObject,
@@ -1049,6 +1242,8 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[spread_leaves_binding]("x_trees_spread_leaves")
     m.def_function[leaf_numbering_binding]("x_trees_leaf_numbering")
     m.def_function[block_mean_binding]("x_trees_block_mean")
+    m.def_function[kshap_schedule_binding]("x_trees_kshap_schedule")
+    m.def_function[normalized_weights_binding]("x_trees_normalized_weights")
     m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")
     m.def_function[pshap_synth_binding]("x_trees_pshap_synth")

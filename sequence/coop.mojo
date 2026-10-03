@@ -27,6 +27,8 @@ from sequence.ops import (
     ld,
     st,
 )
+from sequence.ops import OP_THETA
+from sequence.theta_spec import THETA_SPEC, op_theta_spec
 from sequence.adafactor import af_alpha_tail, af_denom_tail, lamb_ratio_tail, op_af_alpha, op_af_denom, op_lamb_ratio, op_seg_sumsq
 
 #: the Apple simdgroup
@@ -135,6 +137,10 @@ def apply_coop[OP: Int](cell: Int, lane: Int, a: Args):
         var uss = coop_sumsq(a.p1, s, e - s, lane)
         if lane == 0:
             lamb_ratio_tail(a, cell, pss, uss)
+    elif THETA_SPEC and OP == OP_THETA:
+        # lane/apple-fast-gap-tsa: theta with the Nelder-Mead candidates on
+        # the simdgroup's lanes (sequence/theta_spec.mojo)
+        op_theta_spec(cell, lane, a)
     elif OP == OP_GEMM:
         # op_gemm's cell, the fold on the simdgroup
         var n_cols = a.i1

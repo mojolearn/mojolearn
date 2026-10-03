@@ -21,6 +21,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 from x_linear.ops import FP
 from x_linear.device import fit_device, decision_device
+from x_linear.cls1_fast import cls1_flags
 
 
 def _fp(addr: Int) raises -> FP:
@@ -104,6 +105,10 @@ def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonOb
     return PythonObject(n * k)
 
 
+def cls1_flags_binding() raises -> PythonObject:
+    return PythonObject(cls1_flags())
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -131,6 +136,7 @@ def PyInit__mojolearn_x_linear() abi("C") -> PythonObject:
         m.def_function[fit_binding]("x_linear_fit")
         m.def_function[decision_binding]("x_linear_decision")
         m.def_function[numeric_mode_binding]("x_linear_numeric_mode")
+        m.def_function[cls1_flags_binding]("x_linear_cls1_flags")
         m.def_function[vendor_binding]("x_linear_vendor")
         m.def_function[py2mojo_rows_binding]("py2mojo_rows")
         m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
