@@ -533,10 +533,10 @@ def mf_select_kernel(dist: F32Ptr, mask: I32Ptr, r: Int32, h: Int32, active: I32
         i0 += MF_TPB
 
 
-def mf_any_kernel(active: I32Ptr, nc: Int32, out: I32Ptr):
+def mf_any_kernel(active: I32Ptr, nc: Int32, dst: I32Ptr):
     var c = Int(block_idx.x) * MF_TPB + Int(thread_idx.x)
     if c < Int(nc) and active.unsafe_load(c) != 0:
-        out.unsafe_store(0, Int32(1))
+        dst.unsafe_store(0, Int32(1))
 
 
 def mf_rank_kernel(det0: F32Ptr, det1: F32Ptr, fin: I32Ptr, nc: Int32, per: Int32, keep: Int32, order: I32Ptr):

@@ -58,8 +58,8 @@ def maxabs_part_kernel(x: FP, part: FP, n: Int32, d: Int32, rows: Int32, cg: Int
     part[chunk * dd + c] = ma
 
 
-def maxabs_fold_kernel(part: FP, out: FP, d: Int32, nch: Int32):
-    """thread = column c: out[c] = the largest partial (max_abs_), out[d + c]
+def maxabs_fold_kernel(part: FP, dst: FP, d: Int32, nch: Int32):
+    """thread = column c: dst[c] = the largest partial (max_abs_), dst[d + c]
     = `zero_to_one` of it (scale_)."""
     var dd = Int(d)
     var c = Int(block_idx.x) * MA_TPB + Int(thread_idx.x)
@@ -70,8 +70,8 @@ def maxabs_fold_kernel(part: FP, out: FP, d: Int32, nch: Int32):
         var v = part[ch * dd + c]
         if v > ma:
             ma = v
-    out[c] = ma
-    out[dd + c] = zero_to_one(ma)
+    dst[c] = ma
+    dst[dd + c] = zero_to_one(ma)
 
 
 def maxabs_fit_direct(x_addr: Int, n: Int, d: Int, out_addr: Int) raises:

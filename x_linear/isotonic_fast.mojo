@@ -93,9 +93,9 @@ def _key_less(ka: UInt64, ia: Int, kb: UInt64, ib: Int) -> Bool:
 
 
 # ---------------------------------------------------------------- scans
-def if_scan_block_kernel[MX: Bool](inp: IP, out: IP, blk: IP, n: Int32):
+def if_scan_block_kernel[MX: Bool](inp: IP, dst: IP, blk: IP, n: Int32):
     """Inclusive scan (sum, or max when MX) of each block's 256 words into
-    `out`; the block's total into blk[block]."""
+    `dst`; the block's total into blk[block]."""
     var tid = Int(thread_idx.x)
     var b = Int(block_idx.x)
     var g = b * IF_TPB + tid
@@ -121,7 +121,7 @@ def if_scan_block_kernel[MX: Bool](inp: IP, out: IP, blk: IP, n: Int32):
         barrier()
         off *= 2
     if g < Int(n):
-        out.unsafe_store(g, sh[tid])
+        dst.unsafe_store(g, sh[tid])
     if tid == IF_TPB - 1:
         blk.unsafe_store(b, sh[tid])
 
@@ -172,20 +172,20 @@ def if_scan_totals_kernel[MX: Bool](blk: IP, nb: Int32):
         c0 += IF_TPB
 
 
-def if_scan_add_kernel[MX: Bool](out: IP, blk: IP, n: Int32):
+def if_scan_add_kernel[MX: Bool](dst: IP, blk: IP, n: Int32):
     """Each block's words carry the scanned total of the blocks before it."""
     var tid = Int(thread_idx.x)
     var b = Int(block_idx.x)
     var g = b * IF_TPB + tid
     if b > 0 and g < Int(n):
         var c = blk.unsafe_load(b - 1)
-        var v = out.unsafe_load(g)
+        var v = dst.unsafe_load(g)
         comptime if MX:
             if c > v:
                 v = c
         else:
             v = v + c
-        out.unsafe_store(g, v)
+        dst.unsafe_store(g, v)
 
 
 def _if_scan[MX: Bool](

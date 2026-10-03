@@ -483,11 +483,11 @@ def cc_root_rank_kernel(lab: IP, boff: IP, newid: IP, n_: Int64):
         running += tot
 
 
-def cc_relabel_kernel(lab: IP, newid: IP, out: IP, n: Int32):
-    """out[v] = newid[lab[v]]: every node takes its root's rank."""
+def cc_relabel_kernel(lab: IP, newid: IP, dst: IP, n: Int32):
+    """dst[v] = newid[lab[v]]: every node takes its root's rank."""
     var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if v < Int(n):
-        out.unsafe_store(v, newid.unsafe_load(Int(lab.unsafe_load(v))))
+        dst.unsafe_store(v, newid.unsafe_load(Int(lab.unsafe_load(v))))
 
 
 def _cc_csr_fast(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
