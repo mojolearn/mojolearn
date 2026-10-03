@@ -453,21 +453,30 @@ def argmax_rows(scores):
 
 def finite_integer_codes(arr):
     """Sorted distinct values of a float32 label `Array` as ints, or None
-    when any value is non-finite, negative or not an integer. The
-    finiteness test is native (`_buffer.all_finite`); the distinct set is
-    built by `set()` over the storage view, O(rows) at C speed with no
-    Python loop until the loop over DISTINCT values."""
-    from ._buffer import all_finite
+    when any value is non-finite, negative or not an integer. Every pass
+    over the rows is native (lane apple-fast-py2mojo-core; the `set()` over
+    the storage view is gone): the finiteness scan (`_buffer.all_finite`),
+    the integer test and the minimum (the core helper `reduce_stat`), and
+    the distinct values (`unique_inverse`, the device sort on a GPU install);
+    Python only converts the k class values."""
+    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
+    from ._buffer import all_finite, _native
 
     if not all_finite(arr):
         return None
-    distinct = set(flat_view(arr, "f"))
-    if not distinct or min(distinct) < 0:
+    if arr.size == 0:
         return None
-    for v in distinct:
-        if v != math.floor(v):
-            return None
-    return sorted(int(v) for v in distinct)
+    flat = arr._as_c()
+    code = _NATIVE_CODE.get(flat.dtype)
+    if code is None or flat.dtype not in ("<f4", "<f8"):
+        flat = flat.astype("<f8")
+        code = _NATIVE_CODE["<f8"]
+    if not int(_native("reduce_stat")(flat._addr, code, flat.size, _REDUCE_INTEGRAL)):
+        return None
+    if flat.min() < 0:
+        return None
+    classes, _ = unique_inverse(flat.reshape((flat.size,)))
+    return [int(v) for v in classes.tolist()]
 
 
 def unique_inverse(y):
@@ -511,7 +520,11 @@ def unique_inverse(y):
             raise ValueError(str(exc)) from None
         raise
     del wide, arr
-    classes = Array._owned(classes_store, (n,), "<f8" if kind == 0 else "<i8", "C")
+    # the first k slots hold the classes: one memmove into a k-slot store,
+    # no per-class Python list (lane apple-fast-py2mojo-core)
     if k < n:
-        classes = Array.from_list(classes.tolist()[:k], classes.dtype)
+        cut = _output_store("d" if kind == 0 else "q", k)
+        ctypes.memmove(cut.buffer_info()[0], classes_store.buffer_info()[0], 8 * k)
+        classes_store = cut
+    classes = Array._owned(classes_store, (k,), "<f8" if kind == 0 else "<i8", "C")
     return classes, Array._owned(codes_store, (n,), "<i4", "C")
