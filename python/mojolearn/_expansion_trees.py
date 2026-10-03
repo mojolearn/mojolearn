@@ -3217,7 +3217,7 @@ class KernelExplainer(_AgnosticExplainer):
         f0, p0 = addr_ro(fx, name="fx"), addr(phi, name="phi")
         nl = addr_ro(self._fnull, name="fnull")
         S = self._chunk(m * d, n)
-        for s0 in range(0, n, S):
+        for s0 in range(0, n, S):  # glue: solve-batch loop (one binding call per batch)
             rows = min(S, n - s0)
             b.x_trees_kshap_solve_ey(e0 + 8 * s0 * m * k, f0 + 4 * s0 * k, nl, taddr, p0 + 8 * s0 * d * k,
                                      [rows, nb, d, nfixed, m, nfull, L, npaired, s0, seed, wbits, k, link])
@@ -3250,7 +3250,7 @@ class PermutationExplainer(_AgnosticExplainer):
         R = self._chunk(mm * nb * d, n)
         reuse = _trees_switch(self, _KSHAP_FAST_BATCH)   # one synthetic buffer for every chunk
         syn = None
-        for r0 in range(0, n, R):
+        for r0 in range(0, n, R):  # glue: chunk loop (one model call per chunk)
             rows = min(R, n - r0)
             params = [rows, nb, d, npm, r0, seed]
             if not reuse or syn is None or syn.size != rows * mm * nb * d:
