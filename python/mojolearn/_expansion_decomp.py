@@ -1177,6 +1177,14 @@ def _rp_rand(k, r, c, seed, stream, kind, dev):
     return out
 
 
+def _grp_cls2(k):
+    """lane/apple-fast-gap-cls2: the random projections' FAST Apple fit
+    switches compiled into the kit's binding (x_decomp/resident.mojo
+    `grp_cls2_py`: bit 1 NOSCAN, 2 DEVSCAN, 4 LAZY); 0 when it has none."""
+    fn = getattr(k.b, "x_decomp_grp_cls2", None)
+    return int(fn()) if fn is not None else 0
+
+
 def _sparse_rp_device(mode):
     """lane/apple-fast-kapprox: whether SparseRandomProjection.fit draws its
     matrix in one x_neighbors launch and skips the host finiteness pass over
@@ -1201,6 +1209,37 @@ class _RandomProjection(_Base):
         projection (SparseRandomProjection overrides); None takes main's path."""
         return None
 
+    @property
+    def components_(self):
+        """The (n_components, n_features) matrix. Under lane/apple-fast-gap-cls2's
+        LAZY switch the fit leaves it on the device and the first read
+        downloads it once (the same words)."""
+        dct = self.__dict__
+        v = dct.get("_rp_components")
+        if v is None and "_rp_lazy" in dct:
+            k, C, kc, d = dct.pop("_rp_lazy")
+            res = array.array("f", [0.0]) * (kc * d)
+            k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], kc * d)
+            v = dct["_rp_components"] = Array._owned(res, (kc, d), "<f4", "C")
+        if v is None:
+            raise AttributeError("components_")
+        return v
+
+    @components_.setter
+    def components_(self, v):
+        self.__dict__.pop("_rp_lazy", None)
+        self.__dict__["_rp_components"] = v
+
+    def _check(self, attr="components_"):
+        if attr == "components_" and "_rp_lazy" in self.__dict__:
+            return
+        super()._check(attr)
+
+    def __getstate__(self):
+        if "_rp_lazy" in self.__dict__:
+            _ = self.components_
+        return dict(self.__dict__)
+
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
         got = self._device_fit(X)
@@ -1210,7 +1249,21 @@ class _RandomProjection(_Base):
         # the store (a copy of the whole input) is transform's to build
         # (lane neural-pass27: fit_transform converted the 880 MB input
         # twice at the board's shape)
-        n, d = _M.shape_of_input(X)
+        k = self._kit()
+        cls2 = _grp_cls2(k) if self.numeric_mode_ == "fast" else 0
+        if cls2 & 3 and not _is_sparse(X):
+            # lane/apple-fast-gap-cls2 (FAST + Apple, x_decomp/resident.mojo
+            # GRP_CLS2_*): no host walk over X. NOSCAN: the shape only
+            # (transform's device projection refuses a non-finite X);
+            # DEVSCAN: the refusal as one device scan of X
+            a = as_f32_c(X, ndim=2, name="X")[0]
+            if a.ndim != 2 or min(a.shape) == 0:
+                raise ValueError("X: a nonempty two-dimensional input is required")
+            if cls2 & 2 and int(k.b.x_decomp_dev_first_nonfinite(addr_ro(a, name="X"), a.size)) >= 0:
+                raise ValueError("X: input must be finite; NaN/inf are unsupported")
+            n, d = a.shape
+        else:
+            n, d = _M.shape_of_input(X)
         if self.n_components == "auto":
             kc = johnson_lindenstrauss_min_dim(n, eps=self.eps)
             if kc <= 0:
@@ -1221,7 +1274,6 @@ class _RandomProjection(_Base):
             kc = int(self.n_components)
             if kc <= 0:
                 raise ValueError(f"n_components must be greater than 0, got {kc}")
-        k = self._kit()
         self.n_components_ = kc
         self.n_features_in_ = d
         # lane gap-nb-maxabs-grp: on the GPU binding the matrix is drawn on
@@ -1234,9 +1286,14 @@ class _RandomProjection(_Base):
             # stays there for transform; components_ is a copy of its words
             # (one download, the device matrix kept)
             C = self.components_m_
-            res = array.array("f", [0.0]) * (kc * d)
-            k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], kc * d)
-            self.components_ = Array._owned(res, (kc, d), "<f4", "C")
+            if cls2 & 4 and not self.compute_inverse_components:
+                # lane/apple-fast-gap-cls2 LAZY: downloaded on first read
+                self.__dict__.pop("_rp_components", None)
+                self.__dict__["_rp_lazy"] = (k, C, kc, d)
+            else:
+                res = array.array("f", [0.0]) * (kc * d)
+                k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], kc * d)
+                self.components_ = Array._owned(res, (kc, d), "<f4", "C")
         else:
             self.components_ = self.components_m_.out()
         if self.compute_inverse_components:
