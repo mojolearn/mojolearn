@@ -17,8 +17,9 @@ reference computes nmse-step forecasts and uses only the first for the
 objective); the ACF, the decomposition and the objective are float32."""
 from sequence.nm import Objective, nelder_mead
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 #: lane/apple-fast-tier (2026-10-02). `theta_run` writes five state words
 #: and one error per step to the thread's device scratch and reads the
@@ -27,12 +28,17 @@ from std.sys.compile import is_defined
 #: threads to hide it behind, inside Nelder-Mead's up to 1000 evaluations
 #: (board: theta taxi-hourly FAST 1,747 ms, IDENTICAL 388). Only row n - 1
 #: is ever read after the run (by the forecast) and the error sum is a
-#: running fma, so `-D MOJOLEARN_SEQ_THETA_REG=1` keeps the recurrence in
-#: registers: the same operations in the same order, four words written.
-#: FAST only; IDENTICAL compiles the stored-row code.
+#: running fma, so THETA_REG keeps the recurrence in registers: the same
+#: operations in the same order, four words written. Default on FAST + Apple
+#: since the M3 A/B (lane/apple-fast-tier 78d5b99d1, theta taxi-hourly, n=1):
+#: alone 1,770 -> 1,326 ms; with MOJOLEARN_SEQ_FAST_FMA 1,769 -> 220 ms,
+#: forecast_rmse 49.28 -> 49.02. -D MOJOLEARN_SEQ_THETA_REG_OFF restores the
+#: stored-row code; the old -D MOJOLEARN_SEQ_THETA_REG=1 is harmless.
+#: IDENTICAL compiles the stored-row code.
 comptime THETA_REG = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_SEQ_THETA_REG"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEQ_THETA_REG_OFF"]()
 )
 
 comptime STM = 0

@@ -19,6 +19,7 @@ IDENTICAL by construction (IDENTITY_PATHS.md "The rule"):
 """
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
     identical_div,
@@ -32,6 +33,7 @@ from checks.numerics import (
 )
 
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from std.math import fma as _std_fma
 
 comptime FP = MutPointer[Float32, MutUntrackedOrigin]
@@ -40,11 +42,19 @@ comptime FP = MutPointer[Float32, MutUntrackedOrigin]
 #: unfused `a * b + c` (two roundings, two instructions); the board's theta
 #: row ran FAST 1,747 ms against IDENTICAL's 388 on taxi-hourly, one thread
 #: per series on fma chains, so the fused `fma` is the A/B arm:
-#: `-D MOJOLEARN_SEQ_FAST_FMA=1` makes every sequence `fma3` one fused
-#: multiply-add under FAST. IDENTICAL keeps its pinned contraction.
+#: every sequence `fma3` is one fused multiply-add under FAST on Apple.
+#: Default since the M3 A/B (lane/apple-fast-tier 78d5b99d1, theta
+#: taxi-hourly, n=1): with MOJOLEARN_SEQ_THETA_REG, 1,769 -> 220 ms,
+#: forecast_rmse 49.28 -> 49.02. It reaches every x_sequence lane that calls
+#: `fma3` (theta, nm, ets, ets_team, croston, garch, stl, prophet, vecar,
+#: mlp, moe, layernorm, adafactor, coop, fit_team), FAST + Apple only.
+#: -D MOJOLEARN_SEQ_FAST_FMA_OFF restores the unfused form; the old
+#: -D MOJOLEARN_SEQ_FAST_FMA=1 is harmless. IDENTICAL keeps its pinned
+#: contraction.
 comptime SEQ_FAST_FMA = (
-    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
-    and is_defined["MOJOLEARN_SEQ_FAST_FMA"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SEQ_FAST_FMA_OFF"]()
 )
 
 #: The CPU identity gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1,
