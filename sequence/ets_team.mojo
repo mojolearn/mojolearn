@@ -42,12 +42,15 @@ from sequence.fit_team import SEQ_TEAM_TPB, TEAM_REC, SeqTeam, _ldi, _nm_load, _
 from sequence.nm import Objective, nm_finish, nm_start, nm_steps
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
 
-#: the switch: FAST on Apple, opt-in by define (default OFF: IDENTICAL and
-#: every other vendor compile op_ets unchanged)
+#: the switch: FAST on Apple, default ON since the M3 A/B (damped-ets
+#: taxi-hourly, lane/apple-fast-ets e3369d119, n=1: 611.9 -> 48.0 ms,
+#: forecast_rmse 96.69 -> 96.68; docs/apple-fast/ab/ets.md).
+#: -D MOJOLEARN_ETS_TEAM_OFF turns it off; the old -D MOJOLEARN_ETS_TEAM is
+#: harmless. IDENTICAL and every other vendor compile op_ets unchanged.
 comptime ETS_TEAM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_ETS_TEAM"]()
+    and not is_defined["MOJOLEARN_ETS_TEAM_OFF"]()
 )
 
 #: ETS phases: 0 setup (the initial state, the bounds, the simplex);

@@ -127,7 +127,7 @@ def croston_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObjec
 def ets_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     comptime if ETS_TEAM:
-        # Apple FAST, -D MOJOLEARN_ETS_TEAM: ETS(A, A|Ad, N) one series per
+        # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF): ETS(A, A|Ad, N) one series per
         # block (sequence/ets_team.mojo); every other model keeps ets_py
         if ets_team_applies(ip):
             return ets_team_py(ex, addrs, ip, fp)
