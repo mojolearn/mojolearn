@@ -62,6 +62,23 @@ the optimizer (afn-optim).
   else's arena, and the destructor ends and releases it if the op raises (no arena is left active).
 - No smoke gate ran: the build scripts export MOJOLEARN_SKIP_BUILD_GATE=1; only the binary checks run.
 
-## Compile results
+## Compile results (plan changed 2026-10-03: the M3 manager peer compiles; no more local builds)
 
-See the final section (filled after the builds).
+| build | result |
+|---|---|
+| training FAST `-D MOJOLEARN_AFN_SAMBA_ALL`, first try | rc=1: aliasing errors (List elements passed as several `mut` args; one buffer passed twice to the pair-add kernel). Fixed in samba_afn.mojo. |
+| training FAST `-D MOJOLEARN_AFN_SAMBA_ALL`, after the fixes | front end clean (warnings only, no errors) when it was stopped on the new order before codegen/link: UNCOMPILED (peer compiles) |
+| training FAST, each of FUSE / ARENA / DEVICE_ADMIT / EMB_ATOMIC alone | UNCOMPILED (peer compiles) |
+| mamba FAST, ALL / MAMBA3_BWD_CHUNK / MAMBA3_BWD_ARENA | UNCOMPILED (peer compiles) |
+| training FAST no define, mamba FAST no define | UNCOMPILED (peer compiles) |
+| training IDENTICAL, mamba IDENTICAL | UNCOMPILED (peer compiles) |
+
+Compile probe (scratch, not committed): a variable declared before one `comptime if` and initialized
+inside it is "use of uninitialized" at a use inside a later `comptime if`, with the define on AND off.
+So the Mamba-3 chunk sums live in `_AfnM3Arena.keep` (an empty list in every other build), not in
+declared-then-initialized locals.
+
+Note: `_mojolearn_mamba_host.mojo` also imports mamba3_prefill_backward; on a Mac FAST host build
+`has_apple_gpu_accelerator()` is true, so MAMBA3_BWD_CHUNK would also select the chunked kernels on the
+host column there (arena stays off: device_arena_on() is off outside the Apple column). The host column is
+an IDENTICAL verification tool, so this does not touch any bit the product compares.
