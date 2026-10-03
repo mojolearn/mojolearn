@@ -22,7 +22,7 @@ def test_bad_visible_mask_fails_before_any_worker(monkeypatch, vendor, variable,
     pool = DevicePool((0, 1))
     with pytest.raises(ValueError, match=message):
         pool._start()
-    assert not started and pool._threads is None
+    assert not started and not pool._workers
 
 
 @pytest.mark.parametrize('vendor,variable', [('cuda', 'CUDA_VISIBLE_DEVICES'),

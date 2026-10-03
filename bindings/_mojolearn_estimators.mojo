@@ -14,6 +14,7 @@ from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from bindings.py2mojo_cluster_est import dbscan_core_arrays_binding, estimators_py2mojo_cluster_binding
 from core.py2mojo_rows import py2mojo_rows_device_binding
 from core.py2mojo_linear import py2mojo_linear_flags
 
@@ -81,9 +82,6 @@ from decomposition.estimator import (
     tsvd_transform_host,
 )
 from glm.estimator import (
-    OLS_FAST_DEVICE_CENTER,
-    ols_center_tsqr_r_host,
-    ols_fit_centered_host,
     ols_fit_host,
     ols_fit_resident_host,
     ols_predict_host,
@@ -643,65 +641,6 @@ def lm_scale_rows_binding(x_addr: PythonObject, w_addr: PythonObject, out_addr: 
         var ctx = process_ctx[_DEVCTX_SLOT]()
         scale_rows_device(ctx, xa, wa, oa, nr, nc)
     return PythonObject(0)
-
-
-def ols_center_tsqr_r_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    r_addr: PythonObject,
-    means_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """R of the blocked TSQR of [X - mu | y - mu_y] with RAW X and y uploaded
-    once and centered on the device (-D MOJOLEARN_OLS_FAST_DEVICE_CENTER,
-    lane/apple-fast-core, 2026-10-02; `glm/estimator.mojo::
-    ols_center_tsqr_r_host`). params: n_rows, n_features. `r_addr` receives
-    the (n_features + 1) square float32 R, `means_addr` the n_features
-    float32 column means; returns the mean of y. Registered under FAST +
-    Apple with the define only."""
-    if len(params) != 2:
-        raise Error("ols_center_tsqr_r: params must contain n_rows, n_features")
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var xa = Int(py=x_addr)
-    var ya = Int(py=y_addr)
-    var ra = Int(py=r_addr)
-    var ma = Int(py=means_addr)
-    var y_mean = Float64(0.0)
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        y_mean = ols_center_tsqr_r_host(ctx, xa, ya, ra, ma, nr, nf)
-        ctx.synchronize()
-    return PythonObject(y_mean)
-
-
-def ols_fit_centered_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    coef_addr: PythonObject,
-    means_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`ols_fit` on RAW X and y with the intercept's centering on the device
-    (-D MOJOLEARN_OLS_FAST_DEVICE_CENTER, lane/apple-fast-core, 2026-10-02;
-    `glm/estimator.mojo::ols_fit_centered_host`): the route for the designs
-    the Python layer keeps off the TSQR. params: n_rows, n_features.
-    `means_addr` receives the n_features float32 column means; returns the
-    mean of y. Registered under FAST + Apple with the define only."""
-    if len(params) != 2:
-        raise Error("ols_fit_centered: params must contain n_rows, n_features")
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var xa = Int(py=x_addr)
-    var ya = Int(py=y_addr)
-    var ca = Int(py=coef_addr)
-    var ma = Int(py=means_addr)
-    var y_mean = Float64(0.0)
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        y_mean = ols_fit_centered_host(ctx, xa, ya, ca, ma, nr, nf)
-        ctx.synchronize()
-    return PythonObject(y_mean)
 
 
 def ols_predict_binding(
@@ -1266,6 +1205,8 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         m.def_function[dbscan_fit_binding]("dbscan_fit")
         m.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
+        m.def_function[dbscan_core_arrays_binding]("dbscan_core_arrays")
+        m.def_function[estimators_py2mojo_cluster_binding]("estimators_py2mojo_cluster")
         m.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         m.def_function[kde_score_samples_binding]("kde_score_samples")
         m.def_function[kde_fit_prepare_binding]("kde_fit_prepare")
@@ -1286,11 +1227,6 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[lm_col_sums_binding]("lm_col_sums")
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
-        comptime if OLS_FAST_DEVICE_CENTER:
-            # -D MOJOLEARN_OLS_FAST_DEVICE_CENTER, FAST + Apple: the Python
-            # layer takes the device-centering route when these names exist.
-            m.def_function[ols_center_tsqr_r_binding]("ols_center_tsqr_r")
-            m.def_function[ols_fit_centered_binding]("ols_fit_centered")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[ridge_fit_binding]("ridge_fit")
         m.def_function[ridge_fit_resident_binding]("ridge_fit_resident")

@@ -26,6 +26,7 @@ from x_decomp.resident import (
     dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_lda_rows_py,
     dev_lda_bound_py, dev_als_rows_py, dev_move_py,
 )
+from x_decomp.resident import GRP_CLS2_ANY, GRP_CLS2_DEVSCAN, grp_cls2_py, dev_first_nonfinite_py
 
 
 @export
@@ -120,6 +121,12 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_graph_components_py]("x_decomp_dev_graph_components")
         m.def_function[dev_graph_join_py]("x_decomp_dev_graph_join")
         m.def_function[dev_graph_dijkstra_py]("x_decomp_dev_graph_dijkstra")
+        # lane/apple-fast-gap-cls2: the random projections' FAST Apple fit
+        # switches (x_decomp/resident.mojo GRP_CLS2_*; DEVSCAN FAST + Apple default)
+        comptime if GRP_CLS2_ANY:
+            m.def_function[grp_cls2_py]("x_decomp_grp_cls2")
+        comptime if GRP_CLS2_DEVSCAN:
+            m.def_function[dev_first_nonfinite_py]("x_decomp_dev_first_nonfinite")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
         return m.finalize()

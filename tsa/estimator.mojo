@@ -52,7 +52,7 @@ comptime _DEVCTX_SLOT = "MojoTsaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDE
 
 from tsa.impl.timeSeries.stationarity import KPSS_ELEM_TPB, download_results
 from tsa.impl.timeSeries.kpss_fused import (
-    KPSS_FUSED_MAX_N, KPSS_PACK_W, TSA2_KPSS, TSA_KPSS_PACK, TSA_SELD_FUSED, kpss_fused, kpss_rounds,
+    KPSS_FUSED_MAX_N, KPSS_PACK_W, TSA_KPSS_PACK, TSA_SELD_FUSED, kpss_rounds,
 )
 from tsa.impl.auto_arima import select_d
 from tsa.impl.stationarity import kpss_test
@@ -126,23 +126,6 @@ def kpss_test_host(
                 stat_ptr.unsafe_store(b, res[b * KPSS_PACK_W])
                 flags_ptr.unsafe_store(b, Int32(1) if res[b * KPSS_PACK_W + 1] != Float32(0.0) else Int32(0))
             _ = ctx^
-            return batch_size
-    comptime if TSA2_KPSS:
-        # lane/apple-fast-tsa2 (-D MOJOLEARN_TSA2_KPSS, FAST + Apple): the
-        # undifferenced test as one launch, one block per series
-        # (tsa/impl/timeSeries/kpss_fused.mojo); the upload is queued, not
-        # waited for (its staging buffer lives past the one wait inside),
-        # and the finite check rides in the kernel. Differenced tests and
-        # series past the threadgroup's words take main's path below.
-        if d == 0 and D == 0 and n_obs <= KPSS_FUSED_MAX_N:
-            var total = batch_size * n_obs
-            var ybuf = ctx.enqueue_create_buffer[DType.float32](total)
-            var host = ctx.enqueue_create_host_buffer[DType.float32](total)
-            copy_f32(y_ptr, host.unsafe_ptr(), total)
-            ctx.enqueue_copy(dst_buf=ybuf, src_ptr=host.unsafe_ptr())
-            kpss_fused(ctx, ybuf, flags_ptr, stat_ptr, batch_size, n_obs, pval_threshold)
-            _ = host^
-            _ = ybuf^
             return batch_size
     var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)
     var res = kpss_test(

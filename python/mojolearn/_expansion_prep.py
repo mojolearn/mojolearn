@@ -90,6 +90,9 @@ _OPS = dict(
     cal_fold_part=142, cal_fold_scan=143, cal_fold_rank=144, cal_fold_assign=145, cal_lofo_merge=146,
     cal_eps_folds=147, cal_params_folds=148, cal_jll_folds=149, cal_platt_init=150, cal_platt_setup=151,
     cal_platt_part=152, cal_platt_step=153, cal_platt_ls_part=154, cal_platt_ls_pick=155, cal_sigmoid_avg=156,
+    # lane apple-fast-gap-cls2 (x_prep/cat_cls2.mojo): only the FAST + Apple binding (default;
+    # -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF has none) runs them (it exports x_prep_cls2_cat)
+    cat_zero=157, cat_present=158, pres_count=159, pres_write=160, cat_pack=161,
     # lane apple-fast-py2mojo-prep (x_prep/py2mojo.mojo, a range of its own): every binding
     # that exports x_prep_py2mojo runs them; built with -D MOJOLEARN_PY2MOJO_prep_OFF it has
     # none and `_p2m` routes to the old Python loops
@@ -585,12 +588,6 @@ def _mode():
     return _backend.default_mode()
 
 
-#: lane/apple-fast-prep (2026-10-02): the A/B switch
-#: MOJOLEARN_X_PREP_FAST_NONEG=1 (opt-in; measured noise), read once at
-#: import (never on a fit / transform path).
-_X_PREP_FAST = frozenset(
-    name for name in ("NONEG",) if os.environ.get("MOJOLEARN_X_PREP_FAST_" + name, "0") == "1")
-
 #: binding -> whether it exports `x_prep_fast_unique` (FAST + Apple default,
 #: bindings/_mojolearn_x_prep.mojo X_PREP_FAST_UNIQUE; built with
 #: -D MOJOLEARN_X_PREP_FAST_UNIQUE_OFF it does not), probed once per binding
@@ -600,8 +597,8 @@ _FAST_UNIQUE = {}
 def _fast_on(name, mode):
     """Whether the switch `name` is on for the FAST tier (`mode` is the
     estimator's numeric mode, `_backend.default_mode`). UNIQUE is the
-    binding's comptime default (a cached probe); NONEG a set lookup. Off,
-    or on another tier, every route below is the old one."""
+    binding's comptime default (a cached probe). Off, or on another tier,
+    every route below is the old one."""
     if mode != "fast":
         return False
     if name == "UNIQUE":
@@ -611,7 +608,7 @@ def _fast_on(name, mode):
         if on is None:
             on = _FAST_UNIQUE[key] = _optional_prep_entry(binding, "x_prep_fast_unique") is not None
         return on
-    return name in _X_PREP_FAST
+    return False
 
 
 def encode_labels(y):
@@ -789,10 +786,90 @@ def _finite_2d(X, who):
     return _x2d(X)
 
 
+#: lane/apple-fast-gap-cls2 (x_prep/cat_cls2.mojo): the packed distinct
+#: values' host region (words), the presence flags per column, flags per chunk
+_CAT_CAP = 1 << 16
+_CAT_R = 4096
+_CAT_CH = 64
+#: binding -> its `x_prep_cls2_cat` bits (0 when it has none), probed once
+_CLS2_CAT = {}
+
+
+def _cls2_cat(mode):
+    """lane/apple-fast-gap-cls2: bit 1 PACK, bit 2 PRESENT on the FAST
+    binding built with them (x_prep/cat_cls2.mojo), else 0."""
+    if mode != "fast":
+        return 0
+    binding = _prep_binding(mode)
+    key = id(binding)
+    v = _CLS2_CAT.get(key)
+    if v is None:
+        fn = _optional_prep_entry(binding, "x_prep_cls2_cat")
+        v = _CLS2_CAT[key] = int(fn()) if fn is not None else 0
+    return v
+
+
+def _fit_categories_cls2(mode, arr, bits):
+    """`_fit_categories`' lists with the distinct values packed into a small
+    host region (PACK) and, with PRESENT, found by presence flags instead of
+    a sort. None (nothing kept) when a column is not small non-negative
+    integers under PRESENT, or the values do not fit the region: the caller
+    runs main's program."""
+    n, d = arr.shape
+    pr = _Prog()
+    xo = pr.put(arr)
+    co = pr.alloc(d)
+    cap = min(n * d, _CAT_CAP)
+    pk = pr.alloc(cap)
+    bad = None
+    if bits & 2:
+        R, ch = _CAT_R, _CAT_CH
+        nch = -(-R // ch)
+        bad = pr.alloc(d)
+        fl = pr.work(d * R)
+        uo = pr.work(d * R)
+        pr.stage("cat_zero", d * R, fl)
+        pr.stage("cat_present", n * d, xo, n, d, R, fl, bad)
+        for c in range(d):
+            cnt, off = pr.work(nch), pr.work(nch)
+            pr.stage("pres_count", nch, fl + c * R, R, ch, cnt)
+            pr.stage("uniq_scan", 1, cnt, nch, off, co + c)
+            pr.stage("pres_write", nch, fl + c * R, R, ch, off, uo + c * R)
+        pr.stage("cat_pack", d * R, uo, R, d, co, cap, pk)
+    else:
+        so = pr.work(n * d)
+        uo = pr.work(n * d)
+        pr.stage("sort_cols", d, xo, n, d, so, 1)
+        ch = _label_chunk(n)
+        nch = -(-n // ch)
+        for c in range(d):
+            cnt, off = pr.work(nch), pr.work(nch)
+            pr.stage("uniq_count", nch, so + c * n, n, ch, cnt)
+            pr.stage("uniq_scan", 1, cnt, nch, off, co + c)
+            pr.stage("uniq_write", nch, so + c * n, n, ch, off, uo + c * n)
+        pr.stage("cat_pack", n * d, uo, n, d, co, cap, pk)
+    pr.run(mode)
+    if bad is not None and any(v != 0 for v in pr.get_i32(bad, (d,)).tolist()):
+        return None
+    counts = [int(v) for v in pr.values(co, d)]
+    if sum(counts) > cap:
+        return None
+    out, o = [], 0
+    for c in range(d):
+        out.append(pr.get(pk + o, counts[c]))
+        o += counts[c]
+    return out
+
+
 def _fit_categories(mode, arr):
     """Per column, the sorted distinct values (-0.0 folded into 0.0), on the
     device: a sort per column and a run scan."""
     n, d = arr.shape
+    cls2 = _cls2_cat(mode)
+    if cls2 & 1 and _fast_on("UNIQUE", mode):
+        got = _fit_categories_cls2(mode, arr, cls2)
+        if got is not None:
+            return got
     pr = _Prog()
     xo = pr.put(arr)
     so = pr.work(n * d)
@@ -865,23 +942,15 @@ def _category_block(pr, categories):
     return pr.put_list(block), kmax
 
 
-def _codes(pr, arr, categories, neg=True):
+def _codes(pr, arr, categories):
     """Stages that write each element's category index (or -1) and each
-    column's unknown count. Returns (codes offset, unknown-count offset).
-    neg=False (lane apple-fast-prep, MOJOLEARN_X_PREP_FAST_NONEG=1): no
-    count, the offset None. `count_neg` (x_prep/prims.mojo count_neg_unit)
-    is ONE thread per column over every row; the encoders read it only under
-    handle_unknown='error' / 'warn' or with a drop, so the board's
-    OneHotEncoder(handle_unknown='ignore') and
-    OrdinalEncoder(handle_unknown='use_encoded_value') never did."""
+    column's unknown count. Returns (codes offset, unknown-count offset)."""
     n, d = arr.shape
     xo = pr.put(arr)
     uo, kmax = _category_block(pr, categories)
     co = pr.put_list([c.size for c in categories])
     codes = pr.alloc(n * d)
     pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
-    if not neg:
-        return codes, None
     neg = pr.alloc(d)
     pr.stage("count_neg", d, codes, n, d, neg)
     return codes, neg
@@ -1116,8 +1185,7 @@ class OrdinalEncoder(_PrepBase):
         self._check_width(arr)
         n, d = arr.shape
         pr = _Prog()
-        codes, neg = _codes(pr, arr, self.categories_,
-                            neg=self.handle_unknown == "error" or not _fast_on("NONEG", self.numeric_mode_))
+        codes, neg = _codes(pr, arr, self.categories_)
         out = codes
         if self._grouping is not None:
             out = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping), _NONE)
@@ -1270,9 +1338,7 @@ class OneHotEncoder(_PrepBase):
         starts = [sum(widths[:j]) for j in range(d)]
         W = sum(widths)
         pr = _Prog()
-        codes, neg = _codes(pr, arr, self.categories_,
-                            neg=self.handle_unknown in ("error", "warn") or self.drop is not None
-                            or not _fast_on("NONEG", self.numeric_mode_))
+        codes, neg = _codes(pr, arr, self.categories_)
         if self._grouping is not None:
             unk = self._unknown_to()
             codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping),
@@ -1559,10 +1625,10 @@ class TargetEncoder(_PrepBase):
         self.categories_, self.target_type_, self.numeric_mode_, self.n_features_in_ = cats, kind, mode, d
         self.classes_ = classes
         self._T, self._cmax = T, cmax
-        full = F * d * cmax * T
-        self._enc = pr.get(enc + full, d * cmax * T)
+        base = F * d * cmax * T
+        self._enc = pr.get(enc + base, d * cmax * T)
         self._meta = pr.get(meta + 2 * F * T, 2 * T)
-        self.encodings_ = [pr.get(enc + full + (j * cmax) * T, cats[j].size * T) for j in range(d)]
+        self.encodings_ = [pr.get(enc + base + (j * cmax) * T, cats[j].size * T) for j in range(d)]
         means = pr.values(meta + 2 * F * T, 2 * T)[0::2]
         self.target_mean_ = pr.get(meta + 2 * F * T, 1) if T == 1 else Array.from_list(means, "<f4")
         return pr.get(out, (n, d * T)) if apply_rows_folds else None
@@ -3726,7 +3792,8 @@ def _label_buffer(y):
 def _label_chunk(n):
     """Rows per chunk of the run scan and the unknown count (bookkeeping
     only: every chunking writes the same words)."""
-    return max(1024, int(n ** 0.5) + 1)
+    from math import isqrt  # exact integer square root, no platform pow
+    return max(1024, isqrt(int(n)) + 1)
 
 
 def _label_load(pr, lb):

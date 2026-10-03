@@ -66,6 +66,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import time
 
@@ -146,28 +147,12 @@ def _split_points(ranges, n):
     return sorted(points)
 
 
-def documents(data, ranges, document_bytes, lo=None, hi=None):
-    """`[(start, stop)]` by the declared rule, half-open and in order,
-    covering `[lo, hi)` (default the whole file)."""
-    n = len(data)
-    lo = 0 if lo is None else lo
-    hi = n if hi is None else hi
-    out = []
-    points = [p for p in _split_points(ranges, n) if lo < p < hi]
-    for a, b in zip([lo] + points, points + [hi]):
-        at = a
-        while at < b:
-            stop = min(at + document_bytes, b)
-            if stop < b:
-                cut = data.rfind(b"\n", at, stop)
-                if cut != -1 and cut + 1 > at:
-                    stop = cut + 1
-            out.append((at, stop))
-            at = stop
-    return out
+# The document rule (no document spans a declared range boundary; at most
+# `document_bytes` bytes, ending at the last 0x0A at or before the limit) is
+# `_cut_documents` in `bindings/_mojolearn_tokenizer_host.mojo`, applied
+# inside the one binding call that trains (`bpe_train_corpus`) or encodes
+# (`bpe_encode_corpus`); Python never walks the corpus.
 
-
-# ---------------------------------------------------------------- vocabulary
 
 def _atomic_dir(final, fill):
     """Build `final` in a temporary sibling and rename it into place, so a
@@ -211,11 +196,11 @@ def _trained_vocabulary(data, ranges, sha, cache, vocab_size, min_frequency, sam
         return final, _check_vocab_dir(final)
 
     def fill(tmp):
-        docs = [bytes(data[a:b]) for a, b in documents(data, ranges, document_bytes, lo, hi)]
         t0 = time.perf_counter()
         if progress:
-            progress(f"training a {vocab_size}-rank vocabulary on {hi - lo} bytes ({len(docs)} documents)")
-        v = _tokenizer.BpeVocabularyTrainer(vocab_size=vocab_size, min_frequency=min_frequency).train(docs)
+            progress(f"training a {vocab_size}-rank vocabulary on {hi - lo} bytes")
+        v = _tokenizer._train_corpus(data, _split_points(ranges, len(data)), lo, hi, document_bytes,
+                                     vocab_size, min_frequency)
         seconds = time.perf_counter() - t0
         v.write_ranks(str(tmp / "ranks.tsv"))
         recipe = dict(trainer="mojolearn.tokenizer.BpeVocabularyTrainer", backend=v.stats.get("backend"),
@@ -233,7 +218,8 @@ def _trained_vocabulary(data, ranges, sha, cache, vocab_size, min_frequency, sam
 def _user_vocabulary(vocab, cache):
     """A caller's token map, loaded and written canonically into the cache."""
     if isinstance(vocab, _tokenizer.TrainedBpeVocabulary):
-        tokens = vocab.tokens
+        text = vocab.render_ranks()
+        n_ranks = vocab.n_tokens
         source = "TrainedBpeVocabulary"
     else:
         if isinstance(vocab, _tokenizer.BpeTokenizer):
@@ -245,10 +231,10 @@ def _user_vocabulary(vocab, cache):
         else:
             raise TypeError("mojolearn: vocab must be a rank file path, (encoder_json, vocab_bpe), a BpeTokenizer "
                             f"or a TrainedBpeVocabulary, got {type(vocab).__name__}")
-        tokens = _tokens_by_decoding(tok)
+        text = tok._m.bpe_ranks_text(tok._handle)
+        n_ranks = tok.n_vocab - 1
         source = tok.vocabulary_source
-    text = _tokenizer._bpe_trainer.render_ranks(tokens)
-    identity = _tokenizer._identity_from_tokens_text(text, len(tokens))
+    identity = _tokenizer._identity_from_tokens_text(text, n_ranks)
     final = cache / "vocab" / f"user-{identity['sha256'][:16]}"
     if not (final / "vocabulary.json").is_file():
         def fill(tmp):
@@ -259,42 +245,23 @@ def _user_vocabulary(vocab, cache):
     return final, _check_vocab_dir(final)
 
 
-def _tokens_by_decoding(tok):
-    """Every rank's bytes, read back through `decode_bytes` one id at a time
-    (the binding exposes no token listing; `NOT_IMPLEMENTED.tsv`)."""
-    return [tok.decode_bytes([i]) for i in range(tok.n_vocab - 1)]
-
-
 # ---------------------------------------------------------------- tokenizing
 
 def _tokenize(data, src, ranges, tok, identity, out, document_bytes, batch_documents, progress=None):
-    from ._array import Array
-    docs = documents(data, ranges, document_bytes)
-    boundaries = {p: None for p in _split_points(ranges, len(data))}
-    payload, at_token, above_255, max_id = bytearray(), 0, 0, -1
-    encode_seconds, t_start = 0.0, time.perf_counter()
-    for k in range(0, len(docs), batch_documents):
-        group = docs[k:k + batch_documents]
-        t0 = time.perf_counter()
-        encoded = tok.encode_batch([bytes(data[a:b]) for a, b in group])
-        encode_seconds += time.perf_counter() - t0
-        for (a, _b), ids in zip(group, encoded):
-            if a in boundaries:
-                boundaries[a] = at_token
-            arr = Array.from_list(ids, "<i4")
-            payload.extend(arr.tobytes())
-            at_token += arr.size
-            if arr.size:
-                above_255 += sum(value > 255 for value in ids)
-                max_id = max(max_id, int(arr.max()))
-        if progress and (k // batch_documents) % 8 == 0:
-            done = group[-1][1]
-            secs = time.perf_counter() - t_start
-            progress(f"tokenized {done}/{len(data)} bytes, {at_token} ids, {secs:.1f} s, "
-                     f"{done / max(secs, 1e-9) / 1e6:.3f} MB/s")
-    boundaries[len(data)] = at_token
-    seconds = time.perf_counter() - t_start
-    payload = bytes(payload)
+    """Cut, encode and concatenate the corpus in ONE binding call
+    (`BpeTokenizer._encode_corpus`). `batch_documents` is kept for the
+    recipe's signature; the binding takes every document at once."""
+    t_start = time.perf_counter()
+    ids, boundaries, n_documents, max_id, above_255 = tok._encode_corpus(
+        data, _split_points(ranges, len(data)), document_bytes)
+    encode_seconds = seconds = time.perf_counter() - t_start
+    at_token = len(ids)
+    if progress:
+        progress(f"tokenized {len(data)} bytes, {at_token} ids, {seconds:.1f} s, "
+                 f"{len(data) / max(seconds, 1e-9) / 1e6:.3f} MB/s")
+    if sys.byteorder != "little":
+        ids.byteswap()
+    payload = ids.tobytes()
     token_ranges = {key: [boundaries[a], boundaries[b]] for key, (a, b) in ranges.items()}
     manifest = dict(
         schema=TOKENS_SCHEMA,
@@ -306,7 +273,7 @@ def _tokenize(data, src, ranges, tok, identity, out, document_bytes, batch_docum
         document_rule=f"no document spans a declared range boundary; at most {document_bytes} bytes, ending at "
                       "the last 0x0A at or before the limit (or at the limit when the window holds none); each "
                       "encoded alone, ids concatenated in document order",
-        document_bytes=document_bytes, n_documents=len(docs),
+        document_bytes=document_bytes, n_documents=n_documents,
         dtype="int32", byte_order="little",
         sha256=_sha_bytes(payload), bytes=len(payload), tokens=at_token,
         bytes_per_token=(len(data) / at_token) if at_token else None,
@@ -451,68 +418,33 @@ class TokenBatches:
         from ._array import Array
         width = self.length + 1
         out = Array((self.batch, width), "<i4")
-        for b in range(self.batch):
-            start = self.lo + (step_index * self.batch * self.length + b * self.length) % self.modulus
-            out._mv[b * width:(b + 1) * width] = self.ids_all._mv[start:start + width]
+        # Row b reads ids[lo + (k*batch*length + b*length) % modulus : +width],
+        # copied in one binding call (`tokens_gather_rows`).
+        _tokenizer._gather_rows(self.ids_all, out, self.batch, self.length, self.lo, self.modulus,
+                                step_index * self.batch * self.length)
         return out
 
     def prefetch(self, start_step, steps, *, depth=2):
-        """Yield ``(step, ids)`` in order while preparing later batches.
+        """Yield ``(step, ids)`` in order.
 
-        This is the bounded loading stage for pretokenized corpora staged from
-        the dataset store: the producer reads only the already verified mmap,
-        never R2 credentials or mutable remote state.  At most ``depth``
-        batches are live.  Producer failures are re-raised at their exact
-        logical step, before any later batch is yielded.
+        Each batch is one `tokens_gather_rows` copy out of the already
+        verified mmap, made when the consumer asks for it; there is no host
+        thread (lane/pyglue-text-io, 2026-10-03), so ``depth`` only bounds
+        how many batches may be live and is validated for the old callers.
+        A failure is raised at its exact logical step, before any later
+        batch is made.
         """
-        import queue
-        import threading
-
         if type(start_step) is not int or start_step < 0:
             raise ValueError(f"mojolearn: start_step must be a nonnegative int, got {start_step!r}")
         if type(steps) is not int or steps < 0:
             raise ValueError(f"mojolearn: steps must be a nonnegative int, got {steps!r}")
         if type(depth) is not int or depth < 1:
             raise ValueError(f"mojolearn: prefetch depth must be a positive int, got {depth!r}")
+        return self._batches(start_step, steps)
 
-        ready = queue.Queue(maxsize=depth)
-        stopped = threading.Event()
-        done = object()
-
-        def put(item):
-            while not stopped.is_set():
-                try:
-                    ready.put(item, timeout=0.05)
-                    return True
-                except queue.Full:
-                    pass
-            return False
-
-        def produce():
-            for step in range(start_step, start_step + steps):
-                try:
-                    batch = self.ids(step)
-                except BaseException as exc:
-                    put((step, None, exc))
-                    return
-                if not put((step, batch, None)):
-                    return
-            put(done)
-
-        worker = threading.Thread(target=produce, name="mojolearn-token-prefetch", daemon=True)
-        worker.start()
-        try:
-            while True:
-                item = ready.get()
-                if item is done:
-                    return
-                step, batch, error = item
-                if error is not None:
-                    raise error
-                yield step, batch
-        finally:
-            stopped.set()
-            worker.join()
+    def _batches(self, start_step, steps):
+        for step in range(start_step, start_step + steps):
+            yield step, self.ids(step)
 
     def describe(self):
         v = self.manifest["vocabulary"]

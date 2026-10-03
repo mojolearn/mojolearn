@@ -622,8 +622,62 @@ struct HostOps(ClusterOps):
     ) raises:
         raise Error("x_cluster: agglo_merge is the GPU column's (the host column runs agglo_tree's loop)")
 
-    def agglo_connect(mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int) raises -> Int:
+    def agglo_connect(
+        mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int, edge_mode: Int
+    ) raises -> Int:
         raise Error("x_cluster: agglo_connect is the GPU column's (the host column runs agglo_tree's loop)")
+
+    def tree_parent(mut self, children: Int, n: Int, m: Int, parent: Int) raises:
+        var pc = self._ip(children)
+        var pp = self._ip(parent)
+        for j in range(n + m):
+            pp[j] = Int32(j)
+        for t in range(m):
+            pp[Int(pc[2 * t])] = Int32(n + t)
+            pp[Int(pc[2 * t + 1])] = Int32(n + t)
+
+    def tree_roots(mut self, parent: Int, total: Int, rank1: Int) raises -> Int:
+        var pp = self._ip(parent)
+        var pr = self._ip(rank1)
+        var c = 0
+        for j in range(total):
+            if Int(pp[j]) == j:
+                c += 1
+                pr[j] = Int32(c)
+            else:
+                pr[j] = 0
+        return c
+
+    def tree_scatter(mut self, nodes: Int, c: Int, rank1: Int) raises:
+        var pn = self._ip(nodes)
+        var pr = self._ip(rank1)
+        for i in range(c):
+            pr[Int(pn[i])] = Int32(i + 1)
+
+    def tree_leaf_label(mut self, parent: Int, rank1: Int, n: Int, labels: Int) raises:
+        var pp = self._ip(parent)
+        var pr = self._ip(rank1)
+        var pl = self._ip(labels)
+        for t in range(n):
+            var v = t
+            var lab = Int32(-1)
+            while True:
+                if pr[v] != 0:
+                    lab = pr[v] - 1
+                    break
+                var p = Int(pp[v])
+                if p == v:
+                    break
+                v = p
+            pl[t] = lab
+
+    def count_ge(mut self, x: Int, n: Int, thr: Float32) raises -> Int:
+        var p = self._fp(x)
+        var c = 0
+        for t in range(n):
+            if p[t] >= thr:
+                c += 1
+        return c
 
     def estep(
         mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int

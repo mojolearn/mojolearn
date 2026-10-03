@@ -55,9 +55,10 @@ def fit_gaussian_process_classifier(estimator, X, y, *, devices=(0,)):
     if len(classes) < 2:
         raise ValueError('GaussianProcessClassifier requires at least two classes')
     columns = [1] if len(classes) == 2 else range(len(classes))
-    # the 0/1 targets through the core helpers (equal_elements, cast_elements)
-    requests = [('gpc_class_fit', _fresh(estimator), (x, (codes == k).astype('<f4')))
-                for k in columns]
+    # the class codes and the class: the worker's `_fit_binary` builds the
+    # 0/1 targets in the binding (lane apple-fast-py2mojo-cluster)
+    codes32 = Array.from_list(codes, '<i4')
+    requests = [('gpc_class_fit', _fresh(estimator), (x, codes32, k)) for k in columns]
     fits = _run(requests, devices)
     result = _fresh(estimator)
     result.input_copied_ = copied
@@ -77,22 +78,24 @@ def predict_gaussian_process_classifier(estimator, X, *, devices=(0,), method='p
     if method not in ('predict', 'predict_proba'):
         raise ValueError('method must be predict or predict_proba')
     q = estimator._query(X)
-    # 2: the binding writes the binary [1 - p, p] rows; 1: the class-1 column
-    want_proba = (2 if estimator.n_classes_ == 2 else 1) if (
-        method == 'predict_proba' or estimator.n_classes_ > 2) else 0
+    want_proba = method == 'predict_proba' or estimator.n_classes_ > 2
+    # a binary model's codes (1) or [1 - p, p] rows (2) come back finished
+    # from the worker (lane apple-fast-py2mojo-cluster)
+    out_kind = (2 if method == 'predict_proba' else 1) if estimator.n_classes_ == 2 else 0
     requests = []
     for fit in estimator.estimators_:
         part = _fresh(estimator)
         part.X_train_, part.kernel_ = estimator.X_train_, estimator.kernel_
         part.n_features_in_ = estimator.n_features_in_
-        requests.append(('gpc_class_predict', part, (fit, q, want_proba)))
+        args = (fit, q, want_proba, out_kind) if out_kind else (fit, q, want_proba)
+        requests.append(('gpc_class_predict', part, args))
     arrays = list(_run(requests, devices))
     if any(len(column) != q.shape[0] for column in arrays):
         raise ValueError('GPC worker returned an invalid row count')
     if estimator.n_classes_ == 2:
         if method == 'predict_proba':
             return arrays[0]
-        return decode_labels(estimator.classes_, threshold_codes(arrays[0]))
+        return decode_labels(estimator.classes_, arrays[0])
     # DEVIATION 2833's one-vs-rest combine on this process's device, the
     # single-device class's own call (cpu-gpu-cleanup c-gp-kernel).
     from ._gpc_impl import _ovr_combine

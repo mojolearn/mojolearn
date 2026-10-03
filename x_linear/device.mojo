@@ -379,12 +379,7 @@ def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, ypart
     var t = device_team(tw, 0, team_rows(a, ip), team_own(a, dd))
     var wsum = ld(state, 3)
     var yvar = fd(fold_parts(vparts, 0, Int(nb)), wsum)
-    var jtol = Float32(1e-9)
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
-        # lane/apple-fast-kernel: ip[7] (MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1)
-        if ldi(ip, 7) != 0:
-            jtol = Float32(1e-7)
-    var al = bayes_eig_prep(t, fw, fp, dd, yvar, jtol)
+    var al = bayes_eig_prep(t, fw, fp, dd, yvar)
     var ratio = fd(al[1], al[0])
     for j in range(t.tid, dd, t.nt):
         st(res, j, bayes_coef_one(fw, dd, j, ratio))
@@ -3388,30 +3383,28 @@ def fit_device(
             if fast_gram:
                 grid_gram = False
                 lars_pre = False
-    # lane/apple-fast-kernel (2026-10-02), FAST on Apple only, both default
-    # off, build-time. -D MOJOLEARN_KERNEL_FAST_BAYES_STATS: the means, the centered Gram,
-    # X'y from x_linear/fast_gram.mojo (the gram lane's shared grid Gram,
-    # chunked tiles on the grid) instead of `xg_means_kernel` + `xg_gram_kernel`
-    # (one serial million-row chain per cell) and the team's own X'y /
-    # mean / variance passes on one block (after the 2026-10-02 merge: in
-    # place of main's moments grid, one block per 16-column tile pair with
-    # one serial chain per cell, and main's `bayes_xty_kernel`; the y
-    # partials stay main's). -D MOJOLEARN_KERNEL_FAST_BAYES_JACOBI (ip[7]): the team Jacobi
-    # skips rotations below 1e-7 * sqrt(a_pp a_qq) instead of 1e-9, a
-    # threshold float32 roundoff never reaches, so it ran all 60 sweeps.
+    # lane/apple-fast-kernel (2026-10-02), FAST on Apple only: the means, the
+    # centered Gram, X'y from x_linear/fast_gram.mojo (the gram lane's shared
+    # grid Gram, chunked tiles on the grid) instead of `xg_means_kernel` +
+    # `xg_gram_kernel` (one serial million-row chain per cell) and the team's
+    # own X'y / mean / variance passes on one block (after the 2026-10-02
+    # merge: in place of main's moments grid, one block per 16-column tile
+    # pair with one serial chain per cell, and main's `bayes_xty_kernel`; the
+    # y partials stay main's). Taken under BAYES_CLS1_STATS (the KEPT
+    # lane/apple-fast-gap-cls1 default); its own opt-in define
+    # MOJOLEARN_KERNEL_FAST_BAYES_STATS and the Jacobi threshold arm
+    # MOJOLEARN_KERNEL_FAST_BAYES_JACOBI were dropped (lane/apple-fast-kernel
+    # @ 9e851777c).
     var kstats = False
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         if bayes_like:
             # STATS: BayesianRidge (unweighted) on main's grid driver only;
             # ARD keeps main's moments grid (its X'y pass is the team's)
             # lane/apple-fast-gap-cls1: BAYES_CLS1_STATS (FAST + Apple default) turns the same path on
-            if algo == ALGO_BAYES and n > 0 and d > 0 and (is_defined["MOJOLEARN_KERNEL_FAST_BAYES_STATS"]() or BAYES_CLS1_STATS):
+            if algo == ALGO_BAYES and n > 0 and d > 0 and BAYES_CLS1_STATS:
                 kstats = True
                 grid_gram = True
                 hip[4] = Int32(1)
-            while len(hip) < 8:
-                hip.append(Int32(0))
-            hip[7] = Int32(1 if is_defined["MOJOLEARN_KERNEL_FAST_BAYES_JACOBI"]() else 0)
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](team_work(0, 3, 0))
     var hfp = fp.copy()

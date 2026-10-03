@@ -12,17 +12,12 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_neighbors.eigh_device import op_eigh
 from checks.vendor import COMPILED_VENDOR
 from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp_var, op_nc_median, op_row_argmax, op_nc_med_std, op_pos_compact, op_p2m_mask_value, op_p2m_zero_cols, op_p2m_nan_indicator, op_p2m_sign_label, op_p2m_relabel, op_p2m_fill, op_p2m_iota, op_p2m_negate, op_p2m_transpose, op_p2m_transpose_i, op_p2m_row_sort
-from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn, op_kernel_tiled
+from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
 from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain
-from x_neighbors.kapprox_dev import op_kapprox_check
-from x_neighbors.kapprox_dev import op_kapprox_achi2
-from x_neighbors.kapprox_dev import op_kapprox_skew_fit
-from x_neighbors.kapprox_dev import op_kapprox_skew_transform
-from x_neighbors.kapprox_dev import op_kapprox_sparse_rp
-from x_neighbors.nc_cls1 import op_nc_counts, nc_cls1_flags_binding
-from x_neighbors.kapprox_dev import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding
+from x_neighbors.kapprox_dev import kpca_resident_binding
 from x_neighbors.iter_device import lp_fast_resident_binding
+from x_neighbors.ocsvm_dev import OCSVM_CLS2_RES, ocsvm_resident_binding
 from x_neighbors.sort_items import purity_flags_binding
 
 
@@ -695,17 +690,6 @@ def pos_compact_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) ra
     return PythonObject(None)
 
 
-def nc_counts_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    """lane/apple-fast-gap-cls1 NC_CLS1_LABELS: [lab int32, nk float32 out], [n, C]."""
-    var v_lab = _a(a_, 0)
-    var v_nk = _a(a_, 1)
-    var v_n = _n(i_, 0)
-    var v_c = _n(i_, 1)
-    with GILReleased(Python()):
-        op_nc_counts(v_lab, v_nk, v_n, v_c)
-    return PythonObject(None)
-
-
 def p2m_mask_value_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_x = _a(a_, 0)
     var v_res = _a(a_, 1)
@@ -1098,22 +1082,6 @@ def lp_iterate_knn_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject)
     return PythonObject(None)
 
 
-def kernel_tiled_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_x = _a(a_, 0)
-    var v_y = _a(a_, 1)
-    var v_res = _a(a_, 2)
-    var v_n = _n(i_, 0)
-    var v_m = _n(i_, 1)
-    var v_d = _n(i_, 2)
-    var v_kind = _n(i_, 3)
-    var v_gamma = _f(f_, 0)
-    var v_coef0 = _f(f_, 1)
-    var v_degree = _n(i_, 4)
-    with GILReleased(Python()):
-        op_kernel_tiled(v_x, v_y, v_res, v_n, v_m, v_d, v_kind, v_gamma, v_coef0, v_degree)
-    return PythonObject(None)
-
-
 def ocsvm_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_q = _a(a_, 0)
     var v_cv = _a(a_, 1)
@@ -1138,69 +1106,6 @@ def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
     var v_threshold = _f(f_, 1)
     with GILReleased(Python()):
         op_louvain(v_a, v_labels, v_info, v_n, v_max_level, v_resolution, v_threshold)
-    return PythonObject(None)
-
-
-def kapprox_check_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_x = _a(a_, 0)
-    var v_flag = _a(a_, 1)
-    var v_n = _n(i_, 0)
-    var v_d = _n(i_, 1)
-    var v_strict = _n(i_, 2)
-    var v_floor = _f(f_, 0)
-    with GILReleased(Python()):
-        op_kapprox_check(v_x, v_flag, v_n, v_d, v_strict, v_floor)
-    return PythonObject(None)
-
-
-def kapprox_achi2_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_x = _a(a_, 0)
-    var v_res = _a(a_, 1)
-    var v_flag = _a(a_, 2)
-    var v_n = _n(i_, 0)
-    var v_d = _n(i_, 1)
-    var v_steps = _n(i_, 2)
-    var v_interval = _f(f_, 0)
-    with GILReleased(Python()):
-        op_kapprox_achi2(v_x, v_res, v_flag, v_n, v_d, v_steps, v_interval)
-    return PythonObject(None)
-
-
-def kapprox_skew_fit_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_w = _a(a_, 0)
-    var v_off = _a(a_, 1)
-    var v_d = _n(i_, 0)
-    var v_nc = _n(i_, 1)
-    var v_seed = _n(i_, 2)
-    with GILReleased(Python()):
-        op_kapprox_skew_fit(v_w, v_off, v_d, v_nc, v_seed)
-    return PythonObject(None)
-
-
-def kapprox_skew_transform_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_x = _a(a_, 0)
-    var v_w = _a(a_, 1)
-    var v_off = _a(a_, 2)
-    var v_res = _a(a_, 3)
-    var v_flag = _a(a_, 4)
-    var v_n = _n(i_, 0)
-    var v_d = _n(i_, 1)
-    var v_nc = _n(i_, 2)
-    var v_skew = _f(f_, 0)
-    with GILReleased(Python()):
-        op_kapprox_skew_transform(v_x, v_w, v_off, v_res, v_flag, v_n, v_d, v_nc, v_skew)
-    return PythonObject(None)
-
-
-def kapprox_sparse_rp_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_res = _a(a_, 0)
-    var v_kc = _n(i_, 0)
-    var v_d = _n(i_, 1)
-    var v_seed = _n(i_, 2)
-    var v_dens = _f(f_, 0)
-    var v_scale = _f(f_, 1)
-    with GILReleased(Python()):
-        op_kapprox_sparse_rp(v_res, v_kc, v_d, v_seed, v_dens, v_scale)
     return PythonObject(None)
 
 
@@ -1269,7 +1174,6 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[p2m_transpose_i_binding]("xn_p2m_transpose_i")
     m.def_function[p2m_row_sort_binding]("xn_p2m_row_sort")
     m.def_function[nc_stats_binding]("xn_nc_stats")
-    m.def_function[nc_counts_binding]("xn_nc_counts")
     m.def_function[lp_knn_graph_binding]("xn_lp_knn_graph")
     m.def_function[lp_knn_product_binding]("xn_lp_knn_product")
     m.def_function[lp_iterate_binding]("xn_lp_iterate")
@@ -1286,14 +1190,8 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[svgp_fit_ff_binding]("xn_svgp_fit_ff")
     m.def_function[svgp_predict_binding]("xn_svgp_predict")
     m.def_function[lp_iterate_knn_binding]("xn_lp_iterate_knn")
-    m.def_function[kernel_tiled_binding]("xn_kernel_tiled")
     m.def_function[ocsvm_binding]("xn_ocsvm")
     m.def_function[louvain_binding]("xn_louvain")
-    m.def_function[kapprox_check_binding]("xn_kapprox_check")
-    m.def_function[kapprox_achi2_binding]("xn_kapprox_achi2")
-    m.def_function[kapprox_skew_fit_binding]("xn_kapprox_skew_fit")
-    m.def_function[kapprox_skew_transform_binding]("xn_kapprox_skew_transform")
-    m.def_function[kapprox_sparse_rp_binding]("xn_kapprox_sparse_rp")
     m.def_function[eigh_binding]("xn_eigh")
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
     m.def_function[x_neighbors_py2mojo_off_binding]("x_neighbors_py2mojo_off")
@@ -1309,12 +1207,13 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_neighbors")
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
-        m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
-        m.def_function[nc_cls1_flags_binding]("x_neighbors_cls1_flags")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
-        m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
+        # lane/apple-fast-gap-cls2: OneClassSVM's Gram kept on the device
+        # (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_RES; FAST + Apple default)
+        comptime if OCSVM_CLS2_RES:
+            m.def_function[ocsvm_resident_binding]("x_neighbors_ocsvm_resident")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors: ", e))

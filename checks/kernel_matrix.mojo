@@ -1015,22 +1015,6 @@ def hist2_block_size_for[column: Int, smem_mode: Int]() -> Int:
         comptime want = (
             APPLE_HIST2_SHARED_I32_BLOCK_CAP if column == COLUMN_APPLE else 512
         )
-        # `-D MOJOLEARN_SYM_HIST_FAST=1` (lane/apple-fast-trees-yeti,
-        # 2026-10-02), FAST on Apple only: the 512-thread shared-Int32
-        # block the arm was measured at (1.94x, `hist_2_one_byte_base.mojo`
-        # module docstring) instead of the 256 cap above, which is the M2
-        # Pro's dispatch limit and halves the per-core occupancy of every
-        # histogram launch on the M3 (one 32 KB block per core either way).
-        # Same bits: the accumulation is Int32 fixed point and the flush
-        # adds Int32 cells, so the block changes the grid only (the note
-        # on the cap). IDENTICAL keeps the cap; its bits never move.
-        comptime if (
-            is_defined["MOJOLEARN_SYM_HIST_FAST"]()
-            and column == COLUMN_APPLE
-            and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
-        ):
-            comptime by_smem_fast = 512 if limit >= 512 else limit
-            return by_smem_fast if by_smem_fast < hard else hard
         comptime by_smem = want if limit >= want else limit
         return by_smem if by_smem < hard else hard
     else:

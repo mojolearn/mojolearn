@@ -219,11 +219,29 @@ def execute(request):
         from ._cpu_reference import require_training
         from ._gpc_impl import _kernel_arrays
         require_training(state)
+        if len(args) == 3:
+            # (x, int32 class codes, k): the targets are built in the binding
+            x, codes, k = args
+            return state._fit_binary(state._extension(), x, codes, *_kernel_arrays(state.kernel), k=k)
         x, y01 = args
         return state._fit_binary(state._extension(), x, y01, *_kernel_arrays(state.kernel))
     if operation == 'gpc_class_predict':
-        fit, q, want_proba = args
-        mean, _, probability = state._latent(state._extension(), fit, q, want_proba)
+        fit, q, want_proba = args[:3]
+        out_kind = args[3] if len(args) > 3 else 0
+        ext = state._extension()
+        if out_kind:
+            # a binary model's predict codes (1) or predict_proba pairs (2):
+            # from the binding when it computes them (lane
+            # apple-fast-py2mojo-cluster), the Python loops otherwise
+            from ._gp_impl import _gp_py2mojo
+            if _gp_py2mojo(ext):
+                return state._latent(ext, fit, q, want_proba, out_kind)[3]
+            from ._array import Array
+            mean, _, probability = state._latent(ext, fit, q, want_proba)
+            if out_kind == 1:
+                return Array.from_list([1 if v > 0.0 else 0 for v in mean.tolist()], '<i8')
+            return Array.from_list([[1.0 - v, v] for v in probability.tolist()], '<f8')
+        mean, _, probability = state._latent(ext, fit, q, want_proba)
         return probability if want_proba else mean
     if operation == 'forecast_predict':
         method, positional = args

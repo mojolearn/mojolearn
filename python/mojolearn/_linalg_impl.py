@@ -603,6 +603,21 @@ def from_bf16(bits):
     return out
 
 
+def from_f16(bits):
+    """IEEE float16 bits (a `'<u2'` or `'<f2'` buffer) to float32, exact, by
+    bit construction (`gemm/contract.mojo::f16_bits_to_f32`): on the GPU on
+    a GPU install, the linalg host binding on a CPU-only one. A float32
+    `mojolearn.Array` of the same shape."""
+    a, _ = as_u16_c(bits, ndim=None, name="bits")
+    pb = probe(a)
+    n = nelems(pb.shape)
+    if n == 0:
+        raise ValueError("mojolearn.linalg.from_f16: bits has no elements")
+    out = empty(pb.shape, "<f4")
+    _lowbit_binding().from_f16(addr(out, name="out"), addr_ro(a, name="bits"), [int(n)])
+    return out
+
+
 def quantize_int8(x):
     """Row-wise int8 codes and per-row power-of-two exponents of a 2-D
     float32 matrix (contract L-3, L-4), on the GPU. Returns `(codes,

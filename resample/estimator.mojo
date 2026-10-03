@@ -49,6 +49,7 @@ comptime _DEVCTX_SLOT = "MojoResampleContextIdentical" if _DEVCTX_MODE == _DEVCT
 from core.identity_trace import IdentityTrace
 from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32
 from metrics.checks.pinned_sum import (
+    PINNED_SUM_TPB,
     PINNED_SUM_W,
     canonicalize_nan,
     chunk_count,
@@ -118,6 +119,8 @@ from resample.checks.statistics import (
     monte_carlo_chunk_kernel,
     mc_finish_host,
     order_stat_kernel,
+    perm_observed_chunks_kernel,
+    perm_observed_fold_kernel,
     perm_select_stat_kernel,
     perm_stat_kernel,
     quantile_of_sorted_host,
@@ -210,6 +213,54 @@ def _download_f32(
         out.append(host.unsafe_ptr().unsafe_load(i))
     _ = host^
     return out^
+
+
+def _perm_observed(
+    ctx: DeviceContext,
+    mut dpool: DeviceBuffer[DType.float32],
+    n_pooled: Int,
+    n_x: Int,
+    n_y: Int,
+    statistic: Int,
+) raises -> Float32:
+    """The permutation test's observed statistic on the device
+    (`perm_observed_chunks_kernel` / `perm_observed_fold_kernel`); one
+    scalar comes home."""
+    var chunks = chunk_count(n_pooled)
+    var parts = ctx.enqueue_create_buffer[DType.float32](3 * max(chunks, 1))
+    var stats = ctx.enqueue_create_buffer[DType.float32](2)
+    comptime ck = perm_observed_chunks_kernel[PINNED_SUM_TPB]
+    ctx.enqueue_function[ck](
+        parts.unsafe_ptr(), dpool.unsafe_ptr(), stats.unsafe_ptr(),
+        Int32(n_pooled), Int32(n_x), Int32(0),
+        grid_dim=(max(chunks, 1), 1, 1), block_dim=(PINNED_SUM_TPB, 1, 1),
+    )
+    if statistic == STAT_DIFF_MEANS:
+        comptime fk = perm_observed_fold_kernel[STAT_DIFF_MEANS]
+        ctx.enqueue_function[fk](
+            stats.unsafe_ptr(), parts.unsafe_ptr(), Int32(chunks), Int32(n_x),
+            Int32(n_y), Int32(0), grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )
+    else:
+        comptime fm = perm_observed_fold_kernel[STAT_MEAN]
+        ctx.enqueue_function[fm](
+            stats.unsafe_ptr(), parts.unsafe_ptr(), Int32(chunks), Int32(n_x),
+            Int32(n_y), Int32(0), grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )
+        if statistic == STAT_STD:
+            ctx.enqueue_function[ck](
+                parts.unsafe_ptr(), dpool.unsafe_ptr(), stats.unsafe_ptr(),
+                Int32(n_pooled), Int32(n_x), Int32(1),
+                grid_dim=(max(chunks, 1), 1, 1), block_dim=(PINNED_SUM_TPB, 1, 1),
+            )
+            ctx.enqueue_function[fm](
+                stats.unsafe_ptr(), parts.unsafe_ptr(), Int32(chunks), Int32(n_x),
+                Int32(n_y), Int32(1), grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+            )
+    var h = _download_f32(ctx, stats, 2)
+    _ = parts^
+    _ = stats^
+    return h[0]
 
 
 def _download_i32(
@@ -1533,44 +1584,12 @@ def permutation_test_host(
     var null_dist = _download_f32(ctx, null_buf, n_resamples)
 
     # The OBSERVED statistic is the pooled sample split where it already is,
-    # i.e. the identity permutation. Host, over the same pinned tree, for
-    # `point_estimate_host`'s reason: the p-value's tolerance `gamma` is a
-    # multiple of it, so a last bit here moves a count.
-    var vx = List[Float32]()
-    var vy = List[Float32]()
-    for j in range(n_pooled):
-        var v = ftz(pooled[j])
-        if j < n_x:
-            vx.append(v)
-            vy.append(Float32(0.0))
-        else:
-            vx.append(Float32(0.0))
-            vy.append(v)
-    var sx = host_tree_sum(vx, n_pooled)
-    var sy = host_tree_sum(vy, n_pooled)
-    var observed: Float32
-    if statistic == STAT_DIFF_MEANS:
-        observed = ftz(_mean_of_sum(sx, n_x) - _mean_of_sum(sy, n_y))
-    elif statistic == STAT_MEAN:
-        observed = _mean_of_sum(sx, n_x)
-    else:
-        var mx = _mean_of_sum(sx, n_x)
-        var sq = List[Float32]()
-        for j in range(n_pooled):
-            if j < n_x:
-                var d = ftz(ftz(pooled[j]) - mx)
-                sq.append(ftz(identical_mul(d, d)))
-            else:
-                sq.append(Float32(0.0))
-        observed = ftz(
-            identical_sqrt(
-                ftz(
-                    identical_div(
-                        host_tree_sum(sq, n_pooled), Float32(n_x - 1)
-                    )
-                )
-            )
-        )
+    # i.e. the identity permutation, over `host_tree_sum`'s pinned tree (the
+    # p-value's tolerance `gamma` is a multiple of it, so a last bit here
+    # moves a count). lane/apple-fast-purity2: on the device -- a block per
+    # chunk, then one thread over the chunk totals -- where it was a host
+    # loop over the pooled sample; the same words.
+    var observed = _perm_observed(ctx, dpool, n_pooled, n_x, n_y, statistic)
     trace.record_scalar_f32("resample.observed", observed)
 
     var pv = permutation_pvalue(null_dist, n_resamples, observed, alternative)
