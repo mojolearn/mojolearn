@@ -1,0 +1,3 @@
+CMD lane/apple-fast-tsa tsa-llonly-autoarima AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa-llonly-autoarima arima autoarima taxi-hourly 1 2 "" "-D MOJOLEARN_ARIMA_FAST_LLONLY=1"
+CMD lane/apple-fast-tsa tsa-evalws-autoarima AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa-evalws-autoarima arima autoarima taxi-hourly 1 2 "" "-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1"
+CMD lane/apple-fast-tsa tsa-both-autoarima AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa-both-autoarima arima autoarima taxi-hourly 1 2 "" "-D MOJOLEARN_ARIMA_FAST_LLONLY=1 -D MOJOLEARN_ARIMA_FAST_EVAL_WS=1"
