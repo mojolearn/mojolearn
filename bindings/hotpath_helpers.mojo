@@ -1415,3 +1415,27 @@ def adam_hyper_f64_binding(
         dp.unsafe_store(row + 7, dec)
         dp.unsafe_store(row + 8, 1.0 - lr * wd)
     return PythonObject(0)
+
+
+def mean_std_f32_binding(
+    src_addr: PythonObject, n: PythonObject, stride: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """dst (float64, 2) = [mean, population std] of src[0], src[stride], ...,
+    src[(n-1)*stride] (float32), two passes in float64 in row order."""
+    var count = Int(py=n)
+    var st = Int(py=stride)
+    if count < 1 or st < 1:
+        raise Error("mean_std_f32: n >= 1, stride >= 1")
+    var sp = _ptr[DType.float32](Int(py=src_addr))
+    var dp = _ptr[DType.float64](Int(py=dst_addr))
+    var s = Float64(0)
+    for i in range(count):
+        s += Float64(sp.unsafe_load(i * st))
+    var mean = s / Float64(count)
+    var q = Float64(0)
+    for i in range(count):
+        var dv = Float64(sp.unsafe_load(i * st)) - mean
+        q += dv * dv
+    dp.unsafe_store(0, mean)
+    dp.unsafe_store(1, sqrt(q / Float64(count)))
+    return PythonObject(0)

@@ -854,7 +854,12 @@ class NearestNeighbors(NumericModeMixin):
             if self._dist_params()[0] == _DIST_INNER_PRODUCT:
                 # the kernel selected the smallest NEGATED products; hand
                 # back the products themselves (a negation, exact)
-                dist = Array.from_list([[-v for v in row] for row in dist.tolist()], "<f4")
+                from ._buffer import _native
+                dc = dist._as_c()
+                neg = empty(dc.shape, "<f4")
+                if dc.size:
+                    _native("scale_shift_ftz_f32")(dc._addr, dc.size, -1.0, 0.0, 2, neg._addr)
+                dist = neg
             return dist, ind.astype("<i8")
         return ind.astype("<i8")
 
