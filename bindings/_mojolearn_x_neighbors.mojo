@@ -1317,7 +1317,7 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         # lane/apple-fast-gap-cls2: OneClassSVM's Gram kept on the device
-        # (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_RES; default off)
+        # (x_neighbors/ocsvm_dev.mojo OCSVM_CLS2_RES; FAST + Apple default)
         comptime if OCSVM_CLS2_RES:
             m.def_function[ocsvm_resident_binding]("x_neighbors_ocsvm_resident")
         return m.finalize()

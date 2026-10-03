@@ -837,7 +837,7 @@ class OneClassSVM(_XNeighbors):
         else:
             self._gamma = _f32_scalar(_resolve_gamma(self.gamma, self.kernel, X, self))
             Xw = X if m == n else self._take_rows(X, rows)
-            # lane/apple-fast-gap-cls2 (FAST + Apple, -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES):
+            # lane/apple-fast-gap-cls2 (FAST + Apple default; -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF off):
             # the binding forms the same Gram on the device and solves over it
             # there (no 400 MB download into a fresh host array and upload back)
             res_fn = getattr(self._bind(), "x_neighbors_ocsvm_resident", None) if self._fast_tier() else None

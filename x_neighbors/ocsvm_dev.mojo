@@ -53,7 +53,7 @@ comptime OCSVM_TPB = 256
 comptime OCSVM_CHUNK = 64
 
 # lane/apple-fast-gap-cls2 (2026-10-03), FAST + Apple, every switch default
-# OFF. Board (M3 FAST): ocsvm taxi 372 ms vs scikit-learn 181 (10,000 rows).
+# ON (below). Board (M3 FAST): ocsvm taxi 372 ms vs scikit-learn 181 (10,000 rows).
 #   MOJOLEARN_XN_FAST_CLS2_OCSVM_RES: the 10,000 x 10,000 Gram never leaves
 #     the device. Main forms it with `xn_kernel` (x_neighbors/device_ops.mojo
 #     op_kernel), DOWNLOADS its 400 MB into a fresh host array
@@ -71,9 +71,13 @@ comptime OCSVM_CHUNK = 64
 #     of the stop flag, not 64 (fewer synchronizes; the iterations past the
 #     stop are no-op launches, as they are now).
 comptime _OC_FA = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime OCSVM_CLS2_RES = _OC_FA and is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_RES"]()
-comptime OCSVM_CLS2_2L = _OC_FA and is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_2L"]()
-comptime OCSVM_CLS2_CHUNK256 = _OC_FA and is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256"]()
+# All three are the FAST + Apple default since the M3 A/B (n=1, quality
+# identical): ocsvm taxi 375.7 -> 65.0 ms (RES+2L+CHUNK256; RES alone -77%).
+# -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF / _2L_OFF / _CHUNK256_OFF turn them
+# off; the old -D names stay harmless.
+comptime OCSVM_CLS2_RES = _OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF"]()
+comptime OCSVM_CLS2_2L = _OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF"]()
+comptime OCSVM_CLS2_CHUNK256 = _OC_FA and not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF"]()
 comptime OCSVM_CHUNK_RUN = 256 if OCSVM_CLS2_CHUNK256 else OCSVM_CHUNK
 
 comptime S_IT = 0
@@ -607,7 +611,7 @@ def op_ocsvm_x(
     (`kernel_kernel`, or `kernel_rbf_tiled_kernel` when `tiled`): the same
     words, never downloaded."""
     comptime if not OCSVM_CLS2_RES:
-        raise Error("x_neighbors: op_ocsvm_x is a FAST Apple switch (-D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES)")
+        raise Error("x_neighbors: op_ocsvm_x is a FAST Apple switch (off under -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF)")
     else:
         var ctx = xn_ctx()
         var d_x = _buf(ctx, x, n * d, True)
