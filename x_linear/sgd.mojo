@@ -34,7 +34,10 @@ by five) and the loss classes at the top of that file. Differences, named:
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fexp, flog, fabs, fmax, fmin,
     ld, st, ldi, sti, i2f, fill, row_dot, shuffle, axpy_acc, scale_acc, ftzv, par_rows, fz, xmad, fsign,
+    X_LINEAR_HOST_SABOTAGE,
 )
+from std.memory import bitcast
+from std.sys import llvm_intrinsic
 from std.sys.info import is_gpu
 from std.sys.compile import is_defined
 from std.sys.info import is_apple_gpu
@@ -148,6 +151,88 @@ def sgd_dloss(kind: Int, y: Float32, p: Float32, eps: Float32) -> Float32:
     return Float32(0)
 
 
+# ------------------------------------------------ the host row chains (lane/neural-pass81)
+# lane/neural-pass81 (2026-10-01; re-applied on cgr3-pr85 to the blocked
+# predictor of lane/neural-pass139): the host's per-row folds without the
+# per-step flush on the chain. `fmad(a, b, acc)` flushes its accumulator
+# before and after each fused multiply-add; the operand flushes do not
+# depend on the chain, the result flush does, and it was most of the row's
+# latency. Here the chain runs the bare multiply-add (`xmad`) on flushed
+# operands and, off the chain, notes whether any partial sum was subnormal.
+# When none was, every flush of the accumulator returned its operand
+# unchanged, so the bare chain IS the flushed chain, step by step, bit for
+# bit; when one was, the row's fold is recomputed with the flushed steps.
+# Host only, IDENTICAL only; the device keeps its kernels' words.
+comptime SGD_HOST_TRACK = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not X_LINEAR_HOST_SABOTAGE
+)
+
+
+@always_inline
+def _subnormal8(v: SIMD[DType.float32, 8]) -> SIMD[DType.bool, 8]:
+    var b = bitcast[DType.uint32](v)
+    return (b & UInt32(0x7F800000)).eq(UInt32(0)) & (b & UInt32(0x007FFFFF)).ne(UInt32(0))
+
+
+@always_inline
+def _subnormal(v: Float32) -> Bool:
+    var b = bitcast[DType.uint32](v)
+    return ((b & UInt32(0x7F800000)) == UInt32(0)) & ((b & UInt32(0x007FFFFF)) != UInt32(0))
+
+
+@always_inline
+def _mb_dot_tracked(x: FP, i: Int, d: Int, w: FP, woff: Int, blk: Int) -> Float32:
+    """`mb_dot(x, i, d, w, woff, blk)` (blk > 0) by the tracked chains above:
+    the same blk-column blocks from zero, 8 advancing together, each in
+    column order, folded ascending with fa; the same words."""
+    var base = i * d
+    var nb = (d + blk - 1) // blk
+    var total = Float32(0)
+    var hit = SIMD[DType.bool, 8](fill=False)
+    var g0 = 0
+    while g0 < nb:
+        var accs = SIMD[DType.float32, 8](0)
+        for k in range(blk):
+            comptime for b in range(8):
+                var j = (g0 + b) * blk + k
+                if g0 + b < nb and j < d:
+                    accs[b] = xmad(fz(ld(x, base + j)), fz(ld(w, woff + j)), accs[b])
+            hit = hit | _subnormal8(accs)
+        comptime for b in range(8):
+            if g0 + b < nb:
+                total = fa(total, accs[b])
+        g0 += 8
+    if hit.reduce_or():
+        return mb_dot(x, i, d, w, woff, blk)
+    return total
+
+
+@always_inline
+def _sq_tracked(x: FP, i: Int, d: Int) -> Float32:
+    """sum_j fmad(x_ij, x_ij, .), j ascending (the PA rates' |x_i|^2) by the
+    tracked chain above; the same word."""
+    var acc = Float32(0)
+    var sub = False
+    for j in range(d):
+        var xj = fz(ld(x, i * d + j))
+        acc = xmad(xj, xj, acc)
+        sub = sub | _subnormal(acc)
+    if sub:
+        acc = Float32(0)
+        for j in range(d):
+            var xj = ld(x, i * d + j)
+            acc = fmad(xj, xj, acc)
+    return acc
+
+
+@always_inline
+def _prefetch_row(x: FP, off: Int, d: Int):
+    var j = 0
+    while j < d:
+        llvm_intrinsic["llvm.prefetch.p0", NoneType]((x + off + j).bitcast[NoneType](), Int32(0), Int32(3), Int32(1))
+        j += 16
+
+
 def sgd_one(
     x: FP, ys: FP, n: Int, d: Int,
     loss: Int, penalty: Int, alpha: Float32, l1_ratio_in: Float32,
@@ -168,6 +253,8 @@ def sgd_one(
     fill(q, 0, d, Float32(0))
     var intercept = Float32(1) if one_class else Float32(0)
     var il = Float32(0)  # one-class: the intercept's low word
+    # the shuffled rows miss the caches: the host fetches ~2 KB of rows ahead
+    var pf_ahead = max(1, min(16, 2048 // (4 * d + 1)))
     for i in range(n):
         sti(idx, i, i)
     var rng = seed
@@ -198,7 +285,14 @@ def sgd_one(
             # lane/neural-pass139: the predictor as MB_DBLK-column blocks,
             # each from zero, folded ascending (`mb_dot`; the device's
             # team-parallel per-sample kernel takes the same words)
-            var dotw = ws_mul(mb_dot(x, i, d, w, woff, MB_DBLK), whi, wlo)
+            var dotv: Float32
+            comptime if not is_gpu() and SGD_HOST_TRACK:
+                if r + pf_ahead < n:
+                    _prefetch_row(x, Int(ldi(idx, r + pf_ahead)) * d, d)
+                dotv = _mb_dot_tracked(x, i, d, w, woff, MB_DBLK)
+            else:
+                dotv = mb_dot(x, i, d, w, woff, MB_DBLK)
+            var dotw = ws_mul(dotv, whi, wlo)
             # one-class: the intercept is the float-float (intercept, il)
             var p = fa(fa(dotw, il), intercept) if one_class else fa(dotw, intercept)
             if lr == LR_OPTIMAL:
@@ -224,9 +318,12 @@ def sgd_one(
             var update: Float32
             if lr == LR_PA1 or lr == LR_PA2:
                 var sq = Float32(0)
-                for j in range(d):
-                    var xj = ld(x, i * d + j)
-                    sq = fmad(xj, xj, sq)
+                comptime if not is_gpu() and SGD_HOST_TRACK:
+                    sq = _sq_tracked(x, i, d)
+                else:
+                    for j in range(d):
+                        var xj = ld(x, i * d + j)
+                        sq = fmad(xj, xj, sq)
                 if lr == LR_PA1:
                     if sq == 0:
                         continue
