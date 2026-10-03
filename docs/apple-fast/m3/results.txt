@@ -1,4 +1,4 @@
-pos=290 lines=     453
+pos=296 lines=     455
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -355,3 +355,12 @@ pos=290 lines=     453
 457:CMD apple-fast-seq@8b3f1d90e seq-garch-reggrid-syn rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=528.0 all=[528] quality=['{"mean_llf":'] defines='-D MOJOLEARN_SEQ_GARCH_REG=1 -D MOJOLEARN_SEQ_GARCH_GRID=1'
 458:FBUILD lane/apple-fast-trees-scan@43430ca0f core=0 ibase=0 estimators=0 gbdt=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
 459:CMD apple-fast-trees-scan@43430ca0f trees-scan-dw-taxi rc=0 AFT-MEDIAN arm=B n=2 median_ms=12852.6 all=[12944, 12762] hashes=['5a16a858f54b8ce3', '801aad4400c740f3'] acc={'logloss': [0.527892, 0.527943], 'auc': [0.63241, 0.632481]}
+460:FBUILD lane/apple-fast@2dcdd949f core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+461:CMD apple-fast@2dcdd949f afb15-prophet rc=0 afb done tag=afb15-prophet pairs=2 ok=2
+462:CMD apple-fast@2dcdd949f afb16-garch-croston rc=0 afb done tag=afb16-garch-croston pairs=8 ok=8
+463:CMD apple-fast-trees-scan@43430ca0f trees-scan-rf-istella rc=0 AFT-MEDIAN arm=B n=2 median_ms=10146.2 all=[10165, 10127] hashes=['46ef5c27f84cf904'] acc={'logloss': [0.182017, 0.182017], 'auc': [0.945385, 0.945385]}
+464:FBUILD lane/apple-fast-gram@47ab9b791 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=1 
+465:CMD apple-fast-gram@47ab9b791 gram-lars-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=14.6 all=[15] quality=['{"finite":'] defines='-D MOJOLEARN_X_LINEAR_LARS_FAST_GRAM'
+466:FBUILD lane/apple-fast@443ae5fa3 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+467:CMD apple-fast@443ae5fa3 crostonopt-reg-synthetic rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=9.1 all=[9] quality=['{"forecast_rmse":'] defines=''
+468:CMD apple-fast@443ae5fa3 crostonopt-reg-taxi-hourly rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=9.3 all=[9] quality=['{"forecast_rmse":'] defines=''
