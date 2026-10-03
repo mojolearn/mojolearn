@@ -932,7 +932,7 @@ def bpe_decode_batch_binding(
                 )
         var out = owner[].tok.value().decode_bytes(ids)
         lens.append(len(out))
-        joined += out
+        joined += out^
     if len(joined) > cap:
         raise Error("bpe_decode_batch: " + String(len(joined)) + " bytes do not fit " + String(cap))
     if n > 0:
