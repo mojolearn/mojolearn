@@ -119,6 +119,46 @@ def _binding():
     return _Entries(_backend.load_host_module(_EXTENSION))
 
 
+#: THE FAST TIER'S GPU TOKENIZER (lane/apple-fast-bpe, 2026-10-03). Loaded by path from the fast
+#: tier's directory only under MOJOLEARN_NUMERIC_MODE=fast, and only when built
+#: (bindings/build_tokenizer_fast.sh). `bpe_fast_flags()` says which device paths it compiled
+#: (each needs FAST, an Apple GPU target and its -D MOJOLEARN_BPE_* define); a path it did not
+#: compile runs on the host binding exactly as before, and IDENTICAL never reaches this.
+_FAST_EXTENSION = "_mojolearn_tokenizer_fast"
+_FAST_STATE = []
+
+
+def _fast_entries():
+    """`(module, flags)` with flags `(train_device, encode_device, merge_batch, group_filter,
+    livebuf)`, or `(None, all False)`."""
+    if _FAST_STATE:
+        return _FAST_STATE[0]
+    found = (None, (False,) * 5)
+    if _backend.requested_mode() == "fast":
+        try:
+            path = os.path.join(_backend.tier_dir("fast"), _FAST_EXTENSION + ".so")
+        except ImportError:
+            path = None
+        if path is not None and os.path.exists(path):
+            import importlib.machinery
+            import importlib.util
+            import sys
+            full = "mojolearn." + _FAST_EXTENSION
+            module = sys.modules.get(full)
+            if module is None:
+                loader = importlib.machinery.ExtensionFileLoader(full, path)
+                spec = importlib.util.spec_from_loader(full, loader, origin=path)
+                module = importlib.util.module_from_spec(spec)
+                _backend._exec_binding(loader, module)
+                sys.modules[full] = module
+            if int(module.tokenizer_fast_numeric_mode()) != 0:
+                raise ImportError(f"mojolearn: {path} was not compiled FAST; rebuild it with "
+                                  "MOJOLEARN_NUMERIC_MODE=fast bash bindings/build_tokenizer_fast.sh")
+            found = (module, tuple(bool(x) for x in module.bpe_fast_flags()))
+    _FAST_STATE.append(found)
+    return found
+
+
 def _byte_to_char():
     """The GPT-2 format's byte-to-unicode spelling (`tokenizer/impl/
     byte_unicode.mojo` builds the same table): the printable Latin-1 runs
@@ -166,6 +206,12 @@ class BpeTokenizer:
         self._handle = self._m.bpe_load(path)
         self._n_vocab = int(self._m.bpe_n_vocab(self._handle))
         self._max_token_bytes = int(self._m.bpe_max_token_bytes(self._handle))
+        # FAST + a device encoder compiled in: the GPU binding's own handle, loaded now while the
+        # rank file exists (from_token_bytes deletes its temporary file after this returns).
+        self._fast = None
+        fast, flags = _fast_entries()
+        if fast is not None and flags[1]:
+            self._fast = (fast, fast.bpe_fast_load(path))
 
     # ------------------------------------------------------------ loading
 
@@ -383,6 +429,8 @@ class BpeTokenizer:
             pos += len(r)
             offsets[k + 1] = pos
         counts = array.array("q", bytes(8 * n_docs))
+        if self._fast is not None and not allow:
+            return self._encode_batch_fast(text, offsets, counts)
         ids = array.array("i", bytes(4 * max(n, 1)))
         text_buf = text if n > 0 else b"\0"
         total = int(self._m.bpe_encode_batch(
@@ -397,6 +445,21 @@ class BpeTokenizer:
             out.append(ids[at:at + c].tolist())
             at += c
         return out
+
+    def _encode_batch_fast(self, text, offsets, counts):
+        """The FAST GPU encoder (lane/apple-fast-bpe): document k's ids come back at its own byte
+        offset in `ids`, so each is one slice; the same ids as the host route, id for id."""
+        fast, handle = self._fast
+        n = len(text)
+        ids = array.array("i", bytes(4 * max(n, 1)))
+        text_buf = text if n > 0 else b"\0"
+        total = int(fast.bpe_encode_batch(
+            handle, addr_ro(text_buf, name="text"), addr_ro(offsets, name="offsets"),
+            addr(ids, name="ids"), addr(counts, name="counts"), [len(counts), n]))
+        if not 0 <= total <= n or sum(counts) != total:
+            raise RuntimeError(
+                f"mojolearn: bpe_encode_batch (fast) returned {total} ids for {n} bytes (counts sum {sum(counts)})")
+        return [ids[o:o + c].tolist() for o, c in zip(offsets, counts)]
 
     # ------------------------------------------------------------ decode
 
@@ -598,6 +661,16 @@ class BpeVocabularyTrainer:
                 raise TypeError(
                     f"mojolearn: document {k} must be str or bytes-like, got {type(d).__name__}")
         native = None
+        fast, flags = (None, (False,) * 5)
+        if self.backend != "python" and not _bpe_trainer.sabotaged() and self.vocab_size <= 46340:
+            fast, flags = _fast_entries()
+        if fast is not None and flags[0]:
+            # FAST + the device trainer compiled in (lane/apple-fast-bpe): the merge loop on the
+            # GPU, the host trainer's merges in the host trainer's order.
+            tokens, merges, stats = _train_native(fast, raws, self.vocab_size, self.min_frequency, False)
+            stats["backend"] = "mojo"
+            stats["device"] = "gpu"
+            return TrainedBpeVocabulary(tokens, merges, stats)
         if self.backend != "python":
             native = _native_trainer(required=self.backend == "mojo")
         if native is not None:
