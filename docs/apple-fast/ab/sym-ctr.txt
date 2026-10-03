@@ -1,0 +1,6 @@
+CMD lane/apple-fast-sym-ctr sym-ctr-perm-batch-taxicat AFT_OUT=$HOME/aft-ab/sym-ctr-perm-batch-taxicat bash tools/aft_ab.sh gbdt gbdt-categorical taxicat 2 "" "-D MOJOLEARN_SYM_CTR_PERM_BATCH"
+CMD lane/apple-fast-sym-ctr sym-ctr-all-taxicat AFT_OUT=$HOME/aft-ab/sym-ctr-all-taxicat bash tools/aft_ab.sh gbdt gbdt-categorical taxicat 2 "" "-D MOJOLEARN_SYM_CTR_ALL"
+CMD lane/apple-fast-sym-ctr sym-ctr-prep-shared-taxicat AFT_OUT=$HOME/aft-ab/sym-ctr-prep-shared-taxicat bash tools/aft_ab.sh gbdt gbdt-categorical taxicat 2 "" "-D MOJOLEARN_CTR_PREP_SHARED"
+CMD lane/apple-fast-sym-ctr sym-ctr-sort-once-taxicat AFT_OUT=$HOME/aft-ab/sym-ctr-sort-once-taxicat bash tools/aft_ab.sh gbdt gbdt-categorical taxicat 2 "" "-D MOJOLEARN_CTR_SORT_ONCE"
+CMD lane/apple-fast-sym-ctr sym-ctr-index-fused-taxicat AFT_OUT=$HOME/aft-ab/sym-ctr-index-fused-taxicat bash tools/aft_ab.sh gbdt gbdt-categorical taxicat 2 "" "-D MOJOLEARN_CTR_INDEX_FUSED"
+CMD lane/apple-fast-sym-ctr sym-ctr-onehot-device-taxicat AFT_OUT=$HOME/aft-ab/sym-ctr-onehot-device-taxicat bash tools/aft_ab.sh gbdt gbdt-categorical taxicat 2 "" "-D MOJOLEARN_CTR_ONEHOT_DEVICE"

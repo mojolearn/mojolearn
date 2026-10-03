@@ -100,12 +100,13 @@ serial estimation tasks per tree are the only term that scales with the 500 tree
 2. `MOJOLEARN_CTR_PREP_SHARED` (ctrs/fast_prep.mojo, train.mojo): one device prep context per fit: the binarized
    target uploaded once, each permutation's order uploaded once, the builder and calcer scratch allocated once and
    reused by every (feature, permutation); the fresh-order `compute_current_bins` (whose result is the zero fill)
-   skipped; the `bins` readback for `ReadLast` replaced by `unique_values` (dense codes: every code is present, so
-   the segment count is known). 24 N-uploads -> 1 + P + C, ~48 drains -> ~P + 2C, ~144 N-allocations -> ~20.
+   skipped (the fast walk does this under every CTR_* define). 24 N-uploads -> 1 + P + C, ~48 drains -> ~P + 2C,
+   ~144 N-allocations -> ~20.
 3. `MOJOLEARN_CTR_SORT_ONCE`: the FeatureFreq column derived from permutation 0's Borders builder (the rows are
    already sorted by category; segment lengths do not depend on the within-category order): segment ids, partition
    offsets, segmented reduce of the trivial weights, freq kernel. No identity-order builder, no second radix sort,
-   no host sort + host calcer. Integer counts, so the column is bit-identical to both existing arms.
+   no host sort + host calcer, and the `bins` readback for `ReadLast` replaced by `unique_values + 1` (dense codes:
+   every code is present). Integer counts, so the column is bit-identical to both existing arms.
 4. `MOJOLEARN_CTR_INDEX_FUSED`: CTR columns stay on the device. The calcer's prior divide writes each column into its
    own device buffer (no readback, no host copy, no re-upload per permutation); the per-permutation cindex binarizes
    those buffers in place (`_build_cindex_fast`); the Borders grid takes its min/max from a device stripe reduction
@@ -125,3 +126,14 @@ Owed, not done here: the FeatureFreq grid (MinEntropy-15) still sorts the N-row 
 `_exact_best_split` dedups inside; a weighted-uniques entry (the FeatureFreq column has at most `unique_values`
 distinct values, with known multiplicities) would remove that sort. It is a refactor of `grid_creator/binarization.mojo`,
 outside a FAST guard, so it is left for a lane that owns that file.
+
+## Wiring (as built)
+
+- `gbdt/ctrs/fast_prep.mojo`: the flags, `CtrPrepFast`, `fast_dependent_ctrs`, `fast_freq_ctrs`,
+  `device_dense_codes`, `device_target_histogram`, `device_minmax`, `ctr_borders_from_device`.
+- `gbdt/train.mojo`: the device dense-code pre-pass (ONEHOT_DEVICE), the fast categorical walk (any CTR_* define;
+  main's walk then runs zero times), pre-built grids passed to `_quantize_training_columns` (`pre_has` /
+  `pre_borders` / `pre_folds`, read only under the flags), `_build_cindex_fused` (INDEX_FUSED).
+- `gbdt/models/ctr_value_table.mojo`: `build_ctr_tables_from_counts` (ONEHOT_DEVICE).
+- `gbdt/methods/doc_parallel_boosting.mojo`: SYM_CTR_PERM_BATCH.
+- Requests: `docs/apple-fast/ab/sym-ctr.txt`, explained in `docs/apple-fast/ab/sym-ctr.md`.
