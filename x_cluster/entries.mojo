@@ -210,7 +210,8 @@ def affinity_entry[O: ClusterOps](
     """ip = [n, d, precomputed, pref_mode (0 median, 1 scalar, 2 array),
     max_iter, convergence_iter, seed]; fp = [damping, preference scalar].
     i = [cluster_centers_indices, labels], f = [affinity_matrix, the final
-    diagonals of A then R], s = [n_iter]."""
+    diagonals of A then R, the exemplar rows (none when precomputed)],
+    s = [n_iter]."""
     var centers = List[Int32]()
     var labels = List[Int32]()
     var n_iter = 0
@@ -220,11 +221,22 @@ def affinity_entry[O: ClusterOps](
         ops, x, ip[0], ip[1], ip[2] != 0, ip[3], Float32(fp[1]), pref, Float32(fp[0]), ip[4], ip[5],
         UInt64(ip[6]), centers, labels, n_iter, aff, ar_diag,
     )
+    # f[2]: the exemplar rows of x (cluster_centers_) unless precomputed, a
+    # row copy per exemplar (lane pyglue-numeric: a Python gather)
+    var d = ip[1]
+    var rows = List[Float32]()
+    if ip[2] == 0:
+        rows = List[Float32](capacity=len(centers) * d)
+        for c in centers:
+            var r = Int(c)
+            for f in range(d):
+                rows.append(x[r * d + f])
     var out = ClusterOut()
     out.i.append(centers^)
     out.i.append(labels^)
     out.f.append(aff^)
     out.f.append(ar_diag^)
+    out.f.append(rows^)
     out.s.append(Float64(n_iter))
     return out^
 

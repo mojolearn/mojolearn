@@ -14,6 +14,8 @@ first imported, after the package, so both may rely on every module existing:
                                import `_classical_host` INSIDE it and subclass
                                its `_HostBound`; never import it at module level
 """
+import ctypes
+
 from . import _portable_math as math
 
 from . import _backend, _buffer
@@ -31,17 +33,37 @@ def _f32(X, name="X"):
     x, _ = _buffer.as_f32_c(X, ndim=2, name=name)
     if x.shape[0] < 1 or x.shape[1] < 1:
         raise ValueError(f"mojolearn: {name} must be a non-empty 2-D array, got shape {x.shape}")
-    # the base binding's native scan (`_buffer.all_finite`), the same answer
-    # as the Python walk it replaces (lane cluster-apple3: 0.069 s of every
-    # 1M x 8 fit, predict and score on an M4 Pro); MOJOLEARN_HOTPATH=python
-    # is the reference arm
-    if _buffer.hotpath_enabled():
-        finite = _buffer.all_finite(x)
-    else:
-        finite = all(map(math.isfinite, _buffer.flat_bytes(x).cast("f")))
-    if not finite:
+    # the base binding's native scan (`_buffer.all_finite`)
+    if not _buffer.all_finite(x):
         raise ValueError(f"mojolearn: {name} contains NaN or infinity")
     return x
+
+
+def _aux(*parts):
+    """The parts (Arrays or array-likes, None skipped) end to end as one
+    float32 Array: byte copies, no Python pass over the values (lane
+    pyglue-numeric: the aux blocks were Python lists of every value)."""
+    arrs = [_buffer.as_f32_c(p, ndim=None, name="aux")[0] for p in parts if p is not None]
+    total = sum(a.size for a in arrs)   # glue: the few part sizes
+    if not total:
+        return None
+    out = _buffer.empty((total,), "<f4")
+    off = 0
+    for a in arrs:                      # glue: one copy per part
+        if a.size:
+            ctypes.memmove(out._addr + 4 * off, _buffer.addr_ro(a, name="aux"), 4 * a.size)
+        off += a.size
+    return out
+
+
+def _weights(sample_weight, n):
+    """sample_weight as a float32 Array of n values (None stays None)."""
+    if sample_weight is None:
+        return None
+    w = _buffer.as_f32_c(sample_weight, ndim=None, name="sample_weight")[0]
+    if w.size != n:
+        raise ValueError(f"sample_weight has {w.size} values for {n} samples")
+    return w
 
 
 def _seed(random_state):
@@ -174,11 +196,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
         k = int(self.n_clusters)
         if k < 1 or k > n:
             raise ValueError(f"n_samples={n} should be >= n_clusters={k}.")
-        weights = None
-        if sample_weight is not None:
-            weights = [float(v) for v in sample_weight]
-            if len(weights) != n:
-                raise ValueError(f"sample_weight has {len(weights)} values for {n} samples")
+        weights = _weights(sample_weight, n)
         init_arr = None
         if isinstance(self.init, str):
             if self.init not in ("k-means++", "random"):
@@ -200,12 +218,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
               0 if self.init_size is None else int(self.init_size), n_init,
               1 if init_arr is not None else 0, _seed(self.random_state),
               1 if (init_arr is None and self.init == "random") else 0, 1 if weights is not None else 0]
-        aux = []
-        if init_arr is not None:
-            aux += [float(v) for v in _buffer.flat_bytes(init_arr).cast("f")]
-        if weights is not None:
-            aux += weights
-        a = _f32([aux], "init") if aux else None
+        a = _aux(init_arr, weights)
         f, i, s = self._call(_E_MINIBATCH, x, a, ip, [float(self.tol), float(self.reassignment_ratio)])
         self.cluster_centers_ = Array._from_flat(f[0], (k, d), "<f4")
         self.counts_ = Array._from_flat(f[1], (k,), "<f4")
@@ -235,7 +248,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
             self._partial_state = ((seed >> 32, seed & 0xFFFFFFFF), 0)
         if not first and d != self.n_features_in_:
             raise ValueError(f"X has {d} features, MiniBatchKMeans was fitted with {self.n_features_in_}")
-        aux = []
+        aux = []                        # glue: the parts of the state block
         if first:
             if k < 1 or k > n:
                 raise ValueError(f"n_samples={n} should be >= n_clusters={k}.")
@@ -254,7 +267,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
                 if ia.shape != (k, d):
                     raise ValueError(f"The shape of the initial centers {ia.shape} does not match "
                                      f"the number of clusters {k} and features {d}.")
-                aux += [float(v) for v in _buffer.flat_bytes(ia).cast("f")]
+                aux.append(ia)
                 mode = 2
             seed = _seed(self.random_state)
             state = (seed >> 32, seed & 0xFFFFFFFF)
@@ -266,16 +279,11 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
             mode, init_size = self._partial_init
             batch_eff = self._partial_batch
             state, since = self._partial_state
-            aux += [float(v) for v in _buffer.flat_bytes(self.cluster_centers_).cast("f")]
-            aux += [float(v) for v in _buffer.flat_bytes(self.counts_).cast("f")]
-        if sample_weight is not None:
-            w = [float(v) for v in sample_weight]
-            if len(w) != n:
-                raise ValueError(f"sample_weight has {len(w)} values for {n} samples")
-            aux += w
+            aux += [self.cluster_centers_, self.counts_]
+        aux.append(_weights(sample_weight, n))
         ip = [n, d, k, 1 if first else 0, mode, init_size, batch_eff, since, state[0], state[1],
               1 if sample_weight is not None else 0]
-        a = _f32([aux], "state") if aux else None
+        a = _aux(*aux)
         f, i, s = self._call(_E_MINIBATCH_PARTIAL, x, a, ip, [float(self.reassignment_ratio)])
         self.cluster_centers_ = Array._from_flat(f[0], (k, d), "<f4")
         self.counts_ = Array._from_flat(f[1], (k,), "<f4")
@@ -332,9 +340,7 @@ class BisectingKMeans(_CentersMixin, _XCluster):
               _seed(self.random_state), 1 if self.bisecting_strategy == "largest_cluster" else 0]
         w = None
         if sample_weight is not None:
-            w = _f32([[float(v) for v in sample_weight]], "sample_weight")
-            if w.shape[1] != n:
-                raise ValueError(f"sample_weight has {w.shape[1]} values for {n} samples")
+            w = _weights(sample_weight, n)
         f, i, s = self._call(_E_BISECT, x, w, ip, [float(self.tol)])
         self.cluster_centers_ = Array._from_flat(f[0], (k, d), "<f4")
         m = len(i[1]) // 3
@@ -567,8 +573,7 @@ class AffinityPropagation(_XCluster):
         self.n_iter_ = int(s[0])
         self.n_features_in_ = d
         if not pre:
-            rows = [x[int(c)] for c in self.cluster_centers_indices_]
-            self.cluster_centers_ = Array._from_flat([float(v) for r in rows for v in r], (k, d), "<f4")
+            self.cluster_centers_ = Array._from_flat(f[2], (k, d), "<f4")   # the entry's exemplar rows
         return self
 
     def predict(self, X):
@@ -577,7 +582,7 @@ class AffinityPropagation(_XCluster):
             raise ValueError("Predict method is not supported when affinity='precomputed'.")
         x = self._input_like_fit(X)
         if self.cluster_centers_.shape[0] == 0:
-            return Array._from_flat([-1] * x.shape[0], (x.shape[0],), "<i4")
+            return _buffer.full((x.shape[0],), -1, "<i4")
         return self._nearest(x, self.cluster_centers_)[0]
 
     def fit_predict(self, X, y=None):
