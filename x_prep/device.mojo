@@ -317,7 +317,7 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                                  Int(hq[3]), Int(hq[4]))
             continue
         comptime if PREP2_FAST:
-            if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, qp, p2):
+            if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, qp.unsafe_origin_cast[MutAnyOrigin](), p2):
                 continue
         comptime if RR_EIGH:
             if op == OP_EIGH:
