@@ -1,4 +1,4 @@
-pos=246 lines=     438
+pos=250 lines=     439
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -299,3 +299,7 @@ pos=246 lines=     438
 389:FBUILD lane/apple-fast-rfet-scan@b272364e4 core=0 ibase=0 estimators=0 gbdt=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
 390:CMD apple-fast-rfet-scan@b272364e4 aft-ab-rffin rc=0 AFT-REFUSAL device_scan rf_device_finite_scan 1
 391:FBUILD lane/apple-fast@d1fa9223b core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+392:CMD apple-fast@d1fa9223b afb12-seq-algos-1 rc=0 afb done tag=afb12-seq-algos-1 pairs=54 ok=44
+393:CMD apple-fast@d1fa9223b afb12-seq-algos-2 rc=0 afb done tag=afb12-seq-algos-2 pairs=18 ok=16
+394:CMD apple-fast@d1fa9223b afb12-seq-algos-3 rc=0 afb done tag=afb12-seq-algos-3 pairs=18 ok=15
+395:CMD apple-fast@d1fa9223b afb12-seq-algos-4 rc=0 afb done tag=afb12-seq-algos-4 pairs=6 ok=6
