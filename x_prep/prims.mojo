@@ -638,6 +638,27 @@ def gather_cols_unit(t: Int, f: FP, q: IP):
     f.unsafe_store(p(q, 5) + t, raw(f, p(q, 0) + i * p(q, 2) + c))
 
 
+def colblock_unit(t: Int, f: FP, q: IP):
+    """q = [SRC, w, OUT, d, start]; t = i*w + c: OUT[i, start + c] = SRC[i, c]
+    (SRC is n x w, OUT n x d), bit for bit: one column block of a row-major
+    matrix written from its own contiguous shard."""
+    var w = p(q, 1)
+    var i = t // w
+    f.unsafe_store(p(q, 2) + i * p(q, 3) + p(q, 4) + t % w, raw(f, p(q, 0) + t))
+
+
+def hcat_unit(t: Int, f: FP, q: IP):
+    """q = [A, pa, B, pb, OUT]; t = i*(pa+pb) + c: OUT = [A | B] row by row
+    (A is n x pa, B is n x pb), bit for bit."""
+    var pa = p(q, 1)
+    var pb = p(q, 3)
+    var w = pa + pb
+    var i = t // w
+    var c = t % w
+    var v = raw(f, p(q, 0) + i * pa + c) if c < pa else raw(f, p(q, 2) + i * pb + c - pa)
+    f.unsafe_store(p(q, 4) + t, v)
+
+
 def var_ptp_unit(t: Int, f: FP, q: IP):
     """q = [ST, d, OUT, PTP]; t = column: the variance row of col_stats, or
     min(variance, max - min) when PTP (VarianceThreshold's threshold == 0

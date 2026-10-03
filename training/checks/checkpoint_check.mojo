@@ -120,7 +120,7 @@ from training.checkpoint import (
     load_checkpoint,
     save_checkpoint,
 )
-from training.checks.optimizer_oracle import OPT_ADAMW
+from training.checks.optimizer_contract import OPT_ADAMW
 from training.checks.train_loop import (
     ARM_NONE,
     PID_NORM1,

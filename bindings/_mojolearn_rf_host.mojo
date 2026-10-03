@@ -80,7 +80,8 @@ from bindings.forest_host_groves_binding import (
     forest_prepare_host_binding,
     forest_release_host_binding,
 )
-from ensemble.host_layout import RF_NAN_REFUSAL, has_nan_f32_threaded
+from ensemble.host_layout import has_nan_f32_threaded
+from ensemble.nan_refusal import RF_NAN_REFUSAL
 from ensemble.host.rf_oracle import (
     RF_ENTROPY,
     RF_GAMMA,

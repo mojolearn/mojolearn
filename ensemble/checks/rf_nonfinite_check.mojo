@@ -27,7 +27,7 @@ from ensemble.host.rf_oracle import (
     RfHostParams,
     rf_host_fit,
 )
-from ensemble.host_layout import RF_NAN_REFUSAL
+from ensemble.nan_refusal import RF_NAN_REFUSAL
 
 comptime N = 350
 comptime D = 10

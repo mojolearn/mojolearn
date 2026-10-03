@@ -55,8 +55,10 @@ from extratrees.impl.decisiontree.flatnode import (
     predict_leaf,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.builder import (
-    train_classification,
     train_classification_device,
+)
+from extratrees.impl.decisiontree.batched_levelalgo.host_builder import (
+    train_classification,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
 

@@ -1,23 +1,76 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CSR fuzzy graph groundwork; not connected to the dense estimator yet.
+"""The CSR fuzzy graph, built on the device (lane c-cluster, 2026-10-02).
 
-Storage is O(n*k). Row-local insertion sorting costs O(n*k*k); transpose
-construction and row merges are linear in stored entries. Arithmetic and
-accepted input semantics follow graph.mojo. Explicit zero entries from kNN
-candidates are retained; consumers must apply their existing weight policy.
+`sparse_fuzzy_simplicial_graph_device` runs every stage of umap-learn's
+`fuzzy_simplicial_set` as grid-wide launches: the self-first adapter, the
+input checks and rho (one thread per row), the sigma bisection (one thread
+per row), the directed rows (one thread per row: duplicate max in rank
+order, then an insertion sort by column), their compaction (an exclusive
+scan of the row counts), the transpose (a STABLE radix sort of the entries
+by column, so each transpose row keeps ascending source rows, the host
+scatter's order), and the union merge (a count pass, a scan, a write pass).
+Integer scans and counts have no order to pin. No host step sits inside the
+build; the finished CSR is read back once into the struct the spectral
+init and the optimizer take.
+
+THE SAME WORDS ON EVERY COLUMN. The per-row arithmetic is shared with the
+CPU column's builder (`umap/host/sparse_graph_host.mojo`): `ug_row_rho`,
+`ug_row_sigma`, `ug_member` and `ug_merge_weight` below. Their binary64
+steps are `checks/soft_f64.mojo` (integer instructions, correctly rounded,
+`sf64_exp` is `portable_exp64` statement for statement), since the Apple GPU
+has no float64; their float32 products go through the pinned `identical_*`
+seams. FAST and IDENTICAL differ only in the sigma search's early exit
+(`_sigma_fast`'s `|value - target| <= 1e-5`).
+
+Errors keep the host builder's first-error order: one Int32 key per
+failure, folded by `Atomic.min` (an order-free integer min), decoded once.
 """
-from checks.numerics import identical_exp64, identical_log2_64, identical_mul, identical_mul_add, identical_pow64
-from std.math import fma
+from std.atomic import Atomic
+from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast
+from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.host_predict_threads import (
-    host_list_ptr,
-    host_predict_chunk,
-    host_predict_task_count,
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    identical_exp64,
+    identical_log2_64,
+    identical_mul,
+    identical_mul_add,
+    identical_pow64,
 )
-from core.host_parallel import host_parallelize
-from umap.graph import _finite, _sigma_fast, _sigma_identical
+from checks.soft_f64 import (
+    SF64_NAN,
+    SF64_ONE,
+    SF64_ZERO,
+    sf64_add,
+    sf64_div,
+    sf64_exp,
+    sf64_fma,
+    sf64_from_f32,
+    sf64_from_int,
+    sf64_gt,
+    sf64_is_nan,
+    sf64_lt,
+    sf64_mul,
+    sf64_neg,
+    sf64_sub,
+    sf64_to_f32,
+    sf64_to_int,
+)
+from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
+from dbscan.impl.adjgraph.algo import exclusive_scan, scan_blocks_needed
+from umap.graph import _finite
+
+
+comptime UG_F32P = MutPointer[Float32, MutAnyOrigin]
+comptime UG_U32P = MutPointer[UInt32, MutAnyOrigin]
+comptime UG_I32P = MutPointer[Int32, MutAnyOrigin]
+comptime UG_TPB = 256
+comptime UG_TWO = UInt64(0x4000000000000000)
+comptime UG_HALF = UInt64(0x3FE0000000000000)
+comptime UG_NO_ERROR = Int32(0x7FFFFFFF)
 
 
 struct SparseFuzzySimplicialGraph(Copyable, Movable):
@@ -64,223 +117,572 @@ struct SparseFuzzySimplicialGraph(Copyable, Movable):
         )
 
 
-# DEVIATION 5323 (PIN; lane/algos-decomp, 2026-09-27): umap-learn's
-# `smooth_knn_dist` rho at a local_connectivity other than 1, host code both
-# columns run: the row's positive distances in rank order, index =
-# floor(lc), rho = nz[index - 1] + interp (nz[index] - nz[index - 1]) as ONE
-# Float64 fma rounded once to Float32 when interp > 1e-5 (SMOOTH_K_TOLERANCE),
-# interp * nz[0] when index is 0, the largest positive distance when the row
-# has fewer than lc of them, 0 when it has none. lc = 1 keeps the first
-# positive distance (the path above, unchanged).
-comptime UMAP_SMOOTH_K_TOLERANCE = Float64(1.0e-5)
+
+# ---------------------------------------------------------------------------
+# The per-row statements both columns run.
+# ---------------------------------------------------------------------------
 
 
-def _local_rho(distances: List[Float32], row: Int, k: Int, lc: Float32) -> Float32:
-    var nz = List[Float32]()
+def ug_constants(n_neighbors: Int) -> Tuple[UInt64, UInt64, UInt64]:
+    """HOST: the sigma search's target `log2(k)` (the host seam, one scalar),
+    umap-learn's SMOOTH_K_TOLERANCE 1e-5 and the bracket cap 1e20, as
+    binary64 words for the soft arithmetic."""
+    return (
+        bitcast[DType.uint64](identical_log2_64(Float64(n_neighbors))),
+        bitcast[DType.uint64](Float64(1.0e-5)),
+        bitcast[DType.uint64](Float64(1.0e20)),
+    )
+
+
+@always_inline
+def _ug_nz(dp: UG_F32P, base: Int, k: Int, which: Int) -> Float32:
+    """The `which`-th (0-based) positive distance of the row, in rank order."""
+    var seen = 0
     for j in range(k):
-        var d = distances[row * k + j]
+        var d = dp[base + j]
         if d > Float32(0.0):
-            nz.append(d)
-    var lc64 = Float64(lc)
-    if Float64(len(nz)) >= lc64:
-        var index = Int(lc64)          # floor: lc >= 0
-        var interp = lc64 - Float64(index)
-        if index > 0:
-            var rho = nz[index - 1]
-            if interp > UMAP_SMOOTH_K_TOLERANCE:
-                var diff = nz[index] - nz[index - 1]
-                rho = Float32(fma(interp, Float64(diff), Float64(rho)))
-            return rho
-        return Float32(interp * Float64(nz[0])) if len(nz) > 0 else Float32(0.0)
-    if len(nz) > 0:
-        return nz[len(nz) - 1]
+            if seen == which:
+                return d
+            seen += 1
     return Float32(0.0)
 
 
-def sparse_fuzzy_simplicial_graph(
-    knn_indices: List[UInt32], knn_distances: List[Float32],
+def ug_row_rho(dp: UG_F32P, row: Int, k: Int, lc: Float32, tol: UInt64) -> Float32:
+    """rho: the first positive distance; at a local_connectivity other than
+    1, DEVIATION 5323 (PIN): the positive distances in rank order, index =
+    floor(lc), rho = nz[index - 1] + interp (nz[index] - nz[index - 1]) as
+    ONE binary64 fma rounded once to Float32 when interp > 1e-5, interp *
+    nz[0] when index is 0, the largest positive distance when the row has
+    fewer than lc of them, 0 when it has none."""
+    var base = row * k
+    var cnt = 0
+    var first = Float32(0.0)
+    for j in range(k):
+        var d = dp[base + j]
+        if d > Float32(0.0):
+            if cnt == 0:
+                first = d
+            cnt += 1
+    if lc == Float32(1.0):
+        return first
+    var lc64 = sf64_from_f32(lc)
+    if not sf64_lt(sf64_from_int(cnt), lc64):
+        var index = sf64_to_int(lc64)  # floor: lc >= 0
+        var interp = sf64_sub(lc64, sf64_from_int(index))
+        if index > 0:
+            var rho = _ug_nz(dp, base, k, index - 1)
+            if sf64_gt(interp, tol):
+                var diff = _ug_nz(dp, base, k, index) - rho
+                rho = sf64_to_f32(
+                    sf64_fma(interp, sf64_from_f32(diff), sf64_from_f32(rho))
+                )
+            return rho
+        if cnt > 0:
+            return sf64_to_f32(sf64_mul(interp, sf64_from_f32(first)))
+        return Float32(0.0)
+    if cnt > 0:
+        return _ug_nz(dp, base, k, cnt - 1)
+    return Float32(0.0)
+
+
+@always_inline
+def _ug_msum(dp: UG_F32P, base: Int, k: Int, rho: UInt64, sigma: UInt64) -> UInt64:
+    """`sum_{j >= 1} (1 if d_j - rho <= 0 else exp(-(d_j - rho) / sigma))`,
+    binary64, ascending j."""
+    var total = SF64_ZERO
+    for j in range(1, k):
+        var d = sf64_sub(sf64_from_f32(dp[base + j]), rho)
+        if sf64_gt(d, SF64_ZERO):
+            total = sf64_add(total, sf64_exp(sf64_div(sf64_neg(d), sigma)))
+        else:
+            total = sf64_add(total, SF64_ONE)
+    return total
+
+
+def ug_row_sigma(
+    dp: UG_F32P, row: Int, k: Int, rho_f32: Float32,
+    target: UInt64, tol: UInt64, big: UInt64,
+) -> UInt64:
+    """The row's sigma as a binary64 word, or `SF64_NAN` when doubling from
+    1 passes 1e20 without reaching `target` (the host's bracket refusal).
+    IDENTICAL: 64 bisection steps, fixed. FAST: the same steps with the
+    `|value - target| <= 1e-5` early exit."""
+    var base = row * k
+    var rho = sf64_from_f32(rho_f32)
+    var hi = SF64_ONE
+    while sf64_lt(_ug_msum(dp, base, k, rho, hi), target):
+        hi = sf64_mul(hi, UG_TWO)
+        if sf64_gt(hi, big):
+            return SF64_NAN
+    var lo = SF64_ZERO
+    var sigma = hi
+    var step = 0
+    while step < 64:
+        sigma = sf64_mul(sf64_add(lo, hi), UG_HALF)
+        var value = _ug_msum(dp, base, k, rho, sigma)
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            var err = sf64_sub(value, target)
+            if sf64_lt(err, SF64_ZERO):
+                err = sf64_neg(err)
+            if not sf64_gt(err, tol):
+                return sigma
+        if sf64_gt(value, target):
+            hi = sigma
+        else:
+            lo = sigma
+        step += 1
+    return sigma
+
+
+@always_inline
+def ug_member(delta: Float32, sigma: Float32) -> Float32:
+    """One directed membership: 1 at or below rho, else
+    `Float32(exp(-delta / sigma))` in binary64."""
+    if delta > Float32(0.0):
+        return sf64_to_f32(
+            sf64_exp(sf64_div(sf64_neg(sf64_from_f32(delta)), sf64_from_f32(sigma)))
+        )
+    return Float32(1.0)
+
+
+@always_inline
+def ug_merge_weight(a: Float32, b: Float32, mix: Float32) -> Float32:
+    """`mix * (a + b - a b) + (1 - mix) * a b` with every product pinned and
+    ONE rounding on the intersection's product (the fma)."""
+    var intersection = identical_mul(a, b)
+    var union = (a + b) - intersection
+    return identical_mul_add(
+        Float32(1.0) - mix, intersection, identical_mul(mix, union)
+    )
+
+
+# ---------------------------------------------------------------------------
+# The device build.
+# ---------------------------------------------------------------------------
+
+
+@always_inline
+def _ug_gid() -> Int:
+    return Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+
+
+@always_inline
+def _ug_blocks(n: Int) -> Int:
+    return max(1, (n + UG_TPB - 1) // UG_TPB)
+
+
+def ug_canon_kernel(idx: UG_U32P, dist: UG_F32P, err: UG_I32P, n_in: Int32, k_in: Int32):
+    """`umap/graph.mojo::canonicalize_self_neighbors` per row: self moves to
+    slot 0 with distance 0, the first k-1 other candidates keep their order.
+    A duplicate self records key `row`."""
+    var row = _ug_gid()
+    var k = Int(k_in)
+    if row >= Int(n_in):
+        return
+    var base = row * k
+    var self_slot = -1
+    for col in range(k):
+        if Int(idx[base + col]) == row:
+            if self_slot >= 0:
+                _ = Atomic.min(err, Int32(row))
+                return
+            self_slot = col
+    if self_slot < 0:
+        self_slot = k - 1
+    var col = self_slot
+    while col > 0:
+        idx[base + col] = idx[base + col - 1]
+        dist[base + col] = dist[base + col - 1]
+        col -= 1
+    idx[base] = UInt32(row)
+    dist[base] = Float32(0.0)
+
+
+def ug_rho_kernel(
+    idx: UG_U32P, dist: UG_F32P, rhos: UG_F32P, err: UG_I32P,
+    n_in: Int32, k_in: Int32, lc: Float32, tol: UInt64,
+):
+    """The host's caller-order checks (self in slot 0: key n + 2 row;
+    finite, non-negative, sorted: key n + 2 row + 1), then rho."""
+    var row = _ug_gid()
+    var n = Int(n_in)
+    var k = Int(k_in)
+    if row >= n:
+        return
+    var base = row * k
+    if Int(idx[base]) != row:
+        _ = Atomic.min(err, Int32(n + 2 * row))
+        return
+    var previous = Float32(-1.0)
+    for j in range(k):
+        var d = dist[base + j]
+        if not _finite(d) or d < Float32(0.0) or (j > 0 and d < previous):
+            _ = Atomic.min(err, Int32(n + 2 * row + 1))
+            return
+        previous = d
+    rhos[row] = ug_row_rho(dist, row, k, lc, tol)
+
+
+def ug_sigma_kernel(
+    dist: UG_F32P, rhos: UG_F32P, sigmas: UG_F32P, err: UG_I32P,
+    n_in: Int32, k_in: Int32, target: UInt64, tol: UInt64, big: UInt64,
+):
+    """One thread per row; a failed bracket records key 3n."""
+    var row = _ug_gid()
+    var n = Int(n_in)
+    if row >= n:
+        return
+    var sigma = ug_row_sigma(dist, row, Int(k_in), rhos[row], target, tol, big)
+    if sf64_is_nan(sigma):
+        _ = Atomic.min(err, Int32(3 * n))
+        sigmas[row] = Float32(0.0)
+        return
+    sigmas[row] = sf64_to_f32(sigma)
+
+
+def ug_directed_kernel(
+    idx: UG_U32P, dist: UG_F32P, rhos: UG_F32P, sigmas: UG_F32P,
+    scol: UG_U32P, sval: UG_F32P, counts: UG_I32P, err: UG_I32P,
+    n_in: Int32, k_in: Int32,
+):
+    """One directed row into its `k - 1` slots: memberships in rank order,
+    a repeated column keeps the max, then an insertion sort by column. An
+    invalid index records key 3n + 1 + row."""
+    var row = _ug_gid()
+    var n = Int(n_in)
+    var k = Int(k_in)
+    if row >= n:
+        return
+    var base = row * k
+    var sb = row * (k - 1)
+    var m = 0
+    for j in range(1, k):
+        var dst = Int(idx[base + j])
+        if dst >= n or dst == row:
+            _ = Atomic.min(err, Int32(3 * n + 1 + row))
+            counts[row] = Int32(0)
+            return
+        var value = ug_member(dist[base + j] - rhos[row], sigmas[row])
+        var existing = -1
+        for at in range(m):
+            if Int(scol[sb + at]) == dst:
+                existing = at
+                break
+        if existing >= 0:
+            if value > sval[sb + existing]:
+                sval[sb + existing] = value
+        else:
+            scol[sb + m] = UInt32(dst)
+            sval[sb + m] = value
+            m += 1
+    for at in range(1, m):
+        var col = scol[sb + at]
+        var val = sval[sb + at]
+        var pos = at
+        while pos > 0:
+            if scol[sb + pos - 1] < col:
+                break
+            scol[sb + pos] = scol[sb + pos - 1]
+            sval[sb + pos] = sval[sb + pos - 1]
+            pos -= 1
+        scol[sb + pos] = col
+        sval[sb + pos] = val
+    counts[row] = Int32(m)
+
+
+def ug_compact_kernel(
+    scol: UG_U32P, sval: UG_F32P, counts: UG_I32P, doff: UG_I32P,
+    dcol: UG_U32P, dval: UG_F32P, erow: UG_U32P, n_in: Int32, k_in: Int32,
+):
+    """Row `row`'s slots to `[doff[row], doff[row + 1])`, with its row id."""
+    var row = _ug_gid()
+    if row >= Int(n_in):
+        return
+    var sb = row * (Int(k_in) - 1)
+    var at = Int(doff[row])
+    for t in range(Int(counts[row])):
+        dcol[at + t] = scol[sb + t]
+        dval[at + t] = sval[sb + t]
+        erow[at + t] = UInt32(row)
+
+
+def ug_tcount_kernel(dcol: UG_U32P, keys: UG_U32P, order: UG_U32P, tcount: UG_I32P, nnz_in: Int32):
+    """Per entry: its column's count (an integer add, order-free), and the
+    (column, entry) pair the stable sort takes."""
+    var e = _ug_gid()
+    if e >= Int(nnz_in):
+        return
+    var col = dcol[e]
+    _ = Atomic.fetch_add(tcount.unsafe_offset(Int(col)), Int32(1))
+    keys[e] = col
+    order[e] = UInt32(e)
+
+
+def ug_tgather_kernel(
+    order: UG_U32P, erow: UG_U32P, dval: UG_F32P, tcol: UG_U32P, tval: UG_F32P, nnz_in: Int32
+):
+    """Sorted position p holds entry `order[p]`: its source row and value."""
+    var p = _ug_gid()
+    if p >= Int(nnz_in):
+        return
+    var e = Int(order[p])
+    tcol[p] = erow[e]
+    tval[p] = dval[e]
+
+
+def ug_merge_kernel[WRITE: Bool](
+    doff: UG_I32P, dcol: UG_U32P, dval: UG_F32P,
+    toff: UG_I32P, tcol: UG_U32P, tval: UG_F32P,
+    moff: UG_I32P, mcount: UG_I32P, ocol: UG_U32P, oval: UG_F32P,
+    n_in: Int32, mix: Float32,
+):
+    """Row `row` of `S + S^T` merged in ascending column order: the count
+    pass (`WRITE` false) and the write pass, the same walk."""
+    var row = _ug_gid()
+    var n = Int(n_in)
+    if row >= n:
+        return
+    var left = Int(doff[row])
+    var lend = Int(doff[row + 1])
+    var right = Int(toff[row])
+    var rend = Int(toff[row + 1])
+    var out = 0
+    var at = 0
+    comptime if WRITE:
+        at = Int(moff[row])
+    while left < lend or right < rend:
+        var lc = n
+        var rc = n
+        if left < lend:
+            lc = Int(dcol[left])
+        if right < rend:
+            rc = Int(tcol[right])
+        var col = min(lc, rc)
+        var a = Float32(0.0)
+        var b = Float32(0.0)
+        if lc == col:
+            a = dval[left]
+            left += 1
+        if rc == col:
+            b = tval[right]
+            right += 1
+        comptime if WRITE:
+            ocol[at + out] = UInt32(col)
+            oval[at + out] = ug_merge_weight(a, b, mix)
+        out += 1
+    comptime if not WRITE:
+        mcount[row] = Int32(out)
+
+
+def _ug_scan(
+    ctx: DeviceContext, mut counts: DeviceBuffer[DType.int32], n: Int
+) raises -> DeviceBuffer[DType.int32]:
+    """Exclusive scan of `n` counts into `n + 1` offsets (total last)."""
+    var off = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var bs = ctx.enqueue_create_buffer[DType.int32](scan_blocks_needed(n) + 1)
+    exclusive_scan(ctx, off, counts, bs, n)
+    _ = bs^
+    return off^
+
+
+def _ug_get_f32(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
+    var out = List[Float32](length=n, fill=Float32(0.0))
+    if n > 0:
+        var view = buf.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
+        ctx.synchronize()
+        _ = view^
+    return out^
+
+
+def _ug_get_u32(ctx: DeviceContext, buf: DeviceBuffer[DType.uint32], n: Int) raises -> List[UInt32]:
+    var out = List[UInt32](length=n, fill=UInt32(0))
+    if n > 0:
+        var view = buf.create_sub_buffer[DType.uint32](0, n)
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
+        ctx.synchronize()
+        _ = view^
+    return out^
+
+
+def _ug_get_i32(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], at: Int, n: Int) raises -> List[Int32]:
+    var out = List[Int32](length=n, fill=Int32(0))
+    if n > 0:
+        var view = buf.create_sub_buffer[DType.int32](at, n)
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
+        ctx.synchronize()
+        _ = view^
+    return out^
+
+
+def _ug_get_offsets(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int) raises -> List[Int]:
+    var h = _ug_get_i32(ctx, buf, 0, n)
+    var out = List[Int](capacity=n)
+    for i in range(n):
+        out.append(Int(h[i]))
+    return out^
+
+
+def sparse_fuzzy_simplicial_graph_device(
+    ctx: DeviceContext,
+    mut idx: DeviceBuffer[DType.uint32],
+    mut dist: DeviceBuffer[DType.float32],
     n_samples: Int, n_neighbors: Int,
     set_op_mix_ratio: Float32 = Float32(1.0),
     local_connectivity: Float32 = Float32(1.0),
+    canonicalize: Bool = True,
 ) raises -> SparseFuzzySimplicialGraph:
-    if n_samples < 2 or n_neighbors < 2 or n_neighbors > n_samples:
+    """The CSR fuzzy graph of a same-data k-NN held on the device (this
+    file's header). `idx` and `dist` are `n x k` row-major, sorted by
+    distance per row; `canonicalize` applies the self-first adapter to them
+    in place first. Same refusals, in the same order, as the host builder."""
+    var n = n_samples
+    var k = n_neighbors
+    if n < 2 or k < 2 or k > n:
         raise Error("invalid UMAP k-NN graph shape")
-    # Division avoids overflowing n*k in a malformed shape request.
-    if len(knn_indices) != len(knn_distances) or (
-        len(knn_indices) // n_samples != n_neighbors
-        or len(knn_indices) % n_samples != 0
-    ):
+    if len(idx) < n * k or len(dist) < n * k:
         raise Error("UMAP k-NN arrays do not match their shape")
     if not _finite(set_op_mix_ratio):
         raise Error("UMAP set operation mix ratio must be finite")
     if set_op_mix_ratio < Float32(0.0) or set_op_mix_ratio > Float32(1.0):
         raise Error("UMAP set operation mix ratio must be in [0, 1]")
-    var rhos = List[Float32]()
-    var sigmas = List[Float32]()
-    rhos.resize(n_samples, Float32(0.0))
-    sigmas.resize(n_samples, Float32(0.0))
-    var target = identical_log2_64(Float64(n_neighbors))
-    # Validate in caller order so malformed input keeps the same first error,
-    # and compute rho while the row is already hot.  Sigma searches are then
-    # independent by row: moving whole searches to worker threads changes no
-    # statement or reduction order within a row.
-    for i in range(n_samples):
-        if Int(knn_indices[i * n_neighbors]) != i:
-            raise Error("UMAP expects self in k-NN slot zero")
-        var previous = Float32(-1.0)
-        var rho = Float64(0.0)
-        for j in range(n_neighbors):
-            var d = knn_distances[i * n_neighbors + j]
-            if not _finite(d) or d < Float32(0.0) or (
-                j > 0 and d < previous
-            ):
-                raise Error("UMAP k-NN distances must be finite and sorted")
-            previous = d
-            if rho == 0.0 and d > Float32(0.0):
-                rho = Float64(d)
-        if local_connectivity != Float32(1.0):
-            rho = Float64(_local_rho(knn_distances, i, n_neighbors, local_connectivity))
-        rhos[i] = Float32(rho)
-    var tasks = host_predict_task_count(n_samples)
-    # The thread-pool join is not worthwhile for small graph builds.
-    if n_samples < 256:
-        tasks = 1
-    var chunk = host_predict_chunk(n_samples, tasks)
-    var rp = host_list_ptr(rhos)
-    var sp = host_list_ptr(sigmas)
-    var failed = List[Int](length=tasks, fill=0)
-    var fp = failed.unsafe_ptr()
-
-    def _sigma_rows(task: Int) {imm knn_distances, imm target, imm n_neighbors, imm n_samples, imm chunk, imm rp, imm sp, imm fp}:
-        try:
-            var lo = task * chunk
-            var hi = min(lo + chunk, n_samples)
-            for i in range(lo, hi):
-                var rho = Float64(rp.unsafe_load(i))
-                var sigma: Float64
-                comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-                    sigma = _sigma_identical(
-                        knn_distances, i, n_neighbors, rho, target
-                    )
-                else:
-                    sigma = _sigma_fast(
-                        knn_distances, i, n_neighbors, rho, target
-                    )
-                sp.unsafe_store(i, Float32(sigma))
-        except:
-            fp.unsafe_store(task, 1)
-
-    if tasks == 1:
-        _sigma_rows(0)
-    else:
-        host_parallelize(_sigma_rows, tasks)
-    for task in range(tasks):
-        if failed[task] != 0:
-            raise Error("UMAP sigma search did not bracket its target")
-
-    var doff = List[Int]()
-    var dcol = List[UInt32]()
-    var dval = List[Float32]()
-    doff.append(0)
-    for i in range(n_samples):
-        var row_start = len(dcol)
-        # Membership evaluation and duplicate max update stay in original
-        # distance-rank order; only the finished row is column sorted.
-        for j in range(1, n_neighbors):
-            var dst = Int(knn_indices[i * n_neighbors + j])
-            if dst < 0 or dst >= n_samples or dst == i:
-                raise Error("UMAP k-NN index is invalid or repeats self")
-            var delta = knn_distances[i * n_neighbors + j] - rhos[i]
-            var value = Float32(1.0)
-            if delta > Float32(0.0):
-                value = Float32(identical_exp64(-Float64(delta) / Float64(sigmas[i])))
-            var existing = -1
-            for at in range(row_start, len(dcol)):
-                if Int(dcol[at]) == dst:
-                    existing = at
-                    break
-            if existing >= 0:
-                if value > dval[existing]:
-                    dval[existing] = value
-            else:
-                dcol.append(UInt32(dst))
-                dval.append(value)
-        for at in range(row_start + 1, len(dcol)):
-            var col = dcol[at]
-            var val = dval[at]
-            var pos = at
-            while pos > row_start:
-                if dcol[pos - 1] < col:
-                    break
-                dcol[pos] = dcol[pos - 1]
-                dval[pos] = dval[pos - 1]
-                pos -= 1
-            dcol[pos] = col
-            dval[pos] = val
-        doff.append(len(dcol))
-
-    # Transpose CSR: count, prefix-sum, scatter rows in ascending order.
-    # That scatter order makes each transpose row column sorted already.
-    var toff = List[Int]()
-    toff.resize(n_samples + 1, 0)
-    for col in dcol:
-        toff[Int(col) + 1] += 1
-    for i in range(n_samples):
-        toff[i + 1] += toff[i]
-    var cursor = toff.copy()
-    var tcol = List[UInt32]()
-    var tval = List[Float32]()
-    tcol.resize(len(dcol), UInt32(0))
-    tval.resize(len(dcol), Float32(0.0))
-    for i in range(n_samples):
-        for at in range(doff[i], doff[i + 1]):
-            var col = Int(dcol[at])
-            var target_at = cursor[col]
-            tcol[target_at] = UInt32(i)
-            tval[target_at] = dval[at]
-            cursor[col] += 1
-
-    var offsets = List[Int]()
-    var indices = List[UInt32]()
-    var values = List[Float32]()
-    offsets.append(0)
-    for i in range(n_samples):
-        var left = doff[i]
-        var right = toff[i]
-        while left < doff[i + 1] or right < toff[i + 1]:
-            var lc = n_samples
-            var rc = n_samples
-            if left < doff[i + 1]:
-                lc = Int(dcol[left])
-            if right < toff[i + 1]:
-                rc = Int(tcol[right])
-            var col = min(lc, rc)
-            var a = Float32(0.0)
-            var b = Float32(0.0)
-            if lc == col:
-                a = dval[left]
-                left += 1
-            if rc == col:
-                b = tval[right]
-                right += 1
-            # Preserve dense expression and operand orientation per cell.
-            # Do not calculate once and mirror to the opposite row.
-            var union = a + b - a * b
-            var intersection = a * b
-            # ONE rounding on the intersection's product: the default
-            # (contract=fast) build fused `(1 - mix) * intersection` into the
-            # add (lane/explicit-fma-contract-proof, 2026-09-26)
-            var weight = identical_mul_add(
-                Float32(1.0) - set_op_mix_ratio, intersection,
-                set_op_mix_ratio * union,
-            )
-            indices.append(UInt32(col))
-            values.append(weight)
-        offsets.append(len(indices))
-    return SparseFuzzySimplicialGraph(
-        n_samples, n_neighbors, rhos^, sigmas^, doff^, dcol^, dval^,
-        offsets^, indices^, values^
+    if 4 * n + 1 >= Int(UG_NO_ERROR):
+        raise Error("UMAP sparse graph: n_samples is past the Int32 error keys")
+    var c = ug_constants(k)
+    var rg = _ug_blocks(n)
+    var err = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(err, UG_NO_ERROR)
+    var rhos = ctx.enqueue_create_buffer[DType.float32](n)
+    var sigmas = ctx.enqueue_create_buffer[DType.float32](n)
+    var scol = ctx.enqueue_create_buffer[DType.uint32](n * (k - 1))
+    var sval = ctx.enqueue_create_buffer[DType.float32](n * (k - 1))
+    var counts = ctx.enqueue_create_buffer[DType.int32](n)
+    if canonicalize:
+        ctx.enqueue_function[ug_canon_kernel](
+            idx.unsafe_ptr(), dist.unsafe_ptr(), err.unsafe_ptr(), Int32(n), Int32(k),
+            grid_dim=rg, block_dim=UG_TPB,
+        )
+    ctx.enqueue_function[ug_rho_kernel](
+        idx.unsafe_ptr(), dist.unsafe_ptr(), rhos.unsafe_ptr(), err.unsafe_ptr(),
+        Int32(n), Int32(k), local_connectivity, c[1],
+        grid_dim=rg, block_dim=UG_TPB,
     )
+    ctx.enqueue_function[ug_sigma_kernel](
+        dist.unsafe_ptr(), rhos.unsafe_ptr(), sigmas.unsafe_ptr(), err.unsafe_ptr(),
+        Int32(n), Int32(k), c[0], c[1], c[2],
+        grid_dim=rg, block_dim=UG_TPB,
+    )
+    ctx.enqueue_function[ug_directed_kernel](
+        idx.unsafe_ptr(), dist.unsafe_ptr(), rhos.unsafe_ptr(), sigmas.unsafe_ptr(),
+        scol.unsafe_ptr(), sval.unsafe_ptr(), counts.unsafe_ptr(), err.unsafe_ptr(),
+        Int32(n), Int32(k),
+        grid_dim=rg, block_dim=UG_TPB,
+    )
+    var doff = _ug_scan(ctx, counts, n)
+    var key = Int(_ug_get_i32(ctx, err, 0, 1)[0])
+    if key != Int(UG_NO_ERROR):
+        if key < n:
+            raise Error("duplicate self index in UMAP neighbors")
+        if key < 3 * n:
+            if (key - n) % 2 == 0:
+                raise Error("UMAP expects self in k-NN slot zero")
+            raise Error("UMAP k-NN distances must be finite and sorted")
+        if key == 3 * n:
+            raise Error("UMAP sigma search did not bracket its target")
+        raise Error("UMAP k-NN index is invalid or repeats self")
+    var nnz = Int(_ug_get_i32(ctx, doff, n, 1)[0])
+    var cap = max(nnz, 1)
+    var dcol = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var dval = ctx.enqueue_create_buffer[DType.float32](cap)
+    var erow = ctx.enqueue_create_buffer[DType.uint32](cap)
+    ctx.enqueue_function[ug_compact_kernel](
+        scol.unsafe_ptr(), sval.unsafe_ptr(), counts.unsafe_ptr(), doff.unsafe_ptr(),
+        dcol.unsafe_ptr(), dval.unsafe_ptr(), erow.unsafe_ptr(), Int32(n), Int32(k),
+        grid_dim=rg, block_dim=UG_TPB,
+    )
+    # The transpose: a stable sort of (column, entry) keeps every column's
+    # entries in ascending source row, the host scatter's order.
+    var tcount = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_memset(tcount, Int32(0))
+    var keys = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var order = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var tkeys = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var torder = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var sort_counts = ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(cap), 1))
+    var eg = _ug_blocks(nnz)
+    if nnz > 0:
+        ctx.enqueue_function[ug_tcount_kernel](
+            dcol.unsafe_ptr(), keys.unsafe_ptr(), order.unsafe_ptr(), tcount.unsafe_ptr(),
+            Int32(nnz), grid_dim=eg, block_dim=UG_TPB,
+        )
+        fast_radix_sort_pairs_u32(ctx, nnz, keys, order, tkeys, torder, sort_counts)
+    var toff = _ug_scan(ctx, tcount, n)
+    var tcol = ctx.enqueue_create_buffer[DType.uint32](cap)
+    var tval = ctx.enqueue_create_buffer[DType.float32](cap)
+    if nnz > 0:
+        ctx.enqueue_function[ug_tgather_kernel](
+            order.unsafe_ptr(), erow.unsafe_ptr(), dval.unsafe_ptr(),
+            tcol.unsafe_ptr(), tval.unsafe_ptr(), Int32(nnz),
+            grid_dim=eg, block_dim=UG_TPB,
+        )
+    # The union merge: count, scan, write.
+    var mcount = ctx.enqueue_create_buffer[DType.int32](n)
+    # the count pass reads neither `moff` nor the outputs: one-cell dummies
+    var no_off = ctx.enqueue_create_buffer[DType.int32](1)
+    var no_col = ctx.enqueue_create_buffer[DType.uint32](1)
+    var no_val = ctx.enqueue_create_buffer[DType.float32](1)
+    ctx.enqueue_function[ug_merge_kernel[False]](
+        doff.unsafe_ptr(), dcol.unsafe_ptr(), dval.unsafe_ptr(),
+        toff.unsafe_ptr(), tcol.unsafe_ptr(), tval.unsafe_ptr(),
+        no_off.unsafe_ptr(), mcount.unsafe_ptr(), no_col.unsafe_ptr(), no_val.unsafe_ptr(),
+        Int32(n), set_op_mix_ratio,
+        grid_dim=rg, block_dim=UG_TPB,
+    )
+    var moff = _ug_scan(ctx, mcount, n)
+    var mnz = Int(_ug_get_i32(ctx, moff, n, 1)[0])
+    _ = no_off^
+    _ = no_col^
+    _ = no_val^
+    var ocol = ctx.enqueue_create_buffer[DType.uint32](max(mnz, 1))
+    var oval = ctx.enqueue_create_buffer[DType.float32](max(mnz, 1))
+    ctx.enqueue_function[ug_merge_kernel[True]](
+        doff.unsafe_ptr(), dcol.unsafe_ptr(), dval.unsafe_ptr(),
+        toff.unsafe_ptr(), tcol.unsafe_ptr(), tval.unsafe_ptr(),
+        moff.unsafe_ptr(), mcount.unsafe_ptr(), ocol.unsafe_ptr(), oval.unsafe_ptr(),
+        Int32(n), set_op_mix_ratio,
+        grid_dim=rg, block_dim=UG_TPB,
+    )
+    var graph = SparseFuzzySimplicialGraph(
+        n, k,
+        _ug_get_f32(ctx, rhos, n), _ug_get_f32(ctx, sigmas, n),
+        _ug_get_offsets(ctx, doff, n + 1), _ug_get_u32(ctx, dcol, nnz),
+        _ug_get_f32(ctx, dval, nnz), _ug_get_offsets(ctx, moff, n + 1),
+        _ug_get_u32(ctx, ocol, mnz), _ug_get_f32(ctx, oval, mnz),
+    )
+    _ = err^
+    _ = rhos^
+    _ = sigmas^
+    _ = scol^
+    _ = sval^
+    _ = counts^
+    _ = doff^
+    _ = dcol^
+    _ = dval^
+    _ = erow^
+    _ = tcount^
+    _ = keys^
+    _ = order^
+    _ = tkeys^
+    _ = torder^
+    _ = sort_counts^
+    _ = toff^
+    _ = tcol^
+    _ = tval^
+    _ = mcount^
+    _ = moff^
+    _ = ocol^
+    _ = oval^
+    return graph^
 
 
 # ---------------------------------------------------------------------------

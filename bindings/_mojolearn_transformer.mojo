@@ -206,7 +206,7 @@ from transformer.impl.llama.modeling_llama import _zeros as _llama_zeros
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 from transformer.impl.llama.modeling_llama import llama_rms_norm
 from std.math import isfinite
 
