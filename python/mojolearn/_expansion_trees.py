@@ -495,12 +495,10 @@ def _trees_switch(est, bit):
 
 
 def _trees_native_glue(est):
-    """`est` when MOJOLEARN_TE_NATIVE_SPLITS selects the device cv
-    bookkeeping for it (FAST tier, a binding that carries
-    `x_trees_device_folds`), else None."""
-    if not _trees_switch(est, _TE_NATIVE_SPLITS):
-        return None
-    return est if callable(getattr(est._bind(), "x_trees_device_folds", None)) else None
+    """`est`: the cv fold bookkeeping is `x_trees_device_folds` on every
+    tier and column (the device kernel on a GPU binding, its host twin on a
+    CPU-only one; lane cgr4-py-compute deleted the Python fold route)."""
+    return est
 
 
 def _trees_ada_session_default(est):
@@ -1321,9 +1319,12 @@ class _DARTBase(_TreesEnsembleBase):
                 raise ValueError("y must hold both classes")
             inits = [float(b.x_trees_log64(p / (1.0 - p)))]
         else:
-            counts = [0] * K
-            for v in y32.tolist():
-                counts[int(v)] += 1
+            # the class counts by the base binding's bincount (lane cgr4-py-compute)
+            from ._buffer import _native
+            cnt = zeros((K,), "<i8")
+            yc = y32.astype("<i4")
+            _native("bincount_i64")(addr_ro(yc, name="y"), 2, n, K, addr(cnt, name="counts"), 0)
+            counts = cnt.tolist()
             inits = [float(b.x_trees_log64(max(1e-15, cnt / n))) for cnt in counts]
         self.init_score_ = inits[0] if K == 1 else inits
         score = _class_major_fill(inits, n)
@@ -1428,8 +1429,13 @@ class _DARTBase(_TreesEnsembleBase):
                 else:
                     tree.fit(Xf, yf)
                 if cols is not None:
-                    cl = cols.tolist()
-                    tree._colid = Array.from_list([cl[v] if v >= 0 else v for v in tree._colid.tolist()], "<i4")
+                    # each split's feature id through the column table, leaves kept
+                    from ._buffer import _native
+                    tbl, _ = as_i32_c(cols, ndim=1, name="cols")
+                    cid = empty((tree._colid.size,), "<i4")
+                    _native("gather_keep_neg_i32")(addr_ro(tbl, name="cols"), tbl.size,
+                                                   addr_ro(tree._colid, name="colid"), cid.size, addr(cid, name="colid"))
+                    tree._colid = cid
                 nodes = self._tree_nodes(tree, Xa)
                 n_nodes = int(tree._offsets.tolist()[1])
                 values = empty((n_nodes,), "<f4")
@@ -1762,49 +1768,6 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
 
 
 # ------------------------------------------------------ wrappers: helpers
-def _trees_stratified_folds(codes, n_splits):
-    """sklearn StratifiedKFold(n_splits, shuffle=False)._make_test_folds:
-    classes in order of first appearance, per-class fold allocation from the
-    sorted labels dealt round robin. Returns the test fold of each row."""
-    first = {}
-    for c in codes:
-        if c not in first:
-            first[c] = len(first)
-    enc = [first[c] for c in codes]
-    k = len(first)
-    counts = [0] * k
-    for e in enc:
-        counts[e] += 1
-    if n_splits > max(counts) and min(counts) < n_splits and max(counts) < n_splits:
-        raise ValueError(f"n_splits={n_splits} cannot be greater than the number of members in each class")
-    order = sorted(enc)
-    alloc = [[0] * k for _ in range(n_splits)]
-    for i in range(n_splits):
-        for e in order[i::n_splits]:
-            alloc[i][e] += 1
-    folds = [0] * len(enc)
-    for c in range(k):
-        seq = [i for i in range(n_splits) for _ in range(alloc[i][c])]
-        pos = 0
-        for r, e in enumerate(enc):
-            if e == c:
-                folds[r] = seq[pos]
-                pos += 1
-    return folds
-
-
-def _trees_kfolds(n, n_splits):
-    """sklearn KFold(n_splits, shuffle=False): contiguous folds, the first
-    n % n_splits one row longer."""
-    folds, start = [0] * n, 0
-    for i in range(n_splits):
-        size = n // n_splits + (1 if i < n % n_splits else 0)
-        for r in range(start, start + size):
-            folds[r] = i
-        start += size
-    return folds
-
-
 def _trees_cv(cv, default=5):
     """An int number of folds (None: `default`), or `cv` itself when it is a
     splitter (has `split`) or an iterable of (train, test) index pairs."""
@@ -1818,12 +1781,6 @@ def _trees_cv(cv, default=5):
     return int(cv)
 
 
-def _trees_fold_rows(folds, i):
-    tr = [r for r, f in enumerate(folds) if f != i]
-    te = [r for r, f in enumerate(folds) if f == i]
-    return Array.from_list(tr, "<i4"), Array.from_list(te, "<i4")
-
-
 class _FoldRows(list):
     """The [(train rows, test rows)] of `_trees_native_folds`: int32 views into
     the one buffer the device filled, kept alive here."""
@@ -1834,8 +1791,8 @@ def _trees_native_folds(est, n_splits, n, codes, n_classes=0):
     """`_trees_splits` for an int cv with the fold assignment and the fold
     row lists made on the device (xtrees/folds_device.mojo through
     `x_trees_device_folds`: sklearn's unshuffled StratifiedKFold / KFold law,
-    the same folds `_trees_stratified_folds` / `_trees_kfolds` build, no
-    Python row loop and no host row loop), under MOJOLEARN_TE_NATIVE_SPLITS (FAST + Apple default; `-D ..._OFF`)
+    sklearn's unshuffled StratifiedKFold / KFold law; the host column runs
+    the same law in Mojo (lane cgr4-py-compute), every tier
     (lane/apple-fast-trees-ensembles, 2026-10-02). `codes` is an int32 code
     Array in [0, n_classes) (stratified) or None (KFold). The lists are
     zero-copy int32 views into one downloaded buffer: fold i's rows outside
@@ -1877,29 +1834,44 @@ def _trees_splits(cv, X, y, n, codes=None, partition=False, native=None, n_class
     [0, n_classes)), else None."""
     c = _trees_cv(cv)
     if isinstance(c, int):
-        if native is not None:
-            return _trees_native_folds(native, c, n, codes, n_classes)
-        folds = _trees_stratified_folds(codes, c) if codes is not None else _trees_kfolds(n, c)
-        return [_trees_fold_rows(folds, i) for i in range(max(folds) + 1)]
+        if native is None:
+            raise ValueError("mojolearn: an int cv needs the estimator whose binding builds the folds")
+        return _trees_native_folds(native, c, n, codes, n_classes)
+    from ._buffer import _native
     pairs = c.split(X, y) if hasattr(c, "split") else c
-    out, seen = [], [0] * n
+    out = []
+    seen = zeros((max(n, 1),), "<i8")
+    check = _native("check_indices_i64")
     for pair in pairs:
-        tr, te = pair
-        tr = [int(v) for v in (tr.tolist() if hasattr(tr, "tolist") else tr)]
-        te = [int(v) for v in (te.tolist() if hasattr(te, "tolist") else te)]
-        for v in tr + te:
-            if not 0 <= v < n:
-                raise ValueError(f"cv index {v} is outside [0, {n})")
-        if not tr or not te:
+        tr, te = (_trees_index_i64(v) for v in pair)
+        if tr.size == 0 or te.size == 0:
             raise ValueError("every cv split needs train and test rows")
-        for v in te:
-            seen[v] += 1
-        out.append((Array.from_list(tr, "<i4"), Array.from_list(te, "<i4")))
+        for v in (tr, te):
+            # range only: a repeated index is the splitter's to give
+            if int(check(addr_ro(v, name="cv rows"), v.size, n)) == 1:
+                raise ValueError(f"a cv index is outside [0, {n})")
+        _native("bincount_i64")(addr_ro(te, name="cv rows"), 3, te.size, n, addr(seen, name="seen"), 1)
+        out.append((tr.astype("<i4"), te.astype("<i4")))
     if not out:
         raise ValueError("cv produced no splits")
-    if partition and any(v != 1 for v in seen):
+    if partition and (seen.min() != 1 or seen.max() != 1):
         raise ValueError("cross_val_predict only works for partitions: every row must be in exactly one test set")
     return out
+
+
+def _trees_index_i64(v):
+    """A cv index list as an int64 Array (the native cast of an array; a
+    Python list goes in through array('q'), in C)."""
+    if isinstance(v, Array):
+        return v.astype("<i8") if v.dtype != "<i8" else v
+    try:
+        from ._buffer import _materialize
+        a, _ = _materialize(v, "cv rows")
+        return a.astype("<i8") if a.dtype != "<i8" else a
+    except (TypeError, ValueError):
+        import array as _array
+        store = _array.array("q", v)
+        return Array._owned(store, (len(store),), "<i8", "C")
 
 
 def _trees_estimators(estimators):
@@ -2187,7 +2159,7 @@ class StackingClassifier(_StackingBase):
         self.classes_, codes = encode_labels(y)
         self._binary = len(self.classes_) == 2
         nat = _trees_native_glue(self)
-        splits = _trees_splits(self.cv, X, y, len(codes), codes=codes if nat is not None else codes.tolist(),
+        splits = _trees_splits(self.cv, X, y, len(codes), codes=codes,
                                partition=True, native=nat, n_classes=len(self.classes_))
         final = self.final_estimator
         if final is None:
@@ -2717,7 +2689,7 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         if consts is not None:
             return self._fit_fast(Xa, codes, base, consts)
         nat = _trees_native_glue(self)
-        splits = _trees_splits(self.cv, X, y, n, codes=codes if nat is not None else codes.tolist(),
+        splits = _trees_splits(self.cv, X, y, n, codes=codes,
                                partition=not self.ensemble, native=nat, n_classes=len(self.classes_))
         cols = _trees_arange(d)
         self.calibrated_classifiers_ = []
