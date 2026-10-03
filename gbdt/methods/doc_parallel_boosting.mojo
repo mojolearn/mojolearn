@@ -74,6 +74,7 @@ from gbdt.ctrs.ctr_binarization import TBinarizationOptions
 # `pointwise_non_symmetric.cpp:7-29` registers for every single-target
 # pointwise loss under `EGrowPolicy::Depthwise` and `Lossguide`
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper_depthwise import (
+    DW_FAST_DEV_SCALE,
     NS_INHERIT_PARTITION,
     TDepthwiseWorkspace,
     fit_non_symmetric_tree,
@@ -2631,13 +2632,23 @@ def fit_with_test(
             var gmag = Float32(0.0)
             var t_mags = loop_times.start()
 
+            # DW_FAST_DEV_SCALE (lane apple-fast-gap-misc): the buffer goes
+            # to the searcher, which derives the scale on the device
+            var ns_mags = Optional[DeviceBuffer[DType.float32]]()
+            var mags_drain = True
+            comptime if DW_FAST_DEV_SCALE and _needs_magnitudes:
+                if grow_policy == GROW_DEPTHWISE:
+                    ns_mags = Optional(mags.copy())
+                    mags_drain = False
+
             @parameter
             if _needs_magnitudes:
-                var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
-                ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
-                ctx.synchronize()
-                wmag = hm[0]
-                gmag = hm[1]
+                if mags_drain:
+                    var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
+                    ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
+                    ctx.synchronize()
+                    wmag = hm[0]
+                    gmag = hm[1]
                 _ = hm^  # past the drain
             loop_times.stop_host("iter_mags_drain", t_mags)
             # ====================== DEVIATION 260 ======================
@@ -2680,6 +2691,7 @@ def fit_with_test(
                 multiclass_optimization=objective == OBJECTIVE_MULTICLASS,
                 random_seed=tree_seed,
                 tag_prefix=_tree_tag(iteration) + ".",
+                mags_dev=ns_mags,
             )
             loop_times.stop_host("iter_tree_search", t_search)
             var n_bins = tree.bin_count()

@@ -54,6 +54,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.builtin.sort import sort
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
+    choose_scale_kernel,
     copy_histograms_kernel,
     copy_histograms_vec4_kernel,
     scan_histograms_kernel,
@@ -373,6 +374,16 @@ comptime DW_FAST_SKIP_FINAL_STATS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_GBDT_DW_FAST_SKIP_FINAL_STATS"]()
+)
+#: The per-tree magnitudes drain (`doc_parallel_boosting`, the
+#: non-symmetric arm: a sync to read two floats for the host
+#: `choose_scale`) replaced by `choose_scale_kernel` on the device, which
+#: the symmetric driver already uses (DEVIATION 95): the same scale, no
+#: wait before the tree. `-D MOJOLEARN_GBDT_DW_FAST_DEV_SCALE`.
+comptime DW_FAST_DEV_SCALE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_DW_FAST_DEV_SCALE"]()
 )
 
 
@@ -1808,6 +1819,7 @@ def fit_non_symmetric_tree[
     # so twenty non-symmetric trees in one card stay distinguishable.
     # DEVIATION 259.
     tag_prefix: String = String(""),
+    mags_dev: Optional[DeviceBuffer[DType.float32]] = None,
 ) raises -> TNonSymmetricTree:
     """`TGreedyTreeLikeStructureSearcher<TNonSymmetricTree>::FitImpl`.
 
@@ -2250,15 +2262,29 @@ def fit_non_symmetric_tree[
         gmag = -gmag
     if gmag > mag:
         mag = gmag
-    ws[0].h_scale.unsafe_ptr().unsafe_store(
-        0, Float32(choose_scale(mag, n_rows))
-    )
-    ctx.enqueue_copy(
-        dst_buf=ws[0].scale_dev, src_ptr=ws[0].h_scale.unsafe_ptr()
-    )
     var fixed_scale = rebind[MutPointer[Float32, MutAnyOrigin]](
         ws[0].scale_dev.unsafe_ptr()
     )
+    # DW_FAST_DEV_SCALE (lane apple-fast-gap-misc): the caller handed the
+    # magnitudes buffer instead of draining it; `choose_scale_kernel` is
+    # the host `choose_scale` bit for bit (DEVIATION 95, the symmetric
+    # driver's derivation), so the same scale lands in `scale_dev`.
+    if mags_dev:
+        ctx.enqueue_function[choose_scale_kernel](
+            rebind[MutPointer[Float32, MutAnyOrigin]](
+                mags_dev.value().unsafe_ptr()
+            ),
+            Int32(n_rows), fixed_scale,
+            grid_dim=(1, 1, 1),
+            block_dim=(1, 1, 1),
+        )
+    else:
+        ws[0].h_scale.unsafe_ptr().unsafe_store(
+            0, Float32(choose_scale(mag, n_rows))
+        )
+        ctx.enqueue_copy(
+            dst_buf=ws[0].scale_dev, src_ptr=ws[0].h_scale.unsafe_ptr()
+        )
     # lane/sym-quality: the gradient planes onto this tree's fixed-point
     # grid before the root histogram (`snap_gradients_to_scale_kernel`), as
     # the symmetric driver does; only where a histogram quantizes at all.
