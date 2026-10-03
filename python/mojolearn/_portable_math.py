@@ -41,7 +41,7 @@ def _load():
         path = (root / ".dylibs/libMojolearnMath.dylib" if sys.platform == "darwin"
                 else root / ".libs/libMojolearnMath.so")
         lib = ctypes.CDLL(str(path))
-        for operation in ("sqrt", "log", "log2", "log10", "exp"):
+        for operation in ("sqrt", "log", "log2", "log10", "exp"):  # glue: binds five library symbols
             fn = getattr(lib, "mojolearn_" + operation)
             fn.argtypes = [ctypes.c_double]
             fn.restype = ctypes.c_double
@@ -105,7 +105,7 @@ def comb(n, k):
         return 0
     k = min(k, n - k)
     result = 1
-    for i in range(1, k + 1):
+    for i in range(1, k + 1):  # glue: scalar binomial of two integer arguments
         result = result * (n - k + i) // i
     return result
 
@@ -170,9 +170,7 @@ def ceil(x):
 
 
 def prod(values, *, start=1):
-    for value in values:
-        start *= value
-    return start
+    return functools.reduce(operator.mul, values, start)
 
 
 def _scaled_integer(value, exponent):
@@ -285,24 +283,14 @@ def nsum(values):
     nonzero and finite. Python 3.10 and 3.11 `sum` is the plain left-to-right
     fold, so the builtin's bits depend on the interpreter; this twin gives
     3.12+'s bits on every supported Python. An empty input gives 0.0."""
-    it = iter(values)
-    for first in it:
-        total = 0.0 + float(first)
-        break
-    else:
+    # The fold runs in Mojo (`nsum_f64`, bindings/array_helpers.mojo, the
+    # same operations in the same order; lane pyglue-sweep). Python only
+    # converts the values to float64 with C builtins.
+    vals = array.array("d", map(float, values))
+    if not vals:
         return 0.0
-    c = 0.0
-    for x in it:
-        x = float(x)
-        t = total + x
-        if abs(total) >= abs(x):
-            c += (total - t) + x
-        else:
-            c += (x - t) + total
-        total = t
-    if c and isfinite(c):
-        total += c
-    return total
+    from ._buffer import _native
+    return float(_native("nsum_f64")(vals.buffer_info()[0], len(vals)))
 
 
 def _cut(value, shift, bits, up):
@@ -423,7 +411,7 @@ _SB = (3.03380607434824582924e+01, 3.25792512996573918826e+02, 1.536729586084436
 def _horner(c, z):
     """c[0] + z * (c[1] + z * (... + z * c[-1])), innermost first."""
     r = c[-1]
-    for v in reversed(c[:-1]):
+    for v in reversed(c[:-1]):  # glue: fixed polynomial coefficients, scalar argument
         r = v + z * r
     return r
 
