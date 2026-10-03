@@ -403,6 +403,26 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 sort_cols_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
                                  Int(hq[3]), Int(hq[4]))
             continue
+        comptime if SELECT_FREG:
+            # FAST on Apple (lane/apple-fast-select): f_regression as row x feature tiles
+            if op == OP_F_REGRESSION:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                if select_freg_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
+                                      Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8])):
+                    continue
+        comptime if SELECT_FCLS:
+            # FAST on Apple (lane/apple-fast-select): f_classif, and the class_stats ahead of
+            # it in the same program, as row x feature tiles
+            if op == OP_F_CLASSIF:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                if select_fcls_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
+                                      Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8])):
+                    continue
+            if op == OP_CLASS_STATS and program_has_op(host_q, stages, OP_F_CLASSIF):
+                var hq = host_q + (s * STAGE_INTS + 2)
+                if select_cstats_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
+                                        Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8]), Int(hq[9])):
+                    continue
         comptime if PREP2_FAST:
             if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, qp.unsafe_origin_cast[MutAnyOrigin](), p2):
                 continue
@@ -494,26 +514,6 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                               FP(unsafe_from_address=Int(dpt.unsafe_ptr())), Int(hq[0]), Int(hq[1]), Int(hq[2]),
                               -1, 0, Int(hq[3]))
                 continue
-        comptime if SELECT_FREG:
-            # FAST on Apple (lane/apple-fast-select): f_regression as row x feature tiles
-            if op == OP_F_REGRESSION:
-                var hq = host_q + (s * STAGE_INTS + 2)
-                if select_freg_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
-                                      Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8])):
-                    continue
-        comptime if SELECT_FCLS:
-            # FAST on Apple (lane/apple-fast-select): f_classif, and the class_stats ahead of
-            # it in the same program, as row x feature tiles
-            if op == OP_F_CLASSIF:
-                var hq = host_q + (s * STAGE_INTS + 2)
-                if select_fcls_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
-                                      Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8])):
-                    continue
-            if op == OP_CLASS_STATS and program_has_op(host_q, stages, OP_F_CLASSIF):
-                var hq = host_q + (s * STAGE_INTS + 2)
-                if select_cstats_device(ctx, df, dw, Int(hq[0]), Int(hq[1]), Int(hq[2]), Int(hq[3]), Int(hq[4]),
-                                        Int(hq[5]), Int(hq[6]), Int(hq[7]), Int(hq[8]), Int(hq[9])):
-                    continue
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if cov_grid and op == OP_QDA_COV:
                 # q = [X, n, d, Y, MEAN, CNT, COV]: class k's covariance

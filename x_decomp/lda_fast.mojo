@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """LatentDirichletAllocation's E-step and sufficient statistics in ONE launch
-(lane apple-fast-nb, 2026-10-02). FAST + Apple ONLY, behind
--D MOJOLEARN_LDA_FUSED_SS: the IDENTICAL binding, the other vendors and a
-FAST build without the define do not export `x_decomp_dev_lda_estep_ss`, and
+(lane apple-fast-nb, 2026-10-02). FAST + Apple ONLY, default on (off with
+-D MOJOLEARN_LDA_FUSED_SS_OFF): the IDENTICAL binding, the other vendors and a
+FAST build with the _OFF define do not export `x_decomp_dev_lda_estep_ss`, and
 `_expansion_decomp.LatentDirichletAllocation._e_step` keeps main's chain
 (`lda_block_kernel`, then norm_phi = Et exp_dir (n x v), X / norm_phi and
 the (k x n)(n x v) gemm).
@@ -41,9 +41,13 @@ from x_decomp.cells import F32Ptr, add, mul, sub, div0, exp_c, digamma
 from x_decomp.device import TPB, _blocks, xd_ctx
 from x_decomp.resident import _id, _n, _ptr, pool_alloc, pool_free
 
-#: The switch: FAST, Apple, and the define (default OFF).
+#: The switch: FAST + Apple default ON since the M3 A/B (nb-lda-fused-zones:
+#: LDA taxi-zones 2,721 -> 1,509 ms, -44.5%, perplexity 45.22 same).
+#: -D MOJOLEARN_LDA_FUSED_SS_OFF turns it off; the old -D MOJOLEARN_LDA_FUSED_SS
+#: is harmless (no longer read).
 comptime LDA_FUSED_SS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_LDA_FUSED_SS"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_LDA_FUSED_SS_OFF"]()
 )
 #: Lanes per document (one SIMD group).
 comptime LFS_TPD = 32

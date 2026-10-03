@@ -3287,7 +3287,7 @@ class LatentDirichletAllocation(_Base):
         """FAST only (lane apple-fast-nb): the E-step's document loop and the
         sufficient statistics in one launch, `x_decomp_dev_lda_estep_ss`
         (x_decomp/lda_fast.mojo), exported by the GPU binding only when built
-        FAST on Apple with -D MOJOLEARN_LDA_FUSED_SS. Dt and Et are updated in
+        FAST on Apple (default; off with -D MOJOLEARN_LDA_FUSED_SS_OFF). Dt and Et are updated in
         place on the device as `lda_rows` does. None (the caller runs main's
         chain) under IDENTICAL, without the export, off the resident path, or
         past the kernel's caps."""

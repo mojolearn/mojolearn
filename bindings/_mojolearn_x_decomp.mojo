@@ -97,7 +97,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_lda_rows_py]("x_decomp_dev_lda_rows")
         m.def_function[dev_lda_bound_py]("x_decomp_dev_lda_bound")
         comptime if LDA_FUSED_SS:
-            # lane apple-fast-nb: FAST + Apple + -D MOJOLEARN_LDA_FUSED_SS only (x_decomp/lda_fast.mojo)
+            # lane apple-fast-nb: FAST + Apple default (off: -D MOJOLEARN_LDA_FUSED_SS_OFF) (x_decomp/lda_fast.mojo)
             m.def_function[dev_lda_estep_ss_py]("x_decomp_dev_lda_estep_ss")
         # FAST on Apple (lane/apple-fast-lle, 2026-10-02): the sparse LLE
         # eigensolver entry exists only in a build with
