@@ -1,0 +1,3 @@
+CMD lane/apple-fast-tsa2 tsa2-var-taxi-hourly AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa2-var-taxi-hourly x_sequence var taxi-hourly 1 2 "" "-D MOJOLEARN_TSA2_VAR=1"
+CMD lane/apple-fast-tsa2 tsa2-stl-taxi-hourly AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa2-stl-taxi-hourly x_sequence stl taxi-hourly 1 2 "" "-D MOJOLEARN_TSA2_STL=1"
+CMD lane/apple-fast-tsa2 tsa2-kpss-taxi-hourly AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa2-kpss-taxi-hourly tsa kpss taxi-hourly 1 2 "" "-D MOJOLEARN_TSA2_KPSS=1"
