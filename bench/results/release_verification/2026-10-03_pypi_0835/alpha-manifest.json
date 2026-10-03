@@ -1,0 +1,1178 @@
+{
+  "files": {
+    "mojolearn-0.8.35-py3-none-macosx_11_0_arm64.whl": "cb970bd093c20991a0a419fc2dae3e57be0b6f75da7ab7642fc76db72452c58b",
+    "mojolearn-0.8.35-py3-none-manylinux_2_35_x86_64.whl": "5a1c02bfbd91bf39dc4acb08561133c8ac5a85413f83f8ac34d1cd3d40f32dce",
+    "mojolearn_amd-0.8.35-py3-none-manylinux_2_35_x86_64.whl": "cfc64f7606f8598297f407ddfad5462204bb61b7ec537fd44e85d7f775b6a253",
+    "mojolearn_nvidia-0.8.35-py3-none-manylinux_2_35_x86_64.whl": "9c41ab78852609b951d6609f4779e5fb7a3d79c454d67d73897336cb5e9795ab"
+  },
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "merge_evidence": [
+      {
+        "commit": "b2dd5dfe5ea949d080eacaeff758f93aa1577ca7",
+        "message": "Merge lane/apple-fast-ldaqda: FAST Apple rr eigh, parallel DA stages, tiled qda_dec default\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "0c57d9bf6eeeda953e8f296753c6030ad9a540c1",
+        "message": "Merge origin/main into lane/apple-fast-ldaqda"
+      },
+      {
+        "commit": "f419ea9f154e58bb76ceebacdc2daa2faccc75ca",
+        "message": "Merge lane/apple-fast-prep: PREP_FAST_MINMAX + X_PREP_FAST_UNIQUE FAST+Apple defaults"
+      },
+      {
+        "commit": "fa3bb9363c9c7b70bee64573df488f3e15890870",
+        "message": "Merge origin/main into lane/apple-fast-prep"
+      },
+      {
+        "commit": "4b1311c12deca2faf68f329840c2467ae05b2d25",
+        "message": "Merge remote-tracking branch 'origin/lane/apple-fast-cluster' into HEAD"
+      },
+      {
+        "commit": "f707846c892cab7035834c99dd9c5424765bee0f",
+        "message": "x_cluster: merge origin/main; FAST meanshift grid + minibatch device steps default on Apple\n\nMEANSHIFT_FAST_GRID and MINIBATCH_FAST_DEV = FAST and Apple and not the\n*_OFF define, since the M3 A/B (aaef7b261, n=1, Istella): meanshift\n52.1 -> 34.9 ms, n_clusters 12 / silhouette .4035 same; minibatch-kmeans\n388 -> 352 ms, silhouette .1167 -> .1182.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "c5e1bbeb6c648c0f91c442c2bafeef89ce10fa90",
+        "message": "Merge remote-tracking branch 'origin/lane/apple-fast-gram' into HEAD"
+      },
+      {
+        "commit": "f21f6575af204b10c7d3de6196b70a718bb71880",
+        "message": "Merge origin/main into lane/apple-fast-gram; fast_gram: rename reserved 'out' params; LARS fast gram on main's lars_path_kernel words; Ridge fast gram moved into ridge_fit_grid\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "2dcdd949f1d81bccddf4191aa2cacdba49e9a099",
+        "message": "Merge lane/apple-fast-seq: CROSTON_REG, GARCH_REG, GARCH_GRID default on FAST + Apple\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "04480f6d98e623619e955a1c316ee0bff857c90e",
+        "message": "Merge origin/main into lane/apple-fast-seq"
+      },
+      {
+        "commit": "8c2b7de5106e0e555574c8537dc504cda417783c",
+        "message": "Merge remote-tracking branch 'origin/lane/apple-fast-prophetspeed' into HEAD"
+      },
+      {
+        "commit": "b15de7d3da53d6761f7b4229056c23479f9e935b",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-prophetspeed"
+      },
+      {
+        "commit": "f6216636ce052adb42f77039512709df15841b92",
+        "message": "Merge lane/apple-fast-prophetfix: Prophet device team fit reads its inputs through raw Args pointers (Metal mis-read them through ProphetData; the fit stopped at iteration 1)\n\nM3 board afb-prophetfix2 (FAST): forecast_rmse synthetic 1.0152, taxi-hourly 32.034 (reference prophet 1.015 / 32.03; main was 13.90 / 97.69).\nn_iter 72-391, no NaN. Same statements, same order. ID check owed (idcheck errored on the sequence lane; nv/amd unreachable).\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "9722e5a2b21126a118c3c0f1f7fb19e5a08943c5",
+        "message": "Merge lane/apple-fast-lgw128: FAST Apple lossguide exact batch width 128 by default\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "69f7a41fd8a9e75cb06a7af18c0e50ff290d8d0c",
+        "message": "Merge lane/apple-fast-rfet-scan: FAST Apple RF/ET device finite scan + RF/ET block-total segment scan default (GBDT copy opt-in)"
+      },
+      {
+        "commit": "44329fe7941ab66d28adf8a5e73c960d6851038e",
+        "message": "Merge origin/main into lane/apple-fast-rfet-scan"
+      },
+      {
+        "commit": "5f5eadcde500092dc62c0ae0824ea3e20f9064cc",
+        "message": "Merge lane/apple-fast-moefix: MoEBlock forward reshapes to the input shape again (d8cb35b51 reused `shape` in the weight check)\n\nM3 board check afb-moefix (FAST, synthetic): moe 788.7 ms (0.8.34 FAST 788.8 ms). Python only, no bit change.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "9a7564bc54394d6c7c2266c8944c8e0406d592b8",
+        "message": "Merge lane/apple-fast-optfix: optimizer resident-step calls pass the handle (adamax, adagrad, rmsprop, nadam, lion, lamb ran on no device binding since ba3bfbdab)\n\nM3 board check afb-optfix (FAST, synthetic): all six run, 318-339 ms. Python only, no bit change.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "d1fa9223bfa52d69a014456cc2a77085cd1cb554",
+        "message": "Merge lane/apple-fast-tier: SEQ_THETA_REG + SEQ_FAST_FMA are the Apple FAST default (M3 A/B theta taxi-hourly 1,769 -> 220 ms, rmse 49.28 -> 49.02)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "6c54b7e8745639e50989511183c3bb6d82335ee2",
+        "message": "Merge remote-tracking branch 'origin/lane/apple-fast-tsa' into HEAD"
+      },
+      {
+        "commit": "f7881aabffcde2a401d23e2f8eae5a44d3328530",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-tsa"
+      },
+      {
+        "commit": "94cb5ba59500f720f361b193b33bd23657522dc7",
+        "message": "Merge lane/apple-fast-olsne: OLS_FAST_NORMAL_EQ FAST Apple default"
+      },
+      {
+        "commit": "39038f4af9efbe654691b21256d9d4ab897a999d",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-olsne"
+      },
+      {
+        "commit": "c55b8c3773e19d7ce0c27b0446d4385b91bd8b94",
+        "message": "Merge lane/apple-fast-dwgap2: DW2_PART_VEC4 + DW2_SCAN_SMEM FAST Apple defaults\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "8a077b7c25cd9bafcdf4c28997ee11ef052f0714",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-dwgap2"
+      },
+      {
+        "commit": "83390b7cae79a76c500a205e471324d02f2c6960",
+        "message": "Merge lane/apple-fast-tsqr: OLS TSQR route (launch slices >= 256 blocks, R column equilibration)\n\nM3 A/B (58316f6f6, arm A = TSQR route): ols istella 2,935 ms r2 0.3325 (main 65,858 ms r2 0.157); taxi 288 ms (main 333 ms).\nCompiled FAST + IDENTICAL: x_decomp, linalg, estimators; host: x_decomp, linalg, estimators.\nID check owed: host binding lacks lm_col_sums\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "7de01a4816fd45c3e4261c6d290866fec9f5fc5a",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-tsqr"
+      },
+      {
+        "commit": "7736fa5b8d8e00efea06516efc3c2d2e8e835ae4",
+        "message": "Merge FAST Apple QH_MODE_SKIP default (lane/apple-fast-dwgap)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "6deeacae346fb905a385f8bb225e9f7b670021a2",
+        "message": "Merge origin/main into lane/apple-fast-dwgap"
+      },
+      {
+        "commit": "42b6db46c7506a4874bea1c2816b12e9cfa32b5a",
+        "message": "Merge lane/ours-only-default: race tools default to our GPU arm only\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "b2f5fa7f235ed3c1a2fd52289445d72d1ae4d638",
+        "message": "Merge lane/cgr3-hdbscan-mst: sparse MR MST as a device Boruvka; core-distance kNN device-resident"
+      },
+      {
+        "commit": "8a4e4cff07c5bea8f7d8025e2a048df21a2bddc4",
+        "message": "Merge lane/cgr3-pr86"
+      },
+      {
+        "commit": "86cda757672d9b35cd6fae21dd010592b6da11c2",
+        "message": "Merge lane/cgr3-pr85"
+      },
+      {
+        "commit": "1277521757c1c7a96f3136f819307122ed3807cc",
+        "message": "Merge lane/cgr3-pr63"
+      },
+      {
+        "commit": "c6cccb3abddfeb000e9fb90b42d76184a5b7f248",
+        "message": "Merge lane/neural-pass81 (PR #85) onto the cgr-linear SGD: tracked host chains on the blocked predictor and the PA |x|^2, row prefetch; no legacy switch\n\nMain already skips the per-row penalty norms when tol is None (the PR's need_obj).\nThe tracked chains return the flushed chains' words (bits unchanged).\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "ed49f2b1105df3f935bf611e0b3e8a1c683cae8c",
+        "message": "Merge lane/apple-fast-trees-ensembles: TE_NATIVE_SPLITS, TE_ADA_SESSION, TE_ADA_SESSION_SHARE FAST + Apple default\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "1669a3bcdf0123a5a88a7ef1718380cc29ed13ce",
+        "message": "Merge origin/main into lane/apple-fast-trees-ensembles; TE_NATIVE_SPLITS, TE_ADA_SESSION, TE_ADA_SESSION_SHARE default on in FAST + Apple (_OFF defines)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "44b42e14d413a4ad8e4129c6db03d8cb5af62e88",
+        "message": "Merge remote-tracking branch 'origin/lane/neural-pass82' into lane/cgr3-pr86"
+      },
+      {
+        "commit": "d55e1f8f6e6b1f05769a43a39b98791f1d204ba9",
+        "message": "Merge remote-tracking branch 'origin/lane/neural-pass56' into lane/cgr3-pr63"
+      },
+      {
+        "commit": "dde8cdc729fd6b7a8af4b0fb434d4bcb082bcf0d",
+        "message": "Merge lane/cgr2-metrics-shap"
+      },
+      {
+        "commit": "e48c94c5a4fd791d28bebe60bc64eb2d3f50e0ed",
+        "message": "Merge lane/cgr2-cluster"
+      },
+      {
+        "commit": "0d788ded316da88949eed6aff5c0bc688c9d348c",
+        "message": "Merge lane/cgr2-hdbscan: condense, stability, EOM/leaf selection, labels and prediction data on the device (bits: nv=amd=apple=host)"
+      },
+      {
+        "commit": "24ed7667983010449b1c972562598f784460b3a9",
+        "message": "Merge lane/apple-fast-meta: MULTIOUT_RIDGE and CALIB_GNB_FOLDS are the Apple FAST default (M3 A/B multioutput-reg 163.0 -> 53.2 ms, calibrated 839.9 -> 49.8 ms, quality same)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "d0fc88b07a6e553fedaae2f42bb75c947b5b7308",
+        "message": "Merge origin/main into lane/apple-fast-meta"
+      },
+      {
+        "commit": "3d480618a14fd63285974d78c0c6dcb982d20297",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-trees-ensembles"
+      },
+      {
+        "commit": "741a5495dff3a7bc09600851499975bc8f97578c",
+        "message": "Merge remote-tracking branch 'origin/lane/apple-fast-dart' into HEAD"
+      },
+      {
+        "commit": "7484503b6c85608807b1a8c5bb29d41cca3de67e",
+        "message": "Merge remote-tracking branch 'origin/lane/apple-fast-tier' into HEAD"
+      },
+      {
+        "commit": "57ded6695ffbeb781d4c75fc4de4a8c7f100b48e",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-dart"
+      },
+      {
+        "commit": "f6c97a3736de0539a078a56493192b65a73d4f0a",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-tier"
+      },
+      {
+        "commit": "93470c8e78f3d2a78f2e999e836df6a3952f7367",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-meta"
+      },
+      {
+        "commit": "aec9f8c33217dfa4bb6def42dc092752305005dc",
+        "message": "Merge lane/apple-fast-ets: ETS team kernel is the Apple FAST default (M3 A/B 611.9 -> 48.0 ms, rmse 96.69 -> 96.68)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "3150b0179ff6fa34de34ac6cbb56873d46187778",
+        "message": "Merge origin/main into lane/apple-fast-ets"
+      },
+      {
+        "commit": "2c7ada8c5b072c91724bc90f6fecdb487383bde1",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-dart"
+      },
+      {
+        "commit": "57ddea946ccbb21426c51f849c53f3b015db0200",
+        "message": "Merge lane/apple-fast-trees-depthwise: CTR_PERM_BATCH FAST default\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "4a35ff34b7f4c3641e9d52edbe7289126952c7e4",
+        "message": "Merge origin/main into lane/apple-fast-trees-depthwise"
+      },
+      {
+        "commit": "9919872718d513b89e01c4915398a03450559f8e",
+        "message": "Merge lane/cgr-linear: fit_kernel deleted; quantile/ARD/ridge/LARS/weighted Bayes on the grid, parallel PAVA, device LogisticRegressionCV folds, blocked RidgeCV scoring (bits: nv=amd=apple=host)"
+      },
+      {
+        "commit": "b6ecc708b87679f73966bf00bf930b75932d2e75",
+        "message": "Merge lane/cgr-decomp: round-robin eigh/svd everywhere (one-block fallbacks deleted), batched LTSA/Hessian/modified LLE, device sparse_encode lars, Lanczos projected solve on device, UPLO on device (bits: nv=amd=apple=host)\n\n# Conflicts:\n#\ttools/hooks/host_routes_baseline.tsv"
+      },
+      {
+        "commit": "745ff31da7a187c5d4898a7a80bcbb219c50140f",
+        "message": "Merge lane/apple-fast-depthwise: fused chain + one wait per level are the FAST Apple Depthwise default\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "97a66e635658dd6a6c9761d874ff155244f8c6a5",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-depthwise"
+      },
+      {
+        "commit": "28adffe8563db6daff3683c4c7b35eefeadebe22",
+        "message": "Merge lane/apple-fast-pairlogit: PairLogit GROUP_FUSED + EST_REUSE and MultiClass HESSIAN_BATCH as FAST + Apple defaults\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "766703162baefe017303dac2c0dc77aad1903cfb",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-pairlogit"
+      },
+      {
+        "commit": "cf45a2732954becee605e63c68fab9cbb1033f15",
+        "message": "Merge remote-tracking branch 'origin/lane/apple-fast-ordered' into HEAD"
+      },
+      {
+        "commit": "7c359e169c5f0a5be8827dfa02b46b66bcecbca9",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-ordered"
+      },
+      {
+        "commit": "c65d788ffbed11193cddda398bbe83af801d9f8b",
+        "message": "Merge lane/cgr-kernel: SVGP/GPR/LP resident on device, SVC probability folds and working-set selection on the grid, GPC host class to _classical_host (bits: nv=amd=apple=host)"
+      },
+      {
+        "commit": "d00ffae62d9138a53ba5199b270da195e4e2f968",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/cgr-decomp"
+      },
+      {
+        "commit": "931a449a7b5c84065deb197a659aa8d3c41b1667",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/cgr-linear"
+      },
+      {
+        "commit": "4c567c52fd742ccb7c28d90ccfb3565642be3a66",
+        "message": "Merge origin/main into lane/cgr-kernel\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "c59506c03e16055647ca55ce64139e513fb44edc",
+        "message": "Merge lane/cgr-py: GPU ensemble no longer imports _gbdt_host, lazy language_model, stale refs"
+      },
+      {
+        "commit": "b272364e4be94e14c21735bfeaf88347ea024dd0",
+        "message": "Merge origin/main (2d7eade5b) into lane/apple-fast-rfet-scan: main's host NaN scan removal wins; the FAST device finite scan sits on top of main's upload_forest_x\n\nbindings/_mojolearn_rf.mojo: the pooled host scan hunks take main's side (gone);\nmain's device_has_nan_f32 check after upload_forest_x is compiled only when\nFOREST_DEVICE_FINITE is off, since the lane's NaN-and-inf ForestFiniteScan\nreplaces it under FAST + Apple. builder.mojo: main's upload_forest_x import,\nthe lane's device_finite import, the scan block plus main's h_labels release.\n\nStatic check: every lane line is inside FOREST_DEVICE_FINITE (FAST + Apple, not MOJOLEARN_FOREST_DEVICE_FINITE_OFF) or its else arm is main's code; IDENTICAL compiles main's code unchanged.\n\nClaude-Session: https://claude.ai/code/session_01R9CSSyTf65x632XTyE8LYt"
+      },
+      {
+        "commit": "9ee4a2ed2051452af764c5350e8142ca174a6c7b",
+        "message": "Merge origin/main (2d7eade5b, the device L-BFGS) into lane/apple-fast-tsa; FAST switches re-expressed on main's batched_fit\n\nMain wins: arima/impl/batched_fit.mojo is main's (batched_min_lbfgs on the\ndevice, eval_batch_device, FIT_COMPACT gone). Re-expressed on top:\n- EVAL_WS: batched_min_lbfgs holds one Optional[FastEvalWS] per solve and\n  routes both eval_batch_device call sites through it; FastEvalWS.eval is\n  the stacked arm on held buffers (one stacking kernel, unpack, Jones,\n  fast_kalman_into, main's arima_mark_infeasible_kernel, one gradient\n  kernel, the d_x_pert copy, main's arima_eval_finish_kernel), nothing read\n  back, no wait, no host buffers.\n- LLONLY: loglike_ws_packed (the fit's filter call) passes ll_only=True; the\n  WIP's argument in the now-uncalled batched_loglike_grad_host is dropped.\n\nStatic check: every changed line is inside a FAST + Apple guard (the\nKALMAN_FAST_EVAL_WS / KALMAN_LL_ONLY comptime branches) or a definition\nthose branches alone call; IDENTICAL compiles main's code unchanged (the\nll_only argument is read only under KALMAN_LL_ONLY).\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01R9CSSyTf65x632XTyE8LYt"
+      },
+      {
+        "commit": "db0dc27229168a4098497e5b22fbdcee049b2f3c",
+        "message": "Merge origin/main (2d7eade5b) into lane/apple-fast-trees-ensembles: xtrees/api.mojo import list keeps main's bag_rows/unseen_rows/transpose_f64 and this lane's fold ops\n\nStatic check: an import-list conflict only; every lane change stays behind the x_trees_fast_switches bits (FAST + Apple) or is main's code; IDENTICAL compiles main's code unchanged.\n\nClaude-Session: https://claude.ai/code/session_01R9CSSyTf65x632XTyE8LYt"
+      },
+      {
+        "commit": "debb5f743b93ad28caf2ab9f77fdc5b29cf9cf18",
+        "message": "Merge origin/main (2d7eade5b) into lane/apple-fast-meta: calib ops renumbered 142-156\n\nmain's x_prep ops 136-141 (ii_rcount .. colblock) win; the CALIB_GNB_FOLDS\nops move to 142-156 (N_OPS 157 under CALIB_FOLDS, else main's 142) in\nx_prep/units.mojo and python/mojolearn/_expansion_prep.py; the x_prep\nbinding keeps main's imports plus the guarded calib import. MULTIOUT_RIDGE\nmerged without conflict. meta.md's op numbers updated.\n\nStatic check: every changed line is inside a FAST + Apple guard (or the\ndefine's comptime branch); IDENTICAL compiles main's code unchanged.\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01R9CSSyTf65x632XTyE8LYt"
+      },
+      {
+        "commit": "f9cb5a252a3fcacbe90d60a0467e28de705d087b",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-cluster"
+      },
+      {
+        "commit": "47ab9b7912d32a23eb8623dd5f6b94b9e677fdac",
+        "message": "Merge origin/main (2d7eade5b, lane/cg-integrate) into lane/apple-fast-gram\n\nMain removed the _bayes_grid_gram env reader next to this lane's define\nblock; the block stays, the reader goes with main. The fast_gram hooks\n(fit_device's FAST block and setup unit, the k-fold unit A) are unchanged.\n\nStatic check: every changed line is inside a FAST + Apple guard (or the\ndefine's comptime branch); IDENTICAL compiles main's code unchanged.\n\nClaude-Session: https://claude.ai/code/session_01R9CSSyTf65x632XTyE8LYt"
+      },
+      {
+        "commit": "2d7eade5bd671017cba046a1d6d6311064bf7c83",
+        "message": "Merge remote-tracking branch 'origin/lane/cg-integrate' into HEAD"
+      },
+      {
+        "commit": "a500b290f5f8f2cfe828275318471b391aaf2d65",
+        "message": "Merge remote-tracking branch 'origin/lane/cgfin-c-svm' into lane/cg-integrate\n\n# Conflicts:\n#\ttools/hooks/host_routes_baseline.tsv"
+      },
+      {
+        "commit": "9a98beeb3174fc5aaf0ced0b63a8207ec04fb950",
+        "message": "Merge remote-tracking branch 'origin/lane/cgfin-c-cluster' into lane/cg-integrate\n\n# Conflicts:\n#\ttools/hooks/host_routes_baseline.tsv"
+      },
+      {
+        "commit": "6aa96ed8637ef98413e4390a534bb0dabd300531",
+        "message": "Merge remote-tracking branch 'origin/lane/cgfin-c-decomp' into lane/cg-integrate\n\n# Conflicts:\n#\ttools/hooks/host_routes_baseline.tsv"
+      },
+      {
+        "commit": "9361dbaa8e7a09d6a5d88cdaab6d3a9c75174611",
+        "message": "Merge remote-tracking branch 'origin/lane/cgfin-c-linear' into lane/cg-integrate\n\n# Conflicts:\n#\ttools/hooks/host_routes_baseline.tsv"
+      },
+      {
+        "commit": "817f3b47ba4e38a48f93101d08b57704ebaa58bb",
+        "message": "Merge remote-tracking branch 'origin/lane/cgfin-c-gp-kernel' into lane/cg-integrate"
+      },
+      {
+        "commit": "2a246dd31428c575c6cdee7e6eb450ec56c5b837",
+        "message": "Merge lane/apple-fast: NEXT_PASS_TREES measured times\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "86a4b344c4e49e9fa93361ecb2b770ea6a093840",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-depthwise"
+      },
+      {
+        "commit": "e776ea835ce4f79ca396c1893f216a0e4295d594",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-trees-depthwise"
+      },
+      {
+        "commit": "7d08eb921d29ec3fe06ba08251eaddf1c9399dff",
+        "message": "Merge remote-tracking branch 'origin/lane/cgfin-trees' into lane/cg-integrate\n\n# Conflicts:\n#\ttools/hooks/host_routes_baseline.tsv"
+      },
+      {
+        "commit": "6c48f2c2b97bb551316909755e4bb745c9a3ee3f",
+        "message": "Merge remote-tracking branch 'origin/lane/cgfin-c-gp-kernel' into lane/cg-integrate"
+      },
+      {
+        "commit": "2e93e9a343c9f1cdf53f1dcfa8e917140a71a3ba",
+        "message": "Merge remote-tracking branch 'origin/lane/cgfin-c-core' into lane/cg-integrate"
+      },
+      {
+        "commit": "829c3fb4a4b497ce976c72f5ee1a2a3792ceb1b9",
+        "message": "Merge lane/apple-fast: NEXT_PASS_TREES.md\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "c03430da78dd4c1286aeb0103539bc9794091e5d",
+        "message": "Merge remote-tracking branch 'origin/lane/cgfin-c-xneighbors' into lane/cg-integrate"
+      },
+      {
+        "commit": "f7ff65f1b266e0c81a9479f5c7912f324bd63060",
+        "message": "Merge remote-tracking branch 'origin/lane/cgfin-n-seq-train' into lane/cg-integrate"
+      },
+      {
+        "commit": "6b00d58e01522d6e4992271449fb717ed0242d06",
+        "message": "Merge remote-tracking branch 'origin/lane/cgfin-c-metrics-prep' into lane/cg-integrate\n\n# Conflicts:\n#\ttools/hooks/host_routes_baseline.tsv"
+      },
+      {
+        "commit": "f287fc3c536b3807b0c3f23500450dc412c1a502",
+        "message": "Merge remote-tracking branch 'origin/lane/fix-eigh-main' into HEAD"
+      },
+      {
+        "commit": "988beb90deeaf647ac35ba52e34a41e57cdd556d",
+        "message": "Merge remote-tracking branch 'origin/lane/fix-dart-host' into HEAD"
+      },
+      {
+        "commit": "aaf7ae02c55f98db8390810fe9320d528aed0661",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/cg-integrate\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "497bcad7d8914f637576a56c4f95af3db821c020",
+        "message": "Merge remote-tracking branch 'origin/lane/apple-fast-meta' into lane/apple-fast-meta"
+      },
+      {
+        "commit": "280515ca3b653c063397432f3f12721e69cf7d36",
+        "message": "Merge lane/no-our-cpu-in-races: our CPU is never raced, timed or reported (race drivers refuse our CPU arms, board strips old cells, host column digest-only)\n\nBoard tests: 168 passed; the 2 failures in test_speed_gbdt_tasks.py also fail on main (main has 4).\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "6d4d55c99419d457f32c33d0528e63c7363b6c2f",
+        "message": "Merge lane/apple-fast-bayes: BayesianRidge FAST grid guard default on Apple (istella NaN -> finite, M3 A/B bayes-br-guard-istella)\n\nIDENTICAL compiles main's code (static proof in 1a0bb2b2b). OFF define: -D MOJOLEARN_BAYES_GRID_GUARD_OFF=1.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "dddd634c1fa11b4bc0257e5a6d7cbd590094024d",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-bayes"
+      },
+      {
+        "commit": "09ac7dfd092da989168771a5bae4293ad245ae53",
+        "message": "Merge lane/apple-fast-board: M3 FAST board refresh page and its tools\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "b0d5b1fab4f4ef9b48a90707af0810e50d3f2075",
+        "message": "Merge origin/main into lane/apple-fast-rfet-scan (PLAN-trees.md: main's row 80 and this lane's rows 84-86 both kept)\n\nStatic check: a docs-only conflict; the lane's Mojo changes merged clean and stay inside their FAST + Apple guards; IDENTICAL compiles main's code unchanged.\n\nClaude-Session: https://claude.ai/code/session_01R9CSSyTf65x632XTyE8LYt"
+      },
+      {
+        "commit": "387211293c94f44e4e4343a99442063be25ce324",
+        "message": "prep: merge origin/main; FAST minmax re-expressed on main's direct fit behind -D MOJOLEARN_PREP_FAST_MINMAX\n\nMain's host-route removals win: minmax_fit_direct (X up from the caller's buffer, device finite scan) and\nMultiLabelBinarizer's _mlb_flat / row_ones device route. The MULTILABEL switch is dropped (main's route does what it\ndid); the env MINMAX arms go. What remains of the FAST minmax change sits behind PREP_FAST_MINMAX (FAST + Apple +\nis_defined MOJOLEARN_PREP_FAST_MINMAX): the row-tiled extrema kernel inside minmax_fit_direct and a\nminmax_transform_direct entry (registered only under the define) that Python's MinMaxScaler._transform takes when the\nbinding has it. UNIQUE / NONEG stay Python env switches, now read once at import, not on the fit / transform path.\ntools/afc_ab_def.sh copied from lane/apple-fast-tier for the define A/B. Request lines in the light form.\n\nStatic check: every changed Mojo line is inside PREP_FAST_MINMAX's comptime branch (FAST + Apple + define) or is\nmain's code; the Python changes run only on the FAST tier (a FAST-only binding entry, or mode == \"fast\");\nIDENTICAL compiles main's code unchanged. No runtime check possible here (no Mojo toolchain).\n\nClaude-Session: https://claude.ai/code/session_01R9CSSyTf65x632XTyE8LYt"
+      },
+      {
+        "commit": "0af5c301e50b06ec97657c52c4caa568ea5e6584",
+        "message": "Merge origin/main into lane/apple-fast-trees-ensembles: switches as -D defines, BAG_SESSION dropped (main's batched bag covers it)\n\nxtrees/api.mojo: resolved against main's shap-binding removal (fold bindings kept,\nnode_cover/tree_shap/expected_value gone as on main); new export\nx_trees_fast_switches = XTREES_FAST_SWITCHES, a comptime bit set of\n-D MOJOLEARN_TE_NATIVE_SPLITS (1), MOJOLEARN_TE_ADA_SESSION (2),\nMOJOLEARN_TE_ADA_SESSION_SHARE (4), 0 unless\nGLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator().\n\npython/mojolearn/_expansion_trees.py: _trees_switch reads that bit set through\nthe binding (FAST tier only; the env reads are gone); AdaBoost fits pass\n_trees_ada_session_default (main's \"0\" without a define). The BAG_SESSION\nswitch, _BaggingBase._bag_session, DecisionTreeClassifier._fit_rows_in_session\nand the rf export rf_classifier_fit_session_rows_export are dropped: main's\nlane/hr2-gbdt-host (cc2743da9) fits the board's bag as one batched forest on\nthe device (_fit_batched). bindings/_mojolearn_rf.mojo is main's again.\n\ndocs/apple-fast/ab/trees-ensembles.txt: eight afc_ab_def.sh lines (x_trees,\n1 2, \"\" vs the define), one dataset per change; no -ident lines; the dart\nFOREST_SESSION arms dropped (main's DART opens the session by default,\ne3372c826); the random-trees-embedding stage lines dropped (no change here).\n\nStatic check (no Mojo toolchain here): the only Mojo lines IDENTICAL compiles\ndifferently from main are new, never-called exports (x_trees_fast_switches\nreturns 0 outside FAST + Apple; x_trees_stratified_folds / kfolds / fold_rows\nare reached only when the bit is set); every changed Python line is behind\n_trees_switch (FAST tier and the define bit) or is main's code moved under an\nelse. No existing export changed.\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01R9CSSyTf65x632XTyE8LYt"
+      },
+      {
+        "commit": "62d9768c468e5a312753a48458ad5acb81197e50",
+        "message": "x_cluster cluster: merge origin/main; the two FAST Apple switches become build defines\n\nMerge origin/main (hr2 host-route removal, neural-pass133 device step) into\nlane/apple-fast-cluster. x_cluster/ops.mojo, host/host_ops.mojo and\ndevice_ops.mojo conflicted additively (both sides appended at the same\ntail): main's set_i/mb_update/mb_assign/agglo_* kept whole, ours after them.\n\n- x_cluster/meanshift_fast.mojo, minibatch_fast.mojo: MEANSHIFT_FAST_GRID and\n  MINIBATCH_FAST_DEV are now GLOBAL_NUMERIC_MODE == NUMERIC_FAST and\n  has_apple_gpu_accelerator() and is_defined[\"MOJOLEARN_X_CLUSTER_FAST_*\"]();\n  the host env reads in device_ops.meanshift and minibatch_fit are gone\n  (the brief: no env read on a hot path, -D defines instead).\n- x_cluster/minibatch.mojo: the resident-steps hook sits whole inside\n  `comptime if MINIBATCH_FAST_DEV`; on success it sets n_steps = 0 and\n  uploads the final centers to cslot, because main's MB_DEVICE_STEP\n  readback after the loop would otherwise return the pre-loop centers.\n  Main's loop and readback lines are unchanged.\n- tools/afc_ab_def.sh (the build-define A/B driver, byte-identical on the\n  tier/linear/seq/tsa/neighbors2 branches) added so the request lines run.\n- docs/apple-fast/ab/cluster.txt in the light form: 1 2, no -ident lines,\n  one tag per lane x dataset, the two switches through afc_ab_def.sh.\n\nStatic same-bits check (no Apple GPU or Mojo toolchain here): every changed\nMojo line is inside MEANSHIFT_FAST_GRID or MINIBATCH_FAST_DEV (FAST + Apple\n+ define); an IDENTICAL build compiles main's code unchanged.\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01R9CSSyTf65x632XTyE8LYt"
+      },
+      {
+        "commit": "cb64721f956545475fd4b8a4269a724f7d921a28",
+        "message": "Merge origin/main into lane/apple-fast-trees-depthwise\n\ngbdt/train.mojo: main's import block (hr2 ftz/getenv aliases, device_float_borders,\nsoft_f64) wins; the FAST CTR_FAST_FREQ arm keeps GLOBAL_NUMERIC_MODE and NUMERIC_FAST\non the checks.numerics import line. The compute_simple_ctrs site merged clean; callee\nsignatures (compute_simple_ctrs, compute_simple_ctrs_device) are unchanged on main.\n\nStatic same-bits check (no toolchain here): the only re-expressed line is an import;\nevery FAST line stays inside the CTR_FAST_FREQ guard\n(GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined).\nIDENTICAL compiles main's code unchanged.\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01R9CSSyTf65x632XTyE8LYt"
+      },
+      {
+        "commit": "2768becc83e12094425455c21470aa8e744b7a60",
+        "message": "Merge origin/main into lane/apple-fast-gram: the FAST grid Gram on main's moments grid flags and witnessed setup\n\nMain's lane/neural-pass120 moments grid fills Lars' (ip[4] == 2) and Ridge's\n(ip[4] == 1) fw words on one block per tile pair; this lane's chunked grid\nGram now sets those same flags (lars.mojo and ridge.mojo take main's code,\nthe ip[5] flag goes) and runs first inside main's witnessed setup unit and\nthe k-fold unit A (unwitnessed itself; it waits for its launches). Main's\nremoved _fit_on_host stays removed. x_prep's class-covariance switch is\nguarded FAST + Apple (was != IDENTICAL). A/B lines in the light form (1 2,\nno -ident, one dataset per switch).\n\nStatic check (no toolchain here): every changed line sits under\n`comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()`\nor behind a flag only that guard sets; IDENTICAL compiles main's code.\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01R9CSSyTf65x632XTyE8LYt"
+      },
+      {
+        "commit": "b4c56eca3453c419ac219160b2a7cfc45ffff85e",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-tsa"
+      },
+      {
+        "commit": "5538e9353abb024b97b9214478e33ec8a7215717",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-bayes"
+      },
+      {
+        "commit": "9fc8d0b46047c7f18fb446843ec557fd3a25b3cf",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast-depthwise"
+      },
+      {
+        "commit": "269ffa57ac05164faf59464a9fb09820a24e9ab1",
+        "message": "Merge origin/main into lane/apple-fast (host-route-removal hr2-* lanes)\n\nConflicts resolved keeping both sides; IDENTICAL compiles main's code:\n- depthwise: LG_EXACT_BATCH / NS_INHERIT_PARTITION = FAST Apple default-on\n  (lane) or IDENTICAL opt-in LG_EXACT_ID / NS_INHERIT_ID (main);\n  LG_EXACT_BATCH_WIDTH keeps main's 32 (arms 16|64) outside FAST.\n- x_linear/bayes.mojo: main's bayes_prep/coef/step/finish factoring; the\n  FAST Apple gram sse (X_LINEAR_GRAM_SSE) re-set on top of it in\n  bayes_ridge_fit and ard_fit.\n- x_linear/device.mojo: main's hip[4] (lars_pre) plus the lane's hip[5];\n  the FAST Apple gram sse re-expressed on main's BayesianRidge grid driver\n  (bayes_yy_parts_kernel once + bayes_step_gram_kernel per iteration in\n  place of the resid/part row pass).\n- isolation forest: IF_FAST_ROWMAJOR (FAST Apple) and IF_DEVICE_TRANSPOSE\n  (main) as one comptime chain; both device-scan probes in the binding; the\n  Python fit accepts either scan's refusal.\n- x_neighbors/iter_device.mojo: main's import removals, stale getenv dropped.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "6b1224f9b64c1bb62bb8b5a1b79e9a5bab9cb767",
+        "message": "Merge lane/hr2-gbdt-host (cc2743da9) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\ttools/gap_trees_race.sh"
+      },
+      {
+        "commit": "46b658e966ab1d305989d7148912b0256d98c9cd",
+        "message": "Merge lane/hr2-graph-embed (1524cd621) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tbindings/_mojolearn_x_decomp.mojo\n#\tpython/mojolearn/_surface_decomp.py\n#\ttools/hooks/host_routes_baseline.tsv"
+      },
+      {
+        "commit": "3d12d98e2edc3461239692541cf67c07f81a9a00",
+        "message": "Merge lane/hr2-mds-agglo (9305493e3) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_cluster/ops.mojo"
+      },
+      {
+        "commit": "c76802e61fcf5c3497b4da1b1c8d222522e758b3",
+        "message": "Merge lane/hr2-kpca-seq up to 92b510257 (KernelPCA device eigh) into main\n\nThe branch's GARCH/Prophet warp-per-series commits (e99030f6f..a67c406fd) are not merged: they rewrite the same fits neural-pass143 put on main (one block per series) and their A/B arm restores the host route.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "2bc786449b9f5bacb4f01ff933660e2dd29d98ba",
+        "message": "Merge lane/gap-neural-overhead2 (c937fed3c) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tbindings/_mojolearn_x_sequence.mojo"
+      },
+      {
+        "commit": "740dd86e913b0d3ba3192aa2c0d072d4d322e631",
+        "message": "Merge lane/gap-neural-models (7c3c46997) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "32f3b7c2f5ec7afa9c89a6c130be2ae04b1a96bb",
+        "message": "Merge lane/gap-lm (dec33b57f) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "dd489e8f5c7934dc88af9514028f604940635561",
+        "message": "Merge lane/gap-trees-nv (69510bcc4) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "f8f95f89bbca3d863c213efb0059189a1fb7854f",
+        "message": "Merge lane/gap-serial-gpu (714739222) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "15becca23e24b42117a45737341d64647659a004",
+        "message": "Merge lane/gap-linear-nv (fb4d6da40) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "755effee6ddb967cd3942095887d0b85d8671801",
+        "message": "Merge lane/gap-nv-classical2 (76c8775ba) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\txtrees/api.mojo"
+      },
+      {
+        "commit": "07bb7a110c2b3649e703060846339fde16f1fd24",
+        "message": "Merge lane/gap-classical-nv (8b521dc9c) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "08c13e8aef1da80006d87bace328b3bfa129be2a",
+        "message": "Merge lane/gap-fails2 (1efdb9a09) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "f95a71d9ec907efd6edb7873f25d9087717b0942",
+        "message": "Merge lane/gap-train-utils (f6359a0cd) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "5a39b9041e746da1885755065ef5756d1b30d5b4",
+        "message": "Merge lane/gap-optimizers (0b6dec222) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tbindings/_mojolearn_x_sequence.mojo"
+      },
+      {
+        "commit": "6a3a847ee8c8f5b6cbaf712d3046244e293598d0",
+        "message": "Merge lane/gap-lda-als (daaa2674c) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_decomp/resident.mojo"
+      },
+      {
+        "commit": "a7d164403bc2dabefa78449140fb610e051e2ffa",
+        "message": "Merge lane/gap-treeshap (1ac8ca365) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "1abc0533a18f8a932ea246c82ffca9b14acca5cd",
+        "message": "Merge lane/gap-prep2 (839b7e3a0) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tsequence/exec_device.mojo"
+      },
+      {
+        "commit": "145f66c34d0dcc5be120e886373e6ef3d8e475cb",
+        "message": "Merge lane/gap-nb-maxabs-grp (b0b921f4e) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tbindings/_mojolearn_x_decomp.mojo\n#\tx_decomp/device.mojo"
+      },
+      {
+        "commit": "25d8cca005462dd5291d49d660677d2eb27f383c",
+        "message": "Merge lane/gap-board-refusals (9c31e3bb2) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_linear/ridgecv.mojo"
+      },
+      {
+        "commit": "f8584a1a66921eda0096f972a0861ea796018d13",
+        "message": "Merge lane/gap-optin-flags (239122ed7) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_neighbors/iter_device.mojo"
+      },
+      {
+        "commit": "115ca215c1f6303056bd30fd2d0c5d82caf20f84",
+        "message": "Merge lane/neural-pass143 (bd8d3737f) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "f014a2cc94b93046402f43c060cbbd857efdb3f3",
+        "message": "Merge lane/neural-pass142 (bf56a992b) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tbindings/_mojolearn_x_decomp.mojo\n#\tbindings/_mojolearn_x_decomp_host.mojo\n#\tpython/mojolearn/_expansion_decomp.py\n#\tx_decomp/api.mojo\n#\tx_decomp/cells.mojo\n#\tx_decomp/device.mojo\n#\tx_decomp/exec_trait.mojo\n#\tx_decomp/host.mojo\n#\tx_decomp/resident.mojo"
+      },
+      {
+        "commit": "44da0283d9cdd8cc1d1e35f70cd6cbc09cb140bb",
+        "message": "Merge lane/neural-pass141 (3d34431d6) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tIDENTITY_PATHS.md\n#\ttools/hooks/host_routes_baseline.tsv\n#\tx_neighbors/README.md\n#\tx_neighbors/device_ops.mojo\n#\tx_neighbors/gen.py\n#\tx_neighbors/host_ops.mojo\n#\tx_neighbors/iter_device.mojo"
+      },
+      {
+        "commit": "471efa2be05a814a7d27580a71cde1f516c5951f",
+        "message": "Merge lane/neural-pass139 (30728f3c3) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "79b806fd8b5fd07e24d8055bcd962eaaed190e97",
+        "message": "Merge lane/neural-pass136 (9dc3299ad) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "30a7b9880711a2399868e691211e223f73f81092",
+        "message": "Merge lane/neural-pass135 (6ca3baf77) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_decomp/device.mojo"
+      },
+      {
+        "commit": "773f1a56e3a0e65f59eef7fdf76101c310630982",
+        "message": "Merge lane/neural-pass133 (9901c6a91) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "89c1f9a0114f6e2e7df1839e07eb5b9b7d8c52e6",
+        "message": "Merge lane/neural-pass131 (d96752167) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "4fc5187e75a0fa175e16303ace36ce2ec9fc16c8",
+        "message": "Merge lane/neural-pass130 (1dda0419c) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "9c7aebc252006ad5722573b1986e280d763ef27a",
+        "message": "Merge lane/neural-pass127 (473ed18c6) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "e892d63c30d0e1b7a9d7eda37e61d53a0f938216",
+        "message": "Merge lane/neural-pass121 (ec4d525e5) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "e95af23a57e6d50b402a83c3137887becc93a866",
+        "message": "Merge lane/neural-pass120 (f4568cc3e) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "5785858f2ddc6e4fd271847a96463402330146a1",
+        "message": "Merge lane/neural-pass118 (28671ad0e) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tpython/mojolearn/_expansion_linear.py\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "71a1119d5ea29e9f7ba94cec74477451e87a1a48",
+        "message": "Merge lane/neural-pass115 (6cb813bb7) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_decomp/device.mojo"
+      },
+      {
+        "commit": "417313fae10c621d325dbad67e923953c3c28eb8",
+        "message": "Merge lane/neural-pass112 (bda43f725) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_cluster/device_ops.mojo"
+      },
+      {
+        "commit": "a369a5c19510aac9a22424f678d665cd362630b8",
+        "message": "Merge lane/neural-pass108 (2e72907f5) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "2e95ac2dbe0410211824138e3e1d4f1ec68362b3",
+        "message": "Merge lane/neural-pass106 (3efe5c346) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tbindings/_mojolearn_x_neighbors.mojo\n#\tbindings/_mojolearn_x_neighbors_host.mojo\n#\ttools/hooks/host_routes_baseline.tsv\n#\tx_neighbors/iter_device.mojo"
+      },
+      {
+        "commit": "fd26f684dfa8c1d5aa39c20737fdda36a33c2d90",
+        "message": "Merge lane/neural-pass101 (e2a9e6e15) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "72df60c17093a59e0e147385f5b4767a54a2e2f0",
+        "message": "Merge lane/neural-pass100 (156e7c9c4) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "2e017605ee697312e35b279d35363a2eadf4630d",
+        "message": "Merge lane/neural-pass93 (c8b328813) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "0b6b30aaa2aaf0c1f6708c7afff20a1a7f599f71",
+        "message": "Merge lane/hr-gbdt-small (3a60fe1db) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "b1ce6392f4c5f5c6f629393150072abe9a3a0a24",
+        "message": "Merge lane/hr-graph (31f9b7bb4) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_neighbors/iter_device.mojo"
+      },
+      {
+        "commit": "53523b21a00b09bf43357acef84f26b7725466f9",
+        "message": "Merge lane/hr-adafactor (cb9749dff) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "188a676c8f46ebf63fba23b8fdc64a9554cbdd65",
+        "message": "Merge lane/hr-small-passes (3696f52a6) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tpython/mojolearn/linear_model.py"
+      },
+      {
+        "commit": "eb68e8812bbe9dadd86327c2ec43f92306ce4767",
+        "message": "Merge remote-tracking branch 'origin/lane/apple-fast' into lane/apple-fast-depthwise"
+      },
+      {
+        "commit": "7c91d5fde2d77198238b7c7a79848beca9f07298",
+        "message": "Merge lane/hr-qr (cfcf6e27b) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tIDENTITY_PATHS.md\n#\ttools/hooks/host_routes_baseline.tsv\n#\tx_decomp/device.mojo\n#\tx_decomp/host.mojo"
+      },
+      {
+        "commit": "c68d1616c3ec9a98a45a89fa2658712d775b6572",
+        "message": "Merge lane/hr-lu (6c5c7bf96) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n\n# Conflicts:\n#\tx_decomp/device.mojo"
+      },
+      {
+        "commit": "f6a856c97ec88c7b07a1306c38c5bf7713329171",
+        "message": "Merge lane/hr-kit (e43783646) into main\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "125ba6d60c82d002fa48cee1bdc9f7eae674489c",
+        "message": "Merge remote-tracking branch 'origin/lane/apple-fast-yetirank' into lane/apple-fast"
+      },
+      {
+        "commit": "2806c7184be2f34044055bc877760f09975da1a3",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/hr-graph"
+      },
+      {
+        "commit": "4fd3527e88129bda95874358566064ca94e01610",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/gap-optimizers"
+      },
+      {
+        "commit": "5ab826643d614ae4aeee397f7540fe65feec7dfb",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/gap-lda-als"
+      },
+      {
+        "commit": "18714f9ef591cd5c484f75ac4976103e3a5a66da",
+        "message": "Merge origin/main"
+      },
+      {
+        "commit": "334dbc6fcf70ba8509ad58156d6fb7cf7b820d89",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/gap-board-refusals"
+      },
+      {
+        "commit": "c377307fa2edd809a45924513acfc934801df4cd",
+        "message": "Merge lane/gap-ensemble-reg: stacking-reg and voting-reg race on the GPU (NV r2 0.920/0.448 stacking, 0.919/0.407 voting)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "c5407a94a484f5c4e4c2b16aa40af3cdfb38488f",
+        "message": "Merge remote-tracking branch 'origin/main' into fix-hrsp-tmp"
+      },
+      {
+        "commit": "eead08ca23e46779939787345116665da61bd3dc",
+        "message": "Merge remote-tracking branch 'origin/lane/hr-kit' into fix-hrqr-tmp\n\n# Conflicts:\n#\tbindings/_mojolearn_x_decomp.mojo"
+      },
+      {
+        "commit": "f5d6382108af911e7fe44b8da0c415b6f85b5c89",
+        "message": "Merge remote-tracking branch 'origin/main' into fix-hrqr-tmp\n\n# Conflicts:\n#\tbindings/_mojolearn_x_decomp.mojo\n#\tbindings/_mojolearn_x_decomp_host.mojo"
+      },
+      {
+        "commit": "8e72c306ba13a3c345a6cfb22da4a8de3280f7cc",
+        "message": "Merge remote-tracking branch 'origin/main' into fix-hrkit-tmp\n\n# Conflicts:\n#\tx_decomp/device.mojo"
+      },
+      {
+        "commit": "75947a45cdcf380854db653c002c817fc5c5ed28",
+        "message": "Merge remote-tracking branch 'origin/main' into fix-np143-tmp"
+      },
+      {
+        "commit": "e566edd2ae6522792b3597909d577a33e9bcbc6f",
+        "message": "Merge remote-tracking branch 'origin/main' into fix-np141-tmp\n\n# Conflicts:\n#\tx_neighbors/device_ops.mojo\n#\tx_neighbors/gen.py\n#\tx_neighbors/host_ops.mojo\n#\tx_neighbors/items.mojo\n#\tx_neighbors/iter_device.mojo"
+      },
+      {
+        "commit": "8a2380411eb53abf61c997ca2c53d770c9b39f41",
+        "message": "Merge remote-tracking branch 'origin/main' into fix-np131-tmp\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "7783587f11cb0e5036c34601c1251f9deecd0919",
+        "message": "Merge remote-tracking branch 'origin/main' into fix-np130-tmp\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "da4a777ec81c0574976aa3ddfba730995c4047b6",
+        "message": "Merge remote-tracking branch 'origin/main' into fix-np106-tmp\n\n# Conflicts:\n#\tbindings/_mojolearn_x_neighbors.mojo\n#\tbindings/_mojolearn_x_neighbors_host.mojo\n#\tx_linear/device.mojo\n#\tx_neighbors/iter_device.mojo"
+      },
+      {
+        "commit": "ecb2ca3b3a7abe3aa38f4e5e140e8f8443d1627a",
+        "message": "Merge remote-tracking branch 'origin/main' into fix-np101-tmp\n\n# Conflicts:\n#\tx_neighbors/iter_device.mojo"
+      },
+      {
+        "commit": "e24d3c4c1ffc84bf841ee16e83d26d0ea45aae73",
+        "message": "Merge origin/main into lane/hr-graph (x_neighbors generated files regenerated from the merged gen.py)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "250a4d1d7154886137c17ac946616df7499ce912",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/gap-neural-overhead2"
+      },
+      {
+        "commit": "6559d506f2a0a3575b9ec55129ec6a3fde2d735b",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/gap-neural-models"
+      },
+      {
+        "commit": "8ca4ed0d51612362fa6a15dcb633ca1de8669aa3",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/gap-nv-classical2"
+      },
+      {
+        "commit": "fb541bbad3b07548c34d5a2ca69a81a4325746b9",
+        "message": "Merge remote-tracking branch 'origin/main' into docs/claude-md"
+      },
+      {
+        "commit": "e613f7977c680acce98aae9f0b7835c784115e0f",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/gpu-path-audit"
+      },
+      {
+        "commit": "add99d1ba3782b14c59b0cbcc5e48c404cc5f854",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/apple-fast"
+      },
+      {
+        "commit": "ce7b0ebf2479160e3e8d5e73d672c56b16a5ec11",
+        "message": "Merge remote-tracking branch 'origin/lane/apple-fast-trees2' into lane/apple-fast"
+      },
+      {
+        "commit": "5b4f7936f76404a978b3cdfd4905e88cf6d945a2",
+        "message": "Merge remote-tracking branch 'origin/lane/apple-fast-classical' into lane/apple-fast"
+      },
+      {
+        "commit": "b19fe64081099652596a6c5c988770657e9cfb58",
+        "message": "Merge remote-tracking branch 'origin/lane/gap-classical-nv' into lane/gap-nv-classical2"
+      },
+      {
+        "commit": "03c7ca66c54b6b2c6d18d1ef0e5500c9249f910c",
+        "message": "Merge origin/main into lane/board-gpu-only-tests"
+      },
+      {
+        "commit": "2dd2e2f21bef8ab8940a17df13e27027224c0210",
+        "message": "Merge remote-tracking branch 'origin/lane/gap-nb-maxabs-grp' into lane/gap-prep2"
+      },
+      {
+        "commit": "41800c6741bacd6d09a12b40e0a7bc1433809cf6",
+        "message": "Merge remote-tracking branch 'origin/lane/gap-optimizers' into lane/gap-train-utils"
+      },
+      {
+        "commit": "a3cf6236a2765cce7ea5d83b05237239d44a77eb",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/gap-treeshap"
+      },
+      {
+        "commit": "7d1f6149cf936a19df1eebd2f5d114de77e7d7b1",
+        "message": "Merge lane/hr-adafactor: reuse its blocked norm order (AF_NORM_BLOCK, OP_AF_BLK_SUMSQ) for LAMB\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "62c484f002b9ff37578b9b3280888ef5d8ca0db6",
+        "message": "Merge pull request #131 from mojolearn/lane/hr-hook-mirror\n\nno-host-routes hook: mirror/URL pushes read their range against origin/main"
+      },
+      {
+        "commit": "c8df490f2fc3cd07d0feb11b80457accf5296fa6",
+        "message": "Merge pull request #125 from mojolearn/lane/neural-pass132\n\nx_linear Perceptron / PassiveAggressive / SGDOneClassSVM: minibatch on the grid (batch 256)"
+      },
+      {
+        "commit": "933382ef96f26cad8120bc549696185619bf2f79",
+        "message": "Merge branch 'lane/neural-pass138' into lane/gap-neural-overhead2"
+      },
+      {
+        "commit": "3f2263cdc46aab6c275c19b9ad30f997c5cd947a",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass132\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "440b83066e141462fc82f1a0c8108adbf7f10c59",
+        "message": "Merge pull request #97 from mojolearn/lane/neural-pass97\n\nx_linear GLM: blocked fold order (4096-row blocks), grid block-major partials"
+      },
+      {
+        "commit": "886b522ee5547a1fcf14d96b2f787b2972e9f5d7",
+        "message": "Merge lane/neural-pass129 (PR #122)\n\nx_linear LogisticRegressionCV + HuberRegressor: L-BFGS objective passes on the grid (bits unchanged)"
+      },
+      {
+        "commit": "fa2801203bb47289869efa1e5f2a14f5b03ca69b",
+        "message": "Merge lane/neural-pass113 (PR #112)\n\nCholesky.fit: one-copy download + tiled symmetry pre-check (factor bits unchanged)"
+      },
+      {
+        "commit": "6e658e6a4c7f858d5ff2fb3f4ca52132b4017461",
+        "message": "Merge lane/neural-pass111 (PR #110)\n\nx_cluster MeanShift: one block per seed (bits unchanged)"
+      },
+      {
+        "commit": "4e1b0ae7a9595bf2ab8a806d35a0d77986440305",
+        "message": "Merge lane/neural-pass105 (PR #105)\n\nx_decomp top-k: Lanczos (fixed start, full reorth) on every vendor for Isomap/ClassicalMDS/KernelPCA"
+      },
+      {
+        "commit": "3c4bcfa0962ded20d6fd3cefdacf63c47856c43d",
+        "message": "Merge origin/main into lane/neural-pass129\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "b4ff88e76056db5492cfe7ae2543fd3e576743b1",
+        "message": "Merge origin/main into lane/neural-pass113\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "822e2355841a0dbe80f2c44e96a3ae6800cab5b9",
+        "message": "Merge origin/main into lane/neural-pass111\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "2606582886f1131d4aeb610783b6e4c1d157445a",
+        "message": "Merge origin/main into lane/neural-pass105\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "ef9188cfaff977a87c4c724ed99fc54707e14809",
+        "message": "Merge lane/neural-pass72 (PR #77)\n\nx_neighbors host drivers run items over host tasks (stacked on #76)"
+      },
+      {
+        "commit": "6bcb1898045239b79629f7c4e97ec14db3752ed8",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass72"
+      },
+      {
+        "commit": "74e0b865f5632c686ff263d50dfd68727c85788d",
+        "message": "Merge origin/main into lane/neural-pass72 (generated x_neighbors files regenerated from the merged gen.py)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "ea276a3d4c0ff3a2c488098644ade0be9701fe01",
+        "message": "Merge lane/neural-pass80 (PR #84)\n\nsvgp: m x m column loops as host tasks"
+      },
+      {
+        "commit": "82bbb422e25bd8f5615d0191d09f656f54a35874",
+        "message": "Merge lane/neural-pass79 (PR #82)\n\nx_decomp host column runs its groups on host_parallelize (was single-threaded)"
+      },
+      {
+        "commit": "e899ea7d373314d486d6dec62974842493f748c8",
+        "message": "Merge origin/main into lane/neural-pass80 (brings tools/hooks/no_host_routes.py for the check)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "806e9288a9e1bbfcfb3445437a52b4bccafb369e",
+        "message": "Merge origin/main into lane/neural-pass79 (brings tools/hooks/no_host_routes.py for the check)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "76e46e5e203aac0fb6509e9f71d3922b2062e881",
+        "message": "Merge lane/neural-pass137 (PR #129)\n\nLabelEncoder/LabelBinarizer: numeric labels to the device as raw words, parallel unique"
+      },
+      {
+        "commit": "e43ac476c9a3bca8bbabdb5aea131a50cc85b132",
+        "message": "Merge lane/neural-pass95 (PR #96)\n\nGPU NearestCentroid (fused nc_stats, one upload) and connected components on the device"
+      },
+      {
+        "commit": "b8559b96c6e45b9a09ca06d95f6eb588d5825a7a",
+        "message": "Merge branch 'lane/neural-pass132' into lane/neural-pass139\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "61702bd12b58e11326976d8da77118c9921c408b",
+        "message": "Merge lane/neural-pass134 (PR #127)\n\nLLE shift-invert: right-looking device triangular solves, no inverses"
+      },
+      {
+        "commit": "d198116eaff47a3e4d9bc1f9341783ada74ae927",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass97"
+      },
+      {
+        "commit": "13afc601074d9ac887675fc0f997ee4e3b572ed6",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass132\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "e7ff0f98d93ac713186e2a79f355d8745d089f2d",
+        "message": "Merge lane/neural-pass126 (PR #120)\n\nGBDT Ordered on GPU: score-noise split, int hist slots, half-byte/binary fixed point, leaf scan, split search (-43% L40S)"
+      },
+      {
+        "commit": "8956dd56c2e47d373f05539dc44f0159b8248fb0",
+        "message": "Merge branch 'lane/neural-pass99' into lane/neural-pass131"
+      },
+      {
+        "commit": "473ed18c6027a82585807e75ae8b1d83c6cf590c",
+        "message": "Merge branch 'lane/neural-pass99' into lane/neural-pass127"
+      },
+      {
+        "commit": "7734b6105043b37cc7181059e41ed6d8b4ae12fb",
+        "message": "Merge branch 'lane/neural-pass99' into lane/neural-pass129"
+      },
+      {
+        "commit": "96f762d705cac9c9d49a788c89b40dc4f94eb5a9",
+        "message": "Merge branch 'lane/neural-pass98' into lane/neural-pass99"
+      },
+      {
+        "commit": "808dd12a13c1380a415bc026a583e5759875507e",
+        "message": "Merge branch 'lane/neural-pass97' into lane/neural-pass98"
+      },
+      {
+        "commit": "583486d414f034002b3edaff682fa39279369244",
+        "message": "Merge branch 'lane/neural-pass127' into lane/neural-pass129"
+      },
+      {
+        "commit": "d5a407606c7b08fd15578cb2cc0bb1b08e78095d",
+        "message": "Merge branch 'lane/neural-pass99' into lane/neural-pass129"
+      },
+      {
+        "commit": "f3e75cc5f6d602441b33c858d06cd68b67690338",
+        "message": "Merge branch 'lane/neural-pass99' into lane/neural-pass127"
+      },
+      {
+        "commit": "882567f3d868def9ea7423f355872ca4a0ade28d",
+        "message": "Merge branch 'lane/neural-pass99' into lane/neural-pass131"
+      },
+      {
+        "commit": "cce8af66811095647fd6a05f3620d64d2fab43eb",
+        "message": "Merge branch 'lane/neural-pass98' into lane/neural-pass99"
+      },
+      {
+        "commit": "82f69da39261183119565f2408f44f04bc1e5edb",
+        "message": "Merge branch 'lane/neural-pass97' into lane/neural-pass98"
+      },
+      {
+        "commit": "7fe261e930a40b2264f40ebfd22fd011aa1a8a44",
+        "message": "Merge branch 'lane/neural-pass99' into lane/neural-pass131\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "20f44be170627036e690507f84d57314f776baf3",
+        "message": "Merge branch 'lane/neural-pass99' into lane/neural-pass129"
+      },
+      {
+        "commit": "3d597fe189b23606231956ab92b796082c753e85",
+        "message": "Merge branch 'lane/neural-pass99' into lane/neural-pass127"
+      },
+      {
+        "commit": "46c341613fb708c1305661a4f7e7b8cd69d13a57",
+        "message": "Merge branch 'lane/neural-pass98' into lane/neural-pass99"
+      },
+      {
+        "commit": "e93f3b78e7b91c7c970d65bdd8f8cb40e3ae5d35",
+        "message": "Merge branch 'lane/neural-pass97' into lane/neural-pass98"
+      },
+      {
+        "commit": "766a75bc12e3f0aa677f75a5af7ddf59bb07528e",
+        "message": "Merge branch 'lane/neural-pass89' into lane/neural-pass97\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "37edd9ee83b64b7e22ef00d8d614723a74913de7",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass89\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "cfe0d1e0797969f7dee1cd85f15ae5eb449fde04",
+        "message": "Merge branch 'lane/neural-pass99' into lane/neural-pass131"
+      },
+      {
+        "commit": "f31e56d0df5040df4ba25a95e5c21925039d4687",
+        "message": "Merge branch 'lane/neural-pass98' into lane/neural-pass99"
+      },
+      {
+        "commit": "291c928fd9fe31d2fbcfce70736e9c333d21a76b",
+        "message": "Merge branch 'lane/neural-pass97' into lane/neural-pass98"
+      },
+      {
+        "commit": "05431411ef227c7ca63b2bea9b3c7c297caa5b8f",
+        "message": "Merge lane/neural-pass89 (Apple GLM cell slices); the blocked parts launch sliced by row blocks on Apple\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "28591a36faae0e0540a50bf7006b7e0a4d21b9ef",
+        "message": "Merge lane/neural-pass91 (PR #94)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "b162f6bc6c13cd3df51577240352217a60c603e9",
+        "message": "Merge branch 'lane/neural-pass91' into lane/neural-pass93\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "088a6fd603a50387f26d2ad51fe977e32a1d1824",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass91\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "1aa315b2b4e17e48dff389fb2aeb2d231004f360",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass130\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "ec4d525e54ef2a4f01cb3d9a0e34ef3ecb1154e9",
+        "message": "Merge branch 'lane/neural-pass90' into lane/neural-pass121"
+      },
+      {
+        "commit": "5c38204f4ea5308ddd8603062168f959afabb201",
+        "message": "Merge lane/neural-pass88 (PR #91)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "32fb5d03f2db42ae3c6e6ab2ba10e4a1d2635852",
+        "message": "Merge branch 'lane/neural-pass98' into lane/neural-pass99\n\n# Conflicts:\n#\tx_linear/bayes.mojo"
+      },
+      {
+        "commit": "a498291383e01631332e7269433e02af83dfe13e",
+        "message": "Merge branch 'lane/neural-pass97' into lane/neural-pass98"
+      },
+      {
+        "commit": "c66bf5252b68f7271332e0f359976aa52e2efa41",
+        "message": "Merge branch 'lane/neural-pass89' into lane/neural-pass97\n\n# Conflicts:\n#\tx_linear/tops.mojo"
+      },
+      {
+        "commit": "a0bfd9cab43c4300494ef4bc76aaf5af3f7e8fd4",
+        "message": "Merge branch 'lane/neural-pass88' into lane/neural-pass89\n\n# Conflicts:\n#\tx_linear/device.mojo"
+      },
+      {
+        "commit": "7c794c4d8d596eee8898ff191583234247c65bde",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass88\n\n# Conflicts:\n#\tx_linear/tops.mojo"
+      },
+      {
+        "commit": "3206fd3fafbc541a040e1a49577c02669cb1484a",
+        "message": "Merge lane/neural-pass87 (PR #90)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "7bdb7188d33bfe798d86bcfdc984408cbd2743ed",
+        "message": "Merge lane/neural-pass86 (PR #89)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "42cc87e3be1b0407ee4dc2f2c51d724478af78b7",
+        "message": "Merge branch 'lane/neural-pass98' into lane/neural-pass99\n\n# Conflicts:\n#\tx_linear/bayes.mojo"
+      },
+      {
+        "commit": "5c05c85d059e5b986f58e595aeab39c4500d2a79",
+        "message": "Merge branch 'lane/neural-pass97' into lane/neural-pass98"
+      },
+      {
+        "commit": "d58e86832b08a196c21e7ae86a0e08b0583e166b",
+        "message": "Merge branch 'lane/neural-pass89' into lane/neural-pass97\n\n# Conflicts:\n#\tx_linear/tops.mojo"
+      },
+      {
+        "commit": "b32b32873ab9aa8120b16ea4b020c230b5c1ddd1",
+        "message": "Merge branch 'lane/neural-pass88' into lane/neural-pass89"
+      },
+      {
+        "commit": "e64a78c757965bcd7d533f702afacb81291b1f92",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass88\n\n# Conflicts:\n#\tx_linear/tops.mojo"
+      },
+      {
+        "commit": "779cd666b55c268e3c36ced36c90007916d3baf8",
+        "message": "Merge branch 'lane/neural-pass86' into lane/neural-pass90"
+      },
+      {
+        "commit": "e0748dfc882a898f303d17960c47238d300103a9",
+        "message": "Merge origin/main into lane/neural-pass86 (with pass85's t_jacobi_eig); ARD sigma below 32 features on the lead (the same words)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "4024cd7ec1503e4b4d655b7a6f264191ea684b39",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass90\n\n# Conflicts:\n#\tx_linear/bayes.mojo\n#\tx_linear/tops.mojo"
+      },
+      {
+        "commit": "33fa0a81f505d910c630987f53e68bc97a8f03ef",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass87"
+      },
+      {
+        "commit": "53468fd8344c009efdc50374d60fa97703c64ef6",
+        "message": "Merge lane/neural-pass85 (PR #88)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "d616ae26f6eeb5777d23abe03dcb328400b886b8",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass106"
+      },
+      {
+        "commit": "e0fcecf1cf6f69a22b344fe51a09844d9144d5af",
+        "message": "Merge origin/main into lane/neural-pass95 (generated x_neighbors files regenerated: pr_iterate_sparse, nc_stats, nc_shrink_d all exported)"
+      },
+      {
+        "commit": "ad0734746b992427971ac0dea39819dfa3c5f4f9",
+        "message": "Merge lane/neural-pass96: restore PageRank's sparse export (dropped by the #74 regeneration)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "a996ce4b77ca3d718eef2c2e341ea7279c2e0434",
+        "message": "Merge #78 (lane/neural-pass73)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "58bf8a29b4ad1b377983e304faf9798185f8bbfd",
+        "message": "Merge #79 (lane/neural-pass75)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "e4b78c4721801c5d576ff84519e8862761bd5ff8",
+        "message": "Merge #76 (lane/neural-pass71)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "2d5017337f6748edf0c4f4692de5b1078c6849c1",
+        "message": "Merge #75 (lane/neural-pass70)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "3b9ab9be9fb4f0edd5390222594344e58197a5df",
+        "message": "Merge #74 (lane/neural-pass69)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "fa3b567870ce471deca8c883addc8f5c8982c92a",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass75"
+      },
+      {
+        "commit": "28bd7bf23d28d63aa9c1eae1279ecfe72fb00a44",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass73"
+      },
+      {
+        "commit": "e0918aa35bfbf6b81b095ee364ed8cc5bfb2a003",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass72"
+      },
+      {
+        "commit": "1e621ec154093f8075dd3a4953faa03db73d2647",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass71"
+      },
+      {
+        "commit": "8d8343dc5d056ee86546e6b0e8e812d077bd6859",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass70"
+      },
+      {
+        "commit": "04c65bffb70be555ddf88c57539a2b8feff06247",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass69"
+      },
+      {
+        "commit": "196ec4831be01311eb667844471afdf0c917702a",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass75"
+      },
+      {
+        "commit": "9d3b5532a21b5ca26d3c3c5ee747b66d585adc9e",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass73"
+      },
+      {
+        "commit": "456b6e6910a2237b0f2f66138df7a3725fb8b29a",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass72"
+      },
+      {
+        "commit": "f2fd807bf2e8e0a2c07dab2552c731560e6c14e1",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass71"
+      },
+      {
+        "commit": "01f023aeacccc59d7423ab2992a9f9dbf56f2cfe",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass70"
+      },
+      {
+        "commit": "949fd03f0c9d2041f46394c24cf5fefd6282829f",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass69"
+      },
+      {
+        "commit": "24d3a89a8accbd12acbc3e0b1ac9e2529a73620e",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass72"
+      },
+      {
+        "commit": "ba0a186cb751ed873b5ff8015158863a7ef9485d",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass71"
+      },
+      {
+        "commit": "4103d6874274fad7000a8221f08eb7170fc9b52d",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass70"
+      },
+      {
+        "commit": "d277a0f9d2e306a20145b5314525eac03fc791db",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass69"
+      },
+      {
+        "commit": "964e485345b6c9513a0d8d1a850bfeb7c9b2462a",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass72"
+      },
+      {
+        "commit": "0fedcfabf77a966afec824822aad28172fa6660d",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass71"
+      },
+      {
+        "commit": "d2d940435c57bd35cd698b8b8e86eac5e241a9a0",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass70"
+      },
+      {
+        "commit": "ce4f15303a00f0eab1a905a49700848abf7676e9",
+        "message": "Merge remote-tracking branch 'origin/main' into lane/neural-pass69"
+      },
+      {
+        "commit": "2caa93962d7ae7bf7a0b1826f815985e18bef9e6",
+        "message": "Merge branch 'lane/neural-pass68' into lane/neural-pass70"
+      }
+    ],
+    "new_runtime_verification": false,
+    "source_commit": "8897404daf6b4727c81602b707e9119d7686711a"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.35"
+}
