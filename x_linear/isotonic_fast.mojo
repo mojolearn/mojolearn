@@ -709,7 +709,7 @@ def isotonic_fast(
     ctx.enqueue_function[if_pava_block_kernel](
         dfw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), diw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
         grid_dim=_ifb((n + IF_PAVA_L - 1) // IF_PAVA_L), block_dim=IF_TPB)
-    comptime if not is_defined["MOJOLEARN_ISOTONIC_FAST_PAIRMERGE_OFF"]():
+    comptime if is_defined["MOJOLEARN_ISOTONIC_FAST_PAIRMERGE"]():
         var rounds = 4
         var t2 = 1
         while t2 < n:

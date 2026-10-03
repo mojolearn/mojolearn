@@ -95,7 +95,7 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
         # it declines. M2 A/B ik-iso-pair-istella-b: PAR alone timed out,
         # PAR + PAIRMERGE 165.5 ms, r2 .188. -D MOJOLEARN_ISOTONIC_FAST_PAR_OFF
         # reverts.
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_ISOTONIC_FAST_PAR_OFF"]():
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_ISOTONIC_FAST_PAR"]():
             if a == ALGO_ISOTONIC:
                 var ctx = _p2m_ctx()
                 if isotonic_fast(ctx, x, n_x, y, n_y, n, d, ipl, fpl, n_out, out):

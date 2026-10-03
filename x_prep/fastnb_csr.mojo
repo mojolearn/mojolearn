@@ -48,7 +48,7 @@ from x_prep.device import x_prep_ctx
 #: The switch: FAST and Apple, unless -D MOJOLEARN_NB_TEXT_CSR_OFF (default ON
 #: since M2 A/B nb-mnb-csr-text-x, 221.7 -> 47.7 ms, same accuracy / logloss).
 comptime NB_TEXT_CSR = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_NB_TEXT_CSR_OFF"]()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_NB_TEXT_CSR"]()
 )
 #: Rows per block of the count kernel (its indptr slice in threadgroup memory).
 comptime CSR_ROWS = 64

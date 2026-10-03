@@ -114,7 +114,7 @@ the coarse quantizer is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over
 a stride sample of its training rows) and cluster/'s k-means starts from
 those seeds (`INIT_ARRAY`). An untraced build only."""
 
-comptime IVF_FAST_SEED_DEVICE = IVF_FAST_SEED and not is_defined["MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF"]()
+comptime IVF_FAST_SEED_DEVICE = IVF_FAST_SEED and is_defined["MOJOLEARN_IVF_FAST_SEED_DEVICE"]()
 """Lane apple-fast-fastonly2, FAST + Apple DEFAULT (`-D
 MOJOLEARN_IVF_FAST_SEED_DEVICE_OFF` reverts to the host k-means++). M2 A/Bs:
 fastonly2-5-ivf-pq-istella (no seed -> seed+device) 18,555 -> 12,036 ms,

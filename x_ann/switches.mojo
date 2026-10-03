@@ -46,7 +46,7 @@ comptime ANN3_PQ_SEED = is_defined["MOJOLEARN_ANN3_PQ_SEED"]()
 #: IVF_FAST_SEED gates it on FAST + Apple) since M2 A/B fastonly2-5-ivf-pq-istella
 #: (with IVF_FAST_SEED_DEVICE): ivf-pq istella 18,555 -> 12,036 ms, recall@k
 #: .5995 -> .6071. `-D MOJOLEARN_ANN3_COARSE_SEED_OFF` reverts.
-comptime ANN3_COARSE_SEED = not is_defined["MOJOLEARN_ANN3_COARSE_SEED_OFF"]()
+comptime ANN3_COARSE_SEED = is_defined["MOJOLEARN_ANN3_COARSE_SEED"]()
 
 #: FAST on Apple: rows per threadgroup of the t-SNE repulsion (128 in a
 #: default build). At 10,000 rows 128 makes 79 threadgroups, and the M3 Ultra

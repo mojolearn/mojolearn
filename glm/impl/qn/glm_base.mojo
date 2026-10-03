@@ -495,7 +495,7 @@ comptime QNT_TPB = 256
 # ---------------------------------------------------------------------------
 
 comptime QN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime QN_FAST_LS_BATCH = QN_FAST_APPLE and not is_defined["MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF"]()
+comptime QN_FAST_LS_BATCH = QN_FAST_APPLE and is_defined["MOJOLEARN_LSVR_LINESEARCH_BATCH"]()
 comptime QN_FAST_FUSED = QN_FAST_LS_BATCH
 comptime QN_FAST_SLIM = QN_FAST_APPLE and not is_defined["MOJOLEARN_LSVR_EVAL_SLIM_OFF"]()
 #: the fused pass: threads per block, rows per thread, the register bound on d

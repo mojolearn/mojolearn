@@ -17,4 +17,4 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 comptime PREP3_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime PREP3_MAXABS = PREP3_FAST_APPLE and not is_defined["MOJOLEARN_PREP3_MAXABS_OFF"]()
+comptime PREP3_MAXABS = PREP3_FAST_APPLE and is_defined["MOJOLEARN_PREP3_MAXABS"]()
