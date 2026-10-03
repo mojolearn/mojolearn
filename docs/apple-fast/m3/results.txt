@@ -1,4 +1,4 @@
-pos=599 lines=    1059
+pos=609 lines=    1116
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -725,3 +725,17 @@ pos=599 lines=    1059
 833:CMD apple-fast-cluster2@ded4ea07b cluster2-ap-loop-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=372.1 all=[372] quality=['{"n_clusters":'] defines='-D MOJOLEARN_AFFINITY_FAST_LOOP=1'
 834:CMD apple-fast-cluster2@ded4ea07b cluster2-ap-exact-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=379.2 all=[379] quality=['{"n_clusters":'] defines='-D MOJOLEARN_AP_EXACT=1'
 835:CMD apple-fast-cluster2@ded4ea07b cluster2-ap-split-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=264.8 all=[265] quality=['{"n_clusters":'] defines='-D MOJOLEARN_AP_SPLIT=1'
+836:CMD apple-fast-cluster2@ded4ea07b cluster2-bgmm-momgemm-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=29151.9 all=[29152] quality=['{"mean_log_likelihood":'] defines='-D MOJOLEARN_BGMM_FAST_MOMENTS_GEMM=1'
+837:CMD apple-fast-cluster2@ded4ea07b cluster2-bgmm-mahal-taxi-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=558.0 all=[558] quality=['{"mean_log_likelihood":'] defines='-D MOJOLEARN_BGMM_FAST_MAHAL_GEMM=1'
+838:CMD apple-fast-cluster2@ded4ea07b cluster2-bgmm-ent-taxi-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=310.5 all=[311] quality=['{"mean_log_likelihood":'] defines='-D MOJOLEARN_BGMM_ENT=1'
+839:CMD apple-fast-cluster2@ded4ea07b cluster2-bgmm-estep1-taxi-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=311.1 all=[311] quality=['{"mean_log_likelihood":'] defines='-D MOJOLEARN_BGMM_ESTEP1=1'
+840:CMD apple-fast-cluster2@ded4ea07b cluster2-bisect-resident-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2127.7 all=[2128] quality=['{"n_clusters":'] defines='-D MOJOLEARN_BISECT_FAST_RESIDENT=1'
+841:CMD apple-fast-cluster2@ded4ea07b cluster2-optics-devorder-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=260.7 all=[261] quality=['{"n_clusters":'] defines='-D MOJOLEARN_OPTICS_FAST_DEVICE_ORDER=1'
+842:FBUILD lane/apple-fast-isotonic-knn@7385fcfdd prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
+843:CMD apple-fast-isotonic-knn@7385fcfdd ik-iso-par-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=0 median_ms=None all=[] quality=[] defines='-D MOJOLEARN_ISOTONIC_FAST_PAR=1'
+844:FBUILD lane/apple-fast-fastonly2@eca3e33b6 core=0 ibase=0 estimators=0 x_ann=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+845:CMD apple-fast-fastonly2@eca3e33b6 fastonly2-1-gmm-istella rc=0 AFC-DEF-SUMMARY arm=B n=0 median_ms=None all=[] quality=[] defines=''
+846:CMD apple-fast-fastonly2@eca3e33b6 fastonly2-2-ivf-istella rc=0 AFC-DEF-SUMMARY arm=B n=0 median_ms=None all=[] quality=[] defines='-D MOJOLEARN_ANN3_COARSE_SEED -D MOJOLEARN_IVF_FAST_SEED_DEVICE'
+847:FBUILD lane/apple-fast@413da4d18 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+848:CMD apple-fast@413da4d18 stl-main-synthetic rc=0 AFC-AB-SUMMARY stl-main-synthetic arm=A lane=stl ds=synthetic median_of_medians_ms=7.2659374854993075 runs=[ 7.2659374854993075 ] digest= digest=3693977ba9768f2a 
+849:FBUILD lane/apple-fast-py2mojo-cluster@2b6f3bfd4 prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
