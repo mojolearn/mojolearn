@@ -28,6 +28,7 @@ def fit_exponential_smoothing(estimator, *, devices=(0,), series_per_shard=1):
     """Fit Holt-Winters series independently and assemble original component layouts."""
     from ._tsa_impl import ExponentialSmoothing
     from . import _backend
+    from ._array import _strided_copy
     from ._buffer import empty, addr, addr_ro
     from ._bufcheck import memcopy
     if type(estimator) is not ExponentialSmoothing:
@@ -49,17 +50,17 @@ def fit_exponential_smoothing(estimator, *, devices=(0,), series_per_shard=1):
             ('holtwinters_fit', params,
              (data[start - driver_read_shift(index, start, devices):
                    min(start + series_per_shard, batch) - driver_read_shift(index, start, devices)],))
-            for index, start in enumerate(range(0, batch, series_per_shard))])
+            for index, start in enumerate(range(0, batch, series_per_shard))])  # glue: one request per device shard
     finally:
         pool.close()
     result = ExponentialSmoothing(estimator.endog, ts_num=batch, **params)
     result.__dict__.update(parts[0].__dict__)
     result.endog, result._data, result.ts_num, result.n = estimator.endog, data, batch, n
-    for name in ('level_', 'trend_', 'season_', 'sse_', 'alpha_', 'beta_', 'gamma_', 'n_iter_', 'criterion_'):
-        arrays = [getattr(part, name) for part in parts]
+    for name in ('level_', 'trend_', 'season_', 'sse_', 'alpha_', 'beta_', 'gamma_', 'n_iter_', 'criterion_'):  # glue: nine fitted attribute names
+        arrays = [getattr(part, name) for part in parts]  # glue: one buffer per device shard
         merged = empty((batch,) + arrays[0].shape[1:], arrays[0].dtype)
         cursor = 0
-        for array in arrays:
+        for array in arrays:  # glue: one memcopy per device shard
             memcopy(addr(merged, name=name) + cursor, addr_ro(array, name=name), array.nbytes)
             cursor += array.nbytes
         setattr(result, name, merged)
@@ -68,17 +69,17 @@ def fit_exponential_smoothing(estimator, *, devices=(0,), series_per_shard=1):
     result._comps = empty((3 * result._components_len,), '<f4')
     destination = addr(result._comps, name='components')
     start = 0
-    for part in parts:
-        source = addr_ro(part._comps, name='component shard')
-        for component in range(3):
-            for row in range(steps):
-                memcopy(destination + (component * steps * batch + row * batch + start) * 4,
-                        source + (component * steps * part.ts_num + row * part.ts_num) * 4,
-                        part.ts_num * 4)
+    for part in parts:  # glue: one strided copy per device shard
+        # the shard's (3, steps, ts) block into columns [start, start + ts) of
+        # the (3, steps, batch) block: one Mojo strided copy (strided_copy_bytes)
+        if steps > 0 and part.ts_num > 0:
+            _strided_copy(addr_ro(part._comps, name='component shard'), destination, 4,
+                          (3, steps, part.ts_num), (steps * part.ts_num, part.ts_num, 1),
+                          (steps * batch, batch, 1), 0, start)
         start += part.ts_num
     cl = result._components_len
     result._time_major = {name: result._comps[i * cl:(i + 1) * cl].reshape((steps, batch))
-                          for i, name in enumerate(('level', 'trend', 'season'))}
+                          for i, name in enumerate(('level', 'trend', 'season'))}  # glue: three component views by name
     result.fit_executed_flag = True
     estimator.__dict__ = result.__dict__.copy()
     return estimator
@@ -142,7 +143,7 @@ def fit_arima(estimator, y, *, devices=(0,), series_per_shard=1, exog=None):
     requests = [('arima_fit', params,
                  (data[start - driver_read_shift(index, start, devices):
                        min(start + series_per_shard, batch) - driver_read_shift(index, start, devices)],))
-                for index, start in enumerate(range(0, batch, series_per_shard))]
+                for index, start in enumerate(range(0, batch, series_per_shard))]  # glue: one request per device shard
     pool = DevicePool(devices)
     try:
         parts = pool.map(requests)
@@ -150,11 +151,11 @@ def fit_arima(estimator, y, *, devices=(0,), series_per_shard=1, exog=None):
         pool.close()
     result = ARIMA(**params)
     result.__dict__.update(parts[0].__dict__)
-    for name in ('params_', 'x_', 'x0_', 'n_iter_', 'retcode_', 'llf_', 'fx_', 'aic_', 'bic_'):
-        arrays = [getattr(part, name) for part in parts]
+    for name in ('params_', 'x_', 'x0_', 'n_iter_', 'retcode_', 'llf_', 'fx_', 'aic_', 'bic_'):  # glue: nine fitted attribute names
+        arrays = [getattr(part, name) for part in parts]  # glue: one buffer per device shard
         merged = empty((batch,) + arrays[0].shape[1:], arrays[0].dtype)
         cursor = 0
-        for array in arrays:
+        for array in arrays:  # glue: one memcopy per device shard
             memcopy(addr(merged, name=name) + cursor, addr_ro(array, name=name), array.nbytes)
             cursor += array.nbytes
         setattr(result, name, merged)
@@ -174,7 +175,7 @@ def fit_kmeans(estimator, X, *, devices=(0,), sample_weight=None):
     from .cluster import KMeans
     if type(estimator) is not KMeans:
         raise TypeError('fit_kmeans requires mojolearn.KMeans')
-    params = {name: getattr(estimator, name) for name in (
+    params = {name: getattr(estimator, name) for name in (  # glue: copies seven constructor parameters
         'n_clusters', 'init', 'n_init', 'max_iter', 'tol', 'random_state', 'init_centroids')}
     mode = getattr(estimator, 'numeric_mode', None)
     if mode not in (None, 'identical'):
@@ -358,7 +359,7 @@ def predict_gaussian_mixture(estimator, X, *, devices=(0,), method='predict'):
 def _resample_parallel(name, devices, kwargs):
     if kwargs.get('numeric_mode') not in (None, 'identical'):
         raise ValueError('parallel resampling requires IDENTICAL numeric mode')
-    kwargs = {k: v for k, v in kwargs.items() if k != 'numeric_mode'}
+    kwargs = {k: v for k, v in kwargs.items() if k != 'numeric_mode'}  # glue: drops one keyword argument
     pool = DevicePool(devices, cooperative=True)
     try:
         return pool.map([('resample', None, (name, kwargs))])[0]
@@ -535,16 +536,16 @@ def transform_rbf_sampler(estimator, X, *, devices=(0,), rows_per_shard=4096):
         return estimator.transform(X)
     shards = [X[start - driver_read_shift(index, start, devices):
                 min(start + rows_per_shard, rows) - driver_read_shift(index, start, devices)]
-              for index, start in enumerate(range(0, rows, rows_per_shard))]
+              for index, start in enumerate(range(0, rows, rows_per_shard))]  # glue: one row slice per device shard
     pool = DevicePool(devices)
     try:
-        parts = pool.map([('rbf_sampler_rows', estimator, (shard,)) for shard in shards])
+        parts = pool.map([('rbf_sampler_rows', estimator, (shard,)) for shard in shards])  # glue: one request per device shard
     finally:
         pool.close()
     q = estimator.random_weights_.shape[1]
     out = Array((rows, q), '<f4')
     start = 0
-    for part in parts:
+    for part in parts:  # glue: one block copy per device shard
         part, _ = as_f32_c(part, ndim=2, name="worker result")
         if part.shape[1] != q or start + part.shape[0] > rows:
             raise ValueError("RBFSampler worker returned an invalid result shape")
