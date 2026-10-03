@@ -174,7 +174,7 @@ def cg_dot_knn_kernel(
         j0 += DT_TJ
 
 
-def cg_norms_kernel(x: F32P, n: Int32, d: Int32, mu: F32P, out: F32P):
+def cg_norms_kernel(x: F32P, n: Int32, d: Int32, mu: F32P, dst: F32P):
     """|x_i - mu|^2, one thread per row, features ascending."""
     var i = _gid()
     if i < Int(n):
@@ -183,7 +183,7 @@ def cg_norms_kernel(x: F32P, n: Int32, d: Int32, mu: F32P, out: F32P):
         for c in range(dd):
             var v = x.unsafe_load(i * dd + c) - mu.unsafe_load(c)
             acc = v * v + acc
-        out.unsafe_store(i, acc)
+        dst.unsafe_store(i, acc)
 
 
 def cg_mean_kernel(x: F32P, n: Int32, d: Int32, m: Int32, mu: F32P):
@@ -375,8 +375,8 @@ def _dot_knn(
     )
 
 
-def _norms(ctx: DeviceContext, x: F32P, n: Int, d: Int, mu: F32P, out: F32P) raises:
-    ctx.enqueue_function[cg_norms_kernel](x, Int32(n), Int32(d), mu, out, grid_dim=(n + ETPB - 1) // ETPB,
+def _norms(ctx: DeviceContext, x: F32P, n: Int, d: Int, mu: F32P, dst: F32P) raises:
+    ctx.enqueue_function[cg_norms_kernel](x, Int32(n), Int32(d), mu, dst, grid_dim=(n + ETPB - 1) // ETPB,
                                           block_dim=ETPB)
 
 
