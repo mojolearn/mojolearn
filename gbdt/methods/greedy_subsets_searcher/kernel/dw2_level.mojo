@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Depthwise per-level experiments, FAST on Apple only (lane apple-fast-dwgap2).
 
-Each arm sits behind its own opt-in define in
-`greedy_search_helper_depthwise.mojo`; IDENTICAL and the FAST default never
-reach this file. The measured reason all three exist: on Metal a
+Each arm has its own switch in `greedy_search_helper_depthwise.mojo`.
+PART_VEC4 and SCAN_SMEM are FAST Apple defaults since the M3 A/B (off with
+`-D <NAME>_OFF`); COPY_ZERO stays opt-in. IDENTICAL never reaches this file. The measured reason all three exist: on Metal a
 one-float-per-thread copy ran at 11.0 GB/s and the 16-byte form at 65.2 GB/s
 (`copy_histograms_vec4_kernel`'s deviation block), and the per-level chain
 still moves the row index and the flag plane one element per thread.

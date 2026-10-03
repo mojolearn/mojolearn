@@ -321,20 +321,31 @@ comptime DW_TREE_SYNC_CHECK = DW_TREE_SYNC and is_defined[
     "MOJOLEARN_GBDT_DW_TREE_SYNC_CHECK"
 ]()
 
-# ---- lane apple-fast-dwgap2: opt-in FAST Apple experiments ----------------
+# ---- lane apple-fast-dwgap2: FAST Apple arms --------------------------------
 # (`kernel/dw2_level.mojo` has the kernels and the argument for each.)
 #: The fused split chain at four rows per thread, aligned 16-byte row-index
-#: and 4-byte flag accesses. Same stable partition: same tree.
-comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and is_defined[
-    "MOJOLEARN_GBDT_DW2_PART_VEC4"
+#: and 4-byte flag accesses. Same stable partition: same tree. FAST on
+#: Apple, default on (needs DW_FUSED_CHAIN, itself a FAST Apple default).
+#: Default since the M3 A/B (lane/apple-fast-dwgap2 049899d81, n=2, SEP):
+#: depthwise taxi 12,711 -> 11,361 ms (-10.6%), istella 17,154 -> 16,539 ms
+#: (-3.6%), auc within spread. Off: `-D MOJOLEARN_GBDT_DW2_PART_VEC4_OFF`.
+#: The old opt-in define `-D MOJOLEARN_GBDT_DW2_PART_VEC4` is harmless.
+comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and not is_defined[
+    "MOJOLEARN_GBDT_DW2_PART_VEC4_OFF"
 ]()
 #: The histogram prefix scan over a shared-memory copy of 16 features'
-#: cells; the same serial fold, so the same bits.
+#: cells; the same serial fold, so the same bits. FAST on Apple, default
+#: on. Default since the M3 A/B (lane/apple-fast-dwgap2 049899d81, n=2,
+#: SEP): depthwise taxi 13,861 -> 13,127 ms (-5.3%), istella 17,237 ->
+#: 17,014 ms (-1.3%), auc within spread. Off:
+#: `-D MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF`. The old opt-in define
+#: `-D MOJOLEARN_GBDT_DW2_SCAN_SMEM` is harmless.
 comptime DW2_SCAN_SMEM = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GBDT_DW2_SCAN_SMEM"]()
+    and not is_defined["MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF"]()
 )
+#: Opt-in (measured slower on the M3).
 #: DEVIATION 1903's deferred copy and the dirty-slot zero pass in one
 #: launch. Same bytes in every slot.
 comptime DW2_COPY_ZERO = (
