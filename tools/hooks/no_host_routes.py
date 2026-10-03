@@ -149,7 +149,8 @@ _LINE_RULES = [
 _RULE_CLASS = {r[0]: r[1] for r in _LINE_RULES}
 _RULE_CLASS.update({"host-call": "host-import", "serial-launch": "serial-gpu", "host-switch": "host-env/threshold",
                     "d2h-loop": "d2h-roundtrip", "tid0-loop": "serial-gpu",
-                    "d2h-host-work": "d2h-roundtrip", "one-block-n": "serial-gpu"})
+                    "d2h-host-work": "d2h-roundtrip", "one-block-n": "serial-gpu",
+                    "block-per-n": "serial-gpu"})
 _RULE_WHY = {r[0]: r[4] for r in _LINE_RULES}
 _RULE_WHY.update({
     "host-call": "calls a host-only module from GPU code",
@@ -158,6 +159,7 @@ _RULE_WHY.update({
     "tid0-loop": "one thread loops over a runtime n",
     "d2h-host-work": "copies device data to the host, then computes on it in a host loop over a data size",
     "one-block-n": "a one-block launch (grid_dim=(1, 1, 1)) over a runtime size",
+    "block-per-n": "one block per class / output / problem (a small grid) walking a runtime size",
     "serial-launch": "a one-block or one-thread launch over a runtime size",
 })
 
@@ -583,6 +585,10 @@ def _small_launch_ok(txt, first=None):
 
 
 _GRID1_3D = re.compile(r"\bgrid_dim\s*=\s*(\(\s*1\s*,\s*1\s*,\s*1\s*\)|Dim\(\s*1\s*\))")
+# a grid of one block per small count: classes, outputs, features, targets
+_GRID_SMALL = re.compile(
+    r"\bgrid_dim\s*=\s*\(?\s*(dims\.C|dims\.D|C|D|n_classes|n_class|num_classes|n_targets|n_outputs"
+    r"|n_cols|n_features|d|k|cd|n_comp|n_components)\s*(,\s*1\s*,\s*1\s*\)|\)|,|$)")
 _BLOCK1 = re.compile(r"\bblock_dim\s*=\s*(1\b(?!\s*[.\w])|\(\s*1\s*\))")
 # a runtime size among the launch arguments (rows, samples, elements, nnz)
 _SIZES = (r"(n|m|n_rows|rows|n_samples|nnz|n_nodes|n_points|n_q|numel|n_elems|n_obs|n_train"
@@ -842,6 +848,16 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
                 args = args[args.find("(", args.find("enqueue_function")) + 1:] if "(" in args else args
                 if any(_SIZE_ARG.match(a) for a in _top_args(args)):
                     add("one-block-n", lines[i][0], lines[i][1])
+                continue
+            # one block per class / output cell / feature over all n rows:
+            # the grid is a small count (classes, features, outputs) and a
+            # launch argument is a runtime row count, so each block walks n
+            gs = _GRID_SMALL.search(txt)
+            if gs:
+                args = txt[:gs.start()]
+                args = args[args.find("(", args.find("enqueue_function")) + 1:] if "(" in args else args
+                if any(_SIZE_ARG.match(a) for a in _top_args(args)):
+                    add("block-per-n", lines[i][0], lines[i][1])
             continue
         args = txt[:g1.start()]
         args = args[args.find("(", args.find("enqueue_function")) + 1:] if "(" in args else args
@@ -875,7 +891,7 @@ _HDR = "rule\tclass\towner\tstate\tpath\tocc\ttext"
 _DEBT_STATES = ("debt", "owed")
 # rules added after the baseline was first written; a baseline with no row of
 # one predates it (see check_tree)
-_LATE_RULES = ("d2h-host-work", "one-block-n")
+_LATE_RULES = ("d2h-host-work", "one-block-n", "block-per-n")
 
 
 def load_baseline(text):
