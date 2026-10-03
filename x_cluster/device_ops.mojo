@@ -44,6 +44,7 @@ from x_cluster.bodies import (
     SplitMix64,
     sqdist_cell,
     sqrt_cell,
+    flush_cell,
     tree_descend,
     ward_cell,
     lance_williams,
@@ -227,6 +228,12 @@ def _sqrt_kernel(x: FPtr, n: Int32):
     var t = _tid()
     if t < Int(n):
         sqrt_cell(x, t)
+
+
+def _flush_kernel(x: FPtr, n: Int32):
+    var t = _tid()
+    if t < Int(n):
+        flush_cell(x, t)
 
 
 comptime KTH_TPB = 256
@@ -1746,6 +1753,13 @@ struct DeviceOps(ClusterOps):
             self._fp(x), Int32(n), grid_dim=_grid(n), block_dim=TPB,
         )
         self._ph1("sqrt")
+
+    def flush(mut self, x: Int, n: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[_flush_kernel](
+            self._fp(x), Int32(n), grid_dim=_grid(n), block_dim=TPB,
+        )
+        self._ph1("flush")
 
     def kth(mut self, m: Int, n_rows: Int, n_cols: Int, k: Int, dst: Int) raises:
         self._ph0()
