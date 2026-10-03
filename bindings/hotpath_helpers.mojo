@@ -1856,6 +1856,57 @@ def weighted_draw_rows_i32_binding(
     return PythonObject(0)
 
 
+def weighted_pick_i32_binding(
+    m_addr: PythonObject, dk: PythonObject, col: PythonObject, k: PythonObject, state_addr: PythonObject,
+    dst_addr: PythonObject,
+) raises -> PythonObject:
+    """IterativeImputer's n_nearest_features draw for feature `col`: k of
+    the dk features drawn without replacement with probability M[:, col]
+    (float32, row-major dk x dk): each draw u = the 53-bit uniform of the
+    next splitmix64 word (`state`, uint64, advanced in place) times the
+    binary64 total of the positive weights not yet drawn, the first such
+    feature whose running sum exceeds u (the last one when none does). The
+    k picks ascending, int32 at dst (lane pyglue-numeric: a Python loop)."""
+    var n = Int(py=dk)
+    var j = Int(py=col)
+    var kk = Int(py=k)
+    if n < 1 or j < 0 or j >= n or kk < 0:
+        raise Error("weighted_pick_i32: bad sizes")
+    var mp = _ptr[DType.float32](Int(py=m_addr))
+    var sp = _ptr[DType.uint64](Int(py=state_addr))
+    var dp = _ptr[DType.int32](Int(py=dst_addr))
+    var state = sp.unsafe_load(0)
+    var chosen = List[Bool](length=n, fill=False)
+    for _ in range(kk):
+        var tot = Float64(0)
+        var last = -1
+        for a in range(n):
+            var w = Float64(mp.unsafe_load(a * n + j))
+            if not chosen[a] and w > 0:
+                tot += w
+                last = a
+        if last < 0:
+            raise Error("weighted_pick_i32: no feature left to draw")
+        var u = Float64(_sm64_next(state) >> 11) * 1.1102230246251565e-16 * tot
+        var pick = last
+        var cum = Float64(0)
+        for a in range(n):
+            var w = Float64(mp.unsafe_load(a * n + j))
+            if not chosen[a] and w > 0:
+                cum += w
+                if cum > u:
+                    pick = a
+                    break
+        chosen[pick] = True
+    sp.unsafe_store(0, state)
+    var at = 0
+    for a in range(n):
+        if chosen[a]:
+            dp.unsafe_store(at, Int32(a))
+            at += 1
+    return PythonObject(at)
+
+
 def strat_fold_assign_i32_binding(
     enc_addr: PythonObject, n: PythonObject, k: PythonObject, n_folds: PythonObject,
     alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject, dst_addr: PythonObject,

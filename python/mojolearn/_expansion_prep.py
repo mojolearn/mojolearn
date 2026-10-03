@@ -92,7 +92,8 @@ _OPS = dict(
     # lane apple-fast-py2mojo-prep (x_prep/py2mojo.mojo, a range of its own): every binding
     # runs them (lane pyglue-numeric deleted the OFF arm and its Python loops)
     p2m_ccount=200, p2m_cscan=201, p2m_cstart=202, p2m_cwrite=203, p2m_rgather=204, p2m_smrows=205,
-    p2m_sel_count=206, p2m_sel_scan=207, p2m_sel_write=208, p2m_transpose=209,
+    p2m_sel_count=206, p2m_sel_scan=207, p2m_sel_write=208, p2m_transpose=209, p2m_rowflag=210,
+    p2m_abscorr_cell=211, p2m_abscorr_norm=212,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1008,10 +1009,23 @@ def _gather_categories(pr, codes, n, d, categories):
     return out
 
 
-def _bad_codes(pr, codes, n, d, bad):
-    """Row indices with a code equal to `bad`."""
-    vals = pr.values(codes, n * d)
-    return sorted({i // d for i, v in enumerate(vals) if v == bad})
+def _bad_rows_stages(pr, codes, n, d, bad, strict=_NONE):
+    """Stages flagging each row with a code equal to `bad` (in a column whose
+    `strict` word is nonzero, when given) and compacting the flagged rows
+    ascending (p2m_rowflag, p2m_sel). Returns (ROWS, TOT): read them with
+    `_bad_rows` after the run."""
+    flags, rows = pr.alloc(n), pr.alloc(n)
+    pr.stage("p2m_rowflag", n, codes, n, d, int(bad), strict, flags)
+    return rows, _p2m_sel(pr, flags, n, 1, 1, rows)
+
+
+def _bad_rows(pr, staged, limit=None):
+    """The flagged rows `_bad_rows_stages` compacted (the first `limit`)."""
+    rows, tot = staged
+    k = int(pr.get_i32(tot, 1).tolist()[0])
+    if k == 0:
+        return []
+    return pr.get_i32(rows, k if limit is None else min(k, limit)).tolist()
 
 
 def _block_argmax(pr, arr, widths, drops, check):
@@ -1129,8 +1143,9 @@ class OrdinalEncoder(_PrepBase):
             back = _grouping_table(pr, self._grouping, inverse=True)
         out, codes = _inverse_codes(pr, arr, self.categories_, self._missing, self.encoded_missing_value, unknown,
                                     ncat, back)
+        staged = _bad_rows_stages(pr, codes, n, d, -2)
         pr.run(self.numeric_mode_)
-        bad = _bad_codes(pr, codes, n, d, -2)
+        bad = _bad_rows(pr, staged, 10)
         if bad:
             raise ValueError(f"mojolearn: rows {bad[:10]} hold codes that name no category")
         return pr.get(out, (n, d))
@@ -1290,14 +1305,16 @@ class OneHotEncoder(_PrepBase):
         if self._grouping is not None:
             codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping, inverse=True), _NONE)
         out = _gather_categories(pr, codes, n, d, self.categories_)
-        pr.run(self.numeric_mode_)
         # an all-zero block is unknown (NaN) under 'ignore', and under
         # 'infrequent_if_exist' / 'warn' for a column with no infrequent
-        # category; anywhere else it cannot be inverted
-        strict = [self.handle_unknown == "error" or (self.handle_unknown != "ignore" and self._infrequent is not None
-                                                      and self._infrequent[j] is not None) for j in range(d)]
-        vals = pr.values(grouped, n * d)
-        bad = sorted({i // d for i, v in enumerate(vals) if v == -1 and strict[i % d]})
+        # category; anywhere else it cannot be inverted (glue: d flags)
+        strict = [1.0 if (self.handle_unknown == "error" or (self.handle_unknown != "ignore"
+                                                               and self._infrequent is not None
+                                                               and self._infrequent[j] is not None)) else 0.0
+                  for j in range(d)]
+        staged = _bad_rows_stages(pr, grouped, n, d, -1, pr.put_list(strict))
+        pr.run(self.numeric_mode_)
+        bad = _bad_rows(pr, staged, 10)
         if bad:
             raise ValueError(f"mojolearn: samples {bad[:10]} can not be inverted when drop=None and "
                              "handle_unknown='error' because they contain all zeros")
@@ -2001,8 +2018,9 @@ class KBinsDiscretizer(_PrepBase):
             bad_code, why = -1, "can not be inverted because they contain all zeros"
         out = pr.output(n * d)
         pr.stage("kbins_inverse", n * d, codes, n, d, pr.put(self._edges), self._stride, out)
+        staged = _bad_rows_stages(pr, codes, n, d, bad_code)
         pr.run(self.numeric_mode_)
-        bad = _bad_codes(pr, codes, n, d, bad_code)
+        bad = _bad_rows(pr, staged, 10)
         if bad:
             raise ValueError(f"mojolearn: samples {bad[:10]} {why}")
         return pr.get(out, (n, d))
@@ -3004,10 +3022,13 @@ class QuantileTransformer(_PrepBase):
         pr.stage("sort_cols", d, xo, n, d, so, 0)
         pr.stage("col_stats", d, xo, n, d, st)
         pr.stage("quantile", nq * d, so, n, d, qf, nq, qo, st)
+        # quantiles_ (nq, d): the (d, nq) block written column-major on the
+        # device (p2m_transpose; lane pyglue-numeric: a Python transpose)
+        qt = pr.alloc(nq * d)
+        pr.stage("p2m_transpose", nq * d, qo, d, nq, qt)
         pr.run(mode)
         self._q = pr.get(qo, nq * d)
-        flat = pr.values(qo, nq * d)
-        self.quantiles_ = Array.from_list([[flat[c * nq + j] for c in range(d)] for j in range(nq)], "<f4")
+        self.quantiles_ = pr.get(qt, (nq, d))
         self.references_ = refs_arr
         self.n_quantiles_, self.numeric_mode_, self.n_features_in_ = nq, mode, d
         return self
@@ -4166,48 +4187,34 @@ class IterativeImputer(_PrepBase):
 
     def _abs_corr(self, Xf, n, dk, mode):
         """The reference's `_get_abs_corr_mat` of the initially filled block:
-        |corrcoef| (the centred Gram on the device, the d x d normalisation in
-        Python float64), NaN -> 1e-6, clipped below at 1e-6, a zero diagonal,
-        each column scaled to sum 1."""
+        |corrcoef| (the centred Gram, then the dk x dk normalisation, on the
+        device: p2m_abscorr_cell / p2m_abscorr_norm, float32), NaN -> 1e-6,
+        clipped below at 1e-6, a zero diagonal, each column scaled to sum 1.
+        The matrix comes back as a (dk, dk) float32 Array (the neighbour
+        draws read it)."""
         pr = _Prog()
         fo, mz = pr.put(Xf), pr.alloc(n * dk)
         means, cnt, g, flag = pr.alloc(dk), pr.alloc(1), pr.alloc(dk * dk), pr.alloc(1)
         pr.stage("ii_mean", dk, fo, n, dk, mz, 0, means, cnt, flag)
         pr.stage("ii_gram", dk * dk, fo, n, dk, mz, 0, means, g, flag)
+        m = pr.alloc(dk * dk)
+        pr.stage("p2m_abscorr_cell", dk * dk, g, dk, m)
+        pr.stage("p2m_abscorr_norm", dk, m, dk)
         pr.run(mode)
-        G = pr.values(g, dk * dk)
-        m = [[0.0] * dk for _ in range(dk)]
-        for a in range(dk):
-            for b in range(dk):
-                den = math.sqrt(G[a * dk + a] * G[b * dk + b]) if G[a * dk + a] > 0 and G[b * dk + b] > 0 else 0.0
-                v = abs(G[a * dk + b] / den) if den > 0 else float("nan")
-                v = min(v, 1.0) if v == v else 1e-6
-                m[a][b] = 0.0 if a == b else max(v, 1e-6)
-        for b in range(dk):
-            col = _pm.nsum(m[a][b] for a in range(dk))
-            if col > 0:
-                for a in range(dk):
-                    m[a][b] /= col
-        return m
+        return pr.get(m, (dk, dk))
 
     def _neighbours(self, corr, j, dk):
         """n_nearest_features predictors of feature j, drawn without
         replacement with probability corr[:, j] (a 53-bit splitmix64 uniform
-        against the cumulative weight of the columns not yet drawn)."""
-        w = [corr[a][j] for a in range(dk)]
-        chosen = set()
-        for _ in range(int(self.n_nearest_features)):
-            left = [a for a in range(dk) if a not in chosen and w[a] > 0]
-            tot = _pm.nsum(w[a] for a in left)
-            u = (self._draw() >> 11) * 2.0 ** -53 * tot
-            pick, cum = left[-1], 0.0
-            for a in left:
-                cum += w[a]
-                if cum > u:
-                    pick = a
-                    break
-            chosen.add(pick)
-        return sorted(chosen)
+        against the cumulative weight of the columns not yet drawn): the base
+        binding's `weighted_pick_i32` on the instance's draw stream."""
+        k = int(self.n_nearest_features)
+        out = Array((max(k, 1),), "<i4")
+        st = array.array("Q", [self._rng])
+        got = int(_native_helper("weighted_pick_i32")(addr_ro(corr, name="corr"), dk, j, k, st.buffer_info()[0],
+                                                       _addr_rw(out, name="neighbours")))
+        self._rng = st[0]
+        return out.tolist()[:got]
 
     def fit_transform(self, X, y=None):
         self._refuse()
