@@ -358,7 +358,12 @@ def bayes_eig_kernel(fw: FP, fp: FP, res: FP, ip: IP, d: Int32, nb: Int32, ypart
     var t = device_team(tw, 0, team_rows(a, ip), team_own(a, dd))
     var wsum = ld(state, 3)
     var yvar = fd(fold_parts(vparts, 0, Int(nb)), wsum)
-    var al = bayes_eig_prep(t, fw, fp, dd, yvar)
+    var jtol = Float32(1e-9)
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        # lane/apple-fast-kernel: ip[7] (MOJOLEARN_KERNEL_FAST_BAYES_JACOBI=1)
+        if ldi(ip, 7) != 0:
+            jtol = Float32(1e-7)
+    var al = bayes_eig_prep(t, fw, fp, dd, yvar, jtol)
     var ratio = fd(al[1], al[0])
     for j in range(t.tid, dd, t.nt):
         st(res, j, bayes_coef_one(fw, dd, j, ratio))
@@ -3319,6 +3324,29 @@ def fit_device(
             if fast_gram:
                 grid_gram = False
                 lars_pre = False
+    # lane/apple-fast-kernel (2026-10-02), FAST on Apple only, both default
+    # off, build-time. -D MOJOLEARN_KERNEL_FAST_BAYES_STATS: the means, the centered Gram,
+    # X'y from x_linear/fast_gram.mojo (the gram lane's shared grid Gram,
+    # chunked tiles on the grid) instead of `xg_means_kernel` + `xg_gram_kernel`
+    # (one serial million-row chain per cell) and the team's own X'y /
+    # mean / variance passes on one block (after the 2026-10-02 merge: in
+    # place of main's moments grid, one block per 16-column tile pair with
+    # one serial chain per cell, and main's `bayes_xty_kernel`; the y
+    # partials stay main's). -D MOJOLEARN_KERNEL_FAST_BAYES_JACOBI (ip[7]): the team Jacobi
+    # skips rotations below 1e-7 * sqrt(a_pp a_qq) instead of 1e-9, a
+    # threshold float32 roundoff never reaches, so it ran all 60 sweeps.
+    var kstats = False
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        if bayes_like:
+            # STATS: BayesianRidge (unweighted) on main's grid driver only;
+            # ARD keeps main's moments grid (its X'y pass is the team's)
+            if algo == ALGO_BAYES and n > 0 and d > 0 and is_defined["MOJOLEARN_KERNEL_FAST_BAYES_STATS"]():
+                kstats = True
+                grid_gram = True
+                hip[4] = Int32(1)
+            while len(hip) < 8:
+                hip.append(Int32(0))
+            hip[7] = Int32(1 if is_defined["MOJOLEARN_KERNEL_FAST_BAYES_JACOBI"]() else 0)
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](team_work(0, 3, 0))
     var hfp = fp.copy()
@@ -3352,6 +3380,8 @@ def fit_device(
     bayes_w = algo == ALGO_BAYES and n > 0 and d > 0 and len(ip) > 2 and ip[2] != 0
     if bayes_w:
         bayes_grid = True
+    # lane/apple-fast-kernel BAYES_STATS: unweighted BayesianRidge on the grid only
+    kstats = kstats and bayes_grid and not bayes_w
     var ynb = fold_blocks(n)
     var prep_blocks = 2 * _xg_blocks(ynb) + _xg_blocks(d) + 1
     if bayes_w:
@@ -3383,6 +3413,16 @@ def fit_device(
                 # holds the y mean (lars_fit zeroes it)
                 var xty_o = d + d * d
                 fast_gram_into(ctx, px, py, 0, n, d, 1, hip[1] != 0, pfw, pfw + (xty_o + d), pfw + d, pfw + xty_o)
+            elif kstats:
+                # BayesianRidge on main's grid driver: xm at 0, G at d, X'y at
+                # d + d*d; the y mean parked at the `old` offset (3d + 2d^2),
+                # scratch until the first step (the driver's own y partials
+                # give it ym). Waits for its own launches (unwitnessed); the
+                # witnessed eig unit follows
+                var pfw = FP(unsafe_from_address=Int(dfw.unsafe_ptr()))
+                var px = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
+                var py = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
+                fast_gram_into(ctx, px, py, 0, n, d, 1, hip[1] != 0, pfw, pfw + (3 * d + 2 * d * d), pfw + d, pfw + (d + d * d))
         if lars_pre:
             # lane/neural-pass120's moments of [X | y] (fw: xm 0, G d, X'y
             # d + d*d, y's mean parked in prev = 2d + d*d)
@@ -3395,6 +3435,8 @@ def fit_device(
                 dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(1), dfw.unsafe_ptr(),
                 Int32(0), Int32(2 * d + d * d), Int32(d), Int32(d + d * d), grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
             )
+        elif kstats:
+            pass
         elif grid_gram and bayes_like:
             # lane/neural-pass130: BayesianRidge / ARD's means and centered Gram
             # from the staged moments kernels (no Y columns), into the layout
@@ -3493,11 +3535,13 @@ def fit_device(
                         wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(ynb), block_dim=XG_TPB,
                     )
                     wo += _xg_blocks(ynb)
-                    ctx.enqueue_function[bayes_xty_kernel](
-                        dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(hip[1]), dfw.unsafe_ptr(),
-                        dyparts.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(d), block_dim=XG_TPB,
-                    )
-                    wo += _xg_blocks(d)
+                    if not kstats:
+                        # BAYES_STATS: X'y came from the fast grid Gram
+                        ctx.enqueue_function[bayes_xty_kernel](
+                            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d), Int32(hip[1]), dfw.unsafe_ptr(),
+                            dyparts.unsafe_ptr(), wit.p(), Int32(wo), nonce, grid_dim=_xg_blocks(d), block_dim=XG_TPB,
+                        )
+                        wo += _xg_blocks(d)
                 ctx.enqueue_function[bayes_eig_kernel](
                     dfw.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dip.unsafe_ptr(), Int32(d), Int32(ynb),
                     dyparts.unsafe_ptr(), dvparts.unsafe_ptr(), dtw.unsafe_ptr(), dstate.unsafe_ptr(),

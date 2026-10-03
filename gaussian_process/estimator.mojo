@@ -717,6 +717,12 @@ def gpr_fit_host(
         elem_tpb,
         sabotage,
     )
+    # MOJOLEARN_KERNEL_FAST_GPR_RESIDENT (lane/apple-fast-kernel, M3 A/B
+    # kernel-gpr-resident-ist: gpr istella 168.4 -> 132.8 ms, r2 .2354 same)
+    # is SUBSUMED here: main's resident chain below (lane/cgr-kernel) keeps
+    # K, L and the dual on the device in every mode and folds y.alpha on
+    # the device, which the lane arm did on the host. The define (and
+    # MOJOLEARN_KERNEL_FAST_GPR_RESIDENT_OFF) are accepted and change nothing.
     # --- L = cholesky(K + alpha I); alpha_ = cho_solve(L, y), RESIDENT ----
     # (lane/cgr-kernel) K, its factor and the dual never leave the device
     # until the fit's outputs are read back. Before, K was downloaded, then
