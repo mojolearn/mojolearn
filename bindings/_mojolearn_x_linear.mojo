@@ -17,7 +17,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 from x_linear.ops import FP
-from x_linear.device import fit_device, decision_device
+from x_linear.device import fit_device, decision_device, linear_ctx
+from x_linear.dispatch import ALGO_ISOTONIC
+from x_linear.isotonic_fast import isotonic_fast
 
 
 def _fp(addr: Int) raises -> FP:
@@ -86,10 +88,6 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
         # (x_linear/isotonic_fast.mojo) instead of the lead thread of one
         # block (x_linear/isotonic.mojo:129); the team fit when it declines.
         comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_ISOTONIC_FAST_PAR"]():
-            from x_linear.dispatch import ALGO_ISOTONIC
-            from x_linear.device import linear_ctx
-            from x_linear.isotonic_fast import isotonic_fast
-
             if a == ALGO_ISOTONIC:
                 var ctx = linear_ctx()
                 if isotonic_fast(ctx, x, n_x, y, n_y, n, d, ipl, fpl, n_out, out):
