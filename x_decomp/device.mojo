@@ -1489,8 +1489,8 @@ def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
 
 #: lane/apple-fast-gap-linalg2-pca (2026-10-03): DECOMP_FAST_GEMM_MMA, the FAST +
 #: Apple default (M3 A/B, one run per arm: randomized-svd istella 711 -> 533 ms,
-#: taxi -1.3%, relative_reconstruction_error the same; tags
-#: gl2p-rsvd-gemmmma-istella, -taxi). -D MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF
+#: taxi -1.3%, nmf istella 8,155 -> 6,333 ms, reconstruction errors the same;
+#: tags gl2p-rsvd-gemmmma-istella, -taxi, gl2p-nmf-gemmmma-istella). -D MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF
 #: restores the per-cell kit GEMM (the A/B arm).
 #: The kit's GEMM (`launch_gemm`: one thread per output cell and FOLD_BLOCK
 #: slice, scalar loads, no tiling) on the Apple matrix unit instead
