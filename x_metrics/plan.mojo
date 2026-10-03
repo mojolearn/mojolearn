@@ -37,9 +37,10 @@ comptime OP_SORT_RUNS = 19
 comptime OP_SORT_MERGE = 20
 comptime OP_SORT_EMIT = 21
 comptime OP_CURVE_GATHER = 22
-comptime OP_CURVE_PREFIX = 23
+#: 23 (the curve's sequential prefix) is retired: the weighted curve runs
+#: OP_CURVE_CNT/OFF/FILL as a blocked scan (lane cgr2-metrics-shap)
 comptime OP_WPCT_GATHER = 24
-comptime OP_WPCT_PREFIX = 25
+#: 25 (wpercentile's sequential CDF) is retired: OP_WPCT_CSUM/COFF/CFILL
 comptime OP_WPCT_SELECT = 26
 comptime OP_CURVE_EMIT = 27
 comptime OP_COPY = 28
@@ -71,30 +72,28 @@ comptime OP_CK_FILL = 44
 comptime CK_CHUNK = 1024
 #: a caller's StratifiedKFold row -> fold (x_metrics/split.mojo strat_codes_unit)
 comptime OP_STRAT_CODES = 45
+#: lane cgr2-metrics-shap: a caller's curve fold (the ROC AUC, the partial
+#: AUC and the average precision sums; x_metrics/par.mojo curve_fold_unit)
+#: and its wide schedule (cf_*); wpercentile's blocked weighted CDF
+comptime OP_CURVE_FOLD = 46
+comptime OP_CF_CHUNK = 47
+comptime OP_CF_FINAL = 48
+comptime OP_WPCT_CSUM = 49
+comptime OP_WPCT_COFF = 50
+comptime OP_WPCT_CFILL = 51
+#: points per chunk of the curve folds
+comptime CF_CHUNK = 1024
 #: rows per chunk of the K-fold row partition
 comptime FR_CHUNK = 1024
 #: rows per chunk of the unweighted curve counts
 comptime CURVE_CHUNK = 1024
 #: the unweighted CDF is Float32(i + 1) only while it stays exact
 comptime IOTA_EXACT = 1 << 24
-#: HOST STAGES: a stage whose unit is one sequential walk of a Float32
-#: prefix (DEVIATION 6107 keeps it sequential, so no wide schedule returns
-#: its bits). The device runner runs it on the host, over a copy of the
-#: slots it reads (params [HOST_RD, HOST_RD+1)) and writes back the slots it
-#: writes ([HOST_WR, HOST_WR+1)); the host runner runs it like any stage.
-comptime HOST_RD = 10
-comptime HOST_WR = 12
-
-
 @always_inline
 def is_user_op(op: Int) -> Bool:
-    """An op a caller may name: 0..N_USER_OPS-1, fold_rows, rows64 and strat_codes."""
-    return (op >= 0 and op < N_USER_OPS) or op == OP_FOLD_ROWS or op == OP_ROWS64 or op == OP_STRAT_CODES
-
-
-@always_inline
-def is_host_op(op: Int) -> Bool:
-    return op == OP_WPCT_PREFIX or op == OP_CURVE_PREFIX
+    """An op a caller may name: 0..N_USER_OPS-1, fold_rows, rows64, strat_codes and curve_fold."""
+    return ((op >= 0 and op < N_USER_OPS) or op == OP_FOLD_ROWS or op == OP_ROWS64 or op == OP_STRAT_CODES
+            or op == OP_CURVE_FOLD)
 #: the chunk length the counting sort aims for, and the bound on its
 #: (groups x chunks) count table
 comptime CS_CHUNK = 256
@@ -172,9 +171,10 @@ def _a(r: IP, k: Int) -> Int:
 
 def _plan_keep(mut pl: Plan, r: IP, n: Int, total: Int):
     """bin_curve params 10 and 11 (lane metrics-apple): with KEEP (10) and
-    the flag (11) == 1 on an unweighted curve, the collinear-drop flags of
-    every slot follow the curve (x_metrics/par.mojo curve_keep_unit)."""
-    if _a(r, 3) < 0 and _a(r, 11) == 1 and n > 0:
+    the flag (11) == 1, the collinear-drop flags of every slot follow the
+    curve (x_metrics/par.mojo curve_keep_unit; weighted curves too, lane
+    cgr2-metrics-shap)."""
+    if _a(r, 11) == 1 and n > 0:
         pl.emit(OP_CURVE_KEEP, n * total, [n, _a(r, 6), _a(r, 7), _a(r, 9), _a(r, 10)])
         # params 12, 13 (lane metrics-apple2): CF > 0 = the kept slots'
         # fps, tps and threshold words, in order, at CF + p*n, CF + N + p*n,
@@ -258,7 +258,8 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             pl.emit(OP_SORT_EMIT, n * total, [B, n * total, _a(r, 3)])
         elif op == OP_WPERCENTILE:
             var n = _a(r, 1)
-            if n <= 0 or not pl.fits(2 * n * total):
+            var WC = (n + CURVE_CHUNK - 1) // CURVE_CHUNK
+            if n <= 0 or not pl.fits(2 * n * total + WC * total):
                 pl.copy_stage(q, s)
                 continue
             var N = n * total
@@ -267,7 +268,11 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             if _a(r, 4) < 0 and n <= IOTA_EXACT:
                 pl.emit(OP_WPCT_IOTA, N, [n, G + N])
             else:
-                pl.emit(OP_WPCT_PREFIX, total, [n, G, G + N, 0, 0, 0, 0, 0, 0, 0, G, G + N, G + N, G + 2 * N])
+                # the blocked weighted CDF (x_metrics/par.mojo wpct_c*)
+                var S = pl.alloc(WC * total)
+                pl.emit(OP_WPCT_CSUM, WC * total, [n, G, S, WC, CURVE_CHUNK])
+                pl.emit(OP_WPCT_COFF, total, [S, WC])
+                pl.emit(OP_WPCT_CFILL, WC * total, [n, G, G + N, S, WC, CURVE_CHUNK])
             pl.emit(OP_COPY, N, [G + N, _a(r, 8)])
             var sel = List[Int]()
             for k in range(9):
@@ -275,7 +280,7 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             pl.emit(OP_WPCT_SELECT, total, sel)
         elif op == OP_BIN_CURVE:
             var n = _a(r, 4)
-            if n <= 1 or not pl.fits(12 * n * total + total):
+            if n <= 1 or not pl.fits(12 * n * total + total + 3 * total * ((n + CURVE_CHUNK - 1) // CURVE_CHUNK)):
                 pl.copy_stage(q, s)
                 _plan_keep(pl, r, n, total)
                 continue
@@ -283,14 +288,12 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             var B = pl.sort(KEY_CURVE, n, total, _a(r, 0), _a(r, 1), _a(r, 3))
             var G = pl.alloc(6 * N + total)
             pl.emit(OP_CURVE_GATHER, N, [n, B, N, _a(r, 0), _a(r, 1), _a(r, 2), _a(r, 3), G, _a(r, 5)])
-            if _a(r, 3) < 0 and pl.fits(12 * n * total + total + 3 * total * ((n + CURVE_CHUNK - 1) // CURVE_CHUNK)):
-                var C = (n + CURVE_CHUNK - 1) // CURVE_CHUNK
-                var S = pl.alloc(3 * C * total)
-                pl.emit(OP_CURVE_CNT, C * total, [n, G, N, S, C, CURVE_CHUNK])
-                pl.emit(OP_CURVE_OFF, total, [G, N, S, C])
-                pl.emit(OP_CURVE_FILL, C * total, [n, G, N, S, C, CURVE_CHUNK])
-            else:
-                pl.emit(OP_CURVE_PREFIX, total, [n, G, N, _a(r, 3), 0, 0, 0, 0, 0, 0, G, G + 3 * N, G + 3 * N, G + 6 * N + total])
+            var C = (n + CURVE_CHUNK - 1) // CURVE_CHUNK
+            var S = pl.alloc(3 * C * total)
+            # counts unweighted, the blocked Float32 scan weighted (W = param 6)
+            pl.emit(OP_CURVE_CNT, C * total, [n, G, N, S, C, CURVE_CHUNK, _a(r, 3)])
+            pl.emit(OP_CURVE_OFF, total, [G, N, S, C, _a(r, 3)])
+            pl.emit(OP_CURVE_FILL, C * total, [n, G, N, S, C, CURVE_CHUNK, _a(r, 3)])
             pl.emit(OP_CURVE_EMIT, N, [n, G, N, _a(r, 6), _a(r, 7), _a(r, 8), _a(r, 9)])
             _plan_keep(pl, r, n, total)
         elif op == OP_PERMUTE:
@@ -311,6 +314,20 @@ def plan_program(q: IP, stages: Int, arena_len: Int) raises -> Plan:
             var S = pl.alloc(2 * C * total)
             pl.emit(OP_CM_CHUNK, C * total, [V, n, D, S, C, CM_CHUNK])
             pl.emit(OP_CM_FINAL, total, [V, D, S, C, _a(r, 3)])
+        elif op == OP_CURVE_FOLD:
+            # q = [n, FPS, TPS, CNT, OUT, mode, MH, ML, CH]; total = problems
+            var n = _a(r, 0)
+            var CH = _a(r, 8)
+            if n <= 0 or CH < 1:
+                pl.copy_stage(q, s)
+                continue
+            var C = (n + CH - 1) // CH
+            if not pl.fits(3 * C * total):
+                pl.copy_stage(q, s)
+                continue
+            var S = pl.alloc(3 * C * total)
+            pl.emit(OP_CF_CHUNK, C * total, [n, _a(r, 1), _a(r, 2), _a(r, 3), S, C, CH, _a(r, 5), _a(r, 6), _a(r, 7)])
+            pl.emit(OP_CF_FINAL, total, [n, _a(r, 1), _a(r, 2), _a(r, 3), S, C, _a(r, 4), _a(r, 5)])
         elif op == OP_FOLD_ROWS:
             var n = _a(r, 0)
             var K = _a(r, 1)
