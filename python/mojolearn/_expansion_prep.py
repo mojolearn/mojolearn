@@ -2897,9 +2897,14 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         K = len(self.classes_)
         if K < 2:
             raise ValueError("mojolearn: QuadraticDiscriminantAnalysis needs at least two classes")
-        if min(_class_counts(codes, K)) < 2:
-            raise ValueError("mojolearn: y has only 1 sample in a class, covariance is ill defined")
         mode = _mode()
+        # lane apple-fast-py2mojo-prep: without a covariance_estimator the count check reads
+        # the program's own class counts (class_stats `cnt`, exact integers) right after the
+        # run, before anything else is read or raised; an estimator fits per class inside the
+        # build, so its check stays first (`_class_counts`, a p2m program)
+        late = est is None and _p2m(mode)
+        if not late and min(_class_counts(codes, K)) < 2:
+            raise ValueError("mojolearn: y has only 1 sample in a class, covariance is ill defined")
         pr = _Prog()
         xo = pr.put(arr)
         yo = pr.put_codes(codes)
@@ -2932,6 +2937,8 @@ class QuadraticDiscriminantAnalysis(_Classifier):
             keep = pr.alloc(K * d * d)
             pr.stage("sym_fn", K * d * d, s2, evec, d, 2, keep)
         pr.run(mode)
+        if late and min(pr.values(cnt, K)) < 2:
+            raise ValueError("mojolearn: y has only 1 sample in a class, covariance is ill defined")
         s2v = pr.values(s2, K * d)
         for k in range(K):
             if sum(1 for v in s2v[k * d:(k + 1) * d] if v > self.tol) < d:
