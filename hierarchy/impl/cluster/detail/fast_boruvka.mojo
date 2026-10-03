@@ -37,7 +37,7 @@ from hdbscan.impl.cluster.detail.sparse_mr_mst import (
     smr_assign_kernel, smr_classify_kernel, smr_cmin_hi_kernel, smr_cmin_key_kernel,
     smr_cmin_lo_kernel, smr_drop_arg_kernel, smr_drop_b_kernel, smr_edge_rank_kernel,
     smr_edge_scatter_kernel, smr_hook_kernel, smr_init_kernel, smr_jump_kernel,
-    smr_relabel_kernel, smr_round_reset_kernel, smr_winner_kernel,
+    smr_relabel_kernel, smr_round_reset_kernel, smr_ub_from_a_kernel, smr_winner_kernel,
 )
 
 comptime FB_TPB = 128
