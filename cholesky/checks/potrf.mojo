@@ -1545,7 +1545,7 @@ def enqueue_logdet(
         grid_dim=((nb + LOGDET_TPB - 1) // LOGDET_TPB, 1, 1),
         block_dim=(LOGDET_TPB, 1, 1),
     )
-    ctx.enqueue_function[logdet_kernel](
+    ctx.enqueue_function[logdet_kernel](  # small-launch(nb: diagonal blocks): one block folds the n over 256 block partials by the aligned tree
         parts, out_scalar, Int32(nb), grid_dim=(1, 1, 1), block_dim=(LOGDET_TPB, 1, 1),
     )
 

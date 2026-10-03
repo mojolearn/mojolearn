@@ -195,7 +195,7 @@ def lbfgs_device[O: LbObjective](
         var nonce = wit.begin()
         var wf = wit.p()
         obj.enqueue(ctx, lp + lbd_th(p, 0), lp + lbd_g(p, 0), lp + lbd_sc(p, 0), wf, 0, nonce)
-        ctx.enqueue_function[lbd_start_kernel](lp, Int32(p), tol, wf, Int32(ob), nonce, grid_dim=1, block_dim=LBD_TPB)
+        ctx.enqueue_function[lbd_start_kernel](lp, Int32(p), tol, wf, Int32(ob), nonce, grid_dim=1, block_dim=LBD_TPB)  # small-launch(p: parameters): one block strides the P-vector two-loop recursion, sequential over the history pairs
         ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=fl)
         if wit.ok(ctx, ob + 1, what):
             break
@@ -220,7 +220,7 @@ def lbfgs_device[O: LbObjective](
                 ctx.enqueue_function[lbd_trial_kernel](lp, Int32(p), Int32(c), tt, wf, Int32(0), nonce,
                                                        grid_dim=bt, block_dim=LBD_TPB)
                 obj.enqueue(ctx, lp + lbd_th(p, 1 - c), lp + lbd_g(p, 1 - c), lp + lbd_sc(p, 1 - c), wf, bt, nonce)
-                ctx.enqueue_function[lbd_step_kernel](lp, Int32(p), Int32(c), tt, tol, wf, Int32(bt + ob), nonce,
+                ctx.enqueue_function[lbd_step_kernel](lp, Int32(p), Int32(c), tt, tol, wf, Int32(bt + ob), nonce,  # small-launch(p: parameters): one block strides the P-vector accept, pair and two-loop phases, sequential over pairs
                                                       grid_dim=1, block_dim=LBD_TPB)
                 ctx.enqueue_copy(dst_ptr=flags.unsafe_ptr(), src_buf=fl)
                 if wit.ok(ctx, bt + ob + 1, what):

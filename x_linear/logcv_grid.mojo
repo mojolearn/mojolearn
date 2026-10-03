@@ -424,7 +424,7 @@ struct LcvObjective(LbObjective):
             self.scr.unsafe_ptr(), Int32(nbk), Int32(p), g, self.outs.unsafe_ptr(), wf, Int32(woff + b1 + b2), nonce,
             grid_dim=b3, block_dim=LCV_TPB,
         )
-        ctx.enqueue_function[lcv_finish_kernel](
+        ctx.enqueue_function[lcv_finish_kernel](  # small-launch(kp: classes): one block strides the K-prime by d+1 gradient cells and one vfold sum
             th, g, f, self.outs.unsafe_ptr(), self.cs.unsafe_ptr(), Int32(kp), Int32(d), sw, Int32(cnt),
             self.parts.unsafe_ptr(), wf, Int32(woff + b1 + b2 + b3), nonce, grid_dim=1, block_dim=LBD_TPB,
         )
@@ -536,13 +536,13 @@ def logcv_fit_grid(
         obj.cnt = _lcv_rows(c, obj, wit, bcnt, tot, f)
         c.enqueue_function[lcv_theta_kernel](lp, Int32(p), Int32(-1), grid_dim=bt, block_dim=LCV_TPB)
         for ci in range(nc):
-            c.enqueue_function[lcv_setc_kernel](obj.cs.unsafe_ptr(), cvals.unsafe_ptr(), Int32(ci), grid_dim=1,
+            c.enqueue_function[lcv_setc_kernel](obj.cs.unsafe_ptr(), cvals.unsafe_ptr(), Int32(ci), grid_dim=1,  # small-launch(ci: the C index): one thread copies one scalar C into the objective slot
                                                 block_dim=1)
             var r = lbfgs_device(c, obj, wit, lw, p, max_iter, tol, "LogisticRegressionCV fit")
             _lcv_score(c, obj, wit, lp, r[1], hit, sp, f, sw, FP(unsafe_from_address=Int(scores.unsafe_ptr())) + f * nc + ci)
             # the warm start: the next C starts from this theta
             c.enqueue_function[lcv_theta_kernel](lp, Int32(p), Int32(r[1]), grid_dim=bt, block_dim=LCV_TPB)
-    c.enqueue_function[lcv_best_kernel](scores.unsafe_ptr(), Int32(nf), Int32(nc), cvals.unsafe_ptr(),
+    c.enqueue_function[lcv_best_kernel](scores.unsafe_ptr(), Int32(nf), Int32(nc), cvals.unsafe_ptr(),  # small-launch(nc: the C grid): one thread folds the nf by nc score table and picks the first best C
                                         obj.cs.unsafe_ptr(), grid_dim=1, block_dim=1)
     obj.fold = -1
     obj.cnt = n

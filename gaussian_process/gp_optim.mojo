@@ -383,7 +383,7 @@ def gpr_optimize_device(
     # dwork): a constant of the step's scalar combine, never a loop bound
     var eval_cap = GP_OPT_MAX_ITER * (GP_OPT_MAX_LS + 1) + 2
     for run in range(n_runs):
-        ctx.enqueue_function[gp_opt_init_kernel](
+        ctx.enqueue_function[gp_opt_init_kernel](  # small-launch(nt: hyperparameters): one block over the kernel hyperparameters sets a start, never the rows
             _gp(dst), _gi(dsi), _gi(dtmap), _gp(dbnd), _gp(dpar), _gp(dls),
             Int32(nt), Int32(run), seed_lo, seed_hi,
             grid_dim=1, block_dim=GP_OPT_TPB,
@@ -429,7 +429,7 @@ def gpr_optimize_device(
                     _gp(dgpart), Int32(nb), Int32(nt), gp_grad_half(), _gp(dgraw),
                     grid_dim=(nt + GP_GRAD_TPB - 1) // GP_GRAD_TPB, block_dim=GP_GRAD_TPB,
                 )
-            ctx.enqueue_function[gp_opt_step_kernel](
+            ctx.enqueue_function[gp_opt_step_kernel](  # small-launch(nt: hyperparameters): one block strides the theta-sized optimizer stages; n is a constant of the likelihood
                 _gp(dst), _gi(dsi), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dyd), _gp(dwork), Int32(n),
                 _gp(dlml), _gp(dgraw), Int32(nt), Int32(info),
                 grid_dim=1, block_dim=GP_OPT_TPB,
@@ -439,10 +439,10 @@ def gpr_optimize_device(
             ctx.synchronize()
             if Int(hstop.unsafe_ptr().unsafe_load(0)) != 0:
                 break
-        ctx.enqueue_function[gp_opt_run_end_kernel](
+        ctx.enqueue_function[gp_opt_run_end_kernel](  # small-launch(nt: hyperparameters): one block records one restart over the theta entries only
             _gp(dst), _gi(dsi), _gp(drec), Int32(nt), Int32(run), grid_dim=1, block_dim=GP_OPT_TPB,
         )
-    ctx.enqueue_function[gp_opt_final_kernel](
+    ctx.enqueue_function[gp_opt_final_kernel](  # small-launch(nt: hyperparameters): one block writes the winning theta, a few entries only
         _gp(dst), _gi(dtmap), _gp(dpar), _gp(dls), _gp(dout), Int32(nt), grid_dim=1, block_dim=GP_OPT_TPB,
     )
     var hrec = ctx.enqueue_create_host_buffer[DType.float32](n_runs * 4)

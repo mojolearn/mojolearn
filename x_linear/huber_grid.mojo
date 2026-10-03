@@ -187,7 +187,7 @@ struct HuberObjective(LbObjective):
             self.scr.unsafe_ptr(), Int32(nbk), Int32(cells), g, self.sums.unsafe_ptr(), wf, Int32(woff + b1 + b2),
             nonce, grid_dim=b3, block_dim=HG_TPB,
         )
-        ctx.enqueue_function[hg_finish_kernel](
+        ctx.enqueue_function[hg_finish_kernel](  # small-launch(d: weights): one block strides the d weights and one vfold sum; n is only the row count as a scalar
             th, g, f, self.sums.unsafe_ptr(), Int32(n), Int32(d), fi, self.eps, self.alpha, sw,
             self.parts.unsafe_ptr(), wf, Int32(woff + b1 + b2 + b3), nonce, grid_dim=1, block_dim=LBD_TPB,
         )
