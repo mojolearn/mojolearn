@@ -14,7 +14,7 @@
 #      ONE commit, and that commit must be in this repository (its commit time
 #      decides "newest wins")
 #   2. copies them, with their provenance, to
-#      bench/results/identity_break/<UTC date>-0836/<vendor label>/
+#      bench/results/identity_break/<UTC date>-<REF_TAG>/<vendor label>/
 #   3. regenerates python/mojolearn/verify_reference/table.json from every
 #      committed column (`verify --all --emit-reference`; newest commit wins per
 #      cell part and device class, older classes kept as superseded)
@@ -36,7 +36,7 @@
 # ~/mojolearn-evidence/compile_slot.sh when present, -j 1).
 #
 # Environment: PYTHON (default `pixi run -e default python`, else python3),
-#   ADMIT_DATE (default today UTC), EVIDENCE (default
+#   ADMIT_DATE (default today UTC), REF_TAG (directory suffix, default 0836), EVIDENCE (default
 #   ~/mojolearn-evidence/ref-regen/<date>) for the long logs.
 # Commits nothing; prints the git commands to run.
 set -uo pipefail
@@ -189,7 +189,7 @@ if [ $CHECK_ONLY = 1 ]; then
     exit $?
 fi
 
-DEST=bench/results/identity_break/$DATE-0836
+DEST=bench/results/identity_break/$DATE-${REF_TAG:-0836}
 mkdir -p "$DEST"
 {
     echo "# Reference columns at ${C:0:12} ($DATE)"
