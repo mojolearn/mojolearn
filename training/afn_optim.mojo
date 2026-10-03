@@ -164,6 +164,8 @@ comptime AFN_FCELLS = 4
 #: Loss cells (Int32 x 4): 0 the smallest non-finite logit index, 1 the
 #: first row with a target out of range, 2 the gate.
 comptime AFN_LOSS_CELLS = 4
+#: the loss fold's first level: at most this many blocks, one partial each.
+comptime AFN_CE_PARTS = 64
 
 
 def _afn_grid(n: Int) -> Int:
@@ -230,6 +232,7 @@ comptime AFN_SI_CELLS = 1  # the gate cells
 comptime AFN_SI_TABLE = 2  # the SGD offsets + flags table
 comptime AFN_SI_LOSS_BAD = 3  # the loss's per-row flag cells, 2 * N
 comptime AFN_SI_LOSS_CELLS = 4  # the loss's gate cells
+comptime AFN_SI_LOSS_PART = 5  # the loss's per-block flag partials, 2 * AFN_CE_PARTS
 #: Float32 slots.
 comptime AFN_SF_SUMS = 0  # clip partials, blocks
 comptime AFN_SF_FCELLS = 1  # total_norm, coef
@@ -243,6 +246,7 @@ comptime AFN_SF_WS = 8
 comptime AFN_SF_SAB = 9  # ... through here
 comptime AFN_SF_LOSS_ROW = 10  # the loss's row losses, N
 comptime AFN_SF_LOSS_LOSS = 11  # the loss's scalar
+comptime AFN_SF_LOSS_PART = 12  # the loss's per-block sums, AFN_CE_PARTS
 #: Pinned Int32 mirrors.
 comptime AFN_SH_CELLS = 0
 comptime AFN_SH_LOSS_CELLS = 1
@@ -802,6 +806,8 @@ def afn_optimizer_step(
         keep_h.append(ctx.enqueue_create_host_buffer[DType.int32](AFN_CELLS))
         part = keep_i[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         cells = keep_i[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        psum = keep_f[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        pflag = keep_i[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         table = keep_i[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         sums = keep_f[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         fcells = keep_f[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
@@ -1307,6 +1313,78 @@ def afn_ce_row_kernel[TPB: Int](
             v += TPB
 
 
+def afn_ce_part_kernel[TPB: Int](
+    psum: MutPointer[Float32, MutAnyOrigin],
+    pnf: MutPointer[Int32, MutAnyOrigin],
+    ptg: MutPointer[Int32, MutAnyOrigin],
+    row: MutPointer[Float32, MutAnyOrigin],
+    bad_nf: MutPointer[Int32, MutAnyOrigin],
+    bad_tg: MutPointer[Int32, MutAnyOrigin],
+    n_rows_in: Int32,
+    want_total_in: Int32,
+):
+    """The loss fold's first level: block `b` folds rows `b * TPB + tid`,
+    stride `grid * TPB` (free order), into `psum[b]` (the row-loss sum
+    under `want_total`), `pnf[b]` and `ptg[b]` (the flag minima).
+    `afn_ce_fold_kernel` folds the partials."""
+    var n_rows = Int(n_rows_in)
+    var tid = Int(thread_idx.x)
+    var blk = Int(block_idx.x)
+    var stride = Int(grid_dim.x) * TPB
+    var redf = stack_allocation[
+        TPB,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var rnf = stack_allocation[
+        TPB,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var rtg = stack_allocation[
+        TPB,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var acc = Float32(0.0)
+    var nf = NONFINITE_NONE
+    var tg = NONFINITE_NONE
+    var want_total = want_total_in != Int32(0)
+    var r = blk * TPB + tid
+    while r < n_rows:
+        if want_total:
+            acc = acc + row.unsafe_load(r)
+        var a = bad_nf.unsafe_load(r)
+        if a < nf:
+            nf = a
+        var b = bad_tg.unsafe_load(r)
+        if b < tg:
+            tg = b
+        r += stride
+    redf.unsafe_store(tid, acc)
+    rnf.unsafe_store(tid, nf)
+    rtg.unsafe_store(tid, tg)
+    barrier()
+    var active = TPB // 2
+    while active > 0:
+        if tid < active:
+            redf.unsafe_store(
+                tid, redf.unsafe_load(tid) + redf.unsafe_load(tid + active)
+            )
+            var o = rnf.unsafe_load(tid + active)
+            if o < rnf.unsafe_load(tid):
+                rnf.unsafe_store(tid, o)
+            var o2 = rtg.unsafe_load(tid + active)
+            if o2 < rtg.unsafe_load(tid):
+                rtg.unsafe_store(tid, o2)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        psum.unsafe_store(blk, redf.unsafe_load(0))
+        pnf.unsafe_store(blk, rnf.unsafe_load(0))
+        ptg.unsafe_store(blk, rtg.unsafe_load(0))
+
+
 def afn_ce_fold_kernel[TPB: Int](
     loss_out: MutPointer[Float32, MutAnyOrigin],
     cells: MutPointer[Int32, MutAnyOrigin],
@@ -1317,7 +1395,9 @@ def afn_ce_fold_kernel[TPB: Int](
     divisor: Float32,
     want_total_in: Int32,
 ):
-    """ONE block: the batch fold of the row losses (free order) divided
+    """ONE block over `afn_ce_part_kernel`'s partials (at most
+    AFN_CE_PARTS of them; `row`, `bad_nf`, `bad_tg` are the partials and
+    `n_rows_in` their count): the batch fold (free order) divided
     once by `divisor` into `loss_out[0]` (seam L13) under `want_total`, and
     the minimum over the per-row flag cells into `cells[0]` (non-finite
     logit index), `cells[1]` (first bad-target row) and the gate
@@ -1426,12 +1506,16 @@ def afn_ce_loss_resident(
     var loss: MutPointer[Float32, MutAnyOrigin]
     var bad: MutPointer[Int32, MutAnyOrigin]
     var cells: MutPointer[Int32, MutAnyOrigin]
+    var psum: MutPointer[Float32, MutAnyOrigin]
+    var pflag: MutPointer[Int32, MutAnyOrigin]
     var host: MutPointer[Int32, MutAnyOrigin]
     comptime if AFN_OPT_RESIDENT_STATE:
         row = afn_scratch_f32(ctx, AFN_SF_LOSS_ROW, n_rows)
         loss = afn_scratch_f32(ctx, AFN_SF_LOSS_LOSS, 1)
         bad = afn_scratch_i32(ctx, AFN_SI_LOSS_BAD, 2 * n_rows)
         cells = afn_scratch_i32(ctx, AFN_SI_LOSS_CELLS, AFN_LOSS_CELLS)
+        psum = afn_scratch_f32(ctx, AFN_SF_LOSS_PART, AFN_CE_PARTS)
+        pflag = afn_scratch_i32(ctx, AFN_SI_LOSS_PART, 2 * AFN_CE_PARTS)
         host = afn_scratch_host_i32(ctx, AFN_SH_LOSS_CELLS, AFN_LOSS_CELLS)
     else:
         step_count_device_alloc()
@@ -1442,6 +1526,10 @@ def afn_ce_loss_resident(
         keep_i.append(ctx.enqueue_create_buffer[DType.int32](2 * n_rows))
         step_count_device_alloc()
         keep_i.append(ctx.enqueue_create_buffer[DType.int32](AFN_LOSS_CELLS))
+        step_count_device_alloc()
+        keep_f.append(ctx.enqueue_create_buffer[DType.float32](AFN_CE_PARTS))
+        step_count_device_alloc()
+        keep_i.append(ctx.enqueue_create_buffer[DType.int32](2 * AFN_CE_PARTS))
         step_count_host_alloc()
         keep_h.append(
             ctx.enqueue_create_host_buffer[DType.int32](AFN_LOSS_CELLS)
@@ -1456,13 +1544,13 @@ def afn_ce_loss_resident(
     # is tiny (the MLP head), else 256.
     if vocab <= 32:
         _afn_launch_ce[32](
-            ctx, row, loss, bad, cells, dlogits, logits, targets, n_rows,
+            ctx, row, loss, bad, cells, psum, pflag, dlogits, logits, targets, n_rows,
             vocab, cfg.ignore_index, want_grad, smoothing, tv[0], tv[1],
             divisor, one_minus, cfg.eps, want_total,
         )
     else:
         _afn_launch_ce[AFN_TPB](
-            ctx, row, loss, bad, cells, dlogits, logits, targets, n_rows,
+            ctx, row, loss, bad, cells, psum, pflag, dlogits, logits, targets, n_rows,
             vocab, cfg.ignore_index, want_grad, smoothing, tv[0], tv[1],
             divisor, one_minus, cfg.eps, want_total,
         )
@@ -1507,6 +1595,8 @@ def _afn_launch_ce[TPB: Int](
     loss: MutPointer[Float32, MutAnyOrigin],
     bad: MutPointer[Int32, MutAnyOrigin],
     cells: MutPointer[Int32, MutAnyOrigin],
+    psum: MutPointer[Float32, MutAnyOrigin],
+    pflag: MutPointer[Int32, MutAnyOrigin],
     mut dlogits: DeviceBuffer[DType.float32],
     mut logits: DeviceBuffer[DType.float32],
     mut targets: DeviceBuffer[DType.int32],
@@ -1523,6 +1613,7 @@ def _afn_launch_ce[TPB: Int](
     want_total: Bool,
 ) raises:
     comptime row_kern = afn_ce_row_kernel[TPB]
+    comptime part_kern = afn_ce_part_kernel[TPB]
     comptime fold_kern = afn_ce_fold_kernel[TPB]
     step_count_launch()
     ctx.enqueue_function[row_kern](
@@ -1545,14 +1636,30 @@ def _afn_launch_ce[TPB: Int](
         grid_dim=(n_rows, 1, 1),
         block_dim=(TPB, 1, 1),
     )
+    # The batch fold in two levels: up to AFN_CE_PARTS blocks fold the
+    # rows into partials, then one block folds the partials.
+    var n_parts = min((n_rows + TPB - 1) // TPB, AFN_CE_PARTS)
     step_count_launch()
-    ctx.enqueue_function[fold_kern](
-        loss,
-        cells,
+    ctx.enqueue_function[part_kern](
+        psum,
+        pflag,
+        pflag + AFN_CE_PARTS,
         row,
         bad,
         bad + n_rows,
         Int32(n_rows),
+        Int32(1) if want_total else Int32(0),
+        grid_dim=(n_parts, 1, 1),
+        block_dim=(TPB, 1, 1),
+    )
+    step_count_launch()
+    ctx.enqueue_function[fold_kern](
+        loss,
+        cells,
+        psum,
+        pflag,
+        pflag + AFN_CE_PARTS,
+        Int32(n_parts),
         divisor,
         Int32(1) if want_total else Int32(0),
         grid_dim=(1, 1, 1),

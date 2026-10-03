@@ -341,6 +341,27 @@ def _launch_fold_adam(
     )
 
 
+def mlp_flag_clear_kernel(flag: IP):
+    """`flag[0] = 0` (the resident step's nonfinite word)."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        flag.unsafe_store(0, Int32(0))
+
+
+def mlp_nonfinite_kernel(flag: IP, src: FP, n_in: Int32):
+    """`flag[0] = 1` when any of `src[0:n]` is nonfinite (every writer
+    stores the same 1, so the race is benign)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in) and not isfinite(src.unsafe_load(i)):
+        flag.unsafe_store(0, Int32(1))
+
+
+def _launch_nonfinite(ctx: DeviceContext, flag: IP, src: FP, n: Int) raises:
+    ctx.enqueue_function[mlp_nonfinite_kernel](
+        flag, src, Int32(n),
+        grid_dim=((n + FT_FOLD_TPB - 1) // FT_FOLD_TPB, 1, 1), block_dim=(FT_FOLD_TPB, 1, 1),
+    )
+
+
 def _launch_copy(ctx: DeviceContext, dst: FP, src: FP, n: Int) raises:
     ctx.enqueue_function[mlp_copy_kernel](
         dst, src, Int32(n),
@@ -578,7 +599,8 @@ def mlp_resident_open_host(
         var cap_rows = MLP_FT_MAX_ROWS * cap_k
         var offs = _rs_offsets(cap_rows, cap_k)
         var arena = ctx.enqueue_create_buffer[DType.float32](offs[4])
-        var ybuf = ctx.enqueue_create_buffer[DType.int32](cap_rows)
+        # ybuf[cap_rows] is the step's nonfinite flag word.
+        var ybuf = ctx.enqueue_create_buffer[DType.int32](cap_rows + 1)
         _rs_upload(ctx, arena, w1_ptr, b1_ptr, w2_ptr, b2_ptr, m_ptr, v_ptr)
         ctx.synchronize()
         var s = _MLP_SESSIONS.get_or_create_ptr()
@@ -803,6 +825,18 @@ def mlp_resident_step_host(
                     base + RS_OFF_P, base + RS_OFF_M, base + RS_OFF_V, 1 if train else 0, sc,
                     beta1, beta2, eps,
                 )
+        # The nonfinite check runs on the device: one flag word comes back.
+        var flag = yb + s[].cap_rows[h]
+        var flag_v = s[].ybuf[h].create_sub_buffer[DType.int32](s[].cap_rows[h], 1)
+        ctx.enqueue_function[mlp_flag_clear_kernel](flag, grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
+        _launch_nonfinite(ctx, flag, base + off_lg, rows * FT_OUT)
+        if grads:
+            _launch_nonfinite(ctx, flag, base + RS_OFF_LOSS, k)
+            _launch_nonfinite(ctx, flag, base + RS_OFF_G, FT_TOTAL)
+            if want_input_grad != 0:
+                _launch_nonfinite(ctx, flag, base + off_dx, rows * FT_IN)
+        var flag_host = List[Int32](length=1, fill=Int32(0))
+        ctx.enqueue_copy(dst_ptr=flag_host.unsafe_ptr(), src_buf=flag_v)
         ctx.enqueue_copy(dst_ptr=logits_ptr, src_buf=lg_v)
         if grads:
             ctx.enqueue_copy(dst_ptr=losses_ptr, src_buf=loss_v)
@@ -822,30 +856,8 @@ def mlp_resident_step_host(
         _ = db1_v^
         _ = dw2_v^
         _ = db2_v^
-        var ok = True
-        for i in range(rows * FT_OUT):
-            if not isfinite(logits_ptr.unsafe_load(i)):
-                ok = False
-        if grads:
-            for i in range(k):
-                if not isfinite(losses_ptr.unsafe_load(i)):
-                    ok = False
-            for i in range(FT_W1):
-                if not isfinite(dw1_ptr.unsafe_load(i)):
-                    ok = False
-            for i in range(FT_HID):
-                if not isfinite(db1_ptr.unsafe_load(i)):
-                    ok = False
-            for i in range(FT_OUT * FT_HID):
-                if not isfinite(dw2_ptr.unsafe_load(i)):
-                    ok = False
-            for i in range(FT_OUT):
-                if not isfinite(db2_ptr.unsafe_load(i)):
-                    ok = False
-            if want_input_grad != 0:
-                for i in range(rows * FT_IN):
-                    if not isfinite(dx_ptr.unsafe_load(i)):
-                        ok = False
+        _ = flag_v^
+        var ok = flag_host[0] == 0
         if not ok:
             if train:
                 _launch_copy(ctx, base + RS_OFF_P, base + RS_OFF_SHADOW, RS_STATE)

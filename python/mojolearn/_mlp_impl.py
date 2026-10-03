@@ -386,7 +386,7 @@ class SmallMLPTrainer:
             self._session_sync_host()
             self._session_close()
         opt = self._opt
-        addresses = [addr(w, name=n) for w, n in zip(opt.params, _NAMES)]
+        addresses = [addr(w, name=n) for w, n in zip(opt.params, _NAMES)]  # glue: packs the six parameter addresses
         addresses += [addr(opt.exp_avg, name='m'), addr(opt.exp_avg_sq, name='v')]
         handle = int(binding.mlp_resident_open(addresses, [int(cap_k)]))
         self._session = (handle, binding, int(cap_k))
@@ -397,7 +397,7 @@ class SmallMLPTrainer:
             return
         handle, binding, _ = self._session
         opt = self._opt
-        addresses = [addr(w, name=n) for w, n in zip(opt.params, _NAMES)]
+        addresses = [addr(w, name=n) for w, n in zip(opt.params, _NAMES)]  # glue: packs the six parameter addresses
         addresses += [addr(opt.exp_avg, name='m'), addr(opt.exp_avg_sq, name='v')]
         binding.mlp_resident_download(handle, addresses)
 
@@ -422,7 +422,7 @@ class SmallMLPTrainer:
         handle = self._session_open(binding, k)
         losses = zeros((k,), '<f4')
         logits = empty((rows, 3), '<f4')
-        grads = [empty(shape, '<f4') for shape in _SHAPES]
+        grads = [empty(shape, '<f4') for shape in _SHAPES]  # glue: allocates the four gradient outputs
         dx = empty((rows, 8), '<f4') if return_input_grad else zeros((1,), '<f4')
         t = opt.t + 1
         # `addresses` and `params` in this exact order (mirrored word for word
@@ -433,7 +433,7 @@ class SmallMLPTrainer:
         #                weight_decay, want_input_grad
         addresses = [addr_ro(x, name='X'), addr_ro(y, name='targets'),
                      addr(losses, name='losses'), addr(logits, name='logits')]
-        addresses += [addr(g, name=n + ' gradient') for g, n in zip(grads, _NAMES)]
+        addresses += [addr(g, name=n + ' gradient') for g, n in zip(grads, _NAMES)]  # glue: packs the four gradient addresses
         addresses += [addr(dx, name='input_grad')]
         params = [int(rows), int(k), int(mode), int(t), float(config['lr']),
                   float(config['beta1']), float(config['beta2']), float(config['eps']),
@@ -444,10 +444,10 @@ class SmallMLPTrainer:
             raise RuntimeError('SmallMLPTrainer step returned an invalid result')
         if mode == _MODE_FORWARD:
             return None, logits, None, None
-        values = [float(v) for v in flat_view(losses, 'f')]
-        if not all(math.isfinite(v) for v in values):
+        values = [float(v) for v in flat_view(losses, 'f')]  # glue: converts the k returned step losses
+        if not all(math.isfinite(v) for v in values):  # glue: checks the k returned step losses
             raise RuntimeError('SmallMLPTrainer loss is not finite')
-        for g in grads:
+        for g in grads:  # glue: iterates the four gradient arrays
             if not all_finite(g):
                 raise RuntimeError('SmallMLPTrainer step returned an invalid result')
         input_grad = None
@@ -493,7 +493,7 @@ class SmallMLPTrainer:
             _require_mode()
             return dict(step=int(self._opt.t), losses=losses, loss=losses[-1],
                         logits=logits.copy(),
-                        gradients={name: value.copy() for name, value in zip(_NAMES, grads)})
+                        gradients={name: value.copy() for name, value in zip(_NAMES, grads)})  # glue: names the four returned gradients
 
     @staticmethod
     def _binding():
@@ -702,7 +702,7 @@ class SmallMLPTrainer:
                     binding, x, y, 1, _MODE_TRAIN, return_input_grad)
                 _require_mode()
                 result = dict(step=int(self._opt.t), loss=losses[0], logits=logits.copy(),
-                              gradients={name: value.copy() for name, value in zip(_NAMES, grads)})
+                              gradients={name: value.copy() for name, value in zip(_NAMES, grads)})  # glue: names the four returned gradients
                 if return_input_grad:
                     result['input_grad'] = input_grad.copy()
                 return result

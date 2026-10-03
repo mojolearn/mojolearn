@@ -338,12 +338,12 @@ class SambaStack(object):
         if _buffers.hotpath_enabled():
             binding = T._load(self.numeric_mode)
             found = {}
-            for name in self._AFN_ENTRIES:
+            for name in self._AFN_ENTRIES:  # glue: looks up the named binding entries
                 try:
                     found[name] = getattr(binding, name, None)
                 except (AttributeError, ImportError):
                     found[name] = None
-            if all(callable(found[name]) for name in self._AFN_ENTRIES):
+            if all(callable(found[name]) for name in self._AFN_ENTRIES):  # glue: checks the named binding entries
                 entries = found
         self._afn_cache = entries if entries is not None else {}
         return entries
