@@ -869,6 +869,98 @@ def perm_stat_kernel[stat: Int, tpb: Int](
         null_dist.unsafe_store(rr, canonicalize_nan(value))
 
 
+# lane/apple-fast-purity2 (2026-10-03): the permutation test's OBSERVED
+# statistic (the pooled sample split where it is: positions j < n_x the
+# first group) on the device. It was a host loop over the pooled sample
+# through `host_tree_sum`; here a block per PINNED_SUM_W chunk folds its
+# chunk by `virtual_block_sum` (the same halving tree), and one thread
+# chains the chunk totals ascending (`host_fold_partials`'s chain), so the
+# words are `host_tree_sum`'s on every vendor: no bit change.
+
+
+def perm_observed_chunks_kernel[tpb: Int](
+    parts: MutPointer[Float32, MutAnyOrigin],
+    pooled: MutPointer[Float32, MutAnyOrigin],
+    stats: MutPointer[Float32, MutAnyOrigin],
+    n_pooled_in: Int32,
+    n_x_in: Int32,
+    squares: Int32,
+):
+    """Block c: chunk c's totals. `squares == 0`: the first group's values
+    into parts[c], the second's into parts[chunks + c]. `squares != 0`: the
+    first group's `ftz(identical_mul(d, d))`, `d = ftz(v - stats[1])` (the
+    mean the fold wrote), into parts[2 * chunks + c]."""
+    comptime lanes = PINNED_SUM_W // tpb
+    var c = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var n_pooled = Int(n_pooled_in)
+    var n_x = Int(n_x_in)
+    var chunks = chunk_count(n_pooled)
+    if squares != 0:
+        var mx = stats.unsafe_load(1)
+        var vs = SIMD[DType.float32, lanes](0.0)
+        comptime for lane in range(lanes):
+            var i2 = c * PINNED_SUM_W + tid + lane * tpb
+            if i2 < n_pooled and i2 < n_x:
+                var dv = ftz(ftz(pooled.unsafe_load(i2)) - mx)
+                vs[lane] = ftz(identical_mul(dv, dv))
+        var ts = virtual_block_sum[tpb](vs)
+        if tid == 0:
+            parts.unsafe_store(2 * chunks + c, ts)
+        return
+    var vx = SIMD[DType.float32, lanes](0.0)
+    var vy = SIMD[DType.float32, lanes](0.0)
+    comptime for lane in range(lanes):
+        var i = c * PINNED_SUM_W + tid + lane * tpb
+        if i < n_pooled:
+            var v = ftz(pooled.unsafe_load(i))
+            if i < n_x:
+                vx[lane] = v
+            else:
+                vy[lane] = v
+    var tx = virtual_block_sum[tpb](vx)
+    var ty = virtual_block_sum[tpb](vy)
+    if tid == 0:
+        parts.unsafe_store(c, tx)
+        parts.unsafe_store(chunks + c, ty)
+
+
+def perm_observed_fold_kernel[stat: Int](
+    stats: MutPointer[Float32, MutAnyOrigin],
+    parts: MutPointer[Float32, MutAnyOrigin],
+    chunks_in: Int32,
+    n_x_in: Int32,
+    n_y_in: Int32,
+    squares: Int32,
+):
+    """One thread: the chunk totals chained ascending from +0.0. `squares
+    == 0`: stats[0] the statistic (mean, diff of means) and stats[1] the
+    first group's mean; `squares != 0` (std): stats[0] from the squares."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    var chunks = Int(chunks_in)
+    var n_x = Int(n_x_in)
+    if squares != 0:
+        var ssd = Float32(0.0)
+        for c in range(chunks):
+            ssd = ftz(ssd + parts.unsafe_load(2 * chunks + c))
+        stats.unsafe_store(
+            0, ftz(identical_sqrt(ftz(identical_div(ssd, Float32(n_x - 1)))))
+        )
+        return
+    var sx = Float32(0.0)
+    var sy = Float32(0.0)
+    for c in range(chunks):
+        sx = ftz(sx + parts.unsafe_load(c))
+        sy = ftz(sy + parts.unsafe_load(chunks + c))
+    var mx = _mean_of_sum(sx, n_x)
+    stats.unsafe_store(1, mx)
+    comptime if stat == STAT_DIFF_MEANS:
+        stats.unsafe_store(0, ftz(mx - _mean_of_sum(sy, Int(n_y_in))))
+    else:
+        stats.unsafe_store(0, mx)
+
+
 comptime PERM_SELECT_BUCKETS = 256
 
 
