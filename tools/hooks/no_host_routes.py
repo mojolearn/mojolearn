@@ -589,15 +589,17 @@ _D2H_ANY = re.compile(r"enqueue_copy\(\s*dst_ptr\s*=|\bmap_to_host\b|enqueue_cop
                       r"|\b\w*download\w*\s*\(|\b\w*readback\w*\s*\(")
 _KERNEL_TOK = re.compile(r"\b(thread_idx|block_idx|global_idx|lane_id|warp_id)\b|\bblock_dim\.")
 # a data-sized loop bound: rows, samples, queries, points, nonzeros, elements
-_DATA_SIZES = re.compile(r"\b" + _SIZES + r"\b|\b(n_queries|n_cand|n_todo|n_pooled|n_resamples|n_live"
-                         r"|n_vertices|n_labels_total|total_labels|n_pairs|self\.size|n_tokens|T)\b")
+_DATA_SIZES = re.compile(r"(?<![.\w])(" + _SIZES + r"|n_queries|n_cand|n_todo|n_pooled|n_resamples"
+                         r"|n_vertices|total_labels|n_pairs|n_tokens|T)\b|\bself\.size\b")
 # a loop body that computes (branches, folds, sorts), not a plain element copy
 _HOST_WORK = re.compile(r"^\s*(if|elif|while)\b|[-+*/]=|\b(min|max|abs|sqrt|exp|log)\s*\("
                         r"|\bsort\w*\s*\(|\b_find\s*\(|\.insert\s*\(|[^<>=!]\s(<|>|<=|>=|==|!=)\s"
                         r"|\b(?P<acc>\w+)\s*=\s*\w*\(?\s*(?P=acc)\s*[-+*/]")
 # debug-only blocks (identity traces, stage timers) are not the product path
-_DEBUG_IF = re.compile(r"^\s*(el)?if\b.*\b(trace\w*\.enabled|_st_on|_trace\w*|verbose|debug\w*|timing\w*"
-                       r"|phase_timing|STAGE_TIMES)\b")
+_DEBUG_IF = re.compile(r"^\s*(comptime\s+)?(el)?if\b.*(\b(trace\w*\.enabled|_st_on|_trace\w*|verbose|debug\w*"
+                       r"|timing\w*|phase_timing)\b|STAGE_TIMES|TIMERS?\b|TIMING\b)")
+# a function that returns at once unless tracing is on is a trace recorder
+_TRACE_ONLY = re.compile(r"^\s*if\s+not\s+\w*trace\w*\.enabled\s*:")
 
 
 def _d2h_host_work(lines):
@@ -626,7 +628,9 @@ def _d2h_host_work(lines):
         ind = len(t) - len(t.lstrip())
         while ifs and ind <= ifs[-1][0] and not re.match(r"\s*(else|elif)\b", t):
             ifs.pop()
-        if re.match(r"\s*(el)?if\b|\s*else\b", t):
+        if o is not None and _TRACE_ONLY.match(t):
+            kern[o] = True  # not product work: skip the rest of the function
+        if re.match(r"\s*(comptime\s+)?(el)?if\b|\s*else\b", t):
             if re.match(r"\s*(else|elif)\b", t) and ifs and ifs[-1][0] == ind:
                 ifs.pop()
             ifs.append((ind, bool(_DEBUG_IF.match(t))))
@@ -828,7 +832,7 @@ def tree_findings(tree, paths=None):
 
 # ------------------------------------------------------------- baseline ----
 
-_HDR = "rule\tclass\towner\tstate\tpath\tocc\ttext"
+_HDR = "rule\tclass\towner\tstate\tpath\tocc\ttext\twhy"
 
 
 def load_baseline(text):
@@ -837,11 +841,14 @@ def load_baseline(text):
         if not ln.strip() or ln.startswith("#") or ln.startswith("rule\t"):
             continue
         c = ln.split("\t")
-        if len(c) != 7:
+        if len(c) not in (7, 8):
             raise SystemExit(f"no_host_routes: bad baseline row: {ln[:120]}")
-        rule, cls, owner, state, path, occ, text = c
+        rule, cls, owner, state, path, occ, text = c[:7]
+        why = c[7] if len(c) == 8 else ""
+        if rule == "d2h-host-work" and not why.strip():
+            raise SystemExit(f"no_host_routes: a d2h-host-work row needs a reason (8th column): {ln[:120]}")
         rows.append(dict(rule=rule, cls=cls, owner=owner, state=state, path=path,
-                         occ=int(occ), text=text))
+                         occ=int(occ), text=text, why=why))
     return rows
 
 
@@ -849,10 +856,11 @@ def dump_baseline(rows):
     rows = sorted(rows, key=lambda r: (r["path"], r["rule"], r["text"], r["occ"]))
     head = ("# no_host_routes baseline: CPU work in GPU code that main still carries.\n"
             "# It only shrinks. A fix deletes its rows (no_host_routes.py --prune-baseline).\n"
-            "# state debt = on main; inflight = pre-authorized lines of an open PR.\n")
+            "# state debt = on main; inflight = pre-authorized lines of an open PR.\n"
+            "# An optional 8th column gives the reason a row stays (required for d2h-host-work).\n")
     return head + _HDR + "\n" + "".join(
         "\t".join([r["rule"], r["cls"], r["owner"], r["state"], r["path"], str(r["occ"]),
-                   r["text"]]) + "\n" for r in rows)
+                   r["text"]] + ([r["why"]] if r.get("why") else [])) + "\n" for r in rows)
 
 
 def _key(r):

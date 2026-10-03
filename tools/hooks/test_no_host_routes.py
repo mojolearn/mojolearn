@@ -119,6 +119,16 @@ BLOCKED = [
            "    ctx.enqueue_copy(dst_ptr=hb, src_buf=dbuf)\n    ctx.synchronize()\n"
            "    for i in range(n):\n        hb[i] = hb[i] * 2\n    ctx.enqueue_copy(dst_buf=dbuf, src_ptr=hb)"},
      "ctx.enqueue_copy(dst_ptr=hb, src_buf=dbuf)"),
+    ("download, then a host fold over n (d2h-host-work)",
+     {DEV: "def _p20(ctx: DeviceContext, d: DeviceBuffer[DType.float32], n: Int) raises -> Float32:\n"
+           "    var h = download_f32(ctx, d, n)\n    var total = Float32(0.0)\n"
+           "    for i in range(n):\n        total = total + h[i]\n    return total"},
+     "for i in range(n):"),
+    ("download, then a host walk that branches (d2h-host-work)",
+     {DEV: "def _p21(ctx: DeviceContext, d: DeviceBuffer[DType.int32], hb: UnsafePointer[Int32], n_rows: Int) raises:\n"
+           "    ctx.enqueue_copy(dst_ptr=hb, src_buf=d)\n    ctx.synchronize()\n"
+           "    for i in range(n_rows):\n        if hb[i] == 0:\n            raise Error(\"bad\")"},
+     "for i in range(n_rows):"),
     ("one-thread launch over n",
      {DEV: "def _p13(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
            "    ctx.enqueue_function[_fold_kernel](x, Int32(n), grid_dim=1, block_dim=1)"},
@@ -181,6 +191,17 @@ PASSES = [
                                         "        var ctx = DeviceContext(device_id=rank)\n"
                                         "        ctx.synchronize()\n    host_parallelize(_task, n)\n"),
       DEV: "from x_decomp.multi_gpu_drive import drive"}),
+    ("download, then a plain element copy",
+     {DEV: "def _q1(ctx: DeviceContext, d: DeviceBuffer[DType.float32], out: UnsafePointer[Float32], n: Int) raises:\n"
+           "    var h = download_f32(ctx, d, n)\n    for i in range(n):\n        out[i] = h[i]"}),
+    ("download, then a trace-only fold",
+     {DEV: "def _q2(ctx: DeviceContext, mut trace: IdentityTrace, d: DeviceBuffer[DType.float32], n: Int) raises:\n"
+           "    var h = download_f32(ctx, d, n)\n    if trace.enabled:\n        var t = Float32(0.0)\n"
+           "        for i in range(n):\n            t = t + h[i]"}),
+    ("download, then a loop over a small k",
+     {DEV: "def _q3(ctx: DeviceContext, d: DeviceBuffer[DType.float32], n_features: Int) raises -> Float32:\n"
+           "    var h = download_f32(ctx, d, n_features)\n    var t = Float32(0.0)\n"
+           "    for j in range(n_features):\n        t = t + h[j]\n    return t"}),
     ("a module no GPU binding imports",
      {"x_decomp/unused_scratch.mojo": ("=", "def f(n: Int):\n    host_parallelize(_rows, n)\n")}),
 ]
