@@ -855,7 +855,7 @@ comptime XN_MMA_ROUTE = (
 
 
 def knn_mma_finish_kernel(
-    cd: FP, ci: MutPointer[UInt32, MutAnyOrigin], dist: FP, idx: IP, n_: Int64, k_: Int64, kk_: Int64, ex_: Int64,
+    cd: FP, ci: IP, dist: FP, idx: IP, n_: Int64, k_: Int64, kk_: Int64, ex_: Int64,
 ):
     """Row t: the first k of its kk MMA candidates (ascending by (distance,
     index)) that are not the query itself when ex; a short row ends in
@@ -872,7 +872,7 @@ def knn_mma_finish_kernel(
     for c in range(kk):
         if s >= k:
             break
-        var j = Int(ci.unsafe_load(t * kk + c))
+        var j = Int(ci.unsafe_load(t * kk + c).cast[DType.uint32]())  # the MMA index words (uint32), read as int32 bits
         if ex != 0 and j == t:
             continue
         var v = cd.unsafe_load(t * kk + c)
@@ -1005,7 +1005,7 @@ def op_knn_sq_tiled(
             # typed locals: the launch's arguments match the kernel's signature exactly (the
             # inline unsafe_ptr() arguments made the enqueue_function overloads ambiguous)
             var p_cd: FP = c_d.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-            var p_ci: MutPointer[UInt32, MutAnyOrigin] = c_i.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var p_ci: IP = c_i.unsafe_ptr().bitcast[Int32]().unsafe_origin_cast[MutAnyOrigin]()
             var p_dist: FP = d_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
             var p_idx: IP = d_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
             var a_n = Int64(n)
