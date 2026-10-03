@@ -70,6 +70,14 @@ def nearest_row[REV: Bool = False](
 
 
 @always_inline
+def flush_cell(x: FPtr, i: Int):
+    """x[i] = ftz(x[i]): a subnormal to its signed zero, every other word
+    unchanged (OPTICS' precomputed matrix, so no float compare on it sees a
+    subnormal: the Apple GPU's compare reads one as zero)."""
+    x[i] = ftz(x[i])
+
+
+@always_inline
 def sqrt_cell(x: FPtr, i: Int):
     """x[i] = identical_sqrt(max(x[i], 0))."""
     var v = x[i]

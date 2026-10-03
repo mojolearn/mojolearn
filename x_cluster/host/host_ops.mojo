@@ -47,6 +47,7 @@ from x_cluster.bodies import (
     SplitMix64,
     sqdist_cell,
     sqrt_cell,
+    flush_cell,
     tree_descend,
     ward_nn_row,
 )
@@ -285,6 +286,14 @@ struct HostOps(ClusterOps):
             sqrt_cell(px, t)
 
         host_cells(body, n, 4)
+
+    def flush(mut self, x: Int, n: Int) raises:
+        var px = self._fp(x)
+
+        def body(t: Int) {imm px}:
+            flush_cell(px, t)
+
+        host_cells(body, n, 1)
 
     def kth(mut self, m: Int, n_rows: Int, n_cols: Int, k: Int, dst: Int) raises:
         var pm = self._fp(m)
