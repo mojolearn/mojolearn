@@ -406,7 +406,7 @@ class AgglomerativeClustering:
                 "mojolearn AgglomerativeClustering: sparse X is refused; the "
                 "dissimilarities are a dense float32 matrix")
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        n, d = (int(v) for v in x.shape)
+        n, d = (int(v) for v in x.shape)  # glue: the two shape dims
         if n < 2:
             raise ValueError(
                 f"mojolearn AgglomerativeClustering: n_rows={n} < 2; a tree "
@@ -598,7 +598,7 @@ class AgglomerativeClustering:
         meta = _serialize.exact(arrays, "meta", "<i8")
         if meta.size != 3:
             raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 3 are needed")
-        k, nf, n_leaves = (int(v) for v in meta.tolist())
+        k, nf, n_leaves = (int(v) for v in meta.tolist())  # glue: unpacks the fixed meta vector
         obj = cls(n_clusters=k, metric=_serialize.scalar_str(arrays, "metric"), prediction_data=True)
         _restore_mode(obj, arrays)
         x = _serialize.exact(arrays, "x", "<f4")

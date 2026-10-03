@@ -415,7 +415,7 @@ class UMAP(NumericModeMixin):
             "metric": str(self.metric),
             "init": self.init if isinstance(self.init, str) else "array",
             # option parity (lane/algos-decomp): metric code, minkowski p, a, b
-            "extras": Array.from_list([float(v) for v in c[11:15]], "<f8"),
+            "extras": Array.from_list([float(v) for v in c[11:15]], "<f8"),  # glue: four saved option scalars
             "training": self._transform_training,
             "embedding": self._transform_embedding,
             "meta": Array.from_list(
@@ -442,15 +442,15 @@ class UMAP(NumericModeMixin):
         if meta.size != 7 or controls.size != 6:
             raise ValueError(f"mojolearn: {path!r} holds {meta.size} meta and {controls.size} control "
                              "fields; 7 and 6 are needed")
-        m = [int(meta[i]) for i in range(7)]
-        f = [float(controls[i]) for i in range(6)]
+        m = [int(meta[i]) for i in range(7)]  # glue: unpacks the fixed meta vector
+        f = [float(controls[i]) for i in range(6)]  # glue: unpacks the fixed controls vector
         init = _serialize.scalar_str(arrays, "init")
         ex = [-1.0, 2.0, 0.0, 0.0]
         if "extras" in arrays:
             e = _serialize.exact(arrays, "extras", "<f8")
             if e.size != 4:
                 raise ValueError(f"mojolearn: {path!r} holds {e.size} extras; 4 are needed")
-            ex = [float(e[i]) for i in range(4)]
+            ex = [float(e[i]) for i in range(4)]  # glue: unpacks four saved extras
         obj = cls(n_neighbors=m[0], n_components=m[1], n_epochs=None if m[5] else m[2],
                   random_state=m[3], min_dist=f[0], spread=f[1], set_op_mix_ratio=f[2],
                   local_connectivity=f[3], metric=_serialize.scalar_str(arrays, "metric"),

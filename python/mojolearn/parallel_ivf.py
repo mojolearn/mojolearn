@@ -73,7 +73,7 @@ class DistributedIVFIndex:
         if index._metric_code() != index.metric_code_:
             raise ValueError('metric differs from the fitted index')
         from ._ivf_impl import _int_param
-        for name in ('n_lists', 'n_probes', 'n_neighbors'):
+        for name in ('n_lists', 'n_probes', 'n_neighbors'):  # glue: checks three parameter names
             _int_param(name, getattr(index, name))
         if not 1 <= index.n_probes <= index.n_lists_ or index.n_neighbors < 1:
             raise ValueError('invalid IVF probe or neighbor count')
@@ -133,7 +133,7 @@ class DistributedIVFIndex:
             requests.append(('ivf_store', shard, ()))
         try:
             receipts = pool.map(requests)
-            if receipts != [len(ids) for ids in obj._id_maps]:
+            if receipts != [len(ids) for ids in obj._id_maps]:  # glue: one receipt per device
                 raise ValueError('IVF storage receipts differ from shard sizes')
         except BaseException:
             obj.close()
@@ -149,11 +149,11 @@ class DistributedIVFIndex:
         if q.shape[1] != self.n_features_in_:
             raise ValueError('query features differ from index')
         try:
-            parts = self._pool.map([('ivf_search_stored', None, (q,)) for _ in self.devices])
+            parts = self._pool.map([('ivf_search_stored', None, (q,)) for _ in self.devices])  # glue: one search request per device
             if len(parts) != len(self._id_maps):
                 raise ValueError('incomplete IVF result shards')
             m, k = q.shape[0], self.n_neighbors
-            for d, ix, count in parts:
+            for d, ix, count in parts:  # glue: checks each device's output shapes
                 if d.shape != (m, k) or ix.shape != d.shape or count.shape != (m,):
                     raise ValueError('invalid IVF shard output shapes')
             # THE MERGE (lane/py-dn-ann, 2026-09-28): one native pass
@@ -163,12 +163,12 @@ class DistributedIVFIndex:
             # ordered by (float32 distance, original id), the first k kept.
             result, ids, counts = empty((m, k), '<f4'), empty((m, k), '<i4'), empty((m,), '<i4')
             addrs = [addr(result, name='distances'), addr(ids, name='ids'), addr(counts, name='counts')]
-            for mapping, (d, ix, count) in zip(self._id_maps, parts):
+            for mapping, (d, ix, count) in zip(self._id_maps, parts):  # glue: addresses of each device's outputs
                 addrs += [addr_ro(d, name='shard distances'), addr_ro(ix, name='shard ids'),
                           addr_ro(count, name='shard counts'),
                           addr_ro(mapping, name='shard id map') if len(mapping) else addr_ro(count, name='shard id map')]
             status, _row = self._native.ivf_merge_shards(
-                addrs, [len(parts), m, k] + [len(mapping) for mapping in self._id_maps])
+                addrs, [len(parts), m, k] + [len(mapping) for mapping in self._id_maps])  # glue: row count of each device shard
             if int(status) != 0:
                 raise ValueError(_MERGE_ERRORS.get(int(status), 'IVF shard merge failed'))
             if self.metric_code_ == 1:
