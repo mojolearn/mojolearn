@@ -74,9 +74,8 @@ comptime BPE_CHUNK = 64
 comptime BPE_MAX_VOCAB = 46340
 comptime KEY_NONE = Int32(2147483647)
 
-# Fits gate: the two shared K-lists of one threadgroup (counts and keys, int32) in Apple's 32 KiB.
-comptime assert BPE_RT * BPE_K * 8 <= 32768, "bpe_device: the top-K partial lists exceed 32 KiB of threadgroup memory"
-comptime assert BPE_RB * BPE_K * 8 <= 32768, "bpe_device: the selection lists exceed 32 KiB of threadgroup memory"
+# Fits gate: the two shared K-lists of one threadgroup (counts and keys, int32) in Apple's 32 KiB,
+# asserted at the top of bpe_topk_part_kernel and bpe_select_kernel (comptime assert needs a function).
 
 # state words
 comptime S_DONE = 0
@@ -221,6 +220,7 @@ def bpe_topk_part_kernel(keys: I32P, vals: I32P, occ: I32P, st: I32P, pc: I32P, 
     keeps a sorted list over its strided entries, then the block merges the lists pairwise."""
     var tid = Int(thread_idx.x)
     var b = Int(block_idx.x)
+    comptime assert BPE_RT * BPE_K * 8 <= 32768, "bpe_device: the top-K partial lists exceed 32 KiB of threadgroup memory"
     var sc = stack_allocation[BPE_RT * BPE_K, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
     var sk = stack_allocation[BPE_RT * BPE_K, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
     var lc = InlineArray[Int32, BPE_K](fill=Int32(0))
@@ -279,6 +279,7 @@ def bpe_select_kernel(pc: I32P, pk: I32P, st: I32P, sel: I32P, mrg: I32P, vocab:
     top BPE_K, then thread 0 picks this pass's merges (the host's winner, plus under MERGE_BATCH the
     exact batch of docs/apple-fast/notes/bpe.md) and records them."""
     var tid = Int(thread_idx.x)
+    comptime assert BPE_RB * BPE_K * 8 <= 32768, "bpe_device: the selection lists exceed 32 KiB of threadgroup memory"
     var sc = stack_allocation[BPE_RB * BPE_K, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
     var sk = stack_allocation[BPE_RB * BPE_K, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
     for j in range(BPE_K):
