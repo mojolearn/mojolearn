@@ -31,6 +31,16 @@ from gbdt.methods.leaves_estimation.descent_helpers import (
     _update_move_direction,
     newton_like_walker_estimate,
 )
+from gbdt.methods.leaves_estimation.apple_fast_est import (
+    EST_APPLE_ANY,
+    EST_SHRINK_FUSED,
+    AppleEstScratch,
+    EstDerivsHook,
+    apple_est_ensure,
+    apple_est_fuses_derivs,
+    apple_est_handles,
+    apple_fast_estimate_and_apply,
+)
 from gbdt.gpu_util.arena import BufferArena
 from gbdt.methods.leaves_estimation.pointwise_oracle import (
     BinOptimizedOracle,
@@ -864,6 +874,10 @@ struct TEstimationWorkspace(Movable):
     #: one-call path builds
     var arena_scratch: List[OracleDeviceScratch]
     var arena_host: List[OracleHostScratch]
+    #: lane/apple-fast-sym-est: the FAST + Apple estimation task's buffers
+    #: (`apple_fast_est.AppleEstScratch`), pool of one; empty in every
+    #: build without one of its defines
+    var apple_est: List[AppleEstScratch]
 
     def __init__(
         out self,
@@ -890,6 +904,7 @@ struct TEstimationWorkspace(Movable):
         self.oracle_scratch = OracleScratchPool()
         self.arena_scratch = List[OracleDeviceScratch]()
         self.arena_host = List[OracleHostScratch]()
+        self.apple_est = List[AppleEstScratch]()
 
     def __init__(
         out self,
@@ -923,6 +938,7 @@ struct TEstimationWorkspace(Movable):
         self.oracle_scratch = OracleScratchPool()
         self.arena_scratch = List[OracleDeviceScratch]()
         self.arena_host = List[OracleHostScratch]()
+        self.apple_est = List[AppleEstScratch]()
 
 
 def _estimate_and_apply(
@@ -965,6 +981,9 @@ def _estimate_and_apply(
     # fit's YetiRank stream per tree); read only with `yeti`
     yeti_seed: UInt64 = UInt64(0),
     tail_drain: Bool = True,
+    # lane/apple-fast-sym-est (`EST_SHRINK_FUSED`): the loop head's
+    # derivative pass, for the task to leave done; None everywhere else
+    var derivs_hook: Optional[EstDerivsHook] = None,
 ) raises:
     """One estimation task: their `TDocParallelLeavesEstimator::Estimate`
     plus the `AppendModels` that follows it, for ONE (dataset, cursor).
@@ -1015,6 +1034,37 @@ def _estimate_and_apply(
                 ctx, n_rows, approx_dim, n_leaves, target_planes
             )
         )
+    # lane/apple-fast-sym-est: the FAST + Apple task (`apple_fast_est.mojo`)
+    # for a single-dim pointwise Newton / Gradient walk; every other build
+    # and every other task takes the path below unchanged
+    comptime if EST_APPLE_ANY:
+        if apple_est_handles(
+            objective, leaf_estimation_method, approx_dim, iters,
+            query.__bool__() or pairs.__bool__() or yeti.__bool__(),
+        ):
+            var a_sm = est_sm
+            if a_sm < 0:
+                a_sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+            apple_est_ensure(ctx, est_ws[0].apple_est, n_rows, n_leaves, a_sm)
+            var a_s = est_ws[0].apple_est[0].handles()
+            var a_gt = est_ws[0].g_target.copy()
+            var a_gw = est_ws[0].g_weights.copy()
+            var a_gc = est_ws[0].g_cursor.copy()
+            var a_po = est_ws[0].d_p_off.copy()
+            var a_ps = est_ws[0].d_p_sz.copy()
+            var a_hpo = est_ws[0].h_po.copy()
+            var a_hps = est_ws[0].h_ps.copy()
+            stage_times.end(ctx, "est.stage_in")
+            apple_fast_estimate_and_apply(
+                ctx, n_rows, n_leaves, sizes, leaf_offsets,
+                row_index, targets, weights, has_weights, cursor,
+                objective, alpha, logloss_border, l2_leaf_reg, a_sm,
+                leaf_estimation_method, iters, learning_rate,
+                leaf_values, trace, stage_times, leaf_tag,
+                a_gt, a_gw, a_gc, a_po, a_ps, a_hpo, a_hps, a_s,
+                derivs_hook^,
+            )
+            return
     # DEVIATION 3041: the oracle's device buffers from the fit's pool (keyed
     # exactly; see `OracleScratchPool`), taken as handle views BEFORE the
     # workspace refs below are borrowed
@@ -2474,6 +2524,10 @@ def fit_with_test(
     # stage's own drain returned". Disjoint stages; `other` is the rest.
     var loop_times = HostStageTimes()
     var t_loop = loop_times.start()
+    # lane/apple-fast-sym-est (`EST_SHRINK_FUSED`): True when the previous
+    # tree's estimation task left this iteration's search planes and value
+    # partials in `stats` / `fv_part` / `mag_part`; never set otherwise
+    var derivs_ready = False
     for iteration in range(n_estimators):
         var t_grad = loop_times.start()
         # ---- which permutation the STRUCTURE is searched on ----------
@@ -2561,6 +2615,10 @@ def fit_with_test(
         comptime if SYM_DERIV_FUSED:
             sym_skip_grad = sym_grad_prefetched
             sym_grad_prefetched = False
+        var skip_derivs = False
+        comptime if EST_SHRINK_FUSED:
+            skip_derivs = derivs_ready
+            derivs_ready = False
         # under bootstrap the magnitudes must bound the BOOTSTRAPPED
         # planes (a Bayesian weight reaches ~46 at the tail), so the
         # bootstrap kernel computes them AFTER its multiply instead
@@ -2632,6 +2690,10 @@ def fit_with_test(
                     yeti_rand.next_uniform_l(),
                     stats, fv_part, True, mag_part, mags_in_mse,
                 )
+            elif skip_derivs:
+                # lane/apple-fast-sym-est: the planes are already this cursor's
+                # (`apple_fast_est._launch_apply_derivs`, the same kernels)
+                pass
             elif second_order:
                 # `secondDerAsWeights=true`: plane 0 becomes `weight * der2`
                 # (`pointwise_target_impl.h:193-201`); plane 1 stays
@@ -3451,6 +3513,30 @@ def fit_with_test(
                         y_est = Optional(yeti_buffers.value().handles())
                         # this tree's second draw: the estimation stream's seed
                         y_seed = yeti_rand.next_uniform_l()
+                    var d_hook = Optional[EstDerivsHook]()
+                    comptime if EST_SHRINK_FUSED:
+                        # the learn permutation's cursor is the one the next
+                        # loop head differentiates: hand the task that pass
+                        # (one permutation only: with more, the next
+                        # tree's learn permutation is a fresh draw)
+                        # (never with SYM_DERIV_FUSED's prefetch this
+                        # tree: that tail already enqueues the same pass)
+                        if (
+                            perm_count == 1 and not sym_fuse
+                        ) and apple_est_fuses_derivs(
+                            objective, leaf_estimation_method, approx_dim,
+                            leaf_estimation_iterations,
+                            is_querywise or is_pair_logit or is_yeti_rank,
+                        ):
+                            d_hook = Optional(
+                                EstDerivsHook(
+                                    stats.copy(), fv_part.copy(),
+                                    mag_part.copy(),
+                                    _needs_magnitudes and not bootstrap_on,
+                                    second_order,
+                                )
+                            )
+                            derivs_ready = True
                     _estimate_and_apply(
                         ctx, n_rows, approx_dim, len(sizes), sizes,
                         leaf_offsets,
@@ -3470,6 +3556,7 @@ def fit_with_test(
                         y_est^,
                         y_seed,
                         tail_drain=not sym_fuse,
+                        d_hook^,
                     )
                 else:
                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
