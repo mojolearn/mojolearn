@@ -1,17 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/apple-fast-gap-arima (2026-10-03): two FAST-on-Apple switches for
+"""lane/apple-fast-gap-arima (2026-10-03): a FAST-on-Apple switch for
 `batched_fit.mojo::batched_min_lbfgs`. ARIMA_FAST_ASYNC is the FAST+Apple
-default (`_OFF` turns it off); ARIMA_FAST_LS_NOREAD stays opt-in.
-
-`-D MOJOLEARN_ARIMA_FAST_LS_NOREAD=1` (ARIMA_FAST_LS_NOREAD). The lock-step
-solver reads `any_searching` back right after `lbfgs_prelude_kernel`, a
-host wait per L-BFGS iteration whose answer is "yes" whenever any series is
-active (the prelude starts a search for every active series unless its step
-or direction is invalid). The switch skips that first read: when no series
-searches, the one extra evaluation proposes every series' current `x`, the
-accept kernel changes nothing and the next read ends the search. Same bits,
-one host wait fewer per iteration.
+default (`_OFF` turns it off). ARIMA_FAST_LS_NOREAD was DROPPED-noise; its
+code is on lane/apple-fast-gap-arima @ d967c0121.
 
 `-D MOJOLEARN_ARIMA_FAST_ASYNC=1` (ARIMA_FAST_ASYNC). The lock-step solver
 moves every series through the same phase together: prelude, a shared line
@@ -37,7 +29,6 @@ from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isinf, isnan
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import memcpy
@@ -55,8 +46,6 @@ from arima.impl.lbfgs_device import (
 )
 from arima.impl.tsa.arima_common import ARIMAOrder
 from checks.numerics import (
-    GLOBAL_NUMERIC_MODE,
-    NUMERIC_FAST,
     ftz,
     identical_mul,
     identical_mul_add,
@@ -72,13 +61,6 @@ from glm.impl.qn.qn_util import (
     OPT_NUMERIC_ERROR,
     OPT_SUCCESS,
     LBFGSParam,
-)
-
-comptime ARIMA_FAST_LS_NOREAD = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_ARIMA_FAST_LS_NOREAD"]()
-    and not is_defined["MOJOLEARN_ARIMA_FAST_LS_NOREAD_OFF"]()
 )
 
 #: DEFAULT ON (FAST + Apple, via KALMAN_FAST_EVAL_WS) since the M3 A/B:
