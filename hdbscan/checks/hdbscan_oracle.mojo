@@ -77,6 +77,7 @@ from hierarchy.checks.linkage_oracle import (
     host_row_norms_pinned,
     merge_sort_f64_with_index,
 )
+from hdbscan.impl.detail.stabilities import STAB_FOLD
 from hierarchy.impl.cluster.detail.connectivities import FLOAT32_MAX
 from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index
 from checks.numerics import (
@@ -431,7 +432,7 @@ def oracle_indptr(tree: OracleCondensed) -> List[Int32]:
 def oracle_stabilities(tree: OracleCondensed) -> List[Float32]:
     """DEVIATIONS 1603 and 1604 on the host, term for term: the segment
     minimum on the integer key, the `births` initialization from the
-    child slot, and the ascending fold through `ftz`/`identical_mul_add`."""
+    child slot, and the blocked fold through `ftz`/`identical_mul_add`."""
     var indptr = oracle_indptr(tree)
     var births = List[Float32](capacity=tree.n_clusters)
     for _ in range(tree.n_clusters):
@@ -453,13 +454,24 @@ def oracle_stabilities(tree: OracleCondensed) -> List[Float32]:
             if weight_order_key(seg_min) < weight_order_key(birth):
                 birth = seg_min
             births[c] = birth
-        var acc = Float32(0.0)
+        # the blocked order: STAB_FOLD strided partials, then the pairwise
+        # tree (stride STAB_FOLD / 2 down to 1), written out here apart from
+        # `stability_fold_host`.
+        var part = List[Float32](length=STAB_FOLD, fill=Float32(0.0))
         for i in range(lo, hi):
+            var t = (i - lo) % STAB_FOLD
             var term = ftz(tree.lambdas[i] - birth)
-            acc = ftz(
-                identical_mul_add(term, Float32(Int(tree.sizes[i])), acc)
+            part[t] = ftz(
+                identical_mul_add(term, Float32(Int(tree.sizes[i])), part[t])
             )
-        out.append(acc)
+        var stride = STAB_FOLD // 2
+        while stride > 0:
+            for t in range(stride):
+                part[t] = ftz(
+                    identical_mul_add(Float32(1.0), part[t + stride], part[t])
+                )
+            stride //= 2
+        out.append(part[0])
     return out^
 
 

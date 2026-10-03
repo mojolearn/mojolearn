@@ -5,11 +5,13 @@
 DEVIATION 6106 puts what follows the O(n) device work in IEEE binary64 on
 the host: for the ROC and precision-recall scores that is O(n) too (one
 term per curve point), and in Python it made a Python float per point,
-several times over (the largest cost left in roc_auc_score, the curves and
-average_precision_score on the Apple board). These functions are the SAME
+several times over. The ROC AUC and average precision SUMS left this file
+(lane cgr2-metrics-shap, 2026-10-03): they are device folds now
+(x_metrics/par.mojo curve_fold_unit); what stays here formats the curves a
+caller receives as Float64 arrays (one division per returned point). These functions are the SAME
 binary64 operations, in the same order, as the Python they stand in for in
-python/mojolearn/_expansion_metrics.py (`_drop_collinear`, `_trapezoid`,
-`_binary_auc`, `_binary_ap`, `roc_curve`), run over the Float32 curve words
+python/mojolearn/_expansion_metrics.py (`_drop_collinear`, `roc_curve`),
+run over the Float32 curve words
 in the caller's arena:
 
 - + - / are correctly rounded binary64 operations, as in Python; every
@@ -122,14 +124,6 @@ def fsum_partials(vals: List[Float64], mut p: List[Float64]):
             p.append(x)
 
 
-def _trapezoid(x: List[Float64], y: List[Float64], L: Int) -> Float64:
-    """fsum of ((x[i] - x[i-1]) * (y[i] + y[i-1])) / 2 over the first L."""
-    var terms = List[Float64](capacity=max(L - 1, 0))
-    for i in range(1, L):
-        terms.append(pinned_mul_f64(x[i] - x[i - 1], y[i] + y[i - 1]) / 2.0)
-    return fsum(terms)
-
-
 def kept(a: Int, fps: Int, tps: Int, keep: Int, c: Int, drop: Bool) -> List[Int]:
     """The curve points `_drop_collinear` keeps: all of them when not
     `drop` or c <= 2; the device's flags (`keep` >= 0, an unweighted curve);
@@ -158,72 +152,6 @@ def kept(a: Int, fps: Int, tps: Int, keep: Int, c: Int, drop: Bool) -> List[Int]
             out.append(i)
     out.append(c - 1)
     return out^
-
-
-def binary_auc(a: Int, fps: Int, tps: Int, keep: Int, c: Int, max_fpr: Float64) raises -> Float64:
-    """`_binary_auc` for fps[c-1] > 0 and tps[c-1] > 0 (the caller checks);
-    max_fpr < 0 means None (or 1)."""
-    var F = _w(a, fps + c - 1)
-    var T = _w(a, tps + c - 1)
-    if not (F > 0.0 and T > 0.0):
-        raise Error("x_metrics epilogue: an empty class goes the Python way")
-    var ks = kept(a, fps, tps, keep, c, True)
-    var m = len(ks)
-    var fpr = List[Float64](capacity=m + 1)
-    var tpr = List[Float64](capacity=m + 1)
-    fpr.append(0.0)
-    tpr.append(0.0)
-    for j in range(m):
-        fpr.append(_w(a, fps + ks[j]) / F)
-        tpr.append(_w(a, tps + ks[j]) / T)
-    if max_fpr < 0.0:
-        return _trapezoid(fpr, tpr, m + 1)
-    # bisect_right(fpr, max_fpr)
-    var lo = 0
-    var hi = m + 1
-    while lo < hi:
-        var mid = (lo + hi) // 2
-        if max_fpr < fpr[mid]:
-            hi = mid
-        else:
-            lo = mid + 1
-    var stop = lo
-    if stop < 1 or stop > m:
-        raise Error("x_metrics epilogue: max_fpr outside the curve goes the Python way")
-    var x0 = fpr[stop - 1]
-    var x1 = fpr[stop]
-    var y0 = tpr[stop - 1]
-    var y1 = tpr[stop]
-    var yi = y0
-    if x1 != x0:
-        yi = y0 + pinned_mul_f64(max_fpr - x0, y1 - y0) / (x1 - x0)
-    fpr[stop] = max_fpr
-    tpr[stop] = yi
-    var part = _trapezoid(fpr, tpr, stop + 1)
-    var min_area = pinned_mul_f64(pinned_mul_f64(0.5, max_fpr), max_fpr)
-    return pinned_mul_f64(0.5, 1.0 + (part - min_area) / (max_fpr - min_area))
-
-
-def binary_ap(a: Int, fps: Int, tps: Int, c: Int) raises -> Float64:
-    """`_binary_ap` for tps[c-1] != 0 (the caller checks): max(0.0, fsum
-    of (r - r_prev) * (t / (t + f))), r = t / T, r_prev of the first 0.0."""
-    var T = _w(a, tps + c - 1)
-    if not (T != 0.0):
-        raise Error("x_metrics epilogue: no positives goes the Python way")
-    var terms = List[Float64](capacity=c)
-    var rp: Float64 = 0.0
-    for i in range(c):
-        var t = _w(a, tps + i)
-        var d = t + _w(a, fps + i)
-        if d == 0.0:
-            raise Error("x_metrics epilogue: a zero denominator goes the Python way")
-        var r = t / T
-        terms.append(pinned_mul_f64(r - rp, t / d))
-        rp = r
-    var s = fsum(terms)
-    if s > 0.0:
-        return s
-    return 0.0
 
 
 def roc_arrays(a: Int, fps: Int, tps: Int, thr: Int, keep: Int, c: Int, drop: Bool,

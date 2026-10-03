@@ -44,8 +44,8 @@ from x_neighbors.device_ops import (
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
     kernel_kernel, rowsum_kernel, scale_div_kernel, kpca_center_kernel, unary_kernel, svgp_var_kernel,
 )
-from x_neighbors.items import matmul_tn_acc_item, K_RBF, U_IDENTITY
-from x_neighbors.lp_spmm import lp_spmm_kernel
+from x_neighbors.items import K_RBF, U_IDENTITY
+from x_neighbors.lp_spmm import lp_ell_fill_kernel, lp_nonfinite_kernel, lp_prod_kernel, lp_rowcount_kernel
 from core.device_zero import enqueue_fill
 
 
@@ -67,15 +67,17 @@ def op_lp_iterate(
 ) raises:
     """variant 0 propagation (lp_clamp), 1 spreading (ls_clamp). `ld` in:
     the initial label distributions, out: the last. info (int32 x 2): the
-    fit's n_iter_ and converged."""
-    # Imports must be at function scope, even when their use is opt-in.
-    from x_neighbors.lp_batched import op_lp_iterate_batched
+    fit's n_iter_ and converged.
 
+    Everything on the device (lane/cgr-kernel): the stopping sum is the
+    blocked `absdiff_sum` fold (`absdiff_sum_item`'s bits) with only the
+    scalar read back; G's nonzeros are found on the device, once, and the
+    product runs over them while the distributions are finite
+    (`lp_prod_kernel`, the dense product's bits). Before, the host scanned
+    G for its CSR and downloaded the distributions every iteration for the
+    stopping sum and the finiteness test (and `-D MOJOLEARN_XN_LP_BATCH`,
+    `_DENSE` and `_DEVICE_FOLD` chose other routes; they are gone)."""
     var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
-    comptime if is_defined["MOJOLEARN_XN_LP_BATCH"]() and not is_defined["MOJOLEARN_XN_LP_DEVICE_FOLD"]():
-        if n * c > 0 and max_iter > 0:
-            op_lp_iterate_batched(g, ld, ystatic, unlabeled, info, n, c, max_iter, variant, tol, alpha)
-            return
     var nc = n * c
     var ctx = xn_ctx()
     var d_g = _buf(ctx, g, n * n, True)
@@ -93,80 +95,48 @@ def op_lp_iterate(
     var cur_is_a = True
     var n_iter = 0
     var converged = False
-    # The stopping sum's ONE-ITEM fold over n * c values ran on ONE GPU
-    # thread every iteration (1.5 ms at n = 5,000 with many classes). By
-    # default the host folds it: the current distributions come back each
-    # iteration (they are what the step just wrote), the previous ones are
-    # the host copy from the iteration before, and `absdiff_sum_item` runs
-    # its same statements on them. `-D MOJOLEARN_XN_LP_DEVICE_FOLD` keeps
-    # the device fold.
-    var hc = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
-    var hp = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
-    # G's nonzero entries (a knn graph holds ~k per row), row-major CSR,
-    # built once on the host from the caller's array. Sparse only when it
-    # pays (under an eighth nonzero) and only in the host-fold path, which
-    # has each iteration's x on the host for the finiteness test.
-    # `-D MOJOLEARN_XN_LP_DENSE` keeps the dense product.
-    var pg = FP(unsafe_from_address=g)
-    var h_ip = List[Int32](length=n + 1, fill=Int32(0))
-    var h_cols = List[Int32]()
-    var h_vals = List[Float32]()
-    var use_sparse = False
-    comptime if not is_defined["MOJOLEARN_XN_LP_DENSE"]() and not is_defined["MOJOLEARN_XN_LP_DEVICE_FOLD"]():
-        var nnz = 0
-        for q in range(n * n):
-            if pg.unsafe_load(q) != Float32(0):
-                nnz += 1
-        use_sparse = nnz > 0 and nnz * 8 < n * n
-        if use_sparse:
-            for i in range(n):
-                for jj in range(n):
-                    var v = pg.unsafe_load(i * n + jj)
-                    if v != Float32(0):
-                        h_cols.append(Int32(jj))
-                        h_vals.append(v)
-                h_ip[i + 1] = Int32(len(h_cols))
-    var nnzb = len(h_cols) if len(h_cols) > 0 else 1
-    var d_ip = ctx.enqueue_create_buffer[DType.int32](n + 1)
-    var d_cols = ctx.enqueue_create_buffer[DType.int32](nnzb)
-    var d_vals = ctx.enqueue_create_buffer[DType.float32](nnzb)
+    # G's nonzeros per row (sparse only when it pays: under an eighth
+    # nonzero), counted and laid out on the device; two integers come back
+    var d_cnt = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+    var d_stats = ctx.enqueue_create_buffer[DType.int32](2)
+    var d_flag = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(d_stats, Int32(0))
+    if n > 0:
+        ctx.enqueue_function[lp_rowcount_kernel](
+            d_g.unsafe_ptr(), Int64(n), d_cnt.unsafe_ptr(), d_stats.unsafe_ptr(),
+            grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+        )
+    var hst = List[Int32](length=2, fill=Int32(0))
+    ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=d_stats)
+    ctx.synchronize()
+    var nnz = Int(hst[0])
+    var maxk = Int(hst[1])
+    var use_sparse = nnz > 0 and nnz * 8 < n * n
+    var ell = n * maxk if use_sparse else 1
+    var d_cols = ctx.enqueue_create_buffer[DType.int32](max(ell, 1))
+    var d_vals = ctx.enqueue_create_buffer[DType.float32](max(ell, 1))
     if use_sparse:
-        ctx.enqueue_copy(dst_buf=d_ip, src_ptr=h_ip.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_cols, src_ptr=h_cols.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
+        ctx.enqueue_function[lp_ell_fill_kernel](
+            d_g.unsafe_ptr(), Int64(n), Int64(maxk), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(),
+            grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+        )
     for it in range(max_iter):
         n_iter = it
-        comptime if is_defined["MOJOLEARN_XN_LP_DEVICE_FOLD"]():
-            _absdiff_launch(ctx, cur, prev, _p(d_s), _p(d_part), nc)
-            ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
-            ctx.synchronize()
-        else:
-            if cur_is_a:
-                ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=d_a)
-            else:
-                ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=d_b)
-            ctx.synchronize()
-            absdiff_sum_item(
-                0, FP(unsafe_from_address=Int(hc.unsafe_ptr())),
-                FP(unsafe_from_address=Int(hp.unsafe_ptr())),
-                FP(unsafe_from_address=Int(hs.unsafe_ptr())), nc,
-            )
-            for q in range(nc):
-                hp[q] = hc[q]
+        _absdiff_launch(ctx, cur, prev, _p(d_s), _p(d_part), nc)
+        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
+        ctx.synchronize()
         if Float64(hs[0]) < tol:
             converged = True
             break
-        var sparse_now = use_sparse
-        if sparse_now:
-            for q in range(nc):
-                var bits = bitcast[DType.uint32](hc[q]) & UInt32(0x7F800000)
-                if bits == UInt32(0x7F800000):
-                    sparse_now = False
-                    break
-        if sparse_now:
-            ctx.enqueue_function[lp_spmm_kernel](
-                d_ip.unsafe_ptr(), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), cur, d_nxt.unsafe_ptr(),
-                Int64(n), Int64(c), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+        if use_sparse:
+            ctx.enqueue_memset(d_flag, Int32(0))
+            ctx.enqueue_function[lp_nonfinite_kernel](
+                cur, Int64(nc), d_flag.unsafe_ptr(), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+            )
+            ctx.enqueue_function[lp_prod_kernel](
+                d_flag.unsafe_ptr(), d_cnt.unsafe_ptr(), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), Int64(maxk),
+                d_g.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), Int64(n), Int64(c),
+                grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
             )
         else:
             ctx.enqueue_function[matmul_kernel](
@@ -200,12 +170,10 @@ def op_lp_iterate(
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))
     _ = hs^
-    _ = hc^
-    _ = hp^
-    _ = h_ip^
-    _ = h_cols^
-    _ = h_vals^
-    _ = d_ip^
+    _ = hst^
+    _ = d_cnt^
+    _ = d_stats^
+    _ = d_flag^
     _ = d_cols^
     _ = d_vals^
     _ = d_g^
@@ -1315,7 +1283,7 @@ def knn_impute_split_kernel(
 # that stay on the device, and download only the final output. Every item
 # computes its cells from its own row, so a row tile changes no statement.
 # The one carried fold (SVGP's Kuf Kfu and Kuf y) continues each cell's
-# float32 accumulator from tile to tile: `matmul_tn_acc_item`.
+# float-float accumulator from tile to tile: `matmul_tn_acc_ff_item`.
 # -D MOJOLEARN_XN_FUSED_SABOTAGE adds 1e-3 to the first output cell of each
 # fused device driver (the new device path's negative control).
 # ============================================================================
@@ -1334,12 +1302,6 @@ def _p(mut b: DeviceBuffer[DType.float32]) -> FP:
 def _tile_rows(n: Int, width: Int) -> Int:
     var t = XN_FUSED_CELLS // max(width, 1)
     return max(1, min(n, t))
-
-
-def matmul_tn_acc_kernel(a: FP, b: FP, res: FP, rows_: Int64, n_: Int64, m_: Int64):
-    var t = _tid()
-    if t < Int(n_) * Int(m_):
-        matmul_tn_acc_item(t, a, b, res, Int(rows_), Int(n_), Int(m_))
 
 
 def _fused_sabotage(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], count: Int) raises:
@@ -1482,53 +1444,6 @@ def _launch_scaled_rbf(
     )
 
 
-def op_svgp_stats(
-    x: Int, z: Int, y: Int, bmat: Int, bvec: Int, n: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
-) raises:
-    """SVGP.fit's B = Kuf Kfu (m x m) and b = Kuf y (m): Kfu = variance *
-    rbf(x, z) per row tile on the device, both products carried over the
-    tiles (`matmul_tn_acc_item`); Kuf is never formed (it is Kfu^T bit for
-    bit: the rbf item squares x - z, and IEEE subtraction is antisymmetric)."""
-    var ctx = xn_ctx()
-    var d_x = _buf(ctx, x, n * d, True)
-    var d_z = _buf(ctx, z, m * d, True)
-    var d_y = _buf(ctx, y, n, True)
-    var d_b = _buf(ctx, 0, m * m, False)
-    var d_bv = _buf(ctx, 0, m, False)
-    enqueue_fill(ctx, d_b, Float32(0))
-    enqueue_fill(ctx, d_bv, Float32(0))
-    var tr = _tile_rows(n, m)
-    var d_k = _buf(ctx, 0, tr * m, False)
-    var d_ks = _buf(ctx, 0, tr * m, False)
-    var xp: FP = _p(d_x)
-    var yp: FP = _p(d_y)
-    var r0 = 0
-    while r0 < n:
-        var rows = min(tr, n - r0)
-        _launch_scaled_rbf(ctx, xp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
-        ctx.enqueue_function[matmul_tn_acc_kernel](
-            _p(d_ks), _p(d_ks), _p(d_b), Int64(rows), Int64(m), Int64(m),
-            grid_dim=_grid(m * m), block_dim=(BLOCK if m * m > 1 else 1),
-        )
-        ctx.enqueue_function[matmul_tn_acc_kernel](
-            _p(d_ks), yp + r0, _p(d_bv), Int64(rows), Int64(m), Int64(1),
-            grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
-        )
-        r0 += rows
-    _fused_sabotage(ctx, d_b, m * m)
-    _down(ctx, d_b, bmat, m * m)
-    _down(ctx, d_bv, bvec, m)
-    ctx.synchronize()
-    _ = d_x^
-    _ = d_z^
-    _ = d_y^
-    _ = d_b^
-    _ = d_bv^
-    _ = d_k^
-    _ = d_ks^
-    _ = ctx^
-
-
 def matmul_tn_acc_ff_kernel(a: FP, b: FP, rh: FP, rl: FP, rows_: Int64, n_: Int64, m_: Int64):
     var t = _tid()
     if t < Int(n_) * Int(m_):
@@ -1542,65 +1457,6 @@ def _up_direct(ctx: DeviceContext, addr: Int, count: Int) raises -> DeviceBuffer
     if count > 0:
         ctx.enqueue_copy(dst_buf=buf, src_ptr=FP(unsafe_from_address=addr))
     return buf^
-
-
-def _down_direct(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], addr: Int, count: Int) raises:
-    """`count` floats of `buf` (sized `count`) copied straight to the host pointer."""
-    if count > 0:
-        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=addr), src_buf=buf)
-
-
-def op_svgp_stats_ff(
-    x: Int, z: Int, y: Int, bh: Int, bl: Int, bvh: Int, bvl: Int, n: Int, m: Int, d: Int, gamma: Float32,
-    variance: Float32,
-) raises:
-    """`op_svgp_stats` with B and b accumulated in float-float (lane/neural-pass106,
-    x_neighbors/svgp_ff.mojo): the same Kfu tiles, the same rows ascending."""
-    var ctx = xn_ctx()
-    var d_x = _up_direct(ctx, x, n * d)
-    var d_z = _up_direct(ctx, z, m * d)
-    var d_y = _up_direct(ctx, y, n)
-    var d_bh = ctx.enqueue_create_buffer[DType.float32](max(m * m, 1))
-    var d_bl = ctx.enqueue_create_buffer[DType.float32](max(m * m, 1))
-    var d_vh = ctx.enqueue_create_buffer[DType.float32](max(m, 1))
-    var d_vl = ctx.enqueue_create_buffer[DType.float32](max(m, 1))
-    enqueue_fill(ctx, d_bh, Float32(0))
-    enqueue_fill(ctx, d_bl, Float32(0))
-    enqueue_fill(ctx, d_vh, Float32(0))
-    enqueue_fill(ctx, d_vl, Float32(0))
-    var tr = _tile_rows(n, m)
-    var d_k = ctx.enqueue_create_buffer[DType.float32](max(tr * m, 1))
-    var d_ks = ctx.enqueue_create_buffer[DType.float32](max(tr * m, 1))
-    var xp: FP = _p(d_x)
-    var yp: FP = _p(d_y)
-    var r0 = 0
-    while r0 < n:
-        var rows = min(tr, n - r0)
-        _launch_scaled_rbf(ctx, xp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
-        ctx.enqueue_function[matmul_tn_acc_ff_kernel](
-            _p(d_ks), _p(d_ks), _p(d_bh), _p(d_bl), Int64(rows), Int64(m), Int64(m),
-            grid_dim=_grid(m * m), block_dim=(BLOCK if m * m > 1 else 1),
-        )
-        ctx.enqueue_function[matmul_tn_acc_ff_kernel](
-            _p(d_ks), yp + r0, _p(d_vh), _p(d_vl), Int64(rows), Int64(m), Int64(1),
-            grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
-        )
-        r0 += rows
-    _down_direct(ctx, d_bh, bh, m * m)
-    _down_direct(ctx, d_bl, bl, m * m)
-    _down_direct(ctx, d_vh, bvh, m)
-    _down_direct(ctx, d_vl, bvl, m)
-    ctx.synchronize()
-    _ = d_x^
-    _ = d_z^
-    _ = d_y^
-    _ = d_bh^
-    _ = d_bl^
-    _ = d_vh^
-    _ = d_vl^
-    _ = d_k^
-    _ = d_ks^
-    _ = ctx^
 
 
 def svgp_ff_init_kernel(kuu: FP, bh: FP, bl: FP, w: FP, m_: Int64, n_: Int64, noise: Float32, jitter: Float32):
@@ -1656,29 +1512,60 @@ def svgp_ff_fin_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float32, n
         svgp_ff_fin_item(w, info, Int(nbn_), Int(nbm_), nf, noise, kdiag)
 
 
-def op_svgp_ff(
-    kuu: Int, bh: Int, bl: Int, bvh: Int, bvl: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int,
-    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+def op_svgp_fit_ff(
+    x: Int, z: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, n: Int, m: Int, d: Int,
+    gamma: Float32, variance: Float32, noise: Float32, jitter: Float32, kdiag: Float32,
 ) raises:
-    """The float-float SVGP solve on the device (x_neighbors/svgp_ff.mojo):
-    the parallel item passes in the CPU column's order. Before
-    (cpu-gpu-cleanup c-xneighbors-iter), the solve ran on the host."""
+    """SVGP.fit in float-float on the device, one resident chain
+    (lane/cgr-kernel): Kuu = variance * rbf(z, z), then B = Kuf Kfu and
+    b = Kuf y accumulated in float-float over the Kfu row tiles (rows
+    ascending), then the float-float solve (x_neighbors/svgp_ff.mojo). Kuu,
+    B and b never leave the device; only alpha, C, q_mu, q_sqrt and
+    [elbo, ok] come back. Before, B and b (hi and lo) were downloaded after
+    the statistics and uploaded again for the solve."""
     var ctx = xn_ctx()
-    var d_kuu = _buf(ctx, kuu, m * m, True)
-    var d_bh = _buf(ctx, bh, m * m, True)
-    var d_bl = _buf(ctx, bl, m * m, True)
-    var d_bvh = _buf(ctx, bvh, m, True)
-    var d_bvl = _buf(ctx, bvl, m, True)
-    var d_y = _buf(ctx, y, n, True)
+    var d_x = _up_direct(ctx, x, n * d)
+    var d_z = _up_direct(ctx, z, m * d)
+    var d_y = _up_direct(ctx, y, n)
+    var mm = m * m
+    var d_kuu = ctx.enqueue_create_buffer[DType.float32](max(mm, 1))
+    var d_bh = ctx.enqueue_create_buffer[DType.float32](max(mm, 1))
+    var d_bl = ctx.enqueue_create_buffer[DType.float32](max(mm, 1))
+    var d_bvh = ctx.enqueue_create_buffer[DType.float32](max(m, 1))
+    var d_bvl = ctx.enqueue_create_buffer[DType.float32](max(m, 1))
+    enqueue_fill(ctx, d_bh, Float32(0))
+    enqueue_fill(ctx, d_bl, Float32(0))
+    enqueue_fill(ctx, d_bvh, Float32(0))
+    enqueue_fill(ctx, d_bvl, Float32(0))
+    var tr = max(_tile_rows(n, m), m)
+    var d_k = ctx.enqueue_create_buffer[DType.float32](max(tr * m, 1))
+    var d_ks = ctx.enqueue_create_buffer[DType.float32](max(tr * m, 1))
+    var xp: FP = _p(d_x)
+    var yp: FP = _p(d_y)
+    if mm > 0:
+        _launch_scaled_rbf(ctx, _p(d_z), _p(d_z), _p(d_k), _p(d_kuu), m, m, d, gamma, variance)
+    var tile = _tile_rows(n, m)
+    var r0 = 0
+    while r0 < n:
+        var rows = min(tile, n - r0)
+        _launch_scaled_rbf(ctx, xp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
+        ctx.enqueue_function[matmul_tn_acc_ff_kernel](
+            _p(d_ks), _p(d_ks), _p(d_bh), _p(d_bl), Int64(rows), Int64(m), Int64(m),
+            grid_dim=_grid(mm), block_dim=(BLOCK if mm > 1 else 1),
+        )
+        ctx.enqueue_function[matmul_tn_acc_ff_kernel](
+            _p(d_ks), yp + r0, _p(d_bvh), _p(d_bvl), Int64(rows), Int64(m), Int64(1),
+            grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),
+        )
+        r0 += rows
     var d_alpha = _buf(ctx, 0, m, False)
-    var d_c = _buf(ctx, 0, m * m, False)
+    var d_c = _buf(ctx, 0, mm, False)
     var d_qmu = _buf(ctx, 0, m, False)
-    var d_qs = _buf(ctx, 0, m * m, False)
+    var d_qs = _buf(ctx, 0, mm, False)
     var d_info = _buf(ctx, 0, 2, False)
     var d_w = ctx.enqueue_create_buffer[DType.float32](max(svgp_ff_ws_size(m, n), 1))
     enqueue_fill(ctx, d_w, Float32(0))
     var wp = _p(d_w)
-    var mm = m * m
     if mm > 0:
         ctx.enqueue_function[svgp_ff_init_kernel](
             _p(d_kuu), _p(d_bh), _p(d_bl), wp, Int64(m), Int64(n), noise, jitter,
@@ -1707,8 +1594,10 @@ def op_svgp_ff(
     var nbm = svgp_ff_nbm(m)
     if nbn + nbm > 0:
         ctx.enqueue_function[svgp_ff_part_kernel](
-            _p(d_y), _p(d_bvh), _p(d_bvl), wp, Int64(m), Int64(n), grid_dim=_grid(nbn + nbm), block_dim=BLOCK,
+            yp, _p(d_bvh), _p(d_bvl), wp, Int64(m), Int64(n), grid_dim=_grid(nbn + nbm), block_dim=BLOCK,
         )
+    # one thread folds the nbn + nbm block partials (n / 2048 + m / 64 of
+    # them) into the scalar bound: a scalar step, not a loop over n
     ctx.enqueue_function[svgp_ff_fin_kernel](
         wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=1,
     )
@@ -1718,18 +1607,23 @@ def op_svgp_ff(
     _down(ctx, d_qs, qsqrt, mm)
     _down(ctx, d_info, info, 2)
     ctx.synchronize()
+    _ = d_x^
+    _ = d_z^
+    _ = d_y^
     _ = d_kuu^
     _ = d_bh^
     _ = d_bl^
     _ = d_bvh^
     _ = d_bvl^
-    _ = d_y^
+    _ = d_k^
+    _ = d_ks^
     _ = d_alpha^
     _ = d_c^
     _ = d_qmu^
     _ = d_qs^
     _ = d_info^
     _ = d_w^
+    _ = ctx^
 
 
 def op_svgp_predict(

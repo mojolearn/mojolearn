@@ -196,7 +196,10 @@ class _ScalerProtocol:
         reference's `ensure_all_finite='allow-nan'`) and the second value
         says whether every entry is finite; +-inf is refused by the NaN path's
         own scan. `with_copied`: also whether that cost a copy (copy=False
-        writes in place only into the caller's own buffer)."""
+        writes in place only into the caller's own buffer). `scan=False` (a
+        direct entry: lane gap-prep2's fits, lane apple-fast-prep's
+        transform): the finite walk is the device's and the second value is
+        None."""
         values, copied = materialize_f32_lists(X, "input")
         if values.dtype != "<f4":
             raise TypeError('Scaler input must have dtype float32')
@@ -403,7 +406,13 @@ class MinMaxScaler(_ScalerProtocol):
     def _transform(self, X, inverse):
         if not self.__sklearn_is_fitted__():
             raise NotFittedError('MinMaxScaler is not fitted')
-        values, finite, copied = self._input(X, allow_nan=True, with_copied=True)
+        binding = self._binding(self.numeric_mode_)
+        # lane apple-fast-prep: the FAST Apple binding (default; built with
+        # -D MOJOLEARN_PREP_FAST_MINMAX_OFF it has none) has `minmax_transform_direct` (X up from
+        # its own buffer, the device scans the output); any other binding, the
+        # List route with the host scans, as before
+        direct = _direct_entry(binding, "minmax_transform_direct")
+        values, finite, copied = self._input(X, allow_nan=True, with_copied=True, scan=direct is None)
         n, d = values.shape
         if d != self.n_features_in_:
             raise ValueError('MinMaxScaler input feature count differs from fit')
@@ -424,14 +433,24 @@ class MinMaxScaler(_ScalerProtocol):
             raise ValueError("MinMaxScaler scale_ and min_ must remain finite (NaN: a column never seen)")
         if scale.min() <= 0:
             raise ValueError("MinMaxScaler scale_ must remain positive")
-        source = values if finite else _nan_scan_fill(self.numeric_mode_, values, None)[0]
+        params = [n, d, int(inverse), int(self.clip_),
+                  float(self.feature_range_[0]), float(self.feature_range_[1])]
         output = empty(values.shape, '<f4')
-        self._binding(self.numeric_mode_).minmax_transform(
-            _addr_ro(source), _addr_ro(scale), _addr_ro(offset), _addr(output),
-            [n, d, int(inverse), int(self.clip_),
-             float(self.feature_range_[0]), float(self.feature_range_[1])])
-        if not all_finite(output):
-            raise ValueError('MinMaxScaler transform overflowed in Float32')
+        done = False
+        if finite is None:
+            # 0: a nonfinite output word. A finite input overflowed (refused as
+            # the List route's output scan does); else the NaN route below.
+            if int(direct(_addr_ro(values), _addr_ro(scale), _addr_ro(offset), _addr(output), params)):
+                finite = done = True
+            else:
+                finite = all_finite(values)
+                if finite:
+                    raise ValueError('MinMaxScaler transform overflowed in Float32')
+        if not done:
+            source = values if finite else _nan_scan_fill(self.numeric_mode_, values, None)[0]
+            binding.minmax_transform(_addr_ro(source), _addr_ro(scale), _addr_ro(offset), _addr(output), params)
+            if not all_finite(output):
+                raise ValueError('MinMaxScaler transform overflowed in Float32')
         if not finite or any(colnan):
             output = _nan_keep(self.numeric_mode_, values, output, colnan)
         return _write_back(self.copy, copied, values, X, output)

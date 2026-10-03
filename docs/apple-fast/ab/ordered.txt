@@ -1,0 +1,2 @@
+CMD lane/apple-fast-ordered ord-fd-taxi AFT_OUT=$HOME/aft-ab/ord-fd-taxi bash tools/aft_ab.sh gbdt gbdt-ordered taxi 2 "" "-D MOJOLEARN_ORDERED_FOLD_DERIVS"
+CMD lane/apple-fast-ordered ord-be-taxi AFT_OUT=$HOME/aft-ab/ord-be-taxi bash tools/aft_ab.sh gbdt gbdt-ordered taxi 2 "" "-D MOJOLEARN_ORDERED_BATCH_EST"

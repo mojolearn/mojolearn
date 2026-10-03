@@ -74,8 +74,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 comptime _DEVCTX_SLOT = "MojoLinalgContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoLinalgContextFast"
 
 
+from x_decomp.cells import F32Ptr
+from x_decomp.device import DevExec
 from decomposition.linalg_public_device import (
-    device_eigh,
     device_qr_r,
     device_svdvals,
 )
@@ -796,34 +797,34 @@ def qr_r_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
 
 
 def eigh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """`device_eigh(a, n)`. `addrs`: 0 a, 1 w_out (n, ASCENDING), 2 v_out
-    (n x n, eigenvector i in COLUMN i), 3 scalars_out (converged, executed).
-    `params`: 0 n. Returns n."""
+    """numpy's eigh: x_decomp's round-robin Jacobi (`DevExec.eigh`, the one eigh
+    order of every column; cgr-decomp 2026-10-03 replaced the one-block cyclic
+    solver here). `addrs`: 0 a, 1 w_out (n, ASCENDING), 2 v_out (n x n,
+    eigenvector i in COLUMN i), 3 scalars_out (converged = 1, executed = 0:
+    an unconverged solve raises). `params`: 0 n, 1 (optional) UPLO: 0 the
+    whole matrix, 1 the lower triangle, 2 the upper. Returns n."""
     if len(addrs) != 4:
         raise Error(
             "eigh: addrs must contain 4 addresses (a, w_out, v_out,"
             " scalars_out), got "
             + String(len(addrs))
         )
-    if len(params) != 1:
+    if len(params) != 1 and len(params) != 2:
         raise Error(
-            "eigh: params must contain 1 value (n), got " + String(len(params))
+            "eigh: params must contain 1 or 2 values (n, UPLO), got " + String(len(params))
         )
-    var wp = f32_ptr(Int(py=addrs[1]))
-    var vp = f32_ptr(Int(py=addrs[2]))
-    var sp = f64_ptr(Int(py=addrs[3]))
     var n = Int(py=params[0])
-    var a = read_f32(Int(py=addrs[0]), max(0, n * n))
+    var uplo = Int(py=params[1]) if len(params) == 2 else 0
+    if n < 1 or uplo < 0 or uplo > 2:
+        raise Error("eigh: n must be >= 1 and UPLO 0, 1 or 2")
+    var ap = F32Ptr(unsafe_from_address=Int(f32_ptr(Int(py=addrs[0]))))
+    var wp = F32Ptr(unsafe_from_address=Int(f32_ptr(Int(py=addrs[1]))))
+    var vp = F32Ptr(unsafe_from_address=Int(f32_ptr(Int(py=addrs[2]))))
+    var sp = f64_ptr(Int(py=addrs[3]))
     with GILReleased(Python()):
-        var got = device_eigh(a, n)
-        for i in range(n):
-            wp.unsafe_store(i, got.w[i])
-        for i in range(n * n):
-            vp.unsafe_store(i, got.v[i])
-        sp.unsafe_store(0, Float64(1.0) if got.converged else Float64(0.0))
-        sp.unsafe_store(1, Float64(got.executed))
-        _ = got^
-    _ = a^
+        DevExec.eigh(ap, wp, vp, n, uplo)
+        sp.unsafe_store(0, Float64(1.0))
+        sp.unsafe_store(1, Float64(0.0))
     return PythonObject(n)
 
 

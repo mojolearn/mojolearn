@@ -58,8 +58,16 @@ comptime TS_TPB = TS_P * TS_NB
 #: tree combine is O(n^3) cells in one threadgroup)
 comptime TS_MAX_N = 512
 #: cells (multiply-adds) per device launch: macOS silently cuts a long Metal
-#: command buffer, so every phase is sliced to about this much work
-comptime TS_LAUNCH_CELLS = 1 << 27
+#: command buffer, so every phase is sliced to about this much work. 2^34
+#: (lane apple-fast-tsqr; was 2^27, which left ONE to three leaf blocks per
+#: launch at 221 columns and ~2,300 synchronized launches on istella, a
+#: serial route on the Apple column): a few hundred leaf blocks per launch,
+#: tens of ms of device work, far below the seconds macOS allows.
+comptime TS_LAUNCH_CELLS = 1 << 34
+#: the fewest blocks (or tree pairs) a sliced launch carries, whatever the
+#: cell estimate says (TS_MAX_N columns: 256 x 3 x 8191 x 512 x 16 cells, a
+#: few hundred ms at worst on an M2 Pro); slicing never changes a bit
+comptime TS_LAUNCH_MIN_BLOCKS = 256
 
 
 def ts_blocks(m: Int) -> Int:

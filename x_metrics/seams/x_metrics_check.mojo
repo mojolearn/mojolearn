@@ -236,7 +236,8 @@ def check_contraction(mut card: IdentityTrace) raises:
 
 
 def check_prefix(mut card: IdentityTrace) raises:
-    """DEVIATION 6107: the weighted percentile's CDF is a sequential prefix."""
+    """DEVIATION 6107: the weighted percentile's CDF is a blocked prefix,
+    sequential inside a chunk of 1024 (this fixture is one chunk)."""
     var w: List[Float32] = [1.0, 1.0, 16777216.0, 1.0]
     var want = seq_prefix(w)
     var other = refold_prefix(w)
@@ -264,7 +265,7 @@ def check_prefix(mut card: IdentityTrace) raises:
     for i in range(5):
         rec.append(got[13 + i])
     card.record_list_f32("6107.cdf", rec)
-    print("PASS 6107 prefix: the weight CDF is a sequential ascending prefix (the fixture separates it from a refold)")
+    print("PASS 6107 prefix: the weight CDF is an ascending prefix within its chunk (the fixture separates it from a refold)")
 
 
 def check_rng_mapping(mut card: IdentityTrace) raises:

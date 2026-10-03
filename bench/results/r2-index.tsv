@@ -195,3 +195,7 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-02T07:20:46Z	measurements/2026-10-02/xs130-nvidia-main-nvc2.tar.gz	37fe39c99b15d49fd4a67589ec5b0b4a5b7852543dc7f291f9d606e34717292c	8810	793b70358047	/root/xs130-nvidia-main
 2026-10-02T07:31:08Z	measurements/2026-10-02/cv110-cv109-nvidia-lane.tar.gz	fb6ca2ea3c2f807d2510b3e48d7ebcf4bfad055b747d95f21aec50e23381cf5c	8439	4579ddf1d233	/root/cv109-nvidia-lane
 2026-10-02T07:31:11Z	measurements/2026-10-02/cv110-cv109-nvidia-main.tar.gz	d5eb3b8afa4ced8a0a32c6fc16be71d7208bc66fb12b3565850cf76ba332da35	11069	4579ddf1d233	/root/cv109-nvidia-main
+2026-10-03T03:18:13Z	measurements/2026-10-03/cgr-nv-lq.tar.gz	e5e57eb3a280826e5babc1fe564d6505cb8233b33c13a2ca411b8b2fc4a9cbde	154395	e1cf2463f403	/root/lq
+2026-10-03T03:18:14Z	measurements/2026-10-03/cgr-amd-lq-out.tar.gz	8f2834e10f2210ad545c0acfc9009e1ac3ad5560a7d5d4b45809ed426bda445b	2468203	mojolearn-steward-do-amd	/root/lq/out
+2026-10-03T03:44:51Z	measurements/2026-10-03/main-b2f5fa7f2-verify-nv.tar.gz	c7661e3ce9b3f8f956c44ebf3689857c9b7887a90cdef6b833c790ff90b0143f	296574	e1cf2463f403	/root/lq/out/n0008
+2026-10-03T03:44:52Z	measurements/2026-10-03/main-b2f5fa7f2-verify-amd.tar.gz	618914f6800613616a0e078f0c86d7323f2d12b3df82c6325c2e1dd44b99e448	295009	mojolearn-steward-do-amd	/root/lq/out/a0161
