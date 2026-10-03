@@ -594,7 +594,8 @@ class BayesianGaussianMixture(_XCluster):
     The n-sized work (the Mahalanobis squares, the E-step log-sum-exp, the
     M-step moments) runs on the device in float32; the Wishart and
     Dirichlet(-process) updates, the d x d Cholesky, digamma and log-gamma
-    and the lower bound are host float64. `init_params` is 'kmeans' (this
+    and the lower bound run on the device too, in float-float (about 48
+    bits; x_cluster/bgmm_device.mojo), as do the default priors. `init_params` is 'kmeans' (this
     library's KMeans), 'random', 'k-means++' or 'random_from_data' (the
     lane's seeded stream), as scikit-learn's;
     `random_state=None` means 0. covariance_type 'full', 'tied', 'diag'

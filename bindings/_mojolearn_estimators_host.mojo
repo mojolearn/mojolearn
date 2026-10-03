@@ -58,6 +58,8 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from core.py2mojo_rows import py2mojo_rows_host_binding
+from svm.host.scale_gamma_host import py2mojo_linear_flags_binding
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
@@ -1380,6 +1382,8 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_estimators_host")
         module.def_function[estimators_host_numeric_mode_binding]("estimators_host_numeric_mode")
+        module.def_function[py2mojo_rows_host_binding]("py2mojo_rows")
+        module.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         module.def_function[estimators_host_vendor_binding]("estimators_host_vendor")
         module.def_function[estimators_host_column_binding]("estimators_host_column")
         module.def_function[estimators_host_sabotage_binding]("estimators_host_sabotage")

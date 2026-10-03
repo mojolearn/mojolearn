@@ -1011,6 +1011,17 @@ def _coef_from_w(w, cols, n_targets, fit_intercept):
     return coef, intercept
 
 
+#: lane/apple-fast-py2mojo-linear: `py2mojo_rows` modes (core/py2mojo_rows.mojo)
+#: and the `py2mojo_linear_flags` bit that routes them
+_ROWS_LOG, _ROWS_SGD_PROBA, _ROWS_LRCV_PROBA = 1, 2, 3
+_PY2MOJO_ROWS = 2
+
+
+def _py2mojo_flags(binding):
+    fn = getattr(binding, "py2mojo_linear_flags", None)
+    return int(fn()) if fn is not None else 0
+
+
 def _log_or_inf(p):
     """`np.log` on one probability: `log(p)` for `p > 0`, `-inf` at exactly
     zero (NumPy's answer, minus its warning), NaN for a negative."""
@@ -1294,16 +1305,16 @@ class LogisticRegression(NumericModeMixin):
             codes = empty((x.shape[0],), "<i8")
             binding = self._bind("_mojolearn_estimators")
             native = getattr(binding, "qn_predict_binary", None)
-            if native is not None:
-                native(
-                    addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
-                    addr(codes, name="codes"),
-                    [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
-                )
-                return decode_labels(self.classes_, codes)
-            scores = self.decision_function(x)
-            return decode_labels(self.classes_,
-                                 [1 if s > 0.0 else 0 for s in scores.tolist()])
+            if native is None:
+                raise RuntimeError(
+                    "mojolearn LogisticRegression: the estimators binding has no "
+                    "qn_predict_binary; rebuild it")
+            native(
+                addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
+                addr(codes, name="codes"),
+                [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
+            )
+            return decode_labels(self.classes_, codes)
         scores = self.decision_function(X)
         return decode_labels(self.classes_, argmax_rows(scores))
 
@@ -1335,9 +1346,19 @@ class LogisticRegression(NumericModeMixin):
         (`qn_sigmoid` could return the log form directly). Routed there
         later; recorded here so it is not mistaken for a design.
         """
+        proba = self.predict_proba(X)
+        binding = self._bind("_mojolearn_estimators")
+        if _py2mojo_flags(binding) & _PY2MOJO_ROWS:
+            # lane/apple-fast-py2mojo-linear: `_log_or_inf` of every cell in
+            # the binding (core/py2mojo_rows.mojo ROWS_LOG, the same log)
+            out = empty(proba.shape, "<f8")
+            if proba.size:
+                binding.py2mojo_rows(_ROWS_LOG, addr_ro(proba, name="proba"),
+                                     addr(out, name="log proba"), [proba.size, 1])
+            return out
         return Array.from_list(
             [[_log_or_inf(p) for p in row]
-             for row in self.predict_proba(X).tolist()],
+             for row in proba.tolist()],
             "<f8",
         )
 
