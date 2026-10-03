@@ -376,6 +376,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL | minibatch-kmeans / istella, taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-pool-mbk-{istella,taxi} | 256.7 -> 170.7, 42.5 -> 38.1 | KEEP, FAST+Apple default (`_OFF` off) | pooled X buffer; quality identical (n=1) |
 | MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_G128 | minibatch-kmeans / istella, taxi | lane/apple-fast-gap-cls2@72602a339 (deleted before merge) | gapcls2-g128-mbk-{istella,taxi} | +14%, +22% | DROP, deleted before merge | slower |
 | MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN | minibatch-kmeans / istella, taxi | lane/apple-fast-gap-cls2@72602a339 (deleted before merge) | gapcls2-fin-mbk-{istella,taxi} | +5%, -3% | DROP, deleted before merge | noise; a single-block kernel (no-one-block rule) |
+| `RESAMPLE_FAST_IDX_DIRECT` | resample / taxi, istella | lane/apple-fast-gap-manprep @ c90b63b26 | gmp-rs-idx-taxi, gmp-rs-idx-istella | - | OPEN | the 1M device row draws copied straight into the caller's int32 Array (was host buffer -> List append loop -> store loop); same integers. The numpy row gather stays (a device gather moves the whole matrix up and back) |
 
 ## Time series (31)
 
