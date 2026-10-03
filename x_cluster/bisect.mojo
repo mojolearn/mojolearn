@@ -191,7 +191,6 @@ def bisect_fit[O: ClusterOps](
             var rs_ = ops.put_i(rows32)
             ops.sqdist_rows(xcs, rs_, m, cs, 2, d, ds)
         else:
-            var sub_s = ops.put(sub)
             ops.sqdist(sub_s, m, cs, 2, d, ds)
         var dd = ops.get(ds, m * 2)
         var sc = List[Float64](length=2, fill=Float64(0))
