@@ -33,3 +33,20 @@ Risky compile sites (no Mojo toolchain run on the GPU here; the FAST builds comp
 loop (pt_tile_kernel); the 2-D `grid_dim=(chunks, cgroups)` with a runtime `block_dim=tpb`
 (preprocessing/minmax.mojo's idiom); `pt_finish` called from a new kernel (fastred.mojo already does);
 `x_prep/device.mojo` `continue` inside `comptime if` blocks (the RR_EIGH idiom at device.mojo:330).
+
+## Compile status (M4, compile only, nothing run; 2026-10-03)
+All builds are `bindings/build_x_prep.sh`. The per-define and IDENTICAL builds are at head ed8e8ee7e:
+- FAST `-D MOJOLEARN_PT_FOLD_NOX`: rc=0
+- FAST `-D MOJOLEARN_PT_COLBATCH`: rc=0
+- FAST `-D MOJOLEARN_PT_SPEC` (also turns on COLBATCH): rc=0
+- FAST `-D MOJOLEARN_PT_FUSED_TRANSFORM`: rc=0
+- FAST `-D MOJOLEARN_SI_ONEPASS`: rc=0
+- FAST, all defines off: rc=0
+- IDENTICAL (default mode): rc=0
+- FAST `-D MOJOLEARN_PTIMPUTE_ALL`: rc=0 on a build that started at 06:34:57, two minutes before
+  ed8e8ee7e (fastpt.mojo launch helpers take `mut ctx`). The rebuild at head was stopped when Andrew
+  halted lane compiles. Compile owed: peer.
+
+Brief candidates folded into other defines: PT_TILE220 is the row-tiled column-group layout of
+COLBATCH / FUSED_TRANSFORM / SI_ONEPASS (`pt_tile_kernel`, `cs_tile_kernel`), and SI_LIVEBUF is not a
+separate define. The imputer's launch and buffer savings are in SI_ONEPASS.
