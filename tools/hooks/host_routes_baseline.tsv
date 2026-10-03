@@ -195,6 +195,8 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_ann.p
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_ann.py	2	n, dim = (int(s) for s in x.shape)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_ann.py	0	obj = cls(**{p: cls._load_param(p, int(params[i])) for i, p in enumerate(cls._SAVE_PARAMS)})
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cluster.py	0	arrs = [_buffer.as_f32_c(p, ndim=None, name="aux")[0] for p in parts if p is not None]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cluster.py	0	aux += [float(v) for v in _buffer.flat_bytes(m).cast("f")]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -473,6 +475,8 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	lg = k.ew("lgamma", _M.of([(d - i + 1) / 2.0 for i in range(1, d + 1)], 1, d)).s
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	live = [j for j, v in enumerate(k.colsum(k.ew("abs", Q)).s) if v != 0.0]
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_decomp.py	0	m = max((abs(float(v)) for v in A.s), default=0.0)
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	nr = [float(v) for v in k.colsum(k.ew("abs", Z)).s]
 # why: solver iteration drivers (NMF, FastICA, FactorAnalysis, PLS, DictionaryLearning, LDA, MDS, ALS, IncrementalPCA batches) whose steps are x_decomp Mojo cells, plus k-sized component/column flag lists; owed: one Mojo driver per solver like x_decomp/mcd.mojo
@@ -515,6 +519,8 @@ py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	if stop or max(res) <= _LANCZOS_TOL * big:
 # why: k-sized folds over singular values, components or restarts (rank counts, max of nc values, NMF component permutation); owed to x_decomp count/max moves
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	lim = max(k.ew("abs", k.ew("adds", k.ew("abs", dots), s=-1.0)).s)
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_decomp.py	0	m = max((abs(float(v)) for v in A.s), default=0.0)
 # why: k-sized folds over singular values, components or restarts (rank counts, max of nc values, NMF component permutation); owed to x_decomp count/max moves
 py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_decomp.py	0	rank = sum(1 for v in S.s if v > cut)
 # why: k-sized folds over singular values, components or restarts (rank counts, max of nc values, NMF component permutation); owed to x_decomp count/max moves
@@ -811,6 +817,8 @@ py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_expansion_metrics.py
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	Z = self._take_rows(X, [i * n // M for i in range(M)])
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	bits = [(-1, 1)[v] for v in rs.randint(2, deg * nf)]
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	classes = [c for i, c in enumerate(allc) if i != skip]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	for _ in range(count):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -827,6 +835,8 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neigh
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	for sh in (1, 2, 4, 8, 16):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	getattr(self._bind(), "xn_" + name)(addrs, [int(v) for v in ints], [float(v) for v in floats])
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	if all(isinstance(v, (bool, int)) for v in classes):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	if all(isinstance(v, (int, float)) for v in classes):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -879,6 +889,8 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neigh
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	return _names_out([f"{base}{i}" for i in range(count)])
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	return all(math.isclose(p, 1.0 / C, rel_tol=1e-5, abs_tol=1e-8) for p in self.class_prior_.tolist())
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	return decode_labels([float(v) for v in classes], codes)
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	self._miss_cols = [f for f in range(d) if cm[f] > 0]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -1029,6 +1041,8 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_prep.
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_prep.py	2	for j in range(d):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_prep.py	3	for j in range(d):
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_prep.py	0	for j in range(d)]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_prep.py	0	for j, (v, cats) in enumerate(zip(vals, self.categories_)):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -2435,6 +2449,8 @@ py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	return Array.from_list([float(v) for row in rows for v in row], '<f8').reshape((n,) + tuple(width))
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	return [pos[v] for v in values]
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	return [self.rows(words, f, int(sizes[f])) for f in range(k)]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	return [values[i] for i in indices.tolist()]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -2709,12 +2725,16 @@ py-data-loop	py-compute	pyglue-text-io	owed-py	python/mojolearn/models/tokenizer
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	[int(c) for cl in self._classes_list for c in cl], "<i8"
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	[len(cl) for cl in self._classes_list], "<i8"
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	dst = [dists[ptr[i]:ptr[i + 1]] for i in range(nq)]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	for i, (count, b) in enumerate(zip(n_classes, self._classes_list)):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	for i, count in enumerate(counts):
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	for n in n_classes:
+# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
+py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	ind = [cols64[ptr[i]:ptr[i + 1]] for i in range(nq)]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
 py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	n_classes = [len(c) for c in self._classes_list]
 # why: runtime Python compute owed to Mojo (Python = glue only, Oct 3); lane pyglue-numeric moves it or marks it `# glue:`
@@ -2878,27 +2898,3 @@ host-call	host-import	PR#86	debt	x_linear/ridge.mojo	0	par_rows(rows_loo, n)
 host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	par_rows(run_problems, problems, 1)
 host-env	host-env/threshold	PR#85	inflight@6a483da91d76ae2560b5316910738e7b3328e375	x_linear/sgd.mojo	0	and not is_defined["MOJOLEARN_SGD_HOST_LEGACY"]()
-# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_cluster.py	0	arrs = [_buffer.as_f32_c(p, ndim=None, name="aux")[0] for p in parts if p is not None]
-# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_decomp.py	0	m = max((abs(float(v)) for v in A.s), default=0.0)
-# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
-py-reduce	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_decomp.py	0	m = max((abs(float(v)) for v in A.s), default=0.0)
-# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	if all(isinstance(v, (bool, int)) for v in classes):
-# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	return decode_labels([float(v) for v in classes], codes)
-# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	skip = next((i for i, c in enumerate(allc) if c == -1 and not isinstance(c, str)), -1)   # glue: k classes
-# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_neighbors.py	0	classes = [c for i, c in enumerate(allc) if i != skip]
-# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_expansion_prep.py	0	for j in range(d)]
-# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/_x_sequence_moe.py	0	for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),
-# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/model_selection.py	0	return [self.rows(words, f, int(sizes[f])) for f in range(k)]
-# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	ind = [cols64[ptr[i]:ptr[i + 1]] for i in range(nq)]
-# why: carried in by merging lane/pyglue-numeric into the stricter pyglue-sweep Python rule; owed to the Python glue-only burn-down
-py-data-loop	py-compute	pyglue-numeric	owed-py	python/mojolearn/neighbors.py	0	dst = [dists[ptr[i]:ptr[i + 1]] for i in range(nq)]
