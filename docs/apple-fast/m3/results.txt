@@ -1,4 +1,4 @@
-pos=821 lines=    1130
+pos=830 lines=    1151
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -963,3 +963,15 @@ pos=821 lines=    1130
 1071:FBUILD lane/apple-fast-gap-linalg2@19fb05674 core=0 ibase=0 estimators=0 gp=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
 1072:CMD apple-fast-gap-linalg2@19fb05674 gl2-lu-step1-synthetic rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=977.3 all=[977] quality=['{"relative_residual":'] defines='-D MOJOLEARN_LU_FAST_STEP1'
 1073:CMD apple-fast-gap-linalg2@19fb05674 gl2-lusolve-step1-synthetic rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=971.1 all=[971] quality=['{"relative_residual":'] defines='-D MOJOLEARN_LU_FAST_STEP1'
+1074:FBUILD lane/apple-fast-gap-manprep@8657bb02c core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1075:CMD apple-fast-gap-manprep@8657bb02c gmp-imp-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2.7 all=[3] quality=['{"masked_rmse":'] defines='-D MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN -D MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY'
+1076:CMD apple-fast-gap-manprep@8657bb02c gmp-lle-devf0-taxi rc=0 AFC-AB-SUMMARY gmp-lle-devf0-taxi arm=B lane=lle ds=taxi median_of_medians_ms=2570.1776670175605 runs=[2570.1776670175605 ] digest=68a3bf158fd860ea 
+1077:CMD apple-fast-gap-manprep@8657bb02c gmp-lle-devf0-istella rc=0 AFC-AB-SUMMARY gmp-lle-devf0-istella arm=B lane=lle ds=istella median_of_medians_ms=2653.366292011924 runs=[2653.366292011924 ] digest=bc1d87fcc43a5952 
+1078:CMD apple-fast-gap-manprep@8657bb02c gmp-prof-prep rc=0 PROF maxabs-istella
+1079:FBUILD lane/apple-fast-gap-linalg2@799a99f1f core=0 ibase=0 estimators=0 gp=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1080:CMD apple-fast-gap-linalg2@799a99f1f retime-qr-taxi-c rc=0 AFC-AB-SUMMARY retime-qr-taxi-c arm=A lane=qr ds=taxi median_of_medians_ms=46.59629100933671 runs=[46.59629100933671 ] digest=17823c02b798abed 
+1081:CMD apple-fast-gap-manprep@8657bb02c gmp-iso-nolist-istella rc=0 AFC-AB-SUMMARY gmp-iso-nolist-istella arm=B lane=isotonic ds=istella median_of_medians_ms=29.430166992824525 runs=[29.430166992824525 ] digest=cabead0683a0c1d2 
+1082:FBUILD lane/apple-fast-gap-kapprox2@4fd464a43 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1083:CMD apple-fast-gap-kapprox2@4fd464a43 kap2-kshap-batch-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=15324.7 all=[15325] quality=['{"rel_error_vs_exact":'] defines='-D MOJOLEARN_KSHAP_FAST_BATCH'
+1084:CMD apple-fast-gap-kapprox2@4fd464a43 kap2-kshap-sign-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=15074.1 all=[15074] quality=['{"rel_error_vs_exact":'] defines='-D MOJOLEARN_KSHAP_FAST_BATCH -D MOJOLEARN_KSHAP_FAST_SIGNGRAM'
+1085:CMD apple-fast-gap-kapprox2@4fd464a43 kap2-pshap-batch-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=28235.9 all=[28236] quality=['{"rel_error_vs_exact":'] defines='-D MOJOLEARN_KSHAP_FAST_BATCH'
