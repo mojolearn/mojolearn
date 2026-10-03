@@ -26,7 +26,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.device_pool import pool_give, pool_take
 from core.device_scan import device_first_nonfinite
 
-from x_decomp.cells import F32Ptr
+from x_decomp.cells import F32Ptr, OP_SCALE, ew_cell, rand_cell
+from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu.host import HostBuffer
+from core.device_scan import NONFINITE_NONE, SCAN_TPB, _scan_blocks, nonfinite_partial_kernel
 from x_decomp.moves import MOVE_FILL0, MOVE_TAKE_ROWS
 from x_decomp.moves_device import launch_move
 from x_decomp.device import (
@@ -519,6 +522,17 @@ comptime GRP_CLS2_DEVSCAN = (
     and not GRP_CLS2_NOSCAN
 )
 comptime GRP_CLS2_LAZY = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_LAZY"]()
+#: lane apple-fast-gap-kapprox2 (2026-10-03), FAST + Apple, opt-in: the
+#: random projections' whole fit in ONE binding call and ONE synchronize
+#: (`grp_fit_fused_py`): X up into the pooled scan buffer, the nonfinite
+#: partials into a pooled device buffer, the matrix drawn AND scaled by one
+#: kernel (`rand_cell` then `ew_cell(OP_SCALE)`, the words of main's
+#: `x_decomp_dev_rand` + `ew scale`), the partials and the matrix down in
+#: the same queue. Main's DEVSCAN fit waits twice (scan, then the matrix
+#: download), allocates the partials and a pinned host buffer per fit and
+#: launches rand and scale separately. Refusal stays in fit; bit 8 of
+#: `x_decomp_grp_cls2`. Needs DEVSCAN (not NOSCAN).
+comptime GRP_FAST_FUSED = GRP_CLS2_DEVSCAN and is_defined["MOJOLEARN_XD_FAST_GRP_FUSED"]()
 comptime GRP_CLS2_ANY = GRP_CLS2_NOSCAN or GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
 
 
@@ -532,6 +546,8 @@ def grp_cls2_py() raises -> PythonObject:
         f |= 2
     comptime if GRP_CLS2_LAZY:
         f |= 4
+    comptime if GRP_FAST_FUSED:
+        f |= 8
     return PythonObject(f)
 
 
@@ -573,3 +589,80 @@ def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: Pyth
     var pd = _ptr(_id(dst), max(_n(p, 8), 1))
     launch_move(xd_ctx(), op, ps, pi, pd, count, a1, a2, a3, ist, ioff)
     return PythonObject(count)
+
+
+# ---- GRP_FAST_FUSED (lane apple-fast-gap-kapprox2)
+def grp_rand_scale_kernel(dst: F32Ptr, count: Int32, seed: UInt32, stream: UInt32, kind: Int32, s: Float32):
+    """`rand_kernel` then `ew_kernel(OP_SCALE)` with the unit operands in
+    one pass: dst[i] = ew_cell(OP_SCALE, rand_cell(i), 1, 1, s)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(count):
+        dst.unsafe_store(i, ew_cell(OP_SCALE, rand_cell(i, seed, stream, Int(kind)), Float32(1), Float32(1), s))
+
+
+struct _GrpStage(Defaultable, Movable):
+    """The fused fit's pooled scan partials (device) and their pinned copy."""
+    var part: Optional[DeviceBuffer[DType.int32]]
+    var host: Optional[HostBuffer[DType.int32]]
+
+    def __init__(out self):
+        self.part = Optional[DeviceBuffer[DType.int32]]()
+        self.host = Optional[HostBuffer[DType.int32]]()
+
+
+comptime GRP_STAGE = _Global[StorageType=_GrpStage, name="MojoXDecompGrpFusedStage", init_fn=_GrpStage.__init__]
+
+
+def grp_fit_fused_py(
+    xaddr: PythonObject, n: PythonObject, dst: PythonObject, out: PythonObject, p: PythonObject, s: PythonObject
+) raises -> PythonObject:
+    """p = [count, seed, stream, kind]: the first flat index of a NaN or
+    infinity among the n floats at xaddr (or -1), the count-entry matrix
+    drawn and scaled by s into the device matrix dst, and its words copied
+    to the host floats at out; one synchronize. Registered only under
+    GRP_FAST_FUSED."""
+    var cnt = Int(py=n)
+    var count = _n(p, 0)
+    var seed = UInt32(Int(py=p[1]) & 0xFFFFFFFF)
+    var stream = UInt32(Int(py=p[2]) & 0xFFFFFFFF)
+    var kind = Int(py=p[3])
+    var sc = Float32(Float64(py=s))
+    var src = F32Ptr(unsafe_from_address=Int(py=xaddr))
+    var host_out = F32Ptr(unsafe_from_address=Int(py=out))
+    var pd = _ptr(_id(dst), max(count, 1))
+    var best = NONFINITE_NONE
+    with GILReleased(Python()):
+        var ctx = xd_ctx()
+        var st = GRP_STAGE.get_or_create_ptr()
+        if not st[].part:
+            st[].part = ctx.enqueue_create_buffer[DType.int32](512)
+            st[].host = ctx.enqueue_create_host_buffer[DType.int32](512)
+        var blocks = _scan_blocks(cnt) if cnt > 0 else 0
+        var buf = pool_take["MojoXDecompCls2Scan"](ctx, max(cnt, 1))
+        if cnt > 0:
+            ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
+            ctx.enqueue_function[nonfinite_partial_kernel](
+                st[].part.value().unsafe_ptr(), buf.unsafe_ptr(), Int32(cnt),
+                grid_dim=(blocks, 1, 1), block_dim=(SCAN_TPB, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=st[].host.value().unsafe_ptr(),
+                             src_buf=st[].part.value().create_sub_buffer[DType.int32](0, blocks))
+        if count > 0:
+            ctx.enqueue_function[grp_rand_scale_kernel](
+                pd, Int32(count), seed, stream, Int32(kind), sc, grid_dim=_blocks(count), block_dim=TPB
+            )
+            ctx.enqueue_copy(dst_ptr=host_out, src_buf=_pool_buf_view(_id(dst), count))
+        ctx.synchronize()
+        var hp = st[].host.value().unsafe_ptr()
+        for i in range(blocks):
+            var v = hp[i]
+            if v < best:
+                best = v
+        pool_give["MojoXDecompCls2Scan"](buf^)
+    return PythonObject(-1 if best == NONFINITE_NONE else Int(best))
+
+
+def _pool_buf_view(id: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
+    """The first `count` floats of pooled matrix id as a sub-buffer."""
+    var p = X_DECOMP_POOL.get_or_create_ptr()
+    return p[].bufs[id].create_sub_buffer[DType.float32](0, count)

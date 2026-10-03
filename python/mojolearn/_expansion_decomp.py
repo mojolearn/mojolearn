@@ -1322,6 +1322,8 @@ class _RandomProjection(_Base):
         # twice at the board's shape)
         k = self._kit()
         cls2 = _grp_cls2(k) if self.numeric_mode_ == "fast" else 0
+        if cls2 & 8 and not _is_sparse(X) and self._fused_fit(k, X):
+            return self
         if cls2 & 3 and not _is_sparse(X):
             # lane/apple-fast-gap-cls2 (FAST + Apple, x_decomp/resident.mojo
             # GRP_CLS2_*): no host walk over X. NOSCAN: the shape only
@@ -1371,6 +1373,37 @@ class _RandomProjection(_Base):
             self.inverse_m_ = _pinv_rows(k, self.components_m_)
             self.inverse_components_ = self.inverse_m_.out()
         return self
+
+    def _fused_fit(self, k, X):
+        """lane apple-fast-gap-kapprox2 MOJOLEARN_XD_FAST_GRP_FUSED (bit 8 of
+        `x_decomp_grp_cls2`): the scan, the matrix and its download in one
+        binding call with one wait (x_decomp/resident.mojo
+        `grp_fit_fused_py`); the same words and the same fit-time refusal as
+        the DEVSCAN route. False (nothing done) where it does not apply:
+        not GaussianRandomProjection, 'auto' n_components, or
+        compute_inverse_components."""
+        if type(self) is not GaussianRandomProjection or self.n_components == "auto" \
+                or self.compute_inverse_components or not k._res():
+            return False
+        a = as_f32_c(X, ndim=2, name="X")[0]
+        if a.ndim != 2 or min(a.shape) == 0:
+            raise ValueError("X: a nonempty two-dimensional input is required")
+        n, d = a.shape
+        kc = int(self.n_components)
+        if kc <= 0:
+            raise ValueError(f"n_components must be greater than 0, got {kc}")
+        C = k._dout(kc, d)
+        res = array.array("f", [0.0]) * (kc * d)
+        bad = int(k.b.x_decomp_grp_fit_fused(addr_ro(a, name="X"), a.size, C._d.id, res.buffer_info()[0],
+                                             [kc * d, int(_seed_of(self.random_state)) & 0xFFFFFFFF, 1, 1],
+                                             1.0 / math.sqrt(kc)))
+        if bad >= 0:
+            raise ValueError("X: input must be finite; NaN/inf are unsupported")
+        self.n_components_ = kc
+        self.n_features_in_ = d
+        self.components_m_ = C
+        self.components_ = Array._owned(res, (kc, d), "<f4", "C")
+        return True
 
     def transform(self, X):
         self._check()
