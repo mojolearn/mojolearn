@@ -54,6 +54,9 @@ class _ResidentState:
         self._res_used = 0
         self._host_fresh = True     # the host copies hold the newest values
         self._host_owned = True     # the next step uploads them first
+        # the host copies are still the zeros (and initial values) the
+        # constructor built: nobody has read or replaced them
+        self._pristine = True
 
     @property
     def state(self):
@@ -63,6 +66,7 @@ class _ResidentState:
             self._host_fresh = True
         # a reader may write into the arrays it got: upload before the next step
         self._host_owned = True
+        self._pristine = False
         return self._state
 
     @state.setter
@@ -70,6 +74,16 @@ class _ResidentState:
         self._state = value
         self._host_fresh = True
         self._host_owned = True
+        self._pristine = False
+
+    def _res_opened(self, b, ret, init_zero=True):
+        """Keep the handle an open returned ([handle, used] or, from a
+        binding built with MOJOLEARN_OPT_ZERO_OPEN, [handle, used, 1]: the
+        device slots are zero filled, so host copies that are still the
+        constructor's zeros need no upload)."""
+        self._res, self._res_b, self._res_used = int(ret[0]), b, int(ret[1])
+        zeroed = len(ret) > 2 and int(ret[2]) == 1
+        self._host_owned = not (zeroed and self._pristine and init_zero)
 
     def _res_upload(self):
         if self._host_owned:
@@ -179,9 +193,8 @@ class _SeqOptimizer(_ResidentState):
         gs = self._grad_list(grads)
         fp = [self.lr] + [float(v) for v in self._fp[:5]]
         if self._res is None:
-            h, used = b.optimizer_resident_open([self.n_total, self._kind, self._flags], fp)
-            self._res, self._res_b, self._res_used = int(h), b, int(used)
-            self._host_owned = True
+            self._res_opened(b, b.optimizer_resident_open([self.n_total, self._kind, self._flags], fp),
+                             init_zero=not self._fp[5])
         self._res_upload()
         # empty tensors hold nothing to move or update
         keep = [k for k, p in enumerate(self.params) if p.size > 0]
@@ -446,9 +459,7 @@ class LAMB(_SeqOptimizer):
             # grad straight into its place, the params straight back
             try:
                 if self._res is None:
-                    h, used = b.lamb_resident_open([len(self.params)] + offs)
-                    self._res, self._res_b, self._res_used = int(h), b, int(used)
-                    self._host_owned = True
+                    self._res_opened(b, b.lamb_resident_open([len(self.params)] + offs))
                 self._res_upload()
                 b.lamb_resident_step(self._res, [p.ctypes.data for p in self.params] + [x.ctypes.data for x in gs]
                                      + [self._sc.ctypes.data], [len(self.params), self.t, self.flags], fp)
