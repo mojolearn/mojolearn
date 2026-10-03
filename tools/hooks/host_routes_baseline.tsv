@@ -4,18 +4,6 @@
 # newer than the installed hooks (they skip it).
 # A `# why: ...` line gives the reason the next row stays (required for d2h-host-work).
 rule	class	owner	state	path	occ	text
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for c in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for i in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	1	for i in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	2	for i in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	3	for i in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for t in range(n_todo):
 # why: OWED (per-query path only: k > 32, dim > FIVF_MAX_DIM, traced, partial storage, or naming a query short of k): each query's candidates gathered on the host and uploaded; the batched scans plan on the device (ivf_group_device.mojo); a device candidate gather for this path is the remaining step
 d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo	0	for q in range(n_queries):
 # why: apple-fast-purity2 left it: the public Array's Python iteration protocol (a user's `for row in arr`), not fit/transform/predict work; each row is a view
