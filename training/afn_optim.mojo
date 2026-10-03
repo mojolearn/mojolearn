@@ -263,7 +263,7 @@ def afn_scratch_i32(
         step_count_device_alloc()
         s[].i32[slot] = ctx.enqueue_create_buffer[DType.int32](want)
         s[].i32_n[slot] = want
-    return s[].i32[slot].unsafe_ptr()
+    return s[].i32[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
 def afn_scratch_f32(
@@ -272,7 +272,7 @@ def afn_scratch_f32(
     """`afn_scratch_i32` for a Float32 slot."""
     afn_scratch_f32_ensure(ctx, slot, n)
     var s = AFN_SCRATCH.get_or_create_ptr()
-    return s[].f32[slot].unsafe_ptr()
+    return s[].f32[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
 def afn_scratch_f32_ensure(ctx: DeviceContext, slot: Int, n: Int) raises:
@@ -800,11 +800,11 @@ def afn_optimizer_step(
         keep_f.append(ctx.enqueue_create_buffer[DType.float32](AFN_FCELLS))
         step_count_host_alloc()
         keep_h.append(ctx.enqueue_create_host_buffer[DType.int32](AFN_CELLS))
-        part = keep_i[0].unsafe_ptr()
-        cells = keep_i[1].unsafe_ptr()
-        table = keep_i[2].unsafe_ptr()
-        sums = keep_f[0].unsafe_ptr()
-        fcells = keep_f[1].unsafe_ptr()
+        part = keep_i[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        cells = keep_i[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        table = keep_i[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        sums = keep_f[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        fcells = keep_f[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         host = keep_h[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
     # ---- the one scan / partial-sum pass and the fold into the cells.
@@ -851,10 +851,10 @@ def afn_optimizer_step(
             )
 
     # ---- the update.
-    var p_ptr = param.unsafe_ptr()
-    var g_ptr = grad.unsafe_ptr()
-    var m_ptr = m_state.unsafe_ptr()
-    var v_ptr = v_state.unsafe_ptr()
+    var p_ptr = param.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var g_ptr = grad.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var m_ptr = m_state.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var v_ptr = v_state.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var tab = List[Int32]()
     if is_sgd:
         var nest = Int32(1) if cfg.nesterov else Int32(0)
@@ -1446,10 +1446,10 @@ def afn_ce_loss_resident(
         keep_h.append(
             ctx.enqueue_create_host_buffer[DType.int32](AFN_LOSS_CELLS)
         )
-        row = keep_f[0].unsafe_ptr()
-        loss = keep_f[1].unsafe_ptr()
-        bad = keep_i[0].unsafe_ptr()
-        cells = keep_i[1].unsafe_ptr()
+        row = keep_f[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        loss = keep_f[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        bad = keep_i[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        cells = keep_i[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         host = keep_h[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
     # ---- the two launches: a 32-thread block per row when the vocabulary
