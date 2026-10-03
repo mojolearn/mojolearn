@@ -84,7 +84,7 @@ class MoEBlock:
             setattr(self, name, a)   # a read-only copy (__setattr__)
 
     def load_state_dict(self, sd):
-        for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),
+        for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),  # glue: the four named MoE parameter tensors
                             ("down_proj", (self.E, self.D, self.F))):
             a = np.asarray(sd[name], dtype=np.float32)
             if a.shape != shape:

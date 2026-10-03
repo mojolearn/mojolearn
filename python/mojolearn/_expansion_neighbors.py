@@ -1270,7 +1270,7 @@ class _LabelPropagationBase(_XNeighbors):
         allc, codes = encode_labels(y)
         if codes.size != n:
             raise ValueError("X and y have different numbers of rows")
-        skip = next((i for i, c in enumerate(allc) if c == -1 and not isinstance(c, str)), -1)   # glue: k classes
+        skip = next((i for i, c in enumerate(allc) if c == -1 and not isinstance(c, str)), -1)   # glue: scan over the k class labels
         classes = [c for i, c in enumerate(allc) if i != skip]
         C = len(classes)
         ld = _empty_out((n, C), "<f4")
