@@ -6,8 +6,8 @@ from std.sys.compile import is_defined
 from std.os import getenv
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
-from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item
-from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, pos_count_item, pos_scan_item, pos_emit_item
+from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item, row_argmax_item
+from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, nc_med_std_init_item, nc_med_std_step_item, nc_med_std_pick_item, pos_count_item, pos_scan_item, pos_emit_item
 
 #: the host gate's negative control (`MOJOLEARN_HOST_SABOTAGE`): every op's
 #: first float output moves by 1e-3 in its first element
@@ -648,6 +648,29 @@ def op_nc_median(x: Int, lab: Int, start: Int, cent: Int, n: Int, d: Int, n_clas
         if (n_classes * d) > 0:
             _f(cent).unsafe_store(0, _f(cent).unsafe_load(0) + Float32(1e-3))
     _ = s_perm^
+
+
+def op_row_argmax(a: Int, res: Int, n: Int, m: Int) raises:
+    var p_a = _f(a)
+    var p_res = _i(res)
+    def _item(t: Int) {imm p_a, imm p_res, imm n, imm m}:
+        row_argmax_item(t, p_a, p_res, n, m)
+    _items(_item, n)
+
+
+def op_nc_med_std(std: Int, res: Int, d: Int, p: Int, n_steps: Int) raises:
+    var s_key = List[Float32](length=(p) if (p) > 0 else 1, fill=Float32(0))
+    for t in range(p):
+        nc_med_std_init_item(t, _f(std), _f(res), FP(unsafe_from_address=Int(s_key.unsafe_ptr())), d, p, n_steps)
+    for lj in range(n_steps):
+        for t in range(p // 2):
+            nc_med_std_step_item(t, lj, _f(std), _f(res), FP(unsafe_from_address=Int(s_key.unsafe_ptr())), d, p, n_steps)
+    for t in range(1):
+        nc_med_std_pick_item(t, _f(std), _f(res), FP(unsafe_from_address=Int(s_key.unsafe_ptr())), d, p, n_steps)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (2) > 0:
+            _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
+    _ = s_key^
 
 
 def op_pos_compact(w: Int, rows: Int, vals: Int, info: Int, n: Int) raises:

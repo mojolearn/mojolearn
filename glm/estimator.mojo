@@ -68,7 +68,7 @@ from core.gram_splitk import (
     gram_splitk_chunk_count,
     gram_splitk_scratch_covers,
 )
-from glm.impl.center_device import center_buf, col_sums_buf
+from glm.impl.center_device import center_buf, col_means_buf, col_sums_buf
 
 
 def _add_scalar_kernel(
@@ -206,23 +206,38 @@ def ols_fit_resident_host(
         var d_sy = ctx.enqueue_create_buffer[DType.uint64](1)
         col_sums_buf(ctx, d_x, d_sx, n_rows, n_features)
         col_sums_buf(ctx, d_y, d_sy, n_rows, 1)
-        var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
-        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
-        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
-        ctx.synchronize()
-        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
-        var rows_f = Float64(n_rows)
-        for j in range(n_features + 1):
-            var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
-            h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
-            if j < n_features:
-                mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
-            else:
-                ymean_ptr.unsafe_store(0, mean)
         var d_mx = ctx.enqueue_create_buffer[DType.float32](n_features)
         var d_my = ctx.enqueue_create_buffer[DType.float32](1)
-        ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
+        var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
+        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
+        comptime if is_defined["MOJOLEARN_PURITY_1_OFF"]():
+            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
+            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
+            ctx.synchronize()
+            var rows_f = Float64(n_rows)
+            for j in range(n_features + 1):
+                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
+                h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
+                if j < n_features:
+                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+                else:
+                    ymean_ptr.unsafe_store(0, mean)
+            ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
+        else:
+            # lane apple-fast-purity: the means on the device (soft binary64,
+            # center_device.col_means_buf), downloaded once as the fit's outputs.
+            var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
+            col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
+            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
+            ctx.synchronize()
+            for j in range(n_features + 1):
+                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
+                if j < n_features:
+                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+                else:
+                    ymean_ptr.unsafe_store(0, mean)
+            _ = d_m64^
         var d_cx = ctx.enqueue_create_buffer[DType.float32](cells)
         var d_cy = ctx.enqueue_create_buffer[DType.float32](n_rows)
         center_buf(ctx, d_x, d_mx, d_cx, n_rows, n_features)
@@ -467,23 +482,38 @@ def ridge_fit_resident_host(
         var d_sy = ctx.enqueue_create_buffer[DType.uint64](1)
         col_sums_buf(ctx, d_x, d_sx, n_rows, n_features)
         col_sums_buf(ctx, d_y, d_sy, n_rows, 1)
-        var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
-        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
-        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
-        ctx.synchronize()
-        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
-        var rows_f = Float64(n_rows)
-        for j in range(n_features + 1):
-            var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
-            h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
-            if j < n_features:
-                mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
-            else:
-                ymean_ptr.unsafe_store(0, mean)
         var d_mx = ctx.enqueue_create_buffer[DType.float32](n_features)
         var d_my = ctx.enqueue_create_buffer[DType.float32](1)
-        ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
+        var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
+        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
+        comptime if is_defined["MOJOLEARN_PURITY_1_OFF"]():
+            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
+            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
+            ctx.synchronize()
+            var rows_f = Float64(n_rows)
+            for j in range(n_features + 1):
+                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
+                h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
+                if j < n_features:
+                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+                else:
+                    ymean_ptr.unsafe_store(0, mean)
+            ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
+        else:
+            # lane apple-fast-purity: the means on the device (soft binary64,
+            # center_device.col_means_buf), downloaded once as the fit's outputs.
+            var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
+            col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
+            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
+            ctx.synchronize()
+            for j in range(n_features + 1):
+                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
+                if j < n_features:
+                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+                else:
+                    ymean_ptr.unsafe_store(0, mean)
+            _ = d_m64^
         var d_cx = ctx.enqueue_create_buffer[DType.float32](cells)
         var d_cy = ctx.enqueue_create_buffer[DType.float32](n_rows)
         center_buf(ctx, d_x, d_mx, d_cx, n_rows, n_features)
