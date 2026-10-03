@@ -17,6 +17,8 @@ from x_prep.folds import I32P, kfold_folds, strat_folds
 from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py
 from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
 from x_prep.py2mojo import PY2MOJO_PREP
+from x_prep.prep3 import PREP3_MAXABS
+from x_prep.fastmaxabs import maxabs_fit_direct
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -142,6 +144,24 @@ def kfold_folds_binding(out_addr: PythonObject, ints: PythonObject, seed: Python
     return PythonObject(0)
 
 
+# lane/apple-fast-prep3 (FAST on Apple; registered under PREP3_MAXABS only, so
+# Python's `_optional_prep_entry` probe finds it in no other build and takes
+# main's route there).
+def maxabs_fit_direct_binding(x_addr: PythonObject, out_addr: PythonObject, ints: PythonObject) raises -> PythonObject:
+    """PREP3_MAXABS (FAST + Apple default): MaxAbsScaler's max_abs_ then
+    scale_ (2 d words at out_addr) from the n x d float32 X at x_addr
+    (x_prep/fastmaxabs.mojo). ints = (n, d). Returns 2 d."""
+    var xa = Int(py=x_addr)
+    var oa = Int(py=out_addr)
+    var n = Int(py=ints[0])
+    var d = Int(py=ints[1])
+    if xa == 0 or oa == 0 or n <= 0 or d <= 0 or n > (2 ** 31 - 1) // d:
+        raise Error("x_prep maxabs_fit_direct: invalid buffers or shape")
+    with GILReleased(Python()):
+        maxabs_fit_direct(xa, n, d, oa)
+    return PythonObject(2 * d)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -202,7 +222,7 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_x_prep")
         m.def_function[run_binding]("x_prep_run")
         comptime if NB_TEXT_CSR:
-            # lane apple-fast-nb: FAST + Apple + -D MOJOLEARN_NB_TEXT_CSR only (x_prep/fastnb_csr.mojo)
+            # lane apple-fast-nb: FAST + Apple default, -D MOJOLEARN_NB_TEXT_CSR_OFF reverts (x_prep/fastnb_csr.mojo)
             m.def_function[nb_csr_fit_py]("x_prep_nb_csr_fit")
             m.def_function[nb_csr_jll_py]("x_prep_nb_csr_jll")
         m.def_function[run_scratch_binding]("x_prep_run_scratch")
@@ -213,6 +233,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[dev_live_binding]("x_prep_dev_live")
         m.def_function[strat_folds_binding]("x_prep_strat_folds")
         m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
+        comptime if PREP3_MAXABS:
+            m.def_function[maxabs_fit_direct_binding]("x_prep_maxabs_fit_direct")
         m.def_function[numeric_mode_binding]("x_prep_numeric_mode")
         m.def_function[vendor_binding]("x_prep_vendor")
         comptime if X_PREP_FAST_UNIQUE:

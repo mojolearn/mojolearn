@@ -733,6 +733,17 @@ class MaxAbsScaler(_PrepBase):
         arr = _x2d(X)
         n, d = arr.shape
         mode = _mode()
+        # lane/apple-fast-prep3: `x_prep_maxabs_fit_direct` exists in the FAST
+        # Apple build only (PREP3_MAXABS, default; x_prep/fastmaxabs.mojo):
+        # X up once from its own buffer, the same max_abs_ and scale_ words
+        direct = _optional_prep_entry(_prep_binding(mode), "x_prep_maxabs_fit_direct")
+        if direct is not None:
+            out = Array((2 * d,), "<f4")
+            direct(addr_ro(arr, name="X"), out._addr, [n, d])
+            self.max_abs_ = Array._from_flat(out.tolist()[:d], (d,), "<f4")
+            self.scale_ = Array._from_flat(out.tolist()[d:], (d,), "<f4")
+            self.numeric_mode_, self.n_features_in_, self.n_samples_seen_ = mode, d, n
+            return self
         pr = _Prog()
         xo = pr.put(arr)
         scale = pr.alloc(d)
@@ -2376,9 +2387,10 @@ class _DiscreteNB(_Classifier):
     def _nb_csr_ready(cls):
         """Whether this class fits a scipy.sparse CSR matrix without
         densifying it: FAST mode and the x_prep binding built on Apple with
-        -D MOJOLEARN_NB_TEXT_CSR (lane apple-fast-nb; it exports
+        NB_TEXT_CSR (lane apple-fast-nb, default; it exports
         `x_prep_nb_csr_fit`). The bench hands such a build the text block as
-        CSR. False everywhere else: IDENTICAL, other vendors, no define."""
+        CSR. False everywhere else: IDENTICAL, other vendors,
+        -D MOJOLEARN_NB_TEXT_CSR_OFF."""
         if not cls._csr_ok or _mode() != "fast":
             return False
         try:
