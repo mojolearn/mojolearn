@@ -46,6 +46,7 @@ from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
     da_shrink_unit, da_pool_unit, sym_fn_unit, da_intercept_unit, evr_unit,
 )
+from x_prep.cat_cls2 import CAT_CLS2_PACK, cat_zero_unit, cat_present_unit, pres_count_unit, pres_write_unit, cat_pack_unit
 from x_prep.calib import (
     CALIB_FOLDS, cal_fold_part_unit, cal_fold_scan_unit, cal_fold_rank_unit, cal_fold_assign_unit,
     cal_lofo_merge_unit, cal_eps_folds_unit, cal_params_folds_unit, cal_jll_folds_unit, cal_platt_init_unit,
@@ -55,7 +56,9 @@ from x_prep.calib import (
 
 #: ops 142-156 (x_prep/calib.mojo) exist only under CALIB_FOLDS (FAST + Apple,
 #: default on, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF off); every other binding keeps the 142-op table.
-comptime N_OPS = 157 if CALIB_FOLDS else 142
+comptime N_OPS = 162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142)
+#: ops 157-161 (x_prep/cat_cls2.mojo, lane/apple-fast-gap-cls2) exist only under
+#: CAT_CLS2_PACK (FAST + Apple + -D MOJOLEARN_X_PREP_FAST_CLS2_PACK, default off)
 
 
 @always_inline
@@ -375,3 +378,14 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
             cal_platt_ls_pick_unit(t, f, q)
         comptime if OP == 156:
             cal_sigmoid_avg_unit(t, f, q)
+    comptime if CAT_CLS2_PACK:
+        comptime if OP == 157:
+            cat_zero_unit(t, f, q)
+        comptime if OP == 158:
+            cat_present_unit(t, f, q)
+        comptime if OP == 159:
+            pres_count_unit(t, f, q)
+        comptime if OP == 160:
+            pres_write_unit(t, f, q)
+        comptime if OP == 161:
+            cat_pack_unit(t, f, q)

@@ -90,6 +90,9 @@ _OPS = dict(
     cal_fold_part=142, cal_fold_scan=143, cal_fold_rank=144, cal_fold_assign=145, cal_lofo_merge=146,
     cal_eps_folds=147, cal_params_folds=148, cal_jll_folds=149, cal_platt_init=150, cal_platt_setup=151,
     cal_platt_part=152, cal_platt_step=153, cal_platt_ls_part=154, cal_platt_ls_pick=155, cal_sigmoid_avg=156,
+    # lane apple-fast-gap-cls2 (x_prep/cat_cls2.mojo): only the FAST + Apple binding built with
+    # -D MOJOLEARN_X_PREP_FAST_CLS2_PACK runs them (it exports x_prep_cls2_cat)
+    cat_zero=157, cat_present=158, pres_count=159, pres_write=160, cat_pack=161,
 )
 _PARAMS = 14
 _NONE = -1
@@ -714,10 +717,90 @@ def _finite_2d(X, who):
     return _x2d(X)
 
 
+#: lane/apple-fast-gap-cls2 (x_prep/cat_cls2.mojo): the packed distinct
+#: values' host region (words), the presence flags per column, flags per chunk
+_CAT_CAP = 1 << 16
+_CAT_R = 4096
+_CAT_CH = 64
+#: binding -> its `x_prep_cls2_cat` bits (0 when it has none), probed once
+_CLS2_CAT = {}
+
+
+def _cls2_cat(mode):
+    """lane/apple-fast-gap-cls2: bit 1 PACK, bit 2 PRESENT on the FAST
+    binding built with them (x_prep/cat_cls2.mojo), else 0."""
+    if mode != "fast":
+        return 0
+    binding = _prep_binding(mode)
+    key = id(binding)
+    v = _CLS2_CAT.get(key)
+    if v is None:
+        fn = _optional_prep_entry(binding, "x_prep_cls2_cat")
+        v = _CLS2_CAT[key] = int(fn()) if fn is not None else 0
+    return v
+
+
+def _fit_categories_cls2(mode, arr, bits):
+    """`_fit_categories`' lists with the distinct values packed into a small
+    host region (PACK) and, with PRESENT, found by presence flags instead of
+    a sort. None (nothing kept) when a column is not small non-negative
+    integers under PRESENT, or the values do not fit the region: the caller
+    runs main's program."""
+    n, d = arr.shape
+    pr = _Prog()
+    xo = pr.put(arr)
+    co = pr.alloc(d)
+    cap = min(n * d, _CAT_CAP)
+    pk = pr.alloc(cap)
+    bad = None
+    if bits & 2:
+        R, ch = _CAT_R, _CAT_CH
+        nch = -(-R // ch)
+        bad = pr.alloc(d)
+        fl = pr.work(d * R)
+        uo = pr.work(d * R)
+        pr.stage("cat_zero", d * R, fl)
+        pr.stage("cat_present", n * d, xo, n, d, R, fl, bad)
+        for c in range(d):
+            cnt, off = pr.work(nch), pr.work(nch)
+            pr.stage("pres_count", nch, fl + c * R, R, ch, cnt)
+            pr.stage("uniq_scan", 1, cnt, nch, off, co + c)
+            pr.stage("pres_write", nch, fl + c * R, R, ch, off, uo + c * R)
+        pr.stage("cat_pack", d * R, uo, R, d, co, cap, pk)
+    else:
+        so = pr.work(n * d)
+        uo = pr.work(n * d)
+        pr.stage("sort_cols", d, xo, n, d, so, 1)
+        ch = _label_chunk(n)
+        nch = -(-n // ch)
+        for c in range(d):
+            cnt, off = pr.work(nch), pr.work(nch)
+            pr.stage("uniq_count", nch, so + c * n, n, ch, cnt)
+            pr.stage("uniq_scan", 1, cnt, nch, off, co + c)
+            pr.stage("uniq_write", nch, so + c * n, n, ch, off, uo + c * n)
+        pr.stage("cat_pack", n * d, uo, n, d, co, cap, pk)
+    pr.run(mode)
+    if bad is not None and any(v != 0 for v in pr.get_i32(bad, (d,)).tolist()):
+        return None
+    counts = [int(v) for v in pr.values(co, d)]
+    if sum(counts) > cap:
+        return None
+    out, o = [], 0
+    for c in range(d):
+        out.append(pr.get(pk + o, counts[c]))
+        o += counts[c]
+    return out
+
+
 def _fit_categories(mode, arr):
     """Per column, the sorted distinct values (-0.0 folded into 0.0), on the
     device: a sort per column and a run scan."""
     n, d = arr.shape
+    cls2 = _cls2_cat(mode)
+    if cls2 & 1 and _fast_on("UNIQUE", mode):
+        got = _fit_categories_cls2(mode, arr, cls2)
+        if got is not None:
+            return got
     pr = _Prog()
     xo = pr.put(arr)
     so = pr.work(n * d)

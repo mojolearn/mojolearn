@@ -3,6 +3,7 @@
 """THE PREP LANE'S GPU BINDING (preprocessing additions, naive Bayes and
 discriminant analysis). One entry runs a program of units on the device
 (x_prep/common.mojo); the host binding runs the same units on the CPU."""
+from x_prep.cat_cls2 import CAT_CLS2_PACK, CAT_CLS2_PRESENT
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -169,6 +170,15 @@ def fast_unique_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
+def cls2_cat_binding() raises -> PythonObject:
+    """lane/apple-fast-gap-cls2 (x_prep/cat_cls2.mojo): bit 1 PACK, bit 2
+    PRESENT; registered only under CAT_CLS2_PACK."""
+    var f = 1
+    comptime if CAT_CLS2_PRESENT:
+        f |= 2
+    return PythonObject(f)
+
+
 def calib_folds_binding() raises -> PythonObject:
     """Lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
     the CalibratedClassifierCV(GaussianNB) program's constants [words per
@@ -201,6 +211,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[vendor_binding]("x_prep_vendor")
         comptime if X_PREP_FAST_UNIQUE:
             m.def_function[fast_unique_binding]("x_prep_fast_unique")
+        comptime if CAT_CLS2_PACK:
+            m.def_function[cls2_cat_binding]("x_prep_cls2_cat")
         comptime if CALIB_FOLDS:
             m.def_function[calib_folds_binding]("x_prep_calib_folds")
         return m.finalize()
