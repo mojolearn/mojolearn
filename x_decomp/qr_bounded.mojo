@@ -14,7 +14,7 @@ launch, waits for the device every QRB_SPLIT_SYNC columns, and POISONS r_out
 (and the TSQR tiles) with NaN first: every cell of them is written by a
 finished pass, so a cut launch leaves a NaN the caller's read-back refuses
 (`DevExec.svd`).
-
+"""
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
