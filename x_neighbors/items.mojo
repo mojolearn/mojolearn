@@ -584,6 +584,42 @@ def _fold_parts(part: FP, nb: Int) -> Float32:
     return acc
 
 
+#: lane apple-fast-purity (2026-10-03): the absolute-difference sum's
+#: partials fold in a fixed tree, so the device folds them with one block of
+#: XN_TREE threads instead of one thread (`-D MOJOLEARN_PURITY_4_OFF`: the
+#: ascending chain). Slot s folds partials s, s + XN_TREE, ... from zero,
+#: ascending; then halving: slot s += slot s + h for h = XN_TREE / 2 .. 1.
+#: The host column runs the same steps, so every column has the same word.
+comptime XN_TREE = 256
+comptime XN_TREE_ON = not is_defined["MOJOLEARN_PURITY_4_OFF"]()
+
+
+@always_inline
+def xn_tree_slot(part: FP, s: Int, nb: Int) -> Float32:
+    """Slot s of the tree fold: partials s, s + XN_TREE, ... ascending from zero."""
+    var acc = Float32(0)
+    var i = s
+    while i < nb:
+        acc = _add(acc, part.unsafe_load(i))
+        i += XN_TREE
+    return acc
+
+
+@always_inline
+def xn_tree_fold(part: FP, nb: Int) -> Float32:
+    """The tree fold on one thread (the host column; the device's
+    `xn_tree_fold_kernel` runs the same steps across a block)."""
+    var sl = InlineArray[Float32, XN_TREE](fill=Float32(0))
+    for s in range(XN_TREE):
+        sl[s] = xn_tree_slot(part, s, nb)
+    var h = XN_TREE // 2
+    while h > 0:
+        for s in range(h):
+            sl[s] = _add(sl[s], sl[s + h])
+        h //= 2
+    return sl[0]
+
+
 def variance_part_item(t: Int, x: FP, res: FP, part: FP, count: Int):
     """numpy's `X.var()` over every element (population variance, ddof = 0),
     stage 1 of 4: block t's ascending sum from zero into part[t]."""
@@ -1088,18 +1124,31 @@ def absdiff_part_item(t: Int, a: FP, b: FP, res: FP, part: FP, count: Int):
 
 
 def absdiff_fin_item(t: Int, a: FP, b: FP, res: FP, part: FP, count: Int):
-    """Stage 2 of 2, ONE item: the partials folded ascending."""
-    res.unsafe_store(0, _fold_parts(part, xn_fold_blocks(count)))
+    """Stage 2 of 2, ONE item: the partials folded (the XN_TREE order;
+    ascending under -D MOJOLEARN_PURITY_4_OFF)."""
+    comptime if XN_TREE_ON:
+        res.unsafe_store(0, xn_tree_fold(part, xn_fold_blocks(count)))
+    else:
+        res.unsafe_store(0, _fold_parts(part, xn_fold_blocks(count)))
 
 
 def absdiff_sum_item(t: Int, a: FP, b: FP, res: FP, count: Int):
     """sum |a - b| over every element, ONE host item in the blocked order of
     `absdiff_part_item` + `absdiff_fin_item` (the resident label-propagation
     loops' convergence test, the same bits as the `absdiff_sum` op)."""
-    var acc = Float32(0)
-    for blk in range(xn_fold_blocks(count)):
-        acc = _add(acc, _absdiff_block(a, b, blk, count))
-    res.unsafe_store(0, acc)
+    comptime if XN_TREE_ON:
+        var nb = xn_fold_blocks(count)
+        var parts = List[Float32](length=max(nb, 1), fill=Float32(0))
+        var pp = FP(unsafe_from_address=Int(parts.unsafe_ptr()))
+        for blk in range(nb):
+            pp.unsafe_store(blk, _absdiff_block(a, b, blk, count))
+        res.unsafe_store(0, xn_tree_fold(pp, nb))
+        _ = parts^
+    else:
+        var acc = Float32(0)
+        for blk in range(xn_fold_blocks(count)):
+            acc = _add(acc, _absdiff_block(a, b, blk, count))
+        res.unsafe_store(0, acc)
 
 
 # DEVIATION 5209 (row 123)

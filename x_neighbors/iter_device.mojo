@@ -36,6 +36,7 @@ from std.python import PythonObject
 from x_neighbors.nan_cells_device import nan_cells_device
 from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
+from x_neighbors.items import XN_TREE, XN_TREE_ON, xn_tree_slot
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
@@ -56,13 +57,39 @@ from x_neighbors.items import lp_clamp_item, ls_clamp_item
 
 def _absdiff_launch(ctx: DeviceContext, a: FP, b: FP, s: FP, part: FP, count: Int) raises:
     """The `absdiff_sum` op's two stages on resident buffers: one thread per
-    XN_FOLD_BLOCK block into `part`, then the partials ascending into s[0]
+    XN_FOLD_BLOCK block into `part`, then the partials folded into s[0]
     (the bits of `absdiff_sum_item`, the host column's fold)."""
     var nb = xn_fold_blocks(count)
     ctx.enqueue_function[absdiff_sum_k0](
         a, b, s, part, Int64(count), grid_dim=_grid(nb), block_dim=(BLOCK if nb > 1 else 1),
     )
-    ctx.enqueue_function[absdiff_sum_k1](a, b, s, part, Int64(count), grid_dim=1, block_dim=1)
+    comptime if XN_TREE_ON:
+        # lane apple-fast-purity: the partials folded by one block of XN_TREE
+        # threads (`xn_tree_fold`'s steps), not by one thread
+        ctx.enqueue_function[xn_tree_fold_kernel](part, s, Int64(nb), grid_dim=1, block_dim=XN_TREE)
+    else:
+        ctx.enqueue_function[absdiff_sum_k1](a, b, s, part, Int64(count), grid_dim=1, block_dim=1)
+
+
+comptime _XN_TREE_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, XN_TREE * 4]()
+
+
+def xn_tree_fold_kernel(part: FP, res: FP, nb_: Int64):
+    """ONE block of XN_TREE threads: `xn_tree_fold` (items.mojo) with thread
+    s on slot s, then the halving steps in threadgroup memory; res[0]."""
+    comptime assert _XN_TREE_SMEM_FITS, "xn_tree_fold_kernel: a 1 KB threadgroup page must fit"
+    var s = Int(thread_idx.x)
+    var sh = stack_allocation[XN_TREE, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    sh[s] = xn_tree_slot(part, s, Int(nb_))
+    barrier()
+    var h = XN_TREE // 2
+    while h > 0:
+        if s < h:
+            sh[s] = _add(sh[s], sh[s + h])
+        barrier()
+        h //= 2
+    if s == 0:
+        res.unsafe_store(0, sh[0])
 
 
 def op_lp_iterate(
