@@ -52,6 +52,24 @@ from x_cluster.bodies import (
 from cluster.host.kmeans_oracle import host_kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from x_cluster.ops import ClusterOps
+from x_cluster.post_bodies import (
+    FM_MIN,
+    FM_PROD,
+    FM_VAL,
+    FM_WMIN,
+    FOLD_CHUNK,
+    bin_key,
+    bin_value,
+    center_greater,
+    ff_chunk_host,
+    ff_fold_host,
+    ff_of_f64,
+    ff_to_f64,
+    first_equal_cell,
+    kpp_search_cell,
+    optics_relax_cell,
+    rand_resp_row,
+)
 
 comptime X_CLUSTER_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -597,9 +615,13 @@ struct HostOps(ClusterOps):
         raise Error("x_cluster: agglo_mirror is the GPU column's (the host column runs agglo_tree's loop)")
 
     def agglo_merge(
-        mut self, dm: Int, n: Int, linkage: Int, n_merges: Int, mut children: List[Int32], mut dist: List[Float32]
+        mut self, dm: Int, adj: Int, n: Int, linkage: Int, n_merges: Int, mut children: List[Int32],
+        mut dist: List[Float32],
     ) raises:
         raise Error("x_cluster: agglo_merge is the GPU column's (the host column runs agglo_tree's loop)")
+
+    def agglo_connect(mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int) raises -> Int:
+        raise Error("x_cluster: agglo_connect is the GPU column's (the host column runs agglo_tree's loop)")
 
     def estep(
         mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
@@ -632,3 +654,323 @@ struct HostOps(ClusterOps):
     def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
         self.gather_rows(src, d, idx, m, dst)
         self.nearest(dst, m, c, k, d, labels, dist)
+
+    # ------------------------------------------------------------------
+    # lane cgr2-cluster: the post-processing primitives, host column
+    def _fp_or(mut self, slot: Int) -> FPtr:
+        return self._fp(slot if slot >= 0 else 0)
+
+    def check_nonneg(mut self, x: Int, n: Int) raises -> Bool:
+        var p = self._fp(x)
+        for t in range(n):
+            if not (p[t] >= Float32(0)):
+                return False
+        return True
+
+    def optics_order(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int
+    ) raises:
+        var inf = Float32.MAX * Float32(2)
+        var pd = self._fp(dm)
+        var pc = self._fp(core)
+        var po = self._ip(ordering)
+        var pr = self._fp(reach)
+        var pp = self._ip(pred)
+        var done = List[Int32](length=n, fill=Int32(0))
+        var pdone = done.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        for i in range(n):
+            if pc[i] > max_eps:
+                pc[i] = inf
+            pr[i] = inf
+            pp[i] = Int32(-1)
+        for step in range(n):
+            var point = -1
+            var best = inf
+            for i in range(n):
+                if pdone[i] != 0:
+                    continue
+                if point < 0 or pr[i] < best:
+                    point = i
+                    best = pr[i]
+            pdone[point] = 1
+            po[step] = Int32(point)
+            var cp = pc[point]
+            if cp != inf:
+                for o in range(n):
+                    optics_relax_cell(pd, n, point, cp, max_eps, pdone, pr, pp, o)
+        _ = done^
+
+    def optics_dbscan(mut self, ordering: Int, reach: Int, core: Int, n: Int, eps: Float32, labels: Int) raises:
+        var po = self._ip(ordering)
+        var pr = self._fp(reach)
+        var pc = self._fp(core)
+        var pl = self._ip(labels)
+        var c = -1
+        for q in range(n):
+            var p = Int(po[q])
+            if pr[p] > eps and pc[p] <= eps:
+                c += 1
+            pl[p] = Int32(c)
+        for p in range(n):
+            if pr[p] > eps and not (pc[p] <= eps):
+                pl[p] = Int32(-1)
+
+    def sum_ff(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int) raises -> Float64:
+        return ff_to_f64(ff_fold_host(mode, self._fp(a), self._fp_or(b), self._fp_or(c), n))
+
+    def bin_seeds(mut self, x: Int, n: Int, d: Int, bin_size: Float32, min_bin_freq: Int, dst: Int) raises -> Int:
+        var px = self._fp(x)
+        var keys = List[Float32](length=n * d if n * d > 0 else 1, fill=Float32(0))
+        var pk = keys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        for t in range(n * d):
+            pk[t] = bin_key(px[t], bin_size)
+        var none = List[Int32](length=1, fill=Int32(0))
+        var pn = none.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var cnt = List[Int](length=n, fill=0)
+        for r in range(n):
+            cnt[Int(first_equal_cell(pk, pn, False, d, r))] += 1
+        var pd = self._fp(dst)
+        var kept = 0
+        for u in range(n):
+            if cnt[u] > 0 and cnt[u] >= min_bin_freq:
+                for f in range(d):
+                    pd[kept * d + f] = bin_value(pk[u * d + f], bin_size)
+                kept += 1
+        _ = keys^
+        _ = none^
+        return kept
+
+    def ms_unique(
+        mut self, centers: Int, inten: Int, iters: Int, ns: Int, d: Int, dst: Int, mut n_iter: Int
+    ) raises -> Int:
+        var pc = self._fp(centers)
+        var pi = self._ip(inten)
+        var pt = self._ip(iters)
+        n_iter = 0
+        for s in range(ns):
+            if Int(pt[s]) > n_iter:
+                n_iter = Int(pt[s])
+        var rep = List[Int32](length=ns, fill=Int32(-1))
+        var rv = List[Int32](length=ns, fill=Int32(0))
+        var prv = rv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        for s in range(ns):
+            rep[s] = first_equal_cell(pc, pi, True, d, s)
+            if rep[s] >= 0:
+                prv[Int(rep[s])] = pi[s]
+        var pd = self._fp(dst)
+        var m = 0
+        for u in range(ns):
+            if Int(rep[u]) != u:
+                continue
+            m += 1
+            var rank = 0
+            for v in range(ns):
+                if v != u and Int(rep[v]) == v and center_greater(pc, prv, v, u, d):
+                    rank += 1
+            for f in range(d):
+                pd[rank * d + f] = pc[u * d + f]
+        _ = rv^
+        return m
+
+    def ms_suppress(mut self, sorted: Int, dd: Int, m: Int, d: Int, bw: Float32, dst: Int) raises -> Int:
+        var ps = self._fp(sorted)
+        var pdd = self._fp(dd)
+        var unique = List[Bool](length=m, fill=True)
+        for i in range(m):
+            if unique[i]:
+                for j in range(m):
+                    if pdd[i * m + j] <= bw:
+                        unique[j] = False
+                unique[i] = True
+        var po = self._fp(dst)
+        var kc = 0
+        for i in range(m):
+            if unique[i]:
+                for f in range(d):
+                    po[kc * d + f] = ps[i * d + f]
+                kc += 1
+        return kc
+
+    def ms_noise(mut self, labels: Int, dist: Int, n: Int, bw: Float32) raises:
+        var pl = self._ip(labels)
+        var pd = self._fp(dist)
+        for r in range(n):
+            if not (pd[r] <= bw):
+                pl[r] = Int32(-1)
+
+    def negate(mut self, src: Int, dst: Int, n: Int) raises:
+        var ps = self._fp(src)
+        var pd = self._fp(dst)
+        for t in range(n):
+            pd[t] = -ps[t]
+
+    def count_neg(mut self, x: Int, n: Int) raises -> Int:
+        var p = self._fp(x)
+        var c = 0
+        for t in range(n):
+            if p[t] < Float32(0):
+                c += 1
+        return c
+
+    def sign_side(mut self, src: Int, n: Int, neg: Bool, dst: Int) raises:
+        var inf = Float32.MAX * Float32(2)
+        var ps = self._fp(src)
+        var pd = self._fp(dst)
+        for t in range(n):
+            var v = ps[t]
+            if neg:
+                pd[t] = -v if v < Float32(0) else inf
+            else:
+                pd[t] = inf if v < Float32(0) else v
+
+    def ap_equal(mut self, s: Int, pref: Int, n: Int) raises -> Bool:
+        var ps = self._fp(s)
+        var pp = self._fp(pref)
+        if n >= 2:
+            var first = ps[1]
+            for i in range(n):
+                for j in range(n):
+                    if i != j and ps[i * n + j] != first:
+                        return False
+        for i in range(1, n):
+            if pp[i] != pp[0]:
+                return False
+        return True
+
+    def set_diag(mut self, s: Int, v: Int, n: Int) raises:
+        var ps = self._fp(s)
+        var pv = self._fp(v)
+        for i in range(n):
+            ps[i * n + i] = pv[i]
+
+    def ap_conv(mut self, e: Int, ring: Int, n: Int, conv_iter: Int, it: Int) raises -> Bool:
+        var pe = self._ip(e)
+        var pr = self._ip(ring)
+        var K = 0
+        for i in range(n):
+            pr[i * conv_iter + it % conv_iter] = pe[i]
+            K += Int(pe[i])
+        if it < conv_iter:
+            return False
+        for i in range(n):
+            var se = 0
+            for c in range(conv_iter):
+                se += Int(pr[i * conv_iter + c])
+            if se != conv_iter and se != 0:
+                return False
+        return K > 0
+
+    def ap_exemplars(mut self, s: Int, e: Int, n: Int, centers: Int, labels: Int) raises -> Int:
+        var ps = self._fp(s)
+        var pe = self._ip(e)
+        var pcen = self._ip(centers)
+        var plab = self._ip(labels)
+        var ex = List[Int]()
+        for i in range(n):
+            if pe[i] != 0:
+                ex.append(i)
+        var K = len(ex)
+        if K == 0:
+            for i in range(n):
+                plab[i] = Int32(-1)
+            return 0
+        var c = _ap_argmax_cols(ps, n, ex)
+        for k in range(K):
+            c[ex[k]] = k
+        for k in range(K):
+            var ii = List[Int]()
+            for i in range(n):
+                if c[i] == k:
+                    ii.append(i)
+            var best = 0
+            var best_v = Float32(0)
+            for jj in range(len(ii)):
+                var acc = Float32(0)
+                for q in range(len(ii)):
+                    acc = ftz(acc + ps[ii[q] * n + ii[jj]])
+                if jj == 0 or acc > best_v:
+                    best_v = acc
+                    best = jj
+            ex[k] = ii[best]
+        c = _ap_argmax_cols(ps, n, ex)
+        for k in range(K):
+            c[ex[k]] = k
+        var is_center = List[Bool](length=n, fill=False)
+        for i in range(n):
+            is_center[ex[c[i]]] = True
+        var rank = List[Int](length=n, fill=-1)
+        var nc = 0
+        for i in range(n):
+            if is_center[i]:
+                rank[i] = nc
+                pcen[nc] = Int32(i)
+                nc += 1
+        for i in range(n):
+            plab[i] = Int32(rank[ex[c[i]]])
+        return nc
+
+    def onehot(mut self, idx: Int, m: Int, kc: Int, by_row: Bool, dst: Int) raises:
+        var pi = self._ip(idx)
+        var pd = self._fp(dst)
+        for q in range(m):
+            if by_row:
+                pd[q * kc + Int(pi[q])] = Float32(1)
+            else:
+                pd[Int(pi[q]) * kc + q] = Float32(1)
+
+    def rand_resp(mut self, dst: Int, n: Int, kc: Int, state: UInt64) raises:
+        var pd = self._fp(dst)
+        for i in range(n):
+            rand_resp_row(state, kc, pd, i)
+
+    def kpp_search(mut self, closest: Int, w: Int, m: Int, vs: List[Float64], ids: Int) raises:
+        var pc = self._fp(closest)
+        var pw = self._fp_or(w)
+        var mode = FM_PROD if w >= 0 else FM_VAL
+        var nch = (m + FOLD_CHUNK - 1) // FOLD_CHUNK
+        var th = List[Float32](length=nch, fill=Float32(0))
+        var tl = List[Float32](length=nch, fill=Float32(0))
+        for q in range(nch):
+            var v = ff_chunk_host(mode, pc, pw, pc, q * FOLD_CHUNK, min(m, (q + 1) * FOLD_CHUNK))
+            th[q] = v.hi
+            tl[q] = v.lo
+        var pth = th.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var ptl = tl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var pi = self._ip(ids)
+        for t in range(len(vs)):
+            var v = ff_of_f64(vs[t])
+            pi[t] = Int32(kpp_search_cell(mode, pc, pw, pth, ptl, m, v.hi, v.lo))
+        _ = th^
+        _ = tl^
+
+    def kpp_pots(mut self, dc: Int, closest: Int, w: Int, nt: Int, m: Int) raises -> List[Float64]:
+        var pc = self._fp(closest)
+        var pw = self._fp_or(w)
+        var out = List[Float64](capacity=nt)
+        for t in range(nt):
+            var pdc = self._fp(dc) + t * m
+            out.append(ff_to_f64(ff_fold_host(FM_WMIN if w >= 0 else FM_MIN, pdc, pc, pw, m)))
+        return out^
+
+    def kpp_take(mut self, dc: Int, closest: Int, best: Int, m: Int) raises:
+        var pc = self._fp(closest)
+        var pdc = self._fp(dc) + best * m
+        for j in range(m):
+            var v = pdc[j]
+            if v < pc[j]:
+                pc[j] = v
+
+
+def _ap_argmax_cols(s_m: FPtr, n: Int, cols: List[Int]) -> List[Int]:
+    """argmax over `cols` of each row of S, the lowest position on a tie."""
+    var out = List[Int](capacity=n)
+    for i in range(n):
+        var best = 0
+        var bv = s_m[i * n + cols[0]]
+        for q in range(1, len(cols)):
+            var v = s_m[i * n + cols[q]]
+            if v > bv:
+                bv = v
+                best = q
+        out.append(best)
+    return out^

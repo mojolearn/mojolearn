@@ -48,7 +48,7 @@ def team_fit(algo: Int) -> Bool:
     return (algo == ALGO_GLM or algo == ALGO_HUBER or algo == ALGO_LOGCV
             or algo == ALGO_BAYES or algo == ALGO_ARD or algo == ALGO_RIDGE
             or algo == ALGO_ENETCV or algo == ALGO_LARS
-            or algo == ALGO_QUANTILE or algo == ALGO_SGD
+            or algo == ALGO_SGD
             or algo == ALGO_ISOTONIC_PREDICT)
 
 
@@ -88,7 +88,10 @@ def fit_dispatch(t: Team, algo: Int, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: F
     elif algo == ALGO_LARS:
         lars_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_QUANTILE:
-        quantile_fit(t, x, y, n, d, ip, fp, res, fw, iw)
+        # the device binding runs QuantileRegressor on the grid
+        # (x_linear/quantile_grid.mojo); no device thread reaches this
+        comptime if not is_gpu():
+            quantile_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_RIDGE:
         ridge_fit(t, x, y, n, d, ip, fp, res, fw, iw)
     elif algo == ALGO_ENETCV:

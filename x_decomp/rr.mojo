@@ -27,8 +27,8 @@ def pj_second(r: Int, b: Int, m: Int) -> Int:
 
 # ------------------------------------------------ the round-robin eigh as THE order (lane/neural-pass104)
 # Andrew, 2026-10-01: the two-sided Jacobi in the round-robin ordering is the
-# eigh of every column and of the host (the cyclic order stays behind
-# `-D MOJOLEARN_XD_EIGH_CYCLIC=1`). Its arithmetic is pinned here as the
+# eigh of every column and of the host, at every size (cgr-decomp,
+# 2026-10-03: the cyclic fallback and its define are deleted). Its arithmetic is pinned here as the
 # cyclic solver's: every product `identical_mul`, every rotation step the
 # host cyclic `_rot_sub_1` / `_rot_add_1` form (one fma, the other product
 # flushed and negated), every result flushed, the (c, s) of
@@ -197,12 +197,35 @@ def rr_off_fold(a: F32Ptr, n: Int) -> SIMD[DType.float32, 2]:
     return SIMD[DType.float32, 2](so[0], sd[0])
 
 
+comptime RR_EIGH_SWEEPS = 60
+"""The round-robin eigh's sweep budget, every column and the host (cgr-decomp,
+2026-10-03: the cyclic one-block solver it used to fall back to is deleted;
+a solve that does not converge in this budget raises)."""
+
+
+@always_inline
+def rr_converged(off: Float32, dg: Float32, tol: Float32) -> Bool:
+    """The convergence test on the folded sums, float32 only (the batched
+    kernel decides it on the device, Metal has no float64): off <= tol^2
+    (off + dg)."""
+    var fro = ftz(off + dg)
+    var t2 = ftz(identical_mul(tol, tol))
+    return off <= ftz(identical_mul(t2, fro))
+
+
+@always_inline
+def rr_fro_kept(fro_in: Float32, fro_now: Float32) -> Bool:
+    """J^T A J keeps ||A||_F: |fro_now - fro_in| <= 1e-3 fro_in, float32."""
+    return abs(ftz(fro_now - fro_in)) <= ftz(identical_mul(Float32(1.0e-3), fro_in))
+
+
 def host_eigh_rr(mut a: List[Float32], mut v: List[Float32], n: Int, sweeps: Int, tol: Float32) -> Tuple[Bool, Int]:
-    """The device driver's solve on the host (x_decomp/device.mojo `_eigh_par`):
-    `a` consumed in place (its diagonal the eigenvalues), v = the vectors in
-    columns (row major). The same rounds in the same order, the same
-    convergence test (`rr_off_fold`, before every sweep) and
-    the same Frobenius check. Returns (converged, sweeps run)."""
+    """The device driver's solve on the host (x_decomp/device.mojo `_eigh_par`,
+    x_decomp/rr_batch.mojo `rr_batch_kernel`): `a` consumed in place (its
+    diagonal the eigenvalues), v = the vectors in columns (row major). The
+    same rounds in the same order, the same convergence test (`rr_off_fold`,
+    `rr_converged`, before every sweep) and the same Frobenius check
+    (`rr_fro_kept`). Returns (converged, sweeps run)."""
     var m = n + (n % 2)
     var h = m // 2
     for i in range(n):
@@ -212,19 +235,16 @@ def host_eigh_rr(mut a: List[Float32], mut v: List[Float32], n: Int, sweeps: Int
     var vp = F32Ptr(unsafe_from_address=Int(v.unsafe_ptr()))
     var csl = List[Float32](length=max(2 * h, 2), fill=Float32(0.0))
     var cs = F32Ptr(unsafe_from_address=Int(csl.unsafe_ptr()))
-    var tol2 = Float64(tol) * Float64(tol)
     var converged = False
     var executed = 0
-    var fro_in = Float64(-1.0)
-    var fro_now = Float64(0.0)
+    var fro_in = Float32(-1.0)
+    var fro_now = Float32(0.0)
     for sweep in range(sweeps + 1):
         var sums = rr_off_fold(ap, n)
-        var off = Float64(sums[0])
-        var dg = Float64(sums[1])
-        fro_now = off + dg
-        if fro_in < 0.0:
+        fro_now = ftz(sums[0] + sums[1])
+        if fro_in < Float32(0.0):
             fro_in = fro_now
-        if off <= tol2 * fro_now:
+        if rr_converged(sums[0], sums[1], tol):
             converged = True
             break
         if sweep == sweeps:
@@ -241,7 +261,7 @@ def host_eigh_rr(mut a: List[Float32], mut v: List[Float32], n: Int, sweeps: Int
             for k in range(n):
                 for j in range(h):
                     rr_vrow(vp, cs, n, m, rd, k, j)
-    if converged and not (abs(fro_now - fro_in) <= 1.0e-3 * fro_in):
+    if converged and not rr_fro_kept(fro_in, fro_now):
         converged = False
     _ = csl^
     return (converged, executed)

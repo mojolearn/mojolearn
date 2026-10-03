@@ -175,8 +175,9 @@ def minibatch_fit[O: ClusterOps](
     var wslot = ops.zeros(k)
     ops.set(cslot, c)
     var steps_done = 0
-    # lane/apple-fast-cluster (2026-10-02), FAST on Apple, OFF by default:
-    # `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` (MINIBATCH_FAST_DEV) runs the
+    # lane/apple-fast-cluster (2026-10-02), FAST on Apple, ON by default
+    # (`-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it off; see
+    # x_cluster/minibatch_fast.mojo for the M3 A/B): MINIBATCH_FAST_DEV runs the
     # steps resident on the device (x_cluster/minibatch_fast.mojo: no upload,
     # read-back or host center fold per step; the loop below pays all three
     # every step). Unit weights and tol <= 0 only (the board's shape); `c`,
