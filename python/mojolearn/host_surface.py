@@ -1581,12 +1581,23 @@ FAMILIES = (
             # control is -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1 (reversed
             # tie-break), which tokenizer_host_sabotage() also reads True for.
             "tokenizer/train/bpe_train.mojo",
+            # lane/pyglue-text-io (2026-10-03): the Python doors are glue;
+            # vocabulary build/checks, the Llama 3 / Qwen 2 cut, the
+            # pretrained-vocabulary tokenizer, rendering, the corpus cut and
+            # the batch row gather are compiled in.
+            "tokenizer/impl/vocab_build.mojo", "tokenizer/vocab.mojo",
+            "tokenizer/train/emit.mojo",
         ),
         exports=(
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "bpe_load",
             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
             "bpe_decode", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
+            "bpe_load_tokens", "bpe_load_spelled", "bpe_ranks_text", "bpe_decode_seq",
+            "bpe_decode_batch", "bpe_render", "bpe_encode_corpus", "bpe_train_corpus",
+            "tokens_gather_rows", "tokenizer_pretokenize", "vocab_load_bytes",
+            "vocab_load_spelled", "vocab_info", "vocab_encode", "vocab_pretokenize",
+            "vocab_decode",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(

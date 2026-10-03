@@ -27,25 +27,31 @@ def no_numpy():
         builtins.__import__ = original
 
 
+def _byte_vocabulary():
+    from mojolearn.tokenizer import BpeTokenizer
+    try:
+        return BpeTokenizer.from_token_bytes([bytes([b]) for b in range(256)])
+    except ImportError as exc:
+        pytest.skip(f"tokenizer host binding not built: {exc}")
+
+
 def test_token_payload_and_mapped_batches_match_independent_oracle(tmp_path):
     data = b'abc\ndefgh\nijkl\nmnop\n'
     ranges = {'train_range': [0, 14], 'validation_range': [14, len(data)]}
     identity = {'schema': 'test-vocabulary', 'sha256': 'a' * 64, 'n_vocab': 1024}
 
-    class Tokenizer:
-        def encode_batch(self, documents):
-            return [[value + 256 for value in doc] for doc in documents]
-
-    oracle = np.asarray([value + 256 for value in data], dtype='<i4')
+    # The byte vocabulary: every id is its byte, so the payload is the bytes.
+    tok = _byte_vocabulary()
+    oracle = np.asarray(list(data), dtype='<i4')
     with no_numpy():
         lm_corpus._tokenize(data, {'sha256': hashlib.sha256(data).hexdigest()},
-                           ranges, Tokenizer(), identity, tmp_path, 5, 2)
+                           ranges, tok, identity, tmp_path, 5, 2)
         batches = lm_corpus.TokenBatches(tmp_path, batch=3, length=3)
         actual = [batches.ids(step) for step in (0, 1, 9, 1000001)]
     assert (tmp_path / 'tokens.i32').read_bytes() == oracle.tobytes()
     manifest = json.loads((tmp_path / 'manifest.json').read_text())
     assert manifest['train_range'] == [0, 14]
-    assert manifest['ids_above_255'] == len(data)
+    assert manifest['ids_above_255'] == 0
     assert manifest['max_id'] == int(oracle.max())
     assert batches.ids_all.flags['WRITEABLE'] is False
     for step, result in zip((0, 1, 9, 1000001), actual):
@@ -63,12 +69,8 @@ def test_token_batch_prefetch_is_ordered_bounded_and_propagates(monkeypatch, tmp
     ranges = {'train_range': [0, len(data)]}
     identity = {'schema': 'test-vocabulary', 'sha256': 'b' * 64, 'n_vocab': 1024}
 
-    class Tokenizer:
-        def encode_batch(self, documents):
-            return [[value + 256 for value in doc] for doc in documents]
-
     lm_corpus._tokenize(data, {'sha256': hashlib.sha256(data).hexdigest()},
-                       ranges, Tokenizer(), identity, tmp_path, 8, 2)
+                       ranges, _byte_vocabulary(), identity, tmp_path, 8, 2)
     batches = lm_corpus.TokenBatches(tmp_path, batch=2, length=4)
     expected = [(step, batches.ids(step).tobytes()) for step in range(3, 10)]
     actual = [(step, ids.tobytes()) for step, ids in batches.prefetch(3, 7, depth=2)]
