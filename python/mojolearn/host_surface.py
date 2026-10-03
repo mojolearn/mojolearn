@@ -2228,6 +2228,7 @@ FAMILIES = (
             "gaussian_process/host/gpr_oracle.mojo",
             "gaussian_process/host/gpr_grad_oracle.mojo",
             "gaussian_process/host/gp_theta.mojo",
+            "gaussian_process/gp_optim_items.mojo",
             "gaussian_process/host/gpc_oracle.mojo",
             "gaussian_process/host/gpc_steps.mojo",
             "cholesky/host/chol_oracle.mojo",
@@ -2239,7 +2240,7 @@ FAMILIES = (
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
             "gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad", "gp_log64", "gp_theta_params", "gpr_predict_cov",
             "gp_restart_uniforms", "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
-            "cholesky_factor", "cholesky_solve", "gp_py2mojo",
+            "cholesky_factor", "cholesky_solve", "gpr_optimize", "gp_py2mojo",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(

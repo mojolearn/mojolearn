@@ -69,8 +69,8 @@ HYPERPARAMETER OPTIMIZATION LIVES OUTSIDE THIS ONE-SHOT FIT
 refusal, kept at this entry): it fits the kernel it is handed. The optimizer
 (2026-09-15) evaluates `gpr_lml_grad_host` below at each candidate kernel
 (DEVIATION 2880: the likelihood, and its gradient through the identical
-Cholesky and one pinned fold) and runs its state machine in
-`python/mojolearn/_gp_optimizer.py` (DEVIATION 2881), whose every stop rule
+Cholesky and one pinned fold) and runs its state machine on the device in
+`gaussian_process/gp_optim.mojo` (DEVIATION 2881), whose every stop rule
 reads those bits alone, so the iteration count is the same on every column.
 The Python surface then calls this fit once with the optimized kernel.
 

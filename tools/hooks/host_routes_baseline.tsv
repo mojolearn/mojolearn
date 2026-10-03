@@ -6,8 +6,6 @@
 rule	class	owner	state	path	occ	text
 # why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
 one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[chol_strip_diag_kernel](
-# why: CROSS-LANE (GP/GMM): DEVIATION 1639's one-thread ascending log-det over n diagonal terms; a fixed-order multi-block fold (core/device_fold shape) needs the host column and the GP/GMM likelihood bits changed together
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[logdet_kernel](
 # why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
 one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[panel_factor_guarded_kernel](
 # why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together

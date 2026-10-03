@@ -122,6 +122,26 @@ def _with_weights(yv, sample_weight, n):
     return Array.from_list(yv.tolist() + w, "<f4"), 1
 
 
+#: lane/apple-fast-py2mojo-linear: `py2mojo_rows` modes (core/py2mojo_rows.mojo)
+_ROWS_SGD_PROBA, _ROWS_LRCV_PROBA, _ROWS_HUBER_OUT = 2, 3, 4
+_PY2MOJO_ROWS = 2
+
+
+def _py2mojo_proba(est, mode, scores, k):
+    """predict_proba's per-row glue in the binding (the same words), or None
+    when the binary predates it or was built with
+    -D MOJOLEARN_PY2MOJO_linear_OFF (the old Python rows)."""
+    b = est._bind(_BINDING)
+    fn = getattr(b, "py2mojo_linear_flags", None)
+    if fn is None or not (int(fn()) & _PY2MOJO_ROWS) or scores.dtype != "<f4":
+        return None
+    n = scores.shape[0]
+    out = empty((n, 2 if k == 1 else k), "<f4")
+    if n:
+        b.py2mojo_rows(mode, addr_ro(scores, name="scores"), addr(out, name="proba"), [n, k])
+    return out
+
+
 def _rows(values, k, d):
     return [values[c * d:(c + 1) * d] for c in range(k)]
 
@@ -339,6 +359,9 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
             raise AttributeError("probability estimates are not available for loss=%r" % self.loss)
         _check_fitted(self)
         p = _decision(self, X, self.coef_.tolist(), self.intercept_.tolist(), LINK_SIGMOID)
+        out = _py2mojo_proba(self, _ROWS_SGD_PROBA, p, len(self.intercept_))
+        if out is not None:
+            return out
         rows = p.tolist()
         if len(self.intercept_) == 1:
             return Array.from_list([[1.0 - r[0], r[0]] for r in rows], "<f4")
@@ -530,9 +553,22 @@ class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.scale_ = float(vals[d + 1])
         self.n_iter_ = int(vals[d + 2])
         self.n_features_in_ = d
-        pred = self.predict(a).tolist()
+        pred_a = self.predict(a)
         thr = self.scale_ * self.epsilon
-        self.outliers_ = [abs(t - q) > thr for t, q in zip(yv.tolist(), pred)]
+        b = self._bind(_BINDING)
+        fn = getattr(b, "py2mojo_linear_flags", None)
+        if (fn is not None and int(fn()) & _PY2MOJO_ROWS and yv.dtype == "<f4"
+                and pred_a.dtype == "<f4"):
+            # lane/apple-fast-py2mojo-linear: |y - pred| > thr in the binding
+            # (core/py2mojo_rows.mojo ROWS_HUBER_OUT, the same binary64 test)
+            flags = empty((n,), "<u1")
+            if n:
+                b.py2mojo_rows(_ROWS_HUBER_OUT, addr_ro(yv, name="y"), addr(flags, name="outliers_"),
+                               [n, 1, addr_ro(pred_a, name="pred"), float(thr)])
+            self.outliers_ = list(map(bool, flags.tolist()))
+        else:
+            pred = pred_a.tolist()
+            self.outliers_ = [abs(t - q) > thr for t, q in zip(yv.tolist(), pred)]
         return self
 
 
@@ -1193,7 +1229,11 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
     def predict_proba(self, X):
         # DEVIATION 6900: the pinned exp (was the platform exp) and the
         # CPython 3.12+ sum spelled out (`_pm.nsum`), the same bits on every host
-        scores = self.decision_function(X).tolist()
+        sc = self.decision_function(X)
+        out = _py2mojo_proba(self, _ROWS_LRCV_PROBA, sc, len(self.intercept_))
+        if out is not None:
+            return out
+        scores = sc.tolist()
         if len(self.intercept_) == 1:
             es = _pm.exp_array([-z if z >= 0 else z for z in scores])
             out = []

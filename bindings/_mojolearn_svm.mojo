@@ -80,6 +80,10 @@ from svm.estimator import (
 )
 
 
+from svm.impl.scale_gamma_device import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
+from svm.estimator import _family_ctx as _sg_family_ctx
+from svm.impl.svc_ovo_layout import svc_ovo_layout_device_binding, svc_dual_gemv_device_binding
+
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
 
@@ -614,6 +618,30 @@ def iforest_device_scan_binding() raises -> PythonObject:
     return PythonObject(0)
 
 
+
+def svm_scale_gamma_limbs_binding(
+    x_addr: PythonObject, count: PythonObject, out_addr: PythonObject
+) raises -> PythonObject:
+    """lane/apple-fast-py2mojo-linear: gamma='scale' exact sums on the device
+    (`svm/impl/scale_gamma_device.mojo`)."""
+    return scale_gamma_limbs_device_binding(_sg_family_ctx(), x_addr, count, out_addr)
+
+
+def svc_ovo_layout_binding(
+    sup_addrs: PythonObject, dual_addrs: PythonObject, meta: PythonObject, out_addrs: PythonObject
+) raises -> PythonObject:
+    """lane/apple-fast-py2mojo-linear: SVC's one-vs-one attribute layout on
+    the device (`svm/impl/svc_ovo_layout.mojo`)."""
+    return svc_ovo_layout_device_binding(_sg_family_ctx(), sup_addrs, dual_addrs, meta, out_addrs)
+
+
+def svc_dual_gemv_binding(
+    dual_addr: PythonObject, sv_addr: PythonObject, dims: PythonObject, out_addr: PythonObject
+) raises -> PythonObject:
+    """lane/apple-fast-py2mojo-linear: SVC coef_ (dual @ sv) on the device."""
+    return svc_dual_gemv_device_binding(_sg_family_ctx(), dual_addr, sv_addr, dims, out_addr)
+
+
 @export
 def PyInit__mojolearn_svm() abi("C") -> PythonObject:
     try:
@@ -633,6 +661,10 @@ def PyInit__mojolearn_svm() abi("C") -> PythonObject:
         m.def_function[iforest_run_binding]("iforest_run")
         m.def_function[iforest_device_scan_binding]("iforest_device_scan")
         m.def_function[iforest_device_finite_scan_binding]("iforest_device_finite_scan")
+        m.def_function[svm_scale_gamma_limbs_binding]("scale_gamma_limbs")
+        m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
+        m.def_function[svc_ovo_layout_binding]("svc_ovo_layout")
+        m.def_function[svc_dual_gemv_binding]("svc_dual_gemv")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_svm: ", e))

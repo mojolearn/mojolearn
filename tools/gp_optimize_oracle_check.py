@@ -78,7 +78,7 @@ THE TOLERANCES, AND WHERE THEY COME FROM. None is fitted to an observed error.
                                allowed TWICE this gap, which is derived from
                                that bound rather than chosen.
   PGTOL = 1e-5                 the optimizer's own stop threshold
-                               (`python/mojolearn/_gp_optimizer.py`). Applied
+                               (`gaussian_process/gp_optim_items.mojo`). Applied
                                only where the optimizer claims it, which is
                                where `stop == "pgtol"`.
   PG_DROP = 10                 for any other stop reason, the projected

@@ -78,6 +78,9 @@ import numbers
 from . import _backend
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
+
+#: `gaussian_process/gp_optim_items.mojo`'s stop words (GP_STOP_*).
+_OPT_STOPS = ("running", "pgtol", "no-descent", "line-search", "ftol", "max-iter", "nonfinite-start")
 from ._mode import NumericModeMixin
 from .linear_model import _flatten, _r2_sums, _round_f32, _shape_of
 from .preprocessing import StandardScaler
@@ -434,7 +437,9 @@ class GaussianProcessRegressor(NumericModeMixin):
                                   hyperparameters with the identical gradient
                                   (DEVIATION 2880) and a projected L-BFGS
                                   whose every rule is pinned (DEVIATION 2881,
-                                  _gp_optimizer.py). scikit-learn's default is
+                                  gaussian_process/gp_optim_items.mojo, run
+                                  on the device in one binding call).
+                                  scikit-learn's default is
                                   'fmin_l_bfgs_b'; None stays the default so a
                                   fit that ran before runs the same bits. A
                                   callable is refused by name
@@ -808,40 +813,38 @@ class GaussianProcessRegressor(NumericModeMixin):
         """scikit-learn `_gpr.py:299-341`: optimize from the kernel's theta,
         then from `n_restarts_optimizer` log-uniform starts; the smallest
         negative likelihood wins and a tie goes to the earlier run
-        (`np.argmin`). Returns the fitted kernel, whose `theta` is the winning
-        run's. Every run is recorded in `_optimizer_runs` as
-        `(n_iter, n_eval, stop, -f)`."""
-        from . import _gp_optimizer
-        ext = self._extension()
+        (`np.argmin`). ONE binding call (`gpr_optimize`) runs every start on
+        the device (DEVIATION 2881, `gaussian_process/gp_optim_items.mojo`);
+        Python only hands the kernel over and reads the answer. Returns the
+        fitted kernel, whose `theta` is the winning run's. Every run is
+        recorded in `_optimizer_runs` as `(n_iter, n_eval, stop, -f)`."""
         base = self.kernel
-        bounds = base._free_bounds()
-        lo = [float(v) for v in ext.gp_log64([b[0] for b in bounds])]
-        hi = [float(v) for v in ext.gp_log64([b[1] for b in bounds])]
-        theta0 = [float(v) for v in ext.gp_log64(base._free_values())]
-
-        def fun(theta):
-            params = [float(v) for v in ext.gp_theta_params(theta)]
-            info, lml, grad = self._lml_grad(base._with_free_values(params), x, targets, n_rows, n_cols)
-            if info != 0 or not math.isfinite(lml) or not all(math.isfinite(g) for g in grad):
-                return math.inf, [0.0] * len(theta)
-            return -lml, [-g for g in grad]
-
-        starts = [theta0]
-        if self.n_restarts_optimizer > 0:
-            seed = self.random_state
-            u = [float(v) for v in ext.gp_restart_uniforms(
-                [self.n_restarts_optimizer, len(theta0), seed & 0xFFFFFFFF, seed >> 32])]
-            nd = len(theta0)
-            for r in range(self.n_restarts_optimizer):
-                starts.append([lo[j] + u[r * nd + j] * (hi[j] - lo[j]) for j in range(nd)])
-        best = None
-        for start in starts:
-            theta, f, n_iter, n_eval, stop = _gp_optimizer.minimize(fun, start, lo, hi)
-            self._optimizer_runs.append((n_iter, n_eval, stop, -f))
-            if best is None or f < best[1]:
-                best = (theta, f)
-        theta = best[0]
-        params = [float(v) for v in ext.gp_theta_params(theta)]
+        kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays(base)
+        free = Array.from_list(base._free_flags(), "<i4")
+        n_theta = base.n_dims
+        bounds = Array.from_list([float(v) for b in base._free_bounds() for v in (b[0], b[1])], "<f4")
+        n_runs = 1 + int(self.n_restarts_optimizer)
+        theta_out = empty((n_theta,), "<f8")
+        values_out = empty((n_theta,), "<f8")
+        runs_out = empty((n_runs * 4,), "<f8")
+        seed = int(self.random_state)
+        self._extension().gpr_optimize(
+            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_optimize_binding.
+            # x, y, kinds, kparams, ls_len, ls, free, bounds, theta_out,
+            # values_out, runs_out
+            [addr_ro(x, name="x"), addr_ro(targets, name="targets"), addr_ro(kinds, name="kinds"),
+             addr_ro(kparams, name="kparams"), addr_ro(ls_len, name="ls_len"), addr_ro(ls, name="ls"),
+             addr_ro(free, name="free"), addr_ro(bounds, name="bounds"), addr(theta_out, name="theta_out"),
+             addr(values_out, name="values_out"), addr(runs_out, name="runs_out")],
+            # n_train, n_features, n_nodes, n_ls, alpha, n_restarts, seed_lo, seed_hi
+            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.alpha, n_runs - 1,
+             seed & 0xFFFFFFFF, (seed >> 32) & 0xFFFFFFFF],
+        )
+        for r in range(n_runs):
+            n_iter, n_eval, stop, f = (float(runs_out[r * 4 + j]) for j in range(4))
+            self._optimizer_runs.append((int(n_iter), int(n_eval), _OPT_STOPS[int(stop)], -f))
+        theta = [float(theta_out[i]) for i in range(n_theta)]
+        params = [float(values_out[i]) for i in range(n_theta)]
         return base._with_free_values(params, theta=theta)
 
     # -- predict ------------------------------------------------------------
