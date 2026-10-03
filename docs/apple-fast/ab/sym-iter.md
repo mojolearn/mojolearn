@@ -77,3 +77,13 @@ early-stopped tree once REUSE is on; FUSED's tail drain is the drain that delive
 Not in this lane: the fixed-point scale as a device pointer into `compute_hist2` (af-sym-hist's kernel signature; it
 would remove the magnitude readback entirely, where FUSED only hides its wait), test-metric batching (the board lanes fit
 with no eval set), and a single fused add-model-value + gradient kernel (the separate launches share one wait already).
+
+## Compile status (2026-10-03, gbdt binding, laptop, compile only)
+
+- FAST `-D MOJOLEARN_SYM_ITER_ALL` (turns on every define): rc=0 at 05605a559 (after one fix:
+  `sym_scale_from_mags` now `raises`, since `choose_scale` raises).
+- FAST `-D MOJOLEARN_SYM_BUF_ARENA`, `-D MOJOLEARN_SYM_REUSE_PARTITION`, `-D MOJOLEARN_SYM_DERIV_FUSED`,
+  `-D MOJOLEARN_SYM_LEAF_FROM_STATS` (each alone): compile owed: peer.
+- FAST with no define: compile owed: peer.
+- IDENTICAL: compile owed: peer.
+Stopped on orders when the machine's compile slots jammed; the M3 peer compiles the rest.
