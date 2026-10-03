@@ -39,3 +39,29 @@ Not done: device-resident graph between build and search (the search is `infer_m
 
 gapcagra-ivfg-istella, gapcagra-ivfg32-istella, gapcagra-dot-istella, gapcagra-wide-istella (lane/apple-fast-gap-cagra @ a3ebfc4a7).
 Keep rule: faster and recall@10 >= .9838.
+
+## Results so far and second round (@ 2b16b4322)
+
+- IVFG istella 21,240 -> 1,294 ms, recall .9838 -> .9595; IVFG_P32 1,793 ms, .9597. Doubling the probes moved recall
+  by .0002, so coverage is not the loss. Suspect: `_dt_tile`'s expanded distance |a|^2 + |b|^2 - 2 a.b in float32
+  on Istella's raw features (orders of magnitude apart) cancels and misorders close neighbors, which also changes
+  the prune's ranks. Arm `MOJOLEARN_CAGRA_FAST_IVFG_EXACTD`: the graph kernel forms sum (x_i - x_j)^2 (rows raw,
+  no norms); k-means assignment keeps the dot form. `MOJOLEARN_CAGRA_FAST_IVFG_P8`: 8 probes (speed check).
+  The DOT A/B (exact candidate set, expanded distance) tests the same hypothesis on the full graph.
+
+## Taxi recall bug (main FAST 2,887 ms, recall .4838 vs faiss .9277)
+
+Taxi's 11 features are integer codes (zone ids 1..265 dominate the scale, hour, weekday, day, passengers): of the
+first 400,000 rows 399,987 are distinct and the 10th-nearest distance is untied (numpy check, 200 queries), so not
+ties or duplicates. Each row's 64 nearest rows sit in its own (pickup, dropoff) zone cell, so the k-NN graph, and the
+pruned + reverse-merged CAGRA graph built from it, splits into near-isolated components. The search starts from
+itopk + width x degree = 96 fixed seeds (`python/mojolearn/_expansion_ann.py` `_search_k`) and walks 64 iterations
+(`max_iterations` auto = itopk), so a query whose cell holds no seed never reaches its neighbours. cuVS's own
+CAGRA scores .6251 on this row (it also fails); faiss HNSW's upper layers supply entry points. Arms (search only,
+FAST+Apple, `x_ann/cagra_device.mojo` `cagra_search_on`):
+- `MOJOLEARN_CAGRA_FAST_SEEDS`: seeds >= 262,144 / d rows (taxi 23,831, istella 1,191), never above n.
+- `MOJOLEARN_CAGRA_FAST_SEEDS4`: four times that.
+- `MOJOLEARN_CAGRA_FAST_ITERS`: >= 2 x itopk + log_{deg/2}(n) iterations (cuVS's auto adds the log term).
+The build (the board's median_ms) is unchanged by these; they move recall and infer_ms.
+
+Queued: gapcagra-{seeds,seeds4,iters,seedsiters}-taxi; gapcagra-{ivfgx,ivfgx8,ivfgxsi,seedsiters}-istella.

@@ -206,8 +206,15 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `CAGRA_FAST_TEAM` | cagra / istella | lane/apple-fast-ann @ 70833546a | ann-cagra-team-istella | - | OPEN | A/B queued, no judged result yet |
 | `CAGRA_FAST_WIDE` | cagra / istella | lane/apple-fast-gap-cagra @ a3ebfc4a7 | gapcagra-wide-istella | cagra istella 21,239 -> ? | OPEN | A/B queued, no judged result yet |
 | `CAGRA_FAST_DOT` | cagra / istella | lane/apple-fast-gap-cagra @ a3ebfc4a7 | gapcagra-dot-istella | cagra istella 21,239 -> ? | OPEN | A/B queued, no judged result yet |
-| `CAGRA_FAST_IVFG` | cagra / istella | lane/apple-fast-gap-cagra @ a3ebfc4a7 | gapcagra-ivfg-istella | cagra istella 21,239 -> ? | OPEN | A/B queued, no judged result yet |
-| `CAGRA_FAST_IVFG + CAGRA_FAST_IVFG_P32` | cagra / istella | lane/apple-fast-gap-cagra @ a3ebfc4a7 | gapcagra-ivfg32-istella | cagra istella 21,239 -> ? | OPEN | A/B queued, no judged result yet |
+| `CAGRA_FAST_IVFG` | cagra / istella | lane/apple-fast-gap-cagra @ a3ebfc4a7 | gapcagra-ivfg-istella | cagra istella 21,239 -> 1,294 | DROPPED-quality | recall .9838 -> .9595 |
+| `CAGRA_FAST_IVFG + CAGRA_FAST_IVFG_P32` | cagra / istella | lane/apple-fast-gap-cagra @ a3ebfc4a7 | gapcagra-ivfg32-istella | cagra istella 21,239 -> 1,793 | DROPPED-quality | recall .9597; probes are not the loss |
+| `CAGRA_FAST_SEEDS` | cagra / taxi | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-seeds-taxi | 2,887 -> ? | OPEN | A/B queued, no judged result yet |
+| `CAGRA_FAST_SEEDS4` | cagra / taxi | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-seeds4-taxi | 2,887 -> ? | OPEN | A/B queued, no judged result yet |
+| `CAGRA_FAST_ITERS` | cagra / taxi | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-iters-taxi | 2,887 -> ? | OPEN | A/B queued, no judged result yet |
+| `CAGRA_FAST_SEEDS + CAGRA_FAST_ITERS` | cagra / taxi, istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-seedsiters-{taxi,istella} | 2,887 / 21,239 -> ? | OPEN | A/B queued, no judged result yet |
+| `CAGRA_FAST_IVFG + CAGRA_FAST_IVFG_EXACTD` | cagra / istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-ivfgx-istella | 21,239 -> ? | OPEN | A/B queued, no judged result yet |
+| `CAGRA_FAST_IVFG + IVFG_EXACTD + IVFG_P8` | cagra / istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-ivfgx8-istella | 21,239 -> ? | OPEN | A/B queued, no judged result yet |
+| `CAGRA_FAST_IVFG + IVFG_EXACTD + SEEDS + ITERS` | cagra / istella | lane/apple-fast-gap-cagra @ 2b16b4322 | gapcagra-ivfgxsi-istella | 21,239 -> ? | OPEN | A/B queued, no judged result yet |
 | `ISOTONIC_FAST_PAIRMERGE + ISOTONIC_FAST_PAR` | isotonic / istella | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-iso-pair-istella | - | OPEN | A/B queued, no judged result yet |
 | `ISOTONIC_FAST_PAR` | isotonic / istella | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-iso-par-istella | - | OPEN | A/B queued, no judged result yet |
 | `IVFPQ_FAST_DEVICE_CODEBOOKS` | ivf-filter / istella; ivf-pq / istella; ivf-refine / istella | lane/apple-fast-ann @ 70833546a | ann-ivfpq-devcb-istella, ann-ivfrefine-devcb-istella, ann-ivffilter-devcb-istella | - | OPEN | A/B queued, no judged result yet |
