@@ -37,6 +37,7 @@ from max.gpu.sync import barrier
 from checks.numerics import ftz, identical_mul
 from core.apple_air import simdgroup_load_legacy_air
 from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
+from mamba.impl.modules.afn_defines import AFN_MAMBA2_SSD_MMA
 
 comptime _M64 = SIMD[DType.float32, 64]
 comptime _V2 = SIMD[DType.int64, 2]
@@ -279,13 +280,17 @@ def afn_m2_mma_kernel[
 
 
 def afn_ssd_mma_applies(qv: Int) -> Bool:
-    """The tile plan needs whole 64-row tiles and whole 32-deep windows."""
-    return (
-        qv % AFN_MMA_BM == 0
-        and M2_D_STATE % AFN_MMA_KB == 0
-        and M2_HEADDIM == 64
-        and M2_D_STATE % 32 == 0
-    )
+    """The tile plan needs whole 64-row tiles and whole 32-deep windows.
+    Always False off the switch, so no other build instantiates a kernel."""
+    comptime if not AFN_MAMBA2_SSD_MMA:
+        return False
+    else:
+        return (
+            qv % AFN_MMA_BM == 0
+            and M2_D_STATE % AFN_MMA_KB == 0
+            and M2_HEADDIM == 64
+            and M2_D_STATE % 32 == 0
+        )
 
 
 def afn_m2_cb_g_mma(
@@ -300,25 +305,28 @@ def afn_m2_cb_g_mma(
     qv: Int,
 ) raises:
     """S12 G = C . B^T, [Q x Q] per (b, c). ASYNCHRONOUS."""
-    comptime kern = afn_m2_mma_kernel[AFN_MMA_MODE_CB, 64]
-    var tiles = (qv // AFN_MMA_BM) * (qv // 64)
-    ctx.enqueue_function[kern](
-        cb_g.unsafe_ptr(),
-        cb_g.unsafe_ptr(),
-        cb_g.unsafe_ptr(),
-        xbc_work.unsafe_ptr(),
-        xbc_work.unsafe_ptr(),
-        xbc_work.unsafe_ptr(),
-        Int32(b),
-        Int32(t_work),
-        Int32(1),
-        Int32(di),
-        Int32(cd),
-        Int32(nc),
-        Int32(qv),
-        grid_dim=(b * nc * tiles, 1, 1),
-        block_dim=(AFN_MMA_NT, 1, 1),
-    )
+    comptime if not AFN_MAMBA2_SSD_MMA:
+        raise Error("afn_ssd_mma: MOJOLEARN_AFN_MAMBA2_SSD_MMA is off in this build")
+    else:
+        comptime kern = afn_m2_mma_kernel[AFN_MMA_MODE_CB, 64]
+        var tiles = (qv // AFN_MMA_BM) * (qv // 64)
+        ctx.enqueue_function[kern](
+            cb_g.unsafe_ptr(),
+            cb_g.unsafe_ptr(),
+            cb_g.unsafe_ptr(),
+            xbc_work.unsafe_ptr(),
+            xbc_work.unsafe_ptr(),
+            xbc_work.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(1),
+            Int32(di),
+            Int32(cd),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(b * nc * tiles, 1, 1),
+            block_dim=(AFN_MMA_NT, 1, 1),
+        )
 
 
 def afn_m2_ydiag_mma(
@@ -334,25 +342,28 @@ def afn_m2_ydiag_mma(
     qv: Int,
 ) raises:
     """S13 + S14 Y_diag = (G o L) . X_d, [Q x P] per (b, c, h). ASYNCHRONOUS."""
-    comptime kern = afn_m2_mma_kernel[AFN_MMA_MODE_YDIAG, M2_HEADDIM]
-    var tiles = qv // AFN_MMA_BM
-    ctx.enqueue_function[kern](
-        ydiag.unsafe_ptr(),
-        cb_g.unsafe_ptr(),
-        seg_l.unsafe_ptr(),
-        xd.unsafe_ptr(),
-        xd.unsafe_ptr(),
-        xd.unsafe_ptr(),
-        Int32(b),
-        Int32(t_work),
-        Int32(nh),
-        Int32(0),
-        Int32(0),
-        Int32(nc),
-        Int32(qv),
-        grid_dim=(b * nc * nh * tiles, 1, 1),
-        block_dim=(AFN_MMA_NT, 1, 1),
-    )
+    comptime if not AFN_MAMBA2_SSD_MMA:
+        raise Error("afn_ssd_mma: MOJOLEARN_AFN_MAMBA2_SSD_MMA is off in this build")
+    else:
+        comptime kern = afn_m2_mma_kernel[AFN_MMA_MODE_YDIAG, M2_HEADDIM]
+        var tiles = qv // AFN_MMA_BM
+        ctx.enqueue_function[kern](
+            ydiag.unsafe_ptr(),
+            cb_g.unsafe_ptr(),
+            seg_l.unsafe_ptr(),
+            xd.unsafe_ptr(),
+            xd.unsafe_ptr(),
+            xd.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(nh),
+            Int32(0),
+            Int32(0),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(b * nc * nh * tiles, 1, 1),
+            block_dim=(AFN_MMA_NT, 1, 1),
+        )
 
 
 def afn_m2_cstate_mma(
@@ -371,22 +382,25 @@ def afn_m2_cstate_mma(
 ) raises:
     """S15 (the product) + S16 cstate = X_d^T . (B o decay), [P x N] per
     (b, c, h). ASYNCHRONOUS."""
-    comptime kern = afn_m2_mma_kernel[AFN_MMA_MODE_CSTATE, 32]
-    var tiles = M2_D_STATE // 32
-    ctx.enqueue_function[kern](
-        cstate.unsafe_ptr(),
-        cstate.unsafe_ptr(),
-        cstate.unsafe_ptr(),
-        xd.unsafe_ptr(),
-        xbc_work.unsafe_ptr(),
-        decay.unsafe_ptr(),
-        Int32(b),
-        Int32(t_work),
-        Int32(nh),
-        Int32(di),
-        Int32(cd),
-        Int32(nc),
-        Int32(qv),
-        grid_dim=(b * nc * nh * tiles, 1, 1),
-        block_dim=(AFN_MMA_NT, 1, 1),
-    )
+    comptime if not AFN_MAMBA2_SSD_MMA:
+        raise Error("afn_ssd_mma: MOJOLEARN_AFN_MAMBA2_SSD_MMA is off in this build")
+    else:
+        comptime kern = afn_m2_mma_kernel[AFN_MMA_MODE_CSTATE, 32]
+        var tiles = M2_D_STATE // 32
+        ctx.enqueue_function[kern](
+            cstate.unsafe_ptr(),
+            cstate.unsafe_ptr(),
+            cstate.unsafe_ptr(),
+            xd.unsafe_ptr(),
+            xbc_work.unsafe_ptr(),
+            decay.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(nh),
+            Int32(di),
+            Int32(cd),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(b * nc * nh * tiles, 1, 1),
+            block_dim=(AFN_MMA_NT, 1, 1),
+        )
