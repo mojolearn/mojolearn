@@ -9,8 +9,11 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
-from checks.numerics import identical_log64
+from checks.numerics import identical_log64, GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from std.python import Python
+from xtrees.folds_device import device_folds
 from xtrees import agnostic_device as agn_dev
 from xtrees import agnostic_host as agn_host
 from xtrees.ops_device import (
@@ -637,6 +640,55 @@ def column_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObjec
     return PythonObject(n)
 
 
+#: lane/apple-fast-trees-ensembles (2026-10-02): the build-time FAST switches
+#: of python/mojolearn/_expansion_trees.py as a bit set, filled only in the
+#: FAST + Apple build; 0 in every other build, so IDENTICAL and the other
+#: vendors never see a switch. Default ON in FAST + Apple since the M3 A/B
+#: (lane/apple-fast-trees-ensembles 09a978f4c, n=1, quality identical in every
+#: pair): native splits istella stacking-clf -5.1%, stacking-reg -2.9%,
+#: calibrated -9.6%, ovr -2.2%, multioutput-clf -5.9%; ada session taxi
+#: adaboost-clf -9.0%, adaboost-reg -42%; session share on top adaboost-clf
+#: -22%. `-D MOJOLEARN_TE_<NAME>_OFF` turns one off; the old `-D
+#: MOJOLEARN_TE_<NAME>` is harmless. SHARE needs ADA_SESSION, so
+#: MOJOLEARN_TE_ADA_SESSION_OFF turns both off.
+comptime _XT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _XT_NATIVE_SPLITS = _XT_FAST_APPLE and not is_defined["MOJOLEARN_TE_NATIVE_SPLITS_OFF"]()
+comptime _XT_ADA_SESSION = _XT_FAST_APPLE and not is_defined["MOJOLEARN_TE_ADA_SESSION_OFF"]()
+comptime _XT_ADA_SESSION_SHARE = _XT_ADA_SESSION and not is_defined["MOJOLEARN_TE_ADA_SESSION_SHARE_OFF"]()
+comptime XTREES_FAST_SWITCHES = (
+    (1 if _XT_NATIVE_SPLITS else 0)
+    + (2 if _XT_ADA_SESSION else 0)
+    + (4 if _XT_ADA_SESSION_SHARE else 0)
+)
+
+
+def fast_switches_binding() raises -> PythonObject:
+    """`XTREES_FAST_SWITCHES`: bit 1 MOJOLEARN_TE_NATIVE_SPLITS, bit 2
+    MOJOLEARN_TE_ADA_SESSION, bit 4 MOJOLEARN_TE_ADA_SESSION_SHARE."""
+    return PythonObject(XTREES_FAST_SWITCHES)
+
+
+def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, n_splits, n_classes]: the cv folds on the device
+    (xtrees/folds_device.mojo; MOJOLEARN_TE_NATIVE_SPLITS, default on unless `-D MOJOLEARN_TE_NATIVE_SPLITS_OFF`, FAST + Apple
+    only). n_classes > 0: StratifiedKFold over `codes` (int32, n, in
+    [0, n_classes)); 0: KFold, codes unread. counts (int32, n_splits + 1) =
+    the fold sizes then the status word; rows (int32, n_splits * n): per fold
+    i the rows outside it, ascending, then the rows inside it, ascending.
+    Returns the status: 0, 1 (the Python refusal: n_splits above every class
+    count) or 2 (a code outside [0, n_classes))."""
+    _need(params, 3, "x_trees_device_folds")
+    var n = _count(_i(params, 0), "x_trees_device_folds")
+    var n_splits = _i(params, 1)
+    var k = _count(_i(params, 2), "x_trees_device_folds")
+    if n_splits < 2:
+        raise Error("x_trees_device_folds: n_splits must be >= 2")
+    var status = 0
+    if n > 0:
+        status = device_folds(i32_ptr(Int(py=codes)), n, k, n_splits, i32_ptr(Int(py=rows)), i32_ptr(Int(py=counts)))
+    return PythonObject(status)
+
+
 def _agn_ints(params: PythonObject, n: Int, who: String) raises -> List[Int]:
     _need(params, n, who)
     var out = List[Int]()
@@ -782,6 +834,8 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[complement_pairs_binding]("x_trees_complement_pairs")
     m.def_function[indicator_codes_binding]("x_trees_indicator_codes")
     m.def_function[column_f64_binding]("x_trees_column_f64")
+    m.def_function[fast_switches_binding]("x_trees_fast_switches")
+    m.def_function[device_folds_binding]("x_trees_device_folds")
     m.def_function[block_mean_binding]("x_trees_block_mean")
     m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")
