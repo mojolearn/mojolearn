@@ -3959,6 +3959,8 @@ class MDS(_Base):
 #: 2,000 on the M3 Ultra). method='standard' only (its factor I - W is
 #: square); 'ltsa', 'hessian' and 'modified' keep the dense route.
 _LLE_ITER_MIN_N = 200
+#: lane/apple-fast-gap-manprep: `_lle_smallest` builds F0 on the device (FAST tier only)
+_LLE_FAST_DEV_F0 = _os.environ.get("MOJOLEARN_LLE_FAST_DEV_F0") == "1"
 _LLE_ITER_MAX_K = 10
 #: Converged: the sine of the largest principal angle between two successive
 #: wanted Ritz subspaces is at most _LLE_SUBSPACE_TOL, or, under
@@ -4038,14 +4040,31 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     un = _M.of([rn] * n, n, 1)
     hrow = _M.of([rn] * n1, 1, n1)
     Fh = k.mm(F, h)
-    Fhat = k.ew("sub", F.cols(0, n1), k.ew("scale", k.mm(Fh, hrow), s=coef))
+    dev_f0 = _LLE_FAST_DEV_F0 and str(k.mode).strip().lower() == "fast" and k._use(F)
+    if dev_f0:
+        # lane/apple-fast-gap-manprep (2026-10-03), MOJOLEARN_LLE_FAST_DEV_F0=1
+        # (FAST tier): F0 = [F^ | u] built on the device in three cells
+        # instead of F.cols (F downloaded, then one strided Python slice per
+        # column, 10,000 at the board's n) and _hstack (F^ downloaded and
+        # moved on the host, then uploaded again for the LU). The same words:
+        # the rank-one product has one term per entry, the mask multiply is
+        # exact (x * 1 + 0, 0 * x + rn in one fused rounding).
+        hfull = _M.of([rn] * n1 + [0.0], 1, n)
+        mask = _M.of([1.0] * n1 + [0.0], 1, n)
+        last = _M.of([0.0] * n1 + [rn], 1, n)
+        D = k.ew("sub", F, k.ew("scale", k.mm(Fh, hfull), s=coef))
+        F0 = k.ew("fma", D, mask, last)
+        Fhat = None
+    else:
+        Fhat = k.ew("sub", F.cols(0, n1), k.ew("scale", k.mm(Fh, hrow), s=coef))
     Fu = k.mm(F, un)
     g = math.sqrt(_dsum_sq(k, Fu))
     rms = math.sqrt(max(float(k.total(k.ew("sq", F)).s[0]), 0.0) / n)
     if not (g <= _LLE_NULL_GUARD * rms):
         return None
     floor = _LLE_NULL_FLOOR * _F32_EPS * rms
-    F0 = _hstack(Fhat, un)
+    if not dev_f0:
+        F0 = _hstack(Fhat, un)
     lu, piv, _ = k.lu(F0)
     # a pivot under float32 resolution (an exactly zero one skipped its
     # step) is set to eps times the largest: inverse iteration's usual
@@ -4083,7 +4102,10 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
         Y = solve_t(_M(array.array("f", X.s) + array.array("f", [0.0]) * X.c, n, X.c))
         Y = _lle_orth(k, k.ew("sub", Y, k.mm(z, k.mm(z, Y, ta=True))))
         X = _lle_orth(k, solve(Y).rows(0, n1))
-        S, Vt = k.svd(k.mm(Fhat, X))
+        if dev_f0:          # F^ X = F0 [X; 0] (the last column of F0 meets a zero row)
+            S, Vt = k.svd(k.mm(F0, _M(array.array("f", X.s) + array.array("f", [0.0]) * X.c, n, X.c)))
+        else:
+            S, Vt = k.svd(k.mm(Fhat, X))
         X = k.mm(X, Vt, tb=True)
         Y = X.take_cols(want)
         if it >= 2 and max(float(v) for v in S.take_cols(want).s) <= floor:
