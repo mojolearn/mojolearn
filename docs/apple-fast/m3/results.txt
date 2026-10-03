@@ -1,4 +1,4 @@
-pos=285 lines=     451
+pos=290 lines=     453
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -349,3 +349,9 @@ pos=285 lines=     451
 451:CMD apple-fast-prophetspeed@805207038 ps-coop-taxi-hourly rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=43.1 all=[43] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_PROPHET_COOP'
 452:CMD apple-fast-seq@8b3f1d90e seq-croston-reg-syn rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1.8 all=[2] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_SEQ_CROSTON_REG=1'
 453:CMD apple-fast-seq@8b3f1d90e seq-garch-dev rc=0 AFC-AB-SUMMARY seq-garch-dev arm=A lane=garch ds=taxi-hourly median_of_medians_ms=2769.0836874826346 runs=[2769.0836874826346 ] digest=43a79f7d4c9a412c 
+454:CMD apple-fast-seq@8b3f1d90e seq-garch-reg rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=968.4 all=[968] quality=['{"mean_llf":'] defines='-D MOJOLEARN_SEQ_GARCH_REG=1'
+455:CMD apple-fast-seq@8b3f1d90e seq-garch-grid rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2786.5 all=[2786] quality=['{"mean_llf":'] defines='-D MOJOLEARN_SEQ_GARCH_GRID=1'
+456:CMD apple-fast-seq@8b3f1d90e seq-garch-reggrid rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=904.7 all=[905] quality=['{"mean_llf":'] defines='-D MOJOLEARN_SEQ_GARCH_REG=1 -D MOJOLEARN_SEQ_GARCH_GRID=1'
+457:CMD apple-fast-seq@8b3f1d90e seq-garch-reggrid-syn rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=528.0 all=[528] quality=['{"mean_llf":'] defines='-D MOJOLEARN_SEQ_GARCH_REG=1 -D MOJOLEARN_SEQ_GARCH_GRID=1'
+458:FBUILD lane/apple-fast-trees-scan@43430ca0f core=0 ibase=0 estimators=0 gbdt=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+459:CMD apple-fast-trees-scan@43430ca0f trees-scan-dw-taxi rc=0 AFT-MEDIAN arm=B n=2 median_ms=12852.6 all=[12944, 12762] hashes=['5a16a858f54b8ce3', '801aad4400c740f3'] acc={'logloss': [0.527892, 0.527943], 'auc': [0.63241, 0.632481]}
