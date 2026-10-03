@@ -57,6 +57,7 @@ from x_linear.huber_grid import huber_fit_grid
 from x_linear.dispatch import ALGO_HUBER, ALGO_ENETCV
 from x_linear.enetcv_fast import enetcv_fast
 from x_linear.fast_gram import fast_gram_into, XL_RIDGE_FAST_GRAM
+from x_linear.sgdoc_fast import sgdoc_fw_fit, SGDOC_FAST_PAR
 from x_linear.cls1_fast import (
     C1_TPB, C1_BATCH, C1_BAYES_STATE, BAYES_CLS1_STATS, BAYES_CLS1_PARTS, BAYES_CLS1_BATCH,
     RIDGE_CLS1_CODES, c1_sq_parts_kernel, c1_sum_parts_kernel, c1_dev_parts_kernel, c1_codes_targets_kernel,
@@ -3313,6 +3314,17 @@ def fit_device(
         # (x_linear/quantile_grid.mojo), no longer the one-block fit kernel
         quantile_fit_grid(linear_ctx(), x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
+    # lane/apple-fast-sgdoc-parallel, FAST + Apple, -D MOJOLEARN_SGDOC_FAST_PAR:
+    # SGDOneClassSVM (one class, fit_intercept, no sample weights, the
+    # per-sample batch 0) solved to convergence by Frank-Wolfe on the dual,
+    # every pass on the grid (x_linear/sgdoc_fast.mojo) instead of 20 epochs
+    # of per-sample SGD (one sample after the next)
+    comptime if SGDOC_FAST_PAR:
+        if (algo == ALGO_SGD and n > 0 and d > 0 and Int(ip[0]) == 1 and Int(ip[4]) != 0
+                and len(ip) > 12 and Int(ip[10]) == 0 and Int(ip[12]) == 0):
+            var sctx = linear_ctx()
+            sgdoc_fw_fit(sctx, x, n_x, n, d, fp[0], Int(ip[5]), n_out, res)
+            return
     if algo == ALGO_SGD and len(ip) > 12 and sgd_mb_on(Int(ip[12]), Int(ip[0]), Int(ip[3])):
         _sgd_mb_grid(x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return
