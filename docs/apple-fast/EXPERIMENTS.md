@@ -541,7 +541,9 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 
 | define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
-| `KSHAP_FAST_BATCH` (`_OFF`) | kernel-shap / istella | lane/apple-fast-gap-kapprox2-kshap @ d95ede061 | kap2-kshap-batch-istella | 27011 -> 15325 | KEPT | regression from 57a297161 (one row per chunk: fresh 180 MB device buffer + ~3 GB/s download into a fresh host array, 2(d-1) pivot/elim launches per row); pooled device synthetic buffer, reused host buffer, one solve sweep per ~74 rows; rel_error_vs_exact 4.378e-09 both arms; also on PermutationExplainer (buffer reuse; kap2-pshap-batch-istella owed) |
+| `KSHAP_FAST_BATCH` (`_OFF`) | kernel-shap / istella | lane/apple-fast-gap-kapprox2-kshap @ d95ede061 | kap2-kshap-batch-istella | 27011 -> 15325 | KEPT | regression from 57a297161 (one row per chunk: fresh 180 MB device buffer + ~3 GB/s download into a fresh host array, 2(d-1) pivot/elim launches per row); pooled device synthetic buffer, reused host buffer, one solve sweep per ~74 rows; rel_error_vs_exact 4.378e-09 both arms; also on PermutationExplainer (buffer reuse) |
+| `KSHAP_FAST_BATCH` (`_OFF`) | permutation-shap / istella | lane/apple-fast-gap-kapprox2-kshap @ d95ede061 | kap2-pshap-batch-istella | 34198 -> 28236 | KEPT | pooled device synthetic buffer + reused host buffer (388 MB/row); rel error identical; still ~1.6x the 0.8.34 17.2 s |
+| `KSHAP_FAST_SIGNGRAM` | kernel-shap / istella | lane/apple-fast-gap-kapprox2 @ 4fd464a43 | kap2-kshap-sign-istella (A = BATCH) | -1.4% | DROPPED | noise; sign adds instead of soft-f64 products in the normal equations (same words); not merged |
 
 ## Fixes without a switch (merged; not experiments)
 
