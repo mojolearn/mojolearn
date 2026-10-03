@@ -38,3 +38,13 @@ STEP_BATCH holds; compare with optics2-sb to see what CORE_SQ and LIVEBUF add on
 Not built: CORE_TILE (register top-k without the n x n matrix: the ordering needs the resident matrix anyway, and
 kth is ~1% of the fit) and EXTRACT_DEVICE (the xi walk is a serial state machine; on the device it would be a
 one-thread launch, which the GPU rules forbid; on the host it is well under a millisecond at n = 10,000).
+
+## Compile status (2026-10-03, laptop, compile only)
+
+- FAST + `-D MOJOLEARN_OPTICS2_ALL=1` (STEP_BATCH + CORE_SQ + LIVEBUF): rc=0 at c6f1829c2.
+- FAST + STEP_BATCH alone, FRONTIER_DEVICE alone, CORE_SQ alone, LIVEBUF alone: compile owed: peer.
+- FAST with no define: compile owed: peer.
+- IDENTICAL: compile owed: peer.
+
+Compiling stopped on Andrew's order (compile slots jammed); the M3 peer compiles the rest. FRONTIER_DEVICE is the
+one path ALL does not instantiate (`optics_fused_kernel`), so its build is the one most likely to surface an error.
