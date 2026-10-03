@@ -95,7 +95,7 @@ from gemm.checks.gemm_int8_mma import (
     identical_gemm_int8_mma_into,
     int8_mma_admits,
 )
-from gemm.contract import INT8_MAX_K, OP_NN, OP_NT, OP_TN, gemm_oracle_sabotage_value_flip
+from gemm.contract import INT8_MAX_K, OP_NN, OP_NT, OP_TN, f16_bits_to_f32, gemm_oracle_sabotage_value_flip
 
 #: DEVIATION 2908, the value arm. Off in every build that does not name it.
 comptime LOWBIT_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_SABOTAGE"]()
@@ -170,6 +170,19 @@ def bf16_widen_kernel(
     dst.unsafe_store(i, bf16_bits_to_f32(src.unsafe_load(i)))
 
 
+def f16_widen_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[UInt16, MutAnyOrigin],
+    n_in: Int32,
+):
+    """IEEE float16 bits to float32 (`f16_bits_to_f32`), one element per
+    thread."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    dst.unsafe_store(i, f16_bits_to_f32(src.unsafe_load(i)))
+
+
 def bf16_narrow_kernel(
     dst: MutPointer[UInt16, MutAnyOrigin],
     src: MutPointer[Float32, MutAnyOrigin],
@@ -180,6 +193,23 @@ def bf16_narrow_kernel(
     if i >= Int(n_in):
         return
     dst.unsafe_store(i, f32_to_bf16_bits_rne(src.unsafe_load(i)))
+
+
+def f16_widen(
+    ctx: DeviceContext,
+    mut dst: DeviceBuffer[DType.float32],
+    mut src: DeviceBuffer[DType.uint16],
+    count: Int,
+) raises:
+    if count <= 0:
+        return
+    ctx.enqueue_function[f16_widen_kernel](
+        dst.unsafe_ptr(),
+        src.unsafe_ptr(),
+        Int32(count),
+        grid_dim=((count + LOWBIT_TPB - 1) // LOWBIT_TPB, 1, 1),
+        block_dim=(LOWBIT_TPB, 1, 1),
+    )
 
 
 def bf16_widen(

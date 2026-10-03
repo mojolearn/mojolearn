@@ -96,6 +96,7 @@ from gemm.checks.gemm_lowbit import (
     LowbitWorkspace,
     bf16_narrow,
     bf16_widen,
+    f16_widen,
     dequantize_rows_int8_device,
     identical_gemm_bf16w_into,
     identical_gemm_int8_into,
@@ -752,6 +753,34 @@ def from_bf16_binding(
         ctx.synchronize()
     return PythonObject(count)
 
+def from_f16_binding(
+    dst_addr: PythonObject, src_addr: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """IEEE float16 bits to float32, exact, by bit construction
+    (`gemm/contract.mojo::f16_bits_to_f32`), on the device. The safetensors
+    float16 reader's widening (pyglue-text-io, Oct 3). `params` is
+    `[count]`. Returns `count`."""
+    if len(params) != 1:
+        raise Error("from_f16: params must contain 1 value (count)")
+    var dst_address = Int(py=dst_addr)
+    var src_address = Int(py=src_addr)
+    var count = Int(py=params[0])
+    if count <= 0:
+        raise Error("from_f16: count must be positive, got " + String(count))
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var dsrc = _dev_u16(ctx, src_address, count)
+        var ddst = ctx.enqueue_create_buffer[DType.float32](count)
+        f16_widen(ctx, ddst, dsrc, count)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=f32_ptr(dst_address), src_buf=ddst)
+        ctx.synchronize()
+        _ = dsrc^
+        _ = ddst^
+        # DEVIATION 3010: drain the frees before the context goes.
+        ctx.synchronize()
+    return PythonObject(count)
+
 # ---------------------------------------------------------------- linalg door
 # THE THREE DECOMPOSITIONS UNDER THEIR OWN NAMES, ON THE DEVICE (2026-09-19).
 #
@@ -875,6 +904,7 @@ def PyInit__mojolearn_linalg() abi("C") -> PythonObject:
         m.def_function[dequantize_int15_binding]("dequantize_int15")
         m.def_function[to_bf16_binding]("to_bf16")
         m.def_function[from_bf16_binding]("from_bf16")
+        m.def_function[from_f16_binding]("from_f16")
         m.def_function[qr_r_binding]("qr_r")
         m.def_function[eigh_binding]("eigh")
         m.def_function[svdvals_binding]("svdvals")

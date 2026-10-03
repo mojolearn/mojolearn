@@ -359,3 +359,36 @@ comptime INT15_MAX_K = 65536
 
 #: The int15 profile version the bindings read back.
 comptime INT15_PROFILE_VERSION = 1
+
+
+def f16_bits_to_f32_bits(h_in: UInt16) -> UInt32:
+    """IEEE binary16 bits widened to binary32 bits, by bit construction
+    (pyglue-text-io, Oct 3: the safetensors float16 reader's widening,
+    formerly a per-element Python loop in `models/safetensors.py`). Exact:
+    every float16 is a float32. A normal value keeps its mantissa shifted up
+    by 13 and rebiases the exponent by 112; a subnormal (exponent 0,
+    mantissa nonzero) is renormalized into a NORMAL float32; zero keeps its
+    sign; the infinities and every NaN keep sign and payload (no quieting,
+    which a hardware cast would do). Integer operations only, so every
+    column produces the same bits."""
+    var h = UInt32(h_in)
+    var s = (h & 0x8000) << 16
+    var e = (h >> 10) & 0x1F
+    var m = h & 0x03FF
+    if e == 0:
+        if m == 0:
+            return s
+        var shift: UInt32 = 0
+        while (m & 0x0400) == 0:
+            m <<= 1
+            shift += 1
+        m &= 0x03FF
+        return s | ((113 - shift) << 23) | (m << 13)
+    if e == 31:
+        return s | 0x7F800000 | (m << 13)
+    return s | ((e + 112) << 23) | (m << 13)
+
+
+def f16_bits_to_f32(h: UInt16) -> Float32:
+    """`f16_bits_to_f32_bits` as the float32 it spells."""
+    return bitcast[DType.float32](f16_bits_to_f32_bits(h))
