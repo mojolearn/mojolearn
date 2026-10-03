@@ -172,6 +172,18 @@ def _afn2_widen[T: DType](v: Scalar[T]) -> Float32:
         return v.cast[DType.float32]()
 
 
+def _afn2_rw(rows: Int, kb: Int, nt: Int) -> Int:
+    """A thread's register width for one window's operand: 4 words per slot
+    (`(rows * kb) // (4 * nt)` slots), rounded up to a power of two because a
+    SIMD width must be one (3 or 7 slots at some tiles). The padding lanes
+    stay +0.0 and are never staged."""
+    var w = 4 * ((rows * kb) // (4 * nt))
+    var p = 1
+    while p < w:
+        p *= 2
+    return p
+
+
 @always_inline
 def _afn2_gload[
     ROWS: Int, KB: Int, NT: Int, T: DType
@@ -185,7 +197,7 @@ def _afn2_gload[
     chunk: Int,
     tid: Int,
     ofast: Bool,
-) -> SIMD[DType.float32, 4 * ((ROWS * KB) // (4 * NT))]:
+) -> SIMD[DType.float32, _afn2_rw(ROWS, KB, NT)]:
     """One window's operand words for this thread, 4 per slot, widened (the
     wave-1 `_afn_gload`). `ofast` (the outer index has stride 1): slot =
     (p, 4 consecutive outer); else slot = (outer, 4 consecutive p). Words
@@ -193,7 +205,7 @@ def _afn2_gload[
     comptime SL = (ROWS * KB) // (4 * NT)
     comptime assert SL * 4 * NT == ROWS * KB, "_afn2_gload: whole slots"
     comptime assert ROWS % 4 == 0 and KB % 4 == 0, "_afn2_gload: 4-wide slots"
-    var r = SIMD[DType.float32, 4 * SL](0.0)
+    var r = SIMD[DType.float32, _afn2_rw(ROWS, KB, NT)](0.0)
     comptime for sl in range(SL):
         var s = sl * NT + tid
         if ofast:
@@ -232,7 +244,7 @@ def _afn2_stage[
     ROWS: Int, KB: Int, NT: Int, PMAJOR: Bool, ST: Int
 ](
     dst: _SPtr,
-    r: SIMD[DType.float32, 4 * ((ROWS * KB) // (4 * NT))],
+    r: SIMD[DType.float32, _afn2_rw(ROWS, KB, NT)],
     tid: Int,
     ofast: Bool,
 ):
@@ -324,7 +336,7 @@ def afn2_gemm_kernel[
     comptime BALLOC = 4 if DIRECT_B else BSZ
     comptime PAGE_BYTES = (ASZ + BSZ) * 4
     comptime NPG = lib_smem_pages_for[COLUMN_APPLE, PAGE_BYTES]()
-    comptime RBW = 4 if DIRECT_B else 4 * ((BN * KB) // (4 * NT))
+    comptime RBW = 4 if DIRECT_B else _afn2_rw(BN, KB, NT)
     comptime assert lib_smem_page_fits_for[COLUMN_APPLE, PAGE_BYTES](), (
         "afn2_gemm_kernel: one staged page must fit Apple's threadgroup memory"
     )
@@ -387,7 +399,7 @@ def afn2_gemm_kernel[
         _afn2_stage[BM, KB, NT, True, AST](at, ra, tid, a_ofast)
         comptime if not DIRECT_B:
             _afn2_stage[BN, KB, NT, False, BST](
-                bt, rebind[SIMD[DType.float32, 4 * ((BN * KB) // (4 * NT))]](rb), tid, b_ofast
+                bt, rebind[SIMD[DType.float32, _afn2_rw(BN, KB, NT)]](rb), tid, b_ofast
             )
         barrier()
         if windows > 1:
@@ -405,7 +417,7 @@ def afn2_gemm_kernel[
             _afn2_stage[BM, KB, NT, True, AST](at, ra, tid, a_ofast)
             comptime if not DIRECT_B:
                 _afn2_stage[BN, KB, NT, False, BST](
-                    bt, rebind[SIMD[DType.float32, 4 * ((BN * KB) // (4 * NT))]](rb), tid, b_ofast
+                    bt, rebind[SIMD[DType.float32, _afn2_rw(BN, KB, NT)]](rb), tid, b_ofast
                 )
             barrier()
             if w + 1 < windows:
@@ -439,7 +451,7 @@ def afn2_gemm_kernel[
                 comptime if not DIRECT_B:
                     _afn2_stage[BN, KB, NT, False, BST](
                         bt + nxt * BALLOC,
-                        rebind[SIMD[DType.float32, 4 * ((BN * KB) // (4 * NT))]](rb),
+                        rebind[SIMD[DType.float32, _afn2_rw(BN, KB, NT)]](rb),
                         tid,
                         b_ofast,
                     )
