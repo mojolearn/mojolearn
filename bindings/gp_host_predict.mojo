@@ -14,6 +14,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from gaussian_process.unnorm import GP_PY2MOJO, GP_UNNORM_MEAN, GP_UNNORM_STD, gp_unnorm_cell
 from gaussian_process.host.gpc_oracle import gpc_host_predict
 from gaussian_process.host.gpc_steps import gpc_ovr_combine_rows, gpc_proba
 from gaussian_process.host.gpr_oracle import (
@@ -164,27 +165,40 @@ def _gpr_predict_run(
     var_addr: Int,
     std_addr: Int,
     clamped_addr: Int,
+    unnorm: Bool = False,
+    y_std: Float32 = Float32(1.0),
+    y_mean: Float32 = Float32(0.0),
 ) raises -> Int:
     """The GIL-free half of `gpr_predict_binding`. The variance, std and
     clamp addresses are resolved only in the `return_std` arm, as on the
-    GPU binding."""
+    GPU binding. `unnorm`: normalize_y's mean and std
+    (`gaussian_process/unnorm.mojo`), the variance left normalized."""
     var pred = gpr_host_predict(
         xt, l, dual, n_train, n_features, spec, info, x_star, n_star, return_std
     )
     var mp = f32_ptr(mean_addr)
     for i in range(n_star):
-        mp.unsafe_store(i, pred.mean[i])
+        mp.unsafe_store(i, gp_unnorm_cell(pred.mean[i], y_std, y_mean, GP_UNNORM_MEAN) if unnorm else pred.mean[i])
     if return_std:
         var vp = f32_ptr(var_addr)
         var stp = f32_ptr(std_addr)
         var cp = i32_ptr(clamped_addr)
         for i in range(n_star):
             vp.unsafe_store(i, pred.variance[i])
-            stp.unsafe_store(i, pred.std[i])
+            stp.unsafe_store(
+                i, gp_unnorm_cell(pred.variance[i], y_std, y_mean, GP_UNNORM_STD) if unnorm else pred.std[i]
+            )
             cp.unsafe_store(i, pred.clamped[i])
     var n_clamped = pred.n_clamped
     _ = pred^
     return n_clamped
+
+
+def gp_py2mojo_binding() raises -> PythonObject:
+    """1: normalize_y's un-normalization runs in this binding (lane
+    apple-fast-py2mojo-cluster); 0 under `-D MOJOLEARN_PY2MOJO_cluster_OFF`,
+    and `_gp_impl.py` applies it in Python."""
+    return PythonObject(1 if GP_PY2MOJO else 0)
 
 
 def gpr_predict_binding(
@@ -206,12 +220,16 @@ def gpr_predict_binding(
             " std_out, clamped_out), got "
             + String(len(addrs))
         )
-    if len(params) != 7:
+    if len(params) != 7 and len(params) != 10:
         raise Error(
             "gpr_predict: params must contain 7 values (n_train,"
-            " n_features, n_star, n_nodes, n_ls, return_std, info), got "
+            " n_features, n_star, n_nodes, n_ls, return_std, info), or 10"
+            " (+ normalize_y, y_std, y_mean), got "
             + String(len(params))
         )
+    var unnorm = len(params) == 10 and Int(py=params[7]) != 0
+    var y_std = Float32(Float64(py=params[8])) if len(params) == 10 else Float32(1.0)
+    var y_mean = Float32(Float64(py=params[9])) if len(params) == 10 else Float32(0.0)
     var mean_addr = Int(py=addrs[8])
     var var_addr = Int(py=addrs[9])
     var std_addr = Int(py=addrs[10])
@@ -253,6 +271,9 @@ def gpr_predict_binding(
             var_addr,
             std_addr,
             clamped_addr,
+            unnorm,
+            y_std,
+            y_mean,
         )
     _ = xt^
     _ = l^

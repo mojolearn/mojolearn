@@ -120,6 +120,16 @@ def _as_length_scale(length_scale, what):
 _FLT_MIN = 1.1754943508222875e-38
 
 
+def _gp_py2mojo(ext):
+    """True when the binding `ext` applies normalize_y's un-normalization
+    itself (lane apple-fast-py2mojo-cluster: the mean, std, covariance and
+    sample_y draws, `gaussian_process/unnorm.mojo`). A
+    `-D MOJOLEARN_PY2MOJO_cluster_OFF` build answers 0 and the Python loops
+    below run (the A/B switch)."""
+    fn = getattr(ext, "gp_py2mojo", None)
+    return fn is not None and int(fn()) == 1
+
+
 def _ftz(x):
     """`checks/numerics.mojo::ftz` on a binary32 value held in a Python
     float: a subnormal becomes a zero of the same sign."""
@@ -878,7 +888,11 @@ class GaussianProcessRegressor(NumericModeMixin):
         xt = self.X_train_
         lf = self.L_
         dual = self.alpha_
-        n_clamped = self._extension().gpr_predict(
+        ext = self._extension()
+        norm = bool(getattr(self, "normalize_y_", False))
+        in_mojo = norm and _gp_py2mojo(ext)
+        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
+        n_clamped = ext.gpr_predict(
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
             # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls,
             # mean_out, var_out, std_out, clamped_out
@@ -899,9 +913,9 @@ class GaussianProcessRegressor(NumericModeMixin):
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
             # n_train, n_features, n_star, n_nodes, n_ls, return_std, info
             [n_train, self.n_features_in_, n_star, int(kinds.shape[0]),
-             n_ls, 1 if return_std else 0, self.info_],
+             n_ls, 1 if return_std else 0, self.info_] + tail,
         )
-        if getattr(self, "normalize_y_", False):
+        if norm and not in_mojo:
             # sklearn `_gpr.py:450` and `:494`: y_mean = std * y_mean + mean;
             # y_var = y_var * std**2, then sqrt. Each is ONE correctly
             # rounded binary32 operation on the host (the product or sum of
@@ -955,6 +969,9 @@ class GaussianProcessRegressor(NumericModeMixin):
             )
         mean = empty((max(n_star, 1),), "<f4")
         cov = empty((max(n_star * n_star, 1),), "<f4")
+        norm = bool(getattr(self, "normalize_y_", False))
+        in_mojo = norm and _gp_py2mojo(ext)
+        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
         xt = self.X_train_
         lf = self.L_
         dual = self.alpha_
@@ -974,9 +991,10 @@ class GaussianProcessRegressor(NumericModeMixin):
                 addr(cov, name="cov"),
             ],
             # n_train, n_features, n_star, n_nodes, n_ls, info
-            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls, self.info_],
+            # (+ normalize_y, y_std, y_mean: the binding un-normalizes)
+            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls, self.info_] + tail,
         )
-        if getattr(self, "normalize_y_", False):
+        if norm and not in_mojo:
             s_ = self._y_train_std
             mu = self._y_train_mean
             mean = Array.from_list(
@@ -1169,7 +1187,11 @@ class GaussianProcessRegressor(NumericModeMixin):
         xt = self.X_train_
         lf = self.L_
         dual = self.alpha_
-        self._extension().gpr_sample_y(
+        ext = self._extension()
+        norm = bool(getattr(self, "normalize_y_", False))
+        in_mojo = norm and _gp_py2mojo(ext)
+        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
+        ext.gpr_sample_y(
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_sample_y_binding.
             # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, y_out
             [
@@ -1186,9 +1208,9 @@ class GaussianProcessRegressor(NumericModeMixin):
             # n_train, n_features, n_star, n_nodes, n_ls, info, n_samples,
             # random_state low 32 bits, random_state high 32 bits
             [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls,
-             self.info_, n, seed & 0xFFFFFFFF, seed >> 32],
+             self.info_, n, seed & 0xFFFFFFFF, seed >> 32] + tail,
         )
-        if getattr(self, "normalize_y_", False):
+        if norm and not in_mojo:
             # predict's un-normalization of the mean, applied to every draw:
             # std * (mean + L z) + y_mean, so the covariance is std**2 C.
             s_ = self._y_train_std
