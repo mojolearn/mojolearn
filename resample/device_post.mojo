@@ -157,6 +157,65 @@ def enqueue_diff_map(
     )
 
 
+def chunk_tree_kernel(part: _F32P, v: _F32P, n_in: Int32):
+    """`host_tree_sum`'s first stage: block c folds chunk c of `v[0:n]`
+    (`+0.0` past n) with `virtual_block_sum` into part[c]."""
+    comptime R = PINNED_SUM_W // PINNED_SUM_TPB
+    var tid = Int(thread_idx.x)
+    var c = Int(block_idx.x)
+    var n = Int(n_in)
+    var vals = SIMD[DType.float32, R](0.0)
+    comptime for r in range(R):
+        var i = c * PINNED_SUM_W + tid + r * PINNED_SUM_TPB
+        if i < n:
+            vals[r] = v.unsafe_load(i)
+    var t = virtual_block_sum[PINNED_SUM_TPB](vals)
+    if tid == 0:
+        part.unsafe_store(c, t)
+
+
+def chunk_chain_kernel(res: _F32P, part: _F32P, chunks_in: Int32):
+    """`host_fold_partials`: the chunk totals ascending from +0.0, flushed;
+    one thread over the n / PINNED_SUM_W chunk totals (the chain every
+    replicate block runs over its own chunks, so theta-hat keeps the
+    replicates' words)."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    var acc = Float32(0.0)
+    for c in range(Int(chunks_in)):
+        acc = ftz(acc + part.unsafe_load(c))
+    res.unsafe_store(0, acc)
+
+
+def pe_map_kernel(dst: _F32P, x: _F32P, n_in: Int32, nf_in: Int32, means: _F32P, mode: Int32):
+    """`point_estimate_host`'s per-row maps, row i: mode 0 `dst[i] =
+    ftz(x[i, 0])`, `dst[n + i] = ftz(x[i, 1])` (0.0 for one column); mode 1
+    (std) `d = ftz(ftz(x[i, 0]) - m)`, `dst[i] = ftz(d * d)`; mode 2
+    (pearson) `dst[i]`, `dst[n + i]`, `dst[2n + i]` = dx dy, dx dx, dy dy.
+    The means are `_mean_of_sum(means[0 / 1], n)`."""
+    var i = Int(block_idx.x) * POST_TPB + Int(thread_idx.x)
+    var n = Int(n_in)
+    var nf = Int(nf_in)
+    if i >= n:
+        return
+    var a = ftz(x.unsafe_load(i * nf))
+    var b = Float32(0.0)
+    if nf > 1:
+        b = ftz(x.unsafe_load(i * nf + 1))
+    if mode == 0:
+        dst.unsafe_store(i, a)
+        dst.unsafe_store(n + i, b)
+    elif mode == 1:
+        var d = ftz(a - _mean_of_sum(means.unsafe_load(0), n))
+        dst.unsafe_store(i, ftz(identical_mul(d, d)))
+    else:
+        var dx = ftz(a - _mean_of_sum(means.unsafe_load(0), n))
+        var dy = ftz(b - _mean_of_sum(means.unsafe_load(1), n))
+        dst.unsafe_store(i, ftz(identical_mul(dx, dy)))
+        dst.unsafe_store(n + i, ftz(identical_mul(dx, dx)))
+        dst.unsafe_store(2 * n + i, ftz(identical_mul(dy, dy)))
+
+
 # ---------------------------------------------------------------- drivers ----
 
 
@@ -296,3 +355,53 @@ def device_counts(
     _ = part^
     _ = res^
     return r
+
+
+def device_tree_sum_into(ctx: DeviceContext, res: _F32P, v: _F32P, n: Int, mut part: DeviceBuffer[DType.float32]) raises:
+    """`res[0]` = `host_tree_sum(v, n)`'s words: the chunk trees in parallel
+    into `part` (chunk_count(n) floats), then the chunk chain. Enqueues only."""
+    var chunks = chunk_count(n)
+    var pp = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[chunk_tree_kernel](
+        pp, v, Int32(n), grid_dim=(max(chunks, 1), 1, 1), block_dim=(PINNED_SUM_TPB, 1, 1),
+    )
+    ctx.enqueue_function[chunk_chain_kernel](res, pp, Int32(chunks), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
+
+
+def device_point_moments(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n: Int, nf: Int, stat_mode: Int,
+) raises -> List[Float32]:
+    """The sums `point_estimate_host` folds, on the device in
+    `host_tree_sum`'s order, one download: stat_mode 0 [sum a, sum b];
+    1 (std) [sum a, sum b, sum sq]; 2 (pearson) [sum a, sum b, sum dxdy,
+    sum dxdx, sum dydy]."""
+    var maps = ctx.enqueue_create_buffer[DType.float32](3 * max(n, 1))
+    var part = ctx.enqueue_create_buffer[DType.float32](max(chunk_count(n), 1))
+    var sums = ctx.enqueue_create_buffer[DType.float32](5)
+    var mp = maps.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var sp = sums.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var xp = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var grid = (n + POST_TPB - 1) // POST_TPB
+    ctx.enqueue_memset(sums, Float32(0.0))
+    ctx.enqueue_function[pe_map_kernel](mp, xp, Int32(n), Int32(nf), sp, Int32(0), grid_dim=(grid, 1, 1), block_dim=(POST_TPB, 1, 1))
+    device_tree_sum_into(ctx, sp, mp, n, part)
+    device_tree_sum_into(ctx, sp + 1, mp + n, n, part)
+    var k = 2
+    if stat_mode == 1:
+        ctx.enqueue_function[pe_map_kernel](mp, xp, Int32(n), Int32(nf), sp, Int32(1), grid_dim=(grid, 1, 1), block_dim=(POST_TPB, 1, 1))
+        device_tree_sum_into(ctx, sp + 2, mp, n, part)
+        k = 3
+    elif stat_mode == 2:
+        ctx.enqueue_function[pe_map_kernel](mp, xp, Int32(n), Int32(nf), sp, Int32(2), grid_dim=(grid, 1, 1), block_dim=(POST_TPB, 1, 1))
+        device_tree_sum_into(ctx, sp + 2, mp, n, part)
+        device_tree_sum_into(ctx, sp + 3, mp + n, n, part)
+        device_tree_sum_into(ctx, sp + 4, mp + 2 * n, n, part)
+        k = 5
+    var h = _read_f32(ctx, sums, 5)
+    _ = maps^
+    _ = part^
+    _ = sums^
+    var r = List[Float32]()
+    for i in range(k):
+        r.append(h[i])
+    return r^

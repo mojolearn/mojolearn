@@ -83,6 +83,9 @@ from resample.checks.index_map import (
     validate_positions,
 )
 from resample.device_post import (
+    device_point_moments,
+    device_tree_sum_into,
+    pe_map_kernel,
     device_bca_moments,
     device_counts,
     device_standard_error,
@@ -134,6 +137,9 @@ from resample.checks.statistics import (
     perm_select_stat_kernel,
     perm_stat_kernel,
     quantile_of_sorted_host,
+    quantile_interpolate,
+    quantile_lower_index,
+    quantile_position,
     stat_columns_needed,
     stat_name,
     stat_needs_sort,
@@ -769,6 +775,83 @@ def point_estimate_host(
     return _mean_of_sum(host_tree_sum(keptv, kept), kept)
 
 
+def point_estimate_device(
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], n: Int, n_features: Int, stat: Int, q_or_prop: Float32,
+) raises -> Float32:
+    """`point_estimate_host`'s value with the sample on the device (lane
+    cgr5-owed2): the folds are `resample/device_post.mojo`'s chunk trees and
+    chunk chain (`host_tree_sum`'s words), the order arms the device sort;
+    only the sums (or the two quantile cells) come back. The scalar
+    finishing lines are `point_estimate_host`'s."""
+    if stat == STAT_MEAN or stat == STAT_DIFF_MEANS:
+        var s2 = device_point_moments(ctx, dx, n, n_features, 0)
+        if stat == STAT_MEAN:
+            return _mean_of_sum(s2[0], n)
+        return ftz(_mean_of_sum(s2[0], n) - _mean_of_sum(s2[1], n))
+    if stat == STAT_STD:
+        var s3 = device_point_moments(ctx, dx, n, n_features, 1)
+        return ftz(identical_sqrt(ftz(identical_div(s3[2], Float32(n - 1)))))
+    if stat == STAT_PEARSON:
+        var s5 = device_point_moments(ctx, dx, n, n_features, 2)
+        var sxx = s5[3]
+        var syy = s5[4]
+        if sxx == Float32(0.0) or syy == Float32(0.0):
+            raise Error(
+                "bootstrap: the point estimate of 'pearson' is 0/0 -- a"
+                " column of the sample is constant, so the correlation is"
+                " undefined. SciPy returns NaN and warns; this lane refuses,"
+                " because resample.point is a recorded card stage and a"
+                " computed NaN carries the vendor's payload (IDENTITY_PATHS"
+                " row 39 FACT 2)."
+            )
+        return ftz(identical_div(s5[2], ftz(identical_sqrt(ftz(identical_mul(sxx, syy))))))
+    # the order arms: column 0 flushed, sorted on the device (the replicates' sort)
+    var col = ctx.enqueue_create_buffer[DType.float32](max(2 * n, 1))
+    var sorted_col = ctx.enqueue_create_buffer[DType.float32](max(n, 1))
+    var cp = col.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[pe_map_kernel](
+        cp, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), Int32(n_features), cp, Int32(0),
+        grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    var a_col = col.create_sub_buffer[DType.float32](0, n)
+    _sort_segments(ctx, a_col, sorted_col, 1, n)
+    var result: Float32
+    if stat == STAT_QUANTILE:
+        if n == 1:
+            result = _download_f32(ctx, sorted_col, 1)[0]
+        else:
+            var h = quantile_position(n, q_or_prop)
+            var lo = quantile_lower_index(h, n)
+            var hi = min(lo + 1, n - 1)
+            var cells = _download_f32(ctx, sorted_col.create_sub_buffer[DType.float32](lo, hi - lo + 1), hi - lo + 1)
+            result = quantile_interpolate(cells[0], cells[hi - lo], ftz(h - Float32(lo)))
+    else:
+        var k = trim_count(n, q_or_prop)
+        var kept = n - 2 * k
+        if kept < 1:
+            raise Error(
+                "bootstrap: trimmed_mean's proportiontocut leaves "
+                + String(kept)
+                + " observations of "
+                + String(n)
+                + "; scipy.stats.trim_mean cuts int(n * proportiontocut) from"
+                " EACH end, so the proportion must be below 0.5"
+            )
+        var part = ctx.enqueue_create_buffer[DType.float32](max(chunk_count(kept), 1))
+        var one = ctx.enqueue_create_buffer[DType.float32](1)
+        device_tree_sum_into(
+            ctx, one.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            sorted_col.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + k, kept, part,
+        )
+        result = _mean_of_sum(_download_f32(ctx, one, 1)[0], kept)
+        _ = part^
+        _ = one^
+    _ = a_col^
+    _ = col^
+    _ = sorted_col^
+    return result
+
+
 def _sort_segments(
     ctx: DeviceContext,
     mut src: DeviceBuffer[DType.float32],
@@ -1266,7 +1349,7 @@ def bootstrap_host(
     trace.record_device(ctx, "resample.sorted", sorted_buf, n_resamples)
     var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
 
-    var theta_hat = point_estimate_host(x, n, n_features, statistic, q_or_prop)
+    var theta_hat = point_estimate_device(ctx, dx, n, n_features, statistic, q_or_prop)
     trace.record_scalar_f32("resample.point", theta_hat)
 
     # BCa (DEVIATION 1699, closed by 5410) needs the bias percentile and the
@@ -1426,8 +1509,8 @@ def bootstrap_unpaired_host(
     _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
     var sorted_dist = _download_f32(ctx, sorted_buf, n_resamples)
 
-    var mx = point_estimate_host(x, n_x, 1, STAT_MEAN, Float32(0.5))
-    var my = point_estimate_host(y, n_y, 1, STAT_MEAN, Float32(0.5))
+    var mx = point_estimate_device(ctx, dxb, n_x, 1, STAT_MEAN, Float32(0.5))
+    var my = point_estimate_device(ctx, dyb, n_y, 1, STAT_MEAN, Float32(0.5))
     var theta_hat = ftz(mx - my)
     var alpha = alpha_for(confidence_level, alternative)
     var interval: Interval
