@@ -43,7 +43,7 @@ from checks.numerics import ftz, identical_div, identical_exp, identical_log, id
 from sequence.garch import GARCH_SNAP, LOG_2PI, _backcast, _grid, _pers, _var_bounds, garch_sigma2
 from sequence.nm import NMState, Objective, nm_finish, nm_start, nm_steps
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from sequence.prophet import MEM, LBState, ProphetData, ProphetFG, _fg_prior, lbfgs_start, lbfgs_steps
+from sequence.prophet import MEM, LBState, ProphetFG, _fg_prior_v, lbfgs_start, lbfgs_steps
 
 #: threads of a series' block (one AMD wave, two NVIDIA warps / Apple
 #: simdgroups)
@@ -408,8 +408,19 @@ struct TeamFG(ProphetFG):
     thread's ascending chain over the points (pass B): op_prophet_fit's
     `_fg_data` chain for that accumulator, word for word; the priors
     (`_fg_prior`) in every thread on its private g."""
+    # the data pointers and scalars as plain fields, taken straight from
+    # Args (no ProphetData struct on the Metal team path: lane
+    # apple-fast-prophetfix, the team fit returned the initial line on Apple)
     var team: SeqTeam
-    var d: ProphetData
+    var t: FP
+    var X: FP
+    var cp: FP
+    var sig: FP
+    var N: Int
+    var K: Int
+    var S: Int
+    var tau: Float32
+    var mult: Bool
     var y: FP
     var rr: FP
     var wt: FP
@@ -417,9 +428,18 @@ struct TeamFG(ProphetFG):
     var gs: FP
 
     @always_inline
-    def __init__(out self, team: SeqTeam, d: ProphetData, y: FP, rr: FP, wt: FP, wb: FP, gs: FP):
+    def __init__(out self, team: SeqTeam, t: FP, X: FP, cp: FP, sig: FP, N: Int, K: Int, S: Int,
+                 tau: Float32, mult: Bool, y: FP, rr: FP, wt: FP, wb: FP, gs: FP):
         self.team = team
-        self.d = d
+        self.t = t
+        self.X = X
+        self.cp = cp
+        self.sig = sig
+        self.N = N
+        self.K = K
+        self.S = S
+        self.tau = tau
+        self.mult = mult
         self.y = y
         self.rr = rr
         self.wt = wt
@@ -428,13 +448,13 @@ struct TeamFG(ProphetFG):
 
     @always_inline
     def fg(mut self, th: FP, g: FP) -> Float32:
-        var S = self.d.S
-        var K = self.d.K
-        var N = self.d.N
+        var S = self.S
+        var K = self.K
+        var N = self.N
         var P = 3 + S + K
-        var tt = self.d.t
-        var cp = self.d.cp
-        var X = self.d.X
+        var tt = self.t
+        var cp = self.cp
+        var X = self.X
         var k = ld(th, 0)
         var m = ld(th, 1)
         var u = ld(th, 2 + S)
@@ -452,14 +472,14 @@ struct TeamFG(ProphetFG):
             for q in range(K):
                 se = fma3(ld(X, i * K + q), ld(th, 3 + S + q), se)
             var yhat: Float32
-            if self.d.mult:
+            if self.mult:
                 yhat = fma3(tr, se, tr)
             else:
                 yhat = add(tr, se)
             var r = sub(ld(self.y, i), yhat)
             var w = ftz(identical_div(-r, s2))
-            var wt = mul(w, add(Float32(1.0), se)) if self.d.mult else w
-            var wb = mul(w, tr) if self.d.mult else w
+            var wt = mul(w, add(Float32(1.0), se)) if self.mult else w
+            var wb = mul(w, tr) if self.mult else w
             st(self.rr, i, r)
             st(self.wt, i, wt)
             st(self.wb, i, wb)
@@ -493,7 +513,7 @@ struct TeamFG(ProphetFG):
         self.team.sync()
         for j in range(P):
             st(g, j, ld(self.gs, j))
-        return _fg_prior(self.d, th, g, ld(self.gs, P))
+        return _fg_prior_v(self.sig, self.tau, N, S, K, th, g, ld(self.gs, P))
 
 
 @always_inline
@@ -520,8 +540,7 @@ def prophet_fit_team(slot: Int, team: SeqTeam, a: Args):
     var rec = pv
     var th = pv + TEAM_REC
     var w = th + P
-    var d = ProphetData(a.p1, a.p2, a.p3, a.p4, N, K, S, a.f0, a.i3 != 0)
-    var fg = TeamFG(team, d, ys, rr, wt, wb, gs)
+    var fg = TeamFG(team, a.p1, a.p2, a.p3, a.p4, N, K, S, a.f0, a.i3 != 0, ys, rr, wt, wb, gs)
     var phase = _ldi(rec, 0)
     var left = a.i9
     while phase < PT_DONE and left != 0:
