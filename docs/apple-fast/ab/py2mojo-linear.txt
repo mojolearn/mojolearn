@@ -1,0 +1,2 @@
+CMD lane/apple-fast-py2mojo-linear py2mojo-linear-linearsvc-taxi AFC_FAMILY=classical2 bash ~/mq/ensure_so.sh bash tools/afc_ab_def.sh py2mojo-linear-linearsvc-taxi estimators linearsvc taxi 1 2 "-D MOJOLEARN_PY2MOJO_linear_OFF" ""
+CMD lane/apple-fast-py2mojo-linear py2mojo-linear-linearsvc-istella AFC_FAMILY=classical2 bash ~/mq/ensure_so.sh bash tools/afc_ab_def.sh py2mojo-linear-linearsvc-istella estimators linearsvc istella 1 2 "-D MOJOLEARN_PY2MOJO_linear_OFF" ""

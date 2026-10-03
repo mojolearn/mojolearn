@@ -14,6 +14,8 @@ from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from core.py2mojo_rows import py2mojo_rows_device_binding
+from core.py2mojo_linear import py2mojo_linear_flags
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -1237,6 +1239,18 @@ def estimators_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+
+def py2mojo_rows_binding(mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject,
+                         params: PythonObject) raises -> PythonObject:
+    """lane/apple-fast-py2mojo-linear: per-row probability glue on the
+    device (`core/py2mojo_rows.mojo`)."""
+    return py2mojo_rows_device_binding(process_ctx[_DEVCTX_SLOT](), mode, src_addr, dst_addr, params)
+
+
+def py2mojo_linear_flags_binding() raises -> PythonObject:
+    return PythonObject(py2mojo_linear_flags())
+
+
 @export
 def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
     try:
@@ -1248,6 +1262,8 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[glm_parallel_available_binding]("glm_parallel_available")
         m.def_function[estimators_vendor_binding]("estimators_vendor")
         m.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
+        m.def_function[py2mojo_rows_binding]("py2mojo_rows")
+        m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         m.def_function[dbscan_fit_binding]("dbscan_fit")
         m.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
         m.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
