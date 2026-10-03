@@ -436,7 +436,8 @@ def build_parser():
                    help="MAINTAINER PATH, GPU install: save the portable "
                         "models and their manifest to DIR, keeping only "
                         "models whose file bytes equal the table's model "
-                        "reference")
+                        "reference; every model the shipped bundle carries, "
+                        "or --lanes x --fixtures (default base)")
     v.add_argument("--all-stages", dest="all_stages", action="store_true",
                    help="without --all: on a mismatch of the pinned k-means "
                         "card, list every diverging stage rather than only "
