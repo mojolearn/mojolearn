@@ -281,7 +281,8 @@ def ridge_fit_grid(
             # lane/apple-fast-gram (FAST on Apple, `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM`):
             # the same words from the shared grid Gram (row chunks x 32 x 32
             # tiles); it waits for its own launches (unwitnessed)
-            fast_gram_into(ctx, xp, yp, 0, n, d, t_n, fi != 0, fwp + o[0], fwp + o[4], fwp + o[1], fwp + o[5])
+            var fwf = FP(unsafe_from_address=Int(fwp))
+            fast_gram_into(ctx, xp, yp, 0, n, d, t_n, fi != 0, fwf + o[0], fwf + o[4], fwf + o[1], fwf + o[5])
         else:
             # the moments of [X | Y] (lane/neural-pass120): xm, G, ym, X'Y
             ctx.enqueue_function[mg_means_kernel](
