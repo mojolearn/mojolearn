@@ -958,3 +958,43 @@ def as_index_i64(values, *, name="indices"):
         values, _ = _materialize(values, name)
     values = values.reshape((values.size,))
     return values if values.dtype == "<i8" else values.astype("<i8")
+
+
+class InitStream:
+    """A seeded stream of uniform draws for weight initialisation, made in
+    Mojo (the base binding's counter-based `uniform_init_f32`; lane
+    cgr4-py-compute replaced numpy's Generator, which drew in Python). An
+    int seed gives the same bytes on every column; None draws a fresh seed
+    from the OS, as `numpy.random.default_rng(None)` does. Only the counter
+    (a scalar) lives here."""
+
+    def __init__(self, seed=None):
+        if seed is None:
+            import secrets
+            seed = secrets.randbits(64)
+        self.seed = int(seed) & 0xFFFFFFFFFFFFFFFF
+        self.offset = 0
+
+    def fill_uniform(self, address, n, low, high):
+        """n float32 values U(low, high) at `address`; advances the counter."""
+        n = int(n)
+        if n:
+            _native("uniform_init_f32")(int(address), n, float(low), float(high),
+                                        self.seed & 0xFFFFFFFF, self.seed >> 32, self.offset)
+        self.offset += n
+
+    def uniform(self, low, high, size):
+        """A flat float32 Array of `size` draws."""
+        out = empty((int(size),), "<f4")
+        if out.size:
+            self.fill_uniform(out._addr, out.size, low, high)
+        return out
+
+    def child_seed(self):
+        """A derived 63-bit seed (splitmix64 of the seed and the counter,
+        scalar), advancing the counter by one."""
+        z = (self.seed + (self.offset + 1) * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+        self.offset += 1
+        return (z ^ (z >> 31)) >> 1

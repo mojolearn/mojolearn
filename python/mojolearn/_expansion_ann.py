@@ -328,7 +328,7 @@ class TSNE(NumericModeMixin):
         float64 with math.fsum (one correctly rounded sum, so no platform's
         summation order enters) and applied as one float32 divide and one
         float32 multiply per element.
-        'random' is uniform(-5e-5, 5e-5) from numpy's default_rng(random_state),
+        'random' is uniform(-5e-5, 5e-5) from the seeded Mojo stream (uniform_init_f32),
         whose integer-to-double draw is exact on every platform.
     random_state : int, default 0
     """
