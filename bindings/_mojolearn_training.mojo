@@ -104,6 +104,15 @@ from training.samba_ops import (
     samba_rms_norm_backward_host,
     samba_rms_norm_forward_host,
 )
+# lane afn-samba (2026-10-03): the fused Samba entries exist only in an
+# Apple FAST build with MOJOLEARN_AFN_SAMBA_FUSE (or _ALL); AFN_SAMBA_FUSE
+# is false everywhere else and nothing below registers.
+from training.samba_afn import (
+    AFN_SAMBA_FUSE,
+    samba_afn_embedding_backward_tied_binding,
+    samba_afn_norm_head_forward_binding,
+    samba_afn_tail_train_binding,
+)
 from core.philox_neural import neural_rng_host
 
 
@@ -1182,6 +1191,10 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         m.def_function[linear_forward_binding]("linear_forward")
         m.def_function[linear_backward_binding]("linear_backward")
         m.def_function[samba_head_loss_binding]("samba_head_loss")
+        comptime if AFN_SAMBA_FUSE:
+            m.def_function[samba_afn_norm_head_forward_binding]("samba_afn_norm_head_forward")
+            m.def_function[samba_afn_tail_train_binding]("samba_afn_tail_train")
+            m.def_function[samba_afn_embedding_backward_tied_binding]("samba_afn_embedding_backward_tied")
         m.def_function[accumulate_binding]("accumulate")
         m.def_function[accumulation_is_aligned_binding]("accumulation_is_aligned")
         m.def_function[neural_rng_binding]("neural_rng")

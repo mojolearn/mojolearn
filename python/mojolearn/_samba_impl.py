@@ -328,6 +328,87 @@ class SambaStack(object):
         return self.arrays["embed.weight" if self.config.tie_embeddings
                            else "lm_head.weight"]
 
+    # -- the Apple FAST fused tail (lane afn-samba, 2026-10-03) ---------------
+    _AFN_ENTRIES = ("samba_afn_norm_head_forward", "samba_afn_tail_train",
+                    "samba_afn_embedding_backward_tied")
+
+    def _afn(self):
+        """The training binding's fused Samba entries as `{name: fn}`, or
+        None. They are registered only by an Apple FAST build with
+        MOJOLEARN_AFN_SAMBA_FUSE (or MOJOLEARN_AFN_SAMBA_ALL); the IDENTICAL
+        binding and every other build have none, and MOJOLEARN_HOTPATH=python
+        asks for the per-op reference arm. The kernels, operands and order
+        are the per-op path's; what changes is that the final norm's output,
+        the logits' gradient and the tied embedding pair never cross the bus
+        between binding calls (training/samba_afn.mojo)."""
+        cached = getattr(self, "_afn_cache", None)
+        if cached is not None:
+            return cached or None
+        entries = None
+        if _buffers.hotpath_enabled():
+            binding = T._load(self.numeric_mode)
+            found = {}
+            for name in self._AFN_ENTRIES:
+                try:
+                    found[name] = getattr(binding, name, None)
+                except (AttributeError, ImportError):
+                    found[name] = None
+            if all(callable(found[name]) for name in self._AFN_ENTRIES):
+                entries = found
+        self._afn_cache = entries if entries is not None else {}
+        return entries
+
+    def _afn_norm_head(self, afn, h2):
+        """`logits (M, V)` of the final norm then the head over `h2 (M, D)`,
+        one binding call."""
+        c = self.config
+        h2 = T._c32(h2, "h", "samba_afn_norm_head_forward")
+        nw = T._c32(self.arrays["norm_f.weight"], "weight", "samba_afn_norm_head_forward")
+        hw = T._c32(self._head_weight(), "weight", "samba_afn_norm_head_forward")
+        m, k = h2.shape
+        n = c.vocab
+        logits = _buffers.empty((m, n), '<f4')
+        afn["samba_afn_norm_head_forward"](
+            [T._addr(logits), T._addr_ro(h2), T._addr_ro(nw), T._addr_ro(hw)],
+            [int(m), int(n), int(k), float(c.norm_eps)])
+        return logits
+
+    def _afn_tail_train(self, afn, h2, y, items):
+        """`(loss, dh (M, D), d_norm_w (D,), d_head_w (V, D))` of the final
+        norm, the head, the sum-reduced loss over `items` and both
+        backwards, one binding call."""
+        c = self.config
+        h2 = T._c32(h2, "h", "samba_afn_tail_train")
+        nw = T._c32(self.arrays["norm_f.weight"], "weight", "samba_afn_tail_train")
+        hw = T._c32(self._head_weight(), "weight", "samba_afn_tail_train")
+        m, k = h2.shape
+        n = c.vocab
+        loss_out = _buffers.zeros((1,), '<f4')
+        row_out = _buffers.empty((m,), '<f4')
+        dh = _buffers.empty((m, k), '<f4')
+        dnw = _buffers.empty((k,), '<f4')
+        dhw = _buffers.empty((n, k), '<f4')
+        afn["samba_afn_tail_train"](
+            [T._addr(loss_out), T._addr(row_out), T._addr(dh), T._addr(dnw),
+             T._addr(dhw), T._addr_ro(h2), T._addr_ro(nw), T._addr_ro(hw),
+             T._addr_ro(y)],
+            [int(m), int(n), int(k), float(c.norm_eps),
+             int(T._IGNORE_INDEX_DEFAULT), 1, int(items), 0.0])
+        return float(loss_out[0]), dh, dnw, dhw
+
+    def _afn_embedding_backward_tied(self, afn, dy2, ids1, pair):
+        """`embedding_backward(dy2, ids1) + pair`, the tied gradient, one
+        binding call."""
+        c = self.config
+        dy2 = T._c32(dy2, "dy", "samba_afn_embedding_backward_tied")
+        pair = T._c32(pair, "pair", "samba_afn_embedding_backward_tied")
+        n, d = dy2.shape
+        dw = _buffers.empty((c.vocab, d), '<f4')
+        afn["samba_afn_embedding_backward_tied"](
+            [T._addr(dw), T._addr_ro(dy2), T._addr_ro(ids1), T._addr_ro(pair)],
+            [int(n), int(c.vocab), int(d)])
+        return dw
+
     # -- forward ------------------------------------------------------------
     @staticmethod
     def _ids(x, what):
@@ -336,10 +417,14 @@ class SambaStack(object):
             raise ValueError("mojolearn.SambaStack: %s must be (B, L) integer ids" % what)
         return _buffers.as_i32_c(x, ndim=2, name=what)[0]
 
-    def _forward(self, inputs, dropout_stream=None, token_offset=0, head=True):
+    def _forward(self, inputs, dropout_stream=None, token_offset=0, head=True,
+                 norm=True):
         """The forward with every block input kept for the backward.
         `head=False` stops after the final norm (`logits` is None): the
-        fused `samba_head_loss` runs the head itself."""
+        fused `samba_head_loss` runs the head itself. `norm=False` (with
+        `head=False`) stops after the last block (`hn` is None too): the
+        Apple FAST tail (`_afn`) runs the final norm itself. With `_afn`
+        present and both on, the final norm and the head are one call."""
         c = self.config
         ids = self._ids(inputs, "inputs")
         b, l = ids.shape
@@ -356,12 +441,17 @@ class SambaStack(object):
         for i in range(len(c.layers)):
             xs.append(x)
             x = self._block(i).forward(x)
-        hn = T.rms_norm_forward(x, self.arrays["norm_f.weight"], c.norm_eps,
-                                self.numeric_mode)
+        hn = None
         logits = None
-        if head:
-            logits = T.linear_forward(hn.reshape((b * l, c.d_model)),
-                                      self._head_weight(), self.numeric_mode)
+        afn = self._afn() if (norm and head) else None
+        if afn is not None:
+            logits = self._afn_norm_head(afn, x.reshape((b * l, c.d_model)))
+        elif norm:
+            hn = T.rms_norm_forward(x, self.arrays["norm_f.weight"], c.norm_eps,
+                                    self.numeric_mode)
+            if head:
+                logits = T.linear_forward(hn.reshape((b * l, c.d_model)),
+                                          self._head_weight(), self.numeric_mode)
         return {"ids": ids, "key": key, "xs": xs, "h": x, "hn": hn,
                 "logits": logits}
 
@@ -488,8 +578,13 @@ class SambaStack(object):
         # backward in one call, the logits never crossing back and forth.
         # Same kernels, operands and order as the three-call arm below,
         # which stays as the reference for a binding without the entry.
-        fused = callable(T._optional_samba_head(T._load(self.numeric_mode)))
-        acts = self._forward(inputs, dropout_stream, token_offset, head=not fused)
+        # The Apple FAST tail (lane afn-samba): the final norm, the head, the
+        # loss and both backwards in one call, then the tied embedding
+        # gradient in one call. The per-op arms below are the reference.
+        afn = self._afn()
+        fused = afn is None and callable(T._optional_samba_head(T._load(self.numeric_mode)))
+        acts = self._forward(inputs, dropout_stream, token_offset,
+                             head=not fused and afn is None, norm=afn is None)
         ids = acts["ids"]
         b, l = ids.shape
         y = self._ids(targets, "targets")
@@ -498,24 +593,29 @@ class SambaStack(object):
         y = y.reshape(-1)
         count = _count_targets(y)
         items = count if num_items is None else int(num_items)
-        hn2 = acts["hn"].reshape((b * l, c.d_model))
-        out = T.samba_head_loss(hn2, self._head_weight(), y, items,
-                                self.numeric_mode) if fused else None
-        if out is not None:
-            loss, dhn, dw_head = out
-        else:
-            logits = acts["logits"]
-            if logits is None:
-                logits = T.linear_forward(hn2, self._head_weight(), self.numeric_mode)
-            loss, dlogits = T.cross_entropy(logits, y, reduction="sum",
-                                            num_items=items, return_grad=True,
-                                            numeric_mode=self.numeric_mode)
-            dhn, dw_head = T.linear_backward(dlogits, hn2, self._head_weight(),
-                                             self.numeric_mode)
         grads = {}
-        dh, grads["norm_f.weight"] = T.rms_norm_backward(
-            dhn.reshape((b, l, c.d_model)), acts["h"], self.arrays["norm_f.weight"],
-            c.norm_eps, self.numeric_mode)
+        if afn is not None:
+            loss, dh, grads["norm_f.weight"], dw_head = self._afn_tail_train(
+                afn, acts["h"].reshape((b * l, c.d_model)), y, items)
+            dh = dh.reshape((b, l, c.d_model))
+        else:
+            hn2 = acts["hn"].reshape((b * l, c.d_model))
+            out = T.samba_head_loss(hn2, self._head_weight(), y, items,
+                                    self.numeric_mode) if fused else None
+            if out is not None:
+                loss, dhn, dw_head = out
+            else:
+                logits = acts["logits"]
+                if logits is None:
+                    logits = T.linear_forward(hn2, self._head_weight(), self.numeric_mode)
+                loss, dlogits = T.cross_entropy(logits, y, reduction="sum",
+                                                num_items=items, return_grad=True,
+                                                numeric_mode=self.numeric_mode)
+                dhn, dw_head = T.linear_backward(dlogits, hn2, self._head_weight(),
+                                                 self.numeric_mode)
+            dh, grads["norm_f.weight"] = T.rms_norm_backward(
+                dhn.reshape((b, l, c.d_model)), acts["h"], self.arrays["norm_f.weight"],
+                c.norm_eps, self.numeric_mode)
         for i in reversed(range(len(c.layers))):
             g = self._block(i).backward(acts["xs"][i], dh)
             dh = g.pop("x")
@@ -523,14 +623,18 @@ class SambaStack(object):
                 grads["layers.%d.%s" % (i, n)] = v
         if acts["key"] is not None:
             dh = self.generator.dropout_backward(dh, acts["key"])
-        d_emb = T.embedding_backward(dh.reshape((b * l, c.d_model)), ids.reshape(-1),
-                                     c.vocab, self.numeric_mode)
-        if c.tie_embeddings:
-            # The tied gradient is ONE pair add, embedding first, no
-            # alignment claim (tokens=None).
-            d_emb = T.accumulate_grads([d_emb, dw_head], tokens=None,
-                                       numeric_mode=self.numeric_mode)
+        if c.tie_embeddings and afn is not None:
+            d_emb = self._afn_embedding_backward_tied(
+                afn, dh.reshape((b * l, c.d_model)), ids.reshape(-1), dw_head)
         else:
+            d_emb = T.embedding_backward(dh.reshape((b * l, c.d_model)), ids.reshape(-1),
+                                         c.vocab, self.numeric_mode)
+            if c.tie_embeddings:
+                # The tied gradient is ONE pair add, embedding first, no
+                # alignment claim (tokens=None).
+                d_emb = T.accumulate_grads([d_emb, dw_head], tokens=None,
+                                           numeric_mode=self.numeric_mode)
+        if not c.tie_embeddings:
             grads["lm_head.weight"] = dw_head
         grads["embed.weight"] = d_emb
         return float(loss), [grads[n] for n in self.names]
