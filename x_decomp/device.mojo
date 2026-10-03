@@ -93,6 +93,14 @@ from x_decomp.cells import (
 from x_decomp.exec_trait import Exec
 from x_decomp.jacobi2 import dev_barrier
 from x_decomp.qr_bounded import QRB_CELLS, qr_factor_bounded
+from x_decomp.apple_fast import (
+    LB_TPB,
+    OMP_TPB,
+    lasso_block_kernel,
+    lasso_block_on,
+    omp_block_kernel,
+    omp_block_on,
+)
 from x_decomp.fast_chol import CH_FITS, CH_NB, launch_chol_blocked
 from x_decomp.fast_gemm import FG_TPB, fast_gemm_on, fg_gemm_tiled_kernel, fg_tiles
 from x_decomp.fast_qr import (
@@ -2822,15 +2830,35 @@ struct DevExec(Exec):
         max_iter: Int, tol: Float32, positive: Bool,
     ) raises:
         var ctx = xd_ctx()
+        # -D MOJOLEARN_DECOMP_FAST_LASSO_BLOCK (lane/apple-fast-decomp-sparse,
+        # 2026-10-02; FAST on Apple only): one threadgroup per row
+        # (x_decomp/apple_fast.mojo `lasso_block_kernel`) instead of one
+        # thread per row walking its k-wide h strip in global memory for
+        # every coordinate of every sweep (`lasso_rows_kernel` above,
+        # `lasso_row` in x_decomp/cells.mojo: the dict-learning,
+        # mb-dict-learning, sparse-pca and mb-sparse-pca sparse codes).
+        # Expected: the sweep's k x k loads and stores become k parallel
+        # threadgroup updates; no h scratch buffer. Default off.
+        var block = False
+        comptime if XD_FAST_APPLE:
+            if n > 0 and lasso_block_on(k):
+                block = True
         var dg = _up(ctx, g, k * k)
         var dq = _up(ctx, q, n * k)
         var dw = _up(ctx, w, n * k)
-        var dh = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
+        var dh = ctx.enqueue_create_buffer[DType.float32](n * k if (n * k > 0 and not block) else 1)
         var di = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        ctx.enqueue_function[lasso_rows_kernel](
-            dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dh.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
-            alpha, Int32(max_iter), tol, Int32(1 if positive else 0), grid_dim=_blocks(n), block_dim=TPB,
-        )
+        comptime if XD_FAST_APPLE:
+            if block:
+                ctx.enqueue_function[lasso_block_kernel](
+                    dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
+                    alpha, Int32(max_iter), tol, Int32(1 if positive else 0), grid_dim=n, block_dim=LB_TPB,
+                )
+        if not block:
+            ctx.enqueue_function[lasso_rows_kernel](
+                dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dh.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
+                alpha, Int32(max_iter), tol, Int32(1 if positive else 0), grid_dim=_blocks(n), block_dim=TPB,
+            )
         _down(ctx, dw, w, n * k)
         _down(ctx, di, its, n)
         ctx.synchronize()
@@ -2911,15 +2939,36 @@ struct DevExec(Exec):
     def omp_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int, k: Int, nnz: Int) raises:
         var ctx = xd_ctx()
         var per = k * k + 3 * k
+        # -D MOJOLEARN_DECOMP_FAST_OMP_BLOCK (lane/apple-fast-decomp-sparse,
+        # 2026-10-02; FAST on Apple only): one threadgroup per row
+        # (x_decomp/apple_fast.mojo `omp_block_kernel`), the correlations a
+        # thread per atom and every scratch in threadgroup memory, instead
+        # of one thread per row (`omp_rows_kernel` above, `omp_row` in
+        # x_decomp/cells.mojo) with a k * k + 3k float scratch strip per row
+        # in `ds`: the sparse-coder lane (100,000 rows, 64 atoms, 4 nonzero)
+        # allocated 1.7 GB of device scratch and ran 6.7 s on the M3 Ultra
+        # against scikit-learn's 0.03 s. Expected: no scratch buffer, the
+        # k-wide correlation scan parallel. Default off.
+        var block = False
+        comptime if XD_FAST_APPLE:
+            if n > 0 and omp_block_on(k, nnz):
+                block = True
         var dg = _up(ctx, g, k * k)
         var dq = _up(ctx, q, n * k)
         var dw = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
-        var ds = ctx.enqueue_create_buffer[DType.float32](n * per if n * per > 0 else 1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n * per if (n * per > 0 and not block) else 1)
         var dn = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        ctx.enqueue_function[omp_rows_kernel](
-            dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
-            Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
-        )
+        comptime if XD_FAST_APPLE:
+            if block:
+                ctx.enqueue_function[omp_block_kernel](
+                    dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+                    Int32(nnz), grid_dim=n, block_dim=OMP_TPB,
+                )
+        if not block:
+            ctx.enqueue_function[omp_rows_kernel](
+                dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), ds.unsafe_ptr(), dn.unsafe_ptr(), Int32(n), Int32(k),
+                Int32(nnz), grid_dim=_blocks(n), block_dim=TPB,
+            )
         _down(ctx, dw, w, n * k)
         _down(ctx, dn, na, n)
         ctx.synchronize()
