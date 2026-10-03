@@ -81,11 +81,22 @@ def vpart_wsq(th: FP, toff: Int, d: Int, stride: Int, q: Int, c: Int) -> Float32
 
 
 @always_inline
+def vpart_abssum(a: FP, ia: Int, p: Int, c: Int) -> Float32:
+    var acc = Float32(0)
+    var hi = min(c * VCH + VCH, p)
+    for j in range(c * VCH, hi):
+        acc = fa(acc, fabs(ld(a, ia + j)))
+    return acc
+
+
+@always_inline
 def _vpart[kind: Int](a: FP, ia: Int, b: FP, ib: Int, p: Int, d: Int, stride: Int, c: Int) -> Float32:
     comptime if kind == 0:
         return vpart_dot(a, ia, b, ib, p, c)
     elif kind == 1:
         return vpart_absmax(a, ia, p, c)
+    elif kind == 3:
+        return vpart_abssum(a, ia, p, c)
     else:
         return vpart_wsq(a, ia, d, stride, p, c)
 
@@ -164,6 +175,11 @@ def vdot(t: Team, a: FP, ia: Int, b: FP, ib: Int, p: Int, parts: FP) -> Float32:
 def vabsmax(t: Team, a: FP, ia: Int, p: Int, parts: FP) -> Float32:
     """max_j |a[ia + j]| (0 for p == 0), chunk maxima then the tree."""
     return _vfold[1, VOP_MAX](t, a, ia, a, ia, p, 0, 0, parts)
+
+
+def vabssum(t: Team, a: FP, ia: Int, p: Int, parts: FP) -> Float32:
+    """sum_j |a[ia + j]|, chunk sums then the tree."""
+    return _vfold[3, VOP_SUM](t, a, ia, a, ia, p, 0, 0, parts)
 
 
 def vwsq(t: Team, th: FP, toff: Int, d: Int, stride: Int, kp: Int, parts: FP) -> Float32:
