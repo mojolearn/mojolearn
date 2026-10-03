@@ -1990,6 +1990,17 @@ def _afn_route_a_resid_ok(op: Int, m: Int, n: Int, k: Int) -> Bool:
     return call[4] == BWD_DC_LEFT
 
 
+def _afn_bwd_epi_on(m: Int, it: Int, qw: Int, kw: Int, dm: Int, n_norm1: Int) -> Bool:
+    """Whether BWD_EPILOGUE serves both fan-ins (gate/up and q/k/v) of a
+    layer: every dA has dC on the left and `dw_norm1` holds `dm` zeros."""
+    return (
+        _afn_route_a_resid_ok(OP_NT, m, it, dm)
+        and _afn_route_a_resid_ok(OP_NT, m, qw, dm)
+        and _afn_route_a_resid_ok(OP_NT, m, kw, dm)
+        and n_norm1 >= dm
+    )
+
+
 def _afn_route_a_resid(
     ctx: DeviceContext,
     out_p: MutPointer[Float32, MutAnyOrigin],
@@ -3394,21 +3405,14 @@ def llama_decoder_layer_backward_device(
     # bias both fused fan-ins read is `dw_norm1` (d_model floats), zeroed
     # here and overwritten whole by the norm1 weight GEMM (stage 34) before
     # anything reads it as a gradient.
-    var afn_epi = False
     comptime if _AFN_BWD_EPI:
-        afn_epi = (
-            _afn_route_a_resid_ok(OP_NT, m, it, dm)
-            and _afn_route_a_resid_ok(OP_NT, m, qw, dm)
-            and _afn_route_a_resid_ok(OP_NT, m, kw, dm)
-            and len(bst.dw_norm1) >= dm
-        )
+        var afn_epi = _afn_bwd_epi_on(m, it, qw, kw, dm, len(bst.dw_norm1))
         if afn_epi:
             afn_lm_zero_into(ctx, _afn_ptr(bst.dw_norm1), dm)
-    _route_a(
-        ctx, bst.gemm_workspace, bst.tmp0, bst.d_gate_proj_out, w.w_gate, OP_NT, m, it, dm
-    )
-    pc.tick(ctx, "grad.gate_dA", "gateup_dA")
-    comptime if _AFN_BWD_EPI:
+        _route_a(
+            ctx, bst.gemm_workspace, bst.tmp0, bst.d_gate_proj_out, w.w_gate, OP_NT, m, it, dm
+        )
+        pc.tick(ctx, "grad.gate_dA", "gateup_dA")
         if afn_epi:
             # d(norm2.out) = up_dA + gate_dA in the up GEMM's store.
             _afn_route_a_resid(
@@ -3417,7 +3421,23 @@ def llama_decoder_layer_backward_device(
                 OP_NT, m, it, dm,
             )
             pc.tick(ctx, "grad.up_dA", "gateup_dA")
-    if not afn_epi:
+        else:
+            _route_a(ctx, bst.gemm_workspace, bst.tmp1, bst.d_up_proj_out, w.w_up, OP_NT, m, it, dm)
+            pc.tick(ctx, "grad.up_dA", "gateup_dA")
+            step_count_launch()
+            ctx.enqueue_function[bwd_add2_kernel](
+                bst.d_norm2_out.unsafe_ptr(),
+                bst.tmp0.unsafe_ptr(),
+                bst.tmp1.unsafe_ptr(),
+                Int32(m * dm),
+                grid_dim=(_grid(m * dm), 1, 1),
+                block_dim=(BWD_TPB, 1, 1),
+            )
+    else:
+        _route_a(
+            ctx, bst.gemm_workspace, bst.tmp0, bst.d_gate_proj_out, w.w_gate, OP_NT, m, it, dm
+        )
+        pc.tick(ctx, "grad.gate_dA", "gateup_dA")
         _route_a(ctx, bst.gemm_workspace, bst.tmp1, bst.d_up_proj_out, w.w_up, OP_NT, m, it, dm)
         pc.tick(ctx, "grad.up_dA", "gateup_dA")
         step_count_launch()
@@ -3695,7 +3715,9 @@ def llama_decoder_layer_backward_device(
     _route_a(ctx, bst.gemm_workspace, bst.tmp0, bst.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
     pc.tick(ctx, "grad.q_dA", "proj_dA")
     comptime if _AFN_BWD_EPI:
-        if afn_epi:
+        # the same predicate as the gate/up fan-in above (pure in the shapes),
+        # so dw_norm1 holds the zero bias exactly when it is true here
+        if _afn_bwd_epi_on(m, it, qw, kw, dm, len(bst.dw_norm1)):
             # lane w2-lmgrad BWD_EPILOGUE: the forward-use order q, k, v kept,
             # left associative: tmp1 = k_dA + q_dA, then
             # d(norm1.out) = v_dA + (q_dA + k_dA), each add in a GEMM store.
@@ -3711,7 +3733,22 @@ def llama_decoder_layer_backward_device(
                 OP_NT, m, kw, dm,
             )
             pc.tick(ctx, "grad.v_dA", "proj_dA")
-    if not afn_epi:
+        else:
+            _route_a(ctx, bst.gemm_workspace, bst.tmp1, bst.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
+            pc.tick(ctx, "grad.k_dA", "proj_dA")
+            _route_a(ctx, bst.gemm_workspace, bst.tmp2, bst.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
+            pc.tick(ctx, "grad.v_dA", "proj_dA")
+            step_count_launch()
+            ctx.enqueue_function[bwd_add3_kernel](
+                bst.d_norm1_out.unsafe_ptr(),
+                bst.tmp0.unsafe_ptr(),
+                bst.tmp1.unsafe_ptr(),
+                bst.tmp2.unsafe_ptr(),
+                Int32(m * dm),
+                grid_dim=(_grid(m * dm), 1, 1),
+                block_dim=(BWD_TPB, 1, 1),
+            )
+    else:
         _route_a(ctx, bst.gemm_workspace, bst.tmp1, bst.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
         pc.tick(ctx, "grad.k_dA", "proj_dA")
         _route_a(ctx, bst.gemm_workspace, bst.tmp2, bst.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
