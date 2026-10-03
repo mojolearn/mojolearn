@@ -1642,10 +1642,10 @@ class TargetEncoder(_PrepBase):
         self.categories_, self.target_type_, self.numeric_mode_, self.n_features_in_ = cats, kind, mode, d
         self.classes_ = classes
         self._T, self._cmax = T, cmax
-        full = F * d * cmax * T
-        self._enc = pr.get(enc + full, d * cmax * T)
+        base = F * d * cmax * T
+        self._enc = pr.get(enc + base, d * cmax * T)
         self._meta = pr.get(meta + 2 * F * T, 2 * T)
-        self.encodings_ = [pr.get(enc + full + (j * cmax) * T, cats[j].size * T) for j in range(d)]
+        self.encodings_ = [pr.get(enc + base + (j * cmax) * T, cats[j].size * T) for j in range(d)]
         means = pr.values(meta + 2 * F * T, 2 * T)[0::2]
         self.target_mean_ = pr.get(meta + 2 * F * T, 1) if T == 1 else Array.from_list(means, "<f4")
         return pr.get(out, (n, d * T)) if apply_rows_folds else None
