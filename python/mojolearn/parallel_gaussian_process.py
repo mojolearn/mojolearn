@@ -58,7 +58,7 @@ def fit_gaussian_process_classifier(estimator, X, y, *, devices=(0,)):
     # the class codes and the class: the worker's `_fit_binary` builds the
     # 0/1 targets in the binding (lane apple-fast-py2mojo-cluster)
     codes32 = Array.from_list(codes, '<i4')
-    requests = [('gpc_class_fit', _fresh(estimator), (x, codes32, k)) for k in columns]
+    requests = [('gpc_class_fit', _fresh(estimator), (x, codes32, k)) for k in columns]  # glue: one worker request per class fit
     fits = _run(requests, devices)
     result = _fresh(estimator)
     result.input_copied_ = copied

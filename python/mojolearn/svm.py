@@ -160,7 +160,7 @@ class LinearSVC(_LinearSVMBase):
         n_coefs = cols + (1 if self.fit_intercept else 0)
         # the (C, n_coefs) block, joined as bytes; its column-major copy (one
         # Mojo strided copy) is the `w[c + C*j]` block `qn_decision_function` reads
-        W = frombytes(b"".join(b.tobytes() for b in blocks), "<f4", (n_targets, n_coefs))
+        W = frombytes(b"".join(b.tobytes() for b in blocks), "<f4", (n_targets, n_coefs))  # glue: joins one coefficient block per target
         self._w = Array._view_of(W._as_order("F"), (n_targets * n_coefs,), "C")
         self.coef_ = W[:, :cols]
         self.intercept_ = W[:, cols] if self.fit_intercept else zeros((n_targets,), "<f4")

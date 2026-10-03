@@ -185,7 +185,7 @@ def _count_targets(y):
     and its integer sum run in the core Mojo helpers (`Array.__eq__` against
     a scalar and `Array.sum`, bindings/hotpath_helpers.mojo); Python only
     subtracts (pyglue-sweep 2026-10-03: the Python scan is gone)."""
-    return int(y.size) - int((y == T._IGNORE_INDEX_DEFAULT).sum())
+    return int(y.size) - int((y == T._IGNORE_INDEX_DEFAULT).sum())  # glue: mask and sum run in Mojo helpers
 
 
 class SambaState(object):

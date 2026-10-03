@@ -112,7 +112,7 @@ def _ovr_combine(ext, cols, n_star):
 def _stacked(blocks, dtype, shape):
     """The fits' same-shape buffers as one (len(blocks),) + shape Array, joined
     as bytes (no per-element Python)."""
-    raw = b"".join(a.tobytes() for a in blocks)
+    raw = b"".join(a.tobytes() for a in blocks)  # glue: joins one buffer per class fit
     return frombytes(raw, dtype, (len(blocks),) + tuple(shape))
 
 
@@ -538,10 +538,10 @@ class GaussianProcessClassifier(NumericModeMixin):
             "meta": Array.from_list([int(n_train), int(n_features), len(fits),
                                      int(self.max_iter_predict), int(n_ls),
                                      int(self.n_classes_)], "<i8"),
-            "y": _stacked([e.y_train_ for e in fits], "<f4", (n_train,)),
-            "L": _stacked([e.L_ for e in fits], "<f4", (n_train * n_train,)),
-            "pi": _stacked([e.pi_ for e in fits], "<f4", (n_train,)),
-            "wsr": _stacked([e.W_sr_ for e in fits], "<f4", (n_train,)),
+            "y": _stacked([e.y_train_ for e in fits], "<f4", (n_train,)),  # glue: one buffer per class fit
+            "L": _stacked([e.L_ for e in fits], "<f4", (n_train * n_train,)),  # glue: one buffer per class fit
+            "pi": _stacked([e.pi_ for e in fits], "<f4", (n_train,)),  # glue: one buffer per class fit
+            "wsr": _stacked([e.W_sr_ for e in fits], "<f4", (n_train,)),  # glue: one buffer per class fit
             "lml": Array.from_list([float(e.log_marginal_likelihood_value_) for e in fits], "<f8"),
             "n_iter": Array.from_list([int(e.n_iter_) for e in fits], "<i8"),
             "nb": Array.from_list([int(e.nb_) for e in fits], "<i8"),
