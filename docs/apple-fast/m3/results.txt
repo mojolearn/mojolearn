@@ -1,4 +1,4 @@
-pos=343 lines=     494
+pos=353 lines=     514
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -427,3 +427,15 @@ pos=343 lines=     494
 529:CMD apple-fast@b2dd5dfe5 afb20-eigh rc=0 afb done tag=afb20-eigh pairs=6 ok=6
 530:FBUILD lane/apple-fast-ridgespeed@e3ef68416 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
 531:CMD apple-fast-ridgespeed@e3ef68416 ridgespeed-res-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=24.5 all=[24] quality=['{"finite":'] defines='-D MOJOLEARN_RIDGE_RESIDENT'
+532:FBUILD lane/apple-fast@321a1a81c core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+533:CMD apple-fast@321a1a81c iimp-rreigh-off-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=8820.7 all=[8821] quality=['{"masked_rmse":'] defines=''
+534:CMD apple-fast@321a1a81c iimp-rreigh-off-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=902.1 all=[902] quality=['{"masked_rmse":'] defines=''
+535:CMD apple-fast-ridgespeed@e3ef68416 ridgespeed-nou-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=22.7 all=[23] quality=['{"finite":'] defines='-D MOJOLEARN_RIDGE_RESIDENT -D MOJOLEARN_RIDGE_NO_U'
+536:CMD apple-fast-ridgespeed@e3ef68416 ridgespeed-res-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=724.4 all=[724] quality=['{"finite":'] defines='-D MOJOLEARN_RIDGE_RESIDENT'
+537:CMD apple-fast-ridgespeed@e3ef68416 ridgespeed-nou-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=541.6 all=[542] quality=['{"finite":'] defines='-D MOJOLEARN_RIDGE_RESIDENT -D MOJOLEARN_RIDGE_NO_U'
+538:FBUILD lane/apple-fast@5990c5946 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+539:CMD apple-fast@5990c5946 afb21-garch rc=0 afb done tag=afb21-garch pairs=2 ok=2
+540:CMD apple-fast@5990c5946 afb22-mbk rc=0 afb done tag=afb22-mbk pairs=2 ok=2
+541:CMD apple-fast@5990c5946 afb23-opt rc=0 afb done tag=afb23-opt pairs=6 ok=6
+542:CMD apple-fast-trees-yeti@b157e5ee0 yeti-symhist rc=0 AFT-MEDIAN arm=B n=2 median_ms=5307.5 all=[5307, 5308] hashes=['fea23d0d4f411a84'] acc={'ndcg10': [0.680466, 0.680466], 'ndcg5': [0.614035, 0.614035], 'map': [0.814182, 0.814182]}
+543:CMD apple-fast-trees-yeti@b157e5ee0 yeti-both rc=0 AFT-MEDIAN arm=B n=2 median_ms=5110.1 all=[5117, 5103] hashes=['fea23d0d4f411a84'] acc={'ndcg10': [0.680466, 0.680466], 'ndcg5': [0.614035, 0.614035], 'map': [0.814182, 0.814182]}
