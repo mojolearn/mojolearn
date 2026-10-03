@@ -533,12 +533,7 @@ comptime XL_APPLE_SLICE_MACS = 1 << 27
 
 #: lane/apple-fast-gram (2026-10-02), FAST on Apple, build-time switches
 #: (`-D MOJOLEARN_X_LINEAR_LARS_FAST_GRAM`, `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM`;
-#: no env read on the fit path). Both are the FAST + Apple default since the M3
-#: A/B (lane/apple-fast-gram 47ab9b791, n=1, taxi, quality identical: lars
-#: 63.6 -> 14.6 ms, lasso-lars 60.5 -> 15.9 ms, ridge-clf 169 -> 126 ms,
-#: ridge-cv 3,888 -> 281 ms); `-D MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF` /
-#: `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restore main's path, and the old
-#: on-defines stay harmless:
+#: no env read on the fit path), both default off (the A/B arm is main's path):
 #: LARS_FAST_GRAM builds Lars / LassoLars' means, centered Gram, X'y and y mean
 #: with x_linear/fast_gram.mojo (row chunks x 32 x 32 tiles on the grid) instead
 #: of main's moments grid (one block per 16-column tile pair, one serial chain
@@ -547,7 +542,7 @@ comptime XL_APPLE_SLICE_MACS = 1 << 27
 #: Gram and X'Y, and for k-fold RidgeCV's fold Grams instead of `kf_cells_kernel`
 #: (one thread per cell walking the fold's rows). Unweighted fits only.
 comptime XL_LARS_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                              and not is_defined["MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF"]())
+                              and is_defined["MOJOLEARN_X_LINEAR_LARS_FAST_GRAM"]())
 
 
 @always_inline
@@ -2141,13 +2136,12 @@ def _ridge_kfold_grid(x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, ip: List
                    + _xg_blocks(kbm) + _xg_blocks(na * kbm))
     var wit = Witness(ctx, wcap)
     var dsum_save = ctx.enqueue_create_buffer[DType.float32](max(na, 1))
-    # lane/apple-fast-gram (2026-10-02), FAST on Apple (default since the M3 A/B;
-    # `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restores `kf_cells_kernel`)
+    # lane/apple-fast-gram (2026-10-02), FAST on Apple: `MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM=1`
     # builds each fold's means, centered Gram and X'y with the shared grid
     # Gram (x_linear/fast_gram.mojo; the same dxm / dg / dxty words) instead
     # of `kf_cells_kernel`, one thread per cell walking the fold's rows
     # (136 threads at taxi's 16 features). Its launches are not witnessed
-    # (it waits for them itself); the unit's solve that follows is.
+    # (it waits for them itself); the unit's solve that follows is. Default off.
     var fold_fast_gram = False
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         fold_fast_gram = _ridge_fast_gram() and d > 0

@@ -278,7 +278,7 @@ def ridge_fit_grid(
                                                      wit.p(), Int32(wo), nonce, grid_dim=g_f, block_dim=RG_TPB)
             wo += g_f
         elif XL_RIDGE_FAST_GRAM:
-            # lane/apple-fast-gram (FAST on Apple default; `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restores main's path):
+            # lane/apple-fast-gram (FAST on Apple, `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM`):
             # the same words from the shared grid Gram (row chunks x 32 x 32
             # tiles); it waits for its own launches (unwitnessed)
             var fwf = FP(unsafe_from_address=Int(fwp))

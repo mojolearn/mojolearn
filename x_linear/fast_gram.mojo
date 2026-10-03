@@ -40,13 +40,11 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
-#: FAST + Apple default since the M3 A/B (lane/apple-fast-gram 47ab9b791, n=1,
-#: taxi, quality identical: ridge-clf 169 -> 126 ms, ridge-cv 3,888 -> 281 ms);
-#: `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restores main's path. Ridge's
+#: `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM` (FAST on Apple, default off): Ridge's
 #: unweighted moments (x_linear/ridge_grid.mojo) and k-fold RidgeCV's fold
 #: Grams (x_linear/device.mojo) from `fast_gram_into`.
 comptime XL_RIDGE_FAST_GRAM = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                               and not is_defined["MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF"]())
+                               and is_defined["MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM"]())
 
 comptime FG_TPB = 256
 comptime FG_CH = 8192
