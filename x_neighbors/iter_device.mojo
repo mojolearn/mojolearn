@@ -44,7 +44,7 @@ from x_neighbors.items import XN_TREE, XN_TREE_ON, xn_tree_slot
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
-    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK, op_kernel,
+    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK,
     absdiff_sum_k0, absdiff_sum_k1, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
     pagerank_step_kernel, cc_step_kernel,
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
@@ -2039,81 +2039,3 @@ def op_lp_iterate_knn(
         _ = d_ys^
         _ = d_unl^
         _ = ctx^
-
-
-# ---------------------------------------------------------------- kernel_tiled
-#: MOJOLEARN_XN_FAST_TILED_RBF=1 (lane/apple-fast-neighbors2, 2026-10-02; FAST
-#: tier only, Python-side switch, default off): the rbf kernel matrix from
-#: KT_T x KT_T tiles whose x and y rows are staged in threadgroup memory.
-#: Cause: `kernel_kernel` (x_neighbors/device_ops.mojo, one thread per cell)
-#: streams both rows from device memory for every cell: OneClassSVM's
-#: 10,000 x 10,000 Gram at Istella's 220 features reads each y row 10,000
-#: times (88 GB of traffic for 400 MB of output). Here a block reads its 16
-#: x rows and 16 y rows once and folds 256 cells from threadgroup memory.
-#: Same values up to FAST's fma/exp spellings. d <= KT_MAX_D; other kinds
-#: and wider rows take `kernel`.
-comptime KT_T = 16
-comptime KT_TPB = KT_T * KT_T
-comptime KT_MAX_D = 224
-
-
-def kernel_rbf_tiled_kernel(x: FP, y: FP, res: FP, n_: Int64, m_: Int64, d_: Int64, gamma_: Float32):
-    var n = Int(n_)
-    var m = Int(m_)
-    var d = Int(d_)
-    var tid = Int(thread_idx.x)
-    var i0 = Int(block_idx.y) * KT_T
-    var j0 = Int(block_idx.x) * KT_T
-    var xs = stack_allocation[KT_T * KT_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-    var ys = stack_allocation[KT_T * KT_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-    var q = tid
-    while q < KT_T * d:
-        var r = q // d
-        var f = q - r * d
-        var xv = Float32(0)
-        var yv = Float32(0)
-        if i0 + r < n:
-            xv = x.unsafe_load((i0 + r) * d + f)
-        if j0 + r < m:
-            yv = y.unsafe_load((j0 + r) * d + f)
-        xs[q] = xv
-        ys[q] = yv
-        q += KT_TPB
-    barrier()
-    var ti = tid // KT_T
-    var tj = tid - ti * KT_T
-    var i = i0 + ti
-    var j = j0 + tj
-    if i < n and j < m:
-        var acc = Float32(0)
-        for f in range(d):
-            var df = xs[ti * d + f] - ys[tj * d + f]
-            acc = identical_mul_add(df, df, acc)
-        res.unsafe_store(i * m + j, identical_exp(-gamma_ * acc))
-
-
-def op_kernel_tiled(
-    x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma: Float32, coef0: Float32, degree: Int,
-) raises:
-    """`kernel` from staged tiles for the rbf kind (see KT_T above); every
-    other kind, and d > KT_MAX_D, is `op_kernel` itself."""
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        if kind == K_RBF and d >= 1 and d <= KT_MAX_D and n > 0 and m > 0:
-            var ctx = xn_ctx()
-            var d_x = ctx.enqueue_create_buffer[DType.float32](n * d)
-            ctx.enqueue_copy(dst_buf=d_x, src_ptr=FP(unsafe_from_address=x))
-            var d_y = ctx.enqueue_create_buffer[DType.float32](m * d)
-            ctx.enqueue_copy(dst_buf=d_y, src_ptr=FP(unsafe_from_address=y))
-            var d_res = ctx.enqueue_create_buffer[DType.float32](n * m)
-            ctx.enqueue_function[kernel_rbf_tiled_kernel](
-                d_x.unsafe_ptr(), d_y.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), gamma,
-                grid_dim=((m + KT_T - 1) // KT_T, (n + KT_T - 1) // KT_T, 1), block_dim=(KT_TPB, 1, 1),
-            )
-            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=res), src_buf=d_res)
-            ctx.synchronize()
-            _ = d_x^
-            _ = d_y^
-            _ = d_res^
-            _ = ctx^
-            return
-    op_kernel(x, y, res, n, m, d, kind, gamma, coef0, degree)

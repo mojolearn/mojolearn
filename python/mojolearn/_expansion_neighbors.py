@@ -202,12 +202,10 @@ _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 #: per-row `pcs`, LabelSpreading's per-cell-degree `ls_laplacian`, PageRank's
 #: dangling rows in Python).
 _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
-#: lane/apple-fast-neighbors2 (2026-10-02), FAST tier only, default off:
-#: the rbf kernel matrix from staged tiles (`kernel_tiled`; OneClassSVM's
-#: Gram). LabelPropagation / LabelSpreading's kNN-graph loop as one resident
-#: op (`lp_iterate_knn`) is the FAST + Apple default, read back from the
-#: binding (`_lp_fast_resident`, no env read).
-_FAST_TILED_RBF = os.environ.get("MOJOLEARN_XN_FAST_TILED_RBF", "") == "1"
+#: lane/apple-fast-neighbors2 (2026-10-02): LabelPropagation /
+#: LabelSpreading's kNN-graph loop as one resident op (`lp_iterate_knn`) is
+#: the FAST + Apple default, read back from the binding (`_lp_fast_resident`,
+#: no env read).
 
 
 def _lp_fast_resident(est):
@@ -282,8 +280,7 @@ class _XNeighbors(NumericModeMixin):
         n, d = A.shape
         m = B.shape[0]
         out = _empty_out((n, m), "<f4")
-        op = "kernel_tiled" if (_FAST_TILED_RBF and kind == "rbf" and self._fast_tier()) else "kernel"
-        self._op(op, [(A, 0), (B, 0), (out, 1)], (n, m, d, _KERNELS[kind], int(degree)),
+        self._op("kernel", [(A, 0), (B, 0), (out, 1)], (n, m, d, _KERNELS[kind], int(degree)),
                  (_f32_scalar(gamma), _f32_scalar(coef0)))
         return out
 

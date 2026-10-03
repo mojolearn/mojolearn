@@ -113,7 +113,6 @@ FAMILIES = (
             "xn_svgp_fit_ff",
             "xn_svgp_predict",
             "xn_lp_iterate_knn",
-            "xn_kernel_tiled",
             "xn_ocsvm",
             "xn_louvain",
             "xn_eigh",

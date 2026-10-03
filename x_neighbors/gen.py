@@ -297,12 +297,6 @@ CUSTOM_OPS = [
      [("cols", "iin", "n * k"), ("vals", "fin", "n * k"), ("ld", "finout", "n * c"), ("ystatic", "fin", "n * c"),
       ("unlabeled", "iin", "n"), ("info", "iout", "2"), ("n", "int"), ("k", "int"), ("c", "int"), ("max_iter", "int"),
       ("variant", "int"), ("tol_hi", "int"), ("tol_lo", "int"), ("alpha", "float")]),
-    # lane/apple-fast-neighbors2, FAST tier only: `kernel` with x and y tiles
-    # staged in threadgroup memory (rbf; other kinds take `kernel`),
-    # MOJOLEARN_XN_FAST_TILED_RBF=1
-    ("kernel_tiled",
-     [("x", "fin", "n * d"), ("y", "fin", "m * d"), ("res", "fout", "n * m"), ("n", "int"), ("m", "int"), ("d", "int"),
-      ("kind", "int"), ("gamma", "float"), ("coef0", "float"), ("degree", "int")]),
 ]
 
 #: lane/neural-pass72: scratch ops whose item slices the scratch by its own
