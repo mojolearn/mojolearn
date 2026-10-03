@@ -162,14 +162,14 @@ def c1_dev_parts_kernel(y: FP, n: Int32, yparts: FP, vparts: FP, wf: IP, woff: I
     witness_end(wf, woff, nonce)
 
 
-def c1_codes_targets_kernel(codes: IP, n: Int32, t_n: Int32, out: FP):
+def c1_codes_targets_kernel(codes: IP, n: Int32, t_n: Int32, dst: FP):
     """Row i: the +-1 targets of class code codes[i] (int32): T == 1, +1 for code 1; else +1 in column code."""
     var i = Int(block_idx.x) * C1_TPB + Int(thread_idx.x)
     var tn = Int(t_n)
     if i < Int(n):
         var c = Int(ldi(codes, i))
         if tn == 1:
-            st(out, i, Float32(1) if c == 1 else Float32(-1))
+            st(dst, i, Float32(1) if c == 1 else Float32(-1))
         else:
             for t in range(tn):
-                st(out, i * tn + t, Float32(1) if c == t else Float32(-1))
+                st(dst, i * tn + t, Float32(1) if c == t else Float32(-1))
