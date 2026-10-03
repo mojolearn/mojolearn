@@ -16,7 +16,7 @@ import tempfile
 import numpy as np
 import pytest
 
-from mojolearn import _svm_impl
+from mojolearn.tests import _svm_reference as _svm_ref
 from mojolearn._svm_impl import SVC
 
 
@@ -36,23 +36,23 @@ def _fit_or_skip(x, y, **kw):
 
 
 def test_shuffle_is_a_seeded_permutation():
-    a = _svm_impl._splitmix_perm(50, 3)
+    a = _svm_ref._splitmix_perm(50, 3)
     assert sorted(a) == list(range(50))
-    assert a == _svm_impl._splitmix_perm(50, 3)
-    assert a != _svm_impl._splitmix_perm(50, 4)
+    assert a == _svm_ref._splitmix_perm(50, 3)
+    assert a != _svm_ref._splitmix_perm(50, 4)
 
 
 def test_sigmoid_train_separates_and_orients():
     dec = [-2.0, -1.5, -1.0, -0.2, 0.3, 1.0, 1.4, 2.2]
     labels = [-1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, 1.0]
-    a, b = _svm_impl._sigmoid_train(dec, labels)
+    a, b = _svm_ref._sigmoid_train(dec, labels)
     assert a < 0.0                     # P(+1) rises with the decision value
-    assert _svm_impl._sigmoid_predict(2.0, a, b) > 0.5 > _svm_impl._sigmoid_predict(-2.0, a, b)
+    assert _svm_ref._sigmoid_predict(2.0, a, b) > 0.5 > _svm_ref._sigmoid_predict(-2.0, a, b)
 
 
 def test_coupling_is_a_distribution():
     r = [[0.0, 0.7, 0.8], [0.3, 0.0, 0.6], [0.2, 0.4, 0.0]]
-    p = _svm_impl._multiclass_probability(3, r)
+    p = _svm_ref._multiclass_probability(3, r)
     assert abs(sum(p) - 1.0) < 1e-9 and p[0] > p[1] > p[2]
 
 

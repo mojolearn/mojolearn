@@ -15,8 +15,9 @@ cell t reads draws 2t + 1 and 2t + 2 by their counter, on the device
 Each iteration is two device kernels over the resident S, R and A (a row per
 thread for the responsibilities, a column per thread for the availabilities,
 every fold ascending, the lowest index on an argmax tie) and one for the
-exemplar flags; the convergence window, the exemplar refinement and the
-labels are the reference's host logic from one source."""
+exemplar flags; the convergence window (one flag read an iteration), the
+exemplar refinement and the labels are device primitives too (lane
+cgr2-cluster; the host column runs the reference's loops)."""
 from std.sys.compile import is_defined
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul
@@ -27,7 +28,9 @@ from x_cluster.optics import dist_slot
 # `-D MOJOLEARN_AP_EXACT=1`: the same values by less work (the median by the
 # grid-wide radix select straight from the device's distances, the two final
 # diagonals gathered on the device, the equal-similarities scan stopped at
-# its first difference). `-D MOJOLEARN_AP_SPLIT=1`: the availability column
+# its first difference); since lane cgr2-cluster every build takes these
+# (the radix median, the device diagonals, the device equality test), so the
+# define changes nothing. `-D MOJOLEARN_AP_SPLIT=1`: the availability column
 # sums folded over row slices (bits move; the paired quality check).
 comptime AP_EXACT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_EXACT"]()
 comptime AP_SPLIT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_AP_SPLIT"]()
@@ -44,98 +47,59 @@ def affinity_fit[O: ClusterOps](
     the equal-similarities shortcut): the continuous state the exemplar
     choice reads, kept so a verifier lane can see the message arithmetic and
     not only the discrete labels it settles into."""
-    var s_m: List[Float32]
-    var fast_exact = False
-    comptime if AP_EXACT:
-        fast_exact = ops.fast_device()
-    var dm_slot = -1
+    var m = n * n
+    # S on the device: -(squared distances), or the caller's matrix
+    var ss: Int
+    var neg: Int
     if precomputed:
-        s_m = x.copy()
+        ss = ops.put(x)
+        affinity = x.copy()
+        neg = ops.alloc(m)
+        ops.negate(ss, neg, m)
     else:
         var xs = ops.put(x)
-        var dm = dist_slot(ops, n * n)
-        ops.sqdist(xs, n, xs, n, d, dm)
-        s_m = ops.get(dm, n * n)
-        for t in range(n * n):
-            s_m[t] = -s_m[t]
-        dm_slot = dm
-    affinity = s_m.copy()
+        neg = dist_slot(ops, m)
+        ops.sqdist(xs, n, xs, n, d, neg)
+        ss = ops.alloc(m)
+        ops.negate(neg, ss, m)
+        affinity = ops.get(ss, m)
     # the preference
     var pref = List[Float32](length=n, fill=pref_scalar)
     if pref_mode == 0:
-        # np.median(S): the mean of the two middle values of n^2 (one when odd)
-        var m = n * n
-        var neg = List[Float32]()
-        var nonneg = True
-        if fast_exact and dm_slot >= 0:
-            # `neg` is the device's distance matrix, bit for bit (S is its
-            # negation): the same test, no second copy and no upload
-            for t in range(m):
-                if not (-s_m[t] >= Float32(0)):
-                    nonneg = False
-                    break
-        else:
-            neg = List[Float32](capacity=m)
-            for t in range(m):
-                neg.append(-s_m[t])
-                if not (neg[t] >= Float32(0)):
-                    nonneg = False
+        # np.median(S): the mean of the two middle values of n^2 (one when
+        # odd), exact order statistics by the device's radix select
         var med: Float32
-        if nonneg and fast_exact:
-            var ds = dm_slot if dm_slot >= 0 else ops.put(neg)
-            var hi = ops.kth_flat(ds, m, m // 2 + 1)
+        if ops.check_nonneg(neg, m):
+            var hi = ops.kth_flat(neg, m, m // 2 + 1)
             if m % 2 == 1:
                 med = -hi
             else:
-                var lo = ops.kth_flat(ds, m, m // 2)
-                med = -ftz(identical_mul(ftz(lo + hi), Float32(0.5)))
-        elif nonneg:
-            var ds = ops.put(neg)
-            var ks = ops.zeros(1)
-            ops.kth(ds, 1, m, m // 2 + 1, ks)
-            var hi = ops.get(ks, 1)[0]
-            if m % 2 == 1:
-                med = -hi
-            else:
-                ops.kth(ds, 1, m, m // 2, ks)
-                var lo = ops.get(ks, 1)[0]
+                var lo = ops.kth_flat(neg, m, m // 2)
                 med = -ftz(identical_mul(ftz(lo + hi), Float32(0.5)))
         else:
-            # a precomputed S with a positive entry: the two middle order
-            # statistics by a host heap sort (one source in both bindings)
-            var v = s_m.copy()
-            _heap_sort(v)
+            # a precomputed S with a positive entry: each order statistic of
+            # S from the side of zero it falls on
+            var cneg = ops.count_neg(ss, m)
+            var side = ops.alloc(m)
+            var hi = _kth_signed(ops, ss, m, m // 2 + 1, cneg, side)
             if m % 2 == 1:
-                med = v[m // 2]
+                med = hi
             else:
-                med = ftz(identical_mul(ftz(v[m // 2 - 1] + v[m // 2]), Float32(0.5)))
+                var lo = _kth_signed(ops, ss, m, m // 2, cneg, side)
+                med = ftz(identical_mul(ftz(lo + hi), Float32(0.5)))
         for i in range(n):
             pref[i] = med
     elif pref_mode == 2:
         for i in range(n):
             pref[i] = pref_array[i]
+    var ps = ops.put(pref)
     # _equal_similarities_and_preferences
-    var all_equal = True
-    var first_off = Float32(0)
-    var have = False
-    for i in range(n):
-        if fast_exact and not all_equal:
-            break  # the answer is settled at the first difference
-        for j in range(n):
-            if i != j:
-                if not have:
-                    first_off = s_m[i * n + j]
-                    have = True
-                elif s_m[i * n + j] != first_off:
-                    all_equal = False
-    for i in range(1, n):
-        if pref[i] != pref[0]:
-            all_equal = False
-    if n == 1 or all_equal:
+    if n == 1 or ops.ap_equal(ss, ps, n):
         n_iter = 0
         centers_idx = List[Int32]()
         labels = List[Int32]()
-        if pref[0] > s_m[n - 1]:
+        var row0 = ops.get(ss, n)
+        if pref[0] > row0[n - 1]:
             for i in range(n):
                 centers_idx.append(Int32(i))
                 labels.append(Int32(i))
@@ -144,20 +108,15 @@ def affinity_fit[O: ClusterOps](
             for _i in range(n):
                 labels.append(Int32(0))
         return
-    for i in range(n):
-        s_m[i * n + i] = pref[i]
+    ops.set_diag(ss, ps, n)
     # the tie noise, row-major order of the draws (cell t reads draws 2t + 1
     # and 2t + 2 of the seeded stream, `bodies.ap_noise_cell`, DEVIATION
-    # 5122), on the column that holds S; the host keeps a copy for the
-    # exemplar refinement below
-    var ss = ops.put(s_m)
-    ops.ap_noise(ss, n * n, seed)
-    s_m = ops.get(ss, n * n)
-    var a_s = ops.zeros(n * n)
-    var r_s = ops.zeros(n * n)
+    # 5122), on the device; S stays resident for the exemplar refinement
+    ops.ap_noise(ss, m, seed)
+    var a_s = ops.zeros(m)
+    var r_s = ops.zeros(m)
     var e_s = ops.zeros_i(n)
-    var ring = List[Int32](length=n * conv_iter, fill=Int32(0))
-    var e = List[Int32]()
+    var ring = ops.zeros_i(n * conv_iter)
     var it = 0
     var never_converged = True
     var split = False
@@ -170,129 +129,38 @@ def affinity_fit[O: ClusterOps](
         else:
             ops.ap_a(r_s, a_s, n, damping)
         ops.ap_e(a_s, r_s, n, e_s)
-        e = ops.get_i(e_s, n)
-        var K = 0
-        for i in range(n):
-            ring[i * conv_iter + it % conv_iter] = e[i]
-            K += Int(e[i])
-        if it >= conv_iter:
-            var settled = 0
-            for i in range(n):
-                var se = 0
-                for c in range(conv_iter):
-                    se += Int(ring[i * conv_iter + c])
-                if se == conv_iter or se == 0:
-                    settled += 1
-            if settled == n and K > 0:
-                never_converged = False
-                break
+        # the convergence window on the device; one flag read per iteration
+        if ops.ap_conv(e_s, ring, n, conv_iter, it):
+            never_converged = False
+            break
         it += 1
     ar_diag = List[Float32](capacity=2 * n)
-    if fast_exact:
-        # the 2n values read, not the two n x n matrices around them
-        var a_d = ops.get_diag(a_s, n)
-        var r_d = ops.get_diag(r_s, n)
-        for i in range(n):
-            ar_diag.append(a_d[i])
-        for i in range(n):
-            ar_diag.append(r_d[i])
-    else:
-        var a_fin = ops.get(a_s, n * n)
-        var r_fin = ops.get(r_s, n * n)
-        for i in range(n):
-            ar_diag.append(a_fin[i * n + i])
-        for i in range(n):
-            ar_diag.append(r_fin[i * n + i])
+    var a_d = ops.get_diag(a_s, n)
+    var r_d = ops.get_diag(r_s, n)
+    for i in range(n):
+        ar_diag.append(a_d[i])
+    for i in range(n):
+        ar_diag.append(r_d[i])
     if never_converged:
         it = max_iter - 1
     n_iter = it + 1
-    var ex = List[Int]()
-    for i in range(n):
-        if e[i] != 0:
-            ex.append(i)
-    var K = len(ex)
-    labels = List[Int32]()
+    # the exemplar refinement and the labels on the device
+    var cen_s = ops.zeros_i(n)
+    var lab_s = ops.zeros_i(n)
+    var nc = ops.ap_exemplars(ss, e_s, n, cen_s, lab_s)
+    labels = ops.get_i(lab_s, n)
     centers_idx = List[Int32]()
-    if K == 0:
-        for _i in range(n):
-            labels.append(Int32(-1))
-        return
-    var c = _argmax_cols(s_m, n, ex)
-    for k in range(K):
-        c[ex[k]] = k
-    for k in range(K):
-        var ii = List[Int]()
-        for i in range(n):
-            if c[i] == k:
-                ii.append(i)
-        var best = 0
-        var best_v = Float32(0)
-        for jj in range(len(ii)):
-            var acc = Float32(0)
-            for q in range(len(ii)):
-                acc = ftz(acc + s_m[ii[q] * n + ii[jj]])
-            if jj == 0 or acc > best_v:
-                best_v = acc
-                best = jj
-        ex[k] = ii[best]
-    c = _argmax_cols(s_m, n, ex)
-    for k in range(K):
-        c[ex[k]] = k
-    # labels = I[c]; centers = unique(labels); labels = searchsorted(centers, labels)
-    var is_center = List[Bool](length=n, fill=False)
-    for i in range(n):
-        is_center[ex[c[i]]] = True
-    var rank = List[Int](length=n, fill=-1)
-    for i in range(n):
-        if is_center[i]:
-            rank[i] = len(centers_idx)
-            centers_idx.append(Int32(i))
-    for i in range(n):
-        labels.append(Int32(rank[ex[c[i]]]))
+    if nc > 0:
+        centers_idx = ops.get_i(cen_s, nc)
 
 
-def _argmax_cols(s_m: List[Float32], n: Int, cols: List[Int]) -> List[Int]:
-    """argmax over `cols` of each row of S, the lowest position on a tie."""
-    var out = List[Int](capacity=n)
-    for i in range(n):
-        var best = 0
-        var bv = s_m[i * n + cols[0]]
-        for q in range(1, len(cols)):
-            var v = s_m[i * n + cols[q]]
-            if v > bv:
-                bv = v
-                best = q
-        out.append(best)
-    return out^
-
-
-def _heap_sort(mut v: List[Float32]):
-    """Ascending, in place (a -0.0 and a +0.0 compare equal; the median of
-    them is the same either way)."""
-    var n = len(v)
-
-    def sift(mut a: List[Float32], start: Int, end: Int):
-        var root = start
-        while 2 * root + 1 <= end:
-            var child = 2 * root + 1
-            if child + 1 <= end and a[child] < a[child + 1]:
-                child += 1
-            if a[root] < a[child]:
-                var t = a[root]
-                a[root] = a[child]
-                a[child] = t
-                root = child
-            else:
-                return
-
-    var start = (n - 2) // 2
-    while start >= 0:
-        sift(v, start, n - 1)
-        start -= 1
-    var end = n - 1
-    while end > 0:
-        var t = v[0]
-        v[0] = v[end]
-        v[end] = t
-        end -= 1
-        sift(v, 0, end)
+def _kth_signed[O: ClusterOps](mut ops: O, s: Int, m: Int, k: Int, cneg: Int, side: Int) raises -> Float32:
+    """The k-th smallest (1-based) of m values of either sign: among the
+    negatives the (cneg - k + 1)-th smallest magnitude, negated; else the
+    (k - cneg)-th smallest of the non-negatives (`kth_flat` on one side, the
+    other side +inf)."""
+    if k <= cneg:
+        ops.sign_side(s, m, True, side)
+        return -ops.kth_flat(side, m, cneg - k + 1)
+    ops.sign_side(s, m, False, side)
+    return ops.kth_flat(side, m, k - cneg)

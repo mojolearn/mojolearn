@@ -12,16 +12,18 @@ from x_metrics.par import (
     cs_hist_unit, cs_scan_rows_unit, cs_scan_groups_unit, cs_place_unit,
     fold_leaf_unit, fold_level_unit, fold_final_unit,
     sort_key_unit, sort_runs_unit, sort_merge_unit, sort_emit_unit,
-    curve_gather_unit, curve_prefix_unit, curve_emit_unit, wpct_gather_unit, wpct_prefix_unit, copy_unit,
+    curve_gather_unit, curve_emit_unit, wpct_gather_unit, copy_unit,
     cm_chunk_unit, cm_final_unit, wpct_iota_unit, curve_cnt_unit, curve_off_unit, curve_fill_unit,
     curve_keep_unit, fr_scatter_unit, fr_cnt_unit, fr_off_unit, fr_fill_unit,
     ck_cnt_unit, ck_off_unit, ck_fill_unit,
+    curve_fold_unit, cf_chunk_unit, cf_final_unit, wpct_csum_unit, wpct_coff_unit, wpct_cfill_unit,
 )
 
-#: ops 0..10, 36 (fold_rows), 41 (rows64) and 45 (strat_codes) (lane metrics-apple2) are the caller's
-#: (x_metrics/plan.mojo `is_user_op`); the others are the planner's
-#: parallel schedules (x_metrics/par.mojo)
-comptime N_OPS = 46
+#: ops 0..10, 36 (fold_rows), 41 (rows64), 45 (strat_codes) (lane metrics-apple2) and 46
+#: (curve_fold, lane cgr2-metrics-shap) are the caller's (x_metrics/plan.mojo
+#: `is_user_op`); the others are the planner's parallel schedules
+#: (x_metrics/par.mojo). 23 and 25 (the retired sequential prefixes) run nothing.
+comptime N_OPS = 52
 
 
 @always_inline
@@ -72,12 +74,8 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         sort_emit_unit(t, f, q)
     comptime if OP == 22:
         curve_gather_unit(t, f, q)
-    comptime if OP == 23:
-        curve_prefix_unit(t, f, q)
     comptime if OP == 24:
         wpct_gather_unit(t, f, q)
-    comptime if OP == 25:
-        wpct_prefix_unit(t, f, q)
     comptime if OP == 26:
         wpct_select(t, f, q)
     comptime if OP == 27:
@@ -118,3 +116,15 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         ck_fill_unit(t, f, q)
     comptime if OP == 45:
         strat_codes_unit(t, f, q)
+    comptime if OP == 46:
+        curve_fold_unit(t, f, q)
+    comptime if OP == 47:
+        cf_chunk_unit(t, f, q)
+    comptime if OP == 48:
+        cf_final_unit(t, f, q)
+    comptime if OP == 49:
+        wpct_csum_unit(t, f, q)
+    comptime if OP == 50:
+        wpct_coff_unit(t, f, q)
+    comptime if OP == 51:
+        wpct_cfill_unit(t, f, q)

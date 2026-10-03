@@ -57,6 +57,11 @@ comptime EPI_BINARY_CODES = 5
 comptime GLUE_GATHER = 6
 comptime GLUE_SELECT = 7
 comptime GLUE_C_ROWS = 8
+#: SVC probability=True's five-fold glue (lane/cgr-kernel): the fold's
+#: training rows, labels and held rows (9), and the decisions and +1/-1
+#: labels in pair row order for the Platt fit (10)
+comptime GLUE_FOLD = 9
+comptime GLUE_FOLD_FINISH = 10
 
 #: per-row status: 0 fine, 1 a zero divisor, 2 a log of a value <= 0
 comptime ST_OK = 0
@@ -521,3 +526,48 @@ def c_row(
         w = sf64_mul(w, cw[code])
     dst[i] = bitcast[DType.uint32](sf64_to_f32(sf64_mul(c, w)))
     return ST_OK
+
+
+@always_inline
+def fold_split_cell(
+    k: Int, idx: I32P, perm: I32P, lab: U32P, m: Int, begin: Int, end: Int,
+    rows_held: I32P, lab_out: U32P,
+) -> Int:
+    """One cell of a probability fold (`_fit_probability`): k < m - h is
+    training position k, the shuffle's positions before `begin` then after
+    `end` (`perm[:begin] + perm[end:]`), writing the pair row
+    `idx[perm[p]]` to rows_held[k] and its label bits to lab_out[k];
+    k >= m - h is held position k - (m - h), `idx[perm[begin + ...]]` at
+    rows_held[k]. Returns 1 for a training row of class i (label 0.0, libsvm's
+    +1), else 0."""
+    var h = end - begin
+    var nt = m - h
+    if k < nt:
+        var p = k if k < begin else k + h
+        var e = Int(perm[p])
+        rows_held[k] = idx[e]
+        var lb = lab[e]
+        lab_out[k] = lb
+        return 1 if lb == UInt32(0) else 0
+    var e2 = Int(perm[begin + (k - nt)])
+    rows_held[k] = idx[e2]
+    return 0
+
+
+@always_inline
+def fold_finish_cell(
+    k: Int, dperm: U32P, perm: I32P, lab: U32P, consts: U32P, m: Int, dec_out: U64P, lab_out: U64P,
+):
+    """Shuffle position k back to its pair row e = perm[k]: the decision
+    `-float(d)` (binary64, exact) of the machine that held k out, or that
+    fold's constant (+1, -1 or 0, `consts[2 f]` set) when its training rows
+    held one class; the label +1.0 for class i (0.0) and -1.0 otherwise."""
+    var f = 0
+    while f < 4 and k >= ((f + 1) * m) // 5:
+        f += 1
+    var e = Int(perm[k])
+    if consts[2 * f] != UInt32(0):
+        dec_out[e] = sp_of_f32_bits(consts[2 * f + 1])
+    else:
+        dec_out[e] = sf64_neg(sp_of_f32_bits(dperm[k]))
+    lab_out[e] = _ONE if lab[e] == UInt32(0) else sf64_neg(_ONE)

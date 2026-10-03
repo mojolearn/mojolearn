@@ -4693,7 +4693,15 @@ def identical_gemm_into[allow_vendor: Bool = True](
     # as 1876 does. Under IDENTICAL this branch is not compiled at all:
     # bit-unchanged by construction.
     comptime if allow_vendor and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
+        var vendor = True
+        comptime if TARGET_COLUMN == COLUMN_APPLE:
+            # lane/apple-fast-tier (2026-10-02): MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
+            # keeps IDENTICAL's own shipped plan under FAST on Apple, where the
+            # board shows the vendor matmul slower at the classical shapes
+            # (rbf-sampler Istella FAST slower than IDENTICAL). Read on the
+            # host per call; default off; never compiled under IDENTICAL.
+            vendor = String(getenv("MOJOLEARN_APPLE_FAST_GEMM_PINNED")) != "1"
+        if vendor and _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
             return
     # DEVIATION 2542 -- THE GEMM STEP ARM HOOK. Compiled only under
     # `-D MOJOLEARN_GEMM_ARM_TRIAL=1`. On a shipped build this block is not
@@ -8860,7 +8868,15 @@ def identical_gemm[allow_vendor: Bool = True](
     # before changing anything here; the `n == 1` clause in it is a
     # correctness requirement and not an optimization.
     comptime if allow_vendor and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        if _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
+        var vendor = True
+        comptime if TARGET_COLUMN == COLUMN_APPLE:
+            # lane/apple-fast-tier (2026-10-02): MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
+            # keeps IDENTICAL's own shipped plan under FAST on Apple, where the
+            # board shows the vendor matmul slower at the classical shapes
+            # (rbf-sampler Istella FAST slower than IDENTICAL). Read on the
+            # host per call; default off; never compiled under IDENTICAL.
+            vendor = String(getenv("MOJOLEARN_APPLE_FAST_GEMM_PINNED")) != "1"
+        if vendor and _fast_vendor_gemm(ctx, c, a, b, m, n, k, op):
             return
     var nws = identical_gemm_workspace_max_floats(m, n, k)
     step_count_device_alloc()

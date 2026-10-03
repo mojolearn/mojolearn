@@ -32,6 +32,7 @@ THE SAME BITS AS BEFORE, EXCEPT PLATT AND THE SHUFFLE:
     membership of the probability cross-validation changes.
 """
 
+from std.atomic import Atomic, Ordering
 from std.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.python import Python, PythonObject
@@ -52,6 +53,8 @@ from svm.impl.svc_rows import (
     EPI_VOTES,
     FOLD_TPB,
     GLUE_C_ROWS,
+    GLUE_FOLD,
+    GLUE_FOLD_FINISH,
     GLUE_GATHER,
     GLUE_SELECT,
     I32P,
@@ -64,6 +67,8 @@ from svm.impl.svc_rows import (
     epilogue_row,
     epilogue_scratch,
     fold_blocks,
+    fold_finish_cell,
+    fold_split_cell,
     gather_cell,
     platt_channels,
     platt_solve,
@@ -514,6 +519,94 @@ def device_c_rows(
         raise Error("svc C rows: a class code is outside class_weight")
 
 
+# ------------------------------------------------ the probability folds
+def fold_split_kernel(
+    idx: I32P, perm: I32P, lab: U32P, m: Int32, begin: Int32, end: Int32,
+    rows_held: I32P, lab_out: U32P, npos: I32P,
+):
+    var k = Int(block_idx.x) * FOLD_TPB + Int(thread_idx.x)
+    if k < Int(m):
+        if fold_split_cell(k, idx, perm, lab, Int(m), Int(begin), Int(end), rows_held, lab_out) == 1:
+            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](npos, Int32(1))
+
+
+def fold_finish_kernel(
+    dperm: U32P, perm: I32P, lab: U32P, consts: U32P, m: Int32, dec_out: U64P, lab_out: U64P,
+):
+    var k = Int(block_idx.x) * FOLD_TPB + Int(thread_idx.x)
+    if k < Int(m):
+        fold_finish_cell(k, dperm, perm, lab, consts, Int(m), dec_out, lab_out)
+
+
+def device_fold_split(
+    idx_addr: Int, perm_addr: Int, lab_addr: Int, m: Int, begin: Int, end: Int,
+    out_addr: Int, lab_out_addr: Int,
+) raises -> Int:
+    """One probability fold's training rows and labels and its held rows
+    (`fold_split_cell`, one thread per position); returns the training
+    rows of class i (an integer count, order-free)."""
+    if m == 0:
+        return 0
+    var nt = m - (end - begin)
+    var ctx = _family_ctx()
+    var d_idx = _up_i32(ctx, idx_addr, m)
+    var d_perm = _up_i32(ctx, perm_addr, m)
+    var d_lab = _up_u32(ctx, lab_addr, m)
+    var d_out = ctx.enqueue_create_buffer[DType.int32](m)
+    var d_lo = ctx.enqueue_create_buffer[DType.uint32](max(1, nt))
+    var npos = _status(ctx)
+    ctx.enqueue_function[fold_split_kernel](
+        d_idx.unsafe_ptr(), d_perm.unsafe_ptr(), d_lab.unsafe_ptr(), Int32(m), Int32(begin), Int32(end),
+        d_out.unsafe_ptr(), d_lo.unsafe_ptr(), npos.unsafe_ptr(),
+        grid_dim=_grid(m), block_dim=FOLD_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=out_addr), src_buf=d_out)
+    if nt > 0:
+        ctx.enqueue_copy(dst_ptr=U32P(unsafe_from_address=lab_out_addr),
+                         src_buf=d_lo.create_sub_buffer[DType.uint32](0, nt))
+    var count = _read_status(ctx, npos)
+    _ = d_idx^
+    _ = d_perm^
+    _ = d_lab^
+    _ = d_out^
+    _ = d_lo^
+    _ = npos^
+    _ = ctx^
+    return count
+
+
+def device_fold_finish(
+    dperm_addr: Int, perm_addr: Int, lab_addr: Int, consts_addr: Int, m: Int,
+    dec_addr: Int, labels_addr: Int,
+) raises:
+    """The pair's decisions and +1/-1 labels in pair row order, float64
+    bits (`fold_finish_cell`, one thread per position)."""
+    if m == 0:
+        return
+    var ctx = _family_ctx()
+    var d_dp = _up_u32(ctx, dperm_addr, m)
+    var d_perm = _up_i32(ctx, perm_addr, m)
+    var d_lab = _up_u32(ctx, lab_addr, m)
+    var d_c = _up_u32(ctx, consts_addr, 10)
+    var d_dec = ctx.enqueue_create_buffer[DType.uint64](m)
+    var d_lb = ctx.enqueue_create_buffer[DType.uint64](m)
+    ctx.enqueue_function[fold_finish_kernel](
+        d_dp.unsafe_ptr(), d_perm.unsafe_ptr(), d_lab.unsafe_ptr(), d_c.unsafe_ptr(), Int32(m),
+        d_dec.unsafe_ptr(), d_lb.unsafe_ptr(),
+        grid_dim=_grid(m), block_dim=FOLD_TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=dec_addr), src_buf=d_dec)
+    ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=labels_addr), src_buf=d_lb)
+    ctx.synchronize()
+    _ = d_dp^
+    _ = d_perm^
+    _ = d_lab^
+    _ = d_c^
+    _ = d_dec^
+    _ = d_lb^
+    _ = ctx^
+
+
 # ------------------------------------------------------------ Python doors
 def _ix(v: PythonObject) raises -> Int:
     var x = Int(py=v)
@@ -554,7 +647,15 @@ def svc_pair_epilogue_device_binding(
       bounds-out address or 0]; returns the count.
     8 C_ROWS: dec=sample weights float64 or 0, pairs=class codes int32 or 0,
       ab=class weights float64 (K) or 0, out float32 (n); params [8, n, K,
-      C, 0]; returns n."""
+      C, 0]; returns n.
+    9 FOLD (lane/cgr-kernel): dec=pair rows int32 (m), pairs=shuffle int32
+      (m), ab=pair labels float32 (m), out=training rows then held rows
+      int32 (m); params [9, m, begin, end, training-labels-out address
+      (float32, m - (end - begin))]; returns the class-i training count.
+    10 FOLD_FINISH: dec=decisions float32 in shuffle order (m), pairs=shuffle
+      int32, ab=pair labels float32, out=decisions float64 in pair row order
+      (m); params [10, m, fold constants address (10 float32: flag, value per
+      fold), labels-out address (float64 +1/-1, m), 0]; returns m."""
     if len(params) != 5:
         raise Error("svc_pair_epilogue: params must contain 5 values")
     var mode = _ix(params[0])
@@ -586,6 +687,30 @@ def svc_pair_epilogue_device_binding(
         with GILReleased(Python()):
             count = device_select(ca, n, ci, cj, cb, dst, la, cout)
         return PythonObject(count)
+    if mode == GLUE_FOLD:
+        var m = _ix(params[1])
+        var begin = _ix(params[2])
+        var end = _ix(params[3])
+        var lo = Int(py=params[4])
+        if begin > end or end > m:
+            raise Error("svc fold: bad fold range")
+        var ia = Int(py=dec_addr)
+        var pa2 = Int(py=pairs_addr)
+        var la = Int(py=ab_addr)
+        var npos = 0
+        with GILReleased(Python()):
+            npos = device_fold_split(ia, pa2, la, m, begin, end, dst, lo)
+        return PythonObject(npos)
+    if mode == GLUE_FOLD_FINISH:
+        var m = _ix(params[1])
+        var ca = Int(py=params[2])
+        var lba = Int(py=params[3])
+        var da2 = Int(py=dec_addr)
+        var pa2 = Int(py=pairs_addr)
+        var la = Int(py=ab_addr)
+        with GILReleased(Python()):
+            device_fold_finish(da2, pa2, la, ca, m, dst, lba)
+        return PythonObject(m)
     if mode == GLUE_C_ROWS:
         var n = _ix(params[1])
         var k = _ix(params[2])
