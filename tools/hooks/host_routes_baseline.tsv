@@ -16,24 +16,24 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/models/tokenizer.py	0	loose = [i 
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	module = _backend.load_host_module(_EXTENSION)
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	return _Entries(_backend.load_host_module(_EXTENSION))
 py-loop	py-numpy	gap-lm	debt	python/mojolearn/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/bayes.mojo	0	import x_linear/ops.mojo:par_rows
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/bayes.mojo	0	par_rows(rows_map, n)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/glm.mojo	0	import x_linear/ops.mojo:par_rows
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/glm.mojo	0	par_rows(rows_gh, n)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/glm.mojo	0	par_rows(rows_map, n)
+host-call	host-import	PR#86	debt	x_linear/bayes.mojo	0	import x_linear/ops.mojo:par_rows
+host-call	host-import	PR#86	debt	x_linear/bayes.mojo	0	par_rows(rows_map, n)
+host-call	host-import	PR#86	debt	x_linear/glm.mojo	0	import x_linear/ops.mojo:par_rows
+host-call	host-import	PR#86	debt	x_linear/glm.mojo	0	par_rows(rows_gh, n)
+host-call	host-import	PR#86	debt	x_linear/glm.mojo	0	par_rows(rows_map, n)
 host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/glm.mojo	0	par_rows(units_fold, units, 1)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/huber.mojo	0	import x_linear/ops.mojo:par_rows
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/huber.mojo	0	par_rows(rows_map, n)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/logcv.mojo	0	import x_linear/ops.mojo:par_rows
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/logcv.mojo	0	par_rows(rows_hit, n)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/logcv.mojo	0	par_rows(rows_map, n)
+host-call	host-import	PR#86	debt	x_linear/huber.mojo	0	import x_linear/ops.mojo:par_rows
+host-call	host-import	PR#86	debt	x_linear/huber.mojo	0	par_rows(rows_map, n)
+host-call	host-import	PR#86	debt	x_linear/logcv.mojo	0	import x_linear/ops.mojo:par_rows
+host-call	host-import	PR#86	debt	x_linear/logcv.mojo	0	par_rows(rows_hit, n)
+host-call	host-import	PR#86	debt	x_linear/logcv.mojo	0	par_rows(rows_map, n)
 host-env	host-env/threshold	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/ops.mojo	0	comptime if is_defined["MOJOLEARN_X_LINEAR_HOST_SERIAL"]():
-host-threads	host-threads	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/ops.mojo	0	from core.host_parallel import host_parallelize
-host-threads	host-threads	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/ops.mojo	0	host_parallelize(group, groups)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/quantile.mojo	0	import x_linear/ops.mojo:par_rows
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/quantile.mojo	0	par_rows(rows_map, n)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/ridge.mojo	0	import x_linear/ops.mojo:par_rows
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/ridge.mojo	0	par_rows(rows_loo, n)
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/sgd.mojo	0	import x_linear/ops.mojo:par_rows
-host-call	host-import	PR#86	inflight@11912bf71d8e8d7faaadf8301088c517562c7758	x_linear/sgd.mojo	0	par_rows(run_problems, problems, 1)
+host-threads	host-threads	PR#86	debt	x_linear/ops.mojo	0	from core.host_parallel import host_parallelize
+host-threads	host-threads	PR#86	debt	x_linear/ops.mojo	0	host_parallelize(group, groups)
+host-call	host-import	PR#86	debt	x_linear/quantile.mojo	0	import x_linear/ops.mojo:par_rows
+host-call	host-import	PR#86	debt	x_linear/quantile.mojo	0	par_rows(rows_map, n)
+host-call	host-import	PR#86	debt	x_linear/ridge.mojo	0	import x_linear/ops.mojo:par_rows
+host-call	host-import	PR#86	debt	x_linear/ridge.mojo	0	par_rows(rows_loo, n)
+host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	import x_linear/ops.mojo:par_rows
+host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	par_rows(run_problems, problems, 1)
 host-env	host-env/threshold	PR#85	inflight@6a483da91d76ae2560b5316910738e7b3328e375	x_linear/sgd.mojo	0	and not is_defined["MOJOLEARN_SGD_HOST_LEGACY"]()
