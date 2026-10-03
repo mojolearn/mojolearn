@@ -58,7 +58,34 @@ from hdbscan.impl.detail.stabilities import (
     compute_stabilities,
     get_stability_scores_device,
 )
-from hdbscan.impl.detail.fast_apple import HDB_ONE_SYNC
+from hdbscan.impl.detail.fast_apple import HDB_ONE_SYNC, HDB_SELECT_DEVICE
+from hdbscan.checks.hdbscan_sabotage import HDB_SAB_EOM_NO_UPDATE
+from hdbscan.impl.detail.select import (
+    CLUSTER_SELECTION_EOM,
+    CLUSTER_SELECTION_LEAF,
+    eom_init_kernel,
+    eom_level_kernel,
+    flag_kernel,
+    label_map_kernel,
+    leaf_kernel,
+    negate_apply_kernel,
+    negate_init_kernel,
+)
+from hdbscan.impl.detail.stabilities import (
+    STAB_FOLD,
+    STAB_TPB,
+    births_init_kernel,
+    cluster_stability_kernel,
+    cluster_count_kernel,
+    max_lambda_key_kernel,
+    stability_score_kernel,
+)
+from hdbscan.impl.detail.tree_device import (
+    TD_TPB,
+    td_exclusive_scan,
+    td_grid,
+    td_path_reduce,
+)
 from hdbscan.impl.detail.tree_device import (
     DeviceTree,
     td_download_f32,
@@ -418,6 +445,317 @@ def probabilities_kernel(
         dst[child] = ftz(identical_div(lo, death))
 
 
+# ---------------------------------------- lane af-hdbscan2, FAST Apple ---
+# `-D MOJOLEARN_HDB_SELECT_DEVICE` (epsilon == 0 only; the epsilon search
+# needs the selected count on the host to decide whether it runs, so it
+# keeps main's route). Main's extract already runs every pass on the device
+# (stabilities by a fixed fold, EOM level by level, negation by pointer
+# jumping, labels by pointer jumping, scores, probabilities); what is left
+# is waits and reads: a synchronize after the stabilities, after the
+# negation, after the selection and after the labelling, the selected count
+# read back (1 wait) because the labelling's root rule and two output sizes
+# use it, the stability scores downloaded (1 wait), then the eight output
+# downloads (8 waits, or 1 under ONE_SYNC). Here the same kernels run in the
+# same order on the same values with NO wait in between; the selected
+# count stays on the device (`off[n_clusters]`, read by
+# `label_points_sel_kernel` for the root rule), the scores land in an
+# n_clusters-long buffer (the kernel writes slots < n_selected only), and
+# every output, the count included, comes back in ONE readback. The EOM
+# stays one launch per cluster-tree level: it is a tree recurrence whose
+# float sums must keep their order (0 + stab[k0] + stab[k1]), so neither a
+# scan nor a pointer-jumping form gives the same bits; the levels carry no
+# wait. Labels, probabilities, stabilities and scores are main's bits.
+
+
+def label_points_sel_kernel(
+    rep: MutPointer[Int32, MutAnyOrigin],
+    child_lambda: MutPointer[Float32, MutAnyOrigin],
+    root_key: MutPointer[Int32, MutAnyOrigin],
+    labels: MutPointer[Int32, MutAnyOrigin],
+    off: MutPointer[Int32, MutAnyOrigin],
+    n_clusters: Int32,
+    n_leaves_in: Int32,
+    allow: Int32,
+):
+    """`label_points_kernel` (epsilon 0) with `root_single = n_selected ==
+    1 and allow_single_cluster`, n_selected read from the device scan."""
+    var i = Int(block_dim.x) * Int(block_idx.x) + Int(thread_idx.x)
+    var n_leaves = Int(n_leaves_in)
+    if i >= n_leaves:
+        return
+    var root_single = allow != Int32(0) and off[Int(n_clusters)] == Int32(1)
+    var cluster = Int(rep.unsafe_load(i))
+    var out = Int32(-1)
+    if cluster > n_leaves:
+        out = Int32(cluster - n_leaves)
+    elif cluster == n_leaves and root_single:
+        var lam = child_lambda.unsafe_load(i)
+        if lam >= weight_order_unkey(root_key.unsafe_load(0)):
+            out = Int32(0)
+    labels.unsafe_store(i, out)
+
+
+def _extract_one_read(
+    ctx: DeviceContext,
+    mut tree: DeviceTree,
+    cluster_selection_method: Int,
+    allow_single_cluster: Bool,
+    max_cluster_size_in: Int,
+    sabotage: Int32,
+) raises -> ExtractOutput:
+    """`extract_clusters` at epsilon 0 with one wait (block comment above)."""
+    var n_clusters = tree.n_clusters
+    var n_leaves = tree.n_leaves
+    var n_edges = tree.n_edges
+    var n = n_clusters
+    if n_clusters < 1:
+        raise Error(
+            "hdbscan.compute_stabilities: n_clusters=" + String(n_clusters)
+            + " < 1; the condensed tree has no cluster to score"
+        )
+    if (
+        cluster_selection_method != CLUSTER_SELECTION_EOM
+        and cluster_selection_method != CLUSTER_SELECTION_LEAF
+    ):
+        raise Error(
+            "hdbscan.select_clusters: cluster_selection_method="
+            + String(cluster_selection_method)
+            + " refused by name; their enum has exactly two values, EOM=0"
+            " and LEAF=1 (hdbscan.hpp:126)"
+        )
+    if n_edges < 1:
+        raise Error(
+            "hdbscan.max_lambda_of: the condensed tree has no edges; their"
+            " thrust::max_element at runner.h:209 dereferences an empty"
+            " range here"
+        )
+    var stabilities = ctx.enqueue_create_buffer[DType.float32](n_clusters)
+    var is_cluster = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    var label_map = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    var inverse = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+
+    # compute_stabilities, no wait.
+    var births = ctx.enqueue_create_buffer[DType.float32](n_clusters)
+    ctx.enqueue_memset(births, Float32(0.0))
+    ctx.enqueue_function[births_init_kernel](
+        births.unsafe_ptr(), tree.children.unsafe_ptr(),
+        tree.lambdas.unsafe_ptr(), Int32(n_leaves), Int32(n_edges),
+        grid_dim=((n_edges + STAB_TPB - 1) // STAB_TPB, 1, 1),
+        block_dim=(STAB_TPB, 1, 1),
+    )
+    ctx.enqueue_memset(stabilities, Float32(0.0))
+    ctx.enqueue_function[cluster_stability_kernel](
+        stabilities.unsafe_ptr(), births.unsafe_ptr(),
+        tree.indptr.unsafe_ptr(), tree.lambdas.unsafe_ptr(),
+        tree.sizes.unsafe_ptr(), Int32(n_clusters), sabotage,
+        grid_dim=(n_clusters, 1, 1), block_dim=(STAB_FOLD, 1, 1),
+    )
+
+    var max_cluster_size = max_cluster_size_in
+    if max_cluster_size <= 0:
+        max_cluster_size = n_leaves
+
+    # select_clusters, no wait.
+    var fr = ctx.enqueue_create_buffer[DType.int32](n)
+    var pa = ctx.enqueue_create_buffer[DType.int32](n)
+    var va = ctx.enqueue_create_buffer[DType.int32](n)
+    var pb = ctx.enqueue_create_buffer[DType.int32](n)
+    var vb = ctx.enqueue_create_buffer[DType.int32](n)
+    if cluster_selection_method == CLUSTER_SELECTION_EOM:
+        ctx.enqueue_function[eom_init_kernel](
+            is_cluster.unsafe_ptr(), fr.unsafe_ptr(), tree.csize.unsafe_ptr(),
+            tree.kids.unsafe_ptr(),
+            Int32(1) if allow_single_cluster else Int32(0), Int32(n),
+            grid_dim=(td_grid(n), 1, 1), block_dim=(TD_TPB, 1, 1),
+        )
+        var tree_top = 0 if allow_single_cluster else 1
+        var level = tree.max_cdepth
+        while level >= 0:
+            ctx.enqueue_function[eom_level_kernel](
+                stabilities.unsafe_ptr(), is_cluster.unsafe_ptr(),
+                fr.unsafe_ptr(), tree.kids.unsafe_ptr(),
+                tree.csize.unsafe_ptr(), tree.cdepth.unsafe_ptr(),
+                Int32(level), Int32(tree_top), Int32(max_cluster_size),
+                Int32(1) if sabotage == HDB_SAB_EOM_NO_UPDATE else Int32(0),
+                Int32(n),
+                grid_dim=(td_grid(n), 1, 1), block_dim=(TD_TPB, 1, 1),
+            )
+            level -= 1
+        ctx.enqueue_function[negate_init_kernel](
+            tree.cpar.unsafe_ptr(), fr.unsafe_ptr(), pa.unsafe_ptr(),
+            va.unsafe_ptr(), Int32(n),
+            grid_dim=(td_grid(n), 1, 1), block_dim=(TD_TPB, 1, 1),
+        )
+        var nb = td_path_reduce[False](ctx, pa, va, pb, vb, n)
+        var vptr = vb.unsafe_ptr() if nb else va.unsafe_ptr()
+        ctx.enqueue_function[negate_apply_kernel](
+            vptr, is_cluster.unsafe_ptr(), Int32(n),
+            grid_dim=(td_grid(n), 1, 1), block_dim=(TD_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[leaf_kernel](
+            tree.kids.unsafe_ptr(), is_cluster.unsafe_ptr(), Int32(n),
+            grid_dim=(td_grid(n), 1, 1), block_dim=(TD_TPB, 1, 1),
+        )
+    var off = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    ctx.enqueue_function[flag_kernel](
+        is_cluster.unsafe_ptr(), off.unsafe_ptr(), Int32(n),
+        grid_dim=(td_grid(n + 1), 1, 1), block_dim=(TD_TPB, 1, 1),
+    )
+    td_exclusive_scan(ctx, off, n + 1)
+    ctx.enqueue_function[label_map_kernel](
+        is_cluster.unsafe_ptr(), off.unsafe_ptr(), label_map.unsafe_ptr(),
+        inverse.unsafe_ptr(), Int32(n),
+        grid_dim=(td_grid(n), 1, 1), block_dim=(TD_TPB, 1, 1),
+    )
+
+    # do_labelling_device, no wait, the root rule read on the device.
+    var n_nodes = n_leaves + n_clusters
+    var next_a = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var next_b = ctx.enqueue_create_buffer[DType.int32](n_nodes)
+    var child_lambda = ctx.enqueue_create_buffer[DType.float32](n_nodes)
+    var root_key = ctx.enqueue_create_buffer[DType.int32](1)
+    var raw = ctx.enqueue_create_buffer[DType.int32](max(n_leaves, 1))
+    ctx.enqueue_memset(root_key, weight_order_key(Float32(0.0)))
+    var node_grid = max(1, (n_nodes + LABEL_TPB - 1) // LABEL_TPB)
+    ctx.enqueue_function[label_init_kernel](
+        next_a.unsafe_ptr(), child_lambda.unsafe_ptr(), Int32(n_nodes),
+        grid_dim=(node_grid, 1, 1), block_dim=(LABEL_TPB, 1, 1),
+    )
+    ctx.enqueue_function[label_edges_kernel](
+        tree.parents.unsafe_ptr(), tree.children.unsafe_ptr(),
+        tree.lambdas.unsafe_ptr(), is_cluster.unsafe_ptr(),
+        next_a.unsafe_ptr(), child_lambda.unsafe_ptr(),
+        root_key.unsafe_ptr(), Int32(n_leaves), Int32(n_nodes),
+        Int32(n_edges),
+        grid_dim=(max(1, (n_edges + LABEL_TPB - 1) // LABEL_TPB), 1, 1),
+        block_dim=(LABEL_TPB, 1, 1),
+    )
+    var in_b = td_find(ctx, next_a, next_b, n_nodes)
+    var rep_ptr = next_b.unsafe_ptr() if in_b else next_a.unsafe_ptr()
+    var g_pts = max(1, (n_leaves + LABEL_TPB - 1) // LABEL_TPB)
+    if n_leaves > 0:
+        ctx.enqueue_function[label_points_sel_kernel](
+            rep_ptr, child_lambda.unsafe_ptr(), root_key.unsafe_ptr(),
+            raw.unsafe_ptr(), off.unsafe_ptr(), Int32(n), Int32(n_leaves),
+            Int32(1) if allow_single_cluster else Int32(0),
+            grid_dim=(g_pts, 1, 1), block_dim=(LABEL_TPB, 1, 1),
+        )
+
+    # the remap.
+    var final = ctx.enqueue_create_buffer[DType.int32](max(n_leaves, 1))
+    var n_out = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(n_out, Int32(0))
+    ctx.enqueue_function[remap_labels_kernel](
+        raw.unsafe_ptr(), label_map.unsafe_ptr(), final.unsafe_ptr(),
+        n_out.unsafe_ptr(), Int32(n_leaves),
+        grid_dim=(g_pts, 1, 1), block_dim=(LABEL_TPB, 1, 1),
+    )
+
+    # get_stability_scores_device, no download (n_clusters slots).
+    var max_key = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(max_key, Int32(-2147483647 - 1))
+    ctx.enqueue_function[max_lambda_key_kernel](
+        tree.lambdas.unsafe_ptr(), max_key.unsafe_ptr(), Int32(n_edges),
+        grid_dim=((n_edges + STAB_TPB - 1) // STAB_TPB, 1, 1),
+        block_dim=(STAB_TPB, 1, 1),
+    )
+    var counts = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    ctx.enqueue_memset(counts, Int32(0))
+    ctx.enqueue_function[cluster_count_kernel](
+        raw.unsafe_ptr(), counts.unsafe_ptr(), Int32(n_leaves),
+        grid_dim=(max(1, (n_leaves + STAB_TPB - 1) // STAB_TPB), 1, 1),
+        block_dim=(STAB_TPB, 1, 1),
+    )
+    var scores = ctx.enqueue_create_buffer[DType.float32](n_clusters)
+    ctx.enqueue_memset(scores, Float32(0.0))
+    ctx.enqueue_function[stability_score_kernel](
+        stabilities.unsafe_ptr(), counts.unsafe_ptr(),
+        label_map.unsafe_ptr(), max_key.unsafe_ptr(), scores.unsafe_ptr(),
+        Int32(n_clusters),
+        grid_dim=((n_clusters + STAB_TPB - 1) // STAB_TPB, 1, 1),
+        block_dim=(STAB_TPB, 1, 1),
+    )
+
+    # the probabilities.
+    var dkey = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    ctx.enqueue_memset(dkey, Int32(-2147483647 - 1))
+    var probs = ctx.enqueue_create_buffer[DType.float32](max(n_leaves, 1))
+    ctx.enqueue_memset(probs, Float32(0.0))
+    var g_edges = max(1, (n_edges + LABEL_TPB - 1) // LABEL_TPB)
+    ctx.enqueue_function[deaths_key_kernel](
+        tree.parents.unsafe_ptr(), tree.lambdas.unsafe_ptr(),
+        dkey.unsafe_ptr(), Int32(n_leaves), Int32(n_edges),
+        grid_dim=(g_edges, 1, 1), block_dim=(LABEL_TPB, 1, 1),
+    )
+    ctx.enqueue_function[probabilities_kernel](
+        tree.children.unsafe_ptr(), tree.lambdas.unsafe_ptr(),
+        raw.unsafe_ptr(), dkey.unsafe_ptr(), probs.unsafe_ptr(),
+        Int32(n_leaves), Int32(n_edges),
+        grid_dim=(g_edges, 1, 1), block_dim=(LABEL_TPB, 1, 1),
+    )
+
+    # ONE readback: every output and the selected count.
+    var s_raw = td_stage_i32(ctx, raw)
+    var s_final = td_stage_i32(ctx, final)
+    var s_isc = td_stage_i32(ctx, is_cluster)
+    var s_stab = td_stage_f32(ctx, stabilities)
+    var s_map = td_stage_i32(ctx, label_map)
+    var s_inv = td_stage_i32(ctx, inverse)
+    var s_scores = td_stage_f32(ctx, scores)
+    var s_probs = td_stage_f32(ctx, probs)
+    var s_out = td_stage_i32(ctx, n_out)
+    var s_off = td_stage_i32(ctx, off)
+    ctx.synchronize()
+    var n_selected = Int(s_off.unsafe_ptr().unsafe_load(n))
+    var h_raw = td_take_i32(s_raw, n_leaves)
+    var h_final = td_take_i32(s_final, n_leaves)
+    var h_isc = td_take_i32(s_isc, n_clusters)
+    var h_stab = td_take_f32(s_stab, n_clusters)
+    var h_map = td_take_i32(s_map, n_clusters)
+    var h_inv = td_take_i32(s_inv, n_selected)
+    var h_scores = td_take_f32(s_scores, n_selected)
+    var h_probs = td_take_f32(s_probs, n_leaves)
+    var n_outliers = Int(s_out.unsafe_ptr().unsafe_load(0))
+    _ = s_raw^
+    _ = s_final^
+    _ = s_isc^
+    _ = s_stab^
+    _ = s_map^
+    _ = s_inv^
+    _ = s_scores^
+    _ = s_probs^
+    _ = s_out^
+    _ = s_off^
+    _ = births^
+    _ = fr^
+    _ = pa^
+    _ = va^
+    _ = pb^
+    _ = vb^
+    _ = next_a^
+    _ = next_b^
+    _ = child_lambda^
+    _ = root_key^
+    _ = max_key^
+    _ = counts^
+    _ = dkey^
+    _ = stabilities^
+    _ = is_cluster^
+    _ = label_map^
+    _ = inverse^
+    _ = raw^
+    _ = final^
+    _ = n_out^
+    _ = scores^
+    _ = probs^
+    _ = off^
+    return ExtractOutput(
+        n_selected, n_outliers, h_raw^, h_final^, h_isc^, h_stab^, h_map^,
+        h_inv^, h_scores^, h_probs^,
+    )
+
+
 def extract_clusters(
     ctx: DeviceContext,
     mut tree: DeviceTree,
@@ -430,6 +768,14 @@ def extract_clusters(
     """`extract.cuh:246-314`, then the runner's tail (`runner.h:208-233`:
     max_lambda, the stability scores, the label remap) and the
     probabilities, all on the device over `tree`."""
+    # lane af-hdbscan2 (-D MOJOLEARN_HDB_SELECT_DEVICE): the same passes
+    # with no wait between them and one readback (epsilon 0 only).
+    comptime if HDB_SELECT_DEVICE:
+        if cluster_selection_epsilon == Float32(0.0):
+            return _extract_one_read(
+                ctx, tree, cluster_selection_method, allow_single_cluster,
+                max_cluster_size_in, sabotage,
+            )
     var n_clusters = tree.n_clusters
     var n_leaves = tree.n_leaves
 
