@@ -393,6 +393,24 @@ def _kit_vendor(kit):
     return v
 
 
+def _kit_fast_define(kit, name):
+    """lane/apple-fast-decomp-linalg and -sparse (2026-10-02): whether the
+    kit's binding is a FAST Metal build compiled with `-D <name>` (asked of
+    the binding's `x_decomp_fast_defines` once per kit; no env read). False
+    for every IDENTICAL kit, for another vendor and for a binding without
+    the entry, so the default tier never takes one of these routes."""
+    if kit.mode != "fast" or _kit_vendor(kit) != "metal":
+        return False
+    d = kit.__dict__.get("_fast_defines")
+    if d is None:
+        try:
+            d = str(kit._raw().x_decomp_fast_defines()).split(",")
+        except Exception:
+            d = []
+        kit._fast_defines = d
+    return name in d
+
+
 class _Kit:
     """The binding's cells, called on `_M` matrices."""
 
@@ -1232,7 +1250,7 @@ class _RandomProjection(_Base):
         M = _M.from_input(X)
         if M.c != self.n_features_in_:
             raise ValueError(f"X has {M.c} features, but {type(self).__name__} is expecting {self.n_features_in_}")
-        return self._kit().mm(M, self.components_m_, tb=True).out()
+        return k.mm(M, self.components_m_, tb=True).out()
 
     def _project(self, X):
         """transform on the GPU binding (lane gap-nb-maxabs-grp): X goes up from
@@ -2645,11 +2663,49 @@ def _resample_atom(k, Y, seed, counter):
     return k.ew("add", row, noise)
 
 
+def _update_dict_resident(k, D, Y, code, A, B):
+    """`_update_dict` with every atom's step on the device and no host read
+    inside the atom loop (MOJOLEARN_DECOMP_FAST_DICT_UPDATE,
+    lane/apple-fast-decomp-sparse, 2026-10-02). The loop below reads every
+    row of D back (`_vstack(*rows)`), a column of B and a row of A per atom,
+    about 20 downloads each a sync, 16 atoms x 100 iterations for the
+    dict-learning lane and 16 atoms x 3,910 steps for mb-dict-learning
+    (Istella 16.2 s on the M3 Ultra against scikit-learn's 5.0). Here the
+    atom's update is row j of B^T - A D (one product, the other rows
+    masked to 0 by a one-hot column), divided by A[j, j], added, and row j
+    alone renormalized (a select on the one-hot picks its norm, 1 for the
+    rest): 11 resident launches an atom, one A readback a call. Same
+    operations as the loop (a GEMM row instead of a 1 x m GEMM); FAST
+    promises quality, not bits. None (the caller's loop runs) for an unused
+    atom (A[j, j] <= 1e-6: its resample draws on the host) or
+    positive_dict (the clip is per atom there)."""
+    nc = D.r
+    As = A.s
+    diag = [As[j * nc + j] for j in range(nc)]
+    if any(ajj <= 1e-6 for ajj in diag):
+        return None
+    Bt = k.mm(code, Y, ta=True) if B is None else B.T      # nc x m: row j is B[:, j]^T
+    Adiag = _M.of(diag, nc, 1)
+    one = k.const(1.0)
+    for j in range(nc):
+        onehot = _M.of([1.0 if t == j else 0.0 for t in range(nc)], nc, 1)
+        upd = k.ew("sub", Bt, k.mm(A, D))
+        upd = k.ew("div", k.ew("mul", upd, onehot), Adiag)
+        D = k.ew("add", D, upd)
+        nrm = k.ew("maxs", k.ew("sqrt", k.rowsum(k.ew("sq", D))), s=1.0)
+        D = k.ew("div", D, k.ew("select", onehot, nrm, one, s=0.5))
+    return D, code
+
+
 def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=None):
     """sklearn `_dict_learning.py::_update_dict`: block coordinate descent over
     the atoms in order, each projected onto the unit ball. Returns (D, code)."""
     if A is None:
         A = k.mm(code, code, ta=True)
+    if not positive and _kit_fast_define(k, "MOJOLEARN_DECOMP_FAST_DICT_UPDATE"):
+        got = _update_dict_resident(k, D, Y, code, A, B)
+        if got is not None:
+            return got
     if B is None:
         B = k.mm(Y, code, ta=True)
     rows = [D.rows(j, j + 1) for j in range(D.r)]

@@ -11,7 +11,7 @@ from std.python.bindings import PythonModuleBuilder
 from x_decomp.api import (
     cd_rows_py, chol_py, colsum_py, eigh_py, eigh_batch_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
     geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, als_cg_rows_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
-    rowsum_py, sqdist_py, vendor_py,
+    rowsum_py, sqdist_py, vendor_py, fast_defines_py,
 )
 from x_decomp.device import DevExec
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
@@ -105,6 +105,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_graph_dijkstra_py]("x_decomp_dev_graph_dijkstra")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
+        m.def_function[fast_defines_py]("x_decomp_fast_defines")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_decomp: ", e))
