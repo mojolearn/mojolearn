@@ -40,7 +40,9 @@ from std.math import isinf, isnan
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
-from glm.impl.qn.glm_base import GLMWithData
+from glm.impl.qn.glm_base import GLMWithData, QN_FAST_DCONV, QN_FAST_DUAL_CD
+from glm.impl.qn.qn_dconv import dconv_applies, dconv_run
+from glm.impl.qn.lsvr_dual import lsvr_dual_applies, lsvr_dual_warm_start
 from glm.impl.qn.qn_linesearch import (
     ls_backtrack,
     ls_backtrack_projected,
@@ -249,6 +251,30 @@ def min_lbfgs(
             _release(S, Y, xp, grad, gradp, drt, scalar)
             return retcode
 
+        # lane/apple-fast-linsvr, -D MOJOLEARN_LSVR_DEVICE_CONVERGE (FAST on
+        # Apple only): from here the device runs whole iterations (direction,
+        # line search, convergence test) and the host reads one state block
+        # every QN_DCONV_POLL iterations (`qn_dconv.mojo`). Stopped: x holds
+        # the answer. Handed off: rerun iteration k here, then re-enter.
+        comptime if QN_FAST_DCONV:
+            if k + 1 <= param.max_iterations and dconv_applies(param, f, trace.enabled):
+                var dc = dconv_run(
+                    ctx, param, f, x, xp, grad, gradp, drt, s_all, y_all, hist,
+                    scalar, n, k, fx, end, n_vec, fx_hist, retcode,
+                )
+                if dc == 1:
+                    _ = len(s_all)
+                    _ = len(y_all)
+                    _ = len(hist)
+                    _ = len(unused)
+                    _ = stage.unsafe_ptr()
+                    _release(S, Y, xp, grad, gradp, drt, scalar)
+                    return retcode
+                saved = True
+                dg_ready = True
+                dir_pending = False
+                step = Float32(1.0)
+                continue
         # Update s and y: s_{k+1} = x_{k+1} - x_k, y_{k+1} = g_{k+1} - g_k
         # S[end] = x - xp, Y[end] = grad - gradp, the next xp / gradp saves
         # (and, L-BFGS, dg_init) are inside the direction's one launch.
@@ -540,6 +566,13 @@ def qn_minimize(
     intercept escapes the penalty.
     """
     var ret = OPT_MAX_ITERS_REACHED
+    # lane/apple-fast-linsvr, -D MOJOLEARN_LSVR_DUAL_CD (FAST on Apple only):
+    # the damped parallel dual CD moves the L-BFGS starting point; L-BFGS
+    # then runs to its own tolerance on the shipped objective
+    # (`lsvr_dual.mojo`).
+    comptime if QN_FAST_DUAL_CD:
+        if l1 == Float32(0.0) and (not trace.enabled) and lsvr_dual_applies(loss):
+            lsvr_dual_warm_start(ctx, loss, x)
     if l1 == Float32(0.0):
         ret = min_lbfgs(ctx, opt_param, loss, x, fx, num_iters, n, trace)
     else:

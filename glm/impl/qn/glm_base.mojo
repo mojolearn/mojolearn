@@ -61,7 +61,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemm_nt, gemv_n
-from core.pinned_reduce import pinned_block_sum
+from core.pinned_reduce import pinned_block_max, pinned_block_sum
 from core.strided_walk import (
     APPLE_IDENTICAL_STEP_UNROLL,
     APPLE_FAST_STEP_UNROLL,
@@ -467,11 +467,535 @@ comptime QN_TILED = (
 comptime QNT_ROWS = 256
 comptime QNT_TPB = 256
 
+# ---------------------------------------------------------------------------
+# lane/apple-fast-linsvr (2026-10-03): FAST on Apple, the C == 1 objective.
+# Four build defines, default OFF, each compiled under FAST + Apple only, so
+# IDENTICAL compiles main's code unchanged (docs/apple-fast/notes/linsvr.md,
+# docs/apple-fast/ab/linsvr.md). Under FAST on Apple main runs the pre-tiled
+# objective: `sum_terms_kernel` and `mean_kernel` are ONE block each striding
+# every row, and `xtdz_coalesced` at d = 11 is 12 blocks; the M3 board had
+# linearsvr taxi FAST 183 ms against IDENTICAL 110 ms on the same GPU.
+#
+#   -D MOJOLEARN_LSVR_FASTPATH_FIX     FAST takes the tiled objective above
+#                                      (QN_TILED's kernels, FAST arithmetic).
+#   -D MOJOLEARN_LSVR_FUSED_GRAD       one pass over X per evaluation: the
+#                                      forward, the loss, dZ and the gradient
+#                                      partials in registers
+#                                      (`qnf_partial_kernel`), then one fold.
+#                                      C == 1, d <= QNF_MAX_D.
+#   -D MOJOLEARN_LSVR_LINESEARCH_BATCH the fused pass also sums the loss of
+#                                      the next QNF_LS_K - 1 backtracking
+#                                      candidates (`qn_linesearch.mojo
+#                                      ls_backtrack_batched`); implies
+#                                      FUSED_GRAD.
+#   -D MOJOLEARN_LSVR_EVAL_SLIM        memset g + Tikhonov + the gradient norm
+#                                      (+ the OWL-QN l1 term) as ONE launch
+#                                      after the fold (`qn_slim_epilogue_kernel`).
+#   -D MOJOLEARN_LSVR_DEVICE_CONVERGE  the line search's decision and the
+#                                      convergence test run on the device
+#                                      (`qn_dconv.mojo`); the host reads one
+#                                      state block every QN_DCONV_POLL
+#                                      iterations; implies LINESEARCH_BATCH
+#                                      and EVAL_SLIM's kernels.
+#   -D MOJOLEARN_LSVR_DUAL_CD          a damped parallel dual coordinate
+#                                      descent warm start (`lsvr_dual.mojo`),
+#                                      then the shipped L-BFGS to its own
+#                                      tolerance. NOT in ALL (it changes the
+#                                      solver's starting point, not a kernel).
+#   -D MOJOLEARN_LSVR_ALL              the first four plus DEVICE_CONVERGE.
+# ---------------------------------------------------------------------------
+
+comptime QN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime QN_LSVR_ALL = is_defined["MOJOLEARN_LSVR_ALL"]()
+comptime QN_FAST_TILED = QN_FAST_APPLE and (
+    is_defined["MOJOLEARN_LSVR_FASTPATH_FIX"]() or QN_LSVR_ALL
+)
+#: lane/apple-fast-linsvr: device-side line-search decision + convergence
+#: test, one host read per QN_DCONV_POLL iterations (`qn_dconv.mojo`)
+comptime QN_FAST_DCONV = QN_FAST_APPLE and (
+    is_defined["MOJOLEARN_LSVR_DEVICE_CONVERGE"]() or QN_LSVR_ALL
+)
+#: lane/apple-fast-linsvr: the dual coordinate-descent warm start
+#: (`lsvr_dual.mojo`); deliberately not part of ALL
+comptime QN_FAST_DUAL_CD = QN_FAST_APPLE and is_defined["MOJOLEARN_LSVR_DUAL_CD"]()
+comptime QN_FAST_LS_BATCH = QN_FAST_APPLE and (
+    is_defined["MOJOLEARN_LSVR_LINESEARCH_BATCH"]() or QN_LSVR_ALL or QN_FAST_DCONV
+)
+comptime QN_FAST_FUSED = QN_FAST_APPLE and (
+    is_defined["MOJOLEARN_LSVR_FUSED_GRAD"]() or QN_FAST_LS_BATCH
+)
+comptime QN_FAST_SLIM = QN_FAST_APPLE and (
+    is_defined["MOJOLEARN_LSVR_EVAL_SLIM"]() or QN_LSVR_ALL or QN_FAST_DCONV
+)
+#: the fused pass: threads per block, rows per thread, the register bound on d
+comptime QNF_TPB = 256
+comptime QNF_RPT = 16
+comptime QNF_MAX_D = 32
+#: line-search candidates one fused pass sums: the point itself and the next
+#: QNF_LS_K - 1 backtracking steps
+comptime QNF_LS_K = 4
+#: `slots` words: 0 loss, 1 reg, 2 gnorm, 3 l1 term, 4.. the batch candidates
+comptime QNF_SLOTS = 4 + QNF_LS_K - 1
+
 
 def qn_tiled_applies(c: Int) -> Bool:
-    comptime if QN_TILED:
+    comptime if QN_TILED or QN_FAST_TILED:
         return c == 1
     return False
+
+
+def qn_fused_applies(d: Int, c: Int) -> Bool:
+    comptime if QN_FAST_FUSED:
+        return c == 1 and d >= 1 and d <= QNF_MAX_D
+    return False
+
+
+def qnf_blocks(n: Int) -> Int:
+    return (n + QNF_TPB * QNF_RPT - 1) // (QNF_TPB * QNF_RPT)
+
+
+def qnf_tiles(n: Int) -> Int:
+    """One tile per thread: QNF_RPT rows, row-interleaved inside the block."""
+    return qnf_blocks(n) * QNF_TPB
+
+
+def qnf_workspace_floats(n: Int, d: Int) -> Int:
+    return qnf_tiles(n) * (d + 1 + QNF_LS_K)
+
+
+@always_inline
+def _qn_row_loss(
+    loss: Int, yi: Float32, zi: Float32, svr_eps: Float32,
+    mut lt: Float32, mut dz: Float32,
+):
+    """The per-row `lz`, `dlz` pair of a C == 1 loss (the loss kernels'
+    expressions, `qn_block_eval_kernel`'s dispatch)."""
+    if loss == QN_LOSS_LOGISTIC:
+        lt = logistic_lz(yi, zi)
+        dz = logistic_dlz(yi, zi)
+    elif loss == QN_LOSS_SQUARED:
+        lt = squared_lz(yi, zi)
+        dz = squared_dlz(yi, zi)
+    elif loss == QN_LOSS_ABS:
+        lt = abs_lz(yi, zi)
+        dz = abs_dlz(yi, zi)
+    elif loss == QN_LOSS_SVC_L1:
+        lt = svc_l1_lz(yi, zi)
+        dz = svc_l1_dlz(yi, zi)
+    elif loss == QN_LOSS_SVC_L2:
+        lt = svc_l2_lz(yi, zi)
+        dz = svc_l2_dlz(yi, zi)
+    elif loss == QN_LOSS_SVR_L1:
+        lt = svr_l1_lz(yi, zi, svr_eps)
+        dz = svr_l1_dlz(yi, zi, svr_eps)
+    else:
+        lt = svr_l2_lz(yi, zi, svr_eps)
+        dz = svr_l2_dlz(yi, zi, svr_eps)
+
+
+@always_inline
+def _qn_row_lz(loss: Int, yi: Float32, zi: Float32, svr_eps: Float32) -> Float32:
+    """The per-row loss value alone (the batch candidates need no dZ)."""
+    if loss == QN_LOSS_LOGISTIC:
+        return logistic_lz(yi, zi)
+    if loss == QN_LOSS_SQUARED:
+        return squared_lz(yi, zi)
+    if loss == QN_LOSS_ABS:
+        return abs_lz(yi, zi)
+    if loss == QN_LOSS_SVC_L1:
+        return svc_l1_lz(yi, zi)
+    if loss == QN_LOSS_SVC_L2:
+        return svc_l2_lz(yi, zi)
+    if loss == QN_LOSS_SVR_L1:
+        return svr_l1_lz(yi, zi, svr_eps)
+    return svr_l2_lz(yi, zi, svr_eps)
+
+
+@always_inline
+def _dc_skip(gate: MutPointer[Float32, MutAnyOrigin], need_word: Int32) -> Bool:
+    """QN_FAST_DCONV's gate (`qn_dconv.mojo` state block): word 0 != 0 is a
+    stopped or handed-off device solver, so every later launch of the batch
+    is a no-op and the iterate stays frozen; `need_word >= 0` also skips
+    while that word is 0 (the materialize pass runs only when the device
+    line search picked a candidate past the first)."""
+    if gate.unsafe_load(0) != Float32(0.0):
+        return True
+    if Int(need_word) >= 0 and gate.unsafe_load(Int(need_word)) == Float32(0.0):
+        return True
+    return False
+
+
+@always_inline
+def _qnf_partial_body[DMAX: Int, K: Int](
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    xp: MutPointer[Float32, MutAnyOrigin],
+    drt: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    loss_in: Int32,
+    fit_intercept: Int32,
+    normalization: Float32,
+    svr_eps: Float32,
+    step0: Float32,
+    ls_dec: Float32,
+    tiles_in: Int32,
+):
+    """QN_FAST_FUSED: one pass over X. Block b owns rows [b * QNF_TPB *
+    QNF_RPT, ...); thread t takes rows t, t + QNF_TPB, ... of them (a SIMD
+    group reads consecutive rows, every cache line it touches is consumed
+    across the d loads). Per row the d features sit in registers: z = x . w
+    + b, the loss term and dZ (`_qn_row_loss`), then the d gradient cells,
+    the dZ sum and the loss sum accumulate in registers; nothing per row is
+    written back. Tile `b * QNF_TPB + t` stores its partials at `part[o *
+    tiles + tile]`: o < d the gradient cell, o == d the dZ sum, o == d + 1
+    the loss sum (already times `normalization`). K > 1 (QN_FAST_LS_BATCH):
+    the same registers also give `z_c = x . xp + b_p + step_c (x . drt +
+    b_d)` for the next K - 1 backtracking steps `step_c = step0 * ls_dec^c`
+    and their loss sums go to outputs d + 1 + c. `d <= DMAX`."""
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var loss = Int(loss_in)
+    var tiles = Int(tiles_in)
+    var tid = Int(thread_idx.x)
+    var blk = Int(block_idx.x)
+    var tile = blk * QNF_TPB + tid
+    var bias = Float32(0.0)
+    var bias_p = Float32(0.0)
+    var bias_d = Float32(0.0)
+    if fit_intercept != 0:
+        bias = w.unsafe_load(d)
+        comptime if K > 1:
+            bias_p = xp.unsafe_load(d)
+            bias_d = drt.unsafe_load(d)
+    var wr = InlineArray[Float32, DMAX](fill=Float32(0.0))
+    var pr = InlineArray[Float32, DMAX](fill=Float32(0.0))
+    var dr = InlineArray[Float32, DMAX](fill=Float32(0.0))
+    var acc = InlineArray[Float32, DMAX](fill=Float32(0.0))
+    comptime for j in range(DMAX):
+        if j < d:
+            wr[j] = w.unsafe_load(j)
+            comptime if K > 1:
+                pr[j] = xp.unsafe_load(j)
+                dr[j] = drt.unsafe_load(j)
+    var steps = InlineArray[Float32, K](fill=Float32(0.0))
+    comptime if K > 1:
+        var st = step0
+        comptime for c in range(K):
+            steps[c] = st
+            st = st * ls_dec
+    var acc_c = InlineArray[Float32, K](fill=Float32(0.0))
+    var acc_dz = Float32(0.0)
+    var acc_lt = Float32(0.0)
+    var r = blk * (QNF_TPB * QNF_RPT) + tid
+    for _ in range(QNF_RPT):
+        if r < n:
+            var xr = InlineArray[Float32, DMAX](fill=Float32(0.0))
+            var zi = bias
+            comptime for j in range(DMAX):
+                if j < d:
+                    xr[j] = x.unsafe_load(r * d + j)
+                    zi = xr[j] * wr[j] + zi
+            var yi = y.unsafe_load(r)
+            var lt = Float32(0.0)
+            var dz = Float32(0.0)
+            _qn_row_loss(loss, yi, zi, svr_eps, lt, dz)
+            acc_lt = lt * normalization + acc_lt
+            acc_dz += dz
+            comptime for j in range(DMAX):
+                if j < d:
+                    acc[j] = xr[j] * dz + acc[j]
+            comptime if K > 1:
+                var zp = bias_p
+                var zd = bias_d
+                comptime for j in range(DMAX):
+                    if j < d:
+                        zp = xr[j] * pr[j] + zp
+                        zd = xr[j] * dr[j] + zd
+                comptime for c in range(1, K):
+                    var zc = zd * steps[c] + zp
+                    acc_c[c] = _qn_row_lz(loss, yi, zc, svr_eps) * normalization + acc_c[c]
+        r += QNF_TPB
+    comptime for j in range(DMAX):
+        if j < d:
+            part.unsafe_store(j * tiles + tile, acc[j])
+    part.unsafe_store(d * tiles + tile, acc_dz)
+    part.unsafe_store((d + 1) * tiles + tile, acc_lt)
+    comptime if K > 1:
+        comptime for c in range(1, K):
+            part.unsafe_store((d + 1 + c) * tiles + tile, acc_c[c])
+
+
+def qnf_partial_kernel[DMAX: Int, K: Int](
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    xp: MutPointer[Float32, MutAnyOrigin],
+    drt: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    loss_in: Int32,
+    fit_intercept: Int32,
+    normalization: Float32,
+    svr_eps: Float32,
+    step0: Float32,
+    ls_dec: Float32,
+    tiles_in: Int32,
+):
+    """The kernel entry of `_qnf_partial_body` (its docstring says what it computes)."""
+    _qnf_partial_body[DMAX, K](
+        part, x, y, w, xp, drt, n_in, d_in, loss_in, fit_intercept,
+        normalization, svr_eps, step0, ls_dec, tiles_in,
+    )
+
+
+def qnf_partial_gated_kernel[DMAX: Int, K: Int](
+    gate: MutPointer[Float32, MutAnyOrigin],
+    need_word: Int32,
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    xp: MutPointer[Float32, MutAnyOrigin],
+    drt: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    loss_in: Int32,
+    fit_intercept: Int32,
+    normalization: Float32,
+    svr_eps: Float32,
+    step0: Float32,
+    ls_dec: Float32,
+    tiles_in: Int32,
+):
+    """QN_FAST_DCONV: `qnf_partial_kernel`, a no-op when the device solver state `gate`
+    says stop (word 0 != 0) or, `need_word >= 0`, when `gate[need_word]`
+    is 0 (`_dc_skip`). The test is uniform across the grid."""
+    if _dc_skip(gate, need_word):
+        return
+    _qnf_partial_body[DMAX, K](
+        part, x, y, w, xp, drt, n_in, d_in, loss_in, fit_intercept,
+        normalization, svr_eps, step0, ls_dec, tiles_in,
+    )
+
+
+@always_inline
+def _qnf_fold_body(
+    g: MutPointer[Float32, MutAnyOrigin],
+    slots: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    xp: MutPointer[Float32, MutAnyOrigin],
+    drt: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    tiles_in: Int32,
+    alpha: Float32,
+    beta_is_one: Int32,
+    fit_intercept: Int32,
+    l2: Float32,
+    step0: Float32,
+    ls_dec: Float32,
+):
+    """QN_FAST_FUSED's fold: `qnt_fold_kernel` (block o folds output o's
+    tile partials, lane t taking tiles t, t + STATS_TPB, ...; the gradient
+    epilogue, the bias mean, the loss into slots[0]) plus, for o > D + 1,
+    batch candidate c = o - D - 1: its loss sum plus its Tikhonov value
+    `0.5 * l2 * ||xp + step_c drt||^2` over the D weights (the bias is not
+    penalized) into `slots[4 + c - 1]`, so the host reads the candidate's
+    objective ready to compare."""
+    var D = Int(d_in)
+    var tiles = Int(tiles_in)
+    var o = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var acc = strided_ftz_sum[STATS_TPB](part, 1, o * tiles, tiles, tid, Float32(0.0))
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
+    if tid == 0:
+        if o < D:
+            var sc = ftz(alpha * s0)
+            if beta_is_one != 0:
+                g.unsafe_store(o, ftz(sc + g.unsafe_load(o)))
+            else:
+                g.unsafe_store(o, sc)
+        elif o == D:
+            if fit_intercept != 0:
+                var ratio = Float32(1.0) / Float32(Int(n_in))
+                g.unsafe_store(D, ftz(s0 * ratio))
+        elif o == D + 1:
+            slots.unsafe_store(0, s0)
+        else:
+            var c = o - D - 1
+            var st = step0
+            for _ in range(c):
+                st = st * ls_dec
+            var reg = Float32(0.0)
+            if l2 != Float32(0.0):
+                var half_l2 = ftz(Float32(0.5) * l2)
+                for j in range(D):
+                    var wj = drt.unsafe_load(j) * st + xp.unsafe_load(j)
+                    reg = ftz(reg + ftz(ftz(half_l2 * wj) * wj))
+            slots.unsafe_store(4 + c - 1, ftz(s0 + reg))
+
+
+def qnf_fold_kernel(
+    g: MutPointer[Float32, MutAnyOrigin],
+    slots: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    xp: MutPointer[Float32, MutAnyOrigin],
+    drt: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    tiles_in: Int32,
+    alpha: Float32,
+    beta_is_one: Int32,
+    fit_intercept: Int32,
+    l2: Float32,
+    step0: Float32,
+    ls_dec: Float32,
+):
+    """The kernel entry of `_qnf_fold_body` (its docstring says what it computes)."""
+    _qnf_fold_body(
+        g, slots, part, xp, drt, n_in, d_in, tiles_in, alpha, beta_is_one,
+        fit_intercept, l2, step0, ls_dec,
+    )
+
+
+def qnf_fold_gated_kernel(
+    gate: MutPointer[Float32, MutAnyOrigin],
+    need_word: Int32,
+    g: MutPointer[Float32, MutAnyOrigin],
+    slots: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    xp: MutPointer[Float32, MutAnyOrigin],
+    drt: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    tiles_in: Int32,
+    alpha: Float32,
+    beta_is_one: Int32,
+    fit_intercept: Int32,
+    l2: Float32,
+    step0: Float32,
+    ls_dec: Float32,
+):
+    """QN_FAST_DCONV: `qnf_fold_kernel`, a no-op when the device solver state `gate`
+    says stop (word 0 != 0) or, `need_word >= 0`, when `gate[need_word]`
+    is 0 (`_dc_skip`). The test is uniform across the grid."""
+    if _dc_skip(gate, need_word):
+        return
+    _qnf_fold_body(
+        g, slots, part, xp, drt, n_in, d_in, tiles_in, alpha, beta_is_one,
+        fit_intercept, l2, step0, ls_dec,
+    )
+
+
+@always_inline
+def _qn_slim_epilogue_body(
+    slots: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_weights_in: Int32,
+    n_param_in: Int32,
+    l2: Float32,
+    gnorm_kind: Int32,
+    pen_len_in: Int32,
+):
+    """QN_FAST_SLIM: one block of STATS_TPB after the fold wrote the loss
+    gradient into g (set_zero). Thread j adds the Tikhonov gradient `l2 *
+    w[j]` to g[j] over the C * D weights and folds the value `0.5 * l2 *
+    w_j^2` into slots[1]; then the gradient norm of the updated g (kind 1:
+    sum g^2, 2: sum |g|, 0: max |g|, `_gnorm_kind`) into slots[2]; then,
+    pen_len > 0, `nrm1(w[0:pen_len])` into slots[3]. Replaces the memset,
+    `tikhonov_reg_grad_kernel`, the norm kernel and `nrm1_kernel`: four
+    one-block launches. Index j belongs to thread j mod STATS_TPB in both
+    walks, so every g word is read by the thread that wrote it and no
+    device fence is needed; the folds cross threads through threadgroup
+    memory."""
+    var nw = Int(n_weights_in)
+    var np = Int(n_param_in)
+    var pl = Int(pen_len_in)
+    var tid = Int(thread_idx.x)
+    var reg = Float32(0.0)
+    if l2 != Float32(0.0):
+        var half_l2 = ftz(Float32(0.5) * l2)
+        var j = tid
+        while j < nw:
+            var wj = w.unsafe_load(j)
+            g.unsafe_store(j, ftz(g.unsafe_load(j) + ftz(l2 * wj)))
+            reg = ftz(reg + ftz(ftz(half_l2 * wj) * wj))
+            j += STATS_TPB
+    var reg_s = ftz(pinned_block_sum[STATS_TPB](reg))
+    var acc = Float32(0.0)
+    var i = tid
+    while i < np:
+        var gi = g.unsafe_load(i)
+        if gnorm_kind == 1:
+            acc = gi * gi + acc
+        elif gnorm_kind == 2:
+            acc = ftz(acc + abs(gi))
+        else:
+            var a = abs(gi)
+            if a > acc:
+                acc = a
+        i += STATS_TPB
+    var norm = Float32(0.0)
+    if gnorm_kind == 0:
+        norm = pinned_block_max[STATS_TPB](acc)
+    else:
+        norm = ftz(pinned_block_sum[STATS_TPB](acc))
+    var pen = Float32(0.0)
+    if pl > 0:
+        var p = Float32(0.0)
+        var k = tid
+        while k < pl:
+            p = ftz(p + abs(w.unsafe_load(k)))
+            k += STATS_TPB
+        pen = ftz(pinned_block_sum[STATS_TPB](p))
+    if tid == 0:
+        slots.unsafe_store(1, reg_s)
+        slots.unsafe_store(2, norm)
+        if pl > 0:
+            slots.unsafe_store(3, pen)
+
+
+def qn_slim_epilogue_kernel(
+    slots: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_weights_in: Int32,
+    n_param_in: Int32,
+    l2: Float32,
+    gnorm_kind: Int32,
+    pen_len_in: Int32,
+):
+    """The kernel entry of `_qn_slim_epilogue_body` (its docstring says what it computes)."""
+    _qn_slim_epilogue_body(
+        slots, g, w, n_weights_in, n_param_in, l2, gnorm_kind, pen_len_in,
+    )
+
+
+def qn_slim_epilogue_gated_kernel(
+    gate: MutPointer[Float32, MutAnyOrigin],
+    need_word: Int32,
+    slots: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_weights_in: Int32,
+    n_param_in: Int32,
+    l2: Float32,
+    gnorm_kind: Int32,
+    pen_len_in: Int32,
+):
+    """QN_FAST_DCONV: `qn_slim_epilogue_kernel`, a no-op when the device solver state `gate`
+    says stop (word 0 != 0) or, `need_word >= 0`, when `gate[need_word]`
+    is 0 (`_dc_skip`). The test is uniform across the grid."""
+    if _dc_skip(gate, need_word):
+        return
+    _qn_slim_epilogue_body(
+        slots, g, w, n_weights_in, n_param_in, l2, gnorm_kind, pen_len_in,
+    )
 
 
 def qnt_tiles(n: Int) -> Int:
@@ -756,12 +1280,19 @@ struct GLMWithData(Movable):
                 ws_floats = max(ws_floats, ((n_rows + QNB_ROWS - 1) // QNB_ROWS) * (dims.D + 2))
         if qn_tiled_applies(dims.C):
             ws_floats = max(ws_floats, qnt_workspace_floats(n_rows, dims.D))
+        comptime if QN_FAST_FUSED:
+            # lane/apple-fast-linsvr: the fused pass's tile partials live here
+            if qn_fused_applies(dims.D, dims.C):
+                ws_floats = max(ws_floats, qnf_workspace_floats(n_rows, dims.D))
         self.xtdz_ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
         self.w_weights = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
         self.scalar = ctx.enqueue_create_buffer[DType.float32](1)
         self.n_evals = 0
-        self.slots = ctx.enqueue_create_buffer[DType.float32](4)
-        self.stage = ctx.enqueue_create_host_buffer[DType.float32](4)
+        var n_slots = 4
+        comptime if QN_FAST_LS_BATCH:
+            n_slots = QNF_SLOTS  # words 4.. carry the batch candidates' objectives
+        self.slots = ctx.enqueue_create_buffer[DType.float32](n_slots)
+        self.stage = ctx.enqueue_create_host_buffer[DType.float32](n_slots)
         self.gnorm_at = 0
         self.gnorm_raw = Float32(0.0)
         self.last_pen = Float32(0.0)
@@ -904,9 +1435,18 @@ struct GLMWithData(Movable):
         var s3 = self.slots.create_sub_buffer[DType.float32](3, 1)
         var blocks = qn_blocks_applies(self.dims.D, self.dims.C)
         var tiled = qn_tiled_applies(self.dims.C)
-        if self.l2 == Float32(0.0):
+        var fused = qn_fused_applies(self.dims.D, self.dims.C)
+        # lane/apple-fast-linsvr: QN_FAST_SLIM leaves the Tikhonov half, the
+        # norm and the l1 term to qn_slim_epilogue_kernel after the fold
+        var slim = False
+        comptime if QN_FAST_SLIM:
+            slim = self.dims.C == 1 and self.dims.n_param <= STATS_TPB
+        if self.l2 == Float32(0.0) or slim:
             if blocks:
                 self.enqueue_blocks(ctx, w, g, True)
+            elif fused:
+                comptime if QN_FAST_FUSED:
+                    self.enqueue_fused_plain(ctx, w, g, True)
             elif tiled:
                 self.enqueue_tiled(ctx, w, g, True)
             else:
@@ -926,6 +1466,9 @@ struct GLMWithData(Movable):
             )
             if blocks:
                 self.enqueue_blocks(ctx, w, g, False)
+            elif fused:
+                comptime if QN_FAST_FUSED:
+                    self.enqueue_fused_plain(ctx, w, g, False)
             elif tiled:
                 self.enqueue_tiled(ctx, w, g, False)
             else:
@@ -934,22 +1477,25 @@ struct GLMWithData(Movable):
                 linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, False)
         # `grad_norm`'s reduction of this `g`, speculatively
         var np = self.dims.n_param
-        if self._gnorm_kind() == 1:
+        comptime if QN_FAST_SLIM:
+            if slim:
+                self.enqueue_slim_epilogue(ctx, w, g, pen_len)
+        if not slim and self._gnorm_kind() == 1:
             ctx.enqueue_function[dot_self_kernel](
                 s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
-        elif self._gnorm_kind() == 2:
+        elif not slim and self._gnorm_kind() == 2:
             ctx.enqueue_function[nrm1_kernel](
                 s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
-        else:
+        elif not slim:
             ctx.enqueue_function[nrm_max_kernel](
                 s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
-        if pen_len > 0:
+        if pen_len > 0 and not slim:
             ctx.enqueue_function[nrm1_kernel](
                 s3.unsafe_ptr(), w.unsafe_ptr(), Int32(pen_len),
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
@@ -967,6 +1513,293 @@ struct GLMWithData(Movable):
             return loss_host
         var reg_host = self.stage.unsafe_ptr().unsafe_load(1)
         return ftz(loss_host + reg_host)
+
+    def enqueue_slim_epilogue(
+        mut self,
+        ctx: DeviceContext,
+        mut w: DeviceBuffer[DType.float32],
+        mut g: DeviceBuffer[DType.float32],
+        pen_len: Int,
+    ) raises:
+        """QN_FAST_SLIM: `qn_slim_epilogue_kernel` (Tikhonov gradient and
+        value, the gradient norm, the l1 term) as one launch into slots
+        1..3."""
+        comptime if not QN_FAST_SLIM:
+            raise Error("qn: enqueue_slim_epilogue is compiled under MOJOLEARN_LSVR_EVAL_SLIM only")
+        else:
+            ctx.enqueue_function[qn_slim_epilogue_kernel](
+                self.slots.unsafe_ptr(), g.unsafe_ptr(), w.unsafe_ptr(),
+                Int32(self.dims.C * self.dims.D), Int32(self.dims.n_param),
+                self.l2, Int32(self._gnorm_kind()), Int32(pen_len),
+                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+
+    def enqueue_fused_plain(
+        mut self,
+        ctx: DeviceContext,
+        mut w: DeviceBuffer[DType.float32],
+        mut g: DeviceBuffer[DType.float32],
+        set_zero: Bool,
+    ) raises:
+        """QN_FAST_FUSED without batch candidates: `enqueue_fused` with
+        K = 1 (the xp / drt operands are unread; two owned buffers stand
+        in)."""
+        comptime if not QN_FAST_FUSED:
+            raise Error("qn: enqueue_fused_plain is compiled under MOJOLEARN_LSVR_FUSED_GRAD only")
+        else:
+            self.enqueue_fused(
+                ctx, w, g, set_zero,
+                self.w_weights.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                self.scalar.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                Float32(0.0), Float32(0.0), False,
+            )
+
+    def enqueue_fused(
+        mut self,
+        ctx: DeviceContext,
+        mut w: DeviceBuffer[DType.float32],
+        mut g: DeviceBuffer[DType.float32],
+        set_zero: Bool,
+        xp_p: MutPointer[Float32, MutAnyOrigin],
+        drt_p: MutPointer[Float32, MutAnyOrigin],
+        step0: Float32,
+        ls_dec: Float32,
+        batch: Bool,
+    ) raises:
+        """QN_FAST_FUSED (`C == 1`, `d <= QNF_MAX_D`): `qnf_partial_kernel`
+        (one pass over X: forward, loss, dZ, gradient partials per 16-row
+        tile) and `qnf_fold_kernel` (the tiles' fold, the gradient epilogue,
+        the bias mean, the loss into slots[0]; `batch`: the QNF_LS_K - 1
+        candidate objectives into slots[4..])."""
+        comptime if not QN_FAST_FUSED:
+            raise Error("qn: enqueue_fused is compiled under MOJOLEARN_LSVR_FUSED_GRAD only")
+        else:
+            var n = self.n_rows
+            var d = self.dims.D
+            var tiles = qnf_tiles(n)
+            var nb = qnf_blocks(n)
+            var fi = Int32(1) if self.dims.fit_intercept else Int32(0)
+            var normalization = Float32(1.0 / Float64(n))
+            var outputs = d + 2
+            var launched = False
+            comptime if QN_FAST_LS_BATCH:
+                if batch:
+                    outputs = d + 1 + QNF_LS_K
+                    launched = True
+                    if d <= 16:
+                        ctx.enqueue_function[qnf_partial_kernel[16, QNF_LS_K]](
+                            self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(), self.y.unsafe_ptr(),
+                            w.unsafe_ptr(), xp_p, drt_p,
+                            Int32(n), Int32(d), Int32(self.loss), fi, normalization,
+                            self.svr_eps, step0, ls_dec, Int32(tiles),
+                            grid_dim=(nb, 1, 1), block_dim=(QNF_TPB, 1, 1),
+                        )
+                    else:
+                        ctx.enqueue_function[qnf_partial_kernel[QNF_MAX_D, QNF_LS_K]](
+                            self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(), self.y.unsafe_ptr(),
+                            w.unsafe_ptr(), xp_p, drt_p,
+                            Int32(n), Int32(d), Int32(self.loss), fi, normalization,
+                            self.svr_eps, step0, ls_dec, Int32(tiles),
+                            grid_dim=(nb, 1, 1), block_dim=(QNF_TPB, 1, 1),
+                        )
+            if not launched:
+                if d <= 16:
+                    ctx.enqueue_function[qnf_partial_kernel[16, 1]](
+                        self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(), self.y.unsafe_ptr(),
+                        w.unsafe_ptr(), xp_p, drt_p,
+                        Int32(n), Int32(d), Int32(self.loss), fi, normalization,
+                        self.svr_eps, step0, ls_dec, Int32(tiles),
+                        grid_dim=(nb, 1, 1), block_dim=(QNF_TPB, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[qnf_partial_kernel[QNF_MAX_D, 1]](
+                        self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(), self.y.unsafe_ptr(),
+                        w.unsafe_ptr(), xp_p, drt_p,
+                        Int32(n), Int32(d), Int32(self.loss), fi, normalization,
+                        self.svr_eps, step0, ls_dec, Int32(tiles),
+                        grid_dim=(nb, 1, 1), block_dim=(QNF_TPB, 1, 1),
+                    )
+            ctx.enqueue_function[qnf_fold_kernel](
+                g.unsafe_ptr(), self.slots.unsafe_ptr(), self.xtdz_ws.unsafe_ptr(),
+                xp_p, drt_p,
+                Int32(n), Int32(d), Int32(tiles), Float32(1.0 / Float64(n)),
+                Int32(0) if set_zero else Int32(1), fi, self.l2, step0, ls_dec,
+                grid_dim=(outputs, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+
+    def ls_batch_applies(self) -> Bool:
+        """QN_FAST_LS_BATCH serves this objective: the fused pass holds it."""
+        comptime if QN_FAST_LS_BATCH:
+            return qn_fused_applies(self.dims.D, self.dims.C)
+        return False
+
+    def batch_fx(self, c: Int) -> Float32:
+        """The objective (loss + Tikhonov value) of batch candidate `c`
+        (1 <= c < QNF_LS_K) the last `evaluate_batch` brought home."""
+        return self.stage.unsafe_ptr().unsafe_load(4 + c - 1)
+
+    def evaluate_batch(
+        mut self,
+        ctx: DeviceContext,
+        mut w: DeviceBuffer[DType.float32],
+        mut g: DeviceBuffer[DType.float32],
+        mut xp: DeviceBuffer[DType.float32],
+        mut drt: DeviceBuffer[DType.float32],
+        step0: Float32,
+        ls_dec: Float32,
+    ) raises -> Float32:
+        """QN_FAST_LS_BATCH: `evaluate` at `w = xp + step0 drt` (the value
+        returned, `g` its gradient, the norm speculated as `evaluate_pen`
+        does) with the objectives of the next QNF_LS_K - 1 backtracking
+        candidates `xp + step0 ls_dec^c drt` summed by the same pass and
+        read home behind the same synchronize (`batch_fx`). No l1 term
+        (OWL-QN keeps its own search)."""
+        comptime if not QN_FAST_LS_BATCH:
+            raise Error("qn: evaluate_batch is compiled under MOJOLEARN_LSVR_LINESEARCH_BATCH only")
+        else:
+            self.n_evals += 1
+            self.gnorm_at = 0
+            var s1 = self.slots.create_sub_buffer[DType.float32](1, 1)
+            var s2 = self.slots.create_sub_buffer[DType.float32](2, 1)
+            var slim = False
+            comptime if QN_FAST_SLIM:
+                slim = self.dims.n_param <= STATS_TPB
+            var set_zero = self.l2 == Float32(0.0) or slim
+            if not set_zero:
+                ctx.enqueue_memset(g, Float32(0.0))
+                ctx.enqueue_function[tikhonov_reg_grad_kernel](
+                    s1.unsafe_ptr(), g.unsafe_ptr(), w.unsafe_ptr(),
+                    Int32(self.dims.C * self.dims.D), self.l2,
+                    grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+                )
+            self.enqueue_fused(
+                ctx, w, g, set_zero,
+                xp.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                drt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                step0, ls_dec, True,
+            )
+            var np = self.dims.n_param
+            comptime if QN_FAST_SLIM:
+                if slim:
+                    self.enqueue_slim_epilogue(ctx, w, g, 0)
+            if not slim and self._gnorm_kind() == 1:
+                ctx.enqueue_function[dot_self_kernel](
+                    s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
+                    grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+                )
+            elif not slim and self._gnorm_kind() == 2:
+                ctx.enqueue_function[nrm1_kernel](
+                    s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
+                    grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+                )
+            elif not slim:
+                ctx.enqueue_function[nrm_max_kernel](
+                    s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
+                    grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+                )
+            read_scalars(ctx, self.slots, self.stage, QNF_SLOTS)
+            _ = s1^
+            _ = s2^
+            var loss_host = self.stage.unsafe_ptr().unsafe_load(0)
+            self.gnorm_raw = self.stage.unsafe_ptr().unsafe_load(2)
+            self.gnorm_at = Int(g.unsafe_ptr())
+            if self.l2 == Float32(0.0):
+                return loss_host
+            var reg_host = self.stage.unsafe_ptr().unsafe_load(1)
+            return ftz(loss_host + reg_host)
+
+    def dconv_applies(self) -> Bool:
+        """QN_FAST_DCONV serves this objective: the fused pass with batch
+        candidates and the slim epilogue both hold it."""
+        comptime if QN_FAST_DCONV:
+            return (
+                qn_fused_applies(self.dims.D, self.dims.C)
+                and self.dims.n_param <= STATS_TPB
+            )
+        return False
+
+    def enqueue_dconv_eval(
+        mut self,
+        ctx: DeviceContext,
+        mut w: DeviceBuffer[DType.float32],
+        mut g: DeviceBuffer[DType.float32],
+        mut xp: DeviceBuffer[DType.float32],
+        mut drt: DeviceBuffer[DType.float32],
+        gate: MutPointer[Float32, MutAnyOrigin],
+        need_word: Int,
+        ls_dec: Float32,
+        batch: Bool,
+    ) raises:
+        """QN_FAST_DCONV: `evaluate_batch`'s launches (batch: the objective
+        and gradient at `w`, the QNF_LS_K - 1 next candidates' objectives
+        from `xp`, `drt` at step 1) or `evaluate`'s fused + slim launches
+        (not batch: the materialize pass), every one gated on the device
+        solver state `gate` (`_dc_skip`), with NO synchronize: slots 0..2
+        (and 4.. under batch) stay on the device for `qn_dconv.mojo`'s
+        kernels. Never counted in `n_evals` (nothing on this path reads it)."""
+        comptime if not QN_FAST_DCONV:
+            raise Error("qn: enqueue_dconv_eval is compiled under MOJOLEARN_LSVR_DEVICE_CONVERGE only")
+        else:
+            var n = self.n_rows
+            var d = self.dims.D
+            var tiles = qnf_tiles(n)
+            var nb = qnf_blocks(n)
+            var fi = Int32(1) if self.dims.fit_intercept else Int32(0)
+            var normalization = Float32(1.0 / Float64(n))
+            var nw = Int32(need_word)
+            var step0 = Float32(1.0)
+            var xp_p = xp.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var drt_p = drt.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var outputs = d + 2
+            if batch:
+                outputs = d + 1 + QNF_LS_K
+                if d <= 16:
+                    ctx.enqueue_function[qnf_partial_gated_kernel[16, QNF_LS_K]](
+                        gate, nw, self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(),
+                        self.y.unsafe_ptr(), w.unsafe_ptr(), xp_p, drt_p,
+                        Int32(n), Int32(d), Int32(self.loss), fi, normalization,
+                        self.svr_eps, step0, ls_dec, Int32(tiles),
+                        grid_dim=(nb, 1, 1), block_dim=(QNF_TPB, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[qnf_partial_gated_kernel[QNF_MAX_D, QNF_LS_K]](
+                        gate, nw, self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(),
+                        self.y.unsafe_ptr(), w.unsafe_ptr(), xp_p, drt_p,
+                        Int32(n), Int32(d), Int32(self.loss), fi, normalization,
+                        self.svr_eps, step0, ls_dec, Int32(tiles),
+                        grid_dim=(nb, 1, 1), block_dim=(QNF_TPB, 1, 1),
+                    )
+            else:
+                if d <= 16:
+                    ctx.enqueue_function[qnf_partial_gated_kernel[16, 1]](
+                        gate, nw, self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(),
+                        self.y.unsafe_ptr(), w.unsafe_ptr(), xp_p, drt_p,
+                        Int32(n), Int32(d), Int32(self.loss), fi, normalization,
+                        self.svr_eps, step0, ls_dec, Int32(tiles),
+                        grid_dim=(nb, 1, 1), block_dim=(QNF_TPB, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[qnf_partial_gated_kernel[QNF_MAX_D, 1]](
+                        gate, nw, self.xtdz_ws.unsafe_ptr(), self.x.unsafe_ptr(),
+                        self.y.unsafe_ptr(), w.unsafe_ptr(), xp_p, drt_p,
+                        Int32(n), Int32(d), Int32(self.loss), fi, normalization,
+                        self.svr_eps, step0, ls_dec, Int32(tiles),
+                        grid_dim=(nb, 1, 1), block_dim=(QNF_TPB, 1, 1),
+                    )
+            # set_zero (beta 0): the slim epilogue adds the Tikhonov half
+            ctx.enqueue_function[qnf_fold_gated_kernel](
+                gate, nw, g.unsafe_ptr(), self.slots.unsafe_ptr(),
+                self.xtdz_ws.unsafe_ptr(), xp_p, drt_p,
+                Int32(n), Int32(d), Int32(tiles), Float32(1.0 / Float64(n)),
+                Int32(0), fi, self.l2, step0, ls_dec,
+                grid_dim=(outputs, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
+            ctx.enqueue_function[qn_slim_epilogue_gated_kernel](
+                gate, nw, self.slots.unsafe_ptr(), g.unsafe_ptr(), w.unsafe_ptr(),
+                Int32(self.dims.C * self.dims.D), Int32(self.dims.n_param),
+                self.l2, Int32(self._gnorm_kind()), Int32(0),
+                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
 
     def enqueue_tiled(
         mut self,
