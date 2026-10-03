@@ -1,4 +1,4 @@
-pos=342 lines=     493
+pos=343 lines=     494
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -425,3 +425,5 @@ pos=342 lines=     493
 527:CMD apple-fast-moespeed@2813b2dff moespeed-regtile rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=72.7 all=[73] quality=['{}'] defines='-D MOJOLEARN_MOE_REGTILE'
 528:CMD apple-fast-moespeed@2813b2dff moespeed-devgroup rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=71.9 all=[72] quality=['{}'] defines='-D MOJOLEARN_MOE_REGTILE -D MOJOLEARN_MOE_DEVGROUP'
 529:CMD apple-fast@b2dd5dfe5 afb20-eigh rc=0 afb done tag=afb20-eigh pairs=6 ok=6
+530:FBUILD lane/apple-fast-ridgespeed@e3ef68416 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+531:CMD apple-fast-ridgespeed@e3ef68416 ridgespeed-res-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=24.5 all=[24] quality=['{"finite":'] defines='-D MOJOLEARN_RIDGE_RESIDENT'
