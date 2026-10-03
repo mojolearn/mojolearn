@@ -14,6 +14,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.python import Python
 from xtrees.folds_device import device_folds
+from xtrees.glue_device import binary_proba_device, indicator_codes_device, stack_w64_device
 from xtrees import agnostic_device as agn_dev
 from xtrees import agnostic_host as agn_host
 from xtrees.ops_device import (
@@ -35,7 +36,7 @@ from xtrees.ops import (
     samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, leaf_newton_rows, tree_score_add, uniform,
     onehot_leaves, transpose_f32, normalize_rows, exact_sum_f32, EXACT_SUM_LIMBS, logit, scatter, platt_fit, platt_apply, isotonic_fit,
     isotonic_predict, platt_apply_strided, isotonic_predict_strided, complement_pairs, indicator_codes, column_f64,
-    bag_rows, unseen_rows, transpose_f64,
+    bag_rows, unseen_rows, transpose_f64, stack_w64, binary_proba,
 )
 
 
@@ -623,8 +624,58 @@ def indicator_codes_binding(codes: PythonObject, out_i: PythonObject, out_f: Pyt
     var fa = Int(py=out_f)
     if n > 0:
         var pf = f64_ptr(fa) if fa != 0 else f64_ptr(Int(py=out_i))
-        indicator_codes(i32_ptr(Int(py=codes)), n, _i(params, 1), i32_ptr(Int(py=out_i)), pf, fa != 0)
+        comptime if XTREES_DEVICE_OPS:
+            indicator_codes_device(i32_ptr(Int(py=codes)), n, _i(params, 1), i32_ptr(Int(py=out_i)), pf, fa != 0)
+        else:
+            indicator_codes(i32_ptr(Int(py=codes)), n, _i(params, 1), i32_ptr(Int(py=out_i)), pf, fa != 0)
     return PythonObject(n)
+
+
+def stack_w64_binding(cols: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """cols = m addresses of n 8-byte words each (int64 or float64); dst
+    (n x m, row-major, the same word type) gets column j from cols[j];
+    params = [n]. Words are moved, not computed (lane apple-fast-py2mojo-trees)."""
+    _need(params, 1, "x_trees_stack_w64")
+    var n = _count(_i(params, 0), "x_trees_stack_w64")
+    var addrs = List[Int]()
+    for j in range(len(cols)):
+        var a = Int(py=cols[j])
+        if a == 0:
+            raise Error("x_trees_stack_w64: null column address")
+        addrs.append(a)
+    if n > 0 and len(addrs) > 0:
+        var d = f64_ptr(Int(py=dst)).bitcast[UInt64]()
+        comptime if XTREES_DEVICE_OPS:
+            stack_w64_device(addrs, n, d)
+        else:
+            stack_w64(addrs, n, d)
+    return PythonObject(n * len(addrs))
+
+
+def binary_proba_binding(p: PythonObject, out: PythonObject, params: PythonObject) raises -> PythonObject:
+    """p float32 (n); out float64 (n x 2) = rows (1 - p, p), p widened
+    exactly; params = [n] (lane apple-fast-py2mojo-trees)."""
+    _need(params, 1, "x_trees_binary_proba")
+    var n = _count(_i(params, 0), "x_trees_binary_proba")
+    if n > 0:
+        comptime if XTREES_DEVICE_OPS:
+            binary_proba_device(f32_ptr(Int(py=p)), n, f64_ptr(Int(py=out)))
+        else:
+            binary_proba(f32_ptr(Int(py=p)), n, f64_ptr(Int(py=out)))
+    return PythonObject(n)
+
+
+#: lane apple-fast-py2mojo-trees (2026-10-03, Andrew: "everything is supposed
+#: to be in mojo"): 1 in every build, so python/mojolearn/_expansion_trees.py
+#: runs the wrappers' cv folds, OneVsRest targets, MultiOutputClassifier label
+#: columns and stacking, and binary (1 - p, p) rows in this binding on both
+#: tiers. `-D MOJOLEARN_PY2MOJO_trees_OFF` sets 0: the Python row loops of
+#: main before the lane (the A/B arm A).
+comptime XTREES_PY2MOJO = not is_defined["MOJOLEARN_PY2MOJO_trees_OFF"]()
+
+
+def py2mojo_binding() raises -> PythonObject:
+    return PythonObject(1 if XTREES_PY2MOJO else 0)
 
 
 def column_f64_binding(src: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -670,8 +721,8 @@ def fast_switches_binding() raises -> PythonObject:
 
 def device_folds_binding(codes: PythonObject, rows: PythonObject, counts: PythonObject, params: PythonObject) raises -> PythonObject:
     """params = [n, n_splits, n_classes]: the cv folds on the device
-    (xtrees/folds_device.mojo; MOJOLEARN_TE_NATIVE_SPLITS, default on unless `-D MOJOLEARN_TE_NATIVE_SPLITS_OFF`, FAST + Apple
-    only). n_classes > 0: StratifiedKFold over `codes` (int32, n, in
+    (xtrees/folds_device.mojo: the device on every GPU build, `ops.folds_serial`
+    on the host column). n_classes > 0: StratifiedKFold over `codes` (int32, n, in
     [0, n_classes)); 0: KFold, codes unread. counts (int32, n_splits + 1) =
     the fold sizes then the status word; rows (int32, n_splits * n): per fold
     i the rows outside it, ascending, then the rows inside it, ascending.
@@ -836,6 +887,9 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[column_f64_binding]("x_trees_column_f64")
     m.def_function[fast_switches_binding]("x_trees_fast_switches")
     m.def_function[device_folds_binding]("x_trees_device_folds")
+    m.def_function[stack_w64_binding]("x_trees_stack_w64")
+    m.def_function[binary_proba_binding]("x_trees_binary_proba")
+    m.def_function[py2mojo_binding]("x_trees_py2mojo")
     m.def_function[block_mean_binding]("x_trees_block_mean")
     m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")

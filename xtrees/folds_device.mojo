@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The cv fold bookkeeping of Stacking / CalibratedClassifierCV on the device
-(lane/apple-fast-trees-ensembles, 2026-10-02; MOJOLEARN_TE_NATIVE_SPLITS, default on unless `-D MOJOLEARN_TE_NATIVE_SPLITS_OFF`,
-FAST + Apple only).
+(lane/apple-fast-trees-ensembles, 2026-10-02; every GPU build and the host
+column since lane apple-fast-py2mojo-trees, 2026-10-03).
 
 The law is sklearn's StratifiedKFold(shuffle=False) / KFold(shuffle=False),
 exactly as python/mojolearn/_expansion_trees.py `_trees_stratified_folds` /
@@ -36,19 +36,20 @@ at most FOLD_SCAN_BLOCK totals remains (n <= FOLD_SCAN_BLOCK^3 rows)."""
 
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import prefix_sum
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
+from xtrees.ops import folds_serial
 from core.neural_context import process_ctx
 
 comptime FOLD_TPB = 256
 comptime FOLD_SCAN_BLOCK = 512
 comptime FOLD_GRID_CAP = 65535 * 16
-comptime TE_DEVICE_FOLDS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-"""The device fold path exists only in the FAST + Apple build; every other
-build raises from `device_folds` (never called there: Python asks only when
-`x_trees_fast_switches` carries the NATIVE_SPLITS bit, which that build sets)."""
+comptime TE_DEVICE_FOLDS = TARGET_COLUMN != COLUMN_CPU
+"""Every GPU build (both tiers, every vendor) takes the device fold path
+since lane apple-fast-py2mojo-trees (2026-10-03; it was FAST + Apple only);
+the CPU column (`-D MOJOLEARN_COLUMN_CPU`, the host binding) runs
+`xtrees/ops.mojo` `folds_serial`, the same integers."""
 
 
 def _grid(n: Int) -> Int:
@@ -474,4 +475,4 @@ def device_folds(
         _ = ws^
         return st
     else:
-        raise Error("x_trees device_folds: the FAST + Apple build only")
+        return folds_serial(codes, n, k, n_splits, rows, counts)
