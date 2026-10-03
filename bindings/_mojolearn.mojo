@@ -84,6 +84,12 @@ from core.dense_coo import (
 )
 from core.dense_coo_device import knn_affinity_f32_device
 from core.label_encode_device import device_unique_inverse
+from bindings.array_helpers import (
+    strided_copy_bytes_binding,
+    check_lengths_i64_binding,
+    ragged_rows_bytes_binding,
+    nsum_f64_binding,
+)
 from bindings.hotpath_helpers import (
     cast_elements_binding,
     check_indices_i64_binding,
@@ -1796,6 +1802,10 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[mean_std_f32_binding]("mean_std_f32")
         m.def_function[first_seen_i32_binding]("first_seen_i32")
         m.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
+        m.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
+        m.def_function[check_lengths_i64_binding]("check_lengths_i64")
+        m.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
+        m.def_function[nsum_f64_binding]("nsum_f64")
         m.def_function[gather_i64_binding]("gather_i64")
         m.def_function[gather_f64_binding]("gather_f64")
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")

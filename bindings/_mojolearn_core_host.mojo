@@ -133,6 +133,12 @@ from bindings.hotpath_helpers import (
     first_seen_i32_binding,
     strat_fold_assign_i32_binding,
 )
+from bindings.array_helpers import (
+    strided_copy_bytes_binding,
+    check_lengths_i64_binding,
+    ragged_rows_bytes_binding,
+    nsum_f64_binding,
+)
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_ptr
 from core.dense_coo import (
     nonzero_f32_count as dense_nonzero_f32_count,
@@ -1473,6 +1479,10 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[mean_std_f32_binding]("mean_std_f32")
         module.def_function[first_seen_i32_binding]("first_seen_i32")
         module.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
+        module.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
+        module.def_function[check_lengths_i64_binding]("check_lengths_i64")
+        module.def_function[ragged_rows_bytes_binding]("ragged_rows_bytes")
+        module.def_function[nsum_f64_binding]("nsum_f64")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))

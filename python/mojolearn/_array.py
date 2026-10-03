@@ -177,7 +177,7 @@ _ALIAS = {
 def _c_strides(shape, itemsize):
     strides = []
     acc = itemsize
-    for n in reversed(shape):
+    for n in reversed(shape):  # glue: one stride per array axis
         strides.append(acc)
         acc *= n
     return tuple(reversed(strides))
@@ -186,7 +186,7 @@ def _c_strides(shape, itemsize):
 def _f_strides(shape, itemsize):
     strides = []
     acc = itemsize
-    for n in shape:
+    for n in shape:  # glue: one stride per array axis
         strides.append(acc)
         acc *= n
     return tuple(strides)
@@ -194,7 +194,7 @@ def _f_strides(shape, itemsize):
 
 def _prod(shape):
     n = 1
-    for s in shape:
+    for s in shape:  # glue: product of shape dimensions
         n *= s
     return n
 
@@ -202,8 +202,8 @@ def _prod(shape):
 def _check_shape(shape):
     if isinstance(shape, int):
         shape = (shape,)
-    shape = tuple(int(s) for s in shape)
-    for s in shape:
+    shape = tuple(int(s) for s in shape)  # glue: validates the shape argument
+    for s in shape:  # glue: validates the shape argument
         if s < 0:
             raise ValueError(f"mojolearn: negative dimension in shape {shape}")
     return shape
@@ -224,51 +224,30 @@ def _to_py_values(mv, dtype):
     return mv.tolist()
 
 
-def _reorder(src_mv, shape, src_order, dst_mv):
-    """Copy the elements of `src_mv` (flat, laid out in `src_order`) into
-    `dst_mv` (flat, the other order). Both are typed memoryviews of the
-    same format and length.
+def _strided_copy(src_addr, dst_addr, itemsize, shape, src_strides, dst_strides,
+                  src_base=0, dst_base=0):
+    """Element (i_0..i_k) of `shape`, in C order, moves from
+    src[src_base + sum i_j * src_strides[j]] to dst[dst_base + sum i_j *
+    dst_strides[j]] (strides and bases in elements, bits unchanged), in Mojo
+    (`strided_copy_bytes`, `bindings/array_helpers.mojo`; lane pyglue-sweep:
+    the per-row and per-column Python loops it replaces are gone)."""
+    from . import _buffer
+    dims = array.array("q", (*shape, *src_strides, *dst_strides, src_base, dst_base))
+    _buffer._native("strided_copy_bytes")(src_addr, dst_addr, dims.buffer_info()[0],
+                                          len(shape), itemsize)
 
-    The loop is over the OUTER product of dimensions; every iteration moves
-    `shape[0]` (C -> F) or `shape[-1]` (F -> C) elements with one strided
-    memoryview slice assignment, which CPython performs in C. For a 2-D
-    matrix that is one Python iteration per column, not per element. The
-    only per-element Python work is the index arithmetic of the outer loop.
-    """
-    ndim = len(shape)
-    if ndim <= 1 or len(src_mv) == 0:
-        dst_mv[:] = src_mv
+
+def _reorder(a, src_order, out):
+    """Copy the elements of `a` (laid out in `src_order`) into the store
+    `out` laid out in the other order: one Mojo strided copy."""
+    shape = a.shape
+    if len(shape) <= 1 or a.size == 0:
+        memoryview(out)[:] = a._mv
         return
     cs = _c_strides(shape, 1)
     fs = _f_strides(shape, 1)
-    if src_order == "C":
-        # destination F: fastest axis 0; source axis-0 stride in elements
-        run = shape[0]
-        step = cs[0]
-        outer = shape[1:]
-        outer_src = cs[1:]
-        outer_dst = fs[1:]
-    else:
-        run = shape[-1]
-        step = fs[-1]
-        outer = shape[:-1]
-        outer_src = fs[:-1]
-        outer_dst = cs[:-1]
-    n_outer = _prod(outer)
-    idx = [0] * len(outer)
-    for _ in range(n_outer):
-        so = 0
-        do = 0
-        for k, i in enumerate(idx):
-            so += i * outer_src[k]
-            do += i * outer_dst[k]
-        dst_mv[do:do + run] = src_mv[so:so + run * step:step]
-        # increment the mixed-radix counter (row-major over `outer`)
-        for k in range(len(outer) - 1, -1, -1):
-            idx[k] += 1
-            if idx[k] < outer[k]:
-                break
-            idx[k] = 0
+    src, dst = (cs, fs) if src_order == "C" else (fs, cs)
+    _strided_copy(a._addr, out.buffer_info()[0], a.itemsize, shape, src, dst)
 
 
 def _restore_array(raw, shape, dtype, order, readonly):
@@ -438,7 +417,7 @@ class Array:
     def _both_orders(self):
         """True when C and F layouts coincide: at most one dimension is
         larger than 1 (NumPy's rule), so either label is free."""
-        return sum(1 for s in self.shape if s != 1) <= 1
+        return sum(1 for s in self.shape if s != 1) <= 1  # glue: counts non-unit shape dimensions
 
     def _has_order(self, order):
         return self.order == order or self._both_orders()
@@ -555,7 +534,7 @@ class Array:
         if self._both_orders():
             return Array._view_of(self, self.shape, "C")
         out = _new_store(_CODE[self.dtype], self.size)
-        _reorder(self._mv, self.shape, "F", memoryview(out))
+        _reorder(self, "F", out)
         return Array._owned(out, self.shape, self.dtype, "C")
 
     def _as_order(self, order):
@@ -568,15 +547,15 @@ class Array:
         if order == "C":
             return self._as_c()
         out = _new_store(_CODE[self.dtype], self.size)
-        _reorder(self._mv, self.shape, "C", memoryview(out))
+        _reorder(self, "C", out)
         return Array._owned(out, self.shape, self.dtype, "F")
 
     def tolist(self):
         """Nested Python lists by shape (a scalar for a 0-d Array)."""
-        values = self._as_c()._values()
+        a = self._as_c()
         if self.ndim == 0:
-            return values[0]
-        return _nest(values, self.shape)
+            return a._values()[0]
+        return _nest(a)
 
     def copy(self):
         """An owned copy, same dtype, shape and order."""
@@ -654,11 +633,11 @@ class Array:
         F-order Array is copied to C order first, as NumPy would."""
         if isinstance(shape, int):
             shape = (shape,)
-        shape = [int(s) for s in shape]
+        shape = [int(s) for s in shape]  # glue: validates the shape argument
         if shape.count(-1) > 1:
             raise ValueError("mojolearn: reshape allows one -1")
         if -1 in shape:
-            known = _prod(s for s in shape if s != -1)
+            known = _prod(s for s in shape if s != -1)  # glue: product of the known dimensions
             if known == 0 or self.size % known:
                 raise ValueError(
                     f"mojolearn: cannot reshape size {self.size} into {tuple(shape)}"
@@ -684,7 +663,22 @@ class Array:
             raise TypeError("iteration over a 0-d Array")
         if self.ndim == 1:
             return iter(self._values())
-        return (self[i] for i in range(self.shape[0]))
+        return _RowIter(self._as_c())
+
+    def _row_view(self, i, shape, step):
+        """Row `i` of a C-order Array as a zero-copy view (`shape` = the
+        trailing dimensions, `step` = their element count): the same
+        memory, kept alive through `_base`, as NumPy's iteration gives."""
+        v = Array.__new__(Array)
+        v._store = self._store
+        v._base = self
+        v._pin = self._pin
+        off = i * step
+        v._mv = self._mv[off:off + step]
+        v._addr = self._addr + off * self.itemsize
+        v._readonly = self._readonly
+        v._set_meta(shape, self.dtype, "C")
+        return v
 
     def __repr__(self):
         return f"Array(shape={self.shape}, dtype={self.dtype!r})"
@@ -709,7 +703,7 @@ class Array:
                 f"mojolearn: too many indices ({len(key)}) for shape {a.shape}"
             )
         dims = []  # (start, step, count) or int
-        for axis, k in enumerate(key):
+        for axis, k in enumerate(key):  # glue: one index entry per array axis
             n = a.shape[axis]
             if isinstance(k, slice):
                 start, stop, step = k.indices(n)
@@ -728,49 +722,32 @@ class Array:
                     "mojolearn: Array indices are ints, slices or tuples of "
                     f"them, not {type(k).__name__}"
                 )
-        for axis in range(len(key), a.ndim):
+        for axis in range(len(key), a.ndim):  # glue: one entry per remaining array axis
             dims.append((0, 1, a.shape[axis]))
-        out_shape = tuple(d[2] for d in dims if isinstance(d, tuple))
         cs = _c_strides(a.shape, 1)
-        # Every outer combination is one Python iteration; the innermost
-        # run is one memoryview slice (strided or not), copied in C.
-        outer = [d for d in dims[:-1]]
-        last = dims[-1] if dims else (0, 1, 1)
-        if isinstance(last, tuple):
-            l_start, l_step, l_count = last
-        else:
-            l_start, l_step, l_count = last, 1, 1
-        base_off = l_start
-        outer_ranges = []
-        for axis, d in enumerate(outer):
+        # The selection as one strided copy (shape, strides, base offset in
+        # elements), done in Mojo; a contiguous block is one memcpy.
+        base_off = 0
+        sel_shape = []
+        sel_strides = []
+        for axis, d in enumerate(dims):  # glue: one entry per array axis
             if isinstance(d, tuple):
-                outer_ranges.append([(d[0] + i * d[1]) * cs[axis] for i in range(d[2])])
+                base_off += d[0] * cs[axis]
+                sel_shape.append(d[2])
+                sel_strides.append(d[1] * cs[axis])
             else:
                 base_off += d * cs[axis]
-        src = a._mv
-        code = _CODE[a.dtype]
-        block = _contiguous_block(dims, a.shape, cs) if out_shape else None
-        store = None
-        if block is not None:
-            store = _block_store(a, block[0], block[1])
-        if store is not None:
-            pass
-        elif not outer_ranges:
-            # the constructor copies a (possibly strided) typed memoryview
-            # in C; `frombytes` would insist on a byte-format buffer
-            store = array.array(
-                code, _run(src, base_off, l_count, l_step)
-            ) if l_count else array.array(code)
-        else:
-            total = _prod(len(r) for r in outer_ranges) * l_count
-            store = _new_store(code, total)
-            store_mv = memoryview(store)
-            pos = 0
-            for off in _offsets(outer_ranges):
-                store_mv[pos:pos + l_count] = _run(src, base_off + off, l_count, l_step)
-                pos += l_count
+        out_shape = tuple(sel_shape)
         if not out_shape:
-            return _to_py_values(memoryview(store), a.dtype)[0]
+            return _to_py_values(a._mv[base_off:base_off + 1], a.dtype)[0]
+        block = _contiguous_block(dims, a.shape, cs)
+        store = _block_store(a, block[0], block[1]) if block is not None else None
+        if store is None:
+            total = _prod(out_shape)
+            store = _new_store(_CODE[a.dtype], total)
+            if total:
+                _strided_copy(a._addr, store.buffer_info()[0], a.itemsize, out_shape,
+                              sel_strides, _c_strides(out_shape, 1), base_off, 0)
         return Array._owned(store, out_shape, a.dtype, "C")
 
     def __eq__(self, other):
@@ -892,7 +869,7 @@ class Array:
             # helper, (hi, lo >> 32, lo & 0xffffffff) of a 128-bit total
             parts = self._native_reduce(_REDUCE_ISUM)
             if parts is not None:
-                hi, mid, low = (int(v) for v in parts)
+                hi, mid, low = (int(v) for v in parts)  # glue: three words of a 128-bit sum
                 return (hi << 64) + (mid << 32) + low
         values = self._values()
         if self.dtype in _INT:
@@ -919,6 +896,33 @@ class Array:
         return best
 
 
+class _RowIter:
+    """Iteration over the rows of a C-order Array of rank >= 2: each step
+    hands out a zero-copy view of the next row (no element is read)."""
+
+    __slots__ = ("_a", "_i", "_n", "_shape", "_step")
+
+    def __init__(self, a):
+        self._a = a
+        self._i = 0
+        self._n = a.shape[0]
+        self._shape = a.shape[1:]
+        self._step = _prod(self._shape)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        i = self._i
+        if i >= self._n:
+            raise StopIteration
+        self._i = i + 1
+        return self._a._row_view(i, self._shape, self._step)
+
+    def __length_hint__(self):
+        return self._n - self._i
+
+
 def _contiguous_block(dims, shape, cs):
     """`(offset, length)` in elements when the selection `dims` of a C-order
     block is ONE contiguous run whose C-order walk is the run itself:
@@ -935,7 +939,7 @@ def _contiguous_block(dims, shape, cs):
     start, step, count = dims[axis]
     if step != 1:
         return None
-    for later in range(axis + 1, n):
+    for later in range(axis + 1, n):  # glue: one check per trailing array axis
         d = dims[later]
         if not isinstance(d, tuple) or d != (0, 1, shape[later]):
             return None
@@ -979,27 +983,6 @@ def _flatten_fast(nested):
     return (len(nested), widths.pop()), flat
 
 
-def _run(mv, start, count, step):
-    """`count` elements of a flat memoryview from `start` with `step`,
-    which may be negative; a computed stop below zero would mean "the
-    end" to a slice, so it is spelled as None."""
-    stop = start + count * step
-    if step < 0 and stop < 0:
-        stop = None
-    return mv[start:stop:step]
-
-
-def _offsets(ranges):
-    """Every sum of one element from each list in `ranges`, in row-major
-    order; `ranges` is short (one list per outer axis)."""
-    if len(ranges) == 1:
-        yield from ranges[0]
-        return
-    for head in ranges[0]:
-        for rest in _offsets(ranges[1:]):
-            yield head + rest
-
-
 def _flatten(nested):
     """`(shape, flat_list)` for a rectangular nested sequence; a scalar
     gives shape ()."""
@@ -1025,9 +1008,21 @@ def _flatten(nested):
     return (len(seq),) + first_shape, flat
 
 
-def _nest(values, shape):
-    if len(shape) == 1:
-        return list(values)
-    step = _prod(shape[1:])
-    return [_nest(values[i * step:(i + 1) * step], shape[1:]) for i in range(shape[0])]
+def _nest(a):
+    """Nested Python lists of a C-order Array, built by `memoryview.tolist`
+    (CPython walks the rows in C; a float16 block goes through its exact
+    float64 values first)."""
+    if a.size == 0:
+        return _empty_nest(a.shape)
+    if a.dtype == "<f2":
+        flat = array.array("d", a._values())
+        return memoryview(flat).cast("B").cast("d", a.shape).tolist()
+    return a._mv.cast("B").cast(_CODE[a.dtype], a.shape).tolist()
 
+
+def _empty_nest(shape):
+    """The nested lists of an empty block: no elements, only the list
+    structure up to the first zero dimension."""
+    if not shape or shape[0] == 0:
+        return []
+    return [_empty_nest(shape[1:]) for _ in range(shape[0])]  # glue: list structure of an empty block, no elements
