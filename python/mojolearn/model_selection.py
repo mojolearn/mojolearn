@@ -639,8 +639,11 @@ def _encode_sorted(values):
 
 
 def _as_index(values):
+    if isinstance(values, range) and values.step == 1:
+        # a contiguous row range, written by the base binding (lane cgr4-py-compute)
+        return _arange_rows(values.start, max(len(values), 0))
     store = None
-    if isinstance(values, (list, range)):
+    if isinstance(values, list):
         # ints (and bools) go in as they are, in C; anything array('q')
         # refuses keeps the int() path (lane metrics-apple)
         try:
@@ -652,10 +655,42 @@ def _as_index(values):
     return Array._owned(store, (len(store),), '<i8', 'C')
 
 
-def _rows_of(mask, n):
-    """The ascending rows whose mask byte is 1 (ints from range, in C)."""
-    store = array.array('q', itertools.compress(range(n), mask))
-    return Array._owned(store, (len(store),), '<i8', 'C')
+def _arange_rows(start, n):
+    """Int64 rows start, start + 1, ..., start + n - 1 (`arange_i64`)."""
+    out = empty((n,), '<i8')
+    if n:
+        _native('arange_i64')(_addr(out), int(start), int(n))
+    return out
+
+
+def _split_mask(mask, n):
+    """(train, test): the ascending rows whose mask byte is 0 / nonzero, by
+    `count_mask_u8` and `select_mask_u8_i64` (lane cgr4-py-compute)."""
+    m = mask if isinstance(mask, (bytearray, array.array)) else bytearray(mask)
+    maddr = m.buffer_info()[0] if isinstance(m, array.array) else _bytes_addr(m)
+    n_test = int(_native('count_mask_u8')(maddr, n))
+    test = empty((n_test,), '<i8')
+    train = empty((n - n_test,), '<i8')
+    _native('select_mask_u8_i64')(maddr, n, _addr(test) if n_test else 0, _addr(train) if n - n_test else 0)
+    return train, test
+
+
+def _bytes_addr(buf):
+    import ctypes
+    return ctypes.addressof((ctypes.c_char * len(buf)).from_buffer(buf))
+
+
+def _split_indices(test, n):
+    """(train, test) from a test row list: the mask by `mask_from_indices_u8`
+    (indices checked in range there), then `_split_mask`."""
+    if isinstance(test, Array) and test.dtype == '<i8':
+        k, iaddr = test.size, _addr_ro(test)
+    else:
+        idx = test if isinstance(test, array.array) and test.typecode == 'q' else array.array('q', test)
+        k, iaddr = len(idx), idx.buffer_info()[0]
+    mask = array.array('B', bytes(n))
+    _native('mask_from_indices_u8')(iaddr if k else 0, k, n, mask.buffer_info()[0])
+    return _split_mask(mask, n)
 
 
 class _Mask(bytes):
@@ -796,14 +831,9 @@ class _Splitter:
     def split(self, X, y=None, groups=None):
         n = _n_samples(X)
         for test in self._test_folds(X, y, groups):
-            if isinstance(test, _Mask):
-                mask = test
-            else:
-                mask = bytearray(n)
-                # mask[i] = 1 for every test row, iterated in C
-                collections.deque(map(mask.__setitem__, test, itertools.repeat(1)), maxlen=0)
-            # ascending train and test rows, selected in C (itertools.compress)
-            yield _rows_of(mask.translate(_FLIP), n), _rows_of(mask, n)
+            # ascending train and test rows from the test mask, in Mojo
+            # (lane cgr4-py-compute: no per-row Python mask or compress)
+            yield _split_mask(test, n) if isinstance(test, _Mask) else _split_indices(test, n)
 
 
 def _check_splits(n_splits):
@@ -1128,12 +1158,16 @@ class LeaveOneOut(_Splitter):
             raise ValueError("The 'X' parameter should not be None.")
         return _n_samples(X)
 
-    def _test_folds(self, X, y, groups):
-        n = _n_samples(X)
-        if n <= 1:
-            raise ValueError(f'Cannot perform LeaveOneOut with n_samples={n}.')
-        for i in range(n):
-            yield [i]
+    def split(self, X, y=None, groups=None):
+        n_splits = _n_samples(X)
+        if n_splits <= 1:
+            raise ValueError(f'Cannot perform LeaveOneOut with n_samples={n_splits}.')
+        leave = _native('leave_range_i64')
+        # split s: test row s, train every other row, written in Mojo
+        for s in range(n_splits):
+            train, test = empty((n_splits - 1,), '<i8'), empty((1,), '<i8')
+            leave(n_splits, s, s + 1, _addr(train), _addr(test))
+            yield train, test
 
 
 class LeavePOut(_Splitter):
@@ -1145,13 +1179,24 @@ class LeavePOut(_Splitter):
     def get_n_splits(self, X=None, y=None, groups=None):
         return _comb(_n_samples(X), self.p)
 
-    def _test_folds(self, X, y, groups):
-        import itertools
+    def split(self, X, y=None, groups=None):
         n = _n_samples(X)
         if n <= self.p:
             raise ValueError(f'p={self.p} must be strictly less than the number of samples={n}')
-        for combo in itertools.combinations(range(n), self.p):
-            yield list(combo)
+        p = int(self.p)
+        if p < 0:
+            raise ValueError('r must be non-negative')
+        if p < 1:
+            # itertools.combinations(range(n), 0): one empty test set
+            yield _arange_rows(0, n), empty((0,), '<i8')
+            return
+        # the combinations in lexicographic order, advanced in Mojo
+        combo = _arange_rows(0, p)
+        step = _native('next_combination_i64')
+        while True:
+            yield _split_indices(combo, n)
+            if not int(step(_addr(combo), p, n)):
+                return
 
 
 class LeaveOneGroupOut(_Splitter):
