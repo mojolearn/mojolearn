@@ -865,14 +865,21 @@ class OursGEMM(Ours):
         elif lane == "gemm-int8":         # the codes with exponent 0: C = A B^T exactly
             self.a = (self.a, np.zeros(self.a.shape[0], dtype=np.int32))
             self.b = (self.b, np.zeros(self.b.shape[0], dtype=np.int32))
-        self.info = _ours_info(ml, getattr(linalg, "__file__", None), linalg.numeric_mode())
+        mode = linalg.numeric_mode()
+        self.identical = mode == "identical"
+        self.info = _ours_info(ml, getattr(linalg, "__file__", None), mode)
         self.info.update(profile=linalg.PROFILE, call=LANE_TEXT[lane][0])
         self.record = _ours_record(lane)
 
     def call(self):
         fn = {"gemm": self.linalg.matmul, "gemm-bf16": self.linalg.matmul_bf16,
               "gemm-int8": self.linalg.matmul_int8}[self.lane]
-        self.out = fn(self.a, self.b)
+        if self.lane == "gemm":
+            # matmul's default identical=True refuses a FAST binary (require_identical);
+            # the ours-fast arm asks for the FAST route explicitly, ours keeps the default.
+            self.out = fn(self.a, self.b, identical=self.identical)
+        else:
+            self.out = fn(self.a, self.b)
 
 
 class OursBlock(Ours):
