@@ -39,6 +39,7 @@ from x_linear.ff import (
     FF, ff_of, two_prod, ff_add, ff_add_f, ff_sub, ff_mul, ff_div, ff_sqrt, ff_f32, ff_ld, ff_st, ff_chol_solve,
 )
 from checks.numerics import ftz, identical_log
+from std.sys.compile import is_defined
 
 #: elements of one partial of the m-long folds
 comptime SVGP_FF_FOLD = 64
@@ -294,30 +295,57 @@ def svgp_ff_part_item(t: Int, y: FP, bvh: FP, bvl: FP, w: FP, m: Int, n: Int):
     w.unsafe_store(_o_ldu(nbn, nbm) + b, ldu)
 
 
-def svgp_ff_fin_item(w: FP, info: FP, nbn: Int, nbm: Int, nf: Float32, noise: Float32, kdiag: Float32):
-    """The partials folded ascending (nbn y'y partials, nbm of the rest), the
-    collapsed bound; info = [elbo, ok] ([0, 0] when a factor of Kuu' or
-    Sigma failed)."""
-    if not (w.unsafe_load(0) > 0 and w.unsafe_load(1) > 0):
-        info.unsafe_store(0, Float32(0))
-        info.unsafe_store(1, Float32(0))
-        return
-    var nz = ff_of(noise)
+#: lane apple-fast-purity (2026-10-03): the partials fold in a fixed tree so
+#: the device folds them with one block of SVGP_TREE threads instead of one
+#: thread (`-D MOJOLEARN_PURITY_5_OFF`: the ascending chains). Slot s folds
+#: blocks s, s + SVGP_TREE, ... from zero, ascending; then halving: slot s
+#: combines slot s + h for h = SVGP_TREE / 2 .. 1. The CPU column
+#: (`svgp_ff_solve`) runs the same steps, so every column has the same word.
+comptime SVGP_TREE = 256
+comptime SVGP_TREE_ON = not is_defined["MOJOLEARN_PURITY_5_OFF"]()
+#: one slot: y'y (hi, lo), b'x (hi, lo), the trace (hi, lo), log det S, log det Kuu'
+comptime SV8 = SIMD[DType.float32, 8]
+
+
+@always_inline
+def svgp_ff_tree_comb(a: SV8, b: SV8) -> SV8:
+    """Slot a combined with slot b (each fold's own operation)."""
+    var y = ff_add(FF(a[0], a[1]), FF(b[0], b[1]))
+    var bs = ff_add(FF(a[2], a[3]), FF(b[2], b[3]))
+    var tr = ff_add(FF(a[4], a[5]), FF(b[4], b[5]))
+    return SV8(y.hi, y.lo, bs.hi, bs.lo, tr.hi, tr.lo, ftz(a[6] + b[6]), ftz(a[7] + b[7]))
+
+
+@always_inline
+def svgp_ff_tree_slot(w: FP, s: Int, nbn: Int, nbm: Int) -> SV8:
+    """Slot s: blocks s, s + SVGP_TREE, ... of every fold, ascending from zero."""
     var yty = ff_of(Float32(0))
     var oy = w + _o_yty(nbn, nbm)
-    for b in range(nbn):
+    var b = s
+    while b < nbn:
         yty = ff_add(yty, ff_ld(oy, oy + nbn, b))
+        b += SVGP_TREE
     var bsb = ff_of(Float32(0))
     var trq = ff_of(Float32(0))
     var lds = Float32(0)
     var ldu = Float32(0)
     var ob = w + _o_bsb(nbn, nbm)
     var ot = w + _o_trq(nbn, nbm)
-    for b in range(nbm):
+    b = s
+    while b < nbm:
         bsb = ff_add(bsb, ff_ld(ob, ob + nbm, b))
         trq = ff_add(trq, ff_ld(ot, ot + nbm, b))
         lds = ftz(lds + w.unsafe_load(_o_lds(nbn, nbm) + b))
         ldu = ftz(ldu + w.unsafe_load(_o_ldu(nbn, nbm) + b))
+        b += SVGP_TREE
+    return SV8(yty.hi, yty.lo, bsb.hi, bsb.lo, trq.hi, trq.lo, lds, ldu)
+
+
+@always_inline
+def svgp_ff_bound(w: FP, info: FP, yty: FF, bsb: FF, trq: FF, lds: Float32, ldu: Float32,
+                  nf: Float32, noise: Float32, kdiag: Float32):
+    """The collapsed bound from the folded totals; info = [elbo, ok]."""
+    var nz = ff_of(noise)
     var quad = ff_sub(ff_div(yty, nz), ff_div(bsb, ff_mul(nz, nz)))
     var logdet = ff_add(ff_mul(ff_of(Float32(2)), ff_sub(ff_of(lds), ff_of(ldu))),
                         ff_mul(ff_of(nf), ff_of(ftz(identical_log(noise)))))
@@ -325,6 +353,52 @@ def svgp_ff_fin_item(w: FP, info: FP, nbn: Int, nbm: Int, nf: Float32, noise: Fl
     var total = ff_add(ff_add(ff_mul(ff_of(nf), ff_of(Float32(1.8378770664093453))), logdet), ff_add(quad, trace_term))
     info.unsafe_store(0, ff_f32(ff_mul(ff_of(Float32(-0.5)), total)))
     info.unsafe_store(1, Float32(1) if w.unsafe_load(2) > 0 else Float32(0))
+
+
+@always_inline
+def svgp_ff_failed(w: FP, info: FP) -> Bool:
+    """[0, 0] into info when a factor of Kuu' or Sigma failed."""
+    if not (w.unsafe_load(0) > 0 and w.unsafe_load(1) > 0):
+        info.unsafe_store(0, Float32(0))
+        info.unsafe_store(1, Float32(0))
+        return True
+    return False
+
+
+def svgp_ff_fin_item(w: FP, info: FP, nbn: Int, nbm: Int, nf: Float32, noise: Float32, kdiag: Float32):
+    """The partials folded (the SVGP_TREE order; ascending under
+    -D MOJOLEARN_PURITY_5_OFF), the collapsed bound; info = [elbo, ok]
+    ([0, 0] when a factor of Kuu' or Sigma failed)."""
+    if svgp_ff_failed(w, info):
+        return
+    comptime if SVGP_TREE_ON:
+        var sl = InlineArray[SV8, SVGP_TREE](fill=SV8(0))
+        for s in range(SVGP_TREE):
+            sl[s] = svgp_ff_tree_slot(w, s, nbn, nbm)
+        var h = SVGP_TREE // 2
+        while h > 0:
+            for s in range(h):
+                sl[s] = svgp_ff_tree_comb(sl[s], sl[s + h])
+            h //= 2
+        var t = sl[0]
+        svgp_ff_bound(w, info, FF(t[0], t[1]), FF(t[2], t[3]), FF(t[4], t[5]), t[6], t[7], nf, noise, kdiag)
+    else:
+        var yty = ff_of(Float32(0))
+        var oy = w + _o_yty(nbn, nbm)
+        for b in range(nbn):
+            yty = ff_add(yty, ff_ld(oy, oy + nbn, b))
+        var bsb = ff_of(Float32(0))
+        var trq = ff_of(Float32(0))
+        var lds = Float32(0)
+        var ldu = Float32(0)
+        var ob = w + _o_bsb(nbn, nbm)
+        var ot = w + _o_trq(nbn, nbm)
+        for b in range(nbm):
+            bsb = ff_add(bsb, ff_ld(ob, ob + nbm, b))
+            trq = ff_add(trq, ff_ld(ot, ot + nbm, b))
+            lds = ftz(lds + w.unsafe_load(_o_lds(nbn, nbm) + b))
+            ldu = ftz(ldu + w.unsafe_load(_o_ldu(nbn, nbm) + b))
+        svgp_ff_bound(w, info, yty, bsb, trq, lds, ldu, nf, noise, kdiag)
 
 
 def svgp_ff_solve(

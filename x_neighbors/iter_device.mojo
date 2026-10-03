@@ -19,6 +19,10 @@ from x_neighbors.svgp_ff import (
     svgp_ff_x_item, svgp_ff_qmu_item, svgp_ff_qsqrt_item, svgp_ff_part_item, svgp_ff_fin_item, svgp_ff_nbn,
     svgp_ff_nbm, svgp_ff_ws_size,
 )
+from x_neighbors.svgp_ff import (
+    SVGP_TREE, SVGP_TREE_ON, SV8, svgp_ff_tree_comb, svgp_ff_tree_slot, svgp_ff_bound, svgp_ff_failed,
+)
+from x_linear.ff import FF
 from std.memory import bitcast, memcpy
 from std.atomic import Atomic
 from std.math import sqrt
@@ -1302,6 +1306,39 @@ def svgp_ff_fin_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float32, n
         svgp_ff_fin_item(w, info, Int(nbn_), Int(nbm_), nf, noise, kdiag)
 
 
+comptime _SVGP_TREE_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, SVGP_TREE * 8 * 4]()
+
+
+def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float32, noise: Float32, kdiag: Float32):
+    """ONE block of SVGP_TREE threads (lane apple-fast-purity): `svgp_ff_fin_item`'s
+    tree fold with thread s on slot s, the halving steps in threadgroup
+    memory, then thread 0 writes the bound."""
+    comptime assert _SVGP_TREE_SMEM_FITS, "svgp_ff_fin_tree_kernel: an 8 KB threadgroup page must fit"
+    var s = Int(thread_idx.x)
+    var sh = stack_allocation[SVGP_TREE * 8, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var v = svgp_ff_tree_slot(w, s, Int(nbn_), Int(nbm_))
+    comptime for L in range(8):
+        sh[s * 8 + L] = v[L]
+    barrier()
+    var h = SVGP_TREE // 2
+    while h > 0:
+        if s < h:
+            var a = SV8(0)
+            var b = SV8(0)
+            comptime for L in range(8):
+                a[L] = sh[s * 8 + L]
+                b[L] = sh[(s + h) * 8 + L]
+            var c = svgp_ff_tree_comb(a, b)
+            comptime for L in range(8):
+                sh[s * 8 + L] = c[L]
+        barrier()
+        h //= 2
+    if s == 0:
+        if svgp_ff_failed(w, info):
+            return
+        svgp_ff_bound(w, info, FF(sh[0], sh[1]), FF(sh[2], sh[3]), FF(sh[4], sh[5]), sh[6], sh[7], nf, noise, kdiag)
+
+
 def op_svgp_fit_ff(
     x: Int, z: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, n: Int, m: Int, d: Int,
     gamma: Float32, variance: Float32, noise: Float32, jitter: Float32, kdiag: Float32,
@@ -1386,11 +1423,16 @@ def op_svgp_fit_ff(
         ctx.enqueue_function[svgp_ff_part_kernel](
             yp, _p(d_bvh), _p(d_bvl), wp, Int64(m), Int64(n), grid_dim=_grid(nbn + nbm), block_dim=BLOCK,
         )
-    # one thread folds the nbn + nbm block partials (n / 2048 + m / 64 of
-    # them) into the scalar bound: a scalar step, not a loop over n
-    ctx.enqueue_function[svgp_ff_fin_kernel](
-        wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=1,
-    )
+    comptime if SVGP_TREE_ON:
+        # lane apple-fast-purity: one block of SVGP_TREE threads folds the
+        # nbn + nbm block partials (svgp_ff_fin_item's tree order)
+        ctx.enqueue_function[svgp_ff_fin_tree_kernel](
+            wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=SVGP_TREE,
+        )
+    else:
+        ctx.enqueue_function[svgp_ff_fin_kernel](
+            wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=1,
+        )
     _down(ctx, d_alpha, alpha, m)
     _down(ctx, d_c, cmat, mm)
     _down(ctx, d_qmu, qmu, m)
