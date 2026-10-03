@@ -112,6 +112,7 @@ from checks.kernel_matrix import (
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from checks.numerics import PIN_DETERMINISM
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from gbdt.gpu_data.sym_feat_switches import GBDT_EVAL_FUSED
 
 #: lane/apple-fast-trees-depthwise (2026-10-02, family `trees-ctr`),
 #: FAST + Apple DEFAULT ON (2026-10-02); `-D MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF=1`
@@ -168,6 +169,7 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
 from ensemble.instruments import StageTimes as HostStageTimes
 from gbdt.overfitting_detector.overfitting_detector import (
     OD_NONE,
+    OverfittingDetector,
     make_overfitting_detector,
 )
 from gbdt.options.overfitting_detector_options import (
@@ -222,6 +224,15 @@ from gbdt.targets.kernel.query_rmse import (
 from gbdt.gpu_data.kernel.query_helper import launch_inverse_permutation
 
 
+
+
+#: lane/apple-fast-sym-feat (`GBDT_EVAL_FUSED`, FAST + Apple only): the
+#: held-out loss slots kept on the device between readbacks, and the extra
+#: words per level the packed per-tree apply record needs in `h_vals` /
+#: `d_vals`. Outside the switch both are main's sizes (one loss word, no
+#: extra words), so `make_test_arm` allocates exactly what it did.
+comptime _EVAL_FV_SLOTS = 1024 if GBDT_EVAL_FUSED else 1
+comptime _EVAL_PACK_WORDS = 5 if GBDT_EVAL_FUSED else 0
 
 
 @fieldwise_init
@@ -296,22 +307,26 @@ def make_test_arm(
         ctx.enqueue_create_buffer[DType.float32](approx_dim * n),
         ctx.enqueue_create_buffer[DType.float32](stat_count * n),
         ctx.enqueue_create_buffer[DType.float32](blocks),
-        ctx.enqueue_create_buffer[DType.float32](1),
-        ctx.enqueue_create_host_buffer[DType.float32](blocks),
+        ctx.enqueue_create_buffer[DType.float32](_EVAL_FV_SLOTS),
+        ctx.enqueue_create_host_buffer[DType.float32](
+            max(blocks, _EVAL_FV_SLOTS)
+        ),
         ctx.enqueue_create_buffer[DType.float32](2),
         ctx.enqueue_create_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_buffer[DType.uint8](max_depth),
-        ctx.enqueue_create_buffer[DType.float32](max_leaves * approx_dim),
+        ctx.enqueue_create_buffer[DType.float32](
+            max_leaves * approx_dim + _EVAL_PACK_WORDS * max_depth
+        ),
         ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_host_buffer[DType.uint32](max_depth),
         ctx.enqueue_create_host_buffer[DType.uint8](max_depth),
         ctx.enqueue_create_host_buffer[DType.float32](
-            max_leaves * approx_dim
+            max_leaves * approx_dim + _EVAL_PACK_WORDS * max_depth
         ),
     )
 
@@ -353,6 +368,67 @@ def _apply_last_tree_to_test(
     ref weak = model.weak_models[t]
     var depth = weak.structure.get_depth()
     if depth == 0:
+        return
+
+    comptime if GBDT_EVAL_FUSED:
+        # lane/apple-fast-sym-feat: the tree's records and leaf values in
+        # ONE pinned region of `h_vals` -- offsets, shifts, masks, bins
+        # (`depth` words each), the take-equal bytes (`ceil(depth / 4)`
+        # words), then the values -- and ONE upload of the used prefix
+        # instead of six. Same kernel, same records, same adds.
+        var hv = test.h_vals.unsafe_ptr()
+        var hw = hv.bitcast[UInt32]()
+        var eq_words = (depth + 3) // 4
+        var vals_at = 4 * depth + eq_words
+        for k in range(eq_words):
+            hw.unsafe_store(4 * depth + k, UInt32(0))
+        var hb = (hw + 4 * depth).bitcast[UInt8]()
+        for level in range(depth):
+            ref pcf = layout.features[
+                Int(weak.structure.splits[level].feature_id)
+            ]
+            hw.unsafe_store(level, pcf.offset * UInt32(n))
+            hw.unsafe_store(depth + level, pcf.shift)
+            hw.unsafe_store(2 * depth + level, pcf.mask)
+            hw.unsafe_store(
+                3 * depth + level,
+                UInt32(Int(weak.structure.splits[level].bin_idx)),
+            )
+            var p_take_bin = (
+                Int(weak.structure.splits[level].split_type)
+                == BIN_SPLIT_TAKE_BIN
+            )
+            hb.unsafe_store(level, UInt8(1) if p_take_bin else UInt8(0))
+        var p_values = (1 << depth) * approx_dim
+        for i in range(p_values):
+            var v = Float32(0.0)
+            if i < len(weak.leaf_values):
+                v = weak.leaf_values[i]
+            hv.unsafe_store(vals_at + i, v)
+        var used = vals_at + p_values
+        var d_used = test.d_vals.create_sub_buffer[DType.float32](0, used)
+        ctx.enqueue_copy(dst_buf=d_used, src_ptr=hv)
+        var dv = test.d_vals.unsafe_ptr()
+        var dw = dv.bitcast[UInt32]()
+        var p_wide = (n + 255) // 256
+        if p_wide > 1024:
+            p_wide = 1024
+        ctx.enqueue_function[compute_bins_and_add_kernel](
+            test.cindex.unsafe_ptr(),
+            dw,
+            dw + depth,
+            dw + 2 * depth,
+            dw + 3 * depth,
+            (dw + 4 * depth).bitcast[UInt8](),
+            Int32(depth),
+            dv + vals_at,
+            Int32(n),
+            test.cursor.unsafe_ptr(),
+            Int32(approx_dim),
+            Int32(n),
+            grid_dim=(p_wide, approx_dim, 1),
+            block_dim=(256, 1, 1),
+        )
         return
 
     for level in range(depth):
@@ -458,6 +534,77 @@ def _test_loss(
     ctx.enqueue_copy(dst_ptr=test.h_fv.unsafe_ptr(), src_buf=test.fv)
     ctx.synchronize()
     return -Float64(test.h_fv.unsafe_ptr().unsafe_load(0)) / Float64(n)
+
+
+def _test_loss_enqueue(
+    ctx: DeviceContext,
+    mut test: TestArm,
+    objective: Int,
+    num_classes: Int,
+    alpha: Float32,
+    logloss_border: Float32,
+    approx_dim: Int,
+    slot: Int,
+) raises:
+    """lane/apple-fast-sym-feat (`GBDT_EVAL_FUSED`, FAST + Apple only):
+    `_test_loss`'s launches with the folded sum left on the device in
+    `test.fv[slot]`; no readback, no drain. `_test_loss_flush` reads the
+    slots back. Same kernels, same fold, so the same loss values."""
+    var n = test.n_rows
+    var blocks = (n + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+    if objective == OBJECTIVE_MULTICLASS:
+        blocks = multilogit_blocks(n)
+        launch_multilogit_value_and_der_search(
+            ctx, num_classes, n, test.targets, test.weights, False,
+            test.cursor, n, test.cindex, False,
+            test.fv_part, True, test.stats, n, test.mag_dummy, False,
+        )
+    elif objective == OBJECTIVE_MULTICLASS_OVA:
+        blocks = multilogit_blocks(n)
+        launch_one_vs_all_value_and_der[True](
+            ctx, num_classes, n, test.targets, test.weights, False,
+            test.cursor, n, test.cindex, False,
+            test.fv_part, True, test.stats, n, test.mag_dummy, False,
+        )
+    else:
+        launch_approximate[False](
+            ctx, objective, test.targets, test.weights, Int32(n),
+            test.cursor, Int32(0), alpha, logloss_border,
+            test.stats, test.fv_part, Int32(1),
+            test.mag_dummy, Int32(0), blocks,
+        )
+    ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
+        test.fv_part.unsafe_ptr(), Int32(blocks),
+        test.fv.unsafe_ptr() + slot,
+        grid_dim=1, block_dim=256,
+    )
+
+
+def _test_loss_flush(
+    ctx: DeviceContext,
+    mut test: TestArm,
+    mut test_losses: List[Float64],
+    mut detector: OverfittingDetector,
+    pending: Int,
+) raises:
+    """lane/apple-fast-sym-feat (`GBDT_EVAL_FUSED`): ONE readback and ONE
+    drain for the last `pending` deferred held-out losses (their
+    placeholders are the tail of `test_losses`), then the detector sees
+    them in iteration order, exactly as it would have one per tree. Only
+    used when the detector cannot stop the fit (`is_active()` False), so
+    no stop is ever decided late."""
+    if pending <= 0:
+        return
+    ctx.enqueue_copy(dst_ptr=test.h_fv.unsafe_ptr(), src_buf=test.fv)
+    ctx.synchronize()
+    var n = test.n_rows
+    var base = len(test_losses) - pending
+    for j in range(pending):
+        var t_loss = (
+            -Float64(test.h_fv.unsafe_ptr().unsafe_load(j)) / Float64(n)
+        )
+        test_losses[base + j] = t_loss
+        detector.add_error(t_loss)
 
 
 @fieldwise_init
@@ -3145,22 +3292,63 @@ def fit_with_test(
         # to the held-out cursor. One tree at a time, through the
         # ROW-WISE apply, because the partition-wise one only knows rows
         # the tree was grown on.
-        if has_test:
-            _apply_last_tree_to_test(
-                ctx, model, layout_for_test, test.value(), approx_dim,
-                learning_rate,
-            )
-            var t_loss = _test_loss(
-                ctx, test.value(), objective, num_classes, alpha,
-                logloss_border, approx_dim,
-            )
-            test_losses.append(t_loss)
-            # `DetectOverfitting(testError, detector, ...)`
-            # (`overfitting_detector.h:25-34`)
-            detector.add_error(t_loss)
-            if detector.is_need_stop():
-                stopped_early = True
-                break
+        comptime if GBDT_EVAL_FUSED:
+            # lane/apple-fast-sym-feat: with a detector that cannot stop
+            # the fit, the held-out loss stays on the device and is read
+            # back once per `_EVAL_FV_SLOTS` trees (and after the loop).
+            # The packed apply rewrites `h_vals` each tree without a drain
+            # of its own: the previous tree's upload has completed because
+            # this iteration's leaf values were read back to the host
+            # (a drain) before this tree could be appended to the model.
+            if has_test and not detector.is_active():
+                _apply_last_tree_to_test(
+                    ctx, model, layout_for_test, test.value(), approx_dim,
+                    learning_rate,
+                )
+                var slot = len(test_losses) % _EVAL_FV_SLOTS
+                _test_loss_enqueue(
+                    ctx, test.value(), objective, num_classes, alpha,
+                    logloss_border, approx_dim, slot,
+                )
+                test_losses.append(Float64(0.0))
+                if slot == _EVAL_FV_SLOTS - 1:
+                    _test_loss_flush(
+                        ctx, test.value(), test_losses, detector,
+                        _EVAL_FV_SLOTS,
+                    )
+            elif has_test:
+                _apply_last_tree_to_test(
+                    ctx, model, layout_for_test, test.value(), approx_dim,
+                    learning_rate,
+                )
+                var t_loss = _test_loss(
+                    ctx, test.value(), objective, num_classes, alpha,
+                    logloss_border, approx_dim,
+                )
+                test_losses.append(t_loss)
+                # `DetectOverfitting(testError, detector, ...)`
+                # (`overfitting_detector.h:25-34`)
+                detector.add_error(t_loss)
+                if detector.is_need_stop():
+                    stopped_early = True
+                    break
+        else:
+            if has_test:
+                _apply_last_tree_to_test(
+                    ctx, model, layout_for_test, test.value(), approx_dim,
+                    learning_rate,
+                )
+                var t_loss = _test_loss(
+                    ctx, test.value(), objective, num_classes, alpha,
+                    logloss_border, approx_dim,
+                )
+                test_losses.append(t_loss)
+                # `DetectOverfitting(testError, detector, ...)`
+                # (`overfitting_detector.h:25-34`)
+                detector.add_error(t_loss)
+                if detector.is_need_stop():
+                    stopped_early = True
+                    break
 
         # the device `functionValue` read alongside this iteration's
         # gradients: the loss AFTER THE PREVIOUS TREE (their accumulation
@@ -3175,6 +3363,12 @@ def fit_with_test(
             if model.size() > 1:
                 losses.append(-v / loss_norm)
 
+    comptime if GBDT_EVAL_FUSED:
+        if has_test and not detector.is_active():
+            _test_loss_flush(
+                ctx, test.value(), test_losses, detector,
+                len(test_losses) % _EVAL_FV_SLOTS,
+            )
     loop_times.stop_host("fit_total", t_loop)
     loop_times.report()
 
