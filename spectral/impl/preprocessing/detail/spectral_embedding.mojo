@@ -16,9 +16,9 @@ THE SEQUENCE, AND WHERE EACH PIECE LIVES
           -> laplacian_normalized (or the
              unnormalized one), then NEGATED  impl/sparse/linalg/detail/laplacian.mojo
           -> Lanczos, LA on -L, k pairs       impl/sparse/solver/detail/lanczos.mojo
-          -> eigenvectors /= diagonal (norm)  here, `divide_rows_kernel`
+          -> eigenvectors /= diagonal (norm)  here, `embedding_gather_kernel`
           -> columns gathered in REVERSE,
-             dropping the last when drop_first here, host gather
+             dropping the last when drop_first the same kernel
 
 WHY `LA` ON THE NEGATED LAPLACIAN: the Laplacian's eigenvalues are in
 `[0, 2]` and the embedding wants the SMALLEST; `create_laplacian` negates
@@ -56,10 +56,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from neighbors.estimator import knn_search
 from spectral.checks.device_io import download_f32, upload_f32
-from spectral.host.spectral_predict_host import (
-    SpectralPredictionState,
-    spectral_keep_embedding_order,
-)
+from spectral.impl.spectral_predict_common import SpectralPredictionState
 from spectral.impl.sparse.coo import CooGraph
 from spectral.impl.sparse.linalg.detail.laplacian import (
     DeviceCoo,
@@ -142,21 +139,29 @@ def negate_kernel(vals: MutPointer[Float32, MutAnyOrigin], nnz_in: Int32):
     vals.unsafe_store(i, -vals.unsafe_load(i))
 
 
-def divide_rows_kernel(
+def embedding_gather_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
     vecs: MutPointer[Float32, MutAnyOrigin],
     diag: MutPointer[Float32, MutAnyOrigin],
-    k_in: Int32,
     n_in: Int32,
+    n_out_in: Int32,
+    divide_in: Int32,
 ):
-    """`matrix_vector_op<ALONG_COLUMNS>(eigenvectors, diagonal, elem /
-    diag)` (`:80-87`): every component `p` of every eigenvector is divided
-    by `diagonal[p]`. `vecs` is `k x n` row-major (vector `c` at `c * n`)."""
+    """`dst[p, c] = vecs[(n_out - 1 - c) * n + p]`, divided by `diag[p]`
+    with `divide_rows_kernel`'s expression when `divide_in != 0`. `vecs` is
+    `k x n` row-major, `dst` `n x n_out` row-major. A copy and one division
+    per cell, so the words are those of the divide, then the host gather."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var n = Int(n_in)
-    if i >= Int(k_in) * n:
+    var n_out = Int(n_out_in)
+    if i >= n * n_out:
         return
-    var p = i % n
-    vecs.unsafe_store(i, ftz(vecs.unsafe_load(i) / diag.unsafe_load(p)))
+    var p = i // n_out
+    var c = i - p * n_out
+    var v = vecs.unsafe_load((n_out - 1 - c) * n + p)
+    if divide_in != 0:
+        v = ftz(v / diag.unsafe_load(p))
+    dst.unsafe_store(i, v)
 
 
 def create_connectivity_graph(
@@ -353,31 +358,49 @@ def compute_eigenpairs_keep(
     )
     trace.record_list_f32("spectral.ritz", eigenvalues)
     trace.record_list_f32("spectral.ritz.vectors", eigenvectors)
+    var d_vecs = upload_f32(ctx, eigenvectors)
     if keep:
-        spectral_keep_embedding_order(eigenvalues, eigenvectors, k, n_samples, state)
-        state.diag = download_f32(ctx, diagonal, n_samples)
-    # eigenvectors /= diagonal (norm_laplacian)  (:80-87)
-    if params.norm_laplacian:
-        var d_vecs = upload_f32(ctx, eigenvectors)
-        ctx.enqueue_function[divide_rows_kernel](
+        # The prediction state in embedding column order (the reversed
+        # gather of the undivided Ritz vectors), formed on the device.
+        state.eigenvalues = List[Float32](capacity=k)
+        for c in range(k):
+            state.eigenvalues.append(eigenvalues[k - 1 - c])
+        var d_keep = ctx.enqueue_create_buffer[DType.float32](n_samples * k)
+        ctx.enqueue_function[embedding_gather_kernel](
+            d_keep.unsafe_ptr(),
             d_vecs.unsafe_ptr(),
             diagonal.unsafe_ptr(),
-            Int32(k),
             Int32(n_samples),
+            Int32(k),
+            Int32(0),
             grid_dim=((k * n_samples + lanczos_tpb - 1) // lanczos_tpb, 1, 1),
             block_dim=(lanczos_tpb, 1, 1),
         )
-        ctx.synchronize()
-        eigenvectors = download_f32(ctx, d_vecs, k * n_samples)
-        _ = d_vecs^
-    # reversed gather (:89-115): embedding column c_out = eigenvector column
-    # n_out - 1 - c_out; with drop_first the LAST (trivial) column is dropped.
+        state.eigenvectors = download_f32(ctx, d_keep, n_samples * k)
+        state.diag = download_f32(ctx, diagonal, n_samples)
+        _ = d_keep^
+    # eigenvectors /= diagonal (norm_laplacian, :80-87) and the reversed
+    # gather (:89-115) in one device pass: embedding column c_out is
+    # eigenvector column n_out - 1 - c_out; with drop_first the LAST
+    # (trivial) column is dropped.
     var n_out = k - 1 if params.drop_first else k
     embedding.clear()
-    for p in range(n_samples):
-        for c_out in range(n_out):
-            var src = n_out - 1 - c_out
-            embedding.append(eigenvectors[src * n_samples + p])
+    if n_out > 0:
+        var d_emb = ctx.enqueue_create_buffer[DType.float32](n_samples * n_out)
+        var divide = Int32(1) if params.norm_laplacian else Int32(0)
+        ctx.enqueue_function[embedding_gather_kernel](
+            d_emb.unsafe_ptr(),
+            d_vecs.unsafe_ptr(),
+            diagonal.unsafe_ptr(),
+            Int32(n_samples),
+            Int32(n_out),
+            divide,
+            grid_dim=((n_out * n_samples + lanczos_tpb - 1) // lanczos_tpb, 1, 1),
+            block_dim=(lanczos_tpb, 1, 1),
+        )
+        embedding = download_f32(ctx, d_emb, n_samples * n_out)
+        _ = d_emb^
+    _ = d_vecs^
     trace.record_list_f32("spectral.embedding", embedding)
     return n_out
 

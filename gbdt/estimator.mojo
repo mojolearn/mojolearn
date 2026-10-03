@@ -509,16 +509,12 @@ def gbdt_fit(
     var t_phase = host_times.start()
     var n_x = n_rows * n_features
     var xs = List[Float32]()
-    # DEVIATION 2550 (default ON; `-D MOJOLEARN_2550_HOST_COPY=1` restores
-    # the copy): the caller's buffer
-    # goes to `train` as a pointer and is never copied here. The binding
-    # holds the Python array for the length of the call (its docstring).
-    var x_borrow = Optional[MutPointer[Float32, MutUntrackedOrigin]]()
-    comptime if BORROW_X_COLUMNS:
-        x_borrow = Optional(x)
-    else:
-        xs.resize(n_x, Float32(0.0))
-        memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
+    # DEVIATION 2550 (the only path; the host-copy arm is gone): the
+    # caller's buffer goes to `train` as a pointer and is never copied
+    # here. The binding holds the Python array for the length of the call
+    # (its docstring).
+    var x_borrow = Optional[MutPointer[Float32, MutUntrackedOrigin]](x)
+    _ = n_x
     if target_dim < 1:
         raise Error(
             "gbdt_fit: target_dim must be positive, got " + String(target_dim)

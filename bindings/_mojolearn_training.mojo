@@ -90,7 +90,7 @@ from training.mlp_ops import (
     mlp_bias_activation_host, mlp_relu_backward_host, mlp_sum_rows_host,
     mlp_train_step_host, mlp_validate_shape,
 )
-from training.checks.optimizer_oracle import microbatch_split_is_identical
+from training.checks.optimizer_contract import microbatch_split_is_identical
 from training.chunked_lm_head_v2 import (
     chunked_lm_head_v2_loss_host, chunked_lm_head_v2_train_host,
 )

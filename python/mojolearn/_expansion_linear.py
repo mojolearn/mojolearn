@@ -20,6 +20,7 @@ binding and on the device); every score is `x_linear_decision`. Python only
 validates, encodes labels, assigns CV folds (integers) and unpacks the flat
 float32 result. NumPy-free (NUMPY_FREE_CONTRACT.md).
 """
+import collections
 import os
 from . import _portable_math as _pm
 from . import _backend
@@ -65,60 +66,12 @@ def _vector(y, n, name="y"):
     return a
 
 
-#: lane/neural-pass68 (2026-10-01): the fits the device binding runs on ONE
-#: block (x_linear/dispatch.mojo team_fit: a Team of one threadgroup, every
-#: gradient and Hessian cell one thread's chain over all the rows, the
-#: objective's fold on the lead thread) and the host runs over its cores
-#: (par_rows): on the board's poisson taxi block (1,000,000 x 11) the device
-#: route costs 8 s a Newton iteration on the M4's GPU and 0.47 s on an L40S
-#: against 0.2 s on the M4's cores, the same bits either way (the host
-#: binding is the same IDENTICAL arithmetic). These take the host binding
-#: when it is installed; `MOJOLEARN_X_LINEAR_DEVICE=1` keeps the device.
-#: GLM left this set (Andrew, 2026-10-02: a GPU install defaults to the GPU):
-#: its device route is the sliced grid of cells (lane neural-pass89/97, NV
-#: poisson taxi ~100 ms against ~2 s on the host). CPU-only installs and
-#: MOJOLEARN_VENDOR=cpu still run the host binding.
-_HOST_ALGOS = None
-
-
-def _host_algos():
-    global _HOST_ALGOS
-    if _HOST_ALGOS is None:
-        _HOST_ALGOS = frozenset() if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1" else frozenset(
-            ((ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT)
-             if os.environ.get("MOJOLEARN_X_LINEAR_ISOTONIC_HOST", "") == "1" else ()))
-    # lane/neural-pass107 (GPU-only rule): IsotonicRegression runs on the device
-    # (x_linear/device.mojo: the radix-sorted fit, one thread a predicted
-    # query); MOJOLEARN_X_LINEAR_ISOTONIC_HOST=1 restores the host route
-    return _HOST_ALGOS
-
-
-_HOST_MODULE = []
-
-
-def _host_fit_module():
-    """`mojolearn.host._mojolearn_x_linear_host` when it is importable (every
-    install that ships the host set), else None; resolved once."""
-    if not _HOST_MODULE:
-        mod = None
-        try:
-            import importlib
-            pkg = __name__.rsplit(".", 1)[0]
-            cand = importlib.import_module(f"{pkg}.host.{_BINDING}_host")
-            if getattr(cand, "x_linear_fit", None) is not None:
-                mod = cand
-        except Exception:  # noqa: BLE001 - no host set: the device binding serves
-            mod = None
-        _HOST_MODULE.append(mod)
-    return _HOST_MODULE[0]
-
-
 def _fit_module(est, algo):
-    mode = getattr(est, "numeric_mode", None)
-    if algo in _host_algos() and (mode is None or str(mode).strip().lower() == "identical"):
-        host = _host_fit_module()
-        if host is not None:
-            return host
+    """The estimator's binding: the GPU binding on a GPU install, the host
+    binding on a CPU-only one (`_bind`). cpu-gpu-cleanup c-linear (2026-10-02):
+    the host route table (`_HOST_ALGOS`, MOJOLEARN_X_LINEAR_DEVICE,
+    MOJOLEARN_X_LINEAR_ISOTONIC_HOST) that sent fits to the host binding on a
+    GPU install is deleted."""
     return est._bind(_BINDING)
 
 
@@ -324,9 +277,7 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
     # (taxi / istella 200k: Perceptron accuracy 0.72 / 0.904 at 256 vs 0.36 /
     # 0.879 at 4096 (sklearn 0.60 / 0.902); the one-class objective 0.5001 /
     # 0.5010 vs 0.5008 / 0.5062 (sklearn 0.5000 / 0.5001));
-    # batch 0 is the per-sample fit (batch_size=0 or MOJOLEARN_SGD_PER_SAMPLE=1)
-    if os.environ.get("MOJOLEARN_SGD_PER_SAMPLE", "") == "1":
-        batch_size = 0
+    # batch 0 is the per-sample fit (batch_size=0)
     if batch_size and (not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size < 1):
         raise ValueError(f"mojolearn {type(est).__name__}: batch_size must be a positive int")
     # batch_sum (lane/neural-pass132): Perceptron's batch step is the SUM of
@@ -1165,37 +1116,13 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
 # Reference: scikit-learn sklearn/linear_model/_logistic.py; kernel
 # x_linear/logcv.mojo (L-BFGS on their LinearModelLoss objective).
 
-def _stratified_kfold_ids(codes, k):
-    """scikit-learn's StratifiedKFold(n_splits=k, shuffle=False)._make_test_folds,
-    in integers: classes renumbered by first appearance, each class's rows
-    dealt to folds by the round-robin allocation of the sorted labels."""
-    n = len(codes)
-    first = {}
-    for i, c in enumerate(codes):
-        first.setdefault(c, i)
-    order = sorted(first, key=lambda c: first[c])
-    enc = {c: r for r, c in enumerate(order)}
-    y_enc = [enc[c] for c in codes]
-    K = len(order)
-    counts = [0] * K
-    for c in y_enc:
-        counts[c] += 1
-    if not isinstance(k, int) or isinstance(k, bool) or k < 2 or k > max(counts):
+def _check_stratified_folds(codes, k):
+    """cv must be an int in [2, the largest class size] (StratifiedKFold's
+    refusal). The fold ids themselves are built from the labels inside the
+    binding (x_linear/logcv.mojo `lcv_fold_table`, on the grid on a GPU)."""
+    largest = max(collections.Counter(codes).values())
+    if not isinstance(k, int) or isinstance(k, bool) or k < 2 or k > largest:
         raise ValueError("mojolearn: cv must be None or an int in [2, the largest class size]")
-    y_order = sorted(y_enc)
-    alloc = [[0] * K for _ in range(k)]
-    for i in range(k):
-        for c in y_order[i::k]:
-            alloc[i][c] += 1
-    ids = [0] * n
-    for c in range(K):
-        folds = [f for f in range(k) for _ in range(alloc[f][c])]
-        pos = 0
-        for i in range(n):
-            if y_enc[i] == c:
-                ids[i] = folds[pos]
-                pos += 1
-    return ids
 
 
 class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
@@ -1231,7 +1158,7 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         else:
             Cs = [float(c) for c in self.Cs]
         folds = 5 if self.cv is None else self.cv
-        ids = _stratified_kfold_ids(cl, folds)
+        _check_stratified_folds(cl, folds)
         has_sw = 0
         tail = []
         if sample_weight is not None or self.class_weight is not None:
@@ -1243,7 +1170,8 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
                                             None if sample_weight is None else raw)
                 fitw = [b * cw[c] for b, c in zip(raw, cl)]
             tail, has_sw = fitw + raw, 1
-        yy = Array.from_list([float(c) for c in cl] + [float(f) for f in ids] + tail, "<f4")
+        # the fold ids' slot is zeros: the binding builds them from the labels
+        yy = Array.from_list([float(c) for c in cl] + [0.0] * n + tail, "<f4")
         p = kp * (d + 1)
         nc = len(Cs)
         vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds, has_sw],

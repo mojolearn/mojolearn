@@ -46,14 +46,16 @@ def _no_cpu_flag(env):
 
 def test_plan_never_puts_ours_cpu_on_any_race():
     for vendor in bb.VENDORS:
-        for cpu_arm in (False, True):            # the old switch is accepted and ignored
-            races = bb.plan_races(vendor, bb.modes_for(vendor), cpu_arm=cpu_arm)
-            assert races
-            for r in races:
-                assert bb.CPU_ARM not in r["arms"], r["id"]
-                # no neural lane whose ours runs the CPU binding is planned at all
-                assert not (r["family"] == "neural" and bb.NEURAL.DEVICE_OF[r["lane"]] == "cpu")
-            assert bb.plan_summary(races)["cpu_cells"] == 0
+        races = bb.plan_races(vendor, bb.modes_for(vendor))
+        assert races
+        for r in races:
+            assert bb.CPU_ARM not in r["arms"], r["id"]
+            assert not any(probe.is_our_cpu_arm(a) for a in r["arms"]), r["id"]
+            # no neural lane whose ours runs the CPU binding is planned at all
+            assert not (r["family"] == "neural" and bb.NEURAL.DEVICE_OF[r["lane"]] == "cpu")
+        assert "cpu_cells" not in bb.plan_summary(races)
+    with pytest.raises(TypeError):                # the switch itself is gone
+        bb.plan_races("apple", ["identical"], cpu_arm=True)
     # the lanes that left the board are exactly the CPU-binding ones
     planned = {r["lane"] for r in bb.plan_races("nvidia", ["identical"], ["neural"])}
     gone = {l for l in bb.NEURAL_LANES if bb.NEURAL.DEVICE_OF.get(l) == "cpu"}
@@ -74,7 +76,7 @@ def test_dry_run_same_plan_with_or_without_no_cpu_arm(vendor, capsys):
         texts.append(capsys.readouterr().out)
     for text in texts:
         assert total in text
-        assert "ours-cpu: off (the board races only our GPU)" in text
+        assert "our CPU: never raced (the board races only our GPU)" in text
         assert "ours-cpu cells=" not in text and "ours-cpu NOT PLANNED" not in text
         assert "memory: peak_host_mb and peak_gpu_mb" in text
 
@@ -85,11 +87,11 @@ def test_run_memory_and_no_ours_cpu_cells(env):
     # without --no-cpu-arm: the default never races our CPU either
     assert bb.main(["--vendor", "apple", "--lanes", "rf,kmeans"] + _no_cpu_flag(env)) == 0
     res = json.loads((env["out"] / "board.json").read_text())
-    assert res["config"]["cpu_arm"] is False
+    assert "cpu_arm" not in res["config"]
     assert not any("--ours-cpu" in rec["command"] for rec in res["races"].values())
     rf = {c["arm"]: c for c in res["races"]["trees/rf/taxi/rows=1000"]["cells"]}
     assert set(rf) == {"ours", "ours-ab", "sklearn-rf-cpu", "lightgbm-cpu"}
-    assert rf["sklearn-rf-cpu"]["ratio_ours_cpu_over"] is None
+    assert all("ratio_ours_cpu_over" not in c for c in rf.values())
     # memory: the highest timed-round peak (rounds 1..3), the warm-up apart
     assert rf["ours"]["peak_host_mb"] == pytest.approx(1003.0)
     assert rf["ours"]["memory"]["warmup_host_mb"] == pytest.approx(1000.0)
@@ -108,7 +110,7 @@ def test_run_memory_and_no_ours_cpu_cells(env):
     assert "## Our CPU tier at a glance" not in board
     assert "Our CPU: never raced" in board and "Our CPU is never raced" in board
     assert "races `torch-cpu-*`" not in board
-    assert "| ours CPU / arm | peak host MB | peak GPU MB |" in board   # column kept for old records
+    assert "ours CPU" not in board and "mojolearn CPU" not in board
     assert "memory, " in board and "stub host" in board
     assert not tb.BANNED.search(board)
 
@@ -149,22 +151,53 @@ def test_probe_summary_bits_and_cpu_switch():
     assert probe.bits_equal(a, {"y": np.arange(4, dtype=np.float64)}) is False
     assert probe.bits_equal({"y": np.zeros(1, np.float32)}, {"y": -np.zeros(1, np.float32)}) is False
     assert probe.bits_equal(a, None) is None
-    e = probe.ours_cpu_env({"MOJOLEARN_VENDOR_FORCE": "1"})
-    assert e["MOJOLEARN_VENDOR"] == "cpu" and e["MOJOLEARN_NUMERIC_MODE"] == "identical"
-    assert "MOJOLEARN_VENDOR_FORCE" not in e and e[probe.OURS_CPU_FLAG] == "1"
+    assert not hasattr(probe, "ours_cpu_env") and not hasattr(probe, "ours_cpu_check")
 
 
-def test_probe_cpu_check_refuses_a_gpu_vendor(monkeypatch):
-    monkeypatch.delenv(probe.OURS_CPU_FLAG, raising=False)
-    ml = types.SimpleNamespace(vendor=lambda: "metal",
-                               _backend=types.SimpleNamespace(vendor_how=lambda: "flat layout"))
-    assert probe.ours_cpu_check(ml) == {}            # not an ours-cpu worker: nothing
-    monkeypatch.setenv(probe.OURS_CPU_FLAG, "1")
-    with pytest.raises(RuntimeError, match="REFUSED: ours-cpu.*'metal'"):
-        probe.ours_cpu_check(ml)
-    ml.vendor = lambda: "cpu"
-    info = probe.ours_cpu_check(ml)
-    assert info["device"] == "cpu" and info["vendor_used"] == "cpu"
+def test_probe_refuses_any_arm_of_ours_on_the_cpu():
+    for arm in ("ours-cpu", "ours-host", "ours-fast-cpu", "ours-host-train"):
+        assert probe.is_our_cpu_arm(arm), arm
+        with pytest.raises(SystemExit, match="our CPU is never raced or timed"):
+            probe.refuse_our_cpu_arms(["ours", arm], "t")
+    for arm in ("ours", "ours-fast", "ours-ab", "sklearn-cpu", "torch-cpu-eager-fp32"):
+        assert not probe.is_our_cpu_arm(arm), arm
+    assert probe.refuse_our_cpu_arms(["ours", "sklearn-cpu"]) == ["ours", "sklearn-cpu"]
+
+
+def test_old_record_drops_every_cell_of_ours_on_the_cpu():
+    """A board.json recorded before Oct 2 2026 may hold `ours-cpu` cells, a
+    neural *-infer race whose ours ran on the host, and ratio_ours_cpu_over:
+    none of it survives a load or reaches BOARD.md, and no pick uses it."""
+    def c(arm, lib, dev, mode, ms, **kw):
+        d = {"arm": arm, "library": lib, "device": dev, "mode": mode, "median_ms": ms,
+             "min_ms": ms, "max_ms": ms, "rounds": 1, "status": "ok", "quality": {}}
+        d.update(kw)
+        return d
+    rf = [c("ours-cpu", "mojolearn", "cpu", "identical", 1.0),
+          c("ours", "mojolearn", "gpu", "identical", 50.0),
+          c("sklearn-rf-cpu", "scikit-learn", "cpu", None, 100.0, ratio_ours_cpu_over=0.01)]
+    assert bb.ours_of(rf, "identical")["arm"] == "ours"
+    with pytest.raises(ValueError):
+        bb.ours_of(rf, "cpu")
+    bb.add_ratios(rf)
+    assert rf[2]["ratio_ours_identical_over"] == pytest.approx(0.5)
+    assert "ratio_ours_cpu_over" not in rf[2]
+    res = {"races": {
+        "trees/rf/taxi/rows=full": {"family": "trees", "lane": "rf", "dataset": "taxi",
+                                    "rows": None, "status": "done", "cells": rf,
+                                    "infer_cells": [dict(rf[0], batch="test")]},
+        "neural/mlp-infer/x/shape=full": {"family": "neural", "lane": "mlp-infer", "dataset": "x",
+                                          "status": "done", "cells": [
+                                              c("ours", "mojolearn", "cpu", "identical", 2.0),
+                                              c("torch-cpu-eager-fp32", "torch", "cpu", None, 3.0)]}}}
+    board = bb.render_board(json.loads(json.dumps(res)))
+    assert "mlp-infer" not in board.split("## Not covered")[0]
+    assert "mojolearn CPU" not in board and "ours CPU" not in board
+    out = bb.strip_our_cpu(res)
+    assert set(out["races"]) == {"trees/rf/taxi/rows=full"}
+    assert [x["arm"] for x in out["races"]["trees/rf/taxi/rows=full"]["cells"]] == \
+        ["ours", "sklearn-rf-cpu"]
+    assert out["races"]["trees/rf/taxi/rows=full"]["infer_cells"] == []
 
 
 def test_probe_reads_this_process():
@@ -218,13 +251,13 @@ def test_tree_mem_lines_parse_into_cells(tmp_path):
             for arm in ("ours", "sklearn-rf-cpu"):
                 with mem.context(arm, r):
                     pass
-        mem.emit("ours-cpu", 1, {"host_mb": 12.5, "host_method": "a=b c", "gpu_method": "cpu arm"})
+        mem.emit("ours-ab", 1, {"host_mb": 12.5, "host_method": "a=b c", "gpu_method": "cpu arm"})
     log = tmp_path / "rf.log"
     log.write_text(buf.getvalue())
     parsed = bb.parse_tree_log(str(log))
     assert len(parsed["mem"]["ours"]) == 3 and len(parsed["mem"]["sklearn-rf-cpu"]) == 3
-    assert parsed["mem"]["ours-cpu"][0]["host_mb"] == 12.5
-    assert parsed["mem"]["ours-cpu"][0]["host_method"] == "a:b c"     # no '=' in a value
+    assert parsed["mem"]["ours-ab"][0]["host_mb"] == 12.5
+    assert parsed["mem"]["ours-ab"][0]["host_method"] == "a:b c"     # no '=' in a value
     assert parsed["mem"]["sklearn-rf-cpu"][1]["gpu_method"].startswith("cpu arm")
     f = bb.memory_fields(parsed["mem"]["ours"])
     assert isinstance(f["peak_host_mb"], float) and f["memory"]["rounds_sampled"] == 2

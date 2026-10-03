@@ -583,7 +583,7 @@ def _emb_onehot_gemm_call(
 ) raises:
     """The one GEMM call of the one-hot arm. On its own because with the import local to the launching function the next `enqueue_function` became an ambiguous call (the extension candidates arrived twice)."""
     from gemm.checks.gemm_identical import identical_gemm
-    from gemm.checks.gemm_oracle import OP_TN
+    from gemm.contract import OP_TN
 
     identical_gemm(ctx, product, onehot, dy, vocab, width, n_positions, OP_TN)
 

@@ -29,6 +29,7 @@ from sequence.fit_team import (
     prophet_team_priv,
     prophet_team_shared,
 )
+from sequence.prophet_coop import PROPHET_COOP, PROPHET_COOP_TPB, prophet_coop_priv, prophet_coop_shared
 from sequence.ops import FP, OP_FILL, OP_GARCH, OP_PROPHET_FIT, Args
 from sequence.pyapi import (
     GARCH_FAST_STALL_ITERS,
@@ -60,7 +61,8 @@ def _team_budget(g: Int, steps_per_iter: Int) -> Int:
 
 
 def _run_team[OP: Int](mut ex: DeviceExec, a: Args, g: Int, flags: FP, mut wit: Witness, what: String,
-                       sh: FP, pv: FP, nsh: Int, npv: Int, sv_sh: FP, sv_pv: FP) raises:
+                       sh: FP, pv: FP, nsh: Int, npv: Int, sv_sh: FP, sv_pv: FP,
+                       tpb: Int = SEQ_TEAM_TPB) raises:
     """Launches the group until every series is done: one launch where the
     budget is unbounded (NVIDIA, AMD), else (Apple) slice after slice until
     the done flags all read 1, each slice witness-checked and rerun from
@@ -68,7 +70,7 @@ def _run_team[OP: Int](mut ex: DeviceExec, a: Args, g: Int, flags: FP, mut wit: 
     private words at pv, kept at sv_sh / sv_pv."""
     if a.i9 < 0:
         var nonce0 = wit.begin()
-        ex.launch_team[OP](a, g, SEQ_TEAM_TPB, wit.p(), 0, nonce0)
+        ex.launch_team[OP](a, g, tpb, wit.p(), 0, nonce0)
         return
     var fl = List[Float32](length=g, fill=Float32(0.0))
     while True:
@@ -79,7 +81,7 @@ def _run_team[OP: Int](mut ex: DeviceExec, a: Args, g: Int, flags: FP, mut wit: 
         var tries = 0
         while True:
             var nonce = wit.begin()
-            ex.launch_team[OP](a, g, SEQ_TEAM_TPB, wit.p(), 0, nonce)
+            ex.launch_team[OP](a, g, tpb, wit.p(), 0, nonce)
             if wit.ok(ex.ctx, g, what):
                 break
             tries += 1
@@ -203,9 +205,20 @@ def prophet_fit_team_py(mut ex: DeviceExec, addrs: PythonObject, ip: PythonObjec
         if N >= PROPHET_FAST_MIN_N:
             return prophet_fit_py(ex, addrs, ip, fp)
     var P = 3 + S + K
+    # rows per series: R words per thread (NT threads), SH shared; the
+    # cooperative path (sequence/prophet_coop.mojo) keeps one private area
+    # of R words per series
+    var NT = SEQ_TEAM_TPB
     var R = prophet_team_priv(P)
     var SH = prophet_team_shared(N, P)
     var G = _group(B, SH, R)
+    var RT = NT * R
+    comptime if PROPHET_COOP:
+        NT = PROPHET_COOP_TPB
+        R = prophet_coop_priv(P, NT)
+        SH = prophet_coop_shared(N, P, NT)
+        G = _group(B, SH + R, 0)
+        RT = R
     var X = _prophet_X(ex, addrs[2], addrs[3], addrs[4], N, ns, nh, K)
     var Y = ex.alloc(B * N)
     ex.upload(Y, fptr(addrs[0], "y"), B * N)
@@ -220,9 +233,9 @@ def prophet_fit_team_py(mut ex: DeviceExec, addrs: PythonObject, ip: PythonObjec
     var Pm = ex.alloc(B * P)
     var I = ex.alloc(B * 4)
     var Sh = ex.alloc(G * SH)
-    var Pv = ex.alloc(G * SEQ_TEAM_TPB * R)
+    var Pv = ex.alloc(G * RT)
     var Fl = ex.alloc(G)
-    var sv = _saves(ex, G * SH, G * SEQ_TEAM_TPB * R, Sh, Pv)
+    var sv = _saves(ex, G * SH, G * RT, Sh, Pv)
     var wit = Witness(ex.ctx, G)
     var a = Args()
     a.p0 = Y
@@ -245,15 +258,19 @@ def prophet_fit_team_py(mut ex: DeviceExec, addrs: PythonObject, ip: PythonObjec
     a.i11 = SH
     # a point's pass A and pass B work, against the lead's GARCH step
     var per_eval = N * (2 + (S + K + SEQ_TEAM_TPB - 1) // SEQ_TEAM_TPB)
+    comptime if PROPHET_COOP:
+        # a thread's share: its N / NT points in pass A and in each of the
+        # P + 1 block-wide accumulators
+        per_eval = (N + NT - 1) // NT * (S + K + P + 1) + 2 * (P + 1)
     var s0 = 0
     while s0 < B:
         var g = min(G, B - s0)
         if s0 > 0:
-            _zero(ex, Pv, g * SEQ_TEAM_TPB * R)
+            _zero(ex, Pv, g * RT)
         a.i8 = s0
         a.i9 = _team_budget(g, 2 * per_eval)
-        _run_team[OP_PROPHET_FIT](ex, a, g, Fl, wit, "Prophet fit slice", Sh, Pv, g * SH, g * SEQ_TEAM_TPB * R,
-                                  sv[0], sv[1])
+        _run_team[OP_PROPHET_FIT](ex, a, g, Fl, wit, "Prophet fit slice", Sh, Pv, g * SH, g * RT,
+                                  sv[0], sv[1], NT)
         s0 += g
     ex.sync()
     ex.download(fptr(addrs[7], "params"), Pm, B * P)

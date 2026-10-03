@@ -71,7 +71,7 @@ from gemm.checks.gemm_int8_mma_tuned import (
     identical_gemm_int8_pieces_tuned_fused_with_plan,
     identical_gemm_int8_pieces_tuned_with_plan,
 )
-from gemm.host.gemm_int15_oracle import INT15_MAX_K
+from gemm.contract import INT15_MAX_K
 
 #: Whether this build can run the plan: a column with the integer unit.
 comptime INT15_TUNED_AVAILABLE = lib_int8_matrix_unit_for[TARGET_COLUMN]()

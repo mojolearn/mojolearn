@@ -343,13 +343,12 @@ _PREDICT_CLASSES = 4
 _PREDICT_CLASSES_PINNED = 5
 _PREDICT_CLASSES_OVA = 6
 
-#: DEVIATION 2980: the device-resident parsed model is the default door of
+#: DEVIATION 2980: the device-resident parsed model is THE door of
 #: `GradientBoosting.predict` and `predict_proba` wherever the loaded binding
-#: exports `gbdt_resident_prepare`. `MOJOLEARN_GBDT_RESIDENT=0` in the
-#: environment at import, or this name set to False at run time, takes the
-#: per-call parse (`gbdt_predict`, `gbdt_predict_multi`) instead; the speed
-#: harness flips it to interleave the two arms in one process.
-GBDT_RESIDENT = os.environ.get("MOJOLEARN_GBDT_RESIDENT", "1").strip() != "0"
+#: exports `gbdt_resident_prepare`. The env switch that took the per-call
+#: parse instead is gone (cpu-gpu-cleanup t-forest); the per-call parse
+#: (`gbdt_predict`, `gbdt_predict_multi`) serves only a binary without the
+#: resident entry points.
 
 #: Losses whose parameter CatBoost makes MANDATORY. Passing the loss without
 #: it raises here rather than in Mojo, so the message names the Python
@@ -2228,9 +2227,8 @@ class GradientBoosting(NumericModeMixin):
         if _has_ctr_records(self.model_) and _binding_vendor(dim_binding) == "cpu":
             # a CPU fit with CTR categoricals (gbdt/host/gbdt_oracle_ctr.mojo):
             # the host binding's parser refuses CTR records by name, so the
-            # dim comes from HostGBDT's parse, the reader `predict` uses
-            from ._gbdt_host import parse_model_text
-            self.approx_dim_ = int(parse_model_text(self.model_)["dim"])
+            # dim comes from the CPU binding's CTR reader (_gbdt_host)
+            self.approx_dim_ = int(dim_binding.gbdt_ctr_model_dim(self.model_))
         else:
             self.approx_dim_ = dim_binding.gbdt_model_dim(self.model_)
         # MULTICLASS DROPS A CLASS AND ONEVSALL DOES NOT. `dim` is
@@ -2260,16 +2258,14 @@ class GradientBoosting(NumericModeMixin):
         the first call and reused while the text is the same bytes; None
         where the loaded binding has no `gbdt_resident_prepare` (a binary
         built before DEVIATION 2980, a CPU-only install's proxy, which
-        refuses an absent name with ImportError) or where `GBDT_RESIDENT`
-        is off, in which case the call takes the per-call parse.
+        refuses an absent name with ImportError), in which case the call
+        takes the per-call parse.
 
         The fast check is object identity on the text (`str` is
         immutable, and the entry keeps a reference so the id cannot be
         reused). A different object is hashed and compared to the sha256
         the entry was prepared from: the same text keeps the handle, a
         new text releases it and prepares again."""
-        if not GBDT_RESIDENT:
-            return None
         try:
             prepare = binding.gbdt_resident_prepare
         except (ImportError, AttributeError):
@@ -2375,12 +2371,11 @@ class GradientBoosting(NumericModeMixin):
         # expand_tensor_ctr_columns the device applies), the reader a CPU
         # column already uses for a GPU-saved CTR model.
         if _has_ctr_records(self.model_) and _binding_vendor(binding) == "cpu":
-            from ._gbdt_host import HostGBDT
-            return HostGBDT(
-                loss=self.loss, text=self.model_,
+            return binding.gbdt_ctr_predict(
+                X, loss=self.loss, text=self.model_,
                 n_features_in=self.n_features_in_, approx_dim=self.approx_dim_,
                 n_classes=self.n_classes_, estimator=type(self).__name__,
-            ).predict(X)
+            )
 
         # DEVIATION 2980: the parsed, packed and uploaded model stays on
         # the device between calls; the per-call parse below is the door
@@ -2783,9 +2778,8 @@ class GradientBoosting(NumericModeMixin):
         binding = obj._bind("_mojolearn_gbdt")
         if _has_ctr_records(obj.model_) and _binding_vendor(binding) == "cpu":
             # the host binding's parser refuses CTR records by name; the
-            # dim comes from HostGBDT's parse, the reader `predict` uses
-            from ._gbdt_host import parse_model_text
-            obj.approx_dim_ = int(parse_model_text(obj.model_)["dim"])
+            # dim comes from the CPU binding's CTR reader (_gbdt_host)
+            obj.approx_dim_ = int(binding.gbdt_ctr_model_dim(obj.model_))
         else:
             obj.approx_dim_ = int(binding.gbdt_model_dim(obj.model_))
         if obj.approx_dim_ != int(meta[1]):

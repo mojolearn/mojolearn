@@ -11,8 +11,8 @@ one-thread run. A stage put over host tasks with the same per-row statements
 must therefore give the same bytes at both settings. This tool runs the
 named class's forward at the board shape in two child processes, one per
 setting, from the same weights and input, compares the outputs byte for
-byte, and prints each setting's median wall over `--calls` calls after one
-warm-up.
+byte. OUR CPU IS NEVER TIMED (Andrew, Oct 2 2026): no wall is printed and
+`--timing` refuses.
 
     python tools/host_threads_ab_check.py --model mamba3        # mamba3-infer's shape
     python tools/host_threads_ab_check.py --model transformer   # transformer-infer's
@@ -128,10 +128,12 @@ def main():
     ap.add_argument("--length", type=int, default=None)
     ap.add_argument("--calls", type=int, default=3)
     ap.add_argument("--timing", action="store_true",
-                    help="also run the policy child with MOJOLEARN_HOST_BLOCK_TIMING=1 and print the stage walls of its last call")
+                    help=argparse.SUPPRESS)   # refused: our CPU is never timed
     ap.add_argument("--child", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--out", default=None, help=argparse.SUPPRESS)
     args = ap.parse_args()
+    if args.timing and not args.child:
+        raise SystemExit("host_threads_ab_check: --timing refused: our CPU is never timed (Andrew, Oct 2 2026)")
     if args.child:
         child(args)
         return 0
@@ -181,8 +183,7 @@ def main():
             for name, ms in sorted(last.items(), key=lambda kv: -kv[1]):
                 print(f"  {name:28s} {ms:8.2f} ms  {100 * ms / total:5.1f}%")
     one, policy = results["one"], results["policy"]
-    print(f"{args.model}: one thread {one[1]:.1f} ms, policy {policy[1]:.1f} ms, ratio {one[1] / policy[1]:.2f}x, "
-          f"{one[2] // 4} floats, sha256 one {one[0][:16]} policy {policy[0][:16]}")
+    print(f"{args.model}: {one[2] // 4} floats, sha256 one {one[0][:16]} policy {policy[0][:16]}")
     if one[0] != policy[0]:
         print(f"HOST_THREADS_AB FAIL {args.model} output bytes differ between one thread and the policy")
         return 1
