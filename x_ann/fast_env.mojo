@@ -34,45 +34,42 @@ comptime FAST_KNN_BIGD = ANN_FAST_APPLE and not is_defined["MOJOLEARN_ANN_FAST_K
 #: the host codebooks.
 comptime FAST_IVFPQ_DEVICE_CODEBOOKS = ANN_FAST_APPLE and not is_defined["MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS_OFF"]()
 
-#: lane/apple-fast-gap-cagra (2026-10-03), OPT-IN A/B arms for the CAGRA
-#: build's k-NN graph on rows wider than 64 features (x_ann/cagra_fast_knn.mojo,
+#: lane/apple-fast-gap-cagra (2026-10-03), the CAGRA build's k-NN graph on
+#: rows wider than 64 features (x_ann/cagra_fast_knn.mojo,
 #: docs/apple-fast/notes/gap-cagra.md):
-#:   WIDE  the NVIDIA/AMD register-tiled difference kernel (`knn_wide_kernel`,
-#:         64 x 64 tile, 4 x 4 cells per thread) on Apple; the cell's chain.
-#:   DOT   a 64 x 64 tile of dot products, 4 x 4 per thread, distances
-#:         |x_i - mu|^2 + |x_j - mu|^2 - 2 (x_i - mu).(x_j - mu) clamped at 0
-#:         (mu a sample mean). Exact neighbor set up to FAST rounding.
 #:   IVFG  an approximate k-NN graph: device Lloyd k-means (n / 384 lists),
-#:         each row's candidates the rows of its list's IVFG_PROBES nearest
-#:         lists (the DOT tile), as cuVS builds CAGRA's graph from an IVF
-#:         index. Falls back to the exact graph when a list's probe pool
-#:         holds fewer than intermediate_graph_degree + 1 rows.
-#:   IVFG_P32  IVFG with 32 probe lists instead of 16.
-comptime CAGRA_FAST_WIDE = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_WIDE"]()
-comptime CAGRA_FAST_DOT = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_DOT"]()
-comptime CAGRA_FAST_IVFG = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_IVFG"]()
-comptime CAGRA_FAST_IVFG_PROBES = 32 if is_defined["MOJOLEARN_CAGRA_FAST_IVFG_P32"]() else (
-    8 if is_defined["MOJOLEARN_CAGRA_FAST_IVFG_P8"]() else 16
-)
-#: IVFG_EXACTD (with IVFG): the graph kernel forms sum (x_i - x_j)^2 (the
-#: exact graph's chain) instead of norms - 2 dot. Cause: IVFG istella recall
-#: .9595 at 16 probes and .9597 at 32 (M3, gapcagra-ivfg*-istella), so the
-#: loss is not coverage; Istella's raw features span orders of magnitude and
-#: the expanded form cancels in float32, misordering close neighbors.
-#: IVFG_P8: 8 probe lists.
-comptime CAGRA_FAST_IVFG_EXACTD = is_defined["MOJOLEARN_CAGRA_FAST_IVFG_EXACTD"]()
+#:         each row's candidates the rows of its list's 16 nearest lists
+#:         (the 64 x 64 tile), as cuVS builds CAGRA's graph from an IVF
+#:         index. Falls back to the exact graph when n < 65,536 or a list's
+#:         probe pool holds fewer than intermediate_graph_degree + 1 rows.
+#:   IVFG_EXACTD (with IVFG): the graph tile forms sum (x_i - x_j)^2 (the
+#:         exact graph's chain) instead of norms - 2 dot. Cause: IVFG istella
+#:         recall .9595 at 16 probes and .9597 at 32, so the loss is not
+#:         coverage; Istella's raw features span orders of magnitude and the
+#:         expanded form cancels in float32, misordering close neighbors.
+#: FAST+Apple default since the M3 A/B (one run per arm): CAGRA istella
+#: 21,210 -> 1,254 ms, recall .9838 -> .9972 (IVFG+EXACTD+SEEDS+ITERS).
+#: `-D MOJOLEARN_CAGRA_FAST_IVFG_OFF` restores the exact graph;
+#: `-D MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF` the expanded-form tile.
+comptime CAGRA_FAST_IVFG = ANN_FAST_APPLE and not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_OFF"]()
+comptime CAGRA_FAST_IVFG_PROBES = 16
+comptime CAGRA_FAST_IVFG_EXACTD = CAGRA_FAST_IVFG and not is_defined["MOJOLEARN_CAGRA_FAST_IVFG_EXACTD_OFF"]()
 
-#: lane/apple-fast-gap-cagra (2026-10-03), OPT-IN A/B arms for the CAGRA
-#: SEARCH (taxi recall .48 vs faiss .93): taxi's 11 features are integer
-#: codes (zone ids 1..265, hour, day), so each row's 64 nearest rows sit in
-#: its own (pickup, dropoff) cell and the graph splits into near-isolated
-#: components; 96 seeds rarely land in the query's. SEEDS raises the seed
-#: count to at least CAGRA_FAST_SEED_WORK / d rows (taxi 23,831, istella
-#: 1,191; never above n), the walk unchanged. SEEDS4 takes four times that.
-#: ITERS takes at least 2 x itopk_size + log_{deg/2}(n) iterations (cuVS's
-#: auto rule adds the log term; 2x lets the walk converge).
+#: lane/apple-fast-gap-cagra (2026-10-03), the CAGRA SEARCH (taxi recall .48
+#: vs faiss .93): taxi's 11 features are integer codes (zone ids 1..265,
+#: hour, day), so each row's 64 nearest rows sit in its own (pickup,
+#: dropoff) cell and the graph splits into near-isolated components; 96
+#: seeds rarely land in the query's. SEEDS raises the seed count to at least
+#: CAGRA_FAST_SEED_WORK / d rows (taxi 23,831, istella 1,191; never above
+#: n), the walk unchanged. ITERS takes at least 2 x itopk_size +
+#: log_{deg/2}(n) iterations (cuVS's auto rule adds the log term; 2x lets
+#: the walk converge). FAST+Apple default since the M3 A/B (one run per
+#: arm): taxi recall .4838 -> .9979 (SEEDS+ITERS), build 2,859 -> 2,900 ms
+#: (noise). `-D MOJOLEARN_CAGRA_FAST_SEEDS_OFF` / `_ITERS_OFF` turn each off.
+#: SEEDS4 (OPT-IN, `-D MOJOLEARN_CAGRA_FAST_SEEDS4`): four times the seed
+#: work (taxi .9997, istella untested; follow-up A/B).
 comptime CAGRA_FAST_SEEDS = ANN_FAST_APPLE and (
-    is_defined["MOJOLEARN_CAGRA_FAST_SEEDS"]() or is_defined["MOJOLEARN_CAGRA_FAST_SEEDS4"]()
+    not is_defined["MOJOLEARN_CAGRA_FAST_SEEDS_OFF"]() or is_defined["MOJOLEARN_CAGRA_FAST_SEEDS4"]()
 )
 comptime CAGRA_FAST_SEED_WORK = 4 * 262144 if is_defined["MOJOLEARN_CAGRA_FAST_SEEDS4"]() else 262144
-comptime CAGRA_FAST_ITERS = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_ITERS"]()
+comptime CAGRA_FAST_ITERS = ANN_FAST_APPLE and not is_defined["MOJOLEARN_CAGRA_FAST_ITERS_OFF"]()

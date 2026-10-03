@@ -15,11 +15,10 @@ from max.gpu.sync import barrier
 from max.gpu.host import DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
-from x_ann.knn_device import knn_enqueue, knn_wide_kernel, KW_TI, KW_TX, KW_TY
-from x_ann.fast_env import CAGRA_FAST_WIDE, CAGRA_FAST_DOT, CAGRA_FAST_IVFG, CAGRA_FAST_IVFG_PROBES
-from x_ann.fast_env import CAGRA_FAST_IVFG_EXACTD
+from x_ann.knn_device import knn_enqueue
+from x_ann.fast_env import CAGRA_FAST_IVFG, CAGRA_FAST_IVFG_PROBES, CAGRA_FAST_IVFG_EXACTD
 from x_ann.fast_env import CAGRA_FAST_SEEDS, CAGRA_FAST_SEED_WORK, CAGRA_FAST_ITERS
-from x_ann.cagra_fast_knn import cg_dot_knn_enqueue, cg_ivfg_enqueue
+from x_ann.cagra_fast_knn import cg_ivfg_enqueue
 from max.gpu.host import DeviceBuffer
 
 from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
@@ -510,24 +509,15 @@ def cagra_knn_enqueue(
     mut dnd: DeviceBuffer[DType.float32], mut dni: DeviceBuffer[DType.int32],
 ) raises:
     """The intermediate k-NN graph. lane/apple-fast-gap-cagra (2026-10-03),
-    FAST on Apple, OPT-IN, rows wider than 64 features only
-    (x_ann/fast_env.mojo, x_ann/cagra_fast_knn.mojo): IVFG (approximate,
-    falls back to the exact graph), DOT (exact, dot tile), WIDE (exact,
-    `knn_wide_kernel`); otherwise `knn_enqueue`."""
+    FAST on Apple by default, rows wider than 64 features only
+    (x_ann/fast_env.mojo, x_ann/cagra_fast_knn.mojo): IVFG, the
+    approximate graph, which refuses (returns False) back to the exact
+    graph when n is small or a probe pool is too small; otherwise
+    `knn_enqueue`."""
     comptime if CAGRA_FAST_IVFG:
         if d > 64:
             if cg_ivfg_enqueue[CAGRA_FAST_IVFG_PROBES, CAGRA_FAST_IVFG_EXACTD](ctx, dx, n, d, kdeg, dnd, dni):
                 return
-    comptime if CAGRA_FAST_DOT:
-        if d > 64:
-            cg_dot_knn_enqueue(ctx, dx, n, d, kdeg, dnd, dni)
-            return
-    comptime if CAGRA_FAST_WIDE:
-        if d > 64:
-            ctx.enqueue_function[knn_wide_kernel](Int32(n), dx.unsafe_ptr(), Int32(d), Int32(kdeg),
-                                                  dnd.unsafe_ptr(), dni.unsafe_ptr(),
-                                                  grid_dim=(n + KW_TI - 1) // KW_TI, block_dim=(KW_TX, KW_TY, 1))
-            return
     knn_enqueue(ctx, dx, n, d, kdeg, dnd, dni)
 
 
@@ -618,7 +608,7 @@ def cagra_search_on(
     them): the queries up, the walk, the two outputs down."""
     var words = (n + 31) // 32
     var st = AnnStages("cagra_search")
-    # lane/apple-fast-gap-cagra, FAST on Apple, OPT-IN (x_ann/fast_env.mojo)
+    # lane/apple-fast-gap-cagra, FAST on Apple by default (x_ann/fast_env.mojo)
     var n_seeds = n_seeds_in
     var max_iter = max_iter_in
     comptime if CAGRA_FAST_SEEDS:

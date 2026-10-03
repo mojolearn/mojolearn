@@ -65,3 +65,13 @@ FAST+Apple, `x_ann/cagra_device.mojo` `cagra_search_on`):
 The build (the board's median_ms) is unchanged by these; they move recall and infer_ms.
 
 Queued: gapcagra-{seeds,seeds4,iters,seedsiters}-taxi; gapcagra-{ivfgx,ivfgx8,ivfgxsi,seedsiters}-istella.
+
+## Decision (2026-10-03)
+
+IVFG + IVFG_EXACTD + SEEDS + ITERS are the FAST+Apple default (M3, one run
+per arm: istella 21,210 -> 1,254 ms, recall .9838 -> .9972; taxi recall
+.4838 -> .9979). Off defines: `MOJOLEARN_CAGRA_FAST_{IVFG,IVFG_EXACTD,SEEDS,ITERS}_OFF`.
+IVFG still refuses back to the exact graph (n < 65,536 or a short probe pool).
+Deleted (code recoverable at the lane's pre-merge sha 0c4d268c5): DOT (slower,
+recall loss), WIDE (noise), IVFG_P32 (no recall gain), IVFG_P8 (recall loss).
+SEEDS4 stays opt-in (taxi .9997; istella untested).

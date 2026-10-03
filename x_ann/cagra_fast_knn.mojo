@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""CAGRA's k-NN graph, FAST on Apple, OPT-IN A/B arms (lane/apple-fast-gap-cagra,
+"""CAGRA's k-NN graph, FAST on Apple by default (lane/apple-fast-gap-cagra,
 2026-10-03; switches in x_ann/fast_env.mojo, cost model in
 docs/apple-fast/notes/gap-cagra.md).
 
@@ -9,7 +9,7 @@ nearly all of its 21.2 s in the exact k-NN graph, `knn_tiled_bigd_kernel`:
 one thread per row, one threadgroup-memory load, a subtract and a fused
 multiply-add per (pair, feature), 3.5e13 of them.
 
-  * `cg_dot_knn_kernel` (DOT): a 64 x 64 tile of rows by candidates, both
+  * `cg_dot_knn_kernel` (IVFG's k-means and probe tile): a 64 x 64 tile of rows by candidates, both
     sides staged 16 features at a time, 4 x 4 dot products per thread (8
     threadgroup loads per 16 multiply-adds, no subtract), then the distance
     |a|^2 + |b|^2 - 2 a.b clamped at 0 on rows centred by a sample mean `mu`
@@ -409,22 +409,6 @@ def cg_mu_enqueue(ctx: DeviceContext, x: F32P, n: Int, d: Int, mut mu: DeviceBuf
     var m = MU_ROWS if n > MU_ROWS else n
     ctx.enqueue_function[cg_mean_kernel](x, Int32(n), Int32(d), Int32(m), _f32p(mu),
                                          grid_dim=(d + 63) // 64, block_dim=64)
-
-
-def cg_dot_knn_enqueue(
-    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], n: Int, d: Int, k: Int,
-    mut dnd: DeviceBuffer[DType.float32], mut dni: DeviceBuffer[DType.int32],
-) raises:
-    """DOT: the exact k-NN graph (each row's k nearest other rows), dot tile."""
-    var mu = ctx.enqueue_create_buffer[DType.float32](d)
-    var xn = ctx.enqueue_create_buffer[DType.float32](n)
-    var x = _f32p(dx)
-    cg_mu_enqueue(ctx, x, n, d, mu)
-    _norms(ctx, x, n, d, _f32p(mu), _f32p(xn))
-    _dot_knn(ctx, x, _f32p(xn), n, x, _f32p(xn), n, d, _f32p(mu), k, True, _f32p(dnd), _i32p(dni))
-    ctx.synchronize()
-    _ = xn^
-    _ = mu^
 
 
 def cg_ivfg_enqueue[
