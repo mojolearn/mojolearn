@@ -9,12 +9,26 @@ from std.os import getenv
 from std.memory import memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
+from sequence.moe_reg import (
+    MOE_DEVGROUP,
+    MOE_REGTILE,
+    RT as MOE_RT,
+    moe_group_count_kernel,
+    moe_group_offsets_kernel,
+    moe_group_scatter_kernel,
+    moe_group_zero_kernel,
+    moe_hidden_reg_kernel,
+    moe_logits_reg_kernel,
+    moe_out_reg_kernel,
+    moe_reg_blocks,
+    moe_route_tail_kernel,
+)
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from sequence.exec_trait import Exec
 from sequence.dispatch import apply
-from sequence.ops import OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
+from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
 from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
@@ -477,6 +491,61 @@ struct DeviceExec(Exec):
         # neural-pass29, sequence/moe_tiled.mojo) when the entry grouped the
         # pairs by expert (a.i4 = the block count); MOJOLEARN_SEQ_MOE_TILED=0
         # keeps the one-thread-per-cell items.
+        # Apple FAST (lane apple-fast-moespeed, sequence/moe_reg.mojo):
+        # MOJOLEARN_MOE_REGTILE, the router's logits tiled and the products
+        # register-tiled, the same chains; MOJOLEARN_MOE_DEVGROUP, the pairs
+        # grouped by expert on the device (a.i6 = 1 from the entry).
+        comptime if MOE_REGTILE and OP == OP_MOE_ROUTE:
+            if a.i1 <= MOE_RT:
+                var bt = MOE_RT // a.i1
+                self.ctx.enqueue_function[moe_logits_reg_kernel](
+                    a.p0, a.p1, a.p2, Int32(n), Int32(a.i0), Int32(a.i1),
+                    grid_dim=((n + bt - 1) // bt, 1, 1), block_dim=(MOE_RT, 1, 1),
+                )
+                self.ctx.enqueue_function[moe_route_tail_kernel](
+                    a.p2, a.p3, a.p4, a.p5, Int32(n), Int32(a.i1), Int32(a.i2), Int32(a.i3),
+                    grid_dim=((n + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                )
+                return
+        comptime if MOE_REGTILE and OP == OP_MOE_HIDDEN:
+            if a.i4 > 0:
+                var npairs = n // a.i1
+                comptime if MOE_DEVGROUP:
+                    if a.i6 == 1:
+                        # a.p7 the int32 counts | cursors (2E words)
+                        self.ctx.enqueue_function[moe_group_zero_kernel](
+                            a.p7, Int32(a.i3), grid_dim=(1, 1, 1), block_dim=(MOE_RT, 1, 1),
+                        )
+                        self.ctx.enqueue_function[moe_group_count_kernel](
+                            a.p2, a.p7, Int32(npairs),
+                            grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                        )
+                        self.ctx.enqueue_function[moe_group_offsets_kernel](
+                            a.p7, a.p5, Int32(a.i3), grid_dim=(1, 1, 1), block_dim=(MOE_RT, 1, 1),
+                        )
+                        self.ctx.enqueue_function[moe_group_scatter_kernel](
+                            a.p2, a.p7, a.p5, a.p4, Int32(npairs), Int32(a.i3),
+                            grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                        )
+                self.ctx.enqueue_function[moe_hidden_reg_kernel](
+                    a.p0, a.p1, a.p4, a.p5, a.p3,
+                    Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
+                    grid_dim=(moe_reg_blocks(npairs, a.i3, a.i1), 1, 1), block_dim=(MOE_RT, 1, 1),
+                )
+                return
+        comptime if MOE_REGTILE and OP == OP_MOE_OUT:
+            if a.i4 > 0:
+                var npairs = (n // a.i0) * a.i2
+                self.ctx.enqueue_function[moe_out_reg_kernel](
+                    a.p0, a.p1, a.p6, a.p7, a.p5,
+                    Int32(a.i0), Int32(a.i1), Int32(a.i3),
+                    grid_dim=(moe_reg_blocks(npairs, a.i3, a.i0), 1, 1), block_dim=(MOE_RT, 1, 1),
+                )
+                self.ctx.enqueue_function[moe_combine_kernel](
+                    a.p3, a.p5, a.p4, Int32(a.i0), Int32(a.i2), Int32(n),
+                    grid_dim=((n + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                )
+                return
         comptime if OP == OP_MOE_HIDDEN:
             if a.i4 > 0 and _moe_tiled_on():
                 self.ctx.enqueue_function[moe_hidden_tiled_kernel](
