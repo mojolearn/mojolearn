@@ -101,6 +101,9 @@ for v in MOJOLEARN_CPU_THREADS OMP_NUM_THREADS OMP_THREAD_LIMIT OPENBLAS_NUM_THR
 done
 export OMP_MAX_ACTIVE_LEVELS=1 OMP_DYNAMIC=FALSE
 if [ "$BACKEND" = cpu ]; then export MOJOLEARN_VENDOR=cpu; fi
+# identity_break refuses a Metal matrix of more than one lane unless it is an
+# intentional full run; a reference column is exactly that.
+if [ "$BACKEND" = metal ]; then export MOJOLEARN_APPLE_FULL_DIAGNOSTIC=1; fi
 
 COMMIT=$(git rev-parse HEAD 2>/dev/null) || die "not a git checkout; the record needs a commit witness"
 # A build may touch a lock file or a generated table; a changed SOURCE file
