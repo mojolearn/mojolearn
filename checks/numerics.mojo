@@ -125,8 +125,17 @@ def ftz(x: Float32) -> Float32:
     # refuses NaN payloads at every seam that could see one (row 39), and a
     # NaN in a training step is a failed step whatever its payload.
     # `-D MOJOLEARN_FTZ_HW_OFF=1` restores the integer spelling for the A/B.
+    # A NaN IS RETURNED UNCHANGED (lane fix-xvendor-conflicts, 2026-10-03):
+    # the multiply returns NVIDIA's canonical NaN 0x7FFFFFFF for every NaN,
+    # so every output that stores the one quiet NaN word 0x7FC00000 through
+    # `ftz` read 0x7FFFFFFF on NVIDIA alone (the 0.8.36 reference
+    # recording: x-prep-score-edges, x-prep-select-kbest and
+    # x-prep-inverse-transforms, NVIDIA against AMD, Apple and the host).
+    # The select keeps the input word for a NaN, so this spelling returns the
+    # integer spelling's word for all 2^32 inputs.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_FTZ_HW_OFF"]() and is_nvidia_gpu():
-        return llvm_intrinsic["llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False](x, Float32(1.0))
+        var y = llvm_intrinsic["llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False](x, Float32(1.0))
+        return x if y != y else y
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var b = bitcast[DType.uint32](x)
         if (b & UInt32(0x7F800000)) == UInt32(0) and (
