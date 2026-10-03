@@ -4,7 +4,6 @@ import os
 import pickle
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor
 
 
 #: THE CPU REFERENCE ROUTE (lane/cpu-training-par-classical, 2026-09-15).
@@ -295,12 +294,10 @@ class DevicePool:
                 or len(set(self.devices)) != len(self.devices)):
             raise ValueError('devices must be distinct nonnegative integer indices')
         self._workers = []
-        self._threads = None
 
     def _start(self):
         if self._workers:
             return
-        self._threads = ThreadPoolExecutor(max_workers=len(self.devices))
         try:
             groups = [self.devices] if self.cooperative else [(d,) for d in self.devices]
             for group in groups:
@@ -349,9 +346,18 @@ class DevicePool:
             raise
 
     @staticmethod
-    def _call(worker, request):
+    def _send(worker, request):
         pickle.dump(request, worker.stdin, protocol=5)
         worker.stdin.flush()
+
+    @classmethod
+    def _call(cls, worker, request):
+        """One request to one worker, its reply read back."""
+        cls._send(worker, request)
+        return cls._receive(worker)
+
+    @staticmethod
+    def _receive(worker):
         ok, value = pickle.load(worker.stdout)
         if not ok:
             raise RuntimeError('GPU worker failed:\n' + value)
@@ -370,16 +376,31 @@ class DevicePool:
         self._start()
         result = []
         # Waves preserve logical order and never use one worker concurrently.
+        # No host thread: every request of a wave is written to its own
+        # worker process first (each worker reads a whole request before it
+        # computes, so the writes do not wait on any computation), and the
+        # replies are then read in worker order. The workers run their
+        # devices concurrently; this process only moves the pickled bytes.
         for start in range(0, len(requests), len(self._workers)):
             wave = requests[start:start + len(self._workers)]
-            futures = [self._threads.submit(self._call, worker, request)
-                       for worker, request in zip(self._workers, wave)]
+            pairs = list(zip(self._workers, wave))
             error = None
-            for future in futures:
+            sent = []
+            for worker, request in pairs:
                 try:
-                    result.append(future.result())
+                    self._send(worker, request)
+                    sent.append(worker)
                 except BaseException as exc:
                     error = exc
+                    break
+            for worker in sent:
+                try:
+                    value = self._receive(worker)
+                    if error is None:
+                        result.append(value)
+                except BaseException as exc:
+                    if error is None:
+                        error = exc
             if error is not None:
                 self.close()
                 raise error
@@ -397,6 +418,3 @@ class DevicePool:
             worker.stdin.close()
             worker.stdout.close()
         self._workers = []
-        if self._threads is not None:
-            self._threads.shutdown(wait=True, cancel_futures=True)
-            self._threads = None
