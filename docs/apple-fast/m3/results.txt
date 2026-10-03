@@ -1,4 +1,4 @@
-pos=450 lines=     584
+pos=459 lines=     670
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -549,3 +549,13 @@ pos=450 lines=     584
 651:CMD apple-fast-decomp-sparse@1b2c8f955 dsp-spca-upd-taxi rc=1 ./x_decomp/device.mojo:287:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
 652:CMD apple-fast-decomp-sparse@1b2c8f955 dsp-spca-lasso-taxi rc=1 ./x_decomp/device.mojo:287:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
 653:CMD apple-fast-opp@8157809e8 uncap-mc-istella rc=0 OPP-DONE tag=uncap-mc-istella out=~/mq/out/opp-uncap-mc-istella
+654:CMD apple-fast-trees-symmetric@ce517b4b3 tsym-leaves-istella rc=0 AFT-MEDIAN arm=B n=2 median_ms=14642.7 all=[14623, 14663] hashes=['29308e9f914da17c', '76705e1581a5eabc'] acc={'logloss': [0.186435, 0.186691], 'auc': [0.980154, 0.980112]}
+655:FBUILD lane/apple-fast-eighscope@73f3a856d core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+656:CMD apple-fast-eighscope@73f3a856d afb-eighscope rc=0 afb done tag=afb-eighscope pairs=4 ok=4
+657:CMD apple-fast-isotonic-knn@fd9ebd32a ik-iso-par-istella rc=1 ~/mq/wt/lane_apple-fast-isotonic-knn/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+658:CMD apple-fast-isotonic-knn@fd9ebd32a ik-iso-pair-istella rc=1 ~/mq/wt/lane_apple-fast-isotonic-knn/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+659:CMD apple-fast-isotonic-knn@fd9ebd32a ik-imp-t2-taxi rc=1 ~/mq/wt/lane_apple-fast-isotonic-knn/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+660:CMD apple-fast-decomp-linalg@f231ebab4 dlin-chol-blocked-synthetic rc=1 ~/mq/wt/lane_apple-fast-decomp-linalg/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+661:CMD apple-fast-decomp-linalg@f231ebab4 dlin-svd-cholqr-chol-istella rc=1 ./x_decomp/device.mojo:278:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+662:CMD apple-fast-core@d22a7494c core-kmeans-rownorm-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=984.7 all=[985] quality=['{"inertia":'] defines='-D MOJOLEARN_KMEANS_FAST_ROWNORM=1'
+663:CMD apple-fast-core@d22a7494c core-kmeans-skippred-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=998.7 all=[999] quality=['{"inertia":'] defines='-D MOJOLEARN_KMEANS_FAST_SKIP_PREDICT=1'
