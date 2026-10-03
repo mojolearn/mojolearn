@@ -4,7 +4,7 @@
 GPU. Each primitive is one kernel whose thread `t` calls the `x_cluster/
 bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
-from std.atomic import Atomic
+from std.atomic import Atomic, Ordering
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
@@ -14,7 +14,7 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, lib_smem_page_fits_for
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_sqrt
 
 from x_cluster.bodies import (
@@ -41,6 +41,7 @@ from x_cluster.bodies import (
     ap_r_update,
     meanshift_seed,
     nearest_row,
+    sq_dist_rows,
     SplitMix64,
     sqdist_cell,
     sqrt_cell,
@@ -52,7 +53,8 @@ from x_cluster.bodies import (
 from cluster.estimator import kmeans_fit, kmeans_fit_rows
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
-from gemm.contract import OP_TN
+from gemm.contract import OP_NN, OP_TN
+from mixture.checks.estep import mahal_kernel
 from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
 from x_cluster.ops import ClusterOps
 from x_cluster.meanshift_fast import MEANSHIFT_FAST_GRID, meanshift_fast_grid
@@ -497,6 +499,11 @@ def _ap_key_index(key: UInt64) -> Int:
 
 
 def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+    _ap_r_body(s, a, r, n, damping)
+
+
+@always_inline
+def _ap_r_body(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
     """`ap_responsibility_row` for row `block_idx.x` on one block: the max
     of `ftz(A + S)` with its lowest index, then the second max over the
     other columns with ITS lowest index (each an integer max of `_ap_key`,
@@ -593,6 +600,11 @@ def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
 
 
 def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
+    _ap_a_body(r, a, n, damping)
+
+
+@always_inline
+def _ap_a_body(r: FPtr, a: FPtr, n: Int32, damping: Float32):
     var t = _tid()
     if t < Int(n):
         ap_availability_col(r, a, Int(n), damping, t)
@@ -1043,6 +1055,11 @@ comptime APF_ROWS = 64  # rows per slice
 # its own thread. The addends and the cell update are `ap_availability_col`'s;
 # the column sum's order is not (bits move; the paired quality check).
 def _apf_part_kernel(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr):
+    _apf_part_body(r, n, n_tiles, part)
+
+
+@always_inline
+def _apf_part_body(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr):
     """Block (slice s, tile c), thread t: column c * APF_TPB + t summed over
     the slice's rows (`Rp`: the positive part off the diagonal, the value
     on it). Adjacent threads read adjacent cells of each row."""
@@ -1066,6 +1083,11 @@ def _apf_part_kernel(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr):
 
 
 def _apf_sum_kernel(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr):
+    _apf_sum_body(part, n, n_slices, colsum)
+
+
+@always_inline
+def _apf_sum_body(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr):
     var k = _tid()
     var N = Int(n)
     if k >= N:
@@ -1077,6 +1099,11 @@ def _apf_sum_kernel(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr):
 
 
 def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32, damping: Float32):
+    _apf_update_body(r, a, colsum, n, n_tiles, damping)
+
+
+@always_inline
+def _apf_update_body(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32, damping: Float32):
     """Block (row i, tile c), thread t: cell (i, c * APF_TPB + t)."""
     var N = Int(n)
     var T = Int(n_tiles)
@@ -1093,6 +1120,210 @@ def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32,
         nw = Float32(0)
     var old = a[i * N + k]
     a[i * N + k] = ftz(ftz(identical_mul(old, damping)) + ftz(identical_mul(nw, one_minus)))
+
+
+# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
+# `-D MOJOLEARN_AFFINITY_FAST_LOOP=1` (AP_FAST_LOOP, asked by
+# x_cluster/affinity.mojo under the same define):
+# the AffinityPropagation iteration on the device for AP_LOOP_BATCH
+# iterations per host wait. Cause: the driver's `while it < max_iter`
+# (affinity.mojo) read the n exemplar flags back EVERY iteration
+# (`ops.get_i(e_s, n)`: a stream drain and a host round trip per iteration,
+# up to 200 of them) and kept the convergence window on the host. Here
+# `_apl_e_kernel` keeps the window (`ring`, n x convergence_iter) and its
+# two counts (settled rows, exemplars) on the device, the NEXT iteration's
+# `_apl_r_kernel` reads the counts and raises `done`, and every later kernel
+# of the batch returns at once. The responsibility, availability and
+# exemplar arithmetic is the plain kernels', cell for cell: the same bits
+# and the same n_iter; only the waits go. Expected: the per-iteration host
+# wait (the dominant cost of a 5,000-row iteration on Metal) once per batch.
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE
+comptime BGMM_FAST_MOMENTS_GEMM = XC2_FAST and is_defined["MOJOLEARN_BGMM_FAST_MOMENTS_GEMM"]()
+comptime BGMM_FAST_MAHAL_GEMM = XC2_FAST and is_defined["MOJOLEARN_BGMM_FAST_MAHAL_GEMM"]()
+comptime AP_FAST_LOOP = XC2_FAST and is_defined["MOJOLEARN_AFFINITY_FAST_LOOP"]()
+comptime BISECT_FAST_RESIDENT = XC2_FAST and is_defined["MOJOLEARN_BISECT_FAST_RESIDENT"]()
+comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST and is_defined["MOJOLEARN_OPTICS_FAST_DEVICE_ORDER"]()
+
+
+def _apl_r_kernel(
+    s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32, cnt: IPtr, it: Int32, check: Int32, done: IPtr,
+):
+    """`_ap_r_kernel` for iteration `it`, after the convergence test of
+    iteration it - 1 (`check` != 0 when it - 1 >= convergence_iter): every
+    block reads the same two complete counts and takes the same branch, so
+    either every row updates or none does."""
+    if done[0] != Int32(0):
+        return
+    if check != Int32(0):
+        var prev = Int(it) - 1
+        if cnt[2 * prev] == n and cnt[2 * prev + 1] > Int32(0):
+            done[0] = Int32(1)
+            done[1] = Int32(prev)
+            return
+    _ap_r_body(s, a, r, n, damping)
+
+
+def _apl_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32, done: IPtr):
+    if done[0] != Int32(0):
+        return
+    _ap_a_body(r, a, n, damping)
+
+
+def _apl_a_part_kernel(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr, done: IPtr):
+    if done[0] != Int32(0):
+        return
+    _apf_part_body(r, n, n_tiles, part)
+
+
+def _apl_a_sum_kernel(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr, done: IPtr):
+    if done[0] != Int32(0):
+        return
+    _apf_sum_body(part, n, n_slices, colsum)
+
+
+def _apl_a_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32, damping: Float32, done: IPtr):
+    if done[0] != Int32(0):
+        return
+    _apf_update_body(r, a, colsum, n, n_tiles, damping)
+
+
+def _apl_e_kernel(
+    a: FPtr, r: FPtr, n: Int32, e: IPtr, ring: IPtr, conv: Int32, it: Int32, cnt: IPtr, done: IPtr,
+):
+    """Row i's exemplar flag (`ap_exemplar_cell`), its slot of the window
+    `ring[i, it % conv]`, and the two counts of iteration `it`: cnt[2 it]
+    += (the row's window all ones or all zeros), cnt[2 it + 1] += e[i].
+    Integer adds: every interleaving gives the same counts."""
+    if done[0] != Int32(0):
+        return
+    var i = _tid()
+    var N = Int(n)
+    if i >= N:
+        return
+    ap_exemplar_cell(a, r, N, e, i)
+    var C = Int(conv)
+    var ei = e[i]
+    ring[i * C + Int(it) % C] = ei
+    var se = Int32(0)
+    for c in range(C):
+        se += ring[i * C + c]
+    var settled = Int32(1) if (se == conv or se == Int32(0)) else Int32(0)
+    _ = Atomic.fetch_add[ordering = Ordering.RELAXED](cnt.unsafe_offset(2 * Int(it)), settled)
+    _ = Atomic.fetch_add[ordering = Ordering.RELAXED](cnt.unsafe_offset(2 * Int(it) + 1), ei)
+
+
+# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
+# `-D MOJOLEARN_OPTICS_FAST_DEVICE_ORDER=1` (OPTICS_FAST_DEVICE_ORDER, asked by
+# x_cluster/optics.mojo under the same define): sklearn's
+# `compute_optics_graph` ordering loop on the device. The n steps stay serial
+# by construction (each pick depends on the last relaxation); every step is
+# ONE grid launch of ceil(n / OPT_ORD_PER) blocks, block b owning the rows
+# [b * OPT_ORD_PER, (b + 1) * OPT_ORD_PER): it folds the previous launch's
+# partial keys to the step's point (the min of `_opt_key`: the lowest
+# reachability, the lowest index on a tie, exactly the host's strict `<`
+# scan over `processed == 0`), marks the point processed and writes the
+# ordering, relaxes its own rows from the point's distance row (max(dist,
+# core) when it improves, the predecessor set), then scans its rows for
+# the next step's partial key. The partials are double-buffered (launch s
+# reads half s & 1, writes half (s + 1) & 1), so no block reads what
+# another writes in the same launch; the n + 1 launches (step -1 is the
+# init and the first scan) go out without a host wait. Nothing n^2 crosses
+# to the host. Same picks, same reachability and predecessors.
+comptime OPT_ORD_TPB = 256
+comptime OPT_ORD_PER = OPT_ORD_TPB * 2
+"""Rows per block (two per thread): 20 blocks at the board's 10,000 rows."""
+
+
+@always_inline
+def _opt_key(v: Float32, j: Int) -> UInt64:
+    """An integer whose order is the host loop's pick: the reachability's
+    bits in the high word (every reachability is >= +0 or +inf; -0.0 folded
+    onto +0.0), the index in the low word so the LOWEST index wins a tie."""
+    var b = bitcast[DType.uint32](v)
+    if b == UInt32(0x80000000):
+        b = UInt32(0)
+    return (UInt64(b) << 32) | UInt64(UInt32(j))
+
+
+@always_inline
+def _opt_pick(part: MutPointer[UInt64, MutAnyOrigin], nb: Int) -> UInt64:
+    """The min of the nb partial keys (every thread folds them itself: nb is
+    the block count, tens at the board's rows)."""
+    var k = UInt64(0xFFFFFFFFFFFFFFFF)
+    for b in range(nb):
+        k = min(k, part[b])
+    return k
+
+
+def _optics_step_kernel(
+    dist: FPtr, core: FPtr, n: Int32, max_eps: Float32, ordering: IPtr, reach: FPtr, pred: IPtr, proc: IPtr,
+    part: MutPointer[UInt64, MutAnyOrigin], nb: Int32, step: Int32,
+):
+    var tid = Int(thread_idx.x)
+    var b = Int(block_idx.x)
+    var N = Int(n)
+    var NB = Int(nb)
+    var s = Int(step)
+    var r0 = b * OPT_ORD_PER
+    var r1 = r0 + OPT_ORD_PER
+    if r1 > N:
+        r1 = N
+    var inf = Float32.MAX * Float32(2)
+    var red = stack_allocation[OPT_ORD_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    if s < 0:
+        for o in range(r0 + tid, r1, OPT_ORD_TPB):
+            reach[o] = inf
+            pred[o] = Int32(-1)
+            proc[o] = Int32(0)
+    else:
+        var key = _opt_pick(part + (s & 1) * NB, NB)
+        var point = Int(UInt32(key & UInt64(0xFFFFFFFF)))
+        if b == 0 and tid == 0:
+            ordering[s] = Int32(point)
+        var cp = core[point]
+        # the host's `core[point] != inf` after its clamp of core > max_eps
+        var relax = cp <= max_eps and cp != inf
+        for o in range(r0 + tid, r1, OPT_ORD_TPB):
+            if o == point:
+                proc[o] = Int32(1)
+            elif relax and proc[o] == Int32(0):
+                var dd = dist[point * N + o]
+                if dd <= max_eps:
+                    var rd = dd if dd > cp else cp
+                    if rd < reach[o]:
+                        reach[o] = rd
+                        pred[o] = Int32(point)
+    # this thread's rows again (the same stride): the next step's candidate
+    var mine = UInt64(0xFFFFFFFFFFFFFFFF)
+    for o in range(r0 + tid, r1, OPT_ORD_TPB):
+        if proc[o] == Int32(0):
+            mine = min(mine, _opt_key(reach[o], o))
+    red[tid] = mine
+    barrier()
+    var off = OPT_ORD_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = min(red[tid], red[tid + off])
+        barrier()
+        off //= 2
+    if tid == 0:
+        part[((s + 1) & 1) * NB + b] = red[0]
+
+
+# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
+# `-D MOJOLEARN_BISECT_FAST_RESIDENT=1` (BISECT_FAST_RESIDENT, asked by
+# x_cluster/bisect.mojo under the same define):
+# `sqdist_cell` for the rows `rows[i]` of the resident centered data, so a
+# split's child scores need an upload of m ints, not of the m x d subset
+# again (`ops.put(sub)` after `ops.kmeans` had already uploaded it). The
+# same `sq_dist_rows` on the same rows: the same bits.
+def _sqdist_rows_kernel(a: FPtr, rows: IPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):
+    var t = _tid()
+    var NB = Int(nb)
+    if t < Int(na) * NB:
+        var i = t // NB
+        var j = t - i * NB
+        dst[t] = sq_dist_rows(a, Int(rows[i]), b, j, Int(d))
 
 
 comptime WNN_TPB = 256
@@ -1397,6 +1628,9 @@ struct DeviceOps(ClusterOps):
     var mpart: DeviceBuffer[DType.float32]
     """FAST moments' per-slice partials, grown once per fit."""
     var mpart_n: Int
+    var escr: DeviceBuffer[DType.float32]
+    """Lane cluster2: the E-step GEMM scratch (`gauss_q_gemm`), grown once per fit."""
+    var escr_n: Int
     var ph_on: Bool
     """MOJOLEARN_XC_PHASES=1 (a diagnostic, lane cluster-apple3): every
     primitive drains the stream when it returns and its wall time is added to
@@ -1417,6 +1651,8 @@ struct DeviceOps(ClusterOps):
         self.pend_i = List[List[Int32]]()
         self.mpart = self.ctx.enqueue_create_buffer[DType.float32](1)
         self.mpart_n = 1
+        self.escr = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.escr_n = 1
         self.ph_on = getenv("MOJOLEARN_XC_PHASES") == "1"
         self.ph_t = Int(perf_counter_ns())
         self.ph_names = List[String]()
@@ -1841,6 +2077,21 @@ struct DeviceOps(ClusterOps):
             self._moments_gemm(resp, x, n, d, kc, reg, nk, means, cov)
             self._ph1("moments")
             return
+        # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple,
+        # `-D MOJOLEARN_BGMM_FAST_MOMENTS_GEMM=1` (BGMM_FAST_MOMENTS_GEMM):
+        # past MOM_MAX_D features
+        # (Istella-S: 200) FAST fell through every grid path below to the
+        # three ONE-THREAD-PER-CELL kernels (`_nk_kernel`, `_xk_kernel`,
+        # `_cov_kernel`: kc d^2 threads each walking all n rows, n kc d^2 =
+        # 3e10 dependent loads an iteration at 100,000 x 200 x 8). The
+        # IDENTICAL column's `_moments_gemm` (resp^T X and the kc centered
+        # Grams through `identical_gemm_into`, whose FAST arm is the vendor
+        # GEMM) is taken instead: the same addends, the GEMM's fold order.
+        comptime if BGMM_FAST_MOMENTS_GEMM:
+            if d > MOM_MAX_D:
+                self._moments_gemm(resp, x, n, d, kc, reg, nk, means, cov)
+                self._ph1("moments")
+                return
         comptime if MOMS:
             if d <= MOMS_MAX_D and n > 0:
                 var G = (n + MOMS_ROWS - 1) // MOMS_ROWS
@@ -2187,6 +2438,138 @@ struct DeviceOps(ClusterOps):
             self._fp(q), self._fp(r), self._fp(lpn), grid_dim=_grid(n), block_dim=TPB,
         )
         self._ph1("estep")
+
+    def ap_loop(
+        mut self, s: Int, a: Int, r: Int, e: Int, n: Int, damping: Float32, conv_iter: Int, it0: Int, n_it: Int,
+        ring: Int, cnt: Int, done_off: Int, split: Bool,
+    ) raises:
+        self._ph0()
+        comptime if AP_FAST_LOOP:
+            var pc = self._ip(cnt)
+            var pd = pc + done_off
+            var n_tiles = (n + APF_TPB - 1) // APF_TPB
+            var n_slices = (n + APF_ROWS - 1) // APF_ROWS
+            if split:
+                var need = n_slices * n + n
+                if need > self.mpart_n:
+                    self.mpart = self.ctx.enqueue_create_buffer[DType.float32](need)
+                    self.mpart_n = need
+            var pp = self.mpart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var cp = pp + n_slices * n
+            for q in range(n_it):
+                var it = it0 + q
+                var check = Int32(1) if it >= conv_iter + 1 else Int32(0)
+                self.ctx.enqueue_function[_apl_r_kernel](
+                    self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, pc, Int32(it), check, pd,
+                    grid_dim=n if n > 0 else 1, block_dim=AP_TPB,
+                )
+                if split:
+                    self.ctx.enqueue_function[_apl_a_part_kernel](
+                        self._fp(r), Int32(n), Int32(n_tiles), pp, pd, grid_dim=n_slices * n_tiles, block_dim=APF_TPB,
+                    )
+                    self.ctx.enqueue_function[_apl_a_sum_kernel](
+                        pp, Int32(n), Int32(n_slices), cp, pd, grid_dim=_grid(n), block_dim=TPB,
+                    )
+                    self.ctx.enqueue_function[_apl_a_update_kernel](
+                        self._fp(r), self._fp(a), cp, Int32(n), Int32(n_tiles), damping, pd,
+                        grid_dim=n * n_tiles, block_dim=APF_TPB,
+                    )
+                else:
+                    self.ctx.enqueue_function[_apl_a_kernel](
+                        self._fp(r), self._fp(a), Int32(n), damping, pd, grid_dim=_grid(n), block_dim=TPB,
+                    )
+                self.ctx.enqueue_function[_apl_e_kernel](
+                    self._fp(a), self._fp(r), Int32(n), self._ip(e), self._ip(ring), Int32(conv_iter), Int32(it), pc, pd,
+                    grid_dim=_grid(n), block_dim=TPB,
+                )
+        else:
+            raise Error("x_cluster: ap_loop is the FAST Apple device path (MOJOLEARN_AFFINITY_FAST_LOOP)")
+        self._ph1("ap_loop")
+
+    def optics_order_fast(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
+    ) raises:
+        self._ph0()
+        comptime if OPTICS_FAST_DEVICE_ORDER:
+            var nb = (n + OPT_ORD_PER - 1) // OPT_ORD_PER
+            if nb < 1:
+                nb = 1
+            var part = self.ctx.enqueue_create_buffer[DType.uint64](2 * nb)
+            var p_part = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            # step -1 initialises and scans; steps 0 .. n-1 pick, relax, scan
+            for s in range(-1, n):
+                self.ctx.enqueue_function[_optics_step_kernel](
+                    self._fp(dm), self._fp(core), Int32(n), max_eps, self._ip(ordering), self._fp(reach),
+                    self._ip(pred), self._ip(proc), p_part, Int32(nb), Int32(s), grid_dim=nb, block_dim=OPT_ORD_TPB,
+                )
+            # one wait per fit, after the whole loop: the driver reads the
+            # ordering next anyway, and the partials buffer goes out of scope
+            self.ctx.synchronize()
+            _ = part^
+        else:
+            raise Error("x_cluster: optics_order is the FAST Apple device path (MOJOLEARN_OPTICS_FAST_DEVICE_ORDER)")
+        self._ph1("optics_order")
+
+    def gauss_q_gemm(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
+        """Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple,
+        `-D MOJOLEARN_BGMM_FAST_MAHAL_GEMM=1` (BGMM_FAST_MAHAL_GEMM, asked by
+        x_cluster/bgmm.mojo under the same define):
+        the E-step's Mahalanobis squares as the plain GaussianMixture forms
+        them (mixture/checks/estep.mojo, wrapped, not changed): per component
+        y = X . P_k and murow = mu_k . P_k through `identical_gemm_into`
+        (FAST: the vendor GEMM), then `mahal_kernel`'s row fold of (y -
+        murow)^2, one thread per sample. Cause: `_gauss_q_kernel` is one
+        thread per (sample, component) cell folding the d x d upper
+        triangle itself (n kc d^2 / 2 = 1.6e9 multiply-adds an E-step at
+        100,000 x 200 x 8, every P read from global memory). Bits move
+        (product first, not the difference); the paired quality check."""
+        self._ph0()
+        comptime if BGMM_FAST_MAHAL_GEMM:
+            var wsn = identical_gemm_workspace_max_floats(n, d, d)
+            var w2 = identical_gemm_workspace_max_floats(1, d, d)
+            if w2 > wsn:
+                wsn = w2
+            if wsn < 1:
+                wsn = 1
+            var need = n * d + d + wsn
+            if need > self.escr_n:
+                self.escr = self.ctx.enqueue_create_buffer[DType.float32](need)
+                self.escr_n = need
+            var y = self.escr.create_sub_buffer[DType.float32](0, n * d)
+            var murow = self.escr.create_sub_buffer[DType.float32](n * d, d)
+            var ws = self.escr.create_sub_buffer[DType.float32](n * d + d, wsn)
+            var xb = self.f[x].copy()
+            for k in range(kc):
+                var pk = self.f[pchol].create_sub_buffer[DType.float32](k * d * d, d * d)
+                var muk = self.f[means].create_sub_buffer[DType.float32](k * d, d)
+                identical_gemm_into(self.ctx, y, xb, pk, ws, n, d, d, OP_NN)
+                identical_gemm_into(self.ctx, murow, muk, pk, ws, 1, d, d, OP_NN)
+                self.ctx.enqueue_function[mahal_kernel](
+                    y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    murow.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), self._fp(dst),
+                    Int32(n), Int32(d), Int32(k), Int32(kc), grid_dim=_grid(n), block_dim=TPB,
+                )
+                _ = pk^
+                _ = muk^
+            # the handles outlive every launch that holds their pointers
+            _ = xb^
+            _ = y^
+            _ = murow^
+            _ = ws^
+        else:
+            raise Error("x_cluster: gauss_q_gemm is the FAST Apple device path (MOJOLEARN_BGMM_FAST_MAHAL_GEMM)")
+        self._ph1("gauss_q_gemm")
+
+    def sqdist_rows(mut self, a: Int, rows: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
+        self._ph0()
+        comptime if BISECT_FAST_RESIDENT:
+            self.ctx.enqueue_function[_sqdist_rows_kernel](
+                self._fp(a), self._ip(rows), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
+                grid_dim=_grid(na * nb), block_dim=TPB,
+            )
+        else:
+            raise Error("x_cluster: sqdist_rows is the FAST Apple device path (MOJOLEARN_BISECT_FAST_RESIDENT)")
+        self._ph1("sqdist_rows")
 
     def minibatch_fast(
         mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,

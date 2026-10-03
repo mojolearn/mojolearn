@@ -23,7 +23,8 @@ the start's one-hot or random responsibilities are written on the device). Every
 from std.math import sqrt
 from std.sys.compile import is_defined
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_log64, identical_mul64
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, identical_log64, identical_mul64
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS
 from x_cluster.bodies import SPLITMIX_GAMMA, SplitMix64
 from x_cluster.common import greedy_kmeans_pp_indices
@@ -40,6 +41,21 @@ comptime BGMM_ENT_G = 4
 # `-D MOJOLEARN_BGMM_ESTEP1=1` (FAST, the GPU binding): the E-step's three
 # kernels as one launch, a row per thread (`ops.estep`; the same values).
 comptime BGMM_ESTEP1 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_BGMM_ESTEP1"]()
+# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple, the
+# GPU binding only, build defines that default OFF:
+# `-D MOJOLEARN_BGMM_FAST_MAHAL_GEMM=1` (BGMM_FAST_MAHAL_GEMM): the E-step's
+#   Mahalanobis squares by the plain mixture's GEMM route (`ops.gauss_q_gemm`,
+#   device_ops.mojo). Cause: `gauss_q` is one thread per (row, component)
+#   folding the d x d triangle itself. Bits move; the paired quality check.
+# `-D MOJOLEARN_BGMM_FAST_MOMENTS_GEMM=1` is taken in device_ops.mojo `moments`.
+# The entropy and the one-launch E-step arms are main's own opt-ins above
+# (`-D MOJOLEARN_BGMM_ENT=1`: the lower bound's n kc entropy products on the
+# device, the host adds ceil(n kc / 4) partials, where the host read 2 n kc
+# floats back an iteration, 6.4 MB at 100,000 x 8; `-D MOJOLEARN_BGMM_ESTEP1=1`:
+# the E-step's three kernels as one launch, a row per thread). Their
+# host-read env twins (MOJOLEARN_BGMM_FAST_ENT / _ESTEP1) are gone.
+comptime XC2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE
+comptime BGMM_FAST_MAHAL_GEMM = XC2_FAST and is_defined["MOJOLEARN_BGMM_FAST_MAHAL_GEMM"]()
 
 comptime LOG2 = 0.6931471805599453
 comptime LOG_2PI = 1.8378770664093453
@@ -498,6 +514,9 @@ def bgmm_fit[O: ClusterOps](
     var estep1 = False
     comptime if BGMM_ESTEP1:
         estep1 = ops.fast_device()
+    var mahal_gemm = False
+    comptime if BGMM_FAST_MAHAL_GEMM:
+        mahal_gemm = ops.fast_device()
     var n_ent = (n * kc + BGMM_ENT_G - 1) // BGMM_ENT_G
     var es = ops.zeros(n_ent if ent_dev else 1)
     var max_lb = Float64(0)
@@ -568,7 +587,11 @@ def bgmm_fit[O: ClusterOps](
             ops.set(ms, _f32(st.means))
             ops.set(ps, _f32(st.pchol))
             ops.set(cs, bgmm_constants(pr, st))
-            if estep1:
+            if mahal_gemm:
+                ops.gauss_q_gemm(xs, n, d, ms, ps, kc, qs)
+                ops.resp(qs, cs, n, kc, lpn)
+                ops.exp(qs, rs, n * kc)
+            elif estep1:
                 ops.estep(xs, n, d, ms, ps, cs, kc, qs, rs, lpn)
             else:
                 ops.gauss_q(xs, n, d, ms, ps, kc, qs)

@@ -35,6 +35,7 @@ from x_cluster.bodies import (
     nk_cell,
     pdist_cell,
     resp_row,
+    sq_dist_rows,
     xk_cell,
     ap_availability_col,
     ap_exemplar_cell,
@@ -629,6 +630,93 @@ struct HostOps(ClusterOps):
         self.gauss_q(x, n, d, means, pchol, kc, q)
         self.resp(q, c, n, kc, lpn)
         self.exp(q, r, n * kc)
+
+    def ap_loop(
+        mut self, s: Int, a: Int, r: Int, e: Int, n: Int, damping: Float32, conv_iter: Int, it0: Int, n_it: Int,
+        ring: Int, cnt: Int, done_off: Int, split: Bool,
+    ) raises:
+        # the host column never takes the FAST device paths (`fast_device`):
+        # the same steps in plain loops, for the trait's sake
+        var pc = self._ip(cnt)
+        var pg = self._ip(ring)
+        for q in range(n_it):
+            var it = it0 + q
+            if pc[done_off] != Int32(0):
+                return
+            if it >= conv_iter + 1:
+                var prev = it - 1
+                if Int(pc[2 * prev]) == n and pc[2 * prev + 1] > Int32(0):
+                    pc[done_off] = Int32(1)
+                    pc[done_off + 1] = Int32(prev)
+                    return
+            self.ap_r(s, a, r, n, damping)
+            self.ap_a(r, a, n, damping)
+            self.ap_e(a, r, n, e)
+            var pe = self._ip(e)
+            for i in range(n):
+                var ei = pe[i]
+                pg[i * conv_iter + it % conv_iter] = ei
+                var se = Int32(0)
+                for c in range(conv_iter):
+                    se += pg[i * conv_iter + c]
+                if se == Int32(conv_iter) or se == Int32(0):
+                    pc[2 * it] = pc[2 * it] + Int32(1)
+                pc[2 * it + 1] = pc[2 * it + 1] + ei
+
+    def optics_order_fast(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
+    ) raises:
+        # the host column never takes the FAST device paths (`fast_device`):
+        # the driver's serial loop over the slots, for the trait's sake
+        var inf = Float32.MAX * Float32(2)
+        var pd = self._fp(dm)
+        var pcore = self._fp(core)
+        var po = self._ip(ordering)
+        var pr = self._fp(reach)
+        var pp = self._ip(pred)
+        var pq = self._ip(proc)
+        for j in range(n):
+            pr[j] = inf
+            pp[j] = Int32(-1)
+            pq[j] = Int32(0)
+        for step in range(n):
+            var point = -1
+            var best = inf
+            for j in range(n):
+                if pq[j] != Int32(0):
+                    continue
+                if point < 0 or pr[j] < best:
+                    point = j
+                    best = pr[j]
+            pq[point] = Int32(1)
+            po[step] = Int32(point)
+            var cp = pcore[point]
+            if cp <= max_eps and cp != inf:
+                for o in range(n):
+                    if pq[o] != Int32(0):
+                        continue
+                    var dd = pd[point * n + o]
+                    if not (dd <= max_eps):
+                        continue
+                    var rd = dd if dd > cp else cp
+                    if rd < pr[o]:
+                        pr[o] = rd
+                        pp[o] = Int32(point)
+
+    def gauss_q_gemm(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
+        # the host column never takes the FAST device paths (`fast_device`)
+        self.gauss_q(x, n, d, means, pchol, kc, dst)
+
+    def sqdist_rows(mut self, a: Int, rows: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
+        # the host column never takes the FAST device paths (`fast_device`)
+        var pa = self._fp(a)
+        var pb = self._fp(b)
+        var po = self._fp(dst)
+        var pw = self._ip(rows)
+        for i in range(na):
+            var ri = Int(pw[i])
+            for j in range(nb):
+                po[i * nb + j] = sq_dist_rows(pa, ri, pb, j, d)
 
     def minibatch_fast(
         mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,

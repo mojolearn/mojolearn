@@ -198,6 +198,38 @@ trait ClusterOps(Movable):
         the same bodies in the same order (the same values)."""
         ...
 
+    def ap_loop(
+        mut self, s: Int, a: Int, r: Int, e: Int, n: Int, damping: Float32, conv_iter: Int, it0: Int, n_it: Int,
+        ring: Int, cnt: Int, done_off: Int, split: Bool,
+    ) raises:
+        """FAST (lane cluster2): iterations it0 .. it0 + n_it - 1 of the
+        affinity propagation loop (`ap_r`, `ap_a` or `ap_a_split`, `ap_e`)
+        without a host wait: the convergence window `ring` (n x conv_iter
+        ints) and, per iteration, the settled-row count at cnt[2 it] and the
+        exemplar count at cnt[2 it + 1]; the iteration after a converged one
+        writes 1 and that iteration's index at cnt[done_off], cnt[done_off +
+        1] and does nothing more, nor does anything after it."""
+        ...
+
+    def optics_order_fast(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
+    ) raises:
+        """FAST (lane cluster2): the OPTICS ordering loop over the resident
+        n x n distances `dm` and core distances `core`: ordering (n ints),
+        reachability (n floats, +inf unreached), predecessor (n ints, -1
+        none); `proc` n ints of scratch. The host loop's picks and updates."""
+        ...
+
+    def gauss_q_gemm(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
+        """FAST (lane cluster2): `gauss_q` by the plain mixture's GEMM route
+        (X . P_k, mu_k . P_k, the row fold of their difference squared)."""
+        ...
+
+    def sqdist_rows(mut self, a: Int, rows: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
+        """FAST (lane cluster2): `sqdist` of the rows `rows[i]` (an int slot
+        of na indices) of `a` against the nb rows of `b`."""
+        ...
+
     def minibatch_fast(
         mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
         ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
