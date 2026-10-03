@@ -122,7 +122,9 @@ def core_tile_kernel[DMAX: Int](
         barrier()
         j0 += CT_TILE
     if live:
-        out_core[i] = Float32.NAN if bad else sqrt(kth)
+        out_core[i] = (
+            bitcast[DType.float32](UInt32(0x7FC00000)) if bad else sqrt(kth)
+        )
 
 
 def compute_core_dists_tile(
