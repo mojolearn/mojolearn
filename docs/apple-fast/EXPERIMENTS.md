@@ -186,7 +186,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `NB_TEXT_CSR` | complement-nb / text; multinomial-nb / text | lane/apple-fast-nb @ be2ea3a05 | nb-mnb-csr-text, nb-cnb-csr-text | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `RIDGE_FAST_CLS1_CODES` | ridge-clf / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-rccodes-taxi | ridge-clf taxi 120 -> 19.0 | OPEN | judged KEEP (-84%); merge pending |
 
-## Neighbors (39)
+## Neighbors (42)
 
 | define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
@@ -229,8 +229,11 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `VSEARCH_ALL` | ivf / istella; ivf / taxi; ivf-filter / istella; ivf-filter / taxi; ivf-pq / istella; i... | lane/apple-fast-vsearch @ 86925aef9 | vsearch-pq-all-istella, vsearch-ivf-all-istella, vsearch-ivf-all-taxi (+8) | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `XN_FAST_IMPUTE_TILED2` | knn-imputer / taxi | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-imp-t2-taxi | - | OPEN | A/B queued, no judged result yet |
 | `XN_FAST_MMA_ROUTE` | lle / taxi; lof / taxi | lane/apple-fast-isotonic-knn @ 7385fcfdd | ik-lle-mma-taxi, ik-lof-mma-taxi | - | OPEN | A/B queued, no judged result yet |
+| MOJOLEARN_XN_FAST_CLS2_OCSVM_RES | ocsvm / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-res-ocsvm-taxi | -77% alone | KEEP, FAST+Apple default (`_OFF` off) | Gram formed and solved on the device, no 400 MB round trip; quality identical (n=1) |
+| MOJOLEARN_XN_FAST_CLS2_OCSVM_2L | ocsvm / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-2l-ocsvm-taxi | -5% alone | KEEP, FAST+Apple default (`_OFF` off) | two launches per SMO iteration; same alpha bits |
+| MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256 | ocsvm / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-{chunk256,all3}-ocsvm-taxi | 0% alone; all three 375.7 -> 65.0 | KEEP, FAST+Apple default (`_OFF` off) | kept with the combined A/B winner (fewer synchronizes) |
 
-## Prep (38)
+## Prep (42)
 
 | define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
@@ -272,8 +275,12 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `X_PREP_FAST_QSELECT` | - | lane/apple-fast-prep2 @ 8762eb33f | prep2-si-qsel-istella, prep2-rs-qsel-istella | both arms status=error | OPEN | env-form line; -b relaunch pending |
 | `X_PREP_FAST_TE_ENC` | - | lane/apple-fast-prep2 @ 8762eb33f | prep2-te-enc-taxi | both arms status=error | OPEN | env-form line; -b relaunch pending |
 | `X_PREP_FAST_TE_GLOBAL` | - | lane/apple-fast-prep2 @ 8762eb33f | prep2-te-global-taxi | both arms status=error | OPEN | env-form line; -b relaunch pending |
+| MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL | minmax-scaler / istella | lane/apple-fast-gap-cls2@72602a339 | gapcls2-pool-minmax-istella | 106 -> 21.9 | KEEP, FAST+Apple default (`_OFF` off) | pooled X buffer, no 880 MB allocation per fit; quality identical (n=1) |
+| MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED | minmax-scaler / istella | lane/apple-fast-gap-cls2@72602a339 | gapcls2-{fused,fusedpool}-minmax-istella | -3% alone; 104.7 -> 19.1 with POOL | KEEP, FAST+Apple default (`_OFF` off) | NaN scan folded into the extrema pass; quality identical (n=1) |
+| MOJOLEARN_X_PREP_FAST_CLS2_PACK | onehot, ordinal / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-pack-{onehot,ordinal}-taxi | -19%, -33% | KEEP, FAST+Apple default (`_OFF` off) | distinct values packed into a small host region; quality identical (n=1) |
+| MOJOLEARN_X_PREP_FAST_CLS2_PRESENT | onehot, ordinal / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-present-{onehot,ordinal}-taxi | 32.2 -> 5.6, 28.2 -> 8.2 (with PACK) | KEEP, FAST+Apple default (`_OFF` off) | presence flags replace the sort for small integer columns; quality identical (n=1) |
 
-## Decomp (31)
+## Decomp (34)
 
 | define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
@@ -308,8 +315,11 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `SVD_FAST_CHOLQR` | svd / istella | lane/apple-fast-decomp-linalg @ 74d52352b | dlin-svd-cholqr-istella | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `XD_FAST_CLS2_GRP_DEVSCAN` | gaussian-rp / istella | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | 54 -> 15.9 | OPEN | judged KEEP (-71%, keeps fit-time NaN refusal; beats sklearn 24.3); cls2 merge pending |
 | `XD_FAST_CLS2_GRP_NOSCAN (+ _GRP_LAZY)` | gaussian-rp / istella | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | 57 -> 1.1; with LAZY 54 -> 0.5 | OPEN | semantics: moves the NaN/inf error from fit to transform; Andrew asked, not default |
+| MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN | gaussian-rp / istella, taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-devscan-grp-{istella,taxi} | 54.3 -> 15.9, 4.7 -> 3.9 | KEEP, FAST+Apple default (`_OFF` off) | device NaN scan replaces the one-thread host walk; quality identical (n=1) |
+| MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN | gaussian-rp / istella, taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-noscan-grp-{istella,taxi} | 57 -> 1.1 (istella) | OPT-IN, pending Andrew | moves the NaN/inf refusal from fit to transform (semantics) |
+| MOJOLEARN_XD_FAST_CLS2_GRP_LAZY | gaussian-rp / istella, taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-noscanlazy-grp-{istella,taxi} | 54 -> 0.5 (with NOSCAN) | OPT-IN, pending Andrew | measured only with NOSCAN; kept opt-in with it |
 
-## Cluster (35)
+## Cluster (38)
 
 | define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
 |---|---|---|---|---|---|---|
@@ -348,6 +358,9 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `OPTICS_LIVEBUF` | optics / istella; optics / taxi | lane/apple-fast-optics2 @ 3e192fdb7 | optics2-lb-istella, optics2-lb-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `OPTICS_STEP_BATCH` | optics / istella; optics / taxi | lane/apple-fast-optics2 @ 3e192fdb7 | optics2-sb-istella, optics2-sb-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `X_CLUSTER_FAST_CLS2_MBK_G128 / _MBK_FIN / _MBK_POOL` | minibatch-kmeans / istella | lane/apple-fast-gap-cls2 @ 72602a339 | gapcls2-* | - | OPEN | merge guard: never default MBK_FIN (one-block kernel) |
+| MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL | minibatch-kmeans / istella, taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-pool-mbk-{istella,taxi} | 256.7 -> 170.7, 42.5 -> 38.1 | KEEP, FAST+Apple default (`_OFF` off) | pooled X buffer; quality identical (n=1) |
+| MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_G128 | minibatch-kmeans / istella, taxi | lane/apple-fast-gap-cls2@72602a339 (deleted before merge) | gapcls2-g128-mbk-{istella,taxi} | +14%, +22% | DROP, deleted before merge | slower |
+| MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_FIN | minibatch-kmeans / istella, taxi | lane/apple-fast-gap-cls2@72602a339 (deleted before merge) | gapcls2-fin-mbk-{istella,taxi} | +5%, -3% | DROP, deleted before merge | noise; a single-block kernel (no-one-block rule) |
 
 ## Time series (31)
 
