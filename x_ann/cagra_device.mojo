@@ -16,6 +16,10 @@ from max.gpu.host import DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
+from x_ann.fast_env import CAGRA_FAST_IVFG, CAGRA_FAST_IVFG_PROBES, CAGRA_FAST_IVFG_EXACTD
+from x_ann.fast_env import CAGRA_FAST_SEEDS, CAGRA_FAST_SEED_WORK, CAGRA_FAST_ITERS
+from x_ann.cagra_fast_knn import cg_ivfg_enqueue
+from max.gpu.host import DeviceBuffer
 
 from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
 from x_ann.cagra_core import F32P, I32P, cg_dist, cg_search_cell, cg_seed_node
@@ -500,6 +504,23 @@ def _launch_merge(ctx: DeviceContext, n: Int, deg: Int, dpr: I32P, sk: MutPointe
                                                  block_dim=PRUNE_TPB)
 
 
+def cagra_knn_enqueue(
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], n: Int, d: Int, kdeg: Int,
+    mut dnd: DeviceBuffer[DType.float32], mut dni: DeviceBuffer[DType.int32],
+) raises:
+    """The intermediate k-NN graph. lane/apple-fast-gap-cagra (2026-10-03),
+    FAST on Apple by default, rows wider than 64 features only
+    (x_ann/fast_env.mojo, x_ann/cagra_fast_knn.mojo): IVFG, the
+    approximate graph, which refuses (returns False) back to the exact
+    graph when n is small or a probe pool is too small; otherwise
+    `knn_enqueue`."""
+    comptime if CAGRA_FAST_IVFG:
+        if d > 64:
+            if cg_ivfg_enqueue[CAGRA_FAST_IVFG_PROBES, CAGRA_FAST_IVFG_EXACTD](ctx, dx, n, d, kdeg, dnd, dni):
+                return
+    knn_enqueue(ctx, dx, n, d, kdeg, dnd, dni)
+
+
 def cagra_build_device(x: List[Float32], n: Int, d: Int, kdeg: Int, deg: Int) raises -> List[Int32]:
     """The exact k-NN graph, the prune and the reverse-edge merge, all on
     the device; the merged graph is the one download."""
@@ -514,7 +535,7 @@ def cagra_build_device(x: List[Float32], n: Int, d: Int, kdeg: Int, deg: Int) ra
     st.mark(ctx, "upload")
     var dnd = ctx.enqueue_create_buffer[DType.float32](n * kdeg)
     var dni = ctx.enqueue_create_buffer[DType.int32](n * kdeg)
-    knn_enqueue(ctx, dx, n, d, kdeg, dnd, dni)
+    cagra_knn_enqueue(ctx, dx, n, d, kdeg, dnd, dni)
     var dpr = ctx.enqueue_create_buffer[DType.int32](n * deg)
     var dshort = ctx.enqueue_create_buffer[DType.int32](1)
     dshort.enqueue_fill(Int32(0))
@@ -579,7 +600,7 @@ def cagra_search_device(
 
 def cagra_search_on(
     ctx: DeviceContext, dx: F32P, n: Int, d: Int, dg: I32P, deg: Int, queries: List[Float32], m: Int,
-    k: Int, L: Int, width: Int, max_iter: Int, n_seeds: Int,
+    k: Int, L: Int, width: Int, max_iter_in: Int, n_seeds_in: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], rs: Int = 0,
 ) raises:
     """The search over a dataset and graph already on the device
@@ -587,6 +608,24 @@ def cagra_search_on(
     them): the queries up, the walk, the two outputs down."""
     var words = (n + 31) // 32
     var st = AnnStages("cagra_search")
+    # lane/apple-fast-gap-cagra, FAST on Apple by default (x_ann/fast_env.mojo)
+    var n_seeds = n_seeds_in
+    var max_iter = max_iter_in
+    comptime if CAGRA_FAST_SEEDS:
+        var floor = CAGRA_FAST_SEED_WORK // (d if d > 0 else 1)
+        if floor > n:
+            floor = n
+        if n_seeds < floor:
+            n_seeds = floor
+    comptime if CAGRA_FAST_ITERS:
+        var it = 2 * L
+        var reach = 1
+        var fan = deg // 2 if deg // 2 > 2 else 2
+        while reach < n:
+            reach *= fan
+            it += 1
+        if max_iter < it:
+            max_iter = it
     var dq = upload_f32(ctx, queries)
     var bd = ctx.enqueue_create_buffer[DType.float32](m * L)
     var bi = ctx.enqueue_create_buffer[DType.int32](m * L)
