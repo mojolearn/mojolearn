@@ -28,7 +28,7 @@ NO SPEED CLAIM. The lane has no published number and this door adds none.
 from ._portable_math import sqrt as _sqrt
 
 from . import _backend, _serialize
-from ._scale_gamma import scale_gamma
+from ._scale_gamma import scale_gamma, scale_gamma_x
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, empty
 from ._lazy_out import _empty_out
@@ -573,7 +573,7 @@ class RBFSampler(_KernelMethodBase):
             # variance: the EXACT variance of the float32 cells, the
             # reciprocal rounded once (`_scale_gamma.scale_gamma`), so every
             # host draws from the same gamma bits.
-            gamma = scale_gamma(x.ravel().tolist(), d)
+            gamma = scale_gamma_x(self._extension(), x, d)
         else:
             gamma = _real(self.gamma, "gamma", self._WHERE)
         if isinstance(self.n_components, bool) or not isinstance(self.n_components, int):
