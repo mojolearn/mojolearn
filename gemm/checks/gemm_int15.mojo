@@ -527,13 +527,10 @@ def int15_planes_kernel(
 #: schedule (the same bits). The page is the staged row plus the
 #: INT15_TPB-word reduction scratch, sized to Apple's 32 KiB threadgroup
 #: limit: 8192 staged words plus the scratch claimed 33,792 B and Metal
-#: refused the pipeline on the M2 Pro (Oct 3). The fits gate below makes
+#: refused the pipeline on the M2 Pro (Oct 3). The kernel's fits gate makes
 #: an oversized page a compile error on every column.
 comptime INT15_ROW_BLOCK_PAGE_BYTES = 32 * 1024
 comptime INT15_ROW_BLOCK_COLS = INT15_ROW_BLOCK_PAGE_BYTES // 4 - INT15_TPB
-comptime assert lib_smem_page_fits_for[
-    TARGET_COLUMN, (INT15_ROW_BLOCK_COLS + INT15_TPB) * 4
-](), "int15 row-block page exceeds the column's threadgroup memory"
 
 
 def int15_planes_row_block_kernel(
@@ -552,6 +549,9 @@ def int15_planes_row_block_kernel(
     var r = Int(block_idx.x)
     if r >= rows:
         return
+    comptime assert lib_smem_page_fits_for[
+        TARGET_COLUMN, (INT15_ROW_BLOCK_COLS + INT15_TPB) * 4
+    ](), "int15 row-block page exceeds the column's threadgroup memory"
     var sh = stack_allocation[
         INT15_ROW_BLOCK_COLS, Scalar[DType.float32], address_space = AddressSpace.SHARED
     ]()
@@ -612,9 +612,6 @@ def int15_planes_row_block_kernel(
 #: function of its own value and its row's exponent.
 comptime INT15_TILE = 32
 comptime INT15_TILE_ROWS = 8
-comptime assert lib_smem_page_fits_for[
-    TARGET_COLUMN, INT15_TILE * (INT15_TILE + 1) * 4
-](), "int15 transposed tile page exceeds the column's threadgroup memory"
 
 
 def int15_absmax_chunk_t_kernel(
@@ -670,6 +667,9 @@ def int15_planes_t_tile_kernel(
     and W-3 per value under row `r`'s exponent, as before."""
     var rows = Int(rows_in)
     var cols = Int(cols_in)
+    comptime assert lib_smem_page_fits_for[
+        TARGET_COLUMN, INT15_TILE * (INT15_TILE + 1) * 4
+    ](), "int15 transposed tile page exceeds the column's threadgroup memory"
     var tile = stack_allocation[
         INT15_TILE * (INT15_TILE + 1), Scalar[DType.float32], address_space = AddressSpace.SHARED
     ]()
