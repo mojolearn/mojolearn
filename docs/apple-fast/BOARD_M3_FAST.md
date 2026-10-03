@@ -339,3 +339,5 @@ Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (t
 - **FAST quality under review (not counted as faster until a quality lane clears them):** gamma taxi (r2 -232), tweedie taxi (r2 -10.1), tweedie istella (r2 -24.4), factor-analysis istella (mean log-likelihood 89.0 vs sklearn 98.1).
 - main-only retimes on main c48ede3c1 (single arm, retime-*-b): cholesky, complement-nb, connected-components, elliptic-envelope taxi, huber, incremental-pca taxi, isotonic, kernel-pca, kernel-shap istella, knn-imputer taxi, label-binarizer, label-encoder, lle, lstsq istella, lu-factor, lu-solve, maxabs-scaler, mb-dict-learning istella (replace stale 0.8.34 FAST cells).
 - elliptic-envelope taxi: 78766 ms on main c48ede3c1 (retime-elliptic-envelope-taxi-b) vs the stale 1741 ms: regression on main; fix merging (batch robust-ee winner, 267 ms on the M2).
+- **FAST quality under review:** knn-imputer taxi (masked_rmse 6.15 vs sklearn 5.26); not counted as faster until a quality lane clears it.
+- kernel-shap istella: regression on main (14.4 s -> 27.0 s, retime-kernel-shap-istella-b on c48ede3c1); gap lane.
