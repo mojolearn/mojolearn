@@ -8,10 +8,18 @@ from max.gpu.host.device_attribute import DeviceAttribute
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
-from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
+from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins, _radix_pass
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
+from gbdt.methods.kernel.sym_fast import (
+    SYM_GATHER_FUSED,
+    SYM_PART_STATS_PAR,
+    SYM_SORT_SWAP,
+)
 from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_f32
-from gbdt.methods.kernel.pointwise_scores import update_partition_props
+from gbdt.methods.kernel.pointwise_scores import (
+    update_partition_props,
+    update_partition_props_chunked,
+)
 from gbdt.gpu_util.partitions_reduce import (
     compute_partition_stats,
     partition_stats_chunks,
@@ -327,6 +335,66 @@ def pack_partition_stats_kernel(
         i += stride
 
 
+def gather_pair_sizes_kernel(
+    dst_weight: MutPointer[Float32, MutAnyOrigin],
+    src_weight: MutPointer[Float32, MutAnyOrigin],
+    dst_target: MutPointer[Float32, MutAnyOrigin],
+    src_target: MutPointer[Float32, MutAnyOrigin],
+    map_ptr: MutPointer[UInt32, MutAnyOrigin],
+    sorted_bins: MutPointer[UInt32, MutAnyOrigin],
+    partitions: MutPointer[UInt32, MutAnyOrigin],
+    part_count_in: Int32,
+    size_in: Int32,
+):
+    """lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_GATHER_FUSED` (FAST +
+    Apple only): `update_partition_sizes_kernel` and the two
+    `gather_with_mask_f32_kernel` launches of `update_subsets_stats` as ONE
+    grid-stride pass over the sorted rows. Row `i` gathers its weight and
+    target through `indices[i]` (the `GATHER_NO_MASK` gather, mask dropped)
+    and runs the sizes kernel's boundary test on `sorted_bins[i]` /
+    `sorted_bins[i - 1]` unchanged; the offsets kernel has run before this
+    launch, as it must for the sizes kernel."""
+    var size = Int(size_in)
+    var part_count = UInt32(Int(part_count_in))
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    while i < size:
+        var m = Int(map_ptr.unsafe_load(i))
+        dst_weight.unsafe_store(i, src_weight.unsafe_load(m))
+        dst_target.unsafe_store(i, src_target.unsafe_load(m))
+
+        var bin0 = sorted_bins.unsafe_load(i)
+        var bin1: UInt32
+        if i > 0:
+            bin1 = sorted_bins.unsafe_load(i - 1)
+        else:
+            bin1 = UInt32(0)
+        if bin0 != bin1:
+            var b = bin1
+            while b < bin0:
+                var off = partitions.unsafe_load(
+                    Int(b) * PARTITION_RECORD + PART_OFFSET
+                )
+                partitions.unsafe_store(
+                    Int(b) * PARTITION_RECORD + PART_SIZE, UInt32(i) - off
+                )
+                b += 1
+        if (i + 1) == size:
+            var off0 = partitions.unsafe_load(
+                Int(bin0) * PARTITION_RECORD + PART_OFFSET
+            )
+            partitions.unsafe_store(
+                Int(bin0) * PARTITION_RECORD + PART_SIZE, UInt32(size) - off0
+            )
+            var b = bin0 + 1
+            while b < part_count:
+                partitions.unsafe_store(
+                    Int(b) * PARTITION_RECORD + PART_SIZE, UInt32(0)
+                )
+                b += 1
+        i += stride
+
+
 def launch_update_partition_dimensions(
     ctx: DeviceContext,
     mut partitions: DeviceBuffer[DType.uint32],
@@ -481,43 +549,94 @@ def update_subsets_stats(
     if adapt_blocks < 1:
         adapt_blocks = 1
 
-    launch_update_partition_dimensions(
-        ctx,
-        subsets.partitions,
-        part_count,
-        subsets.bins,
-        subsets.doc_count,
-    )
+    var fused_gather = False
+    comptime if SYM_GATHER_FUSED:
+        # lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_GATHER_FUSED` (FAST +
+        # Apple only): offsets kernel, then ONE launch for the sizes and
+        # both gathers (`gather_pair_sizes_kernel`). The empty-row case
+        # keeps main's path (its `zero_partitions_kernel` arm).
+        var fused_blocks = (
+            subsets.doc_count + SPLIT_BLOCK_SIZE - 1
+        ) // SPLIT_BLOCK_SIZE
+        if fused_blocks > SPLIT_MAX_BLOCKS:
+            fused_blocks = SPLIT_MAX_BLOCKS
+        if fused_blocks > 0:
+            fused_gather = True
+            ctx.enqueue_function[update_partition_offsets_kernel](
+                subsets.partitions.unsafe_ptr(),
+                Int32(part_count),
+                subsets.bins.unsafe_ptr(),
+                Int32(subsets.doc_count),
+                grid_dim=(fused_blocks, 1, 1),
+                block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
+            )
+            ctx.enqueue_function[gather_pair_sizes_kernel](
+                subsets.gathered_weight.unsafe_ptr(),
+                source.weights.unsafe_ptr(),
+                subsets.gathered_target.unsafe_ptr(),
+                source.weighted_target.unsafe_ptr(),
+                subsets.indices.unsafe_ptr(),
+                subsets.bins.unsafe_ptr(),
+                subsets.partitions.unsafe_ptr(),
+                Int32(part_count),
+                Int32(subsets.doc_count),
+                grid_dim=(fused_blocks, 1, 1),
+                block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
+            )
+    if not fused_gather:
+        launch_update_partition_dimensions(
+            ctx,
+            subsets.partitions,
+            part_count,
+            subsets.bins,
+            subsets.doc_count,
+        )
 
-    launch_gather_with_mask_f32(
-        ctx,
-        subsets.gathered_weight,
-        source.weights,
-        subsets.indices,
-        subsets.doc_count,
-        GATHER_NO_MASK,
-    )
-    launch_gather_with_mask_f32(
-        ctx,
-        subsets.gathered_target,
-        source.weighted_target,
-        subsets.indices,
-        subsets.doc_count,
-        GATHER_NO_MASK,
-    )
+        launch_gather_with_mask_f32(
+            ctx,
+            subsets.gathered_weight,
+            source.weights,
+            subsets.indices,
+            subsets.doc_count,
+            GATHER_NO_MASK,
+        )
+        launch_gather_with_mask_f32(
+            ctx,
+            subsets.gathered_target,
+            source.weighted_target,
+            subsets.indices,
+            subsets.doc_count,
+            GATHER_NO_MASK,
+        )
 
-    update_partition_props(
-        ctx,
-        subsets.gathered_target,
-        subsets.gathered_weight,
-        subsets.count_dummy,
-        True,
-        True,
-        False,
-        subsets.partitions,
-        subsets.partition_stats,
-        part_count,
-    )
+    comptime if SYM_PART_STATS_PAR:
+        # lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_PART_STATS_PAR` (FAST +
+        # Apple only): a fill, then a (partitions x chunks) grid that adds
+        # per-chunk block sums into `partition_stats` with global float
+        # atomics, instead of one 1024-thread block per partition.
+        enqueue_fill(ctx, subsets.partition_stats, Float32(0.0))
+        update_partition_props_chunked(
+            ctx,
+            subsets.gathered_target,
+            subsets.gathered_weight,
+            subsets.partitions,
+            subsets.partition_stats,
+            part_count,
+            subsets.sm_count,
+        )
+    else:
+        update_partition_props(
+            ctx,
+            subsets.gathered_target,
+            subsets.gathered_weight,
+            subsets.count_dummy,
+            True,
+            True,
+            False,
+            subsets.partitions,
+            subsets.partition_stats,
+            part_count,
+        )
 
 
 def create_subsets(
@@ -724,18 +843,48 @@ def split_subsets_from_desc(
             block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
         )
 
-    launch_radix_sort_bins(
-        ctx,
-        subsets.doc_count,
-        Int(depth),
-        Int(depth) + 1,
-        subsets.bins,
-        subsets.indices,
-        subsets.tmp_bins,
-        subsets.tmp_indices,
-        subsets.scan_offsets,
-        subsets.block_sums,
-    )
+    comptime if SYM_SORT_SWAP:
+        # lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_SORT_SWAP` (FAST +
+        # Apple only). `launch_radix_sort_bins` over ONE bit is one
+        # `_radix_pass` into `tmp_bins` / `tmp_indices` followed by two
+        # `copy_u32_kernel` launches that move the answer back (its
+        # ping-pong flip). The pass is the same; the copies become a
+        # handle swap, which is what their `TCudaBuffer::Swap` would be.
+        # Every consumer takes `subsets.bins` / `subsets.indices` by name
+        # after this call (the level loop re-reads `subsets.indices.copy()`
+        # each level; `reset_subsets` refills both), and `tmp_*` are
+        # scratch of the same length, so the swap is invisible to them.
+        if subsets.doc_count > 0:
+            var sort_blocks = (
+                subsets.doc_count + REORDER_BLOCK - 1
+            ) // REORDER_BLOCK
+            _radix_pass(
+                ctx,
+                subsets.doc_count,
+                Int(depth),
+                sort_blocks,
+                subsets.bins,
+                subsets.indices,
+                subsets.tmp_bins,
+                subsets.tmp_indices,
+                subsets.scan_offsets,
+                subsets.block_sums,
+            )
+            swap(subsets.bins, subsets.tmp_bins)
+            swap(subsets.indices, subsets.tmp_indices)
+    else:
+        launch_radix_sort_bins(
+            ctx,
+            subsets.doc_count,
+            Int(depth),
+            Int(depth) + 1,
+            subsets.bins,
+            subsets.indices,
+            subsets.tmp_bins,
+            subsets.tmp_indices,
+            subsets.scan_offsets,
+            subsets.block_sums,
+        )
 
     subsets.current_depth += 1
 

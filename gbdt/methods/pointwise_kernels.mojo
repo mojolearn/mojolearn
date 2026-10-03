@@ -191,7 +191,13 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_HALF_BYTE,
     POLICY_ONE_BYTE,
 )
+from gbdt.methods.kernel.sym_fast import (
+    SYM_HIST_MULT,
+    SYM_HIST_MULT_FACTOR,
+    SYM_SCAN_SUB_FUSED,
+)
 from gbdt.methods.kernel.split_properties_helpers import (
+    scan_sub_pointwise_histograms_kernel,
     PW_PRIVATE_DOC_SLOTS,
     PointwisePartOffsetsHelper,
     estimate_block_per_feature_multiplier,
@@ -324,6 +330,16 @@ def pw_block_multiplier(
         if pinned > PW_MAX_MULTIPLIER:
             pinned = PW_MAX_MULTIPLIER
         return pinned
+    comptime if SYM_HIST_MULT:
+        # lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_HIST_MULT` (FAST +
+        # Apple only): the same ladder asked for SYM_HIST_MULT_FACTOR
+        # times the SM count's worth of blocks; cap and row floor stand.
+        var scaled = estimate_block_per_feature_multiplier(
+            nx, ny, nz, size, sm_count * SYM_HIST_MULT_FACTOR
+        )
+        if scaled > PW_MAX_MULTIPLIER:
+            scaled = PW_MAX_MULTIPLIER
+        return scaled
     comptime if not pointwise_doc_split_for[
         TARGET_COLUMN, HIST_BUILD_MODE != NUMERIC_FAST
     ]():
@@ -1951,6 +1967,35 @@ def compute_hist2[
             "ComputeHist2: unexpected feature grouping policy "
             + String(policy)
         )
+
+    comptime if SYM_SCAN_SUB_FUSED:
+        # lane/apple-fast-sym-hist, `-D MOJOLEARN_SYM_SCAN_SUB_FUSED` (FAST +
+        # Apple only): on a partial pass at one fold over the whole line,
+        # the scan and the sibling subtraction are one launch
+        # (`scan_sub_pointwise_histograms_kernel`); every other case keeps
+        # the two launches below.
+        if (
+            policy != POLICY_BINARY
+            and not full_pass
+            and fold_count == 1
+            and bin_features_slice_left == 0
+            and bin_features_slice_size == hist_line_size
+        ):
+            var fx = (feature_count + PW_SCAN_BLOCK - 1) // PW_SCAN_BLOCK
+            var fy = part_count // 2
+            if not is_grid_empty(fx, fy, 1):
+                ctx.enqueue_function[scan_sub_pointwise_histograms_kernel](
+                    feature_first_fold_index,
+                    feature_folds,
+                    feature_one_hot,
+                    Int32(feature_count),
+                    Int32(hist_line_size),
+                    partition,
+                    bin_sums,
+                    grid_dim=(fx, fy, 1),
+                    block_dim=(PW_SCAN_BLOCK, 1, 1),
+                )
+            return
 
     if policy != POLICY_BINARY:
         scan_pointwise_histograms(
