@@ -59,6 +59,33 @@ from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
     fit_oblivious_tree_structure_traced,
     split_stat_planes,
 )
+#: lane/apple-fast-sym-iter: the pointwise SymmetricTree arm's per-tree
+#: fixed cost, FAST + Apple only, every alias default OFF
+#: (`gbdt/methods/sym_iter_fast.mojo` has the defines and the mechanism).
+#: Under every other build each alias is comptime False, the pool list stays
+#: empty and the runtime flags below are constant False.
+from gbdt.methods.sym_iter_fast import (
+    SYM_BUF_ARENA,
+    SYM_DERIV_FUSED,
+    SYM_ITER_ANY,
+    SYM_LEAF_FROM_STATS,
+    SYM_REUSE_PARTITION,
+    SymIterPool,
+    sym_compute_bins_pooled,
+    sym_estimate_leaves_device,
+    sym_leaf_from_stats_ok,
+    sym_objective_is_pointwise,
+    sym_pool_get,
+    sym_scale_from_mags,
+    sym_score_std_dev_collect,
+    sym_split_planes,
+    sym_std_dev_enqueue,
+)
+from gbdt.methods.pointwise_optimization_subsets import (
+    PARTITION_RECORD as SYM_PARTITION_RECORD,
+    PART_OFFSET as SYM_PART_OFFSET,
+    PART_SIZE as SYM_PART_SIZE,
+)
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_sequential_two_level_feature_freq_tree,
     enqueue_snap_plane,
@@ -774,9 +801,12 @@ def _estimate_and_apply(
     # the seed of this task's YetiRank evaluation stream (one draw of the
     # fit's YetiRank stream per tree); read only with `yeti`
     yeti_seed: UInt64 = UInt64(0),
+    tail_drain: Bool = True,
 ) raises:
     """One estimation task: their `TDocParallelLeavesEstimator::Estimate`
     plus the `AppendModels` that follows it, for ONE (dataset, cursor).
+    `tail_drain` (lane/apple-fast-sym-iter, read under `SYM_DERIV_FUSED`
+    only): False hands the closing drain to the caller.
 
     `row_index`, `leaf_offsets` and `sizes` are the partition -- rows
     grouped by leaf. Which partition depends on which permutation this task
@@ -922,6 +952,43 @@ def _estimate_and_apply(
         launch_inverse_permutation(ctx, row_index, yeti.value().query.inverse, n_rows)
     stage_times.end(ctx, "est.stage_in")
     stage_times.begin(ctx)
+    # lane/apple-fast-sym-iter, SYM_BUF_ARENA: the oracle's five host
+    # staging buffers from the workspace's `arena_host` (pool of one, keyed
+    # as `OracleHostScratch.matches`) instead of five allocations per task.
+    # Single-dimensional pointwise oracles only; the key mismatch on any
+    # other shape makes `make_bin_optimized_oracle` allocate as main does.
+    var sym_host_ws = Optional[OracleHostScratch]()
+    comptime if SYM_BUF_ARENA:
+        if (
+            approx_dim == 1
+            and not query.__bool__()
+            and not pairs.__bool__()
+            and not yeti.__bool__()
+            and sym_objective_is_pointwise(objective)
+        ):
+            var sym_fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+            if len(est_ws[0].arena_host) == 0 or not est_ws[0].arena_host[
+                0
+            ].matches(n_leaves, 1, 1, sym_fv_blocks):
+                est_ws[0].arena_host.clear()
+                est_ws[0].arena_host.append(
+                    OracleHostScratch(
+                        n_leaves, 1, 1, sym_fv_blocks,
+                        ctx.enqueue_create_host_buffer[DType.uint32](n_leaves),
+                        ctx.enqueue_create_host_buffer[DType.float32](n_leaves),
+                        ctx.enqueue_create_host_buffer[DType.float32](
+                            sym_fv_blocks
+                        ),
+                        ctx.enqueue_create_host_buffer[DType.float32](
+                            2 * n_leaves
+                        ),
+                        ctx.enqueue_create_host_buffer[DType.float32](n_leaves),
+                        ctx.enqueue_create_host_buffer[DType.float32](
+                            2 * n_leaves
+                        ),
+                    )
+                )
+            sym_host_ws = Optional(est_ws[0].arena_host[0].handles())
     var oracle = make_bin_optimized_oracle(
         ctx, n_rows, n_leaves, sizes,
         g_target.copy(), g_weights.copy(), g_cursor.copy(),
@@ -940,6 +1007,7 @@ def _estimate_and_apply(
         yeti^,
         yeti_seed,
         oracle_ws^,
+        host_scratch=sym_host_ws^,
     )
     stage_times.end(ctx, "est.make_oracle")
     # `TDocParallelLeavesEstimator::Estimate`
@@ -1042,7 +1110,16 @@ def _estimate_and_apply(
     #     would free its exclusive buffers (`d_bins`, `d_shift`, the
     #     Exact path's trailing `move_to` operands) under queued work --
     #     the step-33 race class, device side.
-    ctx.synchronize()
+    # lane/apple-fast-sym-iter, SYM_DERIV_FUSED: `tail_drain=False` hands
+    # the drain to the caller, which enqueues the next tree's gradient pass
+    # first and drains once for both. Nothing of the oracle's is in flight
+    # at return: the walker's own drains settled its evaluation copies, and
+    # the two launches above read only workspace-owned buffers.
+    comptime if SYM_DERIV_FUSED:
+        if tail_drain:
+            ctx.synchronize()
+    else:
+        ctx.synchronize()
     stage_times.end(ctx, "est.tail_apply")
     _ = oracle^  # past the drain (step-33 race class, device side)
 
@@ -2163,6 +2240,12 @@ def fit_with_test(
     # one set of gather/staging buffers, keyed by (n_rows, approx_dim) with
     # a leaf-count capacity
     var est_ws = List[TEstimationWorkspace]()
+    # lane/apple-fast-sym-iter: the pointwise symmetric arm's pool of one
+    # (`SymIterPool`) and the SYM_DERIV_FUSED carry: True when the previous
+    # tree's tail already enqueued and settled this tree's gradient pass.
+    # Both inert (empty, False) under every build without the defines.
+    var sym_pool = List[SymIterPool]()
+    var sym_grad_prefetched = False
     # DEVIATION 2551: the non-symmetric estimator's device partition, the
     # FIT's pool of one (empty and never touched on the default side)
     var leaf_parts = List[DeviceLeafPartitioner]()
@@ -2307,118 +2390,127 @@ def fit_with_test(
         # gradients, so the value this iteration reads is the loss of the
         # cursor as it stands -- i.e. after the PREVIOUS tree.
         var mags_in_mse = _needs_magnitudes and not bootstrap_on
+        # lane/apple-fast-sym-iter, SYM_DERIV_FUSED: the previous tree's
+        # tail enqueued this tree's gradient pass, fv and magnitude folds
+        # and the fv / magnitudes copies, and its drain settled them, so
+        # the launches below are skipped and `h_fv` / `h_mags` are read.
+        var sym_skip_grad = False
+        comptime if SYM_DERIV_FUSED:
+            sym_skip_grad = sym_grad_prefetched
+            sym_grad_prefetched = False
         # under bootstrap the magnitudes must bound the BOOTSTRAPPED
         # planes (a Bayesian weight reaches ~46 at the tail), so the
         # bootstrap kernel computes them AFTER its multiply instead
-        if objective == OBJECTIVE_MULTICLASS:
-            # `TMultiClassificationTargets::StochasticDer`
-            # (`multiclass_targets.cpp:22-45`): column 0 the weights,
-            # columns 1.. the ders, one per FREE class.
-            launch_multilogit_value_and_der_search(
-                ctx, num_classes, n_rows, targets, weights, has_weights,
-                lcur, n_rows, row_index, False,
-                fv_part, True,
-                stats, n_rows,
-                mag_part, mags_in_mse,
-            )
-        elif objective == OBJECTIVE_MULTICLASS_OVA:
-            # the same `StochasticDer`, its `MultiClassOneVsAll` arm
-            # (`:46-49`), where `statCount` keeps the full
-            # `1 + NumClasses` because there is no pinned class to drop.
-            launch_one_vs_all_value_and_der[True](
-                ctx, num_classes, n_rows, targets, weights, has_weights,
-                lcur, n_rows, row_index, False,
-                fv_part, True,
-                stats, n_rows,
-                mag_part, mags_in_mse,
-            )
-        elif objective == OBJECTIVE_MULTIRMSE:
-            # the same `StochasticDer`, its `MultiRMSE` arm (`:61-68`):
-            # column 0 the weights, columns 1.. `diff * weight` per target
-            # dimension, the target read as `num_classes` dim-major planes
-            launch_multi_rmse_value_and_der[True](
-                ctx, num_classes, n_rows, targets, n_rows,
-                weights, has_weights,
-                lcur, n_rows, row_index, False,
-                fv_part, True,
-                stats, n_rows,
-                mag_part, mags_in_mse,
-            )
-        elif is_querywise:
-            # `TQuerywiseTargetsImpl::StochasticDer`
-            # (`querywise_targets_impl.h:161-181`): whichever of `GradientAt`
-            # and `NewtonAt` the score function picks, plane 0 is the row
-            # weight for QueryRMSE and plane 1 is `weight * direction`, the
-            # point read in row order (no indices).
-            launch_query_rmse_with[False](
-                ctx, query_buffers.value(), lcur, False,
-                stats, fv_part, True, mag_part, mags_in_mse,
-            )
-        elif is_pair_logit:
-            # the search planes of `pair_logit.mojo`, whose weight plane
-            # follows `secondDerAsWeights`' meaning (the DEVIATION block there)
-            if second_order:
-                launch_pair_logit_with[False, True](
-                    ctx, pair_buffers.value(), lcur, False,
+        if not sym_skip_grad:
+            if objective == OBJECTIVE_MULTICLASS:
+                # `TMultiClassificationTargets::StochasticDer`
+                # (`multiclass_targets.cpp:22-45`): column 0 the weights,
+                # columns 1.. the ders, one per FREE class.
+                launch_multilogit_value_and_der_search(
+                    ctx, num_classes, n_rows, targets, weights, has_weights,
+                    lcur, n_rows, row_index, False,
+                    fv_part, True,
+                    stats, n_rows,
+                    mag_part, mags_in_mse,
+                )
+            elif objective == OBJECTIVE_MULTICLASS_OVA:
+                # the same `StochasticDer`, its `MultiClassOneVsAll` arm
+                # (`:46-49`), where `statCount` keeps the full
+                # `1 + NumClasses` because there is no pinned class to drop.
+                launch_one_vs_all_value_and_der[True](
+                    ctx, num_classes, n_rows, targets, weights, has_weights,
+                    lcur, n_rows, row_index, False,
+                    fv_part, True,
+                    stats, n_rows,
+                    mag_part, mags_in_mse,
+                )
+            elif objective == OBJECTIVE_MULTIRMSE:
+                # the same `StochasticDer`, its `MultiRMSE` arm (`:61-68`):
+                # column 0 the weights, columns 1.. `diff * weight` per target
+                # dimension, the target read as `num_classes` dim-major planes
+                launch_multi_rmse_value_and_der[True](
+                    ctx, num_classes, n_rows, targets, n_rows,
+                    weights, has_weights,
+                    lcur, n_rows, row_index, False,
+                    fv_part, True,
+                    stats, n_rows,
+                    mag_part, mags_in_mse,
+                )
+            elif is_querywise:
+                # `TQuerywiseTargetsImpl::StochasticDer`
+                # (`querywise_targets_impl.h:161-181`): whichever of `GradientAt`
+                # and `NewtonAt` the score function picks, plane 0 is the row
+                # weight for QueryRMSE and plane 1 is `weight * direction`, the
+                # point read in row order (no indices).
+                launch_query_rmse_with[False](
+                    ctx, query_buffers.value(), lcur, False,
                     stats, fv_part, True, mag_part, mags_in_mse,
+                )
+            elif is_pair_logit:
+                # the search planes of `pair_logit.mojo`, whose weight plane
+                # follows `secondDerAsWeights`' meaning (the DEVIATION block there)
+                if second_order:
+                    launch_pair_logit_with[False, True](
+                        ctx, pair_buffers.value(), lcur, False,
+                        stats, fv_part, True, mag_part, mags_in_mse,
+                    )
+                else:
+                    launch_pair_logit_with[False, False](
+                        ctx, pair_buffers.value(), lcur, False,
+                        stats, fv_part, True, mag_part, mags_in_mse,
+                    )
+            elif is_yeti_rank:
+                # `GradientAt` calls `NewtonAt` for YetiRank
+                # (`querywise_targets_impl.h:131-134`), so both score arms read the
+                # pair weights in plane 0; the call's seed is this tree's first
+                # draw of the YetiRank stream (the DEVIATION at `yeti_rand`)
+                launch_yeti_rank_with[False](
+                    ctx, yeti_buffers.value(), lcur, False,
+                    yeti_rand.next_uniform_l(),
+                    stats, fv_part, True, mag_part, mags_in_mse,
+                )
+            elif second_order:
+                # `secondDerAsWeights=true`: plane 0 becomes `weight * der2`
+                # (`pointwise_target_impl.h:193-201`); plane 1 stays
+                # `weight * der`. Runtime flag to comptime arm, the same shape
+                # as the objective dispatch one call down.
+                launch_approximate[False, True](
+                    ctx, objective, targets, weights, Int32(n_rows), lcur,
+                    Int32(1) if has_weights else Int32(0),
+                    alpha, logloss_border,
+                    stats, fv_part, Int32(1),
+                    mag_part, Int32(1) if mags_in_mse else Int32(0),
+                    mse_blocks,
                 )
             else:
-                launch_pair_logit_with[False, False](
-                    ctx, pair_buffers.value(), lcur, False,
-                    stats, fv_part, True, mag_part, mags_in_mse,
+                launch_approximate[False](
+                    ctx, objective, targets, weights, Int32(n_rows), lcur,
+                    Int32(1) if has_weights else Int32(0),
+                    alpha, logloss_border,
+                    stats, fv_part, Int32(1),
+                    mag_part, Int32(1) if mags_in_mse else Int32(0),
+                    mse_blocks,
                 )
-        elif is_yeti_rank:
-            # `GradientAt` calls `NewtonAt` for YetiRank
-            # (`querywise_targets_impl.h:131-134`), so both score arms read the
-            # pair weights in plane 0; the call's seed is this tree's first
-            # draw of the YetiRank stream (the DEVIATION at `yeti_rand`)
-            launch_yeti_rank_with[False](
-                ctx, yeti_buffers.value(), lcur, False,
-                yeti_rand.next_uniform_l(),
-                stats, fv_part, True, mag_part, mags_in_mse,
-            )
-        elif second_order:
-            # `secondDerAsWeights=true`: plane 0 becomes `weight * der2`
-            # (`pointwise_target_impl.h:193-201`); plane 1 stays
-            # `weight * der`. Runtime flag to comptime arm, the same shape
-            # as the objective dispatch one call down.
-            launch_approximate[False, True](
-                ctx, objective, targets, weights, Int32(n_rows), lcur,
-                Int32(1) if has_weights else Int32(0),
-                alpha, logloss_border,
-                stats, fv_part, Int32(1),
-                mag_part, Int32(1) if mags_in_mse else Int32(0),
-                mse_blocks,
-            )
-        else:
-            launch_approximate[False](
-                ctx, objective, targets, weights, Int32(n_rows), lcur,
-                Int32(1) if has_weights else Int32(0),
-                alpha, logloss_border,
-                stats, fv_part, Int32(1),
-                mag_part, Int32(1) if mags_in_mse else Int32(0),
-                mse_blocks,
-            )
-        var fv_blocks = mse_blocks
-        if objective == OBJECTIVE_MULTICLASS:
-            fv_blocks = multilogit_blocks(n_rows)
-        var mag_blocks = fv_blocks
-        if is_pair_logit:
-            fv_blocks = pair_buffers.value().blocks()
-            comptime if PAIRLOGIT_GROUP_FUSED:
-                # the group layout's magnitudes are per group too
-                if pair_buffers.value().n_pairs < 0:
-                    mag_blocks = fv_blocks
-        ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
-            fv_part.unsafe_ptr(), Int32(fv_blocks), fv.unsafe_ptr(),
-            grid_dim=1, block_dim=256,
-        )
-        if mags_in_mse:
-            ctx.enqueue_function[deterministic_sum_lanes_kernel[2]](
-                mag_part.unsafe_ptr(), Int32(mag_blocks),
-                mags.unsafe_ptr(),
+            var fv_blocks = mse_blocks
+            if objective == OBJECTIVE_MULTICLASS:
+                fv_blocks = multilogit_blocks(n_rows)
+            var mag_blocks = fv_blocks
+            if is_pair_logit:
+                fv_blocks = pair_buffers.value().blocks()
+                comptime if PAIRLOGIT_GROUP_FUSED:
+                    # the group layout's magnitudes are per group too
+                    if pair_buffers.value().n_pairs < 0:
+                        mag_blocks = fv_blocks
+            ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
+                fv_part.unsafe_ptr(), Int32(fv_blocks), fv.unsafe_ptr(),
                 grid_dim=1, block_dim=256,
             )
+            if mags_in_mse:
+                ctx.enqueue_function[deterministic_sum_lanes_kernel[2]](
+                    mag_part.unsafe_ptr(), Int32(mag_blocks),
+                    mags.unsafe_ptr(),
+                    grid_dim=1, block_dim=256,
+                )
         # ================ THE `random_strength` MAGNITUDE ==============
         # `auto mult = CalcScoreModelLengthMult(objectCount,
         #                                       iteration * step);`
@@ -2445,7 +2537,26 @@ def fit_with_test(
         # is a second reason the two arms' noise magnitudes differ; see
         # `gbdt/methods/random_score_helper.mojo` for the first two.
         var pointwise_score_std_dev = Float32(0.0)
-        if use_pointwise_searcher and random_strength != Float32(0.0):
+        # lane/apple-fast-sym-iter, SYM_DERIV_FUSED: the std-dev reduce ran
+        # behind the previous tree's tail drain (`sym_std_dev_enqueue`);
+        # only the host half is left, no drain
+        var sym_std_dev_done = False
+        comptime if SYM_DERIV_FUSED:
+            if (
+                sym_skip_grad and use_pointwise_searcher
+                and random_strength != Float32(0.0)
+            ):
+                pointwise_score_std_dev = Float32(
+                    sym_score_std_dev_collect(
+                        noise_mult, Float64(random_strength), n_rows,
+                        sym_pool[0],
+                    )
+                )
+                sym_std_dev_done = True
+        if (
+            use_pointwise_searcher and random_strength != Float32(0.0)
+            and not sym_std_dev_done
+        ):
             pointwise_score_std_dev = Float32(
                 compute_score_std_dev(
                     ctx,
@@ -2483,7 +2594,8 @@ def fit_with_test(
                 )
         # stream-ordered behind the kernel; READ after `run_tree_layout`,
         # whose first drain settles it, so it costs no synchronize here.
-        ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=fv)
+        if not sym_skip_grad:
+            ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=fv)
 
         # growth reorders rows in place, so the index restarts each tree.
         # their `MakeSequence` (`fill.cu:47`), device-side.
@@ -2575,6 +2687,18 @@ def fit_with_test(
         var sizes = List[Int]()
         # the non-symmetric arm's tree, empty on the oblivious arms
         var ns_trees = List[TNonSymmetricTree]()
+        # lane/apple-fast-sym-iter, per-tree state (constant False / a
+        # handle onto `row_index` under every build without the defines):
+        # `sym_fuse`: this tree's tail enqueues the next gradient pass
+        # (SYM_DERIV_FUSED); `sym_leaf_device`: the leaves came from the
+        # searcher's statistics (SYM_LEAF_FROM_STATS) and are read back at
+        # the tail; `sym_fv_now`: the loss word captured before the tail
+        # overwrites `h_fv`; `sym_rows`: the estimator's row order.
+        var sym_fuse = False
+        var sym_leaf_device = False
+        var sym_fv_now = Float32(0.0)
+        var sym_fv_captured = False
+        var sym_rows = row_index.copy()
 
         if non_symmetric:
             # ---- CatBoost's NON-SYMMETRIC learner (DEVIATION 259) -------
@@ -2905,25 +3029,66 @@ def fit_with_test(
             # `compute_hist2` takes `fixed_scale` as a HOST scalar
             # (`pointwise_kernels.mojo:1318`); making it a device pointer is
             # the fix and is not attempted here.
+            # lane/apple-fast-sym-iter: the pool of one for this arm's
+            # per-tree buffers, and this tree's gates. `sym_fuse` (the next
+            # gradient pass behind this tree's tail drain) needs the one
+            # cursor the plain arm has and a `launch_approximate` loss.
+            comptime if SYM_ITER_ANY:
+                sym_pool_get(
+                    ctx, sym_pool, n_rows, max_depth,
+                    noise_sm if noise_sm > 0 else 1,
+                )
+            comptime if SYM_DERIV_FUSED:
+                sym_fuse = (
+                    perm_count == 1 and not bootstrap_on
+                    and sym_objective_is_pointwise(objective)
+                )
             var scale = Float32(1.0)
             @parameter
             if _needs_magnitudes:
-                var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
-                ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
-                ctx.synchronize()
-                _ = boot_mag_part^  # past the drain (step-33 race class, device side)
-                _ = mags^  # past the drain (step-33 race class, device side)
-                var m0 = Float64(hm[0])
-                if m0 < 0.0:
-                    m0 = -m0
-                var m1 = Float64(hm[1])
-                if m1 < 0.0:
-                    m1 = -m1
-                scale = Float32(
-                    choose_scale(m1 if m1 > m0 else m0, n_rows)
-                )
+                var sym_scale_ready = False
+                comptime if SYM_DERIV_FUSED:
+                    # the magnitudes rode the previous tail drain into
+                    # `h_mags`: no drain here
+                    if sym_skip_grad:
+                        scale = sym_scale_from_mags(h_mags, n_rows)
+                        sym_scale_ready = True
+                comptime if SYM_BUF_ARENA:
+                    # the fit's `h_mags` instead of a host buffer per tree
+                    if not sym_scale_ready:
+                        ctx.enqueue_copy(dst_buf=h_mags, src_buf=mags)
+                        ctx.synchronize()
+                        scale = sym_scale_from_mags(h_mags, n_rows)
+                        sym_scale_ready = True
+                if not sym_scale_ready:
+                    var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
+                    ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
+                    ctx.synchronize()
+                    _ = boot_mag_part^  # past the drain (step-33 race class, device side)
+                    _ = mags^  # past the drain (step-33 race class, device side)
+                    var m0 = Float64(hm[0])
+                    if m0 < 0.0:
+                        m0 = -m0
+                    var m1 = Float64(hm[1])
+                    if m1 < 0.0:
+                        m1 = -m1
+                    scale = Float32(
+                        choose_scale(m1 if m1 > m0 else m0, n_rows)
+                    )
 
-            var planes = split_stat_planes(ctx, stats, n_rows)
+            var planes: Tuple[
+                DeviceBuffer[DType.float32], DeviceBuffer[DType.float32]
+            ]
+            comptime if SYM_BUF_ARENA:
+                # the pool's two planes instead of two n_rows buffers per tree
+                planes = sym_split_planes(ctx, stats, n_rows, sym_pool[0])
+            else:
+                planes = split_stat_planes(ctx, stats, n_rows)
+            # SYM_REUSE_PARTITION: the searcher's final partition records
+            # come back in its tail drain
+            var sym_parts_opt = Optional[HostBuffer[DType.uint32]]()
+            comptime if SYM_REUSE_PARTITION:
+                sym_parts_opt = Optional(sym_pool[0].h_parts.copy())
             # lane/sym-quality: the gradient plane onto the tree's grid, as
             # the greedy arm's `run_tree_layout` does (`enqueue_snap_plane`);
             # only where the scale above is a real one
@@ -2945,25 +3110,104 @@ def fit_with_test(
                 score_std_dev=pointwise_score_std_dev,
                 seed=tree_seed,
                 one_hot=one_hot,
+                sym_parts_out=sym_parts_opt^,
             )
-            var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-            compute_bins_for_model(
-                ctx, layout_for_test, splits, len(splits), lc, n_rows,
-                d_bins,
-            )
-            var part = partition_from_bins(
-                ctx, d_bins, n_rows, 1 << len(splits)
-            )
-            sizes = part.sizes.copy()
-            leaf_offsets = part.offsets.copy()
-            row_index = part.row_index.copy()
-            if not need_estimation:
+            # SYM_DERIV_FUSED: the loss word of the gradient pass that fed
+            # this tree, settled by the drain the searcher just made; the
+            # tail below overwrites `h_fv` with the next tree's.
+            comptime if SYM_DERIV_FUSED:
+                if sym_fuse:
+                    sym_fv_now = h_fv.unsafe_ptr().unsafe_load(0)
+                    sym_fv_captured = True
+            # SYM_REUSE_PARTITION: a full-depth tree's final subsets ARE the
+            # partition -- `indices` grouped by leaf, (offset, size) per
+            # leaf in `h_parts` -- so the bins pass and the radix sort are
+            # skipped. A tree that stopped early (repeated split) keeps
+            # main's path: its subsets carry one redundant bit per repeat.
+            var sym_reuse = False
+            comptime if SYM_REUSE_PARTITION:
+                if len(splits) == max_depth and max_depth > 0:
+                    sym_reuse = True
+                    var sym_hp = sym_pool[0].h_parts.unsafe_ptr()
+                    sizes.clear()
+                    leaf_offsets.clear()
+                    for leaf in range(1 << max_depth):
+                        leaf_offsets.append(
+                            Int(
+                                sym_hp.unsafe_load(
+                                    leaf * SYM_PARTITION_RECORD
+                                    + SYM_PART_OFFSET
+                                )
+                            )
+                        )
+                        sizes.append(
+                            Int(
+                                sym_hp.unsafe_load(
+                                    leaf * SYM_PARTITION_RECORD
+                                    + SYM_PART_SIZE
+                                )
+                            )
+                        )
+                    sym_rows = pw_pool[0].subsets.indices.copy()
+            if not sym_reuse:
+                var sym_pooled_partition = False
+                comptime if SYM_BUF_ARENA:
+                    # the pool's partitioner: the bins land in its `bins`,
+                    # one drain (the bounds readback), no allocation and no
+                    # keep-alive drain
+                    sym_pooled_partition = True
+                    sym_compute_bins_pooled(
+                        ctx, layout_for_test, splits, len(splits), lc,
+                        n_rows, sym_pool[0],
+                    )
+                    var sym_part = sym_pool[0].parts.partition(
+                        ctx, n_rows, 1 << len(splits)
+                    )
+                    sizes = sym_part.sizes.copy()
+                    leaf_offsets = sym_part.offsets.copy()
+                    row_index = sym_part.row_index.copy()
+                if not sym_pooled_partition:
+                    var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+                    compute_bins_for_model(
+                        ctx, layout_for_test, splits, len(splits), lc, n_rows,
+                        d_bins,
+                    )
+                    var part = partition_from_bins(
+                        ctx, d_bins, n_rows, 1 << len(splits)
+                    )
+                    sizes = part.sizes.copy()
+                    leaf_offsets = part.offsets.copy()
+                    row_index = part.row_index.copy()
+                sym_rows = row_index.copy()
+            # SYM_LEAF_FROM_STATS: one Newton step from the searcher's own
+            # partition statistics, on the device, applied through its
+            # partition; the leaf values ride the tail drain back
+            comptime if SYM_LEAF_FROM_STATS:
+                if (
+                    sym_reuse and perm_count == 1
+                    and sym_leaf_from_stats_ok(
+                        objective, leaf_estimation_method,
+                        leaf_estimation_iterations, approx_dim,
+                    )
+                ):
+                    sym_estimate_leaves_device(
+                        ctx, objective, 1 << max_depth,
+                        pw_pool[0].subsets.partitions,
+                        pw_pool[0].subsets.partition_stats,
+                        pw_pool[0].subsets.indices,
+                        weights, has_weights, lcur,
+                        l2_leaf_reg, learning_rate,
+                        est_sm if est_sm > 0 else 1,
+                        sym_pool[0],
+                    )
+                    sym_leaf_device = True
+            if not need_estimation and not sym_leaf_device:
                 # the greedy arm estimates and applies INSIDE
                 # `run_tree_layout` when the method is Simple; this arm has
                 # to do it explicitly, through the same estimator.
                 _estimate_and_apply(
                     ctx, n_rows, approx_dim, len(sizes), sizes,
-                    leaf_offsets, row_index, targets, weights, has_weights,
+                    leaf_offsets, sym_rows, targets, weights, has_weights,
                     lcur, objective, alpha, estimator_alpha,
                     logloss_border, l2_leaf_reg, est_sm,
                     leaf_estimation_method, num_classes,
@@ -2972,6 +3216,7 @@ def fit_with_test(
                     trace, stage_times,
                     _tree_tag(iteration) + ".leaves.estimated",
                     est_ws,
+                    tail_drain=not sym_fuse,
                 )
         else:
             var t_sym = loop_times.start()
@@ -3025,7 +3270,12 @@ def fit_with_test(
             # never looked at them.
             for p in range(perm_count):
                 var pv = List[Float32]()
-                if p == learn_p:
+                if sym_leaf_device and p == learn_p:
+                    # lane/apple-fast-sym-iter, SYM_LEAF_FROM_STATS: the
+                    # learn permutation's leaves are already on the device;
+                    # `leaf_values` is filled from the tail readback below
+                    pass
+                elif p == learn_p:
                     var q_est = Optional[QuerywiseTargetBuffers]()
                     if is_querywise:
                         q_est = Optional(query_buffers.value().handles())
@@ -3041,7 +3291,7 @@ def fit_with_test(
                     _estimate_and_apply(
                         ctx, n_rows, approx_dim, len(sizes), sizes,
                         leaf_offsets,
-                        row_index, targets, weights, has_weights,
+                        sym_rows, targets, weights, has_weights,
                         cursors[p],
                         objective, alpha, estimator_alpha, logloss_border,
                         l2_leaf_reg, est_sm, leaf_estimation_method,
@@ -3056,6 +3306,7 @@ def fit_with_test(
                         p_est^,
                         y_est^,
                         y_seed,
+                        tail_drain=not sym_fuse,
                     )
                 else:
                     var d_bins = ctx.enqueue_create_buffer[DType.uint32](
@@ -3094,6 +3345,74 @@ def fit_with_test(
                     leaf_values.clear()
                     for i in range(len(pv)):
                         leaf_values.append(pv[i])
+        # lane/apple-fast-sym-iter: THE TREE'S TAIL. Under SYM_DERIV_FUSED
+        # the next tree's gradient pass (the same launches the loop head
+        # makes: `launch_approximate`, the fv and magnitude folds, the
+        # fv / magnitudes copies, the score-noise std dev) is enqueued
+        # behind this tree's cursor update, and ONE drain settles the
+        # update, the estimator's tail and all of it; the loop head then
+        # skips its launches and its two drains. Under SYM_LEAF_FROM_STATS
+        # the same drain delivers the 2^depth leaf values for the model.
+        comptime if SYM_ITER_ANY:
+            if sym_fuse or sym_leaf_device:
+                if sym_fuse:
+                    if second_order:
+                        launch_approximate[False, True](
+                            ctx, objective, targets, weights, Int32(n_rows),
+                            lcur,
+                            Int32(1) if has_weights else Int32(0),
+                            alpha, logloss_border,
+                            stats, fv_part, Int32(1),
+                            mag_part,
+                            Int32(1) if _needs_magnitudes else Int32(0),
+                            mse_blocks,
+                        )
+                    else:
+                        launch_approximate[False](
+                            ctx, objective, targets, weights, Int32(n_rows),
+                            lcur,
+                            Int32(1) if has_weights else Int32(0),
+                            alpha, logloss_border,
+                            stats, fv_part, Int32(1),
+                            mag_part,
+                            Int32(1) if _needs_magnitudes else Int32(0),
+                            mse_blocks,
+                        )
+                    ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
+                        fv_part.unsafe_ptr(), Int32(mse_blocks),
+                        fv.unsafe_ptr(),
+                        grid_dim=1, block_dim=256,
+                    )
+
+                    @parameter
+                    if _needs_magnitudes:
+                        ctx.enqueue_function[
+                            deterministic_sum_lanes_kernel[2]
+                        ](
+                            mag_part.unsafe_ptr(), Int32(mse_blocks),
+                            mags.unsafe_ptr(),
+                            grid_dim=1, block_dim=256,
+                        )
+                        ctx.enqueue_copy(dst_buf=h_mags, src_buf=mags)
+                    ctx.enqueue_copy(dst_ptr=h_fv.unsafe_ptr(), src_buf=fv)
+                    if use_pointwise_searcher and random_strength != Float32(
+                        0.0
+                    ):
+                        sym_std_dev_enqueue(
+                            ctx, stats, n_rows, n_rows,
+                            noise_sm if noise_sm > 0 else 1, sym_pool[0],
+                        )
+                    sym_grad_prefetched = True
+                ctx.synchronize()
+                if sym_leaf_device:
+                    leaf_values.clear()
+                    var sym_he = sym_pool[0].h_est.unsafe_ptr()
+                    for i in range(1 << max_depth):
+                        leaf_values.append(sym_he.unsafe_load(i))
+                    trace.record_list_f32(
+                        _tree_tag(iteration) + ".leaves.estimated",
+                        leaf_values,
+                    )
         loop_times.stop_host("iter_symmetric_estimate", t_sym_est)
         _ = len(sizes)
 
@@ -3158,6 +3477,12 @@ def fit_with_test(
         # LAST tree's loss comes from one extra gradient pass below.
         if len(losses) < n_estimators:
             var v = Float64(h_fv.unsafe_ptr().unsafe_load(0))
+            # lane/apple-fast-sym-iter, SYM_DERIV_FUSED: `h_fv` already
+            # holds the NEXT tree's word; this tree's was captured after
+            # the structure drain
+            comptime if SYM_DERIV_FUSED:
+                if sym_fv_captured:
+                    v = Float64(sym_fv_now)
             # `size()` counts either shape (the non-symmetric ensemble's
             # trees are in `non_symmetric_models`)
             if model.size() > 1:
