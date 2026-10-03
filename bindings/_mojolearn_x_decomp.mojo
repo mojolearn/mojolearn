@@ -14,6 +14,7 @@ from x_decomp.api import (
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.device import DevExec
+from x_decomp.fa_fast import FA_FAST_APPLE, fa_defines_py, fa_em_py, fa_gram_py, fa_transform_py
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
 from x_decomp.graph_device import (
     dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py,
@@ -103,6 +104,14 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_graph_components_py]("x_decomp_dev_graph_components")
         m.def_function[dev_graph_join_py]("x_decomp_dev_graph_join")
         m.def_function[dev_graph_dijkstra_py]("x_decomp_dev_graph_dijkstra")
+        # FactorAnalysis on the Apple GPU, FAST only (x_decomp/fa_fast.mojo,
+        # lane/apple-fast-fa): registered only in a FAST build for Apple; the
+        # IDENTICAL binding's names are main's
+        comptime if FA_FAST_APPLE:
+            m.def_function[fa_defines_py]("x_decomp_fa_defines")
+            m.def_function[fa_gram_py]("x_decomp_fa_gram")
+            m.def_function[fa_em_py]("x_decomp_fa_em")
+            m.def_function[fa_transform_py]("x_decomp_fa_transform")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
         return m.finalize()
