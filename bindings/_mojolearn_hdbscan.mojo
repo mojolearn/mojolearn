@@ -43,7 +43,6 @@ from hdbscan.estimator import (
     hdbscan_fit_host_output,
 )
 from hdbscan.impl.prediction_data import generate_prediction_data
-from hdbscan.impl.detail.extract import probabilities_from_labels
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -137,11 +136,8 @@ def _hdbscan_fit_run(
         for c in range(out.n_clusters):
             invp.unsafe_store(c, out.inverse_label_map[c])
     if want_probs:
-        var probs = probabilities_from_labels(
-            out.condensed, out.labels, out.inverse_label_map, n
-        )
         for i in range(n):
-            pp.unsafe_store(i, probs[i])
+            pp.unsafe_store(i, out.probabilities[i])
     var n_clusters = out.n_clusters
     _ = out^
     # DEVIATION 1946: the context dies LAST, after every value built on it.
@@ -189,7 +185,7 @@ def hdbscan_fit_binding(
 
     Either list may end with ONE more address, `probabilities_out` (n
     float32, WRITTEN): `probabilities_`, cuML's `get_probabilities`
-    (DEVIATION 5116, `extract.mojo::probabilities_from_labels`).
+    (DEVIATION 5116), computed on the device by the fit (`extract.mojo::probabilities_kernel`).
     """
     var n_addrs = len(addrs)
     if n_addrs != 4 and n_addrs != 5 and n_addrs != 9 and n_addrs != 10:

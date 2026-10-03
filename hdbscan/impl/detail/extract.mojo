@@ -53,13 +53,17 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE
 from hdbscan.impl.condensed_hierarchy import CondensedHierarchy
-from hdbscan.impl.detail.select import (
-    SELECT_TPB,
-    select_clusters,
-)
+from hdbscan.impl.detail.select import select_clusters
 from hdbscan.impl.detail.stabilities import (
-    STAB_TPB,
     compute_stabilities,
+    get_stability_scores_device,
+)
+from hdbscan.impl.detail.tree_device import (
+    DeviceTree,
+    td_download_f32,
+    td_download_i32,
+    td_find,
+    td_read_i32,
 )
 from hierarchy.checks.edge_order import weight_order_key, weight_order_unkey
 from std.math import isinf, isnan
@@ -69,15 +73,17 @@ from checks.numerics import ftz, identical_div
 
 @fieldwise_init
 struct ExtractOutput(Copyable, Movable):
-    """What `extract_clusters` hands back. Theirs writes through
-    out-pointers and returns `clusters.size()` (`:313`); ours returns the
-    same values in one struct so the driver can record each as a stage
-    without a second call."""
+    """What `extract_clusters` hands back, every array computed on the
+    device and downloaded once at the end. Theirs writes through
+    out-pointers and returns `clusters.size()` (`:313`)."""
 
     var n_selected: Int
+    var n_outliers: Int
     var labels: List[Int32]
     """`n_leaves`, CONDENSED cluster ids (or -1), before the label_map
     remap their `runner.h:226-233` applies."""
+    var final_labels: List[Int32]
+    """`n_leaves`, after the remap: `0 .. n_selected-1` or -1."""
     var is_cluster: List[Int32]
     """`n_clusters`, the selection."""
     var tree_stabilities: List[Float32]
@@ -86,6 +92,10 @@ struct ExtractOutput(Copyable, Movable):
     """`n_clusters`, condensed id -> final label, -1 where unselected."""
     var inverse_label_map: List[Int32]
     """`n_selected`, final label -> condensed id."""
+    var stability_scores: List[Float32]
+    """`n_selected`, `get_stability_scores`' normalized output."""
+    var probabilities: List[Float32]
+    """`n_leaves`, `Membership::get_probabilities` (DEVIATION 5116)."""
 
 
 def get_probabilities_host(
@@ -256,43 +266,25 @@ def label_points_kernel(
 
 def do_labelling_device(
     ctx: DeviceContext,
-    tree: CondensedHierarchy,
+    tree: DeviceTree,
     mut is_cluster: DeviceBuffer[DType.int32],
     n_selected: Int,
-    n_leaves: Int,
     allow_single_cluster: Bool,
     cluster_selection_epsilon: Float32,
     tpb: Int = LABEL_TPB,
-) raises -> List[Int32]:
-    """`extract.cuh:88-167` on the device (this file's header). Returns the
-    `n_leaves` condensed cluster ids (or -1), the host walk's integers."""
+) raises -> DeviceBuffer[DType.int32]:
+    """`extract.cuh:88-167` on the device (this file's header), over the
+    device tree. Returns the `n_leaves` condensed cluster ids (or -1), the
+    host walk's integers, still on the device."""
+    var n_leaves = tree.n_leaves
     var n_edges = tree.n_edges
     var n_clusters = tree.n_clusters
     var n_nodes = n_leaves + n_clusters
-    var d_parents = ctx.enqueue_create_buffer[DType.int32](max(n_edges, 1))
-    var d_children = ctx.enqueue_create_buffer[DType.int32](max(n_edges, 1))
-    var d_lambdas = ctx.enqueue_create_buffer[DType.float32](max(n_edges, 1))
     var next_a = ctx.enqueue_create_buffer[DType.int32](n_nodes)
     var next_b = ctx.enqueue_create_buffer[DType.int32](n_nodes)
     var child_lambda = ctx.enqueue_create_buffer[DType.float32](n_nodes)
     var root_key = ctx.enqueue_create_buffer[DType.int32](1)
     var d_labels = ctx.enqueue_create_buffer[DType.int32](max(n_leaves, 1))
-    var h_parents = tree.parents.copy()
-    var h_children = tree.children.copy()
-    var h_lambdas = tree.lambdas.copy()
-    if n_edges > 0:
-        ctx.enqueue_copy(
-            dst_buf=d_parents.create_sub_buffer[DType.int32](0, n_edges),
-            src_ptr=h_parents.unsafe_ptr(),
-        )
-        ctx.enqueue_copy(
-            dst_buf=d_children.create_sub_buffer[DType.int32](0, n_edges),
-            src_ptr=h_children.unsafe_ptr(),
-        )
-        ctx.enqueue_copy(
-            dst_buf=d_lambdas.create_sub_buffer[DType.float32](0, n_edges),
-            src_ptr=h_lambdas.unsafe_ptr(),
-        )
     # `:117` parent_lambdas starts at 0.0f.
     ctx.enqueue_memset(root_key, weight_order_key(Float32(0.0)))
 
@@ -306,9 +298,9 @@ def do_labelling_device(
     )
     if n_edges > 0:
         ctx.enqueue_function[label_edges_kernel](
-            d_parents.unsafe_ptr(),
-            d_children.unsafe_ptr(),
-            d_lambdas.unsafe_ptr(),
+            tree.parents.unsafe_ptr(),
+            tree.children.unsafe_ptr(),
+            tree.lambdas.unsafe_ptr(),
             is_cluster.unsafe_ptr(),
             next_a.unsafe_ptr(),
             child_lambda.unsafe_ptr(),
@@ -320,27 +312,8 @@ def do_labelling_device(
             block_dim=(tpb, 1, 1),
         )
     # A fixed round count: 2^rounds >= n_nodes reaches every chain's end.
-    var rounds = 1
-    while (1 << rounds) < n_nodes:
-        rounds += 1
-    for r in range(rounds):
-        if r % 2 == 0:
-            ctx.enqueue_function[label_jump_kernel](
-                next_a.unsafe_ptr(),
-                next_b.unsafe_ptr(),
-                Int32(n_nodes),
-                grid_dim=(node_grid, 1, 1),
-                block_dim=(tpb, 1, 1),
-            )
-        else:
-            ctx.enqueue_function[label_jump_kernel](
-                next_b.unsafe_ptr(),
-                next_a.unsafe_ptr(),
-                Int32(n_nodes),
-                grid_dim=(node_grid, 1, 1),
-                block_dim=(tpb, 1, 1),
-            )
-    var rep_ptr = next_b.unsafe_ptr() if rounds % 2 == 1 else next_a.unsafe_ptr()
+    var in_b = td_find(ctx, next_a, next_b, n_nodes)
+    var rep_ptr = next_b.unsafe_ptr() if in_b else next_a.unsafe_ptr()
 
     # `:131-134` identical_div (DEVIATION 5115); unread when epsilon is 0.
     var inverse_cluster_selection_epsilon = Float32(0.0)
@@ -364,115 +337,174 @@ def do_labelling_device(
             grid_dim=(max(1, (n_leaves + tpb - 1) // tpb), 1, 1),
             block_dim=(tpb, 1, 1),
         )
-    var labels = _download_i32(ctx, d_labels, n_leaves)
-    _ = h_parents^
-    _ = h_children^
-    _ = h_lambdas^
-    _ = d_parents^
-    _ = d_children^
-    _ = d_lambdas^
+    ctx.synchronize()
     _ = next_a^
     _ = next_b^
     _ = child_lambda^
     _ = root_key^
-    _ = d_labels^
-    return labels^
+    return d_labels^
+
+
+def remap_labels_kernel(
+    raw: MutPointer[Int32, MutAnyOrigin],
+    label_map: MutPointer[Int32, MutAnyOrigin],
+    out: MutPointer[Int32, MutAnyOrigin],
+    n_out: MutPointer[Int32, MutAnyOrigin],
+    n_leaves: Int32,
+):
+    """`runner.h:221-233` per point, the outliers counted by an integer
+    atomic."""
+    var i = Int(block_dim.x) * Int(block_idx.x) + Int(thread_idx.x)
+    if i >= Int(n_leaves):
+        return
+    var l = Int(raw[i])
+    var v = Int32(-1)
+    if l != -1:
+        v = label_map[l]
+    out[i] = v
+    if v == Int32(-1):
+        _ = Atomic.fetch_add(n_out, Int32(1))
+
+
+def deaths_key_kernel(
+    parents: MutPointer[Int32, MutAnyOrigin],
+    lambdas: MutPointer[Float32, MutAnyOrigin],
+    dkey: MutPointer[Int32, MutAnyOrigin],
+    n_leaves: Int32,
+    n_edges: Int32,
+):
+    """`deaths[c]`, the max child lambda of each cluster, as an integer
+    `Atomic.max` on `weight_order_key` (order-free)."""
+    var e = Int(block_dim.x) * Int(block_idx.x) + Int(thread_idx.x)
+    if e >= Int(n_edges):
+        return
+    var c = Int(parents[e]) - Int(n_leaves)
+    _ = Atomic.max(dkey.unsafe_offset(c), weight_order_key(lambdas[e]))
+
+
+def probabilities_kernel(
+    children: MutPointer[Int32, MutAnyOrigin],
+    lambdas: MutPointer[Float32, MutAnyOrigin],
+    raw: MutPointer[Int32, MutAnyOrigin],
+    dkey: MutPointer[Int32, MutAnyOrigin],
+    out: MutPointer[Float32, MutAnyOrigin],
+    n_leaves: Int32,
+    n_edges: Int32,
+):
+    """`get_probabilities_host`'s per-point step, one thread per edge."""
+    var e = Int(block_dim.x) * Int(block_idx.x) + Int(thread_idx.x)
+    if e >= Int(n_edges):
+        return
+    var child = Int(children[e])
+    if child >= Int(n_leaves):
+        return
+    var cluster = Int(raw[child])
+    if cluster == -1:
+        return
+    var k = dkey[cluster]
+    var death = Float32(0.0)
+    if k != Int32(-2147483647 - 1):
+        death = weight_order_unkey(k)
+    var lam = lambdas[e]
+    if death == Float32(0.0) or isnan(lam) or isinf(lam):
+        out[child] = Float32(1.0)
+    else:
+        var lo = lam if lam < death else death
+        out[child] = ftz(identical_div(lo, death))
 
 
 def extract_clusters(
     ctx: DeviceContext,
-    tree: CondensedHierarchy,
-    n_leaves: Int,
+    tree: DeviceTree,
     cluster_selection_method: Int,
     allow_single_cluster: Bool,
     max_cluster_size_in: Int,
     cluster_selection_epsilon: Float32,
-    stab_tpb: Int = STAB_TPB,
-    select_tpb: Int = SELECT_TPB,
     sabotage: Int32 = HDB_SAB_NONE,
 ) raises -> ExtractOutput:
-    """`extract.cuh:246-314`."""
+    """`extract.cuh:246-314`, then the runner's tail (`runner.h:208-233`:
+    max_lambda, the stability scores, the label remap) and the
+    probabilities, all on the device over `tree`."""
     var n_clusters = tree.n_clusters
+    var n_leaves = tree.n_leaves
 
     # `:263`
     var stabilities = ctx.enqueue_create_buffer[DType.float32](n_clusters)
     var is_cluster = ctx.enqueue_create_buffer[DType.int32](n_clusters)
-    ctx.synchronize()
-    compute_stabilities(ctx, tree, stabilities, stab_tpb, sabotage)
+    var label_map = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    var inverse = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    compute_stabilities(ctx, tree, stabilities, sabotage)
 
     # `:266` if (max_cluster_size <= 0) max_cluster_size = n_leaves
     var max_cluster_size = max_cluster_size_in
     if max_cluster_size <= 0:
         max_cluster_size = n_leaves
 
-    # `:268-275`
-    _ = select_clusters(
-        ctx, tree, stabilities, is_cluster, cluster_selection_method,
-        allow_single_cluster, max_cluster_size, cluster_selection_epsilon,
-        select_tpb, sabotage,
+    # `:268-295` the selection and the ascending label maps.
+    var n_selected = select_clusters(
+        ctx, tree, stabilities, is_cluster, label_map, inverse,
+        cluster_selection_method, allow_single_cluster, max_cluster_size,
+        cluster_selection_epsilon, sabotage,
     )
 
-    # `:277-284` is_cluster back to the host; clusters = the ascending set
-    # of `i + n_leaves` for every selected i.
-    var h_isc = _download_i32(ctx, is_cluster, n_clusters)
-    var h_stab = _download_f32(ctx, stabilities, n_clusters)
-
-    # `:286-295` the forward and inverse maps, in ascending cluster order.
-    var label_map = List[Int32](capacity=n_clusters)
-    for _ in range(n_clusters):
-        label_map.append(Int32(-1))
-    var inverse_label_map = List[Int32]()
-    var n_selected = 0
-    for i in range(n_clusters):
-        if h_isc[i] != Int32(0):
-            label_map[i] = Int32(n_selected)
-            inverse_label_map.append(Int32(i))
-            n_selected += 1
-
-    # `:303-309`, on the device: `is_cluster` stays where the selection
-    # left it, and the membership test reads it by condensed id.
-    var labels = do_labelling_device(
-        ctx, tree, is_cluster, n_selected, n_leaves, allow_single_cluster,
+    # `:303-309` the labelling, on the device.
+    var raw = do_labelling_device(
+        ctx, tree, is_cluster, n_selected, allow_single_cluster,
         cluster_selection_epsilon,
     )
 
-    # `:311` Membership::get_probabilities: `get_probabilities_host`
-    # (DEVIATION 5116), called by the runner on these raw labels.
-
-    _ = stabilities^
-    _ = is_cluster^
-    return ExtractOutput(
-        n_selected, labels^, h_isc^, h_stab^, label_map^, inverse_label_map^
+    # `runner.h:221-233` the remap.
+    var final = ctx.enqueue_create_buffer[DType.int32](max(n_leaves, 1))
+    var n_out = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(n_out, Int32(0))
+    var g_pts = max(1, (n_leaves + LABEL_TPB - 1) // LABEL_TPB)
+    ctx.enqueue_function[remap_labels_kernel](
+        raw.unsafe_ptr(), label_map.unsafe_ptr(), final.unsafe_ptr(),
+        n_out.unsafe_ptr(), Int32(n_leaves),
+        grid_dim=(g_pts, 1, 1), block_dim=(LABEL_TPB, 1, 1),
     )
 
+    # `runner.h:208-219` max_lambda and get_stability_scores.
+    var scores = get_stability_scores_device(
+        ctx, tree, raw, stabilities, label_map, n_selected
+    )
 
-def _download_i32(
-    ctx: DeviceContext, buf: DeviceBuffer[DType.int32], n: Int
-) raises -> List[Int32]:
-    var h = ctx.enqueue_create_host_buffer[DType.int32](n)
-    ctx.synchronize()
-    var v = buf.create_sub_buffer[DType.int32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
-    ctx.synchronize()
-    var out = List[Int32](capacity=n)
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    _ = v^
-    return out^
+    # `:311` Membership::get_probabilities (DEVIATION 5116).
+    var dkey = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    ctx.enqueue_memset(dkey, Int32(-2147483647 - 1))
+    var probs = ctx.enqueue_create_buffer[DType.float32](max(n_leaves, 1))
+    ctx.enqueue_memset(probs, Float32(0.0))
+    var g_edges = max(1, (tree.n_edges + LABEL_TPB - 1) // LABEL_TPB)
+    ctx.enqueue_function[deaths_key_kernel](
+        tree.parents.unsafe_ptr(), tree.lambdas.unsafe_ptr(),
+        dkey.unsafe_ptr(), Int32(n_leaves), Int32(tree.n_edges),
+        grid_dim=(g_edges, 1, 1), block_dim=(LABEL_TPB, 1, 1),
+    )
+    ctx.enqueue_function[probabilities_kernel](
+        tree.children.unsafe_ptr(), tree.lambdas.unsafe_ptr(),
+        raw.unsafe_ptr(), dkey.unsafe_ptr(), probs.unsafe_ptr(),
+        Int32(n_leaves), Int32(tree.n_edges),
+        grid_dim=(g_edges, 1, 1), block_dim=(LABEL_TPB, 1, 1),
+    )
 
-
-def _download_f32(
-    ctx: DeviceContext, buf: DeviceBuffer[DType.float32], n: Int
-) raises -> List[Float32]:
-    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.synchronize()
-    var v = buf.create_sub_buffer[DType.float32](0, n)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=v)
-    ctx.synchronize()
-    var out = List[Float32](capacity=n)
-    for i in range(n):
-        out.append(h.unsafe_ptr().unsafe_load(i))
-    _ = h^
-    _ = v^
-    return out^
+    var h_raw = td_download_i32(ctx, raw, n_leaves)
+    var h_final = td_download_i32(ctx, final, n_leaves)
+    var h_isc = td_download_i32(ctx, is_cluster, n_clusters)
+    var h_stab = td_download_f32(ctx, stabilities, n_clusters)
+    var h_map = td_download_i32(ctx, label_map, n_clusters)
+    var h_inv = td_download_i32(ctx, inverse, n_selected)
+    var h_probs = td_download_f32(ctx, probs, n_leaves)
+    var n_outliers = td_read_i32(ctx, n_out, 0)
+    _ = stabilities^
+    _ = is_cluster^
+    _ = label_map^
+    _ = inverse^
+    _ = raw^
+    _ = final^
+    _ = n_out^
+    _ = dkey^
+    _ = probs^
+    return ExtractOutput(
+        n_selected, n_outliers, h_raw^, h_final^, h_isc^, h_stab^, h_map^,
+        h_inv^, scores^, h_probs^,
+    )
