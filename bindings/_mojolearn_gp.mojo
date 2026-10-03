@@ -892,7 +892,8 @@ def cholesky_factor_binding(
     var jitter = Float32(Float64(py=params[1]))
     var info = 0
     comptime if CHOL_FAST_DEVIO:
-        # -D MOJOLEARN_CHOL_FAST_DEVIO (cholesky/estimator.mojo)
+        # CHOL_FAST_DEVIO (FAST + Apple default, cholesky/estimator.mojo;
+        # -D MOJOLEARN_CHOL_FAST_DEVIO_OFF reverts)
         with GILReleased(Python()):
             info = cholesky_factor_devio(ap, lp, sp, n, jitter)
         return PythonObject(info)

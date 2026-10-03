@@ -420,8 +420,12 @@ comptime CHOL_INV_MIN_N = 2048
 """The explicit `L11^{-1}` rounds where the column-by-column solve is exact
 on exactly representable data; below this size the solve is not where the
 time goes, so small factorizations keep the exact route."""
-comptime CHOL_FAST_NOSYNC = CHOL_FAST_APPLE and is_defined["MOJOLEARN_CHOL_FAST_NOSYNC"]()
-"""lane/apple-fast-gap-linalg2: see `potrf_lower`'s fast_defer."""
+comptime CHOL_FAST_NOSYNC = CHOL_FAST_APPLE and not is_defined["MOJOLEARN_CHOL_FAST_NOSYNC_OFF"]()
+"""lane/apple-fast-gap-linalg2: see `potrf_lower`'s fast_defer. The FAST +
+Apple default since 2026-10-03 (M3 A/B on top of CHOL_FAST_DEVIO: cholesky
+synthetic 285 -> 271 ms, residual the same; tag gl2-chol-nosync-synthetic).
+Only callers passing defer_ok (`cholesky_factor_devio`) take it.
+-D MOJOLEARN_CHOL_FAST_NOSYNC_OFF keeps the per-panel drains."""
 comptime CHOL_FUSED_SUB = CHOL_FAST_APPLE and not is_defined[
     "MOJOLEARN_CHOL_FUSED_SUB_OFF"
 ]()
@@ -1961,7 +1965,7 @@ def potrf_lower(
     var defer = False
     comptime if CHOL_DEFER_INFO:
         defer = left_mode and not ctim
-    # -D MOJOLEARN_CHOL_FAST_NOSYNC (lane/apple-fast-gap-linalg2): a caller
+    # CHOL_FAST_NOSYNC (FAST + Apple default; _OFF reverts): a caller
     # that can redo a failed factor (defer_ok: `cholesky_factor_devio`
     # re-runs from its staged input with defer_ok False) gets no drain per
     # panel -- neither the info read nor the end-of-trailing wait -- and one

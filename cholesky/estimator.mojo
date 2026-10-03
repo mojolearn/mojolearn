@@ -204,7 +204,7 @@ def cholesky_factor_host(
     return CholeskyFactor(l^, n, run.info, logdet, run.nb, jitter)
 
 
-# ---- lane/apple-fast-gap-linalg2 (2026-10-03): -D MOJOLEARN_CHOL_FAST_DEVIO --------
+# ---- lane/apple-fast-gap-linalg2 (2026-10-03): CHOL_FAST_DEVIO (default; _OFF reverts) ----
 #: FAST + Apple: `cholesky_factor_binding` without the host Lists and the
 #: host scans. Main's one-shot form copies the caller's n x n matrix into a
 #: List (read_f32), scans it twice on ONE host thread (finite, then the
@@ -218,10 +218,14 @@ def cholesky_factor_host(
 #: validator on the caller's matrix for the by-name error), and the factor
 #: comes back through one staging buffer straight into the caller's array.
 #: The factorization itself is `potrf_lower` unchanged: the same words.
+#: The FAST + Apple default since 2026-10-03 (M3 A/B, one run per arm:
+#: cholesky synthetic 435 -> 290 ms, residual the same 1.659e-07; tag
+#: gl2-chol-devio-synthetic). -D MOJOLEARN_CHOL_FAST_DEVIO_OFF restores
+#: main's host-List route (the A/B arm).
 comptime CHOL_FAST_DEVIO = (
     _CTX_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_CHOL_FAST_DEVIO"]()
+    and not is_defined["MOJOLEARN_CHOL_FAST_DEVIO_OFF"]()
 )
 
 
