@@ -233,11 +233,13 @@ comptime KALMAN_LL_ONLY = (
 #: `K`, so the loop keeps those values and runs only the state update
 #: (pred, v, alpha) and the log-likelihood sums: the same statements on the
 #: same operands, the same bits, about rd^3 fewer FMAs per step. FAST on
-#: Apple only; default OFF until the M3 A/B.
+#: Apple only. DEFAULT ON since the M3 A/B (combined gaparima-pfixasync
+#: A/B with ARIMA_FAST_ASYNC, forecast_rmse identical). The old
+#: `-D MOJOLEARN_ARIMA_FAST_P_FIX=1` stays harmless;
+#: `-D MOJOLEARN_ARIMA_FAST_P_FIX_OFF=1` turns it off.
 comptime KALMAN_FAST_P_FIX = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_ARIMA_FAST_P_FIX"]()
     and not is_defined["MOJOLEARN_ARIMA_FAST_P_FIX_OFF"]()
 )
 

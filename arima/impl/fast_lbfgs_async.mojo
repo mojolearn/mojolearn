@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """lane/apple-fast-gap-arima (2026-10-03): two FAST-on-Apple switches for
-`batched_fit.mojo::batched_min_lbfgs`, both default OFF.
+`batched_fit.mojo::batched_min_lbfgs`. ARIMA_FAST_ASYNC is the FAST+Apple
+default (`_OFF` turns it off); ARIMA_FAST_LS_NOREAD stays opt-in.
 
 `-D MOJOLEARN_ARIMA_FAST_LS_NOREAD=1` (ARIMA_FAST_LS_NOREAD). The lock-step
 solver reads `any_searching` back right after `lbfgs_prelude_kernel`, a
@@ -80,9 +81,13 @@ comptime ARIMA_FAST_LS_NOREAD = (
     and not is_defined["MOJOLEARN_ARIMA_FAST_LS_NOREAD_OFF"]()
 )
 
+#: DEFAULT ON (FAST + Apple, via KALMAN_FAST_EVAL_WS) since the M3 A/B:
+#: autoarima taxi-hourly 39,639 -> 24,563 ms (-38%), synthetic 28,511 ->
+#: 14,918 ms (-48%), forecast_rmse identical. The old
+#: `-D MOJOLEARN_ARIMA_FAST_ASYNC=1` stays harmless;
+#: `-D MOJOLEARN_ARIMA_FAST_ASYNC_OFF=1` turns it off.
 comptime ARIMA_FAST_ASYNC = (
     KALMAN_FAST_EVAL_WS
-    and is_defined["MOJOLEARN_ARIMA_FAST_ASYNC"]()
     and not is_defined["MOJOLEARN_ARIMA_FAST_ASYNC_OFF"]()
 )
 
