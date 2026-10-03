@@ -254,7 +254,9 @@ def sym_split_planes(
     return (pool.w.copy(), pool.t.copy())
 
 
-def sym_scale_from_mags(h_mags: HostBuffer[DType.float32], n_rows: Int) -> Float32:
+def sym_scale_from_mags(
+    h_mags: HostBuffer[DType.float32], n_rows: Int
+) raises -> Float32:
     """`choose_scale` over the larger plane magnitude, as the loop derives
     it after its magnitudes drain."""
     var m0 = Float64(h_mags[0])
