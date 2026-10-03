@@ -83,3 +83,9 @@ Not done: `MOJOLEARN_LSVR_DEVICE_CONVERGE` (no separate readback exists, section
 `MOJOLEARN_LSVR_DUAL_CD` (liblinear's dual coordinate descent is sequential per coordinate; a
 parallel block variant changes the solution path and would need its own convergence proof against
 the primal tolerance; not simple, not attempted).
+
+## Compile results (2026-10-03, head 5e6f8e319 code, bindings/build_estimators.sh, compile only)
+FAST + MOJOLEARN_LSVR_FASTPATH_FIX rc=0; FAST + MOJOLEARN_LSVR_FUSED_GRAD rc=0;
+FAST + MOJOLEARN_LSVR_LINESEARCH_BATCH rc=0; FAST + MOJOLEARN_LSVR_EVAL_SLIM rc=0;
+FAST + MOJOLEARN_LSVR_ALL rc=0; FAST, no define rc=0; IDENTICAL rc=0.
+Logs: ~/mojolearn-evidence/af-linsvr/build-*.log (not in git).
