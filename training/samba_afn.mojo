@@ -41,6 +41,21 @@ The defines (each read once, at compile time; default OFF):
                                     run begins, permutation, fold; the id
                                     refusal's download and two waits).
   MOJOLEARN_AFN_SAMBA_ALL           all of the above.
+  MOJOLEARN_AFN_SAMBA_HEAD_GEMM     (wave 2, lane w2-epi; also on under
+                                    MOJOLEARN_AFN_EPI_ALL, NOT under
+                                    _SAMBA_ALL) the tied head GEMM and its
+                                    two backward GEMMs in the fused entries
+                                    and the resident head loss run on the
+                                    gemm lane's FAST matrix-unit kernel
+                                    (gemm/afn_apple_fast.mojo) instead of
+                                    `identical_gemm_into` (no workspaces);
+                                    a product whose tiles cover fewer than
+                                    2 x AFN_GEMM_CORES blocks (the head's
+                                    dW at the board shape: 24 tiles, k =
+                                    1024 tokens) splits k over grid.y into
+                                    a zeroed output with f32 atomic adds.
+                                    Reached only through the entries above,
+                                    so an A/B pairs it with _SAMBA_FUSE.
 
 FAST promises quality, never bits: the fold orders that change here are the
 embedding scatter (free order) and the tied pair add's placement; every
@@ -56,6 +71,7 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_arena import (
     arena_active,
@@ -70,7 +86,25 @@ from embedding.checks.embedding_identical import (
     identical_embedding_forward_into,
 )
 from embedding.checks.embedding_oracle import EmbConfig
+#: lane w2-epi (MOJOLEARN_AFN_SAMBA_HEAD_GEMM): the FAST matrix-unit kernel's
+#: launcher and policies, instantiated only under that switch.
+from gemm.afn_apple_fast import (
+    AFN_EPI_NONE,
+    AFN_GEMM_CORES,
+    AFN_GEMM_KB,
+    AFN_GEMM_SPLIT_MAX,
+    AFN_GEMM_SPLIT_MIN_STEPS,
+    AFN_ZERO_TPB,
+    _afn_launch_tile,
+    _afn_strides,
+    afn_gemm_tile,
+    afn_gemm_tile_count,
+    afn_zero_kernel,
+)
 from gemm.checks.gemm_backward import (
+    BWD_DC_LEFT,
+    gemm_backward_a_call,
+    gemm_backward_b_call,
     identical_gemm_backward_a_into,
     identical_gemm_backward_a_workspace_max_floats,
     identical_gemm_backward_b_into,
@@ -80,7 +114,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.contract import OP_NT
+from gemm.contract import OP_NN, OP_NT, OP_TN
 from training.checks.loss_contract import (
     CeConfig,
     ce_count,
@@ -112,6 +146,16 @@ comptime AFN_SAMBA_DEVICE_ADMIT = AFN_SAMBA_ALL or (
 )
 comptime AFN_SAMBA_EMB_ATOMIC = AFN_SAMBA_ALL or (
     AFN_SAMBA_APPLE_FAST and is_defined["MOJOLEARN_AFN_SAMBA_EMB_ATOMIC"]()
+)
+#: lane w2-epi (wave 2): the head GEMMs on the FAST matrix-unit kernel. The
+#: gemm kernel's own guard adds the Apple column (never the CPU column).
+comptime AFN_SAMBA_HEAD_GEMM = (
+    AFN_SAMBA_APPLE_FAST
+    and TARGET_COLUMN == COLUMN_APPLE
+    and (
+        is_defined["MOJOLEARN_AFN_SAMBA_HEAD_GEMM"]()
+        or is_defined["MOJOLEARN_AFN_EPI_ALL"]()
+    )
 )
 #: the standalone ops of samba_ops.mojo route here when any of these is on
 comptime AFN_SAMBA_OPS = (
@@ -586,6 +630,113 @@ def afn_rms_norm_backward_host(
     return cells
 
 
+# ===========================================================================
+# THE HEAD GEMMS ON THE MATRIX UNIT (MOJOLEARN_AFN_SAMBA_HEAD_GEMM, lane w2-epi)
+# ===========================================================================
+
+
+def _afn_head_k_split(tiles: Int, k: Int) -> Int:
+    """Steps per split, or 0: the gemm lane's `afn_gemm_k_split` rule, owned
+    here so it follows MOJOLEARN_AFN_SAMBA_HEAD_GEMM rather than
+    MOJOLEARN_AFN_GEMM_SPLITK. Whole windows per split."""
+    var target = 2 * AFN_GEMM_CORES
+    if tiles >= target or k < 2 * AFN_GEMM_SPLIT_MIN_STEPS:
+        return 0
+    var s = (target + tiles - 1) // tiles
+    s = min(s, k // AFN_GEMM_SPLIT_MIN_STEPS)
+    s = min(s, AFN_GEMM_SPLIT_MAX)
+    if s <= 1:
+        return 0
+    var per = (k + s - 1) // s
+    per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
+    if (k + per - 1) // per <= 1:
+        return 0
+    return per
+
+
+def afn_head_gemm_into(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+) raises -> Bool:
+    """`C[m x n] = op(A) . op(B)` on the FAST matrix-unit kernel: one launch,
+    or (a short grid with a long `k`) one zero launch of the `m n` cells and
+    one split launch adding every split into them. Asynchronous; every
+    buffer is the caller's. True when served; False (nothing enqueued) when
+    the switch is off or the shape/op is not served, and the caller runs its
+    `identical_gemm_*` call."""
+    comptime if not AFN_SAMBA_HEAD_GEMM:
+        return False
+    else:
+        if m <= 0 or n <= 0 or k <= 0:
+            return False
+        if op != OP_NN and op != OP_NT and op != OP_TN:
+            return False
+        var st = _afn_strides(op, m, n, k)
+        var tile = afn_gemm_tile(m, n)
+        var cp = c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var ap = a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var bp = b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var k_split = _afn_head_k_split(afn_gemm_tile_count(tile, m, n), k)
+        if k_split > 0:
+            var splits = (k + k_split - 1) // k_split
+            ctx.enqueue_function[afn_zero_kernel](
+                cp,
+                Int32(m * n),
+                grid_dim=((m * n + 4 * AFN_ZERO_TPB - 1) // (4 * AFN_ZERO_TPB), 1, 1),
+                block_dim=(AFN_ZERO_TPB, 1, 1),
+            )
+            _afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+                ctx, tile, cp, ap, bp, cp, cp, m, n, k, st, splits, k_split
+            )
+        else:
+            _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
+                ctx, tile, cp, ap, bp, cp, cp, m, n, k, st, 1, k
+            )
+        return True
+
+
+def _afn_head_backward_a_into(
+    ctx: DeviceContext,
+    mut da: DeviceBuffer[DType.float32],
+    mut dc: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+) raises -> Bool:
+    """`identical_gemm_backward_a_into`'s operand table
+    (`gemm_backward_a_call`) on the matrix-unit kernel."""
+    var call = gemm_backward_a_call(op, m, n, k)
+    if call[4] == BWD_DC_LEFT:
+        return afn_head_gemm_into(ctx, da, dc, b, call[1], call[2], call[3], call[0])
+    return afn_head_gemm_into(ctx, da, b, dc, call[1], call[2], call[3], call[0])
+
+
+def _afn_head_backward_b_into(
+    ctx: DeviceContext,
+    mut db: DeviceBuffer[DType.float32],
+    mut dc: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+) raises -> Bool:
+    """`identical_gemm_backward_b_into`'s operand table
+    (`gemm_backward_b_call`) on the matrix-unit kernel."""
+    var call = gemm_backward_b_call(op, m, n, k)
+    if call[4] == BWD_DC_LEFT:
+        return afn_head_gemm_into(ctx, db, dc, a, call[1], call[2], call[3], call[0])
+    return afn_head_gemm_into(ctx, db, a, dc, call[1], call[2], call[3], call[0])
+
+
 def _head_loss_resident(
     own: Bool,
     ctx: DeviceContext,
@@ -613,8 +764,17 @@ def _head_loss_resident(
     for the host scan only without the admit define. Returns `count`."""
     var cells = m * n
     var c = afn_scratch_f32(own, ctx, cells)
-    var ws = afn_scratch_f32(own, ctx, identical_gemm_workspace_max_floats(m, n, k))
-    identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
+    # lane w2-epi (MOJOLEARN_AFN_SAMBA_HEAD_GEMM): the matrix-unit kernel,
+    # no workspace; afn-samba's spelling if it declines or the switch is off.
+    comptime if AFN_SAMBA_HEAD_GEMM:
+        if not afn_head_gemm_into(ctx, c, a, w, m, n, k, OP_NT):
+            var ws = afn_scratch_f32(own, ctx, identical_gemm_workspace_max_floats(m, n, k))
+            identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
+            keep.append(ws^)
+    else:
+        var ws = afn_scratch_f32(own, ctx, identical_gemm_workspace_max_floats(m, n, k))
+        identical_gemm_into(ctx, c, a, w, ws, m, n, k, OP_NT)
+        keep.append(ws^)
 
     identical_ce_admit_call(reduction, 1, m)
     var cfg = CeConfig(n, ignore_index, reduction, label_smoothing, num_items)
@@ -644,19 +804,34 @@ def _head_loss_resident(
     identical_ce_loss_resident(
         ctx, loss_ptr, row_ptr, dc, c, ints[len(ints) - 1], m, count, reduction, 1, cfg,
     )
-    var ws_a = afn_scratch_f32(
-        own, ctx, identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
-    )
-    var ws_b = afn_scratch_f32(
-        own, ctx, identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
-    )
-    identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
-    identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
+    # lane w2-epi (MOJOLEARN_AFN_SAMBA_HEAD_GEMM): dA and dW on the
+    # matrix-unit kernel (dW, k = m tokens, splits when its grid is short).
+    comptime if AFN_SAMBA_HEAD_GEMM:
+        if not _afn_head_backward_a_into(ctx, da, dc, w, m, n, k, OP_NT):
+            var ws_a = afn_scratch_f32(
+                own, ctx, identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
+            )
+            identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
+            keep.append(ws_a^)
+        if not _afn_head_backward_b_into(ctx, dw, dc, a, m, n, k, OP_NT):
+            var ws_b = afn_scratch_f32(
+                own, ctx, identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
+            )
+            identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
+            keep.append(ws_b^)
+    else:
+        var ws_a = afn_scratch_f32(
+            own, ctx, identical_gemm_backward_a_workspace_max_floats(OP_NT, m, n, k)
+        )
+        var ws_b = afn_scratch_f32(
+            own, ctx, identical_gemm_backward_b_workspace_max_floats(OP_NT, m, n, k)
+        )
+        identical_gemm_backward_a_into(ctx, da, dc, w, ws_a, m, n, k, OP_NT)
+        identical_gemm_backward_b_into(ctx, dw, dc, a, ws_b, m, n, k, OP_NT)
+        keep.append(ws_a^)
+        keep.append(ws_b^)
     keep.append(c^)
-    keep.append(ws^)
     keep.append(dc^)
-    keep.append(ws_a^)
-    keep.append(ws_b^)
     return count
 
 
@@ -756,8 +931,18 @@ def afn_norm_head_forward_host(
         var sumsq = afn_scratch_f32(own, ctx, m)
         llama_rms_norm(ctx, sumsq, hn, x, nw, m, k, eps)
         var c = afn_scratch_f32(own, ctx, m * n)
-        var ws = afn_scratch_f32(own, ctx, identical_gemm_workspace_max_floats(m, n, k))
-        identical_gemm_into(ctx, c, hn, hw, ws, m, n, k, OP_NT)
+        var keep = List[DeviceBuffer[DType.float32]]()
+        # lane w2-epi (MOJOLEARN_AFN_SAMBA_HEAD_GEMM): the matrix-unit
+        # kernel, no workspace; afn-samba's spelling if it declines.
+        comptime if AFN_SAMBA_HEAD_GEMM:
+            if not afn_head_gemm_into(ctx, c, hn, hw, m, n, k, OP_NT):
+                var ws = afn_scratch_f32(own, ctx, identical_gemm_workspace_max_floats(m, n, k))
+                identical_gemm_into(ctx, c, hn, hw, ws, m, n, k, OP_NT)
+                keep.append(ws^)
+        else:
+            var ws = afn_scratch_f32(own, ctx, identical_gemm_workspace_max_floats(m, n, k))
+            identical_gemm_into(ctx, c, hn, hw, ws, m, n, k, OP_NT)
+            keep.append(ws^)
         ctx.enqueue_copy(dst_ptr=c_ptr, src_buf=c)
         admit.finish(ctx)
         ctx.synchronize()
@@ -769,7 +954,7 @@ def afn_norm_head_forward_host(
         _ = hn^
         _ = sumsq^
         _ = c^
-        _ = ws^
+        _ = keep^
         _ = admit^
         return m * n
 

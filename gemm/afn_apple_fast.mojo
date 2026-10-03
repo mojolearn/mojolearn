@@ -84,6 +84,9 @@ from checks.kernel_matrix import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from core.apple_air import simdgroup_load_legacy_air
 from gemm.contract import OP_NN, OP_NT, OP_TN
+# lane/apple-fast-neural-w2-gemm2: the second-round kernel (AFN_GEMM2_ON is
+# False unless FAST + Apple + a MOJOLEARN_AFN_GEMM2_* define).
+from gemm.afn_apple_fast2 import AFN_GEMM2_ON, afn2_gemm_dispatch
 
 
 # ===========================================================================
@@ -97,7 +100,7 @@ comptime AFN_GEMM_APPLE = (
     and TARGET_COLUMN == COLUMN_APPLE
 )
 comptime AFN_GEMM_ALL = AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_ALL"]()
-comptime AFN_GEMM_SIMDGROUP = AFN_GEMM_ALL or (
+comptime AFN_GEMM_SIMDGROUP = AFN_GEMM_ALL or AFN_GEMM2_ON or (
     AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_SIMDGROUP"]()
 )
 comptime AFN_GEMM_SPLITK = AFN_GEMM_ALL or (
@@ -106,7 +109,7 @@ comptime AFN_GEMM_SPLITK = AFN_GEMM_ALL or (
 comptime AFN_GEMM_TILESHAPE = AFN_GEMM_ALL or (
     AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_TILESHAPE"]()
 )
-comptime AFN_GEMM_BF16_MMA = AFN_GEMM_ALL or (
+comptime AFN_GEMM_BF16_MMA = AFN_GEMM_ALL or AFN_GEMM2_ON or (
     AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_BF16_MMA"]()
 )
 comptime AFN_GEMM_INT8_MMA = AFN_GEMM_ALL or (
@@ -133,6 +136,23 @@ comptime AFN_EPI_BIAS = 1
 comptime AFN_EPI_BIAS_RESID = 2
 comptime AFN_EPI_BIAS_SILU = 3
 comptime AFN_EPI_BIAS_GELU = 4
+#: w2-gemm2 (2026-10-03, for the w2-lmgrad lane): `C = A.B + resid[i, j]`,
+#: no bias (the residual-gradient fan-in add). `c == resid` is safe: each
+#: cell is read and written by the one thread that owns it.
+comptime AFN_EPI_RESID = 5
+#: w2-gemm2: the SwiGLU backward on the GEMM's output `a = d_gated[i, j]`
+#: (`dY . W_down^T`), with `gate = bias` and `up = resid` (both `m x n`,
+#: the forward's gate_proj and up_proj outputs) and a second output `aux`:
+#:     d   = exp(-g) + 1;  sg = 1 / d;  s = g / d        (silu = s)
+#:     aux[i, j] = d_up   = a * s
+#:     dsi                = a * u
+#:     c[i, j]   = d_gate = dsi * (sg * (1 + g * (1 - sg)))
+#: the VJP of transformer/checks/transformer_backward.mojo's
+#: bwd_mul2_silu_backward_kernel (S21 products) + bwd_silu_backward_kernel
+#: (S20: r1 = 1 - sg, r2 = g r1, r3 = 1 + r2, r4 = sg r3, dg = dsi r4, the
+#: sigmoid recomputed from `g`, never from silu), in f32, same operation
+#: order, `std.math.exp` (FAST: no ftz, contraction allowed).
+comptime AFN_EPI_SWIGLU_BWD = 6
 
 #: Tiles (`afn_gemm_tile`).
 comptime AFN_TILE_SQUARE = 0  # 64x64: 2x2 simdgroups, 4x4 fragments
@@ -288,6 +308,8 @@ def _afn_epilogue[
     throughout; GELU is the exact erf form, SiLU the exact logistic."""
     comptime if EPI == AFN_EPI_NONE:
         return v
+    elif EPI == AFN_EPI_RESID:
+        return v + resid.unsafe_load(gi * n + gj)
     else:
         var x = v + bias.unsafe_load(gj)
         comptime if EPI == AFN_EPI_BIAS_RESID:
@@ -300,6 +322,31 @@ def _afn_epilogue[
             return x
 
 
+@always_inline
+def _afn_store_swiglu_bwd(
+    v: Float32,
+    c: MutPointer[Float32, MutAnyOrigin],
+    gate: MutPointer[Float32, MutAnyOrigin],
+    up: MutPointer[Float32, MutAnyOrigin],
+    aux: MutPointer[Float32, MutAnyOrigin],
+    idx: Int,
+):
+    """AFN_EPI_SWIGLU_BWD's store (formula at the define): `c[idx] =
+    d_gate`, `aux[idx] = d_up`, from `v = d_gated`."""
+    var g = gate.unsafe_load(idx)
+    var u = up.unsafe_load(idx)
+    var d = exp(-g) + Float32(1.0)
+    var sg = Float32(1.0) / d
+    var s = g / d
+    aux.unsafe_store(idx, v * s)
+    var dsi = v * u
+    var r1 = Float32(1.0) - sg
+    var r2 = g * r1
+    var r3 = Float32(1.0) + r2
+    var r4 = sg * r3
+    c.unsafe_store(idx, dsi * r4)
+
+
 def afn_gemm_mma_kernel[
     SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int,
     AT: DType, BT: DType, SPLIT: Bool, EPI: Int,
@@ -309,6 +356,7 @@ def afn_gemm_mma_kernel[
     b: MutPointer[Scalar[BT], MutAnyOrigin],
     bias: MutPointer[Float32, MutAnyOrigin],
     resid: MutPointer[Float32, MutAnyOrigin],
+    aux: MutPointer[Float32, MutAnyOrigin],
     m_in: Int32,
     n_in: Int32,
     k_in: Int32,
@@ -426,6 +474,8 @@ def afn_gemm_mma_kernel[
                     var v = acc[fm * FN + fq][e]
                     comptime if SPLIT:
                         _ = Atomic.fetch_add(c.unsafe_offset(gi * n + gj), v)
+                    elif EPI == AFN_EPI_SWIGLU_BWD:
+                        _afn_store_swiglu_bwd(v, c, bias, resid, aux, gi * n + gj)
                     else:
                         c.unsafe_store(gi * n + gj, _afn_epilogue[EPI](v, bias, resid, gi, gj, n))
 
@@ -465,6 +515,12 @@ def _afn_strides(op: Int, m: Int, n: Int, k: Int) -> Tuple[Int, Int, Int, Int]:
         b_sp = 1
         b_sj = k
     return (a_si, a_sp, b_sp, b_sj)
+
+
+def afn_strides(op: Int, m: Int, n: Int, k: Int) -> Tuple[Int, Int, Int, Int]:
+    """Public name of `_afn_strides` (w2-gemm2, for w2-lmgrad):
+    `(a_si, a_sp, b_sp, b_sj)` for `op` in OP_NN, OP_NT, OP_TN."""
+    return _afn_strides(op, m, n, k)
 
 
 def afn_gemm_tile(m: Int, n: Int) -> Int:
@@ -527,6 +583,7 @@ def _afn_launch[
     b: MutPointer[Scalar[BT], MutAnyOrigin],
     bias: MutPointer[Float32, MutAnyOrigin],
     resid: MutPointer[Float32, MutAnyOrigin],
+    aux: MutPointer[Float32, MutAnyOrigin],
     m: Int,
     n: Int,
     k: Int,
@@ -539,13 +596,48 @@ def _afn_launch[
     comptime BN = 8 * FN * SGN
     var tiles = ((m + BM - 1) // BM) * ((n + BN - 1) // BN)
     ctx.enqueue_function[kern](
-        c, a, b, bias, resid,
+        c, a, b, bias, resid, aux,
         Int32(m), Int32(n), Int32(k),
         Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]),
         Int32(k_split),
         grid_dim=(tiles, splits, 1),
         block_dim=(SGM * SGN * 32, 1, 1),
     )
+
+
+def afn_launch_tile_aux[
+    AT: DType, BT: DType, SPLIT: Bool, EPI: Int
+](
+    ctx: DeviceContext,
+    tile: Int,
+    c: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Scalar[AT], MutAnyOrigin],
+    b: MutPointer[Scalar[BT], MutAnyOrigin],
+    bias: MutPointer[Float32, MutAnyOrigin],
+    resid: MutPointer[Float32, MutAnyOrigin],
+    aux: MutPointer[Float32, MutAnyOrigin],
+    m: Int,
+    n: Int,
+    k: Int,
+    st: Tuple[Int, Int, Int, Int],
+    splits: Int,
+    k_split: Int,
+) raises:
+    """The named tile with the second output `aux` (only
+    AFN_EPI_SWIGLU_BWD writes it; any valid pointer otherwise). The
+    non-square tiles are instantiated only under
+    AFN_GEMM_TILESHAPE (`afn_gemm_tile` never names them otherwise)."""
+    comptime if AFN_GEMM_TILESHAPE:
+        if tile == AFN_TILE_SMALL:
+            _afn_launch[2, 2, 2, 2, AT, BT, SPLIT, EPI](ctx, c, a, b, bias, resid, aux, m, n, k, st, splits, k_split)
+            return
+        if tile == AFN_TILE_TALL:
+            _afn_launch[4, 1, 4, 4, AT, BT, SPLIT, EPI](ctx, c, a, b, bias, resid, aux, m, n, k, st, splits, k_split)
+            return
+        if tile == AFN_TILE_WIDE:
+            _afn_launch[1, 4, 4, 4, AT, BT, SPLIT, EPI](ctx, c, a, b, bias, resid, aux, m, n, k, st, splits, k_split)
+            return
+    _afn_launch[2, 2, 4, 4, AT, BT, SPLIT, EPI](ctx, c, a, b, bias, resid, aux, m, n, k, st, splits, k_split)
 
 
 def _afn_launch_tile[
@@ -565,19 +657,40 @@ def _afn_launch_tile[
     splits: Int,
     k_split: Int,
 ) raises:
-    """The named tile; the non-square tiles are instantiated only under
-    AFN_GEMM_TILESHAPE (`afn_gemm_tile` never names them otherwise)."""
-    comptime if AFN_GEMM_TILESHAPE:
-        if tile == AFN_TILE_SMALL:
-            _afn_launch[2, 2, 2, 2, AT, BT, SPLIT, EPI](ctx, c, a, b, bias, resid, m, n, k, st, splits, k_split)
-            return
-        if tile == AFN_TILE_TALL:
-            _afn_launch[4, 1, 4, 4, AT, BT, SPLIT, EPI](ctx, c, a, b, bias, resid, m, n, k, st, splits, k_split)
-            return
-        if tile == AFN_TILE_WIDE:
-            _afn_launch[1, 4, 4, 4, AT, BT, SPLIT, EPI](ctx, c, a, b, bias, resid, m, n, k, st, splits, k_split)
-            return
-    _afn_launch[2, 2, 4, 4, AT, BT, SPLIT, EPI](ctx, c, a, b, bias, resid, m, n, k, st, splits, k_split)
+    """The named tile, no second output (`aux` = `c`)."""
+    afn_launch_tile_aux[AT, BT, SPLIT, EPI](
+        ctx, tile, c, a, b, bias, resid, c, m, n, k, st, splits, k_split
+    )
+
+
+def afn_launch_tile[
+    AT: DType, BT: DType, SPLIT: Bool, EPI: Int
+](
+    ctx: DeviceContext,
+    tile: Int,
+    c: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Scalar[AT], MutAnyOrigin],
+    b: MutPointer[Scalar[BT], MutAnyOrigin],
+    bias: MutPointer[Float32, MutAnyOrigin],
+    resid: MutPointer[Float32, MutAnyOrigin],
+    m: Int,
+    n: Int,
+    k: Int,
+    st: Tuple[Int, Int, Int, Int],
+    splits: Int,
+    k_split: Int,
+) raises:
+    """Public name of `_afn_launch_tile` (w2-gemm2, for w2-lmgrad): one
+    asynchronous launch of the tile `tile` (`afn_gemm_tile`), strides `st`
+    (`afn_strides`), `splits` x `k_split` (`SPLIT`: atomic add into `c`,
+    which the caller seeds; else `splits = 1`, `k_split = k`), epilogue
+    `EPI`. FAST Apple builds only (raises otherwise)."""
+    comptime if not AFN_GEMM_APPLE:
+        raise Error("afn_launch_tile: FAST Apple build only")
+    else:
+        _afn_launch_tile[AT, BT, SPLIT, EPI](
+            ctx, tile, c, a, b, bias, resid, m, n, k, st, splits, k_split
+        )
 
 
 def _afn_dispatch[
@@ -603,6 +716,12 @@ def _afn_dispatch[
         return False
     var st = _afn_strides(op, m, n, k)
     var tile = afn_gemm_tile(m, n)
+    # w2-gemm2: the second-round kernel takes every product this route
+    # would run at the square tile without a split.
+    comptime if AFN_GEMM2_ON and EPI == AFN_EPI_NONE:
+        if tile == AFN_TILE_SQUARE and afn_gemm_k_split(afn_gemm_tile_count(tile, m, n), k) == 0:
+            if afn2_gemm_dispatch[AT, BT](ctx, c, a, b, m, n, k, op):
+                return True
     comptime if AFN_GEMM_SPLITK and EPI == AFN_EPI_NONE:
         var k_split = afn_gemm_k_split(afn_gemm_tile_count(tile, m, n), k)
         if k_split > 0:
@@ -741,6 +860,120 @@ def afn_gemm_fused_into(
             _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_BIAS_GELU](
                 ctx, tile, cp, ap, bp, biasp, residp, m, n, k, st, 1, k
             )
+        elif epi == AFN_EPI_RESID:
+            _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_RESID](
+                ctx, tile, cp, ap, bp, biasp, residp, m, n, k, st, 1, k
+            )
         else:
             return False
+        return True
+
+
+# ===========================================================================
+# w2-gemm2 (2026-10-03): pointer entry points for the w2-lmgrad lane
+# ===========================================================================
+
+
+def afn_gemm_resid_ptr_into(
+    ctx: DeviceContext,
+    c: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    resid: MutPointer[Float32, MutAnyOrigin],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+) raises -> Bool:
+    """`C[m x n] = op(A) . op(B) + resid[i, j]` in one launch, no bias
+    (AFN_EPI_RESID, behind AFN_GEMM_EPILOGUE). `c == resid` is safe.
+    Asynchronous; False (nothing enqueued) when the define is off or the op
+    or shape is not served."""
+    comptime if not AFN_GEMM_EPILOGUE:
+        return False
+    else:
+        if m <= 0 or n <= 0 or k <= 0:
+            return False
+        if op != OP_NN and op != OP_NT and op != OP_TN:
+            return False
+        var st = _afn_strides(op, m, n, k)
+        var tile = afn_gemm_tile(m, n)
+        _afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_RESID](
+            ctx, tile, c, a, b, resid, resid, m, n, k, st, 1, k
+        )
+        return True
+
+
+def afn_gemm_swiglu_bwd_ptr_into(
+    ctx: DeviceContext,
+    d_gate: MutPointer[Float32, MutAnyOrigin],
+    d_up: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    gate: MutPointer[Float32, MutAnyOrigin],
+    up: MutPointer[Float32, MutAnyOrigin],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+) raises -> Bool:
+    """`d_gated = op(A) . op(B)` (`m x n`, e.g. `dY . W_down^T`, never
+    stored) and the SwiGLU backward in the store (AFN_EPI_SWIGLU_BWD,
+    behind AFN_GEMM_EPILOGUE; formula at the define): `d_gate[i, j]` and
+    `d_up[i, j]` from `gate[i, j]` (gate_proj output) and `up[i, j]`
+    (up_proj output), all `m x n` row-major. One launch, asynchronous;
+    False (nothing enqueued) when the define is off or the op or shape is
+    not served. Outputs must not alias the inputs."""
+    comptime if not AFN_GEMM_EPILOGUE:
+        return False
+    else:
+        if m <= 0 or n <= 0 or k <= 0:
+            return False
+        if op != OP_NN and op != OP_NT and op != OP_TN:
+            return False
+        var st = _afn_strides(op, m, n, k)
+        var tile = afn_gemm_tile(m, n)
+        afn_launch_tile_aux[DType.float32, DType.float32, False, AFN_EPI_SWIGLU_BWD](
+            ctx, tile, d_gate, a, b, gate, up, d_up, m, n, k, st, 1, k
+        )
+        return True
+
+
+def afn_gemm_accum_ptr_into(
+    ctx: DeviceContext,
+    c: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+    k_split: Int,
+) raises -> Bool:
+    """`C[m x n] += op(A) . op(B)` onto the EXISTING `C` (no zero launch):
+    split-K over `grid.y`, every split adding its partial tile with global
+    f32 atomics (behind AFN_GEMM_SPLITK). `k_split` > 0 is the steps per
+    split (a multiple of AFN_GEMM_KB keeps whole windows); `k_split` <= 0
+    takes `afn_gemm_k_split`'s policy, and a product that does not split
+    still runs as one split adding into `C`. One launch, asynchronous; the
+    order of the adds is nondeterministic (FAST). False (nothing enqueued)
+    when the define is off or the op or shape is not served."""
+    comptime if not AFN_GEMM_SPLITK:
+        return False
+    else:
+        if m <= 0 or n <= 0 or k <= 0:
+            return False
+        if op != OP_NN and op != OP_NT and op != OP_TN:
+            return False
+        var st = _afn_strides(op, m, n, k)
+        var tile = afn_gemm_tile(m, n)
+        var per = k_split
+        if per <= 0:
+            per = afn_gemm_k_split(afn_gemm_tile_count(tile, m, n), k)
+        if per <= 0 or per > k:
+            per = k
+        var splits = (k + per - 1) // per
+        _afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+            ctx, tile, c, a, b, c, c, m, n, k, st, splits, per
+        )
         return True
