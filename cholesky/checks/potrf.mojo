@@ -420,6 +420,12 @@ comptime CHOL_INV_MIN_N = 2048
 """The explicit `L11^{-1}` rounds where the column-by-column solve is exact
 on exactly representable data; below this size the solve is not where the
 time goes, so small factorizations keep the exact route."""
+comptime CHOL_FAST_NOSYNC = CHOL_FAST_APPLE and not is_defined["MOJOLEARN_CHOL_FAST_NOSYNC_OFF"]()
+"""lane/apple-fast-gap-linalg2: see `potrf_lower`'s fast_defer. The FAST +
+Apple default since 2026-10-03 (M3 A/B on top of CHOL_FAST_DEVIO: cholesky
+synthetic 285 -> 271 ms, residual the same; tag gl2-chol-nosync-synthetic).
+Only callers passing defer_ok (`cholesky_factor_devio`) take it.
+-D MOJOLEARN_CHOL_FAST_NOSYNC_OFF keeps the per-panel drains."""
 comptime CHOL_FUSED_SUB = CHOL_FAST_APPLE and not is_defined[
     "MOJOLEARN_CHOL_FUSED_SUB_OFF"
 ]()
@@ -1830,6 +1836,7 @@ def potrf_lower(
     elem_tpb: Int = CHOL_ELEM_TPB,
     sabotage: Int = CHOL_SAB_NONE,
     solve_tpb: Int = CHOL_SOLVE_TPB,
+    defer_ok: Bool = False,
 ) raises -> CholRun:
     """**THE FACTORIZATION.** `A = L L^T` in place, lower, row-major.
 
@@ -1958,6 +1965,15 @@ def potrf_lower(
     var defer = False
     comptime if CHOL_DEFER_INFO:
         defer = left_mode and not ctim
+    # CHOL_FAST_NOSYNC (FAST + Apple default; _OFF reverts): a caller
+    # that can redo a failed factor (defer_ok: `cholesky_factor_devio`
+    # re-runs from its staged input with defer_ok False) gets no drain per
+    # panel -- neither the info read nor the end-of-trailing wait -- and one
+    # info read after the loop. A failed factor's matrix is then not the
+    # partial one, which is why the caller redoes it.
+    var fast_defer = False
+    comptime if CHOL_FAST_NOSYNC:
+        fast_defer = defer_ok and not defer and not ctim and sabotage == CHOL_SAB_NONE and not trace.enabled
     var tf = 0
     var ts = 0
     var tt = 0
@@ -2045,7 +2061,7 @@ def potrf_lower(
 
         # DEVIATION 1634: read `info` back and stop. One drain per panel
         # (CHOL_DEFER_INFO: once, after the loop).
-        if not defer:
+        if not defer and not fast_defer:
             ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
             ctx.synchronize()
             info = Int(hinfo.unsafe_ptr().unsafe_load(0))
@@ -2269,7 +2285,8 @@ def potrf_lower(
                 trace.record_device(
                     ctx, chol_panel_tag("chol", p, "trailing"), a, n * n
                 )
-                ctx.synchronize()
+                if not fast_defer:
+                    ctx.synchronize()
                 _ = packed^
                 _ = packed_b^
                 _ = g^
@@ -2278,6 +2295,10 @@ def potrf_lower(
         p += 1
         j0 += nb
 
+    if fast_defer:
+        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+        ctx.synchronize()
+        info = Int(hinfo.unsafe_ptr().unsafe_load(0))
     if defer:
         # CHOL_DEFER_INFO: the one read of `info`. After a failing panel pf
         # every later kernel returned at once, so the matrix is what the
