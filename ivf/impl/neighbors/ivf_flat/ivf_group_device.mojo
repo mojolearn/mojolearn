@@ -265,3 +265,86 @@ def ivf_group_pairs_device(
     _ = nblk^
     _ = boff^
     return IvfPairGroups(goff^, gq^, gp^, bl^, bs^, n_blocks)
+
+
+def _gather_rows_kernel(x: MutPointer[Float32, MutAnyOrigin], rows: _U32P, n_in: Int32, dim_in: Int32,
+                        out: MutPointer[Float32, MutAnyOrigin]):
+    """out[j, :] = x[rows[j], :], one thread per element: a copy, no float op."""
+    var t = Int(block_idx.x) * _TPB + Int(thread_idx.x)
+    var dim = Int(dim_in)
+    if t < Int(n_in) * dim:
+        var j = t // dim
+        var f = t - j * dim
+        out[t] = x[Int(rows[j]) * dim + f]
+
+
+def ivf_list_layout_device(
+    ctx: DeviceContext,
+    mut labels: DeviceBuffer[DType.uint32],
+    mut dx: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    dim: Int,
+    n_lists: Int,
+    with_data: Bool,
+) raises -> Tuple[List[Int32], List[UInt32], List[Float32], UInt32]:
+    """`build_list_layout`'s CSR on the device (lane cgr4-download-loop):
+    the rows sorted by label with a stable device radix sort (each list
+    ascending in the original row index, DEVIATION 1783's order, the host
+    pass's order), the offsets by a device histogram and scan, the permuted
+    vectors by a device gather. Integer and copy only, so the same offsets,
+    ids and words. Returns (offsets, list_indices, list_data, max label);
+    the caller refuses a max label >= n_lists by name."""
+    var n = n_rows
+    var keys = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
+    var vals = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
+    var tk = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
+    var tv = ctx.enqueue_create_buffer[DType.uint32](max(n, 1))
+    var cnt = ctx.enqueue_create_buffer[DType.int32](max(frs_counts_len(n), 1))
+    ctx.enqueue_function[_pair_keys_kernel](
+        labels.unsafe_ptr(), Int32(n), keys.unsafe_ptr(), vals.unsafe_ptr(),
+        grid_dim=_grid(n), block_dim=_TPB,
+    )
+    fast_radix_sort_pairs_u32(ctx, n, keys, vals, tk, tv, cnt)
+    # the largest label (the sorted keys' last), checked before any list
+    # is indexed by it
+    var hmax = ctx.enqueue_create_host_buffer[DType.uint32](1)
+    if n > 0:
+        ctx.enqueue_copy(dst_ptr=hmax.unsafe_ptr(), src_buf=keys.create_sub_buffer[DType.uint32](n - 1, 1))
+    ctx.synchronize()
+    var max_label = hmax.unsafe_ptr()[0] if n > 0 else UInt32(0)
+    _ = hmax^
+    var offsets = List[Int32](length=n_lists + 1, fill=Int32(0))
+    var list_indices = List[UInt32](length=n, fill=UInt32(0))
+    var list_data = List[Float32](length=(n * dim if with_data else 0), fill=Float32(0.0))
+    if n > 0 and Int(max_label) >= n_lists:
+        return (offsets^, list_indices^, list_data^, max_label)
+    var gcount = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
+    var goff = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
+    ctx.enqueue_function[_zero_kernel](
+        gcount.unsafe_ptr(), Int32(n_lists + 1), grid_dim=_grid(n_lists + 1), block_dim=_TPB,
+    )
+    ctx.enqueue_function[_list_hist_kernel](
+        labels.unsafe_ptr(), Int32(n), gcount.unsafe_ptr(), grid_dim=_grid(n), block_dim=_TPB,
+    )
+    device_exclusive_scan_total(ctx, gcount.unsafe_ptr(), goff, n_lists)
+    ctx.enqueue_copy(dst_ptr=offsets.unsafe_ptr(), src_buf=goff)
+    if n > 0:
+        ctx.enqueue_copy(dst_ptr=list_indices.unsafe_ptr(), src_buf=vals.create_sub_buffer[DType.uint32](0, n))
+    if with_data and n > 0 and dim > 0:
+        var dd = ctx.enqueue_create_buffer[DType.float32](n * dim)
+        ctx.enqueue_function[_gather_rows_kernel](
+            dx.unsafe_ptr(), vals.unsafe_ptr(), Int32(n), Int32(dim), dd.unsafe_ptr(),
+            grid_dim=_grid(n * dim), block_dim=_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=list_data.unsafe_ptr(), src_buf=dd)
+        ctx.synchronize()
+        _ = dd^
+    ctx.synchronize()
+    _ = gcount^
+    _ = goff^
+    _ = keys^
+    _ = vals^
+    _ = tk^
+    _ = tv^
+    _ = cnt^
+    return (offsets^, list_indices^, list_data^, max_label)
