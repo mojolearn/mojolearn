@@ -150,7 +150,7 @@ def device_float_borders(
     var base = 0
     while base < n_float:
         var width = min(chunk, n_float - base)
-        var cols_ptr = d_cols.unsafe_ptr()
+        var cols_ptr = d_cols.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         if use_dev:
             cols_ptr = dev_cols.value() + base * n_rows
         else:
