@@ -15,7 +15,8 @@ from bindings.hostptr import f32_ptr, read_f32
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from x_cluster.device_ops import DeviceOps
-from x_cluster.entries import ENTRY_MINIBATCH, run_entry
+from x_cluster.bisect_fast import BISECT_FAST_ZEROCOPY, bisect_entry_ptr
+from x_cluster.entries import ENTRY_BISECT, ENTRY_MINIBATCH, run_entry
 from x_cluster.minibatch_ptr import MBK_ZEROCOPY, minibatch_entry_ptr
 from x_cluster.out import ClusterOut, py_floats, py_ints
 from x_cluster.tree_cut import PY2MOJO_CLUSTER
@@ -45,6 +46,22 @@ def call_binding(
                 took = minibatch_entry_ptr(ops0, xp, nx, a0, ints0, floats0, res0)
             if took:
                 return res0.to_py()
+    # lane/apple-fast-gap-clus3, FAST on Apple, -D MOJOLEARN_BISECT_FAST_ZEROCOPY
+    # (default off until the M3 A/B): BisectingKMeans uploads X from the
+    # caller's array and centers it on the device (x_cluster/bisect_fast.mojo);
+    # False falls through to the copy below
+    comptime if BISECT_FAST_ZEROCOPY:
+        if w == ENTRY_BISECT and nx > 0:
+            var ints1 = py_ints(ip)
+            var floats1 = py_floats(fp)
+            var xp1 = f32_ptr(Int(py=x_addr))
+            var res1 = ClusterOut()
+            var took1 = False
+            with GILReleased(Python()):
+                var ops1 = DeviceOps()
+                took1 = bisect_entry_ptr(ops1, xp1, nx, na > 0, ints1, floats1, res1)
+            if took1:
+                return res1.to_py()
     var x = read_f32(Int(py=x_addr), nx) if nx > 0 else List[Float32]()
     var a = read_f32(Int(py=a_addr), na) if na > 0 else List[Float32]()
     var ints = py_ints(ip)
