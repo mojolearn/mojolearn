@@ -39,3 +39,13 @@ IDENTICAL runs the same float32 Gram + Jacobi with no cut (archived M3 board 202
 rmse 170.6): the same bug. Not changed here (the orchestrator owns IDENTICAL); flagged in
 ~/mojolearn-evidence/apple-fast/FLAGS-for-orchestrator-2026-10-03.md. The cut would change IDENTICAL bits on every
 vendor and the host column together.
+
+## A/B (M3, afc_ab_def x_linear, one run per arm; arm A `-D MOJOLEARN_BAYES_FAST_Q_OFF`, arm B the cut)
+
+| tag | arm A | arm B |
+|---|---|---|
+| bayesq-istella | 2839 ms, r2 -32316.3, rmse 150.17, digest e924b832 | 494 ms, r2 0.32840, rmse 0.68456, digest 360b6f8a |
+| bayesq-taxi | 19.2 ms, r2 0.908983, rmse 4.80505, digest 3ce1ea7b | 23.3 ms, same r2/rmse, same digest 3ce1ea7b (bits unchanged; timing noise, n=1) |
+
+istella now matches scikit-learn float64 (0.3287) and beats the board's float32 sklearn arm (-890). Faster too: the
+evidence iteration converges instead of running 300 iterations.
