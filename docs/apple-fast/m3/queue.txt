@@ -197,20 +197,20 @@
    197	CMD lane/apple-fast afb5-merged-algos bash tools/af_board_queue.sh run afb5-merged-algos algos calibrated:taxi,calibrated:istella,damped-ets:taxi-hourly,damped-ets:synthetic,dart:taxi,dart:istella,dart-reg:taxi,dart-reg:
    198	CMD lane/apple-fast afb5-merged-classical bash tools/af_board_queue.sh run afb5-merged-classical classical ols:taxi,ols:istella
    199	CMD lane/apple-fast afb6-te-algos bash tools/af_board_queue.sh run afb6-te-algos algos adaboost-clf:taxi,adaboost-clf:istella,adaboost-reg:taxi,adaboost-reg:istella,calibrated:taxi,calibrated:istella,multioutput-clf:taxi
-   200	CMD lane/apple-fast-tsa tsa-evalws-autoarima bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa-evalws-autoarima arima autoarima taxi-hourly 1 2 "" "-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1"
-   201	CMD lane/apple-fast-tsa tsa-both-autoarima bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa-both-autoarima arima autoarima taxi-hourly 1 2 "" "-D MOJOLEARN_ARIMA_FAST_LLONLY=1 -D MOJOLEARN_ARIMA_FAST_
-   202	CMD lane/apple-fast-kapprox kap-schi2-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-schi2-taxi x_neighbors skewed-chi2 taxi 1 2 "" "-D MOJOLEARN_KAPPROX_DEVICE=1"
-   203	CMD lane/apple-fast-kapprox kap-achi2-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-achi2-istella x_neighbors additive-chi2 istella 1 2 "" "-D MOJOLEARN_KAPPROX_DEVICE=1"
-   204	CMD lane/apple-fast-kapprox kap-kpca-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-kpca-istella x_neighbors kernel-pca istella 1 2 "" "-D MOJOLEARN_KPCA_RESIDENT=1"
-   205	CMD lane/apple-fast-kapprox kap-srp-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-srp-taxi x_neighbors sparse-rp taxi 1 2 "" "-D MOJOLEARN_SPARSE_RP_DEVICE=1"
-   206	CMD lane/apple-fast-select sel-freg-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-freg-taxi x_prep select-f-regression taxi 1 2 "" "-D MOJOLEARN_SELECT_FREG=1"
-   207	CMD lane/apple-fast-select sel-rreg-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-rreg-taxi x_prep select-r-regression taxi 1 2 "" "-D MOJOLEARN_SELECT_FREG=1"
-   208	CMD lane/apple-fast-select sel-fcls-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-fcls-taxi x_prep select-f-classif taxi 1 2 "" "-D MOJOLEARN_SELECT_FCLS=1"
-   209	CMD lane/apple-fast-select sel-d-hourly bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-d-hourly tsa select-d taxi-hourly 1 2 "" "-D MOJOLEARN_SELECT_D=1"
-   210	CMD lane/apple-fast-opp opp2-classical2 $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family classical2 --tag opp2-classical2 --races gmm:taxi
-   211	CMD lane/apple-fast-opp opp2-classical $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family classical --tag opp2-classical --races hdbscan:istella
-   212	CMD lane/apple-fast-opp opp2-algos $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family algos --tag opp2-algos --races adaboost-clf:istella,gamma:taxi,gamma:istella,poisson:taxi,poisson:istella,tweedie
-   213	CMD lane/apple-fast-opp opp3-neural $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family algos --tag opp3-neural --races als:text,cnn-clf:synthetic,gru-clf:synthetic,gru-clf:taxi-hourly,gru-reg:synthet
+   200	CMD lane/apple-fast-opp opp2-classical2 $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family classical2 --tag opp2-classical2 --races gmm:taxi
+   201	CMD lane/apple-fast-opp opp2-classical $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family classical --tag opp2-classical --races hdbscan:istella
+   202	CMD lane/apple-fast-opp opp2-algos $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family algos --tag opp2-algos --races adaboost-clf:istella,gamma:taxi,gamma:istella,poisson:taxi,poisson:istella,tweedie
+   203	CMD lane/apple-fast-opp opp3-neural $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family algos --tag opp3-neural --races als:text,cnn-clf:synthetic,gru-clf:synthetic,gru-clf:taxi-hourly,gru-reg:synthet
+   204	CMD lane/apple-fast-tsa tsa-evalws-autoarima bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa-evalws-autoarima arima autoarima taxi-hourly 1 2 "" "-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1"
+   205	CMD lane/apple-fast-tsa tsa-both-autoarima bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa-both-autoarima arima autoarima taxi-hourly 1 2 "" "-D MOJOLEARN_ARIMA_FAST_LLONLY=1 -D MOJOLEARN_ARIMA_FAST_
+   206	CMD lane/apple-fast-kapprox kap-schi2-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-schi2-taxi x_neighbors skewed-chi2 taxi 1 2 "" "-D MOJOLEARN_KAPPROX_DEVICE=1"
+   207	CMD lane/apple-fast-kapprox kap-achi2-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-achi2-istella x_neighbors additive-chi2 istella 1 2 "" "-D MOJOLEARN_KAPPROX_DEVICE=1"
+   208	CMD lane/apple-fast-kapprox kap-kpca-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-kpca-istella x_neighbors kernel-pca istella 1 2 "" "-D MOJOLEARN_KPCA_RESIDENT=1"
+   209	CMD lane/apple-fast-kapprox kap-srp-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-srp-taxi x_neighbors sparse-rp taxi 1 2 "" "-D MOJOLEARN_SPARSE_RP_DEVICE=1"
+   210	CMD lane/apple-fast-select sel-freg-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-freg-taxi x_prep select-f-regression taxi 1 2 "" "-D MOJOLEARN_SELECT_FREG=1"
+   211	CMD lane/apple-fast-select sel-rreg-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-rreg-taxi x_prep select-r-regression taxi 1 2 "" "-D MOJOLEARN_SELECT_FREG=1"
+   212	CMD lane/apple-fast-select sel-fcls-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-fcls-taxi x_prep select-f-classif taxi 1 2 "" "-D MOJOLEARN_SELECT_FCLS=1"
+   213	CMD lane/apple-fast-select sel-d-hourly bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-d-hourly tsa select-d taxi-hourly 1 2 "" "-D MOJOLEARN_SELECT_D=1"
    214	CMD lane/apple-fast-tier tier-pca-nttiled2 bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab.sh tier-pca-nttiled2 pca istella 1 2 - MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1
    215	CMD lane/apple-fast-tier tier-kmeans-nttiled bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab.sh tier-kmeans-nttiled kmeans istella 1 2 - MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1
    216	CMD lane/apple-fast-tier tier-rbf-pinned bash ~/mq/ensure_so.sh AFC_FAMILY=classical2 bash tools/afc_ab.sh tier-rbf-pinned rbf-sampler istella 1 2 - MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
@@ -366,39 +366,38 @@
    366	CMD lane/apple-fast-opp uncap-et-istella GBM_BENCH_DATA=$HOME/datasets/gbm-bench $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family trees --tag uncap-et-istella --races et:istella --only-arms lightgb
    367	CMD lane/apple-fast-opp uncap-svm-istella $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family classical2 --tag uncap-svm-istella --races linearsvc:istella,linearsvr:istella --round-seconds 7200 --arm-
    368	CMD lane/apple-fast-trees-symmetric tsym-leaves-istella AFT_OUT=$HOME/aft-ab/tsym-leaves-istella bash tools/aft_ab.sh gbdt gbdt-symmetric istella 2 "" "-D MOJOLEARN_SYM_DEVICE_LEAVES"
-   369	CMD lane/apple-fast afb3-ord-istella-uncap MOJOLEARN_SPEED_BUDGET_S=14400 MOJOLEARN_SPEED_DEADLINE_S=28800 bash tools/af_board_queue.sh run afb3-ord-istella-uncap trees gbdt-ordered:istella
-   370	CMD lane/apple-fast-isotonic-knn ik-iso-par-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh ik-iso-par-istella x_linear isotonic istella 1 2 "" "-D MOJOLEARN_ISOTONIC_FAST_PAR=1"
-   371	CMD lane/apple-fast-isotonic-knn ik-iso-pair-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh ik-iso-pair-istella x_linear isotonic istella 1 2 "-D MOJOLEARN_ISOTONIC_FAST_PAR=1" "-D MOJOLEARN_ISO
-   372	CMD lane/apple-fast-isotonic-knn ik-imp-t2-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh ik-imp-t2-taxi x_neighbors knn-imputer taxi 1 2 "" "-D MOJOLEARN_XN_FAST_IMPUTE_TILED2=1"
-   373	CMD lane/apple-fast-decomp-linalg dlin-chol-blocked-synthetic bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh dlin-chol-blocked-synthetic gp cholesky synthetic 1 2 "" "-D MOJOLEARN_CHOL_FAST_BLOCKED"
-   374	CMD lane/apple-fast-decomp-linalg dlin-svd-cholqr-chol-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh dlin-svd-cholqr-chol-istella x_decomp svd istella 1 2 "" "-D MOJOLEARN_SVD_FAST_CHOLQR -D MO
-   375	CMD lane/apple-fast-core core-kmeans-rownorm-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab_def.sh core-kmeans-rownorm-taxi base kmeans taxi 1 2 "" "-D MOJOLEARN_KMEANS_FAST_ROWNORM=1"
-   376	CMD lane/apple-fast-core core-kmeans-skippred-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab_def.sh core-kmeans-skippred-taxi base kmeans taxi 1 2 "" "-D MOJOLEARN_KMEANS_FAST_SKIP_PREDICT=1"
-   377	CMD lane/apple-fast-core core-dbscan-scan-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab_def.sh core-dbscan-scan-taxi estimators dbscan taxi 1 2 "" "-D MOJOLEARN_DBSCAN_FAST_SCAN=1"
-   378	CMD lane/apple-fast-core core-dbscan-ccbatch-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab_def.sh core-dbscan-ccbatch-taxi estimators dbscan taxi 1 2 "" "-D MOJOLEARN_DBSCAN_FAST_CC_BATCH=1"
-   379	CMD lane/apple-fast-graph graph-cc-fast-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh graph-cc-fast-taxi x_neighbors connected-components taxi 1 2 "" "-D MOJOLEARN_CC_FAST"
-   380	CMD lane/apple-fast-nb nb-cat-atomic-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh nb-cat-atomic-taxi x_prep categorical-nb taxi 1 2 "" "-D MOJOLEARN_NB_CAT_ATOMIC=1"
-   381	CMD lane/apple-fast-nb nb-lda-fused-zones bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh nb-lda-fused-zones x_decomp lda taxi-zones 1 2 "" "-D MOJOLEARN_LDA_FUSED_SS=1"
-   382	CMD lane/apple-fast-prep3 prep3-le-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-le-istella x_prep label-encoder istella 1 2 "" "-D MOJOLEARN_PREP3_LABELS"
-   383	CMD lane/apple-fast-prep3 prep3-lb-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-lb-taxi x_prep label-binarizer taxi 1 2 "" "-D MOJOLEARN_PREP3_LABELS"
-   384	CMD lane/apple-fast-prep3 prep3-mlb-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-mlb-taxi x_prep multilabel-binarizer taxi 1 2 "" "-D MOJOLEARN_PREP3_LABELS"
-   385	CMD lane/apple-fast-prep3 prep3-maxabs-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-maxabs-istella x_prep maxabs-scaler istella 1 2 "" "-D MOJOLEARN_PREP3_MAXABS"
-   386	CMD lane/apple-fast-prep3 prep3-spline-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-spline-istella x_prep spline istella 1 2 "" "-D MOJOLEARN_PREP3_SPLINE"
-   387	CMD lane/apple-fast-robust robust-huber-dev-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh robust-huber-dev-taxi x_linear huber taxi 1 2 "" "-D MOJOLEARN_HUBER_DEVICE_LBFGS=1"
-   388	CMD lane/apple-fast-robust robust-huber-blk-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh robust-huber-blk-taxi x_linear huber taxi 1 2 "-D MOJOLEARN_HUBER_DEVICE_LBFGS=1" "-D MOJOLEARN_HUBER_DEVI
-   389	CMD lane/apple-fast-tsa2 tsa2-var-taxi-hourly bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa2-var-taxi-hourly x_sequence var taxi-hourly 1 2 "" "-D MOJOLEARN_TSA2_VAR=1"
-   390	CMD lane/apple-fast-tsa2 tsa2-stl-taxi-hourly bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa2-stl-taxi-hourly x_sequence stl taxi-hourly 1 2 "" "-D MOJOLEARN_TSA2_STL=1"
-   391	CMD lane/apple-fast-tsa2 tsa2-kpss-taxi-hourly bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa2-kpss-taxi-hourly tsa kpss taxi-hourly 1 2 "" "-D MOJOLEARN_TSA2_KPSS=1"
-   392	CMD lane/apple-fast-shap shap-tree-tab bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh shap-tree-tab x_trees tree-shap istella 1 2 "" "-D MOJOLEARN_SHAP_TREE_TAB"
-   393	CMD lane/apple-fast-shap shap-kernel-dev bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh shap-kernel-dev x_trees kernel-shap istella 1 2 "" "-D MOJOLEARN_SHAP_KERNEL_DEV"
-   394	CMD lane/apple-fast-shap shap-perm-cache bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh shap-perm-cache x_trees permutation-shap istella 1 2 "" "-D MOJOLEARN_SHAP_PERM_CACHE"
-   395	CMD lane/apple-fast-kapprox kap-grp-base-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab.sh kap-grp-base-taxi gaussian-rp taxi 1 2 -
-   396	CMD lane/apple-fast-kapprox kap-grp-base-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab.sh kap-grp-base-istella gaussian-rp istella 1 2 -
-   397	CMD lane/apple-fast-decomp-linalg dlin-lu-pivot-synthetic bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh dlin-lu-pivot-synthetic x_decomp lu-factor synthetic 1 2 "" "-D MOJOLEARN_LU_FAST_PIVOT_GRID"
-   398	CMD lane/apple-fast-decomp-linalg dlin-lusolve-pivot-synthetic bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh dlin-lusolve-pivot-synthetic x_decomp lu-solve synthetic 1 2 "" "-D MOJOLEARN_LU_FAST_PIVOT_
-   399	CMD lane/apple-fast-nb nb-mnb-csr-text bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh nb-mnb-csr-text x_prep multinomial-nb text 1 2 "" "-D MOJOLEARN_NB_TEXT_CSR=1"
-   400	CMD lane/apple-fast-nb nb-cnb-csr-text bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh nb-cnb-csr-text x_prep complement-nb text 1 2 "" "-D MOJOLEARN_NB_TEXT_CSR=1"
-   401	CMD lane/apple-fast-robust robust-ocsvm-base-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab.sh robust-ocsvm-base-taxi ocsvm taxi 1 2 -
-   402	CMD lane/apple-fast-robust robust-mcd-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh robust-mcd-taxi x_decomp min-cov-det taxi 1 2 "" "-D MOJOLEARN_MCD_DEVICE_CSTEPS=1"
-   403	CMD lane/apple-fast-robust robust-ee-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh robust-ee-taxi x_decomp elliptic-envelope taxi 1 2 "" "-D MOJOLEARN_MCD_DEVICE_CSTEPS=1"
-   404	CMD lane/apple-fast-lle lle-sparse-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh lle-sparse-taxi x_decomp lle taxi 1 2 "" "-D MOJOLEARN_LLE_SPARSE_EIG=1"
+   369	CMD lane/apple-fast-isotonic-knn ik-iso-par-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh ik-iso-par-istella x_linear isotonic istella 1 2 "" "-D MOJOLEARN_ISOTONIC_FAST_PAR=1"
+   370	CMD lane/apple-fast-isotonic-knn ik-iso-pair-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh ik-iso-pair-istella x_linear isotonic istella 1 2 "-D MOJOLEARN_ISOTONIC_FAST_PAR=1" "-D MOJOLEARN_ISO
+   371	CMD lane/apple-fast-isotonic-knn ik-imp-t2-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh ik-imp-t2-taxi x_neighbors knn-imputer taxi 1 2 "" "-D MOJOLEARN_XN_FAST_IMPUTE_TILED2=1"
+   372	CMD lane/apple-fast-decomp-linalg dlin-chol-blocked-synthetic bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh dlin-chol-blocked-synthetic gp cholesky synthetic 1 2 "" "-D MOJOLEARN_CHOL_FAST_BLOCKED"
+   373	CMD lane/apple-fast-decomp-linalg dlin-svd-cholqr-chol-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh dlin-svd-cholqr-chol-istella x_decomp svd istella 1 2 "" "-D MOJOLEARN_SVD_FAST_CHOLQR -D MO
+   374	CMD lane/apple-fast-core core-kmeans-rownorm-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab_def.sh core-kmeans-rownorm-taxi base kmeans taxi 1 2 "" "-D MOJOLEARN_KMEANS_FAST_ROWNORM=1"
+   375	CMD lane/apple-fast-core core-kmeans-skippred-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab_def.sh core-kmeans-skippred-taxi base kmeans taxi 1 2 "" "-D MOJOLEARN_KMEANS_FAST_SKIP_PREDICT=1"
+   376	CMD lane/apple-fast-core core-dbscan-scan-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab_def.sh core-dbscan-scan-taxi estimators dbscan taxi 1 2 "" "-D MOJOLEARN_DBSCAN_FAST_SCAN=1"
+   377	CMD lane/apple-fast-core core-dbscan-ccbatch-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab_def.sh core-dbscan-ccbatch-taxi estimators dbscan taxi 1 2 "" "-D MOJOLEARN_DBSCAN_FAST_CC_BATCH=1"
+   378	CMD lane/apple-fast-graph graph-cc-fast-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh graph-cc-fast-taxi x_neighbors connected-components taxi 1 2 "" "-D MOJOLEARN_CC_FAST"
+   379	CMD lane/apple-fast-nb nb-cat-atomic-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh nb-cat-atomic-taxi x_prep categorical-nb taxi 1 2 "" "-D MOJOLEARN_NB_CAT_ATOMIC=1"
+   380	CMD lane/apple-fast-nb nb-lda-fused-zones bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh nb-lda-fused-zones x_decomp lda taxi-zones 1 2 "" "-D MOJOLEARN_LDA_FUSED_SS=1"
+   381	CMD lane/apple-fast-prep3 prep3-le-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-le-istella x_prep label-encoder istella 1 2 "" "-D MOJOLEARN_PREP3_LABELS"
+   382	CMD lane/apple-fast-prep3 prep3-lb-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-lb-taxi x_prep label-binarizer taxi 1 2 "" "-D MOJOLEARN_PREP3_LABELS"
+   383	CMD lane/apple-fast-prep3 prep3-mlb-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-mlb-taxi x_prep multilabel-binarizer taxi 1 2 "" "-D MOJOLEARN_PREP3_LABELS"
+   384	CMD lane/apple-fast-prep3 prep3-maxabs-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-maxabs-istella x_prep maxabs-scaler istella 1 2 "" "-D MOJOLEARN_PREP3_MAXABS"
+   385	CMD lane/apple-fast-prep3 prep3-spline-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh prep3-spline-istella x_prep spline istella 1 2 "" "-D MOJOLEARN_PREP3_SPLINE"
+   386	CMD lane/apple-fast-robust robust-huber-dev-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh robust-huber-dev-taxi x_linear huber taxi 1 2 "" "-D MOJOLEARN_HUBER_DEVICE_LBFGS=1"
+   387	CMD lane/apple-fast-robust robust-huber-blk-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh robust-huber-blk-taxi x_linear huber taxi 1 2 "-D MOJOLEARN_HUBER_DEVICE_LBFGS=1" "-D MOJOLEARN_HUBER_DEVI
+   388	CMD lane/apple-fast-tsa2 tsa2-var-taxi-hourly bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa2-var-taxi-hourly x_sequence var taxi-hourly 1 2 "" "-D MOJOLEARN_TSA2_VAR=1"
+   389	CMD lane/apple-fast-tsa2 tsa2-stl-taxi-hourly bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa2-stl-taxi-hourly x_sequence stl taxi-hourly 1 2 "" "-D MOJOLEARN_TSA2_STL=1"
+   390	CMD lane/apple-fast-tsa2 tsa2-kpss-taxi-hourly bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh tsa2-kpss-taxi-hourly tsa kpss taxi-hourly 1 2 "" "-D MOJOLEARN_TSA2_KPSS=1"
+   391	CMD lane/apple-fast-shap shap-tree-tab bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh shap-tree-tab x_trees tree-shap istella 1 2 "" "-D MOJOLEARN_SHAP_TREE_TAB"
+   392	CMD lane/apple-fast-shap shap-kernel-dev bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh shap-kernel-dev x_trees kernel-shap istella 1 2 "" "-D MOJOLEARN_SHAP_KERNEL_DEV"
+   393	CMD lane/apple-fast-shap shap-perm-cache bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh shap-perm-cache x_trees permutation-shap istella 1 2 "" "-D MOJOLEARN_SHAP_PERM_CACHE"
+   394	CMD lane/apple-fast-kapprox kap-grp-base-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab.sh kap-grp-base-taxi gaussian-rp taxi 1 2 -
+   395	CMD lane/apple-fast-kapprox kap-grp-base-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab.sh kap-grp-base-istella gaussian-rp istella 1 2 -
+   396	CMD lane/apple-fast-decomp-linalg dlin-lu-pivot-synthetic bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh dlin-lu-pivot-synthetic x_decomp lu-factor synthetic 1 2 "" "-D MOJOLEARN_LU_FAST_PIVOT_GRID"
+   397	CMD lane/apple-fast-decomp-linalg dlin-lusolve-pivot-synthetic bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh dlin-lusolve-pivot-synthetic x_decomp lu-solve synthetic 1 2 "" "-D MOJOLEARN_LU_FAST_PIVOT_
+   398	CMD lane/apple-fast-nb nb-mnb-csr-text bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh nb-mnb-csr-text x_prep multinomial-nb text 1 2 "" "-D MOJOLEARN_NB_TEXT_CSR=1"
+   399	CMD lane/apple-fast-nb nb-cnb-csr-text bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh nb-cnb-csr-text x_prep complement-nb text 1 2 "" "-D MOJOLEARN_NB_TEXT_CSR=1"
+   400	CMD lane/apple-fast-robust robust-ocsvm-base-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab.sh robust-ocsvm-base-taxi ocsvm taxi 1 2 -
+   401	CMD lane/apple-fast-robust robust-mcd-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh robust-mcd-taxi x_decomp min-cov-det taxi 1 2 "" "-D MOJOLEARN_MCD_DEVICE_CSTEPS=1"
+   402	CMD lane/apple-fast-robust robust-ee-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh robust-ee-taxi x_decomp elliptic-envelope taxi 1 2 "" "-D MOJOLEARN_MCD_DEVICE_CSTEPS=1"
+   403	CMD lane/apple-fast-lle lle-sparse-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh lle-sparse-taxi x_decomp lle taxi 1 2 "" "-D MOJOLEARN_LLE_SPARSE_EIG=1"

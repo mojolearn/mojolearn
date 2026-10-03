@@ -1,4 +1,4 @@
-pos=196 lines=     404
+pos=197 lines=     403
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -232,3 +232,4 @@ pos=196 lines=     404
 316:CMD apple-fast-trees-ensembles@09a978f4c te-adaclf-share-taxi-c rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1607.6 all=[1608] quality=['{"accuracy":'] defines='-D MOJOLEARN_TE_ADA_SESSION -D MOJOLEARN_TE_ADA_SESSION_SHARE'
 317:CMD apple-fast-trees-ensembles@09a978f4c te-stackreg-istella-d rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=10308.8 all=[10309] quality=['{"finite":'] defines='-D MOJOLEARN_TE_NATIVE_SPLITS'
 318:FBUILD lane/apple-fast@24ed76679 core=0 ibase=0 embedding=0 estimators=0 gbdt=0 gp=0 training=0 x_ann=0 x_cluster=0 x_cnn=0 x_decomp=0 x_linear=0 x_metrics=0 x_neighbors=0 x_prep=0 x_sequence=0
+319:CMD apple-fast@24ed76679 afb5-merged-trees rc=0 afb done tag=afb5-merged-trees pairs=8 ok=8
