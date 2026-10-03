@@ -695,7 +695,7 @@ def p2m_zero_cols_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) 
 
 def p2m_nan_indicator_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_src = _a(a_, 0)
-    var v_out = _a(a_, 1)
+    var v_cur = _a(a_, 1)
     var v_cols = _a(a_, 2)
     var v_res = _a(a_, 3)
     var v_n = _n(i_, 0)
@@ -703,7 +703,7 @@ def p2m_nan_indicator_binding(a_: PythonObject, i_: PythonObject, f_: PythonObje
     var v_c = _n(i_, 2)
     var v_q = _n(i_, 3)
     with GILReleased(Python()):
-        op_p2m_nan_indicator(v_src, v_out, v_cols, v_res, v_n, v_d, v_c, v_q)
+        op_p2m_nan_indicator(v_src, v_cur, v_cols, v_res, v_n, v_d, v_c, v_q)
     return PythonObject(None)
 
 

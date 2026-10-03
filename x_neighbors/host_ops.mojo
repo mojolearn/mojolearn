@@ -688,13 +688,13 @@ def op_p2m_zero_cols(x: Int, flags: Int, res: Int, n: Int, d: Int) raises:
             _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
 
 
-def op_p2m_nan_indicator(src: Int, out: Int, cols: Int, res: Int, n: Int, d: Int, c: Int, q: Int) raises:
+def op_p2m_nan_indicator(src: Int, cur: Int, cols: Int, res: Int, n: Int, d: Int, c: Int, q: Int) raises:
     var p_src = _f(src)
-    var p_out = _f(out)
+    var p_cur = _f(cur)
     var p_cols = _i(cols)
     var p_res = _f(res)
-    def _item(t: Int) {imm p_src, imm p_out, imm p_cols, imm p_res, imm n, imm d, imm c, imm q}:
-        p2m_nan_indicator_item(t, p_src, p_out, p_cols, p_res, n, d, c, q)
+    def _item(t: Int) {imm p_src, imm p_cur, imm p_cols, imm p_res, imm n, imm d, imm c, imm q}:
+        p2m_nan_indicator_item(t, p_src, p_cur, p_cols, p_res, n, d, c, q)
     _items(_item, n * (c + q))
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n * (c + q)) > 0:

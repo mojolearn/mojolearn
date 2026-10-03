@@ -182,7 +182,7 @@ OPS = [
     ("p2m_zero_cols", "py2mojo_items", "p2m_zero_cols_item", "n * d",
      [("x", "fin", "n * d"), ("flags", "iin", "d"), ("res", "fout", "n * d"), ("n", "int"), ("d", "int")]),
     ("p2m_nan_indicator", "py2mojo_items", "p2m_nan_indicator_item", "n * (c + q)",
-     [("src", "fin", "n * d"), ("out", "fin", "n * c"), ("cols", "iin", "q"), ("res", "fout", "n * (c + q)"),
+     [("src", "fin", "n * d"), ("cur", "fin", "n * c"), ("cols", "iin", "q"), ("res", "fout", "n * (c + q)"),
       ("n", "int"), ("d", "int"), ("c", "int"), ("q", "int")]),
     ("p2m_sign_label", "py2mojo_items", "p2m_sign_label_item", "count",
      [("x", "fin", "count"), ("res", "iout", "count"), ("count", "int"), ("mode", "int"), ("thr", "float")]),

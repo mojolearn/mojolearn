@@ -1582,30 +1582,30 @@ def op_p2m_zero_cols(x: Int, flags: Int, res: Int, n: Int, d: Int) raises:
     _ = ctx^
 
 
-def p2m_nan_indicator_kernel(src: FP, out: FP, cols: IP, res: FP, n_: Int64, d_: Int64, c_: Int64, q_: Int64):
+def p2m_nan_indicator_kernel(src: FP, cur: FP, cols: IP, res: FP, n_: Int64, d_: Int64, c_: Int64, q_: Int64):
     var n = Int(n_)
     var d = Int(d_)
     var c = Int(c_)
     var q = Int(q_)
     var t = _tid()
     if t < n * (c + q):
-        p2m_nan_indicator_item(t, src, out, cols, res, n, d, c, q)
+        p2m_nan_indicator_item(t, src, cur, cols, res, n, d, c, q)
 
 
-def op_p2m_nan_indicator(src: Int, out: Int, cols: Int, res: Int, n: Int, d: Int, c: Int, q: Int) raises:
+def op_p2m_nan_indicator(src: Int, cur: Int, cols: Int, res: Int, n: Int, d: Int, c: Int, q: Int) raises:
     var ctx = xn_ctx()
     var d_src = _buf(ctx, src, n * d, True)
-    var d_out = _buf(ctx, out, n * c, True)
+    var d_cur = _buf(ctx, cur, n * c, True)
     var d_cols = _buf_i(ctx, cols, q, True)
     var d_res = _buf(ctx, res, n * (c + q), False)
     ctx.enqueue_function[p2m_nan_indicator_kernel](
-        d_src.unsafe_ptr(), d_out.unsafe_ptr(), d_cols.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(d), Int64(c), Int64(q),
+        d_src.unsafe_ptr(), d_cur.unsafe_ptr(), d_cols.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(d), Int64(c), Int64(q),
         grid_dim=_grid(n * (c + q)), block_dim=(BLOCK if n * (c + q) > 1 else 1),
     )
     _down(ctx, d_res, res, n * (c + q))
     ctx.synchronize()
     _ = d_src^
-    _ = d_out^
+    _ = d_cur^
     _ = d_cols^
     _ = d_res^
     _ = ctx^

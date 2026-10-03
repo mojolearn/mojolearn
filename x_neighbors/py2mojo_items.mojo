@@ -48,14 +48,14 @@ def p2m_zero_cols_item(t: Int, x: FP, flags: IP, res: FP, n: Int, d: Int):
         res.unsafe_store(t, x.unsafe_load(t))
 
 
-def p2m_nan_indicator_item(t: Int, src: FP, out: FP, cols: IP, res: FP, n: Int, d: Int, c: Int, q: Int):
-    """res row i = out row i (c values) then 1.0 / 0.0 for src[i, cols[j]]
+def p2m_nan_indicator_item(t: Int, src: FP, cur: FP, cols: IP, res: FP, n: Int, d: Int, c: Int, q: Int):
+    """res row i = cur row i (c values) then 1.0 / 0.0 for src[i, cols[j]]
     being NaN (j < q); t = i*(c + q) + k."""
     var w = c + q
     var i = t // w
     var k = t - i * w
     if k < c:
-        res.unsafe_store(t, out.unsafe_load(i * c + k))
+        res.unsafe_store(t, cur.unsafe_load(i * c + k))
     else:
         var v = src.unsafe_load(i * d + Int(cols.unsafe_load(k - c)))
         res.unsafe_store(t, Float32(1) if v != v else Float32(0))
