@@ -293,6 +293,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED | minmax-scaler / istella | lane/apple-fast-gap-cls2@72602a339 | gapcls2-{fused,fusedpool}-minmax-istella | -3% alone; 104.7 -> 19.1 with POOL | KEEP, FAST+Apple default (`_OFF` off) | NaN scan folded into the extrema pass; quality identical (n=1) |
 | MOJOLEARN_X_PREP_FAST_CLS2_PACK | onehot, ordinal / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-pack-{onehot,ordinal}-taxi | -19%, -33% | KEEP, FAST+Apple default (`_OFF` off) | distinct values packed into a small host region; quality identical (n=1) |
 | MOJOLEARN_X_PREP_FAST_CLS2_PRESENT | onehot, ordinal / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-present-{onehot,ordinal}-taxi | 32.2 -> 5.6, 28.2 -> 8.2 (with PACK) | KEEP, FAST+Apple default (`_OFF` off) | presence flags replace the sort for small integer columns; quality identical (n=1) |
+| `X_PREP_FAST_STAGED_OUT` | label-binarizer / taxi; multilabel-binarizer / taxi; target-encoder / taxi | lane/apple-fast-gap-manprep @ 1169df581 | gmp-staged-lb-taxi, gmp-staged-mlb-taxi, gmp-staged-te-taxi | - | OPEN | the program's output (LabelBinarizer's 1M x 259 int32 = 1 GB region; arena ranges of 1M+ words) downloaded through core/staged_download.mojo's pinned-stage pipeline instead of a raw host-pointer copy (~21 ms per 64 MB on Apple); copies only |
 
 ## Decomp (34)
 
