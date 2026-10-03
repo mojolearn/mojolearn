@@ -423,7 +423,7 @@ def sgdoc_fw_fit(mut ctx: DeviceContext, x: FP, n_x: Int, n: Int, d: Int, nu: Fl
     ctx.enqueue_function[sf_fold_kernel](
         dcp.unsafe_ptr(), Int32(col_blocks), Int32(d), dsum.unsafe_ptr(), Int32(1), dst.unsafe_ptr(),
         grid_dim=fold_blocks, block_dim=SF_TPB)
-    ctx.enqueue_function[sf_step_kernel](
+    ctx.enqueue_function[sf_step_kernel](  # small-launch(d: weights): one block strides the d weights; n only scales the mean and the cap 1/(nu n)
         dsum.unsafe_ptr(), Int32(d), Int32(n), nu, Int32(r_rank), du.unsafe_ptr(), ds.unsafe_ptr(),
         dsel.unsafe_ptr(), dst.unsafe_ptr(), Int32(cap), Int32(1), grid_dim=1, block_dim=SF_TPB)
     var evals = 0
@@ -448,7 +448,7 @@ def sgdoc_fw_fit(mut ctx: DeviceContext, x: FP, n_x: Int, n: Int, d: Int, nu: Fl
             ctx.enqueue_function[sf_fold_kernel](
                 dcp.unsafe_ptr(), Int32(col_blocks), Int32(d), dsum.unsafe_ptr(), Int32(0), dst.unsafe_ptr(),
                 grid_dim=fold_blocks, block_dim=SF_TPB)
-            ctx.enqueue_function[sf_step_kernel](
+            ctx.enqueue_function[sf_step_kernel](  # small-launch(d: weights): one block strides the d weights; n only scales the mean and the cap 1/(nu n)
                 dsum.unsafe_ptr(), Int32(d), Int32(n), nu, Int32(r_rank), du.unsafe_ptr(), ds.unsafe_ptr(),
                 dsel.unsafe_ptr(), dst.unsafe_ptr(), Int32(cap), Int32(0), grid_dim=1, block_dim=SF_TPB)
             evals += 1
