@@ -2279,7 +2279,7 @@ def run_race(ctx, race):
     opponent the store does not hold is skipped unless ctx["with_opponents"]
     (--with-opponents / --retime-opponents)."""
     stored = stored_opponents(ctx, race)
-    skipped = [] if ctx.get("with_opponents") else [
+    skipped = [] if (ctx.get("with_opponents") or ctx.get("retime")) else [
         a for a in race.get("opponents") or [] if a not in stored]
     full = race
     if stored or skipped:
