@@ -1354,9 +1354,9 @@ def _ordered_estimate_complete(
 
 # ===========================================================================
 # APPLE FAST (lane/apple-fast-ordered, 2026-10-02): the per-fold loops of a
-# tree as one launch per stage. Default OFF; compiled only under FAST on an
-# Apple GPU and behind its define; IDENTICAL compiles the code above
-# unchanged.
+# tree as one launch per stage. Compiled only under FAST on an Apple GPU;
+# IDENTICAL compiles the code above unchanged. FOLD_DERIVS is opt-in
+# (measured slower, 282 -> 287 s); BATCH_EST is the default (see below).
 #
 #   -D MOJOLEARN_ORDERED_FOLD_DERIVS  step 2 (the fold derivatives): one
 #       launch over the concatenated fold layout instead of two per fold
@@ -1365,7 +1365,8 @@ def _ordered_estimate_complete(
 #       `f` at `offsets[f]`; the per-fold cursors are views of it). Also
 #       drops the per-iteration `MOJOLEARN_ORD_STD_SPLIT` env read (a host
 #       step): the split noise fold is the only arm.
-#   -D MOJOLEARN_ORDERED_BATCH_EST  step 6 (the fold models and the
+#   ORDERED_BATCH_EST (default; -D MOJOLEARN_ORDERED_BATCH_EST_OFF to
+#       disable) step 6 (the fold models and the
 #       estimation model): every task of the tree in one reduce launch per
 #       cursor buffer (grid over tasks x leaves x chunks, reading the
 #       device partition's sorted runs and snapshots directly), one leaf
@@ -1389,10 +1390,15 @@ comptime ORDERED_FOLD_DERIVS = (
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_ORDERED_FOLD_DERIVS"]()
 )
+#: ORDERED_BATCH_EST is the FAST + Apple default since the M3 A/B of
+#: 2026-10-02 (gbdt-ordered taxi 275.9 -> 264.1 s, auc .6289 -> .6285).
+#: `-D MOJOLEARN_ORDERED_BATCH_EST_OFF` restores the per-task walk;
+#: `-D MOJOLEARN_ORDERED_BATCH_EST` is still accepted and changes nothing.
+#: IDENTICAL and non-Apple FAST keep the code above (the flag is False).
 comptime ORDERED_BATCH_EST = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_ORDERED_BATCH_EST"]()
+    and not is_defined["MOJOLEARN_ORDERED_BATCH_EST_OFF"]()
 )
 #: either switch keeps a learn permutation's fold cursors in one buffer
 comptime ORDERED_CAT_CURSORS = ORDERED_FOLD_DERIVS or ORDERED_BATCH_EST
