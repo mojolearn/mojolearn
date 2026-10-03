@@ -13,11 +13,13 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from std.sys.compile import is_defined
 from x_linear.ops import FP
-from x_linear.device import fit_device, decision_device
+from x_linear.device import fit_device, decision_device, linear_ctx
+from x_linear.dispatch import ALGO_ISOTONIC
+from x_linear.isotonic_fast import isotonic_fast
 
 
 def _fp(addr: Int) raises -> FP:
@@ -81,6 +83,15 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     _finite(x, Int(py=dims[2]), "X")
     _finite(y, Int(py=dims[3]), "y")
     with GILReleased(Python()):
+        # FAST on Apple (lane/apple-fast-isotonic-knn, 2026-10-02):
+        # -D MOJOLEARN_ISOTONIC_FAST_PAR=1 builds the isotonic fit on the grid
+        # (x_linear/isotonic_fast.mojo) instead of the lead thread of one
+        # block (x_linear/isotonic.mojo:129); the team fit when it declines.
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_ISOTONIC_FAST_PAR"]():
+            if a == ALGO_ISOTONIC:
+                var ctx = linear_ctx()
+                if isotonic_fast(ctx, x, n_x, y, n_y, n, d, ipl, fpl, n_out, out):
+                    return PythonObject(n_out)
         fit_device(a, x, n_x, y, n_y, n, d, ipl, fpl, n_out, n_fw, n_iw, out)
     return PythonObject(n_out)
 
