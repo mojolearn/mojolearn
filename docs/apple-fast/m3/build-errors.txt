@@ -1,0 +1,45 @@
+== lane_apple-fast-decomp-linalg-fbuild-x_neighbors.log (12:27Z)
+~/mq/wt/lane_apple-fast-decomp-linalg/./x_decomp/device.mojo:3065:38: error: use of unknown declaration 'geqrf_scale_kernel'
+                ctx.enqueue_function[geqrf_scale_kernel](
+                                     ^~~~~~~~~~~~~~~~~~
+Imported from ~/mq/wt/lane_apple-fast-decomp-linalg/bindings/_mojolearn_x_neighbors.mojo:11:
+== lane_apple-fast-decomp-linalg-fbuild-x_decomp.log (12:26Z)
+./x_decomp/fast_gemm.mojo:46:30: error: expected argument name
+    a: F32Ptr, b: F32Ptr, out: F32Ptr, m: Int32, k: Int32, n: Int32, ta: Int32, tb: Int32, nb: Int32
+                             ^
+Imported from ~/mq/wt/lane_apple-fast-decomp-linalg/bindings/_mojolearn_x_decomp.mojo:16:
+== lane_apple-fast-decomp-linalg-fbuild-gp.log (12:26Z)
+~/mq/wt/lane_apple-fast-decomp-linalg/./cholesky/checks/potrf.mojo:422:1: error: expressions must not appear at file scope; move this into a function body
+"""CHOL_FAST_APPLE: the panel solve `L21 = A21 L11^{-T}` as `L11^{-1}`
+^
+~/mq/wt/lane_apple-fast-decomp-linalg/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+== lane_apple-fast-prep2-fbuild-x_prep.log (12:08Z)
+./x_prep/device.mojo:231:68: error: invalid call to 'prep2_fast_stage': value passed to 'qp' cannot be converted from 'Pointer[Int32, origin_of(dq)]' to 'Pointer[Int32, MutAnyOrigin]'
+            if prep2_fast_stage(ctx, df, dw, host_q, s, op, total, qp, p2):
+               ~~~~~~~~~~~~~~~~                                    ^~
+Imported from ~/mq/wt/lane_apple-fast-prep2/bindings/_mojolearn_x_prep.mojo:12:
+== lane_apple-fast-decomp-sparse-fbuild-x_neighbors.log (11:59Z)
+~/mq/wt/lane_apple-fast-decomp-sparse/./x_decomp/device.mojo:3127:38: error: use of unknown declaration 'geqrf_scale_kernel'
+                ctx.enqueue_function[geqrf_scale_kernel](
+                                     ^~~~~~~~~~~~~~~~~~
+Imported from ~/mq/wt/lane_apple-fast-decomp-sparse/bindings/_mojolearn_x_neighbors.mojo:11:
+== lane_apple-fast-decomp-sparse-fbuild-x_decomp.log (11:58Z)
+./x_decomp/fast_gemm.mojo:46:30: error: expected argument name
+    a: F32Ptr, b: F32Ptr, out: F32Ptr, m: Int32, k: Int32, n: Int32, ta: Int32, tb: Int32, nb: Int32
+                             ^
+Imported from ~/mq/wt/lane_apple-fast-decomp-sparse/bindings/_mojolearn_x_decomp.mojo:16:
+== lane_apple-fast-decomp-sparse-fbuild-gp.log (11:58Z)
+~/mq/wt/lane_apple-fast-decomp-sparse/./cholesky/checks/potrf.mojo:422:1: error: expressions must not appear at file scope; move this into a function body
+"""CHOL_FAST_APPLE: the panel solve `L21 = A21 L11^{-T}` as `L11^{-1}`
+^
+~/mq/wt/lane_apple-fast-decomp-sparse/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+== lane_apple-fast-cluster2-fbuild-x_cluster.log (11:55Z)
+./x_cluster/bisect.mojo:194:33: error: use of unknown declaration 'sub'
+            var sub_s = ops.put(sub)
+                                ^~~
+Imported from ~/mq/wt/lane_apple-fast-cluster2/bindings/_mojolearn_x_cluster.mojo:17:
+== lane_apple-fast-ann-fbuild-x_ann.log (11:51Z)
+./x_ann/ivf_pq_device.mojo:309:9: error: invalid redefinition of 'codebooks'
+    var codebooks = List[Float32]()
+        ^
+Imported from ~/mq/wt/lane_apple-fast-ann/bindings/_mojolearn_x_ann.mojo:21:

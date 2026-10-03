@@ -1,4 +1,4 @@
-pos=353 lines=     514
+pos=449 lines=     584
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -439,3 +439,112 @@ pos=353 lines=     514
 541:CMD apple-fast@5990c5946 afb23-opt rc=0 afb done tag=afb23-opt pairs=6 ok=6
 542:CMD apple-fast-trees-yeti@b157e5ee0 yeti-symhist rc=0 AFT-MEDIAN arm=B n=2 median_ms=5307.5 all=[5307, 5308] hashes=['fea23d0d4f411a84'] acc={'ndcg10': [0.680466, 0.680466], 'ndcg5': [0.614035, 0.614035], 'map': [0.814182, 0.814182]}
 543:CMD apple-fast-trees-yeti@b157e5ee0 yeti-both rc=0 AFT-MEDIAN arm=B n=2 median_ms=5110.1 all=[5117, 5103] hashes=['fea23d0d4f411a84'] acc={'ndcg10': [0.680466, 0.680466], 'ndcg5': [0.614035, 0.614035], 'map': [0.814182, 0.814182]}
+544:CMD apple-fast-trees-yeti@b157e5ee0 yeti-symhist-sym-taxi rc=0 AFT-MEDIAN arm=B n=2 median_ms=9660.0 all=[9694, 9626] hashes=['ee77e5880b78b029'] acc={'logloss': [0.528595, 0.528595], 'auc': [0.630376, 0.630376]}
+545:CMD apple-fast-trees-yeti@b157e5ee0 yeti-symhist-sym-istella rc=0 AFT-MEDIAN arm=B n=2 median_ms=14685.8 all=[14650, 14721] hashes=['0b0139f922fd6743', '3ef2a28961ecd535'] acc={'logloss': [0.186259, 0.186451], 'auc': [0.980202, 0.980153]}
+546:CMD apple-fast-trees-yeti@b157e5ee0 yeti-symhist-ordered-taxi rc=0 AFT-MEDIAN arm=B n=2 median_ms=67150.0 all=[67436, 66864] hashes=['05561f7113fd1df0', 'df54918e0a532424'] acc={'logloss': [0.529022, 0.529072], 'auc': [0.629087, 0.628934]}
+547:FBUILD lane/apple-fast-isotonic-knn@fd9ebd32a core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=1 x_neighbors=1 x_prep=0 
+548:CMD apple-fast-isotonic-knn@fd9ebd32a ik-lle-knn-taxi rc=0 AFC-AB-SUMMARY ik-lle-knn-taxi arm=B lane=lle ds=taxi median_of_medians_ms=4289.3620205286425 runs=[4289.3620205286425 ] digest=1bdf29eb902c3bfb 
+549:CMD apple-fast-isotonic-knn@fd9ebd32a ik-lle-mma-taxi rc=1 ~/mq/wt/lane_apple-fast-isotonic-knn/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+550:CMD apple-fast-isotonic-knn@fd9ebd32a ik-lof-mma-taxi rc=1 ~/mq/wt/lane_apple-fast-isotonic-knn/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+551:FBUILD lane/apple-fast-kernel@ca0756e50 core=0 ibase=0 estimators=0 gp=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=1 
+552:CMD apple-fast-kernel@ca0756e50 kernel-bayes-stats-ist rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=3143.2 all=[3143] quality=['{"finite":'] defines='-D MOJOLEARN_KERNEL_FAST_BAYES_STATS'
+553:CMD apple-fast-kernel@ca0756e50 kernel-bayes-jacobi-ist rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2725.6 all=[2726] quality=['{"finite":'] defines='-D MOJOLEARN_KERNEL_FAST_BAYES_JACOBI'
+554:CMD apple-fast-kernel@ca0756e50 kernel-gpr-resident-ist rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=132.8 all=[133] quality=['{"finite":'] defines='-D MOJOLEARN_KERNEL_FAST_GPR_RESIDENT'
+555:CMD apple-fast-kernel@ca0756e50 kernel-nys-rr-ist rc=1 ~/mq/wt/lane_apple-fast-kernel/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+556:FBUILD lane/apple-fast-linear@44ec8018d core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+557:CMD apple-fast-linear@44ec8018d linear-lasso-gg-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=200.9 all=[201] quality=['{"finite":'] defines='-D MOJOLEARN_CD_FAST_GRID_GRAM=1'
+558:CMD apple-fast-linear@44ec8018d linear-lasso-rm-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=149.3 all=[149] quality=['{"finite":'] defines='-D MOJOLEARN_CD_FAST_GRID_GRAM=1 -D MOJOLEARN_CD_FAST_ROWMAJOR=1'
+559:CMD apple-fast-linear@44ec8018d linear-enet-gg-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=196.3 all=[196] quality=['{"finite":'] defines='-D MOJOLEARN_CD_FAST_GRID_GRAM=1'
+560:CMD apple-fast-linear@44ec8018d linear-enet-rm-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=142.9 all=[143] quality=['{"finite":'] defines='-D MOJOLEARN_CD_FAST_GRID_GRAM=1 -D MOJOLEARN_CD_FAST_ROWMAJOR=1'
+561:CMD apple-fast-linear@44ec8018d linear-logreg-gs-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=4235.1 all=[4235] quality=['{"accuracy":'] defines='-D MOJOLEARN_QN_FAST_GRID_SUMS=1'
+562:CMD apple-fast-linear@44ec8018d linear-svc-gs-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=801.9 all=[802] quality=['{"accuracy":'] defines='-D MOJOLEARN_QN_FAST_GRID_SUMS=1'
+563:CMD apple-fast-linear@44ec8018d linear-svr-gs-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=213.1 all=[213] quality=['{"finite":'] defines='-D MOJOLEARN_QN_FAST_GRID_SUMS=1'
+564:CMD apple-fast-linear@44ec8018d linear-gmm-gc-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=9858.2 all=[9858] quality=['{"bic":'] defines='-D MOJOLEARN_GMM_FAST_GRID_COV=1'
+565:CMD apple-fast-linear@44ec8018d linear-gmm-bc-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=5893.5 all=[5893] quality=['{"bic":'] defines='-D MOJOLEARN_GMM_FAST_BIG_CHOL=1'
+566:CMD apple-fast-linear@44ec8018d linear-gmm-es-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=6885.7 all=[6886] quality=['{"bic":'] defines='-D MOJOLEARN_GMM_FAST_ESTEP_STACK=1'
+567:CMD apple-fast-linear@44ec8018d linear-gmm-all-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=9045.9 all=[9046] quality=['{"bic":'] defines='-D MOJOLEARN_GMM_FAST_GRID_COV=1 -D MOJOLEARN_GMM_FAST_BIG_CHOL=1 -D MOJOLEARN_GMM_FAST_ESTEP_STACK=1'
+568:FBUILD lane/apple-fast-trees-depthwise@f743edd60 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+569:CMD apple-fast-trees-depthwise@f743edd60 tdw-cat-scan rc=0 AFT-MEDIAN arm=B n=2 median_ms=33044.5 all=[33409, 32680] hashes=['95d15fd2211e0bec', '9e7a58f176c28448'] acc={'logloss': [0.528385, 0.528493], 'auc': [0.631172, 0.630971]}
+570:CMD apple-fast-trees-depthwise@f743edd60 tdw-cat-freq rc=0 AFT-MEDIAN arm=B n=2 median_ms=27761.0 all=[27556, 27966] hashes=['a8ee42911cc9758d', 'e58c76132746972e'] acc={'logloss': [0.528563, 0.528454], 'auc': [0.630609, 0.630918]}
+571:CMD apple-fast-trees-depthwise@f743edd60 tdw-cat-both rc=0 AFT-MEDIAN arm=B n=2 median_ms=27662.6 all=[27807, 27518] hashes=['4f376db8bff48fdc', 'f672e9a4844adfbd'] acc={'logloss': [0.528365, 0.528573], 'auc': [0.631023, 0.630674]}
+572:FBUILD lane/apple-fast-ann@68cc6b6bd core=0 ibase=0 estimators=0 x_ann=1 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+573:CMD apple-fast-ann@68cc6b6bd ann-tsne-split-istella rc=1 ./x_ann/ivf_pq_device.mojo:322:9: warning: implicit declaration of 'codebooks' is deprecated; declare it with 'var' in the function body
+574:CMD apple-fast-ann@68cc6b6bd ann-cagra-team-istella rc=1 ./x_ann/ivf_pq_device.mojo:322:9: warning: implicit declaration of 'codebooks' is deprecated; declare it with 'var' in the function body
+575:CMD apple-fast-ann@68cc6b6bd ann-cagra-knnbigd-istella rc=1 ./x_ann/ivf_pq_device.mojo:322:9: warning: implicit declaration of 'codebooks' is deprecated; declare it with 'var' in the function body
+576:CMD apple-fast-ann@68cc6b6bd ann-ivfpq-devcb-istella rc=1 ./x_ann/ivf_pq_device.mojo:322:9: warning: implicit declaration of 'codebooks' is deprecated; declare it with 'var' in the function body
+577:CMD apple-fast-ann@68cc6b6bd ann-ivfpq-select-istella rc=1 ./x_ann/ivf_pq_device.mojo:322:9: warning: implicit declaration of 'codebooks' is deprecated; declare it with 'var' in the function body
+578:CMD apple-fast-ann@68cc6b6bd ann-ivfpq-trainset-istella rc=1 ./x_ann/ivf_pq_device.mojo:322:9: warning: implicit declaration of 'codebooks' is deprecated; declare it with 'var' in the function body
+579:CMD apple-fast-ann@68cc6b6bd ann-ivfpq-csr-istella rc=1 ./x_ann/ivf_pq_device.mojo:322:9: warning: implicit declaration of 'codebooks' is deprecated; declare it with 'var' in the function body
+580:CMD apple-fast-ann@68cc6b6bd ann-ivfrefine-devcb-istella rc=1 ./x_ann/ivf_pq_device.mojo:322:9: warning: implicit declaration of 'codebooks' is deprecated; declare it with 'var' in the function body
+581:CMD apple-fast-ann@68cc6b6bd ann-ivffilter-devcb-istella rc=1 ./x_ann/ivf_pq_device.mojo:322:9: warning: implicit declaration of 'codebooks' is deprecated; declare it with 'var' in the function body
+582:CMD apple-fast-ann@68cc6b6bd ann-ivfsq-trainset-istella rc=1 ./x_ann/ivf_pq_device.mojo:322:9: warning: implicit declaration of 'codebooks' is deprecated; declare it with 'var' in the function body
+583:CMD apple-fast-ann@68cc6b6bd ann-ivfsq-select-istella rc=1 ./x_ann/ivf_pq_device.mojo:322:9: warning: implicit declaration of 'codebooks' is deprecated; declare it with 'var' in the function body
+584:CMD apple-fast-ann@68cc6b6bd ann-ivfrq-select-istella rc=1 ./x_ann/ivf_pq_device.mojo:322:9: warning: implicit declaration of 'codebooks' is deprecated; declare it with 'var' in the function body
+585:CMD apple-fast-ann@68cc6b6bd ann-ivf-csr-istella rc=1 ~/mq/wt/lane_apple-fast-ann/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+586:CMD apple-fast-ann@68cc6b6bd ann-ivf-trainset-istella rc=1 ~/mq/wt/lane_apple-fast-ann/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+587:FBUILD lane/apple-fast-cluster2@775d5b7be core=0 ibase=0 estimators=0 x_cluster=1 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+588:CMD apple-fast-cluster2@775d5b7be cluster2-ap-loop-istella rc=1 ~/mq/wt/lane_apple-fast-cluster2/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+589:CMD apple-fast-cluster2@775d5b7be cluster2-ap-exact-istella rc=1 ~/mq/wt/lane_apple-fast-cluster2/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+590:CMD apple-fast-cluster2@775d5b7be cluster2-ap-split-istella rc=1 ~/mq/wt/lane_apple-fast-cluster2/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+591:CMD apple-fast-cluster2@775d5b7be cluster2-bgmm-momgemm-istella rc=1 ~/mq/wt/lane_apple-fast-cluster2/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+592:CMD apple-fast-cluster2@775d5b7be cluster2-bgmm-mahal-taxi rc=1 ~/mq/wt/lane_apple-fast-cluster2/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+593:CMD apple-fast-cluster2@775d5b7be cluster2-bgmm-ent-taxi rc=1 ~/mq/wt/lane_apple-fast-cluster2/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+594:CMD apple-fast-cluster2@775d5b7be cluster2-bgmm-estep1-taxi rc=1 ~/mq/wt/lane_apple-fast-cluster2/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+595:CMD apple-fast-cluster2@775d5b7be cluster2-bisect-resident-istella rc=1 ~/mq/wt/lane_apple-fast-cluster2/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+596:CMD apple-fast-cluster2@775d5b7be cluster2-optics-devorder-istella rc=1 ~/mq/wt/lane_apple-fast-cluster2/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+597:FBUILD lane/apple-fast-decomp-sparse@1b2c8f955 core=0 ibase=0 estimators=0 gp=1 x_cluster=0 x_decomp=1 x_linear=0 x_neighbors=1 x_prep=0 
+598:CMD apple-fast-decomp-sparse@1b2c8f955 dsp-omp-istella rc=1 ./x_decomp/device.mojo:287:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+599:CMD apple-fast-decomp-sparse@1b2c8f955 dsp-mbdl-upd-istella rc=1 ./x_decomp/device.mojo:287:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+600:CMD apple-fast-decomp-sparse@1b2c8f955 dsp-mbdl-upd-istella rc=1 ./x_decomp/device.mojo:287:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+601:CMD apple-fast-decomp-sparse@1b2c8f955 dsp-mbdl-lasso-istella rc=1 ./x_decomp/device.mojo:287:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+602:CMD apple-fast-decomp-sparse@1b2c8f955 dsp-dl-upd-istella rc=1 ./x_decomp/device.mojo:287:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+603:CMD apple-fast-decomp-sparse@1b2c8f955 dsp-dl-lasso-istella rc=1 ./x_decomp/device.mojo:287:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+604:CMD apple-fast-decomp-sparse@1b2c8f955 dsp-mbspca-upd-istella rc=1 ./x_decomp/device.mojo:287:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+605:CMD apple-fast-decomp-sparse@1b2c8f955 dsp-ica-istella rc=1 ./x_decomp/device.mojo:287:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+606:FBUILD lane/apple-fast-neighbors2@6d9c7b1f1 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+607:CMD apple-fast-neighbors2@6d9c7b1f1 n2-lp-res-taxi rc=0 AFC-AB-SUMMARY n2-lp-res-taxi arm=B lane=label-propagation ds=taxi median_of_medians_ms=2085.723562486237 runs=[2085.723562486237 ] digest=edacd5a14bb91f43 
+608:CMD apple-fast-neighbors2@6d9c7b1f1 n2-ls-res-taxi rc=0 AFC-AB-SUMMARY n2-ls-res-taxi arm=B lane=label-spreading ds=taxi median_of_medians_ms=2003.6557919811457 runs=[2003.6557919811457 ] digest=142d80cf3e34e57f 
+609:CMD apple-fast-neighbors2@6d9c7b1f1 n2-ocsvm-tiled-istella rc=0 AFC-AB-SUMMARY n2-ocsvm-tiled-istella arm=B lane=ocsvm ds=istella median_of_medians_ms=445.0994375220034 runs=[445.0994375220034 ] digest=ad8baaf140f0a5ab 
+610:CMD apple-fast-neighbors2@6d9c7b1f1 n2-svgp-gpu-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=903.4 all=[903] quality=['{"finite":'] defines='-D MOJOLEARN_SVGP_FAST_GPU=1'
+611:CMD apple-fast-neighbors2@6d9c7b1f1 n2-radius-reuse-taxi rc=0 AFC-AB-SUMMARY n2-radius-reuse-taxi arm=B lane=radius-neighbors ds=taxi median_of_medians_ms=0.13993747415952384 runs=[0.13993747415952384 ] digest=44ffe1102e4b7b4d 
+612:CMD apple-fast-neighbors2@6d9c7b1f1 n2-pcs-sparse-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=0.3 all=[0] quality=['{"kernel_rel_error":'] defines='-D MOJOLEARN_XN_PCS_SPARSE=1'
+613:FBUILD lane/apple-fast-prep2@cc3b27d5f core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=1 
+614:CMD apple-fast-prep2@cc3b27d5f prep2-te-global-taxi rc=0 ENSURE-SO giving up after 3 rebuild rounds: x_prep
+615:CMD apple-fast-prep2@cc3b27d5f prep2-te-enc-taxi rc=0 ENSURE-SO giving up after 3 rebuild rounds: x_prep
+616:CMD apple-fast-prep2@cc3b27d5f prep2-si-qsel-istella rc=0 ENSURE-SO giving up after 3 rebuild rounds: x_prep
+617:CMD apple-fast-prep2@cc3b27d5f prep2-rs-qsel-istella rc=0 ENSURE-SO giving up after 3 rebuild rounds: x_prep
+618:CMD apple-fast-prep2@cc3b27d5f prep2-ii-eigh-taxi rc=1 ~/mq/wt/lane_apple-fast-prep2/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+619:CMD apple-fast-prep2@cc3b27d5f prep2-ii-gram-taxi rc=0 ENSURE-SO giving up after 3 rebuild rounds: x_prep
+620:CMD apple-fast-prep2@cc3b27d5f prep2-ii-conv-taxi rc=0 ENSURE-SO giving up after 3 rebuild rounds: x_prep
+621:FBUILD lane/apple-fast-resample@50b96e795 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+622:CMD apple-fast-resample@50b96e795 resample-boot-rank-taxi rc=1 ~/mq/wt/lane_apple-fast-resample/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+623:CMD apple-fast-resample@50b96e795 resample-boot-onefold-taxi rc=1 ~/mq/wt/lane_apple-fast-resample/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+624:CMD apple-fast-resample@50b96e795 resample-perm-select-taxi rc=1 ~/mq/wt/lane_apple-fast-resample/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+625:CMD apple-fast-resample@50b96e795 resample-rs-idxbulk-taxi rc=1 ~/mq/wt/lane_apple-fast-resample/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+626:CMD apple-fast-resample@50b96e795 resample-rs-gather-taxi rc=1 ~/mq/wt/lane_apple-fast-resample/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+627:CMD apple-fast-resample@50b96e795 resample-cv-slice-taxi rc=1 ~/mq/wt/lane_apple-fast-resample/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+628:CMD apple-fast-resample@50b96e795 resample-cv-trust-taxi rc=1 ~/mq/wt/lane_apple-fast-resample/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+629:CMD apple-fast@5990c5946 core-nc-fast-istella rc=0 AFC-AB-SUMMARY core-nc-fast-istella arm=A lane=nearest-centroid ds=istella median_of_medians_ms=223.81766649778 runs=[223.81766649778 ] digest=43dc9a912f62cf0b 
+630:FBUILD lane/apple-fast-yetirank@c9eb1ce14 core=0 ibase=0 estimators=0 gbdt=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+631:CMD apple-fast-yetirank@c9eb1ce14 aft-ab-ysort1 rc=0 AFT-MEDIAN arm=B n=2 median_ms=3349.4 all=[3350, 3349] hashes=['fea23d0d4f411a84'] acc={'ndcg10': [0.680466, 0.680466], 'ndcg5': [0.614035, 0.614035], 'map': [0.814182, 0.814182]}
+632:FBUILD lane/apple-fast-core@d22a7494c core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+633:CMD apple-fast-core@d22a7494c core-kde-slices-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=141.0 all=[141] quality=['{"mean_log_likelihood":'] defines='-D MOJOLEARN_KDE_FAST_SLICES=1'
+634:CMD apple-fast-core@d22a7494c core-knn-k64-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=351.6 all=[352] quality=['{"recall_at_k":'] defines='-D MOJOLEARN_KNN_FAST_MMA_K64=1'
+635:CMD apple-fast-mainbase@37c65a3af core-nc-main-istella rc=0 AFC-AB-SUMMARY core-nc-main-istella arm=A lane=nearest-centroid ds=istella median_of_medians_ms=225.50277100526728 runs=[225.50277100526728 ] digest=43dc9a912f62cf0b 
+636:FBUILD lane/apple-fast-decomp-linalg@f231ebab4 core=0 ibase=0 estimators=0 gp=1 x_cluster=0 x_decomp=1 x_linear=0 x_neighbors=1 x_prep=0 
+637:CMD apple-fast-decomp-linalg@f231ebab4 dlin-qr-dev-istella rc=1 ./x_decomp/device.mojo:278:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+638:CMD apple-fast-decomp-linalg@f231ebab4 dlin-svd-cholqr-istella rc=1 ./x_decomp/device.mojo:278:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+639:CMD apple-fast-decomp-linalg@f231ebab4 dlin-nmf-tiled-istella rc=1 ./x_decomp/device.mojo:278:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+640:CMD apple-fast-linear@44ec8018d linear-logreg-blocks-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=3612.1 all=[3612] quality=['{"accuracy":'] defines='-D MOJOLEARN_QN_FAST_BLOCKS=1'
+641:CMD apple-fast-linear@44ec8018d linear-logreg-nocoal-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=4996.2 all=[4996] quality=['{"accuracy":'] defines='-D MOJOLEARN_QN_FAST_COALESCED_OFF=1'
+642:CMD apple-fast-linear@44ec8018d linear-svc-blocks-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=733.2 all=[733] quality=['{"accuracy":'] defines='-D MOJOLEARN_QN_FAST_BLOCKS=1'
+643:CMD apple-fast-linear@44ec8018d linear-svr-blocks-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=219.4 all=[219] quality=['{"finite":'] defines='-D MOJOLEARN_QN_FAST_BLOCKS=1'
+644:CMD apple-fast-core@d22a7494c core-ols-dcenter-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=157.6 all=[158] quality=['{"finite":'] defines='-D MOJOLEARN_OLS_FAST_DEVICE_CENTER=1'
+645:CMD apple-fast-yetirank@c9eb1ce14 yeti-scoregrid rc=0 AFT-MEDIAN arm=B n=2 median_ms=5288.9 all=[5293, 5284] hashes=['fea23d0d4f411a84'] acc={'ndcg10': [0.680466, 0.680466], 'ndcg5': [0.614035, 0.614035], 'map': [0.814182, 0.814182]}
+646:CMD apple-fast-yetirank@c9eb1ce14 yeti-h8unroll rc=0 AFT-MEDIAN arm=B n=2 median_ms=5372.7 all=[5371, 5375] hashes=['fea23d0d4f411a84'] acc={'ndcg10': [0.680466, 0.680466], 'ndcg5': [0.614035, 0.614035], 'map': [0.814182, 0.814182]}
+647:CMD apple-fast-decomp-linalg@f231ebab4 dlin-lstsq-tiled-istella rc=1 ./x_decomp/device.mojo:278:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+648:CMD apple-fast-decomp-linalg@f231ebab4 dlin-rsvd-tiled-istella rc=1 ./x_decomp/device.mojo:278:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+649:CMD apple-fast-decomp-linalg@f231ebab4 dlin-als-tiled-taxizones rc=1 ./x_decomp/device.mojo:278:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+650:CMD apple-fast-decomp-linalg@f231ebab4 dlin-fa-qrr-istella rc=1 ./x_decomp/device.mojo:278:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+651:CMD apple-fast-decomp-sparse@1b2c8f955 dsp-spca-upd-taxi rc=1 ./x_decomp/device.mojo:287:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+652:CMD apple-fast-decomp-sparse@1b2c8f955 dsp-spca-lasso-taxi rc=1 ./x_decomp/device.mojo:287:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
