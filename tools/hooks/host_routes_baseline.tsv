@@ -8,10 +8,6 @@ rule	class	owner	state	path	occ	text
 one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[logdet_kernel](
 # why: CROSS-LANE (GP/GMM): DEVIATION 1639's one-thread ascending log-det over n diagonal terms; a fixed-order multi-block fold (core/device_fold shape) needs the host column and the GP/GMM likelihood bits changed together
 one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[sabotage_logdet_kernel](
-# why: CROSS-LANE (x_decomp/linalg): the one-slice QR (ns == 1, qr_slice_count says the matrix is too short to split) runs one block over n_rows; the sliced TSQR path is multi-block; a forced split needs the host column's order
-one-block-n	serial-gpu	UNOWNED	owed	core/householder_qr.mojo	0	ctx.enqueue_function[qr_panel_kernel](
-# why: CROSS-LANE (x_decomp/linalg): the one-slice QR (ns == 1, qr_slice_count says the matrix is too short to split) runs one block over n_rows; the sliced TSQR path is multi-block; a forced split needs the host column's order
-one-block-n	serial-gpu	UNOWNED	owed	core/householder_qr.mojo	0	devices[rank].enqueue_function[qr_panel_kernel](panels[panel].unsafe_ptr(),outputs[panel].unsafe_ptr(),
 # why: k-sized: a selection sort of the n_cols eigenvalues (n = n_cols, not rows); index-only, no float op
 d2h-host-work	d2h-roundtrip	UNOWNED	owed	glm/impl/linalg/detail/svd.mojo	0	for i in range(n):
 # why: k-sized: a selection sort of the n_cols eigenvalues (n = n_cols, not rows); index-only, no float op
@@ -48,10 +44,6 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/models/tokenizer.py	0	loose = [i 
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	module = _backend.load_host_module(_EXTENSION)
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	return _Entries(_backend.load_host_module(_EXTENSION))
 py-loop	py-numpy	gap-lm	debt	python/mojolearn/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
-# why: OWED: the observed statistic folds the host input on the host with the replicate kernels' pinned tree; a device version needs a multi-block tree sum in that order (the replicate kernels fold one block per replicate)
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	resample/estimator.mojo	0	for j in range(n_pooled):
-# why: OWED: the observed statistic folds the host input on the host with the replicate kernels' pinned tree; a device version needs a multi-block tree sum in that order (the replicate kernels fold one block per replicate)
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	resample/estimator.mojo	1	for j in range(n_pooled):
 # why: OWED (sequence/neural lane): the MoE pair grouping by expert (a counting sort over T*k picks) runs on the host by default; the device grouping exists only behind -D MOJOLEARN_MOE_DEVGROUP with one-block kernels for E <= 127; needs a multi-block grouping op in the executor registry
 d2h-host-work	d2h-roundtrip	UNOWNED	owed	sequence/pyapi.mojo	0	for i in range(T * k):
 # why: OWED (sequence/neural lane): the MoE pair grouping by expert (a counting sort over T*k picks) runs on the host by default; the device grouping exists only behind -D MOJOLEARN_MOE_DEVGROUP with one-block kernels for E <= 127; needs a multi-block grouping op in the executor registry
