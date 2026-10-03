@@ -494,7 +494,7 @@ def dev_als_rows_py(
 # finiteness walk over X (python/mojolearn/_expansion_decomp.py
 # `_M.shape_of_input` -> `_host_all_finite` -> bindings/host_helpers.mojo
 # `all_finite_f32_binding`, one thread, a branch per word: 900k x 220 words
-# on Istella). Three FAST + Apple switches, default OFF, Python routes read
+# on Istella). Three FAST + Apple switches (DEVSCAN default on, below), Python routes read
 # back from `grp_cls2_py` (no env read):
 #   MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN  bit 1: fit reads the shape only;
 #       transform's device projection (`dev_project_py`) flags a non-finite X,
@@ -505,10 +505,19 @@ def dev_als_rows_py(
 #   MOJOLEARN_XD_FAST_CLS2_GRP_LAZY    bit 4: components_ is downloaded on
 #       first read, not in fit (the fit then ends with no synchronize).
 # The matrix (and so every output word) is main's under every switch.
+# DEVSCAN is the FAST + Apple default since the M3 A/B (n=1, quality
+# identical): gaussian-rp istella 54.3 -> 15.9 ms, taxi 4.7 -> 3.9 ms;
+# -D MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF turns it off. NOSCAN and LAZY
+# stay opt-in (they move the NaN/inf refusal from fit to transform; pending
+# Andrew's decision); NOSCAN, when defined, replaces the device scan.
 
 comptime _CLS2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime GRP_CLS2_NOSCAN = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN"]()
-comptime GRP_CLS2_DEVSCAN = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN"]()
+comptime GRP_CLS2_DEVSCAN = (
+    _CLS2_FAST_APPLE
+    and not is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF"]()
+    and not GRP_CLS2_NOSCAN
+)
 comptime GRP_CLS2_LAZY = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_LAZY"]()
 comptime GRP_CLS2_ANY = GRP_CLS2_NOSCAN or GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
 
