@@ -43,6 +43,7 @@ from core.device_scan import DeviceScanScratch
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
+from training.byte_lm_afn import BYTE_LM_FAST_APPLE
 from training.checkpoint import Checkpoint
 from training.byte_lm_config import ByteConfig
 from training.checks.train_loop import (
@@ -374,7 +375,9 @@ def byte_validate_tokens(ids: List[Int32], config: ByteConfig = ByteConfig()) ra
 
 
 def _require_profile() raises:
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    # afn-lm (2026-10-03): a FAST build on Apple is admitted too; IDENTICAL
+    # reads the same condition as before (BYTE_LM_FAST_APPLE is False there).
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not BYTE_LM_FAST_APPLE:
         raise Error("byte LM: training requires IDENTICAL")
     comptime if (GEMM_SABOTAGE or GEMM_BWD_SABOTAGE or ANY_EMB_SABOTAGE
                  or ANY_LOSS_SABOTAGE or OPT_SABOTAGE or BWD_ANY_SABOTAGE
