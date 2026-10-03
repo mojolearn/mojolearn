@@ -1,4 +1,4 @@
-pos=626 lines=    1181
+pos=628 lines=    1181
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -761,3 +761,7 @@ pos=626 lines=    1181
 869:CMD apple-fast-gap-cagra@3a216d535 gapcagra-dot-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=27573.5 all=[27573] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_CAGRA_FAST_DOT'
 870:FBUILD lane/apple-fast@82f310d8f core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
 871:CMD apple-fast@82f310d8f retime-additive-chi2-istella rc=0 AFC-AB-SUMMARY retime-additive-chi2-istella arm=A lane=additive-chi2 ds=istella median_of_medians_ms=none runs=[ ] digest= 
+872:FBUILD lane/apple-fast-gap-cagra@2b16b4322 core=0 ibase=0 estimators=0 x_ann=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+873:CMD apple-fast-gap-cagra@2b16b4322 gapcagra-wide-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=21077.5 all=[21078] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_CAGRA_FAST_WIDE'
+874:CMD apple-fast-gap-cagra@2b16b4322 gapcagra-seeds-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2865.1 all=[2865] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_CAGRA_FAST_SEEDS'
+875:FBUILD lane/apple-fast-gap-cagra@0c4d268c5 prebuilt=m2 core=0 ibase=0 x_ann=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=8
