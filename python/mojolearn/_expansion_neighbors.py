@@ -884,12 +884,12 @@ class KernelPCA(_XNeighbors):
         # Top-k GPU Lanczos instead of the full n-by-n host eigensolve when
         # auto asks for a few components (on by default since 2026-09-30:
         # L40S CUDA, Apple Metal and the CPU column bit-identical, residual < 1e-5,
-        # float64 reference match; MOJOLEARN_XN_KPCA_LANCZOS=0 turns it off).
-        # Anything outside that scope, or a basis that does not converge,
-        # takes the exact dense path below.
+        # float64 reference match; lane pyglue-numeric deleted the
+        # MOJOLEARN_XN_KPCA_LANCZOS route switch). Anything outside that
+        # scope, or a basis that does not converge, takes the exact dense
+        # path below.
         c = 0 if self.n_components is None else int(self.n_components)
-        lanczos = (os.environ.get("MOJOLEARN_XN_KPCA_LANCZOS", "1") != "0"
-                   and self.eigen_solver == "auto" and n > 200 and 0 < c < 10)
+        lanczos = self.eigen_solver == "auto" and n > 200 and 0 < c < 10
         if lanczos and kit is None:
             from ._expansion_decomp import _Kit
             # Every column (CUDA, HIP, Metal and the CPU host binding) takes

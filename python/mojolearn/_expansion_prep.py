@@ -3613,7 +3613,7 @@ def _multilabel_indicator(y):
 # float32 word the old route would have built, NaN where float32 cannot hold
 # the label, which sends the call back to the old route), the device sort, a
 # chunked run scan, and for fit_transform the codes in the same program.
-# MOJOLEARN_XPREP_LABELS=0 is the old route (the A/B arm).
+# The old route stays for labels no numeric buffer holds (str, bool, lists).
 _LABEL_KIND = {"<f4": (0, 1), "<i4": (1, 1), "<u4": (2, 1), "<i8": (3, 2), "<f8": (4, 2)}
 
 
@@ -3627,9 +3627,8 @@ class _LabelBuf:
 def _label_buffer(y):
     """A numeric label vector as raw int32 words (a view, no copy, of a
     contiguous buffer), or None: the old route (lists, str or bool labels,
-    other dtypes, a matrix, an empty y, MOJOLEARN_XPREP_LABELS=0)."""
-    if os.environ.get("MOJOLEARN_XPREP_LABELS", "1") == "0":
-        return None
+    other dtypes, a matrix, an empty y; lane pyglue-numeric deleted the
+    MOJOLEARN_XPREP_LABELS switch)."""
     if isinstance(y, (list, tuple, str, bytes)):
         return None
     from ._buffer import Buf, _has_buffer, _materialize, _raw_store_type, typestr_of
@@ -3962,9 +3961,9 @@ def _mlb_flat(y):
     """y's label sets as one int64 label buffer and int32 row offsets, or
     None (the Python route): rows that are not lists, tuples or sets, a
     label that is not a plain int (bool, float, str, numpy scalars), no
-    label at all, or MOJOLEARN_MLB_DEVICE=0."""
-    if os.environ.get("MOJOLEARN_MLB_DEVICE", "1").strip() == "0":
-        return None
+    label at all (lane pyglue-numeric deleted the MOJOLEARN_MLB_DEVICE
+    switch). glue: the walks below convert the caller's Python containers
+    into one buffer, in C (map, chain, array)."""
     rows = y if isinstance(y, (list, tuple)) else None
     if not rows or not set(map(type, rows)) <= _MLB_ROW_TYPES:
         return None
