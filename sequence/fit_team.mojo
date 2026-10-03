@@ -109,7 +109,7 @@ comptime GT_DONE = 6
 #: GARCH(1, 1)) the recursion without its bounds is AFFINE in the previous
 #: variance, sigma2_t = beta sigma2_{t-1} + c_t with c_t = omega +
 #: alpha r_{t-1}^2 + gamma r_{t-1}^2 [r_{t-1} < 0], so
-#: `-D MOJOLEARN_GARCH_COOP` splits the series into one chunk of L points
+#: GARCH_COOP splits the series into one chunk of L points
 #: per thread, the ETS_TEAM shape (sequence/ets_team.mojo): pass 1 composes
 #: the chunk's map (A, C) from an unknown start, each thread takes its
 #: start from the maps before it (the exclusive prefix), and pass 2 walks
@@ -121,10 +121,15 @@ comptime GT_DONE = 6
 #: start grid scores its candidates the same way; the final evaluation keeps
 #: the stored recursion (the sigma output and the forecast read r and s2).
 #: The fold orders differ, so the bits differ: FAST only, Apple only.
+#: Default on FAST + Apple since the M3 A/B (lane/apple-fast-garchspeed
+#: 5bc97d9d7, n=1): garch synthetic 383 -> 15.1 ms, taxi-hourly 582 -> 31.0
+#: ms; mean_llf -1938.2249 -> -1938.2239 and -1132.955 -> -1131.911 (equal
+#: or better). -D MOJOLEARN_GARCH_COOP_OFF restores the lead's recursion;
+#: the old -D MOJOLEARN_GARCH_COOP is harmless.
 comptime GARCH_COOP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GARCH_COOP"]()
+    and not is_defined["MOJOLEARN_GARCH_COOP_OFF"]()
 )
 
 
