@@ -114,7 +114,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
             m.def_function[dev_lda_estep_ss_py]("x_decomp_dev_lda_estep_ss")
         m.def_function[dev_als_rows_py]("x_decomp_dev_als_rows")
         comptime if DECOMP_FAST_DICT_DEV:
-            # lane/apple-fast-gap-clus3: -D MOJOLEARN_DECOMP_FAST_DICT_DEV (x_decomp/dict_fast.mojo)
+            # lane/apple-fast-gap-clus3: FAST + Apple default (off: -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF) (x_decomp/dict_fast.mojo)
             m.def_function[dev_dict_update_py]("x_decomp_dev_dict_update")
         # Isomap / LLE graph builds (x_decomp/graph_device.mojo, lane hr2-graph-embed)
         m.def_function[dev_graph_knn_py]("x_decomp_dev_graph_knn")
