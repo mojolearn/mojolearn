@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Theta on one simdgroup per series with the Nelder-Mead candidates
 evaluated side by side (lane/apple-fast-gap-tsa,
--D MOJOLEARN_SEQ_FAST_THETA_SPEC; FAST + Apple, on THETA_REG; default OFF;
+FAST + Apple, on THETA_REG; default on, -D MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF off;
 docs/apple-fast/notes/gap-tsa.md).
 
 `op_theta` runs one thread per series (64 threads on the board's taxi-hourly
@@ -36,8 +36,11 @@ from sequence.theta import (
 )
 from checks.numerics import ftz, identical_div, identical_sqrt
 
-#: the switch (default OFF; FAST + Apple with THETA_REG)
-comptime THETA_SPEC = THETA_REG and is_defined["MOJOLEARN_SEQ_FAST_THETA_SPEC"]()
+#: the switch (FAST + Apple with THETA_REG). Default since the M3 A/B (n=1,
+#: quality identical; theta taxi-hourly 218 -> 20.3 ms);
+#: -D MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF turns it off; the old
+#: -D MOJOLEARN_SEQ_FAST_THETA_SPEC is harmless.
+comptime THETA_SPEC = THETA_REG and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SPEC_OFF"]()
 
 
 @fieldwise_init

@@ -116,7 +116,7 @@ def kpss_test_host(
     _refuse_empty_shape(batch_size, n_obs, "kpss_test")
     var ctx = process_ctx[_DEVCTX_SLOT]()
     comptime if TSA_KPSS_PACK:
-        # lane/apple-fast-gap-tsa (-D MOJOLEARN_TSA_FAST_KPSS_PACK, FAST +
+        # lane/apple-fast-gap-tsa (TSA_KPSS_PACK, default; FAST +
         # Apple): one launch, one device buffer and one host stage for the
         # input and the packed outputs, one wait (kpss_fused.mojo::kpss_rounds)
         if d == 0 and D == 0 and n_obs <= KPSS_FUSED_MAX_N:
@@ -181,7 +181,7 @@ def select_d_host(
     _refuse_empty_shape(batch_size, n_obs, "select_d")
     var ctx = process_ctx[_DEVCTX_SLOT]()
     comptime if TSA_SELD_FUSED:
-        # lane/apple-fast-gap-tsa (-D MOJOLEARN_TSA_FAST_SELD_FUSED, FAST +
+        # lane/apple-fast-gap-tsa (TSA_SELD_FUSED, default; FAST +
         # Apple): every round of a series in its block, the first stationary
         # order chosen there, one upload, one launch, one download, one wait
         # (kpss_fused.mojo::kpss_rounds). Seasonal differencing, d_max past 2

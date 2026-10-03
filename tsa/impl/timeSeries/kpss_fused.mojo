@@ -51,19 +51,23 @@ comptime TSA2_KPSS = (
 )
 #: lane/apple-fast-gap-tsa: the KPSS test as one launch over ONE device
 #: buffer (input and packed outputs) and ONE host stage, one download
-#: (`kpss_rounds`); -D MOJOLEARN_TSA_FAST_KPSS_PACK (default OFF; FAST +
-#: Apple only)
+#: (`kpss_rounds`); FAST + Apple only. Default since the M3 A/B (n=1,
+#: quality identical; kpss taxi-hourly 5.2 -> 1.5 ms, synthetic 5.3 -> 2.0 ms);
+#: -D MOJOLEARN_TSA_FAST_KPSS_PACK_OFF turns it off; the old
+#: -D MOJOLEARN_TSA_FAST_KPSS_PACK is harmless.
 comptime TSA_KPSS_PACK = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_TSA_FAST_KPSS_PACK"]()
+    and not is_defined["MOJOLEARN_TSA_FAST_KPSS_PACK_OFF"]()
 )
 #: lane/apple-fast-gap-tsa: `select_d` as one launch (every round of a
 #: series inside its block, the first stationary order chosen there), the
-#: same packed buffers, one download; -D MOJOLEARN_TSA_FAST_SELD_FUSED
-#: (default OFF; FAST + Apple only)
+#: same packed buffers, one download; FAST + Apple only. Default since the
+#: M3 A/B (n=1, quality identical; select-d taxi-hourly 8.5 -> 2.0 ms,
+#: synthetic 8.0 -> 2.2 ms); -D MOJOLEARN_TSA_FAST_SELD_FUSED_OFF turns it
+#: off; the old -D MOJOLEARN_TSA_FAST_SELD_FUSED is harmless.
 comptime TSA_SELD_FUSED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_TSA_FAST_SELD_FUSED"]()
+    and not is_defined["MOJOLEARN_TSA_FAST_SELD_FUSED_OFF"]()
 )
 #: words per series in the packed output: stat, flag, first bad index
 #: (-1 none), chosen d

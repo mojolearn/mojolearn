@@ -14,7 +14,7 @@ from sequence.exec_device import DeviceExec
 from sequence.fit_team_py import garch_team_py, prophet_fit_team_py
 from sequence.ets_team import ETS_TEAM
 from sequence.ets_team_py import ets_team_applies, ets_team_py
-from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, var_spec_steps_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, prophet_predict_py, moe_forward_py
+from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
 from sequence.moe_weights import moe_weights_put, moe_weights_ptrs, moe_weights_free
@@ -87,10 +87,6 @@ def var_fit_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObjec
 def var_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     return var_forecast_py(ex, addrs, ip)
-
-
-def var_spec_steps_binding(ip: PythonObject) raises -> PythonObject:
-    return var_spec_steps_py(ip)
 
 
 def mlp_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -201,7 +197,6 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[stl_binding]("stl")
         m.def_function[var_fit_binding]("var_fit")
         m.def_function[var_forecast_binding]("var_forecast")
-        m.def_function[var_spec_steps_binding]("var_spec_steps")
         m.def_function[mlp_fit_binding]("mlp_fit")
         m.def_function[mlp_predict_binding]("mlp_predict")
         m.def_function[adafactor_step_binding]("adafactor_step")
