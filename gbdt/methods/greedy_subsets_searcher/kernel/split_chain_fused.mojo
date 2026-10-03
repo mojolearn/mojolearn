@@ -1,6 +1,7 @@
-"""The non-symmetric split chain in four launches (FAST, Apple; opt-in).
+"""The non-symmetric split chain in four launches (FAST Apple default).
 
-`-D MOJOLEARN_GBDT_DW_FUSED_CHAIN` (lane apple-fast-depthwise). The chain
+Depthwise only; off with `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF` (lane
+apple-fast-depthwise). The chain
 `greedy_search_helper_depthwise.mojo` runs per level on the row-index-only
 schedule (DEVIATION 1902) is eight launches:
 
@@ -289,7 +290,7 @@ def fused_copy_back_kernel[GUARD: Bool = False](
         i += stride
 
 
-# ---- DW_NO_LEVEL_SYNC (FAST, Apple; opt-in) ------------------------------
+# ---- DW_NO_LEVEL_SYNC (FAST, Apple; default) -----------------------------
 #: `dw_select_splits_kernel`'s block (one thread per scored leaf).
 comptime DW_SELECT_BLOCK = 64
 #: Words per `CFeature` record in the split payload (`CFEATURE_BYTES // 4`).

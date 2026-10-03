@@ -242,16 +242,22 @@ comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[
     TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 ]()
 
-#: FAST on Apple, opt-in (lane apple-fast-depthwise): the per-level split
+#: FAST on Apple, DEFAULT (lane apple-fast-depthwise): the per-level split
 #: chain of the row-index-only schedule in four launches instead of eight
 #: (`kernel/split_chain_fused.mojo` has the mapping and why it is the same
-#: permutation, partitions and stats bit for bit). Taken only when the tree
-#: runs the row-index-only schedule (`use_ridx`); the stat-moving schedule
-#: keeps the old chain. `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN` is the B arm.
+#: permutation, partitions and stats bit for bit). Taken only for a
+#: Depthwise tree on the row-index-only schedule (`use_ridx`, not
+#: Lossguide); the stat-moving schedule and Lossguide keep the old chain.
+#: M3 A/B (plain FAST vs this + DW_NO_LEVEL_SYNC, n=2): dw-fcns-taxi
+#: 14,933 -> 14,120 ms (-5.4%), auc .6322 -> .6325; dw-fcns-istella
+#: 19,561 -> 19,522 ms (neutral), auc .9832 both.
+#: `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF` turns it off (and with it
+#: DW_NO_LEVEL_SYNC and DW_TREE_SYNC, which stack on it); the old
+#: `-D MOJOLEARN_GBDT_DW_FUSED_CHAIN` is harmless.
 comptime DW_FUSED_CHAIN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GBDT_DW_FUSED_CHAIN"]()
+    and not is_defined["MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF"]()
 )
 
 #: FAST on Apple, opt-in, stacked on DW_FUSED_CHAIN (lane
@@ -266,11 +272,12 @@ comptime DW_FUSED_CHAIN = (
 #: paths and terminal marks are unchanged. Integer moves only: the same
 #: tree bit for bit. Lossguide, `min_split_gain >= 0` and a level with
 #: nothing to score keep the two-wait schedule.
-#: `-D MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC` is the B arm (with the chain define).
-comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and (
-    is_defined["MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC"]()
-    or is_defined["MOJOLEARN_GBDT_DW_TREE_SYNC"]()
-)
+#: DEFAULT with DW_FUSED_CHAIN (numbers above). `-D
+#: MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC_OFF` turns it off (and DW_TREE_SYNC
+#: with it); the old `-D MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC` is harmless.
+comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and not is_defined[
+    "MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC_OFF"
+]()
 
 #: FAST on Apple, opt-in, stacked on DW_NO_LEVEL_SYNC (lane
 #: apple-fast-depthwise, third pass): a Depthwise TREE takes ONE host wait.
@@ -281,10 +288,11 @@ comptime DW_NO_LEVEL_SYNC = DW_FUSED_CHAIN and (
 #: and counters of every level come home with the end-of-tree partition
 #: stats in one wait; the host replays its bookkeeping from them and
 #: checks the device's lists against its own. Integer moves only: the
-#: same tree. Taken when the level-sync arm would be, with
+#: same tree. Measured noise on the M3, so it stays opt-in. Taken when
+#: the level-sync arm would be, with
 #: `random_strength == 0` (the per-level score noise is drawn per level on
 #: the host) and no identity trace. `-D MOJOLEARN_GBDT_DW_TREE_SYNC` is the
-#: B arm (it implies the level-sync and chain defines).
+#: B arm (it needs the level-sync and chain arms, both FAST Apple defaults).
 comptime DW_TREE_SYNC = DW_NO_LEVEL_SYNC and is_defined[
     "MOJOLEARN_GBDT_DW_TREE_SYNC"
 ]()
@@ -4098,7 +4106,8 @@ def fit_non_symmetric_tree[
                 stage_times.end(ctx, "split.host")
                 var fused_chain = False
                 comptime if DW_FUSED_CHAIN:
-                    fused_chain = use_ridx
+                    # Depthwise only: Lossguide keeps the eight-launch chain
+                    fused_chain = use_ridx and not lossguide
                 if level_synced or tree_sync:
                     # DW_NO_LEVEL_SYNC: the chain already ran behind the fold;
                     # DW_TREE_SYNC: in the device loop
