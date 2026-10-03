@@ -34,6 +34,19 @@ comptime PREP_FAST_MINMAX = (
     and not is_defined["MOJOLEARN_PREP_FAST_MINMAX_OFF"]()
 )
 from checks.numerics import ftz, identical_div, identical_mul
+
+#: lane/apple-fast-gap-cls2 (2026-10-03), FAST + Apple, default OFF:
+#: `-D MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED` folds the fit's nonfinite scan
+#: (core/device_scan.mojo device_first_nonfinite: a second full read of X, a
+#: partials buffer, a host buffer and its own synchronize) into the extrema
+#: pass (`extrema_rows_flag_kernel` / `extrema_finalize_flag_kernel`, one
+#: flag row more in the one download). `-D MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL`
+#: (preprocessing/estimator.mojo) takes the X buffer from a pool kept between
+#: fits instead of a fresh 880 MB allocation per fit at the board's Istella
+#: shape. Both need PREP_FAST_MINMAX. Same keys, same partials, same finalize:
+#: the same words.
+comptime PREP_CLS2_MINMAX_FUSED = PREP_FAST_MINMAX and is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_FUSED"]()
+comptime PREP_CLS2_MINMAX_POOL = PREP_FAST_MINMAX and is_defined["MOJOLEARN_PREP_FAST_CLS2_MINMAX_POOL"]()
 from metrics.checks.device_io import download_f32
 
 
@@ -240,3 +253,99 @@ def minmax_transform_into(
         Int32(n*d),Int32(d),Int32(inverse),Int32(clip),lower,upper,
         grid_dim=(n*d+255)//256,block_dim=256,
     )
+
+
+def extrema_rows_flag_kernel(
+    x: MutPointer[Float32, MutAnyOrigin], n: Int32, d: Int32, tpb: Int32,
+    lows: MutPointer[UInt32, MutAnyOrigin], highs: MutPointer[UInt32, MutAnyOrigin],
+    bad: MutPointer[UInt32, MutAnyOrigin],
+):
+    """`extrema_rows_fast_kernel` (the same keys into the same partials) plus
+    bad[(chunk, column)] = 1 when one of the chunk's words of the column is a
+    NaN or an infinity (by bits, as core/device_scan.mojo's predicate).
+    lane/apple-fast-gap-cls2, PREP_CLS2_MINMAX_FUSED only."""
+    var column = Int(block_idx.y) * Int(tpb) + Int(thread_idx.x)
+    var chunk = Int(block_idx.x)
+    var dd = Int(d)
+    if column >= dd:
+        return
+    var row0 = chunk * FAST_ROWS
+    var row1 = min(row0 + FAST_ROWS, Int(n))
+    var lo = UInt32(0xffffffff)
+    var hi = UInt32(0)
+    var nf = UInt32(0)
+    for row in range(row0, row1):
+        var v = x.unsafe_load(row * dd + column)
+        var k = ordered_key(v)
+        lo = min(lo, k)
+        hi = max(hi, k)
+        if (bitcast[DType.uint32](v) & UInt32(0x7fffffff)) >= UInt32(0x7f800000):
+            nf = UInt32(1)
+    var index = chunk * dd + column
+    lows.unsafe_store(index, lo)
+    highs.unsafe_store(index, hi)
+    bad.unsafe_store(index, nf)
+
+
+def extrema_finalize_flag_kernel(
+    lows: MutPointer[UInt32, MutAnyOrigin], highs: MutPointer[UInt32, MutAnyOrigin],
+    bad: MutPointer[UInt32, MutAnyOrigin],
+    chunks: Int32, d_in: Int32, lower: Float32, upper: Float32,
+    output: MutPointer[Float32, MutAnyOrigin],
+):
+    """`extrema_finalize_kernel`'s five rows (the same arithmetic) and a sixth:
+    1 when any chunk flagged the column, else 0."""
+    var column = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    var d = Int(d_in)
+    if column < d:
+        var lo = UInt32(0xffffffff)
+        var hi = UInt32(0)
+        var nf = UInt32(0)
+        for chunk in range(Int(chunks)):
+            lo = min(lo,lows.unsafe_load(chunk*d+column))
+            hi = max(hi,highs.unsafe_load(chunk*d+column))
+            nf = nf | bad.unsafe_load(chunk*d+column)
+        var data_min = key_value(lo)
+        var data_max = key_value(hi)
+        var data_range = ftz(ftz(data_max)-ftz(data_min))
+        var denominator = Float32(1) if data_range < Float32(0.0000011920928955078125) else data_range
+        var scale = ftz(identical_div(ftz(ftz(upper)-ftz(lower)),denominator))
+        var offset = ftz(ftz(lower)-ftz(identical_mul(ftz(data_min),scale)))
+        output.unsafe_store(column,data_min)
+        output.unsafe_store(d+column,data_max)
+        output.unsafe_store(2*d+column,data_range)
+        output.unsafe_store(3*d+column,scale)
+        output.unsafe_store(4*d+column,offset)
+        output.unsafe_store(5*d+column,Float32(1) if nf != UInt32(0) else Float32(0))
+
+
+def minmax_fit_flagged(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n: Int, d: Int,
+    lower: Float32, upper: Float32,
+) raises -> List[Float32]:
+    """`minmax_fit_fast`'s five rows of d and a sixth row of nonfinite flags,
+    from ONE read of X and one synchronize (PREP_CLS2_MINMAX_FUSED only)."""
+    comptime if not PREP_CLS2_MINMAX_FUSED:
+        raise Error("MinMaxScaler: minmax_fit_flagged is a FAST Apple switch")
+    else:
+        var chunks = (n + FAST_ROWS - 1) // FAST_ROWS
+        var tpb = 256 if d >= 256 else ((d + 31) // 32) * 32
+        var cgroups = (d + tpb - 1) // tpb
+        var lows = ctx.enqueue_create_buffer[DType.uint32](chunks*d)
+        var highs = ctx.enqueue_create_buffer[DType.uint32](chunks*d)
+        var bad = ctx.enqueue_create_buffer[DType.uint32](chunks*d)
+        var output = ctx.enqueue_create_buffer[DType.float32](6*d)
+        ctx.enqueue_function[extrema_rows_flag_kernel](
+            x.unsafe_ptr(), Int32(n), Int32(d), Int32(tpb), lows.unsafe_ptr(), highs.unsafe_ptr(), bad.unsafe_ptr(),
+            grid_dim=(chunks, cgroups), block_dim=tpb,
+        )
+        ctx.enqueue_function[extrema_finalize_flag_kernel](
+            lows.unsafe_ptr(),highs.unsafe_ptr(),bad.unsafe_ptr(),Int32(chunks),Int32(d),lower,upper,output.unsafe_ptr(),
+            grid_dim=(d+255)//256,block_dim=256,
+        )
+        var result = download_f32(ctx,output,6*d)
+        _ = output^
+        _ = bad^
+        _ = highs^
+        _ = lows^
+        return result^
