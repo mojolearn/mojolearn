@@ -232,7 +232,9 @@ def tree_shap_values(forest: List[Int], tscale: Int, cover_in: Int, x: Int, phi:
     var r0 = 0
     while r0 < n:
         var rc = min(rows, n - r0)
-        var xp = F32P(unsafe_from_address=Int(dx.unsafe_ptr()) + r0 * d * 4)
+        # a typed offset of the device pointer, never one rebuilt from an
+        # integer (Metal cannot follow those)
+        var xp = dx.unsafe_ptr() + r0 * d
         var tu = n_trees * rc
         comptime for wi in range(6):
             comptime W = 8 << wi
