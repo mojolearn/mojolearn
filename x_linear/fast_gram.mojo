@@ -40,8 +40,8 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
-#: FAST + Apple default since the M3 A/B (lane/apple-fast-gram 47ab9b791, n=1,
-#: taxi, quality identical: ridge-clf 169 -> 126 ms, ridge-cv 3,888 -> 281 ms);
+#: FAST + Apple default since the M3 re-A/B on lane head c338b88dd (n=1, taxi,
+#: quality the same: ridge-clf 168 -> 122 ms, ridge-cv 3,614 -> 37 ms);
 #: `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restores main's path. Ridge's
 #: unweighted moments (x_linear/ridge_grid.mojo) and k-fold RidgeCV's fold
 #: Grams (x_linear/device.mojo) from `fast_gram_into`.

@@ -534,9 +534,9 @@ comptime XL_APPLE_SLICE_MACS = 1 << 27
 #: lane/apple-fast-gram (2026-10-02), FAST on Apple, build-time switches
 #: (`-D MOJOLEARN_X_LINEAR_LARS_FAST_GRAM`, `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM`;
 #: no env read on the fit path). Both are the FAST + Apple default since the M3
-#: A/B (lane/apple-fast-gram 47ab9b791, n=1, taxi, quality identical: lars
-#: 63.6 -> 14.6 ms, lasso-lars 60.5 -> 15.9 ms, ridge-clf 169 -> 126 ms,
-#: ridge-cv 3,888 -> 281 ms); `-D MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF` /
+A/B (lane/apple-fast-gram 47ab9b791) and the re-A/B on lane head c338b88dd
+#: (n=1, taxi, quality the same: lars 59.1 -> 15.1 ms, lasso-lars 59.1 ->
+#: 14.2 ms, ridge-clf 168 -> 122 ms, ridge-cv 3,614 -> 37 ms); `-D MOJOLEARN_X_LINEAR_LARS_FAST_GRAM_OFF` /
 #: `-D MOJOLEARN_X_LINEAR_RIDGE_FAST_GRAM_OFF` restore main's path, and the old
 #: on-defines stay harmless:
 #: LARS_FAST_GRAM builds Lars / LassoLars' means, centered Gram, X'y and y mean
