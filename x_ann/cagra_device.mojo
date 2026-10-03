@@ -17,6 +17,7 @@ from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue, knn_wide_kernel, KW_TI, KW_TX, KW_TY
 from x_ann.fast_env import CAGRA_FAST_WIDE, CAGRA_FAST_DOT, CAGRA_FAST_IVFG, CAGRA_FAST_IVFG_PROBES
+from x_ann.fast_env import CAGRA_FAST_SEEDS, CAGRA_FAST_SEED_WORK, CAGRA_FAST_ITERS
 from x_ann.cagra_fast_knn import cg_dot_knn_enqueue, cg_ivfg_enqueue
 from max.gpu.host import DeviceBuffer
 
@@ -608,7 +609,7 @@ def cagra_search_device(
 
 def cagra_search_on(
     ctx: DeviceContext, dx: F32P, n: Int, d: Int, dg: I32P, deg: Int, queries: List[Float32], m: Int,
-    k: Int, L: Int, width: Int, max_iter: Int, n_seeds: Int,
+    k: Int, L: Int, width: Int, max_iter_in: Int, n_seeds_in: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], rs: Int = 0,
 ) raises:
     """The search over a dataset and graph already on the device
@@ -616,6 +617,24 @@ def cagra_search_on(
     them): the queries up, the walk, the two outputs down."""
     var words = (n + 31) // 32
     var st = AnnStages("cagra_search")
+    # lane/apple-fast-gap-cagra, FAST on Apple, OPT-IN (x_ann/fast_env.mojo)
+    var n_seeds = n_seeds_in
+    var max_iter = max_iter_in
+    comptime if CAGRA_FAST_SEEDS:
+        var floor = CAGRA_FAST_SEED_WORK // (d if d > 0 else 1)
+        if floor > n:
+            floor = n
+        if n_seeds < floor:
+            n_seeds = floor
+    comptime if CAGRA_FAST_ITERS:
+        var it = 2 * L
+        var reach = 1
+        var fan = deg // 2 if deg // 2 > 2 else 2
+        while reach < n:
+            reach *= fan
+            it += 1
+        if max_iter < it:
+            max_iter = it
     var dq = upload_f32(ctx, queries)
     var bd = ctx.enqueue_create_buffer[DType.float32](m * L)
     var bi = ctx.enqueue_create_buffer[DType.int32](m * L)

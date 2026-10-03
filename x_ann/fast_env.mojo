@@ -52,3 +52,18 @@ comptime CAGRA_FAST_WIDE = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_W
 comptime CAGRA_FAST_DOT = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_DOT"]()
 comptime CAGRA_FAST_IVFG = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_IVFG"]()
 comptime CAGRA_FAST_IVFG_PROBES = 32 if is_defined["MOJOLEARN_CAGRA_FAST_IVFG_P32"]() else 16
+
+#: lane/apple-fast-gap-cagra (2026-10-03), OPT-IN A/B arms for the CAGRA
+#: SEARCH (taxi recall .48 vs faiss .93): taxi's 11 features are integer
+#: codes (zone ids 1..265, hour, day), so each row's 64 nearest rows sit in
+#: its own (pickup, dropoff) cell and the graph splits into near-isolated
+#: components; 96 seeds rarely land in the query's. SEEDS raises the seed
+#: count to at least CAGRA_FAST_SEED_WORK / d rows (taxi 23,831, istella
+#: 1,191; never above n), the walk unchanged. SEEDS4 takes four times that.
+#: ITERS takes at least 2 x itopk_size + log_{deg/2}(n) iterations (cuVS's
+#: auto rule adds the log term; 2x lets the walk converge).
+comptime CAGRA_FAST_SEEDS = ANN_FAST_APPLE and (
+    is_defined["MOJOLEARN_CAGRA_FAST_SEEDS"]() or is_defined["MOJOLEARN_CAGRA_FAST_SEEDS4"]()
+)
+comptime CAGRA_FAST_SEED_WORK = 4 * 262144 if is_defined["MOJOLEARN_CAGRA_FAST_SEEDS4"]() else 262144
+comptime CAGRA_FAST_ITERS = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_ITERS"]()
