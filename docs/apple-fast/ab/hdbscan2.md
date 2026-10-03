@@ -1,6 +1,6 @@
 # lane/apple-fast-hdbscan2: HDBSCAN under FAST on Apple (board lane hdbscan, AFC_FAMILY=classical, taxi and istella)
 
-Four independent build defines plus one that turns them all on, each compiled only under
+Six independent build defines plus one that turns them all on, each compiled only under
 `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()` (`hdbscan/impl/detail/fast_apple.mojo`),
 default OFF; IDENTICAL, every build off Apple and a FAST Apple build without the define compile main's code
 unchanged. No environment read was added. The profile the defines answer is `docs/apple-fast/notes/hdbscan.md`.
@@ -18,7 +18,9 @@ launch bound and a wait after every launch.
 | `-D MOJOLEARN_HDB_CORE_TILE` | taxi (d <= 64 and k <= 16); istella falls back to the k-NN | `hdbscan/impl/detail/core_tile.mojo`, `reachability.mojo::compute_core_dists` |
 | `-D MOJOLEARN_HDB_DEV_BORUVKA` | taxi (the d <= 64 FAST arm) | `hdbscan/impl/cluster/detail/fast_mr_mst_device.mojo`, `single_linkage.mojo::build_mr_linkage` |
 | `-D MOJOLEARN_HDB_ONE_SYNC` | both | `hdbscan/impl/detail/extract.mojo::extract_clusters`, `runner.mojo::fit_hdbscan`, `tree_device.mojo::td_stage_*` |
-| `-D MOJOLEARN_HDBSCAN2_ALL` | both | all four |
+| `-D MOJOLEARN_HDB_LINKAGE_DEVICE` | both | `hdbscan/impl/cluster/detail/dendrogram_union.mojo`, `single_linkage.mojo` (dendrogram call), `tree_device.mojo::_condensed_two_reads` |
+| `-D MOJOLEARN_HDB_SELECT_DEVICE` | both (epsilon 0) | `hdbscan/impl/detail/extract.mojo::_extract_one_read`, `label_points_sel_kernel` |
+| `-D MOJOLEARN_HDBSCAN2_ALL` | both | all six |
 
 ## MOJOLEARN_HDB_SMR_TILED (istella)
 
@@ -110,12 +112,79 @@ Bits. None: the same device words are read.
 
 Risk. None beyond compile (whole-buffer `enqueue_copy` into a host buffer of `len(buf)` words).
 
+## MOJOLEARN_HDB_LINKAGE_DEVICE (both) -- compile owed: peer
+
+What main already does. The single linkage tree and the condense are ALREADY on the device on main (no host
+linkage loop exists any more): both FAST MST arms emit the edges sorted by (weight key, lo, hi), so no sort is
+needed; `hierarchy/.../dendrogram_device.mojo::build_dendrogram_device` builds the dendrogram by a divide and
+conquer over the edge index with parallel union-find per level; `tree_device.mojo::build_condensed_device`
+condenses with min_cluster_size by pointer jumping and radix sorts. What is left is WAITS: the dendrogram's
+17 levels each loop (memset flag, hook, jump, 1-word readback, synchronize) until no hook fires (~40 waits at
+m = 100,000), and the condense waits eight times (delta refusal, two MST-check reads, n_split, a wait after
+the rank, max_cdepth, lambda refusal, closing synchronize).
+
+Mechanism. (1) Dendrogram (`dendrogram_union.mojo`): each level's hook loop becomes ONE launch of a lock-free
+union-find, one thread per lower-half edge: find both roots by relaxed atomic loads, CAS the larger root to the
+smaller, retry from the roots when another thread's hook won. Roots are only ever hooked under smaller roots, so
+the final root of every component is its smallest label, exactly where main's converged min-label hooking ends;
+main's jump / top / size / relabel kernels then run unchanged. 7 launches per level, no flag, no readback, no
+closing wait. (2) Condense (`_condensed_two_reads`): the same kernels in the same order; the delta refusal, the
+MST check and n_split come back in ONE 4-word read (the refusals raised in main's order with main's messages and
+the same first index, an integer Atomic.min), and max_cdepth with the lambda refusal in a second 2-word read;
+the split-flag kernel bounds-checks children so an invalid MST is refused before anything reads out of range.
+
+Expected effect. ~46 fewer waits per fit on either dataset (each ~0.2 ms plus the per-live-buffer cost),
+plus ~30 fewer flag launches. A few to ~15 ms; the A/B decides.
+
+Bits. None: integer work only, the same dendrogram and condensed tree as main's FAST route, so labels and
+probabilities are identical.
+
+Risk. The CAS loop is the first lock-free union in hdbscan on Metal (Atomic.compare_exchange on Int32 device
+memory is already used on Apple by core/device_mutex.mojo); a compile or pipeline failure shows at the peer's
+build. Not compiled here (compile owed: peer).
+
+## MOJOLEARN_HDB_SELECT_DEVICE (both, epsilon 0) -- compile owed: peer
+
+What main already does. Stabilities (fixed blocked fold), EOM (one launch per cluster-tree level), the
+deselection (pointer jumping), the label maps (scan), the labels (pointer jumping), the stability scores and the
+probabilities all run on the device on main. What is left: a synchronize after the stabilities, after the
+negation, after the selection and after the labelling, the selected count read back (it feeds the labelling's
+root rule and two output sizes), the stability scores downloaded on their own, then the eight output downloads
+(one wait under ONE_SYNC).
+
+Mechanism. `_extract_one_read`: the same kernels in the same order with no wait between them. The selected count
+stays on the device (`off[n_clusters]` after the scan); the labelling's root rule (`n_selected == 1 and
+allow_single_cluster`) is read there by `label_points_sel_kernel`; the scores land in an n_clusters-long buffer
+(the kernel writes only slots < n_selected); every output plus the count comes back in ONE readback (one
+synchronize for the whole extract). Leaf selection is supported (one `leaf_kernel` launch). With
+cluster_selection_epsilon != 0 main's route runs (the epsilon search decides on the host whether it runs from
+the selected count; the board runs epsilon 0).
+
+Why EOM stays level by level. The EOM recurrence is a tree DP whose float sum must keep its order
+(0 + stab[k0] + stab[k1], `identical_mul_add`): a scan or pointer-jumping form reassociates the sums and moves
+bits, and a single-launch "last child to arrive continues" form needs a device-scope release/acquire between
+threadgroups, which Metal does not order (`fence` fails at pipeline creation on Apple, core/device_mutex.mojo).
+So the closest correct parallel form is main's: one launch per level, all cluster-tree nodes of a level in
+parallel, with no wait between levels. That is what runs here.
+
+Expected effect. ~6 to 13 fewer waits per fit (13 against main, 6 against ONE_SYNC), and one host buffer per
+output instead of a staged copy chain. Small, a few ms.
+
+Bits. None: the same device words, so labels, probabilities, stabilities and scores are main's.
+
+Risk. Low. Composes with ONE_SYNC (this path does its own single readback; ONE_SYNC's runner staging still
+applies). Not compiled here (compile owed: peer).
+
 ## MOJOLEARN_HDBSCAN2_ALL
 
-All four at once (the switches touch different stages: k-NN, MST, outputs). On taxi: CORE_TILE + DEV_BORUVKA +
-ONE_SYNC; on istella: SMR_TILED + ONE_SYNC. Where ALL beats the best single define, the stages compose; where
+All six at once (the switches touch different stages: k-NN, MST, dendrogram + condense, extract, outputs). On
+taxi: CORE_TILE + DEV_BORUVKA + LINKAGE_DEVICE + SELECT_DEVICE + ONE_SYNC; on istella: SMR_TILED +
+LINKAGE_DEVICE + SELECT_DEVICE + ONE_SYNC. Tags `hdbscan2-all-*` are the four-define ALL of head 6631889a3;
+`hdbscan2-all6-*` are the six-define ALL (compile owed: peer). Where ALL beats the best single define, the stages compose; where
 it does not, read the single lines.
 
 ## Compile record (2026-10-03, head 6631889a3, compile only, nothing run)
 FAST + `-D MOJOLEARN_HDBSCAN2_ALL` rc=0; FAST + `HDB_CORE_TILE` rc=0; FAST + `HDB_DEV_BORUVKA` rc=0;
 FAST + `HDB_ONE_SYNC` rc=0; FAST + `HDB_SMR_TILED` rc=0; FAST, no define, rc=0; IDENTICAL rc=0.
+LINKAGE_DEVICE and SELECT_DEVICE (added after cac2b2a53): NOT compiled in this lane (Andrew, 2026-10-03: compile
+slots jammed, the M3 peer compiles). Compile owed: peer -- FAST + each new define, FAST ALL, FAST off, IDENTICAL.

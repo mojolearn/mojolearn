@@ -96,4 +96,16 @@ No mutual reachability matrix is formed on either arm; weights are computed insi
   min-edge, hook and jump kernels) with hierarchy's search kernels; no host union-find, no m-word readbacks,
   no host sort; 3 status words per round (taxi).
 - MOJOLEARN_HDB_ONE_SYNC: the extract's 8 and the runner's 6 output waits become 2.
-- MOJOLEARN_HDBSCAN2_ALL: all four.
+- MOJOLEARN_HDB_LINKAGE_DEVICE: main already builds the linkage and the condense on the device (no host
+  linkage loop; the MST edges arrive sorted, so no sort). The define removes what is left: the dendrogram's
+  per-level (hook, jump, flag readback, synchronize) loop becomes ONE lock-free CAS union launch per level
+  (~40 waits -> 0, same roots = component minimum, same integers), and the condense's eight waits become two
+  status readbacks (delta refusal + MST check + n_split; max_cdepth + lambda refusal). Bits unchanged.
+- MOJOLEARN_HDB_SELECT_DEVICE: main already runs stabilities, EOM / leaf, labels, scores and probabilities on
+  the device. The define removes the waits between them and the selected-count and scores readbacks: one
+  readback for the whole extract (labels, probabilities, the rest, and the count). EOM stays one launch per
+  cluster-tree level: its ordered float sums forbid a scan or pointer-jumping form, and a single-launch
+  last-arriver form needs a cross-threadgroup fence Metal does not give. Epsilon != 0 keeps main's route.
+  Bits unchanged.
+- MOJOLEARN_HDBSCAN2_ALL: all six.
+- LINKAGE_DEVICE and SELECT_DEVICE: compile owed: peer (not compiled in this lane, Andrew 2026-10-03).
