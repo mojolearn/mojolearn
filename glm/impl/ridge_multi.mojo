@@ -63,7 +63,7 @@ def _ridge_ycol_kernel(
 
 
 def _ridge_predict_multi_kernel(
-    out: MutPointer[Float32, MutAnyOrigin],
+    y_out: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
     coef: MutPointer[Float32, MutAnyOrigin],
     icpt: MutPointer[Float32, MutAnyOrigin],
@@ -71,7 +71,7 @@ def _ridge_predict_multi_kernel(
     d_in: Int32,
     m_in: Int32,
 ):
-    """out[i, j] = icpt[j] + x[i, :] . coef[j, :]: one thread per row, the
+    """y_out[i, j] = icpt[j] + x[i, :] . coef[j, :]: one thread per row, the
     row read once for every target."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(n_in):
@@ -82,7 +82,7 @@ def _ridge_predict_multi_kernel(
         var acc = icpt.unsafe_load(j)
         for c in range(d):
             acc = acc + x.unsafe_load(i * d + c) * coef.unsafe_load(j * d + c)
-        out.unsafe_store(i * m + j, acc)
+        y_out.unsafe_store(i * m + j, acc)
 
 
 def _elem_grid(n: Int) -> Int:
@@ -203,23 +203,23 @@ def ridge_predict_multi_host(
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
     var coef = ctx.enqueue_create_buffer[DType.float32](n_targets * n_cols)
     var icpt = ctx.enqueue_create_buffer[DType.float32](n_targets)
-    var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_targets)
+    var out_buf = ctx.enqueue_create_buffer[DType.float32](n_rows * n_targets)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     ctx.enqueue_copy(dst_buf=coef, src_ptr=coef_ptr)
     ctx.enqueue_copy(dst_buf=icpt, src_ptr=icpt_ptr)
     ctx.synchronize()
     ctx.enqueue_function[_ridge_predict_multi_kernel](
-        out.unsafe_ptr(), x.unsafe_ptr(), coef.unsafe_ptr(), icpt.unsafe_ptr(),
+        out_buf.unsafe_ptr(), x.unsafe_ptr(), coef.unsafe_ptr(), icpt.unsafe_ptr(),
         Int32(n_rows), Int32(n_cols), Int32(n_targets),
         grid_dim=((n_rows + _ROW_TPB - 1) // _ROW_TPB, 1, 1), block_dim=(_ROW_TPB, 1, 1),
     )
     var hout = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_targets)
-    ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out)
+    ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out_buf)
     ctx.synchronize()
     for i in range(n_rows * n_targets):
         out_ptr.unsafe_store(i, hout.unsafe_ptr().unsafe_load(i))
     _ = hout^
-    _ = out^
+    _ = out_buf^
     _ = icpt^
     _ = coef^
     _ = x^
