@@ -2,8 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MiniBatchKMeans, FAST on Apple: X uploaded straight from the caller's
 array (lane/apple-fast-mbkspeed, 2026-10-03). Switch: `MBK_ZEROCOPY`
-below, OPT-IN (`-D MOJOLEARN_MBK_ZEROCOPY=1`) while the M3 A/B is owed;
-taken by bindings/_mojolearn_x_cluster.mojo for ENTRY_MINIBATCH.
+below, DEFAULT on FAST+Apple since the M3 A/B (lane/apple-fast-mbkspeed
+d844f180a, n=1: minibatch-kmeans istella 351 -> 256 ms, taxi 51.1 -> 48.5 ms,
+silhouette identical .1182 / .138); `-D MOJOLEARN_MBK_ZEROCOPY_OFF` turns it
+off (the old `-D MOJOLEARN_MBK_ZEROCOPY` is harmless); taken by bindings/_mojolearn_x_cluster.mojo for ENTRY_MINIBATCH.
 
 Cause: the binding copies X into a FRESH host list (`read_f32`,
 bindings/_mojolearn_x_cluster.mojo `call_binding`) before `ops.put` uploads
@@ -36,8 +38,8 @@ from x_cluster.out import ClusterOut
 
 comptime MBK_ZEROCOPY = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and MINIBATCH_FAST_DEV
-    and is_defined["MOJOLEARN_MBK_ZEROCOPY"]()
-)
+    and not is_defined["MOJOLEARN_MBK_ZEROCOPY_OFF"]()
+)  # default since the M3 A/B (docstring above); MINIBATCH_FAST_DEV is required
 
 comptime XPtr = MutPointer[Float32, MutUntrackedOrigin]
 

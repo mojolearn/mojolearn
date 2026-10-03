@@ -27,7 +27,8 @@ def call_binding(
     var w = Int(py=which)
     var nx = Int(py=x_len)
     var na = Int(py=a_len)
-    # lane/apple-fast-mbkspeed, FAST on Apple, OPT-IN (-D MOJOLEARN_MBK_ZEROCOPY=1):
+    # lane/apple-fast-mbkspeed, FAST on Apple, DEFAULT since the M3 A/B
+    # (off: -D MOJOLEARN_MBK_ZEROCOPY_OFF):
     # MiniBatchKMeans uploads X from the caller's array, no host copy
     # (x_cluster/minibatch_ptr.mojo); False falls through to the copy below
     comptime if MBK_ZEROCOPY:
