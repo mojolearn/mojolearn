@@ -3565,6 +3565,20 @@ def _kdot(k, a, b):
     return float(k.mm(a, b, ta=True).s[0])
 
 
+def _lanczos_dev_batch(k, aid, Qd, ABd, ab, n, j, m, cap, alphas, betas):
+    """Steps j .. m-1 on the device, then their alphas and betas appended up to
+    the first stop (`_lanczos_top`'s breakdown test). Returns (j, stop)."""
+    k.b.x_decomp_dev_lanczos(aid, Qd._d.id, ABd._d.id, [n, j, m, cap])
+    k.b.x_decomp_dev_download(ABd._d.id, ab.buffer_info()[0], 2 * cap)
+    for jj in range(j, m):  # glue: per-step scalars, at most _LANCZOS_MAX_M
+        a, b = float(ab[jj]), float(ab[cap + jj])
+        alphas.append(a)
+        betas.append(b)
+        if b <= 1e-30 * max(1.0, abs(a)) or jj + 1 == n:  # glue: two scalars
+            return jj + 1, True
+    return m, False
+
+
 def _lanczos_top(k, A, nc):
     """The nc largest eigenpairs of symmetric A by Lanczos with full
     reorthogonalization (classical Gram-Schmidt, twice), every product on
@@ -3576,8 +3590,6 @@ def _lanczos_top(k, A, nc):
     route never returns a less converged answer than it promises. The start
     vector is a seeded uniform draw centred at 0 (a constant vector is
     orthogonal to a centred kernel's spectrum)."""
-    if _lanczos_dev_on(k, A):
-        return _lanczos_top_dev(k, A, nc)
     n = A.r
     q = k.ew("adds", k.rand(n, 1, 0x1A2C05, 91, 0), s=-0.5)
     q = k.ew("scale", q, s=1.0 / math.sqrt(_kdot(k, q, q)))
@@ -3586,7 +3598,23 @@ def _lanczos_top(k, A, nc):
     m = min(n, max(2 * nc + 1, 20))
     j = 0
     stop = False
+    dev = _lanczos_dev_on(k, A)
+    if dev:
+        # lane/apple-fast-gap-linalg2-kpca (-D MOJOLEARN_KPCA_FAST_LANCZOS_DEV,
+        # x_decomp/lanczos_dev.mojo): the basis on the device (row j = q_j),
+        # each batch of steps enqueued in Mojo and its alphas and betas read
+        # in ONE download; the restart test and the Ritz extraction below
+        # are this route's
+        cap = min(n, _LANCZOS_MAX_M)
+        Qd = k._dout(cap + 1, n)
+        qs = q.s
+        k.b.x_decomp_dev_upload(Qd._d.id, qs.buffer_info()[0], n)
+        ABd = k._dout(1, 2 * cap)
+        aid = k._did(A)
+        ab = array.array("f", [0.0]) * (2 * cap)
     while True:
+        if dev and j < m and not stop:
+            j, stop = _lanczos_dev_batch(k, aid, Qd, ABd, ab, n, j, m, cap, alphas, betas)
         while j < m and not stop:
             QT.extend(q.s)
             w = k.mm(A, q)
@@ -3622,7 +3650,8 @@ def _lanczos_top(k, A, nc):
             return None
         m = min(n, 2 * m, _LANCZOS_MAX_M)
     Yt = Y.take_cols(top)
-    V = k.mm(_M(QT[:j * n], j, n), Yt, ta=True)
+    QM = _M._on_device(Qd._d, j, n) if dev else _M(QT[:j * n], j, n)
+    V = k.mm(QM, Yt, ta=True)
     return th.take_cols(top), V
 
 
@@ -3643,57 +3672,6 @@ def _lanczos_dev_on(k, A):
         return False
     n = A.r
     return on == 1 and (min(n, _LANCZOS_MAX_M) + 1) * n <= _LANCZOS_DEV_MAX_FLOATS
-
-
-def _lanczos_top_dev(k, A, nc):
-    """`_lanczos_top` with the steps on the device (x_decomp/lanczos_dev.mojo):
-    the same start vector, basis growth, restart test and Ritz extraction;
-    the alphas and betas of a batch of steps read in ONE download."""
-    n = A.r
-    q = k.ew("adds", k.rand(n, 1, 0x1A2C05, 91, 0), s=-0.5)
-    q = k.ew("scale", q, s=1.0 / math.sqrt(_kdot(k, q, q)))
-    cap = min(n, _LANCZOS_MAX_M)
-    Q = k._dout(cap + 1, n)
-    qs = q.s
-    k.b.x_decomp_dev_upload(Q._d.id, qs.buffer_info()[0], n)
-    AB = k._dout(1, 2 * cap)
-    aid = k._did(A)
-    ab = array.array("f", [0.0]) * (2 * cap)
-    alphas, betas = [], []
-    m = min(n, max(2 * nc + 1, 20))
-    j = 0
-    stop = False
-    while True:
-        if j < m and not stop:
-            k.b.x_decomp_dev_lanczos(aid, Q._d.id, AB._d.id, [n, j, m, cap])
-            k.b.x_decomp_dev_download(AB._d.id, ab.buffer_info()[0], 2 * cap)
-            for jj in range(j, m):
-                a, b = float(ab[jj]), float(ab[cap + jj])
-                alphas.append(a)
-                betas.append(b)
-                j = jj + 1
-                if b <= 1e-30 * max(1.0, abs(a)) or j == n:
-                    stop = True
-                    break
-        T = [0.0] * (j * j)
-        for i in range(j):
-            T[i * j + i] = alphas[i]
-            if i + 1 < j:
-                T[i * j + i + 1] = T[(i + 1) * j + i] = betas[i]
-        th, Y = k.eigh(_M.of(T, j, j))
-        top = list(range(j - 1, max(j - 1 - nc, -1), -1))
-        if len(top) < nc:
-            return None
-        big = max(abs(th.s[i]) for i in top) or 1.0
-        res = [abs(betas[j - 1] * Y.s[(j - 1) * j + i]) for i in top]
-        if stop or max(res) <= _LANCZOS_TOL * big:
-            break
-        if m >= min(n, _LANCZOS_MAX_M):
-            return None
-        m = min(n, 2 * m, _LANCZOS_MAX_M)
-    Yt = Y.take_cols(top)
-    V = k.mm(_M._on_device(Q._d, j, n), Yt, ta=True)
-    return th.take_cols(top), V
 
 
 def _top_eig(k, A, nc, topk=False):
