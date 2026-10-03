@@ -100,7 +100,27 @@ construction). The judge is tools/neural_fast_quality.py through afn_ab.sh.
   MOJOLEARN_AFN_<NAME>" bash bindings/build_mamba.sh`. The script exports
   MOJOLEARN_SKIP_BUILD_GATE=1 itself, so no build here imported or ran the
   binding; the AIR-blob and otool checks (strings/otool only) still run.
-- Compile results are in the final commit message of this lane.
+- Compile table (2026-10-03). Andrew's change of plan: lanes stop compiling,
+  the M3 manager peer compiles everything.
+
+| build | status here |
+|---|---|
+| FAST + `-D MOJOLEARN_AFN_MAMBA_ALL` | compiled once, rc=1 at the front end with 9 errors in two causes, both FIXED in source and not recompiled: `MAMBA_GUARD` not imported in mamba2.mojo; the SSD MMA launches passed one buffer's pointer mutably twice (now `unsafe_origin_cast[MutAnyOrigin]`). No other front-end error was reported; Metal kernel codegen was never reached. UNCOMPILED after the fixes (peer compiles). |
+| FAST + MAMBA1_CHUNKSCAN | UNCOMPILED (peer compiles) |
+| FAST + MAMBA1_FUSE_IN | UNCOMPILED (peer compiles) |
+| FAST + MAMBA2_SSD_MMA | UNCOMPILED (peer compiles) |
+| FAST + MAMBA3_SISO_FUSED | UNCOMPILED (peer compiles) |
+| FAST + MAMBA_ARENA | UNCOMPILED (peer compiles) |
+| FAST + MAMBA_DEVICE_REFUSAL | UNCOMPILED (peer compiles) |
+| FAST, no afn define | UNCOMPILED (peer compiles) |
+| IDENTICAL | UNCOMPILED (peer compiles) |
+
+  Watch for, in the peer's builds: single-define builds take arms the ALL
+  build did not (for example mamba3.mojo's `SISO_FUSED or ARENA` wait
+  helper with only one of the two on); and the IDENTICAL/NVIDIA/AMD builds
+  must not instantiate any afn kernel (every afn launch wrapper is reached
+  only through a `comptime if` on its switch; afn_ssd_mma.mojo's wrappers
+  guard themselves because ssd_forward's call site is a runtime flag).
 - Not touched: the *_backward files (afn-samba owns them), training/**,
   gemm/**. modeling_mamba.mojo (mamba/impl/modeling, the Mamba-1 forward)
   is edited only behind the switches.

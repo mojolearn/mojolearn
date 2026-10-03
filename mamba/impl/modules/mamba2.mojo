@@ -107,6 +107,7 @@ from mamba.impl.modules.afn_refusal import AfnRefusalBatch
 from mamba.impl.modeling.modeling_mamba import (
     mamba_a_from_a_log_kernel,
     mamba_download,
+    MAMBA_GUARD,
     MAMBA_POISON_OVERREAD,
     mamba_rms_norm,
     mamba_upload,

@@ -311,12 +311,12 @@ def afn_m2_cb_g_mma(
         comptime kern = afn_m2_mma_kernel[AFN_MMA_MODE_CB, 64]
         var tiles = (qv // AFN_MMA_BM) * (qv // 64)
         ctx.enqueue_function[kern](
-            cb_g.unsafe_ptr(),
-            cb_g.unsafe_ptr(),
-            cb_g.unsafe_ptr(),
-            xbc_work.unsafe_ptr(),
-            xbc_work.unsafe_ptr(),
-            xbc_work.unsafe_ptr(),
+            cb_g.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            cb_g.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            cb_g.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            xbc_work.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            xbc_work.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            xbc_work.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             Int32(b),
             Int32(t_work),
             Int32(1),
@@ -348,12 +348,12 @@ def afn_m2_ydiag_mma(
         comptime kern = afn_m2_mma_kernel[AFN_MMA_MODE_YDIAG, M2_HEADDIM]
         var tiles = qv // AFN_MMA_BM
         ctx.enqueue_function[kern](
-            ydiag.unsafe_ptr(),
-            cb_g.unsafe_ptr(),
-            seg_l.unsafe_ptr(),
-            xd.unsafe_ptr(),
-            xd.unsafe_ptr(),
-            xd.unsafe_ptr(),
+            ydiag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            cb_g.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            seg_l.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            xd.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            xd.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            xd.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             Int32(b),
             Int32(t_work),
             Int32(nh),
@@ -388,12 +388,12 @@ def afn_m2_cstate_mma(
         comptime kern = afn_m2_mma_kernel[AFN_MMA_MODE_CSTATE, 32]
         var tiles = M2_D_STATE // 32
         ctx.enqueue_function[kern](
-            cstate.unsafe_ptr(),
-            cstate.unsafe_ptr(),
-            cstate.unsafe_ptr(),
-            xd.unsafe_ptr(),
-            xbc_work.unsafe_ptr(),
-            decay.unsafe_ptr(),
+            cstate.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            cstate.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            cstate.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            xd.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            xbc_work.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            decay.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             Int32(b),
             Int32(t_work),
             Int32(nh),
