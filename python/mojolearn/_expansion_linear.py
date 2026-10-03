@@ -186,10 +186,8 @@ class _LinearClassifierMixin:
         return decode_labels(self.classes_, codes)
 
     def score(self, X, y):
-        pred = self.predict(X)
-        pred = pred.tolist() if hasattr(pred, "tolist") else list(pred)
-        truth = y.tolist() if hasattr(y, "tolist") else list(y)
-        return sum(1 for a, b in zip(pred, truth) if a == b) / max(len(truth), 1)
+        from ._expansion_metrics import accuracy_fraction
+        return accuracy_fraction(y, self.predict(X))
 
 
 class _LinearRegressorMixin:
@@ -204,12 +202,11 @@ class _LinearRegressorMixin:
         return out.reshape((out.shape[0],))
 
     def score(self, X, y):
-        pred = self.predict(X).tolist()
-        truth = y.tolist() if hasattr(y, "tolist") else list(y)
-        mean = _pm.nsum(truth) / len(truth)
-        ss_res = _pm.nsum((a - b) * (a - b) for a, b in zip(truth, pred))
-        ss_tot = _pm.nsum((a - mean) * (a - mean) for a in truth)
-        return 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+        # R^2 on the device (the metrics binding's pinned-sum r2_score)
+        from ._metrics_impl import r2_score
+        pred, _ = as_f32_c(self.predict(X), ndim=1, name="prediction")
+        truth, _ = as_f32_c(y, ndim=1, name="y")
+        return r2_score(truth, pred)
 
 
 # ---------------------------------------------------------------------- SGD

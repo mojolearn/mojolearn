@@ -818,6 +818,22 @@ def accuracy_count(y_true, y_pred, sample_weight, numeric_mode):
     return float(hit) if s.weighted else int(hit)
 
 
+def accuracy_fraction(y_true, y_pred, sample_weight=None, numeric_mode=None):
+    """sklearn's ClassifierMixin.score / accuracy_score over labels of any
+    kind: the (weighted) match count from `accuracy_count` (the x_metrics
+    binding's grouped sums) over the row count or the weight total (the
+    base binding's sum). Lane cgr4-py-compute: the estimators' `score`
+    methods called this instead of a per-row Python comparison."""
+    hit = accuracy_count(y_true, y_pred, sample_weight, numeric_mode)
+    if sample_weight is None:
+        from ._metrics_impl import _shape_of
+        n = int(_shape_of(y_true)[0])
+        return float(hit) / max(n, 1)
+    from ._buffer import as_f64_c
+    w, _ = as_f64_c(sample_weight, ndim=1, name="sample_weight")
+    return float(hit) / w.sum()
+
+
 def class_likelihood_ratios(y_true, y_pred, *, labels=None, sample_weight=None,
                             replace_undefined_by=float("nan"), numeric_mode=None):
     """scikit-learn 1.9 `class_likelihood_ratios` (binary targets): LR+ and

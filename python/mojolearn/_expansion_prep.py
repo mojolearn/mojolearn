@@ -1965,10 +1965,8 @@ class _Classifier(_PrepBase):
         return pr.get(o["jll"], (n, K))
 
     def score(self, X, y):
-        pred = self.predict(X)
-        truth = list(y.tolist() if hasattr(y, "tolist") else y)
-        pred = list(pred.tolist() if hasattr(pred, "tolist") else pred)
-        return sum(1 for a, b in zip(pred, truth) if a == b) / max(len(truth), 1)
+        from ._expansion_metrics import accuracy_fraction
+        return accuracy_fraction(y, self.predict(X))
 
 
 def _nb_weights(pr, sample_weight, n):
