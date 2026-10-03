@@ -480,7 +480,7 @@ def _apply_last_tree_to_test(
         var used = vals_at + p_values
         var d_used = test.d_vals.create_sub_buffer[DType.float32](0, used)
         ctx.enqueue_copy(dst_buf=d_used, src_ptr=hv)
-        var dv = test.d_vals.unsafe_ptr()
+        var dv = test.d_vals.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var dw = dv.bitcast[UInt32]()
         var p_wide = (n + 255) // 256
         if p_wide > 1024:

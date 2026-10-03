@@ -74,9 +74,7 @@ comptime BPE_CHUNK = 64
 comptime BPE_MAX_VOCAB = 46340
 comptime KEY_NONE = Int32(2147483647)
 
-# Fits gate: the two shared K-lists of one threadgroup (counts and keys, int32) in Apple's 32 KiB.
-comptime assert BPE_RT * BPE_K * 8 <= 32768, "bpe_device: the top-K partial lists exceed 32 KiB of threadgroup memory"
-comptime assert BPE_RB * BPE_K * 8 <= 32768, "bpe_device: the selection lists exceed 32 KiB of threadgroup memory"
+# Fits gate (in `_train_passes`): the two shared K-lists of one threadgroup (counts and keys, int32) in Apple's 32 KiB.
 
 # state words
 comptime S_DONE = 0
@@ -724,6 +722,8 @@ def _train_passes(
 ) raises:
     """Upload the groups, count every pair, run passes until the selection says done, read the
     state words into h_st and the merges into h_mrg."""
+    comptime assert BPE_RT * BPE_K * 8 <= 32768, "bpe_device: the top-K partial lists exceed 32 KiB of threadgroup memory"
+    comptime assert BPE_RB * BPE_K * 8 <= 32768, "bpe_device: the selection lists exceed 32 KiB of threadgroup memory"
     var ng = groups.n()
     var syms = len(groups.arena)
     var mcap = 2 * (vocab_size - 256)

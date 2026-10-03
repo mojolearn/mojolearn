@@ -1003,7 +1003,8 @@ def op_knn_sq_tiled(
             var d_idx = _buf_i(ctx, 0, n * k, False)
             fast_mma_knn(ctx, d_x, d_y, c_d, c_i, n, m, d, kk, False)
             ctx.enqueue_function[knn_mma_finish_kernel](
-                c_d.unsafe_ptr(), c_i.unsafe_ptr(), d_dist.unsafe_ptr(), d_idx.unsafe_ptr(),
+                c_d.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), c_i.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                d_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
                 Int64(n), Int64(k), Int64(kk), Int64(exclude_self),
                 grid_dim=(n + KNN_TILE_TPB - 1) // KNN_TILE_TPB, block_dim=KNN_TILE_TPB,
             )
