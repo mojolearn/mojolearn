@@ -359,4 +359,3 @@ comptime INT15_MAX_K = 65536
 
 #: The int15 profile version the bindings read back.
 comptime INT15_PROFILE_VERSION = 1
-

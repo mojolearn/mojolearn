@@ -61,7 +61,6 @@ from gemm.host.gemm_oracle import (
 #: L-7) and the profile version: in gemm/contract.mojo, which the device
 #: kernels import instead of this oracle.
 from gemm.contract import INT8_MAX_K, LOWBIT_PROFILE_VERSION
-from gemm.f16_widen import f16_bits_to_f32
 
 #: THE CONVERSION SEAMS' OWN NEGATIVE CONTROL (lane/laneless-public-classes,
 #: 2026-09-19). The four functions below -- `widen_bf16`, `narrow_bf16`,
@@ -94,15 +93,6 @@ comptime LOWBIT_CONVERT_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_CONVERT_SABOTAGE
 # ===========================================================================
 # bf16f32.v1
 # ===========================================================================
-
-
-def widen_f16(bits: List[UInt16]) -> List[Float32]:
-    """IEEE float16 bits to float32, every element exactly
-    (`gemm/contract.mojo::f16_bits_to_f32`), in index order."""
-    var out = List[Float32](capacity=len(bits))
-    for i in range(len(bits)):
-        out.append(f16_bits_to_f32(bits[i]))
-    return out^
 
 
 def widen_bf16(bits: List[UInt16]) -> List[Float32]:

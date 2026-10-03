@@ -96,13 +96,14 @@ from gemm.checks.gemm_lowbit import (
     LowbitWorkspace,
     bf16_narrow,
     bf16_widen,
-    f16_widen,
     dequantize_rows_int8_device,
     identical_gemm_bf16w_into,
     identical_gemm_int8_into,
     quantize_rows_int8_device,
 )
 from gemm.contract import INT8_MAX_K, LOWBIT_PROFILE_VERSION
+from gemm.f16_widen import f16_bits_to_f32
+from std.gpu import block_dim, block_idx, thread_idx
 from gemm.checks.gemm_int15 import (
     Int15QuantWorkspace,
     dequantize_planes_int15_device,
@@ -753,6 +754,22 @@ def from_bf16_binding(
         ctx.synchronize()
     return PythonObject(count)
 
+def f16_widen_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[UInt16, MutAnyOrigin],
+    n_in: Int32,
+):
+    """IEEE float16 bits to float32 (`gemm/f16_widen.mojo`), one element
+    per thread."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    dst.unsafe_store(i, f16_bits_to_f32(src.unsafe_load(i)))
+
+
+comptime F16_WIDEN_TPB = 256
+
+
 def from_f16_binding(
     dst_addr: PythonObject, src_addr: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -771,7 +788,13 @@ def from_f16_binding(
         var ctx = process_ctx[_DEVCTX_SLOT]()
         var dsrc = _dev_u16(ctx, src_address, count)
         var ddst = ctx.enqueue_create_buffer[DType.float32](count)
-        f16_widen(ctx, ddst, dsrc, count)
+        ctx.enqueue_function[f16_widen_kernel](
+            ddst.unsafe_ptr(),
+            dsrc.unsafe_ptr(),
+            Int32(count),
+            grid_dim=((count + F16_WIDEN_TPB - 1) // F16_WIDEN_TPB, 1, 1),
+            block_dim=(F16_WIDEN_TPB, 1, 1),
+        )
         ctx.synchronize()
         ctx.enqueue_copy(dst_ptr=f32_ptr(dst_address), src_buf=ddst)
         ctx.synchronize()
