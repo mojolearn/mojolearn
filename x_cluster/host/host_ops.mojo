@@ -700,6 +700,13 @@ struct HostOps(ClusterOps):
                     optics_relax_cell(pd, n, point, cp, max_eps, pdone, pr, pp, o)
         _ = done^
 
+    def optics_fast(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, sq: Bool,
+        mut ordering: List[Int32], mut reach: List[Float32], mut core_out: List[Float32], mut pred: List[Int32],
+    ) raises -> Bool:
+        # the host column never takes the FAST device paths (`fast_device`)
+        return False
+
     def optics_dbscan(mut self, ordering: Int, reach: Int, core: Int, n: Int, eps: Float32, labels: Int) raises:
         var po = self._ip(ordering)
         var pr = self._fp(reach)

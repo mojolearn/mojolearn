@@ -21,6 +21,7 @@ the ratios in Float64 from the Float32 plot. sklearn's `np.around(...,
 decimals=precision)` of the core and reach distances is not carried
 (NOT_IMPLEMENTED.tsv)."""
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul64
 from x_cluster.bodies import FPtr, IPtr
@@ -39,10 +40,36 @@ comptime XC_ALLOC = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEAR
 # (hr-optin-flags): the loop reads the device's n x n distances.
 comptime _OW = 8
 
+# lane/apple-fast-optics2 (2026-10-03), FAST on Apple ONLY, every switch a
+# build define, default OFF; IDENTICAL, the host binding and a FAST build
+# without a define compile main's code (docs/apple-fast/notes/optics2.md
+# has the profile, docs/apple-fast/ab/optics2.md the experiments). The
+# ordering is `DeviceOps.optics_fast` (x_cluster/optics_fast.mojo kernels):
+# `MOJOLEARN_OPTICS_STEP_BATCH`: one threadgroup runs 512 ordering steps per
+#   launch (n/512 launches instead of 2n);
+# `MOJOLEARN_OPTICS_FRONTIER_DEVICE`: one fused launch per step (relax and
+#   emit the next step's block minima; STEP_BATCH wins when both are set);
+# `MOJOLEARN_OPTICS_CORE_SQ`: no sqrt pass over the n x n matrix (kth on the
+#   squared cells, sqrt of the n core values, sqrt at use in the relaxation);
+# `MOJOLEARN_OPTICS_LIVEBUF`: no memset of kernel-filled slots, the four
+#   outputs in two paired buffers, one readback synchronize;
+# `MOJOLEARN_OPTICS2_ALL`: STEP_BATCH + CORE_SQ + LIVEBUF.
+# Same picks (lowest reachability, lowest index on a tie), same relaxation,
+# same words as main's `optics_order` and the host column.
+comptime OPTICS_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime OPTICS2_ALL = OPTICS_FAST_APPLE and is_defined["MOJOLEARN_OPTICS2_ALL"]()
+comptime OPTICS_STEP_BATCH = OPTICS_FAST_APPLE and (is_defined["MOJOLEARN_OPTICS_STEP_BATCH"]() or OPTICS2_ALL)
+comptime OPTICS_FRONTIER_DEVICE = (
+    OPTICS_FAST_APPLE and is_defined["MOJOLEARN_OPTICS_FRONTIER_DEVICE"]() and not OPTICS_STEP_BATCH
+)
+comptime OPTICS_CORE_SQ = OPTICS_FAST_APPLE and (is_defined["MOJOLEARN_OPTICS_CORE_SQ"]() or OPTICS2_ALL)
+comptime OPTICS_LIVEBUF = OPTICS_FAST_APPLE and (is_defined["MOJOLEARN_OPTICS_LIVEBUF"]() or OPTICS2_ALL)
+comptime OPTICS_FAST_ANY = OPTICS_STEP_BATCH or OPTICS_FRONTIER_DEVICE or OPTICS_CORE_SQ or OPTICS_LIVEBUF
+
 
 def dist_slot[O: ClusterOps](mut ops: O, n: Int) raises -> Int:
     """The slot of an n-value matrix a distance kernel is about to fill."""
-    comptime if XC_ALLOC:
+    comptime if XC_ALLOC or OPTICS_LIVEBUF:
         if ops.fast_device():
             return ops.alloc(n)
     return ops.zeros(n)
@@ -169,9 +196,30 @@ def optics_graph[O: ClusterOps](
     else:
         dm = dist_slot(ops, n * n)
         ops.sqdist(xs, n, xs, n, d, dm)
-        ops.sqrt(dm, n * n)
-    var cs = ops.zeros(n)
+        comptime if not OPTICS_CORE_SQ:
+            ops.sqrt(dm, n * n)
+        # OPTICS_CORE_SQ: the squared cells stay; `kth` below reads them (sqrt
+        # is monotone: the k-th smallest root is the root of the k-th smallest
+        # square), the n core values are rooted, the relaxation roots at use
+    var cs: Int
+    comptime if OPTICS_LIVEBUF:
+        cs = ops.alloc(n)  # `kth` writes every row
+    else:
+        cs = ops.zeros(n)
     ops.kth(dm, n, n, min_samples, cs)
+    comptime if OPTICS_CORE_SQ:
+        if metric < 0:
+            ops.sqrt(cs, n)
+    comptime if OPTICS_FAST_ANY:
+        var oi2 = List[Int32]()
+        var pi2 = List[Int32]()
+        if ops.optics_fast(dm, cs, n, max_eps, OPTICS_CORE_SQ and metric < 0, oi2, reach, core, pi2):
+            ordering = List[Int](capacity=n)
+            pred = List[Int](capacity=n)
+            for q in range(n):
+                ordering.append(Int(oi2[q]))
+                pred.append(Int(pi2[q]))
+            return
     comptime if OPTICS_SIMD:
         if n >= _OW:
             core = ops.get(cs, n)
