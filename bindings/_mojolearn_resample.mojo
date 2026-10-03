@@ -38,6 +38,8 @@ from resample.estimator import (
     permutation_samples_host,
     permutation_test_host,
     resample_indices_host,
+    resample_indices_replace_into,
+    RESAMPLE_IDX_DIRECT,
 )
 
 
@@ -381,6 +383,11 @@ def resample_indices_binding(
     var count = Int(py=params[1])
     var replace = Int(py=params[2]) != 0
     var seed = UInt64(Int(py=params[3]))
+    comptime if RESAMPLE_IDX_DIRECT:
+        if replace:
+            with GILReleased(Python()):
+                resample_indices_replace_into(n, count, seed, op)
+            return PythonObject(0)
     with GILReleased(Python()):
         var idx = resample_indices_host(n, count, replace, seed)
         for i in range(count):

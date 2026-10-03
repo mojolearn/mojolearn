@@ -463,6 +463,19 @@ class _Kit:
                 big = True
         return big
 
+    def _dict_dev(self):
+        """`x_decomp_dev_dict_update` when this binding exports it (a FAST
+        Apple build without -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF), else None."""
+        if "_dd_fn" not in self.__dict__:
+            fn = None
+            if self._res():
+                try:
+                    fn = getattr(self._raw(), "x_decomp_dev_dict_update")
+                except Exception:
+                    fn = None
+            self._dd_fn = fn
+        return self._dd_fn
+
     def _did(self, M):
         """M's device id on this binding, uploading a host matrix (it moves)."""
         raw = self._raw()
@@ -2109,11 +2122,19 @@ class FactorAnalysis(_Base):
         M = _M.from_input(X)
         n, d = M.r, M.c
         nc = self.n_components or d
+        # lane/apple-fast-quality-glmfa (2026-10-03): the two-pass mean. The
+        # float32 blocked column sum of a million rows carries a relative
+        # error near 1e-6, so a constant column c had mean c(1 + e), centred
+        # residuals c e and a variance (c e)^2 where theirs (float64) is 0:
+        # its psi stopped near (c e)^2 instead of the 1e-12 floor, and the
+        # mean_ the score subtracts was off by c e. The second pass adds the
+        # mean of the residuals (exact for a constant column: c is recovered
+        # to the word, the residuals are 0). Device launches only.
         mean = k.colmean(M)
+        mean = k.ew("add", mean, k.colmean(k.ew("sub", M, mean)))
         Xc = k.ew("sub", M, mean)
         nsqrt = math.sqrt(n)
         llconst = d * _LOG_2PI + nc
-        var = k.ew("scale", k.colsum(k.ew("sq", Xc)), s=1.0 / n)
         if self.noise_variance_init is None:
             psi = k.const(1.0, 1, d)
         else:
@@ -2139,6 +2160,7 @@ class FactorAnalysis(_Base):
                 order = list(range(d - 1, -1, -1))
                 s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
                 Vt = V.take_cols(order).T
+            Vfull = Vt
             Vt = Vt.rows(0, nc)
             sk = s2.cols(0, nc)
             # the log-likelihood is accumulated in Python float64 (IEEE adds,
@@ -2153,7 +2175,23 @@ class FactorAnalysis(_Base):
             if (ll - old_ll) < self.tol:
                 break
             old_ll = ll
-            psi = k.ew("maxs", k.ew("sub", var, k.colsum(k.ew("sq", W))), s=SMALL)
+            # lane/apple-fast-quality-glmfa (2026-10-03): psi without the
+            # cancellation. Theirs is var - sum_k W_kj^2; both terms are near
+            # var for a column the factors explain, and in float32 their
+            # difference has a floor near var * 1e-7 (theirs, float64, keeps
+            # falling toward the 1e-12 floor: Istella's held-out
+            # log-likelihood 89.0 against 98.1). With q = (sqrt psi + SMALL)^2
+            # the scaled data's column norms are var_j / q_j = sum_i V_ij^2 s2_i
+            # (every singular vector), so var_j - sum_k W_kj^2 = q_j (sum_i
+            # V_ij^2 w_i), w_i = min(s2_i, 1) for the nc kept components and
+            # s2_i past them: a sum of nonnegative terms, relative accuracy at
+            # any psi. The same value in exact arithmetic; d x d device ops.
+            dfull = Vfull.r
+            keep = _M.of([1.0] * nc + [0.0] * (dfull - nc), 1, dfull)
+            drop = _M.of([0.0] * nc + [1.0] * (dfull - nc), 1, dfull)
+            wts = k.ew("add", k.ew("mul", k.ew("mins", s2, s=1.0), keep), k.ew("mul", s2, drop))
+            share = k.mm(wts, k.ew("sq", Vfull))
+            psi = k.ew("maxs", k.ew("mul", k.ew("sq", sqrt_psi), share), s=SMALL)
         if self.rotation is not None:
             W = _ortho_rotation(k, W.T, self.rotation).rows(0, nc)
         self.components_m_ = W
@@ -2845,6 +2883,16 @@ def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=
         A = k.mm(code, code, ta=True)
     if B is None:
         B = k.mm(Y, code, ta=True)
+    # lane/apple-fast-gap-clus3: the atom loop on the device when the build
+    # exports it (FAST + Apple default, off: -D MOJOLEARN_DECOMP_FAST_DICT_DEV_OFF, x_decomp/dict_fast.mojo);
+    # an unused atom (the Philox resample) or positive_dict keep the loop
+    fn = k._dict_dev() if not positive and D.r * D.c else None
+    if fn is not None:
+        As = A.s
+        if all(As[j * A.c + j] > 1e-6 for j in range(D.r)):  # glue: the nc diagonal reads the loop made
+            Dn = k._dout(D.r, D.c)
+            fn(k._did(D), k._did(A), k._did(B), Dn._d.id, [D.r, D.c])
+            return Dn, code
     rows = [D.rows(j, j + 1) for j in range(D.r)]
     zero_cols = []
     for j in range(D.r):
@@ -3959,6 +4007,11 @@ class MDS(_Base):
 #: 2,000 on the M3 Ultra). method='standard' only (its factor I - W is
 #: square); 'ltsa', 'hessian' and 'modified' keep the dense route.
 _LLE_ITER_MIN_N = 200
+#: lane/apple-fast-gap-manprep: `_lle_smallest` builds F0 on the device, FAST +
+#: Apple default since the M3 A/B gmp-lle-devf0-* (taxi 3,827 -> 2,570 ms,
+#: istella 3,895 -> 2,653 ms, trustworthiness the same);
+#: MOJOLEARN_LLE_FAST_DEV_F0_OFF=1 restores the host F.cols + _hstack route
+_LLE_FAST_DEV_F0 = _os.environ.get("MOJOLEARN_LLE_FAST_DEV_F0_OFF") != "1"
 _LLE_ITER_MAX_K = 10
 #: Converged: the sine of the largest principal angle between two successive
 #: wanted Ritz subspaces is at most _LLE_SUBSPACE_TOL, or, under
@@ -4038,14 +4091,31 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     un = _M.of([rn] * n, n, 1)
     hrow = _M.of([rn] * n1, 1, n1)
     Fh = k.mm(F, h)
-    Fhat = k.ew("sub", F.cols(0, n1), k.ew("scale", k.mm(Fh, hrow), s=coef))
+    dev_f0 = (_LLE_FAST_DEV_F0 and str(k.mode).strip().lower() == "fast" and k._use(F)
+              and _kit_vendor(k) == "metal")
+    if dev_f0:
+        # lane/apple-fast-gap-manprep (2026-10-03), FAST + Apple default: F0 = [F^ | u] built on the device in three cells
+        # instead of F.cols (F downloaded, then one strided Python slice per
+        # column, 10,000 at the board's n) and _hstack (F^ downloaded and
+        # moved on the host, then uploaded again for the LU). The same words:
+        # the rank-one product has one term per entry, the mask multiply is
+        # exact (x * 1 + 0, 0 * x + rn in one fused rounding).
+        hfull = _M.of([rn] * n1 + [0.0], 1, n)
+        mask = _M.of([1.0] * n1 + [0.0], 1, n)
+        last = _M.of([0.0] * n1 + [rn], 1, n)
+        D = k.ew("sub", F, k.ew("scale", k.mm(Fh, hfull), s=coef))
+        F0 = k.ew("fma", D, mask, last)
+        Fhat = None
+    else:
+        Fhat = k.ew("sub", F.cols(0, n1), k.ew("scale", k.mm(Fh, hrow), s=coef))
     Fu = k.mm(F, un)
     g = math.sqrt(_dsum_sq(k, Fu))
     rms = math.sqrt(max(float(k.total(k.ew("sq", F)).s[0]), 0.0) / n)
     if not (g <= _LLE_NULL_GUARD * rms):
         return None
     floor = _LLE_NULL_FLOOR * _F32_EPS * rms
-    F0 = _hstack(Fhat, un)
+    if not dev_f0:
+        F0 = _hstack(Fhat, un)
     lu, piv, _ = k.lu(F0)
     # a pivot under float32 resolution (an exactly zero one skipped its
     # step) is set to eps times the largest: inverse iteration's usual
@@ -4083,7 +4153,10 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
         Y = solve_t(_M(array.array("f", X.s) + array.array("f", [0.0]) * X.c, n, X.c))
         Y = _lle_orth(k, k.ew("sub", Y, k.mm(z, k.mm(z, Y, ta=True))))
         X = _lle_orth(k, solve(Y).rows(0, n1))
-        S, Vt = k.svd(k.mm(Fhat, X))
+        if dev_f0:          # F^ X = F0 [X; 0] (the last column of F0 meets a zero row)
+            S, Vt = k.svd(k.mm(F0, _M(array.array("f", X.s) + array.array("f", [0.0]) * X.c, n, X.c)))
+        else:
+            S, Vt = k.svd(k.mm(Fhat, X))
         X = k.mm(X, Vt, tb=True)
         Y = X.take_cols(want)
         if it >= 2 and max(float(v) for v in S.take_cols(want).s) <= floor:

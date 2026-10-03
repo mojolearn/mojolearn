@@ -1728,33 +1728,7 @@ py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	sel
 # why: OWED A/B control only: reached solely in a -D MOJOLEARN_PY2MOJO_cluster_OFF build (gp_py2mojo() == 0); every default build takes the binding's targets/out_kind (gaussian_process/unnorm.mojo); delete with that define
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_gpc_impl.py	0	y01 = Array.from_list([1.0 if c == k else 0.0 for c in y01.tolist()], "<f4")
 # why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	for _ in range(n_clusters - 1):
-# why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	for i, node in enumerate(nodes):
-# why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	for r, c, v in triples:
-# why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	for t, (a, b) in enumerate(children):
-# why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	for v in range(n_leaves):
-# why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	if any(not any(row) for row in flat):
-# why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	pairs = [(children[2 * t], children[2 * t + 1]) for t in range(n_merges)]
-# why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	rank = {h: r for r, h in enumerate(sorted(set(heads)))}
-# why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	return [rank[h] for h in heads]
-# why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	self.n_clusters_ = sum(1 for v in distances if v >= thr) + 1
-# why: AgglomerativeClustering post-processing over n (connectivity edge list, cosine zero-row check, tree cut, heads, label ranks); owed to x_cluster/agglo.mojo returning labels (x_cluster binding shared with pyglue-numeric)
-py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	triples = ((i, j, flat[i][j]) for i in range(shape[0]) for j in range(shape[1]))
-# why: AgglomerativeClustering n_clusters count over n-1 merge distances and the cut's root; owed with the agglo labels move
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	nodes = [-(max(children[-1]) + 1)]
-# why: AgglomerativeClustering n_clusters count over n-1 merge distances and the cut's root; owed with the agglo labels move
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	rank = {h: r for r, h in enumerate(sorted(set(heads)))}
-# why: AgglomerativeClustering n_clusters count over n-1 merge distances and the cut's root; owed with the agglo labels move
-py-reduce	py-compute	pyglue-sweep	owed-py	python/mojolearn/_hierarchy_impl.py	0	self.n_clusters_ = sum(1 for v in distances if v >= thr) + 1
 # why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed
 py-data-loop	py-compute	pyglue-sweep	owed-py	python/mojolearn/_labels.py	0	classes = [bool(classes_store[i]) for i in range(k)]
 # why: label objects: sorted_classes for Python-list or str labels (n-sized, Python objects no Mojo buffer holds; numeric buffers already take encode_labels), class-list packing and kind tests over k classes, and decode_labels' object arm for str classes; owed to a native encoder for numeric lists once packed

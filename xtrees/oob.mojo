@@ -257,18 +257,19 @@ def oob_pred_kernel(
 
 def oob_sq_kernel(
     y: MutPointer[UInt32, MutAnyOrigin], pred: MutPointer[UInt64, MutAnyOrigin], n: Int64,
-    mean: MutPointer[UInt64, MutAnyOrigin], part_tot: MutPointer[Int64, MutAnyOrigin],
+    words: MutPointer[UInt64, MutAnyOrigin], part_tot: MutPointer[Int64, MutAnyOrigin],
     part_res: MutPointer[Int64, MutAnyOrigin], flags: MutPointer[Int32, MutAnyOrigin],
 ):
     """Thread t's limb rows: the exact sums of (y - mean)^2 and (y - pred)^2
-    over its rows, each term two correctly rounded binary64 operations."""
+    over its rows, each term two correctly rounded binary64 operations; the
+    mean is words[3] (mean_kernel's)."""
     var t = _thread()
     var rt = part_tot + t * E64_LIMBS
     var rr = part_res + t * E64_LIMBS
     for k in range(E64_LIMBS):
         rt[unsafe_offset=k] = 0
         rr[unsafe_offset=k] = 0
-    var mu = mean.unsafe_load(0)
+    var mu = words.unsafe_load(3)
     var i = t
     while i < Int(n):
         var v = widen_f32_word(y.unsafe_load(i))
@@ -335,9 +336,10 @@ def oob_r2_device(
     ctx.enqueue_function[limb_reduce_kernel](d_p1.unsafe_ptr(), d_t1.unsafe_ptr(), grid_dim=1, block_dim=E64_LIMBS)
     ctx.enqueue_function[mean_kernel](d_t1.unsafe_ptr(), sf64_from_int(n), d_words.unsafe_ptr(), d_flags.unsafe_ptr(),
                                       grid_dim=1, block_dim=1)
-    var d_mean = d_words.create_sub_buffer[DType.uint64](3, 1)
     ctx.enqueue_function[oob_sq_kernel](
-        d_y.unsafe_ptr(), d_pred.unsafe_ptr(), Int64(n), d_mean.unsafe_ptr(), d_p1.unsafe_ptr(), d_p2.unsafe_ptr(),
+        # the whole words buffer, never a sub-buffer's pointer as a kernel
+        # argument (the BaggingRegressor oob refusal on the MI325X)
+        d_y.unsafe_ptr(), d_pred.unsafe_ptr(), Int64(n), d_words.unsafe_ptr(), d_p1.unsafe_ptr(), d_p2.unsafe_ptr(),
         d_flags.unsafe_ptr(), grid_dim=grid, block_dim=OPS_TPB,
     )
     ctx.enqueue_function[limb_reduce_kernel](d_p1.unsafe_ptr(), d_t1.unsafe_ptr(), grid_dim=1, block_dim=E64_LIMBS)
@@ -358,7 +360,6 @@ def oob_r2_device(
     _ = d_p2^
     _ = d_t1^
     _ = d_t2^
-    _ = d_mean^
     _ = d_words^
     _ = d_flags^
 

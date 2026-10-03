@@ -76,8 +76,31 @@ def _fit_module(est, algo):
     return est._bind(_BINDING)
 
 
+#: lane/apple-fast-gap-manprep: IsotonicRegression.fit reads its output Array
+#: by byte copies on FAST + Apple (default since the M3 A/B
+#: gmp-iso-nolist-istella: 50.9 -> 29.4 ms, r2 / rmse the same words);
+#: MOJOLEARN_ISOTONIC_FAST_NOLIST_OFF=1 restores the list route
+_ISO_FAST_NOLIST = os.environ.get("MOJOLEARN_ISOTONIC_FAST_NOLIST_OFF") != "1"
+
+
+def _fast_apple(est, mod):
+    """The estimator runs the FAST tier on a Metal binding."""
+    try:
+        if str(est.numeric_mode_used()).strip().lower() != "fast":
+            return False
+        v = getattr(mod, "x_linear_vendor", None)
+        return v is not None and str(v()) == "metal"
+    except Exception:
+        return False
+
+
 def _run(est, algo, X, n, d, y, ip, fp, n_out, n_fw, n_iw):
     """One `x_linear_fit` call; the flat float32 result as a Python list."""
+    return _run_array(est, algo, X, n, d, y, ip, fp, n_out, n_fw, n_iw).tolist()
+
+
+def _run_array(est, algo, X, n, d, y, ip, fp, n_out, n_fw, n_iw):
+    """One `x_linear_fit` call; the flat float32 result as an Array."""
     out = empty((n_out,), "<f4")
     yy = y if y is not None else zeros((1,), "<f4")
     ip = [int(v) for v in ip]
@@ -86,7 +109,7 @@ def _run(est, algo, X, n, d, y, ip, fp, n_out, n_fw, n_iw):
         int(algo), addr_ro(X, name="X"), addr_ro(yy, name="y"),
         [n, d, X.size, 0 if y is None else yy.size, n_out, max(n_fw, 1), max(n_iw, 1), len(ip), len(fp)],
         ip, fp, addr(out, name="out"))
-    return out.tolist()
+    return out
 
 
 def _decision_codes(est, X, coef, intercept, strict=True, below=0, above=1):
@@ -1320,11 +1343,30 @@ class IsotonicRegression(NumericModeMixin):
         yy, has_w = _with_weights(yv, sample_weight, n)
         ip = [int(self.increasing_), int(self.y_min is not None), int(self.y_max is not None), int(has_w)]
         fp = [0.0 if self.y_min is None else self.y_min, 0.0 if self.y_max is None else self.y_max]
-        vals = _run(self, ALGO_ISOTONIC, xa, n, 1, yy, ip, fp, 3 + 2 * n, 6 * n, 3 * n)
-        k = int(vals[0])
-        self.X_min_, self.X_max_ = float(vals[1]), float(vals[2])
-        self.X_thresholds_ = Array.from_list(vals[3:3 + k], "<f4")
-        self.y_thresholds_ = Array.from_list(vals[3 + n:3 + n + k], "<f4")
+        if _ISO_FAST_NOLIST and _fast_apple(self, _fit_module(self, ALGO_ISOTONIC)):
+            # lane/apple-fast-gap-manprep (2026-10-03), FAST + Apple default:
+            # the 3 + 2n output words stay one float32 Array; the three
+            # header words and the two k-word threshold blocks are byte
+            # copies, not a 2n-element Python list (2,000,000 floats at the
+            # board's 1,000,000 fit rows) sliced and rebuilt. The same words.
+            out = _run_array(self, ALGO_ISOTONIC, xa, n, 1, yy, ip, fp, 3 + 2 * n, 6 * n, 3 * n)
+            base = addr_ro(out, name="out")
+            head = empty((3,), "<f4")
+            memcopy(addr(head, name="head"), base, 12)
+            hv = head.tolist()
+            k = int(hv[0])
+            self.X_min_, self.X_max_ = float(hv[1]), float(hv[2])
+            xt, yt = empty((k,), "<f4"), empty((k,), "<f4")
+            if k:
+                memcopy(addr(xt, name="X_thresholds_"), base + 12, 4 * k)
+                memcopy(addr(yt, name="y_thresholds_"), base + 4 * (3 + n), 4 * k)
+            self.X_thresholds_, self.y_thresholds_ = xt, yt
+        else:
+            vals = _run(self, ALGO_ISOTONIC, xa, n, 1, yy, ip, fp, 3 + 2 * n, 6 * n, 3 * n)
+            k = int(vals[0])
+            self.X_min_, self.X_max_ = float(vals[1]), float(vals[2])
+            self.X_thresholds_ = Array.from_list(vals[3:3 + k], "<f4")
+            self.y_thresholds_ = Array.from_list(vals[3 + n:3 + n + k], "<f4")
         self.n_features_in_ = 1
         return self
 

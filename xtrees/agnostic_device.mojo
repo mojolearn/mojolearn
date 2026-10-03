@@ -17,26 +17,25 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.neural_context import process_ctx
 from xtrees.agnostic import (
     F32P, I32P, U64P, I64P, kshap_mask_unit, kshap_synth_unit, bg_mean_unit, logit_unit, kshap_gram_unit,
-    kshap_rhs_unit, kshap_gram_sign_unit, kshap_wy2_unit, kshap_rhs_sign_unit, kshap_pivot_unit, kshap_elim_unit, kshap_back_unit, fx_unit, pshap_perm_unit,
+    kshap_rhs_unit, kshap_pivot_unit, kshap_elim_unit, kshap_back_unit, fx_unit, pshap_perm_unit,
     pshap_synth_unit, pshap_marginal_unit,
 )
 
 comptime AGN_TPB = 128
-#: lane apple-fast-gap-kapprox2 (2026-10-03), FAST + Apple experiments, off
-#: unless defined (IDENTICAL and the other columns are unchanged):
+#: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default
+#: (IDENTICAL and the other columns are unchanged; -D
+#: MOJOLEARN_KSHAP_FAST_BATCH_OFF restores the per-chunk path):
 #: MOJOLEARN_KSHAP_FAST_BATCH  the explainers' synthetic matrix lives in one
 #:   pooled device buffer (no per-chunk 100-400 MB allocation), the Python
 #:   glue reuses one host buffer for it across chunks (no fresh pages per
 #:   row), and KernelExplainer's solve runs once over many rows after every
 #:   chunk's background means (`kshap_means` + `kshap_solve_ey`): the 2 (d-1)
 #:   pivot/elimination launches per ROW become 2 (d-1) per solve batch.
-#:   Bit-inert (the same units in the same order per row).
-#: MOJOLEARN_KSHAP_FAST_SIGNGRAM  the normal matrix and right-hand side add
-#:   +-w (resp. +-w y2) instead of soft-float products by e = -1/0/1
-#:   (`kshap_gram_sign_unit`): bit-identical words, far fewer soft ops.
+#:   Bit-inert (the same units in the same order per row). M3 A/B
+#:   kap2-kshap-batch-istella: kernel-shap istella 27,011 -> 15,325 ms
+#:   (-43.3%), rel_error_vs_exact 4.378e-09 both arms.
 comptime _AGN_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and is_defined["MOJOLEARN_KSHAP_FAST_BATCH"]()
-comptime KSHAP_FAST_SIGNGRAM = _AGN_FAST_APPLE and is_defined["MOJOLEARN_KSHAP_FAST_SIGNGRAM"]()
+comptime KSHAP_FAST_BATCH = _AGN_FAST_APPLE and not is_defined["MOJOLEARN_KSHAP_FAST_BATCH_OFF"]()
 comptime AGN_MAX_BLOCKS = 65535 * 16
 comptime _CTX = "MojoXTreesAgnosticIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXTreesAgnosticFast"
 
@@ -110,28 +109,6 @@ def rhs_kernel(total: Int64, d: Int32, m: Int32, k: Int32, masks: I32P, w: U64P,
     var t = _t0()
     while t < Int(total):
         kshap_rhs_unit(t, Int(d), Int(m), Int(k), masks, w, ey, fx, fnull, B)
-        t += _stride()
-
-
-def gram_sign_kernel(total: Int64, d: Int32, m: Int32, masks: I32P, w: U64P, A: U64P, perm0: I32P):
-    var t = _t0()
-    while t < Int(total):
-        kshap_gram_sign_unit(t, Int(d), Int(m), masks, w, A, perm0)
-        t += _stride()
-
-
-def wy2_kernel(total: Int64, d: Int32, m: Int32, k: Int32, masks: I32P, w: U64P, ey: U64P, fx: U64P,
-               fnull: U64P, wy: U64P):
-    var t = _t0()
-    while t < Int(total):
-        kshap_wy2_unit(t, Int(d), Int(m), Int(k), masks, w, ey, fx, fnull, wy)
-        t += _stride()
-
-
-def rhs_sign_kernel(total: Int64, d: Int32, m: Int32, k: Int32, masks: I32P, wy: U64P, B: U64P):
-    var t = _t0()
-    while t < Int(total):
-        kshap_rhs_sign_unit(t, Int(d), Int(m), Int(k), masks, wy, B)
         t += _stride()
 
 
@@ -304,31 +281,15 @@ def _ksolve_core(ctx: DeviceContext, mut mk: _Masks, ey: U64P, dfx: U64P, dnull:
     var p1 = ctx.enqueue_create_buffer[DType.int32](max(R * q, 1))
     var sol = ctx.enqueue_create_buffer[DType.uint64](max(R * k * q, 1))
     var dphi = ctx.enqueue_create_buffer[DType.uint64](R * d * k)
-    var wy = ctx.enqueue_create_buffer[DType.uint64](max(R * m * k, 1) if KSHAP_FAST_SIGNGRAM else 1)
     if q > 0:
-        comptime if KSHAP_FAST_SIGNGRAM:
-            ctx.enqueue_function[gram_sign_kernel](
-                Int64(R * q * q), Int32(d), Int32(m), mk.masks.unsafe_ptr(), mk.w.unsafe_ptr(), dA.unsafe_ptr(),
-                p0.unsafe_ptr(), grid_dim=_blocks(R * q * q), block_dim=AGN_TPB,
-            )
-            if R * m * k > 0:
-                ctx.enqueue_function[wy2_kernel](
-                    Int64(R * m * k), Int32(d), Int32(m), Int32(k), mk.masks.unsafe_ptr(), mk.w.unsafe_ptr(), ey,
-                    dfx, dnull, wy.unsafe_ptr(), grid_dim=_blocks(R * m * k), block_dim=AGN_TPB,
-                )
-            ctx.enqueue_function[rhs_sign_kernel](
-                Int64(R * q * k), Int32(d), Int32(m), Int32(k), mk.masks.unsafe_ptr(), wy.unsafe_ptr(),
-                dB.unsafe_ptr(), grid_dim=_blocks(R * q * k), block_dim=AGN_TPB,
-            )
-        else:
-            ctx.enqueue_function[gram_kernel](
-                Int64(R * q * q), Int32(d), Int32(m), mk.masks.unsafe_ptr(), mk.w.unsafe_ptr(), dA.unsafe_ptr(),
-                p0.unsafe_ptr(), grid_dim=_blocks(R * q * q), block_dim=AGN_TPB,
-            )
-            ctx.enqueue_function[rhs_kernel](
-                Int64(R * q * k), Int32(d), Int32(m), Int32(k), mk.masks.unsafe_ptr(), mk.w.unsafe_ptr(),
-                ey, dfx, dnull, dB.unsafe_ptr(), grid_dim=_blocks(R * q * k), block_dim=AGN_TPB,
-            )
+        ctx.enqueue_function[gram_kernel](
+            Int64(R * q * q), Int32(d), Int32(m), mk.masks.unsafe_ptr(), mk.w.unsafe_ptr(), dA.unsafe_ptr(),
+            p0.unsafe_ptr(), grid_dim=_blocks(R * q * q), block_dim=AGN_TPB,
+        )
+        ctx.enqueue_function[rhs_kernel](
+            Int64(R * q * k), Int32(d), Int32(m), Int32(k), mk.masks.unsafe_ptr(), mk.w.unsafe_ptr(),
+            ey, dfx, dnull, dB.unsafe_ptr(), grid_dim=_blocks(R * q * k), block_dim=AGN_TPB,
+        )
     var pa = p0.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var pb = p1.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var in0 = True
@@ -356,7 +317,6 @@ def _ksolve_core(ctx: DeviceContext, mut mk: _Masks, ey: U64P, dfx: U64P, dnull:
     _ = p1^
     _ = sol^
     _ = dphi^
-    _ = wy^
 
 
 def _fx_dev(ctx: DeviceContext, fx: Int, R: Int, k: Int, link: Bool,

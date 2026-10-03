@@ -224,68 +224,6 @@ def kshap_rhs_unit(t: Int, d: Int, m: Int, k: Int, masks: I32P, w: U64P, ey: U64
     B[t] = b
 
 
-def kshap_gram_sign_unit(t: Int, d: Int, m: Int, masks: I32P, w: U64P, A: U64P, perm0: I32P):
-    """`kshap_gram_unit`'s words with the products dropped (lane
-    apple-fast-gap-kapprox2, MOJOLEARN_KSHAP_FAST_SIGNGRAM): e_r, e_c are
-    -1, 0 or 1, so (w e_r) e_c is exactly +-w (a binary64 product by +-1 is
-    exact and rounding is sign-symmetric) and a zero term adds +-0 to a sum
-    that started at +0 and so is never -0: the term is skipped. One add per
-    contributing sample instead of three conversions, two subtractions, two
-    products and an add."""
-    var q = d - 1
-    var row = t // (q * q)
-    var rc = t - row * q * q
-    var r = rc // q
-    var c = rc - r * q
-    if c == 0:
-        perm0[row * q + r] = Int32(r)
-    var a = SF64_ZERO
-    for s in range(m):
-        var mk = masks + (row * m + s) * d
-        var last = Int(mk[q])
-        var er = Int(mk[r]) - last
-        var ec = Int(mk[c]) - last
-        if er == 0 or ec == 0:
-            continue
-        var ws = w[row * m + s]
-        a = sf64_add(a, ws if er == ec else ws ^ SF64_SIGN)
-    A[t] = a
-
-
-def kshap_wy2_unit(t: Int, d: Int, m: Int, k: Int, masks: I32P, w: U64P, ey: U64P, fx: U64P, fnull: U64P,
-                   wy: U64P):
-    """t = (row * m + s) * k + j: wy[t] = w * y2 of sample s (`kshap_rhs_unit`'s
-    y2, the same operations), the per-sample product the signed right-hand
-    side adds (MOJOLEARN_KSHAP_FAST_SIGNGRAM)."""
-    var rs = t // k
-    var j = t - rs * k
-    var row = rs // m
-    var q = d - 1
-    var total = sf64_sub(fx[row * k + j], fnull[j])
-    var last = sf64_from_int(Int(masks[rs * d + q]))
-    var y2 = sf64_sub(sf64_sub(ey[t], fnull[j]), sf64_mul(last, total))
-    wy[t] = sf64_mul(w[rs], y2)
-
-
-def kshap_rhs_sign_unit(t: Int, d: Int, m: Int, k: Int, masks: I32P, wy: U64P, B: U64P):
-    """`kshap_rhs_unit`'s words from `kshap_wy2_unit`: (w e_r) y2 = +-(w y2)
-    exactly, e_r = +-1 (MOJOLEARN_KSHAP_FAST_SIGNGRAM)."""
-    var q = d - 1
-    var row = t // (q * k)
-    var rj = t - row * q * k
-    var r = rj // k
-    var j = rj - r * k
-    var b = SF64_ZERO
-    for s in range(m):
-        var mk = masks + (row * m + s) * d
-        var er = Int(mk[r]) - Int(mk[q])
-        if er == 0:
-            continue
-        var v = wy[(row * m + s) * k + j]
-        b = sf64_add(b, v if er > 0 else v ^ SF64_SIGN)
-    B[t] = b
-
-
 def kshap_pivot_unit(t: Int, q: Int, col: Int, A: U64P, pin: I32P, pout: I32P):
     """t = row: column col's pivot (the first largest |A| among the rows not
     yet pivoted, in pivot order); pout = pin with positions col and the

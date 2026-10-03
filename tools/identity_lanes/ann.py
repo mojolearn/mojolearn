@@ -61,8 +61,8 @@ _batch_decl("n/a:whole-set (t-SNE embeds the whole set jointly; no row of it is 
 def _(ml, X, yc, yr, Xh=None):
     """TSNE with init='pca' (sklearn's default), the x-ann-tsne shape
     otherwise: mojolearn's PCA of the 400 rows, scaled to a first-column
-    standard deviation of 1e-4 (math.fsum on the host), then the same
-    optimizer. Train hashes the PCA projection itself, the scaled start,
+    standard deviation of 1e-4 (math.fsum; the binding builds it, the lane
+    restates it to hash it), then the same optimizer. Train hashes the PCA projection itself, the scaled start,
     the embedding and the KL.
 
     `ml.PCA` is named HERE, not only inside `TSNE._init`: the selector reads
@@ -71,7 +71,15 @@ def _(ml, X, yc, yr, Xh=None):
     builds it, and the GPU arm refuses on a fresh box (2026-09-28)."""
     pca = ml.PCA(n_components=2).fit_transform(np.ascontiguousarray(X[:400], dtype=np.float32))
     m = ml.TSNE(perplexity=10.0, max_iter=300, init="pca", random_state=5)
-    y0 = m._init(np.ascontiguousarray(X[:400], dtype=np.float32), 400, 5)
+    # the scaled start TSNE builds in the binding (x_ann/tsne_init.mojo mode 2),
+    # restated here because TSNE no longer exposes it: the first column's
+    # population std by math.fsum, then (pca / std) * 1e-4 in float32
+    import math
+    p32 = np.ascontiguousarray(np.asarray(pca, dtype=np.float32))
+    col = [float(v) for v in p32[:, 0]]
+    mean = math.fsum(col) / len(col)
+    std = math.sqrt(math.fsum((v - mean) * (v - mean) for v in col) / len(col))
+    y0 = np.ascontiguousarray((p32 / np.float32(std)) * np.float32(1e-4), dtype=np.float32)
     m.fit(X[:400])
     return _fit(dict(pca=_h(np.asarray(pca, dtype=np.float32)), init=_h(y0), embedding=_h(m.embedding_),
                      kl=_h(np.float32(m.kl_divergence_))),

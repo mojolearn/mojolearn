@@ -297,14 +297,14 @@ def op_pr_iterate_sparse(
     pr_iterate_gpu(a, x, p, dw, info, n, max_iter,
                    bitcast[DType.float64]((UInt64(thr_hi) << UInt64(32)) | UInt64(thr_lo)), binary, alpha)
 
-def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int) raises:
+def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int, colmiss_only: Int = 0) raises:
     """lane/neural-pass71: the NaN cells of x (n x d): flat indices
     ascending into `cells`, the NaN count per column, the total in info[0].
     lane hr-small-passes (2026-10-02): a device NaN mask and a deterministic
     prefix-sum compaction (x_neighbors/nan_cells_device.mojo), the same
     integers in the same order as the CPU column's pass
     (x_neighbors/nan_cells.mojo)."""
-    nan_cells_device(x, cells, colmiss, info, n, d)
+    nan_cells_device(x, cells, colmiss, info, n, d, colmiss_only)
 
 
 def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
@@ -914,6 +914,13 @@ def op_knn_impute_tiled(
             d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(weights), Int64(nc),
             grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
         )
+    comptime if XN_IMPUTE_TIE_MEAN:
+        if weights == 0:
+            ctx.enqueue_function[knn_impute_tie_mean_kernel](
+                d_cells.unsafe_ptr(), d_x.unsafe_ptr(), d_fx.unsafe_ptr(), d_bd.unsafe_ptr(), d_bi.unsafe_ptr(),
+                d_res.unsafe_ptr(), Int64(m), Int64(d), Int64(k), Int64(nc),
+                grid_dim=(nc + IMP_TPB - 1) // IMP_TPB, block_dim=IMP_TPB,
+            )
     _down(ctx, d_res, res, n * d)
     ctx.synchronize()
     _ = d_cells^
@@ -923,6 +930,96 @@ def op_knn_impute_tiled(
     _ = d_bi^
     _ = d_res^
     _ = ctx^
+
+
+# lane/apple-fast-gap-manprep (2026-10-03): KNNImputer quality on taxi was
+# masked_rmse 6.15 vs scikit-learn 5.26. Taxi's columns are mostly discrete
+# (passengers, hour, weekday, day, fees) and the fit rows are in time order,
+# so many donors tie at the k-th distance and the lower-index rule always
+# took the EARLIEST trips (early January for late-February queries), a
+# biased draw. The tie mean imputes the expectation of a uniform tie-break:
+# the donors strictly closer than the k-th distance D_k, plus the remaining
+# k - c_lt slots filled by the mean of ALL donors at exactly D_k. Order-free,
+# deterministic, one GPU thread per missing cell, the same distance
+# statements as the scan. Uniform weights only (distance weights keep the
+# scan's result). FAST + Apple default since the M3 A/B gmp-imp-taxi
+# (masked_rmse 6.152 -> 5.109, scikit-learn 5.26; with COLMISS_ONLY);
+# -D MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF restores the lower-index rule.
+# IDENTICAL keeps the lower-index rule (a cross-vendor bit change is the
+# orchestrator's call).
+comptime XN_IMPUTE_TIE_MEAN = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                               and not is_defined["MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF"]())
+
+
+def knn_impute_tie_mean_kernel(
+    cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
+    m_: Int64, d_: Int64, k_: Int64, nc_: Int64,
+):
+    """Rewrites the imputed value of each missing cell whose scan found k
+    donors as the tie mean (above). Fewer than k donors: every donor is
+    already used, the scan's value stays."""
+    var m = Int(m_)
+    var d = Int(d_)
+    var k = Int(k_)
+    var nc = Int(nc_)
+    var tid = Int(thread_idx.x)
+    var q0 = Int(block_idx.x) * IMP_TPB + tid
+    var fs = stack_allocation[IMP_ROWS * IMP_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var live = q0 < nc
+    var t = 0
+    var r = 0
+    var c = 0
+    var dk = Float32(0)
+    if live:
+        t = Int(cells.unsafe_load(q0))
+        r = t // d
+        c = t - r * d
+        if Int(best_i.unsafe_load(t * k + k - 1)) < 0:
+            live = False
+        else:
+            dk = best_d.unsafe_load(t * k + k - 1)
+    var sum_lt = Float32(0)
+    var sum_eq = Float32(0)
+    var c_lt = 0
+    var c_eq = 0
+    var j0 = 0
+    while j0 < m:
+        var rows = min(IMP_ROWS, m - j0)
+        var q = tid
+        while q < rows * d:
+            fs[q] = fx.unsafe_load(j0 * d + q)
+            q += IMP_TPB
+        barrier()
+        if live:
+            for jj in range(rows):
+                var dv = fs[jj * d + c]
+                if dv != dv:
+                    continue
+                var acc = Float32(0)
+                var present = 0
+                for f in range(d):
+                    var a = x.unsafe_load(r * d + f)
+                    var b = fs[jj * d + f]
+                    if a != a or b != b:
+                        continue
+                    present += 1
+                    var df = _sub(a, b)
+                    acc = ftz(identical_mul_add(df, df, acc))
+                if present == 0:
+                    continue
+                var sq = ftz(identical_mul(ftz(identical_div(acc, Float32(present))), Float32(d)))
+                var dist = ftz(identical_sqrt(sq))
+                if dist < dk:
+                    sum_lt = _add(sum_lt, dv)
+                    c_lt += 1
+                elif dist == dk:
+                    sum_eq = _add(sum_eq, dv)
+                    c_eq += 1
+        barrier()
+        j0 += rows
+    if live and c_eq > 0 and c_lt < k:
+        var fill = ftz(identical_mul(ftz(identical_div(sum_eq, Float32(c_eq))), Float32(k - c_lt)))
+        res.unsafe_store(t, ftz(identical_div(_add(sum_lt, fill), Float32(k))))
 
 
 comptime IMPS_TPB = 128

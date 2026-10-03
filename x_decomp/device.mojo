@@ -17,6 +17,8 @@ from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
 from decomposition.linalg_public_device import device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
+from x_decomp.lu_fast import LU_FAST_STEP1, lfs_blocks, lu_fast_panel
+from x_decomp.lasso_grp import DECOMP_FAST_LASSO_GRP, LG_MAXK, LG_TPB, lasso_grp_kernel
 from x_decomp.cells import (
     lu_perm_src,
     lu_aux_clamp,
@@ -1906,9 +1908,24 @@ def launch_lu(
         # steps in order through tiles. The same cells in the same
         # order as the per-step route below.
         var k0 = 0
+        # LU_FAST_STEP1 (FAST + Apple default, x_decomp/lu_fast.mojo; -D
+        # MOJOLEARN_LU_FAST_STEP1_OFF reverts):
+        # each panel column one launch instead of five; the same cells.
+        var step1 = False
+        comptime if LU_FAST_STEP1:
+            step1 = True
+        var lfs_mb = lfs_blocks(n)
+        var lfs_p0 = ctx.enqueue_create_buffer[DType.float32](n * nb if step1 else 1)
+        var lfs_p1 = ctx.enqueue_create_buffer[DType.float32](n * nb if step1 else 1)
+        var lfs_pa = ctx.enqueue_create_buffer[DType.float32](2 * lfs_mb if step1 else 1)
+        var lfs_pb = ctx.enqueue_create_buffer[DType.float32](2 * lfs_mb if step1 else 1)
         while k0 < n:
             var k1 = min(k0 + nb, n)
-            for k in range(k0, k1):
+            if step1:
+                lu_fast_panel(
+                    ctx, a, piv, info, act, _p(lfs_p0), _p(lfs_p1), _p(lfs_pa), _p(lfs_pb), k0, k1, n, lfs_mb
+                )
+            for k in range(k0, k1 if not step1 else k0):
                 enqueue_lu_pivot(ctx, a, piv, scal, k, n)
                 ctx.enqueue_function[lu_swap_cols_kernel](
                     a, piv, info, scal, act, Int32(k), Int32(n), Int32(0), Int32(k1),
@@ -1963,6 +1980,13 @@ def launch_lu(
                         grid_dim=(tiles, tiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
                     )
             k0 = k1
+        if step1:
+            # the scratch dies here: wait for the launches that use it
+            ctx.synchronize()
+        _ = lfs_p0^
+        _ = lfs_p1^
+        _ = lfs_pa^
+        _ = lfs_pb^
     for k in range(n if nb == 0 else 0):
         enqueue_lu_pivot(ctx, a, piv, scal, k, n)
         ctx.enqueue_function[lu_swap_kernel](
@@ -2622,10 +2646,20 @@ struct DevExec(Exec):
         var dw = _up(ctx, w, n * k)
         var dh = ctx.enqueue_create_buffer[DType.float32](n * k if n * k > 0 else 1)
         var di = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        ctx.enqueue_function[lasso_rows_kernel](
-            dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dh.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
-            alpha, Int32(max_iter), tol, Int32(1 if positive else 0), grid_dim=_blocks(n), block_dim=TPB,
-        )
+        var grp = False
+        comptime if DECOMP_FAST_LASSO_GRP:
+            # lane/apple-fast-gap-clus3: a 32-thread block per row (x_decomp/lasso_grp.mojo)
+            grp = n > 0 and k >= 1 and k <= LG_MAXK
+        if grp:
+            ctx.enqueue_function[lasso_grp_kernel](
+                dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
+                alpha, Int32(max_iter), tol, Int32(1 if positive else 0), grid_dim=n, block_dim=LG_TPB,
+            )
+        else:
+            ctx.enqueue_function[lasso_rows_kernel](
+                dg.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), dh.unsafe_ptr(), di.unsafe_ptr(), Int32(n), Int32(k),
+                alpha, Int32(max_iter), tol, Int32(1 if positive else 0), grid_dim=_blocks(n), block_dim=TPB,
+            )
         _down(ctx, dw, w, n * k)
         _down(ctx, di, its, n)
         ctx.synchronize()

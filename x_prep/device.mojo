@@ -5,9 +5,10 @@ program is one launch of one thread per unit on the same stream (so stage s
 sees every write of stage s-1), and the arena comes back once."""
 from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
+from std.memory import bitcast
 from std.os import getenv
 from std.time import perf_counter_ns
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
@@ -28,6 +29,45 @@ from x_prep.select_fast import (
 )
 from x_prep.fastprep2 import PREP2_FAST, Prep2Switches, prep2_scratch_words, prep2_fast_stage
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
+from core.staged_download import download_f32_into
+
+#: lane/apple-fast-gap-manprep: MOJOLEARN_X_PREP_FAST_STAGED_OUT (FAST + Apple)
+#: downloads the program's output region through core/staged_download.mojo
+comptime X_PREP_STAGED_OUT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                              and is_defined["MOJOLEARN_X_PREP_FAST_STAGED_OUT"]())
+comptime _XP_STAGE_POOL = "MojoXPrepDownloadStagesFast"
+
+
+def _download_ranges_staged(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], host_addr: Int,
+                            outs_addr: Int, nouts: Int) raises:
+    """core/arena_io.mojo `download_ranges` with every range of at least
+    1M words through the pinned-stage pipeline (synchronizes)."""
+    if nouts <= 0:
+        return
+    var hf = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=host_addr)
+    var o = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=outs_addr)
+    var bounded = False
+    for k in range(nouts):
+        var cn = Int(o.unsafe_load(4 * k + 2))
+        if cn >= 0:
+            bounded = True
+            ctx.enqueue_copy(dst_ptr=hf + cn, src_buf=df.create_sub_buffer[DType.float32](cn, 1))
+    if bounded:
+        ctx.synchronize()
+    for k in range(nouts):
+        var lo = Int(o.unsafe_load(4 * k))
+        var hi = Int(o.unsafe_load(4 * k + 1))
+        var cn = Int(o.unsafe_load(4 * k + 2))
+        if cn >= 0:
+            var c = Int(bitcast[DType.int32](hf.unsafe_load(cn))) * Int(o.unsafe_load(4 * k + 3))
+            hi = lo + max(0, min(hi - lo, c))
+        if hi - lo >= (1 << 20):
+            ctx.synchronize()
+            var view = df.create_sub_buffer[DType.float32](lo, hi - lo)
+            download_f32_into[_XP_STAGE_POOL](ctx, view, hi - lo, hf + lo)
+            _ = view^
+        elif hi > lo:
+            ctx.enqueue_copy(dst_ptr=hf + lo, src_buf=df.create_sub_buffer[DType.float32](lo, hi - lo))
 from core.device_store import DeviceStore
 from x_linear.fast_gram import fast_sym_gram_into, fg_part_words
 from x_prep.rr_eigh import rr_eigh_into, rre_words
@@ -506,14 +546,29 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
               (now - t_last) // 1000)
         t_last = now
     if nouts >= 0:
-        download_ranges(ctx, df, host_f, outs_addr, nouts)
+        comptime if X_PREP_STAGED_OUT:
+            _download_ranges_staged(ctx, df, Int(host_f), outs_addr, nouts)
+        else:
+            download_ranges(ctx, df, host_f, outs_addr, nouts)
     elif arena_len > 0:
         if dev_len > arena_len:
             ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
         else:
             ctx.enqueue_copy(dst_ptr=host_f, src_buf=df)
-    if out_n > 0:
-        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=df.create_sub_buffer[DType.float32](out_at, out_n))
+    comptime if X_PREP_STAGED_OUT:
+        if out_n > 0:
+            # lane/apple-fast-gap-manprep (2026-10-03): the output region
+            # (LabelBinarizer's 1M x 259 int32 words at the board, 1 GB)
+            # through the pooled pinned-stage pipeline instead of one raw
+            # host-pointer copy (~21 ms per 64 MB on Apple). Copies only.
+            ctx.synchronize()
+            var oview = df.create_sub_buffer[DType.float32](out_at, out_n)
+            download_f32_into[_XP_STAGE_POOL](ctx, oview, out_n,
+                                              MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr))
+            _ = oview^
+    else:
+        if out_n > 0:
+            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=df.create_sub_buffer[DType.float32](out_at, out_n))
     ctx.synchronize()
     if prof:
         var now = perf_counter_ns()

@@ -19,7 +19,7 @@ import sys
 
 from . import _backend, _expansion_cluster, _mojolearn_solver, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, frombytes, zeros
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, frombytes, zeros
 from .density import _check_queries
 from .linear_model import _check_saved_by, _restore_mode, _saved_mode
 
@@ -364,42 +364,10 @@ class AgglomerativeClustering:
         single linkage's own criterion under the euclidean metric only."""
         return self.linkage == "single" and self.metric in _METRICS
 
-    def _connectivity_edges(self, X, n):
-        """The connectivity matrix (dense, sparse with `tocoo()`, or a
-        callable of X) as flat (row, col) pairs of its stored nonzero
-        entries, as exact floats; scikit-learn's `_fix_connectivity`
-        symmetrizes it (`connectivity + connectivity.T`) and drops the
-        diagonal, which `x_cluster/agglo.mojo` does."""
-        conn = self.connectivity
-        if callable(conn):
-            conn = conn(X)
-        tocoo = getattr(conn, "tocoo", None)
-        if callable(tocoo):
-            coo = tocoo()
-            shape = tuple(coo.shape)
-            rows, _ = as_i32_c(coo.row, ndim=1, name="connectivity rows")
-            cols, _ = as_i32_c(coo.col, ndim=1, name="connectivity cols")
-            vals, _ = as_f32_c(coo.data, ndim=1, name="connectivity values")
-            triples = zip(rows.tolist(), cols.tolist(), vals.tolist())
-        else:
-            dense, _ = as_f32_c(conn, ndim=2, name="connectivity")
-            shape = tuple(dense.shape)
-            flat = dense.tolist()
-            triples = ((i, j, flat[i][j]) for i in range(shape[0]) for j in range(shape[1]))
-        if shape != (n, n):
-            raise ValueError(
-                f"Wrong shape for connectivity matrix: {shape} when X has {n} samples")
-        edges = []
-        for r, c, v in triples:
-            if v != 0 and r != c:
-                edges.append(float(r))
-                edges.append(float(c))
-        return edges
-
     def _connectivity_aux(self, X, n):
         """The connectivity matrix as the binding takes it (lane
         apple-fast-py2mojo-cluster: `x_cluster/agglo.mojo` keeps its nonzero
-        off-diagonal entries, which `_connectivity_edges` did here):
+        off-diagonal entries, which Python's edge list did before):
         (aux, count, edge_mode), mode 1 the dense n x n float32 matrix
         (count n * n), mode 2 the COO rows, columns and values as float32,
         concatenated (count nnz)."""
@@ -467,21 +435,14 @@ class AgglomerativeClustering:
         # the cluster lane's binding, named by its door (a name here would
         # make this file a whole-surface registry to tools/lane_select.py)
         b = _backend.binding(_expansion_cluster._XCluster._BINDING, getattr(self, "numeric_mode", None))
-        mojo = _expansion_cluster._py2mojo(b)
-        if mojo:
-            # the connectivity filter, the distance-threshold count and the
-            # labels in the binding (x_cluster/agglo.mojo, tree_cut.mojo)
-            aux, n_edges, edge_mode = self._connectivity_aux(x, n) if constrained else (None, -1, 0)
-            thr = self.distance_threshold
-            cut = (1 if thr is not None else int(self.n_clusters)) if full else 0
-            ip = [n, d, _LINKAGES[self.linkage], metric, n_edges, n_merges, edge_mode, cut,
-                  1 if (full and thr is not None) else 0]
-            fp = [2.0, float(thr) if thr is not None else 0.0]
-        else:
-            edges = self._connectivity_edges(x, n) if constrained else []
-            aux = (Array.from_list(edges, "<f4") if edges else None)
-            ip = [n, d, _LINKAGES[self.linkage], metric, len(edges) // 2 if constrained else -1, n_merges]
-            fp = [2.0]
+        # the connectivity filter, the distance-threshold count and the
+        # labels in the binding (x_cluster/agglo.mojo, tree_cut.mojo)
+        aux, n_edges, edge_mode = self._connectivity_aux(x, n) if constrained else (None, -1, 0)
+        thr = self.distance_threshold
+        cut = (1 if thr is not None else int(self.n_clusters)) if full else 0
+        ip = [n, d, _LINKAGES[self.linkage], metric, n_edges, n_merges, edge_mode, cut,
+              1 if (full and thr is not None) else 0]
+        fp = [2.0, float(thr) if thr is not None else 0.0]
         f, i, sc = b.x_cluster_call(
             _E_AGGLO, addr_ro(x, name="X"), x.size,
             addr_ro(aux, name="connectivity") if aux is not None else 0,
@@ -500,22 +461,9 @@ class AgglomerativeClustering:
             self.distances_ = Array._from_flat(distances, (n_merges,), "<f4")
         else:
             self.__dict__.pop("distances_", None)
-        if mojo:
-            self.n_clusters_ = (int(sc[1]) if self.distance_threshold is not None and full
-                                else int(self.n_clusters))
-            self.labels_ = Array._from_flat(i[1], (n,), "<i4")
-        else:
-            if self.distance_threshold is not None:
-                thr = float(self.distance_threshold)
-                self.n_clusters_ = sum(1 for v in distances if v >= thr) + 1
-            else:
-                self.n_clusters_ = int(self.n_clusters)
-            pairs = [(children[2 * t], children[2 * t + 1]) for t in range(n_merges)]
-            if full:
-                labels = _hc_cut(self.n_clusters_, pairs, n)
-            else:
-                labels = _heads(pairs, n)
-            self.labels_ = Array._from_flat(labels, (n,), "<i4")
+        self.n_clusters_ = (int(sc[1]) if self.distance_threshold is not None and full
+                            else int(self.n_clusters))
+        self.labels_ = Array._from_flat(i[1], (n,), "<i4")
         self.n_boruvka_rounds_ = -1
         self.n_features_in_ = d
         self._fit_X = None
@@ -661,43 +609,3 @@ class AgglomerativeClustering:
         obj.n_features_in_ = nf
         return obj
 
-
-def _hc_cut(n_clusters, children, n_leaves):
-    """scikit-learn `_agglomerative.py::_hc_cut`, the same heap operations,
-    so the label numbering is scikit-learn's for the same children."""
-    from heapq import heappush, heappushpop
-    if n_clusters > n_leaves:
-        raise ValueError(
-            "Cannot extract more clusters than samples: "
-            f"{n_clusters} clusters were given for a tree with {n_leaves} leaves.")
-    nodes = [-(max(children[-1]) + 1)]
-    for _ in range(n_clusters - 1):
-        these = children[-nodes[0] - n_leaves]
-        heappush(nodes, -these[0])
-        heappushpop(nodes, -these[1])
-    label = [0] * n_leaves
-    for i, node in enumerate(nodes):
-        stack = [-node]
-        while stack:
-            v = stack.pop()
-            if v < n_leaves:
-                label[v] = i
-            else:
-                stack.extend(children[v - n_leaves])
-    return label
-
-
-def _heads(children, n_leaves):
-    """A partial tree's labels (scikit-learn `hc_get_heads` then
-    `searchsorted(unique(heads), heads)`): each leaf's root, numbered by
-    ascending root id."""
-    parent = list(range(n_leaves + len(children)))
-    for t, (a, b) in enumerate(children):
-        parent[a] = parent[b] = n_leaves + t
-    heads = []
-    for v in range(n_leaves):
-        while parent[v] != v:
-            v = parent[v]
-        heads.append(v)
-    rank = {h: r for r, h in enumerate(sorted(set(heads)))}
-    return [rank[h] for h in heads]

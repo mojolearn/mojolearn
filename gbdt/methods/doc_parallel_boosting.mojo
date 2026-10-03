@@ -586,6 +586,18 @@ def fit_two_level_feature_freq_tree(
     var h_final_rows = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     ctx.enqueue_copy(dst_ptr=h_final_rows.unsafe_ptr(), src_buf=rows)
     ctx.synchronize()
+    # past the drain [[mojo-buffer-freed-at-last-use]]: the two staging
+    # buffers' last named uses were their upload enqueues, so Mojo freed
+    # them under the queued copies, and the tree's first allocation
+    # (`insert_staged_tensor_candidate_device`'s `h_words`) reused that
+    # pinned memory and filled it with cindex words before the copy ran.
+    # `rows` then carried packed bins as row ids and the leaf estimate
+    # read `y` out of bounds (L40S `wide`: row 197378 = 0x00030302 of
+    # 20,000). The device pair is kept for the same reason.
+    _ = h_rows^
+    _ = h_stats^
+    _ = rows^
+    _ = stats^
     var structure = TObliviousTreeStructure()
     for level in range(len(tree.splits)):
         structure.splits.append(tree.splits[level])

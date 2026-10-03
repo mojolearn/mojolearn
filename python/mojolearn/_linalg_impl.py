@@ -980,10 +980,14 @@ def _refuse_wide(rows, cols, who):
 
 
 def _xd_kit():
-    """The decomp lane's cells (x_decomp), IDENTICAL: GPU == CPU bit for bit
-    (the x-decomp lanes), so Q and U are the same bytes on every column."""
+    """The decomp lane's cells (x_decomp) in the process's numeric mode:
+    IDENTICAL is GPU == CPU bit for bit (the x-decomp lanes), so Q and U are
+    the same bytes on every column there. lane/apple-fast-gap-linalg2
+    (2026-10-03): this pinned "identical", so a FAST process (the M3, FAST
+    bindings only) failed qr/eigh/svd with the identical binding's
+    ImportError; the kit now follows `_backend.default_mode()`."""
     from ._expansion_decomp import _Kit
-    return _Kit("identical")
+    return _Kit(_backend.default_mode())
 
 
 def _xd_matrix(a_arr, rows, cols):
