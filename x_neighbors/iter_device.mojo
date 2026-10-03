@@ -23,6 +23,7 @@ from std.memory import bitcast, memcpy
 from std.atomic import Atomic
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
+from neighbors.impl.detail.fast_mma_knn import fast_mma_knn, fast_mma_knn_applies
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -789,8 +790,6 @@ def op_knn_sq_tiled(
     """The fused k-NN (`knn_sq`) with y staged per block; d above
     KNN_TILE_MAX_D takes the one-thread-per-row item kernel."""
     comptime if XN_MMA_ROUTE:
-        from neighbors.impl.detail.fast_mma_knn import fast_mma_knn, fast_mma_knn_applies
-
         var kk = k + (1 if exclude_self != 0 else 0)
         if n > 0 and m > 0 and kk <= m and fast_mma_knn_applies(d, kk):
             # direct device copies in and out (no host-thread staging), as
