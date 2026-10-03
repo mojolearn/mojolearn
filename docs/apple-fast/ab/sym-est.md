@@ -48,3 +48,12 @@ needs its own design; left for a later pass.
 
 Request lines: `docs/apple-fast/ab/sym-est.txt` (istella singles first, then ALL; symmetric-1000 istella for ALL and
 SHRINK_FUSED; symmetric-1000 taxi and ordered taxi as null controls for ALL).
+
+## Compile status (2026-10-03)
+
+No build of this branch has completed: the FAST `MOJOLEARN_SYM_EST_ALL` build was queued on the laptop's compile slots and
+killed unstarted when the slots jammed (Andrew's stop order). Compile owed: peer, for each of
+FAST `-D MOJOLEARN_EST_STATS_FUSED`, FAST `-D MOJOLEARN_EST_REUSE_PART`, FAST `-D MOJOLEARN_EST_ITERS_DEVICE`,
+FAST `-D MOJOLEARN_EST_SHRINK_FUSED`, FAST `-D MOJOLEARN_SYM_EST_ALL` (covers every new line; build this one first),
+FAST with no define, and IDENTICAL once. `apple_fast_est.mojo` is new and has never been through the compiler, so
+expect first-build fixes there (the call sites in `doc_parallel_boosting.mojo` are small).
