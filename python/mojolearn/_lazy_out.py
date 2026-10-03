@@ -25,9 +25,9 @@ _LAZY_OUT_MIN_BYTES = 1 << 26
 def _empty_out(shape, dtype="<f4"):
     """`empty(shape, dtype)` for an output a kernel will fill."""
     if _LAZY_OUT and dtype == "<f4":
-        dims = tuple(int(v) for v in (shape if isinstance(shape, (tuple, list)) else (shape,)))
+        dims = tuple(int(v) for v in (shape if isinstance(shape, (tuple, list)) else (shape,)))  # glue: validates the shape argument
         count = 1
-        for v in dims:
+        for v in dims:  # glue: product of shape dimensions
             count *= v
         if count * 4 >= _LAZY_OUT_MIN_BYTES:
             import mmap
