@@ -253,6 +253,12 @@ def _colmean32_fold_kernel(part: _F32P, mean: _F32P, blocks_in: Int32, n_in: Int
         mean.unsafe_store(f, t / Float32(Int(n_in)))
 
 
+def _scan_tail_kernel(buf: _I32P, n_in: Int32):
+    """buf[n] = 0, the slot an exclusive scan with the total fills."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        buf.unsafe_store(Int(n_in), Int32(0))
+
+
 # ------------------------------------------------------------ host side ----
 
 
@@ -496,10 +502,8 @@ def device_exclusive_scan_total(ctx: DeviceContext, mut buf: DeviceBuffer[DType.
     gives. `buf` holds at least n + 1 slots."""
     if n < 0:
         return
-    var p = buf.unsafe_ptr()
-    ctx.enqueue_function[_scan_input_kernel](
-        p, p, Int32(n),
-        grid_dim=(_grid(n + 1), 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    ctx.enqueue_function[_scan_tail_kernel](  # small-launch(n: the index of the one slot written): one thread stores one word, no walk
+        buf.unsafe_ptr(), Int32(n), grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
     )
     var bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n + 1))
     frs_exclusive_scan(ctx, buf, n + 1, bsum)
