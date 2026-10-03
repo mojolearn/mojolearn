@@ -88,8 +88,8 @@ def scan_part_kernel(flags: IPtr, n: Int32, part: IPtr):
         part[Int(block_idx.x)] = red[0]
 
 
-def scan_out_kernel(flags: IPtr, n: Int32, part: IPtr, nb: Int32, out: IPtr, total: IPtr):
-    """out[t] = the sum of flags[0 .. t) (exclusive); total[0] = the sum of
+def scan_out_kernel(flags: IPtr, n: Int32, part: IPtr, nb: Int32, dst: IPtr, total: IPtr):
+    """dst[t] = the sum of flags[0 .. t) (exclusive); total[0] = the sum of
     all (block 0)."""
     var sh = stack_allocation[RTPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
     var tid = Int(thread_idx.x)
@@ -121,7 +121,7 @@ def scan_out_kernel(flags: IPtr, n: Int32, part: IPtr, nb: Int32, out: IPtr, tot
     var run = off0 + sh[tid] - loc
     for q in range(4):
         if base + q < Int(n):
-            out[base + q] = run
+            dst[base + q] = run
             run += flags[base + q]
 
 
