@@ -549,16 +549,19 @@ def _trees_label_words(Y):
         if not isinstance(d, str):
             return None
         kind = d.lstrip("<>=|")[:1]
-    if kind == "f":
-        return as_f64_c(Y, ndim=2, name="Y")[0]
-    if kind not in ("i", "u"):
+    if kind not in ("f", "i", "u"):
         return None
-    arr, _ = _materialize(Y, "Y")
-    if arr.ndim != 2 or arr.dtype in ("<u8", ">u8"):
-        return None
-    if arr.dtype != "<i8":
-        arr = arr.astype("<i8")
-    return arr._as_c()
+    try:
+        if kind == "f":
+            return as_f64_c(Y, ndim=2, name="Y")[0]
+        arr, _ = _materialize(Y, "Y")
+        if arr.ndim != 2 or arr.dtype not in ("<i1", "<i2", "<i4", "<i8", "|i1", "|u1", "<u1", "<u2", "<u4"):
+            return None
+        if arr.dtype != "<i8":
+            arr = arr.astype("<i8")
+        return arr._as_c()
+    except (TypeError, ValueError):
+        return None  # the Python rows name the refusal
 
 
 def _trees_binary_proba(est, p, n):
