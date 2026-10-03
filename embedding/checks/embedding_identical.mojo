@@ -7,6 +7,7 @@ from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT, embedding_sort
 from std.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_fold import device_first_nonneg_i32
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
@@ -631,20 +632,24 @@ def emb_refuse_device_nonfinite(
         grid_dim=(_grid_for(rows), 1, 1),
         block_dim=(EMB_TPB, 1, 1),
     )
-    step_count_host_alloc()
-    var h = ctx.enqueue_create_host_buffer[DType.int32](rows)
-    step_count_sync()
-    ctx.synchronize()
-    step_count_d2h()
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=flags)
-    step_count_sync()
-    ctx.synchronize()
-    for r in range(rows):
-        var f = Int(h.unsafe_ptr().unsafe_load(r))
+    # lane cgr4-download-loop: the first flagged row is found on the device
+    # (an integer minimum over block partials), then its one flag is read;
+    # was a download of `rows` flags and a host walk
+    var r = device_first_nonneg_i32(ctx, flags, rows)
+    if r >= 0:
+        step_count_host_alloc()
+        var h = ctx.enqueue_create_host_buffer[DType.int32](1)
+        var one = flags.create_sub_buffer[DType.int32](r, 1)
+        step_count_d2h()
+        ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=one)
+        step_count_sync()
+        ctx.synchronize()
+        var f = Int(h.unsafe_ptr().unsafe_load(0))
+        _ = one^
+        _ = h^
         if f >= 0:
             var flat = r * width + f // 2
             _ = flags^
-            _ = h^
             if f % 2 == 1:
                 raise Error(
                     String("embedding: NaN in ")
@@ -662,7 +667,6 @@ def emb_refuse_device_nonfinite(
                 + " REFUSED on the device entry point (contract 9.1)"
             )
     _ = flags^
-    _ = h^
 
 
 def emb_run_scratch_ints(vocab: Int, n_positions: Int) -> Int:

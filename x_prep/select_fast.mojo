@@ -30,11 +30,11 @@ float32), the scores' edge rules and the p-values are the units' own
 (`f_sf`, the force_finite words), so the only change is the fold ORDER of
 the sums: pairwise instead of row order, never less accurate.
 
-  -D MOJOLEARN_SELECT_FREG=1   f_regression / r_regression (op 64): pass 1
+  (default; _OFF off)          f_regression / r_regression (op 64): pass 1
                                the column sums (and y's) when centring,
                                pass 2 the centred cross and square sums,
                                then r, F and p per column.
-  -D MOJOLEARN_SELECT_FCLS=1   f_classif (op 63): the within-class squares
+  (default; _OFF off)          f_classif (op 63): the within-class squares
                                about the class means, then F and p per
                                column; and, in a program that contains op
                                63, the `class_stats` stage (op 16) ahead of
@@ -54,10 +54,15 @@ from x_prep.common import FP, IP, STAGE_INTS, canonical_nan
 from x_prep.prims import add, sub, mul, div, sqrtf
 from x_prep.stats import f_sf, pos_inf, F32_MAX
 
-#: FAST on Apple only, each behind its define (default off)
+#: FAST on Apple only. SELECT_FREG is the FAST + Apple default since the M3 A/B
+#: (select-r-regression taxi 100.5 -> 10.1 ms, -90%, n_selected same);
+#: -D MOJOLEARN_SELECT_FREG_OFF turns it off (-D MOJOLEARN_SELECT_FREG is now harmless).
+#: SELECT_FCLS is the FAST + Apple default since the M3 A/B (select-f-classif taxi
+#: 131.4 -> 17.5 ms, -87%, n_selected same); -D MOJOLEARN_SELECT_FCLS_OFF turns it
+#: off (-D MOJOLEARN_SELECT_FCLS is now harmless).
 comptime SELECT_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime SELECT_FREG = SELECT_FAST_APPLE and is_defined["MOJOLEARN_SELECT_FREG"]()
-comptime SELECT_FCLS = SELECT_FAST_APPLE and is_defined["MOJOLEARN_SELECT_FCLS"]()
+comptime SELECT_FREG = SELECT_FAST_APPLE and not is_defined["MOJOLEARN_SELECT_FREG_OFF"]()
+comptime SELECT_FCLS = SELECT_FAST_APPLE and not is_defined["MOJOLEARN_SELECT_FCLS_OFF"]()
 
 #: the ops (python/mojolearn/_expansion_prep.py `_OPS`)
 comptime OP_SEL_CLASS_STATS = 16

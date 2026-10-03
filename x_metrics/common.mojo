@@ -26,6 +26,12 @@ from checks.numerics import ftz
 #: upward. Only the host build ever defines it.
 comptime X_METRICS_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
+#: lane apple-fast-py2mojo-core (2026-10-03): the label layouts and class sums
+#: of `_expansion_metrics.py` run here (x_metrics/onehot.mojo) unless the
+#: build defines MOJOLEARN_PY2MOJO_core_OFF, which restores the Python
+#: layouts for the A/B (the binding reports it as `x_metrics_py2mojo_core`).
+comptime PY2MOJO_CORE_ON = not is_defined["MOJOLEARN_PY2MOJO_core_OFF"]()
+
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
 comptime STAGE_INTS = 16

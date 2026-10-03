@@ -60,14 +60,17 @@ def test_missing_mandatory_entry_is_not_hidden(program):
 
 
 @pytest.mark.parametrize('codes', [None, [0, 1, 0, 1]])
-def test_missing_optional_native_folds_returns_legacy_signal(program, codes):
+def test_missing_native_folds_is_not_hidden(program, codes):
+    """The fold entries are mandatory on both columns (lane cgr4-py-compute
+    deleted the Python fold route): a binding without them raises."""
     class Binding:
         x_prep_run = staticmethod(lambda *args: None)
         def __getattr__(self, name):
             raise ImportError('host has no ' + name)
     program['_prep_binding'] = lambda mode: Binding()
     program['_mode'] = lambda: 'identical'
-    assert program['_native_folds'](4, 2, 3, True, codes, 2) is None
+    with pytest.raises(ImportError, match='host has no x_prep_'):
+        program['_native_folds'](4, 2, 3, True, codes, 2)
 
 
 def test_missing_optional_host_marker_does_not_refuse_gpu(program):

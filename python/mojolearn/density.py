@@ -861,14 +861,13 @@ class KernelDensity(NumericModeMixin):
 
     def score(self, X, y=None):
         """The total log density: the float32 per-row scores summed
-        SEQUENTIALLY in Python float64. A host reduction outside the
+        SEQUENTIALLY in float64 by the base binding (`Array.sum`). A host reduction outside the
         identity claim (DEVIATION 2365); it was NumPy's pairwise
         `np.sum(dtype=float64)`, so the last bits may differ from a value
         recorded under it."""
-        total = 0.0
-        for v in self.score_samples(X).tolist():
-            total += v
-        return total
+        # the base binding's sequential float sum (`Array.sum`, reduce_stat)
+        s = self.score_samples(X)
+        return s.sum() if s.size else 0.0
 
     def sample(self, n_samples=1, random_state=None):
         raise NotImplementedError(

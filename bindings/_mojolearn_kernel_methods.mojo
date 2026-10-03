@@ -54,6 +54,9 @@ from kernel_methods.estimator import (
 from svm.impl.svm_parameter import KernelParams
 
 
+from svm.impl.scale_gamma_device import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
+from kernel_methods.estimator import _family_ctx as _sg_family_ctx
+
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
     return f32_ptr(addr)
 
@@ -570,6 +573,15 @@ def rbf_sampler_transform_binding(
     return PythonObject(0)
 
 
+
+def km_scale_gamma_limbs_binding(
+    x_addr: PythonObject, count: PythonObject, out_addr: PythonObject
+) raises -> PythonObject:
+    """lane/apple-fast-py2mojo-linear: RBFSampler gamma='scale' exact sums on
+    the device (`svm/impl/scale_gamma_device.mojo`)."""
+    return scale_gamma_limbs_device_binding(_sg_family_ctx(), x_addr, count, out_addr)
+
+
 @export
 def PyInit__mojolearn_kernel_methods() abi("C") -> PythonObject:
     try:
@@ -587,6 +599,8 @@ def PyInit__mojolearn_kernel_methods() abi("C") -> PythonObject:
         m.def_function[nystroem_transform_binding]("nystroem_transform")
         m.def_function[rbf_sampler_fit_binding]("rbf_sampler_fit")
         m.def_function[rbf_sampler_transform_binding]("rbf_sampler_transform")
+        m.def_function[km_scale_gamma_limbs_binding]("scale_gamma_limbs")
+        m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_kernel_methods: ", e))

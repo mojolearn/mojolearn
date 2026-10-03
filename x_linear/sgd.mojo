@@ -33,7 +33,7 @@ by five) and the loss classes at the top of that file. Differences, named:
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fexp, flog, fabs, fmax, fmin,
-    ld, st, ldi, sti, i2f, fill, row_dot, shuffle, axpy_acc, scale_acc, ftzv, par_rows, fz, xmad, fsign,
+    ld, st, ldi, sti, i2f, fill, row_dot, shuffle, perm_fill, perm_key, axpy_acc, scale_acc, ftzv, par_rows, fz, xmad, fsign,
     X_LINEAR_HOST_SABOTAGE,
 )
 from std.memory import bitcast
@@ -42,7 +42,8 @@ from std.sys.info import is_gpu
 from std.sys.compile import is_defined
 from std.sys.info import is_apple_gpu
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_linear.team import Team
+from x_linear.team import Team, team_at
+from x_linear.vfold import vdot, vabssum
 from checks.numerics import identical_pow
 
 comptime L_HINGE = 0
@@ -278,7 +279,7 @@ def sgd_one(
         epochs = epoch + 1
         var objective = Float32(0)
         if do_shuffle:
-            shuffle(idx, n, rng)
+            perm_fill(idx, n, perm_key(seed, epoch))
         for r in range(n):
             var i = ldi(idx, r)
             var y = ld(ys, i)
@@ -1034,18 +1035,23 @@ def mb_bias_step(b: Float32, gb: Float32, bs: Int, eta: Float32, alpha: Float32,
 
 
 @always_inline
-def mb_penalty(w: FP, woff: Int, d: Int, alpha: Float32, l1r: Float32, penalty: Int) -> Float32:
-    """alpha times the penalty (sgd_one's reg) at w."""
+def mb_penalty_t(v: Team, w: FP, woff: Int, d: Int, alpha: Float32, l1r: Float32, penalty: Int,
+                 parts: FP) -> Float32:
+    """alpha times the penalty (sgd_one's reg) at w; ||w||^2 and ||w||_1 in
+    the vfold order (lane cgr4-device-optim; they were ascending chains), so
+    the device's epoch-end block (x_linear/sgd_end.mojo) folds the same
+    words. Every thread returns it."""
     if penalty == P_NONE:
         return Float32(0)
-    var n2 = Float32(0)
-    var n1 = Float32(0)
-    for j in range(d):
-        var wj = ld(w, woff + j)
-        n2 = fmad(wj, wj, n2)
-        n1 = fa(n1, fabs(wj))
+    var n2 = vdot(v, w, woff, w, woff, d, parts)
+    var n1 = vabssum(v, w, woff, d, parts)
     var l1 = Float32(0) if penalty == P_L2 else (Float32(1) if penalty == P_L1 else l1r)
     return fm(alpha, fa(fm(fm(fs(Float32(1), l1), Float32(0.5)), n2), fm(l1, n1)))
+
+
+def mb_penalty(w: FP, woff: Int, d: Int, alpha: Float32, l1r: Float32, penalty: Int) -> Float32:
+    """`mb_penalty_t` on one thread."""
+    return mb_penalty_t(team_at(0, 1, w, 0, 0, 0), w, woff, d, alpha, l1r, penalty, w)
 
 
 def sgd_mb_one(
@@ -1079,7 +1085,7 @@ def sgd_mb_one(
     for epoch in range(max_iter):
         epochs = epoch + 1
         if do_shuffle:
-            shuffle(idx, n, rng)
+            perm_fill(idx, n, perm_key(seed, epoch))
         var objective = Float32(0)
         var start = 0
         while start < n:

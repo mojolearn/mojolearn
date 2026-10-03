@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """t-SNE on the device: one thread per cell of `x_ann/tsne_core.mojo`; the
-symmetrization is the shared host function (`tsne_symmetrize`)."""
+symmetrization runs on the device too (`x_ann/tsne_sym_device.mojo`, the
+host function `tsne_symmetrize`'s CSR and words)."""
 
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
@@ -14,6 +15,8 @@ from std.atomic import Atomic, Ordering, fence
 from std.gpu import grid_dim
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA, COLUMN_AMD
 from x_ann.device_ctx import x_ann_ctx
+from core.device_fold import device_sum_f32_fixed
+from x_ann.tsne_sym_device import tsne_symmetrize_device
 from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
 
@@ -473,17 +476,15 @@ def tsne_fit_device(
                                             dp.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB)
     ctx.synchronize()
     st.host("knn_perplexity")
-    var nn_i = download_i32(ctx, dni, n * nn)
-    var p_cond = download_f32(ctx, dp, n * nn)
-    var indptr = List[Int32]()
-    var indices = List[Int32]()
-    var values = List[Float32]()
-    tsne_symmetrize(n, nn, nn_i, p_cond, indptr, indices, values)
+    # lane cgr4-download-loop: P symmetrized on the device
+    # (x_ann/tsne_sym_device.mojo), the host function's CSR and words; the
+    # graph never comes to the host
+    var graph = tsne_symmetrize_device(ctx, dni, dp, n, nn)
     st.host("symmetrize")
 
-    var dptr = upload_i32(ctx, indptr)
-    var dind = upload_i32(ctx, indices)
-    var dval = upload_f32(ctx, values)
+    ref dptr = graph.indptr
+    ref dind = graph.indices
+    ref dval = graph.values
     var dy = upload_f32(ctx, y0)
     var dy2 = upload_f32(ctx, y0)
     var dupd = upload_f32(ctx, List[Float32](length=2 * n, fill=Float32(0.0)))
@@ -532,11 +533,9 @@ def tsne_fit_device(
         y_out = download_f32(ctx, dy, 2 * n)
     else:
         y_out = download_f32(ctx, dy2, 2 * n)
-    var kl = download_f32(ctx, dkl, n)
-    var total = Float32(0.0)
-    for i in range(n):
-        total = total + kl[i]
-    kl_out = total
+    # lane cgr4-download-loop: the KL total folds on the device in the fixed
+    # order of core/device_fold.mojo (the host column folds the same order)
+    kl_out = device_sum_f32_fixed(ctx, dkl, n)
     st.host("kl_download")
     _ = dkl^
     _ = dz^
@@ -546,9 +545,7 @@ def tsne_fit_device(
     _ = dupd^
     _ = dy2^
     _ = dy^
-    _ = dval^
-    _ = dind^
-    _ = dptr^
+    _ = graph^
     _ = dp^
     _ = dni^
     _ = dnd^

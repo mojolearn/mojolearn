@@ -12,6 +12,9 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from core.py2mojo_rows import py2mojo_rows_device_binding
+from core.py2mojo_linear import py2mojo_linear_flags
+from x_linear.device import linear_ctx as _p2m_ctx
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.sys.info import has_apple_gpu_accelerator
@@ -133,6 +136,18 @@ def vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+
+def py2mojo_rows_binding(mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject,
+                         params: PythonObject) raises -> PythonObject:
+    """lane/apple-fast-py2mojo-linear: per-row probability glue on the
+    device (`core/py2mojo_rows.mojo`)."""
+    return py2mojo_rows_device_binding(_p2m_ctx(), mode, src_addr, dst_addr, params)
+
+
+def py2mojo_linear_flags_binding() raises -> PythonObject:
+    return PythonObject(py2mojo_linear_flags())
+
+
 @export
 def PyInit__mojolearn_x_linear() abi("C") -> PythonObject:
     try:
@@ -143,6 +158,8 @@ def PyInit__mojolearn_x_linear() abi("C") -> PythonObject:
         m.def_function[decision_codes_binding]("x_linear_decision_codes")
         m.def_function[cls1_flags_binding]("x_linear_cls1_flags")
         m.def_function[vendor_binding]("x_linear_vendor")
+        m.def_function[py2mojo_rows_binding]("py2mojo_rows")
+        m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_linear: ", e))

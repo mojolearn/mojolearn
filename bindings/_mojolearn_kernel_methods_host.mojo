@@ -59,6 +59,8 @@ from kernel_methods.host.km_host_oracle import (
 )
 
 
+from svm.host.scale_gamma_host import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
+
 def kernel_methods_host_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
@@ -413,6 +415,8 @@ def rbf_sampler_transform_binding(
     return PythonObject(0)
 
 
+
+
 @export
 def PyInit__mojolearn_kernel_methods_host() abi("C") -> PythonObject:
     try:
@@ -429,6 +433,8 @@ def PyInit__mojolearn_kernel_methods_host() abi("C") -> PythonObject:
         module.def_function[nystroem_transform_binding]("nystroem_transform")
         module.def_function[rbf_sampler_fit_binding]("rbf_sampler_fit")
         module.def_function[rbf_sampler_transform_binding]("rbf_sampler_transform")
+        module.def_function[scale_gamma_limbs_host_binding]("scale_gamma_limbs")
+        module.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         return module.finalize()
     except e:
         abort(String("failed to create _mojolearn_kernel_methods_host: ", e))

@@ -63,7 +63,7 @@ def _dg_init_enqueue(
     come home with the candidate's loss behind ONE synchronize. The dot is
     enqueued before the step overwrites anything it reads."""
     if not dg_ready:  # else the direction's launch already wrote it
-        ctx.enqueue_function[dot_kernel](
+        ctx.enqueue_function[dot_kernel](  # small-launch(n: parameter count n_param, the coefficient vector): an L-BFGS vector phase over d-sized data, never rows
             scalar.unsafe_ptr(), u.unsafe_ptr(), drt.unsafe_ptr(), Int32(n),
             grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
         )
