@@ -489,3 +489,253 @@ def qh_write_hist_kernel(
             + cell
         )
         dst_histogram.unsafe_store(dst, val)
+
+
+# ---- QH_MODE_SKIP (FAST, Apple; default, off `-D MOJOLEARN_GBDT_DW_MODE_SKIP_OFF`)
+# Lane apple-fast-dwgap. A low-cardinality feature sends most of a block's
+# rows to ONE bin, so every lane's two threadgroup atomics land on the same
+# two cells and serialize (taxi: store_fwd, mta_tax, airport_fee,
+# congestion, tolls, ratecode, extra, passengers each have a dominant bin).
+# LightGBM's most-frequent-bin trick, in the integer domain: per feature one
+# SKIP bin takes no per-row atomic; the block keeps its own row total of
+# both quantized stats in registers, and after the row loop the skip cell
+# is set to `total - sum(every other cell of that feature)`. Every row hits
+# exactly one of the feature's 256 cells, and the cells hold Int32 sums of
+# the SAME addends, so the skip cell ends with exactly the sum the per-row
+# atomics would have left there: integer addition is associative, so the
+# flushed accumulator, the dequantized histogram and the tree are the same
+# bits as the arm without the define, whatever bin is chosen. The choice
+# only decides how much contention goes away: `qh_mode_bins_kernel` takes
+# each feature's heaviest stat-0 bin of the ROOT histogram after depth 0,
+# and depth 0 of the next tree uses the previous tree's table (256 = no
+# skip, the table's initial state; a bin byte never reaches 256).
+# No extra shared memory: the skip cell itself is the fix-up accumulator
+# (no row ever touched it), so the 32 KB page is unchanged.
+
+
+@always_inline
+def qh_add_row_skip(
+    pair: SIMD[DType.int32, 2],
+    words: Int,
+    row: Int,
+    bins_line_size: Int,
+    bins_p: MutPointer[UInt32, MutAnyOrigin],
+    rot_skip: SIMD[DType.int32, QH_GROUP_FEATURES],
+    smem: UnsafePointer[
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+        origin=MutUntrackedOrigin,
+    ],
+    tid: Int,
+):
+    """`qh_add_row` with the skip test: `rot_skip[4w + i]` is the skip bin
+    of the feature this thread's byte rotation visits at `(w, i)`, staged
+    per thread so the index stays comptime (registers, no local array)."""
+    comptime for w in range(QH_GROUP_WORDS):
+        if w < words:
+            var ci = ldg(bins_p + (w * bins_line_size + row))
+            comptime for i in range(4):
+                var j = (tid + i) & 3
+                var bin = Int((ci >> UInt32(24 - 8 * j)) & UInt32(255))
+                if bin != Int(rot_skip[w * 4 + i]):
+                    var cell = (((w << 2) + j) << 9) + (bin << 1)
+                    _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                        smem.unsafe_offset(cell), pair[0]
+                    )
+                    _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                        smem.unsafe_offset(cell + 1), pair[1]
+                    )
+
+
+def qh_hist_skip_kernel[gather: Bool](
+    feature_folds: MutPointer[UInt32, MutAnyOrigin],
+    feature_fold_offset: MutPointer[UInt32, MutAnyOrigin],
+    f_count_in32: Int32,
+    cindex: MutPointer[UInt32, MutAnyOrigin],
+    bins_line_size_in: Int32,
+    cindex_base_in: Int32,
+    indices: MutPointer[UInt32, MutAnyOrigin],
+    q_stats: MutPointer[UInt64, MutAnyOrigin],
+    part_offset: MutPointer[UInt32, MutAnyOrigin],
+    part_size: MutPointer[UInt32, MutAnyOrigin],
+    part_ids: MutPointer[UInt32, MutAnyOrigin],
+    q_acc: MutPointer[Int32, MutAnyOrigin],
+    hist_block_offset_in: Int32,
+    hist_cell_count_in: Int32,
+    skip_bins: MutPointer[UInt32, MutAnyOrigin],
+):
+    """QH_MODE_SKIP's build: `qh_hist_kernel` (gather False, depth 0) or
+    `qh_hist_gather_kernel` (gather True) with the skip test and the
+    skip-cell fix-up before the unchanged flush. `skip_bins` is this
+    policy block's slice of the table (block-local feature index)."""
+    var tid = Int(thread_idx.x)
+    var f_count_in = Int(f_count_in32)
+    var bins_line_size = Int(bins_line_size_in)
+
+    var part_id = Int(part_ids.unsafe_load(Int(block_idx.y)))
+    var p_offset = Int(part_offset.unsafe_load(part_id))
+    var p_size = Int(part_size.unsafe_load(part_id))
+
+    var feature_blocks = (
+        f_count_in + QH_GROUP_FEATURES - 1
+    ) // QH_GROUP_FEATURES
+    var max_blocks_per_part = Int(grid_dim.x) // feature_blocks
+    var group_id = Int(block_idx.x) // max_blocks_per_part
+    var local_block_idx = Int(block_idx.x) % max_blocks_per_part
+    var feature_offset = group_id * QH_GROUP_FEATURES
+    var f_count = min(f_count_in - feature_offset, QH_GROUP_FEATURES)
+    var words = (f_count + 3) // 4
+    var bins_p = cindex + Int(cindex_base_in) + bins_line_size * (
+        group_id * QH_GROUP_WORDS
+    )
+
+    var active_block_count = (
+        p_size + QH_MIN_ITEMS_PER_BLOCK - 1
+    ) // QH_MIN_ITEMS_PER_BLOCK
+    if active_block_count > max_blocks_per_part:
+        active_block_count = max_blocks_per_part
+    if active_block_count < 1:
+        active_block_count = 1
+    if local_block_idx >= active_block_count:
+        return
+
+    # this thread's rotated skip bins (256 = none, also for the padding
+    # features of a partial group)
+    var rot_skip = SIMD[DType.int32, QH_GROUP_FEATURES](256)
+    comptime for w in range(QH_GROUP_WORDS):
+        comptime for i in range(4):
+            var f_local = (w << 2) + ((tid + i) & 3)
+            if f_local < f_count:
+                rot_skip[w * 4 + i] = Int32(
+                    Int(skip_bins.unsafe_load(feature_offset + f_local))
+                )
+
+    var smem = stack_allocation[
+        QH_SMEM,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var z = tid
+    while z < QH_SMEM:
+        smem[z] = Int32(0)
+        z += QH_BLOCK
+    barrier()
+
+    var tot = SIMD[DType.int32, 2](0)
+    var pos = p_offset + local_block_idx * QH_BLOCK + tid
+    var stride = active_block_count * QH_BLOCK
+    var pend = p_offset + p_size
+    while pos < pend:
+        var row = pos
+        comptime if gather:
+            row = Int(ldg(indices + pos))
+        var pair = bitcast[DType.int32, 2](ldg(q_stats + pos))
+        tot += pair
+        qh_add_row_skip(
+            pair, words, row, bins_line_size, bins_p, rot_skip, smem, tid
+        )
+        pos += stride
+    barrier()
+
+    # fix-up 1: minus every non-skip cell of (feature, stat), 16 bins per
+    # thread, into the skip cell (which no row touched). Reads only
+    # non-skip cells; writes only skip cells.
+    var piece = tid
+    var n_pieces = f_count * QH_STATS * 16
+    while piece < n_pieces:
+        var pair_id = piece >> 4
+        var sub = piece & 15
+        var f_local = pair_id >> 1
+        var stat = pair_id & 1
+        var s = Int(skip_bins.unsafe_load(feature_offset + f_local))
+        if s < QH_BINS:
+            var part = Int32(0)
+            for k in range(16):
+                var b = (sub << 4) + k
+                if b != s:
+                    part += smem[(f_local << 9) + (b << 1) + stat]
+            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                smem.unsafe_offset((f_local << 9) + (s << 1) + stat), -part
+            )
+        piece += QH_BLOCK
+    # fix-up 2: plus this thread's row total, rotated so the lanes spread
+    # over the skip cells
+    for k in range(f_count):
+        var f_local = (tid + k) % f_count
+        var s = Int(skip_bins.unsafe_load(feature_offset + f_local))
+        if s < QH_BINS:
+            var cell = (f_local << 9) + (s << 1)
+            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                smem.unsafe_offset(cell), tot[0]
+            )
+            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                smem.unsafe_offset(cell + 1), tot[1]
+            )
+
+    qh_flush(
+        tid, active_block_count, feature_folds, feature_fold_offset,
+        feature_offset, f_count, Int(hist_block_offset_in),
+        Int(hist_cell_count_in), q_acc, smem,
+    )
+
+
+comptime QH_MODE_BLOCK = 256
+
+
+def qh_mode_bins_kernel(
+    feature_folds: MutPointer[UInt32, MutAnyOrigin],
+    feature_fold_offset: MutPointer[UInt32, MutAnyOrigin],
+    hist_ids: MutPointer[UInt32, MutAnyOrigin],
+    histogram: MutPointer[Float32, MutAnyOrigin],
+    hist_block_offset_in: Int32,
+    hist_cell_count_in: Int32,
+    skip_bins: MutPointer[UInt32, MutAnyOrigin],
+):
+    """QH_MODE_SKIP's table: one block per feature of a policy block (grid
+    x), one thread per bin; the feature's heaviest stat-0 bin of the root's
+    flat histogram (`hist_ids[0]`, depth 0), ties to the lower bin, 256 when
+    no bin is positive. Any value is exact for the build; this only picks
+    the most contended cell."""
+    var tid = Int(thread_idx.x)
+    var fid = Int(block_idx.x)
+    var hist_cell_count = Int(hist_cell_count_in)
+    var folds = Int(feature_folds.unsafe_load(fid))
+    var root = Int(hist_ids.unsafe_load(0))
+    var vals = stack_allocation[
+        QH_MODE_BLOCK,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var bins = stack_allocation[
+        QH_MODE_BLOCK,
+        Scalar[DType.int32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var v = Float32(0.0)
+    if tid < folds:
+        v = histogram.unsafe_load(
+            root * hist_cell_count * QH_STATS
+            + Int(hist_block_offset_in)
+            + Int(feature_fold_offset.unsafe_load(fid))
+            + tid
+        )
+    vals[tid] = v
+    bins[tid] = Int32(tid)
+    barrier()
+    var half = QH_MODE_BLOCK // 2
+    while half > 0:
+        if tid < half:
+            var ov = vals[tid + half]
+            var ob = bins[tid + half]
+            var mv = vals[tid]
+            var mb = bins[tid]
+            if ov > mv or (ov == mv and ob < mb):
+                vals[tid] = ov
+                bins[tid] = ob
+        barrier()
+        half //= 2
+    if tid == 0:
+        var best = Int(bins[0])
+        if not (vals[0] > Float32(0.0)):
+            best = QH_BINS
+        skip_bins.unsafe_store(fid, UInt32(best))
