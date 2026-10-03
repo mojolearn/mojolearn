@@ -98,15 +98,6 @@ def _new_arena(size):
     return array.array("f", bytes(4 * max(size, 1)))
 
 
-def _py2mojo(numeric_mode):
-    """lane apple-fast-py2mojo-core (2026-10-03): True when the binding forms
-    the label layouts and class sums (x_metrics/onehot.mojo, epilogue
-    class_sums); a build with -D MOJOLEARN_PY2MOJO_core_OFF answers 0 and
-    keeps the Python layouts below them (the A/B arm)."""
-    fn = _optional_metrics_entry(_binding(numeric_mode), "x_metrics_py2mojo_core")
-    return fn is not None and int(fn()) == 1
-
-
 def _i32_c(codes):
     """int32 C-order codes as an `Array` (no copy when they already are)."""
     if isinstance(codes, Array):
@@ -1519,18 +1510,13 @@ class _DevCurve:
         return p.floats(self.fps + self.c - 1, 1)[0], p.floats(self.tps + self.c - 1, 1)[0]
 
     def native(self, name):
-        """The binding's epilogue entry `name`, or None (an older binary,
-        MOJOLEARN_HOTPATH=python, or an empty curve)."""
-        from ._buffer import hotpath_enabled
-        if self.c <= 0 or not hotpath_enabled():
-            return None
-        fn = _optional_metrics_entry(_binding(self.numeric_mode), name)
-        if fn is not None:
-            p = self.prog
-            p._check(self.fps, self.c)
-            p._check(self.tps, self.c)
-            if self.keep >= 0:
-                p._check(self.keep, self.c)
+        """The binding's epilogue entry `name`, its words checked readable."""
+        fn = _epilogue(name, self.numeric_mode)
+        p = self.prog
+        p._check(self.fps, self.c)
+        p._check(self.tps, self.c)
+        if self.keep >= 0:
+            p._check(self.keep, self.c)
         return fn
 
     def addr(self):
@@ -1550,28 +1536,23 @@ class _DevCurve:
 
 
 def _epilogue(name, numeric_mode):
-    """The binding's host epilogue entry `name` (x_metrics/epilogue.mojo,
-    lane py-misc-metrics), or None: an older binary, MOJOLEARN_HOTPATH=python,
-    or MOJOLEARN_METRICS_EPILOGUE=python (the reference arm the identity and
-    timing jobs run beside the native one in the same build)."""
-    import os
-    from ._buffer import hotpath_enabled
-    if not hotpath_enabled() or os.environ.get("MOJOLEARN_METRICS_EPILOGUE", "").strip().lower() == "python":
-        return None
-    return _optional_metrics_entry(_binding(numeric_mode), name)
+    """The binding's epilogue entry `name` (x_metrics/epilogue.mojo, lane
+    py-misc-metrics). Every install's x_metrics binding carries it: the
+    MOJOLEARN_METRICS_EPILOGUE=python and MOJOLEARN_HOTPATH=python reference
+    arms are gone (lane pyglue-sweep: Python is glue only)."""
+    return getattr(_binding(numeric_mode), name)
 
 
 def _dev_epilogue(dev, name):
-    """`_epilogue` for a `_DevCurve` whose fps, tps and thresholds words are
-    all readable (declared outputs), or None."""
+    """`_epilogue` for a `_DevCurve` with thresholds, its fps, tps and
+    thresholds words checked readable (declared outputs)."""
     if dev.c <= 0 or dev.thr < 0:
-        return None
+        raise ValueError("mojolearn metrics: an empty curve has no thresholds")
     fn = _epilogue(name, dev.numeric_mode)
-    if fn is not None:
-        p = dev.prog
-        p._check(dev.fps, dev.c)
-        p._check(dev.tps, dev.c)
-        p._check(dev.thr, dev.c)
+    p = dev.prog
+    p._check(dev.fps, dev.c)
+    p._check(dev.tps, dev.c)
+    p._check(dev.thr, dev.c)
     return fn
 
 
@@ -1769,8 +1750,9 @@ class _FoldCurve:
     def auc(self, max_fpr):
         s, F, T, k, a, b, u, v, c = self._words()
         if c <= 0 or not (F > 0 and T > 0):
-            L = self.lists()
-            return _binary_auc(L[0], L[1], max_fpr, L.keep)
+            # `_binary_auc`'s empty-class answer, without bringing the curve back
+            _undefined_warning("Only one class is present in y_true. ROC AUC score is not defined in that case.")
+            return float("nan")
         if max_fpr is None:
             return float(s / (2.0 * F * T))
         if k >= c:
@@ -1830,37 +1812,19 @@ def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
     counts run on the device; drop_intermediate removes collinear points."""
     dev, _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "roc_curve", lazy=True,
                            compact=bool(drop_intermediate))
-    fn = dev.native("x_metrics_curve_roc")
-    if fn is not None:
-        # the three Float64 arrays straight from the arena words
-        # (x_metrics/epilogue.mojo roc_arrays; lane metrics-apple2)
-        F, T = dev.last()
-        if F > 0 and T > 0:
-            try:
-                bufs = [array.array("d", bytes(8 * (dev.c + 1))) for _ in range(3)]
-                m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr, dev.keep), dev.c,
-                           1 if drop_intermediate else 0, tuple(b.buffer_info()[0] for b in bufs)))
-                for b in bufs:
-                    del b[m:]
-                return tuple(Array._owned(b, (m,), "<f8", "C") for b in bufs)
-            except Exception:
-                pass
-    cur = dev.lists()
-    fps, tps, thr = cur
-    if drop_intermediate and len(fps) > 2:
-        fps, tps, thr = _drop_collinear(fps, tps, thr, cur.keep)
-    fps, tps, thr = [0.0] + fps, [0.0] + tps, [float("inf")] + thr
-    if fps[-1] <= 0:
+    # the three Float64 arrays straight from the arena words
+    # (x_metrics/epilogue.mojo roc_arrays; lane metrics-apple2), an empty
+    # class's NaN rates there too (lane pyglue-sweep)
+    F, T = dev.last()
+    if F <= 0:
         _undefined_warning("No negative samples in y_true, false positive value should be meaningless")
-        fpr = [float("nan")] * len(fps)
-    else:
-        fpr = list(map(operator.truediv, fps, itertools.repeat(fps[-1])))
-    if tps[-1] <= 0:
+    if T <= 0:
         _undefined_warning("No positive samples in y_true, true positive value should be meaningless")
-        tpr = [float("nan")] * len(tps)
-    else:
-        tpr = list(map(operator.truediv, tps, itertools.repeat(tps[-1])))
-    return (Array.from_list(fpr, "<f8"), Array.from_list(tpr, "<f8"), Array.from_list(thr, "<f8"))
+    fn = dev.native("x_metrics_curve_roc")
+    bufs = [_f64_out(dev.c + 1) for _ in range(3)]  # glue: three output buffers
+    m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr, dev.keep), dev.c,
+               1 if drop_intermediate else 0, tuple(b.buffer_info()[0] for b in bufs)))  # glue: three buffer addresses
+    return tuple(_f64_array(b, m) for b in bufs)  # glue: three output arrays
 
 
 def precision_recall_curve_options(y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode):
@@ -1868,68 +1832,33 @@ def precision_recall_curve_options(y_true, y_score, pos_label, sample_weight, dr
     (lane/metrics): Float64 outputs; the default call keeps its kernel."""
     dev, _ = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "precision_recall_curve",
                            lazy=True)
+    # the three Float64 arrays straight from the arena words
+    # (x_metrics/epilogue.mojo pr_arrays; lane py-misc-metrics), no
+    # positives' recall of one there too (lane pyglue-sweep)
     fn = _dev_epilogue(dev, "x_metrics_curve_pr")
-    if fn is not None and dev.last()[1] != 0:
-        # the three Float64 arrays straight from the arena words
-        # (x_metrics/epilogue.mojo pr_arrays; lane py-misc-metrics)
-        try:
-            bufs = [_f64_out(dev.c + 1) for _ in range(3)]
-            m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr), dev.c, 1 if drop_intermediate else 0,
-                       tuple(b.buffer_info()[0] for b in bufs)))
-            return _f64_array(bufs[0], m + 1), _f64_array(bufs[1], m + 1), _f64_array(bufs[2], m)
-        except Exception:
-            pass
-    fps, tps, thr = dev.lists()
-    if drop_intermediate and len(fps) > 2:
-        keep = [0] + [i for i in range(1, len(fps) - 1)
-                      if tps[i] != tps[i - 1] or tps[i + 1] != tps[i]] + [len(fps) - 1]
-        fps, tps, thr = [fps[i] for i in keep], [tps[i] for i in keep], [thr[i] for i in keep]
-    prec = [t / (t + f) if (t + f) != 0 else 0.0 for t, f in zip(tps, fps)]
-    if tps[-1] == 0:
+    if dev.last()[1] == 0:
         warnings.warn("No positive class found in y_true, recall is set to one for all thresholds.",
                       UserWarning, stacklevel=3)
-        rec = [1.0] * len(tps)
-    else:
-        rec = [t / tps[-1] for t in tps]
-    return (Array.from_list(prec[::-1] + [1.0], "<f8"), Array.from_list(rec[::-1] + [0.0], "<f8"),
-            Array.from_list(thr[::-1], "<f8"))
+    bufs = [_f64_out(dev.c + 1) for _ in range(3)]  # glue: three output buffers
+    m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr), dev.c, 1 if drop_intermediate else 0,
+               tuple(b.buffer_info()[0] for b in bufs)))  # glue: three buffer addresses
+    return _f64_array(bufs[0], m + 1), _f64_array(bufs[1], m + 1), _f64_array(bufs[2], m)
 
 
 def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_intermediate=False,
               numeric_mode=None):
     """scikit-learn 1.9 `det_curve`: fpr, fnr, thresholds."""
     dev, classes = _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, "det_curve", lazy=True)
-    fn = _dev_epilogue(dev, "x_metrics_curve_det") if len(classes) == 2 else None
-    if fn is not None:
-        F, T = dev.last()
-        if F != 0 and T != 0:
-            # x_metrics/epilogue.mojo det_arrays (lane py-misc-metrics)
-            try:
-                bufs = [_f64_out(dev.c + 1) for _ in range(3)]
-                m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr), dev.c, 1 if drop_intermediate else 0,
-                           tuple(b.buffer_info()[0] for b in bufs)))
-                return tuple(_f64_array(b, m) for b in bufs)
-            except Exception:
-                pass
-    fps, tps, thr = dev.lists()
-    if drop_intermediate and len(fps) > 2:
-        keep = [0] + [i for i in range(1, len(fps) - 1)
-                      if tps[i] != tps[i - 1] or tps[i + 1] != tps[i]] + [len(fps) - 1]
-        fps, tps, thr = [fps[i] for i in keep], [tps[i] for i in keep], [thr[i] for i in keep]
-    tps, fps, thr = [0.0] + tps, [0.0] + fps, [float("inf")] + thr
     if len(classes) != 2:
         raise ValueError("Only one class is present in y_true. Detection error tradeoff curve is not "
                          "defined in that case.")
-    fns = [tps[-1] - v for v in tps]
-    p_count, n_count = tps[-1], fps[-1]
-    import bisect
-    right = bisect.bisect_right(fps, fps[0])
-    first = right - 1 if right > 0 else 0
-    last = bisect.bisect_left(tps, tps[-1]) + 1
-    sl = slice(first, last)
-    return (Array.from_list([v / n_count for v in fps[sl]][::-1], "<f8"),
-            Array.from_list([v / p_count for v in fns[sl]][::-1], "<f8"),
-            Array.from_list(thr[sl][::-1], "<f8"))
+    # x_metrics/epilogue.mojo det_arrays (lane py-misc-metrics); a zero class
+    # weight raises there as the Python division by zero did
+    fn = _dev_epilogue(dev, "x_metrics_curve_det")
+    bufs = [_f64_out(dev.c + 1) for _ in range(3)]  # glue: three output buffers
+    m = int(fn(dev.addr(), (dev.fps, dev.tps, dev.thr), dev.c, 1 if drop_intermediate else 0,
+               tuple(b.buffer_info()[0] for b in bufs)))  # glue: three buffer addresses
+    return tuple(_f64_array(b, m) for b in bufs)  # glue: three output arrays
 
 
 def _trapezoid(x, y):
@@ -2041,52 +1970,14 @@ def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flag
     w = _weights(sample_weight, n, caller)
     index = {c: i for i, c in enumerate(classes)}
     codes = _label_map(true, lambda v: index[v])
-    if _py2mojo(numeric_mode):
-        # lane apple-fast-py2mojo-core: the class-major flags formed by the
-        # onehot unit inside the curve program, the support by the binding's
-        # class_sums (the same counts, binary64 in row order); no n*k host walk
-        codes = _i32_c(codes)
-        curves = _curves(s, _OneHot(codes, n, k, 0), w, n, k, numeric_mode, stride=k, thresholds=False,
-                         keep_flags=keep_flags, lazy=True, compact=True, fold=fold)
-        return curves, _class_sums(codes, w, k, numeric_mode), s, codes, classes, w
-    # the codes' low bytes straight from the int32 words (lane
-    # metrics-apple3); a Python list only where one is walked
-    direct = _LITTLE and k <= 256 and isinstance(codes, Array) and codes.dtype == "<i4"
-    code_list = codes if direct else codes.tolist()
-    if k <= 256:
-        # class-major 0/1 flags as int32 words, built with bytes.translate
-        # and a strided byte copy (little-endian '<i4'), and the unweighted
-        # support by bytes.count: the same values (lane metrics-apple)
-        cb = codes.tobytes()[0::4] if direct else bytes(code_list)
-        words = bytearray(4 * n * k)
-        words[0::4] = b"".join(cb.translate(bytes(int(j == c) for j in range(256))) for c in range(k))
-        store = array.array("i")
-        store.frombytes(words)
-        if not _LITTLE:
-            store.byteswap()
-        flags = Array._owned(store, (n * k,), "<i4", "C")
-    else:
-        flags = []
-        for c in range(k):
-            flags.extend(1 if v == c else 0 for v in code_list)
-        flags = Array.from_list(flags, "<i4")
-    curves = _curves(s, flags, w, n, k, numeric_mode, stride=k, thresholds=False, keep_flags=keep_flags,
-                     lazy=True, compact=True, fold=fold)
-    support = [0.0] * k
-    if w is None:
-        if k <= 256:
-            support = [float(cb.count(c)) for c in range(k)]
-        else:
-            for v in code_list:
-                support[v] += 1
-    else:
-        native = _class_sums_native(codes, w, k, numeric_mode)
-        if native is not None:
-            support = native
-        else:
-            for v, wt in zip(code_list, w.tolist()):
-                support[v] += wt
-    return curves, support, s, code_list, classes, w
+    # the class-major flags formed by the onehot unit inside the curve
+    # program, the support by the binding's class_sums (the same counts,
+    # binary64 in row order); no n*k host walk (lane pyglue-sweep: the
+    # Python byte layouts, the -D MOJOLEARN_PY2MOJO_core_OFF arm, are gone)
+    codes = _i32_c(codes)
+    curves = _curves(s, _OneHot(codes, n, k, 0), w, n, k, numeric_mode, stride=k, thresholds=False,
+                     keep_flags=keep_flags, lazy=True, compact=True, fold=fold)
+    return curves, _class_sums(codes, w, k, numeric_mode), s, codes, classes, w
 
 
 _LITTLE = array.array("i", [1]).tobytes()[0] == 1
@@ -2121,69 +2012,20 @@ def _average_scores(scores, support, average):
 
 
 def _micro_inputs(codes, w, n, k, numeric_mode=None):
-    """The micro average's row-major one-hot flags ('<i4', n * k) and its
-    weights (each of the n repeated k times, or None): word r * k + c is 1
-    exactly when row r's code is c, and weight word r * k + c is w[r],
-    laid out by strided byte copies:
-    per class, each byte lane of the little-endian Int32 codes is mapped
-    to 0/1 by `bytes.translate` and the lanes are ANDed as one integer,
-    so no Python step runs per row (cpu-gpu-cleanup c-metrics-prep; lane
-    metrics-apple3's byte layout, now for every k).
-
-    lane apple-fast-py2mojo-core: with `numeric_mode`'s binding forming the
-    layouts (`_py2mojo`), the flags are an `_OneHot` (row-major) and the
-    weights a `_RepRows`, both formed by stages of the curve program."""
-    if _py2mojo(numeric_mode):
-        codes = _i32_c(codes)
-        if codes.size != n:
-            raise ValueError("mojolearn metrics: micro-average codes do not match the scores")
-        wm = None
-        if w is not None:
-            wa = w if isinstance(w, Array) and w.dtype == "<f4" else as_f32_c(w, ndim=1, name="sample_weight")[0]
-            if wa.size != n:
-                raise ValueError("mojolearn metrics: micro-average weights do not match the scores")
-            wm = _RepRows(wa, n, k)
-        return _OneHot(codes, n, k, 1), wm
-    if not isinstance(codes, Array) or codes.dtype != "<i4":
-        codes = Array.from_list(list(codes.tolist() if isinstance(codes, Array) else codes), "<i4")
+    """The micro average's row-major one-hot flags (an `_OneHot`, word
+    r * k + c is 1 exactly when row r's code is c) and its weights (a
+    `_RepRows`, each of the n repeated k times, or None), both formed by
+    stages of the curve program (x_metrics onehot and rep_rows units)."""
+    codes = _i32_c(codes)
     if codes.size != n:
         raise ValueError("mojolearn metrics: micro-average codes do not match the scores")
-    cb = codes.tobytes()
-    lanes = [cb[j::4] for j in range(4)]
-    # byte lanes that are not all zero (lane 0 always takes part)
-    live = [0] + [j for j in (1, 2, 3) if lanes[j].count(0) != n]
-    words = bytearray(4 * n * k)
-    for c in range(k):
-        hit = None
-        for j in live:
-            want = (c >> (8 * j)) & 255
-            m = int.from_bytes(lanes[j].translate(bytes(int(v == want) for v in range(256))), "little")
-            hit = m if hit is None else hit & m
-        if any((c >> (8 * j)) & 255 for j in (1, 2, 3) if j not in live):
-            hit = 0     # c has a nonzero byte in a lane every code has zero
-        words[4 * c::4 * k] = hit.to_bytes(n, "little")
-    store = array.array("i")
-    store.frombytes(words)
-    if not _LITTLE:
-        store.byteswap()
-    flags = Array._owned(store, (n * k,), "<i4", "C")
     wm = None
     if w is not None:
-        wa = w if isinstance(w, Array) and w.dtype == "<f4" else Array.from_list(
-            list(w.tolist() if isinstance(w, Array) else w), "<f4")
+        wa = w if isinstance(w, Array) and w.dtype == "<f4" else as_f32_c(w, ndim=1, name="sample_weight")[0]
         if wa.size != n:
             raise ValueError("mojolearn metrics: micro-average weights do not match the scores")
-        wb = wa.tobytes()
-        rep = bytearray(4 * n * k)
-        for c in range(k):
-            for j in range(4):
-                rep[4 * c + j::4 * k] = wb[j::4]
-        ws = array.array("f")
-        ws.frombytes(rep)
-        if not _LITTLE:
-            ws.byteswap()
-        wm = Array._owned(ws, (n * k,), "<f4", "C")
-    return flags, wm
+        wm = _RepRows(wa, n, k)
+    return _OneHot(codes, n, k, 1), wm
 
 
 def _ovo_native(true, index, s, n, k, numeric_mode):
@@ -2365,27 +2207,22 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
     index = {c: i for i, c in enumerate(classes)}
     codes = _label_map(true, lambda v: index[v])
     prog = _Prog()
-    p2m = binary and _py2mojo(numeric_mode)
     if binary:
         flat = s.reshape((n,)) if s.ndim == 2 else s
         if k == 1:
             thr = 0.5 if flat.min() >= 0 and flat.max() <= 1 else 0.0
             # two score columns [thr, s] make "s > thr" a top-1 hit of class 1
             # with the tie going to class 0 (scikit-learn: y_pred = s > thr)
-            if p2m:
-                # lane apple-fast-py2mojo-core: the columns laid out by the
-                # pair_cols unit (thr's bits, then s bit for bit)
-                import struct
-                S1 = prog.put(flat)
-                S = prog.scratch(2 * n)
-                prog.stage("pair_cols", n, S1, S, struct.unpack("<i", struct.pack("<f", thr))[0])
-            else:
-                two = Array.from_list([v for x in flat.tolist() for v in (thr, x)], "<f4")
-                S = prog.put(two)
+            # the columns laid out by the pair_cols unit (thr's bits, then s
+            # bit for bit)
+            import struct
+            S1 = prog.put(flat)
+            S = prog.scratch(2 * n)
+            prog.stage("pair_cols", n, S1, S, struct.unpack("<i", struct.pack("<f", thr))[0])
             kk, cols = 1, 2
         else:
             # zero words: a scratch slot starts zero on every backend
-            S = prog.scratch(2 * n) if p2m else prog.put(Array.from_list([0.0] * (2 * n), "<f4"))
+            S = prog.scratch(2 * n)
             kk, cols = 2, 2
     else:
         S = prog.put(s)
@@ -2703,8 +2540,19 @@ def _clusterings(labels_true, labels_pred, caller):
     return a, b, sorted(_label_set(a)), sorted(_label_set(b))
 
 
-def _contingency(a, b, ca, cb, numeric_mode):
-    """Exact Int counts, rows = classes of `a`, columns = classes of `b`."""
+class _Contingency:
+    """The exact contingency counts of two clusterings and what the
+    clustering metrics read from them, all formed by the binding
+    (x_metrics/epilogue.mojo contingency_stats, lane pyglue-sweep): `C`
+    (ka x kb Int64, rows = classes of `a`, columns = classes of `b`), `F`
+    (C + eps as Float64, when eps is given), `rows` and `cols` (Int64
+    sums), `pairs` (the 2 x 2 pair confusion counts, Int64) and `ent` (the
+    row and column entropies, Float64)."""
+
+    __slots__ = ("ka", "kb", "C", "F", "rows", "cols", "pairs", "ent")
+
+
+def _contingency(a, b, ca, cb, numeric_mode, eps=None):
     n, ka, kb = len(a), len(ca), len(cb)
     if ka * kb > 16777216:
         raise ValueError("mojolearn metrics: the contingency matrix exceeds 2^24 cells")
@@ -2712,16 +2560,23 @@ def _contingency(a, b, ca, cb, numeric_mode):
     A = prog.put_i32(_codes(a, ca))
     B = prog.put_i32(_codes(b, cb))
     key = prog.scratch(n)
-    prog.stage("pair_key", n, A, B, key, max(ka, kb), 0)
-    m = max(ka, kb) ** 2
+    kk = max(ka, kb)
+    prog.stage("pair_key", n, A, B, key, kk, 0)
+    m = kk * kk
     off, _ = _group(prog, key, n, m)
     _execute(prog, numeric_mode)
-    kk = max(ka, kb)
-    # the differences of the Int32 offsets, each row by one C-level map
-    # over two slices of the words (exact integers)
     o = prog.words(off, m + 1, "i")
-    return [list(map(operator.sub, o[i * kk + 1:i * kk + kb + 1], o[i * kk:i * kk + kb]))
-            for i in range(ka)]
+    r = _Contingency()
+    r.ka, r.kb = ka, kb
+    r.C = empty((ka, kb), "<i8")
+    r.F = empty((ka, kb), "<f8") if eps is not None else None
+    r.rows, r.cols = empty((ka,), "<i8"), empty((kb,), "<i8")
+    r.pairs, r.ent = empty((2, 2), "<i8"), empty((2,), "<f8")
+    _binding(numeric_mode).x_metrics_contingency_stats(
+        o.buffer_info()[0], (ka, kb, kk), float(eps) if eps is not None else 0.0,
+        (r.C._addr, r.F._addr if r.F is not None else 0, r.rows._addr, r.cols._addr, r.pairs._addr,
+         r.ent._addr))
+    return r
 
 
 def contingency_matrix(labels_true, labels_pred, *, eps=None, sparse=False, dtype="int64", numeric_mode=None):
@@ -2735,74 +2590,27 @@ def contingency_matrix(labels_true, labels_pred, *, eps=None, sparse=False, dtyp
         raise NotImplementedError("mojolearn contingency_matrix: sparse=True is NOT IMPLEMENTED; this "
                                   "package has no sparse matrix type (metrics/NOT_IMPLEMENTED.tsv)")
     a, b, ca, cb = _clusterings(labels_true, labels_pred, "contingency_matrix")
-    C = _contingency(a, b, ca, cb, numeric_mode)
-    flat = [v for row in C for v in row]
+    r = _contingency(a, b, ca, cb, numeric_mode, eps=eps)
     if eps is not None:
-        return Array.from_list([v + float(eps) for v in flat], "<f8").reshape((len(ca), len(cb)))
+        return r.F
     code = {"int64": "<i8", "int32": "<i4", "float64": "<f8", "float32": "<f4"}.get(
         dtype if isinstance(dtype, str) else getattr(dtype, "__name__", str(dtype)), "<i8")
-    return Array.from_list([float(v) if code[1] == "f" else int(v) for v in flat], code).reshape((len(ca), len(cb)))
+    return r.C if code == "<i8" else r.C.astype(code)
 
 
 def pair_confusion_matrix(labels_true, labels_pred, *, numeric_mode=None):
     """scikit-learn 1.9 `pair_confusion_matrix`: the 2 x 2 Int64 pair counts
-    from the exact contingency matrix (Python integers, no overflow)."""
+    from the exact contingency matrix (exact Int64 in the binding: every
+    pair count is below 2^62)."""
     a, b, ca, cb = _clusterings(labels_true, labels_pred, "pair_confusion_matrix")
-    C = _contingency(a, b, ca, cb, numeric_mode)
-    n = len(a)
-    n_c = [sum(row) for row in C]
-    n_k = _col_sums(C, len(cb))
-    sq = sum(v * v for row in C for v in row)
-    c11 = sq - n
-    c01 = sum(C[i][j] * n_k[j] for i in range(len(C)) for j in range(len(cb))) - sq
-    c10 = sum(C[i][j] * n_c[i] for i in range(len(C)) for j in range(len(cb))) - sq
-    c00 = n * n - c01 - c10 - sq
-    return Array.from_list([c00, c01, c10, c11], "<i8").reshape((2, 2))
+    return _contingency(a, b, ca, cb, numeric_mode).pairs
 
 
-def _col_sums(C, kb):
-    """Each column's sum of the ka x kb integer rows `C` (exact Python
-    integers, summed down the rows as `sum(C[i][j] for i in ...)` does;
-    `zip` walks the rows in C; lane metrics-apple3)."""
-    if not C:
-        return [0] * kb
-    return [sum(col) for col in zip(*C)]
-
-
-def _entropy_counts(counts):
-    total = sum(counts)
-    if total == 0:
-        return 1.0
-    lt = pmath.log(total)
-    return -_fsum([(c / total) * (pmath.log(c) - lt) for c in counts if c])
-
-
-def _mi_from_contingency(C, numeric_mode=None):
-    fn = _epilogue("x_metrics_mi_contingency", numeric_mode)
-    if fn is not None and C and C[0]:
-        # x_metrics/epilogue.mojo mi_contingency (lane py-misc-metrics): the
-        # same terms per nonzero cell, the two loop-invariant logs hoisted
-        try:
-            flat = array.array("q", itertools.chain.from_iterable(C))
-            return float(fn(flat.buffer_info()[0], len(C), len(C[0])))
-        except Exception:
-            pass
-    total = sum(v for row in C for v in row)
-    pi = [sum(row) for row in C]
-    pj = _col_sums(C, len(C[0]))
-    if len(pi) == 1 or len(pj) == 1:
-        return 0.0
-    lt = pmath.log(total)
-    terms = []
-    for i, row in enumerate(C):
-        for j, v in enumerate(row):
-            if not v:
-                continue
-            nm = v / total
-            log_outer = -pmath.log(pi[i] * pj[j]) + pmath.log(sum(pi)) + pmath.log(sum(pj))
-            t = nm * (pmath.log(v) - lt) + nm * log_outer
-            terms.append(0.0 if abs(t) < 2.220446049250313e-16 else t)
-    return max(_fsum(terms), 0.0)
+def _mi_from_contingency(r, numeric_mode=None):
+    """MI of the counts in nats (x_metrics/epilogue.mojo mi_contingency, lane
+    py-misc-metrics; the Python fallback is gone, lane pyglue-sweep: the
+    counts of a clustering are never negative and total below 2^31)."""
+    return float(_binding(numeric_mode).x_metrics_mi_contingency(r.C._addr, r.ka, r.kb))
 
 
 def _generalized_average(U, V, method):
@@ -2825,12 +2633,11 @@ def normalized_mutual_info_score(labels_true, labels_pred, *, average_method="ar
     a, b, ca, cb = _clusterings(labels_true, labels_pred, "normalized_mutual_info_score")
     if len(ca) == len(cb) == 1 or len(ca) == len(cb) == 0:
         return 1.0
-    C = _contingency(a, b, ca, cb, numeric_mode)
-    mi = _mi_from_contingency(C, numeric_mode)
+    r = _contingency(a, b, ca, cb, numeric_mode)
+    mi = _mi_from_contingency(r, numeric_mode)
     if mi == 0:
         return 0.0
-    ht = _entropy_counts([sum(r) for r in C])
-    hp = _entropy_counts(_col_sums(C, len(cb)))
+    ht, hp = r.ent[0], r.ent[1]
     return float(mi / _generalized_average(ht, hp, average_method))
 
 
@@ -2840,17 +2647,15 @@ def _expected_mi(a_counts, b_counts, n, numeric_mode=None):
     Here each hypergeometric pmf is built by its ratio recurrence from the
     mode and normalized by its own sum over the full support: no difference
     of large log-gamma values, portable binary64 log / exp only."""
-    if len(a_counts) == 1 or len(b_counts) == 1:
+    if a_counts.size == 1 or b_counts.size == 1:
         return 0.0
     # the walks and terms in the binding's host binary64, the log the C of
     # mojolearn._portable_math.log (x_metrics/epilogue.mojo expected_mi; lane
     # metrics-apple2). The Python walk is gone (lane apple-fast-py2mojo-core):
     # every install's binding carries it, and its refusals (n outside
     # [1, 2**31), a non-finite term) cannot occur for a clustering's counts.
-    A = array.array("q", a_counts)
-    B = array.array("q", b_counts)
-    return float(_binding(numeric_mode).x_metrics_expected_mi(A.buffer_info()[0], len(A), B.buffer_info()[0],
-                                                              len(B), n))
+    return float(_binding(numeric_mode).x_metrics_expected_mi(a_counts._addr, a_counts.size, b_counts._addr,
+                                                              b_counts.size, n))
 
 
 def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arithmetic", numeric_mode=None):
@@ -2862,13 +2667,11 @@ def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arit
         return 1.0
     if len(ca) == 1 or len(cb) == 1:
         return 0.0
-    C = _contingency(a, b, ca, cb, numeric_mode)
+    r = _contingency(a, b, ca, cb, numeric_mode)
     n = len(a)
-    mi = _mi_from_contingency(C, numeric_mode)
-    rows = [sum(r) for r in C]
-    cols = _col_sums(C, len(cb))
-    emi = _expected_mi(rows, cols, n, numeric_mode)
-    norm = _generalized_average(_entropy_counts(rows), _entropy_counts(cols), average_method)
+    mi = _mi_from_contingency(r, numeric_mode)
+    emi = _expected_mi(r.rows, r.cols, n, numeric_mode)
+    norm = _generalized_average(r.ent[0], r.ent[1], average_method)
     eps = 2.220446049250313e-16
     den = norm - emi
     den = min(den, -eps) if den < 0 else max(den, eps)
