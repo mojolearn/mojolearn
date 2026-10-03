@@ -17,6 +17,7 @@ from x_decomp.api import (
 from x_decomp.device import DevExec
 from x_decomp.kit_device import lda_online_dev_py, mcd_dev_py
 from x_decomp.lda_fast import LDA_FUSED_SS, dev_lda_estep_ss_py
+from x_decomp.dict_fast import DECOMP_FAST_DICT_DEV, dev_dict_update_py
 from x_decomp.graph_device import (
     dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py,
     dev_graph_join_py, dev_graph_dijkstra_py,
@@ -112,6 +113,9 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
             # lane apple-fast-nb: FAST + Apple default (off: -D MOJOLEARN_LDA_FUSED_SS_OFF) (x_decomp/lda_fast.mojo)
             m.def_function[dev_lda_estep_ss_py]("x_decomp_dev_lda_estep_ss")
         m.def_function[dev_als_rows_py]("x_decomp_dev_als_rows")
+        comptime if DECOMP_FAST_DICT_DEV:
+            # lane/apple-fast-gap-clus3: -D MOJOLEARN_DECOMP_FAST_DICT_DEV (x_decomp/dict_fast.mojo)
+            m.def_function[dev_dict_update_py]("x_decomp_dev_dict_update")
         # Isomap / LLE graph builds (x_decomp/graph_device.mojo, lane hr2-graph-embed)
         m.def_function[dev_graph_knn_py]("x_decomp_dev_graph_knn")
         m.def_function[dev_graph_knn_dense_py]("x_decomp_dev_graph_knn_dense")

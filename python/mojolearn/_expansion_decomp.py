@@ -463,6 +463,19 @@ class _Kit:
                 big = True
         return big
 
+    def _dict_dev(self):
+        """`x_decomp_dev_dict_update` when this binding exports it (a FAST
+        Apple build with -D MOJOLEARN_DECOMP_FAST_DICT_DEV), else None."""
+        if "_dd_fn" not in self.__dict__:
+            fn = None
+            if self._res():
+                try:
+                    fn = getattr(self._raw(), "x_decomp_dev_dict_update")
+                except Exception:
+                    fn = None
+            self._dd_fn = fn
+        return self._dd_fn
+
     def _did(self, M):
         """M's device id on this binding, uploading a host matrix (it moves)."""
         raw = self._raw()
@@ -2870,6 +2883,16 @@ def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=
         A = k.mm(code, code, ta=True)
     if B is None:
         B = k.mm(Y, code, ta=True)
+    # lane/apple-fast-gap-clus3: the atom loop on the device when the build
+    # exports it (-D MOJOLEARN_DECOMP_FAST_DICT_DEV, x_decomp/dict_fast.mojo);
+    # an unused atom (the Philox resample) or positive_dict keep the loop
+    fn = k._dict_dev() if not positive and D.r * D.c else None
+    if fn is not None:
+        As = A.s
+        if all(As[j * A.c + j] > 1e-6 for j in range(D.r)):  # glue: the nc diagonal reads the loop made
+            Dn = k._dout(D.r, D.c)
+            fn(k._did(D), k._did(A), k._did(B), Dn._d.id, [D.r, D.c])
+            return Dn, code
     rows = [D.rows(j, j + 1) for j in range(D.r)]
     zero_cols = []
     for j in range(D.r):
