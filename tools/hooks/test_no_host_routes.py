@@ -141,6 +141,10 @@ BLOCKED = [
      {DEV: "def _p22(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
            "    ctx.enqueue_function[_fold_kernel](\n        x, Int32(n),\n        grid_dim=(1, 1, 1), block_dim=(256, 1, 1),\n    )"},
      "ctx.enqueue_function[_fold_kernel]("),
+    ("one block per class over n (block-per-n)",
+     {DEV: "def _p24(ctx: DeviceContext, x: UnsafePointer[Float32], n_rows: Int, C: Int) raises:\n"
+           "    ctx.enqueue_function[_mean_kernel](\n        x, Int32(n_rows), Int32(C),\n        grid_dim=(C, 1, 1), block_dim=(256, 1, 1),\n    )"},
+     "ctx.enqueue_function[_mean_kernel]("),
     ("small-launch note naming an argument the launch does not pass",
      {DEV: "def _p23(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
            "    ctx.enqueue_function[_fold_kernel](  # small-launch(d: feature count): the vector is d long\n"

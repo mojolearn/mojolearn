@@ -93,6 +93,7 @@ from core.column_stats import STATS_TPB
 from core.gemm import PINNED_GEMM_TPB, gemm_nt, pinned_gemm_nt_kernel
 from core.identity_trace import IdentityTrace, first_divergence
 from glm.impl.qn.glm_base import GLMDims, GLMWithData
+from glm.host.qn_oracle import host_qnt_sum_strided
 from glm.impl.qn.glm_softmax import (
     SOFTMAX_MAX_SEED,
     SOFTMAX_SABOTAGE,
@@ -645,7 +646,7 @@ def _host_backward(
 ):
     """`linear_bwd`'s `C > 1` arm: `xtdz_multi_kernel` per `(c, j)` (strided
     fma partials, tree), the cuBLAS epilogue (`ftz(alpha * s)`, `+ g`), and
-    `mean_rows_multi_kernel` per class (`ftz(acc + dz)`, tree, `* ratio`)."""
+    `qn_tile_sum_classes` per class (tile chains, tile fold, `* ratio`)."""
     var alpha = Float32(1.0 / Float64(n))
     for b in range(C * d):
         var c = b % C
@@ -664,16 +665,8 @@ def _host_backward(
     if fit_intercept:
         var ratio = Float32(1.0) / Float32(n)
         for c in range(C):
-            var red = List[Float32]()
-            for t in range(STATS_TPB):
-                var acc = Float32(0.0)
-                var i = t
-                while i < n:
-                    acc = ftz(acc + dz[c + C * i])
-                    i += STATS_TPB
-                red.append(acc)
-            var s0 = _tree(red)
-            g[C * d + c] = ftz(s0 * ratio)
+            # `qn_tile_sum_classes`' tile order
+            g[C * d + c] = ftz(host_qnt_sum_strided(dz, n, C, c) * ratio)
 
 
 def _host_tikhonov(w: List[Float32], n_weights: Int, l2: Float32, mut g: List[Float32]) -> Float32:
