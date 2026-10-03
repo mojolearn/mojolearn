@@ -37,13 +37,13 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
   `host_get_loss_and_dz`   `GLMWithData.get_loss_and_dz`, `glm_base.mojo:
                            371`: `normalization = Float32(1.0 / Float64(n))`,
                            `loss_terms[i] = ftz(lz * normalization)`, `z[i] =
-                           dlz`, then `sum_terms_kernel` (`acc = ftz(acc +
-                           term)` per lane, the tree, `ftz`).
+                           dlz`, then `qn_tile_sum` (per 256-row tile
+                           `acc = ftz(acc + term)`, the pinned tile fold).
   `host_linear_bwd`        `linear_bwd` at `C == 1`, `glm_base.mojo:283`:
                            `xty_kernel` (`host_xty`), `gemm_epilogue_kernel`
                            (`s = ftz(alpha * prod)`, `g = ftz(s + g)` or `s`),
-                           `mean_kernel` for the bias (`ftz(s0 * ratio)`,
-                           `ratio = 1 / n` in Float32).
+                           `qn_tile_sum` mean for the bias (`ftz(s0 *
+                           ratio)`, `ratio = 1 / n` in Float32).
   `host_evaluate`          `GLMWithData.evaluate`, `glm_base.mojo:462`, both
                            shapes: `l2 == 0` is the loss alone with
                            `init_grad_zero`; else `tikhonov_reg_grad_kernel`
@@ -474,7 +474,7 @@ struct HostGLM(Movable):
 
     def get_loss_and_dz(mut self) -> Float32:
         """`get_loss_and_dz`, the logistic or the softmax arm, then
-        `qnt_sum` (the tile order)."""
+        `sum_terms_kernel`."""
         var n = self.n_rows
         var normalization = Float32(1.0 / Float64(n))
         if self.c > 1:
@@ -513,7 +513,8 @@ struct HostGLM(Movable):
                     host_one_target_lz(self.loss, yi, zi, self.svr_eps) * normalization
                 )
                 self.z[i] = host_one_target_dlz(self.loss, yi, zi, self.svr_eps)
-        # every shape's loss sum is `qnt_sum`'s tile order (lane cgr5-owed)
+        # lane/apple-fast-purity2: every loss sum (softmax too, and with
+        # QN_TILED off) is the device's tile order (`qn_tile_sum`).
         return host_qnt_sum(self.loss_terms, n)
 
     def linear_bwd(mut self, mut g: List[Float32], set_zero: Bool):
@@ -582,10 +583,9 @@ struct HostGLM(Movable):
             else:
                 g[j] = ftz(s + g[j])
         if self.fit_intercept:
-            # `qnt_sum`'s tile order for the bias mean (lane cgr5-owed)
+            # the device's `qn_tile_sum` mean (lane/apple-fast-purity2)
             var s0 = host_qnt_sum(self.z, n)
-            var ratio = Float32(1.0) / Float32(n)
-            g[self.d] = ftz(s0 * ratio)
+            g[self.d] = ftz(s0 * (Float32(1.0) / Float32(n)))
 
     def loss_grad(mut self, w: List[Float32], mut g: List[Float32], init_grad_zero: Bool) -> Float32:
         self.linear_fwd(w)

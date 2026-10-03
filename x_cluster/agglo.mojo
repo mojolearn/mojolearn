@@ -297,13 +297,18 @@ def agglo_tree[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, linkage: Int, metric: Int, p: Float32,
     edges: List[Float32], n_edges: Int, n_merges: Int,
     mut children: List[Int32], mut dist: List[Float32], mut n_components: Int,
+    edge_mode: Int = 0,
 ) raises:
     """metric -1: euclidean (squared for ward, rooted otherwise, through the
     squared distance); 0-4 the `bodies.pdist_cell` metrics; 5 precomputed
     (`x` is the n x n matrix; its UPPER triangle is read, as scipy's condensed
     form). `edges` holds n_edges (row, col) pairs of the connectivity graph
     (as exact floats), symmetrized here, the diagonal dropped; n_edges < 0
-    means no connectivity (every pair). `children` gets n_merges (lower id,
+    means no connectivity (every pair). edge_mode 1: `edges` is the dense
+    n x n connectivity matrix (n_edges = n * n), 2: its COO rows, columns and
+    values concatenated (n_edges entries each); a nonzero entry off the
+    diagonal is an edge (lane apple-fast-py2mojo-cluster: Python built the
+    pairs). `children` gets n_merges (lower id,
     higher id) pairs, `dist` the merge values."""
     if n < 2:
         raise Error("AgglomerativeClustering: at least two samples are needed")
@@ -342,7 +347,7 @@ def agglo_tree[O: ClusterOps](
         if n_edges >= 0:
             var es = ops.put(edges)
             adj_dev = ops.zeros_i(n * n)
-            n_components = ops.agglo_connect(es, n_edges, n, ds_dev, linkage, adj_dev)
+            n_components = ops.agglo_connect(es, n_edges, n, ds_dev, linkage, adj_dev, edge_mode)
         ops.agglo_merge(ds_dev, adj_dev, n, linkage, n_merges, children, dist)
         return
     var dm = List[Float32]()
@@ -373,8 +378,21 @@ def agglo_tree[O: ClusterOps](
     if constrained:
         adj = List[Bool](length=n * n, fill=False)
         for e in range(n_edges):
-            var r = Int(edges[2 * e])
-            var c = Int(edges[2 * e + 1])
+            var r: Int
+            var c: Int
+            if edge_mode == 1:
+                r = e // n
+                c = e - r * n
+                if edges[e] == Float32(0):
+                    continue
+            elif edge_mode == 2:
+                r = Int(edges[e])
+                c = Int(edges[n_edges + e])
+                if edges[2 * n_edges + e] == Float32(0) or r == c:
+                    continue
+            else:
+                r = Int(edges[2 * e])
+                c = Int(edges[2 * e + 1])
             if r < 0 or r >= n or c < 0 or c >= n:
                 raise Error("AgglomerativeClustering: a connectivity edge is outside [0, n)")
             if r != c:

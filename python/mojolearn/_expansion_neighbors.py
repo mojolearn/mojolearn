@@ -28,6 +28,7 @@ from . import _portable_math as math
 import os
 import struct
 
+from ._labels import threshold_codes
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, zeros
 from ._lazy_out import _empty_out
@@ -82,16 +83,11 @@ def _prefixed_names(est, count):
 
 
 def _accuracy(y_true, y_pred, sample_weight=None):
-    """sklearn's accuracy_score: the (weighted) fraction of exact label matches,
-    in IEEE double on labels compared exactly."""
-    t = y_true.tolist() if hasattr(y_true, "tolist") else list(y_true)
-    p = y_pred.tolist() if hasattr(y_pred, "tolist") else list(y_pred)
-    if len(t) != len(p):
-        raise ValueError("y_true and y_pred have different lengths")
-    if sample_weight is None:
-        return math.fsum(1.0 for a, b in zip(t, p) if a == b) / len(t)
-    w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else sample_weight)]
-    return math.fsum(wi for a, b, wi in zip(t, p, w) if a == b) / math.fsum(w)
+    """sklearn's accuracy_score: the (weighted) fraction of exact label
+    matches (`_expansion_metrics.accuracy_fraction`: grouped sums in the
+    x_metrics binding, no per-row Python)."""
+    from ._expansion_metrics import accuracy_fraction
+    return accuracy_fraction(y_true, y_pred, sample_weight)
 
 
 def _f32_1d(x, name):
@@ -107,16 +103,6 @@ def _i32(x, name):
 def _f32_scalar(v):
     """A Python double rounded once to float32, as a Python float."""
     return Array.from_list([float(v)], "<f4").tolist()[0]
-
-
-def _kapprox_fast(est):
-    """lane/apple-fast-kapprox: whether the bound binary takes the chi2
-    samplers' device fit / transform (FAST + Apple, built with
-    `-D MOJOLEARN_KAPPROX_DEVICE`), read back from the binding's compile-time
-    constant `x_neighbors_kapprox_fast` (no env read). 0 on IDENTICAL, on
-    the host binding and on a build without the define: main's path."""
-    fn = getattr(est._bind(), "x_neighbors_kapprox_fast", None)
-    return fn is not None and int(fn()) != 0
 
 
 def _kpca_resident(est):
@@ -161,30 +147,21 @@ def _kpca_resident_center(kit, X, n, kernel, gamma, coef0, degree):
     return Kc, cols, all_
 
 
-def _kapprox_op(est, name, bufs, ints, floats, message):
-    """One kapprox op with its refusal flag appended (the op's last buffer):
-    the device sets flag[0] when a cell fails the sampler's check, and the
-    caller's ValueError is raised here, as sklearn's would be."""
-    flag = zeros((1,), "<i4")
-    est._op(name, list(bufs) + [(flag, 1)], ints, floats)
-    if flag.tolist()[0] != 0:
-        raise ValueError(message)
-
-
-def _kapprox_seed(random_state):
-    """The device stream's 31-bit seed: the int itself, else one draw from
-    sklearn's check_random_state of `random_state` (None: numpy's global
-    stream, as theirs; a RandomState: one draw from it)."""
-    if isinstance(random_state, int) and not isinstance(random_state, bool):
-        return random_state & 0x7FFFFFFF
-    return int(_random_state(random_state).randint(1 << 31, 1)[0])
-
-
 def _labels_of(y):
     y = y.tolist() if hasattr(y, "tolist") else list(y)
     classes = sorted(set(y))
     code = {c: i for i, c in enumerate(classes)}
     return classes, [code[v] for v in y]
+
+
+def _nc_cls1_flags(est):
+    """lane/apple-fast-gap-cls1: the bound binary's NearestCentroid switches
+    (`x_neighbors_cls1_flags`; 0 without them: main's path)."""
+    try:
+        fn = getattr(est._bind(), "x_neighbors_cls1_flags", None)
+        return int(fn()) if fn is not None else 0
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 def _purity_flags(est):
@@ -235,12 +212,10 @@ _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 #: per-row `pcs`, LabelSpreading's per-cell-degree `ls_laplacian`, PageRank's
 #: dangling rows in Python).
 _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
-#: lane/apple-fast-neighbors2 (2026-10-02), FAST tier only, default off:
-#: the rbf kernel matrix from staged tiles (`kernel_tiled`; OneClassSVM's
-#: Gram). LabelPropagation / LabelSpreading's kNN-graph loop as one resident
-#: op (`lp_iterate_knn`) is the FAST + Apple default, read back from the
-#: binding (`_lp_fast_resident`, no env read).
-_FAST_TILED_RBF = os.environ.get("MOJOLEARN_XN_FAST_TILED_RBF", "") == "1"
+#: lane/apple-fast-neighbors2 (2026-10-02): LabelPropagation /
+#: LabelSpreading's kNN-graph loop as one resident op (`lp_iterate_knn`) is
+#: the FAST + Apple default, read back from the binding (`_lp_fast_resident`,
+#: no env read).
 
 
 def _lp_fast_resident(est):
@@ -315,8 +290,7 @@ class _XNeighbors(NumericModeMixin):
         n, d = A.shape
         m = B.shape[0]
         out = _empty_out((n, m), "<f4")
-        op = "kernel_tiled" if (_FAST_TILED_RBF and kind == "rbf" and self._fast_tier()) else "kernel"
-        self._op(op, [(A, 0), (B, 0), (out, 1)], (n, m, d, _KERNELS[kind], int(degree)),
+        self._op("kernel", [(A, 0), (B, 0), (out, 1)], (n, m, d, _KERNELS[kind], int(degree)),
                  (_f32_scalar(gamma), _f32_scalar(coef0)))
         return out
 
@@ -520,7 +494,7 @@ class LocalOutlierFactor(_XNeighbors):
             lab = empty((score.size,), "<i4")
             self._op("p2m_sign_label", [(score, 0), (lab, 1)], (score.size, 0), (off,))
             return lab.astype("<i8")
-        return Array.from_list([-1 if s < off else 1 for s in score.tolist()], "<i8")
+        return threshold_codes(score, off, strict=False, below=-1, above=1)
 
     def _novelty(self, what):
         if not self.novelty:
@@ -549,7 +523,7 @@ class LocalOutlierFactor(_XNeighbors):
             lab = empty((dec.size,), "<i4")
             self._op("p2m_sign_label", [(dec, 0), (lab, 1)], (dec.size, 1), (0.0,))
             return lab.astype("<i8")
-        return Array.from_list([1 if v >= 0 else -1 for v in dec.tolist()], "<i8")
+        return threshold_codes(dec, 0.0, strict=False, below=-1, above=1)
 
 
 # ====================================================================== NearestCentroid
@@ -578,15 +552,36 @@ class NearestCentroid(_XNeighbors):
             raise ValueError("NearestCentroid: metric must be 'euclidean' or 'manhattan'")
         X = _f32(X)
         n, d = X.shape
-        classes, codes = _labels_of(y)
-        if len(codes) != n:
-            raise ValueError("X and y have different numbers of rows")
-        C = len(classes)
-        if C < 2:
-            raise ValueError(f"The number of classes has to be greater than one; got {C} class")
-        counts = [0] * C
-        for c in codes:
-            counts[c] += 1
+        lab = None
+        if _nc_cls1_flags(self) & 1:
+            # lane/apple-fast-gap-cls1 NC_FAST_CLS1_LABELS (FAST + Apple
+            # default, off with -D MOJOLEARN_NC_FAST_CLS1_LABELS_OFF): the
+            # native encoder's int32 codes as they are, the class counts from
+            # the device (x_neighbors/nc_cls1.mojo); no Python pass over the rows
+            from ._labels import encode_labels
+            classes, lab = encode_labels(y)
+            if lab.size != n:
+                raise ValueError("X and y have different numbers of rows")
+            C = len(classes)
+            if C < 2:
+                raise ValueError(f"The number of classes has to be greater than one; got {C} class")
+            if C <= 256:
+                nkc = _empty_out((C,), "<f4")
+                self._op("nc_counts", [(lab, 0), (nkc, 1)], (n, C))
+                counts = [int(v) for v in nkc.tolist()]
+            else:
+                lab = None
+        if lab is None:
+            classes, codes = _labels_of(y)
+            if len(codes) != n:
+                raise ValueError("X and y have different numbers of rows")
+            C = len(classes)
+            if C < 2:
+                raise ValueError(f"The number of classes has to be greater than one; got {C} class")
+            counts = [0] * C
+            for c in codes:
+                counts[c] += 1
+            lab = _i32(codes, "y")
         if self.priors == "empirical":
             prior = [c / float(n) for c in counts]
         elif self.priors == "uniform":
@@ -601,7 +596,6 @@ class NearestCentroid(_XNeighbors):
             if not math.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
                 prior = [p / tot for p in prior]
         self.class_prior_ = Array.from_list(prior, "<f8")
-        lab = _i32(codes, "y")
         if self.metric == "euclidean":
             cent = _empty_out((C, d), "<f4")
             if os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") == "1":
@@ -811,7 +805,11 @@ class OneClassSVM(_XNeighbors):
         else:
             self._gamma = _f32_scalar(_resolve_gamma(self.gamma, self.kernel, X, self))
             Xw = X if m == n else self._take_rows(X, rows)
-            Q = self._kernel(Xw, Xw, self.kernel, self._gamma, self.coef0, self.degree)
+            # lane/apple-fast-gap-cls2 (FAST + Apple default; -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF off):
+            # the binding forms the same Gram on the device and solves over it
+            # there (no 400 MB download into a fresh host array and upload back)
+            res_fn = getattr(self._bind(), "x_neighbors_ocsvm_resident", None) if self._fast_tier() else None
+            Q = None if res_fn is not None else self._kernel(Xw, Xw, self.kernel, self._gamma, self.coef0, self.degree)
         cv = Array.from_list(cvals, "<f4")
         cf = cv.tolist()                                  # libsvm's C_i as the solver sees them
         nl = float(self.nu) * m                            # solve_one_class: nu_l = sum(C_i * nu) ...
@@ -829,7 +827,14 @@ class OneClassSVM(_XNeighbors):
         info = _empty_out((1,), "<f4")
         iters = empty((1,), "<i4")
         cap = 10_000_000 if int(self.max_iter) < 0 else int(self.max_iter)
-        self._op("ocsvm", [(Q, 0), (cv, 0), (alpha, 1), (info, 1), (iters, 1)], (m, cap), (_f32_scalar(self.tol),), )
+        if Q is None:
+            res_fn([addr_ro(Xw, name="xn_ocsvm X"), addr_ro(cv, name="xn_ocsvm cv"),
+                    addr(alpha, name="xn_ocsvm alpha"), addr(info, name="xn_ocsvm info"),
+                    addr(iters, name="xn_ocsvm iters")],
+                   [m, d, _KERNELS[self.kernel], int(self.degree), cap],
+                   [float(self._gamma), float(_f32_scalar(self.coef0)), float(_f32_scalar(self.tol))])
+        else:
+            self._op("ocsvm", [(Q, 0), (cv, 0), (alpha, 1), (info, 1), (iters, 1)], (m, cap), (_f32_scalar(self.tol),), )
         # the op's scalar order is (n, eps, max_iter): ints (n, max_iter), floats (eps,)
         rho = info.tolist()[0]
         a = alpha.tolist()
@@ -872,7 +877,7 @@ class OneClassSVM(_XNeighbors):
         return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
 
     def predict(self, X):
-        return Array.from_list([1 if v > 0 else -1 for v in self.decision_function(X).tolist()], "<i8")
+        return threshold_codes(self.decision_function(X), 0.0, strict=True, below=-1, above=1)
 
     def fit_predict(self, X, y=None):
         return self.fit(X).predict(X)
@@ -1225,15 +1230,6 @@ class AdditiveChi2Sampler(_XNeighbors):
 
     def fit(self, X, y=None):
         X = _f32(X)
-        if _kapprox_fast(self):
-            # lane/apple-fast-kapprox: the negative check on the device (one
-            # upload, a grid over every cell, a one-int flag); no host min.
-            self._interval()
-            n, d = X.shape
-            _kapprox_op(self, "kapprox_check", [(X, 0)], (n, d, 0), (0.0,),
-                        "Negative values in data passed to AdditiveChi2Sampler")
-            self.n_features_in_ = d
-            return self
         if X.size and X.min() < 0:
             raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
         self._interval()
@@ -1246,15 +1242,9 @@ class AdditiveChi2Sampler(_XNeighbors):
         n, d = X.shape
         steps = int(self.sample_steps)
         out = _empty_out((n, d * (2 * steps - 1)), "<f4")
-        if _kapprox_fast(self):
-            # lane/apple-fast-kapprox: the map and the negative check in one launch
-            _kapprox_op(self, "kapprox_achi2", [(X, 0), (out, 1)], (n, d, steps),
-                        (_f32_scalar(self._interval()),),
-                        "Negative values in data passed to AdditiveChi2Sampler")
-        else:
-            if X.size and X.min() < 0:
-                raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
-            self._op("achi2", [(X, 0), (out, 1)], (n, d, steps), (_f32_scalar(self._interval()),))
+        if X.size and X.min() < 0:
+            raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
+        self._op("achi2", [(X, 0), (out, 1)], (n, d, steps), (_f32_scalar(self._interval()),))
         if sparse is not None:
             # Preserve the caller's sparse container type; dense inputs need
             # neither SciPy nor NumPy. SciPy owns this optional format conversion.
@@ -1298,17 +1288,6 @@ class SkewedChi2Sampler(_XNeighbors):
         X = _f32(X)
         d = X.shape[1]
         nc = int(self.n_components)
-        if _kapprox_fast(self):
-            # lane/apple-fast-kapprox: the weights and offsets drawn on the
-            # device, one thread per draw (a counter-based uniform of the same
-            # law, not sklearn's MT19937 numbers; the fitted map is as random)
-            w = _empty_out((d, nc), "<f4")
-            off = _empty_out((nc,), "<f4")
-            self._op("kapprox_skew_fit", [(w, 1), (off, 1)], (d, nc, _kapprox_seed(self.random_state)))
-            self.random_weights_ = w
-            self.random_offset_ = off
-            self.n_features_in_ = d
-            return self
         rs = _random_state(self.random_state)
         u = rs.random_sample(d * nc)
         z = Array.from_list([[math.pi / 2.0 * u[f * nc + c] for c in range(nc)] for f in range(d)], "<f4")
@@ -1322,19 +1301,9 @@ class SkewedChi2Sampler(_XNeighbors):
     def transform(self, X):
         X = _f32(X)
         n, d = X.shape
-        nc = int(self.n_components)
-        if _kapprox_fast(self):
-            # lane/apple-fast-kapprox: log(X + skewedness) into a device
-            # scratch (the -skewedness check fused), then the product and the
-            # cosine on the same stream: one upload of X, one download
-            out = _empty_out((n, nc), "<f4")
-            _kapprox_op(self, "kapprox_skew_transform",
-                        [(X, 0), (self.random_weights_, 0), (self.random_offset_, 0), (out, 1)],
-                        (n, d, nc), (_f32_scalar(self.skewedness),),
-                        "X may not contain entries smaller than -skewedness.")
-            return out
         if X.size and X.min() <= -float(self.skewedness):
             raise ValueError("X may not contain entries smaller than -skewedness.")
+        nc = int(self.n_components)
         lx = self._unary(X, _U_LOG, 1.0, _f32_scalar(self.skewedness))
         out = _empty_out((n, nc), "<f4")
         self._op("skew_transform", [(lx, 0), (self.random_weights_, 0), (self.random_offset_, 0), (out, 1)], (n, d, nc))

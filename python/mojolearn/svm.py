@@ -22,14 +22,14 @@ tol` (`linear.pyx:150-151`).
 """
 
 from ._array import Array
-from ._buffer import as_f32_c
+from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._labels import argmax_rows, decode_labels, encode_labels, sorted_classes
 from ._mode import NumericModeMixin
 from ._svm_impl import SVC, SVR
 from .linear_model import (
     _QN_LOSS_SVC_L1, _QN_LOSS_SVC_L2, _QN_LOSS_SVR_L1, _QN_LOSS_SVR_L2,
     _accuracy_host, _check_qn_solver_fields, _labels_1d, _qn_fit_one_target,
-    _qn_scores, _r2_host, _target_1d,
+    _qn_scores, _r2_host, _target_1d, _py2mojo_flags, _PY2MOJO_ROWS,
 )
 
 __all__ = ["SVC", "SVR", "LinearSVC", "LinearSVR"]
@@ -177,6 +177,23 @@ class LinearSVC(_LinearSVMBase):
         return _qn_scores(self, X, self._w, 1 if n_classes == 2 else n_classes)
 
     def predict(self, X):
+        b = self._bind("_mojolearn_estimators") if hasattr(self, "classes_") else None
+        if (b is not None and len(self.classes_) == 2
+                and _py2mojo_flags(b) & _PY2MOJO_ROWS):
+            # lane/apple-fast-py2mojo-linear: the `z > 0` codes in the binding
+            # (`qn_predict_binary`, the same decision function and threshold)
+            if not hasattr(self, "_w"):
+                raise ValueError("mojolearn LinearSVC: call fit first")
+            x, _ = as_f32_c(X, ndim=2, name="X")
+            if x.shape[1] != self.n_features_in_:
+                raise ValueError(f"mojolearn {type(self).__name__} feature count differs from fit")
+            codes = empty((x.shape[0],), "<i8")
+            if x.shape[0]:
+                b.qn_predict_binary(
+                    addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
+                    addr(codes, name="codes"),
+                    [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0])
+            return decode_labels(self.classes_, codes)
         scores = self.decision_function(X)
         if len(self.classes_) == 2:
             return decode_labels(self.classes_,

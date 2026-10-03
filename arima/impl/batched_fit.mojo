@@ -121,7 +121,6 @@ from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
 from arima.impl.fast_eval_ws import FastEvalWS
 from arima.impl.fast_lbfgs_async import (
     ARIMA_FAST_ASYNC,
-    ARIMA_FAST_LS_NOREAD,
     async_min_lbfgs,
 )
 from arima.impl.lbfgs_device import (
@@ -614,12 +613,7 @@ def batched_min_lbfgs(
 
         # THE SHARED LINE SEARCH (`ls_backtrack:109-121`, B at a time)
         for _t in range(param.max_linesearch):
-            var read_it = True
-            comptime if ARIMA_FAST_LS_NOREAD:
-                # the prelude's word is "yes" whenever a series is active
-                # (fast_lbfgs_async.mojo banner); an extra round changes nothing
-                read_it = _t > 0
-            if read_it and not _read_flag(ctx, any_searching, flag_host):
+            if not _read_flag(ctx, any_searching, flag_host):
                 break
             ctx.enqueue_memset(any_searching, Int32(0))
             ctx.enqueue_function[lbfgs_candidate_kernel](

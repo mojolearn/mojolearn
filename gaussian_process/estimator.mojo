@@ -69,8 +69,8 @@ HYPERPARAMETER OPTIMIZATION LIVES OUTSIDE THIS ONE-SHOT FIT
 refusal, kept at this entry): it fits the kernel it is handed. The optimizer
 (2026-09-15) evaluates `gpr_lml_grad_host` below at each candidate kernel
 (DEVIATION 2880: the likelihood, and its gradient through the identical
-Cholesky and one pinned fold) and runs its state machine in
-`python/mojolearn/_gp_optimizer.py` (DEVIATION 2881), whose every stop rule
+Cholesky and one pinned fold) and runs its state machine on the device in
+`gaussian_process/gp_optim.mojo` (DEVIATION 2881), whose every stop rule
 reads those bits alone, so the iteration count is the same on every column.
 The Python surface then calls this fit once with the optimized kernel.
 
@@ -124,6 +124,7 @@ from cholesky.checks.potrf import (
 )
 from cholesky.checks.trsm import cho_solve
 from core.device_zero import enqueue_fill
+from gaussian_process.unnorm import GP_UNNORM_COV, GP_UNNORM_MEAN, GP_UNNORM_STD, gp_unnorm_cell
 from gaussian_process.gpc_items import gpc_fold_blocks, gpr_ydot_fin, gpr_ydot_part_item
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.identity_trace import IdentityTrace
@@ -717,12 +718,6 @@ def gpr_fit_host(
         elem_tpb,
         sabotage,
     )
-    # MOJOLEARN_KERNEL_FAST_GPR_RESIDENT (lane/apple-fast-kernel, M3 A/B
-    # kernel-gpr-resident-ist: gpr istella 168.4 -> 132.8 ms, r2 .2354 same)
-    # is SUBSUMED here: main's resident chain below (lane/cgr-kernel) keeps
-    # K, L and the dual on the device in every mode and folds y.alpha on
-    # the device, which the lane arm did on the host. The define (and
-    # MOJOLEARN_KERNEL_FAST_GPR_RESIDENT_OFF) are accepted and change nothing.
     # --- L = cholesky(K + alpha I); alpha_ = cho_solve(L, y), RESIDENT ----
     # (lane/cgr-kernel) K, its factor and the dual never leave the device
     # until the fit's outputs are read back. Before, K was downloaded, then
@@ -941,6 +936,29 @@ def gp_cov_kernel(
         dst.unsafe_store(t, ftz(ftz(kss.unsafe_load(i * nn + j)) - ftz(vtv.unsafe_load(i * nn + j))))
 
 
+def gp_unnorm_kernel(
+    src: MutPointer[Float32, MutAnyOrigin], dst: MutPointer[Float32, MutAnyOrigin], n: Int32,
+    s: Float32, mu: Float32, mode: Int32,
+):
+    """`normalize_y`'s un-normalization, one thread per value
+    (`gaussian_process/unnorm.mojo`; lane apple-fast-py2mojo-cluster, it ran
+    in Python). In place when src is dst."""
+    var t = Int(_gb_idx.x) * GP_YDOT_TPB + Int(_gt_idx.x)
+    if t < Int(n):
+        dst.unsafe_store(t, gp_unnorm_cell(src.unsafe_load(t), s, mu, Int(mode)))
+
+
+def _gp_unnorm(
+    ctx: DeviceContext, src: DeviceBuffer[DType.float32], dst: DeviceBuffer[DType.float32], n: Int,
+    s: Float32, mu: Float32, mode: Int,
+) raises:
+    if n > 0:
+        ctx.enqueue_function[gp_unnorm_kernel](
+            _gp(src), _gp(dst), Int32(n), s, mu, Int32(mode),
+            grid_dim=(n + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
+        )
+
+
 def gp_normals_kernel(dst: MutPointer[Float32, MutAnyOrigin], n_star: Int32, n_samples: Int32, k0: UInt32, k1: UInt32):
     """`gp_sample_y_normals`, one thread per draw `Z[i, s]`."""
     var t = Int(_gb_idx.x) * GP_YDOT_TPB + Int(_gt_idx.x)
@@ -1154,6 +1172,9 @@ def gpr_predict_host(
     solve_tpb: Int = CHOL_SOLVE_TPB,
     sabotage: Int = GP_SAB_NONE,
     trace_path: String = "",
+    unnorm: Bool = False,
+    y_std: Float32 = Float32(1.0),
+    y_mean: Float32 = Float32(0.0),
 ) raises -> GPPrediction:
     """`predict(X_star, return_std)`, scikit-learn `_gpr.py:446-500`.
 
@@ -1292,6 +1313,9 @@ def gpr_predict_host(
             ctx, dmean, dkcross, ddual, dws, n_star, 1, n_train, OP_TN
         )
     trace.record_device(ctx, "gp.mean", dmean, n_star)
+    if unnorm:
+        # `unnorm`: normalize_y's mean, on the device (it ran in Python)
+        _gp_unnorm(ctx, dmean, dmean, n_star, y_std, y_mean, GP_UNNORM_MEAN)
 
     var mean = _download(ctx, dmean, n_star)
     var variance = List[Float32]()
@@ -1324,6 +1348,10 @@ def gpr_predict_host(
             elem_tpb,
             sabotage,
         )
+        if unnorm:
+            # the standard deviation from the variance times std**2; the
+            # variance itself stays in the normalized scale
+            _gp_unnorm(ctx, dvar, dstd, n_star, y_std, y_mean, GP_UNNORM_STD)
         variance = _download(ctx, dvar, n_star)
         std = _download(ctx, dstd, n_star)
         clamped = _download_i32(ctx, dclamp, n_star)
@@ -1400,6 +1428,9 @@ def gpr_predict_cov_host(
     n_star: Int,
     elem_tpb: Int = GP_ELEM_TPB,
     solve_tpb: Int = CHOL_SOLVE_TPB,
+    unnorm: Bool = False,
+    y_std: Float32 = Float32(1.0),
+    y_mean: Float32 = Float32(0.0),
 ) raises -> GPPosteriorCov:
     """`predict(X, return_cov=True)`, scikit-learn `_gpr.py:495-506`:
 
@@ -1447,6 +1478,8 @@ def gpr_predict_cov_host(
     identical_gemm_into(
         ctx, dmean, dkcross, ddual, dws, n_star, 1, n_train, OP_TN
     )
+    if unnorm:
+        _gp_unnorm(ctx, dmean, dmean, n_star, y_std, y_mean, GP_UNNORM_MEAN)
     var mean = _download(ctx, dmean, n_star)
     trsm_lower(ctx, dl, dkcross, n_train, n_star, trace, "gp.cov.v", solve_tpb)
     # GEMM takes two mutable operands, so V is copied once more as B, on
@@ -1477,6 +1510,9 @@ def gpr_predict_cov_host(
         _gp(dcov), _gp(dkss), _gp(dvtv), Int32(n_star),
         grid_dim=(nn + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
     )
+    if unnorm:
+        # each cell times std**2 on the device (it ran in Python over n^2)
+        _gp_unnorm(ctx, dcov, dcov, nn, y_std, y_mean, GP_UNNORM_COV)
     var cov = _download(ctx, dcov, nn)
     _ = dcov^
     _ = dx^
@@ -1506,6 +1542,9 @@ def gpr_sample_y_host(
     seed: UInt64,
     elem_tpb: Int = GP_ELEM_TPB,
     solve_tpb: Int = CHOL_SOLVE_TPB,
+    unnorm: Bool = False,
+    y_std: Float32 = Float32(1.0),
+    y_mean: Float32 = Float32(0.0),
 ) raises -> List[Float32]:
     """`sample_y(X, n_samples, random_state)`, scikit-learn `_gpr.py`
     `GaussianProcessRegressor.sample_y`: `n_star x n_samples` float32
@@ -1655,6 +1694,9 @@ def gpr_sample_y_host(
         _gp(dyo), _gp(dmean), _gp(dlz), Int32(n_star), Int32(n_samples),
         grid_dim=(nz + GP_YDOT_TPB - 1) // GP_YDOT_TPB, block_dim=GP_YDOT_TPB,
     )
+    if unnorm:
+        # every draw un-normalized as the mean, on the device
+        _gp_unnorm(ctx, dyo, dyo, nz, y_std, y_mean, GP_UNNORM_MEAN)
     var out = _download(ctx, dyo, nz)
     _ = dx^
     _ = dxs^

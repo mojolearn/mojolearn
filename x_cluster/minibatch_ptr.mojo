@@ -26,6 +26,7 @@ anything else returns False and the binding takes the copying path.
 IDENTICAL compiles none of this.
 """
 from std.sys.compile import is_defined
+from max.gpu.host import DeviceBuffer
 from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -33,7 +34,8 @@ from x_cluster.bodies import SplitMix64
 from x_cluster.common import greedy_kmeans_pp, nearest_all, sum_f64, weighted_draw
 from x_cluster.device_ops import DeviceOps
 from x_cluster.minibatch import MiniBatchParams
-from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV
+from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, MBK_CLS2_POOL
+from core.device_pool import pool_give, pool_take
 from x_cluster.out import ClusterOut
 
 comptime MBK_ZEROCOPY = (
@@ -102,7 +104,12 @@ def minibatch_entry_ptr(
         # X straight from the caller's array: no host list, no synchronize
         # here (the stream orders every later kernel behind the copy; the
         # first read below synchronizes, and `xp` outlives the call)
-        var xbuf = ops.ctx.enqueue_create_buffer[DType.float32](nx)
+        var xbuf: DeviceBuffer[DType.float32]
+        comptime if MBK_CLS2_POOL:
+            # lane/apple-fast-gap-cls2: a pooled buffer, returned below
+            xbuf = pool_take["MojoXClusterCls2MbkX"](ops.ctx, nx)
+        else:
+            xbuf = ops.ctx.enqueue_create_buffer[DType.float32](nx)
         ops.ctx.enqueue_copy(dst_buf=xbuf, src_ptr=xp)
         ops.f.append(xbuf^)
         var xs = len(ops.f) - 1
@@ -159,6 +166,11 @@ def minibatch_entry_ptr(
         var labels = List[Int32]()
         var dist = List[Float32]()
         nearest_all(ops, xs, n, c, k, d, labels, dist)
+        comptime if MBK_CLS2_POOL:
+            # nearest_all read its labels back (a synchronize): no launch
+            # still reads X; the slot's later entries are not used again
+            ops.ctx.synchronize()
+            pool_give["MojoXClusterCls2MbkX"](ops.f.pop(xs))
         var n_iter = (steps_done * batch + n - 1) // n
         var inertia = sum_f64(dist, n)
         out.f.append(c^)

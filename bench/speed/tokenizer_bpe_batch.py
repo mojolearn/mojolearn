@@ -45,9 +45,8 @@ def main():
                b"12345...", b"short document")
     documents = [samples[k % len(samples)] for k in range(args.documents)]
     text = bytearray(b"".join(documents))
-    offsets = array.array("q", [0])
-    for document in documents:
-        offsets.append(offsets[-1] + len(document))
+    # The binding takes the document LENGTHS (lane/pyglue-text-io).
+    offsets = array.array("q", map(len, documents))
     ids = array.array("i", [0]) * max(len(text), 1)
     counts = array.array("q", [0]) * len(documents)
     dims = [len(documents), len(text), len(text), False]

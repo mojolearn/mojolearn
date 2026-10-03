@@ -53,33 +53,8 @@ only input this implementation scans is a 0/1 flag per row.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import prefix_sum
-
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-
-#: lane/apple-fast-trees-depthwise (2026-10-02), `-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1`,
-#: FAST + Apple only, default OFF. Phase 2 of every `ScanVector` below runs
-#: on ONE THREAD over `size / 512` block totals (`scan_block_sums_u32_kernel`,
-#: the `grid_dim=1, block_dim=1` launch in `launch_scan_vector_u32`): at
-#: taxi's 4.1M rows that is ~8,000 dependent global round trips per scan, and
-#: the categorical fit's CTR prep runs it per cat feature per permutation
-#: (`ctrs/ctr_bins_builder.mojo` compute_current_bins,
-#: `ctrs/ctr_calcers.mojo` TWeightedBinFreqCalcerGpu). The arm launches one
-#: 256-thread block instead (`scan_block_sums_u32_parallel_kernel`, the
-#: shape `reorder_one_bit.mojo`'s `scan_block_sums_parallel_kernel` already
-#: ships for the radix sort). Integer sums, so the carries are the serial
-#: scan's bit for bit; IDENTICAL compiles the one-thread kernel unchanged.
-comptime CTR_FAST_SCAN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GBDT_CTR_FAST_SCAN"]()
-)
-
-#: the one block of the parallel block-sums scan (CTR_FAST_SCAN)
-comptime SCAN_SUMS_BLOCK_U32 = 256
 
 
 comptime SCAN_BLOCK = 512
@@ -134,34 +109,6 @@ def scan_block_sums_u32_kernel(
     for b in range(n):
         var v = block_sums.unsafe_load(b)
         block_sums.unsafe_store(b, running)
-        running += v
-
-
-def scan_block_sums_u32_parallel_kernel(
-    block_sums: MutPointer[UInt32, MutAnyOrigin], n_blocks_in: Int32
-):
-    """Phase 2 with `SCAN_SUMS_BLOCK_U32` threads in ONE block
-    (CTR_FAST_SCAN): thread `t` owns the contiguous stripe
-    `[t * per, (t + 1) * per)`, sums it, the block's exclusive `prefix_sum`
-    gives each stripe its carry, and each thread writes its stripe's
-    exclusive prefixes. Integer sums (0/1 flags, below 2^31), so every
-    value is the serial kernel's. Launch with `grid_dim=1,
-    block_dim=SCAN_SUMS_BLOCK_U32`."""
-    var n = Int(n_blocks_in)
-    var tid = Int(thread_idx.x)
-    var per = (n + SCAN_SUMS_BLOCK_U32 - 1) // SCAN_SUMS_BLOCK_U32
-    var lo = tid * per
-    var hi = min(lo + per, n)
-    var local = Int32(0)
-    for i in range(lo, hi):
-        local += Int32(Int(block_sums.unsafe_load(i)))
-    var carry = prefix_sum[block_size=SCAN_SUMS_BLOCK_U32, exclusive=True](
-        local
-    )
-    var running = UInt32(Int(carry))
-    for i in range(lo, hi):
-        var v = block_sums.unsafe_load(i)
-        block_sums.unsafe_store(i, running)
         running += v
 
 
@@ -222,16 +169,10 @@ def launch_scan_vector_u32(
         block_sums.unsafe_ptr(),
         grid_dim=n_blocks, block_dim=SCAN_BLOCK,
     )
-    comptime if CTR_FAST_SCAN:
-        ctx.enqueue_function[scan_block_sums_u32_parallel_kernel](
-            block_sums.unsafe_ptr(), Int32(n_blocks),
-            grid_dim=1, block_dim=SCAN_SUMS_BLOCK_U32,
-        )
-    else:
-        ctx.enqueue_function[scan_block_sums_u32_kernel](
-            block_sums.unsafe_ptr(), Int32(n_blocks),
-            grid_dim=1, block_dim=1,
-        )
+    ctx.enqueue_function[scan_block_sums_u32_kernel](
+        block_sums.unsafe_ptr(), Int32(n_blocks),
+        grid_dim=1, block_dim=1,
+    )
     ctx.enqueue_function[scan_add_carry_u32_kernel](
         output.unsafe_ptr(), block_sums.unsafe_ptr(), Int32(size),
         grid_dim=n_blocks, block_dim=SCAN_BLOCK,

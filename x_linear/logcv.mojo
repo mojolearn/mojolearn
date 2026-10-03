@@ -28,7 +28,8 @@ from x_linear.ops import (
 )
 from std.sys.info import is_gpu
 from x_linear.lbfgs import lbfgs, lbfgs_work, Objective
-from x_linear.team import Team
+from x_linear.team import Team, team_at
+from x_linear.vfold import vwsq
 from std.gpu import WARP_SIZE
 from x_linear.tops import fold_fa, fold_fa_ix, chain_fmad, chain_fmad_ix, fold_parts, fold_blocks, FOLD_BLOCK
 from checks.numerics import identical_sigmoid, identical_softplus, ftz
@@ -249,26 +250,32 @@ def logcv_map_row(i: Int, x: FP, y: FP, n: Int, d: Int, kp: Int, fi: Bool, sw: B
 
 
 
-def logcv_finish(g: FP, goff: Int, th: FP, toff: Int, kp: Int, d: Int, sw: Bool, c: Float32, cnt: Int,
-                 acc: Float32, wrows: Float32) -> Float32:
-    """The objective's last step on the folded sums (the team's lead, the
-    grid objective's host): the gradient scaled and penalized in place, the
-    loss returned."""
+def logcv_finish_t(v: Team, g: FP, goff: Int, th: FP, toff: Int, kp: Int, d: Int, sw: Bool, c: Float32,
+                   cnt: Int, acc: Float32, wrows: Float32, parts: FP) -> Float32:
+    """The objective's last step on the folded sums, on a team (the device
+    L-BFGS's finish block) or a team of one: the gradient scaled and
+    penalized in place a thread a cell, ||W||^2 in the vfold order (lane
+    cgr4-device-optim; it was one ascending chain). Every thread returns
+    the loss."""
     var stride = d + 1
     var cntf = wrows if sw else i2f(cnt)
     var inv_n = fd(Float32(1), cntf)
     var lam = fd(Float32(1), fm(c, cntf))
-    var reg = Float32(0)
-    for k in range(kp):
-        for j in range(stride):
-            var o = k * stride + j
-            var gv = fm(ld(g, goff + o), inv_n)
-            if j < d:
-                var w = ld(th, toff + o)
-                reg = fmad(w, w, reg)
-                gv = fmad(lam, w, gv)
-            st(g, goff + o, gv)
+    var reg = vwsq(v, th, toff, d, stride, kp, parts)
+    for o in range(v.tid, kp * stride, v.nt):
+        var j = o % stride
+        var gv = fm(ld(g, goff + o), inv_n)
+        if j < d:
+            gv = fmad(lam, ld(th, toff + o), gv)
+        st(g, goff + o, gv)
+    v.sync()
     return fa(fm(acc, inv_n), fm(fm(Float32(0.5), lam), reg))
+
+
+def logcv_finish(g: FP, goff: Int, th: FP, toff: Int, kp: Int, d: Int, sw: Bool, c: Float32, cnt: Int,
+                 acc: Float32, wrows: Float32) -> Float32:
+    """`logcv_finish_t` on one thread."""
+    return logcv_finish_t(team_at(0, 1, g, 0, 0, 0), g, goff, th, toff, kp, d, sw, c, cnt, acc, wrows, g)
 
 
 def _logistic_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int) -> Float32:
@@ -437,20 +444,7 @@ def _logistic_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
         if sw:
             wrows = fa(wrows, pw)
     _ = pl^
-    var cnt = wrows if sw else i2f(rows)
-    var inv_n = fd(Float32(1), cnt)
-    var lam = fd(Float32(1), fm(c, cnt))
-    var reg = Float32(0)
-    for k in range(kp):
-        for j in range(stride):
-            var o = k * stride + j
-            var gv = fm(ld(g, goff + o), inv_n)
-            if j < d:
-                var w = ld(th, toff + o)
-                reg = fmad(w, w, reg)
-                gv = fmad(lam, w, gv)
-            st(g, goff + o, gv)
-    return fa(fm(acc, inv_n), fm(fm(Float32(0.5), lam), reg))
+    return logcv_finish(g, goff, th, toff, kp, d, sw, c, rows, acc, wrows)
 
 
 def logistic_objective(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int, sc: FP) -> Float32:

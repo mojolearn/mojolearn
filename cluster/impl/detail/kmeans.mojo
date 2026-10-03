@@ -100,10 +100,6 @@ from cluster.checks.scalable_init import (
     zero_f32_kernel,
 )
 from core.row_norms import NORM_TPB, row_norm_kernel
-from cluster.impl.detail.kmeans_fast import (
-    kmeans_fast_rownorm_on,
-    launch_fast_row_sqnorm,
-)
 from cluster.impl.detail.kmeans_common import (
     check_convergence,
 )
@@ -1360,20 +1356,14 @@ def kmeans_fit_main_traced(
     # biggest reason the assignment step is cheap: the sample side of the
     # expanded identity never has to be recomputed, only the centroid side.
     if params.needs_row_norms():
-        if kmeans_fast_rownorm_on(n_features):
-            # -D MOJOLEARN_KMEANS_FAST_ROWNORM (lane/apple-fast-core,
-            # 2026-10-02, FAST + Apple only): one thread per row instead
-            # of one block per row (`detail/kmeans_fast.mojo`).
-            launch_fast_row_sqnorm(ctx, x_norm, x, n_samples, n_features)
-        else:
-            ctx.enqueue_function[row_norm_kernel](
-                x_norm.unsafe_ptr(),
-                x.unsafe_ptr(),
-                Int32(n_features),
-                Int32(0),
-                grid_dim=(n_samples, 1, 1),
-                block_dim=(NORM_TPB, 1, 1),
-            )
+        ctx.enqueue_function[row_norm_kernel](
+            x_norm.unsafe_ptr(),
+            x.unsafe_ptr(),
+            Int32(n_features),
+            Int32(0),
+            grid_dim=(n_samples, 1, 1),
+            block_dim=(NORM_TPB, 1, 1),
+        )
         ctx.synchronize()
         if trace.enabled:
             trace.record_device(

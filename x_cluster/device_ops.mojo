@@ -55,8 +55,19 @@ from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_works
 from gemm.contract import OP_TN
 from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
 from x_cluster.ops import ClusterOps
+from x_cluster.optics_xi_device import optics_xi_device
 from x_cluster.meanshift_fast import MEANSHIFT_FAST_GRID, meanshift_fast_grid
 from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, minibatch_fast_steps
+from x_cluster.device_tree import (
+    agc_edges_mode_kernel,
+    count_ge_kernel,
+    tree_leaf_kernel,
+    tree_parent_init_kernel,
+    tree_parent_kernel,
+    tree_root_flag_kernel,
+    tree_root_rank_kernel,
+    tree_scatter_kernel,
+)
 from x_cluster.device_post import (
     PTPB,
     RTPB,
@@ -111,6 +122,7 @@ from x_cluster.device_post import (
     sign_side_kernel,
 )
 from x_cluster.post_bodies import FM_FF, FM_MIN, FM_PROD, FM_VAL, FM_WMIN, FOLD_CHUNK, ff_of_f64
+from x_cluster.bgmm_kernels import bgmm_launch
 from std.gpu import WARP_SIZE
 from std.gpu.primitives.warp import shuffle_idx
 from x_cluster.minibatch_cells import mb_center_wsum, mb_center_word
@@ -2307,11 +2319,20 @@ struct DeviceOps(ClusterOps):
             cnt = nch
             nch = (nch + FOLD_CHUNK - 1) // FOLD_CHUNK
 
-    def agglo_connect(mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int) raises -> Int:
+    def agglo_connect(
+        mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int, edge_mode: Int
+    ) raises -> Int:
         self._ph0()
         var bad = self.zeros_i(1)
         var pa = self._ip(adj)
-        if n_edges > 0:
+        if n_edges > 0 and edge_mode != 0:
+            # the dense matrix or the COO triples, filtered on the device
+            # (lane apple-fast-py2mojo-cluster; Python built the pair list)
+            self.ctx.enqueue_function[agc_edges_mode_kernel](
+                self._fp(edges), Int32(n_edges), Int32(n), Int32(edge_mode), pa, self._ip(bad),
+                grid_dim=pgrid(n_edges), block_dim=PTPB,
+            )
+        elif n_edges > 0:
             self.ctx.enqueue_function[agc_edges_kernel](
                 self._fp(edges), Int32(n_edges), Int32(n), pa, self._ip(bad), grid_dim=pgrid(n_edges), block_dim=PTPB,
             )
@@ -2376,6 +2397,57 @@ struct DeviceOps(ClusterOps):
         self._ph1("agglo_connect")
         return C
 
+    def tree_parent(mut self, children: Int, n: Int, m: Int, parent: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[tree_parent_init_kernel](
+            Int32(n + m), self._ip(parent), grid_dim=pgrid(n + m), block_dim=PTPB,
+        )
+        if m > 0:
+            self.ctx.enqueue_function[tree_parent_kernel](
+                self._ip(children), Int32(n), Int32(m), self._ip(parent), grid_dim=pgrid(m), block_dim=PTPB,
+            )
+        self._ph1("tree_parent")
+
+    def tree_roots(mut self, parent: Int, total: Int, rank1: Int) raises -> Int:
+        self._ph0()
+        var flags = self.zeros_i(total)
+        self.ctx.enqueue_function[tree_root_flag_kernel](
+            self._ip(parent), Int32(total), self._ip(flags), grid_dim=pgrid(total), block_dim=PTPB,
+        )
+        var sc = self._scan(self._ip(flags), total)
+        self.ctx.enqueue_function[tree_root_rank_kernel](
+            self._ip(flags), self._ip(sc[0]), Int32(total), self._ip(rank1), grid_dim=pgrid(total), block_dim=PTPB,
+        )
+        var c = self._int1(sc[1])
+        self._ph1("tree_roots")
+        return c
+
+    def tree_scatter(mut self, nodes: Int, c: Int, rank1: Int) raises:
+        self._ph0()
+        if c > 0:
+            self.ctx.enqueue_function[tree_scatter_kernel](
+                self._ip(nodes), Int32(c), self._ip(rank1), grid_dim=pgrid(c), block_dim=PTPB,
+            )
+        self._ph1("tree_scatter")
+
+    def tree_leaf_label(mut self, parent: Int, rank1: Int, n: Int, labels: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[tree_leaf_kernel](
+            self._ip(parent), self._ip(rank1), Int32(n), self._ip(labels), grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        self._ph1("tree_leaf_label")
+
+    def count_ge(mut self, x: Int, n: Int, thr: Float32) raises -> Int:
+        self._ph0()
+        var cnt = self.zeros_i(1)
+        if n > 0:
+            self.ctx.enqueue_function[count_ge_kernel](
+                self._fp(x), Int32(n), thr, self._ip(cnt), grid_dim=pgrid(n), block_dim=PTPB,
+            )
+        var c = self._int1(cnt)
+        self._ph1("count_ge")
+        return c
+
     def check_nonneg(mut self, x: Int, n: Int) raises -> Bool:
         self._ph0()
         var bad = self.zeros_i(1)
@@ -2420,6 +2492,18 @@ struct DeviceOps(ClusterOps):
         )
         self._ph1("optics_dbscan")
 
+    def optics_xi(
+        mut self, ordering: Int, reach: Int, pred: Int, n: Int, xc: Float32, min_samples: Int,
+        min_cluster_size: Int, predecessor_correction: Bool, labels: Int,
+    ) raises -> List[Int32]:
+        self._ph0()
+        var cl = optics_xi_device(
+            self.ctx, self._ip(ordering), self._fp(reach), self._ip(pred), n, xc, min_samples, min_cluster_size,
+            predecessor_correction, self._ip(labels),
+        )
+        self._ph1("optics_xi")
+        return cl^
+
     def sum_ff(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int) raises -> Float64:
         self._ph0()
         var o = self.zeros(2)
@@ -2428,6 +2512,22 @@ struct DeviceOps(ClusterOps):
         var h = self.get(o, 2)
         self._ph1("sum_ff")
         return Float64(h[0]) + Float64(h[1])
+
+    def fold_into(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int, dst: Int) raises:
+        self._ph0()
+        var po = self._fp(dst)
+        self._fold(mode, self._fp(a), self._fp(b if b >= 0 else a), self._fp(c if c >= 0 else a), n, po, po + 1, 0)
+        self._ph1("fold_into")
+
+    def bgmm_step(
+        mut self, step: Int, kc: Int, d: Int, cfg: Int, aux: Int, w: Int, p1: Int, p2: Int, p3: Int
+    ) raises:
+        self._ph0()
+        bgmm_launch(
+            self.ctx, step, self._fp(w), self._fp(p1 if p1 >= 0 else w), self._fp(p2 if p2 >= 0 else w),
+            self._fp(p3 if p3 >= 0 else w), kc, d, cfg, aux,
+        )
+        self._ph1("bgmm_step")
 
     def bin_seeds(mut self, x: Int, n: Int, d: Int, bin_size: Float32, min_bin_freq: Int, dst: Int) raises -> Int:
         self._ph0()

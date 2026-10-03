@@ -306,6 +306,9 @@ from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from std.sys import llvm_intrinsic
+from std.sys.info import is_apple_gpu
+from cholesky.logdet_fold import logdet_blocks, logdet_part, logdet_pair, logdet_double
 
 from core.gemm import gemm_nt
 from core.identity_trace import IdentityTrace
@@ -1466,45 +1469,85 @@ def zero_upper_kernel(
         a.unsafe_store(idx, Float32(0.0))
 
 
-def logdet_kernel(
+comptime LOGDET_TPB = 256
+
+
+def logdet_part_kernel(
     diag: MutPointer[Float32, MutAnyOrigin],
-    out_scalar: MutPointer[Float32, MutAnyOrigin],
+    parts: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
 ):
-    """`2 * sum_j log(diag[j])`, in ONE thread, ascending. DEVIATION 1639.
-
-    `diag` is `diag(L)`, extracted by the implemented RAFT kernel
-    (`cholesky/impl/matrix/detail/matrix.mojo::
-    copy_vector_from_matrix_diagonal_kernel`) and recorded as the card stage
-    `chol.diag` before this runs. Reading the vector rather than striding the
-    matrix is what gives the implemented kernel a real caller, and it gives the
-    card an intermediate: two columns that disagree here disagree in ONE
-    diagonal entry, and a scalar hash cannot say which one.
-
-    One thread rather than a block fold, for the same reason the trsm is one
-    thread per column: a fold shape is a summation order, and a serial
-    ascending chain over `n` terms is a pure function of `n` and of nothing
-    else. `n` values is not enough work to be worth pinning a tree for, and
-    a `pinned_block_sum` here would be a second fold shape in a lane that
-    needs zero.
-
-    Every `log` is `identical_log` (IDENTITY_PATHS row 12): a device `log`
-    is a VENDOR CHOICE in its last bit, and this scalar multiplies straight
-    into a GP marginal likelihood and a GMM's responsibilities, so a
-    one-ulp vendor difference here moves every downstream number.
-
-    The doubling is `identical_mul(2.0, acc)` rather than `2.0 * acc`.
-    Multiplying by two is exact, so no bit depends on the spelling; it is
-    written that way so no codegen can contract it into a neighbouring
-    add (row 9), and so this file has ONE spelling of a product.
-    """
-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
-        return
+    """A thread a LOGDET_BLOCK of the diagonal: its logs folded ascending
+    (cholesky/logdet_fold.mojo, DEVIATION 1639 as revised by lane
+    cgr4-device-optim). Every `log` is `identical_log` (IDENTITY_PATHS row
+    12): a device `log` is a vendor choice in its last bit."""
     var n = Int(n_in)
-    var acc = Float32(0.0)
-    for j in range(n):
-        acc = ftz(acc + ftz(identical_log(ftz(diag.unsafe_load(j)))))
-    out_scalar.unsafe_store(0, ftz(identical_mul(Float32(2.0), acc)))
+    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if b < logdet_blocks(n):
+        parts.unsafe_store(b, logdet_part(diag, n, b))
+
+
+def logdet_kernel(
+    parts: MutPointer[Float32, MutAnyOrigin],
+    out_scalar: MutPointer[Float32, MutAnyOrigin],
+    nb_in: Int32,
+):
+    """One block: the nb block partials (k = n / LOGDET_BLOCK of them, not n)
+    by the aligned tree, level by level through parts[0, nb) and
+    parts[nb, 2 nb), then the doubling `identical_mul(2.0, root)` (exact,
+    written so no codegen contracts it). `logdet_serial` is the same tree."""
+    var nb = Int(nb_in)
+    var tid = Int(thread_idx.x)
+    var nt = Int(block_dim.x)
+    var src = 0
+    var dst = nb
+    var cur = nb
+    while cur > 1:
+        var h = cur // 2
+        var nxt = (cur + 1) // 2
+        for i in range(tid, nxt, nt):
+            if i < h:
+                parts.unsafe_store(dst + i, logdet_pair(parts.unsafe_load(src + 2 * i), parts.unsafe_load(src + 2 * i + 1)))
+            else:
+                parts.unsafe_store(dst + i, parts.unsafe_load(src + cur - 1))
+        _logdet_barrier()
+        var s2 = src
+        src = dst
+        dst = s2
+        cur = nxt
+    if tid == 0:
+        var r = parts.unsafe_load(src) if nb > 0 else Float32(0.0)
+        out_scalar.unsafe_store(0, logdet_double(r))
+
+
+@always_inline
+def _logdet_barrier():
+    """A block barrier that orders DEVICE memory (the partials live there):
+    Apple's `barrier()` orders threadgroup memory only."""
+    comptime if is_apple_gpu():
+        llvm_intrinsic["llvm.air.wg.barrier", NoneType](Int32(3), Int32(1))
+    else:
+        barrier()
+
+
+def enqueue_logdet(
+    ctx: DeviceContext,
+    diag: MutPointer[Float32, MutAnyOrigin],
+    parts: MutPointer[Float32, MutAnyOrigin],
+    out_scalar: MutPointer[Float32, MutAnyOrigin],
+    n: Int,
+) raises:
+    """The partials (a thread a block) then the tree (one block over the
+    partials). parts: 2 * logdet_blocks(n) floats."""
+    var nb = logdet_blocks(n)
+    ctx.enqueue_function[logdet_part_kernel](
+        diag, parts, Int32(n),
+        grid_dim=((nb + LOGDET_TPB - 1) // LOGDET_TPB, 1, 1),
+        block_dim=(LOGDET_TPB, 1, 1),
+    )
+    ctx.enqueue_function[logdet_kernel](  # small-launch(nb: diagonal blocks): one block folds the n over 256 block partials by the aligned tree
+        parts, out_scalar, Int32(nb), grid_dim=(1, 1, 1), block_dim=(LOGDET_TPB, 1, 1),
+    )
 
 
 # ===========================================================================
@@ -1646,7 +1689,7 @@ def fast_diag_factor(
     var s0 = 0
     while s0 < w:
         var sw = min(CHOL_INNER_NB, w - s0)
-        ctx.enqueue_function[panel_factor_kernel](  # small-launch(sw: panel width): the w x w diagonal block of a blocked Cholesky, w <= the panel width (CHOL_NB_PINNED 32 under IDENTICAL, CS_NB 32, CHOL_INNER_NB 64, CHOL_FAST_NB under FAST); n is the row stride only, the trailing updates are multi-block
+        ctx.enqueue_function[panel_factor_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal panel block, columns serial, rows across the block; n is the row stride
             a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(j0 + s0),
             Int32(sw),
             grid_dim=(1, 1, 1), block_dim=(panel_tpb, 1, 1),
@@ -1732,7 +1775,7 @@ def _potrf_lower_strips(
         while q0 < s_end:
             var w = min(CS_NB, n - q0)
             var n_trail = n - q0 - w
-            ctx.enqueue_function[chol_strip_diag_kernel](  # small-launch(w: panel width): the w x w diagonal block of a blocked Cholesky, w <= the panel width (CHOL_NB_PINNED 32 under IDENTICAL, CS_NB 32, CHOL_INNER_NB 64, CHOL_FAST_NB under FAST); n is the row stride only, the trailing updates are multi-block
+            ctx.enqueue_function[chol_strip_diag_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal block (w <= CS_NB) in threadgroup memory, n is the row stride
                 a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(q0), Int32(w),
                 grid_dim=(1, 1, 1), block_dim=(CS_DIAG_TPB, 1, 1),
             )
@@ -1961,7 +2004,7 @@ def potrf_lower(
 
         # ---- the panel ------------------------------------------------
         if chol_sabotage_is_kernel_arm(sabotage):
-            ctx.enqueue_function[sabotage_panel_factor_kernel](  # small-launch(w: panel width): the w x w diagonal block of a blocked Cholesky, w <= the panel width (CHOL_NB_PINNED 32 under IDENTICAL, CS_NB 32, CHOL_INNER_NB 64, CHOL_FAST_NB under FAST); n is the row stride only, the trailing updates are multi-block
+            ctx.enqueue_function[sabotage_panel_factor_kernel](  # small-launch(n: leading dimension only): the negative-control copy of the w x w panel factor, reached only with a sabotage id
                 a.unsafe_ptr(),
                 dinfo.unsafe_ptr(),
                 Int32(n),
@@ -1977,7 +2020,7 @@ def potrf_lower(
                 inv_shape, panel_tpb, elem_tpb,
             )
         elif defer:
-            ctx.enqueue_function[panel_factor_guarded_kernel](  # small-launch(w: panel width): the w x w diagonal block of a blocked Cholesky, w <= the panel width (CHOL_NB_PINNED 32 under IDENTICAL, CS_NB 32, CHOL_INNER_NB 64, CHOL_FAST_NB under FAST); n is the row stride only, the trailing updates are multi-block
+            ctx.enqueue_function[panel_factor_guarded_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal panel block, columns serial, rows across the block; n is the row stride
                 a.unsafe_ptr(),
                 dinfo.unsafe_ptr(),
                 Int32(n),
@@ -1987,7 +2030,7 @@ def potrf_lower(
                 block_dim=(panel_tpb, 1, 1),
             )
         else:
-            ctx.enqueue_function[panel_factor_kernel](  # small-launch(w: panel width): the w x w diagonal block of a blocked Cholesky, w <= the panel width (CHOL_NB_PINNED 32 under IDENTICAL, CS_NB 32, CHOL_INNER_NB 64, CHOL_FAST_NB under FAST); n is the row stride only, the trailing updates are multi-block
+            ctx.enqueue_function[panel_factor_kernel](  # small-launch(n: leading dimension only): factors the w x w diagonal panel block, columns serial, rows across the block; n is the row stride
                 a.unsafe_ptr(),
                 dinfo.unsafe_ptr(),
                 Int32(n),
@@ -2352,16 +2395,17 @@ def chol_logdet(
         block_dim=(elem_tpb, 1, 1),
     )
     trace.record_device(ctx, "chol.diag", diag, n)
+    var parts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
     if sabotage == CHOL_SAB_NONE:
-        ctx.enqueue_function[logdet_kernel](
-            diag.unsafe_ptr(),
-            scalar.unsafe_ptr(),
-            Int32(n),
-            grid_dim=(1, 1, 1),
-            block_dim=(1, 1, 1),
+        enqueue_logdet(
+            ctx,
+            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(diag.unsafe_ptr())),
+            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(parts.unsafe_ptr())),
+            MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(scalar.unsafe_ptr())),
+            n,
         )
     else:
-        ctx.enqueue_function[sabotage_logdet_kernel](
+        ctx.enqueue_function[sabotage_logdet_kernel](  # small-launch(n: sabotage arm only): the negative control of the log-det fold, reached only with a sabotage id, never by a fit
             diag.unsafe_ptr(),
             scalar.unsafe_ptr(),
             Int32(n),
@@ -2377,4 +2421,5 @@ def chol_logdet(
     _ = h^
     _ = diag^
     _ = scalar^
+    _ = parts^
     return v

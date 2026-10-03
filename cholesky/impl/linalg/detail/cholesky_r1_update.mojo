@@ -56,11 +56,13 @@ row of `A` sits in row `n-1` (lower arm). Then (`:60-118`):
 #                  and `ld` = the factor's stride. That is what the `ld`
 #                  parameter of that kernel exists for and this is its only
 #                  caller.
-#   cublasdot   -> `r1_dot_partial_kernel` / `r1_dot_fold_kernel` below: a
-#                  blocked-then-tree fold whose order is a pure function of
-#                  `n` (one `fma` per term through `identical_mul_add`,
-#                  flushed through `ftz`; lane cgr5-owed 2026-10-03 replaced
-#                  DEVIATION 1632's one-thread chain).
+#   cublasdot   -> `r1_dot_part_kernel` / `r1_dot_tree_kernel` below: one
+#                  `fma` per term through `identical_mul_add`, flushed
+#                  through `ftz`, in the blocked-then-tree order of
+#                  cholesky/logdet_fold.mojo (`sqsum_part`, the aligned
+#                  tree). A fold shape is a summation order (IDENTITY_PATHS
+#                  row 21): the host column folds the same blocks and tree
+#                  (lane/apple-fast-purity2; it was one thread over m).
 #
 # THE HOST ROUND TRIP IS COPIED RATHER THAN OPTIMIZED AWAY. Theirs reads two
 # scalars to the host, computes `sqrt` THERE, and writes one back. That is
@@ -135,17 +137,18 @@ row of `A` sits in row `n-1` (lower arm). Then (`:60-118`):
 #
 # The `align = 256` workspace padding (`:50-52`) is NOT implemented: it exists so
 # cuBLAS gets an aligned scalar and there is no such requirement here.
-# `cholesky_rank1_update_workspace_floats` returns `n + r1_dot_blocks(n-1)`
-# floats -- `n-1` for the vector, one for the dot, then the dot's block
-# partials -- rather than their byte count.
+# `cholesky_rank1_update_workspace_floats` returns `n` floats -- `n-1` for
+# the vector and one for the dot -- rather than their byte count.
 # =========================================================================
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
-from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from std.sys import llvm_intrinsic
+from std.sys.info import is_apple_gpu
+
+from cholesky.logdet_fold import logdet_blocks, logdet_pair, sqsum_part
 
 from core.identity_trace import IdentityTrace
 from cholesky.checks.chol_sabotage import CHOL_SAB_NONE
@@ -204,98 +207,72 @@ def copy_vector_to_row_kernel(
 
 
 comptime R1_DOT_TPB = 256
-"""Threads per block of the rank-one dot (and lanes of its fold)."""
-comptime R1_DOT_MAX_BLOCKS = 256
-"""At most this many partial blocks; above 256 * 256 terms each thread's
-chain strides the grid."""
 
 
-def r1_dot_blocks(count: Int) -> Int:
-    """Blocks of the rank-one dot over `count` terms: one per R1_DOT_TPB,
-    capped at R1_DOT_MAX_BLOCKS, at least 1. A pure function of `count`."""
-    var nb = (count + R1_DOT_TPB - 1) // R1_DOT_TPB
-    if nb > R1_DOT_MAX_BLOCKS:
-        nb = R1_DOT_MAX_BLOCKS
-    if nb < 1:
-        nb = 1
-    return nb
-
-
-def r1_dot_partial_kernel(
+def r1_dot_part_kernel(
     x: MutPointer[Float32, MutAnyOrigin],
-    part: MutPointer[Float32, MutAnyOrigin],
+    parts: MutPointer[Float32, MutAnyOrigin],
     count_in: Int32,
-    nb_in: Int32,
 ):
-    """`cublasdot(n-1, A_new, 1, A_new, 1, s)` (`:92-93`), pass 1 of the
-    blocked-then-tree fold (lane cgr5-owed, 2026-10-03; it replaced
-    DEVIATION 1632's one-thread chain):
+    """`cublasdot(n-1, A_new, 1, A_new, 1, s)` (`:92-93`), pass 1: thread b
+    folds block b of LOGDET_BLOCK terms, `acc = ftz(identical_mul_add(v, v,
+    acc))` ascending (cholesky/logdet_fold.mojo `sqsum_part`).
 
-      thread t of block b chains the terms k = b * TPB + t + j * nb * TPB,
-      j ascending, `acc = ftz(identical_mul_add(v, v, acc))` from 0.0 with
-      `v = ftz(x[k])`; the block folds its TPB chains with the halving tree
-      `red[t] = ftz(red[t] + red[t + h])`, h = TPB/2 .. 1, into part[b].
-
-    The order is a pure function of `count`, the same on every vendor and
-    in the host column (`cholesky/checks/cholesky_oracle.mojo::
-    oracle_r1_dot`)."""
-    var red = stack_allocation[R1_DOT_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var tid = Int(thread_idx.x)
+    lane/apple-fast-purity2: DEVIATION 1632's ONE-thread chain over m is
+    now the blocked-then-tree order; the host column (`oracle_rank1_update`)
+    folds the same blocks and tree. The caller still subtracts once, on the
+    host: this accumulates the dot, not its negation."""
     var count = Int(count_in)
-    var stride = Int(nb_in) * R1_DOT_TPB
-    var k = Int(block_idx.x) * R1_DOT_TPB + tid
-    var acc = Float32(0.0)
-    while k < count:
-        var v = ftz(x.unsafe_load(k))
-        acc = ftz(identical_mul_add(v, v, acc))
-        k += stride
-    red[tid] = acc
-    barrier()
-    var h = R1_DOT_TPB // 2
-    while h > 0:
-        if tid < h:
-            red[tid] = ftz(red[tid] + red[tid + h])
-        barrier()
-        h //= 2
-    if tid == 0:
-        part.unsafe_store(Int(block_idx.x), red[0])
+    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if b < logdet_blocks(count):
+        parts.unsafe_store(b, sqsum_part(x, count, b))
 
 
-def r1_dot_fold_kernel(
-    part: MutPointer[Float32, MutAnyOrigin],
+def r1_dot_tree_kernel(
+    parts: MutPointer[Float32, MutAnyOrigin],
     out_scalar: MutPointer[Float32, MutAnyOrigin],
     nb_in: Int32,
 ):
-    """Pass 2: lane t takes part[t] (0.0 past nb; nb <= R1_DOT_TPB), the
-    same halving tree, into out_scalar[0]."""
-    var red = stack_allocation[R1_DOT_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    """Pass 2, one block: the nb block partials (m / LOGDET_BLOCK of them)
+    by the aligned tree, level by level through parts[0, nb) and
+    parts[nb, 2 nb) (`potrf.mojo::logdet_kernel`'s tree, no doubling)."""
+    var nb = Int(nb_in)
     var tid = Int(thread_idx.x)
-    var v = Float32(0.0)
-    if tid < Int(nb_in):
-        v = part.unsafe_load(tid)
-    red[tid] = v
-    barrier()
-    var h = R1_DOT_TPB // 2
-    while h > 0:
-        if tid < h:
-            red[tid] = ftz(red[tid] + red[tid + h])
-        barrier()
-        h //= 2
+    var nt = Int(block_dim.x)
+    var src = 0
+    var dst = nb
+    var cur = nb
+    while cur > 1:
+        var h = cur // 2
+        var nxt = (cur + 1) // 2
+        for i in range(tid, nxt, nt):
+            if i < h:
+                parts.unsafe_store(dst + i, logdet_pair(parts.unsafe_load(src + 2 * i), parts.unsafe_load(src + 2 * i + 1)))
+            else:
+                parts.unsafe_store(dst + i, parts.unsafe_load(src + cur - 1))
+        comptime if is_apple_gpu():
+            llvm_intrinsic["llvm.air.wg.barrier", NoneType](Int32(3), Int32(1))
+        else:
+            barrier()
+        var s2 = src
+        src = dst
+        dst = s2
+        cur = nxt
     if tid == 0:
-        out_scalar.unsafe_store(0, red[0])
+        out_scalar.unsafe_store(0, parts.unsafe_load(src) if nb > 0 else Float32(0.0))
 
 
 def cholesky_rank1_update_workspace_floats(n: Int) -> Int:
     """`*n_bytes` (`:53-56`), in floats and without their 256-byte align.
 
-    `n - 1` floats for `A_new`, one for the dot's scalar, then the dot's
-    `r1_dot_blocks(n - 1)` block partials. Never less than 1, so the buffer
-    is always constructible. DEVIATION 1646.
+    `n - 1` floats for `A_new` plus one for the dot's scalar. Never less
+    than 1, so the buffer is always constructible. DEVIATION 1646.
     """
-    # n - 1 terms, the dot's scalar, then its block partials
-    if n < 1:
+    var need = n
+    if need < 1:
         return 1
-    return n + r1_dot_blocks(n - 1)
+    # lane/apple-fast-purity2: plus the dot's block partials and tree level
+    return need + 2 * logdet_blocks(max(n - 1, 0))
 
 
 def cholesky_rank1_update(
@@ -385,20 +362,19 @@ def cholesky_rank1_update(
             ld,
         )
         # `:92-93`
-        var nb = r1_dot_blocks(m)
-        var pbuf = workspace.create_sub_buffer[DType.float32](m + 1, nb)
-        ctx.enqueue_function[r1_dot_partial_kernel](
+        var r1_nb = logdet_blocks(m)
+        var r1_parts = workspace.create_sub_buffer[DType.float32](m + 1, 2 * r1_nb)
+        ctx.enqueue_function[r1_dot_part_kernel](
             xvec.unsafe_ptr(),
-            pbuf.unsafe_ptr(),
+            r1_parts.unsafe_ptr(),
             Int32(m),
-            Int32(nb),
-            grid_dim=(nb, 1, 1),
+            grid_dim=((r1_nb + R1_DOT_TPB - 1) // R1_DOT_TPB, 1, 1),
             block_dim=(R1_DOT_TPB, 1, 1),
         )
-        ctx.enqueue_function[r1_dot_fold_kernel](
-            pbuf.unsafe_ptr(),
+        ctx.enqueue_function[r1_dot_tree_kernel](  # small-launch(r1_nb: block partials of the dot): one block folds the m over 256 partials by the aligned tree
+            r1_parts.unsafe_ptr(),
             sbuf.unsafe_ptr(),
-            Int32(nb),
+            Int32(r1_nb),
             grid_dim=(1, 1, 1),
             block_dim=(R1_DOT_TPB, 1, 1),
         )
@@ -419,7 +395,7 @@ def cholesky_rank1_update(
         _ = hs^
         _ = xvec^
         _ = sbuf^
-        _ = pbuf^
+        _ = r1_parts^
     # else: `:99-101`, `cudaMemsetAsync(s, 0, ...)` -- the n == 1 case.
 
     # `:103-117`, on the HOST, and DEVIATION 1633 changes the order of the

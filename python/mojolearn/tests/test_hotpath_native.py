@@ -137,12 +137,12 @@ def _python_arm():
         _buffer._NATIVE_MISSING.update(saved_missing)
 
 
-def _both(fn, expect=()):
+def _both(fn, expect=(), ref_fn=None):
     """Run `fn` on the reference arm and the new arm. `expect` names the
     helpers the new arm must call; () means the new arm is a C builtin (or a
     deliberate fall back) and only the reference arm's silence is pinned."""
     with _python_arm():
-        ref = _outcome(fn)
+        ref = _outcome(fn if ref_fn is None else ref_fn)
         hot = {key for key in _HELPERS if key in _buffer._NATIVE}
     assert not hot, f"the reference arm reached a hotpath helper: {sorted(hot)}"
     with _Spy() as new_spy:
@@ -157,8 +157,11 @@ def _both(fn, expect=()):
 _DIVERGED = []
 
 
-def _same(fn, expect=(), group=""):
-    ref, new = _both(fn, expect)
+def _same(fn, expect=(), group="", ref_fn=None):
+    """ref_fn: the reference arm's own call, for a seam whose new route has
+    no Python fall back left (the default folds since lane cgr4-py-compute:
+    `_default_fold_arrays` is native only; `_default_folds` is its definition)."""
+    ref, new = _both(fn, expect, ref_fn)
     if _EXPECT_SABOTAGE:
         if ref != new:
             _DIVERGED.append(group)
@@ -585,7 +588,7 @@ def test_default_folds_match(name, classifier):
         # the two helpers, so only `fold_ids` is pinned for every case
         expect = () if python_only else ("fold_ids",)
         _same(lambda: _fold_lists(MS._default_fold_arrays(y, splits, classifier)), expect,
-              group="folds")
+              group="folds", ref_fn=lambda: _fold_lists(MS._default_folds(y, splits, classifier)))
         if not _EXPECT_SABOTAGE and not python_only:
             clean = _outcome(lambda: _fold_lists(MS._default_folds(y, splits, classifier)))
             fast = _outcome(lambda: _fold_lists(MS._default_fold_arrays(y, splits, classifier)))
@@ -596,7 +599,7 @@ def test_one_row_per_fold():
     y = _arr(_RNG.integers(0, 2, 300))
     for classifier in (True, False):
         _same(lambda: _fold_lists(MS._default_fold_arrays(y, 300, classifier)), ("fold_ids",),
-              group="folds")
+              group="folds", ref_fn=lambda: _fold_lists(MS._default_folds(y, 300, classifier)))
 
 
 def test_the_fold_sabotage_control_still_moves_the_folds():

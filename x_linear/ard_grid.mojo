@@ -25,6 +25,11 @@ from x_linear.tops import fold_parts, fold_blocks, fold_fa, FOLD_BLOCK
 from x_linear.team import device_team, team_work, LINEAR_TPB
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.moments_grid import mg_means_kernel, mg_cross_kernel, mg_tiles, MG_NT
+from x_linear.fast_gram import fast_gram_into
+from x_linear.cls1_fast import (
+    ARD_CLS1_STATS, ARD_CLS1_PARTS, ARD_CLS1_BATCH, C1_TPB, c1_sq_parts_kernel, c1_sum_parts_kernel,
+    c1_dev_parts_kernel,
+)
 from x_linear.bayes import (
     bayes_yvar_part, _sse_part, _t_ard_sigma, _t_ard_coef, _t_sse_delta, ard_update, ard_layout, ard_finish,
     X_LINEAR_GRAM_SSE,
@@ -231,7 +236,17 @@ def ard_fit_grid(
     var stp = dstate.unsafe_ptr()
     var g_nb = _ab(nb)
     var g_rows = _ab(n)
-    var wit = Witness(ctx, max(2 * g_nb + 1, 1 + g_rows + g_nb + 1) + 1)
+    # lane/apple-fast-gap-cls1 ARD_CLS1_PARTS: the partials a block per row
+    # block (g_pp blocks); ARD_CLS1_BATCH: one witness check per AG_BATCH
+    # iterations, so the words of a whole batch
+    var g_pp = g_nb
+    comptime if ARD_CLS1_PARTS:
+        g_pp = nb
+    var per_it = 1 + g_rows + g_pp + 1
+    var wcap = max(2 * g_pp + 1, per_it) + 1
+    comptime if ARD_CLS1_BATCH:
+        wcap = max(2 * g_pp + 1, AG_BATCH * per_it) + 1
+    var wit = Witness(ctx, wcap)
     var nf = i2f(n)
     var tl = mg_tiles(d, 1)
     var tries = 0
@@ -242,20 +257,40 @@ def ard_fit_grid(
         diw.enqueue_fill(Int32(0))
         dout.enqueue_fill(Float32(0))
         # the moments of [X | y]: xm at 0, G at d, X'y at d + d*d, y's mean parked in A
-        ctx.enqueue_function[mg_means_kernel](
-            xp, yp, Int32(n), Int32(d), Int32(1), Int32(fi), fwp, Int32(0), Int32(o[3]),
-            grid_dim=tl, block_dim=MG_NT,
-        )
-        ctx.enqueue_function[mg_cross_kernel](
-            xp, yp, Int32(n), Int32(d), Int32(1), fwp, Int32(0), Int32(o[3]), Int32(o[1]), Int32(o[2]),
-            grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
-        )
-        ctx.enqueue_function[ard_yparts_kernel](yp, Int32(n), dyp.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                grid_dim=g_nb, block_dim=AG_TPB)
-        wo += g_nb
-        ctx.enqueue_function[ard_vparts_kernel](yp, Int32(n), dyp.unsafe_ptr(), dvp.unsafe_ptr(), wit.p(), Int32(wo), nonce,
-                                                grid_dim=g_nb, block_dim=AG_TPB)
-        wo += g_nb
+        var fg = False
+        comptime if ARD_CLS1_STATS:
+            # lane/apple-fast-gap-cls1: the shared grid Gram (row chunks across
+            # the grid) fills xm, ym (parked at o[3]), G and X'y; it waits for
+            # its own launches (unwitnessed), as Ridge's does
+            fg = True
+            var fwf = FP(unsafe_from_address=Int(fwp))
+            fast_gram_into(ctx, FP(unsafe_from_address=Int(xp)), FP(unsafe_from_address=Int(yp)), 0, n, d, 1,
+                           fi != 0, fwf, fwf + o[3], fwf + o[1], fwf + o[2])
+        if not fg:
+            ctx.enqueue_function[mg_means_kernel](
+                xp, yp, Int32(n), Int32(d), Int32(1), Int32(fi), fwp, Int32(0), Int32(o[3]),
+                grid_dim=tl, block_dim=MG_NT,
+            )
+            ctx.enqueue_function[mg_cross_kernel](
+                xp, yp, Int32(n), Int32(d), Int32(1), fwp, Int32(0), Int32(o[3]), Int32(o[1]), Int32(o[2]),
+                grid_dim=tl * (tl + 1) // 2, block_dim=MG_NT,
+            )
+        var c1p = False
+        comptime if ARD_CLS1_PARTS:
+            c1p = True
+            ctx.enqueue_function[c1_sum_parts_kernel](yp, Int32(n), dyp.unsafe_ptr(), stp, Int32(-1),
+                                                      wit.p(), Int32(wo), nonce, grid_dim=nb, block_dim=C1_TPB)
+            wo += nb
+            ctx.enqueue_function[c1_dev_parts_kernel](yp, Int32(n), dyp.unsafe_ptr(), dvp.unsafe_ptr(),
+                                                      wit.p(), Int32(wo), nonce, grid_dim=nb, block_dim=C1_TPB)
+            wo += nb
+        if not c1p:
+            ctx.enqueue_function[ard_yparts_kernel](yp, Int32(n), dyp.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                    grid_dim=g_nb, block_dim=AG_TPB)
+            wo += g_nb
+            ctx.enqueue_function[ard_vparts_kernel](yp, Int32(n), dyp.unsafe_ptr(), dvp.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                    grid_dim=g_nb, block_dim=AG_TPB)
+            wo += g_nb
         ctx.enqueue_function[ard_init_kernel](Int32(d), Int32(nb), nf, fwp, dout.unsafe_ptr(), diw.unsafe_ptr(),
                                               dvp.unsafe_ptr(), stp, wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
         wo += 1
@@ -265,30 +300,52 @@ def ard_fit_grid(
         if tries >= WITNESS_TRIES:
             wit.fail()
     var hst = List[Float32](length=AS_WORDS, fill=Float32(0))
+    var batch_wit = False
+    comptime if ARD_CLS1_BATCH:
+        batch_wit = True
+    var nonce = wit.begin()
+    var wo = 0
     for it in range(max_iter):
         # in place: a cut raises
-        var nonce = wit.begin()
-        var wo = 0
+        if not batch_wit:
+            nonce = wit.begin()
+            wo = 0
         ctx.enqueue_function[ard_sc_kernel](Int32(d), fwp, dout.unsafe_ptr(), diw.unsafe_ptr(), stp, dtw.unsafe_ptr(),
                                             Int32(gram), Int32(0), wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=LINEAR_TPB)
         wo += 1
         ctx.enqueue_function[ard_resid_kernel](xp, yp, Int32(n), Int32(d), fwp, dout.unsafe_ptr(), stp, drows.unsafe_ptr(),
                                                wit.p(), Int32(wo), nonce, grid_dim=g_rows, block_dim=AG_TPB)
         wo += g_rows
-        ctx.enqueue_function[ard_part_kernel](drows.unsafe_ptr(), yp, Int32(n), stp, dparts.unsafe_ptr(),
-                                              wit.p(), Int32(wo), nonce, grid_dim=g_nb, block_dim=AG_TPB)
-        wo += g_nb
+        if g_pp != g_nb:
+            # ARD_CLS1_PARTS: live while not done and the row pass is fresh
+            ctx.enqueue_function[c1_sq_parts_kernel](drows.unsafe_ptr(), Int32(n), stp, Int32(AS_DONE), Int32(AS_FRESH),
+                                                     Int32(1), dparts.unsafe_ptr(), wit.p(), Int32(wo), nonce,
+                                                     grid_dim=g_pp, block_dim=C1_TPB)
+        else:
+            ctx.enqueue_function[ard_part_kernel](drows.unsafe_ptr(), yp, Int32(n), stp, dparts.unsafe_ptr(),
+                                                  wit.p(), Int32(wo), nonce, grid_dim=g_nb, block_dim=AG_TPB)
+        wo += g_pp
         ctx.enqueue_function[ard_step_kernel](Int32(d), Int32(nb), nf, fwp, dout.unsafe_ptr(), diw.unsafe_ptr(),
                                               dfp.unsafe_ptr(), dparts.unsafe_ptr(), stp, Int32(gram), Int32(it),
                                               wit.p(), Int32(wo), nonce, grid_dim=1, block_dim=1)
         wo += 1
-        if not wit.ok(ctx, wo, "ARD iteration"):
-            wit.fail()
-        if (it + 1) % AG_BATCH == 0 and it + 1 < max_iter:
+        if not batch_wit:
+            if not wit.ok(ctx, wo, "ARD iteration"):
+                wit.fail()
+            if (it + 1) % AG_BATCH == 0 and it + 1 < max_iter:
+                ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dstate)
+                ctx.synchronize()
+                if hst[AS_DONE] != Float32(0):
+                    break
+        elif (it + 1) % AG_BATCH == 0 or it + 1 == max_iter:
+            # ARD_CLS1_BATCH: the batch's words and the stop word in one wait
             ctx.enqueue_copy(dst_ptr=hst.unsafe_ptr(), src_buf=dstate)
-            ctx.synchronize()
+            if not wit.ok(ctx, wo, "ARD iterations"):
+                wit.fail()
             if hst[AS_DONE] != Float32(0):
                 break
+            nonce = wit.begin()
+            wo = 0
     var nf2 = wit.begin()
     ctx.enqueue_function[ard_sc_kernel](Int32(d), fwp, dout.unsafe_ptr(), diw.unsafe_ptr(), stp, dtw.unsafe_ptr(),
                                         Int32(0), Int32(1), wit.p(), Int32(0), nf2, grid_dim=1, block_dim=LINEAR_TPB)

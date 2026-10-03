@@ -24,7 +24,7 @@ from ._buffer import (
 )
 from ._labels import (
     argmax_rows, classes_from_member, classes_member, decode_labels,
-    encode_labels, flatten_labels, sorted_classes,
+    encode_labels, flatten_labels, sorted_classes, threshold_codes,
 )
 from ._mode import NumericModeMixin
 
@@ -485,28 +485,6 @@ def _ols_tsqr(x, y, rows, cols, mode):
     return X.out((cols,))
 
 
-def _ols_fast_tsqr_r(r_aug, cols, mode):
-    """coef_ (float32, cols) from the TSQR's R_aug ((cols + 1) square) that
-    `ols_center_tsqr_r` formed on the device from the raw X and y
-    (-D MOJOLEARN_OLS_FAST_DEVICE_CENTER, lane/apple-fast-core; FAST + Apple
-    only). The small-R solve is `_expansion_decomp._tsqr_lstsq_core`'s after
-    its `x_decomp_tsqr_r` call, line for line, with nrhs = 1 and
-    `_ols_tsqr`'s cutoff `_F32_EPS * cols`: repeated here rather than split
-    out of that shared function so the switch touches only this FAST-only
-    branch; when it wins, `_tsqr_lstsq_core` gains the R entry and this goes."""
-    from ._expansion_decomp import _F32_EPS, _Kit, _M, _f32, _mode
-    from ._linalg_impl import _svd_tall
-    k = _Kit(_mode(mode))
-    n = cols + 1
-    top = r_aug.rows(0, cols)
-    R, C = top.cols(0, cols), top.cols(cols, n)
-    Ur, S, Vt = _svd_tall(k, R, False)
-    cut = _f32(S.s[0] * (_F32_EPS * cols))
-    inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
-    X = k.mm(Vt, k.ew("mul", k.mm(Ur, C, ta=True), inv.T), ta=True)
-    return X.out((cols,))
-
-
 class LinearRegression(NumericModeMixin):
     """Ordinary least squares on the GPU.
 
@@ -648,44 +626,6 @@ class LinearRegression(NumericModeMixin):
                 self._y_mean = 0.0
             self._set_intercept(cols)
             return self
-        if self.fit_intercept and weights is None and self._fast_device_center():
-            # -D MOJOLEARN_OLS_FAST_DEVICE_CENTER (lane/apple-fast-core,
-            # 2026-10-02, FAST + Apple only, default off): the three device
-            # trips below (`_column_means` -> `lm_col_sums`, `_center` ->
-            # `lm_center`, then the solve's own upload of the centered copy)
-            # become ONE upload of the raw X and y with the centering on the
-            # device (`glm/estimator.mojo`). The solve is the same one this
-            # layer would pick: the TSQR's R comes back and `_ols_fast_tsqr_r`
-            # finishes it exactly as `_ols_tsqr` does; off the TSQR it is
-            # `ols_fit` on the device-centered data. The intercept is formed
-            # here as below from the means the device hands back.
-            b = self._bind("_mojolearn_estimators")
-            means = empty((cols,), "<f4")
-            if _ols_tsqr_on(rows, cols):
-                from ._expansion_decomp import _M
-                n = cols + 1
-                r_aug = _M.zeros(n, n)
-                y_mean = b.ols_center_tsqr_r(
-                    addr_ro(x, name="X"), addr_ro(target, name="y"),
-                    r_aug.addr, addr(means, name="means"), [rows, cols],
-                )
-                self.coef_ = _ols_fast_tsqr_r(r_aug, cols, getattr(self, "numeric_mode", None))
-            else:
-                self.coef_ = empty((cols,), "<f4")
-                y_mean = b.ols_fit_centered(
-                    addr_ro(x, name="X"), addr_ro(target, name="y"),
-                    addr(self.coef_, name="coef_"), addr(means, name="means"),
-                    [rows, cols],
-                )
-            self._x_mean = means
-            self._y_mean = float(y_mean)
-            dot = math.fsum(
-                float(a) * float(b)
-                for a, b in zip(self._x_mean.tolist(), self.coef_.tolist())
-            )
-            self.intercept_ = float(self._y_mean - dot)
-            self.n_features_in_ = cols
-            return self
         if self.fit_intercept:
             # float64 column means -> float32, then a float32 subtraction.
             # The means come from exact column sums rounded once to float64
@@ -746,18 +686,6 @@ class LinearRegression(NumericModeMixin):
         else:
             self.intercept_ = 0.0
         self.n_features_in_ = cols
-
-    def _fast_device_center(self):
-        """Whether `fit` takes the device-centering entries: the loaded
-        binding registers `ols_center_tsqr_r` only when it was built FAST
-        on Apple with -D MOJOLEARN_OLS_FAST_DEVICE_CENTER
-        (`bindings/_mojolearn_estimators.mojo`), so the name's presence is
-        the whole switch: no env read, and the host binding has not got it
-        (its proxy raises ImportError for a missing name)."""
-        try:
-            return getattr(self._bind("_mojolearn_estimators"), "ols_center_tsqr_r", None) is not None
-        except (AttributeError, ImportError):
-            return False
 
     def predict(self, X):
         if not hasattr(self, "coef_"):
@@ -1009,6 +937,17 @@ def _coef_from_w(w, cols, n_targets, fit_intercept):
     intercept = (Array.from_list([values[c + n_targets * cols] for c in range(n_targets)], "<f4")
                  if fit_intercept else zeros((n_targets,), "<f4"))
     return coef, intercept
+
+
+#: lane/apple-fast-py2mojo-linear: `py2mojo_rows` modes (core/py2mojo_rows.mojo)
+#: and the `py2mojo_linear_flags` bit that routes them
+_ROWS_LOG, _ROWS_SGD_PROBA, _ROWS_LRCV_PROBA = 1, 2, 3
+_PY2MOJO_ROWS = 2
+
+
+def _py2mojo_flags(binding):
+    fn = getattr(binding, "py2mojo_linear_flags", None)
+    return int(fn()) if fn is not None else 0
 
 
 def _log_or_inf(p):
@@ -1294,16 +1233,16 @@ class LogisticRegression(NumericModeMixin):
             codes = empty((x.shape[0],), "<i8")
             binding = self._bind("_mojolearn_estimators")
             native = getattr(binding, "qn_predict_binary", None)
-            if native is not None:
-                native(
-                    addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
-                    addr(codes, name="codes"),
-                    [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
-                )
-                return decode_labels(self.classes_, codes)
-            scores = self.decision_function(x)
-            return decode_labels(self.classes_,
-                                 [1 if s > 0.0 else 0 for s in scores.tolist()])
+            if native is None:
+                raise RuntimeError(
+                    "mojolearn LogisticRegression: the estimators binding has no "
+                    "qn_predict_binary; rebuild it")
+            native(
+                addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
+                addr(codes, name="codes"),
+                [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
+            )
+            return decode_labels(self.classes_, codes)
         scores = self.decision_function(X)
         return decode_labels(self.classes_, argmax_rows(scores))
 
@@ -1335,9 +1274,19 @@ class LogisticRegression(NumericModeMixin):
         (`qn_sigmoid` could return the log form directly). Routed there
         later; recorded here so it is not mistaken for a design.
         """
+        proba = self.predict_proba(X)
+        binding = self._bind("_mojolearn_estimators")
+        if _py2mojo_flags(binding) & _PY2MOJO_ROWS:
+            # lane/apple-fast-py2mojo-linear: `_log_or_inf` of every cell in
+            # the binding (core/py2mojo_rows.mojo ROWS_LOG, the same log)
+            out = empty(proba.shape, "<f8")
+            if proba.size:
+                binding.py2mojo_rows(_ROWS_LOG, addr_ro(proba, name="proba"),
+                                     addr(out, name="log proba"), [proba.size, 1])
+            return out
         return Array.from_list(
             [[_log_or_inf(p) for p in row]
-             for row in self.predict_proba(X).tolist()],
+             for row in proba.tolist()],
             "<f8",
         )
 

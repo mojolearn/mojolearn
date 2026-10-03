@@ -22,6 +22,7 @@ from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_div, identical_mul
 from x_cluster.minibatch_cells import mb_center_update
+from x_cluster.optics_xi_cells import optics_xi_host
 from cluster.host.host_cells import ftz_v, host_cells, mul_v
 from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 
@@ -52,6 +53,7 @@ from x_cluster.bodies import (
 from cluster.host.kmeans_oracle import host_kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from x_cluster.ops import ClusterOps
+from x_cluster.bgmm_device import bgmm_host_step
 from x_cluster.post_bodies import (
     FM_MIN,
     FM_PROD,
@@ -620,8 +622,62 @@ struct HostOps(ClusterOps):
     ) raises:
         raise Error("x_cluster: agglo_merge is the GPU column's (the host column runs agglo_tree's loop)")
 
-    def agglo_connect(mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int) raises -> Int:
+    def agglo_connect(
+        mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int, edge_mode: Int
+    ) raises -> Int:
         raise Error("x_cluster: agglo_connect is the GPU column's (the host column runs agglo_tree's loop)")
+
+    def tree_parent(mut self, children: Int, n: Int, m: Int, parent: Int) raises:
+        var pc = self._ip(children)
+        var pp = self._ip(parent)
+        for j in range(n + m):
+            pp[j] = Int32(j)
+        for t in range(m):
+            pp[Int(pc[2 * t])] = Int32(n + t)
+            pp[Int(pc[2 * t + 1])] = Int32(n + t)
+
+    def tree_roots(mut self, parent: Int, total: Int, rank1: Int) raises -> Int:
+        var pp = self._ip(parent)
+        var pr = self._ip(rank1)
+        var c = 0
+        for j in range(total):
+            if Int(pp[j]) == j:
+                c += 1
+                pr[j] = Int32(c)
+            else:
+                pr[j] = 0
+        return c
+
+    def tree_scatter(mut self, nodes: Int, c: Int, rank1: Int) raises:
+        var pn = self._ip(nodes)
+        var pr = self._ip(rank1)
+        for i in range(c):
+            pr[Int(pn[i])] = Int32(i + 1)
+
+    def tree_leaf_label(mut self, parent: Int, rank1: Int, n: Int, labels: Int) raises:
+        var pp = self._ip(parent)
+        var pr = self._ip(rank1)
+        var pl = self._ip(labels)
+        for t in range(n):
+            var v = t
+            var lab = Int32(-1)
+            while True:
+                if pr[v] != 0:
+                    lab = pr[v] - 1
+                    break
+                var p = Int(pp[v])
+                if p == v:
+                    break
+                v = p
+            pl[t] = lab
+
+    def count_ge(mut self, x: Int, n: Int, thr: Float32) raises -> Int:
+        var p = self._fp(x)
+        var c = 0
+        for t in range(n):
+            if p[t] >= thr:
+                c += 1
+        return c
 
     def estep(
         mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
@@ -715,8 +771,31 @@ struct HostOps(ClusterOps):
             if pr[p] > eps and not (pc[p] <= eps):
                 pl[p] = Int32(-1)
 
+    def optics_xi(
+        mut self, ordering: Int, reach: Int, pred: Int, n: Int, xc: Float32, min_samples: Int,
+        min_cluster_size: Int, predecessor_correction: Bool, labels: Int,
+    ) raises -> List[Int32]:
+        return optics_xi_host(
+            self._ip(ordering), self._fp(reach), self._ip(pred), n, xc, min_samples, min_cluster_size,
+            predecessor_correction, self._ip(labels),
+        )
+
     def sum_ff(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int) raises -> Float64:
         return ff_to_f64(ff_fold_host(mode, self._fp(a), self._fp_or(b), self._fp_or(c), n))
+
+    def fold_into(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int, dst: Int) raises:
+        var v = ff_fold_host(mode, self._fp(a), self._fp_or(b), self._fp_or(c), n)
+        var po = self._fp(dst)
+        po[0] = v.hi
+        po[1] = v.lo
+
+    def bgmm_step(
+        mut self, step: Int, kc: Int, d: Int, cfg: Int, aux: Int, w: Int, p1: Int, p2: Int, p3: Int
+    ) raises:
+        bgmm_host_step(
+            step, self._fp(w), self._fp(p1 if p1 >= 0 else w), self._fp(p2 if p2 >= 0 else w),
+            self._fp(p3 if p3 >= 0 else w), kc, d, cfg, aux,
+        )
 
     def bin_seeds(mut self, x: Int, n: Int, d: Int, bin_size: Float32, min_bin_freq: Int, dst: Int) raises -> Int:
         var px = self._fp(x)

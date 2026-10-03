@@ -49,6 +49,7 @@ comptime _DEVCTX_SLOT = "MojoResampleContextIdentical" if _DEVCTX_MODE == _DEVCT
 from core.identity_trace import IdentityTrace
 from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32
 from metrics.checks.pinned_sum import (
+    PINNED_SUM_TPB,
     PINNED_SUM_W,
     canonicalize_nan,
     chunk_count,
@@ -84,7 +85,6 @@ from resample.checks.index_map import (
 from resample.device_post import (
     device_bca_moments,
     device_counts,
-    device_observed_statistic,
     device_standard_error,
     enqueue_diff_map,
 )
@@ -129,6 +129,8 @@ from resample.checks.statistics import (
     monte_carlo_chunk_kernel,
     mc_finish_host,
     order_stat_kernel,
+    perm_observed_chunks_kernel,
+    perm_observed_fold_kernel,
     perm_select_stat_kernel,
     perm_stat_kernel,
     quantile_of_sorted_host,
@@ -221,6 +223,54 @@ def _download_f32(
         out.append(host.unsafe_ptr().unsafe_load(i))
     _ = host^
     return out^
+
+
+def _perm_observed(
+    ctx: DeviceContext,
+    mut dpool: DeviceBuffer[DType.float32],
+    n_pooled: Int,
+    n_x: Int,
+    n_y: Int,
+    statistic: Int,
+) raises -> Float32:
+    """The permutation test's observed statistic on the device
+    (`perm_observed_chunks_kernel` / `perm_observed_fold_kernel`); one
+    scalar comes home."""
+    var chunks = chunk_count(n_pooled)
+    var parts = ctx.enqueue_create_buffer[DType.float32](3 * max(chunks, 1))
+    var stats = ctx.enqueue_create_buffer[DType.float32](2)
+    comptime ck = perm_observed_chunks_kernel[PINNED_SUM_TPB]
+    ctx.enqueue_function[ck](
+        parts.unsafe_ptr(), dpool.unsafe_ptr(), stats.unsafe_ptr(),
+        Int32(n_pooled), Int32(n_x), Int32(0),
+        grid_dim=(max(chunks, 1), 1, 1), block_dim=(PINNED_SUM_TPB, 1, 1),
+    )
+    if statistic == STAT_DIFF_MEANS:
+        comptime fk = perm_observed_fold_kernel[STAT_DIFF_MEANS]
+        ctx.enqueue_function[fk](
+            stats.unsafe_ptr(), parts.unsafe_ptr(), Int32(chunks), Int32(n_x),
+            Int32(n_y), Int32(0), grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )
+    else:
+        comptime fm = perm_observed_fold_kernel[STAT_MEAN]
+        ctx.enqueue_function[fm](
+            stats.unsafe_ptr(), parts.unsafe_ptr(), Int32(chunks), Int32(n_x),
+            Int32(n_y), Int32(0), grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )
+        if statistic == STAT_STD:
+            ctx.enqueue_function[ck](
+                parts.unsafe_ptr(), dpool.unsafe_ptr(), stats.unsafe_ptr(),
+                Int32(n_pooled), Int32(n_x), Int32(1),
+                grid_dim=(max(chunks, 1), 1, 1), block_dim=(PINNED_SUM_TPB, 1, 1),
+            )
+            ctx.enqueue_function[fm](
+                stats.unsafe_ptr(), parts.unsafe_ptr(), Int32(chunks), Int32(n_x),
+                Int32(n_y), Int32(1), grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+            )
+    var h = _download_f32(ctx, stats, 2)
+    _ = parts^
+    _ = stats^
+    return h[0]
 
 
 def _download_i32(
@@ -1548,11 +1598,12 @@ def permutation_test_host(
     var null_dist = _download_f32(ctx, null_buf, n_resamples)
 
     # The OBSERVED statistic is the pooled sample split where it already is,
-    # i.e. the identity permutation, in the replicate kernels' order (the
+    # i.e. the identity permutation, over `host_tree_sum`'s pinned tree (the
     # p-value's tolerance `gamma` is a multiple of it, so a last bit here
-    # moves a count): on the device, chunk trees in parallel then the chunk
-    # chain (resample/device_post.mojo).
-    var observed = device_observed_statistic(ctx, dpool, n_pooled, n_x, statistic)
+    # moves a count). lane/apple-fast-purity2: on the device -- a block per
+    # chunk, then one thread over the chunk totals -- where it was a host
+    # loop over the pooled sample; the same words.
+    var observed = _perm_observed(ctx, dpool, n_pooled, n_x, n_y, statistic)
     trace.record_scalar_f32("resample.observed", observed)
 
     var bounds = permutation_bounds(observed)
@@ -1646,9 +1697,9 @@ def permutation_samples_host(
     var null_dist = _download_f32(ctx, null_buf, n_resamples)
     # the identity arrangement's statistic and the p-value's counts on the
     # device (resample/device_post.mojo), the replicate kernels' tree
-    var observed = device_observed_statistic(ctx, dx, n, n, STAT_MEAN)
+    var observed = _perm_observed(ctx, dx, n, n, 0, STAT_MEAN)
     if two:
-        observed = ftz(observed - device_observed_statistic(ctx, dy, n, n, STAT_MEAN))
+        observed = ftz(observed - _perm_observed(ctx, dy, n, n, 0, STAT_MEAN))
     var bounds = permutation_bounds(observed)
     var cnt = device_counts(ctx, null_buf, n_resamples, bounds[0], bounds[1], 0)
     var pv = permutation_pvalue_of_counts(cnt[0], cnt[1], n_resamples, alternative)

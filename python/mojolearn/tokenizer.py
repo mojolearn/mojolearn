@@ -43,8 +43,8 @@ THIS door to the same cases through the binding, plus every refusal by name.
 """
 import array
 import json
+import operator
 import os
-import tempfile
 
 from . import _backend
 from . import _bpe_trainer
@@ -98,21 +98,43 @@ def _identity_from_tokens_text(text, n_ranks):
 
 def _identity_of_ranks_file(path):
     """`_identity_from_tokens_text` over the canonical rendering of a rank
-    file. The binding is what refuses a malformed file; this reads only what
-    it needs to canonicalize and leaves a line it cannot read to the loader."""
-    with open(path, "rb") as fh:
-        raw = fh.read()
-    lines = raw.decode("ascii", errors="replace").splitlines()
-    while lines and not lines[-1].strip():
-        lines.pop()
-    out = []
-    for k, line in enumerate(lines):
-        _rank, _, hx = line.strip().partition("\t")
-        try:
-            out.append(f"{k}\t{bytes.fromhex(hx).hex()}\n")
-        except ValueError:
-            out.append(f"{k}\t{hx}\n")
-    return _identity_from_tokens_text("".join(out), len(lines))
+    file. The binding loads (and refuses) the file and renders the canonical
+    text (`tokenizer/impl/vocab_build.mojo::ranks_text`)."""
+    m = _binding()
+    return _identity_of_handle(m, _native(m.bpe_load, os.fspath(path)))
+
+
+def _identity_of_handle(m, handle):
+    return _identity_from_tokens_text(m.bpe_ranks_text(handle), int(m.bpe_n_vocab(handle)) - 1)
+
+
+def _native(fn, *args, prefix="mojolearn: "):
+    """Call a binding entry; a refusal it raises as `ValueError: ...` or
+    `TypeError: ...` (the Mojo side names the Python type) is re-raised as
+    that type with `prefix`."""
+    try:
+        return fn(*args)
+    except Exception as exc:
+        msg = str(exc)
+        for name, kind in (("ValueError: ", ValueError), ("TypeError: ", TypeError)):
+            if msg.startswith(name):
+                raise kind(prefix + msg[len(name):]) from None
+        raise
+
+
+def _blob(parts, what):
+    """`(bytes, int64 lengths)` of a sequence of bytes-like parts, joined
+    by the C `bytes.join` (no Python loop); a part that is not bytes-like
+    is refused."""
+    try:
+        blob = b"".join(parts)
+    except TypeError as exc:
+        raise TypeError(f"mojolearn: {what} must be bytes-like ({exc})") from None
+    return blob, array.array("q", map(len, parts))
+
+
+def _ro(buf, name):
+    return addr_ro(buf, name=name) if len(buf) else 0
 
 
 def _binding():
@@ -160,12 +182,22 @@ class BpeTokenizer:
         path = os.path.abspath(os.fspath(ranks_file))
         if not os.path.isfile(path):
             raise FileNotFoundError(f"mojolearn: BpeTokenizer rank file {path} does not exist")
-        self._source = path
-        self._identity = _identity_of_ranks_file(path)
-        self._m = _binding()
-        self._handle = self._m.bpe_load(path)
-        self._n_vocab = int(self._m.bpe_n_vocab(self._handle))
-        self._max_token_bytes = int(self._m.bpe_max_token_bytes(self._handle))
+        m = _binding()
+        self._adopt(m, _native(m.bpe_load, path), path)
+
+    def _adopt(self, m, handle, source):
+        self._source = source
+        self._m = m
+        self._handle = handle
+        self._identity = _identity_of_handle(m, handle)
+        self._n_vocab = int(m.bpe_n_vocab(handle))
+        self._max_token_bytes = int(m.bpe_max_token_bytes(handle))
+
+    @classmethod
+    def _from_handle(cls, m, handle, source):
+        tok = cls.__new__(cls)
+        tok._adopt(m, handle, source)
+        return tok
 
     # ------------------------------------------------------------ loading
 
@@ -179,37 +211,18 @@ class BpeTokenizer:
     def from_token_bytes(cls, tokens):
         """A vocabulary as a sequence of bytes-like tokens; a token's rank
         (and id) is its index. Unique, non-empty, and holding all 256 single
-        bytes, or refused by name before anything is loaded."""
+        bytes, or refused by name before anything is loaded (the checks are
+        `tokenizer/impl/vocab_build.mojo::table_from_tokens`)."""
         if isinstance(tokens, (str, bytes, bytearray, memoryview)):
             raise TypeError(f"mojolearn: tokens must be a sequence of bytes, got {type(tokens).__name__}")
-        toks = []
-        for k, t in enumerate(tokens):
-            if not isinstance(t, (bytes, bytearray, memoryview)):
-                raise TypeError(f"mojolearn: token {k} must be bytes-like, got {type(t).__name__}")
-            t = bytes(t)
-            if not t:
-                raise ValueError(f"mojolearn: token {k} is empty")
-            toks.append(t)
-        seen = {}
-        for k, t in enumerate(toks):
-            if t in seen:
-                raise ValueError(f"mojolearn: token {k} repeats token {seen[t]} ({t.hex()})")
-            seen[t] = k
-        missing = [b for b in range(256) if bytes([b]) not in seen]
-        if missing:
-            raise ValueError(
-                f"mojolearn: the vocabulary lacks {len(missing)} of the 256 single-byte tokens "
-                f"(first 0x{missing[0]:02x}); byte-level BPE needs every byte")
-        fd, path = tempfile.mkstemp(prefix="mojolearn-ranks-", suffix=".tsv")
         try:
-            with os.fdopen(fd, "w", encoding="ascii") as fh:
-                for k, t in enumerate(toks):
-                    fh.write(f"{k}\t{t.hex()}\n")
-            tok = cls(path)
-        finally:
-            os.unlink(path)
-        tok._source = "<token bytes>"
-        return tok
+            toks = list(tokens)
+        except TypeError:
+            raise TypeError(f"mojolearn: tokens must be a sequence of bytes, got {type(tokens).__name__}") from None
+        blob, lengths = _blob(toks, "every token")
+        m = _binding()
+        handle = _native(m.bpe_load_tokens, [_ro(blob, "tokens"), _ro(lengths, "lengths")], [len(toks)])
+        return cls._from_handle(m, handle, "<token bytes>")
 
     @classmethod
     def from_files(cls, encoder_json, vocab_bpe):
@@ -224,53 +237,20 @@ class BpeTokenizer:
         parts; and every token no merge makes is a single byte. Those are
         the conditions under which merging by rank gives the merge list's
         own result."""
-        byte_of = {c: b for b, c in _byte_to_char().items()}
         with open(encoder_json, "r", encoding="utf-8") as fh:
             encoder = json.load(fh)
         if not isinstance(encoder, dict):
             raise ValueError(f"mojolearn: {encoder_json} is not a JSON object of spelling to id")
         eot_id = encoder.pop(cls.ENDOFTEXT, None)
         n = len(encoder)
-        tokens = [None] * n
-        for spelling, i in encoder.items():
-            if type(i) is not int or not 0 <= i < n or tokens[i] is not None:
-                raise ValueError(f"mojolearn: {encoder_json}: id {i!r} of {spelling!r} is not a unique id in [0, {n})")
-            try:
-                tokens[i] = bytes(byte_of[c] for c in spelling)
-            except KeyError as exc:
-                raise ValueError(
-                    f"mojolearn: {encoder_json}: {spelling!r} holds {exc.args[0]!r}, which is not a "
-                    "byte-level spelling") from None
         if eot_id is not None and eot_id != n:
             raise ValueError(f"mojolearn: {encoder_json}: {cls.ENDOFTEXT} is id {eot_id}, not {n} (after the ranks)")
-        index = {t: i for i, t in enumerate(tokens)}
-        spelled = {c: b for c, b in zip(encoder.keys(), (tokens[i] for i in encoder.values()))}
-        made = set()
-        last = -1
         with open(vocab_bpe, "r", encoding="utf-8") as fh:
-            lines = fh.read().split("\n")
-        for lineno, line in enumerate(lines, 1):
-            if not line.strip() or (lineno == 1 and line.startswith("#version")):
-                continue
-            parts = line.split(" ")
-            if len(parts) != 2 or parts[0] not in spelled or parts[1] not in spelled:
-                raise ValueError(f"mojolearn: {vocab_bpe}:{lineno}: {line!r} is not a merge of two tokens")
-            a, b = spelled[parts[0]], spelled[parts[1]]
-            m = index.get(a + b)
-            if m is None:
-                raise ValueError(f"mojolearn: {vocab_bpe}:{lineno}: the merge result {parts[0] + parts[1]!r} is not a token")
-            if m <= last or m <= index[a] or m <= index[b]:
-                raise ValueError(
-                    f"mojolearn: {vocab_bpe}:{lineno}: merge result id {m} does not rise above the previous "
-                    f"merge ({last}) and both parts; merging by rank would not follow this merge list")
-            last = m
-            made.add(m)
-        loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
-        if loose:
-            raise ValueError(f"mojolearn: {encoder_json}: id {loose[0]} is neither a single byte nor made by a merge")
-        tok = cls.from_token_bytes(tokens)
-        tok._source = f"{os.path.abspath(encoder_json)} + {os.path.abspath(vocab_bpe)}"
-        return tok
+            merges = fh.read()
+        m = _binding()
+        handle = _native(m.bpe_load_spelled, encoder, merges,
+                         prefix=f"mojolearn: {encoder_json} + {vocab_bpe}: ")
+        return cls._from_handle(m, handle, f"{os.path.abspath(encoder_json)} + {os.path.abspath(vocab_bpe)}")
 
     @classmethod
     def _synthetic(cls):
@@ -375,18 +355,13 @@ class BpeTokenizer:
         n_docs = len(raws)
         if n_docs == 0:
             return []
-        text = b"".join(raws)
+        text, lengths = _blob(raws, "every document")
         n = len(text)
-        offsets = array.array("q", bytes(8 * (n_docs + 1)))
-        pos = 0
-        for k, r in enumerate(raws):
-            pos += len(r)
-            offsets[k + 1] = pos
         counts = array.array("q", bytes(8 * n_docs))
         ids = array.array("i", bytes(4 * max(n, 1)))
         text_buf = text if n > 0 else b"\0"
         total = int(self._m.bpe_encode_batch(
-            self._handle, addr_ro(text_buf, name="text"), addr_ro(offsets, name="offsets"),
+            self._handle, addr_ro(text_buf, name="text"), addr_ro(lengths, name="lengths"),
             addr(ids, name="ids"), addr(counts, name="counts"), [n_docs, n, n, allow]))
         if not 0 <= total <= n or sum(counts) != total:
             raise RuntimeError(
@@ -398,44 +373,44 @@ class BpeTokenizer:
             at += c
         return out
 
+    def _encode_corpus(self, data, points, document_bytes):
+        """`lm_corpus._tokenize`'s work in one call (`bpe_encode_corpus`):
+        `data` cut into documents by the corpus rule, each encoded alone.
+        Returns `(ids int32 array, {point: id offset}, n_documents, max_id,
+        ids_above_255)`."""
+        n = len(data)
+        pts = array.array("q", points)
+        ids = array.array("i", bytes(4 * max(n, 1)))
+        bounds = array.array("q", bytes(8 * max(len(pts), 1)))
+        stats = array.array("q", bytes(24))
+        total = int(_native(self._m.bpe_encode_corpus, self._handle,
+                            [_ro(data, "corpus"), addr_ro(pts, name="points"), addr(ids, name="ids"),
+                             addr(bounds, name="bounds"), addr(stats, name="stats")],
+                            [n, len(pts), int(document_bytes), n]))
+        del ids[total:]
+        return ids, dict(zip(points, bounds)), int(stats[0]), int(stats[1]), int(stats[2])
+
     # ------------------------------------------------------------ decode
 
-    def _ids_array(self, ids):
+    @staticmethod
+    def _id_list(ids):
         if isinstance(ids, (str, bytes, bytearray)):
             raise TypeError(f"mojolearn: ids must be a sequence of int, got {type(ids).__name__}")
         try:
-            seq = list(ids)
+            return list(ids)
         except TypeError:
             raise TypeError(f"mojolearn: ids must be a sequence of int, got {type(ids).__name__}") from None
-        out = array.array("i", bytes(4 * max(len(seq), 1)))
-        for k, v in enumerate(seq):
-            if isinstance(v, bool):
-                raise TypeError(f"mojolearn: ids must be int, not bool, at position {k}")
-            try:
-                iv = v.__index__()
-            except AttributeError:
-                raise TypeError(
-                    f"mojolearn: ids must be int, got {type(v).__name__} at position {k}"
-                ) from None
-            if not 0 <= iv < self._n_vocab:
-                raise ValueError(
-                    f"mojolearn: id {iv} at position {k} is outside [0, {self._n_vocab})"
-                )
-            out[k] = iv
-        return out, len(seq)
 
     def decode_bytes(self, ids):
-        """The bytes of an id sequence. An id outside [0, n_vocab) is refused
-        by value and position before the binding is called."""
-        arr, n = self._ids_array(ids)
-        if n == 0:
+        """The bytes of an id sequence. An id that is not an int, or is
+        outside [0, n_vocab), is refused by value and position before
+        anything is decoded (the binding's `bpe_decode_seq`)."""
+        seq = self._id_list(ids)
+        if not seq:
             return b""
-        cap = n * self._max_token_bytes
+        cap = len(seq) * self._max_token_bytes
         out = bytearray(cap)
-        count = int(self._m.bpe_decode(
-            self._handle, addr_ro(arr, name="ids"), n, addr(out, name="text"), cap))
-        if not 0 <= count <= cap:
-            raise RuntimeError(f"mojolearn: bpe_decode returned {count} bytes into {cap}")
+        count = int(_native(self._m.bpe_decode_seq, self._handle, seq, addr(out, name="text"), cap))
         return bytes(out[:count])
 
     def decode(self, ids, errors="replace"):
@@ -443,12 +418,22 @@ class BpeTokenizer:
         return self.decode_bytes(ids).decode("utf-8", errors)
 
     def decode_bytes_batch(self, batch):
-        """`[decode_bytes(ids) for ids in batch]`. A thin loop over the one
-        `bpe_decode` call per sequence: decode is a table copy, and a
-        sequence of ids already carries its own boundaries."""
+        """`[decode_bytes(ids) for ids in batch]`, in ONE binding call
+        (`bpe_decode_batch`); an id is refused by its position inside its
+        own sequence."""
         if isinstance(batch, (str, bytes, bytearray)):
             raise TypeError(f"mojolearn: decode_bytes_batch takes a sequence of id sequences, got {type(batch).__name__}")
-        return [self.decode_bytes(ids) for ids in batch]
+        seqs = self._id_list(batch)
+        cap = sum(map(len, seqs)) * self._max_token_bytes
+        out = bytearray(max(cap, 1))
+        lengths = array.array("q", bytes(8 * max(len(seqs), 1)))
+        _native(self._m.bpe_decode_batch, self._handle, seqs, addr(out, name="text"), cap,
+                addr(lengths, name="lengths"))
+        result, at = [], 0
+        for k in range(len(seqs)):
+            result.append(bytes(out[at:at + lengths[k]]))
+            at += lengths[k]
+        return result
 
     def decode_batch(self, batch, errors="replace"):
         """`[decode(ids, errors) for ids in batch]`."""
@@ -488,20 +473,32 @@ class TrainedBpeVocabulary:
         """The total order that settles equal counts, spelled out."""
         return self.stats["tie_break"]
 
+    def _render(self, which):
+        blob, lengths = _blob(self.tokens, "every token")
+        left = array.array("q", map(operator.itemgetter(0), self.merges))
+        right = array.array("q", map(operator.itemgetter(1), self.merges))
+        m = _binding()
+        return _native(m.bpe_render, [_ro(blob, "tokens"), _ro(lengths, "lengths"), _ro(left, "merge_left"),
+                                      _ro(right, "merge_right")], [len(self.tokens), len(self.merges), which])
+
     def render_ranks(self):
-        """OUR format as text: `rank<TAB>hex_of_token_bytes` per line."""
-        return _bpe_trainer.render_ranks(self.tokens)
+        """OUR format as text: `rank<TAB>hex_of_token_bytes` per line
+        (`tokenizer/train/emit.mojo::render_ranks`)."""
+        return self._render(0)
 
     def render_tokenizer_json(self):
-        """A `tokenizer.json` Hugging Face `tokenizers` loads, as text."""
-        return _bpe_trainer.render_tokenizer_json(self.tokens, self.merges)
+        """A `tokenizer.json` Hugging Face `tokenizers` loads, as text
+        (`tokenizer/train/emit.mojo::render_tokenizer_json`)."""
+        return self._render(1)
 
     def write_ranks(self, path):
-        _bpe_trainer.write_ranks(self.tokens, path)
+        with open(path, "w", encoding="ascii", newline="\n") as fh:
+            fh.write(self.render_ranks())
         return path
 
     def write_tokenizer_json(self, path):
-        _bpe_trainer.write_tokenizer_json(self.tokens, self.merges, path)
+        with open(path, "w", encoding="ascii", newline="\n") as fh:
+            fh.write(self.render_tokenizer_json())
         return path
 
     @property
@@ -539,23 +536,19 @@ class BpeVocabularyTrainer:
     selection that never depends on an iteration order, and no float anywhere
     in the selection.
 
-    THE BACKEND (lane/bpe-builder-native, 2026-09-18). `backend="auto"`
-    (the default) trains with the Mojo trainer `tokenizer/train/
-    bpe_train.mojo` through the tokenizer host binding (`bpe_train`), and
-    falls back to the pure Python reference `_bpe_trainer.train` when the
-    binding is not built or predates that entry. `"mojo"` requires the
-    binding; `"python"` runs the reference. The two are held to the SAME
-    BYTES by `pixi run check-bpe-trainer` (file byte for file byte, both
-    formats) and by the identity lanes, so which one ran cannot reach the
-    vocabulary; `stats["backend"]` records it. The Python reference recounts
-    every pair per merge in pure Python and is impractical at tens of
-    thousands of ranks; the Mojo one trained 50,256 ranks on 20 MB on one
-    core.
-    `MOJOLEARN_BPE_TRAINER_SABOTAGE=1` reverses the tie-break on EITHER
-    backend (the negative control).
+    THE TRAINER is the Mojo one, `tokenizer/train/bpe_train.mojo`, through
+    the tokenizer host binding (`bpe_train`). `backend` is kept for its
+    old spellings: "auto" and "mojo" both name it. The pure Python
+    reference `_bpe_trainer.train` is a VERIFICATION oracle only
+    (lane/pyglue-text-io, 2026-10-03: Python is glue at run time), held to
+    the Mojo trainer's bytes by `pixi run check-bpe-trainer` and the
+    tokenizer surface test; `backend="python"` is refused by name.
+    `stats["backend"]` records "mojo".
+    `MOJOLEARN_BPE_TRAINER_SABOTAGE=1` reverses the tie-break (the negative
+    control).
     """
 
-    _BACKENDS = ("auto", "mojo", "python")
+    _BACKENDS = ("auto", "mojo")
 
     def __init__(self, vocab_size=32000, min_frequency=2, backend="auto"):
         if not isinstance(vocab_size, int) or isinstance(vocab_size, bool):
@@ -568,6 +561,9 @@ class BpeVocabularyTrainer:
             raise TypeError(f"mojolearn: min_frequency must be an int, got {type(min_frequency).__name__}")
         if min_frequency < 1:
             raise ValueError(f"mojolearn: min_frequency {min_frequency} must be at least 1")
+        if backend == "python":
+            raise ValueError("mojolearn: backend='python' is gone: the Python BPE trainer is a verification "
+                             "oracle (mojolearn._bpe_trainer.train), not a run-time route; use backend='auto'")
         if backend not in self._BACKENDS:
             raise ValueError(f"mojolearn: backend must be one of {self._BACKENDS}, got {backend!r}")
         self.vocab_size = vocab_size
@@ -597,16 +593,10 @@ class BpeVocabularyTrainer:
             else:
                 raise TypeError(
                     f"mojolearn: document {k} must be str or bytes-like, got {type(d).__name__}")
-        native = None
-        if self.backend != "python":
-            native = _native_trainer(required=self.backend == "mojo")
-        if native is not None:
-            tokens, merges, stats = _train_native(native, raws, self.vocab_size, self.min_frequency,
-                                                  _bpe_trainer.sabotaged())
-            stats["backend"] = "mojo"
-        else:
-            tokens, merges, stats = _bpe_trainer.train(raws, self.vocab_size, self.min_frequency)
-            stats["backend"] = "python"
+        native = _native_trainer(required=True)
+        tokens, merges, stats = _train_native(native, raws, self.vocab_size, self.min_frequency,
+                                              _bpe_trainer.sabotaged())
+        stats["backend"] = "mojo"
         return TrainedBpeVocabulary(tokens, merges, stats)
 
     def __repr__(self):
@@ -631,16 +621,18 @@ def _native_trainer(required):
 
 
 def _train_native(module, raws, vocab_size, min_frequency, break_ties_high):
-    """`_bpe_trainer.train`'s return shape, `(tokens, merges, stats)`, from
-    the Mojo trainer: one crossing in (the documents back to back with
-    int64 offsets), one out (the token bytes, lengths and merge ids)."""
-    offsets = array.array("q", [0])
-    for r in raws:
-        offsets.append(offsets[-1] + len(r))
-    text = bytearray(b"".join(raws))
+    """`(tokens, merges, stats)` from the Mojo trainer: one crossing in (the
+    documents back to back with int64 lengths), one out (the token bytes,
+    lengths and merge ids)."""
+    text, lengths = _blob(raws, "every document")
     n = len(text)
-    handle = module.bpe_train(addr_ro(text, name="documents") if n else 0, addr_ro(offsets, name="offsets"),
-                              [len(raws), n, int(vocab_size), int(min_frequency), bool(break_ties_high)])
+    handle = _native(module.bpe_train, addr_ro(text, name="documents") if n else 0,
+                     addr_ro(lengths, name="lengths"),
+                     [len(raws), n, int(vocab_size), int(min_frequency), bool(break_ties_high)])
+    return _read_trained(module, handle, vocab_size, min_frequency)
+
+
+def _read_trained(module, handle, vocab_size, min_frequency):
     n_tokens, arena_bytes, n_merges, n_ties, n_groups = (int(x) for x in module.bpe_trained_sizes(handle))
     arena = bytearray(max(arena_bytes, 1))
     lengths = array.array("q", [0]) * n_tokens
@@ -648,11 +640,13 @@ def _train_native(module, raws, vocab_size, min_frequency, break_ties_high):
     right = array.array("q", [0]) * max(n_merges, 1)
     module.bpe_trained_copy(handle, addr(arena, name="arena"), addr(lengths, name="lengths"),
                             addr(left, name="merge_left"), addr(right, name="merge_right"))
+    # The result as the public shape: token bytes by rank, merges as
+    # (left, right, new) ids.
     tokens, at = [], 0
     for m in lengths:
         tokens.append(bytes(arena[at:at + m]))
         at += m
-    merges = [(int(left[k]), int(right[k]), 256 + k) for k in range(n_merges)]
+    merges = list(zip(left[:n_merges], right[:n_merges], range(256, 256 + n_merges)))
     stats = {
         "n_tokens": n_tokens,
         "n_merges": n_merges,
@@ -663,6 +657,29 @@ def _train_native(module, raws, vocab_size, min_frequency, break_ties_high):
         "min_frequency": min_frequency,
     }
     return tokens, merges, stats
+
+
+def _train_corpus(data, points, lo, hi, document_bytes, vocab_size, min_frequency):
+    """`lm_corpus`'s vocabulary: the documents of `data[lo:hi]` (cut by the
+    corpus rule in Mojo, `bpe_train_corpus`) trained in the same call.
+    `points` are the corpus's sorted split points."""
+    module = _native_trainer(required=True)
+    pts = array.array("q", points)
+    n = len(data)
+    handle = _native(module.bpe_train_corpus, [_ro(data, "corpus"), _ro(pts, "points")],
+                     [n, len(pts), int(lo), int(hi), int(document_bytes), int(vocab_size), int(min_frequency),
+                      bool(_bpe_trainer.sabotaged())])
+    tokens, merges, stats = _read_trained(module, handle, vocab_size, min_frequency)
+    stats["backend"] = "mojo"
+    return TrainedBpeVocabulary(tokens, merges, stats)
+
+
+def _gather_rows(ids_all, out, batch, length, lo, modulus, base):
+    """`out[b] = ids_all[lo + (base + b*length) % modulus : + length + 1]`
+    for every row b, in one binding call (int32 buffers by address)."""
+    m = _binding()
+    return _native(m.tokens_gather_rows, [addr_ro(ids_all, name="ids"), addr(out, name="out")],
+                   [int(ids_all.size), int(batch), int(length), int(lo), int(modulus), int(base)])
 
 
 #: Renamed classes still importable under their old name, {old: new}.

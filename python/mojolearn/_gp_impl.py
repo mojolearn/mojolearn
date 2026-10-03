@@ -78,6 +78,9 @@ import numbers
 from . import _backend
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
+
+#: `gaussian_process/gp_optim_items.mojo`'s stop words (GP_STOP_*).
+_OPT_STOPS = ("running", "pgtol", "no-descent", "line-search", "ftol", "max-iter", "nonfinite-start")
 from ._mode import NumericModeMixin
 from .linear_model import _flatten, _r2_sums, _round_f32, _shape_of
 from .preprocessing import StandardScaler
@@ -120,12 +123,35 @@ def _as_length_scale(length_scale, what):
 _FLT_MIN = 1.1754943508222875e-38
 
 
+def _gp_py2mojo(ext):
+    """True when the binding `ext` applies normalize_y's un-normalization
+    itself (lane apple-fast-py2mojo-cluster: the mean, std, covariance and
+    sample_y draws, `gaussian_process/unnorm.mojo`). A
+    `-D MOJOLEARN_PY2MOJO_cluster_OFF` build answers 0 and the Python loops
+    below run (the A/B switch)."""
+    fn = getattr(ext, "gp_py2mojo", None)
+    return fn is not None and int(fn()) == 1
+
+
 def _ftz(x):
     """`checks/numerics.mojo::ftz` on a binary32 value held in a Python
     float: a subnormal becomes a zero of the same sign."""
     if x != 0.0 and abs(x) < _FLT_MIN:
         return math.copysign(0.0, x)
     return x
+
+def _scale_shift(arr, a, b, op):
+    """A new float32 Array of `scale_shift_ftz_f32` over `arr` (op 0
+    ftz(ftz(a v) + b), 1 ftz(sqrt(ftz(v a))), 2 ftz(v a)): each step one
+    binary32 rounding then `ftz`, the same bits the Python comprehension
+    gave, in Mojo (lane cgr4-py-compute)."""
+    from ._buffer import _native, as_f32_c, empty
+    src, _ = as_f32_c(arr, ndim=None, name="values")
+    out = empty(src.shape, "<f4")
+    if src.size:
+        _native("scale_shift_ftz_f32")(src._addr, src.size, float(a), float(b), int(op), out._addr)
+    return out
+
 
 
 #: scikit-learn's default hyperparameter bounds, `kernels.py` (every leaf).
@@ -424,7 +450,9 @@ class GaussianProcessRegressor(NumericModeMixin):
                                   hyperparameters with the identical gradient
                                   (DEVIATION 2880) and a projected L-BFGS
                                   whose every rule is pinned (DEVIATION 2881,
-                                  _gp_optimizer.py). scikit-learn's default is
+                                  gaussian_process/gp_optim_items.mojo, run
+                                  on the device in one binding call).
+                                  scikit-learn's default is
                                   'fmin_l_bfgs_b'; None stays the default so a
                                   fit that ran before runs the same bits. A
                                   callable is refused by name
@@ -798,40 +826,38 @@ class GaussianProcessRegressor(NumericModeMixin):
         """scikit-learn `_gpr.py:299-341`: optimize from the kernel's theta,
         then from `n_restarts_optimizer` log-uniform starts; the smallest
         negative likelihood wins and a tie goes to the earlier run
-        (`np.argmin`). Returns the fitted kernel, whose `theta` is the winning
-        run's. Every run is recorded in `_optimizer_runs` as
-        `(n_iter, n_eval, stop, -f)`."""
-        from . import _gp_optimizer
-        ext = self._extension()
+        (`np.argmin`). ONE binding call (`gpr_optimize`) runs every start on
+        the device (DEVIATION 2881, `gaussian_process/gp_optim_items.mojo`);
+        Python only hands the kernel over and reads the answer. Returns the
+        fitted kernel, whose `theta` is the winning run's. Every run is
+        recorded in `_optimizer_runs` as `(n_iter, n_eval, stop, -f)`."""
         base = self.kernel
-        bounds = base._free_bounds()
-        lo = [float(v) for v in ext.gp_log64([b[0] for b in bounds])]
-        hi = [float(v) for v in ext.gp_log64([b[1] for b in bounds])]
-        theta0 = [float(v) for v in ext.gp_log64(base._free_values())]
-
-        def fun(theta):
-            params = [float(v) for v in ext.gp_theta_params(theta)]
-            info, lml, grad = self._lml_grad(base._with_free_values(params), x, targets, n_rows, n_cols)
-            if info != 0 or not math.isfinite(lml) or not all(math.isfinite(g) for g in grad):
-                return math.inf, [0.0] * len(theta)
-            return -lml, [-g for g in grad]
-
-        starts = [theta0]
-        if self.n_restarts_optimizer > 0:
-            seed = self.random_state
-            u = [float(v) for v in ext.gp_restart_uniforms(
-                [self.n_restarts_optimizer, len(theta0), seed & 0xFFFFFFFF, seed >> 32])]
-            nd = len(theta0)
-            for r in range(self.n_restarts_optimizer):
-                starts.append([lo[j] + u[r * nd + j] * (hi[j] - lo[j]) for j in range(nd)])
-        best = None
-        for start in starts:
-            theta, f, n_iter, n_eval, stop = _gp_optimizer.minimize(fun, start, lo, hi)
-            self._optimizer_runs.append((n_iter, n_eval, stop, -f))
-            if best is None or f < best[1]:
-                best = (theta, f)
-        theta = best[0]
-        params = [float(v) for v in ext.gp_theta_params(theta)]
+        kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays(base)
+        free = Array.from_list(base._free_flags(), "<i4")
+        n_theta = base.n_dims
+        bounds = Array.from_list([float(v) for b in base._free_bounds() for v in (b[0], b[1])], "<f4")
+        n_runs = 1 + int(self.n_restarts_optimizer)
+        theta_out = empty((n_theta,), "<f8")
+        values_out = empty((n_theta,), "<f8")
+        runs_out = empty((n_runs * 4,), "<f8")
+        seed = int(self.random_state)
+        self._extension().gpr_optimize(
+            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_optimize_binding.
+            # x, y, kinds, kparams, ls_len, ls, free, bounds, theta_out,
+            # values_out, runs_out
+            [addr_ro(x, name="x"), addr_ro(targets, name="targets"), addr_ro(kinds, name="kinds"),
+             addr_ro(kparams, name="kparams"), addr_ro(ls_len, name="ls_len"), addr_ro(ls, name="ls"),
+             addr_ro(free, name="free"), addr_ro(bounds, name="bounds"), addr(theta_out, name="theta_out"),
+             addr(values_out, name="values_out"), addr(runs_out, name="runs_out")],
+            # n_train, n_features, n_nodes, n_ls, alpha, n_restarts, seed_lo, seed_hi
+            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.alpha, n_runs - 1,
+             seed & 0xFFFFFFFF, (seed >> 32) & 0xFFFFFFFF],
+        )
+        for r in range(n_runs):
+            n_iter, n_eval, stop, f = (float(runs_out[r * 4 + j]) for j in range(4))
+            self._optimizer_runs.append((int(n_iter), int(n_eval), _OPT_STOPS[int(stop)], -f))
+        theta = [float(theta_out[i]) for i in range(n_theta)]
+        params = [float(values_out[i]) for i in range(n_theta)]
         return base._with_free_values(params, theta=theta)
 
     # -- predict ------------------------------------------------------------
@@ -878,7 +904,11 @@ class GaussianProcessRegressor(NumericModeMixin):
         xt = self.X_train_
         lf = self.L_
         dual = self.alpha_
-        n_clamped = self._extension().gpr_predict(
+        ext = self._extension()
+        norm = bool(getattr(self, "normalize_y_", False))
+        in_mojo = norm and _gp_py2mojo(ext)
+        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
+        n_clamped = ext.gpr_predict(
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
             # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls,
             # mean_out, var_out, std_out, clamped_out
@@ -899,9 +929,9 @@ class GaussianProcessRegressor(NumericModeMixin):
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
             # n_train, n_features, n_star, n_nodes, n_ls, return_std, info
             [n_train, self.n_features_in_, n_star, int(kinds.shape[0]),
-             n_ls, 1 if return_std else 0, self.info_],
+             n_ls, 1 if return_std else 0, self.info_] + tail,
         )
-        if getattr(self, "normalize_y_", False):
+        if norm and not in_mojo:
             # sklearn `_gpr.py:450` and `:494`: y_mean = std * y_mean + mean;
             # y_var = y_var * std**2, then sqrt. Each is ONE correctly
             # rounded binary32 operation on the host (the product or sum of
@@ -911,13 +941,10 @@ class GaussianProcessRegressor(NumericModeMixin):
             # computes the same bits.
             s_ = self._y_train_std
             mu = self._y_train_mean
-            mean = Array.from_list(
-                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in mean.tolist()], "<f4")
+            mean = _scale_shift(mean, s_, mu, 0)
             if return_std:
                 s2 = _ftz(_round_f32(s_ * s_))
-                std = Array.from_list(
-                    [_ftz(_round_f32(math.sqrt(_ftz(_round_f32(v * s2))))) for v in var.tolist()],
-                    "<f4")
+                std = _scale_shift(var, s2, 0.0, 1)
         if return_std:
             self.clamped_ = clamped
             self.n_clamped_ = int(n_clamped)
@@ -955,6 +982,9 @@ class GaussianProcessRegressor(NumericModeMixin):
             )
         mean = empty((max(n_star, 1),), "<f4")
         cov = empty((max(n_star * n_star, 1),), "<f4")
+        norm = bool(getattr(self, "normalize_y_", False))
+        in_mojo = norm and _gp_py2mojo(ext)
+        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
         xt = self.X_train_
         lf = self.L_
         dual = self.alpha_
@@ -974,15 +1004,15 @@ class GaussianProcessRegressor(NumericModeMixin):
                 addr(cov, name="cov"),
             ],
             # n_train, n_features, n_star, n_nodes, n_ls, info
-            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls, self.info_],
+            # (+ normalize_y, y_std, y_mean: the binding un-normalizes)
+            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls, self.info_] + tail,
         )
-        if getattr(self, "normalize_y_", False):
+        if norm and not in_mojo:
             s_ = self._y_train_std
             mu = self._y_train_mean
-            mean = Array.from_list(
-                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in mean.tolist()], "<f4")
+            mean = _scale_shift(mean, s_, mu, 0)
             s2 = _ftz(_round_f32(s_ * s_))
-            cov = Array.from_list([_ftz(_round_f32(v * s2)) for v in cov.tolist()], "<f4")
+            cov = _scale_shift(cov, s2, 0.0, 2)
         return mean[:n_star], cov[:n_star * n_star].reshape((n_star, n_star))
 
     # -- saved models -----------------------------------------------------------
@@ -1169,7 +1199,11 @@ class GaussianProcessRegressor(NumericModeMixin):
         xt = self.X_train_
         lf = self.L_
         dual = self.alpha_
-        self._extension().gpr_sample_y(
+        ext = self._extension()
+        norm = bool(getattr(self, "normalize_y_", False))
+        in_mojo = norm and _gp_py2mojo(ext)
+        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
+        ext.gpr_sample_y(
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_sample_y_binding.
             # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, y_out
             [
@@ -1186,15 +1220,14 @@ class GaussianProcessRegressor(NumericModeMixin):
             # n_train, n_features, n_star, n_nodes, n_ls, info, n_samples,
             # random_state low 32 bits, random_state high 32 bits
             [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls,
-             self.info_, n, seed & 0xFFFFFFFF, seed >> 32],
+             self.info_, n, seed & 0xFFFFFFFF, seed >> 32] + tail,
         )
-        if getattr(self, "normalize_y_", False):
+        if norm and not in_mojo:
             # predict's un-normalization of the mean, applied to every draw:
             # std * (mean + L z) + y_mean, so the covariance is std**2 C.
             s_ = self._y_train_std
             mu = self._y_train_mean
-            out = Array.from_list(
-                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in out.tolist()], "<f4")
+            out = _scale_shift(out, s_, mu, 0)
         return out.reshape((n_star, n))
 
     def score(self, X, y):

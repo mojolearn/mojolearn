@@ -9,15 +9,19 @@ padding slot and is skipped, as their kOutOfBoundsRecord is), and a sorted
 insertion under (distance, id), so equal distances resolve by id whatever
 order the candidates arrive in (DEVIATION 5850)."""
 
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import ftz, identical_mul_add, identical_sqrt
 from x_ann.ivf_pq_core import F32P, I32P, pq_inf, pq_insert
 
 
 @always_inline
 def refine_cell(
     qi: Int, x: F32P, n: Int, d: Int, queries: F32P, cand: I32P, k0: Int, k: Int,
-    out_d: F32P, out_i: I32P,
+    out_d: F32P, out_i: I32P, root: Bool = False,
 ):
+    """`root` (lane apple-fast-py2mojo-cluster: `refine(metric='euclidean')`
+    took the root in Python with numpy): each kept distance becomes its
+    correctly rounded square root (`identical_sqrt`) after the selection, so
+    the ids and their order are the squared metric's."""
     var base = qi * k
     for s in range(k):
         out_d.unsafe_store(base + s, pq_inf())
@@ -39,3 +43,6 @@ def refine_cell(
             var diff = ftz(ftz(queries.unsafe_load(qi * d + c)) - ftz(x.unsafe_load(v * d + c)))
             acc = ftz(identical_mul_add(diff, diff, acc))
         pq_insert(k, base, acc, Int32(v), out_d, out_i)
+    if root:
+        for s in range(k):
+            out_d.unsafe_store(base + s, identical_sqrt(out_d.unsafe_load(base + s)))

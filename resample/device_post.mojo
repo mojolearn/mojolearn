@@ -1,20 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The resample lane's finishing statistics on the device (lane cgr5-owed,
-2026-10-03): the permutation test's observed statistic, the bootstrap
+2026-10-03): the bootstrap
 standard error, the BCa jackknife moments and the two integer counts (the
 bias percentile's, the p-value's). Each was a host loop over n or over
 n_resamples after the replicates came back.
 
 ORDERS.
 
-  * The OBSERVED statistic keeps the replicate kernels' order (it is the
-    identity permutation's replicate, and the p-value's tolerance is a
-    multiple of it): the masked values in chunks of PINNED_SUM_W, each chunk
-    one `virtual_block_sum` tree, here one block per chunk in parallel, then
-    the chunk totals ascending from +0.0 (`host_fold_partials`, the chain
-    each replicate block runs over its own chunks). `host_tree_sum` is its
-    host model, unchanged.
+  * The OBSERVED statistic is `resample/estimator.mojo::_perm_observed`
+    (lane/apple-fast-purity2), the replicate kernels' order.
   * The STANDARD ERROR and the BCa MOMENTS are grid-wide sums: the chunk
     trees, then `metrics/checks/pinned_sum.mojo`'s level tree over the chunk
     totals (`host_grid_sum` on the host column, `resample/checks/
@@ -50,78 +45,6 @@ comptime POST_MAX_BLOCKS = 256
 
 
 # ---------------------------------------------------------------- kernels ----
-
-
-def obs_chunk_kernel(
-    part_x: _F32P,
-    part_y: _F32P,
-    pooled: _F32P,
-    n_pooled_in: Int32,
-    n_x_in: Int32,
-    centre: _F32P,
-    mode: Int32,
-):
-    """Block c, chunk c of the pooled sample. mode 0: the x-masked and the
-    y-masked values (`+0.0` for the other group), two trees; mode 1: the
-    x-masked `ftz(identical_mul(d, d))`, `d = ftz(ftz(v) - mx)` with `mx =
-    _mean_of_sum(centre[0], n_x)`, one tree into part_x."""
-    comptime R = PINNED_SUM_W // PINNED_SUM_TPB
-    var tid = Int(thread_idx.x)
-    var c = Int(block_idx.x)
-    var n_pooled = Int(n_pooled_in)
-    var n_x = Int(n_x_in)
-    var vx = SIMD[DType.float32, R](0.0)
-    var vy = SIMD[DType.float32, R](0.0)
-    var mx = Float32(0.0)
-    if mode != 0:
-        mx = _mean_of_sum(centre.unsafe_load(0), n_x)
-    comptime for r in range(R):
-        var j = c * PINNED_SUM_W + tid + r * PINNED_SUM_TPB
-        if j < n_pooled:
-            var v = ftz(pooled.unsafe_load(j))
-            if mode == 0:
-                if j < n_x:
-                    vx[r] = v
-                else:
-                    vy[r] = v
-            elif j < n_x:
-                var d = ftz(v - mx)
-                vx[r] = ftz(identical_mul(d, d))
-    var tx = virtual_block_sum[PINNED_SUM_TPB](vx)
-    if tid == 0:
-        part_x.unsafe_store(c, tx)
-    if mode == 0:
-        var ty = virtual_block_sum[PINNED_SUM_TPB](vy)
-        if tid == 0:
-            part_y.unsafe_store(c, ty)
-
-
-def chunk_chain_kernel(res: _F32P, part: _F32P, chunks_in: Int32):
-    """`host_fold_partials`: the chunk totals ascending from +0.0, flushed.
-    One thread over the chunk totals (n / PINNED_SUM_W of them), the chain
-    each replicate block runs over its own chunks."""
-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
-        return
-    var acc = Float32(0.0)
-    for c in range(Int(chunks_in)):
-        acc = ftz(acc + part.unsafe_load(c))
-    res.unsafe_store(0, acc)
-
-
-def obs_finish_kernel(res: _F32P, sums: _F32P, n_x_in: Int32, n_y_in: Int32, stat: Int32):
-    """The observed statistic from its sums (sums[0] x, sums[1] y, sums[2]
-    the squared deviations): `permutation_test_host`'s finishing lines."""
-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
-        return
-    var n_x = Int(n_x_in)
-    if Int(stat) == STAT_DIFF_MEANS:
-        res.unsafe_store(0, ftz(_mean_of_sum(sums.unsafe_load(0), n_x) - _mean_of_sum(sums.unsafe_load(1), Int(n_y_in))))
-    elif Int(stat) == STAT_MEAN:
-        res.unsafe_store(0, _mean_of_sum(sums.unsafe_load(0), n_x))
-    else:
-        res.unsafe_store(
-            0, ftz(identical_sqrt(ftz(identical_div(sums.unsafe_load(2), Float32(n_x - 1)))))
-        )
 
 
 def dev_sq_kernel(dst: _F32P, src: _F32P, n_in: Int32, mean_sum: _F32P, scale_in: Int32, mode: Int32):
@@ -267,45 +190,6 @@ def device_grid_sum_into(
     ctx.enqueue_function[fold_partials_level_kernel[PINNED_SUM_TPB]](
         lv[0], Int32(lv[1]), res, grid_dim=chunk_count(lv[1]), block_dim=PINNED_SUM_TPB,
     )
-
-
-def device_observed_statistic(
-    ctx: DeviceContext, mut pooled: DeviceBuffer[DType.float32], n_pooled: Int, n_x: Int, stat: Int,
-) raises -> Float32:
-    """`permutation_test`'s observed statistic (the pooled sample split where
-    it is) in the replicate kernels' order; one scalar comes back."""
-    var chunks = chunk_count(n_pooled)
-    var px = ctx.enqueue_create_buffer[DType.float32](chunks)
-    var py = ctx.enqueue_create_buffer[DType.float32](chunks)
-    var sums = ctx.enqueue_create_buffer[DType.float32](3)
-    var res = ctx.enqueue_create_buffer[DType.float32](1)
-    var sp = sums.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var pxp = px.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var pyp = py.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var pp = pooled.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    ctx.enqueue_memset(sums, Float32(0.0))
-    ctx.enqueue_function[obs_chunk_kernel](
-        pxp, pyp, pp, Int32(n_pooled), Int32(n_x), sp, Int32(0),
-        grid_dim=(chunks, 1, 1), block_dim=(PINNED_SUM_TPB, 1, 1),
-    )
-    ctx.enqueue_function[chunk_chain_kernel](sp, pxp, Int32(chunks), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
-    ctx.enqueue_function[chunk_chain_kernel](sp + 1, pyp, Int32(chunks), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
-    if stat != STAT_MEAN and stat != STAT_DIFF_MEANS:
-        ctx.enqueue_function[obs_chunk_kernel](
-            pxp, pyp, pp, Int32(n_pooled), Int32(n_x), sp, Int32(1),
-            grid_dim=(chunks, 1, 1), block_dim=(PINNED_SUM_TPB, 1, 1),
-        )
-        ctx.enqueue_function[chunk_chain_kernel](sp + 2, pxp, Int32(chunks), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
-    ctx.enqueue_function[obs_finish_kernel](
-        res.unsafe_ptr(), sp, Int32(n_x), Int32(n_pooled - n_x), Int32(stat),
-        grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
-    )
-    var r = _read_f32(ctx, res, 1)[0]
-    _ = px^
-    _ = py^
-    _ = sums^
-    _ = res^
-    return r
 
 
 def device_standard_error(ctx: DeviceContext, mut dist: DeviceBuffer[DType.float32], n_resamples: Int) raises -> Float32:
