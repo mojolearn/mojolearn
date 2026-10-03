@@ -58,6 +58,16 @@ from x_cluster.ops import ClusterOps
 from x_cluster.optics_xi_device import optics_xi_device
 from x_cluster.meanshift_fast import MEANSHIFT_FAST_GRID, meanshift_fast_grid
 from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, minibatch_fast_steps
+from x_cluster.device_tree import (
+    agc_edges_mode_kernel,
+    count_ge_kernel,
+    tree_leaf_kernel,
+    tree_parent_init_kernel,
+    tree_parent_kernel,
+    tree_root_flag_kernel,
+    tree_root_rank_kernel,
+    tree_scatter_kernel,
+)
 from x_cluster.device_post import (
     PTPB,
     RTPB,
@@ -2309,11 +2319,20 @@ struct DeviceOps(ClusterOps):
             cnt = nch
             nch = (nch + FOLD_CHUNK - 1) // FOLD_CHUNK
 
-    def agglo_connect(mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int) raises -> Int:
+    def agglo_connect(
+        mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int, edge_mode: Int
+    ) raises -> Int:
         self._ph0()
         var bad = self.zeros_i(1)
         var pa = self._ip(adj)
-        if n_edges > 0:
+        if n_edges > 0 and edge_mode != 0:
+            # the dense matrix or the COO triples, filtered on the device
+            # (lane apple-fast-py2mojo-cluster; Python built the pair list)
+            self.ctx.enqueue_function[agc_edges_mode_kernel](
+                self._fp(edges), Int32(n_edges), Int32(n), Int32(edge_mode), pa, self._ip(bad),
+                grid_dim=pgrid(n_edges), block_dim=PTPB,
+            )
+        elif n_edges > 0:
             self.ctx.enqueue_function[agc_edges_kernel](
                 self._fp(edges), Int32(n_edges), Int32(n), pa, self._ip(bad), grid_dim=pgrid(n_edges), block_dim=PTPB,
             )
@@ -2377,6 +2396,57 @@ struct DeviceOps(ClusterOps):
             c0 += k
         self._ph1("agglo_connect")
         return C
+
+    def tree_parent(mut self, children: Int, n: Int, m: Int, parent: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[tree_parent_init_kernel](
+            Int32(n + m), self._ip(parent), grid_dim=pgrid(n + m), block_dim=PTPB,
+        )
+        if m > 0:
+            self.ctx.enqueue_function[tree_parent_kernel](
+                self._ip(children), Int32(n), Int32(m), self._ip(parent), grid_dim=pgrid(m), block_dim=PTPB,
+            )
+        self._ph1("tree_parent")
+
+    def tree_roots(mut self, parent: Int, total: Int, rank1: Int) raises -> Int:
+        self._ph0()
+        var flags = self.zeros_i(total)
+        self.ctx.enqueue_function[tree_root_flag_kernel](
+            self._ip(parent), Int32(total), self._ip(flags), grid_dim=pgrid(total), block_dim=PTPB,
+        )
+        var sc = self._scan(self._ip(flags), total)
+        self.ctx.enqueue_function[tree_root_rank_kernel](
+            self._ip(flags), self._ip(sc[0]), Int32(total), self._ip(rank1), grid_dim=pgrid(total), block_dim=PTPB,
+        )
+        var c = self._int1(sc[1])
+        self._ph1("tree_roots")
+        return c
+
+    def tree_scatter(mut self, nodes: Int, c: Int, rank1: Int) raises:
+        self._ph0()
+        if c > 0:
+            self.ctx.enqueue_function[tree_scatter_kernel](
+                self._ip(nodes), Int32(c), self._ip(rank1), grid_dim=pgrid(c), block_dim=PTPB,
+            )
+        self._ph1("tree_scatter")
+
+    def tree_leaf_label(mut self, parent: Int, rank1: Int, n: Int, labels: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[tree_leaf_kernel](
+            self._ip(parent), self._ip(rank1), Int32(n), self._ip(labels), grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        self._ph1("tree_leaf_label")
+
+    def count_ge(mut self, x: Int, n: Int, thr: Float32) raises -> Int:
+        self._ph0()
+        var cnt = self.zeros_i(1)
+        if n > 0:
+            self.ctx.enqueue_function[count_ge_kernel](
+                self._fp(x), Int32(n), thr, self._ip(cnt), grid_dim=pgrid(n), block_dim=PTPB,
+            )
+        var c = self._int1(cnt)
+        self._ph1("count_ge")
+        return c
 
     def check_nonneg(mut self, x: Int, n: Int) raises -> Bool:
         self._ph0()

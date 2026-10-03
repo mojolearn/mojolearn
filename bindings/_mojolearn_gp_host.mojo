@@ -83,7 +83,9 @@ from cholesky.host.chol_oracle import (
     chol_host_potrf,
     chol_host_solve,
 )
+from gaussian_process.unnorm import GP_UNNORM_COV, GP_UNNORM_MEAN, gp_unnorm_cell, gpc_ovr_targets
 from bindings.gp_host_predict import (
+    gp_py2mojo_binding,
     _rebuild_kernel_spec,
     gpc_ovr_combine_binding,
     gpc_predict_binding,
@@ -248,12 +250,16 @@ def gpr_sample_y_binding(
             " xstar, kinds, kparams, ls_len, ls, y_out), got "
             + String(len(addrs))
         )
-    if len(params) != 9:
+    if len(params) != 9 and len(params) != 12:
         raise Error(
             "gpr_sample_y: params must contain 9 values (n_train, n_features,"
-            " n_star, n_nodes, n_ls, info, n_samples, seed_lo, seed_hi), got "
+            " n_star, n_nodes, n_ls, info, n_samples, seed_lo, seed_hi), or 12"
+            " (+ normalize_y, y_std, y_mean), got "
             + String(len(params))
         )
+    var unnorm = len(params) == 12 and Int(py=params[9]) != 0
+    var y_std = Float32(Float64(py=params[10])) if len(params) == 12 else Float32(1.0)
+    var y_mean = Float32(Float64(py=params[11])) if len(params) == 12 else Float32(0.0)
     var yp = f32_ptr(Int(py=addrs[8]))
     var n_train = Int(py=params[0])
     var n_features = Int(py=params[1])
@@ -282,7 +288,7 @@ def gpr_sample_y_binding(
             n_samples, seed,
         )
         for i in range(n_star * n_samples):
-            yp.unsafe_store(i, y[i])
+            yp.unsafe_store(i, gp_unnorm_cell(y[i], y_std, y_mean, GP_UNNORM_MEAN) if unnorm else y[i])
         _ = y^
     _ = xt^
     _ = l^
@@ -310,8 +316,11 @@ def gpr_predict_cov_binding(
     Returns n_star."""
     if len(addrs) != 10:
         raise Error("gpr_predict_cov: addrs must contain 10 addresses, got " + String(len(addrs)))
-    if len(params) != 6:
-        raise Error("gpr_predict_cov: params must contain 6 values, got " + String(len(params)))
+    if len(params) != 6 and len(params) != 9:
+        raise Error("gpr_predict_cov: params must contain 6 or 9 values, got " + String(len(params)))
+    var unnorm = len(params) == 9 and Int(py=params[6]) != 0
+    var y_std = Float32(Float64(py=params[7])) if len(params) == 9 else Float32(1.0)
+    var y_mean = Float32(Float64(py=params[8])) if len(params) == 9 else Float32(0.0)
     var mp = f32_ptr(Int(py=addrs[8]))
     var cp = f32_ptr(Int(py=addrs[9]))
     var n_train = Int(py=params[0])
@@ -334,9 +343,9 @@ def gpr_predict_cov_binding(
             xt, l, dual, n_train, n_features, spec, info, x_star, n_star, mean
         )
         for i in range(n_star):
-            mp.unsafe_store(i, mean[i])
+            mp.unsafe_store(i, gp_unnorm_cell(mean[i], y_std, y_mean, GP_UNNORM_MEAN) if unnorm else mean[i])
         for i in range(n_star * n_star):
-            cp.unsafe_store(i, cov[i])
+            cp.unsafe_store(i, gp_unnorm_cell(cov[i], y_std, y_mean, GP_UNNORM_COV) if unnorm else cov[i])
         _ = mean^
         _ = cov^
     _ = xt^
@@ -377,16 +386,17 @@ def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
     3 kparams, 4 ls_len, 5 ls, 6 l_out, 7 pi_out, 8 wsr_out, 9 scalars_out
     (lml, n_iter, nb). `params`: 0 n_train, 1 n_features, 2 n_nodes, 3 n_ls,
     4 max_iter_predict. Returns the iteration count."""
-    if len(addrs) != 10:
+    if len(addrs) != 10 and not (len(addrs) == 11 and len(params) == 6):
         raise Error(
             "gpc_fit: addrs must contain 10 addresses (x, y, kinds, kparams,"
             " ls_len, ls, l_out, pi_out, wsr_out, scalars_out), got "
             + String(len(addrs))
         )
-    if len(params) != 5:
+    if len(params) != 5 and len(params) != 6:
         raise Error(
             "gpc_fit: params must contain 5 values (n_train, n_features,"
-            " n_nodes, n_ls, max_iter_predict), got "
+            " n_nodes, n_ls, max_iter_predict), or 6 (+ the one-vs-rest class"
+            " k, when addrs[1] is the n_train int32 class codes), got "
             + String(len(params))
         )
     var lp = f32_ptr(Int(py=addrs[6]))
@@ -408,7 +418,18 @@ def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
         String("gpc_fit"),
     )
     var x = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
-    var y = read_f32(Int(py=addrs[1]), max(0, n_train))
+    # params[5] (lane apple-fast-py2mojo-cluster): addrs[1] holds the int32
+    # class codes and the targets are code == k, built here, not in Python
+    var y: List[Float32]
+    if len(params) == 6:
+        y = gpc_ovr_targets(read_i32(Int(py=addrs[1]), max(0, n_train)), n_train, Int(py=params[5]))
+        if len(addrs) == 11:
+            # addrs[10]: the targets, WRITTEN (the fitted model keeps them)
+            var yo = f32_ptr(Int(py=addrs[10]))
+            for i in range(n_train):
+                yo.unsafe_store(i, y[i])
+    else:
+        y = read_f32(Int(py=addrs[1]), max(0, n_train))
     var n_iter = 0
     with GILReleased(Python()):
         n_iter = _gpc_fit_run(
@@ -773,6 +794,7 @@ def PyInit__mojolearn_gp_host() abi("C") -> PythonObject:
         module.def_function[gp_numeric_mode_binding]("gp_numeric_mode")
         module.def_function[gpr_fit_binding]("gpr_fit")
         module.def_function[gpr_predict_binding]("gpr_predict")
+        module.def_function[gp_py2mojo_binding]("gp_py2mojo")
         module.def_function[gpr_sample_y_binding]("gpr_sample_y")
         module.def_function[gpr_predict_cov_binding]("gpr_predict_cov")
         module.def_function[gpr_lml_grad_binding]("gpr_lml_grad")
