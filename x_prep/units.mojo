@@ -58,7 +58,7 @@ from x_prep.calib import (
 #: default on, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF off); every other binding keeps the 142-op table.
 comptime N_OPS = 162 if CAT_CLS2_PACK else (157 if CALIB_FOLDS else 142)
 #: ops 157-161 (x_prep/cat_cls2.mojo, lane/apple-fast-gap-cls2) exist only under
-#: CAT_CLS2_PACK (FAST + Apple + -D MOJOLEARN_X_PREP_FAST_CLS2_PACK, default off)
+#: CAT_CLS2_PACK (FAST + Apple default, -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF off)
 
 
 @always_inline

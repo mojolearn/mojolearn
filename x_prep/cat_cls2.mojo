@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """OneHotEncoder / OrdinalEncoder fit, FAST on Apple (lane/apple-fast-gap-cls2,
 2026-10-03). Board (M3 FAST, taxi 1M x 5 id columns): onehot 28.0 ms vs
-scikit-learn 19.0, ordinal 24.8 vs 18.8. Every switch default OFF; the
-binding exports `x_prep_cls2_cat` (bit 1 PACK, bit 2 PRESENT) only when one
+scikit-learn 19.0, ordinal 24.8 vs 18.8. Both switches default ON (below); the
+binding exports `x_prep_cls2_cat` (bit 1 PACK, bit 2 PRESENT) only when PACK
 is on, and python/mojolearn/_expansion_prep.py `_fit_categories` reads it.
 
 Cause (python/mojolearn/_expansion_prep.py `_fit_categories`): the
@@ -33,11 +33,16 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_prep.common import FP, IP, p, raw, st, sti, ldi
 
+#: PACK and PRESENT are the FAST + Apple default since the M3 A/B (n=1,
+#: quality identical): onehot taxi 32.2 -> 5.6 ms, ordinal taxi 28.2 -> 8.2 ms
+#: (PACK+PRESENT; PACK alone -19% / -33%). -D MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF
+#: (turns both off) / -D MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF; the old -D
+#: names stay harmless.
 comptime CAT_CLS2_PACK = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_X_PREP_FAST_CLS2_PACK"]()
+    and not is_defined["MOJOLEARN_X_PREP_FAST_CLS2_PACK_OFF"]()
 )
-comptime CAT_CLS2_PRESENT = CAT_CLS2_PACK and is_defined["MOJOLEARN_X_PREP_FAST_CLS2_PRESENT"]()
+comptime CAT_CLS2_PRESENT = CAT_CLS2_PACK and not is_defined["MOJOLEARN_X_PREP_FAST_CLS2_PRESENT_OFF"]()
 #: presence flags per column (integer categories 0 .. CAT_R - 1)
 comptime CAT_R = 4096
 
