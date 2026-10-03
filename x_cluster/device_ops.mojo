@@ -65,6 +65,7 @@ from x_cluster.optics import (
     OPTICS_STEP_BATCH,
 )
 from x_cluster.optics_fast import (
+    OBG,
     OB_STEPS,
     OB_TPB,
     OF_PER,
@@ -2429,6 +2430,29 @@ struct DeviceOps(ClusterOps):
         self.i.append(self.ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1))
         return len(self.i) - 1
 
+    def _optics_steps(
+        mut self, pm: FPtr, pc: FPtr, n: Int, max_eps: Float32, sq: Bool, pd: IPtr, pr: FPtr, pp: IPtr, po: IPtr
+    ) raises:
+        """`optics_order`'s n steps of two launches over the given pointers,
+        the cell rooted at use when `sq` (OPTICS_CORE_SQ); enqueued only."""
+        var nb = (n + SCAN_PER - 1) // SCAN_PER
+        if nb < 1:
+            nb = 1
+        var part = self._keys(nb)
+        for step in range(n):
+            self.ctx.enqueue_function[optics_part_kernel](pr, pd, Int32(n), part, grid_dim=nb, block_dim=RTPB)
+            comptime if OPTICS_CORE_SQ:
+                if sq:
+                    self.ctx.enqueue_function[optics_step2_kernel[True]](
+                        part, Int32(nb), pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(step),
+                        grid_dim=pgrid(n), block_dim=PTPB,
+                    )
+                    continue
+            self.ctx.enqueue_function[optics_step_kernel](
+                part, Int32(nb), pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(step),
+                grid_dim=pgrid(n), block_dim=PTPB,
+            )
+
     def optics_fast(
         mut self, dm: Int, core: Int, n: Int, max_eps: Float32, sq: Bool,
         mut ordering: List[Int32], mut reach: List[Float32], mut core_out: List[Float32], mut pred: List[Int32],
@@ -2475,21 +2499,44 @@ struct DeviceOps(ClusterOps):
                 grid_dim=(n + OF_TPB - 1) // OF_TPB if n > 0 else 1, block_dim=OF_TPB,
             )
             comptime if OPTICS_STEP_BATCH:
+                var flags = self.zeros_i(OBG)
+                var fail = self.zeros_i(1)
+                var xk = self._keys(2 * OBG)
                 var s0 = 0
+                var failed = False
                 while s0 < n:
                     var k = min(OB_STEPS, n - s0)
                     comptime if OPTICS_CORE_SQ:
                         if sq:
                             self.ctx.enqueue_function[optics_batch_kernel[True]](
-                                pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(s0), Int32(k),
-                                grid_dim=1, block_dim=OB_TPB,
+                                pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(s0), Int32(k), xk, self._ip(flags),
+                                self._ip(fail), grid_dim=OBG, block_dim=OB_TPB,
                             )
                             s0 += k
+                            if s0 == k and self._flag_true(fail):
+                                failed = True
+                                break
                             continue
                     self.ctx.enqueue_function[optics_batch_kernel[False]](
-                        pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(s0), Int32(k), grid_dim=1, block_dim=OB_TPB,
+                        pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(s0), Int32(k), xk, self._ip(flags),
+                        self._ip(fail), grid_dim=OBG, block_dim=OB_TPB,
                     )
                     s0 += k
+                    # the first launch tells whether the OBG threadgroups ran
+                    # together (one word read); the last is read below
+                    if s0 == k and self._flag_true(fail):
+                        failed = True
+                        break
+                if not failed:
+                    failed = self._flag_true(fail)
+                if failed:
+                    # a wait hit OB_SPIN_CAP: the same steps by main's two
+                    # launches a step, from a fresh init (same words)
+                    self.ctx.enqueue_function[optics_init2_kernel](
+                        pc, Int32(n), max_eps, pr, pp, pd, pcopy, copy,
+                        grid_dim=(n + OF_TPB - 1) // OF_TPB if n > 0 else 1, block_dim=OF_TPB,
+                    )
+                    self._optics_steps(pm, pc, n, max_eps, sq, pd, pr, pp, po)
             elif OPTICS_FRONTIER_DEVICE:
                 var nb = (n + OF_PER - 1) // OF_PER
                 if nb < 1:
@@ -2512,21 +2559,7 @@ struct DeviceOps(ClusterOps):
                     )
             else:
                 # main's two launches a step (CORE_SQ or LIVEBUF alone)
-                var nb = (n + SCAN_PER - 1) // SCAN_PER
-                var part = self._keys(nb)
-                for step in range(n):
-                    self.ctx.enqueue_function[optics_part_kernel](pr, pd, Int32(n), part, grid_dim=nb, block_dim=RTPB)
-                    comptime if OPTICS_CORE_SQ:
-                        if sq:
-                            self.ctx.enqueue_function[optics_step2_kernel[True]](
-                                part, Int32(nb), pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(step),
-                                grid_dim=pgrid(n), block_dim=PTPB,
-                            )
-                            continue
-                    self.ctx.enqueue_function[optics_step_kernel](
-                        part, Int32(nb), pm, pc, Int32(n), max_eps, pd, pr, pp, po, Int32(step),
-                        grid_dim=pgrid(n), block_dim=PTPB,
-                    )
+                self._optics_steps(pm, pc, n, max_eps, sq, pd, pr, pp, po)
             comptime if OPTICS_LIVEBUF:
                 var oi2 = List[Int32]()
                 var rf2 = List[Float32]()

@@ -16,15 +16,23 @@ bits, then index), and an unprocessed row within `max_eps` takes
 `max(dist, core)` when that is strictly lower (`optics_relax_cell`'s test).
 Same picks, same words as `optics_order` and the host column.
 
-`optics_batch_kernel` (MOJOLEARN_OPTICS_STEP_BATCH): ONE threadgroup of
-OB_TPB threads runs OB_STEPS steps per launch. Thread t owns rows t,
-t + OB_TPB, ...: their reach, pred and done words are read and written by
-that thread only, so no device-memory barrier is needed between a step's
-relaxation and the next step's minimum; the only shared state is the
-threadgroup reduction (`_block_min_key`: warp shuffles, then one 32-entry
-pass, three `barrier()`s a step, threadgroup memory only). The point's row
-of the distance matrix is read coalesced (consecutive threads, consecutive
-columns). n / OB_STEPS launches instead of 2n.
+`optics_batch_kernel` (MOJOLEARN_OPTICS_STEP_BATCH): OBG threadgroups of
+OB_TPB threads run OB_STEPS steps per launch. Thread g (grid-wide) owns rows
+g, g + OB_T, ...: their reach, pred and done words are read and written by
+that thread only, so nothing n-sized crosses between threadgroups. A step
+is: the block's min key over its unprocessed rows (`_block_min_key`: warp
+shuffles, one 32-entry threadgroup pass), published to the step's parity
+slot by thread 0 with a RELEASE store of the epoch (step + 1) to the
+block's flag; the first warp ACQUIRE-spins on the OBG flags, reads the OBG
+keys, and the min is the step's point (svm/impl/smoblocksolve.mojo's
+`_publish` / `_await` protocol: the same thread writes the payload and
+releases, so the release orders it; no block runs more than one step ahead
+of the slowest, so a parity slot is never overwritten before every block
+has read it). The spin is bounded (OB_SPIN_CAP polls): a block that waits
+that long sets `fail` and leaves, every other block then does the same, and
+`DeviceOps.optics_fast` reads the word and reruns the ordering with main's
+two launches a step, so a grid that is not co-resident costs time, never a
+wrong word. n / OB_STEPS launches instead of 2n.
 
 `optics_fused_kernel` (MOJOLEARN_OPTICS_FRONTIER_DEVICE): one launch per
 step. A block relaxes its SCAN_PER rows against the step's point (taken from
@@ -38,6 +46,7 @@ instead of 2n + 1.
 cell is rooted at use with `sqrt_cell`'s expression (same input, same
 function: the same word the sqrt pass would have stored).
 """
+from std.atomic import Atomic, Ordering
 from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
@@ -51,10 +60,18 @@ from x_cluster.post_bodies import KEY_NONE, order_key
 comptime UPtr = MutPointer[UInt64, MutAnyOrigin]
 comptime SharedU64 = UnsafePointer[UInt64, MutUntrackedOrigin, address_space = AddressSpace.SHARED]
 
-#: the batch kernel's one threadgroup (Apple's maximum)
+#: the batch kernel's threadgroups: few enough to be co-resident on every
+#: Apple GPU (the M1 has 8 cores), enough threads for one row each at the
+#: board's 10k rows
+comptime OBG = 8
+#: threads of each (Apple's maximum)
 comptime OB_TPB = 1024
-#: warps of that threadgroup (32 at Apple's simdgroup width)
+#: warps of a threadgroup (32 at Apple's simdgroup width)
 comptime OB_WARPS = OB_TPB // WARP_SIZE
+#: grid-wide threads
+comptime OB_T = OBG * OB_TPB
+#: ACQUIRE polls before a block gives up on a flag and sets `fail`
+comptime OB_SPIN_CAP = 1 << 22
 #: ordering steps per batch launch: far under the ~4 s command-buffer cut at
 #: any board size (a step is a few us), and few launches (20 at 10k rows)
 comptime OB_STEPS = 512
@@ -143,33 +160,84 @@ def optics_init2_kernel(
             core_copy[i] = c
 
 
+@always_inline
+def _warp_all(ok: Bool) -> Bool:
+    """Every lane's `ok` (a butterfly AND; every lane reaches every shuffle)."""
+    var v = UInt32(1) if ok else UInt32(0)
+    var off = 1
+    while off < WARP_SIZE:
+        v = v & shuffle_xor(v, UInt32(off))
+        off *= 2
+    return v != UInt32(0)
+
+
 def optics_batch_kernel[SQ: Bool](
     dist: FPtr, core: FPtr, n: Int32, max_eps: Float32, done: IPtr, reach: FPtr, pred: IPtr,
-    ordering: IPtr, step0: Int32, steps: Int32,
+    ordering: IPtr, step0: Int32, steps: Int32, xk: UPtr, flags: IPtr, fail: IPtr,
 ):
-    """Steps step0 .. step0 + steps - 1 of the ordering by ONE threadgroup
-    (grid 1, block OB_TPB). Thread t owns rows i == t (mod OB_TPB)."""
+    """Steps step0 .. step0 + steps - 1 of the ordering by OBG threadgroups
+    (grid OBG, block OB_TPB). Thread g owns rows i == g (mod OB_T). `xk`:
+    2 * OBG key slots (parity, block); `flags`: OBG epochs, zero before the
+    first launch and only growing; `fail`: one word, set when a wait hits
+    OB_SPIN_CAP."""
     var red = stack_allocation[OB_WARPS, UInt64, address_space = AddressSpace.SHARED]()
+    var good = stack_allocation[1, Int32, address_space = AddressSpace.SHARED]()
     var tid = Int(thread_idx.x)
+    var blk = Int(block_idx.x)
+    var g = blk * OB_TPB + tid
     var N = Int(n)
     var inf = Float32.MAX * Float32(2)
     for s in range(Int(steps)):
+        var step = Int(step0) + s
+        var epoch = Int32(step + 1)
         var mine = KEY_NONE
-        for i in range(tid, N, OB_TPB):
+        for i in range(g, N, OB_T):
             if done[i] == Int32(0):
                 mine = min(mine, order_key(reach[i], i))
         var r = _block_min_key(red, mine)
-        if r == KEY_NONE:
-            return  # uniform: every row is processed
-        var point = Int(UInt32(r & UInt64(0xFFFFFFFF)))
         if tid == 0:
-            ordering[Int(step0) + s] = Int32(point)
-        if point % OB_TPB == tid:
+            # the block's key into this step's parity slot, then the epoch:
+            # the same thread writes the payload and releases
+            xk[(step & 1) * OBG + blk] = r
+            Atomic.store[ordering = Ordering.RELEASE](flags.unsafe_offset(blk), epoch)
+        if tid < WARP_SIZE:
+            var ok = True
+            var gk = KEY_NONE
+            if tid < OBG:
+                var polls = 0
+                while Atomic.load[ordering = Ordering.ACQUIRE](flags.unsafe_offset(tid)) < epoch:
+                    polls += 1
+                    if polls >= OB_SPIN_CAP:
+                        ok = False
+                        break
+                if ok:
+                    gk = xk[(step & 1) * OBG + tid]
+            var hi = UInt32(gk >> 32)
+            var lo = UInt32(gk & UInt64(0xFFFFFFFF))
+            _warp_min_key(hi, lo)
+            var all_ok = _warp_all(ok)
+            if tid == 0:
+                red[0] = (UInt64(hi) << 32) | UInt64(lo)
+                good[0] = Int32(1) if all_ok else Int32(0)
+        barrier()
+        var r2 = red[0]
+        var is_good = good[0] != Int32(0)
+        barrier()
+        if not is_good:
+            if tid == 0:
+                Atomic.store[ordering = Ordering.RELEASE](fail, Int32(1))
+            return  # uniform in the block; every other block times out the same way
+        if r2 == KEY_NONE:
+            return  # every row is processed
+        var point = Int(UInt32(r2 & UInt64(0xFFFFFFFF)))
+        if g == 0:
+            ordering[step] = Int32(point)
+        if point % OB_T == g:
             done[point] = Int32(1)  # the owner marks its own row
         var cp = core[point]
         if cp != inf:
             var row = point * N
-            for i in range(tid, N, OB_TPB):
+            for i in range(g, N, OB_T):
                 if i != point and done[i] == Int32(0):
                     var dd = _dd[SQ](dist, row + i)
                     if dd <= max_eps:
