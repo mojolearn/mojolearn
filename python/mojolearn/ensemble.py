@@ -1919,7 +1919,19 @@ class GradientBoosting(NumericModeMixin):
         # text's sha256 (`_resident_handle`), so a subclass fit that
         # replaces `model_` without passing here is served a fresh copy.
         self._release_resident()
-        Xa, _ = as_f32_colmajor(X, name="X")
+        # lane/apple-fast-sym-feat: a FAST Apple binding built with the
+        # device quantizer (`gbdt_fit_row_major_available`) takes a C-order
+        # float32 array as it is through `gbdt_fit_rowmajor` and transposes
+        # it on the device; every other binding, and every fit with
+        # categorical or one-hot features, stages the column-major copy
+        # exactly as before.
+        fit_binding = self._bind("_mojolearn_gbdt")
+        x_row_major = False
+        if (not self.cat_features and not self.one_hot_features
+                and _fit_row_major_available(fit_binding)):
+            Xa, x_row_major = as_f32_forest_layout(X, name="X")
+        else:
+            Xa, _ = as_f32_colmajor(X, name="X")
         n_rows, n_features = Xa.shape
 
         if n_rows == 0 or n_features == 0:
@@ -2205,7 +2217,9 @@ class GradientBoosting(NumericModeMixin):
             params,
             strs,
         )
-        out = self._bind("_mojolearn_gbdt").gbdt_fit(*fit_args)
+        fit_fn = (fit_binding.gbdt_fit_rowmajor if x_row_major
+                  else fit_binding.gbdt_fit)
+        out = fit_fn(*fit_args)
         self.model_ = out[0]
         # the model's bias (CatBoost's `get_scale_and_bias()[1]`), parsed
         # from the text's BITS half so it round-trips exactly. 0.0 on
@@ -2811,6 +2825,16 @@ def _binding_vendor(binding):
         return str(binding.gbdt_vendor())
     except (AttributeError, ImportError):
         return None
+
+
+def _fit_row_major_available(binding):
+    """lane/apple-fast-sym-feat: whether the binding serves
+    `gbdt_fit_rowmajor` (a FAST Apple build with the device quantizer).
+    False for every binary without the probe or whose probe says 0."""
+    try:
+        return bool(int(binding.gbdt_fit_row_major_available()))
+    except (AttributeError, ImportError, TypeError, ValueError):
+        return False
 
 
 class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
