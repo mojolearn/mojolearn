@@ -90,6 +90,14 @@ from training.mlp_ops import (
     mlp_bias_activation_host, mlp_relu_backward_host, mlp_sum_rows_host,
     mlp_train_step_host, mlp_validate_shape,
 )
+#: lane afn-mlp (2026-10-03): the Apple FAST resident session, registered
+#: only under FAST + Apple + `-D MOJOLEARN_AFN_MLP_RESIDENT` / `_MULTISTEP`
+#: / `_ALL` (training/mlp_fast.mojo); absent from every other build.
+from training.mlp_fast import (
+    MLP_MULTISTEP, MLP_RESIDENT,
+    mlp_resident_close_host, mlp_resident_download_host, mlp_resident_open_host,
+    mlp_resident_step_host, mlp_resident_upload_host,
+)
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from training.chunked_lm_head_v2 import (
     chunked_lm_head_v2_loss_host, chunked_lm_head_v2_train_host,
@@ -857,6 +865,109 @@ def mlp_train_step_binding(
     return PythonObject(count)
 
 
+# ---------------------------------------------------------------------------
+# lane afn-mlp (2026-10-03): the small MLP's RESIDENT SESSION on Apple FAST.
+# `python/mojolearn/_mlp_impl.py::SmallMLPTrainer` opens one per trainer when
+# the binding exposes `mlp_resident_open`; weights and moments live on the
+# device between steps and come down only for `state_dict`.
+# ---------------------------------------------------------------------------
+
+
+def mlp_resident_open_binding(
+    addresses: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """addresses = [w1, b1, w2, b2, m, v] (read); params = [cap_k], the most
+    minibatches one `mlp_resident_steps` call may run. Returns the handle."""
+    var a = _addrs(addresses, 6, "mlp_resident_open")
+    _params(params, 1, "mlp_resident_open")
+    var cap_k = Int(py=params[0])
+    var h = -1
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        h = mlp_resident_open_host(
+            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
+            _f32_ptr(a[4]), _f32_ptr(a[5]), cap_k,
+        )
+    return PythonObject(h)
+
+
+def mlp_resident_upload_binding(
+    handle: PythonObject, addresses: PythonObject,
+) raises -> PythonObject:
+    """addresses = [w1, b1, w2, b2, m, v] (read): replace the session's state."""
+    var a = _addrs(addresses, 6, "mlp_resident_upload")
+    var h = Int(py=handle)
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        mlp_resident_upload_host(
+            ctx, h, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
+            _f32_ptr(a[4]), _f32_ptr(a[5]),
+        )
+    return PythonObject(h)
+
+
+def mlp_resident_download_binding(
+    handle: PythonObject, addresses: PythonObject,
+) raises -> PythonObject:
+    """addresses = [w1, b1, w2, b2, m, v] (written): the session's state."""
+    var a = _addrs(addresses, 6, "mlp_resident_download")
+    var h = Int(py=handle)
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        mlp_resident_download_host(
+            ctx, h, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
+            _f32_ptr(a[4]), _f32_ptr(a[5]),
+        )
+    return PythonObject(h)
+
+
+def mlp_resident_close_binding(handle: PythonObject) raises -> PythonObject:
+    var h = Int(py=handle)
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        mlp_resident_close_host(ctx, h)
+    return PythonObject(h)
+
+
+def mlp_resident_steps_binding(
+    handle: PythonObject, addresses: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`k` steps on the session (mirrored word for word in
+    `python/mojolearn/_mlp_impl.py::SmallMLPTrainer._resident_steps`):
+
+        addresses: x (k*rows x 8), y (k*rows i32), losses (k f32, written),
+                   logits (rows x 3, the last step's), dw1, db1, dw2, db2
+                   (the last step's), dx (rows x 8 when want_input_grad,
+                   else any one float)
+        params:    rows, k, mode, t, lr, beta1, beta2, eps, weight_decay,
+                   want_input_grad
+
+    `k > 1` is compiled under MOJOLEARN_AFN_MLP_MULTISTEP only. Returns
+    `rows * 3`."""
+    var a = _addrs(addresses, 9, "mlp_resident_steps")
+    _params(params, 10, "mlp_resident_steps")
+    var h = Int(py=handle)
+    var rows = Int(py=params[0])
+    var k = Int(py=params[1])
+    var mode = Int(py=params[2])
+    var t = Int(py=params[3])
+    var lr = Float32(Float64(py=params[4]))
+    var beta1 = Float32(Float64(py=params[5]))
+    var beta2 = Float32(Float64(py=params[6]))
+    var eps = Float32(Float64(py=params[7]))
+    var weight_decay = Float32(Float64(py=params[8]))
+    var want_input_grad = Int(py=params[9])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = mlp_resident_step_host(
+            ctx, h, _f32_ptr(a[0]), _i32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
+            _f32_ptr(a[4]), _f32_ptr(a[5]), _f32_ptr(a[6]), _f32_ptr(a[7]), _f32_ptr(a[8]),
+            rows, k, mode, t, lr, beta1, beta2, eps, weight_decay, want_input_grad,
+        )
+    return PythonObject(count)
+
+
 # ===========================================================================
 # THE SAMBA STACK'S OPS: embedding, RMSNorm, LM head, accumulate, RNG.
 # Every one takes (addresses, params) as two Python lists, the byte-LM
@@ -1175,6 +1286,15 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         m.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
         m.def_function[mlp_sum_rows_binding]("mlp_sum_rows")
         m.def_function[mlp_train_step_binding]("mlp_train_step")
+        comptime if MLP_RESIDENT:
+            # lane afn-mlp: Apple FAST only, behind its define
+            m.def_function[mlp_resident_open_binding]("mlp_resident_open")
+            m.def_function[mlp_resident_upload_binding]("mlp_resident_upload")
+            m.def_function[mlp_resident_download_binding]("mlp_resident_download")
+            m.def_function[mlp_resident_close_binding]("mlp_resident_close")
+            m.def_function[mlp_resident_steps_binding]("mlp_resident_step")
+        comptime if MLP_MULTISTEP:
+            m.def_function[mlp_resident_steps_binding]("mlp_resident_steps")
         m.def_function[embedding_forward_binding]("embedding_forward")
         m.def_function[embedding_backward_binding]("embedding_backward")
         m.def_function[rms_norm_forward_binding]("rms_norm_forward")
