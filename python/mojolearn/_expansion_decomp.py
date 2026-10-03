@@ -2109,11 +2109,19 @@ class FactorAnalysis(_Base):
         M = _M.from_input(X)
         n, d = M.r, M.c
         nc = self.n_components or d
+        # lane/apple-fast-quality-glmfa (2026-10-03): the two-pass mean. The
+        # float32 blocked column sum of a million rows carries a relative
+        # error near 1e-6, so a constant column c had mean c(1 + e), centred
+        # residuals c e and a variance (c e)^2 where theirs (float64) is 0:
+        # its psi stopped near (c e)^2 instead of the 1e-12 floor, and the
+        # mean_ the score subtracts was off by c e. The second pass adds the
+        # mean of the residuals (exact for a constant column: c is recovered
+        # to the word, the residuals are 0). Device launches only.
         mean = k.colmean(M)
+        mean = k.ew("add", mean, k.colmean(k.ew("sub", M, mean)))
         Xc = k.ew("sub", M, mean)
         nsqrt = math.sqrt(n)
         llconst = d * _LOG_2PI + nc
-        var = k.ew("scale", k.colsum(k.ew("sq", Xc)), s=1.0 / n)
         if self.noise_variance_init is None:
             psi = k.const(1.0, 1, d)
         else:
@@ -2139,6 +2147,7 @@ class FactorAnalysis(_Base):
                 order = list(range(d - 1, -1, -1))
                 s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
                 Vt = V.take_cols(order).T
+            Vfull = Vt
             Vt = Vt.rows(0, nc)
             sk = s2.cols(0, nc)
             # the log-likelihood is accumulated in Python float64 (IEEE adds,
@@ -2153,7 +2162,23 @@ class FactorAnalysis(_Base):
             if (ll - old_ll) < self.tol:
                 break
             old_ll = ll
-            psi = k.ew("maxs", k.ew("sub", var, k.colsum(k.ew("sq", W))), s=SMALL)
+            # lane/apple-fast-quality-glmfa (2026-10-03): psi without the
+            # cancellation. Theirs is var - sum_k W_kj^2; both terms are near
+            # var for a column the factors explain, and in float32 their
+            # difference has a floor near var * 1e-7 (theirs, float64, keeps
+            # falling toward the 1e-12 floor: Istella's held-out
+            # log-likelihood 89.0 against 98.1). With q = (sqrt psi + SMALL)^2
+            # the scaled data's column norms are var_j / q_j = sum_i V_ij^2 s2_i
+            # (every singular vector), so var_j - sum_k W_kj^2 = q_j (sum_i
+            # V_ij^2 w_i), w_i = min(s2_i, 1) for the nc kept components and
+            # s2_i past them: a sum of nonnegative terms, relative accuracy at
+            # any psi. The same value in exact arithmetic; d x d device ops.
+            dfull = Vfull.r
+            keep = _M.of([1.0] * nc + [0.0] * (dfull - nc), 1, dfull)
+            drop = _M.of([0.0] * nc + [1.0] * (dfull - nc), 1, dfull)
+            wts = k.ew("add", k.ew("mul", k.ew("mins", s2, s=1.0), keep), k.ew("mul", s2, drop))
+            share = k.mm(wts, k.ew("sq", Vfull))
+            psi = k.ew("maxs", k.ew("mul", k.ew("sq", sqrt_psi), share), s=SMALL)
         if self.rotation is not None:
             W = _ortho_rotation(k, W.T, self.rotation).rows(0, nc)
         self.components_m_ = W
