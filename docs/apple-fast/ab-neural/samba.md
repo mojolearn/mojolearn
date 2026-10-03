@@ -45,3 +45,8 @@ allocation churn. Risk: as ARENA. Touches samba-train-step.
 
 **MOJOLEARN_AFN_SAMBA_ALL.** Every define above. It is requested twice, once per binding (training and
 mamba), because afn_ab.sh builds one binding per line; both A/Bs together give the combined effect.
+
+Note: ARENA, DEVICE_ADMIT and EMB_ATOMIC reroute the training binding's generic `embedding_forward`,
+`embedding_backward`, `rms_norm_forward`, `rms_norm_backward` and `samba_head_loss` entries
+(training/samba_ops.mojo), so any other model calling those entries in an Apple FAST build with the define
+takes the same path.
