@@ -103,6 +103,7 @@ from gbdt.methods.leaves_estimation.leaves_estimation_helper import (
 )
 from gbdt.targets.kernel.multilogit import (
     launch_multilogit_second_der,
+    launch_multilogit_second_der_all_rows,
     launch_multilogit_value_and_der,
     launch_multi_rmse_second_der,
     launch_multi_rmse_value_and_der,
@@ -127,8 +128,10 @@ from gbdt.targets.kernel.query_rmse import (
 )
 from gbdt.targets.kernel.pair_logit import (
     PairwiseTargetBuffers,
+    launch_pair_logit_estimation_from_search,
     launch_pair_logit_with,
 )
+from gbdt.targets.kernel.pair_logit_group import PAIRLOGIT_EST_REUSE
 from gbdt.targets.kernel.yeti_rank import (
     YetiRankTargetBuffers,
     launch_yeti_rank_with,
@@ -611,11 +614,33 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                         self.d_mag_dummy, False,
                     )
             elif self.pairs.__bool__():
-                launch_pair_logit_with[True, False](
-                    self.ctx, self.pairs.value(), self.d_cursor, True,
-                    self.d_eval_stats, self.d_fv, True,
-                    self.d_mag_dummy, False,
-                )
+                comptime if PAIRLOGIT_EST_REUSE:
+                    # FAST Apple: the tree's search call left its per-row
+                    # sums at this same point (`PAIRLOGIT_EST_REUSE`, the
+                    # YetiRank model); the search-point flag is the shared
+                    # one, cleared by any move that shifts a leaf
+                    var pair_reuse = (
+                        self.yeti_at_search_point
+                        and self.pairs.value().n_pairs < 0
+                    )
+                    self.yeti_at_search_point = False
+                    if pair_reuse:
+                        launch_pair_logit_estimation_from_search(
+                            self.ctx, self.pairs.value(),
+                            self.d_eval_stats, self.d_fv, True,
+                        )
+                    else:
+                        launch_pair_logit_with[True, False](
+                            self.ctx, self.pairs.value(), self.d_cursor, True,
+                            self.d_eval_stats, self.d_fv, True,
+                            self.d_mag_dummy, False,
+                        )
+                else:
+                    launch_pair_logit_with[True, False](
+                        self.ctx, self.pairs.value(), self.d_cursor, True,
+                        self.d_eval_stats, self.d_fv, True,
+                        self.d_mag_dummy, False,
+                    )
             elif self.query.__bool__():
                 launch_query_rmse_with[True](
                     self.ctx, self.query.value(), self.d_cursor, True,
@@ -1065,6 +1090,51 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         for _ in range(matrix_size * self.bin_count):
             second_der.append(Float64(0.0))
 
+        comptime if MULTICLASS_HESSIAN_BATCH:
+            # FAST Apple: every row in one launch into the lower-triangle
+            # planes the scratch was sized for (`_oracle_multi_planes`),
+            # one reduce over all of them, one copy, one wait; then the
+            # same mirror per row from the row's slot
+            var tri = _oracle_multi_planes(self.objective, hbs)
+            if tri != hbs:
+                launch_multilogit_second_der_all_rows(
+                    self.ctx, self.num_classes, self.n_rows,
+                    self.d_weights, self.has_weights,
+                    self.d_cursor, self.n_rows,
+                    self.d_multi_der, self.n_rows,
+                )
+                compute_partition_stats(
+                    self.ctx, self.bin_count, 0, tri, self.n_rows,
+                    self.d_leaves, self.d_p_off, self.d_p_sz,
+                    self.d_multi_der, self.d_multi_partials,
+                    self.d_multi_stats,
+                    sm_count=self.sm_count,
+                )
+                self.ctx.enqueue_copy(
+                    dst_ptr=self.h_multi_stats.unsafe_ptr(),
+                    src_buf=self.d_multi_stats,
+                )
+                self.ctx.synchronize()
+                for row in range(hbs):
+                    var column_count = row + 1
+                    var slot = row * (row + 1) // 2
+                    for bin in range(self.bin_count):
+                        var base = bin * matrix_size
+                        for col in range(column_count):
+                            var val = Float64(
+                                self.h_multi_stats.unsafe_ptr().unsafe_load(
+                                    bin * tri + slot + col
+                                )
+                            )
+                            if col == row:
+                                second_der[base + row * hbs + row] = (
+                                    val + self.lambda_reg
+                                )
+                            else:
+                                second_der[base + row * hbs + col] = val
+                                second_der[base + col * hbs + row] = val
+                return
+
         for row in range(hbs):
             var column_count = row + 1
             if self.objective == OBJECTIVE_MULTIRMSE:
@@ -1209,6 +1279,46 @@ def oracle_scratch_pooled_for[column: Int]() -> Bool:
 
 
 comptime ORACLE_SCRATCH_POOLED = oracle_scratch_pooled_for[TARGET_COLUMN]()
+
+
+def multiclass_hessian_batch_for[column: Int]() -> Bool:
+    """FAST Apple (lane apple-fast-pairlogit, the plan's `trees-multiclass`),
+    the FAST + Apple default: the MultiClass Hessian's
+    `numClasses` rows in ONE launch, one partition reduce, one copy and one
+    wait per estimation iteration, where main's DEVIATION 75 loop launches,
+    reduces, copies and waits per row (`_write_blocked_second_derivatives`). The
+    reference's own layout (`reducedHessianGpu` slices, one `ReadReduce`).
+    Element values are the row kernel's; the reduce over more columns can
+    move FAST bits. IDENTICAL compiles main's loop.
+    Default since the M3 A/B 2026-10-03 (gbdt-multiclass taximc, n=2,
+    mlogloss 1.012595, acc .59938 identical): 18,603 -> 17,857 ms (-4.0%).
+    `-D MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF` restores main's loop; the old
+    `-D MOJOLEARN_MULTICLASS_HESSIAN_BATCH` is accepted and changes nothing."""
+    comptime if not is_defined["MOJOLEARN_MULTICLASS_HESSIAN_BATCH_OFF"]():
+        comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+            return True
+    return False
+
+
+comptime MULTICLASS_HESSIAN_BATCH = multiclass_hessian_batch_for[TARGET_COLUMN]()
+#: the widest class count batched: `d_multi_der` is `K (K + 1) / 2` planes
+#: of `n_rows` floats under the batch (36 at 8), the row loop above that
+comptime MULTICLASS_HESSIAN_BATCH_MAX_CLASSES = 8
+
+
+def _oracle_multi_planes(objective: Int, single_bin_dim: Int) -> Int:
+    """The width of `d_multi_der` / `d_multi_stats`: `single_bin_dim`
+    (the widest Hessian row) as main's, or the whole lower triangle under
+    `MULTICLASS_HESSIAN_BATCH` for a MultiClass oracle within the cap. The
+    pool's key, the factory and the Hessian pass all derive it from here,
+    so the layout allocated is the layout written."""
+    comptime if MULTICLASS_HESSIAN_BATCH:
+        if (
+            objective == OBJECTIVE_MULTICLASS
+            and single_bin_dim <= MULTICLASS_HESSIAN_BATCH_MAX_CLASSES
+        ):
+            return single_bin_dim * (single_bin_dim + 1) // 2
+    return single_bin_dim
 #: negative control for DEVIATION 3041 (default off): a task that REUSES the
 #: fit's buffers gets ONE cell of `d_bins` moved to another leaf after the
 #: fill, in range. It stands in for the stale read this DEVIATION must never
@@ -1610,6 +1720,9 @@ struct OracleScratchPool(Movable):
         if dims[0] < 1:
             # the factory refuses this `num_classes` in its own words
             return Optional[OracleDeviceScratch]()
+        comptime if MULTICLASS_HESSIAN_BATCH:
+            # the batched Hessian's wider planes (`_oracle_multi_planes`)
+            dims = (dims[0], _oracle_multi_planes(objective, dims[1]))
         var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
         if pair_blocks > 0:
             fv_blocks = pair_blocks
@@ -1727,6 +1840,8 @@ def make_bin_optimized_oracle(
     # one buffer wide enough for both the value pass (`cursor_dim`
     # planes) and the widest Hessian row (`single_bin_dim` columns)
     var multi_planes = single_bin_dim
+    comptime if MULTICLASS_HESSIAN_BATCH:
+        multi_planes = _oracle_multi_planes(objective, single_bin_dim)
 
     var blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     var fv_blocks = blocks

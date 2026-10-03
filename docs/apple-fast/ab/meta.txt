@@ -1,0 +1,2 @@
+CMD lane/apple-fast-meta meta-calib-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh meta-calib-taxi x_prep calibrated taxi 1 2 "" "-D MOJOLEARN_CALIB_GNB_FOLDS"
+CMD lane/apple-fast-meta meta-mor-taxi AFC_FAMILY=algos bash tools/afc_ab_def.sh meta-mor-taxi estimators multioutput-reg taxi 1 2 "" "-D MOJOLEARN_MULTIOUT_RIDGE"
