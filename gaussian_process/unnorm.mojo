@@ -46,3 +46,41 @@ def gp_unnorm_host(src: List[Float32], n: Int, s: Float32, mu: Float32, mode: In
     for i in range(n):
         out.append(gp_unnorm_cell(src[i], s, mu, mode))
     return out^
+
+
+def gpc_ovr_targets(codes: List[Int32], n: Int, k: Int) -> List[Float32]:
+    """The binary targets of one-vs-rest class k: 1 where the class code is
+    k, 0 elsewhere (lane apple-fast-py2mojo-cluster: `_gpc_impl.py` built
+    them in Python, n values per class). The binding reads the int32 codes
+    where it read the float32 targets."""
+    var y = List[Float32](capacity=n)
+    for i in range(n):
+        y.append(Float32(1.0) if Int(codes[i]) == k else Float32(0.0))
+    return y^
+
+
+#: `gpc_binary_out` kinds: the binary predict's class codes, predict_proba's pairs
+comptime GPC_OUT_CODES = 1
+comptime GPC_OUT_PAIRS = 2
+
+
+def gpc_binary_out(mean_addr: Int, proba_addr: Int, n: Int, kind: Int, out_addr: Int) raises:
+    """What `_gpc_impl.py` computed in Python from one binary fit's outputs
+    (lane apple-fast-py2mojo-cluster): kind 1, the int64 class codes of
+    `predict` (1 where the float32 latent mean is > 0); kind 2, the float64
+    `predict_proba` rows `[1 - p, p]` of the class-1 probability p (one
+    float64 subtraction, Python's)."""
+    if kind == GPC_OUT_CODES:
+        var mp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=mean_addr)
+        var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=out_addr)
+        for t in range(n):
+            op.unsafe_store(t, Int64(1) if mp.unsafe_load(t) > Float32(0.0) else Int64(0))
+    elif kind == GPC_OUT_PAIRS:
+        var pp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=proba_addr)
+        var op = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=out_addr)
+        for t in range(n):
+            var p = pp.unsafe_load(t)
+            op.unsafe_store(2 * t, Float64(1.0) - p)
+            op.unsafe_store(2 * t + 1, p)
+    else:
+        raise Error("gpc_predict: unknown output kind " + String(kind))

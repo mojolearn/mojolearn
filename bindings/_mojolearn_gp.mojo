@@ -82,7 +82,7 @@ THE GIL is released around every device call, and nothing inside a
 `GILReleased` block touches a `PythonObject`.
 """
 
-from gaussian_process.unnorm import GP_PY2MOJO
+from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets
 from std.os import abort
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
 from gaussian_process.host.gp_theta import (
@@ -1019,16 +1019,17 @@ def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
     `params`, in this exact order: 0 n_train, 1 n_features, 2 n_nodes,
     3 n_ls, 4 max_iter_predict.
     """
-    if len(addrs) != 10:
+    if len(addrs) != 10 and not (len(addrs) == 11 and len(params) == 6):
         raise Error(
             "gpc_fit: addrs must contain 10 addresses (x, y, kinds, kparams,"
             " ls_len, ls, l_out, pi_out, wsr_out, scalars_out), got "
             + String(len(addrs))
         )
-    if len(params) != 5:
+    if len(params) != 5 and len(params) != 6:
         raise Error(
             "gpc_fit: params must contain 5 values (n_train, n_features,"
-            " n_nodes, n_ls, max_iter_predict), got "
+            " n_nodes, n_ls, max_iter_predict), or 6 (+ the one-vs-rest class"
+            " k, when addrs[1] is the n_train int32 class codes), got "
             + String(len(params))
         )
     var lp = _f32_ptr(Int(py=addrs[6]))
@@ -1050,7 +1051,18 @@ def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
         String("gpc_fit"),
     )
     var x = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
-    var y = read_f32(Int(py=addrs[1]), max(0, n_train))
+    # params[5] (lane apple-fast-py2mojo-cluster): addrs[1] holds the int32
+    # class codes and the targets are code == k, built here, not in Python
+    var y: List[Float32]
+    if len(params) == 6:
+        y = gpc_ovr_targets(read_i32(Int(py=addrs[1]), max(0, n_train)), n_train, Int(py=params[5]))
+        if len(addrs) == 11:
+            # addrs[10]: the targets, WRITTEN (the fitted model keeps them)
+            var yo = f32_ptr(Int(py=addrs[10]))
+            for i in range(n_train):
+                yo.unsafe_store(i, y[i])
+    else:
+        y = read_f32(Int(py=addrs[1]), max(0, n_train))
     var n_iter = 0
     with GILReleased(Python()):
         n_iter = _gpc_fit_run(
@@ -1117,14 +1129,17 @@ def gpc_predict_binding(
     `params`, in this exact order: 0 n_train, 1 n_features, 2 n_star,
     3 n_nodes, 4 n_ls, 5 want_proba.
     """
-    if len(addrs) != 13:
+    # addrs[13] + params[6] (lane apple-fast-py2mojo-cluster): an output the
+    # Python side computed from these, `gpc_binary_out`'s kind
+    var out_kind = Int(py=params[6]) if len(params) == 7 else 0
+    if len(addrs) != 13 and not (len(addrs) == 14 and out_kind != 0):
         raise Error(
             "gpc_predict: addrs must contain 13 addresses (xtrain, y, pi,"
             " wsr, l, xstar, kinds, kparams, ls_len, ls, mean_out, var_out,"
             " proba_out), got "
             + String(len(addrs))
         )
-    if len(params) != 6:
+    if len(params) != 6 and len(params) != 7:
         raise Error(
             "gpc_predict: params must contain 6 values (n_train, n_features,"
             " n_star, n_nodes, n_ls, want_proba), got "
@@ -1160,6 +1175,8 @@ def gpc_predict_binding(
             xt, y, pi, wsr, l, spec, x_star, n_train, n_features, n_star,
             want_proba, mean_addr, var_addr, proba_addr,
         )
+    if out_kind != 0:
+        gpc_binary_out(mean_addr, proba_addr, n_star, out_kind, Int(py=addrs[13]))
     return PythonObject(rc)
 
 

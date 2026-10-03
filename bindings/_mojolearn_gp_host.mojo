@@ -69,7 +69,7 @@ from cholesky.host.chol_oracle import (
     chol_host_potrf,
     chol_host_solve,
 )
-from gaussian_process.unnorm import GP_UNNORM_COV, GP_UNNORM_MEAN, gp_unnorm_cell
+from gaussian_process.unnorm import GP_UNNORM_COV, GP_UNNORM_MEAN, gp_unnorm_cell, gpc_ovr_targets
 from bindings.gp_host_predict import (
     gp_py2mojo_binding,
     _rebuild_kernel_spec,
@@ -372,16 +372,17 @@ def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
     3 kparams, 4 ls_len, 5 ls, 6 l_out, 7 pi_out, 8 wsr_out, 9 scalars_out
     (lml, n_iter, nb). `params`: 0 n_train, 1 n_features, 2 n_nodes, 3 n_ls,
     4 max_iter_predict. Returns the iteration count."""
-    if len(addrs) != 10:
+    if len(addrs) != 10 and not (len(addrs) == 11 and len(params) == 6):
         raise Error(
             "gpc_fit: addrs must contain 10 addresses (x, y, kinds, kparams,"
             " ls_len, ls, l_out, pi_out, wsr_out, scalars_out), got "
             + String(len(addrs))
         )
-    if len(params) != 5:
+    if len(params) != 5 and len(params) != 6:
         raise Error(
             "gpc_fit: params must contain 5 values (n_train, n_features,"
-            " n_nodes, n_ls, max_iter_predict), got "
+            " n_nodes, n_ls, max_iter_predict), or 6 (+ the one-vs-rest class"
+            " k, when addrs[1] is the n_train int32 class codes), got "
             + String(len(params))
         )
     var lp = f32_ptr(Int(py=addrs[6]))
@@ -403,7 +404,18 @@ def gpc_fit_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
         String("gpc_fit"),
     )
     var x = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
-    var y = read_f32(Int(py=addrs[1]), max(0, n_train))
+    # params[5] (lane apple-fast-py2mojo-cluster): addrs[1] holds the int32
+    # class codes and the targets are code == k, built here, not in Python
+    var y: List[Float32]
+    if len(params) == 6:
+        y = gpc_ovr_targets(read_i32(Int(py=addrs[1]), max(0, n_train)), n_train, Int(py=params[5]))
+        if len(addrs) == 11:
+            # addrs[10]: the targets, WRITTEN (the fitted model keeps them)
+            var yo = f32_ptr(Int(py=addrs[10]))
+            for i in range(n_train):
+                yo.unsafe_store(i, y[i])
+    else:
+        y = read_f32(Int(py=addrs[1]), max(0, n_train))
     var n_iter = 0
     with GILReleased(Python()):
         n_iter = _gpc_fit_run(

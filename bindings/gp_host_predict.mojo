@@ -14,7 +14,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
-from gaussian_process.unnorm import GP_PY2MOJO, GP_UNNORM_MEAN, GP_UNNORM_STD, gp_unnorm_cell
+from gaussian_process.unnorm import GP_PY2MOJO, GP_UNNORM_MEAN, GP_UNNORM_STD, gp_unnorm_cell, gpc_binary_out
 from gaussian_process.host.gpc_oracle import gpc_host_predict
 from gaussian_process.host.gpc_steps import gpc_ovr_combine_rows, gpc_proba
 from gaussian_process.host.gpr_oracle import (
@@ -324,14 +324,17 @@ def gpc_predict_binding(
     5 xstar, 6 kinds, 7 kparams, 8 ls_len, 9 ls, 10 mean_out, 11 var_out,
     12 proba_out. `params`: 0 n_train, 1 n_features, 2 n_star, 3 n_nodes,
     4 n_ls, 5 want_proba. Returns 0."""
-    if len(addrs) != 13:
+    # addrs[13] + params[6] (lane apple-fast-py2mojo-cluster): an output the
+    # Python side computed from these, `gpc_binary_out`'s kind
+    var out_kind = Int(py=params[6]) if len(params) == 7 else 0
+    if len(addrs) != 13 and not (len(addrs) == 14 and out_kind != 0):
         raise Error(
             "gpc_predict: addrs must contain 13 addresses (xtrain, y, pi,"
             " wsr, l, xstar, kinds, kparams, ls_len, ls, mean_out, var_out,"
             " proba_out), got "
             + String(len(addrs))
         )
-    if len(params) != 6:
+    if len(params) != 6 and len(params) != 7:
         raise Error(
             "gpc_predict: params must contain 6 values (n_train, n_features,"
             " n_star, n_nodes, n_ls, want_proba), got "
@@ -374,6 +377,8 @@ def gpc_predict_binding(
     _ = l^
     _ = x_star^
     _ = spec^
+    if out_kind != 0:
+        gpc_binary_out(mean_addr, proba_addr, n_star, out_kind, Int(py=addrs[13]))
     return PythonObject(rc)
 
 
