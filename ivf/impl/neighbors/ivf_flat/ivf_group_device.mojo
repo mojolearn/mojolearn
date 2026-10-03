@@ -41,6 +41,7 @@ def _grid(n: Int) -> Int:
     return max((n + _TPB - 1) // _TPB, 1)
 
 
+@always_inline
 def _upper_bound(a: _I32P, len_in: Int, v: Int) -> Int:
     """The first index i in [0, len) with a[i] > v (a ascending)."""
     var lo = 0
