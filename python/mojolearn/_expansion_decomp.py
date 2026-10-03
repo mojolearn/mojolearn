@@ -2060,11 +2060,25 @@ def _logdet(k, A):
 
 def _polar(k, A):
     """U V^T of the SVD of a square A, and the sum of its singular values:
-    A V S^-1 V^T through the eigh of A^T A."""
+    A V S^-1 V^T through the eigh of A^T A.
+
+    A is first scaled by a power of two, 2^-e with 2^(e-1) <= max|A| < 2^e,
+    and the singular-value sum scaled back by 2^e. The polar factor is
+    scale-invariant and a power-of-two scale is exact, so a finite A^T A
+    gives the same words as before; what changes is that A^T A can no longer
+    overflow. Varimax on large loadings (FactorAnalysis on the identity
+    reference's `wide` fixture, columns up to 1e4) cubed them into an A whose
+    A^T A was inf in float32, and eigh refused it (DEVIATION 590) on every
+    column. A is n_components x n_components: the max is a k x k host read."""
+    m = max((abs(float(v)) for v in A.s), default=0.0)
+    # clamped so 2^-e stays a normal float32 in the device's scale
+    e = max(-120, min(120, math.frexp(m)[1])) if m > 0.0 and math.isfinite(m) else 0
+    if e:
+        A = k.ew("scale", A, s=math.ldexp(1.0, -e))
     w, V = k.eigh(k.mm(A, A, ta=True))
     sv = k.ew("sqrt", w)
     AV = k.ew("div", k.mm(A, V), sv)
-    return k.mm(AV, V, tb=True), k.total(sv).s[0]
+    return k.mm(AV, V, tb=True), math.ldexp(k.total(sv).s[0], e)
 
 
 def _ortho_rotation(k, C, method, tol=1e-6, max_iter=100):
