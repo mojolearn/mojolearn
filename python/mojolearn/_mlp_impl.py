@@ -226,6 +226,17 @@ def _fused_enabled(binding):
     return callable(getattr(binding, 'mlp_train_step', None))
 
 
+def _resident_enabled(binding):
+    """lane afn-mlp (2026-10-03): whether the step runs on a DEVICE-RESIDENT
+    session (`mlp_resident_open` .. `mlp_resident_close`, compiled into the
+    Apple FAST binding under `-D MOJOLEARN_AFN_MLP_RESIDENT`, `_MULTISTEP`
+    or `_ALL` only): the weights and moments stay on the device between
+    steps, a step uploads the batch and downloads the loss, the logits and
+    the gradients, one wait. The same switches as `_fused_enabled` turn it
+    off; a binding without the entry (every other build) never takes it."""
+    return _fused_enabled(binding) and callable(getattr(binding, 'mlp_resident_open', None))
+
+
 def _optimizer(parameters, config, state=None):
     # `resident=False`: this trainer builds an optimizer object per step
     # (transactional publication), so device-resident moments would be
@@ -331,6 +342,8 @@ class SmallMLPTrainer:
         self._config = config
         self._schedule = schedule
         self._opt = _optimizer(weights, config)
+        # lane afn-mlp: the resident session (handle, its binding, cap_k)
+        self._session = None
 
     @property
     def step_(self):
@@ -344,6 +357,7 @@ class SmallMLPTrainer:
     def state_dict(self):
         """Return an independent snapshot of every resumable state cell."""
         with self._lock:
+            self._session_sync_host()
             return _state(self._opt.params, self._opt, self._config, self._schedule)
 
     def load_state_dict(self, state):
@@ -352,8 +366,133 @@ class SmallMLPTrainer:
             weights, moments, config, schedule = _validate_state(state)
             _require_mode()
             replacement = _optimizer(weights, config, moments)
+            self._session_close()
             self._opt, self._config, self._schedule = replacement, config, schedule
         return self
+
+    # -- lane afn-mlp: the device-resident session (Apple FAST, behind its
+    # -- define; `_resident_enabled`). The session is the truth for the
+    # -- weights and moments while it is open; `_session_sync_host` brings
+    # -- them into `self._opt`'s arrays before anything on the host reads
+    # -- them, and a failed step restores the pre-step state on the device.
+
+    def _session_open(self, binding, cap_k=1):
+        """The open session's handle, (re)opened with capacity `cap_k`."""
+        if self._session is not None:
+            handle, owner, cap = self._session
+            if owner is binding and cap >= cap_k:
+                return handle
+            self._session_sync_host()
+            self._session_close()
+        opt = self._opt
+        addresses = [addr(w, name=n) for w, n in zip(opt.params, _NAMES)]
+        addresses += [addr(opt.exp_avg, name='m'), addr(opt.exp_avg_sq, name='v')]
+        handle = int(binding.mlp_resident_open(addresses, [int(cap_k)]))
+        self._session = (handle, binding, int(cap_k))
+        return handle
+
+    def _session_sync_host(self):
+        if self._session is None:
+            return
+        handle, binding, _ = self._session
+        opt = self._opt
+        addresses = [addr(w, name=n) for w, n in zip(opt.params, _NAMES)]
+        addresses += [addr(opt.exp_avg, name='m'), addr(opt.exp_avg_sq, name='v')]
+        binding.mlp_resident_download(handle, addresses)
+
+    def _session_close(self):
+        if self._session is None:
+            return
+        handle, binding, _ = self._session
+        self._session = None
+        binding.mlp_resident_close(handle)
+
+    def __del__(self):
+        try:
+            self._session_close()
+        except Exception:
+            pass
+
+    def _resident_steps(self, binding, x, y, k, mode, return_input_grad=False):
+        """`k` steps on the session; returns `(losses, logits, grads,
+        input_grad)` (the logits and gradients are the last step's)."""
+        rows = len(x) // k
+        opt, config = self._opt, self._config
+        handle = self._session_open(binding, k)
+        losses = zeros((k,), '<f4')
+        logits = empty((rows, 3), '<f4')
+        grads = [empty(shape, '<f4') for shape in _SHAPES]
+        dx = empty((rows, 8), '<f4') if return_input_grad else zeros((1,), '<f4')
+        t = opt.t + 1
+        # `addresses` and `params` in this exact order (mirrored word for word
+        # in `bindings/_mojolearn_training.mojo::mlp_resident_steps_binding`):
+        #
+        #     addresses: x, y, losses, logits, dw1, db1, dw2, db2, dx
+        #     params:    rows, k, mode, t, lr, beta1, beta2, eps,
+        #                weight_decay, want_input_grad
+        addresses = [addr_ro(x, name='X'), addr_ro(y, name='targets'),
+                     addr(losses, name='losses'), addr(logits, name='logits')]
+        addresses += [addr(g, name=n + ' gradient') for g, n in zip(grads, _NAMES)]
+        addresses += [addr(dx, name='input_grad')]
+        params = [int(rows), int(k), int(mode), int(t), float(config['lr']),
+                  float(config['beta1']), float(config['beta2']), float(config['eps']),
+                  float(config['weight_decay']), 1 if return_input_grad else 0]
+        entry = binding.mlp_resident_steps if k > 1 else binding.mlp_resident_step
+        written = entry(handle, addresses, params)
+        if written != logits.size or not all_finite(logits):
+            raise RuntimeError('SmallMLPTrainer step returned an invalid result')
+        if mode == _MODE_FORWARD:
+            return None, logits, None, None
+        values = [float(v) for v in flat_view(losses, 'f')]
+        if not all(math.isfinite(v) for v in values):
+            raise RuntimeError('SmallMLPTrainer loss is not finite')
+        for g in grads:
+            if not all_finite(g):
+                raise RuntimeError('SmallMLPTrainer step returned an invalid result')
+        input_grad = None
+        if return_input_grad:
+            if not all_finite(dx):
+                raise RuntimeError('SmallMLPTrainer step returned an invalid result')
+            input_grad = dx
+        if mode == _MODE_TRAIN:
+            opt.t = t + k - 1
+            opt.packed_ = True
+            opt.total_norm_ = None
+            opt.clip_coef_ = None
+            opt.lr_ = float(_training_impl._round_f32(config['lr']))
+        return values, logits, grads, input_grad
+
+    def train_steps(self, X, targets, k):
+        """lane afn-mlp: `k` consecutive `train_step`s as ONE binding call on
+        the resident session (Apple FAST under `-D MOJOLEARN_AFN_MLP_MULTISTEP`
+        or `_ALL`; elsewhere a RuntimeError names the build). `X` is
+        `(k * batch, 8)` and `targets` `(k * batch,)`, minibatch `i` the rows
+        `[i * batch, (i + 1) * batch)`, every minibatch 1..256 rows. Returns
+        `step`, `losses` (one per minibatch), and `loss`, `logits` and
+        `gradients` of the LAST minibatch."""
+        with self._lock:
+            if type(k) is not int or k < 1:
+                raise ValueError('SmallMLPTrainer train_steps k must be a positive int')
+            binding = self._binding()
+            if not (_resident_enabled(binding)
+                    and callable(getattr(binding, 'mlp_resident_steps', None))):
+                raise RuntimeError('SmallMLPTrainer.train_steps needs the Apple FAST training '
+                                   'binding built with -D MOJOLEARN_AFN_MLP_MULTISTEP')
+            pb = probe(X)
+            if pb.ndim != 2 or pb.shape[1] != 8 or pb.shape[0] % k != 0:
+                raise ValueError('SmallMLPTrainer train_steps X must have shape (k * batch, 8)')
+            batch = pb.shape[0] // k
+            if not 1 <= batch <= 256:
+                raise ValueError('SmallMLPTrainer batch must be in [1, 256]')
+            x = _array(X, pb.shape, 'X')
+            y = _targets(targets, len(x))
+            if self._opt.t + k > _MAX_STEP:
+                raise ValueError('SmallMLPTrainer step counter is exhausted')
+            losses, logits, grads, _ = self._resident_steps(binding, x, y, k, _MODE_TRAIN)
+            _require_mode()
+            return dict(step=int(self._opt.t), losses=losses, loss=losses[-1],
+                        logits=logits.copy(),
+                        gradients={name: value.copy() for name, value in zip(_NAMES, grads)})
 
     @staticmethod
     def _binding():
@@ -407,7 +546,10 @@ class SmallMLPTrainer:
         with self._lock:
             x = _batch(X)
             binding = self._binding()
-            if _fused_enabled(binding):
+            if _resident_enabled(binding):
+                _, result, _, _ = self._resident_steps(
+                    binding, x, zeros((len(x),), '<i4'), 1, _MODE_FORWARD)
+            elif _fused_enabled(binding):
                 _, result, _, _ = self._fused(x, zeros((len(x),), '<i4'), self._opt.params,
                                               self._opt, self._config, binding, _MODE_FORWARD)
             else:
@@ -511,7 +653,10 @@ class SmallMLPTrainer:
             x = _batch(X)
             y = _targets(targets, len(x))
             binding = self._binding()
-            if _fused_enabled(binding):
+            if _resident_enabled(binding):
+                losses, _, grads, _ = self._resident_steps(binding, x, y, 1, _MODE_GRADS)
+                loss = losses[0]
+            elif _fused_enabled(binding):
                 loss, _, grads, _ = self._fused(x, y, self._opt.params, self._opt,
                                                 self._config, binding, _MODE_GRADS)
             else:
@@ -526,6 +671,8 @@ class SmallMLPTrainer:
                 raise ValueError('SmallMLPTrainer requires exactly four gradients')
             grads = [_array(g, shape, name + ' gradient')
                      for g, shape, name in zip(gradients, _SHAPES, _NAMES)]
+            self._session_sync_host()
+            self._session_close()
             weights, moments, config, schedule = _validate_state(self.state_dict())
             if moments['step'] == _MAX_STEP:
                 raise ValueError('SmallMLPTrainer step counter is exhausted')
@@ -543,10 +690,24 @@ class SmallMLPTrainer:
             y = _targets(targets, len(x))
             if type(return_input_grad) is not bool:
                 raise TypeError('SmallMLPTrainer return_input_grad must be a bool')
+            binding = self._binding()
+            if _resident_enabled(binding):
+                # lane afn-mlp: the state stays on the device; the binding
+                # restores the pre-step state on the device when the step
+                # fails, so nothing is published unless the step succeeded.
+                if self._opt.t == _MAX_STEP:
+                    raise ValueError('SmallMLPTrainer step counter is exhausted')
+                losses, logits, grads, input_grad = self._resident_steps(
+                    binding, x, y, 1, _MODE_TRAIN, return_input_grad)
+                _require_mode()
+                result = dict(step=int(self._opt.t), loss=losses[0], logits=logits.copy(),
+                              gradients={name: value.copy() for name, value in zip(_NAMES, grads)})
+                if return_input_grad:
+                    result['input_grad'] = input_grad.copy()
+                return result
             weights, moments, config, schedule = _validate_state(self.state_dict())
             if moments['step'] == _MAX_STEP:
                 raise ValueError('SmallMLPTrainer step counter is exhausted')
-            binding = self._binding()
             working = _optimizer(weights, config, moments)
             if _fused_enabled(binding):
                 loss, logits, grads, input_grad = self._fused(
