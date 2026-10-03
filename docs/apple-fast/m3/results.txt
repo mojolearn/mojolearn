@@ -1,4 +1,4 @@
-pos=487 lines=     746
+pos=503 lines=     775
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -595,3 +595,23 @@ pos=487 lines=     746
 697:CMD apple-fast-regress@c97c2b3a0 regress-adagrad-pipe rc=0 AFC-DEF-SUMMARY arm=B n=3 median_ms=199.1 all=[199, 199, 199] quality=['{}'] defines='-D MOJOLEARN_SEQ_FAST_PIPE_UP -D MOJOLEARN_SEQ_FAST_PIPE_DOWN'
 698:CMD apple-fast-regress@c97c2b3a0 regress-dotm-fmaoff rc=0 AFC-DEF-SUMMARY arm=B n=3 median_ms=539.7 all=[540, 539, 540] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_SEQ_FAST_FMA_OFF'
 699:CMD apple-fast-regress@c97c2b3a0 regress-dotm-snap rc=0 AFC-DEF-SUMMARY arm=B n=3 median_ms=561.9 all=[562, 562, 562] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_SEQ_FAST_THETA_SNAP'
+700:CMD apple-fast-robust@cfdb95e48 robust-huber-blk-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=195.9 all=[196] quality=['{"finite":'] defines='-D MOJOLEARN_HUBER_DEVICE_LBFGS=1 -D MOJOLEARN_HUBER_FAST_BLOCK512=1'
+701:FBUILD lane/apple-fast-tsa2@22edf8f13 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0 
+702:CMD apple-fast-tsa2@22edf8f13 tsa2-var-taxi-hourly rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=5.0 all=[5] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_TSA2_VAR=1'
+703:CMD apple-fast-tsa2@22edf8f13 tsa2-stl-taxi-hourly rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=7.0 all=[7] quality=['{"residual_std":'] defines='-D MOJOLEARN_TSA2_STL=1'
+704:CMD apple-fast-tsa2@22edf8f13 tsa2-kpss-taxi-hourly rc=1 ~/mq/wt/lane_apple-fast-tsa2/.pixi/envs/default/bin/mojo: error: failed to run the pass manager
+705:FBUILD lane/apple-fast-shap@13343dd51 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+706:CMD apple-fast-shap@13343dd51 shap-tree-tab rc=1 ~/mq/wt/lane_apple-fast-shap/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+707:CMD apple-fast-shap@13343dd51 shap-kernel-dev rc=1 ~/mq/wt/lane_apple-fast-shap/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+708:CMD apple-fast-shap@13343dd51 shap-perm-cache rc=1 ~/mq/wt/lane_apple-fast-shap/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+709:FBUILD lane/apple-fast-kapprox@10d5a7970 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+710:CMD apple-fast-kapprox@10d5a7970 kap-grp-base-taxi rc=0 AFC-AB-SUMMARY kap-grp-base-taxi arm=A lane=gaussian-rp ds=taxi median_of_medians_ms=6.209354003658518 runs=[6.209354003658518 ] digest=20cb8f6b620c564a 
+711:CMD apple-fast-kapprox@10d5a7970 kap-grp-base-istella rc=0 AFC-AB-SUMMARY kap-grp-base-istella arm=A lane=gaussian-rp ds=istella median_of_medians_ms=54.15527051081881 runs=[54.15527051081881 ] digest=ce7dcd780f8e2868 
+712:FBUILD lane/apple-fast-decomp-linalg@74d52352b core=0 ibase=0 estimators=0 gp=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+713:CMD apple-fast-decomp-linalg@74d52352b dlin-lu-pivot-synthetic rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1232.9 all=[1233] quality=['{"relative_residual":'] defines='-D MOJOLEARN_LU_FAST_PIVOT_GRID'
+714:CMD apple-fast-decomp-linalg@74d52352b dlin-lusolve-pivot-synthetic rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1234.0 all=[1234] quality=['{"relative_residual":'] defines='-D MOJOLEARN_LU_FAST_PIVOT_GRID'
+715:CMD apple-fast-nb@9f2b71471 nb-mnb-csr-text rc=1 ~/mq/wt/lane_apple-fast-nb/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+716:CMD apple-fast-nb@9f2b71471 nb-cnb-csr-text rc=1 ~/mq/wt/lane_apple-fast-nb/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+717:CMD apple-fast-robust@cfdb95e48 robust-ocsvm-base-taxi rc=0 AFC-AB-SUMMARY robust-ocsvm-base-taxi arm=A lane=ocsvm ds=taxi median_of_medians_ms=408.6844999692403 runs=[408.6844999692403 ] digest=1a7756c6125d21cc 
+718:CMD apple-fast-robust@cfdb95e48 robust-mcd-taxi rc=1 ~/mq/wt/lane_apple-fast-robust/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+719:CMD apple-fast-robust@cfdb95e48 robust-ee-taxi rc=1 ~/mq/wt/lane_apple-fast-robust/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module

@@ -23,18 +23,3 @@ Imported from ~/mq/wt/lane_apple-fast-prep3/bindings/_mojolearn_estimators.mojo:
 def cc_relabel_kernel(lab: IP, newid: IP, out: IP, n: Int32):
                                              ^
 Imported from ~/mq/wt/lane_apple-fast-graph/bindings/_mojolearn_x_neighbors.mojo:14:
-== lane_apple-fast-decomp-linalg-fbuild-x_neighbors.log (12:27Z)
-~/mq/wt/lane_apple-fast-decomp-linalg/./x_decomp/device.mojo:3065:38: error: use of unknown declaration 'geqrf_scale_kernel'
-                ctx.enqueue_function[geqrf_scale_kernel](
-                                     ^~~~~~~~~~~~~~~~~~
-Imported from ~/mq/wt/lane_apple-fast-decomp-linalg/bindings/_mojolearn_x_neighbors.mojo:11:
-== lane_apple-fast-decomp-linalg-fbuild-x_decomp.log (12:26Z)
-./x_decomp/fast_gemm.mojo:46:30: error: expected argument name
-    a: F32Ptr, b: F32Ptr, out: F32Ptr, m: Int32, k: Int32, n: Int32, ta: Int32, tb: Int32, nb: Int32
-                             ^
-Imported from ~/mq/wt/lane_apple-fast-decomp-linalg/bindings/_mojolearn_x_decomp.mojo:16:
-== lane_apple-fast-decomp-linalg-fbuild-gp.log (12:26Z)
-~/mq/wt/lane_apple-fast-decomp-linalg/./cholesky/checks/potrf.mojo:422:1: error: expressions must not appear at file scope; move this into a function body
-"""CHOL_FAST_APPLE: the panel solve `L21 = A21 L11^{-T}` as `L11^{-1}`
-^
-~/mq/wt/lane_apple-fast-decomp-linalg/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
