@@ -1386,7 +1386,7 @@ class _RandomProjection(_Base):
                 or self.compute_inverse_components or not k._res():
             return False
         a = as_f32_c(X, ndim=2, name="X")[0]
-        if a.ndim != 2 or min(a.shape) == 0:
+        if a.ndim != 2 or a.shape[0] == 0 or a.shape[1] == 0:
             raise ValueError("X: a nonempty two-dimensional input is required")
         n, d = a.shape
         kc = int(self.n_components)
