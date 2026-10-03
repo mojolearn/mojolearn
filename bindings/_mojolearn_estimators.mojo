@@ -799,9 +799,13 @@ def ridge_fit_multi_binding(
     """Lane apple-fast-meta (MOJOLEARN_MULTIOUT_RIDGE): ridge on every column
     of Y (n_rows x n_targets, row-major) in one program; coef is n_targets x
     n_features, ymean the n_targets column means. params: n_rows,
-    n_features, n_targets, alpha, center_y (1 subtracts the column means)."""
-    if len(params) != 5:
-        raise Error("ridge_fit_multi: params must contain n_rows, n_features, n_targets, alpha, center_y")
+    n_features, n_targets, alpha, center_y (1 subtracts the column means),
+    and optionally xmean_addr, icpt_addr: then icpt[j] = ymean[j] - xmean .
+    coef[j, :] (binary64 products and sum, ascending features; lane
+    pyglue-numeric: a Python fsum per target)."""
+    if len(params) != 5 and len(params) != 7:
+        raise Error("ridge_fit_multi: params must contain n_rows, n_features, n_targets, alpha, center_y"
+                    " (, xmean_addr, icpt_addr)")
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     var wp = _f32_ptr(Int(py=coef_addr))
@@ -815,6 +819,14 @@ def ridge_fit_multi_binding(
         var ctx = process_ctx[_DEVCTX_SLOT]()
         ridge_fit_multi_host(ctx, xp, yp, wp, mp, nr, nf, nt, alpha, center)
         ctx.synchronize()
+    if len(params) == 7:
+        var xm = _f32_ptr(Int(py=params[5]))
+        var ic = _f32_ptr(Int(py=params[6]))
+        for j in range(nt):
+            var dot = Float64(0)
+            for c in range(nf):
+                dot += Float64(xm[c]) * Float64(wp[j * nf + c])
+            ic[j] = Float32(Float64(mp[j]) - dot)
     return PythonObject(0)
 
 
