@@ -57,7 +57,7 @@ def kshap_synth(x: Int, bg: Int, size_off: Int, size_w: Int, cdf: Int, syn: Int,
     _ = len(mk.masks)
 
 
-def kshap_solve(out: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf: Int, phi: Int, R: Int, nb: Int,
+def kshap_solve(yout: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf: Int, phi: Int, R: Int, nb: Int,
                 d: Int, k: Int, m: Int, nfixed: Int, nfull: Int, npaired: Int, L: Int, seed: Int, row0: Int,
                 wrand: UInt64, link: Bool) raises:
     if R <= 0:
@@ -65,7 +65,7 @@ def kshap_solve(out: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf: 
     var mk = _Masks(size_off, size_w, cdf, R, d, m, nfixed, nfull, npaired, L, seed, row0, wrand)
     var ey = List[UInt64](length=max(R * m * k, 1), fill=0)
     var eyp = _u64(ey)
-    var op = F32P(unsafe_from_address=out)
+    var op = F32P(unsafe_from_address=yout)
     for t in range(R * m * k):
         bg_mean_unit(t, nb, k, op, eyp)
     if link:
@@ -137,7 +137,7 @@ def pshap_synth(x: Int, bg: Int, syn: Int, R: Int, nb: Int, d: Int, np: Int, see
     _ = len(inv)
 
 
-def pshap_values(out: Int, phi: Int, R: Int, nb: Int, d: Int, k: Int, np: Int, seed: Int, row0: Int) raises:
+def pshap_values(yout: Int, phi: Int, R: Int, nb: Int, d: Int, k: Int, np: Int, seed: Int, row0: Int) raises:
     var mm = np * (2 * d + 1)
     if R * d * k <= 0 or mm <= 0:
         return
@@ -146,7 +146,7 @@ def pshap_values(out: Int, phi: Int, R: Int, nb: Int, d: Int, k: Int, np: Int, s
     for t in range(R * np):
         pshap_perm_unit(t, d, np, seed, row0, _i32(perm), _i32(inv))
     var ey = List[UInt64](length=R * mm * k, fill=0)
-    var op = F32P(unsafe_from_address=out)
+    var op = F32P(unsafe_from_address=yout)
     for t in range(R * mm * k):
         bg_mean_unit(t, nb, k, op, _u64(ey))
     var php = U64P(unsafe_from_address=phi)

@@ -209,7 +209,7 @@ def kshap_synth(x: Int, bg: Int, size_off: Int, size_w: Int, cdf: Int, syn: Int,
     _ = dsyn^
 
 
-def kshap_solve(out: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf: Int, phi: Int, R: Int, nb: Int,
+def kshap_solve(yout: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf: Int, phi: Int, R: Int, nb: Int,
                 d: Int, k: Int, m: Int, nfixed: Int, nfull: Int, npaired: Int, L: Int, seed: Int, row0: Int,
                 wrand: UInt64, link: Bool) raises:
     """phi (R x d x k binary64) of the chunk from the model outputs `out` of
@@ -219,7 +219,7 @@ def kshap_solve(out: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf: 
         return
     var ctx = _ctx()
     var mk = _Masks(ctx, size_off, size_w, cdf, R, d, m, nfixed, nfull, npaired, L, seed, row0, wrand)
-    var dout = _up_f32(ctx, out, R * m * nb * k)
+    var dout = _up_f32(ctx, yout, R * m * nb * k)
     var ey = ctx.enqueue_create_buffer[DType.uint64](max(R * m * k, 1))
     if R * m * k > 0:
         ctx.enqueue_function[mean_kernel](
@@ -320,7 +320,7 @@ def pshap_synth(x: Int, bg: Int, syn: Int, R: Int, nb: Int, d: Int, np: Int, see
     _ = dsyn^
 
 
-def pshap_values(out: Int, phi: Int, R: Int, nb: Int, d: Int, k: Int, np: Int, seed: Int, row0: Int) raises:
+def pshap_values(yout: Int, phi: Int, R: Int, nb: Int, d: Int, k: Int, np: Int, seed: Int, row0: Int) raises:
     """phi (R x d x k binary64) from the model outputs of the chunk's
     synthetic rows."""
     var mm = np * (2 * d + 1)
@@ -330,7 +330,7 @@ def pshap_values(out: Int, phi: Int, R: Int, nb: Int, d: Int, k: Int, np: Int, s
     var perm = ctx.enqueue_create_buffer[DType.int32](R * np * d)
     var inv = ctx.enqueue_create_buffer[DType.int32](R * np * d)
     _perms(ctx, R, d, np, seed, row0, perm, inv)
-    var dout = _up_f32(ctx, out, R * mm * nb * k)
+    var dout = _up_f32(ctx, yout, R * mm * nb * k)
     var ey = ctx.enqueue_create_buffer[DType.uint64](R * mm * k)
     ctx.enqueue_function[mean_kernel](
         Int64(R * mm * k), Int32(nb), Int32(k), dout.unsafe_ptr(), ey.unsafe_ptr(),

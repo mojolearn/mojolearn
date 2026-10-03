@@ -688,7 +688,7 @@ def kshap_synth_binding(x: PythonObject, bg: PythonObject, tables: PythonObject,
     return PythonObject(p[0])
 
 
-def kshap_solve_binding(out: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
+def kshap_solve_binding(yout: PythonObject, fx: PythonObject, fnull: PythonObject, tables: PythonObject,
                         phi: PythonObject, params: PythonObject) raises -> PythonObject:
     """KernelExplainer's values of a chunk: out Float32 (R m nb) x k (the
     model on the synthetic rows), fx Float32 R x k (the model on the rows),
@@ -699,11 +699,11 @@ def kshap_solve_binding(out: PythonObject, fx: PythonObject, fnull: PythonObject
     if p[11] < 1:
         raise Error("x_trees_kshap_solve: needs outputs")
     comptime if XTREES_DEVICE_OPS:
-        agn_dev.kshap_solve(Int(py=out), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
+        agn_dev.kshap_solve(Int(py=yout), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
                             Int(py=tables[2]), Int(py=phi), p[0], p[1], p[2], p[11], p[4], p[3], p[5], p[7], p[6],
                             p[9], p[8], UInt64(p[10]), p[12] != 0)
     else:
-        agn_host.kshap_solve(Int(py=out), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
+        agn_host.kshap_solve(Int(py=yout), Int(py=fx), Int(py=fnull), Int(py=tables[0]), Int(py=tables[1]),
                              Int(py=tables[2]), Int(py=phi), p[0], p[1], p[2], p[11], p[4], p[3], p[5], p[7], p[6],
                              p[9], p[8], UInt64(p[10]), p[12] != 0)
     return PythonObject(p[0])
@@ -722,16 +722,16 @@ def pshap_synth_binding(x: PythonObject, bg: PythonObject, syn: PythonObject, pa
     return PythonObject(p[0])
 
 
-def pshap_values_binding(out: PythonObject, phi: PythonObject, params: PythonObject) raises -> PythonObject:
+def pshap_values_binding(yout: PythonObject, phi: PythonObject, params: PythonObject) raises -> PythonObject:
     """PermutationExplainer's values of a chunk: out Float32 (R np (2d + 1)
     nb) x k, phi float64 R x d x k; params = [R, nb, d, np, row0, seed, k]."""
     var p = _agn_ints(params, 7, "x_trees_pshap_values")
     if p[0] < 0 or p[1] < 1 or p[2] < 1 or p[3] < 1 or p[4] < 0 or p[6] < 1:
         raise Error("x_trees_pshap_values: bad counts")
     comptime if XTREES_DEVICE_OPS:
-        agn_dev.pshap_values(Int(py=out), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
+        agn_dev.pshap_values(Int(py=yout), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
     else:
-        agn_host.pshap_values(Int(py=out), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
+        agn_host.pshap_values(Int(py=yout), Int(py=phi), p[0], p[1], p[2], p[6], p[3], p[5], p[4])
     return PythonObject(p[0])
 
 
