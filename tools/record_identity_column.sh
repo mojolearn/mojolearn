@@ -62,7 +62,6 @@ case $OUT in /*) ;; *) die "<outdir> must be absolute (an lq CMD tree is deleted
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT" || die "cannot enter $ROOT"
 case $OUT in "$ROOT"|"$ROOT"/*) die "<outdir> must be outside the tree $ROOT";; esac
-mkdir -p "$OUT" || die "cannot create $OUT"
 
 case $LABEL in
     nvidia-*) BACKEND=cuda ;;
@@ -75,6 +74,7 @@ esac
 if [ "$MODE" = --models ] && [ "$BACKEND" = cpu ]; then
     die "--models saves GPU-trained models; run it on a GPU box"
 fi
+mkdir -p "$OUT" || die "cannot create $OUT"
 
 # --- the interpreter -------------------------------------------------------
 if [ -n "${PYTHON:-}" ]; then
