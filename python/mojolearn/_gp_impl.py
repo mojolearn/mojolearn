@@ -127,6 +127,19 @@ def _ftz(x):
         return math.copysign(0.0, x)
     return x
 
+def _scale_shift(arr, a, b, op):
+    """A new float32 Array of `scale_shift_ftz_f32` over `arr` (op 0
+    ftz(ftz(a v) + b), 1 ftz(sqrt(ftz(v a))), 2 ftz(v a)): each step one
+    binary32 rounding then `ftz`, the same bits the Python comprehension
+    gave, in Mojo (lane cgr4-py-compute)."""
+    from ._buffer import _native, as_f32_c, empty
+    src, _ = as_f32_c(arr, ndim=None, name="values")
+    out = empty(src.shape, "<f4")
+    if src.size:
+        _native("scale_shift_ftz_f32")(src._addr, src.size, float(a), float(b), int(op), out._addr)
+    return out
+
+
 
 #: scikit-learn's default hyperparameter bounds, `kernels.py` (every leaf).
 _DEFAULT_BOUNDS = (1e-5, 1e5)
@@ -911,13 +924,10 @@ class GaussianProcessRegressor(NumericModeMixin):
             # computes the same bits.
             s_ = self._y_train_std
             mu = self._y_train_mean
-            mean = Array.from_list(
-                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in mean.tolist()], "<f4")
+            mean = _scale_shift(mean, s_, mu, 0)
             if return_std:
                 s2 = _ftz(_round_f32(s_ * s_))
-                std = Array.from_list(
-                    [_ftz(_round_f32(math.sqrt(_ftz(_round_f32(v * s2))))) for v in var.tolist()],
-                    "<f4")
+                std = _scale_shift(var, s2, 0.0, 1)
         if return_std:
             self.clamped_ = clamped
             self.n_clamped_ = int(n_clamped)
@@ -979,10 +989,9 @@ class GaussianProcessRegressor(NumericModeMixin):
         if getattr(self, "normalize_y_", False):
             s_ = self._y_train_std
             mu = self._y_train_mean
-            mean = Array.from_list(
-                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in mean.tolist()], "<f4")
+            mean = _scale_shift(mean, s_, mu, 0)
             s2 = _ftz(_round_f32(s_ * s_))
-            cov = Array.from_list([_ftz(_round_f32(v * s2)) for v in cov.tolist()], "<f4")
+            cov = _scale_shift(cov, s2, 0.0, 2)
         return mean[:n_star], cov[:n_star * n_star].reshape((n_star, n_star))
 
     # -- saved models -----------------------------------------------------------
@@ -1193,8 +1202,7 @@ class GaussianProcessRegressor(NumericModeMixin):
             # std * (mean + L z) + y_mean, so the covariance is std**2 C.
             s_ = self._y_train_std
             mu = self._y_train_mean
-            out = Array.from_list(
-                [_ftz(_round_f32(_ftz(_round_f32(s_ * v)) + mu)) for v in out.tolist()], "<f4")
+            out = _scale_shift(out, s_, mu, 0)
         return out.reshape((n_star, n))
 
     def score(self, X, y):
