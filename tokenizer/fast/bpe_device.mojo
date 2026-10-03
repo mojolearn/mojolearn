@@ -913,10 +913,10 @@ def _encode_launch(
                 ctx.enqueue_copy(dst_buf=table.idx[1], src_ptr=I64P(unsafe_from_address=Int(ranks.length.unsafe_ptr())))
             if nbk > 0:
                 ctx.enqueue_copy(dst_buf=table.idx[2], src_ptr=I64P(unsafe_from_address=Int(ranks.buckets.unsafe_ptr())))
-        t_arena = table.arena[0].unsafe_ptr()
-        t_off = table.idx[0].unsafe_ptr()
-        t_len = table.idx[1].unsafe_ptr()
-        t_bk = table.idx[2].unsafe_ptr()
+        t_arena = table.arena[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        t_off = table.idx[0].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        t_len = table.idx[1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        t_bk = table.idx[2].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     else:
         var s_ta = mem.a8(ctx, narena)
         var s_to = mem.a64(ctx, ntok)

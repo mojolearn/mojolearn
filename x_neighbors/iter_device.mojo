@@ -1002,10 +1002,18 @@ def op_knn_sq_tiled(
             var d_dist = ctx.enqueue_create_buffer[DType.float32](n * k)
             var d_idx = _buf_i(ctx, 0, n * k, False)
             fast_mma_knn(ctx, d_x, d_y, c_d, c_i, n, m, d, kk, False)
+            # typed locals: the launch's arguments match the kernel's signature exactly (the
+            # inline unsafe_ptr() arguments made the enqueue_function overloads ambiguous)
+            var p_cd: FP = c_d.unsafe_ptr()
+            var p_ci: MutPointer[UInt32, MutAnyOrigin] = c_i.unsafe_ptr()
+            var p_dist: FP = d_dist.unsafe_ptr()
+            var p_idx: IP = d_idx.unsafe_ptr()
+            var a_n = Int64(n)
+            var a_k = Int64(k)
+            var a_kk = Int64(kk)
+            var a_ex = Int64(exclude_self)
             ctx.enqueue_function[knn_mma_finish_kernel](
-                c_d.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), c_i.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                d_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                Int64(n), Int64(k), Int64(kk), Int64(exclude_self),
+                p_cd, p_ci, p_dist, p_idx, a_n, a_k, a_kk, a_ex,
                 grid_dim=(n + KNN_TILE_TPB - 1) // KNN_TILE_TPB, block_dim=KNN_TILE_TPB,
             )
             ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=dist), src_buf=d_dist)
