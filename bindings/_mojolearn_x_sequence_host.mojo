@@ -16,6 +16,7 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.exec import HostExec
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
+from sequence.schedule import epoch_schedule_py
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
 
@@ -122,6 +123,10 @@ def garch_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     return garch_py(ex, addrs, ip)
 
 
+def epoch_schedule_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    return epoch_schedule_py(addrs, ip)
+
+
 def prophet_days_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     return prophet_days_py(addrs, ip)
 
@@ -175,6 +180,7 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[croston_binding]("croston")
         m.def_function[ets_binding]("ets")
         m.def_function[garch_binding]("garch")
+        m.def_function[epoch_schedule_binding]("epoch_schedule")
         m.def_function[prophet_days_binding]("prophet_days")
         m.def_function[prophet_features_binding]("prophet_features")
         m.def_function[prophet_changepoints_binding]("prophet_changepoints")
