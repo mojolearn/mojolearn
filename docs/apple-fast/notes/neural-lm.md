@@ -134,8 +134,6 @@ Compile risks to check first (code that was written without a compiler):
   ensemble/checks/atomic_width_probe.mojo).
 - The `return` inside a `comptime if` that has code after it: `_unpack_block`,
   `_byte_step_device`, and the deferred loss return in `_byte_forward_loss`.
-- `training/byte_lm_host_kernels.mojo` has `comptime assert ... IDENTICAL builds only` in
-  `_identical_build_only()`. If a FAST build reaches it through the binding's imports,
-  the FAST build fails there. The fix belongs in that file, which this lane owns
-  (`training/byte_lm*.mojo`): admit `BYTE_LM_FAST_APPLE`, or keep the host kernels out
-  of the device binding.
+- `training/byte_lm_host_kernels.mojo` asserts IDENTICAL. The device binding does not
+  import it (grep: only comments mention it in byte_lm_config/byte_lm_logits), so FAST
+  is not expected to reach that assert.
