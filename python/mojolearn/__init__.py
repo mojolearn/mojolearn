@@ -180,16 +180,35 @@ from . import manifold
 from . import umap
 from .umap import UMAP
 from .neural_network import SmallMLPTrainer
-from .language_model import (SmallByteLanguageModelTrainer, ByteLanguageModelConfig,
-                             LanguageModelTrainer, LanguageModelConfig,
-                             LanguageModelInference, LanguageModelHostTrainer)
 # The forest host lane (2026-09-13): predict and predict_proba of a SAVED
 # RandomForest, ExtraTrees or (the GBDT host lane, the same day)
 # GradientBoosting model on a CPU with no GPU, through
 # host/_mojolearn_forest_host.so. Resolves its binding on first use, so an
 # install without it still imports and raises BY NAME when touched.
-from ._forest_host import HostForest, host_model, host_predict, host_predict_proba
-from ._gbdt_host import HostGBDT
+# cpu-gpu-cleanup c-core (2026-10-02): the CPU inference modules load on
+# first touch (`__getattr__` below), so importing the package on a GPU
+# install pulls in no CPU-side module.
+_CPU_INFERENCE = {
+    "HostForest": "._forest_host", "host_model": "._forest_host", "host_predict": "._forest_host",
+    "host_predict_proba": "._forest_host", "HostGBDT": "._gbdt_host",
+    # cgr-py (2026-10-03): the language-model names load on first touch
+    # too. `language_model` re-exports the CPU trainer and CPU inference
+    # from `_byte_lm_host`, which an eager `from .language_model import`
+    # pulled in on every import; the GPU trainers come from their own
+    # modules, so a GPU install importing the package loads neither.
+    "language_model": None,
+    "SmallByteLanguageModelTrainer": "._byte_lm_impl",
+    "ByteLanguageModelConfig": "._byte_lm_config",
+    "LanguageModelTrainer": ".language_model",
+    "LanguageModelConfig": ".language_model",
+    "LanguageModelInference": "._byte_lm_host",
+    "LanguageModelHostTrainer": "._byte_lm_host",
+    # The public CPU neural inference (host/_mojolearn_neural_host.so).
+    "neural_inference": None,
+    "MLPInference": ".neural_inference", "TransformerBlockInference": ".neural_inference",
+    "Mamba1BlockInference": ".neural_inference", "Mamba2BlockInference": ".neural_inference",
+    "Mamba3BlockInference": ".neural_inference", "SambaInference": ".neural_inference",
+}
 from ._svm_impl import SVC, SVR
 # lane/expose-qn-objectives (2026-09-20): the linear machines, the
 # quasi-Newton solver on the four hinge-family losses, and the `svm`
@@ -201,10 +220,8 @@ from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
 from . import tokenizer
 from . import lm_corpus
 from .tokenizer import BpeTokenizer
-# Public neural inference on the CPU from GPU-trained weights (2026-09-15),
-# host/_mojolearn_neural_host.so resolved on first use.
-from .neural_inference import (MLPInference, TransformerBlockInference, Mamba1BlockInference,
-                               Mamba2BlockInference, Mamba3BlockInference, SambaInference)
+# Public neural inference on the CPU from GPU-trained weights (2026-09-15):
+# `neural_inference`'s classes load on first touch (`_CPU_INFERENCE`).
 
 # Workstream D, 2026-09-14: the door-less families of the claim-surface
 # census given a binding and a class. `Cholesky` binds `_mojolearn_gp` (the GP
@@ -536,6 +553,15 @@ _NOT_YET = {}
 
 
 def __getattr__(name):
+    if name in _CPU_INFERENCE:
+        import importlib
+        where = _CPU_INFERENCE[name]
+        if where is None:   # a submodule named in __all__
+            value = importlib.import_module("." + name, __name__)
+        else:
+            value = getattr(importlib.import_module(where, __name__), name)
+        globals()[name] = value
+        return value
     if name in _LAZY_EXPANSION_EXPORTS:
         value = getattr(_LAZY_EXPANSION_EXPORTS[name], name)
         globals()[name] = value

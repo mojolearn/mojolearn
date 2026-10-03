@@ -19,14 +19,14 @@ from training.byte_lm_pooled_head import BytePooledHead
 from training.byte_lm_parallel import _ordered_add_kernel
 from training.checks.train_loop import _zeros, _upload, _copy_into, download_f32
 from training.checks.optimizer import OPT_RECORD_INTERMEDIATES
-from training.checks.optimizer_oracle import OptimizerConfig
+from training.checks.optimizer_contract import OptimizerConfig
 from embedding.checks.embedding_oracle import EmbConfig
 from embedding.checks.embedding_identical import identical_embedding_forward_into, identical_embedding_backward_into
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 from gemm.checks.gemm_identical import identical_gemm_into
 from gemm.checks.gemm_backward import identical_gemm_backward_a_into, identical_gemm_backward_b_into
 from training.checks.loss import identical_ce_forward_into, identical_ce_backward_into
-from training.checks.loss_oracle import CeConfig
+from training.checks.loss_contract import CeConfig
 
 from core.identity_trace import IdentityTrace
 from training.byte_lm import byte_dims

@@ -305,7 +305,7 @@ def test_modes_apple_both_others_identical_only():
 # --- planning ---------------------------------------------------------------
 
 def test_plan_apple_carries_fast_and_identical_arms():
-    races = bb.plan_races("apple", bb.modes_for("apple"), cpu_arm=False)
+    races = bb.plan_races("apple", bb.modes_for("apple"))
     more = sum(len([d for d in bb.MORE.datasets_of(l) if d in bb.DATASETS]) or 1
                for l in bb.MORE_LANES)
     tasks = sum(len(bb.tree_task_datasets(l, bb.DATASETS)) for l in bb.TREE_TASK_LANES)
@@ -328,7 +328,7 @@ def test_plan_apple_carries_fast_and_identical_arms():
 
 @pytest.mark.parametrize("vendor", ["nvidia", "amd"])
 def test_plan_gpu_boxes_identical_only(vendor):
-    races = bb.plan_races(vendor, bb.modes_for(vendor), cpu_arm=False)
+    races = bb.plan_races(vendor, bb.modes_for(vendor))
     for r in races:
         assert r["our_arms"] == {"ours": "identical"}
         assert "ours-ab" not in r["arms"] and "ours-fast" not in r["arms"]
@@ -344,29 +344,22 @@ def test_plan_gpu_boxes_identical_only(vendor):
 def test_plan_races_only_our_gpu_and_never_mixes_cpu_and_gpu_opponents(vendor):
     """Andrew, Oct 2 2026: the board races only our GPU; our GPU races GPU
     opponents only, and a race keeps CPU opponents only when it has no GPU one."""
-    for cpu_arm in (False, True):                 # cpu_arm=True is accepted and ignored
-        races = bb.plan_races(vendor, bb.modes_for(vendor), cpu_arm=cpu_arm)
-        assert races
-        for r in races:
-            assert bb.CPU_ARM not in r["arms"], r["id"]
-            assert all(bb.arm_device(a, vendor) == "gpu" for a in r["our_arms"]), r["id"]
-            devices = {bb.arm_device(a, vendor) for a in r["opponents"]}
-            assert len(devices) <= 1, (r["id"], r["opponents"])
+    races = bb.plan_races(vendor, bb.modes_for(vendor))
+    assert races
+    for r in races:
+        assert bb.CPU_ARM not in r["arms"], r["id"]
+        assert all(bb.arm_device(a, vendor) == "gpu" for a in r["our_arms"]), r["id"]
+        devices = {bb.arm_device(a, vendor) for a in r["opponents"]}
+        assert len(devices) <= 1, (r["id"], r["opponents"])
     assert bb.gpu_opponents_first(["sklearn-cpu", "cuml-gpu", "lightgbm-cpu"]) == ["cuml-gpu"]
     assert bb.gpu_opponents_first(["sklearn-cpu", "lightgbm-cpu"]) == ["sklearn-cpu", "lightgbm-cpu"]
 
 
 def test_plan_filters_and_counts():
-    races = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["rf"], ["taxi"], 5000,
-                          cpu_arm=False)
+    races = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["rf"], ["taxi"], 5000)
     assert [r["id"] for r in races] == ["trees/rf/taxi/rows=5000"]
     s = bb.plan_summary(races)
-    assert s == {"races": 1, "cells": 4, "cpu_cells": 0,
-                 "by_family": {"trees": {"races": 1, "cells": 4}}}
-    races = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["rf"], ["taxi"], 5000,
-                          cpu_arm=True)            # ignored: our CPU never races
-    s = bb.plan_summary(races)
-    assert s == {"races": 1, "cells": 4, "cpu_cells": 0,
+    assert s == {"races": 1, "cells": 4,
                  "by_family": {"trees": {"races": 1, "cells": 4}}}
 
 
@@ -377,8 +370,7 @@ def test_tree_command_apple_interleaves_fast():
     cmd, env = bb.tree_cmd(ctx, race)
     assert "--ours-ab" in cmd and cmd[cmd.index("--ours-ab") + 1] == "numeric_mode='fast'"
     assert "--ours-cpu" not in cmd and "--mem" in cmd
-    off = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["iforest"], ["taxi"], None,
-                        cpu_arm=False)[0]
+    off = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["iforest"], ["taxi"], None)[0]
     assert "--ours-cpu" not in bb.tree_cmd(ctx, off)[0] and "--mem" in bb.tree_cmd(ctx, off)[0]
     assert "--rows" not in cmd          # full size: no cap
     assert env["MOJOLEARN_NUMERIC_MODE"] == "identical"
@@ -408,8 +400,8 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     text = capsys.readouterr().out
     # the races outside the algos family: 93 since Oct 2 2026, when the eight neural lanes
     # that ran OUR CPU binding left the board and CPU opponents left races that have a GPU one
-    algos = bb.plan_races("apple", bb.modes_for("apple"), ["algos"], rows=1000, cpu_arm=False)
-    before = bb.plan_races("apple", bb.modes_for("apple"), bb.FAMILIES[:-1], rows=1000, cpu_arm=False)
+    algos = bb.plan_races("apple", bb.modes_for("apple"), ["algos"], rows=1000)
+    before = bb.plan_races("apple", bb.modes_for("apple"), bb.FAMILIES[:-1], rows=1000)
     assert len(before) == 93 and sum(len(r["arms"]) for r in before) == 316
     assert "TOTAL races=%d cells=%d" % (93 + len(algos), 316 + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
@@ -418,7 +410,7 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     algo_lines = [ln for ln in text.splitlines() if ln.startswith("RACE algos/")]
     assert algo_lines and all("[in source]" in ln or "not built yet: SKIPPED" in ln
                               for ln in algo_lines)
-    assert "ours-cpu: off (the board races only our GPU)" in text
+    assert "our CPU: never raced (the board races only our GPU)" in text
     # neural on Apple: the 12 GPU lanes (the 8 that ran our CPU binding left the board),
     # each `ours` plus its torch GPU arms: 52 cells (see test_plan_neural_identical_only_on_every_vendor)
     neural = bb.plan_races("apple", ["identical"], ["neural"])
@@ -669,7 +661,7 @@ CPU_ARMS = ["torch-cpu-eager-fp32", "torch-cpu-compile-fp32", "torch-cpu-eager-b
 
 @pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
 def test_plan_neural_identical_only_on_every_vendor(vendor):
-    races = bb.plan_races(vendor, bb.modes_for(vendor), ["neural"], cpu_arm=False)
+    races = bb.plan_races(vendor, bb.modes_for(vendor), ["neural"])
     assert [r["id"] for r in races] == NEURAL_IDS
     for r in races:
         assert r["our_arms"] == {"ours": "identical"}
@@ -732,8 +724,7 @@ def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
 
 
 def test_neural_command_and_settings():
-    race = bb.plan_races("amd", ["identical"], ["neural"], ["lm-train-step"], neural_shape="small",
-                         cpu_arm=False)[0]
+    race = bb.plan_races("amd", ["identical"], ["neural"], ["lm-train-step"], neural_shape="small")[0]
     ctx = {"python": "py", "neural_driver": "drv", "vendor": "amd", "rounds": 4, "out": "/o",
            "round_seconds": 0}
     cmd, env, ceiling = bb.neural_cmd(ctx, race)
@@ -927,8 +918,7 @@ def test_neural_driver_inputs_and_quality(tmp_path):
 # --- the classical2 family ---------------------------------------------------
 
 def test_plan_classical2_per_vendor():
-    ap = {r["id"]: r for r in bb.plan_races("apple", bb.modes_for("apple"), ["classical2"],
-                                            cpu_arm=False)}
+    ap = {r["id"]: r for r in bb.plan_races("apple", bb.modes_for("apple"), ["classical2"])}
     umap = ap["classical2/umap/taxi/rows=full"]
     assert umap["our_arms"] == {"ours": "identical", "ours-fast": "fast"}
     assert umap["opponents"] == ["umap-learn-cpu", "umap-learn-cpu-unseeded"]
@@ -937,8 +927,7 @@ def test_plan_classical2_per_vendor():
     assert [i for i in ap if "/arima/" in i or "/ets/" in i] == [
         "classical2/arima/synthetic/rows=full", "classical2/ets/synthetic/rows=full"]
     assert ap["classical2/arima/synthetic/rows=full"]["opponents"] == ["statsmodels-cpu"]
-    nv = {r["id"]: r for r in bb.plan_races("nvidia", ["identical"], ["classical2"],
-                                            cpu_arm=False)}
+    nv = {r["id"]: r for r in bb.plan_races("nvidia", ["identical"], ["classical2"])}
     assert nv["classical2/umap/taxi/rows=full"]["arms"] == ["ours", "cuml-gpu"]
     assert nv["classical2/ivf/taxi/rows=full"]["opponents"] == ["cuvs-gpu"]
     assert nv["classical2/gmm/taxi/rows=full"]["opponents"] == ["sklearn-cpu"]
@@ -963,15 +952,13 @@ def test_plan_classical2_per_vendor():
 
 def test_classical2_identical_only_lane_has_no_fast_arm(monkeypatch):
     monkeypatch.setattr(bb.MORE, "has_fast", lambda lane: lane != "gmm")
-    r = bb.plan_races("apple", ["fast", "identical"], ["classical2"], ["gmm"], ["taxi"],
-                      cpu_arm=False)[0]
+    r = bb.plan_races("apple", ["fast", "identical"], ["classical2"], ["gmm"], ["taxi"])[0]
     assert r["our_arms"] == {"ours": "identical"} and "ours-fast" not in r["arms"]
     assert bb.plan_races("apple", ["fast"], ["classical2"], ["gmm"], ["taxi"]) == []
 
 
 def test_classical2_command_and_settings():
-    race = bb.plan_races("amd", ["identical"], ["classical2"], ["umap"], ["taxi"], 2000,
-                         cpu_arm=False)[0]
+    race = bb.plan_races("amd", ["identical"], ["classical2"], ["umap"], ["taxi"], 2000)[0]
     ctx = {"python": "py", "more_driver": "drv", "vendor": "amd", "rounds": 2, "out": "/o",
            "round_seconds": 0, "more_data": "/c/more"}
     cmd, env, ceiling = bb.more_cmd(ctx, race)
@@ -1118,7 +1105,7 @@ def _store_ctx(tmp_path):
            "python": "py", "tree_driver": "drv", "arm_budget_s": 60, "race_deadline_s": 600,
            "infer": False, "commit": "c0ffee", "out": str(tmp_path / "out"), "nice": 0}
     race = bb.plan_races("apple", ["identical"], ["trees"], ["gbdt-symmetric"], ["taxi"],
-                         None, cpu_arm=False)[0]
+                         None)[0]
     return ctx, race
 
 
@@ -1169,6 +1156,24 @@ def test_store_hit_constructs_then_skips_the_opponent_and_runs_ours_only(tmp_pat
     assert cat["source"].startswith("stored (measured 2026-09-29T12:00:00Z on m3ultra-b")
     assert cat["ratio_ours_identical_over"] == 0.5
     assert rec["stored_arms"] == ["catboost-cpu"] and rec["stored_now"] == 0
+
+
+def test_default_skips_unstored_opponents_with_opponents_races_them(tmp_path, monkeypatch):
+    ctx, race = _store_ctx(tmp_path)
+    _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.8"})
+    seen = []
+
+    def fake(ctx_, race_):
+        seen.append(race_)
+        cells = [dict(bb.base_cell(ctx_, race_, a, race_["our_arms"].get(a)), status="ok",
+                      median_ms=500.0, times_ms=[500.0], rounds=1) for a in race_["arms"]]
+        return {"cells": cells, "status": "done", "rc": 0, "finished": "now"}
+    monkeypatch.setattr(bb, "_run_race", fake)
+    rec = bb.run_race(ctx, race)                     # empty store, no flag: ours only
+    assert seen[-1]["opponents"] == [] and "catboost-cpu" not in seen[-1]["arms"]
+    assert rec["skipped_opponents"] == ["catboost-cpu"] and "catboost-cpu" not in rec["arms"]
+    rec = bb.run_race(dict(ctx, with_opponents=True), race)
+    assert seen[-1]["opponents"] == ["catboost-cpu"] and rec["skipped_opponents"] == []
 
 
 def test_store_reuses_only_the_same_read_back_version_and_device(tmp_path, monkeypatch):
@@ -1327,7 +1332,7 @@ def test_smoke_planned_refusal_passes_only_as_a_named_refusal():
 
 
 def test_shards_split_the_plan_round_robin_by_id():
-    races = bb.plan_races("nvidia", ["identical"], ["classical", "classical2"], cpu_arm=False)
+    races = bb.plan_races("nvidia", ["identical"], ["classical", "classical2"])
     a, b = bb.shard_races(races, "1/2"), bb.shard_races(races, "2/2")
     ids = sorted(r["id"] for r in races)
     assert sorted(r["id"] for r in a + b) == ids and not {r["id"] for r in a} & {r["id"] for r in b}
@@ -1348,7 +1353,7 @@ def _write_smoke(path, races, vendor="apple", files=None, fail=()):
 
 
 def test_smoke_gate_needs_every_planned_race_in_the_union_of_shards(tmp_path):
-    races = bb.plan_races("apple", ["identical"], ["classical"], cpu_arm=False)
+    races = bb.plan_races("apple", ["identical"], ["classical"])
     out = tmp_path / "board"
     assert "no SMOKE PASS for" in bb.smoke_gate(str(out), "apple", races)
     one, two = bb.shard_races(races, "1/2"), bb.shard_races(races, "2/2")
@@ -1385,7 +1390,7 @@ def test_full_board_refuses_without_smoke_and_records_an_override(env):
 
 def test_full_board_starts_after_a_smoke_pass(env):
     races = bb.plan_races("apple", bb.modes_for("apple"), bb.FAMILIES, ["rf", "kmeans"],
-                          bb.DATASETS, None, "full", cpu_arm=False)
+                          bb.DATASETS, None, "full")
     _write_smoke(env["tmp"] / "out-smoke" / "smoke.json", races)
     assert _run(env, "--rows", "full") == 0
     res = json.loads((env["out"] / "board.json").read_text())
@@ -1396,7 +1401,7 @@ def test_full_board_starts_after_a_smoke_pass(env):
 
 @pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
 def test_board_races_only_our_gpu(vendor):
-    races = bb.plan_races(vendor, bb.modes_for(vendor), cpu_arm=True)   # cpu_arm is ignored
+    races = bb.plan_races(vendor, bb.modes_for(vendor))
     for r in races:
         assert not any(bb._ours_runs_on_cpu(r["family"], r["lane"], a) for a in r["our_arms"]), r["id"]
         opp = r["opponents"]

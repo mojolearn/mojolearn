@@ -71,6 +71,7 @@ from cholesky.host.chol_oracle import (
 )
 from bindings.gp_host_predict import (
     _rebuild_kernel_spec,
+    gpc_ovr_combine_binding,
     gpc_predict_binding,
     gpr_predict_binding,
 )
@@ -612,6 +613,7 @@ def PyInit__mojolearn_gp_host() abi("C") -> PythonObject:
         module.def_function[gp_restart_uniforms_binding]("gp_restart_uniforms")
         module.def_function[gpc_fit_binding]("gpc_fit")
         module.def_function[gpc_predict_binding]("gpc_predict")
+        module.def_function[gpc_ovr_combine_binding]("gpc_ovr_combine")
         module.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         module.def_function[cholesky_factor_binding]("cholesky_factor")
         module.def_function[cholesky_solve_binding]("cholesky_solve")

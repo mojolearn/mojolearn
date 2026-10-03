@@ -136,7 +136,7 @@ from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 from core.device_scan import (
     NONFINITE_NONE,
     SCAN_TPB,
@@ -154,7 +154,7 @@ from checks.numerics import (
     identical_rsqrt,
     identical_sqrt,
 )
-from training.checks.optimizer_oracle import (
+from training.checks.optimizer_contract import (
     OPT_ADAMW,
     OPT_SGD,
     OptimizerConfig,

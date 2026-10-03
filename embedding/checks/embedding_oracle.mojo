@@ -2,7 +2,6 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host FP32 oracle of profile `mojolearn.identical.embedding.fp32.v1`. The contract is `embedding/IDENTICAL_EMBEDDING_CONTRACT.md` and this file is that contract in code -- the two must be read together and every function below cites its section."""
 
-from core.host_lanes import all_finite
 from checks.numerics import ftz, identical_mul_add
 
 
@@ -37,29 +36,35 @@ struct EmbConfig(Copyable, Movable):
 
 
 
+def nonfinite_refusal(name: String, i: Int, v: Float32) raises:
+    """The refusal of `v` at flat index `i` of `name` when it is a NaN or an
+    infinity (by its bits); returns for a finite value. The one wording the
+    host scan below and the device scan's hit (`bindings/
+    _mojolearn_embedding.mojo`) both raise."""
+    var au = rebind[UInt32](v.to_bits()) & UInt32(0x7FFFFFFF)
+    if au > EMB_POS_INF_BITS:
+        raise Error(
+            String("embedding: NaN in ")
+            + name
+            + " at flat index "
+            + String(i)
+            + " REFUSED (row 39: NaN payloads are vendor-shaped; no"
+            + " stage may record one)"
+        )
+    if au == EMB_POS_INF_BITS:
+        raise Error(
+            String("embedding: infinity in ")
+            + name
+            + " at flat index "
+            + String(i)
+            + " REFUSED (contract 9.1)"
+        )
+
+
 def refuse_nonfinite(name: String, values: List[Float32]) raises:
     """IDENTITY_PATHS row 39: a NaN or an infinity in an input is REFUSED BY NAME before any recorded stage. All four must stay the same shape."""
-    if all_finite(values):
-        return  # the bit test below, as lanes (lane neural-cpu); nothing to refuse
     for i in range(len(values)):
-        var au = rebind[UInt32](values[i].to_bits()) & UInt32(0x7FFFFFFF)
-        if au > EMB_POS_INF_BITS:
-            raise Error(
-                String("embedding: NaN in ")
-                + name
-                + " at flat index "
-                + String(i)
-                + " REFUSED (row 39: NaN payloads are vendor-shaped; no"
-                + " stage may record one)"
-            )
-        if au == EMB_POS_INF_BITS:
-            raise Error(
-                String("embedding: infinity in ")
-                + name
-                + " at flat index "
-                + String(i)
-                + " REFUSED (contract 9.1)"
-            )
+        nonfinite_refusal(name, i, values[i])
 
 
 def emb_refuse_shape(cfg: EmbConfig, n_positions: Int) raises:

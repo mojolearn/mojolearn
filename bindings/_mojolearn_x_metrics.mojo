@@ -9,9 +9,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.memory import bitcast
-from x_metrics.epilogue import binary_auc, binary_ap, roc_arrays, expected_mi, row_sum_range
-from x_metrics.epilogue import scatter_rows, encode_small_i64, first_rows_i32, ovo_pair
-from x_metrics.epilogue import expected_mi_tasks, row_sum_range_tasks
+from x_metrics.epilogue import roc_arrays, expected_mi, row_sum_range
+from x_metrics.epilogue import scatter_rows, first_rows_i32, ovo_pair
 from x_metrics.epilogue import (
     pr_arrays, det_arrays, ndcg_mean, class_sums, auc_xy, mi_contingency, centroids_f32, ch_extra,
     db_score,
@@ -96,18 +95,6 @@ def dev_live_binding() raises -> PythonObject:
     return PythonObject(X_METRICS_STORE.get_or_create_ptr()[].live)
 
 
-def curve_auc_binding(arena: PythonObject, fps: PythonObject, tps: PythonObject, keep: PythonObject,
-                      c: PythonObject, max_fpr_bits: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo binary_auc (lane metrics-apple2)."""
-    var mf = bitcast[DType.float64](Int64(Int(py=max_fpr_bits)))
-    return PythonObject(binary_auc(Int(py=arena), Int(py=fps), Int(py=tps), Int(py=keep), Int(py=c), mf))
-
-
-def curve_ap_binding(arena: PythonObject, fps: PythonObject, tps: PythonObject, c: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo binary_ap (lane metrics-apple2)."""
-    return PythonObject(binary_ap(Int(py=arena), Int(py=fps), Int(py=tps), Int(py=c)))
-
-
 def curve_roc_binding(arena: PythonObject, offs: PythonObject, c: PythonObject, drop: PythonObject,
                       outs: PythonObject) raises -> PythonObject:
     """x_metrics/epilogue.mojo roc_arrays (lane metrics-apple2): offs =
@@ -130,12 +117,6 @@ def row_sum_range_binding(s: PythonObject, n: PythonObject, k: PythonObject, out
     return PythonObject(0)
 
 
-def encode_small_binding(src: PythonObject, n: PythonObject, classes: PythonObject, max_classes: PythonObject,
-                         codes: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo encode_small_i64 (lane metrics-apple3)."""
-    return PythonObject(encode_small_i64(Int(py=src), Int(py=n), Int(py=classes), Int(py=max_classes), Int(py=codes)))
-
-
 def first_rows_binding(codes: PythonObject, n: PythonObject, k: PythonObject, out_addr: PythonObject) raises -> PythonObject:
     """x_metrics/epilogue.mojo first_rows_i32 (lane metrics-apple3)."""
     first_rows_i32(Int(py=codes), Int(py=n), Int(py=k), Int(py=out_addr))
@@ -150,19 +131,6 @@ def ovo_pair_binding(codes: PythonObject, scores: PythonObject, dims: PythonObje
         Int(py=codes), Int(py=scores), Int(py=dims[0]), Int(py=dims[1]), Int(py=dims[2]), Int(py=dims[3]),
         Int(py=outs[0]), Int(py=outs[1]), Int(py=outs[2]), Int(py=outs[3]), Int(py=dims[4]),
     ))
-
-
-def expected_mi_tasks_binding(a: PythonObject, na: PythonObject, b: PythonObject, nb: PythonObject,
-                              n: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo expected_mi_tasks (lane metrics-apple3)."""
-    return PythonObject(expected_mi_tasks(Int(py=a), Int(py=na), Int(py=b), Int(py=nb), Int(py=n)))
-
-
-def row_sum_range_tasks_binding(s: PythonObject, n: PythonObject, k: PythonObject,
-                                out_addr: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo row_sum_range_tasks (lane metrics-apple3)."""
-    row_sum_range_tasks(Int(py=s), Int(py=n), Int(py=k), Int(py=out_addr))
-    return PythonObject(0)
 
 
 def scatter_rows_binding(src: PythonObject, dst: PythonObject, idx: PythonObject, n: PythonObject,
@@ -250,17 +218,12 @@ def PyInit__mojolearn_x_metrics() abi("C") -> PythonObject:
         m.def_function[dev_put_binding]("x_metrics_dev_put")
         m.def_function[dev_free_binding]("x_metrics_dev_free")
         m.def_function[dev_live_binding]("x_metrics_dev_live")
-        m.def_function[curve_auc_binding]("x_metrics_curve_auc")
-        m.def_function[curve_ap_binding]("x_metrics_curve_ap")
         m.def_function[curve_roc_binding]("x_metrics_curve_roc")
         m.def_function[expected_mi_binding]("x_metrics_expected_mi")
         m.def_function[row_sum_range_binding]("x_metrics_row_sum_range")
         m.def_function[scatter_rows_binding]("x_metrics_scatter_rows")
-        m.def_function[encode_small_binding]("x_metrics_encode_small_i64")
         m.def_function[first_rows_binding]("x_metrics_first_rows")
         m.def_function[ovo_pair_binding]("x_metrics_ovo_pair")
-        m.def_function[expected_mi_tasks_binding]("x_metrics_expected_mi_tasks")
-        m.def_function[row_sum_range_tasks_binding]("x_metrics_row_sum_range_tasks")
         m.def_function[curve_pr_binding]("x_metrics_curve_pr")
         m.def_function[curve_det_binding]("x_metrics_curve_det")
         m.def_function[ndcg_mean_binding]("x_metrics_ndcg_mean")

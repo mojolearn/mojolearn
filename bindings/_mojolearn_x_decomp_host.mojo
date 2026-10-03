@@ -11,13 +11,13 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_decomp.api import (
-    cd_rows_py, chol_py, colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
+    cd_rows_py, chol_py, colsum_py, eigh_py, eigh_batch_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
     geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, als_cg_rows_py, mcd_py, lda_online_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
 from x_decomp.graph_host import (
-    graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_lle_iw_py, graph_components_py, graph_join_py,
+    graph_knn_py, graph_knn_dense_py, graph_radius_py, graph_radius_geo_py, graph_lle_iw_py, graph_components_py, graph_join_py,
     graph_dijkstra_py,
 )
 
@@ -59,12 +59,17 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
         m.def_function[knn_select_py[HostExec]]("x_decomp_knn_select")
         m.def_function[chol_py[HostExec]]("x_decomp_chol")
         m.def_function[eigh_py[HostExec]]("x_decomp_eigh")
+        m.def_function[eigh_batch_py[HostExec]]("x_decomp_eigh_batch")
+        m.def_function[lle_local_py[HostExec]]("x_decomp_lle_local")
+        m.def_function[lle_apply_py[HostExec]]("x_decomp_lle_apply")
         m.def_function[cd_rows_py[HostExec]]("x_decomp_cd_rows")
         m.def_function[orth_py[HostExec]]("x_decomp_orth")
         m.def_function[orth_diag_py[HostExec]]("x_decomp_orth_diag")
         m.def_function[svd_py[HostExec]]("x_decomp_svd")
         m.def_function[lasso_rows_py[HostExec]]("x_decomp_lasso_rows")
         m.def_function[omp_rows_py[HostExec]]("x_decomp_omp_rows")
+        m.def_function[lars_rows_py[HostExec]]("x_decomp_lars_rows")
+        m.def_function[lu_aux_py[HostExec]]("x_decomp_lu_aux")
         m.def_function[rand_gamma_py[HostExec]]("x_decomp_rand_gamma")
         m.def_function[lda_rows_py[HostExec]]("x_decomp_lda_rows")
         m.def_function[dijkstra_rows_py[HostExec]]("x_decomp_dijkstra_rows")
@@ -87,6 +92,7 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
         m.def_function[graph_knn_py]("x_decomp_graph_knn")
         m.def_function[graph_knn_dense_py]("x_decomp_graph_knn_dense")
         m.def_function[graph_radius_py]("x_decomp_graph_radius")
+        m.def_function[graph_radius_geo_py]("x_decomp_graph_radius_geo")
         m.def_function[graph_lle_iw_py]("x_decomp_graph_lle_iw")
         m.def_function[graph_components_py]("x_decomp_graph_components")
         m.def_function[graph_join_py]("x_decomp_graph_join")

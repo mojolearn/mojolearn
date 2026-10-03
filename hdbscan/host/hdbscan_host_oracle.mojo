@@ -42,7 +42,7 @@ restated beside the device line they mirror:
                             cluster_stability_kernel
     selection               select.mojo::excess_of_mass (and perform_bfs's
                             negation) or leaf
-    labels                  extract.mojo::do_labelling_on_host and the
+    labels                  labelling_host.mojo::do_labelling_on_host and the
                             label map
 
 WHAT IS REFUSED, BY NAME, AS ON THE DEVICE: fewer than two rows, no column,
@@ -75,7 +75,7 @@ from hdbscan.impl.prediction_data import (
     refuse_soft_clustering_inputs,
 )
 from hdbscan.impl.detail.condense import _add_edge, _collapse, bfs_from_node
-from hdbscan.impl.detail.extract import do_labelling_on_host
+from hdbscan.host.labelling_host import do_labelling_on_host
 from hdbscan.impl.detail.sparse_mr import (
     boruvka_rounds_on_tree,
     mr_edge_weight,
@@ -84,6 +84,7 @@ from hdbscan.impl.detail.sparse_mr import (
 )
 from cluster.host.host_cells import ftz_v, mul_add_v
 from hdbscan.impl.detail.stabilities import (
+    stability_fold_host,
     stability_order_key_bits,
     stability_order_unkey_bits,
 )
@@ -1087,7 +1088,8 @@ def hdbh_condense(
 
 def hdbh_stabilities(tree: CondensedHierarchy) raises -> List[Float32]:
     """`compute_stabilities`: `births_init_kernel` then
-    `cluster_stability_kernel`, one cluster at a time."""
+    `cluster_stability_kernel`, one cluster at a time, its sum in the
+    kernel's blocked order (`stability_fold_host`)."""
     var n_clusters = tree.n_clusters
     var n_edges = tree.n_edges
     if n_clusters < 1:
@@ -1120,12 +1122,9 @@ def hdbh_stabilities(tree: CondensedHierarchy) raises -> List[Float32]:
                 birth_bits = stability_order_unkey_bits(seg_key)
             births[c] = bitcast[DType.float32](birth_bits)
         var birth = bitcast[DType.float32](birth_bits)
-        var acc = Float32(0.0)
-        for i in range(lo, hi):
-            var term = ftz(tree.lambdas[i] - birth)
-            var size_f = tree.sizes[i].cast[DType.float32]()
-            acc = ftz(identical_mul_add(term, size_f, acc))
-        stab[c] = acc
+        # the device kernel's blocked order (STAB_FOLD partials, then the
+        # pairwise tree), the one function both columns' order lives in.
+        stab[c] = stability_fold_host(tree.lambdas, tree.sizes, lo, hi, birth)
     return stab^
 
 

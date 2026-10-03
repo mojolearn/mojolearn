@@ -1,0 +1,6 @@
+CMD lane/apple-fast-dwgap2 dw2-part-vec4-taxi AFT_OUT=$HOME/aft-ab/dw2-part-vec4-taxi bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 2 "" "-D MOJOLEARN_GBDT_DW2_PART_VEC4"
+CMD lane/apple-fast-dwgap2 dw2-part-vec4-istella AFT_OUT=$HOME/aft-ab/dw2-part-vec4-istella bash tools/aft_ab.sh gbdt gbdt-depthwise istella 2 "" "-D MOJOLEARN_GBDT_DW2_PART_VEC4"
+CMD lane/apple-fast-dwgap2 dw2-scan-smem-taxi AFT_OUT=$HOME/aft-ab/dw2-scan-smem-taxi bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 2 "" "-D MOJOLEARN_GBDT_DW2_SCAN_SMEM"
+CMD lane/apple-fast-dwgap2 dw2-scan-smem-istella AFT_OUT=$HOME/aft-ab/dw2-scan-smem-istella bash tools/aft_ab.sh gbdt gbdt-depthwise istella 2 "" "-D MOJOLEARN_GBDT_DW2_SCAN_SMEM"
+CMD lane/apple-fast-dwgap2 dw2-copy-zero-taxi AFT_OUT=$HOME/aft-ab/dw2-copy-zero-taxi bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 2 "" "-D MOJOLEARN_GBDT_DW2_COPY_ZERO"
+CMD lane/apple-fast-dwgap2 dw2-copy-zero-istella AFT_OUT=$HOME/aft-ab/dw2-copy-zero-istella bash tools/aft_ab.sh gbdt gbdt-depthwise istella 2 "" "-D MOJOLEARN_GBDT_DW2_COPY_ZERO"

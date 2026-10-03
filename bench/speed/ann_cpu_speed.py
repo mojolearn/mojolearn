@@ -13,6 +13,9 @@ Data: the first `--n` rows of `--data` (an .npz with an `X` array, staged
 from R2 by tools/dataset_store.sh; HIGGS is 11M x 28), standardized per
 column in float64 then cast to float32; queries are the next `--m` rows.
 Without `--data`, a seeded Gaussian blob mixture (for a smoke only).
+
+OUR CPU IS NEVER TIMED (Andrew, Oct 2 2026): on the host column this script prints digests only: the
+MOJOLEARN_VENDOR=cpu run drops every *_s field and keeps the digests.
 """
 import argparse
 import hashlib
@@ -64,6 +67,19 @@ def gpu_fit(args, algo):
     return est, dt
 
 
+def _host_column():
+    """True when this process runs our host (CPU) column: MOJOLEARN_VENDOR=cpu
+    or a CPU-only install. Our CPU is never timed (Andrew, Oct 2 2026): there
+    this script prints digests only."""
+    if os.environ.get("MOJOLEARN_VENDOR", "").strip().lower() == "cpu":
+        return True
+    try:
+        import mojolearn
+        return mojolearn.vendor() == "cpu"
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def timed(fn):
     t = time.perf_counter()
     r = fn()
@@ -100,7 +116,13 @@ def main():
     x, q = load(args, args.n, args.m)
     k = args.k
 
+    host = _host_column()
+    if host:
+        print("%s: %s (no *_s fields)" % ("ann_cpu_speed", "OUR CPU IS NEVER TIMED (Andrew, Oct 2 2026): on the host column this script prints digests only"), flush=True)
+
     def cell(name, **kv):
+        if host:
+            kv = {k_: v_ for k_, v_ in kv.items() if not k_.endswith("_s")}
         rec["cells"][name] = kv
         print(json.dumps({name: kv}), flush=True)
 

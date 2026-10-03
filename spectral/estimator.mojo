@@ -69,7 +69,7 @@ comptime _DEVCTX_SLOT = "MojoMetricsContextIdentical" if _DEVCTX_MODE == _DEVCTX
 
 
 from core.identity_trace import IdentityTrace
-from spectral.host.spectral_predict_host import (
+from spectral.impl.spectral_predict_common import (
     SpectralPrediction,
     SpectralPredictionState,
 )

@@ -441,7 +441,7 @@ def _materialize(obj, name):
         # answer read from the type set; a subclass (a NumPy scalar is one)
         # or anything else takes the walks, which define the refusal.
         kinds = set(map(type, flat))
-        if kinds and kinds <= _SCALAR_TYPES and hotpath_enabled():
+        if kinds and kinds <= _SCALAR_TYPES:
             return Array._from_flat(flat, shape, "<f8" if float in kinds else "<i8"), True
         if any(isinstance(v, float) for v in flat):
             return Array._from_flat(flat, shape, "<f8"), True
@@ -492,7 +492,7 @@ def _materialize(obj, name):
                 n = len(raw) // 2
                 values = struct.unpack("<%de" % n, raw) if n else ()
                 return Array._from_flat(list(values), shape, "<f2"), True
-            if _CODE[target] == letter and hotpath_enabled():
+            if _CODE[target] == letter:
                 # DEVIATION 3105: a strided view whose dtype an Array already
                 # holds needs no per-element conversion. `array.array(code,
                 # <memoryview>)` builds a Python object per element (22 ns);
@@ -835,21 +835,17 @@ def all_finite(arr):
 _NATIVE = {}
 _NATIVE_MISSING = set()
 
-#: lane/python-hotpath (2026-09-17). `MOJOLEARN_HOTPATH=python` sends every
-#: DEVIATION 3100-3107 seam down the Python routine it replaced: the
-#: reference arm of `tests/test_hotpath_native.py` and of an A/B timing. Any
-#: other value, or none, takes the compiled helper when the binary has it.
-_HOTPATH_ENV = "MOJOLEARN_HOTPATH"
-
-
 def hotpath_enabled():
-    import os
-    return os.environ.get(_HOTPATH_ENV, "").strip().lower() != "python"
+    """Always True: the compiled helpers are the one route. The
+    `MOJOLEARN_HOTPATH=python` reference arm (lane/python-hotpath) is
+    deleted (cpu-gpu-cleanup c-core: an env switch picking a route). Kept
+    only so callers outside c-core still import it; they drop the call."""
+    return True
 
 
 def _native_optional(key):
     """`_native(key)`, or None when this install's binary does not carry
-    `key` or `MOJOLEARN_HOTPATH=python` is set.
+    `key`.
 
     FOR THE lane/python-hotpath HELPERS ONLY, and the reason it may return
     None where `_native` raises: each of those helpers stands in for a
@@ -858,8 +854,6 @@ def _native_optional(key):
     rebuilt, a core host binding from before 2026-09-17) computes the same
     answer more slowly instead of refusing to run. The miss is remembered,
     so a missing symbol costs one lookup per process."""
-    if not hotpath_enabled():
-        return None
     fn = _NATIVE.get(key)
     if fn is not None:
         return fn

@@ -11,7 +11,7 @@ comptime _DEVCTX_SLOT = "MojoPreprocessingContextIdentical" if _DEVCTX_MODE == _
 
 from metrics.checks.device_io import upload_f32
 from core.device_scan import device_first_nonfinite
-from preprocessing.minmax import minmax_fit, minmax_transform, minmax_transform_into
+from preprocessing.minmax import PREP_FAST_MINMAX, minmax_fit, minmax_fit_fast, minmax_transform, minmax_transform_into
 from preprocessing.standard import standard_fit, standard_transform, standard_transform_into
 
 
@@ -217,7 +217,9 @@ def minmax_fit_direct(
     if device_first_nonfinite(ctx,dx,n*d) >= 0:
         _ = dx^
         return 0
-    var result = minmax_fit(ctx,dx,n,d,lower,upper)
+    # lane/apple-fast-prep: under PREP_FAST_MINMAX the extrema pass is the
+    # row-tiled kernel (minmax_fit_fast); otherwise minmax_fit itself
+    var result = minmax_fit_fast(ctx,dx,n,d,lower,upper)
     _ = dx^
     _ = ctx^
     finite_values(result)
@@ -251,3 +253,43 @@ def standard_fit_direct(
     for i in range(3*d):
         output[i] = result[i]
     return 1
+
+
+def minmax_transform_direct(
+    x: MutPointer[Float32, MutUntrackedOrigin], scale: MutPointer[Float32, MutUntrackedOrigin],
+    offset: MutPointer[Float32, MutUntrackedOrigin], output: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int, d: Int, inverse: Int, clip: Int, lower: Float32, upper: Float32,
+) raises -> Int:
+    """lane/apple-fast-prep (2026-10-02), `PREP_FAST_MINMAX` only (the binding
+    registers it only then): `minmax_transform_host_into` from the caller's
+    own buffers. The List route copies the n*d words into a List
+    (bindings `load`, hostptr read_f32), walks them on one thread
+    (`finite_values`) and copies them again in `upload_f32` before the
+    device copy, and the Python side walked them once more (`all_finite`):
+    four host passes over Istella's 880 MB around one kernel (board
+    minmax-scaler Istella 5.7x behind scikit-learn). Here X, scale and
+    offset go up from their addresses and the only scan is the device's,
+    of the output: 1 when the n*d words were written, 0 (nothing written)
+    when the output holds a nonfinite word, which the caller tells apart
+    (a finite input overflowed, else its NaN route). The caller holds scale
+    and offset finite and scale positive. Same kernel, same words."""
+    validate_dimensions(n,d,lower,upper)
+    if inverse < 0 or inverse > 1 or clip < 0 or clip > 1:
+        raise Error("MinMaxScaler: invalid transform parameters")
+    comptime if not PREP_FAST_MINMAX:
+        raise Error("MinMaxScaler: minmax_transform_direct is a FAST Apple entry")
+    else:
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var dx = _upload_direct(ctx,x,n*d)
+        var ds = _upload_direct(ctx,scale,d)
+        var dm = _upload_direct(ctx,offset,d)
+        var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
+        minmax_transform_into(ctx,dx,ds,dm,dout,n,d,inverse,clip,lower,upper)
+        var ok = 1
+        if device_first_nonfinite(ctx,dout,n*d) >= 0:
+            ok = 0
+        else:
+            ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
+            ctx.synchronize()
+        _ = dout^; _ = dm^; _ = ds^; _ = dx^; _ = ctx^
+        return ok
