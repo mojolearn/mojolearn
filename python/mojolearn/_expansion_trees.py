@@ -25,7 +25,7 @@ coalition weights and marginals, Bagging's oob R^2 (`_portable_math.fsum` over
 n) and AdaBoost's sample_weight normalization are still binary64 Python over
 rows. CalibratedClassifierCV's per-class epilogue moved to xtrees on lane
 py-misc-prep (strided platt/isotonic apply, `complement_pairs`, native class
-columns and 0/1 targets); `_CAL_NATIVE = False` is its Python reference.
+columns and 0/1 targets; its Python reference arm is deleted).
 """
 import numbers
 import os
@@ -494,10 +494,22 @@ def _trees_switch(est, bit):
     return callable(query) and (int(query()) & bit) != 0
 
 
+def _trees_py2mojo(est):
+    """True when `est`'s x_trees binding runs the wrapper glue (cv folds,
+    OneVsRest targets, MultiOutputClassifier columns, binary (1 - p, p)
+    rows) itself: `x_trees_py2mojo`, 1 in every build unless `-D
+    MOJOLEARN_PY2MOJO_trees_OFF` (lane apple-fast-py2mojo-trees, the A/B
+    arm A that restores main's Python row loops)."""
+    query = getattr(est._bind(), "x_trees_py2mojo", None)
+    return callable(query) and int(query()) != 0
+
+
 def _trees_native_glue(est):
-    """`est` when MOJOLEARN_TE_NATIVE_SPLITS selects the device cv
-    bookkeeping for it (FAST tier, a binding that carries
-    `x_trees_device_folds`), else None."""
+    """`est` when its binding builds the cv bookkeeping (`_trees_py2mojo`,
+    or MOJOLEARN_TE_NATIVE_SPLITS on the FAST tier with a binding that
+    carries `x_trees_device_folds`), else None."""
+    if _trees_py2mojo(est):
+        return est
     if not _trees_switch(est, _TE_NATIVE_SPLITS):
         return None
     return est if callable(getattr(est._bind(), "x_trees_device_folds", None)) else None
@@ -511,6 +523,43 @@ def _trees_ada_session_default(est):
     if _trees_switch(est, _TE_ADA_SESSION_SHARE):
         return "share"
     return "1" if _trees_switch(est, _TE_ADA_SESSION) else "0"
+
+
+def _trees_label_words(Y):
+    """A numeric 2-D label buffer as a C-order (n, m) Array of 8-byte words
+    whose `tolist()` labels are the Python ones: float64 for a float dtype,
+    int64 for a signed or unsigned int dtype that fits it; None for anything
+    else (bool, str, object, nested lists, uint64), which keeps the Python
+    rows (lane apple-fast-py2mojo-trees)."""
+    d = getattr(Y, "dtype", None)
+    if getattr(Y, "ndim", None) != 2:
+        return None
+    kind = getattr(d, "kind", None)
+    if kind is None:
+        if not isinstance(d, str):
+            return None
+        kind = d.lstrip("<>=|")[:1]
+    if kind == "f":
+        return as_f64_c(Y, ndim=2, name="Y")[0]
+    if kind not in ("i", "u"):
+        return None
+    arr, _ = _materialize(Y, "Y")
+    if arr.ndim != 2 or arr.dtype in ("<u8", ">u8"):
+        return None
+    if arr.dtype != "<i8":
+        arr = arr.astype("<i8")
+    return arr._as_c()
+
+
+def _trees_binary_proba(est, p, n):
+    """(n, 2) float64 rows (1 - p, p) of a float32 positive-class column, in
+    the binding (x_trees_binary_proba: the exact widening and one IEEE
+    subtract, the Python `[[1.0 - v, v] for v in p.tolist()]` word for word;
+    lane apple-fast-py2mojo-trees)."""
+    p = as_f32_c(p, ndim=1, name="p")[0]
+    out = empty((2 * n,), "<f8")
+    est._bind().x_trees_binary_proba(addr_ro(p, name="p"), addr(out, name="proba"), [n])
+    return out.reshape((n, 2))
 
 
 def _trees_float_dtype(Y):
@@ -2345,6 +2394,10 @@ class MultiOutputClassifier(_TreesWrapperBase):
 
     def fit(self, X, Y, sample_weight=None):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
+        if _trees_py2mojo(self):
+            W = _trees_label_words(Y)
+            if W is not None:
+                return self._fit_words(Xa, W, sample_weight)
         Ya = None
         if _trees_native_glue(self) is not None and _trees_float_dtype(Y):
             # a float Y: each column natively (x_trees_column_f64), the same
@@ -2376,13 +2429,59 @@ class MultiOutputClassifier(_TreesWrapperBase):
         self._fitted = True
         return self
 
+    def _fit_words(self, Xa, W, sample_weight):
+        """`fit` for a numeric Y (`_trees_label_words`): the label columns are
+        one native transpose (x_trees_transpose_f64 moves the 8-byte words of
+        an int64 or float64 Y), each encoded natively; the same classes and
+        codes the Python `tolist()` columns gave (lane apple-fast-py2mojo-trees)."""
+        n, m = W.shape
+        if n != Xa.shape[0]:
+            raise ValueError(f"Y has {n} rows, X has {Xa.shape[0]}")
+        T = empty((m * n,), W.dtype)
+        self._bind().x_trees_transpose_f64(addr_ro(W, name="Y"), addr(T, name="Y^T"), [n, m])
+        T = T.reshape((m, n))
+        self.estimators_, self.classes_ = [], []
+        for j in range(m):
+            classes, codes = encode_labels(T[j])
+            e = _trees_clone(self.estimator)
+            e.fit(Xa, codes) if sample_weight is None else e.fit(Xa, codes, sample_weight=sample_weight)
+            self.estimators_.append(e)
+            self.classes_.append(classes)
+        self.n_features_in_ = Xa.shape[1]
+        self._fitted = True
+        return self
+
     def predict(self, X):
         """(n, n_outputs): an int64 or float64 Array for numeric labels."""
         Xa = self._check_X(X)
+        if _trees_py2mojo(self):
+            out = self._predict_stacked(Xa)
+            if out is not None:
+                return out
         cols = [decode_labels(c, as_i32_c(e.predict(Xa), ndim=1, name="codes")[0]).tolist()
                 for e, c in zip(self.estimators_, self.classes_)]
         kind = "<i8" if all(isinstance(v, int) for col in cols for v in col[:1]) else "<f8"
         return Array.from_list([list(r) for r in zip(*cols)], kind)
+
+    def _predict_stacked(self, Xa):
+        """`predict` with the decoded columns stacked natively
+        (x_trees_stack_w64), or None when some output's classes are not all
+        int or all float (labels no Array holds take the Python rows). The
+        dtype rule is the Python one: int64 when every column is int64, else
+        float64 with the int columns widened exactly as `Array.from_list`
+        did (lane apple-fast-py2mojo-trees)."""
+        n = Xa.shape[0]
+        cols = []
+        for e, c in zip(self.estimators_, self.classes_):
+            col = decode_labels(c, as_i32_c(e.predict(Xa), ndim=1, name="codes")[0])
+            if not isinstance(col, Array) or col.dtype not in ("<i8", "<f8"):
+                return None
+            cols.append(col)
+        kind = "<i8" if all(col.dtype == "<i8" for col in cols) else "<f8"
+        cols = [col if col.dtype == kind else col.astype(kind) for col in cols]
+        out = empty((n * len(cols),), kind)
+        self._bind().x_trees_stack_w64([addr_ro(col, name="column") for col in cols], addr(out, name="Y"), [n])
+        return out.reshape((n, len(cols)))
 
     def predict_proba(self, X):
         """A list, one (n, n_classes_j) float64 Array per output."""
@@ -2479,6 +2578,8 @@ class OneVsRestClassifier(_TreesWrapperBase):
         acc = zeros((n * k,), "<f8")
         rows = _trees_arange(n)
         if k == 2:
+            if _trees_py2mojo(self):
+                return _trees_binary_proba(self, self._proba_positive(self.estimators_[0], Xa), n)
             p = self._proba_positive(self.estimators_[0], Xa).tolist()
             return Array.from_list([[1.0 - v, v] for v in p], "<f8")
         for j, e in enumerate(self.estimators_):
@@ -2498,15 +2599,10 @@ class OneVsRestClassifier(_TreesWrapperBase):
 # column when binary). DEVIATIONS: Platt's minimiser is Newton with
 # backtracking (xtrees/ops.mojo platt_fit) on sklearn's objective, not
 # L-BFGS; the default estimator is this library's LinearSVC as sklearn's.
-#: lane py-misc-prep: CalibratedClassifierCV's per-class epilogue in
-#: xtrees (strided calibrators, native columns and 0/1 targets); False (or
-#: MOJOLEARN_HOTPATH=python) is the Python reference route (the before arm).
-_CAL_NATIVE = True
-
-
-def _cal_native(est):
-    from ._buffer import hotpath_enabled
-    return _CAL_NATIVE and hotpath_enabled() and hasattr(est._bind(), "x_trees_platt_apply_strided")
+#: CalibratedClassifierCV's per-class epilogue runs in xtrees (strided
+#: calibrators, native columns and 0/1 targets); the Python reference route
+#: (an [fb] arm no install reached: every x_trees binding carries the strided
+#: entries) is deleted (lane apple-fast-py2mojo-trees).
 
 
 #: lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
@@ -2578,53 +2674,25 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         return acc.reshape((n, k))
 
     def _fit_calibrators(self, S, codes):
-        if _cal_native(self):
-            return self._fit_calibrators_native(S, codes)
-        n, c = S.shape
-        b = self._bind()
-        cl = codes.tolist()
-        cals = []
-        for j in range(c):
-            cls = 1 if c == 1 else j
-            f = self._column64(S, j)
-            yj = Array.from_list([1 if v == cls else 0 for v in cl], "<i4")
-            if self.method == "sigmoid":
-                ab = zeros((2,), "<f8")
-                b.x_trees_platt_fit(addr_ro(f, name="f"), addr_ro(yj, name="y"), addr(ab, name="ab"), [n])
-                cals.append(("sigmoid", tuple(ab.tolist())))
-            else:
-                y64 = Array.from_list([float(v) for v in yj.tolist()], "<f8")
-                kx, ky = empty((n,), "<f8"), empty((n,), "<f8")
-                m = int(b.x_trees_isotonic_fit(addr_ro(f, name="x"), addr_ro(y64, name="y"), addr(kx, name="kx"),
-                                               addr(ky, name="ky"), [n]))
-                cals.append(("isotonic", (kx[0:m], ky[0:m], m)))
-        return cals
-
-    def _column64(self, S, j):
-        n, c = S.shape
-        if c == 1:
-            return S.reshape((n,))
-        v = S.tolist()
-        return Array.from_list([row[j] for row in v], "<f8")
-
-    def _fit_calibrators_native(self, S, codes):
-        """`_fit_calibrators` with the class column and its 0/1 target made
-        natively (x_trees_column_f64, x_trees_indicator_codes): the same
-        float64 and int32 words the list comprehensions built."""
+        """One calibrator per class column, the column and its 0/1 target
+        made natively (one x_trees_transpose_f64 of the score block,
+        x_trees_indicator_codes): the same float64 and int32 words the old
+        list comprehensions built."""
         n, c = S.shape
         b = self._bind()
         codes = as_i32_c(codes, ndim=1, name="codes")[0]
-        Sa = as_f64_c(S, ndim=2, name="scores")[0] if c > 1 else None
+        St = None
+        if c > 1:
+            Sa = as_f64_c(S, ndim=2, name="scores")[0]
+            St = empty((c * n,), "<f8")
+            b.x_trees_transpose_f64(addr_ro(Sa, name="S"), addr(St, name="S^T"), [n, c])
+            St = St.reshape((c, n))
         yj = empty((n,), "<i4")
         y64 = empty((n,), "<f8") if self.method != "sigmoid" else None
         cals = []
         for j in range(c):
             cls = 1 if c == 1 else j
-            if c == 1:
-                f = S.reshape((n,))
-            else:
-                f = empty((n,), "<f8")
-                b.x_trees_column_f64(addr_ro(Sa, name="S"), addr(f, name="f"), [n, c, j])
+            f = S.reshape((n,)) if c == 1 else St[j]
             b.x_trees_indicator_codes(addr_ro(codes, name="codes"), addr(yj, name="y"),
                                       addr(y64, name="y64") if y64 is not None else 0, [n, cls])
             if self.method == "sigmoid":
@@ -2638,8 +2706,8 @@ class CalibratedClassifierCV(_TreesWrapperBase):
                 cals.append(("isotonic", (kx[0:m], ky[0:m], m)))
         return cals
 
-    def _calibrated_native(self, e, cals, Xa):
-        """`_calibrated` with each calibrator reading its column of the score
+    def _calibrated(self, e, cals, Xa):
+        """The (n, k) probabilities: each calibrator reading its column of the score
         block in place and writing its column of the (n, k) block (binary:
         column 1, then column 0 = 1 - column 1, one IEEE subtract), then the
         same x_trees_normalize_rows: no per-class list and no Python
@@ -2661,33 +2729,6 @@ class CalibratedClassifierCV(_TreesWrapperBase):
                                                    addr_ro(S, name="t"), addr(acc, name="p"),
                                                    [m, n, n * c, c, j, n * w, w, col])
         if k == 2:
-            b.x_trees_complement_pairs(addr(acc, name="proba"), [n])
-            return acc
-        b.x_trees_normalize_rows(addr(acc, name="proba"), [n, k])
-        return acc
-
-    def _calibrated(self, e, cals, Xa):
-        if _cal_native(self):
-            return self._calibrated_native(e, cals, Xa)
-        n, k = Xa.shape[0], len(self.classes_)
-        S = self._scores(e, Xa)
-        b = self._bind()
-        # class-major (k, n): calibrator j writes row j in place (binary:
-        # the one calibrator writes row 1, the positive class)
-        cm = empty((k * n,), "<f8")
-        for j, (kind, par) in enumerate(cals):
-            f = self._column64(S, j)
-            dst = addr(cm, name="p") + 8 * (j + (1 if k == 2 else 0)) * n
-            if kind == "sigmoid":
-                b.x_trees_platt_apply(addr_ro(f, name="f"), dst, [n, par[0], par[1]])
-            else:
-                kx, ky, m = par
-                b.x_trees_isotonic_predict(addr_ro(kx, name="kx"), addr_ro(ky, name="ky"), addr_ro(f, name="t"),
-                                           dst, [m, n])
-        acc = empty((n * k,), "<f8")
-        b.x_trees_transpose_f64(addr_ro(cm, name="p"), addr(acc, name="proba"), [k, n])
-        if k == 2:
-            # (1 - p, p) rows: the complement into the even cells
             b.x_trees_complement_pairs(addr(acc, name="proba"), [n])
             return acc
         b.x_trees_normalize_rows(addr(acc, name="proba"), [n, k])

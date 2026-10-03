@@ -92,6 +92,7 @@ FAMILIES = (
             "x_trees_platt_apply_strided", "x_trees_isotonic_predict_strided", "x_trees_complement_pairs",
             "x_trees_indicator_codes", "x_trees_column_f64",
             "x_trees_transpose_f64", "x_trees_bag_rows", "x_trees_unseen_rows",
+            "x_trees_stack_w64", "x_trees_binary_proba", "x_trees_py2mojo",
         ),
         gate="tools/algos_lane_check.sh",
         wheel_note="Ships: the trees expansion lane's ensemble glue (pass 1, PENDING).",
