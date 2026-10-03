@@ -1,0 +1,5 @@
+# lane apple-fast-olsne: LinearRegression FAST Apple normal-equations route (A/B define MOJOLEARN_FAST_OLS_NORMAL_EQ, binding estimators)
+# A = main route (TSQR), B = -D MOJOLEARN_FAST_OLS_NORMAL_EQ (equilibrated normal equations, X/y uploaded once via ols_fit_resident)
+# quality bar: taxi r2 .9088, istella r2 >= .3319
+olsne-taxi     m3 queued-front (221) head 741ce5262  afc_ab_def.sh olsne-taxi estimators ols taxi 1 2 "" "-D MOJOLEARN_FAST_OLS_NORMAL_EQ"
+olsne-istella  m3 queued-front (222) head 741ce5262  afc_ab_def.sh olsne-istella estimators ols istella 1 2 "" "-D MOJOLEARN_FAST_OLS_NORMAL_EQ"
