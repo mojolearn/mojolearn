@@ -31,8 +31,11 @@ observations, which is the one quantity here that is not O(R) scalars.
 
 `scipy.stats.bootstrap` returns
 `standard_error = xp.std(theta_hat_b, correction=1, axis=-1)`. Ours is the
-same quantity, two-pass, through `host_tree_sum` (DEVIATION 1697 for the
-ddof, `statistics.mojo`'s header for why two-pass).
+same quantity, two-pass, through `host_grid_sum` (DEVIATION 1697 for the
+ddof, `statistics.mojo`'s header for why two-pass). The device path computes
+it on the device in that order (`resample/device_post.mojo`, lane cgr5-owed
+2026-10-03), as it does the BCa moments (also `host_grid_sum`) and the
+p-value's and bias percentile's integer counts.
 
 ================= DEVIATION BLOCK =================
 
@@ -126,6 +129,7 @@ from metrics.checks.pinned_sum import (
     PINNED_SUM_W,
     canonicalize_nan,
     chunk_count,
+    host_grid_sum,
     host_tree_sum,
     virtual_block_sum,
 )
@@ -337,9 +341,10 @@ def narrow_for_alternative(interval: Interval, alternative: Int) -> Interval:
 
 
 def distribution_mean(dist: List[Float32], n_resamples: Int) -> Float32:
-    """`host_tree_sum / n`, the pinned tree of
-    `metrics/checks/pinned_sum.mojo`."""
-    return _mean_of_sum(host_tree_sum(dist, n_resamples), n_resamples)
+    """`host_grid_sum / n`, the grid-wide tree of
+    `metrics/checks/pinned_sum.mojo` (the device path's
+    `resample/device_post.mojo::device_standard_error`; lane cgr5-owed)."""
+    return _mean_of_sum(host_grid_sum(dist, n_resamples), n_resamples)
 
 
 def distribution_standard_error(
@@ -364,7 +369,7 @@ def distribution_standard_error(
     for i in range(n_resamples):
         var d = ftz(dist[i] - m)
         sq.append(ftz(identical_mul(d, d)))
-    var ssd = host_tree_sum(sq, n_resamples)
+    var ssd = host_grid_sum(sq, n_resamples)
     return ftz(
         identical_sqrt(ftz(identical_div(ssd, Float32(n_resamples - 1))))
     )
@@ -417,17 +422,30 @@ def permutation_pvalue(
     hazard has no site here -- and it is written as a strict compare anyway,
     never as `min()`.
     """
-    var gamma = abs(ftz(identical_mul(PERM_EPS_SCALE, observed)))
-    var hi_bound = ftz(observed + gamma)
-    var lo_bound = ftz(observed - gamma)
+    var b = permutation_bounds(observed)
     var n_less = 0
     var n_greater = 0
     for i in range(n_resamples):
         var v = null_dist[i]
-        if v <= hi_bound:
+        if v <= b[0]:
             n_less += 1
-        if v >= lo_bound:
+        if v >= b[1]:
             n_greater += 1
+    return permutation_pvalue_of_counts(n_less, n_greater, n_resamples, alternative)
+
+
+def permutation_bounds(observed: Float32) -> Tuple[Float32, Float32]:
+    """`(observed + gamma, observed - gamma)`, `gamma = abs(eps * observed)`:
+    the two bounds the null is counted against."""
+    var gamma = abs(ftz(identical_mul(PERM_EPS_SCALE, observed)))
+    return (ftz(observed + gamma), ftz(observed - gamma))
+
+
+def permutation_pvalue_of_counts(
+    n_less: Int, n_greater: Int, n_resamples: Int, alternative: Int
+) -> PValue:
+    """`permutation_pvalue` from its two counts (the device path counts on
+    the device, `resample/device_post.mojo::device_counts`)."""
     var denom = Float32(n_resamples + 1)
     var p_less = ftz(identical_div(Float32(n_less + 1), denom))
     var p_greater = ftz(identical_div(Float32(n_greater + 1), denom))
@@ -474,6 +492,11 @@ def bca_bias_percentile(
             below += 1
         if v <= theta_hat:
             at_or_below += 1
+    return bca_bias_of_counts(below, at_or_below, n_resamples)
+
+
+def bca_bias_of_counts(below: Int, at_or_below: Int, n_resamples: Int) -> Float32:
+    """`bca_bias_percentile` from its two counts."""
     return ftz(
         identical_div(
             Float32(below + at_or_below), Float32(2 * n_resamples)
@@ -562,7 +585,7 @@ def bca_acceleration(theta_jack: List[Float32], n: Int) raises -> Float32:
     """`a_hat = (1/6) * (sum U^3 / n^3) / (sum U^2 / n^2)^(3/2)` with
     `U_i = (n - 1) * (theta_dot - theta_i)` (`_bca_interval`).
 
-    The two sums are `host_tree_sum`, the same tree as everything else.
+    The two sums are `host_grid_sum`, the device's grid-wide tree.
     `den^(3/2)` is `den * sqrt(den)` and not `identical_pow(den, 1.5)`: the
     two-operation spelling is exact for the sqrt and correctly rounded for
     the multiply, where `pow` is an exp of a log and carries that whole
@@ -576,7 +599,7 @@ def bca_acceleration(theta_jack: List[Float32], n: Int) raises -> Float32:
     computed NaN there would carry the vendor's payload.
     """
     var m = _bca_moments(theta_jack, n)
-    return _bca_accel_of(m.num, m.den)
+    return bca_accel_of(m.num, m.den)
 
 
 @fieldwise_init
@@ -592,7 +615,7 @@ def _bca_moments(theta_jack: List[Float32], n: Int) raises -> _BcaMoments:
             "bootstrap: the BCa acceleration needs at least 2 observations;"
             " got n=" + String(n)
         )
-    var dot = _mean_of_sum(host_tree_sum(theta_jack, n), n)
+    var dot = _mean_of_sum(host_grid_sum(theta_jack, n), n)
     var u2 = List[Float32]()
     var u3 = List[Float32]()
     var scale = Float32(n - 1)
@@ -604,12 +627,12 @@ def _bca_moments(theta_jack: List[Float32], n: Int) raises -> _BcaMoments:
     var nf = Float32(n)
     var n2 = ftz(identical_mul(nf, nf))
     var n3 = ftz(identical_mul(n2, nf))
-    var num = ftz(identical_div(host_tree_sum(u3, n), n3))
-    var den = ftz(identical_div(host_tree_sum(u2, n), n2))
+    var num = ftz(identical_div(host_grid_sum(u3, n), n3))
+    var den = ftz(identical_div(host_grid_sum(u2, n), n2))
     return _BcaMoments(num, den)
 
 
-def _bca_accel_of(num: Float32, den: Float32) raises -> Float32:
+def bca_accel_of(num: Float32, den: Float32) raises -> Float32:
     if den == Float32(0.0):
         raise Error(
             "bootstrap: the BCa acceleration is 0/0 -- every leave-one-out"
@@ -632,7 +655,7 @@ def bca_acceleration_two(
     the two sums added in sample order."""
     var m0 = _bca_moments(jack_0, n_0)
     var m1 = _bca_moments(jack_1, n_1)
-    return _bca_accel_of(ftz(m0.num + m1.num), ftz(m0.den + m1.den))
+    return bca_accel_of(ftz(m0.num + m1.num), ftz(m0.den + m1.den))
 
 
 @fieldwise_init

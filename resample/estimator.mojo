@@ -81,8 +81,19 @@ from resample.checks.index_map import (
     PERM_MAX_POOLED,
     validate_positions,
 )
+from resample.device_post import (
+    device_bca_moments,
+    device_counts,
+    device_observed_statistic,
+    device_standard_error,
+    enqueue_diff_map,
+)
 from resample.checks.intervals import (
     ALT_TWO_SIDED,
+    bca_accel_of,
+    bca_bias_of_counts,
+    permutation_bounds,
+    permutation_pvalue_of_counts,
     Interval,
     METHOD_BASIC,
     METHOD_BCA,
@@ -1213,11 +1224,13 @@ def bootstrap_host(
     # below, where they always were on the card.
     var need_jack = with_bca_diagnostics or method == METHOD_BCA
     var jack = ctx.enqueue_create_buffer[DType.float32](n if need_jack else 1)
-    var jack_h = List[Float32]()
     var z0p = Float32(0.0)
     var ahat = Float32(0.0)
     if need_jack:
-        z0p = bca_bias_percentile(sorted_dist, n_resamples, theta_hat)
+        # the bias percentile's counts and the jackknife moments on the
+        # device (resample/device_post.mojo)
+        var cz = device_counts(ctx, sorted_buf, n_resamples, theta_hat, theta_hat, 1)
+        z0p = bca_bias_of_counts(cz[0], cz[1], n_resamples)
         ctx.synchronize()
         if tpb == 256:
             _launch_jackknife_at[256](ctx, jack, dx, n, n_features, statistic)
@@ -1225,9 +1238,8 @@ def bootstrap_host(
             _launch_jackknife_at[128](ctx, jack, dx, n, n_features, statistic)
         else:
             _launch_jackknife_at[64](ctx, jack, dx, n, n_features, statistic)
-        ctx.synchronize()
-        jack_h = _download_f32(ctx, jack, n)
-        ahat = bca_acceleration(jack_h, n)
+        var mom = device_bca_moments(ctx, jack, n)
+        ahat = bca_accel_of(mom.num, mom.den)
 
     var alpha = alpha_for(confidence_level, alternative)
     var interval: Interval
@@ -1255,7 +1267,7 @@ def bootstrap_host(
     var pos_words: List[Int32] = [Int32(pos_lo), Int32(pos_hi)]
     trace.record_list_i32("resample.order_pos", pos_words)
 
-    var se = distribution_standard_error(dist, n_resamples)
+    var se = device_standard_error(ctx, theta, n_resamples)
     trace.record_scalar_f32("resample.se", se)
     var ends: List[Float32] = [interval.low, interval.high]
     trace.record_list_f32("resample.interval", ends)
@@ -1354,12 +1366,11 @@ def bootstrap_unpaired_host(
     _launch_bootstrap_stat(ctx, tx, dxb, kx, r_first, n_resamples, n_x, n_x, 1, STAT_MEAN, tpb)
     _launch_bootstrap_stat(ctx, ty, dyb, ky, r_first, n_resamples, n_y, n_y, 1, STAT_MEAN, tpb)
     ctx.synchronize()
-    var hx = _download_f32(ctx, tx, n_resamples)
-    var hy = _download_f32(ctx, ty, n_resamples)
-    var dist = List[Float32](capacity=n_resamples)
-    for i in range(n_resamples):
-        dist.append(canonicalize_nan(ftz(hx[i] - hy[i])))
-    var theta = _upload(ctx, dist)
+    # the replicate differences on the device; the distribution comes back
+    # once (it is returned)
+    var theta = ctx.enqueue_create_buffer[DType.float32](n_resamples)
+    enqueue_diff_map(ctx, theta, tx, ty.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_resamples, Float32(0.0), 0)
+    var dist = _download_f32(ctx, theta, n_resamples)
     var sorted_buf = ctx.enqueue_create_buffer[DType.float32](n_resamples)
     ctx.synchronize()
     _sort_segments(ctx, theta, sorted_buf, 1, n_resamples)
@@ -1375,7 +1386,8 @@ def bootstrap_unpaired_host(
     if method == METHOD_BASIC:
         interval = basic_interval(sorted_dist, n_resamples, alpha, theta_hat)
     elif method == METHOD_BCA:
-        var z0p = bca_bias_percentile(sorted_dist, n_resamples, theta_hat)
+        var cz = device_counts(ctx, sorted_buf, n_resamples, theta_hat, theta_hat, 1)
+        var z0p = bca_bias_of_counts(cz[0], cz[1], n_resamples)
         var jx = ctx.enqueue_create_buffer[DType.float32](n_x)
         var jy = ctx.enqueue_create_buffer[DType.float32](n_y)
         ctx.synchronize()
@@ -1388,21 +1400,24 @@ def bootstrap_unpaired_host(
         else:
             _launch_jackknife_at[64](ctx, jx, dxb, n_x, 1, STAT_MEAN)
             _launch_jackknife_at[64](ctx, jy, dyb, n_y, 1, STAT_MEAN)
-        ctx.synchronize()
-        var jxh = _download_f32(ctx, jx, n_x)
-        var jyh = _download_f32(ctx, jy, n_y)
-        var j0 = List[Float32](capacity=n_x)
-        for i in range(n_x):
-            j0.append(ftz(jxh[i] - my))
-        var j1 = List[Float32](capacity=n_y)
-        for i in range(n_y):
-            j1.append(ftz(mx - jyh[i]))
+        # SciPy's multi-sample acceleration (`bca_acceleration_two`): each
+        # sample's shifted leave-one-out statistics and their moments on the
+        # device, the two moments added in sample order
+        var j0 = ctx.enqueue_create_buffer[DType.float32](n_x)
+        var j1 = ctx.enqueue_create_buffer[DType.float32](n_y)
+        enqueue_diff_map(ctx, j0, jx, jx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_x, my, 1)
+        enqueue_diff_map(ctx, j1, jy, jy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n_y, mx, 2)
+        var m0 = device_bca_moments(ctx, j0, n_x)
+        var m1 = device_bca_moments(ctx, j1, n_y)
         var ends = bca_interval(
-            sorted_dist, n_resamples, alpha, z0p, bca_acceleration_two(j0, n_x, j1, n_y)
+            sorted_dist, n_resamples, alpha, z0p,
+            bca_accel_of(ftz(m0.num + m1.num), ftz(m0.den + m1.den)),
         )
         interval = ends.interval
         lvl_lo = ends.alpha_1
         lvl_hi = ends.alpha_2
+        _ = j0^
+        _ = j1^
         _ = jx^
         _ = jy^
     else:
@@ -1410,7 +1425,7 @@ def bootstrap_unpaired_host(
     interval = narrow_for_alternative(interval, alternative)
     var pos_lo = Int(Float32(n_resamples - 1) * lvl_lo)
     var pos_hi = Int(Float32(n_resamples - 1) * lvl_hi)
-    var se = distribution_standard_error(dist, n_resamples)
+    var se = device_standard_error(ctx, theta, n_resamples)
     _ = dxb^
     _ = dyb^
     _ = tx^
@@ -1533,47 +1548,16 @@ def permutation_test_host(
     var null_dist = _download_f32(ctx, null_buf, n_resamples)
 
     # The OBSERVED statistic is the pooled sample split where it already is,
-    # i.e. the identity permutation. Host, over the same pinned tree, for
-    # `point_estimate_host`'s reason: the p-value's tolerance `gamma` is a
-    # multiple of it, so a last bit here moves a count.
-    var vx = List[Float32]()
-    var vy = List[Float32]()
-    for j in range(n_pooled):
-        var v = ftz(pooled[j])
-        if j < n_x:
-            vx.append(v)
-            vy.append(Float32(0.0))
-        else:
-            vx.append(Float32(0.0))
-            vy.append(v)
-    var sx = host_tree_sum(vx, n_pooled)
-    var sy = host_tree_sum(vy, n_pooled)
-    var observed: Float32
-    if statistic == STAT_DIFF_MEANS:
-        observed = ftz(_mean_of_sum(sx, n_x) - _mean_of_sum(sy, n_y))
-    elif statistic == STAT_MEAN:
-        observed = _mean_of_sum(sx, n_x)
-    else:
-        var mx = _mean_of_sum(sx, n_x)
-        var sq = List[Float32]()
-        for j in range(n_pooled):
-            if j < n_x:
-                var d = ftz(ftz(pooled[j]) - mx)
-                sq.append(ftz(identical_mul(d, d)))
-            else:
-                sq.append(Float32(0.0))
-        observed = ftz(
-            identical_sqrt(
-                ftz(
-                    identical_div(
-                        host_tree_sum(sq, n_pooled), Float32(n_x - 1)
-                    )
-                )
-            )
-        )
+    # i.e. the identity permutation, in the replicate kernels' order (the
+    # p-value's tolerance `gamma` is a multiple of it, so a last bit here
+    # moves a count): on the device, chunk trees in parallel then the chunk
+    # chain (resample/device_post.mojo).
+    var observed = device_observed_statistic(ctx, dpool, n_pooled, n_x, statistic)
     trace.record_scalar_f32("resample.observed", observed)
 
-    var pv = permutation_pvalue(null_dist, n_resamples, observed, alternative)
+    var bounds = permutation_bounds(observed)
+    var cnt = device_counts(ctx, null_buf, n_resamples, bounds[0], bounds[1], 0)
+    var pv = permutation_pvalue_of_counts(cnt[0], cnt[1], n_resamples, alternative)
     trace.record_scalar_f32("resample.pvalue", pv.p)
 
     _ = dpool^
@@ -1627,7 +1611,8 @@ def permutation_samples_host(
     `diff_means`, else `(x,)` with `mean` (SciPy's sign-flip convention).
     `perm_samples_kernel` draws each pair's coin at its own Philox position
     (kind 5); the observed statistic is the identity arrangement, the pinned
-    tree on the host; the p-value is `permutation_pvalue` (DEVIATION 1702)."""
+    tree on the device; the p-value is `permutation_pvalue`'s (DEVIATION 1702)
+    from device counts."""
     perm_samples_validate(x, y, two, n_resamples, r_first)
     var n = len(x)
     var key = resample_key(seed, RESAMPLE_KIND_PERM_SAMPLES)
@@ -1659,16 +1644,14 @@ def permutation_samples_host(
                 )
     ctx.synchronize()
     var null_dist = _download_f32(ctx, null_buf, n_resamples)
-    var vx = List[Float32](capacity=n)
-    for i in range(n):
-        vx.append(ftz(x[i]))
-    var observed = _mean_of_sum(host_tree_sum(vx, n), n)
+    # the identity arrangement's statistic and the p-value's counts on the
+    # device (resample/device_post.mojo), the replicate kernels' tree
+    var observed = device_observed_statistic(ctx, dx, n, n, STAT_MEAN)
     if two:
-        var vy = List[Float32](capacity=n)
-        for i in range(n):
-            vy.append(ftz(y[i]))
-        observed = ftz(observed - _mean_of_sum(host_tree_sum(vy, n), n))
-    var pv = permutation_pvalue(null_dist, n_resamples, observed, alternative)
+        observed = ftz(observed - device_observed_statistic(ctx, dy, n, n, STAT_MEAN))
+    var bounds = permutation_bounds(observed)
+    var cnt = device_counts(ctx, null_buf, n_resamples, bounds[0], bounds[1], 0)
+    var pv = permutation_pvalue_of_counts(cnt[0], cnt[1], n_resamples, alternative)
     _ = dx^
     _ = dy^
     _ = null_buf^
