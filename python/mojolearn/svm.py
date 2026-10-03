@@ -22,8 +22,8 @@ tol` (`linear.pyx:150-151`).
 """
 
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
-from ._labels import argmax_rows, decode_labels, encode_labels, sorted_classes
+from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes, zeros
+from ._labels import argmax_rows, decode_labels, encode_labels, sorted_classes, threshold_codes
 from ._mode import NumericModeMixin
 from ._svm_impl import SVC, SVR
 from .linear_model import (
@@ -138,7 +138,6 @@ class LinearSVC(_LinearSVMBase):
             raise ValueError("mojolearn LinearSVC X and y lengths differ")
         # lane py-shared: the native encoder (`sorted_classes` is its definition)
         self.classes_, codes = encode_labels(labels)
-        codes = codes.tolist()
         n_classes = len(self.classes_)
         if n_classes < 2:
             raise ValueError("mojolearn LinearSVC: y has one class")
@@ -148,22 +147,23 @@ class LinearSVC(_LinearSVMBase):
         selected = [1] if n_classes == 2 else list(range(n_classes))
         blocks, n_iter, objectives, retcodes = [], 0, [], []
         for cls in selected:
-            y_enc = Array.from_list([1.0 if c == cls else 0.0 for c in codes], "<f4")
+            # the 0/1 target through the core helpers (equal_elements, cast_elements)
+            y_enc = (codes == cls).astype("<f4")
             w, k, fx, rc = _qn_fit_one_target(
                 self, x, y_enc, 2, self._LOSSES[self.loss], l1, l2,
                 self.tol, 0.1 * self.tol)
-            blocks.append(w.tolist())
+            blocks.append(w)
             n_iter = max(n_iter, k)
             objectives.append(fx)
             retcodes.append(rc)
         n_targets = len(blocks)
         n_coefs = cols + (1 if self.fit_intercept else 0)
-        # the column-major `w[c + C*j]` block `qn_decision_function` reads
-        self._w = Array.from_list(
-            [blocks[c][j] for j in range(n_coefs) for c in range(n_targets)], "<f4")
-        self.coef_ = Array.from_list([b[:cols] for b in blocks], "<f4")
-        self.intercept_ = Array.from_list(
-            [b[cols] if self.fit_intercept else 0.0 for b in blocks], "<f4")
+        # the (C, n_coefs) block, joined as bytes; its column-major copy (one
+        # Mojo strided copy) is the `w[c + C*j]` block `qn_decision_function` reads
+        W = frombytes(b"".join(b.tobytes() for b in blocks), "<f4", (n_targets, n_coefs))
+        self._w = Array._view_of(W._as_order("F"), (n_targets * n_coefs,), "C")
+        self.coef_ = W[:, :cols]
+        self.intercept_ = W[:, cols] if self.fit_intercept else zeros((n_targets,), "<f4")
         self.n_iter_ = Array.from_list([n_iter], "<i8")
         self.objective_ = objectives[0] if n_targets == 1 else objectives
         self.retcode_ = retcodes[0] if n_targets == 1 else retcodes
@@ -196,8 +196,7 @@ class LinearSVC(_LinearSVMBase):
             return decode_labels(self.classes_, codes)
         scores = self.decision_function(X)
         if len(self.classes_) == 2:
-            return decode_labels(self.classes_,
-                                 [1 if s > 0.0 else 0 for s in scores.tolist()])
+            return decode_labels(self.classes_, threshold_codes(scores))
         return decode_labels(self.classes_, argmax_rows(scores))
 
     def score(self, X, y):
