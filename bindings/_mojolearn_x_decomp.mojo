@@ -11,6 +11,7 @@ from std.python.bindings import PythonModuleBuilder
 from x_decomp.api import (
     cd_rows_py, chol_py, colsum_py, eigh_py, eigh_batch_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
     geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, als_cg_rows_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
+    py2mojo_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, sign_labels_py, accuracy_py, pca_mle_rank_terms_py, pca_mle_pa_py,
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.device import DevExec
@@ -23,7 +24,7 @@ from x_decomp.graph_device import (
 from x_decomp.resident import (
     dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_project_py, dev_rand_py, dev_trisolve_py, dev_knn_select_py, dev_rowsum_py,
     dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_lda_rows_py,
-    dev_lda_bound_py, dev_als_rows_py,
+    dev_lda_bound_py, dev_als_rows_py, dev_move_py,
 )
 
 
@@ -75,6 +76,17 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[triu_nonzero_py]("x_decomp_triu_nonzero")
         m.def_function[argsort_f32_py]("x_decomp_argsort_f32")
         m.def_function[iso_order_py]("x_decomp_iso_order")
+        m.def_function[py2mojo_py]("x_decomp_py2mojo")
+        m.def_function[move_py]("x_decomp_move")
+        m.def_function[dsum_sq_py]("x_decomp_dsum_sq")
+        m.def_function[order_f_py]("x_decomp_order_f")
+        m.def_function[select_smallest_py]("x_decomp_select_smallest")
+        m.def_function[argmin_all_py]("x_decomp_argmin_all")
+        m.def_function[sign_labels_py]("x_decomp_sign_labels")
+        m.def_function[accuracy_py]("x_decomp_accuracy")
+        m.def_function[pca_mle_rank_terms_py]("x_decomp_pca_mle_terms")
+        m.def_function[pca_mle_pa_py]("x_decomp_pca_mle_pa")
+        m.def_function[dev_move_py]("x_decomp_dev_move")
         # device-resident matrices (x_decomp/resident.mojo; GPU binding only)
         m.def_function[dev_alloc_py]("x_decomp_dev_alloc")
         m.def_function[dev_free_py]("x_decomp_dev_free")

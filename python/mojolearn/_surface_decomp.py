@@ -34,6 +34,8 @@ FAMILIES = (
             # lane py-decomp-nbrs (2026-09-28): fast_mcd, LDA online and the MDS / Isomap moves
             "x_decomp_mcd", "x_decomp_lda_online", "x_decomp_gather", "x_decomp_scatter", "x_decomp_triu_nonzero",
             "x_decomp_argsort_f32", "x_decomp_iso_order",
+            # lane apple-fast-py2mojo-decomp (2026-10-03): the rest of the module's data path
+            "x_decomp_py2mojo", "x_decomp_move", "x_decomp_dsum_sq", "x_decomp_order_f", "x_decomp_select_smallest", "x_decomp_argmin_all", "x_decomp_sign_labels", "x_decomp_accuracy", "x_decomp_pca_mle_terms", "x_decomp_pca_mle_pa",
             # lane hr2-graph-embed (2026-10-02): the Isomap / LLE graph builds as cells
             "x_decomp_graph_knn", "x_decomp_graph_knn_dense", "x_decomp_graph_radius", "x_decomp_graph_lle_iw",
             "x_decomp_graph_components", "x_decomp_graph_join", "x_decomp_graph_dijkstra",
