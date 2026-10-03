@@ -355,6 +355,28 @@ struct TrainedModel(Movable):
     the production structure-search driver rather than focused checks."""
 
 
+def _sym_feat_test_cindex(
+    ctx: DeviceContext,
+    x_colmajor: List[Float32],
+    n_rows: Int,
+    borders: List[List[Float32]],
+    fold_counts: List[Int],
+    nan_treatment: List[Int],
+    eval_rows: Int,
+) raises -> DeviceBuffer[DType.uint32]:
+    """The held-out arm's compressed index: `_build_cindex_from_floats`,
+    except under `GBDT_EVAL_SKIP_EMPTY` (lane/apple-fast-sym-feat, FAST +
+    Apple only) with NO held-out rows, where nothing reads the index and
+    the one-row dummy build (a launch and two uploads per bordered feature,
+    a drain per eight) is replaced by a one-word allocation."""
+    comptime if GBDT_EVAL_SKIP_EMPTY:
+        if eval_rows == 0:
+            return ctx.enqueue_create_buffer[DType.uint32](1)
+    return _build_cindex_from_floats(
+        ctx, x_colmajor, n_rows, borders, fold_counts, nan_treatment,
+    )
+
+
 def _build_cindex_from_floats(
     ctx: DeviceContext,
     x_colmajor: List[Float32],
@@ -2460,20 +2482,10 @@ def train(
         for _ in range(len(fold_counts)):
             eval_expanded.append(Float32(0.0))
 
-    var test_cindex: DeviceBuffer[DType.uint32]
-    var test_cindex_built = False
-    comptime if GBDT_EVAL_SKIP_EMPTY:
-        if eval_rows == 0:
-            # no held-out rows: nothing reads the test index, so no launches
-            # (the one-row dummy build cost a launch and two uploads per
-            # bordered feature and a drain per eight)
-            test_cindex = ctx.enqueue_create_buffer[DType.uint32](1)
-            test_cindex_built = True
-    if not test_cindex_built:
-        test_cindex = _build_cindex_from_floats(
-            ctx, eval_expanded, t_rows, borders, fold_counts,
-            column_nan_treatment,
-        )
+    var test_cindex = _sym_feat_test_cindex(
+        ctx, eval_expanded, t_rows, borders, fold_counts,
+        column_nan_treatment, eval_rows,
+    )
     var test_targets = ctx.enqueue_create_buffer[DType.float32](t_rows)
     var h_ty = ctx.enqueue_create_host_buffer[DType.float32](t_rows)
     for r in range(t_rows):
