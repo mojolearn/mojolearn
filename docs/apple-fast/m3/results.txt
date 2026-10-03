@@ -1,4 +1,4 @@
-pos=227 lines=     429
+pos=231 lines=     429
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -274,3 +274,8 @@ pos=227 lines=     429
 364:CMD apple-fast-opp@89fa71dda opp3-neural rc=0 OPP-DONE tag=opp3-neural out=~/mq/out/opp-opp3-neural
 365:CMD apple-fast-tsa@9ee4a2ed2 tsa-evalws-autoarima rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=42920.9 all=[42921] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1'
 366:FBUILD lane/apple-fast-opp@8157809e8 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+367:CMD apple-fast-opp@8157809e8 opp3-neural-b rc=0 OPP-DONE tag=opp3-neural-b out=~/mq/out/opp-opp3-neural-b
+368:CMD apple-fast-tsa@9ee4a2ed2 tsa-both-autoarima rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=39503.6 all=[39504] quality=['{"forecast_rmse":'] defines='-D MOJOLEARN_ARIMA_FAST_LLONLY=1 -D MOJOLEARN_ARIMA_FAST_EVAL_WS=1'
+369:FBUILD lane/apple-fast-kapprox@2157ed10b core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+370:CMD apple-fast-kapprox@2157ed10b kap-schi2-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1.3 all=[1] quality=['{"kernel_rel_error":'] defines='-D MOJOLEARN_KAPPROX_DEVICE=1'
+371:CMD apple-fast-kapprox@2157ed10b kap-achi2-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=12.5 all=[13] quality=['{"kernel_rel_error":'] defines='-D MOJOLEARN_KAPPROX_DEVICE=1'
