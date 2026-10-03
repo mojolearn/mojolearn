@@ -24,7 +24,8 @@ from sequence.moe_reg import (
     moe_route_tail_kernel,
 )
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
 
 from sequence.exec_trait import Exec
 from sequence.dispatch import apply
@@ -44,6 +45,29 @@ from std.sys.info import has_apple_gpu_accelerator
 comptime SEQ_COOP = has_apple_gpu_accelerator()
 
 comptime TPB = 128
+
+#: Apple FAST pipelined transport (lane apple-fast-regress, 2026-10-03;
+#: docs/apple-fast/notes/regress-oct3.md). cpu-gpu-cleanup n-seq
+#: (1774263e0) made `_pcopy` one memcpy on the calling thread; at the
+#: board's 64 MB tensors (layernorm, adafactor, the optimizers) each
+#: transfer is then a serial DMA plus a serial single-thread copy, the
+#: rows' regression against 0.8.34. Instead of restoring host threads, the
+#: copy and the DMA overlap, chunk by chunk (SEQ_PIPE_CH floats):
+#:  MOJOLEARN_SEQ_FAST_PIPE_UP: an upload copies chunk i into its stage and
+#:    queues its DMA at once, so the DMA of chunk i runs while chunk i + 1
+#:    is copied (the stage still holds every chunk until the next sync).
+#:  MOJOLEARN_SEQ_FAST_PIPE_DOWN: the downloads of a sync go through two
+#:    pinned halves: the DMA of chunk i overlaps the read of chunk i - 1
+#:    (opt_resident's OPT_PIPE_DOWN, which took the optimizers 318 -> 191 ms
+#:    on the M3, for every x_sequence download).
+#: Copies only: the same bytes, the same launches, no bit moves. FAST +
+#: Apple, default off for the M3 A/B; IDENTICAL and the other vendors
+#: compile the main path unchanged.
+comptime _SEQ_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime SEQ_PIPE_UP = _SEQ_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_PIPE_UP"]()
+comptime SEQ_PIPE_DOWN = _SEQ_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_PIPE_DOWN"]()
+#: the pipelined chunk, floats (8 MB)
+comptime SEQ_PIPE_CH = 1 << 21
 
 
 struct _SeqContext(Defaultable, Movable):
@@ -330,6 +354,11 @@ struct DeviceExec(Exec):
     var pdev: List[Int]
     var pstaged: List[Int]
     var ppend_host: List[Int]
+    #: SEQ_PIPE_DOWN: downloads deferred to the next sync's pipeline
+    #: (destination address, device source address, count)
+    var pipe_dst: List[Int]
+    var pipe_src: List[Int]
+    var pipe_n: List[Int]
 
     def __init__(out self) raises:
         self.ctx = sequence_ctx()
@@ -344,6 +373,9 @@ struct DeviceExec(Exec):
         self.pdev = List[Int]()
         self.pstaged = List[Int]()
         self.ppend_host = List[Int]()
+        self.pipe_dst = List[Int]()
+        self.pipe_src = List[Int]()
+        self.pipe_n = List[Int]()
 
     def alloc(mut self, n: Int) raises -> FP:
         return self._alloc(n, True)
@@ -416,6 +448,22 @@ struct DeviceExec(Exec):
             var hi = _pool_host(self.ctx, n)
             var pool = X_SEQUENCE_POOL.get_or_create_ptr()
             var hp = pool[].host[hi].unsafe_ptr()
+            comptime if SEQ_PIPE_UP:
+                if n >= 2 * SEQ_PIPE_CH:
+                    # chunk i's DMA is queued as soon as it is staged, and
+                    # runs while chunk i + 1 is copied
+                    _ = view^
+                    var hpf = FP(unsafe_from_address=Int(hp))
+                    var done = 0
+                    while done < n:
+                        var cnt = min(SEQ_PIPE_CH, n - done)
+                        memcpy(dest=hpf + done, src=src + done, count=cnt)
+                        var cv = self._sub(found[0], found[1] + done, cnt)
+                        self.ctx.enqueue_copy(dst_buf=cv, src_ptr=hpf + done)
+                        _ = cv^
+                        done += cnt
+                    self.pstaged.append(hi)
+                    return
             _pcopy(hp, src, n)
             self.ctx.enqueue_copy(dst_buf=view, src_ptr=hp)
             self.pstaged.append(hi)
@@ -436,6 +484,11 @@ struct DeviceExec(Exec):
     def download(mut self, dst: FP, src: FP, n: Int) raises:
         if n <= 0:
             return
+        comptime if SEQ_PIPE_DOWN:
+            if self.pooled and n >= 2 * SEQ_PIPE_CH:
+                self.download_async(dst, src, n)
+                self.sync()
+                return
         var found = self._find(src, n)
         var view = self._sub(found[0], found[1], n)
         if self.pooled:
@@ -461,6 +514,13 @@ struct DeviceExec(Exec):
         if n <= 0:
             return
         var found = self._find(src, n)
+        comptime if SEQ_PIPE_DOWN:
+            if self.pooled and n >= 2 * SEQ_PIPE_CH:
+                # nothing queued now: the next sync runs the pipeline
+                self.pipe_dst.append(Int(dst))
+                self.pipe_src.append(Int(src))
+                self.pipe_n.append(n)
+                return
         if self.pooled:
             var hi = _pool_host(self.ctx, n)
             var pool = X_SEQUENCE_POOL.get_or_create_ptr()
@@ -658,3 +718,51 @@ struct DeviceExec(Exec):
         self.pend_host.clear()
         self.pend_dst.clear()
         self.pend_n.clear()
+        comptime if SEQ_PIPE_DOWN:
+            if len(self.pipe_n) > 0:
+                self._pipe_down()
+
+    def _pipe_down(mut self) raises:
+        """SEQ_PIPE_DOWN: the deferred downloads through two pinned halves of
+        SEQ_PIPE_CH floats, after the queue has drained (every kernel that
+        writes them is done): the DMA of chunk i runs into one half while
+        chunk i - 1 is read out of the other. Each chunk's wait comes before
+        its half is reused (that half was last read for chunk i - 2, before
+        the previous wait). Returns with every byte in place."""
+        var h0 = _pool_host(self.ctx, SEQ_PIPE_CH)
+        var h1 = _pool_host(self.ctx, SEQ_PIPE_CH)
+        var pool = X_SEQUENCE_POOL.get_or_create_ptr()
+        var st0 = FP(unsafe_from_address=Int(pool[].host[h0].unsafe_ptr()))
+        var st1 = FP(unsafe_from_address=Int(pool[].host[h1].unsafe_ptr()))
+        var have_prev = False
+        var prev_dst = 0
+        var prev_cnt = 0
+        var prev_half = 0
+        var half = 0
+        for j in range(len(self.pipe_n)):
+            var nj = self.pipe_n[j]
+            var done = 0
+            while done < nj:
+                var cnt = min(SEQ_PIPE_CH, nj - done)
+                var f = self._find(FP(unsafe_from_address=self.pipe_src[j] + done * 4), cnt)
+                var v = self._sub(f[0], f[1], cnt)
+                self.ctx.enqueue_copy(dst_ptr=st0 if half == 0 else st1, src_buf=v)
+                _ = v^
+                if have_prev:
+                    # overlaps the DMA just queued, into the other half
+                    memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1,
+                           count=prev_cnt)
+                self.ctx.synchronize()
+                have_prev = True
+                prev_dst = self.pipe_dst[j] + done * 4
+                prev_cnt = cnt
+                prev_half = half
+                half = 1 - half
+                done += cnt
+        if have_prev:
+            memcpy(dest=FP(unsafe_from_address=prev_dst), src=st0 if prev_half == 0 else st1, count=prev_cnt)
+        _pool_release_host(h0)
+        _pool_release_host(h1)
+        self.pipe_dst.clear()
+        self.pipe_src.clear()
+        self.pipe_n.clear()
