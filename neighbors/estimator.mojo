@@ -652,6 +652,100 @@ def knn_self_search_device_indices(
     return out_idx^
 
 
+def knn_self_search_resident(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut data: DeviceBuffer[DType.float32],
+    n: Int,
+    n_features: Int,
+    k: Int,
+    mut out_dist: DeviceBuffer[DType.float32],
+    mut out_idx: DeviceBuffer[DType.uint32],
+    return_sqrt: Bool = True,
+) raises -> Int:
+    """`knn_search_traced(data, data, ...)` with the data ALREADY ON THE
+    DEVICE and the result LEFT THERE (lane cgr3-hdbscan-mst, 2026-10-03):
+    `data` holds `n x n_features` row-major float32 (it may be longer),
+    `out_dist` / `out_idx` receive `n x k`, every row ascending by
+    (distance, index). The refusals, plan, norms, search, order pass and
+    trace records are `_knn_search_traced_retaining`'s statements on the
+    same bytes (L2 metrics only: the cosine zero-row refusal reads the host
+    data); only the host copies on either side are gone. Returns the query
+    tile that ran."""
+    if n <= 0 or n_features <= 0 or k <= 0:
+        raise Error(
+            "knn_self_search_resident: n, n_features and k must be positive,"
+            " got " + String(n) + ", " + String(n_features) + ", " + String(k)
+        )
+    if k > n:
+        raise Error(
+            "knn_search: k (" + String(k) + ") exceeds n_index (" + String(n)
+            + "); the upstream's short-index fill is not implemented"
+        )
+    var mtr = resolve_metric(METRIC_FROM_IS_SQRT, return_sqrt)
+    validate_metric_arg(mtr, Float32(2.0))
+    var devices = knn_device_count(n, KNN_METHOD_AUTO)
+    var query_tile = plan_query_tile(n, n, DEFAULT_QUERY_TILE)
+    var buf_len = tiled_radix_scratch_len(n, k)
+    var nd = n * n_features
+    var index = ctx.enqueue_create_buffer[DType.float32](nd)
+    var queries = ctx.enqueue_create_buffer[DType.float32](nd)
+    var index_norm = ctx.enqueue_create_buffer[DType.float32](n)
+    var query_norm = ctx.enqueue_create_buffer[DType.float32](n)
+    var dist_tile = ctx.enqueue_create_buffer[DType.float32](
+        tiled_distance_tile_cells(query_tile, n, n_features, k, mtr)
+    )
+    var buf_val = ctx.enqueue_create_buffer[DType.float32](query_tile * 2 * buf_len)
+    var buf_idx = ctx.enqueue_create_buffer[DType.uint32](query_tile * 2 * buf_len)
+    var out_i32 = ctx.enqueue_create_buffer[DType.int32](n * k)
+    var src = data.create_sub_buffer[DType.float32](0, nd)
+    ctx.enqueue_copy(dst_buf=index, src_buf=src)
+    ctx.enqueue_copy(dst_buf=queries, src_buf=src)
+    compute_norms_for_metric(ctx, index, index_norm, n, n_features, mtr)
+    compute_norms_for_metric(ctx, queries, query_norm, n, n_features, mtr)
+    ctx.synchronize()
+    if trace.enabled:
+        trace.header(
+            String("knn n_index=") + String(n) + " n_queries="
+            + String(n) + " d=" + String(n_features) + " k="
+            + String(k) + " method=" + String(KNN_METHOD_AUTO) + " sqrt="
+            + String(return_sqrt) + " metric=" + metric_value_name(mtr)
+            + " metric_arg=" + String(Float32(2.0))
+        )
+        if metric_uses_norms(mtr):
+            trace.record_device(ctx, "knn.index_norm", index_norm, n)
+            trace.record_device(ctx, "knn.query_norm", query_norm, n)
+    if devices > 1:
+        query_tile = parallel_knn_rows(ctx, queries, query_norm, index, index_norm,
+            out_dist, out_idx, n, n, n_features, k, query_tile, buf_len,
+            return_sqrt, KNN_METHOD_AUTO, mtr, Float32(2.0), devices)
+    else:
+        brute_force_knn_impl(
+            ctx, queries, query_norm, index, index_norm, dist_tile, buf_val,
+            buf_idx, out_dist, out_idx, out_i32, n, n, n_features, k,
+            query_tile, buf_len, return_sqrt, False, True, True,
+            KNN_METHOD_AUTO, mtr, Float32(2.0), KnnIndexCachePointer(None),
+        )
+    ctx.synchronize()
+    if trace.enabled:
+        trace.record_device(ctx, "knn.out_dist", out_dist, n * k)
+        trace.record_device(ctx, "knn.out_idx", out_idx, n * k)
+    _knn_order_rows_device(ctx, out_dist, out_idx, n, k)
+    if trace.enabled:
+        trace.record_device(ctx, "knn.sorted_dist", out_dist, n * k)
+        trace.record_device(ctx, "knn.sorted_idx", out_idx, n * k)
+    _ = src^
+    _ = index^
+    _ = queries^
+    _ = index_norm^
+    _ = query_norm^
+    _ = dist_tile^
+    _ = buf_val^
+    _ = buf_idx^
+    _ = out_i32^
+    return query_tile
+
+
 comptime _KO_TPB = 128
 comptime _KFP = MutPointer[Float32, MutAnyOrigin]
 comptime _KUP = MutPointer[UInt32, MutAnyOrigin]

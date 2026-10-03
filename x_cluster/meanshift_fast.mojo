@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MeanShift, FAST on Apple: every shift of every seed on the whole GPU
-(lane/apple-fast-cluster, 2026-10-02). Switch: the build define
-`-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1` (`MEANSHIFT_FAST_GRID` below, taken
-by `x_cluster/device_ops.mojo` `DeviceOps.meanshift`); without it nothing
-here compiles, and no build reads the environment.
+(lane/apple-fast-cluster, 2026-10-02). Switch: `MEANSHIFT_FAST_GRID` below,
+taken by `x_cluster/device_ops.mojo` `DeviceOps.meanshift`: on by default
+in FAST on Apple; `-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF=1` turns it
+off (the old `-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT=1` is harmless). No
+build reads the environment.
 
 Cause: `_meanshift_team_kernel` (x_cluster/device_ops.mojo:169) takes ONE
 block per seed and walks all n rows of every shift inside it, so a fit with
@@ -39,9 +40,12 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_sqrt
 from x_cluster.bodies import FPtr, IPtr
 
+# Default in FAST on Apple since the M3 A/B (lane/apple-fast-cluster aaef7b261,
+# n=1, Istella): meanshift 52.1 -> 34.9 ms, n_clusters 12 and silhouette
+# .4035 unchanged. `-D MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF=1` turns it off.
 comptime MEANSHIFT_FAST_GRID = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT"]()
+    and not is_defined["MOJOLEARN_X_CLUSTER_FAST_MEANSHIFT_OFF"]()
 )
 comptime MSG_TPB = 256
 comptime MSG_T = 256

@@ -164,3 +164,18 @@ def eigh_par_off_fold_kernel(part: F32Ptr, dst: F32Ptr, nb_in: Int32):
         dst.unsafe_store(0, so[0])
         dst.unsafe_store(1, sd[0])
         dst.unsafe_store(2, sm[0])
+
+
+def sym_from_triangle_kernel(a: F32Ptr, n_in: Int32, uplo_in: Int32):
+    """numpy eigh's UPLO on the device: uplo 1 copies the lower triangle over
+    the upper (a_ij := a_ji, i < j), 2 the upper over the lower. One thread a
+    cell of the overwritten triangle; the read triangle is never written."""
+    var n = Int(n_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < n * n:
+        var i = t // n
+        var j = t - i * n
+        if Int(uplo_in) == 1 and i < j:
+            a.unsafe_store(t, a.unsafe_load(j * n + i))
+        elif Int(uplo_in) == 2 and i > j:
+            a.unsafe_store(t, a.unsafe_load(j * n + i))

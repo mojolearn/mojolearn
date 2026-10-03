@@ -149,6 +149,7 @@ fail. `vendor()` reports what was picked, cross-checked against the loaded
 binaries; `NumericModeMixin.vendor_used()` reports it per estimator.
 """
 
+import importlib
 import importlib.machinery
 import importlib.util
 import json
@@ -1504,6 +1505,15 @@ class _NoGpuBinding(type(sys)):
         raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
 
 
+# Python entries a `_HostBinding` serves beside its host binding's exports:
+# binding name -> (CPU-side module, entry names). They exist only on the CPU
+# vendor, so GPU-path Python reaches CPU-side code through the binding it
+# already holds and never imports it (ensemble.py's CTR model reader).
+_HOST_PY_ENTRIES = {
+    "_mojolearn_gbdt": ("_gbdt_host", frozenset({"gbdt_ctr_model_dim", "gbdt_ctr_predict"})),
+}
+
+
 class _HostBinding(type(sys)):
     """Stands in for a GPU binding whose family HAS a host binding on a
     CPU-only install. An attribute the host binding exports is served from
@@ -1520,6 +1530,10 @@ class _HostBinding(type(sys)):
     def __getattr__(self, item):
         if item.startswith("__"):
             raise AttributeError(item)
+        py_entries = _HOST_PY_ENTRIES.get(self.__name)
+        if py_entries is not None and item in py_entries[1]:
+            pkg = __name__.rsplit(".", 1)[0]
+            return getattr(importlib.import_module(f"{pkg}.{py_entries[0]}"), item)
         module = load_host_module(self.__basename)
         fn = getattr(module, item, None)
         if fn is None:

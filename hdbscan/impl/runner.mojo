@@ -30,15 +30,18 @@ WHAT SURVIVES OF IT, AND IT IS THE PART THAT CHANGES THE ANSWER: their
 which is why the core distance is the distance to the `min_samples`-th
 neighbour EXCLUDING self. Kept exactly, warning included.
 
-THE HOST/DEVICE SPLIT, stated once for the whole lane. cuML 26.08 already
-put `condense` and the labelling on the host (`condense.cuh:92-212`,
-`extract.cuh:88-167`) and keeps stabilities and the selection BFS on the
-device. This lane keeps that split: `build_mr_linkage`'s distances, MST
-and mutual reachability are device kernels; `compute_stabilities` and
-`propagate_cluster_negation_kernel` are device kernels; condense, the
-Excess-of-Mass loop (DEVIATION 1605) and the labelling are host. Nothing
-of theirs that runs on the device was moved to the host except the two
-places a DEVIATION BLOCK names.
+THE HOST/DEVICE SPLIT, stated once for the whole lane. cuML 26.08 put
+`condense` and the labelling on the host (`condense.cuh:92-212`,
+`extract.cuh:88-167`). Ours runs every stage of the fit on the device
+(lane cgr2-hdbscan, 2026-10-03): the distances, MST and mutual
+reachability (`build_mr_linkage`), the condensed tree
+(`tree_device.mojo`), the stabilities, the Excess-of-Mass or leaf
+selection and the epsilon search (`select.mojo`), the labelling, the
+stability scores, the label remap and the probabilities (`extract.mojo`).
+The only transfers after the input are a few scalar sizes (the split count,
+the cluster-tree depth, the selected count) and the outputs, downloaded
+once at the end. The CPU column (`hdbscan/host/hdbscan_host_oracle.mojo`)
+runs the same stages as host loops in the same orders.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -51,7 +54,10 @@ from hdbscan.impl.cluster.detail.single_linkage import (
     build_mr_linkage,
 )
 from hdbscan.impl.condensed_hierarchy import CondensedHierarchy
-from hdbscan.impl.detail.condense import build_condensed_hierarchy
+from hdbscan.impl.detail.condense import (
+    build_condensed_hierarchy,
+    download_condensed,
+)
 from hdbscan.impl.detail.extract import ExtractOutput, extract_clusters
 from hdbscan.impl.detail.reachability import CORE_TPB
 from hdbscan.impl.detail.select import (
@@ -59,11 +65,7 @@ from hdbscan.impl.detail.select import (
     CLUSTER_SELECTION_LEAF,
     SELECT_TPB,
 )
-from hdbscan.impl.detail.stabilities import (
-    STAB_TPB,
-    get_stability_scores,
-    max_lambda_of,
-)
+from hdbscan.impl.detail.stabilities import STAB_TPB
 from hierarchy.impl.cluster.detail.connectivities import (
     DISTANCE_L2_SQRT_EXPANDED,
 )
@@ -111,8 +113,8 @@ def default_hdbscan_params() -> HDBSCANParams:
 struct HDBSCANOutput(Movable):
     """`hdbscan.hpp:203-...`'s `hdbscan_output` plus
     `robust_single_linkage_output`, reduced to what rung 1 produces.
-    `probabilities` is computed from it by the bindings
-    (`extract.mojo::probabilities_from_labels`, DEVIATION 5116)."""
+    `probabilities` is computed on the device with the rest
+    (DEVIATION 5116)."""
 
     var n_clusters: Int
     var n_outliers: Int
@@ -121,7 +123,7 @@ struct HDBSCANOutput(Movable):
     """`n_rows`, FINAL labels: `0 .. n_clusters-1` or `-1` for noise,
     after their `runner.h:226-233` remap through `label_map`."""
     var raw_labels: List[Int32]
-    """`n_rows`, the CONDENSED cluster ids `do_labelling_on_host` returned,
+    """`n_rows`, the CONDENSED cluster ids the labelling returned,
     before the remap. Recorded so a card diff can separate a selection
     difference from a numbering one."""
     var core_dists: List[Float32]
@@ -132,6 +134,9 @@ struct HDBSCANOutput(Movable):
     var is_cluster: List[Int32]
     var inverse_label_map: List[Int32]
     var condensed: CondensedHierarchy
+    var probabilities: List[Float32]
+    """`n_rows`, `Membership::get_probabilities` computed on the device
+    (`extract.mojo::probabilities_kernel`, DEVIATION 5116)."""
 
     def __init__(
         out self,
@@ -146,6 +151,7 @@ struct HDBSCANOutput(Movable):
         var is_cluster: List[Int32],
         var inverse_label_map: List[Int32],
         var condensed: CondensedHierarchy,
+        var probabilities: List[Float32],
     ):
         self.n_clusters = n_clusters
         self.n_outliers = n_outliers
@@ -158,6 +164,7 @@ struct HDBSCANOutput(Movable):
         self.is_cluster = is_cluster^
         self.inverse_label_map = inverse_label_map^
         self.condensed = condensed^
+        self.probabilities = probabilities^
 
 
 def effective_min_samples(min_samples: Int, m: Int) raises -> Int:
@@ -309,58 +316,42 @@ def fit_hdbscan(
         var now = Int(perf_counter_ns())
         print("HDB_STAGE linkage_ms=" + String(Float64(now - st_t) / 1.0e6))
         st_t = now
-    # `:172-181` Condense branches of tree according to min cluster size
-    var tree = build_condensed_hierarchy(
+    # `:172-181` Condense branches of tree according to min cluster size,
+    # on the device.
+    var dtree = build_condensed_hierarchy(
         ctx, children, deltas, sizes, params.min_cluster_size, m, sabotage
     )
-    trace.record_list_i32("hdbscan.condensed.parents", tree.parents)
-    trace.record_list_i32("hdbscan.condensed.children", tree.children)
-    trace.record_list_f32("hdbscan.condensed.lambdas", tree.lambdas)
-    trace.record_list_i32("hdbscan.condensed.sizes", tree.sizes)
 
     if st_on:
         ctx.synchronize()
         var now = Int(perf_counter_ns())
         print("HDB_STAGE condense_ms=" + String(Float64(now - st_t) / 1.0e6))
         st_t = now
-    # `:183-204` Extract labels from stability
+    # `:183-233` extract, max_lambda, the stability scores and the label
+    # remap, on the device over the same tree.
     var ext = extract_clusters(
-        ctx, tree, m, params.cluster_selection_method,
+        ctx, dtree, params.cluster_selection_method,
         params.allow_single_cluster, params.max_cluster_size,
-        params.cluster_selection_epsilon, stab_tpb, select_tpb, sabotage,
+        params.cluster_selection_epsilon, sabotage,
     )
-    trace.record_list_f32("hdbscan.stabilities", ext.tree_stabilities)
-    trace.record_list_i32("hdbscan.selected", ext.is_cluster)
-    trace.record_list_i32("hdbscan.raw_labels", ext.labels)
 
     if st_on:
         ctx.synchronize()
         var now = Int(perf_counter_ns())
         print("HDB_STAGE extract_ms=" + String(Float64(now - st_t) / 1.0e6))
         st_t = now
-    # `:208-210` max_lambda = *thrust::max_element(lambdas)
-    var max_lambda = max_lambda_of(tree)
 
-    # `:212-219` get_stability_scores
-    var scores = get_stability_scores(
-        ext.labels, ext.tree_stabilities, tree.n_clusters, max_lambda, m,
-        ext.label_map, ext.n_selected,
-    )
-
-    # `:221-233` Normalize labels so they are drawn from a monotonically
-    # increasing set starting at 0 even in the presence of noise (-1).
-    var labels = List[Int32](capacity=m)
-    var n_outliers = 0
-    for i in range(m):
-        var l = ext.labels[i]
-        if l != Int32(-1):
-            labels.append(ext.label_map[Int(l)])
-        else:
-            labels.append(Int32(-1))
-        if labels[i] == Int32(-1):
-            n_outliers += 1
-    trace.record_list_i32("hdbscan.labels", labels)
-    trace.record_list_f32("hdbscan.stability_scores", scores)
+    # The outputs, downloaded once.
+    var tree = download_condensed(ctx, dtree)
+    trace.record_list_i32("hdbscan.condensed.parents", tree.parents)
+    trace.record_list_i32("hdbscan.condensed.children", tree.children)
+    trace.record_list_f32("hdbscan.condensed.lambdas", tree.lambdas)
+    trace.record_list_i32("hdbscan.condensed.sizes", tree.sizes)
+    trace.record_list_f32("hdbscan.stabilities", ext.tree_stabilities)
+    trace.record_list_i32("hdbscan.selected", ext.is_cluster)
+    trace.record_list_i32("hdbscan.raw_labels", ext.labels)
+    trace.record_list_i32("hdbscan.labels", ext.final_labels)
+    trace.record_list_f32("hdbscan.stability_scores", ext.stability_scores)
 
     var h_core = _download_f32(ctx, core_dists, m)
 
@@ -371,18 +362,20 @@ def fit_hdbscan(
     _ = children^
     _ = deltas^
     _ = sizes^
+    _ = dtree^
     return HDBSCANOutput(
         ext.n_selected,
-        n_outliers,
+        ext.n_outliers,
         rounds,
-        labels^,
+        ext.final_labels.copy(),
         ext.labels.copy(),
         h_core^,
-        scores^,
+        ext.stability_scores.copy(),
         ext.tree_stabilities.copy(),
         ext.is_cluster.copy(),
         ext.inverse_label_map.copy(),
         tree^,
+        ext.probabilities.copy(),
     )
 
 

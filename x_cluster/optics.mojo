@@ -8,11 +8,15 @@
 
 The n x n euclidean distances and the core distances (the `min_samples`-th
 smallest of each row, the row itself included: `bodies.kth_smallest_row`)
-are the device's. THE ORDERING LOOP IS SEQUENTIAL, as the reference's: the
+are the device's, and so is THE ORDERING (lane cgr2-cluster,
+`ClusterOps.optics_order`), one step after another as the reference's: the
 next point is the unprocessed one with the lowest reachability, THE LOWEST
-INDEX ON A TIE (`np.argmin` over the unprocessed indices in order); its
-unprocessed neighbors within `max_eps` get `max(dist, core)` when that is
-strictly lower. The xi and dbscan extractions are the reference's host logic,
+INDEX ON A TIE (`np.argmin` over the unprocessed indices in order), a
+min-reduction over the rows; its unprocessed neighbors within `max_eps` get
+`max(dist, core)` when that is strictly lower, one thread a row. The dbscan
+extraction is the device's (`optics_dbscan`). The xi extraction is the
+reference's sequential steep-region walk (a data-dependent state machine over
+the n-length plot, run once on the fitted reachability the fit returns),
 the ratios in Float64 from the Float32 plot. sklearn's `np.around(...,
 decimals=precision)` of the core and reach distances is not carried
 (NOT_IMPLEMENTED.tsv)."""
@@ -36,8 +40,9 @@ comptime XC_ALLOC = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEAR
 # (hr-optin-flags): the loop reads the device's n x n distances.
 comptime _OW = 8
 # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple, the
-# GPU binding only, env `MOJOLEARN_OPTICS_FAST_DEVICE_ORDER=1` (default off):
-# the ordering loop on the device (`ops.optics_order`, device_ops.mojo).
+# GPU binding only, `-D MOJOLEARN_OPTICS_FAST_DEVICE_ORDER=1` (default off):
+# the ordering loop as n + 1 grid launches (`ops.optics_order_fast`,
+# device_ops.mojo) in place of main's 2n (`ops.optics_order`).
 # Cause: `optics_graph` below reads the n x n distances back to the host
 # (`ops.get(dm, n * n)`, 400 MB at 10,000 rows) and walks the n serial steps
 # on one host thread, each a scan of n reachabilities and a relaxation of
@@ -168,9 +173,8 @@ def optics_graph[O: ClusterOps](
     var xs = ops.put(x)
     var dm: Int
     if metric == 5:
-        for t in range(n * n):
-            if not (x[t] >= Float32(0)):
-                raise Error("OPTICS: a precomputed distance matrix must be non-negative")
+        if not ops.check_nonneg(xs, n * n):
+            raise Error("OPTICS: a precomputed distance matrix must be non-negative")
         dm = xs
     elif metric >= 0:
         dm = dist_slot(ops, n * n)
@@ -181,78 +185,73 @@ def optics_graph[O: ClusterOps](
         ops.sqrt(dm, n * n)
     var cs = ops.zeros(n)
     ops.kth(dm, n, n, min_samples, cs)
-    core = ops.get(cs, n)
-    for i in range(n):
-        if core[i] > max_eps:
-            core[i] = inf
     comptime if OPTICS_FAST_DEVICE_ORDER:
         if ops.fast_device():
             # lane cluster2: the device's raw core distances (`cs`), the
-            # kernel's test `core <= max_eps and core != inf` is the clamp above
-            var os_ = ops.zeros_i(n)
-            var rs = ops.zeros(n)
-            var ps = ops.zeros_i(n)
-            var qs = ops.zeros_i(n)
-            ops.optics_order(dm, cs, n, max_eps, os_, rs, ps, qs)
+            # kernel's test `core <= max_eps and core != inf` is the clamp below
+            var fos = ops.zeros_i(n)
+            var frs = ops.zeros(n)
+            var fps = ops.zeros_i(n)
+            var fqs = ops.zeros_i(n)
+            ops.optics_order_fast(dm, cs, n, max_eps, fos, frs, fps, fqs)
             var o32 = List[Int32]()
-            ops.get_if(os_, n, rs, n, o32, reach)
-            var p32 = ops.get_i(ps, n)
+            ops.get_if(fos, n, frs, n, o32, reach)
+            core = ops.get(cs, n)
+            for i in range(n):
+                if core[i] > max_eps:
+                    core[i] = inf
+            var p32 = ops.get_i(fps, n)
             ordering = List[Int](capacity=n)
             pred = List[Int](capacity=n)
             for i in range(n):
                 ordering.append(Int(o32[i]))
                 pred.append(Int(p32[i]))
             return
-    var dist = ops.get(dm, n * n)
     comptime if OPTICS_SIMD:
         if n >= _OW:
+            core = ops.get(cs, n)
+            for i in range(n):
+                if core[i] > max_eps:
+                    core[i] = inf
+            var dist = ops.get(dm, n * n)
             _order_simd(dist, core, n, max_eps, ordering, reach, pred)
             return
-    reach = List[Float32](length=n, fill=inf)
-    pred = List[Int](length=n, fill=-1)
-    var processed = List[Bool](length=n, fill=False)
+    # THE ORDERING ON THE DEVICE (lane cgr2-cluster): the distances stay
+    # resident; each step is a min-reduction of (reachability, index) over
+    # the unprocessed rows and one parallel relaxation (`ops.optics_order`;
+    # the host column walks the same steps).
+    var os_ = ops.zeros_i(n)
+    var rs = ops.zeros(n)
+    var ps = ops.zeros_i(n)
+    ops.optics_order(dm, cs, n, max_eps, os_, rs, ps)
+    var oi = List[Int32]()
+    var pi = List[Int32]()
+    ops.get_if(os_, n, rs, n, oi, reach)
+    var g = ops.gets([cs], [n])
+    core = g[0].copy()
+    pi = ops.get_i(ps, n)
     ordering = List[Int](capacity=n)
-    for _step in range(n):
-        var point = -1
-        var best = inf
-        for i in range(n):
-            if processed[i]:
-                continue
-            if point < 0 or reach[i] < best:
-                point = i
-                best = reach[i]
-        processed[point] = True
-        ordering.append(point)
-        if core[point] != inf:
-            var cp = core[point]
-            for o in range(n):
-                if processed[o]:
-                    continue
-                var dd = dist[point * n + o]
-                if not (dd <= max_eps):
-                    continue
-                var rd = dd if dd > cp else cp
-                if rd < reach[o]:
-                    reach[o] = rd
-                    pred[o] = point
-
-
-def optics_dbscan_labels(
-    reach: List[Float32], core: List[Float32], ordering: List[Int], eps: Float32
-) -> List[Int32]:
-    """`cluster_optics_dbscan`."""
-    var n = len(core)
-    var labels = List[Int32](length=n, fill=Int32(0))
-    var c = -1
+    pred = List[Int](capacity=n)
     for q in range(n):
-        var p = ordering[q]
-        if reach[p] > eps and core[p] <= eps:
-            c += 1
-        labels[p] = Int32(c)
-    for p in range(n):
-        if reach[p] > eps and not (core[p] <= eps):
-            labels[p] = Int32(-1)
-    return labels^
+        ordering.append(Int(oi[q]))
+        pred.append(Int(pi[q]))
+
+
+def optics_dbscan_ops[O: ClusterOps](
+    mut ops: O, ordering: List[Int], reach: List[Float32], core: List[Float32], eps: Float32
+) raises -> List[Int32]:
+    """`cluster_optics_dbscan` by the device (a flag per ordered row and a
+    prefix count; `ops.optics_dbscan`)."""
+    var n = len(core)
+    var oi = List[Int32](capacity=n)
+    for q in range(n):
+        oi.append(Int32(ordering[q]))
+    var os_ = ops.put_i(oi)
+    var rs = ops.put(reach)
+    var cs = ops.put(core)
+    var ls = ops.zeros_i(n)
+    ops.optics_dbscan(os_, rs, cs, n, eps, ls)
+    return ops.get_i(ls, n)
 
 
 def _extend_region(steep: List[Bool], xward: List[Bool], start: Int, min_samples: Int) -> Int:

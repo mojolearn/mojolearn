@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MiniBatchKMeans, FAST on Apple: the mini-batch steps resident on the
-device (lane/apple-fast-cluster, 2026-10-02). Switch: the build define
-`-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` (`MINIBATCH_FAST_DEV` below, taken
-by `x_cluster/minibatch.mojo` `minibatch_fit`); without it nothing here
-compiles, and no build reads the environment.
+device (lane/apple-fast-cluster, 2026-10-02). Switch: `MINIBATCH_FAST_DEV`
+below, taken by `x_cluster/minibatch.mojo` `minibatch_fit`: on by default
+in FAST on Apple; `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it
+off (the old `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH=1` is harmless). No
+build reads the environment.
 
 Cause: `minibatch_fit`'s step loop (x_cluster/minibatch.mojo, `for step in
 range(n_steps)`) gathers the batch on the host, uploads it (`ops.set`),
@@ -48,9 +49,12 @@ from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul, identical_mul64
 from x_cluster.bodies import FPtr, IPtr, SplitMix64
 
+# Default in FAST on Apple since the M3 A/B (lane/apple-fast-cluster aaef7b261,
+# n=1, Istella): minibatch-kmeans 388 -> 352 ms, silhouette .1167 -> .1182.
+# `-D MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF=1` turns it off.
 comptime MINIBATCH_FAST_DEV = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH"]()
+    and not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_OFF"]()
 )
 comptime MBF_TPB = 256
 comptime MBF_CH = 256

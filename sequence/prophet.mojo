@@ -62,6 +62,10 @@ struct ProphetData(ImplicitlyCopyable, Movable):
     var tau: Float32
     var mult: Bool
 
+    # Metal: pointer-taking callees on a kernel path must inline (an
+    # out-of-line call can mis-read the t/X/cp/sig pointers; lane
+    # apple-fast-prophetfix, prophet_fit_team quit L-BFGS at iteration 1)
+    @always_inline
     def __init__(out self, t: FP, X: FP, cp: FP, sig: FP, N: Int, K: Int, S: Int, tau: Float32, mult: Bool):
         self.t = t
         self.X = X
@@ -119,11 +123,11 @@ def _fg_data(d: ProphetData, y: FP, th: FP, g: FP, lo: Int, hi: Int) -> Float32:
 
 
 @always_inline
-def _fg_prior(d: ProphetData, th: FP, g: FP, sse: Float32) -> Float32:
+def _fg_prior_v(sig: FP, tau: Float32, N: Int, S: Int, K: Int, th: FP, g: FP, sse: Float32) -> Float32:
     """The priors and the sigma terms on top of the likelihood's gradient in
-    g and its sse; returns the objective."""
-    var S = d.S
-    var K = d.K
+    g and its sse; returns the objective. The scalars and the prior-scale
+    pointer by value (no struct on the Metal team path, lane
+    apple-fast-prophetfix)."""
     var k = ld(th, 0)
     var m = ld(th, 1)
     var u = ld(th, 2 + S)
@@ -134,26 +138,34 @@ def _fg_prior(d: ProphetData, th: FP, g: FP, sse: Float32) -> Float32:
     st(g, 1, add(ld(g, 1), div(m, Float32(25.0))))
     for j in range(S):
         var dl = ld(th, 2 + j)
-        f = add(f, div(abs(dl), d.tau))
+        f = add(f, div(abs(dl), tau))
         var sg = Float32(0.0)
         if dl > Float32(0.0):
             sg = Float32(1.0)
         elif dl < Float32(0.0):
             sg = Float32(-1.0)
-        st(g, 2 + j, add(ld(g, 2 + j), div(sg, d.tau)))
+        st(g, 2 + j, add(ld(g, 2 + j), div(sg, tau)))
     for q in range(K):
         var b = ld(th, 3 + S + q)
-        var sq = mul(ld(d.sig, q), ld(d.sig, q))
+        var sq = mul(ld(sig, q), ld(sig, q))
         f = add(f, div(mul(b, b), mul(Float32(2.0), sq)))
         st(g, 3 + S + q, add(ld(g, 3 + S + q), div(b, sq)))
     # sigma: prior N(0, 0.5), likelihood N log sigma + sse / (2 sigma^2)
     f = add(f, div(s2, Float32(0.5)))
-    f = fma3(Float32(d.N), u, f)
+    f = fma3(Float32(N), u, f)
     f = add(f, div(sse, mul(Float32(2.0), s2)))
-    st(g, 2 + S, add(sub(add(div(s2, Float32(0.25)), Float32(d.N)), div(sse, s2)), Float32(0.0)))
+    st(g, 2 + S, add(sub(add(div(s2, Float32(0.25)), Float32(N)), div(sse, s2)), Float32(0.0)))
     return f
 
 
+@always_inline
+def _fg_prior(d: ProphetData, th: FP, g: FP, sse: Float32) -> Float32:
+    """The priors and the sigma terms on top of the likelihood's gradient in
+    g and its sse; returns the objective (`_fg_prior_v` on d's fields)."""
+    return _fg_prior_v(d.sig, d.tau, d.N, d.S, d.K, th, g, sse)
+
+
+@always_inline
 def prophet_fg(d: ProphetData, y: FP, th: FP, g: FP) -> Float32:
     """-log posterior (up to a constant) at th and its gradient into g.
     th = [k, m, delta (S), log sigma, beta (K)]. (apple2: the likelihood
@@ -383,6 +395,7 @@ def lbfgs_steps[F: ProphetFG](mut fg: F, mut s: LBState, P: Int, th: FP, w: FP,
     return steps
 
 
+@always_inline
 def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[Float32, Int]:
     """Minimise prophet_fg from th (in place). w: scratch of
     (6 + 2 MEM) P + 2 MEM floats. Returns (f, iterations)."""
