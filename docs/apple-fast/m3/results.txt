@@ -1,4 +1,4 @@
-pos=862 lines=    1164
+pos=883 lines=    1175
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -1017,3 +1017,31 @@ pos=862 lines=    1164
 1125:FBUILD lane/apple-fast-gap-manprep@65fd67ba6 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
 1126:CMD apple-fast-gap-manprep@65fd67ba6 gmp-import-smoke rc=0 IMPORT-SMOKE ok True True
 1127:CMD apple-fast-gap-linalg2-pca@474241154 gl2p-pca-grammma-istella-r rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=490.1 all=[490] quality=['{"explained_variance_ratio_sum":'] defines='-D MOJOLEARN_PCA_FAST_GRAM_MMA'
+1128:FBUILD lane/apple-fast-gap-kapprox2-kshap@173f0d66e core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1129:CMD apple-fast-gap-kapprox2-kshap@173f0d66e kap2-merge2-import-smoke rc=0 IMPORT-OK
+1130:CMD apple-fast-gap-linalg2-pca@474241154 gl2p-rsvd-gemmmma-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=533.2 all=[533] quality=['{"relative_reconstruction_error":'] defines='-D MOJOLEARN_DECOMP_FAST_GEMM_MMA'
+1131:CMD apple-fast-gap-linalg2-pca@474241154 gl2p-rsvd-gemmmma-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=199.4 all=[199] quality=['{"relative_reconstruction_error":'] defines='-D MOJOLEARN_DECOMP_FAST_GEMM_MMA'
+1132:CMD apple-fast-gap-linalg2-pca@474241154 gl2p-nmf-gemmmma-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=6333.3 all=[6333] quality=['{"relative_reconstruction_error":'] defines='-D MOJOLEARN_DECOMP_FAST_GEMM_MMA'
+1133:FBUILD lane/apple-fast-gap-kapprox2-grp@2adb82837 prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
+1134:CMD apple-fast-gap-kapprox2-grp@2adb82837 kap2-grp rc=127 bash: gaussian-rp: command not found
+1135:CMD apple-fast-gap-kapprox2-grp@2adb82837 kap2-grp rc=127 bash: gaussian-rp: command not found
+1136:CMD apple-fast-gap-kapprox2-grp@2adb82837 kap2-srp rc=127 bash: sparse-rp: command not found
+1137:CMD apple-fast-gap-kapprox2-grp@2adb82837 kap2-srp rc=127 bash: sparse-rp: command not found
+1138:FBUILD lane/apple-fast-gap-linalg2-kpca@3a476db49 prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
+1139:CMD apple-fast-gap-linalg2-kpca@3a476db49 gl2k-kpca-lzdev-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=920.7 all=[921] quality=['{}'] defines='-D MOJOLEARN_KPCA_FAST_LANCZOS_DEV'
+1140:CMD apple-fast-gap-linalg2-kpca@3a476db49 gl2k-kpca-lzdev-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=979.1 all=[979] quality=['{}'] defines='-D MOJOLEARN_KPCA_FAST_LANCZOS_DEV'
+1141:CMD apple-fast-gap-kapprox2-grp@2adb82837 kap2-grp-fused-taxi-r rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2.1 all=[2] quality=['{"mean_abs_distortion":'] defines='-D MOJOLEARN_XD_FAST_GRP_FUSED'
+1142:CMD apple-fast-gap-kapprox2-grp@2adb82837 kap2-grp-fused-istella-r rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=15.7 all=[16] quality=['{"mean_abs_distortion":'] defines='-D MOJOLEARN_XD_FAST_GRP_FUSED'
+1143:CMD apple-fast-gap-kapprox2-grp@2adb82837 kap2-srp-fused-taxi-r rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=3.4 all=[3] quality=['{"mean_abs_distortion":'] defines='-D MOJOLEARN_XD_FAST_GRP_FUSED'
+1144:CMD apple-fast-gap-kapprox2-grp@2adb82837 kap2-srp-fused-istella-r rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=15.2 all=[15] quality=['{"mean_abs_distortion":'] defines='-D MOJOLEARN_XD_FAST_GRP_FUSED'
+1145:CMD apple-fast-gap-linalg2-kpca@3a476db49 gl2k-ipca-dev-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=135.9 all=[136] quality=['{"explained_variance_fraction":'] defines='-D MOJOLEARN_IPCA_FAST_DEV'
+1146:CMD apple-fast-gap-kapprox2-kshap@173f0d66e kap2-kshap-import-smoke rc=133 bash: line 1: 56827 Trace/BPT trap: 5       python3 -c "import mojolearn, mojolearn._expansion_trees as t; from mojolearn import KernelExplainer, PermutationExplainer; print(\"IMPORT-OK\", t._KSHAP_FAST_BATCH)"
+1147:FBUILD lane/apple-fast-gap-kapprox2@eb6d39bff prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
+1148:CMD apple-fast-gap-kapprox2@eb6d39bff kap2-pshap-shared-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=27507.8 all=[27508] quality=['{"rel_error_vs_exact":'] defines='-D MOJOLEARN_PSHAP_FAST_SHARED'
+1149:FBUILD lane/apple-fast-gap-linalg2-gemmmma@7bb6250dd core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1150:CMD apple-fast-gap-linalg2-gemmmma@7bb6250dd gl2-gemmmma-smoke rc=1 AttributeError: module 'mojolearn.linalg' has no attribute 'randomized_svd'
+1151:FBUILD lane/apple-fast-gap-kapprox2-kshap@848cfc956 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1152:CMD apple-fast-gap-kapprox2-kshap@848cfc956 kap2-merge3-import-smoke rc=0 IMPORT-OK
+1153:FBUILD lane/apple-fast-gap-linalg2-gemmmma@d6d9ff2bd core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1154:CMD apple-fast-gap-linalg2-gemmmma@d6d9ff2bd gl2-gemmmma-smoke2 rc=1 AttributeError: module 'mojolearn.linalg' has no attribute 'randomized_svd'
+1155:CMD apple-fast-gap-linalg2-gemmmma@d6d9ff2bd gl2-gemmmma-smoke3 rc=0 SMOKE-OK 449.29803466796875 (20000, 5)
