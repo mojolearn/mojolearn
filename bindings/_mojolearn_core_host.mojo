@@ -127,6 +127,7 @@ from bindings.hotpath_helpers import (
     split_table_i32_binding,
     scatter_rows_bytes_binding,
     uniform_init_f32_binding,
+    normal_init_f32_binding,
     epoch_order_i32_binding,
     adam_hyper_f64_binding,
     mean_std_f32_binding,
@@ -1468,6 +1469,7 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[split_table_i32_binding]("split_table_i32")
         module.def_function[scatter_rows_bytes_binding]("scatter_rows_bytes")
         module.def_function[uniform_init_f32_binding]("uniform_init_f32")
+        module.def_function[normal_init_f32_binding]("normal_init_f32")
         module.def_function[epoch_order_i32_binding]("epoch_order_i32")
         module.def_function[adam_hyper_f64_binding]("adam_hyper_f64")
         module.def_function[mean_std_f32_binding]("mean_std_f32")

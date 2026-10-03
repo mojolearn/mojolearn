@@ -983,6 +983,15 @@ class InitStream:
                                         self.seed & 0xFFFFFFFF, self.seed >> 32, self.offset)
         self.offset += n
 
+    def fill_normal(self, address, n, mean, std):
+        """n float32 values N(mean, std**2) at `address` (the base binding's
+        counter-based Box-Muller `normal_init_f32`); advances the counter."""
+        n = int(n)
+        if n:
+            _native("normal_init_f32")(int(address), n, float(mean), float(std),
+                                       self.seed & 0xFFFFFFFF, self.seed >> 32, self.offset)
+        self.offset += n
+
     def uniform(self, low, high, size):
         """A flat float32 Array of `size` draws."""
         out = empty((int(size),), "<f4")

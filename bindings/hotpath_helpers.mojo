@@ -44,6 +44,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 from sequence.schedule import fill_epoch_order, splitmix64
+from checks.numerics import portable_cosf, portable_log64
 
 
 
@@ -1389,6 +1390,41 @@ def uniform_init_f32_binding(
             var s = seed + (off + UInt64(i)) * UInt64(0x9E3779B97F4A7C15)
             var u = Float64(splitmix64(s) >> 11) * 1.1102230246251565e-16
             dp.unsafe_store(i, Float32(lo + (hi - lo) * u))
+    return PythonObject(0)
+
+
+def normal_init_f32_binding(
+    dst_addr: PythonObject, n: PythonObject, mean: PythonObject, std: PythonObject,
+    seed_lo: PythonObject, seed_hi: PythonObject, offset: PythonObject,
+) raises -> PythonObject:
+    """dst[i] = float32(mean + std * z_i), z_i a standard normal draw at
+    counter c = offset + i of the seed: Box-Muller over the two splitmix64
+    uniforms at counters 2c and 2c + 1 (u1 = 1 - U(2c) in (0, 1], the angle
+    2 pi U(2c + 1)), z = sqrt(-2 log u1) cos(angle), with the portable log
+    and cos (checks/numerics.mojo) so every column writes the same bytes.
+    Counter-based as `uniform_init_f32`: a caller drawing several arrays
+    from one seed advances `offset` by each array's size. Weight
+    initialisation (lane pyglue-numeric: MoEBlock drew numpy normals)."""
+    var count = Int(py=n)
+    if count < 0:
+        raise Error("normal_init_f32: n must be non-negative")
+    if count == 0:
+        return PythonObject(0)
+    var mu = Float64(py=mean)
+    var sd = Float64(py=std)
+    var seed = (UInt64(Int(py=seed_hi)) << 32) | UInt64(Int(py=seed_lo))
+    var off = UInt64(Int(py=offset))
+    var dp = _ptr[DType.float32](Int(py=dst_addr))
+    with GILReleased(Python()):
+        for i in range(count):
+            var c = (off + UInt64(i)) * UInt64(2)
+            var s1 = seed + c * UInt64(0x9E3779B97F4A7C15)
+            var s2 = seed + (c + UInt64(1)) * UInt64(0x9E3779B97F4A7C15)
+            var u1 = 1.0 - Float64(splitmix64(s1) >> 11) * 1.1102230246251565e-16
+            var u2 = Float64(splitmix64(s2) >> 11) * 1.1102230246251565e-16
+            var r = sqrt(-2.0 * portable_log64(u1))
+            var cz = portable_cosf(Float32(6.283185307179586 * u2))
+            dp.unsafe_store(i, Float32(mu + sd * (r * Float64(cz))))
     return PythonObject(0)
 
 
