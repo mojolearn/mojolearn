@@ -2109,7 +2109,7 @@ class StackingRegressor(_StackingBase):
 # :200, one clone per column of Y; predict stacks the columns;
 # MultiOutputClassifier.predict_proba :500 returns a list). Y is a numeric
 # 2-D buffer; a classifier's labels per column are encoded to codes.
-#: lane apple-fast-meta (-D MOJOLEARN_MULTIOUT_RIDGE, FAST + Apple only):
+#: lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_MULTIOUT_RIDGE_OFF turns it off):
 #: MultiOutputRegressor(Ridge) fits every target in ONE ridge program
 #: (glm/impl/ridge_multi.mojo: X up once, one eigendecomposition, one U^T b
 #: and one V (S b) per target) and predicts every target in one launch. The
@@ -2362,7 +2362,7 @@ def _cal_native(est):
     return _CAL_NATIVE and hotpath_enabled() and hasattr(est._bind(), "x_trees_platt_apply_strided")
 
 
-#: lane apple-fast-meta (-D MOJOLEARN_CALIB_GNB_FOLDS, FAST + Apple only):
+#: lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
 #: CalibratedClassifierCV(GaussianNB, method="sigmoid", ensemble=True, cv=int)
 #: as ONE x_prep program per fit and one per predict (x_prep/calib.mojo: the
 #: folds, every fold's statistics, the held-out scores and Platt's sigmoids on

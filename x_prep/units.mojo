@@ -53,8 +53,8 @@ from x_prep.calib import (
     cal_sigmoid_avg_unit,
 )
 
-#: ops 142-156 (x_prep/calib.mojo) exist only under CALIB_FOLDS (FAST + Apple +
-#: -D MOJOLEARN_CALIB_GNB_FOLDS); every other binding keeps the 142-op table.
+#: ops 142-156 (x_prep/calib.mojo) exist only under CALIB_FOLDS (FAST + Apple,
+#: default on, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF off); every other binding keeps the 142-op table.
 comptime N_OPS = 157 if CALIB_FOLDS else 142
 
 

@@ -146,7 +146,7 @@ def vendor_binding() raises -> PythonObject:
 
 
 def calib_folds_binding() raises -> PythonObject:
-    """Lane apple-fast-meta (-D MOJOLEARN_CALIB_GNB_FOLDS, FAST + Apple only):
+    """Lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
     the CalibratedClassifierCV(GaussianNB) program's constants [words per
     Platt problem, line-search steps]; registered only when the ops exist."""
     var out = Python.list()

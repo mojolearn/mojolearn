@@ -48,10 +48,13 @@ from x_prep.common import FP, IP, p, ld, st, ldi, sti
 from x_prep.prims import add, sub, mul, div, logf, expf
 from x_prep.transform import log1pf
 
-#: the switch: FAST + Apple + the define
+#: the switch: FAST + Apple, on by default since the M3 A/B (lane/apple-fast-meta
+#: 18b4150df, taxi CalibratedClassifierCV(GaussianNB) 839.9 -> 49.8 ms, acc
+#: .7553 / logloss .5507 identical); -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it
+#: off, the old -D MOJOLEARN_CALIB_GNB_FOLDS is harmless
 comptime CALIB_FOLDS = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_CALIB_GNB_FOLDS"]()
+    and not is_defined["MOJOLEARN_CALIB_GNB_FOLDS_OFF"]()
 )
 #: words per Platt problem in STATE: A, B, fval, done, hi, lo, da, db, gd, nrows
 comptime CAL_ST = 10

@@ -35,10 +35,13 @@ from glm.impl.matrix.math import (
     set_small_values_zero_kernel,
 )
 
-#: the switch: FAST + Apple + the define
+#: the switch: FAST + Apple, on by default since the M3 A/B (lane/apple-fast-meta
+#: 18b4150df, taxi MultiOutputRegressor(Ridge) 163.0 -> 53.2 ms, r2 .604241 ->
+#: .604240); -D MOJOLEARN_MULTIOUT_RIDGE_OFF turns it off, the old
+#: -D MOJOLEARN_MULTIOUT_RIDGE is harmless
 comptime MULTIOUT_RIDGE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_MULTIOUT_RIDGE"]()
+    and not is_defined["MOJOLEARN_MULTIOUT_RIDGE_OFF"]()
 )
 comptime _ROW_TPB = 256
 
