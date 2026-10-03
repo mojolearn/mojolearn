@@ -26,7 +26,7 @@ import sys
 from . import _backend
 from . import _portable_math as _pm
 from ._array import Array
-from ._buffer import addr_ro, as_f32_c, as_i32_c, frombytes
+from ._buffer import addr_ro, as_f32_c, as_f64_c, as_i32_c, frombytes
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
@@ -279,6 +279,20 @@ class _M:
         return _M(self.s[a * self.c:b * self.c], b - a, self.c)
 
     def take_rows(self, idx):
+        k = _host_kit()
+        if k is not None and self.r < _F32_INDEX_MAX:
+            if not isinstance(idx, _M):
+                a = array.array("f", idx)
+                idx = _M(a, len(a), 1)
+            I = idx
+            m = I.r * I.c
+            out = _M.zeros(m, self.c)
+            if m * self.c:
+                k.b.x_decomp_move(self.addr, I.addr, out.addr,
+                                  [_MV_TAKE_ROWS, m * self.c, self.c, 0, 0, 1, 0, len(self.s), m * self.c, m])
+            return out
+        if isinstance(idx, _M):
+            idx = [int(v) for v in idx.s]
         out = array.array("f")
         for i in idx:
             out.extend(self.s[i * self.c:(i + 1) * self.c])
@@ -300,6 +314,12 @@ class _M:
     def T(self):
         if self.r == 1 or self.c == 1:
             return _M(self.s, self.c, self.r)
+        k = _host_kit()
+        if k is not None:
+            out = _M.zeros(self.c, self.r)
+            n = self.r * self.c
+            k.b.x_decomp_move(self.addr, _M._one.addr, out.addr, [_MV_TRANSPOSE, n, self.r, self.c, 0, 0, 0, n, n, 1])
+            return out
         out = array.array("f")
         for j in range(self.c):
             out.extend(self.s[j::self.c])
@@ -353,6 +373,33 @@ def _dev_one(kit):
 _M._dev_one = staticmethod(_dev_one)
 
 
+#: lane apple-fast-py2mojo-decomp (2026-10-03): x_decomp/moves.mojo `move`
+#: ops and the float32 row-index bound (indices travel as exact floats).
+_MV_TAKE_ROWS, _MV_TRANSPOSE, _MV_PLACE_COLS, _MV_FILL0 = 0, 1, 2, 3
+_F32_INDEX_MAX = 1 << 24
+_P2M = {}
+
+
+def _p2m(b):
+    """Whether binding `b` runs the Mojo data path (`x_decomp_py2mojo` is 1;
+    0 when built with -D MOJOLEARN_PY2MOJO_decomp_OFF, the A/B arm)."""
+    v = _P2M.get(id(b))
+    if v is None:
+        try:
+            v = int(b.x_decomp_py2mojo()) == 1
+        except Exception:
+            v = False
+        _P2M[id(b)] = v
+    return v
+
+
+def _host_kit():
+    """The default-mode kit when its binding runs the Mojo data path (for the
+    `_M` host moves, which use only its host-address entries), else None."""
+    k = _Kit(_backend.default_mode())
+    return k if _p2m(k.b) else None
+
+
 def _any_negative(M):
     """Whether any value is < 0, through the cells (x < 0 counted as ones)."""
     if not len(M.s):
@@ -371,6 +418,16 @@ def _vstack(*ms):
 def _hstack(*ms):
     r = ms[0].r
     w = sum(m.c for m in ms)
+    k = _host_kit()
+    if k is not None:
+        out = _M.zeros(r, w)
+        off = 0
+        for m in ms:
+            if m.r * m.c:
+                k.b.x_decomp_move(m.addr, _M._one.addr, out.addr,
+                                  [_MV_PLACE_COLS, m.r * m.c, m.c, w, off, 0, 0, m.r * m.c, r * w, 1])
+            off += m.c
+        return out
     s = array.array("f", [0.0]) * (r * w)
     off = 0
     for m in ms:
@@ -625,6 +682,81 @@ class _Kit:
         if n * k:
             self.b.x_decomp_knn_select(D.addr, V.addr, I.addr, [n, m, k, int(bool(exclude_self))])
         return I, V
+
+    # ---- data movement and orders (lane apple-fast-py2mojo-decomp, x_decomp/moves.mojo)
+    def py2mojo(self):
+        """Whether this binding runs the Mojo data path (see `_p2m`)."""
+        r = self.__dict__.get("_p2m_ok")
+        if r is None:
+            r = self._p2m_ok = _p2m(self.b)
+        return r
+
+    def take_rows(self, A, idx, m=None, ist=1, ioff=0, radd=0):
+        """Rows Int(idx[a * ist + ioff]) + radd of A for a < m (idx an _M of
+        exact float row numbers; m defaults to all of idx): one thread per
+        copied value on the device, the checked host loop otherwise."""
+        if m is None:
+            m = idx.r * idx.c
+        count = m * A.c
+        p = [_MV_TAKE_ROWS, count, A.c, radd, 0, ist, ioff, A.r * A.c, count, idx.r * idx.c]
+        if count and self._use(A, idx):
+            out = self._dout(m, A.c)
+            self.b.x_decomp_dev_move(self._did(A), self._did(idx), out._d.id, p)
+            return out
+        out = _M.zeros(m, A.c)
+        if count:
+            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)
+        return out
+
+    def copy(self, A):
+        """An exact copy of A, on the device when A is there (the PLACE_COLS
+        move of all of A into a matrix of its own shape)."""
+        n = A.r * A.c
+        if n and A._d is not None and self._use(A):
+            out = self._dout(A.r, A.c)
+            self.b.x_decomp_dev_move(self._did(A), _M._dev_one(self), out._d.id,
+                                     [_MV_PLACE_COLS, n, A.c, A.c, 0, 0, 0, n, n, 1])
+            return out
+        return A.copy()
+
+    def fill0(self, A, start, stride, count):
+        """A[start + t * stride] = 0 for t < count, in place."""
+        if not count:
+            return A
+        p = [_MV_FILL0, count, start, stride, 0, 0, 0, A.r * A.c, A.r * A.c, 1]
+        if self._use(A):
+            did = self._did(A)
+            self.b.x_decomp_dev_move(did, _M._dev_one(self), did, p)
+            return A
+        self.b.x_decomp_move(A.addr, _M._one.addr, A.addr, p)
+        return A
+
+    def order(self, A):
+        """The stable ascending order of A's values (ties to the lower index)
+        as an n x 1 _M of exact floats; NaN refused."""
+        n = A.r * A.c
+        out = _M.zeros(n, 1)
+        if n:
+            self.b.x_decomp_order_f(A.addr, n, out.addr)
+        return out
+
+    def select_smallest(self, A, h):
+        """(sel, mask): the h smallest values' positions by (value, index),
+        ascending by position (h x 1 exact floats), and the int32 membership
+        of every position."""
+        n = A.r * A.c
+        sel = _M.zeros(h, 1)
+        mask = array.array("i", [0]) * n
+        if n:
+            self.b.x_decomp_select_smallest(A.addr, [n, h], sel.addr, mask.buffer_info()[0])
+        return sel, mask
+
+    def argmin_all(self, A):
+        """Every position (exact floats, c x 1) whose value equals the minimum."""
+        n = A.r * A.c
+        buf = _M.zeros(max(n, 1), 1)
+        c = int(self.b.x_decomp_argmin_all(A.addr, n, buf.addr)) if n else 0
+        return _M(buf.s[:c], c, 1)
 
     def lu_solve(self, lu, piv, B, trans=0):
         out = B.copy()
@@ -2124,6 +2256,11 @@ def _pca_mle_rank(spectrum, n_samples, mode):
     lg = k.ew("lgamma", _M.of([(d - i + 1) / 2.0 for i in range(1, d + 1)], 1, d)).s
     logn = logs([float(n_samples)])[0]
     best, arg = -math.inf, 0
+    native = k.py2mojo() and d > 1
+    if native:
+        spd = array.array("d", sp)
+        spa = spd.buffer_info()[0]
+        tbuf = _M.zeros(1, max(d * (d - 1) // 2, 1))
     for rank in range(1, d):
         if sp[rank - 1] < 1e-15:
             continue
@@ -2136,11 +2273,19 @@ def _pca_mle_rank(spectrum, n_samples, mode):
         pv = -logv * n_samples * (d - rank) / 2.0
         m = d * rank - rank * (rank + 1.0) / 2.0
         pp = _LOG2PI_D * (m + rank) / 2.0
-        spv = sp[:rank] + [v] * (d - rank)
-        terms = [(sp[i] - sp[j]) * (1.0 / spv[j] - 1.0 / spv[i]) for i in range(rank) for j in range(i + 1, d)]
-        pa = 0.0
-        for t in logs(terms):
-            pa += t + logn
+        if native:
+            # the rank * (2d - rank - 1) / 2 cross terms and their in-order
+            # sum in x_decomp/moves.mojo (pca_mle_terms / pca_mle_pa): the
+            # same double expressions, rounded to float32 as _M.of stores them
+            cnt = int(k.b.x_decomp_pca_mle_terms(spa, [d, rank], float(v), tbuf.addr))
+            tl = k.ew("logs", _M(tbuf.s[:cnt], 1, cnt), s=tiny)
+            pa = float(k.b.x_decomp_pca_mle_pa(tl.addr, cnt, float(logn)))
+        else:
+            spv = sp[:rank] + [v] * (d - rank)
+            terms = [(sp[i] - sp[j]) * (1.0 / spv[j] - 1.0 / spv[i]) for i in range(rank) for j in range(i + 1, d)]
+            pa = 0.0
+            for t in logs(terms):
+                pa += t + logn
         ll = pu + pl + pv + pp - pa / 2.0 - rank * logn / 2.0
         if ll > best:
             best, arg = ll, rank
@@ -2733,7 +2878,11 @@ def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=
             rows[j] = k.ew("maxs", rows[j], s=0.0)
         nrm = k.ew("sqrt", k.total(k.ew("sq", rows[j])))
         rows[j] = k.ew("div", rows[j], k.ew("maxs", nrm, s=1.0))
-    if zero_cols:
+    if zero_cols and k.py2mojo():
+        code = k.copy(code)
+        for j in zero_cols:
+            k.fill0(code, j, code.c, code.r)
+    elif zero_cols:
         code = code.copy()
         for i in range(code.r):
             for j in zero_cols:
@@ -2908,9 +3057,12 @@ class MiniBatchDictionaryLearning(_SparseCoding):
         else:
             D = _vstack(D, _M.zeros(nc - D.r, m))
         if self.shuffle:
-            u = k.rand(1, n, seed, 50, 0).s
-            perm = sorted(range(n), key=lambda i: (u[i], i))
-            Xt = M.take_rows(perm)
+            if k.py2mojo() and n < _F32_INDEX_MAX:
+                Xt = k.take_rows(M, k.order(k.rand(1, n, seed, 50, 0)))
+            else:
+                u = k.rand(1, n, seed, 50, 0).s
+                perm = sorted(range(n), key=lambda i: (u[i], i))
+                Xt = M.take_rows(perm)
         else:
             Xt = M
         A, B = _M.zeros(nc, nc), _M.zeros(m, nc)
@@ -3349,8 +3501,11 @@ def _dist(k, A, B, kind, pw, same=False):
         return k.ew("sqrt", k.sqdist(A, B))
     D = k.pdist(A, B, kind, pw)
     if same and kind == 4:
-        for i in range(A.r):
-            D.s[i * B.r + i] = 0.0
+        if k.py2mojo():
+            k.fill0(D, 0, B.r + 1, min(A.r, B.r))
+        else:
+            for i in range(A.r):
+                D.s[i * B.r + i] = 0.0
     return D
 
 
@@ -3586,15 +3741,26 @@ class Isomap(_Base):
         if self._knn is None:
             G = self._radius_geodesic(k, Q)
         else:
-            idx, dst = _knn_lists(k, Q, self._fit_X, self._knn, False, self._kind, self._pw)
-            sq = _M.of([v for row in dst for v in row], Q.r, self._knn)
-            if self._kind == 0:
-                sq = k.ew("sqrt", sq)
             G = None
-            for a in range(self._knn):
-                rows = D.take_rows([idx[i][a] for i in range(Q.r)])
-                cand = k.ew("add", rows, sq.cols(a, a + 1))
-                G = cand if G is None else k.ew("min", G, cand)
+            if k.py2mojo() and n < _F32_INDEX_MAX:
+                # the neighbour matrices as they come (indices as exact
+                # floats), each neighbour's rows of D gathered on the device
+                im, sq = _knn_mats(k, Q, self._fit_X, self._knn, False, self._kind, self._pw)
+                if self._kind == 0:
+                    sq = k.ew("sqrt", sq)
+                for a in range(self._knn):
+                    rows = k.take_rows(D, im, m=Q.r, ist=self._knn, ioff=a)
+                    cand = k.ew("add", rows, sq.cols(a, a + 1))
+                    G = cand if G is None else k.ew("min", G, cand)
+            else:
+                idx, dst = _knn_lists(k, Q, self._fit_X, self._knn, False, self._kind, self._pw)
+                sq = _M.of([v for row in dst for v in row], Q.r, self._knn)
+                if self._kind == 0:
+                    sq = k.ew("sqrt", sq)
+                for a in range(self._knn):
+                    rows = D.take_rows([idx[i][a] for i in range(Q.r)])
+                    cand = k.ew("add", rows, sq.cols(a, a + 1))
+                    G = cand if G is None else k.ew("min", G, cand)
         G = k.ew("scale", k.ew("sq", G), s=-0.5)
         row = k.ew("scale", k.rowsum(G), s=1.0 / n)
         Kc = k.ew("add", k.ew("sub", k.ew("sub", G, self._k_col), row), self._k_all)
@@ -3622,7 +3788,12 @@ class Isomap(_Base):
         k = self._kit()
         # a difference of two nearly equal sums: accumulated in float64
         # (sequential IEEE adds of exact float32 squares) or it cancels
-        t = _dsum(v * v for v in self._Kc.s) - _dsum(v * v for v in self.eigenvalues_m_.s)
+        if k.py2mojo():
+            Kc, ev = self._Kc, self.eigenvalues_m_
+            t = (float(k.b.x_decomp_dsum_sq(Kc.addr, len(Kc.s))) if Kc.r * Kc.c else 0.0) - \
+                (float(k.b.x_decomp_dsum_sq(ev.addr, len(ev.s))) if ev.r * ev.c else 0.0)
+        else:
+            t = _dsum(v * v for v in self._Kc.s) - _dsum(v * v for v in self.eigenvalues_m_.s)
         return math.sqrt(t) / self._Kc.r if t > 0 else 0.0
 
 
@@ -4273,6 +4444,8 @@ class MinCovDet(_Base):
         mean of their midpoints, the support the h values nearest it (ties to
         the lower index), the variance of the support."""
         n = X.r
+        if k.py2mojo() and n < _F32_INDEX_MAX:
+            return self._mcd_1d_native(k, X, h)
         order = sorted(range(n), key=lambda i: (X.s[i], i))
         xs = _M.of([X.s[i] for i in order], n, 1)
         if h < n:
@@ -4292,6 +4465,29 @@ class MinCovDet(_Base):
         support = [False] * n
         for i in sel:
             support[i] = True
+        return loc, cov, support, _mahal(k, X, loc, P)
+
+    def _mcd_1d_native(self, k, X, h):
+        """`_mcd_1d` with its orders, gathers, window minimum and support in
+        x_decomp/moves.mojo (lane apple-fast-py2mojo-decomp): the same
+        (value, index) orders, the same kit cells on the same values."""
+        n = X.r
+        xs = k.take_rows(X, k.order(X))
+        if h < n:
+            diff = k.ew("sub", xs.rows(h, n), xs.rows(0, n - h))
+            starts = k.argmin_all(diff)
+            mids = k.ew("scale", k.ew("add", k.take_rows(xs, starts, radd=h), k.take_rows(xs, starts)), s=0.5)
+            loc = k.colmean(mids)
+            cen = k.ew("abs", k.ew("sub", X, loc))
+            sel, mask = k.select_smallest(cen, h)
+            Xs = k.take_rows(X, sel)
+            support = [v != 0 for v in mask]
+        else:
+            loc = k.colmean(X)
+            Xs = X
+            support = [True] * n
+        cov = _emp_cov(k, Xs)
+        P = _pinvh(k, cov)
         return loc, cov, support, _mahal(k, X, loc, P)
 
     def _fast_mcd_native(self, k, X, h):
@@ -4436,6 +4632,21 @@ class EllipticEnvelope(MinCovDet):
         if not 0 < self.contamination <= 0.5:
             raise ValueError("contamination must be in (0, 0.5]")
         super().fit(X)
+        k = self._kit()
+        if k.py2mojo():
+            # the two order statistics the interpolation reads: sorted(-d)[i]
+            # is -(d in ascending order)[n - 1 - i] (negation is exact)
+            dm = self.dist_m_
+            nv = dm.r * dm.c
+            o = array.array("i", [0]) * nv
+            k.b.x_decomp_argsort_f32(dm.addr, nv, o.buffer_info()[0])
+            ds = dm.s
+            q = 100.0 * self.contamination / 100.0 * (nv - 1)
+            lo = int(math.floor(q))
+            hi = min(lo + 1, nv - 1)
+            vlo, vhi = -ds[o[nv - 1 - lo]], -ds[o[nv - 1 - hi]]
+            self.offset_ = vlo + (vhi - vlo) * (q - lo)
+            return self
         v = sorted(-d for d in self.dist_m_.s)
         q = 100.0 * self.contamination / 100.0 * (len(v) - 1)
         lo = int(math.floor(q))
@@ -4454,8 +4665,16 @@ class EllipticEnvelope(MinCovDet):
         return k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_).out((d.r,))
 
     def predict(self, X):
-        vals = self.decision_function(X)
         from ._buffer import frombytes as _fb
+        k = self._kit()
+        if k.py2mojo():
+            d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
+            dec = k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_)
+            out = array.array("i", [0]) * d.r
+            if d.r:
+                k.b.x_decomp_sign_labels(dec.addr, d.r, out.buffer_info()[0])
+            return _fb(out.tobytes(), "<i4", (len(out),))
+        vals = self.decision_function(X)
         out = array.array("i", [1 if v >= 0 else -1 for v in vals])
         return _fb(out.tobytes(), "<i4", (len(out),))
 
@@ -4466,6 +4685,24 @@ class EllipticEnvelope(MinCovDet):
         """sklearn OutlierMixin/ClassifierMixin.score: accuracy_score(y,
         predict(X), sample_weight), the (weighted) share of exact label
         matches as an IEEE double (weights summed in order)."""
+        k = self._kit()
+        if k.py2mojo():
+            pa = self.predict(X)
+            n = len(pa)
+            ya = as_f64_c(y, ndim=1, name="y")[0]
+            if len(ya) != n:
+                raise ValueError("y and X have different numbers of rows")
+            if sample_weight is None:
+                hit, tot = k.b.x_decomp_accuracy(addr_ro(ya, name="y"), addr_ro(pa, name="pred"), 0, n)
+                return float(hit) / n
+            wa = as_f64_c(sample_weight, ndim=1, name="sample_weight")[0]
+            if len(wa) != n:
+                raise ValueError("sample_weight and X have different numbers of rows")
+            hit, tw = k.b.x_decomp_accuracy(addr_ro(ya, name="y"), addr_ro(pa, name="pred"),
+                                            addr_ro(wa, name="sample_weight"), n)
+            if float(tw) == 0:
+                raise ZeroDivisionError("Weights sum to zero, can't be normalized")
+            return float(hit) / float(tw)
         pred = self.predict(X).tolist()
         yl = [int(v) for v in (y.tolist() if hasattr(y, "tolist") else list(y))]
         if len(yl) != len(pred):
@@ -4558,6 +4795,20 @@ class AlternatingLeastSquares(_Base):
         if not hasattr(self, "user_factors_m_"):
             raise RuntimeError("AlternatingLeastSquares is not fitted; call fit first")
 
+    def _topn(self, k, S, N, skip):
+        """(ids, scores) of the N best entries of the score row S by (-score,
+        id), skipping the nonzero entries of the float32 row at address
+        `skip` (0: none): x_decomp/moves.mojo `topn_desc` and `gather`."""
+        from ._buffer import frombytes as _fb
+        m = S.r * S.c
+        n = max(min(N, m), 0)
+        order = array.array("i", [0]) * max(n, 1)
+        c = int(k.b.x_decomp_topn_desc(S.addr, [m, n], skip, order.buffer_info()[0])) if n else 0
+        vals = array.array("f", [0.0]) * max(c, 1)
+        if c:
+            k.b.x_decomp_gather(S.addr, order.buffer_info()[0], c, vals.buffer_info()[0])
+        return (_fb(order[:c].tobytes(), "<i4", (c,)), _fb(vals[:c].tobytes(), "<f4", (c,)))
+
     def recommend(self, userid, user_items, N=10, filter_already_liked_items=True):
         """(ids, scores) of the N best items for one user: x_u . y_i, ties to
         the lower item id; items the user interacted with (row `userid` of
@@ -4565,7 +4816,18 @@ class AlternatingLeastSquares(_Base):
         self._check_fit()
         k = self._kit()
         U = self.user_factors_m_.rows(userid, userid + 1)
-        sc = k.mm(U, self.item_factors_m_, tb=True).s
+        S = k.mm(U, self.item_factors_m_, tb=True)
+        if k.py2mojo() and int(N) >= 0:
+            skip, R = 0, None
+            if filter_already_liked_items and user_items is not None:
+                R = _M.from_input(user_items, "user_items")
+                if R.c != S.c or not (R.r == 1 or 0 <= userid < R.r):
+                    R = None
+                else:
+                    skip = R.addr + 4 * (0 if R.r == 1 else int(userid)) * R.c
+            if R is not None or not (filter_already_liked_items and user_items is not None):
+                return self._topn(k, S, int(N), skip)
+        sc = S.s
         liked = set()
         if filter_already_liked_items and user_items is not None:
             R = _M.from_input(user_items, "user_items")
@@ -4584,7 +4846,10 @@ class AlternatingLeastSquares(_Base):
         Y = self.item_factors_m_
         nrm = k.ew("sqrt", k.rowsum(k.ew("sq", Y)))
         Yn = k.ew("div", Y, nrm)
-        sc = k.mm(Yn.rows(itemid, itemid + 1), Yn, tb=True).s
+        S = k.mm(Yn.rows(itemid, itemid + 1), Yn, tb=True)
+        if k.py2mojo() and int(N) >= 0:
+            return self._topn(k, S, int(N), 0)
+        sc = S.s
         order = sorted(range(len(sc)), key=lambda i: (-sc[i], i))[:N]
         from ._buffer import frombytes as _fb
         return (_fb(array.array("i", order).tobytes(), "<i4", (len(order),)),
