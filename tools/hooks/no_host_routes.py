@@ -832,23 +832,37 @@ def tree_findings(tree, paths=None):
 
 # ------------------------------------------------------------- baseline ----
 
-_HDR = "rule\tclass\towner\tstate\tpath\tocc\ttext\twhy"
+_HDR = "rule\tclass\towner\tstate\tpath\tocc\ttext"
+# `owed` is `debt` for a rule added after the 2026-10-02 hooks were
+# installed: those hooks skip a state they do not know, so the row neither
+# fails them as stale nor needs them to know the rule.
+_DEBT_STATES = ("debt", "owed")
+# rules added after the baseline was first written; a baseline with no row of
+# one predates it (see check_tree)
+_LATE_RULES = ("d2h-host-work",)
 
 
 def load_baseline(text):
+    """Rows of the baseline. A `# why: ...` comment line gives the reason for
+    the row right after it (required for d2h-host-work rows); older readers
+    skip it as a comment."""
     rows = []
+    why = ""
     for ln in text.splitlines():
+        if ln.startswith("# why:"):
+            why = ln[len("# why:"):].strip()
+            continue
         if not ln.strip() or ln.startswith("#") or ln.startswith("rule\t"):
             continue
         c = ln.split("\t")
-        if len(c) not in (7, 8):
+        if len(c) != 7:
             raise SystemExit(f"no_host_routes: bad baseline row: {ln[:120]}")
-        rule, cls, owner, state, path, occ, text = c[:7]
-        why = c[7] if len(c) == 8 else ""
-        if rule == "d2h-host-work" and not why.strip():
-            raise SystemExit(f"no_host_routes: a d2h-host-work row needs a reason (8th column): {ln[:120]}")
+        rule, cls, owner, state, path, occ, text = c
+        if rule == "d2h-host-work" and not why:
+            raise SystemExit(f"no_host_routes: a d2h-host-work row needs a `# why:` line above it: {ln[:120]}")
         rows.append(dict(rule=rule, cls=cls, owner=owner, state=state, path=path,
                          occ=int(occ), text=text, why=why))
+        why = ""
     return rows
 
 
@@ -856,11 +870,13 @@ def dump_baseline(rows):
     rows = sorted(rows, key=lambda r: (r["path"], r["rule"], r["text"], r["occ"]))
     head = ("# no_host_routes baseline: CPU work in GPU code that main still carries.\n"
             "# It only shrinks. A fix deletes its rows (no_host_routes.py --prune-baseline).\n"
-            "# state debt = on main; inflight = pre-authorized lines of an open PR.\n"
-            "# An optional 8th column gives the reason a row stays (required for d2h-host-work).\n")
+            "# state debt = on main; inflight = pre-authorized lines of an open PR; owed = debt of a rule\n"
+            "# newer than the installed hooks (they skip it).\n"
+            "# A `# why: ...` line gives the reason the next row stays (required for d2h-host-work).\n")
     return head + _HDR + "\n" + "".join(
-        "\t".join([r["rule"], r["cls"], r["owner"], r["state"], r["path"], str(r["occ"]),
-                   r["text"]] + ([r["why"]] if r.get("why") else [])) + "\n" for r in rows)
+        (f"# why: {r['why']}\n" if r.get("why") else "")
+        + "\t".join([r["rule"], r["cls"], r["owner"], r["state"], r["path"], str(r["occ"]),
+                     r["text"]]) + "\n" for r in rows)
 
 
 def _key(r):
@@ -883,7 +899,7 @@ def _inflight_ok(state, ref):
 
 
 def summary(rows, out=sys.stderr):
-    debt = [r for r in rows if r["state"] == "debt"]
+    debt = [r for r in rows if r["state"] in _DEBT_STATES]
     by_cls = collections.Counter(r["cls"] for r in debt)
     by_owner = collections.Counter(r["owner"] for r in debt)
     infl = collections.Counter(r["owner"] for r in rows if r["state"].startswith("inflight"))
@@ -915,17 +931,22 @@ def check_tree(ref, baseline_path=None, overlay=None, quiet=False):
     rows = load_baseline(btext)
     tree = Tree(ref, overlay)
     found = tree_findings(tree)
-    debt_keys = collections.Counter(_key(r) for r in rows if r["state"] == "debt")
+    debt_keys = collections.Counter(_key(r) for r in rows if r["state"] in _DEBT_STATES)
     infl_keys = collections.Counter(_key(r) for r in rows if _inflight_ok(r["state"], ref))
     allowed_extra = collections.Counter()
-    if not own:
+    # a rule newer than the tree's baseline (no row of it, so the baseline was
+    # written before the rule) is judged like a tree that predates the
+    # baseline, for that rule only: what the branch adds over its merge-base
+    late = {r for r in _LATE_RULES if not any(x["rule"] == r for x in rows)} if own else set()
+    if not own or late:
         # the tree predates the baseline: judge only what the branch adds over
         # its merge-base with main (main's later fixes are not charged to it)
         mb = _git("merge-base", "refs/remotes/origin/main", ref)
         if mb.returncode != 0:
             mb = _git("merge-base", "origin/main", ref)
         if mb.returncode == 0:
-            allowed_extra = collections.Counter(k for k, _ in tree_findings(Tree(mb.stdout.strip())))
+            allowed_extra = collections.Counter(k for k, _ in tree_findings(Tree(mb.stdout.strip()))
+                                                if not own or k[0] in late)
     found_keys = collections.Counter(k for k, _ in found)
     new, matched_infl = [], []
     for k, no in found:
