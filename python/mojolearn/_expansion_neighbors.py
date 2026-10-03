@@ -1318,26 +1318,30 @@ class _LabelPropagationBase(_XNeighbors):
     def fit(self, X, y):
         X = _f32(X)
         n = X.shape[0]
-        y = y.tolist() if hasattr(y, "tolist") else list(y)
-        if len(y) != n:
+        # the labels by the native encoder, then the one-hot rows, the
+        # spreading rows and the unlabeled flags on the device
+        # (`p2m_lp_labels`; lane pyglue-numeric: Python lists over the rows)
+        from ._labels import encode_labels
+        allc, codes = encode_labels(y)
+        if codes.size != n:
             raise ValueError("X and y have different numbers of rows")
-        classes = sorted(set(v for v in y if v != -1))
+        skip = next((i for i, c in enumerate(allc) if c == -1 and not isinstance(c, str)), -1)   # glue: k classes
+        classes = [c for i, c in enumerate(allc) if i != skip]
         C = len(classes)
-        code = {c: i for i, c in enumerate(classes)}
-        unl = [1 if v == -1 else 0 for v in y]
-        ld0 = [[1.0 if (v != -1 and code[v] == j) else 0.0 for j in range(C)] for v in y]
-        ys = None
-        if self._variant != "propagation":
-            a = _f32_scalar(1.0 - float(self.alpha))
-            ys = [[a * v for v in row] for row in ld0]
+        ld = _empty_out((n, C), "<f4")
+        ys = _empty_out((n, C), "<f4")
+        unlabeled = empty((n,), "<i4")
+        a = _f32_scalar(1.0 - float(self.alpha)) if self._variant != "propagation" else 1.0
+        if n and C:
+            self._op("p2m_lp_labels", [(codes, 0), (ld, 1), (ys, 1), (unlabeled, 1)], (n, C, skip), (a,))
+        if self._variant == "propagation":
+            ys = None
         if self.kernel == "knn":
             k = min(int(self.n_neighbors), n)
             _, idx = self._knn_sq(X, X, k, False)
             G = self._compact_graph(idx, n, 0 if self._variant == "propagation" else 1)
         else:
             G = self._build_graph(X)
-        ld = Array.from_list(ld0, "<f4")
-        unlabeled = _i32(unl, "unlabeled")
         if ys is None:
             # propagation's static rows on the device: a labeled row keeps
             # its one-hot row, an unlabeled row (all zero in ld0) normalizes
@@ -1345,7 +1349,7 @@ class _LabelPropagationBase(_XNeighbors):
             ystatic = _empty_out((n, C), "<f4")
             self._op("lp_clamp", [(ld, 0), (ld, 0), (unlabeled, 0), (ystatic, 1)], (n, C))
         else:
-            ystatic = Array.from_list(ys, "<f4")
+            ystatic = ys
         if isinstance(G, tuple) and self._fast_tier() and _lp_fast_resident(self):
             # lane/apple-fast-neighbors2: the loop below over the compact kNN
             # graph as ONE resident op (x_neighbors/iter_device.mojo

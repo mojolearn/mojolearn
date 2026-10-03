@@ -10,7 +10,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item, row_argmax_item
 from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, nc_med_std_init_item, nc_med_std_step_item, nc_med_std_pick_item, pos_count_item, pos_scan_item, pos_emit_item
-from x_neighbors.py2mojo_items import p2m_mask_value_item, p2m_zero_cols_item, p2m_nan_indicator_item, p2m_sign_label_item, p2m_relabel_init_item, p2m_relabel_first_item, p2m_relabel_count_item, p2m_relabel_scan_item, p2m_relabel_emit_item, p2m_relabel_map_item, p2m_ccount_zero_item, p2m_ccount_add_item, p2m_ccount_emit_item, p2m_const_init_item, p2m_const_cmp_item, p2m_fill_item, p2m_iota_item, p2m_negate_item, p2m_transpose_item, p2m_transpose_i_item, p2m_row_sort_init_item, p2m_row_sort_step_item, p2m_row_sort_emit_item
+from x_neighbors.py2mojo_items import p2m_mask_value_item, p2m_zero_cols_item, p2m_nan_indicator_item, p2m_sign_label_item, p2m_relabel_init_item, p2m_relabel_first_item, p2m_relabel_count_item, p2m_relabel_scan_item, p2m_relabel_emit_item, p2m_relabel_map_item, p2m_ccount_zero_item, p2m_ccount_add_item, p2m_ccount_emit_item, p2m_const_init_item, p2m_const_cmp_item, p2m_lp_labels_item, p2m_fill_item, p2m_iota_item, p2m_negate_item, p2m_transpose_item, p2m_transpose_i_item, p2m_row_sort_init_item, p2m_row_sort_step_item, p2m_row_sort_emit_item
 
 comptime BLOCK = 128
 
@@ -1882,6 +1882,37 @@ def op_p2m_const_cols(x: Int, flag: Int, n: Int, d: Int) raises:
     ctx.synchronize()
     _ = d_x^
     _ = d_flag^
+    _ = ctx^
+
+
+def p2m_lp_labels_kernel(codes: IP, ld: FP, ys: FP, unl: IP, n_: Int64, c_: Int64, skip_: Int64, a_: Float32):
+    var n = Int(n_)
+    var c = Int(c_)
+    var skip = Int(skip_)
+    var a = a_
+    var t = _tid()
+    if t < n * c:
+        p2m_lp_labels_item(t, codes, ld, ys, unl, n, c, skip, a)
+
+
+def op_p2m_lp_labels(codes: Int, ld: Int, ys: Int, unl: Int, n: Int, c: Int, skip: Int, a: Float32) raises:
+    var ctx = xn_ctx()
+    var d_codes = _buf_i(ctx, codes, n, True)
+    var d_ld = _buf(ctx, ld, n * c, False)
+    var d_ys = _buf(ctx, ys, n * c, False)
+    var d_unl = _buf_i(ctx, unl, n, False)
+    ctx.enqueue_function[p2m_lp_labels_kernel](
+        d_codes.unsafe_ptr(), d_ld.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), Int64(n), Int64(c), Int64(skip), a,
+        grid_dim=_grid(n * c), block_dim=(BLOCK if n * c > 1 else 1),
+    )
+    _down(ctx, d_ld, ld, n * c)
+    _down(ctx, d_ys, ys, n * c)
+    _down_i(ctx, d_unl, unl, n)
+    ctx.synchronize()
+    _ = d_codes^
+    _ = d_ld^
+    _ = d_ys^
+    _ = d_unl^
     _ = ctx^
 
 

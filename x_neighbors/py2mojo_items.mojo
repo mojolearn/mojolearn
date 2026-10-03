@@ -15,6 +15,7 @@ copy, a compare or integer work: no float arithmetic, so no bit can move.
                      flag count, scan and emit)
   p2m_class_counts   NearestCentroid's class counts (atomic adds per row)
   p2m_const_cols     NearestCentroid's all-features-constant test
+  p2m_lp_labels      LabelPropagation / LabelSpreading's label rows
   p2m_fill, p2m_iota PageRank's uniform start vectors, the cc start labels
   p2m_negate         kneighbors' inner-product distances (exact negation)
   p2m_transpose(_i)  the k-NN multi-output label / target transposes
@@ -184,6 +185,24 @@ def p2m_const_cmp_item(t: Int, x: FP, flag: IP, n: Int, d: Int):
     (sklearn's ptp == 0 over all features). Every writer stores the same 1."""
     if x.unsafe_load(t) != x.unsafe_load(t % d):
         flag.unsafe_store(0, Int32(1))
+
+
+# ------------------------------------------------------------------ LabelPropagation
+def p2m_lp_labels_item(t: Int, codes: IP, ld: FP, ys: FP, unl: IP, n: Int, c: Int, skip: Int, a: Float32):
+    """Item t = i*c + j: ld[t] = 1.0 when row i's class (its code, with the
+    unlabeled marker's code `skip` taken out of the numbering) is j, else
+    0.0; ys[t] = a * ld[t]; unl[i] = 1 for a row with code `skip` (written
+    by item j == 0). skip -1: no row is unlabeled."""
+    var i = t // c
+    var j = t - i * c
+    var code = Int(codes.unsafe_load(i))
+    var unlabeled = skip >= 0 and code == skip
+    var cls = code - 1 if (skip >= 0 and code > skip) else code
+    var v = Float32(1) if (not unlabeled and cls == j) else Float32(0)
+    ld.unsafe_store(t, v)
+    ys.unsafe_store(t, a * v)
+    if j == 0:
+        unl.unsafe_store(i, Int32(1) if unlabeled else Int32(0))
 
 
 def p2m_fill_item(t: Int, res: FP, count: Int, value: Float32):

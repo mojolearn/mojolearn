@@ -209,6 +209,12 @@ OPS = [
     ("p2m_const_cols", "py2mojo_items",
      [("p2m_const_init_item", "1"), ("p2m_const_cmp_item", "n * d")], None,
      [("x", "fin", "n * d"), ("flag", "iout", "1"), ("n", "int"), ("d", "int")]),
+    # lane pyglue-numeric: LabelPropagation / LabelSpreading's label rows (the
+    # one-hot rows without the unlabeled marker's code, the spreading rows
+    # scaled by 1 - alpha, the unlabeled flags) from the native codes
+    ("p2m_lp_labels", "py2mojo_items", "p2m_lp_labels_item", "n * c",
+     [("codes", "iin", "n"), ("ld", "fout", "n * c"), ("ys", "fout", "n * c"), ("unl", "iout", "n"),
+      ("n", "int"), ("c", "int"), ("skip", "int"), ("a", "float")]),
     ("p2m_fill", "py2mojo_items", "p2m_fill_item", "count",
      [("res", "fout", "count"), ("count", "int"), ("value", "float")]),
     ("p2m_iota", "py2mojo_items", "p2m_iota_item", "count",

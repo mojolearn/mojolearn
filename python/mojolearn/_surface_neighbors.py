@@ -92,6 +92,7 @@ FAMILIES = (
             "xn_p2m_relabel",
             "xn_p2m_class_counts",
             "xn_p2m_const_cols",
+            "xn_p2m_lp_labels",
             "xn_p2m_fill",
             "xn_p2m_iota",
             "xn_p2m_negate",
