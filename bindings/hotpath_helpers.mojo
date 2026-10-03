@@ -789,3 +789,152 @@ def select_fold_i64_binding(
                 rp.unsafe_store(n_train, Int64(i))
                 n_train += 1
     return PythonObject(n_test)
+
+
+# ---------------------------------------------------------------------------
+# lane cgr4-py-compute: the remaining CV-splitter index generation
+# ---------------------------------------------------------------------------
+
+
+def arange_i64_binding(dst_addr: PythonObject, start: PythonObject, n: PythonObject) raises -> PythonObject:
+    """`dst[i] = start + i` for i < n, int64: every contiguous row range a
+    splitter hands out (TimeSeriesSplit, train_test_split, `_as_index`)."""
+    var count = Int(py=n)
+    if count < 0:
+        raise Error("arange_i64: n must be non-negative")
+    if count == 0:
+        return PythonObject(0)
+    var lo = Int64(Int(py=start))
+    var dp = _ptr[DType.int64](Int(py=dst_addr))
+    with GILReleased(Python()):
+        for i in range(count):
+            comptime if HOTPATH_SABOTAGE:
+                dp.unsafe_store(i, lo + Int64(count - 1 - i))
+            else:
+                dp.unsafe_store(i, lo + Int64(i))
+    return PythonObject(0)
+
+
+def leave_range_i64_binding(
+    n: PythonObject, lo: PythonObject, hi: PythonObject,
+    train_addr: PythonObject, test_addr: PythonObject,
+) raises -> PythonObject:
+    """test = rows [lo, hi), train = rows [0, lo) then [hi, n), ascending
+    int64 (LeaveOneOut's split i is lo = i, hi = i + 1). Returns hi - lo."""
+    var rows = Int(py=n)
+    var a = Int(py=lo)
+    var b = Int(py=hi)
+    if rows < 1 or a < 0 or b < a or b > rows:
+        raise Error("leave_range_i64: needs 0 <= lo <= hi <= n, n >= 1")
+    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=test_addr))
+    var rp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=train_addr))
+    with GILReleased(Python()):
+        for i in range(a, b):
+            tp.unsafe_store(i - a, Int64(i))
+        var at = 0
+        for i in range(rows):
+            if i < a or i >= b:
+                comptime if HOTPATH_SABOTAGE:
+                    rp.unsafe_store(at, Int64(rows - 1 - i))
+                else:
+                    rp.unsafe_store(at, Int64(i))
+                at += 1
+    return PythonObject(b - a)
+
+
+def mask_from_indices_u8_binding(
+    idx_addr: PythonObject, k: PythonObject, n: PythonObject, mask_addr: PythonObject,
+) raises -> PythonObject:
+    """mask[r] = 1 for every int64 index r of the k at `idx` (mask zeroed
+    first, n bytes); returns the number of distinct rows set. An index
+    outside [0, n) raises before the mask is read."""
+    var count = Int(py=k)
+    var rows = Int(py=n)
+    if count < 0 or rows < 1:
+        raise Error("mask_from_indices_u8: k must be non-negative and n positive")
+    var mp = _ptr[DType.uint8](Int(py=mask_addr))
+    var bad = False
+    var set = 0
+    with GILReleased(Python()):
+        for r in range(rows):
+            mp.unsafe_store(r, 0)
+        if count > 0:
+            var ip = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=idx_addr))
+            for i in range(count):
+                var r = Int(ip.unsafe_load(i))
+                if r < 0 or r >= rows:
+                    bad = True
+                    break
+                if mp.unsafe_load(r) == 0:
+                    set += 1
+                mp.unsafe_store(r, 1)
+    if bad:
+        raise Error("mask_from_indices_u8: index out of range")
+    return PythonObject(set)
+
+
+def select_mask_u8_i64_binding(
+    mask_addr: PythonObject, n: PythonObject, test_addr: PythonObject, train_addr: PythonObject,
+) raises -> PythonObject:
+    """Ascending int64 rows whose mask byte is nonzero into `test`, the rest
+    into `train`; returns the test count. A null output address is legal
+    when that side is empty. `n_test` = count of nonzero bytes: the caller
+    sizes the outputs from `count_mask_u8`."""
+    var rows = Int(py=n)
+    if rows < 1:
+        raise Error("select_mask_u8_i64: n must be positive")
+    var mp = _ptr[DType.uint8](Int(py=mask_addr))
+    var ta = Int(py=test_addr)
+    var ra = Int(py=train_addr)
+    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ta)
+    var rp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ra)
+    var n_test = 0
+    with GILReleased(Python()):
+        var n_train = 0
+        for i in range(rows):
+            var at = i
+            comptime if HOTPATH_SABOTAGE:
+                at = (i + 1) % rows
+            if mp.unsafe_load(at) != 0:
+                tp.unsafe_store(n_test, Int64(i))
+                n_test += 1
+            else:
+                rp.unsafe_store(n_train, Int64(i))
+                n_train += 1
+    return PythonObject(n_test)
+
+
+def count_mask_u8_binding(mask_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """The number of nonzero bytes of the n-byte mask."""
+    var rows = Int(py=n)
+    if rows < 0:
+        raise Error("count_mask_u8: n must be non-negative")
+    if rows == 0:
+        return PythonObject(0)
+    var mp = _ptr[DType.uint8](Int(py=mask_addr))
+    var c = 0
+    with GILReleased(Python()):
+        for i in range(rows):
+            if mp.unsafe_load(i) != 0:
+                c += 1
+    return PythonObject(c)
+
+
+def next_combination_i64_binding(addr: PythonObject, p: PythonObject, n: PythonObject) raises -> PythonObject:
+    """Advance the ascending p-combination of range(n) at `addr` (int64) to
+    its lexicographic successor (itertools.combinations order); 1 when it
+    advanced, 0 when it was the last (left unchanged)."""
+    var k = Int(py=p)
+    var rows = Int(py=n)
+    if k < 1 or k > rows:
+        raise Error("next_combination_i64: needs 1 <= p <= n")
+    var cp = _ptr[DType.int64](Int(py=addr))
+    var i = k - 1
+    while i >= 0 and Int(cp.unsafe_load(i)) == i + rows - k:
+        i -= 1
+    if i < 0:
+        return PythonObject(0)
+    var v = cp.unsafe_load(i) + 1
+    for j in range(i, k):
+        cp.unsafe_store(j, v + Int64(j - i))
+    return PythonObject(1)

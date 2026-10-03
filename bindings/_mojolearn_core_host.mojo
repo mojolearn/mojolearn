@@ -108,6 +108,12 @@ from bindings.hotpath_helpers import (
     indices_overlap_i64_binding,
     reduce_stat_binding,
     select_fold_i64_binding,
+    arange_i64_binding,
+    leave_range_i64_binding,
+    mask_from_indices_u8_binding,
+    select_mask_u8_i64_binding,
+    count_mask_u8_binding,
+    next_combination_i64_binding,
 )
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_ptr
 from core.dense_coo import (
@@ -1425,6 +1431,12 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[indices_overlap_i64_binding]("indices_overlap_i64")
         module.def_function[fold_ids_binding]("fold_ids")
         module.def_function[select_fold_i64_binding]("select_fold_i64")
+        module.def_function[arange_i64_binding]("arange_i64")
+        module.def_function[leave_range_i64_binding]("leave_range_i64")
+        module.def_function[mask_from_indices_u8_binding]("mask_from_indices_u8")
+        module.def_function[select_mask_u8_i64_binding]("select_mask_u8_i64")
+        module.def_function[count_mask_u8_binding]("count_mask_u8")
+        module.def_function[next_combination_i64_binding]("next_combination_i64")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))
