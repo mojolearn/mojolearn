@@ -8,29 +8,41 @@ hand the `ClusterOut` back. The integer and float parameter lists are
 documented per entry and mirrored in `python/mojolearn/_x_cluster_impl.py`."""
 from x_cluster.affinity import affinity_fit
 from x_cluster.agglo import agglo_tree
-from x_cluster.bgmm import BgmmPriors, BgmmState, bgmm_constants, bgmm_fit, bgmm_score, bgmm_weights
+from x_cluster.bgmm import BgmmPriors, BgmmState, bgmm_fit, bgmm_score
 from x_cluster.bisect import BisectTree, bisect_fit, bisect_predict
-from checks.numerics import identical_mul64
 from x_cluster.common import distances_to, nearest_all
 from x_cluster.meanshift import meanshift_fit
 from x_cluster.bodies import SplitMix64
 from x_cluster.minibatch import MiniBatchParams, minibatch_fit, minibatch_partial
 from x_cluster.ops import ClusterOps
-from x_cluster.optics import optics_dbscan_ops, optics_graph, optics_xi_clusters, optics_xi_labels
+from x_cluster.optics import optics_dbscan_ops, optics_graph, optics_xi_ops
 from x_cluster.out import ClusterOut
+from x_cluster.post_bodies import FM_VAL
+from checks.numerics import portable_log64
+from x_cluster.tree_cut import tree_labels
 from x_cluster.spectral_assign import ASSIGN_CLUSTER_QR, ASSIGN_DISCRETIZE, cluster_qr_labels, discretize_labels
 
 
 def nearest_entry[O: ClusterOps](mut ops: O, x: List[Float32], c: List[Float32], ip: List[Int]) raises -> ClusterOut:
-    """ip = [n, k, d]. i = [labels], f = [squared distance to the nearest]."""
+    """ip = [n, k, d]. i = [labels], f = [squared distance to the nearest].
+    ip[3] = 1 (lane apple-fast-py2mojo-cluster: `score` summed them in
+    Python): s = [the float-float fold of the distances]."""
     var n = ip[0]
     var k = ip[1]
     var d = ip[2]
     var xs = ops.put(x)
     var labels = List[Int32]()
     var dist = List[Float32]()
-    nearest_all(ops, xs, n, c, k, d, labels, dist)
     var out = ClusterOut()
+    if len(ip) > 3 and ip[3] != 0:
+        var cs = ops.put(c)
+        var ls = ops.zeros_i(n)
+        var ds = ops.zeros(n)
+        ops.nearest(xs, n, cs, k, d, ls, ds)
+        out.s.append(ops.sum_ff(ds, -1, -1, n, FM_VAL))
+        ops.get_if(ls, n, ds, n, labels, dist)
+    else:
+        nearest_all(ops, xs, n, c, k, d, labels, dist)
     out.i.append(labels^)
     out.f.append(dist^)
     return out^
@@ -177,12 +189,12 @@ def optics_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[Int], fp:
     var pred = List[Int]()
     var metric = ip[6] if len(ip) > 6 else -1
     var pw = Float32(fp[3]) if len(fp) > 3 else Float32(2)
-    optics_graph(ops, x, n, d, ip[2], Float32(fp[0]), ordering, core, reach, pred, metric, pw)
-    var labels: List[Int32]
-    var clusters = List[Int]()
+    var slots = List[Int]()
+    optics_graph(ops, x, n, d, ip[2], Float32(fp[0]), ordering, core, reach, pred, slots, metric, pw)
+    var labels = List[Int32]()
+    var clusters = List[Int32]()
     if ip[4] == 0:
-        clusters = optics_xi_clusters(reach, pred, ordering, fp[1], ip[2], ip[3], ip[5] != 0)
-        labels = optics_xi_labels(ordering, clusters)
+        clusters = optics_xi_ops(ops, slots, n, fp[1], ip[2], ip[3], ip[5] != 0, labels)
     else:
         labels = optics_dbscan_ops(ops, ordering, reach, core, Float32(fp[2]))
     var out = ClusterOut()
@@ -191,7 +203,7 @@ def optics_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[Int], fp:
     out.i.append(_i32(ordering))
     out.i.append(_i32(pred))
     out.i.append(labels^)
-    out.i.append(_i32(clusters))
+    out.i.append(clusters^)
     return out^
 
 
@@ -201,7 +213,8 @@ def affinity_entry[O: ClusterOps](
     """ip = [n, d, precomputed, pref_mode (0 median, 1 scalar, 2 array),
     max_iter, convergence_iter, seed]; fp = [damping, preference scalar].
     i = [cluster_centers_indices, labels], f = [affinity_matrix, the final
-    diagonals of A then R], s = [n_iter]."""
+    diagonals of A then R, the exemplar rows (none when precomputed)],
+    s = [n_iter]."""
     var centers = List[Int32]()
     var labels = List[Int32]()
     var n_iter = 0
@@ -211,11 +224,22 @@ def affinity_entry[O: ClusterOps](
         ops, x, ip[0], ip[1], ip[2] != 0, ip[3], Float32(fp[1]), pref, Float32(fp[0]), ip[4], ip[5],
         UInt64(ip[6]), centers, labels, n_iter, aff, ar_diag,
     )
+    # f[2]: the exemplar rows of x (cluster_centers_) unless precomputed, a
+    # row copy per exemplar (lane pyglue-numeric: a Python gather)
+    var d = ip[1]
+    var rows = List[Float32]()
+    if ip[2] == 0:
+        rows = List[Float32](capacity=len(centers) * d)
+        for c in centers:
+            var r = Int(c)
+            for f in range(d):
+                rows.append(x[r * d + f])
     var out = ClusterOut()
     out.i.append(centers^)
     out.i.append(labels^)
     out.f.append(aff^)
     out.f.append(ar_diag^)
+    out.f.append(rows^)
     out.s.append(Float64(n_iter))
     return out^
 
@@ -247,47 +271,19 @@ def bgmm_entry[O: ClusterOps](
     var n = ip[0]
     var d = ip[1]
     var kc = ip[2]
+    # the caller's priors; the defaults (X's mean, np.cov(X.T), its mean
+    # variance times I when spherical) are the device's (`bgmm_fit`)
     var off = 0
-    var mean_prior = List[Float64](capacity=d)
+    var mean_prior = List[Float64]()
     if ip[8] != 0:
         for f in range(d):
             mean_prior.append(Float64(a[f]))
         off = d
-    else:
-        for f in range(d):
-            var acc = Float64(0)
-            for r in range(n):
-                acc = acc + Float64(x[r * d + f])
-            mean_prior.append(acc / Float64(n))
-    var cov_prior = List[Float64](length=d * d, fill=0)
+    var cov_prior = List[Float64]()
     if ip[9] != 0:
         for t in range(d * d):
-            cov_prior[t] = Float64(a[off + t])
-    else:
-        # np.cov(X.T): ddof 1, one ascending Float64 chain per cell
-        var mean = List[Float64](capacity=d)
-        for f in range(d):
-            var acc = Float64(0)
-            for r in range(n):
-                acc = acc + Float64(x[r * d + f])
-            mean.append(acc / Float64(n))
-        for p in range(d):
-            for q in range(d):
-                var acc = Float64(0)
-                for r in range(n):
-                    acc = acc + identical_mul64(Float64(x[r * d + p]) - mean[p], Float64(x[r * d + q]) - mean[q])
-                cov_prior[p * d + q] = acc / Float64(n - 1 if n > 1 else 1)
+            cov_prior.append(Float64(a[off + t]))
     var cov_type = ip[10] if len(ip) > 10 else 0
-    if cov_type == 3 and ip[9] == 0:
-        # spherical: var(X, ddof=1).mean(), as s * I
-        var sph = Float64(0)
-        for f in range(d):
-            sph = sph + cov_prior[f * d + f]
-        sph = sph / Float64(d)
-        for t in range(d * d):
-            cov_prior[t] = Float64(0)
-        for f in range(d):
-            cov_prior[f * d + f] = sph
     var wcp = fp[0] if fp[0] >= 0 else 1.0 / Float64(kc)
     var mpp = fp[1] if fp[1] >= 0 else 1.0
     var dofp = fp[2] if fp[2] >= 0 else Float64(d)
@@ -346,7 +342,7 @@ def bgmm_entry[O: ClusterOps](
         w_init, m_init, p_init,
     )
     var out = ClusterOut()
-    out.f.append(_f32_of(bgmm_weights(pr, best)))
+    out.f.append(_f32_of(best.weights))
     out.f.append(_f32_of(best.means))
     out.f.append(_f32_of(best.cov))
     out.f.append(_f32_of(best.pchol))
@@ -354,10 +350,20 @@ def bgmm_entry[O: ClusterOps](
     out.f.append(_f32_of(best.wc1))
     out.f.append(_f32_of(best.mean_prec))
     out.f.append(_f32_of(best.dof))
-    out.f.append(bgmm_constants(pr, best))
-    out.f.append(_f32_of(mean_prior))
-    out.f.append(_f32_of(cov_prior))
+    out.f.append(best.consts.copy())
+    out.f.append(_f32_of(best.mean_prior))
+    out.f.append(_f32_of(best.cov_prior))
     out.f.append(_f32_of(best.nk))
+    # f[12]: log_det_chol_, sum_j log(pchol[c, j, j]) per component (the
+    # portable log, ascending j; lane pyglue-numeric: a Python loop over
+    # the components and features)
+    var ld = List[Float32](capacity=kc)
+    for c in range(kc):
+        var acc = Float64(0)
+        for j in range(d):
+            acc += portable_log64(best.pchol[c * d * d + j * d + j])
+        ld.append(Float32(acc))
+    out.f.append(ld^)
     out.i.append(labels^)
     out.s.append(r.lower_bound)
     out.s.append(Float64(r.n_iter))
@@ -373,7 +379,10 @@ def bgmm_score_entry[O: ClusterOps](
 ) raises -> ClusterOut:
     """ip = [n, d, n_components]; a = means (k x d), precisions_cholesky
     (k x d x d), constants (k). f = [log_resp (n x k), log_prob_norm (n)];
-    i = [labels (n), each row's first largest log responsibility]."""
+    i = [labels (n), each row's first largest log responsibility].
+    ip[3] (optional, lane apple-fast-py2mojo-cluster): bit 0 adds f[2] =
+    predict_proba (the pinned exp of log_resp), bit 1 adds s = [the
+    float-float fold of log_prob_norm]."""
     var n = ip[0]
     var d = ip[1]
     var kc = ip[2]
@@ -389,10 +398,17 @@ def bgmm_score_entry[O: ClusterOps](
     var lr = List[Float32]()
     var lpn = List[Float32]()
     var labels = List[Int32]()
-    bgmm_score(ops, x, n, d, kc, means, pchol, c, lr, lpn, labels)
+    var flags = ip[3] if len(ip) > 3 else 0
+    var proba = List[Float32]()
+    var total = Float64(0)
+    bgmm_score(ops, x, n, d, kc, means, pchol, c, lr, lpn, labels, flags, proba, total)
     var out = ClusterOut()
     out.f.append(lr^)
     out.f.append(lpn^)
+    if flags & 1:
+        out.f.append(proba^)
+    if flags & 2:
+        out.s.append(total)
     out.i.append(labels^)
     return out^
 
@@ -450,15 +466,35 @@ def agglo_entry[O: ClusterOps](
     (-1 euclidean, 0-4 bodies.pdist_cell, 5 precomputed), n_edges (-1: no
     connectivity), n_merges]; fp = [minkowski p]; `edges` = the n_edges
     (row, col) pairs. i = [children (n_merges x 2)], f = [distances],
-    s = [n_connected_components]."""
+    s = [n_connected_components].
+
+    Optional (lane apple-fast-py2mojo-cluster, what `_hierarchy_impl.py`
+    computed in Python): ip[6] = edge_mode (0 the pairs above, 1 `edges` is
+    the dense n x n connectivity matrix, 2 its COO rows, columns and values
+    concatenated; n_edges counts the cells / entries), ip[7] = cut (-1 none;
+    0 a partial tree's roots; >= 1 `_hc_cut` with that n_clusters), ip[8] = 1
+    when the cut's n_clusters is the count of distances >= fp[1] plus one.
+    With a cut: i += [labels (n)], s += [n_clusters]."""
     var children = List[Int32]()
     var dist = List[Float32]()
     var n_cc = 1
-    agglo_tree(ops, x, ip[0], ip[1], ip[2], ip[3], Float32(fp[0]), edges, ip[4], ip[5], children, dist, n_cc)
+    var edge_mode = ip[6] if len(ip) > 6 else 0
+    agglo_tree(
+        ops, x, ip[0], ip[1], ip[2], ip[3], Float32(fp[0]), edges, ip[4], ip[5], children, dist, n_cc, edge_mode
+    )
     var out = ClusterOut()
+    var cut = ip[7] if len(ip) > 7 else -1
+    var labels = List[Int32]()
+    var k = 0
+    if cut >= 0:
+        var use_thr = len(ip) > 8 and ip[8] != 0
+        k = tree_labels(ops, children, dist, ip[0], ip[5], cut, fp[1] if use_thr else 0.0, use_thr, labels)
     out.i.append(children^)
     out.f.append(dist^)
     out.s.append(Float64(n_cc))
+    if cut >= 0:
+        out.i.append(labels^)
+        out.s.append(Float64(k))
     return out^
 
 

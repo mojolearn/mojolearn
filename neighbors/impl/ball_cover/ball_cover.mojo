@@ -183,7 +183,7 @@ from neighbors.impl.ball_cover.registers import (
 )
 from neighbors.impl.ball_cover.scan import (
     RBC_SCAN_TPB,
-    rbc_exclusive_scan_kernel,
+    rbc_exclusive_scan_launch,
 )
 
 
@@ -521,13 +521,7 @@ def rbc_build_index(
         grid_dim=(grid_m, 1, 1),
         block_dim=(RBC_BUILD_TPB, 1, 1),
     )
-    ctx.enqueue_function[rbc_exclusive_scan_kernel](
-        r_indptr.unsafe_ptr(),
-        counts.unsafe_ptr(),
-        Int32(n_landmarks),
-        grid_dim=(1, 1, 1),
-        block_dim=(RBC_SCAN_TPB, 1, 1),
-    )
+    rbc_exclusive_scan_launch(ctx, r_indptr, counts, n_landmarks)
     # `counts` becomes the per-landmark write cursor.
     ctx.enqueue_memset(counts, Int32(0))
     ctx.enqueue_function[rbc_scatter_kernel](

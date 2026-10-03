@@ -97,7 +97,7 @@ def execute(request):
         if int(os.environ.get('MOJOLEARN_OPTIMIZER_DEVICE_COUNT', '1')) > 1:
             from ._training_impl import _load
             binding = _load('identical')
-            for name in ('optimizer_parallel_available', 'accumulate_parallel_available', 'clip_parallel_available'):
+            for name in ('optimizer_parallel_available', 'accumulate_parallel_available', 'clip_parallel_available'):  # glue: checks three binding entry points
                 function = getattr(binding, name, None)
                 if not callable(function):
                     raise ImportError('rebuild training binding for pooled neural gradients and updates')
@@ -112,7 +112,7 @@ def execute(request):
             return model.loss_and_grads(*args)
         from .parallel_training import ordered_sum_gradients
         gradients = ordered_sum_gradients(args)
-        retained = [g.copy() for g in gradients]
+        retained = [g.copy() for g in gradients]  # glue: copies each parameter gradient buffer
         step = model.apply_gradients(gradients)
         return model.state_dict(), retained, step
     if operation in ('samba_gradient', 'samba_update'):
@@ -126,7 +126,7 @@ def execute(request):
             return model.loss_and_grads(inputs, targets, dropout_stream=stream, token_offset=offset)
         from .parallel_training import ordered_sum_gradients
         gradients = ordered_sum_gradients(args)
-        retained = [g.copy() for g in gradients]
+        retained = [g.copy() for g in gradients]  # glue: copies each parameter gradient buffer
         model.optimizer.step(gradients, max_norm=model.max_norm)
         return model.state_dict(), retained, model.optimizer.t
     if operation == 'forest_fit':
@@ -219,11 +219,29 @@ def execute(request):
         from ._cpu_reference import require_training
         from ._gpc_impl import _kernel_arrays
         require_training(state)
+        if len(args) == 3:
+            # (x, int32 class codes, k): the targets are built in the binding
+            x, codes, k = args
+            return state._fit_binary(state._extension(), x, codes, *_kernel_arrays(state.kernel), k=k)
         x, y01 = args
         return state._fit_binary(state._extension(), x, y01, *_kernel_arrays(state.kernel))
     if operation == 'gpc_class_predict':
-        fit, q, want_proba = args
-        mean, _, probability = state._latent(state._extension(), fit, q, want_proba)
+        fit, q, want_proba = args[:3]
+        out_kind = args[3] if len(args) > 3 else 0
+        ext = state._extension()
+        if out_kind:
+            # a binary model's predict codes (1) or predict_proba pairs (2):
+            # from the binding when it computes them (lane
+            # apple-fast-py2mojo-cluster), the Python loops otherwise
+            from ._gp_impl import _gp_py2mojo
+            if _gp_py2mojo(ext):
+                return state._latent(ext, fit, q, want_proba, out_kind)[3]
+            from ._array import Array
+            mean, _, probability = state._latent(ext, fit, q, want_proba)
+            if out_kind == 1:
+                return Array.from_list([1 if v > 0.0 else 0 for v in mean.tolist()], '<i8')
+            return Array.from_list([[1.0 - v, v] for v in probability.tolist()], '<f8')
+        mean, _, probability = state._latent(ext, fit, q, want_proba)
         return probability if want_proba else mean
     if operation == 'forecast_predict':
         method, positional = args
@@ -416,7 +434,7 @@ def execute(request):
         if method not in _methods(state):
             raise ValueError('invalid neighbors/density query operation')
         result = getattr(state, method)(X, **kwargs)
-        diagnostics = {name: getattr(state, name) for name in
+        diagnostics = {name: getattr(state, name) for name in  # glue: two named diagnostic attributes
                        ('used_query_tile_', 'n_candidate_distances_')
                        if hasattr(state, name)}
         return result, diagnostics

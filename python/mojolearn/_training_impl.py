@@ -290,7 +290,7 @@ def _as_seq(x, name, where):
             "parameter registry is refused rather than answered "
             "(training/estimator.mojo)" % (where, name)
         )
-    for i, a in enumerate(out):
+    for i, a in enumerate(out):  # glue: checks each parameter tensor
         if not _is_buffer(a):
             raise TypeError(
                 "mojolearn.%s: %s[%d] is %s, not an array (it does not "
@@ -319,7 +319,7 @@ def _check_dtype(arrays, name, where, *, inplace):
     over the model, which the numpy-free contract forbids on this path.
     """
     probes = []
-    for i, a in enumerate(arrays):
+    for i, a in enumerate(arrays):  # glue: probes each parameter tensor
         pb = probe(a)
         dn = dtype_name(a, pb)
         if base_format(pb.format) == "e" or dn in ("float16", "bfloat16"):
@@ -359,7 +359,7 @@ def _offsets_for(probes):
     strictly ascending; `training/estimator.mojo::_offsets_from_ptr` refuses
     anything else BY NAME before any device work."""
     off = [0]
-    for pb in probes:
+    for pb in probes:  # glue: offsets over parameter tensors
         off.append(off[-1] + nelems(pb.shape))
     return Array.from_list(off, "<i4")
 
@@ -383,10 +383,10 @@ def _pack(arrays, probes):
     # unpack copies anything. The device then writes the caller's storage
     # directly, exactly as in the single-tensor case; the caller holds the
     # owning objects across the call, as `step` documents.
-    total = sum(nelems(pb.shape) for pb in probes)
+    total = sum(nelems(pb.shape) for pb in probes)  # glue: element count over tensor shapes
     end = addr_ro(arrays[0], name="tensor")
     base = end
-    for a, pb in zip(arrays, probes):
+    for a, pb in zip(arrays, probes):  # glue: checks parameter tensors are adjacent
         if pb.readonly or addr_ro(a, name="tensor") != end:
             break
         end += pb.nbytes
@@ -397,7 +397,7 @@ def _pack(arrays, probes):
     flat = empty((total,), "<f4")
     base = addr(flat, name="flat")
     at = 0
-    for a, pb in zip(arrays, probes):
+    for a, pb in zip(arrays, probes):  # glue: memcopy per parameter tensor
         memcopy(base + at, addr_ro(a, name="tensor"), pb.nbytes)
         at += pb.nbytes
     return flat, True
@@ -416,7 +416,7 @@ def _unpack_into(flat, arrays, probes):
     """
     src = addr_ro(flat, name="flat")
     at = 0
-    for a, pb in zip(arrays, probes):
+    for a, pb in zip(arrays, probes):  # glue: memcopy per parameter tensor
         memcopy(addr(a, name="tensor"), src + at, pb.nbytes)
         at += pb.nbytes
 
@@ -458,7 +458,7 @@ def _resident_enabled(binding, wanted):
         return False
     if os.environ.get("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1") != "1":
         return False
-    return all(callable(getattr(binding, n, None)) for n in _RESIDENT_ENTRIES)
+    return all(callable(getattr(binding, n, None)) for n in _RESIDENT_ENTRIES)  # glue: checks binding entry names
 
 
 class _Optimizer(NumericModeMixin):
@@ -512,7 +512,7 @@ class _Optimizer(NumericModeMixin):
         self.accumulation_steps = a
         probes = _check_dtype(self.params, "params", where, inplace=True)
         self.offsets = _offsets_for(probes)
-        self.n_total = sum(nelems(pb.shape) for pb in probes)
+        self.n_total = sum(nelems(pb.shape) for pb in probes)  # glue: element count over tensor shapes
         #: `m` is Adam's `exp_avg` and SGD's `momentum_buffer`; `v` is Adam's
         #: `exp_avg_sq` and is UNREAD BY SGD. Both are allocated at `N`
         #: whatever the algorithm, because the certified entry takes one
@@ -687,7 +687,7 @@ class _Optimizer(NumericModeMixin):
         `+0.0` in float32 and needs the buffer C-contiguous and writable."""
         gs = _as_seq(grads, "grads", self._where)
         probes = _check_dtype(gs, "grads", self._where, inplace=True)
-        for g, pb in zip(gs, probes):
+        for g, pb in zip(gs, probes):  # glue: memset per gradient tensor
             memzero(addr(g, name="grads"), pb.nbytes)
 
     def step(self, grads, max_norm=None):
@@ -725,18 +725,18 @@ class _Optimizer(NumericModeMixin):
                 "mojolearn.%s.step: %d gradients for %d parameter tensors"
                 % (self._where, len(gs), len(self.params))
             )
-        for j, (pp, gp) in enumerate(zip(pprobes, gprobes)):
+        for j, (pp, gp) in enumerate(zip(pprobes, gprobes)):  # glue: checks each parameter tensor shape
             if pp.shape != gp.shape:
                 raise ValueError(
                     "mojolearn.%s.step: grads[%d] has shape %r, params[%d] "
                     "has %r" % (self._where, j, gp.shape, j, pp.shape)
                 )
-        if sum(nelems(pb.shape) for pb in pprobes) != self.n_total:
+        if sum(nelems(pb.shape) for pb in pprobes) != self.n_total:  # glue: element count over tensor shapes
             raise ValueError(
                 "mojolearn.%s.step: the parameter tensors hold %d floats now "
                 "and held %d when this optimizer was built; a parameter "
                 "buffer was resized underneath its registry"
-                % (self._where, sum(nelems(pb.shape) for pb in pprobes),
+                % (self._where, sum(nelems(pb.shape) for pb in pprobes),  # glue: error message element count
                    self.n_total)
             )
 
@@ -1232,7 +1232,7 @@ def _maximize_flag(maximize, where):
 
 def _refuse_unknown(kwargs, where):
     """Every keyword this surface does not have, refused BY NAME."""
-    for k in kwargs:
+    for k in kwargs:  # glue: refuses unknown keyword arguments
         if k in ("dropout",):
             _refuse_out_of_scope("dropout", where)
         if k in ("distributed", "world_size", "rank"):
@@ -1376,7 +1376,7 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
     if (len(gs) > 1 and multi is not None
             and os.environ.get("MOJOLEARN_CLIP_PACKED") != "1"
             and os.environ.get("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1") == "1"):
-        multi([addr(g, name="tensor") for g in gs], addr_ro(offsets, name="offsets"),
+        multi([addr(g, name="tensor") for g in gs], addr_ro(offsets, name="offsets"),  # glue: one address per tensor
               addr(info, name="info"), plist)
         return float(info[0])
     flat, packed = _pack(gs, probes)
@@ -1906,7 +1906,7 @@ class _Schedule(_LrTable):
         self.min_lr = float(_round_f32(min_lr))
         self.warmup_steps = int(warmup_steps)
         self.total_steps = None if total_steps is None else int(total_steps)
-        for name, v in (("peak_lr", self.peak_lr), ("min_lr", self.min_lr)):
+        for name, v in (("peak_lr", self.peak_lr), ("min_lr", self.min_lr)):  # glue: validates two scalar arguments
             if not math.isfinite(v) or v < 0.0:
                 raise ValueError(
                     "mojolearn.%s: %s must be finite and >= 0, got %r"
@@ -2186,15 +2186,15 @@ def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
         raise ValueError("mojolearn.accumulate_grads: no microbatches")
     single = _is_buffer(parts[0])
     seqs = [_as_seq(p, "microbatch_grads[%d]" % i, "accumulate_grads")
-            for i, p in enumerate(parts)]
+            for i, p in enumerate(parts)]  # glue: wraps each microbatch argument
     probes = [_check_dtype(sq, "microbatch_grads[%d]" % i, "accumulate_grads", inplace=False)
-              for i, sq in enumerate(seqs)]
-    for i, sq in enumerate(seqs):
+              for i, sq in enumerate(seqs)]  # glue: probes each microbatch argument
+    for i, sq in enumerate(seqs):  # glue: checks microbatch tensor shapes
         if len(sq) != len(seqs[0]):
             raise ValueError(
                 "mojolearn.accumulate_grads: microbatch %d has %d tensors, "
                 "microbatch 0 has %d" % (i, len(sq), len(seqs[0])))
-        for j, (a, b) in enumerate(zip(probes[i], probes[0])):
+        for j, (a, b) in enumerate(zip(probes[i], probes[0])):  # glue: checks microbatch tensor shapes
             if a.shape != b.shape:
                 raise ValueError(
                     "mojolearn.accumulate_grads: microbatch %d tensor %d has "
@@ -2205,12 +2205,12 @@ def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
         raise ValueError("mojolearn.accumulate_grads: tokens must be >= 1")
     # Inputs are read-only: pack strided buffers without imposing the
     # writable/contiguous restriction of in-place optimizer parameters.
-    contiguous = [[_buffers.as_f32_c(a, ndim=None, name='microbatch')[0] for a in sq]
-                  for sq in seqs]
-    flats = [_pack(sq, pb)[0] for sq, pb in zip(contiguous, probes)]
-    n = sum(nelems(pb.shape) for pb in probes[0])
+    contiguous = [[_buffers.as_f32_c(a, ndim=None, name='microbatch')[0] for a in sq]  # glue: converts each microbatch tensor buffer
+                  for sq in seqs]  # glue: converts each microbatch tensor buffer
+    flats = [_pack(sq, pb)[0] for sq, pb in zip(contiguous, probes)]  # glue: packs each microbatch by memcopy
+    n = sum(nelems(pb.shape) for pb in probes[0])  # glue: element count over tensor shapes
     stacked = empty((a_count, n), '<f4')
-    for i, flat in enumerate(flats):
+    for i, flat in enumerate(flats):  # glue: memcopy per microbatch buffer
         memcopy(addr(stacked, name='stacked') + i*n*4,
                 addr_ro(flat, name='microbatch'), n*4)
     out = _buffers.empty(n, '<f4')
@@ -2219,7 +2219,7 @@ def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
     # for word in bindings/_mojolearn_training.mojo::accumulate_binding).
     binding.accumulate([_addr(out), _addr_ro(stacked)],
                        [n, a_count, t_tokens])
-    result = [empty(pb.shape, "<f4") for pb in probes[0]]
+    result = [empty(pb.shape, "<f4") for pb in probes[0]]  # glue: allocates each result tensor
     _unpack_into(out, result, probes[0])
     return result[0] if single else result
 
@@ -2305,9 +2305,9 @@ class Generator(object):
         if isinstance(shape, numbers.Integral):
             shape = (int(shape),)
         else:
-            shape = tuple(int(d) for d in shape)
+            shape = tuple(int(d) for d in shape)  # glue: shape tuple of ints
         n = 1
-        for d in shape:
+        for d in shape:  # glue: validates each shape dimension
             if d < 1:
                 raise ValueError(
                     "mojolearn.Generator: shape must be positive, got %r"
@@ -2615,8 +2615,8 @@ def chunked_lm_head_loss(hidden, weight, targets, return_grad=False,
         raise ValueError(
             "mojolearn.%s: hidden must be (rows, width) and weight "
             "(vocab, width)" % where)
-    rows, width = (int(d) for d in h.shape)
-    vocab, width_w = (int(d) for d in w.shape)
+    rows, width = (int(d) for d in h.shape)  # glue: two shape dimensions only
+    vocab, width_w = (int(d) for d in w.shape)  # glue: two shape dimensions only
     if width != width_w:
         raise ValueError(
             "mojolearn.%s: hidden has width %d, weight has width %d"

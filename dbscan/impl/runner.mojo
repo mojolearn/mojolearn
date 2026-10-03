@@ -136,9 +136,9 @@ from dbscan.impl.multi_gpu import (
     rbc_eps_nn_query_fill, rbc_eps_nn_query_max_k,
 )
 from neighbors.impl.ball_cover.scan import (
-    rbc_exclusive_scan_kernel,
+    rbc_exclusive_scan_launch,
     RBC_SCAN_TPB,
-    rbc_max_reduce_kernel,
+    rbc_max_reduce_launch,
 )
 
 
@@ -727,12 +727,8 @@ their code branches on is this Bool.
         # scalar comes back. It sits inside the mask.vertexdeg window below
         # exactly as it sits inside their nvtx VertexDeg range (:255-296).
         if sparse_rbc_mode:
-            ctx.enqueue_function[rbc_max_reduce_kernel](
-                rbc_mk_scratch.unsafe_ptr(),
-                vd.unsafe_ptr(),
-                Int32(n_points),
-                grid_dim=(1, 1, 1),
-                block_dim=(RBC_SCAN_TPB, 1, 1),
+            rbc_max_reduce_launch(
+                ctx, rbc_mk_scratch, vd, n_points
             )
             ctx.synchronize()
             ctx.enqueue_copy(
@@ -913,11 +909,7 @@ their code branches on is this Bool.
                                 start2, n_points2
                             ),
                         )
-                        ctx.enqueue_function[rbc_exclusive_scan_kernel](
-                            ex_scan.unsafe_ptr(), vd.unsafe_ptr(),
-                            Int32(n_points2),
-                            grid_dim=(1, 1, 1), block_dim=(RBC_SCAN_TPB, 1, 1),
-                        )
+                        rbc_exclusive_scan_launch(ctx, ex_scan, vd, n_points2)
                         ctx.enqueue_copy(
                             dst_buf=vd.create_sub_buffer[DType.int32](
                                 n_points2, 1
@@ -1076,11 +1068,7 @@ their code branches on is this Bool.
                                 start_b, np_b
                             ),
                         )
-                        ctx.enqueue_function[rbc_exclusive_scan_kernel](
-                            ex_scan.unsafe_ptr(), vd.unsafe_ptr(),
-                            Int32(np_b),
-                            grid_dim=(1, 1, 1), block_dim=(RBC_SCAN_TPB, 1, 1),
-                        )
+                        rbc_exclusive_scan_launch(ctx, ex_scan, vd, np_b)
                     else:
                         var _nnzb = rbc_eps_nn_query_count(
                             ctx, rbc_xr, qbb, rbc_r, rbc_ip, rbc_c1, rbc_d1,

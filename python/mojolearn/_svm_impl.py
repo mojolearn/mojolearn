@@ -57,9 +57,9 @@ from . import _backend
 from . import _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, zeros
-from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, encode_labels, sorted_classes
+from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, encode_labels, sorted_classes, threshold_codes
 from ._mode import NumericModeMixin
-from ._scale_gamma import scale_gamma
+from ._scale_gamma import scale_gamma, scale_gamma_x
 from .linear_model import (
     _accuracy_host,
     _check_saved_by,
@@ -184,7 +184,6 @@ def _as_labels(y):
         )
     # lane py-shared: the native encoder (`sorted_classes` is its definition)
     classes, codes_arr = encode_labels(labels)
-    _codes = codes_arr.tolist()
     if len(classes) < 2:
         raise ValueError(
             f"mojolearn SVC: y has {len(classes)} class; at least two are needed"
@@ -200,7 +199,7 @@ def _as_labels(y):
         # float32 path below, bit for bit. Found by the Sep 22 pip smoke:
         # `SVC().fit(X, ["a", "b", ...])` raised "buffer format '<U1'"
         # while LogisticRegression and LinearSVC took the same labels.
-        f = Array.from_list([float(c) for c in _codes], "<f4")
+        f = codes_arr.astype("<f4")             # exact: small ints
         return f, classes, (0.0, 1.0)
     f, _ = as_f32_c(y, ndim=1, name="y")
     if not all_finite(f):
@@ -229,16 +228,14 @@ def _c_rows(binding, C, n_rows, sample_weight, class_weight=None, y=None, who="S
         return None
     sw = None
     if sample_weight is not None:
-        sw = as_f64_c(sample_weight, ndim=1, name="sample_weight")
+        sw, _ = as_f64_c(sample_weight, ndim=1, name="sample_weight")
         if sw.shape[0] != n_rows:
             raise ValueError(
                 f"mojolearn {who}: sample_weight has {sw.shape[0]} entries, X has {n_rows} rows"
             )
-        for v in sw.tolist():
-            if not math.isfinite(v) or v < 0.0:
-                raise ValueError(
-                    f"mojolearn {who}: sample_weight must be finite and >= 0, got {v!r}"
-                )
+        # finiteness and sign by the base binding (all_finite_f64, reduce_stat min)
+        if n_rows and (not all_finite(sw) or sw.min() < 0.0):
+            raise ValueError(f"mojolearn {who}: sample_weight must be finite and >= 0")
     codes = cwa = None
     n_classes = 0
     if class_weight is not None:
@@ -252,9 +249,11 @@ def _c_rows(binding, C, n_rows, sample_weight, class_weight=None, y=None, who="S
                 raise ValueError(
                     f"mojolearn {who}: class_weight is a dict, 'balanced' or None, got {class_weight!r}"
                 )
-            counts = [0] * len(classes)
-            for c in codes.tolist():
-                counts[c] += 1
+            from ._buffer import _native
+            cnt = zeros((len(classes),), "<i8")
+            _native("bincount_i64")(addr_ro(codes, name="class codes"), 2, codes.shape[0], len(classes),
+                                    addr(cnt, name="counts"), 0)
+            counts = cnt.tolist()
             cw = [n_rows / (len(classes) * counts[k]) for k in range(len(classes))]
         else:
             cw = [1.0] * len(classes)
@@ -304,6 +303,19 @@ def _gather(binding, x, rows=None, cols=None):
     return out
 
 
+def _gather_i32(binding, values, rows):
+    """`values[rows]` for an int32 Array `values` and int32 row indices, the
+    binding's 4-byte gather (on the device on a GPU install)."""
+    m = values.shape[0]
+    ra = _i32(rows)
+    out = empty((ra.shape[0],), "<i4")
+    if ra.shape[0]:
+        binding.svc_pair_epilogue(
+            addr_ro(values, name="values"), addr_ro(ra, name="row indices"), 0,
+            addr(out, name="gathered"), [_GLUE_GATHER, m, 1, ra.shape[0], 1])
+    return out
+
+
 def _pair_select(binding, codes, ci, cj, c_rows=None):
     """The rows of class ci or cj, in row order, selected in the binding (a
     device compaction on a GPU install; cgfin-c-svm): their indices (int32
@@ -338,27 +350,18 @@ def _precomputed_columns(binding, q, support):
     return _gather(binding, q, None, idx)
 
 
-def _dual_times_sv(dual_coef, support_vectors):
-    """`dual_coef_ @ support_vectors_`: a `(1, n_support) x (n_support,
-    n_features)` product, accumulated SEQUENTIALLY over the support vectors
-    in Python float64 and rounded once to float32.
-
-    DEVIATION 2372 -- A HOST REDUCTION, OUTSIDE THE IDENTITY CLAIM. NumPy's
-    float32 matmul went through the platform BLAS (or NumPy's own blocked
-    loop), whose fold shape was the host's; this is one written-down order
-    instead, so the bits are the same on every host but MAY DIFFER from a
-    NumPy-era `coef_` in the last place. Only reachable on
-    `kernel='linear'`, and only through the `coef_` property. It is an
-    O(n_support * n_features) Python loop, FLAGGED AS A DEFECT: the right
-    home is a gemv binding.
-    """
-    d = dual_coef.tolist()[0]
-    n_features = support_vectors.shape[1]
-    acc = [0.0] * n_features
-    for a, row in zip(d, support_vectors.tolist()):
-        for j in range(n_features):
-            acc[j] += a * row[j]
-    return Array.from_list([acc], "<f4")
+def _concat_f32(blocks):
+    """The float32 elements of every block, in order, as one flat Array
+    (byte copies; the saved pair arrays)."""
+    from ._bufcheck import memcopy
+    parts = [as_f32_c(b, ndim=None, name="block")[0] for b in blocks]
+    out = empty((max(sum(p.size for p in parts), 0),), "<f4")
+    at = addr(out, name="pairs") if out.size else 0
+    for p in parts:
+        if p.size:
+            memcopy(at, addr_ro(p, name="block"), 4 * p.size)
+            at += 4 * p.size
+    return out
 
 
 #: `svc_pair_epilogue` modes (svm/impl/svc_rows.mojo): the epilogues
@@ -768,7 +771,7 @@ class SVC(NumericModeMixin):
         if self.gamma == "auto":
             return 1.0 / float(x.shape[1])
         if self.gamma == "scale":
-            return scale_gamma(x.ravel().tolist(), x.shape[1])
+            return scale_gamma_x(self._bind(_EXT_NAME), x, x.shape[1])
         return float(self.gamma)
 
     def _solve(self, x, labels, gamma, c_rows):
@@ -851,7 +854,7 @@ class SVC(NumericModeMixin):
         self._label1 = label1
         if self.probability:
             self._fit_probability(
-                x, Array.from_list([0 if v == label0 else 1 for v in labels.tolist()], "<i4"),
+                x, threshold_codes(labels, float(label0), strict=True).astype("<i4"),
                 gamma, c_rows)
         else:
             self.__dict__.pop("_prob_ab", None)
@@ -972,7 +975,6 @@ class SVC(NumericModeMixin):
                 # bounds, selected in the binding (a device compaction on a
                 # GPU install), then their X rows gathered there
                 idx_a, lab, sub_c = _pair_select(native, codes, i, j, c_rows)
-                idx = idx_a.tolist()
                 if self.kernel == "precomputed":
                     # the pair's kernel matrix: its rows AND its columns
                     sub = _gather(native, x, idx_a, idx_a)
@@ -984,18 +986,19 @@ class SVC(NumericModeMixin):
                         "mojolearn SVC: the solver's label pair for classes "
                         f"({classes[i]!r}, {classes[j]!r}) is not (0.0, 1.0); "
                         "the class mapping cannot be trusted")
-                local = support[:n_sv].tolist()
                 sub_cols = sub.shape[1]
                 sv_rows = sv[:n_sv * sub_cols].reshape((n_sv, sub_cols))
+                # the pair's support in X's row numbers, gathered in the binding
+                pair_support = _gather_i32(native, idx_a, support[:n_sv])
                 if self.kernel == "precomputed":
                     # the support rows of the WHOLE kernel matrix, as the
                     # binary fit keeps them (predict reads support_ only)
-                    sv_rows = _gather(native, x, [idx[s] for s in local])
+                    sv_rows = _gather(native, x, pair_support)
                 pairs.append(dict(
                     i=i, j=j,
                     dual=dual[:n_sv].reshape((1, n_sv)),
                     sv=sv_rows,
-                    support=[idx[s] for s in local],
+                    support=pair_support,
                     b=_round_f32(info[0]),
                     n_iter=int(info[2]),
                 ))
@@ -1011,6 +1014,11 @@ class SVC(NumericModeMixin):
         (also `load`'s path, where `x` is None and the rows come from each
         pair's own support vectors)."""
         k = len(classes)
+        if x is not None:
+            self._set_ovo_native(self._bind(_EXT_NAME), classes, pairs, x, n_cols)
+            return
+        # glue: `load` only (no fit, transform or predict), from the saved
+        # pairs' own support vectors
         per_class = [dict() for _ in range(k)]          # orig index -> row bytes
         for p in pairs:
             rows = p["sv"].tolist()
@@ -1051,6 +1059,59 @@ class SVC(NumericModeMixin):
         self.n_support_ = Array.from_list(n_support, "<i4")
         self.n_iter_ = Array.from_list([p["n_iter"] for p in pairs], "<i4")
 
+    def _set_ovo_native(self, native, classes, pairs, x, n_cols):
+        """`_set_ovo` in the binding (lane/apple-fast-py2mojo-linear,
+        `svm/impl/svc_ovo_layout.mojo`): the same support_ order, dual_coef_
+        cells and n_support_, then support_vectors_ as the gather of X at
+        support_ (the bytes the per-class dict held)."""
+        k = len(classes)
+        n_rows = x.shape[0]
+        sup_arrays = [_i32(p["support"]) for p in pairs]
+        ms = [p["dual"].shape[1] for p in pairs]
+        cap = min(n_rows, sum(ms))
+        meta = [k, n_rows, len(pairs)]
+        for p, m in zip(pairs, ms):
+            meta += [p["i"], p["j"], m]
+        support = empty((max(1, cap),), "<i4")
+        n_support = empty((k,), "<i4")
+        dual = empty((max(1, (k - 1) * cap),), "<f4")
+        n_sv = int(native.svc_ovo_layout(
+            [addr_ro(a, name="pair support") if m else 0 for a, m in zip(sup_arrays, ms)],
+            [addr_ro(p["dual"], name="pair dual") if m else 0 for p, m in zip(pairs, ms)],
+            meta,
+            [addr(support, name="support_"), addr(n_support, name="n_support_"),
+             addr(dual, name="dual_coef_"), cap]))
+        self.classes_ = classes
+        self.n_features_in_ = n_cols
+        self._pairs = pairs
+        if n_sv:
+            self.support_ = support[:n_sv]
+            self.support_vectors_ = _gather(native, x, self.support_)
+            self.dual_coef_ = dual[:(k - 1) * n_sv].reshape((k - 1, n_sv))
+        else:
+            self.support_ = zeros((0,), "<i4")
+            self.support_vectors_ = zeros((0, n_cols), "<f4")
+            self.dual_coef_ = zeros((k - 1, 0), "<f4")
+        self.intercept_ = Array.from_list([-p["b"] for p in pairs], "<f4")
+        self.n_support_ = n_support
+        self.n_iter_ = Array.from_list([p["n_iter"] for p in pairs], "<i4")
+
+    def _dual_times_sv(self, dual_coef, support_vectors, out=None, row=0, negate=False):
+        """`dual_coef_ @ support_vectors_` in the binding (`svc_dual_gemv`,
+        on the device on a GPU install: an ascending binary64 chain per
+        feature), into row `row` of `out` (a new (1, d) Array when None),
+        negated when `negate` (exact)."""
+        native = self._bind(_EXT_NAME)
+        n_sv, n_features = support_vectors.shape
+        if out is None:
+            out = empty((1, n_features), "<f4")
+        if n_features:
+            native.svc_dual_gemv(
+                addr_ro(dual_coef, name="dual_coef_") if n_sv else 0,
+                addr_ro(support_vectors, name="support_vectors_") if n_sv else 0,
+                [n_sv, n_features, 1 if negate else 0], addr(out, name="coef_") + 4 * row * n_features)
+        return out
+
     @property
     def coef_(self):
         if not hasattr(self, "dual_coef_"):
@@ -1063,16 +1124,14 @@ class SVC(NumericModeMixin):
         if pairs is not None:
             # one row per pair in scikit-learn's orientation: the negation
             # of each pair machine's own dual_coef_ @ support_vectors_
-            rows = []
-            for p in pairs:
-                if p["dual"].shape[1] == 0:
-                    rows.append([0.0] * self.n_features_in_)
-                else:
-                    rows.append([-v for v in _dual_times_sv(p["dual"], p["sv"]).tolist()[0]])
-            return Array.from_list(rows, "<f4")
+            out = zeros((len(pairs), self.n_features_in_), "<f4")
+            for r, p in enumerate(pairs):           # glue: one gemv call per pair
+                if p["dual"].shape[1]:
+                    self._dual_times_sv(p["dual"], p["sv"], out, r, negate=True)
+            return out
         if self.n_support_ == 0:
             return zeros((1, self.n_features_in_), "<f4")
-        return _dual_times_sv(self.dual_coef_, self.support_vectors_)
+        return self._dual_times_sv(self.dual_coef_, self.support_vectors_)
 
     def _query(self, X):
         if not hasattr(self, "dual_coef_"):
@@ -1301,9 +1360,8 @@ class SVC(NumericModeMixin):
                 [v for p in pairs for v in (p["i"], p["j"], p["dual"].shape[1], p["n_iter"])], "<i8")
             arrays["pair_b"] = Array.from_list([p["b"] for p in pairs], "<f4")
             arrays["pair_support"] = Array.from_list([r for p in pairs for r in p["support"]], "<i4")
-            arrays["pair_dual"] = Array.from_list([v for p in pairs for v in p["dual"].tolist()[0]], "<f4")
-            arrays["pair_sv"] = Array.from_list(
-                [v for p in pairs for row in p["sv"].tolist() for v in row], "<f4")
+            arrays["pair_dual"] = _concat_f32([p["dual"] for p in pairs])
+            arrays["pair_sv"] = _concat_f32([p["sv"] for p in pairs])
         return _serialize.write_npz(path, arrays)
 
     @classmethod
@@ -1757,6 +1815,7 @@ class SVR(NumericModeMixin):
         self.output_type = None
 
     _resolve_gamma = SVC._resolve_gamma
+    _dual_times_sv = SVC._dual_times_sv
 
     def _kernel_tail(self):
         """degree and coef0 as the bindings' optional trailing params: only
@@ -1837,7 +1896,7 @@ class SVR(NumericModeMixin):
             )
         if self.n_support_ == 0:
             return zeros((1, self.n_features_in_), "<f4")
-        return _dual_times_sv(self.dual_coef_, self.support_vectors_)
+        return self._dual_times_sv(self.dual_coef_, self.support_vectors_)
 
     def predict(self, X):
         """`sum_j K(x, sv_j) dual_j + b`, one value per row, float32.

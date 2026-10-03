@@ -441,13 +441,11 @@ def qr_panel_kernel(
 #: j + 1 + l, + QR_TPB, ...) and folds its 32 partials with the SAME
 #: two-phase halving tree (`_warp_fold`, the additions of
 #: `two_phase_halving_sum[32]` on a warp-private slab), so the bits are the
-#: panel kernel's. MOJOLEARN_QR_SPLIT=0 keeps the panel kernel.
+#: panel kernel's. `qr_factor` and x_decomp/qr_bounded.mojo always run the
+#: split launches (the MOJOLEARN_QR_SPLIT env switch is gone).
 comptime QR_APPLY_WARPS = 8
 comptime QR_APPLY_TPB = QR_APPLY_WARPS * QR_TPB
 
-
-def qr_split() -> Bool:
-    return String(getenv("MOJOLEARN_QR_SPLIT")) != "0"
 
 
 @always_inline
@@ -613,30 +611,47 @@ def qr_r_copy_kernel(
         t += QR_TPB
 
 
-def qr_factor_split(
-    ctx: DeviceContext, mut a: DeviceBuffer[DType.float32], mut r_out: DeviceBuffer[DType.float32],
+def qr_split_enqueue(
+    ctx: DeviceContext,
+    a: MutPointer[Float32, MutAnyOrigin],
+    r_out: MutPointer[Float32, MutAnyOrigin],
+    tau: MutPointer[Float32, MutAnyOrigin],
     m: Int, n: Int, lda: Int, n_slices: Int,
 ) raises:
     """`qr_panel_kernel` over `n_slices` slices as the split launches: per
-    step the reflector kernel then the apply kernel, then the R copy."""
-    var tau = ctx.enqueue_create_buffer[DType.float32](n_slices if n_slices > 0 else 1)
+    step the reflector kernel then the apply kernel (blocks over the
+    trailing columns x slices), then the R copy. `tau` holds `n_slices`
+    floats. Enqueues only; the caller waits."""
     for j in range(n):
         ctx.enqueue_function[qr_reflector_kernel](
-            a.unsafe_ptr(), r_out.unsafe_ptr(), tau.unsafe_ptr(),
+            a, r_out, tau,
             Int32(m), Int32(n), Int32(lda), Int32(n_slices), Int32(j),
             grid_dim=(n_slices, 1, 1), block_dim=(QR_TPB, 1, 1),
         )
         var cols = n - j - 1
         if cols > 0:
             ctx.enqueue_function[qr_apply_kernel](
-                a.unsafe_ptr(), tau.unsafe_ptr(),
+                a, tau,
                 Int32(m), Int32(n), Int32(lda), Int32(n_slices), Int32(j),
                 grid_dim=((cols + QR_APPLY_WARPS - 1) // QR_APPLY_WARPS, n_slices, 1),
                 block_dim=(QR_APPLY_TPB, 1, 1),
             )
     ctx.enqueue_function[qr_r_copy_kernel](
-        a.unsafe_ptr(), r_out.unsafe_ptr(), Int32(m), Int32(n), Int32(lda), Int32(n_slices),
+        a, r_out, Int32(m), Int32(n), Int32(lda), Int32(n_slices),
         grid_dim=(n_slices, 1, 1), block_dim=(QR_TPB, 1, 1),
+    )
+
+
+def qr_factor_split(
+    ctx: DeviceContext, mut a: DeviceBuffer[DType.float32], mut r_out: DeviceBuffer[DType.float32],
+    m: Int, n: Int, lda: Int, n_slices: Int,
+) raises:
+    """`qr_split_enqueue` on buffers, then one wait."""
+    var tau = ctx.enqueue_create_buffer[DType.float32](n_slices if n_slices > 0 else 1)
+    qr_split_enqueue(
+        ctx, a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        r_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        tau.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), m, n, lda, n_slices,
     )
     ctx.synchronize()
     _ = tau^
@@ -675,54 +690,21 @@ def qr_factor(
     var ns = qr_slice_count(n_rows, n_cols) if slices_override <= 0 else slices_override
     if ns < 1:
         raise Error("qr_factor slice count must be at least 1")
+    # Every pass is the split launches (`qr_split_enqueue`): the trailing
+    # columns of each step spread over blocks, the bits the panel kernel's
+    # (lane cgr5-owed, 2026-10-03: the one-block `qr_panel_kernel` arms of
+    # the ns == 1 and root passes are gone; MOJOLEARN_QR_SPLIT no longer
+    # reaches qr_factor).
     if ns == 1:
-        if qr_split():
-            qr_factor_split(ctx, a, r_out, n_rows, n_cols, n_cols, 1)
-        else:
-            ctx.enqueue_function[qr_panel_kernel](
-                a.unsafe_ptr(),
-                r_out.unsafe_ptr(),
-                Int32(n_rows),
-                Int32(n_cols),
-                Int32(n_cols),
-                Int32(1),
-                grid_dim=(1, 1, 1),
-                block_dim=(QR_TPB, 1, 1),
-            )
-        ctx.synchronize()
+        qr_factor_split(ctx, a, r_out, n_rows, n_cols, n_cols, 1)
         return 1
     if not qr_parallel_panels(ctx,a,r_scratch,n_rows,n_cols,ns):
-        if qr_split():
-            qr_factor_split(ctx, a, r_scratch, n_rows, n_cols, n_cols, ns)
-        else:
-            ctx.enqueue_function[qr_panel_kernel](
-                a.unsafe_ptr(),
-                r_scratch.unsafe_ptr(),
-                Int32(n_rows),
-                Int32(n_cols),
-                Int32(n_cols),
-                Int32(ns),
-                grid_dim=(ns, 1, 1),
-                block_dim=(QR_TPB, 1, 1),
-            )
+        qr_factor_split(ctx, a, r_scratch, n_rows, n_cols, n_cols, ns)
     # The `ns` tiles are contiguous `n x n` row-major blocks, so the stack
     # of them IS an `(ns * n) x n` row-major matrix with leading dimension
     # `n`. No copy and no transpose: TSQR's second pass is the SAME kernel
     # on the SAME layout, which is the reason the tiles are stored this way.
-    if qr_split():
-        qr_factor_split(ctx, r_scratch, r_out, ns * n_cols, n_cols, n_cols, 1)
-    else:
-        ctx.enqueue_function[qr_panel_kernel](
-            r_scratch.unsafe_ptr(),
-            r_out.unsafe_ptr(),
-            Int32(ns * n_cols),
-            Int32(n_cols),
-            Int32(n_cols),
-            Int32(1),
-            grid_dim=(1, 1, 1),
-            block_dim=(QR_TPB, 1, 1),
-        )
-    ctx.synchronize()
+    qr_factor_split(ctx, r_scratch, r_out, ns * n_cols, n_cols, n_cols, 1)
     return ns
 
 
@@ -765,13 +747,21 @@ def qr_parallel_panels(ctx: DeviceContext, mut a: DeviceBuffer[DType.float32],
         outputs.append(devices[rank].enqueue_create_buffer[DType.float32](n*n))
     for rank in range(count):
         devices[rank].synchronize()
+    # each panel as the split launches on its device (trailing columns over
+    # blocks), enqueued on every device before any wait
+    var taus = List[DeviceBuffer[DType.float32]]()
+    for panel in range(ns):
+        var rank = panel%count
+        taus.append(devices[rank].enqueue_create_buffer[DType.float32](1))
     for panel in range(ns):
         var rank = panel%count
         var first = panel*m//ns
         var rows = (panel+1)*m//ns-first
-        devices[rank].enqueue_function[qr_panel_kernel](panels[panel].unsafe_ptr(),outputs[panel].unsafe_ptr(),
-            Int32(rows),Int32(n),Int32(n),Int32(1),
-            grid_dim=(1,1,1),block_dim=(QR_TPB,1,1))
+        qr_split_enqueue(
+            devices[rank], panels[panel].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            outputs[panel].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            taus[panel].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows, n, n, 1,
+        )
     for panel in range(ns):
         var rank = panel%count
         devices[rank].synchronize()
@@ -782,6 +772,7 @@ def qr_parallel_panels(ctx: DeviceContext, mut a: DeviceBuffer[DType.float32],
         panels[panel].enqueue_copy_to(av)
         outputs[panel].enqueue_copy_to(rv)
         devices[rank].synchronize()
+    _ = taus^
     _ = outputs^
     _ = panels^
     for rank in range(count):

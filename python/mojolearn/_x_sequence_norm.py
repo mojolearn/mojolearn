@@ -27,7 +27,7 @@ def _run(x, D, weight, bias, eps, dy, numeric_mode):
     M = x.size // D
     w = None if weight is None else _f32(weight, "weight").reshape(-1)
     b = None if bias is None else _f32(bias, "bias").reshape(-1)
-    for name, v in (("weight", w), ("bias", b)):
+    for name, v in (("weight", w), ("bias", b)):  # glue: the two named parameter arrays
         if v is not None and v.size != D:
             raise ValueError(f"layer_norm: {name} must hold {D} values")
     bwd = dy is not None
@@ -48,9 +48,9 @@ def _run(x, D, weight, bias, eps, dy, numeric_mode):
 
 def _D(normalized_shape):
     shape = (normalized_shape,) if isinstance(normalized_shape, (int, np.integer)) else tuple(normalized_shape)
-    if not shape or any(int(s) < 1 for s in shape):
+    if not shape or any(int(s) < 1 for s in shape):  # glue: shape dims of the argument
         raise ValueError("normalized_shape must be positive")
-    return shape, int(np.prod(shape))
+    return shape, int(np.prod(shape))  # glue: product of the shape dims
 
 
 def layer_norm_forward(x, normalized_shape=None, weight=None, bias=None, eps=1e-5, numeric_mode=None):

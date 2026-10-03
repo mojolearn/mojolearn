@@ -2,7 +2,7 @@
 """Memory-bounded single-GPU replay of ordered byte-LM checkpoints."""
 import threading
 
-from .parallel_training import ParallelByteLanguageModelTrainer
+from .parallel_training import ParallelByteLanguageModelTrainer, _missing_entry
 from ._byte_lm_impl import _load, _validate_state
 from ._byte_lm_config import state_shape
 from ._buffer import addr_ro
@@ -12,10 +12,10 @@ class _OffloadBinding:
     """Use the existing step/export transaction adapter with a model owner."""
 
     def __init__(self, binding):
-        for name in ('create', 'open', 'close', 'step', 'export', 'rollback'):
+        for name in ('create', 'open', 'close', 'step', 'export', 'rollback'):  # glue: checks binding entry names
             function = getattr(binding, 'byte_lm_offload_' + name, None)
             if not callable(function):
-                raise ImportError('rebuild bindings/build_byte_lm.sh for offloaded replay')
+                raise _missing_entry('byte_lm_offload', 'offloaded replay')
             setattr(self, 'byte_lm_parallel_' + name, function)
 
 
@@ -33,7 +33,7 @@ class OffloadedByteLanguageModelTrainer(ParallelByteLanguageModelTrainer):
         devices = tuple(devices)
         if type(logical_shards) is not int or not 1 <= logical_shards <= 1024:
             raise ValueError('logical_shards must be in [1, 1024]')
-        if any(type(i) is not int or i < 0 for i in devices) or len(set(devices)) != len(devices):
+        if any(type(i) is not int or i < 0 for i in devices) or len(set(devices)) != len(devices):  # glue: validates device index arguments
             raise ValueError('devices must be distinct nonnegative integer indices')
         self._state = _validate_state(state)
         self._shape = state_shape(self._state)
@@ -61,7 +61,7 @@ class OffloadedByteLanguageModelTrainer(ParallelByteLanguageModelTrainer):
         session = binding.byte_lm_parallel_create()
         try:
             completed = binding.byte_lm_parallel_open(session,
-                [addr_ro(seed[k], name=k) for k in ('parameters', 'm', 'v', 'flags')],
+                [addr_ro(seed[k], name=k) for k in ('parameters', 'm', 'v', 'flags')],  # glue: four seed buffer addresses
                 params, list(self._shape.native_shape), list(self.devices), self.logical_shards)
             if completed != self.step_:
                 raise RuntimeError('offloaded replay admission returned wrong step')

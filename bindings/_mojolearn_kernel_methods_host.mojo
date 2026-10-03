@@ -37,6 +37,7 @@ kernel matrix, factorization, normalization and feature map this binary
 serves differs.
 """
 from std.os import abort
+from std.math import sqrt
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -58,6 +59,8 @@ from kernel_methods.host.km_host_oracle import (
     kmh_rbf_sampler_transform,
 )
 
+
+from svm.host.scale_gamma_host import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
 
 def kernel_methods_host_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
@@ -155,7 +158,12 @@ def kernel_ridge_fit_binding(
     var y = read_f32(Int(py=addrs[1]), max(0, n * t))
     var sw = List[Float32]()
     if len(addrs) == 5:
-        sw = read_f32(Int(py=addrs[4]), max(0, n))
+        # the per-row factors sqrt(sample_weight): the binary64 square root
+        # of each weight rounded once to float32 (formerly Python's loop)
+        var wp = f64_ptr(Int(py=addrs[4]))
+        sw.reserve(max(0, n))
+        for i in range(n):
+            sw.append(Float32(sqrt(wp[i])))
     var info = 0
     with GILReleased(Python()):
         info = _kernel_ridge_fit_run(
@@ -413,6 +421,8 @@ def rbf_sampler_transform_binding(
     return PythonObject(0)
 
 
+
+
 @export
 def PyInit__mojolearn_kernel_methods_host() abi("C") -> PythonObject:
     try:
@@ -429,6 +439,8 @@ def PyInit__mojolearn_kernel_methods_host() abi("C") -> PythonObject:
         module.def_function[nystroem_transform_binding]("nystroem_transform")
         module.def_function[rbf_sampler_fit_binding]("rbf_sampler_fit")
         module.def_function[rbf_sampler_transform_binding]("rbf_sampler_transform")
+        module.def_function[scale_gamma_limbs_host_binding]("scale_gamma_limbs")
+        module.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         return module.finalize()
     except e:
         abort(String("failed to create _mojolearn_kernel_methods_host: ", e))

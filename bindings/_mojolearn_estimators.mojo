@@ -14,6 +14,9 @@ from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from bindings.py2mojo_cluster_est import dbscan_core_arrays_binding, estimators_py2mojo_cluster_binding
+from core.py2mojo_rows import py2mojo_rows_device_binding
+from core.py2mojo_linear import py2mojo_linear_flags
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -79,9 +82,6 @@ from decomposition.estimator import (
     tsvd_transform_host,
 )
 from glm.estimator import (
-    OLS_FAST_DEVICE_CENTER,
-    ols_center_tsqr_r_host,
-    ols_fit_centered_host,
     ols_fit_host,
     ols_fit_resident_host,
     ols_predict_host,
@@ -643,65 +643,6 @@ def lm_scale_rows_binding(x_addr: PythonObject, w_addr: PythonObject, out_addr: 
     return PythonObject(0)
 
 
-def ols_center_tsqr_r_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    r_addr: PythonObject,
-    means_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """R of the blocked TSQR of [X - mu | y - mu_y] with RAW X and y uploaded
-    once and centered on the device (-D MOJOLEARN_OLS_FAST_DEVICE_CENTER,
-    lane/apple-fast-core, 2026-10-02; `glm/estimator.mojo::
-    ols_center_tsqr_r_host`). params: n_rows, n_features. `r_addr` receives
-    the (n_features + 1) square float32 R, `means_addr` the n_features
-    float32 column means; returns the mean of y. Registered under FAST +
-    Apple with the define only."""
-    if len(params) != 2:
-        raise Error("ols_center_tsqr_r: params must contain n_rows, n_features")
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var xa = Int(py=x_addr)
-    var ya = Int(py=y_addr)
-    var ra = Int(py=r_addr)
-    var ma = Int(py=means_addr)
-    var y_mean = Float64(0.0)
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        y_mean = ols_center_tsqr_r_host(ctx, xa, ya, ra, ma, nr, nf)
-        ctx.synchronize()
-    return PythonObject(y_mean)
-
-
-def ols_fit_centered_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    coef_addr: PythonObject,
-    means_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`ols_fit` on RAW X and y with the intercept's centering on the device
-    (-D MOJOLEARN_OLS_FAST_DEVICE_CENTER, lane/apple-fast-core, 2026-10-02;
-    `glm/estimator.mojo::ols_fit_centered_host`): the route for the designs
-    the Python layer keeps off the TSQR. params: n_rows, n_features.
-    `means_addr` receives the n_features float32 column means; returns the
-    mean of y. Registered under FAST + Apple with the define only."""
-    if len(params) != 2:
-        raise Error("ols_fit_centered: params must contain n_rows, n_features")
-    var nr = Int(py=params[0])
-    var nf = Int(py=params[1])
-    var xa = Int(py=x_addr)
-    var ya = Int(py=y_addr)
-    var ca = Int(py=coef_addr)
-    var ma = Int(py=means_addr)
-    var y_mean = Float64(0.0)
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        y_mean = ols_fit_centered_host(ctx, xa, ya, ca, ma, nr, nf)
-        ctx.synchronize()
-    return PythonObject(y_mean)
-
-
 def ols_predict_binding(
     x_addr: PythonObject,
     coef_addr: PythonObject,
@@ -797,9 +738,13 @@ def ridge_fit_multi_binding(
     """Lane apple-fast-meta (MOJOLEARN_MULTIOUT_RIDGE): ridge on every column
     of Y (n_rows x n_targets, row-major) in one program; coef is n_targets x
     n_features, ymean the n_targets column means. params: n_rows,
-    n_features, n_targets, alpha, center_y (1 subtracts the column means)."""
-    if len(params) != 5:
-        raise Error("ridge_fit_multi: params must contain n_rows, n_features, n_targets, alpha, center_y")
+    n_features, n_targets, alpha, center_y (1 subtracts the column means),
+    and optionally xmean_addr, icpt_addr: then icpt[j] = ymean[j] - xmean .
+    coef[j, :] (binary64 products and sum, ascending features; lane
+    pyglue-numeric: a Python fsum per target)."""
+    if len(params) != 5 and len(params) != 7:
+        raise Error("ridge_fit_multi: params must contain n_rows, n_features, n_targets, alpha, center_y"
+                    " (, xmean_addr, icpt_addr)")
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     var wp = _f32_ptr(Int(py=coef_addr))
@@ -813,6 +758,14 @@ def ridge_fit_multi_binding(
         var ctx = process_ctx[_DEVCTX_SLOT]()
         ridge_fit_multi_host(ctx, xp, yp, wp, mp, nr, nf, nt, alpha, center)
         ctx.synchronize()
+    if len(params) == 7:
+        var xm = _f32_ptr(Int(py=params[5]))
+        var ic = _f32_ptr(Int(py=params[6]))
+        for j in range(nt):
+            var dot = Float64(0)
+            for c in range(nf):
+                dot += Float64(xm[c]) * Float64(wp[j * nf + c])
+            ic[j] = Float32(Float64(mp[j]) - dot)
     return PythonObject(0)
 
 
@@ -1109,11 +1062,15 @@ def kde_score_samples_binding(
     n_query. Added 2026-08-23 by the identity lane on the kde lane's
     hand-off (kde/README.md).
     """
-    if len(params) != 5:
+    if len(params) != 5 and len(params) != 6:
         raise Error(
-            "kde_score_samples: params must contain 5 values, got "
+            "kde_score_samples: params must contain 5 or 6 values, got "
             + String(len(params))
         )
+    if len(params) == 6 and Int(py=params[5]) != 0:
+        # the sum folds on the device in `kde_score_samples_resident` (the
+        # route KernelDensity takes wherever `kde_fit_prepare` exists)
+        raise Error("kde_score_samples: want_total is served by kde_score_samples_resident on this binding")
     var tp = _f32_ptr(Int(py=train_addr))
     var qp = _f32_ptr(Int(py=query_addr))
     var op = _f32_ptr(Int(py=out_addr))
@@ -1196,13 +1153,16 @@ def kde_score_samples_resident_binding(
     metric: PythonObject,
 ) raises -> PythonObject:
     """`kde_score_samples` over a resident fit set (DEVIATION 3003).
-    `params`: [n_query, n_features, bandwidth]. Writes `n_query` float32
-    to `out_addr`; returns n_query."""
-    if len(params) != 3:
+    `params`: [n_query, n_features, bandwidth(, want_total)]. Writes
+    `n_query` float32 to `out_addr`; returns n_query, or with want_total the
+    scores' fixed-order float32 sum (on the device, `device_sum_f32_fixed`;
+    lane pyglue-numeric: KernelDensity.score summed them on the host)."""
+    if len(params) != 3 and len(params) != 4:
         raise Error(
-            "kde_score_samples_resident: params must contain 3 values, got "
+            "kde_score_samples_resident: params must contain 3 or 4 values, got "
             + String(len(params))
         )
+    var want_total = len(params) == 4 and Int(py=params[3]) != 0
     var h = Int(py=handle)
     var qp = _f32_ptr(Int(py=query_addr))
     var op = _f32_ptr(Int(py=out_addr))
@@ -1211,8 +1171,13 @@ def kde_score_samples_resident_binding(
     var bandwidth = Float32(Float64(py=params[2]))
     var kname = String(py=kernel)
     var mname = String(py=metric)
+    var total = Float32(0)
     with GILReleased(Python()):
-        kde_score_samples_resident(h, qp, n_query, n_features, bandwidth, kname, mname, op)
+        total = kde_score_samples_resident(
+            h, qp, n_query, n_features, bandwidth, kname, mname, op, want_total=want_total,
+        )
+    if want_total:
+        return PythonObject(Float64(total))
     return PythonObject(n_query)
 
 
@@ -1237,6 +1202,18 @@ def estimators_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+
+def py2mojo_rows_binding(mode: PythonObject, src_addr: PythonObject, dst_addr: PythonObject,
+                         params: PythonObject) raises -> PythonObject:
+    """lane/apple-fast-py2mojo-linear: per-row probability glue on the
+    device (`core/py2mojo_rows.mojo`)."""
+    return py2mojo_rows_device_binding(process_ctx[_DEVCTX_SLOT](), mode, src_addr, dst_addr, params)
+
+
+def py2mojo_linear_flags_binding() raises -> PythonObject:
+    return PythonObject(py2mojo_linear_flags())
+
+
 @export
 def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
     try:
@@ -1248,8 +1225,12 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[glm_parallel_available_binding]("glm_parallel_available")
         m.def_function[estimators_vendor_binding]("estimators_vendor")
         m.def_function[estimators_numeric_mode_binding]("estimators_numeric_mode")
+        m.def_function[py2mojo_rows_binding]("py2mojo_rows")
+        m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         m.def_function[dbscan_fit_binding]("dbscan_fit")
         m.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
+        m.def_function[dbscan_core_arrays_binding]("dbscan_core_arrays")
+        m.def_function[estimators_py2mojo_cluster_binding]("estimators_py2mojo_cluster")
         m.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         m.def_function[kde_score_samples_binding]("kde_score_samples")
         m.def_function[kde_fit_prepare_binding]("kde_fit_prepare")
@@ -1270,11 +1251,6 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[lm_col_sums_binding]("lm_col_sums")
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
-        comptime if OLS_FAST_DEVICE_CENTER:
-            # -D MOJOLEARN_OLS_FAST_DEVICE_CENTER, FAST + Apple: the Python
-            # layer takes the device-centering route when these names exist.
-            m.def_function[ols_center_tsqr_r_binding]("ols_center_tsqr_r")
-            m.def_function[ols_fit_centered_binding]("ols_fit_centered")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[ridge_fit_binding]("ridge_fit")
         m.def_function[ridge_fit_resident_binding]("ridge_fit_resident")

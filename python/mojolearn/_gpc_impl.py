@@ -75,9 +75,10 @@ box.
 
 from . import _backend, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
-from ._gp_impl import _MODE_CODE, ConstantKernel, Kernel, RBF
+from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes
+from ._gp_impl import _MODE_CODE, ConstantKernel, Kernel, RBF, _gp_py2mojo
 from ._labels import (
+    threshold_codes,
     classes_from_member,
     classes_member,
     decode_labels,
@@ -108,14 +109,21 @@ def _ovr_combine(ext, cols, n_star):
     return proba, codes
 
 
+def _stacked(blocks, dtype, shape):
+    """The fits' same-shape buffers as one (len(blocks),) + shape Array, joined
+    as bytes (no per-element Python)."""
+    raw = b"".join(a.tobytes() for a in blocks)  # glue: joins one buffer per class fit
+    return frombytes(raw, dtype, (len(blocks),) + tuple(shape))
+
+
 def _kernel_arrays(kernel):
     """The postfix spec as the four flat arrays `_gp_impl.py` sends
     (DEVIATION 1756), plus the length-scale count."""
     nodes = kernel._nodes()
-    kinds = Array.from_list([int(k) for k, _, _ in nodes], "<i4")
-    params = Array.from_list([float(p) for _, p, _ in nodes], "<f4")
-    ls_len = Array.from_list([len(ls) for _, _, ls in nodes], "<i4")
-    table = [v for _, _, ls in nodes for v in ls]
+    kinds = Array.from_list([int(k) for k, _, _ in nodes], "<i4")  # glue: packs the kernel's postfix nodes
+    params = Array.from_list([float(p) for _, p, _ in nodes], "<f4")  # glue: packs the kernel's postfix nodes
+    ls_len = Array.from_list([len(ls) for _, _, ls in nodes], "<i4")  # glue: packs the kernel's postfix nodes
+    table = [v for _, _, ls in nodes for v in ls]  # glue: packs the kernel length-scale hyperparameters
     ls = Array.from_list(table if table else [1.0], "<f4")
     return kinds, params, ls_len, ls, len(table)
 
@@ -126,10 +134,10 @@ class _SavedKernel(Kernel):
     exactly), so a loaded model sends the binding the bytes the fit sent."""
 
     def __init__(self, nodes):
-        self._node_list = [(int(k), float(p), [float(v) for v in ls]) for k, p, ls in nodes]
+        self._node_list = [(int(k), float(p), [float(v) for v in ls]) for k, p, ls in nodes]  # glue: copies the kernel's postfix nodes
 
     def _nodes(self):
-        return [(k, p, list(ls)) for k, p, ls in self._node_list]
+        return [(k, p, list(ls)) for k, p, ls in self._node_list]  # glue: copies the kernel's postfix nodes
 
     def _name(self):
         return f"SavedKernel({len(self._node_list)} postfix nodes)"
@@ -293,9 +301,8 @@ class GaussianProcessClassifier(NumericModeMixin):
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         classes, codes = encode_labels(y)
-        codes = [int(c) for c in codes.tolist()]
-        if len(codes) != n_rows:
-            raise ValueError(f"{_NAME}: y has {len(codes)} entries, X has {n_rows} rows")
+        if codes.size != n_rows:
+            raise ValueError(f"{_NAME}: y has {codes.size} entries, X has {n_rows} rows")
         n_classes = len(classes)
         if n_classes == 1:
             raise ValueError(
@@ -305,15 +312,27 @@ class GaussianProcessClassifier(NumericModeMixin):
         kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self.kernel)
         ext = self._extension()
         columns = [1] if n_classes == 2 else list(range(n_classes))
+        codes32 = Array.from_list(codes, "<i4")
         fits = []
         for k in columns:
-            y01 = Array.from_list([1.0 if c == k else 0.0 for c in codes], "<f4")
-            fits.append(self._fit_binary(ext, x, y01, kinds, kparams, ls_len, ls, n_ls))
+            fits.append(self._fit_binary(ext, x, codes32, kinds, kparams, ls_len, ls, n_ls, k=k))
         self._set_fitted(x, classes, fits)
         return self
 
-    def _fit_binary(self, ext, x, y01, kinds, kparams, ls_len, ls, n_ls):
+    def _fit_binary(self, ext, x, y01, kinds, kparams, ls_len, ls, n_ls, k=None):
+        """With `k`, `y01` is the int32 class codes and the targets are
+        `code == k`: the binding builds them (lane apple-fast-py2mojo-cluster,
+        it was a Python loop per class) and writes them back for the model;
+        a `-D MOJOLEARN_PY2MOJO_cluster_OFF` build gets them from Python."""
         n_rows, n_cols = x.shape
+        extra_addrs, extra_params, codes = [], [], None
+        if k is not None:
+            if _gp_py2mojo(ext):
+                codes, _ = as_i32_c(y01, ndim=1, name="class codes")
+                y01 = empty((n_rows,), "<f4")
+                extra_addrs, extra_params = [addr(y01, name="y_out")], [int(k)]
+            else:
+                y01 = Array.from_list([1.0 if c == k else 0.0 for c in y01.tolist()], "<f4")
         l_out = empty((n_rows * n_rows,), "<f4")
         pi = empty((n_rows,), "<f4")
         wsr = empty((n_rows,), "<f4")
@@ -324,7 +343,7 @@ class GaussianProcessClassifier(NumericModeMixin):
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_fit_binding.
             [
                 addr_ro(x, name="x"),
-                addr_ro(y01, name="y"),
+                addr_ro(codes if codes is not None else y01, name="y"),
                 addr_ro(kinds, name="kinds"),
                 addr_ro(kparams, name="kparams"),
                 addr_ro(ls_len, name="ls_len"),
@@ -333,9 +352,9 @@ class GaussianProcessClassifier(NumericModeMixin):
                 addr(pi, name="pi_out"),
                 addr(wsr, name="wsr_out"),
                 addr(scalars, name="scalars_out"),
-            ],
-            # n_train, n_features, n_nodes, n_ls, max_iter_predict
-            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.max_iter_predict],
+            ] + extra_addrs,
+            # n_train, n_features, n_nodes, n_ls, max_iter_predict (+ k)
+            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.max_iter_predict] + extra_params,
         )
         return _BinaryLaplace(y01, l_out.reshape((n_rows, n_rows)), pi, wsr,
                               float(scalars[0]), int(n_iter), int(scalars[2]))
@@ -374,15 +393,23 @@ class GaussianProcessClassifier(NumericModeMixin):
             )
         return q
 
-    def _latent(self, ext, est, q, want_proba):
+    def _latent(self, ext, est, q, want_proba, out_kind=0):
         """(mean, var, proba) of one binary fit at the query rows; var and
-        proba are written only with `want_proba`."""
+        proba are written only with `want_proba`. `out_kind` 1 / 2 (lane
+        apple-fast-py2mojo-cluster): a fourth item, the int64 class codes of
+        `predict` / the float64 `[1 - p, p]` rows of `predict_proba`, from
+        the binding (`gaussian_process/unnorm.mojo::gpc_binary_out`)."""
         n_star = int(q.shape[0])
         n_train, n_features = self.X_train_.shape
         kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self.kernel)
         mean = empty((n_star,), "<f4")
         var = empty((n_star,), "<f4")
         proba = empty((n_star,), "<f8")
+        out = None
+        if out_kind == 1:
+            out = empty((n_star,), "<i8")
+        elif out_kind == 2:
+            out = empty((n_star, 2), "<f8")
         xt = self.X_train_
         y01 = est.y_train_
         pi = est.pi_
@@ -404,11 +431,13 @@ class GaussianProcessClassifier(NumericModeMixin):
                 addr(mean, name="mean_out"),
                 addr(var, name="var_out"),
                 addr(proba, name="proba_out"),
-            ],
-            # n_train, n_features, n_star, n_nodes, n_ls, want_proba
+            ] + ([addr(out, name="out")] if out is not None else []),
+            # n_train, n_features, n_star, n_nodes, n_ls, want_proba (+ out_kind)
             [int(n_train), int(n_features), n_star, int(kinds.shape[0]), n_ls,
-             1 if want_proba else 0],
+             1 if want_proba else 0] + ([out_kind] if out is not None else []),
         )
+        if out is not None:
+            return mean, var, proba, out
         return mean, var, proba
 
     def latent_mean_and_variance(self, X):
@@ -430,6 +459,8 @@ class GaussianProcessClassifier(NumericModeMixin):
         q = self._query(X)
         ext = self._extension()
         if self.n_classes_ == 2:
+            if _gp_py2mojo(ext):
+                return self._latent(ext, self.estimators_[0], q, True, 2)[3]
             _, _, p = self._latent(ext, self.estimators_[0], q, True)
             return Array.from_list([[1.0 - v, v] for v in p.tolist()], "<f8")
         cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]
@@ -443,13 +474,15 @@ class GaussianProcessClassifier(NumericModeMixin):
         q = self._query(X)
         ext = self._extension()
         if self.n_classes_ == 2:
+            if _gp_py2mojo(ext):
+                return decode_labels(self.classes_, self._latent(ext, self.estimators_[0], q, False, 1)[3])
             mean, _, _ = self._latent(ext, self.estimators_[0], q, False)
-            codes = [1 if v > 0.0 else 0 for v in mean.tolist()]
+            codes = threshold_codes(mean)
         else:
             cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]
             _, codes32 = _ovr_combine(ext, cols, int(q.shape[0]))
-            codes = codes32.tolist()
-        return decode_labels(self.classes_, Array.from_list(codes, "<i8"))
+            codes = codes32.astype("<i8")
+        return decode_labels(self.classes_, codes)
 
     def log_marginal_likelihood(self, theta=None, eval_gradient=False, clone_kernel=True):
         """`_gpc.py:279-353`, the `theta is None` arm only."""
@@ -467,15 +500,14 @@ class GaussianProcessClassifier(NumericModeMixin):
 
     def score(self, X, y):
         """Mean accuracy, a host summary outside the identity claim."""
+        from ._expansion_metrics import accuracy_fraction
+        from ._metrics_impl import _shape_of
         pred = self.predict(X)
-        pred = pred.tolist() if isinstance(pred, Array) else list(pred)
-        truth = y.tolist() if hasattr(y, "tolist") else list(y)
-        if len(truth) != len(pred):
-            raise ValueError(f"{_NAME}: y has {len(truth)} entries for {len(pred)} rows")
-        hits = 0
-        for a, b in zip(pred, truth):
-            hits += 1 if a == b else 0
-        return hits / len(pred)
+        n_truth = int(_shape_of(y)[0]) if _shape_of(y) else 0
+        if n_truth != len(pred):
+            raise ValueError(f"{_NAME}: y has {n_truth} entries for {len(pred)} rows")
+        # the x_metrics binding's grouped match count over the row count
+        return accuracy_fraction(y, pred)
 
     # -- save and load ----------------------------------------------------------
 
@@ -506,10 +538,10 @@ class GaussianProcessClassifier(NumericModeMixin):
             "meta": Array.from_list([int(n_train), int(n_features), len(fits),
                                      int(self.max_iter_predict), int(n_ls),
                                      int(self.n_classes_)], "<i8"),
-            "y": Array.from_list([e.y_train_.tolist() for e in fits], "<f4"),
-            "L": Array.from_list([e.L_.reshape((n_train * n_train,)).tolist() for e in fits], "<f4"),
-            "pi": Array.from_list([e.pi_.tolist() for e in fits], "<f4"),
-            "wsr": Array.from_list([e.W_sr_.tolist() for e in fits], "<f4"),
+            "y": _stacked([e.y_train_ for e in fits], "<f4", (n_train,)),  # glue: one buffer per class fit
+            "L": _stacked([e.L_ for e in fits], "<f4", (n_train * n_train,)),  # glue: one buffer per class fit
+            "pi": _stacked([e.pi_ for e in fits], "<f4", (n_train,)),  # glue: one buffer per class fit
+            "wsr": _stacked([e.W_sr_ for e in fits], "<f4", (n_train,)),  # glue: one buffer per class fit
             "lml": Array.from_list([float(e.log_marginal_likelihood_value_) for e in fits], "<f8"),
             "n_iter": Array.from_list([int(e.n_iter_) for e in fits], "<i8"),
             "nb": Array.from_list([int(e.nb_) for e in fits], "<i8"),
@@ -530,15 +562,15 @@ class GaussianProcessClassifier(NumericModeMixin):
         meta = _serialize.exact(arrays, "meta", "<i8").tolist()
         if len(meta) != 6:
             raise ValueError(f"mojolearn: {path!r} meta holds {len(meta)} fields, 6 are needed")
-        n_train, n_features, n_est, max_iter, n_ls, n_classes = (int(v) for v in meta)
+        n_train, n_features, n_est, max_iter, n_ls, n_classes = (int(v) for v in meta)  # glue: six saved meta fields
         kinds = _serialize.exact(arrays, "kinds", "<i4").tolist()
         kparams = _serialize.exact(arrays, "kparams", "<f4").tolist()
         ls_len = _serialize.exact(arrays, "ls_len", "<i4").tolist()
         table = _serialize.exact(arrays, "ls", "<f4").tolist()
-        if len(kparams) != len(kinds) or len(ls_len) != len(kinds) or sum(ls_len) != n_ls:
+        if len(kparams) != len(kinds) or len(ls_len) != len(kinds) or sum(ls_len) != n_ls:  # glue: kernel node count check
             raise ValueError(f"mojolearn: {path!r} kernel arrays disagree with each other")
         nodes, off = [], 0
-        for k, p, ln in zip(kinds, kparams, ls_len):
+        for k, p, ln in zip(kinds, kparams, ls_len):  # glue: rebuilds the kernel's postfix nodes
             nodes.append((k, p, table[off:off + ln]))
             off += ln
         obj = cls(kernel=_SavedKernel(nodes), max_iter_predict=max_iter)
@@ -557,7 +589,7 @@ class GaussianProcessClassifier(NumericModeMixin):
             a = _serialize.exact(arrays, name, dtype)
             if tuple(a.shape) != ((n_est, width) if width else (n_est,)):
                 raise ValueError(f"mojolearn: {path!r} {name} has shape {tuple(a.shape)}")
-            return a.tolist()
+            return a
 
         ys = rows("y", "<f4", n_train)
         ls_ = rows("L", "<f4", n_train * n_train)
@@ -568,11 +600,12 @@ class GaussianProcessClassifier(NumericModeMixin):
         nbs = rows("nb", "<i8", 0)
         fits = []
         for e in range(n_est):
+            # row e of each saved block, copied by memoryview runs (no per-element Python)
             fits.append(_BinaryLaplace(
-                Array.from_list(ys[e], "<f4"),
-                Array.from_list(ls_[e], "<f4").reshape((n_train, n_train)),
-                Array.from_list(pis[e], "<f4"),
-                Array.from_list(wsrs[e], "<f4"),
+                ys[e],
+                ls_[e].reshape((n_train, n_train)),
+                pis[e],
+                wsrs[e],
                 float(lmls[e]), int(iters[e]), int(nbs[e]),
             ))
         obj._set_fitted(x, classes, fits)

@@ -17,12 +17,15 @@ DEVIATION 2880: THE HYPERPARAMETERS, THEIR LOGS AND THE GRADIENT'S FOLD.
              entries first, scikit-learn's `k1.theta` then `k2.theta`); an
              ARD length scale contributes one entry per feature. A leaf whose
              bounds are "fixed" contributes none.
-  log        `identical_log64` (Float64, host), `gp_log64`, for the initial
-             theta and for the bounds.
-  exp        `Float32(identical_exp64(theta))` then `ftz`, `gp_theta_param`:
-             the hyperparameter that runs is that float32. So a kernel's
-             value is always a float32 the binding can be handed, and two
-             hosts computing it agree because both seams are portable.
+  log        the optimizer's start and bounds: `ftz(identical_log(v))` of
+             the float32 value, on the device (`gp_optim_items.mojo`);
+             `gp_log64` (`identical_log64`) remains the binding's float64
+             log for callers that want one.
+  exp        `ftz(identical_exp(Float32(theta)))`, `gp_theta_param`: the
+             hyperparameter that runs is that float32, the value the device
+             optimizer (`gp_optim_items.mojo`) writes from its float32
+             theta, so a re-evaluation at the fitted theta is the
+             optimizer's own evaluation bit for bit.
   dK/dtheta  on the device and in the verifier, `kernel_gradient.mojo` and
              `gpr_grad_oracle.mojo`, their headers pin each formula.
   K^-1       the identical Cholesky's solve against the identity (`n`
@@ -34,13 +37,11 @@ DEVIATION 2880: THE HYPERPARAMETERS, THEIR LOGS AND THE GRADIENT'S FOLD.
              scikit-learn's `0.5 * einsum("ijl,jik->kl", alpha alpha^T -
              K_inv, K_gradient)` as ONE serial float32 chain.
 
-DEVIATION 2881 (the optimizer) lives in `python/mojolearn/_gp_optimizer.py`;
-its restart draws are `gp_restart_uniform` below: position-mapped Philox,
-`philox4x32_10(ctr = (restart r, dimension j, 0, "GPOR"), key =
-random_state as (low word, high word))`, `u = ((w0 >> 5) * 2^26 + (w1 >> 6))
-* 2^-53`, the 53-bit double every Philox double in the repository uses. Each
-draw is exact integer arithmetic followed by one exact scaling, so it is the
-same double on every host.
+DEVIATION 2881 (the optimizer) lives in `gaussian_process/gp_optim_items.mojo`,
+on the device (cgr4-device-optim-gp, 2026-10-03); its restart draws are
+`gp_restart_uniform32` there: position-mapped Philox, `philox4x32_10(ctr =
+(restart r, dimension j, 0, "GPOR"), key = random_state as (low word, high
+word))`, `u = (w0 >> 8) * 2^-24`, exact on every column.
 
 THE SABOTAGE (-D MOJOLEARN_GP_GRAD_SABOTAGE=1, a VALUE arm in the gradient):
 the fold's `0.5` becomes `0.625`. The likelihood value is untouched, so every
@@ -52,23 +53,16 @@ from std.sys.compile import is_defined
 
 from checks.numerics import (
     ftz,
-    identical_exp64,
+    identical_exp,
     identical_log64,
     identical_mul,
     identical_mul_add,
 )
-from core.philox import philox4x32_10
+from gaussian_process.gp_optim_items import gp_restart_uniform32
 from gaussian_process.gp_grad_items import gp_grad_blocks, gp_grad_part_item, gp_grad_fin_item, gp_free_count
 
 #: THE NEGATIVE CONTROL. See this file's header.
 comptime GP_GRAD_SABOTAGE = is_defined["MOJOLEARN_GP_GRAD_SABOTAGE"]()
-
-#: `ctr[3]` of the restart draws, ASCII "GPOR". Distinct from sample_y's
-#: "GPSY" (DEVIATION 2793).
-comptime GP_RESTART_TAG: UInt32 = 0x47504F52
-
-#: `2^-53` as float64 bits.
-comptime GP_TWO_POW_M53_BITS: UInt64 = 0x3CA0000000000000
 
 # The postfix kinds, `kernels.mojo`'s and `gpr_oracle.mojo`'s.
 comptime _K_CONST = 0
@@ -85,27 +79,16 @@ def gp_log64(v: Float64) -> Float64:
 
 
 def gp_theta_param(theta: Float64) -> Float32:
-    """The float32 hyperparameter that runs at `theta` (DEVIATION 2880)."""
-    return ftz(Float32(identical_exp64(theta)))
+    """The float32 hyperparameter that runs at `theta` (DEVIATION 2880):
+    `ftz(identical_exp(Float32(theta)))`, the device optimizer's own."""
+    return ftz(identical_exp(ftz(Float32(theta))))
 
 
 def gp_restart_uniform(seed: UInt64, restart: Int, dim: Int) -> Float64:
-    """The uniform in [0, 1) of restart `restart`, dimension `dim`
-    (DEVIATION 2881's stream, this file's header)."""
-    var ctr = SIMD[DType.uint32, 4](
-        UInt32(restart & 0xFFFFFFFF),
-        UInt32(dim & 0xFFFFFFFF),
-        UInt32(0),
-        GP_RESTART_TAG,
-    )
-    var key = SIMD[DType.uint32, 2](
-        UInt32(seed & 0xFFFFFFFF), UInt32((seed >> 32) & 0xFFFFFFFF)
-    )
-    var w = philox4x32_10(ctr, key)
-    var hi = UInt64(w[0] >> UInt32(5))
-    var lo = UInt64(w[1] >> UInt32(6))
-    var bits53 = (hi << 26) | lo
-    return Float64(bits53) * bitcast[DType.float64](GP_TWO_POW_M53_BITS)
+    """The optimizer's restart draw (`gp_restart_uniform32`), widened."""
+    return Float64(gp_restart_uniform32(
+        UInt32(seed & 0xFFFFFFFF), UInt32((seed >> 32) & 0xFFFFFFFF), restart, dim
+    ))
 
 
 def gp_lml_gradient_fold(

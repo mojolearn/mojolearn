@@ -62,6 +62,29 @@ comptime SEQ_FAST_FMA = (
 #: model this binary returns differs from the device's.
 comptime SEQUENCE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
+#: Apple FAST switches of lane/apple-fast-tsa2. Default ON for FAST + Apple
+#: since the M3 A/B (n=1, quality same; STL taxi-hourly 359.0 -> 7.0 ms,
+#: VAR 7.6 -> 5.0 ms); `-D <NAME>_OFF` restores main's path; the old
+#: `-D MOJOLEARN_TSA2_VAR` / `-D MOJOLEARN_TSA2_STL` are now harmless.
+#: IDENTICAL compiles the code above and below unchanged.
+#: TSA2_VAR: VAR's fit queues every launch behind one upload
+#: and ends on one wait (sequence/pyapi.mojo::var_fit_py); the residual
+#: and sigma_u products fuse their epilogues (sequence/vecar.mojo).
+#: TSA2_STL: STL's LOESS passes as one thread per output
+#: point over every series (sequence/stl_grid.mojo), the inner iterations
+#: queued, one wait per fit (sequence/pyapi.mojo::stl_py).
+comptime _TSA2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime TSA2_VAR = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_VAR_OFF"]()
+comptime TSA2_STL = _TSA2_FAST_APPLE and not is_defined["MOJOLEARN_TSA2_STL_OFF"]()
+#: lane/apple-fast-gap-tsa (docs/apple-fast/notes/gap-tsa.md), on the
+#: TSA2_VAR fit, FAST + Apple only.
+#: SEQ_FAST_VAR_ONECOPY: params, resid, sigma_u and the status word lie in
+#: one span of the workspace, so one device-to-host copy replaces four.
+#: Default since the M3 A/B (n=1, quality identical; var taxi-hourly
+#: 5.9 -> 5.1 ms, synthetic 6.2 -> 5.0 ms); -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF
+#: restores the four copies; the old -D MOJOLEARN_SEQ_FAST_VAR_ONECOPY is harmless.
+comptime SEQ_FAST_VAR_ONECOPY = TSA2_VAR and not is_defined["MOJOLEARN_SEQ_FAST_VAR_ONECOPY_OFF"]()
+
 # ------------------------------------------------------------------ op codes
 comptime OP_GEMM = 1
 comptime OP_BIAS = 2
@@ -137,6 +160,14 @@ comptime OP_LAMB_SEGFOLD = 69
 comptime OP_LAMB_CLIP = 70
 comptime OP_LAMB_TRUST = 71
 comptime OP_LAMB_APPLY_ALL = 72
+#: lane/apple-fast-tsa2 (reached only under TSA2_VAR / TSA2_STL)
+comptime OP_VAR_RESID = 73
+comptime OP_VAR_SIGMA = 74
+comptime OP_STL_SEAS = 75
+comptime OP_STL_MA = 76
+comptime OP_STL_LOESS = 77
+comptime OP_STL_DESEAS = 78
+comptime OP_STL_FINISH = 79
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

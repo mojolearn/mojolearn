@@ -75,7 +75,7 @@ FAMILIES = (
         ),
         exports=(
             "x_linear_host_numeric_mode", "x_linear_host_vendor", "x_linear_host_column", "x_linear_host_sabotage",
-            "x_linear_fit", "x_linear_decision", "x_linear_numeric_mode", "x_linear_vendor",
+            "x_linear_fit", "x_linear_decision", "x_linear_decision_codes", "x_linear_numeric_mode", "x_linear_vendor",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the linear expansion lane's CPU route (x_linear/, pass 1, PENDING).",

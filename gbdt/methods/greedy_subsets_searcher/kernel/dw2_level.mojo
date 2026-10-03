@@ -28,12 +28,6 @@ still moves the row index and the flag plane one element per thread.
     writes the span back. Same adds in the same order: the same bits. Falls
     back to the global serial loop when the features are not laid out
     back to back or the span exceeds the shared page.
-  * `MOJOLEARN_GBDT_DW2_COPY_ZERO`: DEVIATION 1903's deferred parent copy
-    and the dirty-slot zero pass in one launch. A copy pair's thread reads
-    the source cell, writes it to the destination, then (when the source is
-    in the zero set, flagged in bit 31 of its id) zeroes the source cell in
-    the same thread; the other zero-set slots take the remaining rows of
-    the grid. Same bytes in every slot.
 """
 
 from gbdt.gpu_data.gpu_structures import CFeature
@@ -477,47 +471,3 @@ def dw2_scan_histograms_smem_kernel(
                 for i in range(folds):
                     running = ftz(running + histogram.unsafe_load(b + i))
                     histogram.unsafe_store(b + i, running)
-
-
-# ---- MOJOLEARN_GBDT_DW2_COPY_ZERO ------------------------------------------
-comptime DW2_ZERO_FLAG = UInt32(0x80000000)
-comptime DW2_ID_MASK = UInt32(0x7FFFFFFF)
-
-
-def dw2_copy_zero_kernel(
-    copy_src: MutPointer[UInt32, MutAnyOrigin],
-    copy_dst: MutPointer[UInt32, MutAnyOrigin],
-    n_copy_in: Int32,
-    zero_ids: MutPointer[UInt32, MutAnyOrigin],
-    plane_in: Int32,
-    histograms: MutPointer[Float32, MutAnyOrigin],
-):
-    """Rows `y < n_copy`: copy slot `src` to `dst` (16 bytes per thread),
-    then zero `src` when its id carries `DW2_ZERO_FLAG`, in the same
-    thread. Rows `y >= n_copy`: zero `zero_ids[y - n_copy]`. `plane` (the
-    leaf stride, cells x stats) is a multiple of 4; the launcher checks."""
-    var plane = Int(plane_in)
-    var n_copy = Int(n_copy_in)
-    var y = Int(block_idx.y)
-    var n4 = plane >> 2
-    var zero4 = SIMD[DType.float32, 4](0.0)
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var stride = Int(grid_dim.x) * Int(block_dim.x)
-    if y < n_copy:
-        var sw = copy_src.unsafe_load(y)
-        var zero_src = (sw & DW2_ZERO_FLAG) != UInt32(0)
-        var src = Int(sw & DW2_ID_MASK) * plane
-        var dst = Int(copy_dst.unsafe_load(y)) * plane
-        while i < n4:
-            var off = i << 2
-            (histograms + dst).store[width=4](
-                off, (histograms + src).load[width=4](off)
-            )
-            if zero_src:
-                (histograms + src).store[width=4](off, zero4)
-            i += stride
-    else:
-        var z = Int(zero_ids.unsafe_load(y - n_copy)) * plane
-        while i < n4:
-            (histograms + z).store[width=4](i << 2, zero4)
-            i += stride

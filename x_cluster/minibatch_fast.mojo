@@ -67,6 +67,14 @@ comptime MBF_MAX_BATCH = 4096
 comptime MBF_GROUP = 32
 """Steps enqueued between two reads of the batch inertias."""
 
+# lane/apple-fast-gap-cls2 (2026-10-03): MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL
+# (x_cluster/minibatch_ptr.mojo): X's device buffer from a pool kept between
+# fits, not a fresh 880 MB allocation per fit at Istella's shape. FAST + Apple
+# default since the M3 A/B (n=1, quality identical): minibatch-kmeans istella
+# 256.7 -> 170.7 ms, taxi 42.5 -> 38.1 ms. -D MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF
+# turns it off; the old -D name stays harmless.
+comptime MBK_CLS2_POOL = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF"]()
+
 comptime UPtr = MutPointer[UInt64, MutAnyOrigin]
 
 

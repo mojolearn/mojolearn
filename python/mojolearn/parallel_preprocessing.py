@@ -17,7 +17,7 @@ def _statistics(estimator):
 def _ranges(columns, width):
     if type(width) is not int or width < 1:
         raise ValueError('columns_per_shard must be a positive integer')
-    return [(start, min(columns, start + width)) for start in range(0, columns, width)]
+    return [(start, min(columns, start + width)) for start in range(0, columns, width)]  # glue: lists the column shard bounds
 
 
 def fit_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, sample_weight=None):
@@ -46,17 +46,17 @@ def fit_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, sample_weigh
             ('scaler_fit', (type(estimator).__name__, params),
              (data[:, start - driver_read_shift(index, start, devices):
                      end - driver_read_shift(index, start, devices)],))
-            for index, (start, end) in enumerate(ranges)])
+            for index, (start, end) in enumerate(ranges)])  # glue: dispatches one device job per shard
     finally:
         pool.close()
     result = type(estimator)(**params)
     result.__dict__.update(parts[0].__dict__)
-    for name in names:
+    for name in names:  # glue: walks the fitted statistic names
         if getattr(parts[0], name) is None:
             setattr(result, name, None)
             continue
         merged = empty((d,), '<f4')
-        for (start, end), part in zip(ranges, parts):
+        for (start, end), part in zip(ranges, parts):  # glue: copies each shard result block
             value = getattr(part, name)
             memcopy(addr(merged, name=name) + start * 4, addr_ro(value, name=name), (end - start) * 4)
         setattr(result, name, merged)
@@ -81,11 +81,11 @@ def transform_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, invers
         raise ValueError('input feature count differs from fit')
     ranges = _ranges(d, columns_per_shard)
     requests = []
-    for index, (start, end) in enumerate(ranges):
+    for index, (start, end) in enumerate(ranges):  # glue: builds one device job per shard
         part = copy.copy(estimator)
         part.__dict__ = estimator.__dict__.copy()
         part.n_features_in_ = end - start
-        for name in names:
+        for name in names:  # glue: walks the fitted statistic names
             value = getattr(estimator, name)
             setattr(part, name, None if value is None else value[start:end])
         # Only the DATA columns are shifted; the fitted statistics stay on the

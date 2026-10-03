@@ -6,8 +6,9 @@ from std.sys.compile import is_defined
 from std.os import getenv
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
-from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item
-from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, pos_count_item, pos_scan_item, pos_emit_item
+from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item, row_argmax_item
+from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, nc_med_std_init_item, nc_med_std_step_item, nc_med_std_pick_item, pos_count_item, pos_scan_item, pos_emit_item
+from x_neighbors.py2mojo_items import p2m_mask_value_item, p2m_zero_cols_item, p2m_nan_indicator_item, p2m_sign_label_item, p2m_relabel_init_item, p2m_relabel_first_item, p2m_relabel_count_item, p2m_relabel_scan_item, p2m_relabel_emit_item, p2m_relabel_map_item, p2m_ccount_zero_item, p2m_ccount_add_item, p2m_ccount_emit_item, p2m_const_init_item, p2m_const_cmp_item, p2m_lp_labels_item, p2m_fill_item, p2m_iota_item, p2m_negate_item, p2m_transpose_item, p2m_transpose_i_item, p2m_row_sort_init_item, p2m_row_sort_step_item, p2m_row_sort_emit_item
 
 #: the host gate's negative control (`MOJOLEARN_HOST_SABOTAGE`): every op's
 #: first float output moves by 1e-3 in its first element
@@ -650,6 +651,29 @@ def op_nc_median(x: Int, lab: Int, start: Int, cent: Int, n: Int, d: Int, n_clas
     _ = s_perm^
 
 
+def op_row_argmax(a: Int, res: Int, n: Int, m: Int) raises:
+    var p_a = _f(a)
+    var p_res = _i(res)
+    def _item(t: Int) {imm p_a, imm p_res, imm n, imm m}:
+        row_argmax_item(t, p_a, p_res, n, m)
+    _items(_item, n)
+
+
+def op_nc_med_std(std: Int, res: Int, d: Int, p: Int, n_steps: Int) raises:
+    var s_key = List[Float32](length=(p) if (p) > 0 else 1, fill=Float32(0))
+    for t in range(p):
+        nc_med_std_init_item(t, _f(std), _f(res), FP(unsafe_from_address=Int(s_key.unsafe_ptr())), d, p, n_steps)
+    for lj in range(n_steps):
+        for t in range(p // 2):
+            nc_med_std_step_item(t, lj, _f(std), _f(res), FP(unsafe_from_address=Int(s_key.unsafe_ptr())), d, p, n_steps)
+    for t in range(1):
+        nc_med_std_pick_item(t, _f(std), _f(res), FP(unsafe_from_address=Int(s_key.unsafe_ptr())), d, p, n_steps)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (2) > 0:
+            _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
+    _ = s_key^
+
+
 def op_pos_compact(w: Int, rows: Int, vals: Int, info: Int, n: Int) raises:
     var s_part = List[Int32](length=(xn_fold_blocks(n)) if (xn_fold_blocks(n)) > 0 else 1, fill=Int32(0))
     for t in range(xn_fold_blocks(n)):
@@ -662,3 +686,166 @@ def op_pos_compact(w: Int, rows: Int, vals: Int, info: Int, n: Int) raises:
         if (n) > 0:
             _f(vals).unsafe_store(0, _f(vals).unsafe_load(0) + Float32(1e-3))
     _ = s_part^
+
+
+def op_p2m_mask_value(x: Int, res: Int, count: Int, want: Float32) raises:
+    var p_x = _f(x)
+    var p_res = _f(res)
+    def _item(t: Int) {imm p_x, imm p_res, imm count, imm want}:
+        p2m_mask_value_item(t, p_x, p_res, count, want)
+    _items(_item, count)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (count) > 0:
+            _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
+
+
+def op_p2m_zero_cols(x: Int, flags: Int, res: Int, n: Int, d: Int) raises:
+    var p_x = _f(x)
+    var p_flags = _i(flags)
+    var p_res = _f(res)
+    def _item(t: Int) {imm p_x, imm p_flags, imm p_res, imm n, imm d}:
+        p2m_zero_cols_item(t, p_x, p_flags, p_res, n, d)
+    _items(_item, n * d)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (n * d) > 0:
+            _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
+
+
+def op_p2m_nan_indicator(src: Int, cur: Int, cols: Int, res: Int, n: Int, d: Int, c: Int, q: Int) raises:
+    var p_src = _f(src)
+    var p_cur = _f(cur)
+    var p_cols = _i(cols)
+    var p_res = _f(res)
+    def _item(t: Int) {imm p_src, imm p_cur, imm p_cols, imm p_res, imm n, imm d, imm c, imm q}:
+        p2m_nan_indicator_item(t, p_src, p_cur, p_cols, p_res, n, d, c, q)
+    _items(_item, n * (c + q))
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (n * (c + q)) > 0:
+            _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
+
+
+def op_p2m_sign_label(x: Int, res: Int, count: Int, mode: Int, thr: Float32) raises:
+    var p_x = _f(x)
+    var p_res = _i(res)
+    def _item(t: Int) {imm p_x, imm p_res, imm count, imm mode, imm thr}:
+        p2m_sign_label_item(t, p_x, p_res, count, mode, thr)
+    _items(_item, count)
+
+
+def op_p2m_relabel(lab: Int, res: Int, info: Int, n: Int) raises:
+    var s_first = List[Int32](length=(n) if (n) > 0 else 1, fill=Int32(0))
+    var s_rk = List[Int32](length=(n) if (n) > 0 else 1, fill=Int32(0))
+    var s_part = List[Int32](length=(xn_fold_blocks(n)) if (xn_fold_blocks(n)) > 0 else 1, fill=Int32(0))
+    for t in range(n):
+        p2m_relabel_init_item(t, _i(lab), _i(res), _i(info), IP(unsafe_from_address=Int(s_first.unsafe_ptr())), IP(unsafe_from_address=Int(s_rk.unsafe_ptr())), IP(unsafe_from_address=Int(s_part.unsafe_ptr())), n)
+    for t in range(n):
+        p2m_relabel_first_item(t, _i(lab), _i(res), _i(info), IP(unsafe_from_address=Int(s_first.unsafe_ptr())), IP(unsafe_from_address=Int(s_rk.unsafe_ptr())), IP(unsafe_from_address=Int(s_part.unsafe_ptr())), n)
+    for t in range(xn_fold_blocks(n)):
+        p2m_relabel_count_item(t, _i(lab), _i(res), _i(info), IP(unsafe_from_address=Int(s_first.unsafe_ptr())), IP(unsafe_from_address=Int(s_rk.unsafe_ptr())), IP(unsafe_from_address=Int(s_part.unsafe_ptr())), n)
+    for t in range(1):
+        p2m_relabel_scan_item(t, _i(lab), _i(res), _i(info), IP(unsafe_from_address=Int(s_first.unsafe_ptr())), IP(unsafe_from_address=Int(s_rk.unsafe_ptr())), IP(unsafe_from_address=Int(s_part.unsafe_ptr())), n)
+    for t in range(xn_fold_blocks(n)):
+        p2m_relabel_emit_item(t, _i(lab), _i(res), _i(info), IP(unsafe_from_address=Int(s_first.unsafe_ptr())), IP(unsafe_from_address=Int(s_rk.unsafe_ptr())), IP(unsafe_from_address=Int(s_part.unsafe_ptr())), n)
+    for t in range(n):
+        p2m_relabel_map_item(t, _i(lab), _i(res), _i(info), IP(unsafe_from_address=Int(s_first.unsafe_ptr())), IP(unsafe_from_address=Int(s_rk.unsafe_ptr())), IP(unsafe_from_address=Int(s_part.unsafe_ptr())), n)
+    _ = s_first^
+    _ = s_rk^
+    _ = s_part^
+
+
+def op_p2m_class_counts(lab: Int, nk: Int, info: Int, n: Int, n_classes: Int) raises:
+    var s_cnt = List[Int32](length=(n_classes) if (n_classes) > 0 else 1, fill=Int32(0))
+    for t in range(n_classes):
+        p2m_ccount_zero_item(t, _i(lab), _f(nk), _i(info), IP(unsafe_from_address=Int(s_cnt.unsafe_ptr())), n, n_classes)
+    for t in range(n):
+        p2m_ccount_add_item(t, _i(lab), _f(nk), _i(info), IP(unsafe_from_address=Int(s_cnt.unsafe_ptr())), n, n_classes)
+    for t in range(n_classes):
+        p2m_ccount_emit_item(t, _i(lab), _f(nk), _i(info), IP(unsafe_from_address=Int(s_cnt.unsafe_ptr())), n, n_classes)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (n_classes) > 0:
+            _f(nk).unsafe_store(0, _f(nk).unsafe_load(0) + Float32(1e-3))
+    _ = s_cnt^
+
+
+def op_p2m_const_cols(x: Int, flag: Int, n: Int, d: Int) raises:
+    for t in range(1):
+        p2m_const_init_item(t, _f(x), _i(flag), n, d)
+    for t in range(n * d):
+        p2m_const_cmp_item(t, _f(x), _i(flag), n, d)
+
+
+def op_p2m_lp_labels(codes: Int, ld: Int, ys: Int, unl: Int, n: Int, c: Int, skip: Int, a: Float32) raises:
+    var p_codes = _i(codes)
+    var p_ld = _f(ld)
+    var p_ys = _f(ys)
+    var p_unl = _i(unl)
+    def _item(t: Int) {imm p_codes, imm p_ld, imm p_ys, imm p_unl, imm n, imm c, imm skip, imm a}:
+        p2m_lp_labels_item(t, p_codes, p_ld, p_ys, p_unl, n, c, skip, a)
+    _items(_item, n * c)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (n * c) > 0:
+            _f(ld).unsafe_store(0, _f(ld).unsafe_load(0) + Float32(1e-3))
+
+
+def op_p2m_fill(res: Int, count: Int, value: Float32) raises:
+    var p_res = _f(res)
+    def _item(t: Int) {imm p_res, imm count, imm value}:
+        p2m_fill_item(t, p_res, count, value)
+    _items(_item, count)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (count) > 0:
+            _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
+
+
+def op_p2m_iota(res: Int, count: Int) raises:
+    var p_res = _i(res)
+    def _item(t: Int) {imm p_res, imm count}:
+        p2m_iota_item(t, p_res, count)
+    _items(_item, count)
+
+
+def op_p2m_negate(x: Int, res: Int, count: Int) raises:
+    var p_x = _f(x)
+    var p_res = _f(res)
+    def _item(t: Int) {imm p_x, imm p_res, imm count}:
+        p2m_negate_item(t, p_x, p_res, count)
+    _items(_item, count)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (count) > 0:
+            _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
+
+
+def op_p2m_transpose(src: Int, res: Int, r: Int, c: Int) raises:
+    var p_src = _f(src)
+    var p_res = _f(res)
+    def _item(t: Int) {imm p_src, imm p_res, imm r, imm c}:
+        p2m_transpose_item(t, p_src, p_res, r, c)
+    _items(_item, r * c)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (r * c) > 0:
+            _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
+
+
+def op_p2m_transpose_i(src: Int, res: Int, r: Int, c: Int) raises:
+    var p_src = _i(src)
+    var p_res = _i(res)
+    def _item(t: Int) {imm p_src, imm p_res, imm r, imm c}:
+        p2m_transpose_i_item(t, p_src, p_res, r, c)
+    _items(_item, r * c)
+
+
+def op_p2m_row_sort(indptr: Int, cols: Int, dists: Int, out_cols: Int, out_d: Int, nq: Int, nnz: Int, p: Int, n_steps: Int) raises:
+    var s_perm = List[Int32](length=(p) if (p) > 0 else 1, fill=Int32(0))
+    var s_rowid = List[Int32](length=(nnz) if (nnz) > 0 else 1, fill=Int32(0))
+    for t in range(p):
+        p2m_row_sort_init_item(t, _i(indptr), _i(cols), _f(dists), _i(out_cols), _f(out_d), IP(unsafe_from_address=Int(s_perm.unsafe_ptr())), IP(unsafe_from_address=Int(s_rowid.unsafe_ptr())), nq, nnz, p, n_steps)
+    for lj in range(n_steps):
+        for t in range(p // 2):
+            p2m_row_sort_step_item(t, lj, _i(indptr), _i(cols), _f(dists), _i(out_cols), _f(out_d), IP(unsafe_from_address=Int(s_perm.unsafe_ptr())), IP(unsafe_from_address=Int(s_rowid.unsafe_ptr())), nq, nnz, p, n_steps)
+    for t in range(nnz):
+        p2m_row_sort_emit_item(t, _i(indptr), _i(cols), _f(dists), _i(out_cols), _f(out_d), IP(unsafe_from_address=Int(s_perm.unsafe_ptr())), IP(unsafe_from_address=Int(s_rowid.unsafe_ptr())), nq, nnz, p, n_steps)
+    comptime if X_NEIGHBORS_HOST_SABOTAGE:
+        if (nnz) > 0:
+            _f(out_d).unsafe_store(0, _f(out_d).unsafe_load(0) + Float32(1e-3))
+    _ = s_perm^
+    _ = s_rowid^

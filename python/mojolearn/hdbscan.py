@@ -158,7 +158,7 @@ class HDBSCAN(NumericModeMixin):
         """Cluster row-major `X`. Returns `self`."""
         x, copied = as_f32_c(X, ndim=2, name="X")
         n, d = x.shape
-        for name in ("min_cluster_size", "max_cluster_size"):
+        for name in ("min_cluster_size", "max_cluster_size"):  # glue: checks two parameter names
             v = getattr(self, name)
             if isinstance(v, bool) or not isinstance(v, int):
                 raise TypeError(f"mojolearn HDBSCAN: {name} must be an int, got {type(v).__name__}")
@@ -186,7 +186,7 @@ class HDBSCAN(NumericModeMixin):
             method = _SELECTION[self.cluster_selection_method]
         else:
             method = int(self.cluster_selection_method)
-        for name in ("alpha", "cluster_selection_epsilon"):
+        for name in ("alpha", "cluster_selection_epsilon"):  # glue: checks two parameter names
             v = getattr(self, name)
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 raise TypeError(f"mojolearn HDBSCAN: {name} must be a real number")
@@ -332,7 +332,7 @@ class HDBSCAN(NumericModeMixin):
             raise ValueError(f"mojolearn: {path!r} holds {ints.size} ints and {reals.size} reals, "
                              f"{_HDBSCAN_INTS} and 2 are needed")
         (d, n_sel, n_out, n_rounds, n_cond, n_edges, mcs, ms, maxcs, single, n_ex) = (
-            int(ints[i]) for i in range(_HDBSCAN_INTS))
+            int(ints[i]) for i in range(_HDBSCAN_INTS))  # glue: unpacks the fixed int vector
         obj = cls(min_cluster_size=mcs, min_samples=None if ms == -1 else ms,
                   cluster_selection_epsilon=float(reals[1]), max_cluster_size=maxcs,
                   metric=_serialize.scalar_str(arrays, "metric"), alpha=float(reals[0]),
@@ -348,7 +348,7 @@ class HDBSCAN(NumericModeMixin):
                     selected_clusters=("<i4", max(n_sel, 1)), index_into_children=("<i4", n_edges + 1),
                     exemplar_idx=("<i4", max(n_ex, 1)), exemplar_label_offsets=("<i4", n_sel + 1))
         got = {}
-        for name, (dtype, size) in want.items():
+        for name, (dtype, size) in want.items():  # glue: checks saved array names
             a = _serialize.exact(arrays, name, dtype)
             if a.ndim != 1 or a.size != size:
                 raise ValueError(f"mojolearn: {path!r} {name} holds {a.size} values, {size} are needed")
@@ -498,7 +498,7 @@ def membership_vector(clusterer, points_to_predict, batch_size=4096):
     ext = clusterer._extension()
     q_addr = addr_ro(q, name="points_to_predict")
     o_addr = addr(out, name="membership_vectors")
-    for s in range(0, nq, batch_size):
+    for s in range(0, nq, batch_size):  # glue: one Mojo call per user batch
         cnt = min(batch_size, nq - s)
         ext.hdbscan_membership_vector(
             # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_membership_vector_binding.
@@ -539,7 +539,7 @@ def all_points_membership_vectors(clusterer, batch_size=4096):
     tree = _soft_tree_addrs(pd)
     ext = clusterer._extension()
     o_addr = addr(out, name="membership_vectors")
-    for s in range(0, m, batch_size):
+    for s in range(0, m, batch_size):  # glue: one Mojo call per user batch
         cnt = min(batch_size, m - s)
         ext.hdbscan_all_points_membership_vectors(
             # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_all_points_membership_vectors_binding.

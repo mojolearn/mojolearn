@@ -290,8 +290,8 @@ def monte_carlo_integrate(integrand, lower, upper, n_samples, random_state=0, i_
     the estimate."""
     where = "monte_carlo_integrate"
     f_id = _code(INTEGRANDS, integrand, "integrand", where)
-    lo = Array.from_list([_real(v, "lower", where) for v in lower], "<f4")
-    hi = Array.from_list([_real(v, "upper", where) for v in upper], "<f4")
+    lo = Array.from_list([_real(v, "lower", where) for v in lower], "<f4")  # glue: validates the two lower bounds
+    hi = Array.from_list([_real(v, "upper", where) for v in upper], "<f4")  # glue: validates the two upper bounds
     if lo.shape != (2,) or hi.shape != (2,):
         raise ValueError(
             f"mojolearn {where}: lower and upper must each hold 2 values "
@@ -350,12 +350,12 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
     if not arrays:
         return None
     n = len(arrays[0])
-    for a in arrays[1:]:
+    for a in arrays[1:]:  # glue: checks each argument array length
         if len(a) != n:
             raise ValueError(f"mojolearn {where}: Found input variables with inconsistent numbers of samples: "
                              f"{[len(x) for x in arrays]}")
     idx = resample_indices(n, n_samples, replace, random_state, numeric_mode)
-    out = [_take(a, idx) for a in arrays]
+    out = [_take(a, idx) for a in arrays]  # glue: dispatches one gather per argument array
     return out[0] if len(out) == 1 else out
 
 

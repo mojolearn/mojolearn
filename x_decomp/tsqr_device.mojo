@@ -35,6 +35,7 @@ Threadgroup memory: TS_SMEM_BYTES (20 KB), under every column's limit
 hand DEVICE words between threads are `dev_barrier` (Apple's
 `air.wg.barrier(3, 1)`; `barrier()` there orders threadgroup memory only).
 """
+from std.atomic import Atomic
 from std.ffi import _Global
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
@@ -448,6 +449,19 @@ def _per_launch(cells: Int) -> Int:
     return u if u >= TS_LAUNCH_MIN_BLOCKS else TS_LAUNCH_MIN_BLOCKS
 
 
+comptime TS_NO_NAN = Int32(2147483647)
+
+
+def ts_first_nan_kernel(r: MutPointer[Float32, MutAnyOrigin], count: Int32, first: MutPointer[Int32, MutAnyOrigin]):
+    """first[0] = the lowest t < count with r[t] NaN (left at TS_NO_NAN
+    when there is none)."""
+    var t = Int(block_idx.x) * TS_TPB + Int(thread_idx.x)
+    if t < Int(count):
+        var v = r.unsafe_load(t)
+        if v != v:
+            _ = Atomic.min(first, Int32(t))
+
+
 def _grid(count: Int) -> Int:
     return (count + TS_TPB - 1) // TS_TPB if count > 0 else 1
 
@@ -505,12 +519,22 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
             _wait_apple(ctx)
             p0 += cnt
         s *= 2
+    # lane/apple-fast-purity2: the NaN refusal's scan runs on the device
+    # (the first NaN entry by an atomic min), not as a host loop over R.
+    var dnan = ctx.enqueue_create_buffer[DType.int32](1)
+    enqueue_fill(ctx, dnan, TS_NO_NAN)
+    ctx.enqueue_function[ts_first_nan_kernel](
+        dtl.unsafe_ptr(), Int32(n * n), dnan.unsafe_ptr(), grid_dim=_grid(n * n), block_dim=TS_TPB
+    )
+    var hnan = ctx.enqueue_create_host_buffer[DType.int32](1)
+    ctx.enqueue_copy(dst_buf=hnan, src_buf=dnan)
     ctx.enqueue_copy(dst_ptr=r, src_buf=dtl.create_sub_buffer[DType.float32](0, n * n))
     ctx.synchronize()
-    for t in range(n * n):
-        var v = r.unsafe_load(t)
-        if v != v:
-            raise Error("x_decomp tsqr: R entry " + String(t) + " is NaN (a NaN input, or a device launch cut short): refused")
+    var first_nan = hnan.unsafe_ptr().unsafe_load(0)
+    _ = hnan^
+    _ = dnan^
+    if first_nan != TS_NO_NAN:
+        raise Error("x_decomp tsqr: R entry " + String(first_nan) + " is NaN (a NaN input, or a device launch cut short): refused")
     if keep:
         var st = TS_DEV_STATE.get_or_create_ptr()
         st[].bufs.append(da)

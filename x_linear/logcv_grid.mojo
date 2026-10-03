@@ -1,86 +1,48 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""LogisticRegressionCV with every row pass on the whole device
-(lane/neural-pass127, 2026-10-02).
+"""LogisticRegressionCV wholly on the device (lane/neural-pass127,
+2026-10-02: the row passes; cgr-linear: the folds, rows and scores; lane
+cgr4-device-optim, 2026-10-03: the minimizer and the driver).
 
-The team form (x_linear/logcv.mojo) ran the whole fit on ONE block: every
-L-BFGS objective evaluation (each training row's residuals and loss term,
-then each gradient cell's FOLD_BLOCK-row partials folded in block order)
-and every held-out scoring pass on 256 threads (board: taxi 9.35 s on the
-MI325X, 3.3 s on the L40S, sklearn 0.76). Here `logcv_fit` runs on a host
-team with two device steps in place of its team ones:
-  * `logistic_objective_grid`: the rows' terms (`logcv_map_row`, a thread
-    per row), every (block, cell) partial (`logcv_part_rows`, a thread per
-    pair), the partials folded per cell in block order (`fold_parts`, a
-    thread per cell); the folded sums come home and `logcv_finish` runs
-    the team lead's last statements;
-  * `lcv_score_grid` (cgr-linear): a thread per held-out row
-    (`_predict_code`), the hits folded per row block and the blocks
-    folded (`lcv_score_part`, the host column's order); one word home;
-  * `lcv_rows_grid` (cgr-linear): the fold's training rows compacted on
-    the grid (block counts, a block scan, the writes); the count home.
+`logcv_fit_device` runs `logcv_fit`'s schedule (x_linear/logcv.mojo) with
+every value on the device:
+  * the objective `LcvObjective` (an `LbObjective`): the rows' terms
+    (`logcv_map_row`, a thread per training row), every (block, cell)
+    partial (`logcv_part_rows`), the partials folded per cell in block
+    order (`fold_parts`), then one block finishing (`logcv_finish_t`: the
+    scale, the penalty in the vfold order, the loss);
+  * the minimizer x_linear/lbfgs_device.mojo (warm starts across Cs are
+    the device theta carried over; a fold starts from zeros);
+  * the held-out score into the device score table (`_predict_code` a
+    thread a row, the hits folded per row block, the blocks folded);
+  * the fold's training rows compacted on the grid (block counts, a block
+    scan, the writes); the count comes home, a scalar per fold;
+  * the best C (`lcv_best_kernel`: the fold means and the first best, the
+    host column's statements) and the result words.
 The StratifiedKFold ids are built on the grid from the labels
-(`lcv_fold_ids_device`: per-class block counts, a scan per class, the
-fold table, a thread per row). The L-BFGS iterations are logcv_fit's own
-code on the host (the x_linear host and device columns already share
-every word). The same statements on the same rows in the same order: the
-same words.
+(`lcv_fold_ids_device`). Per line-search trial two flag words come home,
+per fold one count, and the result once. The host column runs `logcv_fit`:
+the same statements on the same rows in the same order: the same words.
 """
 from std.gpu import block_idx, block_dim, thread_idx
-from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
-from x_linear.ops import FP, IP, ld, st, ldi, i2f
+from x_linear.ops import FP, IP, ld, st, ldi, i2f, fa, fd
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from x_linear.scan import SC_NT, _sc_block_excl
 from x_linear.tops import FOLD_BLOCK
-from x_linear.team import Team, team_work, solo
+from x_linear.team import team_at
 from x_linear.tops import fold_blocks, fold_parts
-from x_linear.witness import Witness, witness_end, WITNESS_TRIES, WITNESS_ABORT
+from x_linear.witness import Witness, witness_end, WITNESS_TRIES
+from x_linear.vfold import vscratch
+from x_linear.lbfgs_device import LbObjective, lbfgs_device, lbd_words, lbd_th, lbd_witness_words, LBD_TPB
 from x_linear.logcv import (
-    logcv_fit, logcv_map_row, logcv_part_rows, logcv_finish, logcv_team_rows, _predict_code,
+    logcv_map_row, logcv_part_rows, logcv_finish_t, _predict_code,
     lcv_fold_table, lcv_fold_of, lcv_score_part, lcv_score_final,
 )
 
 comptime LCV_TPB = 256
-
-# the state the two thin callbacks reach (one fit at a time per process)
-comptime LCV_X = 0
-comptime LCV_Y = 1
-comptime LCV_TH = 2
-comptime LCV_ROWS = 3
-comptime LCV_SCR = 4
-comptime LCV_G = 5
-comptime LCV_OUT = 6
-comptime LCV_HIT = 7
-comptime LCV_SP = 8
-# int buffers
-comptime LCV_IX = 0
-comptime LCV_BCNT = 1
-comptime LCV_TOT = 2
-
-
-struct _LcvState(Defaultable, Movable):
-    var ctx: Optional[DeviceContext]
-    var bf: List[DeviceBuffer[DType.float32]]
-    var ix: List[DeviceBuffer[DType.int32]]
-    var cur_fold: Int
-    var err: Bool
-    var aborted: Bool
-    var wit: Optional[Witness]
-
-    def __init__(out self):
-        self.ctx = Optional[DeviceContext]()
-        self.bf = List[DeviceBuffer[DType.float32]]()
-        self.ix = List[DeviceBuffer[DType.int32]]()
-        self.cur_fold = -2
-        self.err = False
-        self.aborted = False
-        self.wit = Optional[Witness]()
-
-
-comptime LCV_STATE = _Global[StorageType=_LcvState, name="MojoXLinearLogcvGrid", init_fn=_LcvState.__init__]
 
 
 def _blocks(count: Int) -> Int:
@@ -126,73 +88,6 @@ def lcv_hit_kernel(x: FP, y: FP, n: Int32, d: Int32, kpp: Int32, fi: Int32, th: 
             var h = _predict_code(x, i, Int(d), Int(kpp), fi != 0, th, 0) == Int(ld(y, i))
             st(hit, i, Float32(1) if h else Float32(0))
     witness_end(wf, woff, nonce)
-
-def _lcv_objective(t: Team, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int) raises -> Float32:
-    var stp = LCV_STATE.get_or_create_ptr()
-    var ctx = stp[].ctx.value().copy()
-    var kp = ldi(ip, 0)
-    var fi = ldi(ip, 1) != 0
-    var fold = ldi(ip, 2)
-    var c = ld(fp, 0)
-    var sw = ldi(ip, 3) != 0
-    var p = kp * (d + 1)
-    var cnt = ldi(ip, 4) if fold >= 0 else n
-    # the fold's training rows: listed on the device by `lcv_rows_grid`
-    ctx.enqueue_copy(dst_buf=stp[].bf[LCV_TH], src_ptr=th + toff)
-    var nbk = fold_blocks(cnt)
-    # the map, partials and fold rebuild from theta: rerun as one unit when
-    # the Metal witness finds a launch cut (x_linear/witness.mojo)
-    var outs = List[Float32](length=2, fill=Float32(0))
-    var b1 = _blocks(cnt)
-    var b2 = _blocks((p + 2) * nbk)
-    var b3 = _blocks(p + 2)
-    var tries = 0
-    while True:
-        var nonce = stp[].wit.value().begin()
-        var wf = stp[].wit.value().p()
-        ctx.enqueue_function[lcv_map_kernel](
-            stp[].bf[LCV_X].unsafe_ptr(), stp[].bf[LCV_Y].unsafe_ptr(), Int32(n), Int32(d), Int32(kp),
-            Int32(1 if fi else 0), Int32(1 if sw else 0), stp[].bf[LCV_TH].unsafe_ptr(), stp[].ix[0].unsafe_ptr(),
-            Int32(cnt), Int32(fold), stp[].bf[LCV_ROWS].unsafe_ptr(), wf, Int32(0), nonce, grid_dim=_blocks(cnt), block_dim=LCV_TPB,
-        )
-        ctx.enqueue_function[lcv_part_kernel](
-            stp[].bf[LCV_X].unsafe_ptr(), stp[].bf[LCV_Y].unsafe_ptr(), Int32(n), Int32(d), Int32(kp),
-            Int32(1 if fi else 0), Int32(1 if sw else 0), Int32(fold), stp[].ix[0].unsafe_ptr(), Int32(cnt),
-            stp[].bf[LCV_ROWS].unsafe_ptr(), stp[].bf[LCV_SCR].unsafe_ptr(), Int32(nbk), wf, Int32(b1), nonce,
-            grid_dim=_blocks((p + 2) * nbk), block_dim=LCV_TPB,
-        )
-        ctx.enqueue_function[lcv_fold_kernel](
-            stp[].bf[LCV_SCR].unsafe_ptr(), Int32(nbk), Int32(p), stp[].bf[LCV_G].unsafe_ptr(),
-            stp[].bf[LCV_OUT].unsafe_ptr(), wf, Int32(b1 + b2), nonce, grid_dim=_blocks(p + 2), block_dim=LCV_TPB,
-        )
-        # the copies home ride before the witness read (one in-order queue):
-        # a good read means they ran
-        ctx.enqueue_copy(dst_ptr=g + goff, src_buf=stp[].bf[LCV_G])
-        ctx.enqueue_copy(dst_ptr=outs.unsafe_ptr(), src_buf=stp[].bf[LCV_OUT])
-        if stp[].wit.value().ok(ctx, b1 + b2 + b3, "LogisticRegressionCV objective"):
-            break
-        tries += 1
-        if tries >= WITNESS_TRIES:
-            stp[].aborted = True
-            raise Error(WITNESS_ABORT)
-    ctx.synchronize()
-    var acc = outs[0]
-    var wrows = outs[1] if sw else Float32(0)
-    _ = outs^
-    return logcv_finish(g, goff, th, toff, kp, d, sw, c, cnt, acc, wrows)
-
-
-def logistic_objective_grid(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP,
-                            goff: Int, sc: FP) -> Float32:
-    try:
-        return _lcv_objective(t, n, d, ip, fp, th, toff, g, goff)
-    except:
-        try:
-            LCV_STATE.get_or_create_ptr()[].err = True
-        except:
-            pass
-        return Float32(0)
-
 
 # ------------------------------------------------ StratifiedKFold ids (cgr-linear)
 def lcv_class_count_kernel(y: FP, n: Int32, nk: Int32, bc: IP, bf: IP, wf: IP, woff: Int32, nonce: Int32):
@@ -359,52 +254,6 @@ def lcv_rows_write_kernel(y: FP, n: Int32, fold: Int32, bcnt: IP, ix: IP, wf: IP
     witness_end(wf, woff, nonce)
 
 
-def lcv_rows_grid(t: Team, y: FP, n: Int, fold: Int, kp: Int) -> Int:
-    """`logcv_rows` on the grid: the list stays on the device (the objective
-    reads it there), the count comes home."""
-    if fold < 0:
-        return n
-    try:
-        var stp = LCV_STATE.get_or_create_ptr()
-        var ctx = stp[].ctx.value().copy()
-        var nbk = _blocks(n)
-        var cnt = List[Int32](length=1, fill=Int32(0))
-        var tries = 0
-        while True:
-            var nonce = stp[].wit.value().begin()
-            var wf = stp[].wit.value().p()
-            ctx.enqueue_function[lcv_rows_count_kernel](
-                stp[].bf[LCV_Y].unsafe_ptr(), Int32(n), Int32(fold), stp[].ix[LCV_BCNT].unsafe_ptr(), wf, Int32(0), nonce,
-                grid_dim=nbk, block_dim=LCV_TPB,
-            )
-            ctx.enqueue_function[lcv_rows_scan_kernel](
-                stp[].ix[LCV_BCNT].unsafe_ptr(), Int32(nbk), stp[].ix[LCV_TOT].unsafe_ptr(), wf, Int32(nbk), nonce,
-                grid_dim=1, block_dim=SC_NT,
-            )
-            ctx.enqueue_function[lcv_rows_write_kernel](
-                stp[].bf[LCV_Y].unsafe_ptr(), Int32(n), Int32(fold), stp[].ix[LCV_BCNT].unsafe_ptr(),
-                stp[].ix[LCV_IX].unsafe_ptr(), wf, Int32(nbk + 1), nonce, grid_dim=nbk, block_dim=LCV_TPB,
-            )
-            ctx.enqueue_copy(dst_ptr=cnt.unsafe_ptr(), src_buf=stp[].ix[LCV_TOT])
-            if stp[].wit.value().ok(ctx, 2 * nbk + 1, "LogisticRegressionCV rows"):
-                break
-            tries += 1
-            if tries >= WITNESS_TRIES:
-                stp[].aborted = True
-                raise Error(WITNESS_ABORT)
-        ctx.synchronize()
-        stp[].cur_fold = fold
-        var c = Int(cnt[0])
-        _ = cnt^
-        return c
-    except:
-        try:
-            LCV_STATE.get_or_create_ptr()[].err = True
-        except:
-            pass
-        return 0
-
-
 # ------------------------------------------------ the held-out score (cgr-linear)
 def lcv_score_parts_kernel(y: FP, n: Int32, f: Int32, sw: Int32, hit: FP, sp: FP, wf: IP, woff: Int32, nonce: Int32):
     """Thread per FOLD_BLOCK rows: the fold's (weighted) hits and rows from zero."""
@@ -427,114 +276,294 @@ def lcv_score_fin_kernel(sp: FP, nb: Int32, res: FP, wf: IP, woff: Int32, nonce:
     witness_end(wf, woff, nonce)
 
 
-def lcv_score_grid(t: Team, x: FP, y: FP, n: Int, d: Int, kpp: Int, fi: Bool, fw: FP, th: Int, f: Int,
-                   hitr: FP, weighted: Bool) -> Float32:
-    try:
-        var stp = LCV_STATE.get_or_create_ptr()
-        var ctx = stp[].ctx.value().copy()
-        var nb = fold_blocks(n)
-        var g = _blocks(nb)
-        var out = List[Float32](length=1, fill=Float32(0))
-        var tries = 0
-        while True:
-            var nonce = stp[].wit.value().begin()
-            var wf = stp[].wit.value().p()
-            ctx.enqueue_copy(dst_buf=stp[].bf[LCV_TH], src_ptr=fw + th)
-            ctx.enqueue_function[lcv_hit_kernel](
-                stp[].bf[LCV_X].unsafe_ptr(), stp[].bf[LCV_Y].unsafe_ptr(), Int32(n), Int32(d), Int32(kpp),
-                Int32(1 if fi else 0), stp[].bf[LCV_TH].unsafe_ptr(), Int32(f), stp[].bf[LCV_HIT].unsafe_ptr(),
-                wf, Int32(0), nonce, grid_dim=_blocks(n), block_dim=LCV_TPB,
-            )
-            ctx.enqueue_function[lcv_score_parts_kernel](
-                stp[].bf[LCV_Y].unsafe_ptr(), Int32(n), Int32(f), Int32(1 if weighted else 0),
-                stp[].bf[LCV_HIT].unsafe_ptr(), stp[].bf[LCV_SP].unsafe_ptr(), wf, Int32(_blocks(n)), nonce,
-                grid_dim=g, block_dim=LCV_TPB,
-            )
-            ctx.enqueue_function[lcv_score_fin_kernel](
-                stp[].bf[LCV_SP].unsafe_ptr(), Int32(nb), stp[].bf[LCV_OUT].unsafe_ptr(), wf, Int32(_blocks(n) + g), nonce,
-                grid_dim=1, block_dim=1,
-            )
-            ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=stp[].bf[LCV_OUT].create_sub_buffer[DType.float32](0, 1))
-            if stp[].wit.value().ok(ctx, _blocks(n) + g + 1, "LogisticRegressionCV score"):
-                break
-            tries += 1
-            if tries >= WITNESS_TRIES:
-                stp[].aborted = True
-                raise Error(WITNESS_ABORT)
-        ctx.synchronize()
-        var v = out[0]
-        _ = out^
-        return v
-    except:
-        try:
-            LCV_STATE.get_or_create_ptr()[].err = True
-        except:
-            pass
-        return Float32(0)
+def lcv_finish_kernel(th: FP, g: FP, f: FP, outs: FP, cs: FP, kp: Int32, d: Int32, sw: Int32, cnt: Int32,
+                      parts: FP, wf: IP, woff: Int32, nonce: Int32):
+    """One block: `logcv_finish_t` on the folded sums; f[0] by the lead."""
+    var t = team_at(Int(thread_idx.x), Int(block_dim.x), parts, 0, 0, 0)
+    var swb = sw != 0
+    var fv = logcv_finish_t(t, g, 0, th, 0, Int(kp), Int(d), swb, ld(cs, 0), Int(cnt), ld(outs, 0),
+                            ld(outs, 1) if swb else Float32(0), parts)
+    if t.lead():
+        st(f, 0, fv)
+    witness_end(wf, woff, nonce)
+
+
+def lcv_theta_kernel(lw: FP, p: Int32, c: Int32):
+    """theta[0] = theta[c] (c = 1), or zeros (c < 0): a thread an entry."""
+    var j = Int(block_idx.x) * LCV_TPB + Int(thread_idx.x)
+    var pp = Int(p)
+    if j < pp:
+        if Int(c) < 0:
+            st(lw, lbd_th(pp, 0) + j, Float32(0))
+        elif Int(c) == 1:
+            st(lw, lbd_th(pp, 0) + j, ld(lw, lbd_th(pp, 1) + j))
+
+
+def lcv_setc_kernel(cs: FP, cvals: FP, ci: Int32):
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        st(cs, 0, ld(cvals, Int(ci)))
+
+
+def lcv_best_kernel(scores: FP, nf: Int32, nc: Int32, cvals: FP, cs: FP):
+    """`logcv_fit`'s choice: each C's fold mean, the first best (DEVIATION
+    5005), C_ = Cs[best] into cs[0] and best into cs[1] (bits). nc x nf
+    scalars: the one thread is the choice, not a pass over rows."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        var best = 0
+        var bs = Float32(0)
+        var f = Int(nf)
+        var c = Int(nc)
+        for ci in range(c):
+            var acc = Float32(0)
+            for k in range(f):
+                acc = fa(acc, ld(scores, k * c + ci))
+            var m = fd(acc, i2f(f))
+            if ci == 0 or m > bs:
+                best = ci
+                bs = m
+        st(cs, 0, ld(cvals, best))
+
+
+def lcv_result_kernel(lw: FP, c: Int32, res: FP, kp: Int32, d: Int32, fi: Int32, cs: FP, iters: Int32,
+                      scores: FP, nsc: Int32):
+    """res: coef K'*d | intercept K' | C_ | n_iter | scores F*nC."""
+    var q = Int(block_idx.x) * LCV_TPB + Int(thread_idx.x)
+    var k1 = Int(kp)
+    var dd = Int(d)
+    var stride = dd + 1
+    var p = k1 * stride
+    var th = lw + lbd_th(p, Int(c))
+    if q < k1 * dd:
+        var k = q // dd
+        st(res, q, ld(th, k * stride + (q - k * dd)))
+    elif q < k1 * dd + k1:
+        var k = q - k1 * dd
+        st(res, q, ld(th, k * stride + dd) if fi != 0 else Float32(0))
+    elif q == k1 * dd + k1:
+        st(res, q, ld(cs, 0))
+    elif q == k1 * dd + k1 + 1:
+        var it = Int(iters)
+        st(res, q, i2f(it if it >= 0 else -it))
+    elif q < k1 * dd + k1 + 2 + Int(nsc):
+        st(res, q, ld(scores, q - (k1 * dd + k1 + 2)))
+
+
+struct LcvObjective(LbObjective):
+    var x: DeviceBuffer[DType.float32]
+    var y: DeviceBuffer[DType.float32]
+    var rows: DeviceBuffer[DType.float32]
+    var scr: DeviceBuffer[DType.float32]
+    var outs: DeviceBuffer[DType.float32]
+    var parts: DeviceBuffer[DType.float32]
+    var cs: DeviceBuffer[DType.float32]
+    var ix: DeviceBuffer[DType.int32]
+    var n: Int
+    var d: Int
+    var kp: Int
+    var fi: Bool
+    var sw: Bool
+    var fold: Int
+    var cnt: Int
+
+    def __init__(out self, mut ctx: DeviceContext, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, kp: Int,
+                 fi: Bool, sw: Bool) raises:
+        var p = kp * (d + 1)
+        self.x = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
+        self.y = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
+        self.rows = ctx.enqueue_create_buffer[DType.float32](max((kp + 1) * n, 1))
+        self.scr = ctx.enqueue_create_buffer[DType.float32](max((p + 2) * fold_blocks(n), 1))
+        self.outs = ctx.enqueue_create_buffer[DType.float32](2)
+        self.parts = ctx.enqueue_create_buffer[DType.float32](vscratch(kp * d) + 16)
+        self.cs = ctx.enqueue_create_buffer[DType.float32](2)
+        self.ix = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+        if n_x > 0:
+            ctx.enqueue_copy(dst_buf=self.x, src_ptr=x)
+        if n_y > 0:
+            ctx.enqueue_copy(dst_buf=self.y, src_ptr=y)
+        self.n = n
+        self.d = d
+        self.kp = kp
+        self.fi = fi
+        self.sw = sw
+        self.fold = -1
+        self.cnt = n
+
+    def _p(self) -> Int:
+        return self.kp * (self.d + 1)
+
+    def blocks_at(self, cnt: Int) -> Int:
+        var p = self._p()
+        return _blocks(cnt) + _blocks((p + 2) * fold_blocks(cnt)) + _blocks(p + 2) + 1
+
+    def blocks(self) -> Int:
+        return self.blocks_at(self.cnt)
+
+    def enqueue(mut self, mut ctx: DeviceContext, th: FP, g: FP, f: FP, wf: IP, woff: Int, nonce: Int32) raises:
+        var n = self.n
+        var d = self.d
+        var kp = self.kp
+        var p = self._p()
+        var cnt = self.cnt
+        var nbk = fold_blocks(cnt)
+        var fi = Int32(1 if self.fi else 0)
+        var sw = Int32(1 if self.sw else 0)
+        var b1 = _blocks(cnt)
+        var b2 = _blocks((p + 2) * nbk)
+        var b3 = _blocks(p + 2)
+        ctx.enqueue_function[lcv_map_kernel](
+            self.x.unsafe_ptr(), self.y.unsafe_ptr(), Int32(n), Int32(d), Int32(kp), fi, sw, th,
+            self.ix.unsafe_ptr(), Int32(cnt), Int32(self.fold), self.rows.unsafe_ptr(), wf, Int32(woff), nonce,
+            grid_dim=b1, block_dim=LCV_TPB,
+        )
+        ctx.enqueue_function[lcv_part_kernel](
+            self.x.unsafe_ptr(), self.y.unsafe_ptr(), Int32(n), Int32(d), Int32(kp), fi, sw, Int32(self.fold),
+            self.ix.unsafe_ptr(), Int32(cnt), self.rows.unsafe_ptr(), self.scr.unsafe_ptr(), Int32(nbk), wf,
+            Int32(woff + b1), nonce, grid_dim=b2, block_dim=LCV_TPB,
+        )
+        ctx.enqueue_function[lcv_fold_kernel](
+            self.scr.unsafe_ptr(), Int32(nbk), Int32(p), g, self.outs.unsafe_ptr(), wf, Int32(woff + b1 + b2), nonce,
+            grid_dim=b3, block_dim=LCV_TPB,
+        )
+        ctx.enqueue_function[lcv_finish_kernel](  # small-launch(kp: classes): one block strides the K-prime by d+1 gradient cells and one vfold sum
+            th, g, f, self.outs.unsafe_ptr(), self.cs.unsafe_ptr(), Int32(kp), Int32(d), sw, Int32(cnt),
+            self.parts.unsafe_ptr(), wf, Int32(woff + b1 + b2 + b3), nonce, grid_dim=1, block_dim=LBD_TPB,
+        )
+
+
+def _lcv_rows(mut ctx: DeviceContext, mut obj: LcvObjective, mut wit: Witness, mut bcnt: DeviceBuffer[DType.int32],
+              mut tot: DeviceBuffer[DType.int32], fold: Int) raises -> Int:
+    """The fold's training rows ascending into obj.ix; the count home."""
+    var n = obj.n
+    var nbk = _blocks(n)
+    var cnt = List[Int32](length=1, fill=Int32(0))
+    var tries = 0
+    while True:
+        var nonce = wit.begin()
+        var wf = wit.p()
+        ctx.enqueue_function[lcv_rows_count_kernel](
+            obj.y.unsafe_ptr(), Int32(n), Int32(fold), bcnt.unsafe_ptr(), wf, Int32(0), nonce,
+            grid_dim=nbk, block_dim=LCV_TPB,
+        )
+        ctx.enqueue_function[lcv_rows_scan_kernel](
+            bcnt.unsafe_ptr(), Int32(nbk), tot.unsafe_ptr(), wf, Int32(nbk), nonce, grid_dim=1, block_dim=SC_NT,
+        )
+        ctx.enqueue_function[lcv_rows_write_kernel](
+            obj.y.unsafe_ptr(), Int32(n), Int32(fold), bcnt.unsafe_ptr(), obj.ix.unsafe_ptr(), wf, Int32(nbk + 1),
+            nonce, grid_dim=nbk, block_dim=LCV_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=cnt.unsafe_ptr(), src_buf=tot)
+        if wit.ok(ctx, 2 * nbk + 1, "LogisticRegressionCV rows"):
+            break
+        tries += 1
+        if tries >= WITNESS_TRIES:
+            wit.fail()
+    ctx.synchronize()
+    var c = Int(cnt[0])
+    _ = cnt^
+    return c
+
+
+def _lcv_score(mut ctx: DeviceContext, mut obj: LcvObjective, mut wit: Witness, lw: FP, c: Int,
+               mut hit: DeviceBuffer[DType.float32], mut sp: DeviceBuffer[DType.float32], f: Int, weighted: Bool,
+               dst: FP) raises:
+    """The held-out score of theta[c] on fold f into dst[0] (device)."""
+    var n = obj.n
+    var d = obj.d
+    var kpp = obj.kp if obj.kp > 1 else 1
+    var nb = fold_blocks(n)
+    var g = _blocks(nb)
+    var tries = 0
+    while True:
+        var nonce = wit.begin()
+        var wf = wit.p()
+        ctx.enqueue_function[lcv_hit_kernel](
+            obj.x.unsafe_ptr(), obj.y.unsafe_ptr(), Int32(n), Int32(d), Int32(kpp), Int32(1 if obj.fi else 0),
+            lw + lbd_th(obj._p(), c), Int32(f), hit.unsafe_ptr(), wf, Int32(0), nonce, grid_dim=_blocks(n),
+            block_dim=LCV_TPB,
+        )
+        ctx.enqueue_function[lcv_score_parts_kernel](
+            obj.y.unsafe_ptr(), Int32(n), Int32(f), Int32(1 if weighted else 0), hit.unsafe_ptr(), sp.unsafe_ptr(),
+            wf, Int32(_blocks(n)), nonce, grid_dim=g, block_dim=LCV_TPB,
+        )
+        ctx.enqueue_function[lcv_score_fin_kernel](
+            sp.unsafe_ptr(), Int32(nb), dst, wf, Int32(_blocks(n) + g), nonce, grid_dim=1, block_dim=1,
+        )
+        if wit.ok(ctx, _blocks(n) + g + 1, "LogisticRegressionCV score"):
+            break
+        tries += 1
+        if tries >= WITNESS_TRIES:
+            wit.fail()
 
 
 def logcv_fit_grid(
     ctx: DeviceContext, algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
 ) raises:
-    """`logcv_fit` on a host team with the device objective and hits."""
+    """`logcv_fit` on the device (see the module notes)."""
+    var max_iter = Int(ip[0])
+    var fi = Int(ip[1]) != 0
     var kp = Int(ip[2])
+    var nc = Int(ip[3])
+    var nf = Int(ip[4])
+    var sw = Int(ip[5]) != 0
+    var tol = fp[0]
     var p = kp * (d + 1)
-    var stp = LCV_STATE.get_or_create_ptr()
-    stp[].ctx = ctx.copy()
-    stp[].bf = List[DeviceBuffer[DType.float32]]()
-    stp[].ix = List[DeviceBuffer[DType.int32]]()
-    stp[].cur_fold = -2
-    stp[].err = False
-    stp[].aborted = False
-    var wcap = max(_blocks(n) + _blocks((p + 2) * fold_blocks(n)) + _blocks(p + 2), 2 * _blocks(n) + _blocks(fold_blocks(n)) + 2)
-    var wctx = ctx.copy()
-    stp[].wit = Witness(wctx, wcap)
-    stp[].bf.append(ctx.enqueue_create_buffer[DType.float32](max(n_x, 1)))  # X
-    stp[].bf.append(ctx.enqueue_create_buffer[DType.float32](max(n_y, 1)))  # Y
-    stp[].bf.append(ctx.enqueue_create_buffer[DType.float32](max(p, 1)))  # TH
-    stp[].bf.append(ctx.enqueue_create_buffer[DType.float32](max((kp + 1) * n, 1)))  # ROWS
-    stp[].bf.append(ctx.enqueue_create_buffer[DType.float32](max((p + 2) * fold_blocks(n), 1)))  # SCR
-    stp[].bf.append(ctx.enqueue_create_buffer[DType.float32](max(p, 1)))  # G
-    stp[].bf.append(ctx.enqueue_create_buffer[DType.float32](2))  # OUT
-    stp[].bf.append(ctx.enqueue_create_buffer[DType.float32](max(n, 1)))  # HIT
-    stp[].bf.append(ctx.enqueue_create_buffer[DType.float32](max(2 * fold_blocks(n), 1)))  # SP
-    stp[].ix.append(ctx.enqueue_create_buffer[DType.int32](max(n, 1)))  # IX
-    stp[].ix.append(ctx.enqueue_create_buffer[DType.int32](_blocks(n) + 1))  # BCNT
-    stp[].ix.append(ctx.enqueue_create_buffer[DType.int32](1))  # TOT
-    if n_x > 0:
-        ctx.enqueue_copy(dst_buf=stp[].bf[LCV_X], src_ptr=x)
-    if n_y > 0:
-        ctx.enqueue_copy(dst_buf=stp[].bf[LCV_Y], src_ptr=y)
+    var c = ctx.copy()
+    var obj = LcvObjective(c, x, n_x, y, n_y, n, d, kp, fi, sw)
+    var wcap = max(lbd_witness_words(obj.blocks_at(n), p), 2 * _blocks(n) + _blocks(fold_blocks(n)) + 2)
+    var wit = Witness(c, wcap)
+    var lw = c.enqueue_create_buffer[DType.float32](lbd_words(p))
+    lw.enqueue_fill(Float32(0))
+    var hit = c.enqueue_create_buffer[DType.float32](max(n, 1))
+    var sp = c.enqueue_create_buffer[DType.float32](max(2 * fold_blocks(n), 1))
+    var bcnt = c.enqueue_create_buffer[DType.int32](_blocks(n) + 1)
+    var tot = c.enqueue_create_buffer[DType.int32](1)
+    var scores = c.enqueue_create_buffer[DType.float32](max(nf * nc, 1))
+    scores.enqueue_fill(Float32(0))
+    var cvals = c.enqueue_create_buffer[DType.float32](max(nc, 1))
+    var hc = List[Float32](length=max(nc, 1), fill=Float32(0))
+    for ci in range(nc):
+        hc[ci] = fp[1 + ci]
+    c.enqueue_copy(dst_buf=cvals, src_ptr=hc.unsafe_ptr())
     # the StratifiedKFold ids from the device labels (the caller sent zeros)
-    lcv_fold_ids_device(ctx.copy(), FP(unsafe_from_address=Int(stp[].bf[LCV_Y].unsafe_ptr())), n, max(Int(ip[2]), 2), Int(ip[4]))
-    ctx.synchronize()
-    # the host team, as `_fit_on_host` builds it
-    var hip = ip.copy()
-    var hfp = fp.copy()
-    var fw = List[Float32](length=max(n_fw, 1), fill=Float32(0))
-    var iw = List[Int32](length=max(n_iw, 1), fill=Int32(0))
-    var bufs = logcv_team_rows(IP(unsafe_from_address=Int(hip.unsafe_ptr())))
-    var tw = List[Float32](length=team_work(n, bufs, 0), fill=Float32(0))
-    for i in range(n_out):
-        res.unsafe_store(i, Float32(0))
-    logcv_fit[logistic_objective_grid, lcv_rows_grid, lcv_score_grid](
-        solo(FP(unsafe_from_address=Int(tw.unsafe_ptr())), n, bufs, 0), x, y, n, d,
-        IP(unsafe_from_address=Int(hip.unsafe_ptr())), FP(unsafe_from_address=Int(hfp.unsafe_ptr())),
-        res, FP(unsafe_from_address=Int(fw.unsafe_ptr())), IP(unsafe_from_address=Int(iw.unsafe_ptr())),
-    )
-    _ = hip^
-    _ = hfp^
-    _ = fw^
-    _ = iw^
-    _ = tw^
-    var failed = stp[].err
-    var aborted = stp[].aborted
-    stp[].wit = Optional[Witness]()
-    stp[].bf = List[DeviceBuffer[DType.float32]]()
-    stp[].ix = List[DeviceBuffer[DType.int32]]()
-    stp[].ctx = Optional[DeviceContext]()
-    if aborted:
-        raise Error(WITNESS_ABORT)
-    if failed:
-        raise Error("LogisticRegressionCV: a device step of the grid fit failed")
+    lcv_fold_ids_device(c.copy(), FP(unsafe_from_address=Int(obj.y.unsafe_ptr())), n, max(kp, 2), nf)
+    c.synchronize()
+    _ = hc^
+    var lp = FP(unsafe_from_address=Int(lw.unsafe_ptr()))
+    var bt = _blocks(p)
+    for f in range(nf):
+        obj.fold = f
+        obj.cnt = _lcv_rows(c, obj, wit, bcnt, tot, f)
+        c.enqueue_function[lcv_theta_kernel](lp, Int32(p), Int32(-1), grid_dim=bt, block_dim=LCV_TPB)
+        for ci in range(nc):
+            c.enqueue_function[lcv_setc_kernel](obj.cs.unsafe_ptr(), cvals.unsafe_ptr(), Int32(ci), grid_dim=1,  # small-launch(ci: the C index): one thread copies one scalar C into the objective slot
+                                                block_dim=1)
+            var r = lbfgs_device(c, obj, wit, lw, p, max_iter, tol, "LogisticRegressionCV fit")
+            _lcv_score(c, obj, wit, lp, r[1], hit, sp, f, sw, FP(unsafe_from_address=Int(scores.unsafe_ptr())) + f * nc + ci)
+            # the warm start: the next C starts from this theta
+            c.enqueue_function[lcv_theta_kernel](lp, Int32(p), Int32(r[1]), grid_dim=bt, block_dim=LCV_TPB)
+    c.enqueue_function[lcv_best_kernel](scores.unsafe_ptr(), Int32(nf), Int32(nc), cvals.unsafe_ptr(),  # small-launch(nc: the C grid): one thread folds the nf by nc score table and picks the first best C
+                                        obj.cs.unsafe_ptr(), grid_dim=1, block_dim=1)
+    obj.fold = -1
+    obj.cnt = n
+    c.enqueue_function[lcv_theta_kernel](lp, Int32(p), Int32(-1), grid_dim=bt, block_dim=LCV_TPB)
+    var r = lbfgs_device(c, obj, wit, lw, p, max_iter, tol, "LogisticRegressionCV fit")
+    var dres = c.enqueue_create_buffer[DType.float32](max(n_out, 1))
+    dres.enqueue_fill(Float32(0))
+    var nsc = nf * nc
+    c.enqueue_function[lcv_result_kernel](lp, Int32(r[1]), dres.unsafe_ptr(), Int32(kp), Int32(d),
+                                          Int32(1 if fi else 0), obj.cs.unsafe_ptr(), Int32(r[0]),
+                                          scores.unsafe_ptr(), Int32(nsc), grid_dim=_blocks(kp * d + kp + 2 + nsc),
+                                          block_dim=LCV_TPB)
+    c.enqueue_copy(dst_ptr=res, src_buf=dres)
+    c.synchronize()
+    _ = obj^
+    _ = wit^
+    _ = lw^
+    _ = hit^
+    _ = sp^
+    _ = bcnt^
+    _ = tot^
+    _ = scores^
+    _ = cvals^
+    _ = dres^

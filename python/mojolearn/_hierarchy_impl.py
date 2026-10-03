@@ -19,7 +19,7 @@ import sys
 
 from . import _backend, _expansion_cluster, _mojolearn_solver, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, zeros
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, frombytes, zeros
 from .density import _check_queries
 from .linear_model import _check_saved_by, _restore_mode, _saved_mode
 
@@ -396,6 +396,36 @@ class AgglomerativeClustering:
                 edges.append(float(c))
         return edges
 
+    def _connectivity_aux(self, X, n):
+        """The connectivity matrix as the binding takes it (lane
+        apple-fast-py2mojo-cluster: `x_cluster/agglo.mojo` keeps its nonzero
+        off-diagonal entries, which `_connectivity_edges` did here):
+        (aux, count, edge_mode), mode 1 the dense n x n float32 matrix
+        (count n * n), mode 2 the COO rows, columns and values as float32,
+        concatenated (count nnz)."""
+        conn = self.connectivity
+        if callable(conn):
+            conn = conn(X)
+        tocoo = getattr(conn, "tocoo", None)
+        if callable(tocoo):
+            coo = tocoo()
+            shape = tuple(coo.shape)
+            rows, _ = as_f32_c(coo.row, ndim=1, name="connectivity rows")
+            cols, _ = as_f32_c(coo.col, ndim=1, name="connectivity cols")
+            vals, _ = as_f32_c(coo.data, ndim=1, name="connectivity values")
+            nnz = int(vals.shape[0])
+            aux = (frombytes(rows.tobytes() + cols.tobytes() + vals.tobytes(), "<f4", (3 * nnz,))
+                   if nnz else None)
+            mode, count = 2, nnz
+        else:
+            dense, _ = as_f32_c(conn, ndim=2, name="connectivity")
+            shape = tuple(dense.shape)
+            aux, mode, count = dense, 1, int(dense.size)
+        if shape != (n, n):
+            raise ValueError(
+                f"Wrong shape for connectivity matrix: {shape} when X has {n} samples")
+        return aux, count, mode
+
     def _fit_x(self, X):
         """The x_cluster route (`x_cluster/agglo.mojo`, ENTRY_AGGLO): every
         linkage, metric, connectivity matrix and the per-merge distances,
@@ -406,7 +436,7 @@ class AgglomerativeClustering:
                 "mojolearn AgglomerativeClustering: sparse X is refused; the "
                 "dissimilarities are a dense float32 matrix")
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        n, d = (int(v) for v in x.shape)
+        n, d = (int(v) for v in x.shape)  # glue: the two shape dims
         if n < 2:
             raise ValueError(
                 f"mojolearn AgglomerativeClustering: n_rows={n} < 2; a tree "
@@ -434,16 +464,28 @@ class AgglomerativeClustering:
                 full = (self.distance_threshold is not None
                         or int(self.n_clusters) < max(100, 0.02 * n))
         n_merges = n - 1 if full else n - int(self.n_clusters)
-        edges = self._connectivity_edges(x, n) if constrained else []
-        aux = (Array.from_list(edges, "<f4") if edges else None)
         # the cluster lane's binding, named by its door (a name here would
         # make this file a whole-surface registry to tools/lane_select.py)
         b = _backend.binding(_expansion_cluster._XCluster._BINDING, getattr(self, "numeric_mode", None))
-        ip = [n, d, _LINKAGES[self.linkage], metric, len(edges) // 2 if constrained else -1, n_merges]
+        mojo = _expansion_cluster._py2mojo(b)
+        if mojo:
+            # the connectivity filter, the distance-threshold count and the
+            # labels in the binding (x_cluster/agglo.mojo, tree_cut.mojo)
+            aux, n_edges, edge_mode = self._connectivity_aux(x, n) if constrained else (None, -1, 0)
+            thr = self.distance_threshold
+            cut = (1 if thr is not None else int(self.n_clusters)) if full else 0
+            ip = [n, d, _LINKAGES[self.linkage], metric, n_edges, n_merges, edge_mode, cut,
+                  1 if (full and thr is not None) else 0]
+            fp = [2.0, float(thr) if thr is not None else 0.0]
+        else:
+            edges = self._connectivity_edges(x, n) if constrained else []
+            aux = (Array.from_list(edges, "<f4") if edges else None)
+            ip = [n, d, _LINKAGES[self.linkage], metric, len(edges) // 2 if constrained else -1, n_merges]
+            fp = [2.0]
         f, i, sc = b.x_cluster_call(
             _E_AGGLO, addr_ro(x, name="X"), x.size,
             addr_ro(aux, name="connectivity") if aux is not None else 0,
-            aux.size if aux is not None else 0, ip, [2.0])
+            aux.size if aux is not None else 0, ip, fp)
         children = i[0]
         self.children_ = Array._from_flat(children, (n_merges, 2), "<i4")
         self.n_leaves_ = n
@@ -458,17 +500,22 @@ class AgglomerativeClustering:
             self.distances_ = Array._from_flat(distances, (n_merges,), "<f4")
         else:
             self.__dict__.pop("distances_", None)
-        if self.distance_threshold is not None:
-            thr = float(self.distance_threshold)
-            self.n_clusters_ = sum(1 for v in distances if v >= thr) + 1
+        if mojo:
+            self.n_clusters_ = (int(sc[1]) if self.distance_threshold is not None and full
+                                else int(self.n_clusters))
+            self.labels_ = Array._from_flat(i[1], (n,), "<i4")
         else:
-            self.n_clusters_ = int(self.n_clusters)
-        pairs = [(children[2 * t], children[2 * t + 1]) for t in range(n_merges)]
-        if full:
-            labels = _hc_cut(self.n_clusters_, pairs, n)
-        else:
-            labels = _heads(pairs, n)
-        self.labels_ = Array._from_flat(labels, (n,), "<i4")
+            if self.distance_threshold is not None:
+                thr = float(self.distance_threshold)
+                self.n_clusters_ = sum(1 for v in distances if v >= thr) + 1
+            else:
+                self.n_clusters_ = int(self.n_clusters)
+            pairs = [(children[2 * t], children[2 * t + 1]) for t in range(n_merges)]
+            if full:
+                labels = _hc_cut(self.n_clusters_, pairs, n)
+            else:
+                labels = _heads(pairs, n)
+            self.labels_ = Array._from_flat(labels, (n,), "<i4")
         self.n_boruvka_rounds_ = -1
         self.n_features_in_ = d
         self._fit_X = None
@@ -598,7 +645,7 @@ class AgglomerativeClustering:
         meta = _serialize.exact(arrays, "meta", "<i8")
         if meta.size != 3:
             raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 3 are needed")
-        k, nf, n_leaves = (int(v) for v in meta.tolist())
+        k, nf, n_leaves = (int(v) for v in meta.tolist())  # glue: unpacks the fixed meta vector
         obj = cls(n_clusters=k, metric=_serialize.scalar_str(arrays, "metric"), prediction_data=True)
         _restore_mode(obj, arrays)
         x = _serialize.exact(arrays, "x", "<f4")

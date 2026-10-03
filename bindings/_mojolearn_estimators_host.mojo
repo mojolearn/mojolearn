@@ -58,6 +58,9 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from bindings.py2mojo_cluster_est import dbscan_core_arrays_binding, estimators_py2mojo_cluster_binding
+from core.py2mojo_rows import py2mojo_rows_host_binding
+from svm.host.scale_gamma_host import py2mojo_linear_flags_binding
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
@@ -106,6 +109,7 @@ from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
 from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
 from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_predict_task_count
 from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples_into
+from core.device_fold import host_sum_f32_fixed
 from kde.impl.neighbors.kernel_density import (
     kde_fit_validate,
     kde_validate_data_ptr,
@@ -214,11 +218,14 @@ def kde_score_samples_binding(
     `kernel` and `metric` are the sklearn/cuML names; every unimplemented
     one is refused BY NAME by `kernel_from_name` and `metric_from_name`, as
     on the device. Returns n_query."""
-    if len(params) != 5:
+    if len(params) != 5 and len(params) != 6:
         raise Error(
-            "kde_score_samples: params must contain 5 values, got "
+            "kde_score_samples: params must contain 5 or 6 values, got "
             + String(len(params))
         )
+    # params[5] want_total: return the scores' `host_sum_f32_fixed` (the
+    # GPU binding's device fold order; lane pyglue-numeric)
+    var want_total = len(params) == 6 and _index(params[5]) != 0
     var tp = f32_ptr(_index(train_addr))
     var qp = f32_ptr(_index(query_addr))
     var op = f32_ptr(_index(out_addr))
@@ -253,6 +260,11 @@ def kde_score_samples_binding(
             tp, qp, weights, has_weights, n_train, n_query, n_features,
             bandwidth, k, m, op, host_predict_task_count(n_query), Float32(2.0),
         )
+    if want_total:
+        var scores = List[Float32](capacity=n_query)
+        for i in range(n_query):
+            scores.append(op[i])
+        return PythonObject(Float64(host_sum_f32_fixed(scores, n_query)))
     return PythonObject(n_query)
 
 
@@ -1380,6 +1392,8 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_estimators_host")
         module.def_function[estimators_host_numeric_mode_binding]("estimators_host_numeric_mode")
+        module.def_function[py2mojo_rows_host_binding]("py2mojo_rows")
+        module.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         module.def_function[estimators_host_vendor_binding]("estimators_host_vendor")
         module.def_function[estimators_host_column_binding]("estimators_host_column")
         module.def_function[estimators_host_sabotage_binding]("estimators_host_sabotage")
@@ -1397,6 +1411,8 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[ridge_fit_binding]("ridge_fit")
         module.def_function[dbscan_fit_binding]("dbscan_fit")
         module.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
+        module.def_function[dbscan_core_arrays_binding]("dbscan_core_arrays")
+        module.def_function[estimators_py2mojo_cluster_binding]("estimators_py2mojo_cluster")
         module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         module.def_function[qn_fit_binding]("qn_fit")
         module.def_function[ols_predict_binding]("ols_predict")

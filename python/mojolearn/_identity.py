@@ -101,7 +101,7 @@ def _checkout_root():
     """The repository root when this package sits in a checkout (the
     directory holding tools/identity_break.py), else None."""
     base = _pkg_dir()
-    for _ in range(6):
+    for _ in range(6):  # glue: identity verification CLI over record files
         base = os.path.dirname(base)
         if not base or base == os.path.dirname(base):
             return None
@@ -142,7 +142,7 @@ def columns():
     record = host_surface.training_gpu_column_record()
     root = _checkout_root()
     out, missing = [], []
-    for rel in host_surface.TRAINING_GPU_COLUMNS:
+    for rel in host_surface.TRAINING_GPU_COLUMNS:  # glue: identity verification CLI over record files
         base = os.path.basename(rel)
         label = base[:-len(".json")] if base.endswith(".json") else base
         copy = os.path.join(_pkg_dir(), _COLUMNS_DIR, record, base)
@@ -181,14 +181,14 @@ def commit_witness():
 def _column_lanes_and_fixtures(paths):
     """The lanes and fixtures every one of the shipped columns carries."""
     lanes, fixtures = None, None
-    for p in paths:
+    for p in paths:  # glue: identity verification CLI over record files
         with open(p, "r", encoding="utf-8") as fh:
             j = json.load(fh)
-        l = {k.split("/")[0] for k in j.get("cells", {})}
+        l = {k.split("/")[0] for k in j.get("cells", {})}  # glue: identity verification CLI over record files
         f = set(j.get("fixtures", {}))
         lanes = l if lanes is None else lanes & l
         fixtures = f if fixtures is None else fixtures & f
-    return sorted(lanes or ()), sorted(fixtures or ())
+    return sorted(lanes or ()), sorted(fixtures or ())  # glue: identity verification CLI over record files
 
 
 def _run(harness, argv, env, capture):
@@ -209,9 +209,9 @@ def _judge(diff_text, lanes, fixtures):
     """Every cell this box ran, from the diff's two tables: the train verdict
     must be IDENTICAL x4; infer and model must be IDENTICAL x4 or N/A. Returns
     (bad rows, cells seen)."""
-    keys = {f"{l}/{f}" for l in lanes for f in fixtures}
+    keys = {f"{l}/{f}" for l in lanes for f in fixtures}  # glue: identity verification CLI over record files
     bad, seen = [], 0
-    for line in diff_text.splitlines():
+    for line in diff_text.splitlines():  # glue: identity verification CLI over record files
         m2 = _ROW2.match(line)
         if m2 and m2.group("key") in keys:
             v = m2.group("verdict").strip()
@@ -224,8 +224,8 @@ def _judge(diff_text, lanes, fixtures):
             seen += 1
             if v != "IDENTICAL x4":
                 bad.append(f"{m.group('key')} train: {v}")
-    for k in sorted(keys):
-        if not any(line.startswith(f"| {k} ") for line in diff_text.splitlines()):
+    for k in sorted(keys):  # glue: identity verification CLI over record files
+        if not any(line.startswith(f"| {k} ") for line in diff_text.splitlines()):  # glue: identity verification CLI over record files
             bad.append(f"{k} train: (no row in the diff)")
     return bad, seen
 
@@ -256,9 +256,9 @@ def cmd_check(args):
         problems.append(str(exc))
     try:
         cols = columns()
-        report["columns"] = [dict(label=l, path=p, how=how) for l, p, how in cols]
+        report["columns"] = [dict(label=l, path=p, how=how) for l, p, how in cols]  # glue: identity verification CLI over record files
         report["record"] = host_surface.training_gpu_column_record()
-        lanes, fixtures = _column_lanes_and_fixtures([p for _, p, _ in cols])
+        lanes, fixtures = _column_lanes_and_fixtures([p for _, p, _ in cols])  # glue: identity verification CLI over record files
         report["lanes"], report["fixtures"] = lanes, fixtures
     except (FileNotFoundError, ValueError, OSError, json.JSONDecodeError) as exc:
         problems.append(str(exc))
@@ -301,7 +301,7 @@ def cmd_identity(args):
     except FileNotFoundError as exc:
         return _finish(args, _verify.EXIT_NO_REFERENCE, "NO REFERENCE", str(exc))
     record = host_surface.training_gpu_column_record()
-    record_lanes, record_fixtures = _column_lanes_and_fixtures([p for _, p, _ in cols])
+    record_lanes, record_fixtures = _column_lanes_and_fixtures([p for _, p, _ in cols])  # glue: identity verification CLI over record files
     cpu_only = _backend.vendor() == "cpu"
     # Public CPU checks use only the small probes supported by inference
     # wheel dependencies. Full source verification has its own lane list.
@@ -309,29 +309,29 @@ def cmd_identity(args):
     # compares its fixed bundled columns, so a promoted fix-record lane must
     # not accidentally compare against an older, pre-fix answer here.
     cpu_record_lanes = set(host_surface.public_reference_lanes()) & set(host_surface.record_covered_lanes())
-    lanes = [l for l in record_lanes if not cpu_only or l in cpu_record_lanes]
+    lanes = [l for l in record_lanes if not cpu_only or l in cpu_record_lanes]  # glue: identity verification CLI over record files
     if args.lanes:
-        asked = [x for x in args.lanes.split(",") if x]
-        unknown = [x for x in asked if x not in record_lanes]
+        asked = [x for x in args.lanes.split(",") if x]  # glue: identity verification CLI over record files
+        unknown = [x for x in asked if x not in record_lanes]  # glue: identity verification CLI over record files
         if unknown:
             return _finish(args, _verify.EXIT_USAGE, "USAGE",
                            f"--lanes names lanes the shipped columns do not carry: {unknown}; "
                            f"record {record} carries {record_lanes}")
-        refused = [x for x in asked if x not in lanes]
+        refused = [x for x in asked if x not in lanes]  # glue: identity verification CLI over record files
         if refused:
             return _finish(args, _verify.EXIT_USAGE, "USAGE",
                            f"--lanes names lanes outside the public CPU reference checks on this "
                            f"install: {refused}; the inference wheel supports reference checks for {host_surface.public_reference_lanes()} "
                            f"against this record")
-        lanes = [l for l in lanes if l in asked]
+        lanes = [l for l in lanes if l in asked]  # glue: identity verification CLI over record files
     fixtures = record_fixtures
     if args.fixtures:
-        asked = [x for x in args.fixtures.split(",") if x]
-        unknown = [x for x in asked if x not in record_fixtures]
+        asked = [x for x in args.fixtures.split(",") if x]  # glue: identity verification CLI over record files
+        unknown = [x for x in asked if x not in record_fixtures]  # glue: identity verification CLI over record files
         if unknown:
             return _finish(args, _verify.EXIT_USAGE, "USAGE",
                            f"--fixtures names fixtures the record does not carry: {unknown}")
-        fixtures = [f for f in record_fixtures if f in asked]
+        fixtures = [f for f in record_fixtures if f in asked]  # glue: identity verification CLI over record files
     if not lanes:
         return _finish(args, _verify.EXIT_CANNOT_RUN, "CANNOT RUN",
                        "no lane to run: this CPU-only install covers none of the record's lanes")
@@ -350,7 +350,7 @@ def cmd_identity(args):
     _emit([
         "# python -m mojolearn identity",
         f"# harness: {harness} ({harness_how})",
-        f"# record:  {record}; columns: " + ", ".join(f"{l} ({how})" for l, _, how in cols),
+        f"# record:  {record}; columns: " + ", ".join(f"{l} ({how})" for l, _, how in cols),  # glue: identity verification CLI over record files
         f"# commit:  {commit or '(the checkout, read by the harness)'} ({commit_source})",
         f"# this box: {'CPU-only install' if cpu_only else 'vendor ' + str(_backend.vendor())}; "
         f"{len(lanes)} of {len(record_lanes)} lanes x {len(fixtures)} fixtures x {args.repeats} repeats",
@@ -367,7 +367,7 @@ def cmd_identity(args):
                        f"the harness exited {rc} and wrote {'no' if not os.path.isfile(keep) else 'a'} "
                        f"column ({keep}); its refusal is printed above")
 
-    diff_argv = ["--diff"] + [p for _, p, _ in cols] + [keep]
+    diff_argv = ["--diff"] + [p for _, p, _ in cols] + [keep]  # glue: identity verification CLI over record files
     full = set(fixtures) == set(record_fixtures)
     if full:
         # The gate's own mechanism, when every fixture ran: a cell of a run
@@ -376,11 +376,11 @@ def cmd_identity(args):
     drc, text = _run(harness, diff_argv, env, capture=True)
     sys.stdout.write(text if text.endswith("\n") else text + "\n")
     bad, seen = _judge(text, lanes, fixtures)
-    summary = [ln for ln in text.splitlines()
+    summary = [ln for ln in text.splitlines()  # glue: identity verification CLI over record files
                if ln.startswith("summary") or ln.startswith("REQUIRE FAIL") or ln.startswith("require-columns")]
     with open(keep, "r", encoding="utf-8") as fh:
         local = json.load(fh)
-    extra = dict(record=record, columns=[l for l, _, _ in cols], commit=local.get("commit"),
+    extra = dict(record=record, columns=[l for l, _, _ in cols], commit=local.get("commit"),  # glue: identity verification CLI over record files
                  vendor=local.get("vendor"), lanes=lanes, fixtures=fixtures, repeats=args.repeats,
                  local_json=keep, harness=harness, diff_exit=drc, cells_run=seen,
                  summary=summary, bad=bad, full_fixture_set=full)

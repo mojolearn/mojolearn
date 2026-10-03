@@ -237,7 +237,7 @@ def _block_options(what, head_dim, rope_theta, rope_scaling, rope_dim,
             )
         tail[2] = _f32_bits(rope_scaling["factor"], what, "rope_scaling factor")
         if kind == "llama3":
-            for key in ("low_freq_factor", "high_freq_factor",
+            for key in ("low_freq_factor", "high_freq_factor",  # glue: checks three rope_scaling keys
                         "original_max_position_embeddings"):
                 if key not in rope_scaling:
                     raise ValueError(
@@ -462,8 +462,8 @@ def _take(weights, what, names):
             "(numpy arrays or mojolearn Arrays) keyed by the upstream "
             f"parameter names {names}"
         )
-    missing = [n for n in names if n not in weights]
-    extra = [n for n in weights if n not in names]
+    missing = [n for n in names if n not in weights]  # glue: checks weight dict names
+    extra = [n for n in weights if n not in names]  # glue: checks weight dict names
     if missing or extra:
         raise ValueError(
             f"mojolearn {what}: weight dict mismatch"
@@ -473,7 +473,7 @@ def _take(weights, what, names):
             "parameter names (modeling_llama.py; the same names "
             "llama_refuse_bad_inputs uses)"
         )
-    return [weights[n] for n in names]
+    return [weights[n] for n in names]  # glue: orders weight tensors by name
 
 
 class TransformerState:
@@ -535,13 +535,17 @@ class TransformerState:
             held = min(s, w)
             out = _buffers.empty((b, kv, held, hd), '<f4')
             dest = _checks.flat_view(out, 'f')
-            # Copy contiguous head vectors in chronological order, preserving
-            # ring wrap and head/batch strides without advanced-index arrays.
+            # Per (batch, kv head) the held positions in chronological order
+            # are at most two contiguous runs of the ring (before and after
+            # the wrap): two slice copies, no per-token loop.
+            start = (s - held) % w
+            first = min(held, w - start)
             for head in range(b * kv):
-                for j in range(held):
-                    src = (head*w + (s-held+j) % w)*hd
-                    dst = (head*held+j)*hd
-                    dest[dst:dst+hd] = source[src:src+hd]
+                d0, s0 = head * held * hd, (head * w + start) * hd
+                dest[d0:d0 + first * hd] = source[s0:s0 + first * hd]
+                if held > first:
+                    s1, d1 = head * w * hd, d0 + first * hd
+                    dest[d1:d1 + (held - first) * hd] = source[s1:s1 + (held - first) * hd]
             return out
         n = b * kv * self.cached_tokens * hd
         return _Array.from_buffer(source[:n]).reshape((b, kv, self.cached_tokens, hd))
@@ -749,7 +753,7 @@ class TransformerBlock(NumericModeMixin):
         # present with its flag off, or missing with its flag on, is
         # refused by ITS name before the generic key-set message.
         if hasattr(weights, "keys"):
-            for name in _OPT_NAMES:
+            for name in _OPT_NAMES:  # glue: checks optional tensor flags
                 present = name in weights
                 if present and not flags[name]:
                     raise ValueError(
@@ -769,9 +773,9 @@ class TransformerBlock(NumericModeMixin):
                     f"mlp={mlp!r} is ungated (down_proj(act(up_proj(x)))); "
                     "drop it or pick a gated form"
                 )
-        base_names = tuple(n for n in self._W_NAMES
+        base_names = tuple(n for n in self._W_NAMES  # glue: names of base weights
                            if gated or n != "gate_proj.weight")
-        opt_names = tuple(n for n in _OPT_NAMES if flags[n])
+        opt_names = tuple(n for n in _OPT_NAMES if flags[n])  # glue: names of optional weights
         arrs_all = _take(weights, what, base_names + opt_names)
         arrs = list(arrs_all[:len(base_names)])
         if not gated:
@@ -869,7 +873,7 @@ class TransformerBlock(NumericModeMixin):
         }
         present = iter(opt_arrs)
         self._wopt = []
-        for name in _OPT_NAMES:
+        for name in _OPT_NAMES:  # glue: collects optional weight tensors
             if flags[name]:
                 a = next(present)
                 self._wopt.append(_want_shape(_f32_strict(a, what, name),
@@ -899,17 +903,17 @@ class TransformerBlock(NumericModeMixin):
                     f"mojolearn {what}: numeric_profile={self.numeric_profile!r} has no block "
                     "implementation; it is never replaced by 'fp32_v1' silently")
             from ._linalg_impl import quantize_int15
-            self._int15 = [None if a is None else quantize_int15(a) for a in self._w[2:9]]
+            self._int15 = [None if a is None else quantize_int15(a) for a in self._w[2:9]]  # glue: quantizes each weight tensor binding
 
     def _weight_addrs(self):
         """The nine base weight addresses in the binding's order; the gate
         slot is 0 under an ungated MLP. The arrays are alive on `self`."""
-        return [0 if a is None else _addr_ro(a) for a in self._w]
+        return [0 if a is None else _addr_ro(a) for a in self._w]  # glue: one address per weight tensor
 
     def _tail_addrs(self):
         """The eleven optional addresses in `_OPT_NAMES` order, 0 where
         absent -- the addrs tail, sent only when `_extended`."""
-        return [0 if a is None else _addr_ro(a) for a in self._wopt]
+        return [0 if a is None else _addr_ro(a) for a in self._wopt]  # glue: one address per weight tensor
 
     def _with_tails(self, addrs, params):
         """The two lists as the binding wants them: the old lists for a
@@ -923,7 +927,7 @@ class TransformerBlock(NumericModeMixin):
         # Device contexts and thread locks cannot cross serialization/copy.
         # Only ordinary model state is saved; GPU ownership is recreated lazily.
         state = self.__dict__.copy()
-        for name in ("_runtime_lock", "_native_session", "_session_binding"):
+        for name in ("_runtime_lock", "_native_session", "_session_binding"):  # glue: drops three cached attributes
             state.pop(name, None)
         return state
 
@@ -1082,7 +1086,7 @@ class TransformerBlock(NumericModeMixin):
             # non-default block only, the 11-address options tail
             # (`_OPT_NAMES` order) and the 17-int params tail.
             [addr_ro(x, name="x")]
-            + [0 if a is None else addr_ro(a, name="weight") for a in w]
+            + [0 if a is None else addr_ro(a, name="weight") for a in w]  # glue: one address per weight tensor
             + [addr(kc, name="k_cache"), addr(vc, name="v_cache"),
                addr(y, name="y")]
         )
@@ -1151,15 +1155,15 @@ class TransformerBlock(NumericModeMixin):
                      + [0] * 7
                      + [addr(kc, name="k_cache"), addr(vc, name="v_cache"), addr(y, name="y")]
                      + self._tail_addrs())
-            for trip in planes:
-                addrs += [0, 0, 0] if trip is None else [addr_ro(t, name="planes") for t in trip]
+            for trip in planes:  # glue: addresses per int15 plane triple
+                addrs += [0, 0, 0] if trip is None else [addr_ro(t, name="planes") for t in trip]  # glue: addresses per int15 plane triple
             if self._native_session is None:
                 self._native_session = ext.transformer_session_create()
                 self._session_binding = ext
             new_len = ext.transformer_session_forward_int15(self._native_session, addrs, params)
         elif _exports(ext, "transformer_forward_int15"):
             addrs = ([addr_ro(x, name="x")]
-                     + [0 if a is None else addr_ro(a, name="weight") for a in w]
+                     + [0 if a is None else addr_ro(a, name="weight") for a in w]  # glue: one address per weight tensor
                      + [addr(kc, name="k_cache"), addr(vc, name="v_cache"), addr(y, name="y")]
                      + self._tail_addrs())
             new_len = ext.transformer_forward_int15(addrs, params)
@@ -1289,12 +1293,12 @@ class TransformerBlock(NumericModeMixin):
                 " in IDENTICAL mode"
             )
         w = self._w
-        grads = [_buffers.empty(x.shape, "<f4")] + [_buffers.empty(a.shape, "<f4") for a in w]
+        grads = [_buffers.empty(x.shape, "<f4")] + [_buffers.empty(a.shape, "<f4") for a in w]  # glue: allocates one gradient per weight
         # ORDER MATCHES bindings/_mojolearn_transformer.mojo::
         # transformer_backward_binding: x, the nine weights, grad_output,
         # grad_x, the nine weight gradients.
-        addrs = ([_addr_ro(x)] + [_addr_ro(a) for a in w] + [_addr_ro(dy)]
-                 + [_addr(g) for g in grads])
+        addrs = ([_addr_ro(x)] + [_addr_ro(a) for a in w] + [_addr_ro(dy)]  # glue: one address per weight tensor
+                 + [_addr(g) for g in grads])  # glue: one address per gradient tensor
         params = [b, l, self.d_model, self.n_heads, self.n_kv_heads,
                   self.head_dim, self.intermediate, self.window]
         # lane/neural-net-experiment: the session entry keeps the weights,
@@ -1385,7 +1389,7 @@ def _private_copy(a):
     if a is None:
         return None
     pb = probe(a)
-    out = empty(tuple(int(d) for d in pb.shape), "<f4")
+    out = empty(tuple(int(d) for d in pb.shape), "<f4")  # glue: shape tuple of ints
     memcopy(addr(out, name="copy"), addr_ro(a, name="source"), 4 * int(out.size))
     return out
 
@@ -1488,8 +1492,8 @@ class TransformerDecodeSession:
             # COPIED, which is the ownership clause the device arm satisfies
             # with an upload. `cached_tokens` is unchanged by opening.
             self._native = None
-            self._hw = [_private_copy(a) for a in w]
-            self._hwopt = [_private_copy(a) for a in block._wopt]
+            self._hw = [_private_copy(a) for a in w]  # glue: private copy per weight tensor
+            self._hwopt = [_private_copy(a) for a in block._wopt]  # glue: private copy per weight tensor
             self._kc = _private_copy(kc)
             self._vc = _private_copy(vc)
             s0 = int(state.cached_tokens)
@@ -1502,8 +1506,8 @@ class TransformerDecodeSession:
             addrs = ([addr_ro(w[0], name="weight"), addr_ro(w[1], name="weight")] + [0] * 7
                      + [addr(kc, name="k_cache"), addr(vc, name="v_cache")]
                      + block._tail_addrs())
-            for trip in block._int15:
-                addrs += [0, 0, 0] if trip is None else [addr_ro(t, name="planes") for t in trip]
+            for trip in block._int15:  # glue: addresses per int15 plane triple
+                addrs += [0, 0, 0] if trip is None else [addr_ro(t, name="planes") for t in trip]  # glue: addresses per int15 plane triple
             params = ([b, block.d_model, block.n_heads, block.n_kv_heads, block.head_dim,
                        block.intermediate, int(state.max_tokens), int(state.cached_tokens),
                        block.window] + list(block._opts_tail))
@@ -1511,7 +1515,7 @@ class TransformerDecodeSession:
         else:
             self._native = create()
             addrs, params = block._with_tails(
-                [0 if a is None else addr_ro(a, name="weight") for a in w]
+                [0 if a is None else addr_ro(a, name="weight") for a in w]  # glue: one address per weight tensor
                 + [addr(kc, name="k_cache"), addr(vc, name="v_cache")],
                 [b, block.d_model, block.n_heads, block.n_kv_heads, block.head_dim,
                  block.intermediate, int(state.max_tokens), int(state.cached_tokens),
@@ -1529,12 +1533,12 @@ class TransformerDecodeSession:
         session's buffers standing where the caller's would."""
         blk = self._block
         addrs = ([addr_ro(x, name="x")]
-                 + [0 if a is None else addr_ro(a, name="weight") for a in self._hw]
+                 + [0 if a is None else addr_ro(a, name="weight") for a in self._hw]  # glue: one address per weight tensor
                  + [addr(self._kc, name="k_cache"), addr(self._vc, name="v_cache"),
                     addr(y, name="y")])
         if blk._extended:
             addrs = addrs + [0 if a is None else addr_ro(a, name="weight")
-                             for a in self._hwopt]
+                             for a in self._hwopt]  # glue: one address per weight tensor
             params = params + list(blk._opts_tail)
         return int(entry(addrs, params))
 

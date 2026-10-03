@@ -257,6 +257,24 @@ def gather_rows_at(i: Int, src: FP, dst: FP, f2: FP, f3: FP, q: IP, p: IP):
     dst.bitcast[Int32]().unsafe_store(i, src.bitcast[Int32]().unsafe_load(j))
 
 
+def argmax_row_at(i: Int, proba: FP, f1: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """q[i] = the column of row i's first largest value (k = p[0] columns;
+    a NaN wins at its first occurrence, as numpy's argmax): the classifier's
+    predict on the device (lane pyglue-numeric: numpy's argmax on the host)."""
+    var k = Int(p.unsafe_load(0))
+    var base = i * k
+    var best = 0
+    var bv = proba.unsafe_load(base)
+    for j in range(1, k):
+        if bv != bv:
+            break
+        var v = proba.unsafe_load(base + j)
+        if v != v or v > bv:
+            best = j
+            bv = v
+    q.unsafe_store(i, Int32(best))
+
+
 # ---------------------------------------------------------------- pooling
 # The Int32 block of a pooling layer (pool_params fills 12 and 13):
 comptime PP_N = 0

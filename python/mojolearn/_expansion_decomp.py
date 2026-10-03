@@ -26,7 +26,7 @@ import sys
 from . import _backend
 from . import _portable_math as _pm
 from ._array import Array
-from ._buffer import addr_ro, as_f32_c, as_i32_c, frombytes
+from ._buffer import addr_ro, as_f32_c, as_f64_c, as_i32_c, frombytes
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
@@ -212,7 +212,7 @@ class _M:
         if _is_sparse(X):
             X = X.toarray()
         a = as_f32_c(X, ndim=2, name=name)[0]
-        if a.ndim != 2 or min(a.shape) == 0:
+        if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
             raise ValueError(f"{name}: a nonempty two-dimensional input is required")
         fin = _host_all_finite(a)
         if fin is False:
@@ -226,7 +226,7 @@ class _M:
         if _is_sparse(X):
             X = X.toarray()          # a scipy.sparse matrix/array: densified (exact)
         a = as_f32_c(X, ndim=2, name=name)[0]
-        if a.ndim != 2 or min(a.shape) == 0:
+        if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
             raise ValueError(f"{name}: a nonempty two-dimensional input is required")
         s = array.array("f")
         mv = getattr(a, "_mv", None)
@@ -279,10 +279,19 @@ class _M:
         return _M(self.s[a * self.c:b * self.c], b - a, self.c)
 
     def take_rows(self, idx):
-        out = array.array("f")
-        for i in idx:
-            out.extend(self.s[i * self.c:(i + 1) * self.c])
-        return _M(out, len(idx), self.c)
+        k = _host_kit()
+        if self.r >= _F32_INDEX_MAX:
+            raise ValueError("x_decomp: take_rows exceeds the float32 row-index bound (2^24 rows)")
+        if not isinstance(idx, _M):
+            a = array.array("f", idx)
+            idx = _M(a, len(a), 1)
+        I = idx
+        m = I.r * I.c
+        out = _M.zeros(m, self.c)
+        if m * self.c:
+            k.b.x_decomp_move(self.addr, I.addr, out.addr,
+                              [_MV_TAKE_ROWS, m * self.c, self.c, 0, 0, 1, 0, len(self.s), m * self.c, m])
+        return out
 
     def cols(self, a, b):
         return self.take_cols(range(a, b))
@@ -300,10 +309,11 @@ class _M:
     def T(self):
         if self.r == 1 or self.c == 1:
             return _M(self.s, self.c, self.r)
-        out = array.array("f")
-        for j in range(self.c):
-            out.extend(self.s[j::self.c])
-        return _M(out, self.c, self.r)
+        k = _host_kit()
+        out = _M.zeros(self.c, self.r)
+        n = self.r * self.c
+        k.b.x_decomp_move(self.addr, _M._one.addr, out.addr, [_MV_TRANSPOSE, n, self.r, self.c, 0, 0, 0, n, n, 1])
+        return out
 
     def reshape(self, r, c):
         return _M(self.s, r, c)
@@ -353,6 +363,19 @@ def _dev_one(kit):
 _M._dev_one = staticmethod(_dev_one)
 
 
+#: lane apple-fast-py2mojo-decomp (2026-10-03): x_decomp/moves.mojo `move`
+#: ops and the float32 row-index bound (indices travel as exact floats).
+_MV_TAKE_ROWS, _MV_TRANSPOSE, _MV_PLACE_COLS, _MV_FILL0 = 0, 1, 2, 3
+_F32_INDEX_MAX = 1 << 24
+
+
+def _host_kit():
+    """The default-mode kit (for the `_M` host moves, which use only its
+    host-address entries). The Python data path and its A/B define are gone
+    (Python = glue only, Oct 3 2026): every move is x_decomp/moves.mojo."""
+    return _Kit(_backend.default_mode())
+
+
 def _any_negative(M):
     """Whether any value is < 0, through the cells (x < 0 counted as ones)."""
     if not len(M.s):
@@ -363,21 +386,23 @@ def _any_negative(M):
 
 def _vstack(*ms):
     s = array.array("f")
-    for m in ms:
+    for m in ms:  # glue: one C-level copy per argument matrix
         s.extend(m.s)
-    return _M(s, sum(m.r for m in ms), ms[0].c)
+    return _M(s, sum(m.r for m in ms), ms[0].c)  # glue: row count of argument matrices
 
 
 def _hstack(*ms):
     r = ms[0].r
-    w = sum(m.c for m in ms)
-    s = array.array("f", [0.0]) * (r * w)
+    w = sum(m.c for m in ms)  # glue: column count of argument matrices
+    k = _host_kit()
+    out = _M.zeros(r, w)
     off = 0
-    for m in ms:
-        for j in range(m.c):
-            s[off + j::w] = m.s[j::m.c]
+    for m in ms:  # glue: one Mojo move per argument matrix
+        if m.r * m.c:
+            k.b.x_decomp_move(m.addr, _M._one.addr, out.addr,
+                              [_MV_PLACE_COLS, m.r * m.c, m.c, w, off, 0, 0, m.r * m.c, r * w, 1])
         off += m.c
-    return _M(s, r, w)
+    return out
 
 
 def _kit_vendor(kit):
@@ -626,6 +651,75 @@ class _Kit:
             self.b.x_decomp_knn_select(D.addr, V.addr, I.addr, [n, m, k, int(bool(exclude_self))])
         return I, V
 
+    # ---- data movement and orders (lane apple-fast-py2mojo-decomp, x_decomp/moves.mojo)
+
+    def take_rows(self, A, idx, m=None, ist=1, ioff=0, radd=0):
+        """Rows Int(idx[a * ist + ioff]) + radd of A for a < m (idx an _M of
+        exact float row numbers; m defaults to all of idx): one thread per
+        copied value on the device, the checked host loop otherwise."""
+        if m is None:
+            m = idx.r * idx.c
+        count = m * A.c
+        p = [_MV_TAKE_ROWS, count, A.c, radd, 0, ist, ioff, A.r * A.c, count, idx.r * idx.c]
+        if count and self._use(A, idx):
+            out = self._dout(m, A.c)
+            self.b.x_decomp_dev_move(self._did(A), self._did(idx), out._d.id, p)
+            return out
+        out = _M.zeros(m, A.c)
+        if count:
+            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)
+        return out
+
+    def copy(self, A):
+        """An exact copy of A, on the device when A is there (the PLACE_COLS
+        move of all of A into a matrix of its own shape)."""
+        n = A.r * A.c
+        if n and A._d is not None and self._use(A):
+            out = self._dout(A.r, A.c)
+            self.b.x_decomp_dev_move(self._did(A), _M._dev_one(self), out._d.id,
+                                     [_MV_PLACE_COLS, n, A.c, A.c, 0, 0, 0, n, n, 1])
+            return out
+        return A.copy()
+
+    def fill0(self, A, start, stride, count):
+        """A[start + t * stride] = 0 for t < count, in place."""
+        if not count:
+            return A
+        p = [_MV_FILL0, count, start, stride, 0, 0, 0, A.r * A.c, A.r * A.c, 1]
+        if self._use(A):
+            did = self._did(A)
+            self.b.x_decomp_dev_move(did, _M._dev_one(self), did, p)
+            return A
+        self.b.x_decomp_move(A.addr, _M._one.addr, A.addr, p)
+        return A
+
+    def order(self, A):
+        """The stable ascending order of A's values (ties to the lower index)
+        as an n x 1 _M of exact floats; NaN refused."""
+        n = A.r * A.c
+        out = _M.zeros(n, 1)
+        if n:
+            self.b.x_decomp_order_f(A.addr, n, out.addr)
+        return out
+
+    def select_smallest(self, A, h):
+        """(sel, mask): the h smallest values' positions by (value, index),
+        ascending by position (h x 1 exact floats), and the int32 membership
+        of every position."""
+        n = A.r * A.c
+        sel = _M.zeros(h, 1)
+        mask = array.array("i", [0]) * n
+        if n:
+            self.b.x_decomp_select_smallest(A.addr, [n, h], sel.addr, mask.buffer_info()[0])
+        return sel, mask
+
+    def argmin_all(self, A):
+        """Every position (exact floats, c x 1) whose value equals the minimum."""
+        n = A.r * A.c
+        buf = _M.zeros(max(n, 1), 1)
+        c = int(self.b.x_decomp_argmin_all(A.addr, n, buf.addr)) if n else 0
+        return _M(buf.s[:c], c, 1)
+
     def lu_solve(self, lu, piv, B, trans=0):
         out = B.copy()
         p = [lu.r, B.c, trans] if trans else [lu.r, B.c]
@@ -648,8 +742,10 @@ class _Kit:
         m, n = A.r, A.c
         s, v = _M.zeros(1, n), _M.zeros(n, n)
         self.b.x_decomp_svd(A.addr, s.addr, v.addr, [m, n])
-        order = sorted(range(n), key=lambda j: (-s.s[j], j))
-        return s.take_cols(order), v.take_cols(order).T
+        # descending by value, ties to the lower index: the stable ascending
+        # order of -s (an exact negation), and the gathers, in Mojo
+        o = self.order(self.ew("scale", s, s=-1.0))
+        return self.take_rows(s.T, o).T, self.take_rows(v.T, o)
 
     def orth(self, A):
         """A copy of A with its columns orthonormalized: two passes of the
@@ -712,7 +808,7 @@ class _Kit:
         pm, im, diag, st = _M.zeros(n, 1), _M.zeros(n, 1), _M.zeros(1, n), _M.zeros(1, 4)
         self.b.x_decomp_lu_aux(lu.addr, piv.buffer_info()[0], pm.addr, im.addr, diag.addr, st.addr,
                                [n, int(bool(clamp))])
-        return [float(v) for v in st.s], diag, pm, im
+        return [float(v) for v in st.s], diag, pm, im  # glue: the four-field lu_aux status
 
     def lars_rows(self, G, Q, m, nnz):
         """Row-parallel Lars on the Gram (x_decomp/cells.mojo `lars_row`): the
@@ -853,12 +949,8 @@ class _Kit:
 
     def barycenter(self, X, Y, nbr, reg):
         """sklearn barycenter_weights: (n x k) weights of each row of X on
-        its k neighbors in Y (`nbr`: n lists of k indices)."""
-        if isinstance(nbr, _M):
-            n, k, idx = X.r, nbr.c, nbr
-        else:
-            n, k = X.r, len(nbr[0])
-            idx = _M.of([float(j) for row in nbr for j in row], n, k)
+        its k neighbors in Y (`nbr`: an n x k _M of exact float indices)."""
+        n, k, idx = X.r, nbr.c, nbr
         W, flags = _M.zeros(n, k), _M.zeros(n, 1)
         self.b.x_decomp_barycenter_rows(X.addr, Y.addr, idx.addr, W.addr, flags.addr, [n, Y.r, X.c, k], float(reg))
         return W
@@ -976,10 +1068,10 @@ class _Base:
     _parameters = ()
 
     def get_params(self, deep=True):
-        return {name: getattr(self, name) for name in self._parameters}
+        return {name: getattr(self, name) for name in self._parameters}  # glue: estimator parameter names (get_params)
 
     def set_params(self, **params):
-        for k, v in params.items():
+        for k, v in params.items():  # glue: estimator keyword arguments (set_params)
             if k not in self._parameters:
                 raise ValueError(f"Invalid {type(self).__name__} parameter: {k}")
             setattr(self, k, v)
@@ -1015,7 +1107,7 @@ class IncrementalPCA(_Base):
 
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
-        for a in ("components_", "n_samples_seen_"):
+        for a in ("components_", "n_samples_seen_"):  # glue: drops two fitted attribute names
             if hasattr(self, a):
                 delattr(self, a)
         if _is_sparse(X):
@@ -1177,17 +1269,12 @@ def _rp_rand(k, r, c, seed, stream, kind, dev):
     return out
 
 
-def _sparse_rp_device(mode):
-    """lane/apple-fast-kapprox: whether SparseRandomProjection.fit draws its
-    matrix in one x_neighbors launch and skips the host finiteness pass over
-    X (FAST + Apple, `-D MOJOLEARN_SPARSE_RP_DEVICE`), read back from that
-    binding's compile-time constant (no env read). The binding, or None."""
-    try:
-        b = _backend.binding("_mojolearn_x_neighbors", mode)
-    except Exception:
-        return None
-    fn = getattr(b, "x_neighbors_sparse_rp_device", None)
-    return b if fn is not None and int(fn()) != 0 else None
+def _grp_cls2(k):
+    """lane/apple-fast-gap-cls2: the random projections' FAST Apple fit
+    switches compiled into the kit's binding (x_decomp/resident.mojo
+    `grp_cls2_py`: bit 1 NOSCAN, 2 DEVSCAN, 4 LAZY); 0 when it has none."""
+    fn = getattr(k.b, "x_decomp_grp_cls2", None)
+    return int(fn()) if fn is not None else 0
 
 
 class _RandomProjection(_Base):
@@ -1196,21 +1283,58 @@ class _RandomProjection(_Base):
     `rand_cell`), not numpy's generator: the same `random_state` gives the
     same matrix on every box, and a different one than sklearn's."""
 
-    def _device_fit(self, X):
-        """lane/apple-fast-kapprox: the FAST + Apple fit of the sparse
-        projection (SparseRandomProjection overrides); None takes main's path."""
-        return None
+    @property
+    def components_(self):
+        """The (n_components, n_features) matrix. Under lane/apple-fast-gap-cls2's
+        LAZY switch the fit leaves it on the device and the first read
+        downloads it once (the same words)."""
+        dct = self.__dict__
+        v = dct.get("_rp_components")
+        if v is None and "_rp_lazy" in dct:
+            k, C, kc, d = dct.pop("_rp_lazy")
+            res = array.array("f", [0.0]) * (kc * d)
+            k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], kc * d)
+            v = dct["_rp_components"] = Array._owned(res, (kc, d), "<f4", "C")
+        if v is None:
+            raise AttributeError("components_")
+        return v
+
+    @components_.setter
+    def components_(self, v):
+        self.__dict__.pop("_rp_lazy", None)
+        self.__dict__["_rp_components"] = v
+
+    def _check(self, attr="components_"):
+        if attr == "components_" and "_rp_lazy" in self.__dict__:
+            return
+        super()._check(attr)
+
+    def __getstate__(self):
+        if "_rp_lazy" in self.__dict__:
+            _ = self.components_
+        return dict(self.__dict__)
 
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
-        got = self._device_fit(X)
-        if got is not None:
-            return got
         # fit reads only the input's shape and refuses a non-finite input;
         # the store (a copy of the whole input) is transform's to build
         # (lane neural-pass27: fit_transform converted the 880 MB input
         # twice at the board's shape)
-        n, d = _M.shape_of_input(X)
+        k = self._kit()
+        cls2 = _grp_cls2(k) if self.numeric_mode_ == "fast" else 0
+        if cls2 & 3 and not _is_sparse(X):
+            # lane/apple-fast-gap-cls2 (FAST + Apple, x_decomp/resident.mojo
+            # GRP_CLS2_*): no host walk over X. NOSCAN: the shape only
+            # (transform's device projection refuses a non-finite X);
+            # DEVSCAN: the refusal as one device scan of X
+            a = as_f32_c(X, ndim=2, name="X")[0]
+            if a.ndim != 2 or min(a.shape) == 0:
+                raise ValueError("X: a nonempty two-dimensional input is required")
+            if cls2 & 2 and int(k.b.x_decomp_dev_first_nonfinite(addr_ro(a, name="X"), a.size)) >= 0:
+                raise ValueError("X: input must be finite; NaN/inf are unsupported")
+            n, d = a.shape
+        else:
+            n, d = _M.shape_of_input(X)
         if self.n_components == "auto":
             kc = johnson_lindenstrauss_min_dim(n, eps=self.eps)
             if kc <= 0:
@@ -1221,7 +1345,6 @@ class _RandomProjection(_Base):
             kc = int(self.n_components)
             if kc <= 0:
                 raise ValueError(f"n_components must be greater than 0, got {kc}")
-        k = self._kit()
         self.n_components_ = kc
         self.n_features_in_ = d
         # lane gap-nb-maxabs-grp: on the GPU binding the matrix is drawn on
@@ -1234,9 +1357,14 @@ class _RandomProjection(_Base):
             # stays there for transform; components_ is a copy of its words
             # (one download, the device matrix kept)
             C = self.components_m_
-            res = array.array("f", [0.0]) * (kc * d)
-            k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], kc * d)
-            self.components_ = Array._owned(res, (kc, d), "<f4", "C")
+            if cls2 & 4 and not self.compute_inverse_components:
+                # lane/apple-fast-gap-cls2 LAZY: downloaded on first read
+                self.__dict__.pop("_rp_components", None)
+                self.__dict__["_rp_lazy"] = (k, C, kc, d)
+            else:
+                res = array.array("f", [0.0]) * (kc * d)
+                k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], kc * d)
+                self.components_ = Array._owned(res, (kc, d), "<f4", "C")
         else:
             self.components_ = self.components_m_.out()
         if self.compute_inverse_components:
@@ -1266,7 +1394,7 @@ class _RandomProjection(_Base):
         if not k._res():
             return None
         a = as_f32_c(X, ndim=2, name="X")[0]
-        if a.ndim != 2 or min(a.shape) == 0:
+        if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
             raise ValueError("X: a nonempty two-dimensional input is required")
         m, d = a.shape
         if d != self.n_features_in_:
@@ -1335,40 +1463,6 @@ class SparseRandomProjection(_RandomProjection):
             return sgn
         # u < density keeps the signed value, else 0 (select: x > s -> y else z)
         return k.ew("select", u, _M.zeros(1, 1), sgn, s=dens - 2.0 ** -25)
-
-    def _device_fit(self, X):
-        """lane/apple-fast-kapprox (FAST + Apple, -D MOJOLEARN_SPARSE_RP_DEVICE):
-        fit reads the input's shape from its own buffer (no host finiteness
-        pass over every cell: transform's tiled device projection flags a
-        non-finite X, as it does on main) and draws the kc x d matrix in ONE
-        x_neighbors launch (counter-based uniforms of the same law as the
-        kit's four-launch draw, not its Philox words). The matrix comes down
-        once as components_; transform's `_project` uploads it once and
-        keeps it on the device, as main does."""
-        if self.n_components == "auto" or self.compute_inverse_components or _is_sparse(X):
-            return None
-        b = _sparse_rp_device(self.numeric_mode_)
-        if b is None:
-            return None
-        a = as_f32_c(X, ndim=2, name="X")[0]
-        if a.ndim != 2 or min(a.shape) == 0:
-            raise ValueError("X: a nonempty two-dimensional input is required")
-        n, d = a.shape
-        kc = int(self.n_components)
-        if kc <= 0:
-            raise ValueError(f"n_components must be greater than 0, got {kc}")
-        dens = 1.0 / math.sqrt(d) if self.density == "auto" else float(self.density)
-        if not 0 < dens <= 1:
-            raise ValueError(f"Expected density in range ]0, 1], got: {dens}")
-        self.density_ = dens
-        res = array.array("f", [0.0]) * (kc * d)
-        b.xn_kapprox_sparse_rp([res.buffer_info()[0]], [kc, d, _seed_of(self.random_state) & 0x7FFFFFFF],
-                               [float(dens), math.sqrt(1.0 / dens) / math.sqrt(kc)])
-        self.n_components_ = kc
-        self.n_features_in_ = d
-        self.components_m_ = _M(res, kc, d)
-        self.components_ = Array._owned(array.array("f", res), (kc, d), "<f4", "C")
-        return self
 
 
 # ================================================================ thin SVD
@@ -1708,9 +1802,17 @@ class NMF(_Base):
 # ================================================================ FastICA
 def _sym_decorrelation(k, W):
     """sklearn `_fastica.py::_sym_decorrelation`: (W W^T)^(-1/2) W through
-    eigh, eigenvalues clipped at float32 tiny."""
+    eigh, eigenvalues clipped at float32 tiny AND at float32 eps times the
+    largest one. sklearn clips at tiny alone; in float32 an eigenvalue below
+    eps * max is rounding noise of the eigh, and 1 / sqrt(tiny) = 9.2e18
+    turns that noise into a W whose next cube overflows to inf - inf = NaN
+    (a fit on duplicated / constant / zero columns: two null directions of
+    the whitened data, the identity reference's `dupes` fixture). The
+    relative floor bounds the gain at 1 / sqrt(eps); a W W^T with no
+    eigenvalue under eps * max is untouched. The floor is a host scalar from
+    the largest eigenvalue (eigh's last, ascending), times 2^-23: exact."""
     w, u = k.eigh(k.mm(W, W, tb=True))
-    w = k.ew("maxs", w, s=1.1754943508222875e-38)
+    w = k.ew("maxs", w, s=max(1.1754943508222875e-38, float(w.s[w.c - 1]) * _F32_EPS))
     ui = k.ew("mul", u, k.ew("recip", k.ew("sqrt", w)))
     return k.mm(k.mm(ui, u, tb=True), W)
 
@@ -1885,6 +1987,26 @@ class FastICA(_Base):
 _LOG_2PI = 1.8378770664093453
 
 
+def _f32_store(a):
+    """An `array.array('f')` holding a float32 Array's bytes (one memcpy)."""
+    st = array.array("f")
+    st.frombytes(a.tobytes())
+    return st
+
+
+def _support_of(mask, n):
+    """A 0/1 int32 membership store as a public '<u1' Array (the Mojo cast helper)."""
+    from ._buffer import frombytes as _fb
+    return _fb(mask.tobytes(), "<i4", (n,)).astype("<u1")
+
+
+def _dsum_sq(k, M):
+    """The in-order float64 sum of the squares of M's float32 values
+    (x_decomp/moves.mojo `dsum_sq`, the product pinned)."""
+    n = M.r * M.c
+    return float(k.b.x_decomp_dsum_sq(M.addr, n)) if n else 0.0
+
+
 def _dsum(values):
     """Sequential float64 sum (IEEE adds, ascending): the same on every box."""
     t = 0.0
@@ -1918,11 +2040,25 @@ def _logdet(k, A):
 
 def _polar(k, A):
     """U V^T of the SVD of a square A, and the sum of its singular values:
-    A V S^-1 V^T through the eigh of A^T A."""
+    A V S^-1 V^T through the eigh of A^T A.
+
+    A is first scaled by a power of two, 2^-e with 2^(e-1) <= max|A| < 2^e,
+    and the singular-value sum scaled back by 2^e. The polar factor is
+    scale-invariant and a power-of-two scale is exact, so a finite A^T A
+    gives the same words as before; what changes is that A^T A can no longer
+    overflow. Varimax on large loadings (FactorAnalysis on the identity
+    reference's `wide` fixture, columns up to 1e4) cubed them into an A whose
+    A^T A was inf in float32, and eigh refused it (DEVIATION 590) on every
+    column. A is n_components x n_components: the max is a k x k host read."""
+    m = max((abs(float(v)) for v in A.s), default=0.0)
+    # clamped so 2^-e stays a normal float32 in the device's scale
+    e = max(-120, min(120, math.frexp(m)[1])) if m > 0.0 and math.isfinite(m) else 0
+    if e:
+        A = k.ew("scale", A, s=math.ldexp(1.0, -e))
     w, V = k.eigh(k.mm(A, A, ta=True))
     sv = k.ew("sqrt", w)
     AV = k.ew("div", k.mm(A, V), sv)
-    return k.mm(AV, V, tb=True), k.total(sv).s[0]
+    return k.mm(AV, V, tb=True), math.ldexp(k.total(sv).s[0], e)
 
 
 def _ortho_rotation(k, C, method, tol=1e-6, max_iter=100):
@@ -2116,6 +2252,10 @@ def _pca_mle_rank(spectrum, n_samples, mode):
     lg = k.ew("lgamma", _M.of([(d - i + 1) / 2.0 for i in range(1, d + 1)], 1, d)).s
     logn = logs([float(n_samples)])[0]
     best, arg = -math.inf, 0
+    if d > 1:
+        spd = array.array("d", sp)
+        spa = spd.buffer_info()[0]
+        tbuf = _M.zeros(1, max(d * (d - 1) // 2, 1))
     for rank in range(1, d):
         if sp[rank - 1] < 1e-15:
             continue
@@ -2128,11 +2268,12 @@ def _pca_mle_rank(spectrum, n_samples, mode):
         pv = -logv * n_samples * (d - rank) / 2.0
         m = d * rank - rank * (rank + 1.0) / 2.0
         pp = _LOG2PI_D * (m + rank) / 2.0
-        spv = sp[:rank] + [v] * (d - rank)
-        terms = [(sp[i] - sp[j]) * (1.0 / spv[j] - 1.0 / spv[i]) for i in range(rank) for j in range(i + 1, d)]
-        pa = 0.0
-        for t in logs(terms):
-            pa += t + logn
+        # the rank * (2d - rank - 1) / 2 cross terms and their in-order
+        # sum in x_decomp/moves.mojo (pca_mle_terms / pca_mle_pa): the
+        # same double expressions, rounded to float32 as _M.of stores them
+        cnt = int(k.b.x_decomp_pca_mle_terms(spa, [d, rank], float(v), tbuf.addr))
+        tl = k.ew("logs", _M(tbuf.s[:cnt], 1, cnt), s=tiny)
+        pa = float(k.b.x_decomp_pca_mle_pa(tl.addr, cnt, float(logn)))
         ll = pu + pl + pv + pp - pa / 2.0 - rank * logn / 2.0
         if ll > best:
             best, arg = ll, rank
@@ -2171,7 +2312,7 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
     pa = as_i32_c(piv, ndim=1, name="piv")[0]
     pv = array.array("i")
     pv.frombytes(pa.tobytes())
-    if len(pv) != n or any(not 0 <= p < n for p in pv):
+    if len(pv) != n or any(not 0 <= p < n for p in pv):  # glue: validates the piv argument's row indices
         raise ValueError("piv must hold one row index in [0, n) per row")
     vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
     B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
@@ -2289,7 +2430,7 @@ def _f32_input(X, name, ndim):
     if _is_sparse(X):
         X = X.toarray()
     a = as_f32_c(X, ndim=ndim, name=name)[0]
-    if min(a.shape) == 0:
+    if min(a.shape) == 0:  # glue: smaller of two shape dims
         raise ValueError(f"{name}: a nonempty input is required")
     fin = _host_all_finite(a)
     if fin is False:
@@ -2300,9 +2441,7 @@ def _f32_input(X, name, ndim):
 
 
 def _tsqr_lstsq_on(m, nn, nrhs):
-    import os
-    return (os.environ.get("MOJOLEARN_LINALG_TSQR", "1") != "0"
-            and nn >= 1 and nrhs >= 1 and nn + nrhs <= _TS_MAX_N and m >= nn + nrhs)
+    return nn >= 1 and nrhs >= 1 and nn + nrhs <= _TS_MAX_N and m >= nn + nrhs
 
 
 def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False):
@@ -2374,8 +2513,7 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
     float32 eps * max(M, N)); residuals are the squared column norms of
     b - a x when rank == N < M, else empty. A tall a with N + nrhs <= 512
     takes the blocked TSQR of [a | b] and the SVD of its small R
-    (`_tsqr_lstsq_core`, lane neural-pass140; MOJOLEARN_LINALG_TSQR=0 keeps
-    the route below); any other shape the QR + one-sided Jacobi SVD of a (or
+    (`_tsqr_lstsq_core`, lane neural-pass140); any other shape the QR + one-sided Jacobi SVD of a (or
     of a^T)."""
     k = _Kit(_mode(numeric_mode))
     vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
@@ -2566,7 +2704,7 @@ class _PLS(_Base):
         coef = k.mm(self.x_rotations_m_, self.y_loadings_m_, tb=True)          # p x q
         coef = k.ew("div", k.ew("mul", coef, self._y_std), self._x_std.T).T     # q x p
         self.coef_m_ = coef
-        for name in ("x_weights", "y_weights", "x_loadings", "y_loadings", "x_rotations", "y_rotations"):
+        for name in ("x_weights", "y_weights", "x_loadings", "y_loadings", "x_rotations", "y_rotations"):  # glue: loops over six attribute names
             setattr(self, name + "_", getattr(self, name + "_m_").out())
         self.coef_ = coef.out()
         self.intercept_ = self._y_mean.out((q,))
@@ -2726,10 +2864,9 @@ def _update_dict(k, D, Y, code, A=None, B=None, positive=False, seed=0, counter=
         nrm = k.ew("sqrt", k.total(k.ew("sq", rows[j])))
         rows[j] = k.ew("div", rows[j], k.ew("maxs", nrm, s=1.0))
     if zero_cols:
-        code = code.copy()
-        for i in range(code.r):
-            for j in zero_cols:
-                code.s[i * code.c + j] = 0.0
+        code = k.copy(code)
+        for j in zero_cols:
+            k.fill0(code, j, code.c, code.r)
     return _vstack(*rows), code
 
 
@@ -2900,9 +3037,7 @@ class MiniBatchDictionaryLearning(_SparseCoding):
         else:
             D = _vstack(D, _M.zeros(nc - D.r, m))
         if self.shuffle:
-            u = k.rand(1, n, seed, 50, 0).s
-            perm = sorted(range(n), key=lambda i: (u[i], i))
-            Xt = M.take_rows(perm)
+            Xt = k.take_rows(M, k.order(k.rand(1, n, seed, 50, 0)))
         else:
             Xt = M
         A, B = _M.zeros(nc, nc), _M.zeros(m, nc)
@@ -3341,8 +3476,7 @@ def _dist(k, A, B, kind, pw, same=False):
         return k.ew("sqrt", k.sqdist(A, B))
     D = k.pdist(A, B, kind, pw)
     if same and kind == 4:
-        for i in range(A.r):
-            D.s[i * B.r + i] = 0.0
+        k.fill0(D, 0, B.r + 1, min(A.r, B.r))
     return D
 
 
@@ -3352,19 +3486,6 @@ def _knn_mats(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
     binding)."""
     D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
     return k.graph_knn(D, n_neighbors, exclude_self)
-
-
-def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
-    """(indices, distances) of the n_neighbors nearest rows of X for every
-    row of Q, ascending, ties to the lower index; `exclude_self` drops the
-    query's own index (queries ARE the training rows). kind 0 returns
-    SQUARED Euclidean distances (the callers take the root); any other kind
-    the `_dist` distances themselves."""
-    im, dm = _knn_mats(k, Q, X, n_neighbors, exclude_self, kind, pw)
-    nn = n_neighbors
-    iv, dv = im.s, dm.s
-    return ([[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)],
-            [list(dv[i * nn:(i + 1) * nn]) for i in range(Q.r)])
 
 
 def _center_kernel(k, K):
@@ -3470,11 +3591,10 @@ def _top_eig(k, A, nc, topk=False):
     is on in every mode and on every vendor. Every step is a kit primitive
     (the IDENTICAL GEMM, element-wise ops, the small eigh) or Python float64
     scalar arithmetic, in a fixed order with a fixed seeded start, so the
-    words agree across vendors. MOJOLEARN_XD_LANCZOS=0 keeps the exact solve."""
+    words agree across vendors."""
     n = A.r
     got = None
-    if topk and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC and _os.environ.get(
-            "MOJOLEARN_XD_LANCZOS", "1") == "1":
+    if topk and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC:
         got = _lanczos_top(k, A, nc)
     if got is not None:
         w, V = got
@@ -3578,13 +3698,14 @@ class Isomap(_Base):
         if self._knn is None:
             G = self._radius_geodesic(k, Q)
         else:
-            idx, dst = _knn_lists(k, Q, self._fit_X, self._knn, False, self._kind, self._pw)
-            sq = _M.of([v for row in dst for v in row], Q.r, self._knn)
+            G = None
+            # the neighbour matrices as they come (indices as exact
+            # floats), each neighbour's rows of D gathered on the device
+            im, sq = _knn_mats(k, Q, self._fit_X, self._knn, False, self._kind, self._pw)
             if self._kind == 0:
                 sq = k.ew("sqrt", sq)
-            G = None
             for a in range(self._knn):
-                rows = D.take_rows([idx[i][a] for i in range(Q.r)])
+                rows = k.take_rows(D, im, m=Q.r, ist=self._knn, ioff=a)
                 cand = k.ew("add", rows, sq.cols(a, a + 1))
                 G = cand if G is None else k.ew("min", G, cand)
         G = k.ew("scale", k.ew("sq", G), s=-0.5)
@@ -3614,7 +3735,9 @@ class Isomap(_Base):
         k = self._kit()
         # a difference of two nearly equal sums: accumulated in float64
         # (sequential IEEE adds of exact float32 squares) or it cancels
-        t = _dsum(v * v for v in self._Kc.s) - _dsum(v * v for v in self.eigenvalues_m_.s)
+        Kc, ev = self._Kc, self.eigenvalues_m_
+        t = (float(k.b.x_decomp_dsum_sq(Kc.addr, len(Kc.s))) if Kc.r * Kc.c else 0.0) - \
+            (float(k.b.x_decomp_dsum_sq(ev.addr, len(ev.s))) if ev.r * ev.c else 0.0)
         return math.sqrt(t) / self._Kc.r if t > 0 else 0.0
 
 
@@ -3696,7 +3819,6 @@ class MDS(_Base):
         b.x_decomp_argsort_f32(dis_w.buffer_info()[0], m, xorder.buffer_info()[0])
         ir = _xlin.IsotonicRegression(out_of_bounds="clip", numeric_mode=self.numeric_mode_)
         lin = ir._bind(_xlin._BINDING)
-        ones = array.array("f", [1.0]) * m
 
         def call(algo, X, Y, rows, ip, fp, n_out, n_fw, n_iw):
             # _expansion_linear._run's one x_linear_fit call, its parameter
@@ -3704,7 +3826,7 @@ class MDS(_Base):
             out = array.array("f", [0.0]) * max(n_out, 1)
             lin.x_linear_fit(int(algo), X.buffer_info()[0], Y.buffer_info()[0],
                              [rows, 1, rows, len(Y), n_out, max(n_fw, 1), max(n_iw, 1), len(ip), len(fp)],
-                             [int(v) for v in ip], [float(v) for v in fp], out.buffer_info()[0])
+                             [int(v) for v in ip], [float(v) for v in fp], out.buffer_info()[0])  # glue: small x_linear parameter lists
             return out
 
         def disparities(d, first):
@@ -3724,9 +3846,14 @@ class MDS(_Base):
                 b.x_decomp_gather(dis_w.buffer_info()[0], ob, m, xa.buffer_info()[0])
                 yy = array.array("f", [0.0]) * m
                 b.x_decomp_gather(ds.buffer_info()[0], ob, m, yy.buffer_info()[0])
-                yy.extend(ones)
-                # IsotonicRegression(out_of_bounds='clip').fit(dis_w, ds): increasing, no bounds
-                vals = call(_xlin.ALGO_ISOTONIC, xa, yy, m, [1, 0, 0], [0.0, 0.0], 3 + 2 * m, 3 * m, m)
+                # IsotonicRegression(out_of_bounds='clip').fit(dis_w, ds): increasing, no bounds,
+                # no sample_weight. The ABI of IsotonicRegression.fit since lane/neural-pass70:
+                # ip [increasing, has_y_min, has_y_max, has_weights], float work 6 m, int work
+                # 3 m. This call still passed the old 3 flags and 3 m / m work words, so the
+                # binding read ip[3] past the list and wrote past both work buffers: NaN
+                # thresholds on every device column ("y contains NaN or infinity", refcol
+                # smoke at 811275d5b) and the host column's heap.
+                vals = call(_xlin.ALGO_ISOTONIC, xa, yy, m, [1, 0, 0, 0], [0.0, 0.0], 3 + 2 * m, 6 * m, 3 * m)
                 kk = int(vals[0])
                 thr = vals[3:3 + kk] + vals[3 + m:3 + m + kk]
                 # .transform(dis_w): clip, the thresholds and bounds above
@@ -3905,14 +4032,15 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     rn = 1.0 / math.sqrt(n)
     hv = [rn] * n
     hv[n - 1] = rn - 1.0
-    coef = 2.0 / _dsum(v * v for v in hv)
+    # |h|^2 in closed form (n - 1 entries rn, one rn - 1): a scalar, no fold over n
+    coef = 2.0 / ((n - 1) * (rn * rn) + (rn - 1.0) * (rn - 1.0))
     h = _M.of(hv, n, 1)
     un = _M.of([rn] * n, n, 1)
     hrow = _M.of([rn] * n1, 1, n1)
     Fh = k.mm(F, h)
     Fhat = k.ew("sub", F.cols(0, n1), k.ew("scale", k.mm(Fh, hrow), s=coef))
     Fu = k.mm(F, un)
-    g = math.sqrt(_dsum(float(v) * float(v) for v in Fu.s))
+    g = math.sqrt(_dsum_sq(k, Fu))
     rms = math.sqrt(max(float(k.total(k.ew("sq", F)).s[0]), 0.0) / n)
     if not (g <= _LLE_NULL_GUARD * rms):
         return None
@@ -3939,7 +4067,7 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     en = _M.zeros(n, 1)
     en.s[n - 1] = 1.0
     z = solve_t(en)
-    zn = math.sqrt(_dsum(float(v) * float(v) for v in z.s))
+    zn = math.sqrt(_dsum_sq(k, z))
     if not zn > 0.0 or not math.isfinite(zn):
         return None
     z = k.ew("scale", z, s=1.0 / zn)
@@ -4059,7 +4187,7 @@ class LocallyLinearEmbedding(_Base):
             self.embedding_m_ = Vt.take_rows(rows).T
             sv = S.take_cols(rows)
         self.embedding_ = self.embedding_m_.out()
-        self.reconstruction_error_ = _dsum(v * v for v in sv.s)
+        self.reconstruction_error_ = _dsum_sq(k, sv)
         self._fit_X, self._knn = M, nn
         self.n_features_in_ = M.c
         return self
@@ -4205,85 +4333,34 @@ class MinCovDet(_Base):
         self.store_precision, self.assume_centered = store_precision, assume_centered
         self.support_fraction, self.random_state, self.numeric_mode = support_fraction, random_state, numeric_mode
 
-    # ---- randomness
-    def _perm(self, k, n):
-        self._draws += 1
-        u = k.rand(1, n, self._seed, 1000 + self._draws, 0).s
-        return sorted(range(n), key=lambda i: (u[i], i))
-
-    # ---- the C-step
-    def _c_step(self, k, X, h, iters, init=None):
-        n = X.r
-        dist = None
-        if init is None:
-            sel = self._perm(k, n)[:h]
-        else:
-            loc0, cov0 = init
-            P0 = _pinvh(k, cov0)
-            dist = _mahal(k, X, loc0, P0)
-            sel = sorted(range(n), key=lambda i: (dist.s[i], i))[:h]
-        sel = sorted(sel)
-        Xs = X.take_rows(sel)
-        loc = k.colmean(Xs)
-        cov = _emp_cov(k, Xs)
-        det = _fast_logdet(k, cov)
-        P = _pinvh(k, cov) if det == -math.inf else None
-        prev_det = math.inf
-        prev = None
-        while det < prev_det and iters > 0 and det != -math.inf:
-            prev = (loc, cov, det, sel, dist)
-            prev_det = det
-            P = _pinvh(k, cov)
-            dist = _mahal(k, X, loc, P)
-            sel = sorted(sorted(range(n), key=lambda i: (dist.s[i], i))[:h])
-            Xs = X.take_rows(sel)
-            loc = k.colmean(Xs)
-            cov = _emp_cov(k, Xs)
-            det = _fast_logdet(k, cov)
-            iters -= 1
-        prev_dist = dist
-        dist = _mahal(k, X, loc, P)
-        # sklearn's four checks in its order, the LAST one that fires wins
-        res = (loc, cov, det, sel, dist)
-        if prev is not None and det > prev_det:
-            res = (prev[0], prev[1], prev[2], prev[3], prev_dist)
-        if iters == 0:
-            res = (loc, cov, det, sel, dist)
-        return res
-
-    def _select(self, k, X, h, trials, select, n_iter=30):
-        if isinstance(trials, int):
-            est = [self._c_step(k, X, h, n_iter) for _ in range(trials)]
-        else:
-            est = [self._c_step(k, X, h, n_iter, init=t) for t in trials]
-        order = sorted(range(len(est)), key=lambda j: (est[j][2], j))[:select]
-        return [est[j] for j in order]
-
     def _mcd_1d(self, k, X, h):
         """sklearn fast_mcd's one-feature shortcut: the shortest window of h
         sorted values (every tie of the minimum width kept), the location the
         mean of their midpoints, the support the h values nearest it (ties to
         the lower index), the variance of the support."""
+        return self._mcd_1d_native(k, X, h)
+
+    def _mcd_1d_native(self, k, X, h):
+        """`_mcd_1d` with its orders, gathers, window minimum and support in
+        x_decomp/moves.mojo (lane apple-fast-py2mojo-decomp): the same
+        (value, index) orders, the same kit cells on the same values."""
         n = X.r
-        order = sorted(range(n), key=lambda i: (X.s[i], i))
-        xs = _M.of([X.s[i] for i in order], n, 1)
+        xs = k.take_rows(X, k.order(X))
         if h < n:
             diff = k.ew("sub", xs.rows(h, n), xs.rows(0, n - h))
-            dmin = min(diff.s)
-            starts = [i for i, v in enumerate(diff.s) if v == dmin]
-            mids = k.ew("scale", k.ew("add", xs.take_rows([h + i for i in starts]), xs.take_rows(starts)), s=0.5)
+            starts = k.argmin_all(diff)
+            mids = k.ew("scale", k.ew("add", k.take_rows(xs, starts, radd=h), k.take_rows(xs, starts)), s=0.5)
             loc = k.colmean(mids)
             cen = k.ew("abs", k.ew("sub", X, loc))
-            sel = sorted(sorted(range(n), key=lambda i: (cen.s[i], i))[:h])
+            sel, mask = k.select_smallest(cen, h)
+            Xs = k.take_rows(X, sel)
+            support = _support_of(mask, n)
         else:
-            sel = list(range(n))
             loc = k.colmean(X)
-        Xs = X.take_rows(sel)
+            Xs = X
+            support = _support_of(array.array("i", [1]) * n, n)
         cov = _emp_cov(k, Xs)
         P = _pinvh(k, cov)
-        support = [False] * n
-        for i in sel:
-            support[i] = True
         return loc, cov, support, _mahal(k, X, loc, P)
 
     def _fast_mcd_native(self, k, X, h):
@@ -4304,50 +4381,14 @@ class MinCovDet(_Base):
         sup = array.array("i", [0]) * n
         k.b.x_decomp_mcd(X.addr, loc.addr, cov.addr, sup.buffer_info()[0], dist.addr,
                          [n, p, h, int(self._seed) & 0xFFFFFFFF] + plan)
-        return loc, cov, [v != 0 for v in sup], dist
+        return loc, cov, _support_of(sup, n), dist
 
     def _fast_mcd(self, k, X):
         n, p = X.r, X.c
         h = int(math.ceil(0.5 * (n + p + 1))) if self.support_fraction is None else int(self.support_fraction * n)
         if p == 1:
             return self._mcd_1d(k, X, h)
-        if _os.environ.get("MOJOLEARN_XD_MCD_PYTHON") != "1":
-            return self._fast_mcd_native(k, X, h)
-        # THE REFERENCE ARM (MOJOLEARN_XD_MCD_PYTHON=1, timing and A/B only):
-        # the same search driven from Python one kit call at a time.
-        if n > 500:
-            n_sub = n // 300
-            n_ss = n // n_sub
-            shuf = self._perm(k, n)
-            h_sub = int(math.ceil(n_ss * (h / float(n))))
-            n_trials = max(10, 500 // n_sub)
-            pool = []
-            for i in range(n_sub):
-                cur = X.take_rows(shuf[i * n_ss:(i + 1) * n_ss])
-                pool += [(e[0], e[1]) for e in self._select(k, cur, h_sub, n_trials, 10, n_iter=2)]
-            n_m = min(1500, n)
-            h_m = int(math.ceil(n_m * (h / float(n))))
-            n_best_m = 10 if n > 1500 else 1
-            selection = self._perm(k, n)[:n_m]
-            merged = self._select(k, X.take_rows(selection), h_m, pool, n_best_m)
-            if n < 1500:
-                loc, cov, _, sup_sel, d = merged[0]
-                support = [False] * n
-                dist = [0.0] * n
-                for a, idx in enumerate(selection):
-                    dist[idx] = d.s[a]
-                for a in sup_sel:
-                    support[selection[a]] = True
-                return loc, cov, support, _M.of(dist, n, 1)
-            full = self._select(k, X, h, [(e[0], e[1]) for e in merged], 1)
-        else:
-            best = self._select(k, X, h, 30, 10, n_iter=2)
-            full = self._select(k, X, h, [(e[0], e[1]) for e in best], 1)
-        loc, cov, _, sup_sel, d = full[0]
-        support = [False] * n
-        for a in sup_sel:
-            support[a] = True
-        return loc, cov, support, d
+        return self._fast_mcd_native(k, X, h)
 
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
@@ -4359,7 +4400,7 @@ class MinCovDet(_Base):
         loc, cov, support, dist = self._fast_mcd(k, M)
         if self.assume_centered:
             loc = _M.zeros(1, p)
-            sm = _M.of([1.0 if v else 0.0 for v in support], n, 1)
+            sm = _M(_f32_store(support.astype("<f4")), n, 1)
             _, cov = _masked_cov(k, M, sm, True)
             dist = k.rowsum(k.ew("mul", k.mm(M, _pinvh(k, cov)), M))
         self.raw_location_m_, self.raw_covariance_m_ = loc, cov
@@ -4368,7 +4409,7 @@ class MinCovDet(_Base):
         self.raw_support_ = support
         # correct_covariance: consistency at the normal model (the corrected
         # matrix is returned by sklearn and not kept; dist_ is rescaled)
-        n_support = sum(1 for v in support if v)
+        n_support = int(support.sum())  # glue: Array.sum is the Mojo reduce helper
         corr = _consistency_factor(k, p, n_support / n)
         dist = k.ew("scale", dist, s=1.0 / corr)
         # reweight_covariance
@@ -4378,7 +4419,7 @@ class MinCovDet(_Base):
         mm = k.ew("le", dist, _M.of([_f32_below(thr)], 1, 1))
         locr, covr = _masked_cov(k, M, mm, self.assume_centered)
         covr = k.ew("scale", covr, s=_consistency_factor(k, p, 0.975))
-        mask = [v != 0.0 for v in mm.s]
+        mask = mm.out((n,)).astype("<u1")
         self.location_m_, self.covariance_m_ = locr, covr
         self.precision_m_ = _pinvh(k, covr)
         self.location_ = locr.out((p,))
@@ -4428,11 +4469,19 @@ class EllipticEnvelope(MinCovDet):
         if not 0 < self.contamination <= 0.5:
             raise ValueError("contamination must be in (0, 0.5]")
         super().fit(X)
-        v = sorted(-d for d in self.dist_m_.s)
-        q = 100.0 * self.contamination / 100.0 * (len(v) - 1)
+        k = self._kit()
+        # the two order statistics the interpolation reads: sorted(-d)[i]
+        # is -(d in ascending order)[n - 1 - i] (negation is exact)
+        dm = self.dist_m_
+        nv = dm.r * dm.c
+        o = array.array("i", [0]) * nv
+        k.b.x_decomp_argsort_f32(dm.addr, nv, o.buffer_info()[0])
+        ds = dm.s
+        q = 100.0 * self.contamination / 100.0 * (nv - 1)
         lo = int(math.floor(q))
-        hi = min(lo + 1, len(v) - 1)
-        self.offset_ = v[lo] + (v[hi] - v[lo]) * (q - lo)
+        hi = min(lo + 1, nv - 1)
+        vlo, vhi = -ds[o[nv - 1 - lo]], -ds[o[nv - 1 - hi]]
+        self.offset_ = vlo + (vhi - vlo) * (q - lo)
         return self
 
     def score_samples(self, X):
@@ -4446,9 +4495,13 @@ class EllipticEnvelope(MinCovDet):
         return k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_).out((d.r,))
 
     def predict(self, X):
-        vals = self.decision_function(X)
         from ._buffer import frombytes as _fb
-        out = array.array("i", [1 if v >= 0 else -1 for v in vals])
+        k = self._kit()
+        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
+        dec = k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_)
+        out = array.array("i", [0]) * d.r
+        if d.r:
+            k.b.x_decomp_sign_labels(dec.addr, d.r, out.buffer_info()[0])
         return _fb(out.tobytes(), "<i4", (len(out),))
 
     def fit_predict(self, X, y=None):
@@ -4458,17 +4511,23 @@ class EllipticEnvelope(MinCovDet):
         """sklearn OutlierMixin/ClassifierMixin.score: accuracy_score(y,
         predict(X), sample_weight), the (weighted) share of exact label
         matches as an IEEE double (weights summed in order)."""
-        pred = self.predict(X).tolist()
-        yl = [int(v) for v in (y.tolist() if hasattr(y, "tolist") else list(y))]
-        if len(yl) != len(pred):
+        k = self._kit()
+        pa = self.predict(X)
+        n = len(pa)
+        ya = as_f64_c(y, ndim=1, name="y")[0]
+        if len(ya) != n:
             raise ValueError("y and X have different numbers of rows")
         if sample_weight is None:
-            return sum(1 for a, b in zip(yl, pred) if a == b) / len(pred)
-        w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else list(sample_weight))]
-        tw = _dsum(w)
-        if tw == 0:
+            hit, tot = k.b.x_decomp_accuracy(addr_ro(ya, name="y"), addr_ro(pa, name="pred"), 0, n)
+            return float(hit) / n
+        wa = as_f64_c(sample_weight, ndim=1, name="sample_weight")[0]
+        if len(wa) != n:
+            raise ValueError("sample_weight and X have different numbers of rows")
+        hit, tw = k.b.x_decomp_accuracy(addr_ro(ya, name="y"), addr_ro(pa, name="pred"),
+                                        addr_ro(wa, name="sample_weight"), n)
+        if float(tw) == 0:
             raise ZeroDivisionError("Weights sum to zero, can't be normalized")
-        return _dsum(wi for wi, a, b in zip(w, yl, pred) if a == b) / tw
+        return float(hit) / float(tw)
 
 
 # ================================================================ implicit ALS
@@ -4550,6 +4609,20 @@ class AlternatingLeastSquares(_Base):
         if not hasattr(self, "user_factors_m_"):
             raise RuntimeError("AlternatingLeastSquares is not fitted; call fit first")
 
+    def _topn(self, k, S, N, skip):
+        """(ids, scores) of the N best entries of the score row S by (-score,
+        id), skipping the nonzero entries of the float32 row at address
+        `skip` (0: none): x_decomp/moves.mojo `topn_desc` and `gather`."""
+        from ._buffer import frombytes as _fb
+        m = S.r * S.c
+        n = max(min(N, m), 0)
+        order = array.array("i", [0]) * max(n, 1)
+        c = int(k.b.x_decomp_topn_desc(S.addr, [m, n], skip, order.buffer_info()[0])) if n else 0
+        vals = array.array("f", [0.0]) * max(c, 1)
+        if c:
+            k.b.x_decomp_gather(S.addr, order.buffer_info()[0], c, vals.buffer_info()[0])
+        return (_fb(order[:c].tobytes(), "<i4", (c,)), _fb(vals[:c].tobytes(), "<f4", (c,)))
+
     def recommend(self, userid, user_items, N=10, filter_already_liked_items=True):
         """(ids, scores) of the N best items for one user: x_u . y_i, ties to
         the lower item id; items the user interacted with (row `userid` of
@@ -4557,16 +4630,17 @@ class AlternatingLeastSquares(_Base):
         self._check_fit()
         k = self._kit()
         U = self.user_factors_m_.rows(userid, userid + 1)
-        sc = k.mm(U, self.item_factors_m_, tb=True).s
-        liked = set()
+        S = k.mm(U, self.item_factors_m_, tb=True)
+        if int(N) < 0:
+            raise ValueError(f"recommend: N must be non-negative, got {N}")
+        skip = 0
         if filter_already_liked_items and user_items is not None:
             R = _M.from_input(user_items, "user_items")
-            row = R.row(0 if R.r == 1 else userid)
-            liked = {i for i, v in enumerate(row) if v != 0}
-        order = sorted((i for i in range(len(sc)) if i not in liked), key=lambda i: (-sc[i], i))[:N]
-        from ._buffer import frombytes as _fb
-        return (_fb(array.array("i", order).tobytes(), "<i4", (len(order),)),
-                _fb(array.array("f", [sc[i] for i in order]).tobytes(), "<f4", (len(order),)))
+            if R.c != S.c or not (R.r == 1 or 0 <= userid < R.r):
+                raise ValueError(f"recommend: user_items of shape ({R.r}, {R.c}) has no row {userid} "
+                                 f"over the {S.c} items")
+            skip = R.addr + 4 * (0 if R.r == 1 else int(userid)) * R.c
+        return self._topn(k, S, int(N), skip)
 
     def similar_items(self, itemid, N=10):
         """(ids, scores) of the N items whose factors have the largest cosine
@@ -4576,11 +4650,10 @@ class AlternatingLeastSquares(_Base):
         Y = self.item_factors_m_
         nrm = k.ew("sqrt", k.rowsum(k.ew("sq", Y)))
         Yn = k.ew("div", Y, nrm)
-        sc = k.mm(Yn.rows(itemid, itemid + 1), Yn, tb=True).s
-        order = sorted(range(len(sc)), key=lambda i: (-sc[i], i))[:N]
-        from ._buffer import frombytes as _fb
-        return (_fb(array.array("i", order).tobytes(), "<i4", (len(order),)),
-                _fb(array.array("f", [sc[i] for i in order]).tobytes(), "<f4", (len(order),)))
+        S = k.mm(Yn.rows(itemid, itemid + 1), Yn, tb=True)
+        if int(N) < 0:
+            raise ValueError(f"similar_items: N must be non-negative, got {N}")
+        return self._topn(k, S, int(N), 0)
 
 
 class SparseCoder(_SparseCoding):
