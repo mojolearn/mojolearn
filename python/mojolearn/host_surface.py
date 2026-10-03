@@ -1884,6 +1884,7 @@ FAMILIES = (
             "lm_col_sums", "lm_center", "lm_scale_rows",
             "tsvd_explained",
             "dbscan_fit_core", "labeled_reference_predict",
+            "dbscan_core_arrays", "kde_score_total", "estimators_py2mojo_cluster",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
             # lane cpu (2026-09-27): PCA (whiten=False) and TruncatedSVD
