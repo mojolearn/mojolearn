@@ -491,7 +491,7 @@ def qh_write_hist_kernel(
         dst_histogram.unsafe_store(dst, val)
 
 
-# ---- QH_MODE_SKIP (FAST, Apple; opt-in `-D MOJOLEARN_GBDT_DW_MODE_SKIP`) --
+# ---- QH_MODE_SKIP (FAST, Apple; default, off `-D MOJOLEARN_GBDT_DW_MODE_SKIP_OFF`)
 # Lane apple-fast-dwgap. A low-cardinality feature sends most of a block's
 # rows to ONE bin, so every lane's two threadgroup atomics land on the same
 # two cells and serialize (taxi: store_fwd, mta_tax, airport_fee,

@@ -58,17 +58,21 @@ comptime QUANTIZED_HIST_LIVE = greedy_quantized_hist_for[
     TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 ]()
 
-#: FAST on Apple, opt-in (lane apple-fast-dwgap): the quantized build skips
-#: each feature's most contended bin and derives that cell from the block's
-#: row total (`kernel/hist_quantized_shared.mojo`, QH_MODE_SKIP block).
-#: Integer sums of the same addends, so the same histogram bit for bit.
-#: The B arm is `-D MOJOLEARN_GBDT_DW_MODE_SKIP`; it reaches every caller
-#: of `launch_quantized_histograms` (Depthwise and Lossguide).
+#: FAST on Apple, default on (lane apple-fast-dwgap): the quantized build
+#: skips each feature's most contended bin and derives that cell from the
+#: block's row total (`kernel/hist_quantized_shared.mojo`, QH_MODE_SKIP
+#: block). Integer sums of the same addends, so the same histogram bit for
+#: bit. It reaches every caller of `launch_quantized_histograms` (Depthwise
+#: and Lossguide). Default since the M3 A/B (lane/apple-fast-dwgap
+#: 23cbc3195, n=2, both SEP): depthwise taxi 13,744 -> 12,930 ms (-5.9%),
+#: auc .6325 -> .6324; istella 17,297 -> 16,975 ms (-1.9%), auc .9832 same.
+#: Off: `-D MOJOLEARN_GBDT_DW_MODE_SKIP_OFF`. The old opt-in define
+#: `-D MOJOLEARN_GBDT_DW_MODE_SKIP` is harmless (no longer read).
 comptime QH_MODE_SKIP = (
     QUANTIZED_HIST_LIVE
     and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GBDT_DW_MODE_SKIP"]()
+    and not is_defined["MOJOLEARN_GBDT_DW_MODE_SKIP_OFF"]()
 )
 
 
