@@ -105,6 +105,8 @@ comptime OP_LE = 34
 comptime OP_SELECT = 35
 comptime OP_MUZ = 36
 comptime OP_LGAMMA = 37
+#: the exact power-of-two column scale of a Gram diagonal entry (DEVIATION 2620)
+comptime OP_P2SCALE = 38
 
 
 @always_inline
@@ -217,6 +219,24 @@ def lgamma(a: Float32) -> Float32:
     return sub(r, shift)
 
 
+def p2_equilibration_scale(diag: Float32) -> Float32:
+    """DEVIATION 2620's power-of-two scale `s` for a Gram diagonal entry
+    `diag`, chosen so `s^2 diag` lies in [0.5, 2): `diag = m 2^e` with `m` in
+    [1, 2) gives `2^-ceil(e / 2)`. The rule of
+    glm/impl/linalg/detail/lstsq.mojo `ols_equilibration_scale`, copied
+    (x_decomp does not import glm). Integer arithmetic on the bits, no
+    floating-point operation, so every column computes the same scale; a
+    zero, negative or non-finite entry gets 1. The operand is already
+    flushed (`ew_cell`), so no subnormal reaches it."""
+    var bits = bitcast[DType.uint32](diag)
+    var field = Int((bits >> 23) & UInt32(0xFF))
+    if (bits >> 31) != UInt32(0) or field == 255 or field == 0:
+        return Float32(1.0)
+    var e = field - 127
+    var k = (e + 1) // 2 if e >= 0 else -((-e) // 2)
+    return bitcast[DType.float32](UInt32(127 - k) << 23)
+
+
 def ew_cell(op: Int, x_in: Float32, y_in: Float32, z_in: Float32, s_in: Float32) -> Float32:
     var x = ftz(x_in)
     var y = ftz(y_in)
@@ -302,6 +322,8 @@ def ew_cell(op: Int, x_in: Float32, y_in: Float32, z_in: Float32, s_in: Float32)
     elif op == OP_MUZ:
         # sklearn NMF multiplicative update: x * (y / z), a zero z replaced by s
         r = mul(x, div0(y, z if z != Float32(0) else s))
+    elif op == OP_P2SCALE:
+        r = p2_equilibration_scale(x)
     return ftz(r)
 
 

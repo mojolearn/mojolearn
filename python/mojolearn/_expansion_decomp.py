@@ -44,7 +44,7 @@ _OP = dict(
     add=0, sub=1, mul=2, div=3, axpy=4, maxs=5, mu=6, sqrt=7, sq=8, exp=9, logs=10, tanh=11,
     onemsq=12, abs=13, scale=14, fma=15, recip=16, soft=17, submul=18, mins=19, copyb=20,
     sqdiff=21, adds=22, gts=23, digamma=24, expg=25, expgp=26, cube=27, cubep=28, max=30,
-    min=31, sign=33, le=34, select=35,
+    min=31, sign=33, le=34, select=35, p2scale=38,
 )
 
 
@@ -2250,7 +2250,7 @@ def _tsqr_lstsq_on(m, nn, nrhs):
             and nn >= 1 and nrhs >= 1 and nn + nrhs <= _TS_MAX_N and m >= nn + nrhs)
 
 
-def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond):
+def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False):
     """(X nn x nrhs, residuals _M 1 x nrhs or None, rank, S 1 x nn) of
     min ||A X - B|| through the blocked TSQR of [A | B] (lane
     neural-pass140; x_decomp/tsqr_core.mojo): R_aug = [[R, C], [0, R22]]
@@ -2259,7 +2259,16 @@ def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond):
     (`_svd_tall`: S descending, U_R orthonormal): X = V diag(1/s) U_R^T C,
     singular values at or below rcond * s_max dropped, as before; the
     residuals (rank == nn < m only) are the squared column norms of R22,
-    which is ||b - a x||^2 at the least-squares solution."""
+    which is ||b - a x||^2 at the least-squares solution.
+
+    `equilibrate` (LinearRegression, lane apple-fast-tsqr): before the SVD
+    every column j of R is multiplied by the exact power of two s_j that
+    DEVIATION 2620 picks for the Gram diagonal ||R e_j||^2 = ||A e_j||^2
+    (op p2scale, x_decomp/cells.mojo), so the rcond cutoff sees the design
+    in balanced units as the normal equations route did, and X is
+    multiplied by s after. A power of two scales without rounding, so
+    R S is what the TSQR of A S gives; every step stays on the binding's
+    cells (the same words on every column)."""
     from ._linalg_impl import _svd_tall
     from ._buffer import addr_ro
     n = nn + nrhs
@@ -2269,11 +2278,17 @@ def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond):
                         [int(m), int(nn), int(nrhs), 0])
     top = Ra.rows(0, nn)
     R, C = top.cols(0, nn), top.cols(nn, n)
+    sc = None
+    if equilibrate:
+        sc = k.ew("p2scale", k.colsum(k.ew("sq", R)))
+        R = k.ew("mul", R, sc)
     Ur, S, Vt = _svd_tall(k, R, False)
     cut = _f32(S.s[0] * rcond)
     rank = sum(1 for v in S.s if v > cut)
     inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
     X = k.mm(Vt, k.ew("mul", k.mm(Ur, C, ta=True), inv.T), ta=True)
+    if sc is not None:
+        X = k.ew("mul", X, sc.T)
     res = None
     if rank == nn and m > nn:
         res = k.colsum(k.ew("sq", Ra.rows(nn, n).cols(nn, n)))
