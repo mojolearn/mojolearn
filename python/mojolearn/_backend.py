@@ -323,7 +323,7 @@ _MODULES += tuple(host_surface.expansion_gpu_bindings())
 #:     fused kernel on the identical contract, so their lower tiers were
 #:     SLOWER than the default (DEVIATION 2300 is the cost: a `k_last`
 #:     failure that lived only in a tier nobody ran). SUPERSEDED 2026-09-27
-#:     for every neural binding but the byte LM: see `_CLASSICAL_FAST`.
+#:     for every neural binding, the byte LM included: see `_CLASSICAL_FAST`.
 #:
 #: This is an ALLOWLIST on purpose. A binding added tomorrow is identical
 #: only until someone measures a win and adds it here, which is the rule in
@@ -364,7 +364,9 @@ _CLASSICAL_FAST = frozenset({
     # then gated on IDENTICAL, so the lower tiers ran slower unfused arms);
     # those gates are gone and FAST runs the same kernels with the pins on
     # the free schedule. Quality, never bits.
-    # The byte LM (`_mojolearn_byte_lm`) stays IDENTICAL only for now.
+    # The byte LM (`_mojolearn_byte_lm`) joined FAST on 2026-10-03 (afn-lm):
+    # build_byte_lm.sh builds it under MOJOLEARN_NUMERIC_MODE=fast.
+    "_mojolearn_byte_lm",
     "_mojolearn_training",
     "_mojolearn_mamba",
     "_mojolearn_transformer",
@@ -389,7 +391,7 @@ _SELECTED = None
 _IDENTICAL_ONLY_REASON = (
     "Trees, classical ML and the neural blocks ship a fast tier and only the "
     "tree lanes (GradientBoosting, RandomForest, ExtraTrees) ship a "
-    "deterministic tier; the byte language model ships IDENTICAL only."
+    "deterministic tier; this binding ships IDENTICAL only."
 )
 
 
