@@ -952,7 +952,10 @@ _HDR = "rule\tclass\towner\tstate\tpath\tocc\ttext"
 # `owed` is `debt` for a rule added after the 2026-10-02 hooks were
 # installed: those hooks skip a state they do not know, so the row neither
 # fails them as stale nor needs them to know the rule.
-_DEBT_STATES = ("debt", "owed")
+# `owed-py` is the same for the Python glue-only rules (Oct 3): hooks
+# installed before them know `owed` but not these rules, so they skip only a
+# state they do not know.
+_DEBT_STATES = ("debt", "owed", "owed-py")
 # rules added after the baseline was first written; a baseline with no row of
 # one predates it (see check_tree)
 _LATE_RULES = ("d2h-host-work", "one-block-n", "py-data-loop", "py-np-compute", "py-reduce",
@@ -988,7 +991,8 @@ def dump_baseline(rows):
     head = ("# no_host_routes baseline: CPU work in GPU code that main still carries.\n"
             "# It only shrinks. A fix deletes its rows (no_host_routes.py --prune-baseline).\n"
             "# state debt = on main; inflight = pre-authorized lines of an open PR; owed = debt of a rule\n"
-            "# newer than the installed hooks (they skip it).\n"
+            "# newer than the installed hooks (they skip it); owed-py = the same for the Python\n"
+            "# glue-only rules (py-data-loop, py-np-compute, py-reduce, py-array-method).\n"
             "# A `# why: ...` line gives the reason the next row stays (required for d2h-host-work).\n")
     return head + _HDR + "\n" + "".join(
         (f"# why: {r['why']}\n" if r.get("why") else "")
