@@ -251,6 +251,7 @@ from gbdt.targets.kernel.pair_logit import (
 )
 from gbdt.targets.kernel.pair_logit_group import PAIRLOGIT_GROUP_FUSED
 from gbdt.targets.kernel.yeti_rank import (
+    YETI_TASK_FUSED,
     YetiRankTargetBuffers,
     launch_yeti_rank_with,
     launch_yeti_rank_zero_value,
@@ -2743,6 +2744,12 @@ def fit_with_test(
                     # the group layout's magnitudes are per group too
                     if pair_buffers.value().n_pairs < 0:
                         mag_blocks = fv_blocks
+            comptime if YETI_TASK_FUSED:
+                # lane af-sym-multi: the fused task kernel writes one magnitude
+                # pair per TASK (its launcher's guard, `n_tasks <= row_blocks`);
+                # the value partials stay one per row block (all 0.0)
+                if is_yeti_rank and yeti_buffers.value().n_tasks <= mse_blocks:
+                    mag_blocks = yeti_buffers.value().n_tasks
             ctx.enqueue_function[deterministic_sum_lanes_kernel[1]](
                 fv_part.unsafe_ptr(), Int32(fv_blocks), fv.unsafe_ptr(),
                 grid_dim=1, block_dim=256,
