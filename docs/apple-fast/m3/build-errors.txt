@@ -1,25 +1,15 @@
-== lane_apple-fast-robust-fbuild-x_decomp.log (14:35Z)
-./x_decomp/mcd_fast.mojo:536:49: error: expected argument name
-def mf_any_kernel(active: I32Ptr, nc: Int32, out: I32Ptr):
-                                                ^
-Imported from ~/mq/wt/lane_apple-fast-robust/bindings/_mojolearn_x_decomp.mojo:16:
-== lane_apple-fast-prep3-fbuild-x_prep.log (14:34Z)
+== lane_apple-fast-lle-fbuild-x_prep.log (15:04Z)
 ./x_prep/fastnb_csr.mojo:229:29: error: expected argument name
     sizes: PythonObject, out: PythonObject,
                             ^
-~/mq/wt/lane_apple-fast-prep3/bindings/_mojolearn_x_prep.mojo:35:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'x'
-== lane_apple-fast-prep3-fbuild-estimators.log (14:33Z)
-./glm/impl/ridge_multi.mojo:66:8: error: expected argument name
-    out: MutPointer[Float32, MutAnyOrigin],
-       ^
-Imported from ~/mq/wt/lane_apple-fast-prep3/bindings/_mojolearn_estimators.mojo:32:
-== lane_apple-fast-nb-fbuild-x_prep.log (14:30Z)
-./x_prep/fastnb_csr.mojo:229:29: error: expected argument name
-    sizes: PythonObject, out: PythonObject,
-                            ^
-~/mq/wt/lane_apple-fast-nb/bindings/_mojolearn_x_prep.mojo:32:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'x'
-== lane_apple-fast-graph-fbuild-x_neighbors.log (14:26Z)
-./x_neighbors/iter_device.mojo:513:46: error: expected argument name
-def cc_relabel_kernel(lab: IP, newid: IP, out: IP, n: Int32):
-                                             ^
-Imported from ~/mq/wt/lane_apple-fast-graph/bindings/_mojolearn_x_neighbors.mojo:14:
+~/mq/wt/lane_apple-fast-lle/bindings/_mojolearn_x_prep.mojo:32:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'x'
+== lane_apple-fast-lle-fbuild-x_linear.log (15:04Z)
+~/mq/wt/lane_apple-fast-lle/bindings/_mojolearn_x_linear.mojo:89:13: error: 'import' statements must be at module or function scope; move this to a valid location
+            from x_linear.dispatch import ALGO_ISOTONIC
+            ^
+~/mq/wt/lane_apple-fast-lle/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+== lane_apple-fast-lle-fbuild-x_neighbors.log (15:04Z)
+./x_neighbors/iter_device.mojo:840:16: error: ambiguous call to 'enqueue_function', each candidate requires 2 implicit conversions, disambiguate with an explicit cast
+            ctx.enqueue_function[knn_mma_finish_kernel](
+            ~~~^~~~~~~~~~~~~~~~~
+Imported from ~/mq/wt/lane_apple-fast-lle/bindings/_mojolearn_x_neighbors.mojo:13:
