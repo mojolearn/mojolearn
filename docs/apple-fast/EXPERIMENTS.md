@@ -244,6 +244,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | MOJOLEARN_XN_FAST_CLS2_OCSVM_RES | ocsvm / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-res-ocsvm-taxi | -77% alone | KEEP, FAST+Apple default (`_OFF` off) | Gram formed and solved on the device, no 400 MB round trip; quality identical (n=1) |
 | MOJOLEARN_XN_FAST_CLS2_OCSVM_2L | ocsvm / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-2l-ocsvm-taxi | -5% alone | KEEP, FAST+Apple default (`_OFF` off) | two launches per SMO iteration; same alpha bits |
 | MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256 | ocsvm / taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-{chunk256,all3}-ocsvm-taxi | 0% alone; all three 375.7 -> 65.0 | KEEP, FAST+Apple default (`_OFF` off) | kept with the combined A/B winner (fewer synchronizes) |
+| `XN_FAST_IMPUTE_TIE_MEAN + XN_FAST_NAN_COLMISS_ONLY` | knn-imputer / taxi | lane/apple-fast-gap-manprep @ 9130a81bc | gmp-imp-taxi | - | OPEN | quality fix: masked_rmse 6.15 vs sklearn 5.26; taxi's discrete columns tie at the k-th distance and the lower-index rule took the earliest (January) donors; tie mean = the mean of all donors at D_k filling the remaining slots (the expectation of a uniform tie-break). Fit: column NaN counts only, no cell list (expect fit 2.3 -> ~1.5 ms) |
 
 ## Prep (42)
 
@@ -330,6 +331,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN | gaussian-rp / istella, taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-devscan-grp-{istella,taxi} | 54.3 -> 15.9, 4.7 -> 3.9 | KEEP, FAST+Apple default (`_OFF` off) | device NaN scan replaces the one-thread host walk; quality identical (n=1) |
 | MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN | gaussian-rp / istella, taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-noscan-grp-{istella,taxi} | 57 -> 1.1 (istella) | OPT-IN, pending Andrew | moves the NaN/inf refusal from fit to transform (semantics) |
 | MOJOLEARN_XD_FAST_CLS2_GRP_LAZY | gaussian-rp / istella, taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-noscanlazy-grp-{istella,taxi} | 54 -> 0.5 (with NOSCAN) | OPT-IN, pending Andrew | measured only with NOSCAN; kept opt-in with it |
+| `LLE_FAST_DEV_F0` (env MOJOLEARN_LLE_FAST_DEV_F0=1) | lle / taxi, istella | lane/apple-fast-gap-manprep @ 9130a81bc | gmp-lle-devf0-taxi, gmp-lle-devf0-istella | - | OPEN | F0 = [F^ | u] built by three device cells instead of F.cols (400 MB download + 10,000 strided Python slices) and _hstack (F^ download, host move); same words for F0 |
 
 ## Cluster (38)
 
