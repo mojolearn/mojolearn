@@ -155,13 +155,13 @@ def gp_opt_run_end_kernel(st: _P, si: _I, rec: _P, t: Int32, run: Int32):
     gp_opt_run_end_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, si, rec, Int(run))
 
 
-def gp_opt_final_kernel(st: _P, tmap: _I, dpar: _P, dls: _P, out: _P, t: Int32):
-    gp_opt_final_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, tmap, dpar, dls, out)
+def gp_opt_final_kernel(st: _P, tmap: _I, dpar: _P, dls: _P, res: _P, t: Int32):
+    gp_opt_final_item(Int(thread_idx.x), GP_OPT_TPB, Int(t), st, tmap, dpar, dls, res)
 
 
 def gp_kernel_matrix_grad_dev(
     ctx: DeviceContext,
-    mut out: DeviceBuffer[DType.float32],
+    mut kout: DeviceBuffer[DType.float32],
     x_input: DeviceBuffer[DType.float32],
     mut dpar: DeviceBuffer[DType.float32],
     mut dls: DeviceBuffer[DType.float32],
@@ -294,7 +294,7 @@ def gp_kernel_matrix_grad_dev(
 
     var root = stack.create_sub_buffer[DType.float32](0, cells)
     ctx.enqueue_function[gp_copy_kernel](
-        out.unsafe_ptr(), root.unsafe_ptr(), Int32(cells),
+        kout.unsafe_ptr(), root.unsafe_ptr(), Int32(cells),
         grid_dim=(grid, 1, 1), block_dim=(elem_tpb, 1, 1),
     )
     _ = root^

@@ -738,7 +738,7 @@ def gp_opt_run_end_item(tid: Int, nt: Int, t: Int, st: _P, si: _I, rec: _P, run:
             p += nt
 
 
-def gp_opt_final_item(tid: Int, nt: Int, t: Int, st: _P, tmap: _I, dpar: _P, dls: _P, out: _P):
+def gp_opt_final_item(tid: Int, nt: Int, t: Int, st: _P, tmap: _I, dpar: _P, dls: _P, res: _P):
     """The winner: `out[p]` its theta, `out[t + p]` the float32
     hyperparameter that runs there, also written into the parameter table."""
     var p = tid
@@ -746,6 +746,6 @@ def gp_opt_final_item(tid: Int, nt: Int, t: Int, st: _P, tmap: _I, dpar: _P, dls
         var x = st.unsafe_load(_o(t, _R_BX) + p)
         var v = ftz(identical_exp(x))
         _param_store(tmap, p, dpar, dls, v)
-        out.unsafe_store(p, x)
-        out.unsafe_store(t + p, v)
+        res.unsafe_store(p, x)
+        res.unsafe_store(t + p, v)
         p += nt
