@@ -93,6 +93,7 @@ from metrics.checks.fixtures import (
 from metrics.checks.pinned_sum import (
     PINNED_SUM_W,
     canonicalize_nan,
+    host_grid_sum,
     host_tree_sum,
     sabotage_shifted_host_tree_sum,
     virtual_block_sum,
@@ -148,7 +149,7 @@ def _oracle_r2(
     var ys = List[Float32]()
     for i in range(n):
         ys.append(y[i])
-    var y_sum = host_tree_sum(ys, n)
+    var y_sum = host_grid_sum(ys, n)
     var ratio = ftz(Float32(1.0) / Float32(n))
     var y_bar = ftz(y_sum * ratio)
     var se = List[Float32]()
@@ -158,8 +159,8 @@ def _oracle_r2(
         var d2 = ftz(y[i] - y_bar)
         se.append(ftz(d1 * d1))
         st.append(ftz(d2 * d2))
-    var sse = host_tree_sum(se, n)
-    var ssto = host_tree_sum(st, n)
+    var sse = host_grid_sum(se, n)
+    var ssto = host_grid_sum(st, n)
     # DEVIATION 657: the same epilogue as the device path (the oracle's
     # job is the three SUMS; the epilogue is two compares and one division)
     return (y_bar, sse, ssto, r2_epilogue(sse, ssto))
@@ -191,7 +192,7 @@ def _oracle_kl(p: List[Float32], q: List[Float32], n: Int) -> Float32:
         # thing DEVIATION 653 pins.
         terms.append(kld_op(p[i], q[i]))
     # DEVIATION 658 (2): the same canonical NaN as the device path
-    return canonicalize_nan(host_tree_sum(terms, n))
+    return canonicalize_nan(host_grid_sum(terms, n))
 
 
 def _ref_kl_f64(p: List[Float32], q: List[Float32], n: Int) -> Float64:

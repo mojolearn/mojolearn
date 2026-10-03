@@ -16,7 +16,6 @@ import decimal
 import functools
 import math as _cmath
 import operator
-from os import environ as _environ
 from pathlib import Path
 import struct
 import sys
@@ -46,10 +45,9 @@ def _load():
             fn = getattr(lib, "mojolearn_" + operation)
             fn.argtypes = [ctypes.c_double]
             fn.restype = ctypes.c_double
-        vector = getattr(lib, "mojolearn_exp_f64", None)
-        if vector is not None:
-            vector.argtypes = [ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p]
-            vector.restype = ctypes.c_long
+        vector = lib.mojolearn_exp_f64
+        vector.argtypes = [ctypes.c_void_p, ctypes.c_long, ctypes.c_void_p]
+        vector.restype = ctypes.c_long
         _lib = lib
     return _lib
 
@@ -226,16 +224,16 @@ def fsum(values):
     bit. A zero result is +0.0 here, so a zero goes out as +0.0. A NaN or
     infinite result, an intermediate overflow, or a term `math.fsum` refuses
     (a string float() accepts) goes to the exact sum below, which decides it.
-    The reference arm `MOJOLEARN_HOTPATH=python` keeps the exact sum always.
-    About 4 ns per term instead of about 500 ns."""
+    About 4 ns per term instead of about 500 ns. (The `MOJOLEARN_HOTPATH`
+    reference arm that forced the exact sum is deleted: cpu-gpu-cleanup
+    c-core, no env switch picks a route.)"""
     vals = values if type(values) is list else list(values)
-    if _environ.get("MOJOLEARN_HOTPATH", "").strip().lower() != "python":
-        try:
-            s = _cmath.fsum(vals)
-        except (OverflowError, ValueError, TypeError):
-            return _fsum_exact(vals)
-        if s - s == 0.0:
-            return s if s != 0.0 else 0.0
+    try:
+        s = _cmath.fsum(vals)
+    except (OverflowError, ValueError, TypeError):
+        return _fsum_exact(vals)
+    if s - s == 0.0:
+        return s if s != 0.0 else 0.0
     return _fsum_exact(vals)
 
 
@@ -271,12 +269,11 @@ def exp_array(values):
     src = array.array("d", values)
     n = len(src)
     out = array.array("d", bytes(8 * n))
-    vector = getattr(_load(), "mojolearn_exp_f64", None) if n else None
-    if vector is None:
-        for i in range(n):
-            out[i] = exp(src[i])
+    if not n:
         return out
-    if vector(src.buffer_info()[0], n, out.buffer_info()[0]):
+    # libMojolearnMath always exports the vector (packaging/portable_math/
+    # portable_math.c); the per-element Python fallback is gone.
+    if _load().mojolearn_exp_f64(src.buffer_info()[0], n, out.buffer_info()[0]):
         raise OverflowError("math range error")
     return out
 

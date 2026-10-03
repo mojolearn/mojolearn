@@ -22,7 +22,7 @@ only moves buffers and keeps exact integer bookkeeping.
 
 | DEVIATION | seam | move | check / sabotage arm |
 |---|---|---|---|
-| 5200 | one-class SMO (`ocsvm_smo_item`) | float32, one sequential item; libsvm's `>=` / `<=` scans, the LAST index on a tie | `checks/model_check.mojo`, `5200_smo_first_index.patch` |
+| 5200 | one-class SMO (`ocsvm_smo_item`) | float32; the host column one sequential item, the GPU its scans and updates over the grid (`ocsvm_dev.mojo`); libsvm's `>=` / `<=` scans, the LAST index on a tie | `checks/model_check.mojo`, `5200_smo_first_index.patch` |
 | 5201 | NearestCentroid shrink scale m*s == 0 | deviation 0 instead of a computed NaN | `model_check.mojo`, `5201_shrink_centroid_fold_reversed.patch` |
 | 5202 | KernelPCA centering order, svd_flip sign row; every eigen_solver served by the dense Jacobi | their subtract-subtract-add order; the FIRST row of largest magnitude | `model_check.mojo`, `5202_svd_flip_last_row.patch` |
 | 5203 | PolynomialCountSketch convolution | summed directly, shift ascending (no FFT) | `checks/sketch_check.mojo`, `5203_pcs_shift_reversed.patch` |

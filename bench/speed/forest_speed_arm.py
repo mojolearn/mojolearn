@@ -468,6 +468,29 @@ OUR_BUILDERS = {
 }
 
 
+#: [True] under --host-digest (main sets it): our arm on the host column,
+#: digests only, no time printed (see host_digest_mode).
+HOST_DIGEST = [False]
+
+
+def host_digest_mode(lane):
+    """--host-digest: OUR CPU IS NEVER RACED OR TIMED (Andrew, Oct 2 2026).
+    This process runs `ours` on the host column (MOJOLEARN_VENDOR=cpu, set by
+    the caller before start) for the same-bits check only. The runner's round
+    and warm-up lines are replaced by FSPEED-DIGEST lines that carry the
+    output hash and no time."""
+    if os.environ.get("MOJOLEARN_VENDOR", "").strip().lower() != "cpu":
+        raise SystemExit("forest_speed_arm: --host-digest needs MOJOLEARN_VENDOR=cpu set "
+                         "before start (the host column, digests only)")
+    HOST_DIGEST[0] = True
+
+    def _digest(lane_, arm, shape, index, ms, digest):
+        print("FSPEED-DIGEST lane=%s arm=%s shape=%s round=%d hash=%s"
+              % (lane_, arm, shape, index, digest or "-"), flush=True)
+    spec.emit_round = _digest
+    spec.emit_warmup = lambda *a, **k: None
+
+
 def verify_our_arm(arm, requested=None):
     """Resolve and verify this arm before any fit timer starts. `requested`
     overrides the environment's tier for an `--ours-ab numeric_mode=...` arm."""
@@ -493,7 +516,10 @@ def verify_our_arm(arm, requested=None):
         raise RuntimeError("native compiled-mode readback missing for " + model._BINDING)
     compiled = codes.get(int(getter()), "unknown")
     expected_vendor = os.environ.get("MOJOLEARN_SPEED_EXPECTED_VENDOR", "").strip().lower()
-    if expected_vendor not in ("cuda", "metal", "hip"):
+    if HOST_DIGEST[0]:
+        # --host-digest: the host column, for a same-bits digest only (no time)
+        expected_vendor = "cpu"
+    elif expected_vendor not in ("cuda", "metal", "hip"):
         raise RuntimeError("set MOJOLEARN_SPEED_EXPECTED_VENDOR to cuda, metal, or hip")
     if resolved != requested or compiled != requested or vendor != expected_vendor:
         raise RuntimeError("mode/vendor mismatch: requested=%s/%s resolved=%s compiled=%s/%s"
@@ -555,7 +581,7 @@ def build_ours(lane, cfg, data, name="ours", extra=None):
 # --------------------------------------------------------------------------
 
 INFER_LARGE_ROWS = 1_000_000
-#: the dataset of this process's inference phase, for a proxy arm's batch
+#: the dataset of this process's inference phase
 _INFER_DATA = [None]
 
 
@@ -582,9 +608,6 @@ def infer_spec(arm_name, lane, task, model, n_features=None, frame=None):
     documented one. It never contains '=' (the lines are key=value)."""
     iforest = lane == "iforest"
     binary = task == "binary"
-    if hasattr(model, "board_infer_spec"):
-        # a board arm in another process (forest_board_arms.py, `--ours-cpu`)
-        return model.board_infer_spec(lane, task, _INFER_DATA[0])
     if task not in ("binary", "regression", "multiclass", "ranking") and not iforest:
         raise RuntimeError("inference timing covers binary, regression, multiclass and "
                            "ranking tasks; %s is %s" % (lane, task))
@@ -880,10 +903,9 @@ def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
                     emit_infer("FSPEED-INFER-REFUSED", lane, [("arm", name), ("batch", batch),
                                ("reason", "%s while scoring: %s" % (exc.__class__.__name__,
                                                                     _one_line(exc)))])
-        # FAST (ours-ab on the Apple board) and our CPU tier (ours-cpu)
-        # against IDENTICAL (ours): the same rows through two models,
-        # compared bit for bit.
-        for other in [o for o in ("ours-ab", "ours-cpu") if "ours" in last and o in last]:
+        # FAST (ours-ab on the Apple board) against IDENTICAL (ours): the
+        # same rows through two models, compared bit for bit.
+        for other in [o for o in ("ours-ab",) if "ours" in last and o in last]:
             a, b = last["ours"], last[other]
             same_shape = a.shape == b.shape
             emit_infer("FSPEED-INFER-AGREE", lane, [
@@ -926,7 +948,8 @@ def build_parser():
                    help="comma-separated opponent arm names to keep (a subset "
                         "of the lane's roster, e.g. catboost-cpu,xgboost-gpu); "
                         "a name asked for and not built is REFUSED by name. "
-                        "`ours` always runs; the filter reads opponents only.")
+                        "`ours` always runs; the filter reads opponents only. "
+                        "Naming opponents here races them (default: ours only).")
     p.add_argument("--ours-ab", default=None, metavar="PARAM=VALUE",
                    help="add a second ours arm, `ours-ab`, equal to `ours` "
                         "except one estimator keyword (a Python literal, "
@@ -951,8 +974,12 @@ def build_parser():
                         "missing-opponent fill; opponents are scored once and our time comes "
                         "from the board)")
     p.add_argument("--ours-only", action="store_true",
-                   help="skip the opponents; use when two CUDA runtimes in "
-                        "one process will not coexist")
+                   help="skip the opponents. This is now the DEFAULT (Andrew, "
+                        "Oct 3 2026: opponents are scored once and stored); the "
+                        "flag is kept so existing callers still parse")
+    p.add_argument("--with-opponents", action="store_true",
+                   help="also race the lane's whole opponent roster (default: our "
+                        "arm(s) only; --arms or --opponents-first also ask for them)")
     p.add_argument("--params-only", action="store_true",
                    help="construct every arm, print its parameters (BOARD-PARAMS) and library "
                         "(FSPEED-LIBRARY) and stop before the warm-up (the board's opponent "
@@ -964,10 +991,11 @@ def build_parser():
                         "predicts with its own last fitted model on the held-out rows "
                         "and on a large batch (FSPEED-INFER lines). Off by default; "
                         "without it the output is unchanged")
-    p.add_argument("--ours-cpu", action="store_true",
-                   help="add `ours-cpu`: the same ours estimator in a worker process under "
-                        "MOJOLEARN_VENDOR=cpu (the wheel's CPU tier, IDENTICAL), in the "
-                        "round-robin beside the other arms (bench/speed/forest_board_arms.py)")
+    p.add_argument("--ours-cpu", action="store_true", help=argparse.SUPPRESS)
+    p.add_argument("--host-digest", action="store_true",
+                   help="same-bits check only: run `ours` alone on the host column "
+                        "(MOJOLEARN_VENDOR=cpu set before start) and print FSPEED-DIGEST "
+                        "hash lines with no time. Our CPU is never raced or timed")
     p.add_argument("--mem", action="store_true",
                    help="print FSPEED-MEM: each arm's peak host memory per round (and the "
                         "process's GPU figure), read outside the clock (forest_board_arms.py)")
@@ -1000,6 +1028,20 @@ def main(argv=None):
     started = time.time()
     args = build_parser().parse_args(argv)
     lane = args.lane
+    # Default: our arm(s) only. Opponents race only on an explicit ask:
+    # --with-opponents, an --arms list, or --opponents-first.
+    if not (args.with_opponents or args.arms or args.opponents_first):
+        args.ours_only = True
+    elif args.ours_only and args.with_opponents:
+        raise SystemExit("forest_speed_arm: --ours-only and --with-opponents contradict")
+    if args.ours_cpu:
+        raise SystemExit("forest_speed_arm: --ours-cpu is removed: our CPU is never raced or "
+                         "timed (Andrew, Oct 2 2026); use --host-digest for a same-bits digest")
+    if args.host_digest:
+        if not args.ours_only or args.ours_ab or args.infer or args.mem or args.arms:
+            raise SystemExit("forest_speed_arm: --host-digest runs `ours` alone (--ours-only; "
+                             "no --ours-ab, --infer, --mem or --arms)")
+        host_digest_mode(lane)
     size = spec.size_tag()
     dataset = args.dataset or spec.LANE_DEFAULT_DATASET[lane]
     devices, devices_auto = spec.resolve_devices(args.devices, lane)
@@ -1095,12 +1137,6 @@ def main(argv=None):
               "estimator default)" % (lane, key.strip(), value), flush=True)
         arms.extend(build_ours(lane, cfg, data, name="ours-ab",
                                extra={key.strip(): value}))
-    proxies = []
-    if args.ours_cpu:
-        import forest_board_arms
-        proxies = forest_board_arms.build_cpu_arm(lane, dataset, args.rows, args.infer_large_rows,
-                                                  spec.emit_refused)
-        arms.extend(proxies)
     if not args.ours_only:
         if not args.opponents_first:
             opponents = spec.build_opponents(lane, cfg, data, devices, wanted)
@@ -1125,15 +1161,11 @@ def main(argv=None):
     # same tuning parameters), before the first timed round. Each
     # arm's model is constructed, not fitted, and its parameters are read
     # back from the object; a seed or a shared parameter that differs
-    # refuses the race by name. The CPU proxy arms are ours on another
-    # column and carry the same parameters, so they are not compared.
+    # refuses the race by name.
     # `ours-ab` differs from ours by the one key --ours-ab names, on purpose.
     import bench_board_params as BP
-    proxy_names = {getattr(a, "name", None) for a in proxies}
     records = {}
     for arm in arms:
-        if arm.name in proxy_names:
-            continue
         try:
             records[arm.name] = arm.make()
         except Exception as exc:  # noqa: BLE001
@@ -1143,7 +1175,7 @@ def main(argv=None):
     # an opponent by them), one FSPEED-LIBRARY JSON line per constructed arm
     import bench_board_probe
     for arm in arms:
-        if arm.name in proxy_names or arm.name not in records \
+        if arm.name not in records \
                 or isinstance(records[arm.name], dict):          # not constructed
             continue
         lib = getattr(arm, "library", None) or "mojolearn"
@@ -1171,7 +1203,7 @@ def main(argv=None):
     # SAME SEED, SAME TUNING PARAMETERS: rule 1's note, then the board's check
     # on one constructed estimator per arm, before any warm-up or timed round
     spec.emit_seed_note(lane, [a.name for a in arms], seed_draws(lane, cfg, data))
-    if not spec.enforce_board_params(lane, arms, skip={p.name for p in proxies}):
+    if not spec.enforce_board_params(lane, arms, skip=set()):
         return 2
     if args.opponents_only:
         # ours was built for the parameter check (the reference arm) only; it is never fitted
@@ -1197,15 +1229,13 @@ def main(argv=None):
     fit_context = None
     if args.mem:
         import forest_board_arms
-        fit_context = forest_board_arms.TreeMem(lane, proxies).context
+        fit_context = forest_board_arms.TreeMem(lane).context
     live = spec.run(lane, arms, data, spec.rounds(), size, cfg=cfg, fit_context=fit_context)
     if args.infer:
         names = {a.name for a in live}
         run_inference(lane, [a for a in arms if a.name in names],
                       models, data, spec.rounds(), args.infer_large_rows,
                       started + spec.process_deadline_s())
-    for proxy in proxies:
-        proxy.close()
     return 0
 
 

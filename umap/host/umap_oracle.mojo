@@ -36,7 +36,7 @@ THE STAGES, EACH WITH THE DEVICE CODE IT MIRRORS
                         return_sqrt True (the knn lanes' restatement)
     self first          umap/graph.mojo::canonicalize_self_neighbors
                         (host code, imported; no device)
-    fuzzy graph         umap/sparse_graph.mojo::sparse_fuzzy_simplicial_graph
+    fuzzy graph         umap/host/sparse_graph_host.mojo::sparse_fuzzy_simplicial_graph
                         (host code, imported; no device)
     spectral init       sparse_estimator.mojo:67-88 (the positive row-major
                         COO) -> umap/spectral_init.mojo:72-125
@@ -104,8 +104,8 @@ from umap.sparse_graph import (
     SparseFuzzySimplicialGraph,
     categorical_intersection,
     general_intersection,
-    sparse_fuzzy_simplicial_graph,
 )
+from umap.host.sparse_graph_host import sparse_fuzzy_simplicial_graph
 
 
 #: The gate's negative control (module docstring). Read back by

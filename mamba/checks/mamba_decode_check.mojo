@@ -4,7 +4,7 @@ from std.sys import argv
 from std.memory import bitcast
 from core.identity_trace import IdentityTrace
 from max.gpu.host import DeviceContext
-from mamba.impl.modules.mamba_simple import check_reference_decode as reference_gate
+from mamba.checks.mamba_simple_reference import check_reference_decode as reference_gate
 from mamba.checks.mamba_check import (
     clause_d, run_step, stage_names, stage_kind, token_slice, compare_stage, KIND_TOKEN,
 )

@@ -29,7 +29,8 @@ from pathlib import Path
 import mojolearn as ml
 from mojolearn import _backend, host_surface
 from mojolearn._cpu_reference import reference_training
-from mojolearn._gpc_impl import GaussianProcessClassifier, HostGaussianProcessClassifier
+from mojolearn._gpc_impl import GaussianProcessClassifier
+from mojolearn._classical_host import HostGaussianProcessClassifier
 
 ROOT = Path(__file__).resolve().parents[3]
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
@@ -99,9 +100,10 @@ def test_classification_is_no_longer_not_implemented():
     assert all(row.startswith("sklearn GaussianProcessClassifier's hyperparameter optimizer")
                for row in rows), rows
     steps = _read("gaussian_process/host/gpc_steps.mojo")
-    for token in ("GPC_LML_TOL_BITS: UInt32 = 0x2EDBE6FF", "identical_softplus", "identical_exp64",
+    for token in ("identical_softplus", "identical_exp64",
                   "DEVIATION 2830", "DEVIATION 2831", "DEVIATION 2832"):
         assert token in steps, token
+    assert "GPC_LML_TOL_BITS: UInt32 = 0x2EDBE6FF" in _read("gaussian_process/gpc_common.mojo")
 
 
 # -- runtime checks (skipped without a binding) ----------------------------------------

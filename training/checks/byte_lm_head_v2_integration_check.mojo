@@ -6,7 +6,7 @@ from std.time import perf_counter_ns
 from training.byte_lm import ByteTrainer, byte_train_step_resident
 from training.chunked_lm_head_v2 import LM_HEAD_V2_CHUNK
 from training.byte_lm_config import ByteConfig
-from training.checks.optimizer_oracle import OPT_ADAMW, OptimizerConfig
+from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
 from training.checks.train_loop import download_f32
 
 

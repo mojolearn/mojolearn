@@ -921,49 +921,23 @@ def _out_or_new(out, m, n, who):
 #
 # `HostQR`-style second names do not exist and should not: a caller who
 # wants the host route on a GPU box is asking for the device/host
-# comparison, which is a verification job and reaches the host binding
-# directly through `_host_load()`.
-
-_LINALG_HOST_BASENAME = "_mojolearn_linalg_host"
-_host_binding_cache = None
-
-
-def _host_load():
-    """`_mojolearn_linalg_host`: THE VERIFIER, and the whole route only on a
-    box with no GPU.
-
-    This docstring used to say the host binding was the route these three
-    took everywhere, on purpose. It is not, and the ranking is the other way
-    round: **the device kernels are the product and the host oracles exist
-    to confirm what the device computed.** `decomposition/host/
-    linalg_public.mojo` and the oracles under it re-derive the device's
-    answer serially so the two can be diffed; that is what they are for.
-
-    A GPU install ships this binding beside the device one (it is in
-    `python/mojolearn/host_surface.py`'s families), which is why the
-    comparison can be made in ONE process on ONE box -- and why `qr`,
-    `eigh` and `svdvals` are checkable in a way an estimator that ships only
-    one route is not.
-    """
-    global _host_binding_cache
-    if _host_binding_cache is None:
-        _host_binding_cache = _backend.load_host_module(_LINALG_HOST_BASENAME)
-    return _host_binding_cache
+# comparison, which is a verification job and loads `_mojolearn_linalg_host`
+# itself (`_backend.load_host_module`, the verification side); this module
+# never loads a host binding (cpu-gpu-cleanup c-linear, 2026-10-02).
 
 
 def _door():
     """The module that serves `qr_r`, `eigh` and `svdvals` for THIS install:
-    the device binding where there is a GPU, the host binding where there is
-    not. Chosen by ROUTE, never probed -- `_cholesky_impl.Cholesky._door`'s
-    shape and its reason.
+    `_backend.binding`, which is the device binding where there is a GPU and,
+    on a CPU-only install, the host binding `_select_cpu_only` installed
+    under the canonical name (`_mojolearn_linalg_host`, host_surface's
+    linalg family). Chosen by ROUTE, never probed.
 
     The device binding is IDENTICAL-only (`_backend._IDENTICAL_ONLY`), so
     `numeric_mode='fast'` on a GPU box is refused here by name rather than
     quietly answered by the host. Before 2026-09-19 it was quietly answered
     by the host, which is the behaviour this door exists to end.
     """
-    if _backend._CPU_ONLY is not None:
-        return _host_load()
     return _load()
 
 
@@ -1239,23 +1213,6 @@ def qr(a, mode="r"):
     return out
 
 
-def _from_triangle(a_arr, n, uplo):
-    """The symmetric matrix numpy's eigh reads: the lower (UPLO='L') or upper
-    ('U') triangle mirrored across the diagonal. Pure data movement (strided
-    copies of float32 words), so every column sees the same bytes."""
-    import array as _array
-    from ._buffer import frombytes
-    s = _array.array("f")
-    s.frombytes(a_arr.tobytes())
-    out = _array.array("f", s)
-    for i in range(n):
-        if uplo == "L":   # row i right of the diagonal := column i below it
-            out[i * n + i + 1:(i + 1) * n] = s[(i + 1) * n + i::n]
-        else:             # row i left of the diagonal := column i above it
-            out[i * n:i * n + i] = s[i:i * n:n]
-    return frombytes(out.tobytes(), "<f4", (n, n))
-
-
 def eigh(a, UPLO="L"):
     """`numpy.linalg.eigh(a, UPLO)`: eigenvalues ASCENDING and their vectors.
 
@@ -1293,8 +1250,9 @@ def eigh(a, UPLO="L"):
 
     Notes
     -----
-    Runs `jacobi_eigh_kernel` and `sign_flip_kernel` ON THE DEVICE where
-    there is one, and their host replay on a CPU-only install.
+    Runs x_decomp's round-robin Jacobi (`eigh_par_*` kernels) and
+    `sign_flip_kernel` ON THE DEVICE where there is one, and their host
+    replay (x_decomp's host binding, the same rounds) on a CPU-only install.
     """
     a_arr, rows, cols = _two_d(a, "a")
     if rows != cols:
@@ -1303,14 +1261,20 @@ def eigh(a, UPLO="L"):
         )
     if UPLO not in ("L", "U"):
         raise ValueError("mojolearn.linalg.eigh: UPLO argument must be 'L' or 'U'")
-    a_arr = _from_triangle(a_arr, rows, UPLO)
-    w = empty((rows,), "<f4")
-    v = empty((rows, rows), "<f4")
-    scalars = empty((2,), "<f8")
-    _door().eigh([addr_ro(a_arr, name="a"), addr(w, name="w_out"),
-                  addr(v, name="v_out"), addr(scalars, name="scalars_out")],
-                 [int(rows)])
-    return w, v
+    # lane fix-eigh-main (2026-10-02): x_decomp's eigh, the round-robin
+    # Jacobi (x_decomp/jacobi_par.mojo, the pinned order of x_decomp/rr.mojo:
+    # n/2 independent rotations per round, one thread per updated cell; the
+    # host binding replays the same rounds), then `device_eigh`'s own tail
+    # (sign_flip_kernel, eigh_ascending). It replaces the linalg binding's
+    # `device_eigh`, ONE threadblock for the whole cyclic sweep
+    # (grid_dim=(1, 1, 1)), which never finished n = 4096 on the L40S inside
+    # the board's 2400 s (0.8.34 board: 1,984 s). `svd(hermitian=True)`
+    # already took this route.
+    # cgr-decomp (2026-10-03): the triangle is mirrored by the binding, on
+    # the device where there is one (`sym_from_triangle_kernel`), not by a
+    # host loop over the rows
+    w, v = _xd_kit().eigh(_xd_matrix(a_arr, rows, rows), uplo=1 if UPLO == "L" else 2)
+    return w.out((rows,)), v.out()
 
 
 def svdvals(a):
@@ -1470,8 +1434,7 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
     if hermitian:
         if rows != cols:
             raise ValueError("mojolearn.linalg.svd: hermitian=True needs a square matrix")
-        sym = _xd_matrix(_from_triangle(a_arr, rows, "L"), rows, rows)
-        w, v = k.eigh(sym)
+        w, v = k.eigh(A, uplo=1)
         # numpy: argsort(|w|) (ascending) reversed, so equal magnitudes come
         # higher index first
         order = sorted(range(rows), key=lambda j: (abs(w.s[j]), j))[::-1]

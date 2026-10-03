@@ -7,7 +7,7 @@ from training.byte_lm_model_pool import ByteModelPool
 from training.byte_lm_parallel import ByteParallelTrainer
 from training.checks.byte_lm_layer_pool_check import same
 from training.checks.train_loop import download_f32
-from training.checks.optimizer_oracle import OptimizerConfig, OPT_ADAMW
+from training.checks.optimizer_contract import OptimizerConfig, OPT_ADAMW
 
 
 def check(shape: ByteConfig, devices: List[Int], logical: Int) raises:

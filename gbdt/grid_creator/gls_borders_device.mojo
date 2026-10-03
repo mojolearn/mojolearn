@@ -1,8 +1,13 @@
 """The device driver of `gls_borders.mojo` (lane hr2-gbdt-host): the float
-columns' GreedyLogSum grids, every step on the device, the columns in
-chunks so the staging stays bounded. Returns, per float column, its
-borders WITH the NaN sentinel (`calc_quantization`'s output) and the NaN
-mode it resolved to."""
+columns' grids, every step on the device, the columns in chunks so the
+staging stays bounded. Returns, per float column, its borders WITH the NaN
+sentinel (`calc_quantization`'s output) and the NaN mode it resolved to.
+
+cpu-gpu-cleanup w2-trees: every `feature_border_type` runs here. The
+subsample, keys, sort and NaN modes are GreedyLogSum's; the per-column
+search is `gls_column` for GreedyLogSum and `border_types.mojo`'s
+`border_type_column` for the six others (its table built by
+`border_table_kernel`, its scratch sized per type)."""
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.device_zero import enqueue_fill
@@ -13,6 +18,16 @@ from gbdt.options.data_processing_options import (
 )
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 from gbdt.gpu_util.kernel.segmented_sort import launch_segmented_radix_sort
+from gbdt.grid_creator.binarization import (
+    BORDER_TYPE_GREEDY_LOG_SUM,
+    BORDER_TYPE_MAX_LOG_SUM,
+    BORDER_TYPE_MIN_ENTROPY,
+)
+from gbdt.grid_creator.border_types import (
+    border_table_kernel,
+    border_types_columns_kernel,
+    exact_i32_words,
+)
 from gbdt.grid_creator.gls_borders import (
     GLS_BLOCK,
     GLS_MODE_REFUSED,
@@ -36,6 +51,7 @@ def device_float_borders(
     border_count: Int,
     nan_mode_option: Int,
     sample_key: UInt64,
+    border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,
 ) raises -> Tuple[List[List[Float32]], List[Int]]:
     var n_float = len(cols)
     var borders = List[List[Float32]]()
@@ -48,12 +64,37 @@ def device_float_borders(
     var chunk = max(1, min(n_float, (1 << 25) // span))
     var heap_cap = border_count + 2
     var out_cap = border_count + 1
-
-    var d_logtab = ctx.enqueue_create_buffer[DType.uint64](sn + 1)
-    ctx.enqueue_function[gls_log_table_kernel](
-        d_logtab.unsafe_ptr(), Int32(sn + 1),
-        grid_dim=_blocks(sn + 1), block_dim=GLS_BLOCK,
+    var gls = border_type == BORDER_TYPE_GREEDY_LOG_SUM
+    var exact = (
+        border_type == BORDER_TYPE_MAX_LOG_SUM
+        or border_type == BORDER_TYPE_MIN_ENTROPY
     )
+    # the exact dynamic program's scratch per column (`exact_column`):
+    # 4 * sn soft doubles, the Int32 planes, sn floats; the chunk shrinks
+    # so the chunk's scratch stays under 1 GiB
+    var f64_stride = 4 * sn if exact else 0
+    var i32_stride = exact_i32_words(sn, border_count) if exact else 0
+    var uniq_stride = sn if exact else 0
+    if exact:
+        var per_col = 8 * f64_stride + 4 * i32_stride + 4 * uniq_stride
+        chunk = max(1, min(chunk, (1 << 30) // max(1, per_col)))
+
+    # the type's table: `log(w + 1e-8)` for GreedyLogSum, the type's score
+    # or penalty for the others (`border_table_entry`)
+    var d_logtab = ctx.enqueue_create_buffer[DType.uint64](sn + 1)
+    if gls:
+        ctx.enqueue_function[gls_log_table_kernel](
+            d_logtab.unsafe_ptr(), Int32(sn + 1),
+            grid_dim=_blocks(sn + 1), block_dim=GLS_BLOCK,
+        )
+    else:
+        ctx.enqueue_function[border_table_kernel](
+            d_logtab.unsafe_ptr(), Int32(sn + 1), Int32(border_type),
+            grid_dim=_blocks(sn + 1), block_dim=GLS_BLOCK,
+        )
+    var d_f64s = ctx.enqueue_create_buffer[DType.uint64](max(1, chunk * f64_stride))
+    var d_i32s = ctx.enqueue_create_buffer[DType.int32](max(1, chunk * i32_stride))
+    var d_uniq = ctx.enqueue_create_buffer[DType.float32](max(1, chunk * uniq_stride))
     var d_idx = ctx.enqueue_create_buffer[DType.uint32](max(sn, 1))
     if sampled:
         ctx.enqueue_function[border_sample_kernel](
@@ -130,14 +171,27 @@ def device_float_borders(
             d_valid.unsafe_ptr(), d_budget.unsafe_ptr(), d_mode.unsafe_ptr(),
             grid_dim=_blocks(width), block_dim=GLS_BLOCK,
         )
-        ctx.enqueue_function[gls_columns_kernel](
-            d_keys.unsafe_ptr(), Int32(sn), Int32(width),
-            d_valid.unsafe_ptr(), d_budget.unsafe_ptr(), d_logtab.unsafe_ptr(),
-            d_hs.unsafe_ptr(), d_he.unsafe_ptr(), d_hp.unsafe_ptr(),
-            d_hsc.unsafe_ptr(), Int32(heap_cap), d_out.unsafe_ptr(),
-            Int32(out_cap), d_counts.unsafe_ptr(),
-            grid_dim=max(1, (width + 63) // 64), block_dim=64,
-        )
+        if gls:
+            ctx.enqueue_function[gls_columns_kernel](
+                d_keys.unsafe_ptr(), Int32(sn), Int32(width),
+                d_valid.unsafe_ptr(), d_budget.unsafe_ptr(), d_logtab.unsafe_ptr(),
+                d_hs.unsafe_ptr(), d_he.unsafe_ptr(), d_hp.unsafe_ptr(),
+                d_hsc.unsafe_ptr(), Int32(heap_cap), d_out.unsafe_ptr(),
+                Int32(out_cap), d_counts.unsafe_ptr(),
+                grid_dim=max(1, (width + 63) // 64), block_dim=64,
+            )
+        else:
+            ctx.enqueue_function[border_types_columns_kernel](
+                Int32(border_type), d_keys.unsafe_ptr(), Int32(sn), Int32(width),
+                d_valid.unsafe_ptr(), d_budget.unsafe_ptr(), d_logtab.unsafe_ptr(),
+                d_hs.unsafe_ptr(), d_he.unsafe_ptr(), d_hp.unsafe_ptr(),
+                d_hsc.unsafe_ptr(), Int32(heap_cap),
+                d_f64s.unsafe_ptr(), Int64(f64_stride),
+                d_i32s.unsafe_ptr(), Int64(i32_stride),
+                d_uniq.unsafe_ptr(), Int64(uniq_stride),
+                d_out.unsafe_ptr(), Int32(out_cap), d_counts.unsafe_ptr(),
+                grid_dim=max(1, (width + 63) // 64), block_dim=64,
+            )
         ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=d_out)
         ctx.enqueue_copy(dst_ptr=h_counts.unsafe_ptr(), src_buf=d_counts)
         ctx.enqueue_copy(dst_ptr=h_mode.unsafe_ptr(), src_buf=d_mode)
@@ -160,4 +214,7 @@ def device_float_borders(
             borders.append(bs^)
             modes.append(m)
         base += width
+    _ = d_f64s^
+    _ = d_i32s^
+    _ = d_uniq^
     return (borders^, modes^)

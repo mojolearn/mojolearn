@@ -44,7 +44,7 @@ _OP = dict(
     add=0, sub=1, mul=2, div=3, axpy=4, maxs=5, mu=6, sqrt=7, sq=8, exp=9, logs=10, tanh=11,
     onemsq=12, abs=13, scale=14, fma=15, recip=16, soft=17, submul=18, mins=19, copyb=20,
     sqdiff=21, adds=22, gts=23, digamma=24, expg=25, expgp=26, cube=27, cubep=28, max=30,
-    min=31, sign=33, le=34, select=35,
+    min=31, sign=33, le=34, select=35, p2scale=38,
 )
 
 
@@ -327,19 +327,14 @@ class _M:
 
 _M._one = _M(array.array("f", [0.0]), 1, 1)
 _DEV_ONE = {}
-#: the fewest values for which a host-only kit call goes resident (_Kit._use);
-#: MOJOLEARN_XD_RES_MIN overrides it (timing only: the bits are the same).
+#: the fewest values for which a host-only kit call goes resident (_Kit._use)
+#: (cgr-decomp: the MOJOLEARN_XD_RES_MIN override is deleted).
 #: 1 (always) measured fastest on m4pro-a once the pool was O(1) and capped
 #: (1790588268075: MiniBatchDictionaryLearning 0.66 s at 1 against 1.56 s at
 #: 1024 and 1.76 s at 16384; MinCovDet 48.4 / 55.0 / 51.1 s; FastICA 0.089 /
 #: 0.129 / 0.124 s)
 import os as _os
-_RES_MIN = int(_os.environ.get("MOJOLEARN_XD_RES_MIN", "1"))
-#: A/B arm (lane hr2-graph-embed, 2026-10-02): Isomap's / LLE's kNN by
-#: heapq, their graphs, component walk and joins in Python, and the
-#: host-built Dijkstra arcs, instead of the graph cells
-#: (x_decomp/graph_cells.mojo) on device-resident matrices.
-_PY_GRAPH = _os.environ.get("MOJOLEARN_XD_PY_GRAPH", "") == "1"
+_RES_MIN = 1
 
 
 def _dev_one(kit):
@@ -396,34 +391,6 @@ def _kit_vendor(kit):
             v = ""
         kit._vendor = v
     return v
-
-
-class _FastMetalEigh:
-    """FAST on Apple runs the kit's eigh on x_decomp/jacobi2.mojo's kernel
-    (lane/decomp-apple3; m4-a 1790626766529: eigh 800 8.88 -> 5.36 s, Isomap
-    and ClassicalMDS at 1000 rows 1.9x, the SAME output bytes as the kernel
-    it replaces). The binding picks that kernel from MOJOLEARN_XD_JACOBI at
-    each call, and on Metal its own default is the older kernel, so this
-    sets the variable to 2 for the length of one FAST eigh call on a Metal
-    binding and puts back what was there. A value the user set wins (1 keeps
-    the older kernel). IDENTICAL calls never come through here."""
-
-    __slots__ = ("on",)
-
-    def __init__(self, kit):
-        self.on = False
-        if kit.mode == "fast" and "MOJOLEARN_XD_JACOBI" not in _os.environ:
-            self.on = _kit_vendor(kit) == "metal"
-
-    def __enter__(self):
-        if self.on:
-            _os.environ["MOJOLEARN_XD_JACOBI"] = "2"
-        return self
-
-    def __exit__(self, *exc):
-        if self.on:
-            _os.environ.pop("MOJOLEARN_XD_JACOBI", None)
-        return False
 
 
 class _Kit:
@@ -601,13 +568,25 @@ class _Kit:
         return out
 
     # ---- small dense linear algebra
-    def eigh(self, A):
-        """Ascending eigenvalues (1 x n) and eigenvectors in COLUMNS (n x n)."""
+    def eigh(self, A, uplo=0):
+        """Ascending eigenvalues (1 x n) and eigenvectors in COLUMNS (n x n):
+        the round-robin Jacobi at every size. uplo 1 / 2 reads only the
+        lower / upper triangle (numpy's UPLO, mirrored by the binding on the
+        device), 0 the whole matrix."""
         n = A.r
         w, v = _M.zeros(1, n), _M.zeros(n, n)
-        with _FastMetalEigh(self):
-            self.b.x_decomp_eigh(A.addr, w.addr, v.addr, [n])
+        self.b.x_decomp_eigh(A.addr, w.addr, v.addr, [n, int(uplo)])
         return w, v
+
+    def eigh_batch(self, A, batch, n):
+        """`eigh` of `batch` n x n problems stacked in A (batch n x n), one
+        device block each (x_decomp/rr_batch.mojo): (W batch x n ascending,
+        V batch n x n, problem b's vectors in the COLUMNS of rows b n ..
+        (b + 1) n)."""
+        W, V = _M.zeros(batch, n), _M.zeros(batch * n, n)
+        if batch:
+            self.b.x_decomp_eigh_batch(A.addr, W.addr, V.addr, [int(batch), int(n)])
+        return W, V
 
     def lu(self, A):
         n = A.r
@@ -704,6 +683,46 @@ class _Kit:
                                    [float(alpha), float(tol)])
         return W
 
+    def lle_apply(self, Wb, idm, E):
+        """out (nq x nc) = sum_a Wb[i, a] E[idm[i, a]] (LLE transform)."""
+        nq, nn, nc = Wb.r, Wb.c, E.c
+        out = _M.zeros(nq, nc)
+        if nq * nc:
+            self.b.x_decomp_lle_apply(Wb.addr, idm.addr, E.addr, out.addr, [nq, E.r, nn, nc])
+        return out
+
+    def lle_local(self, M, idm, method, nn, nc, tol):
+        """LocallyLinearEmbedding's stacked factor B (x_decomp/lle_local.mojo):
+        method 0 LTSA (n nn x n), 1 Hessian (n (nn - 1 - nc) x n), 2 modified
+        (n nn x n); every per-sample step (the local Gram, its eigh, the
+        assembly) a cell on the device, the local eigensolves batched."""
+        n, d = M.r, M.c
+        rows = n * (nn - 1 - nc) if method == 1 else n * nn
+        B = _M.zeros(rows, n)
+        self.b.x_decomp_lle_local(M.addr, idm.addr, B.addr, [int(method), n, d, int(nn), int(nc)], [float(tol)])
+        return B
+
+    def lu_aux(self, lu, piv, clamp=False):
+        """An LU factor's companions, computed by the binding (on the device
+        where there is one; x_decomp/cells.mojo `lu_aux_*`): (stats = [max
+        |u_ii|, zero pivots, negative pivots, swaps], diag 1 x n, pm n x 1
+        the swaps' row order, im n x 1 its inverse). clamp floors the pivots
+        under eps * max |u_ii| in `lu` itself."""
+        n = lu.r
+        pm, im, diag, st = _M.zeros(n, 1), _M.zeros(n, 1), _M.zeros(1, n), _M.zeros(1, 4)
+        self.b.x_decomp_lu_aux(lu.addr, piv.buffer_info()[0], pm.addr, im.addr, diag.addr, st.addr,
+                               [n, int(bool(clamp))])
+        return [float(v) for v in st.s], diag, pm, im
+
+    def lars_rows(self, G, Q, m, nnz):
+        """Row-parallel Lars on the Gram (x_decomp/cells.mojo `lars_row`): the
+        n x k coefficients, m the samples of each row's problem."""
+        W = _M.zeros(Q.r, Q.c)
+        na = _M.zeros(Q.r, 1)
+        if Q.r * Q.c:
+            self.b.x_decomp_lars_rows(G.addr, Q.addr, W.addr, na.addr, [Q.r, Q.c, int(m), int(nnz)])
+        return W
+
     def omp_rows(self, G, Q, nnz):
         W = _M.zeros(Q.r, Q.c)
         na = _M.zeros(Q.r, 1)
@@ -735,13 +754,8 @@ class _Kit:
         """All-pairs shortest paths on a dense undirected graph (0 = no edge),
         one source per thread; -1 marks an unreachable pair. The GPU binding
         keeps W and the result resident and compresses the arcs on the
-        device (x_decomp/graph_device.mojo); MOJOLEARN_XD_PY_GRAPH=1 (A/B,
-        lane hr2-graph-embed) restores the host-address entry."""
+        device (x_decomp/graph_device.mojo)."""
         n = W.r
-        if _PY_GRAPH:
-            dist, reached = _M.zeros(n, n), _M.zeros(n, 1)
-            self.b.x_decomp_dijkstra_rows(W.addr, dist.addr, reached.addr, [n])
-            return dist
         if self._res():
             dist = self._dout(n, n)
             self.b.x_decomp_dev_graph_dijkstra(self._did(W), dist._d.id, [n])
@@ -788,6 +802,21 @@ class _Kit:
             return out
         out = _M.zeros(n, n)
         self.b.x_decomp_graph_radius(D.addr, out.addr, [n], float(r))
+        return out
+
+    def graph_radius_geo(self, Dq, D, r):
+        """Isomap's radius transform: G[i, c] = min over j (ascending) with
+        Dq[i, j] <= r of D[j, c] + Dq[i, j] (x_decomp/graph_cells.mojo
+        `radius_geo_cell`; 0 for a row with no such j)."""
+        nq, n = Dq.r, Dq.c
+        if self._res():
+            out = self._dout(nq, n)
+            if nq * n:
+                self.b.x_decomp_dev_graph_radius_geo(self._did(Dq), self._did(D), out._d.id, [nq, n], float(r))
+            return out
+        out = _M.zeros(nq, n)
+        if nq * n:
+            self.b.x_decomp_graph_radius_geo(Dq.addr, D.addr, out.addr, [nq, n], float(r))
         return out
 
     def graph_lle_iw(self, idx, wb, n):
@@ -1138,14 +1167,6 @@ def _pinv_rows(k, C):
     return k.lu_solve(lu, piv, C).T
 
 
-def _rp_tiled():
-    """The A/B switch MOJOLEARN_XD_RP_TILED (lane gap-nb-maxabs-grp; unset or
-    anything but "0": on): the random projections draw their matrix on the
-    device (`x_decomp_dev_rand`, the same Philox words as `x_decomp_rand`)
-    and transform through the tiled projection kernel."""
-    return _os.environ.get("MOJOLEARN_XD_RP_TILED", "1").strip() != "0"
-
-
 def _rp_rand(k, r, c, seed, stream, kind, dev):
     """`k.rand`'s matrix; with dev, drawn into a device matrix by the same
     kernel (enqueued, nothing downloaded)."""
@@ -1182,10 +1203,13 @@ class _RandomProjection(_Base):
         k = self._kit()
         self.n_components_ = kc
         self.n_features_in_ = d
-        dev = _rp_tiled() and k._res()
+        # lane gap-nb-maxabs-grp: on the GPU binding the matrix is drawn on
+        # the device (`x_decomp_dev_rand`, the same Philox words as
+        # `x_decomp_rand`); cgr-decomp deleted the MOJOLEARN_XD_RP_TILED switch
+        dev = k._res()
         self.components_m_ = self._make(k, kc, d, _seed_of(self.random_state), dev)
         if dev and self.components_m_._d is not None:
-            # MOJOLEARN_XD_RP_TILED: the matrix was drawn on the device and
+            # the matrix was drawn on the device and
             # stays there for transform; components_ is a copy of its words
             # (one download, the device matrix kept)
             C = self.components_m_
@@ -1201,7 +1225,7 @@ class _RandomProjection(_Base):
 
     def transform(self, X):
         self._check()
-        if _rp_tiled() and not _is_sparse(X):
+        if not _is_sparse(X):
             out = self._project(X)
             if out is not None:
                 return out
@@ -1211,8 +1235,7 @@ class _RandomProjection(_Base):
         return self._kit().mm(M, self.components_m_, tb=True).out()
 
     def _project(self, X):
-        """transform on the GPU binding (lane gap-nb-maxabs-grp; the A/B
-        switch MOJOLEARN_XD_RP_TILED=0 keeps the path above): X goes up from
+        """transform on the GPU binding (lane gap-nb-maxabs-grp): X goes up from
         its own buffer (no host copy into a store, no host finiteness pass),
         x_decomp_dev_project's tiled kernel computes `mm(X, components, tb)`'s
         words and flags a non-finite entry of X on the device, and the result
@@ -1824,10 +1847,11 @@ def _inv(k, A):
 
 
 def _eye(n):
-    E = _M.zeros(n, n)
-    for i in range(n):
-        E.s[i * n + i] = 1.0
-    return E
+    """The n x n identity, built whole (row major, a 1 every n + 1 words):
+    no per-row loop. The resident kit's `diag_mask` makes it on the device."""
+    if n < 1:
+        return _M.zeros(0, 0)
+    return _M(array.array("f", [1.0] + [0.0] * n) * (n - 1) + array.array("f", [1.0]), n, n)
 
 
 def _logdet(k, A):
@@ -2226,7 +2250,7 @@ def _tsqr_lstsq_on(m, nn, nrhs):
             and nn >= 1 and nrhs >= 1 and nn + nrhs <= _TS_MAX_N and m >= nn + nrhs)
 
 
-def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond):
+def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False):
     """(X nn x nrhs, residuals _M 1 x nrhs or None, rank, S 1 x nn) of
     min ||A X - B|| through the blocked TSQR of [A | B] (lane
     neural-pass140; x_decomp/tsqr_core.mojo): R_aug = [[R, C], [0, R22]]
@@ -2235,7 +2259,16 @@ def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond):
     (`_svd_tall`: S descending, U_R orthonormal): X = V diag(1/s) U_R^T C,
     singular values at or below rcond * s_max dropped, as before; the
     residuals (rank == nn < m only) are the squared column norms of R22,
-    which is ||b - a x||^2 at the least-squares solution."""
+    which is ||b - a x||^2 at the least-squares solution.
+
+    `equilibrate` (LinearRegression, lane apple-fast-tsqr): before the SVD
+    every column j of R is multiplied by the exact power of two s_j that
+    DEVIATION 2620 picks for the Gram diagonal ||R e_j||^2 = ||A e_j||^2
+    (op p2scale, x_decomp/cells.mojo), so the rcond cutoff sees the design
+    in balanced units as the normal equations route did, and X is
+    multiplied by s after. A power of two scales without rounding, so
+    R S is what the TSQR of A S gives; every step stays on the binding's
+    cells (the same words on every column)."""
     from ._linalg_impl import _svd_tall
     from ._buffer import addr_ro
     n = nn + nrhs
@@ -2245,11 +2278,17 @@ def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond):
                         [int(m), int(nn), int(nrhs), 0])
     top = Ra.rows(0, nn)
     R, C = top.cols(0, nn), top.cols(nn, n)
+    sc = None
+    if equilibrate:
+        sc = k.ew("p2scale", k.colsum(k.ew("sq", R)))
+        R = k.ew("mul", R, sc)
     Ur, S, Vt = _svd_tall(k, R, False)
     cut = _f32(S.s[0] * rcond)
     rank = sum(1 for v in S.s if v > cut)
     inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
     X = k.mm(Vt, k.ew("mul", k.mm(Ur, C, ta=True), inv.T), ta=True)
+    if sc is not None:
+        X = k.ew("mul", X, sc.T)
     res = None
     if rank == nn and m > nn:
         res = k.colsum(k.ew("sq", Ra.rows(nn, n).cols(nn, n)))
@@ -2421,8 +2460,11 @@ class _PLS(_Base):
         self.n_iter_ = []
         thr = 10 * _F32_EPS
         for _c in range(nc):
-            # Yk columns that are all below 10 eps are set to zero
-            dead = [all(abs(Yk.s[i * q + j]) < thr for i in range(n)) for j in range(q)]
+            # Yk columns that are all below 10 eps are set to zero: per
+            # column, the count of |y| >= thr (-|y| <= -thr, exact) on the
+            # device; q values come back
+            live = k.colsum(k.ew("le", k.ew("scale", k.ew("abs", Yk), s=-1.0), _M.of([-thr], 1, 1)))
+            dead = [v == 0.0 for v in live.s]
             if any(dead):
                 Yk = k.ew("mul", Yk, _M.of([0.0 if d else 1.0 for d in dead], 1, q))
             try:
@@ -2556,8 +2598,8 @@ def _sparse_encode(k, X, D, algorithm, alpha=None, n_nonzero_coefs=None, init=No
     from zero: the Lasso optimum does not depend on the path taken to it);
     'lasso_cd' warm-starts from `init`; 'omp' and 'threshold' as sklearn.
     'lars' is sklearn's Lars(fit_intercept=False, n_nonzero_coefs) of each
-    row on the dictionary's columns, through the linear lane's LARS
-    (x_linear/lars.mojo), one row at a time."""
+    row on the dictionary's columns, on the Gram, every row at once
+    (x_decomp/cells.mojo `lars_row`, x_linear/lars.mojo's lar path)."""
     if algorithm not in _SPARSE_ALGOS:
         raise ValueError(f"algorithm={algorithm!r} is not carried; one of {_SPARSE_ALGOS}")
     n, m = X.r, X.c
@@ -2567,19 +2609,10 @@ def _sparse_encode(k, X, D, algorithm, alpha=None, n_nonzero_coefs=None, init=No
     else:
         reg = alpha if alpha is not None else 1.0
     if algorithm == "lars":
-        # The linear lane's Lars, imported as a MODULE: the lane selector
-        # reads a module import as a door the lane runs whole, so the x_linear
-        # binding is declared for every x_decomp lane and a clean box builds
-        # it (a name import left it undeclared: 1790542293472 on m4pro-a).
-        from . import _expansion_linear as _xlin
-        Lars = _xlin.Lars
-        Dt = D.T.out()
-        code = _M.zeros(n, kc)
-        for i in range(n):
-            coef = Lars(fit_intercept=False, n_nonzero_coefs=int(reg),
-                        numeric_mode=k.mode).fit(Dt, X.row(i)).coef_
-            code.s[i * kc:(i + 1) * kc] = array.array("f", coef.tolist())
-        return code
+        # cgr-decomp (2026-10-03): every row's Lars on the Gram at once, one
+        # device thread a row (x_decomp/cells.mojo `lars_row`), in place of
+        # the linear lane's Lars fitted one row at a time from Python
+        return k.lars_rows(k.mm(D, D, tb=True), k.mm(X, D, tb=True), m, int(reg))
     Q = k.mm(X, D, tb=True)                      # n x k: row i is D x_i
     if algorithm == "threshold":
         code = k.ew("soft", Q, s=reg)
@@ -3064,13 +3097,9 @@ class LatentDirichletAllocation(_Base):
         """`for a in range(0, n, batch_size): self._em_step(k, M.rows(a, b),
         total_samples, False)` in ONE binding call (x_decomp/lda_online.mojo,
         lane/py-decomp-nbrs): the same cells, draws and float32 scalars per
-        mini-batch. MOJOLEARN_XD_LDA_PYTHON=1 runs the Python loop (the
-        reference arm, timing and A/B only)."""
+        mini-batch (cgr-decomp: the MOJOLEARN_XD_LDA_PYTHON loop arm is
+        deleted)."""
         bs = self.batch_size
-        if _os.environ.get("MOJOLEARN_XD_LDA_PYTHON") == "1":
-            for a in range(0, M.r, bs):
-                self._em_step(k, M.rows(a, min(a + bs, M.r)), total_samples, False)
-            return
         if isinstance(bs, bool) or not isinstance(bs, int) or bs < 1:
             raise ValueError("batch_size must be a positive integer")
         C, E = self.components_m_, self._exp_dir
@@ -3252,23 +3281,11 @@ def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
     query's own index (queries ARE the training rows). kind 0 returns
     SQUARED Euclidean distances (the callers take the root); any other kind
     the `_dist` distances themselves."""
-    if not _PY_GRAPH:
-        im, dm = _knn_mats(k, Q, X, n_neighbors, exclude_self, kind, pw)
-        nn = n_neighbors
-        iv, dv = im.s, dm.s
-        return ([[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)],
-                [list(dv[i * nn:(i + 1) * nn]) for i in range(Q.r)])
-    D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
-    # each row's n_neighbors smallest by (value, column), its own column
-    # skipped: exactly nsmallest(n_neighbors + 1) less the row itself, on the
-    # device beside D (lane neural-pass142; the host heap walk was 5.5 s of a
-    # 10,000-row LocallyLinearEmbedding fit on the M4)
-    nn = min(n_neighbors, X.r - (1 if exclude_self else 0))
-    I, V = k.knn_select(D, nn, exclude_self)
-    iv, vv = I.s, V.s
-    idx = [[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)]
-    dst = [list(vv[i * nn:(i + 1) * nn]) for i in range(Q.r)]
-    return idx, dst
+    im, dm = _knn_mats(k, Q, X, n_neighbors, exclude_self, kind, pw)
+    nn = n_neighbors
+    iv, dv = im.s, dm.s
+    return ([[int(iv[i * nn + a]) for a in range(nn)] for i in range(Q.r)],
+            [list(dv[i * nn:(i + 1) * nn]) for i in range(Q.r)])
 
 
 def _center_kernel(k, K):
@@ -3389,51 +3406,6 @@ def _top_eig(k, A, nc, topk=False):
     return w, V.neg_cols(k.absmax_flags(V, True))
 
 
-def _fix_components(k, X, Wg, kind=0, pw=2.0, adj=None):
-    """sklearn `utils/graph.py::_fix_connected_components` on a dense graph:
-    for every pair of connected components (i < j, labels by lowest member),
-    the closest pair of points between them gets an edge of their distance.
-    `adj` (optional): each node's neighbors in either direction, the nonzero
-    entries of Wg's row and column; the components are walked over it
-    (O(edges), not O(n^2) in Python). The labels do not depend on the walk."""
-    n = Wg.r
-    labels = [-1] * n
-    comp = 0
-    for s0 in range(n):
-        if labels[s0] >= 0:
-            continue
-        stack = [s0]
-        labels[s0] = comp
-        while stack:
-            u = stack.pop()
-            for v in (adj[u] if adj is not None else range(n)):
-                if labels[v] < 0 and (adj is not None or Wg.s[u * n + v] != 0 or Wg.s[v * n + u] != 0):
-                    labels[v] = comp
-                    stack.append(v)
-        comp += 1
-    if comp == 1:
-        return Wg, 1
-    import warnings
-    warnings.warn(f"The number of connected components of the neighbors graph is {comp} > 1. "
-                  "Completing the graph to fit Isomap might be slow.", stacklevel=3)
-    D = _dist(k, X, X, kind, pw, same=True)
-    Wg = Wg.copy()
-    for a in range(comp):
-        ia = [i for i in range(n) if labels[i] == a]
-        for b in range(a + 1, comp):
-            ib = [i for i in range(n) if labels[i] == b]
-            best = None
-            for i in ia:
-                for j in ib:
-                    v = D.s[i * n + j]
-                    if best is None or v < best[0]:
-                        best = (v, i, j)
-            v, i, j = best
-            Wg.s[i * n + j] = v if v != 0 else 1e-10
-            Wg.s[j * n + i] = Wg.s[i * n + j]
-    return Wg, comp
-
-
 class Isomap(_Base):
     """sklearn.manifold.Isomap (reference: scikit-learn `manifold/_isomap.py`
     with `KernelPCA(kernel='precomputed')` and `utils/graph.py`): the
@@ -3473,10 +3445,7 @@ class Isomap(_Base):
         k = self._kit()
         M = _M.from_input(X)
         n = M.r
-        if not _PY_GRAPH:
-            Wg, nn = self._graph(k, M, n, kind, pw)
-        else:
-            Wg, nn = self._py_graph(k, M, n, kind, pw)
+        Wg, nn = self._graph(k, M, n, kind, pw)
         D = k.dijkstra(Wg)
         self.dist_matrix_m_ = D
         self.dist_matrix_ = D.out()
@@ -3516,36 +3485,6 @@ class Isomap(_Base):
             k.graph_join(Wg, D, comp, C)
         return Wg, nn
 
-    def _py_graph(self, k, M, n, kind, pw):
-        """MOJOLEARN_XD_PY_GRAPH=1 (A/B): the Python graph build."""
-        Wg = _M.zeros(n, n)
-        adj = [[] for _ in range(n)]      # neighbors either way, for the component walk
-        if self.radius is not None:
-            r = _f32(float(self.radius))
-            D = _dist(k, M, M, kind, pw, same=True)
-            for i in range(n):
-                for j in range(n):
-                    v = D.s[i * n + j]
-                    if j != i and v <= r:
-                        Wg.s[i * n + j] = v if v != 0 else 1e-10   # scipy drops explicit zeros; keep the edge
-                        adj[i].append(j)
-                        adj[j].append(i)
-            nn = None
-        else:
-            nn = int(self.n_neighbors)
-            idx, dst = _knn_lists(k, M, M, nn, True, kind, pw)
-            sq = _M.of([v for row in dst for v in row], n, nn)
-            if kind == 0:
-                sq = k.ew("sqrt", sq)
-            for i in range(n):
-                for a, j in enumerate(idx[i]):
-                    v = sq.s[i * nn + a]
-                    Wg.s[i * n + j] = v if v != 0 else 1e-10   # scipy drops explicit zeros; keep the edge
-                    adj[i].append(j)
-                    adj[j].append(i)
-        Wg, self.n_connected_components_ = _fix_components(k, M, Wg, kind, pw, adj)
-        return Wg, nn
-
     def fit_transform(self, X, y=None):
         return self.fit(X).embedding_
 
@@ -3578,23 +3517,18 @@ class Isomap(_Base):
     def _radius_geodesic(self, k, Q):
         """sklearn's radius transform: for each query, the minimum over the
         training rows within the radius (distance 0 included) of
-        dist_matrix_[j] + d(q, j). The candidates are taken in ascending j,
-        a fixed order, one elementwise min at a time."""
-        n = self._fit_X.r
+        dist_matrix_[j] + d(q, j): one cell per (query, column) on the
+        device, the candidates in ascending j (`graph_radius_geo`)."""
         r = _f32(float(self.radius))
         Dq = _dist(k, Q, self._fit_X, self._kind, self._pw)
         D = self.dist_matrix_m_
-        rows = []
-        for i in range(Q.r):
-            js = [j for j in range(n) if Dq.s[i * n + j] <= r]
-            if not js:
-                raise ValueError(f"Isomap.transform: query row {i} has no training row within radius {self.radius}")
-            g = None
-            for j in js:
-                cand = k.ew("adds", D.rows(j, j + 1), s=Dq.s[i * n + j])
-                g = cand if g is None else k.ew("min", g, cand)
-            rows.append(g)
-        return _vstack(*rows)
+        # every query has a training row within the radius: the per-row
+        # counts and their total on the device, one scalar read
+        hits = k.ew("gts", k.rowsum(k.ew("le", Dq, _M.of([r], 1, 1))), s=0.5)
+        if Q.r and k.total(hits).s[0] != Q.r:
+            i = list(hits.s).index(0.0)
+            raise ValueError(f"Isomap.transform: query row {i} has no training row within radius {self.radius}")
+        return k.graph_radius_geo(Dq, D, r)
 
     def reconstruction_error(self):
         self._check("embedding_m_")
@@ -3662,21 +3596,6 @@ class MDS(_Base):
 
     def _dist(self, k, Y):
         return k.ew("sqrt", k.sqdist(Y, Y))
-
-    def _disparities(self, k, n, pos, flat):
-        """sklearn's non-metric disparities: the upper-triangle values at
-        `pos` (row-major, dissimilarity != 0), scaled by sqrt((n (n - 1) / 2)
-        / sum of their squares), mirrored below the diagonal (an exact copy:
-        sklearn adds a zero)."""
-        P = _M.zeros(n, n)
-        for q, v in zip(pos, flat):
-            P.s[q] = v
-        ss = k.total(k.ew("sq", P)).s[0]
-        P = k.ew("scale", P, s=math.sqrt((n * (n - 1) / 2) / ss))
-        for q in pos:
-            i, j = divmod(q, n)
-            P.s[j * n + i] = P.s[q]
-        return P
 
     def _nm_native(self, k, Dis, n):
         """The non-metric SMACOF bookkeeping in native calls (lane/py-decomp-nbrs):
@@ -3747,52 +3666,34 @@ class MDS(_Base):
 
     def _single(self, k, Dis, Y, run):
         n = Dis.r
-        nonmetric = not self.metric_mds
-        native = (nonmetric and n * n <= 2147483647 and _os.environ.get("MOJOLEARN_XD_MDS_PYTHON") != "1")
+        # cgfin-c-decomp: non-metric SMACOF's bookkeeping is the native
+        # calls only (`_nm_native`); the Python pair lists and the
+        # MOJOLEARN_XD_MDS_PYTHON switch are deleted
+        native = not self.metric_mds
         if native:
+            if n * n > 2147483647:
+                raise ValueError(f"MDS(metric_mds=False): {n} rows exceed the 32-bit pair index (n * n <= 2**31 - 1)")
             nm = self._nm_native(k, Dis, n)
-            nonmetric = False
-        if nonmetric:
-            # sklearn `_smacof_single` with metric=False: a zero dissimilarity
-            # is a missing value; the first iteration uses the dissimilarities
-            # themselves, later ones IsotonicRegression(out_of_bounds='clip')
-            # of the distances on the dissimilarities (the linear lane's
-            # x_linear PAVA, fitted on (x, y)-sorted rows).
-            from . import _expansion_linear as _xlin    # a module import: see _sparse_encode
-            IsotonicRegression = _xlin.IsotonicRegression
-            pos = [i * n + j for i in range(n) for j in range(i + 1, n) if Dis.s[i * n + j] != 0]
-            dis_w = [Dis.s[q] for q in pos]
-            ir = IsotonicRegression(out_of_bounds="clip", numeric_mode=self.numeric_mode_)
         disp = Dis
         d = self._dist(k, Y)
         old = None
         it = 0
-        # The Guttman transform's diagonal on the device (lane hr2-mds-agglo):
-        # B's diagonal gets the row sums by fma(I, rs, B) (1 * rs + B, one
-        # rounding: the add the host loop did; 0 * rs + B is B off it), so
-        # the n x n matrix stays resident; the host loop read all of B and
-        # wrote it back every iteration. MOJOLEARN_XD_MDS_DIAG_V0=1 is the
-        # old loop (the A/B switch).
-        eye = None
-        if _os.environ.get("MOJOLEARN_XD_MDS_DIAG_V0") != "1":
-            eye = k.diag_mask(n)
+        # The Guttman transform's diagonal (lane hr2-mds-agglo): B's diagonal
+        # gets the row sums by fma(I, rs, B) (1 * rs + B, one rounding;
+        # 0 * rs + B is B off it), so the n x n matrix stays resident. The
+        # host binding takes the same fma on a host identity.
+        eye = k.diag_mask(n)
+        if eye is None:
+            eye = _eye(n)
         floor = k.const(1e-5)
         for it in range(1, self.max_iter + 1):
             if native:
                 disp = nm(d, it == 1)
-            elif nonmetric:
-                flat = dis_w if it == 1 else ir.fit_transform(dis_w, [d.s[q] for q in pos]).tolist()
-                disp = self._disparities(k, n, pos, flat)
             dz = k.ew("select", d, d, floor, s=0.0)
             ratio = k.ew("div", disp, dz)
             B = k.ew("scale", ratio, s=-1.0)
             rs = k.rowsum(ratio)
-            if eye is not None:
-                B = k.ew("fma", eye, rs, B)
-            else:
-                B = B.copy()
-                for i in range(n):
-                    B.s[i * n + i] = _f32(B.s[i * n + i] + rs.s[i])
+            B = k.ew("fma", eye, rs, B)
             Y = k.ew("scale", k.mm(B, Y), s=1.0 / n)
             d = self._dist(k, Y)
             stress = k.total(k.ew("sqdiff", d, disp)).s[0] / 2
@@ -3939,28 +3840,16 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     floor = _LLE_NULL_FLOOR * _F32_EPS * rms
     F0 = _hstack(Fhat, un)
     lu, piv, _ = k.lu(F0)
-    ls = lu.s
     # a pivot under float32 resolution (an exactly zero one skipped its
     # step) is set to eps times the largest: inverse iteration's usual
     # perturbation (LAPACK's stein/hsein); the factor is only the spectral
-    # transform, the Rayleigh-Ritz step below uses F^ itself
-    big = max(abs(ls[i * n + i]) for i in range(n))
+    # transform, the Rayleigh-Ritz step below uses F^ itself. The floor and
+    # the swaps' row order (and its inverse) are cells (`lu_aux`), no host
+    # loop over the rows.
+    st, _, pm, im = k.lu_aux(lu, piv, clamp=True)
+    big = st[0]
     if not (big > 0.0 and math.isfinite(big)):
         return None
-    tiny = _f32(_F32_EPS * big)
-    for i in range(n):
-        d = ls[i * n + i]
-        if abs(d) < tiny:
-            ls[i * n + i] = -tiny if d < 0 else tiny
-    perm = list(range(n))
-    for i in range(n):
-        j = int(piv[i])
-        perm[i], perm[j] = perm[j], perm[i]
-    inv = [0] * n
-    for i, j in enumerate(perm):
-        inv[j] = i
-    pm = _M.of([float(v) for v in perm], n, 1)
-    im = _M.of([float(v) for v in inv], n, 1)
 
     def solve(B):               # F0^-1 B = U^-1 L^-1 P B
         return k.trisolve(lu, pm, B)
@@ -4058,29 +3947,19 @@ class LocallyLinearEmbedding(_Base):
                              "[n_components * (n_components + 3) / 2]")
         if self.method == "modified" and nn < nc:
             raise ValueError("modified LLE requires n_neighbors >= n_components")
-        if self.method == "standard" and not _PY_GRAPH:
-            # lane hr2-graph-embed: the kNN, the barycenter weights and I - W
-            # as cells, I - W resident on the GPU binding
-            idm, _ = _knn_mats(k, M, M, nn, True)
+        # lane hr2-graph-embed: the kNN, the barycenter weights and I - W
+        # as cells, I - W resident on the GPU binding; cgr-decomp: the LTSA,
+        # Hessian and modified factors as cells too (x_decomp/lle_local.mojo,
+        # the local eigensolves batched), no Python loop over the samples
+        idm, _ = _knn_mats(k, M, M, nn, True)
+        if self.method == "standard":
             IW = k.graph_lle_iw(idm, k.barycenter(M, M, idm, self.reg), n)
-            idx = None
-        else:
-            idx, _ = _knn_lists(k, M, M, nn, True)
-        if idx is None:
-            pass
         elif self.method == "ltsa":
-            IW = self._ltsa_factor(k, M, idx, nn, nc)
+            IW = k.lle_local(M, idm, 0, nn, nc, 0.0)
         elif self.method == "hessian":
-            IW = self._hessian_factor(k, M, idx, nn, nc)
-        elif self.method == "modified":
-            IW = self._modified_factor(k, M, idx, nn, nc)
+            IW = k.lle_local(M, idm, 1, nn, nc, float(self.hessian_tol))
         else:
-            Wb = k.barycenter(M, M, idx, self.reg)
-            IW = _M.zeros(n, n)
-            for i in range(n):
-                IW.s[i * n + i] = 1.0
-                for a, j in enumerate(idx[i]):
-                    IW.s[i * n + j] = _f32(IW.s[i * n + j] - Wb.s[i * nn + a])
+            IW = k.lle_local(M, idm, 2, nn, nc, float(self.modified_tol))
         # The eigenvectors of M = (I - W)^T (I - W) for its smallest
         # eigenvalues are the right singular vectors of I - W for its
         # smallest singular values. Those eigenvalues sit near 1e-7, under
@@ -4106,129 +3985,6 @@ class LocallyLinearEmbedding(_Base):
         self.n_features_in_ = M.c
         return self
 
-    def _ltsa_factor(self, k, M, idx, nn, nc):
-        """sklearn LTSA's M = sum_i S_i^T (I - G_i G_i^T) S_i, returned as the
-        stacked factor B (n k x n) with M = B^T B, since I - G G^T is a
-        projector: G_i = [1/sqrt(k), the nc top eigenvectors of the centered
-        neighborhood's Gram] (Jacobi eigh, sign free: G G^T does not see it).
-        The null space is then B's smallest right singular vectors."""
-        n = M.r
-        B = _M.zeros(n * nn, n)
-        inv = 1.0 / math.sqrt(nn)
-        for i in range(n):
-            Xi = M.take_rows(idx[i])
-            Xi = k.ew("sub", Xi, k.colmean(Xi))
-            _, V = k.eigh(k.mm(Xi, Xi, tb=True))
-            top = V.take_cols(list(range(nn - 1, nn - 1 - nc, -1)))
-            Gi = _hstack(k.const(inv, nn, 1), top)
-            P = k.ew("sub", _eye(nn), k.mm(Gi, Gi, tb=True))
-            for a in range(nn):
-                row = (i * nn + a) * n
-                for b, j in enumerate(idx[i]):
-                    B.s[row + j] = P.s[a * nn + b]
-        return B
-
-    def _hessian_factor(self, k, M, idx, nn, nc):
-        """sklearn Hessian LLE's M = sum_i S_i^T w_i w_i^T S_i as the stacked
-        factor B (n (k - 1 - nc) x n), B_i = w_i^T scattered to the neighbor
-        columns. Yi = [1, U, the products U_a U_b (a <= b)] with U the nc top
-        eigenvectors of the centered neighborhood's Gram (sign free: every
-        column of w is divided by its own sum); w = the columns of Yi's
-        orthonormal basis past the linear ones (x_decomp orth, the Householder
-        R route: Gram-Schmidt of Yi up to sign) and then an orthonormal basis
-        of Yi's complement (the eigenvalue-1 eigenvectors of I - Q Q^T, Jacobi
-        eigh, descending). sklearn takes that complement from LAPACK's full Q,
-        whose basis is LAPACK's own choice (x_decomp/NOT_IMPLEMENTED.tsv:
-        DELIBERATELY DIVERGENT). A column sum under hessian_tol counts as 1."""
-        n = M.r
-        dp = nc * (nc + 1) // 2
-        ncol = nn - 1 - nc
-        extra = ncol - dp
-        tol = float(self.hessian_tol)
-        B = _M.zeros(n * ncol, n)
-        for i in range(n):
-            Gi = M.take_rows(idx[i])
-            Gi = k.ew("sub", Gi, k.colmean(Gi))
-            _, V = k.eigh(k.mm(Gi, Gi, tb=True))
-            U = V.take_cols(list(range(nn - 1, nn - 1 - nc, -1)))
-            cols = [k.const(1.0, nn, 1), U]
-            for a in range(nc):
-                cols.append(k.ew("mul", U.cols(a, nc), U.cols(a, a + 1)))
-            Q = k.orth(_hstack(*cols))
-            w = Q.cols(nc + 1, nc + 1 + dp)
-            if extra > 0:
-                _, Vc = k.eigh(k.ew("sub", _eye(nn), k.mm(Q, Q, tb=True)))
-                w = _hstack(w, Vc.take_cols(list(range(nn - 1, nn - 1 - extra, -1))))
-            S = k.colsum(w)
-            S = _M.of([1.0 if abs(v) < tol else v for v in S.s], 1, ncol)
-            w = k.ew("div", w, S)
-            for c in range(ncol):
-                row = (i * ncol + c) * n
-                for a, j in enumerate(idx[i]):
-                    B.s[row + j] = w.s[a * ncol + c]
-        return B
-
-    def _modified_factor(self, k, M, idx, nn, nc):
-        """sklearn modified LLE (Zhang & Wang) as a stacked factor: M = sum_i
-        A_i A_i^T with A_i (n x s_i) holding W_i on the neighbor rows and -1
-        on row i, which is sklearn's W_i W_i^T, -W_i 1 on row and column i
-        and s_i on the diagonal. The local spectra are the Jacobi eigh of
-        X_nbrs X_nbrs^T (descending; sklearn takes the full SVD of X_nbrs when
-        k > d, whose null-space basis is LAPACK's own choice:
-        x_decomp/NOT_IMPLEMENTED.tsv, DELIBERATELY DIVERGENT). The per-point
-        vectors (at most k values) are then IEEE double arithmetic in a fixed
-        order: the regularized weights, rho, eta (the median), s_i, alpha_i,
-        the Householder vector h and W_i."""
-        n, d = M.r, M.c
-        nev = min(d, nn)
-        tol = float(self.modified_tol)
-        Vs, evs = [], []
-        for i in range(n):
-            Xn = k.ew("sub", M.take_rows(idx[i]), M.rows(i, i + 1))
-            w, V = k.eigh(k.mm(Xn, Xn, tb=True))
-            order = list(range(nn - 1, -1, -1))
-            Vs.append(V.take_cols(order))
-            evs.append([float(w.s[j]) for j in order[:nev]])
-        wreg, rho = [], []
-        for i in range(n):
-            V, ev = Vs[i], evs[i]
-            reg = 1e-3 * _dsum(ev)
-            tmp = [_dsum(V.s[a * nn + c] for a in range(nn)) for c in range(nn)]
-            tmp = [tmp[c] / (ev[c] + reg) if c < nev else tmp[c] / reg for c in range(nn)]
-            wr = [_dsum(V.s[a * nn + c] * tmp[c] for c in range(nn)) for a in range(nn)]
-            tot = _dsum(wr)
-            wreg.append([v / tot for v in wr])
-            rho.append(_dsum(ev[nc:]) / _dsum(ev[:nc]))
-        srt = sorted(rho)
-        eta = srt[n // 2] if n % 2 else (srt[n // 2 - 1] + srt[n // 2]) / 2
-        cols = []
-        for i in range(n):
-            V, ev = Vs[i], evs[i]
-            cum, t = [], 0.0
-            for v in ev:
-                t += v
-                cum.append(t)
-            er = [cum[-1] / c - 1 for c in cum[:-1]][::-1]
-            si = sum(1 for v in er if v < eta) + nn - nev
-            Vi = [[float(V.s[a * nn + c]) for c in range(nn - si, nn)] for a in range(nn)]
-            vs = [_dsum(Vi[a][c] for a in range(nn)) for c in range(si)]
-            alpha = math.sqrt(_dsum(v * v for v in vs)) / math.sqrt(si)
-            h = [alpha - v for v in vs]
-            nh = math.sqrt(_dsum(v * v for v in h))
-            h = [0.0] * si if nh < tol else [v / nh for v in h]
-            for c in range(si):
-                col = [0.0] * n
-                for a, j in enumerate(idx[i]):
-                    vh = _dsum(Vi[a][e] * h[e] for e in range(si))
-                    col[j] = Vi[a][c] - 2 * vh * h[c] + (1 - alpha) * wreg[i][a]
-                col[i] = -1.0
-                cols.append(col)
-        rows = max(len(cols), n)
-        B = _M.zeros(rows, n)
-        for r, col in enumerate(cols):
-            B.s[r * n:(r + 1) * n] = array.array("f", col)
-        return B
-
     def fit_transform(self, X, y=None):
         return self.fit(X).embedding_
 
@@ -4236,15 +3992,11 @@ class LocallyLinearEmbedding(_Base):
         self._check("embedding_m_")
         k = self._kit()
         Q = _M.from_input(X)
-        idx, _ = _knn_lists(k, Q, self._fit_X, self._knn, False)
-        Wb = k.barycenter(Q, self._fit_X, idx, self.reg)
-        out = _M.zeros(Q.r, self.embedding_m_.c)
-        # X_new[i] = sum_a W[i, a] * embedding[idx[i][a]]  (one gemm row per query)
-        for i in range(Q.r):
-            E = self.embedding_m_.take_rows(idx[i])
-            r = k.mm(Wb.rows(i, i + 1), E)
-            out.s[i * out.c:(i + 1) * out.c] = r.s
-        return out.out()
+        idm, _ = _knn_mats(k, Q, self._fit_X, self._knn, False)
+        Wb = k.barycenter(Q, self._fit_X, idm, self.reg)
+        # X_new[i] = sum_a W[i, a] * embedding[idx[i][a]]: one cell per output
+        # (x_decomp/lle_local.mojo `lle_apply_cell`), no loop over the queries
+        return k.lle_apply(Wb, idm, self.embedding_m_).out()
 
 
 # ================================================================ robust covariance
@@ -4260,12 +4012,11 @@ def _pinvh(k, A):
 
 def _slogdet(k, A):
     """(sign, log|det|) from the LU factorization (getrf; sums ascending)."""
-    n = A.r
     lu, piv, info = k.lu(A)
-    diag = _M.of([lu.s[i * n + i] for i in range(n)], 1, n)
-    if any(v == 0 for v in diag.s):
+    st, diag, _, _ = k.lu_aux(lu, piv)
+    if st[1] > 0:
         return 0.0, -math.inf
-    neg = sum(1 for v in diag.s if v < 0) + sum(1 for i, p in enumerate(piv) if p != i)
+    neg = int(st[2]) + int(st[3])
     ld = k.total(k.ew("logs", k.ew("abs", diag), s=1.1754943508222875e-38)).s[0]
     return (-1.0 if neg % 2 else 1.0), ld
 
@@ -4281,6 +4032,38 @@ def _emp_cov(k, Xs, assume_centered=False):
         return k.ew("scale", k.mm(Xs, Xs, ta=True), s=1.0 / Xs.r)
     Xc = k.ew("sub", Xs, k.colmean(Xs))
     return k.ew("scale", k.mm(Xc, Xc, ta=True), s=1.0 / Xs.r)
+
+
+def _f32_below(x):
+    """The largest float32 strictly below the float x: v < x is v <= this for
+    every float32 v (the kit's `le` cell takes the same decision)."""
+    f = _f32(x)
+    if f < x:
+        return f
+    b = array.array("f", [f])
+    u = array.array("I", b.tobytes())
+    if f > 0.0:
+        u[0] -= 1
+    elif f == 0.0:
+        u[0] = 0x80000001          # the least negative subnormal
+    else:
+        u[0] += 1
+    return array.array("f", u.tobytes())[0]
+
+
+def _masked_cov(k, M, m, assume_centered):
+    """sklearn's location and empirical covariance of the rows of M whose
+    mask entry (m, n x 1, 0 or 1) is 1, on the device: the masked rows are
+    exact zeros in the products, the count is the mask's total."""
+    cnt = k.total(m).s[0]
+    Xm = k.ew("mul", M, m)
+    if assume_centered:
+        loc = _M.zeros(1, M.c)
+        Xc = Xm
+    else:
+        loc = k.ew("scale", k.colsum(Xm), s=1.0 / cnt)
+        Xc = k.ew("mul", k.ew("sub", M, loc), m)
+    return loc, k.ew("scale", k.mm(Xc, Xc, ta=True), s=1.0 / cnt)
 
 
 def _mahal(k, X, loc, P):
@@ -4497,7 +4280,8 @@ class MinCovDet(_Base):
         loc, cov, support, dist = self._fast_mcd(k, M)
         if self.assume_centered:
             loc = _M.zeros(1, p)
-            cov = _emp_cov(k, M.take_rows([i for i in range(n) if support[i]]), assume_centered=True)
+            sm = _M.of([1.0 if v else 0.0 for v in support], n, 1)
+            _, cov = _masked_cov(k, M, sm, True)
             dist = k.rowsum(k.ew("mul", k.mm(M, _pinvh(k, cov)), M))
         self.raw_location_m_, self.raw_covariance_m_ = loc, cov
         self.raw_location_ = loc.out((p,))
@@ -4510,11 +4294,12 @@ class MinCovDet(_Base):
         dist = k.ew("scale", dist, s=1.0 / corr)
         # reweight_covariance
         thr = _chi2_quantile(k, p, 0.025)
-        mask = [v < thr for v in dist.s]
-        Xm = M.take_rows([i for i in range(n) if mask[i]])
-        locr = _M.zeros(1, p) if self.assume_centered else k.colmean(Xm)
-        covr = k.ew("scale", _emp_cov(k, Xm, assume_centered=self.assume_centered),
-                    s=_consistency_factor(k, p, 0.975))
+        # the reweighting mask dist < thr on the device (`le` against the
+        # float32 just below thr: the same decision), then the masked moments
+        mm = k.ew("le", dist, _M.of([_f32_below(thr)], 1, 1))
+        locr, covr = _masked_cov(k, M, mm, self.assume_centered)
+        covr = k.ew("scale", covr, s=_consistency_factor(k, p, 0.975))
+        mask = [v != 0.0 for v in mm.s]
         self.location_m_, self.covariance_m_ = locr, covr
         self.precision_m_ = _pinvh(k, covr)
         self.location_ = locr.out((p,))

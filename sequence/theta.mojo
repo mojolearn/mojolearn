@@ -17,7 +17,23 @@ reference computes nmse-step forecasts and uses only the first for the
 objective); the ACF, the decomposition and the objective are float32."""
 from sequence.nm import Objective, nelder_mead
 from sequence.ops import FP, Args, add, fma3, ld, mul, st, sub
-from checks.numerics import ftz, identical_div, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
+from std.sys.compile import is_defined
+
+#: lane/apple-fast-tier (2026-10-02). `theta_run` writes five state words
+#: and one error per step to the thread's device scratch and reads the
+#: previous row back, on a kernel of one thread per series (64 series on
+#: taxi-hourly): every step is a round trip to device memory with no other
+#: threads to hide it behind, inside Nelder-Mead's up to 1000 evaluations
+#: (board: theta taxi-hourly FAST 1,747 ms, IDENTICAL 388). Only row n - 1
+#: is ever read after the run (by the forecast) and the error sum is a
+#: running fma, so `-D MOJOLEARN_SEQ_THETA_REG=1` keeps the recurrence in
+#: registers: the same operations in the same order, four words written.
+#: FAST only; IDENTICAL compiles the stored-row code.
+comptime THETA_REG = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    and is_defined["MOJOLEARN_SEQ_THETA_REG"]()
+)
 
 comptime STM = 0
 comptime OTM = 1
@@ -105,6 +121,105 @@ def theta_run(
 
 
 @always_inline
+def theta_run_reg(
+    y: FP, n: Int, model: Int, level0: Float32, alpha: Float32, theta: Float32, last: FP,
+) -> Float32:
+    """`theta_run` with the state rows in registers (MOJOLEARN_SEQ_THETA_REG):
+    writes row n - 1 (level, meany, A, B) to `last[0:4]` and returns
+    sum(e[3:]^2) / max(mean|y|, 1e-10), the error sum accumulated as each
+    error is formed, in the same order as the stored-row code."""
+    var dyn = model == DSTM or model == DOTM
+    var A: Float32
+    var B: Float32
+    var mu: Float32
+    var y0 = ld(y, 0)
+    var k = sub(Float32(1.0), div(Float32(1.0), theta))
+    if dyn:
+        A = y0
+        B = Float32(0.0)
+        mu = y0
+    else:
+        var s = Float32(0.0)
+        var w = Float32(0.0)
+        for i in range(n):
+            var v = ld(y, i)
+            s = add(s, v)
+            w = fma3(v, Float32(i + 1), w)
+        var ym = div(s, Float32(n))
+        var wa = div(w, Float32(n))
+        B = div(mul(Float32(6.0), sub(mul(Float32(2.0), wa), mul(Float32(n + 1), ym))),
+                Float32(n * n - 1))
+        A = sub(ym, div(mul(Float32(n + 1), B), Float32(2.0)))
+        mu = fma3(k, add(A, B), level0)
+    var oma = sub(Float32(1.0), alpha)
+    var lev = fma3(alpha, y0, mul(oma, level0))
+    var my = y0
+    var An = A
+    var Bn = B
+    _ = sub(y0, mu)   # e[0]: outside the error sum (i >= 3)
+    var sse = Float32(0.0)
+    var pw = oma          # (1 - alpha)^i at i = 1
+    for i in range(1, n):
+        var pw1 = mul(pw, oma)
+        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+        var yi = ld(y, i)
+        var ei = sub(yi, m)
+        if i >= 3:
+            sse = fma3(ei, ei, sse)
+        var lev2 = fma3(alpha, yi, mul(oma, lev))
+        var my2 = div(fma3(Float32(i), my, yi), Float32(i + 1))
+        if dyn:
+            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(yi, my)), Float32(i + 1))),
+                         Float32(i + 2))
+            Bn = b2
+            An = sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0)))
+        lev = lev2
+        my = my2
+        pw = pw1
+    st(last, 0, lev)
+    st(last, 1, my)
+    st(last, 2, An)
+    st(last, 3, Bn)
+    var sa = Float32(0.0)
+    for i in range(n):
+        sa = add(sa, abs(ld(y, i)))
+    var mean_y = div(sa, Float32(n))
+    if mean_y < Float32(1e-10):
+        mean_y = Float32(1e-10)
+    return div(sse, mean_y)
+
+
+@always_inline
+def theta_forecast_reg(n: Int, h: Int, model: Int, alpha: Float32, theta: Float32, last: FP, f: FP):
+    """`theta_forecast` from `theta_run_reg`'s last row, the h rows in registers."""
+    var dyn = model == DSTM or model == DOTM
+    var k = sub(Float32(1.0), div(Float32(1.0), theta))
+    var oma = sub(Float32(1.0), alpha)
+    var pw = Float32(1.0)
+    for _ in range(n):
+        pw = mul(pw, oma)
+    var lev = ld(last, 0)
+    var my = ld(last, 1)
+    var An = ld(last, 2)
+    var Bn = ld(last, 3)
+    for j in range(h):
+        var i = n + j
+        var pw1 = mul(pw, oma)
+        var m = fma3(k, add(mul(An, pw), div(mul(Bn, sub(Float32(1.0), pw1)), alpha)), lev)
+        var lev2 = fma3(alpha, m, mul(oma, lev))
+        var my2 = div(fma3(Float32(i), my, m), Float32(i + 1))
+        if dyn:
+            var b2 = div(add(mul(Float32(i - 1), Bn), div(mul(Float32(6.0), sub(m, my)), Float32(i + 1))),
+                         Float32(i + 2))
+            Bn = b2
+            An = sub(my2, div(mul(b2, Float32(i + 2)), Float32(2.0)))
+        lev = lev2
+        my = my2
+        st(f, j, m)
+        pw = pw1
+
+
+@always_inline
 def theta_forecast(n: Int, h: Int, model: Int, alpha: Float32, theta: Float32, states: FP, f: FP):
     """`forecast`: h updates past row n - 1 with y = mu."""
     var dyn = model == DSTM or model == DOTM
@@ -186,7 +301,11 @@ struct ThetaObj(Objective):
     @always_inline
     def eval(mut self, x: FP) -> Float32:
         var p = self.params(x)
-        var mse = theta_run(self.y, self.n, self.model, p[0], p[1], p[2], self.states, self.e)
+        var mse = Float32(0.0)
+        comptime if THETA_REG:
+            mse = theta_run_reg(self.y, self.n, self.model, p[0], p[1], p[2], self.states)
+        else:
+            mse = theta_run(self.y, self.n, self.model, p[0], p[1], p[2], self.states, self.e)
         return mse if mse > Float32(-1e10) else Float32(-1e10)
 
 
@@ -338,7 +457,11 @@ def op_theta(t: Int, a: Args):
         if k > 0:
             it = nelder_mead(obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4))
         var p = obj.params(x)
-        var mse = theta_run(yd, n, model, p[0], p[1], p[2], states, e)
+        var mse = Float32(0.0)
+        comptime if THETA_REG:
+            mse = theta_run_reg(yd, n, model, p[0], p[1], p[2], states)
+        else:
+            mse = theta_run(yd, n, model, p[0], p[1], p[2], states, e)
         if mse < best_mse:
             best_mse = mse
             best_model = model
@@ -346,8 +469,12 @@ def op_theta(t: Int, a: Args):
             ba = p[1]
             bt = p[2]
             iters = it
-    _ = theta_run(yd, n, best_model, bl, ba, bt, states, e)
-    theta_forecast(n, h, best_model, ba, bt, states, f)
+    comptime if THETA_REG:
+        _ = theta_run_reg(yd, n, best_model, bl, ba, bt, states)
+        theta_forecast_reg(n, h, best_model, ba, bt, states, f)
+    else:
+        _ = theta_run(yd, n, best_model, bl, ba, bt, states, e)
+        theta_forecast(n, h, best_model, ba, bt, states, f)
     for j in range(h):
         var v = ld(f, j)
         if decompose:

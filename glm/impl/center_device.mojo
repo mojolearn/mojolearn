@@ -13,7 +13,7 @@ integer sum, so any order is the same total) and its thread 0 rounds the
 total once to float64 bits. Center and scale: one thread per cell."""
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
@@ -178,3 +178,51 @@ def scale_rows_device(ctx: DeviceContext, x: Int, w: Int, dst: Int, rows: Int, c
     _ = d_x^
     _ = d_w^
     _ = d_o^
+
+
+# ---- resident forms (lane apple-fast-olsne, 2026-10-03) --------------------
+# The same two kernels on buffers already on the device, so LinearRegression's
+# normal-equations route uploads X and y ONCE (`ols_fit_resident_host`)
+# instead of once per helper (col sums, center, solve). Same kernels, same
+# launch shapes, same inputs: the same words as col_sums_device and
+# center_device.
+
+
+def col_sums_buf(
+    ctx: DeviceContext,
+    mut d_x: DeviceBuffer[DType.float32],
+    mut d_o: DeviceBuffer[DType.uint64],
+    rows: Int,
+    cols: Int,
+) raises:
+    """d_o (uint64[cols], float64 bits): col_sums_device on a resident
+    [rows, cols] buffer. Enqueued only; the caller synchronizes."""
+    comptime assert CS_SMEM_FITS, "col_sums_buf: a 2 KB threadgroup page must fit"
+    if rows <= 0 or cols <= 0:
+        raise Error("col_sums: rows and cols must be positive")
+    var rb = cs_rows_per_block(rows)
+    var nrb = (rows + rb - 1) // rb
+    var d_p = ctx.enqueue_create_buffer[DType.int64](nrb * cols * CS_WORDS)
+    var threads = nrb * cols
+    ctx.enqueue_function[cs_partial_kernel](d_x.unsafe_ptr(), d_p.unsafe_ptr(), Int64(rows), Int64(cols), Int64(rb),
+                                            grid_dim=(threads + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
+    ctx.enqueue_function[cs_fold_kernel](d_p.unsafe_ptr(), d_o.unsafe_ptr(), Int64(nrb), Int64(cols),
+                                         grid_dim=cols, block_dim=CS_TPB)
+    ctx.synchronize()
+    _ = d_p^
+
+
+def center_buf(
+    ctx: DeviceContext,
+    mut d_x: DeviceBuffer[DType.float32],
+    mut d_m: DeviceBuffer[DType.float32],
+    mut d_o: DeviceBuffer[DType.float32],
+    rows: Int,
+    cols: Int,
+) raises:
+    """d_o = center_device(d_x, d_m) on resident buffers. Enqueued only."""
+    var cells = rows * cols
+    if cells <= 0:
+        return
+    ctx.enqueue_function[center_kernel](d_x.unsafe_ptr(), d_m.unsafe_ptr(), d_o.unsafe_ptr(), Int64(rows), Int64(cols),
+                                        grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)

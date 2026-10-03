@@ -3,13 +3,19 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The M3 FAST board refresh: lane selection, box-side helpers, and the merge.
 
-    af_board_merge.py merge --logs LOGFILE [--tsv TSV] [--trees-board JSON] [--out MD]
+    af_board_merge.py merge --logs LOGFILE [--mode fast|identical] [--opp-lines FILE ...]
+                            [--tsv TSV] [--trees-board JSON] [--out MD]
         Laptop. LOGFILE holds the `lq log m3 <tag> '^AFB'` output of every job
         tools/af_board_queue.sh queued (AFB result lines and the opp job's
         AFB-OPPZ chunks). Writes docs/apple-fast/BOARD_M3_FAST.md: per lane x
         dataset, FAST before (0.8.34 M3 board; Sept 29 M3 board for trees) ->
         after, best opponent and arm, ratio before -> after, held-out quality,
         flips. Worst ratio after first. Opponents are not re-raced.
+        --mode identical reads an AFB_MODE=identical run: before = the boards'
+        IDENTICAL cells, page docs/apple-fast/BOARD_M3_IDENTICAL.md.
+        --opp-lines: files of `OPP family=.. lane=.. ds=.. arm=.. status=ok
+        median_ms=..` lines (the M3 opponent fill, tools/opp_only_board.py);
+        their best ok arm per race replaces the stored best opponent.
 
     af_board_merge.py select --branch BR [--lanesel JSON | --lanes a,b] [--batch N] [--prefix P] [--lq LQ]
         Laptop (called by af_board_queue.sh). Prints the lq lines.
@@ -33,6 +39,7 @@ EVID = os.path.expanduser("~/mojolearn-evidence")
 TSV = os.path.join(EVID, "board-0834-times.tsv")
 TREES_BOARD = os.path.join(EVID, "board-archive/m3-ultra/2026-09-29_m3ultra_checked/board.json")
 OUT_MD = os.path.join(REPO, "docs/apple-fast/BOARD_M3_FAST.md")
+OUT_MD_IDENT = os.path.join(REPO, "docs/apple-fast/BOARD_M3_IDENTICAL.md")
 
 # Tree board lanes (bench/speed/forest_speed_arm.py) -> binding build, datasets.
 TREE_LANES = {
@@ -201,15 +208,17 @@ def _q(q):
             if isinstance(v, (int, float)) and not isinstance(v, bool) and not k.endswith("_matches_fit")}
 
 
-def _cells(rec):
-    """(fast cell, best opponent cell) of one board race, fit phase."""
+def _cells(rec, mode="fast"):
+    """(our `mode` cell, best opponent cell) of one board race, fit phase."""
     fast, opp = None, []
     for c in rec.get("cells") or []:
         if c.get("phase") not in (None, "fit"):
             continue
         ms = c.get("median_ms")
         if c.get("library") == "mojolearn" or str(c.get("arm", "")).startswith("ours"):
-            if c.get("mode") == "fast" and ms:
+            # our CPU is never reported (Andrew, Oct 2 2026)
+            if c.get("mode") == mode and ms and c.get("device") != "cpu" \
+                    and c.get("arm") != "ours-cpu":
                 fast = c
         elif ms and c.get("status") == "ok":
             opp.append(c)
@@ -224,8 +233,10 @@ def cmd_extract(a):
         if rec.get("family") in ("trees", "neural"):
             continue
         fast, best = _cells(rec)
+        ident, _ = _cells(rec, "identical")
         key = "%s/%s" % (rec.get("lane") or rid.split("/")[1], rec.get("dataset") or rid.split("/")[2])
         rows[key] = {"fast_ms": fast and round(fast["median_ms"], 1), "fast_q": _q(fast and fast.get("quality")),
+                     "ours_ms": ident and round(ident["median_ms"], 1), "ours_q": _q(ident and ident.get("quality")),
                      "best_arm": best and best.get("arm"), "best_ms": best and round(best["median_ms"], 1),
                      "best_q": _q(best and best.get("quality"))}
     blob = base64.b64encode(gzip.compress(json.dumps(rows, separators=(",", ":")).encode())).decode()
@@ -259,6 +270,25 @@ def _read_logs(path):
     return res, opp
 
 
+def _read_opp_lines(paths):
+    """(family, lane, ds) -> (best ok arm, ms, quality) from OPP fill lines."""
+    best = {}
+    for path in paths or []:
+        for ln in open(os.path.expanduser(path), errors="replace"):
+            if not ln.startswith("OPP "):
+                continue
+            kv = dict(re.findall(r"(\w+)=(\[[^\]]*\]|\S+)", ln))
+            ms = _num(kv.get("median_ms"))
+            if kv.get("status") != "ok" or ms is None:
+                continue
+            m = re.search(r"acc=metric=(\S+) value=(\S+)", ln)
+            q = {m.group(1): _num(m.group(2))} if m and _num(m.group(2)) is not None else {}
+            key = (kv.get("family"), kv.get("lane"), kv.get("ds"))
+            if key not in best or ms < best[key][1]:
+                best[key] = (kv.get("arm"), ms, q)
+    return best
+
+
 def _num(x):
     try:
         v = float(x)
@@ -285,6 +315,9 @@ def _fmt_q(q):
 
 def cmd_merge(a):
     res, opp = _read_logs(a.logs)
+    fill = _read_opp_lines(a.opp_lines)
+    ident = a.mode == "identical"
+    out_md = a.out or (OUT_MD_IDENT if ident else OUT_MD)
     tsv = {}
     if os.path.exists(a.tsv):
         lines = open(a.tsv).read().splitlines()
@@ -296,7 +329,7 @@ def cmd_merge(a):
     if os.path.exists(a.trees_board):
         for rid, rec in json.load(open(a.trees_board)).get("races", {}).items():
             if rec.get("family") == "trees":
-                trees[(rec["lane"], rec["dataset"])] = _cells(rec)
+                trees[(rec["lane"], rec["dataset"])] = _cells(rec, a.mode)
     rows = []
     for (fam, lane, ds), kv in res.items():
         after = _num(kv.get("median_ms"))
@@ -312,15 +345,18 @@ def cmd_merge(a):
             src = "M3 2026-09-29" if (fast or b) else "-"
         else:
             t = tsv.get((lane, ds), {})
-            before, best = _num(t.get("M3_fast_ms")), _num(t.get("M3_best_ms"))
+            before, best = _num(t.get("M3_ours_ms" if ident else "M3_fast_ms")), _num(t.get("M3_best_ms"))
             best_arm = t.get("M3_best_arm") or "-"
             o = opp.get("%s/%s" % (lane, ds)) or {}
             if before is None:
-                before = _num(o.get("fast_ms"))
+                before = _num(o.get("ours_ms" if ident else "fast_ms"))
             if best is None and o.get("best_ms"):
                 best, best_arm = _num(o.get("best_ms")), o.get("best_arm") or "-"
-            q_before, q_best = o.get("fast_q"), o.get("best_q")
+            q_before, q_best = o.get("ours_q" if ident else "fast_q"), o.get("best_q")
             src = "M3 0.8.34" if (t or o) else "-"
+        f = fill.get((fam, lane, ds))
+        if f:
+            best_arm, best, q_best = f[0] + " (fill)", f[1], f[2]
         r_before = before / best if (before and best) else None
         r_after = after / best if (after and best) else None
         flip = ""
@@ -339,20 +375,22 @@ def cmd_merge(a):
     flips_f = [r for r in rows if r["flip"] == "FLIP faster"]
     flips_s = [r for r in rows if r["flip"] == "FLIP slower"]
     gm = (statistics.geometric_mean([r["ra"] for r in ok]) if ok else None)
-    out = ["# M3 FAST board refresh (lane/apple-fast)", "",
-           "Our FAST arm on the M3 Ultra Metal GPU at head %s, 1 warm-up + 3 timed rounds at board size "
+    M = "IDENTICAL" if ident else "FAST"
+    out = ["# M3 %s board refresh (lane/apple-fast)" % M, "",
+           "Our %s arm on the M3 Ultra Metal GPU at head %s, 1 warm-up + 3 timed rounds at board size "
            "(rows-full; trees MOJOLEARN_SPEED_SIZE=shipped). Opponents are not re-raced: classical times come from "
            "the M3 0.8.34 board (`~/mojolearn-evidence/board-0834-times.tsv`, quality from its board.json), trees "
-           "from the 2026-09-29 M3 board (older tree params on some lanes). Ratio = our FAST ms / best opponent "
+           "from the 2026-09-29 M3 board (older tree params on some lanes); an opponent marked (fill) comes from the "
+           "M3 opponent fill on the 0.8.34 kit. Ratio = our %s ms / best opponent "
            "ms; below 1 is faster. Rows sort worst ratio after first. Written by `tools/af_board_merge.py`."
-           % (", ".join(heads) or "?"), "",
+           % (M, ", ".join(heads) or "?", M), "",
            "Summary: %d rows, %d with a ratio, %d faster than the best opponent after, geometric-mean ratio %s. "
            "Flips to faster: %s. Flips to slower: %s." % (
                len(rows), len(ok), sum(1 for r in ok if r["ra"] <= 1), _fmt_r(gm),
                ", ".join("%s %s" % (r["lane"], r["ds"]) for r in flips_f) or "none",
                ", ".join("%s %s" % (r["lane"], r["ds"]) for r in flips_s) or "none"), "",
-           "| lane | dataset | family | FAST before ms | FAST after ms | best opponent | opp ms | ratio before | "
-           "ratio after | flip | quality after (FAST) | quality before (FAST) | opponent quality | status |",
+           "| lane | dataset | family | %s before ms | %s after ms | best opponent | opp ms | ratio before | "
+           "ratio after | flip | quality after (%s) | quality before (%s) | opponent quality | status |" % (M, M, M, M),
            "|---|---|---|---:|---:|---|---:|---:|---:|---|---|---|---|---|"]
     for r in rows:
         out.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
@@ -360,12 +398,12 @@ def cmd_merge(a):
             _fmt_ms(r["best"]), _fmt_r(r["rb"]), _fmt_r(r["ra"]), r["flip"] or "", _fmt_q(r["qa"]),
             _fmt_q(r["qb"]), _fmt_q(r["qo"]), r["st"]))
     out += ["", "Sources: before = %s; job tags %s." % (
-        "M3 0.8.34 board (classical), M3 2026-09-29 board ours-ab FAST cells (trees)",
+        "M3 0.8.34 board (classical), M3 2026-09-29 board %s cells (trees)" % M,
         ", ".join(sorted({r["tag"] for r in rows if r["tag"]})))]
-    with open(a.out, "w") as fh:
+    with open(out_md, "w") as fh:
         fh.write("\n".join(out) + "\n")
     print("wrote %s: %d rows, %d flips faster, %d flips slower, geomean ratio %s" % (
-        a.out, len(rows), len(flips_f), len(flips_s), _fmt_r(gm)))
+        out_md, len(rows), len(flips_f), len(flips_s), _fmt_r(gm)))
 
 
 def main():
@@ -388,7 +426,9 @@ def main():
     m.add_argument("--logs", required=True)
     m.add_argument("--tsv", default=TSV)
     m.add_argument("--trees-board", default=TREES_BOARD)
-    m.add_argument("--out", default=OUT_MD)
+    m.add_argument("--mode", choices=("fast", "identical"), default="fast")
+    m.add_argument("--opp-lines", action="append", default=[])
+    m.add_argument("--out", default=None)
     a = ap.parse_args()
     {"select": cmd_select, "builds": cmd_builds, "extract": cmd_extract, "merge": cmd_merge}[a.cmd](a)
 

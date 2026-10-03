@@ -44,3 +44,4 @@ The orchestrator saves every lane brief as `~/mojolearn-evidence/briefs-<date>/<
 - Same bits on NVIDIA, AMD, Apple and the host column, within one version. Bits may change between versions: when a parallel kernel needs a different fold order, change the order on every vendor and in the host column together. Never keep a serial chain to preserve old bits.
 - Never time a CPU or host route. The CPU is for verification digests, CPU-only installs and inference.
 - Never add, rent, extend or release an Apple machine.
+- Race and measure tools default to our GPU arm only; opponents are scored once, stored, and run only by an explicit opponent job.
