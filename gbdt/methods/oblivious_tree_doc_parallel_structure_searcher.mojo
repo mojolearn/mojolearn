@@ -126,6 +126,11 @@ from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
 #: (`gbdt/methods/sym_iter_fast.mojo`); every use below sits under one
 from gbdt.methods.sym_iter_fast import SYM_BUF_ARENA, SYM_REUSE_PARTITION
 from gbdt.methods.dynamic_boosting_folds import TFold
+from gbdt.methods.ordered_fast_switches import (
+    ORD_FOLD_BINS_ONE,
+    ORD_FOLD_INDEX,
+    ORD_TREE_LEAN,
+)
 from gbdt.methods.kernel.pointwise_scores import (
     SCORE_FUNCTION_COSINE,
     SCORE_FUNCTION_NEWTON_COSINE,
@@ -188,6 +193,33 @@ def fold_cindex_gather_kernel(
         var c = t // dc
         var p = t - c * dc
         dst[t] = src[c * Int(n_rows) + Int(ids[p])]
+
+
+def fold_bins_from_table_kernel(
+    starts: UnsafePointer[UInt32, MutAnyOrigin],
+    bins: UnsafePointer[UInt32, MutAnyOrigin],
+    n_parts: Int32,
+    doc_count: Int32,
+):
+    """`ORD_FOLD_BINS_ONE` (Apple FAST): `write_fold_based_initial_bins`'
+    writes in one launch. `starts` holds the `n_parts` partition offsets
+    of the fold layout in order (`FoldLayout.parts[p].offset`, learn then
+    quality per fold, ascending) and `starts[n_parts] = doc_count`;
+    position `p` gets the last partition `s` with `starts[s] <= p`, which
+    is the one that contains it (an empty partition shares its start with
+    the next one and is never the last such `s`). The same bins
+    `enqueue_fill(view, UInt32(p))` wrote per partition."""
+    var p = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if p < Int(doc_count):
+        var lo = 0
+        var hi = Int(n_parts) - 1
+        while lo < hi:
+            var mid = (lo + hi + 1) >> 1
+            if Int(starts[mid]) <= p:
+                lo = mid
+            else:
+                hi = mid - 1
+        bins[p] = UInt32(lo)
 
 
 def _cindex_columns(layout: CompressedIndexLayout) -> Int:
@@ -365,6 +397,12 @@ def fit_oblivious_tree_structure_traced(
     permutation: List[UInt32] = List[UInt32](),
     permutation_id: Int = -1,
     var sym_parts_out: Optional[HostBuffer[DType.uint32]] = None,
+    fold_part_off: List[DeviceBuffer[DType.uint32]] = List[
+        DeviceBuffer[DType.uint32]
+    ](),
+    obs_scratch: List[DeviceBuffer[DType.uint32]] = List[
+        DeviceBuffer[DType.uint32]
+    ](),
 ) raises -> List[TBinarySplit]:
     """`TDocParallelObliviousTreeSearcher::FitImpl` (`:12-160`), the
     structure half.
@@ -378,6 +416,13 @@ def fit_oblivious_tree_structure_traced(
     `permutation_id` (fold arm only): a caller id for `permutation`, fixed
     for the span of `pool`; with it the fold doc ids are built once per id
     and kept in the pool. -1 builds them every call.
+
+    `fold_part_off` and `obs_scratch` (Apple FAST experiments, read only
+    under `ORD_FOLD_BINS_ONE` / `ORD_TREE_LEAN`; every other build ignores
+    them): one device table of the fold layout's partition starts plus
+    `doc_count` (`fold_bins_from_table_kernel`), and one `doc_count`-long
+    scratch for the per-level observation gather, both owned by the
+    caller for the fit. Empty lists take main's path.
 
     The weak target arrives as TWO buffers, which is `TL2Target` in the reference
     and is forced here besides: the histogram kernels take `target` and
@@ -441,7 +486,12 @@ def fit_oblivious_tree_structure_traced(
                 " per row"
             )
 
-    var fold_order = fold_count > 1 and ordered_fold_index()
+    var fold_order = False
+    comptime if ORD_FOLD_INDEX:
+        # the fold-order index as the compiled default (no env read a tree)
+        fold_order = fold_count > 1
+    else:
+        fold_order = fold_count > 1 and ordered_fold_index()
     var stride = doc_count if fold_order else n_rows
     var blocks = blocks_for(layout, stride)
     var global_ids = List[Int]()
@@ -474,9 +524,28 @@ def fit_oblivious_tree_structure_traced(
                 ctx, pool[0].subsets, target, fold_count,
                 fold_layout.fold_bits,
             )
-            write_fold_based_initial_bins(
-                ctx, fold_layout, pool[0].subsets.bins
-            )
+            comptime if ORD_FOLD_BINS_ONE:
+                if len(fold_part_off) > 0:
+                    # every partition's bins in one launch from the
+                    # caller's start table: no staging buffers, no drain
+                    var starts = fold_part_off[0].copy()
+                    ctx.enqueue_function[fold_bins_from_table_kernel](
+                        starts.unsafe_ptr(),
+                        pool[0].subsets.bins.unsafe_ptr(),
+                        Int32(len(fold_layout.parts)),
+                        Int32(doc_count),
+                        grid_dim=max((doc_count + 255) // 256, 1),
+                        block_dim=256,
+                    )
+                    _ = starts^
+                else:
+                    write_fold_based_initial_bins(
+                        ctx, fold_layout, pool[0].subsets.bins
+                    )
+            else:
+                write_fold_based_initial_bins(
+                    ctx, fold_layout, pool[0].subsets.bins
+                )
             update_subsets_stats(ctx, target, pool[0].subsets)
         pool[0].calcer.reset_for_tree(ctx)
     else:
@@ -608,7 +677,21 @@ def fit_oblivious_tree_structure_traced(
     if sym_pooled_dummies:
         d_observations = pool[0].d_best_ids.copy()
     else:
-        d_observations = ctx.enqueue_create_buffer[DType.uint32](doc_count)
+        comptime if ORD_TREE_LEAN or ORD_FOLD_INDEX:
+            # the caller's scratch when it hands one (ORD_TREE_LEAN), one
+            # cell when the fold-order index never gathers (ORD_FOLD_INDEX)
+            if len(obs_scratch) > 0 and not fold_order:
+                d_observations = obs_scratch[0].copy()
+            elif fold_order:
+                d_observations = ctx.enqueue_create_buffer[DType.uint32](1)
+            else:
+                d_observations = ctx.enqueue_create_buffer[DType.uint32](
+                    doc_count
+                )
+        else:
+            d_observations = ctx.enqueue_create_buffer[DType.uint32](
+                doc_count
+            )
 
     var structure = List[TBinarySplit]()
 
