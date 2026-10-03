@@ -37,6 +37,8 @@ def _resident_binding(b, entries):
 
 _SEQ_RESIDENT = ("optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_move",
                  "optimizer_resident_step")
+_AF_RESIDENT = ("adafactor_resident_open", "optimizer_resident_close", "optimizer_resident_move",
+                "adafactor_resident_step")
 _LAMB_RESIDENT = ("lamb_resident_open", "optimizer_resident_close", "optimizer_resident_move",
                   "lamb_resident_step")
 
@@ -368,14 +370,77 @@ class Adafactor:
         eps1, eps2 = eps
         self.eps = (float(np.finfo(np.float32).eps) if eps1 is None else float(eps1), float(eps2))
         self.numeric_mode = numeric_mode
-        self.state = []
+        self._af_state = []
         for p in self.params:
             if p.ndim == 2:
-                self.state.append(dict(row_var=np.zeros(p.shape[0], np.float32),
-                                       col_var=np.zeros(p.shape[1], np.float32)))
+                self._af_state.append(dict(row_var=np.zeros(p.shape[0], np.float32),
+                                           col_var=np.zeros(p.shape[1], np.float32)))
             else:
-                self.state.append(dict(variance=np.zeros(p.shape[0], np.float32)))
+                self._af_state.append(dict(variance=np.zeros(p.shape[0], np.float32)))
         self.t = 0
+        # lane apple-fast-gap-optim: the second moment on the device
+        # (`adafactor_resident_*`, a FAST + Apple binding built with
+        # -D MOJOLEARN_AF_FAST_RESIDENT), mirrored on the host on access as
+        # `_ResidentState` does: `state` downloads once per stale read and the
+        # next step uploads the host copies a reader may have written
+        self._af_res = None
+        self._af_b = None
+        self._af_fresh = True
+        self._af_owned = True
+        self._af_pristine = True
+
+    @staticmethod
+    def _af_slots(st):
+        return [st["row_var"], st["col_var"]] if "row_var" in st else [st["variance"]]
+
+    @property
+    def state(self):
+        if self._af_res is not None and not self._af_fresh:
+            for h, st in zip(self._af_res, self._af_state):
+                for k, s in enumerate(self._af_slots(st)):
+                    self._af_b.optimizer_resident_move(h, k, s.ctypes.data, 0)
+            self._af_fresh = True
+        self._af_owned = True
+        self._af_pristine = False
+        return self._af_state
+
+    @state.setter
+    def state(self, value):
+        self._af_state = value
+        self._af_fresh = True
+        self._af_owned = True
+        self._af_pristine = False
+
+    def __del__(self):
+        res, b = getattr(self, "_af_res", None), getattr(self, "_af_b", None)
+        if res is not None and b is not None:
+            for h in res:
+                try:
+                    b.optimizer_resident_close(h)
+                except Exception:
+                    pass
+
+    def _step_resident(self, b, grads):
+        if self._af_res is None:
+            res, zeroed = [], True
+            for p in self.params:
+                R, C = (p.shape[0], p.shape[1]) if p.ndim == 2 else (p.shape[0], 0)
+                ret = b.adafactor_resident_open([R, C])
+                res.append(int(ret[0]))
+                zeroed = zeroed and len(ret) > 2 and int(ret[2]) == 1
+            self._af_res, self._af_b = res, b
+            if zeroed and self._af_pristine:
+                self._af_owned = False
+        if self._af_owned:
+            for h, st in zip(self._af_res, self._af_state):
+                for k, s in enumerate(self._af_slots(st)):
+                    b.optimizer_resident_move(h, k, s.ctypes.data, 1)
+            self._af_owned = False
+        self._af_fresh = False
+        fp = [self.lr, self.beta2_decay, self.eps[0], self.eps[1], self.d, self.weight_decay]
+        for h, p, g in zip(self._af_res, self.params, grads):
+            R, C = (p.shape[0], p.shape[1]) if p.ndim == 2 else (p.shape[0], 0)
+            b.adafactor_resident_step(h, [p.ctypes.data, g.ctypes.data], [R, C, self.t], fp)
 
     def step(self, grads):
         if isinstance(grads, np.ndarray):
@@ -386,7 +451,21 @@ class Adafactor:
         if getattr(self, "lr_schedule", None) is not None:
             self.lr = float(self.lr_schedule.lr_at(self.t))
         b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-        for p, g, st in zip(self.params, grads, self.state):
+        if self._af_res is not None or _resident_binding(b, _AF_RESIDENT):
+            gs = []
+            for p, g in zip(self.params, grads):
+                g = np.asarray(g)
+                if g.shape != p.shape or g.dtype == np.float64:
+                    self.t -= 1
+                    raise ValueError("Adafactor: a grad must be float32 of its param's shape")
+                gs.append(np.ascontiguousarray(g, dtype=np.float32))
+            try:
+                self._step_resident(b, gs)
+            except BaseException:
+                self.t -= 1
+                raise
+            return self
+        for p, g, st in zip(self.params, grads, self._af_state):
             g = np.asarray(g)
             if g.shape != p.shape or g.dtype == np.float64:
                 raise ValueError("Adafactor: a grad must be float32 of its param's shape")

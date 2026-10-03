@@ -9,7 +9,7 @@ from std.python import PythonObject
 
 from std.math import sqrt
 from std.memory import bitcast
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec_trait import Exec
 from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
@@ -24,6 +24,17 @@ from sequence.prophet import div as _pdiv
 from sequence.ops import add as p_add, fma3 as p_fma3, ld as p_ld, mul as p_mul, st as p_st, sub as p_sub
 from sequence.adafactor import AF_NORM_BLOCK
 from std.os import getenv as _getenv_seq
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+
+#: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md),
+#: default OFF, FAST + Apple only. Skipped fills, no bit moves:
+#:  MOJOLEARN_AF_FAST_NOFILL: Adafactor's P, G and variance buffers are bound
+#:    by their upload (`Exec.bind`), not zero filled first.
+#:  MOJOLEARN_LN_FAST_NOFILL: LayerNorm's x and dy likewise.
+comptime _PY_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime AF_NOFILL = _PY_APPLE_FAST and is_defined["MOJOLEARN_AF_FAST_NOFILL"]()
+comptime LN_NOFILL = _PY_APPLE_FAST and is_defined["MOJOLEARN_LN_FAST_NOFILL"]()
 
 
 def fptr(addr: PythonObject, what: String) raises -> FP:
@@ -529,25 +540,54 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
     if R < 1 or C < 0 or t < 1:
         raise Error("adafactor_step: R >= 1, C >= 0 and the one-based step t >= 1")
     var n = R * C if C > 0 else R
+    var hp = fptr(addrs[0], "param")
+    var h1 = fptr(addrs[2], "row_var / variance")
+    var P: FP
+    var G: FP
+    var S1: FP
+    var S2: FP
+    comptime if AF_NOFILL:
+        P = ex.bind(hp, n)
+        G = ex.bind(fptr(addrs[1], "grad"), n)
+        S1 = ex.bind(h1, n if C == 0 else R)
+        if C > 0:
+            S2 = ex.bind(fptr(addrs[3], "col_var"), C)
+        else:
+            S2 = ex.alloc(1)
+    else:
+        P = ex.alloc(n)
+        G = ex.alloc(n)
+        S1 = ex.alloc(n if C == 0 else R)
+        S2 = ex.alloc(C if C > 0 else 1)
+        ex.upload(P, hp, n)
+        ex.upload(G, fptr(addrs[1], "grad"), n)
+        ex.upload(S1, h1, n if C == 0 else R)
+        if C > 0:
+            ex.upload(S2, fptr(addrs[3], "col_var"), C)
+    adafactor_core(ex, P, G, S1, S2, R, C, t, fp)
+    ex.download_async(hp, P, n)
+    ex.download_async(h1, S1, n if C == 0 else R)
+    if C > 0:
+        ex.download_async(fptr(addrs[3], "col_var"), S2, C)
+    ex.sync()
+    return PythonObject(n)
+
+
+def adafactor_core[E: Exec](mut ex: E, P: FP, G: FP, S1: FP, S2: FP, R: Int, C: Int, t: Int,
+                            fp: PythonObject) raises:
+    """The launches of one Adafactor step on device-side P, G, S1 (row_var
+    or the variance) and S2 (col_var; unused for a vector), queued, no
+    transfer: `adafactor_step_py`'s body, also the resident step's
+    (`sequence/opt_resident.mojo`, AF_RESIDENT)."""
+    var n = R * C if C > 0 else R
     var lr = Float64(py=fp[0])
     var w = Float32(identical_pow64(Float64(t), Float64(py=fp[1])))
     var rho = Float32(min(lr, Float64(1.0) / sqrt(Float64(t))))
     var eps1 = fval(fp, 2)
     var eps1sq = ftz(identical_mul(eps1, eps1))
     var wd = fval(fp, 5)
-    var P = ex.alloc(n)
-    var G = ex.alloc(n)
-    var S1 = ex.alloc(n if C == 0 else R)
-    var S2 = ex.alloc(C if C > 0 else 1)
     var U = ex.alloc(n)
     var sc = ex.alloc(4)
-    var hp = fptr(addrs[0], "param")
-    var h1 = fptr(addrs[2], "row_var / variance")
-    ex.upload(P, hp, n)
-    ex.upload(G, fptr(addrs[1], "grad"), n)
-    ex.upload(S1, h1, n if C == 0 else R)
-    if C > 0:
-        ex.upload(S2, fptr(addrs[3], "col_var"), C)
     var fast = _fast_norms() and n >= FAST_NORM_MIN
     var blocked = _blocked_norms() and n > AF_NORM_BLOCK
     var parts = ex.alloc(_PARTS if fast else ((n + AF_NORM_BLOCK - 1) // AF_NORM_BLOCK if blocked else 1))
@@ -623,12 +663,6 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
     ap.p1 = U
     ap.p2 = sc
     ex.launch[OP_AF_APPLY](ap, n)
-    ex.download_async(hp, P, n)
-    ex.download_async(h1, S1, n if C == 0 else R)
-    if C > 0:
-        ex.download_async(fptr(addrs[3], "col_var"), S2, C)
-    ex.sync()
-    return PythonObject(n)
 
 
 def lamb_table(offs: List[Int], mut tab: List[Float32]) raises -> Int:
@@ -844,8 +878,12 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
     var bwd = ival(ip, 4) != 0
     if M < 1 or D < 1:
         raise Error("layer_norm: M and D must be >= 1")
-    var X = ex.alloc(M * D)
-    ex.upload(X, fptr(addrs[0], "x"), M * D)
+    var X: FP
+    comptime if LN_NOFILL:
+        X = ex.bind(fptr(addrs[0], "x"), M * D)
+    else:
+        X = ex.alloc(M * D)
+        ex.upload(X, fptr(addrs[0], "x"), M * D)
     var W = ex.alloc(D)
     var Bb = ex.alloc(D)
     if hw:
@@ -868,8 +906,12 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
     a.f0 = fval(fp, 0)
     ex.launch[OP_LN_FWD](a, M)
     if bwd:
-        var DY = ex.alloc(M * D)
-        ex.upload(DY, fptr(addrs[4], "dy"), M * D)
+        var DY: FP
+        comptime if LN_NOFILL:
+            DY = ex.bind(fptr(addrs[4], "dy"), M * D)
+        else:
+            DY = ex.alloc(M * D)
+            ex.upload(DY, fptr(addrs[4], "dy"), M * D)
         var DX = ex.alloc(M * D)
         var DW = ex.alloc(D)
         var DB = ex.alloc(D)
