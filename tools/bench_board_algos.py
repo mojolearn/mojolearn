@@ -2484,6 +2484,10 @@ def _build_est(lane, arm, D):
             o["covariance"] = _arr(est.covariance_, np.float64)
         if qk == "outlier" and s.get("fit_predict"):
             o["pred"] = o.pop("out")
+        if lane == "sgd-ocsvm" and hasattr(est, "coef_") and hasattr(est, "offset_"):
+            # the fitted (w, rho) for the objective J (quality(): sgd_ocsvm_objective)
+            o["coef"] = _arr(est.coef_, np.float64).reshape(-1)
+            o["offset"] = _arr(est.offset_, np.float64).reshape(-1)
         return o
 
     return Runner(info, fit, outputs, infer if has_infer(lane) else None, sync,
@@ -4371,6 +4375,19 @@ def _modularity(ip, ix, lab):
     return inside / m2 - float((tot / m2) ** 2 @ np.ones_like(tot))
 
 
+def sgd_ocsvm_objective(X, w, rho, nu):
+    """SGDOneClassSVM's objective on the fit rows, float64:
+    J = nu/2 |w|^2 + nu (1 - rho) + mean_i max(0, rho - w.x_i)
+    (sklearn `_fit_one_class`: hinge on y = 1, alpha = nu, intercept = 1 - offset;
+    the optimum on centered X is w = 0, rho = 0, J = nu)."""
+    np = _np()
+    w = np.asarray(w, dtype=np.float64)
+    sc = np.zeros(X.shape[0])
+    for lo in range(0, X.shape[0], 131072):
+        sc[lo:lo + 131072] = X[lo:lo + 131072].astype(np.float64) @ w
+    return float(0.5 * nu * (w @ w) + nu * (1.0 - rho) + np.maximum(0.0, rho - sc).mean())
+
+
 def quality(lane, D, outs):
     if LANES[lane]["kind"] == "extra":
         return _EXTRA.quality(lane, D, outs, globals())
@@ -4406,6 +4423,9 @@ def quality(lane, D, outs):
                     rf = ref["pred"].reshape(-1) < 0
                     u = float((flag | rf).sum())
                     e["jaccard_vs_sklearn"] = float((flag & rf).sum()) / u if u else 1.0
+                if "coef" in o and "offset" in o:
+                    e["objective"] = sgd_ocsvm_objective(D["X"], o["coef"], o["offset"][0],
+                                                         float(s["params"]["nu"]))
             elif qk == "cluster":
                 lab = o["labels"]
                 X = D["X"]
