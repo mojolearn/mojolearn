@@ -228,7 +228,11 @@ class UMAP(NumericModeMixin):
                 Vt = k.ew("div", Vt, S.take_cols(list(range(nc))).T)
             Vt = _svd_flip_v(Vt.rows(0, nc))
             coords = k.mm(Xc, Vt, tb=True)
-            peak = max(abs(v) for v in coords.s)
+            # max |coords| in Mojo: the positions of the minimum of -|coords|
+            # (x_decomp/moves.mojo argmin_all), an exact negation
+            mag = k.ew("abs", coords)
+            at = k.argmin_all(k.ew("scale", mag, s=-1.0))
+            peak = mag.s[int(at.s[0])] if at.r else 0.0
             if not peak > 0:
                 raise ValueError("UMAP init='pca' found a zero spread")
             coords = k.ew("scale", coords, s=10.0 / peak)
