@@ -47,6 +47,7 @@ from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_fold import device_column_means32
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -346,10 +347,9 @@ def fast_mma_eps_neighborhood(
     var flag_h = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_memset(vd, Int32(0))
     ctx.enqueue_memset(flag, Int32(0))
-    ctx.enqueue_function[me_center_kernel](
-        x.unsafe_ptr(), mean.unsafe_ptr(), Int32(n), Int32(k),
-        grid_dim=(1, 1, 1), block_dim=(256, 1, 1),
-    )
+    # lane cgr4-download-loop: the center's column means over the whole
+    # device (was one block over n); the center never reaches the answer
+    device_column_means32(ctx, x.unsafe_ptr(), n, k, mean.unsafe_ptr())
     ctx.enqueue_function[me_shift_kernel](
         x.unsafe_ptr(), mean.unsafe_ptr(), xc.unsafe_ptr(), nc.unsafe_ptr(),
         flag.unsafe_ptr(), Int32(n), Int32(k),

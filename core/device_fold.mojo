@@ -208,6 +208,46 @@ def _scan_input_kernel(src: _I32P, dst: _I32P, n_in: Int32):
         dst.unsafe_store(n, Int32(0))
 
 
+comptime COLMEAN_BLOCKS = 256
+"""`device_column_means32`'s grid cap."""
+
+
+def _colsum32_partial_kernel(x: _F32P, part: _F32P, n_in: Int32, k_in: Int32):
+    """Block b, thread t = 32 * p + f: column f summed over rows
+    `r = (b + G * j) * 8 + p` (G = grid size), ascending j; the block's 8
+    row-phases folded ascending into `part[b * 32 + f]`."""
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var tid = Int(thread_idx.x)
+    var f = tid % 32
+    var p = tid // 32
+    var g = Int(grid_dim.x)
+    var sh = stack_allocation[256, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var s = Float32(0.0)
+    if f < k:
+        var r = Int(block_idx.x) * 8 + p
+        while r < n:
+            s = s + x.unsafe_load(r * k + f)
+            r += g * 8
+    sh.unsafe_store(tid, s)
+    barrier()
+    if tid < 32:
+        var t = Float32(0.0)
+        for q in range(8):
+            t = t + sh.unsafe_load(q * 32 + tid)
+        part.unsafe_store(Int(block_idx.x) * 32 + tid, t)
+
+
+def _colmean32_fold_kernel(part: _F32P, mean: _F32P, blocks_in: Int32, n_in: Int32, k_in: Int32):
+    """Thread f < k: the block partials of column f added ascending, over n."""
+    var f = Int(thread_idx.x)
+    if f < Int(k_in):
+        var t = Float32(0.0)
+        for b in range(Int(blocks_in)):
+            t = t + part.unsafe_load(b * 32 + f)
+        mean.unsafe_store(f, t / Float32(Int(n_in)))
+
+
 # ------------------------------------------------------------ host side ----
 
 
@@ -453,3 +493,31 @@ def device_exclusive_scan_total(
     var bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n + 1))
     frs_exclusive_scan(ctx, out, n + 1, bsum)
     _ = bsum^
+
+
+def device_column_means32(
+    ctx: DeviceContext, x: MutPointer[Float32, MutAnyOrigin], n: Int, k: Int,
+    mean: MutPointer[Float32, MutAnyOrigin],
+) raises:
+    """`mean[f]` = the mean of column f of the row-major n x k matrix x, for
+    k <= 32, over the whole device: per-block partial column sums of a
+    grid-strided row slice (at most `COLMEAN_BLOCKS` blocks), then one warp
+    adding the partials in ascending block order. A fixed order (a pure
+    function of n and k)."""
+    if n <= 0 or k <= 0:
+        return
+    if k > 32:
+        raise Error("device_column_means32: k must be at most 32")
+    var blocks = (n + 2047) // 2048
+    if blocks > COLMEAN_BLOCKS:
+        blocks = COLMEAN_BLOCKS
+    var part = ctx.enqueue_create_buffer[DType.float32](blocks * 32)
+    ctx.enqueue_function[_colsum32_partial_kernel](
+        x, part.unsafe_ptr(), Int32(n), Int32(k),
+        grid_dim=(blocks, 1, 1), block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_function[_colmean32_fold_kernel](
+        part.unsafe_ptr(), mean, Int32(blocks), Int32(n), Int32(k),
+        grid_dim=(1, 1, 1), block_dim=(32, 1, 1),
+    )
+    _ = part^
