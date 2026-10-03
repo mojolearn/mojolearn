@@ -268,7 +268,7 @@ class PoolWitness:
             from .parallel_training import ParallelByteLanguageModelTrainer
             from .model_pool_training import PooledByteLanguageModelTrainer
             from .offload_training import OffloadedByteLanguageModelTrainer
-        except ImportError:
+        except (ImportError, AttributeError):
             return []
         undo = []
         for cls in (ParallelByteLanguageModelTrainer, PooledByteLanguageModelTrainer,

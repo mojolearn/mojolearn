@@ -456,7 +456,7 @@ def _optional_export(b, name):
     CPU-only install, and LinearRegression.fit raised there."""
     try:
         return getattr(b, name, None)
-    except ImportError:
+    except (ImportError, AttributeError):
         return None
 
 

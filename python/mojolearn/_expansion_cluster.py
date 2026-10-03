@@ -89,7 +89,7 @@ def _callable_init(init, X, k, random_state):
         _np = require_numpy('_expansion_cluster')
         X = _np.asarray(X)
         rs = _np.random.RandomState(random_state)
-    except ImportError:
+    except (ImportError, AttributeError):
         pass
     return init(X, k, random_state=rs)
 

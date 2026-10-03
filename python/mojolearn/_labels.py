@@ -253,7 +253,7 @@ def _encode_label_list_native(y):
         return None  # an int outside int64: a class only Python can hold
     try:
         return _encode_labels_native(Array._owned(store, (len(store),), dtype, "C"))
-    except ImportError:
+    except (ImportError, AttributeError):
         # a GPU install whose base binding predates DEVIATION 2500 raises
         # here by design for a BUFFER; a list has its Python routine
         return None
@@ -288,7 +288,7 @@ def _encode_labels_native(y):
     key, fmt, py = spec
     try:
         fn = _native(key)
-    except ImportError:
+    except (ImportError, AttributeError):
         # A CPU-ONLY INSTALL whose base host binding does not carry the
         # native encoder (the CPU training lane, et-clf, 2026-09-14:
         # bindings/_mojolearn_core_host.mojo exports the converters, the
@@ -372,7 +372,7 @@ def _decode_labels_native(classes, codes, kind):
         # Python arm ANSWERS it) sends the call back to the Python arm.
         try:
             return _decode_labels_native(classes, codes.astype("<i8"), kind)
-        except ImportError:
+        except (ImportError, AttributeError):
             raise
         except Exception:
             return None

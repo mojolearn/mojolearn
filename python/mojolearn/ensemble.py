@@ -2528,7 +2528,7 @@ class GradientBoosting(NumericModeMixin):
         # an entry point its host family does not export
         try:
             pair = getattr(binding, "gbdt_sigmoid_pair", None)
-        except ImportError:
+        except (ImportError, AttributeError):
             pair = None
         if pair is not None:
             # DEVIATION 2902 (lane/infer-speed-trees, 2026-09-17): both

@@ -192,7 +192,7 @@ def _exports(ext, name):
     same reason; a probe is not a use."""
     try:
         return hasattr(ext, name)
-    except ImportError:
+    except (ImportError, AttributeError):
         return False
 
 
@@ -749,7 +749,7 @@ class Mamba1DecodeSession:
             # The CPU-only stand-in raises ImportError BY NAME from
             # __getattr__ (_backend.py::_HostBinding); a probe is not a use.
             create = getattr(ext, "mamba1_session_create", None)
-        except ImportError:
+        except (ImportError, AttributeError):
             create = None
         # THE HOST ARM. No device session entry, but the decode entry the
         # session would have run is right there under its per-call name.
@@ -1204,7 +1204,7 @@ class _Mamba2DecodeSession:
         ext = block._extension()
         try:
             create = getattr(ext, "mamba2_session_create", None)
-        except ImportError:
+        except (ImportError, AttributeError):
             create = None
         host = create is None and _exports(ext, "mamba2_decode_step")
         if create is None and not host:
@@ -1595,7 +1595,7 @@ class Mamba3Block(_MambaBase):
         session_forward = None
         try:
             session_forward = getattr(ext, "mamba3_prefill_session_forward", None)
-        except ImportError:
+        except (ImportError, AttributeError):
             session_forward = None
         if session_forward is not None and os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") != "1":
             if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not ext:
@@ -1621,7 +1621,7 @@ class Mamba3Block(_MambaBase):
         session_backward = None
         try:
             session_backward = getattr(extension, "mamba3_prefill_session_backward", None)
-        except ImportError:
+        except (ImportError, AttributeError):
             session_backward = None
         if session_backward is None or os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") == "1":
             return native
@@ -1818,7 +1818,7 @@ class _Mamba3DecodeSession:
         ext = block._extension()
         try:
             create = getattr(ext, "mamba3_session_create", None)
-        except ImportError:
+        except (ImportError, AttributeError):
             create = None
         host = create is None and _exports(ext, "mamba3_decode_step")
         if create is None and not host:

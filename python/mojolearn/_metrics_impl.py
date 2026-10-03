@@ -1172,7 +1172,7 @@ def _native_classification_labels(values):
         return None  # floats are refused by `_classification_labels`
     try:
         encoded = _encode_labels_native(arr)
-    except ImportError:
+    except (ImportError, AttributeError):
         return None
     if encoded is None:
         return None

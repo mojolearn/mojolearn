@@ -862,7 +862,7 @@ def _native_optional(key):
         return None
     try:
         return _native(key)
-    except ImportError:
+    except (ImportError, AttributeError):
         _NATIVE_MISSING.add(key)
         return None
 

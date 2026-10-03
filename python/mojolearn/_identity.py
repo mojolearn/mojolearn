@@ -267,7 +267,7 @@ def cmd_check(args):
     try:
         import numpy  # noqa: F401
         report["numpy"] = numpy.__version__
-    except ImportError:
+    except (ImportError, AttributeError):
         problems.append("numpy is not installed; identity_break needs it (pip install numpy)")
     if problems:
         return _finish(args, _verify.EXIT_NO_REFERENCE, "NO REFERENCE",
@@ -292,7 +292,7 @@ def cmd_identity(args):
                        "promise; set MOJOLEARN_NUMERIC_MODE=identical before import")
     try:
         import numpy  # noqa: F401
-    except ImportError:
+    except (ImportError, AttributeError):
         return _finish(args, _verify.EXIT_CANNOT_RUN, "CANNOT RUN",
                        "numpy is not installed; identity_break needs it (pip install numpy)")
     try:

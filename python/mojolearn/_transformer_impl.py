@@ -1374,7 +1374,7 @@ def _exports(ext, name):
     use; the repo's own guard in `_backend.py` does the same."""
     try:
         return hasattr(ext, name)
-    except ImportError:
+    except (ImportError, AttributeError):
         return False
 
 

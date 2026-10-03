@@ -171,7 +171,7 @@ def main(argv=None):
     os.environ['MOJOLEARN_NUMERIC_MODE'] = 'identical'
     try:
         import numpy as np
-    except ImportError:
+    except (ImportError, AttributeError):
         parser.error('CV capture requires NumPy; install the optional mojolearn[test] extra')
     import mojolearn as ml
     from . import _backend

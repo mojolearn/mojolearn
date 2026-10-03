@@ -609,7 +609,7 @@ def _native_trainer(required):
     raised, when `required`)."""
     try:
         module = _backend.load_host_module(_EXTENSION)
-    except ImportError as exc:
+    except (ImportError, AttributeError) as exc:
         if required:
             raise ImportError(f"mojolearn: backend='mojo' needs the tokenizer host binding: {exc}") from exc
         return None

@@ -463,7 +463,7 @@ def read_vendor(module):
     fn = _vendor_fn(module.__name__.rsplit(".", 1)[-1])
     try:
         f = getattr(module, fn, None)
-    except ImportError:
+    except (ImportError, AttributeError):
         return None
     if f is None:
         return None
@@ -1514,11 +1514,13 @@ _HOST_PY_ENTRIES = {
 }
 
 
-class NoCpuEntry(ImportError, AttributeError):
+class NoCpuEntry(AttributeError):
     """The by-name refusal of an entry a built host binding does not export.
 
-    It is an ImportError, so every `except ImportError` refusal reads as
-    before, AND an AttributeError, so a PROBE is not a use:
+    It is an AttributeError (ImportError and AttributeError cannot both be
+    bases: their instance layouts conflict), and the package's guards catch
+    (ImportError, AttributeError), so a refusal reads as before and a PROBE
+    is not a use:
     `getattr(b, name, None)` answers None and `hasattr` answers False, and the
     caller takes the route its own comment names for a binary without that
     entry (the host column's route). Until 2026-10-03 a probe of a device-only
@@ -1636,7 +1638,7 @@ def select():
         # A GPU box without its plugin, or a mismatched plugin: never the
         # CPU-only set (see GpuPluginError).
         raise
-    except ImportError as exc:
+    except (ImportError, AttributeError) as exc:
         if not host_binding_built():
             raise
         return _select_cpu_only(pkg, mode, str(exc))
@@ -2115,7 +2117,7 @@ def numeric_mode():
     # which is not the same as the cross-check failing.
     try:
         readable = gb is not None and hasattr(gb, "gbdt_numeric_mode")
-    except ImportError:
+    except (ImportError, AttributeError):
         readable = False
     if readable:
         compiled = _CODE_MODE.get(gb.gbdt_numeric_mode(), "unknown")
@@ -2159,7 +2161,7 @@ def vendor():
                 continue
             try:
                 said = read_vendor(getattr(s, name))
-            except ImportError:
+            except (ImportError, AttributeError):
                 continue
             if said is not None:
                 break

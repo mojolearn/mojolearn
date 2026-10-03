@@ -61,7 +61,7 @@ import time
 
 try:
     from ._buffer import flat_bytes
-except ImportError:  # loaded by file path outside the package (tools/tests do this
+except (ImportError, AttributeError):  # loaded by file path outside the package (tools/tests do this
     # for the host fold, which needs only the standard library): a memoryview
     # is enough there, since the package's Array never reaches such a caller
     def flat_bytes(obj, *, name="array"):

@@ -196,7 +196,7 @@ def main(argv=None):
     os.environ['MOJOLEARN_NUMERIC_MODE'] = 'identical'
     try:
         import numpy as np
-    except ImportError:
+    except (ImportError, AttributeError):
         ap.error("distributed capture requires NumPy; install the optional mojolearn[test] extra")
     import mojolearn as ml
     from mojolearn import _backend

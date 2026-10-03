@@ -161,7 +161,7 @@ def _linalg():
     from . import _linalg_impl
     try:
         _linalg_impl._load()
-    except ImportError as e:
+    except (ImportError, AttributeError) as e:
         raise ImportError(
             "mojolearn.lowbit: packing and materializing need the linalg binding "
             f"(GPU extension or _mojolearn_linalg_host); none is loaded: {e}") from None
