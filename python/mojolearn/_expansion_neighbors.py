@@ -187,6 +187,16 @@ def _labels_of(y):
     return classes, [code[v] for v in y]
 
 
+def _nc_cls1_flags(est):
+    """lane/apple-fast-gap-cls1: the bound binary's NearestCentroid switches
+    (`x_neighbors_cls1_flags`; 0 without them: main's path)."""
+    try:
+        fn = getattr(est._bind(), "x_neighbors_cls1_flags", None)
+        return int(fn()) if fn is not None else 0
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def _class_array(classes, codes):
     vals = [classes[c] for c in codes]
     if all(isinstance(v, bool) or isinstance(v, int) for v in classes):
@@ -473,15 +483,35 @@ class NearestCentroid(_XNeighbors):
             raise ValueError("NearestCentroid: metric must be 'euclidean' or 'manhattan'")
         X = _f32(X)
         n, d = X.shape
-        classes, codes = _labels_of(y)
-        if len(codes) != n:
-            raise ValueError("X and y have different numbers of rows")
-        C = len(classes)
-        if C < 2:
-            raise ValueError(f"The number of classes has to be greater than one; got {C} class")
-        counts = [0] * C
-        for c in codes:
-            counts[c] += 1
+        lab = None
+        if _nc_cls1_flags(self) & 1:
+            # lane/apple-fast-gap-cls1 (-D MOJOLEARN_NC_FAST_CLS1_LABELS): the
+            # native encoder's int32 codes as they are, the class counts from
+            # the device (x_neighbors/nc_cls1.mojo); no Python pass over the rows
+            from ._labels import encode_labels
+            classes, lab = encode_labels(y)
+            if lab.size != n:
+                raise ValueError("X and y have different numbers of rows")
+            C = len(classes)
+            if C < 2:
+                raise ValueError(f"The number of classes has to be greater than one; got {C} class")
+            if C <= 256:
+                nkc = _empty_out((C,), "<f4")
+                self._op("nc_counts", [(lab, 0), (nkc, 1)], (n, C))
+                counts = [int(v) for v in nkc.tolist()]
+            else:
+                lab = None
+        if lab is None:
+            classes, codes = _labels_of(y)
+            if len(codes) != n:
+                raise ValueError("X and y have different numbers of rows")
+            C = len(classes)
+            if C < 2:
+                raise ValueError(f"The number of classes has to be greater than one; got {C} class")
+            counts = [0] * C
+            for c in codes:
+                counts[c] += 1
+            lab = _i32(codes, "y")
         if self.priors == "empirical":
             prior = [c / float(n) for c in counts]
         elif self.priors == "uniform":
@@ -496,7 +526,6 @@ class NearestCentroid(_XNeighbors):
             if not math.isclose(tot, 1.0, rel_tol=1e-5, abs_tol=1e-8):
                 prior = [p / tot for p in prior]
         self.class_prior_ = Array.from_list(prior, "<f8")
-        lab = _i32(codes, "y")
         if self.metric == "euclidean":
             cent = _empty_out((C, d), "<f4")
             if os.environ.get("MOJOLEARN_NC_SPLIT_OPS", "") == "1":
@@ -564,6 +593,11 @@ class NearestCentroid(_XNeighbors):
         if self._uniform():
             D = self._sqdist(Q, self.centroids_) if self.metric == "euclidean" else self._l1dist(Q, self.centroids_)
             _, idx = self._knn_select(D, 1, False)
+            if _nc_cls1_flags(self) & 2:
+                # lane/apple-fast-gap-cls1 (-D MOJOLEARN_NC_FAST_CLS1_PREDICT):
+                # the int32 indices to the native gather, no per-row list
+                from ._labels import decode_labels
+                return decode_labels(self.classes_, idx.reshape((Q.shape[0],)))
             return _class_array(self.classes_, [r[0] for r in idx.tolist()])
         return _class_array(self.classes_, [_argmax(r) for r in self.decision_function(Q).tolist()])
 

@@ -19,6 +19,7 @@ from x_neighbors.kapprox_dev import op_kapprox_achi2
 from x_neighbors.kapprox_dev import op_kapprox_skew_fit
 from x_neighbors.kapprox_dev import op_kapprox_skew_transform
 from x_neighbors.kapprox_dev import op_kapprox_sparse_rp
+from x_neighbors.nc_cls1 import op_nc_counts, nc_cls1_flags_binding
 from x_neighbors.kapprox_dev import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding
 from x_neighbors.iter_device import lp_fast_resident_binding
 
@@ -665,6 +666,17 @@ def pos_compact_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) ra
     return PythonObject(None)
 
 
+def nc_counts_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    """lane/apple-fast-gap-cls1 NC_CLS1_LABELS: [lab int32, nk float32 out], [n, C]."""
+    var v_lab = _a(a_, 0)
+    var v_nk = _a(a_, 1)
+    var v_n = _n(i_, 0)
+    var v_c = _n(i_, 1)
+    with GILReleased(Python()):
+        op_nc_counts(v_lab, v_nk, v_n, v_c)
+    return PythonObject(None)
+
+
 def nc_stats_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_x = _a(a_, 0)
     var v_lab = _a(a_, 1)
@@ -1098,6 +1110,7 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[nc_median_binding]("xn_nc_median")
     m.def_function[pos_compact_binding]("xn_pos_compact")
     m.def_function[nc_stats_binding]("xn_nc_stats")
+    m.def_function[nc_counts_binding]("xn_nc_counts")
     m.def_function[lp_knn_graph_binding]("xn_lp_knn_graph")
     m.def_function[lp_knn_product_binding]("xn_lp_knn_product")
     m.def_function[lp_iterate_binding]("xn_lp_iterate")
@@ -1137,6 +1150,7 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
+        m.def_function[nc_cls1_flags_binding]("x_neighbors_cls1_flags")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
