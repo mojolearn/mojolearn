@@ -221,6 +221,33 @@ def _lp_fast_resident(est):
     return fn is not None and int(fn()) != 0
 
 
+def _p2m(est, name=None):
+    """lane apple-fast-py2mojo-neighbors (2026-10-03): True when the bound
+    x_neighbors binary runs the Python data loops as its p2m_* ops
+    (x_neighbors/py2mojo_items.mojo); False when it was built with
+    `-D MOJOLEARN_PY2MOJO_neighbors_OFF` (the A/B arm) or predates them."""
+    try:
+        fn = getattr(est._bind(name), "x_neighbors_py2mojo_off", None)
+        return fn is not None and int(fn()) == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _p2m_relabel(est, lab, name=None):
+    """(count, labels): lab renumbered by first occurrence on the device
+    (`xn_p2m_relabel`), or None when a label falls outside [0, n)."""
+    n = lab.shape[0]
+    out = empty((max(n, 1),), "<i4")
+    info = empty((2,), "<i4")
+    getattr(est._bind(name), "xn_p2m_relabel")(
+        [addr_ro(lab, name="xn_p2m_relabel input"), addr(out, name="xn_p2m_relabel output"),
+         addr(info, name="xn_p2m_relabel output")], [n], [])
+    cnt, bad = info.tolist()
+    if bad:
+        return None
+    return int(cnt), out
+
+
 class _XNeighbors(NumericModeMixin):
     """The primitives, one method each. Every buffer is an owned Array held
     in a local for the duration of the call (the `_buffer` contract)."""
@@ -336,6 +363,26 @@ class _XNeighbors(NumericModeMixin):
         return self._unary(sq, _U_SQRT), idx
 
 
+def _p2m_sort_rows(est, indptr, cols, dists, name=None):
+    """(cols, dists) of a CSR's rows each sorted ascending by distance, ties
+    in position order (Python's stable `sorted`), on the device
+    (`xn_p2m_row_sort`, a segmented bitonic sort). int32 / float32 Arrays."""
+    nq = indptr.shape[0] - 1
+    nnz = dists.shape[0]
+    p = 1
+    while p < nnz:
+        p *= 2
+    lg = p.bit_length() - 1
+    n_steps = lg * (lg + 1) // 2
+    oc = empty((nnz,), "<i4")
+    od = empty((nnz,), "<f4")
+    getattr(est._bind(name), "xn_p2m_row_sort")(
+        [addr_ro(indptr, name="xn_p2m_row_sort input"), addr_ro(cols, name="xn_p2m_row_sort input"),
+         addr_ro(dists, name="xn_p2m_row_sort input"), addr(oc, name="xn_p2m_row_sort output"),
+         addr(od, name="xn_p2m_row_sort output")], [nq, nnz, p, n_steps], [])
+    return oc, od
+
+
 def _percentile(values, q):
     """numpy.percentile, method 'linear', on Python doubles."""
     v = sorted(values)
@@ -412,15 +459,38 @@ class LocalOutlierFactor(_XNeighbors):
         if self.contamination == "auto":
             self.offset_ = -1.5
         else:
-            self.offset_ = _f32_scalar(_percentile(score.tolist(), 100.0 * float(self.contamination)))
+            q = 100.0 * float(self.contamination)
+            if _p2m(self):
+                self.offset_ = _f32_scalar(self._sorted_percentile(score, q))
+            else:
+                self.offset_ = _f32_scalar(_percentile(score.tolist(), q))
         return self
+
+    def _sorted_percentile(self, score, q):
+        """`_percentile(score, q)` with the sort on the device (`p2m_row_sort`
+        over one row: ascending by value, ties by position, as `sorted`);
+        only the two order statistics it reads come back to Python."""
+        n = score.shape[0]
+        srt = _p2m_sort_rows(self, _i32([0, n], "indptr"), zeros((n,), "<i4"), score)[1]
+        pos = (q / 100.0) * (n - 1)
+        lo = math.floor(pos)
+        hi = min(lo + 1, n - 1)
+        t = pos - lo
+        a, b = srt[lo], srt[hi]
+        diff = b - a
+        return b - diff * (1.0 - t) if t >= 0.5 else a + diff * t
 
     def fit_predict(self, X, y=None):
         if self.novelty:
             raise AttributeError("fit_predict is not available when novelty=True; use predict on new data")
         self.fit(X)
         off = self.offset_
-        return Array.from_list([-1 if s < off else 1 for s in self.negative_outlier_factor_.tolist()], "<i8")
+        score = self.negative_outlier_factor_
+        if score.size and _p2m(self):
+            lab = empty((score.size,), "<i4")
+            self._op("p2m_sign_label", [(score, 0), (lab, 1)], (score.size, 0), (off,))
+            return lab.astype("<i8")
+        return Array.from_list([-1 if s < off else 1 for s in score.tolist()], "<i8")
 
     def _novelty(self, what):
         if not self.novelty:
@@ -444,7 +514,12 @@ class LocalOutlierFactor(_XNeighbors):
 
     def predict(self, X):
         self._novelty("predict")
-        return Array.from_list([1 if v >= 0 else -1 for v in self.decision_function(X).tolist()], "<i8")
+        dec = self.decision_function(X)
+        if dec.size and _p2m(self):
+            lab = empty((dec.size,), "<i4")
+            self._op("p2m_sign_label", [(dec, 0), (lab, 1)], (dec.size, 1), (0.0,))
+            return lab.astype("<i8")
+        return Array.from_list([1 if v >= 0 else -1 for v in dec.tolist()], "<i8")
 
 
 # ====================================================================== NearestCentroid
@@ -1484,7 +1559,11 @@ class KNNImputer(_XNeighbors):
     def _masked(self, X):
         X = _f32(X)
         mv = self.missing_values
-        if mv == mv:                                     # a number: its cells become NaN
+        if mv == mv and X.size and _p2m(self):           # a number: its cells become NaN
+            out = empty(X.shape, "<f4")
+            self._op("p2m_mask_value", [(X, 0), (out, 1)], (X.size,), (_f32_scalar(mv),))
+            X = out
+        elif mv == mv:
             want = _f32_scalar(mv)
             X = Array.from_list([[float("nan") if v == want else v for v in r] for r in X.tolist()], "<f4")
         return X
@@ -1525,9 +1604,15 @@ class KNNImputer(_XNeighbors):
                          [(cells, 0), (X, 0), (self._fit_X, 0), (out, 1)],
                          (n, m, d, k, 1 if self.weights == "distance" else 0, nc))
         keep = [f for f in range(d) if self._valid[f]]
+        p2m = n > 0 and _p2m(self)
         if self.keep_empty_features:
             empty_cols = [f for f in range(d) if not self._valid[f]]
-            if empty_cols:
+            if empty_cols and p2m:
+                flags = _i32([0 if self._valid[f] else 1 for f in range(d)], "flags")
+                z = _empty_out((n, d), "<f4")
+                self._op("p2m_zero_cols", [(out, 0), (flags, 0), (z, 1)], (n, d))
+                out = z
+            elif empty_cols:
                 rows = out.tolist()
                 for r in rows:
                     for f in empty_cols:
@@ -1535,7 +1620,14 @@ class KNNImputer(_XNeighbors):
                 out = Array.from_list(rows, "<f4")
         elif len(keep) != d:
             out = self._take_cols(out, keep)
-        if self.add_indicator and self._miss_cols:
+        if self.add_indicator and self._miss_cols and p2m:
+            c = out.shape[1]
+            q = len(self._miss_cols)
+            res = _empty_out((n, c + q), "<f4")
+            self._op("p2m_nan_indicator",
+                     [(X, 0), (out if c else X, 0), (_i32(self._miss_cols, "cols"), 0), (res, 1)], (n, d, c, q))
+            out = res
+        elif self.add_indicator and self._miss_cols:
             src = X.tolist()
             res = out.tolist()
             for i, r in enumerate(res):
@@ -1608,13 +1700,24 @@ class PageRank(_XNeighbors):
         # and iterated on the device (lane hr-graph,
         # x_neighbors/graph_par.mojo): the dense chains with their zero
         # terms left out, the dangling mass and |x' - x| blocked folds
+        p2m = n > 0 and _p2m(self)
+
+        def uniform():
+            # [1/n] * n: 1/n in IEEE double rounded once to float32, the
+            # same value the binding's float argument rounds to
+            if not p2m:
+                return Array.from_list([1.0 / n] * n, "<f4")
+            u = empty((n,), "<f4")
+            self._op("p2m_fill", [(u, 1)], (n,), (1.0 / n,))
+            return u
+
         if self.personalization is None:
-            p = Array.from_list([1.0 / n] * n, "<f4")
+            p = uniform()
         else:
             p = self._unit(self.personalization, n, "personalization")
         dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
-        x = Array.from_list([1.0 / n] * n, "<f4") if self.nstart is None else self._unit(self.nstart, n, "nstart")
-        x = Array.from_list(x.tolist(), "<f4")
+        x = uniform() if self.nstart is None else self._unit(self.nstart, n, "nstart")
+        x = x.copy() if p2m else Array.from_list(x.tolist(), "<f4")
         info = empty((2,), "<i4")
         thr = struct.unpack("<Q", struct.pack("<d", n * float(self.tol)))[0]
         self._op("pr_iterate_sparse", [(A, 0), (x, 1), (p, 0), (dw, 0), (info, 1)],
@@ -1650,20 +1753,34 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         # (indptr, indices, n)) walks its edge lists directly: the same rounds
         # and labels as the dense matrix's, without building or scanning it
         indptr, indices, n = csr
-        lab = _i32(list(range(n)), "labels")
+        lab = _p2m_iota(est, n)
         info = empty((1,), "<i4")
         est._op("cc_iterate_csr", [(indptr, 0), (indices, 0), (lab, 1), (info, 1)], (n, indices.shape[0]))
-        return _cc_relabel(lab, return_labels)
+        return _cc_relabel(lab, return_labels, est)
     A = _adjacency(A)
     n = A.shape[0]
-    lab = _i32(list(range(n)), "labels")
+    lab = _p2m_iota(est, n)
     # the min-label rounds as ONE resident op, A uploaded once
     info = empty((1,), "<i4")
     est._op("cc_iterate", [(A, 0), (lab, 1), (info, 1)], (n,))
-    return _cc_relabel(lab, return_labels)
+    return _cc_relabel(lab, return_labels, est)
 
 
-def _cc_relabel(lab, return_labels):
+def _p2m_iota(est, n):
+    """[0, 1, ..., n - 1] as int32 (`xn_p2m_iota` on the device)."""
+    if n > 0 and _p2m(est):
+        lab = empty((n,), "<i4")
+        est._op("p2m_iota", [(lab, 1)], (n,))
+        return lab
+    return _i32(list(range(n)), "labels")
+
+
+def _cc_relabel(lab, return_labels, est=None):
+    if est is not None and lab.shape[0] and _p2m(est):
+        got = _p2m_relabel(est, lab)
+        if got is not None:
+            cnt, labels = got
+            return (cnt, labels) if return_labels else cnt
     roots = {}
     out = []
     for v in lab.tolist():
@@ -1735,9 +1852,13 @@ class Louvain(_XNeighbors):
             raise ValueError("max_level must be a positive integer or None")
         self._op("louvain", [(A, 0), (labels, 1), (info, 1)], (n, ml),
                  (_f32_scalar(self.resolution), _f32_scalar(self.threshold)))
-        roots = {}
-        self.labels_ = Array.from_list([roots.setdefault(v, len(roots)) for v in labels.tolist()], "<i4")
-        self.n_communities_ = len(roots)
+        got = _p2m_relabel(self, labels) if (n and _p2m(self)) else None
+        if got is not None:
+            self.n_communities_, self.labels_ = got
+        else:
+            roots = {}
+            self.labels_ = Array.from_list([roots.setdefault(v, len(roots)) for v in labels.tolist()], "<i4")
+            self.n_communities_ = len(roots)
         info = info.tolist()
         self.modularity_ = info[0]
         self.n_levels_ = int(info[1])
