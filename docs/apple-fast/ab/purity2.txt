@@ -1,0 +1,4 @@
+CMD lane/apple-fast-purity2 purity2-1-gmm-istella AFC_FAMILY=classical2 bash ~/mq/ensure_so.sh bash tools/afc_ab_def.sh purity2-1-gmm-istella mixture gmm istella 1 2 "-D MOJOLEARN_PURITY2_1_OFF" ""
+CMD lane/apple-fast-purity2 purity2-2-logreg-istella AFC_FAMILY=classical2 bash ~/mq/ensure_so.sh bash tools/afc_ab_def.sh purity2-2-logreg-istella estimators logreg istella 1 2 "-D MOJOLEARN_PURITY2_2_OFF" ""
+CMD lane/apple-fast-purity2 purity2-2-logreg-taxi AFC_FAMILY=classical2 bash ~/mq/ensure_so.sh bash tools/afc_ab_def.sh purity2-2-logreg-taxi estimators logreg taxi 1 2 "-D MOJOLEARN_PURITY2_2_OFF" ""
+CMD lane/apple-fast-purity2 purity2-boruvka-check bash ~/mq/ensure_so.sh python3 tools/purity2_boruvka_check.py

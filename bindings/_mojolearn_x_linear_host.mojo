@@ -7,10 +7,12 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from core.py2mojo_rows import py2mojo_rows_host_binding
+from svm.host.scale_gamma_host import py2mojo_linear_flags_binding
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_linear.ops import FP, IP, X_LINEAR_HOST_SABOTAGE
-from x_linear.dispatch import fit_dispatch, decision_one, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV
+from x_linear.dispatch import fit_dispatch, decision_one, decision_code_row, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV, ALGO_RIDGE, isotonic_abi_check
 from x_linear.logcv import logcv_fold_ids
 from x_linear.isotonic_host import isotonic_fit_host
 from x_linear.team import team_work, solo
@@ -41,6 +43,7 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
     var n_fp = Int(py=dims[8])
     if n <= 0 or d < 0 or n_out <= 0:
         raise Error("x_linear: positive dimensions required")
+    isotonic_abi_check(Int(py=algo), n, Int(py=dims[3]), n_out, n_fw, n_iw, n_ip)
     var ipl = List[Int32](capacity=max(n_ip, 1))
     for i in range(n_ip):
         ipl.append(Int32(Int(py=ip[i])))
@@ -70,6 +73,25 @@ def fit_binding(algo: PythonObject, x_addr: PythonObject, y_addr: PythonObject, 
             ycopy[i] = y.unsafe_load(i)
         y = FP(unsafe_from_address=Int(ycopy.unsafe_ptr()))
         logcv_fold_ids(y, n, IP(unsafe_from_address=Int(ipl.unsafe_ptr())))
+    # RidgeClassifier: ip[4] == 1 means y holds the n int32 class codes (then
+    # the n weights when ip[3]); the +-1 targets as the device builds them
+    # (`c1_codes_targets_kernel`), the weights after them
+    if a == ALGO_RIDGE and n_ip > 4 and Int(ipl[4]) == 1:
+        var t_c = Int(ipl[0])
+        var has_sw = Int(ipl[3]) != 0
+        ycopy = List[Float32](length=n * t_c + (n if has_sw else 0), fill=Float32(0))
+        var yi = IP(unsafe_from_address=Int(y))
+        for i in range(n):
+            var c = Int(yi.unsafe_load(i))
+            if t_c == 1:
+                ycopy[i] = Float32(1) if c == 1 else Float32(-1)
+            else:
+                for t in range(t_c):
+                    ycopy[i * t_c + t] = Float32(1) if c == t else Float32(-1)
+        if has_sw:
+            for i in range(n):
+                ycopy[n * t_c + i] = y.unsafe_load(n + i)
+        y = FP(unsafe_from_address=Int(ycopy.unsafe_ptr()))
     with GILReleased(Python()):
         if a == ALGO_ISOTONIC:
             isotonic_fit_host(
@@ -109,6 +131,33 @@ def decision_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonOb
     return PythonObject(n * k)
 
 
+def decision_codes_binding(x_addr: PythonObject, wb_addr: PythonObject, dims: PythonObject,
+                           out_addr: PythonObject) raises -> PythonObject:
+    """The GPU binding's `x_linear_decision_codes` on the host: the same
+    `decision_one` cells, then `decision_code_row` per row."""
+    var n = Int(py=dims[0])
+    var d = Int(py=dims[1])
+    var k = Int(py=dims[2])
+    var link = Int(py=dims[3])
+    var strict = Int(py=dims[4])
+    var below = Int(py=dims[5])
+    var above = Int(py=dims[6])
+    if n < 0 or d < 0 or k <= 0:
+        raise Error("x_linear: positive dimensions required")
+    var x = _fp(Int(py=x_addr))
+    var wb = _fp(Int(py=wb_addr))
+    var out = IP(unsafe_from_address=Int(py=out_addr))
+    with GILReleased(Python()):
+        var s = List[Float32](length=max(n * k, 1), fill=Float32(0))
+        var sp = s.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        for t in range(n * k):
+            sp.unsafe_store(t, decision_one(x, t // k, d, wb, t % k, link))
+        for i in range(n):
+            out.unsafe_store(i, decision_code_row(sp, i, k, strict, below, above))
+        _ = s^
+    return PythonObject(n)
+
+
 def x_linear_host_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
@@ -144,8 +193,11 @@ def PyInit__mojolearn_x_linear_host() abi("C") -> PythonObject:
         m.def_function[x_linear_host_sabotage_binding]("x_linear_host_sabotage")
         m.def_function[fit_binding]("x_linear_fit")
         m.def_function[decision_binding]("x_linear_decision")
+        m.def_function[decision_codes_binding]("x_linear_decision_codes")
         m.def_function[x_linear_numeric_mode_binding]("x_linear_numeric_mode")
         m.def_function[x_linear_vendor_binding]("x_linear_vendor")
+        m.def_function[py2mojo_rows_host_binding]("py2mojo_rows")
+        m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_linear_host: ", e))

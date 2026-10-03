@@ -76,7 +76,7 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
     prototype = _clone(estimator)
     params = prototype.get_params(deep=True)
     if any((name == 'numeric_mode' or name.endswith('__numeric_mode'))
-           and value not in (None, 'identical') for name, value in params.items()):
+           and value not in (None, 'identical') for name, value in params.items()):  # glue: estimator parameter names and values
         raise ValueError('parallel cross-validation requires IDENTICAL estimator numeric modes')
     try:
         pickle.dumps((prototype, scoring), protocol=5)
@@ -93,11 +93,11 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
         # untouched, deliberately.
         if host:
             require_distinct_processes(
-                pool.map([('worker_identity', None, ()) for _ in pool.devices]), width)
+                pool.map([('worker_identity', None, ()) for _ in pool.devices]), width)  # glue: one identity request per device
         elif metal:
             _require_single_metal_worker(pool.map([('metal_worker_identity', None, ())]))
         else:
-            inventory = pool.map([('device_inventory', None, ()) for _ in pool.devices])
+            inventory = pool.map([('device_inventory', None, ()) for _ in pool.devices])  # glue: one inventory request per device
             require_distinct_workers(inventory, vendor, width)
         for start in range(0, len(folds), width):
             requests = []

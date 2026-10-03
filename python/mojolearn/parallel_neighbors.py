@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Whole-query GPU partitions with the original complete reference-row order."""
+import itertools
+
 from ._parallel_pool import DevicePool, driver_read_shift
 from ._buffer import as_f32_c, empty, addr, addr_ro
 from ._bufcheck import memcopy
@@ -21,18 +23,19 @@ def _methods(estimator):
 def _join(parts, *, ragged=False):
     first = parts[0]
     if isinstance(first, tuple):
-        return tuple(_join([p[i] for p in parts], ragged=ragged)
-                     for i in range(len(first)))
+        return tuple(_join([p[i] for p in parts], ragged=ragged)  # glue: one join per result tuple component
+                     for i in range(len(first)))  # glue: one join per result tuple component
     if isinstance(first, list):
         if ragged:
-            return [row for part in parts for row in part]
+            # shard result lists concatenated in shard order (C-level chain)
+            return list(itertools.chain.from_iterable(parts))
         # Multi-output classification: one probability matrix per target.
-        return [_join([p[i] for p in parts]) for i in range(len(first))]
-    shape = (sum(p.shape[0] for p in parts),) + first.shape[1:]
+        return [_join([p[i] for p in parts]) for i in range(len(first))]  # glue: one join per output target
+    shape = (sum(p.shape[0] for p in parts),) + first.shape[1:]  # glue: row counts of the shard results
     result = empty(shape, first.dtype)
     destination = addr(result, name='query output')
     offset = 0
-    for part in parts:
+    for part in parts:  # glue: one memcopy per shard result
         if part.dtype != first.dtype or part.shape[1:] != first.shape[1:]:
             raise RuntimeError('inconsistent query shard result')
         if part.nbytes:
@@ -99,7 +102,7 @@ class ParallelQueries:
             raise ValueError('input feature count differs from fit')
         n = data.shape[0]
         ranges = [(i, min(i + self.rows_per_shard, n))
-                  for i in range(0, n, self.rows_per_shard)] or [(0, 0)]
+                  for i in range(0, n, self.rows_per_shard)] or [(0, 0)]  # glue: shard boundaries for the device pool
         state = copy.copy(self.estimator)
         state.numeric_mode = 'identical'
         token = _next_token()
@@ -114,12 +117,12 @@ class ParallelQueries:
                     self._pool.map([('neighbor_state', None, token)] * workers)
                 except BaseException:
                     self._pool.close()
-        output = _join([r[0] for r in results], ragged=method == 'radius_neighbors')
+        output = _join([r[0] for r in results], ragged=method == 'radius_neighbors')  # glue: one result buffer per shard
         # Diagnostics describe actual shard calls, not a fictitious global tile.
         diagnostics = [dict(start=start, end=end,
                             device=self._pool.devices[i % len(self._pool.devices)],
                             **result[1])
-                       for i, ((start, end), result) in enumerate(zip(ranges, results))]
+                       for i, ((start, end), result) in enumerate(zip(ranges, results))]  # glue: one diagnostics record per shard
         self.last_shards_ = diagnostics
         return output
 
@@ -132,7 +135,7 @@ class ParallelQueries:
             ('neighbor_query', token,
              (data[start - driver_read_shift(index, start, self._pool.devices):
                    end - driver_read_shift(index, start, self._pool.devices)], method, kwargs))
-            for index, (start, end) in enumerate(ranges)])
+            for index, (start, end) in enumerate(ranges)])  # glue: one worker request per shard
 
     def close(self):
         self._pool.close()

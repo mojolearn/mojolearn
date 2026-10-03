@@ -203,7 +203,7 @@ def _is_float64(x):
     fmt = _buffer_format(x)
     if fmt is not None:
         return fmt == "d"
-    return any(type(v) is float for v in _flatten(x))
+    return any(type(v) is float for v in _flatten(x))  # glue: type probe of a list argument
 
 
 def _as_i32_1d(x, name):
@@ -323,53 +323,41 @@ def _prepare_cluster_labels(labels_true, labels_pred):
     # order rule (`_labels.sorted_classes`, DEVIATION 2340) over the
     # concatenation and a dict lookup, O(rows) label loops (DEVIATION 2377).
     fast = _native_union_codes(yt, yp)
-    if fast is not None:
-        return fast[0], fast[1], int(yt.shape[0]), 0, fast[2] - 1
-    tl = yt.tolist()
-    pl = yp.tolist()
-    classes, _ = sorted_classes(tl + pl)
-    index = {c: i for i, c in enumerate(classes)}
-    yt = Array.from_list([index[v] for v in tl], "<i4")
-    yp = Array.from_list([index[v] for v in pl], "<i4")
-    return yt, yp, len(tl), 0, len(classes) - 1
+    if fast is None:
+        return yt, yp, 0, 0, -1   # both sides empty: no classes
+    return fast[0], fast[1], int(yt.shape[0]), 0, fast[2] - 1
 
 
 #: DEVIATION 3107 (lane/python-hotpath, 2026-09-17). Below this many labels
-#: the Python label routines are the only path.
-_NATIVE_MIN_LABELS = 256
+#: the Python label routines were the only path; lane apple-fast-py2mojo-core
+#: (2026-10-03) sends every non-empty label buffer to the native encoder.
+_NATIVE_MIN_LABELS = 1
 
 
 def _native_union_codes(yt, yp):
     """`(codes_true, codes_pred, n_classes)` over the sorted union of two
-    int32 label Arrays, as the Python lines below it in
-    `_prepare_cluster_labels` compute them, or None (DEVIATION 3107).
+    int32 label Arrays, or None when both are empty (lane pyglue-sweep: one
+    empty side is encoded too; the Python dict route is gone).
 
-    Each array is encoded by the native ORDER RULE encoder (DEVIATION 2500),
-    the two sorted class lists are merged in Python (classes, not rows) and
-    each array's dense codes are remapped onto the union by `gather_i32`.
-    Measured on the M4 at 1,000,000 rows: 627 ms in Python, five passes of
-    one object per row."""
-    from ._buffer import _native_optional
-    from ._labels import _encode_labels_native
+    lane apple-fast-py2mojo-core (2026-10-03): the two arrays are laid end
+    to end and encoded ONCE by the base binding's `unique_inverse` (the
+    device sort, flag/scan compaction and gather on a GPU install, the core
+    host twin on a CPU-only one): its sorted distinct values ARE the sorted
+    union and its codes, split at len(yt), are each side's codes on it. No
+    class cap (the 4096-class encoder and the Python merge of the two class
+    lists are gone, and with them the dict fallback for more classes)."""
+    import ctypes
+    from ._labels import unique_inverse
 
-    if min(yt.size, yp.size) < _NATIVE_MIN_LABELS:
+    nt, npred = int(yt.size), int(yp.size)
+    if nt + npred == 0:
         return None
-    gather = _native_optional("gather_i32")
-    if gather is None:
-        return None
-    true = _encode_labels_native(yt)
-    pred = _encode_labels_native(yp) if true is not None else None
-    if true is None or pred is None:
-        return None  # more distinct labels than the native encoder holds
-    union = sorted(set(true[0]) | set(pred[0]))
-    index = {c: i for i, c in enumerate(union)}
-    out = []
-    for classes, codes in (true, pred):
-        table = Array.from_list([index[c] for c in classes], "<i4")
-        mapped = empty((codes.size,), "<i4")
-        gather(_addr_ro(table), len(classes), _addr_ro(codes), codes.size, _addr(mapped))
-        out.append(mapped)
-    return out[0], out[1], len(union)
+    yt, yp = yt._as_c(), yp._as_c()
+    both = empty((nt + npred,), "<i4")
+    ctypes.memmove(_addr(both), _addr_ro(yt), 4 * nt)
+    ctypes.memmove(_addr(both) + 4 * nt, _addr_ro(yp), 4 * npred)
+    classes, codes = unique_inverse(both)
+    return codes[0:nt], codes[nt:nt + npred], int(classes.size)
 
 
 # ===========================================================================
@@ -879,7 +867,7 @@ def kl_divergence(P, Q):
     gives `+inf`, as theirs.
     """
     p, q = _pair_1d(P, Q, "P", "Q", _as_f32_1d)
-    for name, arr in (("P", p), ("Q", q)):
+    for name, arr in (("P", p), ("Q", q)):  # glue: validates the two named arguments
         if arr.min() < 0:
             raise ValueError(
                 f"mojolearn kl_divergence: {name} has a negative entry; "
@@ -1069,7 +1057,7 @@ def trustworthiness(
             f"mojolearn trustworthiness: X has {x.shape[0]} rows and "
             f"X_embedded has {emb.shape[0]}"
         )
-    for name, arr in (("X", x), ("X_embedded", emb)):
+    for name, arr in (("X", x), ("X_embedded", emb)):  # glue: validates the two named arguments
         if not all_finite(arr):
             raise ValueError(
                 f"mojolearn trustworthiness: {name} contains NaN or "
@@ -1108,9 +1096,9 @@ def _classification_labels(values, name, *, allow_empty=False):
     labels = flatten_labels(values)
     if not allow_empty and not labels:
         raise ValueError(f"{name} must contain at least one label")
-    if all(isinstance(v, str) for v in labels):
+    if all(isinstance(v, str) for v in labels):  # glue: type validation of list labels
         return [str(v) for v in labels], "string"
-    if all(isinstance(v, numbers.Integral) or is_bool(v) for v in labels):
+    if all(isinstance(v, numbers.Integral) or is_bool(v) for v in labels):  # glue: type validation of list labels
         return [int(v) for v in labels], "integer"
     raise TypeError(f"{name} must contain only strings or only integers; "
                     "floating labels, missing labels and mixed types are unsupported")
@@ -1153,8 +1141,21 @@ def _native_classification_labels(values):
     from ._buffer import _has_buffer, hotpath_enabled
     from ._labels import _encode_labels_native
 
-    if isinstance(values, (list, tuple, str, bytes)) or not hotpath_enabled():
+    if isinstance(values, (str, bytes)) or not hotpath_enabled():
         return None
+    if type(values) in (list, tuple):
+        # lane apple-fast-py2mojo-core: a flat list of exact Python ints is
+        # packed into an int64 buffer in C and encoded like one (the list
+        # route's `[int(v) for v in labels]` and its dict per row are gone
+        # for it); str, bool, nested or mixed lists keep the list route
+        if not values or set(map(type, values)) != {int}:
+            return None
+        import array
+        try:
+            store = array.array("q", values)
+        except OverflowError:
+            return None
+        values = Array._owned(store, (len(store),), "<i8", "C")
     if not isinstance(values, Array) and not _has_buffer(values):
         return None
     if len(_shape_of(values)) != 1:
@@ -1192,16 +1193,14 @@ def _label_map(labels, fn):
     function of the label: evaluated once per CLASS and gathered per row for
     `_EncodedLabels` (DEVIATION 3107), once per row for a list."""
     if isinstance(labels, _EncodedLabels):
-        from ._buffer import _native_optional
-        gather = _native_optional("gather_i32")
+        from ._buffer import _native
+        gather = _native("gather_i32")
         table = [fn(c) for c in labels.classes]
-        if gather is not None:
-            table = Array.from_list(table, "<i4")
-            out = empty((len(labels),), "<i4")
-            gather(_addr_ro(table), len(labels.classes), _addr_ro(labels.codes),
-                   len(labels), _addr(out))
-            return out
-        return Array.from_list([table[c] for c in labels.codes._values()], "<i4")
+        table = Array.from_list(table, "<i4")
+        out = empty((len(labels),), "<i4")
+        gather(_addr_ro(table), len(labels.classes), _addr_ro(labels.codes),
+               len(labels), _addr(out))
+        return out
     return Array.from_list([fn(v) for v in labels], "<i4")
 
 

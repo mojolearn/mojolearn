@@ -283,7 +283,7 @@ def _encode_labels_native(y):
         return None
     # `flatten_labels` reads the LOGICAL order; storage order equals it only
     # for a vector (rank 1, or every other axis of length 1).
-    if arr.size != max(arr.shape):
+    if arr.size != max(arr.shape):  # glue: largest axis of the shape
         return None
     key, fmt, py = spec
     try:
@@ -451,23 +451,53 @@ def argmax_rows(scores):
     return Array._owned(store, (n_rows,), "<i8", "C")
 
 
+def threshold_codes(scores, threshold=0.0, *, strict=True, below=0, above=1):
+    """`above` where a score is > threshold (`strict`) or >= threshold, else
+    `below` (NaN takes `below`), as an int64 `Array`, by the base binding's
+    `threshold_labels_i64` (lane cgr4-py-compute: the predict label maps
+    that were per-row Python comprehensions)."""
+    if not isinstance(scores, Array):
+        from ._buffer import _materialize
+        scores, _ = _materialize(scores, "scores")
+    if scores.dtype not in ("<f4", "<f8"):
+        scores = scores.astype("<f8")
+    scores = scores._as_c()
+    n = scores.size
+    if not n:
+        return Array.from_list([], "<i8")
+    from ._buffer import _native, _output_store
+    store = _output_store("q", n)
+    _native("threshold_labels_i64")(scores._addr, 0 if scores.dtype == "<f4" else 1, n, float(threshold),
+                                    int(bool(strict)), int(below), int(above), store.buffer_info()[0])
+    return Array._owned(store, (n,), "<i8", "C")
+
+
 def finite_integer_codes(arr):
     """Sorted distinct values of a float32 label `Array` as ints, or None
-    when any value is non-finite, negative or not an integer. The
-    finiteness test is native (`_buffer.all_finite`); the distinct set is
-    built by `set()` over the storage view, O(rows) at C speed with no
-    Python loop until the loop over DISTINCT values."""
-    from ._buffer import all_finite
+    when any value is non-finite, negative or not an integer. Every pass
+    over the rows is native (lane apple-fast-py2mojo-core; the `set()` over
+    the storage view is gone): the finiteness scan (`_buffer.all_finite`),
+    the integer test and the minimum (the core helper `reduce_stat`), and
+    the distinct values (`unique_inverse`, the device sort on a GPU install);
+    Python only converts the k class values."""
+    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
+    from ._buffer import all_finite, _native
 
     if not all_finite(arr):
         return None
-    distinct = set(flat_view(arr, "f"))
-    if not distinct or min(distinct) < 0:
+    if arr.size == 0:
         return None
-    for v in distinct:
-        if v != math.floor(v):
-            return None
-    return sorted(int(v) for v in distinct)
+    flat = arr._as_c()
+    code = _NATIVE_CODE.get(flat.dtype)
+    if code is None or flat.dtype not in ("<f4", "<f8"):
+        flat = flat.astype("<f8")
+        code = _NATIVE_CODE["<f8"]
+    if not int(_native("reduce_stat")(flat._addr, code, flat.size, _REDUCE_INTEGRAL)):
+        return None
+    if flat.min() < 0:
+        return None
+    classes, _ = unique_inverse(flat.reshape((flat.size,)))
+    return [int(v) for v in classes.tolist()]
 
 
 def unique_inverse(y):
@@ -496,7 +526,7 @@ def unique_inverse(y):
     kind = 0 if arr.dtype.lstrip("<>|=")[:1] == "f" else 1
     if arr.size == 0:
         raise ValueError("mojolearn: y is empty")
-    if arr.size != max(arr.shape):
+    if arr.size != max(arr.shape):  # glue: largest axis of the shape
         raise ValueError("mojolearn: y must be a vector of labels")
     wide = arr.astype("<f8" if kind == 0 else "<i8")
     n = int(wide.size)
@@ -511,7 +541,11 @@ def unique_inverse(y):
             raise ValueError(str(exc)) from None
         raise
     del wide, arr
-    classes = Array._owned(classes_store, (n,), "<f8" if kind == 0 else "<i8", "C")
+    # the first k slots hold the classes: one memmove into a k-slot store,
+    # no per-class Python list (lane apple-fast-py2mojo-core)
     if k < n:
-        classes = Array.from_list(classes.tolist()[:k], classes.dtype)
+        cut = _output_store("d" if kind == 0 else "q", k)
+        ctypes.memmove(cut.buffer_info()[0], classes_store.buffer_info()[0], 8 * k)
+        classes_store = cut
+    classes = Array._owned(classes_store, (k,), "<f8" if kind == 0 else "<i8", "C")
     return classes, Array._owned(codes_store, (n,), "<i4", "C")

@@ -9,7 +9,7 @@ index and extending a distributed index are outside this API.
 __all__ = ['DistributedIVFIndex']
 
 from ._parallel_pool import DevicePool
-from ._buffer import Array, as_f32_c, empty, addr, addr_ro
+from ._buffer import Array, as_f32_c, as_i32_c, empty, addr, addr_ro
 from ._ivf_impl import IVFIndex
 
 
@@ -73,22 +73,18 @@ class DistributedIVFIndex:
         if index._metric_code() != index.metric_code_:
             raise ValueError('metric differs from the fitted index')
         from ._ivf_impl import _int_param
-        for name in ('n_lists', 'n_probes', 'n_neighbors'):
+        for name in ('n_lists', 'n_probes', 'n_neighbors'):  # glue: checks three parameter names
             _int_param(name, getattr(index, name))
         if not 1 <= index.n_probes <= index.n_lists_ or index.n_neighbors < 1:
             raise ValueError('invalid IVF probe or neighbor count')
-        original_ids = [int(v) for v in index.list_indices_.tolist()]
-        if sorted(original_ids) != list(range(index.n_rows_)):
-            raise ValueError('IVF original IDs must be a permutation of stored row IDs')
         if index.list_data_.shape != (index.n_rows_, index.n_features_in_):
             raise ValueError('IVF stored data shape differs from index metadata')
-        offsets = [int(v) for v in index.list_offsets_.tolist()]
-        # Partitioning clips offsets to local bounds. Validate BEFORE clipping:
-        # otherwise a corrupted saved index can be silently repaired differently
-        # from the ordinary native search, which rejects its original layout.
-        if (len(offsets) != index.n_lists_ + 1 or offsets[0] != 0
-                or offsets[-1] != index.n_rows_
-                or any(a > b for a, b in zip(offsets, offsets[1:]))):
+        n, n_lists = int(index.n_rows_), int(index.n_lists_)
+        ind, _ = as_i32_c(index.list_indices_, ndim=1, name='list_indices_')
+        offs, _ = as_i32_c(index.list_offsets_, ndim=1, name='list_offsets_')
+        if ind.shape[0] != n:
+            raise ValueError('IVF original IDs must be a permutation of stored row IDs')
+        if offs.shape[0] != n_lists + 1:
             raise ValueError('invalid global IVF list offsets')
         devices = tuple(devices)
         pool = DevicePool(devices)  # validates every requested device before slicing
@@ -102,26 +98,42 @@ class DistributedIVFIndex:
         obj.n_candidates_ = None
         obj._id_maps = []
         obj._native = index._extension()
+        # Validation and the row split in one native pass (bindings/
+        # ivf_index_arrays.mojo `ivf_shard_plan`): the ids must be a
+        # permutation and the offsets 0 .. n nondecreasing BEFORE clipping
+        # (otherwise a corrupted saved index is silently repaired differently
+        # from the ordinary native search, which rejects its layout); then each
+        # shard's clipped offsets, local ids and ascending id map.
+        P = len(devices)
+        soff = empty((P, n_lists + 1), '<i4')
+        local_all, map_all = empty((n,), '<i4'), empty((n,), '<i4')
+        status = int(obj._native.ivf_shard_plan(
+            [addr_ro(ind, name='list_indices_'), addr_ro(offs, name='list_offsets_'),
+             addr(soff, name='shard offsets'), addr(local_all, name='local ids'),
+             addr(map_all, name='id map')], [n, n_lists, P]))
+        if status == 1:
+            obj.close()
+            raise ValueError('IVF original IDs must be a permutation of stored row IDs')
+        if status != 0:
+            obj.close()
+            raise ValueError('invalid global IVF list offsets')
         requests = []
-        for part in range(len(devices)):
-            lo = part * index.n_rows_ // len(devices)
-            hi = (part + 1) * index.n_rows_ // len(devices)
-            original = original_ids[lo:hi]
-            mapping = sorted(original)
-            local = {value: i for i, value in enumerate(mapping)}
+        for part in range(P):  # glue: one shard request per device
+            lo = part * n // P
+            hi = (part + 1) * n // P
             shard = IVFIndex(index.n_lists_, index.n_probes, index.n_neighbors,
                              metric=index.metric, numeric_mode='identical')
             shard.n_rows_, shard.n_lists_ = hi - lo, index.n_lists_
             shard.n_features_in_, shard.metric_code_ = index.n_features_in_, index.metric_code_
             shard.centers_, shard.center_norms_ = index.centers_, index.center_norms_
-            shard.list_offsets_ = Array.from_list([max(0, min(v, hi) - lo) for v in offsets], '<i4')
-            shard.list_indices_ = Array.from_list([local[v] for v in original], '<i4')
+            shard.list_offsets_ = soff[part]
+            shard.list_indices_ = local_all[lo:hi]
             shard.list_data_ = index.list_data_[lo:hi]
-            obj._id_maps.append(Array.from_list(mapping, '<i4') if mapping else empty((0,), '<i4'))
+            obj._id_maps.append(map_all[lo:hi] if hi > lo else empty((0,), '<i4'))
             requests.append(('ivf_store', shard, ()))
         try:
             receipts = pool.map(requests)
-            if receipts != [len(ids) for ids in obj._id_maps]:
+            if receipts != [len(ids) for ids in obj._id_maps]:  # glue: one receipt per device
                 raise ValueError('IVF storage receipts differ from shard sizes')
         except BaseException:
             obj.close()
@@ -137,11 +149,11 @@ class DistributedIVFIndex:
         if q.shape[1] != self.n_features_in_:
             raise ValueError('query features differ from index')
         try:
-            parts = self._pool.map([('ivf_search_stored', None, (q,)) for _ in self.devices])
+            parts = self._pool.map([('ivf_search_stored', None, (q,)) for _ in self.devices])  # glue: one search request per device
             if len(parts) != len(self._id_maps):
                 raise ValueError('incomplete IVF result shards')
             m, k = q.shape[0], self.n_neighbors
-            for d, ix, count in parts:
+            for d, ix, count in parts:  # glue: checks each device's output shapes
                 if d.shape != (m, k) or ix.shape != d.shape or count.shape != (m,):
                     raise ValueError('invalid IVF shard output shapes')
             # THE MERGE (lane/py-dn-ann, 2026-09-28): one native pass
@@ -151,12 +163,12 @@ class DistributedIVFIndex:
             # ordered by (float32 distance, original id), the first k kept.
             result, ids, counts = empty((m, k), '<f4'), empty((m, k), '<i4'), empty((m,), '<i4')
             addrs = [addr(result, name='distances'), addr(ids, name='ids'), addr(counts, name='counts')]
-            for mapping, (d, ix, count) in zip(self._id_maps, parts):
+            for mapping, (d, ix, count) in zip(self._id_maps, parts):  # glue: addresses of each device's outputs
                 addrs += [addr_ro(d, name='shard distances'), addr_ro(ix, name='shard ids'),
                           addr_ro(count, name='shard counts'),
                           addr_ro(mapping, name='shard id map') if len(mapping) else addr_ro(count, name='shard id map')]
             status, _row = self._native.ivf_merge_shards(
-                addrs, [len(parts), m, k] + [len(mapping) for mapping in self._id_maps])
+                addrs, [len(parts), m, k] + [len(mapping) for mapping in self._id_maps])  # glue: row count of each device shard
             if int(status) != 0:
                 raise ValueError(_MERGE_ERRORS.get(int(status), 'IVF shard merge failed'))
             if self.metric_code_ == 1:

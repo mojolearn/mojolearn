@@ -102,7 +102,6 @@ row whose largest value lies in that tail and of no other row.
 
 from std.gpu import WARP_SIZE, block_dim, block_idx, lane_id, thread_idx
 from std.memory import stack_allocation
-from std.os import getenv
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys import is_defined, llvm_intrinsic
@@ -114,6 +113,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     column_name,
     lib_int8_matrix_unit_for,
+    lib_smem_page_fits_for,
 )
 from checks.numerics import ftz
 from checks.numerics_int15 import (
@@ -523,14 +523,14 @@ def int15_planes_kernel(
 #: of magnitudes is the same float under every grouping (W-10's own
 #: argument for the parallel schedule), and a plane is a function of its
 #: own value and its row's exponent. Rows of at most INT15_ROW_BLOCK_COLS
-#: values (32 KB of threadgroup memory); longer rows and the transposed
-#: orientation keep the parallel schedule. MOJOLEARN_INT15_ROW_BLOCK=0
-#: keeps the parallel schedule for every row (the A/B).
-comptime INT15_ROW_BLOCK_COLS = 8192
-
-
-def int15_row_block_on() -> Bool:
-    return String(getenv("MOJOLEARN_INT15_ROW_BLOCK")) != "0"
+#: values; longer rows and the transposed orientation keep the parallel
+#: schedule (the same bits). The page is the staged row plus the
+#: INT15_TPB-word reduction scratch, sized to Apple's 32 KiB threadgroup
+#: limit: 8192 staged words plus the scratch claimed 33,792 B and Metal
+#: refused the pipeline on the M2 Pro (Oct 3). The kernel's fits gate makes
+#: an oversized page a compile error on every column.
+comptime INT15_ROW_BLOCK_PAGE_BYTES = 32 * 1024
+comptime INT15_ROW_BLOCK_COLS = INT15_ROW_BLOCK_PAGE_BYTES // 4 - INT15_TPB
 
 
 def int15_planes_row_block_kernel(
@@ -549,6 +549,9 @@ def int15_planes_row_block_kernel(
     var r = Int(block_idx.x)
     if r >= rows:
         return
+    comptime assert lib_smem_page_fits_for[
+        TARGET_COLUMN, (INT15_ROW_BLOCK_COLS + INT15_TPB) * 4
+    ](), "int15 row-block page exceeds the column's threadgroup memory"
     var sh = stack_allocation[
         INT15_ROW_BLOCK_COLS, Scalar[DType.float32], address_space = AddressSpace.SHARED
     ]()
@@ -607,13 +610,8 @@ def int15_planes_row_block_kernel(
 #: the planes' rows, both coalesced. SAME BITS: each chunk maximum is the
 #: same maximum of the same magnitudes, and each plane is the same
 #: function of its own value and its row's exponent.
-#: MOJOLEARN_INT15_TRANSPOSED_TILE=0 keeps the old maps (the A/B).
 comptime INT15_TILE = 32
 comptime INT15_TILE_ROWS = 8
-
-
-def int15_transposed_tile_on() -> Bool:
-    return String(getenv("MOJOLEARN_INT15_TRANSPOSED_TILE")) != "0"
 
 
 def int15_absmax_chunk_t_kernel(
@@ -669,6 +667,9 @@ def int15_planes_t_tile_kernel(
     and W-3 per value under row `r`'s exponent, as before."""
     var rows = Int(rows_in)
     var cols = Int(cols_in)
+    comptime assert lib_smem_page_fits_for[
+        TARGET_COLUMN, INT15_TILE * (INT15_TILE + 1) * 4
+    ](), "int15 transposed tile page exceeds the column's threadgroup memory"
     var tile = stack_allocation[
         INT15_TILE * (INT15_TILE + 1), Scalar[DType.float32], address_space = AddressSpace.SHARED
     ]()
@@ -741,7 +742,7 @@ def _parallel_exponents(
     """The first two launches: chunk maxima, then one exponent per row."""
     var chunks = int15_quant_chunks(cols)
     work.ensure(ctx, rows * chunks)
-    if s_row == 1 and s_col == rows and int15_transposed_tile_on():
+    if s_row == 1 and s_col == rows:
         ctx.enqueue_function[int15_absmax_chunk_t_kernel](
             work.part.unsafe_ptr(),
             x.unsafe_ptr(),
@@ -820,10 +821,10 @@ def quantize_planes_int15_parallel_device(
 ) raises:
     """The PARALLEL schedule, straight to planes. Asynchronous. A row-major
     operand whose rows fit the row-block kernel takes that schedule (one
-    read, one write; the same bits) unless MOJOLEARN_INT15_ROW_BLOCK=0."""
+    read, one write; the same bits)."""
     if rows <= 0 or cols <= 0:
         raise Error("quantize_planes_int15_parallel: rows and cols must be positive")
-    if not transposed and cols <= INT15_ROW_BLOCK_COLS and int15_row_block_on():
+    if not transposed and cols <= INT15_ROW_BLOCK_COLS:
         ctx.enqueue_function[int15_planes_row_block_kernel](
             hi.unsafe_ptr(),
             lo.unsafe_ptr(),
@@ -841,7 +842,7 @@ def quantize_planes_int15_parallel_device(
         s_row = 1
         s_col = rows
     _parallel_exponents(ctx, e, x, work, rows, cols, s_row, s_col)
-    if transposed and int15_transposed_tile_on():
+    if transposed:
         ctx.enqueue_function[int15_planes_t_tile_kernel](
             hi.unsafe_ptr(),
             lo.unsafe_ptr(),

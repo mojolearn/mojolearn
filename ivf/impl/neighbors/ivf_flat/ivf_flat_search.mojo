@@ -98,6 +98,19 @@ from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
 from std.sys.compile import is_defined
 from std.os import getenv
 from x_ann.io import upload_i32
+from core.device_fold import device_count_less_i32
+from ivf.impl.neighbors.ivf_flat.ivf_group_device import (
+    ivf_group_pairs_device,
+    ivf_probe_counts_device,
+)
+from ivf.impl.neighbors.ivf_flat.ivf_query_device import (
+    IVF_QUERY_BATCH_CANDIDATES,
+    IvfQueryBatch,
+    ivf_kept_prefix_device,
+    ivf_query_batch_device,
+    ivf_query_batches,
+)
+from x_ann.io import download_i32
 from std.gpu import WARP_SIZE
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_PREPARE
@@ -204,6 +217,15 @@ struct IvfSearchResult(Movable):
     var n_candidates: List[Int32]
 
 
+
+
+def _sort_probes_host(
+    mut probe_dist: List[Float32], mut probe_ids: List[UInt32], n_queries: Int, n_probes: Int
+):
+    """The per-query path's probe order: each query's probes ascending by
+    (distance, list id). Only the per-query path and the trace read it."""
+    for q in range(n_queries):
+        sort_slots_by_distance_then_index(probe_dist, probe_ids, q * n_probes, n_probes)
 
 
 def _ivf_scan_grouped() -> Bool:
@@ -523,6 +545,58 @@ struct IvfFlatDevice(Movable):
         )
 
 
+def _count_sum(counts: List[Int32], q0: Int, q1: Int) -> Int:
+    var t = 0
+    for q in range(q0, q1):
+        t += Int(counts[q])
+    return t
+
+
+def _refuse_query(
+    counts: List[Int32], n_queries: Int, n_probes: Int, k: Int, filtered: Bool, partial_storage: Bool
+) raises:
+    """DEVIATION 1794. Their `postprocess_neighbors_kernel` fills the short
+    slots with `kOutOfBoundsRecord` (`ivf_common.cuh:106-108`); that fill is
+    not implemented and the implemented selection cannot take `k > len`.
+    Refusing names the first such query and the two numbers a caller can
+    act on. The first query that selects anything and asks for more than
+    the mode's selection capacity refuses as the per-query selector did."""
+    for q in range(n_queries):
+        if Int(counts[q]) < k and not partial_storage:
+            raise Error(
+                "ivf_flat search: query "
+                + String(q)
+                + " probes "
+                + String(n_probes)
+                + " lists holding "
+                + String(Int(counts[q]))
+                + " vectors between them, fewer than k = "
+                + String(k)
+                + (" (after the filter)" if filtered else "")
+                + ". Their kOutOfBoundsRecord short-fill"
+                " (ivf_common.cuh:106-108) is not implemented. Raise n_probes,"
+                " or lower k, or rebuild with fewer lists."
+            )
+        var selected = min(k, Int(counts[q]))
+        if selected > IVF_SELECT_LIMIT:
+            raise Error("ivf_flat: selection k exceeds the mode's bounded rank capacity " + String(IVF_SELECT_LIMIT))
+
+
+def _trace_batch(
+    ctx: DeviceContext, mut batch: IvfQueryBatch, mut all_idx: List[Int32], mut all_dist: List[Float32]
+) raises:
+    """The trace's `ivf.cand_idx` / `ivf.cand_dist` of one batch: its
+    candidates in query order, each query's in original-id order (the
+    merged row's), as the per-query loop recorded them. Checks only."""
+    if batch.total <= 0:
+        return
+    var ids = download_u32(ctx, batch.corig, batch.total)
+    var ds = download_f32(ctx, batch.cdist, batch.total)
+    for i in range(batch.total):
+        all_idx.append(Int32(ids[i]))
+        all_dist.append(ds[i])
+
+
 def ivf_flat_search_traced(
     ctx: DeviceContext,
     mut trace: IdentityTrace,
@@ -688,20 +762,10 @@ def ivf_flat_search_prepared(
         ctx, dcoarse, dprobe_dist, dprobe_idx, dpbuf_val, dpbuf_idx,
         n_queries, n_lists, n_probes, probe_buf_len,
     )
-    var probe_dist = download_f32(ctx, dprobe_dist, n_queries * n_probes)
-    var probe_ids = download_u32(ctx, dprobe_idx, n_queries * n_probes)
-    for q in range(n_queries):
-        sort_slots_by_distance_then_index(
-            probe_dist, probe_ids, q * n_probes, n_probes
-        )
-    if trace.enabled:
-        trace.record_list_f32("ivf.probe_dist", probe_dist)
-        var probe_i32 = List[Int32]()
-        for i in range(n_queries * n_probes):
-            probe_i32.append(Int32(probe_ids[i]))
-        trace.record_list_i32("ivf.probe_lists", probe_i32)
-
-    # ---- steps 3-5, FAST on Apple: every query in one launch ------------
+    # lane cgr4-download-loop: the batched scans plan on the device (the
+    # probes are never downloaded for them); only the per-query path below
+    # reads the probes on the host, sorted, as before.
+    var use_batched = False
     comptime if IVF_FAST_SCAN or IVF_IDENTICAL_SCAN:
         # lane ivf-filter-fix (2026-10-01): a FILTERED search takes the
         # batched scans too, with the mask applied inside the scan (the FAST
@@ -713,35 +777,45 @@ def ivf_flat_search_prepared(
         var batched_filter_ok = True
         comptime if IVF_IDENTICAL_SCAN:
             batched_filter_ok = _ivf_scan_grouped()
-        if (
+        use_batched = (
             not trace.enabled
             and not partial_storage
             and (not filtered or batched_filter_ok)
             and k <= 32
             and dim <= FIVF_MAX_DIM
-        ):
-            # the kept rows per list: the candidate count per query is the
-            # kept candidates (the per-query path's `len(kept)`)
-            var kept_per_list = List[Int32](length=n_lists, fill=Int32(0))
-            if filtered:
-                for l in range(n_lists):
-                    var c = 0
-                    for sl in range(Int(index.list_offsets[l]), Int(index.list_offsets[l + 1])):
-                        if keep[Int(index.list_indices[sl])] != 0:
-                            c += 1
-                    kept_per_list[l] = Int32(c)
-            var counts = List[Int32]()
-            var enough = True
-            for q in range(n_queries):
-                var c = 0
-                for p in range(n_probes):
-                    var l = Int(probe_ids[q * n_probes + p])
-                    c += Int(kept_per_list[l]) if filtered else index.list_size(l)
-                counts.append(Int32(c))
-                if c < k:
-                    enough = False
+        )
+    # the trace records each query's probes sorted (checks only); no search
+    # path reads the probes on the host
+    var probe_dist = List[Float32]()
+    var probe_ids = List[UInt32]()
+    if trace.enabled:
+        probe_dist = download_f32(ctx, dprobe_dist, n_queries * n_probes)
+        probe_ids = download_u32(ctx, dprobe_idx, n_queries * n_probes)
+        _sort_probes_host(probe_dist, probe_ids, n_queries, n_probes)
+        if trace.enabled:
+            trace.record_list_f32("ivf.probe_dist", probe_dist)
+            var probe_i32 = List[Int32]()
+            for i in range(n_queries * n_probes):
+                probe_i32.append(Int32(probe_ids[i]))
+            trace.record_list_i32("ivf.probe_lists", probe_i32)
+
+    # ---- steps 3-5, FAST on Apple: every query in one launch ------------
+    comptime if IVF_FAST_SCAN or IVF_IDENTICAL_SCAN:
+        if use_batched:
+            # the candidate count per query (the kept candidates under a
+            # filter, the per-query path's `len(kept)`), on the device
             var d_keep = upload_i32(ctx, keep) if filtered else ctx.enqueue_create_buffer[DType.int32](1)
             var keep_len = len(keep) if filtered else 0
+            var d_counts = ivf_probe_counts_device(
+                ctx, dprobe_idx, dev.d_off, dev.d_ind, d_keep, filtered,
+                n_queries, n_probes, n_lists, index.n_rows,
+            )
+            var enough = device_count_less_i32(ctx, d_counts, n_queries, Int32(k)) == 0
+            var counts = List[Int32](length=n_queries, fill=Int32(0))
+            if n_queries > 0:
+                ctx.enqueue_copy(dst_ptr=counts.unsafe_ptr(), src_buf=d_counts.create_sub_buffer[DType.int32](0, n_queries))
+                ctx.synchronize()
+            _ = d_counts^
             if enough:
                 var d_od = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
                 var d_oi = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
@@ -751,43 +825,13 @@ def ivf_flat_search_prepared(
                         comptime if IVF_IDENTICAL_SCAN:
                             if _ivf_scan_grouped():
                                 # lane neural-pass42: the (query, probe) pairs grouped by
-                                # list on the host (a counting sort, ascending (q, p)
-                                # within a list), the blocks GQPB pairs of one list each
-                                var gcount = List[Int32](length=n_lists + 1, fill=Int32(0))
-                                for q in range(n_queries):
-                                    for p in range(n_probes):
-                                        gcount[Int(probe_ids[q * n_probes + p]) + 1] += 1
-                                var goff = List[Int32](length=n_lists + 1, fill=Int32(0))
-                                for l in range(n_lists):
-                                    goff[l + 1] = goff[l] + gcount[l + 1]
-                                var cursor = List[Int32](length=n_lists, fill=Int32(0))
-                                for l in range(n_lists):
-                                    cursor[l] = goff[l]
-                                var gq = List[Int32](length=max(n_queries * n_probes, 1), fill=Int32(0))
-                                var gp = List[Int32](length=max(n_queries * n_probes, 1), fill=Int32(0))
-                                for q in range(n_queries):
-                                    for p in range(n_probes):
-                                        var l = Int(probe_ids[q * n_probes + p])
-                                        gq[Int(cursor[l])] = Int32(q)
-                                        gp[Int(cursor[l])] = Int32(p)
-                                        cursor[l] += 1
-                                var bl = List[Int32]()
-                                var bs = List[Int32]()
-                                for l in range(n_lists):
-                                    var j = Int(goff[l])
-                                    while j < Int(goff[l + 1]):
-                                        bl.append(Int32(l))
-                                        bs.append(Int32(j))
-                                        j += GQPB
-                                var n_blocks = len(bl)
-                                if n_blocks == 0:
-                                    bl.append(Int32(0))
-                                    bs.append(Int32(0))
-                                var d_goff = upload_i32(ctx, goff)
-                                var d_gq = upload_i32(ctx, gq)
-                                var d_gp = upload_i32(ctx, gp)
-                                var d_bl = upload_i32(ctx, bl)
-                                var d_bs = upload_i32(ctx, bs)
+                                # list, ascending (q, p) within a list, the blocks GQPB
+                                # pairs of one list each; lane cgr4-download-loop: the
+                                # grouping runs on the device (ivf_group_device.mojo)
+                                var grp = ivf_group_pairs_device(
+                                    ctx, dprobe_idx, n_queries, n_probes, n_lists, GQPB
+                                )
+                                var n_blocks = grp.n_blocks
                                 var d_pd = ctx.enqueue_create_buffer[DType.float32](max(n_queries * n_probes * KM, 1))
                                 var d_pi = ctx.enqueue_create_buffer[DType.uint32](max(n_queries * n_probes * KM, 1))
                                 if n_blocks > 0:
@@ -795,8 +839,8 @@ def ivf_flat_search_prepared(
                                         dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
                                         dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
                                         dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
-                                        d_goff.unsafe_ptr(), d_gq.unsafe_ptr(), d_gp.unsafe_ptr(),
-                                        d_bl.unsafe_ptr(), d_bs.unsafe_ptr(),
+                                        grp.goff.unsafe_ptr(), grp.gq.unsafe_ptr(), grp.gp.unsafe_ptr(),
+                                        grp.bl.unsafe_ptr(), grp.bs.unsafe_ptr(),
                                         d_pd.unsafe_ptr(), d_pi.unsafe_ptr(),
                                         d_keep.unsafe_ptr(), Int32(keep_len),
                                         Int32(dim), Int32(n_probes), Int32(k),
@@ -808,20 +852,9 @@ def ivf_flat_search_prepared(
                                     grid_dim=(n_queries + 255) // 256, block_dim=256,
                                 )
                                 ctx.synchronize()
-                                _ = d_goff^
-                                _ = d_gq^
-                                _ = d_gp^
-                                _ = d_bl^
-                                _ = d_bs^
+                                _ = grp^
                                 _ = d_pd^
                                 _ = d_pi^
-                                _ = gcount^
-                                _ = goff^
-                                _ = cursor^
-                                _ = gq^
-                                _ = gp^
-                                _ = bl^
-                                _ = bs^
                             elif not filtered and _ivf_scan_staged():
                                 ctx.enqueue_function[identical_ivf_scan_staged_kernel[KM]](
                                     dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
@@ -872,125 +905,47 @@ def ivf_flat_search_prepared(
                 _ = dpbuf_val^
                 _ = dpbuf_idx^
                 return IvfSearchResult(fd^, fi^, counts^)
-    # ---- steps 3-5: the candidates of each query -----------------------
-    dev.ensure_layout(index)
-
-    # ONE ALLOCATION AT THE WORST CASE, REUSED. The worst case is
-    # `n_probes == n_lists`, where every vector is a candidate; anything
-    # smaller uses the head of the same buffers. The alternative is an
-    # allocation per query, which would make the workspace a function of
-    # the query and give `check_launch_invariance` a second thing to move.
-    var max_cand = index.n_rows
-    var cand_buf_len = max_cand // 8
-    if cand_buf_len < k:
-        cand_buf_len = k
-    var dcand_vec = ctx.enqueue_create_buffer[DType.float32](max_cand * dim)
-    var dcand_norm = ctx.enqueue_create_buffer[DType.float32](max_cand)
-    var dcand_dist = ctx.enqueue_create_buffer[DType.float32](max_cand)
-    var dcbuf_val = ctx.enqueue_create_buffer[DType.float32](2 * cand_buf_len)
-    var dcbuf_idx = ctx.enqueue_create_buffer[DType.uint32](2 * cand_buf_len)
-    var dsel_val = ctx.enqueue_create_buffer[DType.float32](k)
-    var dsel_idx = ctx.enqueue_create_buffer[DType.uint32](k)
-    var hcand_vec = ctx.enqueue_create_host_buffer[DType.float32](
-        max_cand * dim
+    # ---- steps 3-5: the candidates of each query, every query at once ---
+    # (lane cgr5-owed: ivf_query_device.mojo; the host loop over queries
+    # that merged, gathered, uploaded, scored, selected and sorted one query
+    # at a time is gone, with the same answer bit for bit)
+    var dkeep = upload_i32(ctx, keep) if filtered else ctx.enqueue_create_buffer[DType.int32](1)
+    var dcounts = ivf_probe_counts_device(
+        ctx, dprobe_idx, dev.d_off, dev.d_ind, dkeep, filtered,
+        n_queries, n_probes, n_lists, index.n_rows,
     )
-    var hcand_norm = ctx.enqueue_create_host_buffer[DType.float32](max_cand)
-    var out_dist = List[Float32]()
-    var out_idx = List[UInt32]()
-    var cand_counts = List[Int32]()
+    var cand_counts = download_i32(ctx, dcounts, n_queries)
+    _refuse_query(cand_counts, n_queries, n_probes, k, filtered, partial_storage)
+    var dkp = (
+        ivf_kept_prefix_device(ctx, dev.d_ind, dkeep, index.n_rows) if filtered
+        else ctx.enqueue_create_buffer[DType.int32](1)
+    )
+    var d_od = ctx.enqueue_create_buffer[DType.float32](max(n_queries * k, 1))
+    var d_oi = ctx.enqueue_create_buffer[DType.uint32](max(n_queries * k, 1))
+    var starts = ivf_query_batches(
+        cand_counts, n_queries, max(index.n_rows, IVF_QUERY_BATCH_CANDIDATES)
+    )
     var all_cand_idx = List[Int32]()
     var all_cand_dist = List[Float32]()
-
-    for q in range(n_queries):
-        var this_probe = List[UInt32]()
-        for p in range(n_probes):
-            this_probe.append(probe_ids[q * n_probes + p])
-
-        var chunks = calc_chunk_indices(dev.list_sizes, this_probe, n_probes)
-        var n_cand = n_samples_from_chunks(chunks, n_probes)
-        var kept = List[Int32]()
-        if filtered:
-            kept = filter_candidate_slots(
-                dev.layout, merge_probed_lists(dev.layout, this_probe, n_probes), keep
-            )
-            n_cand = len(kept)
-        cand_counts.append(Int32(n_cand))
-        if n_cand < k and not partial_storage:
-            # DEVIATION 1794. Their `postprocess_neighbors_kernel` fills
-            # the short slots with `kOutOfBoundsRecord`
-            # (`ivf_common.cuh:106-108`); that fill is not implemented and the
-            # implemented selector cannot take `k > len` at all. Refusing names
-            # the two numbers a caller can act on.
-            raise Error(
-                "ivf_flat search: query "
-                + String(q)
-                + " probes "
-                + String(n_probes)
-                + " lists holding "
-                + String(n_cand)
-                + " vectors between them, fewer than k = "
-                + String(k)
-                + (" (after the filter)" if filtered else "")
-                + ". Their kOutOfBoundsRecord short-fill"
-                " (ivf_common.cuh:106-108) is not implemented. Raise n_probes,"
-                " or lower k, or rebuild with fewer lists."
-            )
-
-        # Partial storage keeps global coarse probes but may own no candidates.
-        # Padding has no numerical meaning; n_candidates gives min(k, count)
-        # valid slots and the driver must ignore the remainder.
-        var selected = min(k, n_cand)
-        if selected == 0:
-            for i in range(k):
-                out_dist.append(Float32(0))
-                out_idx.append(UInt32(0))
-            continue
-
-        var slots: List[Int32]
-        if filtered:
-            slots = kept.copy()
-        else:
-            slots = merge_probed_lists(dev.layout, this_probe, n_probes)
-        var cand_vec = gather_candidate_vectors(dev.layout, slots)
-        var cand_orig = gather_candidate_indices(dev.layout, slots)
-        var cand_norm = gather_candidate_norms(slots, dev.list_norm)
-
-        for i in range(n_cand * dim):
-            hcand_vec.unsafe_ptr().unsafe_store(i, cand_vec[i])
-        for i in range(n_cand):
-            hcand_norm.unsafe_ptr().unsafe_store(i, cand_norm[i])
-        ctx.enqueue_copy(dst_buf=dcand_vec, src_ptr=hcand_vec.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=dcand_norm, src_ptr=hcand_norm.unsafe_ptr())
-        _expanded_distances(
-            ctx, dcand_dist, dq, q, dcand_vec, dq_norm, dcand_norm,
-            1, n_cand, dim, tile_tpb, expand_tpb,
+    for bi in range(len(starts) - 1):
+        var q0 = starts[bi]
+        var q1 = starts[bi + 1]
+        var total = _count_sum(cand_counts, q0, q1)
+        var batch = ivf_query_batch_device(
+            ctx, dprobe_idx, dev.d_off, dev.d_ind, dkp, filtered, dcounts,
+            dq, dq_norm, dev.dlist_data, dev.dlist_norm,
+            q0, q1, total, n_probes, dim, k, d_od, d_oi,
         )
-        _select_top_k(
-            ctx, dcand_dist, dsel_val, dsel_idx, dcbuf_val, dcbuf_idx,
-            1, n_cand, selected, cand_buf_len,
-        )
-        var sel_dist = download_f32(ctx, dsel_val, selected)
-        var sel_pos = download_u32(ctx, dsel_idx, selected)
-        var sel_orig = postprocess_neighbors(sel_pos, cand_orig, selected)
-        sort_slots_by_distance_then_index(sel_dist, sel_orig, 0, selected)
-        # The root, if the metric wants one, AFTER the order is fixed on
-        # the squared keys (their store-time `post_process`). `sqrt` is
-        # monotone, so the rooted row is still ascending; two squared
-        # values that root to one float keep their squared order.
-        if not dist_is_identity and not partial_storage:
-            postprocess_distances(sel_dist, index.metric)
-
-        for i in range(selected):
-            out_dist.append(sel_dist[i])
-            out_idx.append(sel_orig[i])
-        for i in range(selected, k):
-            out_dist.append(Float32(0))
-            out_idx.append(UInt32(0))
         if trace.enabled:
-            var row = download_f32(ctx, dcand_dist, n_cand)
-            for i in range(n_cand):
-                all_cand_idx.append(Int32(cand_orig[i]))
-                all_cand_dist.append(row[i])
+            _trace_batch(ctx, batch, all_cand_idx, all_cand_dist)
+        _ = batch^
+    var out_dist = download_f32(ctx, d_od, n_queries * k)
+    var out_idx = download_u32(ctx, d_oi, n_queries * k)
+    # The root, if the metric wants one, AFTER the order is fixed on the
+    # squared keys (their store-time `post_process`); the padding of a
+    # partial-storage search is never rooted (it never was).
+    if not dist_is_identity and not partial_storage:
+        postprocess_distances(out_dist, index.metric)
 
     if trace.enabled:
         trace.record_list_i32("ivf.cand_counts", cand_counts)
@@ -1009,14 +964,10 @@ def ivf_flat_search_prepared(
     _ = dprobe_idx^
     _ = dpbuf_val^
     _ = dpbuf_idx^
-    _ = dcand_vec^
-    _ = dcand_norm^
-    _ = dcand_dist^
-    _ = dcbuf_val^
-    _ = dcbuf_idx^
-    _ = dsel_val^
-    _ = dsel_idx^
-    _ = hcand_vec^
-    _ = hcand_norm^
+    _ = dkeep^
+    _ = dcounts^
+    _ = dkp^
+    _ = d_od^
+    _ = d_oi^
 
     return IvfSearchResult(out_dist^, out_idx^, cand_counts^)

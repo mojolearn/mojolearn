@@ -13,6 +13,8 @@
 # so `lq log <box> <tag>` greps it. Run inside a built tree (FAST bindings).
 set -u
 TAG=$1 LANE=$2 DS=$3 REPS=$4 ROUNDS=$5 EA=$6 EB=${7:-}
+# One run per arm (Andrew, Oct 3): reps and rounds are 1 unless AB_MULTI_RUN=1.
+[ "${AB_MULTI_RUN:-0}" = 1 ] || { REPS=1; ROUNDS=1; }
 for b in board-0834 board-0833; do [ -d $HOME/$b/cache/algos-data/rows-full ] && { B=$HOME/$b; break; }; done
 VP=$B/cache/venv/bin/python
 # AFC_FAMILY: algos (default, tools/bench_board_algos.py), classical2

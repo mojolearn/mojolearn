@@ -315,15 +315,24 @@ def _max_leaves_slot(max_leaves):
 def _class_weight_rows(class_weight, classes, codes):
     """cuML 26.08 process_class_weight shape, bounded Float32 weights.
 
-    Host label bookkeeping; the existing native forest consumes row weights.
-    Unlike cuML RF's Float64 weights, this engine narrows to Float32.
+    The per-class counts (`bincount_i64`) and the per-row weights
+    (`gather_rows_bytes`) are the core helpers'; Python touches only the
+    k class weights. Unlike cuML RF's Float64 weights, this engine narrows
+    to Float32. `codes` is an int32/int64 Array (or a list of ints).
     """
     if class_weight is None:
         return None
+    from ._buffer import _native
+    if not isinstance(codes, Array):
+        codes = Array.from_list(list(codes), "<i8")
+    codes = codes._as_c()
+    n = codes.size
+    k = len(classes)
     if isinstance(class_weight, str):
-        from collections import Counter
-        counts = Counter(codes)
-        values = [len(codes) / (len(classes) * counts[i]) for i in range(len(classes))]
+        counts = Array((k,), "<i8")
+        _native("bincount_i64")(codes._addr, 2 if codes.dtype == "<i4" else 3, n, k, counts._addr, 0)
+        counts = counts.tolist()
+        values = [n / (k * counts[i]) for i in range(k)]
     else:
         unknown = set(class_weight).difference(classes)
         if unknown:
@@ -339,13 +348,14 @@ def _class_weight_rows(class_weight, classes, codes):
         raise ValueError("class weights must remain finite and nonzero when positive in Float32") from None
     if not all_finite(narrowed) or any(v > 0 and n == 0 for v, n in zip(values, narrowed)):
         raise ValueError("class weights must remain finite and nonzero when positive in Float32")
-    if max(narrowed) <= 0:
+    if narrowed.max() <= 0:
         raise ValueError("class weights must have positive total")
-    # One scalar Array.__getitem__ per row cost 1.1 s per 1,000,000 rows
-    # (lane/python-hotpath audit, 2026-09-17); the same float32 values
-    # through a list lookup driven by map, then one C-level store.
-    table = narrowed.tolist()
-    return Array._from_flat(list(map(table.__getitem__, codes)), (len(codes),), "<f4")
+    # the per-row weight of each row's class: one byte-row gather in Mojo
+    rows = codes if codes.dtype == "<i8" else codes.astype("<i8")
+    out = Array((n,), "<f4")
+    if n:
+        _native("gather_rows_bytes")(narrowed._addr, out._addr, rows._addr, k, n, 4)
+    return out
 
 
 class _RandomForestBase(ForestProtocol, NumericModeMixin):
@@ -667,7 +677,7 @@ class RandomForestClassifier(_RandomForestBase):
         if self.n_classes_ < 2:
             raise ValueError("y has fewer than 2 classes")
         weights = (None if self.class_weight is None else
-                   _class_weight_rows(self.class_weight, self.classes_, y32.tolist()))
+                   _class_weight_rows(self.class_weight, self.classes_, y32))
         binding = self._bind("_mojolearn_rf")
         fit_fn = _forest_fit_function(binding, "rf_classifier_fit")
         rowmajor_fn = _rowmajor_fit_function(binding, "rf_classifier_fit")
@@ -831,15 +841,13 @@ class RandomForestRegressor(_RandomForestBase):
         y32, _ = as_f32_c(y, ndim=1, name="y")
         code = self._cfg["criterion"]
         # DEVIATION 2342: the deviance-domain checks are native
-        # finiteness plus builtin `min`/`max` over the storage view
-        # (C-driven, O(rows), no Python loop body). Poisson's "positive
+        # finiteness plus the core helper's `min`/`max` (`reduce_stat`). Poisson's "positive
         # sum" is "some label positive" once every label is finite and
         # non-negative, which is what the float64 sum tested; a NaN or
         # inf label, which made that sum NaN or inf, is refused for all
         # three criteria rather than passed to a deviance.
         if code == _REG_CRITERIA["poisson"]:
-            yv = flat_view(y32, "f")
-            if not all_finite(y32) or min(yv) < 0 or not max(yv) > 0:
+            if not all_finite(y32) or y32.min() < 0 or not y32.max() > 0:
                 raise ValueError(
                     "criterion='poisson' requires y >= 0 with a positive"
                     " sum: PoissonGain returns -max() for a non-positive"
@@ -848,7 +856,7 @@ class RandomForestRegressor(_RandomForestBase):
                 )
         elif code in (_REG_CRITERIA["gamma"],
                       _REG_CRITERIA["inverse_gaussian"]):
-            if not all_finite(y32) or min(flat_view(y32, "f")) <= 0:
+            if not all_finite(y32) or y32.min() <= 0:
                 raise ValueError(
                     f"criterion={self.criterion!r} requires y > 0: its"
                     " gain returns -max() for a non-positive label sum"

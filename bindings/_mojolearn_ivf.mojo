@@ -65,7 +65,7 @@ from ivf.resident import (
     ivf_resident_release,
     ivf_resident_search,
 )
-from bindings.ivf_index_arrays import ivf_merge_shards_binding, ivf_read_resident_filter, ivf_write_resident_result
+from bindings.ivf_index_arrays import ivf_merge_shards_binding, ivf_shard_plan_binding, ivf_read_resident_filter, ivf_write_resident_result
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -448,6 +448,7 @@ def PyInit__mojolearn_ivf() abi("C") -> PythonObject:
         m.def_function[ivf_flat_index_search_binding]("ivf_flat_index_search")
         m.def_function[ivf_flat_index_release_binding]("ivf_flat_index_release")
         m.def_function[ivf_merge_shards_binding]("ivf_merge_shards")
+        m.def_function[ivf_shard_plan_binding]("ivf_shard_plan")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_ivf: ", e))

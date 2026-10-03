@@ -507,7 +507,10 @@ def known_cpu_refusal(ib, lane, gpu_json, cpu_json, fixtures):
     if sorted(k.split("/", 1)[1] for k in mine) != sorted(want):
         return False, f"the CPU column carries {len(mine)} of {len(want)} fixtures"
     for k, c in sorted(mine.items()):
-        if c.get("verdict") != "REFUSED" or CPU_BY_DESIGN_REFUSAL not in (c.get("error") or ""):
+        # REFUSED with the sentence, or N/A with it (identity_break marks a
+        # CPU column's by-design refusal N/A since 2026-10-03 and keeps the
+        # sentence in `error`)
+        if c.get("verdict") not in ("REFUSED", "N/A") or CPU_BY_DESIGN_REFUSAL not in (c.get("error") or ""):
             return False, f"{k}: {c.get('verdict')} ({(c.get('error') or '').splitlines()[:1]})"
     for f in want:
         c = gpu.get(f"{lane}/{f}")

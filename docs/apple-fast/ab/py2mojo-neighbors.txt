@@ -1,0 +1,4 @@
+CMD lane/apple-fast-py2mojo-neighbors py2mojo-neighbors-lof-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh py2mojo-neighbors-lof-taxi x_neighbors lof taxi 1 2 "-D MOJOLEARN_PY2MOJO_neighbors_OFF" ""
+CMD lane/apple-fast-py2mojo-neighbors py2mojo-neighbors-pagerank-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh py2mojo-neighbors-pagerank-taxi x_neighbors pagerank taxi 1 2 "-D MOJOLEARN_PY2MOJO_neighbors_OFF" ""
+CMD lane/apple-fast-py2mojo-neighbors py2mojo-neighbors-connected-components-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh py2mojo-neighbors-connected-components-taxi x_neighbors connected-components taxi 1 2 "-D MOJOLEARN_PY2MOJO_neighbors_OFF" ""
+CMD lane/apple-fast-py2mojo-neighbors py2mojo-neighbors-louvain-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh py2mojo-neighbors-louvain-taxi x_neighbors louvain taxi 1 2 "-D MOJOLEARN_PY2MOJO_neighbors_OFF" ""

@@ -8,9 +8,10 @@ nothing is retained after the call."""
 from std.python import PythonObject
 
 from std.math import sqrt
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec_trait import Exec
+from sequence.ops import SEQ_FAST_VAR_ONECOPY, TSA2_STL, TSA2_VAR, OP_VAR_RESID, OP_VAR_SIGMA, OP_STL_SEAS, OP_STL_MA, OP_STL_LOESS, OP_STL_DESEAS, OP_STL_FINISH
 from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LAMB_BLK, OP_LAMB_SEGFOLD, OP_LAMB_CLIP, OP_LAMB_TRUST, OP_LAMB_APPLY_ALL, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
@@ -19,6 +20,7 @@ from sequence.ets import ets_scratch
 from sequence.garch import GARCH_GRID, GARCH_GRID_N, GARCH_SNAP
 from sequence.moe_tiled import TILE_P, TILE_Q
 from sequence.moe_reg import MOE_DEVGROUP
+from sequence.moe_group import moe_group_blocks
 from sequence.prophet import MEM, ProphetData, _dot, _fg_prior
 from sequence.prophet import div as _pdiv
 from sequence.ops import add as p_add, fma3 as p_fma3, ld as p_ld, mul as p_mul, st as p_st, sub as p_sub
@@ -274,6 +276,14 @@ def stl_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> 
     if ival(ip, 10) < 1 or ival(ip, 11) < 0:
         raise Error("stl: inner_iter must be >= 1 and outer_iter >= 0")
     var n2 = n + 2 * np_
+    comptime if TSA2_STL:
+        # lane/apple-fast-tsa2: the passes as one thread per point over the
+        # batch (sequence/stl_grid.mojo), the inner iterations queued, one
+        # wait. Jump 1 everywhere and no robust outer pass (the board's
+        # configuration); anything else keeps the one-thread-per-series op.
+        if (ival(ip, 7) == 1 and ival(ip, 8) == 1 and ival(ip, 9) == 1
+                and ival(ip, 11) == 0 and n >= 2 * np_):
+            return _stl_grid_py(ex, addrs, B, n, np_, ival(ip, 3), ival(ip, 4), ival(ip, 5), degs, ival(ip, 10))
     var y = ex.alloc(B * n)
     ex.upload(y, fptr(addrs[0], "y"), B * n)
     var outs = List[FP]()
@@ -307,6 +317,114 @@ def stl_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> 
     return PythonObject(B * n)
 
 
+def _stl_grid_py[E: Exec](
+    mut ex: E, addrs: PythonObject, B: Int, n: Int, np_: Int, ns: Int, nt: Int, nl: Int, degs: Int, inner: Int,
+) raises -> PythonObject:
+    """`stl_py` under -D MOJOLEARN_TSA2_STL (FAST + Apple; sequence/stl_grid.mojo):
+    one upload, 7 launches per inner pass over every point of every series,
+    one launch for the residual and the unit weights, one wait, four
+    downloads sharing it. Work rows have stride n2 = n + 2 np: the extended
+    seasonal series, two moving-average stages, the low pass, and the
+    deseasonalised series."""
+    var n2 = n + 2 * np_
+    var y = ex.bind(fptr(addrs[0], "y"), B * n)
+    var season = ex.alloc(B * n)
+    var trend = ex.alloc(B * n)
+    var rw = ex.alloc(B * n)
+    var resid = ex.alloc(B * n)
+    var work = ex.alloc(B * 5 * n2)
+    var w1 = work
+    var ma1 = work + B * n2
+    var ma2 = work + 2 * B * n2
+    var lp = work + 3 * B * n2
+    var w0 = work + 4 * B * n2
+    var isdeg = degs & 1
+    var itdeg = (degs >> 1) & 1
+    var ildeg = (degs >> 2) & 1
+    for _ in range(inner):
+        var a = Args()
+        a.p0 = y
+        a.p1 = trend
+        a.p2 = rw
+        a.p3 = w1
+        a.i0 = n
+        a.i1 = np_
+        a.i2 = ns
+        a.i3 = isdeg
+        a.i4 = n2
+        a.i5 = 0
+        ex.launch[OP_STL_SEAS](a, B * n2)
+        var m1 = Args()
+        m1.p0 = w1
+        m1.p1 = ma1
+        m1.i0 = n2 - np_ + 1
+        m1.i1 = np_
+        m1.i2 = n2
+        m1.i3 = n2
+        ex.launch[OP_STL_MA](m1, B * m1.i0)
+        var m2 = Args()
+        m2.p0 = ma1
+        m2.p1 = ma2
+        m2.i0 = n2 - 2 * np_ + 2
+        m2.i1 = np_
+        m2.i2 = n2
+        m2.i3 = n2
+        ex.launch[OP_STL_MA](m2, B * m2.i0)
+        var m3 = Args()
+        m3.p0 = ma2
+        m3.p1 = ma1
+        m3.i0 = n
+        m3.i1 = 3
+        m3.i2 = n2
+        m3.i3 = n2
+        ex.launch[OP_STL_MA](m3, B * n)
+        var lo = Args()
+        lo.p0 = ma1
+        lo.p1 = lp
+        lo.p2 = rw
+        lo.i0 = n
+        lo.i1 = nl
+        lo.i2 = ildeg
+        lo.i3 = n2
+        lo.i4 = n2
+        lo.i5 = 0
+        ex.launch[OP_STL_LOESS](lo, B * n)
+        var d = Args()
+        d.p0 = y
+        d.p1 = w1
+        d.p2 = lp
+        d.p3 = season
+        d.p4 = w0
+        d.i0 = n
+        d.i1 = np_
+        d.i2 = n2
+        ex.launch[OP_STL_DESEAS](d, B * n)
+        var tr = Args()
+        tr.p0 = w0
+        tr.p1 = trend
+        tr.p2 = rw
+        tr.i0 = n
+        tr.i1 = nt
+        tr.i2 = itdeg
+        tr.i3 = n2
+        tr.i4 = n
+        tr.i5 = 0
+        ex.launch[OP_STL_LOESS](tr, B * n)
+    var f = Args()
+    f.p0 = y
+    f.p1 = season
+    f.p2 = trend
+    f.p3 = rw
+    f.p4 = resid
+    ex.launch[OP_STL_FINISH](f, B * n)
+    ex.download_async(fptr(addrs[1], "output"), season, B * n)
+    ex.download_async(fptr(addrs[2], "output"), trend, B * n)
+    ex.download_async(fptr(addrs[3], "output"), rw, B * n)
+    ex.download_async(fptr(addrs[4], "output"), resid, B * n)
+    ex.sync()
+    return PythonObject(B * n)
+
+
 def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     """VAR(p) by OLS (`sequence/vecar.mojo`). addrs = [y (n, K), params (m, K),
     sigma_u (K, K), resid (n - p, K)], each output written; ip = [n, K, p,
@@ -324,6 +442,8 @@ def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
     var m = kt + K * p
     if R - m < 1:
         raise Error("var_fit: too few observations for the lag order (need n - p > k_trend + K p)")
+    comptime if TSA2_VAR:
+        return _var_fit_queued(ex, addrs, n, K, p, kt, R, m)
     var y = ex.alloc(n * K)
     ex.upload(y, fptr(addrs[0], "y"), n * K)
     var Z = ex.alloc(R * m)
@@ -390,6 +510,96 @@ def var_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
     return PythonObject(0)
 
 
+def _var_fit_queued[E: Exec](
+    mut ex: E, addrs: PythonObject, n: Int, K: Int, p: Int, kt: Int, R: Int, m: Int,
+) raises -> PythonObject:
+    """`var_fit_py` under -D MOJOLEARN_TSA2_VAR (FAST + Apple): one upload (no
+    zero fill), one workspace (one fill for nine), eight launches queued
+    with nothing between them, four downloads sharing ONE wait. Main's fit
+    waits after the Cholesky to read the status word before it queues the
+    residual products; here the products are queued regardless and the
+    status word comes down with the outputs: on a non-positive pivot the
+    code is returned and the Python layer raises without reading the
+    arrays (which then hold the unsolved products, finite words, not
+    main's untouched zeros). The residual and sigma_u products fuse their
+    epilogues (`op_var_resid`, `op_var_sigma`: the same chains)."""
+    var y = ex.bind(fptr(addrs[0], "y"), n * K)
+    var ws = ex.alloc(R * m + R * K + m + m * m + m * K + R * K + K * K + 1)
+    var Z = ws
+    var Ys = Z + R * m
+    var sc = Ys + R * K
+    var G = sc + m
+    var Bm = G + m * m
+    var Rs = Bm + m * K
+    var S = Rs + R * K
+    var status = S + K * K
+    var a = Args()
+    a.p0 = y
+    a.p1 = Z
+    a.p2 = Ys
+    a.i0 = K
+    a.i1 = p
+    a.i2 = kt
+    a.i3 = m
+    ex.launch[OP_VAR_DESIGN](a, R * m)
+    var b = Args()
+    b.p0 = Z
+    b.p1 = sc
+    b.i0 = R
+    b.i1 = m
+    ex.launch[OP_COLSCALE](b, m)
+    gemm(ex, Z, Z, G, m, m, R, 1, m, m, 1, False, m)
+    gemm(ex, Z, Ys, Bm, m, K, R, 1, m, K, 1, False, K)
+    var c = Args()
+    c.p0 = G
+    c.p1 = Bm
+    c.p2 = status
+    c.i0 = m
+    c.i1 = K
+    ex.launch[OP_CHOLSOLVE](c, 1)
+    var d = Args()
+    d.p0 = Z
+    d.p1 = Bm
+    d.p2 = Ys
+    d.p3 = Rs
+    d.i0 = K
+    d.i1 = m
+    ex.launch[OP_VAR_RESID](d, R * K)
+    var e = Args()
+    e.p0 = Rs
+    e.p1 = S
+    e.i0 = K
+    e.i1 = R
+    e.f0 = Float32(1.0) / Float32(R - m)
+    ex.launch[OP_VAR_SIGMA](e, K * K)
+    var f = Args()
+    f.p0 = Bm
+    f.p1 = sc
+    f.i1 = K
+    ex.launch[OP_ROWSCALE](f, m * K)
+    comptime if SEQ_FAST_VAR_ONECOPY:
+        # lane/apple-fast-gap-tsa: params | resid | sigma_u | status lie in one
+        # span of the workspace: one device-to-host copy replaces four
+        var span = m * K + R * K + K * K + 1
+        var tmp = List[Float32](length=span, fill=Float32(0.0))
+        var tp = FP(unsafe_from_address=Int(tmp.unsafe_ptr()))
+        ex.download_async(tp, Bm, span)
+        ex.sync()
+        memcpy(dest=fptr(addrs[1], "params"), src=tp, count=m * K)
+        memcpy(dest=fptr(addrs[3], "resid"), src=tp + m * K, count=R * K)
+        memcpy(dest=fptr(addrs[2], "sigma_u"), src=tp + m * K + R * K, count=K * K)
+        var code = Int(tp.unsafe_load(m * K + R * K + K * K))
+        _ = tmp^
+        return PythonObject(code)
+    var st = List[Float32](length=1, fill=Float32(0.0))
+    ex.download_async(FP(unsafe_from_address=Int(st.unsafe_ptr())), status, 1)
+    ex.download_async(fptr(addrs[1], "params"), Bm, m * K)
+    ex.download_async(fptr(addrs[2], "sigma_u"), S, K * K)
+    ex.download_async(fptr(addrs[3], "resid"), Rs, R * K)
+    ex.sync()
+    return PythonObject(Int(st[0]))
+
+
 def var_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     """addrs = [y_last (p, K), params (m, K), out (h, K)]; ip = [K, p, k_trend, h]."""
     if len(addrs) != 3 or len(ip) != 4:
@@ -401,6 +611,23 @@ def var_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) r
     if K < 1 or p < 1 or kt < 0 or kt > 1 or h < 1:
         raise Error("var_forecast: K, p, h >= 1 and k_trend 0 or 1")
     var m = kt + K * p
+    comptime if TSA2_VAR:
+        # lane/apple-fast-tsa2: the two inputs bound (uploaded over, no zero
+        # fill first); the recursion and its download as below
+        var yb = ex.bind(fptr(addrs[0], "y"), p * K)
+        var Pb = ex.bind(fptr(addrs[1], "params"), m * K)
+        var outb = ex.alloc(h * K)
+        var ab = Args()
+        ab.p0 = yb
+        ab.p1 = Pb
+        ab.p2 = outb
+        ab.i0 = K
+        ab.i1 = p
+        ab.i2 = kt
+        ab.i3 = h
+        ex.launch[OP_VAR_FORECAST](ab, 1)
+        ex.download(fptr(addrs[2], "out"), outb, h * K)
+        return PythonObject(h * K)
     var y = ex.alloc(p * K)
     ex.upload(y, fptr(addrs[0], "y"), p * K)
     var P = ex.alloc(m * K)
@@ -1033,6 +1260,33 @@ def croston_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
     return PythonObject(B)
 
 
+def croston_forecast_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """Croston's flat forecast (pyglue-sweep, Oct 3: it was numpy's repeat).
+    addrs = [mean (B), forecast (B, h) out]; ip = [B, h]. Every cell of row b
+    is mean[b]: a fill of 1 then `op_rowscale` (1 * mean is mean exactly)."""
+    if len(addrs) != 2 or len(ip) != 2:
+        raise Error("croston_forecast: requires 2 addresses and 2 integer parameters")
+    var B = ival(ip, 0)
+    var h = ival(ip, 1)
+    if B < 1 or h < 1:
+        raise Error("croston_forecast: B >= 1 and h >= 1")
+    var M = ex.alloc(B)
+    ex.upload(M, fptr(addrs[0], "mean"), B)
+    var F = ex.alloc(B * h)
+    var f = Args()
+    f.p0 = F
+    f.f0 = Float32(1.0)
+    ex.launch[OP_FILL](f, B * h)
+    var a = Args()
+    a.p0 = F
+    a.p1 = M
+    a.i1 = h
+    ex.launch[OP_ROWSCALE](a, B * h)
+    ex.sync()
+    ex.download(fptr(addrs[1], "forecast"), F, B * h)
+    return PythonObject(B * h)
+
+
 #: ETS's FAST Nelder-Mead stall stop (sequence/nm.mojo): the fit ends once
 #: its best value has not dropped by more than ETS_FAST_STALL_REL |best| for
 #: ETS_FAST_STALL_ITERS iterations. FAST only; chosen by the paired quality
@@ -1627,51 +1881,20 @@ def moe_forward_run[E: Exec](
             return _moe_devgroup_rest(ex, addrs, T, D, F, En, k, X, Gu, Dn, Sel, W, Y, L, H)
     # The pairs (token, pick) grouped by expert for the tiled device
     # products (lane neural-pass29, sequence/moe_tiled.mojo): `order` the
-    # pair indices sorted by expert (stable), `poff` each expert's first
-    # pair, `boff` each expert's first block of TILE_P pairs x TILE_Q
-    # outputs. The host executor runs the items and reads none of these.
-    ex.sync()
-    var sel_host = List[Float32](length=T * k, fill=Float32(0.0))
-    ex.download(fptr_of(sel_host), Sel, T * k)
-    var counts = List[Int](length=En + 1, fill=0)
-    for i in range(T * k):
-        counts[Int(sel_host[i]) + 1] += 1
-    var poff_host = List[Float32](length=En + 1, fill=Float32(0.0))
-    var running = 0
-    for e in range(En):
-        poff_host[e] = Float32(running)
-        running += counts[e + 1]
-    poff_host[En] = Float32(running)
-    var cursor = List[Int](length=En, fill=0)
-    for e in range(En):
-        cursor[e] = Int(poff_host[e])
-    var order_host = List[Float32](length=T * k, fill=Float32(0.0))
-    for i in range(T * k):
-        var e = Int(sel_host[i])
-        order_host[cursor[e]] = Float32(i)
-        cursor[e] += 1
+    # pair indices grouped by expert, `poff` each expert's first pair,
+    # `boff` each expert's first block of TILE_P pairs x TILE_Q outputs.
+    # Grouped ON THE DEVICE inside the hidden product's launch (a.i6 = 2,
+    # sequence/moe_group.mojo; lane cgr5-owed), any E; the grids are the
+    # upper bound. The host executor runs the items and reads none of these.
     var n_ftiles = (F + TILE_Q - 1) // TILE_Q
     var n_dtiles = (D + TILE_Q - 1) // TILE_Q
-    var boff_h = List[Float32](length=En + 1, fill=Float32(0.0))
-    var boff_o = List[Float32](length=En + 1, fill=Float32(0.0))
-    var blocks_h = 0
-    var blocks_o = 0
-    for e in range(En):
-        boff_h[e] = Float32(blocks_h)
-        boff_o[e] = Float32(blocks_o)
-        var ptiles = (counts[e + 1] + TILE_P - 1) // TILE_P
-        blocks_h += ptiles * n_ftiles
-        blocks_o += ptiles * n_dtiles
-    boff_h[En] = Float32(blocks_h)
-    boff_o[En] = Float32(blocks_o)
+    var blocks_h = moe_group_blocks(T * k, En, n_ftiles)
+    var blocks_o = moe_group_blocks(T * k, En, n_dtiles)
     var Order = ex.alloc(T * k)
-    ex.upload(Order, fptr_of(order_host), T * k)
     var Poff = ex.alloc(En + 1)
-    ex.upload(Poff, fptr_of(poff_host), En + 1)
     var BoffH = ex.alloc(En + 1)
-    ex.upload(BoffH, fptr_of(boff_h), En + 1)
     var BoffO = ex.alloc(En + 1)
-    ex.upload(BoffO, fptr_of(boff_o), En + 1)
+    var Cnt = ex.alloc(2 * En)
     var S = ex.alloc(T * k * D)
     var b = Args()
     b.p0 = X
@@ -1685,8 +1908,12 @@ def moe_forward_run[E: Exec](
     b.i1 = F
     b.i2 = k
     b.i3 = En
+    b.p7 = Cnt
+    b.p8 = BoffO
     b.i4 = blocks_h
     b.i5 = n_ftiles
+    b.i6 = 2
+    b.i7 = n_dtiles
     ex.launch[OP_MOE_HIDDEN](b, T * k * F)
     var c = Args()
     c.p0 = H
@@ -1705,13 +1932,6 @@ def moe_forward_run[E: Exec](
     c.i4 = blocks_o
     c.i5 = n_dtiles
     ex.launch[OP_MOE_OUT](c, T * D)
-    _ = sel_host^
-    _ = order_host^
-    _ = poff_host^
-    _ = boff_h^
-    _ = boff_o^
-    _ = counts^
-    _ = cursor^
     ex.sync()
     ex.download(fptr(addrs[4], "y"), Y, T * D)
     ex.download(fptr(addrs[5], "logits"), L, T * En)

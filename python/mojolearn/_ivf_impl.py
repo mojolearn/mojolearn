@@ -151,7 +151,7 @@ class IVFIndex(NumericModeMixin):
         """Build the index. Returns `self`."""
         self._release_resident()
         x, _ = as_f32_c(X, ndim=2, name="X")
-        n, dim = (int(s) for s in x.shape)
+        n, dim = (int(s) for s in x.shape)  # glue: the two shape dims
         n_lists = _int_param("n_lists", self.n_lists)
         iters = _int_param("kmeans_n_iters", self.kmeans_n_iters)
         seed = _int_param("random_state", self.random_state)
@@ -187,9 +187,9 @@ class IVFIndex(NumericModeMixin):
     # the closure of DEVIATION 1804) --
 
     def _resident_key(self, partial):
-        arrays = tuple(getattr(self, name) for name, _dtype in _INDEX_ARRAYS)
+        arrays = tuple(getattr(self, name) for name, _dtype in _INDEX_ARRAYS)  # glue: the five index array names
         return (tuple((id(a), addr_ro(a, name=name), tuple(a.shape))
-                      for a, (name, _dtype) in zip(arrays, _INDEX_ARRAYS)),
+                      for a, (name, _dtype) in zip(arrays, _INDEX_ARRAYS)),  # glue: addresses of five index arrays
                 self.n_rows_, self.n_features_in_, self.n_lists_, self.metric_code_, bool(partial))
 
     def _resident_handle(self, native, partial=False):
@@ -271,7 +271,7 @@ class IVFIndex(NumericModeMixin):
         m, dim = q.shape
         if dim != self.n_features_in_:
             raise ValueError(f"mojolearn IVFIndex: queries have {dim} features, the index has {self.n_features_in_}")
-        for name in ("n_lists", "n_probes", "n_neighbors", "kmeans_n_iters", "random_state"):
+        for name in ("n_lists", "n_probes", "n_neighbors", "kmeans_n_iters", "random_state"):  # glue: checks five parameter names
             _int_param(name, getattr(self, name))
         if self._metric_code() != self.metric_code_:
             raise ValueError(
@@ -340,7 +340,7 @@ class IVFIndex(NumericModeMixin):
         if not hasattr(self, "list_data_"):
             raise ValueError("mojolearn IVFIndex: call fit (or load) before extend")
         x, _ = as_f32_c(X, ndim=2, name="X")
-        m, dim = (int(v) for v in x.shape)
+        m, dim = (int(v) for v in x.shape)  # glue: the two shape dims
         if dim != self.n_features_in_:
             raise ValueError(f"mojolearn IVFIndex: X has {dim} features, the index has {self.n_features_in_}")
         if self._metric_code() != self.metric_code_:
@@ -384,7 +384,7 @@ class IVFIndex(NumericModeMixin):
         c = type(self)(n_lists=self.n_lists, n_probes=self.n_probes, n_neighbors=self.n_neighbors,
                        kmeans_n_iters=self.kmeans_n_iters, metric=self.metric, random_state=self.random_state)
         c.numeric_mode = getattr(self, "numeric_mode", None)
-        for name, dtype in _INDEX_ARRAYS:
+        for name, dtype in _INDEX_ARRAYS:  # glue: the five index array names
             a = getattr(self, name)
             setattr(c, name, frombytes(a.tobytes(), dtype, tuple(a.shape)))
         c.n_features_in_, c.n_rows_, c.n_lists_, c.metric_code_ = (
@@ -413,7 +413,7 @@ class IVFIndex(NumericModeMixin):
                 "<i8",
             ),
         }
-        for name, _dtype in _INDEX_ARRAYS:
+        for name, _dtype in _INDEX_ARRAYS:  # glue: the five index array names
             arrays[name.rstrip("_")] = getattr(self, name)
         return _serialize.write_npz(path, arrays)
 
@@ -428,7 +428,7 @@ class IVFIndex(NumericModeMixin):
         meta = _serialize.exact(arrays, "meta", "<i8")
         if meta.size != 8:
             raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 8 are needed")
-        n, dim, n_lists, metric, n_probes, k, iters, seed = (int(meta[i]) for i in range(8))
+        n, dim, n_lists, metric, n_probes, k, iters, seed = (int(meta[i]) for i in range(8))  # glue: unpacks the fixed meta vector
         if metric not in _METRIC_CODES:
             raise ValueError(f"mojolearn: {path!r} records metric code {metric}")
         shapes = {"centers": (n_lists, dim), "center_norms": (n_lists,), "list_offsets": (n_lists + 1,),
@@ -436,7 +436,7 @@ class IVFIndex(NumericModeMixin):
         obj = cls(n_lists=n_lists, n_probes=n_probes, n_neighbors=k, kmeans_n_iters=iters,
                   metric=_METRIC_NAMES[metric], random_state=seed)
         _restore_mode(obj, arrays)
-        for name, dtype in _INDEX_ARRAYS:
+        for name, dtype in _INDEX_ARRAYS:  # glue: the five index array names
             key = name.rstrip("_")
             value = _serialize.exact(arrays, key, dtype)
             if tuple(value.shape) != shapes[key]:

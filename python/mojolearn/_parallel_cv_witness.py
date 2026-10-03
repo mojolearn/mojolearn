@@ -14,7 +14,7 @@ def array_digest(value):
     if a.dtype.kind not in 'fiub':
         raise TypeError('CV witness requires numeric array bytes')
     h = hashlib.sha256()
-    for part in (a.dtype.str.encode(), json.dumps(list(a.shape)).encode(), a.tobytes(order='C')):
+    for part in (a.dtype.str.encode(), json.dumps(list(a.shape)).encode(), a.tobytes(order='C')):  # glue: three parts of a digest
         h.update(len(part).to_bytes(8, 'little'))
         h.update(part)
     return h.hexdigest()
@@ -59,10 +59,10 @@ def score_with_witness(estimator, X, y, *, directory):
 
 
 def read_records(directory, folds):
-    records = [json.loads(p.read_text()) for p in sorted(Path(directory).glob('*.json'))]
-    if len(records) != folds or len({r['fixture'] for r in records}) != folds:
+    records = [json.loads(p.read_text()) for p in sorted(Path(directory).glob('*.json'))]  # glue: one witness record per file
+    if len(records) != folds or len({r['fixture'] for r in records}) != folds:  # glue: one witness record per file
         raise ValueError('missing or duplicate fold witnesses')
-    return {r['fixture']: r for r in records}
+    return {r['fixture']: r for r in records}  # glue: one witness record per file
 
 
 def compare_records(expected, actual, *, vendor, workers):
@@ -71,8 +71,8 @@ def compare_records(expected, actual, *, vendor, workers):
     if not expected or expected.keys() != actual.keys():
         raise ValueError('fold inputs differ')
     inventories, bindings = {}, set()
-    for key, record in actual.items():
-        for part in ('model', 'predict', 'raw_predict', 'reload_predict', 'loss_curve', 'score'):
+    for key, record in actual.items():  # glue: one witness record per fold
+        for part in ('model', 'predict', 'raw_predict', 'reload_predict', 'loss_curve', 'score'):  # glue: six named record fields
             value = record.get(part)
             if not value or value != expected[key].get(part):
                 raise ValueError(f'{key}: {part} differs or is missing')

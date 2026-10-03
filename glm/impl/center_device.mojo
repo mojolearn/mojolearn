@@ -17,6 +17,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
+from checks.soft_f64 import sf64_div, sf64_from_int, sf64_to_f32
 from glm.impl.center_items import (
     CS_LIMBS, CS_WORDS, exact_add, exact_finish, center_cell, scale_cell,
 )
@@ -226,3 +227,49 @@ def center_buf(
         return
     ctx.enqueue_function[center_kernel](d_x.unsafe_ptr(), d_m.unsafe_ptr(), d_o.unsafe_ptr(), Int64(rows), Int64(cols),
                                         grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
+
+
+# ---- device means (lane apple-fast-purity, 2026-10-03) ---------------------
+# The resident Ridge / OLS routes used to download the n_features + 1 exact
+# sums, divide them by rows on the host and upload the float32 means again.
+# One thread per column now does that division on the device in software
+# binary64 (checks/soft_f64.mojo: the correctly rounded IEEE quotient and
+# the round-to-nearest-even narrowing, the same words the host's float64
+# `/` and `.cast[float32]` produce on every vendor). The means are still
+# downloaded once, because they are the fit's outputs (mu_, the y mean).
+
+
+def col_means_kernel(sx: U64P, sy: U64P, mx: F32P, my: F32P, m64: U64P, cols_: Int64, rows_: Int64):
+    """Thread j < cols: column j of X; thread cols: y. m64[j] = sum / rows
+    (binary64 bits), mx / my = its float32 rounding."""
+    var cols = Int(cols_)
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j > cols:
+        return
+    var s = sx.unsafe_load(j) if j < cols else sy.unsafe_load(0)
+    var m = sf64_div(s, sf64_from_int(Int(rows_)))
+    m64.unsafe_store(j, m)
+    var f = sf64_to_f32(m)
+    if j < cols:
+        mx.unsafe_store(j, f)
+    else:
+        my.unsafe_store(0, f)
+
+
+def col_means_buf(
+    ctx: DeviceContext,
+    mut d_sx: DeviceBuffer[DType.uint64],
+    mut d_sy: DeviceBuffer[DType.uint64],
+    mut d_mx: DeviceBuffer[DType.float32],
+    mut d_my: DeviceBuffer[DType.float32],
+    mut d_m64: DeviceBuffer[DType.uint64],
+    rows: Int,
+    cols: Int,
+) raises:
+    """d_mx[cols], d_my[1] (float32) and d_m64[cols + 1] (binary64 bits):
+    the means of col_sums_buf's sums of X (d_sx) and y (d_sy). Enqueued only."""
+    var n = cols + 1
+    ctx.enqueue_function[col_means_kernel](
+        d_sx.unsafe_ptr(), d_sy.unsafe_ptr(), d_mx.unsafe_ptr(), d_my.unsafe_ptr(), d_m64.unsafe_ptr(),
+        Int64(cols), Int64(rows), grid_dim=(n + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB,
+    )

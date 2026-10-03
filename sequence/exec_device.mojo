@@ -9,6 +9,10 @@ from std.os import getenv
 from std.memory import memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
+from sequence.moe_group import (
+    MOE_GROUP_TPB, moe_group_count_all_kernel, moe_group_offsets_all_kernel, moe_group_scatter_all_kernel,
+    moe_group_zero_all_kernel,
+)
 from sequence.moe_reg import (
     MOE_DEVGROUP,
     MOE_REGTILE,
@@ -32,7 +36,9 @@ from sequence.exec_trait import Exec
 from sequence.dispatch import apply
 from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
-from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST
+from sequence.ops import OP_THETA
+from sequence.theta_spec import THETA_SPEC
+from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
 from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
 from sequence.ets_team import ETS_TEAM, ets_team
@@ -572,6 +578,28 @@ struct DeviceExec(Exec):
         # MOJOLEARN_MOE_REGTILE, the router's logits tiled and the products
         # register-tiled, the same chains; MOJOLEARN_MOE_DEVGROUP, the pairs
         # grouped by expert on the device (a.i6 = 1 from the entry).
+        # lane cgr5-owed: the pairs grouped by expert on the device for any E
+        # (sequence/moe_group.mojo), a.i6 = 2 from the entry: p2 the picks,
+        # p4 order, p5 poff, p6 boff_h, p7 counts | cursors (2E int32
+        # words), p8 boff_o; i3 E, i5 / i7 the F / D tiles.
+        comptime if OP == OP_MOE_HIDDEN:
+            if a.i6 == 2:
+                var gp = n // a.i1
+                var gt = MOE_GROUP_TPB
+                self.ctx.enqueue_function[moe_group_zero_all_kernel](
+                    a.p7, Int32(2 * a.i3), grid_dim=((2 * a.i3 + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
+                )
+                self.ctx.enqueue_function[moe_group_count_all_kernel](
+                    a.p2, a.p7, Int32(gp), grid_dim=((gp + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
+                )
+                self.ctx.enqueue_function[moe_group_offsets_all_kernel](
+                    a.p7, a.p5, a.p6, a.p8, Int32(a.i3), Int32(a.i5), Int32(a.i7),
+                    grid_dim=((a.i3 + gt) // gt, 1, 1), block_dim=(gt, 1, 1),
+                )
+                self.ctx.enqueue_function[moe_group_scatter_all_kernel](
+                    a.p2, a.p7, a.p5, a.p4, Int32(gp), Int32(a.i3),
+                    grid_dim=((gp + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
+                )
         comptime if MOE_REGTILE and OP == OP_MOE_ROUTE:
             if a.i1 <= MOE_RT:
                 var bt = MOE_RT // a.i1
@@ -645,6 +673,22 @@ struct DeviceExec(Exec):
                     grid_dim=((n + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
                 )
                 return
+        # lane/apple-fast-tsa2 (-D MOJOLEARN_TSA2_VAR): the threadgroup VAR
+        # kernels without the env read of `_var_block_on` on the fit path
+        comptime if TSA2_VAR and OP == OP_CHOLSOLVE:
+            if a.i0 * a.i0 + a.i0 * a.i1 <= VAR_SMEM:
+                self.ctx.enqueue_function[var_chol_block_kernel](
+                    a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1),
+                    grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
+                )
+                return
+        comptime if TSA2_VAR and OP == OP_VAR_FORECAST:
+            if (a.i1 + a.i3) * a.i0 <= VAR_SMEM:
+                self.ctx.enqueue_function[var_forecast_block_kernel](
+                    a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
+                    grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
+                )
+                return
         # VAR's one-thread ops on one threadgroup (sequence/vecar_block.mojo):
         # the same chain per cell, so the same words
         comptime if OP == OP_CHOLSOLVE:
@@ -662,7 +706,8 @@ struct DeviceExec(Exec):
                 )
                 return
         comptime if SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
-                                  or OP == OP_LAMB_RATIO or OP == OP_GEMM or OP == OP_AF_BLK_SUMSQ):
+                                  or OP == OP_LAMB_RATIO or OP == OP_GEMM or OP == OP_AF_BLK_SUMSQ
+                                  or (THETA_SPEC and OP == OP_THETA)):
             var coop = True
             comptime if OP == OP_GEMM:
                 coop = a.i0 * a.i1 <= 1024 and a.i2 >= 32768

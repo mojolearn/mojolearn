@@ -198,6 +198,15 @@ trait ClusterOps(Movable):
         the same bodies in the same order (the same values)."""
         ...
 
+    def optics_order_fast(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
+    ) raises:
+        """FAST (lane cluster2): the OPTICS ordering loop over the resident
+        n x n distances `dm` and core distances `core`: ordering (n ints),
+        reachability (n floats, +inf unreached), predecessor (n ints, -1
+        none); `proc` n ints of scratch. The host loop's picks and updates."""
+        ...
+
     def minibatch_fast(
         mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
         ratio: Float64, seed: UInt64, mut rng: SplitMix64, mut c: List[Float32], mut w: List[Float32],
@@ -261,12 +270,43 @@ trait ClusterOps(Movable):
     # that ran on the host between device calls. Each is one primitive; the
     # host column runs the same decisions in loops (the bodies in
     # `x_cluster/post_bodies.mojo`), sums are its float-float fold.
-    def agglo_connect(mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int) raises -> Int:
+    def agglo_connect(
+        mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int, edge_mode: Int
+    ) raises -> Int:
         """GPU column: adj (int slot, n x n) = the connectivity graph of the
-        n_edges (row, col) float pairs in `edges`, symmetrized, the diagonal
+        n_edges (row, col) float pairs in `edges` (edge_mode 0; 1: `edges` is
+        the dense n x n matrix, n_edges = n * n; 2: the COO rows, columns and
+        values concatenated, n_edges entries each; a nonzero entry is an edge),
+        symmetrized, the diagonal
         dropped; with several components each pair of components joined at
         its closest pair (`agglo.agglo_tree`'s rule); returns the number of
         components. The host column runs agglo_tree's loop."""
+        ...
+
+    # ------------------------------------------------------------------
+    # THE TREE CUT (lane apple-fast-py2mojo-cluster): the labels of an
+    # agglomerative tree, which `_hierarchy_impl.py` computed in Python.
+    def tree_parent(mut self, children: Int, n: Int, m: Int, parent: Int) raises:
+        """Int slot `parent` (n + m) = each node's parent, a root its own:
+        merge t of the int slot `children` (m x 2) is node n + t."""
+        ...
+
+    def tree_roots(mut self, parent: Int, total: Int, rank1: Int) raises -> Int:
+        """Int slot `rank1` (total) = 1 + the number of roots below j for
+        every root j (parent[j] == j), 0 elsewhere; returns the root count."""
+        ...
+
+    def tree_scatter(mut self, nodes: Int, c: Int, rank1: Int) raises:
+        """rank1[nodes[i]] = i + 1 for the c ids of the int slot `nodes`."""
+        ...
+
+    def tree_leaf_label(mut self, parent: Int, rank1: Int, n: Int, labels: Int) raises:
+        """Int slot `labels` (n): leaf t's first ancestor-or-self v with
+        rank1[v] != 0 gives rank1[v] - 1."""
+        ...
+
+    def count_ge(mut self, x: Int, n: Int, thr: Float32) raises -> Int:
+        """The number of the first n values that are >= thr."""
         ...
 
     def check_nonneg(mut self, x: Int, n: Int) raises -> Bool:
@@ -287,9 +327,30 @@ trait ClusterOps(Movable):
         """`cluster_optics_dbscan` into the int slot `labels`."""
         ...
 
+    def optics_xi(
+        mut self, ordering: Int, reach: Int, pred: Int, n: Int, xc: Float32, min_samples: Int,
+        min_cluster_size: Int, predecessor_correction: Bool, labels: Int,
+    ) raises -> List[Int32]:
+        """`_xi_cluster` + `_extract_xi_labels` over the fitted ordering,
+        reachability and predecessors (slots): labels (point order) into the
+        int slot `labels`; returns the clusters (start, end) flattened
+        (`x_cluster/optics_xi_cells.mojo`, both columns)."""
+        ...
+
     def sum_ff(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int) raises -> Float64:
         """The float-float fold (`post_bodies`) of n elements of `mode` over
         slots a, b, c (-1 when unused), as a double."""
+        ...
+
+    def fold_into(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int, dst: Int) raises:
+        """`sum_ff`'s fold left where it is: (hi, lo) into dst[0], dst[1]."""
+        ...
+
+    def bgmm_step(
+        mut self, step: Int, kc: Int, d: Int, cfg: Int, aux: Int, w: Int, p1: Int, p2: Int, p3: Int
+    ) raises:
+        """One step of the mixtures' k-sized work on the workspace slot w
+        (`x_cluster/bgmm_device.mojo`; p1..p3 -1 when unused)."""
         ...
 
     def bin_seeds(mut self, x: Int, n: Int, d: Int, bin_size: Float32, min_bin_freq: Int, dst: Int) raises -> Int:

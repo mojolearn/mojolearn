@@ -32,11 +32,10 @@ def _need(*modules):
 
 # ---------------------------------------------------------------------------
 # THE NUMPY ORACLE SPELLINGS. They lived in `mojolearn/lowbit.py` until the
-# NumPy-free rewrite (lane/model-loader, 2026-09-17); the package now carries
-# a pure-Python third spelling (`lowbit._to_bf16_py` and friends, the
-# `checks/numerics.mojo` seams over Python ints), and these four stay here
-# as the vectorized oracle the kernels, the host binding and that spelling
-# are all held to. `_quantize_int8_numpy` propagates a NaN through the row
+# NumPy-free rewrite (lane/model-loader, 2026-09-17), and these four stay
+# here as the vectorized oracle the kernels and the host binding are held to
+# (the pure-Python third spelling left the package on 2026-10-03: Python is
+# glue only). `_quantize_int8_numpy` propagates a NaN through the row
 # absmax where `row_absmax` ignores it, so the oracle is compared on finite
 # data only.
 # ---------------------------------------------------------------------------
@@ -172,23 +171,14 @@ def _special_rows():
     return np.array(rows, dtype=np.float32)
 
 
-def test_pure_python_spelling_equals_numpy_oracle():
-    """No binding needed: the pure-Python third spelling (`checks/numerics.mojo`'s
-    seams over Python ints) equals the vectorized oracle bit for bit on
-    hashed and on hand-picked finite data, and `pack`/`unpack` route through
-    it on an install with neither the linalg kernels nor the host binding."""
+def test_packed_containers_are_arrays():
+    """`pack`/`unpack` hand back mojolearn Arrays, never NumPy (the
+    conversion itself runs in the linalg binding)."""
     from mojolearn import Array
-    for w in (_hw((40, 32), 7), _special_rows(), _hw((3, 5), 9, -1e3, 1e3)):
-        a = Array.from_buffer(np.ascontiguousarray(w))
-        bits = lowbit._to_bf16_py(a)
-        assert bits.dtype == "<u2" and np.array_equal(np.asarray(bits), _to_bf16_numpy(w))
-        back = lowbit._from_bf16_py(bits)
-        assert back.dtype == "<f4" and _same(back, _from_bf16_numpy(_to_bf16_numpy(w)))
-        q, e = lowbit._quantize_int8_py(a)
-        qn, en = _quantize_int8_numpy(w)
-        assert np.array_equal(np.asarray(q), qn) and np.array_equal(np.asarray(e), en)
-        deq = lowbit._dequantize_int8_py(q, e)
-        assert _same(deq, _dequantize_int8_numpy(qn, en))
+    try:
+        lowbit._linalg()
+    except ImportError as e:
+        pytest.skip(f"no linalg binding: {e}")
     # the packed containers are Arrays, never NumPy
     packed = lowbit.pack({"a": _hw((8, 4), 3), "n": _hw((4,), 4)}, "int8")
     assert isinstance(packed["a"].codes, Array) and isinstance(packed["a"].exponents, Array)

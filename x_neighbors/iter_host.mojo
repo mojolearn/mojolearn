@@ -16,7 +16,7 @@ from x_neighbors.items import (
     pagerank_step_item, cc_step_item, pcs_item, knn_sq_item, nc_stats_item,
 )
 
-from x_neighbors.host_ops import op_knn_impute_cells, op_kernel, X_NEIGHBORS_HOST_SABOTAGE
+from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE
 from x_neighbors.items import (
     kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
     K_RBF, U_IDENTITY,
@@ -514,13 +514,6 @@ def op_lp_iterate_knn(
     _ = prev^
     _ = nxt^
     _ = hs^
-
-
-def op_kernel_tiled(
-    x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma: Float32, coef0: Float32, degree: Int,
-) raises:
-    """The CPU column of `kernel_tiled`: `kernel` itself."""
-    op_kernel(x, y, res, n, m, d, kind, gamma, coef0, degree)
 
 
 def lp_fast_resident_binding() raises -> PythonObject:

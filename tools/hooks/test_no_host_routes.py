@@ -119,6 +119,16 @@ BLOCKED = [
            "    ctx.enqueue_copy(dst_ptr=hb, src_buf=dbuf)\n    ctx.synchronize()\n"
            "    for i in range(n):\n        hb[i] = hb[i] * 2\n    ctx.enqueue_copy(dst_buf=dbuf, src_ptr=hb)"},
      "ctx.enqueue_copy(dst_ptr=hb, src_buf=dbuf)"),
+    ("download, then a host fold over n (d2h-host-work)",
+     {DEV: "def _p20(ctx: DeviceContext, d: DeviceBuffer[DType.float32], n: Int) raises -> Float32:\n"
+           "    var h = download_f32(ctx, d, n)\n    var total = Float32(0.0)\n"
+           "    for i in range(n):\n        total = total + h[i]\n    return total"},
+     "for i in range(n):"),
+    ("download, then a host walk that branches (d2h-host-work)",
+     {DEV: "def _p21(ctx: DeviceContext, d: DeviceBuffer[DType.int32], hb: UnsafePointer[Int32], n_rows: Int) raises:\n"
+           "    ctx.enqueue_copy(dst_ptr=hb, src_buf=d)\n    ctx.synchronize()\n"
+           "    for i in range(n_rows):\n        if hb[i] == 0:\n            raise Error(\"bad\")"},
+     "for i in range(n_rows):"),
     ("one-thread launch over n",
      {DEV: "def _p13(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
            "    ctx.enqueue_function[_fold_kernel](x, Int32(n), grid_dim=1, block_dim=1)"},
@@ -126,6 +136,19 @@ BLOCKED = [
     ("one-block launch over n",
      {DEV: "def _p14(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
            "    ctx.enqueue_function[_fold_kernel](\n        x, Int32(n),\n        grid_dim=1, block_dim=256,\n    )"},
+     "ctx.enqueue_function[_fold_kernel]("),
+    ("one-block launch spelled grid_dim=(1, 1, 1) over n (one-block-n)",
+     {DEV: "def _p22(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
+           "    ctx.enqueue_function[_fold_kernel](\n        x, Int32(n),\n        grid_dim=(1, 1, 1), block_dim=(256, 1, 1),\n    )"},
+     "ctx.enqueue_function[_fold_kernel]("),
+    ("one block per class over n (block-per-n)",
+     {DEV: "def _p24(ctx: DeviceContext, x: UnsafePointer[Float32], n_rows: Int, C: Int) raises:\n"
+           "    ctx.enqueue_function[_mean_kernel](\n        x, Int32(n_rows), Int32(C),\n        grid_dim=(C, 1, 1), block_dim=(256, 1, 1),\n    )"},
+     "ctx.enqueue_function[_mean_kernel]("),
+    ("small-launch note naming an argument the launch does not pass",
+     {DEV: "def _p23(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
+           "    ctx.enqueue_function[_fold_kernel](  # small-launch(d: feature count): the vector is d long\n"
+           "        x, Int32(n),\n        grid_dim=(1, 1, 1), block_dim=(256, 1, 1),\n    )"},
      "ctx.enqueue_function[_fold_kernel]("),
     ("tid == 0 serial loop over n",
      {DEV: "def _p15_kernel(x: UnsafePointer[Float32], n: Int):\n    var tid = thread_idx.x\n"
@@ -136,6 +159,14 @@ BLOCKED = [
     ("Python loop over rows", {PY: "for i in range(n_samples):\n    out[i] = f(X[i])"},
      "for i in range(n_samples):"),
     ("sklearn import", {PY: "from sklearn.isotonic import isotonic_regression"}, "from sklearn.isotonic"),
+    ("comprehension over data in a def (py-data-loop)", {PY: "def _pz1(X):\n    return [v * 2 for v in X]"},
+     "[v * 2 for v in X]"),
+    ("numpy compute in a def (py-np-compute)", {PY: "def _pz2(X):\n    return np.mean(X, axis=0)"}, "np.mean"),
+    ("sum() over data in a def (py-reduce)", {PY: "def _pz3(y):\n    return sum(y) / len(y)"}, "sum(y)"),
+    ("array reduction method in a def (py-array-method)", {PY: "def _pz4(X):\n    return X.argmax()"},
+     "X.argmax()"),
+    ("glue note whose reason is under three words",
+     {PY: "def _pz5(X):\n    for v in X:  # glue: fine\n        pass"}, "for v in X:"),
     ("Python thread pool", {PY: "from concurrent.futures import ThreadPoolExecutor"}, "ThreadPoolExecutor"),
     ("process pool", {PY: "import multiprocessing"}, "import multiprocessing"),
     ("forces MOJOLEARN_VENDOR=cpu", {PY: "os.environ['MOJOLEARN_VENDOR'] = 'cpu'"}, "MOJOLEARN_VENDOR"),
@@ -181,6 +212,28 @@ PASSES = [
                                         "        var ctx = DeviceContext(device_id=rank)\n"
                                         "        ctx.synchronize()\n    host_parallelize(_task, n)\n"),
       DEV: "from x_decomp.multi_gpu_drive import drive"}),
+    ("download, then a plain element copy",
+     {DEV: "def _q1(ctx: DeviceContext, d: DeviceBuffer[DType.float32], out: UnsafePointer[Float32], n: Int) raises:\n"
+           "    var h = download_f32(ctx, d, n)\n    for i in range(n):\n        out[i] = h[i]"}),
+    ("download, then a trace-only fold",
+     {DEV: "def _q2(ctx: DeviceContext, mut trace: IdentityTrace, d: DeviceBuffer[DType.float32], n: Int) raises:\n"
+           "    var h = download_f32(ctx, d, n)\n    if trace.enabled:\n        var t = Float32(0.0)\n"
+           "        for i in range(n):\n            t = t + h[i]"}),
+    ("download, then a loop over a small k",
+     {DEV: "def _q3(ctx: DeviceContext, d: DeviceBuffer[DType.float32], n_features: Int) raises -> Float32:\n"
+           "    var h = download_f32(ctx, d, n_features)\n    var t = Float32(0.0)\n"
+           "    for j in range(n_features):\n        t = t + h[j]\n    return t"}),
+    ("a reviewed small-launch note on a one-block launch over d-sized data",
+     {DEV: "def _q4(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
+           "    ctx.enqueue_function[_fold_kernel](  # small-launch(n: parameter count): an L-BFGS vector phase, never rows\n"
+           "        x, Int32(n),\n        grid_dim=(1, 1, 1), block_dim=(256, 1, 1),\n    )"}),
+    ("a reviewed glue note on an argument loop",
+     {PY: "def _qz1(params):\n    for k in params:  # glue: copies estimator keyword arguments\n        pass"}),
+    ("scalar min/max and numpy allocation",
+     {PY: "def _qz2(a, b):\n    return np.zeros(min(a, b) + max(a, 1))"}),
+    ("a module-level table and a loop word in a string",
+     {PY: "_QZ3 = {k: i for i, k in enumerate(('a', 'b'))}\n"
+          "def _qz4():\n    raise ValueError('one value for each in X')"}),
     ("a module no GPU binding imports",
      {"x_decomp/unused_scratch.mojo": ("=", "def f(n: Int):\n    host_parallelize(_rows, n)\n")}),
 ]

@@ -6,6 +6,7 @@ from x_metrics.common import FP, IP
 from x_metrics.group import group_sort_unit, group_sum_unit, pair_key_unit
 from x_metrics.ranking import bin_curve_unit, row_metric_unit
 from x_metrics.cluster import row_centroid_dist_unit
+from x_metrics.onehot import onehot_unit, rep_rows_unit, pair_cols_unit
 from x_metrics.split import permute_unit, fold_rows_unit, rows64_unit, strat_codes_unit
 from x_metrics.regression import reg_term_unit, col_sort_unit, wpercentile_unit, col_max_unit, wpct_select
 from x_metrics.par import (
@@ -23,7 +24,8 @@ from x_metrics.par import (
 #: (curve_fold, lane cgr2-metrics-shap) are the caller's (x_metrics/plan.mojo
 #: `is_user_op`); the others are the planner's parallel schedules
 #: (x_metrics/par.mojo). 23 and 25 (the retired sequential prefixes) run nothing.
-comptime N_OPS = 52
+#: 52..54 (onehot, rep_rows, pair_cols; lane apple-fast-py2mojo-core) are the caller's too.
+comptime N_OPS = 55
 
 
 @always_inline
@@ -128,3 +130,9 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         wpct_coff_unit(t, f, q)
     comptime if OP == 51:
         wpct_cfill_unit(t, f, q)
+    comptime if OP == 52:
+        onehot_unit(t, f, q)
+    comptime if OP == 53:
+        rep_rows_unit(t, f, q)
+    comptime if OP == 54:
+        pair_cols_unit(t, f, q)

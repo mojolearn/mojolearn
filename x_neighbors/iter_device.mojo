@@ -19,6 +19,10 @@ from x_neighbors.svgp_ff import (
     svgp_ff_x_item, svgp_ff_qmu_item, svgp_ff_qsqrt_item, svgp_ff_part_item, svgp_ff_fin_item, svgp_ff_nbn,
     svgp_ff_nbm, svgp_ff_ws_size,
 )
+from x_neighbors.svgp_ff import (
+    SVGP_TREE, SVGP_TREE_ON, SV8, svgp_ff_tree_comb, svgp_ff_tree_slot, svgp_ff_bound, svgp_ff_failed,
+)
+from x_linear.ff import FF
 from std.memory import bitcast, memcpy
 from std.atomic import Atomic
 from std.math import sqrt
@@ -36,10 +40,11 @@ from std.python import PythonObject
 from x_neighbors.nan_cells_device import nan_cells_device
 from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
+from x_neighbors.items import XN_TREE, XN_TREE_ON, xn_tree_slot
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
-    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK, op_kernel,
+    xn_ctx, _buf, _buf_i, _down, _down_i, _grid, _tid, BLOCK,
     absdiff_sum_k0, absdiff_sum_k1, matmul_kernel, lp_clamp_kernel, ls_clamp_kernel,
     pagerank_step_kernel, cc_step_kernel,
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel, op_knn_sq, op_knn_impute_cells,
@@ -56,13 +61,39 @@ from x_neighbors.items import lp_clamp_item, ls_clamp_item
 
 def _absdiff_launch(ctx: DeviceContext, a: FP, b: FP, s: FP, part: FP, count: Int) raises:
     """The `absdiff_sum` op's two stages on resident buffers: one thread per
-    XN_FOLD_BLOCK block into `part`, then the partials ascending into s[0]
+    XN_FOLD_BLOCK block into `part`, then the partials folded into s[0]
     (the bits of `absdiff_sum_item`, the host column's fold)."""
     var nb = xn_fold_blocks(count)
     ctx.enqueue_function[absdiff_sum_k0](
         a, b, s, part, Int64(count), grid_dim=_grid(nb), block_dim=(BLOCK if nb > 1 else 1),
     )
-    ctx.enqueue_function[absdiff_sum_k1](a, b, s, part, Int64(count), grid_dim=1, block_dim=1)
+    comptime if XN_TREE_ON:
+        # lane apple-fast-purity: the partials folded by one block of XN_TREE
+        # threads (`xn_tree_fold`'s steps), not by one thread
+        ctx.enqueue_function[xn_tree_fold_kernel](part, s, Int64(nb), grid_dim=1, block_dim=XN_TREE)
+    else:
+        ctx.enqueue_function[absdiff_sum_k1](a, b, s, part, Int64(count), grid_dim=1, block_dim=1)
+
+
+comptime _XN_TREE_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, XN_TREE * 4]()
+
+
+def xn_tree_fold_kernel(part: FP, res: FP, nb_: Int64):
+    """ONE block of XN_TREE threads: `xn_tree_fold` (items.mojo) with thread
+    s on slot s, then the halving steps in threadgroup memory; res[0]."""
+    comptime assert _XN_TREE_SMEM_FITS, "xn_tree_fold_kernel: a 1 KB threadgroup page must fit"
+    var s = Int(thread_idx.x)
+    var sh = stack_allocation[XN_TREE, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    sh[s] = xn_tree_slot(part, s, Int(nb_))
+    barrier()
+    var h = XN_TREE // 2
+    while h > 0:
+        if s < h:
+            sh[s] = _add(sh[s], sh[s + h])
+        barrier()
+        h //= 2
+    if s == 0:
+        res.unsafe_store(0, sh[0])
 
 
 def op_lp_iterate(
@@ -497,18 +528,6 @@ def pcs_conv_row_kernel(acc: FP, sk: FP, res: FP, n_: Int64, nc_: Int64, degree_
         h0 += PCS_ROW_TPB * 4
 
 
-#: lane neighbors-apple3 (2026-09-28), FAST on Apple, OPT-IN until its A/B
-#: and quality check pass (`-D MOJOLEARN_XN_PCS_SPARSE`): the convolution
-#: over the running product's NONZERO components only. A count sketch of a
-#: row of d features has at most d nonzero components (each feature lands in
-#: one), so at degree 2 a row's 500 outputs fold about 8 terms each, not
-#: 500. The skipped terms are products with a zero; FAST's words can differ
-#: from the full fold's only in the sign of a zero.
-comptime PCS_SPARSE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_XN_PCS_SPARSE"]()
-)
 
 def op_pcs_resident(
     x: Int, hidx: Int, hbit: Int, res: Int,
@@ -519,9 +538,6 @@ def op_pcs_resident(
     one sketch per (row, degree), then per degree p >= 1 one thread per
     output cell folding the convolution in the same ascending order, the
     running product ping-ponging on the device."""
-    # The loop keeps its compile-time guard; only import placement changes.
-    from x_neighbors.pcs_sparse import PCS_SPARSE_MAX_NC, pcs_conv_row_sparse_kernel
-
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d_in, True)
     var d_hi = _buf_i(ctx, hidx, degree * nf, True)
@@ -547,17 +563,7 @@ def op_pcs_resident(
         var row_kernel = nc <= PCS_ROW_MAX_NC
         comptime if is_defined["MOJOLEARN_XN_PCS_CELL"]():
             row_kernel = False
-        var sparse_kernel = False
-        comptime if PCS_SPARSE:
-            sparse_kernel = row_kernel and nc <= PCS_SPARSE_MAX_NC
-            if sparse_kernel:
-                ctx.enqueue_function[pcs_conv_row_sparse_kernel](
-                    cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
-                    grid_dim=n, block_dim=PCS_ROW_TPB,
-                )
-        if sparse_kernel:
-            pass
-        elif row_kernel:
+        if row_kernel:
             ctx.enqueue_function[pcs_conv_row_kernel](
                 cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
                 grid_dim=n, block_dim=PCS_ROW_TPB,
@@ -1275,6 +1281,39 @@ def svgp_ff_fin_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float32, n
         svgp_ff_fin_item(w, info, Int(nbn_), Int(nbm_), nf, noise, kdiag)
 
 
+comptime _SVGP_TREE_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, SVGP_TREE * 8 * 4]()
+
+
+def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float32, noise: Float32, kdiag: Float32):
+    """ONE block of SVGP_TREE threads (lane apple-fast-purity): `svgp_ff_fin_item`'s
+    tree fold with thread s on slot s, the halving steps in threadgroup
+    memory, then thread 0 writes the bound."""
+    comptime assert _SVGP_TREE_SMEM_FITS, "svgp_ff_fin_tree_kernel: an 8 KB threadgroup page must fit"
+    var s = Int(thread_idx.x)
+    var sh = stack_allocation[SVGP_TREE * 8, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var v = svgp_ff_tree_slot(w, s, Int(nbn_), Int(nbm_))
+    comptime for L in range(8):
+        sh[s * 8 + L] = v[L]
+    barrier()
+    var h = SVGP_TREE // 2
+    while h > 0:
+        if s < h:
+            var a = SV8(0)
+            var b = SV8(0)
+            comptime for L in range(8):
+                a[L] = sh[s * 8 + L]
+                b[L] = sh[(s + h) * 8 + L]
+            var c = svgp_ff_tree_comb(a, b)
+            comptime for L in range(8):
+                sh[s * 8 + L] = c[L]
+        barrier()
+        h //= 2
+    if s == 0:
+        if svgp_ff_failed(w, info):
+            return
+        svgp_ff_bound(w, info, FF(sh[0], sh[1]), FF(sh[2], sh[3]), FF(sh[4], sh[5]), sh[6], sh[7], nf, noise, kdiag)
+
+
 def op_svgp_fit_ff(
     x: Int, z: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, n: Int, m: Int, d: Int,
     gamma: Float32, variance: Float32, noise: Float32, jitter: Float32, kdiag: Float32,
@@ -1359,11 +1398,16 @@ def op_svgp_fit_ff(
         ctx.enqueue_function[svgp_ff_part_kernel](
             yp, _p(d_bvh), _p(d_bvl), wp, Int64(m), Int64(n), grid_dim=_grid(nbn + nbm), block_dim=BLOCK,
         )
-    # one thread folds the nbn + nbm block partials (n / 2048 + m / 64 of
-    # them) into the scalar bound: a scalar step, not a loop over n
-    ctx.enqueue_function[svgp_ff_fin_kernel](
-        wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=1,
-    )
+    comptime if SVGP_TREE_ON:
+        # lane apple-fast-purity: one block of SVGP_TREE threads folds the
+        # nbn + nbm block partials (svgp_ff_fin_item's tree order)
+        ctx.enqueue_function[svgp_ff_fin_tree_kernel](
+            wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=SVGP_TREE,
+        )
+    else:
+        ctx.enqueue_function[svgp_ff_fin_kernel](
+            wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=1,
+        )
     _down(ctx, d_alpha, alpha, m)
     _down(ctx, d_c, cmat, mm)
     _down(ctx, d_qmu, qmu, m)
@@ -1970,81 +2014,3 @@ def op_lp_iterate_knn(
         _ = d_ys^
         _ = d_unl^
         _ = ctx^
-
-
-# ---------------------------------------------------------------- kernel_tiled
-#: MOJOLEARN_XN_FAST_TILED_RBF=1 (lane/apple-fast-neighbors2, 2026-10-02; FAST
-#: tier only, Python-side switch, default off): the rbf kernel matrix from
-#: KT_T x KT_T tiles whose x and y rows are staged in threadgroup memory.
-#: Cause: `kernel_kernel` (x_neighbors/device_ops.mojo, one thread per cell)
-#: streams both rows from device memory for every cell: OneClassSVM's
-#: 10,000 x 10,000 Gram at Istella's 220 features reads each y row 10,000
-#: times (88 GB of traffic for 400 MB of output). Here a block reads its 16
-#: x rows and 16 y rows once and folds 256 cells from threadgroup memory.
-#: Same values up to FAST's fma/exp spellings. d <= KT_MAX_D; other kinds
-#: and wider rows take `kernel`.
-comptime KT_T = 16
-comptime KT_TPB = KT_T * KT_T
-comptime KT_MAX_D = 224
-
-
-def kernel_rbf_tiled_kernel(x: FP, y: FP, res: FP, n_: Int64, m_: Int64, d_: Int64, gamma_: Float32):
-    var n = Int(n_)
-    var m = Int(m_)
-    var d = Int(d_)
-    var tid = Int(thread_idx.x)
-    var i0 = Int(block_idx.y) * KT_T
-    var j0 = Int(block_idx.x) * KT_T
-    var xs = stack_allocation[KT_T * KT_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-    var ys = stack_allocation[KT_T * KT_MAX_D, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-    var q = tid
-    while q < KT_T * d:
-        var r = q // d
-        var f = q - r * d
-        var xv = Float32(0)
-        var yv = Float32(0)
-        if i0 + r < n:
-            xv = x.unsafe_load((i0 + r) * d + f)
-        if j0 + r < m:
-            yv = y.unsafe_load((j0 + r) * d + f)
-        xs[q] = xv
-        ys[q] = yv
-        q += KT_TPB
-    barrier()
-    var ti = tid // KT_T
-    var tj = tid - ti * KT_T
-    var i = i0 + ti
-    var j = j0 + tj
-    if i < n and j < m:
-        var acc = Float32(0)
-        for f in range(d):
-            var df = xs[ti * d + f] - ys[tj * d + f]
-            acc = identical_mul_add(df, df, acc)
-        res.unsafe_store(i * m + j, identical_exp(-gamma_ * acc))
-
-
-def op_kernel_tiled(
-    x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma: Float32, coef0: Float32, degree: Int,
-) raises:
-    """`kernel` from staged tiles for the rbf kind (see KT_T above); every
-    other kind, and d > KT_MAX_D, is `op_kernel` itself."""
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        if kind == K_RBF and d >= 1 and d <= KT_MAX_D and n > 0 and m > 0:
-            var ctx = xn_ctx()
-            var d_x = ctx.enqueue_create_buffer[DType.float32](n * d)
-            ctx.enqueue_copy(dst_buf=d_x, src_ptr=FP(unsafe_from_address=x))
-            var d_y = ctx.enqueue_create_buffer[DType.float32](m * d)
-            ctx.enqueue_copy(dst_buf=d_y, src_ptr=FP(unsafe_from_address=y))
-            var d_res = ctx.enqueue_create_buffer[DType.float32](n * m)
-            ctx.enqueue_function[kernel_rbf_tiled_kernel](
-                d_x.unsafe_ptr(), d_y.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(m), Int64(d), gamma,
-                grid_dim=((m + KT_T - 1) // KT_T, (n + KT_T - 1) // KT_T, 1), block_dim=(KT_TPB, 1, 1),
-            )
-            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=res), src_buf=d_res)
-            ctx.synchronize()
-            _ = d_x^
-            _ = d_y^
-            _ = d_res^
-            _ = ctx^
-            return
-    op_kernel(x, y, res, n, m, d, kind, gamma, coef0, degree)

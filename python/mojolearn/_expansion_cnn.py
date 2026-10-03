@@ -49,14 +49,27 @@ def _pair(v, name):
     return v
 
 
+def _rng(random_state):
+    """The layer's init stream (`_buffer.InitStream`: seeded draws in Mojo)."""
+    from ._buffer import InitStream
+    return InitStream(None if random_state is None else int(random_state))
+
+
+def _uniform(rng, bound, shape):
+    """A float32 array of U(-bound, bound) draws from `rng`, in Mojo."""
+    np = _np()
+    out = np.empty(shape, dtype=np.float32)
+    rng.fill_uniform(out.ctypes.data, out.size, -float(bound), float(bound))
+    return out
+
+
 def _kaiming_uniform(rng, shape, fan_in):
     """PyTorch's default Conv/Linear init (kaiming_uniform_(a=sqrt(5)) for the
-    weight, U(-1/sqrt(fan_in), 1/sqrt(fan_in)) for the bias), drawn from
-    NumPy's Generator in float64 and rounded once to float32, so every
+    weight, U(-1/sqrt(fan_in), 1/sqrt(fan_in)) for the bias): float64
+    uniforms rounded once to float32, drawn in Mojo from the layer's seeded
+    stream (lane cgr4-py-compute; it was NumPy's Generator), so every
     platform starts from the same bytes."""
-    np = _np()
-    bound = 1.0 / np.sqrt(fan_in)
-    return rng.uniform(-bound, bound, size=shape).astype(np.float32)
+    return _uniform(rng, 1.0 / _pm.sqrt(float(fan_in)), shape)
 
 
 class _Layer:
@@ -190,7 +203,7 @@ class Conv2d(_Layer):
         self.numeric_mode = numeric_mode
         np = _np()
         fan_in = (self.in_channels // self.groups) * kh * kw
-        rng = np.random.default_rng(random_state)
+        rng = _rng(random_state)
         self.weight_ = _kaiming_uniform(rng, (self.out_channels, self.in_channels // self.groups, kh, kw), fan_in)
         self.bias_ = (_kaiming_uniform(rng, (self.out_channels,), fan_in) if self.bias
                       else np.zeros(self.out_channels, np.float32))
@@ -554,7 +567,7 @@ class _Linear(_Layer):
         np = _np()
         self.in_features, self.out_features = int(in_features), int(out_features)
         self.numeric_mode = numeric_mode
-        rng = np.random.default_rng(random_state)
+        rng = _rng(random_state)
         self.weight_ = _kaiming_uniform(rng, (self.out_features, self.in_features), self.in_features)
         self.bias_ = _kaiming_uniform(rng, (self.out_features,), self.in_features)
 
@@ -615,13 +628,23 @@ def _adam_hyper(step, lr, betas, eps, weight_decay, decoupled):
     DEVIATION 6900: torch's `beta ** step` calls the platform pow; here it is
     `_pm.powi`, correctly rounded (the platform's bits wherever its pow is),
     the same bits on every host. sqrt is correctly rounded everywhere."""
-    b1, b2 = float(betas[0]), float(betas[1])
     if step != int(step):
         raise ValueError(f"Adam step must be a whole number, got {step!r}")
-    bc1 = 1.0 - _pm.powi(b1, int(step))
-    bc2 = 1.0 - _pm.powi(b2, int(step))
-    return [lr / bc1, 1.0 - b1, b2, 1.0 - b2, float(eps), _pm.sqrt(bc2), float(weight_decay),
-            1.0 if decoupled else 0.0, 1.0 - float(lr) * float(weight_decay)]
+    return _adam_hyper_block(int(step), 1, lr, betas, eps, weight_decay, decoupled).reshape(-1).tolist()
+
+
+def _adam_hyper_block(step0, nsteps, lr, betas, eps, weight_decay, decoupled):
+    """`_adam_hyper` of steps step0 .. step0 + nsteps - 1 as an (nsteps, 9)
+    float64 array, made in Mojo (the base binding's `adam_hyper_f64`; lane
+    cgr4-py-compute): beta ** step by squaring in one fixed order, the
+    correctly rounded sqrt, the same bits on every column."""
+    np = _np()
+    from ._buffer import _native
+    out = np.empty((max(int(nsteps), 1), 9), dtype=np.float64)
+    _native("adam_hyper_f64")(out.ctypes.data, int(step0), int(nsteps),
+                              [float(lr), float(betas[0]), float(betas[1]), float(eps), float(weight_decay),
+                               1.0 if decoupled else 0.0])
+    return out[:int(nsteps)]
 
 
 class _Res:
@@ -814,7 +837,10 @@ class CNNClassifier(_Layer):
         b = self._binding()
         per = 2 if self.optimizer != "sgd" else 1
         params = self._params()
-        rng = np.random.default_rng(self.random_state)
+        # the epoch orders from one splitmix64 state, permuted in Mojo
+        # (`epoch_order_i32`, sequence/schedule.mojo; lane cgr4-py-compute)
+        from ._buffer import InitStream, _native
+        order_state = np.array([InitStream(self.random_state).seed], dtype=np.uint64)
         n = x.shape[0]
         k = len(self.classes_)
         cap = min(self.batch_size, n)
@@ -864,17 +890,18 @@ class CNNClassifier(_Layer):
                 sgd_row = [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
                            1.0 if self.nesterov else 0.0, 0.0]
             for _ in range(self.max_iter):
-                order = rng.permutation(n) if self.shuffle else np.arange(n)
+                order = np.empty(n, dtype=np.int32)
+                _native("epoch_order_i32")(order.ctypes.data, n, 1 if self.shuffle else 0, order_state.ctypes.data)
                 if epoch_entry:
                     rows = np.ascontiguousarray(order, dtype=np.int32)
                     if self.optimizer == "sgd":
-                        hyper = np.array([sgd_row] * nsteps, dtype=np.float64)
+                        hyper = np.tile(np.asarray(sgd_row, dtype=np.float64), (nsteps, 1))
                         if step == 0:
                             hyper[0, 5] = 1.0
                     else:
-                        hyper = np.array([_adam_hyper(step + 1 + t, self.learning_rate, self.betas, self.eps,
-                                                      self.weight_decay, self.optimizer == "adamw")
-                                          for t in range(nsteps)], dtype=np.float64)
+                        hyper = np.ascontiguousarray(_adam_hyper_block(
+                            step + 1, nsteps, self.learning_rate, self.betas, self.eps, self.weight_decay,
+                            self.optimizer == "adamw"))
                     losses = np.empty(nsteps, dtype=np.float64)
                     b.x_cnn_fit_epoch_r(spec, rows.ctypes.data, hyper.ctypes.data, losses.ctypes.data,
                                         [n, bs, 0 if self.optimizer == "sgd" else 1])
@@ -896,8 +923,18 @@ class CNNClassifier(_Layer):
                         else:
                             b.x_cnn_res_gather([a["x"], a["y"]], [xall, yall], rows.ctypes.data, [m, row, 1])
                     else:
-                        R.put(a["x"], np.ascontiguousarray(x[idx]))
-                        R.put(a["y"], np.ascontiguousarray(yi[idx]))
+                        # X above a GiB stays on the host: the batch rows into
+                        # one staging block by the base binding's byte gather
+                        # (lane pyglue-numeric: numpy fancy indexing), then up
+                        rows64 = idx.astype(np.int64)
+                        xb = np.empty((m,) + x.shape[1:], np.float32)
+                        yb = np.empty(m, np.int32)
+                        _native("gather_rows_bytes")(x.ctypes.data, xb.ctypes.data, rows64.ctypes.data,
+                                                     n, m, x.nbytes // n)
+                        _native("gather_rows_bytes")(yi.ctypes.data, yb.ctypes.data, rows64.ctypes.data,
+                                                     n, m, 4)
+                        R.put(a["x"], xb)
+                        R.put(a["y"], yb)
                     plans = self._forward_r(b, a, m)
                     loss = float(b.x_cnn_softmax_xent_r(a["logits"], a["y"], a["glog"], a["proba"], [m, k]))
                     hw, _, hgw, hgb = self._rw[id(self.head_)]
@@ -947,6 +984,12 @@ class CNNClassifier(_Layer):
         return self
 
     def predict_proba(self, X):
+        return self._run_predict(X, False)
+
+    def _run_predict(self, X, codes):
+        """predict_proba (n, k) float32, or with `codes` each row's class
+        index (int32), the argmax on the device (`x_cnn_res_argmax`; lane
+        pyglue-numeric: numpy's argmax on the downloaded probabilities)."""
         np = _np()
         x = self._images(X)
         n = x.shape[0]
@@ -955,7 +998,8 @@ class CNNClassifier(_Layer):
         # lane/cnn-apple2: at most _PREDICT_ROWS rows per pass on one set of
         # resident arrays (every op is per row: the same words)
         cap = n if _LEGACY_STEP else max(1, min(n, _PREDICT_ROWS))
-        proba = np.empty((n, k), np.float32)
+        proba = np.empty((n, k), np.float32) if not codes else None
+        lab = np.empty(n, np.int32) if codes else None
         with _Res(b) as R:
             self._rw = {}
             for layer in [c for c, _ in self._blocks] + [self.head_]:
@@ -970,13 +1014,28 @@ class CNNClassifier(_Layer):
                 R.put(a["x"], np.ascontiguousarray(x[s:s + m]))
                 self._forward_r(b, a, m)
                 b.x_cnn_softmax_xent_r(a["logits"], a["y"], a["glog"], a["proba"], [m, k])
-                b.x_cnn_res_download(a["proba"], proba[s:s + m].ctypes.data, m * k)
+                if codes:
+                    b.x_cnn_res_argmax(a["proba"], lab[s:s + m].ctypes.data, [m, k])
+                else:
+                    b.x_cnn_res_download(a["proba"], proba[s:s + m].ctypes.data, m * k)
             self._rw = {}
-        return proba
+        return lab if codes else proba
 
     def predict(self, X):
         np = _np()
-        return self.classes_[np.argmax(self.predict_proba(X), axis=1)]
+        codes = self._run_predict(X, True)
+        cls = self.classes_
+        if cls.dtype.kind in "iuf":
+            # classes_[codes] by the base binding's native gather (the decode
+            # half of label encoding)
+            from ._buffer import _native
+            table = np.ascontiguousarray(cls, dtype=np.float64 if cls.dtype.kind == "f" else np.int64)
+            out = np.empty(codes.shape[0], table.dtype)
+            c64 = codes.astype(np.int64)
+            _native("gather_f64" if cls.dtype.kind == "f" else "gather_i64")(
+                table.ctypes.data, table.shape[0], c64.ctypes.data, c64.shape[0], out.ctypes.data)
+            return out.astype(cls.dtype, copy=False)
+        return cls[codes]   # glue: label objects (str, bool) no native table holds
 
     def weights(self):
         """Every trained array, in layer order: [w0, b0, w1, b1, ...]."""
@@ -1656,9 +1715,9 @@ class GCNConv(_Layer):
         self.improved, self.add_self_loops, self.normalize = bool(improved), bool(add_self_loops), bool(normalize)
         self.bias = bool(bias)
         self.numeric_mode = numeric_mode
-        rng = np.random.default_rng(random_state)
+        rng = _rng(random_state)
         bound = np.sqrt(6.0 / (self.in_channels + self.out_channels))  # glorot, PyG's Linear(weight_initializer='glorot')
-        self.weight_ = rng.uniform(-bound, bound, (self.out_channels, self.in_channels)).astype(np.float32)
+        self.weight_ = _uniform(rng, bound, (self.out_channels, self.in_channels))
         self.bias_ = np.zeros(self.out_channels, np.float32)
 
     def _graph(self, n, edge_index, edge_weight):
@@ -1806,8 +1865,8 @@ class SAGEConv(_Layer):
         self.in_channels, self.out_channels = int(in_channels), int(out_channels)
         self.aggr, self.root_weight, self.bias = aggr, bool(root_weight), bool(bias)
         self.numeric_mode = numeric_mode
-        rng = np.random.default_rng(random_state)
-        self.lin_l = _Linear(self.in_channels, self.out_channels, random_state=rng.integers(2 ** 31),
+        rng = _rng(random_state)
+        self.lin_l = _Linear(self.in_channels, self.out_channels, random_state=rng.child_seed(),
                              numeric_mode=numeric_mode)
         if not self.bias:
             self.lin_l.bias_[:] = 0
@@ -1816,7 +1875,7 @@ class SAGEConv(_Layer):
         self.project = bool(project)
         self.lin = None
         if self.project:
-            self.lin = _Linear(self.in_channels, self.in_channels, random_state=rng.integers(2 ** 31),
+            self.lin = _Linear(self.in_channels, self.in_channels, random_state=rng.child_seed(),
                                numeric_mode=numeric_mode)
             self._relu_p = _ReLU(numeric_mode)
 

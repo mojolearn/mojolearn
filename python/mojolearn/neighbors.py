@@ -21,6 +21,10 @@ from .linear_model import (
     _saved_mode, _shape_of,
 )
 
+#: the x_neighbors binding, which holds the p2m_* ops the data loops below
+#: run through (lane apple-fast-py2mojo-neighbors)
+_XN = "_mojolearn_x_neighbors"
+
 _DEFAULT_QUERY_TILE = 0  # Ask the compiled planner for its measured default.
 
 #: The model file format (the knn host inference lane, 2026-09-14). `save`
@@ -851,10 +855,10 @@ class NearestNeighbors(NumericModeMixin):
             )
 
         if return_distance:
-            if self._dist_params()[0] == _DIST_INNER_PRODUCT:
-                # the kernel selected the smallest NEGATED products; hand
-                # back the products themselves (a negation, exact)
-                dist = Array.from_list([[-v for v in row] for row in dist.tolist()], "<f4")
+            # an inner-product search hands back the products themselves:
+            # the binding negates its selection keys on the device before
+            # the readback (the host binding in its copy loop; lane
+            # pyglue-numeric, the negation was a second call here)
             return dist, ind.astype("<i8")
         return ind.astype("<i8")
 
@@ -1048,13 +1052,17 @@ class KNeighborsClassifier(NearestNeighbors):
             self._y_cols = y32.reshape((1, n))
             self._classes_list = [encode_labels(y32)[0]]
             return self
-        rows = ya.tolist()
-        cols = [[row[j] for row in rows] for j in range(n_out)]
-        self._y_cols = Array.from_list(cols, "<i4")
-        # `np.unique` per column, under the package-wide classes_ ORDER
-        # RULE (`_labels.sorted_classes`, DEVIATION 2340): a Python list
-        # per output; int labels, so a sort by value.
-        self._classes_list = [encode_labels(col)[0] for col in cols]
+        # the narrowing is a C-level copy (exact after the range check) and
+        # the transpose a device op (`xn_p2m_transpose_i`; the host binding's
+        # same op on a CPU-only install); the classes per output column from
+        # the native encoder, as the one-output path above
+        y32 = ya.astype("<i4")
+        yc = empty((n_out, n), "<i4")
+        if n:
+            self._bind(_XN).xn_p2m_transpose_i(
+                [addr_ro(y32, name="y"), addr(yc, name="y_cols")], [n, n_out], [])
+        self._y_cols = yc
+        self._classes_list = [encode_labels(yc[j])[0] for j in range(n_out)]
         return self
 
     @property
@@ -1281,13 +1289,13 @@ class KNeighborsRegressor(NearestNeighbors):
             # reshape, no copy (as `ascontiguousarray(y2.T)` was for 1-D y).
             self._y_cols = ya.reshape((1, n))
         else:
-            # The transpose is a Python loop over O(rows * n_outputs)
-            # targets (DEVIATION 2374); the values are already float32, so
-            # `from_list` reproduces them exactly.
-            rows = ya.tolist()
-            self._y_cols = Array.from_list(
-                [[row[j] for row in rows] for j in range(n_out)], "<f4"
-            )
+            # The transpose on the device (`xn_p2m_transpose`; the host
+            # binding's same op on a CPU-only install)
+            yc = empty((n_out, n), "<f4")
+            if n:
+                self._bind(_XN).xn_p2m_transpose(
+                    [addr_ro(ya, name="y"), addr(yc, name="y_cols")], [n, n_out], [])
+            self._y_cols = yc
         self.outputs_2d_ = len(shape) == 2 and shape[1] != 1
         return self
 
@@ -1613,27 +1621,18 @@ class RadiusNeighbors(NumericModeMixin):
         # LISTS of Arrays (int64 indices, float32 distances), one per query
         # row, where they were object-dtype ndarrays. Same per-row contents,
         # indexed with `[i]` as before; `len()` is the query count.
+        if sort_results and nnz:
+            # every row's stable sort by distance as one segmented sort on
+            # the device (`xn_p2m_row_sort`, key (row, distance, position);
+            # the rows arrive in ascending index order under `identical`, so
+            # the result is (distance, index) lexicographic)
+            from ._expansion_neighbors import _p2m_sort_rows
+            cols, dists = _p2m_sort_rows(self, indptr, cols, dists, _XN)
         ptr = indptr.tolist()
-        ind = []
-        dst = []
-        for i in range(nq):
-            a, b = ptr[i], ptr[i + 1]
-            row_i = cols[a:b].astype("<i8")
-            row_d = dists[a:b]
-            if sort_results:
-                # STABLE, and the stability is the point: the row arrives in
-                # ascending index order under `identical`, so ties in
-                # distance keep that order and the result is
-                # (distance, index) lexicographic without a second key.
-                # Python's `sorted` is stable by definition, over O(row)
-                # items (it was `np.argsort(kind="stable")`).
-                d = row_d.tolist()
-                order = sorted(range(len(d)), key=d.__getitem__)
-                ii = row_i.tolist()
-                row_i = Array.from_list([ii[j] for j in order], "<i8")
-                row_d = Array.from_list([d[j] for j in order], "<f4")
-            ind.append(row_i)
-            dst.append(row_d)
+        cols64 = cols.astype("<i8")
+        # glue: one view per query row, the ragged API's list of Arrays
+        ind = [cols64[ptr[i]:ptr[i + 1]] for i in range(nq)]
+        dst = [dists[ptr[i]:ptr[i + 1]] for i in range(nq)]
         if return_distance:
             return dst, ind
         return ind

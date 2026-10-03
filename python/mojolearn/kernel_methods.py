@@ -25,12 +25,11 @@ by name here and on the Mojo host. `gamma=None` is scikit-learn's
 
 NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
-from ._portable_math import sqrt as _sqrt
 
 from . import _backend, _serialize
-from ._scale_gamma import scale_gamma
+from ._scale_gamma import scale_gamma, scale_gamma_x
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, empty
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, full
 from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin
 
@@ -154,26 +153,26 @@ def _check_chi2_input(x, kernel, where):
 
 
 def _sqrt_weights(sample_weight, n, where):
-    """`np.sqrt(np.atleast_1d(sample_weight))`, each factor the correctly
-    rounded binary64 square root rounded once to float32 (the same bits on
-    every host). None when unweighted."""
+    """The float64 sample weights the binding takes the square roots of
+    (`np.sqrt(np.atleast_1d(sample_weight))`: each factor the correctly
+    rounded binary64 square root rounded once to float32, in Mojo). The
+    finiteness and sign checks run in the core helpers. None when
+    unweighted."""
     if sample_weight is None:
         return None
     if isinstance(sample_weight, (int, float)) and not isinstance(sample_weight, bool):
-        w = [float(sample_weight)] * n
+        w = full((n,), float(sample_weight), "<f8")
     else:
-        raw = sample_weight.tolist() if hasattr(sample_weight, "tolist") else list(sample_weight)
-        w = [float(v) for v in raw]
-        if len(w) != n:
+        w, _ = as_f64_c(sample_weight, ndim=1, name="sample_weight")
+        if w.shape[0] != n:
             raise ValueError(
-                f"mojolearn {where}: sample_weight has {len(w)} entries, X has {n} rows"
+                f"mojolearn {where}: sample_weight has {w.shape[0]} entries, X has {n} rows"
             )
-    for v in w:
-        if not (v >= 0.0) or v == float("inf"):
-            raise ValueError(
-                f"mojolearn {where}: sample_weight must be finite and >= 0, got {v!r}"
-            )
-    return Array.from_list([_sqrt(v) for v in w], "<f4")
+    if n and (not all_finite(w) or w.min() < 0.0):
+        raise ValueError(
+            f"mojolearn {where}: sample_weight must be finite and >= 0"
+        )
+    return w
 
 
 class _KernelMethodBase(NumericModeMixin):
@@ -289,7 +288,7 @@ class KernelRidge(_KernelMethodBase):
         dual = empty((n * t,), "<f4")
         scalars = empty((1,), "<f8")
         sw = _sqrt_weights(sample_weight, n, self._WHERE)
-        tail = [] if sw is None else [addr_ro(sw, name="sqrt(sample_weight)")]
+        tail = [] if sw is None else [addr_ro(sw, name="sample_weight")]
         info = self._extension().kernel_ridge_fit(
             # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_fit_binding.
             # x, y, dual_out, scalars_out[, sw]
@@ -360,8 +359,8 @@ class KernelRidge(_KernelMethodBase):
         from .linear_model import _restore_mode
         arrays = _serialize.read_npz(path, _KERNEL_RIDGE_FORMAT)
         meta, hyper = _km_header(arrays, path, cls, 7, 3)
-        n, d, t, kernel, degree, info, squeeze = (int(v) for v in meta.tolist())
-        gamma, coef0, alpha = (float(v) for v in hyper.tolist())
+        n, d, t, kernel, degree, info, squeeze = (int(v) for v in meta.tolist())  # glue: seven saved meta fields
+        gamma, coef0, alpha = (float(v) for v in hyper.tolist())  # glue: three saved hyperparameters
         obj = cls(alpha=alpha, kernel=kernel, gamma=gamma, degree=degree, coef0=coef0)
         _restore_mode(obj, arrays)
         obj.X_fit_ = _km_array(arrays, "x_fit", "<f4", (n, d), path)
@@ -517,8 +516,8 @@ class Nystroem(_KernelMethodBase):
         from .linear_model import _restore_mode
         arrays = _serialize.read_npz(path, _NYSTROEM_FORMAT)
         meta, hyper = _km_header(arrays, path, cls, 6, 2)
-        q, d, kernel, degree, seed, sweeps = (int(v) for v in meta.tolist())
-        gamma, coef0 = (float(v) for v in hyper.tolist())
+        q, d, kernel, degree, seed, sweeps = (int(v) for v in meta.tolist())  # glue: six saved meta fields
+        gamma, coef0 = (float(v) for v in hyper.tolist())  # glue: two saved hyperparameters
         obj = cls(kernel=kernel, gamma=gamma, degree=degree, coef0=coef0, n_components=q, random_state=seed)
         _restore_mode(obj, arrays)
         obj.n_features_in_ = d
@@ -573,7 +572,7 @@ class RBFSampler(_KernelMethodBase):
             # variance: the EXACT variance of the float32 cells, the
             # reciprocal rounded once (`_scale_gamma.scale_gamma`), so every
             # host draws from the same gamma bits.
-            gamma = scale_gamma(x.ravel().tolist(), d)
+            gamma = scale_gamma_x(self._extension(), x, d)
         else:
             gamma = _real(self.gamma, "gamma", self._WHERE)
         if isinstance(self.n_components, bool) or not isinstance(self.n_components, int):
@@ -655,8 +654,8 @@ class RBFSampler(_KernelMethodBase):
         from .linear_model import _restore_mode
         arrays = _serialize.read_npz(path, _RBF_SAMPLER_FORMAT)
         meta, hyper = _km_header(arrays, path, cls, 3, 3)
-        d, q, seed = (int(v) for v in meta.tolist())
-        gamma, sigma, scale = (float(v) for v in hyper.tolist())
+        d, q, seed = (int(v) for v in meta.tolist())  # glue: three saved meta fields
+        gamma, sigma, scale = (float(v) for v in hyper.tolist())  # glue: three saved hyperparameters
         obj = cls(gamma=gamma, n_components=q, random_state=seed)
         _restore_mode(obj, arrays)
         obj.n_features_in_ = d

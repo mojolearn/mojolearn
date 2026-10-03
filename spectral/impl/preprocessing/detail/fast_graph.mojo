@@ -44,6 +44,7 @@ from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from neighbors.estimator import knn_self_search_device_indices
+from core.device_fold import device_exclusive_scan_total, device_exclusive_scan_total_from
 from spectral.impl.sparse.linalg.detail.laplacian import (
     DeviceCoo,
     laplacian_from_sorted_device,
@@ -158,6 +159,23 @@ def fg_mutual_kernel(
     else:
         mutual[e] = 0
         _ = Atomic.fetch_add(ecnt.unsafe_offset(c), Int32(1))
+
+
+def fg_scan_inputs_kernel(
+    ecnt: MutPointer[Int32, MutAnyOrigin],
+    has_self: MutPointer[Int32, MutAnyOrigin],
+    lens: MutPointer[Int32, MutAnyOrigin],
+    evals: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    k_in: Int32,
+):
+    """Row r: `lens[r] = k + ecnt[r] + !has_self[r]`, `evals[r] = ecnt[r]`,
+    the values `fg_scan_kernel` scans (in place before the device scans)."""
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if r < Int(n_in):
+        var ec = ecnt[r]
+        lens[r] = Int32(Int(k_in)) + ec + (Int32(1) - has_self[r])
+        evals[r] = ec
 
 
 def fg_scan_kernel(
@@ -565,10 +583,9 @@ def _bitmap_graph(
         acols.unsafe_ptr(), tcnt.unsafe_ptr(), Int32(n), Int32(k),
         grid_dim=(grid_e, 1, 1), block_dim=(FG_TPB, 1, 1),
     )
-    ctx.enqueue_function[fg_exscan_kernel](
-        tcnt.unsafe_ptr(), toff.unsafe_ptr(), Int32(n),
-        grid_dim=(1, 1, 1), block_dim=(FG_SCAN_TPB, 1, 1),
-    )
+    # lane cgr4-download-loop: the scans run over the whole device
+    # (core/device_fold.mojo), not one threadgroup over n; integer, same values
+    device_exclusive_scan_total_from(ctx, tcnt, toff, n)
     ctx.enqueue_function[fg_tscatter_kernel](
         acols.unsafe_ptr(), toff.unsafe_ptr(), tcur.unsafe_ptr(),
         tlist.unsafe_ptr(), Int32(n), Int32(k),
@@ -580,10 +597,7 @@ def _bitmap_graph(
         dummy_b.unsafe_ptr(), dummy_f.unsafe_ptr(), Int32(n), Int32(k),
         grid_dim=(n, 1, 1), block_dim=(FG_SORT_TPB, 1, 1),
     )
-    ctx.enqueue_function[fg_exscan_kernel](
-        lens.unsafe_ptr(), indptr_v.unsafe_ptr(), Int32(n),
-        grid_dim=(1, 1, 1), block_dim=(FG_SCAN_TPB, 1, 1),
-    )
+    device_exclusive_scan_total_from(ctx, lens, indptr_v, n)
     var tot = ctx.enqueue_create_host_buffer[DType.int32](2)
     ctx.enqueue_copy(dst_ptr=tot.unsafe_ptr(), src_buf=flags.create_sub_buffer[DType.int32](0, 1))
     ctx.enqueue_copy(dst_ptr=tot.unsafe_ptr() + 1, src_buf=indptr_v.create_sub_buffer[DType.int32](n, 1))
@@ -660,11 +674,15 @@ def fast_knn_graph(
         Int32(n), Int32(k),
         grid_dim=((nk + FG_TPB - 1) // FG_TPB, 1, 1), block_dim=(FG_TPB, 1, 1),
     )
-    ctx.enqueue_function[fg_scan_kernel](
+    # lane cgr4-download-loop: the two scans run over the whole device (was
+    # one threadgroup over n); integer, so the same offsets and totals
+    ctx.enqueue_function[fg_scan_inputs_kernel](
         ecnt.unsafe_ptr(), has_self.unsafe_ptr(), indptr_v.unsafe_ptr(),
         eoff.unsafe_ptr(), Int32(n), Int32(k),
-        grid_dim=(1, 1, 1), block_dim=(FG_SCAN_TPB, 1, 1),
+        grid_dim=((n + FG_TPB - 1) // FG_TPB, 1, 1), block_dim=(FG_TPB, 1, 1),
     )
+    device_exclusive_scan_total(ctx, indptr_v, n)
+    device_exclusive_scan_total(ctx, eoff, n)
     var tot = ctx.enqueue_create_host_buffer[DType.int32](4)
     ctx.enqueue_copy(dst_ptr=tot.unsafe_ptr(), src_buf=flags)
     ctx.enqueue_copy(dst_ptr=tot.unsafe_ptr() + 1, src_buf=indptr_v.create_sub_buffer[DType.int32](n, 1))

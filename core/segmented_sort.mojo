@@ -105,7 +105,9 @@ comptime SORT_BLOCK = 512
 #: scan (the A/B arm); IDENTICAL compiles the old path.
 #: Default since the M3 A/B (b272364e4, n=2, identical output hashes): RF
 #: istella 13,583 -> 10,116 ms (-25.5%), taxi neutral. GBDT's own copy
-#: (gbdt/gpu_util/kernel/segmented_sort.mojo) stays opt-in.
+#: (gbdt/gpu_util/kernel/segmented_sort.mojo) keeps the one-thread scan: its
+#: opt-in block arm MOJOLEARN_GBDT_SEG_SUMS_BLOCK was DROPPED-noise
+#: (lane/apple-fast-rfet-scan @ 500168cfe).
 comptime SEG_SUMS_BLOCK_SCAN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()

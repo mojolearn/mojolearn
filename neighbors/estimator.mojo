@@ -120,11 +120,10 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.sync import barrier
 from std.memory import bitcast
 from core.identity_trace import IdentityTrace
+from core.device_fold import device_sum_i32
 from neighbors.impl.multi_gpu import knn_device_count, parallel_knn_rows
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.os import getenv
-from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from neighbors.impl.knn.knn import (
@@ -345,6 +344,7 @@ def knn_search(
     knn_method: Int = KNN_METHOD_AUTO,
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
+    negate_products: Bool = False,
 ) raises -> Int:
     """Exact k nearest neighbours, index and queries row-major on the host.
 
@@ -374,6 +374,7 @@ def knn_search(
         knn_method,
         metric,
         metric_arg,
+        negate_products,
     )
 
 
@@ -393,6 +394,7 @@ def knn_search_traced(
     knn_method: Int = KNN_METHOD_AUTO,
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
+    negate_products: Bool = False,
 ) raises -> Int:
     """Host-output search; device-result retention is internal to classification."""
     var retained = List[DeviceBuffer[DType.uint32]]()
@@ -400,6 +402,7 @@ def knn_search_traced(
         ctx, trace, retained, False, index_ptr, n_index, queries_ptr,
         n_queries, n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt,
         requested_query_tile, knn_method, metric, metric_arg,
+        negate_products,
     )
 
 
@@ -503,6 +506,7 @@ def _knn_search_traced_retaining(
     knn_method: Int = KNN_METHOD_AUTO,
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
+    negate_products: Bool = False,
 ) raises -> Int:
     """Exact k nearest neighbours, index and queries row-major on the host.
 
@@ -547,6 +551,7 @@ def _knn_search_traced_retaining(
         ctx, trace, retained_indices, keep_device_indices, index, n_index,
         queries_ptr, n_queries, n_features, k, out_dist_ptr, out_idx_ptr,
         return_sqrt, query_tile, knn_method, mtr, metric_arg, devices, buf_len,
+        None, negate_products,
     )
 
 
@@ -567,6 +572,7 @@ def knn_search_resident(
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
     cache: KnnIndexCachePointer = None,
+    negate_products: Bool = False,
 ) raises -> Int:
     """`knn_search` over an index ALREADY ON THE DEVICE (DEVIATION 2921,
     lane/infer-speed-classical, 2026-09-17): `index` holds the same
@@ -591,6 +597,7 @@ def knn_search_resident(
         ctx, trace, retained, False, index, n_index, queries_ptr, n_queries,
         n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt, plan[2],
         knn_method, plan[0], metric_arg, plan[1], plan[3], cache,
+        negate_products,
     )
 
 
@@ -896,6 +903,28 @@ def _knn_order_rows_device(
     _ = state^
 
 
+def knn_negate_kernel(pd: _KFP, n_: Int32):
+    """One thread per entry: pd[t] = -pd[t] (exact)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(n_):
+        return
+    pd.unsafe_store(t, -pd.unsafe_load(t))
+
+
+def _knn_negate_device(ctx: DeviceContext, mut out_dist: DeviceBuffer[DType.float32], n: Int) raises:
+    """The inner-product search's products, in place on the device: the
+    selection ran over the NEGATED products, so a caller that asked for the
+    products (`negate_products`, `NearestNeighbors.kneighbors`) gets them
+    negated back before the readback (lane pyglue-numeric: the Python
+    wrapper negated the downloaded block on the host)."""
+    if n <= 0:
+        return
+    var pd = out_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[knn_negate_kernel](
+        pd, Int32(n), grid_dim=(n + _KO_TPB - 1) // _KO_TPB, block_dim=_KO_TPB,
+    )
+
+
 def _knn_search_on_device_index(
     ctx: DeviceContext,
     mut trace: IdentityTrace,
@@ -917,6 +946,7 @@ def _knn_search_on_device_index(
     devices: Int,
     buf_len: Int,
     cache: KnnIndexCachePointer = None,
+    negate_products: Bool = False,
 ) raises -> Int:
     """`cache` (DEVIATION 3061) is a resident index's derived buffers, None
     for a per-call index: with it the index norms are copied from the cache
@@ -1087,6 +1117,8 @@ def _knn_search_on_device_index(
         trace.record_device(ctx, "knn.out_idx", out_idx, n_queries * k)
 
     _knn_order_rows_device(ctx, out_dist, out_idx, n_queries, k)
+    if negate_products and mtr == DIST_INNER_PRODUCT:
+        _knn_negate_device(ctx, out_dist, n_queries * k)
     var hd = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
     var hi = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
     ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=out_dist)
@@ -1840,63 +1872,6 @@ def _rbc_index_and_count(
     return nnz
 
 
-def _rbc_index_only(
-    ctx: DeviceContext,
-    mut x: DeviceBuffer[DType.float32],
-    mut r: DeviceBuffer[DType.float32],
-    mut x_reordered: DeviceBuffer[DType.float32],
-    mut r_indptr: DeviceBuffer[DType.int32],
-    mut r_1nn_cols: DeviceBuffer[DType.int32],
-    mut r_1nn_dists: DeviceBuffer[DType.float32],
-    mut r_radius: DeviceBuffer[DType.float32],
-    n_index: Int,
-    n_features: Int,
-    n_landmarks: Int,
-    metric: Int = RBC_METRIC_DEFAULT,
-    metric_arg: Float32 = Float32(2.0),
-) raises:
-    """`_rbc_index_and_count`'s index build without its count pass
-    (lane/apple-fast-neighbors2, 2026-10-02): the same `rbc_build_index`
-    call over the same scratch, for a fill whose row offsets the caller
-    already holds."""
-    var landmark_ids = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
-    var slot_cols = ctx.enqueue_create_buffer[DType.int32](n_index)
-    var slot_dists = ctx.enqueue_create_buffer[DType.float32](n_index)
-    var nearest = ctx.enqueue_create_buffer[DType.int32](n_index)
-    var nearest_dist = ctx.enqueue_create_buffer[DType.float32](n_index)
-    var counts = ctx.enqueue_create_buffer[DType.int32](n_landmarks)
-    ctx.synchronize()
-    rbc_build_index(
-        ctx,
-        x,
-        r,
-        x_reordered,
-        landmark_ids,
-        slot_cols,
-        slot_dists,
-        nearest,
-        nearest_dist,
-        r_indptr,
-        r_1nn_cols,
-        r_1nn_dists,
-        r_radius,
-        counts,
-        n_index,
-        n_features,
-        n_landmarks,
-        UInt64(12345),
-        metric,
-        metric_arg,
-    )
-    ctx.synchronize()
-    _ = landmark_ids^
-    _ = slot_cols^
-    _ = slot_dists^
-    _ = nearest^
-    _ = nearest_dist^
-    _ = counts^
-
-
 def _radius_check_shapes(
     n_index: Int, n_queries: Int, n_features: Int, radius: Float32, who: String
 ) raises:
@@ -2064,62 +2039,26 @@ def radius_neighbors_fill(
     ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
     ctx.synchronize()
 
-    var nnz = 0
-    var reuse_count = False
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and has_apple_gpu_accelerator():
-        # MOJOLEARN_RADIUS_FAST_REUSE_COUNT=1 (lane/apple-fast-neighbors2,
-        # 2026-10-02; FAST + Apple only, default off): the fill pass takes
-        # the row offsets the count pass wrote into `out_indptr_ptr` (the
-        # same array, handed back by python/mojolearn/neighbors.py
-        # radius_neighbors) and `nnz_capacity` (the count pass's total)
-        # instead of re-running the count. Cause: `radius_neighbors_fill`
-        # rebuilt the ball-cover index AND ran the whole eps query a second
-        # time in counting mode (`_rbc_index_and_count` above) before its
-        # own fill query: three eps passes and two index builds per
-        # radius_neighbors call. Here the index is built once more (the
-        # fill needs it) and the count pass is skipped. Same CSR: the
-        # offsets are the count pass's own.
-        if String(getenv("MOJOLEARN_RADIUS_FAST_REUSE_COUNT")) == "1":
-            reuse_count = True
-            _rbc_index_only(
-                ctx,
-                x,
-                r,
-                x_reordered,
-                r_indptr,
-                r_1nn_cols,
-                r_1nn_dists,
-                r_radius,
-                n_index,
-                n_features,
-                n_landmarks,
-                metric,
-                metric_arg,
-            )
-            ctx.enqueue_copy(dst_buf=adj_ia, src_ptr=out_indptr_ptr)
-            ctx.synchronize()
-            nnz = nnz_capacity
-    if not reuse_count:
-        nnz = _rbc_index_and_count(
-            ctx,
-            x,
-            queries,
-            r,
-            x_reordered,
-            r_indptr,
-            r_1nn_cols,
-            r_1nn_dists,
-            r_radius,
-            adj_ia,
-            vd,
-            n_index,
-            n_queries,
-            n_features,
-            n_landmarks,
-            radius,
-            metric,
-            metric_arg,
-        )
+    var nnz = _rbc_index_and_count(
+        ctx,
+        x,
+        queries,
+        r,
+        x_reordered,
+        r_indptr,
+        r_1nn_cols,
+        r_1nn_dists,
+        r_radius,
+        adj_ia,
+        vd,
+        n_index,
+        n_queries,
+        n_features,
+        n_landmarks,
+        radius,
+        metric,
+        metric_arg,
+    )
     if nnz > nnz_capacity:
         raise Error(
             "radius_neighbors_fill: the search found "
@@ -2345,12 +2284,8 @@ def rbc_knn_search(
     ctx.enqueue_copy(dst_ptr=out_dist_ptr, src_buf=out_dists)
     ctx.synchronize()
 
-    var hc = ctx.enqueue_create_host_buffer[DType.int32](n_queries)
-    ctx.enqueue_copy(dst_ptr=hc.unsafe_ptr(), src_buf=dist_count)
-    ctx.synchronize()
-    var total = 0
-    for i in range(n_queries):
-        total += Int(hc.unsafe_ptr().unsafe_load(i))
+    # lane cgr4-download-loop: the distance count folds on the device (exact)
+    var total = Int(device_sum_i32(ctx, dist_count, n_queries))
 
     _ = x^
     _ = queries^
@@ -2369,7 +2304,6 @@ def rbc_knn_search(
     _ = out_inds^
     _ = out_dists^
     _ = dist_count^
-    _ = hc^
     return total
 
 

@@ -627,15 +627,14 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         ya, _ = as_f32_c(y, ndim=1, name="y")
         code = self._criterion_code
         if code == _CRITERION_POISSON:
-            yv = flat_view(ya, "f")
-            if not all_finite(ya) or min(yv) < 0 or not max(yv) > 0:
+            if not all_finite(ya) or ya.min() < 0 or not ya.max() > 0:
                 raise ValueError(
                     "criterion='poisson' requires y >= 0 with a positive sum: the"
                     " Poisson gain is -max() for a non-positive label sum"
                     " (objectives.cuh:251-253), which would fit a stump silently"
                 )
         elif code in (_CRITERION_GAMMA, _CRITERION_INVERSE_GAUSSIAN):
-            if not all_finite(ya) or min(flat_view(ya, "f")) <= 0:
+            if not all_finite(ya) or ya.min() <= 0:
                 raise ValueError(
                     f"criterion={self.criterion!r} requires y > 0: its gain is"
                     " -max() for a non-positive label sum, which would fit a stump"

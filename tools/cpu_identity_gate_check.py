@@ -367,7 +367,10 @@ def do_column(args):
                          (oracle_control and part_verdict in ("BATCH_MOVED", "RLPAIR_MOVED")),
                          f"{key}: {field} is {part_verdict}, not STABLE or N/A")
         else:
-            need(verdict == "REFUSED", f"{key}: uncovered lane reads {verdict}, not REFUSED; a hash from a lane with no CPU implementation is a routing bug")
+            # N/A is identity_break's by-design `par-*` refusal (CPU_BY_DESIGN_NA),
+            # its sentence kept in `error`: still no hash, still by name
+            need(verdict == "REFUSED" or (verdict == "N/A" and lane.startswith("par-")),
+                 f"{key}: uncovered lane reads {verdict}, not REFUSED; a hash from a lane with no CPU implementation is a routing bug")
             need(REFUSAL in str(cell.get("error", "")),
                  f"{key}: refused, but not by name ({str(cell.get('error', ''))[:160]!r})")
     for lane in sorted(covered - seen):

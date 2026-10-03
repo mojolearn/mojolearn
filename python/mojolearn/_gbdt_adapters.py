@@ -48,7 +48,7 @@ class _GBDTAdapter:
                  fold_permutation_block=None, numeric_mode=None):
         values = locals().copy()
         values.pop('self')
-        for name, value in values.items():
+        for name, value in values.items():  # glue: stores constructor keyword arguments
             setattr(self, name, value)
         self._new_learner(numeric_mode)
 
@@ -66,13 +66,13 @@ class _GBDTAdapter:
         if type(self).__init__ is not _GBDTAdapter.__init__:
             raise TypeError('GBDT adapter subclasses with custom constructors need their own parameter protocol')
         names = inspect.signature(_GBDTAdapter.__init__).parameters
-        return {name: getattr(self, name) for name in names if name != 'self'}
+        return {name: getattr(self, name) for name in names if name != 'self'}  # glue: returns constructor parameters by name
 
     def set_params(self, **params):
         if not params:
             return self
         values = self.get_params()
-        unknown = sorted(set(params) - values.keys())
+        unknown = sorted(set(params) - values.keys())  # glue: names unknown keyword parameters
         if unknown:
             raise ValueError(f'Invalid {type(self).__name__} parameters: {unknown}')
         values.update(params)
@@ -82,7 +82,7 @@ class _GBDTAdapter:
         return self
 
     def _clear_fit(self):
-        for name in list(self.__dict__):
+        for name in list(self.__dict__):  # glue: clears fitted attribute names
             if name.endswith('_'):
                 del self.__dict__[name]
 
@@ -116,7 +116,7 @@ class _GBDTAdapter:
         self.numeric_mode_ = mode
         self.n_features_in_ = learner.n_features_in_
         self.model_ = learner.model_
-        for name in ('loss_curve_', 'test_loss_curve_', 'best_iteration_', 'stopped_early_',
+        for name in ('loss_curve_', 'test_loss_curve_', 'best_iteration_', 'stopped_early_',  # glue: copies five learner attributes
                      'learning_rate_'):
             setattr(self, name, getattr(learner, name))
         return self
@@ -144,10 +144,10 @@ class GradientBoostingClassifier(_GBDTAdapter):
     def fit(self, X, y, sample_weight=None, eval_set=None):
         self._clear_fit()
         target, kind = metrics._classification_encoded(y, 'y')
-        classes = sorted(metrics._label_set(target))
+        classes = sorted(metrics._label_set(target))  # glue: orders the binary class labels (two expected)
         if len(classes) != 2:
             raise ValueError('GradientBoostingClassifier requires exactly two training classes')
-        vocabulary = {label: i for i, label in enumerate(classes)}
+        vocabulary = {label: i for i, label in enumerate(classes)}  # glue: two-label binary vocabulary
         encoded = metrics._label_map(target, vocabulary.__getitem__).astype('<f4')
         if eval_set is not None:
             if isinstance(eval_set, list):
@@ -158,7 +158,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
                 raise ValueError('eval_set must be (X_eval, y_eval) or a one-pair list')
             eval_X, eval_y = eval_set
             eval_labels, eval_kind = metrics._classification_encoded(eval_y, 'eval_set y')
-            if eval_kind != kind or any(label not in vocabulary for label in metrics._label_set(eval_labels)):
+            if eval_kind != kind or any(label not in vocabulary for label in metrics._label_set(eval_labels)):  # glue: validates eval_set labels against the binary vocabulary
                 raise ValueError('eval_set contains labels outside the training vocabulary')
             eval_set = (eval_X, metrics._label_map(eval_labels, vocabulary.__getitem__).astype('<f4'))
         self._fit_native(X, encoded, sample_weight, eval_set)
@@ -204,7 +204,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
         target, kind = metrics._classification_encoded(y, 'y')
         if kind != self._label_kind_:
             raise TypeError('score labels must have the training label type')
-        vocabulary = {label: i for i, label in enumerate(self.classes_)}
+        vocabulary = {label: i for i, label in enumerate(self.classes_)}  # glue: two-label binary vocabulary
         encoded = metrics._label_map(target, lambda label: vocabulary.get(label, -1))
         return metrics.accuracy_score(encoded, self._binary_output(X, False),
                                       sample_weight=sample_weight,

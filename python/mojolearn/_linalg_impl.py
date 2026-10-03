@@ -603,6 +603,21 @@ def from_bf16(bits):
     return out
 
 
+def from_f16(bits):
+    """IEEE float16 bits (a `'<u2'` or `'<f2'` buffer) to float32, exact, by
+    bit construction (`gemm/contract.mojo::f16_bits_to_f32`): on the GPU on
+    a GPU install, the linalg host binding on a CPU-only one. A float32
+    `mojolearn.Array` of the same shape."""
+    a, _ = as_u16_c(bits, ndim=None, name="bits")
+    pb = probe(a)
+    n = nelems(pb.shape)
+    if n == 0:
+        raise ValueError("mojolearn.linalg.from_f16: bits has no elements")
+    out = empty(pb.shape, "<f4")
+    _lowbit_binding().from_f16(addr(out, name="out"), addr_ro(a, name="bits"), [int(n)])
+    return out
+
+
 def quantize_int8(x):
     """Row-wise int8 codes and per-row power-of-two exponents of a 2-D
     float32 matrix (contract L-3, L-4), on the GPU. Returns `(codes,
@@ -1056,11 +1071,9 @@ _TS_MAX_N = 512
 
 def _tsqr_on(rows, cols, extra=0):
     """Whether the blocked TSQR serves a rows x (cols + extra) factorization:
-    tall, at most _TS_MAX_N wide, and not turned off for the A/B
-    (MOJOLEARN_LINALG_TSQR=0)."""
+    tall and at most _TS_MAX_N wide."""
     n = cols + extra
-    return (os.environ.get("MOJOLEARN_LINALG_TSQR", "1") != "0"
-            and cols >= 1 and n <= _TS_MAX_N and rows >= n)
+    return cols >= 1 and n <= _TS_MAX_N and rows >= n
 
 
 def _tsqr_r(b, a_arr, rows, cols, keep):
@@ -1357,7 +1370,7 @@ def _svd_tall(k, A, full):
     Ug = k.ew("div", AV.take_cols(list(range(r))) if r < n else AV, S.take_cols(list(range(r))) if r < n else S)
     tick("A V / s")
     width = m if full else n
-    if r == n and width == n and os.environ.get("MOJOLEARN_LINALG_SVD_U", "orth") != "householder":
+    if r == n and width == n:
         # lane neural-pass17: with every direction kept and no trailing
         # columns wanted, U is the orthonormalized A V / s: the kit's orth
         # (two sliced-QR passes and a row-parallel A R^-1, DEVIATION 5309),
@@ -1368,8 +1381,7 @@ def _svd_tall(k, A, full):
         # by the product of the passes' R diagonals, which is Q_j . Ug_j:
         # the same orientation geqrf's R[j, j] gave (Ug_j's). A guarded
         # (zero) product means a dependent column the orth cannot build;
-        # the Householder route then stands. MOJOLEARN_LINALG_SVD_U=
-        # householder keeps that route for every call.
+        # the Householder route then stands.
         Qo, d = k.orth_diag(Ug)
         tick("U = orth(A V / s)")
         if all(v != 0.0 for v in d):
@@ -1378,7 +1390,10 @@ def _svd_tall(k, A, full):
             return out, S, Vt
     import array as _array
     if not r:
-        eye = _array.array("f", [1.0 if i == j else 0.0 for i in range(m) for j in range(width)])
+        # the m x width identity: a zero store and one strided C-level fill of its diagonal
+        eye = _array.array("f", bytes(4 * m * width))
+        nd = min(m, width)
+        eye[0:nd * (width + 1):width + 1] = _array.array("f", [1.0]) * nd
         return _M(eye, m, width), S, Vt
     # A v / s loses orthogonality as s_0 / s_j grows (its error is V's
     # rounding times that ratio); the Householder QR of those columns
@@ -1396,13 +1411,7 @@ def _svd_tall(k, A, full):
     # bench board's 95.8 s svd on an MI325X). `neg_cols` is the kit's
     # elementwise multiply by -1.0 / +1.0 per column: an exact sign flip of
     # values a device kernel already stored (so already flushed), the same
-    # bits the loop produced. MOJOLEARN_LINALG_LEGACY_SIGN=1 keeps the loop.
-    if os.environ.get("MOJOLEARN_LINALG_LEGACY_SIGN") == "1":
-        out = _array.array("f", Qc.s)
-        for j in range(r):
-            if neg[j]:
-                out[j::width] = _array.array("f", [-v for v in out[j::width]])
-        return _M(out, m, width), S, Vt
+    # bits the loop produced (the loop and its env switch are gone).
     return Qc.neg_cols(neg), S, Vt
 
 

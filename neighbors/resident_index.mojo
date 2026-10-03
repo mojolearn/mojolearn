@@ -152,6 +152,7 @@ def knn_index_search(
     knn_method: Int = KNN_METHOD_AUTO,
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
+    negate_products: Bool = False,
 ) raises -> Int:
     """`knn_search_resident` over the handle's index and context. The shape
     the caller names must be the shape that was uploaded; `index_ptr` is
@@ -172,6 +173,7 @@ def knn_index_search(
         n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt,
         requested_query_tile, knn_method, metric, metric_arg,
         MutPointer(to=entry.cache).unsafe_origin_cast[MutAnyOrigin](),
+        negate_products,
     )
 
 
