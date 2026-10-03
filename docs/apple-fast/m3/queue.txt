@@ -231,11 +231,11 @@
    231	CMD lane/apple-fast-kapprox kap-kpca-istella bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-kpca-istella x_neighbors kernel-pca istella 1 2 "" "-D MOJOLEARN_KPCA_RESIDENT=1"
    232	CMD lane/apple-fast-kapprox kap-srp-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh kap-srp-taxi x_neighbors sparse-rp taxi 1 2 "" "-D MOJOLEARN_SPARSE_RP_DEVICE=1"
    233	CMD lane/apple-fast-select sel-freg-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-freg-taxi x_prep select-f-regression taxi 1 2 "" "-D MOJOLEARN_SELECT_FREG=1"
-   234	CMD lane/apple-fast-select sel-rreg-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-rreg-taxi x_prep select-r-regression taxi 1 2 "" "-D MOJOLEARN_SELECT_FREG=1"
-   235	CMD lane/apple-fast-select sel-fcls-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-fcls-taxi x_prep select-f-classif taxi 1 2 "" "-D MOJOLEARN_SELECT_FCLS=1"
-   236	CMD lane/apple-fast-select sel-d-hourly bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-d-hourly tsa select-d taxi-hourly 1 2 "" "-D MOJOLEARN_SELECT_D=1"
-   237	CMD lane/apple-fast-tier tier-pca-nttiled2 bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab.sh tier-pca-nttiled2 pca istella 1 2 - MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1
-   238	CMD lane/apple-fast-tier tier-kmeans-nttiled bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab.sh tier-kmeans-nttiled kmeans istella 1 2 - MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1
+   234	CMD lane/apple-fast afb11-arima-algos bash ~/mq/ensure_so.sh bash tools/af_board_queue.sh run afb11-arima-algos algos autoarima:taxi-hourly,autoarima:synthetic
+   235	CMD lane/apple-fast afb11-arima-c2 bash ~/mq/ensure_so.sh bash tools/af_board_queue.sh run afb11-arima-c2 classical2 arima:synthetic
+   236	CMD lane/apple-fast-tier tier-pca-nttiled2 bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab.sh tier-pca-nttiled2 pca istella 1 2 - MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1
+   237	CMD lane/apple-fast-tier tier-kmeans-nttiled bash ~/mq/ensure_so.sh AFC_FAMILY=classical bash tools/afc_ab.sh tier-kmeans-nttiled kmeans istella 1 2 - MOJOLEARN_APPLE_FAST_GEMM_NT_TILED=1
+   238	CMD lane/apple-fast afb11b-arima bash ~/mq/ensure_so.sh bash tools/af_board_queue.sh run afb11b-arima algos autoarima:taxi-hourly,autoarima:synthetic
    239	CMD lane/apple-fast-tier tier-rbf-pinned bash ~/mq/ensure_so.sh AFC_FAMILY=classical2 bash tools/afc_ab.sh tier-rbf-pinned rbf-sampler istella 1 2 - MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
    240	CMD lane/apple-fast-tier tier-rbf-pinned-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=classical2 bash tools/afc_ab.sh tier-rbf-pinned-taxi rbf-sampler taxi 1 2 - MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
    241	CMD lane/apple-fast-tier tier-nys-pinned bash ~/mq/ensure_so.sh AFC_FAMILY=classical2 bash tools/afc_ab.sh tier-nys-pinned nystroem istella 1 2 - MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
@@ -427,3 +427,7 @@
    427	CMD lane/apple-fast-opp uncap-hdbscan-istella $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family classical --tag uncap-hdbscan-istella --races hdbscan:istella --round-seconds 7200 --arm-budget-s 7200
    428	CMD lane/apple-fast-opp uncap-algos-istella $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family algos --tag uncap-algos-istella --races adaboost-clf:istella,knn-imputer:istella,quantile:istella --roun
    429	CMD lane/apple-fast-opp uncap-als-text $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family algos --tag uncap-als-text --races als:text --round-seconds 7200 --arm-budget-s 7200 --race-deadline-s 14400
+   430	CMD lane/apple-fast-select sel-rreg-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-rreg-taxi x_prep select-r-regression taxi 1 2 "" "-D MOJOLEARN_SELECT_FREG=1"
+   431	CMD lane/apple-fast-select sel-fcls-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-fcls-taxi x_prep select-f-classif taxi 1 2 "" "-D MOJOLEARN_SELECT_FCLS=1"
+   432	CMD lane/apple-fast-select sel-d-hourly bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-d-hourly tsa select-d taxi-hourly 1 2 "" "-D MOJOLEARN_SELECT_D=1"
+   433	CMD lane/apple-fast-select sel-freg-taxi-b bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-freg-taxi-b x_prep select-f-regression taxi 1 2 "" "-D MOJOLEARN_SELECT_FREG=1"
