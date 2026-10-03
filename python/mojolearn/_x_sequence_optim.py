@@ -396,8 +396,8 @@ class Adafactor:
     @property
     def state(self):
         if self._af_res is not None and not self._af_fresh:
-            for h, st in zip(self._af_res, self._af_state):
-                for k, s in enumerate(self._af_slots(st)):
+            for h, st in zip(self._af_res, self._af_state):  # glue: per parameter tensor, not elements
+                for k, s in enumerate(self._af_slots(st)):  # glue: per moment slot (one or two)
                     self._af_b.optimizer_resident_move(h, k, s.ctypes.data, 0)
             self._af_fresh = True
         self._af_owned = True
@@ -414,7 +414,7 @@ class Adafactor:
     def __del__(self):
         res, b = getattr(self, "_af_res", None), getattr(self, "_af_b", None)
         if res is not None and b is not None:
-            for h in res:
+            for h in res:  # glue: closes each tensor handle
                 try:
                     b.optimizer_resident_close(h)
                 except Exception:
@@ -423,7 +423,7 @@ class Adafactor:
     def _step_resident(self, b, grads):
         if self._af_res is None:
             res, zeroed = [], True
-            for p in self.params:
+            for p in self.params:  # glue: per parameter tensor, not elements
                 R, C = (p.shape[0], p.shape[1]) if p.ndim == 2 else (p.shape[0], 0)
                 ret = b.adafactor_resident_open([R, C])
                 res.append(int(ret[0]))
@@ -432,13 +432,13 @@ class Adafactor:
             if zeroed and self._af_pristine:
                 self._af_owned = False
         if self._af_owned:
-            for h, st in zip(self._af_res, self._af_state):
-                for k, s in enumerate(self._af_slots(st)):
+            for h, st in zip(self._af_res, self._af_state):  # glue: per parameter tensor, not elements
+                for k, s in enumerate(self._af_slots(st)):  # glue: per moment slot (one or two)
                     b.optimizer_resident_move(h, k, s.ctypes.data, 1)
             self._af_owned = False
         self._af_fresh = False
         fp = [self.lr, self.beta2_decay, self.eps[0], self.eps[1], self.d, self.weight_decay]
-        for h, p, g in zip(self._af_res, self.params, grads):
+        for h, p, g in zip(self._af_res, self.params, grads):  # glue: per parameter tensor, not elements
             R, C = (p.shape[0], p.shape[1]) if p.ndim == 2 else (p.shape[0], 0)
             b.adafactor_resident_step(h, [p.ctypes.data, g.ctypes.data], [R, C, self.t], fp)
 
@@ -453,7 +453,7 @@ class Adafactor:
         b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
         if self._af_res is not None or _resident_binding(b, _AF_RESIDENT):
             gs = []
-            for p, g in zip(self.params, grads):
+            for p, g in zip(self.params, grads):  # glue: per parameter tensor, not elements
                 g = np.asarray(g)
                 if g.shape != p.shape or g.dtype == np.float64:
                     self.t -= 1
@@ -465,7 +465,7 @@ class Adafactor:
                 self.t -= 1
                 raise
             return self
-        for p, g, st in zip(self.params, grads, self._af_state):
+        for p, g, st in zip(self.params, grads, self._af_state):  # glue: per parameter tensor, not elements
             g = np.asarray(g)
             if g.shape != p.shape or g.dtype == np.float64:
                 raise ValueError("Adafactor: a grad must be float32 of its param's shape")
