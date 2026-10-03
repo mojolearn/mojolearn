@@ -45,7 +45,7 @@ from glm.impl.ols import (
     ols_fit_weighted_traced,
 )
 from glm.impl.qn.qn import qn_decision_function, qn_fit_x
-from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_fit_traced
+from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_eig_scratch_traced, ridge_fit_traced
 from glm.impl.linear_model.qn import (
     QN_LOSS_ABS,
     QN_LOSS_LOGISTIC,
@@ -406,6 +406,116 @@ def ridge_fit_host(
     for i in range(n_features):
         coef_ptr.unsafe_store(i, hw.unsafe_ptr().unsafe_load(i))
     _ = hw^
+
+
+def ridge_fit_resident_host(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mu_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ymean_ptr: MutPointer[Float64, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    alpha: Float32,
+    center: Bool,
+) raises:
+    """Ridge's fit with X and y uploaded ONCE (lane apple-fast-ridgespeed,
+    2026-10-03; `ols_fit_resident_host`'s shape).
+
+    The Python route it replaces made four trips over the rows: `lm_col_sums`
+    of X and of y, `lm_center` of X and of y (each an upload and a download
+    of the full design) and `ridge_fit` (another upload of the centered X).
+    Here X and y go up once and stay: the exact column sums (`col_sums_buf`),
+    the means, the center (`center_buf`) and `ridgeEig` read the resident
+    buffers. Same kernels, launch shapes and inputs as that route, so the
+    same words. The means are `linear_model._column_means`' (float64 sum /
+    rows, rounded once to float32); the y mean is returned in float64
+    (`ymean_ptr[0]`) and y is shifted by its float32 rounding, as `_shift`
+    does. The raw X, dead after the center, is the Gram's scratch."""
+    if n_features <= 0:
+        raise Error("ridgeFit: number of columns cannot be less than one")
+    if n_rows <= 1:
+        raise Error("ridgeFit: number of rows cannot be less than two")
+    if n_features == 1:
+        raise Error(
+            "ridgeFit: n_cols == 1 selects ridgeSVD (ridge.cuh:210),"
+            " which is NOT IMPLEMENTED (raft svdQR is cuSOLVER gesvd, no"
+            " equivalent). cuML's Python layer forces the same switch"
+            " (ridge.pyx:355). See glm/NOT_IMPLEMENTED.tsv"
+        )
+    if alpha < Float32(0.0):
+        raise Error("ridgeFit: alpha must be non-negative")
+    var cells = n_rows * n_features
+    var d_x = ctx.enqueue_create_buffer[DType.float32](cells)
+    var d_y = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_buf=d_x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=d_y, src_ptr=y_ptr)
+    var w = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            String("ridge n=") + String(n_rows) + " d=" + String(n_features)
+            + " algo=" + String(RIDGE_ALGO_EIG)
+        )
+    if center:
+        var d_sx = ctx.enqueue_create_buffer[DType.uint64](n_features)
+        var d_sy = ctx.enqueue_create_buffer[DType.uint64](1)
+        col_sums_buf(ctx, d_x, d_sx, n_rows, n_features)
+        col_sums_buf(ctx, d_y, d_sy, n_rows, 1)
+        var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
+        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
+        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
+        ctx.synchronize()
+        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
+        var rows_f = Float64(n_rows)
+        for j in range(n_features + 1):
+            var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
+            h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
+            if j < n_features:
+                mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+            else:
+                ymean_ptr.unsafe_store(0, mean)
+        var d_mx = ctx.enqueue_create_buffer[DType.float32](n_features)
+        var d_my = ctx.enqueue_create_buffer[DType.float32](1)
+        ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
+        var d_cx = ctx.enqueue_create_buffer[DType.float32](cells)
+        var d_cy = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        center_buf(ctx, d_x, d_mx, d_cx, n_rows, n_features)
+        center_buf(ctx, d_y, d_my, d_cy, n_rows, 1)
+        ctx.synchronize()
+        trace.record_device[DType.float32](ctx, "ridge.input.A", d_cx, cells)
+        trace.record_device[DType.float32](ctx, "ridge.input.b", d_cy, n_rows)
+        trace.record_scalar_f32("ridge.input.alpha", alpha)
+        # d_x is dead from here: the Gram's gemm_tn scratch.
+        ridge_eig_scratch_traced(ctx, d_cx, n_rows, n_features, d_cy, alpha, w, d_x, trace)
+        _ = h_s^
+        _ = h_m^
+        _ = d_sx^
+        _ = d_sy^
+        _ = d_mx^
+        _ = d_my^
+        _ = d_cx^
+        _ = d_cy^
+    else:
+        var xa = ctx.enqueue_create_buffer[DType.float32](cells)
+        ctx.synchronize()
+        trace.record_device[DType.float32](ctx, "ridge.input.A", d_x, cells)
+        trace.record_device[DType.float32](ctx, "ridge.input.b", d_y, n_rows)
+        trace.record_scalar_f32("ridge.input.alpha", alpha)
+        ridge_eig_scratch_traced(ctx, d_x, n_rows, n_features, d_y, alpha, w, xa, trace)
+        _ = xa^
+    trace.record_device[DType.float32](ctx, "ridge.coef", w, n_features)
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+    ctx.synchronize()
+    for i in range(n_features):
+        coef_ptr.unsafe_store(i, hw.unsafe_ptr().unsafe_load(i))
+    _ = hw^
+    _ = w^
+    _ = d_x^
+    _ = d_y^
 
 
 # ===========================================================================
