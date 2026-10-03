@@ -826,7 +826,7 @@ struct ResidentGbdtModel(Movable):
                 var pp = _build_packed_predict(
                     ctx, self.tm, self.layout, self.approx_dim
                 )
-                var pd = pp.d.unsafe_ptr()
+                var pd = pp.d.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
                 if pp.packed:
                     var ne = pp.n_entries
                     var nw = pp.n_words
