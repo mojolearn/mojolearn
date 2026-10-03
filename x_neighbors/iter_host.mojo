@@ -5,6 +5,7 @@ same items. HOST ONLY."""
 from x_neighbors.svgp_ff import matmul_tn_acc_ff_item, svgp_ff_solve
 from std.memory import bitcast
 from std.sys.compile import is_defined
+from std.python import PythonObject
 
 from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
 from x_neighbors.nan_cells import nan_cells_host
@@ -15,7 +16,7 @@ from x_neighbors.items import (
     pagerank_step_item, cc_step_item, pcs_item, knn_sq_item, nc_stats_item,
 )
 
-from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE
+from x_neighbors.host_ops import op_knn_impute_cells, op_kernel, X_NEIGHBORS_HOST_SABOTAGE
 from x_neighbors.items import (
     kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
     K_RBF, U_IDENTITY,
@@ -457,3 +458,72 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
     comptime if X_NEIGHBORS_HOST_SABOTAGE:
         if (n_classes * d) > 0:
             cp.unsafe_store(0, cp.unsafe_load(0) + Float32(1e-3))
+
+
+def op_lp_iterate_knn(
+    cols: Int, vals: Int, ld: Int, ystatic: Int, unlabeled: Int, info: Int,
+    n: Int, k: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int, alpha: Float32,
+) raises:
+    """The CPU column of the resident kNN-graph loop (lane/apple-fast-neighbors2):
+    `_LabelPropagationBase.fit`'s Python loop over the same items
+    (absdiff_sum, lp_knn_product, lp_clamp / ls_clamp)."""
+    var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
+    var nc = n * c
+    var pc = IP(unsafe_from_address=cols)
+    var pv = FP(unsafe_from_address=vals)
+    var pld = FP(unsafe_from_address=ld)
+    var pys = FP(unsafe_from_address=ystatic)
+    var pun = IP(unsafe_from_address=unlabeled)
+    var cur = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
+    var prev = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
+    var nxt = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
+    var hs = List[Float32](length=1, fill=Float32(0))
+    var p_cur = FP(unsafe_from_address=Int(cur.unsafe_ptr()))
+    var p_prev = FP(unsafe_from_address=Int(prev.unsafe_ptr()))
+    var p_nxt = FP(unsafe_from_address=Int(nxt.unsafe_ptr()))
+    var p_hs = FP(unsafe_from_address=Int(hs.unsafe_ptr()))
+    for q in range(nc):
+        cur[q] = pld.unsafe_load(q)
+    var n_iter = 0
+    var converged = False
+    for it in range(max_iter):
+        n_iter = it
+        absdiff_sum_item(0, p_cur, p_prev, p_hs, nc)
+        if Float64(hs[0]) < tol:
+            converged = True
+            break
+        for q in range(nc):
+            prev[q] = cur[q]
+        var finite = lp_knn_finite(p_cur, nc)
+        for t in range(nc):
+            lp_knn_product_item(t, pc, pv, p_cur, p_nxt, n, n, k, c, finite)
+        if variant == 0:
+            for t in range(n):
+                lp_clamp_item(t, p_nxt, pys, pun, p_cur, n, c)
+        else:
+            for t in range(nc):
+                ls_clamp_item(t, p_nxt, pys, p_cur, nc, alpha)
+    if not converged:
+        n_iter += 1
+    for q in range(nc):
+        pld.unsafe_store(q, cur[q])
+    var inf = IP(unsafe_from_address=info)
+    inf.unsafe_store(0, Int32(n_iter))
+    inf.unsafe_store(1, Int32(1 if converged else 0))
+    _ = cur^
+    _ = prev^
+    _ = nxt^
+    _ = hs^
+
+
+def op_kernel_tiled(
+    x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma: Float32, coef0: Float32, degree: Int,
+) raises:
+    """The CPU column of `kernel_tiled`: `kernel` itself."""
+    op_kernel(x, y, res, n, m, d, kind, gamma, coef0, degree)
+
+
+def lp_fast_resident_binding() raises -> PythonObject:
+    """The host column never takes the resident kNN-graph loop by default
+    (LP_FAST_RESIDENT is FAST + Apple; the Python loop runs here)."""
+    return PythonObject(0)
