@@ -271,7 +271,7 @@ def shared_syn_addr(total: Int) raises -> Int:
     return Int(slot[].buf.value().unsafe_ptr())
 
 
-def _is_shared(addr: Int) -> Bool:
+def _is_shared(addr: Int) raises -> Bool:
     var slot = AGN_HOST_POOL.get_or_create_ptr()
     return slot[].cap > 0 and addr == Int(slot[].buf.value().unsafe_ptr())
 
