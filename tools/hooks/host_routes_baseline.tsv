@@ -4,18 +4,6 @@
 # newer than the installed hooks (they skip it).
 # A `# why: ...` line gives the reason the next row stays (required for d2h-host-work).
 rule	class	owner	state	path	occ	text
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	apple-fast-purity2	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[chol_strip_diag_kernel](
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	apple-fast-purity2	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[panel_factor_guarded_kernel](
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	apple-fast-purity2	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[panel_factor_kernel](
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	apple-fast-purity2	owed	cholesky/checks/potrf.mojo	1	ctx.enqueue_function[panel_factor_kernel](
-# why: CROSS-LANE (GP/GMM): DEVIATION 1639's one-thread ascending log-det over n diagonal terms; a fixed-order multi-block fold (core/device_fold shape) needs the host column and the GP/GMM likelihood bits changed together
-one-block-n	serial-gpu	apple-fast-purity2	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[sabotage_logdet_kernel](
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	apple-fast-purity2	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[sabotage_panel_factor_kernel](
 # why: CROSS-LANE (cholesky): DEVIATION 1632's one-thread dot over the m-row column of a rank-one update; a fixed-order multi-block fold needs the host column changed with it
 one-block-n	serial-gpu	apple-fast-purity2	owed	cholesky/impl/linalg/detail/cholesky_r1_update.mojo	0	ctx.enqueue_function[r1_dot_kernel](
 # why: CROSS-LANE (x_decomp/linalg): the one-slice QR (ns == 1, qr_slice_count says the matrix is too short to split) runs one block over n_rows; the sliced TSQR path is multi-block; a forced split needs the host column's order
