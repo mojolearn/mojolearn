@@ -28,6 +28,7 @@ from . import _portable_math as math
 import os
 import struct
 
+from ._labels import threshold_codes
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, zeros
 from ._lazy_out import _empty_out
@@ -420,7 +421,7 @@ class LocalOutlierFactor(_XNeighbors):
             raise AttributeError("fit_predict is not available when novelty=True; use predict on new data")
         self.fit(X)
         off = self.offset_
-        return Array.from_list([-1 if s < off else 1 for s in self.negative_outlier_factor_.tolist()], "<i8")
+        return threshold_codes(self.negative_outlier_factor_, off, strict=False, below=-1, above=1)
 
     def _novelty(self, what):
         if not self.novelty:
@@ -444,7 +445,7 @@ class LocalOutlierFactor(_XNeighbors):
 
     def predict(self, X):
         self._novelty("predict")
-        return Array.from_list([1 if v >= 0 else -1 for v in self.decision_function(X).tolist()], "<i8")
+        return threshold_codes(self.decision_function(X), 0.0, strict=False, below=-1, above=1)
 
 
 # ====================================================================== NearestCentroid
@@ -752,7 +753,7 @@ class OneClassSVM(_XNeighbors):
         return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
 
     def predict(self, X):
-        return Array.from_list([1 if v > 0 else -1 for v in self.decision_function(X).tolist()], "<i8")
+        return threshold_codes(self.decision_function(X), 0.0, strict=True, below=-1, above=1)
 
     def fit_predict(self, X, y=None):
         return self.fit(X).predict(X)

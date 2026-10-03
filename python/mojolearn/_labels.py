@@ -451,6 +451,27 @@ def argmax_rows(scores):
     return Array._owned(store, (n_rows,), "<i8", "C")
 
 
+def threshold_codes(scores, threshold=0.0, *, strict=True, below=0, above=1):
+    """`above` where a score is > threshold (`strict`) or >= threshold, else
+    `below` (NaN takes `below`), as an int64 `Array`, by the base binding's
+    `threshold_labels_i64` (lane cgr4-py-compute: the predict label maps
+    that were per-row Python comprehensions)."""
+    if not isinstance(scores, Array):
+        from ._buffer import _materialize
+        scores, _ = _materialize(scores, "scores")
+    if scores.dtype not in ("<f4", "<f8"):
+        scores = scores.astype("<f8")
+    scores = scores._as_c()
+    n = scores.size
+    if not n:
+        return Array.from_list([], "<i8")
+    from ._buffer import _native, _output_store
+    store = _output_store("q", n)
+    _native("threshold_labels_i64")(scores._addr, 0 if scores.dtype == "<f4" else 1, n, float(threshold),
+                                    int(bool(strict)), int(below), int(above), store.buffer_info()[0])
+    return Array._owned(store, (n,), "<i8", "C")
+
+
 def finite_integer_codes(arr):
     """Sorted distinct values of a float32 label `Array` as ints, or None
     when any value is non-finite, negative or not an integer. The

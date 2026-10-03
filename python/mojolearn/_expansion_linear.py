@@ -27,7 +27,7 @@ from . import _backend
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, full, zeros
 from ._bufcheck import memcopy
-from ._labels import decode_labels, encode_labels
+from ._labels import argmax_rows, decode_labels, encode_labels, threshold_codes
 from ._mode import NumericModeMixin
 
 __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
@@ -182,10 +182,7 @@ class _LinearClassifierMixin:
 
     def predict(self, X):
         scores = self.decision_function(X)
-        if scores.ndim == 1:
-            codes = [1 if v > 0 else 0 for v in scores.tolist()]
-        else:
-            codes = [max(range(len(r)), key=lambda c, r=r: (r[c], -c)) for r in scores.tolist()]
+        codes = threshold_codes(scores) if scores.ndim == 1 else argmax_rows(scores)
         return decode_labels(self.classes_, codes)
 
     def score(self, X, y):
@@ -887,7 +884,7 @@ class SGDOneClassSVM(NumericModeMixin):
         return out.reshape((out.shape[0],))
 
     def predict(self, X):
-        return Array.from_list([1 if v >= 0 else -1 for v in self.decision_function(X).tolist()], "<i8")
+        return threshold_codes(self.decision_function(X), 0.0, strict=False, below=-1, above=1)
 
 
 # ------------------------------------------------------------------- Ridge

@@ -24,7 +24,7 @@ from ._buffer import (
 )
 from ._labels import (
     argmax_rows, classes_from_member, classes_member, decode_labels,
-    encode_labels, flatten_labels, sorted_classes,
+    encode_labels, flatten_labels, sorted_classes, threshold_codes,
 )
 from ._mode import NumericModeMixin
 
@@ -1302,8 +1302,7 @@ class LogisticRegression(NumericModeMixin):
                 )
                 return decode_labels(self.classes_, codes)
             scores = self.decision_function(x)
-            return decode_labels(self.classes_,
-                                 [1 if s > 0.0 else 0 for s in scores.tolist()])
+            return decode_labels(self.classes_, threshold_codes(scores))
         scores = self.decision_function(X)
         return decode_labels(self.classes_, argmax_rows(scores))
 
