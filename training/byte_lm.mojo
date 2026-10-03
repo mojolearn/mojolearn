@@ -726,16 +726,16 @@ def _unpack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut w: LlamaDeviceWei
         # afn-lm PARAM_VIEWS (FAST + Apple only): the nine weights become
         # views of the CURRENT flat `param` (re-bound every call, as
         # `_bind_emb_head` does), so no launch and no separate allocation.
-        ref o = tb.offsets
-        w.norm1_w = tb.param.create_sub_buffer[DType.float32](o[base], o[base + 1] - o[base])
-        w.w_q = tb.param.create_sub_buffer[DType.float32](o[base + 1], o[base + 2] - o[base + 1])
-        w.w_k = tb.param.create_sub_buffer[DType.float32](o[base + 2], o[base + 3] - o[base + 2])
-        w.w_v = tb.param.create_sub_buffer[DType.float32](o[base + 3], o[base + 4] - o[base + 3])
-        w.w_o = tb.param.create_sub_buffer[DType.float32](o[base + 4], o[base + 5] - o[base + 4])
-        w.norm2_w = tb.param.create_sub_buffer[DType.float32](o[base + 5], o[base + 6] - o[base + 5])
-        w.w_gate = tb.param.create_sub_buffer[DType.float32](o[base + 6], o[base + 7] - o[base + 6])
-        w.w_up = tb.param.create_sub_buffer[DType.float32](o[base + 7], o[base + 8] - o[base + 7])
-        w.w_down = tb.param.create_sub_buffer[DType.float32](o[base + 8], o[base + 9] - o[base + 8])
+        ref vo = tb.offsets
+        w.norm1_w = tb.param.create_sub_buffer[DType.float32](vo[base], vo[base + 1] - vo[base])
+        w.w_q = tb.param.create_sub_buffer[DType.float32](vo[base + 1], vo[base + 2] - vo[base + 1])
+        w.w_k = tb.param.create_sub_buffer[DType.float32](vo[base + 2], vo[base + 3] - vo[base + 2])
+        w.w_v = tb.param.create_sub_buffer[DType.float32](vo[base + 3], vo[base + 4] - vo[base + 3])
+        w.w_o = tb.param.create_sub_buffer[DType.float32](vo[base + 4], vo[base + 5] - vo[base + 4])
+        w.norm2_w = tb.param.create_sub_buffer[DType.float32](vo[base + 5], vo[base + 6] - vo[base + 5])
+        w.w_gate = tb.param.create_sub_buffer[DType.float32](vo[base + 6], vo[base + 7] - vo[base + 6])
+        w.w_up = tb.param.create_sub_buffer[DType.float32](vo[base + 7], vo[base + 8] - vo[base + 7])
+        w.w_down = tb.param.create_sub_buffer[DType.float32](vo[base + 8], vo[base + 9] - vo[base + 8])
         return
     var o = tb.offsets.copy()
     step_count_launch()
