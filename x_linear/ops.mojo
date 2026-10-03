@@ -365,12 +365,11 @@ def par_rows[F: def(Int, Int) -> None](ref f: F, n: Int, grain: Int = ROW_CHUNK)
         # every x_linear host fit's row passes (GLM, Huber, LogisticCV,
         # quantile, Bayes, ridge LOO, SGD one-vs-rest) were single threaded.
         # Every caller's f writes only its own rows' (or units') slots and
-        # per-block scratch (audited), so the bits are the serial loop's.
-        # `-D MOJOLEARN_X_LINEAR_HOST_SERIAL=1` restores the serial loop.
+        # per-block scratch (audited again on cgr3-pr86 against the
+        # cgr-linear rewrite: huber, logcv, quantile, ridge, ridgecv, glm,
+        # bayes, sgd), so the bits are the serial loop's.
         var blocks = (n + grain - 1) // grain
         var groups = host_predict_task_count(blocks)
-        comptime if is_defined["MOJOLEARN_X_LINEAR_HOST_SERIAL"]():
-            groups = 1
         var per = host_predict_chunk(blocks, groups)
 
         def group(g: Int) {imm f, imm n, imm grain, imm per, imm blocks}:
