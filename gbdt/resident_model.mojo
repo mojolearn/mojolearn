@@ -175,6 +175,7 @@ comptime STAGE_MIN_ROWS_PER_TASK = 4096
 comptime PAIR_SABOTAGE = is_defined["MOJOLEARN_FOREST_HOST_SABOTAGE"]()
 
 
+@fieldwise_init
 struct _PackedPredict(Movable):
     """lane/apple-fast-sym-feat (`GBDT_PREDICT_PACKED`): one call's packed
     tables, ONE uint32 host buffer and its device copy, kept alive by the

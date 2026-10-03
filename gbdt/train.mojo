@@ -540,6 +540,7 @@ comptime _QD_SUB_BLOCK = 256
 comptime _QD_SUB_MAX_BLOCKS = 4096
 
 
+@fieldwise_init
 struct _QdPackTable(Movable):
     """`pack_cindex_words_kernel`'s host-built tables (lane af-sym-feat):
     one entry per device-resident bordered feature, grouped by index word."""
