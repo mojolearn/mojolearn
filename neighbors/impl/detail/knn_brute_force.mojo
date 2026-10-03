@@ -72,6 +72,7 @@ from std.time import perf_counter_ns
 from std.os import getenv
 
 from core.expand_distances import expand_distances_kernel
+from core.device_fold import device_compact_equal_i32
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from core.gemm import gemm_nt
 from core.row_norms import NORM_TPB, row_norm_kernel
@@ -2150,28 +2151,19 @@ def certified_mma_knn(
             Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
             root_arg, grid_dim=(grid, 1, 1), block_dim=(CERT_TPB, 1, 1),
         )
-    var hf = ctx.enqueue_create_host_buffer[DType.int32](n_queries)
-    ctx.enqueue_copy(dst_ptr=hf.unsafe_ptr(), src_buf=flags)
-    ctx.synchronize()
-    var failed = List[Int32]()
-    for i in range(n_queries):
-        if hf.unsafe_ptr().unsafe_load(i) == Int32(0):
-            failed.append(Int32(i))
+    # lane cgr4-download-loop: the uncertified queries are compacted on the
+    # device (ascending, by an exclusive scan), not downloaded and walked
+    var rows = ctx.enqueue_create_buffer[DType.int32](n_queries)
+    var nf = device_compact_equal_i32(ctx, flags, n_queries, Int32(0), rows)
     if getenv("MOJOLEARN_STAGE_TIMES") == "1":
         print("CERT_KNN queries=" + String(n_queries) + " kc=" + String(kc)
-              + " tiled_fallback=" + String(len(failed)))
-    _ = hf^
+              + " tiled_fallback=" + String(nf))
     _ = cand_d^
     _ = cand_i^
     _ = flags^
-    var nf = len(failed)
     if nf == 0:
+        _ = rows^
         return
-    var hrows = ctx.enqueue_create_host_buffer[DType.int32](nf)
-    for i in range(nf):
-        hrows.unsafe_ptr().unsafe_store(i, failed[i])
-    var rows = ctx.enqueue_create_buffer[DType.int32](nf)
-    ctx.enqueue_copy(dst_buf=rows, src_ptr=hrows.unsafe_ptr())
     var sub_q = ctx.enqueue_create_buffer[DType.float32](nf * n_features)
     var sub_qn = ctx.enqueue_create_buffer[DType.float32](nf)
     var sub_d = ctx.enqueue_create_buffer[DType.float32](nf * k)
@@ -2204,7 +2196,6 @@ def certified_mma_knn(
         grid_dim=((nf * k + CERT_TPB - 1) // CERT_TPB, 1, 1), block_dim=(CERT_TPB, 1, 1),
     )
     ctx.synchronize()
-    _ = hrows^
     _ = rows^
     _ = sub_q^
     _ = sub_qn^

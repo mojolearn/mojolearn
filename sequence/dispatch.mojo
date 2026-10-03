@@ -76,6 +76,13 @@ from sequence.ops import (
     OP_MOE_OUT,
     OP_ETS_LIK,
     OP_ETS_INIT,
+    OP_VAR_RESID,
+    OP_VAR_SIGMA,
+    OP_STL_SEAS,
+    OP_STL_MA,
+    OP_STL_LOESS,
+    OP_STL_DESEAS,
+    OP_STL_FINISH,
     op_gemm,
     op_gemm_splitk,
     op_bias,
@@ -106,6 +113,8 @@ from sequence.garch import op_garch
 from sequence.moe import op_moe_hidden, op_moe_out, op_moe_route
 from sequence.prophet import op_prophet_features, op_prophet_fit, op_prophet_predict, op_prophet_fg_part, op_prophet_fg_sum
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
+from sequence.vecar import op_var_resid, op_var_sigma
+from sequence.stl_grid import op_stl_deseas, op_stl_finish, op_stl_loess, op_stl_ma, op_stl_seas
 
 
 @always_inline
@@ -254,3 +263,18 @@ def apply[OP: Int](t: Int, a: Args):
         op_moe_hidden(t, a)
     elif OP == OP_MOE_OUT:
         op_moe_out(t, a)
+    # lane/apple-fast-tsa2: reached only under TSA2_VAR / TSA2_STL
+    elif OP == OP_VAR_RESID:
+        op_var_resid(t, a)
+    elif OP == OP_VAR_SIGMA:
+        op_var_sigma(t, a)
+    elif OP == OP_STL_SEAS:
+        op_stl_seas(t, a)
+    elif OP == OP_STL_MA:
+        op_stl_ma(t, a)
+    elif OP == OP_STL_LOESS:
+        op_stl_loess(t, a)
+    elif OP == OP_STL_DESEAS:
+        op_stl_deseas(t, a)
+    elif OP == OP_STL_FINISH:
+        op_stl_finish(t, a)

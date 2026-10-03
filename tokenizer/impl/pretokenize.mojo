@@ -221,3 +221,171 @@ def pretokenize(
         bounds.append(end)
         i = end
     return bounds^
+
+
+# ------------------------------------------------ Llama 3 and Qwen 2 cuts
+#
+# lane/pyglue-text-io (2026-10-03): the Llama 3 and Qwen 2 patterns, moved
+# here from `python/mojolearn/models/tokenizer.py` (where they ran in Python
+# over `unicodedata`), so every pattern cuts in Mojo over the SAME pinned
+# Unicode tables the GPT-2 cut uses:
+#
+#   (?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}
+#   | ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+
+#
+# (Qwen 2: `\p{N}` one digit at a time). Leftmost-first over the seven
+# alternatives, as the backtracking engines that compiled them do.
+
+comptime PATTERN_GPT2 = 0
+comptime PATTERN_LLAMA3 = 1
+comptime PATTERN_QWEN2 = 2
+
+
+def _cp_at(data: List[UInt8], i: Int) raises -> Tuple[Int, Int]:
+    return decode_codepoint(data, i)
+
+
+def _fold_letter(cp: Int) -> Int:
+    """The ASCII lowercase letter a codepoint case-folds to, when that fold
+    is one of the contraction letters (s t m d r v l e), else -1. The only
+    non-ASCII codepoint folding to one of them is U+017F (long s -> s)."""
+    if cp == 0x17F:
+        return 0x73
+    if cp >= 0x41 and cp <= 0x5A:
+        return cp + 0x20
+    if cp >= 0x61 and cp <= 0x7A:
+        return cp
+    return -1
+
+
+def _contraction_end_ci(data: List[UInt8], i: Int) raises -> Int:
+    """`(?i:'s|'t|'re|'ve|'m|'ll|'d)` at `i`, or -1."""
+    var n = len(data)
+    if Int(data[i]) != 0x27 or i + 1 >= n:
+        return -1
+    var s1 = _cp_at(data, i + 1)
+    var f1 = _fold_letter(s1[0])
+    if f1 == 0x73 or f1 == 0x74 or f1 == 0x6D or f1 == 0x64:  # s t m d
+        return i + 1 + s1[1]
+    if (f1 == 0x72 or f1 == 0x76 or f1 == 0x6C) and i + 1 + s1[1] < n:
+        var s2 = _cp_at(data, i + 1 + s1[1])
+        var f2 = _fold_letter(s2[0])
+        if (f1 == 0x72 and f2 == 0x65) or (f1 == 0x76 and f2 == 0x65) or (
+            f1 == 0x6C and f2 == 0x6C
+        ):
+            return i + 1 + s1[1] + s2[1]
+    return -1
+
+
+def _cls(classes: UnicodeClasses, cp: Int, which: Int) -> Bool:
+    if cp < 0:
+        return False
+    return _in_class(classes, cp, which)
+
+
+def _is_crlf(cp: Int) -> Bool:
+    return cp == 0x0D or cp == 0x0A
+
+
+def pretoken_end_llama(
+    data: List[UInt8], i: Int, classes: UnicodeClasses, max_digits: Int
+) raises -> Int:
+    """End of the pre-token at byte `i` under the Llama 3 (`max_digits` 3)
+    or Qwen 2 (`max_digits` 1) pattern. Always > `i`."""
+    var n = len(data)
+    var e = _contraction_end_ci(data, i)
+    if e > 0:
+        return e
+    var s0 = _cp_at(data, i)
+    var cp0 = s0[0]
+    var w0 = s0[1]
+    # 2.  [^\r\n\p{L}\p{N}]?\p{L}+
+    if _cls(classes, cp0, CLASS_LETTER):
+        return _run_end(data, i, classes, CLASS_LETTER)
+    if (
+        cp0 >= 0
+        and not _is_crlf(cp0)
+        and not _cls(classes, cp0, CLASS_NUMBER)
+        and i + w0 < n
+    ):
+        var cp1 = _cp_at(data, i + w0)[0]
+        if _cls(classes, cp1, CLASS_LETTER):
+            return _run_end(data, i + w0, classes, CLASS_LETTER)
+    # 3.  \p{N}{1,max_digits}
+    if _cls(classes, cp0, CLASS_NUMBER):
+        var j = i
+        var k = 0
+        while j < n and k < max_digits:
+            var s = _cp_at(data, j)
+            if not _cls(classes, s[0], CLASS_NUMBER):
+                break
+            j += s[1]
+            k += 1
+        return j
+    # 4.   ?[^\s\p{L}\p{N}]+[\r\n]*
+    var start = i
+    if cp0 == 0x20 and i + 1 < n:
+        var cp1 = _cp_at(data, i + 1)[0]
+        if _cls(classes, cp1, CLASS_OTHER):
+            start = i + 1
+    if start > i or _cls(classes, cp0, CLASS_OTHER):
+        var j = _run_end(data, start, classes, CLASS_OTHER)
+        if j > start:
+            while j < n and (Int(data[j]) == 0x0D or Int(data[j]) == 0x0A):
+                j += 1
+            return j
+    # 5.  \s*[\r\n]+  -- the run up to and including its last CR or LF
+    var ws_end = _run_end(data, i, classes, CLASS_SPACE)
+    if ws_end > i:
+        var last_crlf = -1
+        var j = i
+        while j < ws_end:
+            var s = _cp_at(data, j)
+            if _is_crlf(s[0]):
+                last_crlf = j + s[1]
+            j += s[1]
+        if last_crlf > 0:
+            return last_crlf
+        # 6.  \s+(?!\S)
+        if ws_end == n:
+            return ws_end
+        var last = i
+        j = i
+        while j < ws_end:
+            last = j
+            j += _cp_at(data, j)[1]
+        if last > i:
+            return last
+        # 7.  \s+
+        return ws_end
+    # an invalid UTF-8 lead byte is its own one-byte pre-token
+    return i + 1
+
+
+def pretokenize_pattern(
+    data: List[UInt8], classes: UnicodeClasses, pattern: Int
+) raises -> List[Int]:
+    """`pretokenize` under `pattern` (PATTERN_GPT2, PATTERN_LLAMA3 or
+    PATTERN_QWEN2): `m + 1` boundaries, first 0 and last `len(data)`."""
+    if pattern == PATTERN_GPT2:
+        return pretokenize(data, classes)
+    if pattern != PATTERN_LLAMA3 and pattern != PATTERN_QWEN2:
+        raise Error("pretokenize: unknown pattern code " + String(pattern))
+    var digits = 3 if pattern == PATTERN_LLAMA3 else 1
+    var bounds = List[Int]()
+    bounds.append(0)
+    var i = 0
+    var n = len(data)
+    while i < n:
+        var end = pretoken_end_llama(data, i, classes, digits)
+        if end <= i or end > n:
+            raise Error(
+                "pretoken_end_llama returned "
+                + String(end)
+                + " at offset "
+                + String(i)
+                + ": the scan must advance and must stay in bounds"
+            )
+        bounds.append(end)
+        i = end
+    return bounds^

@@ -20,8 +20,15 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from core.device_pool import pool_give, pool_take
+from core.device_scan import device_first_nonfinite
 
 from x_decomp.cells import F32Ptr
+from x_decomp.moves import MOVE_FILL0, MOVE_TAKE_ROWS
+from x_decomp.moves_device import launch_move
 from x_decomp.device import (
     _down,
     _up_into,
@@ -479,3 +486,90 @@ def dev_als_rows_py(
     )
     pool_free(sid)
     return PythonObject(n)
+
+
+# ---- lane/apple-fast-gap-cls2 (2026-10-03): GaussianRandomProjection.fit -----
+# Board (M3 FAST): gaussian-rp istella 53.7 ms vs scikit-learn 24.3, taxi 3.3
+# vs 1.6. The fit's matrix is a 10 x d device draw; the time is the host
+# finiteness walk over X (python/mojolearn/_expansion_decomp.py
+# `_M.shape_of_input` -> `_host_all_finite` -> bindings/host_helpers.mojo
+# `all_finite_f32_binding`, one thread, a branch per word: 900k x 220 words
+# on Istella). Three FAST + Apple switches (DEVSCAN default on, below), Python routes read
+# back from `grp_cls2_py` (no env read):
+#   MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN  bit 1: fit reads the shape only;
+#       transform's device projection (`dev_project_py`) flags a non-finite X,
+#       as SparseRandomProjection's MOJOLEARN_SPARSE_RP_DEVICE fit does.
+#   MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN bit 2: the refusal stays in fit, as a
+#       device scan (`dev_first_nonfinite_py`: X up from the caller's buffer
+#       into a pooled buffer, core/device_scan.mojo `device_first_nonfinite`).
+#   MOJOLEARN_XD_FAST_CLS2_GRP_LAZY    bit 4: components_ is downloaded on
+#       first read, not in fit (the fit then ends with no synchronize).
+# The matrix (and so every output word) is main's under every switch.
+# DEVSCAN is the FAST + Apple default since the M3 A/B (n=1, quality
+# identical): gaussian-rp istella 54.3 -> 15.9 ms, taxi 4.7 -> 3.9 ms;
+# -D MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF turns it off. NOSCAN and LAZY
+# stay opt-in (they move the NaN/inf refusal from fit to transform; pending
+# Andrew's decision); NOSCAN, when defined, replaces the device scan.
+
+comptime _CLS2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime GRP_CLS2_NOSCAN = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN"]()
+comptime GRP_CLS2_DEVSCAN = (
+    _CLS2_FAST_APPLE
+    and not is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN_OFF"]()
+    and not GRP_CLS2_NOSCAN
+)
+comptime GRP_CLS2_LAZY = _CLS2_FAST_APPLE and is_defined["MOJOLEARN_XD_FAST_CLS2_GRP_LAZY"]()
+comptime GRP_CLS2_ANY = GRP_CLS2_NOSCAN or GRP_CLS2_DEVSCAN or GRP_CLS2_LAZY
+
+
+def grp_cls2_py() raises -> PythonObject:
+    """The random projections' FAST Apple fit switches compiled in: bit 1
+    NOSCAN, bit 2 DEVSCAN, bit 4 LAZY (0 on every other build)."""
+    var f = 0
+    comptime if GRP_CLS2_NOSCAN:
+        f |= 1
+    comptime if GRP_CLS2_DEVSCAN:
+        f |= 2
+    comptime if GRP_CLS2_LAZY:
+        f |= 4
+    return PythonObject(f)
+
+
+def dev_first_nonfinite_py(addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """The first flat index of a NaN or infinity among the n floats at
+    `addr`, or -1: one upload from the caller's buffer into a pooled device
+    buffer (no fresh allocation per fit) and one device scan. Registered
+    only under GRP_CLS2_DEVSCAN."""
+    var cnt = Int(py=n)
+    if cnt <= 0:
+        return PythonObject(-1)
+    var src = F32Ptr(unsafe_from_address=Int(py=addr))
+    var r = -1
+    with GILReleased(Python()):
+        var ctx = xd_ctx()
+        var buf = pool_take["MojoXDecompCls2Scan"](ctx, cnt)
+        ctx.enqueue_copy(dst_buf=buf, src_ptr=src)
+        r = device_first_nonfinite(ctx, buf, cnt)
+        pool_give["MojoXDecompCls2Scan"](buf^)
+    return PythonObject(r)
+
+
+def dev_move_py(src: PythonObject, idx: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`x_decomp_move` on device ids, enqueued (no sync); p = [op, count, a1,
+    a2, a3, ist, ioff, nsrc, ndst, nidx] (lane apple-fast-py2mojo-decomp)."""
+    var op = Int(py=p[0])
+    var count = _n(p, 1)
+    var a1 = _n(p, 2)
+    var a2 = _n(p, 3)
+    var a3 = _n(p, 4)
+    var ist = _n(p, 5)
+    var ioff = _n(p, 6)
+    if op < MOVE_TAKE_ROWS or op > MOVE_FILL0:
+        raise Error("x_decomp: unknown move op")
+    if op != MOVE_FILL0 and a1 <= 0 and count > 0:
+        raise Error("x_decomp: move needs a positive width")
+    var ps = _ptr(_id(src), max(_n(p, 7), 1))
+    var pi = _ptr(_id(idx), max(_n(p, 9), 1))
+    var pd = _ptr(_id(dst), max(_n(p, 8), 1))
+    launch_move(xd_ctx(), op, ps, pi, pd, count, a1, a2, a3, ist, ioff)
+    return PythonObject(count)

@@ -41,6 +41,7 @@ from std.math import fma
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
+from core.device_fold import device_count_nonzero_i32
 from metrics.impl.stats.detail.contingency_matrix import (
     get_input_class_cardinality,
 )
@@ -66,22 +67,18 @@ def count_unique(
 ) raises -> Tuple[Int, Int32, Int32]:
     """`countUnique` (:74-101): returns `(numUniques, minLabel, maxLabel)`.
     The histogram is the device's (integer, exact); the count of nonzero
-    bins (`mapThenSumReduce(val != 0)`, an integer sum) is done on the host
-    from the read-back bins (DEVIATION 650's split)."""
+    bins (`mapThenSumReduce(val != 0)`, an integer sum) is the device's too
+    (core/device_fold.mojo; lane cgr4-download-loop, was a host walk of the
+    read-back bins)."""
     var mm = get_input_class_cardinality(ctx, arr, size)
     var min_label = mm[0]
     var max_label = mm[1]
     var total_labels = Int(max_label - min_label + 1)
     var bins = ctx.enqueue_create_buffer[DType.int32](total_labels)
     histogram(ctx, bins, total_labels, arr, size, min_label)
-    var h = ctx.enqueue_create_host_buffer[DType.int32](total_labels)
-    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=bins)
-    ctx.synchronize()
-    var n_uniq = 0
-    for i in range(total_labels):
-        if h.unsafe_ptr().unsafe_load(i) != Int32(0):
-            n_uniq += 1
-    _ = h^
+    # lane cgr4-download-loop: the nonzero bins are counted on the device
+    # (an integer count, exact), not read back and walked
+    var n_uniq = device_count_nonzero_i32(ctx, bins, total_labels)
     _ = bins^
     return (n_uniq, min_label, max_label)
 

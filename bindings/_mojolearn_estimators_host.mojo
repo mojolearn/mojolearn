@@ -58,6 +58,9 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from bindings.py2mojo_cluster_est import dbscan_core_arrays_binding, estimators_py2mojo_cluster_binding
+from core.py2mojo_rows import py2mojo_rows_host_binding
+from svm.host.scale_gamma_host import py2mojo_linear_flags_binding
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import (
@@ -1380,6 +1383,8 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
     try:
         var module = PythonModuleBuilder("_mojolearn_estimators_host")
         module.def_function[estimators_host_numeric_mode_binding]("estimators_host_numeric_mode")
+        module.def_function[py2mojo_rows_host_binding]("py2mojo_rows")
+        module.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         module.def_function[estimators_host_vendor_binding]("estimators_host_vendor")
         module.def_function[estimators_host_column_binding]("estimators_host_column")
         module.def_function[estimators_host_sabotage_binding]("estimators_host_sabotage")
@@ -1397,6 +1402,8 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[ridge_fit_binding]("ridge_fit")
         module.def_function[dbscan_fit_binding]("dbscan_fit")
         module.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
+        module.def_function[dbscan_core_arrays_binding]("dbscan_core_arrays")
+        module.def_function[estimators_py2mojo_cluster_binding]("estimators_py2mojo_cluster")
         module.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         module.def_function[qn_fit_binding]("qn_fit")
         module.def_function[ols_predict_binding]("ols_predict")

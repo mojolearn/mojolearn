@@ -2651,6 +2651,21 @@ def feature_groups_for(policy: Int, n_features: Int) -> Int:
 
 
 
+def sym_argmax_blocks_for(hist_cells_per_leaf: Int) -> Int:
+    """The symmetric score launch's grid (and the `out_score`/`out_bin`
+    partials it writes): `min(64, ceil(cells / 256))`, at least 1, the
+    reference sizing. The workspace allocation and the level loop both size
+    through here so the partials always fit. (The FAST one-thread-per-bin-
+    feature grid, `-D MOJOLEARN_YETI_TREE_SEARCH_SCORE_GRID`, was
+    DROPPED-noise; lane/apple-fast-yetirank @ c7b35fd7c.)"""
+    var argmax_blocks = (hist_cells_per_leaf + 255) // 256
+    if argmax_blocks > 64:
+        argmax_blocks = 64
+    if argmax_blocks < 1:
+        argmax_blocks = 1
+    return argmax_blocks
+
+
 def replication_for(
     groups: Int, n_live: Int, stat_count: Int, sm_count: Int,
     gather: Bool = False,
@@ -3614,11 +3629,7 @@ struct TTreeWorkspace(Movable):
             if tf > widest_block:
                 widest_block = tf
         var block_cells = max_leaves * stat_count * widest_block
-        var argmax_blocks = (hist_cells_per_leaf + 255) // 256
-        if argmax_blocks > 64:
-            argmax_blocks = 64
-        if argmax_blocks < 1:
-            argmax_blocks = 1
+        var argmax_blocks = sym_argmax_blocks_for(hist_cells_per_leaf)
         var sm_count = ctx.get_attribute(
             DeviceAttribute.MULTIPROCESSOR_COUNT
         )
@@ -5225,11 +5236,7 @@ def run_tree_layout_traced[
     # `argmaxBlockCount = Min(CeilDivide(binFeatureCountPerDevice, 256),
     # 64)` (`greedy_search_helper.cpp:439`), still needed for the score
     # launches below; the buffers it sizes live in the pool.
-    var argmax_blocks = (hist_cells_per_leaf + 255) // 256
-    if argmax_blocks > 64:
-        argmax_blocks = 64
-    if argmax_blocks < 1:
-        argmax_blocks = 1
+    var argmax_blocks = sym_argmax_blocks_for(hist_cells_per_leaf)
 
     # ---- per-tree state, the only part the pool cannot carry over ----
     # their `CreateInitialSubsets`' root partition and `FillBuffer` zeroing
@@ -5299,7 +5306,7 @@ def run_tree_layout_traced[
         ws[0].scale_dev.unsafe_ptr()
     )
     if mags_dev:
-        ctx.enqueue_function[choose_scale_kernel](
+        ctx.enqueue_function[choose_scale_kernel](  # small-launch(n_rows: a scalar operand of the scale snap): one thread of control plane reading two magnitudes, no walk
             rebind[MutPointer[Float32, MutAnyOrigin]](
                 mags_dev.value().unsafe_ptr()
             ),

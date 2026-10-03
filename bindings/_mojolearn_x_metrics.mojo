@@ -9,6 +9,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.memory import bitcast
+from x_metrics.common import PY2MOJO_CORE_ON
 from x_metrics.epilogue import roc_arrays, expected_mi, row_sum_range
 from x_metrics.epilogue import scatter_rows, first_rows_i32, ovo_pair
 from x_metrics.epilogue import (
@@ -208,6 +209,15 @@ def vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+def py2mojo_core_binding() raises -> PythonObject:
+    """1 when the label layouts run in the binding (lane apple-fast-py2mojo-core),
+    0 under -D MOJOLEARN_PY2MOJO_core_OFF (the Python layouts, the A/B arm)."""
+    comptime if PY2MOJO_CORE_ON:
+        return PythonObject(1)
+    else:
+        return PythonObject(0)
+
+
 @export
 def PyInit__mojolearn_x_metrics() abi("C") -> PythonObject:
     try:
@@ -235,6 +245,7 @@ def PyInit__mojolearn_x_metrics() abi("C") -> PythonObject:
         m.def_function[db_score_binding]("x_metrics_db_score")
         m.def_function[numeric_mode_binding]("x_metrics_numeric_mode")
         m.def_function[vendor_binding]("x_metrics_vendor")
+        m.def_function[py2mojo_core_binding]("x_metrics_py2mojo_core")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_metrics: ", e))

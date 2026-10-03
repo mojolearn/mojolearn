@@ -185,20 +185,18 @@ def strided_rows(src, offset, count, n_rows, row_len, dst):
     """Un-interleave a TIME-MAJOR float32 block into `dst`, a C-contiguous
     `(n_rows, row_len)` float32 buffer: element `[s + i * n_rows]` of
     `src[offset : offset + count]` lands at `dst[s, i]`. That is exactly
-    cuML's `.reshape((n_rows, row_len), order="F")`, done as `n_rows`
-    strided memoryview slice copies (C-level element loops) rather than a
-    Python element loop. Falls back to ctypes slicing when an exporter's
-    format cannot be cast."""
-    try:
-        s_mv = flat_view(src, "f")
-        d_mv = flat_view(dst, "f")
-        for s in range(n_rows):
-            d_mv[s * row_len:(s + 1) * row_len] = \
-                s_mv[offset + s:offset + count:n_rows]
-    except (TypeError, ValueError, NotImplementedError):
-        s_ct = ctypes_view(src, ctypes.c_float, offset + count, name="src")
-        d_ct = ctypes_view(dst, ctypes.c_float, n_rows * row_len, name="dst")
-        for s in range(n_rows):
-            d_ct[s * row_len:(s + 1) * row_len] = \
-                s_ct[offset + s:offset + count:n_rows]
+    cuML's `.reshape((n_rows, row_len), order="F")`: the block at `offset`
+    is a C-order `(row_len, n_rows)` float32 matrix and `dst` its
+    transpose, written by the base binding's `transpose_f32` (Mojo; lane
+    cgr4-py-compute: no per-row Python slice copies). A pure move."""
+    n_rows, row_len, count, offset = int(n_rows), int(row_len), int(count), int(offset)
+    if count != n_rows * row_len:
+        raise ValueError(
+            f"mojolearn: strided_rows count {count} is not n_rows * row_len "
+            f"({n_rows} * {row_len})")
+    if count == 0:
+        return dst
+    from ._buffer import _native, addr
+    src_addr = addr_ro(src, name="src") + 4 * offset
+    _native("transpose_f32")(src_addr, addr(dst, name="dst"), row_len, n_rows)
     return dst

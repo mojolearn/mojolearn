@@ -36,6 +36,7 @@ min-norm card, which a bypass to `lstsq_eig` cannot do.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
+from std.sys.compile import is_defined
 
 from core.gemm import gemv_n
 from core.identity_trace import IdentityTrace
@@ -45,7 +46,7 @@ from glm.impl.ols import (
     ols_fit_weighted_traced,
 )
 from glm.impl.qn.qn import qn_decision_function, qn_fit_x
-from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_fit_traced
+from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_eig_scratch_traced, ridge_fit_traced
 from glm.impl.linear_model.qn import (
     QN_LOSS_ABS,
     QN_LOSS_LOGISTIC,
@@ -64,7 +65,7 @@ from core.gram_splitk import (
     gram_splitk_chunk_count,
     gram_splitk_scratch_covers,
 )
-from glm.impl.center_device import center_buf, col_sums_buf
+from glm.impl.center_device import center_buf, col_means_buf, col_sums_buf
 
 
 def _add_scalar_kernel(
@@ -202,23 +203,38 @@ def ols_fit_resident_host(
         var d_sy = ctx.enqueue_create_buffer[DType.uint64](1)
         col_sums_buf(ctx, d_x, d_sx, n_rows, n_features)
         col_sums_buf(ctx, d_y, d_sy, n_rows, 1)
-        var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
-        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
-        ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
-        ctx.synchronize()
-        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
-        var rows_f = Float64(n_rows)
-        for j in range(n_features + 1):
-            var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
-            h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
-            if j < n_features:
-                mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
-            else:
-                ymean_ptr.unsafe_store(0, mean)
         var d_mx = ctx.enqueue_create_buffer[DType.float32](n_features)
         var d_my = ctx.enqueue_create_buffer[DType.float32](1)
-        ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
-        ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
+        var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
+        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
+        comptime if is_defined["MOJOLEARN_PURITY_1_OFF"]():
+            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
+            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
+            ctx.synchronize()
+            var rows_f = Float64(n_rows)
+            for j in range(n_features + 1):
+                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
+                h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
+                if j < n_features:
+                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+                else:
+                    ymean_ptr.unsafe_store(0, mean)
+            ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
+        else:
+            # lane apple-fast-purity: the means on the device (soft binary64,
+            # center_device.col_means_buf), downloaded once as the fit's outputs.
+            var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
+            col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
+            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
+            ctx.synchronize()
+            for j in range(n_features + 1):
+                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
+                if j < n_features:
+                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+                else:
+                    ymean_ptr.unsafe_store(0, mean)
+            _ = d_m64^
         var d_cx = ctx.enqueue_create_buffer[DType.float32](cells)
         var d_cy = ctx.enqueue_create_buffer[DType.float32](n_rows)
         center_buf(ctx, d_x, d_mx, d_cx, n_rows, n_features)
@@ -408,6 +424,131 @@ def ridge_fit_host(
     _ = hw^
 
 
+def ridge_fit_resident_host(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mu_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ymean_ptr: MutPointer[Float64, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    alpha: Float32,
+    center: Bool,
+) raises:
+    """Ridge's fit with X and y uploaded ONCE (lane apple-fast-ridgespeed,
+    2026-10-03; `ols_fit_resident_host`'s shape).
+
+    The Python route it replaces made four trips over the rows: `lm_col_sums`
+    of X and of y, `lm_center` of X and of y (each an upload and a download
+    of the full design) and `ridge_fit` (another upload of the centered X).
+    Here X and y go up once and stay: the exact column sums (`col_sums_buf`),
+    the means, the center (`center_buf`) and `ridgeEig` read the resident
+    buffers. Same kernels, launch shapes and inputs as that route, so the
+    same words. The means are `linear_model._column_means`' (float64 sum /
+    rows, rounded once to float32); the y mean is returned in float64
+    (`ymean_ptr[0]`) and y is shifted by its float32 rounding, as `_shift`
+    does. The raw X, dead after the center, is the Gram's scratch."""
+    if n_features <= 0:
+        raise Error("ridgeFit: number of columns cannot be less than one")
+    if n_rows <= 1:
+        raise Error("ridgeFit: number of rows cannot be less than two")
+    if n_features == 1:
+        raise Error(
+            "ridgeFit: n_cols == 1 selects ridgeSVD (ridge.cuh:210),"
+            " which is NOT IMPLEMENTED (raft svdQR is cuSOLVER gesvd, no"
+            " equivalent). cuML's Python layer forces the same switch"
+            " (ridge.pyx:355). See glm/NOT_IMPLEMENTED.tsv"
+        )
+    if alpha < Float32(0.0):
+        raise Error("ridgeFit: alpha must be non-negative")
+    var cells = n_rows * n_features
+    var d_x = ctx.enqueue_create_buffer[DType.float32](cells)
+    var d_y = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_buf=d_x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=d_y, src_ptr=y_ptr)
+    var w = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var trace = IdentityTrace()
+    if trace.enabled:
+        trace.header(
+            String("ridge n=") + String(n_rows) + " d=" + String(n_features)
+            + " algo=" + String(RIDGE_ALGO_EIG)
+        )
+    if center:
+        var d_sx = ctx.enqueue_create_buffer[DType.uint64](n_features)
+        var d_sy = ctx.enqueue_create_buffer[DType.uint64](1)
+        col_sums_buf(ctx, d_x, d_sx, n_rows, n_features)
+        col_sums_buf(ctx, d_y, d_sy, n_rows, 1)
+        var d_mx = ctx.enqueue_create_buffer[DType.float32](n_features)
+        var d_my = ctx.enqueue_create_buffer[DType.float32](1)
+        var h_s = ctx.enqueue_create_host_buffer[DType.uint64](n_features + 1)
+        var h_m = ctx.enqueue_create_host_buffer[DType.float32](n_features + 1)
+        comptime if is_defined["MOJOLEARN_PURITY_1_OFF"]():
+            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_sx)
+            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr() + n_features, src_buf=d_sy)
+            ctx.synchronize()
+            var rows_f = Float64(n_rows)
+            for j in range(n_features + 1):
+                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j)) / rows_f
+                h_m.unsafe_ptr().unsafe_store(j, mean.cast[DType.float32]())
+                if j < n_features:
+                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+                else:
+                    ymean_ptr.unsafe_store(0, mean)
+            ctx.enqueue_copy(dst_buf=d_mx, src_ptr=h_m.unsafe_ptr())
+            ctx.enqueue_copy(dst_buf=d_my, src_ptr=h_m.unsafe_ptr() + n_features)
+        else:
+            # lane apple-fast-purity: the means on the device (soft binary64,
+            # center_device.col_means_buf), downloaded once as the fit's outputs.
+            var d_m64 = ctx.enqueue_create_buffer[DType.uint64](n_features + 1)
+            col_means_buf(ctx, d_sx, d_sy, d_mx, d_my, d_m64, n_rows, n_features)
+            ctx.enqueue_copy(dst_ptr=h_s.unsafe_ptr(), src_buf=d_m64)
+            ctx.synchronize()
+            for j in range(n_features + 1):
+                var mean = bitcast[DType.float64](h_s.unsafe_ptr().unsafe_load(j))
+                if j < n_features:
+                    mu_ptr.unsafe_store(j, mean.cast[DType.float32]())
+                else:
+                    ymean_ptr.unsafe_store(0, mean)
+            _ = d_m64^
+        var d_cx = ctx.enqueue_create_buffer[DType.float32](cells)
+        var d_cy = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        center_buf(ctx, d_x, d_mx, d_cx, n_rows, n_features)
+        center_buf(ctx, d_y, d_my, d_cy, n_rows, 1)
+        ctx.synchronize()
+        trace.record_device[DType.float32](ctx, "ridge.input.A", d_cx, cells)
+        trace.record_device[DType.float32](ctx, "ridge.input.b", d_cy, n_rows)
+        trace.record_scalar_f32("ridge.input.alpha", alpha)
+        # d_x is dead from here: the Gram's gemm_tn scratch.
+        ridge_eig_scratch_traced(ctx, d_cx, n_rows, n_features, d_cy, alpha, w, d_x, trace)
+        _ = h_s^
+        _ = h_m^
+        _ = d_sx^
+        _ = d_sy^
+        _ = d_mx^
+        _ = d_my^
+        _ = d_cx^
+        _ = d_cy^
+    else:
+        var xa = ctx.enqueue_create_buffer[DType.float32](cells)
+        ctx.synchronize()
+        trace.record_device[DType.float32](ctx, "ridge.input.A", d_x, cells)
+        trace.record_device[DType.float32](ctx, "ridge.input.b", d_y, n_rows)
+        trace.record_scalar_f32("ridge.input.alpha", alpha)
+        ridge_eig_scratch_traced(ctx, d_x, n_rows, n_features, d_y, alpha, w, xa, trace)
+        _ = xa^
+    trace.record_device[DType.float32](ctx, "ridge.coef", w, n_features)
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+    ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
+    ctx.synchronize()
+    for i in range(n_features):
+        coef_ptr.unsafe_store(i, hw.unsafe_ptr().unsafe_load(i))
+    _ = hw^
+    _ = w^
+    _ = d_x^
+    _ = d_y^
+
+
 # ===========================================================================
 # LOGISTIC REGRESSION (DEVIATIONS 546-549) -- the entry
 # `mojolearn.LogisticRegression` reaches
@@ -589,6 +730,22 @@ def qn_decision_function_host(
     _ = hs^
 
 
+def _positive_code_kernel(
+    scores: MutPointer[Float32, MutAnyOrigin],
+    codes: MutPointer[Int64, MutAnyOrigin],
+    n_in: Int32,
+):
+    """codes[i] = 1 if scores[i] > 0 else 0, decided BY BITS (Metal flushes
+    compare operands): sign clear, magnitude nonzero and not a NaN. That is
+    the host's `score > 0.0` for every float, subnormals included."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var b = bitcast[DType.uint32](scores.unsafe_load(i))
+        var mag = b & UInt32(0x7FFFFFFF)
+        var pos = (b >> 31) == UInt32(0) and mag != UInt32(0) and mag <= UInt32(0x7F800000)
+        codes.unsafe_store(i, Int64(1) if pos else Int64(0))
+
+
 def qn_predict_binary_host(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -611,12 +768,16 @@ def qn_predict_binary_host(
     pams.loss = QN_LOSS_LOGISTIC
     pams.fit_intercept = fit_intercept
     qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores)
-    var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=scores)
+    # lane cgr4-download-loop: the threshold runs on the device and the codes
+    # download straight into the caller's buffer (was a host loop over rows)
+    if n_rows <= 0:
+        return
+    var codes = ctx.enqueue_create_buffer[DType.int64](n_rows)
+    ctx.enqueue_function[_positive_code_kernel](
+        scores.unsafe_ptr(), codes.unsafe_ptr(), Int32(n_rows),
+        grid_dim=((n_rows + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=codes)
     ctx.synchronize()
-    for i in range(n_rows):
-        out_ptr.unsafe_store(
-            i, Int64(1) if hs.unsafe_ptr().unsafe_load(i) > Float32(0.0)
-            else Int64(0),
-        )
-    _ = hs^
+    _ = codes^
+    _ = scores^

@@ -156,3 +156,6 @@ HANDOFF*.md
 EXPERIMENTS.md
 **/RESUME.md
 **/NOTES.md
+
+# the committed Apple FAST experiments record (CLAUDE.md Experiments rule)
+!docs/apple-fast/EXPERIMENTS.md

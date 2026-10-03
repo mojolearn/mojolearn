@@ -19,6 +19,10 @@ from x_neighbors.svgp_ff import (
     svgp_ff_x_item, svgp_ff_qmu_item, svgp_ff_qsqrt_item, svgp_ff_part_item, svgp_ff_fin_item, svgp_ff_nbn,
     svgp_ff_nbm, svgp_ff_ws_size,
 )
+from x_neighbors.svgp_ff import (
+    SVGP_TREE, SVGP_TREE_ON, SV8, svgp_ff_tree_comb, svgp_ff_tree_slot, svgp_ff_bound, svgp_ff_failed,
+)
+from x_linear.ff import FF
 from std.memory import bitcast, memcpy
 from std.atomic import Atomic
 from std.math import sqrt
@@ -32,9 +36,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 
 from std.sys.compile import is_defined
+from std.python import PythonObject
 from x_neighbors.nan_cells_device import nan_cells_device
 from x_neighbors.graph_dev import pr_iterate_gpu
 from x_neighbors.items import FP, IP, absdiff_sum_item, xn_fold_blocks, _sub, _add, knn_sq_item, knn_impute_finish
+from x_neighbors.items import XN_TREE, XN_TREE_ON, xn_tree_slot
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
 from x_neighbors.device_ops import (
@@ -47,17 +53,47 @@ from x_neighbors.device_ops import (
 from x_neighbors.items import K_RBF, U_IDENTITY
 from x_neighbors.lp_spmm import lp_ell_fill_kernel, lp_nonfinite_kernel, lp_prod_kernel, lp_rowcount_kernel
 from core.device_zero import enqueue_fill
+from core.pinned_reduce import pinned_block_sum
+from checks.numerics import NUMERIC_IDENTICAL
+from checks.numerics import identical_exp
+from x_neighbors.items import lp_clamp_item, ls_clamp_item
 
 
 def _absdiff_launch(ctx: DeviceContext, a: FP, b: FP, s: FP, part: FP, count: Int) raises:
     """The `absdiff_sum` op's two stages on resident buffers: one thread per
-    XN_FOLD_BLOCK block into `part`, then the partials ascending into s[0]
+    XN_FOLD_BLOCK block into `part`, then the partials folded into s[0]
     (the bits of `absdiff_sum_item`, the host column's fold)."""
     var nb = xn_fold_blocks(count)
     ctx.enqueue_function[absdiff_sum_k0](
         a, b, s, part, Int64(count), grid_dim=_grid(nb), block_dim=(BLOCK if nb > 1 else 1),
     )
-    ctx.enqueue_function[absdiff_sum_k1](a, b, s, part, Int64(count), grid_dim=1, block_dim=1)
+    comptime if XN_TREE_ON:
+        # lane apple-fast-purity: the partials folded by one block of XN_TREE
+        # threads (`xn_tree_fold`'s steps), not by one thread
+        ctx.enqueue_function[xn_tree_fold_kernel](part, s, Int64(nb), grid_dim=1, block_dim=XN_TREE)
+    else:
+        ctx.enqueue_function[absdiff_sum_k1](a, b, s, part, Int64(count), grid_dim=1, block_dim=1)
+
+
+comptime _XN_TREE_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, XN_TREE * 4]()
+
+
+def xn_tree_fold_kernel(part: FP, res: FP, nb_: Int64):
+    """ONE block of XN_TREE threads: `xn_tree_fold` (items.mojo) with thread
+    s on slot s, then the halving steps in threadgroup memory; res[0]."""
+    comptime assert _XN_TREE_SMEM_FITS, "xn_tree_fold_kernel: a 1 KB threadgroup page must fit"
+    var s = Int(thread_idx.x)
+    var sh = stack_allocation[XN_TREE, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    sh[s] = xn_tree_slot(part, s, Int(nb_))
+    barrier()
+    var h = XN_TREE // 2
+    while h > 0:
+        if s < h:
+            sh[s] = _add(sh[s], sh[s + h])
+        barrier()
+        h //= 2
+    if s == 0:
+        res.unsafe_store(0, sh[0])
 
 
 def op_lp_iterate(
@@ -492,18 +528,6 @@ def pcs_conv_row_kernel(acc: FP, sk: FP, res: FP, n_: Int64, nc_: Int64, degree_
         h0 += PCS_ROW_TPB * 4
 
 
-#: lane neighbors-apple3 (2026-09-28), FAST on Apple, OPT-IN until its A/B
-#: and quality check pass (`-D MOJOLEARN_XN_PCS_SPARSE`): the convolution
-#: over the running product's NONZERO components only. A count sketch of a
-#: row of d features has at most d nonzero components (each feature lands in
-#: one), so at degree 2 a row's 500 outputs fold about 8 terms each, not
-#: 500. The skipped terms are products with a zero; FAST's words can differ
-#: from the full fold's only in the sign of a zero.
-comptime PCS_SPARSE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_XN_PCS_SPARSE"]()
-)
 
 def op_pcs_resident(
     x: Int, hidx: Int, hbit: Int, res: Int,
@@ -514,9 +538,6 @@ def op_pcs_resident(
     one sketch per (row, degree), then per degree p >= 1 one thread per
     output cell folding the convolution in the same ascending order, the
     running product ping-ponging on the device."""
-    # The loop keeps its compile-time guard; only import placement changes.
-    from x_neighbors.pcs_sparse import PCS_SPARSE_MAX_NC, pcs_conv_row_sparse_kernel
-
     var ctx = xn_ctx()
     var d_x = _buf(ctx, x, n * d_in, True)
     var d_hi = _buf_i(ctx, hidx, degree * nf, True)
@@ -542,17 +563,7 @@ def op_pcs_resident(
         var row_kernel = nc <= PCS_ROW_MAX_NC
         comptime if is_defined["MOJOLEARN_XN_PCS_CELL"]():
             row_kernel = False
-        var sparse_kernel = False
-        comptime if PCS_SPARSE:
-            sparse_kernel = row_kernel and nc <= PCS_SPARSE_MAX_NC
-            if sparse_kernel:
-                ctx.enqueue_function[pcs_conv_row_sparse_kernel](
-                    cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
-                    grid_dim=n, block_dim=PCS_ROW_TPB,
-                )
-        if sparse_kernel:
-            pass
-        elif row_kernel:
+        if row_kernel:
             ctx.enqueue_function[pcs_conv_row_kernel](
                 cur, d_sk.unsafe_ptr(), nxt, Int64(n), Int64(nc), Int64(degree), Int64(p),
                 grid_dim=n, block_dim=PCS_ROW_TPB,
@@ -1270,6 +1281,39 @@ def svgp_ff_fin_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float32, n
         svgp_ff_fin_item(w, info, Int(nbn_), Int(nbm_), nf, noise, kdiag)
 
 
+comptime _SVGP_TREE_SMEM_FITS = lib_smem_page_fits_for[TARGET_COLUMN, SVGP_TREE * 8 * 4]()
+
+
+def svgp_ff_fin_tree_kernel(w: FP, info: FP, nbn_: Int64, nbm_: Int64, nf: Float32, noise: Float32, kdiag: Float32):
+    """ONE block of SVGP_TREE threads (lane apple-fast-purity): `svgp_ff_fin_item`'s
+    tree fold with thread s on slot s, the halving steps in threadgroup
+    memory, then thread 0 writes the bound."""
+    comptime assert _SVGP_TREE_SMEM_FITS, "svgp_ff_fin_tree_kernel: an 8 KB threadgroup page must fit"
+    var s = Int(thread_idx.x)
+    var sh = stack_allocation[SVGP_TREE * 8, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var v = svgp_ff_tree_slot(w, s, Int(nbn_), Int(nbm_))
+    comptime for L in range(8):
+        sh[s * 8 + L] = v[L]
+    barrier()
+    var h = SVGP_TREE // 2
+    while h > 0:
+        if s < h:
+            var a = SV8(0)
+            var b = SV8(0)
+            comptime for L in range(8):
+                a[L] = sh[s * 8 + L]
+                b[L] = sh[(s + h) * 8 + L]
+            var c = svgp_ff_tree_comb(a, b)
+            comptime for L in range(8):
+                sh[s * 8 + L] = c[L]
+        barrier()
+        h //= 2
+    if s == 0:
+        if svgp_ff_failed(w, info):
+            return
+        svgp_ff_bound(w, info, FF(sh[0], sh[1]), FF(sh[2], sh[3]), FF(sh[4], sh[5]), sh[6], sh[7], nf, noise, kdiag)
+
+
 def op_svgp_fit_ff(
     x: Int, z: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, n: Int, m: Int, d: Int,
     gamma: Float32, variance: Float32, noise: Float32, jitter: Float32, kdiag: Float32,
@@ -1354,11 +1398,16 @@ def op_svgp_fit_ff(
         ctx.enqueue_function[svgp_ff_part_kernel](
             yp, _p(d_bvh), _p(d_bvl), wp, Int64(m), Int64(n), grid_dim=_grid(nbn + nbm), block_dim=BLOCK,
         )
-    # one thread folds the nbn + nbm block partials (n / 2048 + m / 64 of
-    # them) into the scalar bound: a scalar step, not a loop over n
-    ctx.enqueue_function[svgp_ff_fin_kernel](
-        wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=1,
-    )
+    comptime if SVGP_TREE_ON:
+        # lane apple-fast-purity: one block of SVGP_TREE threads folds the
+        # nbn + nbm block partials (svgp_ff_fin_item's tree order)
+        ctx.enqueue_function[svgp_ff_fin_tree_kernel](
+            wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=SVGP_TREE,
+        )
+    else:
+        ctx.enqueue_function[svgp_ff_fin_kernel](
+            wp, _p(d_info), Int64(nbn), Int64(nbm), Float32(n), noise, kdiag, grid_dim=1, block_dim=1,
+        )
     _down(ctx, d_alpha, alpha, m)
     _down(ctx, d_c, cmat, mm)
     _down(ctx, d_qmu, qmu, m)
@@ -1776,3 +1825,192 @@ def op_nc_stats(x: Int, lab: Int, nk: Int, cent: Int, std: Int, dsc: Int, n: Int
     _ = d_cent^
     _ = d_std^
     _ = d_dsc^
+
+
+# ---------------------------------------------------------------- lp_iterate_knn
+#: LP_FAST_RESIDENT (lane/apple-fast-neighbors2, 2026-10-02; FAST + Apple
+#: default, `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` off): LabelPropagation /
+#: LabelSpreading's fit loop over the compact kNN graph as ONE resident op.
+#: Cause: with kernel='knn' `_LabelPropagationBase.fit`
+#: (python/mojolearn/_expansion_neighbors.py) runs the loop in Python, three
+#: binding calls per iteration: `absdiff_sum` (a one-item serial fold over
+#: n x C on the host), `lp_knn_product` (uploads cols, vals and the
+#: distributions, downloads the product) and `lp_clamp` / `ls_clamp` (upload,
+#: download) -- about 10 MB across the boundary and two drains per iteration
+#: at the board's 200,000 rows, for up to 1,000 iterations. Here the graph
+#: goes up once, the stopping sum is block partials + a one-block fold on the
+#: device (`pinned_block_sum`, FAST's block sum), the stopping test sets a
+#: device flag the later kernels of the batch honour, and LPK_BATCH iterations
+#: are enqueued per drain. The product is the finite-x item (a kNN graph's
+#: values and the distributions are finite); the fold order differs from the
+#: item's ascending chain (FAST promises quality, not bits); tol is compared
+#: in float32 on the device. Expected: the per-iteration boundary crossings
+#: gone (LabelPropagation taxi runs its 1,000 steps).
+comptime LPK_TPB = 256
+comptime LPK_BATCH = 16
+comptime LPK_FAST_BUILD = GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+#: LP_FAST_RESIDENT: the default on FAST + Apple since the M3 A/B
+#: (n2-lp-res-taxi: label-propagation taxi 6,793 -> 2,086 ms, -69%, accuracy
+#: .7016 same). `-D MOJOLEARN_LP_FAST_RESIDENT_OFF` keeps the Python loop;
+#: the old `MOJOLEARN_LP_FAST_RESIDENT` env name is harmless (no longer
+#: read). The Python layer asks `x_neighbors_lp_fast_resident()`.
+comptime LP_FAST_RESIDENT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_LP_FAST_RESIDENT_OFF"]()
+)
+
+
+def lp_fast_resident_binding() raises -> PythonObject:
+    """1 when this binary takes the resident kNN-graph loop by default."""
+    comptime if LP_FAST_RESIDENT:
+        return PythonObject(1)
+    return PythonObject(0)
+
+
+def lpk_absdiff_partial_kernel(a: FP, b: FP, part: FP, flag: IP, count_: Int64):
+    """Block partials of sum |a - b|; nothing once the flag is set."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var tid = Int(thread_idx.x)
+    var i = Int(block_idx.x) * LPK_TPB + tid
+    var v = Float32(0)
+    if i < Int(count_):
+        v = abs(a.unsafe_load(i) - b.unsafe_load(i))
+    var s = pinned_block_sum[LPK_TPB](v)
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), s)
+
+
+def lpk_check_kernel(part: FP, nparts_: Int64, flag: IP, iters: IP, tol_: Float32):
+    """ONE block of LPK_TPB threads: the partials folded; below tol the flag
+    is set (the loop stops before this step), else the step is counted."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var tid = Int(thread_idx.x)
+    var acc = Float32(0)
+    var i = tid
+    while i < Int(nparts_):
+        acc += part.unsafe_load(i)
+        i += LPK_TPB
+    var s = pinned_block_sum[LPK_TPB](acc)
+    if tid == 0:
+        if s < tol_:
+            flag.unsafe_store(0, 1)
+        else:
+            iters.unsafe_store(0, iters.unsafe_load(0) + 1)
+
+
+def lpk_product_kernel(cols: IP, vals: FP, x: FP, res: FP, flag: IP, n_: Int64, k_: Int64, c_: Int64):
+    """`lp_knn_product_item` (finite x); nothing once the flag is set."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var t = _tid()
+    if t < Int(n_) * Int(c_):
+        lp_knn_product_item(t, cols, vals, x, res, Int(n_), Int(n_), Int(k_), Int(c_), True)
+
+
+def lpk_clamp_kernel(
+    ld: FP, ystatic: FP, unlabeled: IP, res: FP, flag: IP, n_: Int64, c_: Int64, variant_: Int64, alpha_: Float32,
+):
+    """variant 0 `lp_clamp_item` per row, 1 `ls_clamp_item` per cell;
+    nothing once the flag is set."""
+    if flag.unsafe_load(0) != 0:
+        return
+    var t = _tid()
+    var n = Int(n_)
+    var c = Int(c_)
+    if variant_ == 0:
+        if t < n:
+            lp_clamp_item(t, ld, ystatic, unlabeled, res, n, c)
+    else:
+        if t < n * c:
+            ls_clamp_item(t, ld, ystatic, res, n * c, alpha_)
+
+
+def op_lp_iterate_knn(
+    cols: Int, vals: Int, ld: Int, ystatic: Int, unlabeled: Int, info: Int,
+    n: Int, k: Int, c: Int, max_iter: Int, variant: Int, tol_hi: Int, tol_lo: Int, alpha: Float32,
+) raises:
+    """The Python loop of `_LabelPropagationBase.fit` over the compact kNN
+    graph, resident (see LPK_TPB above). `ld` in: the initial distributions,
+    out: the last. info (int32 x 2): n_iter_, converged. tol is Python's
+    float64 bits."""
+    comptime if not LPK_FAST_BUILD:
+        raise Error("lp_iterate_knn: the FAST tier only (LP_FAST_RESIDENT)")
+    else:
+        var tol = bitcast[DType.float64]((UInt64(tol_hi) << UInt64(32)) | UInt64(tol_lo))
+        var nc = n * c
+        var ctx = xn_ctx()
+        var d_cols = _buf_i(ctx, cols, n * k, True)
+        var d_vals = ctx.enqueue_create_buffer[DType.float32](n * k)
+        ctx.enqueue_copy(dst_buf=d_vals, src_ptr=FP(unsafe_from_address=vals))
+        var d_a = ctx.enqueue_create_buffer[DType.float32](nc)
+        ctx.enqueue_copy(dst_buf=d_a, src_ptr=FP(unsafe_from_address=ld))
+        var d_b = ctx.enqueue_create_buffer[DType.float32](nc)
+        ctx.enqueue_memset(d_b, Float32(0))
+        var d_nxt = ctx.enqueue_create_buffer[DType.float32](nc)
+        var d_ys = ctx.enqueue_create_buffer[DType.float32](nc)
+        ctx.enqueue_copy(dst_buf=d_ys, src_ptr=FP(unsafe_from_address=ystatic))
+        var d_unl = _buf_i(ctx, unlabeled, n, True)
+        var nparts = max(1, (nc + LPK_TPB - 1) // LPK_TPB)
+        var d_part = ctx.enqueue_create_buffer[DType.float32](nparts)
+        var h_fl = List[Int32](length=2, fill=Int32(0))
+        var d_fl = _buf_i(ctx, Int(h_fl.unsafe_ptr()), 2, True)
+        var flp: IP = d_fl.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var itp: IP = flp + 1
+        var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var prev: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var tol32 = Float32(tol)
+        var done = 0
+        var converged = False
+        while done < max_iter and not converged:
+            var steps = min(LPK_BATCH, max_iter - done)
+            for _ in range(steps):
+                ctx.enqueue_function[lpk_absdiff_partial_kernel](
+                    cur, prev, d_part.unsafe_ptr(), flp, Int64(nc),
+                    grid_dim=nparts, block_dim=LPK_TPB,
+                )
+                ctx.enqueue_function[lpk_check_kernel](
+                    d_part.unsafe_ptr(), Int64(nparts), flp, itp, tol32,
+                    grid_dim=1, block_dim=LPK_TPB,
+                )
+                ctx.enqueue_function[lpk_product_kernel](
+                    d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), flp,
+                    Int64(n), Int64(k), Int64(c), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+                )
+                # prev = ld; ld = clamp(nxt): the clamp writes over the buffer
+                # the old prev held, then the two names swap (op_lp_iterate)
+                ctx.enqueue_function[lpk_clamp_kernel](
+                    d_nxt.unsafe_ptr(), d_ys.unsafe_ptr(), d_unl.unsafe_ptr(), prev, flp,
+                    Int64(n), Int64(c), Int64(variant), alpha,
+                    grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+                )
+                var t = cur
+                cur = prev
+                prev = t
+            ctx.enqueue_copy(dst_ptr=h_fl.unsafe_ptr(), src_buf=d_fl)
+            ctx.synchronize()
+            converged = h_fl[0] != 0
+            done += steps
+        # steps taken: the loop's n_iter_ whether it converged (it) or ran out
+        var n_iter = Int(h_fl[1])
+        if n_iter % 2 == 0:
+            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=ld), src_buf=d_a)
+        else:
+            ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=ld), src_buf=d_b)
+        ctx.synchronize()
+        var inf = IP(unsafe_from_address=info)
+        inf.unsafe_store(0, Int32(n_iter))
+        inf.unsafe_store(1, Int32(1 if converged else 0))
+        _ = h_fl^
+        _ = d_fl^
+        _ = d_part^
+        _ = d_cols^
+        _ = d_vals^
+        _ = d_a^
+        _ = d_b^
+        _ = d_nxt^
+        _ = d_ys^
+        _ = d_unl^
+        _ = ctx^

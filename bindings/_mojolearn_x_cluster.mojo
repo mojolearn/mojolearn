@@ -18,6 +18,7 @@ from x_cluster.device_ops import DeviceOps
 from x_cluster.entries import ENTRY_MINIBATCH, run_entry
 from x_cluster.minibatch_ptr import MBK_ZEROCOPY, minibatch_entry_ptr
 from x_cluster.out import ClusterOut, py_floats, py_ints
+from x_cluster.tree_cut import PY2MOJO_CLUSTER
 
 
 def call_binding(
@@ -59,6 +60,13 @@ def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
 
+def py2mojo_binding() raises -> PythonObject:
+    """1: the steps `_expansion_cluster.py` / `_hierarchy_impl.py` ran in
+    Python run here (lane apple-fast-py2mojo-cluster); 0 under
+    `-D MOJOLEARN_PY2MOJO_cluster_OFF`, and Python takes its old path."""
+    return PythonObject(1 if PY2MOJO_CLUSTER else 0)
+
+
 def vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
@@ -70,6 +78,7 @@ def PyInit__mojolearn_x_cluster() abi("C") -> PythonObject:
         m.def_function[call_binding]("x_cluster_call")
         m.def_function[numeric_mode_binding]("x_cluster_numeric_mode")
         m.def_function[vendor_binding]("x_cluster_vendor")
+        m.def_function[py2mojo_binding]("x_cluster_py2mojo")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cluster: ", e))

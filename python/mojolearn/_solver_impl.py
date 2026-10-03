@@ -385,7 +385,7 @@ class ElasticNet(ParamsMixin):
             addr(self.coef_, name="coef_"), addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_solver.mojo::cd_fit_binding.
             # n_rows, n_cols, fit_intercept, max_iter, alpha, l1_ratio, tol,
-            # shuffle, has_sample_weight
+            # shuffle, has_sample_weight, row_major
             [
                 n_rows, n_cols, 1 if self.fit_intercept else 0,
                 int(self.max_iter), float(self.alpha), float(self.l1_ratio),

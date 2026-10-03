@@ -1091,3 +1091,148 @@ def column_f64(
     """dst[r] = src[r, j] of a row-major (n, c) block (a copy)."""
     for r in range(n):
         dst[unsafe_offset=r] = src[unsafe_offset=r * c + j]
+
+
+def stack_w64(cols: List[Int], n: Int, dst: MutPointer[UInt64, MutUntrackedOrigin]):
+    """dst (n x m, row-major 8-byte words) with column j = the n words at
+    address cols[j] (lane apple-fast-py2mojo-trees: MultiOutputClassifier's
+    `zip(*cols)` transpose; the host column of `glue_device.stack_w64_device`)."""
+    var m = len(cols)
+    for j in range(m):
+        var src = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=cols[j])
+        for r in range(n):
+            dst[unsafe_offset=r * m + j] = src[unsafe_offset=r]
+
+
+def binary_proba(p: MutPointer[Float32, MutUntrackedOrigin], n: Int, res: MutPointer[Float64, MutUntrackedOrigin]):
+    """res (n x 2) rows (1 - p, p), p widened exactly: the Python
+    `[[1.0 - v, v] for v in p.tolist()]` (lane apple-fast-py2mojo-trees; the
+    host column of `glue_device.binary_proba_device`)."""
+    for r in range(n):
+        var w = Float64(p[unsafe_offset=r])
+        res[unsafe_offset=2 * r + 1] = w
+        res[unsafe_offset=2 * r] = 1.0 - w
+
+
+def folds_serial(
+    codes: MutPointer[Int32, MutUntrackedOrigin], n: Int, k: Int, n_splits: Int,
+    rows: MutPointer[Int32, MutUntrackedOrigin], counts: MutPointer[Int32, MutUntrackedOrigin],
+) -> Int:
+    """`folds_device.device_folds` on the host column (lane
+    apple-fast-py2mojo-trees): sklearn's unshuffled StratifiedKFold (k > 0)
+    or KFold (k == 0), the same fold sizes and fold row lists, integers
+    only. Returns the same status word (2: a code outside [0, k); 1:
+    n_splits above every class count; 0)."""
+    for i in range(n_splits + 1):
+        counts[unsafe_offset=i] = 0
+    var folds = List[Int](length=n, fill=0)
+    if k > 0:
+        var hist = List[Int](length=k, fill=0)
+        var enc = List[Int](length=k, fill=-1)
+        var n_enc = 0
+        for r in range(n):
+            var c = Int(codes[unsafe_offset=r])
+            if c < 0 or c >= k:
+                counts[unsafe_offset=n_splits] = 2
+                return 2
+            if hist[c] == 0:
+                enc[c] = n_enc
+                n_enc += 1
+            hist[c] += 1
+        var cmax = 0
+        for c in range(k):
+            cmax = max(cmax, hist[c])
+        if n_splits > cmax:
+            counts[unsafe_offset=n_splits] = 1
+            return 1
+        var count_enc = List[Int](length=n_enc, fill=0)
+        for c in range(k):
+            if enc[c] >= 0:
+                count_enc[enc[c]] = hist[c]
+        var start = List[Int](length=n_enc, fill=0)
+        for e in range(1, n_enc):
+            start[e] = start[e - 1] + count_enc[e - 1]
+        var seen = List[Int](length=n_enc, fill=0)
+        var ns = n_splits
+        for r in range(n):
+            var e = enc[Int(codes[unsafe_offset=r])]
+            var j = seen[e]
+            seen[e] += 1
+            var s = start[e]
+            var cnt = count_enc[e]
+            var sm = s % ns
+            var cum = 0
+            var f = 0
+            while f < ns - 1:
+                var p0 = s + ((f - sm + ns) % ns)
+                if p0 < s + cnt:
+                    cum += (s + cnt - 1 - p0) // ns + 1
+                if j < cum:
+                    break
+                f += 1
+            folds[r] = f
+    else:
+        var q = n // n_splits
+        var rem = n % n_splits
+        for r in range(n):
+            if r < rem * (q + 1):
+                folds[r] = r // (q + 1)
+            else:
+                folds[r] = rem + (r - rem * (q + 1)) // q
+    for r in range(n):
+        counts[unsafe_offset=folds[r]] += 1
+    for i in range(n_splits):
+        var base = i * n
+        var cnt = Int(counts[unsafe_offset=i])
+        var out_pos = 0
+        var in_pos = 0
+        for r in range(n):
+            if folds[r] == i:
+                rows[unsafe_offset=base + (n - cnt) + in_pos] = Int32(r)
+                in_pos += 1
+            else:
+                rows[unsafe_offset=base + out_pos] = Int32(r)
+                out_pos += 1
+    return 0
+
+
+# lane apple-fast-py2mojo-trees: the host column of glue_device's DART / RTE
+# bookkeeping (the same integers, compares and word copies).
+
+
+def class_counts(y: MutPointer[Float32, MutUntrackedOrigin], n: Int, k: Int,
+                 counts: MutPointer[Int32, MutUntrackedOrigin]) raises:
+    for c in range(k):
+        counts[unsafe_offset=c] = 0
+    for r in range(n):
+        var v = y[unsafe_offset=r]
+        var c = Int(v) if (v >= 0.0 and v < Float32(k)) else -1
+        if c < 0 or Float32(c) != v:
+            raise Error("x_trees class_counts: a class code outside [0, n_classes)")
+        counts[unsafe_offset=c] = counts[unsafe_offset=c] + 1
+
+
+def remap_cols(colid: MutPointer[Int32, MutUntrackedOrigin], nn: Int,
+               cols: MutPointer[Int32, MutUntrackedOrigin], m: Int) raises:
+    for g in range(nn):
+        var v = Int(colid[unsafe_offset=g])
+        if v >= m:
+            raise Error("x_trees remap_cols: a split column outside the sampled columns")
+    for g in range(nn):
+        var v = Int(colid[unsafe_offset=g])
+        if v >= 0:
+            colid[unsafe_offset=g] = cols[unsafe_offset=v]
+
+
+def positive_codes(x: MutPointer[Float64, MutUntrackedOrigin], n: Int, codes: MutPointer[Int32, MutUntrackedOrigin]):
+    for r in range(n):
+        codes[unsafe_offset=r] = Int32(1) if x[unsafe_offset=r] > 0.0 else Int32(0)
+
+
+def spread_leaves(vals: MutPointer[Float32, MutUntrackedOrigin], offs: MutPointer[Int32, MutUntrackedOrigin],
+                  t: Int, nn: Int, k: Int, dst: MutPointer[Float32, MutUntrackedOrigin]):
+    for j in range(t):
+        var c = j % k
+        for g in range(Int(offs[unsafe_offset=j]), Int(offs[unsafe_offset=j + 1])):
+            for q in range(k):
+                dst[unsafe_offset=g * k + q] = vals[unsafe_offset=g] if q == c else Float32(0.0)

@@ -16,29 +16,11 @@ next draw of the lane's splitmix64 stream. The scores are the per-child
 inertia ('biggest_inertia') or size ('largest_cluster'). Leaves in
 depth-first order are the labels; `predict` descends the tree on the device
 (`bodies.tree_descend`)."""
-from std.sys.compile import is_defined
-
-from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
+from checks.numerics import ftz
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, INIT_RANDOM
 from x_cluster.bodies import SplitMix64
 from x_cluster.common import gather_rows
 from x_cluster.ops import ClusterOps
-
-# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple, the
-# GPU binding only, the build define `-D MOJOLEARN_BISECT_FAST_RESIDENT=1`
-# (BISECT_FAST_RESIDENT, default off):
-# the centered data and the raw data uploaded ONCE and kept resident. Cause:
-# every split re-uploaded its m x d subset for the child scores
-# (`ops.put(sub)` below, after `ops.kmeans` had uploaded the same rows; an
-# upload of a million floats or more drains the stream), and the final
-# inertia uploaded all of x again (`ops.put(x)`). With the switch the scores
-# read the resident rows by index (`ops.sqdist_rows`: m ints up, not m d
-# floats) and the inertia reuses the resident x. Same bits. What stays:
-# the gather and the upload inside `ops.kmeans` (cluster/estimator.mojo
-# kmeans_fit takes host rows), listed in docs/apple-fast/ab/cluster2.md.
-comptime XC2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE
-comptime BISECT_FAST_RESIDENT = XC2_FAST and is_defined["MOJOLEARN_BISECT_FAST_RESIDENT"]()
 
 
 struct BisectTree(Movable):
@@ -116,14 +98,6 @@ def bisect_fit[O: ClusterOps](
         var row = r * d
         for f in range(d):
             xc[row + f] = ftz(ftz(x[row + f]) - ftz(mean[f]))
-    var resident = False
-    comptime if BISECT_FAST_RESIDENT:
-        resident = ops.fast_device()
-    var xcs = -1
-    var xs_full = -1
-    if resident:
-        xcs = ops.put(xc)
-        xs_full = ops.put(x)
     var rng = SplitMix64(seed)
     var all_rows = List[Int](capacity=n)
     for r in range(n):
@@ -184,14 +158,7 @@ def bisect_fit[O: ClusterOps](
         # per-child scores and rows
         var cs = ops.put(best_c)
         var ds = ops.zeros(m * 2)
-        if resident:
-            var rows32 = List[Int32](capacity=m)
-            for r in rows:
-                rows32.append(Int32(r))
-            var rs_ = ops.put_i(rows32)
-            ops.sqdist_rows(xcs, rs_, m, cs, 2, d, ds)
-        else:
-            ops.sqdist(sub_s, m, cs, 2, d, ds)
+        ops.sqdist(sub_s, m, cs, 2, d, ds)
         var dd = ops.get(ds, m * 2)
         var sc = List[Float64](length=2, fill=Float64(0))
         var child_rows = List[List[Int]]()
@@ -227,7 +194,7 @@ def bisect_fit[O: ClusterOps](
         for f in range(d):
             centers.append(tree.centers[t * d + f])
     # inertia against the (uncentered) leaf centers, one Float64 chain
-    var xs = xs_full if resident else ops.put(x)
+    var xs = ops.put(x)
     var cs = ops.put(centers)
     var ds = ops.zeros(n * k)
     ops.sqdist(xs, n, cs, k, d, ds)

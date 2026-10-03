@@ -4,7 +4,7 @@
 GPU. Each primitive is one kernel whose thread `t` calls the `x_cluster/
 bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
-from std.atomic import Atomic, Ordering
+from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
@@ -41,7 +41,6 @@ from x_cluster.bodies import (
     ap_r_update,
     meanshift_seed,
     nearest_row,
-    sq_dist_rows,
     SplitMix64,
     sqdist_cell,
     sqrt_cell,
@@ -53,12 +52,22 @@ from x_cluster.bodies import (
 from cluster.estimator import kmeans_fit, kmeans_fit_rows
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
-from gemm.contract import OP_NN, OP_TN
-from mixture.checks.estep import mahal_kernel
+from gemm.contract import OP_TN
 from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
 from x_cluster.ops import ClusterOps
+from x_cluster.optics_xi_device import optics_xi_device
 from x_cluster.meanshift_fast import MEANSHIFT_FAST_GRID, meanshift_fast_grid
 from x_cluster.minibatch_fast import MINIBATCH_FAST_DEV, minibatch_fast_steps
+from x_cluster.device_tree import (
+    agc_edges_mode_kernel,
+    count_ge_kernel,
+    tree_leaf_kernel,
+    tree_parent_init_kernel,
+    tree_parent_kernel,
+    tree_root_flag_kernel,
+    tree_root_rank_kernel,
+    tree_scatter_kernel,
+)
 from x_cluster.device_post import (
     PTPB,
     RTPB,
@@ -113,6 +122,7 @@ from x_cluster.device_post import (
     sign_side_kernel,
 )
 from x_cluster.post_bodies import FM_FF, FM_MIN, FM_PROD, FM_VAL, FM_WMIN, FOLD_CHUNK, ff_of_f64
+from x_cluster.bgmm_kernels import bgmm_launch
 from std.gpu import WARP_SIZE
 from std.gpu.primitives.warp import shuffle_idx
 from x_cluster.minibatch_cells import mb_center_wsum, mb_center_word
@@ -499,11 +509,6 @@ def _ap_key_index(key: UInt64) -> Int:
 
 
 def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
-    _ap_r_body(s, a, r, n, damping)
-
-
-@always_inline
-def _ap_r_body(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
     """`ap_responsibility_row` for row `block_idx.x` on one block: the max
     of `ftz(A + S)` with its lowest index, then the second max over the
     other columns with ITS lowest index (each an integer max of `_ap_key`,
@@ -600,11 +605,6 @@ def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
 
 
 def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
-    _ap_a_body(r, a, n, damping)
-
-
-@always_inline
-def _ap_a_body(r: FPtr, a: FPtr, n: Int32, damping: Float32):
     var t = _tid()
     if t < Int(n):
         ap_availability_col(r, a, Int(n), damping, t)
@@ -1055,11 +1055,6 @@ comptime APF_ROWS = 64  # rows per slice
 # its own thread. The addends and the cell update are `ap_availability_col`'s;
 # the column sum's order is not (bits move; the paired quality check).
 def _apf_part_kernel(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr):
-    _apf_part_body(r, n, n_tiles, part)
-
-
-@always_inline
-def _apf_part_body(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr):
     """Block (slice s, tile c), thread t: column c * APF_TPB + t summed over
     the slice's rows (`Rp`: the positive part off the diagonal, the value
     on it). Adjacent threads read adjacent cells of each row."""
@@ -1083,11 +1078,6 @@ def _apf_part_body(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr):
 
 
 def _apf_sum_kernel(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr):
-    _apf_sum_body(part, n, n_slices, colsum)
-
-
-@always_inline
-def _apf_sum_body(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr):
     var k = _tid()
     var N = Int(n)
     if k >= N:
@@ -1099,11 +1089,6 @@ def _apf_sum_body(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr):
 
 
 def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32, damping: Float32):
-    _apf_update_body(r, a, colsum, n, n_tiles, damping)
-
-
-@always_inline
-def _apf_update_body(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32, damping: Float32):
     """Block (row i, tile c), thread t: cell (i, c * APF_TPB + t)."""
     var N = Int(n)
     var T = Int(n_tiles)
@@ -1122,99 +1107,18 @@ def _apf_update_body(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32, d
     a[i * N + k] = ftz(ftz(identical_mul(old, damping)) + ftz(identical_mul(nw, one_minus)))
 
 
-# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
-# `-D MOJOLEARN_AFFINITY_FAST_LOOP=1` (AP_FAST_LOOP, asked by
-# x_cluster/affinity.mojo under the same define):
-# the AffinityPropagation iteration on the device for AP_LOOP_BATCH
-# iterations per host wait. Cause: the driver's `while it < max_iter`
-# (affinity.mojo) read the n exemplar flags back EVERY iteration
-# (`ops.get_i(e_s, n)`: a stream drain and a host round trip per iteration,
-# up to 200 of them) and kept the convergence window on the host. Here
-# `_apl_e_kernel` keeps the window (`ring`, n x convergence_iter) and its
-# two counts (settled rows, exemplars) on the device, the NEXT iteration's
-# `_apl_r_kernel` reads the counts and raises `done`, and every later kernel
-# of the batch returns at once. The responsibility, availability and
-# exemplar arithmetic is the plain kernels', cell for cell: the same bits
-# and the same n_iter; only the waits go. Expected: the per-iteration host
-# wait (the dominant cost of a 5,000-row iteration on Metal) once per batch.
+# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only.
+# BGMM_FAST_MOMENTS_GEMM stays OPT-IN (`-D MOJOLEARN_BGMM_FAST_MOMENTS_GEMM`,
+# its M3 repeat pending); OPTICS_FAST_DEVICE_ORDER is the default (below).
 comptime XC2_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_COLUMN == COLUMN_APPLE
 comptime BGMM_FAST_MOMENTS_GEMM = XC2_FAST and is_defined["MOJOLEARN_BGMM_FAST_MOMENTS_GEMM"]()
-comptime BGMM_FAST_MAHAL_GEMM = XC2_FAST and is_defined["MOJOLEARN_BGMM_FAST_MAHAL_GEMM"]()
-comptime AP_FAST_LOOP = XC2_FAST and is_defined["MOJOLEARN_AFFINITY_FAST_LOOP"]()
-comptime BISECT_FAST_RESIDENT = XC2_FAST and is_defined["MOJOLEARN_BISECT_FAST_RESIDENT"]()
-comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST and is_defined["MOJOLEARN_OPTICS_FAST_DEVICE_ORDER"]()
-
-
-def _apl_r_kernel(
-    s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32, cnt: IPtr, it: Int32, check: Int32, done: IPtr,
-):
-    """`_ap_r_kernel` for iteration `it`, after the convergence test of
-    iteration it - 1 (`check` != 0 when it - 1 >= convergence_iter): every
-    block reads the same two complete counts and takes the same branch, so
-    either every row updates or none does."""
-    if done[0] != Int32(0):
-        return
-    if check != Int32(0):
-        var prev = Int(it) - 1
-        if cnt[2 * prev] == n and cnt[2 * prev + 1] > Int32(0):
-            done[0] = Int32(1)
-            done[1] = Int32(prev)
-            return
-    _ap_r_body(s, a, r, n, damping)
-
-
-def _apl_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32, done: IPtr):
-    if done[0] != Int32(0):
-        return
-    _ap_a_body(r, a, n, damping)
-
-
-def _apl_a_part_kernel(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr, done: IPtr):
-    if done[0] != Int32(0):
-        return
-    _apf_part_body(r, n, n_tiles, part)
-
-
-def _apl_a_sum_kernel(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr, done: IPtr):
-    if done[0] != Int32(0):
-        return
-    _apf_sum_body(part, n, n_slices, colsum)
-
-
-def _apl_a_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32, damping: Float32, done: IPtr):
-    if done[0] != Int32(0):
-        return
-    _apf_update_body(r, a, colsum, n, n_tiles, damping)
-
-
-def _apl_e_kernel(
-    a: FPtr, r: FPtr, n: Int32, e: IPtr, ring: IPtr, conv: Int32, it: Int32, cnt: IPtr, done: IPtr,
-):
-    """Row i's exemplar flag (`ap_exemplar_cell`), its slot of the window
-    `ring[i, it % conv]`, and the two counts of iteration `it`: cnt[2 it]
-    += (the row's window all ones or all zeros), cnt[2 it + 1] += e[i].
-    Integer adds: every interleaving gives the same counts."""
-    if done[0] != Int32(0):
-        return
-    var i = _tid()
-    var N = Int(n)
-    if i >= N:
-        return
-    ap_exemplar_cell(a, r, N, e, i)
-    var C = Int(conv)
-    var ei = e[i]
-    ring[i * C + Int(it) % C] = ei
-    var se = Int32(0)
-    for c in range(C):
-        se += ring[i * C + c]
-    var settled = Int32(1) if (se == conv or se == Int32(0)) else Int32(0)
-    _ = Atomic.fetch_add[ordering = Ordering.RELAXED](cnt.unsafe_offset(2 * Int(it)), settled)
-    _ = Atomic.fetch_add[ordering = Ordering.RELAXED](cnt.unsafe_offset(2 * Int(it) + 1), ei)
+comptime OPTICS_FAST_DEVICE_ORDER = XC2_FAST and not is_defined["MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF"]()
 
 
 # Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
-# `-D MOJOLEARN_OPTICS_FAST_DEVICE_ORDER=1` (OPTICS_FAST_DEVICE_ORDER, asked by
-# x_cluster/optics.mojo under the same define): sklearn's
+# OPTICS_FAST_DEVICE_ORDER (DEFAULT ON since the M3 A/B: optics istella
+# 432.7 -> 260.7 ms, n=1, quality identical; off with
+# `-D MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF`; asked by x_cluster/optics.mojo): sklearn's
 # `compute_optics_graph` ordering loop on the device. The n steps stay serial
 # by construction (each pick depends on the last relaxation); every step is
 # ONE grid launch of ceil(n / OPT_ORD_PER) blocks, block b owning the rows
@@ -1308,22 +1212,6 @@ def _optics_step_kernel(
         off //= 2
     if tid == 0:
         part[((s + 1) & 1) * NB + b] = red[0]
-
-
-# Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple only,
-# `-D MOJOLEARN_BISECT_FAST_RESIDENT=1` (BISECT_FAST_RESIDENT, asked by
-# x_cluster/bisect.mojo under the same define):
-# `sqdist_cell` for the rows `rows[i]` of the resident centered data, so a
-# split's child scores need an upload of m ints, not of the m x d subset
-# again (`ops.put(sub)` after `ops.kmeans` had already uploaded it). The
-# same `sq_dist_rows` on the same rows: the same bits.
-def _sqdist_rows_kernel(a: FPtr, rows: IPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):
-    var t = _tid()
-    var NB = Int(nb)
-    if t < Int(na) * NB:
-        var i = t // NB
-        var j = t - i * NB
-        dst[t] = sq_dist_rows(a, Int(rows[i]), b, j, Int(d))
 
 
 comptime WNN_TPB = 256
@@ -1628,9 +1516,6 @@ struct DeviceOps(ClusterOps):
     var mpart: DeviceBuffer[DType.float32]
     """FAST moments' per-slice partials, grown once per fit."""
     var mpart_n: Int
-    var escr: DeviceBuffer[DType.float32]
-    """Lane cluster2: the E-step GEMM scratch (`gauss_q_gemm`), grown once per fit."""
-    var escr_n: Int
     var ph_on: Bool
     """MOJOLEARN_XC_PHASES=1 (a diagnostic, lane cluster-apple3): every
     primitive drains the stream when it returns and its wall time is added to
@@ -1651,8 +1536,6 @@ struct DeviceOps(ClusterOps):
         self.pend_i = List[List[Int32]]()
         self.mpart = self.ctx.enqueue_create_buffer[DType.float32](1)
         self.mpart_n = 1
-        self.escr = self.ctx.enqueue_create_buffer[DType.float32](1)
-        self.escr_n = 1
         self.ph_on = getenv("MOJOLEARN_XC_PHASES") == "1"
         self.ph_t = Int(perf_counter_ns())
         self.ph_names = List[String]()
@@ -2439,53 +2322,6 @@ struct DeviceOps(ClusterOps):
         )
         self._ph1("estep")
 
-    def ap_loop(
-        mut self, s: Int, a: Int, r: Int, e: Int, n: Int, damping: Float32, conv_iter: Int, it0: Int, n_it: Int,
-        ring: Int, cnt: Int, done_off: Int, split: Bool,
-    ) raises:
-        self._ph0()
-        comptime if AP_FAST_LOOP:
-            var pc = self._ip(cnt)
-            var pd = pc + done_off
-            var n_tiles = (n + APF_TPB - 1) // APF_TPB
-            var n_slices = (n + APF_ROWS - 1) // APF_ROWS
-            if split:
-                var need = n_slices * n + n
-                if need > self.mpart_n:
-                    self.mpart = self.ctx.enqueue_create_buffer[DType.float32](need)
-                    self.mpart_n = need
-            var pp = self.mpart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-            var cp = pp + n_slices * n
-            for q in range(n_it):
-                var it = it0 + q
-                var check = Int32(1) if it >= conv_iter + 1 else Int32(0)
-                self.ctx.enqueue_function[_apl_r_kernel](
-                    self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, pc, Int32(it), check, pd,
-                    grid_dim=n if n > 0 else 1, block_dim=AP_TPB,
-                )
-                if split:
-                    self.ctx.enqueue_function[_apl_a_part_kernel](
-                        self._fp(r), Int32(n), Int32(n_tiles), pp, pd, grid_dim=n_slices * n_tiles, block_dim=APF_TPB,
-                    )
-                    self.ctx.enqueue_function[_apl_a_sum_kernel](
-                        pp, Int32(n), Int32(n_slices), cp, pd, grid_dim=_grid(n), block_dim=TPB,
-                    )
-                    self.ctx.enqueue_function[_apl_a_update_kernel](
-                        self._fp(r), self._fp(a), cp, Int32(n), Int32(n_tiles), damping, pd,
-                        grid_dim=n * n_tiles, block_dim=APF_TPB,
-                    )
-                else:
-                    self.ctx.enqueue_function[_apl_a_kernel](
-                        self._fp(r), self._fp(a), Int32(n), damping, pd, grid_dim=_grid(n), block_dim=TPB,
-                    )
-                self.ctx.enqueue_function[_apl_e_kernel](
-                    self._fp(a), self._fp(r), Int32(n), self._ip(e), self._ip(ring), Int32(conv_iter), Int32(it), pc, pd,
-                    grid_dim=_grid(n), block_dim=TPB,
-                )
-        else:
-            raise Error("x_cluster: ap_loop is the FAST Apple device path (MOJOLEARN_AFFINITY_FAST_LOOP)")
-        self._ph1("ap_loop")
-
     def optics_order_fast(
         mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int, proc: Int
     ) raises:
@@ -2509,67 +2345,6 @@ struct DeviceOps(ClusterOps):
         else:
             raise Error("x_cluster: optics_order is the FAST Apple device path (MOJOLEARN_OPTICS_FAST_DEVICE_ORDER)")
         self._ph1("optics_order")
-
-    def gauss_q_gemm(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
-        """Lane cluster2 (lane/apple-fast-cluster2, 2026-10-02), FAST + Apple,
-        `-D MOJOLEARN_BGMM_FAST_MAHAL_GEMM=1` (BGMM_FAST_MAHAL_GEMM, asked by
-        x_cluster/bgmm.mojo under the same define):
-        the E-step's Mahalanobis squares as the plain GaussianMixture forms
-        them (mixture/checks/estep.mojo, wrapped, not changed): per component
-        y = X . P_k and murow = mu_k . P_k through `identical_gemm_into`
-        (FAST: the vendor GEMM), then `mahal_kernel`'s row fold of (y -
-        murow)^2, one thread per sample. Cause: `_gauss_q_kernel` is one
-        thread per (sample, component) cell folding the d x d upper
-        triangle itself (n kc d^2 / 2 = 1.6e9 multiply-adds an E-step at
-        100,000 x 200 x 8, every P read from global memory). Bits move
-        (product first, not the difference); the paired quality check."""
-        self._ph0()
-        comptime if BGMM_FAST_MAHAL_GEMM:
-            var wsn = identical_gemm_workspace_max_floats(n, d, d)
-            var w2 = identical_gemm_workspace_max_floats(1, d, d)
-            if w2 > wsn:
-                wsn = w2
-            if wsn < 1:
-                wsn = 1
-            var need = n * d + d + wsn
-            if need > self.escr_n:
-                self.escr = self.ctx.enqueue_create_buffer[DType.float32](need)
-                self.escr_n = need
-            var y = self.escr.create_sub_buffer[DType.float32](0, n * d)
-            var murow = self.escr.create_sub_buffer[DType.float32](n * d, d)
-            var ws = self.escr.create_sub_buffer[DType.float32](n * d + d, wsn)
-            var xb = self.f[x].copy()
-            for k in range(kc):
-                var pk = self.f[pchol].create_sub_buffer[DType.float32](k * d * d, d * d)
-                var muk = self.f[means].create_sub_buffer[DType.float32](k * d, d)
-                identical_gemm_into(self.ctx, y, xb, pk, ws, n, d, d, OP_NN)
-                identical_gemm_into(self.ctx, murow, muk, pk, ws, 1, d, d, OP_NN)
-                self.ctx.enqueue_function[mahal_kernel](
-                    y.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                    murow.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), self._fp(dst),
-                    Int32(n), Int32(d), Int32(k), Int32(kc), grid_dim=_grid(n), block_dim=TPB,
-                )
-                _ = pk^
-                _ = muk^
-            # the handles outlive every launch that holds their pointers
-            _ = xb^
-            _ = y^
-            _ = murow^
-            _ = ws^
-        else:
-            raise Error("x_cluster: gauss_q_gemm is the FAST Apple device path (MOJOLEARN_BGMM_FAST_MAHAL_GEMM)")
-        self._ph1("gauss_q_gemm")
-
-    def sqdist_rows(mut self, a: Int, rows: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
-        self._ph0()
-        comptime if BISECT_FAST_RESIDENT:
-            self.ctx.enqueue_function[_sqdist_rows_kernel](
-                self._fp(a), self._ip(rows), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
-                grid_dim=_grid(na * nb), block_dim=TPB,
-            )
-        else:
-            raise Error("x_cluster: sqdist_rows is the FAST Apple device path (MOJOLEARN_BISECT_FAST_RESIDENT)")
-        self._ph1("sqdist_rows")
 
     def minibatch_fast(
         mut self, xs: Int, n: Int, d: Int, k: Int, batch: Int, n_steps: Int, max_no_improvement: Int,
@@ -2690,11 +2465,20 @@ struct DeviceOps(ClusterOps):
             cnt = nch
             nch = (nch + FOLD_CHUNK - 1) // FOLD_CHUNK
 
-    def agglo_connect(mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int) raises -> Int:
+    def agglo_connect(
+        mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int, edge_mode: Int
+    ) raises -> Int:
         self._ph0()
         var bad = self.zeros_i(1)
         var pa = self._ip(adj)
-        if n_edges > 0:
+        if n_edges > 0 and edge_mode != 0:
+            # the dense matrix or the COO triples, filtered on the device
+            # (lane apple-fast-py2mojo-cluster; Python built the pair list)
+            self.ctx.enqueue_function[agc_edges_mode_kernel](
+                self._fp(edges), Int32(n_edges), Int32(n), Int32(edge_mode), pa, self._ip(bad),
+                grid_dim=pgrid(n_edges), block_dim=PTPB,
+            )
+        elif n_edges > 0:
             self.ctx.enqueue_function[agc_edges_kernel](
                 self._fp(edges), Int32(n_edges), Int32(n), pa, self._ip(bad), grid_dim=pgrid(n_edges), block_dim=PTPB,
             )
@@ -2759,6 +2543,57 @@ struct DeviceOps(ClusterOps):
         self._ph1("agglo_connect")
         return C
 
+    def tree_parent(mut self, children: Int, n: Int, m: Int, parent: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[tree_parent_init_kernel](
+            Int32(n + m), self._ip(parent), grid_dim=pgrid(n + m), block_dim=PTPB,
+        )
+        if m > 0:
+            self.ctx.enqueue_function[tree_parent_kernel](
+                self._ip(children), Int32(n), Int32(m), self._ip(parent), grid_dim=pgrid(m), block_dim=PTPB,
+            )
+        self._ph1("tree_parent")
+
+    def tree_roots(mut self, parent: Int, total: Int, rank1: Int) raises -> Int:
+        self._ph0()
+        var flags = self.zeros_i(total)
+        self.ctx.enqueue_function[tree_root_flag_kernel](
+            self._ip(parent), Int32(total), self._ip(flags), grid_dim=pgrid(total), block_dim=PTPB,
+        )
+        var sc = self._scan(self._ip(flags), total)
+        self.ctx.enqueue_function[tree_root_rank_kernel](
+            self._ip(flags), self._ip(sc[0]), Int32(total), self._ip(rank1), grid_dim=pgrid(total), block_dim=PTPB,
+        )
+        var c = self._int1(sc[1])
+        self._ph1("tree_roots")
+        return c
+
+    def tree_scatter(mut self, nodes: Int, c: Int, rank1: Int) raises:
+        self._ph0()
+        if c > 0:
+            self.ctx.enqueue_function[tree_scatter_kernel](
+                self._ip(nodes), Int32(c), self._ip(rank1), grid_dim=pgrid(c), block_dim=PTPB,
+            )
+        self._ph1("tree_scatter")
+
+    def tree_leaf_label(mut self, parent: Int, rank1: Int, n: Int, labels: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[tree_leaf_kernel](
+            self._ip(parent), self._ip(rank1), Int32(n), self._ip(labels), grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        self._ph1("tree_leaf_label")
+
+    def count_ge(mut self, x: Int, n: Int, thr: Float32) raises -> Int:
+        self._ph0()
+        var cnt = self.zeros_i(1)
+        if n > 0:
+            self.ctx.enqueue_function[count_ge_kernel](
+                self._fp(x), Int32(n), thr, self._ip(cnt), grid_dim=pgrid(n), block_dim=PTPB,
+            )
+        var c = self._int1(cnt)
+        self._ph1("count_ge")
+        return c
+
     def check_nonneg(mut self, x: Int, n: Int) raises -> Bool:
         self._ph0()
         var bad = self.zeros_i(1)
@@ -2803,6 +2638,18 @@ struct DeviceOps(ClusterOps):
         )
         self._ph1("optics_dbscan")
 
+    def optics_xi(
+        mut self, ordering: Int, reach: Int, pred: Int, n: Int, xc: Float32, min_samples: Int,
+        min_cluster_size: Int, predecessor_correction: Bool, labels: Int,
+    ) raises -> List[Int32]:
+        self._ph0()
+        var cl = optics_xi_device(
+            self.ctx, self._ip(ordering), self._fp(reach), self._ip(pred), n, xc, min_samples, min_cluster_size,
+            predecessor_correction, self._ip(labels),
+        )
+        self._ph1("optics_xi")
+        return cl^
+
     def sum_ff(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int) raises -> Float64:
         self._ph0()
         var o = self.zeros(2)
@@ -2811,6 +2658,22 @@ struct DeviceOps(ClusterOps):
         var h = self.get(o, 2)
         self._ph1("sum_ff")
         return Float64(h[0]) + Float64(h[1])
+
+    def fold_into(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int, dst: Int) raises:
+        self._ph0()
+        var po = self._fp(dst)
+        self._fold(mode, self._fp(a), self._fp(b if b >= 0 else a), self._fp(c if c >= 0 else a), n, po, po + 1, 0)
+        self._ph1("fold_into")
+
+    def bgmm_step(
+        mut self, step: Int, kc: Int, d: Int, cfg: Int, aux: Int, w: Int, p1: Int, p2: Int, p3: Int
+    ) raises:
+        self._ph0()
+        bgmm_launch(
+            self.ctx, step, self._fp(w), self._fp(p1 if p1 >= 0 else w), self._fp(p2 if p2 >= 0 else w),
+            self._fp(p3 if p3 >= 0 else w), kc, d, cfg, aux,
+        )
+        self._ph1("bgmm_step")
 
     def bin_seeds(mut self, x: Int, n: Int, d: Int, bin_size: Float32, min_bin_freq: Int, dst: Int) raises -> Int:
         self._ph0()

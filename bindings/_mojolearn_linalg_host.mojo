@@ -80,6 +80,7 @@ from gemm.host.gemm_lowbit_oracle import (
     quantize_rows_int8,
     widen_bf16,
 )
+from gemm.f16_widen import f16_bits_to_f32
 from bindings.hostptr import i8_ptr, i32_ptr, read_i8, read_i32, read_u16, u16_ptr
 from gemm.host.gemm_int15_oracle import (
     INT15_MAX_K,
@@ -522,6 +523,26 @@ def from_bf16_binding(
             dp[i] = x[i]
     return PythonObject(count)
 
+def from_f16_binding(
+    dst_addr: PythonObject, src_addr: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """IEEE float16 bits to float32, exact (`gemm/f16_widen.mojo`, the device
+    kernel's bit construction). `params`: 0 count."""
+    if len(params) != 1:
+        raise Error("from_f16: params must contain 1 value (count)")
+    var dp = f32_ptr(_index(dst_addr))
+    var src_address = _index(src_addr)
+    var count = _index(params[0])
+    if count <= 0:
+        raise Error("from_f16: count must be positive, got " + String(count))
+    if count > LINALG_HOST_MAX_EXTENT:
+        raise Error("from_f16: count must be at most 2^30")
+    with GILReleased(Python()):
+        var bits = read_u16(src_address, count)
+        for i in range(count):
+            dp[i] = f16_bits_to_f32(bits[i])
+    return PythonObject(count)
+
 # ---------------------------------------------------------------- linalg door
 # THE THREE DECOMPOSITIONS UNDER THEIR OWN NAMES (lane/linalg-public,
 # 2026-09-19). Address and param contracts are repeated in each docstring
@@ -745,6 +766,7 @@ def PyInit__mojolearn_linalg_host() abi("C") -> PythonObject:
         module.def_function[dequantize_int15_binding]("dequantize_int15")
         module.def_function[to_bf16_binding]("to_bf16")
         module.def_function[from_bf16_binding]("from_bf16")
+        module.def_function[from_f16_binding]("from_f16")
         module.def_function[qr_r_binding]("qr_r")
         module.def_function[eigh_binding]("eigh")
         module.def_function[svdvals_binding]("svdvals")

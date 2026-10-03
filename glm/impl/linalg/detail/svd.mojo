@@ -28,9 +28,9 @@ THE REVERSE IS A SORT, FOR THE SAME REASON `eig_and_truncate` GIVES
 cuSOLVER returns eigenvalues ascending, so `col_reverse`/`row_reverse` make
 them descending. Cyclic Jacobi does not order anything, so a reverse here
 would be an arbitrary permutation. The descending ORDER is the semantic and
-is produced by a host selection sort of INDICES (no arithmetic; the same
-shape `decomposition/impl/linalg/detail/pca.mojo::eig_and_truncate` uses
-and for the same reason) applied on the device by `gather_columns_kernel`.
+is produced on the device by ranking INDICES (`_descending_order_kernel`,
+comparisons only, ties to the lower index) and applied by
+`gather_columns_kernel`.
 For ridge the order is not even observable in exact arithmetic -- `w = V
 diag(.) V^T A^T b` is permutation-invariant -- but the final `w = V S_nnz`
 sums over columns IN INDEX ORDER, so the order is a rounding order, and
@@ -43,7 +43,10 @@ absent as in `lstsq.mojo`.
 """
 
 from core.device_zero import enqueue_fill
+from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
+
+from decomposition.spectrum_order_device import spectrum_rank_desc
 
 from core.column_stats import diagonal_to_vector_kernel
 from core.gemm import gemm_nt, gemm_tn
@@ -64,28 +67,22 @@ from glm.impl.matrix.math import (
 )
 
 
-def _descending_order(
-    ctx: DeviceContext, mut s_raw: DeviceBuffer[DType.float32], n: Int
-) raises -> List[Int32]:
+def _descending_order_kernel(
+    key: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    order: MutPointer[Int32, MutAnyOrigin],
+):
     """`col_reverse`/`row_reverse`'s semantic for an unordered eigensolver:
-    the permutation that puts the eigenvalues DESCENDING. Indices only --
-    a selection sort with a strict `>`, O(n^2) on n_cols, no float op."""
-    var hs = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s_raw)
-    ctx.synchronize()
-    var order = List[Int32]()
-    for i in range(n):
-        order.append(Int32(i))
-    for i in range(n):
-        for j in range(i + 1, n):
-            var vj = hs.unsafe_ptr().unsafe_load(Int(order[j]))
-            var vi = hs.unsafe_ptr().unsafe_load(Int(order[i]))
-            if vj > vi:
-                var t = order[i]
-                order[i] = order[j]
-                order[j] = t
-    _ = hs^
-    return order^
+    thread i puts index i at its rank in the DESCENDING order
+    (`decomposition/spectrum_order_device.mojo::spectrum_rank_desc`: the
+    float bits made monotone, ties to the LOWER index). Comparisons only.
+    lane/apple-fast-purity2: was a host selection sort of the downloaded
+    eigenvalues (strict `>`, whose tie order was not the lower index); the
+    host column (`glm/host/glm_oracle.mojo`) now ranks the same way."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_in)
+    if i < n:
+        order.unsafe_store(spectrum_rank_desc(key, n, i), Int32(i))
 
 
 def svd_eig_traced(
@@ -107,14 +104,39 @@ def svd_eig_traced(
     `n_cols x n_cols` with the right singular vectors as COLUMNS, descending.
     `tag` prefixes the card's stage names (`ridge.svd.*`).
     """
+    var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+    var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
+    ctx.synchronize()
+    svd_eig_scratch_traced(ctx, a, n_rows, n_cols, s, u, v, gen_left_vec, xa, xa2, trace, tag)
+    _ = xa^
+    _ = xa2^
+
+
+def svd_eig_scratch_traced(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    mut s: DeviceBuffer[DType.float32],
+    mut u: DeviceBuffer[DType.float32],
+    mut v: DeviceBuffer[DType.float32],
+    gen_left_vec: Bool,
+    mut xa: DeviceBuffer[DType.float32],
+    mut xa2: DeviceBuffer[DType.float32],
+    mut trace: IdentityTrace,
+    tag: String,
+) raises:
+    """`svd_eig_traced` with the Gram's `gemm_tn` scratch (`xt`, `xt2`)
+    handed in by the caller (lane apple-fast-ridgespeed): a caller holding a
+    dead rows x cols buffer passes it instead of two fresh allocations. Same
+    kernels, same launch shapes, same words; `xa`/`xa2` carry `gemm_tn`'s
+    contracts (`k * m` floats where its arm reads them)."""
     var cov = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
     var v_raw = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
     var vt = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
     var s_raw = ctx.enqueue_create_buffer[DType.float32](n_cols)
     var info_buf = ctx.enqueue_create_buffer[DType.float32](3)
     enqueue_fill(ctx, info_buf, JACOBI_INFO_UNWRITTEN)
-    var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
-    var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
     ctx.synchronize()
 
     # in_cross_mult <- A^T A. `svd.cuh:132-144`. Through `gemm_tn`'s
@@ -177,11 +199,15 @@ def svd_eig_traced(
     # col_reverse(V); row_reverse(S). `svd.cuh:148-151`. A permutation of
     # indices, computed on the host, applied on the device; the module
     # docstring says why it is a sort and not a reverse.
-    var order = _descending_order(ctx, s_raw, n_cols)
     var d_order = ctx.enqueue_create_buffer[DType.int32](n_cols)
-    ctx.enqueue_copy(dst_buf=d_order, src_ptr=order.unsafe_ptr())
-    ctx.synchronize()
-    trace.record_list_i32(tag + ".order", order)
+    ctx.enqueue_function[_descending_order_kernel](
+        s_raw.unsafe_ptr(),
+        Int32(n_cols),
+        d_order.unsafe_ptr(),
+        grid_dim=((n_cols + MATRIX_ELEM_TPB - 1) // MATRIX_ELEM_TPB, 1, 1),
+        block_dim=(MATRIX_ELEM_TPB, 1, 1),
+    )
+    trace.record_device[DType.int32](ctx, tag + ".order", d_order, n_cols)
     ctx.enqueue_function[gather_columns_kernel](
         v.unsafe_ptr(),
         vt.unsafe_ptr(),
@@ -240,6 +266,4 @@ def svd_eig_traced(
     _ = vt^
     _ = s_raw^
     _ = info_buf^
-    _ = xa^
-    _ = xa2^
     _ = d_order^
