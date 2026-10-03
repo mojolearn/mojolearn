@@ -168,7 +168,7 @@ def _p2m_sel(pr, xo, n, d, mode, dst):
     return tot
 
 
-def _p2m_positive_rows(pr, xo, arr, wo, n, d, m):
+def _p2m_positive_rows(pr, xo, wo, n, d, m):
     """Stages: the rows of the (n, d) block at xo whose weight (at wo) is
     positive, as a new (m, d) block (the old `_gather_rows(arr, nz)`; m is
     the count of positive weights). Returns its offset."""
@@ -1868,7 +1868,13 @@ class KBinsDiscretizer(_PrepBase):
         w = None
         if sample_weight is not None:
             w, wl = _check_weights(sample_weight, n, "KBinsDiscretizer")
-        if self.subsample is not None and n > self.subsample:
+        sub = None
+        if self.subsample is not None and n > self.subsample and w is None and _p2m(_mode()):
+            # lane apple-fast-py2mojo-prep: the draws (p2m_smrows, splitmix64's closed form, one
+            # thread a draw) and the gather (p2m_rgather) run in the fit's program below
+            sub = ((0 if self.random_state is None else int(self.random_state)) & 0xFFFFFFFFFFFFFFFF,
+                   int(self.subsample))
+        elif self.subsample is not None and n > self.subsample:
             state = 0 if self.random_state is None else int(self.random_state)
             rows = []
             if w is None:
@@ -1900,6 +1906,14 @@ class KBinsDiscretizer(_PrepBase):
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
+        if sub is not None:
+            seed, m = sub
+            lo, hi = seed & 0xFFFFFFFF, seed >> 32
+            so_seed = pr.put_ints([lo - (1 << 32) if lo >= 1 << 31 else lo, hi - (1 << 32) if hi >= 1 << 31 else hi])
+            ro, xs = pr.alloc(m), pr.alloc(m * d)
+            pr.stage("p2m_smrows", m, so_seed, n, ro)
+            pr.stage("p2m_rgather", m * d, xo, d, ro, xs)
+            xo, n = xs, m
         so = pr.work(n * d) if w is None else pr.alloc(n * d)
         st = pr.alloc(6 * d)
         nbo = pr.put_list(nb)
@@ -1915,13 +1929,22 @@ class KBinsDiscretizer(_PrepBase):
             stw = st
             if strat in (0, 3):
                 # the min / max over the rows of nonzero weight (the reference's nnz mask)
-                nz = [i for i, v in enumerate(wl) if v > 0]
                 stw = pr.alloc(6 * d)
-                if len(nz) < n:
-                    xz = pr.put(_gather_rows(arr, nz))
-                    pr.stage("col_stats", d, xz, len(nz), d, stw)
+                if _p2m(mode):
+                    # lane apple-fast-py2mojo-prep: the rows selected and gathered on the device
+                    # (the weights are validated nonnegative: v > 0 is v != 0)
+                    m = n - wl.count(0.0)
+                    if m < n:
+                        pr.stage("col_stats", d, _p2m_positive_rows(pr, xo, pr.put(w), n, d, m), m, d, stw)
+                    else:
+                        stw = st
                 else:
-                    stw = st
+                    nz = [i for i, v in enumerate(wl) if v > 0]
+                    if len(nz) < n:
+                        xz = pr.put(_gather_rows(arr, nz))
+                        pr.stage("col_stats", d, xz, len(nz), d, stw)
+                    else:
+                        stw = st
             if strat == 0:
                 pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, 0, stw, edges, ne, 0, 0)
             else:
@@ -3226,7 +3249,10 @@ class PolynomialFeatures(_PrepBase):
         # the output region measured slower here (m4-a: 0.452 -> 0.523 s): arena words
         out = pr.alloc(n * nout)
         pr.stage("poly", n * nout, xo, n, d, io, so, nout, out)
+        fo = _p2m_f_stage(pr, out, n, nout) if self.order == "F" else None
         pr.run(self.numeric_mode_)
+        if fo is not None:
+            return _p2m_f_get(pr, fo, n, nout)
         if self.order == "F":
             pr._check(out, n * nout)
             seg = pr.arena[out:out + n * nout]
@@ -3235,6 +3261,22 @@ class PolynomialFeatures(_PrepBase):
                 store.extend(seg[j::nout])
             return Array._owned(store, (n, nout), "<f4", "F")
         return pr.get(out, (n, nout))
+
+
+def _p2m_f_stage(pr, off, n, w):
+    """Lane apple-fast-py2mojo-prep: a p2m_transpose stage writing the (n, w)
+    block at off column-major into the program's output; read it back with
+    `_p2m_f_get`. None when the binding has no p2m units."""
+    if n * w <= 0 or not _p2m(_mode()):
+        return None
+    fo = pr.output(n * w)
+    pr.stage("p2m_transpose", n * w, off, n, w, fo)
+    return fo
+
+
+def _p2m_f_get(pr, fo, n, w):
+    """The column-major block `_p2m_f_stage` wrote, as an (n, w) Fortran-ordered Array."""
+    return Array._view_of(pr.get(fo, (n * w,)), (n, w), "F")
 
 
 def _f_order(pr, off, n, w):
@@ -3384,7 +3426,12 @@ class SplineTransformer(_PrepBase):
                 _weighted_levels(pr, ug, ucnt, n, d, [lv] * d, False, base)
         else:
             base, uniform = pr.alloc(d * nk), 1
-            if w is not None and any(v == 0 for v in wl):
+            if w is not None and _p2m(mode) and wl.count(0.0):
+                # lane apple-fast-py2mojo-prep: the positive-weight rows on the device
+                kst = pr.alloc(6 * d)
+                m = n - wl.count(0.0)
+                pr.stage("col_stats", d, _p2m_positive_rows(pr, xo, pr.put(w), n, d, m), m, d, kst)
+            elif w is not None and any(v == 0 for v in wl):
                 kst = pr.alloc(6 * d)
                 nz = [i for i, v in enumerate(wl) if v > 0]
                 pr.stage("col_stats", d, pr.put(_gather_rows(arr, nz)), len(nz), d, kst)
@@ -3418,6 +3465,7 @@ class SplineTransformer(_PrepBase):
             pr.stage("col_stats", d, xo, n, d, st)
         pr.stage("spline_apply", n * d, xo, n, d, ko, self._nk, self._k, self._EXTRAP[self.extrapolation], W,
                  1 if self.include_bias else 0, out)
+        fo = _p2m_f_stage(pr, out, n, W) if self.order == "F" else None
         pr.run(self.numeric_mode_)
         if check:
             self._no_nan(pr, st, d, n)
@@ -3425,6 +3473,8 @@ class SplineTransformer(_PrepBase):
             lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
             if any(a < b for a, b in zip(lo, self._lo)) or any(a > b for a, b in zip(hi, self._hi)):
                 raise ValueError("mojolearn: X contains values beyond the limits of the knots")
+        if fo is not None:
+            return _p2m_f_get(pr, fo, n, W)
         if self.order == "F":
             return _f_order(pr, out, n, W)
         return pr.get(out, (n, W))
