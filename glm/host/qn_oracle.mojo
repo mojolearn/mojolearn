@@ -474,7 +474,7 @@ struct HostGLM(Movable):
 
     def get_loss_and_dz(mut self) -> Float32:
         """`get_loss_and_dz`, the logistic or the softmax arm, then
-        `sum_terms_kernel`."""
+        `qnt_sum` (the tile order)."""
         var n = self.n_rows
         var normalization = Float32(1.0 / Float64(n))
         if self.c > 1:
@@ -513,17 +513,8 @@ struct HostGLM(Movable):
                     host_one_target_lz(self.loss, yi, zi, self.svr_eps) * normalization
                 )
                 self.z[i] = host_one_target_dlz(self.loss, yi, zi, self.svr_eps)
-            comptime if HOST_QN_TILED:
-                return host_qnt_sum(self.loss_terms, n)
-        var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
-        for t in range(STATS_TPB):
-            var acc = Float32(0.0)
-            var i = t
-            while i < n:
-                acc = ftz(acc + self.loss_terms[i])
-                i += STATS_TPB
-            partials[t] = acc
-        return ftz(host_halving_sum(partials))
+        # every shape's loss sum is `qnt_sum`'s tile order (lane cgr5-owed)
+        return host_qnt_sum(self.loss_terms, n)
 
     def linear_bwd(mut self, mut g: List[Float32], set_zero: Bool):
         """`linear_bwd` at `C == 1`: `xty`, the cuBLAS epilogue, the bias
@@ -591,15 +582,8 @@ struct HostGLM(Movable):
             else:
                 g[j] = ftz(s + g[j])
         if self.fit_intercept:
-            var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
-            for t in range(STATS_TPB):
-                var acc = Float32(0.0)
-                var i = t
-                while i < n:
-                    acc = ftz(acc + self.z[i])
-                    i += STATS_TPB
-                partials[t] = acc
-            var s0 = ftz(host_halving_sum(partials))
+            # `qnt_sum`'s tile order for the bias mean (lane cgr5-owed)
+            var s0 = host_qnt_sum(self.z, n)
             var ratio = Float32(1.0) / Float32(n)
             g[self.d] = ftz(s0 * ratio)
 

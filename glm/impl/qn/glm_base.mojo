@@ -651,6 +651,72 @@ def qnt_fold_kernel(
             slots.unsafe_store(0, s0)
 
 
+def qnt_sum_partial_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    tiles_in: Int32,
+):
+    """`qnt_sum`'s pass 1: thread `k` is tile `k`'s chain, rows ascending
+    from 0.0 (`ftz(acc + v[r])`), stored at `part[k]` (`qnt_partial_kernel`'s
+    loss-sum output, alone)."""
+    var n = Int(n_in)
+    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if k >= Int(tiles_in):
+        return
+    var r0 = k * QNT_ROWS
+    var r1 = min(n, r0 + QNT_ROWS)
+    part.unsafe_store(k, strided_ftz_sum[1](v, 1, 0, r1, r0, Float32(0.0)))
+
+
+def qnt_sum_fold_kernel(
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    tiles_in: Int32,
+    ratio: Float32,
+    is_mean: Int32,
+):
+    """`qnt_sum`'s pass 2, `qnt_fold_kernel`'s fold of one output: lane t
+    takes tiles t, t + STATS_TPB, ... (`ftz(acc + p)`), the pinned tree,
+    flushed; `out_v[0] = s` or, for a mean, `ftz(s * ratio)`."""
+    var tid = Int(thread_idx.x)
+    var tiles = Int(tiles_in)
+    var acc = strided_ftz_sum[STATS_TPB](part, 1, 0, tiles, tid, Float32(0.0))
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
+    if tid == 0:
+        if is_mean != 0:
+            out_v.unsafe_store(0, ftz(s0 * ratio))
+        else:
+            out_v.unsafe_store(0, s0)
+
+
+def qnt_sum(
+    ctx: DeviceContext,
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    mut ws: DeviceBuffer[DType.float32],
+    n: Int,
+    is_mean: Bool,
+) raises:
+    """`out_v[0]` = the sum of `v[0:n]` (or its mean, `ftz(s * (1 / N))` with
+    `1 / N` in Float32) in the QN_TILED order: ceil(n / QNT_ROWS) tile chains
+    in parallel, then one block folds the tile partials (`ws` holds
+    `qnt_tiles(n)` floats). It replaced the one-block 256-chain
+    `sum_terms_kernel` / `mean_kernel` launches over all n rows (lane
+    cgr5-owed, 2026-10-03), on every column; the host column is
+    `glm/host/qn_oracle.mojo::host_qnt_sum`."""
+    var tiles = qnt_tiles(n)
+    ctx.enqueue_function[qnt_sum_partial_kernel](
+        ws.unsafe_ptr(), v, Int32(n), Int32(tiles),
+        grid_dim=((tiles + QNT_TPB - 1) // QNT_TPB, 1, 1), block_dim=(QNT_TPB, 1, 1),
+    )
+    ctx.enqueue_function[qnt_sum_fold_kernel](
+        out_v, ws.unsafe_ptr(), Int32(tiles), Float32(1.0) / Float32(n),
+        Int32(1) if is_mean else Int32(0),
+        grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+
+
 def linear_fwd(
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
@@ -711,6 +777,7 @@ def linear_bwd(
     mut dz: DeviceBuffer[DType.float32],
     mut xtdz: DeviceBuffer[DType.float32],
     mut xtdz_ws: DeviceBuffer[DType.float32],
+    mut sum_ws: DeviceBuffer[DType.float32],
     n_rows: Int,
     dims: GLMDims,
     set_zero: Bool,
@@ -791,9 +858,10 @@ def linear_bwd(
                     n_rows, Float32(1.0) / Float32(n_rows),
                 )
         if not grid_mean:
-            ctx.enqueue_function[mean_kernel](
-                g.unsafe_ptr() + d, dz.unsafe_ptr(), Int32(n_rows),
-                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            # the QN_TILED order (`qnt_sum`), not one block over n
+            qnt_sum(
+                ctx, (g.unsafe_ptr() + d).unsafe_origin_cast[MutAnyOrigin](),
+                dz.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), sum_ws, n_rows, True,
             )
 
 
@@ -818,6 +886,8 @@ struct GLMWithData(Movable):
     var loss_terms: DeviceBuffer[DType.float32]
     var xtdz: DeviceBuffer[DType.float32]
     var xtdz_ws: DeviceBuffer[DType.float32]
+    #: `qnt_sum`'s tile partials (qnt_tiles(n_rows) floats)
+    var sum_ws: DeviceBuffer[DType.float32]
     var w_weights: DeviceBuffer[DType.float32]
     var scalar: DeviceBuffer[DType.float32]
     var n_evals: Int
@@ -873,6 +943,7 @@ struct GLMWithData(Movable):
         comptime if QN_GRID_SUMS:
             ws_floats = max(ws_floats, QN_GS_BLOCKS)
         self.xtdz_ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
+        self.sum_ws = ctx.enqueue_create_buffer[DType.float32](qnt_tiles(n_rows) if n_rows > 0 else 1)
         self.w_weights = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
         self.scalar = ctx.enqueue_create_buffer[DType.float32](1)
         self.n_evals = 0
@@ -974,9 +1045,10 @@ struct GLMWithData(Movable):
                     self.xtdz_ws, n, Float32(1.0),
                 )
         if not grid_sum:
-            ctx.enqueue_function[sum_terms_kernel](
-                out_v, self.loss_terms.unsafe_ptr(), Int32(n),
-                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            # the QN_TILED order (`qnt_sum`), not one block over n
+            qnt_sum(
+                ctx, out_v, self.loss_terms.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                self.sum_ws, n, False,
             )
 
     def loss_grad(
@@ -990,7 +1062,7 @@ struct GLMWithData(Movable):
         backward. Returns the loss value the device scalar held."""
         linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
         var loss_host = self.get_loss_and_dz(ctx)
-        linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, init_grad_zero)
+        linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.sum_ws, self.n_rows, self.dims, init_grad_zero)
         return loss_host
 
     def evaluate(
@@ -1041,7 +1113,7 @@ struct GLMWithData(Movable):
             else:
                 linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
                 self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
-                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, True)
+                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.sum_ws, self.n_rows, self.dims, True)
         else:
             ctx.enqueue_memset(g, Float32(0.0))
             # `G[:, 0:n_param - has_bias]`: the first `C*D` entries of the
@@ -1060,7 +1132,7 @@ struct GLMWithData(Movable):
             else:
                 linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
                 self.enqueue_loss_and_dz(ctx, self.slots.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
-                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, False)
+                linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.sum_ws, self.n_rows, self.dims, False)
         # `grad_norm`'s reduction of this `g`, speculatively
         var np = self.dims.n_param
         if self._gnorm_kind() == 1:
