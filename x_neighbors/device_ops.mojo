@@ -9,6 +9,7 @@ from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from x_neighbors.items import FP, IP, xn_fold_blocks, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_part_item, variance_mean_item, variance_ss_part_item, variance_fin_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_d_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_part_item, absdiff_fin_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, col_degree_item, ls_laplacian_deg_item, row_all_zero_item, pcs_sketch_item, pcs_conv_item, pcs_copy0_item, knn_impute_cell_item, pagerank_step_item, cc_step_item, graph_symmetry_row_item, graph_symmetry_fin_item, svgp_var_item, row_argmax_item
+from x_neighbors.kap2_items import any_below_item, schi2_draw_item
 from x_neighbors.sort_items import nc_median_init_item, nc_median_step_item, nc_median_pick_item, nc_med_std_init_item, nc_med_std_step_item, nc_med_std_pick_item, pos_count_item, pos_scan_item, pos_emit_item
 from x_neighbors.py2mojo_items import p2m_mask_value_item, p2m_zero_cols_item, p2m_nan_indicator_item, p2m_sign_label_item, p2m_relabel_init_item, p2m_relabel_first_item, p2m_relabel_count_item, p2m_relabel_scan_item, p2m_relabel_emit_item, p2m_relabel_map_item, p2m_ccount_zero_item, p2m_ccount_add_item, p2m_ccount_emit_item, p2m_const_init_item, p2m_const_cmp_item, p2m_lp_labels_item, p2m_fill_item, p2m_iota_item, p2m_negate_item, p2m_transpose_item, p2m_transpose_i_item, p2m_row_sort_init_item, p2m_row_sort_step_item, p2m_row_sort_emit_item
 
@@ -872,6 +873,55 @@ def op_achi2(x: Int, res: Int, n: Int, d: Int, steps: Int, interval: Float32) ra
     ctx.synchronize()
     _ = d_x^
     _ = d_res^
+    _ = ctx^
+
+
+def any_below_kernel(x: FP, res: IP, count_: Int64, incl_: Int64, thr_: Float32):
+    var count = Int(count_)
+    var incl = Int(incl_)
+    var thr = thr_
+    var t = _tid()
+    if t < count:
+        any_below_item(t, x, res, count, incl, thr)
+
+
+def op_any_below(x: Int, res: Int, count: Int, incl: Int, thr: Float32) raises:
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, count, True)
+    var d_res = _buf_i(ctx, res, 1, True)
+    ctx.enqueue_function[any_below_kernel](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), Int64(count), Int64(incl), thr,
+        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
+    )
+    _down_i(ctx, d_res, res, 1)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_res^
+    _ = ctx^
+
+
+def schi2_draw_kernel(w: FP, off: FP, d_: Int64, nc_: Int64, seed_: Int64):
+    var d = Int(d_)
+    var nc = Int(nc_)
+    var seed = Int(seed_)
+    var t = _tid()
+    if t < d * nc + nc:
+        schi2_draw_item(t, w, off, d, nc, seed)
+
+
+def op_schi2_draw(w: Int, off: Int, d: Int, nc: Int, seed: Int) raises:
+    var ctx = xn_ctx()
+    var d_w = _buf(ctx, w, d * nc, False)
+    var d_off = _buf(ctx, off, nc, False)
+    ctx.enqueue_function[schi2_draw_kernel](
+        d_w.unsafe_ptr(), d_off.unsafe_ptr(), Int64(d), Int64(nc), Int64(seed),
+        grid_dim=_grid(d * nc + nc), block_dim=(BLOCK if d * nc + nc > 1 else 1),
+    )
+    _down(ctx, d_w, w, d * nc)
+    _down(ctx, d_off, off, nc)
+    ctx.synchronize()
+    _ = d_w^
+    _ = d_off^
     _ = ctx^
 
 

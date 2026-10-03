@@ -61,6 +61,8 @@ FAMILIES = (
             "xn_log_softmax",
             "xn_pcs",
             "xn_achi2",
+            "xn_any_below",
+            "xn_schi2_draw",
             "xn_skew_weights",
             "xn_skew_transform",
             "xn_absdiff_sum",

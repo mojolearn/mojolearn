@@ -111,6 +111,12 @@ OPS = [
     ("achi2", "items", "achi2_item", "n * d",
      [("x", "fin", "n * d"), ("res", "fout", "n * d * (2 * steps - 1)"), ("n", "int"), ("d", "int"), ("steps", "int"),
       ("interval", "float")]),
+    # lane apple-fast-gap-kapprox2 (2026-10-03): FAST + Apple experiments
+    # (x_neighbors/kap2_items.mojo; read back as x_neighbors_kap2_flags)
+    ("any_below", "kap2_items", "any_below_item", "count",
+     [("x", "fin", "count"), ("res", "iinout", "1"), ("count", "int"), ("incl", "int"), ("thr", "float")]),
+    ("schi2_draw", "kap2_items", "schi2_draw_item", "d * nc + nc",
+     [("w", "fout", "d * nc"), ("off", "fout", "nc"), ("d", "int"), ("nc", "int"), ("seed", "int")]),
     ("skew_weights", "items", "skew_weights_item", "count",
      [("z", "fin", "count"), ("res", "fout", "count"), ("count", "int")]),
     ("skew_transform", "items", "skew_transform_item", "n * nc",
@@ -725,6 +731,7 @@ def gpu_binding():
     ops = ", ".join(f"op_{o[0]}" for o in OPS)
     return (HDR + GEN + '"""THE NEIGHBORS EXPANSION LANE\'S GPU BINDING:\nevery export is xn_<op>(addresses, ints, floats) over x_neighbors/device_ops.mojo."""\n'
             + BIND_HEAD % "eigh_device" + "from checks.vendor import COMPILED_VENDOR\n"
+            + "from checks.numerics import NUMERIC_FAST\nfrom std.sys.info import has_apple_gpu_accelerator\n"
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
             + "from x_neighbors.kapprox_dev import kpca_resident_binding\n"
@@ -737,12 +744,29 @@ def x_neighbors_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+#: lane apple-fast-gap-kapprox2 (2026-10-03): FAST + Apple experiments, off
+#: unless defined. bit 1 MOJOLEARN_ACHI2_FAST_DEVCHECK (the chi2 samplers'
+#: input checks as the xn_any_below device flag, not a host X.min() pass);
+#: bit 2 MOJOLEARN_SCHI2_FAST_DEVRNG (SkewedChi2Sampler's weights and
+#: offsets drawn on the device, xn_schi2_draw).
+comptime _KAP2_FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime KAP2_FLAGS = (
+    (1 if _KAP2_FAST_APPLE and is_defined["MOJOLEARN_ACHI2_FAST_DEVCHECK"]() else 0)
+    + (2 if _KAP2_FAST_APPLE and is_defined["MOJOLEARN_SCHI2_FAST_DEVRNG"]() else 0)
+)
+
+
+def x_neighbors_kap2_flags_binding() raises -> PythonObject:
+    return PythonObject(KAP2_FLAGS)
+
+
 @export
 def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_neighbors")
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
+        m.def_function[x_neighbors_kap2_flags_binding]("x_neighbors_kap2_flags")
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
