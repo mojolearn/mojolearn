@@ -420,3 +420,4 @@
    420	CMD lane/apple-fast-robust robust-mcd-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh robust-mcd-taxi x_decomp min-cov-det taxi 1 2 "" "-D MOJOLEARN_MCD_DEVICE_CSTEPS=1"
    421	CMD lane/apple-fast-robust robust-ee-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh robust-ee-taxi x_decomp elliptic-envelope taxi 1 2 "" "-D MOJOLEARN_MCD_DEVICE_CSTEPS=1"
    422	CMD lane/apple-fast-lle lle-sparse-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh lle-sparse-taxi x_decomp lle taxi 1 2 "" "-D MOJOLEARN_LLE_SPARSE_EIG=1"
+   423	CMD lane/apple-fast-opp uncap-hdbscan-istella $HOME/board-0834/cache/venv/bin/python tools/opp_only_board.py --family classical --tag uncap-hdbscan-istella --races hdbscan:istella --round-seconds 7200 --arm-budget-s 7200

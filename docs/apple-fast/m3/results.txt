@@ -1,4 +1,4 @@
-pos=216 lines=     422
+pos=218 lines=     423
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -259,3 +259,6 @@ pos=216 lines=     422
 349:CMD apple-fast@83390b7ca afb7-dw-modeskip rc=0 afb done tag=afb7-dw-modeskip pairs=4 ok=4
 350:CMD apple-fast-dwgap2@049899d81 dw2-copy-zero-taxi rc=0 AFT-MEDIAN arm=B n=2 median_ms=13441.0 all=[12796, 14086] hashes=['09c9e7b6a908c17a', 'b3a4da2e3864ba19'] acc={'logloss': [0.527958, 0.527852], 'auc': [0.632407, 0.632494]}
 351:CMD apple-fast-dwgap2@049899d81 dw2-copy-zero-istella rc=0 AFT-MEDIAN arm=B n=2 median_ms=16855.6 all=[16901, 16811] hashes=['09ab0479acd50029', 'dd9daebc4c29c906'] acc={'logloss': [0.156764, 0.156756], 'auc': [0.983235, 0.983176]}
+352:CMD apple-fast-opp@89fa71dda opp2-classical rc=0 OPP-DONE tag=opp2-classical out=~/mq/out/opp-opp2-classical
+353:FBUILD lane/apple-fast@c55b8c377 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+354:CMD apple-fast@c55b8c377 afb8-ols rc=0 afb done tag=afb8-ols pairs=2 ok=2
