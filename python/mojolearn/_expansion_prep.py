@@ -50,7 +50,7 @@ import time
 from . import _backend
 from . import _portable_math as _pm
 from ._array import Array
-from ._buffer import as_f32_c, addr_ro, addr as _addr_rw, _as_typed, empty, full
+from ._buffer import as_f32_c, as_i32_c, addr_ro, addr as _addr_rw, _as_typed, empty, full
 from . import _labels
 from . import _arena_io
 from ._labels import flatten_labels, sorted_classes, label_kind
@@ -96,6 +96,12 @@ _NONE = -1
 #: x_prep/transform.mojo PT_EVALS (PT_ITERS + 2) and PT_STATE
 _PT_EVALS = 50
 _PT_STATE = 10
+
+
+def _native_helper(key):
+    """The base binding's host helper `key` (`_buffer._native`)."""
+    from ._buffer import _native
+    return _native(key)
 
 
 def _prep_binding(mode):
@@ -1668,10 +1674,16 @@ class SimpleImputer(_PrepBase):
         """strategy=<callable>: the reference's `strategy(masked_X[:, j].compressed())`
         per column over the missing-marked X (NaN = missing)."""
         n, d = marked.shape
-        cols = [list(c) for c in zip(*marked.tolist())]
+        mk, _ = as_f32_c(marked, ndim=2, name="X")
+        compact = _native_helper("compact_notnan_f32")
         stats = []
         for j in range(d):
-            v = Array.from_list([x for x in cols[j] if x == x], "<f4") if counts[j] else Array((0,), "<f4")
+            # column j's non-missing values, compacted in Mojo
+            v = Array((0,), "<f4")
+            if counts[j]:
+                buf = empty((n,), "<f4")
+                m = int(compact(addr_ro(mk, name="X") + 4 * j, n, d, _addr_rw(buf, name="column")))
+                v = buf[:m]
             stats.append(float(self.strategy(v)))
         self.statistics_ = Array.from_list(stats, "<f4")
         self._fill = self.statistics_
@@ -1724,10 +1736,13 @@ def _gather_rows(arr, rows):
     """A new float32 Array of the given rows of a C-order 2-D Array (a byte
     copy per row; no arithmetic)."""
     n, d = arr.shape
-    out = Array((len(rows), d), "<f4")
-    src, dst, rb = addr_ro(arr, name="X"), out._addr, 4 * d
-    for k, r in enumerate(rows):
-        ctypes.memmove(dst + k * rb, src + r * rb, rb)
+    if not (isinstance(rows, Array) and rows.dtype == "<i8"):
+        store = array.array("q", rows)
+        rows = Array._owned(store, (len(store),), "<i8", "C")
+    out = Array((rows.size, d), "<f4")
+    if rows.size and d:
+        _native_helper("gather_rows_bytes")(addr_ro(arr, name="X"), out._addr, addr_ro(rows, name="rows"),
+                                            n, rows.size, 4 * d)
     return out
 
 
@@ -1973,12 +1988,13 @@ def _nb_weights(pr, sample_weight, n):
     """sample_weight -> its arena offset (None when not given)."""
     if sample_weight is None:
         return None
-    w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else sample_weight)]
-    if len(w) != n:
-        raise ValueError(f"mojolearn: sample_weight has {len(w)} entries, expected {n}")
-    if any(v != v or v in (float("inf"), float("-inf")) for v in w):
+    w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
+    if w.shape[0] != n:
+        raise ValueError(f"mojolearn: sample_weight has {w.shape[0]} entries, expected {n}")
+    from ._buffer import all_finite
+    if n and not all_finite(w):
         raise ValueError("mojolearn: sample_weight must be finite")
-    return pr.put_list(w)
+    return pr.put(w)
 
 
 def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums):
@@ -2413,10 +2429,11 @@ def _binary_difference(pr, src, rows, K, d_cols, out):
 
 
 def _class_counts(codes, K):
-    counts = [0] * K
-    for c in codes.tolist():
-        counts[c] += 1
-    return counts
+    """Rows per class code (the base binding's bincount; lane cgr4-py-compute)."""
+    c32, _ = as_i32_c(codes, ndim=1, name="codes")
+    cnt = Array((K,), "<i8")
+    _native_helper("bincount_i64")(addr_ro(c32, name="codes"), 2, c32.size, K, _addr_rw(cnt, name="counts"), 0)
+    return cnt.tolist()
 
 
 def _shrinkage_value(shrinkage):
@@ -2438,10 +2455,22 @@ def _estimator_covs(est, arr, codes, K, who):
     Python on the class's float32 rows (a mojolearn Array); its covariance_
     is read as float32. Returns the (K, d, d) blocks as one flat list."""
     n, d = arr.shape
-    code_list = [0] * n if codes is None else [int(c) for c in codes.tolist()]
     out = []
+    if codes is not None:
+        # each class's ascending rows by the base binding's select (no row loop here)
+        c32, _ = as_i32_c(codes, ndim=1, name="codes")
+        sizes = _class_counts(c32, K)
+        select = _native_helper("select_fold_i64")
+        scratch = Array((n,), "<i8")
     for k in range(K):
-        rows = [i for i, c in enumerate(code_list) if c == k]
+        if codes is None:
+            rows = Array((n,), "<i8")
+            if n:
+                _native_helper("arange_i64")(_addr_rw(rows, name="rows"), 0, n)
+        else:
+            rows = Array((sizes[k],), "<i8")
+            select(addr_ro(c32, name="codes"), n, k, _addr_rw(rows, name="rows") if sizes[k] else
+                   _addr_rw(scratch, name="rows"), _addr_rw(scratch, name="rows"))
         est.fit(_gather_rows(arr, rows))
         if not hasattr(est, "covariance_"):
             raise ValueError(f"mojolearn: {type(est).__name__} does not have a covariance_ attribute")
