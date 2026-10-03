@@ -354,9 +354,89 @@ def resample(*arrays, replace=True, n_samples=None, random_state=0, stratify=Non
         if len(a) != n:
             raise ValueError(f"mojolearn {where}: Found input variables with inconsistent numbers of samples: "
                              f"{[len(x) for x in arrays]}")
+    if replace and _fast_gather_on(numeric_mode):
+        out = _gather_device(arrays, n, n_samples, random_state, numeric_mode)
+        if out is not None:
+            return out[0] if len(out) == 1 else out
     idx = resample_indices(n, n_samples, replace, random_state, numeric_mode)
     out = [_take(a, idx) for a in arrays]
     return out[0] if len(out) == 1 else out
+
+
+#: Bits of the binding's `resample_fast_defines()` mask (resample/estimator.mojo).
+FAST_DEFINE_GATHER = 16
+FAST_DEFINE_CV_SLICE = 32
+FAST_DEFINE_CV_TRUST_FOLDS = 64
+
+
+def fast_defines(numeric_mode=None):
+    """The FAST + Apple switches the resample binding was built with
+    (`-D MOJOLEARN_RESAMPLE_FAST_*`, `-D MOJOLEARN_CV_FAST_*`), as the
+    binding's bit mask; 0 off the FAST tier, on a build without the
+    function, or when the binding cannot be loaded. No environment read."""
+    if (numeric_mode or _backend.default_mode()) != "fast":
+        return 0
+    try:
+        mod = _backend.binding("_mojolearn_resample", numeric_mode)
+    except Exception:
+        return 0
+    fn = getattr(mod, "resample_fast_defines", None)
+    if fn is None:
+        return 0
+    return int(fn())
+
+
+def _fast_gather_on(numeric_mode):
+    """`-D MOJOLEARN_RESAMPLE_FAST_GATHER` in a FAST + Apple build of the
+    resample binding (lane/apple-fast-resample, 2026-10-02): the draw and
+    the row gathers of `resample` on the device. Every other build takes
+    `resample_indices` and the host gather as before."""
+    return bool(fast_defines(numeric_mode) & FAST_DEFINE_GATHER)
+
+
+def _gather_device(arrays, n, n_samples, random_state, numeric_mode):
+    """`[resample(a) for a in arrays]` through `resample_gather`, for numpy
+    float32 C-contiguous 1-D or 2-D arrays only; None hands the call back
+    to the host path (any other array, no numpy, or the binding says no).
+
+    Cause: `_take` is numpy's fancy-index gather of n_samples rows on the
+    host (the board times it: 1,000,000 rows of X and y), after
+    `resample_indices_binding` has copied the indices out one element at a
+    time twice (`_download_i32`, the binding's store loop)."""
+    from ._optional_numpy import require_numpy
+    try:
+        np = require_numpy('resample')
+    except Exception:
+        return None
+    where = "resample"
+    count = n if n_samples is None else _int(n_samples, "n_samples", where)
+    if count <= 0:
+        return None
+    srcs = []
+    for a in arrays:
+        if not (hasattr(a, "__array__") and hasattr(a, "shape")):
+            return None
+        x = np.asarray(a)
+        if x.dtype != np.float32 or x.ndim not in (1, 2) or not x.flags.c_contiguous:
+            return None
+        srcs.append(x)
+    outs = [np.empty((count,) + x.shape[1:], dtype=np.float32) for x in srcs]
+    idx = empty((count,), "<i4")
+    addrs = [addr(idx, name="indices")]
+    widths = []
+    for x, o in zip(srcs, outs):
+        addrs.append(addr_ro(x, name="array"))
+        addrs.append(addr(o, name="resampled"))
+        widths.append(1 if x.ndim == 1 else int(x.shape[1]))
+    mod = _extension(numeric_mode)
+    fn = getattr(mod, "resample_gather", None)
+    if fn is None:
+        return None
+    # ORDER MATCHES bindings/_mojolearn_resample.mojo::resample_gather_binding.
+    done = int(fn(addrs, [n, count, 1, _int(random_state, "random_state", where)] + widths))
+    if not done:
+        return None
+    return outs
 
 
 __all__ = ["bootstrap", "permutation_test", "monte_carlo_integrate", "resample", "resample_indices",
