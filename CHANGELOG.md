@@ -4,6 +4,25 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.36 (published 2026-10-03)
+
+`python -m mojolearn verify` works again: the bundled reference table and the 58 portable models are regenerated from columns recorded on NVIDIA (L40S, sm_89), AMD (MI325X, gfx942), Apple (M4, Metal) and the host column at this release's code (0.8.35 shipped a stale table, so `verify --quick` stopped at its self-test). `verify --quick` reads VERIFIED on 32 of 32 lanes. Releases now refuse to publish when `verify --self-test` fails on the built wheel.
+
+### Fixed
+- `import mojolearn` on every platform after a merge regression; CPU-only installs: RF, ExtraTrees, decision trees, ensembles, SHAP, IsolationForest, Ridge and DART no longer call GPU-only entries; LinearRegression fits on CPU-only installs; host Lasso/ElasticNet argument count; host GBDT accepts one-border features and binary class_weights; non-metric MDS no longer overruns isotonic buffers (segfault).
+- Depthwise GBDT on subnormal inputs (Metal flushed subnormals in the binarize compare); FastICA on duplicate columns; FactorAnalysis overflow on wide data; SVC sample weights; int15 quantization on Apple (shared page over 32 KiB); feature-frequency GBDT use-after-free on NVIDIA; TreeSHAP on Metal; gp-optimize seed; IDENTICAL BayesianRidge on data with null directions (istella r2 restored).
+
+### Changed (GPU path only, in parallel; Python is glue)
+- Device L-BFGS for Huber, LogisticRegressionCV and the GP hyperparameters; BGMM, OPTICS xi, SGD epoch end and shuffle, Cholesky logdet and rank-one update, QR, QN sums, Boruvka, IVF query/extend, MoE grouping and resample statistics on the device.
+- Runtime compute moved from Python into Mojo: CV folds and splitters, schedules, weight init (counter-based), scores, label maps, prep, tokenizer/BPE, token prefetch and multi-GPU dispatch (no Python worker threads).
+- Apple FAST defaults merged by the Apple FAST lanes since 0.8.35.
+
+### Bits that change from 0.8.35 (same on every vendor and the host column)
+Huber, LogisticRegressionCV and GP optimizer state; BGMM (float-float); OPTICS xi ratio tests; SGD epoch order (keyed Feistel permutation); Cholesky logdet for n > 256; GLM multiclass bias; resample standard error and BCa; t-SNE normalizer and KL total; RNN/CNN/MLP/t-SNE weight init and shuffles; BayesianRidge on near-null directions; non-metric MDS.
+
+### Known
+Eight verifier lanes still disagree across vendors on a few cells (umap and par-graph-umap ties batch, OPTICS metrics and nearest centroid on denormal, three x_prep lanes); those cells carry no reference until the fix in 0.8.37.
+
 ## 0.8.35 (published 2026-10-03)
 
 GPU fits, transforms and predictions no longer contain CPU steps: the host-route debt went from 816 rows to 32: 18 are the CPU-only column's host-pool row passes (PR #86) and 14 are small scalar or k-sized steps. Main at b2f5fa7f2 builds every binding on NVIDIA (sm_89), AMD (gfx942) and Apple Metal, and the verifier cross-check (`python -m mojolearn verify --cross-check default`) agrees bit for bit on all 48 compared cell parts across NVIDIA, AMD, Apple and the host column. IDENTICAL means the same bits across hardware within a release; bits change from 0.8.34 where a fold order changed (listed below).
