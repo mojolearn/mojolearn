@@ -1033,9 +1033,12 @@ def _gpc_predict_run(
     mean_addr: Int,
     var_addr: Int,
     proba_addr: Int,
+    two_columns: Bool = False,
 ) raises -> Int:
     """The GIL-free half of `gpc_predict_binding`. The variance and
-    probability addresses are resolved only when `want_proba`."""
+    probability addresses are resolved only when `want_proba`; with
+    `two_columns` the probabilities are written as n_star rows of
+    [1 - p, p] (the binary predict_proba, formerly a Python comprehension)."""
     var lat = gpc_predict_binary_host(
         xt, y, pi, wsr, l, n_train, n_features, spec, x_star, n_star, want_proba
     )
@@ -1047,7 +1050,11 @@ def _gpc_predict_run(
         var pr = _f64_ptr(proba_addr)
         for t in range(n_star):
             vp.unsafe_store(t, lat.variance[t])
-            pr.unsafe_store(t, lat.proba[t])
+            if two_columns:
+                pr.unsafe_store(2 * t, Float64(1.0) - lat.proba[t])
+                pr.unsafe_store(2 * t + 1, lat.proba[t])
+            else:
+                pr.unsafe_store(t, lat.proba[t])
     return 0
 
 
@@ -1071,10 +1078,12 @@ def gpc_predict_binding(
         9  ls              max(n_ls, 1) float32, read
         10 mean_out        n_star float32, WRITTEN
         11 var_out         n_star float32, WRITTEN when want_proba
-        12 proba_out       n_star float64, WRITTEN when want_proba
+        12 proba_out       n_star float64 (want_proba 1) or n_star * 2
+                           float64 rows [1 - p, p] (want_proba 2), WRITTEN
+                           when want_proba
 
     `params`, in this exact order: 0 n_train, 1 n_features, 2 n_star,
-    3 n_nodes, 4 n_ls, 5 want_proba.
+    3 n_nodes, 4 n_ls, 5 want_proba (0, 1 or 2).
     """
     if len(addrs) != 13:
         raise Error(
@@ -1094,7 +1103,9 @@ def gpc_predict_binding(
     var n_star = Int(py=params[2])
     var n_nodes = Int(py=params[3])
     var n_ls = Int(py=params[4])
-    var want_proba = Int(py=params[5]) != 0
+    var proba_mode = Int(py=params[5])
+    var want_proba = proba_mode != 0
+    var two_columns = proba_mode == 2
     var mean_addr = Int(py=addrs[10])
     var var_addr = Int(py=addrs[11])
     var proba_addr = Int(py=addrs[12])
@@ -1117,7 +1128,7 @@ def gpc_predict_binding(
     with GILReleased(Python()):
         rc = _gpc_predict_run(
             xt, y, pi, wsr, l, spec, x_star, n_train, n_features, n_star,
-            want_proba, mean_addr, var_addr, proba_addr,
+            want_proba, mean_addr, var_addr, proba_addr, two_columns,
         )
     return PythonObject(rc)
 

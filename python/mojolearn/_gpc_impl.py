@@ -75,7 +75,7 @@ box.
 
 from . import _backend, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes
 from ._gp_impl import _MODE_CODE, ConstantKernel, Kernel, RBF
 from ._labels import (
     threshold_codes,
@@ -109,14 +109,21 @@ def _ovr_combine(ext, cols, n_star):
     return proba, codes
 
 
+def _stacked(blocks, dtype, shape):
+    """The fits' same-shape buffers as one (len(blocks),) + shape Array, joined
+    as bytes (no per-element Python)."""
+    raw = b"".join(a.tobytes() for a in blocks)
+    return frombytes(raw, dtype, (len(blocks),) + tuple(shape))
+
+
 def _kernel_arrays(kernel):
     """The postfix spec as the four flat arrays `_gp_impl.py` sends
     (DEVIATION 1756), plus the length-scale count."""
     nodes = kernel._nodes()
-    kinds = Array.from_list([int(k) for k, _, _ in nodes], "<i4")
-    params = Array.from_list([float(p) for _, p, _ in nodes], "<f4")
-    ls_len = Array.from_list([len(ls) for _, _, ls in nodes], "<i4")
-    table = [v for _, _, ls in nodes for v in ls]
+    kinds = Array.from_list([int(k) for k, _, _ in nodes], "<i4")  # glue: packs the kernel's postfix nodes
+    params = Array.from_list([float(p) for _, p, _ in nodes], "<f4")  # glue: packs the kernel's postfix nodes
+    ls_len = Array.from_list([len(ls) for _, _, ls in nodes], "<i4")  # glue: packs the kernel's postfix nodes
+    table = [v for _, _, ls in nodes for v in ls]  # glue: packs the kernel length-scale hyperparameters
     ls = Array.from_list(table if table else [1.0], "<f4")
     return kinds, params, ls_len, ls, len(table)
 
@@ -127,10 +134,10 @@ class _SavedKernel(Kernel):
     exactly), so a loaded model sends the binding the bytes the fit sent."""
 
     def __init__(self, nodes):
-        self._node_list = [(int(k), float(p), [float(v) for v in ls]) for k, p, ls in nodes]
+        self._node_list = [(int(k), float(p), [float(v) for v in ls]) for k, p, ls in nodes]  # glue: copies the kernel's postfix nodes
 
     def _nodes(self):
-        return [(k, p, list(ls)) for k, p, ls in self._node_list]
+        return [(k, p, list(ls)) for k, p, ls in self._node_list]  # glue: copies the kernel's postfix nodes
 
     def _name(self):
         return f"SavedKernel({len(self._node_list)} postfix nodes)"
@@ -294,9 +301,8 @@ class GaussianProcessClassifier(NumericModeMixin):
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         classes, codes = encode_labels(y)
-        codes = [int(c) for c in codes.tolist()]
-        if len(codes) != n_rows:
-            raise ValueError(f"{_NAME}: y has {len(codes)} entries, X has {n_rows} rows")
+        if codes.size != n_rows:
+            raise ValueError(f"{_NAME}: y has {codes.size} entries, X has {n_rows} rows")
         n_classes = len(classes)
         if n_classes == 1:
             raise ValueError(
@@ -308,7 +314,8 @@ class GaussianProcessClassifier(NumericModeMixin):
         columns = [1] if n_classes == 2 else list(range(n_classes))
         fits = []
         for k in columns:
-            y01 = Array.from_list([1.0 if c == k else 0.0 for c in codes], "<f4")
+            # the 0/1 target through the core helpers (equal_elements, cast_elements)
+            y01 = (codes == k).astype("<f4")
             fits.append(self._fit_binary(ext, x, y01, kinds, kparams, ls_len, ls, n_ls))
         self._set_fitted(x, classes, fits)
         return self
@@ -383,7 +390,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self.kernel)
         mean = empty((n_star,), "<f4")
         var = empty((n_star,), "<f4")
-        proba = empty((n_star,), "<f8")
+        proba = empty((n_star, 2) if want_proba == 2 else (n_star,), "<f8")
         xt = self.X_train_
         y01 = est.y_train_
         pi = est.pi_
@@ -408,7 +415,7 @@ class GaussianProcessClassifier(NumericModeMixin):
             ],
             # n_train, n_features, n_star, n_nodes, n_ls, want_proba
             [int(n_train), int(n_features), n_star, int(kinds.shape[0]), n_ls,
-             1 if want_proba else 0],
+             int(want_proba)],
         )
         return mean, var, proba
 
@@ -431,8 +438,8 @@ class GaussianProcessClassifier(NumericModeMixin):
         q = self._query(X)
         ext = self._extension()
         if self.n_classes_ == 2:
-            _, _, p = self._latent(ext, self.estimators_[0], q, True)
-            return Array.from_list([[1.0 - v, v] for v in p.tolist()], "<f8")
+            # the binding writes [1 - p, p] per row (want_proba == 2)
+            return self._latent(ext, self.estimators_[0], q, 2)[2]
         cols = [self._latent(ext, e, q, True)[2] for e in self.estimators_]
         proba, _ = _ovr_combine(ext, cols, int(q.shape[0]))
         return proba
@@ -468,15 +475,14 @@ class GaussianProcessClassifier(NumericModeMixin):
 
     def score(self, X, y):
         """Mean accuracy, a host summary outside the identity claim."""
+        from ._expansion_metrics import accuracy_fraction
+        from ._metrics_impl import _shape_of
         pred = self.predict(X)
-        pred = pred.tolist() if isinstance(pred, Array) else list(pred)
-        truth = y.tolist() if hasattr(y, "tolist") else list(y)
-        if len(truth) != len(pred):
-            raise ValueError(f"{_NAME}: y has {len(truth)} entries for {len(pred)} rows")
-        hits = 0
-        for a, b in zip(pred, truth):
-            hits += 1 if a == b else 0
-        return hits / len(pred)
+        n_truth = int(_shape_of(y)[0]) if _shape_of(y) else 0
+        if n_truth != len(pred):
+            raise ValueError(f"{_NAME}: y has {n_truth} entries for {len(pred)} rows")
+        # the x_metrics binding's grouped match count over the row count
+        return accuracy_fraction(y, pred)
 
     # -- save and load ----------------------------------------------------------
 
@@ -507,10 +513,10 @@ class GaussianProcessClassifier(NumericModeMixin):
             "meta": Array.from_list([int(n_train), int(n_features), len(fits),
                                      int(self.max_iter_predict), int(n_ls),
                                      int(self.n_classes_)], "<i8"),
-            "y": Array.from_list([e.y_train_.tolist() for e in fits], "<f4"),
-            "L": Array.from_list([e.L_.reshape((n_train * n_train,)).tolist() for e in fits], "<f4"),
-            "pi": Array.from_list([e.pi_.tolist() for e in fits], "<f4"),
-            "wsr": Array.from_list([e.W_sr_.tolist() for e in fits], "<f4"),
+            "y": _stacked([e.y_train_ for e in fits], "<f4", (n_train,)),
+            "L": _stacked([e.L_ for e in fits], "<f4", (n_train * n_train,)),
+            "pi": _stacked([e.pi_ for e in fits], "<f4", (n_train,)),
+            "wsr": _stacked([e.W_sr_ for e in fits], "<f4", (n_train,)),
             "lml": Array.from_list([float(e.log_marginal_likelihood_value_) for e in fits], "<f8"),
             "n_iter": Array.from_list([int(e.n_iter_) for e in fits], "<i8"),
             "nb": Array.from_list([int(e.nb_) for e in fits], "<i8"),
@@ -531,15 +537,15 @@ class GaussianProcessClassifier(NumericModeMixin):
         meta = _serialize.exact(arrays, "meta", "<i8").tolist()
         if len(meta) != 6:
             raise ValueError(f"mojolearn: {path!r} meta holds {len(meta)} fields, 6 are needed")
-        n_train, n_features, n_est, max_iter, n_ls, n_classes = (int(v) for v in meta)
+        n_train, n_features, n_est, max_iter, n_ls, n_classes = (int(v) for v in meta)  # glue: six saved meta fields
         kinds = _serialize.exact(arrays, "kinds", "<i4").tolist()
         kparams = _serialize.exact(arrays, "kparams", "<f4").tolist()
         ls_len = _serialize.exact(arrays, "ls_len", "<i4").tolist()
         table = _serialize.exact(arrays, "ls", "<f4").tolist()
-        if len(kparams) != len(kinds) or len(ls_len) != len(kinds) or sum(ls_len) != n_ls:
+        if len(kparams) != len(kinds) or len(ls_len) != len(kinds) or sum(ls_len) != n_ls:  # glue: kernel node count check
             raise ValueError(f"mojolearn: {path!r} kernel arrays disagree with each other")
         nodes, off = [], 0
-        for k, p, ln in zip(kinds, kparams, ls_len):
+        for k, p, ln in zip(kinds, kparams, ls_len):  # glue: rebuilds the kernel's postfix nodes
             nodes.append((k, p, table[off:off + ln]))
             off += ln
         obj = cls(kernel=_SavedKernel(nodes), max_iter_predict=max_iter)
@@ -558,7 +564,7 @@ class GaussianProcessClassifier(NumericModeMixin):
             a = _serialize.exact(arrays, name, dtype)
             if tuple(a.shape) != ((n_est, width) if width else (n_est,)):
                 raise ValueError(f"mojolearn: {path!r} {name} has shape {tuple(a.shape)}")
-            return a.tolist()
+            return a
 
         ys = rows("y", "<f4", n_train)
         ls_ = rows("L", "<f4", n_train * n_train)
@@ -569,11 +575,12 @@ class GaussianProcessClassifier(NumericModeMixin):
         nbs = rows("nb", "<i8", 0)
         fits = []
         for e in range(n_est):
+            # row e of each saved block, copied by memoryview runs (no per-element Python)
             fits.append(_BinaryLaplace(
-                Array.from_list(ys[e], "<f4"),
-                Array.from_list(ls_[e], "<f4").reshape((n_train, n_train)),
-                Array.from_list(pis[e], "<f4"),
-                Array.from_list(wsrs[e], "<f4"),
+                ys[e],
+                ls_[e].reshape((n_train, n_train)),
+                pis[e],
+                wsrs[e],
                 float(lmls[e]), int(iters[e]), int(nbs[e]),
             ))
         obj._set_fitted(x, classes, fits)
