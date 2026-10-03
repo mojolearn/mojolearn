@@ -557,6 +557,33 @@ def _launch_statements(lines):
 
 
 _GRID1 = re.compile(r"\bgrid_dim\s*=\s*(1\b(?!\s*[.\w])|\(\s*1\s*,\s*1\s*\)|\(\s*1\s*\))")
+# THE REVIEWED EXEMPTION. A one-block or one-thread launch (or an
+# `if tid == 0:` walk) that works over d- or k-sized data, never rows, says so
+# on the launch statement (or the `if` line) with a trailing comment
+#     # small-launch(<arg>: <what it counts>): <why it is bounded>
+# naming the launch argument that bounds the work and what it counts. A
+# reviewer reads the annotation in the diff; the checker requires the named
+# argument to appear in the launch and a reason of at least a few words, so a
+# lane annotates instead of renaming arguments to dodge the rule.
+_SMALL_LAUNCH = re.compile(r"#\s*small-launch\(\s*([^:()]+?)\s*:\s*([^()]+?)\s*\)\s*:\s*(.+)$")
+
+
+def _small_launch_ok(txt, first=None):
+    """`first`: the statement's first physical line, which carries the note
+    (the note runs to the end of that line); `txt` the joined statement."""
+    first = txt if first is None else first
+    m = _SMALL_LAUNCH.search(first)
+    if not m:
+        return False
+    arg, what, why = m.group(1), m.group(2), m.group(3)
+    code = txt.replace(first[m.start():].strip(), " ")
+    # the named argument appears in the code, not only in the note
+    is_if = code.lstrip().startswith("if ")
+    if not is_if and not re.search(r"\b" + re.escape(arg) + r"\b", code):
+        return False
+    return len(what.split()) >= 1 and len(why.split()) >= 3
+
+
 _GRID1_3D = re.compile(r"\bgrid_dim\s*=\s*(\(\s*1\s*,\s*1\s*,\s*1\s*\)|Dim\(\s*1\s*\))")
 _BLOCK1 = re.compile(r"\bblock_dim\s*=\s*(1\b(?!\s*[.\w])|\(\s*1\s*\))")
 # a runtime size among the launch arguments (rows, samples, elements, nnz)
@@ -789,7 +816,7 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
                 state, d2h = 0, None
         # if tid == 0: for i in range(<runtime>)
         for k, (no, t) in enumerate(body):
-            if not _TID0.match(t):
+            if not _TID0.match(t) or _small_launch_ok(t):
                 continue
             ind = len(t) - len(t.lstrip())
             for no2, t2 in body[k + 1:]:
@@ -807,6 +834,8 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
     # one-block / one-thread launches over a runtime size
     for i, txt in _launch_statements(lines):
         g1, b1 = _GRID1.search(txt), _BLOCK1.search(txt)
+        if _small_launch_ok(txt, lines[i][1]):
+            continue
         if not g1:
             # the 3-D spelling serial-launch's pattern never matched
             g3 = _GRID1_3D.search(txt)

@@ -946,7 +946,7 @@ def rbc_eps_pass_max_k(
         grid_dim=((n_queries + RBC_QPB - 1) // RBC_QPB, 1, 1),
         block_dim=(RBC_TPB, 1, 1),
     )
-    rbc_max_reduce_launch(ctx, scratch.unsafe_ptr(), vd.unsafe_ptr(), n_queries)
+    rbc_max_reduce_launch(ctx, scratch, vd, n_queries)
     ctx.synchronize()
 
     var h = ctx.enqueue_create_host_buffer[DType.int32](1)

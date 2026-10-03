@@ -251,7 +251,6 @@ def trustworthiness_rank_sum(
         one.append(total)
         trace.record_host("trust.rank_sum", one.unsafe_ptr(), 1)
         _ = one^
-    _ = h^
     _ = partials^
     _ = emb^
     _ = x_dev^

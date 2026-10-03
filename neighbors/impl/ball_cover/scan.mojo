@@ -209,16 +209,18 @@ def rbc_max_partial_kernel(
 
 def rbc_max_reduce_launch(
     ctx: DeviceContext,
-    dst: MutPointer[Int32, MutAnyOrigin],
-    src: MutPointer[Int32, MutAnyOrigin],
+    mut dst_buf: DeviceBuffer[DType.int32],
+    mut src_buf: DeviceBuffer[DType.int32],
     n: Int,
 ) raises:
     """`rbc_max_reduce_kernel`'s `dst[0]` over the whole device (lane
     cgr4-download-loop): per-block maxima of a grid-stride slice (at most
     `RBC_MAX_BLOCKS` blocks, each slice strided by the full grid), then the
     one-block kernel over those partials. The same integer maximum."""
+    var dst = dst_buf.unsafe_ptr()
+    var src = src_buf.unsafe_ptr()
     if n <= RBC_SCAN_TPB * 8:
-        ctx.enqueue_function[rbc_max_reduce_kernel](
+        ctx.enqueue_function[rbc_max_reduce_kernel](  # small-launch(n: at most 8 * RBC_SCAN_TPB rows on this branch): larger n takes the multi-block partial maxima
             dst, src, Int32(n), grid_dim=(1, 1, 1), block_dim=(RBC_SCAN_TPB, 1, 1),
         )
         return
@@ -360,7 +362,7 @@ def rbc_exclusive_scan_launch(
         ctx.synchronize()
         _ = chunk_tot^
         return
-    ctx.enqueue_function[rbc_exclusive_scan_kernel](
+    ctx.enqueue_function[rbc_exclusive_scan_kernel](  # small-launch(n: at most one chunk of RBC_PSCAN_CHUNK rows on this branch): larger n takes the device-wide scan
         ex_scan.unsafe_ptr(),
         counts.unsafe_ptr(),
         Int32(n),

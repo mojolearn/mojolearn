@@ -29,7 +29,7 @@ from std.atomic import Atomic
 from std.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from core.device_fold import device_exclusive_scan_total
+from core.device_fold import device_exclusive_scan_total_from
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 
 comptime _TPB = 256
@@ -238,12 +238,12 @@ def ivf_group_pairs_device(
     ctx.enqueue_function[_list_hist_kernel](
         probe.unsafe_ptr(), Int32(n), gcount.unsafe_ptr(), grid_dim=_grid(n), block_dim=_TPB,
     )
-    device_exclusive_scan_total(ctx, gcount.unsafe_ptr(), goff, n_lists)
+    device_exclusive_scan_total_from(ctx, gcount, goff, n_lists)
     ctx.enqueue_function[_list_blocks_kernel](
         goff.unsafe_ptr(), Int32(n_lists), Int32(gqpb), nblk.unsafe_ptr(),
         grid_dim=_grid(n_lists), block_dim=_TPB,
     )
-    device_exclusive_scan_total(ctx, nblk.unsafe_ptr(), boff, n_lists)
+    device_exclusive_scan_total_from(ctx, nblk, boff, n_lists)
     var h = ctx.enqueue_create_host_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=boff.create_sub_buffer[DType.int32](n_lists, 1))
     ctx.synchronize()
@@ -269,14 +269,14 @@ def ivf_group_pairs_device(
 
 
 def _gather_rows_kernel(x: MutPointer[Float32, MutAnyOrigin], rows: _U32P, n_in: Int32, dim_in: Int32,
-                        out: MutPointer[Float32, MutAnyOrigin]):
+                        dst: MutPointer[Float32, MutAnyOrigin]):
     """out[j, :] = x[rows[j], :], one thread per element: a copy, no float op."""
     var t = Int(block_idx.x) * _TPB + Int(thread_idx.x)
     var dim = Int(dim_in)
     if t < Int(n_in) * dim:
         var j = t // dim
         var f = t - j * dim
-        out[t] = x[Int(rows[j]) * dim + f]
+        dst[t] = x[Int(rows[j]) * dim + f]
 
 
 def ivf_list_layout_device(
@@ -327,7 +327,7 @@ def ivf_list_layout_device(
     ctx.enqueue_function[_list_hist_kernel](
         labels.unsafe_ptr(), Int32(n), gcount.unsafe_ptr(), grid_dim=_grid(n), block_dim=_TPB,
     )
-    device_exclusive_scan_total(ctx, gcount.unsafe_ptr(), goff, n_lists)
+    device_exclusive_scan_total_from(ctx, gcount, goff, n_lists)
     ctx.enqueue_copy(dst_ptr=offsets.unsafe_ptr(), src_buf=goff)
     if n > 0:
         ctx.enqueue_copy(dst_ptr=list_indices.unsafe_ptr(), src_buf=vals.create_sub_buffer[DType.uint32](0, n))

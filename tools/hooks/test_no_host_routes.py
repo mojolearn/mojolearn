@@ -137,6 +137,15 @@ BLOCKED = [
      {DEV: "def _p14(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
            "    ctx.enqueue_function[_fold_kernel](\n        x, Int32(n),\n        grid_dim=1, block_dim=256,\n    )"},
      "ctx.enqueue_function[_fold_kernel]("),
+    ("one-block launch spelled grid_dim=(1, 1, 1) over n (one-block-n)",
+     {DEV: "def _p22(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
+           "    ctx.enqueue_function[_fold_kernel](\n        x, Int32(n),\n        grid_dim=(1, 1, 1), block_dim=(256, 1, 1),\n    )"},
+     "ctx.enqueue_function[_fold_kernel]("),
+    ("small-launch note naming an argument the launch does not pass",
+     {DEV: "def _p23(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
+           "    ctx.enqueue_function[_fold_kernel](  # small-launch(d: feature count): the vector is d long\n"
+           "        x, Int32(n),\n        grid_dim=(1, 1, 1), block_dim=(256, 1, 1),\n    )"},
+     "ctx.enqueue_function[_fold_kernel]("),
     ("tid == 0 serial loop over n",
      {DEV: "def _p15_kernel(x: UnsafePointer[Float32], n: Int):\n    var tid = thread_idx.x\n"
            "    if tid == 0:\n        for i in range(n):\n            x[0] += x[i]"}, "if tid == 0:"),
@@ -202,6 +211,10 @@ PASSES = [
      {DEV: "def _q3(ctx: DeviceContext, d: DeviceBuffer[DType.float32], n_features: Int) raises -> Float32:\n"
            "    var h = download_f32(ctx, d, n_features)\n    var t = Float32(0.0)\n"
            "    for j in range(n_features):\n        t = t + h[j]\n    return t"}),
+    ("a reviewed small-launch note on a one-block launch over d-sized data",
+     {DEV: "def _q4(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
+           "    ctx.enqueue_function[_fold_kernel](  # small-launch(n: parameter count): an L-BFGS vector phase, never rows\n"
+           "        x, Int32(n),\n        grid_dim=(1, 1, 1), block_dim=(256, 1, 1),\n    )"}),
     ("a module no GPU binding imports",
      {"x_decomp/unused_scratch.mojo": ("=", "def f(n: Int):\n    host_parallelize(_rows, n)\n")}),
 ]

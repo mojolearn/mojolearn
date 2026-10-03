@@ -20,18 +20,10 @@ one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_fun
 one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[sabotage_panel_factor_kernel](
 # why: CROSS-LANE (cholesky): DEVIATION 1632's one-thread dot over the m-row column of a rank-one update; a fixed-order multi-block fold needs the host column changed with it
 one-block-n	serial-gpu	UNOWNED	owed	cholesky/impl/linalg/detail/cholesky_r1_update.mojo	0	ctx.enqueue_function[r1_dot_kernel](
-# why: not a walk over n: one thread per trial, each a binary search (log n steps) over the cumulative sums
-one-block-n	serial-gpu	UNOWNED	owed	cluster/impl/detail/kmeans.mojo	0	ctx.enqueue_function[binary_search_kernel](
-# why: not a walk over n: one thread per trial, each a binary search (log n steps) over the cumulative sums
-one-block-n	serial-gpu	UNOWNED	owed	cluster/impl/detail/kmeans.mojo	1	ctx.enqueue_function[binary_search_kernel](
 # why: CROSS-LANE (x_decomp/linalg): the one-slice QR (ns == 1, qr_slice_count says the matrix is too short to split) runs one block over n_rows; the sliced TSQR path is multi-block; a forced split needs the host column's order
 one-block-n	serial-gpu	UNOWNED	owed	core/householder_qr.mojo	0	ctx.enqueue_function[qr_panel_kernel](
 # why: CROSS-LANE (x_decomp/linalg): the one-slice QR (ns == 1, qr_slice_count says the matrix is too short to split) runs one block over n_rows; the sliced TSQR path is multi-block; a forced split needs the host column's order
 one-block-n	serial-gpu	UNOWNED	owed	core/householder_qr.mojo	0	devices[rank].enqueue_function[qr_panel_kernel](panels[panel].unsafe_ptr(),outputs[panel].unsafe_ptr(),
-# why: not a walk over n: choose_scale_kernel is one thread of control plane that reads two magnitudes; n_rows is a scalar operand
-one-block-n	serial-gpu	UNOWNED	owed	gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo	0	ctx.enqueue_function[choose_scale_kernel](
-# why: k-sized: Jacobi eigh of the n_rows x n_rows Gram, taken only when n_rows < n_cols (the minimum-norm branch)
-one-block-n	serial-gpu	UNOWNED	owed	glm/impl/linalg/detail/lstsq_min_norm.mojo	0	ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
 # why: k-sized: a selection sort of the n_cols eigenvalues (n = n_cols, not rows); index-only, no float op
 d2h-host-work	d2h-roundtrip	UNOWNED	owed	glm/impl/linalg/detail/svd.mojo	0	for i in range(n):
 # why: k-sized: a selection sort of the n_cols eigenvalues (n = n_cols, not rows); index-only, no float op
@@ -40,18 +32,6 @@ d2h-host-work	d2h-roundtrip	UNOWNED	owed	glm/impl/linalg/detail/svd.mojo	0	for j
 one-block-n	serial-gpu	UNOWNED	owed	glm/impl/qn/glm_base.mojo	0	ctx.enqueue_function[mean_kernel](
 # why: CROSS-LANE (glm QN / x_linear logcv, cgr4-device-optim): one-block pinned folds over n (loss value, bias mean, vector norms); the multi-block qn_grid_sum exists behind QN_GRID_SUMS; making it the IDENTICAL default changes the loss bits and the host column must fold the same grid
 one-block-n	serial-gpu	UNOWNED	owed	glm/impl/qn/glm_base.mojo	0	ctx.enqueue_function[sum_terms_kernel](
-# why: CROSS-LANE (glm QN / x_linear logcv, cgr4-device-optim): one-block pinned folds over n (loss value, bias mean, vector norms); the multi-block qn_grid_sum exists behind QN_GRID_SUMS; making it the IDENTICAL default changes the loss bits and the host column must fold the same grid
-one-block-n	serial-gpu	UNOWNED	owed	glm/impl/qn/glm_linear.mojo	0	ctx.enqueue_function[nrm1_kernel](
-# why: CROSS-LANE (glm QN / x_linear logcv, cgr4-device-optim): one-block pinned folds over n (loss value, bias mean, vector norms); the multi-block qn_grid_sum exists behind QN_GRID_SUMS; making it the IDENTICAL default changes the loss bits and the host column must fold the same grid
-one-block-n	serial-gpu	UNOWNED	owed	glm/impl/qn/qn_linesearch.mojo	0	ctx.enqueue_function[dot_kernel](
-# why: CROSS-LANE (glm QN / x_linear logcv, cgr4-device-optim): one-block pinned folds over n (loss value, bias mean, vector norms); the multi-block qn_grid_sum exists behind QN_GRID_SUMS; making it the IDENTICAL default changes the loss bits and the host column must fold the same grid
-one-block-n	serial-gpu	UNOWNED	owed	glm/impl/qn/qn_util.mojo	0	ctx.enqueue_function[lbfgs_dir_kernel](
-# why: CROSS-LANE (glm QN / x_linear logcv, cgr4-device-optim): one-block pinned folds over n (loss value, bias mean, vector norms); the multi-block qn_grid_sum exists behind QN_GRID_SUMS; making it the IDENTICAL default changes the loss bits and the host column must fold the same grid
-one-block-n	serial-gpu	UNOWNED	owed	glm/impl/qn/simple_mat/dense.mojo	0	ctx.enqueue_function[dot_kernel](
-# why: CROSS-LANE (glm QN / x_linear logcv, cgr4-device-optim): one-block pinned folds over n (loss value, bias mean, vector norms); the multi-block qn_grid_sum exists behind QN_GRID_SUMS; making it the IDENTICAL default changes the loss bits and the host column must fold the same grid
-one-block-n	serial-gpu	UNOWNED	owed	glm/impl/qn/simple_mat/dense.mojo	0	ctx.enqueue_function[dot_self_kernel](
-# why: CROSS-LANE (glm QN / x_linear logcv, cgr4-device-optim): one-block pinned folds over n (loss value, bias mean, vector norms); the multi-block qn_grid_sum exists behind QN_GRID_SUMS; making it the IDENTICAL default changes the loss bits and the host column must fold the same grid
-one-block-n	serial-gpu	UNOWNED	owed	glm/impl/qn/simple_mat/dense.mojo	0	ctx.enqueue_function[nrm_max_kernel](
 # why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
 d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for c in range(m):
 # why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
@@ -70,10 +50,6 @@ d2h-host-work	d2h-roundtrip	UNOWNED	owed	ivf/impl/neighbors/ivf_flat/ivf_flat_se
 one-block-n	serial-gpu	UNOWNED	owed	mixture/checks/estep.mojo	0	ctx.enqueue_function[fast_meanll_kernel](
 # why: FAST tier only (GMM_FAST_MEANLL, the Apple FAST peer's): one 1024-thread block over n; IDENTICAL and default FAST without the define use the chunked-level device fold
 one-block-n	serial-gpu	UNOWNED	owed	mixture/checks/estep.mojo	1	ctx.enqueue_function[fast_meanll_kernel](
-# why: bounded: the one-block kernels serve only n <= one chunk (2,048 rows); larger n takes the device-wide scan and the multi-block max
-one-block-n	serial-gpu	UNOWNED	owed	neighbors/impl/ball_cover/scan.mojo	0	ctx.enqueue_function[rbc_exclusive_scan_kernel](
-# why: bounded: the one-block kernels serve only n <= one chunk (2,048 rows); larger n takes the device-wide scan and the multi-block max
-one-block-n	serial-gpu	UNOWNED	owed	neighbors/impl/ball_cover/scan.mojo	0	ctx.enqueue_function[rbc_max_reduce_kernel](
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_array.py	0	return (self[i] for i in range(self.shape[0]))
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	0	for s in range(n_rows):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	1	for s in range(n_rows):

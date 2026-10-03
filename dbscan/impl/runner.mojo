@@ -728,7 +728,7 @@ their code branches on is this Bool.
         # exactly as it sits inside their nvtx VertexDeg range (:255-296).
         if sparse_rbc_mode:
             rbc_max_reduce_launch(
-                ctx, rbc_mk_scratch.unsafe_ptr(), vd.unsafe_ptr(), n_points
+                ctx, rbc_mk_scratch, vd, n_points
             )
             ctx.synchronize()
             ctx.enqueue_copy(

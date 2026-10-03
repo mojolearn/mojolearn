@@ -349,7 +349,7 @@ def fast_mma_eps_neighborhood(
     ctx.enqueue_memset(flag, Int32(0))
     # lane cgr4-download-loop: the center's column means over the whole
     # device (was one block over n); the center never reaches the answer
-    device_column_means32(ctx, x.unsafe_ptr(), n, k, mean.unsafe_ptr())
+    device_column_means32(ctx, x, n, k, mean)
     ctx.enqueue_function[me_shift_kernel](
         x.unsafe_ptr(), mean.unsafe_ptr(), xc.unsafe_ptr(), nc.unsafe_ptr(),
         flag.unsafe_ptr(), Int32(n), Int32(k),

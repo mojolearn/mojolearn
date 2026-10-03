@@ -44,7 +44,7 @@ from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from neighbors.estimator import knn_self_search_device_indices
-from core.device_fold import device_exclusive_scan_total
+from core.device_fold import device_exclusive_scan_total, device_exclusive_scan_total_from
 from spectral.impl.sparse.linalg.detail.laplacian import (
     DeviceCoo,
     laplacian_from_sorted_device,
@@ -585,7 +585,7 @@ def _bitmap_graph(
     )
     # lane cgr4-download-loop: the scans run over the whole device
     # (core/device_fold.mojo), not one threadgroup over n; integer, same values
-    device_exclusive_scan_total(ctx, tcnt.unsafe_ptr(), toff, n)
+    device_exclusive_scan_total_from(ctx, tcnt, toff, n)
     ctx.enqueue_function[fg_tscatter_kernel](
         acols.unsafe_ptr(), toff.unsafe_ptr(), tcur.unsafe_ptr(),
         tlist.unsafe_ptr(), Int32(n), Int32(k),
@@ -597,7 +597,7 @@ def _bitmap_graph(
         dummy_b.unsafe_ptr(), dummy_f.unsafe_ptr(), Int32(n), Int32(k),
         grid_dim=(n, 1, 1), block_dim=(FG_SORT_TPB, 1, 1),
     )
-    device_exclusive_scan_total(ctx, lens.unsafe_ptr(), indptr_v, n)
+    device_exclusive_scan_total_from(ctx, lens, indptr_v, n)
     var tot = ctx.enqueue_create_host_buffer[DType.int32](2)
     ctx.enqueue_copy(dst_ptr=tot.unsafe_ptr(), src_buf=flags.create_sub_buffer[DType.int32](0, 1))
     ctx.enqueue_copy(dst_ptr=tot.unsafe_ptr() + 1, src_buf=indptr_v.create_sub_buffer[DType.int32](n, 1))
@@ -681,8 +681,8 @@ def fast_knn_graph(
         eoff.unsafe_ptr(), Int32(n), Int32(k),
         grid_dim=((n + FG_TPB - 1) // FG_TPB, 1, 1), block_dim=(FG_TPB, 1, 1),
     )
-    device_exclusive_scan_total(ctx, indptr_v.unsafe_ptr(), indptr_v, n)
-    device_exclusive_scan_total(ctx, eoff.unsafe_ptr(), eoff, n)
+    device_exclusive_scan_total(ctx, indptr_v, n)
+    device_exclusive_scan_total(ctx, eoff, n)
     var tot = ctx.enqueue_create_host_buffer[DType.int32](4)
     ctx.enqueue_copy(dst_ptr=tot.unsafe_ptr(), src_buf=flags)
     ctx.enqueue_copy(dst_ptr=tot.unsafe_ptr() + 1, src_buf=indptr_v.create_sub_buffer[DType.int32](n, 1))

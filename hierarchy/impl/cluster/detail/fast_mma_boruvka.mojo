@@ -439,7 +439,7 @@ struct MmaBoruvka(Movable):
         ctx.enqueue_memset(flag, Int32(0))
         # lane cgr4-download-loop: column means over the whole device (was
         # one block over m); the center never reaches the answer
-        device_column_means32(ctx, x.unsafe_ptr(), m, n, mean.unsafe_ptr())
+        device_column_means32(ctx, x, m, n, mean)
         if mutual_reach:
             ctx.enqueue_function[mb_shift_kernel[True]](
                 x.unsafe_ptr(), mean.unsafe_ptr(), core_ptr,

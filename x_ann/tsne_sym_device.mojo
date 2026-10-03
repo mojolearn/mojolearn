@@ -28,7 +28,7 @@ from std.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_div
-from core.device_fold import device_count_nonzero_i32, device_exclusive_scan_total, device_sum_f32_fixed
+from core.device_fold import device_count_nonzero_i32, device_exclusive_scan_total_from, device_sum_f32_fixed
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len, frs_exclusive_scan, frs_scan_blocks
 
 comptime _TPB = 256
@@ -181,7 +181,7 @@ def tsne_symmetrize_device(
         pos.unsafe_ptr(), indices.unsafe_ptr(), values.unsafe_ptr(), rowcnt.unsafe_ptr(),
         grid_dim=_g(m), block_dim=_TPB,
     )
-    device_exclusive_scan_total(ctx, rowcnt.unsafe_ptr(), indptr, n)
+    device_exclusive_scan_total_from(ctx, rowcnt, indptr, n)
     var total = device_sum_f32_fixed(ctx, values, nnz)
     if total < Float32(1.1920929e-07):
         total = Float32(1.1920929e-07)

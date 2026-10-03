@@ -170,10 +170,10 @@ def _eq_flag_kernel(src: _I32P, n_in: Int32, value: Int32, flag: _I32P, scan: _I
         scan.unsafe_store(i, f)
 
 
-def _emit_rows_kernel(flag: _I32P, scan: _I32P, n_in: Int32, out: _I32P):
+def _emit_rows_kernel(flag: _I32P, scan: _I32P, n_in: Int32, dst: _I32P):
     var i = Int(block_idx.x) * SCAN_TPB + Int(thread_idx.x)
     if i < Int(n_in) and flag.unsafe_load(i) != Int32(0):
-        out.unsafe_store(Int(scan.unsafe_load(i)), Int32(i))
+        dst.unsafe_store(Int(scan.unsafe_load(i)), Int32(i))
 
 
 def _key_i32_kernel(src: _I32P, n_in: Int32, keys: _U32P, vals: _U32P):
@@ -194,10 +194,10 @@ def _boundary_kernel(keys: _U32P, n_in: Int32, flag: _I32P, scan: _I32P):
         scan.unsafe_store(i, f)
 
 
-def _emit_keys_kernel(keys: _U32P, flag: _I32P, scan: _I32P, n_in: Int32, out: _I32P):
+def _emit_keys_kernel(keys: _U32P, flag: _I32P, scan: _I32P, n_in: Int32, dst: _I32P):
     var i = Int(block_idx.x) * SCAN_TPB + Int(thread_idx.x)
     if i < Int(n_in) and flag.unsafe_load(i) != Int32(0):
-        out.unsafe_store(
+        dst.unsafe_store(
             Int(scan.unsafe_load(i)), bitcast[DType.int32](keys.unsafe_load(i) ^ UInt32(0x80000000))
         )
 
@@ -242,15 +242,15 @@ def _colsum32_partial_kernel(x: _F32P, part: _F32P, n_in: Int32, k_in: Int32):
         part.unsafe_store(Int(block_idx.x) * 32 + tid, t)
 
 
-def _colmean32_fold_kernel(part: _F32P, mean: _F32P, blocks_in: Int32, rows: Float32, k_in: Int32):
-    """Thread f < k: the block partials of column f added ascending, over
-    the row count (passed as a float: this pass walks blocks, not rows)."""
+def _colmean32_fold_kernel(part: _F32P, mean: _F32P, blocks_in: Int32, n_in: Int32, k_in: Int32):
+    """Thread f < k: the block partials of column f added ascending, over n
+    (this pass walks at most COLMEAN_BLOCKS partials, never rows)."""
     var f = Int(thread_idx.x)
     if f < Int(k_in):
         var t = Float32(0.0)
         for b in range(Int(blocks_in)):
             t = t + part.unsafe_load(b * 32 + f)
-        mean.unsafe_store(f, t / rows)
+        mean.unsafe_store(f, t / Float32(Int(n_in)))
 
 
 # ------------------------------------------------------------ host side ----
@@ -441,9 +441,9 @@ def device_sorted_unique_i32(
     """The sorted distinct values of `src[0:n]`: a stable device radix sort
     of the order-preserving keys, a boundary flag, an exclusive scan and an
     emit; only the distinct values (the answer) are downloaded. Exact."""
-    var out = List[Int32]()
+    var res = List[Int32]()
     if n <= 0:
-        return out^
+        return res^
     var keys = ctx.enqueue_create_buffer[DType.uint32](n)
     var vals = ctx.enqueue_create_buffer[DType.uint32](n)
     var tk = ctx.enqueue_create_buffer[DType.uint32](n)
@@ -472,9 +472,9 @@ def device_sorted_unique_i32(
     var head = uniq.create_sub_buffer[DType.int32](0, k)
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=head)
     ctx.synchronize()
-    out = List[Int32](capacity=k)
+    res = List[Int32](capacity=k)
     for j in range(k):
-        out.append(host.unsafe_ptr().unsafe_load(j))
+        res.append(host.unsafe_ptr().unsafe_load(j))
     _ = head^
     _ = host^
     _ = uniq^
@@ -486,30 +486,45 @@ def device_sorted_unique_i32(
     _ = tk^
     _ = vals^
     _ = keys^
-    return out^
+    return res^
 
 
-def device_exclusive_scan_total(
-    ctx: DeviceContext, src: MutPointer[Int32, MutAnyOrigin], mut out: DeviceBuffer[DType.int32], n: Int
-) raises:
-    """out[0 .. n) = the exclusive scan of src[0 .. n), out[n] = the total,
-    over the whole device (`frs_exclusive_scan`). Int32 adds with the usual
-    wrap, so every value is the one a one-block scan gives. `src` may be
-    `out`'s own pointer (an in-place scan)."""
+def device_exclusive_scan_total(ctx: DeviceContext, mut buf: DeviceBuffer[DType.int32], n: Int) raises:
+    """In place: buf[0 .. n) (the input) becomes its exclusive scan and
+    buf[n] the total, over the whole device (`frs_exclusive_scan`). Int32
+    adds with the usual wrap, so every value is the one a one-block scan
+    gives. `buf` holds at least n + 1 slots."""
     if n < 0:
         return
+    var p = buf.unsafe_ptr()
     ctx.enqueue_function[_scan_input_kernel](
-        src, out.unsafe_ptr(), Int32(n),
+        p, p, Int32(n),
         grid_dim=(_grid(n + 1), 1, 1), block_dim=(SCAN_TPB, 1, 1),
     )
     var bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n + 1))
-    frs_exclusive_scan(ctx, out, n + 1, bsum)
+    frs_exclusive_scan(ctx, buf, n + 1, bsum)
+    _ = bsum^
+
+
+def device_exclusive_scan_total_from(
+    ctx: DeviceContext, mut src: DeviceBuffer[DType.int32], mut dst: DeviceBuffer[DType.int32], n: Int
+) raises:
+    """`device_exclusive_scan_total` of src[0 .. n) into dst[0 .. n] (src is
+    left as it was)."""
+    if n < 0:
+        return
+    ctx.enqueue_function[_scan_input_kernel](
+        src.unsafe_ptr(), dst.unsafe_ptr(), Int32(n),
+        grid_dim=(_grid(n + 1), 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    var bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n + 1))
+    frs_exclusive_scan(ctx, dst, n + 1, bsum)
     _ = bsum^
 
 
 def device_column_means32(
-    ctx: DeviceContext, x: MutPointer[Float32, MutAnyOrigin], n: Int, k: Int,
-    mean: MutPointer[Float32, MutAnyOrigin],
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n: Int, k: Int,
+    mut mean: DeviceBuffer[DType.float32],
 ) raises:
     """`mean[f]` = the mean of column f of the row-major n x k matrix x, for
     k <= 32, over the whole device: per-block partial column sums of a
@@ -525,11 +540,11 @@ def device_column_means32(
         blocks = COLMEAN_BLOCKS
     var part = ctx.enqueue_create_buffer[DType.float32](blocks * 32)
     ctx.enqueue_function[_colsum32_partial_kernel](
-        x, part.unsafe_ptr(), Int32(n), Int32(k),
+        x.unsafe_ptr(), part.unsafe_ptr(), Int32(n), Int32(k),
         grid_dim=(blocks, 1, 1), block_dim=(256, 1, 1),
     )
-    ctx.enqueue_function[_colmean32_fold_kernel](
-        part.unsafe_ptr(), mean, Int32(blocks), Float32(n), Int32(k),
+    ctx.enqueue_function[_colmean32_fold_kernel](  # small-launch(blocks: block partials, at most COLMEAN_BLOCKS): n is only the divisor here
+        part.unsafe_ptr(), mean.unsafe_ptr(), Int32(blocks), Int32(n), Int32(k),
         grid_dim=(1, 1, 1), block_dim=(32, 1, 1),
     )
     _ = part^
