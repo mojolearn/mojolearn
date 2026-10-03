@@ -756,7 +756,7 @@ def oob_r2_binding(acc: PythonObject, counts: PythonObject, y: PythonObject, pre
     return PythonObject(1.0 if res == 0 else 0.0)
 
 
-def normalized_weights_binding(w: PythonObject, out: PythonObject, params: PythonObject) raises -> PythonObject:
+def normalized_weights_binding(w: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
     """AdaBoost's initial weights (lane cgr4-py-compute, out of Python):
     out[i] = w[i] / sum(w) in float64 from float32 w, the sum in row order.
     Returns 0, 1 when an entry is not finite or is negative, 2 when the
@@ -766,7 +766,7 @@ def normalized_weights_binding(w: PythonObject, out: PythonObject, params: Pytho
     if n == 0:
         return PythonObject(2)
     var wp = f32_ptr(Int(py=w))
-    var op = f64_ptr(Int(py=out))
+    var op = f64_ptr(Int(py=dst))
     var total = Float64(0)
     for i in range(n):
         var v = Float64(wp[i])
@@ -790,12 +790,12 @@ def _kshap_binom(M: Int, r: Int) -> Float64:
     return c
 
 
-def kshap_schedule_binding(tables: PythonObject, out: PythonObject, params: PythonObject) raises -> PythonObject:
+def kshap_schedule_binding(tables: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
     """KernelExplainer's coalition schedule (shap `KernelExplainer.explain`
     over subset SIZES; lane cgr4-py-compute moved it out of Python): params
     = [M, nsamples] with M > 1; tables = (size_off Int64 M // 2 + 1, size_w
     float64 max(1, M // 2), cdf float64 max(1, M // 2)); out = Int64 6:
-    [m, nfixed, nfull, npaired, L, wrand_bits]. The sums run in index
+    [m, nfixed, nfull, npaired, L, wrand_bits] (`dst`). The sums run in index
     order (one fixed fold, the same on every column)."""
     _need(params, 2, "x_trees_kshap_schedule")
     var M = _i(params, 0)
@@ -805,7 +805,7 @@ def kshap_schedule_binding(tables: PythonObject, out: PythonObject, params: Pyth
     var off = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=tables[0]))
     var sw = f64_ptr(Int(py=tables[1]))
     var cdf = f64_ptr(Int(py=tables[2]))
-    var res = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=out))
+    var res = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=dst))
     var nss = M // 2
     var npaired = (M - 1) // 2
     var wv = List[Float64](length=nss, fill=0.0)
