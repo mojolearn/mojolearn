@@ -35,6 +35,10 @@ taxi (well conditioned) has no direction under the cut: same bits expected.
 
 ## IDENTICAL
 
+Fixed in lane/fix-bayes-null (2026-10-03): the cut now runs unconditionally in `bayes_eig_prep` on every vendor, every
+mode and the host column; `BAYES_FAST_Q` and `-D MOJOLEARN_BAYES_FAST_Q_OFF` are gone (FAST and IDENTICAL share the code
+path). IDENTICAL bits change on every vendor and the host column together. The history below is kept as measured.
+
 IDENTICAL runs the same float32 Gram + Jacobi with no cut (archived M3 board 2026-09-29: IDENTICAL istella r2 -41689,
 rmse 170.6): the same bug. Not changed here (the orchestrator owns IDENTICAL); flagged in
 ~/mojolearn-evidence/apple-fast/FLAGS-for-orchestrator-2026-10-03.md. The cut would change IDENTICAL bits on every
