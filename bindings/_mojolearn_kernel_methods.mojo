@@ -49,8 +49,11 @@ from kernel_methods.estimator import (
     kernel_ridge_predict_host,
     nystroem_fit_host,
     nystroem_transform_host_into,
+    nystroem_transform_ptr_into,
+    KM_FAST_PTR_IN,
     rbf_sampler_fit_host,
     rbf_sampler_transform_host_into,
+    rbf_sampler_transform_ptr_into,
 )
 from svm.impl.svm_parameter import KernelParams
 
@@ -427,7 +430,7 @@ def nystroem_transform_binding(
     var normalization = read_f32(Int(py=addrs[2]), max(0, q * q))
     var eigenvalues = read_f32(Int(py=addrs[3]), max(0, q))
     var eigenvectors = read_f32(Int(py=addrs[4]), max(0, q * q))
-    var x = read_f32(Int(py=addrs[5]), max(0, m * d))
+    var xaddr = Int(py=addrs[5])
     var op = _f32_ptr(Int(py=addrs[6]))
     var model = NystroemModel(
         components^,
@@ -444,8 +447,16 @@ def nystroem_transform_binding(
         seed,
         sweeps,
     )
-    with GILReleased(Python()):
-        _nystroem_transform_run(model, x, m, op)
+    comptime if KM_FAST_PTR_IN:
+        if xaddr == 0:
+            raise Error("nystroem_transform: null X address")
+        with GILReleased(Python()):
+            var trace = IdentityTrace()
+            nystroem_transform_ptr_into(model, xaddr, m, op, trace)
+    else:
+        var x = read_f32(xaddr, max(0, m * d))
+        with GILReleased(Python()):
+            _nystroem_transform_run(model, x, m, op)
     return PythonObject(0)
 
 
@@ -571,13 +582,21 @@ def rbf_sampler_transform_binding(
     var m = Int(py=params[6])
     var weights = read_f32(Int(py=addrs[0]), max(0, d * q))
     var offset = read_f32(Int(py=addrs[1]), max(0, q))
-    var x = read_f32(Int(py=addrs[2]), max(0, m * d))
+    var xaddr = Int(py=addrs[2])
     var op = _f32_ptr(Int(py=addrs[3]))
     var model = RBFSamplerModel(
         weights^, offset^, d, q, gamma, seed, sigma, scale
     )
-    with GILReleased(Python()):
-        _rbf_sampler_transform_run(model, x, m, op)
+    comptime if KM_FAST_PTR_IN:
+        if xaddr == 0:
+            raise Error("rbf_sampler_transform: null X address")
+        with GILReleased(Python()):
+            var trace = IdentityTrace()
+            rbf_sampler_transform_ptr_into(model, xaddr, m, op, trace)
+    else:
+        var x = read_f32(xaddr, max(0, m * d))
+        with GILReleased(Python()):
+            _rbf_sampler_transform_run(model, x, m, op)
     return PythonObject(0)
 
 
