@@ -38,6 +38,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
 )
 from gbdt.methods.greedy_subsets_searcher.quantized_hist_launcher import (
     QUANTIZED_HIST_LIVE,
+    QH_MODE_SKIP,
     launch_quantized_histograms,
     quantized_hist_shape_ok,
 )
@@ -804,6 +805,9 @@ struct TDepthwiseWorkspace(Movable):
     var qh_key: Bool
     var d_qstats: DeviceBuffer[DType.uint64]
     var d_qacc: DeviceBuffer[DType.int32]
+    # QH_MODE_SKIP: one skip bin per feature (256 = none), set from each
+    # tree's root histogram; one cell when the arm is compiled out
+    var d_qskip: DeviceBuffer[DType.uint32]
     var d_bf_feature: DeviceBuffer[DType.int32]
     var h_bf_feature: HostBuffer[DType.int32]
     var d_bf_bin: DeviceBuffer[DType.int32]
@@ -951,6 +955,12 @@ struct TDepthwiseWorkspace(Movable):
         else:
             self.d_qstats = ctx.enqueue_create_buffer[DType.uint64](1)
             self.d_qacc = ctx.enqueue_create_buffer[DType.int32](1)
+        var qskip_n = 1
+        comptime if QH_MODE_SKIP:
+            if qh_live and n_features > 0:
+                qskip_n = n_features
+        self.d_qskip = ctx.enqueue_create_buffer[DType.uint32](qskip_n)
+        enqueue_fill(ctx, self.d_qskip, UInt32(256))
         var records = argmax_blocks * max_leaves
         self.region_score = ctx.enqueue_create_buffer[DType.float32](records)
         self.region_bin = ctx.enqueue_create_buffer[DType.uint32](records)
@@ -2388,6 +2398,7 @@ def fit_non_symmetric_tree[
                             cindex, row_index, stats, p_off, p_sz,
                             dws[0].d_ts_build[level],
                             d_qstats, d_qacc, hist, hist_cells_per_leaf,
+                            _dw_dev_u32(dws[0].d_qskip, 0), dws[0].n_features_key,
                         )
                         ts_quantized = True
                 if not ts_quantized:
@@ -3122,6 +3133,7 @@ def fit_non_symmetric_tree[
                                 stat_count, sm_count, fixed_scale,
                                 cindex, row_index, stats, p_off, p_sz, d_ids,
                                 d_qstats, d_qacc, hist, hist_cells_per_leaf,
+                                _dw_dev_u32(dws[0].d_qskip, 0), dws[0].n_features_key,
                             )
                         else:
                             launch_quantized_histograms[False](
@@ -3129,6 +3141,7 @@ def fit_non_symmetric_tree[
                                 stat_count, sm_count, fixed_scale,
                                 cindex, row_index, stats, p_off, p_sz, d_ids,
                                 d_qstats, d_qacc, hist, hist_cells_per_leaf,
+                                _dw_dev_u32(dws[0].d_qskip, 0), dws[0].n_features_key,
                             )
                         quantized_built = True
                 if not quantized_built:

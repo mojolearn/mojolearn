@@ -37,6 +37,9 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_quantized_shared import (
     QH_STATS,
     qh_hist_gather_kernel,
     qh_hist_kernel,
+    qh_hist_skip_kernel,
+    qh_mode_bins_kernel,
+    QH_MODE_BLOCK,
     qh_write_hist_kernel,
     quantize_pair_kernel,
 )
@@ -44,7 +47,9 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     greedy_quantized_hist_for,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 #: THE ONE TRUTH the driver keys its dispatch on. Comptime, so the
 #: IDENTICAL build folds every consumer away and executes the pre-round
@@ -52,6 +57,19 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 comptime QUANTIZED_HIST_LIVE = greedy_quantized_hist_for[
     TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 ]()
+
+#: FAST on Apple, opt-in (lane apple-fast-dwgap): the quantized build skips
+#: each feature's most contended bin and derives that cell from the block's
+#: row total (`kernel/hist_quantized_shared.mojo`, QH_MODE_SKIP block).
+#: Integer sums of the same addends, so the same histogram bit for bit.
+#: The B arm is `-D MOJOLEARN_GBDT_DW_MODE_SKIP`; it reaches every caller
+#: of `launch_quantized_histograms` (Depthwise and Lossguide).
+comptime QH_MODE_SKIP = (
+    QUANTIZED_HIST_LIVE
+    and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_DW_MODE_SKIP"]()
+)
 
 
 def quantized_hist_shape_ok(
@@ -152,6 +170,8 @@ def launch_quantized_histograms[ridx_stats: Bool = False](
     mut q_acc: DeviceBuffer[DType.int32],
     mut hist: DeviceBuffer[DType.float32],
     hist_cells_per_leaf: Int,
+    q_skip: MutPointer[UInt32, MutAnyOrigin],
+    q_skip_cap: Int,
 ) raises:
     """The quantized family's whole level: quantize the pairs for the
     partitions being built (DEV 1911), one shared-histogram launch per
@@ -204,6 +224,18 @@ def launch_quantized_histograms[ridx_stats: Bool = False](
     # cursor by each block's fold count (the flat-bin-order invariant,
     # `feature_blocks.mojo`'s banner).
     var block_first_bin = 0
+    var block_first_feature = 0
+    comptime if QH_MODE_SKIP:
+        var n_feat_total = 0
+        for b in range(len(blocks)):
+            n_feat_total += blocks[b].n_features
+        if n_feat_total > q_skip_cap:
+            raise Error(
+                "QH_MODE_SKIP: skip table holds "
+                + String(q_skip_cap)
+                + " features, the policy blocks have "
+                + String(n_feat_total)
+            )
     for b in range(len(blocks)):
         ref blk = blocks[b]
         var base = n_rows * blk.first_column
@@ -216,6 +248,50 @@ def launch_quantized_histograms[ridx_stats: Bool = False](
             groups, n_live, sm_count, n_rows, gather=(depth > 0)
         )
 
+        comptime if QH_MODE_SKIP:
+            if depth == 0:
+                ctx.enqueue_function[qh_hist_skip_kernel[False]](
+                    blk.folds.unsafe_ptr(),
+                    blk.fold_off.unsafe_ptr(),
+                    Int32(blk.n_features),
+                    cindex.unsafe_ptr(),
+                    Int32(line),
+                    Int32(base),
+                    row_index.unsafe_ptr(),
+                    q_stats.unsafe_ptr(),
+                    p_off.unsafe_ptr(),
+                    p_sz.unsafe_ptr(),
+                    ids.unsafe_ptr(),
+                    q_acc.unsafe_ptr(),
+                    Int32(block_first_bin),
+                    Int32(hist_cells_per_leaf),
+                    q_skip + block_first_feature,
+                    grid_dim=(groups * replicas, n_live, 1),
+                    block_dim=(QH_BLOCK, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[qh_hist_skip_kernel[True]](
+                    blk.folds.unsafe_ptr(),
+                    blk.fold_off.unsafe_ptr(),
+                    Int32(blk.n_features),
+                    cindex.unsafe_ptr(),
+                    Int32(line),
+                    Int32(base),
+                    row_index.unsafe_ptr(),
+                    q_stats.unsafe_ptr(),
+                    p_off.unsafe_ptr(),
+                    p_sz.unsafe_ptr(),
+                    ids.unsafe_ptr(),
+                    q_acc.unsafe_ptr(),
+                    Int32(block_first_bin),
+                    Int32(hist_cells_per_leaf),
+                    q_skip + block_first_feature,
+                    grid_dim=(groups * replicas, n_live, 1),
+                    block_dim=(QH_BLOCK, 1, 1),
+                )
+            block_first_bin += blk.total_folds
+            block_first_feature += blk.n_features
+            continue
         if depth == 0:
             ctx.enqueue_function[qh_hist_kernel](
                 blk.folds.unsafe_ptr(),
@@ -267,3 +343,27 @@ def launch_quantized_histograms[ridx_stats: Bool = False](
         grid_dim=((hist_cells_per_leaf + 255) // 256, n_live, stat_count),
         block_dim=(256, 1, 1),
     )
+
+    # ---- QH_MODE_SKIP: the next builds' skip bins from this tree's root
+    # histogram (depth 0 only; stream order puts it after the bridge and
+    # before the next level's build).
+    comptime if QH_MODE_SKIP:
+        if depth == 0:
+            var mode_first_bin = 0
+            var mode_first_feature = 0
+            for b in range(len(blocks)):
+                ref mblk = blocks[b]
+                if mblk.n_features > 0:
+                    ctx.enqueue_function[qh_mode_bins_kernel](
+                        mblk.folds.unsafe_ptr(),
+                        mblk.fold_off.unsafe_ptr(),
+                        ids.unsafe_ptr(),
+                        hist.unsafe_ptr(),
+                        Int32(mode_first_bin),
+                        Int32(hist_cells_per_leaf),
+                        q_skip + mode_first_feature,
+                        grid_dim=(mblk.n_features, 1, 1),
+                        block_dim=(QH_MODE_BLOCK, 1, 1),
+                    )
+                mode_first_bin += mblk.total_folds
+                mode_first_feature += mblk.n_features
