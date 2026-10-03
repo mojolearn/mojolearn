@@ -441,8 +441,8 @@ def yeti_task_16k_for[column: Int]() -> Bool:
     """SCHEDULING row (lane/apple-fast-trees-yeti, 2026-10-02): whether the
     block kernel is `yeti_rank_task_block16k_kernel` (16 KiB of threadgroup
     memory, accumulators in registers) instead of
-    `yeti_rank_task_block_kernel` (32 KiB). `-D MOJOLEARN_YETI_SEARCH_TASK16K=1`,
-    FAST on Apple only, default off. Same bits (the kernel's docstring).
+    `yeti_rank_task_block_kernel` (32 KiB),
+    FAST on Apple only. Same bits (the kernel's docstring).
 
     CAUSE. `yeti_rank_task_block_kernel` claims exactly Apple's 32 KiB
     threadgroup limit (`yeti_rank.mojo`, the DEVIATION 3040 block), so one
@@ -450,9 +450,23 @@ def yeti_task_16k_for[column: Int]() -> Bool:
     barriers a round and the pair phases' read-modify-writes scattered into
     threadgroup memory. The task kernel is the search gradient's whole cost
     (`tree_search` 6.0 s of the 9.56 s Istella fit). At 16 KiB two tasks
-    share a core."""
-    comptime if is_defined["MOJOLEARN_YETI_SEARCH_TASK16K"]():
-        return column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    share a core.
+
+    Default on FAST Apple since the M3 A/B yeti-task16k (istellarank, n=2,
+    same hash): 5,315 -> 5,102 ms (-4%); yeti-both 5,296 -> 5,110.
+    `-D MOJOLEARN_YETI_SEARCH_TASK16K_OFF` is the A arm; the old
+    `-D MOJOLEARN_YETI_SEARCH_TASK16K` is harmless.
+
+    DEPENDENCY. This kernel keeps the rank-merge sort; `YETI_FAST_SORT`
+    (default, M3 aft-ab-ysort1 -37%) lives only in the 32 KiB kernel. The
+    16 KiB kernel therefore steps aside while `YETI_FAST_SORT` is on, and
+    takes over when `-D MOJOLEARN_YETI_FAST_SORT_OFF` turns it off."""
+    comptime if is_defined["MOJOLEARN_YETI_SEARCH_TASK16K_OFF"]():
+        return False
+    comptime if yeti_fast_sort_for[column]():
+        return False
+    comptime if column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        return True
     return False
 
 
