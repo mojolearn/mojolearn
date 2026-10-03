@@ -44,6 +44,7 @@ from sequence.ops import (
     OPT_NADAM,
     gates_of,
 )
+from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, SEQ_LSTM_SCAN, SEQ_LSTM_WGRAD, scan_applies
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
 comptime TASK_MSE = 0
@@ -130,6 +131,52 @@ def gemm[E: Exec](
     ex.launch[OP_GEMM](a, M * N)
 
 
+#: SEQ_LSTM_WGRAD: the split-K scratch (floats) every weight-gradient fold shares
+comptime WGRAD_SCRATCH = 65536
+
+
+def wgrad_gemm[E: Exec](
+    mut ex: E, A: FP, B: FP, C: FP, M: Int, N: Int, K: Int,
+    sam: Int, sak: Int, sbk: Int, sbn: Int, ldc: Int, scratch: FP,
+) raises:
+    """SEQ_LSTM_WGRAD (FAST + Apple, lane apple-fast-gap-lstm): a weight or
+    bias gradient, C = A B over the K = T B (time x batch) rows, which ran
+    as M N threads each one K-long chain (6,144 terms on the board, 256
+    threads for dW_ih and the bias sums). K splits into S blocks of >= 512
+    so about 65,536 threads fold a block each from zero, then one ordered
+    sum of the S partials per cell (`OP_GEMM_SPLITK`). A different fold
+    order from `gemm`'s chain: FAST only. Shapes outside the bound keep
+    `gemm`."""
+    var MN = M * N
+    if MN <= 16384 and K >= 2048:
+        var S = min(WGRAD_SCRATCH // MN, K // 512)
+        if S > 1:
+            var KS = (K + S - 1) // S
+            S = (K + KS - 1) // KS
+            var a = Args()
+            a.p0 = A
+            a.p1 = B
+            a.p2 = C
+            a.p3 = scratch
+            a.i0 = M
+            a.i1 = N
+            a.i2 = K
+            a.i3 = sam
+            a.i4 = sak
+            a.i5 = sbk
+            a.i6 = sbn
+            a.i7 = 0
+            a.i8 = ldc
+            a.i9 = S
+            a.i10 = KS
+            a.i11 = 0
+            ex.launch[OP_GEMM_SPLITK](a, S * MN)
+            a.i11 = 1
+            ex.launch[OP_GEMM_SPLITK](a, MN)
+            return
+    gemm(ex, A, B, C, M, N, K, sam, sak, sbk, sbn, False, ldc)
+
+
 def bias_rows[E: Exec](mut ex: E, X: FP, b: FP, Y: FP, R: Int, C: Int) raises:
     var a = Args()
     a.p0 = X
@@ -211,6 +258,8 @@ struct Work(Movable):
     var yhat: FP
     var dy: FP
     var sq: FP
+    var one: FP
+    var wsplit: FP
 
     def __init__[E: Exec](out self, mut ex: E, net: Net, T: Int, B: Int, train: Bool) raises:
         var GH = net.G() * net.H
@@ -239,6 +288,14 @@ struct Work(Movable):
         self.yhat = ex.alloc(B * net.O)
         self.dy = ex.alloc(B * net.O)
         self.sq = ex.alloc(B * net.O)
+        comptime if SEQ_LSTM_WGRAD:
+            # the bias sums as ones^T dG (one fma by 1.0 per term, exact)
+            self.one = ex.alloc(1)
+            fill(ex, self.one, 1, Float32(1.0))
+            self.wsplit = ex.alloc(WGRAD_SCRATCH if train else 1)
+        else:
+            self.one = self.sq
+            self.wsplit = self.sq
 
 
 def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work) raises -> FP:
@@ -251,6 +308,27 @@ def forward[E: Exec](mut ex: E, net: Net, P: FP, x: FP, T: Int, B: Int, w: Work)
         var din = net.din(l)
         gemm(ex, inp, P + net.w_ih(l), w.gx[l], T * B, GH, din, din, 1, 1, din, False, GH)
         bias_rows(ex, w.gx[l], P + net.b_ih(l), w.gx[l], T * B, GH)
+        comptime if SEQ_LSTM_SCAN:
+            if scan_applies(H, net.G()):
+                # the whole recurrence, one block per row (h_0 = c_0 = 0
+                # inside): sequence/recurrent_scan.mojo
+                var sa = Args()
+                sa.p0 = w.gx[l]
+                sa.p1 = w.gh[l]
+                sa.p2 = w.act[l]
+                sa.p3 = w.hall[l]
+                sa.p4 = w.call[l]
+                sa.p5 = w.hall[l] + B * H
+                sa.p6 = w.call[l] + B * H
+                sa.p7 = P + net.w_hh(l)
+                sa.p8 = P + net.b_hh(l)
+                sa.i0 = net.cell
+                sa.i1 = B
+                sa.i2 = H
+                sa.i3 = T
+                ex.launch[OP_CELL_FWD_SCAN](sa, B)
+                inp = w.hall[l] + B * H
+                continue
         fill(ex, w.hall[l], B * H, Float32(0.0))
         fill(ex, w.call[l], B * H, Float32(0.0))
         for s in range(T):
@@ -300,9 +378,35 @@ def backward[E: Exec](mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int,
         var din = net.din(l)
         var dh = w.dh
         var dhn = w.dhn
-        fill(ex, dh, B * H, Float32(0.0))
-        fill(ex, w.dc, B * H, Float32(0.0))
-        var s = T - 1
+        var scanned = False
+        comptime if SEQ_LSTM_SCAN:
+            if scan_applies(H, net.G()):
+                # every step from T - 1 down, one block per row (dh = dc = 0
+                # inside): sequence/recurrent_scan.mojo
+                var sa = Args()
+                sa.p0 = w.act[l]
+                sa.p1 = w.gh[l]
+                sa.p2 = w.hall[l]
+                sa.p3 = w.call[l]
+                sa.p4 = w.call[l] + B * H
+                sa.p5 = dh
+                sa.p6 = cur
+                sa.p7 = w.dc
+                sa.p8 = w.dgx
+                sa.p9 = w.dgh
+                sa.p10 = dhn
+                sa.p11 = P + net.w_hh(l)
+                sa.i0 = net.cell
+                sa.i1 = B
+                sa.i2 = H
+                sa.i3 = T
+                sa.i4 = B * GH
+                ex.launch[OP_CELL_BWD_SCAN](sa, B)
+                scanned = True
+        if not scanned:
+            fill(ex, dh, B * H, Float32(0.0))
+            fill(ex, w.dc, B * H, Float32(0.0))
+        var s = T - 1 if not scanned else -1
         while s >= 0:
             var a = Args()
             a.p0 = w.act[l] + s * B * GH
@@ -333,10 +437,16 @@ def backward[E: Exec](mut ex: E, net: Net, P: FP, Gr: FP, x: FP, T: Int, B: Int,
             dhn = t
             s -= 1
         var inp = x if l == 0 else w.hall[l - 1] + B * H
-        gemm(ex, w.dgx, inp, Gr + net.w_ih(l), GH, din, T * B, 1, GH, din, 1, False, din)
-        gemm(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, False, H)
-        colsum(ex, w.dgx, Gr + net.b_ih(l), T * B, GH)
-        colsum(ex, w.dgh, Gr + net.b_hh(l), T * B, GH)
+        comptime if SEQ_LSTM_WGRAD:
+            wgrad_gemm(ex, w.dgx, inp, Gr + net.w_ih(l), GH, din, T * B, 1, GH, din, 1, din, w.wsplit)
+            wgrad_gemm(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, H, w.wsplit)
+            wgrad_gemm(ex, w.one, w.dgx, Gr + net.b_ih(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
+            wgrad_gemm(ex, w.one, w.dgh, Gr + net.b_hh(l), 1, GH, T * B, 0, 0, GH, 1, GH, w.wsplit)
+        else:
+            gemm(ex, w.dgx, inp, Gr + net.w_ih(l), GH, din, T * B, 1, GH, din, 1, False, din)
+            gemm(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, False, H)
+            colsum(ex, w.dgx, Gr + net.b_ih(l), T * B, GH)
+            colsum(ex, w.dgh, Gr + net.b_hh(l), T * B, GH)
         if l > 0:
             gemm(ex, w.dgx, P + net.w_ih(l), other, T * B, din, GH, GH, 1, din, 1, False, din)
             var t2 = cur
