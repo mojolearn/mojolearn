@@ -150,7 +150,7 @@ def ls_backtrack(
     many candidates were evaluated (for the card)."""
     if step <= Float32(0.0):
         return LS_INVALID_STEP
-    # lane/apple-fast-linsvr: FAST on Apple under QN_FAST_LS_BATCH (default; LSVR_ALL_OFF reverts),
+    # lane/apple-fast-linsvr: FAST on Apple under QN_FAST_LS_BATCH (default; -D MOJOLEARN_LSVR_LINESEARCH_BATCH_OFF reverts),
     # Armijo only (the Wolfe arms need a gradient dot per candidate)
     comptime if QN_FAST_LS_BATCH:
         if param.linesearch == LBFGS_LS_BT_ARMIJO and f.ls_batch_applies():
@@ -229,7 +229,7 @@ def ls_backtrack_batched(
     which can differ from the full evaluation at that point in the last
     bits; FAST promises no bits."""
     comptime if not QN_FAST_LS_BATCH:
-        raise Error("qn: ls_backtrack_batched is compiled under FAST + Apple (QN_LSVR_ALL) only")
+        raise Error("qn: ls_backtrack_batched is compiled under FAST + Apple (QN_FAST_LS_BATCH) only")
     else:
         var fx_init = fx
         _dg_init_enqueue(ctx, grad, drt, n, scalar, stage, dg_ready)
