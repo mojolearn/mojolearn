@@ -65,3 +65,8 @@ device buffer as a column for the broadcast (the `_DevBuf` is refcounted, freed 
 
 Requests: `kap-kpca-istella` (kernel-pca istella), `kap-srp-taxi` (sparse-rp taxi). After a win:
 kernel-pca taxi, sparse-rp istella with the same defines.
+
+## gaussian-rp baseline re-run (no switch)
+`kap-grp-base-taxi` / `kap-grp-base-istella` run arm A only (afc_ab.sh with no envB): main's current gaussian-rp FAST route (the tiled
+device projection, `x_decomp_dev_project`, default on) at this branch's head, which carries no gaussian-rp change. The 0.8.34 board rows
+(taxi 3.7x, istella 2.4x slower than sklearn) predate that kernel; these lines give the manager the current FAST time to replace them.
