@@ -11,7 +11,8 @@
 SEVERABLE PIPELINES (2026-09-25). After the common steps a release is four
 pipelines that run at once in one invocation, each publishing as soon as ITS
 OWN gates pass; a failure in one never blocks or undoes another:
-  macos       macos-build -> macos-smoke -> release-check (the Apple column) -> publish-macos
+  macos       macos-build -> macos-smoke + macos-self-test -> release-check (the Apple column)
+              -> publish-macos
   core-linux  linux-builds -> linux-wait -> linux-assemble -> linux-pack -> linux-joint-diff
               -> publish-core-linux (after publish-nvidia AND publish-amd)
   nvidia      gpu-column-nvidia -> publish-nvidia
@@ -92,6 +93,11 @@ THE STEPS
                      tools/release_github_build.py) are opt-in
   macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
   macos-smoke        qualify_verifier_wheel.py --scope expanded under the Metal lock
+  macos-self-test    tools/wheel_self_test.py: the built macOS wheel in a fresh venv,
+                     `python -m mojolearn verify --self-test --cpu-threads 3`; the
+                     bundled reference table must reproduce this wheel's own bits
+                     (0.8.35 shipped a stale table). No PASSED receipt for these
+                     wheel bytes, no publish-macos
   release-check      pixi run -e test release-check: the Apple (Metal) column of
                      the changed lanes, one fit per cell (CPU pass: --cpu-column)
   linux-wait         every launched leg finished, its proof complete for this
@@ -738,6 +744,7 @@ STEP_TABLE = [
     ("linux-builds", "core-linux", ["reuse-plan", "cross-compile"], None),
     ("macos-build", "macos", ["reuse-plan"], "mac"),
     ("macos-smoke", "macos", ["macos-build"], "mac"),
+    ("macos-self-test", "macos", ["macos-build"], "mac"),
     ("release-check", "macos", ["reuse-plan"], "mac"),
     ("linux-wait", "core-linux", ["linux-builds"], None),
     ("linux-assemble", "core-linux", ["linux-wait"], None),
@@ -750,7 +757,7 @@ STEP_TABLE = [
     ("publish-nvidia", "nvidia", ["gpu-column-nvidia", "linux-joint-diff"], "dispatch"),
     ("publish-amd", "amd", ["gpu-column-amd", "linux-joint-diff"], "dispatch"),
     ("publish-core-linux", "core-linux", ["linux-joint-diff", "publish-nvidia", "publish-amd"], "dispatch"),
-    ("publish-macos", "macos", ["macos-smoke", "release-check"], "dispatch"),
+    ("publish-macos", "macos", ["macos-smoke", "macos-self-test", "release-check"], "dispatch"),
     ("finish-line", "finish", ["freeze-commit"], None),
     ("record", "finish", ["finish-line"], None),
 ]
@@ -760,7 +767,8 @@ AFTER = {"linux-joint-diff": ["gpu-column-nvidia", "gpu-column-amd"],
 #: A PIPELINE: named builds, named checks, one publish, and the platform it
 #: ships (what published_platforms() says: `linux` is the core's).
 PIPELINES = {
-    "macos": dict(builds=["macos-build"], checks=["macos-smoke", "release-check"], publish="publish-macos",
+    "macos": dict(builds=["macos-build"], checks=["macos-smoke", "macos-self-test", "release-check"],
+                  publish="publish-macos",
                   platform="macos"),
     "core-linux": dict(builds=["linux-builds", "linux-wait", "linux-assemble", "linux-pack"],
                        checks=["cross-compile", "linux-joint-diff"], publish="publish-core-linux", platform="linux"),
@@ -1530,6 +1538,35 @@ class Release:
             raise StepFailed(f"macOS smoke receipt is not PASSED for this wheel: {out / 'results.json'}")
         return "PASSED"
 
+    def self_test_receipt(self):
+        return self.rel / "self-test-macos" / "results.json"
+
+    def self_test_passed(self, wheel):
+        sys.path.insert(0, str(ROOT / "tools"))
+        import wheel_self_test
+        return bool(wheel) and wheel_self_test.passed(self.self_test_receipt(), wheel)
+
+    def step_macos_self_test(self):
+        """The bundled reference table against the wheel's own bits, before
+        any publish: a fresh venv, the built wheel, `verify --self-test`."""
+        w = self.macos_wheel()
+        if w and self.self_test_passed(w):
+            return "PASSED (receipt exists)"
+        if not w and not self.dry:
+            raise StepFailed("no macOS wheel; run macos-build")
+        out = self.self_test_receipt().parent
+        if out.exists() and not self.dry:
+            out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+        self.must([PY, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "3600", "metal", "--",
+                   PY, str(ROOT / "tools" / "wheel_self_test.py"), w or "<macos wheel>", "--out", out,
+                   "--python", self.smoke_python() if not self.dry else "python3.12", "--cpu-threads", "3"],
+                  log=self.rel / "macos-self-test.log", what="macOS verify --self-test")
+        if not self.dry and not self.self_test_passed(w):
+            raise StepFailed(f"verify --self-test did not pass on the built macOS wheel: {self.self_test_receipt()}; "
+                             "regenerate the reference table (tools/record_identity_column.sh, "
+                             "tools/admit_identity_columns.sh)")
+        return "PASSED"
+
     def release_check_dir(self):
         base = os.environ.get("MOJOLEARN_RELEASE_CHECK_DIR") or os.path.expanduser("~/mojolearn-evidence/release-check")
         return Path(base) / self.commit[:12]
@@ -2198,6 +2235,11 @@ class Release:
                              "bits on purpose)")
 
     def step_publish_macos(self):
+        # The self-test gate holds even when publish-macos is run alone
+        # (--only publish-macos): no PASSED receipt for these bytes, no upload.
+        if not self.dry and not self.self_test_passed(self.macos_wheel()):
+            raise StepFailed("no PASSED verify --self-test receipt for this macOS wheel "
+                             f"({self.self_test_receipt()}); run macos-self-test")
         checked = self.mac_cross_check()
         self.say("  " + checked)
         return self.publish("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json")
