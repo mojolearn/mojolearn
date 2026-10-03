@@ -98,17 +98,22 @@ def _bigd_on() -> Bool:
 
 def _k64_on() -> Bool:
     """MOJOLEARN_KNN_FAST_MMA_K64=1 (lane/apple-fast-core, 2026-10-02, FAST +
-    Apple only, default off): admit `32 < k <= 64` to this arm with `K = 64`
+    Apple only): admit `32 < k <= 64` to this arm with `K = 64`
     instantiations. Cause: `MQ_MAX_K` is 32, so the board's k-NN lane
     (k = 64, `tools/classical_two_datasets.py` KNN_K) never reaches the
     matrix-unit kernels and falls to the generic tiled arm
     (`knn_brute_force.mojo::brute_force_knn_impl`, the dispatch after the
     FAST arms). The lists are the same sorted (distance, index) insertions,
     twice as long per thread; the bitonic fold gets a sixth level (a no-op
-    for `K <= 32`)."""
+    for `K <= 32`).
+
+    DEFAULT ON (FAST + Apple) since the M3 A/B core-knn-k64-istella: knn
+    1,581 -> 352 ms, recall .9766 same. -D MOJOLEARN_KNN_FAST_MMA_K64_OFF
+    turns it off; the old -D MOJOLEARN_KNN_FAST_MMA_K64 name is accepted and
+    changes nothing."""
     comptime if not (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-        and is_defined["MOJOLEARN_KNN_FAST_MMA_K64"]()
+        and not is_defined["MOJOLEARN_KNN_FAST_MMA_K64_OFF"]()
     ):
         return False
     else:

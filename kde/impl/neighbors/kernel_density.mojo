@@ -2783,8 +2783,12 @@ def kde_score_samples_device(
 # `(m, s)` pair, and `kde_slice_merge_kernel` folds the pairs per query:
 # `lse = M + log(sum_slice s_slice * exp(m_slice - M))`, `M = max m_slice`.
 # The per-cell arithmetic is the fused kernel's; only the fold association
-# changes, which FAST may do. FAST + Apple only, default off; the two slice
-# kernels are the two fused kernels with slice bounds and partial outputs.
+# changes, which FAST may do. FAST + Apple only; the two slice kernels are
+# the two fused kernels with slice bounds and partial outputs.
+# DEFAULT ON (FAST + Apple) since the M3 A/B core-kde-slices-istella: kde
+# 1,519 -> 141 ms, mean_log_likelihood -222.3 same. -D
+# MOJOLEARN_KDE_FAST_SLICES_OFF turns it off; the old -D
+# MOJOLEARN_KDE_FAST_SLICES name is accepted and changes nothing.
 comptime KDE_SLICE_TARGET_BLOCKS = 1024
 comptime KDE_SLICE_MAX = 256
 
@@ -2792,7 +2796,7 @@ comptime KDE_SLICE_MAX = 256
 def kde_fast_slices_on() -> Bool:
     comptime if not (
         GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-        and is_defined["MOJOLEARN_KDE_FAST_SLICES"]()
+        and not is_defined["MOJOLEARN_KDE_FAST_SLICES_OFF"]()
     ):
         return False
     else:
