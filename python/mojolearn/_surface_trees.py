@@ -85,7 +85,7 @@ FAMILIES = (
             "x_trees_onehot_leaves", "x_trees_transpose_f32", "x_trees_log64",
             "x_trees_normalize_rows", "x_trees_scatter", "x_trees_platt_fit", "x_trees_platt_apply",
             "x_trees_isotonic_fit", "x_trees_isotonic_predict", "x_trees_tree_shap_prepare", "x_trees_tree_shap",
-            "x_trees_block_mean", "x_trees_kshap_synth", "x_trees_kshap_solve", "x_trees_pshap_synth", "x_trees_pshap_values",
+            "x_trees_block_mean", "x_trees_kshap_synth", "x_trees_kshap_solve", "x_trees_kshap_means", "x_trees_kshap_solve_ey", "x_trees_pshap_synth", "x_trees_pshap_values",
             "x_trees_leaf_newton_rows", "x_trees_logit", "x_trees_accumulate_rows",
             "x_trees_check_weights_f32", "x_trees_mul_f32",
             "x_trees_exact_sum_f32", "x_trees_margin2",
