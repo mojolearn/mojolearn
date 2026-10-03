@@ -620,3 +620,91 @@ def expand_raw_columns(
                     )
                 )
     return out^
+
+
+def build_ctr_tables_from_counts(
+    counts: List[Int],
+    histogram: List[Int],
+    unique_values: Int,
+    ctr_configs: List[TCtrConfig],
+    target_classes_count: Int,
+    source_feature: Int,
+    first_column: Int,
+    n_rows: Int,
+) raises -> List[TCtrValueTable]:
+    """`build_ctr_tables` from counts that were already tallied -- by the
+    device (`gbdt/ctrs/fast_prep.mojo` `code_histogram_kernel`, FAST + Apple
+    under `-D MOJOLEARN_CTR_ONEHOT_DEVICE`). Same tables, same fields, same
+    checks on what is present; only the two host passes over the rows are
+    gone. `histogram` is `unique_values * target_classes_count` long when a
+    Borders config is present and may be empty otherwise. Reached by no
+    build but that one; `build_ctr_tables` above is unchanged."""
+    if unique_values <= 0:
+        raise Error("a categorical feature with no categories has no table")
+    if len(counts) != unique_values:
+        raise Error(
+            "counts has " + String(len(counts)) + " entries for "
+            + String(unique_values) + " categories"
+        )
+    var wants_histogram = False
+    for i in range(len(ctr_configs)):
+        if ctr_configs[i].ctr_type == CTR_BORDERS:
+            wants_histogram = True
+    if wants_histogram:
+        if target_classes_count < 2:
+            raise Error(
+                "a Borders CTR table needs at least two target classes and"
+                " was given " + String(target_classes_count)
+                + "; their TargetClassesCount is the target classifier's"
+                " Borders.size() + 1 (libs/model/target_classifier.h:32-34)"
+            )
+        if len(histogram) != unique_values * target_classes_count:
+            raise Error(
+                "a Borders CTR table histogram has "
+                + String(len(histogram)) + " cells for "
+                + String(unique_values) + " x "
+                + String(target_classes_count)
+            )
+    var out = List[TCtrValueTable]()
+    for i in range(len(ctr_configs)):
+        ref cfg = ctr_configs[i]
+        if cfg.ctr_type == CTR_FEATURE_FREQ:
+            out.append(
+                TCtrValueTable(
+                    first_column + i,
+                    source_feature,
+                    cfg.ctr_type,
+                    cfg.numerator_shift(),
+                    cfg.denumerator_shift(),
+                    Float32(0.0),
+                    Float32(1.0),
+                    n_rows,
+                    0,
+                    0,
+                    counts.copy(),
+                )
+            )
+        elif cfg.ctr_type == CTR_BORDERS:
+            out.append(
+                TCtrValueTable(
+                    first_column + i,
+                    source_feature,
+                    cfg.ctr_type,
+                    cfg.numerator_shift(),
+                    cfg.denumerator_shift(),
+                    Float32(0.0),
+                    Float32(1.0),
+                    0,
+                    target_classes_count,
+                    cfg.param_id,
+                    histogram.copy(),
+                )
+            )
+        else:
+            raise Error(
+                "no apply-time CTR table is implemented for ctr type "
+                + ctr_type_name(cfg.ctr_type)
+                + "; TCatFeatureParams.check() admits only Borders and"
+                " FeatureFreq, so this config never reached train()"
+            )
+    return out^
