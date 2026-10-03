@@ -115,3 +115,7 @@ Risk. None beyond compile (whole-buffer `enqueue_copy` into a host buffer of `le
 All four at once (the switches touch different stages: k-NN, MST, outputs). On taxi: CORE_TILE + DEV_BORUVKA +
 ONE_SYNC; on istella: SMR_TILED + ONE_SYNC. Where ALL beats the best single define, the stages compose; where
 it does not, read the single lines.
+
+## Compile record (2026-10-03, head 6631889a3, compile only, nothing run)
+FAST + `-D MOJOLEARN_HDBSCAN2_ALL` rc=0; FAST + `HDB_CORE_TILE` rc=0; FAST + `HDB_DEV_BORUVKA` rc=0;
+FAST + `HDB_ONE_SYNC` rc=0; FAST + `HDB_SMR_TILED` rc=0; FAST, no define, rc=0; IDENTICAL rc=0.
