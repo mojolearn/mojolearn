@@ -516,9 +516,19 @@ def test_classification_labels_match(name):
 def test_cluster_label_union_matches(name):
     y = _metric_label_inputs()[name]
     other = _RNG.integers(-2, 9, 3000)
-    native = name in _NATIVE_LABELS and name != "bool"  # a bool is not an integer label here
-    _same(lambda: M._prepare_cluster_labels(y, other[:len(y)]),
-          ("gather_i32", "encode_labels_i32") if native else (), group="metrics")
+    # lane apple-fast-py2mojo-core: the union is ONE `unique_inverse` of the
+    # two arrays laid end to end (no encoder, no gather), so the reference
+    # is the Python routine with the union seam declined
+    call = lambda: M._prepare_cluster_labels(y, other[:len(y)])
+    real = M._native_union_codes
+    M._native_union_codes = lambda *args, **kwargs: None
+    try:
+        ref = _outcome(call)
+    finally:
+        M._native_union_codes = real
+    new = _outcome(call)
+    if not _EXPECT_SABOTAGE:
+        assert new == ref, f"metrics: new arm {new!r:.300} != reference {ref!r:.300}"
     _same(lambda: M._as_i32_1d(y, "labels"), (), group="metrics")
 
 
