@@ -46,10 +46,6 @@ d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	hierarchy/impl/cluster/detai
 d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for t in range(n_todo):
 # why: OWED (per-query path only: k > 32, dim > FIVF_MAX_DIM, traced, partial storage, or naming a query short of k): each query's candidates gathered on the host and uploaded; the batched scans plan on the device (ivf_group_device.mojo); a device candidate gather for this path is the remaining step
 d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo	0	for q in range(n_queries):
-# why: FAST tier only (GMM_FAST_MEANLL, the Apple FAST peer's): one 1024-thread block over n; IDENTICAL and default FAST without the define use the chunked-level device fold
-one-block-n	serial-gpu	apple-fast-purity2	owed	mixture/checks/estep.mojo	0	ctx.enqueue_function[fast_meanll_kernel](
-# why: FAST tier only (GMM_FAST_MEANLL, the Apple FAST peer's): one 1024-thread block over n; IDENTICAL and default FAST without the define use the chunked-level device fold
-one-block-n	serial-gpu	apple-fast-purity2	owed	mixture/checks/estep.mojo	1	ctx.enqueue_function[fast_meanll_kernel](
 py-loop	py-numpy	apple-fast-purity2	debt	python/mojolearn/_array.py	0	return (self[i] for i in range(self.shape[0]))
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	0	for s in range(n_rows):
 py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_bufcheck.py	1	for s in range(n_rows):
