@@ -1,4 +1,4 @@
-pos=589 lines=    1059
+pos=599 lines=    1059
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -714,3 +714,14 @@ pos=589 lines=    1059
 822:CMD apple-fast-ann@70833546a ann-ivfpq-select-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=6052.9 all=[6053] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_IVF_FAST_SCAN_SELECT=1'
 823:CMD apple-fast-ann@70833546a ann-ivfpq-trainset-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=5961.9 all=[5962] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1'
 824:CMD apple-fast-ann@70833546a ann-ivfpq-csr-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=6059.1 all=[6059] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_IVF_FAST_DEVICE_CSR=1'
+825:CMD apple-fast-ann@70833546a ann-ivfrefine-devcb-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2507.1 all=[2507] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1'
+826:CMD apple-fast-ann@70833546a ann-ivffilter-devcb-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2516.5 all=[2516] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_IVFPQ_FAST_DEVICE_CODEBOOKS=1'
+827:CMD apple-fast-ann@70833546a ann-ivfsq-trainset-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2078.0 all=[2078] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1'
+828:CMD apple-fast-ann@70833546a ann-ivfsq-select-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2190.3 all=[2190] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_IVF_FAST_SCAN_SELECT=1'
+829:CMD apple-fast-ann@70833546a ann-ivfrq-select-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1978.1 all=[1978] quality=['{"recall_at_10":'] defines='-D MOJOLEARN_IVF_FAST_SCAN_SELECT=1'
+830:CMD apple-fast-ann@70833546a ann-ivf-csr-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2825.3 all=[2825] quality=['{}'] defines='-D MOJOLEARN_IVF_FAST_DEVICE_CSR=1'
+831:CMD apple-fast-ann@70833546a ann-ivf-trainset-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=2489.2 all=[2489] quality=['{}'] defines='-D MOJOLEARN_IVF_FAST_DEVICE_TRAINSET=1'
+832:FBUILD lane/apple-fast-cluster2@ded4ea07b prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
+833:CMD apple-fast-cluster2@ded4ea07b cluster2-ap-loop-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=372.1 all=[372] quality=['{"n_clusters":'] defines='-D MOJOLEARN_AFFINITY_FAST_LOOP=1'
+834:CMD apple-fast-cluster2@ded4ea07b cluster2-ap-exact-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=379.2 all=[379] quality=['{"n_clusters":'] defines='-D MOJOLEARN_AP_EXACT=1'
+835:CMD apple-fast-cluster2@ded4ea07b cluster2-ap-split-istella-b rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=264.8 all=[265] quality=['{"n_clusters":'] defines='-D MOJOLEARN_AP_SPLIT=1'
