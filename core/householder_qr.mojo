@@ -441,14 +441,11 @@ def qr_panel_kernel(
 #: j + 1 + l, + QR_TPB, ...) and folds its 32 partials with the SAME
 #: two-phase halving tree (`_warp_fold`, the additions of
 #: `two_phase_halving_sum[32]` on a warp-private slab), so the bits are the
-#: panel kernel's. `qr_factor` always runs the split launches;
-#: MOJOLEARN_QR_SPLIT=0 reaches only x_decomp/qr_bounded.mojo.
+#: panel kernel's. `qr_factor` and x_decomp/qr_bounded.mojo always run the
+#: split launches (the MOJOLEARN_QR_SPLIT env switch is gone).
 comptime QR_APPLY_WARPS = 8
 comptime QR_APPLY_TPB = QR_APPLY_WARPS * QR_TPB
 
-
-def qr_split() -> Bool:
-    return String(getenv("MOJOLEARN_QR_SPLIT")) != "0"
 
 
 @always_inline
