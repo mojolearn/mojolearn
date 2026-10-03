@@ -124,8 +124,11 @@ from gbdt.gpu_data.feature_sampling import check_feature_fraction
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
-#: lane/apple-fast-trees-depthwise (2026-10-02), `-D MOJOLEARN_GBDT_CTR_FAST_FREQ=1`,
-#: FAST + Apple only, default OFF. The permutation-INDEPENDENT simple CTR
+#: lane/apple-fast-trees-depthwise (2026-10-02), CTR_FAST_FREQ: FAST + Apple
+#: only, the default since the M3 A/B (tdw-cat-freq: gbdt-categorical
+#: taxicat 33,043 -> 27,761 ms, -16%, auc same); `-D
+#: MOJOLEARN_GBDT_CTR_FAST_FREQ_OFF` keeps the host calcer, and the old
+#: `-D MOJOLEARN_GBDT_CTR_FAST_FREQ` name is harmless. The permutation-INDEPENDENT simple CTR
 #: (the GPU default's FeatureFreq / Counter column) was computed on the
 #: HOST inside the fit: `compute_simple_ctrs` (`ctrs/ctr_calcers.mojo:81`)
 #: runs `TCtrBinBuilder`'s host stable sort of every row by category and
@@ -138,7 +141,7 @@ from std.sys.info import has_apple_gpu_accelerator
 comptime CTR_FAST_FREQ = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GBDT_CTR_FAST_FREQ"]()
+    and not is_defined["MOJOLEARN_GBDT_CTR_FAST_FREQ_OFF"]()
 )
 
 #: lane/apple-fast-trees-depthwise (2026-10-02, family `trees-ctr`),
