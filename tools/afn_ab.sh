@@ -72,6 +72,7 @@ usage() {
   echo "usage: afn_ab.sh <tag> <binding> <board-lane> <shape> <reps> \"<defines A>\" \"<defines B>\"" >&2
   echo "       afn_ab.sh <tag> <binding> <board-lane> <shape> <reps> identical fast   (baseline)" >&2
   echo "  binding: linalg|transformer|mamba|training|byte_lm|embedding|x_cnn; shape: full|small" >&2
+  echo "  board-lane custom (binding embedding|x_cnn): tools/afn_custom_time.py, no board lane" >&2
   echo "  board-lane: lm-train-step lm-forward gemm gemm-bf16 gemm-int8 transformer-forward" >&2
   echo "              mamba1-forward mamba2-forward mamba3-forward samba-train-step samba-forward mlp-train-step" >&2
   [ $# -gt 0 ] && echo "afn_ab.sh: $*" >&2
@@ -87,6 +88,7 @@ case $BIND in linalg|transformer|mamba|training|byte_lm|embedding|x_cnn) ;;
 case $LANE in
   lm-train-step|lm-forward|gemm|gemm-bf16|gemm-int8|transformer-forward|mamba1-forward|mamba2-forward|\
   mamba3-forward|samba-train-step|samba-forward|mlp-train-step) ;;
+  custom) case $BIND in embedding|x_cnn) ;; *) usage "lane custom times the embedding or x_cnn binding only (tools/afn_custom_time.py), got '$BIND'" ;; esac ;;
   *-infer|lm-host-train-step) usage "lane '$LANE' runs our CPU: never raced, in no numeric mode" ;;
   *) usage "unknown board lane '$LANE'" ;;
 esac
@@ -171,10 +173,9 @@ race_once() {  # $1 arm, $2 spec, $3 rep
   d=$OUT/$arm-$rep; rm -rf "$d"; mkdir -p "$d"
   env MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_BENCH_INSTALLED=0 PYTHONPATH="$here/python" \
     MOJOLEARN_REPO_COMMIT=$head \
-    "$VP" tools/bench_board_neural.py race --lane "$LANE" --shape "$SHAPE" --arms "$rarm" \
-      --rounds "$ROUNDS" --out "$d/res" --work "$d/work" --ours-python "$VP" --keep-outputs \
-      --ready-seconds "${AFN_READY_SECONDS:-1800}" --warmup-seconds "${AFN_ROUND_SECONDS:-1800}" \
-      --round-seconds "${AFN_ROUND_SECONDS:-1800}" > "$d/race.txt" 2>&1 || rc=$?
+    $( [ "$LANE" = custom ] && echo "$VP tools/afn_custom_time.py --binding $BIND --rounds $ROUNDS --out $d/res --arm $rarm" \
+       || echo "$VP tools/bench_board_neural.py race --lane $LANE --shape $SHAPE --arms $rarm --rounds $ROUNDS --out $d/res --work $d/work --ours-python $VP --keep-outputs --ready-seconds ${AFN_READY_SECONDS:-1800} --warmup-seconds ${AFN_ROUND_SECONDS:-1800} --round-seconds ${AFN_ROUND_SECONDS:-1800}" ) \
+      > "$d/race.txt" 2>&1 || rc=$?
   rm -rf "$d/work"
   line=$(grep -m 1 "^NEURAL lane=$LANE arm=$rarm " "$d/race.txt" || true)
   m=$(echo "$line" | grep -o 'median_ms=[^ ]*' | cut -d= -f2 || true)
