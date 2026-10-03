@@ -512,3 +512,18 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | RR_EIGH scope to LDA/QDA | lane/apple-fast-eighscope @ 73f3a856d | 7edf6d895 | iterative-imputer istella 8,805 -> 4,596 ms |
 | purity: host steps out of LP/LS/PageRank stop sums, SVGP ELBO folds | lane/apple-fast-purity | a5e98534a | IDENTICAL bits change on every vendor + host |
 | py2mojo-core / -prep / -decomp / -neighbors / -linear: Python loops into Mojo | lane/apple-fast-py2mojo-* | 93d3522cd, 5ebff5c29, 05fffc97d, 12f304993, f72fbf64a | no switches |
+
+## GPU purity 2 (lane/apple-fast-purity2, Oct 3)
+
+Fixes of UNOWNED rows of `tools/hooks/host_routes_baseline.tsv`. Arm A of each A/B is the `_OFF` define (the old cost class), arm B the fix (default).
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `PURITY2_1` (`_OFF`) | gmm / istella | lane/apple-fast-purity2 @ 6f1ad9cf7 | purity2-1-gmm-istella | owed | OPEN | FAST mean log-likelihood: up to 64 partial blocks + a fold, not one 1024-thread block over n (mixture/checks/estep.mojo) |
+| `PURITY2_2` (`_OFF`) | logreg / istella, taxi | lane/apple-fast-purity2 @ 6f1ad9cf7 | purity2-2-logreg-{istella,taxi} | owed | OPEN | QN loss sum + bias mean in QN_TILED's tile order (two passes), not one block over n (glm/impl/qn/glm_base.mojo); IDENTICAL softmax loss word changes on every vendor + host |
+| no switch | rank-one Cholesky update (LARS) | lane/apple-fast-purity2 @ 6f1ad9cf7 | none | - | merged | the dot in the blocked-then-tree order (cholesky/logdet_fold.mojo sqsum); IDENTICAL bits change for m > 256, host oracle the same |
+| no switch | ridge (svdEig) | lane/apple-fast-purity2 @ 6f1ad9cf7 | none | - | merged | descending eigen order ranked on the device (ties to the lower index), host column the same; bits change only on exact eigenvalue ties |
+| no switch | permutation test | lane/apple-fast-purity2 @ 6f1ad9cf7 | none | - | merged | observed statistic on the device in host_tree_sum's order; no bit change |
+| no switch | HDBSCAN / single linkage FAST (Boruvka, m > 4096) | lane/apple-fast-purity2 @ 6f1ad9cf7 | purity2-boruvka-check | - | merged | every Boruvka round on the device (atomic-min edge passes, scan, label propagation, radix sort); same MST by construction; correctness CMD queued |
+| no switch | x_trees apply refusal, tsqr NaN refusal | lane/apple-fast-purity2 @ 6f1ad9cf7 | none | - | merged | error-path scans on the device (atomic min of the first bad key) |
+| no switch | potrf panel / strip diag / sabotage arms, householder QR leaves | lane/apple-fast-purity2 @ 6f1ad9cf7 | none | - | merged | small-launch notes: the launches factor a w x w block (n is the row stride) or one TSQR leaf |
