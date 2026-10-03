@@ -10,6 +10,9 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.device_arena import arena_active, arena_take
+# lane afn-lm (2026-10-03): Apple FAST experiments, each False unless the
+# build is FAST, on Apple, and carries its own -D MOJOLEARN_AFN_LM_* define.
+from training.byte_lm_afn import AFN_LM_BWD_FUSE, AFN_LM_BWD_NOSYNC
 from core.step_phase import (
     StepPhaseClock,
     step_count_d2h,
@@ -2833,14 +2836,14 @@ def _bwd_rms_norm_kernels[which: Int](
     comptime if (
         BWD_ANY_SABOTAGE
         or BWD_NORM_SPLIT_TRIAL
-        or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+        or (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not AFN_LM_BWD_FUSE)
     ):
         ctx.enqueue_function[bwd_norm_dh_kernel](
             dh.unsafe_ptr(), dy.unsafe_ptr(), weight.unsafe_ptr(), Int32(m),
             Int32(dm), grid_dim=(_grid(m * dm), 1, 1),
             block_dim=(BWD_TPB, 1, 1),
         )
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not AFN_LM_BWD_NOSYNC:
             step_count_sync()
             ctx.synchronize()
         step_count_launch()
@@ -2882,7 +2885,7 @@ def _bwd_rms_norm_kernels[which: Int](
                 Int32(dm), eps, grid_dim=(dot_blocks, 1, 1),
                 block_dim=(dot_threads, 1, 1),
             )
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not AFN_LM_BWD_NOSYNC:
         step_count_sync()
         ctx.synchronize()
     step_count_launch()
@@ -2902,7 +2905,7 @@ def _bwd_rms_norm_kernels[which: Int](
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not AFN_LM_BWD_NOSYNC:
         step_count_sync()
         ctx.synchronize()
     comptime if which == 1:
@@ -3215,7 +3218,7 @@ def llama_decoder_layer_backward_device(
     # =====================================================================
     var fuse_gated_silu = False
     comptime if (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or AFN_LM_BWD_FUSE)
         and (
             TARGET_COLUMN == COLUMN_APPLE
             or TARGET_COLUMN == COLUMN_NVIDIA
@@ -3322,7 +3325,7 @@ def llama_decoder_layer_backward_device(
     # =====================================================================
     var fuse_norm2_residual = False
     comptime if (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        (GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL or AFN_LM_BWD_FUSE)
         and (
             TARGET_COLUMN == COLUMN_APPLE
             or TARGET_COLUMN == COLUMN_NVIDIA

@@ -43,7 +43,10 @@ from core.device_scan import DeviceScanScratch
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
-from training.byte_lm_afn import BYTE_LM_FAST_APPLE
+from training.byte_lm_afn import (
+    AFN_LM_HEAD_FUSE, AFN_LM_NOSYNC, AFN_LM_PARAM_VIEWS, BYTE_LM_FAST_APPLE,
+    afn_ce_fused, afn_reset, afn_status_view, afn_step_finish, afn_upload_ids,
+)
 from training.checkpoint import Checkpoint
 from training.byte_lm_config import ByteConfig
 from training.checks.train_loop import (
@@ -719,6 +722,21 @@ def _unpack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut w: LlamaDeviceWei
     the host is a Metal round trip for nothing.
     """
     var base = 1 + 9 * block
+    comptime if AFN_LM_PARAM_VIEWS:
+        # afn-lm PARAM_VIEWS (FAST + Apple only): the nine weights become
+        # views of the CURRENT flat `param` (re-bound every call, as
+        # `_bind_emb_head` does), so no launch and no separate allocation.
+        ref o = tb.offsets
+        w.norm1_w = tb.param.create_sub_buffer[DType.float32](o[base], o[base + 1] - o[base])
+        w.w_q = tb.param.create_sub_buffer[DType.float32](o[base + 1], o[base + 2] - o[base + 1])
+        w.w_k = tb.param.create_sub_buffer[DType.float32](o[base + 2], o[base + 3] - o[base + 2])
+        w.w_v = tb.param.create_sub_buffer[DType.float32](o[base + 3], o[base + 4] - o[base + 3])
+        w.w_o = tb.param.create_sub_buffer[DType.float32](o[base + 4], o[base + 5] - o[base + 4])
+        w.norm2_w = tb.param.create_sub_buffer[DType.float32](o[base + 5], o[base + 6] - o[base + 5])
+        w.w_gate = tb.param.create_sub_buffer[DType.float32](o[base + 6], o[base + 7] - o[base + 6])
+        w.w_up = tb.param.create_sub_buffer[DType.float32](o[base + 7], o[base + 8] - o[base + 7])
+        w.w_down = tb.param.create_sub_buffer[DType.float32](o[base + 8], o[base + 9] - o[base + 8])
+        return
     var o = tb.offsets.copy()
     step_count_launch()
     byte_block_copy[False](ctx, tb.param,
@@ -742,6 +760,25 @@ def _pack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut bst: LlamaBackwardS
         bst.dw_norm1, bst.dw_q, bst.dw_k, bst.dw_v, bst.dw_o,
         bst.dw_norm2, bst.dw_gate, bst.dw_up, bst.dw_down,
         _block_offsets(o, base))
+
+
+def _afn_bind_grad_views(mut tb: ByteBuffers, mut bst: LlamaBackwardStages, block: Int) raises:
+    """afn-lm PARAM_VIEWS (FAST + Apple only): the block's nine weight
+    gradients become views of the flat `grad` at the offsets `_pack_block`
+    copies them to. Every one is written whole, once, by the block backward
+    (a GEMM or the norm weight GEMM), so the flat buffer ends holding what
+    the pack would have copied, and the pack launch goes."""
+    var base = 1 + 9 * block
+    ref o = tb.offsets
+    bst.dw_norm1 = tb.grad.create_sub_buffer[DType.float32](o[base], o[base + 1] - o[base])
+    bst.dw_q = tb.grad.create_sub_buffer[DType.float32](o[base + 1], o[base + 2] - o[base + 1])
+    bst.dw_k = tb.grad.create_sub_buffer[DType.float32](o[base + 2], o[base + 3] - o[base + 2])
+    bst.dw_v = tb.grad.create_sub_buffer[DType.float32](o[base + 3], o[base + 4] - o[base + 3])
+    bst.dw_o = tb.grad.create_sub_buffer[DType.float32](o[base + 4], o[base + 5] - o[base + 4])
+    bst.dw_norm2 = tb.grad.create_sub_buffer[DType.float32](o[base + 5], o[base + 6] - o[base + 5])
+    bst.dw_gate = tb.grad.create_sub_buffer[DType.float32](o[base + 6], o[base + 7] - o[base + 6])
+    bst.dw_up = tb.grad.create_sub_buffer[DType.float32](o[base + 7], o[base + 8] - o[base + 7])
+    bst.dw_down = tb.grad.create_sub_buffer[DType.float32](o[base + 8], o[base + 9] - o[base + 8])
 
 
 struct ByteTrainer(Movable):
@@ -1149,37 +1186,45 @@ def byte_rollback(ctx: DeviceContext, mut tr: ByteTrainer) raises -> Bool:
     return True
 
 
-def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
+def _byte_forward_loss[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteTrainer,
                        ids: List[Int32], mut trace: IdentityTrace) raises -> Float32:
-    """Shared forward only. Authoritative params/m/v/flags/t are read-only."""
+    """Shared forward only. Authoritative params/m/v/flags/t are read-only.
+
+    `deferred` (afn-lm NOSYNC, FAST + Apple only; False everywhere else):
+    the ids go up from `ids` itself with no staging and no wait, and the
+    loss stays on the device (returns 0; the step's one wait reads it).
+    The caller keeps `ids` alive past that wait."""
     var config = tr.config.copy()
     var M = config.batch * config.length
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
-    var inputs = List[Int32]()
-    var targets = List[Int32]()
-    for b in range(config.batch):
-        for l in range(config.length):
-            inputs.append(ids[b * (config.length + 1) + l])
-            targets.append(ids[b * (config.length + 1) + l + 1])
-    step_count_host_alloc()
-    var hi = ctx.enqueue_create_host_buffer[DType.int32](M)
-    step_count_host_alloc()
-    var ht = ctx.enqueue_create_host_buffer[DType.int32](M)
-    step_count_sync()
-    ctx.synchronize()
-    for i in range(M):
-        hi.unsafe_ptr().unsafe_store(i, inputs[i])
-        ht.unsafe_ptr().unsafe_store(i, targets[i])
-    step_count_h2d()
-    ctx.enqueue_copy(dst_buf=tr.buffers.ids, src_ptr=hi.unsafe_ptr())
-    step_count_h2d()
-    ctx.enqueue_copy(dst_buf=tr.buffers.targets, src_ptr=ht.unsafe_ptr())
-    step_count_sync()
-    ctx.synchronize()
-    _ = hi
-    _ = ht
-    # The wait above completes both uploads: host split, staging, H2D.
+    comptime if AFN_LM_NOSYNC and deferred:
+        afn_upload_ids(ctx, tr.buffers.ids, tr.buffers.targets, ids, config.batch, config.length)
+    else:
+        var inputs = List[Int32]()
+        var targets = List[Int32]()
+        for b in range(config.batch):
+            for l in range(config.length):
+                inputs.append(ids[b * (config.length + 1) + l])
+                targets.append(ids[b * (config.length + 1) + l + 1])
+        step_count_host_alloc()
+        var hi = ctx.enqueue_create_host_buffer[DType.int32](M)
+        step_count_host_alloc()
+        var ht = ctx.enqueue_create_host_buffer[DType.int32](M)
+        step_count_sync()
+        ctx.synchronize()
+        for i in range(M):
+            hi.unsafe_ptr().unsafe_store(i, inputs[i])
+            ht.unsafe_ptr().unsafe_store(i, targets[i])
+        step_count_h2d()
+        ctx.enqueue_copy(dst_buf=tr.buffers.ids, src_ptr=hi.unsafe_ptr())
+        step_count_h2d()
+        ctx.enqueue_copy(dst_buf=tr.buffers.targets, src_ptr=ht.unsafe_ptr())
+        step_count_sync()
+        ctx.synchronize()
+        _ = hi
+        _ = ht
+        # The wait above completes both uploads: host split, staging, H2D.
     timing_tick(ctx, ton, tk, "step.upload_inputs")
     timing_bytes(ton, "step.upload_inputs_bytes", 2 * M * 4)
     for layer in range(config.n_layers):
@@ -1273,7 +1318,15 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
     # first statement: the full logits download and host scan) and then
     # `step.ce_forward` (L1-L13, waited on under the switch only), both from
     # its own clock; this clock is re-read after the call's wait.
-    if not config.chunked_lm_head_v2:
+    comptime if AFN_LM_HEAD_FUSE:
+        # afn-lm HEAD_FUSE (FAST + Apple only): softmax, CE, mean loss and
+        # dlogits in one row kernel; the CE backward below is skipped.
+        if not config.chunked_lm_head_v2:
+            var afn_status = afn_status_view(tr.scan)
+            afn_ce_fused(ctx, tr.buffers.ce_loss, tr.buffers.ce_dlogits,
+                tr.buffers.logits, tr.buffers.targets, afn_status, M,
+                config.vocab_size)
+    if not config.chunked_lm_head_v2 and not AFN_LM_HEAD_FUSE:
         identical_ce_forward_into(ctx, tr.buffers.ce_max, tr.buffers.ce_shift,
             tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logdenom,
             tr.buffers.ce_logp_target, tr.buffers.ce_nll, tr.buffers.ce_logp,
@@ -1282,6 +1335,9 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
             tr.buffers.targets, tr.buffers.ce_ones, tr.buffers.ce_ws, M, M, ce)
     # No wait: `download_f32` below waits for the loss itself.
     # A host round trip costs about a dozen kernel launches on Metal.
+    comptime if AFN_LM_NOSYNC and deferred:
+        _maybe_fault(ctx, tr.buffers.ce_loss, "loss_nonfinite", 0, _FAULT_NAN)
+        return Float32(0.0)
     if ton:
         tk = Int(perf_counter_ns())
     _maybe_fault(ctx, tr.buffers.ce_loss, "loss_nonfinite", 0, _FAULT_NAN)
@@ -1295,8 +1351,84 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
 def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
                       ids: List[Int32]) raises -> Float32:
     """Single-device composition; the numerical operation order is unchanged."""
+    comptime if AFN_LM_NOSYNC:
+        return _afn_byte_step_nosync(ctx, tr, ids)
     var loss = byte_gradient_device(ctx, tr, ids)
     byte_update_device(ctx, tr)
+    return loss
+
+
+def _afn_byte_step_nosync(ctx: DeviceContext, mut tr: ByteTrainer,
+                          ids: List[Int32]) raises -> Float32:
+    """afn-lm NOSYNC (FAST + Apple only): the resident step with ONE host
+    wait. The gradient half runs deferred (no staged upload, no loss
+    download); the update is the shipped shadow copy and the shipped Adam
+    kernel with the shipped scalars, minus the entry scans and the wait;
+    every check of the synchronous step (loss, gradients, then
+    parameters, moments and v >= 0 after the update) is one status launch
+    read back with the loss at the one wait. A failing check raises AFTER
+    the shadow point, so `_byte_recover` rolls the update back: the state
+    a failure leaves is the synchronous step's. `ids` is borrowed for the
+    whole call, past the wait, so its upload never reads freed memory."""
+    if tr.buffers.optimizer_pooled:
+        raise Error("byte LM: pooled optimizer requires its group update")
+    if tr.optimizer.kind == OPT_SGD or tr.optimizer.max_norm > Float32(0.0):
+        raise Error("byte LM: NOSYNC update takes Adam or AdamW without clipping")
+    var config = tr.config.copy()
+    var n = config.n_total()
+    var next_step = tr.completed_steps + 1
+    if next_step >= 1000000:
+        raise Error("byte LM: completed step must be in [0,1000000)")
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
+    var status = afn_status_view(tr.scan)
+    afn_reset(ctx, status, tr.buffers.ce_loss, True, False)
+    _ = byte_gradient_device[True](ctx, tr, ids)
+    _maybe_fault(ctx, tr.buffers.grad, "grad_nonfinite", 0, _FAULT_NAN)
+    _copy_into(ctx, tr.buffers.shadow_p, tr.buffers.param, 0, 0, n)
+    _copy_into(ctx, tr.buffers.shadow_m, tr.buffers.m_state, 0, 0, n)
+    _copy_into(ctx, tr.buffers.shadow_v, tr.buffers.v_state, 0, 0, n)
+    tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
+    tr.shadow_step = tr.completed_steps
+    tr.shadow_valid = True
+    _maybe_fault(ctx, tr.buffers.m_state, "opt_refuse", 5, _FAULT_NAN)
+    ref cfg = tr.optimizer
+    var sc = device_step_scalars(cfg, next_step)
+    var is_adamw = Int32(1 if cfg.kind == OPT_ADAMW else 0)
+    step_count_launch()
+    ctx.enqueue_function[adam_update_kernel](
+        tr.buffers.param.unsafe_ptr(),
+        tr.buffers.grad.unsafe_ptr(),
+        tr.buffers.m_state.unsafe_ptr(),
+        tr.buffers.v_state.unsafe_ptr(),
+        tr.buffers.denom_out.unsafe_ptr(),
+        tr.buffers.q_out.unsafe_ptr(),
+        Int32(n),
+        is_adamw,
+        cfg.beta1,
+        cfg.beta2,
+        cfg.eps,
+        cfg.weight_decay,
+        sc.c1,
+        sc.c2,
+        sc.step_size,
+        sc.rt_bc2,
+        sc.decay_mul,
+        cfg.lr,
+        sc.bc1,
+        sc.bc2,
+        grid_dim=(_opt_grid_for(n), 1, 1),
+        block_dim=(OPT_TPB, 1, 1),
+    )
+    _maybe_fault(ctx, tr.buffers.v_state, "after_nonfinite", 3, _FAULT_INF)
+    _maybe_fault(ctx, tr.buffers.v_state, "after_negative", 3, _FAULT_MINUS_ONE)
+    var loss = afn_step_finish(ctx, tr.scan, tr.buffers.ce_loss, tr.buffers.grad,
+        tr.buffers.param, tr.buffers.m_state, tr.buffers.v_state, n)
+    timing_tick(ctx, ton, tk, "step.afn_nosync_step")
+    _ = status^
+    _ = ids
+    tr.completed_steps = next_step
+    tr.grad_step = next_step
     return loss
 
 
@@ -1391,7 +1523,7 @@ def _byte_release_eager(ctx: DeviceContext, mut fwd: LlamaDeviceStages,
     return released
 
 
-def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
+def byte_gradient_device[deferred: Bool = False](ctx: DeviceContext, mut tr: ByteTrainer,
                          ids: List[Int32]) raises -> Float32:
     """Internal gradient half. Caller owns admission and transaction recovery."""
     tr.released_eager_cells = 0
@@ -1400,7 +1532,7 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
     var emb = EmbConfig.llama(config.vocab_size, config.d_model)
     var ce = CeConfig.causal_lm(config.vocab_size)
     var trace = IdentityTrace.disabled()
-    var loss = _byte_forward_loss(ctx, tr, ids, trace)
+    var loss = _byte_forward_loss[deferred](ctx, tr, ids, trace)
     # DEVIATION 2499 step-phase timers; see byte_train_step. The forward's
     # own clock ended at `step.loss_download`; this one starts here.
     var ton = timing_on()
@@ -1413,7 +1545,7 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
             tr.buffers.targets, tr.buffers.ce_max, tr.buffers.ce_denom,
             M, config.vocab_size, config.d_model,
         )
-    else:
+    elif not AFN_LM_HEAD_FUSE:
         identical_ce_backward_into(ctx, tr.buffers.ce_weights, tr.buffers.ce_dlogits,
             tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logp,
             tr.buffers.targets, M, M, ce)
@@ -1439,6 +1571,10 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
     # A host round trip costs about a dozen kernel launches on Metal.
     pg.tick(ctx, "gemm.head_dB")
     timing_tick(ctx, ton, tk, "step.head_backward_db")
+    comptime if AFN_LM_PARAM_VIEWS:
+        # afn-lm PARAM_VIEWS: the weight gradients land in the flat `grad`.
+        for layer in range(config.n_layers):
+            _afn_bind_grad_views(tr.buffers, tr.backward[layer], layer)
     # Keep inter-layer cotangents on device, as the reference tensor graph
     # does (transformers/models/llama/modeling_llama.py:402-412). Each
     # backward call synchronizes before its borrowed buffers are reinserted.
@@ -1489,7 +1625,7 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
     # No wait: the pack loop below queues onto this same in-order context.
     # A host round trip costs about a dozen kernel launches on Metal.
     timing_tick(ctx, ton, tk, "step.embedding_backward")
-    for layer in range(config.n_layers):
+    for layer in range(0 if AFN_LM_PARAM_VIEWS else config.n_layers):
         _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
     _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
     _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
