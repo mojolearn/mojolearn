@@ -21,6 +21,7 @@ from metrics.checks.device_io import upload_f32, upload_i32, download_f32, downl
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_log
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_TSNE_RB32, ANN3_TSNE_RB64, ANN3_TSNE_STEP_ROWS
+from x_ann.fast_env import FAST_TSNE_SPLIT
 from checks.numerics import identical_div, identical_mul
 from x_ann.tsne_core import ts_q
 from x_ann.tsne_core import (
@@ -155,6 +156,121 @@ def _ts_z(
         dst = t
         ln = h
     ctx.enqueue_function[z_root_kernel](Int32(ln), src, dz.unsafe_ptr(), grid_dim=1, block_dim=1)
+
+
+#: stripes of candidate rows per row in the FAST-on-Apple striped repulsion,
+#: `-D MOJOLEARN_TSNE_FAST_SPLIT=1` (main's `repulse_split_kernel` / `TS_SPLIT`
+#: below are the NVIDIA and AMD arm; this one never compiles there)
+comptime TS_STRIPED = _FAST_APPLE and FAST_TSNE_SPLIT
+comptime TS_STRIPES = 8
+
+
+def repulse_stripe_kernel(n: Int32, y: F32P, part: F32P):
+    """FAST on Apple, `-D MOJOLEARN_TSNE_FAST_SPLIT=1` (lane/apple-fast-ann,
+    2026-10-02): `repulse_tiled_kernel` with each row's candidate rows j
+    split into TS_STRIPES stripes, one threadgroup per (row block, stripe):
+    threadgroup (b, s) folds j in [s n / TS_STRIPES, (s + 1) n / TS_STRIPES) for
+    rows b RTB .. b RTB + RTB - 1 (tiles of RTJ staged rows, the cell's
+    `ts_repulse_pair` on ftz(y)) and stores its three partial sums at
+    part[(s n + i) 3 ..]; `repulse_stripe_join_kernel` adds the stripes in
+    order.
+    Cause: `_ts_iter`'s repulsion ran n / RTB threadgroups (157 at the
+    board's 20,000 rows), each thread walking every row, for all 1000
+    iterations, so the GPU was mostly idle; this runs TS_STRIPES times as many
+    threadgroups over the same pairs. FAST bits move (a fold per stripe,
+    then across stripes): paired trustworthiness / KL check."""
+    var t = Int(thread_idx.x)
+    var nr = Int(n)
+    var s = Int(block_idx.y)
+    var i = Int(block_idx.x) * RTB + t
+    var j_lo = (s * nr) // TS_STRIPES
+    var j_hi = ((s + 1) * nr) // TS_STRIPES
+    var tile = stack_allocation[2 * RTJ, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var live = i < nr
+    var y0 = Float32(0.0)
+    var y1 = Float32(0.0)
+    if live:
+        y0 = ftz(y.unsafe_load(2 * i))
+        y1 = ftz(y.unsafe_load(2 * i + 1))
+    var z = Float32(0.0)
+    var r0 = Float32(0.0)
+    var r1 = Float32(0.0)
+    var j0 = j_lo
+    while j0 < j_hi:
+        var jn = RTJ if j_hi - j0 > RTJ else j_hi - j0
+        for e in range(t, 2 * RTJ, RTB):
+            var v = Float32(0.0)
+            if e < 2 * jn:
+                v = ftz(y.unsafe_load(2 * j0 + e))
+            tile[e] = v
+        barrier()
+        if live:
+            var r = 0
+            while r + 4 <= jn:
+                if i >= j0 + r and i < j0 + r + 4:
+                    for u in range(4):
+                        if j0 + r + u != i:
+                            ts_repulse_pair(y0, y1, tile[2 * (r + u)], tile[2 * (r + u) + 1], z, r0, r1)
+                else:
+                    var ta = ts_repulse_terms(y0, y1, tile[2 * r], tile[2 * r + 1])
+                    var tb = ts_repulse_terms(y0, y1, tile[2 * r + 2], tile[2 * r + 3])
+                    var tc = ts_repulse_terms(y0, y1, tile[2 * r + 4], tile[2 * r + 5])
+                    var td = ts_repulse_terms(y0, y1, tile[2 * r + 6], tile[2 * r + 7])
+                    ts_repulse_fold(ta, z, r0, r1)
+                    ts_repulse_fold(tb, z, r0, r1)
+                    ts_repulse_fold(tc, z, r0, r1)
+                    ts_repulse_fold(td, z, r0, r1)
+                r += 4
+            while r < jn:
+                if j0 + r != i:
+                    ts_repulse_pair(y0, y1, tile[2 * r], tile[2 * r + 1], z, r0, r1)
+                r += 1
+        barrier()
+        j0 += RTJ
+    if live:
+        var o = (s * nr + i) * 3
+        part.unsafe_store(o, z)
+        part.unsafe_store(o + 1, r0)
+        part.unsafe_store(o + 2, r1)
+
+
+def repulse_stripe_join_kernel(n: Int32, part: F32P, row_z: F32P, rep: F32P):
+    """Row i's z, r0, r1 as the sum of its TS_STRIPES stripe partials in
+    stripe order (the striped repulsion's second launch)."""
+    var i = _tid()
+    if i < Int(n):
+        var nr = Int(n)
+        var z = Float32(0.0)
+        var r0 = Float32(0.0)
+        var r1 = Float32(0.0)
+        for s in range(TS_STRIPES):
+            var o = (s * nr + i) * 3
+            z = z + part.unsafe_load(o)
+            r0 = ftz(r0 + part.unsafe_load(o + 1))
+            r1 = ftz(r1 + part.unsafe_load(o + 2))
+        row_z.unsafe_store(i, z)
+        rep.unsafe_store(2 * i, r0)
+        rep.unsafe_store(2 * i + 1, r1)
+
+
+
+def _ts_repulse(
+    ctx: DeviceContext, mut ycur: DeviceBuffer[DType.float32], n: Int, mut drz: DeviceBuffer[DType.float32],
+    mut drep: DeviceBuffer[DType.float32], mut dpart: DeviceBuffer[DType.float32],
+) raises:
+    """The repulsion launch: striped under TS_STRIPED (FAST on Apple,
+    lane/apple-fast-ann), the tiled kernel otherwise."""
+    comptime if TS_STRIPED:
+        ctx.enqueue_function[repulse_stripe_kernel](
+            Int32(n), ycur.unsafe_ptr(), dpart.unsafe_ptr(), grid_dim=((n + RTB - 1) // RTB, TS_STRIPES),
+            block_dim=RTB,
+        )
+        ctx.enqueue_function[repulse_stripe_join_kernel](
+            Int32(n), dpart.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB,
+        )
+    else:
+        ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                                   grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
 
 
 # lane/gap-nv-classical2: the repulsion and Z on NVIDIA and AMD. The tiled
@@ -375,7 +491,7 @@ def _ts_iter(
     mut drz: DeviceBuffer[DType.float32], mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
     mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
     lr: Float32, mut dcnt: DeviceBuffer[DType.int32], mut dparts: DeviceBuffer[DType.float32],
-    mut dzs: DeviceBuffer[DType.float32],
+    mut dzs: DeviceBuffer[DType.float32], mut dpart: DeviceBuffer[DType.float32],
 ) raises:
     comptime if TS_SPLIT:
         ctx.enqueue_function[repulse_split_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
@@ -387,8 +503,7 @@ def _ts_iter(
             mom, lr, grid_dim=_grid(n), block_dim=TPB,
         )
         return
-    ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
-                                               grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
+    _ts_repulse(ctx, ycur, n, drz, drep, dpart)
     _ts_z(ctx, n, drz, dz, dzs)
     comptime if TS_STEP_ROWS:
         ctx.enqueue_function[step_rows_kernel](
@@ -410,13 +525,13 @@ def _ts_iter_timed(
     mut drz: DeviceBuffer[DType.float32], mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
     mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
     lr: Float32, mut t_rep: Int, mut t_sum: Int, mut t_step: Int, mut dzs: DeviceBuffer[DType.float32],
+    mut dpart: DeviceBuffer[DType.float32],
 ) raises:
     """`_ts_iter` for the stage pass only (MOJOLEARN_ANN_STAGES, lane
     ann-apple3): the same three launches, drained one by one, their wall
     times added to t_rep / t_sum / t_step (ns)."""
     var t0 = Int(perf_counter_ns())
-    ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
-                                               grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
+    _ts_repulse(ctx, ycur, n, drz, drep, dpart)
     ctx.synchronize()
     var t1 = Int(perf_counter_ns())
     _ts_z(ctx, n, drz, dz, dzs)
@@ -495,6 +610,8 @@ def tsne_fit_device(
     ctx.enqueue_memset(dcnt, Int32(0))
     var dparts = ctx.enqueue_create_buffer[DType.float32]((n + RS_ROWS - 1) // RS_ROWS + 1)
     var dzs = ctx.enqueue_create_buffer[DType.float32]((n + 1) // 2 + 1)
+    # lane/apple-fast-ann: the stripe partials, one word unless TS_STRIPED
+    var dpart = ctx.enqueue_create_buffer[DType.float32]((TS_STRIPES * n * 3) if TS_STRIPED else 1)
     var dkl = ctx.enqueue_create_buffer[DType.float32](n)
     st.mark(ctx, "upload_graph")
     var t_rep = 0
@@ -507,14 +624,16 @@ def tsne_fit_device(
             # the stage pass: each launch drained and timed (ann-apple3)
             if it % 2 == 0:
                 _ts_iter_timed(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
-                               learning_rate, t_rep, t_sum, t_step, dzs)
+                               learning_rate, t_rep, t_sum, t_step, dzs, dpart)
             else:
                 _ts_iter_timed(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
-                               learning_rate, t_rep, t_sum, t_step, dzs)
+                               learning_rate, t_rep, t_sum, t_step, dzs, dpart)
         elif it % 2 == 0:
-            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt, dparts, dzs)
+            _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt,
+                     dparts, dzs, dpart)
         else:
-            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt, dparts, dzs)
+            _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate, dcnt,
+                     dparts, dzs, dpart)
     st.mark(ctx, "iterations")
     if st.on:
         print("ANN-STAGE tsne_iter repulse", Float64(t_rep) / 1.0e6)
@@ -528,6 +647,7 @@ def tsne_fit_device(
     _ = dcnt^
     _ = dparts^
     _ = dzs^
+    _ = dpart^
     if max_iter % 2 == 0:
         y_out = download_f32(ctx, dy, 2 * n)
     else:
