@@ -1,0 +1,9 @@
+commit=72a65643653c679b080ebf1eabd70449ccf4f097
+label=amd-mi325x-gfx942
+backend=hip
+scope=routine shard= lanes_override=yes
+repeats=2 cpu_threads=3
+host=Linux 6.8.0-59-generic x86_64 mojolearn-refcols-final-amd
+date=2026-10-03T21:33:06Z
+dirty_tracked=none
+record_sha256=6ad4417dee084430ecd94f33993642a0bef31d7cd532ed95a4154e47a30c2051

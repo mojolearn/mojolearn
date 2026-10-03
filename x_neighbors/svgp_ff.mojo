@@ -57,6 +57,66 @@ def matmul_tn_acc_ff_item(t: Int, a: FP, b: FP, rh: FP, rl: FP, rows: Int, n: In
     rl.unsafe_store(t, acc.lo)
 
 
+#: lane apple-fast-gap-kapprox2-svgp (2026-10-03): MOJOLEARN_SVGP_FAST_SYMTILE
+#: (FAST + Apple, off unless defined). B = Kuf Kfu is symmetric and
+#: two_prod(x, y) == two_prod(y, x) bit for bit (hi = x*y and lo =
+#: fma(x, y, -hi) commute), so only the upper 4 x 4 blocks are summed, each
+#: thread carrying 16 entries over the rows (p ascending, the same fold as
+#: `matmul_tn_acc_ff_item` per entry) and writing the mirror too: the same
+#: words, half the products, a quarter of the loads.
+comptime SVGP_SYM_TB = 4
+
+
+@always_inline
+def svgp_sym_nb(m: Int) -> Int:
+    return (m + SVGP_SYM_TB - 1) // SVGP_SYM_TB
+
+
+def matmul_tn_sym_ff_tile_item(t: Int, a: FP, rh: FP, rl: FP, rows: Int, m: Int):
+    """t = bi * nb + bj (bj >= bi, else nothing): (rh, rl)[i, j] and [j, i]
+    continued by sum_p a[p, i] a[p, j] for the 4 x 4 block (bi, bj)."""
+    comptime TB = SVGP_SYM_TB
+    var nb = svgp_sym_nb(m)
+    var bi = t // nb
+    var bj = t - bi * nb
+    if bj < bi:
+        return
+    var i0 = bi * TB
+    var j0 = bj * TB
+    var hh = SIMD[DType.float32, TB * TB](0)
+    var ll = SIMD[DType.float32, TB * TB](0)
+    comptime for u in range(TB):
+        comptime for v in range(TB):
+            var i = i0 + u
+            var j = j0 + v
+            if i < m and j < m:
+                hh[u * TB + v] = rh.unsafe_load(i * m + j)
+                ll[u * TB + v] = rl.unsafe_load(i * m + j)
+    for p in range(rows):
+        var ai = SIMD[DType.float32, TB](0)
+        var aj = SIMD[DType.float32, TB](0)
+        comptime for u in range(TB):
+            if i0 + u < m:
+                ai[u] = ftz(a.unsafe_load(p * m + i0 + u))
+            if j0 + u < m:
+                aj[u] = ftz(a.unsafe_load(p * m + j0 + u))
+        comptime for u in range(TB):
+            comptime for v in range(TB):
+                var c = ff_add(FF(hh[u * TB + v], ll[u * TB + v]), two_prod(ai[u], aj[v]))
+                hh[u * TB + v] = c.hi
+                ll[u * TB + v] = c.lo
+    comptime for u in range(TB):
+        comptime for v in range(TB):
+            var i = i0 + u
+            var j = j0 + v
+            if i < m and j < m:
+                rh.unsafe_store(i * m + j, hh[u * TB + v])
+                rl.unsafe_store(i * m + j, ll[u * TB + v])
+                if bi != bj:
+                    rh.unsafe_store(j * m + i, hh[u * TB + v])
+                    rl.unsafe_store(j * m + i, ll[u * TB + v])
+
+
 @always_inline
 def _kj(kuu: FP, m: Int, i: Int, k: Int, jitter: Float32) -> FF:
     """(Kuu + jitter I)[i, k] as float-float."""
@@ -220,6 +280,59 @@ def svgp_ff_column_item(j: Int, kuu: FP, bh: FP, bl: FP, cmat: FP, w: FP, m: Int
     ff_chol_solve(luh, lul, m, uh, ul)
     var tp = _vec(w, m, n, 4)
     ff_st(tp, tp + m, j, ff_ld(uh, ul, j))
+
+
+def svgp_ff_col_solve_item(t: Int, kuu: FP, bh: FP, bl: FP, w: FP, xb: FP, m: Int, n: Int, jitter: Float32):
+    """MOJOLEARN_SVGP_FAST_COLSPLIT (lane apple-fast-gap-kapprox2-svgp): the
+    four independent triangular solves of `svgp_ff_column_item` as four
+    items per column, t = which * m + j: 0 Kuu'^-1 e_j (scratch u), 1
+    Sigma^-1 e_j (scratch v), 2 Sigma^-1 Kuu'[:, j] (scratch k), 3 Kuu'^-1
+    B[:, j] into xb (its entry j is the trace term). The same operations in
+    the same order per solve: the same words, a quarter of the chain per
+    thread and four times the threads."""
+    var which = t // m
+    var j = t - which * m
+    var base = _scratch(w, m, n) + j * 6 * m
+    if which == 0:
+        for i in range(m):
+            ff_st(base, base + m, i, ff_of(Float32(1) if i == j else Float32(0)))
+        ff_chol_solve(_mat(w, m, n, 4), _mat(w, m, n, 5), m, base, base + m)
+    elif which == 1:
+        var vh = base + 2 * m
+        for i in range(m):
+            ff_st(vh, vh + m, i, ff_of(Float32(1) if i == j else Float32(0)))
+        ff_chol_solve(_mat(w, m, n, 6), _mat(w, m, n, 7), m, vh, vh + m)
+    elif which == 2:
+        var kh = base + 4 * m
+        for i in range(m):
+            ff_st(kh, kh + m, i, _kj(kuu, m, i, j, jitter))
+        ff_chol_solve(_mat(w, m, n, 6), _mat(w, m, n, 7), m, kh, kh + m)
+    else:
+        var xh = xb + j * 2 * m
+        for i in range(m):
+            ff_st(xh, xh + m, i, ff_ld(bh, bl, i * m + j))
+        ff_chol_solve(_mat(w, m, n, 4), _mat(w, m, n, 5), m, xh, xh + m)
+        var tp = _vec(w, m, n, 4)
+        ff_st(tp, tp + m, j, ff_ld(xh, xh + m, j))
+
+
+def svgp_ff_col_fin_item(t: Int, kuu: FP, cmat: FP, w: FP, m: Int, n: Int, jitter: Float32):
+    """MOJOLEARN_SVGP_FAST_COLSPLIT: t = i * m + j, entry (i, j) of
+    `svgp_ff_column_item`'s outputs from the solves: C, Sigma^-1 and S =
+    Kuu' (Sigma^-1 Kuu'[:, j]) (k ascending)."""
+    var i = t // m
+    var j = t - i * m
+    var base = _scratch(w, m, n) + j * 6 * m
+    var u = ff_ld(base, base + m, i)
+    var vh = base + 2 * m
+    var v = ff_ld(vh, vh + m, i)
+    cmat.unsafe_store(i * m + j, ff_f32(ff_sub(u, v)))
+    ff_st(_mat(w, m, n, 12), _mat(w, m, n, 13), i * m + j, v)
+    var kh = base + 4 * m
+    var s = ff_of(Float32(0))
+    for k in range(m):
+        s = ff_add(s, ff_mul(_kj(kuu, m, i, k, jitter), ff_ld(kh, kh + m, k)))
+    ff_st(_mat(w, m, n, 8), _mat(w, m, n, 9), i * m + j, s)
 
 
 def svgp_ff_x_item(i: Int, bvh: FP, bvl: FP, alpha: FP, w: FP, m: Int, n: Int, noise: Float32):

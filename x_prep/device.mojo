@@ -31,10 +31,14 @@ from x_prep.fastprep2 import PREP2_FAST, Prep2Switches, prep2_scratch_words, pre
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.staged_download import download_f32_into
 
-#: lane/apple-fast-gap-manprep: MOJOLEARN_X_PREP_FAST_STAGED_OUT (FAST + Apple)
-#: downloads the program's output region through core/staged_download.mojo
+#: lane/apple-fast-gap-manprep: on FAST + Apple the program's output region
+#: (and arena ranges of 1M+ words) download through core/staged_download.mojo.
+#: Default since the M3 A/Bs gmp-staged-* (output digests the same):
+#: label-binarizer taxi 563 -> 345 ms, multilabel-binarizer taxi 287 -> 193 ms,
+#: target-encoder taxi 281 -> 272 ms. -D MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF:
+#: the raw host-pointer copies.
 comptime X_PREP_STAGED_OUT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                              and is_defined["MOJOLEARN_X_PREP_FAST_STAGED_OUT"]())
+                              and not is_defined["MOJOLEARN_X_PREP_FAST_STAGED_OUT_OFF"]())
 comptime _XP_STAGE_POOL = "MojoXPrepDownloadStagesFast"
 
 
