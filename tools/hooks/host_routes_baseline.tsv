@@ -4,22 +4,10 @@
 # newer than the installed hooks (they skip it).
 # A `# why: ...` line gives the reason the next row stays (required for d2h-host-work).
 rule	class	owner	state	path	occ	text
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[chol_strip_diag_kernel](
 # why: CROSS-LANE (GP/GMM): DEVIATION 1639's one-thread ascending log-det over n diagonal terms; a fixed-order multi-block fold (core/device_fold shape) needs the host column and the GP/GMM likelihood bits changed together
 one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[logdet_kernel](
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[panel_factor_guarded_kernel](
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[panel_factor_kernel](
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	1	ctx.enqueue_function[panel_factor_kernel](
 # why: CROSS-LANE (GP/GMM): DEVIATION 1639's one-thread ascending log-det over n diagonal terms; a fixed-order multi-block fold (core/device_fold shape) needs the host column and the GP/GMM likelihood bits changed together
 one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[sabotage_logdet_kernel](
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[sabotage_panel_factor_kernel](
-# why: CROSS-LANE (cholesky): DEVIATION 1632's one-thread dot over the m-row column of a rank-one update; a fixed-order multi-block fold needs the host column changed with it
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/impl/linalg/detail/cholesky_r1_update.mojo	0	ctx.enqueue_function[r1_dot_kernel](
 # why: CROSS-LANE (x_decomp/linalg): the one-slice QR (ns == 1, qr_slice_count says the matrix is too short to split) runs one block over n_rows; the sliced TSQR path is multi-block; a forced split needs the host column's order
 one-block-n	serial-gpu	UNOWNED	owed	core/householder_qr.mojo	0	ctx.enqueue_function[qr_panel_kernel](
 # why: CROSS-LANE (x_decomp/linalg): the one-slice QR (ns == 1, qr_slice_count says the matrix is too short to split) runs one block over n_rows; the sliced TSQR path is multi-block; a forced split needs the host column's order
@@ -28,10 +16,6 @@ one-block-n	serial-gpu	UNOWNED	owed	core/householder_qr.mojo	0	devices[rank].enq
 d2h-host-work	d2h-roundtrip	UNOWNED	owed	glm/impl/linalg/detail/svd.mojo	0	for i in range(n):
 # why: k-sized: a selection sort of the n_cols eigenvalues (n = n_cols, not rows); index-only, no float op
 d2h-host-work	d2h-roundtrip	UNOWNED	owed	glm/impl/linalg/detail/svd.mojo	0	for j in range(i + 1, n):
-# why: CROSS-LANE (glm QN / x_linear logcv, cgr4-device-optim): one-block pinned folds over n (loss value, bias mean, vector norms); the multi-block qn_grid_sum exists behind QN_GRID_SUMS; making it the IDENTICAL default changes the loss bits and the host column must fold the same grid
-one-block-n	serial-gpu	UNOWNED	owed	glm/impl/qn/glm_base.mojo	0	ctx.enqueue_function[mean_kernel](
-# why: CROSS-LANE (glm QN / x_linear logcv, cgr4-device-optim): one-block pinned folds over n (loss value, bias mean, vector norms); the multi-block qn_grid_sum exists behind QN_GRID_SUMS; making it the IDENTICAL default changes the loss bits and the host column must fold the same grid
-one-block-n	serial-gpu	UNOWNED	owed	glm/impl/qn/glm_base.mojo	0	ctx.enqueue_function[sum_terms_kernel](
 # why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
 d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for c in range(m):
 # why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
