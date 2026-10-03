@@ -29,7 +29,8 @@ outside it (bindings/_mojolearn_gbdt_host.mojo, `_refuse`):
 
   grow_policy SymmetricTree, loss Logloss (any loss_border),
   score_function Cosine, leaf_estimation_method Newton (any iteration count),
-  no bootstrap, no sample_weight, no class_weights, no CTR categorical
+  no bootstrap, no sample_weight, binary class_weights on Logloss (the
+  weight column `class_weights[y > 0.5]`, since 2026-10-03), no CTR categorical
   column (one-hot columns are carried, `one_hot_in` below and
   gbdt/host/gbdt_oracle_onehot.mojo), no eval_set and no overfitting detector,
   random_strength 0, the greedy searcher (use_pointwise_searcher False),
@@ -1445,10 +1446,11 @@ def _binary_one_block(
     return stage2^
 
 
-def _binary_block(
+def _binary_block_n(
     blk: PolicyBlock,
     block_first_bin: Int,
     hist_cells: Int,
+    stat_count: Int,
     compute_ids: List[Int],
     depth: Int,
     p_off: List[Int],
@@ -1478,6 +1480,10 @@ def _binary_block(
                           ftz(Float32(Int(q)) / scale) when q != 0, else 0.0
       one active block    val when |val| > 1e-20, else 0.0
       none (empty leaf)   0.0
+
+    At `stat_count` planes (the multi-output and pointwise oracles) the
+    replication base is `groups * n_compute * stat_count` (`replication_for`)
+    and every plane is its own grid z, as `_half_byte_block_n`.
     """
     var n_f = blk.count()
     var n_compute = len(compute_ids)
@@ -1485,7 +1491,7 @@ def _binary_block(
     var max_active_blocks = 2 * GBDT_PINNED_SM
     if depth > 0:
         max_active_blocks = 2 * max_active_blocks
-    var base_count = groups * n_compute * 2
+    var base_count = groups * n_compute * stat_count
     if base_count < 1:
         base_count = 1
     var replicas = (max_active_blocks + base_count - 1) // base_count
@@ -1501,7 +1507,7 @@ def _binary_block(
         var active_block_count = (p_size + min_docs_per_block - 1) // min_docs_per_block
         if active_block_count > replicas:
             active_block_count = replicas
-        for z in range(2):
+        for z in range(stat_count):
             for g in range(groups):
                 var feature_offset = g * 32
                 var f_count = n_f - feature_offset
@@ -1540,9 +1546,31 @@ def _binary_block(
                         if active_block_count > 1 and q != Int32(0):
                             cell = ftz(Float32(Int(q)) / fixed_scale)
                     hist[
-                        slot * 2 * hist_cells + z * hist_cells
+                        slot * stat_count * hist_cells + z * hist_cells
                         + block_first_bin + fold_off
                     ] = cell
+
+
+def _binary_block(
+    blk: PolicyBlock,
+    block_first_bin: Int,
+    hist_cells: Int,
+    compute_ids: List[Int],
+    depth: Int,
+    p_off: List[Int],
+    p_sz: List[Int],
+    row_index: List[Int],
+    stats: List[Float32],
+    cindex: List[UInt32],
+    n_rows: Int,
+    fixed_scale: Float32,
+    mut hist: List[Float32],
+):
+    """`_binary_block_n` at the two search planes."""
+    _binary_block_n(
+        blk, block_first_bin, hist_cells, 2, compute_ids, depth, p_off, p_sz,
+        row_index, stats, cindex, n_rows, fixed_scale, hist,
+    )
 
 
 def _partition_stat(

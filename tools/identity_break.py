@@ -1594,8 +1594,9 @@ def _(ml, X, yc, yr, Xh=None):
     settings), one Depthwise and one Lossguide. The weighted fits are the
     ones whose weight plane `snap_weights_to_grid_kernel` puts on an exact
     dyadic grid (lane/sym-quality, 2026-09-29); every unit-weight lane above
-    is untouched by it. The CPU column refuses binary class_weights by name;
-    gbdt-multiclass-offgrid is the snap's CPU-covered lane."""
+    is untouched by it. The CPU column trains binary class_weights since
+    2026-10-03 (lane/fix-cpu-column2: the weight column through the host
+    search planes, WeightsCpu and the leaf oracle)."""
     cw = [1.0, 1.3101271632087197]
     parts, first = {}, None
     for policy, kw in (("SymmetricTree", dict(max_depth=6, random_strength=1.0, bootstrap_type="No")),
