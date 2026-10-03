@@ -102,3 +102,21 @@ so negligible at this size, but the A/B decides.
 ## -D MOJOLEARN_KDE2_ALL
 
 All five. Request lines compare it against main ("" arm) and against DIMTILE alone, on istella.
+
+## Compile status (2026-10-03)
+
+Builds of `bindings/build_estimators.sh` on the M4, compile only, no runs:
+
+| build | result |
+|---|---|
+| FAST `-D MOJOLEARN_KDE2_ALL` (every define's code path on) | rc=0 |
+| FAST `-D MOJOLEARN_KDE_DIMTILE` | compiled and linked; rc=1 came from the kernel-launch smoke import (no base binding in the worktree), not the compile. Clean rerun: compile owed: peer |
+| FAST `-D MOJOLEARN_KDE_LSE_FUSED` | not run, compile owed: peer |
+| FAST `-D MOJOLEARN_KDE_NORM_FUSED` | not run, compile owed: peer |
+| FAST `-D MOJOLEARN_KDE_KERNEL_VARIANTS` | not run, compile owed: peer |
+| FAST `-D MOJOLEARN_KDE_SAMPLE_FUSED` | not run, compile owed: peer |
+| FAST, all defines off | not run, compile owed: peer |
+| IDENTICAL (default) | not run, compile owed: peer |
+
+Builds stopped on Andrew's order (compile slots jammed). Build with `MOJOLEARN_SKIP_BUILD_GATE=1` so the
+kernel-launch smoke does not need the base binding.
