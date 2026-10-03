@@ -186,6 +186,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `NB_CAT_ATOMIC` | categorical-nb / taxi | lane/apple-fast-nb @ be2ea3a05 | nb-cat-atomic-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `NB_TEXT_CSR` | complement-nb / text; multinomial-nb / text | lane/apple-fast-nb @ be2ea3a05 | nb-mnb-csr-text, nb-cnb-csr-text | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `RIDGE_FAST_CLS1_CODES` | ridge-clf / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-rccodes-taxi | ridge-clf taxi 120 -> 19.0 | OPEN | judged KEEP (-84%); merge pending |
+| `ISOTONIC_FAST_NOLIST` (env MOJOLEARN_ISOTONIC_FAST_NOLIST=1) | isotonic / istella | lane/apple-fast-gap-manprep @ 1db219f01 | gmp-iso-nolist-istella | - | OPEN | fit's 3 + 2n output words were `tolist()`ed (2,000,000 Python floats at 1M rows), sliced and rebuilt; now three byte copies; same words |
 
 ## Neighbors (42)
 
