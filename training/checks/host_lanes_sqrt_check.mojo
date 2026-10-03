@@ -32,13 +32,8 @@ from std.memory import bitcast
 from checks.numerics import identical_div, identical_sqrt
 from core.host_lanes import F32V, HOST_FW, U32V, div_lanes, sqrt_lanes
 from core.host_parallel import host_parallelize
-from training.checks.optimizer_oracle import (
-    OPT_ADAM,
-    OPT_ADAMW,
-    OptimizerConfig,
-    adam_element_oracle,
-    step_scalars,
-)
+from training.checks.optimizer_contract import OPT_ADAM, OPT_ADAMW, OptimizerConfig, step_scalars
+from training.checks.optimizer_oracle import adam_element_oracle
 from training.optimizer_host_rows import adam_lanes
 
 comptime SQRT_CHECK_TASKS = 3

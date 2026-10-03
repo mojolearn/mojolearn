@@ -5,7 +5,7 @@ GPU. Each primitive is one kernel whose thread `t` calls the `x_cluster/
 bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns
@@ -19,11 +19,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 from x_cluster.bodies import (
     FPtr,
+    sq_dist_rows,
     IPtr,
     cov_cell,
     chain_add,
     cov_final,
     cov_term,
+    argmax_row,
     exp_cell,
     mean_final,
     nk_final,
@@ -43,13 +45,73 @@ from x_cluster.bodies import (
     sqrt_cell,
     tree_descend,
     ward_cell,
+    lance_williams,
+    LINK_WARD,
 )
-from cluster.estimator import kmeans_fit
+from cluster.estimator import kmeans_fit, kmeans_fit_rows
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
-from gemm.checks.gemm_oracle import OP_TN
+from gemm.contract import OP_TN
 from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
 from x_cluster.ops import ClusterOps
+from x_cluster.device_post import (
+    PTPB,
+    RTPB,
+    SCAN_PER,
+    UPtr,
+    agc_comp_kernel,
+    agc_edges_kernel,
+    agc_join_kernel,
+    agc_members_kernel,
+    agc_prop_kernel,
+    agc_root_kernel,
+    agc_rowbest_kernel,
+    agc_start_kernel,
+    ap_acc_kernel,
+    ap_best_kernel,
+    ap_c_kernel,
+    ap_conv_kernel,
+    ap_equal_kernel,
+    ap_exsc_kernel,
+    ap_inv_kernel,
+    ap_isc_kernel,
+    ap_label_kernel,
+    bin_count_kernel,
+    bin_key_kernel,
+    bin_scatter_kernel,
+    compact_rows_kernel,
+    count_neg_kernel,
+    ff_chunk_kernel,
+    fill_i_kernel,
+    first_equal_kernel,
+    kpp_search_kernel,
+    kpp_take_kernel,
+    lowest_part_kernel,
+    max_part_kernel,
+    ms_last_kernel,
+    ms_mark_kernel,
+    ms_noise_kernel,
+    ms_rank_kernel,
+    negate_kernel,
+    nonneg_kernel,
+    onehot_kernel,
+    optics_flag_kernel,
+    optics_init_kernel,
+    optics_label_kernel,
+    optics_part_kernel,
+    optics_step_kernel,
+    pgrid,
+    rand_resp_kernel,
+    scan_out_kernel,
+    scan_part_kernel,
+    set_diag_kernel,
+    sign_side_kernel,
+)
+from x_cluster.post_bodies import FM_FF, FM_MIN, FM_PROD, FM_VAL, FM_WMIN, FOLD_CHUNK, ff_of_f64
+from std.gpu import WARP_SIZE
+from std.gpu.primitives.warp import shuffle_idx
+from x_cluster.minibatch_cells import mb_center_wsum, mb_center_word
+from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 
 comptime TPB = 128
 
@@ -63,6 +125,81 @@ def _sqdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):
     var t = _tid()
     if t < Int(na) * Int(nb):
         sqdist_cell(a, Int(na), b, Int(nb), Int(d), dst, t)
+
+
+
+def _gather_rows_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, dst: FPtr):
+    """Block t copies row idx[t] (no division per element)."""
+    var t = Int(block_idx.x)
+    var dd = Int(d)
+    if t < Int(m):
+        var s0 = Int(idx[t]) * dd
+        var d0 = t * dd
+        var f = Int(thread_idx.x)
+        while f < dd:
+            dst[d0 + f] = src[s0 + f]
+            f += Int(block_dim.x)
+
+
+# lane/neural-pass112 (2026-10-02): the pairwise squared distances in tiles.
+# `_sqdist_kernel` is one thread per cell, each reading its two rows from
+# device memory (M4, istella 10K x 220 self-distances for MeanShift's
+# bandwidth: 0.63 s). Here a block owns SQT_B x SQT_B cells and stages
+# SQT_K features of its SQT_B rows of a and of b in threadgroup memory;
+# each thread folds SQT_R x SQT_R cells, every cell its own chain over the
+# features ascending with `sq_dist_rows`' statements (the staged words are
+# already flushed: ftz is idempotent), so every word is the same.
+# `MOJOLEARN_XC_SQDIST_TILED=0` restores the per-cell kernel.
+comptime SQT_R = 4
+comptime SQT_TD = 16
+comptime SQT_B = SQT_R * SQT_TD
+comptime SQT_K = 16
+comptime SQT_BYTES = 2 * SQT_B * SQT_K * 4
+comptime SQDIST_TILED = lib_smem_page_fits_for[TARGET_COLUMN, SQT_BYTES]()
+
+
+def _sqdist_tiled_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):
+    var NA = Int(na)
+    var NB = Int(nb)
+    var D = Int(d)
+    var tid = Int(thread_idx.x)
+    var ti = tid // SQT_TD
+    var tj = tid % SQT_TD
+    var i0 = Int(block_idx.y) * SQT_B
+    var j0 = Int(block_idx.x) * SQT_B
+    var sa = stack_allocation[SQT_B * SQT_K, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var sb = stack_allocation[SQT_B * SQT_K, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var acc = SIMD[DType.float32, SQT_R * SQT_R](0)
+    var f0 = 0
+    while f0 < D:
+        var kc = min(SQT_K, D - f0)
+        barrier()
+        for u in range(tid, SQT_B * SQT_K, SQT_TD * SQT_TD):
+            var r = u // SQT_K
+            var k = u % SQT_K
+            var ra = i0 + r
+            var rb = j0 + r
+            var ok = k < kc
+            sa[u] = ftz(a[min(ra, NA - 1) * D + f0 + min(k, kc - 1)]) if (ok and ra < NA) else Float32(0)
+            sb[u] = ftz(b[min(rb, NB - 1) * D + f0 + min(k, kc - 1)]) if (ok and rb < NB) else Float32(0)
+        barrier()
+        for k in range(kc):
+            var av = SIMD[DType.float32, SQT_R]()
+            var bv = SIMD[DType.float32, SQT_R]()
+            comptime for q in range(SQT_R):
+                av[q] = sa[(ti + q * SQT_TD) * SQT_K + k]
+                bv[q] = sb[(tj + q * SQT_TD) * SQT_K + k]
+            comptime for qi in range(SQT_R):
+                comptime for qj in range(SQT_R):
+                    var t = ftz(av[qi] - bv[qj])
+                    acc[qi * SQT_R + qj] = ftz(acc[qi * SQT_R + qj] + ftz(identical_mul(t, t)))
+        f0 += kc
+    comptime for qi in range(SQT_R):
+        comptime for qj in range(SQT_R):
+            var i = i0 + ti + qi * SQT_TD
+            var j = j0 + tj + qj * SQT_TD
+            if i < NA and j < NB:
+                dst[i * NB + j] = acc[qi * SQT_R + qj]
 
 
 def _nearest_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, labels: IPtr, dist: FPtr):
@@ -486,6 +623,12 @@ def _exp_kernel(src: FPtr, dst: FPtr, n: Int32):
     var t = _tid()
     if t < Int(n):
         exp_cell(src, dst, t)
+
+
+def _argmax_kernel(src: FPtr, n: Int32, kc: Int32, dst: IPtr):
+    var t = _tid()
+    if t < Int(n):
+        argmax_row(src, Int(kc), dst, t)
 
 
 def _nk_kernel(resp: FPtr, n: Int32, kc: Int32, dst: FPtr):
@@ -988,6 +1131,220 @@ def _grid(n: Int) -> Int:
     return (n + TPB - 1) // TPB if n > 0 else 1
 
 
+# ---------------------------------------------------------------------------
+# THE AGGLOMERATIVE MERGE LOOP ON THE DEVICE (lane hr2-mds-agglo, 2026-10-02).
+# `agglo.agglo_tree`'s unconstrained loop, every step as parallel kernels on
+# the resident n x n matrix: no host step between two merges. Every pick is a
+# min of `_agg_key` (the value's order in the high word, the index in the low
+# word), so the reduction's shape cannot move it: the lowest value, the
+# lowest index on a tie, exactly the host loop's strict `<` scans.
+#   state ints:   [0] a  [1] b  [2] rescan list length  [3] error
+#   state floats: [0] dab  [1] size a  [2] size b
+comptime AGG_TPB = 256
+comptime AGG_PER = AGG_TPB * 4
+comptime AGG_RESCAN_BLOCKS = 128
+comptime AGG_NONE = UInt64(0xFFFFFFFFFFFFFFFF)
+
+
+@always_inline
+def _agg_key(v: Float32, k: Int) -> UInt64:
+    """Ascending in v (-0.0 folded onto +0.0, which `<` treats as equal),
+    then ascending in k."""
+    var b = bitcast[DType.uint32](v)
+    if b == UInt32(0x80000000):
+        b = UInt32(0)
+    var o = (b ^ UInt32(0x80000000)) if (b & UInt32(0x80000000)) == UInt32(0) else ~b
+    return (UInt64(o) << 32) | UInt64(UInt32(k))
+
+
+@always_inline
+def _agg_block_min(red: UnsafePointer[UInt64, MutUntrackedOrigin, address_space=AddressSpace.SHARED], mine: UInt64) -> UInt64:
+    var tid = Int(thread_idx.x)
+    red[tid] = mine
+    barrier()
+    var off = AGG_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = min(red[tid], red[tid + off])
+        barrier()
+        off //= 2
+    var r = red[0]
+    barrier()
+    return r
+
+
+def _agg_init_kernel(live: IPtr, nn: IPtr, md: FPtr, sz: FPtr, node: IPtr, lst: IPtr, st: IPtr, n: Int32):
+    var i = _tid()
+    if i < Int(n):
+        live[i] = 1
+        nn[i] = -1
+        md[i] = Float32.MAX * Float32(2)
+        sz[i] = Float32(1)
+        node[i] = Int32(i)
+        lst[i] = Int32(i)
+    if i == 0:
+        st[0] = 0
+        st[1] = 0
+        st[2] = n
+
+
+def _agg_mirror_kernel(x: FPtr, dm: FPtr, n: Int32, bad: IPtr):
+    var t = _tid()
+    var N = Int(n)
+    if t < N * N:
+        var i = t // N
+        var j = t % N
+        if i == j:
+            dm[t] = Float32(0)
+        else:
+            var lo = i if i < j else j
+            var hi = j if i < j else i
+            var v = x[lo * N + hi]
+            if i < j and (not (v >= Float32(0)) or v == Float32.MAX * Float32(2)):
+                bad[0] = 1
+            dm[t] = v
+
+
+def _agg_argmin_part_kernel(md: FPtr, nn: IPtr, live: IPtr, n: Int32, part: MutPointer[UInt64, MutAnyOrigin], st: IPtr):
+    """part[block] = the min key of (md[i], i) over the block's live rows
+    with a partner."""
+    var red = stack_allocation[AGG_TPB, UInt64, address_space = AddressSpace.SHARED]()
+    var mine = AGG_NONE
+    var base = Int(block_idx.x) * AGG_PER
+    var end = min(base + AGG_PER, Int(n))
+    for i in range(base + Int(thread_idx.x), end, AGG_TPB):
+        if live[i] != 0 and nn[i] >= 0:
+            mine = min(mine, _agg_key(md[i], i))
+    var r = _agg_block_min(red, mine)
+    if thread_idx.x == 0:
+        part[Int(block_idx.x)] = r
+
+
+@always_inline
+def _agg_pick(part: MutPointer[UInt64, MutAnyOrigin], nb: Int) -> UInt64:
+    """The step's pick from the argmin partials (a few per thousand rows),
+    read by every thread that needs it."""
+    var r = AGG_NONE
+    for q in range(nb):
+        r = min(r, part[q])
+    return r
+
+
+def _agg_lw_kernel(
+    part: MutPointer[UInt64, MutAnyOrigin], nb: Int32, dm: FPtr, nn: IPtr, live: IPtr, sz: FPtr, n: Int32,
+    linkage: Int32, st: IPtr, stf: FPtr, adj: IPtr, con: Int32,
+):
+    """The merge (a, b = nn[a]) from the partials, then row and column a of
+    the matrix: the Lance-Williams value of (a u b) to every live k other
+    than a and b. Thread 0 records a, b, dab and the two sizes for the
+    kernels after it."""
+    var k = _tid()
+    var N = Int(n)
+    if st[3] != 0:
+        return
+    var r = _agg_pick(part, Int(nb))
+    if r == AGG_NONE:
+        if k == 0:
+            st[3] = 1
+        return
+    var a = Int(UInt32(r & UInt64(0xFFFFFFFF)))
+    var b = Int(nn[a])
+    var dab = dm[a * N + b]
+    var na = sz[a]
+    var nbs = sz[b]
+    if k == 0:
+        st[0] = Int32(a)
+        st[1] = Int32(b)
+        st[2] = 0
+        stf[0] = dab
+        stf[1] = na
+        stf[2] = nbs
+    if k >= N or k == a or k == b or live[k] == 0:
+        return
+    var ha = True
+    var hb = True
+    if con != 0:
+        ha = adj[a * N + k] != 0
+        hb = adj[b * N + k] != 0
+    if Int(linkage) == LINK_WARD or ha or hb:
+        var v = lance_williams(Int(linkage), dm[a * N + k], dm[b * N + k], dab, na, nbs, sz[k], ha, hb)
+        dm[a * N + k] = v
+        dm[k * N + a] = v
+    if con != 0 and (ha or hb):
+        adj[a * N + k] = 1
+        adj[k * N + a] = 1
+
+
+def _agg_flag_kernel(
+    dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, sz: FPtr, node: IPtr, n: Int32, step: Int32, linkage: Int32,
+    ch: IPtr, dist: FPtr, st: IPtr, stf: FPtr, lst: IPtr, adj: IPtr, con: Int32,
+):
+    """Thread a books the merge (the children pair and value; b dies; a
+    takes the merged size and node id n + step) and joins the rescan list
+    with every live row below b whose partner was a or b; a live row below
+    a otherwise takes a when it is nearer (or as near with a lower index)."""
+    var i = _tid()
+    var N = Int(n)
+    if i >= N or st[3] != 0:
+        return
+    var a = Int(st[0])
+    var b = Int(st[1])
+    var go = False
+    if i == a:
+        go = True
+        var dab = stf[0]
+        var x = node[a]
+        var y = node[b]
+        var s = Int(step)
+        ch[2 * s] = x if x < y else y
+        ch[2 * s + 1] = y if x < y else x
+        dist[s] = identical_sqrt(dab) if Int(linkage) == LINK_WARD else dab
+        live[b] = 0
+        nn[b] = -1
+        sz[a] = ftz(stf[1] + stf[2])
+        node[a] = Int32(N + s)
+    elif i < b and live[i] != 0:
+        var q = Int(nn[i])
+        if q == a or q == b:
+            go = True
+        elif i < a and (con == 0 or adj[i * N + a] != 0):
+            var v = dm[i * N + a]
+            if q < 0 or v < md[i] or (v == md[i] and a < q):
+                nn[i] = Int32(a)
+                md[i] = v
+    if go:
+        var at = Atomic.fetch_add(st.unsafe_offset(2), Int32(1))
+        lst[Int(at)] = Int32(i)
+
+
+def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: IPtr, lst: IPtr, adj: IPtr, con: Int32):
+    """nn[i], md[i] for each listed row: the live column j > i at the lowest
+    value, the lowest j on a tie (-1, +inf when none). One block a row."""
+    var red = stack_allocation[AGG_TPB, UInt64, address_space = AddressSpace.SHARED]()
+    var N = Int(n)
+    var cnt = Int(st[2])
+    if st[3] != 0:
+        cnt = 0
+    var e = Int(block_idx.x)
+    while e < cnt:
+        var i = Int(lst[e])
+        var mine = AGG_NONE
+        for j in range(i + 1 + Int(thread_idx.x), N, AGG_TPB):
+            if live[j] != 0 and (con == 0 or adj[i * N + j] != 0):
+                mine = min(mine, _agg_key(dm[i * N + j], j))
+        var r = _agg_block_min(red, mine)
+        if thread_idx.x == 0:
+            if r == AGG_NONE:
+                nn[i] = -1
+                md[i] = Float32.MAX * Float32(2)
+            else:
+                var j = Int(UInt32(r & UInt64(0xFFFFFFFF)))
+                nn[i] = Int32(j)
+                md[i] = dm[i * N + j]
+        e += Int(grid_dim.x)
+
+
+
 struct _ClusterContext(Defaultable, Movable):
     """ONE process-lifetime DeviceContext for every x_cluster entry (the
     x_cnn `_Global` pattern: one DeviceContext per process). A context per call hung the SECOND
@@ -1046,6 +1403,8 @@ struct DeviceOps(ClusterOps):
     var ph_names: List[String]
     var ph_ns: List[Int]
     var ph_calls: List[Int]
+    var u: List[DeviceBuffer[DType.uint64]]
+    """The post-processing primitives' 64-bit key buffers (lane cgr2-cluster)."""
 
     def __init__(out self) raises:
         self.ctx = x_cluster_ctx()
@@ -1060,6 +1419,7 @@ struct DeviceOps(ClusterOps):
         self.ph_names = List[String]()
         self.ph_ns = List[Int]()
         self.ph_calls = List[Int]()
+        self.u = List[DeviceBuffer[DType.uint64]]()
 
     def __del__(deinit self):
         # the buffers and the pending sources die with this value: drain first
@@ -1236,6 +1596,14 @@ struct DeviceOps(ClusterOps):
 
     def sqdist(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
         self._ph0()
+        comptime if SQDIST_TILED:
+            if na > 0 and nb > 0 and d > 0 and getenv("MOJOLEARN_XC_SQDIST_TILED") != "0":
+                self.ctx.enqueue_function[_sqdist_tiled_kernel](
+                    self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
+                    grid_dim=((nb + SQT_B - 1) // SQT_B, (na + SQT_B - 1) // SQT_B), block_dim=SQT_TD * SQT_TD,
+                )
+                self._ph1("sqdist")
+                return
         self.ctx.enqueue_function[_sqdist_kernel](
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
             grid_dim=_grid(na * nb), block_dim=TPB,
@@ -1371,6 +1739,47 @@ struct DeviceOps(ClusterOps):
         self._ph1("kmeans")
         return r.inertia
 
+    def gather_rows(mut self, src: Int, d: Int, idx: Int, m: Int, dst: Int) raises:
+        self._ph0()
+        # a block a row, as wide as the row (lane/neural-pass133: 4096 blocks
+        # of TPB threads for 15-word taxi rows cost the minibatch step more
+        # than its assignment)
+        self.ctx.enqueue_function[_gather_rows_kernel](
+            self._fp(src), Int32(d), self._ip(idx), Int32(m), self._fp(dst),
+            grid_dim=max(m, 1), block_dim=min(TPB, max(32, (d + 31) // 32 * 32)),
+        )
+        self._ph1("gather_rows")
+
+    def kmeans_rows(
+        mut self, sub: Int, x: List[Float32], rows: List[Int], d: Int, k: Int, max_iter: Int,
+        tol: Float64, seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32],
+        mut labels: List[Int32],
+    ) raises -> Float64:
+        self._ph0()
+        var n = len(rows)
+        centers = List[Float32](length=k * d, fill=Float32(0))
+        var lab = List[UInt32](length=n, fill=UInt32(0))
+        var r = kmeans_fit_rows(
+            self.ctx, self.f[sub], MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(x.unsafe_ptr())), rows, d, k,
+            centers.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+            max_iter=max_iter, tol=tol, seed=seed, n_init=n_init, init=init, metric=METRIC_L2_EXPANDED,
+        )
+        _ = x[0]
+        _ = rows[0]
+        labels = List[Int32](capacity=n)
+        for t in range(n):
+            labels.append(Int32(lab[t]))
+        self._ph1("kmeans")
+        return r.inertia
+
+    def shrink(mut self, slot: Int) raises:
+        self.f[slot] = self.ctx.enqueue_create_buffer[DType.float32](1)
+
+    def empty(mut self, n: Int) raises -> Int:
+        self.f.append(self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1))
+        return len(self.f) - 1
+
     def gauss_q(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
         self._ph0()
         self.ctx.enqueue_function[_gauss_q_kernel](
@@ -1392,6 +1801,14 @@ struct DeviceOps(ClusterOps):
             self._fp(src), self._fp(dst), Int32(n), grid_dim=_grid(n), block_dim=TPB,
         )
         self._ph1("exp")
+
+    def argmax_rows(mut self, src: Int, n: Int, kc: Int, labels: Int) raises:
+        self._ph0()
+        if n > 0 and kc > 0:
+            self.ctx.enqueue_function[_argmax_kernel](
+                self._fp(src), Int32(n), Int32(kc), self._ip(labels), grid_dim=_grid(n), block_dim=TPB,
+            )
+        self._ph1("argmax_rows")
 
     def moments(
         mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
@@ -1632,6 +2049,111 @@ struct DeviceOps(ClusterOps):
             )
         self._ph1("dot_groups")
 
+    def agglo_on_device(self) -> Bool:
+        return True
+
+    def agglo_mirror(mut self, x: Int, n: Int, dst: Int) raises:
+        if n * n > 2147483647:
+            raise Error("AgglomerativeClustering: n * n exceeds the Int32 index bound")
+        self._ph0()
+        var bad = self.ctx.enqueue_create_buffer[DType.int32](1)
+        self.ctx.enqueue_memset(bad, Int32(0))
+        var pbad = bad.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        self.ctx.enqueue_function[_agg_mirror_kernel](
+            self._fp(x), self._fp(dst), Int32(n), pbad, grid_dim=_grid(n * n), block_dim=TPB,
+        )
+        var h = List[Int32](length=1, fill=Int32(0))
+        self.ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=bad)
+        self._sync()
+        _ = bad^
+        self._ph1("agglo_mirror")
+        if h[0] != 0:
+            raise Error("AgglomerativeClustering: a precomputed distance matrix must be finite and non-negative")
+
+    def agglo_merge(
+        mut self, dm: Int, adj: Int, n: Int, linkage: Int, n_merges: Int, mut children: List[Int32],
+        mut dist: List[Float32],
+    ) raises:
+        if n * n > 2147483647:
+            raise Error("AgglomerativeClustering: n * n exceeds the Int32 index bound")
+        self._ph0()
+        var ctx = self.ctx.copy()
+        var live = ctx.enqueue_create_buffer[DType.int32](n)
+        var nn = ctx.enqueue_create_buffer[DType.int32](n)
+        var node = ctx.enqueue_create_buffer[DType.int32](n)
+        var lst = ctx.enqueue_create_buffer[DType.int32](n)
+        var st = ctx.enqueue_create_buffer[DType.int32](4)
+        ctx.enqueue_memset(st, Int32(0))
+        var md = ctx.enqueue_create_buffer[DType.float32](n)
+        var sz = ctx.enqueue_create_buffer[DType.float32](n)
+        var stf = ctx.enqueue_create_buffer[DType.float32](3)
+        var nch = max(2 * n_merges, 1)
+        var ndv = max(n_merges, 1)
+        var ch = ctx.enqueue_create_buffer[DType.int32](nch)
+        var dv = ctx.enqueue_create_buffer[DType.float32](ndv)
+        var nb = (n + AGG_PER - 1) // AGG_PER
+        var part = ctx.enqueue_create_buffer[DType.uint64](nb)
+        var p_live = live.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_nn = nn.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_node = node.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_lst = lst.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_st = st.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_md = md.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_sz = sz.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_stf = stf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_ch = ch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_dv = dv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_part = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var p_dm = self._fp(dm)
+        var con = Int32(1) if adj >= 0 else Int32(0)
+        var p_adj = self._ip(adj) if adj >= 0 else p_lst
+        var rb = n if n < AGG_RESCAN_BLOCKS else AGG_RESCAN_BLOCKS
+        ctx.enqueue_function[_agg_init_kernel](
+            p_live, p_nn, p_md, p_sz, p_node, p_lst, p_st, Int32(n), grid_dim=_grid(n), block_dim=TPB,
+        )
+        # every row's first nearest partner: the rescan of the full list
+        ctx.enqueue_function[_agg_rescan_kernel](
+            p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, p_adj, con, grid_dim=rb, block_dim=AGG_TPB,
+        )
+        for step in range(n_merges):
+            ctx.enqueue_function[_agg_argmin_part_kernel](
+                p_md, p_nn, p_live, Int32(n), p_part, p_st, grid_dim=nb, block_dim=AGG_TPB,
+            )
+            ctx.enqueue_function[_agg_lw_kernel](
+                p_part, Int32(nb), p_dm, p_nn, p_live, p_sz, Int32(n), Int32(linkage), p_st, p_stf, p_adj, con,
+                grid_dim=_grid(n), block_dim=TPB,
+            )
+            ctx.enqueue_function[_agg_flag_kernel](
+                p_dm, p_live, p_nn, p_md, p_sz, p_node, Int32(n), Int32(step), Int32(linkage), p_ch, p_dv,
+                p_st, p_stf, p_lst, p_adj, con, grid_dim=_grid(n), block_dim=TPB,
+            )
+            ctx.enqueue_function[_agg_rescan_kernel](
+                p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, p_adj, con, grid_dim=rb, block_dim=AGG_TPB,
+            )
+        var h_st = List[Int32](length=4, fill=Int32(0))
+        children = List[Int32](length=nch, fill=Int32(0))
+        dist = List[Float32](length=ndv, fill=Float32(0))
+        ctx.enqueue_copy(dst_ptr=h_st.unsafe_ptr(), src_buf=st)
+        ctx.enqueue_copy(dst_ptr=children.unsafe_ptr(), src_buf=ch)
+        ctx.enqueue_copy(dst_ptr=dist.unsafe_ptr(), src_buf=dv)
+        self._sync()
+        _ = live^
+        _ = nn^
+        _ = node^
+        _ = lst^
+        _ = st^
+        _ = md^
+        _ = sz^
+        _ = stf^
+        _ = ch^
+        _ = dv^
+        _ = part^
+        self._ph1("agglo_merge")
+        if h_st[3] != 0:
+            raise Error("AgglomerativeClustering: no connected pair is left to merge")
+        children.resize(2 * n_merges, Int32(0))
+        dist.resize(n_merges, Float32(0))
+
     def alloc(mut self, n: Int) raises -> Int:
         self._ph0()
         var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
@@ -1648,3 +2170,600 @@ struct DeviceOps(ClusterOps):
             self._fp(q), self._fp(r), self._fp(lpn), grid_dim=_grid(n), block_dim=TPB,
         )
         self._ph1("estep")
+
+    def set_i(mut self, slot: Int, v: List[Int32]) raises:
+        self._ph0()
+        var n = len(v)
+        if n == 0:
+            self._ph1("set_i")
+            return
+        var view = self.i[slot].create_sub_buffer[DType.int32](0, n)
+        self.pend_i.append(v.copy())
+        self.ctx.enqueue_copy(dst_buf=view, src_ptr=self.pend_i[len(self.pend_i) - 1].unsafe_ptr())
+        self._ph1("set_i")
+
+    def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[_mb_assign_kernel](
+            self._fp(src), Int32(d), self._ip(idx), Int32(m), self._fp(c), Int32(k), self._ip(labels),
+            self._fp(dist), self._fp(dst), grid_dim=_grid(m), block_dim=TPB,
+        )
+        self._ph1("mb_assign")
+
+    def mb_update(mut self, b: Int, batch: Int, labels: Int, c: Int, w: Int, k: Int, d: Int) raises:
+        self._ph0()
+        comptime if MB_BLOCK_FITS:
+            self.ctx.enqueue_function[_mb_centers_block_kernel](
+                self._fp(b), Int32(batch), self._ip(labels), self._fp(c), self._fp(w), Int32(d),
+                grid_dim=k, block_dim=MB_TPB,
+            )
+        else:
+            self.ctx.enqueue_function[_mb_centers_kernel](
+                self._fp(b), Int32(batch), self._ip(labels), self._fp(c), self._fp(w), Int32(k), Int32(d),
+                grid_dim=_grid(k * d), block_dim=TPB,
+            )
+            self.ctx.enqueue_function[_mb_counts_kernel](
+                Int32(batch), self._ip(labels), self._fp(w), Int32(k), grid_dim=_grid(k), block_dim=TPB,
+            )
+        self._ph1("mb_update")
+
+    # ------------------------------------------------------------------
+    # lane cgr2-cluster: the post-processing primitives on the device
+    def _keys(mut self, n: Int) raises -> UPtr:
+        """A new uninitialized 64-bit key buffer that lives as long as the ops."""
+        self.u.append(self.ctx.enqueue_create_buffer[DType.uint64](n if n > 0 else 1))
+        return self.u[len(self.u) - 1].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+    def _int1(mut self, slot: Int) raises -> Int:
+        """Read word 0 of an int slot (the device waits)."""
+        var h = List[Int32](length=1, fill=Int32(0))
+        self.ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=self.i[slot])
+        self._sync()
+        return Int(h[0])
+
+    def _scan(mut self, flags: IPtr, n: Int) raises -> Tuple[Int, Int]:
+        """The exclusive integer scan of n flags: (int slot of the prefix
+        counts, int slot whose word 0 is the total). Enqueued only."""
+        var nb = (n + SCAN_PER - 1) // SCAN_PER
+        if nb < 1:
+            nb = 1
+        var part = self.zeros_i(nb)
+        var out = self.zeros_i(n)
+        var tot = self.zeros_i(1)
+        self.ctx.enqueue_function[scan_part_kernel](flags, Int32(n), self._ip(part), grid_dim=nb, block_dim=RTPB)
+        self.ctx.enqueue_function[scan_out_kernel](
+            flags, Int32(n), self._ip(part), Int32(nb), self._ip(out), self._ip(tot), grid_dim=nb, block_dim=RTPB,
+        )
+        return (out, tot)
+
+    def _flag_true(mut self, bad: Int) raises -> Bool:
+        return self._int1(bad) != 0
+
+    def _fold(mut self, mode: Int, pa: FPtr, pb: FPtr, pc: FPtr, n: Int, oh: FPtr, ol: FPtr, idx: Int) raises:
+        """The float-float fold of n elements into oh/ol[idx], enqueued."""
+        if n <= 0:
+            var z = self.zeros(1)
+            self.ctx.enqueue_function[ff_chunk_kernel](
+                Int32(FM_VAL), self._fp(z), self._fp(z), self._fp(z), Int32(0), oh, ol, Int32(idx),
+                grid_dim=1, block_dim=RTPB,
+            )
+            return
+        var nch = (n + FOLD_CHUNK - 1) // FOLD_CHUNK
+        var md = mode
+        var a = pa
+        var b = pb
+        var c = pc
+        var cnt = n
+        while True:
+            if nch == 1:
+                self.ctx.enqueue_function[ff_chunk_kernel](
+                    Int32(md), a, b, c, Int32(cnt), oh, ol, Int32(idx), grid_dim=1, block_dim=RTPB,
+                )
+                return
+            var th = self.alloc(nch)
+            var tl = self.alloc(nch)
+            self.ctx.enqueue_function[ff_chunk_kernel](
+                Int32(md), a, b, c, Int32(cnt), self._fp(th), self._fp(tl), Int32(0), grid_dim=nch, block_dim=RTPB,
+            )
+            md = FM_FF
+            a = self._fp(th)
+            b = self._fp(tl)
+            c = self._fp(th)
+            cnt = nch
+            nch = (nch + FOLD_CHUNK - 1) // FOLD_CHUNK
+
+    def agglo_connect(mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int) raises -> Int:
+        self._ph0()
+        var bad = self.zeros_i(1)
+        var pa = self._ip(adj)
+        if n_edges > 0:
+            self.ctx.enqueue_function[agc_edges_kernel](
+                self._fp(edges), Int32(n_edges), Int32(n), pa, self._ip(bad), grid_dim=pgrid(n_edges), block_dim=PTPB,
+            )
+        if self._flag_true(bad):
+            raise Error("AgglomerativeClustering: a connectivity edge is outside [0, n)")
+        # the components: min-label propagation to the fixed point
+        var lab_h = List[Int32](capacity=n)
+        for v in range(n):
+            lab_h.append(Int32(v))
+        var lab = self.put_i(lab_h)
+        var changed = self.zeros_i(1)
+        while True:
+            self.ctx.enqueue_function[agc_prop_kernel](
+                pa, Int32(n), self._ip(lab), self._ip(changed), grid_dim=pgrid(n), block_dim=PTPB,
+            )
+            self.ctx.enqueue_memset(self.i[changed], Int32(0))
+            self.ctx.enqueue_function[agc_prop_kernel](
+                pa, Int32(n), self._ip(lab), self._ip(changed), grid_dim=pgrid(n), block_dim=PTPB,
+            )
+            if not self._flag_true(changed):
+                break
+            self.ctx.enqueue_memset(self.i[changed], Int32(0))
+        var isroot = self.zeros_i(n)
+        self.ctx.enqueue_function[agc_root_kernel](self._ip(lab), Int32(n), self._ip(isroot), grid_dim=pgrid(n), block_dim=PTPB)
+        var sc = self._scan(self._ip(isroot), n)
+        var cid = sc[0]
+        var C = self._int1(sc[1])
+        if C <= 1:
+            self._ph1("agglo_connect")
+            return 1
+        var comp = self.zeros_i(n)
+        var start = self.zeros_i(C)
+        var members = self.zeros_i(n)
+        self.ctx.enqueue_function[agc_comp_kernel](
+            self._ip(lab), self._ip(cid), Int32(n), self._ip(comp), grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        self.ctx.enqueue_function[agc_start_kernel](
+            self._ip(isroot), self._ip(cid), self._ip(comp), Int32(n), self._ip(start), grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        self.ctx.enqueue_function[agc_members_kernel](
+            self._ip(comp), self._ip(start), Int32(n), self._ip(members), grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        var cc = (1 << 24) // n
+        if cc < 1:
+            cc = 1
+        if cc > C:
+            cc = C
+        var rowbest = self._keys(n * cc)
+        var ward = Int32(1) if linkage == LINK_WARD else Int32(0)
+        var c0 = 0
+        while c0 < C:
+            var k = min(cc, C - c0)
+            self.ctx.enqueue_function[agc_rowbest_kernel](
+                self._fp(dm), self._ip(comp), self._ip(start), self._ip(members), Int32(n), Int32(C), Int32(c0),
+                Int32(k), ward, rowbest, grid_dim=pgrid(n * k), block_dim=PTPB,
+            )
+            self.ctx.enqueue_function[agc_join_kernel](
+                rowbest, self._ip(comp), self._ip(start), self._ip(members), Int32(n), Int32(C), Int32(c0), Int32(k),
+                pa, grid_dim=pgrid(C * k), block_dim=PTPB,
+            )
+            c0 += k
+        self._ph1("agglo_connect")
+        return C
+
+    def check_nonneg(mut self, x: Int, n: Int) raises -> Bool:
+        self._ph0()
+        var bad = self.zeros_i(1)
+        if n > 0:
+            self.ctx.enqueue_function[nonneg_kernel](self._fp(x), Int32(n), self._ip(bad), grid_dim=pgrid(n), block_dim=PTPB)
+        var r = not self._flag_true(bad)
+        self._ph1("check_nonneg")
+        return r
+
+    def optics_order(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int
+    ) raises:
+        self._ph0()
+        var done = self.zeros_i(n)
+        var nb = (n + SCAN_PER - 1) // SCAN_PER
+        var part = self._keys(nb)
+        self.ctx.enqueue_function[optics_init_kernel](
+            self._fp(core), Int32(n), max_eps, self._fp(reach), self._ip(pred), self._ip(done),
+            grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        for step in range(n):
+            self.ctx.enqueue_function[optics_part_kernel](
+                self._fp(reach), self._ip(done), Int32(n), part, grid_dim=nb, block_dim=RTPB,
+            )
+            self.ctx.enqueue_function[optics_step_kernel](
+                part, Int32(nb), self._fp(dm), self._fp(core), Int32(n), max_eps, self._ip(done), self._fp(reach),
+                self._ip(pred), self._ip(ordering), Int32(step), grid_dim=pgrid(n), block_dim=PTPB,
+            )
+        self._ph1("optics_order")
+
+    def optics_dbscan(mut self, ordering: Int, reach: Int, core: Int, n: Int, eps: Float32, labels: Int) raises:
+        self._ph0()
+        var flag = self.zeros_i(n)
+        self.ctx.enqueue_function[optics_flag_kernel](
+            self._ip(ordering), self._fp(reach), self._fp(core), Int32(n), eps, self._ip(flag),
+            grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        var sc = self._scan(self._ip(flag), n)
+        self.ctx.enqueue_function[optics_label_kernel](
+            self._ip(ordering), self._fp(reach), self._fp(core), Int32(n), eps, self._ip(flag), self._ip(sc[0]),
+            self._ip(labels), grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        self._ph1("optics_dbscan")
+
+    def sum_ff(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int) raises -> Float64:
+        self._ph0()
+        var o = self.zeros(2)
+        var po = self._fp(o)
+        self._fold(mode, self._fp(a), self._fp(b if b >= 0 else a), self._fp(c if c >= 0 else a), n, po, po + 1, 0)
+        var h = self.get(o, 2)
+        self._ph1("sum_ff")
+        return Float64(h[0]) + Float64(h[1])
+
+    def bin_seeds(mut self, x: Int, n: Int, d: Int, bin_size: Float32, min_bin_freq: Int, dst: Int) raises -> Int:
+        self._ph0()
+        var keys = self.alloc(n * d)
+        var rep = self.zeros_i(n)
+        var kept = self.zeros_i(n)
+        self.ctx.enqueue_function[bin_key_kernel](
+            self._fp(x), Int32(n * d), bin_size, self._fp(keys), grid_dim=pgrid(n * d), block_dim=PTPB,
+        )
+        self.ctx.enqueue_function[first_equal_kernel](
+            self._fp(keys), self._ip(rep), Int32(0), Int32(d), Int32(n), self._ip(rep), grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        self.ctx.enqueue_function[bin_count_kernel](
+            self._ip(rep), Int32(n), Int32(min_bin_freq), self._ip(kept), grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        var sc = self._scan(self._ip(kept), n)
+        self.ctx.enqueue_function[bin_scatter_kernel](
+            self._fp(keys), self._ip(kept), self._ip(sc[0]), Int32(n), Int32(d), bin_size, self._fp(dst),
+            grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        var k = self._int1(sc[1])
+        self._ph1("bin_seeds")
+        return k
+
+    def ms_unique(
+        mut self, centers: Int, inten: Int, iters: Int, ns: Int, d: Int, dst: Int, mut n_iter: Int
+    ) raises -> Int:
+        self._ph0()
+        var nb = (ns + RTPB - 1) // RTPB
+        if nb < 1:
+            nb = 1
+        var part = self.zeros_i(nb)
+        self.ctx.enqueue_function[max_part_kernel](self._ip(iters), Int32(ns), self._ip(part), grid_dim=nb, block_dim=RTPB)
+        var rep = self.zeros_i(ns)
+        var rv = self.zeros_i(ns)
+        var cnt = self.zeros_i(1)
+        self.ctx.enqueue_function[first_equal_kernel](
+            self._fp(centers), self._ip(inten), Int32(1), Int32(d), Int32(ns), self._ip(rep), grid_dim=pgrid(ns), block_dim=PTPB,
+        )
+        self.ctx.enqueue_function[ms_last_kernel](
+            self._ip(rep), self._ip(inten), Int32(ns), self._ip(rv), grid_dim=pgrid(ns), block_dim=PTPB,
+        )
+        self.ctx.enqueue_function[ms_rank_kernel](
+            self._fp(centers), self._ip(rep), self._ip(rv), Int32(ns), Int32(d), self._fp(dst), self._ip(cnt),
+            grid_dim=pgrid(ns), block_dim=PTPB,
+        )
+        var parts = self.get_i(part, nb)
+        n_iter = 0
+        for q in range(nb):
+            if Int(parts[q]) > n_iter:
+                n_iter = Int(parts[q])
+        var m = self._int1(cnt)
+        self._ph1("ms_unique")
+        return m
+
+    def ms_suppress(mut self, sorted: Int, dd: Int, m: Int, d: Int, bw: Float32, dst: Int) raises -> Int:
+        self._ph0()
+        var und = self.zeros_i(m)
+        var uni = self.zeros_i(m)
+        self.ctx.enqueue_function[fill_i_kernel](self._ip(und), Int32(m), Int32(1), grid_dim=pgrid(m), block_dim=PTPB)
+        var nb = (m + SCAN_PER - 1) // SCAN_PER
+        if nb < 1:
+            nb = 1
+        var part = self.zeros_i(nb)
+        # rounds: the lowest undecided center is kept and drops every
+        # undecided one within the bandwidth; the batch ends with a check
+        while True:
+            for _r in range(32):
+                self.ctx.enqueue_function[lowest_part_kernel](
+                    self._ip(und), Int32(m), self._ip(part), grid_dim=nb, block_dim=RTPB,
+                )
+                self.ctx.enqueue_function[ms_mark_kernel](
+                    self._ip(part), Int32(nb), self._fp(dd), Int32(m), bw, self._ip(und), self._ip(uni),
+                    grid_dim=pgrid(m), block_dim=PTPB,
+                )
+            self.ctx.enqueue_function[lowest_part_kernel](
+                self._ip(und), Int32(m), self._ip(part), grid_dim=nb, block_dim=RTPB,
+            )
+            var parts = self.get_i(part, nb)
+            var left = False
+            for q in range(nb):
+                if Int(parts[q]) < m:
+                    left = True
+            if not left:
+                break
+        var sc = self._scan(self._ip(uni), m)
+        self.ctx.enqueue_function[compact_rows_kernel](
+            self._fp(sorted), self._ip(uni), self._ip(sc[0]), Int32(m), Int32(d), self._fp(dst),
+            grid_dim=pgrid(m), block_dim=PTPB,
+        )
+        var kc = self._int1(sc[1])
+        self._ph1("ms_suppress")
+        return kc
+
+    def ms_noise(mut self, labels: Int, dist: Int, n: Int, bw: Float32) raises:
+        self._ph0()
+        self.ctx.enqueue_function[ms_noise_kernel](
+            self._ip(labels), self._fp(dist), Int32(n), bw, grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        self._ph1("ms_noise")
+
+    def negate(mut self, src: Int, dst: Int, n: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[negate_kernel](self._fp(src), self._fp(dst), Int32(n), grid_dim=pgrid(n), block_dim=PTPB)
+        self._ph1("negate")
+
+    def count_neg(mut self, x: Int, n: Int) raises -> Int:
+        self._ph0()
+        var cnt = self.zeros_i(1)
+        self.ctx.enqueue_function[count_neg_kernel](self._fp(x), Int32(n), self._ip(cnt), grid_dim=pgrid(n), block_dim=PTPB)
+        var c = self._int1(cnt)
+        self._ph1("count_neg")
+        return c
+
+    def sign_side(mut self, src: Int, n: Int, neg: Bool, dst: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[sign_side_kernel](
+            self._fp(src), Int32(n), Int32(1) if neg else Int32(0), self._fp(dst), grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        self._ph1("sign_side")
+
+    def ap_equal(mut self, s: Int, pref: Int, n: Int) raises -> Bool:
+        self._ph0()
+        var bad = self.zeros_i(1)
+        self.ctx.enqueue_function[ap_equal_kernel](
+            self._fp(s), self._fp(pref), Int32(n), self._ip(bad), grid_dim=pgrid(n * n), block_dim=PTPB,
+        )
+        var r = not self._flag_true(bad)
+        self._ph1("ap_equal")
+        return r
+
+    def set_diag(mut self, s: Int, v: Int, n: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[set_diag_kernel](self._fp(s), self._fp(v), Int32(n), grid_dim=pgrid(n), block_dim=PTPB)
+        self._ph1("set_diag")
+
+    def ap_conv(mut self, e: Int, ring: Int, n: Int, conv_iter: Int, it: Int) raises -> Bool:
+        self._ph0()
+        var st = self.zeros_i(2)
+        self.ctx.enqueue_function[ap_conv_kernel](
+            self._ip(e), self._ip(ring), Int32(n), Int32(conv_iter), Int32(it), self._ip(st),
+            grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        var h = self.get_i(st, 2)
+        self._ph1("ap_conv")
+        return it >= conv_iter and h[1] == 0 and h[0] > 0
+
+    def ap_exemplars(mut self, s: Int, e: Int, n: Int, centers: Int, labels: Int) raises -> Int:
+        self._ph0()
+        var sc = self._scan(self._ip(e), n)
+        var K = self._int1(sc[1])
+        if K == 0:
+            self.ctx.enqueue_function[fill_i_kernel](self._ip(labels), Int32(n), Int32(-1), grid_dim=pgrid(n), block_dim=PTPB)
+            self._ph1("ap_exemplars")
+            return 0
+        var ex = self.zeros_i(K)
+        var inv = self.zeros_i(n)
+        var c = self.zeros_i(n)
+        var acc = self.alloc(n)
+        self.ctx.enqueue_function[ap_exsc_kernel](
+            self._ip(e), self._ip(sc[0]), Int32(n), self._ip(ex), grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        for rnd in range(2):
+            self.ctx.enqueue_function[fill_i_kernel](self._ip(inv), Int32(n), Int32(-1), grid_dim=pgrid(n), block_dim=PTPB)
+            self.ctx.enqueue_function[ap_inv_kernel](self._ip(ex), Int32(K), self._ip(inv), grid_dim=pgrid(K), block_dim=PTPB)
+            self.ctx.enqueue_function[ap_c_kernel](
+                self._fp(s), self._ip(ex), Int32(K), Int32(n), self._ip(inv), self._ip(c), grid_dim=pgrid(n), block_dim=PTPB,
+            )
+            if rnd == 0:
+                self.ctx.enqueue_function[ap_acc_kernel](
+                    self._fp(s), self._ip(c), Int32(n), self._fp(acc), grid_dim=pgrid(n), block_dim=PTPB,
+                )
+                self.ctx.enqueue_function[ap_best_kernel](
+                    self._fp(acc), self._ip(c), Int32(n), self._ip(ex), grid_dim=K, block_dim=RTPB,
+                )
+        var isc = self.zeros_i(n)
+        self.ctx.enqueue_function[ap_isc_kernel](self._ip(ex), self._ip(c), Int32(n), self._ip(isc), grid_dim=pgrid(n), block_dim=PTPB)
+        var sc2 = self._scan(self._ip(isc), n)
+        self.ctx.enqueue_function[ap_label_kernel](
+            self._ip(ex), self._ip(c), self._ip(isc), self._ip(sc2[0]), Int32(n), self._ip(centers), self._ip(labels),
+            grid_dim=pgrid(n), block_dim=PTPB,
+        )
+        var nc = self._int1(sc2[1])
+        self._ph1("ap_exemplars")
+        return nc
+
+    def onehot(mut self, idx: Int, m: Int, kc: Int, by_row: Bool, dst: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[onehot_kernel](
+            self._ip(idx), Int32(m), Int32(kc), Int32(1) if by_row else Int32(0), self._fp(dst),
+            grid_dim=pgrid(m), block_dim=PTPB,
+        )
+        self._ph1("onehot")
+
+    def rand_resp(mut self, dst: Int, n: Int, kc: Int, state: UInt64) raises:
+        self._ph0()
+        self.ctx.enqueue_function[rand_resp_kernel](self._fp(dst), Int32(n), Int32(kc), state, grid_dim=pgrid(n), block_dim=PTPB)
+        self._ph1("rand_resp")
+
+    def kpp_search(mut self, closest: Int, w: Int, m: Int, vs: List[Float64], ids: Int) raises:
+        self._ph0()
+        var mode = FM_PROD if w >= 0 else FM_VAL
+        var nch = (m + FOLD_CHUNK - 1) // FOLD_CHUNK
+        var th = self.alloc(nch)
+        var tl = self.alloc(nch)
+        var pc = self._fp(closest)
+        var pw = self._fp(w if w >= 0 else closest)
+        self.ctx.enqueue_function[ff_chunk_kernel](
+            Int32(mode), pc, pw, pc, Int32(m), self._fp(th), self._fp(tl), Int32(0), grid_dim=nch, block_dim=RTPB,
+        )
+        var vh = List[Float32](capacity=2 * len(vs))
+        for t in range(len(vs)):
+            var v = ff_of_f64(vs[t])
+            vh.append(v.hi)
+            vh.append(v.lo)
+        var vslot = self.put(vh)
+        self.ctx.enqueue_function[kpp_search_kernel](
+            Int32(mode), pc, pw, self._fp(th), self._fp(tl), Int32(m), self._fp(vslot), Int32(len(vs)), self._ip(ids),
+            grid_dim=pgrid(len(vs)), block_dim=PTPB,
+        )
+        self._ph1("kpp_search")
+
+    def kpp_pots(mut self, dc: Int, closest: Int, w: Int, nt: Int, m: Int) raises -> List[Float64]:
+        self._ph0()
+        var o = self.zeros(2 * nt)
+        var po = self._fp(o)
+        var pc = self._fp(closest)
+        var pw = self._fp(w if w >= 0 else closest)
+        for t in range(nt):
+            self._fold(FM_WMIN if w >= 0 else FM_MIN, self._fp(dc) + t * m, pc, pw, m, po, po + nt, t)
+        var h = self.get(o, 2 * nt)
+        var out = List[Float64](capacity=nt)
+        for t in range(nt):
+            out.append(Float64(h[t]) + Float64(h[nt + t]))
+        self._ph1("kpp_pots")
+        return out^
+
+    def kpp_take(mut self, dc: Int, closest: Int, best: Int, m: Int) raises:
+        self._ph0()
+        self.ctx.enqueue_function[kpp_take_kernel](
+            self._fp(dc) + best * m, self._fp(closest), Int32(m), grid_dim=pgrid(m), block_dim=PTPB,
+        )
+        self._ph1("kpp_take")
+
+
+
+
+
+def _mb_centers_kernel(b: FPtr, batch: Int32, labels: IPtr, c: FPtr, w: FPtr, k: Int32, d: Int32):
+    """One thread a center word (lane/neural-pass133): `mb_center_word`; the
+    counts are left to `_mb_counts_kernel` (launched after, so every thread
+    reads the batch's starting count)."""
+    var q = _tid()
+    var dd = Int(d)
+    if q < Int(k) * dd:
+        var j = q // dd
+        var f = q - j * dd
+        var wsum = mb_center_wsum(labels, Int(batch), j)
+        if wsum > Float32(0):
+            c[q] = mb_center_word(b, Int(batch), labels, c[q], w[j], wsum, j, f, dd)
+
+
+def _mb_counts_kernel(batch: Int32, labels: IPtr, w: FPtr, k: Int32):
+    var j = _tid()
+    if j < Int(k):
+        var wsum = mb_center_wsum(labels, Int(batch), j)
+        if wsum > Float32(0):
+            w[j] = ftz(w[j] + wsum)
+
+
+#: The block form (one block a center, `_mb_centers_block_kernel`): each
+#: chunk of the batch compacted to the center's rows by a block scan in
+#: threadgroup memory, each thread a feature's chain over them in batch order;
+#: the count an integer sum (exact, so the host's `+ 1` chain's word below
+#: 2^24 rows). Behind its fits gate; the per-word kernels above otherwise.
+comptime MB_TPB = 256
+comptime MB_PF = 8
+comptime MB_BLOCK_FITS = lib_smem_page_fits_for[TARGET_COLUMN, 2 * MB_TPB * 4]()
+
+
+def _mb_centers_block_kernel(b: FPtr, batch: Int32, labels: IPtr, c: FPtr, w: FPtr, d: Int32):
+    """One block a center j: per chunk of MB_TPB batch rows, a block scan
+    compacts the chunk's rows of j in batch order into `sel`, then each
+    thread chains its feature over them; the count is the sum of the chunk
+    counts (exact). Thread 0 writes the count last: every thread read it
+    into `wj` before the first barrier."""
+    var j = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var nb = Int(batch)
+    var dd = Int(d)
+    var scan = stack_allocation[MB_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var sel = stack_allocation[MB_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var wj = w[j]
+    var total = 0
+    var f0 = 0
+    while f0 < dd:
+        var f = f0 + tid
+        var acc = Float32(0)
+        if f < dd:
+            acc = ftz(identical_mul(c[j * dd + f], wj))
+        var tot = 0
+        var t0 = 0
+        while t0 < nb:
+            var mine = 1 if (t0 + tid < nb and Int(labels[t0 + tid]) == j) else 0
+            # inclusive scan: within the warp by shuffles, then the warp
+            # totals (integers: any order gives the same counts)
+            var lane = tid % WARP_SIZE
+            var wid = tid // WARP_SIZE
+            var v = Int32(mine)
+            var off = 1
+            while off < WARP_SIZE:
+                var u = shuffle_idx(v, UInt32(max(lane - off, 0)))
+                if lane >= off:
+                    v += u
+                off *= 2
+            barrier()
+            if lane == WARP_SIZE - 1:
+                scan[wid] = v
+            barrier()
+            var base = Int32(0)
+            for q in range(wid):
+                base += scan[q]
+            var m = 0
+            for q in range(MB_TPB // WARP_SIZE):
+                m += Int(scan[q])
+            if mine == 1:
+                sel[Int(base + v) - 1] = Int32(tid)
+            barrier()
+            if f < dd:
+                # the loads of MB_PF rows issued before their adds (the adds
+                # stay in batch order): the chain no longer waits on each load
+                var q = 0
+                while q + MB_PF <= m:
+                    var v = SIMD[DType.float32, MB_PF]()
+                    comptime for u in range(MB_PF):
+                        v[u] = b[(t0 + Int(sel[q + u])) * dd + f]
+                    comptime for u in range(MB_PF):
+                        acc = ftz(acc + ftz(v[u]))
+                    q += MB_PF
+                while q < m:
+                    acc = ftz(acc + ftz(b[(t0 + Int(sel[q])) * dd + f]))
+                    q += 1
+            tot += m
+            t0 += MB_TPB
+        total = tot
+        if total > 0 and f < dd:
+            var alpha = ftz(identical_div(Float32(1), ftz(wj + Float32(total))))
+            c[j * dd + f] = ftz(identical_mul(acc, alpha))
+        f0 += MB_TPB
+    barrier()
+    if tid == 0 and total > 0:
+        w[j] = ftz(wj + Float32(total))
+
+
+def _mb_assign_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, c: FPtr, k: Int32, labels: IPtr, dist: FPtr,
+                      dst: FPtr):
+    """One thread a batch row t (lane/neural-pass133): copies row idx[t] of
+    `src` to row t of `dst`, then `nearest_row`'s loop on it (the same
+    `sq_dist_rows` words, the lowest index on a tie)."""
+    var t = _tid()
+    if t < Int(m):
+        var dd = Int(d)
+        var r = Int(idx[t])
+        for f in range(dd):
+            dst[t * dd + f] = src[r * dd + f]
+        var best = sq_dist_rows(dst, t, c, 0, dd)
+        var bi = 0
+        for j in range(1, Int(k)):
+            var v = sq_dist_rows(dst, t, c, j, dd)
+            if v < best:
+                best = v
+                bi = j
+        labels[t] = Int32(bi)
+        dist[t] = best

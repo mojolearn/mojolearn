@@ -5,14 +5,10 @@ same executor calls Python's `_Kit` makes, with the same operands,
 broadcast modes (`mode_of`) and float32 scalars, for drivers that used to
 loop in Python (x_decomp/mcd.mojo, x_decomp/lda_online.mojo).
 
-TWO EXECUTORS. `Kit[E, S]` sends a call whose largest operand has at least
-`dev` elements to `E` and every smaller one to `S`. The GPU binding
-instantiates `[DevExec, HostExec]` (a call on a few hundred values costs
-more in launches than in arithmetic), the CPU binding
-`[HostExec, HostExec]`. The two executors run the same cells to the same
-bits (every x-decomp lane's GPU == CPU claim), so `dev` is timing only;
-`dev = 1` sends every call to `E` (Python passes
-MOJOLEARN_XD_RES_DEV_MIN, default 65536)."""
+ONE EXECUTOR. `Kit[E]` sends every call to `E`. The CPU binding runs it
+on its executor; the GPU binding runs the same drivers on resident device
+matrices instead (x_decomp/kit_device.mojo), the same cells to the same
+bits (every x-decomp lane's GPU == CPU claim)."""
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 
@@ -85,16 +81,11 @@ def take_rows(X: Mat, sel: List[Int]) -> Mat:
     return out^
 
 
-struct Kit[E: Exec, S: Exec](Movable):
+struct Kit[E: Exec](Movable):
     var one: Mat
-    var dev: Int
 
-    def __init__(out self, dev: Int):
+    def __init__(out self):
         self.one = Mat(1, 1)
-        self.dev = dev
-
-    def big(self, count: Int) -> Bool:
-        return self.dev > 0 and count >= self.dev
 
     @staticmethod
     def mode(X: Mat, A: Mat) raises -> Int:
@@ -114,10 +105,7 @@ struct Kit[E: Exec, S: Exec](Movable):
         var out = Mat(A.r, A.c)
         if A.n() == 0:
             return out^
-        if self.big(A.n()):
-            Self.E.ew(op, A.p(), self.one.p(), 1, 3, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(s))
-        else:
-            Self.S.ew(op, A.p(), self.one.p(), 1, 3, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(s))
+        Self.E.ew(op, A.p(), self.one.p(), 1, 3, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(s))
         return out^
 
     def ew2(self, op: Int, A: Mat, B: Mat) raises -> Mat:
@@ -126,10 +114,7 @@ struct Kit[E: Exec, S: Exec](Movable):
         var out = Mat(A.r, A.c)
         if A.n() == 0:
             return out^
-        if self.big(max(A.n(), B.n())):
-            Self.E.ew(op, A.p(), B.p(), B.n(), bm, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(0))
-        else:
-            Self.S.ew(op, A.p(), B.p(), B.n(), bm, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(0))
+        Self.E.ew(op, A.p(), B.p(), B.n(), bm, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(0))
         return out^
 
     def mm(self, A: Mat, B: Mat, ta: Bool, tb: Bool) raises -> Mat:
@@ -142,26 +127,17 @@ struct Kit[E: Exec, S: Exec](Movable):
         var out = Mat(m, n)
         if m * n == 0:
             return out^
-        if self.big(max(A.n(), B.n(), m * n)):
-            Self.E.gemm(A.p(), B.p(), out.p(), m, k, n, ta, tb)
-        else:
-            Self.S.gemm(A.p(), B.p(), out.p(), m, k, n, ta, tb)
+        Self.E.gemm(A.p(), B.p(), out.p(), m, k, n, ta, tb)
         return out^
 
     def colsum(self, A: Mat) raises -> Mat:
         var out = Mat(1, A.c)
-        if self.big(A.n()):
-            Self.E.colsum(A.p(), out.p(), A.r, A.c)
-        else:
-            Self.S.colsum(A.p(), out.p(), A.r, A.c)
+        Self.E.colsum(A.p(), out.p(), A.r, A.c)
         return out^
 
     def rowsum(self, A: Mat) raises -> Mat:
         var out = Mat(A.r, 1)
-        if self.big(A.n()):
-            Self.E.rowsum(A.p(), out.p(), A.r, A.c)
-        else:
-            Self.S.rowsum(A.p(), out.p(), A.r, A.c)
+        Self.E.rowsum(A.p(), out.p(), A.r, A.c)
         return out^
 
     def total(self, A: Mat) raises -> Mat:
@@ -172,18 +148,12 @@ struct Kit[E: Exec, S: Exec](Movable):
         return self.ew1(OP_SCALE, self.colsum(A), 1.0 / Float64(A.r))
 
     def eigh(self, A: Mat, mut w: Mat, mut v: Mat) raises:
-        if self.big(A.n()):
-            Self.E.eigh(A.p(), w.p(), v.p(), A.r)
-        else:
-            Self.S.eigh(A.p(), w.p(), v.p(), A.r)
+        Self.E.eigh(A.p(), w.p(), v.p(), A.r, 0)
 
     def lu(self, mut lu: Mat, mut piv: List[Int32], mut info: Mat) raises:
         """`_Kit.lu` on a copy the caller made (in place)."""
         var pp = I32Ptr(unsafe_from_address=Int(piv.unsafe_ptr()))
-        if self.big(lu.n()):
-            Self.E.lu(lu.p(), pp, info.p(), lu.r)
-        else:
-            Self.S.lu(lu.p(), pp, info.p(), lu.r)
+        Self.E.lu(lu.p(), pp, info.p(), lu.r)
 
     def rand(self, r: Int, c: Int, seed: Int, stream: Int, kind: Int) raises -> Mat:
         var out = Mat(r, c)
@@ -191,10 +161,7 @@ struct Kit[E: Exec, S: Exec](Movable):
             return out^
         var sd = UInt32(seed & 0xFFFFFFFF)
         var st = UInt32(stream & 0xFFFFFFFF)
-        if self.big(r * c):
-            Self.E.rand(out.p(), r * c, sd, st, kind)
-        else:
-            Self.S.rand(out.p(), r * c, sd, st, kind)
+        Self.E.rand(out.p(), r * c, sd, st, kind)
         return out^
 
     def rand_gamma(self, r: Int, c: Int, seed: Int, stream: Int, shape: Float64) raises -> Mat:
@@ -206,10 +173,7 @@ struct Kit[E: Exec, S: Exec](Movable):
             raise Error("x_decomp: the gamma sampler takes shape >= 1")
         var sd = UInt32(seed & 0xFFFFFFFF)
         var st = UInt32(stream & 0xFFFFFFFF)
-        if self.big(r * c):
-            Self.E.rand_gamma(out.p(), r * c, sd, st, a)
-        else:
-            Self.S.rand_gamma(out.p(), r * c, sd, st, a)
+        Self.E.rand_gamma(out.p(), r * c, sd, st, a)
         return out^
 
     def lda_rows(
@@ -222,8 +186,5 @@ struct Kit[E: Exec, S: Exec](Movable):
         var its = Mat(n, 1)
         var s = List[Float32](length=n * (v + k) if n > 0 else 1, fill=Float32(0))
         var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
-        if self.big(max(X.n(), EW.n())):
-            Self.E.lda_rows(X.p(), EW.p(), Dt.p(), Et.p(), ps, its.p(), n, k, v, Float32(prior), max_iter, Float32(tol))
-        else:
-            Self.S.lda_rows(X.p(), EW.p(), Dt.p(), Et.p(), ps, its.p(), n, k, v, Float32(prior), max_iter, Float32(tol))
+        Self.E.lda_rows(X.p(), EW.p(), Dt.p(), Et.p(), ps, its.p(), n, k, v, Float32(prior), max_iter, Float32(tol))
         _ = s^

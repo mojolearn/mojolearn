@@ -11,17 +11,14 @@ run of equal fitted values) and `sklearn/_isotonic.pyx`
 mean; `_inplace_contiguous_isotonic_regression`: the single-pass
 pool-adjacent-violators with backtracking), and scipy's `interp1d(kind=
 'linear')` for predict (searchsorted left, clamped to [1, m-1],
-slope * (x - x_lo) + y_lo). THIS PASS IS SEQUENTIAL; the brief's parallel
-PAVA (a prefix-scan formulation) is pass 2's speed work. Out-of-bounds
+slope * (x - x_lo) + y_lo). PAVA runs chunked then merged (see
+`iso_pava_chunk`), the same order on every column. Out-of-bounds
 'nan' writes the canonical quiet NaN word 0x7FC00000 (a constant, never a
 computed NaN, so its bits are the same on every target).
 """
 from std.memory import bitcast
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fmax, fmin, ld, st, ldi, sti, i2f, copy
 from x_linear.team import Team
-from core.host_lanes import host_row_tasks
-from core.host_parallel import host_parallelize
-from std.sys.info import is_gpu
 
 comptime OOB_NAN = 0
 comptime OOB_CLIP = 1
@@ -42,7 +39,7 @@ def _iso_less(x: FP, y: FP, a: Int, b: Int) -> Bool:
     return a < b
 
 
-def _iso_merge_passes(x: FP, y: FP, perm: IP, tmp: IP, lo: Int, hi: Int, width0: Int):
+def iso_merge_passes(x: FP, y: FP, perm: IP, tmp: IP, lo: Int, hi: Int, width0: Int):
     """Bottom-up merge sort of perm[lo, hi) by `_iso_less`, starting from
     sorted runs of `width0` (1 = unsorted); the result lands in `perm`."""
     var width = width0
@@ -90,110 +87,150 @@ def _iso_merge_passes(x: FP, y: FP, perm: IP, tmp: IP, lo: Int, hi: Int, width0:
             sti(perm, i, ldi(src, i))
 
 
-def _iso_sort(x: FP, y: FP, perm: IP, tmp: IP, nk: Int):
-    """perm[0, nk) sorted by (x, y, index): chunks over host tasks, then the
-    merge passes over the sorted chunks; one pass on a device thread."""
-    comptime if is_gpu():
-        _iso_merge_passes(x, y, perm, tmp, 0, nk, 1)
-    else:
-        var tasks = host_row_tasks(nk, 64)
-        if tasks > 64:
-            tasks = 64
-        if tasks <= 1 or nk < 4096:
-            _iso_merge_passes(x, y, perm, tmp, 0, nk, 1)
-            return
-        var chunk = (nk + tasks - 1) // tasks
-        def _sort_chunk(task: Int) {imm x, imm y, imm perm, imm tmp, imm nk, imm chunk}:
-            var lo = task * chunk
-            var hi = lo + chunk
-            if hi > nk:
-                hi = nk
-            if lo < hi:
-                _iso_merge_passes(x, y, perm, tmp, lo, hi, 1)
-        host_parallelize(_sort_chunk, tasks)
-        _iso_merge_passes(x, y, perm, tmp, 0, nk, chunk)
-
-
-def isotonic_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
-    """x: n values (d == 1), ANY order; y: targets n | weights n (when
-    ip[3] is set; otherwise weights 1).
-    ip: [increasing, has_y_min, has_y_max, has_weights]; fp: [y_min, y_max].
-    res: m | X_min | X_max | xs n | ys n.
-    fw: ux n | uy n | uw n | sx n | sy n | sw n.  iw: target n | perm n | tmp n.
-    lane/neural-pass70 (2026-10-01): the rows with a positive weight are
-    sorted here by (x, y, row), the stable sort by (x, y) the Python layer
-    did over a list of a million pairs (0.5 s of its 1.25 s on the board's
-    taxi block, the fit itself 0.03 s), then pool-adjacent-violators over
-    the sorted copies: the same order, the same chains, the same bits.
-    Sequential after the sort: the lead thread alone."""
-    if not t.lead():
-        return
-    var inc = ldi(ip, 0) != 0
+def iso_fit_sorted(x: FP, y: FP, n: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, perm: IP, nk: Int):
+    """The fit after its sort: perm[0, nk) the rows in (x, y, row) order. The
+    host column's entry is `isotonic_fit_host` (x_linear/isotonic_host.mojo,
+    the sort on host threads); the device runs these steps as grid kernels
+    (x_linear/device.mojo `_iso_fit_grid`: the same gathers, starts, group
+    chains and PAVA statements, so the same words)."""
     var has_w = ldi(ip, 3) != 0
-    var ux = 0
-    var uy = n
-    var uw = 2 * n
     var xs = fw + 3 * n
     var ys = fw + 4 * n
     var ws = fw + 5 * n
-    var perm = iw + n
-    var tmp = iw + 2 * n
-    var nk = 0
-    for i in range(n):
-        if not has_w or ld(y, n + i) > Float32(0):
-            sti(perm, nk, i)
-            nk += 1
-    if nk < 1:
-        st(res, 0, Float32(0))
-        st(res, 1, Float32(0))
-        st(res, 2, Float32(0))
-        return
-    _iso_sort(x, y, perm, tmp, nk)
     for j in range(nk):
-        var r = ldi(perm, j)
-        st(xs, j, ld(x, r))
-        st(ys, j, ld(y, r))
-        st(ws, j, ld(y, n + r) if has_w else Float32(1))
-    # _make_unique
+        iso_gather_one(j, x, y, n, has_w, perm, xs, ys, ws)
+    var starts = iw + n
+    var m = iso_bounds(xs, nk, starts)
+    for g in range(m):
+        iso_group(g, xs, ys, ws, starts, fw, n)
+    iso_after_unique(m, n, ip, fp, res, fw, iw)
+
+
+@always_inline
+def iso_gather_one(j: Int, x: FP, y: FP, n: Int, has_w: Bool, perm: IP, xs: FP, ys: FP, ws: FP):
+    var r = ldi(perm, j)
+    st(xs, j, ld(x, r))
+    st(ys, j, ld(y, r))
+    st(ws, j, ld(y, n + r) if has_w else Float32(1))
+
+
+def iso_bounds_from(xs: FP, nk: Int, cand: IP, nc: Int, starts: IP) -> Int:
+    """`iso_bounds` over the candidate rows cand[0:nc] (ascending): the rows
+    whose x differs from the row before. A row with the previous row's x
+    never starts a group (it is 0 above the group's first x or the same
+    distance as the row before), so walking only the candidates takes the
+    same steps and writes the same starts (lane/neural-pass117)."""
     var m = 0
+    sti(starts, 0, 0)
     var cx = ld(xs, 0)
-    var cy = Float32(0)
-    var cw = Float32(0)
-    for j in range(nk):
+    for q in range(nc):
+        var j = ldi(cand, q)
         var xj = ld(xs, j)
-        var wj = ld(ws, j)
         if fs(xj, cx) >= Float32(1e-6):
-            st(fw, ux + m, cx)
-            st(fw, uw + m, cw)
-            st(fw, uy + m, fd(cy, cw))
             m += 1
+            sti(starts, m, j)
             cx = xj
-            cw = wj
-            cy = fm(ld(ys, j), wj)
-        else:
-            cw = fa(cw, wj)
-            cy = fmad(ld(ys, j), wj, cy)
-    st(fw, ux + m, cx)
-    st(fw, uw + m, cw)
-    st(fw, uy + m, fd(cy, cw))
     m += 1
-    # a decreasing fit runs PAVA on the reversed sequence
-    if not inc:
-        for a in range(m // 2):
-            var b = m - 1 - a
-            var sv = ld(fw, uy + a)
-            st(fw, uy + a, ld(fw, uy + b))
-            st(fw, uy + b, sv)
-            sv = ld(fw, uw + a)
-            st(fw, uw + a, ld(fw, uw + b))
-            st(fw, uw + b, sv)
-    # _inplace_contiguous_isotonic_regression
-    for i in range(m):
+    sti(starts, m, nk)
+    return m
+
+
+def iso_bounds(xs: FP, nk: Int, starts: IP) -> Int:
+    """_make_unique's groups: starts[g] the first sorted row of group g (a row
+    starts a group when it is at least 1e-6 above the group's first x),
+    starts[m] = nk; returns m."""
+    var m = 0
+    sti(starts, 0, 0)
+    var cx = ld(xs, 0)
+    for j in range(1, nk):
+        var xj = ld(xs, j)
+        if fs(xj, cx) >= Float32(1e-6):
+            m += 1
+            sti(starts, m, j)
+            cx = xj
+    m += 1
+    sti(starts, m, nk)
+    return m
+
+
+@always_inline
+def iso_group(g: Int, xs: FP, ys: FP, ws: FP, starts: IP, fw: FP, n: Int):
+    """Group g's pooled x, weight and mean: _make_unique's chains (the first
+    group summed from zero, every other started by its first row)."""
+    var lo = ldi(starts, g)
+    var hi = ldi(starts, g + 1)
+    var cw = Float32(0)
+    var cy = Float32(0)
+    var j0 = lo
+    if g > 0:
+        cw = ld(ws, lo)
+        cy = fm(ld(ys, lo), cw)
+        j0 = lo + 1
+    var j = j0
+    # 16 rows' loads before their folds (scheduling only; lane/neural-pass117:
+    # one group can hold most of the rows, and its chain waited on a load
+    # per row)
+    while j + 16 <= hi:
+        var bw = SIMD[DType.float32, 16]()
+        var by = SIMD[DType.float32, 16]()
+        comptime for u in range(16):
+            bw[u] = ld(ws, j + u)
+            by[u] = ld(ys, j + u)
+        comptime for u in range(16):
+            cw = fa(cw, bw[u])
+            cy = fmad(by[u], bw[u], cy)
+        j += 16
+    while j < hi:
+        var wj = ld(ws, j)
+        cw = fa(cw, wj)
+        cy = fmad(ld(ys, j), wj, cy)
+        j += 1
+    st(fw, g, ld(xs, lo))
+    st(fw, 2 * n + g, cw)
+    st(fw, n + g, fd(cy, cw))
+
+
+# ------------------------------------------------ PAVA, blocked then merged (cgr-linear)
+# The groups' values are pooled in a fixed parallel order, the same on the
+# host and every device: chunks of ISO_CHUNK groups each run the single-pass
+# pool-adjacent-violators (one thread a chunk), then adjacent solved
+# segments merge level by level (segment pairs of ISO_CHUNK << lvl groups,
+# one thread a pair), pooling only the adjacent violators at the seam. Any
+# order of pooling adjacent violators reaches the same isotonic fit (the
+# PAVA theorem); the float chains are this order's on every column. A block
+# is [s, e] with iw[s] = e, iw[e] = s and its pooled mean and weight at
+# uy[s], uw[s]; iw[n + s] is 1 exactly at the current block starts. Then
+# every group takes its block's value (the device finds each group's start
+# by pointer jumping over the start flags), and the trim compacts.
+comptime ISO_CHUNK = 256
+
+
+@always_inline
+def _iso_pool_store(fw: FP, iw: IP, n: Int, s: Int, e: Int, swy: Float32, sw: Float32):
+    st(fw, n + s, fd(swy, sw))
+    st(fw, 2 * n + s, sw)
+    sti(iw, s, e)
+    sti(iw, e, s)
+
+
+def iso_pava_chunk(c: Int, m: Int, n: Int, fw: FP, iw: IP):
+    """Chunk c: groups [c * ISO_CHUNK, min(+ISO_CHUNK, m)), the single-pass
+    PAVA with backtracking (_inplace_contiguous_isotonic_regression) over
+    its own groups."""
+    var lo = c * ISO_CHUNK
+    var hi = min(lo + ISO_CHUNK, m)
+    if lo >= hi:
+        return
+    var uy = n
+    var uw = 2 * n
+    var fl = iw + n
+    for i in range(lo, hi):
         sti(iw, i, i)
-    var i = 0
-    while i < m:
+        sti(fl, i, 1)
+    var i = lo
+    while i < hi:
         var k = ldi(iw, i) + 1
-        if k == m:
+        if k == hi:
             break
         if ld(fw, uy + i) < ld(fw, uy + k):
             i = k
@@ -204,16 +241,119 @@ def isotonic_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP,
             var prev_y = ld(fw, uy + k)
             swy = fmad(ld(fw, uw + k), ld(fw, uy + k), swy)
             sw = fa(sw, ld(fw, uw + k))
+            sti(fl, k, 0)
             k = ldi(iw, k) + 1
-            if k == m or prev_y < ld(fw, uy + k):
-                st(fw, uy + i, fd(swy, sw))
-                st(fw, uw + i, sw)
-                sti(iw, i, k - 1)
-                sti(iw, k - 1, i)
-                if i > 0:
+            if k == hi or prev_y < ld(fw, uy + k):
+                _iso_pool_store(fw, iw, n, i, k - 1, swy, sw)
+                if i > lo:
                     i = ldi(iw, i - 1)
                 break
-    i = 0
+
+
+def iso_pava_levels(m: Int) -> Int:
+    """Merge levels over m groups: ISO_CHUNK << L >= m."""
+    var lv = 0
+    while (ISO_CHUNK << lv) < m:
+        lv += 1
+    return lv
+
+
+def iso_pava_merge(lvl: Int, p: Int, m: Int, n: Int, fw: FP, iw: IP):
+    """Pair p of level lvl: the solved segments [a, mid) and [mid, e) of
+    ISO_CHUNK << lvl groups, pooled at the seam until no adjacent pair
+    violates: the current block against its left neighbor first, then its
+    right one."""
+    var seg = ISO_CHUNK << lvl
+    var a = p * 2 * seg
+    var mid = a + seg
+    if mid >= m:
+        return
+    var e = min(mid + seg, m)
+    var uy = n
+    var uw = 2 * n
+    var fl = iw + n
+    var s = ldi(iw, mid - 1)
+    if ld(fw, uy + s) < ld(fw, uy + mid):
+        return
+    var te = ldi(iw, mid)
+    var swy = fmad(ld(fw, uw + mid), ld(fw, uy + mid), fm(ld(fw, uw + s), ld(fw, uy + s)))
+    var sw = fa(ld(fw, uw + s), ld(fw, uw + mid))
+    sti(fl, mid, 0)
+    _iso_pool_store(fw, iw, n, s, te, swy, sw)
+    while True:
+        var mean = ld(fw, uy + s)
+        if s > a and ld(fw, uy + ldi(iw, s - 1)) >= mean:
+            var ls = ldi(iw, s - 1)
+            swy = fmad(ld(fw, uw + s), mean, fm(ld(fw, uw + ls), ld(fw, uy + ls)))
+            sw = fa(ld(fw, uw + ls), ld(fw, uw + s))
+            sti(fl, s, 0)
+            s = ls
+            _iso_pool_store(fw, iw, n, s, te, swy, sw)
+        elif te + 1 < e and mean >= ld(fw, uy + te + 1):
+            var rs = te + 1
+            var re = ldi(iw, rs)
+            swy = fmad(ld(fw, uw + rs), ld(fw, uy + rs), fm(ld(fw, uw + s), mean))
+            sw = fa(ld(fw, uw + s), ld(fw, uw + rs))
+            sti(fl, rs, 0)
+            te = re
+            _iso_pool_store(fw, iw, n, s, te, swy, sw)
+        else:
+            break
+
+
+@always_inline
+def iso_reverse_one(a: Int, m: Int, n: Int, fw: FP, both: Bool):
+    """Swap groups a and m - 1 - a of uy (and uw with both)."""
+    var b = m - 1 - a
+    var sv = ld(fw, n + a)
+    st(fw, n + a, ld(fw, n + b))
+    st(fw, n + b, sv)
+    if both:
+        sv = ld(fw, 2 * n + a)
+        st(fw, 2 * n + a, ld(fw, 2 * n + b))
+        st(fw, 2 * n + b, sv)
+
+
+@always_inline
+def iso_clip_one(j: Int, n: Int, ip: IP, fp: FP, fw: FP):
+    var v = ld(fw, n + j)
+    if ldi(ip, 1) != 0:
+        v = fmax(v, ld(fp, 0))
+    if ldi(ip, 2) != 0:
+        v = fmin(v, ld(fp, 1))
+    st(fw, n + j, v)
+
+
+@always_inline
+def iso_keep(j: Int, m: Int, n: Int, fw: FP) -> Bool:
+    """The trim keeps the ends of every run of equal fitted values."""
+    if j == 0 or j == m - 1:
+        return True
+    var v = ld(fw, n + j)
+    return v != ld(fw, n + j - 1) or v != ld(fw, n + j + 1)
+
+
+def iso_after_unique(m: Int, n: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """isotonic_fit after _make_unique on the host column: PAVA (reversed for
+    a decreasing fit) in the chunked-then-merged order, the clip and the
+    trim; the device runs each step as a grid launch (x_linear/device.mojo
+    `_iso_fit_grid`) with the same statements."""
+    var inc = ldi(ip, 0) != 0
+    var ux = 0
+    var uy = n
+    # a decreasing fit runs PAVA on the reversed sequence
+    if not inc:
+        for a in range(m // 2):
+            iso_reverse_one(a, m, n, fw, True)
+    var chunks = (m + ISO_CHUNK - 1) // ISO_CHUNK
+    for c in range(chunks):
+        iso_pava_chunk(c, m, n, fw, iw)
+    var lv = iso_pava_levels(m)
+    for l in range(lv):
+        var pairs = (chunks + (2 << l) - 1) // (2 << l)
+        for p in range(pairs):
+            iso_pava_merge(l, p, m, n, fw, iw)
+    var i = 0
     while i < m:
         var k = ldi(iw, i) + 1
         for j in range(i + 1, k):
@@ -221,26 +361,13 @@ def isotonic_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP,
         i = k
     if not inc:
         for a in range(m // 2):
-            var b = m - 1 - a
-            var sv = ld(fw, uy + a)
-            st(fw, uy + a, ld(fw, uy + b))
-            st(fw, uy + b, sv)
+            iso_reverse_one(a, m, n, fw, False)
     if ldi(ip, 1) != 0 or ldi(ip, 2) != 0:
         for j in range(m):
-            var v = ld(fw, uy + j)
-            if ldi(ip, 1) != 0:
-                v = fmax(v, ld(fp, 0))
-            if ldi(ip, 2) != 0:
-                v = fmin(v, ld(fp, 1))
-            st(fw, uy + j, v)
-    # the trim: keep the ends of every run of equal values
+            iso_clip_one(j, n, ip, fp, fw)
     var kept = 0
     for j in range(m):
-        var keep = True
-        if j > 0 and j < m - 1:
-            var v = ld(fw, uy + j)
-            keep = v != ld(fw, uy + j - 1) or v != ld(fw, uy + j + 1)
-        if keep:
+        if iso_keep(j, m, n, fw):
             st(res, 3 + kept, ld(fw, ux + j))
             st(res, 3 + n + kept, ld(fw, uy + j))
             kept += 1
@@ -257,32 +384,41 @@ def isotonic_predict(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res:
     # DEVIATION 5006 (IDENTITY_PATHS row 106): the constant word, never 0/0
     var nan = bitcast[DType.float32](UInt32(0x7FC00000))
     for q in range(t.tid, n, t.nt):
-        var tq = ld(x, q)
-        if oob == OOB_CLIP:
-            tq = fmin(fmax(tq, ld(fp, 0)), ld(fp, 1))
-        if m == 1:
-            st(res, q, ld(y, m))
-            continue
-        if tq < ld(y, 0) or tq > ld(y, m - 1):
-            st(res, q, nan)
-            continue
-        # searchsorted(xs, t, 'left'), clamped to [1, m - 1]
-        var lo = 0
-        var hi = m
-        while lo < hi:
-            var mid = (lo + hi) // 2
-            if ld(y, mid) < tq:
-                lo = mid + 1
-            else:
-                hi = mid
-        var idx = lo
-        if idx < 1:
-            idx = 1
-        if idx > m - 1:
-            idx = m - 1
-        var x_lo = ld(y, idx - 1)
-        var x_hi = ld(y, idx)
-        var y_lo = ld(y, m + idx - 1)
-        var y_hi = ld(y, m + idx)
-        var slope = fd(fs(y_hi, y_lo), fs(x_hi, x_lo))
-        st(res, q, fmad(slope, fs(tq, x_lo), y_lo))
+        iso_predict_one(q, x, y, m, oob, fp, res)
+
+
+@always_inline
+def iso_predict_one(q: Int, x: FP, y: FP, m: Int, oob: Int, fp: FP, res: FP):
+    """isotonic_predict for query q (lane/neural-pass107: the device runs one
+    thread a query)."""
+    # DEVIATION 5006 (IDENTITY_PATHS row 106): the constant word, never 0/0
+    var nan = bitcast[DType.float32](UInt32(0x7FC00000))
+    var tq = ld(x, q)
+    if oob == OOB_CLIP:
+        tq = fmin(fmax(tq, ld(fp, 0)), ld(fp, 1))
+    if m == 1:
+        st(res, q, ld(y, m))
+        return
+    if tq < ld(y, 0) or tq > ld(y, m - 1):
+        st(res, q, nan)
+        return
+    # searchsorted(xs, t, 'left'), clamped to [1, m - 1]
+    var lo = 0
+    var hi = m
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if ld(y, mid) < tq:
+            lo = mid + 1
+        else:
+            hi = mid
+    var idx = lo
+    if idx < 1:
+        idx = 1
+    if idx > m - 1:
+        idx = m - 1
+    var x_lo = ld(y, idx - 1)
+    var x_hi = ld(y, idx)
+    var y_lo = ld(y, m + idx - 1)
+    var y_hi = ld(y, m + idx)
+    var slope = fd(fs(y_hi, y_lo), fs(x_hi, x_lo))
+    st(res, q, fmad(slope, fs(tq, x_lo), y_lo))

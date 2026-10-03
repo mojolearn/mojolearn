@@ -17,6 +17,24 @@ from std.python.bindings import PythonModuleBuilder
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
+from checks.numerics import NUMERIC_FAST as _OLS_FAST
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+
+#: Lane apple-fast-olsne (2026-10-03): LinearRegression.fit takes the
+#: equilibrated normal equations (DEVIATION 2620) with X and y uploaded once
+#: (`ols_fit_resident`) instead of the blocked TSQR under FAST on Apple.
+#: Default since the M3 A/B (lane/apple-fast-olsne 9f5cf2a77, n=1): taxi
+#: 286 -> 110 ms, r2 .9088 same; istella 2,921 -> 842 ms, r2 .3325 -> .3319.
+#: MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF turns it off; the old
+#: MOJOLEARN_FAST_OLS_NORMAL_EQ define is now harmless. IDENTICAL,
+#: DETERMINISTIC and the other vendors keep main's route. Read by Python
+#: through `ols_normal_eq_default`.
+comptime OLS_FAST_NORMAL_EQ = (
+    GLOBAL_NUMERIC_MODE == _OLS_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF"]()
+)
 
 from max.gpu.host import DeviceContext
 from core.neural_context import process_ctx
@@ -48,15 +66,21 @@ from decomposition.estimator import (
 )
 from glm.estimator import (
     ols_fit_host,
+    ols_fit_resident_host,
     ols_predict_host,
     qn_decision_function_host,
     qn_fit_host,
     qn_predict_binary_host,
-    qn_sigmoid_host,
-    qn_softmax_host,
     ridge_fit_host,
 )
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from checks.soft_f64 import (
+    SF64_ONE, SF64_ZERO, sf64_add, sf64_div, sf64_exp, sf64_from_f32, sf64_gt, sf64_neg,
+    sf64_sub,
+)
 from decomposition.impl.linalg.detail.svd_full import pca_full_validate
+from glm.impl.center_device import col_sums_device, center_device, scale_rows_device
+from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -514,6 +538,93 @@ def ols_fit_binding(
     return PythonObject(0)
 
 
+def ols_normal_eq_default_binding() raises -> PythonObject:
+    """True when this build routes LinearRegression.fit to the normal
+    equations by default (`OLS_FAST_NORMAL_EQ`, lane apple-fast-olsne)."""
+    return PythonObject(OLS_FAST_NORMAL_EQ)
+
+
+def ols_fit_resident_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    mu_addr: PythonObject,
+    ymean_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Lane apple-fast-olsne: the unweighted normal-equations fit with X
+    and y uploaded once (glm/estimator.mojo `ols_fit_resident_host`).
+    params: n_rows, n_features, center (0/1). With center, mu (float32
+    [n_features]) and ymean (float64 [1]) are written. Returns 0."""
+    comptime if not OLS_FAST_NORMAL_EQ:
+        raise Error("ols_fit_resident: only the FAST Apple build (OLS_FAST_NORMAL_EQ) has this route")
+    if len(params) != 3:
+        raise Error("ols_fit_resident: params must contain n_rows, n_features, center")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var wp = _f32_ptr(Int(py=coef_addr))
+    var mp = _f32_ptr(Int(py=mu_addr))
+    var ymp = _f64_ptr(Int(py=ymean_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var center = Int(py=params[2]) != 0
+    if nr <= 0 or nf <= 0:
+        raise Error("ols_fit_resident: n_rows and n_features must be positive")
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        ols_fit_resident_host(ctx, xp, yp, wp, mp, ymp, nr, nf, center)
+        ctx.synchronize()
+    return PythonObject(0)
+
+
+def lm_col_sums_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Lane hr-small-passes: the exact, correctly rounded float64 sum of
+    every column of a float32 [rows, cols] matrix, on the device
+    (glm/impl/center_device.mojo). params: rows, cols. Returns 0."""
+    if len(params) != 2:
+        raise Error("lm_col_sums: params must contain rows, cols")
+    var xa = Int(py=x_addr)
+    var oa = Int(py=out_addr)
+    var nr = Int(py=params[0])
+    var nc = Int(py=params[1])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        col_sums_device(ctx, xa, oa, nr, nc)
+    return PythonObject(0)
+
+
+def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Lane hr-small-passes: out = x - mu per column in float32 on the
+    device, subnormals flushed. params: rows, cols. Returns 0."""
+    if len(params) != 2:
+        raise Error("lm_center: params must contain rows, cols")
+    var xa = Int(py=x_addr)
+    var ma = Int(py=mu_addr)
+    var oa = Int(py=out_addr)
+    var nr = Int(py=params[0])
+    var nc = Int(py=params[1])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        center_device(ctx, xa, ma, oa, nr, nc)
+    return PythonObject(0)
+
+
+def lm_scale_rows_binding(x_addr: PythonObject, w_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Lane hr-small-passes: out = x * w per row in float32 on the device,
+    subnormals flushed. params: rows, cols. Returns 0."""
+    if len(params) != 2:
+        raise Error("lm_scale_rows: params must contain rows, cols")
+    var xa = Int(py=x_addr)
+    var wa = Int(py=w_addr)
+    var oa = Int(py=out_addr)
+    var nr = Int(py=params[0])
+    var nc = Int(py=params[1])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        scale_rows_device(ctx, xa, wa, oa, nr, nc)
+    return PythonObject(0)
+
+
 def ols_predict_binding(
     x_addr: PythonObject,
     coef_addr: PythonObject,
@@ -555,6 +666,61 @@ def ridge_fit_binding(
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
         ridge_fit_host(ctx, xp, yp, wp, nr, nf, alpha)
+        ctx.synchronize()
+    return PythonObject(0)
+
+
+def ridge_fit_multi_binding(
+    x_addr: PythonObject,
+    y_addr: PythonObject,
+    coef_addr: PythonObject,
+    ymean_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Lane apple-fast-meta (MOJOLEARN_MULTIOUT_RIDGE): ridge on every column
+    of Y (n_rows x n_targets, row-major) in one program; coef is n_targets x
+    n_features, ymean the n_targets column means. params: n_rows,
+    n_features, n_targets, alpha, center_y (1 subtracts the column means)."""
+    if len(params) != 5:
+        raise Error("ridge_fit_multi: params must contain n_rows, n_features, n_targets, alpha, center_y")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var wp = _f32_ptr(Int(py=coef_addr))
+    var mp = _f32_ptr(Int(py=ymean_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nt = Int(py=params[2])
+    var alpha = Float32(Float64(py=params[3]))
+    var center = Int(py=params[4]) != 0
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        ridge_fit_multi_host(ctx, xp, yp, wp, mp, nr, nf, nt, alpha, center)
+        ctx.synchronize()
+    return PythonObject(0)
+
+
+def ridge_predict_multi_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    icpt_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Lane apple-fast-meta (MOJOLEARN_MULTIOUT_RIDGE): out (n_rows x
+    n_targets, row-major) = X coef^T + icpt. params: n_rows, n_features,
+    n_targets."""
+    if len(params) != 3:
+        raise Error("ridge_predict_multi: params must contain n_rows, n_features, n_targets")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=coef_addr))
+    var ip = _f32_ptr(Int(py=icpt_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nt = Int(py=params[2])
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        ridge_predict_multi_host(ctx, xp, cp, ip, op, nr, nf, nt)
         ctx.synchronize()
     return PythonObject(0)
 
@@ -664,21 +830,103 @@ def qn_predict_binary_binding(
     return PythonObject(0)
 
 
+def qn_sigmoid_kernel(
+    scores: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[UInt64, MutAnyOrigin],
+    n_rows_in: Int64,
+):
+    """The binary `predict_proba` link on the device, one thread per row,
+    grid-stride (cpu-gpu-cleanup w2-core-scope; was `qn_sigmoid_host` on
+    the host, DEVIATION 549): `p1 = 1 / (1 + exp(-z))`, `p0 = 1 - p1` over
+    `checks/soft_f64.mojo`'s binary64 (the Apple GPU has no float64;
+    `sf64_exp` is `portable_exp64` statement for statement). Under
+    IDENTICAL these are the host column's words
+    (`core/classical_host_predict.mojo::host_qn_sigmoid`). `dst` receives
+    the binary64 bit patterns, (n_rows, 2) row-major."""
+    var n_rows = Int(n_rows_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < n_rows:
+        var nz = sf64_neg(sf64_from_f32(scores.unsafe_load(i)))
+        var p = sf64_div(SF64_ONE, sf64_add(SF64_ONE, sf64_exp(nz)))
+        dst.unsafe_store(2 * i, sf64_sub(SF64_ONE, p))
+        dst.unsafe_store(2 * i + 1, p)
+        i += stride
+
+
 def qn_sigmoid_binding(
     scores_addr: PythonObject,
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """The binary predict_proba link on the host through identical_exp64
-    (DEVIATION 549): out is float64 (n_rows, 2)."""
+    """The binary predict_proba link ON THE DEVICE (cpu-gpu-cleanup
+    w2-core-scope; was `qn_sigmoid_host` on the host, DEVIATION 549):
+    scores is float32 (n_rows,), out is float64 (n_rows, 2). See
+    `qn_sigmoid_kernel`."""
     if len(params) != 1:
         raise Error("qn_sigmoid: params must contain n_rows")
     var sp = _f32_ptr(Int(py=scores_addr))
     var op = _f64_ptr(Int(py=out_addr))
     var nr = Int(py=params[0])
+    if nr <= 0:
+        return PythonObject(0)
     with GILReleased(Python()):
-        qn_sigmoid_host(sp, op, nr)
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var d_scores = ctx.enqueue_create_buffer[DType.float32](nr)
+        ctx.enqueue_copy(dst_buf=d_scores, src_ptr=sp)
+        var d_out = ctx.enqueue_create_buffer[DType.uint64](2 * nr)
+        ctx.enqueue_function[qn_sigmoid_kernel](
+            d_scores.unsafe_ptr(), d_out.unsafe_ptr(), Int64(nr),
+            grid_dim=min((nr + QN_SOFTMAX_TPB - 1) // QN_SOFTMAX_TPB, QN_SOFTMAX_MAX_BLOCKS),
+            block_dim=QN_SOFTMAX_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
+        ctx.synchronize()
+        _ = d_scores^
+        _ = d_out^
+        _ = ctx^
     return PythonObject(0)
+
+
+def qn_softmax_kernel(
+    scores: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[UInt64, MutAnyOrigin],
+    n_rows_in: Int64,
+    n_classes_in: Int64,
+):
+    """The multinomial `predict_proba` link on the device, one thread per
+    row, grid-stride (cpu-gpu-cleanup t-gbdt). `qn_softmax_host`'s
+    statements (`glm/estimator.mojo`, lane/logistic-multiclass) over
+    `checks/soft_f64.mojo`'s binary64 (the Apple GPU has no float64; the
+    soft ops are IEEE round-to-nearest, `sf64_exp` is `portable_exp64`
+    statement for statement): `m` the first maximum under a strict `>` from
+    the first entry, `s` the serial ascending sum of `exp(z_c - m)`,
+    `p_c = exp(z_c - m) / s`. Under IDENTICAL these are the host column's
+    words (`core/classical_host_predict.mojo::host_qn_softmax`). `out`
+    receives the binary64 bit patterns."""
+    var n_rows = Int(n_rows_in)
+    var nc = Int(n_classes_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < n_rows:
+        var base = i * nc
+        var m = sf64_from_f32(scores.unsafe_load(base))
+        for c in range(1, nc):
+            var v = sf64_from_f32(scores.unsafe_load(base + c))
+            if sf64_gt(v, m):
+                m = v
+        var acc = SF64_ZERO
+        for c in range(nc):
+            var z = sf64_from_f32(scores.unsafe_load(base + c))
+            acc = sf64_add(acc, sf64_exp(sf64_sub(z, m)))
+        for c in range(nc):
+            var z = sf64_from_f32(scores.unsafe_load(base + c))
+            dst.unsafe_store(base + c, sf64_div(sf64_exp(sf64_sub(z, m)), acc))
+        i += stride
+
+
+comptime QN_SOFTMAX_TPB = 128
+comptime QN_SOFTMAX_MAX_BLOCKS = 65535
 
 
 def qn_softmax_binding(
@@ -686,10 +934,10 @@ def qn_softmax_binding(
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """The multinomial predict_proba link on the host through
-    identical_exp64 (lane/logistic-multiclass, 2026-09-14,
-    `qn_softmax_host`): scores is float32 (n_rows, n_classes) row-major,
-    out is float64 (n_rows, n_classes). params: n_rows, n_classes."""
+    """The multinomial predict_proba link ON THE DEVICE (cpu-gpu-cleanup
+    t-gbdt; was `qn_softmax_host` on host threads): scores is float32
+    (n_rows, n_classes) row-major, out is float64 (n_rows, n_classes).
+    params: n_rows, n_classes. See `qn_softmax_kernel`."""
     if len(params) != 2:
         raise Error("qn_softmax: params must contain n_rows, n_classes")
     var sp = _f32_ptr(Int(py=scores_addr))
@@ -698,8 +946,24 @@ def qn_softmax_binding(
     var nc = Int(py=params[1])
     if nc < 3:
         raise Error("qn_softmax: n_classes must be at least 3; the binary link is qn_sigmoid")
+    if nr <= 0:
+        return PythonObject(0)
     with GILReleased(Python()):
-        qn_softmax_host(sp, op, nr, nc)
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var n = nr * nc
+        var d_scores = ctx.enqueue_create_buffer[DType.float32](n)
+        ctx.enqueue_copy(dst_buf=d_scores, src_ptr=sp)
+        var d_out = ctx.enqueue_create_buffer[DType.uint64](n)
+        ctx.enqueue_function[qn_softmax_kernel](
+            d_scores.unsafe_ptr(), d_out.unsafe_ptr(), Int64(nr), Int64(nc),
+            grid_dim=min((nr + QN_SOFTMAX_TPB - 1) // QN_SOFTMAX_TPB, QN_SOFTMAX_MAX_BLOCKS),
+            block_dim=QN_SOFTMAX_TPB,
+        )
+        ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
+        ctx.synchronize()
+        _ = d_scores^
+        _ = d_out^
+        _ = ctx^
     return PythonObject(0)
 
 
@@ -884,8 +1148,16 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[tsvd_explained_binding]("tsvd_explained")
         m.def_function[inverse_transform_binding]("inverse_transform")
         m.def_function[ols_fit_binding]("ols_fit")
+        m.def_function[ols_fit_resident_binding]("ols_fit_resident")
+        m.def_function[ols_normal_eq_default_binding]("ols_normal_eq_default")
+        m.def_function[lm_col_sums_binding]("lm_col_sums")
+        m.def_function[lm_center_binding]("lm_center")
+        m.def_function[lm_scale_rows_binding]("lm_scale_rows")
         m.def_function[ols_predict_binding]("ols_predict")
         m.def_function[ridge_fit_binding]("ridge_fit")
+        comptime if MULTIOUT_RIDGE:
+            m.def_function[ridge_fit_multi_binding]("ridge_fit_multi")
+            m.def_function[ridge_predict_multi_binding]("ridge_predict_multi")
         m.def_function[qn_fit_binding]("qn_fit")
         m.def_function[qn_decision_function_binding]("qn_decision_function")
         m.def_function[qn_predict_binary_binding]("qn_predict_binary")

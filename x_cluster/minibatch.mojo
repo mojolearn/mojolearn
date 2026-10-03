@@ -163,6 +163,16 @@ def minibatch_fit[O: ClusterOps](
     var cslot = ops.zeros(k * d)
     var lslot = ops.zeros_i(batch)
     var dslot = ops.zeros(batch)
+    # lane/neural-pass133 (2026-10-02): the centers and counts live in their
+    # slots; a step uploads the batch's row ids (not its rows), gathers them
+    # from `xs`, assigns and updates the centers with `ops.mb_update`
+    # (`minibatch_step`'s unit-weight update_center_dense, the same words),
+    # and reads back the batch distances and the k counts for the early stop
+    # and the reassignment, which stay host code (a reassignment patches the
+    # slots).
+    var islot = ops.zeros_i(batch)
+    var wslot = ops.zeros(k)
+    ops.set(cslot, c)
     var steps_done = 0
     for step in range(n_steps):
         var bidx = List[Int](capacity=batch)
@@ -171,7 +181,6 @@ def minibatch_fit[O: ClusterOps](
                 bidx.append(weighted_draw(cum_w, rng))
             else:
                 bidx.append(rng.below(n))
-        var bx = gather_rows(x, d, bidx)
         # _random_reassign(): counted BEFORE the step, as sklearn evaluates the argument
         since_reassign += batch
         var any_empty = False
@@ -183,10 +192,32 @@ def minibatch_fit[O: ClusterOps](
             since_reassign = 0
             reassign = True
         var c_new = List[Float32]()
-        var batch_inertia = minibatch_step(
-            ops, bx, List[Float32](), batch, k, d, c, w, rng, reassign, p.reassignment_ratio,
-            bslot, cslot, lslot, dslot, c_new,
-        )
+        var batch_inertia: Float64
+        var bi32 = List[Int32](capacity=batch)
+        for t in range(batch):
+            bi32.append(Int32(bidx[t]))
+        ops.set_i(islot, bi32)
+        ops.mb_assign(xs, d, islot, batch, cslot, k, lslot, dslot, bslot)
+        ops.mb_update(bslot, batch, lslot, cslot, wslot, k, d)
+        var got = ops.gets([dslot, wslot], [batch, k])
+        batch_inertia = sum_f64(got[0], batch)
+        w = got[1].copy()
+        var need_c = p.tol > 0
+        var to = List[Bool]()
+        var nre = 0
+        if reassign and p.reassignment_ratio > 0:
+            to = mb_reassign_marks(w, k, batch, p.reassignment_ratio)
+            for j in range(k):
+                if to[j]:
+                    nre += 1
+        if need_c or nre > 0:
+            c_new = ops.get(cslot, k * d)
+        if nre > 0:
+            mb_reassign_apply(c_new, w, to, nre, x, bidx, batch, k, d, rng)
+            ops.set(cslot, c_new)
+            ops.set(wslot, w)
+        if not need_c:
+            c_new = c.copy()
         var diff = Float64(0)
         if p.tol > 0:
             for t in range(k * d):
@@ -217,6 +248,7 @@ def minibatch_fit[O: ClusterOps](
         if p.max_no_improvement >= 0 and no_improvement >= p.max_no_improvement:
             break
 
+    c = ops.get(cslot, k * d)
     var dist = List[Float32]()
     nearest_all(ops, xs, n, c, k, d, labels, dist)
     centers = c^
@@ -228,6 +260,71 @@ def minibatch_fit[O: ClusterOps](
         for t in range(n):
             inertia = inertia + identical_mul64(Float64(weights[t]), Float64(dist[t]))
     return MiniBatchResult(inertia, steps_done, n_iter)
+
+
+def mb_reassign_marks(w: List[Float32], k: Int, batch: Int, ratio: Float64) -> List[Bool]:
+    """sklearn `_mini_batch_step`'s low-count centers to reassign (at most
+    half the batch: the stable ascending sort by weight keeps `[half:]`)."""
+    var wmax = w[0]
+    for j in range(1, k):
+        if w[j] > wmax:
+            wmax = w[j]
+    var thr = identical_mul64(Float64(ratio), Float64(wmax))
+    var to = List[Bool](length=k, fill=False)
+    var nre = 0
+    for j in range(k):
+        if Float64(w[j]) < thr:
+            to[j] = True
+            nre += 1
+    var half = batch // 2
+    if 2 * nre > batch:
+        # np.argsort(weight_sums)[half:] stay: a stable ascending sort by weight
+        var order = List[Int](capacity=k)
+        for j in range(k):
+            order.append(j)
+        for a in range(1, k):
+            var b = a
+            while b > 0 and w[order[b - 1]] > w[order[b]]:
+                var tmp = order[b - 1]
+                order[b - 1] = order[b]
+                order[b] = tmp
+                b -= 1
+        for q in range(half, k):
+            to[order[q]] = False
+    return to^
+
+
+def mb_reassign_apply(
+    mut c_new: List[Float32], mut w: List[Float32], to: List[Bool], nre: Int, src: List[Float32],
+    rows: List[Int], batch: Int, k: Int, d: Int, mut rng: SplitMix64,
+):
+    """The reassignment of the marked centers: `choice(batch, nre,
+    replace=False)` by a partial Fisher-Yates, each marked center takes its
+    picked batch row (row `rows[t]` of `src`) and the smallest kept count."""
+    var pool = List[Int](capacity=batch)
+    for t in range(batch):
+        pool.append(t)
+    var picked = List[Int](capacity=nre)
+    for q in range(nre):
+        var r = q + rng.below(batch - q)
+        var tmp = pool[q]
+        pool[q] = pool[r]
+        pool[r] = tmp
+        picked.append(pool[q])
+    var q = 0
+    var wmin = Float32(0)
+    var have = False
+    for j in range(k):
+        if not to[j] and (not have or w[j] < wmin):
+            wmin = w[j]
+            have = True
+    for j in range(k):
+        if to[j]:
+            var r0 = rows[picked[q]] * d
+            for f in range(d):
+                c_new[j * d + f] = src[r0 + f]
+            q += 1
+            w[j] = wmin
 
 
 def minibatch_step[O: ClusterOps](
@@ -299,61 +396,16 @@ def minibatch_step[O: ClusterOps](
             for f in range(d):
                 c_new[j * d + f] = ftz(identical_mul(c_new[j * d + f], alpha))
     if reassign and ratio > 0:
-        var wmax = w[0]
-        for j in range(1, k):
-            if w[j] > wmax:
-                wmax = w[j]
-        var thr = identical_mul64(Float64(ratio), Float64(wmax))
-        var to = List[Bool](length=k, fill=False)
+        var to = mb_reassign_marks(w, k, batch, ratio)
         var nre = 0
         for j in range(k):
-            if Float64(w[j]) < thr:
-                to[j] = True
+            if to[j]:
                 nre += 1
-        var half = batch // 2
-        if 2 * nre > batch:
-            # np.argsort(weight_sums)[half:] stay: a stable ascending sort by weight
-            var order = List[Int](capacity=k)
-            for j in range(k):
-                order.append(j)
-            for a in range(1, k):
-                var b = a
-                while b > 0 and w[order[b - 1]] > w[order[b]]:
-                    var tmp = order[b - 1]
-                    order[b - 1] = order[b]
-                    order[b] = tmp
-                    b -= 1
-            for q in range(half, k):
-                to[order[q]] = False
-            nre = 0
-            for j in range(k):
-                if to[j]:
-                    nre += 1
         if nre > 0:
-            # choice(batch, nre, replace=False): a partial Fisher-Yates
-            var pool = List[Int](capacity=batch)
+            var rows = List[Int](capacity=batch)
             for t in range(batch):
-                pool.append(t)
-            var picked = List[Int](capacity=nre)
-            for q in range(nre):
-                var r = q + rng.below(batch - q)
-                var tmp = pool[q]
-                pool[q] = pool[r]
-                pool[r] = tmp
-                picked.append(pool[q])
-            var q = 0
-            var wmin = Float32(0)
-            var have = False
-            for j in range(k):
-                if not to[j] and (not have or w[j] < wmin):
-                    wmin = w[j]
-                    have = True
-            for j in range(k):
-                if to[j]:
-                    for f in range(d):
-                        c_new[j * d + f] = bx[picked[q] * d + f]
-                    q += 1
-                    w[j] = wmin
+                rows.append(t)
+            mb_reassign_apply(c_new, w, to, nre, bx, rows, batch, k, d, rng)
     return batch_inertia
 
 

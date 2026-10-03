@@ -57,13 +57,10 @@ file's header names every original by file and line. IT HAS A FOLD AND A
 QUANTIZATION, so the sabotage define reaches it (one extra unit in every
 quantized centroid-sum cell) and `core_host_sabotage()` reports it.
 
-Workstream E (lane/cpu-training-e, 2026-09-14) adds the three centering
-helpers of `linear_model.py` (`column_mean_f64`, `center_columns_f32`,
-`scale_rows_f32`, in `bindings/host_helpers.mojo`), which the ols and ridge
-host fits reach through `_buffer._native` before the estimators host
-binding is called; the seven-runner gate refused both lanes at
-`_mojolearn.column_mean_f64` until they were here. Sequential float64
-chains and per-cell operations, no fold to sabotage.
+Workstream E (lane/cpu-training-e, 2026-09-14) added the three centering
+helpers of `linear_model.py`; lane hr-small-passes (2026-10-02) deleted
+them: the linear models center through the estimators binding on every
+tier (`lm_col_sums`, `lm_center`, `lm_scale_rows`).
 
 `transpose_f32` and `cast_colmajor_f64_to_f32` MIRROR
 `bindings/_mojolearn.mojo::_tiled_transpose_to_f32` (DEVIATIONS 2471,
@@ -90,13 +87,10 @@ from bindings.host_helpers import (
     argmax_rows_f32_binding,
     argmax_rows_f64_binding,
     cast_f64_to_f32_binding,
-    center_columns_f32_binding,
-    column_mean_f64_binding,
     gather_f64_binding,
     gather_i64_binding,
     gather_rows_bytes_binding,
     probability_rows_f32_binding,
-    scale_rows_f32_binding,
 )
 from bindings.hotpath_helpers import (
     HOTPATH_SABOTAGE,
@@ -119,8 +113,9 @@ from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_
 from core.dense_coo import (
     nonzero_f32_count as dense_nonzero_f32_count,
     nonzero_f32_fill as dense_nonzero_f32_fill,
-    knn_affinity_f32 as dense_knn_affinity_f32,
 )
+from core.dense_coo_host import knn_affinity_f32 as dense_knn_affinity_f32
+from core.label_encode import host_unique_inverse
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -1347,6 +1342,33 @@ def knn_affinity_f32_binding(addrs: PythonObject, params: PythonObject) raises -
     return PythonObject(0)
 
 
+def unique_inverse_binding(
+    src_addr: PythonObject, n: PythonObject, kind: PythonObject,
+    classes_addr: PythonObject, codes_addr: PythonObject,
+) raises -> PythonObject:
+    """The GPU binding's `unique_inverse` (its contract and refusals) over
+    the host twin `core/label_encode.mojo::host_unique_inverse`, the same
+    statements as `core/label_encode_device.mojo` (cpu-gpu-cleanup
+    w2-pyglue). Integers and bit moves: the same bytes."""
+    var count = Int(py=n)
+    var k_ind = Int(py=kind)
+    if count < 1:
+        raise Error("unique_inverse: n must be positive, got " + String(count))
+    if k_ind != 0 and k_ind != 1:
+        raise Error("unique_inverse: kind must be 0 (float64) or 1 (int64)")
+    if Int(py=src_addr) == 0 or Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
+        raise Error("unique_inverse: null buffer address")
+    var sp = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr))
+    var cp = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=classes_addr))
+    var dp = i32_ptr(Int(py=codes_addr))
+    var k: Int
+    with GILReleased(Python()):
+        k = host_unique_inverse(sp, count, k_ind, cp, dp)
+    if k == -2:
+        raise Error("mojolearn: y contains a NaN label; NaN is not a class")
+    return PythonObject(k)
+
+
 @export
 def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
     try:
@@ -1375,6 +1397,7 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[nonzero_f32_count_binding]("nonzero_f32_count")
         module.def_function[nonzero_f32_fill_binding]("nonzero_f32_fill")
         module.def_function[knn_affinity_f32_binding]("knn_affinity_f32")
+        module.def_function[unique_inverse_binding]("unique_inverse")
         module.def_function[cast_f64_to_f32_binding]("cast_f64_to_f32")
         module.def_function[all_finite_f32_binding]("all_finite_f32")
         module.def_function[all_finite_f64_binding]("all_finite_f64")
@@ -1383,9 +1406,6 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         module.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
-        module.def_function[column_mean_f64_binding]("column_mean_f64")
-        module.def_function[center_columns_f32_binding]("center_columns_f32")
-        module.def_function[scale_rows_f32_binding]("scale_rows_f32")
         module.def_function[probability_rows_f32_binding]("probability_rows_f32")
         # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
         # of bindings/hotpath_helpers.mojo, and the ORDER RULE's encoder the

@@ -836,8 +836,6 @@ def _ours(lane, est):
         info["vendor_used"] = "unavailable (%r)" % (exc,)
     if mode != want:
         raise RuntimeError("REFUSED: ours is not %s: the binary reads back %r" % (want.upper(), mode))
-    # an ours-cpu worker: the wheel must have loaded its CPU set (refuses by name)
-    info.update(_load("bench_board_probe").ours_cpu_check(ml))
     return info
 
 
@@ -860,7 +858,7 @@ def build(lane, arm, D, rec):
     """The runner for (lane, arm) on the lane's arrays D."""
     np = _np()
     S = {}
-    if arm in ("ours", "ours-fast", "ours-cpu"):
+    if arm in ("ours", "ours-fast"):
         return _build_ours(lane, D, rec, S)
     if arm == "sklearn-cpu":
         return _build_sklearn(lane, D, rec, S)
@@ -1724,10 +1722,8 @@ def _worker_env(arm):
     for k in ctd.THREAD_ENV:
         env.pop(k, None)
     ctd.apply_cpu_quota(env)
-    if arm in ("ours", "ours-fast", "ours-cpu"):
+    if arm in ("ours", "ours-fast"):
         env["MOJOLEARN_NUMERIC_MODE"] = "fast" if arm == "ours-fast" else "identical"
-        if arm == "ours-cpu":
-            _load("bench_board_probe").ours_cpu_env(env)
         if os.environ.get("MOJOLEARN_BENCH_INSTALLED", "0").strip() in ("", "0"):
             tree = os.path.join(REPO, "python")
             env["PYTHONPATH"] = tree + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
@@ -1739,6 +1735,7 @@ def race(args):
     ctd = _load("classical_two_datasets")
     lane, ds = args.lane, args.dataset
     arms = [a for a in args.arms.split(",") if a]
+    _load("bench_board_probe").refuse_our_cpu_arms(arms, "bench_board_more")
     os.makedirs(args.out, exist_ok=True)
     os.makedirs(args.work, exist_ok=True)
     block = os.path.join(args.data, "%s-%s" % (block_of(lane), ds))
@@ -1754,7 +1751,7 @@ def race(args):
     tag = "%s-%s" % (lane, ds)
     workers = {}
     for arm in arms:
-        py = args.ours_python if arm in ("ours", "ours-fast", "ours-cpu") else args.theirs_python
+        py = args.ours_python if arm in ("ours", "ours-fast") else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm, "--lane", lane,
                                  "--dataset", ds, "--data", args.data]
         workers[arm] = ctd.Worker(arm, cmd, _worker_env(arm),
@@ -1833,10 +1830,6 @@ def race(args):
         w.close()
     try:
         result["quality"] = quality(lane, D, outs)
-        # our CPU tier against our GPU IDENTICAL, bit for bit (the promise)
-        if "ours-cpu" in outs and "ours" in outs:
-            result["quality"].setdefault("ours-cpu", {})["bits_equal_vs_ours_identical"] = \
-                _load("bench_board_probe").bits_equal(outs["ours-cpu"], outs["ours"])
     except Exception as exc:  # noqa: BLE001
         import traceback
         traceback.print_exc()

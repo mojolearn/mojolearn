@@ -14,9 +14,9 @@ Every Claude session and subagent in this repo reads this file. Lane briefs add 
 
 - **Code, then queue.** A lane subagent writes code, compiles, commits and pushes, then queues its own GPU runs with `~/mojolearn-evidence/lq/lq` (run it with no arguments for usage). It never runs tests, timing, identity runs or Metal jobs on the laptop, and never ssh-es to, rents, extends or releases a box. `lq` is the only way a lane reaches a box:
   - `lq add nv|amd RACE <branch> <lane[,lane]> <ds[,ds]> [ARMS=..] [BUILDS=..] [ENV=V]`: one build covers every lane x dataset, so batch them.
-  - `lq add apple RACE <branch> <lane> <ds> [ENV=V]`: goes to the M2 Pro. The M3 Ultra belongs to the Apple FAST peer (lane/apple-fast only). One lane and one dataset per line. Never RACE with `MOJOLEARN_VENDOR=cpu`: our CPU is never raced or timed; the host digest comes from the ID check.
+  - Apple (the M2 Pro) is for same-bits ID checks only: no Apple timing for IDENTICAL. The M3 Ultra belongs to the Apple FAST peer (lane/apple-fast only). One lane and one dataset per line. Never RACE with `MOJOLEARN_VENDOR=cpu`: our CPU is never raced or timed; the host digest comes from the ID check.
   - **Same-bits checks use `lq add <box> ID <branch> <lane[,lane]> <ds[,ds]>`, never full board races.** It races the lane once on the device and once on the host column, over a 50k-row copy of the board data (identical on every box). It prints `IDCHECK <lane> <ds> <device>=<d> host=<d> MATCH|DIFFER`. Queue it on nv, amd and apple. `lq` refuses it when the branch changes no `.mojo` or `bindings/` file: then the kernels are main's and no check is needed.
-  - Full-size RACE lines are for speed and quality only: NVIDIA and AMD timing, Apple FAST timing, and opponent comparisons.
+  - Full-size RACE lines are for speed and quality only: NVIDIA and AMD timing and opponent comparisons. IDENTICAL speed work targets NVIDIA and AMD.
   - `lq add <box> CMD <branch> <tag> '<command>'`: runs in the branch tree. Scripts it calls must be committed in the branch.
   - `lq results <box> [pattern]` and `lq log <box> <id|tag> [pattern]`: grep-sized output only.
 
@@ -41,6 +41,7 @@ The orchestrator saves every lane brief as `~/mojolearn-evidence/briefs-<date>/<
 ## GPU rules (summary; the plans in docs/plans/ have the details)
 
 - The GPU path is GPU only and parallel. No host steps inside a GPU fit, transform or predict, and no serial one-thread, one-block or per-sample default.
-- Same bits on NVIDIA, AMD, Apple and the host column.
+- Same bits on NVIDIA, AMD, Apple and the host column, within one version. Bits may change between versions: when a parallel kernel needs a different fold order, change the order on every vendor and in the host column together. Never keep a serial chain to preserve old bits.
 - Never time a CPU or host route. The CPU is for verification digests, CPU-only installs and inference.
 - Never add, rent, extend or release an Apple machine.
+- Race and measure tools default to our GPU arm only; opponents are scored once, stored, and run only by an explicit opponent job.

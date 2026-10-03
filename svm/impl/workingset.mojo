@@ -46,7 +46,8 @@ from svm.impl.fast_ws_select import (
     FWS_UPPER,
     fws_flags_kernel,
     fws_mark_kernel,
-    fws_walk_kernel,
+    fws_count_kernel,
+    fws_pick_kernel,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.info import has_apple_gpu_accelerator
@@ -80,9 +81,13 @@ comptime SAB_WS_TIE = is_defined["MOJOLEARN_SVM_SABOTAGE_WS_TIE"]()
 #: (8-bit digits, 12 launches) instead of the one-bit sort (128 launches).
 #: Both are stable sorts by the full key, so the order is the same.
 #: `-D MOJOLEARN_SVM_FAST_SORT_OFF` restores the one-bit sort.
+#: EVERY GPU since lane/gap-classical-nv (2026-10-02): NVIDIA and AMD ran
+#: the one-bit sort (128 launches per working-set pick) and the host-counted
+#: gathers (a drain per gather). Same stable sort by the full key, same
+#: picks, so no bit moves. `fws_pick_kernel` ballots at the hardware wave
+#: width (AMD wave64).
 comptime FAST_WS_SORT = (
     (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
-    and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_FAST_SORT_OFF"]()
 )
 #: FAST on Apple: the three gathers keep their counts on the device
@@ -90,10 +95,11 @@ comptime FAST_WS_SORT = (
 #: `-D MOJOLEARN_SVM_FAST_WS_SELECT_OFF` restores the host-counted gathers.
 comptime SVM_WS_MAX = 2048 if (
     FAST_WS_SORT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_WS1024"]()
 ) else 1024
-"""FAST on Apple: a working set of up to 2048 (the block solve's
-two-elements-per-thread kernel carries it in one 1024-thread block), half
+"""FAST on Apple: a working set of up to 2048 (the grid solve carries it
+over eight blocks of 256, `smoblocksolve.mojo`), half
 the SMO outer iterations of 1024 on a hard problem. Taken from
 SVM_WS_BIG_MIN training rows: below that 1024 is as fast and the solver
 keeps the reference's working set (and every gate fixture's shape)."""
@@ -167,6 +173,8 @@ struct WorkingSet(Movable):
     var select: SelectScratch
     var fws_state: DeviceBuffer[DType.int32]
     """FAST_WS_SELECT's per-stage counts (3 slots)."""
+    var fws_bc: DeviceBuffer[DType.int32]
+    """FAST_WS_SELECT's per-chunk candidate counts (one per FWS_T chunk)."""
 
     def __init__(
         out self,
@@ -215,6 +223,7 @@ struct WorkingSet(Movable):
         self.ws_idx_save = ctx.enqueue_create_buffer[DType.int32](nw)
         self.select = SelectScratch(ctx, nt)
         self.fws_state = ctx.enqueue_create_buffer[DType.int32](3)
+        self.fws_bc = ctx.enqueue_create_buffer[DType.int32]((nt + FWS_T - 1) // FWS_T)
         ctx.synchronize()
         self.initialize(ctx)
 
@@ -371,21 +380,32 @@ struct WorkingSet(Movable):
                 self.available_sorted.unsafe_ptr(), Int32(mode),
                 grid_dim=_grid(nt), block_dim=SEL_TPB,
             )
+            # grid, one block per FWS_T chunk (lane/cgr-kernel; was one
+            # block walking the whole sorted list)
+            var nb = (nt + FWS_T - 1) // FWS_T
             if stage == 1:
-                ctx.enqueue_function[fws_walk_kernel[True]](
+                ctx.enqueue_function[fws_count_kernel[True]](
+                    self.available.unsafe_ptr(), Int32(nt), self.fws_bc.unsafe_ptr(),
+                    grid_dim=nb, block_dim=FWS_T,
+                )
+                ctx.enqueue_function[fws_pick_kernel[True]](
                     self.available.unsafe_ptr(), self.f_idx_sorted.unsafe_ptr(),
-                    Int32(nt), self.idx.unsafe_ptr(),
+                    Int32(nt), Int32(nb), self.fws_bc.unsafe_ptr(), self.idx.unsafe_ptr(),
                     self.available_sorted.unsafe_ptr(), self.fws_state.unsafe_ptr(),
                     Int32(n_fifo), Int32(self.n_ws), Int32(stage),
-                    grid_dim=1, block_dim=FWS_T,
+                    grid_dim=nb, block_dim=FWS_T,
                 )
             else:
-                ctx.enqueue_function[fws_walk_kernel[False]](
+                ctx.enqueue_function[fws_count_kernel[False]](
+                    self.available.unsafe_ptr(), Int32(nt), self.fws_bc.unsafe_ptr(),
+                    grid_dim=nb, block_dim=FWS_T,
+                )
+                ctx.enqueue_function[fws_pick_kernel[False]](
                     self.available.unsafe_ptr(), self.f_idx_sorted.unsafe_ptr(),
-                    Int32(nt), self.idx.unsafe_ptr(),
+                    Int32(nt), Int32(nb), self.fws_bc.unsafe_ptr(), self.idx.unsafe_ptr(),
                     self.available_sorted.unsafe_ptr(), self.fws_state.unsafe_ptr(),
                     Int32(n_fifo), Int32(self.n_ws), Int32(stage),
-                    grid_dim=1, block_dim=FWS_T,
+                    grid_dim=nb, block_dim=FWS_T,
                 )
 
     def gather_available(

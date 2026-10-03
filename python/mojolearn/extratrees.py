@@ -146,6 +146,9 @@ _UNSUPPORTED_CRITERIA = {
 }
 
 
+_NONFINITE_REFUSAL = "X contains NaN or infinity; the forest has no missing-value arm"
+
+
 def _refuse_forest_knobs(n_jobs, verbose):
     if n_jobs is not None:
         raise NotImplementedError(
@@ -275,8 +278,15 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
         # The builder has no missing-value arm: a NaN or inf in X was
         # quantized and split on silently (pip smoke 2026-09-22). Refused
         # here, as cuML documents and scikit-learn's pre-1.4 forests did.
-        if not all_finite(Xf):
-            raise ValueError("X contains NaN or infinity; the forest has no missing-value arm")
+        # FAST on Apple (lane apple-fast-rfet-scan): the binding refuses a
+        # non-finite cell through a device scan of the uploaded X
+        # (ensemble/device_finite.mojo), so this one-thread host scan of
+        # every cell is not repeated; its refusal is raised as the same
+        # ValueError below.
+        scan = getattr(self._bind("_mojolearn_trees"), "trees_device_finite_scan", None)
+        device_scan = scan is not None and int(scan()) == 1
+        if not device_scan and not all_finite(Xf):
+            raise ValueError(_NONFINITE_REFUSAL)
         params = _fit_params(
             n_rows, n_features, n_classes, self._cfg, self.device,
             self._criterion_code,
@@ -286,7 +296,12 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
         from time import perf_counter
         boundary_times = os.environ.get("MOJOLEARN_STAGE_TIMES") == "1"
         binding_start = perf_counter() if boundary_times else 0
-        out = fit_fn(addr_ro(Xf, name="X"), addr_ro(ya, name="y"), params)
+        try:
+            out = fit_fn(addr_ro(Xf, name="X"), addr_ro(ya, name="y"), params)
+        except Exception as exc:
+            if device_scan and _NONFINITE_REFUSAL in str(exc):
+                raise ValueError(_NONFINITE_REFUSAL) from None
+            raise
         binding_end = perf_counter() if boundary_times else 0
         del Xf, ya  # the borrow ends with the call
         (self._offsets, self._colid, self._quesval, self._left_child,

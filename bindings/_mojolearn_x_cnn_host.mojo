@@ -30,6 +30,7 @@ from x_cnn.host.ops_host import pad2d_forward_host as pad2d_forward_impl
 from x_cnn.host.ops_host import pad2d_backward_host as pad2d_backward_impl
 from x_cnn.host.ops_host import spmm_host as spmm_impl
 from x_cnn.host.ops_host import gcn_norm_host as gcn_norm_impl
+from x_cnn.host.ops_host import csr_build_host_binding
 
 
 def fp(addr: PythonObject) raises -> FP:
@@ -515,8 +516,8 @@ def _csr(csr_addr: PythonObject, params: PythonObject) raises -> Tuple[List[Int3
 
 
 def _csr_ints(csr_addr: PythonObject, n: Int, F: Int, nnz: Int, mode: Int) raises -> Tuple[List[Int32], List[Int32]]:
-    if n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 2:
-        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2}")
+    if n <= 0 or F <= 0 or nnz < 0 or mode < 0 or mode > 3:
+        raise Error("x_cnn spmm: positive n and F, nnz >= 0, mode in {0, 1, 2, 3}")
     var csr = read_i32(Int(py=csr_addr), n + 1 + 2 * nnz)
     if Int(csr[0]) != 0 or Int(csr[n]) != nnz:
         raise Error("x_cnn spmm: rowptr must start at 0 and end at nnz")
@@ -988,6 +989,7 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         m.def_function[x_cnn_host_numeric_mode_binding]("x_cnn_host_numeric_mode")
         m.def_function[x_cnn_host_vendor_binding]("x_cnn_host_vendor")
         m.def_function[x_cnn_host_column_binding]("x_cnn_host_column")
+        m.def_function[csr_build_host_binding]("x_cnn_csr_build")
         m.def_function[x_cnn_host_sabotage_binding]("x_cnn_host_sabotage")
         m.def_function[gemm_binding]("x_cnn_gemm")
         m.def_function[conv2d_forward_binding]("x_cnn_conv2d_forward")

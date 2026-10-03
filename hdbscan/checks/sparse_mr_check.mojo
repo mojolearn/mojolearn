@@ -276,7 +276,7 @@ def check_one(
     var kd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var ki = ctx.enqueue_create_buffer[DType.int32](m * k)
     var trace = IdentityTrace.disabled()
-    compute_core_dists(ctx, trace, x_host, core, m, d, DISTANCE_L2_SQRT_EXPANDED, k, kd, ki)
+    compute_core_dists(ctx, trace, xd, core, m, d, DISTANCE_L2_SQRT_EXPANDED, k, kd, ki)
     var inv_alpha = identical_div(Float32(1.0), alpha)
     var small = sparse_mr_mst(ctx, x_host, xd, core, m, d, inv_alpha, HDB_SAB_NONE, launch_macs=4096)
     diff = _edges_diff(dn.lo, dn.hi, dn.w, small.lo, small.hi, small.w)

@@ -36,7 +36,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import bitcast
 
 from core.gemm import gemm_nt
-from gemm.checks.gemm_oracle import contract_leaf_count, contract_leaf_size
+from gemm.contract import contract_leaf_count, contract_leaf_size
 
 
 def _bits(x: Float32) -> UInt32:

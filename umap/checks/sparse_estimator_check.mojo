@@ -17,7 +17,7 @@ from umap.graph import fuzzy_simplicial_graph
 from umap.optimizer import optimize_layout, optimize_layout_identical
 from umap.optimizer_fast import optimize_layout_fast
 from umap.params import UMAPParams
-from umap.sparse_graph import sparse_fuzzy_simplicial_graph
+from umap.host.sparse_graph_host import sparse_fuzzy_simplicial_graph
 from umap.sparse_estimator import (
     sparse_fit_transform, sparse_fuzzy_graph_from_data, sparse_spectral_initialize,
 )

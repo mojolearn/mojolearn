@@ -117,8 +117,6 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, memcpy
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from core.device_arena import arena_active, arena_take
-from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count
 from std.os import getenv
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -145,7 +143,7 @@ from gemm.checks.gemm_backward import (
     identical_gemm_backward_b_into,
     identical_gemm_backward_workspace_max_floats,
 )
-from gemm.checks.gemm_oracle import OP_NT
+from gemm.contract import OP_NT
 
 from embedding.checks.embedding_identical import (
     emb_run_scratch_ints,
@@ -160,13 +158,13 @@ from training.checks.loss import (
     identical_ce_ones_floats,
     identical_ce_workspace_max_floats,
 )
-from training.checks.loss_oracle import REDUCTION_MEAN, CeConfig
+from training.checks.loss_contract import REDUCTION_MEAN, CeConfig
 from training.checks.optimizer import (
     SAB_CHUNKS,
     identical_optimizer_step,
     identical_optimizer_workspace_floats,
 )
-from training.checks.optimizer_oracle import OPT_ADAMW, OptimizerConfig
+from training.checks.optimizer_contract import OPT_ADAMW, OptimizerConfig
 
 from transformer.impl.llama.modeling_llama import (
     LlamaDeviceStages,
@@ -814,251 +812,19 @@ def download_f32(
     return out^
 
 
-def download_f32_into(
-    ctx: DeviceContext,
-    mut buf: DeviceBuffer[DType.float32],
-    n: Int,
-    dst: MutPointer[Float32, MutUntrackedOrigin],
-) raises:
-    """`n` elements of a device buffer written straight into `dst`, host
-    memory the CALLER owns and keeps alive for the whole call; waits inside.
-    DEVIATION 3120: the byte-LM exports (state, gradient, device fold) used
-    `download_f32` and then copied the returned List into the caller's
-    array: a pinned host buffer allocated per call, a device-to-host copy
-    into it, an element loop appending into a List, then a third pass into
-    the caller. At 162M parameters that was about 4 s a step for 2.59 GB.
-    Here the copy engine writes the caller's pages directly, one transfer,
-    no host buffer and no loop: the same bytes, as `cluster/estimator.mojo`
-    (DEVIATION 2672) already does on every vendor. `n` IS PASSED, as in
-    `download_f32`; a prefix of a larger buffer goes through a sub-buffer.
-    On a raise the caller's memory holds an unspecified prefix of the copy;
-    a caller that must not see a partial export stages it elsewhere.
-    From DOWNLOAD_STAGE_MIN floats the copy goes through the pinned stage
-    pipeline (`download_f32_into_scanned` with the scan off).
-    """
-    _ = download_f32_into_scanned(ctx, buf, n, dst, False)
-
-
-def download_f32_into_scanned(
-    ctx: DeviceContext,
-    mut buf: DeviceBuffer[DType.float32],
-    n: Int,
-    dst: MutPointer[Float32, MutUntrackedOrigin],
-    scan: Bool,
-) raises -> Int:
-    """`download_f32_into`, returning the first flat index of a non-finite
-    element of `dst` (-1 when every element is finite, or when `scan` is
-    off): the exponent-all-ones test on the bits, the same test
-    `_refuse_nonfinite_logits` makes, folded into the copy-out so the pages
-    are scanned while they are hot.
-    lane/neural-pass49 (2026-10-01): the staged copy is a PIPELINE over
-    chunks of `download_chunk_floats()` through TWO pinned stages kept in a
-    process pool (`DOWNLOAD_STAGES`): the copy engine fills one stage while
-    the host tasks drain the other into `dst`. The per-call 64 MiB pinned
-    allocation of the first staged form (lane neural-pass43) is gone; it was
-    what made the stage lose to the raw host-pointer copy on the L40S. A
-    transport choice: the same bytes land in the same places.
-    """
-    if n < 1:
-        return -1
-    if n > len(buf):
-        raise Error("download_f32_into: " + String(n) + " elements from a buffer of " + String(len(buf)))
-    if not download_staged(n):
-        if n == len(buf):
-            step_count_d2h()
-            ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
-            step_count_sync()
-            ctx.synchronize()
-        else:
-            var view = buf.create_sub_buffer[DType.float32](0, n)
-            step_count_d2h()
-            ctx.enqueue_copy(dst_ptr=dst, src_buf=view)
-            step_count_sync()
-            ctx.synchronize()
-            _ = view^
-        if scan:
-            return _first_nonfinite(dst, n)
-        return -1
-    var chunk = download_chunk_floats()
-    if chunk > n:
-        chunk = n
-    var nchunks = (n + chunk - 1) // chunk
-    var st0 = _stage_take(ctx, chunk)
-    var st1 = _stage_take(ctx, chunk)
-    var bad = -1
-    _stage_enqueue(ctx, buf, n, 0, chunk, st0)
-    var k = 0
-    while k < nchunks:
-        step_count_sync()
-        ctx.synchronize()
-        if k + 1 < nchunks:
-            _stage_enqueue(ctx, buf, n, k + 1, chunk, st1)
-        var b0 = _copy_out_tasks(dst + k * chunk, st0.unsafe_ptr(), min(chunk, n - k * chunk), scan)
-        if b0 >= 0 and bad < 0:
-            bad = k * chunk + b0
-        if k + 1 >= nchunks:
-            break
-        step_count_sync()
-        ctx.synchronize()
-        if k + 2 < nchunks:
-            _stage_enqueue(ctx, buf, n, k + 2, chunk, st0)
-        var b1 = _copy_out_tasks(dst + (k + 1) * chunk, st1.unsafe_ptr(), min(chunk, n - (k + 1) * chunk), scan)
-        if b1 >= 0 and bad < 0:
-            bad = (k + 1) * chunk + b1
-        k += 2
-    _stage_give(st0^)
-    _stage_give(st1^)
-    return bad
-
-
-def _stage_enqueue(
-    ctx: DeviceContext,
-    mut buf: DeviceBuffer[DType.float32],
-    n: Int,
-    k: Int,
-    chunk: Int,
-    mut stage: HostBuffer[DType.float32],
-) raises:
-    """Chunk `k` of the first `n` elements of `buf` onto `stage` (`chunk`
-    floats long). A full chunk goes buffer to buffer; when the device buffer
-    ends inside the chunk, the shorter view lands on the stage's pointer."""
-    var lo = k * chunk
-    step_count_d2h()
-    if lo + chunk <= len(buf):
-        var view = buf.create_sub_buffer[DType.float32](lo, chunk)
-        ctx.enqueue_copy(dst_buf=stage, src_buf=view)
-        _ = view^
-    else:
-        var view = buf.create_sub_buffer[DType.float32](lo, n - lo)
-        ctx.enqueue_copy(dst_ptr=stage.unsafe_ptr(), src_buf=view)
-        _ = view^
-
-
-comptime DOWNLOAD_STAGE_MIN = 1 << 20
-comptime DOWNLOAD_CHUNK_FLOATS = 1 << 21
-comptime DOWNLOAD_STAGE_KEEP = 2
-
-
-def download_staged(n: Int) -> Bool:
-    """Whether `download_f32_into` goes through the pinned stage pipeline:
-    from DOWNLOAD_STAGE_MIN floats on every column (lane neural-pass49,
-    2026-10-01; the Apple column since lane neural-pass43). The raw
-    host-pointer copy is `MOJOLEARN_DOWNLOAD_STAGE=0`; `=1` forces the
-    stage below the minimum. A transport choice: no bit moves."""
-    var v = String(getenv("MOJOLEARN_DOWNLOAD_STAGE"))
-    if v == "0":
-        return False
-    if v == "1":
-        return True
-    return n >= DOWNLOAD_STAGE_MIN
-
-
-def download_chunk_floats() -> Int:
-    """Floats per pipeline chunk: DOWNLOAD_CHUNK_FLOATS (2M, 8 MiB), or
-    `MOJOLEARN_DOWNLOAD_CHUNK` (floats, at least 64K) for the sweep."""
-    var v = String(getenv("MOJOLEARN_DOWNLOAD_CHUNK"))
-    if v != "":
-        try:
-            var c = Int(v)
-            if c >= (1 << 16):
-                return c
-        except:
-            pass
-    return DOWNLOAD_CHUNK_FLOATS
-
-
-struct _StagePool(Defaultable, Movable):
-    """The pinned stages kept between calls, all of `n` floats."""
-    var bufs: List[HostBuffer[DType.float32]]
-    var n: Int
-
-    def __init__(out self):
-        self.bufs = List[HostBuffer[DType.float32]]()
-        self.n = 0
-
-
-comptime _STAGE_NAME = "MojoDownloadStagesIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoDownloadStagesFast"
-comptime DOWNLOAD_STAGES = _Global[StorageType=_StagePool, name=_STAGE_NAME, init_fn=_StagePool.__init__]
-
-
-def _stage_take(ctx: DeviceContext, chunk: Int) raises -> HostBuffer[DType.float32]:
-    """A pooled pinned stage of at least `chunk` floats, else a new one (a
-    larger chunk retires the smaller stages)."""
-    var pool = DOWNLOAD_STAGES.get_or_create_ptr()
-    if pool[].n < chunk:
-        pool[].bufs.clear()
-        pool[].n = chunk
-    if len(pool[].bufs) > 0:
-        return pool[].bufs.pop()
-    step_count_host_alloc()
-    return ctx.enqueue_create_host_buffer[DType.float32](pool[].n)
-
-
-def _stage_give(var stage: HostBuffer[DType.float32]) raises:
-    var pool = DOWNLOAD_STAGES.get_or_create_ptr()
-    if len(stage) == pool[].n and len(pool[].bufs) < DOWNLOAD_STAGE_KEEP:
-        pool[].bufs.append(stage^)
-
-
-@always_inline
-def _first_nonfinite(p: MutPointer[Float32, MutUntrackedOrigin], n: Int) -> Int:
-    """The first index in `p[0:n]` whose exponent bits are all ones (an
-    infinity or a NaN), -1 when none: eight lanes at a time, the scalar
-    tail once a vector has one. No floating-point arithmetic."""
-    comptime W = 8
-    var exp = SIMD[DType.uint32, W](0x7F800000)
-    var i = 0
-    var body = n - n % W
-    while i < body:
-        var bits = bitcast[DType.uint32, W](p.unsafe_load[width=W](i)) & exp
-        if bits.eq(exp).reduce_or():
-            break
-        i += W
-    while i < n:
-        if (bitcast[DType.uint32](p.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            return i
-        i += 1
-    return -1
-
-
-def _copy_out_tasks(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int, scan: Bool) -> Int:
-    """`memcpy(dst, src, n)` in contiguous chunks over host tasks: one
-    thread reads pinned (write-combined) memory at about 3 GB/s, several
-    read it at 10 GB/s and more (training/estimator.mojo::_parallel_copy_out).
-    With `scan`, every task also scans the pages it just wrote and the
-    result is the first non-finite index of `dst[0:n]` (-1 when none)."""
-    var tasks = host_predict_task_count(1 << 30)
-    if n < (1 << 20) or tasks <= 1:
-        memcpy(dest=dst, src=src, count=n)
-        if scan:
-            return _first_nonfinite(dst, n)
-        return -1
-    if tasks > 16:
-        tasks = 16
-    var chunk = (n + tasks - 1) // tasks
-    var found = List[Int](length=tasks, fill=-1)
-    var fp = found.unsafe_ptr()
-
-    def _chunk(t: Int) {imm dst, imm src, imm n, imm chunk, imm scan, imm fp}:
-        var lo = t * chunk
-        var hi = min(lo + chunk, n)
-        var bad = -1
-        if hi > lo:
-            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
-            if scan:
-                var b = _first_nonfinite(dst + lo, hi - lo)
-                if b >= 0:
-                    bad = lo + b
-        fp[t] = bad
-
-    host_parallelize(_chunk, tasks)
-    var first = -1
-    for t in range(tasks):
-        if found[t] >= 0:
-            first = found[t]
-            break
-    _ = found^
-    return first
+# lane neural-pass138: the staged download MOVED to core/staged_download.mojo
+# (the embedding binding and the CE host entry use it too); re-imported here
+# so every `from training.checks.train_loop import download_f32_into` resolves.
+from core.staged_download import (
+    DOWNLOAD_CHUNK_FLOATS,
+    DOWNLOAD_STAGE_KEEP,
+    DOWNLOAD_STAGE_MIN,
+    DOWNLOAD_STAGES,
+    download_chunk_floats,
+    download_f32_into,
+    download_f32_into_scanned,
+    download_staged,
+)
 
 
 def digest_of_lists(

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Seams DEVIATION 5307-5309 and 5320 of the decomp lane: the LU pivot and
-its tie (5307), the substitution folds of getrs and of the Cholesky (5308),
+its tie (5307), the right-looking substitution folds of lu_solve and the Cholesky's (5308),
 the two-pass modified Gram-Schmidt (5309), and the Householder QR that keeps
 its reflectors with its explicit Q (geqrf + orgqr, 5320).
 
@@ -24,6 +24,7 @@ from x_decomp.checks.seam_util import (
 )
 from decomposition.host.pca_full_oracle import host_one_sided_jacobi_svd, host_qr_factor
 from x_decomp.cells import X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL
+from x_decomp.qr_sliced import QS_ROWS
 from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
 from decomposition.host.pca_oracle import host_jacobi_eigh
 from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
@@ -153,7 +154,7 @@ def main() raises:
         if abs(bsrc[t]) > Float32(100):
             bsrc[t] = bsrc[t] * Float32(1e-6)
     var want = oracle_lu_solve(got_o[0], got_o[1], bsrc, n, nrhs)
-    require_separates("5308 getrs substitution order", count_diff_f32(want, oracle_lu_solve(got_o[0], got_o[1], bsrc, n, nrhs, 1)))
+    require_separates("5308 lu_solve substitution order", count_diff_f32(want, oracle_lu_solve(got_o[0], got_o[1], bsrc, n, nrhs, 1)))
     var xd = bsrc.copy()
     DevExec.lu_solve(ptr(got_o[0]), iptr(got_o[1]), ptr(xd), n, nrhs)
     same("5308 lu_solve device", count_diff_f32(xd, want))
@@ -162,7 +163,7 @@ def main() raises:
     same("5308 lu_solve host", count_diff_f32(xh, want))
     tr.record_list_f32("x_decomp.lu_solve", xd)
     var want_t = oracle_lu_solve_t(got_o[0], got_o[1], bsrc, n, nrhs)
-    require_separates("5308 getrs 'T' substitution order", count_diff_f32(want_t, oracle_lu_solve_t(got_o[0], got_o[1], bsrc, n, nrhs, 1)))
+    require_separates("5308 lu_solve 'T' substitution order", count_diff_f32(want_t, oracle_lu_solve_t(got_o[0], got_o[1], bsrc, n, nrhs, 1)))
     var xtd = bsrc.copy()
     DevExec.lu_solve(ptr(got_o[0]), iptr(got_o[1]), ptr(xtd), n, nrhs, 1)
     same("5308 lu_solve trans device", count_diff_f32(xtd, want_t))
@@ -170,6 +171,24 @@ def main() raises:
     HostExec.lu_solve(ptr(got_o[0]), iptr(got_o[1]), ptr(xth), n, nrhs, 1)
     same("5308 lu_solve trans host", count_diff_f32(xth, want_t))
     tr.record_list_f32("x_decomp.lu_solve_t", xtd)
+    # past one diagonal block (device TRS_BLOCK 128): three blocks, the last
+    # partial, so the feed kernel and the descending block order run; 'N'
+    # and 'T', device == host == the oracle
+    var bn = 300
+    var bnr = 3
+    var ba = seam_fixture(bn, bn, UInt64(91))
+    for i in range(bn):
+        ba[i * bn + i] = ba[i * bn + i] + Float32(6)
+    var bw = oracle_lu(ba, bn)
+    var bb = seam_fixture(bn, bnr, UInt64(92))
+    for tt in range(2):
+        var bwant = oracle_lu_solve(bw[0], bw[1], bb, bn, bnr) if tt == 0 else oracle_lu_solve_t(bw[0], bw[1], bb, bn, bnr)
+        var bxd = bb.copy()
+        DevExec.lu_solve(ptr(bw[0]), iptr(bw[1]), ptr(bxd), bn, bnr, tt)
+        same("5308 lu_solve device n 300 trans " + String(tt), count_diff_f32(bxd, bwant))
+        var bxh = bb.copy()
+        HostExec.lu_solve(ptr(bw[0]), iptr(bw[1]), ptr(bxh), bn, bnr, tt)
+        same("5308 lu_solve host n 300 trans " + String(tt), count_diff_f32(bxh, bwant))
     var ns = 11
     var g = spd(ns)
     var wl = oracle_chol(g, ns)
@@ -202,10 +221,13 @@ def main() raises:
     HostExec.orth(ptr(qh), mm, l)
     same("5309 orth host", count_diff_f32(qh, wq))
     tr.record_list_f32("x_decomp.orth", qd)
-    # ---- 5320 geqrf + orgqr, a tall, a wide and a rank-deficient matrix
-    for shape in range(3):
-        var gm = 23 if shape != 1 else 5
+    # ---- 5320 geqrf + orgqr, a tall, a wide and a rank-deficient matrix,
+    # and (lane hr-qr) a tall one of several slices (x_decomp/qr_sliced.mojo)
+    for shape in range(4):
+        var gm = 23 if shape == 0 or shape == 2 else (5 if shape == 1 else 3 * QS_ROWS + 37)
         var gn = 6 if shape != 1 else 9
+        if shape == 3:
+            gn = 5
         var ga = seam_fixture(gm, gn, UInt64(31 + shape))
         for t in range(len(ga)):
             if abs(ga[t]) > Float32(100):
@@ -214,6 +236,7 @@ def main() raises:
             for t in range(gm):
                 ga[t * gn + 3] = ga[t * gn + 1]          # a duplicated column
         var kk = gm if gm < gn else gn
+        var gq = gm if shape != 3 else gn          # Q's columns (the slices' case: the thin Q)
         var want_f = oracle_geqrf(ga, gm, gn)
         require_separates("5320 geqrf fold order", count_diff_f32(want_f[0], oracle_geqrf(ga, gm, gn, 1)[0]))
         var hd = ga.copy()
@@ -226,21 +249,21 @@ def main() raises:
         HostExec.geqrf(ptr(hh), ptr(th), gm, gn)
         same("5320 geqrf host h", count_diff_f32(hh, want_f[0]))
         same("5320 geqrf host tau", count_diff_f32(th, want_f[1]))
-        var want_q = oracle_orgqr(want_f[0], want_f[1], gm, gn, kk, gm)
-        require_separates("5320 orgqr fold order", count_diff_f32(want_q, oracle_orgqr(want_f[0], want_f[1], gm, gn, kk, gm, 1)))
-        var qgd = zeros(gm * gm)
-        DevExec.orgqr(ptr(want_f[0]), ptr(want_f[1]), ptr(qgd), gm, gn, kk, gm)
+        var want_q = oracle_orgqr(want_f[0], want_f[1], gm, gn, kk, gq)
+        require_separates("5320 orgqr fold order", count_diff_f32(want_q, oracle_orgqr(want_f[0], want_f[1], gm, gn, kk, gq, 1)))
+        var qgd = zeros(gm * gq)
+        DevExec.orgqr(ptr(want_f[0]), ptr(want_f[1]), ptr(qgd), gm, gn, kk, gq)
         same("5320 orgqr device", count_diff_f32(qgd, want_q))
-        var qgh = zeros(gm * gm)
-        HostExec.orgqr(ptr(want_f[0]), ptr(want_f[1]), ptr(qgh), gm, gn, kk, gm)
+        var qgh = zeros(gm * gq)
+        HostExec.orgqr(ptr(want_f[0]), ptr(want_f[1]), ptr(qgh), gm, gn, kk, gq)
         same("5320 orgqr host", count_diff_f32(qgh, want_q))
         tr.record_list_f32("x_decomp.geqrf", hd)
         tr.record_list_f32("x_decomp.orgqr", qgd)
     # ---- the device SVD BOUNDED IN WORK PER LAUNCH (lane/lle-timeout): the
-    # QR in column ranges (x_decomp/qr_bounded.mojo), the Jacobi sweeps in
-    # chunks of pairs, poisoned and read back whole: == the host replay at
-    # the default cut, and the same bits cut small (one QR column and 61
-    # pairs per launch); one slice square, one slice tall, two TSQR slices
+    # QR in column ranges (x_decomp/qr_bounded.mojo), the round-robin Jacobi
+    # one launch a round (x_decomp/rr_svd.mojo): == the host replay at the
+    # default cut, and the same bits with the QR cut small; one slice
+    # square, one slice tall, two TSQR slices
     var bshapes = [150, 150, 300, 150, 1200, 96]
     for sh in range(len(bshapes) // 2):
         var bm = bshapes[2 * sh]
@@ -269,7 +292,7 @@ def main() raises:
         var bc = ba.copy()
         var s_c = zeros(bn)
         var v_c = zeros(bn * bn)
-        DevExec.svd_cells(ptr(bc), bm, bn, ptr(s_c), ptr(v_c), 4096, 61 * bn)
+        DevExec.svd_cells(ptr(bc), bm, bn, ptr(s_c), ptr(v_c), 4096)
         same("bounded device svd values cut small " + tag, count_diff_f32(s_c, s_h))
         same("bounded device svd vectors cut small " + tag, count_diff_f32(v_c, v_h))
         tr.record_list_f32("x_decomp.svd_bounded", v_d)

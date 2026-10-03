@@ -6805,8 +6805,13 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
 
 # ===========================================================================
 # THE FORWARD CONTEXT FOLD ON THE MATRIX CORES (lane/amd-step-time-2,
-# 2026-09-25; AMD only, `ATTN_FWD_MFMA`; TRIAL: on only under
-# `-D MOJOLEARN_ATTN_FWD_MFMA=1` until its bits are proven on the device).
+# 2026-09-25; AMD only, `ATTN_FWD_MFMA`; a trial under
+# `-D MOJOLEARN_ATTN_FWD_MFMA=1` until 2026-10-01, when the MI325X read the
+# same lm-forward digest and the same losses as the VALU fold with lm-forward
+# 41.3 -> 39.6 ms and lm-train-step 75.0 -> 73.2 (bench/results, PR #63);
+# the AMD default since, with no switch back (the matrix-core step is one
+# k=1 fma per cell over the same ascending keys under round-to-nearest, the
+# VALU chain's order, so the bits are NVIDIA's, Apple's and the host's).
 #
 # `fused_attn_forward_r2_kernel[64, TQ, QRES, True, False]` computes, in pass
 # 3, the context chain per (t, c): acc = ftz(fma_rn(w[t][j], v[j][c], acc))
@@ -6821,7 +6826,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
 # per-row upper bound).
 # ===========================================================================
 comptime ATTN_FWD_MFMA = (
-    TARGET_COLUMN == COLUMN_AMD and is_defined["MOJOLEARN_ATTN_FWD_MFMA"]()
+    TARGET_COLUMN == COLUMN_AMD
 )
 
 
@@ -7288,6 +7293,195 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
                 zdot.unsafe_store(row, zf)
         else:
             zdot.unsafe_store(row, zf)
+
+
+# ===========================================================================
+# lane/gap-lm (2026-10-02), `-D MOJOLEARN_GAPLM_ZDOT_KREG=1`, NVIDIA only,
+# A/B until measured: `fused_bwd_zdot_estash_kernel[HD, TQ, True, False]`
+# with the key held in registers. The shipped kernel gives each thread ONE
+# dy chain per key block and reads both operands of every step from shared
+# memory (a V row per key plus the dctx row): about three shared wavefronts
+# per four FMAs, so it runs at the shared-memory port, not the FMA rate.
+# Here a block still owns TQ query rows of one head, but a key block is 256
+# keys, one per thread: the thread loads ITS key's V row into registers
+# once and walks the TQ rows four at a time, reading each dctx row as a
+# warp-wide broadcast (one wavefront per four FMAs per row, four chains in
+# flight). The y and dy stashes are written coalesced along the keys.
+# WHY NO BIT MOVES: every dy cell is the shipped chain, `_stepfx(dctx[p],
+# v[p], dy)` over p ascending from +0.0 on the same `ftz` operands, then
+# `ftz`; y is the shipped `ftz(identical_div(ftz(e), ftz(denom)))`; the z
+# fold is the shipped chain by one thread per row over the visible keys
+# ascending; the -0.0 corner, the masked-tail repair and the stores are the
+# shipped lines. Which thread holds a chain and how many keys a block
+# stages are plan choices the contract does not read. Clean (no SABN)
+# instantiation only; a SABN build keeps the shipped kernel.
+# ===========================================================================
+comptime ATTN_GAPLM_ZDOT_KREG = (
+    TARGET_COLUMN == COLUMN_NVIDIA and is_defined["MOJOLEARN_GAPLM_ZDOT_KREG"]()
+)
+comptime ZK_TQ = 16
+comptime ZK_RG = 4
+
+
+#: Two blocks an SM at most 128 registers a thread (register allocation only).
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(512)))
+def fused_bwd_zdot_kreg_kernel[HD: Int, TQ: Int, SWZ: Bool = False](
+    zdot: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    y_st: MutPointer[Float32, MutAnyOrigin],
+    dy_st: MutPointer[Float32, MutAnyOrigin],
+    e_st: MutPointer[Float32, MutAnyOrigin],
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+):
+    """See the comment above. 256 threads, grid `B * nh * ceil(L / TQ)`."""
+    _attn_mode_enter()
+    comptime BK = FUSED_THREADS
+    comptime ES = BK + 4
+    comptime assert TQ % ZK_RG == 0, "zdot kreg: TQ a multiple of the row group"
+    comptime assert HD % 4 == 0, "zdot kreg: HD a multiple of 4"
+    var dsh = stack_allocation[TQ * HD, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
+    var ys = stack_allocation[TQ * ES, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
+    var dys = stack_allocation[TQ * ES, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
+    var rinfo = stack_allocation[3 * TQ, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var rden = stack_allocation[TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+    var ntb = (l + TQ - 1) // TQ
+    var bm = _blk_map[SWZ, True](Int(block_idx.x), ntb, nh, b)
+    var tb = bm[0]
+    var h = bm[1]
+    var bb = bm[2]
+    if bb >= b:
+        return
+    var kvh = h // n_rep
+    var tid = Int(thread_idx.x)
+    var t0 = tb * TQ
+    var t1 = t0 + TQ - 1
+    if t1 > l - 1:
+        t1 = l - 1
+    var r0 = _row_range(t0, pos0, key_lo, window, s)
+    var r1 = _row_range(t1, pos0, key_lo, window, s)
+    var kb_lo = r0[0] // BK
+    var kb_hi = r1[1] // BK
+    var kvbase = (bb * nkv + kvh) * s * HD
+    var headrow = (bb * nh + h) * l
+
+    # The block's dctx rows through `ftz` (DEVIATION 2651's staging), and
+    # each row's visible range and denominator. An invalid row (t >= l)
+    # gets the empty range [0, -1], so no thread writes or folds for it.
+    comptime for si in range((TQ * HD + FUSED_THREADS - 1) // FUSED_THREADS):
+        var i = tid + si * FUSED_THREADS
+        if i < TQ * HD:
+            var r = i // HD
+            var c = i - r * HD
+            var tq = t0 + r
+            var x = Float32(0.0)
+            if tq < l:
+                x = ftz(dctx.unsafe_load((bb * l + tq) * nh * HD + h * HD + c))
+            dsh.unsafe_store(i, x)
+    if tid < TQ:
+        var tq = t0 + tid
+        if tq < l:
+            var rr = _row_range(tq, pos0, key_lo, window, s)
+            rinfo.unsafe_store(tid, Int32(rr[0]))
+            rinfo.unsafe_store(TQ + tid, Int32(rr[1]))
+            rden.unsafe_store(tid, ftz(denom.unsafe_load(headrow + tq)))
+        else:
+            rinfo.unsafe_store(tid, Int32(0))
+            rinfo.unsafe_store(TQ + tid, Int32(-1))
+            rden.unsafe_store(tid, Float32(1.0))
+    barrier()
+
+    var z = Float32(0.0)
+    for kb in range(kb_lo, kb_hi + 1):
+        var j = kb * BK + tid
+        var vreg = SIMD[DType.float32, HD](0.0)
+        if j < s:
+            comptime for p4 in range(HD // 4):
+                var v4 = v_cache.unsafe_load[width=4, alignment=16](kvbase + j * HD + p4 * 4)
+                comptime for q in range(4):
+                    vreg[p4 * 4 + q] = ftz(v4[q])
+        for g in range(TQ // ZK_RG):
+            var any = False
+            comptime for u in range(ZK_RG):
+                var r = g * ZK_RG + u
+                if Int32(j) >= rinfo.unsafe_load(r) and Int32(j) <= rinfo.unsafe_load(TQ + r):
+                    any = True
+            if any:
+                var dy = SIMD[DType.float32, ZK_RG](0.0)
+                comptime for p4 in range(HD // 4):
+                    comptime p0 = p4 * 4
+                    comptime for u in range(ZK_RG):
+                        var a4 = dsh.unsafe_load[width=4, alignment=16]((g * ZK_RG + u) * HD + p0)
+                        comptime for q in range(4):
+                            dy[u] = _stepfx(a4[q], vreg[p0 + q], dy[u])
+                comptime for u in range(ZK_RG):
+                    var r = g * ZK_RG + u
+                    if Int32(j) >= rinfo.unsafe_load(r) and Int32(j) <= rinfo.unsafe_load(TQ + r):
+                        var t = t0 + r
+                        var dyv = ftz(dy[u])
+                        var ecell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
+                        var e = e_st.unsafe_load(ecell)
+                        var yv = ftz(identical_div(ftz(e), rden.unsafe_load(r)))
+                        var stbase = (headrow + t) * s
+                        ys.unsafe_store(r * ES + tid, yv)
+                        comptime if ATTN_V1_ALIAS_Y_ESTASH:
+                            e_st.unsafe_store(ecell, yv)
+                        else:
+                            y_st.unsafe_store(stbase + j, yv)
+                        dys.unsafe_store(r * ES + tid, dyv)
+                        dy_st.unsafe_store(stbase + j, dyv)
+        barrier()
+        if tid < TQ and t0 + tid < l:
+            var jlo = Int(rinfo.unsafe_load(tid))
+            var jhi = Int(rinfo.unsafe_load(TQ + tid))
+            comptime for j4 in range(BK // 4):
+                comptime jj0 = j4 * 4
+                var jb = kb * BK + jj0
+                if jb + 3 >= jlo and jb <= jhi:
+                    var dy4 = dys.unsafe_load[width=4, alignment=16](tid * ES + jj0)
+                    var y4 = ys.unsafe_load[width=4, alignment=16](tid * ES + jj0)
+                    comptime for q in range(4):
+                        var jq = jb + q
+                        if jq >= jlo and jq <= jhi:
+                            z = _stepfx(dy4[q], y4[q], z)
+        barrier()
+    if tid < TQ and t0 + tid < l:
+        var t = t0 + tid
+        var row = headrow + t
+        var j_hi = Int(rinfo.unsafe_load(TQ + tid))
+        var zf = ftz(z)
+        if bitcast[DType.uint32](zf) == NEG_ZERO_BITS and j_hi < s - 1:
+            comptime if ATTN_REPAIR_MASKED_TAIL:
+                corner.unsafe_store(1, Float32(1.0))
+                comptime if not ATTN_REPAIR_SAB_Z:
+                    var rowbase = (bb * l + t) * nh * HD + h * HD
+                    for jt in range(j_hi + 1, s):
+                        var dyt = _masked_tail_dy[HD](dctx, v_cache, rowbase, kvbase, jt)
+                        zf = _stepfx(dyt, Float32(0.0), zf)
+                        if bitcast[DType.uint32](zf) != NEG_ZERO_BITS:
+                            break
+            else:
+                corner.unsafe_store(0, Float32(1.0))
+        zdot.unsafe_store(row, zf)
 
 
 # ===========================================================================
@@ -9319,26 +9513,37 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
             block_dim=(FUSED_THREADS, 1, 1),
         )
     else:
-        if zdot_tq == 16:
-            comptime zk16 = fused_bwd_zdot_estash_kernel[HD, 16, DRES, SABN, SWZ]
-            ctx.enqueue_function[zk16](
+        comptime if ATTN_GAPLM_ZDOT_KREG and DRES and not SABN:
+            comptime zkr = fused_bwd_zdot_kreg_kernel[HD, ZK_TQ, SWZ]
+            ctx.enqueue_function[zkr](
                 zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
                 dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
                 v_cache.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
                 Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-                Int32(window), grid_dim=(b * nh * ((l + 15) // 16), 1, 1),
+                Int32(window), grid_dim=(b * nh * ((l + ZK_TQ - 1) // ZK_TQ), 1, 1),
                 block_dim=(FUSED_THREADS, 1, 1),
             )
         else:
-            comptime zk8 = fused_bwd_zdot_estash_kernel[HD, 8, DRES, SABN, SWZ]
-            ctx.enqueue_function[zk8](
-                zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-                dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
-                v_cache.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
-                Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-                Int32(window), grid_dim=(b * nh * ((l + 7) // 8), 1, 1),
-                block_dim=(FUSED_THREADS, 1, 1),
-            )
+            if zdot_tq == 16:
+                comptime zk16 = fused_bwd_zdot_estash_kernel[HD, 16, DRES, SABN, SWZ]
+                ctx.enqueue_function[zk16](
+                    zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                    dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
+                    v_cache.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
+                    Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+                    Int32(window), grid_dim=(b * nh * ((l + 15) // 16), 1, 1),
+                    block_dim=(FUSED_THREADS, 1, 1),
+                )
+            else:
+                comptime zk8 = fused_bwd_zdot_estash_kernel[HD, 8, DRES, SABN, SWZ]
+                ctx.enqueue_function[zk8](
+                    zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                    dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
+                    v_cache.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
+                    Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+                    Int32(window), grid_dim=(b * nh * ((l + 7) // 8), 1, 1),
+                    block_dim=(FUSED_THREADS, 1, 1),
+                )
     step_count_sync()
     ctx.synchronize()
     comptime if DRES:

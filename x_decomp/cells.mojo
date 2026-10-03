@@ -46,6 +46,25 @@ comptime X_DECOMP_SVD_SWEEPS = 60
 #: usual float32 one-sided Jacobi threshold (LAPACK sgesvj uses m*eps).
 comptime X_DECOMP_SVD_TOL = Float32(9.5367431640625e-07)
 
+# lane/neural-pass100 (2026-10-01): the stall istella showed (FactorAnalysis,
+# SparsePCA: "did not converge in 60 sweeps at n_cols = 220"). Its R has
+# columns of squared norm ~2e13 next to numerically null ones (1e-16 to
+# 1e-20: the rank-deficient directions of 21 constant features); their
+# a_pq is the float32 rounding of products of a huge and a vanishing column,
+# |a_pq| / (|p| |q|) from 1e-6 to 2e-4, above the 2^-20 tolerance every
+# sweep, so a few rotations repeat forever. A rotation is SIGNIFICANT when
+# the smaller column's squared norm is at least 2^-48 of the larger's (the
+# smaller column above float32 resolution relative to its partner).
+comptime SVD_SIGNIFICANT_RATIO = Float32(3.552713678800501e-15)  # 2^-48
+
+
+@always_inline
+def svd_rotation_significant(app: Float32, aqq: Float32) -> Bool:
+    var lo = app if app < aqq else aqq
+    var hi = aqq if app < aqq else app
+    return lo >= ftz(identical_mul(hi, SVD_SIGNIFICANT_RATIO))
+
+
 comptime F32Ptr = MutPointer[Float32, MutAnyOrigin]
 comptime I32Ptr = MutPointer[Int32, MutAnyOrigin]
 
@@ -86,6 +105,8 @@ comptime OP_LE = 34
 comptime OP_SELECT = 35
 comptime OP_MUZ = 36
 comptime OP_LGAMMA = 37
+#: the exact power-of-two column scale of a Gram diagonal entry (DEVIATION 2620)
+comptime OP_P2SCALE = 38
 
 
 @always_inline
@@ -198,6 +219,24 @@ def lgamma(a: Float32) -> Float32:
     return sub(r, shift)
 
 
+def p2_equilibration_scale(diag: Float32) -> Float32:
+    """DEVIATION 2620's power-of-two scale `s` for a Gram diagonal entry
+    `diag`, chosen so `s^2 diag` lies in [0.5, 2): `diag = m 2^e` with `m` in
+    [1, 2) gives `2^-ceil(e / 2)`. The rule of
+    glm/impl/linalg/detail/lstsq.mojo `ols_equilibration_scale`, copied
+    (x_decomp does not import glm). Integer arithmetic on the bits, no
+    floating-point operation, so every column computes the same scale; a
+    zero, negative or non-finite entry gets 1. The operand is already
+    flushed (`ew_cell`), so no subnormal reaches it."""
+    var bits = bitcast[DType.uint32](diag)
+    var field = Int((bits >> 23) & UInt32(0xFF))
+    if (bits >> 31) != UInt32(0) or field == 255 or field == 0:
+        return Float32(1.0)
+    var e = field - 127
+    var k = (e + 1) // 2 if e >= 0 else -((-e) // 2)
+    return bitcast[DType.float32](UInt32(127 - k) << 23)
+
+
 def ew_cell(op: Int, x_in: Float32, y_in: Float32, z_in: Float32, s_in: Float32) -> Float32:
     var x = ftz(x_in)
     var y = ftz(y_in)
@@ -283,6 +322,8 @@ def ew_cell(op: Int, x_in: Float32, y_in: Float32, z_in: Float32, s_in: Float32)
     elif op == OP_MUZ:
         # sklearn NMF multiplicative update: x * (y / z), a zero z replaced by s
         r = mul(x, div0(y, z if z != Float32(0) else s))
+    elif op == OP_P2SCALE:
+        r = p2_equilibration_scale(x)
     return ftz(r)
 
 
@@ -661,6 +702,133 @@ def omp_row(G: F32Ptr, Q: F32Ptr, W: F32Ptr, S: F32Ptr, i: Int, k: Int, nnz: Int
     return Float32(na)
 
 
+comptime LARS_ROW_EXTRA = 7
+"""Per-row scratch of `lars_row`: k * k + LARS_ROW_EXTRA * k floats."""
+
+
+@always_inline
+def _chol_inplace(S: F32Ptr, L: Int, p: Int) -> Bool:
+    """The Cholesky factor of the p x p S[L ..] (row major, stride p) in its
+    lower triangle, sums ascending; False at a non-positive pivot."""
+    for j in range(p):
+        var s = ftz(S.unsafe_load(L + j * p + j))
+        for t in range(j):
+            var x = ftz(S.unsafe_load(L + j * p + t))
+            s = ftz(identical_mul_add(-x, x, s))
+        if not (s > Float32(0)):
+            return False
+        var dj = sqrt0(s)
+        S.unsafe_store(L + j * p + j, dj)
+        for r in range(j + 1, p):
+            var acc = ftz(S.unsafe_load(L + r * p + j))
+            for t in range(j):
+                acc = ftz(identical_mul_add(-ftz(S.unsafe_load(L + r * p + t)), ftz(S.unsafe_load(L + j * p + t)), acc))
+            S.unsafe_store(L + r * p + j, div0(acc, dj))
+    return True
+
+
+def lars_row(G: F32Ptr, Q: F32Ptr, W: F32Ptr, S: F32Ptr, i: Int, k: Int, m: Int, nnz: Int) -> Float32:
+    """sklearn's Lars(fit_intercept=False, n_nonzero_coefs=nnz) of ONE row on
+    the Gram (sparse_encode 'lars': Gram = D D^T, Xy = D x_i; m samples, the
+    dictionary's columns): x_linear/lars.mojo `lars_fit`'s lar path (alpha_min
+    0, max_iter nnz, the degenerate-regressor skip at a pivot under 1e-7,
+    ties in argmax |cov| to the lower atom, the Cholesky of G_AA refactored
+    each step), here in the decomp lane's arithmetic, one thread a row. W's
+    row gets the coefficients. S: k * k + LARS_ROW_EXTRA * k floats of this
+    row's scratch. Returns the number of active atoms."""
+    var sb = i * (k * k + LARS_ROW_EXTRA * k)
+    var cov = sb
+    var ll = cov + k
+    var ls = ll + k * k
+    var sgn = ls + k
+    var st = sgn + k
+    var act = st + k
+    var base = i * k
+    var eq_tol = Float32(1.1920929e-07)
+    var tiny = Float32(1.1754944e-38)
+    for j in range(k):
+        W.unsafe_store(base + j, Float32(0))
+        S.unsafe_store(st + j, Float32(0))
+    var na = 0
+    var n_iter = 0
+    var guard = 0
+    while guard < 4 * k + 4 * nnz + 8:
+        guard += 1
+        for j in range(k):
+            var acc = ftz(Q.unsafe_load(base + j))
+            for l in range(k):
+                acc = sub(acc, mul(G.unsafe_load(j * k + l), W.unsafe_load(base + l)))
+            S.unsafe_store(cov + j, acc)
+        var c_idx = -1
+        var cbig = Float32(0)
+        for j in range(k):
+            if S.unsafe_load(st + j) == Float32(0):
+                var a = abs(S.unsafe_load(cov + j))
+                if c_idx < 0 or a > cbig:
+                    c_idx = j
+                    cbig = a
+        var alpha = div0(cbig, Float32(m))
+        if alpha <= eq_tol:
+            break
+        if n_iter >= nnz or na >= k or c_idx < 0:
+            break
+        S.unsafe_store(act + na, Float32(c_idx))
+        S.unsafe_store(sgn + na, Float32(1) if S.unsafe_load(cov + c_idx) >= Float32(0) else Float32(-1))
+        var p = na + 1
+        for a in range(p):
+            for b in range(p):
+                var ja = Int(S.unsafe_load(act + a))
+                var jb = Int(S.unsafe_load(act + b))
+                S.unsafe_store(ll + a * p + b, G.unsafe_load(ja * k + jb))
+        if not _chol_inplace(S, ll, p) or S.unsafe_load(ll + na * p + na) < Float32(1e-7):
+            S.unsafe_store(st + c_idx, Float32(2))  # their degenerate-regressor skip
+            continue
+        S.unsafe_store(st + c_idx, Float32(1))
+        na = p
+        # the equiangular direction: L L^T ls = sgn (the factor just made)
+        for a in range(na):
+            var acc = ftz(S.unsafe_load(sgn + a))
+            for t in range(a):
+                acc = ftz(identical_mul_add(-ftz(S.unsafe_load(ll + a * na + t)), ftz(S.unsafe_load(ls + t)), acc))
+            S.unsafe_store(ls + a, div0(acc, S.unsafe_load(ll + a * na + a)))
+        for aa in range(na):
+            var a = na - 1 - aa
+            var acc = ftz(S.unsafe_load(ls + a))
+            for t in range(a + 1, na):
+                acc = ftz(identical_mul_add(-ftz(S.unsafe_load(ll + t * na + a)), ftz(S.unsafe_load(ls + t)), acc))
+            S.unsafe_store(ls + a, div0(acc, S.unsafe_load(ll + a * na + a)))
+        var aq: Float32
+        if na == 1 and S.unsafe_load(ls) == Float32(0):
+            S.unsafe_store(ls, Float32(1))
+            aq = Float32(1)
+        else:
+            var sm = Float32(0)
+            for a in range(na):
+                sm = ftz(identical_mul_add(ftz(S.unsafe_load(ls + a)), ftz(S.unsafe_load(sgn + a)), sm))
+            aq = div0(Float32(1), sqrt0(sm))
+            for a in range(na):
+                S.unsafe_store(ls + a, mul(S.unsafe_load(ls + a), aq))
+        var gamma = div0(cbig, aq)
+        for j in range(k):
+            if S.unsafe_load(st + j) != Float32(0):
+                continue
+            var cj = Float32(0)
+            for a in range(na):
+                cj = ftz(identical_mul_add(ftz(G.unsafe_load(j * k + Int(S.unsafe_load(act + a)))), ftz(S.unsafe_load(ls + a)), cj))
+            var cv = S.unsafe_load(cov + j)
+            var g1 = div0(sub(cbig, cv), add(sub(aq, cj), tiny))
+            if g1 > Float32(0) and g1 < gamma:
+                gamma = g1
+            var g2 = div0(add(cbig, cv), add(add(aq, cj), tiny))
+            if g2 > Float32(0) and g2 < gamma:
+                gamma = g2
+        n_iter += 1
+        for a in range(na):
+            var j = Int(S.unsafe_load(act + a))
+            W.unsafe_store(base + j, ftz(identical_mul_add(gamma, ftz(S.unsafe_load(ls + a)), ftz(W.unsafe_load(base + j)))))
+    return Float32(na)
+
+
 def gamma_cell(i: Int, seed: UInt32, stream: UInt32, shape: Float32) -> Float32:
     """Gamma(shape, 1) for shape >= 1 by Marsaglia and Tsang (2000): attempt
     j draws a normal and a uniform from Philox counter (i, stream, j); the
@@ -995,8 +1163,8 @@ def als_row_solve(X: F32Ptr, S: F32Ptr, u: Int, f: Int) -> Float32:
     """`als_row`'s tail on its accumulated scratch (A at u * (f*f + f), b
     after it): the Cholesky (lower, left-looking, sums ascending), then the
     two solves into row u of X. Returns 1 at a non-positive pivot (x_u = 0),
-    else 0. Split out so the device's team kernel (x_decomp/device.mojo
-    `als_team_kernel`) runs the same tail after a parallel accumulation."""
+    else 0. x_decomp/device.mojo `als_block_kernel` runs the same sums with
+    the Cholesky's rows below the diagonal in parallel."""
     var ab = u * (f * f + f)
     var bb = ab + f * f
     # Cholesky (lower, left-looking, sums ascending), then the two solves
@@ -1132,9 +1300,15 @@ def als_cg_row(
 
 # DEVIATION 5307 (PIN; row 134): the pivot is the largest |a| with ties to the
 # LOWEST row (strict >); arm 5307_pivot_tie.
-# DEVIATION 5308 (PIN; row 134): every substitution and Cholesky fold ascending,
-# getrs 'N' and 'T' alike ('T' undoes the swaps last to first); arm
-# 5308_getrs_order.
+# DEVIATION 5308 (PIN; row 134; lane hr-lu 2026-10-02): lu_solve is
+# right-looking, the `trisolve` order: the row swaps as ONE gather by the row
+# order they make (`lu_perm_src`), then every cell's chain in the order its
+# operands finish, ascending j going forward (unit L for 'N', U^T for 'T', as
+# getrs) and DESCENDING j going backward (U for 'N', unit L^T for 'T'; getrs
+# folds these ascending), each row divided once every step into it is
+# applied; 'T' scatters the rows back through the swaps (getrs's last to
+# first). The bits do not depend on the device's block size. The Cholesky
+# fold ascending. Arm 5308_lu_solve_order.
 def lu_pivot(a: F32Ptr, piv: I32Ptr, k: Int, n: Int):
     """Step k's pivot row: the largest |a[i, k]| for i >= k, ties to the
     LOWEST row (strict >), into piv[k]."""
@@ -1210,103 +1384,6 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
                 lu_update_elem(a, sp, k, i, j, n)
 
 
-def lu_solve_col(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int, c: Int):
-    """`lu_solve_serial` for ONE right-hand side column `c` (lane/neural-net-
-    experiment, 2026-09-30, the classical pass): the columns of B are
-    independent in every statement of the serial solve (each swap, each
-    substitution sum reads and writes column c alone), so a thread per
-    column runs the same cells in the same order and writes the same bits.
-    The device launches one thread per column; the host keeps
-    `lu_solve_serial`, whose column loop is this function called c ascending."""
-    if trans != 0:
-        for i in range(n):
-            var acc = ftz(b.unsafe_load(i * nrhs + c))
-            for j in range(i):
-                acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-            b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
-        for ii in range(n):
-            var i = n - 1 - ii
-            var acc = ftz(b.unsafe_load(i * nrhs + c))
-            for j in range(i + 1, n):
-                acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-            b.unsafe_store(i * nrhs + c, acc)
-        for kk in range(n):
-            var k = n - 1 - kk
-            var p = Int(piv.unsafe_load(k))
-            if p != k:
-                var t = b.unsafe_load(k * nrhs + c)
-                b.unsafe_store(k * nrhs + c, b.unsafe_load(p * nrhs + c))
-                b.unsafe_store(p * nrhs + c, t)
-        return
-    for k in range(n):
-        var p = Int(piv.unsafe_load(k))
-        if p != k:
-            var t = b.unsafe_load(k * nrhs + c)
-            b.unsafe_store(k * nrhs + c, b.unsafe_load(p * nrhs + c))
-            b.unsafe_store(p * nrhs + c, t)
-    for i in range(n):
-        var acc = ftz(b.unsafe_load(i * nrhs + c))
-        for j in range(i):
-            acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(i * n + j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-        b.unsafe_store(i * nrhs + c, acc)
-    for ii in range(n):
-        var i = n - 1 - ii
-        var acc = ftz(b.unsafe_load(i * nrhs + c))
-        for j in range(i + 1, n):
-            acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(i * n + j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-        b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
-
-
-def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0):
-    """getrs: apply the row swaps to B (n x nrhs, row major) in order, then
-    forward substitution with unit L and back substitution with U, each
-    inner sum ascending. trans != 0 solves A^T X = B (getrs 'T'; a real
-    matrix's 'C' is the same): forward substitution with U^T, back
-    substitution with unit L^T, each inner sum ascending in j, then the row
-    swaps in REVERSE order."""
-    if trans != 0:
-        for c in range(nrhs):
-            for i in range(n):
-                var acc = ftz(b.unsafe_load(i * nrhs + c))
-                for j in range(i):
-                    acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-                b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
-            for ii in range(n):
-                var i = n - 1 - ii
-                var acc = ftz(b.unsafe_load(i * nrhs + c))
-                for j in range(i + 1, n):
-                    acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-                b.unsafe_store(i * nrhs + c, acc)
-        for kk in range(n):
-            var k = n - 1 - kk
-            var p = Int(piv.unsafe_load(k))
-            if p != k:
-                for c in range(nrhs):
-                    var t = b.unsafe_load(k * nrhs + c)
-                    b.unsafe_store(k * nrhs + c, b.unsafe_load(p * nrhs + c))
-                    b.unsafe_store(p * nrhs + c, t)
-        return
-    for k in range(n):
-        var p = Int(piv.unsafe_load(k))
-        if p != k:
-            for c in range(nrhs):
-                var t = b.unsafe_load(k * nrhs + c)
-                b.unsafe_store(k * nrhs + c, b.unsafe_load(p * nrhs + c))
-                b.unsafe_store(p * nrhs + c, t)
-    for c in range(nrhs):
-        for i in range(n):
-            var acc = ftz(b.unsafe_load(i * nrhs + c))
-            for j in range(i):
-                acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(i * n + j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-            b.unsafe_store(i * nrhs + c, acc)
-        for ii in range(n):
-            var i = n - 1 - ii
-            var acc = ftz(b.unsafe_load(i * nrhs + c))
-            for j in range(i + 1, n):
-                acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(i * n + j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
-            b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
-
-
 # DEVIATION 5309 (PIN; row 134): the orthonormal basis of a tall A is two
 # passes of {R = the Householder QR's R of decomposition/ (qr_factor, TSQR
 # slices a function of the shape); orth_rank_guard(R); Q = A R^-1, one thread
@@ -1328,9 +1405,9 @@ comptime ORTH_RANK_TOL2 = Float32(2.3283064365386963e-10)
 # LocallyLinearEmbedding's shift-invert): each solved row is applied to the
 # rows it feeds at once, so a cell's chain runs in the order its operands
 # finish (ascending j below the diagonal, DESCENDING j above it). getrs's
-# ascending back substitution (`lu_solve_serial`, DEVIATION 5308) is one
-# n^2 / 2 chain per column; this order blocks on the device (a diagonal
-# block, then every row it feeds a cell at a time) with the same chains.
+# ascending back substitution is one n^2 / 2 chain per column; this order
+# blocks on the device (a diagonal block, then every row it feeds a cell at
+# a time) with the same chains. lu_solve runs it too (DEVIATION 5308).
 # tri: 0 = unit L forward (coef lu[i, j]), 1 = U backward (lu[i, j], divide),
 # 2 = U^T forward (lu[j, i], divide), 3 = unit L^T backward (lu[j, i]).
 
@@ -1391,32 +1468,92 @@ def trs_feed_cell(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, lo: Int, h
     b.unsafe_store(i * nrhs + c, acc)
 
 
-def trs_tri_serial(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int):
-    """One triangle, every column: the reference walk (one row at a time,
-    each applied to every row it feeds, columns innermost)."""
+def trs_tri_cols(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int, c0: Int, c1: Int):
+    """One triangle on the columns [c0, c1): the reference walk (one row at
+    a time, each applied to every row it feeds, columns innermost). Every
+    cell's chain is its own column's, so column slices run apart."""
     if tri == 0 or tri == 2:
         for j in range(n):
-            for c in range(nrhs):
-                if trs_divides(tri):
+            if trs_divides(tri):
+                for c in range(c0, c1):
                     trs_div(lu, b, n, nrhs, j, c)
             for i in range(j + 1, n):
-                for c in range(nrhs):
+                for c in range(c0, c1):
                     trs_step(lu, b, n, nrhs, tri, i, j, c)
     else:
         for jj in range(n):
             var j = n - 1 - jj
-            for c in range(nrhs):
-                if trs_divides(tri):
+            if trs_divides(tri):
+                for c in range(c0, c1):
                     trs_div(lu, b, n, nrhs, j, c)
             for i in range(j):
-                for c in range(nrhs):
+                for c in range(c0, c1):
                     trs_step(lu, b, n, nrhs, tri, i, j, c)
+
+
+def trs_tri_serial(lu: F32Ptr, b: F32Ptr, n: Int, nrhs: Int, tri: Int):
+    """One triangle, every column (`trs_tri_cols`)."""
+    trs_tri_cols(lu, b, n, nrhs, tri, 0, nrhs)
 
 
 def trs_gather(src: F32Ptr, idx: F32Ptr, dst: F32Ptr, nrhs: Int, i: Int, c: Int):
     """dst[i, c] = src[idx[i], c] (idx holds row numbers as floats, exact
     below 2^24)."""
     dst.unsafe_store(i * nrhs + c, src.unsafe_load(Int(idx.unsafe_load(i)) * nrhs + c))
+
+
+def lu_perm_src(piv: I32Ptr, i: Int) -> Int:
+    """The row of B that getrs's swaps (k ascending: rows k and piv[k])
+    bring to row i, from row i alone: swap k > i never touches row i (piv[k]
+    >= k), swap i brings row piv[i], and each earlier swap k whose piv[k] is
+    the row being followed brings row k instead. Integer compares only."""
+    var p = Int(piv.unsafe_load(i))
+    for q in range(i):
+        var k = i - 1 - q
+        if Int(piv.unsafe_load(k)) == p:
+            p = k
+    return p
+
+
+@always_inline
+def lu_aux_val(lu: F32Ptr, piv: I32Ptr, i: Int, n: Int) -> SIMD[DType.float32, 4]:
+    """Row i's share of `lu_aux`'s statistics: (|u_ii|, u_ii == 0, u_ii < 0,
+    piv[i] != i)."""
+    var d = lu.unsafe_load(i * n + i)
+    return SIMD[DType.float32, 4](
+        abs(d),
+        Float32(1) if d == Float32(0) else Float32(0),
+        Float32(1) if d < Float32(0) else Float32(0),
+        Float32(1) if Int(piv.unsafe_load(i)) != i else Float32(0),
+    )
+
+
+@always_inline
+def lu_aux_join(a: SIMD[DType.float32, 4], b: SIMD[DType.float32, 4]) -> SIMD[DType.float32, 4]:
+    """Joins two shares: the max (a NaN wins: order-free), and the counts
+    (integers, exact in float32 to 2^24: order-free)."""
+    var m: Float32
+    if a[0] != a[0]:
+        m = a[0]
+    elif b[0] != b[0]:
+        m = b[0]
+    else:
+        m = max(a[0], b[0])
+    return SIMD[DType.float32, 4](m, a[1] + b[1], a[2] + b[2], a[3] + b[3])
+
+
+@always_inline
+def lu_aux_clamp(lu: F32Ptr, diag: F32Ptr, big: Float32, i: Int, n: Int, clamp: Bool):
+    """diag[i] = u_ii; with `clamp` a pivot under float32 resolution (|u_ii|
+    < eps * max |u_jj|) is set to that floor with its sign, in lu as well
+    (inverse iteration's usual perturbation, LAPACK stein/hsein)."""
+    var d = lu.unsafe_load(i * n + i)
+    if clamp:
+        var tiny = mul(Float32(1.1920928955078125e-07), big)
+        if abs(d) < tiny:
+            d = -tiny if d < Float32(0) else tiny
+            lu.unsafe_store(i * n + i, d)
+    diag.unsafe_store(i, d)
 
 
 def trisolve_serial(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, tmp: F32Ptr, n: Int, nrhs: Int, trans: Int):
@@ -1438,6 +1575,36 @@ def trisolve_serial(lu: F32Ptr, idx: F32Ptr, src: F32Ptr, dst: F32Ptr, tmp: F32P
     for i in range(n):
         for c in range(nrhs):
             trs_gather(tmp, idx, dst, nrhs, i, c)
+
+
+# ------------------------------------------------------------------ knn select
+def knn_select_row(dmat: F32Ptr, dist: F32Ptr, idx: F32Ptr, t: Int, m: Int, k: Int, exclude_self: Int):
+    """Row t's k smallest entries of the row-major (. x m) distance matrix,
+    ascending by (value, column): a candidate enters only when STRICTLY
+    smaller than the entry it passes, so an equal value keeps the lower
+    column first (Python's stable `heapq.nsmallest`, x_neighbors
+    `knn_select_item`). exclude_self != 0 skips column t. idx holds the
+    columns as floats (exact below 2^24); an unfilled slot holds +inf and
+    -1. Comparisons only: every vendor and the host pick the same entries."""
+    var inf = bitcast[DType.float32](UInt32(0x7F800000))
+    for s in range(k):
+        dist.unsafe_store(t * k + s, inf)
+        idx.unsafe_store(t * k + s, Float32(-1))
+    var worst = inf
+    for j in range(m):
+        if exclude_self != 0 and j == t:
+            continue
+        var v = dmat.unsafe_load(t * m + j)
+        if not (v < worst):
+            continue
+        var s = k - 1
+        while s > 0 and v < dist.unsafe_load(t * k + s - 1):
+            dist.unsafe_store(t * k + s, dist.unsafe_load(t * k + s - 1))
+            idx.unsafe_store(t * k + s, idx.unsafe_load(t * k + s - 1))
+            s -= 1
+        dist.unsafe_store(t * k + s, v)
+        idx.unsafe_store(t * k + s, Float32(j))
+        worst = dist.unsafe_load(t * k + k - 1)
 
 
 def orth_rank_guard(R: F32Ptr, l: Int):
@@ -1537,68 +1704,17 @@ def chol_col_elem(a: F32Ptr, j: Int, i: Int, n: Int):
 
 # DEVIATION 5320 (PIN; row 134): the Householder QR that KEEPS its reflectors
 # (LAPACK geqrf, unblocked, dlarfg's sign: beta = -sign(alpha) * ||(alpha, x)||)
-# and the explicit Q (orgqr, one column per thread): every norm is the scaled
-# sum of squares ascending in the row index, alpha first; every reflector
-# product w = v^T c is folded ascending in the row index with v's implicit
-# leading 1 first; reflectors are applied to A in order k ascending and to e_j
-# in order k descending. Arm 5320_householder_order.
-def reflector_norm(a: F32Ptr, k: Int, col: Int, m: Int, n: Int) -> Float32:
-    """||(a[k, col], a[k+1, col], ..., a[m-1, col])||, scaled by its largest
-    |entry| first so no square overflows or underflows, the sum of squares
-    ascending in the row index."""
-    var mx = Float32(0)
-    for i in range(k, m):
-        var v = abs(ftz(a.unsafe_load(i * n + col)))
-        if v > mx:
-            mx = v
-    if mx == Float32(0):
-        return Float32(0)
-    var acc = Float32(0)
-    for i in range(k, m):
-        var v = ftz(identical_div(ftz(a.unsafe_load(i * n + col)), mx))
-        acc = ftz(identical_mul_add(v, v, acc))
-    return ftz(identical_mul(sqrt0(acc), mx))
-
-
-def geqrf_head(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, k: Int, m: Int, n: Int):
-    """Step k's reflector (dlarfg): tau[k], beta on the diagonal, and in
-    `scal` [the divisor alpha - beta, 1 when the step acts else 0]. A column
-    whose sub-diagonal part is exactly zero gets tau = 0 (H = I), as dlarfg."""
-    var alpha = ftz(a.unsafe_load(k * n + k))
-    var xmax = Float32(0)
-    for i in range(k + 1, m):
-        var v = abs(ftz(a.unsafe_load(i * n + k)))
-        if v > xmax:
-            xmax = v
-    if xmax == Float32(0):
-        tau.unsafe_store(k, Float32(0))
-        scal.unsafe_store(0, Float32(1))
-        scal.unsafe_store(1, Float32(0))
-        return
-    var nrm = reflector_norm(a, k, k, m, n)
-    var beta = -nrm if alpha >= Float32(0) else nrm
-    tau.unsafe_store(k, div0(sub(beta, alpha), beta))
-    scal.unsafe_store(0, sub(alpha, beta))
-    scal.unsafe_store(1, Float32(1))
-    a.unsafe_store(k * n + k, beta)
-
-
+# and the explicit Q (orgqr): every norm and every reflector product w = v^T c
+# folded over SLICES of rows by a fixed tree (x_decomp/qr_sliced.mojo, lane
+# hr-qr, 2026-10-02: the order, the reflector, the device kernels and their
+# host replay live there); reflectors are applied to A in order k ascending
+# and to e_j in order k descending. The cells below are the per-element
+# steps both columns share. Arm 5320_householder_order.
 @always_inline
 def geqrf_scale_elem(a: F32Ptr, scal: F32Ptr, k: Int, i: Int, n: Int):
     """v[i] = a[i, k] / (alpha - beta), i > k, when step k acts."""
     if scal.unsafe_load(1) != Float32(0):
         a.unsafe_store(i * n + k, div0(a.unsafe_load(i * n + k), scal.unsafe_load(0)))
-
-
-@always_inline
-def geqrf_dot(a: F32Ptr, scal: F32Ptr, k: Int, j: Int, m: Int, n: Int) -> Float32:
-    """w = v^T a[k:, j], v's implicit leading 1 first, rows ascending."""
-    if scal.unsafe_load(1) == Float32(0):
-        return Float32(0)
-    var w = ftz(a.unsafe_load(k * n + j))
-    for i in range(k + 1, m):
-        w = ftz(identical_mul_add(ftz(a.unsafe_load(i * n + k)), ftz(a.unsafe_load(i * n + j)), w))
-    return w
 
 
 @always_inline
@@ -1614,41 +1730,9 @@ def geqrf_update_elem(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, k: Int, i: Int, j: I
         a.unsafe_store(i * n + j, ftz(identical_mul_add(-tw, ftz(a.unsafe_load(i * n + k)), ftz(a.unsafe_load(i * n + j)))))
 
 
-def geqrf_serial(a: F32Ptr, tau: F32Ptr, m: Int, n: Int):
-    """In-place Householder QR of the row-major m x n A (geqrf semantics,
-    unblocked): for k < min(m, n), dlarfg makes H_k = I - tau_k v v^T with
-    v[k] = 1 implicit and v[k+1:] stored below the diagonal, beta on it; R is
-    the upper triangle. The host column runs these cells in this loop; the
-    device runs the same cells with the rows (scale, update) and the columns
-    (dot) in parallel, every fold still one thread ascending (lane/algos-decomp
-    2026-09-28: one device thread took 217 s at 1M x 28)."""
-    var kk = m if m < n else n
-    var scal = InlineArray[Float32, 2](fill=Float32(0))
-    var sp = F32Ptr(unsafe_from_address=Int(scal.unsafe_ptr()))
-    for k in range(kk):
-        geqrf_head(a, tau, sp, k, m, n)
-        for i in range(k + 1, m):
-            geqrf_scale_elem(a, sp, k, i, n)
-        for j in range(k + 1, n):
-            var w = geqrf_dot(a, sp, k, j, m, n)
-            for i in range(k, m):
-                geqrf_update_elem(a, tau, sp, k, i, j, n, w)
-
-
 @always_inline
 def orgqr_init_elem(q: F32Ptr, i: Int, j: Int, qc: Int):
     q.unsafe_store(i * qc + j, Float32(1) if i == j else Float32(0))
-
-
-@always_inline
-def orgqr_dot(h: F32Ptr, tau: F32Ptr, q: F32Ptr, k: Int, j: Int, m: Int, n: Int, qc: Int) -> Float32:
-    """w = v_k^T q[k:, j], the implicit 1 first, rows ascending (0 when H_k = I)."""
-    if ftz(tau.unsafe_load(k)) == Float32(0):
-        return Float32(0)
-    var w = ftz(q.unsafe_load(k * qc + j))
-    for i in range(k + 1, m):
-        w = ftz(identical_mul_add(ftz(h.unsafe_load(i * n + k)), ftz(q.unsafe_load(i * qc + j)), w))
-    return w
 
 
 @always_inline
@@ -1662,17 +1746,3 @@ def orgqr_update_elem(h: F32Ptr, tau: F32Ptr, q: F32Ptr, k: Int, i: Int, j: Int,
         q.unsafe_store(k * qc + j, sub(q.unsafe_load(k * qc + j), tw))
     else:
         q.unsafe_store(i * qc + j, ftz(identical_mul_add(-tw, ftz(h.unsafe_load(i * n + k)), ftz(q.unsafe_load(i * qc + j)))))
-
-
-def orgqr_col(h: F32Ptr, tau: F32Ptr, q: F32Ptr, j: Int, m: Int, n: Int, kk: Int, qc: Int):
-    """Column j of Q = H_0 H_1 ... H_{kk-1} (m x qc, row major): e_j with the
-    reflectors of the m x n factored `h` applied last to first. The column is
-    built in place in q (the host column; the device runs the same cells
-    with the rows in parallel)."""
-    for i in range(m):
-        orgqr_init_elem(q, i, j, qc)
-    for r in range(kk):
-        var k = kk - 1 - r
-        var w = orgqr_dot(h, tau, q, k, j, m, n, qc)
-        for i in range(k, m):
-            orgqr_update_elem(h, tau, q, k, i, j, n, qc, w)

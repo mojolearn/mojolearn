@@ -11,20 +11,39 @@ writes outputs no other task writes; the O(n^3) cells (gemm, sqdist), the
 QR slices and the shortest-path rows have the host spellings of
 x_decomp/host_simd.mojo, host_qr.mojo and host_graph.mojo (same words).
 So the bits are the same at every thread count."""
-from x_decomp.rr import host_eigh_rr
-
-comptime RR_EIGH_SWEEPS = 30  # x_decomp/device.mojo PJ_EIGH_SWEEPS
+from x_decomp.rr_solve import host_eigh_rr_sorted
+from x_decomp.rr_svd import host_rr_svd
 from std.memory import bitcast
+from std.builtin.sort import sort
+from x_decomp.lle_local import (
+    hessian_cell,
+    hessian_comp_cell,
+    hessian_ncy,
+    hessian_q_cell,
+    lle_apply_cell,
+    lle_gram_cell,
+    lle_mean_cell,
+    ltsa_cell,
+    mlle_eta,
+    mlle_key,
+    mlle_rows_cell,
+    mlle_unkey,
+    mlle_weights_cell,
+)
 from std.sys.compile import is_defined
 
-from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
-from decomposition.host.linalg_public import eigh_ascending, host_eigh, host_qr_r
-from decomposition.host.pca_oracle import host_sign_flip
+from decomposition.host.linalg_public import host_eigh, host_qr_r
 from checks.numerics import ftz
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
+    lu_perm_src,
+    lu_aux_clamp,
+    lu_aux_join,
+    lu_aux_val,
+    trs_tri_cols,
     trisolve_serial,
+    knn_select_row,
     F32Ptr,
     absmax_sign_cell,
     FOLD_BLOCK,
@@ -38,23 +57,23 @@ from x_decomp.cells import (
     chol_serial,
     als_row,
     als_cg_row,
-    geqrf_serial,
-    orgqr_col,
     barycenter_row,
     gamma_cell,
     lasso_row,
     omp_row,
-    lu_solve_serial,
+    lars_row,
+    LARS_ROW_EXTRA,
     orth_diag_cell,
     orth_rank_guard,
     trsm_row,
     rand_cell,
     pdist_cell,
 )
-from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_serial
-from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_serial
+from core.host_lanes import host_row_tasks
+from core.host_parallel import host_parallelize
 from x_decomp.exec_trait import Exec
-from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
+from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
+from x_decomp.qr_sliced_host import qs_geqrf_host, qs_orgqr_host
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
 from x_decomp.host_ew import ew_range
 from x_decomp.host_lda import lda_doc_row_host, lda_pack_t
@@ -77,6 +96,52 @@ from x_decomp.host_simd import (
 )
 
 comptime X_DECOMP_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
+#: columns of B per host task of the right-looking lu_solve (a schedule cut)
+comptime LU_RL_COLS = 16
+
+
+def lu_solve_rl(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int):
+    """lu_solve in the right-looking order (DEVIATION 5308), the device's
+    chains: B gathered by the swaps' row order (`lu_perm_src`), then
+    `trs_tri_cols` on slices of LU_RL_COLS columns over host tasks (each
+    column's chains are its own); 'T' solves first and scatters the rows
+    back through the same order."""
+    if n <= 0 or nrhs <= 0:
+        return
+    var src = List[Int](length=n, fill=0)
+    for i in range(n):
+        src[i] = lu_perm_src(piv, i)
+    var tmp = List[Float32](unsafe_uninit_length=n * nrhs)
+    var tp = F32Ptr(unsafe_from_address=Int(tmp.unsafe_ptr()))
+    for i in range(n):
+        var r = src[i] if trans == 0 else i
+        for c in range(nrhs):
+            tp.unsafe_store(i * nrhs + c, b.unsafe_load(r * nrhs + c))
+    var t0 = 0 if trans == 0 else 2
+    var slices = (nrhs + LU_RL_COLS - 1) // LU_RL_COLS
+    var tasks = host_row_tasks(slices, n * n * LU_RL_COLS)
+    var per = (slices + tasks - 1) // tasks
+
+    def run(t: Int) {imm lu, imm tp, imm n, imm nrhs, imm t0, imm per}:
+        var c0 = t * per * LU_RL_COLS
+        var c1 = min(nrhs, c0 + per * LU_RL_COLS)
+        if c1 > c0:
+            trs_tri_cols(lu, tp, n, nrhs, t0, c0, c1)
+            trs_tri_cols(lu, tp, n, nrhs, t0 + 1, c0, c1)
+
+    var used = (slices + per - 1) // per
+    if used <= 1:
+        run(0)
+    else:
+        host_parallelize(run, used)
+    for i in range(n):
+        var r = i if trans == 0 else src[i]
+        for c in range(nrhs):
+            b.unsafe_store(r * nrhs + c, tp.unsafe_load(i * nrhs + c))
+    _ = tmp^
+    _ = src^
+
 
 #: elements per elementwise task, rows per row-fold task: shape-only cuts
 comptime EW_CHUNK = 32768
@@ -306,66 +371,158 @@ struct HostExec(Exec):
         _ = tmp^
 
     @staticmethod
+    def knn_select(dmat: F32Ptr, dist: F32Ptr, idx: F32Ptr, n: Int, m: Int, k: Int, exclude_self: Int) raises:
+        def row(t: Int) {imm dmat, imm dist, imm idx, imm m, imm k, imm exclude_self}:
+            knn_select_row(dmat, dist, idx, t, m, k, exclude_self)
+
+        xd_parallel(row, n)
+
+    @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
-        # lane neural-pass39: the block-interleaved walk of the same cells
-        # (x_decomp/lu_host.mojo); MOJOLEARN_XD_LU_SOLVE_SERIAL=1 keeps the loop
-        if xd_lu_solve_serial():
-            lu_solve_serial(lu, piv, b, n, nrhs, trans)
-        else:
-            lu_solve_host_rows(lu, piv, b, n, nrhs, trans)
+        lu_solve_rl(lu, piv, b, n, nrhs, trans)
 
     @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:
         chol_serial(a, n, info)
 
     @staticmethod
-    def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
+    def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int, uplo: Int) raises:
         if n < 1 or n > 46340:
             _ = host_eigh(List[Float32](), n)  # refuses the size, by name
         var m = List[Float32](capacity=n * n)
         for i in range(n * n):
             m.append(a.unsafe_load(i))
-        # lane/neural-pass104: the round-robin Jacobi first, the device's
-        # rounds and test (x_decomp/rr.mojo); the cyclic solve below when it
-        # does not converge (the device's fallback too)
-        comptime if not is_defined["MOJOLEARN_XD_EIGH_CYCLIC"]():
-            if n >= 2:
-                var ar = m.copy()
-                var vr = List[Float32](length=n * n, fill=Float32(0.0))
-                var rr = host_eigh_rr(ar, vr, n, RR_EIGH_SWEEPS, Float32(JACOBI_TOL))
-                if rr[0]:
-                    host_sign_flip(vr, n)
-                    var diag_rr = List[Float32]()
-                    for i in range(n):
-                        diag_rr.append(ar[i * n + i])
-                    var got_rr = eigh_ascending(diag_rr, vr, n, True, rr[1])
-                    for i in range(n):
-                        w.unsafe_store(i, got_rr.w[i])
-                    for i in range(n * n):
-                        v.unsafe_store(i, got_rr.v[i])
-                    return
-        # host_eigh's steps, the rotations of x_decomp/host_jacobi.mojo
-        var fe = fast_jacobi_eigh(m, n, JACOBI_SWEEPS, Float32(JACOBI_TOL))
-        if not fe.converged:
-            raise Error(
-                "eigh: the Jacobi eigensolver did not converge in "
-                + String(JACOBI_SWEEPS)
-                + " sweeps at n = "
-                + String(n)
-                + ". An unconverged decomposition is not returned as if it were"
-                " one; see DEVIATION 590. The remedy is more sweeps, the same one"
-                " cuSOLVER's syevj has"
-            )
-        var vecs = fe.vectors.copy()
-        host_sign_flip(vecs, n)
-        var diag = List[Float32]()
+        # numpy's UPLO (the device's `sym_from_triangle_kernel`)
         for i in range(n):
-            diag.append(m[i * n + i])
-        var got = eigh_ascending(diag, vecs, n, fe.converged, fe.executed)
-        for i in range(n):
-            w.unsafe_store(i, got.w[i])
-        for i in range(n * n):
-            v.unsafe_store(i, got.v[i])
+            for j in range(n):
+                if (uplo == 1 and i < j) or (uplo == 2 and i > j):
+                    m[i * n + j] = m[j * n + i]
+        _host_eigh_rr_one(m, w, v, n)
+
+    @staticmethod
+    def eigh_batch(a: F32Ptr, w: F32Ptr, v: F32Ptr, batch: Int, n: Int) raises:
+        """x_decomp/rr_batch.mojo's problems one after another: each is
+        `eigh`'s solve (the same words)."""
+        for b in range(batch):
+            var m = List[Float32](capacity=n * n)
+            for i in range(n * n):
+                m.append(a.unsafe_load(b * n * n + i))
+            _host_eigh_rr_one(m, w + b * n, v + b * n * n, n)
+
+    @staticmethod
+    def lle_apply(wb: F32Ptr, idx: F32Ptr, emb: F32Ptr, dst: F32Ptr, nq: Int, nf: Int, nn: Int, nc: Int) raises:
+        def row(i: Int) {imm wb, imm idx, imm emb, imm dst, imm nn, imm nc}:
+            for c in range(nc):
+                lle_apply_cell(wb, idx, emb, dst, i, c, nn, nc)
+
+        xd_parallel(row, nq)
+
+    @staticmethod
+    def lle_local(
+        x: F32Ptr, idx: F32Ptr, bmat: F32Ptr, method: Int, n: Int, d: Int, nn: Int, nc: Int, tol: Float32
+    ) raises:
+        """DevExec.lle_local's cells, one index at a time (the same words);
+        `bmat` arrives zeroed (the caller's zeros)."""
+        var nn2 = n * nn * nn
+        var g = List[Float32](length=max(nn2, 1), fill=Float32(0.0))
+        var pg = F32Ptr(unsafe_from_address=Int(g.unsafe_ptr()))
+        var mu = List[Float32](length=max(n * d, 1), fill=Float32(0.0))
+        var pmu = F32Ptr(unsafe_from_address=Int(mu.unsafe_ptr()))
+        var cen = x if method == 2 else pmu
+        if method != 2:
+            def mean(t: Int) {imm x, imm idx, imm pmu, imm d, imm nn}:
+                lle_mean_cell(x, idx, pmu, t // d, t % d, d, nn)
+
+            xd_parallel(mean, n * d)
+
+        def gram(i: Int) {imm x, imm idx, imm cen, imm pg, imm d, imm nn}:
+            for a in range(nn):
+                for b in range(nn):
+                    lle_gram_cell(x, idx, cen, pg, i, a, b, d, nn)
+
+        xd_parallel(gram, n)
+        var w = List[Float32](length=max(n * nn, 1), fill=Float32(0.0))
+        var v = List[Float32](length=max(nn2, 1), fill=Float32(0.0))
+        var pw = F32Ptr(unsafe_from_address=Int(w.unsafe_ptr()))
+        var pv = F32Ptr(unsafe_from_address=Int(v.unsafe_ptr()))
+        HostExec.eigh_batch(pg, pw, pv, n, nn)
+        if method == 0:
+            def ltsa(i: Int) {imm pv, imm idx, imm bmat, imm n, imm nn, imm nc}:
+                for a in range(nn):
+                    for b in range(nn):
+                        ltsa_cell(pv, idx, bmat, i, a, b, n, nn, nc)
+
+            xd_parallel(ltsa, n)
+        elif method == 1:
+            var ncy = hessian_ncy(nc)
+            var ncol = nn - 1 - nc
+            var extra = ncol - nc * (nc + 1) // 2
+            var q = List[Float32](length=max(n * nn * ncy, 1), fill=Float32(0.0))
+            var pq = F32Ptr(unsafe_from_address=Int(q.unsafe_ptr()))
+
+            def hq(i: Int) {imm pv, imm pq, imm nn, imm nc}:
+                hessian_q_cell(pv, pq, i, nn, nc)
+
+            xd_parallel(hq, n)
+            var vc = List[Float32](length=max(nn2, 1), fill=Float32(0.0))
+            var pvc = F32Ptr(unsafe_from_address=Int(vc.unsafe_ptr()))
+            if extra > 0:
+                var cm = List[Float32](length=max(nn2, 1), fill=Float32(0.0))
+                var pc = F32Ptr(unsafe_from_address=Int(cm.unsafe_ptr()))
+
+                def comp(i: Int) {imm pq, imm pc, imm nn, imm nc}:
+                    for a in range(nn):
+                        for b in range(nn):
+                            hessian_comp_cell(pq, pc, i, a, b, nn, nc)
+
+                xd_parallel(comp, n)
+                var w2 = List[Float32](length=max(n * nn, 1), fill=Float32(0.0))
+                HostExec.eigh_batch(pc, F32Ptr(unsafe_from_address=Int(w2.unsafe_ptr())), pvc, n, nn)
+                _ = cm^
+                _ = w2^
+
+            def hs(i: Int) {imm pq, imm pvc, imm idx, imm bmat, imm n, imm nn, imm nc, imm tol, imm ncol}:
+                for c in range(ncol):
+                    hessian_cell(pq, pvc, idx, bmat, i, c, n, nn, nc, tol)
+
+            xd_parallel(hs, n)
+            _ = q^
+            _ = vc^
+        else:
+            var nev = min(d, nn)
+            var wr = List[Float32](length=max(n * nn, 1), fill=Float32(0.0))
+            var rho = List[Float32](length=max(n, 1), fill=Float32(0.0))
+            var scr = List[Float32](length=max(3 * n * nn, 1), fill=Float32(0.0))
+            var pwr = F32Ptr(unsafe_from_address=Int(wr.unsafe_ptr()))
+            var prho = F32Ptr(unsafe_from_address=Int(rho.unsafe_ptr()))
+            var pscr = F32Ptr(unsafe_from_address=Int(scr.unsafe_ptr()))
+
+            def mw(i: Int) {imm pw, imm pv, imm pwr, imm prho, imm pscr, imm nn, imm nev, imm nc}:
+                mlle_weights_cell(pw, pv, pwr, prho, pscr, i, nn, nev, nc)
+
+            xd_parallel(mw, n)
+            # the device's radix-sort keys, sorted (exact: the same order)
+            var keys = List[UInt64](capacity=n)
+            for i in range(n):
+                keys.append((UInt64(mlle_key(rho[i])) << 32) | UInt64(i))
+            sort(keys)
+            var srt = List[Float32](length=max(n, 1), fill=Float32(0.0))
+            for i in range(n):
+                srt[i] = mlle_unkey(UInt32(keys[i] >> 32))
+            var eta = mlle_eta(F32Ptr(unsafe_from_address=Int(srt.unsafe_ptr())), n)
+
+            def mr(i: Int) {imm pw, imm pv, imm pwr, imm idx, imm bmat, imm pscr, imm eta, imm n, imm nn, imm nev, imm tol}:
+                mlle_rows_cell(pw, pv, pwr, idx, bmat, pscr, eta, i, n, nn, nev, tol)
+
+            xd_parallel(mr, n)
+            _ = wr^
+            _ = rho^
+            _ = scr^
+            _ = srt^
+        _ = g^
+        _ = mu^
+        _ = w^
+        _ = v^
 
     @staticmethod
     def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:
@@ -416,13 +573,21 @@ struct HostExec(Exec):
         m >= n), then the one-sided Jacobi SVD of R. Unordered values, V in
         columns: the host replay of DevExec.svd."""
         var r = HostExec._qr_r(a, m, n)
-        var got = fast_one_sided_jacobi_svd(r, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
-        if not got.converged:
-            raise Error("x_decomp svd: the one-sided Jacobi SVD did not converge")
+        # the device's round-robin rounds (x_decomp/rr_svd.mojo)
+        var rt = List[Float32](length=max(n * n, 1), fill=Float32(0.0))
+        var vt = List[Float32](length=max(n * n, 1), fill=Float32(0.0))
         for i in range(n):
-            s.unsafe_store(i, got.s[i])
-        for i in range(n * n):
-            v.unsafe_store(i, got.v[i])
+            for j in range(n):
+                rt[j * n + i] = r[i * n + j]
+        var got = host_rr_svd(
+            F32Ptr(unsafe_from_address=Int(rt.unsafe_ptr())), F32Ptr(unsafe_from_address=Int(vt.unsafe_ptr())), s, n,
+            X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL,
+        )
+        if not got[0]:
+            raise Error("x_decomp svd: the round-robin one-sided Jacobi did not converge")
+        for i in range(n):
+            for j in range(n):
+                v.unsafe_store(i * n + j, vt[j * n + i])
 
     @staticmethod
     def lasso_rows(
@@ -433,6 +598,32 @@ struct HostExec(Exec):
             its.unsafe_store(i, lasso_row(g, q, w, h, i, k, alpha, max_iter, tol, positive))
 
         xd_parallel(row, n)
+
+    @staticmethod
+    def lu_aux(
+        lu: F32Ptr, piv: I32Ptr, pm: F32Ptr, im: F32Ptr, diag: F32Ptr, stats: F32Ptr, n: Int, clamp: Int
+    ) raises:
+        var v = SIMD[DType.float32, 4](0.0, 0.0, 0.0, 0.0)
+        for i in range(n):
+            var p = lu_perm_src(piv, i)
+            pm.unsafe_store(i, Float32(p))
+            im.unsafe_store(p, Float32(i))
+            v = lu_aux_join(v, lu_aux_val(lu, piv, i, n))
+        for c in range(4):
+            stats.unsafe_store(c, v[c])
+        for i in range(n):
+            lu_aux_clamp(lu, diag, v[0], i, n, clamp != 0)
+
+    @staticmethod
+    def lars_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, na: F32Ptr, n: Int, k: Int, m: Int, nnz: Int) raises:
+        var sl = List[Float32](length=max(n * (k * k + LARS_ROW_EXTRA * k), 1), fill=Float32(0))
+        var s = F32Ptr(unsafe_from_address=Int(sl.unsafe_ptr()))
+
+        def row(i: Int) {imm g, imm q, imm w, imm s, imm na, imm k, imm m, imm nnz}:
+            na.unsafe_store(i, lars_row(g, q, w, s, i, k, m, nnz))
+
+        xd_parallel(row, n)
+        _ = sl^
 
     @staticmethod
     def omp_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int, k: Int, nnz: Int) raises:
@@ -506,21 +697,12 @@ struct HostExec(Exec):
 
     @staticmethod
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
-        # lane neural-pass37: the row-streaming walk of the same cells
-        # (x_decomp/qr_host.mojo); MOJOLEARN_XD_QR_SERIAL=1 keeps the
-        # column-by-column serial loop (the A/B arm)
-        if xd_qr_serial():
-            geqrf_serial(a, tau, m, n)
-        else:
-            geqrf_host_rows(a, tau, m, n)
+        """The sliced order's host replay (x_decomp/qr_sliced_host.mojo)."""
+        qs_geqrf_host(a, tau, m, n)
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
-        if xd_qr_serial():
-            for j in range(qc):
-                orgqr_col(h, tau, q, j, m, n, kk, qc)
-        else:
-            orgqr_host_rows(h, tau, q, m, n, kk, qc)
+        qs_orgqr_host(h, tau, q, m, n, kk, qc)
 
     @staticmethod
     def als_cg_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, steps: F32Ptr, n: Int, m: Int, f: Int, reg: Float32, cg: Int) raises:
@@ -537,5 +719,29 @@ struct HostExec(Exec):
             r.unsafe_store(t, got[t])
 
     @staticmethod
+    def tsqr_factor(a: F32Ptr, b: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, keep: Bool) raises:
+        """The blocked TSQR's host replay (x_decomp/tsqr_host.mojo)."""
+        ts_factor_host(a, b, r, m, d, nrhs, keep)
+
+    @staticmethod
+    def tsqr_apply(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
+        if k == 0:
+            ts_free_host()
+            return
+        ts_apply_host(c, q, m, n, k)
+
+    @staticmethod
     def vendor() -> String:
         return String("cpu")
+
+
+def _host_eigh_rr_one(mut m: List[Float32], w: F32Ptr, v: F32Ptr, n: Int) raises:
+    """`host_eigh_rr_sorted` (x_decomp/rr_solve.mojo) into w and v:
+    DevExec.eigh's and rr_batch_kernel's words."""
+    var wl = List[Float32]()
+    var vl = List[Float32]()
+    _ = host_eigh_rr_sorted(m, n, wl, vl)
+    for i in range(n):
+        w.unsafe_store(i, wl[i])
+    for i in range(n * n):
+        v.unsafe_store(i, vl[i])

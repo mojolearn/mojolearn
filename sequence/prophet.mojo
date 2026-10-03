@@ -51,7 +51,7 @@ def op_prophet_features(t: Int, a: Args):
         st(a.p3, t * K + col + h, ld(a.p2, t * nh + h))
 
 
-struct ProphetData:
+struct ProphetData(ImplicitlyCopyable, Movable):
     var t: FP        # [N] scaled time
     var X: FP        # [N, K]
     var cp: FP       # [S] changepoint times (scaled)
@@ -62,6 +62,10 @@ struct ProphetData:
     var tau: Float32
     var mult: Bool
 
+    # Metal: pointer-taking callees on a kernel path must inline (an
+    # out-of-line call can mis-read the t/X/cp/sig pointers; lane
+    # apple-fast-prophetfix, prophet_fit_team quit L-BFGS at iteration 1)
+    @always_inline
     def __init__(out self, t: FP, X: FP, cp: FP, sig: FP, N: Int, K: Int, S: Int, tau: Float32, mult: Bool):
         self.t = t
         self.X = X
@@ -119,11 +123,11 @@ def _fg_data(d: ProphetData, y: FP, th: FP, g: FP, lo: Int, hi: Int) -> Float32:
 
 
 @always_inline
-def _fg_prior(d: ProphetData, th: FP, g: FP, sse: Float32) -> Float32:
+def _fg_prior_v(sig: FP, tau: Float32, N: Int, S: Int, K: Int, th: FP, g: FP, sse: Float32) -> Float32:
     """The priors and the sigma terms on top of the likelihood's gradient in
-    g and its sse; returns the objective."""
-    var S = d.S
-    var K = d.K
+    g and its sse; returns the objective. The scalars and the prior-scale
+    pointer by value (no struct on the Metal team path, lane
+    apple-fast-prophetfix)."""
     var k = ld(th, 0)
     var m = ld(th, 1)
     var u = ld(th, 2 + S)
@@ -134,26 +138,34 @@ def _fg_prior(d: ProphetData, th: FP, g: FP, sse: Float32) -> Float32:
     st(g, 1, add(ld(g, 1), div(m, Float32(25.0))))
     for j in range(S):
         var dl = ld(th, 2 + j)
-        f = add(f, div(abs(dl), d.tau))
+        f = add(f, div(abs(dl), tau))
         var sg = Float32(0.0)
         if dl > Float32(0.0):
             sg = Float32(1.0)
         elif dl < Float32(0.0):
             sg = Float32(-1.0)
-        st(g, 2 + j, add(ld(g, 2 + j), div(sg, d.tau)))
+        st(g, 2 + j, add(ld(g, 2 + j), div(sg, tau)))
     for q in range(K):
         var b = ld(th, 3 + S + q)
-        var sq = mul(ld(d.sig, q), ld(d.sig, q))
+        var sq = mul(ld(sig, q), ld(sig, q))
         f = add(f, div(mul(b, b), mul(Float32(2.0), sq)))
         st(g, 3 + S + q, add(ld(g, 3 + S + q), div(b, sq)))
     # sigma: prior N(0, 0.5), likelihood N log sigma + sse / (2 sigma^2)
     f = add(f, div(s2, Float32(0.5)))
-    f = fma3(Float32(d.N), u, f)
+    f = fma3(Float32(N), u, f)
     f = add(f, div(sse, mul(Float32(2.0), s2)))
-    st(g, 2 + S, add(sub(add(div(s2, Float32(0.25)), Float32(d.N)), div(sse, s2)), Float32(0.0)))
+    st(g, 2 + S, add(sub(add(div(s2, Float32(0.25)), Float32(N)), div(sse, s2)), Float32(0.0)))
     return f
 
 
+@always_inline
+def _fg_prior(d: ProphetData, th: FP, g: FP, sse: Float32) -> Float32:
+    """The priors and the sigma terms on top of the likelihood's gradient in
+    g and its sse; returns the objective (`_fg_prior_v` on d's fields)."""
+    return _fg_prior_v(d.sig, d.tau, d.N, d.S, d.K, th, g, sse)
+
+
+@always_inline
 def prophet_fg(d: ProphetData, y: FP, th: FP, g: FP) -> Float32:
     """-log posterior (up to a constant) at th and its gradient into g.
     th = [k, m, delta (S), log sigma, beta (K)]. (apple2: the likelihood
@@ -202,10 +214,63 @@ def _dot(a: FP, b: FP, n: Int) -> Float32:
     return s
 
 
-def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[Float32, Int]:
-    """Minimise prophet_fg from th (in place). w: scratch of
-    (6 + 2 MEM) P + 2 MEM floats. Returns (f, iterations)."""
-    var P = 3 + d.S + d.K
+trait ProphetFG:
+    """The objective `lbfgs_steps` minimises: -log posterior at th and its
+    gradient into g (`prophet_fg`, or the block-cooperative form of
+    sequence/fit_team.mojo)."""
+
+    @always_inline
+    def fg(mut self, th: FP, g: FP) -> Float32:
+        ...
+
+
+struct PlainFG(ProphetFG):
+    """prophet_fg over one series, in one thread."""
+    var d: ProphetData
+    var y: FP
+
+    @always_inline
+    def __init__(out self, d: ProphetData, y: FP):
+        self.d = d
+        self.y = y
+
+    @always_inline
+    def fg(mut self, th: FP, g: FP) -> Float32:
+        return prophet_fg(self.d, self.y, th, g)
+
+
+struct LBState(ImplicitlyCopyable, Movable):
+    """`lbfgs_prophet`'s loop state between iterations (lane neural-pass143);
+    with th, g and the pairs in w, everything the next iteration reads."""
+    var f: Float32
+    var npairs: Int
+    var head: Int
+    var small: Int
+    var it: Int
+    var done: Bool
+
+    @always_inline
+    def __init__(out self, f: Float32):
+        self.f = f
+        self.npairs = 0
+        self.head = 0
+        self.small = 0
+        self.it = 0
+        self.done = False
+
+
+@always_inline
+def lbfgs_start[F: ProphetFG](mut fg: F, th: FP, w: FP) -> LBState:
+    """The objective at the start point (gradient into w's g)."""
+    return LBState(fg.fg(th, w))
+
+
+@always_inline
+def lbfgs_steps[F: ProphetFG](mut fg: F, mut s: LBState, P: Int, th: FP, w: FP,
+                              max_iter: Int, budget: Int = -1) -> Int:
+    """`lbfgs_prophet`'s iterations from state `s`: at most `budget` of them
+    (all when budget < 0); `s.done` says whether the loop ended. Returns the
+    number run here."""
     var g = w
     var dvec = g + P
     var thn = dvec + P
@@ -215,12 +280,21 @@ def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[
     var ym = sm + MEM * P
     var rho = ym + MEM * P
     var al = rho + MEM
-    var f = prophet_fg(d, y, th, g)
-    var npairs = 0
-    var head = 0
-    var small = 0
-    var it = 0
+    var f = s.f
+    var npairs = s.npairs
+    var head = s.head
+    var small = s.small
+    var it = s.it
+    var steps = 0
+    var finished = True
     while it < max_iter:
+        # the slice boundary (lane neural-pass143): the state is exactly
+        # what `s` and w hold here, so a later call resumes with the same
+        # iteration
+        if budget >= 0 and steps >= budget:
+            finished = False
+            break
+        steps += 1
         # two-loop recursion: q = g; newest to oldest, then oldest to newest
         for i in range(P):
             st(q, i, ld(g, i))
@@ -266,7 +340,7 @@ def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[
         for _ in range(40):
             for i in range(P):
                 st(thn, i, fma3(step, ld(dvec, i), ld(th, i)))
-            fnew = prophet_fg(d, y, thn, gn)
+            fnew = fg.fg(thn, gn)
             if fnew <= fma3(mul(Float32(1e-4), step), gd, f):
                 ok = True
                 break
@@ -312,7 +386,24 @@ def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[
                 break
         else:
             small = 0
-    return (f, it)
+    s.f = f
+    s.npairs = npairs
+    s.head = head
+    s.small = small
+    s.it = it
+    s.done = finished
+    return steps
+
+
+@always_inline
+def lbfgs_prophet(d: ProphetData, y: FP, th: FP, w: FP, max_iter: Int) -> Tuple[Float32, Int]:
+    """Minimise prophet_fg from th (in place). w: scratch of
+    (6 + 2 MEM) P + 2 MEM floats. Returns (f, iterations)."""
+    var P = 3 + d.S + d.K
+    var fg = PlainFG(d, y)
+    var s = lbfgs_start(fg, th, w)
+    _ = lbfgs_steps(fg, s, P, th, w, max_iter)
+    return (s.f, s.it)
 
 
 def op_prophet_fit(t: Int, a: Args):

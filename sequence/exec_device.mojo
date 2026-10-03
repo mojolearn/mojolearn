@@ -7,16 +7,23 @@ from std.memory import bitcast
 from std.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from std.memory import memcpy
-from core.host_parallel import host_parallelize
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
-from sequence.exec import Exec
+from sequence.exec_trait import Exec
 from sequence.dispatch import apply
-from sequence.ops import OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
+from sequence.ops import OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
+from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST
+from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
+from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
+from sequence.ets_team import ETS_TEAM, ets_team
+from sequence.prophet_coop import PROPHET_COOP, prophet_fit_coop
+from sequence.ops import OP_ETS, OP_GARCH
+from x_linear.ops import IP
+from x_linear.witness import witness_end
 from std.sys.info import has_apple_gpu_accelerator
 
 #: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple only
@@ -86,6 +93,13 @@ def _moe_tiled_on() -> Bool:
     return String(getenv("MOJOLEARN_SEQ_MOE_TILED")) != "0"
 
 
+def _var_block_on() -> Bool:
+    """VAR's Cholesky solve and forecast on one threadgroup
+    (sequence/vecar_block.mojo, lane gap-prep2); MOJOLEARN_SEQ_VAR_BLOCK=0
+    keeps the one-thread ops (the A/B arm)."""
+    return String(getenv("MOJOLEARN_SEQ_VAR_BLOCK")) != "0"
+
+
 def seq_kernel[OP: Int](
     p0: FP, p1: FP, p2: FP, p3: FP, p4: FP, p5: FP,
     p6: FP, p7: FP, p8: FP, p9: FP, p10: FP, p11: FP,
@@ -107,26 +121,45 @@ def seq_kernel[OP: Int](
         apply[OP](t, a)
 
 
-#: host copies of at least two grains are split over threads (apple2: the
-#: optimizer steps moved ~150 MB a step through one memcpy); data movement
-#: only, the bytes are the same
-comptime PCOPY_GRAIN = 1 << 20
+def team_kernel[OP: Int](
+    p0: FP, p1: FP, p2: FP, p3: FP, p4: FP, p5: FP,
+    p6: FP, p7: FP, p8: FP, p9: FP, p10: FP, p11: FP,
+    i01: Int64, i23: Int64, i45: Int64, i67: Int64, i89: Int64, i1011: Int64,
+    f01: Int64, f23: Int64, f45: Int64, f67: Int64,
+    n: Int64, wf: IP, woff: Int32, nonce: Int32,
+):
+    """One block per series of the group (the arguments packed as
+    seq_kernel's). The early exit is block-uniform, and every thread then
+    reaches the completion witness (x_linear/witness.mojo: on Apple each
+    block's word reports the slice ran to its end; elsewhere nothing)."""
+    var blk = Int(block_idx.x)
+    if blk < Int(n):
+        var a = Args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11,
+                     _lo(i01), _hi(i01), _lo(i23), _hi(i23), _lo(i45), _hi(i45),
+                     _lo(i67), _hi(i67), _lo(i89), _hi(i89), _lo(i1011), _hi(i1011),
+                     _flo(f01), _fhi(f01), _flo(f23), _fhi(f23),
+                     _flo(f45), _fhi(f45), _flo(f67), _fhi(f67))
+        var team = SeqTeam(Int(thread_idx.x), Int(block_dim.x))
+        comptime if OP == OP_GARCH:
+            garch_team(blk, team, a)
+        elif ETS_TEAM and OP == OP_ETS:
+            # Apple FAST default (off: -D MOJOLEARN_ETS_TEAM_OFF; sequence/ets_team.mojo)
+            ets_team(blk, team, a)
+        elif PROPHET_COOP:
+            # Apple FAST default (off: -D MOJOLEARN_PROPHET_COOP_OFF; sequence/prophet_coop.mojo)
+            prophet_fit_coop(blk, team, a)
+        else:
+            prophet_fit_team(blk, team, a)
+    witness_end(wf, woff, nonce)
+
 
 
 def _pcopy(dst: FP, src: FP, n: Int):
-    if n < 2 * PCOPY_GRAIN:
+    """A host transport copy: one memcpy on the calling thread (no host task
+    pool on a GPU install; cpu-gpu-cleanup n-seq, 2026-10-02). Data movement
+    only, the bytes are the same."""
+    if n > 0:
         memcpy(dest=dst, src=src, count=n)
-        return
-    var tasks = min(8, n // PCOPY_GRAIN)
-    var chunk = (n + tasks - 1) // tasks
-
-    def _c(i: Int) {imm dst, imm src, imm chunk, imm n}:
-        var lo = i * chunk
-        var hi = min(lo + chunk, n)
-        if hi > lo:
-            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
-
-    host_parallelize(_c, tasks)
 
 
 def coop_kernel[OP: Int](
@@ -464,8 +497,24 @@ struct DeviceExec(Exec):
                     grid_dim=((n + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
                 )
                 return
+        # VAR's one-thread ops on one threadgroup (sequence/vecar_block.mojo):
+        # the same chain per cell, so the same words
+        comptime if OP == OP_CHOLSOLVE:
+            if a.i0 * a.i0 + a.i0 * a.i1 <= VAR_SMEM and _var_block_on():
+                self.ctx.enqueue_function[var_chol_block_kernel](
+                    a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1),
+                    grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
+                )
+                return
+        comptime if OP == OP_VAR_FORECAST:
+            if (a.i1 + a.i3) * a.i0 <= VAR_SMEM and _var_block_on():
+                self.ctx.enqueue_function[var_forecast_block_kernel](
+                    a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
+                    grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
+                )
+                return
         comptime if SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
-                                  or OP == OP_LAMB_RATIO or OP == OP_GEMM):
+                                  or OP == OP_LAMB_RATIO or OP == OP_GEMM or OP == OP_AF_BLK_SUMSQ):
             var coop = True
             comptime if OP == OP_GEMM:
                 coop = a.i0 * a.i1 <= 1024 and a.i2 >= 32768
@@ -491,6 +540,34 @@ struct DeviceExec(Exec):
             grid_dim=((n + TPB - 1) // TPB, 1, 1),
             block_dim=(TPB, 1, 1),
         )
+
+    def launch_team[OP: Int](mut self, a: Args, nblocks: Int, tpb: Int, wf: IP, woff: Int, nonce: Int32) raises:
+        """`team_kernel[OP]` (lane neural-pass143): one block of tpb threads
+        per series of a group of nblocks (sequence/fit_team.mojo)."""
+        if nblocks <= 0:
+            return
+        self.ctx.enqueue_function[team_kernel[OP]](
+            a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+            _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
+            _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
+            _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
+            Int64(nblocks), wf, Int32(woff), nonce,
+            grid_dim=(nblocks, 1, 1),
+            block_dim=(tpb, 1, 1),
+        )
+
+    def copy(mut self, dst: FP, src: FP, n: Int) raises:
+        """A device-to-device copy of n words between this executor's
+        buffers, queued (no wait)."""
+        if n <= 0:
+            return
+        var fd = self._find(dst, n)
+        var fs = self._find(src, n)
+        var vd = self._sub(fd[0], fd[1], n)
+        var vs = self._sub(fs[0], fs[1], n)
+        self.ctx.enqueue_copy(dst_buf=vd, src_buf=vs)
+        _ = vd^
+        _ = vs^
 
     def sync(mut self) raises:
         self.ctx.synchronize()

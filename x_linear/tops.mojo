@@ -267,11 +267,12 @@ def chain_fmad_ix(a: FP, b: FP, boff: Int, bstep: Int, ix: IP, cnt: Int) -> Floa
 
 @always_inline
 def chain_cfmad(a: FP, aoff: Int, astep: Int, ma: Float32, b: FP, boff: Int, bstep: Int, mb: Float32,
-                n: Int) -> Float32:
+                n: Int, init: Float32 = Float32(0)) -> Float32:
     """acc = fmad(fs(a_i, ma), fs(b_i, mb), acc), a_i = a[aoff + i*astep],
-    b_i = b[boff + i*bstep], i ascending (a centered cross product)."""
+    b_i = b[boff + i*bstep], i ascending (a centered cross product); `init`
+    resumes a chain (an acc is always flushed, so `_fz(init)` is its word)."""
     comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
-    var acc = Float32(0)
+    var acc = _fz(init)
     var i = 0
     while i + U <= n:
         var pa = SIMD[DType.float32, U]()
@@ -397,10 +398,9 @@ def t_fold_fa_staged(t: Team, v: FP, off: Int, n: Int, init: Float32 = Float32(0
 # fold ran, over the block's rows), then the block partials folded ascending
 # with `fa` (from the fold's init). The same words on the host and every
 # device, and a device may compute the partials at once. The bits are not the
-# serial fold's (new baselines); `-D MOJOLEARN_X_LINEAR_SERIAL_FOLDS=1`
-# restores the serial order for the A/B.
+# serial fold's (new baselines). The serial-order A/B define is gone
+# (cgr-linear, 2026-10-03): the blocked order is the only one.
 comptime FOLD_BLOCK = 4096
-comptime X_LINEAR_SERIAL_FOLDS = is_defined["MOJOLEARN_X_LINEAR_SERIAL_FOLDS"]()
 
 
 @always_inline
@@ -419,8 +419,6 @@ def fold_parts(p: FP, off: Int, nb: Int, init: Float32 = Float32(0)) -> Float32:
 
 def fold_fa_blocked(v: FP, off: Int, step: Int, n: Int, init: Float32 = Float32(0)) -> Float32:
     """`fold_fa` in the blocked order."""
-    comptime if X_LINEAR_SERIAL_FOLDS:
-        return fold_fa(v, off, step, n, init)
     var acc = _fz(init)
     var lo = 0
     while lo < n:
@@ -432,8 +430,6 @@ def fold_fa_blocked(v: FP, off: Int, step: Int, n: Int, init: Float32 = Float32(
 
 def chain_fmad_blocked(a: FP, aoff: Int, astep: Int, b: FP, boff: Int, bstep: Int, n: Int) -> Float32:
     """`chain_fmad` (from zero) in the blocked order."""
-    comptime if X_LINEAR_SERIAL_FOLDS:
-        return chain_fmad(a, aoff, astep, b, boff, bstep, n)
     var acc = Float32(0)
     var lo = 0
     while lo < n:
@@ -445,8 +441,6 @@ def chain_fmad_blocked(a: FP, aoff: Int, astep: Int, b: FP, boff: Int, bstep: In
 
 def chain_fmad_scaled_blocked(h: FP, x: FP, j: Int, k: Int, d: Int, n: Int) -> Float32:
     """`chain_fmad_scaled` in the blocked order."""
-    comptime if X_LINEAR_SERIAL_FOLDS:
-        return chain_fmad_scaled(h, x, j, k, d, n)
     var acc = Float32(0)
     var lo = 0
     while lo < n:
@@ -460,8 +454,6 @@ def t_fold_fa_blocked(t: Team, v: FP, n: Int, scratch: FP) -> Float32:
     """`fold_fa_blocked(v, 0, 1, n)` on the team: the partials one block a
     thread into scratch (fold_blocks(n) words), then the lead folds them.
     The value is the lead's."""
-    comptime if X_LINEAR_SERIAL_FOLDS:
-        return t_fold_fa_staged(t, v, 0, n)
     var nb = fold_blocks(n)
     for b in range(t.tid, nb, t.nt):
         var lo = b * FOLD_BLOCK

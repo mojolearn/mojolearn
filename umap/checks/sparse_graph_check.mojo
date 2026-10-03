@@ -11,7 +11,8 @@ from std.memory import bitcast
 from std.os import getenv
 from checks.numerics import numeric_mode_name
 from umap.graph import fuzzy_simplicial_graph
-from umap.sparse_graph import SparseFuzzySimplicialGraph, sparse_fuzzy_simplicial_graph
+from umap.sparse_graph import SparseFuzzySimplicialGraph
+from umap.host.sparse_graph_host import sparse_fuzzy_simplicial_graph
 
 
 def equal_bits(a: Float32, b: Float32, what: String) raises:

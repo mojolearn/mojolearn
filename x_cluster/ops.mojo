@@ -98,6 +98,30 @@ trait ClusterOps(Movable):
         bit for bit. Returns the inertia; `centers` k x d and `labels` n."""
         ...
 
+    def gather_rows(mut self, src: Int, d: Int, idx: Int, m: Int, dst: Int) raises:
+        """dst[t * d + f] = src[idx[t] * d + f], t < m (lane/neural-pass108)."""
+        ...
+
+    def kmeans_rows(
+        mut self, sub: Int, x: List[Float32], rows: List[Int], d: Int, k: Int, max_iter: Int,
+        tol: Float64, seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32],
+        mut labels: List[Int32],
+    ) raises -> Float64:
+        """`kmeans` (unit weights) of the rows `rows` of the host matrix `x`
+        in that order, whose gathered copy is the slot `sub` (the device
+        fits it in place; the host gathers `x`). The same words as `kmeans`
+        on the gathered list (lane/neural-pass108)."""
+        ...
+
+    def shrink(mut self, slot: Int) raises:
+        """Releases a float slot's storage (its index stays valid, one word)."""
+        ...
+
+    def empty(mut self, n: Int) raises -> Int:
+        """A float slot of n words with no defined contents (the caller
+        writes every word before reading one)."""
+        ...
+
     def gauss_q(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
         """dst (n x kc) = the Mahalanobis squares (`bodies.gauss_q_cell`)."""
         ...
@@ -108,6 +132,10 @@ trait ClusterOps(Movable):
         ...
 
     def exp(mut self, src: Int, dst: Int, n: Int) raises:
+        ...
+
+    def argmax_rows(mut self, src: Int, n: Int, kc: Int, labels: Int) raises:
+        """labels (int, n) = each row's `bodies.argmax_row` of src (n x kc)."""
         ...
 
     def moments(
@@ -167,4 +195,162 @@ trait ClusterOps(Movable):
         """`gauss_q`, `resp` and `exp` of one E-step as ONE primitive: row i's
         kc Mahalanobis squares, its log-sum-exp and its responsibilities by
         the same bodies in the same order (the same values)."""
+        ...
+
+    def set_i(mut self, slot: Int, v: List[Int32]) raises:
+        """Writes v into the first len(v) words of the int slot (lane/neural-pass133)."""
+        ...
+
+    def mb_update(mut self, b: Int, batch: Int, labels: Int, c: Int, w: Int, k: Int, d: Int) raises:
+        """MiniBatchKMeans' `update_center_dense` with unit weights for every
+        center, in place: the centers `c` (k x d) and counts `w` (k) from the
+        batch rows `b` (batch x d) and their labels, each center's chain the
+        host loop's (`c * w`, `+ x` in batch order, `w += wsum`, `* (1 / w)`),
+        a center without rows untouched (lane/neural-pass133)."""
+        ...
+
+    def mb_assign(mut self, src: Int, d: Int, idx: Int, m: Int, c: Int, k: Int, labels: Int, dist: Int, dst: Int) raises:
+        """`gather_rows(src, d, idx, m, dst)` then `nearest(dst, m, c, k, d,
+        labels, dist)`: the device fuses them into one launch (the same words;
+        lane/neural-pass133)."""
+        ...
+
+    def agglo_on_device(self) -> Bool:
+        """True on the GPU column: `agglo_merge` runs the unconstrained
+        agglomerative merge loop on the device (lane hr2-mds-agglo). The
+        host column answers False and `agglo.agglo_tree` runs its loop."""
+        ...
+
+    def agglo_mirror(mut self, x: Int, n: Int, dst: Int) raises:
+        """dst (n x n) = the precomputed matrix x's UPPER triangle mirrored
+        below the diagonal, a zero diagonal; raises unless every upper value
+        is finite and non-negative."""
+        ...
+
+    def agglo_merge(
+        mut self, dm: Int, adj: Int, n: Int, linkage: Int, n_merges: Int, mut children: List[Int32],
+        mut dist: List[Float32],
+    ) raises:
+        """The first n_merges merges of the unconstrained agglomerative loop
+        (`agglo.agglo_tree`'s order: the live row with the lowest nearest
+        value, the lowest row on a tie; its nearest partner, the lowest
+        column on a tie; Lance-Williams by `bodies.lance_williams`) on the
+        n x n dissimilarity slot `dm`, which it overwrites. `adj` >= 0: the
+        int slot (n x n, 0/1) of a connectivity graph from `agglo_connect`
+        (the constrained loop: only connected pairs merge; the
+        Lance-Williams value of a pair neither child touched is kept unless
+        ward; the merged cluster takes the union of the edges)."""
+        ...
+
+    # ------------------------------------------------------------------
+    # THE n-SIZED POST-PROCESSING (lane cgr2-cluster, 2026-10-03): the parts
+    # of OPTICS, MeanShift, AffinityPropagation, the mixtures and k-means++
+    # that ran on the host between device calls. Each is one primitive; the
+    # host column runs the same decisions in loops (the bodies in
+    # `x_cluster/post_bodies.mojo`), sums are its float-float fold.
+    def agglo_connect(mut self, edges: Int, n_edges: Int, n: Int, dm: Int, linkage: Int, adj: Int) raises -> Int:
+        """GPU column: adj (int slot, n x n) = the connectivity graph of the
+        n_edges (row, col) float pairs in `edges`, symmetrized, the diagonal
+        dropped; with several components each pair of components joined at
+        its closest pair (`agglo.agglo_tree`'s rule); returns the number of
+        components. The host column runs agglo_tree's loop."""
+        ...
+
+    def check_nonneg(mut self, x: Int, n: Int) raises -> Bool:
+        """Every one of the first n values is >= 0 (a NaN is not)."""
+        ...
+
+    def optics_order(
+        mut self, dm: Int, core: Int, n: Int, max_eps: Float32, ordering: Int, reach: Int, pred: Int
+    ) raises:
+        """`core` > max_eps becomes +inf in place; then the OPTICS ordering
+        over the n x n distances `dm`: each step the unprocessed row of the
+        lowest reachability (the lowest index on a tie), whose unprocessed
+        neighbours take `post_bodies.optics_relax_cell`. Int slots
+        `ordering`, `pred`; float slot `reach`."""
+        ...
+
+    def optics_dbscan(mut self, ordering: Int, reach: Int, core: Int, n: Int, eps: Float32, labels: Int) raises:
+        """`cluster_optics_dbscan` into the int slot `labels`."""
+        ...
+
+    def sum_ff(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int) raises -> Float64:
+        """The float-float fold (`post_bodies`) of n elements of `mode` over
+        slots a, b, c (-1 when unused), as a double."""
+        ...
+
+    def bin_seeds(mut self, x: Int, n: Int, d: Int, bin_size: Float32, min_bin_freq: Int, dst: Int) raises -> Int:
+        """sklearn `get_bin_seeds`: the kept bins (first-seen order) scaled
+        back into `dst` (n x d); returns their count (n: use the rows)."""
+        ...
+
+    def ms_unique(
+        mut self, centers: Int, inten: Int, iters: Int, ns: Int, d: Int, dst: Int, mut n_iter: Int
+    ) raises -> Int:
+        """MeanShift: the distinct centers with a nonzero intensity (the last
+        seed's intensity each), sorted by (intensity, coordinates) descending,
+        into `dst`; returns their count; n_iter = the most iterations."""
+        ...
+
+    def ms_suppress(mut self, sorted: Int, dd: Int, m: Int, d: Int, bw: Float32, dst: Int) raises -> Int:
+        """MeanShift's radius suppression over the m sorted centers (their
+        distances `dd`, m x m): the kept ones in order into `dst`; their count."""
+        ...
+
+    def ms_noise(mut self, labels: Int, dist: Int, n: Int, bw: Float32) raises:
+        """labels[r] = -1 where not dist[r] <= bw."""
+        ...
+
+    def negate(mut self, src: Int, dst: Int, n: Int) raises:
+        ...
+
+    def count_neg(mut self, x: Int, n: Int) raises -> Int:
+        """How many of the first n values are < 0."""
+        ...
+
+    def sign_side(mut self, src: Int, n: Int, neg: Bool, dst: Int) raises:
+        """neg: dst = -v where v < 0, else +inf; not neg: dst = v where
+        v >= 0, else +inf (the inputs of `kth_flat` on one side of zero)."""
+        ...
+
+    def ap_equal(mut self, s: Int, pref: Int, n: Int) raises -> Bool:
+        """Every off-diagonal value of S equals the first one and every
+        preference equals the first."""
+        ...
+
+    def set_diag(mut self, s: Int, v: Int, n: Int) raises:
+        ...
+
+    def ap_conv(mut self, e: Int, ring: Int, n: Int, conv_iter: Int, it: Int) raises -> Bool:
+        """The convergence window: e into column it % conv_iter of ring
+        (n x conv_iter); True when it >= conv_iter, every row's window is
+        all ones or all zeros, and some e is 1."""
+        ...
+
+    def ap_exemplars(mut self, s: Int, e: Int, n: Int, centers: Int, labels: Int) raises -> Int:
+        """AffinityPropagation's exemplar refinement and labels from the
+        flags `e`; returns the number of centers (0: every label -1)."""
+        ...
+
+    def onehot(mut self, idx: Int, m: Int, kc: Int, by_row: Bool, dst: Int) raises:
+        """by_row: dst[q * kc + idx[q]] = 1 (labels); else dst[idx[q] * kc
+        + q] = 1 (picks); q < m; the rest of dst untouched."""
+        ...
+
+    def rand_resp(mut self, dst: Int, n: Int, kc: Int, state: UInt64) raises:
+        """`post_bodies.rand_resp_row` for every row."""
+        ...
+
+    def kpp_search(mut self, closest: Int, w: Int, m: Int, vs: List[Float64], ids: Int) raises:
+        """ids[t] = `post_bodies.kpp_search_cell` of vs[t] over the running
+        table of closest (times w when w >= 0)."""
+        ...
+
+    def kpp_pots(mut self, dc: Int, closest: Int, w: Int, nt: Int, m: Int) raises -> List[Float64]:
+        """Each candidate row t of dc (nt x m): the fold of min(dc, closest)
+        (times w when w >= 0)."""
+        ...
+
+    def kpp_take(mut self, dc: Int, closest: Int, best: Int, m: Int) raises:
+        """closest = min(closest, dc row best)."""
         ...

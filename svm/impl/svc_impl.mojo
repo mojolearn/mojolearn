@@ -38,7 +38,7 @@ from max.gpu.sync import barrier
 
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
-from svm.checks.device_select import SEL_TPB, read_f32, upload_f32
+from svm.checks.device_select import SEL_TPB, check_finite_device, read_f32, upload_f32
 from svm.impl.distance.kernel_matrices import (
     kernel_op,
     kernel_workspace_floats,
@@ -53,7 +53,6 @@ from svm.impl.svm_parameter import (
     SvmModel,
     SvmParameter,
     check_finite_list,
-    check_finite_ptr,
     check_rung1_scope,
 )
 
@@ -175,10 +174,10 @@ def svc_fit_borrowed(
     """`svc_fit` on the caller's borrowed row-major X (DEVIATION 2665,
     2026-09-11). The List front copied X into a host List, walked it once
     for finiteness, then copied it element by element into a pinned host
-    buffer before the device copy. Here the finiteness check is one threaded
-    pass over the borrowed cells (`check_finite_ptr`, the same predicate,
-    first index and message) and the device buffer is filled from the
-    address. The same checks run in the same order, the same bytes reach the
+    buffer before the device copy. Here X is copied to the device from the
+    address once and checked there (`check_finite_device`: one grid scan,
+    the same predicate, first index and message; no host pass over the
+    cells). The same checks run in the same order, the same bytes reach the
     device, and everything after the upload is `_svc_fit_staged`, shared with
     `svc_fit`. The caller keeps the buffer alive and unmodified for the call."""
     if n_cols <= 0:
@@ -188,11 +187,10 @@ def svc_fit_borrowed(
     if len(labels_host) != n_rows:
         raise Error("svc_fit: x / labels sizes do not match n_rows x n_cols")
     check_rung1_scope(param, kp, False)
-    check_finite_ptr(x_ptr, n_rows * n_cols, "X")
-    var model = _svc_label_model(labels_host, n_rows, n_cols, param, kp, card)
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.synchronize()
+    check_finite_device(ctx, x, n_rows * n_cols, "X")
+    var model = _svc_label_model(labels_host, n_rows, n_cols, param, kp, card)
     var fitted = _svc_fit_staged(
         ctx, x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
         1 << 30, 0, False, 0, Float32(0.0), c_rows,

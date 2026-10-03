@@ -5,15 +5,13 @@
 
 NUMPY-FREE SINCE DEVIATION 2360 (branch numpy-free-0.7). Inputs cross the
 boundary through `_buffer.as_f32_c` and friends, outputs are `_array.Array`,
-and the two host reductions this file owns -- the column means and the
-target mean that center an intercept fit -- run through the native
-`column_mean_f64` helper (bindings/_mojolearn.mojo, DEVIATION 2303/2324),
-whose accumulation order is written down. What is still Python here is
-named at each site: label encoding (permitted, O(rows)), and the
-elementwise centering and sqrt-weight rescale, which run through the native
-`center_columns_f32` / `scale_rows_f32` helpers when the loaded binary
-carries them and through a Python reference spelling of the same
-arithmetic otherwise (DEVIATION 2450).
+and the centering of an intercept fit -- the column sums, the subtraction
+and the sqrt-weight rescale -- runs in the estimators binding
+(`lm_col_sums`, `lm_center`, `lm_scale_rows`; on the device on a GPU
+install, lane hr-small-passes 2026-10-02). The column sums are exact,
+rounded once to float64, so they do not depend on any summation order.
+What is still Python here is named at each site: label encoding
+(permitted, O(rows)).
 """
 
 import array
@@ -277,42 +275,35 @@ def _r2_host(pred, y):
     return 1.0 - ss_res / ss_tot if ss_tot else 0.0
 
 
-def _native_helper(name):
-    """A host helper of the base binding (`column_mean_f64`,
-    `center_columns_f32`, `scale_rows_f32`), resolved through
-    `_buffer._native`: once per name for the process's tier, raising by
-    name when the binary predates it. The helpers are host code with no
-    device context and no tier-dependent arithmetic, so any tier's binary
-    gives the same bits (DEVIATION 2450). The Python fallbacks of
-    DEVIATION 2361 that once shadowed them were removed 2026-09-10."""
-    from ._buffer import _native
-    return _native(name)
+# The centering of LinearRegression and Ridge (lane hr-small-passes,
+# 2026-10-02) runs in the estimators binding: `lm_col_sums`, `lm_center`
+# and `lm_scale_rows`, on the device on a GPU install
+# (glm/impl/center_device.mojo) and over the same items on the CPU column
+# (glm/host/center_host.mojo), so every tier writes the same words. `b` is
+# the estimator's `_bind("_mojolearn_estimators")`.
 
 
-def _column_means_f64(x, rows, cols):
-    """Per-column float64 means of a C-contiguous float32 `[rows, cols]`
-    buffer, in the ORDER `bindings/_mojolearn.mojo::column_mean_f64_binding`
-    defines (DEVIATION 2324): row by row, column by column, one binary64
-    round-to-nearest-even addition per element, then one division by
-    `rows`. Returns a Python list of `cols` floats.
-
-    A 1-D vector is a `[rows, 1]` matrix here, which is how
-    `_vector_mean` uses it.
-    """
-    fn = _native_helper("column_mean_f64")
+def _col_sums(b, x, rows, cols):
+    """The column sums of a C-contiguous float32 `[rows, cols]` buffer: each
+    the EXACT sum rounded once to float64 (round to nearest even), so the
+    blocked device fold and the host pass agree on every vendor
+    (glm/impl/center_items.mojo). Returns a Python list of `cols` floats."""
     out = empty((cols,), "<f8")
-    fn(addr_ro(x, name="X"), int(rows), int(cols),
-       addr(out, name="column means"))
+    b.lm_col_sums(addr_ro(x, name="X"), addr(out, name="column sums"),
+                  [int(rows), int(cols)])
     return out.tolist()
 
 
-def _weight_total(weights):
-    """`sum(w)` in float64, SEQUENTIAL (DEVIATION 2366; NumPy's was the
-    pairwise 1-D kernel, so the weighted-fit bits move and the weighted
-    OLS cards are RE-BASELINE OWED with the rest)."""
-    total = 0.0
-    for v in weights.tolist():
-        total += v
+def _column_means_f64(b, x, rows, cols):
+    """Per-column float64 means: `_col_sums` divided by `rows` (one binary64
+    division). A 1-D vector is a `[rows, 1]` matrix here."""
+    return [v / rows for v in _col_sums(b, x, rows, cols)]
+
+
+def _weight_total(b, weights):
+    """`sum(w)`: the exact sum rounded once to float64 (`_col_sums` over a
+    `[rows, 1]` view)."""
+    total = _col_sums(b, weights, weights.shape[0], 1)[0]
     if total <= 0.0:
         raise ValueError(
             "mojolearn: sample_weight sums to zero, so the weighted mean "
@@ -321,129 +312,87 @@ def _weight_total(weights):
     return total
 
 
-def _column_means(x, weights):
+def _column_means(b, x, weights):
     """Column means in float64, narrowed to float32 -- weighted when
     `weights` is not None. Returns a Python list of float32-valued floats.
 
-    Unweighted this is `column_mean_f64` over `x`: the sequential
-    row-order float64 accumulation the helper's docstring defines
-    (DEVIATION 2324). It REPLACES `x.mean(axis=0, dtype=np.float64)`, whose
-    blocked reduction had no order a second implementation could
-    reproduce; the OLS reference cards are RE-BASELINE OWED on all three
-    vendors for that reason (NUMPY_FREE_CONTRACT.md).
-
-    Weighted it is cuML's `raft::stats::weightedMean`, `sum_i w_i x_ij /
-    sum_i w_i` (`raft/stats/detail/weighted_mean.cuh:49-64`), in THIS
-    ORDER (DEVIATION 2366): (1) a float32 copy `wx_ij = fl32(x_ij * w_i)`
-    -- the float64 product of two float32 values is exact, so that is ONE
-    rounding per element; (2) `column_mean_f64` over `wx`, which yields
-    `sum_i wx_ij / rows` in the defined order; (3) `mean_j * rows / total`
-    in float64, `total` the sequential float64 sum of the weights; (4) one
-    narrowing to float32. The NumPy-era spelling kept the products in
-    float64 and summed with the pairwise kernel, so these bits DIFFER from
-    it: the weighted OLS cards are RE-BASELINE OWED. Theirs divides by the
-    SUM OF THE WEIGHTS and not by the row count, so a uniform weight of 2
-    leaves the mean unchanged, which is the property the gate checks.
+    Unweighted: `_column_means_f64`. Weighted it is cuML's
+    `raft::stats::weightedMean`, `sum_i w_i x_ij / sum_i w_i`, in THIS
+    ORDER: (1) `wx_ij = fl32(x_ij * w_i)` (`lm_scale_rows`); (2) the
+    column means of `wx`; (3) `mean_j * rows / total` in float64, `total`
+    the weights' `_weight_total`; (4) one narrowing to float32. Theirs
+    divides by the SUM OF THE WEIGHTS and not by the row count, so a
+    uniform weight of 2 leaves the mean unchanged.
     """
     rows, cols = x.shape
     if weights is None:
-        mu = _column_means_f64(x, rows, cols)
+        mu = _column_means_f64(b, x, rows, cols)
     else:
-        total = _weight_total(weights)
-        # `fl32(x_ij * w_i)`, one rounding of an exact float64 product: what
-        # the native `scale_rows_f32` (DEVIATION 2442) computes, without a
-        # Python float per cell (3.1 s per 1,000,000 x 10, lane/python-hotpath
-        # audit 2026-09-17).
+        total = _weight_total(b, weights)
         wx = _helper_output(x.shape, rows * cols)
-        _native_helper("scale_rows_f32")(
-            addr_ro(x, name="X"), int(rows), int(cols),
-            addr_ro(weights, name="sample_weight"), addr(wx, name="weighted X"))
-        mu = [m * rows / total for m in _column_means_f64(wx, rows, cols)]
+        b.lm_scale_rows(addr_ro(x, name="X"), addr_ro(weights, name="sample_weight"),
+                        addr(wx, name="weighted X"), [int(rows), int(cols)])
+        mu = [m * rows / total for m in _column_means_f64(b, wx, rows, cols)]
     return [_round_f32(m) for m in mu]
 
 
-def _vector_mean(v, weights):
+def _vector_mean(b, v, weights):
     """The scalar float64 mean of the target, weighted when `weights` is
-    not None. The 1-D half of `_column_means` (a vector is a `[rows, 1]`
-    matrix to `column_mean_f64`); see that docstring for the order. This
-    REPLACES `v.mean(dtype=np.float64)`, NumPy's pairwise 1-D kernel, so the
-    intercept's bits move with the column means (RE-BASELINE OWED)."""
+    not None: the 1-D half of `_column_means`."""
     n = v.shape[0]
     if weights is None:
-        return _column_means_f64(v, n, 1)[0]
-    total = _weight_total(weights)
-    wy = Array.from_list([a * b for a, b in zip(v.tolist(), weights.tolist())],
-                         "<f4")
-    return _column_means_f64(wy, n, 1)[0] * n / total
+        return _column_means_f64(b, v, n, 1)[0]
+    total = _weight_total(b, weights)
+    wy = _helper_output(v.shape, n)
+    b.lm_scale_rows(addr_ro(v, name="y"), addr_ro(weights, name="sample_weight"),
+                    addr(wy, name="weighted y"), [int(n), 1])
+    return _column_means_f64(b, wy, n, 1)[0] * n / total
 
 
 def _dims(x):
     """`(rows, cols)` of a 2-D Array, or `(rows, 1)` of a 1-D one: a vector
-    is a `[rows, 1]` matrix to every host helper in this file."""
+    is a `[rows, 1]` matrix to every helper in this file."""
     return (x.shape[0], x.shape[1]) if x.ndim == 2 else (x.shape[0], 1)
 
 
-def _center(x, mu32):
-    """`x - mu` in float32, one rounding per element: `fl32(x_ij - mu_j)`
-    with both operands float32 values; `x` is `[rows, cols]` or a vector
-    with `cols == 1`, `mu32` a list of `cols` float32-valued floats.
-
-    DEVIATION 2450 -- NATIVE WHEN AVAILABLE; THE PYTHON FALLBACK IS THE
-    REFERENCE SPELLING. The binding's `center_columns_f32(x, rows, cols,
-    mean, out)` reproduces this loop exactly; it takes the means as
-    FLOAT64, and they are handed over already rounded to float32 (exactly
-    representable in float64), so whether the helper widens `x` to the
-    mean or narrows the mean to `x`, the difference it rounds is the same
-    difference. The fallback computes each difference in float64 and
-    rounds once, which is the correctly rounded float32 subtraction (double
-    rounding is innocuous for +, -, *, / and sqrt when the wide format has
-    at least 2p + 2 bits; 53 >= 50): the bits NumPy's float32 subtract
-    produced, and the bits the helper produces.
-    """
-    rows, cols = _dims(x)
-    fn = _native_helper("center_columns_f32")
-    mean = Array.from_list([float(m) for m in mu32], "<f8")
-    out = _helper_output(x.shape, rows * cols)
-    fn(addr_ro(x, name="X"), int(rows), int(cols),
-       addr_ro(mean, name="column means"), addr(out, name="centered X"))
-    return out
-
-
 def _helper_output(shape, size):
-    """DEVIATION 2632: the float32 destination of a native helper that
-    writes EVERY element (`center_columns_f32`, `scale_rows_f32`), taken from
+    """DEVIATION 2632: the float32 destination of an op that writes EVERY
+    element (`lm_center`, `lm_scale_rows`), taken from
     `_buffer._output_store`'s uninitialized raw allocation instead of
-    `empty`, whose `array.array` zero fill cost 105 to 121 ms of a 4,000,000 x
-    11 LinearRegression fit on the H100 pod (the helper itself took 8 ms).
-    No byte of the result comes from the allocation, so no bit moves; the
-    helper's own threads take the first touch of every page."""
+    `empty`, whose zero fill cost 105 to 121 ms of a 4,000,000 x 11
+    LinearRegression fit on the H100 pod. No byte of the result comes from
+    the allocation, so no bit moves."""
     from ._buffer import _output_store
     return Array._owned(_output_store("f", size), tuple(shape), "<f4", "C")
 
 
-def _shift(v, mu32):
-    """The 1-D `_center`: `fl32(v_i - mu)`, `mu` already a float32 value."""
-    return _center(v, [mu32])
-
-
-def _scale_rows(x, root):
-    """Row `i` of `x` times `root[i]`, float32: `fl32(x_ij * r_i)`, one
-    rounding (the float64 product of two float32 values is exact); `x` is
-    `[rows, cols]` or a vector, `root` a list of `rows` float32-valued
-    floats. The device's `ols_fit_weighted` performs the same multiply,
-    which is the bit-for-bit claim
-    `check_ols_sample_weight_host_rescale_matches_device` gates.
-
-    DEVIATION 2450 -- NATIVE WHEN AVAILABLE (`scale_rows_f32(x, rows, cols,
-    w, out)`, float32 weights); THE PYTHON FALLBACK IS THE REFERENCE
-    SPELLING of the same arithmetic.
-    """
+def _center(b, x, mu32):
+    """`x - mu` in float32 per column (`lm_center`): one binary32
+    subtraction per cell, operands and result flushed to signed zero when
+    subnormal; `x` is `[rows, cols]` or a vector with `cols == 1`, `mu32` a
+    list of `cols` float32-valued floats."""
     rows, cols = _dims(x)
-    fn = _native_helper("scale_rows_f32")
+    mean = Array.from_list([float(m) for m in mu32], "<f4")
+    out = _helper_output(x.shape, rows * cols)
+    b.lm_center(addr_ro(x, name="X"), addr_ro(mean, name="column means"),
+                addr(out, name="centered X"), [int(rows), int(cols)])
+    return out
+
+
+def _shift(b, v, mu32):
+    """The 1-D `_center`: `fl32(v_i - mu)`, `mu` already a float32 value."""
+    return _center(b, v, [mu32])
+
+
+def _scale_rows(b, x, root):
+    """Row `i` of `x` times `root[i]` in float32 (`lm_scale_rows`): one
+    binary32 multiplication per cell, operands and result flushed when
+    subnormal; `root` a list of `rows` float32-valued floats."""
+    rows, cols = _dims(x)
     w = Array.from_list([float(r) for r in root], "<f4")
     out = _helper_output(x.shape, rows * cols)
-    fn(addr_ro(x, name="X"), int(rows), int(cols),
-       addr_ro(w, name="sqrt weights"), addr(out, name="scaled X"))
+    b.lm_scale_rows(addr_ro(x, name="X"), addr_ro(w, name="sqrt weights"),
+                    addr(out, name="scaled X"), [int(rows), int(cols)])
     return out
 
 
@@ -486,8 +435,54 @@ def _check_sample_weight(sample_weight, n_rows, estimator):
     return w
 
 
+def _ols_tsqr_on(rows, cols):
+    """Whether `LinearRegression.fit` takes the blocked TSQR: a tall design
+    (rows >= cols + 1, cols + 1 <= 512) and MOJOLEARN_LINALG_TSQR not 0."""
+    from ._expansion_decomp import _tsqr_lstsq_on
+    return _tsqr_lstsq_on(rows, cols, 1)
+
+
+def _ols_normal_eq_default(b):
+    """Whether this binding's build routes LinearRegression.fit to the
+    equilibrated normal equations instead of the TSQR (lane
+    apple-fast-olsne: FAST on Apple, the comptime OLS_FAST_NORMAL_EQ read
+    back through `ols_normal_eq_default`; False on a binding without it)."""
+    q = getattr(b, "ols_normal_eq_default", None)
+    return bool(q()) if q is not None else False
+
+
+def _ols_tsqr(x, y, rows, cols, mode):
+    """coef_ (float32, cols) of min ||x w - y|| (x and y already centered and
+    weighted as `fit` prepares them) through the blocked TSQR of [x | y]
+    (x_decomp/tsqr_core.mojo, lane neural-pass140): R_aug = [[R, Q^T y],
+    [0, rho]] in one pass over the rows, then the minimum-norm solution from
+    the SVD of the small R (`_expansion_decomp._tsqr_lstsq_core`). No Gram
+    matrix, so the condition number is not squared. A singular value at or
+    below cols * eps32 * s_max is dropped (the dependent directions of a
+    rank-deficient design, a constant column centered to zero among them,
+    get no weight: the minimum-norm solution). The columns are equilibrated
+    first as the normal equations route does (DEVIATION 2620, lane
+    apple-fast-tsqr): R's column j is scaled by the exact power of two that
+    rule picks for ||x e_j||^2 before the SVD and coef_ is scaled by it
+    after, so a column's units do not move the cutoff (istella's columns
+    span seven orders of magnitude; unequilibrated, real directions fell
+    under it). DEVIATION 2621 still differs: the cutoff is on singular
+    values, not on squared ones."""
+    from ._expansion_decomp import _F32_EPS, _Kit, _mode, _tsqr_lstsq_core
+    k = _Kit(_mode(mode))
+    X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols, equilibrate=True)
+    return X.out((cols,))
+
+
 class LinearRegression(NumericModeMixin):
-    """Ordinary least squares through normal equations on the GPU.
+    """Ordinary least squares on the GPU.
+
+    THE DEFAULT ROUTE (lane neural-pass140, 2026-10-02) is the blocked TSQR
+    of [X | y] and the SVD of its small R (`_ols_tsqr`: no Gram matrix, the
+    condition number not squared) for every tall design with at most 511
+    features; the centering, weights and intercept below are unchanged.
+    MOJOLEARN_LINALG_TSQR=0 (and any design the TSQR does not take) keeps
+    the normal-equations solver this docstring describes from here on.
 
     This is the eigendecomposition solver (reference: cuML's `algorithm='eig'`, `lstsqEig`, RAFT), which forms
     ``X.T @ X`` and so squares the condition number. It is less robust than
@@ -565,19 +560,17 @@ class LinearRegression(NumericModeMixin):
     (center X and y on the DEVICE) and `postProcessData` (intercept =
     mean(y) - mu_X . coef; preprocess.cuh:98-176). The implemented `ols_fit`
     REFUSES `fit_intercept` by name because those two are not implemented
-    (glm/impl/ols.mojo). This class therefore does the centering here,
-    on the host: column means and the y mean in float64 through the native
-    `column_mean_f64` helper (a sequential row-order accumulation whose
-    order is the helper's contract, DEVIATION 2324), subtracted in float32,
+    (glm/impl/ols.mojo). This class therefore does the centering itself:
+    column means and the y mean in float64 from exact column sums
+    (`lm_col_sums`, rounded once; lane hr-small-passes), subtracted in
+    float32 (`lm_center`), both on the device on a GPU install,
     and the intercept as `mean(y) - sum(mu_X * coef)` with `math.fsum`
     (exactly rounded; NO BLAS dot, which would be a platform-dependent host
     reduction -- E2's first finding). The device sees a centered design;
     the arithmetic that reaches it is a function of the inputs alone. The
-    mean-centering is mathematically what cuML does, but it runs on the
-    host in float64 where theirs runs on the device in float32, so
-    `coef_` CAN differ from cuML's in the last bits on ill-conditioned
-    data. Named here because a hidden host step is the thing this library
-    exists to not have.
+    mean-centering is mathematically what cuML does, but its sums are
+    exact where theirs accumulate in float32, so `coef_` CAN differ from
+    cuML's in the last bits on ill-conditioned data.
     """
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
@@ -599,12 +592,34 @@ class LinearRegression(NumericModeMixin):
             "mojolearn LinearRegression X and y lengths differ",
         )
         weights = _check_sample_weight(sample_weight, rows, "LinearRegression")
+        b = self._bind("_mojolearn_estimators")
+        fast_ne = _ols_normal_eq_default(b)
+        normal_eq = not _ols_tsqr_on(rows, cols) or fast_ne
+        resident = getattr(b, "ols_fit_resident", None)
+        if fast_ne and weights is None and resident is not None:
+            # lane apple-fast-olsne: FAST Apple builds only (the binding's
+            # compiled OLS_FAST_NORMAL_EQ): the normal equations with X and y
+            # uploaded once. Every other build keeps main's route below.
+            self.coef_ = empty((cols,), "<f4")
+            mu = empty((cols,), "<f4")
+            ymean = empty((1,), "<f8")
+            resident(addr_ro(x, name="X"), addr_ro(target, name="y"),
+                     addr(self.coef_, name="coef_"), addr(mu, name="column means"),
+                     addr(ymean, name="y mean"),
+                     [rows, cols, 1 if self.fit_intercept else 0])
+            if self.fit_intercept:
+                self._x_mean = mu
+                self._y_mean = float(ymean.tolist()[0])
+            else:
+                self._x_mean = zeros((cols,), "<f4")
+                self._y_mean = 0.0
+            self._set_intercept(cols)
+            return self
         if self.fit_intercept:
             # float64 column means -> float32, then a float32 subtraction.
-            # The means come from `column_mean_f64`, a sequential row-order
-            # float64 accumulation with a written-down order (DEVIATION
-            # 2324); the 1-D target mean is the same helper over a
-            # [rows, 1] view. Neither goes through BLAS or libm. The dot
+            # The means come from exact column sums rounded once to float64
+            # (`lm_col_sums`, lane hr-small-passes); the 1-D target mean is
+            # the same op over a [rows, 1] view. Neither goes through BLAS or libm. The dot
             # below is the one place a BLAS call would have slipped in, so
             # it is an exactly-rounded fsum instead.
             #
@@ -614,14 +629,15 @@ class LinearRegression(NumericModeMixin):
             # applied to weighted rows. The two differ, and using the wrong
             # one puts the intercept in the wrong place without moving any
             # coefficient enough to notice.
-            mu32 = _column_means(x, weights)
+            b = self._bind("_mojolearn_estimators")
+            mu32 = _column_means(b, x, weights)
             self._x_mean = Array.from_list(mu32, "<f4")
-            self._y_mean = _vector_mean(target, weights)
+            self._y_mean = _vector_mean(b, target, weights)
             # NumPy narrowed the Python-float y mean to float32 BEFORE the
             # float32 subtract (value-based / weak-scalar casting); the
             # same order here so the centered bits are the same bits.
-            work_x = _center(x, mu32)
-            work_y = _shift(target, _round_f32(self._y_mean))
+            work_x = _center(b, x, mu32)
+            work_y = _shift(b, target, _round_f32(self._y_mean))
         else:
             work_x, work_y = x, target
             self._x_mean = zeros((cols,), "<f4")
@@ -631,14 +647,25 @@ class LinearRegression(NumericModeMixin):
             # the class docstring for why this is here and not in the Mojo
             # layer, and for the bit-for-bit claim the gate checks.
             root = [_round_f32(math.sqrt(v)) for v in weights.tolist()]
-            work_x = _scale_rows(work_x, root)
-            work_y = _scale_rows(work_y, root)
-        self.coef_ = empty((cols,), "<f4")
-        self._bind("_mojolearn_estimators").ols_fit(
-            addr_ro(work_x, name="X"), addr_ro(work_y, name="y"),
-            addr(self.coef_, name="coef_"),
-            [rows, cols],
-        )
+            b = self._bind("_mojolearn_estimators")
+            work_x = _scale_rows(b, work_x, root)
+            work_y = _scale_rows(b, work_y, root)
+        if not normal_eq:
+            # lane neural-pass140: the blocked TSQR of [X | y] and the SVD of
+            # its small R (_ols_tsqr); MOJOLEARN_LINALG_TSQR=0 (and FAST on
+            # Apple, `_ols_normal_eq_default`) keeps the normal equations below
+            self.coef_ = _ols_tsqr(work_x, work_y, rows, cols, getattr(self, "numeric_mode", None))
+        else:
+            self.coef_ = empty((cols,), "<f4")
+            self._bind("_mojolearn_estimators").ols_fit(
+                addr_ro(work_x, name="X"), addr_ro(work_y, name="y"),
+                addr(self.coef_, name="coef_"),
+                [rows, cols],
+            )
+        self._set_intercept(cols)
+        return self
+
+    def _set_intercept(self, cols):
         if self.fit_intercept:
             dot = math.fsum(
                 float(a) * float(b)
@@ -648,7 +675,6 @@ class LinearRegression(NumericModeMixin):
         else:
             self.intercept_ = 0.0
         self.n_features_in_ = cols
-        return self
 
     def predict(self, X):
         if not hasattr(self, "coef_"):
@@ -773,15 +799,14 @@ class Ridge(NumericModeMixin):
             "mojolearn Ridge X and y lengths differ",
         )
         if self.fit_intercept:
-            # The same host centering as LinearRegression, for the same
-            # reasons; read that class's fit. `column_mean_f64` replaces
-            # `x.mean(axis=0, dtype=np.float64)` (DEVIATION 2361); the
-            # ridge cards are RE-BASELINE OWED with the OLS ones.
-            mu32 = _column_means(x, None)
+            # The same centering as LinearRegression, for the same
+            # reasons; read that class's fit.
+            b = self._bind("_mojolearn_estimators")
+            mu32 = _column_means(b, x, None)
             self._x_mean = Array.from_list(mu32, "<f4")
-            self._y_mean = _vector_mean(target, None)
-            work_x = _center(x, mu32)
-            work_y = _shift(target, _round_f32(self._y_mean))
+            self._y_mean = _vector_mean(b, target, None)
+            work_x = _center(b, x, mu32)
+            work_y = _shift(b, target, _round_f32(self._y_mean))
         else:
             work_x, work_y = x, target
             self._x_mean = zeros((cols,), "<f4")

@@ -30,17 +30,16 @@ weights and 53-bit uniform scaling (`_draw`-driven subsample); IterativeImputer'
 estimator only; its normal cdf / inverse cdf are the pinned `_portable_math`
 twins since lane py-bugs, DEVIATION 6902, row 252) and the O(d^2) `_abs_corr` /
 `_neighbours` normalisation (n_nearest_features). IterativeImputer with a
-user `estimator` otherwise runs its data-sized plumbing in
-x_prep/user_host.mojo (row 221, DEVIATION 5411: row selection, gathers, the
-clipped float32 store and the float64 convergence twin); `_fit_host` and
-`_impute_host` stay the Python reference (`_II_NATIVE = False` or
-MOJOLEARN_HOTPATH=python).
+user `estimator` otherwise runs its data-sized plumbing as x_prep units
+(x_prep/iterative.mojo `ii_rcount` .. `ii_scatter`: row selection, gathers,
+the clipped float32 store; the stop is `ii_rowabs` / `ii_conv`).
 """
 import array
 import bisect
 import copy
 import ctypes
 import inspect
+import itertools
 from . import _portable_math as math
 import mmap
 import numbers
@@ -82,6 +81,15 @@ _OPS = dict(
     pt_spts=110, pt_smap=111, pt_sfold=112, pt_sres=113, te_gather=114,
     te_hist=115, te_hsum=116, te_hstart=117, te_hscatter=118,
     lab_load=119, uniq_count=120, uniq_scan=121, uniq_write=122, chunk_neg=123,
+    colb_part=124, colb_fold=125, colb_ss=126, colb_var=127, maxabs_fold=128, csb_part=129, csb_fold=130, csb_ss=131, csb_var=132, cat_hpart=133, cat_hfold=134,
+    row_ones=135, ii_rcount=136, ii_rwrite=137, ii_gather=138, ii_scatter=139,
+    hcat=140, colblock=141,
+    # lane apple-fast-meta (x_prep/calib.mojo): only the FAST + Apple binding built with
+    # -D MOJOLEARN_CALIB_GNB_FOLDS runs them (it exports x_prep_calib_folds); nothing stages
+    # them otherwise
+    cal_fold_part=142, cal_fold_scan=143, cal_fold_rank=144, cal_fold_assign=145, cal_lofo_merge=146,
+    cal_eps_folds=147, cal_params_folds=148, cal_jll_folds=149, cal_platt_init=150, cal_platt_setup=151,
+    cal_platt_part=152, cal_platt_step=153, cal_platt_ls_part=154, cal_platt_ls_pick=155, cal_sigmoid_avg=156,
 )
 _PARAMS = 14
 _NONE = -1
@@ -106,6 +114,10 @@ def _optional_prep_entry(binding, name):
 #: the smallest output (words) that `_Prog.output` keeps out of the arena
 _OUT_MIN_WORDS = 2 ** 27
 
+#: IterativeImputer(estimator=...): the most chunks of its row selection
+#: (`ii_rcount` / `ii_rwrite`), so `uniq_scan` folds at most this many counts
+_II_CH = 1024
+
 #: lane prep-apple3: host-side changes, each with a name. A name in
 #: _R3_DEFAULT is on; MOJOLEARN_XPREP_R3_ON / MOJOLEARN_XPREP_R3_OFF (names
 #: joined by "+" or ",", or "all") switch names on and off for an A/B arm. None
@@ -126,6 +138,58 @@ _R3_DEFAULT = ("imputer_nosort", "mapped", "view", "work", "te_arrays")
 #: the smallest block (words) that is mapped, and the smallest read that is a view
 _MAP_MIN_WORDS = 2 ** 18
 _VIEW_MIN_WORDS = 2 ** 20
+
+#: lane gap-nb-maxabs-grp (2026-10-02), two A/B switches (unset or anything
+#: but "0": on):
+#:   MOJOLEARN_XPREP_DIRECT   an input of at least _DIRECT_MIN_WORDS words goes
+#:                            up to the device FROM ITS OWN BUFFER (a store
+#:                            slot for the length of the run, copied device to
+#:                            device into the arena) instead of being copied
+#:                            into the host arena first (at the board's 1M x 220
+#:                            that copy was 880 MB of fresh pages a call).
+#:                            Where a word travels moves no bit.
+#:   MOJOLEARN_XPREP_BLOCKED  naive Bayes and MaxAbsScaler fold rows in
+#:                            x_prep/blocked.mojo's blocks (one unit per block,
+#:                            class and column, then the partials) instead of
+#:                            col_stats / class_stats / cat_counts' one thread per
+#:                            column over every row. Counts, minima, maxima and
+#:                            max |x| keep their words (MaxAbsScaler, the
+#:                            discrete models' counts on integer data, and
+#:                            CategoricalNB unweighted are unchanged); sums,
+#:                            means and variances take the blocked order for
+#:                            n > _XB rows (GaussianNB's theta_, var_ and
+#:                            epsilon_; non-integer feature counts).
+_DIRECT_MIN_WORDS = 2 ** 20
+#: x_prep/blocked.mojo XB: the rows a block unit folds
+_XB = 2048
+#: CategoricalNB's block histograms hold at most this many words; past it
+#: the histogram block doubles (a function of the shape only)
+_CAT_HIST_WORDS = 2 ** 26
+
+
+def _switch(name):
+    return os.environ.get(name, "1").strip() != "0"
+
+
+def _blocked():
+    return _switch("MOJOLEARN_XPREP_BLOCKED")
+
+
+def _col_stats(pr, xo, n, d, out, var=True):
+    """col_stats' six rows of d into `out` (count, mean, variance, min, max,
+    max |x|), in the blocked order when `_blocked()`; var=False leaves the
+    variance row unwritten (its consumers here read the other rows)."""
+    if not _blocked():
+        pr.stage("col_stats", d, xo, n, d, out)
+        return
+    nb = (n + _XB - 1) // _XB
+    part = pr.work(5 * nb * d)
+    pr.stage("colb_part", nb * d, xo, n, d, part, nb)
+    pr.stage("colb_fold", d, part, nb, d, out)
+    if var:
+        ss = pr.work(nb * d)
+        pr.stage("colb_ss", nb * d, xo, n, d, out, ss, nb)
+        pr.stage("colb_var", d, ss, nb, d, out)
 
 
 def _r3(name):
@@ -317,12 +381,20 @@ class _Prog:
         run_ranges = (_optional_prep_entry(binding, "x_prep_run_ranges")
                       if (dev_scratch or sc == 0) and _arena_io.ranges_enabled() else None)
         spans = []
+        direct = None
         for off, arr, _ in self._inputs:
             if not arr.size:
                 continue
             inout = (off, off + arr.size) in self._inout
             cache = (_arena_io.active_cache(binding, "x_prep", arr.size)
                      if run_ranges is not None and not inout else None)
+            if (cache is None and run_ranges is not None and not inout and arr.size >= _DIRECT_MIN_WORDS
+                    and _switch("MOJOLEARN_XPREP_DIRECT")):
+                # MOJOLEARN_XPREP_DIRECT: up from the input's own buffer into a
+                # slot freed when the run ends (no copy into the host arena)
+                if direct is None and _arena_io.DeviceCache.supports(binding, "x_prep"):
+                    direct = _arena_io.DeviceCache(binding, "x_prep")
+                cache = direct
             if cache is not None:
                 # resident (lane py-shared): copied from the store on the device;
                 # the host words stay zero and `_check` refuses a read of them
@@ -344,9 +416,13 @@ class _Prog:
             outs = _arena_io.output_ranges(_arena_io.complement(ins, ha) + [list(s) for s in self._inout])
             ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
             out, out_addr = _zero_words(on, self._out_code) if dev_out else (None, 0)
-            run_ranges(base, prog.buffer_info()[0], out_addr,
-                       (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
-                       (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
+            try:
+                run_ranges(base, prog.buffer_info()[0], out_addr,
+                           (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
+                           (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
+            finally:
+                if direct is not None:
+                    direct.close()
             self._out = out
         elif dev_out:
             out, out_addr = _zero_words(on, self._out_code)
@@ -511,7 +587,9 @@ class RobustScaler(_PrepBase):
         center = pr.alloc(d)
         scale = pr.alloc(d)
         pr.stage("sort_cols", d, xo, n, d, so, 0)
-        pr.stage("col_stats", d, xo, n, d, st)
+        # the quantile stage reads the count row only: an exact integer in
+        # the blocked order too (lane gap-prep2), so the same words
+        _col_stats(pr, xo, n, d, st, var=False)
         pr.stage("quantile", 3 * d, so, n, d, qf, 3, q, st)
         pr.stage("scale_params", d, q, 3, d, center, scale, 0, 0, 2, 1)
         if self.unit_variance:
@@ -543,12 +621,21 @@ class MaxAbsScaler(_PrepBase):
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
-        st = pr.alloc(6 * d)
         scale = pr.alloc(d)
-        pr.stage("col_stats", d, xo, n, d, st)
-        pr.stage("scale_params", d, st + 5 * d, 1, d, _NONE, scale, 1)
+        if _blocked():
+            # x_prep/blocked.mojo: one unit per (row block, column), then the
+            # largest partial (a maximum is exact in any order: the same words)
+            nb = (n + _XB - 1) // _XB
+            part, ma = pr.work(5 * nb * d), pr.alloc(d)
+            pr.stage("colb_part", nb * d, xo, n, d, part, nb)
+            pr.stage("maxabs_fold", d, part, nb, d, ma, scale)
+        else:
+            st = pr.alloc(6 * d)
+            ma = st + 5 * d
+            pr.stage("col_stats", d, xo, n, d, st)
+            pr.stage("scale_params", d, ma, 1, d, _NONE, scale, 1)
         pr.run(mode)
-        self.max_abs_ = pr.get(st + 5 * d, d)
+        self.max_abs_ = pr.get(ma, d)
         self.scale_ = pr.get(scale, d)
         self.numeric_mode_, self.n_features_in_, self.n_samples_seen_ = mode, d, n
         return self
@@ -1332,8 +1419,16 @@ class TargetEncoder(_PrepBase):
         if fold is None or -1 in fold or len(splits) < 1:
             raise ValueError("mojolearn: Validation indices from `cv` must cover each sample index exactly once "
                              "with no overlap. Pass a splitter with non-overlapping validation folds as `cv`.")
+        sizes = [0] * len(splits)
+        for k in fold:
+            sizes[k] += 1
         for k, (train, _test) in enumerate(splits):
-            if sorted(idx(train)) != [i for i in range(n) if fold[i] != k]:
+            # the training rows are every row outside fold k exactly once: as
+            # many as there are, distinct, in range and none in fold k (the
+            # folds already cover each row once)
+            tr = idx(train)
+            if (len(tr) != n - sizes[k] or len(set(tr)) != len(tr)
+                    or any(not 0 <= i < n or fold[i] == k for i in tr)):
                 raise NotImplementedError("mojolearn: TargetEncoder cv folds whose training rows are not every "
                                           "row outside the test fold are not implemented")
         return fold, len(splits)
@@ -1521,22 +1616,27 @@ class SimpleImputer(_PrepBase):
         if m:
             io, mo = pr.put_list(self._indicator), pr.alloc(n * m)
             pr.stage("nan_mask", n * m, xo, n, d, io, m, mo)
+            hc = pr.output(n * (dout + m))
+            pr.stage("hcat", n * (dout + m), out, dout, mo, m, hc)
         pr.run(self.numeric_mode_)
         if not m:
             return pr.get(out, (n, dout))
-        return _hstack(pr.get(out, (n, dout)), pr.get(mo, (n, m)))
+        return pr.get(hc, (n, dout + m))
 
 
-def _hstack(a, b):
-    """[a | b] for two C-order float32 2-D Arrays of the same row count (a
-    byte copy per row)."""
-    n, p = a.shape
-    q = b.shape[1]
-    out = Array((n, p + q), "<f4")
-    for i in range(n):
-        ctypes.memmove(out._addr + 4 * i * (p + q), a._addr + 4 * i * p, 4 * p)
-        ctypes.memmove(out._addr + 4 * (i * (p + q) + p), b._addr + 4 * i * q, 4 * q)
-    return out
+def join_column_blocks(parts, ranges, n, d, mode=None):
+    """The (n, d) float32 matrix whose columns [start, end) are the C-order
+    (n, end - start) Array parts[k] for ranges[k]: one `colblock` stage per
+    part in one program (word copies, on the device on a GPU install)."""
+    pr = _Prog()
+    out = pr.output(n * d)
+    for (start, end), part in zip(ranges, parts):
+        w = end - start
+        if w <= 0 or n <= 0:
+            continue
+        pr.stage("colblock", n * w, pr.put(part), w, out, d, start)
+    pr.run(_mode() if mode is None else mode)
+    return pr.get(out, (n, d))
 
 
 # ---------------------------------------------------------------- discretizer
@@ -1740,7 +1840,9 @@ class _Classifier(_PrepBase):
         K = len(self.classes_)
         pr = _Prog()
         xo = pr.put(arr)
-        jll = pr.alloc(n * K)
+        chk = self._score_checks(pr, xo, n, d)
+        # the joint log likelihood stays on the device unless it is the answer
+        jll = pr.work(n * K) if want else pr.alloc(n * K)
         self._jll_stages(pr, xo, n, d, jll)
         lp = pr.alloc(n * K) if "log" in want else _NONE
         pp = pr.alloc(n * K) if "proba" in want else _NONE
@@ -1750,7 +1852,16 @@ class _Classifier(_PrepBase):
         if am != _NONE:
             pr.stage("row_argmax", n, jll, n, K, am)
         pr.run(self.numeric_mode_)
+        self._score_refusals(pr, d, chk)
         return pr, n, K, dict(jll=jll, log=lp, proba=pp, predict=am)
+
+    def _score_checks(self, pr, xo, n, d):
+        """Stages a subclass adds to check its input in the scoring program
+        (CategoricalNB); what it returns goes to `_score_refusals`."""
+        return None
+
+    def _score_refusals(self, pr, d, chk):
+        """Raises on what `_score_checks` found, after the run."""
 
     def predict(self, X):
         pr, n, K, o = self._scores(X, ("predict",))
@@ -1788,7 +1899,21 @@ def _nb_weights(pr, sample_weight, n):
 
 
 def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums):
-    """class_stats, or its weighted form when a sample_weight offset is given."""
+    """class_stats, or its weighted form when a sample_weight offset is given;
+    in x_prep/blocked.mojo's blocked order when `_blocked()` (offsets
+    _NONE are not written)."""
+    if _blocked():
+        nb = (n + _XB - 1) // _XB
+        w = _NONE if wo is None else wo
+        ps, pc, cn = pr.work(nb * K * d), pr.work(nb * K * d), pr.work(K * d)
+        if var != _NONE and mean == _NONE:
+            mean = pr.work(K * d)
+        pr.stage("csb_part", nb * K * d, xo, n, d, yo, K, ps, pc, nb, w)
+        pr.stage("csb_fold", K * d, ps, pc, nb, K, d, cn, cnt, mean, sums, w)
+        if var != _NONE:
+            pr.stage("csb_ss", nb * K * d, xo, n, d, yo, K, mean, cn, ps, nb, w)
+            pr.stage("csb_var", K * d, ps, nb, K, d, cn, var)
+        return
     if wo is None:
         pr.stage("class_stats", total, xo, n, d, yo, K, cnt, mean, var, sums)
     else:
@@ -1877,7 +2002,7 @@ class GaussianNB(_Classifier):
         eps = pr.alloc(1)
         cnt, theta, var, prior, const = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(K)
         wo = _nb_weights(pr, sample_weight, n)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _col_stats(pr, xo, n, d, st)
         pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
         _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var, _NONE)
         raw = _copy_block(pr, var, K, d)
@@ -1919,7 +2044,7 @@ class GaussianNB(_Classifier):
         eps = pr.alloc(1)
         bc, bm, bv = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d)
         wo = _nb_weights(pr, sample_weight, n)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _col_stats(pr, xo, n, d, st)
         pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
         _class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, bm, bv, _NONE)
         oc = pr.put_list(zk) if first else pr.put(self.class_count_)
@@ -1966,14 +2091,14 @@ class _DiscreteNB(_Classifier):
         wo = _nb_weights(pr, sample_weight, n)
         if binarize is not None:
             thr = pr.put_scalar(binarize)
-            xb = pr.alloc(n * d)
+            xb = pr.work(n * d)
             pr.stage("binarize", n * d, xo, n * d, thr, xb)
             xo = xb
         yo = pr.put_codes(codes)
         st = pr.alloc(6 * d)
         cnt, fc = pr.alloc(K), pr.alloc(K * d)
         clp = pr.alloc(K)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _col_stats(pr, xo, n, d, st, var=False)
         _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
         self._prior_stages(pr, K, cnt, clp)
         return pr, mode, n, d, K, st, cnt, fc, clp
@@ -2005,13 +2130,13 @@ class _DiscreteNB(_Classifier):
         xo = pr.put(arr)
         wo = _nb_weights(pr, sample_weight, n)
         if getattr(self, "binarize", None) is not None:
-            xb = pr.alloc(n * d)
+            xb = pr.work(n * d)
             pr.stage("binarize", n * d, xo, n * d, pr.put_scalar(self.binarize), xb)
             xo = xb
         yo = pr.put_codes(codes)
         st = pr.alloc(6 * d)
         cnt, fc, clp = pr.alloc(K), pr.alloc(K * d), pr.alloc(K)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _col_stats(pr, xo, n, d, st, var=False)
         if first:
             _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
         else:
@@ -2089,7 +2214,7 @@ class BernoulliNB(_DiscreteNB):
         K = len(self.classes_)
         if self.binarize is not None:
             thr = pr.put_scalar(self.binarize)
-            xb = pr.alloc(n * d)
+            xb = pr.work(n * d)
             pr.stage("binarize", n * d, xo, n * d, thr, xb)
             xo = xb
         w, b = pr.put(self._w), pr.put(self._bias)
@@ -2608,6 +2733,14 @@ def _pt_spec_depth(n, d):
     s = max(0, min(s, 6))
     while s > 1 and (2 ** s - 1) * n * d > 2 ** 28:
         s -= 1
+    # the first round always evaluates the search's two opening points
+    # (PowerTransformer.fit: m = 2 at k0 = 0), so the candidates' buffer holds
+    # at least two transforms; when even two exceed the cap, the staged search
+    # (lane gap-board-refusals: Istella 1,000,000 x 220 reached S = 1 with a
+    # one-candidate buffer and the opening round wrote past it, an illegal
+    # address on the L40S and the MI300X, 0.8.34 board)
+    if s == 1 and 2 * n * d > 2 ** 28:
+        s = 0
     return s
 
 
@@ -2649,7 +2782,7 @@ class PowerTransformer(_PrepBase):
             if spec:
                 # the search speculated `spec` evaluations deep (transform.mojo pt_spts ..
                 # pt_sres): the same points, values and decisions, fewer dependent folds
-                mmax = 2 ** spec - 1
+                mmax = max(2 ** spec - 1, 2)   # the opening round's two points (see _pt_spec_depth)
                 # the candidates' transforms: contiguous per candidate (0) or one row's side by side (1)
                 il = 1 if os.environ.get("MOJOLEARN_XPREP_PT_INTERLEAVE", "0") == "1" else 0
                 state, leval = pr.alloc(_PT_STATE * d), pr.alloc(d)
@@ -3455,6 +3588,49 @@ class LabelBinarizer(_PrepBase):
         return _classes_array([self._classes[i] for i in idx])
 
 
+#: lane gap-prep2 (2026-10-02): MultiLabelBinarizer's int label sets cross as
+#: ONE int64 buffer (two C-speed passes over the sets) and the rest is the
+#: device's: lab_load + the run scan for classes_ (LabelEncoder's route),
+#: lookup for the codes and one unit per row (`row_ones`) for the indicator.
+#: The Python route flattened the sets three times, converted every label to
+#: a float twice and built a float row-owner vector on the host. The same
+#: classes and the same int32 words. MOJOLEARN_MLB_DEVICE=0: the Python route.
+_MLB_ROW_TYPES = frozenset((list, tuple, set, frozenset))
+
+
+class _MLBFlat:
+    __slots__ = ("n", "lb", "offs")
+
+    def __init__(self, n, lb, offs):
+        self.n, self.lb, self.offs = n, lb, offs
+
+
+def _mlb_flat(y):
+    """y's label sets as one int64 label buffer and int32 row offsets, or
+    None (the Python route): rows that are not lists, tuples or sets, a
+    label that is not a plain int (bool, float, str, numpy scalars), no
+    label at all, or MOJOLEARN_MLB_DEVICE=0."""
+    if os.environ.get("MOJOLEARN_MLB_DEVICE", "1").strip() == "0":
+        return None
+    rows = y if isinstance(y, (list, tuple)) else None
+    if not rows or not set(map(type, rows)) <= _MLB_ROW_TYPES:
+        return None
+    if set(map(type, itertools.chain.from_iterable(rows))) != _INT_ONLY:
+        return None
+    try:
+        flat = array.array("q", itertools.chain.from_iterable(rows))
+    except OverflowError:
+        return None
+    if not flat or len(flat) > 2 ** 30:
+        return None
+    lb = _label_buffer(flat)
+    if lb is None:
+        return None
+    offs = Array._owned(array.array("i", itertools.accumulate(map(len, rows), initial=0)), (len(rows) + 1,),
+                        "<i4", "C")
+    return _MLBFlat(len(rows), lb, offs)
+
+
 class MultiLabelBinarizer(_PrepBase):
     """sklearn.preprocessing.MultiLabelBinarizer: classes_ the sorted union
     of every sample's labels (or `classes` as given, in that order), transform
@@ -3476,14 +3652,44 @@ class MultiLabelBinarizer(_PrepBase):
             nums = _numeric_labels(self._classes)
             self._given = True
             self._cats = None
-        else:
+        elif not self._fit_flat(_mlb_flat(y)):
             flat = [v for row in y for v in row]
             self._classes, self._cats = _label_classes(self.numeric_mode_, flat) if flat else ([], None)
             self._given = False
         self.classes_ = _classes_array(self._classes)
         return self
 
+    def _fit_flat(self, fl):
+        """classes_ from the device route (`_mlb_flat`); False when it does
+        not apply (the caller takes the Python route)."""
+        if fl is None:
+            return False
+        got = _label_fit_device(self.numeric_mode_, fl.lb)
+        if got is None:
+            return False
+        self._classes, self._cats = got[0], got[1]
+        self._given = False
+        return True
+
+    def _transform_flat(self, fl):
+        """The int32 indicator from the device route: one program."""
+        n, K = fl.n, len(self._classes)
+        pr = _Prog()
+        codes = _label_codes_device(pr, fl.lb, self._cats)
+        offs = pr.put_words(fl.offs)
+        out = pr.output(n * max(K, 1), "i")
+        pr.stage("row_ones", n, codes, offs, K, out)
+        pr.run(self.numeric_mode_)
+        return pr.get_i32(out, (n, K))
+
     def fit_transform(self, y):
+        if self.classes is None and not self.sparse_output:
+            fl = _mlb_flat(y)
+            if fl is not None:
+                self.numeric_mode_ = _mode()
+                if self._fit_flat(fl):
+                    self.classes_ = _classes_array(self._classes)
+                    return self._transform_flat(fl)
         y = [list(row) for row in y]
         return self.fit(y).transform(y)
 
@@ -3493,6 +3699,10 @@ class MultiLabelBinarizer(_PrepBase):
 
     def transform(self, y):
         self._check_fitted()
+        if self._cats is not None and self._classes:
+            fl = _mlb_flat(y)
+            if fl is not None:
+                return self._transform_flat(fl)
         rows = [list(r) for r in y]
         n, K = len(rows), len(self._classes)
         flat = [v for r in rows for v in r]
@@ -3700,8 +3910,7 @@ class IterativeImputer(_PrepBase):
         nnf = self.n_nearest_features
         corr = self._abs_corr(Xf, n, dk, mode) if nnf is not None and nnf < dk else None
         if self.estimator is not None:
-            fit = self._fit_native if _ii_native(mode) else self._fit_host
-            return self._with_indicator(arr, fit(arr, Xf, orders, corr, float(self.tol) * scale))
+            return self._with_indicator(arr, self._fit_user(arr, Xf, orders, corr, float(self.tol) * scale))
         pr = _Prog()
         fo, mo, bo = self._prepare(pr, arr, Xf, inout=True)
         tol = pr.put_scalar(float(self.tol) * scale)
@@ -3765,59 +3974,28 @@ class IterativeImputer(_PrepBase):
         xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
         mo = pr.alloc(n * m)
         pr.stage("nan_mask", n * m, xo, n, d, pr.put_list(self._indicator), m, mo)
+        dk = Xt.shape[1]
+        to = pr.put(Xt)
+        hc = pr.output(n * (dk + m))
+        pr.stage("hcat", n * (dk + m), to, dk, mo, m, hc)
         pr.run(self.numeric_mode_)
-        return _hstack(Xt, pr.get(mo, (n, m)))
+        return pr.get(hc, (n, dk + m))
 
-    def _fit_host(self, arr, Xf, orders, corr, tol):
-        """estimator=<any>: the reference's rounds in Python over copies of
-        the estimator (its fit / predict on the float32 blocks; clip, or
-        sample_posterior's truncated normal from predict(return_std=True))."""
+    def _fit_user(self, arr, Xf, orders, corr, tol):
+        """estimator=<any>: the reference's rounds over copies of the
+        estimator, its fit / predict on the float32 blocks. The data-sized
+        plumbing runs as x_prep units (`_ii_take`, `_ii_put`; the device on a
+        GPU install, the same units on the host on a CPU-only one): the
+        observed / missing rows of feature j by a chunked count, scan and
+        write, the estimator's blocks by a gather, the clipped predictions by
+        a scatter, and the round's stop by `ii_rowabs` / `ii_conv`, the
+        default estimator's own test (the matrix inf-norm of the round's
+        change < tol, float32)."""
         n, d = arr.shape
         dk = len(self._keep)
-        mask = self._mask(arr)
-        Xt = [list(r) for r in Xf.tolist()]
-        seq = []
-        done = 0
-        for r, order in enumerate(orders):
-            prev = [list(row) for row in Xt]
-            for j in order:
-                nbl = self._neighbours(corr, j, dk) if corr is not None else [a for a in range(dk) if a != j]
-                est = _clone(self.estimator)
-                obs = [i for i in range(n) if not mask[i][j]]
-                mis = [i for i in range(n) if mask[i][j]]
-                est.fit(Array.from_list([[Xt[i][a] for a in nbl] for i in obs], "<f4"),
-                        Array.from_list([Xt[i][j] for i in obs], "<f4"))
-                seq.append((j, nbl, est))
-                self._impute_host(Xt, mis, j, nbl, est)
-            done = r + 1
-            if not self.sample_posterior and order and \
-                    max(_pm.nsum(abs(a - b) for a, b in zip(ra, rb)) for ra, rb in zip(Xt, prev)) < tol:
-                break
-        self.n_iter_ = done if any(orders) else min(1, len(orders))
-        self.imputation_sequence_ = seq
-        return Array.from_list(Xt, "<f4")
-
-    def _fit_native(self, arr, Xf, orders, corr, tol):
-        """`_fit_host` with the data-sized plumbing in x_prep/user_host.mojo
-        (lane py-misc-prep): the working block is one float32 C array updated
-        in place, the observed / missing rows of feature j and the estimator's
-        inputs are native gathers, the clipped predictions a native scatter,
-        and the round's float64 convergence measure the native twin of the
-        Python expression (CPython `sum` order: Neumaier since 3.12). The
-        estimator sees the same float32 blocks in the same order; its fit and
-        predict are the only Python per feature. `_fit_host` stays the
-        reference (MOJOLEARN_HOTPATH=python, `_II_NATIVE = False`)."""
-        n, d = arr.shape
-        dk = len(self._keep)
-        b = _prep_binding(_mode())
+        mode = _mode()
         mask = self._mask_arr(arr)
         Xt = as_f32_c(Xf, name="X")[0].copy()
-        obs = array.array("i", bytes(4 * n))
-        mis = array.array("i", bytes(4 * n))
-        # The Python reference sums with `_pm.nsum` (lane py-bugs, DEVIATION
-        # 6901): CPython 3.12+'s compensated order on every interpreter, so
-        # the twin is always the compensated spelling (py-consolidated).
-        comp = 1
         seq = []
         done = 0
         for r, order in enumerate(orders):
@@ -3826,47 +4004,76 @@ class IterativeImputer(_PrepBase):
             for j in order:
                 nbl = self._neighbours(corr, j, dk) if corr is not None else [a for a in range(dk) if a != j]
                 est = _clone(self.estimator)
-                mo = b.x_prep_ii_rows(mask._addr, obs.buffer_info()[0], (n, dk, j, 0))
-                mm = b.x_prep_ii_rows(mask._addr, mis.buffer_info()[0], (n, dk, j, 1))
-                Xo, yo = self._ii_block(b, Xt, obs, mo, nbl, j)
+                Xo, yo, Xm, rows, m = self._ii_take(Xt, mask, j, nbl, mode, fit=True)
                 est.fit(Xo, yo)
                 seq.append((j, nbl, est))
-                self._impute_native(b, Xt, mis, mm, j, nbl, est)
+                Xt = self._ii_put(Xt, Xm, rows, m, j, est, mode)
             done = r + 1
-            if check and b.x_prep_ii_conv(Xt._addr, prev._addr, (n, dk, comp)) < tol:
+            if check and self._ii_stop(Xt, prev, tol, mode):
                 break
         self.n_iter_ = done if any(orders) else min(1, len(orders))
         self.imputation_sequence_ = seq
         return Xt
 
-    def _ii_block(self, b, Xt, rows, m, nbl, j=-1):
-        """(Xt[rows][:, nbl], Xt[rows, j]) as the float32 Arrays
-        `Array.from_list` built from the same words (a 0-row block is
-        `from_list([])`, a 0-column one its m empty rows, as before)."""
-        dk = Xt.shape[1]
-        if m == 0:
-            return Array.from_list([], "<f4"), (Array.from_list([], "<f4") if j >= 0 else None)
-        nc = len(nbl)
-        if nc == 0:
-            X = Array.from_list([[] for _ in range(m)], "<f4")
-        else:
-            X = Array._owned(array.array("f", bytes(4 * m * nc)), (m, nc), "<f4", "C")
-        y = Array._owned(array.array("f", bytes(4 * m)), (m,), "<f4", "C") if j >= 0 else None
-        cols = array.array("i", nbl or [0])
-        b.x_prep_ii_gather(Xt._addr, rows.buffer_info()[0], cols.buffer_info()[0],
-                           X._addr if nc else y._addr if y is not None else Xt._addr,
-                           y._addr if y is not None else 0, (dk, m, nc, j))
-        return X, y
+    def _ii_rows(self, pr, mo, n, dk, j, missing):
+        """Stages: the ascending rows whose mask word for feature j is (or is
+        not) zero, as int32 words, and their count (a float slot)."""
+        ch = max(_II_CH, -(-n // _II_CH))
+        nch = -(-n // ch)
+        cnt, off, tot, rows = pr.alloc(nch), pr.alloc(nch), pr.alloc(1), pr.alloc(n)
+        pr.stage("ii_rcount", nch, mo, n, dk, j, 1 if missing else 0, ch, cnt)
+        pr.stage("uniq_scan", 1, cnt, nch, off, tot)
+        pr.stage("ii_rwrite", nch, mo, n, dk, j, 1 if missing else 0, ch, off, rows)
+        return rows, tot
 
-    def _impute_native(self, b, Xt, rows, m, j, nbl, est):
-        """`_impute_host` on the float32 block: predict on the gathered rows,
-        then the clip (or the truncated normal draw, still Python float64 on
-        the pinned normal cdf / inverse cdf, DEVIATION 6902) and the float32
-        store natively."""
+    def _ii_take(self, Xt, mask, j, nbl, mode, fit):
+        """One program: feature j's missing rows and the estimator's predict
+        block Xt[mis][:, nbl] and, with fit, its training blocks
+        Xt[obs][:, nbl] and Xt[obs, j]. Returns (Xo, yo, Xm, mis rows as int32
+        words, m)."""
+        n, dk = Xt.shape
+        nc = len(nbl)
+        pr = _Prog()
+        xo, mo = pr.put(Xt), pr.put(mask)
+        co = pr.put_list(nbl or [0])
+        jo = pr.put_list([j])
+        rm, tm = self._ii_rows(pr, mo, n, dk, j, True)
+        gm = pr.alloc(n * nc)
+        if nc:
+            pr.stage("ii_gather", n * nc, xo, dk, rm, tm, co, nc, gm)
+        if fit:
+            ro, to = self._ii_rows(pr, mo, n, dk, j, False)
+            go, gy = pr.alloc(n * nc), pr.alloc(n)
+            if nc:
+                pr.stage("ii_gather", n * nc, xo, dk, ro, to, co, nc, go)
+            pr.stage("ii_gather", n, xo, dk, ro, to, jo, 1, gy)
+        pr.run(mode)
+        m = int(pr.values(tm, 1)[0])
+        Xo = yo = None
+        if fit:
+            mob = int(pr.values(to, 1)[0])
+            Xo, yo = self._ii_block(pr, go, gy, mob, nc)
+        Xm, _ = self._ii_block(pr, gm, None, m, nc)
+        rows = pr.get_i32(rm, (m,)) if m else None
+        return Xo, yo, Xm, rows, m
+
+    @staticmethod
+    def _ii_block(pr, xo, yo, m, nc):
+        """(X block (m, nc), y (m,)) as float32 Arrays; a 0-row block is
+        `from_list([])`, a 0-column one its m empty rows, as before."""
+        if m == 0:
+            return Array.from_list([], "<f4"), (Array.from_list([], "<f4") if yo is not None else None)
+        X = pr.get(xo, (m, nc)) if nc else Array.from_list([[] for _ in range(m)], "<f4")
+        return X, (pr.get(yo, (m,)) if yo is not None else None)
+
+    def _ii_put(self, Xt, Xm, rows, m, j, est, mode):
+        """Predict on the missing rows' block, then (one program) the clipped
+        float32 store into Xt[rows, j]. sample_posterior's truncated normal
+        draw stays Python float64 on the pinned normal cdf / inverse cdf
+        (DEVIATION 6902) and is stored unclipped."""
         if not m:
-            return
-        dk = Xt.shape[1]
-        Xm, _ = self._ii_block(b, Xt, rows, m, nbl)
+            return Xt
+        n, dk = Xt.shape
         lo, hi = self._bounds_k[2 * j], self._bounds_k[2 * j + 1]
         if not self.sample_posterior:
             v = _pred_f64(est.predict(Xm))
@@ -3877,17 +4084,31 @@ class IterativeImputer(_PrepBase):
                                                for a, s_ in zip(_as_list(mus), _as_list(sig))]),
                              (m,), "<f8", "C")
             clip = 0
-        if v.size != m:
-            # the reference's zip would stop early or ignore extras: keep its words
-            vals = v.tolist()
-            vals = vals[:m] if len(vals) > m else vals
-            k = len(vals)
-            if k == 0:
-                return
-            v = Array._owned(array.array("d", vals), (k,), "<f8", "C")
-            m = k
-        b.x_prep_ii_scatter(Xt._addr, rows.buffer_info()[0], addr_ro(v, name="predict"), (dk, m, j, clip),
-                            (float(lo), float(hi)))
+        k = min(v.size, m)      # the reference's zip stops at the shorter
+        if k == 0:
+            return Xt
+        if v.size != k:
+            v = Array._owned(array.array("d", v.tolist()[:k]), (k,), "<f8", "C")
+        pr = _Prog()
+        xo = pr.put(Xt, inout=True)
+        ro = pr.put_words(rows)
+        vo = pr.put(v.astype("<f4"))
+        bo = pr.put_list([lo, hi])
+        pr.stage("ii_scatter", k, xo, dk, ro, j, vo, bo, clip)
+        pr.run(mode)
+        return pr.get(xo, (n, dk))
+
+    def _ii_stop(self, Xt, prev, tol, mode):
+        """The round's stop: the inf-norm of Xt - prev below tol."""
+        n, dk = Xt.shape
+        pr = _Prog()
+        xo, po = pr.put(Xt), pr.put(prev)
+        to = pr.put_scalar(tol)
+        flag, niter, rowabs = pr.alloc(1), pr.alloc(1), pr.alloc(n)
+        pr.stage("ii_rowabs", n, xo, po, dk, rowabs, flag)
+        pr.stage("ii_conv", 1, xo, po, n * dk, to, flag, niter, dk, rowabs + 1)
+        pr.run(mode)
+        return pr.values(flag, 1)[0] != 0
 
     def _mask_arr(self, arr):
         """`_mask`'s words (1.0 missing, 0.0 observed) as the float32 (n, dk) Array."""
@@ -3898,29 +4119,6 @@ class IterativeImputer(_PrepBase):
         pr.stage("nan_mask", n * len(self._keep), xo, n, d, pr.put_list(self._keep), len(self._keep), mo)
         pr.run(_mode())
         return as_f32_c(pr.get(mo, (n, len(self._keep))), name="mask")[0]
-
-    def _mask(self, arr):
-        n, d = arr.shape
-        pr = _Prog()
-        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
-        mo = pr.alloc(n * len(self._keep))
-        pr.stage("nan_mask", n * len(self._keep), xo, n, d, pr.put_list(self._keep), len(self._keep), mo)
-        pr.run(_mode())
-        return [[v != 0 for v in row] for row in pr.get(mo, (n, len(self._keep))).tolist()]
-
-    def _impute_host(self, Xt, mis, j, nbl, est):
-        if not mis:
-            return
-        Xm = Array.from_list([[Xt[i][a] for a in nbl] for i in mis], "<f4")
-        lo, hi = self._bounds_k[2 * j], self._bounds_k[2 * j + 1]
-        if not self.sample_posterior:
-            vals = [min(max(float(v), lo), hi) for v in _as_list(est.predict(Xm))]
-        else:
-            mus, sig = est.predict(Xm, return_std=True)
-            vals = [self._truncnorm_host(float(m), float(s), lo, hi) for m, s in zip(_as_list(mus), _as_list(sig))]
-        f32 = array.array("f", vals)
-        for i, v in zip(mis, f32):
-            Xt[i][j] = v
 
     def _truncnorm_host(self, mu, sigma, lo, hi):
         """`_impute_one_feature`'s rule in Python float64: mu beyond a bound
@@ -3957,21 +4155,14 @@ class IterativeImputer(_PrepBase):
         n, d = arr.shape
         dk = len(self._keep)
         Xf = self.initial_imputer_.transform(arr)
-        if self.estimator is not None and _ii_native(self.numeric_mode_):
-            b = _prep_binding(self.numeric_mode_)
+        if self.estimator is not None:
+            mode = self.numeric_mode_
             mask = self._mask_arr(arr)
             Xt = as_f32_c(Xf, name="X")[0].copy()
-            rows = array.array("i", bytes(4 * n))
             for j, nbl, est in self.imputation_sequence_:
-                m = b.x_prep_ii_rows(mask._addr, rows.buffer_info()[0], (n, dk, j, 1))
-                self._impute_native(b, Xt, rows, m, j, nbl, est)
+                _, _, Xm, rows, m = self._ii_take(Xt, mask, j, nbl, mode, fit=False)
+                Xt = self._ii_put(Xt, Xm, rows, m, j, est, mode)
             return self._with_indicator(arr, Xt)
-        if self.estimator is not None:
-            mask = self._mask(arr)
-            Xt = [list(r) for r in Xf.tolist()]
-            for j, nbl, est in self.imputation_sequence_:
-                self._impute_host(Xt, [i for i in range(n) if mask[i][j]], j, nbl, est)
-            return self._with_indicator(arr, Array.from_list(Xt, "<f4"))
         pr = _Prog()
         fo, mo, bo = self._prepare(pr, arr, Xf, inout=True)
         seed = self._rng & 0x7FFFFFFF
@@ -3998,22 +4189,6 @@ def _clone(est):
 
 def _as_list(v):
     return [float(x) for x in (v.tolist() if hasattr(v, "tolist") else v)]
-
-
-#: lane py-misc-prep: IterativeImputer(estimator=...) runs its plumbing in
-#: x_prep/user_host.mojo; False (or MOJOLEARN_HOTPATH=python) is the Python
-#: reference route, kept for the before/after arms.
-_II_NATIVE = True
-
-
-def _ii_native(mode):
-    from ._buffer import hotpath_enabled
-    if not (_II_NATIVE and hotpath_enabled()):
-        return False
-    try:
-        return hasattr(_prep_binding(mode), "x_prep_ii_conv")
-    except Exception:
-        return False
 
 
 def _pred_f64(v):
@@ -4496,13 +4671,18 @@ class CategoricalNB(_DiscreteNB):
         return self._cat_fit(arr, codes, sample_weight, self.numeric_mode_, True)
 
     def _cat_fit(self, arr, codes, sample_weight, mode, merge):
+        # the two programs share one device copy of X (and of the codes)
+        with _arena_io.resident():
+            return self._cat_fit_programs(arr, codes, sample_weight, mode, merge)
+
+    def _cat_fit_programs(self, arr, codes, sample_weight, mode, merge):
         n, d = arr.shape
         K = len(self.classes_)
         pr = _Prog()
         xo, yo = pr.put(arr), pr.put_codes(codes)
         st, cnt, clp = pr.alloc(6 * d), pr.alloc(K), pr.alloc(K)
         wo = _nb_weights(pr, sample_weight, n)
-        pr.stage("col_stats", d, xo, n, d, st)
+        _col_stats(pr, xo, n, d, st, var=False)
         if merge:
             bc = pr.alloc(K)
             _class_stats(pr, wo, K, xo, n, 1, yo, K, bc, _NONE, _NONE, _NONE)
@@ -4534,7 +4714,20 @@ class CategoricalNB(_DiscreteNB):
         no, co, a = q.put_list(ncat), q.put(pr.get(cnt, K)), q.put_scalar(self.alpha)
         wq = _nb_weights(q, sample_weight, n)
         cc = q.alloc(d * K * cmax)
-        q.stage("cat_counts", d * K * cmax, xo, n, d, yo, K, no, cmax, _NONE if wq is None else wq, cc)
+        if _blocked():
+            # x_prep/blocked.mojo: a histogram per (row block, feature), then
+            # each (feature, class, category) slot over the blocks (exact
+            # integer counts: cat_counts' words)
+            rows = _XB
+            while ((n + rows - 1) // rows) * d * K * cmax > _CAT_HIST_WORDS and rows < 2 ** 22:
+                rows *= 2
+            nbh = (n + rows - 1) // rows
+            hist = q.work(nbh * d * K * cmax)
+            w = _NONE if wq is None else wq
+            q.stage("cat_hpart", nbh * d, xo, n, d, yo, K, no, cmax, w, hist, rows)
+            q.stage("cat_hfold", d * K * cmax, hist, nbh, d, K, no, cmax, w, cc)
+        else:
+            q.stage("cat_counts", d * K * cmax, xo, n, d, yo, K, no, cmax, _NONE if wq is None else wq, cc)
         if merge:
             old, oc = self._cc.tolist(), self._cmax
             pad = [0.0] * (d * K * cmax)
@@ -4546,30 +4739,31 @@ class CategoricalNB(_DiscreteNB):
         q.stage("cat_flp", d * K * cmax, cc, K, no, cmax, co, a, flp)
         q.run(mode)
         self._cc = q.get(cc, d * K * cmax)
+        # each (feature, class) row read once (the same values)
+        ccv, flv = q.values(cc, d * K * cmax), q.values(flp, d * K * cmax)
         self.category_count_ = [Array.from_list(
-            [[q.values(cc + (j * K + k) * cmax, ncat[j])[v] for v in range(ncat[j])] for k in range(K)], "<f4")
-            for j in range(d)]
+            [ccv[(j * K + k) * cmax:(j * K + k) * cmax + ncat[j]] for k in range(K)], "<f4") for j in range(d)]
         self.n_categories_ = Array.from_list(ncat, "<i8")
         self._flp, self._cmax = q.get(flp, d * K * cmax), cmax
         self.feature_log_prob_ = [Array.from_list(
-            [[q.values(flp + (j * K + k) * cmax, ncat[j])[v] for v in range(ncat[j])] for k in range(K)], "<f4")
-            for j in range(d)]
+            [flv[(j * K + k) * cmax:(j * K + k) * cmax + ncat[j]] for k in range(K)], "<f4") for j in range(d)]
         self.class_count_, self.class_log_prior_ = pr.get(cnt, K), pr.get(clp, K)
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
-    def _scores(self, X, want):
-        arr = _x2d(X)
-        n, d = arr.shape
-        pr = _Prog()
+    def _score_checks(self, pr, xo, n, d):
+        """The input's column minima and maxima in the scoring program itself
+        (one upload of X; cat_jll reads nothing outside the table for an index
+        out of range, and the run is refused after it)."""
         st = pr.alloc(6 * d)
-        pr.stage("col_stats", d, pr.put(arr), n, d, st)
-        pr.run(self.numeric_mode_)
-        ncat = self.n_categories_.tolist() if d == self.n_features_in_ else []
+        _col_stats(pr, xo, n, d, st, var=False)
+        return st
+
+    def _score_refusals(self, pr, d, st):
+        ncat = self.n_categories_.tolist()
         if any(v < 0 for v in pr.values(st + 3 * d, d)) or \
                 any(int(v) >= c for v, c in zip(pr.values(st + 4 * d, d), ncat)):
             raise IndexError("mojolearn: CategoricalNB got a category index outside the fitted range")
-        return super()._scores(arr, want)
 
     def _jll_stages(self, pr, xo, n, d, out):
         K = len(self.classes_)
