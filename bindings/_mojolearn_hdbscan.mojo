@@ -42,7 +42,7 @@ from hdbscan.estimator import (
     hdbscan_membership_vector_host,
     hdbscan_fit_host_output,
 )
-from hdbscan.impl.prediction_data import generate_prediction_data
+from hdbscan.impl.prediction_data import generate_prediction_data_device
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -267,8 +267,9 @@ def hdbscan_fit_binding(
 def hdbscan_generate_prediction_data_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
-    """`generate_prediction_data` (cuML `prediction_data.cu:92-239`,
-    `hdbscan/impl/prediction_data.mojo`, host code on either binding).
+    """`generate_prediction_data` (cuML `prediction_data.cu:92-239`), built
+    on the device (`prediction_data.mojo::generate_prediction_data_device`,
+    DEVIATION 1612).
     Returns the exemplar count.
 
     `addrs`: 0 labels (n_leaves int32), 1 parents, 2 children, 3 lambdas
@@ -314,9 +315,10 @@ def hdbscan_generate_prediction_data_binding(
     var iicp = _i32_ptr(Int(py=addrs[10]))
     var n_ex = 0
     with GILReleased(Python()):
-        var pd = generate_prediction_data(
-            parents, children, lambdas, sizes, n_edges, n_leaves, n_clusters,
-            labels, inv, n_selected,
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var pd = generate_prediction_data_device(
+            ctx, parents, children, lambdas, sizes, n_edges, n_leaves,
+            n_clusters, labels, inv, n_selected,
         )
         for c in range(n_clusters):
             dp.unsafe_store(c, pd.deaths[c])
@@ -330,6 +332,7 @@ def hdbscan_generate_prediction_data_binding(
             iicp.unsafe_store(e, pd.index_into_children[e])
         n_ex = pd.n_exemplars
         _ = pd^
+        _ = ctx^
     return PythonObject(n_ex)
 
 
