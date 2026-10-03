@@ -1,4 +1,4 @@
-pos=843 lines=    1151
+pos=853 lines=    1161
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -990,3 +990,18 @@ pos=843 lines=    1151
 1098:FBUILD lane/apple-fast-gap-kapprox2-kmeth@94fda8e6a prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
 1099:CMD apple-fast-gap-kapprox2-kmeth@94fda8e6a kap2-km-ptrin-rbf-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=93.6 all=[94] quality=['{"kernel_rel_error":'] defines='-D MOJOLEARN_KM_FAST_PTR_IN'
 1100:CMD apple-fast-gap-kapprox2-kmeth@94fda8e6a kap2-km-nysrr-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=190.2 all=[190] quality=['{"kernel_rel_error":'] defines='-D MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH'
+1101:FBUILD lane/apple-fast@af01c6a54 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1102:CMD apple-fast@af01c6a54 smoke-af01 rc=0 ModuleNotFoundError: No module named 'mojolearn'
+1103:CMD apple-fast-gap-clus3@43bc2906c clus3-sgdoc-simd-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=106442.5 all=[106443] quality=['{"fraction_flagged":'] defines='-D MOJOLEARN_SGD_FAST_PS_SIMD'
+1104:CMD apple-fast-gap-clus3@43bc2906c clus3-sgdoc-simd-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=42252.0 all=[42252] quality=['{"fraction_flagged":'] defines='-D MOJOLEARN_SGD_FAST_PS_SIMD'
+1105:FBUILD lane/apple-fast-gap-kapprox2-kshap@ac2fe3e9e core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+1106:CMD apple-fast-gap-kapprox2-kshap@ac2fe3e9e kap2-merge-import-smoke rc=133 bash: line 1: 37153 Trace/BPT trap: 5       python3 -c "import mojolearn, mojolearn._expansion_trees as t, mojolearn.kernel_methods; from mojolearn import KernelExplainer, PermutationExplainer; print(\"IMPORT-OK\", t._KSHAP_FAST_BATCH)"
+1107:FBUILD lane/apple-fast-gap-kapprox2-spline@d7365813f prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
+1108:CMD apple-fast-gap-kapprox2-spline@d7365813f kap2-spl-fused-istella rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=11.6 all=[12] quality=['{"output_shape":'] defines='-D MOJOLEARN_SPLINE_FAST_FUSED'
+1109:CMD apple-fast-gap-kapprox2-kshap@ac2fe3e9e kap2-merge-import-smoke2 rc=0 IMPORT-OK 8
+1110:CMD apple-fast-gap-kapprox2-spline@d7365813f kap2-spl-fused-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=10.8 all=[11] quality=['{"output_shape":'] defines='-D MOJOLEARN_SPLINE_FAST_FUSED'
+1111:FBUILD lane/apple-fast-gap-manprep@6901bb3ea prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
+1112:CMD apple-fast-gap-manprep@6901bb3ea gmp-staged-lb-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=345.3 all=[345] quality=['{"output_shape":'] defines='-D MOJOLEARN_X_PREP_FAST_STAGED_OUT'
+1113:CMD apple-fast-gap-manprep@6901bb3ea gmp-staged-mlb-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=192.5 all=[192] quality=['{"output_shape":'] defines='-D MOJOLEARN_X_PREP_FAST_STAGED_OUT'
+1114:CMD apple-fast-gap-manprep@6901bb3ea gmp-staged-te-taxi rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=271.8 all=[272] quality=['{"output_shape":'] defines='-D MOJOLEARN_X_PREP_FAST_STAGED_OUT'
+1115:FBUILD lane/apple-fast-gap-kapprox2-svgp@9bb2996c0 prebuilt=m2 core=0 ibase=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 files=7
