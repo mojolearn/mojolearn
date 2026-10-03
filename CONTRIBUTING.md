@@ -82,11 +82,19 @@ better and identical in output becomes the default. Reach is per-branch.
 
 ### Numeric modes
 
-`fast` and `deterministic` ship only for the tree learners (`gbdt`, `rf`,
-`trees`). Everything else ships `identical` only, and a withdrawn mode is a
-named refusal, never a silent absence. Report our `identical` result against
-the opponent's fastest configuration. Our `fast` over our `identical` is an
-internal cost, never a result.
+`identical` is the default everywhere and the product: the same bits on
+Apple Metal, NVIDIA CUDA, AMD HIP and the host column. `deterministic` ships
+only for the tree learners (`gbdt`, `rf`, `trees`). `fast` is the Apple tier:
+it ships for the tree learners, classical ML and, since the Apple FAST neural
+pass (2026-10-03, docs/apple-fast/PLAN-neural.md), the neural GPU surface
+(the LM trainer, the transformer and Mamba blocks, the Samba stack, the MLP,
+the GEMMs); on NVIDIA and AMD the neural surface is raced `identical` only.
+Every `fast` change compiles under a FAST + Apple guard and `identical`
+compiles the unchanged code. A withdrawn mode is a named refusal, never a
+silent absence. Report our `identical` result against the opponent's fastest
+configuration; our `fast` arm is reported beside it on the Apple board, never
+in place of it, and `fast` never degrades quality (tools/neural_fast_quality.py
+is the neural judge).
 
 ### Performance claims
 
