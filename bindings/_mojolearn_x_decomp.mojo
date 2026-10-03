@@ -27,6 +27,7 @@ from x_decomp.resident import (
     dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_lda_rows_py,
     dev_lda_bound_py, dev_als_rows_py, dev_move_py,
 )
+from x_decomp.lanczos_dev import dev_lanczos_py, ipca_dev_on_py, kpca_lanczos_dev_on_py
 from x_decomp.resident import GRP_CLS2_ANY, GRP_CLS2_DEVSCAN, grp_cls2_py, dev_first_nonfinite_py
 
 
@@ -97,6 +98,9 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_download_py]("x_decomp_dev_download")
         m.def_function[dev_ew_py]("x_decomp_dev_ew")
         m.def_function[dev_gemm_py]("x_decomp_dev_gemm")
+        m.def_function[dev_lanczos_py]("x_decomp_dev_lanczos")
+        m.def_function[kpca_lanczos_dev_on_py]("x_decomp_lanczos_dev_on")
+        m.def_function[ipca_dev_on_py]("x_decomp_ipca_dev_on")
         m.def_function[dev_project_py]("x_decomp_dev_project")
         m.def_function[dev_rand_py]("x_decomp_dev_rand")
         m.def_function[dev_trisolve_py]("x_decomp_dev_trisolve")

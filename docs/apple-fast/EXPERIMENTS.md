@@ -586,3 +586,10 @@ Fixes of UNOWNED rows of `tools/hooks/host_routes_baseline.tsv`. Arm A of each A
 | no switch | x_trees apply refusal, tsqr NaN refusal | lane/apple-fast-purity2 @ 6f1ad9cf7 | none | - | merged | error-path scans on the device (atomic min of the first bad key) |
 | no switch | potrf panel / strip diag / sabotage arms, householder QR leaves | lane/apple-fast-purity2 @ 6f1ad9cf7 | none | - | merged | small-launch notes: the launches factor a w x w block (n is the row stride) or one TSQR leaf |
 | no switch (quality) | FactorAnalysis (algos): two-pass column mean + cancellation-free psi update (q_j sum_i V_ij^2 w_i); both modes, all vendors | lane/apple-fast-quality-glmfa @ 2e8321b00 | qglm-factor-analysis-istella | istella mean ll 89.03 -> 99.49 (sklearn 98.1; IDENTICAL nv/amd before 77.80), 6172 -> 10351 ms (more EM iterations now that psi keeps converging; still ~0.3x sklearn); taxi -14.8237 unchanged | KEPT (quality first) | GLM rows (gamma/tweedie taxi, tweedie istella) judged no change: FAST = IDENTICAL to 1e-6 and sklearn equally negative (gamma taxi -232.96, tweedie taxi -10.07, tweedie istella -21.87 vs ours -24.41) |
+
+## Gap linalg2, kernel-pca + incremental-pca (lane/apple-fast-gap-linalg2-kpca, Oct 3)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `KPCA_FAST_LANCZOS_DEV` | kernel-pca / taxi; kernel-pca / istella | lane/apple-fast-gap-linalg2-kpca @ 134dca742 | gl2k-kpca-lzdev-taxi, gl2k-kpca-lzdev-istella | - | HOLD | Lanczos steps enqueued in Mojo (x_decomp/lanczos_dev.mojo), basis on the device; one host read per batch instead of ~4 drains + 2 basis uploads per step. Expect most of the fit's time gone | M3: taxi -9%, istella -12.5%; held for the M2 quality-only check gl2k-kpca-quality (alpha/beta in f32), opt-in |
+| `IPCA_FAST_DEV` | incremental-pca / taxi | lane/apple-fast-gap-linalg2-kpca @ 134dca742 | gl2k-ipca-dev-taxi | incremental-pca taxi 159 -> 136 | KEPT | -14.5%; output digest bit-identical; each batch stacked on the device, public arrays read once; FAST+Apple default, -D MOJOLEARN_IPCA_FAST_DEV_OFF reverts |
