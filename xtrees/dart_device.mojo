@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DART's boosting round on the device (lane/apple-fast-dart, 2026-10-02).
 
-FAST + Apple only, behind `-D MOJOLEARN_DART_DEVICE`; nothing here is
+FAST + Apple only, on by default (off: `-D MOJOLEARN_DART_DEVICE_OFF`); nothing here is
 instantiated otherwise (`DART_DEVICE` guards every entry body and the
 binding's registration), so IDENTICAL compiles main's code unchanged.
 
@@ -47,8 +47,12 @@ from core.device_zero import enqueue_fill
 from core.neural_context import process_ctx
 from xtrees.ops import stream_base, draw
 
+# FAST + Apple default since the M3 A/B (lane/apple-fast-dart 443f4b3cc,
+# istella, n=1): dart 45,837 -> 24,730 ms (-46%), acc .9487 -> .9486;
+# dart-reg 45,445 -> 24,837 ms (-45%), r2 .5507 -> .5514. Off define:
+# -D MOJOLEARN_DART_DEVICE_OFF. The old -D MOJOLEARN_DART_DEVICE is harmless.
 comptime DART_DEVICE = (
-    is_defined["MOJOLEARN_DART_DEVICE"]() and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_DART_DEVICE_OFF"]()
 )
 
 comptime TPB = 256
@@ -419,7 +423,7 @@ def dart_open(
         ))
         return id
     else:
-        raise Error("x_trees dart_open: built without MOJOLEARN_DART_DEVICE")
+        raise Error("x_trees dart_open: built without DART_DEVICE (not FAST + Apple, or MOJOLEARN_DART_DEVICE_OFF)")
 
 
 def dart_step(
@@ -466,7 +470,7 @@ def dart_step(
         ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=bad_out), src_buf=reg[].sessions[idx].bad)
         ctx.synchronize()
     else:
-        raise Error("x_trees dart_step: built without MOJOLEARN_DART_DEVICE")
+        raise Error("x_trees dart_step: built without DART_DEVICE (not FAST + Apple, or MOJOLEARN_DART_DEVICE_OFF)")
 
 
 def dart_add(
@@ -523,7 +527,7 @@ def dart_add(
         var vsub = reg[].sessions[idx].values.create_sub_buffer[DType.float32](j * node_cap, n_nodes)
         ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=values_out), src_buf=vsub)
     else:
-        raise Error("x_trees dart_add: built without MOJOLEARN_DART_DEVICE")
+        raise Error("x_trees dart_add: built without DART_DEVICE (not FAST + Apple, or MOJOLEARN_DART_DEVICE_OFF)")
 
 
 def dart_close(id: Int, bad_out: Int) raises:
@@ -538,4 +542,4 @@ def dart_close(id: Int, bad_out: Int) raises:
         var gone = reg[].sessions.pop(idx)
         _ = gone^
     else:
-        raise Error("x_trees dart_close: built without MOJOLEARN_DART_DEVICE")
+        raise Error("x_trees dart_close: built without DART_DEVICE (not FAST + Apple, or MOJOLEARN_DART_DEVICE_OFF)")

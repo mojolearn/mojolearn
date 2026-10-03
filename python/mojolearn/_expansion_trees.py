@@ -1277,7 +1277,7 @@ class _DARTBase(_TreesEnsembleBase):
         try:
             if self._dart_device(b, session, K):
                 # lane/apple-fast-dart: the round on the device (FAST + Apple
-                # binaries built with -D MOJOLEARN_DART_DEVICE expose the
+                # binaries (default; not -D MOJOLEARN_DART_DEVICE_OFF) expose the
                 # x_trees_dart_* entries; every other binary takes main's loop)
                 self._boost_loop_device(Xa, y32, K, b, seed, drop_seed, inits, lr, l1, mds, lam, max_depth,
                                         session)
@@ -1384,7 +1384,7 @@ class _DARTBase(_TreesEnsembleBase):
 
     # -------------------------------------------- lane/apple-fast-dart
     # The boosting round on the device (xtrees/dart_device.mojo): FAST +
-    # Apple only, behind -D MOJOLEARN_DART_DEVICE, which is the only build
+    # Apple only, default unless -D MOJOLEARN_DART_DEVICE_OFF; the only build
     # that registers x_trees_dart_open. Same drop set, shrink factors and
     # tree fits as `_boost_loop`; the score, gradients and leaf values are
     # float32 on the device and the dropped trees come off and go back as
