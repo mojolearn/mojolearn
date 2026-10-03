@@ -2207,134 +2207,6 @@ struct DeviceOps(ClusterOps):
             )
         self._ph1("mb_update")
 
-
-def _mb_centers_kernel(b: FPtr, batch: Int32, labels: IPtr, c: FPtr, w: FPtr, k: Int32, d: Int32):
-    """One thread a center word (lane/neural-pass133): `mb_center_word`; the
-    counts are left to `_mb_counts_kernel` (launched after, so every thread
-    reads the batch's starting count)."""
-    var q = _tid()
-    var dd = Int(d)
-    if q < Int(k) * dd:
-        var j = q // dd
-        var f = q - j * dd
-        var wsum = mb_center_wsum(labels, Int(batch), j)
-        if wsum > Float32(0):
-            c[q] = mb_center_word(b, Int(batch), labels, c[q], w[j], wsum, j, f, dd)
-
-
-def _mb_counts_kernel(batch: Int32, labels: IPtr, w: FPtr, k: Int32):
-    var j = _tid()
-    if j < Int(k):
-        var wsum = mb_center_wsum(labels, Int(batch), j)
-        if wsum > Float32(0):
-            w[j] = ftz(w[j] + wsum)
-
-
-#: The block form (one block a center, `_mb_centers_block_kernel`): each
-#: chunk of the batch compacted to the center's rows by a block scan in
-#: threadgroup memory, each thread a feature's chain over them in batch order;
-#: the count an integer sum (exact, so the host's `+ 1` chain's word below
-#: 2^24 rows). Behind its fits gate; the per-word kernels above otherwise.
-comptime MB_TPB = 256
-comptime MB_PF = 8
-comptime MB_BLOCK_FITS = lib_smem_page_fits_for[TARGET_COLUMN, 2 * MB_TPB * 4]()
-
-
-def _mb_centers_block_kernel(b: FPtr, batch: Int32, labels: IPtr, c: FPtr, w: FPtr, d: Int32):
-    """One block a center j: per chunk of MB_TPB batch rows, a block scan
-    compacts the chunk's rows of j in batch order into `sel`, then each
-    thread chains its feature over them; the count is the sum of the chunk
-    counts (exact). Thread 0 writes the count last: every thread read it
-    into `wj` before the first barrier."""
-    var j = Int(block_idx.x)
-    var tid = Int(thread_idx.x)
-    var nb = Int(batch)
-    var dd = Int(d)
-    var scan = stack_allocation[MB_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    var sel = stack_allocation[MB_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
-    var wj = w[j]
-    var total = 0
-    var f0 = 0
-    while f0 < dd:
-        var f = f0 + tid
-        var acc = Float32(0)
-        if f < dd:
-            acc = ftz(identical_mul(c[j * dd + f], wj))
-        var tot = 0
-        var t0 = 0
-        while t0 < nb:
-            var mine = 1 if (t0 + tid < nb and Int(labels[t0 + tid]) == j) else 0
-            # inclusive scan: within the warp by shuffles, then the warp
-            # totals (integers: any order gives the same counts)
-            var lane = tid % WARP_SIZE
-            var wid = tid // WARP_SIZE
-            var v = Int32(mine)
-            var off = 1
-            while off < WARP_SIZE:
-                var u = shuffle_idx(v, UInt32(max(lane - off, 0)))
-                if lane >= off:
-                    v += u
-                off *= 2
-            barrier()
-            if lane == WARP_SIZE - 1:
-                scan[wid] = v
-            barrier()
-            var base = Int32(0)
-            for q in range(wid):
-                base += scan[q]
-            var m = 0
-            for q in range(MB_TPB // WARP_SIZE):
-                m += Int(scan[q])
-            if mine == 1:
-                sel[Int(base + v) - 1] = Int32(tid)
-            barrier()
-            if f < dd:
-                # the loads of MB_PF rows issued before their adds (the adds
-                # stay in batch order): the chain no longer waits on each load
-                var q = 0
-                while q + MB_PF <= m:
-                    var v = SIMD[DType.float32, MB_PF]()
-                    comptime for u in range(MB_PF):
-                        v[u] = b[(t0 + Int(sel[q + u])) * dd + f]
-                    comptime for u in range(MB_PF):
-                        acc = ftz(acc + ftz(v[u]))
-                    q += MB_PF
-                while q < m:
-                    acc = ftz(acc + ftz(b[(t0 + Int(sel[q])) * dd + f]))
-                    q += 1
-            tot += m
-            t0 += MB_TPB
-        total = tot
-        if total > 0 and f < dd:
-            var alpha = ftz(identical_div(Float32(1), ftz(wj + Float32(total))))
-            c[j * dd + f] = ftz(identical_mul(acc, alpha))
-        f0 += MB_TPB
-    barrier()
-    if tid == 0 and total > 0:
-        w[j] = ftz(wj + Float32(total))
-
-
-def _mb_assign_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, c: FPtr, k: Int32, labels: IPtr, dist: FPtr,
-                      dst: FPtr):
-    """One thread a batch row t (lane/neural-pass133): copies row idx[t] of
-    `src` to row t of `dst`, then `nearest_row`'s loop on it (the same
-    `sq_dist_rows` words, the lowest index on a tie)."""
-    var t = _tid()
-    if t < Int(m):
-        var dd = Int(d)
-        var r = Int(idx[t])
-        for f in range(dd):
-            dst[t * dd + f] = src[r * dd + f]
-        var best = sq_dist_rows(dst, t, c, 0, dd)
-        var bi = 0
-        for j in range(1, Int(k)):
-            var v = sq_dist_rows(dst, t, c, j, dd)
-            if v < best:
-                best = v
-                bi = j
-        labels[t] = Int32(bi)
-        dist[t] = best
-
     # ------------------------------------------------------------------
     # lane cgr2-cluster: the post-processing primitives on the device
     def _keys(mut self, n: Int) raises -> UPtr:
@@ -2764,3 +2636,134 @@ def _mb_assign_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, c: FPtr, k: Int3
             self._fp(dc) + best * m, self._fp(closest), Int32(m), grid_dim=pgrid(m), block_dim=PTPB,
         )
         self._ph1("kpp_take")
+
+
+
+
+
+def _mb_centers_kernel(b: FPtr, batch: Int32, labels: IPtr, c: FPtr, w: FPtr, k: Int32, d: Int32):
+    """One thread a center word (lane/neural-pass133): `mb_center_word`; the
+    counts are left to `_mb_counts_kernel` (launched after, so every thread
+    reads the batch's starting count)."""
+    var q = _tid()
+    var dd = Int(d)
+    if q < Int(k) * dd:
+        var j = q // dd
+        var f = q - j * dd
+        var wsum = mb_center_wsum(labels, Int(batch), j)
+        if wsum > Float32(0):
+            c[q] = mb_center_word(b, Int(batch), labels, c[q], w[j], wsum, j, f, dd)
+
+
+def _mb_counts_kernel(batch: Int32, labels: IPtr, w: FPtr, k: Int32):
+    var j = _tid()
+    if j < Int(k):
+        var wsum = mb_center_wsum(labels, Int(batch), j)
+        if wsum > Float32(0):
+            w[j] = ftz(w[j] + wsum)
+
+
+#: The block form (one block a center, `_mb_centers_block_kernel`): each
+#: chunk of the batch compacted to the center's rows by a block scan in
+#: threadgroup memory, each thread a feature's chain over them in batch order;
+#: the count an integer sum (exact, so the host's `+ 1` chain's word below
+#: 2^24 rows). Behind its fits gate; the per-word kernels above otherwise.
+comptime MB_TPB = 256
+comptime MB_PF = 8
+comptime MB_BLOCK_FITS = lib_smem_page_fits_for[TARGET_COLUMN, 2 * MB_TPB * 4]()
+
+
+def _mb_centers_block_kernel(b: FPtr, batch: Int32, labels: IPtr, c: FPtr, w: FPtr, d: Int32):
+    """One block a center j: per chunk of MB_TPB batch rows, a block scan
+    compacts the chunk's rows of j in batch order into `sel`, then each
+    thread chains its feature over them; the count is the sum of the chunk
+    counts (exact). Thread 0 writes the count last: every thread read it
+    into `wj` before the first barrier."""
+    var j = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var nb = Int(batch)
+    var dd = Int(d)
+    var scan = stack_allocation[MB_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var sel = stack_allocation[MB_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var wj = w[j]
+    var total = 0
+    var f0 = 0
+    while f0 < dd:
+        var f = f0 + tid
+        var acc = Float32(0)
+        if f < dd:
+            acc = ftz(identical_mul(c[j * dd + f], wj))
+        var tot = 0
+        var t0 = 0
+        while t0 < nb:
+            var mine = 1 if (t0 + tid < nb and Int(labels[t0 + tid]) == j) else 0
+            # inclusive scan: within the warp by shuffles, then the warp
+            # totals (integers: any order gives the same counts)
+            var lane = tid % WARP_SIZE
+            var wid = tid // WARP_SIZE
+            var v = Int32(mine)
+            var off = 1
+            while off < WARP_SIZE:
+                var u = shuffle_idx(v, UInt32(max(lane - off, 0)))
+                if lane >= off:
+                    v += u
+                off *= 2
+            barrier()
+            if lane == WARP_SIZE - 1:
+                scan[wid] = v
+            barrier()
+            var base = Int32(0)
+            for q in range(wid):
+                base += scan[q]
+            var m = 0
+            for q in range(MB_TPB // WARP_SIZE):
+                m += Int(scan[q])
+            if mine == 1:
+                sel[Int(base + v) - 1] = Int32(tid)
+            barrier()
+            if f < dd:
+                # the loads of MB_PF rows issued before their adds (the adds
+                # stay in batch order): the chain no longer waits on each load
+                var q = 0
+                while q + MB_PF <= m:
+                    var v = SIMD[DType.float32, MB_PF]()
+                    comptime for u in range(MB_PF):
+                        v[u] = b[(t0 + Int(sel[q + u])) * dd + f]
+                    comptime for u in range(MB_PF):
+                        acc = ftz(acc + ftz(v[u]))
+                    q += MB_PF
+                while q < m:
+                    acc = ftz(acc + ftz(b[(t0 + Int(sel[q])) * dd + f]))
+                    q += 1
+            tot += m
+            t0 += MB_TPB
+        total = tot
+        if total > 0 and f < dd:
+            var alpha = ftz(identical_div(Float32(1), ftz(wj + Float32(total))))
+            c[j * dd + f] = ftz(identical_mul(acc, alpha))
+        f0 += MB_TPB
+    barrier()
+    if tid == 0 and total > 0:
+        w[j] = ftz(wj + Float32(total))
+
+
+def _mb_assign_kernel(src: FPtr, d: Int32, idx: IPtr, m: Int32, c: FPtr, k: Int32, labels: IPtr, dist: FPtr,
+                      dst: FPtr):
+    """One thread a batch row t (lane/neural-pass133): copies row idx[t] of
+    `src` to row t of `dst`, then `nearest_row`'s loop on it (the same
+    `sq_dist_rows` words, the lowest index on a tie)."""
+    var t = _tid()
+    if t < Int(m):
+        var dd = Int(d)
+        var r = Int(idx[t])
+        for f in range(dd):
+            dst[t * dd + f] = src[r * dd + f]
+        var best = sq_dist_rows(dst, t, c, 0, dd)
+        var bi = 0
+        for j in range(1, Int(k)):
+            var v = sq_dist_rows(dst, t, c, j, dd)
+            if v < best:
+                best = v
+                bi = j
+        labels[t] = Int32(bi)
+        dist[t] = best
