@@ -15,22 +15,20 @@ the rename through its old names. The GPT-2 name stays only where it names a
 GPT-2 thing: the pre-tokenization pattern (`GPT2_PAT_STR`) and the
 `encoder.json` + `vocab.bpe` file format.
 
-## Two cut paths, one of them compiled
+## One cut path, compiled
 
-Pre-tokenization (cutting text into the pieces BPE merges inside) runs on
-one of TWO paths, and they do not cover the same families:
+Pre-tokenization (cutting text into the pieces BPE merges inside) runs in
+the Mojo binding for every family (lane/pyglue-text-io, 2026-10-03):
 
-| path | cuts | merges |
+| door | cuts | merges |
 |---|---|---|
-| the Mojo binding (`impl/pretokenize.mojo`, through `BpeTokenizer`) | the GPT-2 pattern ONLY | compiled (`impl/bpe.mojo`) |
-| the Python path (`python/mojolearn/models/tokenizer.py`) | GPT-2, Llama 3 and Qwen 2 | the package's Python BPE, except that the GPT-2 pattern hands its pieces to the compiled binding |
+| `BpeTokenizer` (`encoding.mojo`) | the GPT-2 pattern | `impl/bpe.mojo` |
+| `mojolearn.models.Tokenizer` (`vocab.mojo`) | GPT-2, Llama 3 and Qwen 2 (`impl/pretokenize.mojo::pretokenize_pattern`) | `impl/bpe.mojo` |
 
-So the fast path covers one family. A Llama 3 or Qwen 2 vocabulary loaded
-through `mojolearn.models` tokenizes in Python. Closing that gap is a new
-hand-rolled cut function beside `pretoken_end` per pattern, with its own
-cases; no lane has it yet. `BpeVocabularyTrainer` and `train/bpe_train.mojo`
-cut with the GPT-2 pattern too, so a vocabulary WE train is always a
-compiled-path vocabulary.
+The Python modules only read configuration and pass the vocabulary to the
+binding; the vocabulary checks are `impl/vocab_build.mojo`.
+`BpeVocabularyTrainer` and `train/bpe_train.mojo` cut with the GPT-2
+pattern, so a vocabulary WE train is a GPT-2-pattern vocabulary.
 
 ```mojo
 from tokenizer.encoding import load_bpe_tokenizer_from
