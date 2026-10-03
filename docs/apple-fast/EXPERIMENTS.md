@@ -537,6 +537,12 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `AFN_GEMM_CORES` | neural | lane/apple-fast-neural @ 600237d7c | - | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run (tunable; the split-K core count, default 80) |
 | `AFN_GEMM2_SWZ_G` | neural | lane/apple-fast-neural @ 600237d7c | - | - | MERGED-UNMEASURED opt-in (neural; Andrew Oct 3) | on main via lane/neural-merge-unmeasured, default OFF; no A/B run (tunable; the swizzle group under AFN_GEMM2_SWIZZLE) |
 
+## Gap kapprox2 (lane/apple-fast-gap-kapprox2, Oct 3)
+
+| define | algorithm / dataset | branch @ sha | A/B tag | before -> after ms | verdict | reason / note |
+|---|---|---|---|---|---|---|
+| `KSHAP_FAST_BATCH` (`_OFF`) | kernel-shap / istella | lane/apple-fast-gap-kapprox2-kshap @ d95ede061 | kap2-kshap-batch-istella | 27011 -> 15325 | KEPT | regression from 57a297161 (one row per chunk: fresh 180 MB device buffer + ~3 GB/s download into a fresh host array, 2(d-1) pivot/elim launches per row); pooled device synthetic buffer, reused host buffer, one solve sweep per ~74 rows; rel_error_vs_exact 4.378e-09 both arms; also on PermutationExplainer (buffer reuse; kap2-pshap-batch-istella owed) |
+
 ## Fixes without a switch (merged; not experiments)
 
 | change | branch @ sha | main | note |
