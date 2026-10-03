@@ -431,3 +431,4 @@
    431	CMD lane/apple-fast-select sel-fcls-taxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-fcls-taxi x_prep select-f-classif taxi 1 2 "" "-D MOJOLEARN_SELECT_FCLS=1"
    432	CMD lane/apple-fast-select sel-d-hourly bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-d-hourly tsa select-d taxi-hourly 1 2 "" "-D MOJOLEARN_SELECT_D=1"
    433	CMD lane/apple-fast-select sel-freg-taxi-b bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh sel-freg-taxi-b x_prep select-f-regression taxi 1 2 "" "-D MOJOLEARN_SELECT_FREG=1"
+   434	CMD lane/apple-fast-tier tier-rbf-pinned-b AFC_FAMILY=classical2 bash tools/afc_ab.sh tier-rbf-pinned-b rbf-sampler istella 3 3 - MOJOLEARN_APPLE_FAST_GEMM_PINNED=1
