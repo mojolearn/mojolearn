@@ -44,10 +44,6 @@ py-loop	py-numpy	UNOWNED	debt	python/mojolearn/models/tokenizer.py	0	loose = [i 
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	module = _backend.load_host_module(_EXTENSION)
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	return _Entries(_backend.load_host_module(_EXTENSION))
 py-loop	py-numpy	gap-lm	debt	python/mojolearn/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
-# why: OWED (sequence/neural lane): the MoE pair grouping by expert (a counting sort over T*k picks) runs on the host by default; the device grouping exists only behind -D MOJOLEARN_MOE_DEVGROUP with one-block kernels for E <= 127; needs a multi-block grouping op in the executor registry
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	sequence/pyapi.mojo	0	for i in range(T * k):
-# why: OWED (sequence/neural lane): the MoE pair grouping by expert (a counting sort over T*k picks) runs on the host by default; the device grouping exists only behind -D MOJOLEARN_MOE_DEVGROUP with one-block kernels for E <= 127; needs a multi-block grouping op in the executor registry
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	sequence/pyapi.mojo	1	for i in range(T * k):
 # why: CROSS-LANE (training/LM): ce_serial_fold over the n_rows per-row losses in one block (the LM loss value's pinned order); a multi-block fold changes the loss bits on every vendor and the host column together
 one-block-n	serial-gpu	UNOWNED	owed	training/checks/loss.mojo	0	ctx.enqueue_function[ce_serial_fold_kernel](
 # why: k-sized: a NaN check of the n_cols x n_cols R factor the caller receives on the host anyway
