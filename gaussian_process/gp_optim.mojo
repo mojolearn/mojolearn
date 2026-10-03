@@ -30,10 +30,11 @@ from cholesky.checks.potrf import (
     CHOL_NB_PINNED,
     chol_validate_jitter,
     chol_workspace_floats,
-    logdet_kernel,
+    enqueue_logdet,
     potrf_lower,
 )
 from cholesky.impl.matrix.detail.matrix import copy_vector_from_matrix_diagonal_kernel
+from cholesky.logdet_fold import logdet_blocks
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, cho_solve
 from core.device_zero import enqueue_fill
 from core.identity_trace import IdentityTrace
@@ -357,6 +358,7 @@ def gpr_optimize_device(
     var nb_pin = chol_nb_for(n, CHOL_NB_PINNED)
     var ws = ctx.enqueue_create_buffer[DType.float32](chol_workspace_floats(n, nb_pin))
     var dwork = ctx.enqueue_create_buffer[DType.float32](n + 1)
+    var dlparts = ctx.enqueue_create_buffer[DType.float32](2 * logdet_blocks(n))
     var ddual = ctx.enqueue_create_buffer[DType.float32](n)
     var dkinv = ctx.enqueue_create_buffer[DType.float32](cells)
     var nb = gp_grad_blocks(n)
@@ -403,9 +405,7 @@ def gpr_optimize_device(
                     diag.unsafe_ptr(), dk.unsafe_ptr(), Int32(n), Int32(n),
                     grid_dim=((n + CHOL_ELEM_TPB - 1) // CHOL_ELEM_TPB, 1, 1), block_dim=(CHOL_ELEM_TPB, 1, 1),
                 )
-                ctx.enqueue_function[logdet_kernel](
-                    diag.unsafe_ptr(), scalar.unsafe_ptr(), Int32(n), grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
-                )
+                enqueue_logdet(ctx, _gp(diag), _gp(dlparts), _gp(scalar), n)
                 _ = diag^
                 _ = scalar^
                 ctx.enqueue_copy(dst_buf=ddual, src_buf=dy)
@@ -477,6 +477,7 @@ def gpr_optimize_device(
     _ = dgrad^
     _ = ws^
     _ = dwork^
+    _ = dlparts^
     _ = ddual^
     _ = dkinv^
     _ = dgpart^
