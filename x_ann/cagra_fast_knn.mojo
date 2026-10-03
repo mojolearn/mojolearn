@@ -71,7 +71,7 @@ def _gid() -> Int:
 
 @always_inline
 def _dt_tile[
-    oa: MutOrigin, ob: MutOrigin, od: MutOrigin
+    oa: MutOrigin, ob: MutOrigin, od: MutOrigin, EXACTD: Bool = False
 ](
     q: F32P, i0: Int, ni: Int, x: F32P, j0: Int, nj: Int, d: Int, mu: F32P, qn: F32P, xn: F32P,
     tx: Int, ty: Int, tid: Int,
@@ -81,7 +81,9 @@ def _dt_tile[
 ):
     """dist_s[ii * DT_DS + jj] = |q_{i0+ii} - mu|^2 + |x_{j0+jj} - mu|^2 -
     2 (q - mu).(x - mu), clamped at 0, for ii < ni, jj < nj. Ends on a
-    barrier. Padded features stage as 0 (a product of zeros adds nothing)."""
+    barrier. Padded features stage as 0 (a product of zeros adds nothing).
+    EXACTD (IVFG_EXACTD): the difference form sum (q - x)^2 instead, rows
+    staged raw, no norms: no cancellation on wide-range features."""
     var acc = InlineArray[Float32, DT_RI * DT_RJ](fill=Float32(0.0))
     var k0 = 0
     while k0 < d:
@@ -92,7 +94,10 @@ def _dt_tile[
             var c = k0 + kk
             var v = Float32(0.0)
             if c < d and ii < ni:
-                v = q.unsafe_load((i0 + ii) * d + c) - mu.unsafe_load(c)
+                comptime if EXACTD:
+                    v = q.unsafe_load((i0 + ii) * d + c)
+                else:
+                    v = q.unsafe_load((i0 + ii) * d + c) - mu.unsafe_load(c)
             a_s[kk * DT_TI + ii] = v
         comptime for qq in range(DT_KC * DT_TJ // DT_TPB):
             var e = tid + qq * DT_TPB
@@ -101,7 +106,10 @@ def _dt_tile[
             var c = k0 + kk
             var v = Float32(0.0)
             if c < d and jj < nj:
-                v = x.unsafe_load((j0 + jj) * d + c) - mu.unsafe_load(c)
+                comptime if EXACTD:
+                    v = x.unsafe_load((j0 + jj) * d + c)
+                else:
+                    v = x.unsafe_load((j0 + jj) * d + c) - mu.unsafe_load(c)
             b_s[kk * DT_TJ + jj] = v
         barrier()
         comptime for kk in range(DT_KC):
@@ -113,7 +121,11 @@ def _dt_tile[
                 bv[c] = b_s[kk * DT_TJ + tx + c * DT_TX]
             comptime for r in range(DT_RI):
                 comptime for c in range(DT_RJ):
-                    acc[r * DT_RJ + c] = av[r] * bv[c] + acc[r * DT_RJ + c]
+                    comptime if EXACTD:
+                        var df = av[r] - bv[c]
+                        acc[r * DT_RJ + c] = df * df + acc[r * DT_RJ + c]
+                    else:
+                        acc[r * DT_RJ + c] = av[r] * bv[c] + acc[r * DT_RJ + c]
         barrier()
         k0 += DT_KC
     comptime for r in range(DT_RI):
@@ -122,9 +134,12 @@ def _dt_tile[
             var jj = tx + c * DT_TX
             var dv = Float32(0.0)
             if ii < ni and jj < nj:
-                dv = qn.unsafe_load(i0 + ii) + xn.unsafe_load(j0 + jj) - Float32(2.0) * acc[r * DT_RJ + c]
-                if not (dv > Float32(0.0)):
-                    dv = Float32(0.0)
+                comptime if EXACTD:
+                    dv = acc[r * DT_RJ + c]
+                else:
+                    dv = qn.unsafe_load(i0 + ii) + xn.unsafe_load(j0 + jj) - Float32(2.0) * acc[r * DT_RJ + c]
+                    if not (dv > Float32(0.0)):
+                        dv = Float32(0.0)
             dist_s[ii * DT_DS + jj] = dv
     barrier()
 
@@ -293,7 +308,7 @@ def cg_probe_kernel(cnn_i: I32P, nlist: Int32, P: Int32, probes: I32P, size: I32
             _ = Atomic.fetch_add(flag, Int32(1))
 
 
-def cg_ivfg_kernel(
+def cg_ivfg_kernel[EXACTD: Bool](
     xs: F32P, xn: F32P, perm: U32P, skeys: U32P, start: I32P, size: I32P, probes: I32P, P: Int32,
     n: Int32, d: Int32, mu: F32P, k: Int32, out_d: F32P, out_i: I32P,
 ):
@@ -336,7 +351,7 @@ def cg_ivfg_kernel(
             var j0 = p0
             while j0 < pend:
                 var nj = DT_TJ if pend - j0 > DT_TJ else pend - j0
-                _dt_tile(xs, s0, ni, xs, j0, nj, dd, mu, xn, xn, tx, ty, tid, a_s, b_s, dist_s)
+                _dt_tile[EXACTD=EXACTD](xs, s0, ni, xs, j0, nj, dd, mu, xn, xn, tx, ty, tid, a_s, b_s, dist_s)
                 if mine:
                     for r in range(nj):
                         var j = Int(perm[j0 + r])
@@ -413,7 +428,7 @@ def cg_dot_knn_enqueue(
 
 
 def cg_ivfg_enqueue[
-    PROBES: Int
+    PROBES: Int, EXACTD: Bool = False
 ](
     ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], n: Int, d: Int, k: Int,
     mut dnd: DeviceBuffer[DType.float32], mut dni: DeviceBuffer[DType.int32],
@@ -490,7 +505,7 @@ def cg_ivfg_enqueue[
         ctx.enqueue_function[cg_gather_perm_kernel](x, Int32(d), _u32p(vals), _f32p(xs), Int32(n),
                                                     grid_dim=(n * d + ETPB - 1) // ETPB, block_dim=ETPB)
         _norms(ctx, _f32p(xs), n, d, _f32p(mu), _f32p(xsn))
-        ctx.enqueue_function[cg_ivfg_kernel](
+        ctx.enqueue_function[cg_ivfg_kernel[EXACTD]](
             _f32p(xs), _f32p(xsn), _u32p(vals), _u32p(keys), _i32p(start), _i32p(size), _i32p(probes),
             Int32(PROBES), Int32(n), Int32(d), _f32p(mu), Int32(k), _f32p(dnd), _i32p(dni),
             grid_dim=(n + DT_TI - 1) // DT_TI, block_dim=(DT_TX, DT_TY, 1),

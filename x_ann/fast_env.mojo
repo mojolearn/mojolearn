@@ -51,7 +51,16 @@ comptime FAST_IVFPQ_DEVICE_CODEBOOKS = ANN_FAST_APPLE and not is_defined["MOJOLE
 comptime CAGRA_FAST_WIDE = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_WIDE"]()
 comptime CAGRA_FAST_DOT = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_DOT"]()
 comptime CAGRA_FAST_IVFG = ANN_FAST_APPLE and is_defined["MOJOLEARN_CAGRA_FAST_IVFG"]()
-comptime CAGRA_FAST_IVFG_PROBES = 32 if is_defined["MOJOLEARN_CAGRA_FAST_IVFG_P32"]() else 16
+comptime CAGRA_FAST_IVFG_PROBES = 32 if is_defined["MOJOLEARN_CAGRA_FAST_IVFG_P32"]() else (
+    8 if is_defined["MOJOLEARN_CAGRA_FAST_IVFG_P8"]() else 16
+)
+#: IVFG_EXACTD (with IVFG): the graph kernel forms sum (x_i - x_j)^2 (the
+#: exact graph's chain) instead of norms - 2 dot. Cause: IVFG istella recall
+#: .9595 at 16 probes and .9597 at 32 (M3, gapcagra-ivfg*-istella), so the
+#: loss is not coverage; Istella's raw features span orders of magnitude and
+#: the expanded form cancels in float32, misordering close neighbors.
+#: IVFG_P8: 8 probe lists.
+comptime CAGRA_FAST_IVFG_EXACTD = is_defined["MOJOLEARN_CAGRA_FAST_IVFG_EXACTD"]()
 
 #: lane/apple-fast-gap-cagra (2026-10-03), OPT-IN A/B arms for the CAGRA
 #: SEARCH (taxi recall .48 vs faiss .93): taxi's 11 features are integer
