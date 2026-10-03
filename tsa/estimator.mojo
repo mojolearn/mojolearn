@@ -51,7 +51,9 @@ comptime _DEVCTX_SLOT = "MojoTsaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDE
 
 
 from tsa.impl.timeSeries.stationarity import KPSS_ELEM_TPB, download_results
-from tsa.impl.timeSeries.kpss_fused import KPSS_FUSED_MAX_N, TSA2_KPSS, kpss_fused
+from tsa.impl.timeSeries.kpss_fused import (
+    KPSS_FUSED_MAX_N, KPSS_PACK_W, TSA2_KPSS, TSA_KPSS_PACK, TSA_SELD_FUSED, kpss_fused, kpss_rounds,
+)
 from tsa.impl.auto_arima import select_d
 from tsa.impl.stationarity import kpss_test
 
@@ -113,6 +115,18 @@ def kpss_test_host(
     """
     _refuse_empty_shape(batch_size, n_obs, "kpss_test")
     var ctx = process_ctx[_DEVCTX_SLOT]()
+    comptime if TSA_KPSS_PACK:
+        # lane/apple-fast-gap-tsa (-D MOJOLEARN_TSA_FAST_KPSS_PACK, FAST +
+        # Apple): one launch, one device buffer and one host stage for the
+        # input and the packed outputs, one wait (kpss_fused.mojo::kpss_rounds)
+        if d == 0 and D == 0 and n_obs <= KPSS_FUSED_MAX_N:
+            var res = List[Float32]()
+            kpss_rounds(ctx, y_ptr, batch_size, n_obs, 1, pval_threshold, res)
+            for b in range(batch_size):
+                stat_ptr.unsafe_store(b, res[b * KPSS_PACK_W])
+                flags_ptr.unsafe_store(b, Int32(1) if res[b * KPSS_PACK_W + 1] != Float32(0.0) else Int32(0))
+            _ = ctx^
+            return batch_size
     comptime if TSA2_KPSS:
         # lane/apple-fast-tsa2 (-D MOJOLEARN_TSA2_KPSS, FAST + Apple): the
         # undifferenced test as one launch, one block per series
@@ -166,6 +180,25 @@ def select_d_host(
     """
     _refuse_empty_shape(batch_size, n_obs, "select_d")
     var ctx = process_ctx[_DEVCTX_SLOT]()
+    comptime if TSA_SELD_FUSED:
+        # lane/apple-fast-gap-tsa (-D MOJOLEARN_TSA_FAST_SELD_FUSED, FAST +
+        # Apple): every round of a series in its block, the first stationary
+        # order chosen there, one upload, one launch, one download, one wait
+        # (kpss_fused.mojo::kpss_rounds). Seasonal differencing, d_max past 2
+        # and series past the threadgroup's words take the path below.
+        if D == 0 and d_max >= 0 and d_max <= 2 and n_obs <= KPSS_FUSED_MAX_N:
+            for d_ in range(d_max):
+                if n_obs <= d_:
+                    raise Error(
+                        "stationarity: n_obs (" + String(n_obs)
+                        + ") must be greater than d + s*D (" + String(d_) + ")"
+                    )
+            var res = List[Float32]()
+            kpss_rounds(ctx, y_ptr, batch_size, n_obs, d_max, pval_threshold, res)
+            for b in range(batch_size):
+                d_ptr.unsafe_store(b, Int32(Int(res[b * KPSS_PACK_W + 3])))
+            _ = ctx^
+            return batch_size
     var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)
     var chosen = select_d(ctx, y, batch_size, n_obs, D, s, d_max, pval_threshold)
     for b in range(batch_size):
