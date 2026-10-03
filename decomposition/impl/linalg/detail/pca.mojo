@@ -14,6 +14,31 @@ from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
 from core.gemm import gemm_nt, gemm_tn
+from std.sys.compile import is_defined
+from gemm.afn_apple_fast import (
+    AFN_EPI_NONE,
+    AFN_GEMM_APPLE,
+    AFN_GEMM_KB,
+    AFN_TILE_SQUARE,
+    AFN_ZERO_TPB,
+    afn_launch_tile,
+    afn_strides,
+    afn_zero_kernel,
+)
+from gemm.contract import OP_TN
+
+#: lane/apple-fast-gap-linalg2-pca (2026-10-03): -D MOJOLEARN_PCA_FAST_GRAM_MMA.
+#: Past the split-K Gram's capacity (d > 128: Istella's 220 features) the
+#: FAST covariance ran `gemm_tn_identical_v1`, the IDENTICAL profile's
+#: one-chain-per-cell Gram, plus a second centering pass to restore the
+#: caller's copy. Here: center in place, then X^T X on the Apple matrix unit
+#: (`afn_gemm_mma_kernel`, 64 x 64 tiles, `k` split across PCA_GRAM_SPLITS
+#: row ranges summed with f32 atomics into a zeroed output), then the
+#: 1 / (n - 1) scale. The device copy is the fit's own (`pca_fit_host`
+#: uploads it), so the restore pass is skipped. FAST + Apple only.
+comptime PCA_FAST_GRAM_MMA = AFN_GEMM_APPLE and is_defined["MOJOLEARN_PCA_FAST_GRAM_MMA"]()
+#: blocks the split Gram aims for (tiles x splits), about 8 per M3 Ultra core
+comptime PCA_GRAM_BLOCK_TARGET = 640
 from checks.numerics import ftz, identical_div, identical_mul
 from core.gram_splitk import gram_centered_splitk_into, gram_splitk_applies
 from core.xtdz_coalesced import column_mean_launch
@@ -58,6 +83,53 @@ def compute_covariance(
     # (core/xtdz_coalesced.mojo::column_mean_launch).
     column_mean_launch(ctx, mu, x, n_rows, n_cols)
     var cells = n_rows * n_cols
+    comptime if PCA_FAST_GRAM_MMA:
+        if not gram_splitk_applies(n_cols, n_cols, n_rows):
+            ctx.enqueue_function[shift_columns_kernel](
+                x.unsafe_ptr(),
+                mu.unsafe_ptr(),
+                Int32(n_rows),
+                Int32(n_cols),
+                Float32(-1.0),
+                grid_dim=((cells + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            var mm = n_cols * n_cols
+            var cp = cov.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            var xp = x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+            ctx.enqueue_function[afn_zero_kernel](
+                cp, Int32(mm),
+                grid_dim=((mm + 4 * AFN_ZERO_TPB - 1) // (4 * AFN_ZERO_TPB), 1, 1),
+                block_dim=(AFN_ZERO_TPB, 1, 1),
+            )
+            var tiles = ((n_cols + 63) // 64) * ((n_cols + 63) // 64)
+            var splits = max(1, PCA_GRAM_BLOCK_TARGET // tiles)
+            var per = (n_rows + splits - 1) // splits
+            per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
+            splits = (n_rows + per - 1) // per
+            afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+                ctx, AFN_TILE_SQUARE, cp, xp, xp, cp, cp,
+                n_cols, n_cols, n_rows, afn_strides(OP_TN, n_cols, n_cols, n_rows), splits, per,
+            )
+            ctx.enqueue_function[scale_in_place_kernel](
+                cov.unsafe_ptr(),
+                Int32(n_cols * n_cols),
+                Float32(1.0) / Float32(n_rows - 1),
+                grid_dim=((n_cols * n_cols + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            if restore_input:
+                ctx.enqueue_function[shift_columns_kernel](
+                    x.unsafe_ptr(),
+                    mu.unsafe_ptr(),
+                    Int32(n_rows),
+                    Int32(n_cols),
+                    Float32(1.0),
+                    grid_dim=((cells + 255) // 256, 1, 1),
+                    block_dim=(256, 1, 1),
+                )
+            ctx.synchronize()
+            return
     var fused = gram_splitk_applies(n_cols, n_cols, n_rows)
     if fused:
         gram_centered_splitk_into(

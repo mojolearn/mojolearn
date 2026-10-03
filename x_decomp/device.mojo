@@ -15,6 +15,15 @@ from checks.kernel_matrix import COLUMN_AMD, COLUMN_APPLE, TARGET_COLUMN, lib_sm
 
 from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
+from gemm.afn_apple_fast import (
+    AFN_EPI_NONE,
+    AFN_GEMM_APPLE,
+    AFN_GEMM_KB,
+    AFN_TILE_SQUARE,
+    AFN_ZERO_TPB,
+    afn_launch_tile,
+    afn_zero_kernel,
+)
 from decomposition.linalg_public_device import device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.cells import (
@@ -1476,11 +1485,60 @@ def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
     return nb * m * n if nb > 1 else 0
 
 
+#: lane/apple-fast-gap-linalg2-pca (2026-10-03): -D MOJOLEARN_DECOMP_FAST_GEMM_MMA.
+#: The kit's GEMM (`launch_gemm`: one thread per output cell and FOLD_BLOCK
+#: slice, scalar loads, no tiling) on the Apple matrix unit instead
+#: (`gemm/afn_apple_fast.mojo::afn_gemm_mma_kernel`, 64 x 64 tiles, any of
+#: the four transposes through its strides). A grid of fewer than
+#: DFG_BLOCK_TARGET blocks with a long k (randomized_svd's A^T Q, NMF's
+#: W^T X: a few output tiles over a million rows) splits k into row ranges
+#: summed with f32 atomics into a zeroed C. FAST + Apple only; the sum order
+#: is the matrix unit's (FAST's fold order is free).
+comptime DECOMP_FAST_GEMM_MMA = AFN_GEMM_APPLE and is_defined["MOJOLEARN_DECOMP_FAST_GEMM_MMA"]()
+comptime DFG_BLOCK_TARGET = 640
+comptime DFG_MIN_SPLIT_STEPS = 512
+
+
+def _launch_gemm_mma(
+    ctx: DeviceContext, a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool
+) raises:
+    # A_eff[i, p] = a[i * a_si + p * a_sp], B_eff[p, j] = b[p * b_sp + j * b_sj]
+    var a_si = 1 if ta else k
+    var a_sp = m if ta else 1
+    var b_sp = 1 if tb else n
+    var b_sj = k if tb else 1
+    var st = (a_si, a_sp, b_sp, b_sj)
+    var tiles = ((m + 63) // 64) * ((n + 63) // 64)
+    var splits = 1
+    if tiles < DFG_BLOCK_TARGET and k >= 2 * DFG_MIN_SPLIT_STEPS:
+        splits = min(DFG_BLOCK_TARGET // tiles, k // DFG_MIN_SPLIT_STEPS)
+    if splits > 1:
+        var per = (k + splits - 1) // splits
+        per = ((per + AFN_GEMM_KB - 1) // AFN_GEMM_KB) * AFN_GEMM_KB
+        splits = (k + per - 1) // per
+        ctx.enqueue_function[afn_zero_kernel](
+            c, Int32(m * n),
+            grid_dim=((m * n + 4 * AFN_ZERO_TPB - 1) // (4 * AFN_ZERO_TPB), 1, 1),
+            block_dim=(AFN_ZERO_TPB, 1, 1),
+        )
+        afn_launch_tile[DType.float32, DType.float32, True, AFN_EPI_NONE](
+            ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, splits, per
+        )
+    else:
+        afn_launch_tile[DType.float32, DType.float32, False, AFN_EPI_NONE](
+            ctx, AFN_TILE_SQUARE, c, a, b, c, c, m, n, k, st, 1, k
+        )
+
+
 def launch_gemm(
     ctx: DeviceContext, a: F32Ptr, b: F32Ptr, c: F32Ptr, p: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool
 ) raises:
     """C = op(A) op(B) on device pointers, enqueued (no sync): FOLD_BLOCK
     partial sums then the fold past one block (DEVIATIONS 5300/5301)."""
+    comptime if DECOMP_FAST_GEMM_MMA:
+        if m > 0 and n > 0 and k > 0:
+            _launch_gemm_mma(ctx, a, b, c, m, k, n, ta, tb)
+            return
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
     if nb > 1:
         ctx.enqueue_function[gemm_part_kernel](
