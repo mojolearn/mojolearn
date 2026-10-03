@@ -54,12 +54,15 @@ comptime THETA_REG = (
 #: to an earlier one runs only the iterations left of its last lap, the
 #: same final state, best vertex and iteration count as running them all
 #: (no result moves). The snapshot is 16 floats of the 64 the row reserves
-#: for Nelder-Mead (k <= 3 coordinates use at most 28). FAST + Apple,
-#: default off for the M3 A/B.
+#: for Nelder-Mead (k <= 3 coordinates use at most 28). Default on FAST +
+#: Apple since the M3 A/B (n=3, digests identical): dynamic-optimized-theta
+#: taxi-hourly 2,087.7 -> 561.9 ms, rmse the same. SEQ_FAST_FMA stays on.
+#: -D MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF restores the plain run; the old
+#: -D MOJOLEARN_SEQ_FAST_THETA_SNAP=1 is harmless.
 comptime THETA_SNAP = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_SEQ_FAST_THETA_SNAP"]()
+    and not is_defined["MOJOLEARN_SEQ_FAST_THETA_SNAP_OFF"]()
 )
 #: the snapshot's offset in the Nelder-Mead scratch (after the (k + 1) k +
 #: (k + 1) + 4 k <= 28 floats of k <= 3; (k + 1) k + (k + 1) <= 16 floats)

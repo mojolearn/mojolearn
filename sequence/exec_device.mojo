@@ -60,12 +60,16 @@ comptime TPB = 128
 #:    pinned halves: the DMA of chunk i overlaps the read of chunk i - 1
 #:    (opt_resident's OPT_PIPE_DOWN, which took the optimizers 318 -> 191 ms
 #:    on the M3, for every x_sequence download).
-#: Copies only: the same bytes, the same launches, no bit moves. FAST +
-#: Apple, default off for the M3 A/B; IDENTICAL and the other vendors
-#: compile the main path unchanged.
+#: Copies only: the same bytes, the same launches, no bit moves. Default on
+#: FAST + Apple since the M3 A/B (n=3, digests identical): layernorm
+#: 76.0 -> 52.2 ms (UP + DOWN), adafactor 685.7 -> 390.0 ms (DOWN), adagrad
+#: 195.5 -> 199.1 ms (neutral). -D MOJOLEARN_SEQ_FAST_PIPE_UP_OFF /
+#: -D MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF restore the serial copies; the old
+#: -D MOJOLEARN_SEQ_FAST_PIPE_UP=1 / _DOWN=1 are harmless. IDENTICAL and
+#: the other vendors compile the main path unchanged.
 comptime _SEQ_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-comptime SEQ_PIPE_UP = _SEQ_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_PIPE_UP"]()
-comptime SEQ_PIPE_DOWN = _SEQ_APPLE_FAST and is_defined["MOJOLEARN_SEQ_FAST_PIPE_DOWN"]()
+comptime SEQ_PIPE_UP = _SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_UP_OFF"]()
+comptime SEQ_PIPE_DOWN = _SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF"]()
 #: the pipelined chunk, floats (8 MB)
 comptime SEQ_PIPE_CH = 1 << 21
 
