@@ -569,24 +569,19 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     def _search_filtered(self, queries, filter):
         from ._optional_numpy import require_numpy
         np = require_numpy('_expansion_ann')
-        keep = _ann_mask("CagraIndex", filter, self.n_rows_) != 0
+        from ._buffer import _native
+        keep = _ann_mask("CagraIndex", filter, self.n_rows_)
         k = self._p("n_neighbors")
-        bd, bi = self._search_k(queries, self._p("itopk_size"))
-        bd = np.asarray(bd)
-        bi = np.asarray(bi)
+        L = self._p("itopk_size")
+        bd, bi = self._search_k(queries, L)
         m = bd.shape[0]
-        dist = np.full((m, k), np.inf, dtype=np.float32)
-        idx = np.full((m, k), -1, dtype=np.int32)
-        for q in range(m):
-            o = 0
-            for s in range(bd.shape[1]):
-                if o == k:
-                    break
-                v = int(bi[q, s])
-                if v >= 0 and keep[v]:
-                    dist[q, o] = bd[q, s]
-                    idx[q, o] = v
-                    o += 1
+        dist = np.empty((m, k), dtype=np.float32)
+        idx = np.empty((m, k), dtype=np.int32)
+        # the first k kept candidates per query by the base binding's
+        # `filter_topk_rows` (lane pyglue-numeric: a Python double loop)
+        _native("filter_topk_rows")([addr_ro(bd, name="distances"), addr_ro(bi, name="indices"),
+                                     keep.ctypes.data, dist.ctypes.data, idx.ctypes.data],
+                                    [m, L, k, self.n_rows_])
         return dist, idx
 
 
@@ -817,17 +812,18 @@ def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclide
         raise ValueError(f"mojolearn refine: candidates must be an integer array of shape ({m}, k0)")
     k0 = int(c.shape[1])
     k = _ann_int("refine", "k", k)
-    c32 = np.ascontiguousarray(np.where((c >= 0) & (c < n), c, -1).astype(np.int32))
+    # the binding skips a candidate outside [0, n) (x_ann/refine_core.mojo);
+    # an index beyond int32 is refused here (argument check)
+    if c.size and (int(c.min()) < -(1 << 31) or int(c.max()) >= (1 << 31)):
+        raise ValueError("mojolearn refine: a candidate index exceeds int32")
+    c32 = np.ascontiguousarray(c, dtype=np.int32)
     dist = empty((m * k,), "<f4")
     idx = empty((m * k,), "<i4")
     _backend.binding("_mojolearn_x_ann", numeric_mode).x_ann_refine(
         # dataset, queries, candidates, out_d, out_i
         [addr_ro(x, name="dataset"), addr_ro(q, name="queries"), addr_ro(c32, name="candidates"),
          addr(dist, name="distances"), addr(idx, name="indices")],
-        # n, d, m, k0, k
-        [n, d, m, k0, k],
+        # n, d, m, k0, k, root (metric 'euclidean': the binding roots the distances)
+        [n, d, m, k0, k, 1 if metric == "euclidean" else 0],
     )
-    dist = dist.reshape((m, k))
-    if metric == "euclidean":
-        dist = np.sqrt(np.asarray(dist, dtype=np.float32)).astype(np.float32)
-    return dist, idx.reshape((m, k))
+    return dist.reshape((m, k)), idx.reshape((m, k))

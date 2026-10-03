@@ -1907,6 +1907,45 @@ def weighted_pick_i32_binding(
     return PythonObject(at)
 
 
+def filter_topk_rows_binding(addrs: PythonObject, dims: PythonObject) raises -> PythonObject:
+    """A filtered k-NN result from a wider unfiltered one: per query row q,
+    the first k of its L candidates (in order) whose index v >= 0 has
+    keep[v] != 0, distances and indices, the rest +inf / -1 (CagraIndex
+    `search(filter=)`; lane pyglue-numeric: a Python double loop).
+    addrs = [cand_d f32 (m x L), cand_i i32 (m x L), keep i32 (n), dist f32
+    (m x k), idx i32 (m x k)]; dims = [m, L, k, n]."""
+    if len(addrs) != 5 or len(dims) != 4:
+        raise Error("filter_topk_rows: addrs [cand_d, cand_i, keep, dist, idx], dims [m, L, k, n]")
+    var m = Int(py=dims[0])
+    var L = Int(py=dims[1])
+    var k = Int(py=dims[2])
+    var n = Int(py=dims[3])
+    if m < 0 or L < 0 or k < 1 or n < 0:
+        raise Error("filter_topk_rows: bad sizes")
+    var bd = _ptr[DType.float32](Int(py=addrs[0]))
+    var bi = _ptr[DType.int32](Int(py=addrs[1]))
+    var kp = _ptr[DType.int32](Int(py=addrs[2]))
+    var dd = _ptr[DType.float32](Int(py=addrs[3]))
+    var di = _ptr[DType.int32](Int(py=addrs[4]))
+    var inf = bitcast[DType.float32](UInt32(0x7F800000))
+    with GILReleased(Python()):
+        for q in range(m):
+            var o = 0
+            for s in range(L):
+                if o == k:
+                    break
+                var v = Int(bi.unsafe_load(q * L + s))
+                if v >= 0 and v < n and kp.unsafe_load(v) != 0:
+                    dd.unsafe_store(q * k + o, bd.unsafe_load(q * L + s))
+                    di.unsafe_store(q * k + o, Int32(v))
+                    o += 1
+            while o < k:
+                dd.unsafe_store(q * k + o, inf)
+                di.unsafe_store(q * k + o, Int32(-1))
+                o += 1
+    return PythonObject(0)
+
+
 def strat_fold_assign_i32_binding(
     enc_addr: PythonObject, n: PythonObject, k: PythonObject, n_folds: PythonObject,
     alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject, dst_addr: PythonObject,

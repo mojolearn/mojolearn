@@ -601,15 +601,15 @@ def ivf_sq_search_on(
 
 
 def refine_kernel(m: Int32, x: F32P, n: Int32, d: Int32, queries: F32P, cand: I32P, k0: Int32, k: Int32,
-                  out_d: F32P, out_i: I32P):
+                  out_d: F32P, out_i: I32P, root: Int32):
     var q = _tid()
     if q < Int(m):
-        refine_cell(q, x, Int(n), Int(d), queries, cand, Int(k0), Int(k), out_d, out_i)
+        refine_cell(q, x, Int(n), Int(d), queries, cand, Int(k0), Int(k), out_d, out_i, root != 0)
 
 
 def refine_device(
     x: List[Float32], n: Int, d: Int, queries: List[Float32], m: Int, cand: List[Int32], k0: Int, k: Int,
-    mut out_d: List[Float32], mut out_i: List[Int32],
+    mut out_d: List[Float32], mut out_i: List[Int32], root: Bool = False,
 ) raises:
     var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
@@ -619,7 +619,7 @@ def refine_device(
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     ctx.enqueue_function[refine_kernel](Int32(m), dx.unsafe_ptr(), Int32(n), Int32(d), dq.unsafe_ptr(),
                                         dcand.unsafe_ptr(), Int32(k0), Int32(k), dd.unsafe_ptr(), di.unsafe_ptr(),
-                                        grid_dim=_grid(m), block_dim=TPB)
+                                        Int32(1 if root else 0), grid_dim=_grid(m), block_dim=TPB)
     ctx.synchronize()
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)

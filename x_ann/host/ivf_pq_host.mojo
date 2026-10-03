@@ -524,6 +524,7 @@ def ivf_sq_search_host(
 
 def refine_host(
     x: F32P, n: Int, d: Int, queries: F32P, m: Int, cand: I32P, k0: Int, k: Int, out_d: F32P, out_i: I32P,
+    root: Bool = False,
 ):
     """`refine_cell` per query, on the caller's arrays."""
     var tasks = ann_task_count(m, k0 * (d + k0))
@@ -531,7 +532,7 @@ def refine_host(
     def task(t: Int) {imm}:
         var span = ann_span(t, tasks, m)
         for q in range(span[0], span[1]):
-            refine_cell(q, x, n, d, queries, cand, k0, k, out_d, out_i)
+            refine_cell(q, x, n, d, queries, cand, k0, k, out_d, out_i, root)
 
     ann_tasks(task, tasks)
 
