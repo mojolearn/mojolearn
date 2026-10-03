@@ -68,3 +68,26 @@ process and never shrinks (memory stays at the largest call's size).
 
 ## MOJOLEARN_BPE_ALL
 Every switch above together (MERGE_BATCH + GROUP_FILTER + LIVEBUF + both device paths).
+
+## Compile status (2026-10-03, lane stopped compiling on Andrew's order: slots jammed)
+
+No Mojo build of this branch ran to completion here. `python3 -m py_compile python/mojolearn/tokenizer.py`
+passed (rc=0); `tools/hooks/no_host_routes.py origin/main HEAD` reports no finding.
+
+| build | result |
+|---|---|
+| FAST `-D MOJOLEARN_BPE_ALL=1` | compile owed: peer (was queued, killed before it got a slot) |
+| FAST `-D MOJOLEARN_BPE_TRAIN_DEVICE=1` | compile owed: peer |
+| FAST `-D MOJOLEARN_BPE_MERGE_BATCH=1` | compile owed: peer |
+| FAST `-D MOJOLEARN_BPE_GROUP_FILTER=1` | compile owed: peer |
+| FAST `-D MOJOLEARN_BPE_ENCODE_DEVICE=1` | compile owed: peer |
+| FAST `-D MOJOLEARN_BPE_LIVEBUF=1` | compile owed: peer |
+| FAST, no define | compile owed: peer |
+| IDENTICAL | not applicable: no IDENTICAL-built file changed (the host binding and tokenizer/ sources are untouched; build_tokenizer_fast.sh refuses IDENTICAL) |
+
+Risky compile sites, first build errors most likely here: `tokenizer/fast/bpe_device.mojo` `_pair_add`
+(`Atomic.load` / `compare_exchange[weak=True]` / `fetch_add` on `unsafe_offset` pointers), the
+`InlineArray[Int32, BPE_K]` lists in `bpe_topk_part_kernel` / `bpe_select_kernel` / `bpe_apply_kernel`,
+`BpeMem.p8/p32/p64` (`DeviceBuffer.unsafe_ptr() + off` returned as `MutPointer[T, MutAnyOrigin]`),
+`create_sub_buffer` uploads/downloads, `@fieldwise_init struct _Slot`, and the deferred-init
+`t_arena`/`t_off`/`t_len`/`t_bk` across the `comptime if BPE_LIVEBUF` branches of `_encode_launch`.
