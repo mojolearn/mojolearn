@@ -14,6 +14,7 @@ from std.sys.info import has_apple_gpu_accelerator
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE
 from x_prep.folds import I32P, kfold_folds, strat_folds
 from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
+from x_prep.fastpt import PTIMPUTE_FLAGS
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -168,6 +169,14 @@ def fast_unique_binding() raises -> PythonObject:
     return PythonObject(1)
 
 
+def ptimpute_flags_binding() raises -> PythonObject:
+    """Lane af-ptimpute (FAST + Apple, each switch its own define, default off):
+    the bits of x_prep/fastpt.mojo PTIMPUTE_FLAGS (1 PT_COLBATCH, 2 PT_SPEC,
+    4 PT_FUSED_TRANSFORM, 8 SI_ONEPASS, 16 PT_FOLD_NOX); registered only
+    when one is on, so the Python layer's probe is the switch."""
+    return PythonObject(PTIMPUTE_FLAGS)
+
+
 def calib_folds_binding() raises -> PythonObject:
     """Lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
     the CalibratedClassifierCV(GaussianNB) program's constants [words per
@@ -198,6 +207,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             m.def_function[fast_unique_binding]("x_prep_fast_unique")
         comptime if CALIB_FOLDS:
             m.def_function[calib_folds_binding]("x_prep_calib_folds")
+        comptime if PTIMPUTE_FLAGS != 0:
+            m.def_function[ptimpute_flags_binding]("x_prep_ptimpute_flags")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_prep: ", e))
