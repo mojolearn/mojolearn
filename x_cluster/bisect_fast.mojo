@@ -84,13 +84,14 @@ def _bfz_mean_kernel(part: FPtr, nch: Int32, d: Int32, n: Int32, mean: FPtr):
         mean[f] = ftz(identical_div(acc, Float32(Int(n))))
 
 
-def _bfz_center_kernel(x: FPtr, total: Int, d: Int32, mean: FPtr):
+def _bfz_center_kernel(x: FPtr, total: Int32, d: Int32, mean: FPtr):
     """x[i] = x[i] - mean[i % d] in place, a grid-stride loop over the values
     (`bisect_fit`'s ftz(ftz(x) - ftz(mean)))."""
     var D = Int(d)
     var stride = BFZ_CENTER_GRID * BFZ_TPB
     var i = Int(block_idx.x) * BFZ_TPB + Int(thread_idx.x)
-    while i < total:
+    var T = Int(total)
+    while i < T:
         x[i] = ftz(ftz(x[i]) - ftz(mean[i % D]))
         i += stride
 
@@ -112,7 +113,7 @@ def bisect_entry_ptr(
         var seed = UInt64(ip[6])
         var largest_cluster = ip[7] != 0
         var tol = fp[0]
-        if has_w or largest_cluster or n * d != nx or n < 1 or d < 1:
+        if has_w or largest_cluster or n * d != nx or n < 1 or d < 1 or nx > 2147483647:
             return False
         if k < 1 or k > n:
             raise Error("BisectingKMeans: n_samples=" + String(n) + " should be >= n_clusters=" + String(k))
@@ -136,7 +137,7 @@ def bisect_entry_ptr(
         if cgrid > BFZ_CENTER_GRID:
             cgrid = BFZ_CENTER_GRID
         ops.ctx.enqueue_function[_bfz_center_kernel](
-            ops._fp(xs), nx, Int32(d), ops._fp(mean_s), grid_dim=cgrid, block_dim=BFZ_TPB,
+            ops._fp(xs), Int32(nx), Int32(d), ops._fp(mean_s), grid_dim=cgrid, block_dim=BFZ_TPB,
         )
         var mean = ops.get(mean_s, d)
         ops.shrink(part)
