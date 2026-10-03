@@ -2599,8 +2599,8 @@ DEVIATION 203's partition assumes that tiling: two copies that drifted would
 put a block's rows somewhere its scatter does not write.
 
 The value comes from `_device_tpb()`: 128 (cuML's `TPB_DEFAULT`) unless a
-measurement arm overrides it with `-D MOJOLEARN_ET_TPB_256=1` or
-`-D MOJOLEARN_ET_TPB_512=1` (tools/et_profile_leg.sh builds those arms
+measurement arm overrides it with `-D MOJOLEARN_ET_TPB_512=1`
+(tools/et_profile_leg.sh builds those arms
 side by side with the default on a rented box).
 """
 
@@ -2639,7 +2639,8 @@ def _device_tpb() -> Int:
 
     The defines are the measurement arms: `-D MOJOLEARN_ET_TPB_128`
     forces cuML's width on a 64-lane device for the A/B,
-    `MOJOLEARN_ET_TPB_256` / `_512` widen a 32-lane device, and
+    `MOJOLEARN_ET_TPB_512` widens a 32-lane device (`_256` was DROPPED
+    on Apple: lane/apple-fast @ 269ffa57a), and
     `MOJOLEARN_ET_TPB_1024` (added 2026-09-01 with DEVIATION 2020, and
     it is the sweep this entry's "Owed" paragraph already names: CDNA's
     maximum, never yet timed) widens either. 1024 is
@@ -2657,8 +2658,6 @@ def _device_tpb() -> Int:
         return 1024
     if is_defined["MOJOLEARN_ET_TPB_512"]():
         return 512
-    if is_defined["MOJOLEARN_ET_TPB_256"]():
-        return 256
     if is_defined["MOJOLEARN_ET_TPB_128"]():
         return 128
     return 128 if WARP_SIZE <= 32 else 512

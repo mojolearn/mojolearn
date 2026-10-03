@@ -117,34 +117,8 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
 
 from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
-
-#: lane/apple-fast-trees-depthwise (2026-10-02), `-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1`,
-#: FAST + Apple only, default OFF. Phase 2 of the segmented scan
-#: (`seg_scan_block_sums_kernel`, launched `grid_dim=1, block_dim=1` in
-#: `_run_segmented_scan`) walks `size / 768` block aggregates on ONE THREAD:
-#: ~5,400 dependent round trips at taxi's 4.1M rows, twice per CTR calcer
-#: (`ctrs/ctr_calcers.mojo` THistoryBasedCtrCalcerGpu reset + visit) per
-#: cat feature per permutation. The arm runs that phase as one 256-thread
-#: block (`seg_scan_block_sums_parallel_kernel`) and ONLY from
-#: `launch_segmented_scan_and_scatter_non_negative`, the CTR entry, when
-#: `size < SEG_SUMS_EXACT_ROWS`: there the values are trivial weights and
-#: 0/1 target stats, every partial sum is an integer below 2^24, and an
-#: integer-valued Float32 sum is exact in any association, so the carries
-#: are the serial kernel's bit for bit. `launch_segmented_scan_vector`
-#: (the Exact leaf estimation's weights, not integers) keeps the serial
-#: kernel; IDENTICAL compiles it everywhere.
-comptime CTR_FAST_SCAN = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_GBDT_CTR_FAST_SCAN"]()
-)
-comptime SEG_SUMS_BLOCK = 256
-comptime SEG_SUMS_EXACT_ROWS = 1 << 24
 
 
 #: `TIndexWrapper::Index()` is `Idx & 0x3FFFFFFF` (`index_wrapper.cuh:22`).
@@ -319,80 +293,6 @@ def seg_scan_block_sums_kernel(
             running = running + v
 
 
-def seg_scan_block_sums_parallel_kernel(
-    block_sums: MutPointer[Float32, MutAnyOrigin],
-    block_flags: MutPointer[UInt8, MutAnyOrigin],
-    n_blocks_in: Int32,
-):
-    """Phase 2 with `SEG_SUMS_BLOCK` threads in ONE block (CTR_FAST_SCAN).
-
-    Thread `t` owns the stripe `[t * per, (t + 1) * per)` of block
-    aggregates and folds it with the serial kernel's operator (a flagged
-    block restarts the running sum at its own value). The stripe results
-    then take `seg_block_scan_kernel`'s segmented inclusive scan in shared
-    memory, so stripe `t`'s carry-in is stripe `t - 1`'s inclusive value --
-    exactly the serial `running` at that point -- and each thread writes
-    its stripe's exclusive prefixes. Same values as the serial kernel for
-    integer-valued inputs below 2^24 (the launcher's guard); launch with
-    `grid_dim=1, block_dim=SEG_SUMS_BLOCK`.
-    """
-    var s_val = stack_allocation[
-        SEG_SUMS_BLOCK,
-        Scalar[DType.float32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    var s_flg = stack_allocation[
-        SEG_SUMS_BLOCK,
-        Scalar[DType.int32],
-        address_space = AddressSpace.SHARED,
-    ]()
-    var n = Int(n_blocks_in)
-    var tid = Int(thread_idx.x)
-    var per = (n + SEG_SUMS_BLOCK - 1) // SEG_SUMS_BLOCK
-    var lo = tid * per
-    var hi = min(lo + per, n)
-
-    var agg_v = Float32(0.0)
-    var agg_f = Int32(0)
-    for i in range(lo, hi):
-        var v = block_sums.unsafe_load(i)
-        var f = block_flags.unsafe_load(i)
-        if f != UInt8(0):
-            agg_v = v
-            agg_f = Int32(1)
-        else:
-            agg_v = agg_v + v
-    s_val.unsafe_store(tid, agg_v)
-    s_flg.unsafe_store(tid, agg_f)
-    barrier()
-
-    var d = 1
-    while d < SEG_SUMS_BLOCK:
-        var lv = Float32(0.0)
-        var lf = Int32(0)
-        if tid >= d:
-            lv = s_val.unsafe_load(tid - d)
-            lf = s_flg.unsafe_load(tid - d)
-        barrier()
-        if tid >= d and s_flg.unsafe_load(tid) == Int32(0):
-            s_val.unsafe_store(tid, s_val.unsafe_load(tid) + lv)
-            s_flg.unsafe_store(tid, lf)
-        barrier()
-        d *= 2
-
-    var running = Float32(0.0)
-    if tid > 0:
-        running = s_val.unsafe_load(tid - 1)
-    for i in range(lo, hi):
-        var v = block_sums.unsafe_load(i)
-        var f = block_flags.unsafe_load(i)
-        block_sums.unsafe_store(i, running)
-        if f != UInt8(0):
-            running = v
-        else:
-            running = running + v
-
-
 def seg_add_block_carry_kernel(
     scanned: MutPointer[Float32, MutAnyOrigin],
     has_flag: MutPointer[UInt8, MutAnyOrigin],
@@ -509,13 +409,10 @@ def _run_segmented_scan[from_sign_bit: Bool](
     mut has_flag: DeviceBuffer[DType.uint8],
     mut block_sums: DeviceBuffer[DType.float32],
     mut block_flags: DeviceBuffer[DType.uint8],
-    parallel_sums: Bool = False,
 ) raises:
     """The three phases. `scanned` leaves holding the segmented INCLUSIVE
     scan of the whole array, which is what both of their entry points hand
-    to their output iterator. `parallel_sums` (CTR_FAST_SCAN only) takes
-    phase 2 on one block instead of one thread; a caller passes it only
-    where the sums are exact in any association."""
+    to their output iterator."""
     var n_blocks = (size + SEG_SCAN_BLOCK - 1) // SEG_SCAN_BLOCK
 
     ctx.enqueue_function[seg_block_scan_kernel[from_sign_bit]](
@@ -524,25 +421,10 @@ def _run_segmented_scan[from_sign_bit: Bool](
         block_sums.unsafe_ptr(), block_flags.unsafe_ptr(),
         grid_dim=n_blocks, block_dim=SEG_SCAN_BLOCK,
     )
-    comptime if CTR_FAST_SCAN:
-        if parallel_sums:
-            ctx.enqueue_function[seg_scan_block_sums_parallel_kernel](
-                block_sums.unsafe_ptr(), block_flags.unsafe_ptr(),
-                Int32(n_blocks),
-                grid_dim=1, block_dim=SEG_SUMS_BLOCK,
-            )
-        else:
-            ctx.enqueue_function[seg_scan_block_sums_kernel](
-                block_sums.unsafe_ptr(), block_flags.unsafe_ptr(),
-                Int32(n_blocks),
-                grid_dim=1, block_dim=1,
-            )
-    else:
-        ctx.enqueue_function[seg_scan_block_sums_kernel](
-            block_sums.unsafe_ptr(), block_flags.unsafe_ptr(),
-            Int32(n_blocks),
-            grid_dim=1, block_dim=1,
-        )
+    ctx.enqueue_function[seg_scan_block_sums_kernel](
+        block_sums.unsafe_ptr(), block_flags.unsafe_ptr(), Int32(n_blocks),
+        grid_dim=1, block_dim=1,
+    )
     ctx.enqueue_function[seg_add_block_carry_kernel](
         scanned.unsafe_ptr(), has_flag.unsafe_ptr(), block_sums.unsafe_ptr(),
         Int32(size),
@@ -626,11 +508,9 @@ def launch_segmented_scan_and_scatter_non_negative(
     if not inclusive:
         enqueue_fill(ctx, output, Float32(0.0))
 
-    # CTR_FAST_SCAN: the CTR calcers' inputs are integer-valued (trivial
-    # weights, 0/1 target stats), exact below 2^24 in any association
     _run_segmented_scan[True](
         ctx, size, SEGMENT_START_MASK, values, indices, scanned, has_flag,
-        block_sums, block_flags, parallel_sums=size < SEG_SUMS_EXACT_ROWS,
+        block_sums, block_flags,
     )
 
     var emit_blocks = (size + SEG_EMIT_BLOCK - 1) // SEG_EMIT_BLOCK
