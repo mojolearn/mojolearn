@@ -57,7 +57,7 @@ from . import _backend
 from . import _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, zeros
-from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, encode_labels, sorted_classes
+from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, encode_labels, sorted_classes, threshold_codes
 from ._mode import NumericModeMixin
 from ._scale_gamma import scale_gamma
 from .linear_model import (
@@ -234,11 +234,9 @@ def _c_rows(binding, C, n_rows, sample_weight, class_weight=None, y=None, who="S
             raise ValueError(
                 f"mojolearn {who}: sample_weight has {sw.shape[0]} entries, X has {n_rows} rows"
             )
-        for v in sw.tolist():
-            if not math.isfinite(v) or v < 0.0:
-                raise ValueError(
-                    f"mojolearn {who}: sample_weight must be finite and >= 0, got {v!r}"
-                )
+        # finiteness and sign by the base binding (all_finite_f64, reduce_stat min)
+        if n_rows and (not all_finite(sw) or sw.min() < 0.0):
+            raise ValueError(f"mojolearn {who}: sample_weight must be finite and >= 0")
     codes = cwa = None
     n_classes = 0
     if class_weight is not None:
@@ -252,9 +250,11 @@ def _c_rows(binding, C, n_rows, sample_weight, class_weight=None, y=None, who="S
                 raise ValueError(
                     f"mojolearn {who}: class_weight is a dict, 'balanced' or None, got {class_weight!r}"
                 )
-            counts = [0] * len(classes)
-            for c in codes.tolist():
-                counts[c] += 1
+            from ._buffer import _native
+            cnt = zeros((len(classes),), "<i8")
+            _native("bincount_i64")(addr_ro(codes, name="class codes"), 2, codes.shape[0], len(classes),
+                                    addr(cnt, name="counts"), 0)
+            counts = cnt.tolist()
             cw = [n_rows / (len(classes) * counts[k]) for k in range(len(classes))]
         else:
             cw = [1.0] * len(classes)
@@ -338,27 +338,35 @@ def _precomputed_columns(binding, q, support):
     return _gather(binding, q, None, idx)
 
 
+def _concat_f32(blocks):
+    """The float32 elements of every block, in order, as one flat Array
+    (byte copies; the saved pair arrays)."""
+    from ._bufcheck import memcopy
+    parts = [as_f32_c(b, ndim=None, name="block")[0] for b in blocks]
+    out = empty((max(sum(p.size for p in parts), 0),), "<f4")
+    at = addr(out, name="pairs") if out.size else 0
+    for p in parts:
+        if p.size:
+            memcopy(at, addr_ro(p, name="block"), 4 * p.size)
+            at += 4 * p.size
+    return out
+
+
 def _dual_times_sv(dual_coef, support_vectors):
     """`dual_coef_ @ support_vectors_`: a `(1, n_support) x (n_support,
     n_features)` product, accumulated SEQUENTIALLY over the support vectors
-    in Python float64 and rounded once to float32.
-
-    DEVIATION 2372 -- A HOST REDUCTION, OUTSIDE THE IDENTITY CLAIM. NumPy's
-    float32 matmul went through the platform BLAS (or NumPy's own blocked
-    loop), whose fold shape was the host's; this is one written-down order
-    instead, so the bits are the same on every host but MAY DIFFER from a
-    NumPy-era `coef_` in the last place. Only reachable on
-    `kernel='linear'`, and only through the `coef_` property. It is an
-    O(n_support * n_features) Python loop, FLAGGED AS A DEFECT: the right
-    home is a gemv binding.
-    """
-    d = dual_coef.tolist()[0]
-    n_features = support_vectors.shape[1]
-    acc = [0.0] * n_features
-    for a, row in zip(d, support_vectors.tolist()):
-        for j in range(n_features):
-            acc[j] += a * row[j]
-    return Array.from_list([acc], "<f4")
+    in float64 and rounded once to float32, by the base binding's
+    `dot_rows_f32` (lane cgr4-py-compute; it was a Python double loop).
+    DEVIATION 2372: one written-down order, the same bits on every host.
+    Only reachable on `kernel='linear'`, through the `coef_` property."""
+    from ._buffer import _native
+    a, _ = as_f32_c(dual_coef, ndim=None, name="dual_coef_")
+    sv, _ = as_f32_c(support_vectors, ndim=2, name="support_vectors_")
+    m, d = sv.shape
+    out = empty((1, d), "<f4")
+    _native("dot_rows_f32")(addr_ro(a, name="dual_coef_"), addr_ro(sv, name="support_vectors_"), m, d,
+                            addr(out, name="coef_"))
+    return out
 
 
 #: `svc_pair_epilogue` modes (svm/impl/svc_rows.mojo): the epilogues
@@ -851,7 +859,7 @@ class SVC(NumericModeMixin):
         self._label1 = label1
         if self.probability:
             self._fit_probability(
-                x, Array.from_list([0 if v == label0 else 1 for v in labels.tolist()], "<i4"),
+                x, threshold_codes(labels, float(label0), strict=True).astype("<i4"),
                 gamma, c_rows)
         else:
             self.__dict__.pop("_prob_ab", None)
@@ -1301,9 +1309,8 @@ class SVC(NumericModeMixin):
                 [v for p in pairs for v in (p["i"], p["j"], p["dual"].shape[1], p["n_iter"])], "<i8")
             arrays["pair_b"] = Array.from_list([p["b"] for p in pairs], "<f4")
             arrays["pair_support"] = Array.from_list([r for p in pairs for r in p["support"]], "<i4")
-            arrays["pair_dual"] = Array.from_list([v for p in pairs for v in p["dual"].tolist()[0]], "<f4")
-            arrays["pair_sv"] = Array.from_list(
-                [v for p in pairs for row in p["sv"].tolist() for v in row], "<f4")
+            arrays["pair_dual"] = _concat_f32([p["dual"] for p in pairs])
+            arrays["pair_sv"] = _concat_f32([p["sv"] for p in pairs])
         return _serialize.write_npz(path, arrays)
 
     @classmethod
