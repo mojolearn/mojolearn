@@ -772,16 +772,19 @@ class _BaggingBase(_TreesEnsembleBase):
         its out-of-bag rows, added in member order (sklearn `_set_oob_score`)."""
         n = Xa.shape[0]
         acc = zeros((n * k,), "<f8")
-        counts = [0] * n
+        counts = zeros((n,), "<f8")
+        b = self._bind()
         for est, cols, oob in zip(self.estimators_, self.estimators_features_, self._oob_rows):
             m = len(oob)
             if m == 0:
                 continue
             out = member_out(est, self._gather(Xa, oob, cols), m)
-            self._bind().x_trees_accumulate_rows(addr(acc, name="oob"), addr_ro(out, name="member"),
-                                                 addr_ro(oob, name="rows"), [n, k, m])
-            for i in oob.tolist():
-                counts[i] += 1
+            b.x_trees_accumulate_rows(addr(acc, name="oob"), addr_ro(out, name="member"),
+                                      addr_ro(oob, name="rows"), [n, k, m])
+            # each out-of-bag row's member count, added by the same binding
+            ones = full((m,), 1.0, "<f8")
+            b.x_trees_accumulate_rows(addr(counts, name="oob"), addr_ro(ones, name="member"),
+                                      addr_ro(oob, name="rows"), [n, 1, m])
         return acc, counts
 
     def _check_X(self, X):
@@ -899,16 +902,16 @@ class BaggingRegressor(_BaggingBase):
 
         def member_out(est, Xs, m):
             p, _ = as_f32_c(est.predict(Xs), ndim=1, name="prediction")
-            return Array.from_list(p.tolist(), "<f8")
+            return p.astype("<f8")
 
         acc, counts = self._oob_outputs(Xa, 1, member_out)
-        pred = [v / max(c, 1) for v, c in zip(acc.tolist(), counts)]
-        self.oob_prediction_ = Array.from_list(pred, "<f8")
-        y = y32.tolist()
-        mean = math.fsum(y) / n
-        ss_tot = math.fsum((v - mean) * (v - mean) for v in y)
-        ss_res = math.fsum((a - b) * (a - b) for a, b in zip(y, pred))
-        self.oob_score_ = 1.0 - ss_res / ss_tot if ss_tot > 0 else (1.0 if ss_res == 0 else 0.0)
+        y, _ = as_f32_c(y32, ndim=1, name="y")
+        pred = zeros((n,), "<f8")
+        # per-row predictions and R^2 in Mojo (lane cgr4-py-compute)
+        score = self._bind().x_trees_oob_r2(addr_ro(acc, name="oob"), addr_ro(counts, name="oob"),
+                                            addr_ro(y, name="y"), addr(pred, name="oob"), [n])
+        self.oob_prediction_ = pred
+        self.oob_score_ = float(score)
 
     def predict(self, X):
         Xa = self._check_X(X)
@@ -933,18 +936,22 @@ class BaggingRegressor(_BaggingBase):
 # the estimator weight and the weighted median are `xtrees/ops.mojo`
 # (`samme_step`, `r2_step`, `weighted_median`); R2's weighted bootstrap is the
 # lane's counter RNG, not numpy's `choice`.
-def _trees_normalized_weights(sample_weight, n):
+def _trees_normalized_weights(sample_weight, n, est=None):
+    """sample_weight / its total as float64 (uniform 1 / n without), checked
+    and divided in Mojo (`x_trees_normalized_weights`; lane cgr4-py-compute)."""
     if sample_weight is None:
-        return Array.from_list([1.0 / n] * n, "<f8")
-    sw = [float(v) for v in as_f32_c(sample_weight, ndim=1, name="sample_weight")[0].tolist()]
-    if len(sw) != n:
-        raise ValueError(f"sample_weight has {len(sw)} entries, X has {n} rows")
-    if any(not math.isfinite(v) or v < 0 for v in sw):
+        return full((n,), 1.0 / n, "<f8")
+    sw, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
+    if sw.shape[0] != n:
+        raise ValueError(f"sample_weight has {sw.shape[0]} entries, X has {n} rows")
+    out = zeros((max(n, 1),), "<f8")
+    status = int(_trees_x_bind(est).x_trees_normalized_weights(addr_ro(sw, name="sample_weight"),
+                                                               addr(out, name="weights"), [n]))
+    if status == 1:
         raise ValueError("sample_weight must be finite and nonnegative")
-    total = math.fsum(sw)
-    if not total > 0:
+    if status == 2:
         raise ValueError("sample_weight must have a positive total")
-    return Array.from_list([v / total for v in sw], "<f8")
+    return out
 
 
 class _AdaBoostBase(_TreesEnsembleBase):
@@ -1000,7 +1007,7 @@ class AdaBoostClassifier(_AdaBoostBase):
             raise ValueError("y has fewer than 2 classes")
         seed = _trees_seed(self.random_state)
         base = self.estimator if self.estimator is not None else DecisionTreeClassifier(max_depth=1)
-        w = _trees_normalized_weights(sample_weight, n)
+        w = _trees_normalized_weights(sample_weight, n, self)
         stats = zeros((4,), "<f8")
         self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []
         b = self._bind()
@@ -1125,7 +1132,7 @@ class AdaBoostRegressor(_AdaBoostBase):
             raise ValueError(f"y has {len(y32)} rows, X has {n}")
         seed = _trees_seed(self.random_state)
         base = self.estimator if self.estimator is not None else DecisionTreeRegressor(max_depth=3)
-        w = _trees_normalized_weights(sample_weight, n)
+        w = _trees_normalized_weights(sample_weight, n, self)
         stats = zeros((4,), "<f8")
         cols = _trees_arange(d)
         self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []

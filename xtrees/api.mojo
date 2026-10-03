@@ -724,6 +724,62 @@ def _kshap_check(p: List[Int], who: String) raises:
         raise Error(who + ": sampled coalitions need a size distribution")
 
 
+def oob_r2_binding(acc: PythonObject, counts: PythonObject, y: PythonObject, pred: PythonObject,
+                   params: PythonObject) raises -> PythonObject:
+    """BaggingRegressor's out-of-bag score (lane cgr4-py-compute, out of
+    Python): pred[i] = acc[i] / max(counts[i], 1) (float64), then R^2 of
+    pred against the float32 y, every sum in row order (one fixed fold on
+    every column); 1 - ss_res / ss_tot, or 1 / 0 when ss_tot is 0 and
+    ss_res is / is not. params = [n]."""
+    _need(params, 1, "x_trees_oob_r2")
+    var n = _i(params, 0)
+    if n < 1:
+        raise Error("x_trees_oob_r2: needs rows")
+    var ap = f64_ptr(Int(py=acc))
+    var cp = f64_ptr(Int(py=counts))
+    var yp = f32_ptr(Int(py=y))
+    var pp = f64_ptr(Int(py=pred))
+    var sy = Float64(0)
+    for i in range(n):
+        pp[i] = ap[i] / max(cp[i], 1.0)
+        sy += Float64(yp[i])
+    var mean = sy / Float64(n)
+    var tot = Float64(0)
+    var res = Float64(0)
+    for i in range(n):
+        var dv = Float64(yp[i]) - mean
+        tot += dv * dv
+        var dr = Float64(yp[i]) - pp[i]
+        res += dr * dr
+    if tot > 0:
+        return PythonObject(1.0 - res / tot)
+    return PythonObject(1.0 if res == 0 else 0.0)
+
+
+def normalized_weights_binding(w: PythonObject, out: PythonObject, params: PythonObject) raises -> PythonObject:
+    """AdaBoost's initial weights (lane cgr4-py-compute, out of Python):
+    out[i] = w[i] / sum(w) in float64 from float32 w, the sum in row order.
+    Returns 0, 1 when an entry is not finite or is negative, 2 when the
+    total is not positive (out then unspecified). params = [n]."""
+    _need(params, 1, "x_trees_normalized_weights")
+    var n = _count(_i(params, 0), "x_trees_normalized_weights")
+    if n == 0:
+        return PythonObject(2)
+    var wp = f32_ptr(Int(py=w))
+    var op = f64_ptr(Int(py=out))
+    var total = Float64(0)
+    for i in range(n):
+        var v = Float64(wp[i])
+        if not (v >= 0 and v <= 1.7976931348623157e308):
+            return PythonObject(1)
+        total += v
+    if not (total > 0):
+        return PythonObject(2)
+    for i in range(n):
+        op[i] = Float64(wp[i]) / total
+    return PythonObject(0)
+
+
 def _kshap_binom(M: Int, r: Int) -> Float64:
     """C(M, r) in float64 by the multiplicative recurrence; every step is an
     exact integer while C(M, r) * M < 2^53, which holds for every size the
@@ -929,6 +985,8 @@ def register(mut m: PythonModuleBuilder) raises:
     m.def_function[device_folds_binding]("x_trees_device_folds")
     m.def_function[block_mean_binding]("x_trees_block_mean")
     m.def_function[kshap_schedule_binding]("x_trees_kshap_schedule")
+    m.def_function[oob_r2_binding]("x_trees_oob_r2")
+    m.def_function[normalized_weights_binding]("x_trees_normalized_weights")
     m.def_function[kshap_synth_binding]("x_trees_kshap_synth")
     m.def_function[kshap_solve_binding]("x_trees_kshap_solve")
     m.def_function[pshap_synth_binding]("x_trees_pshap_synth")
