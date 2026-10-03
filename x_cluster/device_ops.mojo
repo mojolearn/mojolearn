@@ -499,6 +499,11 @@ def _ap_key_index(key: UInt64) -> Int:
 
 
 def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
+    _ap_r_body(s, a, r, n, damping)
+
+
+@always_inline
+def _ap_r_body(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
     """`ap_responsibility_row` for row `block_idx.x` on one block: the max
     of `ftz(A + S)` with its lowest index, then the second max over the
     other columns with ITS lowest index (each an integer max of `_ap_key`,
@@ -595,6 +600,11 @@ def _ap_r_top2_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
 
 
 def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
+    _ap_a_body(r, a, n, damping)
+
+
+@always_inline
+def _ap_a_body(r: FPtr, a: FPtr, n: Int32, damping: Float32):
     var t = _tid()
     if t < Int(n):
         ap_availability_col(r, a, Int(n), damping, t)
@@ -1045,6 +1055,11 @@ comptime APF_ROWS = 64  # rows per slice
 # its own thread. The addends and the cell update are `ap_availability_col`'s;
 # the column sum's order is not (bits move; the paired quality check).
 def _apf_part_kernel(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr):
+    _apf_part_body(r, n, n_tiles, part)
+
+
+@always_inline
+def _apf_part_body(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr):
     """Block (slice s, tile c), thread t: column c * APF_TPB + t summed over
     the slice's rows (`Rp`: the positive part off the diagonal, the value
     on it). Adjacent threads read adjacent cells of each row."""
@@ -1068,6 +1083,11 @@ def _apf_part_kernel(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr):
 
 
 def _apf_sum_kernel(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr):
+    _apf_sum_body(part, n, n_slices, colsum)
+
+
+@always_inline
+def _apf_sum_body(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr):
     var k = _tid()
     var N = Int(n)
     if k >= N:
@@ -1079,6 +1099,11 @@ def _apf_sum_kernel(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr):
 
 
 def _apf_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32, damping: Float32):
+    _apf_update_body(r, a, colsum, n, n_tiles, damping)
+
+
+@always_inline
+def _apf_update_body(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32, damping: Float32):
     """Block (row i, tile c), thread t: cell (i, c * APF_TPB + t)."""
     var N = Int(n)
     var T = Int(n_tiles)
@@ -1135,31 +1160,31 @@ def _apl_r_kernel(
             done[0] = Int32(1)
             done[1] = Int32(prev)
             return
-    _ap_r_kernel(s, a, r, n, damping)
+    _ap_r_body(s, a, r, n, damping)
 
 
 def _apl_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32, done: IPtr):
     if done[0] != Int32(0):
         return
-    _ap_a_kernel(r, a, n, damping)
+    _ap_a_body(r, a, n, damping)
 
 
 def _apl_a_part_kernel(r: FPtr, n: Int32, n_tiles: Int32, part: FPtr, done: IPtr):
     if done[0] != Int32(0):
         return
-    _apf_part_kernel(r, n, n_tiles, part)
+    _apf_part_body(r, n, n_tiles, part)
 
 
 def _apl_a_sum_kernel(part: FPtr, n: Int32, n_slices: Int32, colsum: FPtr, done: IPtr):
     if done[0] != Int32(0):
         return
-    _apf_sum_kernel(part, n, n_slices, colsum)
+    _apf_sum_body(part, n, n_slices, colsum)
 
 
 def _apl_a_update_kernel(r: FPtr, a: FPtr, colsum: FPtr, n: Int32, n_tiles: Int32, damping: Float32, done: IPtr):
     if done[0] != Int32(0):
         return
-    _apf_update_kernel(r, a, colsum, n, n_tiles, damping)
+    _apf_update_body(r, a, colsum, n, n_tiles, damping)
 
 
 def _apl_e_kernel(
