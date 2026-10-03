@@ -8,8 +8,8 @@ not a distributed factorization of a single binary covariance matrix.
 __all__ = ['fit_gaussian_process_classifier', 'predict_gaussian_process_classifier']
 
 from ._parallel_pool import DevicePool
-from ._buffer import Array, as_f32_c
-from ._labels import encode_labels, decode_labels
+from ._buffer import as_f32_c
+from ._labels import encode_labels, decode_labels, threshold_codes
 
 
 def _validate(estimator):
@@ -50,14 +50,13 @@ def fit_gaussian_process_classifier(estimator, X, y, *, devices=(0,)):
     _validate(estimator)
     x, copied = as_f32_c(X, ndim=2, name='X')
     classes, codes = encode_labels(y)
-    codes = [int(c) for c in codes.tolist()]
-    if len(codes) != x.shape[0]:
+    if codes.size != x.shape[0]:
         raise ValueError('y length differs from X rows')
     if len(classes) < 2:
         raise ValueError('GaussianProcessClassifier requires at least two classes')
     columns = [1] if len(classes) == 2 else range(len(classes))
-    requests = [('gpc_class_fit', _fresh(estimator),
-                 (x, Array.from_list([1.0 if c == k else 0.0 for c in codes], '<f4')))
+    # the 0/1 targets through the core helpers (equal_elements, cast_elements)
+    requests = [('gpc_class_fit', _fresh(estimator), (x, (codes == k).astype('<f4')))
                 for k in columns]
     fits = _run(requests, devices)
     result = _fresh(estimator)
@@ -78,7 +77,9 @@ def predict_gaussian_process_classifier(estimator, X, *, devices=(0,), method='p
     if method not in ('predict', 'predict_proba'):
         raise ValueError('method must be predict or predict_proba')
     q = estimator._query(X)
-    want_proba = method == 'predict_proba' or estimator.n_classes_ > 2
+    # 2: the binding writes the binary [1 - p, p] rows; 1: the class-1 column
+    want_proba = (2 if estimator.n_classes_ == 2 else 1) if (
+        method == 'predict_proba' or estimator.n_classes_ > 2) else 0
     requests = []
     for fit in estimator.estimators_:
         part = _fresh(estimator)
@@ -90,13 +91,12 @@ def predict_gaussian_process_classifier(estimator, X, *, devices=(0,), method='p
         raise ValueError('GPC worker returned an invalid row count')
     if estimator.n_classes_ == 2:
         if method == 'predict_proba':
-            return Array.from_list([[1.0 - v, v] for v in arrays[0].tolist()], '<f8')
-        codes = [1 if v > 0.0 else 0 for v in arrays[0].tolist()]
-        return decode_labels(estimator.classes_, Array.from_list(codes, '<i8'))
+            return arrays[0]
+        return decode_labels(estimator.classes_, threshold_codes(arrays[0]))
     # DEVIATION 2833's one-vs-rest combine on this process's device, the
     # single-device class's own call (cpu-gpu-cleanup c-gp-kernel).
     from ._gpc_impl import _ovr_combine
     proba, codes32 = _ovr_combine(estimator._extension(), arrays, int(q.shape[0]))
     if method == 'predict_proba':
         return proba
-    return decode_labels(estimator.classes_, Array.from_list(codes32.tolist(), '<i8'))
+    return decode_labels(estimator.classes_, codes32.astype('<i8'))
