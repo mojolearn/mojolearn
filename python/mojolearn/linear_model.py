@@ -447,8 +447,19 @@ def _ols_normal_eq_default(b):
     equilibrated normal equations instead of the TSQR (lane
     apple-fast-olsne: FAST on Apple, the comptime OLS_FAST_NORMAL_EQ read
     back through `ols_normal_eq_default`; False on a binding without it)."""
-    q = getattr(b, "ols_normal_eq_default", None)
+    q = _optional_export(b, "ols_normal_eq_default")
     return bool(q()) if q is not None else False
+
+
+def _optional_export(b, name):
+    """`name` from binding `b`, or None when it does not export it. A host
+    binding's stand-in raises ImportError (by name) for a missing export
+    rather than AttributeError, so a plain getattr default never applies on a
+    CPU-only install, and LinearRegression.fit raised there."""
+    try:
+        return getattr(b, name, None)
+    except ImportError:
+        return None
 
 
 def _ols_tsqr(x, y, rows, cols, mode):
@@ -595,7 +606,7 @@ class LinearRegression(NumericModeMixin):
         b = self._bind("_mojolearn_estimators")
         fast_ne = _ols_normal_eq_default(b)
         normal_eq = not _ols_tsqr_on(rows, cols) or fast_ne
-        resident = getattr(b, "ols_fit_resident", None)
+        resident = _optional_export(b, "ols_fit_resident")
         if fast_ne and weights is None and resident is not None:
             # lane apple-fast-olsne: FAST Apple builds only (the binding's
             # compiled OLS_FAST_NORMAL_EQ): the normal equations with X and y
