@@ -97,7 +97,7 @@ from ivf.impl.neighbors.ivf_flat.fast_build_device import (
 
 #: lane/apple-fast-ann (2026-10-02): the device build passes compile under
 #: FAST on Apple, each arm by its build define (x_ann/fast_env.mojo)
-comptime IVF_FAST_TRAINSET = FAST_IVF_DEVICE_TRAINSET
+comptime IVF_FAST_DEVICE_TRAINSET = FAST_IVF_DEVICE_TRAINSET
 comptime IVF_FAST_CSR = FAST_IVF_DEVICE_CSR
 
 comptime IVF_FAST_TRAINSET = (
@@ -392,7 +392,7 @@ def ivf_flat_build(
     # over them and the upload of `xt` beside `x`. The scale can differ
     # only at a power-of-two boundary (its docstring): FAST bits may move.
     var dev_train = False
-    comptime if IVF_FAST_TRAINSET:
+    comptime if IVF_FAST_DEVICE_TRAINSET:
         dev_train = n_train < n_rows and not trace.enabled
     var xt = List[Float32]()
     var train_rows = List[Int]()
@@ -428,7 +428,7 @@ def ivf_flat_build(
     if n_train == n_rows or dev_train:
         xt.append(Float32(0.0))
     var dxt = upload_f32(ctx, xt)
-    comptime if IVF_FAST_TRAINSET:
+    comptime if IVF_FAST_DEVICE_TRAINSET:
         if dev_train:
             dxt = fast_trainset_device(ctx, dx, train_rows, n_train, dim)
             sum_scale = fast_trainset_scale(ctx, dxt, n_train, dim)
