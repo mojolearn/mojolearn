@@ -43,6 +43,7 @@ from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
+from sequence.schedule import fill_epoch_order, splitmix64
 
 
 
@@ -1072,4 +1073,345 @@ def scale_shift_ftz_f32_binding(
             comptime if HOTPATH_SABOTAGE:
                 r = -r
             dp.unsafe_store(i, r)
+    return PythonObject(0)
+
+
+# ---------------------------------------------------------------------------
+# lane cgr4-py-compute, round 2: the rest of the per-row Python
+# ---------------------------------------------------------------------------
+
+
+def bincount_i64_binding(
+    src_addr: PythonObject, code: PythonObject, n: PythonObject, k: PythonObject,
+    counts_addr: PythonObject, accumulate: PythonObject,
+) raises -> PythonObject:
+    """counts[v] += 1 for each of the n int32 (code 2) or int64 (code 3)
+    values at `src` (counts zeroed first unless `accumulate`); a value
+    outside [0, k) raises before any count is written."""
+    var count = Int(py=n)
+    var kk = Int(py=k)
+    var c = Int(py=code)
+    if count < 0 or kk < 1 or (c != HP_I32 and c != HP_I64):
+        raise Error("bincount_i64: needs n >= 0, k >= 1 and int32 or int64 values")
+    var cp = _ptr[DType.int64](Int(py=counts_addr))
+    var bad = False
+    with GILReleased(Python()):
+        if Int(py=accumulate) == 0:
+            for j in range(kk):
+                cp.unsafe_store(j, 0)
+        if count > 0:
+            var ip = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr))
+            var lp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=src_addr))
+            for i in range(count):
+                var v = Int(ip.unsafe_load(i)) if c == HP_I32 else Int(lp.unsafe_load(i))
+                if v < 0 or v >= kk:
+                    bad = True
+                    break
+            if not bad:
+                for i in range(count):
+                    var v = Int(ip.unsafe_load(i)) if c == HP_I32 else Int(lp.unsafe_load(i))
+                    comptime if HOTPATH_SABOTAGE:
+                        v = (v + 1) % kk
+                    cp.unsafe_store(v, cp.unsafe_load(v) + 1)
+    if bad:
+        raise Error("bincount_i64: value out of range")
+    return PythonObject(0)
+
+
+def compact_notnan_f32_binding(
+    src_addr: PythonObject, n: PythonObject, stride: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """dst = the non-NaN values of src[0], src[stride], ..., src[(n-1)*stride]
+    in order (a column of a row-major block); returns their count."""
+    var count = Int(py=n)
+    var st = Int(py=stride)
+    if count < 0 or st < 1:
+        raise Error("compact_notnan_f32: n >= 0, stride >= 1")
+    if count == 0:
+        return PythonObject(0)
+    var sp = _ptr[DType.float32](Int(py=src_addr))
+    var dp = _ptr[DType.float32](Int(py=dst_addr))
+    var m = 0
+    with GILReleased(Python()):
+        for i in range(count):
+            var v = sp.unsafe_load(i * st)
+            if v == v:
+                dp.unsafe_store(m, v)
+                m += 1
+    return PythonObject(m)
+
+
+def gather_keep_neg_i32_binding(
+    table_addr: PythonObject, n_table: PythonObject, src_addr: PythonObject,
+    n: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """dst[i] = table[src[i]] for src[i] >= 0, else src[i] (a negative
+    sentinel, such as a leaf's column id, kept); int32. A non-negative value
+    outside the table raises before any write."""
+    var count = Int(py=n)
+    var nt = Int(py=n_table)
+    if count < 0 or nt < 0:
+        raise Error("gather_keep_neg_i32: n and n_table must be non-negative")
+    if count == 0:
+        return PythonObject(0)
+    var tp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=table_addr))
+    var sp = _ptr[DType.int32](Int(py=src_addr))
+    var dp = _ptr[DType.int32](Int(py=dst_addr))
+    var bad = False
+    with GILReleased(Python()):
+        for i in range(count):
+            if Int(sp.unsafe_load(i)) >= nt:
+                bad = True
+                break
+        if not bad:
+            for i in range(count):
+                var v = sp.unsafe_load(i)
+                dp.unsafe_store(i, tp.unsafe_load(Int(v)) if v >= 0 else v)
+    if bad:
+        raise Error("gather_keep_neg_i32: index out of range")
+    return PythonObject(0)
+
+
+def dot_rows_f32_binding(
+    a_addr: PythonObject, x_addr: PythonObject, m: PythonObject, d: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """dst[j] = float32(sum_i a[i] * x[i, j]) over a float32 (m,) and a
+    row-major float32 (m, d) block, the sum in float64 in row order (one
+    fixed fold): SVC's linear coef_ (dual_coef_ @ support_vectors_)."""
+    var rows = Int(py=m)
+    var cols = Int(py=d)
+    if rows < 0 or cols < 0:
+        raise Error("dot_rows_f32: m and d must be non-negative")
+    if cols == 0:
+        return PythonObject(0)
+    var dp = _ptr[DType.float32](Int(py=dst_addr))
+    var acc = List[Float64](length=cols, fill=0.0)
+    if rows > 0:
+        var ap = _ptr[DType.float32](Int(py=a_addr))
+        var xp = _ptr[DType.float32](Int(py=x_addr))
+        for i in range(rows):
+            var a = Float64(ap.unsafe_load(i))
+            for j in range(cols):
+                acc[j] = acc[j] + a * Float64(xp.unsafe_load(i * cols + j))
+    for j in range(cols):
+        dp.unsafe_store(j, Float32(acc[j]))
+    return PythonObject(0)
+
+
+def assign_fold_i64_binding(
+    idx_addr: PythonObject, m: PythonObject, n: PythonObject, fold: PythonObject, folds_addr: PythonObject,
+) raises -> PythonObject:
+    """folds[idx[i]] = fold for the m int64 test indices of one split, over
+    an int32 folds array of n entries (-1 = unassigned). Returns 0, 1 when
+    an index is outside [0, n), 2 when a row already has a fold (an overlap
+    or a duplicate); nothing is written past the first refusal."""
+    var count = Int(py=m)
+    var rows = Int(py=n)
+    var f = Int32(Int(py=fold))
+    if count < 0 or rows < 1:
+        raise Error("assign_fold_i64: m >= 0, n >= 1")
+    if count == 0:
+        return PythonObject(0)
+    var ip = _ptr[DType.int64](Int(py=idx_addr))
+    var fp = _ptr[DType.int32](Int(py=folds_addr))
+    var status = 0
+    with GILReleased(Python()):
+        for i in range(count):
+            var r = Int(ip.unsafe_load(i))
+            if r < 0 or r >= rows:
+                status = 1
+                break
+            if fp.unsafe_load(r) != -1:
+                status = 2
+                break
+            fp.unsafe_store(r, f)
+    return PythonObject(status)
+
+
+def count_fold_hits_i64_binding(
+    idx_addr: PythonObject, m: PythonObject, folds_addr: PythonObject, n: PythonObject, fold: PythonObject,
+) raises -> PythonObject:
+    """How many of the m int64 indices (all in [0, n)) sit in fold `fold`
+    of the int32 folds array."""
+    var count = Int(py=m)
+    var rows = Int(py=n)
+    var f = Int32(Int(py=fold))
+    if count <= 0:
+        return PythonObject(0)
+    var ip = _ptr[DType.int64](Int(py=idx_addr))
+    var fp = _ptr[DType.int32](Int(py=folds_addr))
+    var hits = 0
+    with GILReleased(Python()):
+        for i in range(count):
+            var r = Int(ip.unsafe_load(i))
+            if r >= 0 and r < rows and fp.unsafe_load(r) == f:
+                hits += 1
+    return PythonObject(hits)
+
+
+def split_table_i32_binding(
+    perm_addr: PythonObject, m: PythonObject, n_test: PythonObject, n_train: PythonObject,
+    counts_addr: PythonObject, table_addr: PythonObject, sums_addr: PythonObject,
+) raises -> PythonObject:
+    """One GroupShuffleSplit draw as a per-group side table: table[g] = 1
+    for the first n_test groups of the int64 permutation, 0 for the next
+    n_train, 2 for the rest; sums (int64, 2) = [rows on the train side, rows
+    on the test side] from the int64 per-group row counts."""
+    var mm = Int(py=m)
+    var te = Int(py=n_test)
+    var tr = Int(py=n_train)
+    if mm < 1 or te < 0 or tr < 0 or te + tr > mm:
+        raise Error("split_table_i32: bad sizes")
+    var pp = _ptr[DType.int64](Int(py=perm_addr))
+    var cp = _ptr[DType.int64](Int(py=counts_addr))
+    var tp = _ptr[DType.int32](Int(py=table_addr))
+    var sp = _ptr[DType.int64](Int(py=sums_addr))
+    var c_tr = Int64(0)
+    var c_te = Int64(0)
+    var bad = False
+    with GILReleased(Python()):
+        for g in range(mm):
+            tp.unsafe_store(g, 2)
+        for i in range(te + tr):
+            var g = Int(pp.unsafe_load(i))
+            if g < 0 or g >= mm:
+                bad = True
+                break
+            if i < te:
+                tp.unsafe_store(g, 1)
+                c_te += cp.unsafe_load(g)
+            else:
+                tp.unsafe_store(g, 0)
+                c_tr += cp.unsafe_load(g)
+    if bad:
+        raise Error("split_table_i32: group index out of range")
+    sp.unsafe_store(0, c_tr)
+    sp.unsafe_store(1, c_te)
+    return PythonObject(0)
+
+
+def scatter_rows_bytes_binding(
+    src_addr: PythonObject, rows_addr: PythonObject, m: PythonObject, row_bytes: PythonObject,
+    dst_addr: PythonObject, dst_rows: PythonObject,
+) raises -> PythonObject:
+    """dst row rows[i] = src row i (row_bytes each) for the m int64 rows; a
+    row outside [0, dst_rows) raises before any write."""
+    var count = Int(py=m)
+    var width = Int(py=row_bytes)
+    var nd = Int(py=dst_rows)
+    if count < 0 or width < 0 or nd < 0:
+        raise Error("scatter_rows_bytes: dimensions must be non-negative")
+    if count == 0 or width == 0:
+        return PythonObject(0)
+    var sp = _ptr[DType.uint8](Int(py=src_addr))
+    var dp = _ptr[DType.uint8](Int(py=dst_addr))
+    var rp = _ptr[DType.int64](Int(py=rows_addr))
+    var bad = False
+    with GILReleased(Python()):
+        for i in range(count):
+            var r = Int(rp.unsafe_load(i))
+            if r < 0 or r >= nd:
+                bad = True
+                break
+        if not bad:
+            for i in range(count):
+                var r = Int(rp.unsafe_load(i))
+                for b in range(width):
+                    dp.unsafe_store(r * width + b, sp.unsafe_load(i * width + b))
+    if bad:
+        raise Error("scatter_rows_bytes: row index out of bounds")
+    return PythonObject(0)
+
+
+def uniform_init_f32_binding(
+    dst_addr: PythonObject, n: PythonObject, low: PythonObject, high: PythonObject,
+    seed_lo: PythonObject, seed_hi: PythonObject, offset: PythonObject,
+) raises -> PythonObject:
+    """dst[i] = float32(low + (high - low) * u_i), u_i the 53-bit uniform of
+    splitmix64 at counter offset + i of the seed: a counter-based stream, so
+    a caller drawing several arrays from one seed advances `offset` by each
+    array's size. Weight initialisation (lane cgr4-py-compute: it was
+    numpy's Generator in Python); the same bytes on every column."""
+    var count = Int(py=n)
+    if count < 0:
+        raise Error("uniform_init_f32: n must be non-negative")
+    if count == 0:
+        return PythonObject(0)
+    var lo = Float64(py=low)
+    var hi = Float64(py=high)
+    var seed = (UInt64(Int(py=seed_hi)) << 32) | UInt64(Int(py=seed_lo))
+    var off = UInt64(Int(py=offset))
+    var dp = _ptr[DType.float32](Int(py=dst_addr))
+    with GILReleased(Python()):
+        for i in range(count):
+            var s = seed + (off + UInt64(i)) * UInt64(0x9E3779B97F4A7C15)
+            var u = Float64(splitmix64(s) >> 11) * 1.1102230246251565e-16
+            dp.unsafe_store(i, Float32(lo + (hi - lo) * u))
+    return PythonObject(0)
+
+
+def epoch_order_i32_binding(
+    dst_addr: PythonObject, n: PythonObject, shuffle: PythonObject, state_addr: PythonObject,
+) raises -> PythonObject:
+    """One epoch's row order (sequence/schedule.mojo `fill_epoch_order`):
+    0..n-1, Fisher-Yates permuted from the splitmix64 state at `state`
+    (uint64, advanced in place) when `shuffle`."""
+    var count = Int(py=n)
+    if count < 1:
+        raise Error("epoch_order_i32: n must be positive")
+    var dp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=dst_addr))
+    var stp = _ptr[DType.uint64](Int(py=state_addr))
+    var s = stp.unsafe_load(0)
+    fill_epoch_order(dp, count, Int(py=shuffle) != 0, s)
+    stp.unsafe_store(0, s)
+    return PythonObject(0)
+
+
+@always_inline
+def _powi64(b: Float64, e: Int) -> Float64:
+    """b ** e for e >= 0 by squaring, in a fixed order (the same bits on
+    every column)."""
+    var r = Float64(1)
+    var x = b
+    var k = e
+    while k > 0:
+        if (k & 1) != 0:
+            r = r * x
+        x = x * x
+        k >>= 1
+    return r
+
+
+def adam_hyper_f64_binding(
+    dst_addr: PythonObject, step0: PythonObject, nsteps: PythonObject, fp: PythonObject,
+) raises -> PythonObject:
+    """The Adam / AdamW hyper block of steps step0, step0 + 1, ... (nsteps
+    rows of 9 float64): [lr / bc1, 1 - b1, b2, 1 - b2, eps, sqrt(bc2), wd,
+    decoupled, 1 - lr wd] with bc = 1 - beta ** step. fp = [lr, b1, b2, eps,
+    wd, decoupled]."""
+    var s0 = Int(py=step0)
+    var ns = Int(py=nsteps)
+    if s0 < 1 or ns < 0:
+        raise Error("adam_hyper_f64: step0 >= 1, nsteps >= 0")
+    var lr = Float64(py=fp[0])
+    var b1 = Float64(py=fp[1])
+    var b2 = Float64(py=fp[2])
+    var eps = Float64(py=fp[3])
+    var wd = Float64(py=fp[4])
+    var dec = Float64(py=fp[5])
+    var dp = _ptr[DType.float64](Int(py=dst_addr))
+    for t in range(ns):
+        var step = s0 + t
+        var bc1 = 1.0 - _powi64(b1, step)
+        var bc2 = 1.0 - _powi64(b2, step)
+        var row = t * 9
+        dp.unsafe_store(row + 0, lr / bc1)
+        dp.unsafe_store(row + 1, 1.0 - b1)
+        dp.unsafe_store(row + 2, b2)
+        dp.unsafe_store(row + 3, 1.0 - b2)
+        dp.unsafe_store(row + 4, eps)
+        dp.unsafe_store(row + 5, sqrt(bc2))
+        dp.unsafe_store(row + 6, wd)
+        dp.unsafe_store(row + 7, dec)
+        dp.unsafe_store(row + 8, 1.0 - lr * wd)
     return PythonObject(0)
