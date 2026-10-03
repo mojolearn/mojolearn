@@ -206,8 +206,7 @@ class _Prog:
 
     def put_i32(self, codes):
         """int32 values stored as their bits (read with ldi)."""
-        if not (isinstance(codes, Array) and codes.dtype == "<i4" and codes._has_order("C")):
-            codes = Array.from_list([int(c) for c in codes], "<i4")
+        codes = _i32_c(codes)
         off = self.alloc(codes.size)
         self._inputs.append((off, codes))
         self._skip.append((off, off + codes.size))
@@ -216,7 +215,7 @@ class _Prog:
     def stage(self, op, total, *params):
         if len(params) > _PARAMS:
             raise ValueError("x_metrics: too many stage parameters")
-        self._stages.append([_OPS[op], int(total)] + [int(v) for v in params]
+        self._stages.append([_OPS[op], int(total)] + [int(v) for v in params]  # glue: one stage's parameter words
                             + [0] * (_PARAMS - len(params)))
 
     def run(self, numeric_mode):
@@ -240,12 +239,12 @@ class _Prog:
         if n <= 0:
             return
         if self._outs is None:
-            for lo, hi in self._skip:
+            for lo, hi in self._skip:  # glue: the program's input and scratch ranges
                 if off < hi and lo < off + n:
                     raise AssertionError(f"x_metrics: arena [{off}, {off + n}) was read but is an input "
                                          "or scratch slot, which never comes back")
             return
-        for lo, hi, cn, mult in self._outs:
+        for lo, hi, cn, mult in self._outs:  # glue: the program's declared output ranges
             if cn >= 0 and self.arena is not None:
                 hi = lo + max(0, min(hi - lo, mult * self.ints(cn, 1)[0]))
             if lo <= off and off + n <= hi:
@@ -258,23 +257,23 @@ class _Prog:
         None = the whole arena."""
         if self._outs is not None:
             merged = []
-            for lo, hi, cn, mult in sorted(o for o in self._outs if o[2] < 0):
+            for lo, hi, cn, mult in sorted(o for o in self._outs if o[2] < 0):  # glue: merges the declared output ranges
                 if merged and lo <= merged[-1][1]:
                     merged[-1][1] = max(merged[-1][1], hi)
                 else:
                     merged.append([lo, hi, -1, 1])
-            return merged + [list(o) for o in self._outs if o[2] >= 0]
+            return merged + [list(o) for o in self._outs if o[2] >= 0]  # glue: the counted output ranges
         if not self._skip:
             return None
         merged = []
         at = 0
-        for lo, hi in sorted(self._skip):
+        for lo, hi in sorted(self._skip):  # glue: merges the input and scratch ranges
             if lo > at:
                 merged.append([at, lo])
             at = max(at, hi)
         if at < self.size:
             merged.append([at, self.size])
-        return [r + [-1, 1] for r in merged]
+        return [r + [-1, 1] for r in merged]  # glue: marks the download ranges uncounted
 
     def floats(self, off, n):
         """Python floats (exact images of the Float32 results)."""
@@ -298,7 +297,7 @@ class _Prog:
     def get(self, off, shape):
         shape = tuple(shape) if isinstance(shape, (tuple, list)) else (int(shape),)
         n = 1
-        for s in shape:
+        for s in shape:  # glue: the product of shape dims
             n *= s
         self._check(off, n)
         return Array._owned(self.arena[off:off + n], shape, "<f4", "C")
@@ -311,12 +310,12 @@ def _execute(prog, numeric_mode):
     classes) sees every caller reach `x_metrics_run`."""
     arena = _new_arena(prog.size)
     base = arena.buffer_info()[0]
-    stages = array.array("i", [v for s in prog._stages for v in s] or [0])
+    stages = array.array("i", [v for s in prog._stages for v in s] or [0])  # glue: packs the stage parameter words
     b = _binding(numeric_mode)
     merged = prog._download()
     run_ranges = _optional_metrics_entry(b, "x_metrics_run_ranges") if _arena_io.ranges_enabled() else None
     spans = []
-    for off, arr in prog._inputs:
+    for off, arr in prog._inputs:  # glue: copies each program input once
         if not arr.size:
             continue
         cache = _arena_io.active_cache(b, "x_metrics", arr.size) if run_ranges is not None else None
@@ -332,12 +331,12 @@ def _execute(prog, numeric_mode):
         # the shared ranges runner (lane py-shared, core/arena_io.mojo): only
         # the inputs go up, only the outputs come back
         ins = _arena_io.input_ranges(spans)
-        outs = [list(r) for r in merged] if merged is not None else [[0, prog.size, -1, 1]]
+        outs = [list(r) for r in merged] if merged is not None else [[0, prog.size, -1, 1]]  # glue: the download range descriptors
         ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
         run_ranges(base, stages.buffer_info()[0], (prog.size, len(prog._stages), len(ins), len(outs)),
                    ia.buffer_info()[0], oa.buffer_info()[0])
     elif run_out is not None:
-        outs = array.array("i", [v for r in merged for v in r] or [0, 0, -1, 1])
+        outs = array.array("i", [v for r in merged for v in r] or [0, 0, -1, 1])  # glue: packs the download range descriptors
         run_out(base, prog.size, stages.buffer_info()[0], len(prog._stages), outs.buffer_info()[0], len(merged))
     else:
         b.x_metrics_run(base, prog.size, stages.buffer_info()[0], len(prog._stages))
@@ -413,7 +412,7 @@ class _Sums:
         match = prog.scratch(n)
         prog.stage("pair_key", n, a, b, match, L, 1)
         W = _NONE if w is None else prog.put(w)
-        groups = [_group(prog, k, n, L, weights=W) for k in (match, a, b)]
+        groups = [_group(prog, k, n, L, weights=W) for k in (match, a, b)]  # glue: the three count groupings
         total = None
         if w is not None:
             zero = prog.scratch(n)          # every row in group 0: the total weight
@@ -422,12 +421,12 @@ class _Sums:
         _execute(prog, numeric_mode)
         if w is None:
             sums = []
-            for off, _ in groups:
+            for off, _ in groups:  # glue: reads the three count groupings
                 o = prog.ints(off, L + 1)
                 sums.append([o[i + 1] - o[i] for i in range(L)])
             total = n
         else:
-            sums = [prog.floats(out, L) for _, out in groups[:3]]
+            sums = [prog.floats(out, L) for _, out in groups[:3]]  # glue: reads the three weighted groupings
             total = prog.floats(groups[3][1], 1)[0]
         self.tp, self.true, self.pred = sums
         self.total = total
@@ -625,7 +624,7 @@ def precision_recall_fscore_support(y_true, y_pred, *, beta=1.0, labels=None, po
         b2 = beta * beta
         fscore = _divide([(1 + b2) * v for v in tp], [b2 * t + p for t, p in zip(ts, ps)],
                          zero_division, "f-score", warned)
-    for what in warned:
+    for what in warned:  # glue: the names of ill-defined metrics
         if what in warn_for:
             _undefined_warning(f"{what.capitalize()} is ill-defined and being set to 0.0 in labels "
                                "with no predicted/true samples. Use `zero_division` parameter to "
@@ -877,30 +876,32 @@ def zero_one_loss(y_true, y_pred, *, normalize=True, sample_weight=None, numeric
     return (s.total - hit) if s.weighted else int(s.total - hit)
 
 
-def accuracy_count(y_true, y_pred, sample_weight, numeric_mode):
-    """accuracy_score(normalize=False): the (weighted) number of matches."""
+def _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode):
+    """(the (weighted) number of matches, the row count or weight total)."""
     true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "accuracy_score")
     s = _Sums(true, pred, w, present, numeric_mode)
     hit = 0
     for v in s.tp:
         hit += v
-    return float(hit) if s.weighted else int(hit)
+    return (float(hit) if s.weighted else int(hit)), s.total
+
+
+def accuracy_count(y_true, y_pred, sample_weight, numeric_mode):
+    """accuracy_score(normalize=False): the (weighted) number of matches."""
+    return _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode)[0]
 
 
 def accuracy_fraction(y_true, y_pred, sample_weight=None, numeric_mode=None):
     """sklearn's ClassifierMixin.score / accuracy_score over labels of any
-    kind: the (weighted) match count from `accuracy_count` (the x_metrics
-    binding's grouped sums) over the row count or the weight total (the
-    base binding's sum). Lane cgr4-py-compute: the estimators' `score`
-    methods called this instead of a per-row Python comparison."""
-    hit = accuracy_count(y_true, y_pred, sample_weight, numeric_mode)
+    kind: the (weighted) match count over the row count or the weight total,
+    both from the x_metrics binding's grouped sums (lane pyglue-sweep: the
+    weight total is the program's PairSum, not a host sum). Lane
+    cgr4-py-compute: the estimators' `score` methods called this instead of
+    a per-row Python comparison."""
+    hit, total = _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode)
     if sample_weight is None:
-        from ._metrics_impl import _shape_of
-        n = int(_shape_of(y_true)[0])
-        return float(hit) / max(n, 1)
-    from ._buffer import as_f64_c
-    w, _ = as_f64_c(sample_weight, ndim=1, name="sample_weight")
-    return float(hit) / w.sum()
+        return float(hit) / max(total, 1)
+    return float(hit) / total
 
 
 def class_likelihood_ratios(y_true, y_pred, *, labels=None, sample_weight=None,
@@ -965,7 +966,7 @@ def classification_report(y_true, y_pred, *, labels=None, target_names=None, sam
     if target_names is not None and len(target_names) != len(chosen):
         raise ValueError(f"Number of classes, {len(chosen)}, does not match size of target_names, "
                          f"{len(target_names)}. Try specifying the labels parameter")
-    names = [str(t) for t in target_names] if target_names is not None else [str(c) for c in chosen]
+    names = [str(t) for t in target_names] if target_names is not None else [str(c) for c in chosen]  # glue: formats the report's row names
     headers = ["precision", "recall", "f1-score", "support"]
     if getattr(_REPORT, "memo", None) is None:
         _REPORT.memo = {}
@@ -988,7 +989,7 @@ def _classification_report(y_true, y_pred, labels_given, chosen, present, names,
     rows = list(zip(names, p.tolist(), r.tolist(), f.tolist(), s.tolist()))
     averages = (["micro avg"] if not micro_is_accuracy else []) + ["macro avg", "weighted avg"]
     report = {}
-    for name, a, b, c, d in rows:
+    for name, a, b, c, d in rows:  # glue: formats the text report rows
         report[name] = dict(zip(headers, (a, b, c, d)))
     total = 0
     for v in s.tolist():
@@ -999,7 +1000,7 @@ def _classification_report(y_true, y_pred, labels_given, chosen, present, names,
                                               sample_weight=sample_weight, zero_division=zero_division,
                                               numeric_mode=numeric_mode)[0]
         report["accuracy"] = acc
-    for avg in averages:
+    for avg in averages:  # glue: formats the report's average rows
         a, b, c, _ = precision_recall_fscore_support(y_true, y_pred, labels=chosen,
                                                      average=avg.split()[0],
                                                      sample_weight=sample_weight,
@@ -1008,17 +1009,17 @@ def _classification_report(y_true, y_pred, labels_given, chosen, present, names,
         avg_rows.append((avg, a, b, c, total))
     if output_dict:
         return report
-    width = max([len(n) for n in names] + [len("weighted avg"), digits])
+    width = max([len(n) for n in names] + [len("weighted avg"), digits])  # glue: the report's text column width
     head_fmt = "{:>{width}s} " + " {:>9}" * len(headers)
     out = head_fmt.format("", *headers, width=width) + "\n\n"
     row_fmt = "{:>{width}s} " + " {:>9.{digits}f}" * 3 + " {:>9}\n"
-    for name, a, b, c, d in rows:
+    for name, a, b, c, d in rows:  # glue: formats the text report rows
         out += row_fmt.format(name, a, b, c, d, width=width, digits=digits)
     out += "\n"
     if micro_is_accuracy:
         acc_fmt = "{:>{width}s} " + " {:>9.{digits}}" * 2 + " {:>9.{digits}f}" + " {:>9}\n"
         out += acc_fmt.format("accuracy", "", "", report["accuracy"], total, width=width, digits=digits)
-    for avg, a, b, c, d in avg_rows:
+    for avg, a, b, c, d in avg_rows:  # glue: formats the report's average rows
         out += row_fmt.format(avg, a, b, c, d, width=width, digits=digits)
     return out
 
@@ -1043,7 +1044,7 @@ class _Reg:
         from ._metrics_impl import _shape_of, _is_float64
         from ._buffer import materialize_f32_lists
         arrays = []
-        for name, v in (("y_true", y_true), ("y_pred", y_pred)):
+        for name, v in (("y_true", y_true), ("y_pred", y_pred)):  # glue: validates the two named arguments
             a = materialize_f32_lists(v, name)[0]
             if a.dtype != "<f4":
                 raise TypeError(f"mojolearn {caller}: {name} must have dtype float32; cast explicitly before scoring")
@@ -1070,7 +1071,7 @@ class _Reg:
         elif multioutput is None:
             self.mo = "uniform_average"
         else:
-            vals = [float(v) for v in flatten_mo(multioutput)]
+            vals = [float(v) for v in flatten_mo(multioutput)]  # glue: converts the multioutput weights argument
             if self.D == 1:
                 raise ValueError("Custom weights are useful only in multi-output cases.")
             if len(vals) != self.D:
@@ -1092,7 +1093,7 @@ class _Reg:
         zero = prog.scratch(n)
         prog.stage("pair_key", n, 0, 0, zero, 1, 2)
         outs = []
-        for kind in kinds:
+        for kind in kinds:  # glue: one term stage per requested error kind
             term = prog.scratch(n * D)
             prog.stage("reg_term", n * D, Y, P, term, D, _TERM[kind], S, 0 if pred_broadcast is None else 1)
             outs.append(_group(prog, zero, n, 1, values=term, vstride=D, weights=W, width=D)[1])
@@ -1563,13 +1564,6 @@ def _f64_out(n):
 def _f64_array(buf, m):
     del buf[m:]
     return Array._owned(buf, (m,), "<f8", "C")
-
-
-def _i32_codes_addr(codes):
-    """(address, keepalive) of int32 C-order codes, or (None, None)."""
-    if isinstance(codes, Array) and codes.dtype == "<i4" and codes._has_order("C"):
-        return addr_ro(codes, name="codes"), codes
-    return None, None
 
 
 def _f32_weights_addr(w):
@@ -2059,7 +2053,7 @@ def _ovo_native(true, index, s, n, k, numeric_mode):
                     raise RuntimeError("mojolearn roc_auc_score: x_metrics_ovo_pair selected %d rows, "
                                        "counted %d" % (got, m))
             both = []
-            for sv, fl in ((sa, fa), (sb, fb)):
+            for sv, fl in ((sa, fa), (sb, fb)):  # glue: the pair's two one-vs-one directions
                 cur = _curves(sv, fl, None, m, 1, numeric_mode, fold="auc")[0]
                 both.append(_auc_of(cur, None))
             pair_scores.append((both[0] + both[1]) / 2)
@@ -2295,22 +2289,6 @@ def _proba(y_true, y_proba, labels, pos_label, caller):
     return codes, (packed if binary else a), k, binary
 
 
-def _class_sums_native(codes, w, k, numeric_mode):
-    """Per-class (weighted) counts, binary64 in row order, from the binding
-    (x_metrics/epilogue.mojo class_sums, lane py-misc-metrics), or None."""
-    fn = _epilogue("x_metrics_class_sums", numeric_mode)
-    caddr, ckeep = _i32_codes_addr(codes)
-    waddr, wkeep = _f32_weights_addr(w)
-    if fn is None or caddr is None or waddr is None or k <= 0:
-        return None
-    out = _f64_out(k)
-    try:
-        fn(caddr, waddr, codes.size, k, out.buffer_info()[0])
-    except Exception:
-        return None
-    return out.tolist()[:k]
-
-
 def _class_weights(codes, w, k, numeric_mode=None):
     """Per-class (weighted) counts and the total, binary64 in row order, from
     the binding's class_sums (the Python fallback is gone, lane
@@ -2520,7 +2498,7 @@ def label_ranking_loss(y_true, y_score, *, sample_weight=None, numeric_mode=None
 
 def _clusterings(labels_true, labels_pred, caller):
     from ._metrics_impl import _classification_encoded, _label_set
-    for v, name in ((labels_true, "labels_true"), (labels_pred, "labels_pred")):
+    for v, name in ((labels_true, "labels_true"), (labels_pred, "labels_pred")):  # glue: validates the two named arguments
         _refuse_multilabel(v, name, caller)
     a, ka = _classification_encoded(labels_true, "labels_true")
     b, kb = _classification_encoded(labels_pred, "labels_pred")
@@ -2817,12 +2795,12 @@ class CounterRng:
         """One permutation per size, drawn in order, in one device program."""
         prog = _Prog()
         outs = []
-        for n in sizes:
+        for n in sizes:  # glue: one output slot per requested draw
             outs.append((prog.want(self.permute_stage(prog, n), n), n))
         if not outs:
             return []
         _execute(prog, numeric_mode)
-        return [prog.ints(o, n) for o, n in outs]
+        return [prog.ints(o, n) for o, n in outs]  # glue: reads each requested draw's words
 
     def permutation(self, n, numeric_mode=None):
         return self.permutations([n], numeric_mode)[0]
@@ -2833,7 +2811,7 @@ class CounterRng:
         per row (lane metrics-apple2)."""
         prog = _Prog()
         outs = []
-        for n in sizes:
+        for n in sizes:  # glue: one output slot per requested draw
             o = self.permute_stage(prog, n)
             w = prog.want(prog.alloc(2 * n), 2 * n)
             if n:
@@ -2842,7 +2820,7 @@ class CounterRng:
         if not outs:
             return []
         _execute(prog, numeric_mode)
-        return [prog.words(w, 2 * n, "q") for w, n in outs]
+        return [prog.words(w, 2 * n, "q") for w, n in outs]  # glue: reads each requested draw's words
 
 
 #: the largest K-fold row table (2 words per row per fold) `fold_rows` builds
