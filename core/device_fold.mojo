@@ -29,17 +29,19 @@ every vendor; no multiply appears, so no fused multiply-add can change a bit.
 """
 
 from std.gpu import block_idx, grid_dim, thread_idx
-from std.memory import stack_allocation
+from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import ftz
 from core.device_scan import SCAN_TPB, SCAN_BLOCKS, NONFINITE_NONE
+from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len, frs_exclusive_scan, frs_scan_blocks
 
 comptime _I32P = MutPointer[Int32, MutAnyOrigin]
 comptime _I64P = MutPointer[Int64, MutAnyOrigin]
 comptime _F32P = MutPointer[Float32, MutAnyOrigin]
+comptime _U32P = MutPointer[UInt32, MutAnyOrigin]
 
 
 def fold_blocks(n: Int) -> Int:
@@ -154,6 +156,46 @@ def _zero_i32_kernel(buf: _I32P, n_in: Int32):
     var i = Int(block_idx.x) * SCAN_TPB + Int(thread_idx.x)
     if i < Int(n_in):
         buf.unsafe_store(i, Int32(0))
+
+
+def _eq_flag_kernel(src: _I32P, n_in: Int32, value: Int32, flag: _I32P, scan: _I32P):
+    var i = Int(block_idx.x) * SCAN_TPB + Int(thread_idx.x)
+    if i < Int(n_in):
+        var f = Int32(1) if src.unsafe_load(i) == value else Int32(0)
+        flag.unsafe_store(i, f)
+        scan.unsafe_store(i, f)
+
+
+def _emit_rows_kernel(flag: _I32P, scan: _I32P, n_in: Int32, out: _I32P):
+    var i = Int(block_idx.x) * SCAN_TPB + Int(thread_idx.x)
+    if i < Int(n_in) and flag.unsafe_load(i) != Int32(0):
+        out.unsafe_store(Int(scan.unsafe_load(i)), Int32(i))
+
+
+def _key_i32_kernel(src: _I32P, n_in: Int32, keys: _U32P, vals: _U32P):
+    """The order-preserving u32 key of an int32 (sign bit flipped)."""
+    var i = Int(block_idx.x) * SCAN_TPB + Int(thread_idx.x)
+    if i < Int(n_in):
+        keys.unsafe_store(i, bitcast[DType.uint32](src.unsafe_load(i)) ^ UInt32(0x80000000))
+        vals.unsafe_store(i, UInt32(i))
+
+
+def _boundary_kernel(keys: _U32P, n_in: Int32, flag: _I32P, scan: _I32P):
+    var i = Int(block_idx.x) * SCAN_TPB + Int(thread_idx.x)
+    if i < Int(n_in):
+        var f = Int32(1)
+        if i > 0 and keys.unsafe_load(i) == keys.unsafe_load(i - 1):
+            f = Int32(0)
+        flag.unsafe_store(i, f)
+        scan.unsafe_store(i, f)
+
+
+def _emit_keys_kernel(keys: _U32P, flag: _I32P, scan: _I32P, n_in: Int32, out: _I32P):
+    var i = Int(block_idx.x) * SCAN_TPB + Int(thread_idx.x)
+    if i < Int(n_in) and flag.unsafe_load(i) != Int32(0):
+        out.unsafe_store(
+            Int(scan.unsafe_load(i)), bitcast[DType.int32](keys.unsafe_load(i) ^ UInt32(0x80000000))
+        )
 
 
 # ------------------------------------------------------------ host side ----
@@ -293,3 +335,93 @@ def host_sum_f32_fixed(x: List[Float32], n: Int) -> Float32:
             active = active // 2
         total = ftz(total + red[0])
     return total
+
+
+def _grid(n: Int) -> Int:
+    return (n + SCAN_TPB - 1) // SCAN_TPB
+
+
+def device_compact_equal_i32(
+    ctx: DeviceContext,
+    mut src: DeviceBuffer[DType.int32],
+    n: Int,
+    value: Int32,
+    mut out_rows: DeviceBuffer[DType.int32],
+) raises -> Int:
+    """Writes, ascending, every index `i < n` with `src[i] == value` into
+    `out_rows` (which holds at least n slots) and returns how many: a
+    stream compaction by an exclusive scan, so the order is the host
+    loop's. Exact."""
+    if n <= 0:
+        return 0
+    var flag = ctx.enqueue_create_buffer[DType.int32](n)
+    var scan = ctx.enqueue_create_buffer[DType.int32](n)
+    var bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n))
+    ctx.enqueue_function[_eq_flag_kernel](
+        src.unsafe_ptr(), Int32(n), value, flag.unsafe_ptr(), scan.unsafe_ptr(),
+        grid_dim=(_grid(n), 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    frs_exclusive_scan(ctx, scan, n, bsum)
+    ctx.enqueue_function[_emit_rows_kernel](
+        flag.unsafe_ptr(), scan.unsafe_ptr(), Int32(n), out_rows.unsafe_ptr(),
+        grid_dim=(_grid(n), 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    var c = device_count_nonzero_i32(ctx, flag, n)
+    _ = bsum^
+    _ = scan^
+    _ = flag^
+    return c
+
+
+def device_sorted_unique_i32(
+    ctx: DeviceContext, mut src: DeviceBuffer[DType.int32], n: Int
+) raises -> List[Int32]:
+    """The sorted distinct values of `src[0:n]`: a stable device radix sort
+    of the order-preserving keys, a boundary flag, an exclusive scan and an
+    emit; only the distinct values (the answer) are downloaded. Exact."""
+    var out = List[Int32]()
+    if n <= 0:
+        return out^
+    var keys = ctx.enqueue_create_buffer[DType.uint32](n)
+    var vals = ctx.enqueue_create_buffer[DType.uint32](n)
+    var tk = ctx.enqueue_create_buffer[DType.uint32](n)
+    var tv = ctx.enqueue_create_buffer[DType.uint32](n)
+    var cnt = ctx.enqueue_create_buffer[DType.int32](frs_counts_len(n))
+    var flag = ctx.enqueue_create_buffer[DType.int32](n)
+    var scan = ctx.enqueue_create_buffer[DType.int32](n)
+    var bsum = ctx.enqueue_create_buffer[DType.int32](frs_scan_blocks(n))
+    var uniq = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_function[_key_i32_kernel](
+        src.unsafe_ptr(), Int32(n), keys.unsafe_ptr(), vals.unsafe_ptr(),
+        grid_dim=(_grid(n), 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    fast_radix_sort_pairs_u32(ctx, n, keys, vals, tk, tv, cnt)
+    ctx.enqueue_function[_boundary_kernel](
+        keys.unsafe_ptr(), Int32(n), flag.unsafe_ptr(), scan.unsafe_ptr(),
+        grid_dim=(_grid(n), 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    frs_exclusive_scan(ctx, scan, n, bsum)
+    ctx.enqueue_function[_emit_keys_kernel](
+        keys.unsafe_ptr(), flag.unsafe_ptr(), scan.unsafe_ptr(), Int32(n), uniq.unsafe_ptr(),
+        grid_dim=(_grid(n), 1, 1), block_dim=(SCAN_TPB, 1, 1),
+    )
+    var k = device_count_nonzero_i32(ctx, flag, n)
+    var host = ctx.enqueue_create_host_buffer[DType.int32](k)
+    var head = uniq.create_sub_buffer[DType.int32](0, k)
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=head)
+    ctx.synchronize()
+    out = List[Int32](capacity=k)
+    for j in range(k):
+        out.append(host.unsafe_ptr().unsafe_load(j))
+    _ = head^
+    _ = host^
+    _ = uniq^
+    _ = bsum^
+    _ = scan^
+    _ = flag^
+    _ = cnt^
+    _ = tv^
+    _ = tk^
+    _ = vals^
+    _ = keys^
+    return out^
