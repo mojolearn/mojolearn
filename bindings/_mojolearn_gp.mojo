@@ -111,6 +111,7 @@ from gaussian_process.checks.kernels import (
     gp_kernel_sum,
     gp_kernel_white,
 )
+from gaussian_process.gp_optim import GPOptResult, gpr_optimize_device
 from gaussian_process.estimator import (
     GPRegressor,
     gpr_fit_host,
@@ -1160,12 +1161,110 @@ def gpc_ovr_combine_binding(
 
 
 # ===========================================================================
-# KERNEL HYPERPARAMETER OPTIMIZATION (lane/gp-optimizer, 2026-09-15).
-# The optimizer's state machine is python/mojolearn/_gp_optimizer.py
-# (DEVIATION 2881); what it cannot do identically in Python float64 lives
-# here: the likelihood and its gradient (DEVIATION 2880), the log and exp of
-# the hyperparameters, and the Philox restart draws.
+# KERNEL HYPERPARAMETER OPTIMIZATION (lane/gp-optimizer, 2026-09-15;
+# on the device since cgr4-device-optim-gp, 2026-10-03). `gpr_optimize` runs
+# DEVIATION 2881's whole optimizer, every start, in one call
+# (gaussian_process/gp_optim.mojo); `gpr_lml_grad` is the likelihood and its
+# gradient at one kernel (DEVIATION 2880), for log_marginal_likelihood(theta).
 # ===========================================================================
+
+
+def _gpr_optimize_run(
+    x: List[Float32],
+    y: List[Float32],
+    spec: GPKernelSpec,
+    free: List[Int32],
+    bounds: List[Float32],
+    n_train: Int,
+    n_features: Int,
+    alpha: Float32,
+    n_restarts: Int,
+    seed_lo: UInt32,
+    seed_hi: UInt32,
+    tp: MutPointer[Float64, MutUntrackedOrigin],
+    vp: MutPointer[Float64, MutUntrackedOrigin],
+    rp: MutPointer[Float64, MutUntrackedOrigin],
+) raises -> Int:
+    """The GIL-free half of `gpr_optimize_binding`."""
+    var r = gpr_optimize_device(
+        x, n_train, n_features, y, spec, free, bounds, alpha, n_restarts, seed_lo, seed_hi
+    )
+    for i in range(len(r.theta)):
+        tp.unsafe_store(i, Float64(r.theta[i]))
+        vp.unsafe_store(i, Float64(r.values[i]))
+    for i in range(len(r.runs)):
+        rp.unsafe_store(i, Float64(r.runs[i]))
+    return r.best
+
+
+def gpr_optimize_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """DEVIATION 2881 on the device: every start, one call. Returns the
+    winning run's index.
+
+    `addrs`, in this exact order (mirrored in `python/mojolearn/_gp_impl.py`
+    and `bindings/_mojolearn_gp_host.mojo`):
+
+        0  x               n_train * n_features float32, read
+        1  y               n_train float32, read
+        2  kinds           n_nodes int32, read
+        3  kparams         n_nodes float32, read (the starting values)
+        4  ls_len          n_nodes int32, read
+        5  ls              max(n_ls, 1) float32, read (the starting values)
+        6  free            n_nodes int32 (0 fixed, 1 free), read
+        7  bounds          2 * n_theta float32 (lo, hi per entry, values), read
+        8  theta_out       n_theta float64, WRITTEN (float32 widened)
+        9  values_out      n_theta float64, WRITTEN: the hyperparameters there
+        10 runs_out        (1 + n_restarts) * 4 float64, WRITTEN: n_iter,
+                           n_eval, stop code, f = -lml per run
+
+    `params`: 0 n_train, 1 n_features, 2 n_nodes, 3 n_ls, 4 alpha,
+    5 n_restarts, 6 seed low 32 bits, 7 seed high 32 bits.
+    """
+    if len(addrs) != 11:
+        raise Error(
+            "gpr_optimize: addrs must contain 11 addresses (x, y, kinds,"
+            " kparams, ls_len, ls, free, bounds, theta_out, values_out,"
+            " runs_out), got " + String(len(addrs))
+        )
+    if len(params) != 8:
+        raise Error(
+            "gpr_optimize: params must contain 8 values (n_train, n_features,"
+            " n_nodes, n_ls, alpha, n_restarts, seed_lo, seed_hi), got "
+            + String(len(params))
+        )
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_nodes = Int(py=params[2])
+    var n_ls = Int(py=params[3])
+    var alpha = Float32(Float64(py=params[4]))
+    var n_restarts = Int(py=params[5])
+    var seed_lo = UInt32(Int(py=params[6]) & 0xFFFFFFFF)
+    var seed_hi = UInt32(Int(py=params[7]) & 0xFFFFFFFF)
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[2]), Int(py=addrs[3]), Int(py=addrs[4]), Int(py=addrs[5]),
+        n_nodes, n_ls, String("gpr_optimize"),
+    )
+    var free = read_i32(Int(py=addrs[6]), max(0, n_nodes))
+    var n_theta = 0
+    for t in range(n_nodes):
+        if Int(free[t]) != 0:
+            var k = Int(spec.kinds[t])
+            n_theta += Int(spec.ls_len[t]) if (k == GP_K_RBF or k == GP_K_MATERN) else 1
+    var bounds = read_f32(Int(py=addrs[7]), 2 * n_theta)
+    var tp = _f64_ptr(Int(py=addrs[8]))
+    var vp = _f64_ptr(Int(py=addrs[9]))
+    var rp = _f64_ptr(Int(py=addrs[10]))
+    var x = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
+    var y = read_f32(Int(py=addrs[1]), max(0, n_train))
+    var best = 0
+    with GILReleased(Python()):
+        best = _gpr_optimize_run(
+            x, y, spec, free, bounds, n_train, n_features, alpha, n_restarts,
+            seed_lo, seed_hi, tp, vp, rp,
+        )
+    return PythonObject(best)
 
 
 def _gpr_lml_grad_run(
@@ -1294,6 +1393,7 @@ def PyInit__mojolearn_gp() abi("C") -> PythonObject:
         m.def_function[gpr_sample_y_binding]("gpr_sample_y")
         m.def_function[gpr_predict_cov_binding]("gpr_predict_cov")
         m.def_function[gpr_lml_grad_binding]("gpr_lml_grad")
+        m.def_function[gpr_optimize_binding]("gpr_optimize")
         m.def_function[gp_log64_binding]("gp_log64")
         m.def_function[gp_theta_params_binding]("gp_theta_params")
         m.def_function[gp_restart_uniforms_binding]("gp_restart_uniforms")
