@@ -29,8 +29,6 @@ cases = {
  "ee-400x6": ({"MOJOLEARN_XD_MCD_PYTHON": "1"}, lambda: (lambda e: h(e.decision_function(X[:400, :6]), np.float64(e.offset_)))(ml.EllipticEnvelope(contamination=0.05, random_state=1, support_fraction=0.7).fit(np.ascontiguousarray(X[:400, :6])))),
  "mcd-1200x5": ({"MOJOLEARN_XD_MCD_PYTHON": "1"}, lambda: (lambda m: h(m.location_, m.covariance_, m.dist_, np.int8(m.support_)))(ml.MinCovDet(random_state=3).fit(np.ascontiguousarray(X[:1200, :5])))),
  "mcd-5000x8": ({"MOJOLEARN_XD_MCD_PYTHON": "1"}, lambda: (lambda m: h(m.location_, m.covariance_, m.dist_, np.int8(m.support_)))(ml.MinCovDet(random_state=0).fit(np.ascontiguousarray(X[:5000])))),
- "lda-online": ({"MOJOLEARN_XD_LDA_PYTHON": "1"}, lambda: h(ml.LatentDirichletAllocation(n_components=5, learning_method="online", max_iter=2, batch_size=100, random_state=0).fit(C).components_)),
- "lda-partial": ({"MOJOLEARN_XD_LDA_PYTHON": "1"}, lambda: h(ml.LatentDirichletAllocation(n_components=4, batch_size=64, random_state=2).partial_fit(C[:500]).partial_fit(C[500:900]).components_)),
  "mds-nm": ({"MOJOLEARN_XD_MDS_PYTHON": "1"}, lambda: h(ml.MDS(metric_mds=False, max_iter=15, n_init=1, random_state=0).fit_transform(X[:300, :4]))),
 }
 failures = []

@@ -145,6 +145,9 @@ class ProphetForecaster:
              self.changepoints_t_.ctypes.data, sig.ctypes.data, self.params_.ctypes.data, self.info_.ctypes.data],
             [B, N, len(orders), self._nh, self._K, S, int(self.seasonality_mode == "multiplicative"),
              self.max_iter], [self.changepoint_prior_scale])
+        # diagnostics from info_ (y_scale, objective, iterations, 0): views only
+        self.objective_ = self.info_[:, 1]
+        self.n_iter_ = self.info_[:, 2].astype(np.int64)
         return self
 
     def predict(self, t, holidays=None):

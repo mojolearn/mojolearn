@@ -1,0 +1,2 @@
+CMD lane/apple-fast-dart dart-dev-istella AFT_OUT=$HOME/aft-ab/dart-dev-istella bash tools/aft_ab.sh x_trees dart istella 2 "" "-D MOJOLEARN_DART_DEVICE=1"
+CMD lane/apple-fast-dart dartreg-dev-istella AFT_OUT=$HOME/aft-ab/dartreg-dev-istella bash tools/aft_ab.sh x_trees dart-reg istella 2 "" "-D MOJOLEARN_DART_DEVICE=1"

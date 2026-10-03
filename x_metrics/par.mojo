@@ -25,9 +25,15 @@ schedule returns THE SAME BITS as the unit it replaces, by construction:
   elements of the other run before it (a binary search). The host runs the
   same merge as two-pointer merges of MERGE_SPAN-output spans of each run
   pair, each span started by a co-rank search (the same output).
-- the prefixes (`curve_scan`, `wpct_prefix`) stay SEQUENTIAL Float32 prefixes
-  (DEVIATION 6107); the planner first gathers their operands into sorted
-  order in parallel, so the one thread reads memory in order.
+- the weighted prefixes (the curve's TP/FP sums, wpercentile's CDF) are
+  BLOCKED Float32 scans (lane cgr2-metrics-shap, 2026-10-03; they were one
+  sequential walk on the host, DEVIATION 6107): chunk c of CURVE_CHUNK rows
+  sums its weights in ascending order, the chunk sums become exclusive
+  offsets in ascending chunk order, and chunk c rewalks its rows from its
+  offset. One fixed order on every runner and every vendor; the unweighted
+  prefixes are integer counts, exact in any order.
+- the curve folds (`cf_*`: the ROC AUC and average precision sums) are
+  float-float (x_linear/ff.mojo) chunk sums met in ascending chunk order.
 
 Slots holding keys or row indices are words (`ldu`/`ldi`); the fold's
 partial sums are stored raw, as PairSum keeps them.
@@ -37,6 +43,7 @@ from x_metrics.common import FP, IP, p, ld, st, ldi, sti, ldu, stu, key, fadd, l
 from checks.numerics import identical_mul
 from checks.fixture_rng import splitmix_pair
 from x_metrics.split import fold_of_position, st_row64
+from x_linear.ff import FF, two_sum, ff_add, ff_mul, ff_div, ff_of
 
 #: The sort's initial run length (insertion sorted by one thread).
 comptime RUN = 16
@@ -518,59 +525,6 @@ def curve_gather_unit(t: Int, f: FP, q: IP):
     f.unsafe_store(G + 2 * N + t, ld(f, S + pp + r * SS))
 
 
-def curve_prefix_unit(t: Int, f: FP, q: IP):
-    """q = [n, G, N, W]; t = problem: bin_curve_unit's walk over the gathered
-    sorted rows. TP (G+3N) and FP (G+4N) are the cumulative counts (exact
-    integers unweighted; a SEQUENTIAL ascending Float32 prefix weighted,
-    DEVIATION 6107); IDX (G+5N) is the output slot of the last row of each
-    distinct score (-1 elsewhere); G+6N+t the number of slots. A HOST stage
-    (x_metrics/plan.mojo): one sequential walk is a CPU's job; the device
-    runner runs it on the host over a copy of its slots."""
-    var n = p(q, 0)
-    var G = p(q, 1)
-    var N = p(q, 2)
-    var W = p(q, 3)
-    var e0 = t * n
-    var tp_i = 0
-    var fp_i = 0
-    var tp_w = Float32(0)
-    var fp_w = Float32(0)
-    var cnt = 0
-    for i in range(n):
-        var e = e0 + i
-        var pos = ldi(f, G + e)
-        if pos < 0:
-            sti(f, G + 5 * N + e, -1)
-            continue
-        if W >= 0:
-            var w = ld(f, G + N + e)
-            if pos == 1:
-                tp_w = fadd(tp_w, w)
-            else:
-                fp_w = fadd(fp_w, w)
-            st(f, G + 3 * N + e, tp_w)
-            st(f, G + 4 * N + e, fp_w)
-        else:
-            if pos == 1:
-                tp_i += 1
-            else:
-                fp_i += 1
-            st(f, G + 3 * N + e, Float32(tp_i))
-            st(f, G + 4 * N + e, Float32(fp_i))
-        var last = i == n - 1
-        if not last:
-            if ldi(f, G + e + 1) < 0:
-                last = True
-            else:
-                last = ld(f, G + 2 * N + e + 1) != ld(f, G + 2 * N + e)
-        if last:
-            sti(f, G + 5 * N + e, cnt)
-            cnt += 1
-        else:
-            sti(f, G + 5 * N + e, -1)
-    sti(f, G + 6 * N + t, cnt)
-
-
 def curve_emit_unit(t: Int, f: FP, q: IP):
     """q = [n, G, N, FPS, TPS, THR, CNT]; t = sorted element: the last row
     of each distinct score writes its counts and score at its slot; the
@@ -600,19 +554,6 @@ def wpct_gather_unit(t: Int, f: FP, q: IP):
     var W = p(q, 2)
     var r = ldi(f, p(q, 1) + t)
     f.unsafe_store(p(q, 3) + t, Float32(1) if W < 0 else ld(f, W + r))
-
-
-def wpct_prefix_unit(t: Int, f: FP, q: IP):
-    """q = [n, G, P]; t = column: P = the SEQUENTIAL ascending Float32 prefix
-    of the gathered weights G (DEVIATION 6107), wpercentile_unit's loop. A
-    HOST stage (x_metrics/plan.mojo)."""
-    var n = p(q, 0)
-    var G = p(q, 1) + t * n
-    var C = p(q, 2) + t * n
-    var acc = Float32(0)
-    for i in range(n):
-        acc = fadd(acc, ld(f, G + i))
-        st(f, C + i, acc)
 
 
 def copy_unit(t: Int, f: FP, q: IP):
@@ -678,25 +619,69 @@ def cm_final_unit(t: Int, f: FP, q: IP):
 
 
 # ---------------------------------------------------------------------------
-# Unweighted prefixes in parallel (lane metrics-apple)
+# The prefixes in parallel (lane metrics-apple; weighted: cgr2-metrics-shap)
 # ---------------------------------------------------------------------------
-# Without weights the two sequential prefixes are INTEGER counts: the
-# percentile CDF adds 1.0 per row (exact while it stays below 2^24, so its
-# i-th word is Float32(i + 1)), and the curve walk counts positives,
-# negatives and distinct-score ends in Int. Integers do not depend on the
-# order they are added in, so these schedules write the sequential units'
-# words exactly, and the device needs no host round trip for them.
+# Without weights the two prefixes are INTEGER counts: the percentile CDF
+# adds 1.0 per row (exact while it stays below 2^24, so its i-th word is
+# Float32(i + 1)), and the curve walk counts positives, negatives and
+# distinct-score ends in Int, exact in any order. With weights they are
+# BLOCKED Float32 scans of one fixed order: chunk sums in ascending row
+# order, exclusive chunk offsets in ascending chunk order, each chunk's rows
+# rewalked from its offset (`fadd` throughout). Host and device run these
+# same units, so the words agree on every runner.
 
 def wpct_iota_unit(t: Int, f: FP, q: IP):
     """q = [n, P]; t = element c*n + i: P[t] = Float32(i + 1), the
-    unweighted `wpct_prefix_unit` word (n <= 2^24, the planner's guard)."""
+    unweighted CDF word (n <= 2^24, the planner's guard)."""
     var n = p(q, 0)
     st(f, p(q, 1) + t, Float32(t - (t // n) * n + 1))
 
 
+def wpct_csum_unit(t: Int, f: FP, q: IP):
+    """q = [n, G, S, C, CH]; t = column * C + chunk: S[t] = the chunk's
+    gathered weights G summed in ascending order."""
+    var n = p(q, 0)
+    var C = p(q, 3)
+    var CH = p(q, 4)
+    var col = t // C
+    var c = t - col * C
+    var G = p(q, 1) + col * n
+    var acc = Float32(0)
+    for i in range(c * CH, min(n, c * CH + CH)):
+        acc = fadd(acc, ld(f, G + i))
+    st(f, p(q, 2) + t, acc)
+
+
+def wpct_coff_unit(t: Int, f: FP, q: IP):
+    """q = [S, C]; t = column: the column's chunk sums become exclusive
+    offsets in place, in ascending chunk order."""
+    var S = p(q, 0) + t * p(q, 1)
+    var acc = Float32(0)
+    for c in range(p(q, 1)):
+        var v = ld(f, S + c)
+        st(f, S + c, acc)
+        acc = fadd(acc, v)
+
+
+def wpct_cfill_unit(t: Int, f: FP, q: IP):
+    """q = [n, G, P, S, C, CH]; t = column * C + chunk: P = the blocked
+    CDF of the gathered weights G, the chunk's rows from its offset."""
+    var n = p(q, 0)
+    var C = p(q, 4)
+    var CH = p(q, 5)
+    var col = t // C
+    var c = t - col * C
+    var G = p(q, 1) + col * n
+    var P = p(q, 2) + col * n
+    var acc = ld(f, p(q, 3) + t)
+    for i in range(c * CH, min(n, c * CH + CH)):
+        acc = fadd(acc, ld(f, G + i))
+        st(f, P + i, acc)
+
+
 @always_inline
 def _curve_last(f: FP, G: Int, N: Int, n: Int, i: Int, e: Int) -> Bool:
-    """curve_prefix_unit's end-of-distinct-score test for kept row e = pp*n + i."""
+    """The end-of-distinct-score test for kept row e = pp*n + i."""
     if i == n - 1:
         return True
     if ldi(f, G + e + 1) < 0:
@@ -705,75 +690,109 @@ def _curve_last(f: FP, G: Int, N: Int, n: Int, i: Int, e: Int) -> Bool:
 
 
 def curve_cnt_unit(t: Int, f: FP, q: IP):
-    """q = [n, G, N, S, C, CH]; t = problem * C + chunk: the chunk's kept
-    positives, kept negatives and distinct-score ends at S[3t .. 3t+2]."""
+    """q = [n, G, N, S, C, CH, W]; t = problem * C + chunk: the chunk's kept
+    positives, kept negatives (W < 0: Int counts; W >= 0: Float32 weight
+    sums in ascending order, stored as floats) and distinct-score ends at
+    S[3t .. 3t+2]."""
     var n = p(q, 0)
     var G = p(q, 1)
     var N = p(q, 2)
     var S = p(q, 3)
     var C = p(q, 4)
     var CH = p(q, 5)
+    var weighted = p(q, 6) >= 0
     var pp = t // C
     var c = t - pp * C
     var tp = 0
     var fp = 0
+    var tw = Float32(0)
+    var fw = Float32(0)
     var ends = 0
     for i in range(c * CH, min(n, c * CH + CH)):
         var e = pp * n + i
         var pos = ldi(f, G + e)
         if pos < 0:
             continue
-        if pos == 1:
+        if weighted:
+            if pos == 1:
+                tw = fadd(tw, ld(f, G + N + e))
+            else:
+                fw = fadd(fw, ld(f, G + N + e))
+        elif pos == 1:
             tp += 1
         else:
             fp += 1
         if _curve_last(f, G, N, n, i, e):
             ends += 1
-    sti(f, S + 3 * t, tp)
-    sti(f, S + 3 * t + 1, fp)
+    if weighted:
+        st(f, S + 3 * t, tw)
+        st(f, S + 3 * t + 1, fw)
+    else:
+        sti(f, S + 3 * t, tp)
+        sti(f, S + 3 * t + 1, fp)
     sti(f, S + 3 * t + 2, ends)
 
 
 def curve_off_unit(t: Int, f: FP, q: IP):
-    """q = [G, N, S, C]; t = problem: the chunks' counts become exclusive
-    offsets in place, and G+6N+t = the problem's slot count."""
+    """q = [G, N, S, C, W]; t = problem: the chunks' counts (or weight
+    sums) become exclusive offsets in place, in ascending chunk order, and
+    G+6N+t = the problem's slot count."""
     var G = p(q, 0)
     var N = p(q, 1)
     var S = p(q, 2)
     var C = p(q, 3)
+    var weighted = p(q, 4) >= 0
     var tp = 0
     var fp = 0
+    var tw = Float32(0)
+    var fw = Float32(0)
     var ends = 0
     for c in range(C):
         var k = S + 3 * (t * C + c)
-        var a = ldi(f, k)
-        var b = ldi(f, k + 1)
+        if weighted:
+            var a = ld(f, k)
+            var b = ld(f, k + 1)
+            st(f, k, tw)
+            st(f, k + 1, fw)
+            tw = fadd(tw, a)
+            fw = fadd(fw, b)
+        else:
+            var a = ldi(f, k)
+            var b = ldi(f, k + 1)
+            sti(f, k, tp)
+            sti(f, k + 1, fp)
+            tp += a
+            fp += b
         var d = ldi(f, k + 2)
-        sti(f, k, tp)
-        sti(f, k + 1, fp)
         sti(f, k + 2, ends)
-        tp += a
-        fp += b
         ends += d
     sti(f, G + 6 * N + t, ends)
 
 
 def curve_fill_unit(t: Int, f: FP, q: IP):
-    """q = [n, G, N, S, C, CH]; t = problem * C + chunk: the unweighted
-    `curve_prefix_unit` words of the chunk's rows (TP, FP at G+3N, G+4N;
-    IDX at G+5N), started from the chunk's offsets. A dropped row's TP and
-    FP words are 0, as the zero-filled host copy of the sequential stage
-    leaves them."""
+    """q = [n, G, N, S, C, CH, W]; t = problem * C + chunk: the TP, FP
+    (G+3N, G+4N) and IDX (G+5N) words of the chunk's rows, started from the
+    chunk's offsets: Int counts unweighted, the blocked Float32 weight scan
+    weighted. A dropped row's TP and FP words are 0 and its IDX -1."""
     var n = p(q, 0)
     var G = p(q, 1)
     var N = p(q, 2)
     var S = p(q, 3)
     var C = p(q, 4)
     var CH = p(q, 5)
+    var weighted = p(q, 6) >= 0
     var pp = t // C
     var c = t - pp * C
-    var tp = ldi(f, S + 3 * t)
-    var fp = ldi(f, S + 3 * t + 1)
+    var tp = 0
+    var fp = 0
+    var tw = Float32(0)
+    var fw = Float32(0)
+    if weighted:
+        tw = ld(f, S + 3 * t)
+        fw = ld(f, S + 3 * t + 1)
+    else:
+        tp = ldi(f, S + 3 * t)
+        fp = ldi(f, S + 3 * t + 1)
     var cnt = ldi(f, S + 3 * t + 2)
     for i in range(c * CH, min(n, c * CH + CH)):
         var e = pp * n + i
@@ -783,12 +802,20 @@ def curve_fill_unit(t: Int, f: FP, q: IP):
             st(f, G + 4 * N + e, Float32(0))
             sti(f, G + 5 * N + e, -1)
             continue
-        if pos == 1:
-            tp += 1
+        if weighted:
+            if pos == 1:
+                tw = fadd(tw, ld(f, G + N + e))
+            else:
+                fw = fadd(fw, ld(f, G + N + e))
+            st(f, G + 3 * N + e, tw)
+            st(f, G + 4 * N + e, fw)
         else:
-            fp += 1
-        st(f, G + 3 * N + e, Float32(tp))
-        st(f, G + 4 * N + e, Float32(fp))
+            if pos == 1:
+                tp += 1
+            else:
+                fp += 1
+            st(f, G + 3 * N + e, Float32(tp))
+            st(f, G + 4 * N + e, Float32(fp))
         if _curve_last(f, G, N, n, i, e):
             sti(f, G + 5 * N + e, cnt)
             cnt += 1
@@ -796,14 +823,28 @@ def curve_fill_unit(t: Int, f: FP, q: IP):
             sti(f, G + 5 * N + e, -1)
 
 
+@always_inline
+def _step(a: Float32, b: Float32) -> FF:
+    """a - b exactly: Knuth's two-sum of two Float32 words (the error term
+    is exact; its flush only reaches terms below 2^-126)."""
+    return two_sum(a, -b)
+
+
+@always_inline
+def _same_step(x: FF, y: FF) -> Bool:
+    """Two exact two-sum differences are the same value iff both words
+    agree (the rounded sum and its exact remainder are unique)."""
+    return x.hi == y.hi and x.lo == y.lo
+
+
 def curve_keep_unit(t: Int, f: FP, q: IP):
-    """q = [n, FPS, TPS, CNT, KEEP]; t = element pp*n + i of an UNWEIGHTED
-    curve (lane metrics-apple): KEEP[t] = 1 when Python's `_drop_collinear`
-    keeps slot i of the problem's CNT[pp] slots (the first, the last, and
-    every slot where the fps or tps step changes), else 0; slots past the
-    count are not written. The counts are integer-valued Float32 words, so
-    their binary64 differences in Python are exact integers: Int
-    differences decide the same way."""
+    """q = [n, FPS, TPS, CNT, KEEP]; t = element pp*n + i (lane
+    metrics-apple; weighted curves too, cgr2-metrics-shap): KEEP[t] = 1
+    when `_drop_collinear` keeps slot i of the problem's CNT[pp] slots (the
+    first, the last, and every slot where the fps or tps step changes),
+    else 0; slots past the count are not written. The steps are the EXACT
+    differences of the Float32 words (two-sum), compared exactly: integer
+    counts decide as Int differences do, weight sums by their exact steps."""
     var n = p(q, 0)
     var pp = t // n
     var i = t - pp * n
@@ -814,14 +855,178 @@ def curve_keep_unit(t: Int, f: FP, q: IP):
     if i > 0 and i < c - 1:
         var F = p(q, 1) + pp * n + i
         var T = p(q, 2) + pp * n + i
-        var f0 = Int(ld(f, F - 1))
-        var f1 = Int(ld(f, F))
-        var f2 = Int(ld(f, F + 1))
-        var t0 = Int(ld(f, T - 1))
-        var t1 = Int(ld(f, T))
-        var t2 = Int(ld(f, T + 1))
-        keep = 1 if (f2 - f1 != f1 - f0) or (t2 - t1 != t1 - t0) else 0
+        var f0 = ld(f, F - 1)
+        var f1 = ld(f, F)
+        var f2 = ld(f, F + 1)
+        var t0 = ld(f, T - 1)
+        var t1 = ld(f, T)
+        var t2 = ld(f, T + 1)
+        var same = _same_step(_step(f2, f1), _step(f1, f0)) and _same_step(_step(t2, t1), _step(t1, t0))
+        keep = 0 if same else 1
     sti(f, p(q, 4) + t, keep)
+
+
+# ---------------------------------------------------------------------------
+# The curve folds (curve_fold; lane cgr2-metrics-shap, 2026-10-03)
+# ---------------------------------------------------------------------------
+# One float-float sum per problem over its curve points, chunk sums of
+# CF_CHUNK points in ascending order met in ascending chunk order (the same
+# words on every runner). The host turns the few words into the score.
+#   mode 0, the ROC AUC: sum of (fps[i] - fps[i-1]) * (tps[i] + tps[i-1])
+#     over the (collinear-dropped) points, point -1 = (0, 0); the score is
+#     the sum / (2 F T), F = fps[c-1], T = tps[c-1].
+#   mode 1, the average precision: sum of (tps[i] - tps[i-1]) * tps[i] /
+#     (tps[i] + fps[i]); the score is max(0, sum / T); the chunk's count
+#     word holds its zero denominators (any sends the caller to Python).
+#   mode 2, the partial AUC (max_fpr = MH + ML, float-float): mode 0's sum
+#     over the points with fps[i] / F <= max_fpr (float-float quotient,
+#     compared hi then lo), a prefix since fps ascends; the count word holds
+#     how many.
+comptime CF_OUT = 10
+
+
+@always_inline
+def _cf_term(f: FP, FPS: Int, TPS: Int, i: Int, mode: Int) -> FF:
+    var f1 = ld(f, FPS + i)
+    var t1 = ld(f, TPS + i)
+    var f0 = Float32(0)
+    var t0 = Float32(0)
+    if i > 0:
+        f0 = ld(f, FPS + i - 1)
+        t0 = ld(f, TPS + i - 1)
+    if mode == 1:
+        var den = two_sum(t1, f1)
+        if den.hi == Float32(0):
+            return ff_of(Float32(0))
+        return ff_mul(_step(t1, t0), ff_div(ff_of(t1), den))
+    return ff_mul(_step(f1, f0), two_sum(t1, t0))
+
+
+@always_inline
+def _cf_in(f: FP, FPS: Int, i: Int, Fl: Float32, mh: Float32, ml: Float32) -> Bool:
+    """mode 2: fps[i] / F <= max_fpr, the float-float quotient against the
+    float-float bound."""
+    var r = ff_div(ff_of(ld(f, FPS + i)), ff_of(Fl))
+    return r.hi < mh or (r.hi == mh and r.lo <= ml)
+
+
+@always_inline
+def _cf_chunk(f: FP, FPS: Int, TPS: Int, c0: Int, c1: Int, mode: Int, Fl: Float32,
+              mh: Float32, ml: Float32, mut k: Int) -> FF:
+    """The chunk [c0, c1)'s sum, its count word added to k."""
+    var acc = ff_of(Float32(0))
+    for i in range(c0, c1):
+        if mode == 2:
+            if not _cf_in(f, FPS, i, Fl, mh, ml):
+                break
+            k += 1
+        elif mode == 1:
+            if two_sum(ld(f, TPS + i), ld(f, FPS + i)).hi == Float32(0):
+                k += 1
+        acc = ff_add(acc, _cf_term(f, FPS, TPS, i, mode))
+    return acc
+
+
+@always_inline
+def _cf_bound(f: FP, q: IP, pp: Int, n: Int) -> Float32:
+    var c = ldi(f, p(q, 3) + pp)
+    if c <= 0:
+        return Float32(0)
+    return ld(f, p(q, 1) + pp * n + c - 1)
+
+
+def _cf_finish(f: FP, n: Int, FPS: Int, TPS: Int, c: Int, OUT: Int, acc: FF, k: Int, mode: Int):
+    """OUT[0..9] = sum hi, lo, F, T, the count word, then (mode 2) fps and
+    tps at points k-1 and k (0 outside the curve)."""
+    st(f, OUT, acc.hi)
+    st(f, OUT + 1, acc.lo)
+    st(f, OUT + 2, ld(f, FPS + c - 1) if c > 0 else Float32(0))
+    st(f, OUT + 3, ld(f, TPS + c - 1) if c > 0 else Float32(0))
+    sti(f, OUT + 4, k)
+    var a = Float32(0)
+    var b = Float32(0)
+    var u = Float32(0)
+    var v = Float32(0)
+    if mode == 2:
+        if k > 0 and k - 1 < c:
+            a = ld(f, FPS + k - 1)
+            u = ld(f, TPS + k - 1)
+        if k < c:
+            b = ld(f, FPS + k)
+            v = ld(f, TPS + k)
+    st(f, OUT + 5, a)
+    st(f, OUT + 6, b)
+    st(f, OUT + 7, u)
+    st(f, OUT + 8, v)
+    sti(f, OUT + 9, c)
+
+
+def curve_fold_unit(t: Int, f: FP, q: IP):
+    """The caller's op (unplanned: one problem per unit, the same chunks
+    and the same meeting order as cf_chunk_unit + cf_final_unit, so the
+    same words). q = [n, FPS, TPS, CNT, OUT, mode, MH, ML, CH]: FPS, TPS
+    strided by n per problem, CNT[pp] points, OUT + CF_OUT*pp the words."""
+    var n = p(q, 0)
+    var mode = p(q, 5)
+    var CH = p(q, 8)
+    var FPS = p(q, 1) + t * n
+    var TPS = p(q, 2) + t * n
+    var c = ldi(f, p(q, 3) + t)
+    var Fl = _cf_bound(f, q, t, n)
+    var mh = bitcast[DType.float32](Int32(p(q, 6)))
+    var ml = bitcast[DType.float32](Int32(p(q, 7)))
+    var acc = ff_of(Float32(0))
+    var k = 0
+    var c0 = 0
+    while c0 < c:
+        var c1 = min(c, c0 + CH)
+        var kc = 0
+        var part = _cf_chunk(f, FPS, TPS, c0, c1, mode, Fl, mh, ml, kc)
+        acc = ff_add(acc, part)
+        k += kc
+        c0 = c1
+    _cf_finish(f, n, FPS, TPS, c, p(q, 4) + CF_OUT * t, acc, k, mode)
+
+
+def cf_chunk_unit(t: Int, f: FP, q: IP):
+    """q = [n, FPS, TPS, CNT, S, C, CH, mode, MH, ML]; t = problem * C +
+    chunk: S[3t .. 3t+2] = the chunk's float-float sum and count word."""
+    var n = p(q, 0)
+    var C = p(q, 5)
+    var CH = p(q, 6)
+    var mode = p(q, 7)
+    var pp = t // C
+    var ch = t - pp * C
+    var c = ldi(f, p(q, 3) + pp)
+    var S = p(q, 4) + 3 * t
+    var Fl = _cf_bound(f, q, pp, n)
+    var mh = bitcast[DType.float32](Int32(p(q, 8)))
+    var ml = bitcast[DType.float32](Int32(p(q, 9)))
+    var k = 0
+    var acc = ff_of(Float32(0))
+    var c0 = ch * CH
+    if c0 < c:
+        acc = _cf_chunk(f, p(q, 1) + pp * n, p(q, 2) + pp * n, c0, min(c, c0 + CH), mode, Fl, mh, ml, k)
+    f.unsafe_store(S, acc.hi)
+    f.unsafe_store(S + 1, acc.lo)
+    sti(f, S + 2, k)
+
+
+def cf_final_unit(t: Int, f: FP, q: IP):
+    """q = [n, FPS, TPS, CNT, S, C, OUT, mode]; t = problem: the chunk sums
+    met in ascending chunk order (empty chunks add a zero, as the unplanned
+    unit never sees them: ff_add of +0 keeps every word), then the words."""
+    var n = p(q, 0)
+    var C = p(q, 5)
+    var mode = p(q, 7)
+    var c = ldi(f, p(q, 3) + t)
+    var acc = ff_of(Float32(0))
+    var k = 0
+    for ch in range(C):
+        var S = p(q, 4) + 3 * (t * C + ch)
+        acc = ff_add(acc, FF(f.unsafe_load(S), f.unsafe_load(S + 1)))
+        k += ldi(f, S + 2)
+    _cf_finish(f, n, p(q, 1) + t * n, p(q, 2) + t * n, c, p(q, 6) + CF_OUT * t, acc, k, mode)
 
 
 # ---------------------------------------------------------------------------

@@ -57,7 +57,7 @@ offsets[t+1]; a leaf has left == -1; children are left and left + 1,
 tree-relative; `x[colid] <= quesval` goes LEFT.
 """
 from std.atomic import Atomic
-from checks.numerics import ftz, identical_div, identical_mul, identical_mul64
+from checks.numerics import ftz, identical_div, identical_mul
 
 comptime F32P = MutPointer[Float32, MutAnyOrigin]
 comptime I32P = MutPointer[Int32, MutAnyOrigin]
@@ -364,23 +364,6 @@ def shap_fold_unit(u: Int, r0: Int, rows: Int, n_trees: Int, d: Int, k: Int, slo
 
 
 # ------------------------------------------- the model-agnostic explainers
-def mask_expand(
-    x: MutPointer[Float32, MutUntrackedOrigin], bg: MutPointer[Float32, MutUntrackedOrigin], nb: Int, d: Int,
-    masks: MutPointer[Int32, MutUntrackedOrigin], m: Int, res: MutPointer[Float32, MutUntrackedOrigin],
-):
-    """res[(s * nb + r), f] = x[f] if masks[s, f] else bg[r, f]: every
-    coalition over every background row (the synthetic dataset of cuML's
-    `kernel_dataset` / `permutation_shap_dataset`, `explainer/*.cu`). A copy."""
-    for s in range(m):
-        for r in range(nb):
-            var o = (s * nb + r) * d
-            for f in range(d):
-                if masks[unsafe_offset=s * d + f] != 0:
-                    res[unsafe_offset=o + f] = x[unsafe_offset=f]
-                else:
-                    res[unsafe_offset=o + f] = bg[unsafe_offset=r * d + f]
-
-
 def block_mean(
     y: MutPointer[Float32, MutUntrackedOrigin], m: Int, nb: Int, k: Int,
     res: MutPointer[Float64, MutUntrackedOrigin],
@@ -394,77 +377,3 @@ def block_mean(
                 # DEVIATION 5602: background rows folded in order.
                 acc = acc + Float64(y[unsafe_offset=(s * nb + r) * k + j])
             res[unsafe_offset=s * k + j] = acc / Float64(nb)
-
-
-def kernel_solve(
-    masks: MutPointer[Int32, MutUntrackedOrigin], w: MutPointer[Float64, MutUntrackedOrigin], m: Int, d: Int,
-    ey: MutPointer[Float64, MutUntrackedOrigin], k: Int, fx: MutPointer[Float64, MutUntrackedOrigin],
-    fnull: MutPointer[Float64, MutUntrackedOrigin], phi: MutPointer[Float64, MutUntrackedOrigin],
-):
-    """shap `KernelExplainer.solve` without l1 selection: the last feature
-    eliminated through the efficiency constraint, the weighted normal
-    equations solved by Gaussian elimination with partial pivoting (first
-    largest pivot), phi[f, j] written for every output j."""
-    for j in range(k):
-        var total = fx[unsafe_offset=j] - fnull[unsafe_offset=j]
-        if d == 1:
-            phi[unsafe_offset=j] = total
-            continue
-        var q = d - 1
-        var a = List[Float64](length=q * q, fill=0.0)
-        var bv = List[Float64](length=q, fill=0.0)
-        for s in range(m):
-            var last = Float64(Int(masks[unsafe_offset=s * d + q]))
-            var y2 = (ey[unsafe_offset=s * k + j] - fnull[unsafe_offset=j]) - identical_mul64(last, total)
-            var ws = w[unsafe_offset=s]
-            for r in range(q):
-                var er = Float64(Int(masks[unsafe_offset=s * d + r])) - last
-                if er == 0:
-                    continue
-                var wer = identical_mul64(ws, er)
-                bv[r] = bv[r] + identical_mul64(wer, y2)
-                for c in range(q):
-                    var ec = Float64(Int(masks[unsafe_offset=s * d + c])) - last
-                    a[r * q + c] = a[r * q + c] + identical_mul64(wer, ec)
-        # Gaussian elimination, partial pivoting
-        var perm = List[Int](length=q, fill=0)
-        for r in range(q):
-            perm[r] = r
-        for col in range(q):
-            var piv = col
-            var best = abs(a[perm[col] * q + col])
-            for r in range(col + 1, q):
-                var v = abs(a[perm[r] * q + col])
-                if v > best:
-                    best = v
-                    piv = r
-            var t = perm[col]
-            perm[col] = perm[piv]
-            perm[piv] = t
-            var pr = perm[col]
-            var pv = a[pr * q + col]
-            if pv == 0:
-                continue
-            for r in range(col + 1, q):
-                var rr = perm[r]
-                var f = a[rr * q + col] / pv
-                if f == 0:
-                    continue
-                for c in range(col, q):
-                    a[rr * q + c] = a[rr * q + c] - identical_mul64(f, a[pr * q + c])
-                bv[rr] = bv[rr] - identical_mul64(f, bv[pr])
-        var sol = List[Float64](length=q, fill=0.0)
-        var r = q - 1
-        while r >= 0:
-            var pr = perm[r]
-            var acc = bv[pr]
-            for c in range(r + 1, q):
-                acc = acc - identical_mul64(a[pr * q + c], sol[c])
-            var pv = a[pr * q + r]
-            sol[r] = acc / pv if pv != 0 else 0.0
-            r -= 1
-        var ssum: Float64 = 0.0
-        for c in range(q):
-            phi[unsafe_offset=c * k + j] = sol[c]
-            ssum = ssum + sol[c]
-        phi[unsafe_offset=q * k + j] = total - ssum
