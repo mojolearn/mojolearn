@@ -17,7 +17,7 @@ Cholesky (x_linear/ops.mojo). float32, rows ascending.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, copy, cholesky, chol_solve, centered_gram,
-    axpy_acc, add_acc, axpy_centered, par_rows,
+    axpy_acc, add_acc, axpy_centered, par_rows, seq_rows,
 )
 from std.sys.info import is_gpu
 from x_linear.team import Team
@@ -316,8 +316,8 @@ def _ridge_ff_host(x: FP, y: FP, n: Int, d: Int, t_n: Int, fi: Bool, sw: Bool, w
         for u in range(lo, hi):
             ridge_ff_unit(nm + u, x, y, n, d, t_n, fi, sw, wo, sh, sl)
 
-    par_rows(means, nm, 1)
-    par_rows(cells, units - nm, 1)
+    seq_rows(means, nm, 1)
+    seq_rows(cells, units - nm, 1)
     var ok = ridge_ff_solve(d, t_n, fi, alpha, sh, sl, bh, bl, res, fh, fl)
     st(res, t_n * d + t_n + 2 + a_n, Float32(0) if ok else Float32(2))
     _ = hb^

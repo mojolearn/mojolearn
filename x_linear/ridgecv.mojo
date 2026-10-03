@@ -15,7 +15,7 @@ held-out predictions (`row_dot` plus the intercept ym - xm.w) and the R^2
 folds over the held-out rows ascending; the fold scores are summed folds
 ascending and divided by k. Without an intercept nothing is centered.
 """
-from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, cholesky, chol_solve, row_dot, par_rows
+from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, cholesky, chol_solve, row_dot, seq_rows
 from x_linear.ridge import chol_trusted, ridge_ff_unit, ridge_ff_units, ridge_ff_solve
 from x_linear.tops import FOLD_BLOCK
 
@@ -206,7 +206,7 @@ def ridge_kfold_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
                 else:
                     st(ymp, 0, kf_mean(y, 1, 0, n, s, e) if fi else Float32(0))
 
-        par_rows(means, d + 1, 1)
+        seq_rows(means, d + 1, 1)
 
         def cells(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm s, imm e, imm xm, imm ymp, imm g, imm xty}:
             for j in range(lo, hi):
@@ -217,7 +217,7 @@ def ridge_kfold_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
                     st(g, c * d + j, v)
                 st(xty, j, kf_cross(x, d, j, mj, y, 1, 0, ld(ymp, 0), n, s, e))
 
-        par_rows(cells, d, 1)
+        seq_rows(cells, d, 1)
         var have_ff = False
         for a in range(na):
             var r = kf_solve(g, xty, xm, ld(ymp, 0), d, ld(fp, a), fi, aw, w + a * d)
@@ -255,5 +255,5 @@ def _kf_ff_stats_host(x: FP, y: FP, n: Int, d: Int, fi: Bool, s: Int, e: Int, ff
         for u in range(lo, hi):
             ridge_ff_unit(d + 1 + u, x, y, n, d, 1, fi, False, n, sh, sl, s, e)
 
-    par_rows(means, d + 1, 1)
-    par_rows(cells, units - (d + 1), 1)
+    seq_rows(means, d + 1, 1)
+    seq_rows(cells, units - (d + 1), 1)

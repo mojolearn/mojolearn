@@ -17,7 +17,7 @@ minimizer is the same). float32 throughout.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fabs, fmax, ld, st, ldi, i2f,
-    fill, copy, row_dot, cholesky, chol_solve, mean_of, axpy_acc, par_rows, row_dots,
+    fill, copy, row_dot, cholesky, chol_solve, mean_of, axpy_acc, par_rows, seq_rows, row_dots,
 )
 from std.sys.info import is_gpu
 from std.gpu import WARP_SIZE
@@ -561,7 +561,7 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                                 if fi:
                                     st(gpb, d, fa(ld(gpb, d), gi))
 
-            par_rows(blocks_fold, nb, 1)
+            seq_rows(blocks_fold, nb, 1)
             for q in range(words):
                 var acc = Float32(0)
                 for bk in range(nb):
