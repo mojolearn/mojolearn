@@ -1713,10 +1713,6 @@ def fit_non_symmetric_tree[
     # DEVIATION 2007a: no override, so the pool's cached machine constant.
     if sm_count <= 0:
         sm_count = ws[0].sm_count
-        # Measurement arms (FAST): scale the machine-sized split-chain grids.
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
-            comptime if is_defined["MOJOLEARN_GBDT_SM_X8"]():
-                sm_count *= 8
     # ============ DEVIATION 1911/1912: is the quantized family running? ====
     # The vendor/mode half is COMPTIME (`QUANTIZED_HIST_LIVE`, the
     # `greedy_quantized_hist_for` row -- False under IDENTICAL, so that
