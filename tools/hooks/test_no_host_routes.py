@@ -155,6 +155,14 @@ BLOCKED = [
     ("Python loop over rows", {PY: "for i in range(n_samples):\n    out[i] = f(X[i])"},
      "for i in range(n_samples):"),
     ("sklearn import", {PY: "from sklearn.isotonic import isotonic_regression"}, "from sklearn.isotonic"),
+    ("comprehension over data in a def (py-data-loop)", {PY: "def _pz1(X):\n    return [v * 2 for v in X]"},
+     "[v * 2 for v in X]"),
+    ("numpy compute in a def (py-np-compute)", {PY: "def _pz2(X):\n    return np.mean(X, axis=0)"}, "np.mean"),
+    ("sum() over data in a def (py-reduce)", {PY: "def _pz3(y):\n    return sum(y) / len(y)"}, "sum(y)"),
+    ("array reduction method in a def (py-array-method)", {PY: "def _pz4(X):\n    return X.argmax()"},
+     "X.argmax()"),
+    ("glue note whose reason is under three words",
+     {PY: "def _pz5(X):\n    for v in X:  # glue: fine\n        pass"}, "for v in X:"),
     ("Python thread pool", {PY: "from concurrent.futures import ThreadPoolExecutor"}, "ThreadPoolExecutor"),
     ("process pool", {PY: "import multiprocessing"}, "import multiprocessing"),
     ("forces MOJOLEARN_VENDOR=cpu", {PY: "os.environ['MOJOLEARN_VENDOR'] = 'cpu'"}, "MOJOLEARN_VENDOR"),
@@ -215,6 +223,13 @@ PASSES = [
      {DEV: "def _q4(ctx: DeviceContext, x: UnsafePointer[Float32], n: Int) raises:\n"
            "    ctx.enqueue_function[_fold_kernel](  # small-launch(n: parameter count): an L-BFGS vector phase, never rows\n"
            "        x, Int32(n),\n        grid_dim=(1, 1, 1), block_dim=(256, 1, 1),\n    )"}),
+    ("a reviewed glue note on an argument loop",
+     {PY: "def _qz1(params):\n    for k in params:  # glue: copies estimator keyword arguments\n        pass"}),
+    ("scalar min/max and numpy allocation",
+     {PY: "def _qz2(a, b):\n    return np.zeros(min(a, b) + max(a, 1))"}),
+    ("a module-level table and a loop word in a string",
+     {PY: "_QZ3 = {k: i for i, k in enumerate(('a', 'b'))}\n"
+          "def _qz4():\n    raise ValueError('one value for each in X')"}),
     ("a module no GPU binding imports",
      {"x_decomp/unused_scratch.mojo": ("=", "def f(n: Int):\n    host_parallelize(_rows, n)\n")}),
 ]

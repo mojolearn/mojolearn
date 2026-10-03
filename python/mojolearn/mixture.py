@@ -148,7 +148,7 @@ class GaussianMixture(NumericModeMixin):
             raise ValueError("mojolearn GaussianMixture: " + _REFUSED_KNOBS["n_init"])
         if self.warm_start:
             raise ValueError("mojolearn GaussianMixture: " + _REFUSED_KNOBS["warm_start"])
-        for name in ("means_init", "weights_init", "precisions_init"):
+        for name in ("means_init", "weights_init", "precisions_init"):  # glue: checks three parameter names
             if getattr(self, name) is not None:
                 raise ValueError("mojolearn GaussianMixture: " + _REFUSED_KNOBS[name])
 
@@ -313,7 +313,7 @@ class GaussianMixture(NumericModeMixin):
         reals = _serialize.exact(arrays, "reals", "<f8")
         if ints.size != 6 or reals.size != 3:
             raise ValueError(f"mojolearn: {path!r} holds {ints.size} ints and {reals.size} reals, 6 and 3 are needed")
-        k, d, n_iter, converged, max_iter, seed = (int(ints[i]) for i in range(6))
+        k, d, n_iter, converged, max_iter, seed = (int(ints[i]) for i in range(6))  # glue: unpacks the fixed int vector
         if k < 1 or d < 1:
             raise ValueError(f"mojolearn: {path!r} holds an empty model")
         obj = cls(n_components=k, covariance_type=_serialize.scalar_str(arrays, "covariance_type"),
@@ -322,7 +322,7 @@ class GaussianMixture(NumericModeMixin):
         _restore_mode(obj, arrays)
         sizes = dict(weights=k, means=k * d, covariances=k * d * d, precisions_cholesky=k * d * d, log_det_chol=k)
         got = {}
-        for name, size in sizes.items():
+        for name, size in sizes.items():  # glue: checks saved array names
             a = _serialize.exact(arrays, name, "<f4")
             if a.ndim != 1 or a.size != size:
                 raise ValueError(f"mojolearn: {path!r} {name} holds {a.size} values, {size} are needed")

@@ -100,7 +100,7 @@ class ProphetForecaster:
         """(t scaled float32 (N,), frac float32 (N, max(ns, 1))): Prophet's
         time scaling and (t mod P) / P per seasonality, in Mojo
         (`prophet_features`: exact float64 fmod, one rounding to float32)."""
-        periods = np.ascontiguousarray([s["period"] for s in self.seasonalities.values()] or [1.0],
+        periods = np.ascontiguousarray([s["period"] for s in self.seasonalities.values()] or [1.0],  # glue: one period per user seasonality
                                        dtype=np.float64)
         ns = len(self.seasonalities)
         tsc = np.empty(len(days), dtype=np.float32)
@@ -151,8 +151,8 @@ class ProphetForecaster:
         self._nh = 0 if holidays is None else np.asarray(holidays).reshape(N, -1).shape[1]
         H = np.ascontiguousarray(np.asarray(holidays, dtype=np.float32).reshape(N, -1)) if self._nh else \
             np.zeros((N, 1), np.float32)
-        orders = np.asarray([s["fourier_order"] for s in self.seasonalities.values()], dtype=np.float32)
-        sig = [s["prior_scale"] for s in self.seasonalities.values() for _ in range(2 * s["fourier_order"])]
+        orders = np.asarray([s["fourier_order"] for s in self.seasonalities.values()], dtype=np.float32)  # glue: one order per user seasonality
+        sig = [s["prior_scale"] for s in self.seasonalities.values() for _ in range(2 * s["fourier_order"])]  # glue: prior scale per Fourier parameter, model parameter count
         sig += [self.holidays_prior_scale] * self._nh
         self._K = len(sig)
         sig = np.ascontiguousarray(sig if sig else [1.0], dtype=np.float32)
@@ -182,7 +182,7 @@ class ProphetForecaster:
             H = np.ascontiguousarray(np.asarray(holidays, dtype=np.float32).reshape(M, -1))
         else:
             H = np.zeros((M, 1), np.float32)
-        orders = np.asarray([s["fourier_order"] for s in self.seasonalities.values()], dtype=np.float32)
+        orders = np.asarray([s["fourier_order"] for s in self.seasonalities.values()], dtype=np.float32)  # glue: one order per user seasonality
         orders_ = orders if len(orders) else np.zeros(1, np.float32)
         B = self.params_.shape[0]
         yhat = np.zeros((B, M), dtype=np.float32)

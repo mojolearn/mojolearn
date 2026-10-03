@@ -14,7 +14,7 @@ from sequence.exec_device import DeviceExec
 from sequence.fit_team_py import garch_team_py, prophet_fit_team_py
 from sequence.ets_team import ETS_TEAM
 from sequence.ets_team_py import ets_team_applies, ets_team_py
-from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, ets_py, prophet_predict_py, moe_forward_py
+from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
 from sequence.schedule import epoch_schedule_py
@@ -126,6 +126,11 @@ def croston_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObjec
     return croston_py(ex, addrs, ip)
 
 
+def croston_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    var ex = DeviceExec()
+    return croston_forecast_py(ex, addrs, ip)
+
+
 def ets_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     comptime if ETS_TEAM:
@@ -229,6 +234,7 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[layer_norm_binding]("layer_norm")
         m.def_function[theta_binding]("theta")
         m.def_function[croston_binding]("croston")
+        m.def_function[croston_forecast_binding]("croston_forecast")
         m.def_function[ets_binding]("ets")
         m.def_function[garch_binding]("garch")
         m.def_function[epoch_schedule_binding]("epoch_schedule")

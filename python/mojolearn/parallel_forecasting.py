@@ -11,7 +11,8 @@ __all__ = ['predict_arima', 'forecast_arima', 'predict_exponential_smoothing',
 import copy
 from ._parallel_pool import DevicePool
 from ._buffer import empty, addr, addr_ro
-from ._bufcheck import flat_view, memcopy
+from ._bufcheck import memcopy
+from ._array import _strided_copy
 
 
 def _ranges(count, width):
@@ -19,7 +20,7 @@ def _ranges(count, width):
         raise ValueError('series_per_shard must be a positive integer')
     if count < 1:
         raise ValueError('at least one series is required')
-    return [(i, min(i + width, count)) for i in range(0, count, width)]
+    return [(i, min(i + width, count)) for i in range(0, count, width)]  # glue: shard boundaries for the device pool
 
 
 def _run(requests, devices):
@@ -52,12 +53,12 @@ def predict_arima(estimator, start=0, end=None, *, exog=None, devices=(0,), seri
         raise ValueError('need 0 <= start < end; end is exclusive')
     ranges = _ranges(estimator.batch_size_, series_per_shard)
     requests = []
-    for lo, hi in ranges:
+    for lo, hi in ranges:  # glue: one worker request per device shard
         part = copy.copy(estimator)
         part.batch_size_ = hi - lo
         # Only these two series-major arrays are read by the prediction kernel.
         # Remove unrelated full-batch fit statistics from the transported state.
-        part.__dict__ = {k: v for k, v in estimator.__dict__.items()
+        part.__dict__ = {k: v for k, v in estimator.__dict__.items()  # glue: copies estimator attributes, not data
                          if k not in ('params_', '_y', 'x_', 'x0_', 'n_iter_',
                                       'retcode_', 'llf_', 'fx_', 'aic_', 'bic_')}
         part.batch_size_ = hi - lo
@@ -65,7 +66,7 @@ def predict_arima(estimator, start=0, end=None, *, exog=None, devices=(0,), seri
         requests.append(('forecast_predict', part, ('predict', (start, end))))
     parts = _run(requests, devices)
     result = empty((estimator.batch_size_, end - start), '<f4')
-    for (lo, hi), value in zip(ranges, parts):
+    for (lo, hi), value in zip(ranges, parts):  # glue: places one result buffer per device shard
         expected = (hi - lo, end - start)
         if value.shape != expected or value.dtype != result.dtype:
             raise ValueError('ARIMA worker returned an invalid prediction shape or dtype')
@@ -86,37 +87,20 @@ def forecast_arima(estimator, steps, *, exog=None, devices=(0,), series_per_shar
 
 def _gather_cols(dst, src, rows, batch, lo, w):
     """dst[r * w + j] = src[r * batch + lo + j] for r < rows, j < w: one
-    strided slice copy per column when there are fewer columns than rows
-    (the default one series per shard), else one memcopy per row (lane
-    py-sequence; it was one memcopy per row always, 3 x steps calls per
-    shard). The same bytes land in the same places."""
-    if w <= rows:
-        try:
-            d, s = flat_view(dst, 'f'), flat_view(src, 'f')
-            for j in range(w):
-                d[j::w] = s[lo + j:rows * batch:batch]
-            return
-        except (TypeError, ValueError, NotImplementedError):
-            pass
-    for r in range(rows):
-        memcopy(addr(dst, name='components') + r * w * 4,
-                addr_ro(src, name='components') + (r * batch + lo) * 4, w * 4)
+    Mojo strided copy (`_array._strided_copy`; lane pyglue-sweep, the
+    per-column and per-row Python loops are gone). The same bytes land in
+    the same places."""
+    if rows and w:
+        _strided_copy(addr_ro(src, name='components'), addr(dst, name='components'), 4,
+                      (rows, w), (batch, 1), (w, 1), lo, 0)
 
 
 def _scatter_cols(dst, src, rows, batch, lo, w):
     """dst[r * batch + lo + j] = src[r * w + j] for r < rows, j < w, as
     `_gather_cols`."""
-    if w <= rows:
-        try:
-            d, s = flat_view(dst, 'f'), flat_view(src, 'f')
-            for j in range(w):
-                d[lo + j:rows * batch:batch] = s[j:rows * w:w]
-            return
-        except (TypeError, ValueError, NotImplementedError):
-            pass
-    for r in range(rows):
-        memcopy(addr(dst, name='predictions') + (r * batch + lo) * 4,
-                addr_ro(src, name='prediction shard') + r * w * 4, w * 4)
+    if rows and w:
+        _strided_copy(addr_ro(src, name='prediction shard'), addr(dst, name='predictions'), 4,
+                      (rows, w), (w, 1), (batch, 1), 0, lo)
 
 
 def predict_exponential_smoothing(estimator, start, end, *, index=None,
@@ -149,10 +133,10 @@ def predict_exponential_smoothing(estimator, start, end, *, index=None,
     ranges = _ranges(estimator.ts_num, series_per_shard)
     requests = []
     steps, batch = estimator.n - estimator.seasonal_periods, estimator.ts_num
-    for lo, hi in ranges:
+    for lo, hi in ranges:  # glue: one worker request per device shard
         part = copy.copy(estimator)
         # Prediction reads only component state and these scalar parameters.
-        part.__dict__ = {k: getattr(estimator, k) for k in
+        part.__dict__ = {k: getattr(estimator, k) for k in  # glue: copies four scalar estimator attributes
                          ('n', 'seasonal_periods', 'seasonal', 'fit_executed_flag')}
         part.ts_num = hi - lo
         part._components_len = steps * part.ts_num
@@ -163,7 +147,7 @@ def predict_exponential_smoothing(estimator, start, end, *, index=None,
     parts = _run(requests, devices)
     width = end - start
     result = empty((width * batch,), '<f4')
-    for (lo, hi), value in zip(ranges, parts):
+    for (lo, hi), value in zip(ranges, parts):  # glue: places one result buffer per device shard
         expected = (width,) if hi - lo == 1 else (width, hi - lo)
         if value.shape != expected or value.dtype != result.dtype:
             raise ValueError('Holt-Winters worker returned an invalid prediction shape or dtype')

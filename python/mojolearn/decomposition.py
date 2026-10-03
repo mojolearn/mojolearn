@@ -37,7 +37,7 @@ def _check_saved_by(arrays, path, cls):
     """The file's `estimator` must be `cls` or a base of it, so the host
     subclasses of `_classical_host.py` load the plain class's file."""
     saved_as = _serialize.scalar_str(arrays, "estimator")
-    if saved_as not in (c.__name__ for c in cls.__mro__):
+    if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: checks the saved class name
         raise ValueError(
             f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}"
         )
@@ -75,7 +75,7 @@ def _dense(X):
 
 
 def _component_count(n_components, shape):
-    value = min(shape) if n_components is None else int(n_components)
+    value = min(shape) if n_components is None else int(n_components)  # glue: smaller of two shape dims
     if value < 1 or value > shape[1]:
         raise ValueError(
             f"mojolearn n_components must be in [1, {shape[1]}], got {value}"
@@ -252,7 +252,7 @@ class PCA(NumericModeMixin):
         failing with an arity message from the extension.
         """
         binding = self._bind("_mojolearn_estimators")
-        if not all(callable(getattr(binding, name, None)) for name in
+        if not all(callable(getattr(binding, name, None)) for name in  # glue: checks two binding entry names
                    ("pca_whiten_transform", "pca_whiten_inverse_transform")):
             raise NotImplementedError(
                 "mojolearn PCA: whiten=True needs the whitened transform pair "
@@ -275,7 +275,7 @@ class PCA(NumericModeMixin):
         finiteness scan is `_buffer.all_finite` (native when the helper is
         loadable), the sign test is `Array.min()`."""
         views = {}
-        for name, shape in (("components_", (self.n_components_, self.n_features_in_)),
+        for name, shape in (("components_", (self.n_components_, self.n_features_in_)),  # glue: loops over saved attribute names
                             ("mean_", (self.n_features_in_,)),
                             ("singular_values_", (self.n_components_,)),
                             ("explained_variance_", (self.n_components_,))):
@@ -365,7 +365,7 @@ class PCA(NumericModeMixin):
             # full explained-variance spectrum.
             if x.shape[0] < x.shape[1]:
                 raise ValueError("n_components='mle' is only supported if n_samples >= n_features")
-            nc = min(x.shape)
+            nc = min(x.shape)  # glue: smaller of two shape dims
         elif isinstance(self.n_components, float) and not isinstance(self.n_components, bool):
             # scikit-learn's variance fraction (lane/algos-decomp, 2026-09-27):
             # fit every component, keep the fewest whose cumulative explained
@@ -374,10 +374,10 @@ class PCA(NumericModeMixin):
             if not 0.0 < self.n_components < 1.0:
                 raise ValueError("mojolearn PCA: a float n_components must be in (0, 1)")
             frac = float(self.n_components)
-            nc = min(x.shape)
+            nc = min(x.shape)  # glue: smaller of two shape dims
         else:
             nc = _component_count(self.n_components, x.shape)
-        if dense and nc > min(x.shape):
+        if dense and nc > min(x.shape):  # glue: smaller of two shape dims
             raise ValueError("full SVD n_components cannot exceed min(n_samples, n_features)")
         self.components_ = empty((nc, x.shape[1]), "<f4")
         self.mean_ = empty((x.shape[1],), "<f4")
@@ -415,7 +415,7 @@ class PCA(NumericModeMixin):
             comp = _arr.array("f")
             comp.frombytes(self.components_.tobytes()[:4 * keep * d])
             self.components_ = frombytes(comp.tobytes(), "<f4", (keep, d))
-            for name in ("explained_variance_", "explained_variance_ratio_", "singular_values_"):
+            for name in ("explained_variance_", "explained_variance_ratio_", "singular_values_"):  # glue: loops over three attribute names
                 setattr(self, name, frombytes(getattr(self, name).tobytes()[:4 * keep], "<f4", (keep,)))
             nc = keep
         self.n_components_ = nc
@@ -436,11 +436,11 @@ class PCA(NumericModeMixin):
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError("mojolearn PCA requires at least 2 rows and 2 features")
         nc = _component_count(self.n_components, x.shape)
-        if nc >= min(x.shape):
+        if nc >= min(x.shape):  # glue: smaller of two shape dims
             raise ValueError("svd_solver='randomized' needs n_components < min(n_samples, n_features)")
         n_iter = self.iterated_power
         if n_iter == "auto":
-            n_iter = 7 if nc < 0.1 * min(x.shape) else 4
+            n_iter = 7 if nc < 0.1 * min(x.shape) else 4  # glue: smaller of two shape dims
         got = _randomized_decompose(
             x, nc, center=True, n_oversamples=self.n_oversamples, n_iter=n_iter,
             power_iteration_normalizer=self.power_iteration_normalizer, random_state=self.random_state,
@@ -568,10 +568,10 @@ class PCA(NumericModeMixin):
         obj.singular_values_ = _serialize.exact(arrays, "singular_values", "<f4")
         obj.explained_variance_ = _serialize.exact(arrays, "explained_variance", "<f4")
         obj.explained_variance_ratio_ = _serialize.exact(arrays, "explained_variance_ratio", "<f4")
-        for name in ("mean_",):
+        for name in ("mean_",):  # glue: loops over saved attribute names
             if getattr(obj, name).size != nf:
                 raise ValueError(f"mojolearn: {path!r} {name} does not match n_features_in_")
-        for name in ("singular_values_", "explained_variance_", "explained_variance_ratio_"):
+        for name in ("singular_values_", "explained_variance_", "explained_variance_ratio_"):  # glue: loops over saved attribute names
             if getattr(obj, name).size != nc:
                 raise ValueError(f"mojolearn: {path!r} {name} does not match n_components_")
         noise = _serialize.exact(arrays, "noise_variance", "<f8")

@@ -271,7 +271,7 @@ class Cholesky(NumericModeMixin):
         matrix and does not refactor."""
         arrays = _serialize.read_npz(path, _CHOLESKY_FORMAT)
         saved_as = _serialize.scalar_str(arrays, "estimator")
-        if saved_as not in (c.__name__ for c in cls.__mro__):
+        if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: checks the saved class name
             raise ValueError(f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}")
         mode = _serialize.scalar_str(arrays, "numeric_mode")
         if mode not in _MODE_CODE:

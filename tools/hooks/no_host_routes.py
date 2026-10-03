@@ -149,7 +149,9 @@ _LINE_RULES = [
 _RULE_CLASS = {r[0]: r[1] for r in _LINE_RULES}
 _RULE_CLASS.update({"host-call": "host-import", "serial-launch": "serial-gpu", "host-switch": "host-env/threshold",
                     "d2h-loop": "d2h-roundtrip", "tid0-loop": "serial-gpu",
-                    "d2h-host-work": "d2h-roundtrip", "one-block-n": "serial-gpu"})
+                    "d2h-host-work": "d2h-roundtrip", "one-block-n": "serial-gpu",
+                    "py-data-loop": "py-compute", "py-np-compute": "py-compute",
+                    "py-reduce": "py-compute", "py-array-method": "py-compute"})
 _RULE_WHY = {r[0]: r[4] for r in _LINE_RULES}
 _RULE_WHY.update({
     "host-call": "calls a host-only module from GPU code",
@@ -159,6 +161,10 @@ _RULE_WHY.update({
     "d2h-host-work": "copies device data to the host, then computes on it in a host loop over a data size",
     "one-block-n": "a one-block launch (grid_dim=(1, 1, 1)) over a runtime size",
     "serial-launch": "a one-block or one-thread launch over a runtime size",
+    "py-data-loop": "a Python loop or comprehension at runtime (glue only: mark a scalar or argument loop `# glue: <reason>`)",
+    "py-np-compute": "numpy compute at runtime in GPU-path Python (move it into Mojo)",
+    "py-reduce": "sorted()/sum()/min()/max() over a sequence at runtime in GPU-path Python",
+    "py-array-method": "an array reduction or sort method at runtime in GPU-path Python",
 })
 
 # --------------------------------------------------------------- git io ----
@@ -770,6 +776,8 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
             if not flagged[no] & {"host-threads", "host-import", "host-exec"}:
                 add("host-call", no, t)
     if lang != "mojo":
+        for rule, no, t in _py_compute(lines):
+            add(rule, no, t)
         return out
     hostish = {"host-call", "host-import", "host-exec", "host-threads", "std-parallelize"}
     # host-switch: in a function that runs device code, an env/define read or
@@ -850,6 +858,78 @@ def _scan_lines(lang, lines, host_thread_names, host_syms, import_of, local_host
     return out
 
 
+# ------------------------------------------------- Python = glue only ----
+# At runtime python/mojolearn only validates arguments, picks the binding,
+# passes buffers and returns results (Andrew, Oct 3 2026). Inside a def, any
+# loop or comprehension, numpy compute call, sorted()/sum()/one-argument
+# min()/max() or array reduction method is a finding, unless the line carries
+# a reviewed `# glue: <reason of 3+ words>` (a loop over arguments, kwargs,
+# a handful of names, never over rows, features, classes or tokens).
+_GLUE = re.compile(r"#\s*glue:\s*(\S+\s+){2,}\S+")
+_PY_STR = re.compile(r"(?:[rbfuRBFU]{0,2})(\"[^\"\\\n]*(?:\\.[^\"\\\n]*)*\"|'[^'\\\n]*(?:\\.[^'\\\n]*)*')")
+_PY_FOR = re.compile(r"(^\s*(async\s+)?for\s|[\[({,]\s*.*?\bfor\s+[\w\s,()*]+?\s+in\b|\S\s+for\s+[\w\s,()*]+?\s+in\b)")
+# allocation, conversion, dtype and shape plumbing: not compute
+_NP_GLUE = frozenset("""
+asarray ascontiguousarray asfortranarray asanyarray array require frombuffer empty empty_like
+zeros zeros_like ones ones_like full full_like dtype issubdtype iinfo finfo result_type can_cast
+promote_types ndim shape size isscalar errstate reshape ravel atleast_1d atleast_2d broadcast_to
+squeeze expand_dims moveaxis transpose ctypeslib dtypes integer floating number generic bool_
+float32 float64 float16 int8 int16 int32 int64 uint8 uint16 uint32 uint64 intp uintp ndarray
+str_ bytes_ object_ void nan inf pi newaxis random load save savez savez_compressed get_printoptions
+set_printoptions printoptions shares_memory may_share_memory isfortran copyto
+""".split())
+_NP_CALL = re.compile(r"(?<![\w.])(?:np|numpy)\.([A-Za-z_][\w.]*)\s*\(")
+_PY_REDUCE = re.compile(r"(?<![\w.])(sorted|sum|min|max)\s*\(")
+_ARR_METHOD = re.compile(r"\.(sum|mean|std|var|argmin|argmax|argsort|cumsum|cumprod|dot|prod|nonzero"
+                         r"|searchsorted|argpartition|partition|nansum|nanmean)\s*\(")
+
+
+def _one_arg(s):
+    """True when the call whose argument list starts at s has one positional argument."""
+    depth, n, i = 0, 0, 0
+    for i, c in enumerate(s):
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            if depth == 0:
+                break
+            depth -= 1
+        elif c == "," and depth == 0:
+            rest = s[i + 1:].lstrip()
+            if not re.match(r"(key|default|start|reverse)\s*=", rest) and not rest.startswith(")"):
+                n += 1
+    return n == 0
+
+
+def _py_compute(lines):
+    out = []
+    def_ind = []  # indents of enclosing defs
+    for no, t in lines:
+        ind = len(t) - len(t.lstrip())
+        st = t.lstrip()
+        while def_ind and ind <= def_ind[-1] and not st.startswith((")", "]", "}")):
+            def_ind.pop()
+        if re.match(r"(async\s+)?def\s", st):
+            def_ind.append(ind)
+            continue
+        if not def_ind or _GLUE.search(t):
+            continue
+        code = _PY_STR.sub('""', t.split("  #", 1)[0] if "  #" in t else t)
+        if _PY_FOR.search(code):
+            out.append(("py-data-loop", no, t))
+        for m in _NP_CALL.finditer(code):
+            if m.group(1).split(".")[0] not in _NP_GLUE:
+                out.append(("py-np-compute", no, t))
+                break
+        for m in _PY_REDUCE.finditer(code):
+            if m.group(1) in ("sorted", "sum") or _one_arg(code[m.end():]):
+                out.append(("py-reduce", no, t))
+                break
+        if _ARR_METHOD.search(code):
+            out.append(("py-array-method", no, t))
+    return out
+
+
 def _norm(t):
     return re.sub(r"\s+", " ", t.strip())
 
@@ -872,10 +952,14 @@ _HDR = "rule\tclass\towner\tstate\tpath\tocc\ttext"
 # `owed` is `debt` for a rule added after the 2026-10-02 hooks were
 # installed: those hooks skip a state they do not know, so the row neither
 # fails them as stale nor needs them to know the rule.
-_DEBT_STATES = ("debt", "owed")
+# `owed-py` is the same for the Python glue-only rules (Oct 3): hooks
+# installed before them know `owed` but not these rules, so they skip only a
+# state they do not know.
+_DEBT_STATES = ("debt", "owed", "owed-py")
 # rules added after the baseline was first written; a baseline with no row of
 # one predates it (see check_tree)
-_LATE_RULES = ("d2h-host-work", "one-block-n")
+_LATE_RULES = ("d2h-host-work", "one-block-n", "py-data-loop", "py-np-compute", "py-reduce",
+               "py-array-method")
 
 
 def load_baseline(text):
@@ -907,7 +991,8 @@ def dump_baseline(rows):
     head = ("# no_host_routes baseline: CPU work in GPU code that main still carries.\n"
             "# It only shrinks. A fix deletes its rows (no_host_routes.py --prune-baseline).\n"
             "# state debt = on main; inflight = pre-authorized lines of an open PR; owed = debt of a rule\n"
-            "# newer than the installed hooks (they skip it).\n"
+            "# newer than the installed hooks (they skip it); owed-py = the same for the Python\n"
+            "# glue-only rules (py-data-loop, py-np-compute, py-reduce, py-array-method).\n"
             "# A `# why: ...` line gives the reason the next row stays (required for d2h-host-work).\n")
     return head + _HDR + "\n" + "".join(
         (f"# why: {r['why']}\n" if r.get("why") else "")

@@ -79,7 +79,7 @@ def probe(obj):
     this returns. Raises `TypeError` (from `_buffer.view`) when `obj` does
     not support the buffer protocol."""
     with view(obj) as b:
-        return Probe(int(b.ndim), tuple(int(s) for s in b.shape),
+        return Probe(int(b.ndim), tuple(int(s) for s in b.shape),  # glue: one entry per buffer axis
                      str(b.format), int(b.itemsize), bool(b.readonly),
                      bool(b.c_contiguous), int(b.nbytes))
 
@@ -126,7 +126,7 @@ def dtype_name(obj, pb):
 
 def nelems(shape):
     n = 1
-    for s in shape:
+    for s in shape:  # glue: product of shape dimensions
         n *= int(s)
     return n
 

@@ -83,7 +83,7 @@ def plugin(vendor):
 
 def by_profile(profile):
     """vendor for a plugin profile name ('nvidia' -> 'cuda', 'amd' -> 'hip')."""
-    for vendor, row in PLUGINS.items():
+    for vendor, row in PLUGINS.items():  # glue: one row per GPU vendor
         if row["profile"] == profile:
             return vendor
     raise KeyError(profile)
@@ -104,7 +104,7 @@ def core_requirements(version):
     marker: the split core is a manylinux x86_64 wheel only, and a
     `sys_platform` marker is evaluated against the RESOLVING interpreter, so
     `pip download --platform manylinux...` from a Mac would skip both."""
-    return [f"{row['distribution']}=={version}" for row in PLUGINS.values()]
+    return [f"{row['distribution']}=={version}" for row in PLUGINS.values()]  # glue: one row per GPU vendor
 
 
 def reinstall_command(version=None):
@@ -117,11 +117,11 @@ def reinstall_command(version=None):
 def core_marker(version):
     """The core's marker document."""
     return {"schema": CORE_SCHEMA, "version": version,
-            "plugins": {v: {"distribution": r["distribution"]} for v, r in PLUGINS.items()}}
+            "plugins": {v: {"distribution": r["distribution"]} for v, r in PLUGINS.items()}}  # glue: one row per GPU vendor
 
 
 def plugin_marker(vendor, version, arches):
     """A plugin's marker document."""
     return {"schema": PLUGIN_SCHEMA, "vendor": vendor, "version": version,
             "distribution": PLUGINS[vendor]["distribution"],
-            "requires": f"{CORE_DISTRIBUTION}=={version}", "arches": sorted(arches)}
+            "requires": f"{CORE_DISTRIBUTION}=={version}", "arches": sorted(arches)}  # glue: architecture names in the manifest
