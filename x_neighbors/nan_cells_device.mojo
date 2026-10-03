@@ -28,6 +28,9 @@ from max.gpu.sync import barrier
 from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 from x_neighbors.items import FP, IP
 from x_neighbors.device_ops import xn_ctx, _down_i
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.info import has_apple_gpu_accelerator
+from std.sys.compile import is_defined
 
 
 comptime NC_TPB = 256
@@ -202,12 +205,44 @@ def nan_colmiss_kernel(x: FP, colmiss: IP, n_: Int64, d_: Int64):
         _ = Atomic.fetch_add[ordering = Ordering.RELAXED](colmiss + f, c)
 
 
-def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int) raises:
+# lane/apple-fast-gap-manprep (2026-10-03): KNNImputer.fit needs only the
+# column counts; the cell list (four scan kernels, a sync and the list's
+# download) is the transform's. With colmiss_only=1 the op runs the column
+# count kernel alone and stores their sum as the total (integer adds, the
+# same count). FAST + Apple; MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY turns it on.
+comptime NC_COLMISS_ONLY = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                            and is_defined["MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY"]())
+
+
+def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int, colmiss_only: Int = 0) raises:
     """The device op: x (n x d) uploaded once, the three outputs downloaded
     (cells: the first `count` slots)."""
     comptime assert NC_SMEM_FITS, "nan_cells_device: a 1 KB threadgroup page must fit"
     var ctx = xn_ctx()
     var total = n * d
+    comptime if NC_COLMISS_ONLY:
+        if colmiss_only == 1:
+            var d_x1 = ctx.enqueue_create_buffer[DType.float32](max(total, 1))
+            if total > 0:
+                ctx.enqueue_copy(dst_buf=d_x1, src_ptr=FP(unsafe_from_address=x))
+            var d_cm1 = ctx.enqueue_create_buffer[DType.int32](max(d, 1))
+            ctx.enqueue_memset(d_cm1, Int32(0))
+            if total > 0:
+                var nrb1 = (n + NC_RB - 1) // NC_RB
+                var threads1 = nrb1 * d
+                ctx.enqueue_function[nan_colmiss_kernel](d_x1.unsafe_ptr(), d_cm1.unsafe_ptr(), Int64(n), Int64(d),
+                                                         grid_dim=(threads1 + NC_TPB - 1) // NC_TPB, block_dim=NC_TPB)
+            if d > 0:
+                _down_i(ctx, d_cm1, colmiss, d)
+            ctx.synchronize()
+            var cnt = 0
+            var cmp = IP(unsafe_from_address=colmiss)
+            for f in range(d):
+                cnt += Int(cmp.unsafe_load(f))
+            IP(unsafe_from_address=info).unsafe_store(0, Int32(cnt))
+            _ = d_x1^
+            _ = d_cm1^
+            return
     # x straight to the device (the copy engine; no host-thread staging)
     var d_x = ctx.enqueue_create_buffer[DType.float32](max(total, 1))
     if total > 0:
