@@ -1987,6 +1987,19 @@ class FastICA(_Base):
 _LOG_2PI = 1.8378770664093453
 
 
+def _f32_store(a):
+    """An `array.array('f')` holding a float32 Array's bytes (one memcpy)."""
+    st = array.array("f")
+    st.frombytes(a.tobytes())
+    return st
+
+
+def _support_of(mask, n):
+    """A 0/1 int32 membership store as a public '<u1' Array (the Mojo cast helper)."""
+    from ._buffer import frombytes as _fb
+    return _fb(mask.tobytes(), "<i4", (n,)).astype("<u1")
+
+
 def _dsum_sq(k, M):
     """The in-order float64 sum of the squares of M's float32 values
     (x_decomp/moves.mojo `dsum_sq`, the product pinned)."""
@@ -2414,9 +2427,7 @@ def _f32_input(X, name, ndim):
 
 
 def _tsqr_lstsq_on(m, nn, nrhs):
-    import os
-    return (os.environ.get("MOJOLEARN_LINALG_TSQR", "1") != "0"
-            and nn >= 1 and nrhs >= 1 and nn + nrhs <= _TS_MAX_N and m >= nn + nrhs)
+    return nn >= 1 and nrhs >= 1 and nn + nrhs <= _TS_MAX_N and m >= nn + nrhs
 
 
 def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False):
@@ -2488,8 +2499,7 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
     float32 eps * max(M, N)); residuals are the squared column norms of
     b - a x when rank == N < M, else empty. A tall a with N + nrhs <= 512
     takes the blocked TSQR of [a | b] and the SVD of its small R
-    (`_tsqr_lstsq_core`, lane neural-pass140; MOJOLEARN_LINALG_TSQR=0 keeps
-    the route below); any other shape the QR + one-sided Jacobi SVD of a (or
+    (`_tsqr_lstsq_core`, lane neural-pass140); any other shape the QR + one-sided Jacobi SVD of a (or
     of a^T)."""
     k = _Kit(_mode(numeric_mode))
     vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
@@ -3567,11 +3577,10 @@ def _top_eig(k, A, nc, topk=False):
     is on in every mode and on every vendor. Every step is a kit primitive
     (the IDENTICAL GEMM, element-wise ops, the small eigh) or Python float64
     scalar arithmetic, in a fixed order with a fixed seeded start, so the
-    words agree across vendors. MOJOLEARN_XD_LANCZOS=0 keeps the exact solve."""
+    words agree across vendors."""
     n = A.r
     got = None
-    if topk and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC and _os.environ.get(
-            "MOJOLEARN_XD_LANCZOS", "1") == "1":
+    if topk and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC:
         got = _lanczos_top(k, A, nc)
     if got is not None:
         w, V = got
@@ -4306,60 +4315,6 @@ class MinCovDet(_Base):
         self.store_precision, self.assume_centered = store_precision, assume_centered
         self.support_fraction, self.random_state, self.numeric_mode = support_fraction, random_state, numeric_mode
 
-    # ---- randomness
-    def _perm(self, k, n):
-        self._draws += 1
-        u = k.rand(1, n, self._seed, 1000 + self._draws, 0).s
-        return sorted(range(n), key=lambda i: (u[i], i))
-
-    # ---- the C-step
-    def _c_step(self, k, X, h, iters, init=None):
-        n = X.r
-        dist = None
-        if init is None:
-            sel = self._perm(k, n)[:h]
-        else:
-            loc0, cov0 = init
-            P0 = _pinvh(k, cov0)
-            dist = _mahal(k, X, loc0, P0)
-            sel = sorted(range(n), key=lambda i: (dist.s[i], i))[:h]
-        sel = sorted(sel)
-        Xs = X.take_rows(sel)
-        loc = k.colmean(Xs)
-        cov = _emp_cov(k, Xs)
-        det = _fast_logdet(k, cov)
-        P = _pinvh(k, cov) if det == -math.inf else None
-        prev_det = math.inf
-        prev = None
-        while det < prev_det and iters > 0 and det != -math.inf:
-            prev = (loc, cov, det, sel, dist)
-            prev_det = det
-            P = _pinvh(k, cov)
-            dist = _mahal(k, X, loc, P)
-            sel = sorted(sorted(range(n), key=lambda i: (dist.s[i], i))[:h])
-            Xs = X.take_rows(sel)
-            loc = k.colmean(Xs)
-            cov = _emp_cov(k, Xs)
-            det = _fast_logdet(k, cov)
-            iters -= 1
-        prev_dist = dist
-        dist = _mahal(k, X, loc, P)
-        # sklearn's four checks in its order, the LAST one that fires wins
-        res = (loc, cov, det, sel, dist)
-        if prev is not None and det > prev_det:
-            res = (prev[0], prev[1], prev[2], prev[3], prev_dist)
-        if iters == 0:
-            res = (loc, cov, det, sel, dist)
-        return res
-
-    def _select(self, k, X, h, trials, select, n_iter=30):
-        if isinstance(trials, int):
-            est = [self._c_step(k, X, h, n_iter) for _ in range(trials)]
-        else:
-            est = [self._c_step(k, X, h, n_iter, init=t) for t in trials]
-        order = sorted(range(len(est)), key=lambda j: (est[j][2], j))[:select]
-        return [est[j] for j in order]
-
     def _mcd_1d(self, k, X, h):
         """sklearn fast_mcd's one-feature shortcut: the shortest window of h
         sorted values (every tie of the minimum width kept), the location the
@@ -4381,11 +4336,11 @@ class MinCovDet(_Base):
             cen = k.ew("abs", k.ew("sub", X, loc))
             sel, mask = k.select_smallest(cen, h)
             Xs = k.take_rows(X, sel)
-            support = [v != 0 for v in mask]
+            support = _support_of(mask, n)
         else:
             loc = k.colmean(X)
             Xs = X
-            support = [True] * n
+            support = _support_of(array.array("i", [1]) * n, n)
         cov = _emp_cov(k, Xs)
         P = _pinvh(k, cov)
         return loc, cov, support, _mahal(k, X, loc, P)
@@ -4408,50 +4363,14 @@ class MinCovDet(_Base):
         sup = array.array("i", [0]) * n
         k.b.x_decomp_mcd(X.addr, loc.addr, cov.addr, sup.buffer_info()[0], dist.addr,
                          [n, p, h, int(self._seed) & 0xFFFFFFFF] + plan)
-        return loc, cov, [v != 0 for v in sup], dist
+        return loc, cov, _support_of(sup, n), dist
 
     def _fast_mcd(self, k, X):
         n, p = X.r, X.c
         h = int(math.ceil(0.5 * (n + p + 1))) if self.support_fraction is None else int(self.support_fraction * n)
         if p == 1:
             return self._mcd_1d(k, X, h)
-        if _os.environ.get("MOJOLEARN_XD_MCD_PYTHON") != "1":
-            return self._fast_mcd_native(k, X, h)
-        # THE REFERENCE ARM (MOJOLEARN_XD_MCD_PYTHON=1, timing and A/B only):
-        # the same search driven from Python one kit call at a time.
-        if n > 500:
-            n_sub = n // 300
-            n_ss = n // n_sub
-            shuf = self._perm(k, n)
-            h_sub = int(math.ceil(n_ss * (h / float(n))))
-            n_trials = max(10, 500 // n_sub)
-            pool = []
-            for i in range(n_sub):
-                cur = X.take_rows(shuf[i * n_ss:(i + 1) * n_ss])
-                pool += [(e[0], e[1]) for e in self._select(k, cur, h_sub, n_trials, 10, n_iter=2)]
-            n_m = min(1500, n)
-            h_m = int(math.ceil(n_m * (h / float(n))))
-            n_best_m = 10 if n > 1500 else 1
-            selection = self._perm(k, n)[:n_m]
-            merged = self._select(k, X.take_rows(selection), h_m, pool, n_best_m)
-            if n < 1500:
-                loc, cov, _, sup_sel, d = merged[0]
-                support = [False] * n
-                dist = [0.0] * n
-                for a, idx in enumerate(selection):
-                    dist[idx] = d.s[a]
-                for a in sup_sel:
-                    support[selection[a]] = True
-                return loc, cov, support, _M.of(dist, n, 1)
-            full = self._select(k, X, h, [(e[0], e[1]) for e in merged], 1)
-        else:
-            best = self._select(k, X, h, 30, 10, n_iter=2)
-            full = self._select(k, X, h, [(e[0], e[1]) for e in best], 1)
-        loc, cov, _, sup_sel, d = full[0]
-        support = [False] * n
-        for a in sup_sel:
-            support[a] = True
-        return loc, cov, support, d
+        return self._fast_mcd_native(k, X, h)
 
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
@@ -4463,7 +4382,7 @@ class MinCovDet(_Base):
         loc, cov, support, dist = self._fast_mcd(k, M)
         if self.assume_centered:
             loc = _M.zeros(1, p)
-            sm = _M.of([1.0 if v else 0.0 for v in support], n, 1)
+            sm = _M(_f32_store(support.astype("<f4")), n, 1)
             _, cov = _masked_cov(k, M, sm, True)
             dist = k.rowsum(k.ew("mul", k.mm(M, _pinvh(k, cov)), M))
         self.raw_location_m_, self.raw_covariance_m_ = loc, cov
@@ -4472,7 +4391,7 @@ class MinCovDet(_Base):
         self.raw_support_ = support
         # correct_covariance: consistency at the normal model (the corrected
         # matrix is returned by sklearn and not kept; dist_ is rescaled)
-        n_support = sum(1 for v in support if v)
+        n_support = int(support.sum())  # glue: Array.sum is the Mojo reduce helper
         corr = _consistency_factor(k, p, n_support / n)
         dist = k.ew("scale", dist, s=1.0 / corr)
         # reweight_covariance
@@ -4482,7 +4401,7 @@ class MinCovDet(_Base):
         mm = k.ew("le", dist, _M.of([_f32_below(thr)], 1, 1))
         locr, covr = _masked_cov(k, M, mm, self.assume_centered)
         covr = k.ew("scale", covr, s=_consistency_factor(k, p, 0.975))
-        mask = [v != 0.0 for v in mm.s]
+        mask = mm.out((n,)).astype("<u1")
         self.location_m_, self.covariance_m_ = locr, covr
         self.precision_m_ = _pinvh(k, covr)
         self.location_ = locr.out((p,))
