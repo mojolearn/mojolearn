@@ -110,7 +110,7 @@ def _as_length_scale(length_scale, what):
     Mojo refusal unreachable from Python and therefore untestable."""
     if not _shape_of(length_scale):
         return [float(length_scale)]
-    ls = [float(v) for v in _flatten(length_scale)]
+    ls = [float(v) for v in _flatten(length_scale)]  # glue: converts the length-scale argument
     if len(ls) == 0:
         raise ValueError(
             f"mojolearn {what}: length_scale is an empty sequence; pass a "
@@ -159,14 +159,14 @@ def _as_bounds(bounds, n, what):
         return "fixed"
     shape = _shape_of(bounds)
     if shape == (2,):
-        pairs = [tuple(float(v) for v in _flatten(bounds))] * n
+        pairs = [tuple(float(v) for v in _flatten(bounds))] * n  # glue: converts the bounds argument
     elif shape == (n, 2):
-        flat = [float(v) for v in _flatten(bounds)]
+        flat = [float(v) for v in _flatten(bounds)]  # glue: converts the bounds argument
         pairs = list(zip(flat[0::2], flat[1::2]))
     else:
         raise ValueError(
             f"mojolearn {what}: bounds must be 'fixed', a (low, high) pair, or {n} pairs; got shape {shape}")
-    for lo, hi in pairs:
+    for lo, hi in pairs:  # glue: validates each hyperparameter bound pair
         if not (math.isfinite(lo) and math.isfinite(hi) and 0.0 < lo <= hi):
             raise ValueError(
                 f"mojolearn {what}: every bound must be finite and positive with low <= high, got "
@@ -209,18 +209,18 @@ class Kernel:
         raise NotImplementedError
 
     def _free_flags(self):
-        return [0 if h is None else 1 for h in self._hyper()]
+        return [0 if h is None else 1 for h in self._hyper()]  # glue: one flag per postfix node
 
     def _free_values(self):
-        return [v for h in self._hyper() if h is not None for v in h[0]]
+        return [v for h in self._hyper() if h is not None for v in h[0]]  # glue: collects free kernel hyperparameters (n_dims entries)
 
     def _free_bounds(self):
-        return [b for h in self._hyper() if h is not None for b in h[1]]
+        return [b for h in self._hyper() if h is not None for b in h[1]]  # glue: collects bounds of free kernel hyperparameters (n_dims entries)
 
     def _with_free_values(self, values, theta=None):
         out = self._replace(list(values))
         if theta is not None:
-            out._theta_fit = [float(t) for t in theta]
+            out._theta_fit = [float(t) for t in theta]  # glue: copies the fitted theta, kernel hyperparameters (n_dims entries)
         return out
 
     @property
@@ -232,11 +232,11 @@ class Kernel:
         fitted = getattr(self, "_theta_fit", None)
         if fitted is not None:
             return list(fitted)
-        return [math.log(v) for v in self._free_values()]
+        return [math.log(v) for v in self._free_values()]  # glue: sklearn theta API, log of free kernel hyperparameters (n_dims entries)
 
     @property
     def bounds(self):
-        return [[math.log(lo), math.log(hi)] for lo, hi in self._free_bounds()]
+        return [[math.log(lo), math.log(hi)] for lo, hi in self._free_bounds()]  # glue: sklearn bounds API, log of kernel hyperparameters (n_dims entries) bounds
 
     def __repr__(self):
         return self._name()
@@ -309,7 +309,7 @@ class RBF(Kernel):
     def _replace(self, values):
         ls = list(self.length_scale)
         if self.length_scale_bounds != "fixed":
-            ls = [values.pop(0) for _ in ls]
+            ls = [values.pop(0) for _ in ls]  # glue: consumes this leaf's length scales
         return RBF(ls, self.length_scale_bounds)
 
     def _name(self):
@@ -339,7 +339,7 @@ class Matern(Kernel):
     def _replace(self, values):
         ls = list(self.length_scale)
         if self.length_scale_bounds != "fixed":
-            ls = [values.pop(0) for _ in ls]
+            ls = [values.pop(0) for _ in ls]  # glue: consumes this leaf's length scales
         return Matern(ls, self.length_scale_bounds, nu=self.nu)
 
     def _name(self):
@@ -377,14 +377,14 @@ class _SavedKernel(Kernel):
     handed it (the neighbors and density inference lane, 2026-09-15)."""
 
     def __init__(self, nodes):
-        self.__nodes = [(int(k), float(p), [float(v) for v in ls]) for k, p, ls in nodes]
+        self.__nodes = [(int(k), float(p), [float(v) for v in ls]) for k, p, ls in nodes]  # glue: copies the kernel's postfix nodes
 
     def _nodes(self):
-        return [(k, p, list(ls)) for k, p, ls in self.__nodes]
+        return [(k, p, list(ls)) for k, p, ls in self.__nodes]  # glue: copies the kernel's postfix nodes
 
     def _hyper(self):
         # A saved kernel carries no bounds: every hyperparameter is fixed.
-        return [None for _ in self.__nodes]
+        return [None for _ in self.__nodes]  # glue: one None per postfix node
 
     def _replace(self, values):
         return _SavedKernel(self.__nodes)
@@ -691,10 +691,10 @@ class GaussianProcessRegressor(NumericModeMixin):
         nodes = kernel._nodes()
         # `Array.from_list(..., '<f4')` rounds each Python float to binary32
         # exactly as `np.array(dtype=np.float32)` did (DEVIATION 2376).
-        kinds = Array.from_list([int(k) for k, _, _ in nodes], "<i4")
-        params = Array.from_list([float(p) for _, p, _ in nodes], "<f4")
-        ls_len = Array.from_list([len(ls) for _, _, ls in nodes], "<i4")
-        table = [v for _, _, ls in nodes for v in ls]
+        kinds = Array.from_list([int(k) for k, _, _ in nodes], "<i4")  # glue: packs the kernel's postfix nodes
+        params = Array.from_list([float(p) for _, p, _ in nodes], "<f4")  # glue: packs the kernel's postfix nodes
+        ls_len = Array.from_list([len(ls) for _, _, ls in nodes], "<i4")  # glue: packs the kernel's postfix nodes
+        table = [v for _, _, ls in nodes for v in ls]  # glue: packs the kernel length-scale hyperparameters
         n_ls = len(table)
         # Never a zero-length buffer: mirror estimator.mojo's
         # _length_scale_table -- one unused 1.0 stands in, and n_ls says so.
@@ -810,7 +810,7 @@ class GaussianProcessRegressor(NumericModeMixin):
             # n_train, n_features, n_nodes, n_ls, alpha
             [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.alpha],
         )
-        return int(info), float(scalars[1]), [float(grad[i]) for i in range(n_free)]
+        return int(info), float(scalars[1]), [float(grad[i]) for i in range(n_free)]  # glue: reads the gradient of kernel hyperparameters (n_dims entries)
 
     def _optimize(self, x, targets, n_rows, n_cols):
         """scikit-learn `_gpr.py:299-341`: optimize from the kernel's theta,
@@ -825,7 +825,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays(base)
         free = Array.from_list(base._free_flags(), "<i4")
         n_theta = base.n_dims
-        bounds = Array.from_list([float(v) for b in base._free_bounds() for v in (b[0], b[1])], "<f4")
+        bounds = Array.from_list([float(v) for b in base._free_bounds() for v in (b[0], b[1])], "<f4")  # glue: packs bounds of free kernel hyperparameters (n_dims entries)
         n_runs = 1 + int(self.n_restarts_optimizer)
         theta_out = empty((n_theta,), "<f8")
         values_out = empty((n_theta,), "<f8")
@@ -843,11 +843,11 @@ class GaussianProcessRegressor(NumericModeMixin):
             [n_rows, n_cols, int(kinds.shape[0]), n_ls, self.alpha, n_runs - 1,
              seed & 0xFFFFFFFF, (seed >> 32) & 0xFFFFFFFF],
         )
-        for r in range(n_runs):
-            n_iter, n_eval, stop, f = (float(runs_out[r * 4 + j]) for j in range(4))
+        for r in range(n_runs):  # glue: one record per optimizer restart
+            n_iter, n_eval, stop, f = (float(runs_out[r * 4 + j]) for j in range(4))  # glue: four fields per optimizer run
             self._optimizer_runs.append((int(n_iter), int(n_eval), _OPT_STOPS[int(stop)], -f))
-        theta = [float(theta_out[i]) for i in range(n_theta)]
-        params = [float(values_out[i]) for i in range(n_theta)]
+        theta = [float(theta_out[i]) for i in range(n_theta)]  # glue: reads the fitted theta, kernel hyperparameters (n_dims entries)
+        params = [float(values_out[i]) for i in range(n_theta)]  # glue: reads fitted kernel hyperparameters (n_dims entries)
         return base._with_free_values(params, theta=theta)
 
     # -- predict ------------------------------------------------------------
@@ -1006,7 +1006,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         from . import _serialize
         from .linear_model import _saved_mode
         nodes = self.kernel_._nodes()
-        table = [float(v) for _, _, ls in nodes for v in ls]
+        table = [float(v) for _, _, ls in nodes for v in ls]  # glue: packs the kernel length-scale hyperparameters
         n = int(self.X_train_.shape[0])
         return _serialize.write_npz(path, {
             "format": _GP_FORMAT,
@@ -1015,9 +1015,9 @@ class GaussianProcessRegressor(NumericModeMixin):
             "X_train": self.X_train_,
             "L": self.L_.reshape((n * n,)),
             "alpha": self.alpha_,
-            "kinds": Array.from_list([int(k) for k, _, _ in nodes], "<i4"),
-            "params": Array.from_list([float(p) for _, p, _ in nodes], "<f8"),
-            "ls_len": Array.from_list([len(ls) for _, _, ls in nodes], "<i4"),
+            "kinds": Array.from_list([int(k) for k, _, _ in nodes], "<i4"),  # glue: packs the kernel's postfix nodes
+            "params": Array.from_list([float(p) for _, p, _ in nodes], "<f8"),  # glue: packs the kernel's postfix nodes
+            "ls_len": Array.from_list([len(ls) for _, _, ls in nodes], "<i4"),  # glue: packs the kernel's postfix nodes
             "ls": Array.from_list(table if table else [1.0], "<f8"),
             "ints": Array.from_list([int(self.n_features_in_), int(self.info_),
                                      1 if getattr(self, "normalize_y_", False) else 0, len(table)], "<i8"),
@@ -1038,7 +1038,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         reals = _serialize.exact(arrays, "reals", "<f8")
         if ints.size != 4 or reals.size != 4:
             raise ValueError(f"mojolearn: {path!r} holds {ints.size} ints and {reals.size} reals, 4 and 4 are needed")
-        d, info, norm, n_ls = (int(ints[i]) for i in range(4))
+        d, info, norm, n_ls = (int(ints[i]) for i in range(4))  # glue: four saved meta fields
         x = _serialize.exact(arrays, "X_train", "<f4")
         if x.ndim != 2 or x.shape[1] != d or x.shape[0] < 1:
             raise ValueError(f"mojolearn: {path!r} X_train has shape {tuple(x.shape)}, ints say {d} features")
@@ -1053,12 +1053,12 @@ class GaussianProcessRegressor(NumericModeMixin):
         ls = _serialize.exact(arrays, "ls", "<f8")
         if not (kinds.size == params.size == ls_len.size) or kinds.size < 1:
             raise ValueError(f"mojolearn: {path!r} carries a malformed kernel spec")
-        lens = [int(ls_len[i]) for i in range(ls_len.size)]
-        if sum(lens) != n_ls or ls.size != max(n_ls, 1):
+        lens = [int(ls_len[i]) for i in range(ls_len.size)]  # glue: saved length-scale count per node
+        if sum(lens) != n_ls or ls.size != max(n_ls, 1):  # glue: checks the saved kernel node lengths
             raise ValueError(f"mojolearn: {path!r} length scale table does not match its node lengths")
         nodes, off = [], 0
-        for i in range(kinds.size):
-            nodes.append((int(kinds[i]), float(params[i]), [float(ls[off + j]) for j in range(lens[i])]))
+        for i in range(kinds.size):  # glue: rebuilds the kernel's postfix nodes
+            nodes.append((int(kinds[i]), float(params[i]), [float(ls[off + j]) for j in range(lens[i])]))  # glue: rebuilds the kernel's postfix nodes
             off += lens[i]
         obj = cls(kernel=_SavedKernel(nodes), alpha=float(reals[0]), normalize_y=bool(norm))
         _restore_mode(obj, arrays)
@@ -1093,13 +1093,13 @@ class GaussianProcessRegressor(NumericModeMixin):
             if eval_gradient not in (True, False):
                 raise TypeError("mojolearn GaussianProcessRegressor: eval_gradient must be a bool")
             kern = self.kernel_
-            theta = [float(t) for t in _flatten(theta)] if _shape_of(theta) else [float(theta)]
+            theta = [float(t) for t in _flatten(theta)] if _shape_of(theta) else [float(theta)]  # glue: converts the theta argument, kernel hyperparameters (n_dims entries)
             if len(theta) != kern.n_dims:
                 raise ValueError(
                     f"mojolearn GaussianProcessRegressor: theta has {len(theta)} entries, "
                     f"kernel_ has {kern.n_dims} free hyperparameters")
             ext = self._extension()
-            params = [float(v) for v in ext.gp_theta_params(theta)]
+            params = [float(v) for v in ext.gp_theta_params(theta)]  # glue: reads the binding's kernel hyperparameters (n_dims entries)
             n_rows, n_cols = self.X_train_.shape
             info, lml, grad = self._lml_grad(kern._with_free_values(params), self.X_train_,
                                              self.y_train_, n_rows, n_cols)
