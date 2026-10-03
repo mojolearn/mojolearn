@@ -121,7 +121,9 @@ def to_symmetrize(ni: List[Int], p: List[Float32], n: Int, nn: Int, mut indptr: 
                 indices.append(j)
                 values.append(dense[i * n + j])
         indptr.append(len(indices))
-    var total = to_sum(values, 0, len(values), rev_total)
+    # the product's fixed fold order (core/device_fold.mojo); the reversed
+    # sum stays the sabotage arm
+    var total = to_sum(values, 0, len(values), True) if rev_total else host_sum_f32_fixed(values, len(values))
     if total < Float32(1.1920929e-07):
         total = Float32(1.1920929e-07)
     for e in range(len(values)):
