@@ -37,6 +37,7 @@ from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
 from sequence.ets_team import ETS_TEAM, ets_team
 from sequence.prophet_coop import PROPHET_COOP, prophet_fit_coop
 from sequence.ops import OP_ETS, OP_GARCH
+from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_bwd_scan_kernel, cell_fwd_scan_kernel, scan_tpb
 from x_linear.ops import IP
 from x_linear.witness import witness_end
 from std.sys.info import has_apple_gpu_accelerator
@@ -551,6 +552,22 @@ struct DeviceExec(Exec):
         for v in [a.i0, a.i1, a.i2, a.i3, a.i4, a.i5, a.i6, a.i7, a.i8, a.i9, a.i10, a.i11]:
             if v > I32_MAX or v < -I32_MAX - 1:
                 raise Error("sequence DeviceExec: an integer argument does not fit Int32 (" + String(v) + ")")
+        # lane apple-fast-gap-lstm (sequence/recurrent_scan.mojo): the whole
+        # recurrence of a layer, one block per batch row (n = B rows)
+        comptime if OP == OP_CELL_FWD_SCAN:
+            self.ctx.enqueue_function[cell_fwd_scan_kernel](
+                a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+                Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i4),
+                grid_dim=(n, 1, 1), block_dim=(scan_tpb(a.i2), 1, 1),
+            )
+            return
+        comptime if OP == OP_CELL_BWD_SCAN:
+            self.ctx.enqueue_function[cell_bwd_scan_kernel](
+                a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+                Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i4),
+                grid_dim=(n, 1, 1), block_dim=(scan_tpb(a.i2), 1, 1),
+            )
+            return
         # The MoE products as tiled kernels with the items' chains (lane
         # neural-pass29, sequence/moe_tiled.mojo) when the entry grouped the
         # pairs by expert (a.i4 = the block count); MOJOLEARN_SEQ_MOE_TILED=0
@@ -666,15 +683,16 @@ struct DeviceExec(Exec):
                     block_dim=(TPB, 1, 1),
                 )
                 return
-        self.ctx.enqueue_function[seq_kernel[OP]](
-            a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
-            _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
-            _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
-            _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
-            Int64(n),
-            grid_dim=((n + TPB - 1) // TPB, 1, 1),
-            block_dim=(TPB, 1, 1),
-        )
+        comptime if OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN:
+            self.ctx.enqueue_function[seq_kernel[OP]](
+                a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+                _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
+                _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
+                _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
+                Int64(n),
+                grid_dim=((n + TPB - 1) // TPB, 1, 1),
+                block_dim=(TPB, 1, 1),
+            )
 
     def launch_team[OP: Int](mut self, a: Args, nblocks: Int, tpb: Int, wf: IP, woff: Int, nonce: Int32) raises:
         """`team_kernel[OP]` (lane neural-pass143): one block of tpb threads
