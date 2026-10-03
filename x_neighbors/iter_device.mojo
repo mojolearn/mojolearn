@@ -942,9 +942,13 @@ def op_knn_impute_tiled(
 # k - c_lt slots filled by the mean of ALL donors at exactly D_k. Order-free,
 # deterministic, one GPU thread per missing cell, the same distance
 # statements as the scan. Uniform weights only (distance weights keep the
-# scan's result). FAST + Apple; MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN turns it on.
+# scan's result). FAST + Apple default since the M3 A/B gmp-imp-taxi
+# (masked_rmse 6.152 -> 5.109, scikit-learn 5.26; with COLMISS_ONLY);
+# -D MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF restores the lower-index rule.
+# IDENTICAL keeps the lower-index rule (a cross-vendor bit change is the
+# orchestrator's call).
 comptime XN_IMPUTE_TIE_MEAN = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                               and is_defined["MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN"]())
+                               and not is_defined["MOJOLEARN_XN_FAST_IMPUTE_TIE_MEAN_OFF"]())
 
 
 def knn_impute_tie_mean_kernel(

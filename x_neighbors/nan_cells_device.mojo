@@ -209,9 +209,10 @@ def nan_colmiss_kernel(x: FP, colmiss: IP, n_: Int64, d_: Int64):
 # column counts; the cell list (four scan kernels, a sync and the list's
 # download) is the transform's. With colmiss_only=1 the op runs the column
 # count kernel alone and stores their sum as the total (integer adds, the
-# same count). FAST + Apple; MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY turns it on.
+# same count). FAST + Apple default since the M3 A/B gmp-imp-taxi (with
+# TIE_MEAN); -D MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF restores the full pass.
 comptime NC_COLMISS_ONLY = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                            and is_defined["MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY"]())
+                            and not is_defined["MOJOLEARN_XN_FAST_NAN_COLMISS_ONLY_OFF"]())
 
 
 def nan_cells_device(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int, colmiss_only: Int = 0) raises:
