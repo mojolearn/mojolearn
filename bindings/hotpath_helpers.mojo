@@ -1946,6 +1946,34 @@ def filter_topk_rows_binding(addrs: PythonObject, dims: PythonObject) raises -> 
     return PythonObject(0)
 
 
+def ocsvm_alpha_init_f32_binding(
+    c_addr: PythonObject, m: PythonObject, nu: PythonObject, weighted: PythonObject, dst_addr: PythonObject,
+) raises -> PythonObject:
+    """libsvm's solve_one_class start: nu_l = nu * m (or, `weighted`, the
+    sum of C_i * nu in sample order, binary64), then alpha_i = min(C_i,
+    nu_l) while nu_l > 0, nu_l reduced by each (the rest 0). float32 C_i
+    in, float32 alpha out (lane pyglue-numeric: a Python loop over the
+    samples, the same arithmetic)."""
+    var mm = Int(py=m)
+    if mm < 0:
+        raise Error("ocsvm_alpha_init_f32: m >= 0")
+    var v = Float64(py=nu)
+    var cp = _ptr[DType.float32](Int(py=c_addr))
+    var dp = _ptr[DType.float32](Int(py=dst_addr))
+    var nl = v * Float64(mm)
+    if Int(py=weighted) != 0:
+        nl = Float64(0)
+        for i in range(mm):
+            nl += Float64(cp.unsafe_load(i)) * v
+    for i in range(mm):
+        var a = Float64(0)
+        if nl > 0:
+            a = min(Float64(cp.unsafe_load(i)), nl)
+            nl -= a
+        dp.unsafe_store(i, Float32(a))
+    return PythonObject(0)
+
+
 def strat_fold_assign_i32_binding(
     enc_addr: PythonObject, n: PythonObject, k: PythonObject, n_folds: PythonObject,
     alloc_addr: PythonObject, perms_addr: PythonObject, counts_addr: PythonObject, dst_addr: PythonObject,

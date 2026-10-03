@@ -119,6 +119,7 @@ from bindings.hotpath_helpers import (
     first_seen_i32_binding,
     strat_fold_assign_i32_binding,
     strat_alloc_i64_binding,
+    ocsvm_alpha_init_f32_binding,
     filter_topk_rows_binding,
     weighted_pick_i32_binding,
     draw_rows_without_replacement_i32_binding,
@@ -1806,6 +1807,7 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[first_seen_i32_binding]("first_seen_i32")
         m.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
         m.def_function[strat_alloc_i64_binding]("strat_alloc_i64")
+        m.def_function[ocsvm_alpha_init_f32_binding]("ocsvm_alpha_init_f32")
         m.def_function[filter_topk_rows_binding]("filter_topk_rows")
         m.def_function[weighted_pick_i32_binding]("weighted_pick_i32")
         m.def_function[draw_rows_without_replacement_i32_binding]("draw_rows_without_replacement_i32")

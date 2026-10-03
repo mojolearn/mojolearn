@@ -29,7 +29,7 @@ import os
 import struct
 
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, zeros
+from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, full, zeros
 from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin
 
@@ -705,18 +705,17 @@ class OneClassSVM(_XNeighbors):
         if self.kernel == "precomputed" and n != d:
             raise ValueError("Precomputed matrix must be a square matrix.")
         if sample_weight is None:
-            rows = list(range(n))
-            cvals = [1.0] * n
+            rows = None                                   # every row
+            cv = full((n,), 1.0, "<f4")
         else:
-            w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else sample_weight)]
-            if len(w) != n:
+            wv = _f32_1d(sample_weight, "sample_weight")
+            if wv.shape[0] != n:
                 raise ValueError("sample_weight and X have different numbers of samples")
-            if any(v < 0 for v in w):
+            if n and wv.min() < 0:
                 raise ValueError("negative sample_weight is not supported")
             # libsvm's remove_zero_weight as a device compaction (cpu-gpu-cleanup
             # w2-pyglue, x_neighbors/sort_items.mojo pos_compact): the rows of
             # positive weight in row order and their float32 weights
-            wv = Array.from_list(w, "<f4")
             prow = empty((n,), "<i4")
             pval = _empty_out((n,), "<f4")
             pinfo = empty((1,), "<i4")
@@ -724,45 +723,48 @@ class OneClassSVM(_XNeighbors):
             kept = pinfo.tolist()[0]
             if not kept:
                 raise ValueError("Invalid input - all samples have zero or negative weights.")
-            rows = prow.tolist()[:kept]
-            cvals = pval.tolist()[:kept]
-        m = len(rows)
+            rows, cv = prow[:kept], pval[:kept]
+        m = n if rows is None else rows.shape[0]
         if self.kernel == "precomputed":
             self._gamma = 0.0
-            Q = X if m == n else self._take_cols(self._take_rows(X, rows), rows)
+            Q = X if rows is None else self._take_cols(self._take_rows(X, rows), rows)
         else:
             self._gamma = _f32_scalar(_resolve_gamma(self.gamma, self.kernel, X, self))
-            Xw = X if m == n else self._take_rows(X, rows)
+            Xw = X if rows is None else self._take_rows(X, rows)
             Q = self._kernel(Xw, Xw, self.kernel, self._gamma, self.coef0, self.degree)
-        cv = Array.from_list(cvals, "<f4")
-        cf = cv.tolist()                                  # libsvm's C_i as the solver sees them
-        nl = float(self.nu) * m                            # solve_one_class: nu_l = sum(C_i * nu) ...
-        if sample_weight is not None:                      # ... accumulated in sample order, in double
-            nl = 0.0
-            for c in cf:
-                nl += c * float(self.nu)
-        init = [0.0] * m
-        i = 0
-        while nl > 0 and i < m:
-            init[i] = min(cf[i], nl)
-            nl -= init[i]
-            i += 1
-        alpha = Array.from_list(init, "<f4")
+        # libsvm's start (solve_one_class) by the base binding's
+        # `ocsvm_alpha_init_f32` (lane pyglue-numeric: a Python loop)
+        from ._buffer import _native
+        alpha = empty((m,), "<f4")
+        _native("ocsvm_alpha_init_f32")(addr_ro(cv, name="C"), m, float(self.nu),
+                                        0 if sample_weight is None else 1, addr(alpha, name="alpha"))
         info = _empty_out((1,), "<f4")
         iters = empty((1,), "<i4")
         cap = 10_000_000 if int(self.max_iter) < 0 else int(self.max_iter)
         self._op("ocsvm", [(Q, 0), (cv, 0), (alpha, 1), (info, 1), (iters, 1)], (m, cap), (_f32_scalar(self.tol),), )
         # the op's scalar order is (n, eps, max_iter): ints (n, max_iter), floats (eps,)
         rho = info.tolist()[0]
-        a = alpha.tolist()
-        local = [i for i in range(m) if a[i] > 0]
-        support = [rows[i] for i in local]
-        self.support_ = Array.from_list(support, "<i4")
+        # the support (alpha > 0, in order) and its coefficients by the
+        # device compaction (pos_compact), the training rows by the core gather
+        srow = empty((max(m, 1),), "<i4")
+        sval = _empty_out((max(m, 1),), "<f4")
+        sinfo = empty((1,), "<i4")
+        if m:
+            self._op("pos_compact", [(alpha, 0), (srow, 1), (sval, 1), (sinfo, 1)], (m,))
+        n_sv = sinfo.tolist()[0] if m else 0
+        local = srow[:n_sv]
+        if rows is None or not n_sv:
+            support = local
+        else:
+            support = empty((n_sv,), "<i4")
+            _native("gather_i32")(addr_ro(rows, name="rows"), rows.shape[0], addr_ro(local, name="support"),
+                                  n_sv, addr(support, name="support_"))
+        self.support_ = support
         if self.kernel == "precomputed":
-            self.support_vectors_ = Array.from_list([[] for _ in support], "<f4") if support else _empty_out((0, 0), "<f4")
+            self.support_vectors_ = _empty_out((n_sv, 0), "<f4")
         else:
             self.support_vectors_ = self._take_rows(X, support)
-        self.dual_coef_ = Array.from_list([[a[i] for i in local]], "<f4")
+        self.dual_coef_ = sval[:n_sv].reshape((1, n_sv))
         self.intercept_ = Array.from_list([-rho], "<f4")
         self.offset_ = rho
         self.n_iter_ = iters.tolist()[0]
@@ -772,8 +774,8 @@ class OneClassSVM(_XNeighbors):
 
     def score_samples(self, X):
         Q = _f32(X)
-        coef = Array.from_list([[v] for v in self.dual_coef_.tolist()[0]], "<f4")
-        n_sv = coef.shape[0]
+        n_sv = self.dual_coef_.shape[1]
+        coef = as_f32_c(self.dual_coef_, ndim=2, name="dual_coef_")[0].reshape((n_sv, 1))
         if self.kernel != "precomputed" and n_sv and Q.shape[0] and not _OLD_ITEMS:
             # the fused chain (lane/py-dn-kern): kernel then matmul per row
             # tile on the device, only the scores downloaded (`xn_kernel_matmul`)
@@ -784,7 +786,7 @@ class OneClassSVM(_XNeighbors):
                      (_f32_scalar(self._gamma), _f32_scalar(self.coef0)))
             return s.reshape((nq,))
         if self.kernel == "precomputed":
-            K = self._take_cols(Q, self.support_.tolist())
+            K = self._take_cols(Q, self.support_)
         else:
             K = self._kernel(Q, self.support_vectors_, self.kernel, self._gamma, self.coef0, self.degree)
         s = self._matmul(K, coef)
