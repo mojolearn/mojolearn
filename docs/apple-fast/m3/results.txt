@@ -1,4 +1,4 @@
-pos=200 lines=     408
+pos=202 lines=     412
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -238,3 +238,6 @@ pos=200 lines=     408
 322:SWAP 03:50Z runner: family FAST bindings build 5 in parallel
 323:CMD apple-fast@ed49f2b11 afb5-merged-classical rc=0 afb done tag=afb5-merged-classical pairs=2 ok=2
 324:FBUILD lane/apple-fast@42b6db46c core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+325:CMD apple-fast@42b6db46c afb5b-dart rc=0 afb done tag=afb5b-dart pairs=8 ok=4
+326:CMD apple-fast@42b6db46c ols-tsqr-check rc=0 AFC-AB-SUMMARY ols-tsqr-check arm=B lane=ols ds=istella median_of_medians_ms=2175.2457710099407 runs=[2175.2457710099407 ] digest=272ed0debbbe3446 
+327:FBUILD lane/apple-fast-dwgap@23cbc3195 core=0 ibase=0 estimators=0 gbdt=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
