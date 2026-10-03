@@ -417,14 +417,23 @@ def async_min_lbfgs(
     var ip = ist.unsafe_ptr()
     var fp = fst.unsafe_ptr()
     ctx.enqueue_memset(any_active, Int32(0))
+    # one sub-buffer per field (one argument may not alias another)
+    var s_fxp = fst.create_sub_buffer[DType.float32](F_FXP * bs, max(1, bs))
+    var s_gn = fst.create_sub_buffer[DType.float32](F_GNORM * bs, max(1, bs))
+    var s_st = fst.create_sub_buffer[DType.float32](F_STEP * bs, max(1, bs))
+    var s_ac = ist.create_sub_buffer[DType.int32](I_ACTIVE * bs, max(1, bs))
+    var s_se = ist.create_sub_buffer[DType.int32](I_SEARCHING * bs, max(1, bs))
+    var s_en = ist.create_sub_buffer[DType.int32](I_ENDV * bs, max(1, bs))
+    var s_nv = ist.create_sub_buffer[DType.int32](I_NVEC * bs, max(1, bs))
+    var s_lr = ist.create_sub_buffer[DType.int32](I_LSRET * bs, max(1, bs))
+    var s_li = ist.create_sub_buffer[DType.int32](I_LSITERS * bs, max(1, bs))
+    var s_ni = ist.create_sub_buffer[DType.int32](I_NITER * bs, max(1, bs))
+    var s_rc = ist.create_sub_buffer[DType.int32](I_RETCODE * bs, max(1, bs))
     ctx.enqueue_function[lbfgs_init_kernel](
-        grad.unsafe_ptr(), drt.unsafe_ptr(), fp.unsafe_offset(F_FX * bs),
-        fp.unsafe_offset(F_FXP * bs), fx_hist.unsafe_ptr(), fp.unsafe_offset(F_GNORM * bs),
-        fp.unsafe_offset(F_STEP * bs),
-        ip.unsafe_offset(I_ACTIVE * bs), ip.unsafe_offset(I_SEARCHING * bs),
-        ip.unsafe_offset(I_ENDV * bs), ip.unsafe_offset(I_NVEC * bs),
-        ip.unsafe_offset(I_LSRET * bs), ip.unsafe_offset(I_LSITERS * bs),
-        ip.unsafe_offset(I_NITER * bs), ip.unsafe_offset(I_RETCODE * bs),
+        grad.unsafe_ptr(), drt.unsafe_ptr(), f_fx.unsafe_ptr(),
+        s_fxp.unsafe_ptr(), fx_hist.unsafe_ptr(), s_gn.unsafe_ptr(), s_st.unsafe_ptr(),
+        s_ac.unsafe_ptr(), s_se.unsafe_ptr(), s_en.unsafe_ptr(), s_nv.unsafe_ptr(),
+        s_lr.unsafe_ptr(), s_li.unsafe_ptr(), s_ni.unsafe_ptr(), s_rc.unsafe_ptr(),
         any_active.unsafe_ptr(),
         Int32(bs), Int32(n), Int32(past), param.epsilon, param.delta,
         grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
@@ -463,6 +472,17 @@ def async_min_lbfgs(
             grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
         )
         rounds += 1
+    _ = s_fxp^
+    _ = s_gn^
+    _ = s_st^
+    _ = s_ac^
+    _ = s_se^
+    _ = s_en^
+    _ = s_nv^
+    _ = s_lr^
+    _ = s_li^
+    _ = s_ni^
+    _ = s_rc^
     var x_out = _down_f32(ctx, x, 0, b_n)
     var fx_out = _down_f32(ctx, fst, F_FX * bs, bs)
     var n_iter_out = _down_i32(ctx, ist, I_NITER * bs, bs)
