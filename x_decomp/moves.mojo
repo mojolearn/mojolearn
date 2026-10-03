@@ -266,3 +266,18 @@ def pca_mle_pa(lt: F32Ptr, m: Int, logn: Float64) -> Float64:
     for a in range(m):
         pa += Float64(lt.unsafe_load(a)) + logn
     return pa
+
+
+def topn_desc(x: F32Ptr, m: Int, skip: F32Ptr, has_skip: Bool, n: Int, dst: I32Ptr) raises -> Int:
+    """`sorted((i for i in range(m) if not skip[i]), key=lambda i: (-x[i], i))[:n]`
+    (skip[i] = a nonzero entry of the skip row); returns the count written."""
+    var keys = List[UInt64](capacity=m)
+    for i in range(m):
+        if has_skip and skip.unsafe_load(i) != Float32(0):
+            continue
+        keys.append((UInt64(f32_key(-x.unsafe_load(i))) << 32) | UInt64(i))
+    sort(keys)
+    var c = min(n, len(keys))
+    for a in range(c):
+        dst.unsafe_store(a, Int32(Int(keys[a] & UInt64(0xFFFFFFFF))))
+    return c

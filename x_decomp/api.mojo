@@ -16,7 +16,7 @@ from x_decomp.mcd import fast_mcd
 from x_decomp.lda_online import lda_online_pass
 from x_decomp.moves import (
     F64Ptr, PY2MOJO_DECOMP, accuracy, argmin_all, argsort_f32, dsum_sq, gather, iso_order, move_host, order_f, pca_mle_pa,
-    pca_mle_terms, scatter, select_smallest, sign_labels, triu_nonzero,
+    pca_mle_terms, scatter, select_smallest, sign_labels, topn_desc, triu_nonzero,
 )
 from x_decomp.tsqr_core import TS_MAX_N
 
@@ -836,6 +836,19 @@ def pca_mle_pa_py(lt: PythonObject, m: PythonObject, logn: PythonObject) raises 
     if n <= 0:
         return PythonObject(Float64(0))
     return PythonObject(pca_mle_pa(_f(lt), n, Float64(py=logn)))
+
+
+def topn_desc_py(x: PythonObject, p: PythonObject, skip: PythonObject, dst: PythonObject) raises -> PythonObject:
+    """p = [m, n]: the n best positions by (-x, index), skipping the nonzero
+    entries of the float32 row at `skip` (0: none); their count."""
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    if m == 0 or n == 0:
+        return PythonObject(0)
+    var has = Int(py=skip) != 0
+    var px = _f(x)
+    var ps = _f(skip) if has else px
+    return PythonObject(topn_desc(px, m, ps, has, n, _i(dst)))
 
 
 def numeric_mode_py() raises -> PythonObject:
