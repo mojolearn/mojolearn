@@ -68,18 +68,10 @@ comptime THETA_SNAP = (
 #: (k + 1) + 4 k <= 28 floats of k <= 3; (k + 1) k + (k + 1) <= 16 floats)
 comptime THETA_SNAP_OFF = 32
 
-#: lane/apple-fast-gap-tsa (docs/apple-fast/notes/gap-tsa.md). Every
-#: Nelder-Mead evaluation of `theta_run_reg` re-folds two whole-series
-#: chains that depend on the series alone (the static models' A and B from
-#: sum y and sum (i + 1) y, and mean|y| of the objective's scale), and runs
-#: the running mean `my` (a divide per step) that only the dynamic models
-#: read, plus the four-word store of the last row that only the final run
-#: needs. MOJOLEARN_SEQ_FAST_THETA_HOIST folds the series-only chains once
-#: per series (`theta_invariants`, the same operations in the same order)
-#: and evaluates with `theta_sse_hoisted` (no store; `my` only when dynamic):
-#: the same objective words, so the same simplex path and the same fit.
-#: FAST + Apple with THETA_REG on; default OFF.
-comptime THETA_HOIST = THETA_REG and is_defined["MOJOLEARN_SEQ_FAST_THETA_HOIST"]()
+#: lane/apple-fast-gap-tsa: the opt-in THETA_HOIST arm of this file
+#: (`theta_invariants` + `theta_sse_hoisted` in the Nelder-Mead objective,
+#: -D MOJOLEARN_SEQ_FAST_THETA_HOIST) was DROPPED-noise on top of THETA_SPEC
+#: (lane/apple-fast-gap-tsa @ e9da47064); both helpers stay for theta_spec.
 
 comptime STM = 0
 comptime OTM = 1
@@ -378,10 +370,6 @@ struct ThetaObj(Objective):
     var theta: Float32
     var states: FP
     var e: FP
-    #: theta_invariants' words (THETA_HOIST)
-    var hA: Float32
-    var hB: Float32
-    var hmean: Float32
 
     @always_inline
     def __init__(out self, y: FP, n: Int, model: Int, ol: Bool, oa: Bool, ot: Bool,
@@ -397,9 +385,6 @@ struct ThetaObj(Objective):
         self.theta = theta
         self.states = states
         self.e = e
-        self.hA = Float32(0.0)
-        self.hB = Float32(0.0)
-        self.hmean = Float32(1.0)
 
     @always_inline
     def params(self, x: FP) -> Tuple[Float32, Float32, Float32]:
@@ -421,12 +406,7 @@ struct ThetaObj(Objective):
     def eval(mut self, x: FP) -> Float32:
         var p = self.params(x)
         var mse = Float32(0.0)
-        comptime if THETA_HOIST:
-            if self.model == DSTM or self.model == DOTM:
-                mse = theta_sse_hoisted[True](self.y, self.n, p[0], p[1], p[2], self.hA, self.hB, self.hmean)
-            else:
-                mse = theta_sse_hoisted[False](self.y, self.n, p[0], p[1], p[2], self.hA, self.hB, self.hmean)
-        elif THETA_REG:
+        comptime if THETA_REG:
             mse = theta_run_reg(self.y, self.n, self.model, p[0], p[1], p[2], self.states)
         else:
             mse = theta_run(self.y, self.n, self.model, p[0], p[1], p[2], self.states, self.e)
@@ -544,9 +524,6 @@ def op_theta(t: Int, a: Args):
         for i in range(n):
             var s = ld(seas, i % m)
             st(yd, i, div(ld(y, i), s) if mult else sub(ld(y, i), s))
-    var inv = (Float32(0.0), Float32(0.0), Float32(1.0))
-    comptime if THETA_HOIST:
-        inv = theta_invariants(yd, n)
     var best_mse = Float32(3.0e38)
     var best_model = 0
     var bl = Float32(0.0)
@@ -564,10 +541,6 @@ def op_theta(t: Int, a: Args):
         var a0 = Float32(0.5) if oa else a.f1
         var t0 = Float32(2.0) if ((fixed & 4) == 0 or model == STM or model == DSTM) else a.f2
         var obj = ThetaObj(yd, n, model, ol, oa, ot, l0, a0, t0, states, e)
-        comptime if THETA_HOIST:
-            obj.hA = inv[0]
-            obj.hB = inv[1]
-            obj.hmean = inv[2]
         var k = 0
         if ol:
             st(x, k, l0)

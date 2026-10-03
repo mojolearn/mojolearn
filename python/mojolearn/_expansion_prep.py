@@ -588,12 +588,6 @@ def _mode():
     return _backend.default_mode()
 
 
-#: lane/apple-fast-prep (2026-10-02): the A/B switch
-#: MOJOLEARN_X_PREP_FAST_NONEG=1 (opt-in; measured noise), read once at
-#: import (never on a fit / transform path).
-_X_PREP_FAST = frozenset(
-    name for name in ("NONEG",) if os.environ.get("MOJOLEARN_X_PREP_FAST_" + name, "0") == "1")
-
 #: binding -> whether it exports `x_prep_fast_unique` (FAST + Apple default,
 #: bindings/_mojolearn_x_prep.mojo X_PREP_FAST_UNIQUE; built with
 #: -D MOJOLEARN_X_PREP_FAST_UNIQUE_OFF it does not), probed once per binding
@@ -603,8 +597,8 @@ _FAST_UNIQUE = {}
 def _fast_on(name, mode):
     """Whether the switch `name` is on for the FAST tier (`mode` is the
     estimator's numeric mode, `_backend.default_mode`). UNIQUE is the
-    binding's comptime default (a cached probe); NONEG a set lookup. Off,
-    or on another tier, every route below is the old one."""
+    binding's comptime default (a cached probe). Off, or on another tier,
+    every route below is the old one."""
     if mode != "fast":
         return False
     if name == "UNIQUE":
@@ -614,7 +608,7 @@ def _fast_on(name, mode):
         if on is None:
             on = _FAST_UNIQUE[key] = _optional_prep_entry(binding, "x_prep_fast_unique") is not None
         return on
-    return name in _X_PREP_FAST
+    return False
 
 
 def encode_labels(y):
@@ -948,23 +942,15 @@ def _category_block(pr, categories):
     return pr.put_list(block), kmax
 
 
-def _codes(pr, arr, categories, neg=True):
+def _codes(pr, arr, categories):
     """Stages that write each element's category index (or -1) and each
-    column's unknown count. Returns (codes offset, unknown-count offset).
-    neg=False (lane apple-fast-prep, MOJOLEARN_X_PREP_FAST_NONEG=1): no
-    count, the offset None. `count_neg` (x_prep/prims.mojo count_neg_unit)
-    is ONE thread per column over every row; the encoders read it only under
-    handle_unknown='error' / 'warn' or with a drop, so the board's
-    OneHotEncoder(handle_unknown='ignore') and
-    OrdinalEncoder(handle_unknown='use_encoded_value') never did."""
+    column's unknown count. Returns (codes offset, unknown-count offset)."""
     n, d = arr.shape
     xo = pr.put(arr)
     uo, kmax = _category_block(pr, categories)
     co = pr.put_list([c.size for c in categories])
     codes = pr.alloc(n * d)
     pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
-    if not neg:
-        return codes, None
     neg = pr.alloc(d)
     pr.stage("count_neg", d, codes, n, d, neg)
     return codes, neg
@@ -1199,8 +1185,7 @@ class OrdinalEncoder(_PrepBase):
         self._check_width(arr)
         n, d = arr.shape
         pr = _Prog()
-        codes, neg = _codes(pr, arr, self.categories_,
-                            neg=self.handle_unknown == "error" or not _fast_on("NONEG", self.numeric_mode_))
+        codes, neg = _codes(pr, arr, self.categories_)
         out = codes
         if self._grouping is not None:
             out = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping), _NONE)
@@ -1353,9 +1338,7 @@ class OneHotEncoder(_PrepBase):
         starts = [sum(widths[:j]) for j in range(d)]
         W = sum(widths)
         pr = _Prog()
-        codes, neg = _codes(pr, arr, self.categories_,
-                            neg=self.handle_unknown in ("error", "warn") or self.drop is not None
-                            or not _fast_on("NONEG", self.numeric_mode_))
+        codes, neg = _codes(pr, arr, self.categories_)
         if self._grouping is not None:
             unk = self._unknown_to()
             codes = _remap(pr, codes, n, d, _grouping_table(pr, self._grouping),

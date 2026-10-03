@@ -41,8 +41,6 @@ from x_neighbors.items import (
     ocsvm_rho_part_item, ocsvm_rho_fin_item,
 )
 from x_neighbors.device_ops import xn_ctx, _grid, _tid, _buf, _buf_i, _down, BLOCK, kernel_kernel
-from x_neighbors.iter_device import kernel_rbf_tiled_kernel, KT_T, KT_TPB, KT_MAX_D
-from x_neighbors.items import K_RBF
 from std.python import PythonObject
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -604,12 +602,11 @@ def op_ocsvm(q: Int, cv: Int, alpha: Int, info: Int, iters: Int, n: Int, eps: Fl
 
 def op_ocsvm_x(
     x: Int, cv: Int, alpha: Int, info: Int, iters: Int, n: Int, d: Int, kind: Int, gamma: Float32,
-    coef0: Float32, degree: Int, tiled: Int, eps: Float32, max_iter: Int,
+    coef0: Float32, degree: Int, eps: Float32, max_iter: Int,
 ) raises:
     """OCSVM_CLS2_RES: `op_ocsvm` over the Gram of the n x d rows at `x`
     formed on the device by the kernel the Python side would have run
-    (`kernel_kernel`, or `kernel_rbf_tiled_kernel` when `tiled`): the same
-    words, never downloaded."""
+    (`kernel_kernel`): the same words, never downloaded."""
     comptime if not OCSVM_CLS2_RES:
         raise Error("x_neighbors: op_ocsvm_x is a FAST Apple switch (off under -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF)")
     else:
@@ -619,17 +616,11 @@ def op_ocsvm_x(
         # x and y are the same rows: one pointer passed twice (not two
         # mutable borrows of one buffer)
         var px = d_x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        if tiled != 0 and kind == K_RBF and d >= 1 and d <= KT_MAX_D:
-            ctx.enqueue_function[kernel_rbf_tiled_kernel](
-                px, px, d_q.unsafe_ptr(), Int64(n), Int64(n), Int64(d), gamma,
-                grid_dim=((n + KT_T - 1) // KT_T, (n + KT_T - 1) // KT_T, 1), block_dim=(KT_TPB, 1, 1),
-            )
-        else:
-            ctx.enqueue_function[kernel_kernel](
-                px, px, d_q.unsafe_ptr(), Int64(n), Int64(n), Int64(d), Int64(kind),
-                gamma, coef0, Int64(degree),
-                grid_dim=_grid(n * n), block_dim=(BLOCK if n * n > 1 else 1),
-            )
+        ctx.enqueue_function[kernel_kernel](
+            px, px, d_q.unsafe_ptr(), Int64(n), Int64(n), Int64(d), Int64(kind),
+            gamma, coef0, Int64(degree),
+            grid_dim=_grid(n * n), block_dim=(BLOCK if n * n > 1 else 1),
+        )
         _ocsvm_solve(ctx, d_q, cv, alpha, info, iters, n, eps, max_iter)
         _ = d_q^
         _ = d_x^
@@ -638,7 +629,7 @@ def op_ocsvm_x(
 
 def ocsvm_resident_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     """xn_ocsvm_x: addresses (x, cv, alpha, info, iters), ints (n, d, kind,
-    degree, tiled, max_iter), floats (gamma, coef0, eps)."""
+    degree, max_iter), floats (gamma, coef0, eps)."""
     var a = List[Int]()
     for k in range(5):
         var v = Int(py=a_[k])
@@ -646,7 +637,7 @@ def ocsvm_resident_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject)
             raise Error("x_neighbors: null buffer address")
         a.append(v)
     var iv = List[Int]()
-    for k in range(6):
+    for k in range(5):
         var v = Int(py=i_[k])
         if v < 0:
             raise Error("x_neighbors: a negative size was passed")
@@ -654,7 +645,7 @@ def ocsvm_resident_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject)
     var gamma = Float32(Float64(py=f_[0]))
     var coef0 = Float32(Float64(py=f_[1]))
     var eps = Float32(Float64(py=f_[2]))
-    op_ocsvm_x(a[0], a[1], a[2], a[3], a[4], iv[0], iv[1], iv[2], gamma, coef0, iv[3], iv[4], eps, iv[5])
+    op_ocsvm_x(a[0], a[1], a[2], a[3], a[4], iv[0], iv[1], iv[2], gamma, coef0, iv[3], eps, iv[4])
     return PythonObject(None)
 
 
