@@ -122,8 +122,7 @@ from cluster.impl.detail.kmeans_transform import (
 from cluster.impl.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
 )
-from cluster.impl.kmeans import fit, fit_predict, predict
-from cluster.impl.detail.kmeans_fast import kmeans_fast_skip_predict_on
+from cluster.impl.kmeans import fit_predict, predict
 from core.device_zero import enqueue_fill
 from core.row_norms import NORM_TPB, row_norm_kernel
 from cluster.impl.kmeans_params import (
@@ -462,24 +461,14 @@ def _kmeans_fit_tail(
     var take_sqrt = Int32(0)
     if centroid_norms_take_sqrt(metric):
         take_sqrt = Int32(1)
-    # MOJOLEARN_KMEANS_FAST_SKIP_PREDICT=1 (lane/apple-fast-core, 2026-10-02,
-    # FAST + Apple only; `detail/kmeans_fast.mojo`): with one restart the
-    # fit's own post-loop assignment (`kmeans_fit_main_traced`, their
-    # `:500-537`) already wrote the labels against the FINAL centroids, so
-    # `fit_predict`'s second assignment, and this `x_norm` pass that feeds
-    # only it, are skipped. Same kernel, same inputs: same labels.
-    var skip_predict = kmeans_fast_skip_predict_on() and (
-        n_init == 1 or init == INIT_ARRAY
+    ctx.enqueue_function[row_norm_kernel](
+        x_norm.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(n_features),
+        take_sqrt,
+        grid_dim=(n_samples, 1, 1),
+        block_dim=(NORM_TPB, 1, 1),
     )
-    if not skip_predict:
-        ctx.enqueue_function[row_norm_kernel](
-            x_norm.unsafe_ptr(),
-            x.unsafe_ptr(),
-            Int32(n_features),
-            take_sqrt,
-            grid_dim=(n_samples, 1, 1),
-            block_dim=(NORM_TPB, 1, 1),
-        )
     ctx.synchronize()
 
     var params = KMeansParams.default()
@@ -491,24 +480,6 @@ def _kmeans_fit_tail(
     params.seed = seed
     params.n_init = n_init
     params.oversampling_factor = oversampling_factor
-
-    if skip_predict:
-        var r = fit(
-            ctx,
-            x,
-            weights,
-            centroids,
-            labels,
-            params,
-            n_samples,
-            n_features,
-            Float32(sum_scale),
-            Float32(weight_scale),
-        )
-        ctx.enqueue_copy(dst_ptr=out_centroids_ptr, src_buf=centroids)
-        ctx.enqueue_copy(dst_ptr=out_labels_ptr, src_buf=labels)
-        ctx.synchronize()
-        return KMeansFitResult(r.inertia, r.n_iter, sum_scale, weight_scale)
 
     var result = fit_predict(
         ctx,
