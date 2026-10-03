@@ -46,3 +46,12 @@ one-hot max, table histograms). Risk: low; integer atomics. Error messages for i
 
 **MOJOLEARN_SYM_CTR_ALL** turns on all five; they compose. Expected: the sum of the above, dominated by
 SYM_CTR_PERM_BATCH.
+
+## Compile status (2026-10-03; local compiling stopped by Andrew, the M3 peer compiles)
+
+- FAST `-D MOJOLEARN_SYM_CTR_ALL`, first attempt at 13547eaf1: rc=1, two errors, both `fast_prep.mojo` `read_column`
+  mut aliasing (`self` and `self.stats`). Fixed in 4e08a1922 (`_read_column` free function). No other errors in
+  that log (the parse stopped at those two, so later type errors may remain).
+- Not run, compile owed: peer. FAST + SYM_CTR_ALL after the fix; FAST per define (SYM_CTR_PERM_BATCH,
+  CTR_PREP_SHARED, CTR_SORT_ONCE, CTR_INDEX_FUSED, CTR_ONEHOT_DEVICE); FAST with all defines off; IDENTICAL once.
+- No build has passed (rc=0) on this branch yet.
