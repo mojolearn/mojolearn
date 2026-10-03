@@ -29,10 +29,9 @@ SHIPPING kernels and downloads:
   `device_qr_r`      `core/householder_qr.mojo::qr_factor` -- both slice
                      arms, the scratch sized by `qr_slice_count` exactly as
                      `pca_fit_full` sizes it.
-  `device_eigh`      `decomposition/checks/jacobi_eigh_device.mojo::
-                     jacobi_eigh_kernel` then `sign_flip_kernel`, the pair
-                     `eig_and_truncate` launches, at the same launch width
-                     and the same sweep budget.
+  (eigh)             deleted (cgr-decomp, 2026-10-03): the one-block
+                     cyclic `jacobi_eigh_kernel`; numpy's eigh is x_decomp's
+                     round-robin Jacobi (`DevExec.eigh`) on every column.
   `device_svdvals`   `qr_factor` then `decomposition/impl/linalg/detail/
                      svd_full.mojo::svd_of_r`, which is `pca_fit_full`'s
                      tall arm with the centering left out.
@@ -69,18 +68,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTIC
 comptime _DEVCTX_SLOT = "MojoLinalgContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoLinalgContextFast"
 
 
-from core.device_zero import enqueue_fill
 from core.householder_qr import qr_factor, qr_slice_count
-from decomposition.checks.jacobi_eigh_device import (
-    JACOBI_INFO_UNWRITTEN,
-    JACOBI_ROT_TPB,
-    JACOBI_SWEEPS,
-    JACOBI_TOL,
-    jacobi_eigh_kernel,
-)
-from decomposition.linalg_types import EighHostResult, _validate_shape, _validate_square
-from decomposition.spectrum_order_device import enqueue_eigh_ascending, enqueue_svdvals_descending
-from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
+from decomposition.linalg_types import _validate_shape
+from decomposition.spectrum_order_device import enqueue_svdvals_descending
 from decomposition.impl.linalg.detail.svd_full import svd_of_r
 
 
@@ -154,94 +144,6 @@ def device_qr_r(
     # drain, no arithmetic.
     ctx.synchronize()
     return r^
-
-
-def device_eigh(a: List[Float32], n: Int) raises -> EighHostResult:
-    """`numpy.linalg.eigh(a)` on the device, symmetric `a`, ASCENDING.
-
-    The pair `eig_and_truncate` launches -- `jacobi_eigh_kernel` at
-    `JACOBI_ROT_TPB` and then `sign_flip_kernel` -- at the sweep budget and
-    tolerance every shipped caller uses. The sign flip is not optional and
-    not cosmetic: without it two boxes agreeing bit for bit could still hand
-    back `v` and `-v`, because the sweep fixes a vector only up to sign.
-
-    THE INFO BUFFER IS PRE-FILLED WITH `JACOBI_INFO_UNWRITTEN` and the two
-    failures are separated by name. A kernel that never ran leaves the
-    sentinel; a kernel that ran and did not converge writes 0.0. Reading
-    both as "not converged" is how a launch failure gets reported as a
-    numerical one, which sends the reader at the data instead of at the
-    build (`glm/impl/linalg/detail/lstsq.mojo` carries the same guard and
-    the same argument).
-    """
-    return device_eigh(process_ctx[_DEVCTX_SLOT](), a, n)
-
-
-def device_eigh(ctx: DeviceContext, a: List[Float32], n: Int) raises -> EighHostResult:
-    """`device_eigh` on a caller's context (see `device_qr_r`)."""
-    _validate_square(n, "eigh")
-    var da = _upload(ctx, a)
-    var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var dinfo = ctx.enqueue_create_buffer[DType.float32](3)
-    enqueue_fill(ctx, dinfo, JACOBI_INFO_UNWRITTEN)
-    ctx.synchronize()
-    ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
-        da.unsafe_ptr(),
-        dv.unsafe_ptr(),
-        dinfo.unsafe_ptr(),
-        Int32(n),
-        Int32(JACOBI_SWEEPS),
-        Float32(JACOBI_TOL),
-        grid_dim=(1, 1, 1),
-        block_dim=(JACOBI_ROT_TPB, 1, 1),
-    )
-    ctx.enqueue_function[sign_flip_kernel](
-        dv.unsafe_ptr(),
-        Int32(n),
-        grid_dim=(n, 1, 1),
-        block_dim=(SIGNFLIP_TPB, 1, 1),
-    )
-    ctx.synchronize()
-    var info = _download(ctx, dinfo, 3)
-
-    if info[0] == JACOBI_INFO_UNWRITTEN:
-        raise Error(
-            "eigh: the device Jacobi eigensolver DID NOT WRITE its info"
-            " buffer, so it never ran or its launch failed. This is NOT a"
-            " convergence failure and must not be reported as one: -1.0 is a"
-            " value the kernel never stores. Check that the binding is built"
-            " for this device."
-        )
-    if info[0] == Float32(0.0):
-        raise Error(
-            "eigh: the Jacobi eigensolver did not converge in "
-            + String(JACOBI_SWEEPS)
-            + " sweeps at n = "
-            + String(n)
-            + ": ||offdiag(A)||_F / ||A||_F is still "
-            + String(info[1])
-            + ". An unconverged decomposition is not returned as if it were"
-            " one; see DEVIATION 590. The remedy is more sweeps, the same one"
-            " cuSOLVER's syevj has"
-        )
-
-    # the ascending order on the device (decomposition/spectrum_order_device.mojo,
-    # cpu-gpu-cleanup c-decomp): the converged A's diagonal and the basis
-    var dw = ctx.enqueue_create_buffer[DType.float32](n)
-    var dvo = ctx.enqueue_create_buffer[DType.float32](n * n)
-    var dpos = ctx.enqueue_create_buffer[DType.int32](n)
-    enqueue_eigh_ascending(
-        ctx, da.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), n + 1, dv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-        n, dpos, dw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dvo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-    )
-    var w = _download(ctx, dw, n)
-    var v = _download(ctx, dvo, n * n)
-    _ = da^
-    _ = dv^
-    _ = dinfo^
-    _ = dw^
-    _ = dvo^
-    _ = dpos^
-    return EighHostResult(w^, v^, True, Int(info[2]))
 
 
 def device_svdvals(

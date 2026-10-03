@@ -148,7 +148,7 @@ struct Kit[E: Exec](Movable):
         return self.ew1(OP_SCALE, self.colsum(A), 1.0 / Float64(A.r))
 
     def eigh(self, A: Mat, mut w: Mat, mut v: Mat) raises:
-        Self.E.eigh(A.p(), w.p(), v.p(), A.r)
+        Self.E.eigh(A.p(), w.p(), v.p(), A.r, 0)
 
     def lu(self, mut lu: Mat, mut piv: List[Int32], mut info: Mat) raises:
         """`_Kit.lu` on a copy the caller made (in place)."""

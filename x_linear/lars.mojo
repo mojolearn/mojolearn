@@ -60,34 +60,15 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
     # (x_linear/tops.mojo); the path itself (d x d) on the lead.
     var ym = Float32(0)
     comptime if is_gpu():
-        # ip[4] (device only; x_linear/device.mojo `fit_device` always
-        # appends it for LARS): 1 when `xg_gram_kernel` already wrote the
-        # centered Gram into fw[gg, gg + d*d) from the same means, so the
-        # team's own Gram, 96 million-row chains per thread on one block,
-        # is skipped. The means are recomputed here regardless (the same
-        # statements give the same values).
-        var pre_gram = ldi(ip, 4) != 0
-        # ip[4] == 2 (lane/neural-pass120's moments grid): the means, the
-        # Gram and X'y are all in fw already, and y's mean waits in
-        # fw[prev] (read here, then the slot zeroed as the path expects)
-        var pre_all = ldi(ip, 4) == 2
-        if pre_all:
-            ym = ld(fw, prev)
-            t.sync()
-            if t.lead():
-                st(fw, prev, Float32(0))
-            t.sync()
-        elif fi:
-            t_col_means(t, x, n, d, fw, xm)
-            ym = t_mean(t, y, n, 1)
-        else:
-            if t.lead():
-                fill(fw, xm, d, Float32(0))
-            t.sync()
-        if not pre_gram:
-            t_centered_gram(t, x, n, d, fw, xm, fw, gg)
-        if not pre_all:
-            t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
+        # the device (x_linear/device.mojo `lars_path_kernel`): the moments
+        # grid already wrote the means, the Gram and X'y into fw, and y's
+        # mean waits in fw[prev] (read here, then the slot zeroed as the
+        # path expects); no row pass runs on the team
+        ym = ld(fw, prev)
+        t.sync()
+        if t.lead():
+            st(fw, prev, Float32(0))
+        t.sync()
     else:
         # the host: one row pass per statistic, vector accumulators (lane linear-cpu)
         if fi:
@@ -104,7 +85,7 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
             fill(fw, xm, d, Float32(0))
         centered_gram(x, n, d, fw, xm, fw, gg)
         centered_xty(x, y, n, d, fw, xm, ym, fw, xty)
-    comptime if is_gpu() and not is_defined["MOJOLEARN_X_LINEAR_LARS_LEAD"]():
+    comptime if is_gpu():
         if t.nt > 1:
             _lars_path_team(t, n, d, max_iter, lasso, positive, alpha_min, fi, ym, fw, iw, res,
                             xm, gg, xty, prev, cov, ll, ls, sgn, corr, state, act)
