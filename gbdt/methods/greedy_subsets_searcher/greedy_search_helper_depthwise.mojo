@@ -110,6 +110,21 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_chain_fused import (
     fused_place_scatter_kernel,
     fused_scan_update_kernel,
 )
+from gbdt.methods.greedy_subsets_searcher.kernel.dw2_level import (
+    DW2_COPY_BLOCK,
+    DW2_PART_BLOCK,
+    DW2_SCAN_BLOCK,
+    DW2_SCAN_FT,
+    DW2_ZERO_FLAG,
+    DW2_ID_MASK,
+    dw2_copy_back_kernel,
+    dw2_copy_zero_kernel,
+    dw2_flags_count_kernel,
+    dw2_part_max_chunks,
+    dw2_place_scatter_kernel,
+    dw2_scan_histograms_smem_kernel,
+    dw2_scan_update_kernel,
+)
 from checks.kernel_matrix import TARGET_COLUMN, ridx_only_splits_for
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
@@ -305,6 +320,30 @@ comptime DW_TREE_SYNC_CHECK = DW_TREE_SYNC and is_defined[
     "MOJOLEARN_GBDT_DW_TREE_SYNC_CHECK"
 ]()
 
+# ---- lane apple-fast-dwgap2: opt-in FAST Apple experiments ----------------
+# (`kernel/dw2_level.mojo` has the kernels and the argument for each.)
+#: The fused split chain at four rows per thread, aligned 16-byte row-index
+#: and 4-byte flag accesses. Same stable partition: same tree.
+comptime DW2_PART_VEC4 = DW_FUSED_CHAIN and is_defined[
+    "MOJOLEARN_GBDT_DW2_PART_VEC4"
+]()
+#: The histogram prefix scan over a shared-memory copy of 16 features'
+#: cells; the same serial fold, so the same bits.
+comptime DW2_SCAN_SMEM = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_DW2_SCAN_SMEM"]()
+)
+#: DEVIATION 1903's deferred copy and the dirty-slot zero pass in one
+#: launch. Same bytes in every slot.
+comptime DW2_COPY_ZERO = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and DEFER_HIST_COPY_1903
+    and not DW_TREE_SYNC
+    and is_defined["MOJOLEARN_GBDT_DW2_COPY_ZERO"]()
+)
+
 
 def _dw_dev_u32(
     buf: DeviceBuffer[DType.uint32], offset: Int
@@ -428,6 +467,73 @@ def _launch_fused_split_chain[
     (DW_NO_LEVEL_SYNC): `n_split` is the scored-leaf count, an upper bound,
     and every block past `n_split_dev[0]` returns at once."""
     if n_split <= 0:
+        return
+    comptime if DW2_PART_VEC4:
+        # lane apple-fast-dwgap2: the same four launches at four rows per
+        # thread (`kernel/dw2_level.mojo`)
+        var max_chunks4 = dw2_part_max_chunks(n_rows)
+        var grid_x4 = split_points_grid_x(n_split, sm_count)
+        var chunk_grid4 = max_chunks4
+        if grid_x4 < chunk_grid4:
+            chunk_grid4 = grid_x4
+        ctx.enqueue_function[dw2_flags_count_kernel[GUARD]](
+            cindex.unsafe_ptr(),
+            row_index.unsafe_ptr(),
+            p_off.unsafe_ptr(),
+            p_sz.unsafe_ptr(),
+            d_left.unsafe_ptr(),
+            sp_feats.unsafe_ptr().bitcast[CFeature](),
+            sp_bins.unsafe_ptr(),
+            flags.unsafe_ptr(),
+            chunk_zeros.unsafe_ptr(),
+            Int32(max_chunks4),
+            n_split_dev,
+            grid_dim=(chunk_grid4, n_split, 1),
+            block_dim=(DW2_PART_BLOCK, 1, 1),
+        )
+        ctx.enqueue_function[dw2_scan_update_kernel[GUARD]](
+            d_left.unsafe_ptr(),
+            d_right.unsafe_ptr(),
+            p_off.unsafe_ptr(),
+            p_sz.unsafe_ptr(),
+            chunk_zeros.unsafe_ptr(),
+            chunk_offsets.unsafe_ptr(),
+            leaf_zeros.unsafe_ptr(),
+            slot_off.unsafe_ptr(),
+            slot_sz.unsafe_ptr(),
+            d_win_cells.unsafe_ptr(),
+            sp_feats.unsafe_ptr().bitcast[CFeature](),
+            Int32(hist_cells_per_leaf),
+            Int32(stat_count),
+            hist.unsafe_ptr(),
+            part_stats.unsafe_ptr(),
+            Int32(max_chunks4),
+            n_split_dev,
+            grid_dim=(1, n_split, 1),
+            block_dim=(DW2_PART_BLOCK, 1, 1),
+        )
+        ctx.enqueue_function[dw2_place_scatter_kernel[GUARD]](
+            slot_off.unsafe_ptr(),
+            slot_sz.unsafe_ptr(),
+            flags.unsafe_ptr(),
+            chunk_offsets.unsafe_ptr(),
+            leaf_zeros.unsafe_ptr(),
+            row_index.unsafe_ptr(),
+            temp_index.unsafe_ptr(),
+            Int32(max_chunks4),
+            n_split_dev,
+            grid_dim=(chunk_grid4, n_split, 1),
+            block_dim=(DW2_PART_BLOCK, 1, 1),
+        )
+        ctx.enqueue_function[dw2_copy_back_kernel[GUARD]](
+            slot_off.unsafe_ptr(),
+            slot_sz.unsafe_ptr(),
+            temp_index.unsafe_ptr(),
+            row_index.unsafe_ptr(),
+            n_split_dev,
+            grid_dim=(grid_x4, n_split, 1),
+            block_dim=(DW2_COPY_BLOCK, 1, 1),
+        )
         return
     var max_chunks = (n_rows + FUSED_CHAIN_BLOCK - 1) // FUSED_CHAIN_BLOCK
     if max_chunks < 1:
@@ -2821,6 +2927,8 @@ def fit_non_symmetric_tree[
                         plan_slots.append(IDS_SLOT_COPY_DST)
             # the ZERO set (DEVIATION 1903: dirty slots only on the FAST arm)
             var zero_count = 0
+            # DW2_COPY_ZERO: the zero set rides the copy launch this level
+            var copy_zero_fused = False
             if len(plan.compute_ids) > 0:
                 comptime if not DEFER_HIST_COPY_1903:
                     for i in range(len(plan.compute_ids)):
@@ -2835,6 +2943,33 @@ def fit_non_symmetric_tree[
                                 zero_count, plan.compute_ids[i]
                             )
                             zero_count += 1
+                    comptime if DW2_COPY_ZERO:
+                        # lane apple-fast-dwgap2: a copy source in the zero
+                        # set is zeroed by its copy thread (bit 31 of its
+                        # id); the rest of the set rides the same launch
+                        if (
+                            n_copy > 0
+                            and zero_count > 0
+                            and (hist_cells_per_leaf * stat_count) % 4 == 0
+                        ):
+                            copy_zero_fused = True
+                            var kept = 0
+                            for i in range(zero_count):
+                                var zid = h_zero_ids.unsafe_ptr().unsafe_load(i)
+                                var is_src = False
+                                for c in range(n_copy):
+                                    var cw = h_copy_src.unsafe_ptr().unsafe_load(c)
+                                    if (cw & DW2_ID_MASK) == zid:
+                                        h_copy_src.unsafe_ptr().unsafe_store(
+                                            c, cw | DW2_ZERO_FLAG
+                                        )
+                                        is_src = True
+                                if not is_src:
+                                    h_zero_ids.unsafe_ptr().unsafe_store(
+                                        kept, zid
+                                    )
+                                    kept += 1
+                            zero_count = kept
                 if zero_count > 0:
                     plan_slots.append(IDS_SLOT_ZERO)
             # the BUILD set
@@ -3029,7 +3164,25 @@ def fit_non_symmetric_tree[
                         # with the plan-time lists above
                         # WIDTH DISPATCH, the same kernels the split-time copy
                         # ran, over the reduced pair list.
-                        if (hist_cells_per_leaf * stat_count) % 4 == 0:
+                        if copy_zero_fused:
+                            # DW2_COPY_ZERO: copies, then the zero set, one
+                            # launch (the zero launch below is skipped)
+                            ctx.enqueue_function[dw2_copy_zero_kernel](
+                                d_copy_src.unsafe_ptr(),
+                                d_copy_dst.unsafe_ptr(),
+                                Int32(n_copy),
+                                d_zero_ids.unsafe_ptr(),
+                                Int32(hist_cells_per_leaf * stat_count),
+                                hist.unsafe_ptr(),
+                                grid_dim=(
+                                    (hist_cells_per_leaf * stat_count // 4 + 255)
+                                    // 256,
+                                    n_copy + zero_count,
+                                    1,
+                                ),
+                                block_dim=(256, 1, 1),
+                            )
+                        elif (hist_cells_per_leaf * stat_count) % 4 == 0:
                             ctx.enqueue_function[copy_histograms_vec4_kernel](
                                 d_copy_src.unsafe_ptr(),
                                 d_copy_dst.unsafe_ptr(),
@@ -3075,7 +3228,7 @@ def fit_non_symmetric_tree[
                 # False) -- writing zeros over zeros is the one launch in this
                 # step that can be deleted without an argument about the build.
                 # (the ZERO set and its count were staged above)
-                if zero_count > 0 and not tree_sync:
+                if zero_count > 0 and not tree_sync and not copy_zero_fused:
                     stage_times.begin(ctx)
                     ctx.enqueue_function[zero_histograms_kernel](
                         d_zero_ids.unsafe_ptr(),
@@ -3187,21 +3340,40 @@ def fit_non_symmetric_tree[
                 # sum is linear, so the derived sibling needs no scan and an
                 # all-zero slot scans to itself.
                 stage_times.begin(ctx)
-                ctx.enqueue_function[scan_histograms_kernel](
-                    d_ids.unsafe_ptr(),
-                    flat_first.unsafe_ptr(),
-                    flat_folds.unsafe_ptr(),
-                    flat_one_hot.unsafe_ptr(),
-                    Int32(len(fold_counts)),
-                    Int32(hist_cells_per_leaf),
-                    hist.unsafe_ptr(),
-                    grid_dim=(
-                        (len(fold_counts) + 255) // 256,
-                        len(non_zero),
-                        stat_count,
-                    ),
-                    block_dim=(256, 1, 1),
-                )
+                comptime if DW2_SCAN_SMEM:
+                    # lane apple-fast-dwgap2: the same serial fold over a
+                    # shared-memory copy of 16 features per block
+                    ctx.enqueue_function[dw2_scan_histograms_smem_kernel](
+                        d_ids.unsafe_ptr(),
+                        flat_first.unsafe_ptr(),
+                        flat_folds.unsafe_ptr(),
+                        flat_one_hot.unsafe_ptr(),
+                        Int32(len(fold_counts)),
+                        Int32(hist_cells_per_leaf),
+                        hist.unsafe_ptr(),
+                        grid_dim=(
+                            (len(fold_counts) + DW2_SCAN_FT - 1) // DW2_SCAN_FT,
+                            len(non_zero),
+                            stat_count,
+                        ),
+                        block_dim=(DW2_SCAN_BLOCK, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[scan_histograms_kernel](
+                        d_ids.unsafe_ptr(),
+                        flat_first.unsafe_ptr(),
+                        flat_folds.unsafe_ptr(),
+                        flat_one_hot.unsafe_ptr(),
+                        Int32(len(fold_counts)),
+                        Int32(hist_cells_per_leaf),
+                        hist.unsafe_ptr(),
+                        grid_dim=(
+                            (len(fold_counts) + 255) // 256,
+                            len(non_zero),
+                            stat_count,
+                        ),
+                        block_dim=(256, 1, 1),
+                    )
                 mgr.stream_kernel()
                 stage_times.end(ctx, "hist.scan")
                 trace.record_device(
