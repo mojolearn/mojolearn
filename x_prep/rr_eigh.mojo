@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""FAST on Apple (lane/apple-fast-ldaqda, -D MOJOLEARN_LDAQDA_RR_EIGH): the
+"""FAST on Apple by default (lane/apple-fast-ldaqda; off: -D MOJOLEARN_LDAQDA_RR_EIGH_OFF): the
 prep lane's `eigh` stage (op 18, x_prep/eigh.mojo `eigh_unit`) as the
 round-robin Jacobi on the whole GPU.
 

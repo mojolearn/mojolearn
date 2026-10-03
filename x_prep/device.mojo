@@ -34,24 +34,30 @@ from x_prep.da_par import (
 def _da_blocks(t: Int) -> Int:
     return max((t + DA_TPB - 1) // DA_TPB, 1)
 
-#: FAST on Apple, -D MOJOLEARN_LDAQDA_RR_EIGH (lane/apple-fast-ldaqda): the
+#: FAST on Apple by default (lane/apple-fast-ldaqda; off: -D MOJOLEARN_LDAQDA_RR_EIGH_OFF): the
 #: `eigh` stage (op 18) as x_prep/rr_eigh.mojo's round-robin Jacobi on the
 #: whole GPU instead of `eigh_unit`'s one thread per matrix (cyclic, 24,090
 #: serial rotations a sweep at LDA's / QDA's d = 220 on Istella).
 comptime OP_EIGH = 18
-#: -D MOJOLEARN_LDAQDA_PAR_STAGES / _DEC_TILE (FAST on Apple): x_prep/da_par.mojo,
+#: FAST on Apple by default (off: -D MOJOLEARN_LDAQDA_PAR_STAGES_OFF / _DEC_TILE_OFF): x_prep/da_par.mojo,
 #: lda_stage2 / lda_stage3 / qda_prep a thread a cell, qda_dec by shared tiles
 #: (each cell the unit's own chain: the units' words)
 comptime OP_LDA_STAGE2 = 38
 comptime OP_LDA_STAGE3 = 39
 comptime OP_QDA_PREP = 41
 comptime OP_QDA_DEC = 42
+#: RR_EIGH, PAR_STAGES and DEC_TILE are the FAST + Apple default since the M3
+#: A/B on lane/apple-fast-ldaqda ef187d37b (n=1, Istella), all three on:
+#: lda-clf 19,696 -> 536 ms, qda 15,794 -> 425 ms (RR_EIGH alone 607 / 435);
+#: accuracy / logloss unchanged (lda .9131 / .2357, qda .8805 / 3.608 -> 3.609).
+#: `-D MOJOLEARN_LDAQDA_<NAME>_OFF` restores main's path for that stage; the old
+#: `-D MOJOLEARN_LDAQDA_<NAME>` stays harmless. The three are independent.
 comptime PAR_STAGES = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                       and is_defined["MOJOLEARN_LDAQDA_PAR_STAGES"]())
+                       and not is_defined["MOJOLEARN_LDAQDA_PAR_STAGES_OFF"]())
 comptime DEC_TILE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                     and is_defined["MOJOLEARN_LDAQDA_DEC_TILE"]())
+                     and not is_defined["MOJOLEARN_LDAQDA_DEC_TILE_OFF"]())
 comptime RR_EIGH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                    and is_defined["MOJOLEARN_LDAQDA_RR_EIGH"]())
+                    and not is_defined["MOJOLEARN_LDAQDA_RR_EIGH_OFF"]())
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
 #: (the host's argument, x_prep/host/mutual_info.mojo: the same words)

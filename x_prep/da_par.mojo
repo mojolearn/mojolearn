@@ -5,7 +5,7 @@ that run as one thread (or one thread a class) in naive_bayes/da.mojo, cut
 into launches of one thread a CELL. Every cell is the unit's own chain (the
 same operands, the same `add` / `mul` order), so the words are the units'.
 
--D MOJOLEARN_LDAQDA_PAR_STAGES:
+PAR_STAGES (FAST + Apple default; off: -D MOJOLEARN_LDAQDA_PAR_STAGES_OFF):
   `lda_stage2` (op 38, t = 0): SCAL1 (d x d), MS (K x d) and G2 = MS'MS
     (d x d) on one thread; here the rank on one thread (d steps), then a
     thread a cell of each.
@@ -15,7 +15,7 @@ same operands, the same `add` / `mul` order), so the words are the units'.
     and COEF, a thread a class for the two d-step folds of the intercept.
   `qda_prep` (op 41, a thread a class): the d x d rotation R on the class's
     thread; here the scalings and log constant a class, R a thread a cell.
--D MOJOLEARN_LDAQDA_DEC_TILE:
+DEC_TILE (FAST + Apple default; off: -D MOJOLEARN_LDAQDA_DEC_TILE_OFF):
   `qda_dec` (op 42, t = i K + k): sum_r (sum_c (x_c - m_c) R[c, r])^2 with
     the row, the mean and R re-read from device memory d^2 times a unit;
     here a threadgroup takes 32 rows of one class, stages the centred rows
