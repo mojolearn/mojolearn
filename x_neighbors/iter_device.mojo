@@ -17,7 +17,7 @@ from checks.kernel_matrix import lib_smem_page_fits_for, TARGET_COLUMN
 from x_neighbors.svgp_ff import (
     matmul_tn_acc_ff_item, svgp_ff_init_item, svgp_ff_chol_item, svgp_ff_chol_s_item, svgp_ff_column_item,
     svgp_ff_x_item, svgp_ff_qmu_item, svgp_ff_qsqrt_item, svgp_ff_part_item, svgp_ff_fin_item, svgp_ff_nbn,
-    svgp_ff_nbm, svgp_ff_ws_size,
+    svgp_ff_nbm, svgp_ff_ws_size, matmul_tn_sym_ff_tile_item, svgp_sym_nb,
 )
 from x_neighbors.svgp_ff import (
     SVGP_TREE, SVGP_TREE_ON, SV8, svgp_ff_tree_comb, svgp_ff_tree_slot, svgp_ff_bound, svgp_ff_failed,
@@ -1219,6 +1219,18 @@ def matmul_tn_acc_ff_kernel(a: FP, b: FP, rh: FP, rl: FP, rows_: Int64, n_: Int6
         matmul_tn_acc_ff_item(t, a, b, rh, rl, Int(rows_), Int(n_), Int(m_))
 
 
+comptime SVGP_FAST_SYMTILE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and is_defined["MOJOLEARN_SVGP_FAST_SYMTILE"]()
+)
+
+
+def matmul_tn_sym_ff_kernel(a: FP, rh: FP, rl: FP, rows_: Int64, m_: Int64):
+    var t = _tid()
+    var nb = svgp_sym_nb(Int(m_))
+    if t < nb * nb:
+        matmul_tn_sym_ff_tile_item(t, a, rh, rl, Int(rows_), Int(m_))
+
+
 def _up_direct(ctx: DeviceContext, addr: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
     """A device buffer with `count` floats copied straight from the host
     pointer by the device copy engine (no host-thread staging)."""
@@ -1351,10 +1363,17 @@ def op_svgp_fit_ff(
     while r0 < n:
         var rows = min(tile, n - r0)
         _launch_scaled_rbf(ctx, xp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
-        ctx.enqueue_function[matmul_tn_acc_ff_kernel](
-            _p(d_ks), _p(d_ks), _p(d_bh), _p(d_bl), Int64(rows), Int64(m), Int64(m),
-            grid_dim=_grid(mm), block_dim=(BLOCK if mm > 1 else 1),
-        )
+        comptime if SVGP_FAST_SYMTILE:
+            var nbs = svgp_sym_nb(m)
+            ctx.enqueue_function[matmul_tn_sym_ff_kernel](
+                _p(d_ks), _p(d_bh), _p(d_bl), Int64(rows), Int64(m),
+                grid_dim=_grid(nbs * nbs), block_dim=BLOCK,
+            )
+        else:
+            ctx.enqueue_function[matmul_tn_acc_ff_kernel](
+                _p(d_ks), _p(d_ks), _p(d_bh), _p(d_bl), Int64(rows), Int64(m), Int64(m),
+                grid_dim=_grid(mm), block_dim=(BLOCK if mm > 1 else 1),
+            )
         ctx.enqueue_function[matmul_tn_acc_ff_kernel](
             _p(d_ks), yp + r0, _p(d_bvh), _p(d_bvl), Int64(rows), Int64(m), Int64(1),
             grid_dim=_grid(m), block_dim=(BLOCK if m > 1 else 1),

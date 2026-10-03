@@ -57,6 +57,66 @@ def matmul_tn_acc_ff_item(t: Int, a: FP, b: FP, rh: FP, rl: FP, rows: Int, n: In
     rl.unsafe_store(t, acc.lo)
 
 
+#: lane apple-fast-gap-kapprox2-svgp (2026-10-03): MOJOLEARN_SVGP_FAST_SYMTILE
+#: (FAST + Apple, off unless defined). B = Kuf Kfu is symmetric and
+#: two_prod(x, y) == two_prod(y, x) bit for bit (hi = x*y and lo =
+#: fma(x, y, -hi) commute), so only the upper 4 x 4 blocks are summed, each
+#: thread carrying 16 entries over the rows (p ascending, the same fold as
+#: `matmul_tn_acc_ff_item` per entry) and writing the mirror too: the same
+#: words, half the products, a quarter of the loads.
+comptime SVGP_SYM_TB = 4
+
+
+@always_inline
+def svgp_sym_nb(m: Int) -> Int:
+    return (m + SVGP_SYM_TB - 1) // SVGP_SYM_TB
+
+
+def matmul_tn_sym_ff_tile_item(t: Int, a: FP, rh: FP, rl: FP, rows: Int, m: Int):
+    """t = bi * nb + bj (bj >= bi, else nothing): (rh, rl)[i, j] and [j, i]
+    continued by sum_p a[p, i] a[p, j] for the 4 x 4 block (bi, bj)."""
+    comptime TB = SVGP_SYM_TB
+    var nb = svgp_sym_nb(m)
+    var bi = t // nb
+    var bj = t - bi * nb
+    if bj < bi:
+        return
+    var i0 = bi * TB
+    var j0 = bj * TB
+    var hh = SIMD[DType.float32, TB * TB](0)
+    var ll = SIMD[DType.float32, TB * TB](0)
+    comptime for u in range(TB):
+        comptime for v in range(TB):
+            var i = i0 + u
+            var j = j0 + v
+            if i < m and j < m:
+                hh[u * TB + v] = rh.unsafe_load(i * m + j)
+                ll[u * TB + v] = rl.unsafe_load(i * m + j)
+    for p in range(rows):
+        var ai = SIMD[DType.float32, TB](0)
+        var aj = SIMD[DType.float32, TB](0)
+        comptime for u in range(TB):
+            if i0 + u < m:
+                ai[u] = ftz(a.unsafe_load(p * m + i0 + u))
+            if j0 + u < m:
+                aj[u] = ftz(a.unsafe_load(p * m + j0 + u))
+        comptime for u in range(TB):
+            comptime for v in range(TB):
+                var c = ff_add(FF(hh[u * TB + v], ll[u * TB + v]), two_prod(ai[u], aj[v]))
+                hh[u * TB + v] = c.hi
+                ll[u * TB + v] = c.lo
+    comptime for u in range(TB):
+        comptime for v in range(TB):
+            var i = i0 + u
+            var j = j0 + v
+            if i < m and j < m:
+                rh.unsafe_store(i * m + j, hh[u * TB + v])
+                rl.unsafe_store(i * m + j, ll[u * TB + v])
+                if bi != bj:
+                    rh.unsafe_store(j * m + i, hh[u * TB + v])
+                    rl.unsafe_store(j * m + i, ll[u * TB + v])
+
+
 @always_inline
 def _kj(kuu: FP, m: Int, i: Int, k: Int, jitter: Float32) -> FF:
     """(Kuu + jitter I)[i, k] as float-float."""
