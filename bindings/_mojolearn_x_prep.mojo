@@ -15,6 +15,7 @@ from x_prep.device import run_program_device, run_program_device_ranges, x_prep_
 from x_prep.folds import I32P, kfold_folds, strat_folds
 from x_prep.fastnb_csr import NB_TEXT_CSR, nb_csr_fit_py, nb_csr_jll_py
 from x_prep.calib import CALIB_FOLDS, CAL_ST, CAL_LS
+from x_prep.py2mojo import PY2MOJO_PREP
 
 
 def run_binding(arena_addr: PythonObject, arena_len: PythonObject, prog_addr: PythonObject,
@@ -179,6 +180,11 @@ def calib_folds_binding() raises -> PythonObject:
     return out
 
 
+def py2mojo_binding() raises -> PythonObject:
+    """Lane apple-fast-py2mojo-prep: present unless -D MOJOLEARN_PY2MOJO_prep_OFF
+    (x_prep/py2mojo.mojo); Python then takes its old loops."""
+    return PythonObject(1)
+
 
 @export
 def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
@@ -203,6 +209,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
             m.def_function[fast_unique_binding]("x_prep_fast_unique")
         comptime if CALIB_FOLDS:
             m.def_function[calib_folds_binding]("x_prep_calib_folds")
+        comptime if PY2MOJO_PREP:
+            m.def_function[py2mojo_binding]("x_prep_py2mojo")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_prep: ", e))

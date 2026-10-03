@@ -51,7 +51,7 @@ _BINDING = "_mojolearn_x_metrics"
 
 #: op name -> id; x_metrics/units.mojo `run_unit` holds the same table.
 _OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8, row_centroid_dist=9, permute=10,
-            fold_rows=36, rows64=41, strat_codes=45, curve_fold=46)
+            fold_rows=36, rows64=41, strat_codes=45, curve_fold=46, onehot=52, rep_rows=53, pair_cols=54)
 _PARAMS = 14
 _NONE = -1
 
@@ -96,6 +96,84 @@ def _arena_view(arena):
 
 def _new_arena(size):
     return array.array("f", bytes(4 * max(size, 1)))
+
+
+def _py2mojo(numeric_mode):
+    """lane apple-fast-py2mojo-core (2026-10-03): True when the binding forms
+    the label layouts and class sums (x_metrics/onehot.mojo, epilogue
+    class_sums); a build with -D MOJOLEARN_PY2MOJO_core_OFF answers 0 and
+    keeps the Python layouts below them (the A/B arm)."""
+    fn = _optional_metrics_entry(_binding(numeric_mode), "x_metrics_py2mojo_core")
+    return fn is not None and int(fn()) == 1
+
+
+def _i32_c(codes):
+    """int32 C-order codes as an `Array` (no copy when they already are)."""
+    if isinstance(codes, Array):
+        if codes.dtype == "<i4" and codes._has_order("C"):
+            return codes
+        return codes.astype("<i4")._as_c()
+    return Array.from_list(list(codes), "<i4")
+
+
+class _OneHot:
+    """0/1 flags the program forms itself from int32 `codes` (the onehot
+    unit): layout 0 class-major (word c*n + r), layout 1 row-major (word
+    r*k + c). Passed where `_curves` takes flags."""
+
+    __slots__ = ("codes", "n", "k", "layout")
+
+    def __init__(self, codes, n, k, layout):
+        self.codes, self.n, self.k, self.layout = _i32_c(codes), int(n), int(k), int(layout)
+
+
+class _RepRows:
+    """Float32 weights `w` (n) each repeated over k words (the rep_rows
+    unit). Passed where `_curves` takes weights."""
+
+    __slots__ = ("w", "n", "k")
+
+    def __init__(self, w, n, k):
+        self.w, self.n, self.k = w, int(n), int(k)
+
+
+def _put_flags(prog, flags):
+    """The flags' arena offset: an `_OneHot` is formed by a stage on the
+    device (or the host binding), anything else is copied in."""
+    if isinstance(flags, _OneHot):
+        C = prog.put_i32(flags.codes)
+        out = prog.scratch(flags.n * flags.k)
+        prog.stage("onehot", flags.n * flags.k, C, out, flags.n, flags.k, flags.layout)
+        return out
+    return prog.put_i32(flags)
+
+
+def _put_weights(prog, w):
+    """The weights' arena offset (_NONE for none): a `_RepRows` is repeated
+    by a stage, anything else is copied in."""
+    if w is None:
+        return _NONE
+    if isinstance(w, _RepRows):
+        W = prog.put(w.w)
+        out = prog.scratch(w.n * w.k)
+        prog.stage("rep_rows", w.n * w.k, W, out, w.k)
+        return out
+    return prog.put(w)
+
+
+def _class_sums(codes, w, k, numeric_mode):
+    """Per-class (weighted) counts, binary64 in row order, from the binding
+    (x_metrics/epilogue.mojo class_sums); `codes` int32, `w` Float32 or None."""
+    codes = _i32_c(codes)
+    waddr, wkeep = _f32_weights_addr(w)
+    if waddr is None:
+        wkeep = as_f32_c(w, ndim=1, name="sample_weight")[0]
+        waddr = addr_ro(wkeep, name="sample_weight")
+    out = _f64_out(k)
+    _binding(numeric_mode).x_metrics_class_sums(addr_ro(codes, name="codes"), waddr, codes.size, k,
+                                                out.buffer_info()[0])
+    del wkeep
+    return out.tolist()[:k]
 
 
 class _Prog:
@@ -1548,8 +1626,8 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds
                             max_fpr=max_fpr)
     prog = _Prog()
     S = prog.put(scores)
-    POS = prog.put_i32(flags)
-    W = _NONE if w is None else prog.put(w)
+    POS = _put_flags(prog, flags)
+    W = _put_weights(prog, w)
     N = n * problems
     order = prog.scratch(N)
     flagged = bool(keep_flags)
@@ -1619,8 +1697,8 @@ def _fold_curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, fold=
     (compacted for the AUCs) and only the fold's words come back."""
     prog = _Prog()
     S = prog.put(scores)
-    POS = prog.put_i32(flags)
-    W = _NONE if w is None else prog.put(w)
+    POS = _put_flags(prog, flags)
+    W = _put_weights(prog, w)
     N = n * problems
     order = prog.scratch(N)
     auc = fold == "auc"
@@ -1848,24 +1926,30 @@ def _trapezoid(x, y):
 
 
 def auc(x, y):
-    """scikit-learn 1.9 `auc`: the trapezoid rule over a monotonic x
-    (host binary64, a correctly rounded `fsum`)."""
+    """scikit-learn 1.9 `auc`: the trapezoid rule over a monotonic x (host
+    binary64, a correctly rounded `fsum`), in the binding
+    (x_metrics/epilogue.mojo auc_xy, lane py-misc-metrics) for every input:
+    a list or an integer buffer is converted to Float64 first (lane
+    apple-fast-py2mojo-core). The Python trapezoid below it runs only where
+    the binding refuses: a non-finite or overflowing term, whose fsum the
+    portable route decides."""
     xa, ya = _auc_f64(x), _auc_f64(y)
-    if xa is not None and ya is not None and xa.size == ya.size and xa.size >= 2:
-        fn = _epilogue("x_metrics_auc_xy", None)
-        if fn is not None:
-            # x_metrics/epilogue.mojo auc_xy (lane py-misc-metrics): the
-            # same differences, direction and trapezoid terms, fsum-ed
-            try:
-                return float(fn(addr_ro(xa, name="x"), addr_ro(ya, name="y"), xa.size))
-            except Exception:
-                pass
-    x = [float(v) for v in flatten_mo(x)]
-    y = [float(v) for v in flatten_mo(y)]
-    if len(x) != len(y):
+    if xa is None:
+        xa = Array.from_list([float(v) for v in flatten_mo(x)], "<f8")
+    if ya is None:
+        ya = Array.from_list([float(v) for v in flatten_mo(y)], "<f8")
+    if xa.size != ya.size:
         raise ValueError("x and y must have the same length")
-    if len(x) < 2:
-        raise ValueError(f"At least 2 points are needed to compute area under curve, but x.shape = ({len(x)},)")
+    if xa.size < 2:
+        raise ValueError(f"At least 2 points are needed to compute area under curve, but x.shape = ({xa.size},)")
+    try:
+        return float(_binding(None).x_metrics_auc_xy(addr_ro(xa, name="x"), addr_ro(ya, name="y"), xa.size))
+    except Exception as exc:
+        if "non-monotonic" in str(exc):
+            raise ValueError(f"x is neither increasing nor decreasing : {xa.tolist()}.") from None
+        if "Python way" not in str(exc):
+            raise
+    x, y = xa.tolist(), ya.tolist()
     dx = [x[i] - x[i - 1] for i in range(1, len(x))]
     direction = 1
     if any(d < 0 for d in dx):
@@ -1941,6 +2025,14 @@ def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flag
     w = _weights(sample_weight, n, caller)
     index = {c: i for i, c in enumerate(classes)}
     codes = _label_map(true, lambda v: index[v])
+    if _py2mojo(numeric_mode):
+        # lane apple-fast-py2mojo-core: the class-major flags formed by the
+        # onehot unit inside the curve program, the support by the binding's
+        # class_sums (the same counts, binary64 in row order); no n*k host walk
+        codes = _i32_c(codes)
+        curves = _curves(s, _OneHot(codes, n, k, 0), w, n, k, numeric_mode, stride=k, thresholds=False,
+                         keep_flags=keep_flags, lazy=True, compact=True, fold=fold)
+        return curves, _class_sums(codes, w, k, numeric_mode), s, codes, classes, w
     # the codes' low bytes straight from the int32 words (lane
     # metrics-apple3); a Python list only where one is walked
     direct = _LITTLE and k <= 256 and isinstance(codes, Array) and codes.dtype == "<i4"
@@ -1986,30 +2078,21 @@ _LITTLE = array.array("i", [1]).tobytes()[0] == 1
 
 def _rows_sum_to_one(s, k, numeric_mode=None):
     """No row's correctly rounded sum is farther than 1e-8 + 1e-5 from 1
-    (scikit-learn's check; the scores are finite float32). Each row's
-    `math.fsum` is `_fsum`'s value (finite float32 terms never overflow
-    binary64; a zero sum only differs in its sign, which |s - 1| drops),
-    the rows iterated in C; |fl(s - 1)| is monotone on either side of 1,
-    so the largest and smallest sums decide every row (lane metrics-apple)."""
-    from ._buffer import hotpath_enabled
+    (scikit-learn's check; the scores are finite float32): the row fsums in
+    the binding (x_metrics/epilogue.mojo row_sum_range; lane metrics-apple2),
+    whose largest and smallest decide every row since |fl(s - 1)| is monotone
+    on either side of 1. The Python fallback is gone (lane
+    apple-fast-py2mojo-core: every install's x_metrics binding carries
+    `x_metrics_row_sum_range`)."""
     n = s.size // k if k else 0
-    fn = _optional_metrics_entry(_binding(numeric_mode), "x_metrics_row_sum_range") if hotpath_enabled() else None
-    if fn is not None and n > 0 and s.dtype == "<f4" and s._has_order("C"):
-        # the same row fsums, in the binding (x_metrics/epilogue.mojo
-        # row_sum_range; lane metrics-apple2)
-        out = array.array("d", [0.0, 0.0])
-        fn(addr_ro(s, name="y_score"), n, k, out.buffer_info()[0])
-        tol = 1e-8 + 1e-5
-        return not (abs(out[0] - 1) > tol or abs(out[1] - 1) > tol)
-    flat = array.array("f")
-    flat.frombytes(s.tobytes())
-    if not _LITTLE:
-        flat.byteswap()
-    if not len(flat):
+    if n <= 0:
         return True
-    sums = list(map(_math.fsum, zip(*[flat[c::k] for c in range(k)])))
+    if not (s.dtype == "<f4" and s._has_order("C")):
+        s = as_f32_c(s, ndim=s.ndim, name="y_score")[0]
+    out = array.array("d", [0.0, 0.0])
+    _binding(numeric_mode).x_metrics_row_sum_range(addr_ro(s, name="y_score"), n, k, out.buffer_info()[0])
     tol = 1e-8 + 1e-5
-    return not (abs(max(sums) - 1) > tol or abs(min(sums) - 1) > tol)
+    return not (abs(out[0] - 1) > tol or abs(out[1] - 1) > tol)
 
 
 def _average_scores(scores, support, average):
@@ -2021,7 +2104,7 @@ def _average_scores(scores, support, average):
     return float(_fsum(scores) / len(scores))
 
 
-def _micro_inputs(codes, w, n, k):
+def _micro_inputs(codes, w, n, k, numeric_mode=None):
     """The micro average's row-major one-hot flags ('<i4', n * k) and its
     weights (each of the n repeated k times, or None): word r * k + c is 1
     exactly when row r's code is c, and weight word r * k + c is w[r],
@@ -2029,7 +2112,22 @@ def _micro_inputs(codes, w, n, k):
     per class, each byte lane of the little-endian Int32 codes is mapped
     to 0/1 by `bytes.translate` and the lanes are ANDed as one integer,
     so no Python step runs per row (cpu-gpu-cleanup c-metrics-prep; lane
-    metrics-apple3's byte layout, now for every k)."""
+    metrics-apple3's byte layout, now for every k).
+
+    lane apple-fast-py2mojo-core: with `numeric_mode`'s binding forming the
+    layouts (`_py2mojo`), the flags are an `_OneHot` (row-major) and the
+    weights a `_RepRows`, both formed by stages of the curve program."""
+    if _py2mojo(numeric_mode):
+        codes = _i32_c(codes)
+        if codes.size != n:
+            raise ValueError("mojolearn metrics: micro-average codes do not match the scores")
+        wm = None
+        if w is not None:
+            wa = w if isinstance(w, Array) and w.dtype == "<f4" else as_f32_c(w, ndim=1, name="sample_weight")[0]
+            if wa.size != n:
+                raise ValueError("mojolearn metrics: micro-average weights do not match the scores")
+            wm = _RepRows(wa, n, k)
+        return _OneHot(codes, n, k, 1), wm
     if not isinstance(codes, Array) or codes.dtype != "<i4":
         codes = Array.from_list(list(codes.tolist() if isinstance(codes, Array) else codes), "<i4")
     if codes.size != n:
@@ -2169,7 +2267,7 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
                                                      numeric_mode, fold="auc")
         if average == "micro":
             n = len(codes)
-            flags, wm = _micro_inputs(codes, w, n, k)
+            flags, wm = _micro_inputs(codes, w, n, k, numeric_mode)
             cur = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, fold="auc")[0]
             return _auc_of(cur, None)
         scores = [_auc_of(c, None) for c in curves]
@@ -2214,7 +2312,7 @@ def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sa
     k = len(classes)
     if average == "micro":
         n = len(codes)
-        flags, wm = _micro_inputs(codes, w, n, k)
+        flags, wm = _micro_inputs(codes, w, n, k, numeric_mode)
         return _ap_of(_curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, fold="ap")[0])
     return _average_scores([_ap_of(c) for c in curves], support, average)
 
@@ -2251,17 +2349,27 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
     index = {c: i for i, c in enumerate(classes)}
     codes = _label_map(true, lambda v: index[v])
     prog = _Prog()
+    p2m = binary and _py2mojo(numeric_mode)
     if binary:
         flat = s.reshape((n,)) if s.ndim == 2 else s
         if k == 1:
             thr = 0.5 if flat.min() >= 0 and flat.max() <= 1 else 0.0
             # two score columns [thr, s] make "s > thr" a top-1 hit of class 1
             # with the tie going to class 0 (scikit-learn: y_pred = s > thr)
-            two = Array.from_list([v for x in flat.tolist() for v in (thr, x)], "<f4")
-            S = prog.put(two)
+            if p2m:
+                # lane apple-fast-py2mojo-core: the columns laid out by the
+                # pair_cols unit (thr's bits, then s bit for bit)
+                import struct
+                S1 = prog.put(flat)
+                S = prog.scratch(2 * n)
+                prog.stage("pair_cols", n, S1, S, struct.unpack("<i", struct.pack("<f", thr))[0])
+            else:
+                two = Array.from_list([v for x in flat.tolist() for v in (thr, x)], "<f4")
+                S = prog.put(two)
             kk, cols = 1, 2
         else:
-            S = prog.put(Array.from_list([0.0] * (2 * n), "<f4"))
+            # zero words: a scratch slot starts zero on every backend
+            S = prog.scratch(2 * n) if p2m else prog.put(Array.from_list([0.0] * (2 * n), "<f4"))
             kk, cols = 2, 2
     else:
         S = prog.put(s)
@@ -2362,18 +2470,10 @@ def _class_sums_native(codes, w, k, numeric_mode):
 
 
 def _class_weights(codes, w, k, numeric_mode=None):
-    """Per-class (weighted) counts and the total, binary64 in row order."""
-    per = _class_sums_native(codes, w, k, numeric_mode)
-    if per is not None:
-        return per, _fsum(per)
-    cl = codes.tolist()
-    per = [0.0] * k
-    if w is None:
-        for c in cl:
-            per[c] += 1
-    else:
-        for c, x in zip(cl, w.tolist()):
-            per[c] += x
+    """Per-class (weighted) counts and the total, binary64 in row order, from
+    the binding's class_sums (the Python fallback is gone, lane
+    apple-fast-py2mojo-core)."""
+    per = _class_sums(codes, w, k, numeric_mode)
     return per, _fsum(per)
 
 
@@ -2533,23 +2633,18 @@ def ndcg_score(y_true, y_score, *, k=None, sample_weight=None, ignore_ties=False
     prog.want(gain, n)
     prog.want(ideal, n)
     _execute(prog, numeric_mode)
-    fn = _epilogue("x_metrics_ndcg_mean", numeric_mode)
+    # x_metrics/epilogue.mojo ndcg_mean (lane py-misc-metrics): the ratios,
+    # products and fsums over the arena words; the Python fallback is gone
+    # (lane apple-fast-py2mojo-core: every install's binding carries it, and
+    # its refusals, a zero weight total or a non-finite term, cannot occur
+    # for validated weights and flushed Float32 gains)
     waddr, keep = _f32_weights_addr(w)
-    if fn is not None and waddr is not None:
-        # x_metrics/epilogue.mojo ndcg_mean (lane py-misc-metrics): the same
-        # ratios, products and fsums over the arena words
-        prog._check(gain, n)
-        prog._check(ideal, n)
-        try:
-            return float(fn(prog.arena.buffer_info()[0], gain, ideal, n, waddr))
-        except Exception:
-            pass
-    g, i = prog.floats(gain, n), prog.floats(ideal, n)
-    per = [a / b if b != 0 else 0.0 for a, b in zip(g, i)]
-    if w is None:
-        return float(_fsum(per) / n)
-    wl = w.tolist()
-    return float(_fsum([a * b for a, b in zip(per, wl)]) / _fsum(wl))
+    if waddr is None:
+        keep = as_f32_c(w, ndim=1, name="sample_weight")[0]
+        waddr = addr_ro(keep, name="sample_weight")
+    prog._check(gain, n)
+    prog._check(ideal, n)
+    return float(_binding(numeric_mode).x_metrics_ndcg_mean(prog.arena.buffer_info()[0], gain, ideal, n, waddr))
 
 
 def _label_ranking(kind, y_true, y_score, sample_weight, numeric_mode, caller):
@@ -2731,62 +2826,15 @@ def _expected_mi(a_counts, b_counts, n, numeric_mode=None):
     of large log-gamma values, portable binary64 log / exp only."""
     if len(a_counts) == 1 or len(b_counts) == 1:
         return 0.0
-    # the same walks and terms in the binding's host binary64, the log the
-    # C of mojolearn._portable_math.log (x_metrics/epilogue.mojo
-    # expected_mi; lane metrics-apple2)
-    from ._buffer import hotpath_enabled
-    fn = _optional_metrics_entry(_binding(numeric_mode), "x_metrics_expected_mi") if hotpath_enabled() else None
-    if fn is not None and 0 < n < (1 << 31):
-        A = array.array("q", a_counts)
-        B = array.array("q", b_counts)
-        try:
-            return float(fn(A.buffer_info()[0], len(A), B.buffer_info()[0], len(B), n))
-        except Exception:
-            pass
-    # Each walk away from the mode stops at the first u that is exactly 0:
-    # every later u is that 0 times a finite ratio, so it adds nothing to z
-    # (an exact sum) and its term is skipped as pr == 0 (the same bits as
-    # walking the whole support; lane metrics-apple).
-    emi_terms = []
-    logs = {}
-
-    def plog(v):
-        r = logs.get(v)
-        if r is None:
-            r = logs[v] = pmath.log(v)
-        return r
-    for a in a_counts:
-        la = plog(a)
-        for b in b_counts:
-            lb = plog(b)
-            lo, hi = max(0, a + b - n), min(a, b)
-            mode = min(max((a + 1) * (b + 1) // (n + 2), lo), hi)
-            up = [1.0]
-            x, v = mode, 1.0
-            while x < hi:
-                v = v * ((a - x) * (b - x)) / ((x + 1) * (n - a - b + x + 1))
-                if v == 0:
-                    break
-                up.append(v)
-                x += 1
-            down = []
-            x, v = mode, 1.0
-            while x > lo:
-                v = v * (x * (n - a - b + x)) / ((a - x + 1) * (b - x + 1))
-                if v == 0:
-                    break
-                down.append(v)
-                x -= 1
-            z = _fsum(up + down)
-            first = mode - len(down)
-            for nij, u in zip(range(first, mode + len(up)), down[::-1] + up):
-                if nij < 1:
-                    continue
-                pr = u / z
-                if pr == 0:
-                    continue
-                emi_terms.append((nij / n) * (plog(n * nij) - la - lb) * pr)
-    return _fsum(emi_terms)
+    # the walks and terms in the binding's host binary64, the log the C of
+    # mojolearn._portable_math.log (x_metrics/epilogue.mojo expected_mi; lane
+    # metrics-apple2). The Python walk is gone (lane apple-fast-py2mojo-core):
+    # every install's binding carries it, and its refusals (n outside
+    # [1, 2**31), a non-finite term) cannot occur for a clustering's counts.
+    A = array.array("q", a_counts)
+    B = array.array("q", b_counts)
+    return float(_binding(numeric_mode).x_metrics_expected_mi(A.buffer_info()[0], len(A), B.buffer_info()[0],
+                                                              len(B), n))
 
 
 def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arithmetic", numeric_mode=None):
