@@ -663,13 +663,13 @@ struct BpeMem(Defaultable, Movable):
         self.b64.append(ctx.enqueue_create_buffer[DType.int64](m))
         return _Slot(len(self.b64) - 1, 0, m)
 
-    def p8(self, s: _Slot) -> U8P:
+    def p8(mut self, s: _Slot) -> U8P:
         return self.b8[s.idx].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + s.off
 
-    def p32(self, s: _Slot) -> I32P:
+    def p32(mut self, s: _Slot) -> I32P:
         return self.b32[s.idx].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + s.off
 
-    def p64(self, s: _Slot) -> I64P:
+    def p64(mut self, s: _Slot) -> I64P:
         return self.b64[s.idx].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + s.off
 
     def up8(self, ctx: DeviceContext, s: _Slot, src_addr: Int, count: Int) raises:
