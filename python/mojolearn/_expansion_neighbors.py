@@ -1650,6 +1650,21 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         # (indptr, indices, n)) walks its edge lists directly: the same rounds
         # and labels as the dense matrix's, without building or scanning it
         indptr, indices, n = csr
+        if _cc_fast_tier(est):
+            # lane/apple-fast-graph (2026-10-02), FAST on Apple only: the
+            # identity start labels straight from the range (no per-item
+            # walk), two info words. Under `-D MOJOLEARN_CC_FAST` the device
+            # compacts the labels itself in order of first appearance (the
+            # integers `_cc_relabel` builds) and puts n_components + 1 in
+            # info[1]; info[1] == 0 means the binding's main path ran and
+            # `lab` is the min-label fixed point for `_cc_relabel`.
+            lab = Array._from_flat(range(n), (n,), "<i4")
+            info = empty((2,), "<i4")
+            est._op("cc_iterate_csr", [(indptr, 0), (indices, 0), (lab, 1), (info, 1)], (n, indices.shape[0]))
+            k1 = int(info.tolist()[1])
+            if k1 > 0:
+                return (k1 - 1, lab) if return_labels else k1 - 1
+            return _cc_relabel(lab, return_labels)
         lab = _i32(list(range(n)), "labels")
         info = empty((1,), "<i4")
         est._op("cc_iterate_csr", [(indptr, 0), (indices, 0), (lab, 1), (info, 1)], (n, indices.shape[0]))
@@ -1661,6 +1676,14 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     info = empty((1,), "<i4")
     est._op("cc_iterate", [(A, 0), (lab, 1), (info, 1)], (n,))
     return _cc_relabel(lab, return_labels)
+
+
+def _cc_fast_tier(est):
+    """True on the FAST tier on Apple (lane/apple-fast-graph): the x_neighbors
+    binding may compact connected_components' labels on the device
+    (`-D MOJOLEARN_CC_FAST`). IDENTICAL and the other vendors never come
+    through the branch this gates."""
+    return est.numeric_mode_used() == "fast" and est.vendor_used() == "metal"
 
 
 def _cc_relabel(lab, return_labels):
