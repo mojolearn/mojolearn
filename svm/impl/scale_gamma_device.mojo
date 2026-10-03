@@ -37,7 +37,9 @@ comptime _U32P = MutPointer[UInt32, MutAnyOrigin]
 comptime _I64P = MutPointer[Int64, MutAnyOrigin]
 
 
-def sg_partial_kernel(x: _U32P, count: Int, nb: Int, part: _I64P):
+def sg_partial_kernel(x: _U32P, count_in: Int64, nb_in: Int32, part: _I64P):
+    var count = Int(count_in)
+    var nb = Int(nb_in)
     var tid = Int(thread_idx.x)
     var blk = Int(block_idx.x)
     var acc = sg_zero()
@@ -53,7 +55,7 @@ def sg_partial_kernel(x: _U32P, count: Int, nb: Int, part: _I64P):
         i += stride
     sg_normalize(acc)
     var s = stack_allocation[SG_TPB, Scalar[DType.int64], address_space = AddressSpace.SHARED]()
-    for slot in range(SG_SLOTS):
+    comptime for slot in range(SG_SLOTS):
         s[tid] = acc[slot]
         barrier()
         var step = SG_TPB // 2
@@ -67,8 +69,9 @@ def sg_partial_kernel(x: _U32P, count: Int, nb: Int, part: _I64P):
         barrier()
 
 
-def sg_finish_kernel(part: _I64P, nb: Int, dst: _I64P):
+def sg_finish_kernel(part: _I64P, nb_in: Int32, dst: _I64P):
     """Block `slot` folds that slot's `nb` partials."""
+    var nb = Int(nb_in)
     var tid = Int(thread_idx.x)
     var slot = Int(block_idx.x)
     var v = Int64(0)
@@ -109,10 +112,10 @@ def scale_gamma_limbs_device(ctx: DeviceContext, x_addr: Int, count: Int, dst_ad
     var d_part = ctx.enqueue_create_buffer[DType.int64](nb * SG_SLOTS)
     var d_out = ctx.enqueue_create_buffer[DType.int64](SG_SLOTS)
     ctx.enqueue_function[sg_partial_kernel](
-        d_x.unsafe_ptr(), count, nb, d_part.unsafe_ptr(), grid_dim=nb, block_dim=SG_TPB,
+        d_x.unsafe_ptr(), Int64(count), Int32(nb), d_part.unsafe_ptr(), grid_dim=nb, block_dim=SG_TPB,
     )
     ctx.enqueue_function[sg_finish_kernel](
-        d_part.unsafe_ptr(), nb, d_out.unsafe_ptr(), grid_dim=SG_SLOTS, block_dim=SG_TPB,
+        d_part.unsafe_ptr(), Int32(nb), d_out.unsafe_ptr(), grid_dim=SG_SLOTS, block_dim=SG_TPB,
     )
     ctx.enqueue_copy(dst_ptr=dst, src_buf=d_out)
     ctx.synchronize()

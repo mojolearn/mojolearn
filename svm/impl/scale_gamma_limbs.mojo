@@ -40,18 +40,19 @@ comptime _M32 = UInt64(0xFFFFFFFF)
 
 
 @always_inline
-def _put(mut acc: SG_ACC, base: Int, t: Int, v: UInt64, neg: Bool):
-    """Adds `v * 2^t` (v < 2^24) to the limbs at `base`."""
+def _put[base: Int, n: Int](mut acc: SG_ACC, t: Int, v: UInt64, neg: Bool):
+    """Adds `v * 2^t` (v < 2^24) to the `n` limbs at `base`. Every index is
+    a compile-time constant (a select per limb), so the limbs stay in
+    registers on every GPU."""
     var q = t >> 5
     var w = v << UInt64(t & 31)
     var lo = Int64(w & _M32)
     var hi = Int64(w >> 32)
     if neg:
-        acc[base + q] -= lo
-        acc[base + q + 1] -= hi
-    else:
-        acc[base + q] += lo
-        acc[base + q + 1] += hi
+        lo = -lo
+        hi = -hi
+    comptime for k in range(n):
+        acc[base + k] += (lo if q == k else Int64(0)) + (hi if q + 1 == k else Int64(0))
 
 
 @always_inline
@@ -59,28 +60,28 @@ def sg_add_cell(mut acc: SG_ACC, bits: UInt32):
     """One float32 cell, given as its bit pattern."""
     var e = Int((bits >> 23) & 0xFF)
     if e == 255:
-        acc[SG_BAD] += 1
+        acc[SG_BAD] += Int64(1)
         return
     var frac = UInt64(bits & 0x7FFFFF)
     var m = frac | (UInt64(1 << 23) if e > 0 else UInt64(0))
     if m == 0:
         return
     var s = e - 1 if e > 0 else 0
-    _put(acc, 0, s, m, (bits >> 31) != 0)
+    _put[0, SG_L1](acc, s, m, (bits >> 31) != 0)
     var m2 = m * m
-    _put(acc, SG_L1, 2 * s, m2 & 0xFFFFFF, False)
-    _put(acc, SG_L1, 2 * s + 24, m2 >> 24, False)
+    _put[SG_L1, SG_L2](acc, 2 * s, m2 & 0xFFFFFF, False)
+    _put[SG_L1, SG_L2](acc, 2 * s + 24, m2 >> 24, False)
 
 
 @always_inline
 def sg_normalize(mut acc: SG_ACC):
     """Carries every limb but each sum's top one into [0, 2^32); the value
     the limbs spell does not change."""
-    for i in range(SG_L1 - 1):
+    comptime for i in range(SG_L1 - 1):
         var c = acc[i] >> 32
         acc[i] -= c << 32
         acc[i + 1] += c
-    for i in range(SG_L1, SG_LIMBS - 1):
+    comptime for i in range(SG_L1, SG_LIMBS - 1):
         var c = acc[i] >> 32
         acc[i] -= c << 32
         acc[i + 1] += c
