@@ -103,10 +103,11 @@ class MoEBlock:
         b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
         ip = [T, self.D, self.F, self.E, self.k, int(self.norm_topk_prob)]
         if hasattr(b, "moe_weights_put"):
-            for name, shape in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),
-                                ("down_proj", (self.E, self.D, self.F))):
-                if getattr(self, name).shape != shape:
-                    raise ValueError(f"MoEBlock: {name} has shape {getattr(self, name).shape}, expected {shape}")
+            # `want`, not `shape`: `shape` holds x's shape for the final reshape
+            for name, want in (("router", (self.E, self.D)), ("gate_up_proj", (self.E, 2 * self.F, self.D)),
+                               ("down_proj", (self.E, self.D, self.F))):
+                if getattr(self, name).shape != want:
+                    raise ValueError(f"MoEBlock: {name} has shape {getattr(self, name).shape}, expected {want}")
             h = self._weights_handle(b)
             b.moe_forward([X.ctypes.data, X.ctypes.data, X.ctypes.data, X.ctypes.data, y.ctypes.data,
                            logits.ctypes.data, sel.ctypes.data, w.ctypes.data], ip + [h])
