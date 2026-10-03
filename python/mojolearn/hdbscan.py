@@ -498,7 +498,7 @@ def membership_vector(clusterer, points_to_predict, batch_size=4096):
     ext = clusterer._extension()
     q_addr = addr_ro(q, name="points_to_predict")
     o_addr = addr(out, name="membership_vectors")
-    for s in range(0, nq, batch_size):
+    for s in range(0, nq, batch_size):  # glue: one Mojo call per user batch
         cnt = min(batch_size, nq - s)
         ext.hdbscan_membership_vector(
             # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_membership_vector_binding.
@@ -539,7 +539,7 @@ def all_points_membership_vectors(clusterer, batch_size=4096):
     tree = _soft_tree_addrs(pd)
     ext = clusterer._extension()
     o_addr = addr(out, name="membership_vectors")
-    for s in range(0, m, batch_size):
+    for s in range(0, m, batch_size):  # glue: one Mojo call per user batch
         cnt = min(batch_size, m - s)
         ext.hdbscan_all_points_membership_vectors(
             # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_all_points_membership_vectors_binding.
