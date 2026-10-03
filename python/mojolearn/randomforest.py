@@ -496,7 +496,9 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
         # (ensemble/device_finite.mojo), so this one-thread host scan of
         # every cell is not repeated; its refusal is raised as the same
         # ValueError below.
-        scan = getattr(self._bind("_mojolearn_rf"), "rf_device_finite_scan", None)
+        from ._backend import entry_or_none
+
+        scan = entry_or_none(self._bind("_mojolearn_rf"), "rf_device_finite_scan")
         device_scan = scan is not None and int(scan()) == 1
         if not device_scan and not all_finite(Xf):
             raise ValueError(_NONFINITE_REFUSAL)

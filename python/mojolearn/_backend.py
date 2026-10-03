@@ -1514,20 +1514,34 @@ _HOST_PY_ENTRIES = {
 }
 
 
-class NoCpuEntry(ImportError, AttributeError):
+class NoCpuEntry(ImportError):
     """The by-name refusal of an entry a built host binding does not export.
 
     It is an ImportError, so every `except ImportError` refusal reads as
-    before, AND an AttributeError, so a PROBE is not a use:
-    `getattr(b, name, None)` answers None and `hasattr` answers False, and the
-    caller takes the route its own comment names for a binary without that
-    entry (the host column's route). Until 2026-10-03 a probe of a device-only
-    entry (`rf_device_finite_scan`, `trees_device_finite_scan`,
-    `iforest_device_scan`, `ridge_resident_default`, `x_trees_dart_open`)
-    raised here and took the whole CPU fit down (refcol host smoke at
-    811275d5b); `_mamba_impl._exports` and `_transformer_impl._exports` had
-    each worked around the same trap by hand. Calling the entry still raises
-    BY NAME, so a fit with no CPU implementation is still a refusal."""
+    before. It CANNOT also be an AttributeError: since Python 3.10 both carry
+    their own C fields (ImportError name/path, AttributeError name/obj), and
+    a class with both bases raises `TypeError: multiple bases have instance
+    lay-out conflict` at definition, which took `import mojolearn` down
+    everywhere (82f310d8f..e143451b0). A PROBE of an entry that may be absent
+    goes through `entry_or_none(b, name)`, which answers None for this
+    refusal, so a probe is not a use: the caller takes the route its own
+    comment names for a binary without that entry (the host column's route).
+    Calling the entry still raises BY NAME, so a fit with no CPU
+    implementation is still a refusal."""
+
+
+def entry_or_none(binding, name):
+    """`getattr(binding, name, None)`, also answering None when a CPU-only
+    install's `_HostBinding` refuses the entry by name (`NoCpuEntry`).
+    Probes of device-only entries (`rf_device_finite_scan`,
+    `trees_device_finite_scan`, `iforest_device_scan`,
+    `ridge_resident_default`, `x_trees_dart_open`) use it; until 2026-10-03 a
+    plain `getattr` probe raised and took the whole CPU fit down (refcol host
+    smoke at 811275d5b)."""
+    try:
+        return getattr(binding, name, None)
+    except NoCpuEntry:
+        return None
 
 
 class _HostBinding(type(sys)):

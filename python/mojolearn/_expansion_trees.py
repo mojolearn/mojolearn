@@ -1539,7 +1539,9 @@ class _DARTBase(_TreesEnsembleBase):
     _DART_VALUES_CAP = 1 << 26
 
     def _dart_device(self, b, session, K):
-        if session is None or not callable(getattr(b, "x_trees_dart_open", None)):
+        from . import _backend
+
+        if session is None or not callable(_backend.entry_or_none(b, "x_trees_dart_open")):
             return False
         node_cap = 2 * int(self.num_leaves) - 1
         return 1 <= node_cap <= 65535 and int(self.n_estimators) * K * node_cap <= self._DART_VALUES_CAP

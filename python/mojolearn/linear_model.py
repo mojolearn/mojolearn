@@ -808,8 +808,8 @@ class Ridge(NumericModeMixin):
             "mojolearn Ridge X and y lengths differ",
         )
         b = self._bind("_mojolearn_estimators")
-        q = getattr(b, "ridge_resident_default", None)
-        resident = getattr(b, "ridge_fit_resident", None)
+        q = _backend.entry_or_none(b, "ridge_resident_default")
+        resident = _backend.entry_or_none(b, "ridge_fit_resident")
         use_resident = q is not None and resident is not None and bool(q())
         if use_resident:
             # lane apple-fast-ridgespeed: FAST Apple builds (default unless

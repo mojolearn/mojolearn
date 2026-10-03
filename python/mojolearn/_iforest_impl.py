@@ -404,8 +404,10 @@ class IsolationForest(NumericModeMixin):
         # refusal twice: `iforest_device_scan` (lane gap-trees-nv,
         # IF_DEVICE_TRANSPOSE) or `iforest_device_finite_scan` (lane
         # apple-fast-trees2, IF_FAST_ROWMAJOR, FAST on Apple).
+        from ._backend import entry_or_none as _entry_or_none
+
         b = self._bind("_mojolearn_svm")
-        scans = [getattr(b, n, None) for n in ("iforest_device_scan", "iforest_device_finite_scan")]  # glue: looks up two binding entries
+        scans = [_entry_or_none(b, n) for n in ("iforest_device_scan", "iforest_device_finite_scan")]  # glue: looks up two binding entries
         device_scan = any(f is not None and int(f()) == 1 for f in scans)  # glue: checks two binding entries
         if not device_scan and not all_finite(x):
             # was a bare Exception from the native fit; scikit-learn raises
