@@ -205,12 +205,20 @@ _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 #: per-row `pcs`, LabelSpreading's per-cell-degree `ls_laplacian`, PageRank's
 #: dangling rows in Python).
 _OLD_ITEMS = os.environ.get("MOJOLEARN_XN_OLD_ITEMS", "") == "1"
-#: lane/apple-fast-neighbors2 (2026-10-02), FAST tier only, both default off:
+#: lane/apple-fast-neighbors2 (2026-10-02), FAST tier only, default off:
 #: the rbf kernel matrix from staged tiles (`kernel_tiled`; OneClassSVM's
-#: Gram), and LabelPropagation / LabelSpreading's kNN-graph loop as one
-#: resident op (`lp_iterate_knn`) instead of three binding calls per step.
+#: Gram). LabelPropagation / LabelSpreading's kNN-graph loop as one resident
+#: op (`lp_iterate_knn`) is the FAST + Apple default, read back from the
+#: binding (`_lp_fast_resident`, no env read).
 _FAST_TILED_RBF = os.environ.get("MOJOLEARN_XN_FAST_TILED_RBF", "") == "1"
-_LP_FAST_RESIDENT = os.environ.get("MOJOLEARN_LP_FAST_RESIDENT", "") == "1"
+
+
+def _lp_fast_resident(est):
+    """Whether the bound binary takes the resident kNN-graph loop
+    (x_neighbors/iter_device.mojo LP_FAST_RESIDENT: FAST + Apple, off with
+    `-D MOJOLEARN_LP_FAST_RESIDENT_OFF`). 0 on IDENTICAL and the host column."""
+    fn = getattr(est._bind(), "x_neighbors_lp_fast_resident", None)
+    return fn is not None and int(fn()) != 0
 
 
 class _XNeighbors(NumericModeMixin):
@@ -619,8 +627,9 @@ class OneClassSVM(_XNeighbors):
 
     Reference: scikit-learn `svm/_classes.py` (OneClassSVM) over libsvm
     `svm.cpp` (`solve_one_class`, `Solver::Solve` with WSS3 working-set
-    selection, `calculate_rho`). The dual is solved in ONE sequential Mojo
-    item (x_neighbors/items.mojo `ocsvm_smo_item`) over the kernel matrix,
+    selection, `calculate_rho`). On the GPU each SMO iteration is three grid
+    launches (x_neighbors/ocsvm_dev.mojo); the host column runs the same
+    order as one item (x_neighbors/items.mojo `ocsvm_smo_item`) over the kernel matrix,
     in float32 with the pinned spellings (DEVIATION 5200; libsvm is double).
     `shrinking` and `cache_size` are accepted and change nothing (no
     shrinking, the whole kernel matrix is formed). max_iter=-1 caps at
@@ -1291,7 +1300,7 @@ class _LabelPropagationBase(_XNeighbors):
             self._op("lp_clamp", [(ld, 0), (ld, 0), (unlabeled, 0), (ystatic, 1)], (n, C))
         else:
             ystatic = Array.from_list(ys, "<f4")
-        if _LP_FAST_RESIDENT and isinstance(G, tuple) and self._fast_tier():
+        if isinstance(G, tuple) and self._fast_tier() and _lp_fast_resident(self):
             # lane/apple-fast-neighbors2: the loop below over the compact kNN
             # graph as ONE resident op (x_neighbors/iter_device.mojo
             # op_lp_iterate_knn), the graph uploaded once, the stopping sum
@@ -1786,48 +1795,23 @@ class SVGP(_XNeighbors):
             M = min(int(self.n_inducing), n)
             Z = self._take_rows(X, [i * n // M for i in range(M)])
         M = Z.shape[0]
-        Kuu = self._k(Z, Z)
-        if _OLD_ITEMS:
-            Kfu = self._k(X, Z)
-            Kuf = self._k(Z, X)
-            B = self._matmul(Kuf, Kfu)
-            b = self._matmul(Kuf, yv.reshape((n, 1)))
-        else:
-            # the fused chain (lane/py-dn-kern): Kfu per row tile on the
-            # device, B = Kuf Kfu and b = Kuf y folded across the tiles, only
-            # B and b downloaded (`xn_svgp_stats`). Kuf is Kfu^T bit for bit
-            # (the rbf item squares a difference; IEEE subtraction is
-            # antisymmetric), so it is never formed.
-            B = _empty_out((M, M), "<f4")
-            b = _empty_out((M,), "<f4")
-            self._op("svgp_stats", [(X, 0), (Z, 0), (yv, 0), (B, 1), (b, 1)], (n, M, d),
-                     (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance)))
+        # one resident device chain (lane/cgr-kernel, `xn_svgp_fit_ff`):
+        # Kuu, then B = Kuf Kfu and b = Kuf y in float-float per Kfu row tile
+        # (Kuf is Kfu^T bit for bit, never formed), then the float-float
+        # solve (x_neighbors/svgp_ff.mojo). Taxi's Sigma (eigenvalues 1e-6 ..
+        # 9e5) defeats float32: B's float32 accumulation error alone exceeds
+        # its smallest eigenvalue. Kuu, B and b never leave the device.
         alpha = _empty_out((M,), "<f4")
         C = _empty_out((M, M), "<f4")
         qmu = _empty_out((M,), "<f4")
         qsqrt = _empty_out((M, M), "<f4")
         info = _empty_out((2,), "<f4")
-        # FAST on Apple with `-D MOJOLEARN_SVGP_FAST_GPU=1` (lane/apple-fast-neighbors2):
-        # the binding's `svgp` driver runs x_neighbors/svgp_fast.mojo instead
-        # (gen.py FAST_ALT); no switch here
-        self._op("svgp", [(Kuu, 0), (B, 0), (b, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
-                 (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
+        self._op("svgp_fit_ff", [(X, 0), (Z, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
+                 (n, M, d),
+                 (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance),
+                  _f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
         elbo, ok = info.tolist()
-        self.precision_ = "float32"
-        if ok == 0 and os.environ.get("MOJOLEARN_SVGP_FF", "1") != "0":
-            # lane/neural-pass106 (best accuracy, Andrew's standing order): the
-            # statistics and the solve in float-float (x_neighbors/svgp_ff.mojo).
-            # Taxi's Sigma (eigenvalues 1e-6 .. 9e5) defeats float32: B's
-            # float32 accumulation error alone exceeds its smallest eigenvalue.
-            bh, bl = _empty_out((M, M), "<f4"), _empty_out((M, M), "<f4")
-            bvh, bvl = _empty_out((M,), "<f4"), _empty_out((M,), "<f4")
-            self._op("svgp_stats_ff", [(X, 0), (Z, 0), (yv, 0), (bh, 1), (bl, 1), (bvh, 1), (bvl, 1)], (n, M, d),
-                     (_f32_scalar(self._gamma_value()), _f32_scalar(self.kernel_variance)))
-            self._op("svgp_ff", [(Kuu, 0), (bh, 0), (bl, 0), (bvh, 0), (bvl, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1),
-                                 (qsqrt, 1), (info, 1)],
-                     (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
-            elbo, ok = info.tolist()
-            self.precision_ = "float-float"
+        self.precision_ = "float-float"
         if ok == 0:
             raise ValueError("SVGP: the inducing system is not positive definite; raise jitter or noise_variance")
         self.Z_, self._alpha, self._C = Z, alpha, C

@@ -51,7 +51,7 @@ _BINDING = "_mojolearn_x_metrics"
 
 #: op name -> id; x_metrics/units.mojo `run_unit` holds the same table.
 _OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8, row_centroid_dist=9, permute=10,
-            fold_rows=36, rows64=41, strat_codes=45)
+            fold_rows=36, rows64=41, strat_codes=45, curve_fold=46)
 _PARAMS = 14
 _NONE = -1
 
@@ -1505,44 +1505,27 @@ def _f32_weights_addr(w):
     return None, None
 
 
-def _f64_bits(x):
-    import struct
-    return struct.unpack("<q", struct.pack("<d", float(x)))[0]
-
-
 def _auc_of(cur, max_fpr):
-    """`_binary_auc` of a `_DevCurve`: the binding's host epilogue
-    (x_metrics/epilogue.mojo binary_auc, the same binary64 operations)
-    when both classes are present, else (or on any doubt) the Python."""
-    fn = cur.native("x_metrics_curve_auc")
-    if fn is not None:
-        F, T = cur.last()
-        if F > 0 and T > 0:
-            try:
-                return float(fn(cur.addr(), cur.fps, cur.tps, cur.keep, cur.c,
-                                _f64_bits(-1.0 if max_fpr is None else max_fpr)))
-            except Exception:
-                pass
+    """`_binary_auc` of a curve
+    when both classes are present, else (or on any doubt) the Python.
+    A `_FoldCurve` (the device fold, lane cgr2-metrics-shap) scores itself."""
+    if isinstance(cur, _FoldCurve):
+        return cur.auc(max_fpr)
     L = cur.lists()
     return _binary_auc(L[0], L[1], max_fpr, L.keep)
 
 
 def _ap_of(cur):
-    """`_binary_ap` of a `_DevCurve` (x_metrics/epilogue.mojo binary_ap)."""
-    fn = cur.native("x_metrics_curve_ap")
-    if fn is not None:
-        _, T = cur.last()
-        if T != 0:
-            try:
-                return float(fn(cur.addr(), cur.fps, cur.tps, cur.c))
-            except Exception:
-                pass
+    """`_binary_ap` of a curve: a `_FoldCurve` (the device fold, lane
+    cgr2-metrics-shap) scores itself."""
+    if isinstance(cur, _FoldCurve):
+        return cur.ap()
     L = cur.lists()
     return _binary_ap(L[0], L[1])
 
 
 def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds=True, keep_flags=True,
-            lazy=False, compact=False):
+            lazy=False, compact=False, fold=None, max_fpr=None):
     """[(fps, tps, thresholds)] per problem, from the device sort and the
     cumulative counts (Python floats; unweighted counts are exact). An
     unweighted curve also carries `.keep` (lane metrics-apple). Only the
@@ -1553,14 +1536,23 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds
     the collinear points itself (bin_curve params 12, 13: the kept fps, tps,
     thresholds, and their count), so only the kept points come back; the
     `_DevCurve`s then carry keep = -2, every point kept (lane
-    metrics-apple2)."""
+    metrics-apple2). Weighted curves are flagged and compacted too (lane
+    cgr2-metrics-shap: exact two-sum steps on the device).
+
+    fold="auc" (compact) or "ap" (lane cgr2-metrics-shap) adds the device
+    curve fold (x_metrics/par.mojo curve_fold_unit) and brings back only its
+    CF_OUT words per problem, no curve: the list holds `_FoldCurve`s.
+    max_fpr (fold="auc") folds the partial AUC instead."""
+    if fold is not None:
+        return _fold_curves(scores, flags, w, n, problems, numeric_mode, stride=stride, fold=fold,
+                            max_fpr=max_fpr)
     prog = _Prog()
     S = prog.put(scores)
     POS = prog.put_i32(flags)
     W = _NONE if w is None else prog.put(w)
     N = n * problems
     order = prog.scratch(N)
-    flagged = w is None and keep_flags
+    flagged = bool(keep_flags)
     compact = compact and flagged and lazy
     cnt = prog.want(prog.alloc(problems), problems)
     fps = prog.alloc(N)
@@ -1604,6 +1596,107 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds
             cur.keep = bytes(view[lo + (0 if _LITTLE else 3):lo + 4 * c:4])
         out.append(cur)
     return out
+
+
+#: words per problem of the curve fold (x_metrics/par.mojo CF_OUT) and its
+#: points per chunk (x_metrics/plan.mojo CF_CHUNK)
+_CF_OUT = 10
+_CF_CHUNK = 1024
+
+
+def _f32_split(x):
+    """(hi, lo) Int32 bit words of the float-float x = hi + lo (hi the
+    nearest float32, lo the nearest float32 of the remainder)."""
+    import struct
+    hi = struct.unpack("<f", struct.pack("<f", float(x)))[0]
+    lo = float(x) - hi
+    bits = struct.unpack("<ii", struct.pack("<ff", hi, lo))
+    return bits[0], bits[1]
+
+
+def _fold_curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, fold="auc", max_fpr=None):
+    """`_curves` with the device curve fold: the curve stays on the device
+    (compacted for the AUCs) and only the fold's words come back."""
+    prog = _Prog()
+    S = prog.put(scores)
+    POS = prog.put_i32(flags)
+    W = _NONE if w is None else prog.put(w)
+    N = n * problems
+    order = prog.scratch(N)
+    auc = fold == "auc"
+    cnt = prog.scratch(problems)
+    fps = prog.scratch(N)
+    tps = prog.scratch(N)
+    thr = prog.scratch(N)
+    keep = _NONE
+    CF = CM = 0
+    if auc:
+        keep = prog.scratch(N)
+        CF = prog.scratch(3 * N)
+        CM = prog.scratch(problems)
+    prog.stage("bin_curve", problems, S, stride, POS, W, n, order, fps, tps, thr, cnt,
+               keep, 1 if auc else 0, CF, CM)
+    out = prog.want(prog.alloc(_CF_OUT * problems), _CF_OUT * problems)
+    mode, mh, ml = (1, 0, 0) if not auc else ((0, 0, 0) if max_fpr is None else (2,) + _f32_split(max_fpr))
+    if auc:
+        prog.stage("curve_fold", problems, n, CF, CF + N, CM, out, mode, mh, ml, _CF_CHUNK)
+    else:
+        prog.stage("curve_fold", problems, n, fps, tps, cnt, out, mode, mh, ml, _CF_CHUNK)
+    _execute(prog, numeric_mode)
+    holder = {}
+
+    def redo():
+        if "c" not in holder:
+            holder["c"] = _curves(scores, flags, w, n, problems, numeric_mode, stride=stride, thresholds=False,
+                                  keep_flags=auc, lazy=True, compact=auc)
+        return holder["c"]
+
+    return [_FoldCurve(prog, out + _CF_OUT * t, max_fpr, redo, t) for t in range(problems)]
+
+
+class _FoldCurve:
+    """A curve's device fold (lane cgr2-metrics-shap): the float-float sum
+    and the few curve words x_metrics/par.mojo `_cf_finish` writes. `auc()`
+    and `ap()` turn them into the score with a handful of binary64 scalar
+    operations; an edge case (an empty class, a zero precision denominator,
+    max_fpr past the last point) recomputes the curve for the Python rule."""
+
+    def __init__(self, prog, off, max_fpr, redo, t):
+        self.prog, self.off, self.max_fpr, self._redo, self.t = prog, off, max_fpr, redo, t
+
+    def _words(self):
+        f = self.prog.floats(self.off, _CF_OUT)
+        i = self.prog.ints(self.off, _CF_OUT)
+        return f[0] + f[1], f[2], f[3], i[4], f[5], f[6], f[7], f[8], i[9]
+
+    def lists(self):
+        return self._redo()[self.t].lists()
+
+    def auc(self, max_fpr):
+        s, F, T, k, a, b, u, v, c = self._words()
+        if c <= 0 or not (F > 0 and T > 0):
+            L = self.lists()
+            return _binary_auc(L[0], L[1], max_fpr, L.keep)
+        if max_fpr is None:
+            return float(s / (2.0 * F * T))
+        if k >= c:
+            # max_fpr at or past the last point: the Python rule
+            L = self.lists()
+            return _binary_auc(L[0], L[1], max_fpr, L.keep)
+        x0, x1, y0, y1 = a / F, b / F, u / T, v / T
+        yi = y0 if x1 == x0 else y0 + (max_fpr - x0) * (y1 - y0) / (x1 - x0)
+        part = s / (2.0 * F * T) + (max_fpr - x0) * (yi + y0) / 2.0
+        min_area = 0.5 * max_fpr * max_fpr
+        return float(0.5 * (1 + (part - min_area) / (max_fpr - min_area)))
+
+    def ap(self):
+        s, F, T, k, a, b, u, v, c = self._words()
+        if c <= 0 or T == 0:
+            return 0.0
+        if k > 0:
+            L = self.lists()
+            return _binary_ap(L[0], L[1])
+        return float(max(0.0, s / T))
 
 
 def _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, caller, lazy=False, compact=False):
@@ -1830,7 +1923,7 @@ def _binary_ap(fps, tps):
     return float(max(0.0, _fsum(list(terms))))
 
 
-def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flags=True):
+def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flags=True, fold=None):
     """Binarized one-vs-rest problems over the class columns of y_score."""
     from ._metrics_impl import _label_map, _selected_labels
     true, kind, present = _targets(y_true, caller)
@@ -1870,7 +1963,7 @@ def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode, keep_flag
             flags.extend(1 if v == c else 0 for v in code_list)
         flags = Array.from_list(flags, "<i4")
     curves = _curves(s, flags, w, n, k, numeric_mode, stride=k, thresholds=False, keep_flags=keep_flags,
-                     lazy=True, compact=True)
+                     lazy=True, compact=True, fold=fold)
     support = [0.0] * k
     if w is None:
         if k <= 256:
@@ -2022,7 +2115,7 @@ def _ovo_native(true, index, s, n, k, numeric_mode):
                                        "counted %d" % (got, m))
             both = []
             for sv, fl in ((sa, fa), (sb, fb)):
-                cur = _curves(sv, fl, None, m, 1, numeric_mode, thresholds=False, lazy=True, compact=True)[0]
+                cur = _curves(sv, fl, None, m, 1, numeric_mode, fold="auc")[0]
                 both.append(_auc_of(cur, None))
             pair_scores.append((both[0] + both[1]) / 2)
     return pair_scores, prevalence
@@ -2050,8 +2143,9 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
         s = _scores(y_score, n, "roc_auc_score", ndim=1)
         w = _weights(sample_weight, n, "roc_auc_score")
         flags = _label_map(true, lambda v: int(v == present[1]))
-        cur = _curves(s, flags, w, n, 1, numeric_mode, thresholds=False, lazy=True, compact=True)[0]
-        return _auc_of(cur, None if max_fpr == 1 else max_fpr)
+        mf = None if max_fpr is None or max_fpr == 1 else max_fpr
+        cur = _curves(s, flags, w, n, 1, numeric_mode, fold="auc", max_fpr=mf)[0]
+        return _auc_of(cur, mf)
     if max_fpr is not None and max_fpr != 1:
         raise ValueError("Partial AUC computation not available in multiclass setting, 'max_fpr' must be "
                          f"set to `None`, received `max_fpr={max_fpr}` instead")
@@ -2072,12 +2166,11 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
                          "should sum up to 1.0 over classes")
     if multi_class == "ovr":
         curves, support, s, codes, classes, w = _ovr(y_true, y_score, sample_weight, labels, "roc_auc_score",
-                                                     numeric_mode)
+                                                     numeric_mode, fold="auc")
         if average == "micro":
             n = len(codes)
             flags, wm = _micro_inputs(codes, w, n, k)
-            cur = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, thresholds=False, lazy=True,
-                          compact=True)[0]
+            cur = _curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, fold="auc")[0]
             return _auc_of(cur, None)
         scores = [_auc_of(c, None) for c in curves]
         return _average_scores(scores, support, average)
@@ -2108,7 +2201,7 @@ def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sa
         s = _scores(y_score, n, "average_precision_score", ndim=1)
         w = _weights(sample_weight, n, "average_precision_score")
         flags = _label_map(true, lambda v: int(v == pos_label))
-        return _ap_of(_curves(s, flags, w, n, 1, numeric_mode, thresholds=False, keep_flags=False, lazy=True)[0])
+        return _ap_of(_curves(s, flags, w, n, 1, numeric_mode, fold="ap")[0])
     if pos_label != 1:
         raise ValueError("Parameter pos_label is fixed to 1 for multiclass y_true. Do not set pos_label "
                          "or set pos_label to 1.")
@@ -2116,13 +2209,13 @@ def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sa
         raise NotImplementedError("mojolearn average_precision_score: average='samples' applies to "
                                   "multilabel targets, which are NOT IMPLEMENTED")
     curves, support, s, codes, classes, w = _ovr(y_true, y_score, sample_weight, None,
-                                                 "average_precision_score", numeric_mode, keep_flags=False)
+                                                 "average_precision_score", numeric_mode, keep_flags=False,
+                                                 fold="ap")
     k = len(classes)
     if average == "micro":
         n = len(codes)
         flags, wm = _micro_inputs(codes, w, n, k)
-        return _ap_of(_curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, thresholds=False,
-                              keep_flags=False, lazy=True)[0])
+        return _ap_of(_curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, fold="ap")[0])
     return _average_scores([_ap_of(c) for c in curves], support, average)
 
 

@@ -159,15 +159,6 @@ OPS = [
      [("a", "fin", "n * n"), ("lab", "iin", "n"), ("res", "iout", "n"), ("n", "int")]),
     ("graph_symmetry", "items", [("graph_symmetry_row_item", "n"), ("graph_symmetry_fin_item", "1")], None,
      [("a", "fin", "n * n"), ("flags", "iout", "2"), ("rf", "iscr", "2 * n"), ("n", "int")]),
-    ("svgp", "items",
-     [("svgp_init_item", "m * m"), ("svgp_chol2_item", "2 * m", "m"), ("svgp_fix2_item", "2 * m"),
-      ("svgp_solve_item", "4 * m + 1"), ("svgp_mid_item", "m * m"), ("svgp_qchol_item", "m", "m"),
-      ("svgp_qfix_item", "m * m"), ("svgp_ypart_item", "xn_fold_blocks(n)"), ("svgp_fin_item", "1")], None,
-     [("kuu", "fin", "m * m"), ("bmat", "fin", "m * m"), ("b", "fin", "m"), ("y", "fin", "n"), ("alpha", "fout", "m"),
-      ("cmat", "fout", "m * m"), ("qmu", "fout", "m"), ("qsqrt", "fout", "m * m"), ("info", "fout", "2"),
-      ("luu", "fscr", "m * m"), ("ls", "fscr", "m * m"), ("xs", "fscr", "(4 * m + 1) * m"), ("dv", "fscr", "3 * m"),
-      ("yp", "fscr", "xn_fold_blocks(n)"), ("fl", "iscr", "3"),
-      ("m", "int"), ("n", "int"), ("noise", "float"), ("jitter", "float"), ("kdiag", "float")]),
     ("svgp_var", "items", "svgp_var_item", "n",
      [("ksu", "fin", "n * m"), ("cmat", "fin", "m * m"), ("res", "fout", "n"), ("n", "int"), ("m", "int"), ("kdiag", "float")]),
     # cpu-gpu-cleanup w2-pyglue: NearestCentroid's manhattan medians by a
@@ -246,19 +237,14 @@ CUSTOM_OPS = [
      [("q", "fin", "n * d"), ("y", "fin", "m * d"), ("w", "fin", "m * c"), ("res", "fout", "n * c"),
       ("n", "int"), ("m", "int"), ("d", "int"), ("c", "int"), ("kind", "int"), ("degree", "int"),
       ("gamma", "float"), ("coef0", "float")]),
-    ("svgp_stats",
-     [("x", "fin", "n * d"), ("z", "fin", "m * d"), ("y", "fin", "n"), ("bmat", "fout", "m * m"), ("bvec", "fout", "m"),
-      ("n", "int"), ("m", "int"), ("d", "int"), ("gamma", "float"), ("variance", "float")]),
-    # lane/neural-pass106: SVGP's float-float fallback (x_neighbors/svgp_ff.mojo)
-    ("svgp_stats_ff",
-     [("x", "fin", "n * d"), ("z", "fin", "m * d"), ("y", "fin", "n"), ("bh", "fout", "m * m"), ("bl", "fout", "m * m"),
-      ("bvh", "fout", "m"), ("bvl", "fout", "m"),
-      ("n", "int"), ("m", "int"), ("d", "int"), ("gamma", "float"), ("variance", "float")]),
-    ("svgp_ff",
-     [("kuu", "fin", "m * m"), ("bh", "fin", "m * m"), ("bl", "fin", "m * m"), ("bvh", "fin", "m"), ("bvl", "fin", "m"),
-      ("y", "fin", "n"), ("alpha", "fout", "m"), ("cmat", "fout", "m * m"), ("qmu", "fout", "m"),
-      ("qsqrt", "fout", "m * m"), ("info", "fout", "2"),
-      ("m", "int"), ("n", "int"), ("noise", "float"), ("jitter", "float"), ("kdiag", "float")]),
+    # lane/neural-pass106 + lane/cgr-kernel: SVGP.fit in float-float
+    # (x_neighbors/svgp_ff.mojo) as one resident chain: Kuu, B and b stay on
+    # the device between the statistics and the solve
+    ("svgp_fit_ff",
+     [("x", "fin", "n * d"), ("z", "fin", "m * d"), ("y", "fin", "n"), ("alpha", "fout", "m"),
+      ("cmat", "fout", "m * m"), ("qmu", "fout", "m"), ("qsqrt", "fout", "m * m"), ("info", "fout", "2"),
+      ("n", "int"), ("m", "int"), ("d", "int"),
+      ("gamma", "float"), ("variance", "float"), ("noise", "float"), ("jitter", "float"), ("kdiag", "float")]),
     ("svgp_predict",
      [("q", "fin", "n * d"), ("z", "fin", "m * d"), ("alpha", "fin", "m"), ("cmat", "fin", "m * m"),
       ("mean", "fout", "n"), ("var_", "fout", "n"),
@@ -295,11 +281,9 @@ HOST_SERIAL = {"group_mean", "nc_std"}
 #: (tools/afc_ab_def.sh), default off: op -> (module, function, define).
 #: The function takes op_<name>'s whole signature (no scratch) and replaces
 #: the body; the host driver keeps the item, IDENTICAL compiles the driver
-#: unchanged. svgp: the m x m solve through the cholesky lane's potrf /
-#: solve (x_neighbors/svgp_fast.mojo) instead of the staged items.
-FAST_ALT = {
-    "svgp": ("svgp_fast", "svgp_solve_device", "MOJOLEARN_SVGP_FAST_GPU"),
-}
+#: unchanged. (The svgp entry went with main's fused `svgp_fit_ff`, which
+#: replaced the staged svgp op it swapped.)
+FAST_ALT = {}
 
 
 HDR = "# SPDX-License-Identifier: Apache-2.0\n# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632\n"
@@ -703,6 +687,7 @@ def gpu_binding():
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
             + "from x_neighbors.kapprox_dev import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding\n"
+            + "from x_neighbors.iter_device import lp_fast_resident_binding\n"
             + wrappers() + """
 
 def x_neighbors_vendor_binding() raises -> PythonObject:
@@ -716,6 +701,7 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
+        m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         return m.finalize()
@@ -731,6 +717,7 @@ def host_binding():
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
             + "from x_neighbors.kapprox_host import kapprox_fast_binding, kpca_resident_binding, sparse_rp_device_binding\n"
+            + "from x_neighbors.iter_host import lp_fast_resident_binding\n"
             + wrappers() + """
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:
@@ -765,6 +752,7 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
         _add_ops(m)
         m.def_function[x_neighbors_vendor_binding]("x_neighbors_vendor")
         m.def_function[kapprox_fast_binding]("x_neighbors_kapprox_fast")
+        m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
         m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         return m.finalize()

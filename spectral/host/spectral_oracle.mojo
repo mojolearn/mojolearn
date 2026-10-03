@@ -61,6 +61,7 @@ from spectral.checks.symmetric_eig_host import (
     hsqrt,
     symmetric_eig_host,
 )
+from x_decomp.rr_solve import host_eigh_rr_sorted
 from spectral.host.spectral_predict_host import (
     SpectralPredictionState,
     spectral_keep_embedding_order,
@@ -425,7 +426,24 @@ def _host_solve_ritz[
             t[tid * ncv + k] = beta_k[tid]
     var evals = List[Scalar[dt]]()
     var evecs = List[Scalar[dt]]()
-    var sweeps = symmetric_eig_host[dt](t, ncv, evals, evecs)
+    var sweeps: Int
+    comptime if dt == DType.float32:
+        # the host column: the device's round-robin rounds and sign rule
+        # (x_decomp/rr_solve.mojo; lanczos_solve_ritz runs them on the
+        # device, cgr-decomp 2026-10-03)
+        var t32 = List[Float32](capacity=ncv * ncv)
+        for i in range(ncv * ncv):
+            t32.append(Float32(t[i]))
+        var w32 = List[Float32]()
+        var v32 = List[Float32]()
+        sweeps = host_eigh_rr_sorted(t32, ncv, w32, v32)
+        for i in range(ncv):
+            evals.append(Scalar[dt](w32[i]))
+        for i in range(ncv * ncv):
+            evecs.append(Scalar[dt](v32[i]))
+    else:
+        # the float64 reference keeps the cyclic host Jacobi
+        sweeps = symmetric_eig_host[dt](t, ncv, evals, evecs)
     var first: Int
     if which == LANCZOS_SA:
         first = 0

@@ -6,15 +6,11 @@ Reference: `cuml-v26.08.00/cpp/src/hdbscan/condensed_hierarchy.cu`
 (cuML `265b9da`): `TupleComp` (`:34-49`), the two constructors this lane
 reaches (`:51-102`) and `condense()` (`:133-187`), in the reference order.
 
-WHERE IT LIVES. The reference holds four `rmm::device_uvector`s; this file holds four
-host `List`s. That is not a re-decision of the host/device split (rule 2)
-but a consequence of one their 26.08 tree already made: their BUILDER,
-`_build_condensed_hierarchy` (`detail/condense.cuh:92-212`), is a HOST
-function over `std::vector`s that copies the finished arrays up at
-`:205-211`. Every consumer that is a device kernel in this lane
-(`compute_stabilities`, the selection BFS) uploads what it needs and the
-upload is written at the call site, so a reader can see exactly which
-stage crosses.
+WHERE IT LIVES. The reference holds four `rmm::device_uvector`s. Ours
+holds four host `List`s: the DEVICE fit builds the tree on the device
+(`detail/tree_device.mojo::build_condensed_device`, a `DeviceTree` every
+device stage reads in place) and downloads it into this struct once, as an
+output; the CPU column (`hdbh_condense`) fills it with `condense()` below.
 
 THE SORT IS A TOTAL ORDER AND THAT IS NOT AN ACCIDENT OF OURS. Their
 `TupleComp` (`:34-49`) compares `parent`, then `child`, then `size`, and
@@ -27,13 +23,19 @@ reached; it is kept anyway, because the reference comparator is the
 algorithm and a reader diffing the two should see the same three clauses.
 
 ======================================================================
-DEVIATION BLOCK -- DEVIATION 1611. THE CONDENSED-TREE SORT IS A HOST
-STABLE MERGE SORT ON A PACKED (parent, child) KEY.
+DEVIATION BLOCK -- DEVIATION 1611. THE CONDENSED-TREE SORT IS A STABLE
+SORT ON (parent, child): ON THE DEVICE A RADIX SORT BY PARENT OVER THE
+CHILD-ORDERED EDGES, ON THE CPU COLUMN A MERGE SORT ON A PACKED KEY.
 ======================================================================
 WHAT THEIRS DOES. `thrust::sort_by_key(..., TupleComp())` on the device
 (`:185-186`), keys `(parents, children, sizes)`, payload `(lambdas)`.
 
-WHAT OURS DOES. `hierarchy/impl/sparse/op/sort.mojo::
+WHAT OURS DOES ON THE DEVICE. `tree_device.mojo` writes each edge at its
+CHILD's slot (every node has one parent, so that is child order) and runs
+one stable radix sort keyed by parent (`core/fast_radix_sort.mojo`):
+(parent, child) order, the order below, element for element.
+
+WHAT THE CPU COLUMN DOES. `hierarchy/impl/sparse/op/sort.mojo::
 merge_sort_u64_with_index` -- the SAME host merge sort DEVIATION 621
 already put under the MST, imported rather than rewritten -- on the key
 `(UInt64(parent) << 32) | UInt64(child)`. Both fields are non-negative
@@ -96,6 +98,25 @@ struct CondensedHierarchy(Copyable, Movable):
         self.children = List[Int32]()
         self.lambdas = List[Float32]()
         self.sizes = List[Int32]()
+
+    def __init__(
+        out self,
+        n_leaves: Int,
+        n_edges: Int,
+        n_clusters: Int,
+        var parents: List[Int32],
+        var children: List[Int32],
+        var lambdas: List[Float32],
+        var sizes: List[Int32],
+    ):
+        """A finished, sorted hierarchy (the device condense's download)."""
+        self.n_leaves = n_leaves
+        self.n_edges = n_edges
+        self.n_clusters = n_clusters
+        self.parents = parents^
+        self.children = children^
+        self.lambdas = lambdas^
+        self.sizes = sizes^
 
     def condense(
         mut self,

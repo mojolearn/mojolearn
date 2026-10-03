@@ -74,13 +74,20 @@ from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz
-from gbdt.data.pairs import prepare_pairs
+from gbdt.data.pairs import MAX_PAIR_COUNT_ON_GPU, prepare_pairs
 from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_f32
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
     pinned_block_sum,
     routed_exp,
     routed_log,
+)
+from gbdt.targets.kernel.pair_logit_group import (
+    PAIRLOGIT_EST_REUSE,
+    PAIRLOGIT_GROUP_FUSED,
+    launch_pair_logit_group,
+    launch_pair_logit_group_reuse,
+    launch_pair_logit_group_setup,
 )
 
 def pair_blocks(n_pairs: Int) -> Int:
@@ -156,6 +163,11 @@ struct PairwiseTargetBuffers(Movable):
         )
 
     def blocks(self) -> Int:
+        comptime if PAIRLOGIT_GROUP_FUSED:
+            # the group layout (`make_pairwise_group_buffers`): one value
+            # partial per group, `n_pairs` carrying `-n_groups`
+            if self.n_pairs < 0:
+                return -self.n_pairs
         return pair_blocks(self.n_pairs)
 
 
@@ -209,6 +221,179 @@ def make_pairwise_target_buffers(
     return PairwiseTargetBuffers(
         n_rows, n_pairs, prep.total, d_pairs^, d_pw^, d_off^, d_codes^, d_rw^,
         d_dir^, d_scale^, d_point^, inverse^, no_indices^,
+    )
+
+
+def make_pairwise_group_buffers(
+    ctx: DeviceContext,
+    group_sizes: List[UInt32],
+    n_rows: Int,
+    mut targets: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+) raises -> PairwiseTargetBuffers:
+    """`PAIRLOGIT_GROUP_FUSED` (FAST + Apple, generated pairs only): the
+    GROUP LAYOUT of `PairwiseTargetBuffers`, built without a pair list
+    (`gbdt/targets/kernel/pair_logit_group.mojo`). The struct's slots carry:
+
+        n_pairs        -n_groups (negative: the layout's mark; `blocks()`
+                       returns the group count, one value partial per group)
+        d_pairs        the group offsets, `n_groups + 1` (uint32)
+        d_pair_w       `[group_w | der_acc | der2_acc | fv_acc]`: the group
+                       weights (n_groups), the search call's per-row sums
+                       (2 x n_rows) and value partials (n_groups) for
+                       `PAIRLOGIT_EST_REUSE`
+        d_pair_dir     the grades in row order (n_rows)
+        d_row_weights  the per-row pair weights, as main's
+        d_point, inverse, no_indices   as main's
+        d_ep_offsets, d_ep_codes, d_pair_scale   one element, unread
+
+    `weights` (the fit's row weights, still the sample weights here) is
+    rewritten in place with the per-row pair weights, as `train` does on
+    the host for main's path. One readback, before any tree: the per-group
+    pair counts for the reference's per-group cap and constant-target
+    refusals, and the weighted counts summed in Float64 for
+    `PairsTotalWeight`."""
+    comptime if PAIRLOGIT_GROUP_FUSED:
+        var n_groups = len(group_sizes)
+        if n_groups < 1:
+            raise Error("Cannot generate pairs for data without groups")
+        var h_off = ctx.enqueue_create_host_buffer[DType.uint32](n_groups + 1)
+        var at = 0
+        h_off.unsafe_ptr().unsafe_store(0, UInt32(0))
+        for q in range(n_groups):
+            var size = Int(group_sizes[q])
+            if size < 1:
+                raise Error("PairLogit: query " + String(q) + " has no rows")
+            at += size
+            h_off.unsafe_ptr().unsafe_store(q + 1, UInt32(at))
+        if at != n_rows:
+            raise Error(
+                "PairLogit: the query sizes cover " + String(at) + " rows of "
+                + String(n_rows)
+            )
+        var d_off = ctx.enqueue_create_buffer[DType.uint32](n_groups + 1)
+        ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
+        var d_acc = ctx.enqueue_create_buffer[DType.float32](
+            2 * n_groups + 2 * n_rows
+        )
+        var d_grades = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        var d_rw = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        var d_gp = ctx.enqueue_create_buffer[DType.float32](n_groups)
+        var d_gw = ctx.enqueue_create_buffer[DType.float32](n_groups)
+        var d_unused_u1 = ctx.enqueue_create_buffer[DType.uint32](1)
+        var d_unused_u2 = ctx.enqueue_create_buffer[DType.uint32](1)
+        var d_unused_f = ctx.enqueue_create_buffer[DType.float32](1)
+        var d_point = ctx.enqueue_create_buffer[DType.float32](n_rows)
+        var inverse = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+        var no_indices = ctx.enqueue_create_buffer[DType.uint32](1)
+        launch_pair_logit_group_setup(
+            ctx, n_groups, targets, weights, d_off, d_grades, d_rw, d_acc,
+            d_gp, d_gw,
+        )
+        var h_gp = ctx.enqueue_create_host_buffer[DType.float32](n_groups)
+        var h_gw = ctx.enqueue_create_host_buffer[DType.float32](n_groups)
+        ctx.enqueue_copy(dst_ptr=h_gp.unsafe_ptr(), src_buf=d_gp)
+        ctx.enqueue_copy(dst_ptr=h_gw.unsafe_ptr(), src_buf=d_gw)
+        ctx.synchronize()
+        var total = Float64(0.0)
+        var pair_count = Float64(0.0)
+        for q in range(n_groups):
+            var pairs_q = h_gp.unsafe_ptr().unsafe_load(q)
+            if pairs_q > Float32(MAX_PAIR_COUNT_ON_GPU):
+                raise Error(
+                    "Too many pairs should be generated for group: "
+                    + String(Int(pairs_q))
+                    + " , use max_pairs option to limit generated pair count"
+                )
+            pair_count += Float64(pairs_q)
+            total += Float64(h_gw.unsafe_ptr().unsafe_load(q))
+        if pair_count < 1.0:
+            # every group holds one grade: `GeneratePairs`' constant check
+            raise Error("Target data is constant. Cannot generate pairs.")
+        if not (total > 0.0):
+            raise Error(
+                "Observation weights should be greater or equal zero. Total"
+                " weight should be greater, than zero"
+            )
+        _ = h_off^  # past the drain (step-33 race class)
+        _ = h_gp^
+        _ = h_gw^
+        _ = d_gp^
+        _ = d_gw^
+        return PairwiseTargetBuffers(
+            n_rows, -n_groups, total, d_off^, d_acc^, d_unused_u1^,
+            d_unused_u2^, d_rw^, d_grades^, d_unused_f^, d_point^, inverse^,
+            no_indices^,
+        )
+    else:
+        raise Error("make_pairwise_group_buffers is a FAST + Apple path")
+
+
+def _launch_pair_logit_group_layout[estimation: Bool, second_order: Bool](
+    ctx: DeviceContext,
+    mut q: PairwiseTargetBuffers,
+    mut predictions: DeviceBuffer[DType.float32],
+    use_inverse: Bool,
+    mut stats: DeviceBuffer[DType.float32],
+    mut function_value: DeviceBuffer[DType.float32],
+    compute_fv: Bool,
+    mut plane_magnitudes: DeviceBuffer[DType.float32],
+    compute_magnitudes: Bool,
+) raises:
+    """`launch_pair_logit_with` on the group layout: the gather as main's,
+    then one block per group. The search call (no inverse) keeps its sums
+    for `PAIRLOGIT_EST_REUSE`."""
+    var n_rows = q.n_rows
+    var n_groups = -q.n_pairs
+    var der_at = n_groups
+    var der2_at = n_groups + n_rows
+    var fv_at = n_groups + 2 * n_rows
+    if use_inverse:
+        launch_gather_with_mask_f32(
+            ctx, q.d_point, predictions, q.inverse, n_rows, UInt32(0xFFFFFFFF)
+        )
+        launch_pair_logit_group[estimation, second_order, False](
+            ctx, n_rows, n_groups, q.d_point, q.d_pair_dir, q.d_pairs,
+            q.d_row_weights, q.inverse, True,
+            stats, function_value, compute_fv,
+            plane_magnitudes, compute_magnitudes,
+            q.d_pair_w, 0, der_at, der2_at, fv_at,
+        )
+    else:
+        launch_pair_logit_group[estimation, second_order, PAIRLOGIT_EST_REUSE](
+            ctx, n_rows, n_groups, predictions, q.d_pair_dir, q.d_pairs,
+            q.d_row_weights, q.no_indices, False,
+            stats, function_value, compute_fv,
+            plane_magnitudes, compute_magnitudes,
+            q.d_pair_w, 0, der_at, der2_at, fv_at,
+        )
+
+
+def launch_pair_logit_estimation_from_search(
+    ctx: DeviceContext,
+    mut q: PairwiseTargetBuffers,
+    mut stats: DeviceBuffer[DType.float32],
+    mut function_value: DeviceBuffer[DType.float32],
+    compute_fv: Bool,
+) raises:
+    """`PAIRLOGIT_EST_REUSE`: the estimation planes `[der, der2]` at each
+    row's bin position (`q.inverse`) and the value partials, from the sums
+    the tree's search call left in the group layout's accumulators. The
+    caller guarantees the cursor has not moved since that call and that no
+    estimation launch ran in between (the oracle's search-point flag)."""
+    comptime if PAIRLOGIT_EST_REUSE:
+        if q.n_pairs < 0:
+            var n_rows = q.n_rows
+            var n_groups = -q.n_pairs
+            launch_pair_logit_group_reuse(
+                ctx, n_rows, n_groups, q.d_pair_w,
+                n_groups, n_groups + n_rows, n_groups + 2 * n_rows,
+                q.inverse, stats, function_value, compute_fv,
+            )
+            return
+    raise Error(
+        "launch_pair_logit_estimation_from_search needs the group layout"
+        " under PAIRLOGIT_EST_REUSE"
     )
 
 
@@ -338,7 +523,16 @@ def launch_pair_logit_with[estimation: Bool, second_order: Bool](
     the point in row order (gathered through `q.inverse` when `use_inverse`,
     the estimator's bin order), the pair kernel over `q.blocks()` 256-pair
     blocks, then the row kernel over 256-row blocks. `function_value` holds
-    `q.blocks()` partials; `plane_magnitudes` holds two per 256-row block."""
+    `q.blocks()` partials; `plane_magnitudes` holds two per 256-row block.
+    On the group layout (`PAIRLOGIT_GROUP_FUSED`, `q.n_pairs < 0`) the
+    partials are per GROUP and the call is `_launch_pair_logit_group_layout`."""
+    comptime if PAIRLOGIT_GROUP_FUSED:
+        if q.n_pairs < 0:
+            _launch_pair_logit_group_layout[estimation, second_order](
+                ctx, q, predictions, use_inverse, stats, function_value,
+                compute_fv, plane_magnitudes, compute_magnitudes,
+            )
+            return
     var n_rows = q.n_rows
     var n_pairs = q.n_pairs
     var row_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE

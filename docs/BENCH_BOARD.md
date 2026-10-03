@@ -84,7 +84,14 @@ whose full key, read-back included, is in the store is not run (one that does
 not construct runs normally): its stored cell joins the race and
 BOARD.md marks it `stored (measured <UTC> on <box>, <device>)`; an opponent
 measured in this run is marked `measured this run`. When every opponent is
-stored, only our arms run. Any key field that differs means a new
+stored, only our arms run. The DEFAULT is our GPU arm(s) only: an opponent
+the store does not hold is not raced (the race lists it under
+`skipped_opponents`) unless `--with-opponents` or `--retime-opponents` asks.
+The same default holds in `bench/speed/forest_speed_arm.py` (opponents only
+with `--with-opponents`, `--arms` or `--opponents-first`) and
+`tools/classical_two_datasets.py race` (opponents only with `--arms` or
+`--with-opponents`); `bench_board_algos.py` and `bench_board_more.py` take an
+explicit `--arms`. Any key field that differs means a new
 measurement. A refused or failed opponent is stored as what it was; a
 PARTIAL one is never reused. `--retime-opponents` measures every opponent
 again, and `--backfill-store <board.json>` imports an existing board's

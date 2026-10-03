@@ -1,0 +1,4 @@
+# lane/apple-fast-dwgap: light A/Bs on the M3 (A = FAST main code, B = the define)
+# QH_MODE_SKIP: quantized histogram skips each feature's dominant bin, derives it from the block total (same bits)
+LQ_FRONT=1 ~/mojolearn-evidence/lq/lq add m3 CMD lane/apple-fast-dwgap dwgap-modeskip-taxi 'AFT_OUT=$HOME/aft-ab/dwgap-modeskip-taxi bash tools/aft_ab.sh gbdt gbdt-depthwise taxi 2 "" "-D MOJOLEARN_GBDT_DW_MODE_SKIP"'
+LQ_FRONT=1 ~/mojolearn-evidence/lq/lq add m3 CMD lane/apple-fast-dwgap dwgap-modeskip-istella 'AFT_OUT=$HOME/aft-ab/dwgap-modeskip-istella bash tools/aft_ab.sh gbdt gbdt-depthwise istella 2 "" "-D MOJOLEARN_GBDT_DW_MODE_SKIP"'
