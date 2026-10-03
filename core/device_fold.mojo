@@ -60,7 +60,8 @@ def fold_blocks(n: Int) -> Int:
 def _sum_i32_kernel(part: _I64P, buf: _I32P, n_in: Int32, mode: Int32, ref_v: Int32):
     """One Int64 partial per block. mode 0: the sum of the values; mode 1:
     the count of nonzero values; mode 2: the count of values equal to
-    `ref_v`. Integer, so exact in any order."""
+    `ref_v`; mode 3: the count of values below `ref_v`. Integer, so exact in
+    any order."""
     var n = Int(n_in)
     var red = stack_allocation[SCAN_TPB, Scalar[DType.int64], address_space = AddressSpace.SHARED]()
     var tid = Int(thread_idx.x)
@@ -74,8 +75,11 @@ def _sum_i32_kernel(part: _I64P, buf: _I32P, n_in: Int32, mode: Int32, ref_v: In
         elif mode == 1:
             if v != Int32(0):
                 acc += 1
-        else:
+        elif mode == 2:
             if v == ref_v:
+                acc += 1
+        else:
+            if v < ref_v:
                 acc += 1
         i += stride
     red.unsafe_store(tid, acc)
@@ -295,6 +299,13 @@ def device_count_equal_i32(
 ) raises -> Int:
     """How many of `buf[0:n]` equal `value`."""
     return Int(_i32_fold(ctx, buf, n, Int32(2), value))
+
+
+def device_count_less_i32(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.int32], n: Int, value: Int32
+) raises -> Int:
+    """How many of `buf[0:n]` are below `value`."""
+    return Int(_i32_fold(ctx, buf, n, Int32(3), value))
 
 
 def device_first_nonneg_i32(ctx: DeviceContext, mut buf: DeviceBuffer[DType.int32], n: Int) raises -> Int:
