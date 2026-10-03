@@ -9,6 +9,10 @@ from std.os import getenv
 from std.memory import memcpy
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
+from sequence.moe_group import (
+    MOE_GROUP_TPB, moe_group_count_all_kernel, moe_group_offsets_all_kernel, moe_group_scatter_all_kernel,
+    moe_group_zero_all_kernel,
+)
 from sequence.moe_reg import (
     MOE_DEVGROUP,
     MOE_REGTILE,
@@ -559,6 +563,28 @@ struct DeviceExec(Exec):
         # MOJOLEARN_MOE_REGTILE, the router's logits tiled and the products
         # register-tiled, the same chains; MOJOLEARN_MOE_DEVGROUP, the pairs
         # grouped by expert on the device (a.i6 = 1 from the entry).
+        # lane cgr5-owed: the pairs grouped by expert on the device for any E
+        # (sequence/moe_group.mojo), a.i6 = 2 from the entry: p2 the picks,
+        # p4 order, p5 poff, p6 boff_h, p7 counts | cursors (2E int32
+        # words), p8 boff_o; i3 E, i5 / i7 the F / D tiles.
+        comptime if OP == OP_MOE_HIDDEN:
+            if a.i6 == 2:
+                var gp = n // a.i1
+                var gt = MOE_GROUP_TPB
+                self.ctx.enqueue_function[moe_group_zero_all_kernel](
+                    a.p7, Int32(2 * a.i3), grid_dim=((2 * a.i3 + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
+                )
+                self.ctx.enqueue_function[moe_group_count_all_kernel](
+                    a.p2, a.p7, Int32(gp), grid_dim=((gp + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
+                )
+                self.ctx.enqueue_function[moe_group_offsets_all_kernel](
+                    a.p7, a.p5, a.p6, a.p8, Int32(a.i3), Int32(a.i5), Int32(a.i7),
+                    grid_dim=((a.i3 + gt) // gt, 1, 1), block_dim=(gt, 1, 1),
+                )
+                self.ctx.enqueue_function[moe_group_scatter_all_kernel](
+                    a.p2, a.p7, a.p5, a.p4, Int32(gp), Int32(a.i3),
+                    grid_dim=((gp + gt - 1) // gt, 1, 1), block_dim=(gt, 1, 1),
+                )
         comptime if MOE_REGTILE and OP == OP_MOE_ROUTE:
             if a.i1 <= MOE_RT:
                 var bt = MOE_RT // a.i1

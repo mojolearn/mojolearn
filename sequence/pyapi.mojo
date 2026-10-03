@@ -20,6 +20,7 @@ from sequence.ets import ets_scratch
 from sequence.garch import GARCH_GRID, GARCH_GRID_N, GARCH_SNAP
 from sequence.moe_tiled import TILE_P, TILE_Q
 from sequence.moe_reg import MOE_DEVGROUP
+from sequence.moe_group import moe_group_blocks
 from sequence.prophet import MEM, ProphetData, _dot, _fg_prior
 from sequence.prophet import div as _pdiv
 from sequence.ops import add as p_add, fma3 as p_fma3, ld as p_ld, mul as p_mul, st as p_st, sub as p_sub
@@ -1797,51 +1798,20 @@ def moe_forward_run[E: Exec](
             return _moe_devgroup_rest(ex, addrs, T, D, F, En, k, X, Gu, Dn, Sel, W, Y, L, H)
     # The pairs (token, pick) grouped by expert for the tiled device
     # products (lane neural-pass29, sequence/moe_tiled.mojo): `order` the
-    # pair indices sorted by expert (stable), `poff` each expert's first
-    # pair, `boff` each expert's first block of TILE_P pairs x TILE_Q
-    # outputs. The host executor runs the items and reads none of these.
-    ex.sync()
-    var sel_host = List[Float32](length=T * k, fill=Float32(0.0))
-    ex.download(fptr_of(sel_host), Sel, T * k)
-    var counts = List[Int](length=En + 1, fill=0)
-    for i in range(T * k):
-        counts[Int(sel_host[i]) + 1] += 1
-    var poff_host = List[Float32](length=En + 1, fill=Float32(0.0))
-    var running = 0
-    for e in range(En):
-        poff_host[e] = Float32(running)
-        running += counts[e + 1]
-    poff_host[En] = Float32(running)
-    var cursor = List[Int](length=En, fill=0)
-    for e in range(En):
-        cursor[e] = Int(poff_host[e])
-    var order_host = List[Float32](length=T * k, fill=Float32(0.0))
-    for i in range(T * k):
-        var e = Int(sel_host[i])
-        order_host[cursor[e]] = Float32(i)
-        cursor[e] += 1
+    # pair indices grouped by expert, `poff` each expert's first pair,
+    # `boff` each expert's first block of TILE_P pairs x TILE_Q outputs.
+    # Grouped ON THE DEVICE inside the hidden product's launch (a.i6 = 2,
+    # sequence/moe_group.mojo; lane cgr5-owed), any E; the grids are the
+    # upper bound. The host executor runs the items and reads none of these.
     var n_ftiles = (F + TILE_Q - 1) // TILE_Q
     var n_dtiles = (D + TILE_Q - 1) // TILE_Q
-    var boff_h = List[Float32](length=En + 1, fill=Float32(0.0))
-    var boff_o = List[Float32](length=En + 1, fill=Float32(0.0))
-    var blocks_h = 0
-    var blocks_o = 0
-    for e in range(En):
-        boff_h[e] = Float32(blocks_h)
-        boff_o[e] = Float32(blocks_o)
-        var ptiles = (counts[e + 1] + TILE_P - 1) // TILE_P
-        blocks_h += ptiles * n_ftiles
-        blocks_o += ptiles * n_dtiles
-    boff_h[En] = Float32(blocks_h)
-    boff_o[En] = Float32(blocks_o)
+    var blocks_h = moe_group_blocks(T * k, En, n_ftiles)
+    var blocks_o = moe_group_blocks(T * k, En, n_dtiles)
     var Order = ex.alloc(T * k)
-    ex.upload(Order, fptr_of(order_host), T * k)
     var Poff = ex.alloc(En + 1)
-    ex.upload(Poff, fptr_of(poff_host), En + 1)
     var BoffH = ex.alloc(En + 1)
-    ex.upload(BoffH, fptr_of(boff_h), En + 1)
     var BoffO = ex.alloc(En + 1)
-    ex.upload(BoffO, fptr_of(boff_o), En + 1)
+    var Cnt = ex.alloc(2 * En)
     var S = ex.alloc(T * k * D)
     var b = Args()
     b.p0 = X
@@ -1855,8 +1825,12 @@ def moe_forward_run[E: Exec](
     b.i1 = F
     b.i2 = k
     b.i3 = En
+    b.p7 = Cnt
+    b.p8 = BoffO
     b.i4 = blocks_h
     b.i5 = n_ftiles
+    b.i6 = 2
+    b.i7 = n_dtiles
     ex.launch[OP_MOE_HIDDEN](b, T * k * F)
     var c = Args()
     c.p0 = H
@@ -1875,13 +1849,6 @@ def moe_forward_run[E: Exec](
     c.i4 = blocks_o
     c.i5 = n_dtiles
     ex.launch[OP_MOE_OUT](c, T * D)
-    _ = sel_host^
-    _ = order_host^
-    _ = poff_host^
-    _ = boff_h^
-    _ = boff_o^
-    _ = counts^
-    _ = cursor^
     ex.sync()
     ex.download(fptr(addrs[4], "y"), Y, T * D)
     ex.download(fptr(addrs[5], "logits"), L, T * En)
