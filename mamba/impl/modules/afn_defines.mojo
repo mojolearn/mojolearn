@@ -46,7 +46,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 #: The FAST tier on an Apple GPU: the only place any afn-mamba switch can be on.
 comptime AFN_APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 
 comptime AFN_MAMBA_ALL = AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MAMBA_ALL"]()

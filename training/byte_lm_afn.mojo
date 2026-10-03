@@ -23,7 +23,7 @@ from core.step_phase import step_count_d2h, step_count_h2d, step_count_launch, s
 from training.checks.loss_contract import CE_NEG_INF_BITS
 
 comptime BYTE_LM_FAST_APPLE = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 
 

@@ -93,7 +93,7 @@ from mamba.impl.modules.mamba3_backward import (
 )
 
 comptime AFN_M3_BWD_ARENA = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 ) and (
     is_defined["MOJOLEARN_AFN_MAMBA3_BWD_ARENA"]()
     or is_defined["MOJOLEARN_AFN_SAMBA_ALL"]()

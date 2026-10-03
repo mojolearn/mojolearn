@@ -40,7 +40,7 @@ from x_cnn.ops import (
 
 comptime AFN_CNN_DIRECT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and is_defined["MOJOLEARN_AFN_CNN_DIRECT"]()
 )
 #: `x_cnn/device.mojo`'s `DC_MAXK` and `DC_MAXW`, restated (that file

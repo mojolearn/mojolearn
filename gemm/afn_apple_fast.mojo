@@ -93,7 +93,7 @@ from gemm.contract import OP_NN, OP_NT, OP_TN
 #: The tier and the vendor every candidate is behind.
 comptime AFN_GEMM_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and TARGET_COLUMN == COLUMN_APPLE
 )
 comptime AFN_GEMM_ALL = AFN_GEMM_APPLE and is_defined["MOJOLEARN_AFN_GEMM_ALL"]()

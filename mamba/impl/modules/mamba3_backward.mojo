@@ -1309,7 +1309,7 @@ def mamba3_backward_angle_into(
 # vendors compile the kernels above unchanged.
 # ===========================================================================
 comptime AFN_M3_APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 comptime AFN_M3_BWD_CHUNK = AFN_M3_APPLE_FAST and (
     is_defined["MOJOLEARN_AFN_MAMBA3_BWD_CHUNK"]()

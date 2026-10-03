@@ -57,7 +57,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
-comptime _AFN_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+comptime _AFN_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 comptime MLP_AFN_ALL = _AFN_APPLE_FAST and is_defined["MOJOLEARN_AFN_MLP_ALL"]()
 comptime MLP_FUSED_STEP = _AFN_APPLE_FAST and (
     is_defined["MOJOLEARN_AFN_MLP_FUSED_STEP"]() or MLP_AFN_ALL

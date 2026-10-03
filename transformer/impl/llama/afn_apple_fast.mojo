@@ -68,7 +68,7 @@ from core.step_phase import step_count_launch
 # ---------------------------------------------------------------------------
 
 comptime AFN_ATTN_ON = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 comptime AFN_ATTN_ALL = AFN_ATTN_ON and is_defined["MOJOLEARN_AFN_ATTN_ALL"]()
 comptime AFN_ATTN_NORM_SG = AFN_ATTN_ON and (

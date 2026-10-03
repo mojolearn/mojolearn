@@ -39,7 +39,7 @@ from embedding.checks.embedding_oracle import EmbConfig
 
 comptime EMB_ATOMIC_BWD = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
+    and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
     and is_defined["MOJOLEARN_AFN_EMB_ATOMIC_BWD"]()
 )
 

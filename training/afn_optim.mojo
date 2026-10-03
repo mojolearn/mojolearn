@@ -112,7 +112,7 @@ from training.checks.optimizer_contract import (
 
 #: FAST tier on an Apple host: the only build any candidate compiles into.
 comptime AFN_APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 comptime AFN_OPTIM_ALL = is_defined["MOJOLEARN_AFN_OPTIM_ALL"]()
 comptime AFN_OPT_FUSE_SCAN = AFN_APPLE_FAST and (

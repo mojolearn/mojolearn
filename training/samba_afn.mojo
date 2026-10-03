@@ -98,7 +98,7 @@ from transformer.impl.llama.modeling_llama import llama_rms_norm
 # ===========================================================================
 
 comptime AFN_SAMBA_APPLE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_COLUMN_CPU"]()
 )
 comptime AFN_SAMBA_ALL = AFN_SAMBA_APPLE_FAST and is_defined["MOJOLEARN_AFN_SAMBA_ALL"]()
 comptime AFN_SAMBA_FUSE = AFN_SAMBA_ALL or (
