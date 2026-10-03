@@ -777,7 +777,7 @@ comptime FA_TR_SMEM_BYTES = FA_TR_FLOATS * 4
 comptime FA_TR_FITS = lib_smem_page_fits_for[TARGET_COLUMN, FA_TR_SMEM_BYTES]()
 
 
-def fa_transform_kernel(x: F32Ptr, mean: F32Ptr, pm: F32Ptr, out: F32Ptr, n_in: Int32, d_in: Int32, nc_in: Int32):
+def fa_transform_kernel(x: F32Ptr, mean: F32Ptr, pm: F32Ptr, dst: F32Ptr, n_in: Int32, d_in: Int32, nc_in: Int32):
     """out[row] = (x[row] - mean) P, P d x nc in threadgroup memory with the
     mean behind it, one row per thread, nc <= FA_TR_MAXK accumulators."""
     var n = Int(n_in)
@@ -798,11 +798,11 @@ def fa_transform_kernel(x: F32Ptr, mean: F32Ptr, pm: F32Ptr, out: F32Ptr, n_in: 
         for kk in range(nc):
             acc[kk] += xj * sh[j * nc + kk]
     for kk in range(nc):
-        out.unsafe_store(row * nc + kk, acc[kk])
+        dst.unsafe_store(row * nc + kk, acc[kk])
 
 
-def fa_transform_py(x: PythonObject, mean: PythonObject, pm: PythonObject, out: PythonObject, p: PythonObject) raises -> PythonObject:
-    """p = [n, d, nc]: out (n x nc, device id) = (X - mean) P for the
+def fa_transform_py(x: PythonObject, mean: PythonObject, pm: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """p = [n, d, nc]: dst (n x nc, device id) = (X - mean) P for the
     resident X (n x d), mean (d) and P (d x nc); enqueued, no sync."""
     comptime if not FA_TR_FITS:
         raise Error("x_decomp fa_transform: the P page does not fit this column's threadgroup memory")
@@ -816,7 +816,7 @@ def fa_transform_py(x: PythonObject, mean: PythonObject, pm: PythonObject, out: 
     var px = _ptr(_id(x), n * d)
     var pmean = _ptr(_id(mean), d)
     var pp = _ptr(_id(pm), d * nc)
-    var po = _ptr(_id(out), n * nc)
+    var po = _ptr(_id(dst), n * nc)
     var ctx = xd_ctx()
     ctx.enqueue_function[fa_transform_kernel](
         px, pmean, pp, po, Int32(n), Int32(d), Int32(nc), grid_dim=(n + FA_TR_TPB - 1) // FA_TR_TPB, block_dim=FA_TR_TPB
