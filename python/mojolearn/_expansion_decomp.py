@@ -543,6 +543,23 @@ class _Kit:
             self.b.x_decomp_gemm(A.addr, B.addr, out.addr, [m, k, n, int(ta), int(tb)])
         return out
 
+    def vstack_dev(self, ms):
+        """`_vstack` on the device: each matrix's rows placed after the
+        previous ones by the PLACE_COLS move (a3 = the row offset times the
+        width), copies only, so the same values as the host stack."""
+        c = ms[0].c
+        R = sum(m.r for m in ms)  # glue: row count of argument matrices
+        out = self._dout(R, c)
+        one = _M._dev_one(self)
+        off = 0
+        for m in ms:  # glue: one Mojo move per argument matrix
+            cnt = m.r * m.c
+            if cnt:
+                self.b.x_decomp_dev_move(self._did(m), one, out._d.id,
+                                         [_MV_PLACE_COLS, cnt, c, c, off * c, 0, 0, cnt, R * c, 1])
+            off += m.r
+        return out
+
     def colsum(self, A):
         if A.r * A.c and self._use(A):
             out = self._dout(1, A.c)
@@ -1089,6 +1106,20 @@ class _Base:
 
 
 # ================================================================ IncrementalPCA
+def _ipca_dev_on(k):
+    """lane/apple-fast-gap-linalg2-kpca: whether this kit's binding was built
+    with -D MOJOLEARN_IPCA_FAST_DEV (FAST + Apple): IncrementalPCA.fit stacks
+    each batch's matrix on the device (no download and re-upload of the
+    centered batch) and reads its public arrays once after the last batch.
+    Read back from the binding's compile-time constant (no env read)."""
+    if not k._res():
+        return False
+    try:
+        return int(k._raw().x_decomp_ipca_dev_on()) == 1
+    except Exception:
+        return False
+
+
 class IncrementalPCA(_Base):
     """sklearn.decomposition.IncrementalPCA (reference: scikit-learn
     `decomposition/_incremental_pca.py`, `partial_fit`; the running mean and
@@ -1124,15 +1155,18 @@ class IncrementalPCA(_Base):
             rows = M.rows
         self.batch_size_ = 5 * d if self.batch_size is None else int(self.batch_size)
         mb = self.n_components or 0
+        dev = _ipca_dev_on(self._kit())
         start = 0
         for _ in range(n // self.batch_size_):
             end = start + self.batch_size_
             if end + mb > n:
                 continue
-            self._partial(rows(start, end))
+            self._partial(rows(start, end), publish=not dev, dev=dev)
             start = end
         if start < n:
-            self._partial(rows(start, n))
+            self._partial(rows(start, n), publish=not dev, dev=dev)
+        if dev and hasattr(self, "_pending"):
+            self._publish(*self._pending)
         return self
 
     def partial_fit(self, X, y=None):
@@ -1141,7 +1175,7 @@ class IncrementalPCA(_Base):
         self._partial(_M.from_input(X))
         return self
 
-    def _partial(self, Xb):
+    def _partial(self, Xb, publish=True, dev=False):
         k = self._kit()
         n, d = Xb.r, Xb.c
         if self.n_components is None:
@@ -1182,7 +1216,7 @@ class IncrementalPCA(_Base):
             Xc = k.ew("sub", Xb, bmean)
             mc = k.ew("scale", k.ew("sub", self.mean_m_, bmean), s=math.sqrt((seen / total) * n))
             prev = k.ew("mul", self.components_m_, self.singular_values_m_.T)
-            Z = _vstack(prev, Xc, mc)
+            Z = k.vstack_dev([prev, Xc, mc]) if dev else _vstack(prev, Xc, mc)
         S, Vt = _gram_svd(k, Z)
         ev = k.ew("scale", k.ew("sq", S), s=1.0 / (total - 1))
         tot_var = k.total(k.ew("scale", upd_var, s=float(total)))
@@ -1199,10 +1233,20 @@ class IncrementalPCA(_Base):
             nv = _M.zeros(1, 1)
         self.n_components_ = nc
         self.n_features_in_ = d
+        if publish:
+            self._publish(nc, d, evr, nv)
+        else:
+            # lane/apple-fast-gap-linalg2-kpca (-D MOJOLEARN_IPCA_FAST_DEV):
+            # fit publishes the public arrays once, after its last batch
+            self._pending = (nc, d, evr, nv)
+
+    def _publish(self, nc, d, evr, nv):
+        """The public attributes from the running device/host matrices."""
+        self.__dict__.pop("_pending", None)
         self.components_ = self.components_m_.out()
         self.singular_values_ = self.singular_values_m_.out((nc,))
-        self.mean_ = upd_mean.out((d,))
-        self.var_ = upd_var.out((d,))
+        self.mean_ = self.mean_m_.out((d,))
+        self.var_ = self.var_m_.out((d,))
         self.explained_variance_ = self.explained_variance_m_.out((nc,))
         self.explained_variance_ratio_ = evr.cols(0, nc).out((nc,))
         self.noise_variance_ = nv.s[0]
@@ -3532,6 +3576,8 @@ def _lanczos_top(k, A, nc):
     route never returns a less converged answer than it promises. The start
     vector is a seeded uniform draw centred at 0 (a constant vector is
     orthogonal to a centred kernel's spectrum)."""
+    if _lanczos_dev_on(k, A):
+        return _lanczos_top_dev(k, A, nc)
     n = A.r
     q = k.ew("adds", k.rand(n, 1, 0x1A2C05, 91, 0), s=-0.5)
     q = k.ew("scale", q, s=1.0 / math.sqrt(_kdot(k, q, q)))
@@ -3577,6 +3623,76 @@ def _lanczos_top(k, A, nc):
         m = min(n, 2 * m, _LANCZOS_MAX_M)
     Yt = Y.take_cols(top)
     V = k.mm(_M(QT[:j * n], j, n), Yt, ta=True)
+    return th.take_cols(top), V
+
+
+#: the device Lanczos basis cap in floats ((cap + 1) * n): past it the host loop runs
+_LANCZOS_DEV_MAX_FLOATS = 1 << 26
+
+
+def _lanczos_dev_on(k, A):
+    """lane/apple-fast-gap-linalg2-kpca: whether this kit's binding carries
+    the device Lanczos (`-D MOJOLEARN_KPCA_FAST_LANCZOS_DEV`, FAST + Apple,
+    x_decomp/lanczos_dev.mojo), read back from its compile-time constant (no
+    env read), and the basis fits its cap."""
+    if not k._res():
+        return False
+    try:
+        on = int(k._raw().x_decomp_lanczos_dev_on())
+    except Exception:
+        return False
+    n = A.r
+    return on == 1 and (min(n, _LANCZOS_MAX_M) + 1) * n <= _LANCZOS_DEV_MAX_FLOATS
+
+
+def _lanczos_top_dev(k, A, nc):
+    """`_lanczos_top` with the steps on the device (x_decomp/lanczos_dev.mojo):
+    the same start vector, basis growth, restart test and Ritz extraction;
+    the alphas and betas of a batch of steps read in ONE download."""
+    n = A.r
+    q = k.ew("adds", k.rand(n, 1, 0x1A2C05, 91, 0), s=-0.5)
+    q = k.ew("scale", q, s=1.0 / math.sqrt(_kdot(k, q, q)))
+    cap = min(n, _LANCZOS_MAX_M)
+    Q = k._dout(cap + 1, n)
+    qs = q.s
+    k.b.x_decomp_dev_upload(Q._d.id, qs.buffer_info()[0], n)
+    AB = k._dout(1, 2 * cap)
+    aid = k._did(A)
+    ab = array.array("f", [0.0]) * (2 * cap)
+    alphas, betas = [], []
+    m = min(n, max(2 * nc + 1, 20))
+    j = 0
+    stop = False
+    while True:
+        if j < m and not stop:
+            k.b.x_decomp_dev_lanczos(aid, Q._d.id, AB._d.id, [n, j, m, cap])
+            k.b.x_decomp_dev_download(AB._d.id, ab.buffer_info()[0], 2 * cap)
+            for jj in range(j, m):
+                a, b = float(ab[jj]), float(ab[cap + jj])
+                alphas.append(a)
+                betas.append(b)
+                j = jj + 1
+                if b <= 1e-30 * max(1.0, abs(a)) or j == n:
+                    stop = True
+                    break
+        T = [0.0] * (j * j)
+        for i in range(j):
+            T[i * j + i] = alphas[i]
+            if i + 1 < j:
+                T[i * j + i + 1] = T[(i + 1) * j + i] = betas[i]
+        th, Y = k.eigh(_M.of(T, j, j))
+        top = list(range(j - 1, max(j - 1 - nc, -1), -1))
+        if len(top) < nc:
+            return None
+        big = max(abs(th.s[i]) for i in top) or 1.0
+        res = [abs(betas[j - 1] * Y.s[(j - 1) * j + i]) for i in top]
+        if stop or max(res) <= _LANCZOS_TOL * big:
+            break
+        if m >= min(n, _LANCZOS_MAX_M):
+            return None
+        m = min(n, 2 * m, _LANCZOS_MAX_M)
+    Yt = Y.take_cols(top)
+    V = k.mm(_M._on_device(Q._d, j, n), Yt, ta=True)
     return th.take_cols(top), V
 
 
