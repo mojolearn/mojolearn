@@ -1178,7 +1178,7 @@ def _agg_pick(part: MutPointer[UInt64, MutAnyOrigin], nb: Int) -> UInt64:
 
 def _agg_lw_kernel(
     part: MutPointer[UInt64, MutAnyOrigin], nb: Int32, dm: FPtr, nn: IPtr, live: IPtr, sz: FPtr, n: Int32,
-    linkage: Int32, st: IPtr, stf: FPtr,
+    linkage: Int32, st: IPtr, stf: FPtr, adj: IPtr, con: Int32,
 ):
     """The merge (a, b = nn[a]) from the partials, then row and column a of
     the matrix: the Lance-Williams value of (a u b) to every live k other
@@ -1207,14 +1207,23 @@ def _agg_lw_kernel(
         stf[2] = nbs
     if k >= N or k == a or k == b or live[k] == 0:
         return
-    var v = lance_williams(Int(linkage), dm[a * N + k], dm[b * N + k], dab, na, nbs, sz[k], True, True)
-    dm[a * N + k] = v
-    dm[k * N + a] = v
+    var ha = True
+    var hb = True
+    if con != 0:
+        ha = adj[a * N + k] != 0
+        hb = adj[b * N + k] != 0
+    if Int(linkage) == LINK_WARD or ha or hb:
+        var v = lance_williams(Int(linkage), dm[a * N + k], dm[b * N + k], dab, na, nbs, sz[k], ha, hb)
+        dm[a * N + k] = v
+        dm[k * N + a] = v
+    if con != 0 and (ha or hb):
+        adj[a * N + k] = 1
+        adj[k * N + a] = 1
 
 
 def _agg_flag_kernel(
     dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, sz: FPtr, node: IPtr, n: Int32, step: Int32, linkage: Int32,
-    ch: IPtr, dist: FPtr, st: IPtr, stf: FPtr, lst: IPtr,
+    ch: IPtr, dist: FPtr, st: IPtr, stf: FPtr, lst: IPtr, adj: IPtr, con: Int32,
 ):
     """Thread a books the merge (the children pair and value; b dies; a
     takes the merged size and node id n + step) and joins the rescan list
@@ -1244,7 +1253,7 @@ def _agg_flag_kernel(
         var q = Int(nn[i])
         if q == a or q == b:
             go = True
-        elif i < a:
+        elif i < a and (con == 0 or adj[i * N + a] != 0):
             var v = dm[i * N + a]
             if q < 0 or v < md[i] or (v == md[i] and a < q):
                 nn[i] = Int32(a)
@@ -1254,7 +1263,7 @@ def _agg_flag_kernel(
         lst[Int(at)] = Int32(i)
 
 
-def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: IPtr, lst: IPtr):
+def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: IPtr, lst: IPtr, adj: IPtr, con: Int32):
     """nn[i], md[i] for each listed row: the live column j > i at the lowest
     value, the lowest j on a tie (-1, +inf when none). One block a row."""
     var red = stack_allocation[AGG_TPB, UInt64, address_space = AddressSpace.SHARED]()
@@ -1267,7 +1276,7 @@ def _agg_rescan_kernel(dm: FPtr, live: IPtr, nn: IPtr, md: FPtr, n: Int32, st: I
         var i = Int(lst[e])
         var mine = AGG_NONE
         for j in range(i + 1 + Int(thread_idx.x), N, AGG_TPB):
-            if live[j] != 0:
+            if live[j] != 0 and (con == 0 or adj[i * N + j] != 0):
                 mine = min(mine, _agg_key(dm[i * N + j], j))
         var r = _agg_block_min(red, mine)
         if thread_idx.x == 0:
@@ -2005,7 +2014,8 @@ struct DeviceOps(ClusterOps):
             raise Error("AgglomerativeClustering: a precomputed distance matrix must be finite and non-negative")
 
     def agglo_merge(
-        mut self, dm: Int, n: Int, linkage: Int, n_merges: Int, mut children: List[Int32], mut dist: List[Float32]
+        mut self, dm: Int, adj: Int, n: Int, linkage: Int, n_merges: Int, mut children: List[Int32],
+        mut dist: List[Float32],
     ) raises:
         if n * n > 2147483647:
             raise Error("AgglomerativeClustering: n * n exceeds the Int32 index bound")
@@ -2038,28 +2048,30 @@ struct DeviceOps(ClusterOps):
         var p_dv = dv.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_part = part.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         var p_dm = self._fp(dm)
+        var con = Int32(1) if adj >= 0 else Int32(0)
+        var p_adj = self._ip(adj) if adj >= 0 else p_lst
         var rb = n if n < AGG_RESCAN_BLOCKS else AGG_RESCAN_BLOCKS
         ctx.enqueue_function[_agg_init_kernel](
             p_live, p_nn, p_md, p_sz, p_node, p_lst, p_st, Int32(n), grid_dim=_grid(n), block_dim=TPB,
         )
         # every row's first nearest partner: the rescan of the full list
         ctx.enqueue_function[_agg_rescan_kernel](
-            p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, grid_dim=rb, block_dim=AGG_TPB,
+            p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, p_adj, con, grid_dim=rb, block_dim=AGG_TPB,
         )
         for step in range(n_merges):
             ctx.enqueue_function[_agg_argmin_part_kernel](
                 p_md, p_nn, p_live, Int32(n), p_part, p_st, grid_dim=nb, block_dim=AGG_TPB,
             )
             ctx.enqueue_function[_agg_lw_kernel](
-                p_part, Int32(nb), p_dm, p_nn, p_live, p_sz, Int32(n), Int32(linkage), p_st, p_stf,
+                p_part, Int32(nb), p_dm, p_nn, p_live, p_sz, Int32(n), Int32(linkage), p_st, p_stf, p_adj, con,
                 grid_dim=_grid(n), block_dim=TPB,
             )
             ctx.enqueue_function[_agg_flag_kernel](
                 p_dm, p_live, p_nn, p_md, p_sz, p_node, Int32(n), Int32(step), Int32(linkage), p_ch, p_dv,
-                p_st, p_stf, p_lst, grid_dim=_grid(n), block_dim=TPB,
+                p_st, p_stf, p_lst, p_adj, con, grid_dim=_grid(n), block_dim=TPB,
             )
             ctx.enqueue_function[_agg_rescan_kernel](
-                p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, grid_dim=rb, block_dim=AGG_TPB,
+                p_dm, p_live, p_nn, p_md, Int32(n), p_st, p_lst, p_adj, con, grid_dim=rb, block_dim=AGG_TPB,
             )
         var h_st = List[Int32](length=4, fill=Int32(0))
         children = List[Int32](length=nch, fill=Int32(0))
