@@ -54,6 +54,10 @@ from x_linear.huber_grid import huber_fit_grid
 from x_linear.dispatch import ALGO_HUBER, ALGO_ENETCV
 from x_linear.enetcv_fast import enetcv_fast
 from x_linear.fast_gram import fast_gram_into, XL_RIDGE_FAST_GRAM
+from x_linear.cls1_fast import (
+    C1_TPB, C1_BATCH, C1_BAYES_STATE, BAYES_CLS1_STATS, BAYES_CLS1_PARTS, BAYES_CLS1_BATCH,
+    RIDGE_CLS1_CODES, RIDGE_CLS1_PREDICT, c1_sq_parts_kernel, c1_sum_parts_kernel, c1_dev_parts_kernel, c1_codes_targets_kernel,
+)
 from x_linear.dispatch import ALGO_LOGCV
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo, team_barrier
 from x_linear.dispatch import ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_QUANTILE
@@ -129,6 +133,19 @@ def _ridge_device(
         ctx.enqueue_copy(dst_buf=dy, src_ptr=y)
     var dxp = FP(unsafe_from_address=Int(dx.unsafe_ptr()))
     var dyp = FP(unsafe_from_address=Int(dy.unsafe_ptr()))
+    # lane/apple-fast-gap-cls1 RIDGE_CLS1_CODES: ip[4] == 1 means y holds the
+    # n int32 class codes (RidgeClassifier, unweighted); the +-1 targets are
+    # built here on the device (x_linear/cls1_fast.mojo)
+    var dyt = ctx.enqueue_create_buffer[DType.float32](1)
+    comptime if RIDGE_CLS1_CODES:
+        if len(ip) > 4 and Int(ip[4]) == 1 and n > 0:
+            var t_c = Int(ip[0])
+            dyt = ctx.enqueue_create_buffer[DType.float32](n * t_c)
+            ctx.enqueue_function[c1_codes_targets_kernel](
+                dy.unsafe_ptr().bitcast[Int32](), Int32(n), Int32(t_c), dyt.unsafe_ptr(),
+                grid_dim=(n + C1_TPB - 1) // C1_TPB, block_dim=C1_TPB,
+            )
+            dyp = FP(unsafe_from_address=Int(dyt.unsafe_ptr()))
     ridge_fit_grid(ctx.copy(), dxp, dyp, n, d, ip, fp, n_out, res)
     # lane/neural-pass93: the float-float refit on the grid
     var t_n = Int(ip[0])
@@ -140,6 +157,7 @@ def _ridge_device(
     ctx.synchronize()
     _ = dx^
     _ = dy^
+    _ = dyt^
 
 
 def decision_kernel(x: FP, wb: FP, n: Int32, d: Int32, k: Int32, link: Int32, res: FP):
@@ -148,6 +166,56 @@ def decision_kernel(x: FP, wb: FP, n: Int32, d: Int32, k: Int32, link: Int32, re
         var i = t // Int(k)
         var c = t % Int(k)
         res.unsafe_store(t, decision_one(x, i, Int(d), wb, c, Int(link)))
+
+
+def c1_decision_codes_kernel(x: FP, wb: FP, n: Int32, d: Int32, k: Int32, res: IP):
+    """lane/apple-fast-gap-cls1 RIDGE_CLS1_PREDICT: row i's class code from
+    its k decision scores (`decision_one`, identity link): k == 1, 1 when the
+    score is above 0, else the first maximum (RidgeClassifier.predict)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        var kk = Int(k)
+        var code = 0
+        if kk == 1:
+            code = 1 if decision_one(x, i, Int(d), wb, 0, LINK_IDENTITY_C1) > Float32(0) else 0
+        else:
+            var best = decision_one(x, i, Int(d), wb, 0, LINK_IDENTITY_C1)
+            for c in range(1, kk):
+                var z = decision_one(x, i, Int(d), wb, c, LINK_IDENTITY_C1)
+                if z > best:
+                    best = z
+                    code = c
+        res.unsafe_store(i, Int32(code))
+
+
+comptime LINK_IDENTITY_C1 = 0
+
+
+def decision_codes_device(x: FP, wb: FP, n: Int, d: Int, k: Int, res: IP) raises:
+    """RIDGE_CLS1_PREDICT: the n int32 class codes on the device (raises on
+    a build without the switch: the Python side only calls it when the
+    binding's cls1 flags say so)."""
+    comptime if not RIDGE_CLS1_PREDICT:
+        raise Error("x_linear: decision_codes needs -D MOJOLEARN_RIDGE_FAST_CLS1_PREDICT (FAST, Apple)")
+    else:
+        var ctx = linear_ctx()
+        var dx = ctx.enqueue_create_buffer[DType.float32](max(n * d, 1))
+        var dwb = ctx.enqueue_create_buffer[DType.float32](k * (d + 1))
+        var dout = ctx.enqueue_create_buffer[DType.int32](max(n, 1))
+        if n * d > 0:
+            ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+        ctx.enqueue_copy(dst_buf=dwb, src_ptr=wb)
+        if n > 0:
+            ctx.enqueue_function[c1_decision_codes_kernel](
+                dx.unsafe_ptr(), dwb.unsafe_ptr(), Int32(n), Int32(d), Int32(k), dout.unsafe_ptr(),
+                grid_dim=(n + 255) // 256, block_dim=256,
+            )
+            ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
+        ctx.synchronize()
+        _ = dx^
+        _ = dwb^
+        _ = dout^
+        _ = ctx^
 
 
 comptime XG_TPB = 256
