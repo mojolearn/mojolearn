@@ -15,7 +15,9 @@ through the identical GEMM, DEVIATION 5110 revised 2026-09-29,
 `x_cluster/host/moments_gemm.mojo`). THE k-SIZED WORK IS HOST FLOAT64, one source in both
 bindings: the Wishart and Dirichlet(-process) updates, the d x d Cholesky and
 its triangular inverse, digamma and log-gamma (series on the portable
-`identical_log64`), the lower bound. Every host product that feeds an add is
+`identical_log64`), the lower bound (its n-sized sums, the entropy and the
+mean log-likelihood, are the device's float-float fold, lane cgr2-cluster;
+the start's one-hot or random responsibilities are written on the device). Every host product that feeds an add is
 `identical_mul64`. The k-means start is this library's KMeans through
 `ClusterOps.kmeans`. Only covariance_type='full' (NOT_IMPLEMENTED.tsv)."""
 from std.math import sqrt
