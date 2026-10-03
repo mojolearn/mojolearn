@@ -6,7 +6,7 @@ from fractions import Fraction
 from ._portable_math import isfinite
 
 #: lane/apple-fast-py2mojo-linear: `scale_gamma_limbs` word layout
-#: (svm/host/scale_gamma_limbs.mojo): S1 at scale 2^-149 in 9 base-2^32
+#: (svm/impl/scale_gamma_limbs.mojo): S1 at scale 2^-149 in 9 base-2^32
 #: limbs, S2 at scale 2^-298 in 18, then the count of non-finite cells
 _SG_L1, _SG_L2 = 9, 18
 _SG_SLOTS = _SG_L1 + _SG_L2 + 1

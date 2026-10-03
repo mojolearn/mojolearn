@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""scikit-learn's gamma='scale' exact sums in Mojo (lane/apple-fast-py2mojo-linear).
+"""scikit-learn's gamma='scale' exact sums in Mojo, the shared arithmetic
+(lane/apple-fast-py2mojo-linear). Host loop: `svm/host/scale_gamma_host.mojo`.
 
 `python/mojolearn/_scale_gamma.py::scale_gamma` formed the EXACT sums
 S1 = sum x and S2 = sum x * x of X's float32 cells as Python big integers, a
@@ -17,17 +18,13 @@ scale_gamma_device.mojo`), this host loop and any split of the cells give
 the SAME limbs' value; Python adds the 27 words into two integers and rounds
 `N^2 * 2^298 / (n_features * (N * S2 - S1^2))` once, the exact rational the
 old code rounded (its scales were 2^-1074 and 2^-2148; the ratio is equal),
-so gamma keeps its bits on every vendor and on the host column.
+so gamma keeps its bits on every vendor and on the host column
+(`svm/host/scale_gamma_host.mojo`).
 
 Each cell adds at most two words below 2^32 to an S1 limb and four to the
 S2 limbs; `sg_normalize` carries every limb but the top one into [0, 2^32)
 after at most SG_CHUNK cells, so no Int64 word overflows.
 """
-
-from std.python import Python, PythonObject
-from std.python._cpython import GILReleased
-
-from core.py2mojo_linear import py2mojo_linear_flags
 
 comptime SG_L1 = 9
 comptime SG_L2 = 18
@@ -92,43 +89,3 @@ def sg_normalize(mut acc: SG_ACC):
 @always_inline
 def sg_zero() -> SG_ACC:
     return SG_ACC(fill=Int64(0))
-
-
-def scale_gamma_limbs_host(
-    x: MutPointer[UInt32, MutAnyOrigin], count: Int, dst: MutPointer[Int64, MutAnyOrigin]
-):
-    """THE HOST COLUMN: the same limbs from one host loop (exact, so the
-    same value as the device grid)."""
-    var acc = sg_zero()
-    var i = 0
-    while i < count:
-        var end = min(count, i + SG_CHUNK)
-        for j in range(i, end):
-            sg_add_cell(acc, x[j])
-        sg_normalize(acc)
-        i = end
-    for k in range(SG_SLOTS):
-        dst[k] = acc[k]
-
-
-def scale_gamma_limbs_host_binding(
-    x_addr: PythonObject, count: PythonObject, out_addr: PythonObject
-) raises -> PythonObject:
-    """`scale_gamma_limbs(x, count, out)` on the host column: `count` float32
-    cells at x, SG_SLOTS int64 words written at out. Returns count."""
-    var n = Int(py=count)
-    var xa = Int(py=x_addr)
-    var oa = Int(py=out_addr)
-    if n < 0 or oa == 0 or (n > 0 and xa == 0):
-        raise Error("scale_gamma_limbs: null buffer or negative count")
-    with GILReleased(Python()):
-        scale_gamma_limbs_host(
-            MutPointer[UInt32, MutAnyOrigin](unsafe_from_address=xa),
-            n,
-            MutPointer[Int64, MutAnyOrigin](unsafe_from_address=oa),
-        )
-    return PythonObject(n)
-
-
-def py2mojo_linear_flags_binding() raises -> PythonObject:
-    return PythonObject(py2mojo_linear_flags())

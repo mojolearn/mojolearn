@@ -109,7 +109,7 @@ from svm.impl.svm_parameter import (
 from svm.host.finite_scan import check_finite_ptr
 
 
-from svm.host.scale_gamma_limbs import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
+from svm.host.scale_gamma_host import scale_gamma_limbs_host_binding, py2mojo_linear_flags_binding
 
 def _index(value: PythonObject) raises -> Int:
     var type_name = String(py=value.__class__.__name__)

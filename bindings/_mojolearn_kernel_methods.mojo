@@ -54,8 +54,7 @@ from kernel_methods.estimator import (
 from svm.impl.svm_parameter import KernelParams
 
 
-from svm.impl.scale_gamma_device import scale_gamma_limbs_device_binding
-from svm.host.scale_gamma_limbs import py2mojo_linear_flags_binding
+from svm.impl.scale_gamma_device import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
 from kernel_methods.estimator import _family_ctx as _sg_family_ctx
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:

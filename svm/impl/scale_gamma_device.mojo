@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """gamma='scale' exact sums ON THE DEVICE (lane/apple-fast-py2mojo-linear).
 
-The limbs of `svm/host/scale_gamma_limbs.mojo` from a grid: every thread
+The limbs of `svm/impl/scale_gamma_limbs.mojo` from a grid: every thread
 adds a grid-stride share of the cells into its own limbs, carries them, and
 each block folds its threads' limbs slot by slot in shared memory into one
 partial row; a second launch, one block per slot, folds the partial rows.
@@ -17,7 +17,9 @@ from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from svm.host.scale_gamma_limbs import (
+from core.py2mojo_linear import py2mojo_linear_flags
+
+from svm.impl.scale_gamma_limbs import (
     SG_CHUNK,
     SG_SLOTS,
     sg_add_cell,
@@ -132,3 +134,7 @@ def scale_gamma_limbs_device_binding(
     with GILReleased(Python()):
         scale_gamma_limbs_device(ctx, xa, n, oa)
     return PythonObject(n)
+
+
+def py2mojo_linear_flags_binding() raises -> PythonObject:
+    return PythonObject(py2mojo_linear_flags())
