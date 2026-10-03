@@ -13,10 +13,9 @@ allocation happens inside a fit; the caller hands in the work buffers.
 Speed (a parallel schedule with the same fold order) is pass 2.
 """
 from std.sys.compile import is_defined
-from std.sys.info import is_gpu, is_amd_gpu, is_apple_gpu, is_nvidia_gpu
+from std.sys.info import is_gpu, is_amd_gpu, is_apple_gpu, is_nvidia_gpu, num_physical_cores
 from std.sys import llvm_intrinsic
 from core.host_parallel import host_parallelize
-from core.host_predict_threads import host_predict_task_count, host_predict_chunk
 from std.memory import bitcast
 from checks.numerics import (
     ftz, identical_mul, identical_mul_add, identical_div, identical_sqrt,
@@ -350,6 +349,23 @@ def row_dots(x: FP, lo: Int, hi: Int, d: Int, w: FP, woff: Int, dst: FP):
 comptime ROW_CHUNK = 2048
 
 
+def seq_rows[F: def(Int, Int) -> None](ref f: F, n: Int, grain: Int = ROW_CHUNK):
+    """Runs f(lo, hi) over blocks of at most `grain` units covering [0, n),
+    one after another on the calling thread (host) or in one call (device).
+    The callers that lane/neural-pass82 did not reach (ridge and ridgecv
+    unit passes, the GLM block fold, all added by cgr-linear) keep this
+    form: moving them onto the host pool would add host-thread rows to
+    tools/hooks/host_routes_baseline.tsv, which only shrinks."""
+    comptime if is_gpu():
+        f(0, n)
+    else:
+        var lo = 0
+        while lo < n:
+            var hi = min(lo + grain, n)
+            f(lo, hi)
+            lo = hi
+
+
 def par_rows[F: def(Int, Int) -> None](ref f: F, n: Int, grain: Int = ROW_CHUNK):
     """Runs f(lo, hi) over blocks of at most `grain` units covering [0, n).
     f must write only slots owned by its own units, so the block split
@@ -360,26 +376,24 @@ def par_rows[F: def(Int, Int) -> None](ref f: F, n: Int, grain: Int = ROW_CHUNK)
     else:
         # lane/neural-pass82 (2026-10-01): the blocks run on the host pool
         # (core/host_parallel.mojo, in the caller's floating-point
-        # environment), in `host_predict_task_count` contiguous groups. Until
-        # this lane they ran one after another on the calling thread, so
-        # every x_linear host fit's row passes (GLM, Huber, LogisticCV,
+        # environment), one contiguous group of blocks per physical core.
+        # Until this lane they ran one after another on the calling thread,
+        # so every x_linear host fit's row passes (GLM, Huber, LogisticCV,
         # quantile, Bayes, ridge LOO, SGD one-vs-rest) were single threaded.
         # Every caller's f writes only its own rows' (or units') slots and
         # per-block scratch (audited again on cgr3-pr86 against the
-        # cgr-linear rewrite: huber, logcv, quantile, ridge, ridgecv, glm,
-        # bayes, sgd), so the bits are the serial loop's.
+        # cgr-linear rewrite), so the bits are the serial loop's.
         var blocks = (n + grain - 1) // grain
-        var groups = host_predict_task_count(blocks)
-        var per = host_predict_chunk(blocks, groups)
+        var groups = min(blocks, max(1, num_physical_cores()))
+        if groups <= 1:
+            seq_rows(f, n, grain)
+            return
+        var per = (blocks + groups - 1) // groups
 
         def group(g: Int) {imm f, imm n, imm grain, imm per, imm blocks}:
             for bk in range(g * per, min(blocks, (g + 1) * per)):
                 f(bk * grain, min(n, (bk + 1) * grain))
 
-        if groups <= 1:
-            for g in range(groups):
-                group(g)
-            return
         host_parallelize(group, groups)
 
 
