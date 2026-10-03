@@ -15,8 +15,7 @@ from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sq
 from x_neighbors.iter_host import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn, op_kernel_tiled
 from x_neighbors.ocsvm_host import op_ocsvm
 from x_neighbors.graph_host import op_louvain
-from x_neighbors.kapprox_host import op_kapprox_sparse_rp
-from x_neighbors.kapprox_host import kpca_resident_binding, sparse_rp_device_binding
+from x_neighbors.kapprox_host import kpca_resident_binding
 from x_neighbors.iter_host import lp_fast_resident_binding
 from x_neighbors.sort_items import purity_flags_binding
 
@@ -1125,18 +1124,6 @@ def louvain_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises
     return PythonObject(None)
 
 
-def kapprox_sparse_rp_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_res = _a(a_, 0)
-    var v_kc = _n(i_, 0)
-    var v_d = _n(i_, 1)
-    var v_seed = _n(i_, 2)
-    var v_dens = _f(f_, 0)
-    var v_scale = _f(f_, 1)
-    with GILReleased(Python()):
-        op_kapprox_sparse_rp(v_res, v_kc, v_d, v_seed, v_dens, v_scale)
-    return PythonObject(None)
-
-
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[sqdist_binding]("xn_sqdist")
     m.def_function[nan_sqdist_binding]("xn_nan_sqdist")
@@ -1221,7 +1208,6 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[kernel_tiled_binding]("xn_kernel_tiled")
     m.def_function[ocsvm_binding]("xn_ocsvm")
     m.def_function[louvain_binding]("xn_louvain")
-    m.def_function[kapprox_sparse_rp_binding]("xn_kapprox_sparse_rp")
     m.def_function[eigh_binding]("xn_eigh")
     m.def_function[x_neighbors_numeric_mode_binding]("x_neighbors_numeric_mode")
     m.def_function[x_neighbors_py2mojo_off_binding]("x_neighbors_py2mojo_off")
@@ -1261,7 +1247,6 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
-        m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors_host: ", e))

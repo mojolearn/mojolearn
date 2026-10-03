@@ -346,13 +346,6 @@ OWN_DRIVERS = {
     "louvain": ("graph_dev", "graph_host",
                 [("a", "fin", "n * n"), ("labels", "iout", "n"), ("info", "fout", "2"),
                  ("n", "int"), ("max_level", "int"), ("resolution", "float"), ("threshold", "float")]),
-    # lane/apple-fast-kapprox (2026-10-02): SparseRandomProjection's matrix in
-    # one launch (x_neighbors/kapprox_dev.mojo, FAST + Apple only behind
-    # -D MOJOLEARN_SPARSE_RP_DEVICE; other builds refuse by name). The host
-    # module is the CPU binding's twin of the export.
-    "kapprox_sparse_rp": ("kapprox_dev", "kapprox_host",
-                          [("res", "fout", "kc * d"), ("kc", "int"), ("d", "int"), ("seed", "int"),
-                           ("dens", "float"), ("scale", "float")]),
 }
 
 
@@ -724,7 +717,7 @@ def gpu_binding():
             + BIND_HEAD % "eigh_device" + "from checks.vendor import COMPILED_VENDOR\n"
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(0)
-            + "from x_neighbors.kapprox_dev import kpca_resident_binding, sparse_rp_device_binding\n"
+            + "from x_neighbors.kapprox_dev import kpca_resident_binding\n"
             + "from x_neighbors.iter_device import lp_fast_resident_binding\n"
             + "from x_neighbors.sort_items import purity_flags_binding\n"
             + wrappers() + """
@@ -742,7 +735,6 @@ def PyInit__mojolearn_x_neighbors() abi("C") -> PythonObject:
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
-        m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors: ", e))
@@ -755,7 +747,7 @@ def host_binding():
             + BIND_HEAD % "eigh" + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
             + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + own_imports(1)
-            + "from x_neighbors.kapprox_host import kpca_resident_binding, sparse_rp_device_binding\n"
+            + "from x_neighbors.kapprox_host import kpca_resident_binding\n"
             + "from x_neighbors.iter_host import lp_fast_resident_binding\n"
             + "from x_neighbors.sort_items import purity_flags_binding\n"
             + wrappers() + """
@@ -794,7 +786,6 @@ def PyInit__mojolearn_x_neighbors_host() abi("C") -> PythonObject:
         m.def_function[lp_fast_resident_binding]("x_neighbors_lp_fast_resident")
         m.def_function[purity_flags_binding]("x_neighbors_purity_flags")
         m.def_function[kpca_resident_binding]("x_neighbors_kpca_resident")
-        m.def_function[sparse_rp_device_binding]("x_neighbors_sparse_rp_device")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_neighbors_host: ", e))
@@ -813,7 +804,7 @@ if __name__ == "__main__":
     names = ["x_neighbors_host_numeric_mode", "x_neighbors_host_vendor", "x_neighbors_host_column",
              "x_neighbors_host_sabotage"] + [f"xn_{o[0]}" for o in OPS] + [f"xn_{c[0]}" for c in CUSTOM_OPS] + [f"xn_{k}" for k in OWN_DRIVERS] + ["xn_eigh", "x_neighbors_numeric_mode", "x_neighbors_py2mojo_off",
                                                                             "x_neighbors_vendor",
-                                                                            "x_neighbors_kpca_resident", "x_neighbors_sparse_rp_device",
+                                                                            "x_neighbors_kpca_resident",
                                                                             "x_neighbors_purity_flags"]
     body = "# BEGIN GENERATED EXPORTS\n" + "".join(f'            "{x}",\n' for x in names) + "            "
     surf.write_text(t[:a] + body + t[b:])

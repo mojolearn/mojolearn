@@ -116,13 +116,11 @@ FAMILIES = (
             "xn_kernel_tiled",
             "xn_ocsvm",
             "xn_louvain",
-            "xn_kapprox_sparse_rp",
             "xn_eigh",
             "x_neighbors_numeric_mode",
             "x_neighbors_py2mojo_off",
             "x_neighbors_vendor",
             "x_neighbors_kpca_resident",
-            "x_neighbors_sparse_rp_device",
             "x_neighbors_purity_flags",
             # END GENERATED EXPORTS
         ),
