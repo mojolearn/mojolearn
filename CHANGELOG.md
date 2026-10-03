@@ -6,7 +6,7 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## 0.8.35 (published 2026-10-03)
 
-GPU fits, transforms and predictions no longer contain CPU steps: the host-route debt went from 816 rows to 14 small scalar or k-sized steps. Main at b2f5fa7f2 builds every binding on NVIDIA (sm_89), AMD (gfx942) and Apple Metal, and the verifier cross-check (`python -m mojolearn verify --cross-check default`) agrees bit for bit on all 48 compared cell parts across NVIDIA, AMD, Apple and the host column. IDENTICAL means the same bits across hardware within a release; bits change from 0.8.34 where a fold order changed (listed below).
+GPU fits, transforms and predictions no longer contain CPU steps: the host-route debt went from 816 rows to 32: 18 are the CPU-only column's host-pool row passes (PR #86) and 14 are small scalar or k-sized steps. Main at b2f5fa7f2 builds every binding on NVIDIA (sm_89), AMD (gfx942) and Apple Metal, and the verifier cross-check (`python -m mojolearn verify --cross-check default`) agrees bit for bit on all 48 compared cell parts across NVIDIA, AMD, Apple and the host column. IDENTICAL means the same bits across hardware within a release; bits change from 0.8.34 where a fold order changed (listed below).
 
 ### Changed (GPU path only, in parallel)
 - Linear: the one-block `fit_kernel` is deleted. QuantileRegressor, ARD, Ridge/RidgeCV/RidgeClassifier, LARS and weighted BayesianRidge read rows on the grid; PAVA (IsotonicRegression) is parallel; LogisticRegressionCV fold ids and held-out scores are built on the device; RidgeCV k-fold scoring is blocked.
