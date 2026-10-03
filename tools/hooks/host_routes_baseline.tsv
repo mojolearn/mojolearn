@@ -4,8 +4,6 @@
 # newer than the installed hooks (they skip it).
 # A `# why: ...` line gives the reason the next row stays (required for d2h-host-work).
 rule	class	owner	state	path	occ	text
-# why: CROSS-LANE (cholesky): DEVIATION 1632's one-thread dot over the m-row column of a rank-one update; a fixed-order multi-block fold needs the host column changed with it
-one-block-n	serial-gpu	apple-fast-purity2	owed	cholesky/impl/linalg/detail/cholesky_r1_update.mojo	0	ctx.enqueue_function[r1_dot_kernel](
 # why: CROSS-LANE (x_decomp/linalg): the one-slice QR (ns == 1, qr_slice_count says the matrix is too short to split) runs one block over n_rows; the sliced TSQR path is multi-block; a forced split needs the host column's order
 one-block-n	serial-gpu	apple-fast-purity2	owed	core/householder_qr.mojo	0	ctx.enqueue_function[qr_panel_kernel](
 # why: CROSS-LANE (x_decomp/linalg): the one-slice QR (ns == 1, qr_slice_count says the matrix is too short to split) runs one block over n_rows; the sliced TSQR path is multi-block; a forced split needs the host column's order
