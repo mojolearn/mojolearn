@@ -17,6 +17,8 @@
 # Arm B's .so is left installed.
 set -u
 TAG=$1 BIND=$2 LANE=$3 DS=$4 REPS=$5 ROUNDS=$6 DA=$7 DB=$8
+# One run per arm (Andrew, Oct 3): reps and rounds are 1 unless AB_MULTI_RUN=1.
+[ "${AB_MULTI_RUN:-0}" = 1 ] || { REPS=1; ROUNDS=1; }
 here=$(cd "$(dirname "$0")/.." && pwd); cd "$here"
 so=python/mojolearn/_mojolearn_$BIND.so; script=bindings/build_$BIND.sh
 [ "$BIND" = base ] && { so=python/mojolearn/_mojolearn.so; script=bindings/build.sh; }
