@@ -22,13 +22,18 @@ from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
 #: Lane apple-fast-olsne (2026-10-03): LinearRegression.fit takes the
-#: equilibrated normal equations (DEVIATION 2620) instead of the blocked TSQR
-#: under FAST on Apple. A/B define for now; IDENTICAL, DETERMINISTIC and the
-#: other vendors keep the TSQR. Read by Python through `ols_normal_eq_default`.
+#: equilibrated normal equations (DEVIATION 2620) with X and y uploaded once
+#: (`ols_fit_resident`) instead of the blocked TSQR under FAST on Apple.
+#: Default since the M3 A/B (lane/apple-fast-olsne 9f5cf2a77, n=1): taxi
+#: 286 -> 110 ms, r2 .9088 same; istella 2,921 -> 842 ms, r2 .3325 -> .3319.
+#: MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF turns it off; the old
+#: MOJOLEARN_FAST_OLS_NORMAL_EQ define is now harmless. IDENTICAL,
+#: DETERMINISTIC and the other vendors keep main's route. Read by Python
+#: through `ols_normal_eq_default`.
 comptime OLS_FAST_NORMAL_EQ = (
     GLOBAL_NUMERIC_MODE == _OLS_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_FAST_OLS_NORMAL_EQ"]()
+    and not is_defined["MOJOLEARN_FAST_OLS_NORMAL_EQ_OFF"]()
 )
 
 from max.gpu.host import DeviceContext
@@ -551,6 +556,8 @@ def ols_fit_resident_binding(
     and y uploaded once (glm/estimator.mojo `ols_fit_resident_host`).
     params: n_rows, n_features, center (0/1). With center, mu (float32
     [n_features]) and ymean (float64 [1]) are written. Returns 0."""
+    comptime if not OLS_FAST_NORMAL_EQ:
+        raise Error("ols_fit_resident: only the FAST Apple build (OLS_FAST_NORMAL_EQ) has this route")
     if len(params) != 3:
         raise Error("ols_fit_resident: params must contain n_rows, n_features, center")
     var xp = _f32_ptr(Int(py=x_addr))

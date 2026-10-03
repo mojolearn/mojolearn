@@ -593,11 +593,13 @@ class LinearRegression(NumericModeMixin):
         )
         weights = _check_sample_weight(sample_weight, rows, "LinearRegression")
         b = self._bind("_mojolearn_estimators")
-        normal_eq = not _ols_tsqr_on(rows, cols) or _ols_normal_eq_default(b)
+        fast_ne = _ols_normal_eq_default(b)
+        normal_eq = not _ols_tsqr_on(rows, cols) or fast_ne
         resident = getattr(b, "ols_fit_resident", None)
-        if normal_eq and weights is None and resident is not None:
-            # lane apple-fast-olsne: the normal equations with X and y
-            # uploaded once; the same kernels and words as the route below.
+        if fast_ne and weights is None and resident is not None:
+            # lane apple-fast-olsne: FAST Apple builds only (the binding's
+            # compiled OLS_FAST_NORMAL_EQ): the normal equations with X and y
+            # uploaded once. Every other build keeps main's route below.
             self.coef_ = empty((cols,), "<f4")
             mu = empty((cols,), "<f4")
             ymean = empty((1,), "<f8")
