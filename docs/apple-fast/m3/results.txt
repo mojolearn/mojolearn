@@ -1,4 +1,4 @@
-pos=149 lines=     376
+pos=150 lines=     377
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -172,3 +172,5 @@ pos=149 lines=     376
 256:CMD apple-fast-depthwise@bdc8c10b1 dw-tree-taxi rc=0 AFT-MEDIAN arm=B n=2 median_ms=14386.1 all=[13773, 15000] hashes=['10f9d8fc83d5de69', '9d532b72e163d22f'] acc={'logloss': [0.527905, 0.527934], 'auc': [0.63239, 0.632297]}
 257:CMD apple-fast-depthwise@bdc8c10b1 dw-fcns-taxi rc=0 AFT-MEDIAN arm=B n=2 median_ms=14119.5 all=[14117, 14122] hashes=['ba92096b497b8e40', 'e8c11ba64d7ec159'] acc={'logloss': [0.527874, 0.527932], 'auc': [0.632432, 0.632611]}
 258:CMD apple-fast-depthwise@bdc8c10b1 dw-fcns-istella rc=0 AFT-MEDIAN arm=B n=2 median_ms=19521.8 all=[20141, 18903] hashes=['b2648ae4b52fc690', 'e116bd99f18fb7ae'] acc={'logloss': [0.156868, 0.156889], 'auc': [0.983218, 0.983202]}
+259:FBUILD lane/apple-fast-trees-depthwise@da8ad083f core=0 ibase=0 estimators=0 gbdt=0 gp=0 training=0 x_ann=0 x_cluster=0 x_cnn=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 x_sequence=0
+260:CMD apple-fast-trees-depthwise@da8ad083f tdw-cat-permbatch rc=0 AFT-MEDIAN arm=B n=0 median_ms=None all=[] hashes=[] acc={}
