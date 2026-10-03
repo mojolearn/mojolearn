@@ -1,0 +1,5 @@
+== lane_apple-fast-pairlogit-fbuild-gbdt.log (00:02Z)
+./gbdt/targets/kernel/pair_logit_group.mojo:386:6: error: aliasing values passed mutably to 'args' argument and passed mutably to 'args' argument in 'enqueue_function' call
+    ](
+     ^
+Imported from ~/mq/wt/lane_apple-fast-pairlogit/bindings/_mojolearn_gbdt.mojo:805:
