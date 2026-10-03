@@ -256,12 +256,16 @@ def ug_member(delta: Float32, sigma: Float32) -> Float32:
 @always_inline
 def ug_merge_weight(a: Float32, b: Float32, mix: Float32) -> Float32:
     """`mix * (a + b - a b) + (1 - mix) * a b` with every product pinned and
-    ONE rounding on the intersection's product (the fma)."""
-    var intersection = identical_mul(a, b)
-    var union = (a + b) - intersection
-    return identical_mul_add(
-        Float32(1.0) - mix, intersection, identical_mul(mix, union)
-    )
+    ONE rounding on the intersection's product (the fma). Operands, the
+    product and the result are flushed, so no subnormal reaches an Apple
+    add or compare (`ug_member`'s note)."""
+    var fa = ftz(a)
+    var fb = ftz(b)
+    var intersection = ftz(identical_mul(fa, fb))
+    var union = ftz((fa + fb) - intersection)
+    return ftz(identical_mul_add(
+        Float32(1.0) - mix, intersection, ftz(identical_mul(mix, union))
+    ))
 
 
 # ---------------------------------------------------------------------------
