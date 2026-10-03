@@ -343,14 +343,17 @@ def test_trainer_mojo_backend_writes_the_python_reference_bytes(tok):
     ties = 0
     for docs, v, f in corpora:
         m = BpeVocabularyTrainer(vocab_size=v, min_frequency=f, backend="mojo").train(docs)
-        p = BpeVocabularyTrainer(vocab_size=v, min_frequency=f, backend="python").train(docs)
-        assert m.stats["backend"] == "mojo" and p.stats["backend"] == "python"
-        assert m.render_ranks() == p.render_ranks(), f"ranks differ (vocab_size {v})"
-        assert m.render_tokenizer_json() == p.render_tokenizer_json(), f"tokenizer.json differs (vocab_size {v})"
-        assert m.merges == p.merges and m.n_ties_broken == p.n_ties_broken
+        # The pure Python reference is a verification oracle, called directly.
+        p_tokens, p_merges, p_stats = ref.train(docs, v, f)
+        assert m.stats["backend"] == "mojo"
+        assert m.render_ranks() == ref.render_ranks(p_tokens), f"ranks differ (vocab_size {v})"
+        assert m.render_tokenizer_json() == ref.render_tokenizer_json(p_tokens, p_merges), \
+            f"tokenizer.json differs (vocab_size {v})"
+        assert m.merges == [tuple(x) for x in p_merges] and m.n_ties_broken == p_stats["n_ties_broken"]
         ties += m.n_ties_broken
     assert ties > 0, "no tie was reached, so the tie-break was not tested"
     assert BpeVocabularyTrainer(vocab_size=300).train([b"ab ab"]).stats["backend"] == "mojo"
+    _raises(lambda: BpeVocabularyTrainer(backend="python"), ValueError, "verification oracle")
 
 
 def test_refuses_no_vocabulary_by_name():
