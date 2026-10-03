@@ -114,6 +114,7 @@ from dbscan.impl.corepoints.compute import (
     core_points_compute_weighted,
 )
 from dbscan.impl.mergelabels.runner import merge_labels_run
+from dbscan.impl.denseball import DBSCAN_FAST_DENSEBALL, dbscan_denseball_fit
 from dbscan.impl.vertexdeg.algo import (
     weighted_vertex_deg_csr,
     weighted_vertex_deg_dense,
@@ -542,6 +543,32 @@ their code branches on is this Bool.
             n_rows, n_features, n_landmarks,
         )
         ctx.synchronize()
+
+    # FAST + Apple, `-D MOJOLEARN_DBSCAN_FAST_DENSEBALL=1`: no edge list.
+    # Dense-ball cliques, early-exit core counts and union-find over landmark
+    # pairs (`denseball.mojo`); same `i + 1` / MAX_LABEL labels, same tail.
+    comptime if DBSCAN_FAST_DENSEBALL:
+        if sparse_rbc_mode and not has_weights:
+            var t_db = perf_counter_ns()
+            var rounds = dbscan_denseball_fit(
+                ctx, rbc_xr, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad, rbc_ne,
+                core, labels, n_rows, n_features, n_landmarks, eps, min_pts,
+            )
+            if phase_timing:
+                print(
+                    "PHASE denseball rounds " + String(rounds) + " "
+                    + String(Float64(perf_counter_ns() - t_db) / 1.0e6)
+                )
+            if n_batches_out_addr != 0:
+                MutPointer[Int, MutUntrackedOrigin](
+                    unsafe_from_address=n_batches_out_addr
+                ).unsafe_store(0, 1)
+            _dbscan_finish(
+                ctx, labels, core, work_buffer, block_sums, n_rows,
+                n_features, eps, min_pts, 1, metric, has_weights,
+                phase_timing,
+            )
+            return rounds
 
     # THE RADIUS, NOT ITS SQUARE. `algo.cuh:227` hands `data.eps` to `eps_nn`
     # while the brute-force arm one line later gets `eps2`. The query kernel
@@ -1149,6 +1176,30 @@ their code branches on is this Bool.
     # The batch-count invariance the omitted per-batch records would have
     # tested is gated directly instead, by
     # `check_dbscan_batch_count_invariance`.
+    _dbscan_finish(
+        ctx, labels, core, work_buffer, block_sums, n_rows, n_features, eps,
+        min_pts, n_batches, metric, has_weights, phase_timing,
+    )
+    return passes
+
+
+def _dbscan_finish(
+    ctx: DeviceContext,
+    mut labels: DeviceBuffer[DType.int32],
+    mut core: DeviceBuffer[DType.uint8],
+    mut work_buffer: DeviceBuffer[DType.int32],
+    mut block_sums: DeviceBuffer[DType.int32],
+    n_rows: Int,
+    n_features: Int,
+    eps: Float64,
+    min_pts: Int,
+    n_batches: Int,
+    metric: Int,
+    has_weights: Bool,
+    phase_timing: Bool,
+) raises:
+    """The identity trace and `final_relabel` + `relabelForSkl`, shared by
+    the reference route and the FAST dense-ball route (`denseball.mojo`)."""
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(
@@ -1184,4 +1235,3 @@ their code branches on is this Bool.
     if trace.enabled:
         trace.record_device(ctx, "dbscan.labels.final", labels, n_rows)
 
-    return passes
