@@ -61,7 +61,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemm_nt, gemv_n
-from core.pinned_reduce import pinned_block_sum
+from core.pinned_reduce import pinned_block_max, pinned_block_sum
 from core.strided_walk import (
     APPLE_IDENTICAL_STEP_UNROLL,
     APPLE_FAST_STEP_UNROLL,
@@ -470,11 +470,113 @@ comptime QN_TILED = (
 comptime QNT_ROWS = 256
 comptime QNT_TPB = 256
 
+# ---------------------------------------------------------------------------
+# lane/apple-fast-linsvr (2026-10-03): FAST on Apple, the C == 1 objective's
+# epilogue. QN_FAST_SLIM: memset g + Tikhonov + the gradient norm (+ the
+# OWL-QN l1 term) as ONE launch after the fold (`qn_slim_epilogue_kernel`)
+# instead of four one-block launches. FAST + Apple DEFAULT since the M3 A/B
+# (linearsvr taxi -17.4%; M2 linsvr-slim-istella-x -4.5%), quality identical.
+# `-D MOJOLEARN_LSVR_EVAL_SLIM_OFF` reverts. IDENTICAL compiles main's code.
+# The lane's other parts (FUSED_GRAD, LINESEARCH_BATCH, FASTPATH_FIX,
+# DEVICE_CONVERGE, ALL, DUAL_CD) stay on lane/apple-fast-linsvr @ c649076a4
+# and lane/apple-fast-m2b1 (docs/apple-fast/EXPERIMENTS.md).
+# ---------------------------------------------------------------------------
+comptime QN_FAST_SLIM = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_LSVR_EVAL_SLIM_OFF"]()
+)
+
 
 def qn_tiled_applies(c: Int) -> Bool:
     comptime if QN_TILED:
         return c == 1
     return False
+
+
+@always_inline
+def _qn_slim_epilogue_body(
+    slots: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_weights_in: Int32,
+    n_param_in: Int32,
+    l2: Float32,
+    gnorm_kind: Int32,
+    pen_len_in: Int32,
+):
+    """QN_FAST_SLIM: one block of STATS_TPB after the fold wrote the loss
+    gradient into g (set_zero). Thread j adds the Tikhonov gradient `l2 *
+    w[j]` to g[j] over the C * D weights and folds the value `0.5 * l2 *
+    w_j^2` into slots[1]; then the gradient norm of the updated g (kind 1:
+    sum g^2, 2: sum |g|, 0: max |g|, `_gnorm_kind`) into slots[2]; then,
+    pen_len > 0, `nrm1(w[0:pen_len])` into slots[3]. Replaces the memset,
+    `tikhonov_reg_grad_kernel`, the norm kernel and `nrm1_kernel`: four
+    one-block launches. Index j belongs to thread j mod STATS_TPB in both
+    walks, so every g word is read by the thread that wrote it and no
+    device fence is needed; the folds cross threads through threadgroup
+    memory."""
+    var nw = Int(n_weights_in)
+    var np = Int(n_param_in)
+    var pl = Int(pen_len_in)
+    var tid = Int(thread_idx.x)
+    var reg = Float32(0.0)
+    if l2 != Float32(0.0):
+        var half_l2 = ftz(Float32(0.5) * l2)
+        var j = tid
+        while j < nw:
+            var wj = w.unsafe_load(j)
+            g.unsafe_store(j, ftz(g.unsafe_load(j) + ftz(l2 * wj)))
+            reg = ftz(reg + ftz(ftz(half_l2 * wj) * wj))
+            j += STATS_TPB
+    var reg_s = ftz(pinned_block_sum[STATS_TPB](reg))
+    var acc = Float32(0.0)
+    var i = tid
+    while i < np:
+        var gi = g.unsafe_load(i)
+        if gnorm_kind == 1:
+            acc = gi * gi + acc
+        elif gnorm_kind == 2:
+            acc = ftz(acc + abs(gi))
+        else:
+            var a = abs(gi)
+            if a > acc:
+                acc = a
+        i += STATS_TPB
+    var norm = Float32(0.0)
+    if gnorm_kind == 0:
+        norm = pinned_block_max[STATS_TPB](acc)
+    else:
+        norm = ftz(pinned_block_sum[STATS_TPB](acc))
+    var pen = Float32(0.0)
+    if pl > 0:
+        var p = Float32(0.0)
+        var k = tid
+        while k < pl:
+            p = ftz(p + abs(w.unsafe_load(k)))
+            k += STATS_TPB
+        pen = ftz(pinned_block_sum[STATS_TPB](p))
+    if tid == 0:
+        slots.unsafe_store(1, reg_s)
+        slots.unsafe_store(2, norm)
+        if pl > 0:
+            slots.unsafe_store(3, pen)
+
+
+def qn_slim_epilogue_kernel(
+    slots: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    w: MutPointer[Float32, MutAnyOrigin],
+    n_weights_in: Int32,
+    n_param_in: Int32,
+    l2: Float32,
+    gnorm_kind: Int32,
+    pen_len_in: Int32,
+):
+    """The kernel entry of `_qn_slim_epilogue_body` (its docstring says what it computes)."""
+    _qn_slim_epilogue_body(
+        slots, g, w, n_weights_in, n_param_in, l2, gnorm_kind, pen_len_in,
+    )
 
 
 def qnt_tiles(n: Int) -> Int:
@@ -1058,7 +1160,12 @@ struct GLMWithData(Movable):
         var s3 = self.slots.create_sub_buffer[DType.float32](3, 1)
         var blocks = qn_blocks_applies(self.dims.D, self.dims.C)
         var tiled = qn_tiled_applies(self.dims.C)
-        if self.l2 == Float32(0.0):
+        # lane/apple-fast-linsvr: QN_FAST_SLIM leaves the Tikhonov half, the
+        # norm and the l1 term to qn_slim_epilogue_kernel after the fold
+        var slim = False
+        comptime if QN_FAST_SLIM:
+            slim = self.dims.C == 1 and self.dims.n_param <= STATS_TPB
+        if self.l2 == Float32(0.0) or slim:
             if blocks:
                 self.enqueue_blocks(ctx, w, g, True)
             elif tiled:
@@ -1088,22 +1195,25 @@ struct GLMWithData(Movable):
                 linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, False)
         # `grad_norm`'s reduction of this `g`, speculatively
         var np = self.dims.n_param
-        if self._gnorm_kind() == 1:
+        comptime if QN_FAST_SLIM:
+            if slim:
+                self.enqueue_slim_epilogue(ctx, w, g, pen_len)
+        if not slim and self._gnorm_kind() == 1:
             ctx.enqueue_function[dot_self_kernel](
                 s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
-        elif self._gnorm_kind() == 2:
+        elif not slim and self._gnorm_kind() == 2:
             ctx.enqueue_function[nrm1_kernel](
                 s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
-        else:
+        elif not slim:
             ctx.enqueue_function[nrm_max_kernel](
                 s2.unsafe_ptr(), g.unsafe_ptr(), Int32(np),
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
-        if pen_len > 0:
+        if pen_len > 0 and not slim:
             ctx.enqueue_function[nrm1_kernel](
                 s3.unsafe_ptr(), w.unsafe_ptr(), Int32(pen_len),
                 grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
@@ -1121,6 +1231,26 @@ struct GLMWithData(Movable):
             return loss_host
         var reg_host = self.stage.unsafe_ptr().unsafe_load(1)
         return ftz(loss_host + reg_host)
+
+    def enqueue_slim_epilogue(
+        mut self,
+        ctx: DeviceContext,
+        mut w: DeviceBuffer[DType.float32],
+        mut g: DeviceBuffer[DType.float32],
+        pen_len: Int,
+    ) raises:
+        """QN_FAST_SLIM: `qn_slim_epilogue_kernel` (Tikhonov gradient and
+        value, the gradient norm, the l1 term) as one launch into slots
+        1..3."""
+        comptime if not QN_FAST_SLIM:
+            raise Error("qn: enqueue_slim_epilogue is compiled under FAST + Apple only")
+        else:
+            ctx.enqueue_function[qn_slim_epilogue_kernel](  # small-launch(n_param: coefficients): the C * D weights + bias, <= STATS_TPB under slim, never rows; replaces four one-block launches over the same words
+                self.slots.unsafe_ptr(), g.unsafe_ptr(), w.unsafe_ptr(),
+                Int32(self.dims.C * self.dims.D), Int32(self.dims.n_param),
+                self.l2, Int32(self._gnorm_kind()), Int32(pen_len),
+                grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            )
 
     def enqueue_tiled(
         mut self,

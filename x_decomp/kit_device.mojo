@@ -58,6 +58,7 @@ from x_decomp.kit import (
     mat_from,
 )
 from x_decomp.mcd import Est, _F32_EPS, _FLT_MIN, _neg_inf, _order_by_det, _pos_inf, _write, argsort_values, smallest_sorted
+from x_decomp.mcd_fast import MCD_DEVICE_CSTEPS, fast_mcd_fast
 from x_decomp.resident import X_DECOMP_POOL, _ptr, pool_alloc, pool_free
 
 #: `_expansion_decomp._F64_EPS`, the `adds` of LDA's `norm_phi`
@@ -561,6 +562,13 @@ def fast_mcd_dev(
 ) raises:
     """`fast_mcd` (x_decomp/mcd.mojo) with X resident: the same plan, the
     same C-steps, the same draws and orders."""
+    # FAST on Apple by default (-D MOJOLEARN_MCD_DEVICE_CSTEPS_OFF reverts):
+    # every candidate's C-steps together on the device (x_decomp/mcd_fast.mojo,
+    # lane/apple-fast-robust; M3 A/B min-cov-det taxi 79,925 -> 215 ms,
+    # M2 robust-ee-taxi-x 64,578 -> 267.5 ms)
+    comptime if MCD_DEVICE_CSTEPS:
+        if fast_mcd_fast(X, p, loc_out, cov_out, sup_out, dist_out):
+            return
     var n = p[0]
     var d = p[1]
     var h = p[2]
