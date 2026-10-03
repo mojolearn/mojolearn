@@ -402,8 +402,9 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     # that ran OUR CPU binding left the board and CPU opponents left races that have a GPU one
     algos = bb.plan_races("apple", bb.modes_for("apple"), ["algos"], rows=1000)
     before = bb.plan_races("apple", bb.modes_for("apple"), bb.FAMILIES[:-1], rows=1000)
-    assert len(before) == 93 and sum(len(r["arms"]) for r in before) == 316
-    assert "TOTAL races=%d cells=%d" % (93 + len(algos), 316 + sum(len(r["arms"]) for r in algos)) in text
+    # 328 since Oct 3 2026: the Apple FAST neural tier adds `ours-fast` to the 12 neural races
+    assert len(before) == 93 and sum(len(r["arms"]) for r in before) == 328
+    assert "TOTAL races=%d cells=%d" % (93 + len(algos), 328 + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -412,10 +413,13 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
                               for ln in algo_lines)
     assert "our CPU: never raced (the board races only our GPU)" in text
     # neural on Apple: the 12 GPU lanes (the 8 that ran our CPU binding left the board),
-    # each `ours` plus its torch GPU arms: 52 cells (see test_plan_neural_identical_only_on_every_vendor)
+    # each `ours` plus its torch GPU arms: 52 cells identical only, 64 with the Apple FAST
+    # arm `ours-fast` (see test_plan_neural_fast_on_apple_only)
     neural = bb.plan_races("apple", ["identical"], ["neural"])
     assert len(neural) == 12 and sum(len(r["arms"]) for r in neural) == 52
-    assert "family neural     races=12 cells=52" in text
+    both = bb.plan_races("apple", bb.modes_for("apple"), ["neural"])
+    assert len(both) == 12 and sum(len(r["arms"]) for r in both) == 64
+    assert "family neural     races=12 cells=64" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
     assert _calls(env) == []
@@ -660,12 +664,16 @@ CPU_ARMS = ["torch-cpu-eager-fp32", "torch-cpu-compile-fp32", "torch-cpu-eager-b
 
 
 @pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
-def test_plan_neural_identical_only_on_every_vendor(vendor):
+def test_plan_neural_fast_on_apple_only(vendor):
     races = bb.plan_races(vendor, bb.modes_for(vendor), ["neural"])
     assert [r["id"] for r in races] == NEURAL_IDS
+    # the Apple FAST neural tier (Oct 3 2026): `ours-fast` beside `ours` on Apple only
+    ours = ["ours", "ours-fast"] if vendor == "apple" else ["ours"]
     for r in races:
-        assert r["our_arms"] == {"ours": "identical"}
-        assert "ours-ab" not in r["arms"] and "ours-fast" not in r["arms"]
+        assert r["our_arms"] == ({"ours": "identical", "ours-fast": "fast"} if vendor == "apple"
+                                 else {"ours": "identical"})
+        assert r["modes"] == (["fast", "identical"] if vendor == "apple" else ["identical"])
+        assert "ours-ab" not in r["arms"]
         cpu_lane = r["lane"].endswith("-infer") or r["lane"] == "lm-host-train-step"
         want = CPU_ARMS if cpu_lane else GPU_ARMS[vendor]
         if r["lane"] == "gemm-bf16":
@@ -676,7 +684,7 @@ def test_plan_neural_identical_only_on_every_vendor(vendor):
             # the per-token reference scan is not a compile target (named in NOT_PLANNED)
             want = [a for a in want if "-compile-" not in a]
         assert r["opponents"] == want, r["id"]
-        assert r["arms"] == ["ours"] + want
+        assert r["arms"] == ours + want
         # TF32 exists on NVIDIA CUDA only; it is never planned elsewhere
         assert any("tf32" in a for a in r["arms"]) == (vendor == "nvidia" and not cpu_lane
                                                       and not r["lane"].startswith("gemm-"))
@@ -687,27 +695,32 @@ def test_plan_neural_identical_only_on_every_vendor(vendor):
     small = bb.plan_races(vendor, ["identical"], ["neural"], ["gemm"], neural_shape="small")
     assert [r["id"] for r in small] == ["neural/gemm/gaussian/shape=small"]
     cells = sum(len(r["arms"]) for r in races)
-    assert cells == {"apple": 52, "amd": 52, "nvidia": 73}[vendor]
+    assert cells == {"apple": 64, "amd": 52, "nvidia": 73}[vendor]
     assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 12, "cells": cells}}
 
 
-def test_fast_refused_for_neural_by_name(env):
-    with pytest.raises(SystemExit, match="neural family"):
-        bb.plan_races("apple", ["fast"], ["neural"])
-    with pytest.raises(SystemExit, match="neural family"):
-        bb.plan_races("apple", ["fast"])                  # neural is in the default families
-    with pytest.raises(SystemExit, match="neural family"):
-        bb.main(["--dry-run", "--vendor", "apple", "--modes", "fast", "--families", "neural"])
-    # FAST without neural is still the Apple tier for trees and classical
+def test_fast_for_neural_is_the_apple_tier(env):
+    # Apple (Oct 3 2026): a FAST-only neural plan races `ours-fast` alone, GPU lanes only
+    races = bb.plan_races("apple", ["fast"], ["neural"])
+    assert [r["id"] for r in races] == NEURAL_IDS
+    assert all(r["our_arms"] == {"ours-fast": "fast"} and r["arms"][0] == "ours-fast"
+               and r["modes"] == ["fast"] for r in races)
+    assert bb.main(["--dry-run", "--vendor", "apple", "--modes", "fast", "--families", "neural"]) == 0
+    # FAST is still the Apple tier for trees and classical
     races = bb.plan_races("apple", ["fast"], ["trees", "classical"])
     assert races and all(set(r["our_arms"].values()) == {"fast"} for r in races)
+    # NVIDIA and AMD: the neural family is IDENTICAL only, refused by name without identical
     for v in ("nvidia", "amd"):
+        with pytest.raises(SystemExit, match="neural family"):
+            bb.plan_races(v, ["fast"], ["neural"])
+        with pytest.raises(SystemExit, match="neural family"):
+            bb.check_neural_modes(["neural"], ["fast"], v)
         with pytest.raises(SystemExit):
             bb.main(["--dry-run", "--vendor", v, "--modes", "fast", "--families", "neural"])
     assert _calls(env) == []
 
 
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 316, 134, 52),
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 328, 134, 64),
                                                       ("nvidia", 260, 88, 73),
                                                       ("amd", 222, 90, 52)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
@@ -717,7 +730,8 @@ def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert "TOTAL races=93 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text
     assert "family neural     races=12 cells=%d" % neural in text
-    assert "neural: IDENTICAL only" in text
+    assert "neural: ours IDENTICAL" in text
+    assert ("ours-fast, the Apple tier" in text) == (vendor == "apple")
     # what is left off the plan is printed by name, never dropped silently
     assert "neural not planned: torch-compile-* on mamba1-forward" in text
     assert ("neural not planned: torch-eager-tf32" in text) == (vendor != "nvidia")

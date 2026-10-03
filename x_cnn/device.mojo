@@ -30,6 +30,10 @@ from gemm.contract import OP_NN, OP_NT, OP_TN
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from core.staged_download import download_f32_into
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
+#: lane afn-mlp (2026-10-03): the Apple FAST tiled direct convolution,
+#: compiled only under FAST + Apple + `-D MOJOLEARN_AFN_CNN_DIRECT`; every
+#: other build runs the paths below unchanged (x_cnn/afn_direct.mojo).
+from x_cnn.afn_direct import AFN_CNN_DIRECT, afn_conv_direct_applies, afn_conv_direct_launch
 from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW,
     CP_SH, CP_SW, CP_PH, CP_PW, CP_DH, CP_DW,
@@ -1843,6 +1847,14 @@ def _conv_relu_on_device(
                 grid_dim=((rows + DC_TPB - 1) // DC_TPB, 1, 1), block_dim=(DC_TPB, 1, 1),
             )
             return
+    comptime if AFN_CNN_DIRECT:
+        # lane afn-mlp: the shapes im2col + GEMM served, as one tiled launch
+        if rows > 0 and afn_conv_direct_applies(ckk, OC):
+            afn_conv_direct_launch(
+                ctx, fp(dx), fp(dw), fp(dbias), fp(cols), fp(yconv), fp(yconv), ip(dp),
+                rows, OC, need_cols, False,
+            )
+            return
     _im2col(ctx, dx, cols, dp, rows, ckk, C)
     device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
     _conv_out(ctx, y2, dbias, yconv, dp, N, rows // N, OC)
@@ -1886,6 +1898,27 @@ def conv_block_forward_into[resident: Bool = False](
     var cols = view(ctx, FP(unsafe_from_address=save_cols), rows * ckk) if saved else ws(ctx, 4, rows * ckk)
     var y2 = ws(ctx, 5, ny)
     var yconv = view(ctx, FP(unsafe_from_address=save_y), ny) if saved else ws(ctx, 6, ny)
+    comptime if AFN_CNN_DIRECT:
+        # lane afn-mlp: without a pool the tiled launch's epilogue writes the
+        # ReLU too, so the block is one launch and one wait
+        if not pool and rows > 0 and afn_conv_direct_applies(ckk, OC):
+            var pout_a = outb[resident](ctx, 7, dst, ny)
+            afn_conv_direct_launch(
+                ctx, fp(dx), fp(dw), fp(dbias), fp(cols), fp(yconv), fp(pout_a), ip(dp),
+                rows, OC, saved, True,
+            )
+            fetch[resident](ctx, pout_a, dst, ny)
+            ctx.synchronize()
+            _ = pout_a^
+            _ = dx^
+            _ = dw^
+            _ = dbias^
+            _ = dp^
+            _ = cols^
+            _ = y2^
+            _ = yconv^
+            _ = ctx^
+            return
     _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk, N, C, saved)
     # the block's output: the pool's, or the ReLU's when there is no pool
     var pout = outb[resident](ctx, 7, dst, no)

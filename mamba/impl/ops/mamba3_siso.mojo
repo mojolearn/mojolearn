@@ -121,6 +121,15 @@ from checks.numerics import (
     portable_cosf,
     portable_sinf,
 )
+#: lane afn-mamba (2026-10-03): FAST + Apple + `-D MOJOLEARN_AFN_MAMBA3_SISO_FUSED`
+#: runs the elementwise stages as four fused launches (afn_mamba3_fused.mojo);
+#: every other build takes the kernels below unchanged.
+from mamba.impl.modules.afn_defines import AFN_MAMBA3_SISO_FUSED
+from mamba.impl.ops.afn_mamba3_fused import (
+    afn_m3_dacs_decay,
+    afn_m3_rot_kscale,
+    afn_m3_scale_angle,
+)
 from mamba.checks.mamba3_fixture import (
     M3_CHUNK_SIZE,
     M3_D_STATE,
@@ -1744,44 +1753,54 @@ def m3_siso_forward(
     comptime p_dim = M3_HEADDIM
     comptime r_ang = M3_NUM_ROPE_ANGLES
 
-    ctx.enqueue_function[m3_pre_kernel](
-        adt_work.unsafe_ptr(),
-        sig_work.unsafe_ptr(),
-        dt_work.unsafe_ptr(),
-        a_new.unsafe_ptr(),
-        dt_new.unsafe_ptr(),
-        in_proj.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(q0),
-        Int32(nh),
-        Int32(dip),
-        Int32(c_trap),
-        grid_dim=(_grid(b * l * nh), 1, 1),
-        block_dim=(MAMBA3_TPB, 1, 1),
-    )
-    m3_phase_tick(ctx, phase_tick, String("m3_pre_kernel"))
-    ctx.enqueue_function[m3_scale_kernel](
-        gamma_work.unsafe_ptr(),
-        betap_work.unsafe_ptr(),
-        scale_work.unsafe_ptr(),
-        dt_work.unsafe_ptr(),
-        sig_work.unsafe_ptr(),
-        Int32(b),
-        Int32(t_work),
-        Int32(nh),
-        grid_dim=(_grid(b * t_work * nh), 1, 1),
-        block_dim=(MAMBA3_TPB, 1, 1),
-    )
-    m3_phase_tick(ctx, phase_tick, String("m3_scale_kernel"))
-    comptime if M3_PARALLEL_ANGLE_INCREMENT:
-        ctx.enqueue_function[m3_angle_increment_kernel](
-            theta_out.unsafe_ptr(), in_proj.unsafe_ptr(), dt_work.unsafe_ptr(),
-            Int32(b), Int32(l), Int32(q0), Int32(nh), Int32(dip), Int32(c_ang),
-            grid_dim=(_grid(b * l * nh * r_ang), 1, 1),
+    comptime if AFN_MAMBA3_SISO_FUSED:
+        # The block's fused prep launch already wrote the new rows' dt,
+        # ADT, sigma and v (m3_pre_kernel + m3_assemble_vnew_kernel); S9 and
+        # the S10 increments are ONE launch here.
+        afn_m3_scale_angle(
+            ctx, gamma_work, betap_work, scale_work, theta_out, dt_work,
+            sig_work, in_proj, b, l, q0, nh, dip, c_ang,
+        )
+        m3_phase_tick(ctx, phase_tick, String("afn_m3_scale_angle"))
+    else:
+        ctx.enqueue_function[m3_pre_kernel](
+            adt_work.unsafe_ptr(),
+            sig_work.unsafe_ptr(),
+            dt_work.unsafe_ptr(),
+            a_new.unsafe_ptr(),
+            dt_new.unsafe_ptr(),
+            in_proj.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(q0),
+            Int32(nh),
+            Int32(dip),
+            Int32(c_trap),
+            grid_dim=(_grid(b * l * nh), 1, 1),
             block_dim=(MAMBA3_TPB, 1, 1),
         )
-        m3_phase_tick(ctx, phase_tick, String("m3_angle_increment_kernel"))
+        m3_phase_tick(ctx, phase_tick, String("m3_pre_kernel"))
+        ctx.enqueue_function[m3_scale_kernel](
+            gamma_work.unsafe_ptr(),
+            betap_work.unsafe_ptr(),
+            scale_work.unsafe_ptr(),
+            dt_work.unsafe_ptr(),
+            sig_work.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(nh),
+            grid_dim=(_grid(b * t_work * nh), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
+        m3_phase_tick(ctx, phase_tick, String("m3_scale_kernel"))
+        comptime if M3_PARALLEL_ANGLE_INCREMENT:
+            ctx.enqueue_function[m3_angle_increment_kernel](
+                theta_out.unsafe_ptr(), in_proj.unsafe_ptr(), dt_work.unsafe_ptr(),
+                Int32(b), Int32(l), Int32(q0), Int32(nh), Int32(dip), Int32(c_ang),
+                grid_dim=(_grid(b * l * nh * r_ang), 1, 1),
+                block_dim=(MAMBA3_TPB, 1, 1),
+            )
+            m3_phase_tick(ctx, phase_tick, String("m3_angle_increment_kernel"))
     ctx.enqueue_function[m3_angle_kernel](
         theta_out.unsafe_ptr(),
         theta_state.unsafe_ptr(),
@@ -1798,22 +1817,32 @@ def m3_siso_forward(
         block_dim=(MAMBA3_TPB, 1, 1),
     )
     m3_phase_tick(ctx, phase_tick, String("m3_angle_kernel"))
-    ctx.enqueue_function[m3_rot_kernel](
-        rotq_work.unsafe_ptr(),
-        rotk_work.unsafe_ptr(),
-        theta_out.unsafe_ptr(),
-        bcb.unsafe_ptr(),
-        bcc.unsafe_ptr(),
-        b_bias.unsafe_ptr(),
-        c_bias.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(q0),
-        Int32(nh),
-        grid_dim=(_grid(b * l * nh * (n_state // 2)), 1, 1),
-        block_dim=(MAMBA3_TPB, 1, 1),
-    )
-    m3_phase_tick(ctx, phase_tick, String("m3_rot_kernel"))
+    comptime if AFN_MAMBA3_SISO_FUSED:
+        # ONE launch: the rotation of the new rows, the K scaling of every
+        # working row (m3_kscale_kernel) and the k_last / v_last reports
+        # (m3_reports_kernel).
+        afn_m3_rot_kscale(
+            ctx, rotq_work, rotk_work, kscale_work, k_last, v_last, theta_out,
+            bcb, bcc, b_bias, c_bias, scale_work, v_work, b, l, q0, nh,
+        )
+        m3_phase_tick(ctx, phase_tick, String("afn_m3_rot_kscale"))
+    else:
+        ctx.enqueue_function[m3_rot_kernel](
+            rotq_work.unsafe_ptr(),
+            rotk_work.unsafe_ptr(),
+            theta_out.unsafe_ptr(),
+            bcb.unsafe_ptr(),
+            bcc.unsafe_ptr(),
+            b_bias.unsafe_ptr(),
+            c_bias.unsafe_ptr(),
+            Int32(b),
+            Int32(l),
+            Int32(q0),
+            Int32(nh),
+            grid_dim=(_grid(b * l * nh * (n_state // 2)), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
+        m3_phase_tick(ctx, phase_tick, String("m3_rot_kernel"))
     ctx.enqueue_function[m3_qkdot_kernel](
         qkdot.unsafe_ptr(),
         bcb.unsafe_ptr(),
@@ -1829,28 +1858,34 @@ def m3_siso_forward(
         block_dim=(MAMBA3_TPB, 1, 1),
     )
     m3_phase_tick(ctx, phase_tick, String("m3_qkdot_kernel"))
-    ctx.enqueue_function[m3_kscale_kernel](
-        kscale_work.unsafe_ptr(),
-        rotk_work.unsafe_ptr(),
-        scale_work.unsafe_ptr(),
-        gamma_work.unsafe_ptr(),
-        Int32(b * t_work * nh * n_state),
-        grid_dim=(_grid(b * t_work * nh * n_state), 1, 1),
-        block_dim=(MAMBA3_TPB, 1, 1),
-    )
-    m3_phase_tick(ctx, phase_tick, String("m3_kscale_kernel"))
-    ctx.enqueue_function[m3_dacs_kernel](
-        dacs.unsafe_ptr(),
-        adt_work.unsafe_ptr(),
-        Int32(b),
-        Int32(t_work),
-        Int32(nh),
-        Int32(nc),
-        Int32(qv),
-        grid_dim=(_grid(b * nh * nc), 1, 1),
-        block_dim=(MAMBA3_TPB, 1, 1),
-    )
-    m3_phase_tick(ctx, phase_tick, String("m3_dacs_kernel"))
+    comptime if AFN_MAMBA3_SISO_FUSED:
+        # ONE launch: the per-chunk ADT cumsum and the state-pass decays
+        # (m3_state_decay_kernel's values, into the qk_s scratch).
+        afn_m3_dacs_decay(ctx, dacs, qk_s, adt_work, b, t_work, nh, nc, qv)
+        m3_phase_tick(ctx, phase_tick, String("afn_m3_dacs_decay"))
+    else:
+        ctx.enqueue_function[m3_kscale_kernel](
+            kscale_work.unsafe_ptr(),
+            rotk_work.unsafe_ptr(),
+            scale_work.unsafe_ptr(),
+            gamma_work.unsafe_ptr(),
+            Int32(b * t_work * nh * n_state),
+            grid_dim=(_grid(b * t_work * nh * n_state), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
+        m3_phase_tick(ctx, phase_tick, String("m3_kscale_kernel"))
+        ctx.enqueue_function[m3_dacs_kernel](
+            dacs.unsafe_ptr(),
+            adt_work.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(nh),
+            Int32(nc),
+            Int32(qv),
+            grid_dim=(_grid(b * nh * nc), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
+        m3_phase_tick(ctx, phase_tick, String("m3_dacs_kernel"))
     ctx.enqueue_function[m3_seg_l_kernel](
         seg_l.unsafe_ptr(),
         adt_work.unsafe_ptr(),
@@ -1897,12 +1932,13 @@ def m3_siso_forward(
     else:
         # qk_s has B*C*H*Q*Q cells; Q>=32, so Q+1 decay entries fit.
         # Its lifetime as decay scratch ends before the QK kernel below.
-        ctx.enqueue_function[m3_state_decay_kernel](
-            qk_s.unsafe_ptr(), dacs.unsafe_ptr(), Int32(b * nh * nc), Int32(qv),
-            grid_dim=(_grid(b * nh * nc * (qv + 1)), 1, 1),
-            block_dim=(MAMBA3_TPB, 1, 1),
-        )
-        m3_phase_tick(ctx, phase_tick, String("m3_state_decay_kernel"))
+        comptime if not AFN_MAMBA3_SISO_FUSED:
+            ctx.enqueue_function[m3_state_decay_kernel](
+                qk_s.unsafe_ptr(), dacs.unsafe_ptr(), Int32(b * nh * nc), Int32(qv),
+                grid_dim=(_grid(b * nh * nc * (qv + 1)), 1, 1),
+                block_dim=(MAMBA3_TPB, 1, 1),
+            )
+            m3_phase_tick(ctx, phase_tick, String("m3_state_decay_kernel"))
         # One million increment cells provides ample independent tile work.
         # Only tiny and original large grid cases have been priced; the cutoff
         # is an occupancy guard, not a measured optimum across intermediate sizes.
@@ -2072,16 +2108,19 @@ def m3_siso_forward(
         block_dim=(MAMBA3_TPB, 1, 1),
     )
     m3_phase_tick(ctx, phase_tick, String("m3_skip_gate_kernel"))
-    ctx.enqueue_function[m3_reports_kernel](
-        k_last.unsafe_ptr(),
-        v_last.unsafe_ptr(),
-        rotk_work.unsafe_ptr(),
-        v_work.unsafe_ptr(),
-        Int32(b),
-        Int32(t_work),
-        Int32(nh),
-        grid_dim=(_grid(b * nh * (n_state + p_dim)), 1, 1),
-        block_dim=(MAMBA3_TPB, 1, 1),
-    )
-    m3_phase_tick(ctx, phase_tick, String("m3_reports_kernel"))
-    ctx.synchronize()
+    comptime if not AFN_MAMBA3_SISO_FUSED:
+        ctx.enqueue_function[m3_reports_kernel](
+            k_last.unsafe_ptr(),
+            v_last.unsafe_ptr(),
+            rotk_work.unsafe_ptr(),
+            v_work.unsafe_ptr(),
+            Int32(b),
+            Int32(t_work),
+            Int32(nh),
+            grid_dim=(_grid(b * nh * (n_state + p_dim)), 1, 1),
+            block_dim=(MAMBA3_TPB, 1, 1),
+        )
+        m3_phase_tick(ctx, phase_tick, String("m3_reports_kernel"))
+        # The fused build's launches share one in-order queue; its caller
+        # waits once at the end of the call.
+        ctx.synchronize()

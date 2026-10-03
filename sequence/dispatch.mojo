@@ -112,6 +112,7 @@ from sequence.ets import op_ets, op_ets_init, op_ets_lik
 from sequence.garch import op_garch
 from sequence.moe import op_moe_hidden, op_moe_out, op_moe_route
 from sequence.prophet import op_prophet_features, op_prophet_fit, op_prophet_predict, op_prophet_fg_part, op_prophet_fg_sum
+from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, op_cell_bwd_scan, op_cell_fwd_scan
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
 from sequence.vecar import op_var_resid, op_var_sigma
 from sequence.stl_grid import op_stl_deseas, op_stl_finish, op_stl_loess, op_stl_ma, op_stl_seas
@@ -135,6 +136,10 @@ def apply[OP: Int](t: Int, a: Args):
         op_cell_fwd_h(t, a)
     elif OP == OP_CELL_BWD_H:
         op_cell_bwd_h(t, a)
+    elif OP == OP_CELL_FWD_SCAN:
+        op_cell_fwd_scan(t, a)
+    elif OP == OP_CELL_BWD_SCAN:
+        op_cell_bwd_scan(t, a)
     elif OP == OP_GEMM_EPI:
         op_gemm_epi(t, a)
     elif OP == OP_COLSUM_DIV:

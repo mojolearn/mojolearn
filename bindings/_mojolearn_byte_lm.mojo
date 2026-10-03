@@ -39,6 +39,7 @@ from core.step_phase import (
     step_counts_report,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from training.byte_lm_afn import BYTE_LM_FAST_APPLE
 from core.neural_context import neural_ctx
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralByteLMContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralByteLMContextFast"
@@ -358,8 +359,8 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
     Param/m/v/grad spans use shape.n_total(); flags[shape.n_tensors()] int32(0/1);
     IDs[B,L+1] int32[0,shape.vocab_size). kind=2(AdamW). All config fields explicit. Positive learning rate, no clipping or SGD options.
     """
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("byte LM binding requires IDENTICAL")
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not BYTE_LM_FAST_APPLE:
+        raise Error("byte LM binding requires IDENTICAL (or FAST on Apple)")
     if String(COMPILED_VENDOR) != "cuda" and String(COMPILED_VENDOR) != "hip" and String(COMPILED_VENDOR) != "metal":
         raise Error("byte LM binding requires CUDA, HIP or Metal")
     if len(addresses) != 11 or len(params) != 12:
@@ -587,8 +588,8 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
 
 
 def _require_binding_profile() raises:
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("byte LM binding requires IDENTICAL")
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and not BYTE_LM_FAST_APPLE:
+        raise Error("byte LM binding requires IDENTICAL (or FAST on Apple)")
     if String(COMPILED_VENDOR) != "cuda" and String(COMPILED_VENDOR) != "hip" and String(COMPILED_VENDOR) != "metal":
         raise Error("byte LM binding requires CUDA, HIP or Metal")
 

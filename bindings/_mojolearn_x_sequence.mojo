@@ -15,7 +15,7 @@ from sequence.fit_team_py import garch_team_py, prophet_fit_team_py
 from sequence.ets_team import ETS_TEAM
 from sequence.ets_team_py import ets_team_applies, ets_team_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
-from sequence.opt_resident import lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
+from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from sequence.pyapi import ival, _getenv_seq, moe_forward_check, moe_forward_run, fptr
 from sequence.schedule import epoch_schedule_py
 from sequence.prophet_prep import prophet_changepoints_py, prophet_days_py, prophet_features_py
@@ -74,6 +74,15 @@ def optimizer_resident_step_binding(handle: PythonObject, addrs: PythonObject, i
 def lamb_resident_step_binding(handle: PythonObject, addrs: PythonObject, ip: PythonObject,
                                fp: PythonObject) raises -> PythonObject:
     return lamb_resident_step_py(handle, addrs, ip, fp)
+
+
+def adafactor_resident_open_binding(ip: PythonObject) raises -> PythonObject:
+    return adafactor_resident_open_py(ip)
+
+
+def adafactor_resident_step_binding(handle: PythonObject, addrs: PythonObject, ip: PythonObject,
+                                    fp: PythonObject) raises -> PythonObject:
+    return adafactor_resident_step_py(handle, addrs, ip, fp)
 
 
 def stl_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
@@ -231,6 +240,11 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[optimizer_resident_move_binding]("optimizer_resident_move")
         m.def_function[optimizer_resident_step_binding]("optimizer_resident_step")
         m.def_function[lamb_resident_step_binding]("lamb_resident_step")
+        # Adafactor's second moment on the device (-D MOJOLEARN_AF_FAST_RESIDENT,
+        # FAST + Apple; the Python side uses it only when these exist)
+        comptime if AF_RESIDENT:
+            m.def_function[adafactor_resident_open_binding]("adafactor_resident_open")
+            m.def_function[adafactor_resident_step_binding]("adafactor_resident_step")
         m.def_function[layer_norm_binding]("layer_norm")
         m.def_function[theta_binding]("theta")
         m.def_function[croston_binding]("croston")

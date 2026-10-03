@@ -41,6 +41,10 @@ from training.estimator import (
     identical_ce_admit_call,
     identical_ce_loss_resident,
 )
+#: lane afn-mlp (2026-10-03): the Apple FAST fused step, compiled only under
+#: FAST + Apple + `-D MOJOLEARN_AFN_MLP_FUSED_STEP` (or `_ALL`); every other
+#: build takes the path below unchanged (training/mlp_fast.mojo).
+from training.mlp_fast import MLP_FUSED_STEP, mlp_fast_step_host
 
 #: The public small MLP's fixed architecture, 8 -> 16 -> 3, and the flat
 #: parameter layout `[w1 (16 x 8), b1 (16), w2 (3 x 16), b2 (3)]` the
@@ -348,6 +352,14 @@ def mlp_train_step_host(
         _refuse_hyperparameters(cfg_opt)
         _finite(m_ptr, MLP_TOTAL)
         _finite(v_ptr, MLP_TOTAL)
+    comptime if MLP_FUSED_STEP:
+        # lane afn-mlp: the refusals above raised; the step itself is two
+        # launches and one wait (training/mlp_fast.mojo).
+        return mlp_fast_step_host(
+            ctx, x_ptr, y_ptr, w1_ptr, b1_ptr, w2_ptr, b2_ptr, m_ptr, v_ptr, flags_ptr,
+            loss_ptr, logits_ptr, dw1_ptr, db1_ptr, dw2_ptr, db2_ptr, dx_ptr, info_ptr,
+            rows, mode, t, lr, beta1, beta2, eps, weight_decay, want_input_grad,
+        )
 
     # One workspace for every GEMM of the step: the max of the certified
     # sizer over the shapes, and the GEMMs run one after another on the one

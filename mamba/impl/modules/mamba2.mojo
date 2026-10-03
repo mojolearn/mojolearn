@@ -98,9 +98,23 @@ from mamba.impl.modules.ssd_minimal import (
     ssd_forward,
     ssd_sabotage_name,
 )
+#: lane afn-mamba (2026-10-03): Apple FAST experiment switches (arena views
+#: and the one-readback refusal); every use is a `comptime if` whose other
+#: arm is main's spelling unchanged.
+from mamba.impl.modules.afn_defines import AFN_MAMBA_ARENA, AFN_MAMBA_DEVICE_REFUSAL
+from mamba.impl.modules.afn_arena import MambaArena
+from mamba.impl.modules.afn_refusal import AfnRefusalBatch
+#: lane w2-epi (2026-10-03): in_proj/out_proj on the FAST matrix-unit kernel,
+#: the residual folded into out_proj; other arm = main's spelling unchanged.
+from mamba.impl.modules.afn_proj_gemm import (
+    AFN_MAMBA_PROJ_ROUTE,
+    afn_proj_gemm_into,
+    afn_proj_gemm_resid_into,
+)
 from mamba.impl.modeling.modeling_mamba import (
     mamba_a_from_a_log_kernel,
     mamba_download,
+    MAMBA_GUARD,
     MAMBA_POISON_OVERREAD,
     mamba_rms_norm,
     mamba_upload,
@@ -202,6 +216,83 @@ struct Mamba2DeviceWeights(Movable):
         self.gnorm_w = mamba_upload(ctx, w.gnorm_w)
         self.w_out = mamba_upload(ctx, w.w_out)
 
+    def __init__(
+        out self, ctx: DeviceContext, dims: Mamba2Dims, mut arena: MambaArena
+    ) raises:
+        """lane afn-mamba (MOJOLEARN_AFN_MAMBA_ARENA): the nine weights as
+        views of the caller's arena, `_m2_weight_sizes` order; the caller
+        copies the values in (no upload wait per weight)."""
+        self.dims = dims.copy()
+        self.weights_checked = False
+        var s = _m2_weight_sizes(dims)
+        self.norm_w = arena.take(ctx, s[0])
+        self.w_in = arena.take(ctx, s[1])
+        self.conv_w = arena.take(ctx, s[2])
+        self.conv_b = arena.take(ctx, s[3])
+        self.dt_bias = arena.take(ctx, s[4])
+        self.a_log = arena.take(ctx, s[5])
+        self.d_skip = arena.take(ctx, s[6])
+        self.gnorm_w = arena.take(ctx, s[7])
+        self.w_out = arena.take(ctx, s[8])
+
+
+def _m2_weight_sizes(dims: Mamba2Dims) -> List[Int]:
+    """Logical lengths of `Mamba2DeviceWeights`' fields, in field order."""
+    var dm = dims.d_model
+    var di = dims.d_inner
+    var cd = dims.conv_dim()
+    var dip = dims.d_in_proj()
+    var nh = dims.nheads
+    var s: List[Int] = [dm, dip * dm, cd * M2_D_CONV, cd, nh, nh, nh, di, dm * di]
+    return s^
+
+
+def _m2_state_sizes(b: Int, dims: Mamba2Dims) -> List[Int]:
+    """Logical lengths of `Mamba2DeviceState`'s fields, in field order."""
+    var cd = dims.conv_dim()
+    var nh = dims.nheads
+    var s: List[Int] = [
+        b * cd * M2_D_CONV,
+        b * nh * M2_HEADDIM * M2_D_STATE,
+        b * M2_CHUNK_SIZE * cd,
+        b * M2_CHUNK_SIZE * nh,
+    ]
+    return s^
+
+
+def _m2_stage_sizes(b: Int, l: Int, q0: Int, dims: Mamba2Dims) -> List[Int]:
+    """Logical lengths of `Mamba2DeviceStages`' fields, in field order."""
+    var m = b * l
+    var t = q0 + l
+    var nc = m2_n_chunks(t)
+    var qv = m2_q_eff()
+    var dm = dims.d_model
+    var di = dims.d_inner
+    var cd = dims.conv_dim()
+    var dip = dims.d_in_proj()
+    var nh = dims.nheads
+    comptime p_dim = M2_HEADDIM
+    comptime n_state = M2_D_STATE
+    var s: List[Int] = [
+        m, m * dm, m * dip, nh, m * cd, m * cd, b * cd * M2_D_CONV,
+        b * t * nh, b * t * nh, b * t * cd, b * t * nh * p_dim, b * t * nh,
+        b * nh * nc * qv, b * nc * nh * qv * qv, b * nc * qv * qv,
+        b * t * nh * p_dim, b * nh * nc * qv, b * nc * nh * p_dim * n_state,
+        b * nc * nh * p_dim * n_state, b * t * nh * p_dim, b * t * nh * p_dim,
+        b * nh * p_dim * n_state, m * nh * p_dim, m * di, m, m * di, m * dm, m * dm,
+    ]
+    return s^
+
+
+def mamba2_arena_floats(b: Int, l: Int, q0: Int, dims: Mamba2Dims) -> Int:
+    """The arena one Mamba-2 block call needs: weights, state, stages and
+    the input x (lane afn-mamba, MOJOLEARN_AFN_MAMBA_ARENA)."""
+    var t = MambaArena.total(_m2_weight_sizes(dims), MAMBA_GUARD)
+    t += MambaArena.total(_m2_state_sizes(b, dims), MAMBA_GUARD)
+    t += MambaArena.total(_m2_stage_sizes(b, l, q0, dims), MAMBA_GUARD)
+    t += MambaArena.slot(b * l * dims.d_model, MAMBA_GUARD)
+    return t
+
 
 struct Mamba2DeviceState(Movable):
     """Contract section 5's THREE-piece state on the device (the oracle's
@@ -232,6 +323,20 @@ struct Mamba2DeviceState(Movable):
         )
         self.buf_xbc = mamba_zeros(ctx, b * M2_CHUNK_SIZE * cd)
         self.buf_dtraw = mamba_zeros(ctx, b * M2_CHUNK_SIZE * dims.nheads)
+
+    def __init__(
+        out self, ctx: DeviceContext, b: Int, dims: Mamba2Dims, mut arena: MambaArena
+    ) raises:
+        """lane afn-mamba (MOJOLEARN_AFN_MAMBA_ARENA): zero views of the
+        caller's arena (its one fill is the zeros)."""
+        self.b = b
+        self.dims = dims.copy()
+        self.buf_len = 0
+        var s = _m2_state_sizes(b, dims)
+        self.conv_win = arena.take(ctx, s[0])
+        self.h = arena.take(ctx, s[1])
+        self.buf_xbc = arena.take(ctx, s[2])
+        self.buf_dtraw = arena.take(ctx, s[3])
 
 
 def allocate_inference_cache(
@@ -338,6 +443,54 @@ struct Mamba2DeviceStages(Movable):
         self.gnorm_out = mamba_zeros(ctx, m * di)
         self.out_proj = mamba_zeros(ctx, m * dm)
         self.residual_out = mamba_zeros(ctx, m * dm)
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        b: Int,
+        l: Int,
+        q0: Int,
+        dims: Mamba2Dims,
+        mut arena: MambaArena,
+    ) raises:
+        """lane afn-mamba (MOJOLEARN_AFN_MAMBA_ARENA): the twenty-eight stages
+        as zero views of the caller's arena, `_m2_stage_sizes` order, no
+        allocation and no wait per stage."""
+        self.b = b
+        self.l = l
+        self.q0 = q0
+        self.t_work = q0 + l
+        self.nc = m2_n_chunks(self.t_work)
+        self.dims = dims.copy()
+        var s = _m2_stage_sizes(b, l, q0, dims)
+        self.norm_sumsq = arena.take(ctx, s[0])
+        self.norm_out = arena.take(ctx, s[1])
+        self.in_proj = arena.take(ctx, s[2])
+        self.a_out = arena.take(ctx, s[3])
+        self.conv_out = arena.take(ctx, s[4])
+        self.silu_out = arena.take(ctx, s[5])
+        self.conv_win = arena.take(ctx, s[6])
+        self.dtraw_work = arena.take(ctx, s[7])
+        self.dt_work = arena.take(ctx, s[8])
+        self.xbc_work = arena.take(ctx, s[9])
+        self.xd_work = arena.take(ctx, s[10])
+        self.da_work = arena.take(ctx, s[11])
+        self.dacs = arena.take(ctx, s[12])
+        self.seg_l = arena.take(ctx, s[13])
+        self.cb_g = arena.take(ctx, s[14])
+        self.ydiag_work = arena.take(ctx, s[15])
+        self.decay = arena.take(ctx, s[16])
+        self.cstate = arena.take(ctx, s[17])
+        self.pass_states = arena.take(ctx, s[18])
+        self.yoff_work = arena.take(ctx, s[19])
+        self.y_work = arena.take(ctx, s[20])
+        self.h_last = arena.take(ctx, s[21])
+        self.skip_out = arena.take(ctx, s[22])
+        self.gnorm_gate = arena.take(ctx, s[23])
+        self.gnorm_sumsq = arena.take(ctx, s[24])
+        self.gnorm_out = arena.take(ctx, s[25])
+        self.out_proj = arena.take(ctx, s[26])
+        self.residual_out = arena.take(ctx, s[27])
 
 
 # ===========================================================================
@@ -757,6 +910,28 @@ def mamba2_refuse_bad_inputs(
     var cd = dims.conv_dim()
     var dip = dims.d_in_proj()
     var nh = dims.nheads
+    comptime if AFN_MAMBA_DEVICE_REFUSAL:
+        # lane afn-mamba: the same names in the same order, reduced on the
+        # device, ONE readback (afn_refusal.mojo).
+        var batch = AfnRefusalBatch(ctx, 14)
+        batch.add(ctx, String("x"), x, b * l * dm)
+        if not w.weights_checked:
+            batch.add(ctx, String("norm.weight"), w.norm_w, dm)
+            batch.add(ctx, String("in_proj.weight"), w.w_in, dip * dm)
+            batch.add(ctx, String("conv1d.weight"), w.conv_w, cd * M2_D_CONV)
+            batch.add(ctx, String("conv1d.bias"), w.conv_b, cd)
+            batch.add(ctx, String("dt_bias"), w.dt_bias, nh)
+            batch.add(ctx, String("A_log"), w.a_log, nh)
+            batch.add(ctx, String("D"), w.d_skip, nh)
+            batch.add(ctx, String("norm_gated.weight"), w.gnorm_w, di)
+            batch.add(ctx, String("out_proj.weight"), w.w_out, dm * di)
+            w.weights_checked = True
+        batch.add(ctx, String("state.conv_win"), state.conv_win, b * cd * M2_D_CONV)
+        batch.add(ctx, String("state.h"), state.h, b * nh * M2_HEADDIM * M2_D_STATE)
+        batch.add(ctx, String("state.buf_xbc"), state.buf_xbc, b * M2_CHUNK_SIZE * cd)
+        batch.add(ctx, String("state.buf_dtraw"), state.buf_dtraw, b * M2_CHUNK_SIZE * nh)
+        batch.finish(ctx)
+        return
     _refuse_nonfinite_named("x", mamba_download(ctx, x, b * l * dm))
     if not w.weights_checked:
         _refuse_nonfinite_named(
@@ -914,9 +1089,19 @@ def mamba2_block_forward(
     )
 
     # ---- S4: in_proj (mamba2.py:211), gemm v1 OP_NT, k = d_model.
-    identical_gemm[False](
-        ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
-    )
+    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): the
+    #      FAST matrix-unit kernel, main's GEMM if it declines.
+    comptime if AFN_MAMBA_PROJ_ROUTE:
+        if not afn_proj_gemm_into(
+            ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
+        ):
+            identical_gemm[False](
+                ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
+            )
+    else:
+        identical_gemm[False](
+            ctx, stages.in_proj, stages.norm_out, w.w_in, m, dip, dm, OP_NT
+        )
     trace.record_device[DType.float32](
         ctx, prefix + ".in_proj.out", stages.in_proj, m * dip
     )
@@ -1239,22 +1424,44 @@ def mamba2_block_forward(
     )
 
     # ---- S4: out_proj (mamba2.py:275), gemm v1 OP_NT, k = d_inner.
-    identical_gemm[False](
-        ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
-    )
-    trace.record_device[DType.float32](
-        ctx, prefix + ".out_proj.out", stages.out_proj, m * dm
-    )
-
     # ---- S22: residual (HF :630), the REUSED Mamba-1 kernel.
-    ctx.enqueue_function[residual_add_kernel](
-        stages.residual_out.unsafe_ptr(),
-        x.unsafe_ptr(),
-        stages.out_proj.unsafe_ptr(),
-        Int32(m * dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(MAMBA2_TPB, 1, 1),
-    )
+    #      lane w2-epi (MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE / _SPLITK): an
+    #      untraced call runs both as ONE matrix-unit launch seeded with `x`
+    #      (`residual_out = x + gnorm_out . w_out^T`; the out_proj stage is
+    #      not written); a traced call, or a declined shape, runs main's two.
+    comptime if AFN_MAMBA_PROJ_ROUTE:
+        if trace.enabled or not afn_proj_gemm_resid_into(
+            ctx, stages.residual_out, x, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
+        ):
+            identical_gemm[False](
+                ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
+            )
+            trace.record_device[DType.float32](
+                ctx, prefix + ".out_proj.out", stages.out_proj, m * dm
+            )
+            ctx.enqueue_function[residual_add_kernel](
+                stages.residual_out.unsafe_ptr(),
+                x.unsafe_ptr(),
+                stages.out_proj.unsafe_ptr(),
+                Int32(m * dm),
+                grid_dim=(_grid(m * dm), 1, 1),
+                block_dim=(MAMBA2_TPB, 1, 1),
+            )
+    else:
+        identical_gemm[False](
+            ctx, stages.out_proj, stages.gnorm_out, w.w_out, m, dm, di, OP_NT
+        )
+        trace.record_device[DType.float32](
+            ctx, prefix + ".out_proj.out", stages.out_proj, m * dm
+        )
+        ctx.enqueue_function[residual_add_kernel](
+            stages.residual_out.unsafe_ptr(),
+            x.unsafe_ptr(),
+            stages.out_proj.unsafe_ptr(),
+            Int32(m * dm),
+            grid_dim=(_grid(m * dm), 1, 1),
+            block_dim=(MAMBA2_TPB, 1, 1),
+        )
     _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".residual.out", stages.residual_out, m * dm

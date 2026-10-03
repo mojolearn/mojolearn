@@ -22,6 +22,7 @@ handle indexes the pool and a closed handle's slot is reused."""
 from std.ffi import _Global
 from std.memory import bitcast, memcpy
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 from std.sys.info import has_apple_gpu_accelerator
 from std.python import Python, PythonObject
 from max.gpu.host import DeviceBuffer
@@ -30,7 +31,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from sequence.exec_device import DeviceExec, X_SEQUENCE_POOL, _pool_host, _pool_release_host, sequence_ctx
 from sequence.ops import FP
 from sequence.recurrent import OptState, opt_scalars, opt_step
-from sequence.pyapi import fptr, fval, ival, lamb_bias, lamb_core, lamb_offsets, lamb_table, opt_of, opt_slots
+from sequence.pyapi import adafactor_core, fptr, fval, ival, lamb_bias, lamb_core, lamb_offsets, lamb_table, opt_of, opt_slots
 
 #: Apple FAST transport switches of the resident step (lane
 #: apple-fast-optspeed, 2026-10-03). At the board's one tensor of 16,777,216
@@ -61,12 +62,32 @@ comptime OPT_RAW_UP = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_RAW_UP"]()
 #: -D names are harmless. RAW_UP measured noise (310 -> 307): opt-in.
 comptime OPT_PIPE_DOWN = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_PIPE_DOWN_OFF"]()
 comptime OPT_ZERO_OPEN = _OPT_APPLE_FAST and not is_defined["MOJOLEARN_OPT_ZERO_OPEN_OFF"]()
-#: the pipelined download's chunk, floats (8 MB)
-comptime OPT_PIPE_CH = 1 << 21
+#: the pipelined download's chunk, floats (8 MB; lane apple-fast-gap-optim:
+#: -D MOJOLEARN_OPT_FAST_PIPE_CH=<floats> for the A/B)
+comptime OPT_PIPE_CH = get_defined_int["MOJOLEARN_OPT_FAST_PIPE_CH", 1 << 21]()
+#: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md),
+#: default OFF, FAST + Apple only: the parameter read-back.
+#:  MOJOLEARN_OPT_FAST_MAP_DOWN: each tensor is read through
+#:    `DeviceBuffer.map_to_host` and one memcpy (no pinned halves).
+#:  MOJOLEARN_OPT_FAST_RAW_DOWN: each tensor is DMAd straight into the
+#:    caller's array in OPT_PIPE_CH chunks, all queued, one wait.
+#: Copies only: the same bytes.
+comptime OPT_MAP_DOWN = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_FAST_MAP_DOWN"]()
+comptime OPT_RAW_DOWN = _OPT_APPLE_FAST and is_defined["MOJOLEARN_OPT_FAST_RAW_DOWN"]() and not OPT_MAP_DOWN
+
+#: lane apple-fast-gap-optim (2026-10-03), default OFF, FAST + Apple only:
+#:  MOJOLEARN_AF_FAST_RESIDENT: Adafactor's second moment (row_var and
+#:    col_var, or a vector's full variance) lives in a handle's slots on
+#:    the device across steps (`adafactor_resident_*`); a step moves the
+#:    parameter and gradient up and the parameter down only (the board's
+#:    1-D tensor: three 64 MB transfers instead of five). The same launches
+#:    (`sequence/pyapi.mojo::adafactor_core`) on the same values.
+comptime AF_RESIDENT = _OPT_APPLE_FAST and is_defined["MOJOLEARN_AF_FAST_RESIDENT"]()
 
 #: the handle kinds
 comptime RES_ELEMENTWISE = 1
 comptime RES_LAMB = 2
+comptime RES_ADAFACTOR = 3
 
 
 struct _ResPool(Defaultable, Movable):
@@ -110,6 +131,13 @@ def _slot_buf(n: Int, keep: Bool) raises -> DeviceBuffer[DType.float32]:
 
 
 def _open(kind: Int, n: Int, used: Int, nt: Int, var offs: List[Int], tab: List[Float32]) raises -> Int:
+    return _open_sized(kind, n, n, n, n, used, nt, offs^, tab)
+
+
+def _open_sized(kind: Int, n: Int, n0: Int, n1: Int, n2: Int, used: Int, nt: Int, var offs: List[Int],
+                tab: List[Float32]) raises -> Int:
+    """`_open` with each slot's own float count (n0, n1, n2); n is the
+    handle's parameter count."""
     var pool = _RES.get_or_create_ptr()
     var ctx = sequence_ctx()
     var tb = ctx.enqueue_create_buffer[DType.float32](max(len(tab), 1))
@@ -123,9 +151,9 @@ def _open(kind: Int, n: Int, used: Int, nt: Int, var offs: List[Int], tab: List[
         if pool[].n[j] == 0 and h < 0:
             h = j
     if h < 0:
-        pool[].s0.append(_slot_buf(n, (used & 1) != 0))
-        pool[].s1.append(_slot_buf(n, (used & 2) != 0))
-        pool[].s2.append(_slot_buf(n, (used & 4) != 0))
+        pool[].s0.append(_slot_buf(n0, (used & 1) != 0))
+        pool[].s1.append(_slot_buf(n1, (used & 2) != 0))
+        pool[].s2.append(_slot_buf(n2, (used & 4) != 0))
         pool[].used.append(used)
         pool[].tab.append(tb^)
         pool[].n.append(n)
@@ -135,9 +163,9 @@ def _open(kind: Int, n: Int, used: Int, nt: Int, var offs: List[Int], tab: List[
         pool[].offs.append(offs^)
         h = len(pool[].n) - 1
     else:
-        pool[].s0[h] = _slot_buf(n, (used & 1) != 0)
-        pool[].s1[h] = _slot_buf(n, (used & 2) != 0)
-        pool[].s2[h] = _slot_buf(n, (used & 4) != 0)
+        pool[].s0[h] = _slot_buf(n0, (used & 1) != 0)
+        pool[].s1[h] = _slot_buf(n1, (used & 2) != 0)
+        pool[].s2[h] = _slot_buf(n2, (used & 4) != 0)
         pool[].used[h] = used
         pool[].tab[h] = tb^
         pool[].n[h] = n
@@ -354,7 +382,45 @@ def _pipe_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) r
     ex.sync()
 
 
+def _map_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) raises:
+    """OPT_MAP_DOWN: every tensor through `map_to_host` (the mapping waits
+    for the queue) and one memcpy into the caller's array."""
+    var off = 0
+    for j in range(len(sizes)):
+        var f = ex._find(P + off, sizes[j])
+        var v = ex._sub(f[0], f[1], sizes[j])
+        with v.map_to_host() as h:
+            memcpy(dest=FP(unsafe_from_address=ps[j]), src=FP(unsafe_from_address=Int(h.unsafe_ptr())),
+                   count=sizes[j])
+        _ = v^
+        off += sizes[j]
+    ex.sync()
+
+
+def _raw_download(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) raises:
+    """OPT_RAW_DOWN: every chunk DMAd straight into the caller's array, all
+    queued behind the step's launch, one wait."""
+    var off = 0
+    for j in range(len(sizes)):
+        var done = 0
+        while done < sizes[j]:
+            var cnt = min(OPT_PIPE_CH, sizes[j] - done)
+            var f = ex._find(P + off + done, cnt)
+            var v = ex._sub(f[0], f[1], cnt)
+            ex.ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=ps[j] + done * 4), src_buf=v)
+            _ = v^
+            done += cnt
+        off += sizes[j]
+    ex.sync()
+
+
 def _download_all(mut ex: DeviceExec, P: FP, ps: List[Int], sizes: List[Int]) raises:
+    comptime if OPT_MAP_DOWN:
+        _map_download(ex, P, ps, sizes)
+        return
+    comptime if OPT_RAW_DOWN:
+        _raw_download(ex, P, ps, sizes)
+        return
     comptime if OPT_PIPE_DOWN:
         _pipe_download(ex, P, ps, sizes)
         return
@@ -468,4 +534,55 @@ def lamb_resident_step_py(handle: PythonObject, addrs: PythonObject, ip: PythonO
     if (flags & 8) != 0:
         sc.unsafe_store(0, bias[2])
         sc.unsafe_store(1, bias[3])
+    return PythonObject(n)
+
+
+def adafactor_resident_open_py(ip: PythonObject) raises -> PythonObject:
+    """AF_RESIDENT: one Adafactor tensor's handle, ip = [R, C] (C = 0 for a
+    vector of R values): slot 0 = row_var (R) or the variance (R), slot 1 =
+    col_var (C, matrices only), zero filled. Returns [handle, used mask]
+    (and 1 under OPT_ZERO_OPEN)."""
+    comptime if not AF_RESIDENT:
+        raise Error("adafactor_resident_open: not built (-D MOJOLEARN_AF_FAST_RESIDENT, FAST + Apple)")
+    if len(ip) != 2:
+        raise Error("adafactor_resident_open: requires [R, C]")
+    var R = ival(ip, 0)
+    var C = ival(ip, 1)
+    if R < 1 or C < 0:
+        raise Error("adafactor_resident_open: R >= 1 and C >= 0")
+    var n = R * C if C > 0 else R
+    var used = 3 if C > 0 else 1
+    var h = _open_sized(RES_ADAFACTOR, n, R, C if C > 0 else 1, 1, used, R, List[Int](), List[Float32]())
+    var pool = _RES.get_or_create_ptr()
+    pool[].nb[h] = C
+    return _pair(h, used)
+
+
+def adafactor_resident_step_py(handle: PythonObject, addrs: PythonObject, ip: PythonObject,
+                               fp: PythonObject) raises -> PythonObject:
+    """AF_RESIDENT: one Adafactor step of the handle's tensor with its
+    second moment on the device. addrs = [param, grad]; ip = [R, C, t];
+    fp = `adafactor_step`'s six. The parameter is updated in place.
+    Returns n."""
+    comptime if not AF_RESIDENT:
+        raise Error("adafactor_resident_step: not built (-D MOJOLEARN_AF_FAST_RESIDENT, FAST + Apple)")
+    var h = _handle(handle, RES_ADAFACTOR)
+    if len(addrs) != 2 or len(ip) != 3 or len(fp) != 6:
+        raise Error("adafactor_resident_step: requires 2 addresses, 3 integer and 6 float parameters")
+    var pool = _RES.get_or_create_ptr()
+    var R = ival(ip, 0)
+    var C = ival(ip, 1)
+    var t = ival(ip, 2)
+    if R != pool[].nt[h] or C != pool[].nb[h] or t < 1:
+        raise Error("adafactor_resident_step: the handle's shape and a one-based step t >= 1")
+    var n = pool[].n[h]
+    var sizes = List[Int]()
+    sizes.append(n)
+    var pg = _tensors(addrs, 1, sizes, n)
+    var ex = DeviceExec()
+    var P = ex._alloc(n, False)
+    var G = ex._alloc(n, False)
+    _upload_all(ex, P, G, pg[0], pg[1], sizes)
+    adafactor_core(ex, P, G, _slot_ptr(h, 0), _slot_ptr(h, 1), R, C, t, fp)
+    _download_all(ex, P, pg[0], sizes)
     return PythonObject(n)

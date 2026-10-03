@@ -40,6 +40,18 @@ from transformer.checks.transformer_backward import bwd_rms_norm
 from transformer.impl.llama.modeling_llama import (
     llama_rms_norm,
 )
+# lane afn-samba (2026-10-03): the Apple FAST candidates. AFN_SAMBA_OPS is
+# true only under FAST + Apple + one of the lane's defines; each op below
+# then returns its training/samba_afn.mojo body first, and every other
+# build compiles the bodies here unchanged.
+from training.samba_afn import (
+    AFN_SAMBA_OPS,
+    afn_embedding_backward_host,
+    afn_embedding_forward_host,
+    afn_head_loss_host,
+    afn_rms_norm_backward_host,
+    afn_rms_norm_forward_host,
+)
 
 
 comptime SAMBA_TPB = 256
@@ -101,6 +113,10 @@ def samba_embedding_forward_host(
     width: Int,
 ) raises -> Int:
     """`y[n_positions, width] = w[ids]`. Returns `n_positions * width`."""
+    comptime if AFN_SAMBA_OPS:
+        return afn_embedding_forward_host(
+            ctx, y_ptr, w_ptr, ids_ptr, n_positions, vocab, width
+        )
     if n_positions < 1 or vocab < 1 or width < 1:
         raise Error("mojolearn samba ops: embedding shape must be positive")
     _refuse_nonfinite("embedding weight", w_ptr, vocab * width)
@@ -129,6 +145,10 @@ def samba_embedding_backward_host(
 ) raises -> Int:
     """`dw[vocab, width]`, a FRESH gradient (no accumulate, no padding row).
     Returns `vocab * width`."""
+    comptime if AFN_SAMBA_OPS:
+        return afn_embedding_backward_host(
+            ctx, dw_ptr, dy_ptr, ids_ptr, n_positions, vocab, width
+        )
     if n_positions < 1 or vocab < 1 or width < 1:
         raise Error("mojolearn samba ops: embedding shape must be positive")
     _refuse_nonfinite("embedding upstream gradient", dy_ptr, n_positions * width)
@@ -169,6 +189,8 @@ def samba_rms_norm_forward_host(
     eps: Float32,
 ) raises -> Int:
     """`y = w * x * rsqrt(mean(x^2) + eps)` over `m` rows. Returns `m * dm`."""
+    comptime if AFN_SAMBA_OPS:
+        return afn_rms_norm_forward_host(ctx, y_ptr, x_ptr, w_ptr, m, dm, eps)
     if m < 1 or dm < 1:
         raise Error("mojolearn samba ops: rms_norm shape must be positive")
     if not isfinite(eps) or eps < Float32(0.0):
@@ -204,6 +226,10 @@ def samba_rms_norm_backward_host(
     """`dx[m, dm]` and `dw[dm]` for the forward above. The forward's row
     sum of squares is RECOMPUTED here by the same kernel, so the backward
     needs nothing cached. Returns `m * dm`."""
+    comptime if AFN_SAMBA_OPS:
+        return afn_rms_norm_backward_host(
+            ctx, dx_ptr, dw_ptr, dy_ptr, x_ptr, w_ptr, m, dm, eps
+        )
     if m < 1 or dm < 1:
         raise Error("mojolearn samba ops: rms_norm shape must be positive")
     if not isfinite(eps) or eps < Float32(0.0):
@@ -376,6 +402,11 @@ def samba_head_loss_host(
     logits) divided by `ce_divisor`, which is never below 1 (a zero MEAN
     count and a negative `num_items` are refused), so it is finite
     whenever the loss admitted its inputs."""
+    comptime if AFN_SAMBA_OPS:
+        return afn_head_loss_host(
+            ctx, loss_ptr, row_ptr, da_ptr, dw_ptr, a_ptr, w_ptr, targets_ptr,
+            m, n, k, ignore_index, reduction, num_items, label_smoothing,
+        )
     if m < 1 or n < 1 or k < 1:
         raise Error("mojolearn samba ops: linear shape must be positive")
     _refuse_nonfinite("linear input", a_ptr, m * k)

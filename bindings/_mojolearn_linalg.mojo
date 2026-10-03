@@ -102,6 +102,17 @@ from gemm.checks.gemm_lowbit import (
     quantize_rows_int8_device,
 )
 from gemm.contract import INT8_MAX_K, LOWBIT_PROFILE_VERSION
+from gemm.afn_apple_fast import (
+    AFN_EPI_BIAS,
+    AFN_EPI_BIAS_GELU,
+    AFN_EPI_BIAS_RESID,
+    AFN_EPI_BIAS_SILU,
+    AFN_EPI_NONE,
+    AFN_GEMM_BF16_MMA,
+    AFN_GEMM_EPILOGUE,
+    afn_gemm_bf16_bits_into,
+    afn_gemm_fused_into,
+)
 from gemm.f16_widen import f16_bits_to_f32
 from std.gpu import block_dim, block_idx, thread_idx
 from gemm.checks.gemm_int15 import (
@@ -370,8 +381,18 @@ def gemm_bf16_binding(
         if a_bf16:
             var da_bits = lease.u16(ctx, ROLE_A, m * k)
             gemm_up_u16(ctx, lease, da_bits, u16_ptr(a_address), m * k)
-            bf16_widen(ctx, da, da_bits, m * k)
-            _lowbit_run(ctx, lease, dc, da, db, m, n, k, op)
+            # lane/apple-fast-neural-gemm (2026-10-03): under FAST on Apple
+            # with MOJOLEARN_AFN_GEMM_BF16_MMA both operands' bits go straight
+            # to the simdgroup kernel (no widen launch, no float32 image of
+            # A); otherwise, and under IDENTICAL, the lines below unchanged.
+            var served = False
+            comptime if AFN_GEMM_BF16_MMA:
+                served = afn_gemm_bf16_bits_into(ctx, dc, da_bits, db, m, n, k, op)
+                if served:
+                    ctx.synchronize()
+            if not served:
+                bf16_widen(ctx, da, da_bits, m * k)
+                _lowbit_run(ctx, lease, dc, da, db, m, n, k, op)
             _ = da_bits
         else:
             gemm_up_f32(ctx, lease, da, f32_ptr(a_address), m * k)
@@ -452,6 +473,67 @@ def gemm_int8_binding(
         ctx.synchronize()
         _lowbit_tick(ctx, ton, tk, "free_and_drain")
     return PythonObject(m * n)
+
+
+def gemm_fused_binding(
+    c_addr: PythonObject,
+    a_addr: PythonObject,
+    b_addr: PythonObject,
+    bias_addr: PythonObject,
+    resid_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """lane/apple-fast-neural-gemm (2026-10-03), registered only under FAST
+    on Apple with MOJOLEARN_AFN_GEMM_EPILOGUE: `C = epi(op(A) . op(B))` with
+    the epilogue in the store (gemm/afn_apple_fast.mojo::afn_gemm_fused_into).
+    `bias` holds `n` floats; `resid` holds `m * n` floats and is read only by
+    epilogue 2. Returns `m * n`. `params` is, in this exact order (mirrored in
+    `python/mojolearn/linalg_fast.py`):
+
+        0  m, 1  n, 2  k, 3  op (0 NN, 1 NT, 2 TN)
+        4  epi    0 none, 1 bias, 2 bias + residual, 3 bias + SiLU,
+                  4 bias + GELU (exact erf)
+    """
+    if len(params) != 5:
+        raise Error("gemm_fused: params must contain 5 values (m, n, k, op, epi), got " + String(len(params)))
+    var c_address = Int(py=c_addr)
+    var a_address = Int(py=a_addr)
+    var b_address = Int(py=b_addr)
+    var bias_address = Int(py=bias_addr)
+    var resid_address = Int(py=resid_addr)
+    var m = Int(py=params[0])
+    var n = Int(py=params[1])
+    var k = Int(py=params[2])
+    var op = Int(py=params[3])
+    var epi = Int(py=params[4])
+    if m <= 0 or n <= 0 or k <= 0:
+        raise Error("gemm_fused: m, n and k must all be positive, got m=" + String(m) + " n=" + String(n) + " k=" + String(k))
+    if op != OP_NN and op != OP_NT and op != OP_TN:
+        raise Error("gemm_fused: op must be 0 (OP_NN), 1 (OP_NT) or 2 (OP_TN), got " + String(op))
+    if epi < AFN_EPI_NONE or epi > AFN_EPI_BIAS_GELU:
+        raise Error("gemm_fused: epi must be 0..4, got " + String(epi))
+    comptime if not AFN_GEMM_EPILOGUE:
+        raise Error("gemm_fused: this binding was built without MOJOLEARN_AFN_GEMM_EPILOGUE")
+    else:
+        with GILReleased(Python()):
+            var ctx = process_ctx[_DEVCTX_SLOT]()
+            var da = _dev_f32(ctx, a_address, m * k)
+            var db = _dev_f32(ctx, b_address, n * k)
+            var dbias = _dev_f32(ctx, bias_address, n if epi != AFN_EPI_NONE else 0)
+            var dres = _dev_f32(ctx, resid_address, m * n if epi == AFN_EPI_BIAS_RESID else 0)
+            var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
+            if not afn_gemm_fused_into(ctx, dc, da, db, dbias, dres, m, n, k, op, epi):
+                raise Error("gemm_fused: the fused route declined the shape")
+            ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
+            ctx.synchronize()
+            _ = da^
+            _ = db^
+            _ = dbias^
+            _ = dres^
+            _ = dc^
+            # DEVIATION 3010: drain the frees before the block ends.
+            ctx.synchronize()
+        return PythonObject(m * n)
 
 
 def _lowbit_tick(ctx: DeviceContext, on: Bool, mut t: Int, name: String) raises:
@@ -919,6 +1001,8 @@ def PyInit__mojolearn_linalg() abi("C") -> PythonObject:
         m.def_function[lowbit_profile_version_binding]("lowbit_profile_version")
         m.def_function[gemm_bf16_binding]("gemm_bf16")
         m.def_function[gemm_int8_binding]("gemm_int8")
+        comptime if AFN_GEMM_EPILOGUE:
+            m.def_function[gemm_fused_binding]("gemm_fused")
         m.def_function[quantize_int8_binding]("quantize_int8")
         m.def_function[dequantize_int8_binding]("dequantize_int8")
         m.def_function[int15_profile_version_binding]("int15_profile_version")

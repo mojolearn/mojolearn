@@ -27,9 +27,11 @@ from sequence.moe_reg import (
     moe_reg_blocks,
     moe_route_tail_kernel,
 )
+from sequence.moe_mma import MM_BNH, MM_BNO, MM_NT, MOE_MMA, moe_hidden_mma_kernel, moe_mma_blocks, moe_out_mma_kernel
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 
 from sequence.exec_trait import Exec
 from sequence.dispatch import apply
@@ -43,6 +45,7 @@ from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
 from sequence.ets_team import ETS_TEAM, ets_team
 from sequence.prophet_coop import PROPHET_COOP, prophet_fit_coop
 from sequence.ops import OP_ETS, OP_GARCH
+from sequence.recurrent_scan import OP_CELL_BWD_SCAN, OP_CELL_FWD_SCAN, cell_bwd_scan_kernel, cell_fwd_scan_kernel, scan_tpb
 from x_linear.ops import IP
 from x_linear.witness import witness_end
 from std.sys.info import has_apple_gpu_accelerator
@@ -76,8 +79,20 @@ comptime TPB = 128
 comptime _SEQ_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 comptime SEQ_PIPE_UP = _SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_UP_OFF"]()
 comptime SEQ_PIPE_DOWN = _SEQ_APPLE_FAST and not is_defined["MOJOLEARN_SEQ_FAST_PIPE_DOWN_OFF"]()
-#: the pipelined chunk, floats (8 MB)
-comptime SEQ_PIPE_CH = 1 << 21
+#: the pipelined chunk, floats (8 MB; lane apple-fast-gap-optim:
+#: -D MOJOLEARN_SEQ_FAST_PIPE_CH=<floats> for the A/B)
+comptime SEQ_PIPE_CH = get_defined_int["MOJOLEARN_SEQ_FAST_PIPE_CH", 1 << 21]()
+#: lane apple-fast-gap-optim (2026-10-03, docs/apple-fast/notes/gap-optim.md),
+#: default OFF, FAST + Apple only: the pipelined downloads' read-back.
+#:  MOJOLEARN_SEQ_FAST_MAP_DOWN: each deferred download is read through
+#:    `DeviceBuffer.map_to_host` (the runtime's own mapping) and one memcpy,
+#:    instead of the two pinned (write-combined) halves.
+#:  MOJOLEARN_SEQ_FAST_RAW_DOWN: each deferred download is DMAd straight
+#:    into the caller's array in SEQ_PIPE_CH chunks, all queued, one wait
+#:    (no stage and no host read).
+#: Copies only: the same bytes.
+comptime SEQ_MAP_DOWN = SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_MAP_DOWN"]()
+comptime SEQ_RAW_DOWN = SEQ_PIPE_DOWN and is_defined["MOJOLEARN_SEQ_FAST_RAW_DOWN"]() and not SEQ_MAP_DOWN
 
 
 struct _SeqContext(Defaultable, Movable):
@@ -557,6 +572,22 @@ struct DeviceExec(Exec):
         for v in [a.i0, a.i1, a.i2, a.i3, a.i4, a.i5, a.i6, a.i7, a.i8, a.i9, a.i10, a.i11]:
             if v > I32_MAX or v < -I32_MAX - 1:
                 raise Error("sequence DeviceExec: an integer argument does not fit Int32 (" + String(v) + ")")
+        # lane apple-fast-gap-lstm (sequence/recurrent_scan.mojo): the whole
+        # recurrence of a layer, one block per batch row (n = B rows)
+        comptime if OP == OP_CELL_FWD_SCAN:
+            self.ctx.enqueue_function[cell_fwd_scan_kernel](
+                a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+                Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i4),
+                grid_dim=(n, 1, 1), block_dim=(scan_tpb(a.i2), 1, 1),
+            )
+            return
+        comptime if OP == OP_CELL_BWD_SCAN:
+            self.ctx.enqueue_function[cell_bwd_scan_kernel](
+                a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+                Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i4),
+                grid_dim=(n, 1, 1), block_dim=(scan_tpb(a.i2), 1, 1),
+            )
+            return
         # The MoE products as tiled kernels with the items' chains (lane
         # neural-pass29, sequence/moe_tiled.mojo) when the entry grouped the
         # pairs by expert (a.i4 = the block count); MOJOLEARN_SEQ_MOE_TILED=0
@@ -621,6 +652,16 @@ struct DeviceExec(Exec):
                             a.p2, a.p7, a.p5, a.p4, Int32(npairs), Int32(a.i3),
                             grid_dim=((npairs + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
                         )
+                comptime if MOE_MMA:
+                    # lane apple-fast-gap-misc: simdgroup matrix products
+                    # (sequence/moe_mma.mojo), MOJOLEARN_MOE_FAST_MMA*
+                    if a.i6 == 1:
+                        self.ctx.enqueue_function[moe_hidden_mma_kernel](
+                            a.p0, a.p1, a.p4, a.p5, a.p3,
+                            Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
+                            grid_dim=(moe_mma_blocks(npairs, a.i3, a.i1, MM_BNH), 1, 1), block_dim=(MM_NT, 1, 1),
+                        )
+                        return
                 self.ctx.enqueue_function[moe_hidden_reg_kernel](
                     a.p0, a.p1, a.p4, a.p5, a.p3,
                     Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
@@ -630,11 +671,21 @@ struct DeviceExec(Exec):
         comptime if MOE_REGTILE and OP == OP_MOE_OUT:
             if a.i4 > 0:
                 var npairs = (n // a.i0) * a.i2
-                self.ctx.enqueue_function[moe_out_reg_kernel](
-                    a.p0, a.p1, a.p6, a.p7, a.p5,
-                    Int32(a.i0), Int32(a.i1), Int32(a.i3),
-                    grid_dim=(moe_reg_blocks(npairs, a.i3, a.i0), 1, 1), block_dim=(MOE_RT, 1, 1),
-                )
+                var mma_done = False
+                comptime if MOE_MMA:
+                    if a.i6 == 1:
+                        self.ctx.enqueue_function[moe_out_mma_kernel](
+                            a.p0, a.p1, a.p6, a.p7, a.p5,
+                            Int32(a.i0), Int32(a.i1), Int32(a.i3),
+                            grid_dim=(moe_mma_blocks(npairs, a.i3, a.i0, MM_BNO), 1, 1), block_dim=(MM_NT, 1, 1),
+                        )
+                        mma_done = True
+                if not mma_done:
+                    self.ctx.enqueue_function[moe_out_reg_kernel](
+                        a.p0, a.p1, a.p6, a.p7, a.p5,
+                        Int32(a.i0), Int32(a.i1), Int32(a.i3),
+                        grid_dim=(moe_reg_blocks(npairs, a.i3, a.i0), 1, 1), block_dim=(MOE_RT, 1, 1),
+                    )
                 self.ctx.enqueue_function[moe_combine_kernel](
                     a.p3, a.p5, a.p4, Int32(a.i0), Int32(a.i2), Int32(n),
                     grid_dim=((n + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
@@ -711,15 +762,16 @@ struct DeviceExec(Exec):
                     block_dim=(TPB, 1, 1),
                 )
                 return
-        self.ctx.enqueue_function[seq_kernel[OP]](
-            a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
-            _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
-            _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
-            _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
-            Int64(n),
-            grid_dim=((n + TPB - 1) // TPB, 1, 1),
-            block_dim=(TPB, 1, 1),
-        )
+        comptime if OP != OP_CELL_FWD_SCAN and OP != OP_CELL_BWD_SCAN:
+            self.ctx.enqueue_function[seq_kernel[OP]](
+                a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+                _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
+                _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
+                _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
+                Int64(n),
+                grid_dim=((n + TPB - 1) // TPB, 1, 1),
+                block_dim=(TPB, 1, 1),
+            )
 
     def launch_team[OP: Int](mut self, a: Args, nblocks: Int, tpb: Int, wf: IP, woff: Int, nonce: Int32) raises:
         """`team_kernel[OP]` (lane neural-pass143): one block of tpb threads
@@ -778,6 +830,35 @@ struct DeviceExec(Exec):
         chunk i - 1 is read out of the other. Each chunk's wait comes before
         its half is reused (that half was last read for chunk i - 2, before
         the previous wait). Returns with every byte in place."""
+        comptime if SEQ_MAP_DOWN:
+            for j in range(len(self.pipe_n)):
+                var nj = self.pipe_n[j]
+                var f = self._find(FP(unsafe_from_address=self.pipe_src[j]), nj)
+                var v = self._sub(f[0], f[1], nj)
+                with v.map_to_host() as h:
+                    memcpy(dest=FP(unsafe_from_address=self.pipe_dst[j]),
+                           src=FP(unsafe_from_address=Int(h.unsafe_ptr())), count=nj)
+                _ = v^
+            self.pipe_dst.clear()
+            self.pipe_src.clear()
+            self.pipe_n.clear()
+            return
+        comptime if SEQ_RAW_DOWN:
+            for j in range(len(self.pipe_n)):
+                var nj = self.pipe_n[j]
+                var done = 0
+                while done < nj:
+                    var cnt = min(SEQ_PIPE_CH, nj - done)
+                    var f = self._find(FP(unsafe_from_address=self.pipe_src[j] + done * 4), cnt)
+                    var v = self._sub(f[0], f[1], cnt)
+                    self.ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=self.pipe_dst[j] + done * 4), src_buf=v)
+                    _ = v^
+                    done += cnt
+            self.ctx.synchronize()
+            self.pipe_dst.clear()
+            self.pipe_src.clear()
+            self.pipe_n.clear()
+            return
         var h0 = _pool_host(self.ctx, SEQ_PIPE_CH)
         var h1 = _pool_host(self.ctx, SEQ_PIPE_CH)
         var pool = X_SEQUENCE_POOL.get_or_create_ptr()

@@ -1,0 +1,8 @@
+CMD lane/apple-fast-neural afn-attn-norm-sg bash tools/afn_ab.sh afn-attn-norm-sg transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_NORM_SG"
+CMD lane/apple-fast-neural afn-attn-rope-cache bash tools/afn_ab.sh afn-attn-rope-cache transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_ROPE_CACHE"
+CMD lane/apple-fast-neural afn-attn-flash bash tools/afn_ab.sh afn-attn-flash transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_FLASH"
+CMD lane/apple-fast-neural afn-attn-gqa-tile bash tools/afn_ab.sh afn-attn-gqa-tile transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_GQA_TILE"
+CMD lane/apple-fast-neural afn-attn-fuse-pre bash tools/afn_ab.sh afn-attn-fuse-pre transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_FUSE_PRE"
+CMD lane/apple-fast-neural afn-attn-fuse-mlp bash tools/afn_ab.sh afn-attn-fuse-mlp transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_FUSE_MLP"
+CMD lane/apple-fast-neural afn-attn-arena bash tools/afn_ab.sh afn-attn-arena transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_ARENA"
+CMD lane/apple-fast-neural afn-attn-all bash tools/afn_ab.sh afn-attn-all transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_ALL"

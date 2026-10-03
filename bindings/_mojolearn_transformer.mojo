@@ -210,6 +210,10 @@ from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_works
 from gemm.contract import OP_NT
 from transformer.impl.llama.modeling_llama import llama_rms_norm
 from std.math import isfinite
+# lane afn-attn (2026-10-03): MOJOLEARN_AFN_ATTN_ARENA, FAST + Apple only
+# (AFN_ATTN_ARENA is False on every other build, so these are never called).
+from core.device_arena import arena_begin, arena_end, arena_release
+from transformer.impl.llama.afn_apple_fast import AFN_ATTN_ARENA
 
 
 # ===========================================================================
@@ -602,17 +606,41 @@ struct TransformerWorkspace(Movable):
     var rope: LlamaRopeTable
     var stages: LlamaDeviceStages
     var x: DeviceBuffer[DType.float32]
+    #: MOJOLEARN_AFN_ATTN_ARENA (FAST + Apple): the arena the workspace's
+    #: buffers are views of; -1 (no arena) on every other build.
+    var arena_id: Int
 
     def __init__(out self, ctx: DeviceContext, dims: LlamaDims,
                  b: Int, l: Int, smax: Int, window: Int, lean: Bool,
                  opts: BlockOptions) raises:
         self.key = _workspace_key(b, l, dims, smax, window, lean, opts)
+        self.arena_id = -1
+        comptime if AFN_ATTN_ARENA:
+            # lane afn-attn: every buffer below (cache, rope, ~30 stages, x)
+            # is a sub-buffer view of the arena's chunks (core/device_arena),
+            # so a Metal launch pays for a few live allocations, not ~35.
+            # `_zeros`/`_upload` take the views while the arena is active.
+            self.arena_id = arena_begin()
         self.kv = LlamaKVCache(ctx, b, dims, smax, window, opts.max_positions)
         # The table from the record: DEVIATIONS 2930-2933 and 2948; the
         # default record is `LlamaRopeTable(ctx, dims, ROPE_THETA, smax)`.
         self.rope = LlamaRopeTable(ctx, dims, opts, smax)
         self.stages = LlamaDeviceStages(ctx, b, l, smax, dims, window, lean=lean)
-        self.x = ctx.enqueue_create_buffer[DType.float32](b * l * dims.d_model)
+        comptime if AFN_ATTN_ARENA:
+            self.x = _llama_zeros(ctx, b * l * dims.d_model)
+            arena_end(self.arena_id)
+        else:
+            self.x = ctx.enqueue_create_buffer[DType.float32](b * l * dims.d_model)
+
+    def __deinit__(deinit self):
+        """MOJOLEARN_AFN_ATTN_ARENA: the arena's chunks go back to the pool
+        (not freed; the views in this struct's fields die right after this
+        body). Nothing on every other build."""
+        comptime if AFN_ATTN_ARENA:
+            try:
+                arena_release(self.arena_id)
+            except:
+                pass
 
     def retained_bytes(self) -> Int:
         var cells = len(self.x) + len(self.kv.k) + len(self.kv.v)
@@ -999,7 +1027,11 @@ def _transformer_run_session[discard_cache: Bool = False](
         ctx.enqueue_copy(dst_buf=ws.kv.k, src_ptr=_f32_ptr(a[10]))
         ctx.enqueue_copy(dst_buf=ws.kv.v, src_ptr=_f32_ptr(a[11]))
     ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
-    ctx.synchronize()
+    comptime if not AFN_ATTN_ARENA:
+        ctx.synchronize()
+    # MOJOLEARN_AFN_ATTN_ARENA: no wait here. The uploads and the forward's
+    # launches are in order on the one stream, and the caller's host arrays
+    # outlive the call (the download wait below drains everything).
     ws.kv.s = s0
     _btick(ton, tk, "surface.cache_stages_x_up")
     var trace = IdentityTrace.disabled()
