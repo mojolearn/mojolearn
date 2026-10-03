@@ -57,3 +57,13 @@ Not done: the fixed-point scale as a device pointer into `compute_hist2` (would 
 without any host step; the kernel signature is af-sym-hist's), the overfitting detector / test metric batching (the board
 lanes fit without an eval set, so there is nothing to batch on them), and a single fused add-model-value + gradient kernel
 (the wait is what costs on Apple; the fused command buffer takes it without a new kernel).
+
+## Brief candidates and where they went
+
+- `SYM_ONE_WAIT_TREE` (one host wait per tree): served by `SYM_LEAF_FROM_STATS` + `SYM_REUSE_PARTITION` (structure drain
+  plus one closing drain); the structure itself must come back to the host once because the next level's score search
+  is host-driven in this arm.
+- `SYM_LAUNCH_BATCH` (no explicit waits between a level's launches): the Mojo queue is already one ordered stream; the
+  waits it would remove are the drains `SYM_BUF_ARENA` (keep-alive drains) and `SYM_DERIV_FUSED` (std-dev and scale drains)
+  remove.
+- `SYM_METRIC_BATCH`: not built. The board lanes fit with no eval set, so no overfitting detector or metric runs per tree.
