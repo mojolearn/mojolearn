@@ -1451,7 +1451,7 @@ def first_seen_i32_binding(
     var kk = Int(py=k)
     if rows < 0 or kk < 1:
         raise Error("first_seen_i32: n >= 0, k >= 1")
-    var cp = _ptr[DType.int32](Int(py=codes_addr)) if rows > 0 else MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=enc_addr))
+    var cp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=codes_addr))
     var ep = _ptr[DType.int32](Int(py=enc_addr))
     var np = _ptr[DType.int64](Int(py=counts_addr))
     var rank = List[Int](length=kk, fill=-1)
