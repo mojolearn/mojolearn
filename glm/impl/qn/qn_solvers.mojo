@@ -42,6 +42,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 from glm.impl.qn.glm_base import GLMWithData, QN_FAST_DCONV, QN_FAST_DUAL_CD
 from glm.impl.qn.qn_dconv import dconv_applies, dconv_run
+from glm.impl.qn.lsvr_dual import lsvr_dual_applies, lsvr_dual_warm_start
 from glm.impl.qn.qn_linesearch import (
     ls_backtrack,
     ls_backtrack_projected,
@@ -565,6 +566,13 @@ def qn_minimize(
     intercept escapes the penalty.
     """
     var ret = OPT_MAX_ITERS_REACHED
+    # lane/apple-fast-linsvr, -D MOJOLEARN_LSVR_DUAL_CD (FAST on Apple only):
+    # the damped parallel dual CD moves the L-BFGS starting point; L-BFGS
+    # then runs to its own tolerance on the shipped objective
+    # (`lsvr_dual.mojo`).
+    comptime if QN_FAST_DUAL_CD:
+        if l1 == Float32(0.0) and (not trace.enabled) and lsvr_dual_applies(loss):
+            lsvr_dual_warm_start(ctx, loss, x)
     if l1 == Float32(0.0):
         ret = min_lbfgs(ctx, opt_param, loss, x, fx, num_iters, n, trace)
     else:
