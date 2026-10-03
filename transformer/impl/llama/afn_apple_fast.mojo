@@ -100,6 +100,8 @@ comptime AFN_ATTN_ANY = (
 )
 
 comptime AFN_TPB = 256
+#: Apple threadgroup memory per block: every shared page asserts it fits.
+comptime AFN_APPLE_TG_BYTES = 32768
 comptime AFN_NEGMAX_BITS: UInt32 = 0xFF7FFFFF
 
 
@@ -493,6 +495,7 @@ def afn_flash_forward_kernel[GROUP: Int](
     comptime TQG = TQ // GROUP
     comptime assert TQG * GROUP == TQ and TQG >= 8, "flash: GROUP in {1, 2, 4}"
     comptime assert AFN_FL_SPS * AFN_FL_NSG == AFN_FL_NFR * AFN_FL_NFK, "flash: whole score fragments"
+    comptime assert AFN_FL_PAGE_BYTES <= AFN_APPLE_TG_BYTES, "flash: the threadgroup page fits Apple's 32 KB"
     comptime assert AFN_FL_CPS * AFN_FL_NSG == AFN_FL_NFR * AFN_FL_NFC, "flash: whole context fragments"
     comptime KST = AFN_FL_KST
     comptime VST = AFN_FL_VST
@@ -811,6 +814,7 @@ def afn_gemm_nt_kernel[EPI: Int, ANORM: Bool](
     comptime NF = FM * FN
     comptime DUAL = EPI == AFN_EPI_SWIGLU
     comptime assert AFN_GEMM_CSZ <= AFN_GEMM_ASZ + AFN_GEMM_BSZ, "afn gemm: the C tile fits the A and first W pages"
+    comptime assert AFN_GEMM_PAGE_BYTES <= AFN_APPLE_TG_BYTES, "afn gemm: the threadgroup page fits Apple's 32 KB"
     var pg = stack_allocation[AFN_GEMM_PAGE, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
     var rs = stack_allocation[BM, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var at = pg
