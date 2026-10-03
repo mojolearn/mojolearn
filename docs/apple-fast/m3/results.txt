@@ -1,4 +1,4 @@
-pos=267 lines=     449
+pos=279 lines=     449
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -327,3 +327,17 @@ pos=267 lines=     449
 423:CMD apple-fast-prophetfix@2fcb29c68 prophet-diag rc=0 PROPHET-DIAG-SUMMARY ds=taxi-hourly n_iter min/median/max=72/151/293 objective first5=[-2717.69,-2640.92,-2497.65,-2474.68,-2507.55] nan_objective=0 nan_params=0 inf_params=0 zero_beta_series=0 forecast_rmse=32.0337
 424:CMD apple-fast-prophetfix@2fcb29c68 afb-prophetfix2 rc=0 afb done tag=afb-prophetfix2 pairs=2 ok=2
 431:CMD apple-fast-prophetfix@2fcb29c68 id-prophet-synthetic rc=0 IDCHECK prophet synthetic rows=small metal=none host=none ERROR
+432:FBUILD lane/apple-fast@9722e5a2b core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+433:CMD apple-fast@9722e5a2b afb14-lossguide rc=0 afb done tag=afb14-lossguide pairs=2 ok=2
+434:FBUILD lane/apple-fast-pca-eig@9819970b1 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=0 
+435:CMD apple-fast-pca-eig@9819970b1 pca-eig-eig-istella rc=0 AFC-AB-SUMMARY pca-eig-eig-istella arm=B lane=pca ds=istella median_of_medians_ms=997.1048540319316 runs=[997.1048540319316 ] digest=77e50052f0ddd1ad 
+436:CMD apple-fast-pca-eig@9819970b1 pca-eig-topk-istella rc=0 AFC-AB-SUMMARY pca-eig-topk-istella arm=B lane=pca ds=istella median_of_medians_ms=1030.301271006465 runs=[1030.301271006465 ] digest=06fccbde84ce53dd 
+437:CMD apple-fast-pca-eig@9819970b1 pca-eig-noalias-istella rc=0 AFC-AB-SUMMARY pca-eig-noalias-istella arm=B lane=pca ds=istella median_of_medians_ms=1030.001478997292 runs=[1030.001478997292 ] digest=06fccbde84ce53dd 
+438:CMD apple-fast-pca-eig@9819970b1 pca-eig-all-istella rc=0 AFC-AB-SUMMARY pca-eig-all-istella arm=B lane=pca ds=istella median_of_medians_ms=1011.5487499861047 runs=[1011.5487499861047 ] digest=77e50052f0ddd1ad 
+439:CMD apple-fast-pca-eig@9819970b1 pca-eig-eig-taxi rc=0 AFC-AB-SUMMARY pca-eig-eig-taxi arm=B lane=pca ds=taxi median_of_medians_ms=85.13287547975779 runs=[85.13287547975779 ] digest=6f9131a68f5fc5ee 
+440:CMD apple-fast-pca-eig@9819970b1 pca-eig-topk-taxi rc=0 AFC-AB-SUMMARY pca-eig-topk-taxi arm=B lane=pca ds=taxi median_of_medians_ms=78.51693750126287 runs=[78.51693750126287 ] digest=345f1180922cce6d 
+441:CMD apple-fast-pca-eig@9819970b1 pca-eig-noalias-taxi rc=0 AFC-AB-SUMMARY pca-eig-noalias-taxi arm=B lane=pca ds=taxi median_of_medians_ms=71.91514549776912 runs=[71.91514549776912 ] digest=345f1180922cce6d 
+442:CMD apple-fast-pca-eig@9819970b1 pca-eig-tsvd-eig-istella rc=0 AFC-AB-SUMMARY pca-eig-tsvd-eig-istella arm=B lane=tsvd ds=istella median_of_medians_ms=403.76995800761506 runs=[403.76995800761506 ] digest=17200d78b09c6420 
+443:CMD apple-fast-pca-eig@9819970b1 pca-eig-tsvd-topk-istella rc=0 AFC-AB-SUMMARY pca-eig-tsvd-topk-istella arm=B lane=tsvd ds=istella median_of_medians_ms=406.348208518466 runs=[406.348208518466 ] digest=17200d78b09c6420 
+444:CMD apple-fast-pca-eig@9819970b1 pca-eig-ipca-istella rc=0 AFC-AB-SUMMARY pca-eig-ipca-istella arm=B lane=incremental-pca ds=istella median_of_medians_ms=961.9136455003172 runs=[961.9136455003172 ] digest=802371db83dad125 
+445:CMD apple-fast-pca-eig@9819970b1 pca-eig-ipca-taxi rc=0 AFC-AB-SUMMARY pca-eig-ipca-taxi arm=B lane=incremental-pca ds=taxi median_of_medians_ms=151.85666701290756 runs=[151.85666701290756 ] digest=414c9d227d06629a 
