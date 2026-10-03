@@ -809,7 +809,7 @@ def op_knn_sq_tiled(
                 c_d.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), c_i.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
                 d_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), d_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
                 Int64(n), Int64(k), Int64(kk), Int64(exclude_self),
-                grid_dim=(n + KNN_TILE_TPB - 1) // KNN_TILE_TPB, block_dim=KNN_TILE_TPB,
+                grid_dim=((n + KNN_TILE_TPB - 1) // KNN_TILE_TPB, 1, 1), block_dim=(KNN_TILE_TPB, 1, 1),
             )
             ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=dist), src_buf=d_dist)
             _down_i(ctx, d_idx, idx, n * k)

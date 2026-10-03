@@ -93,9 +93,9 @@ def _key_less(ka: UInt64, ia: Int, kb: UInt64, ib: Int) -> Bool:
 
 
 # ---------------------------------------------------------------- scans
-def if_scan_block_kernel[MX: Bool](inp: IP, out: IP, blk: IP, n: Int32):
+def if_scan_block_kernel[MX: Bool](inp: IP, dst: IP, blk: IP, n: Int32):
     """Inclusive scan (sum, or max when MX) of each block's 256 words into
-    `out`; the block's total into blk[block]."""
+    `dst`; the block's total into blk[block]."""
     var tid = Int(thread_idx.x)
     var b = Int(block_idx.x)
     var g = b * IF_TPB + tid
@@ -121,7 +121,7 @@ def if_scan_block_kernel[MX: Bool](inp: IP, out: IP, blk: IP, n: Int32):
         barrier()
         off *= 2
     if g < Int(n):
-        out.unsafe_store(g, sh[tid])
+        dst.unsafe_store(g, sh[tid])
     if tid == IF_TPB - 1:
         blk.unsafe_store(b, sh[tid])
 
@@ -172,33 +172,33 @@ def if_scan_totals_kernel[MX: Bool](blk: IP, nb: Int32):
         c0 += IF_TPB
 
 
-def if_scan_add_kernel[MX: Bool](out: IP, blk: IP, n: Int32):
+def if_scan_add_kernel[MX: Bool](dst: IP, blk: IP, n: Int32):
     """Each block's words carry the scanned total of the blocks before it."""
     var tid = Int(thread_idx.x)
     var b = Int(block_idx.x)
     var g = b * IF_TPB + tid
     if b > 0 and g < Int(n):
         var c = blk.unsafe_load(b - 1)
-        var v = out.unsafe_load(g)
+        var v = dst.unsafe_load(g)
         comptime if MX:
             if c > v:
                 v = c
         else:
             v = v + c
-        out.unsafe_store(g, v)
+        dst.unsafe_store(g, v)
 
 
 def _if_scan[MX: Bool](
-    mut ctx: DeviceContext, mut inp: DeviceBuffer[DType.int32], mut out: DeviceBuffer[DType.int32],
+    mut ctx: DeviceContext, mut inp: DeviceBuffer[DType.int32], mut dst: DeviceBuffer[DType.int32],
     mut blk: DeviceBuffer[DType.int32], n: Int,
 ) raises:
-    """out = the inclusive scan of inp[0, n) (sum, or max when MX)."""
+    """dst = the inclusive scan of inp[0, n) (sum, or max when MX)."""
     var nb = _ifb(n)
     ctx.enqueue_function[if_scan_block_kernel[MX]](
-        inp.unsafe_ptr(), out.unsafe_ptr(), blk.unsafe_ptr(), Int32(n), grid_dim=nb, block_dim=IF_TPB)
-    ctx.enqueue_function[if_scan_totals_kernel[MX]](blk.unsafe_ptr(), Int32(nb), grid_dim=1, block_dim=IF_TPB)
+        inp.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dst.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), blk.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), grid_dim=nb, block_dim=IF_TPB)
+    ctx.enqueue_function[if_scan_totals_kernel[MX]](blk.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(nb), grid_dim=1, block_dim=IF_TPB)
     ctx.enqueue_function[if_scan_add_kernel[MX]](
-        out.unsafe_ptr(), blk.unsafe_ptr(), Int32(n), grid_dim=nb, block_dim=IF_TPB)
+        dst.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), blk.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), grid_dim=nb, block_dim=IF_TPB)
 
 
 # ---------------------------------------------------------------- rows
@@ -655,57 +655,57 @@ def isotonic_fast(
     # 1. the rows with a positive weight, their keys
     if has_w != 0:
         ctx.enqueue_function[if_flag_kernel](
-            dy.unsafe_ptr(), Int32(n), dflag.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+            dy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), dflag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=nb, block_dim=IF_TPB)
         _if_scan[False](ctx, dflag, dscan, dblk, n)
     ctx.enqueue_function[if_perm_kernel](
-        dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(has_w), dflag.unsafe_ptr(), dscan.unsafe_ptr(),
-        dperm.unsafe_ptr(), dkeys.unsafe_ptr(), dmeta.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+        dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), Int32(has_w), dflag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dscan.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        dperm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dkeys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=nb, block_dim=IF_TPB)
     # 2. the merge sort by ranking (ping-pong; nk <= n bounds the rounds)
     var in_a = True
     var width = 1
     while width < n:
         if in_a:
             ctx.enqueue_function[if_sort_kernel](
-                dkeys.unsafe_ptr(), dperm.unsafe_ptr(), dkeys2.unsafe_ptr(), dtmp.unsafe_ptr(),
-                dmeta.unsafe_ptr(), Int32(width), grid_dim=nb, block_dim=IF_TPB)
+                dkeys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dperm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dkeys2.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dtmp.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(width), grid_dim=nb, block_dim=IF_TPB)
         else:
             ctx.enqueue_function[if_sort_kernel](
-                dkeys2.unsafe_ptr(), dtmp.unsafe_ptr(), dkeys.unsafe_ptr(), dperm.unsafe_ptr(),
-                dmeta.unsafe_ptr(), Int32(width), grid_dim=nb, block_dim=IF_TPB)
+                dkeys2.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dtmp.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dkeys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dperm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(width), grid_dim=nb, block_dim=IF_TPB)
         in_a = not in_a
         width *= 2
     # 3. the sorted copies
     if in_a:
         ctx.enqueue_function[if_gather_kernel](
-            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(has_w), dperm.unsafe_ptr(), dfw.unsafe_ptr(),
-            dmeta.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+            dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), Int32(has_w), dperm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dfw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=nb, block_dim=IF_TPB)
     else:
         ctx.enqueue_function[if_gather_kernel](
-            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(has_w), dtmp.unsafe_ptr(), dfw.unsafe_ptr(),
-            dmeta.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+            dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), Int32(has_w), dtmp.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dfw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=nb, block_dim=IF_TPB)
     # 4. the pools of equal x
     ctx.enqueue_function[if_segflag_kernel](
-        dfw.unsafe_ptr(), Int32(n), dmeta.unsafe_ptr(), dflag.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+        dfw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dflag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=nb, block_dim=IF_TPB)
     _if_scan[False](ctx, dflag, dscan, dblk, n)
     ctx.enqueue_function[if_segstart_kernel](
-        dflag.unsafe_ptr(), dscan.unsafe_ptr(), dmeta.unsafe_ptr(), dsstart.unsafe_ptr(),
+        dflag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dscan.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dsstart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
         grid_dim=nb, block_dim=IF_TPB)
     # 5. each pool's weighted mean
     ctx.enqueue_function[if_partcount_kernel](
-        dsstart.unsafe_ptr(), dmeta.unsafe_ptr(), Int32(n), dflag.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+        dsstart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), dflag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=nb, block_dim=IF_TPB)
     _if_scan[False](ctx, dflag, dscan, dblk, n)
     ctx.enqueue_function[if_parttag_kernel](
-        dsstart.unsafe_ptr(), dscan.unsafe_ptr(), dmeta.unsafe_ptr(), dpseg.unsafe_ptr(),
+        dsstart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dscan.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dpseg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
         grid_dim=nb, block_dim=IF_TPB)
     ctx.enqueue_function[if_partsum_kernel](
-        dfw.unsafe_ptr(), Int32(n), dsstart.unsafe_ptr(), dscan.unsafe_ptr(), dmeta.unsafe_ptr(),
-        dpseg.unsafe_ptr(), dpy.unsafe_ptr(), dpw.unsafe_ptr(), grid_dim=_ifb(npmax), block_dim=IF_TPB)
+        dfw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), dsstart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dscan.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        dpseg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dpy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dpw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=_ifb(npmax), block_dim=IF_TPB)
     ctx.enqueue_function[if_segmean_kernel](
-        dfw.unsafe_ptr(), Int32(n), Int32(inc), dsstart.unsafe_ptr(), dscan.unsafe_ptr(), dmeta.unsafe_ptr(),
-        dpy.unsafe_ptr(), dpw.unsafe_ptr(), diw.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+        dfw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), Int32(inc), dsstart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dscan.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        dpy.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dpw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), diw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=nb, block_dim=IF_TPB)
     # 6. PAVA: blocks, then the merge rounds
     ctx.enqueue_function[if_pava_block_kernel](
-        dfw.unsafe_ptr(), Int32(n), dmeta.unsafe_ptr(), diw.unsafe_ptr(),
+        dfw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), diw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
         grid_dim=_ifb((n + IF_PAVA_L - 1) // IF_PAVA_L), block_dim=IF_TPB)
     comptime if is_defined["MOJOLEARN_ISOTONIC_FAST_PAIRMERGE"]():
         var rounds = 4
@@ -715,33 +715,33 @@ def isotonic_fast(
             rounds += 2
         for rd in range(rounds):
             ctx.enqueue_function[if_pm_flag_kernel](
-                diw.unsafe_ptr(), dmeta.unsafe_ptr(), Int32(n), dflag.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+                diw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), dflag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=nb, block_dim=IF_TPB)
             _if_scan[False](ctx, dflag, dscan, dblk, n)
             ctx.enqueue_function[if_pm_merge_kernel](
-                dfw.unsafe_ptr(), Int32(n), dmeta.unsafe_ptr(), diw.unsafe_ptr(), dscan.unsafe_ptr(), Int32(rd & 1),
+                dfw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), diw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dscan.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(rd & 1),
                 grid_dim=nb, block_dim=IF_TPB)
         ctx.enqueue_function[if_pm_check_kernel](
-            dfw.unsafe_ptr(), Int32(n), dmeta.unsafe_ptr(), diw.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+            dfw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), diw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=nb, block_dim=IF_TPB)
     else:
         var span = IF_PAVA_L
         while span < n:
             ctx.enqueue_function[if_pava_merge_kernel](
-                dfw.unsafe_ptr(), Int32(n), dmeta.unsafe_ptr(), diw.unsafe_ptr(), Int32(span),
+                dfw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), diw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(span),
                 grid_dim=_ifb((n + 2 * span - 1) // (2 * span)), block_dim=IF_TPB)
             span *= 2
     # 7. the values, the clip, the trim, the output
     ctx.enqueue_function[if_startflag_kernel](
-        diw.unsafe_ptr(), dmeta.unsafe_ptr(), Int32(n), dflag.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+        diw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), dflag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=nb, block_dim=IF_TPB)
     _if_scan[True](ctx, dflag, dscan, dblk, n)
     ctx.enqueue_function[if_fit_kernel](
-        dfw.unsafe_ptr(), Int32(n), Int32(inc), Int32(has_lo), Int32(has_hi), dfp.unsafe_ptr(),
-        dscan.unsafe_ptr(), dmeta.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+        dfw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), Int32(inc), Int32(has_lo), Int32(has_hi), dfp.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        dscan.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=nb, block_dim=IF_TPB)
     ctx.enqueue_function[if_trimflag_kernel](
-        dfw.unsafe_ptr(), Int32(n), dmeta.unsafe_ptr(), dflag.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+        dfw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dflag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=nb, block_dim=IF_TPB)
     _if_scan[False](ctx, dflag, dscan, dblk, n)
     ctx.enqueue_function[if_out_kernel](
-        dfw.unsafe_ptr(), Int32(n), dflag.unsafe_ptr(), dscan.unsafe_ptr(), dmeta.unsafe_ptr(),
-        dout.unsafe_ptr(), grid_dim=nb, block_dim=IF_TPB)
+        dfw.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), Int32(n), dflag.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dscan.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dmeta.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        dout.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), grid_dim=nb, block_dim=IF_TPB)
     var hmeta = List[Int32](length=8, fill=Int32(0))
     ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
     ctx.enqueue_copy(dst_ptr=hmeta.unsafe_ptr(), src_buf=dmeta)
