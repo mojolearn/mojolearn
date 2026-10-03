@@ -24,12 +24,32 @@ from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, down
 from core.device_store import DeviceStore
 from x_linear.fast_gram import fast_sym_gram_into, fg_part_words
 from x_prep.rr_eigh import rr_eigh_into, rre_words
+from x_prep.da_par import (
+    DA_TPB, DT, DT_TPB, lda2_rank_kernel, lda2_scal1_kernel, lda2_ms_kernel, lda2_g2_kernel, lda3_rank_kernel,
+    lda3_scal_kernel, lda3_tmp_kernel, lda3_inter_kernel, lda3_coef_kernel, lda3_dot_kernel, qda_prep_scal_kernel,
+    qda_prep_rot_kernel, qda_dec_tile_kernel,
+)
+
+
+def _da_blocks(t: Int) -> Int:
+    return max((t + DA_TPB - 1) // DA_TPB, 1)
 
 #: FAST on Apple, -D MOJOLEARN_LDAQDA_RR_EIGH (lane/apple-fast-ldaqda): the
 #: `eigh` stage (op 18) as x_prep/rr_eigh.mojo's round-robin Jacobi on the
 #: whole GPU instead of `eigh_unit`'s one thread per matrix (cyclic, 24,090
 #: serial rotations a sweep at LDA's / QDA's d = 220 on Istella).
 comptime OP_EIGH = 18
+#: -D MOJOLEARN_LDAQDA_PAR_STAGES / _DEC_TILE (FAST on Apple): x_prep/da_par.mojo,
+#: lda_stage2 / lda_stage3 / qda_prep a thread a cell, qda_dec by shared tiles
+#: (each cell the unit's own chain: the units' words)
+comptime OP_LDA_STAGE2 = 38
+comptime OP_LDA_STAGE3 = 39
+comptime OP_QDA_PREP = 41
+comptime OP_QDA_DEC = 42
+comptime PAR_STAGES = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                       and is_defined["MOJOLEARN_LDAQDA_PAR_STAGES"]())
+comptime DEC_TILE = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+                     and is_defined["MOJOLEARN_LDAQDA_DEC_TILE"]())
 comptime RR_EIGH = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
                     and is_defined["MOJOLEARN_LDAQDA_RR_EIGH"]())
 
@@ -291,6 +311,46 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 var pr = FP(unsafe_from_address=Int(dre.unsafe_ptr()))
                 rr_eigh_into(ctx, pf, Int(hq[0]), Int(hq[1]), Int(hq[2]), total, Int(hq[3]), Int(hq[4]), pr)
                 continue
+        comptime if PAR_STAGES:
+            if op == OP_LDA_STAGE2 or op == OP_LDA_STAGE3 or op == OP_QDA_PREP:
+                var hq = host_q + (s * STAGE_INTS + 2)
+                var pf = df.unsafe_ptr()
+                if op == OP_LDA_STAGE2:
+                    # q = [E1, V1, STD, MEAN, XBAR, PRIORS, K, d, n, META, SCAL1, G2, MS]
+                    var kk = Int(hq[6])
+                    var dd = Int(hq[7])
+                    ctx.enqueue_function[lda2_rank_kernel](pf, qp, grid_dim=1, block_dim=1)
+                    ctx.enqueue_function[lda2_scal1_kernel](pf, qp, grid_dim=_da_blocks(dd * dd), block_dim=DA_TPB)
+                    ctx.enqueue_function[lda2_ms_kernel](pf, qp, grid_dim=_da_blocks(kk * dd), block_dim=DA_TPB)
+                    ctx.enqueue_function[lda2_g2_kernel](pf, qp, grid_dim=_da_blocks(dd * dd), block_dim=DA_TPB)
+                elif op == OP_LDA_STAGE3:
+                    # q = [E2, V2, SCAL1, MEAN, XBAR, PRIORS, K, d, META, SCAL, COEF, INTER, EVR, TMP]
+                    var kk = Int(hq[6])
+                    var dd = Int(hq[7])
+                    ctx.enqueue_function[lda3_rank_kernel](pf, qp, grid_dim=1, block_dim=1)
+                    ctx.enqueue_function[lda3_scal_kernel](pf, qp, grid_dim=_da_blocks(dd * dd), block_dim=DA_TPB)
+                    ctx.enqueue_function[lda3_tmp_kernel](pf, qp, grid_dim=_da_blocks(kk * dd), block_dim=DA_TPB)
+                    ctx.enqueue_function[lda3_inter_kernel](pf, qp, grid_dim=_da_blocks(kk), block_dim=DA_TPB)
+                    ctx.enqueue_function[lda3_coef_kernel](pf, qp, grid_dim=_da_blocks(kk * dd), block_dim=DA_TPB)
+                    ctx.enqueue_function[lda3_dot_kernel](pf, qp, grid_dim=_da_blocks(kk), block_dim=DA_TPB)
+                else:
+                    # q = [EVAL, EVEC, K, d, REG, CNT, n, R, LOGC, S2OUT, GIVEN, PIN]
+                    var kk = Int(hq[2])
+                    var dd = Int(hq[3])
+                    ctx.enqueue_function[qda_prep_scal_kernel](pf, qp, grid_dim=_da_blocks(kk), block_dim=DA_TPB)
+                    ctx.enqueue_function[qda_prep_rot_kernel](pf, qp, grid_dim=_da_blocks(kk * dd * dd),
+                                                              block_dim=DA_TPB)
+                continue
+        comptime if DEC_TILE:
+            if op == OP_QDA_DEC:
+                # q = [X, n, d, MEAN, R, LOGC, K, OUT]
+                var hq = host_q + (s * STAGE_INTS + 2)
+                var nn = Int(hq[1])
+                var kk = Int(hq[6])
+                if nn > 0 and kk > 0 and Int(hq[2]) > 0:
+                    ctx.enqueue_function[qda_dec_tile_kernel](df.unsafe_ptr(), qp, grid_dim=((nn + DT - 1) // DT) * kk,
+                                                              block_dim=DT_TPB)
+                    continue
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if cov_grid and op == OP_QDA_COV:
                 # q = [X, n, d, Y, MEAN, CNT, COV]: class k's covariance
