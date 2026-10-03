@@ -721,7 +721,7 @@ def qn_tile_sum(
         grid_dim=((tiles + QNT_TPB - 1) // QNT_TPB, 1, 1),
         block_dim=(QNT_TPB, 1, 1),
     )
-    ctx.enqueue_function[qn_tile_sum_fold_kernel](
+    ctx.enqueue_function[qn_tile_sum_fold_kernel](  # small-launch(n: the mean divisor only): folds the qnt_tiles(n) tile partials, never walks n
         out_v, ws.unsafe_ptr(), Int32(tiles), Int32(n),
         Int32(1) if is_mean else Int32(0),
         grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
