@@ -56,13 +56,11 @@ row of `A` sits in row `n-1` (lower arm). Then (`:60-118`):
 #                  and `ld` = the factor's stride. That is what the `ld`
 #                  parameter of that kernel exists for and this is its only
 #                  caller.
-#   cublasdot   -> `r1_dot_kernel` below: ONE thread, ascending, one `fma`
-#                  per term through `identical_mul_add`, flushed through
-#                  `ftz`. A device-wide dot is a fold shape and a fold shape
-#                  is a summation order (IDENTITY_PATHS row 21); at the
-#                  sizes LARS uses this (one column per active feature) a
-#                  serial chain is a pure function of `n` and is the whole
-#                  of the pin.
+#   cublasdot   -> `r1_dot_partial_kernel` / `r1_dot_fold_kernel` below: a
+#                  blocked-then-tree fold whose order is a pure function of
+#                  `n` (one `fma` per term through `identical_mul_add`,
+#                  flushed through `ftz`; lane cgr5-owed 2026-10-03 replaced
+#                  DEVIATION 1632's one-thread chain).
 #
 # THE HOST ROUND TRIP IS COPIED RATHER THAN OPTIMIZED AWAY. Theirs reads two
 # scalars to the host, computes `sqrt` THERE, and writes one back. That is
@@ -137,13 +135,17 @@ row of `A` sits in row `n-1` (lower arm). Then (`:60-118`):
 #
 # The `align = 256` workspace padding (`:50-52`) is NOT implemented: it exists so
 # cuBLAS gets an aligned scalar and there is no such requirement here.
-# `cholesky_rank1_update_workspace_floats` returns `n` floats -- `n-1` for
-# the vector and one for the dot -- rather than their byte count.
+# `cholesky_rank1_update_workspace_floats` returns `n + r1_dot_blocks(n-1)`
+# floats -- `n-1` for the vector, one for the dot, then the dot's block
+# partials -- rather than their byte count.
 # =========================================================================
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 
 from core.identity_trace import IdentityTrace
 from cholesky.checks.chol_sabotage import CHOL_SAB_NONE
@@ -201,43 +203,99 @@ def copy_vector_to_row_kernel(
     dst.unsafe_store(row * ld + idx, src.unsafe_load(idx))
 
 
-def r1_dot_kernel(
+comptime R1_DOT_TPB = 256
+"""Threads per block of the rank-one dot (and lanes of its fold)."""
+comptime R1_DOT_MAX_BLOCKS = 256
+"""At most this many partial blocks; above 256 * 256 terms each thread's
+chain strides the grid."""
+
+
+def r1_dot_blocks(count: Int) -> Int:
+    """Blocks of the rank-one dot over `count` terms: one per R1_DOT_TPB,
+    capped at R1_DOT_MAX_BLOCKS, at least 1. A pure function of `count`."""
+    var nb = (count + R1_DOT_TPB - 1) // R1_DOT_TPB
+    if nb > R1_DOT_MAX_BLOCKS:
+        nb = R1_DOT_MAX_BLOCKS
+    if nb < 1:
+        nb = 1
+    return nb
+
+
+def r1_dot_partial_kernel(
     x: MutPointer[Float32, MutAnyOrigin],
-    out_scalar: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
     count_in: Int32,
+    nb_in: Int32,
 ):
-    """`cublasdot(n-1, A_new, 1, A_new, 1, s)` (`:92-93`). ONE thread.
+    """`cublasdot(n-1, A_new, 1, A_new, 1, s)` (`:92-93`), pass 1 of the
+    blocked-then-tree fold (lane cgr5-owed, 2026-10-03; it replaced
+    DEVIATION 1632's one-thread chain):
 
-    `s = sum_k x_k^2`, ascending, one `fma` per term, `ftz` at every step.
-    DEVIATION 1632 says why it is a serial chain and not a block fold: a
-    fold shape is a summation order, and a serial chain is a pure function
-    of `count`.
+      thread t of block b chains the terms k = b * TPB + t + j * nb * TPB,
+      j ascending, `acc = ftz(identical_mul_add(v, v, acc))` from 0.0 with
+      `v = ftz(x[k])`; the block folds its TPB chains with the halving tree
+      `red[t] = ftz(red[t] + red[t + h])`, h = TPB/2 .. 1, into part[b].
 
-    Spelled `identical_mul_add(v, v, acc)` and NOT `identical_mul_add(-v, v,
-    acc)` -- this accumulates the dot product, where `panel_factor_kernel`
-    accumulates its NEGATION into the diagonal. The two are different
-    expressions and the caller here subtracts, once, on the host.
-    """
-    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
-        return
+    The order is a pure function of `count`, the same on every vendor and
+    in the host column (`cholesky/checks/cholesky_oracle.mojo::
+    oracle_r1_dot`)."""
+    var red = stack_allocation[R1_DOT_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
     var count = Int(count_in)
+    var stride = Int(nb_in) * R1_DOT_TPB
+    var k = Int(block_idx.x) * R1_DOT_TPB + tid
     var acc = Float32(0.0)
-    for k in range(count):
+    while k < count:
         var v = ftz(x.unsafe_load(k))
         acc = ftz(identical_mul_add(v, v, acc))
-    out_scalar.unsafe_store(0, acc)
+        k += stride
+    red[tid] = acc
+    barrier()
+    var h = R1_DOT_TPB // 2
+    while h > 0:
+        if tid < h:
+            red[tid] = ftz(red[tid] + red[tid + h])
+        barrier()
+        h //= 2
+    if tid == 0:
+        part.unsafe_store(Int(block_idx.x), red[0])
+
+
+def r1_dot_fold_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    out_scalar: MutPointer[Float32, MutAnyOrigin],
+    nb_in: Int32,
+):
+    """Pass 2: lane t takes part[t] (0.0 past nb; nb <= R1_DOT_TPB), the
+    same halving tree, into out_scalar[0]."""
+    var red = stack_allocation[R1_DOT_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var v = Float32(0.0)
+    if tid < Int(nb_in):
+        v = part.unsafe_load(tid)
+    red[tid] = v
+    barrier()
+    var h = R1_DOT_TPB // 2
+    while h > 0:
+        if tid < h:
+            red[tid] = ftz(red[tid] + red[tid + h])
+        barrier()
+        h //= 2
+    if tid == 0:
+        out_scalar.unsafe_store(0, red[0])
 
 
 def cholesky_rank1_update_workspace_floats(n: Int) -> Int:
     """`*n_bytes` (`:53-56`), in floats and without their 256-byte align.
 
-    `n - 1` floats for `A_new` plus one for the dot's scalar. Never less
-    than 1, so the buffer is always constructible. DEVIATION 1646.
+    `n - 1` floats for `A_new`, one for the dot's scalar, then the dot's
+    `r1_dot_blocks(n - 1)` block partials. Never less than 1, so the buffer
+    is always constructible. DEVIATION 1646.
     """
-    var need = n
-    if need < 1:
+    # n - 1 terms, the dot's scalar, then its block partials
+    if n < 1:
         return 1
-    return need
+    return n + r1_dot_blocks(n - 1)
 
 
 def cholesky_rank1_update(
@@ -327,12 +385,22 @@ def cholesky_rank1_update(
             ld,
         )
         # `:92-93`
-        ctx.enqueue_function[r1_dot_kernel](
+        var nb = r1_dot_blocks(m)
+        var pbuf = workspace.create_sub_buffer[DType.float32](m + 1, nb)
+        ctx.enqueue_function[r1_dot_partial_kernel](
             xvec.unsafe_ptr(),
-            sbuf.unsafe_ptr(),
+            pbuf.unsafe_ptr(),
             Int32(m),
+            Int32(nb),
+            grid_dim=(nb, 1, 1),
+            block_dim=(R1_DOT_TPB, 1, 1),
+        )
+        ctx.enqueue_function[r1_dot_fold_kernel](
+            pbuf.unsafe_ptr(),
+            sbuf.unsafe_ptr(),
+            Int32(nb),
             grid_dim=(1, 1, 1),
-            block_dim=(1, 1, 1),
+            block_dim=(R1_DOT_TPB, 1, 1),
         )
         # `:95-98`
         ctx.enqueue_function[copy_vector_to_row_kernel](
@@ -351,6 +419,7 @@ def cholesky_rank1_update(
         _ = hs^
         _ = xvec^
         _ = sbuf^
+        _ = pbuf^
     # else: `:99-101`, `cudaMemsetAsync(s, 0, ...)` -- the n == 1 case.
 
     # `:103-117`, on the HOST, and DEVIATION 1633 changes the order of the

@@ -63,6 +63,7 @@ from std.math import log, sqrt
 
 from core.identity_trace import IdentityTrace
 from cholesky.checks.potrf import chol_panel_tag
+from cholesky.impl.linalg.detail.cholesky_r1_update import R1_DOT_TPB, r1_dot_blocks
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
 from checks.numerics import (
     ftz,
@@ -294,6 +295,37 @@ def oracle_logdet(
     return out
 
 
+def oracle_r1_dot(y: List[Float32], m: Int) -> Float32:
+    """`r1_dot_partial_kernel` then `r1_dot_fold_kernel`, replayed: thread
+    chains strided by nb * TPB, each block's halving tree, the halving tree
+    of the block partials."""
+    var nb = r1_dot_blocks(m)
+    var stride = nb * R1_DOT_TPB
+    var part = List[Float32](length=R1_DOT_TPB, fill=Float32(0.0))
+    var red = List[Float32](length=R1_DOT_TPB, fill=Float32(0.0))
+    for b in range(nb):
+        for t in range(R1_DOT_TPB):
+            var acc = Float32(0.0)
+            var k = b * R1_DOT_TPB + t
+            while k < m:
+                var v = ftz(y[k])
+                acc = ftz(identical_mul_add(v, v, acc))
+                k += stride
+            red[t] = acc
+        var h = R1_DOT_TPB // 2
+        while h > 0:
+            for t in range(h):
+                red[t] = ftz(red[t] + red[t + h])
+            h //= 2
+        part[b] = red[0]
+    var h2 = R1_DOT_TPB // 2
+    while h2 > 0:
+        for t in range(h2):
+            part[t] = ftz(part[t] + part[t + h2])
+        h2 //= 2
+    return part[0]
+
+
 def oracle_rank1_update(
     l_in: List[Float32], n: Int, ld: Int
 ) raises -> List[Float32]:
@@ -313,11 +345,7 @@ def oracle_rank1_update(
         var y = oracle_trsm_lower(l, x, m, 1, ld)
         for k in range(m):
             l[(n - 1) * ld + k] = y[k]
-        var acc = Float32(0.0)
-        for k in range(m):
-            var v = ftz(y[k])
-            acc = ftz(identical_mul_add(v, v, acc))
-        s = acc
+        s = oracle_r1_dot(y, m)
     var a22 = ftz(l[(n - 1) * ld + n - 1])
     var v = ftz(a22 - ftz(s))
     if not (v > Float32(0.0)):
