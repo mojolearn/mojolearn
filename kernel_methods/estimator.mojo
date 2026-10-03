@@ -177,8 +177,10 @@ def _upload(
     return buf^
 
 
-#: lane apple-fast-gap-kapprox2 (2026-10-03), FAST + Apple, OPT-IN until its
-#: M3 A/B (`-D MOJOLEARN_KM_FAST_PTR_IN`): the transforms' X goes to the
+#: lane apple-fast-gap-kapprox2 (2026-10-03), the FAST + Apple default since
+#: its M3 A/B kap2-km-ptrin-rbf-istella (rbf-sampler istella 121 -> 94 ms,
+#: kernel_rel_error identical; `-D MOJOLEARN_KM_FAST_PTR_IN_OFF` reverts):
+#: the transforms' X goes to the
 #: device straight from the caller's memory (one raw host-pointer copy,
 #: 1.6-2.4 ms per 64 MB on Apple) and its finiteness is scanned there
 #: (`device_first_nonfinite`), instead of an owned host copy of X
@@ -188,7 +190,7 @@ def _upload(
 comptime KM_FAST_PTR_IN = (
     _CTX_MODE == _NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_KM_FAST_PTR_IN"]()
+    and not is_defined["MOJOLEARN_KM_FAST_PTR_IN_OFF"]()
 )
 
 
@@ -712,8 +714,10 @@ def nystroem_params(model: NystroemModel) -> KernelParams:
     return KernelParams(model.kernel, model.degree, model.gamma, model.coef0)
 
 
-#: lane/apple-fast-kernel (2026-10-02), FAST on Apple only, build-time:
-#: `-D MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH` solves the q x q basis kernel's
+#: lane/apple-fast-kernel (2026-10-02), FAST on Apple only, the default since
+#: the M3 A/B kap2-km-nysrr-taxi (lane apple-fast-gap-kapprox2: nystroem taxi
+#: 533 -> 190 ms, kernel_rel_error .04561 -> .04503; `-D
+#: MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH_OFF` reverts): it solves the q x q basis kernel's
 #: eigenproblem with x_decomp/jacobi_par.mojo's round-robin Jacobi (every
 #: round's q / 2 disjoint rotations across the grid, two launches a round,
 #: the cyclic kernel's convergence test folded on the grid once a sweep,
@@ -724,7 +728,7 @@ def nystroem_params(model: NystroemModel) -> KernelParams:
 #: the rest of the GPU idles. A solve that does not converge in
 #: NYS_RR_SWEEPS sweeps leaves `dk` untouched and the cyclic kernel runs.
 comptime NYS_RR_EIGH = (_CTX_MODE != _CTX_IDENTICAL and has_apple_gpu_accelerator()
-                        and is_defined["MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH"]())
+                        and not is_defined["MOJOLEARN_KERNEL_FAST_NYS_RR_EIGH_OFF"]())
 comptime NYS_RR_SWEEPS = 30
 
 
