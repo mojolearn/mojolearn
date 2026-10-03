@@ -59,7 +59,7 @@ def input_ranges(spans):
     HOST spans (src -1) merged. `spans` are (lo, hi, src) in any order;
     overlapping inputs are a layout bug and raise."""
     out = []
-    for lo, hi, src in sorted((int(a), int(b), int(c)) for a, b, c in spans if int(b) > int(a)):
+    for lo, hi, src in sorted((int(a), int(b), int(c)) for a, b, c in spans if int(b) > int(a)):  # glue: orders arena layout spans
         if out and lo < out[-1][1]:
             raise AssertionError(f"arena ranges: inputs overlap at [{lo}, {hi})")
         if out and src < 0 and out[-1][2] < 0 and lo == out[-1][1]:
@@ -73,7 +73,7 @@ def complement(ranges, size):
     """The [lo, hi) pairs of [0, size) outside `ranges` (pairs or longer rows)."""
     out = []
     at = 0
-    for r in sorted((int(r[0]), int(r[1])) for r in ranges):
+    for r in sorted((int(r[0]), int(r[1])) for r in ranges):  # glue: orders arena layout ranges
         if r[0] > at:
             out.append([at, r[0]])
         at = max(at, r[1])
@@ -85,20 +85,20 @@ def complement(ranges, size):
 def output_ranges(pairs):
     """[lo, hi, -1, 1] quads (whole ranges, merged) for `pairs`."""
     merged = []
-    for lo, hi in sorted((int(a), int(b)) for a, b in pairs if int(b) > int(a)):
+    for lo, hi in sorted((int(a), int(b)) for a, b in pairs if int(b) > int(a)):  # glue: orders arena layout ranges
         if merged and lo <= merged[-1][1]:
             merged[-1][1] = max(merged[-1][1], hi)
         else:
             merged.append([lo, hi])
-    return [[lo, hi, -1, 1] for lo, hi in merged]
+    return [[lo, hi, -1, 1] for lo, hi in merged]  # glue: arena range descriptor quads
 
 
 def pack_ins(triples):
-    return array.array("i", [v for t in triples for v in t] or [0, 0, -1])
+    return array.array("i", [v for t in triples for v in t] or [0, 0, -1])  # glue: packs arena range descriptors
 
 
 def pack_outs(quads):
-    return array.array("i", [v for q in quads for v in q] or [0, 0, -1, 1])
+    return array.array("i", [v for q in quads for v in q] or [0, 0, -1, 1])  # glue: packs arena range descriptors
 
 
 class DeviceCache:
@@ -152,7 +152,7 @@ class DeviceCache:
 
     def close(self):
         entries, self._entries = self._entries, {}
-        for slot, _ in entries.values():
+        for slot, _ in entries.values():  # glue: frees each cache slot
             self._free(slot)
 
     def live(self):
@@ -186,7 +186,7 @@ class _Scope:
 
     def close(self):
         caches, self.caches = self.caches, {}
-        for c, _ in caches.values():
+        for c, _ in caches.values():  # glue: closes each arena cache
             c.close()
 
 
@@ -221,7 +221,7 @@ class resident:
         scope = getattr(_LOCAL, "scope", None)
         if scope is None:
             return None
-        return {p: (c.uploads, c.hits) for (_, p), (c, _) in scope.caches.items()}
+        return {p: (c.uploads, c.hits) for (_, p), (c, _) in scope.caches.items()}  # glue: counters per arena cache
 
 
 def active_cache(binding, prefix, n_words):

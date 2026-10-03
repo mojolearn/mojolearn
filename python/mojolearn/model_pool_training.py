@@ -12,7 +12,7 @@ class _ModelPoolBinding:
     """Use the existing step/export transaction adapter with a model owner."""
 
     def __init__(self, binding):
-        for name in ('create', 'open', 'close', 'step', 'export', 'rollback', 'ownership'):
+        for name in ('create', 'open', 'close', 'step', 'export', 'rollback', 'ownership'):  # glue: checks binding entry names
             function = getattr(binding, 'byte_lm_model_pool_' + name, None)
             if not callable(function):
                 raise ImportError('rebuild bindings/build_byte_lm.sh for model pooling')
@@ -33,7 +33,7 @@ class PooledByteLanguageModelTrainer(ParallelByteLanguageModelTrainer):
         devices = tuple(devices)
         if type(logical_shards) is not int or not 1 <= logical_shards <= 1024:
             raise ValueError('logical_shards must be in [1, 1024]')
-        if any(type(i) is not int or i < 0 for i in devices) or len(set(devices)) != len(devices):
+        if any(type(i) is not int or i < 0 for i in devices) or len(set(devices)) != len(devices):  # glue: validates device index arguments
             raise ValueError('devices must be distinct nonnegative integer indices')
         self._state = _validate_state(state)
         self._shape = state_shape(self._state)
@@ -63,7 +63,7 @@ class PooledByteLanguageModelTrainer(ParallelByteLanguageModelTrainer):
         session = binding.byte_lm_parallel_create()
         try:
             completed = binding.byte_lm_parallel_open(session,
-                [addr_ro(seed[k], name=k) for k in ('parameters', 'm', 'v', 'flags')],
+                [addr_ro(seed[k], name=k) for k in ('parameters', 'm', 'v', 'flags')],  # glue: four seed buffer addresses
                 params, list(self._shape.native_shape), list(self.devices), self.logical_shards)
             if completed != self.step_:
                 raise RuntimeError('model pool admission returned wrong step')
@@ -89,7 +89,7 @@ class PooledByteLanguageModelTrainer(ParallelByteLanguageModelTrainer):
             return tuple(dict(device=self.devices[int(row[0])], first=int(row[1]),
                               count=int(row[2]), parameter_bytes=int(row[3]),
                               moment_bytes=int(row[4]), rollback_bytes=int(row[5]),
-                              gradient_bytes=int(row[6])) for row in rows)
+                              gradient_bytes=int(row[6])) for row in rows)  # glue: one dict per device ownership
 
     def optimizer_ownership(self):
         return self.model_ownership()
