@@ -62,8 +62,9 @@ from gemm.host.identical_gemm import (
     OP_TN,
     gemm_oracle,
 )
+from x_decomp.cells import F32Ptr
+from x_decomp.host import HostExec
 from decomposition.host.linalg_public import (
-    host_eigh,
     host_qr_r,
     host_svdvals,
 )
@@ -555,34 +556,34 @@ def qr_r_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObje
 
 
 def eigh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """`host_eigh(a, n)`. `addrs`: 0 a, 1 w_out (n, ASCENDING), 2 v_out
-    (n x n, eigenvector i in COLUMN i), 3 scalars_out (converged, executed).
-    `params`: 0 n. Returns n."""
+    """numpy's eigh: x_decomp's round-robin Jacobi (`HostExec.eigh`, the one eigh
+    order of every column; cgr-decomp 2026-10-03 replaced the one-block cyclic
+    solver here). `addrs`: 0 a, 1 w_out (n, ASCENDING), 2 v_out (n x n,
+    eigenvector i in COLUMN i), 3 scalars_out (converged = 1, executed = 0:
+    an unconverged solve raises). `params`: 0 n, 1 (optional) UPLO: 0 the
+    whole matrix, 1 the lower triangle, 2 the upper. Returns n."""
     if len(addrs) != 4:
         raise Error(
             "eigh: addrs must contain 4 addresses (a, w_out, v_out,"
             " scalars_out), got "
             + String(len(addrs))
         )
-    if len(params) != 1:
+    if len(params) != 1 and len(params) != 2:
         raise Error(
-            "eigh: params must contain 1 value (n), got " + String(len(params))
+            "eigh: params must contain 1 or 2 values (n, UPLO), got " + String(len(params))
         )
-    var wp = f32_ptr(_index(addrs[1]))
-    var vp = f32_ptr(_index(addrs[2]))
-    var sp = f64_ptr(_index(addrs[3]))
-    var n = _index(params[0])
-    var a = read_f32(_index(addrs[0]), n * n)
+    var n = Int(py=params[0])
+    var uplo = Int(py=params[1]) if len(params) == 2 else 0
+    if n < 1 or uplo < 0 or uplo > 2:
+        raise Error("eigh: n must be >= 1 and UPLO 0, 1 or 2")
+    var ap = F32Ptr(unsafe_from_address=Int(f32_ptr(Int(py=addrs[0]))))
+    var wp = F32Ptr(unsafe_from_address=Int(f32_ptr(Int(py=addrs[1]))))
+    var vp = F32Ptr(unsafe_from_address=Int(f32_ptr(Int(py=addrs[2]))))
+    var sp = f64_ptr(Int(py=addrs[3]))
     with GILReleased(Python()):
-        var got = host_eigh(a, n)
-        for i in range(n):
-            wp.unsafe_store(i, got.w[i])
-        for i in range(n * n):
-            vp.unsafe_store(i, got.v[i])
-        sp.unsafe_store(0, Float64(1.0) if got.converged else Float64(0.0))
-        sp.unsafe_store(1, Float64(got.executed))
-        _ = got^
-    _ = a^
+        HostExec.eigh(ap, wp, vp, n, uplo)
+        sp.unsafe_store(0, Float64(1.0))
+        sp.unsafe_store(1, Float64(0.0))
     return PythonObject(n)
 
 

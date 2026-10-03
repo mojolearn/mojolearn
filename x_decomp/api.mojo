@@ -197,11 +197,80 @@ def eigh_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: Pytho
     var n = _n(p, 0)
     if n <= 0:
         raise Error("x_decomp: eigh needs n >= 1")
+    # p[1] (optional): numpy's UPLO, 1 the lower triangle, 2 the upper, 0
+    # (absent) the whole matrix; mirrored by the executor (on the device)
+    var uplo = 0
+    if len(p) > 1:
+        uplo = _n(p, 1)
+    if uplo < 0 or uplo > 2:
+        raise Error("x_decomp: eigh uplo is 0, 1 (L) or 2 (U)")
     var pa = _f(a)
     var pw = _f(w)
     var pv = _f(v)
-    E.eigh(pa, pw, pv, n)
+    E.eigh(pa, pw, pv, n, uplo)
     return PythonObject(n)
+
+
+def lle_apply_py[E: Exec](
+    wb: PythonObject, idx: PythonObject, emb: PythonObject, dst: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """p = [nq, nf, nn, nc]: LLE transform's out (nq x nc) = W E[idx]."""
+    var nq = _n(p, 0)
+    var nf = _n(p, 1)
+    var nn = _n(p, 2)
+    var nc = _n(p, 3)
+    if nq * nc > 2147483647 or nf * nc > 2147483647 or nq * nn > 2147483647:
+        raise Error("x_decomp: lle_apply exceeds the Int32 index bound")
+    var pw = _f(wb)
+    var pi = _f(idx)
+    var pe = _f(emb)
+    var po = _f(dst)
+    with GILReleased(Python()):
+        E.lle_apply(pw, pi, pe, po, nq, nf, nn, nc)
+    return PythonObject(nq)
+
+
+def lle_local_py[E: Exec](
+    x: PythonObject, idx: PythonObject, b: PythonObject, p: PythonObject, f: PythonObject
+) raises -> PythonObject:
+    """LocallyLinearEmbedding's stacked factor (x_decomp/lle_local.mojo).
+    p = [method (0 ltsa, 1 hessian, 2 modified), n, d, nn, nc]; f = [tol]
+    (hessian_tol / modified_tol). idx (n x nn) the neighbor indices as exact
+    floats; b zeroed, n nn x n (n (nn - 1 - nc) x n for hessian)."""
+    var method = _n(p, 0)
+    var n = _n(p, 1)
+    var d = _n(p, 2)
+    var nn = _n(p, 3)
+    var nc = _n(p, 4)
+    var tol = Float32(Float64(py=f[0]))
+    if method < 0 or method > 2 or n < 1 or d < 1 or nn < 1 or nc < 1 or (method == 1 and nn - 1 - nc < 1):
+        raise Error("x_decomp: lle_local needs method 0..2, n, d, n_neighbors, n_components >= 1 (hessian: n_neighbors > n_components + 1)")
+    if n * nn * n > 2147483647 or n * nn * nn > 2147483647 or n >= 16777216:
+        raise Error("x_decomp: lle_local exceeds the Int32 index bound")
+    var px = _f(x)
+    var pi = _f(idx)
+    var pb = _f(b)
+    with GILReleased(Python()):
+        E.lle_local(px, pi, pb, method, n, d, nn, nc, tol)
+    return PythonObject(n)
+
+
+def eigh_batch_py[E: Exec](a: PythonObject, w: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+    """p = [batch, n]: `batch` n x n symmetric problems stacked in `a`; w
+    (batch x n, ascending) and v (batch x n x n, vectors in columns), each
+    the words `eigh` gives it (x_decomp/rr_batch.mojo)."""
+    var batch = _n(p, 0)
+    var n = _n(p, 1)
+    if n <= 0 or batch < 0:
+        raise Error("x_decomp: eigh_batch needs n >= 1, batch >= 0")
+    if batch * n * n > 2147483647:
+        raise Error("x_decomp: eigh_batch exceeds the Int32 index bound")
+    var pa = _f(a)
+    var pw = _f(w)
+    var pv = _f(v)
+    with GILReleased(Python()):
+        E.eigh_batch(pa, pw, pv, batch, n)
+    return PythonObject(batch)
 
 
 def cd_rows_py[E: Exec](
@@ -271,6 +340,49 @@ def lasso_rows_py[E: Exec](
     with GILReleased(Python()):
         E.lasso_rows(pg, pq, pw, ph, pi, n, k, alpha, max_iter, tol, positive)
     _ = h^
+    return PythonObject(n)
+
+
+def lu_aux_py[E: Exec](
+    lu: PythonObject, piv: PythonObject, pm: PythonObject, im: PythonObject, diag: PythonObject,
+    stats: PythonObject, p: PythonObject,
+) raises -> PythonObject:
+    """p = [n, clamp]: an LU factor's row order (pm), its inverse (im), its
+    diagonal, (max |u_ii|, zero, negative pivots, swaps) and, with clamp,
+    the tiny pivots floored in lu."""
+    var n = _n(p, 0)
+    var clamp = _n(p, 1)
+    if n < 1 or n >= 16777216:
+        raise Error("x_decomp: lu_aux needs 1 <= n < 2^24")
+    var pl = _f(lu)
+    var pv = _i(piv)
+    var p1 = _f(pm)
+    var p2 = _f(im)
+    var pd = _f(diag)
+    var ps = _f(stats)
+    with GILReleased(Python()):
+        E.lu_aux(pl, pv, p1, p2, pd, ps, n, clamp)
+    return PythonObject(n)
+
+
+def lars_rows_py[E: Exec](
+    g: PythonObject, q: PythonObject, w: PythonObject, na: PythonObject, p: PythonObject
+) raises -> PythonObject:
+    """p = [n, k, m, nnz]: sparse_encode 'lars' on the Gram G (k x k) and Q =
+    X D^T (n x k), m the samples of each row's problem (x_decomp/cells.mojo
+    `lars_row`, one thread a row)."""
+    var n = _n(p, 0)
+    var k = _n(p, 1)
+    var m = _n(p, 2)
+    var nnz = _n(p, 3)
+    if n * (k * k + 7 * k) > 2147483647:
+        raise Error("x_decomp: lars_rows exceeds the Int32 index bound")
+    var pg = _f(g)
+    var pq = _f(q)
+    var pw = _f(w)
+    var pn = _f(na)
+    with GILReleased(Python()):
+        E.lars_rows(pg, pq, pw, pn, n, k, m, nnz)
     return PythonObject(n)
 
 

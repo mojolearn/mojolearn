@@ -55,6 +55,7 @@ lane/inference-holtwinters (2026-09-15) also saved Holt-Winters models
 binding.
 """
 import hashlib
+import os
 
 from . import _backend, _serialize
 from ._iforest_impl import IsolationForest, _IFOREST_FORMAT
@@ -63,7 +64,7 @@ from ._tsa_impl import ExponentialSmoothing, _HW_FORMAT
 from ._cholesky_impl import _CHOLESKY_FORMAT, Cholesky
 from ._ivf_impl import IVFIndex, _IVF_FORMAT
 from .embedding import Embedding, _EMBEDDING_FORMAT
-from ._gpc_impl import _GPC_FORMAT, HostGaussianProcessClassifier
+from ._gpc_impl import _GPC_FORMAT, GaussianProcessClassifier
 from ._solver_impl import ElasticNet, Lasso, _CD_FORMAT
 from ._svm_impl import SVC, SVR, _SVC_FORMAT, _SVR_FORMAT
 from ._umap_impl import UMAP, _UMAP_FORMAT
@@ -289,6 +290,49 @@ class HostHDBSCAN(_HostBound, HDBSCAN):
     """A saved HDBSCAN that `mojolearn.hdbscan.approximate_predict` accepts,
     predicting through the inference-only hdbscan binding."""
     _HOST_ARRAYS = ("_raw_data", "core_distances_", "labels_")
+
+
+#: GaussianProcessClassifier's host bindings (moved from `_gpc_impl` by
+#: lane/cgr-kernel so the GPU class never names host code).
+_GPC_HOST_BASENAME = "_mojolearn_gp_host"
+#: The inference-only gp binding a wheel ships (the neighbors and density
+#: inference lane, 2026-09-15): `gpc_predict` with no Laplace fit. A saved
+#: classifier predicts through it when it is built (every wheel), and
+#: through the reference binding otherwise (a source build of the routed
+#: families, as the CPU identity gate makes).
+_GPC_HOST_INFERENCE_BASENAME = "_mojolearn_gp_infer_host"
+
+class HostGaussianProcessClassifier(GaussianProcessClassifier):
+    """`GaussianProcessClassifier` bound to `_mojolearn_gp_infer_host` (or,
+    when only the reference set is built, `_mojolearn_gp_host`) on any box,
+    a GPU box included, so a GPU fit and a CPU prediction compare in one
+    process (`mojolearn.host_model` returns this for a saved classifier).
+    IDENTICAL only; fit refuses outside `reference_training()`."""
+
+    _HOST_INFERENCE_ONLY = True
+
+    def _bind(self, name=None):
+        name = name or self._BINDING
+        if name != self._BINDING:
+            raise ImportError(
+                f"mojolearn: the host {type(self).__name__} serves {self._BINDING} only, not {name}"
+            )
+        mode = getattr(self, "numeric_mode", None)
+        if mode is not None and mode != "identical":
+            raise ValueError(
+                f"mojolearn: {type(self).__name__} runs IDENTICAL only on the host; "
+                f"this model was saved {mode!r}"
+            )
+        if os.path.exists(_backend.host_module_path(_GPC_HOST_INFERENCE_BASENAME)):
+            return _backend.load_host_module(_GPC_HOST_INFERENCE_BASENAME)
+        return _backend.load_host_module(_GPC_HOST_BASENAME)
+
+    def _host_refusals(self):
+        """Nothing beyond `load`'s checks: the host binding exports both
+        classification entries."""
+
+    def vendor_used(self):
+        return "cpu"
 
 
 _LINALG_HOST_BASENAME = "_mojolearn_linalg_host"

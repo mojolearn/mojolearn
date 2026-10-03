@@ -43,11 +43,11 @@ def fg_tiles(count: Int) -> Int:
 
 
 def fg_gemm_tiled_kernel(
-    a: F32Ptr, b: F32Ptr, out: F32Ptr, m: Int32, k: Int32, n: Int32, ta: Int32, tb: Int32, nb: Int32
+    a: F32Ptr, b: F32Ptr, dst: F32Ptr, m: Int32, k: Int32, n: Int32, ta: Int32, tb: Int32, nb: Int32
 ):
     """Partial `block_idx.z` of C = op(A) op(B) over p in [z * FOLD_BLOCK,
     min(k, (z + 1) * FOLD_BLOCK)), tile (block_idx.y, block_idx.x) of the
-    m x n output, stored at out[z * m * n + i * n + j] (out = C itself when
+    m x n output, stored at dst[z * m * n + i * n + j] (dst = C itself when
     nb == 1). A is m x k (k x m when ta), B is k x n (n x k when tb); the
     slab loads walk the contiguous axis of each layout across consecutive
     threads."""
@@ -127,11 +127,11 @@ def fg_gemm_tiled_kernel(
     var base = z * M * N
     if ia < M:
         if jb < N:
-            out.unsafe_store(base + ia * N + jb, c00)
+            dst.unsafe_store(base + ia * N + jb, c00)
         if jb + 1 < N:
-            out.unsafe_store(base + ia * N + jb + 1, c01)
+            dst.unsafe_store(base + ia * N + jb + 1, c01)
     if ia + 1 < M:
         if jb < N:
-            out.unsafe_store(base + (ia + 1) * N + jb, c10)
+            dst.unsafe_store(base + (ia + 1) * N + jb, c10)
         if jb + 1 < N:
-            out.unsafe_store(base + (ia + 1) * N + jb + 1, c11)
+            dst.unsafe_store(base + (ia + 1) * N + jb + 1, c11)

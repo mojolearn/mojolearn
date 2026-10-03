@@ -10,5 +10,5 @@ from x_neighbors.items import FP
 
 
 def op_eigh(a: Int, n: Int, evals: Int, evecs: Int) raises -> Int:
-    DevExec.eigh(FP(unsafe_from_address=a), FP(unsafe_from_address=evals), FP(unsafe_from_address=evecs), n)
+    DevExec.eigh(FP(unsafe_from_address=a), FP(unsafe_from_address=evals), FP(unsafe_from_address=evecs), n, 0)
     return 0

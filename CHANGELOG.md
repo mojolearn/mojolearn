@@ -4,6 +4,24 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.35 (published 2026-10-03)
+
+GPU fits, transforms and predictions no longer contain CPU steps: the host-route debt went from 816 rows to 32: 18 are the CPU-only column's host-pool row passes (PR #86) and 14 are small scalar or k-sized steps. Main at b2f5fa7f2 builds every binding on NVIDIA (sm_89), AMD (gfx942) and Apple Metal, and the verifier cross-check (`python -m mojolearn verify --cross-check default`) agrees bit for bit on all 48 compared cell parts across NVIDIA, AMD, Apple and the host column. IDENTICAL means the same bits across hardware within a release; bits change from 0.8.34 where a fold order changed (listed below).
+
+### Changed (GPU path only, in parallel)
+- Linear: the one-block `fit_kernel` is deleted. QuantileRegressor, ARD, Ridge/RidgeCV/RidgeClassifier, LARS and weighted BayesianRidge read rows on the grid; PAVA (IsotonicRegression) is parallel; LogisticRegressionCV fold ids and held-out scores are built on the device; RidgeCV k-fold scoring is blocked.
+- Decomposition: eigh and the kit SVD use round-robin Jacobi at every size (one-block fallbacks deleted); LTSA, Hessian and modified LLE solve their local eigenproblems in batches; `sparse_encode` lars runs per row on the device; the Lanczos projected eigensolve and `eigh` UPLO run on the device.
+- SVGP, GPR fit/predict and LabelPropagation/LabelSpreading stay resident on the device; SVC probability folds and working-set selection run on the grid; the GPU GaussianProcessClassifier no longer loads host code.
+- Clustering: AgglomerativeClustering with `connectivity`, OPTICS ordering, MeanShift and AffinityPropagation post-processing, k-means++ seeding and BGMM responsibilities run on the device.
+- HDBSCAN: condensed tree, stability, EOM/leaf selection, labels, prediction data, the sparse mutual-reachability MST (device Boruvka) and core-distance kNN run on the device.
+- Metrics: ROC/PR curves, roc_auc_score and average_precision_score run fully on the device; KernelExplainer and PermutationExplainer build coalitions in device batches.
+- The GPU GBDT class no longer imports host code; `language_model` and `neural_inference` load on first use.
+- AMD attention forward uses MFMA by default (PR #63); the x_linear host column uses the host pool for row passes (PR #86); SGD host predictor tracks subnormal partials (PR #85).
+- Apple FAST defaults merged by the Apple FAST lanes since 0.8.34.
+
+### Bits that change from 0.8.34 (same on every vendor and the host column)
+eigh and x_decomp SVD (round-robin order, float32 convergence test); LTSA/Hessian/modified LLE; Lanczos column signs; k-means sum scale and k-means++ picks; MinCovDet; OneClassSVM rho; GBDT boost_from_average bias; SVC probA_/probB_ and the probability-CV shuffle; t-SNE Z sum; QuantileRegressor; IsotonicRegression pooling; weighted BayesianRidge, weighted Ridge and RidgeCV scores; ARD starting variance; GPR y^T alpha and lml for n > 2048; HDBSCAN stabilities; BGMM lower bound; weighted ROC/PR curves; AUC/AP (float-float fold instead of fsum, about 1e-14 relative); KernelExplainer sampled coalitions (paired draws).
+
 ## 0.8.34 (published 2026-10-01)
 
 Every change below was measured on the NVIDIA L40S, the AMD MI325X and the Apple M3 Ultra before merging, with the same digests on every vendor and the same bits as the route it replaces unless it says otherwise.

@@ -341,8 +341,12 @@ def loglike_ws_packed(
     validate_order(order)
     var t_params = ARIMAParams(ctx, order, batch_size)
     batched_jones_transform(ctx, order, batch_size, False, params, t_params)
+    # lane/apple-fast-tsa: `ll_only` (the last argument) selects the loop
+    # kernel without the per-step `pred` / `vs` / `Fs` stores under
+    # `-D MOJOLEARN_ARIMA_FAST_LLONLY=1` (FAST on Apple); every other build
+    # ignores it. This entry is the optimizer's only, no exog, no forecast.
     var ws = batched_kalman_filter_x(
-        ctx, d_y, d_exog, d_fut, n_obs, t_params, order, batch_size, 0, 32, True,
+        ctx, d_y, d_exog, d_fut, n_obs, t_params, order, batch_size, 0, 32, True, True
     )
     return LoglikeResult(ws=ws^, t_params=t_params^, loglike=List[Float32]())
 

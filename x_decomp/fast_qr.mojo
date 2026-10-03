@@ -26,7 +26,7 @@ from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from x_decomp.cells import F32Ptr
+from x_decomp.cells import F32Ptr, geqrf_scale_elem, geqrf_update_elem, orgqr_init_elem, orgqr_update_elem
 
 #: threads per block of every kernel here
 comptime FQ_TPB = 256
@@ -218,3 +218,35 @@ def fq_orgqr_dot_kernel(h: F32Ptr, q: F32Ptr, part: F32Ptr, k: Int32, m: Int32, 
             acc = vi * q.unsafe_load(i * QC + j) + acc
         part.unsafe_store(b * QC + j, acc)
         j += FQ_TPB
+
+
+# The shipped one-column kernels `_geqrf_fast` / `_orgqr_fast` launch around
+# the grid folds above, deleted from x_decomp/device.mojo with main's chain
+# route (dc686f153); here unchanged, on the same x_decomp/cells.mojo cells.
+def geqrf_scale_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, m: Int32, n: Int32):
+    var i = Int(k) + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(m):
+        geqrf_scale_elem(a, scal, Int(k), i, Int(n))
+
+
+def geqrf_update_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32):
+    var cols = Int(n) - Int(k) - 1
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cols > 0 and t < (Int(m) - Int(k)) * cols:
+        var i = Int(k) + t // cols
+        var j = Int(k) + 1 + t % cols
+        geqrf_update_elem(a, tau, scal, Int(k), i, j, Int(n), w.unsafe_load(j))
+
+
+def orgqr_init_kernel(q: F32Ptr, m: Int32, qc: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(m) * Int(qc):
+        orgqr_init_elem(q, t // Int(qc), t % Int(qc), Int(qc))
+
+
+def orgqr_update_kernel(h: F32Ptr, tau: F32Ptr, q: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32, qc: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < (Int(m) - Int(k)) * Int(qc):
+        var i = Int(k) + t // Int(qc)
+        var j = t % Int(qc)
+        orgqr_update_elem(h, tau, q, Int(k), i, j, Int(n), Int(qc), w.unsafe_load(j))
