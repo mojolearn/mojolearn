@@ -200,17 +200,22 @@ Sources: before = M3 0.8.34 board (classical), M3 2026-09-29 board FAST cells (t
   lars istella (sklearn: OverflowError).
 - Prophet cooperative team fit default since 8c2b7de51. Job afb15-prophet: 44.8 / 43.2 ms (synthetic / taxi-hourly),
   was 429 / 358 ms; forecast_rmse 1.0149 / 32.041 vs prophet-cpu 1.015 / 32.03; ratio 0.10 / 0.08 vs prophet-cpu.
-- Optimizers re-timed after the handle fix (main 9a7564bc5, job afb-optfix): adamax, adagrad, rmsprop, nadam, lion, lamb
-  FAST 318-339 ms, slower than 0.8.34 FAST (129-178 ms) and far behind torch-eager-fp32 (14-33 ms on adagrad, rmsprop, adamax, nadam; lion and lamb have no opponent time).
-- moe synthetic fixed (job afb-moefix, head baa5d967a): 789 ms, was refusing; ratio 20.9 vs torch-eager-bf16 37.7 ms.
-- Slower than before within refresh 4: garch 23-25 -> 384-581 ms (flips slower), adafactor 184 -> 683 ms (flips slower),
-  dynamic-optimized-theta taxi-hourly 727 -> 2087 ms (flips slower), layernorm 26.8 -> 76.8 ms. Quality unchanged on these.
+- Optimizers re-timed in refresh 8 (job afb23-opt, head 5990c5946): adamax, adagrad, rmsprop, nadam, lion, lamb
+  FAST 195-213 ms (was 318-339 ms in refresh 7), still slower than 0.8.34 FAST (129-178 ms) and behind torch-eager-fp32
+  (14-33 ms on adagrad, rmsprop, adamax, nadam; ratio 6.2-13.8; lion and lamb have no opponent time). Open.
+- moe synthetic (job afb26-moe, head eb3fca1ac): 72.7 ms, was 789 ms in refresh 7; ratio 1.93 vs torch-eager-bf16 37.7 ms. Still slower.
+- Slower than the 0.8.34 FAST cells, still open: adafactor 184 -> 683 ms (flips slower), dynamic-optimized-theta taxi-hourly
+  727 -> 2087 ms (flips slower), layernorm 26.8 -> 76.8 ms. Quality unchanged on these.
 - Neural opponents now come from the M3 torch fill (opp3-neural-b, best of eager/compile x fp32/bf16): lstm-clf and
   lstm-reg trail torch at ratio 2.6-2.7; gru and rnn lanes stay ahead (0.53-0.77).
 - Croston and GARCH register/grid defaults (main 2dcdd949f, job afb16-garch-croston): croston 2.9 -> 1.9 / 3.0 -> 2.3 ms,
   croston-sba 2.4 -> 2.2 / 3.0 -> 2.3 ms, croston-optimized 6.3 -> 9.4 / 9.9 -> 9.8 ms (synthetic slower, open); forecast_rmse
-  unchanged. garch 384 / 581 ms with the same digests as afb12-seq-algos-2: the new defaults did not move the board's garch
-  time, still slower than arch-cpu (106 / 125 ms). Open.
-- Gram fast paths (LARS/RIDGE) + class-covariance grid (LDA/QDA, higher accuracy) default since c5e1bbeb6; LDA/QDA istella speed lane in progress.
+  unchanged.
+- garch fixed in refresh 8 (job afb21-garch, head 5990c5946): 16.5 / 23.6 ms (synthetic / taxi-hourly), was 384 / 581 ms;
+  ratio 0.16 / 0.19 vs arch-cpu (106 / 125 ms), faster than the 0.8.34 FAST cells (23.4 / 25.4 ms). mean_llf unchanged.
+- Gram fast paths (LARS/RIDGE) + class-covariance grid (LDA/QDA, higher accuracy) default since c5e1bbeb6. LDA/QDA istella
+  re-timed in refresh 8 (jobs afb20-eigh, afb-eighscope): lda-clf 19779 -> 533 ms, qda 15903 -> 429 ms; both flip faster
+  (ratio 0.14 / 0.07 vs sklearn-cpu).
+- lda-clf/qda taxi slightly slower than refresh 7 (30 -> 43, 116 -> 123 ms); both still faster than sklearn-cpu (ratio 0.23 / 0.87).
 - IterativeImputer back on cyclic eigh under RR_EIGH (7edf6d895); LDA/QDA keep round-robin.
 - DBSCAN on taxi times out in FAST (gap; lane apple-fast-dbscantaxi in progress).
