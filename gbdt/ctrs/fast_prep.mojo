@@ -534,6 +534,22 @@ def ctr_borders_from_device(
 # --- the shared prep context (CTR_PREP_SHARED, CTR_SORT_ONCE, CTR_INDEX_FUSED) --
 
 
+def _read_column(
+    ctx: DeviceContext,
+    mut host: HostBuffer[DType.float32],
+    mut src: DeviceBuffer[DType.float32],
+    n: Int,
+) raises -> List[Float32]:
+    """One device CTR column back to a host list (the staging buffer is the
+    prep's, allocated once)."""
+    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=src)
+    ctx.synchronize()
+    var col = List[Float32]()
+    col.resize(n, Float32(0.0))
+    memcpy(dest=col.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+    return col^
+
+
 @fieldwise_init
 struct FastCtrColumns(Movable):
     """What one fast driver call produced: host columns (in config order,
@@ -746,19 +762,6 @@ struct CtrPrepFast(Movable):
             ctx, self.bins, self.current_bins, self.indices, n
         )
 
-    def read_column(
-        mut self, ctx: DeviceContext, mut src: DeviceBuffer[DType.float32]
-    ) raises -> List[Float32]:
-        ctx.enqueue_copy(dst_ptr=self.host_f32.unsafe_ptr(), src_buf=src)
-        ctx.synchronize()
-        var col = List[Float32]()
-        col.resize(self.n, Float32(0.0))
-        memcpy(
-            dest=col.unsafe_ptr(), src=self.host_f32.unsafe_ptr(),
-            count=self.n,
-        )
-        return col^
-
     def borders_ctrs(
         mut self,
         ctx: DeviceContext,
@@ -827,7 +830,7 @@ struct CtrPrepFast(Movable):
                     config.numerator_shift(), config.denumerator_shift(),
                     self.indices, False, CTR_INDEX_MASK, self.stats,
                 )
-                out.host.append(self.read_column(ctx, self.stats))
+                out.host.append(_read_column(ctx, self.host_f32, self.stats, self.n))
         return out^
 
     def freq_ctrs(
@@ -883,7 +886,7 @@ struct CtrPrepFast(Movable):
                     Float32(n), config.numerator_shift(),
                     config.denumerator_shift(), dst, n,
                 )
-                out.host.append(self.read_column(ctx, dst))
+                out.host.append(_read_column(ctx, self.host_f32, dst, self.n))
                 out.dev.append(dst^)
             else:
                 launch_compute_weighted_bin_freq_ctr(
@@ -891,7 +894,7 @@ struct CtrPrepFast(Movable):
                     Float32(n), config.numerator_shift(),
                     config.denumerator_shift(), self.stats, n,
                 )
-                out.host.append(self.read_column(ctx, self.stats))
+                out.host.append(_read_column(ctx, self.host_f32, self.stats, self.n))
         _ = segment_starts^  # past the drains (step-33 race class)
         _ = bin_weights^
         return out^
