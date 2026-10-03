@@ -42,12 +42,18 @@ from std.sys.info import has_apple_gpu_accelerator
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_exp, identical_silu
 from sequence.ops import FP, add, fma3, ld, mul, st, sub
 
+# FAST + Apple default since the M3 A/B (lane/apple-fast-moespeed 2813b2dff,
+# n=1, synthetic, output digest identical): REGTILE 789 -> 72.7 ms;
+# REGTILE+DEVGROUP 73.4 -> 71.9 ms, and DEVGROUP drops the host sync/sort
+# round trip. MOJOLEARN_MOE_REGTILE_OFF turns both off (DEVGROUP needs
+# REGTILE); MOJOLEARN_MOE_DEVGROUP_OFF turns DEVGROUP alone off. The old
+# -D MOJOLEARN_MOE_REGTILE / MOJOLEARN_MOE_DEVGROUP names are harmless.
 comptime MOE_REGTILE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
-    and is_defined["MOJOLEARN_MOE_REGTILE"]()
+    and not is_defined["MOJOLEARN_MOE_REGTILE_OFF"]()
 )
-comptime MOE_DEVGROUP = MOE_REGTILE and is_defined["MOJOLEARN_MOE_DEVGROUP"]()
+comptime MOE_DEVGROUP = MOE_REGTILE and not is_defined["MOJOLEARN_MOE_DEVGROUP_OFF"]()
 
 #: pairs per block, outputs per block, reduction slab, threads per block
 comptime RM = 64
