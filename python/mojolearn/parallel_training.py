@@ -12,6 +12,21 @@ from ._byte_lm_impl import SmallByteLanguageModelTrainer, _array, _float32, _val
 from ._byte_lm_config import state_shape
 from ._buffer import Buf, addr, addr_ro, empty, flat_bytes, typestr_of
 
+
+def _missing_entry(driver, what):
+    """The refusal for a byte-LM binding without the `driver` session
+    entries. On a CPU-only install the binding is the host byte-LM binding,
+    which has no parallel, pooled or offloaded session BY DESIGN: the
+    cooperative driver's declared sentence (`_parallel_pool._cpu_refusal`),
+    so the identity harness reads the par-* host cell N/A rather than a
+    stale build. Elsewhere it is a GPU binding older than the entries."""
+    from ._backend import vendor
+    if vendor() == 'cpu':
+        return NotImplementedError(
+            'no CPU implementation of the cooperative multi-GPU driver ' + driver + ' yet: its '
+            'sessions live inside the GPU byte-LM binding, which no host binding restates')
+    return ImportError('rebuild bindings/build_byte_lm.sh for ' + what)
+
 STATE_ARRAYS = ('parameters', 'm', 'v', 'flags')
 
 
@@ -89,13 +104,13 @@ class ParallelByteLanguageModelTrainer:
         binding = helper._binding()
         for name in ('create', 'open', 'close', 'step', 'export', 'rollback'):
             if not callable(getattr(binding, 'byte_lm_parallel_' + name, None)):
-                raise ImportError('rebuild bindings/build_byte_lm.sh for parallel training')
+                raise _missing_entry('byte_lm_parallel', 'parallel training')
         open_name = 'byte_lm_parallel_open_pooled' if self.pool_optimizer else 'byte_lm_parallel_open'
         opener = getattr(binding, open_name, None)
         if not callable(opener):
-            raise ImportError('rebuild bindings/build_byte_lm.sh for optimizer pooling')
+            raise _missing_entry('byte_lm_parallel', 'optimizer pooling')
         if not callable(getattr(binding, 'byte_lm_parallel_reduction_pool_available', None)):
-            raise ImportError('rebuild bindings/build_byte_lm.sh for distributed reduction buffers')
+            raise _missing_entry('byte_lm_parallel', 'distributed reduction buffers')
         if binding.byte_lm_parallel_reduction_pool_available() != 1:
             raise RuntimeError('binding refused distributed reduction availability')
         cfg = seed['config']
