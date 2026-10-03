@@ -64,6 +64,11 @@ from gbdt.ctrs.ctr import (
     TCtrConfig,
     is_equal_up_to_prior_and_binarization,
 )
+from gbdt.ctrs.ctr_binarization import (
+    BORDER_SELECTION_UNIFORM,
+    TBinarizationOptions,
+    compute_ctr_borders,
+)
 from gbdt.ctrs.ctr_bins_builder import int_log2
 from gbdt.ctrs.index_wrapper import CTR_INDEX_MASK
 from gbdt.ctrs.kernel.ctr_calcers import (
@@ -111,6 +116,9 @@ comptime CTR_ONEHOT_DEVICE = _SYM_CTR_FAST_APPLE and (
 #: these three; `CTR_PREP_SHARED` alone decides whether the context lives
 #: for the fit or for one (feature, permutation).
 comptime CTR_FAST_PREP = CTR_PREP_SHARED or CTR_SORT_ONCE or CTR_INDEX_FUSED
+
+#: `train`'s fast categorical walk runs under any of the four
+comptime SYM_CTR_ANY = CTR_FAST_PREP or CTR_ONEHOT_DEVICE
 
 #: the strided stripe reductions: 16 blocks x 256 threads, each thread owns
 #: every `STRIPE_SLOTS`-th row, writes one slot, the host folds the slots
@@ -498,6 +506,29 @@ def uniform_ctr_borders_from_minmax(
     if len(out) == 0:
         out.append(Float32(0.5))
     return out^
+
+
+def ctr_borders_from_device(
+    ctx: DeviceContext,
+    mut col: DeviceBuffer[DType.float32],
+    n: Int,
+    description: TBinarizationOptions,
+) raises -> List[Float32]:
+    """`compute_ctr_borders` over a CTR column that lives on the device:
+    the Uniform grid from `device_minmax` (no row readback); any other
+    grid reads the column back and runs the host builder unchanged."""
+    if description.border_selection_type == BORDER_SELECTION_UNIFORM:
+        var mm = device_minmax(ctx, col, n)
+        return uniform_ctr_borders_from_minmax(
+            mm[0], mm[1], description.border_count
+        )
+    var h = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=col)
+    ctx.synchronize()
+    var values = List[Float32]()
+    values.resize(n, Float32(0.0))
+    memcpy(dest=values.unsafe_ptr(), src=h.unsafe_ptr(), count=n)
+    return compute_ctr_borders(values, description)
 
 
 # --- the shared prep context (CTR_PREP_SHARED, CTR_SORT_ONCE, CTR_INDEX_FUSED) --
