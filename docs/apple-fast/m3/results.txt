@@ -1,4 +1,4 @@
-pos=468 lines=     712
+pos=475 lines=     740
 6:CMD main@62c484f00 m3-mm-rerun rc=0 done
 12:neural-pass101@bdccc90df knn-imputer istella digest=3496d0b7 median_ms=29 status=ok witness:clean rc=0  quality={"masked_rmse": 323953.23733174894}
 13:FETCHFAIL lane/neural-pass130
@@ -571,3 +571,12 @@ pos=468 lines=     712
 673:CMD apple-fast@eb3fca1ac afb25-kde rc=0 afb done tag=afb25-kde pairs=2 ok=2
 674:CMD apple-fast@eb3fca1ac afb26-moe rc=0 afb done tag=afb26-moe pairs=1 ok=1
 675:CMD apple-fast@eb3fca1ac afb27-ridge rc=0 afb done tag=afb27-ridge pairs=2 ok=2
+676:CMD apple-fast@eb3fca1ac afb28-linear rc=0 afb done tag=afb28-linear pairs=12 ok=11
+677:CMD apple-fast@eb3fca1ac afb29-lp rc=0 afb done tag=afb29-lp pairs=2 ok=2
+678:CMD apple-fast@eb3fca1ac afb30-cat rc=0 afb done tag=afb30-cat pairs=1 ok=1
+679:CMD apple-fast@eb3fca1ac afb31-yeti rc=0 afb done tag=afb31-yeti pairs=1 ok=1
+680:FBUILD lane/apple-fast-graph@1fa36a7ec core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=1 x_prep=0 
+681:CMD apple-fast-graph@1fa36a7ec graph-cc-fast-taxi rc=1 ~/mq/wt/lane_apple-fast-graph/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+682:FBUILD lane/apple-fast-nb@9f2b71471 core=0 ibase=0 estimators=0 x_cluster=0 x_decomp=0 x_linear=0 x_neighbors=0 x_prep=1 
+683:CMD apple-fast-nb@9f2b71471 nb-cat-atomic-taxi rc=1 ~/mq/wt/lane_apple-fast-nb/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module
+684:CMD apple-fast-nb@9f2b71471 nb-lda-fused-zones rc=0 AFC-DEF-SUMMARY arm=B n=1 median_ms=1509.4 all=[1509] quality=['{"perplexity":'] defines='-D MOJOLEARN_LDA_FUSED_SS=1'
