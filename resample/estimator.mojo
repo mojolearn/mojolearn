@@ -1991,11 +1991,13 @@ def mc_closed_form_for[
 # lane/apple-fast-gap-manprep (2026-10-03): resample(replace=True)'s draw
 # copied the device rows into a host buffer, then appended them one by one
 # into a List, then the binding stored them one by one into the caller's
-# Array (1,000,000 rows at the board). With
-# MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT (FAST + Apple) the device rows go
+# Array (1,000,000 rows at the board). On FAST + Apple the device rows go
 # straight into the caller's int32 buffer in one copy. The same integers.
+# Default since the M3 A/B gmp-rs-idx-* (resample taxi 71.7 -> 62.8 ms,
+# istella -1.8%, max_mean_shift the same); -D
+# MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF restores the List route.
 comptime RESAMPLE_IDX_DIRECT = (GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
-                                and is_defined["MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT"]())
+                                and not is_defined["MOJOLEARN_RESAMPLE_FAST_IDX_DIRECT_OFF"]())
 
 
 def resample_indices_replace_into(
