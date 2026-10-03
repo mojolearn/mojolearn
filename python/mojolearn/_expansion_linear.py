@@ -165,7 +165,7 @@ def _classes(est, y, n):
         raise ValueError(f"mojolearn {type(est).__name__}: X and y lengths differ")
     if len(classes) < 2:
         raise ValueError(f"mojolearn {type(est).__name__}: y has one class")
-    return classes, Array.from_list([float(c) for c in codes.tolist()], "<f4")
+    return classes, codes.astype("<f4")
 
 
 class _LinearClassifierMixin:
