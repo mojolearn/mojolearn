@@ -420,7 +420,7 @@ def cs_tile_finish_kernel(f: FP, pp: FP, chunks: Int32, d: Int32, O: Int32):
 
 
 # ------------------------------------------------------------ launches (host side, x_prep/device.mojo)
-def pt_colbatch_fold(ctx: DeviceContext, f: FP, pp: FP, hq: IP, qp: IP) raises:
+def pt_colbatch_fold(mut ctx: DeviceContext, f: FP, pp: FP, hq: IP, qp: IP) raises:
     """A `pt_fold` stage (hq its host params, qp the device copy) as the tiled
     evaluation and the finish; the `pt_map` stage before it is skipped by the
     caller (nothing reads T or LG)."""
@@ -436,7 +436,7 @@ def pt_colbatch_fold(ctx: DeviceContext, f: FP, pp: FP, hq: IP, qp: IP) raises:
     ctx.enqueue_function[pt_tile_finish_kernel](f, pp, qp, Int32(chunks), grid_dim=d, block_dim=TGR)
 
 
-def pt_spec_fold(ctx: DeviceContext, f: FP, pp: FP, hq: IP, qp: IP) raises:
+def pt_spec_fold(mut ctx: DeviceContext, f: FP, pp: FP, hq: IP, qp: IP) raises:
     """A `pt_sfold` stage as the tiled evaluation over its M candidates and
     the per-candidate finish; the `pt_smap` stage before it is skipped."""
     var n = Int(hq[1])
@@ -453,7 +453,7 @@ def pt_spec_fold(ctx: DeviceContext, f: FP, pp: FP, hq: IP, qp: IP) raises:
     ctx.enqueue_function[pt_stile_finish_kernel](f, pp, qp, Int32(chunks), grid_dim=d * m, block_dim=TGR)
 
 
-def cs_tile_stats(ctx: DeviceContext, f: FP, pp: FP, X: Int, n: Int, d: Int, LAM: Int, method: Int, O: Int) raises:
+def cs_tile_stats(mut ctx: DeviceContext, f: FP, pp: FP, X: Int, n: Int, d: Int, LAM: Int, method: Int, O: Int) raises:
     """`col_stats` of the n x d block at X into the six rows at O, one tiled
     pass; LAM >= 0 folds the power transform of X at LAM instead (the fused
     standardize tail)."""
