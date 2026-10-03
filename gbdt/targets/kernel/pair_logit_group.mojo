@@ -174,7 +174,8 @@ def pair_logit_group_kernel[
     point: MutPointer[Float32, MutAnyOrigin],
     grades: MutPointer[Float32, MutAnyOrigin],
     group_offsets: MutPointer[UInt32, MutAnyOrigin],
-    group_w: MutPointer[Float32, MutAnyOrigin],
+    acc: MutPointer[Float32, MutAnyOrigin],
+    group_w_at: Int,
     row_weights: MutPointer[Float32, MutAnyOrigin],
     n_rows_in: Int32,
     write_map: MutPointer[UInt32, MutAnyOrigin],
@@ -184,9 +185,9 @@ def pair_logit_group_kernel[
     compute_fv: Int32,
     plane_magnitudes: MutPointer[Float32, MutAnyOrigin],
     compute_magnitudes: Int32,
-    der_acc: MutPointer[Float32, MutAnyOrigin],
-    der2_acc: MutPointer[Float32, MutAnyOrigin],
-    fv_acc: MutPointer[Float32, MutAnyOrigin],
+    der_acc_at: Int,
+    der2_acc_at: Int,
+    fv_acc_at: Int,
 ):
     """One block per group, a thread per document per 256-document chunk,
     the group's point and grades tiled through shared memory. The planes
@@ -195,7 +196,14 @@ def pair_logit_group_kernel[
     takes one partial per group, `plane_magnitudes` two per group. With
     `store_acc` the row sums and the group's value partial are also kept
     in the accumulators for `PAIRLOGIT_EST_REUSE`. Every loop bound and
-    every barrier is uniform over the block."""
+    every barrier is uniform over the block. The group weights and the
+    three accumulators are regions of the ONE `acc` buffer, passed once
+    with offsets: `enqueue_function` refuses two mutable arguments derived
+    from one allocation as aliasing."""
+    var group_w = acc + group_w_at
+    var der_acc = acc + der_acc_at
+    var der2_acc = acc + der2_acc_at
+    var fv_acc = acc + fv_acc_at
     comptime assert not (estimation and second_order), (
         "second_order is a SEARCH-mode flag"
     )
@@ -307,9 +315,10 @@ def pair_logit_group_kernel[
 
 
 def pair_logit_group_reuse_kernel(
-    der_acc: MutPointer[Float32, MutAnyOrigin],
-    der2_acc: MutPointer[Float32, MutAnyOrigin],
-    fv_acc: MutPointer[Float32, MutAnyOrigin],
+    acc: MutPointer[Float32, MutAnyOrigin],
+    der_acc_at: Int,
+    der2_acc_at: Int,
+    fv_acc_at: Int,
     n_rows_in: Int32,
     n_groups_in: Int32,
     write_map: MutPointer[UInt32, MutAnyOrigin],
@@ -319,7 +328,12 @@ def pair_logit_group_reuse_kernel(
 ):
     """`PAIRLOGIT_EST_REUSE`: the estimation planes `[der, der2]` at each
     row's bin position from the search call's accumulators, and the
-    per-group value partials copied; one grid over `max(rows, groups)`."""
+    per-group value partials copied; one grid over `max(rows, groups)`.
+    The accumulators are regions of `acc` at the given offsets (one
+    pointer, so no two mutable launch arguments alias)."""
+    var der_acc = acc + der_acc_at
+    var der2_acc = acc + der2_acc_at
+    var fv_acc = acc + fv_acc_at
     var n_rows = Int(n_rows_in)
     var n_groups = Int(n_groups_in)
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -379,21 +393,22 @@ def launch_pair_logit_group[
 ) raises:
     """The target call: `point` in row order, one block per group. The
     group weights and the three accumulators are regions of `acc` at the
-    given offsets (one buffer, so no two `mut` arguments alias; the
-    accumulators are written only under `store_acc`)."""
+    given offsets, passed as ONE pointer plus offsets (two pointers
+    derived from `acc` are refused as aliasing; the accumulators are
+    written only under `store_acc`)."""
     ctx.enqueue_function[
         pair_logit_group_kernel[estimation, second_order, store_acc]
     ](
         point.unsafe_ptr(), grades.unsafe_ptr(), group_offsets.unsafe_ptr(),
-        acc.unsafe_ptr() + group_w_at, row_weights.unsafe_ptr(), Int32(n_rows),
+        acc.unsafe_ptr(), group_w_at, row_weights.unsafe_ptr(), Int32(n_rows),
         write_map.unsafe_ptr(), Int32(1) if has_write_map else Int32(0),
         stats.unsafe_ptr(), function_value.unsafe_ptr(),
         Int32(1) if compute_fv else Int32(0),
         plane_magnitudes.unsafe_ptr(),
         Int32(1) if compute_magnitudes else Int32(0),
-        acc.unsafe_ptr() + der_acc_at,
-        acc.unsafe_ptr() + der2_acc_at,
-        acc.unsafe_ptr() + fv_acc_at,
+        der_acc_at,
+        der2_acc_at,
+        fv_acc_at,
         grid_dim=(n_groups, 1, 1),
         block_dim=(PLG_THREADS, 1, 1),
     )
@@ -420,9 +435,7 @@ def launch_pair_logit_group_reuse(
     if blocks < 1:
         blocks = 1
     ctx.enqueue_function[pair_logit_group_reuse_kernel](
-        acc.unsafe_ptr() + der_acc_at,
-        acc.unsafe_ptr() + der2_acc_at,
-        acc.unsafe_ptr() + fv_acc_at,
+        acc.unsafe_ptr(), der_acc_at, der2_acc_at, fv_acc_at,
         Int32(n_rows), Int32(n_groups),
         write_map.unsafe_ptr(), stats.unsafe_ptr(), function_value.unsafe_ptr(),
         Int32(1) if compute_fv else Int32(0),
