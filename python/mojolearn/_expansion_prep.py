@@ -3401,6 +3401,15 @@ def _weighted_levels(pr, ug, ucnt, n, d, levels, average, out):
     pr.stage("kbins_wq", d, ug, n, d, ucnt, pr.put_list(nb), nbmax, pr.put_list(flat), int(average), out)
 
 
+def _spline_fused(mode):
+    """lane apple-fast-gap-kapprox2: whether the binding is the FAST Apple
+    build with -D MOJOLEARN_SPLINE_FAST_FUSED (it alone exports
+    `x_prep_spline_fused`)."""
+    if str(mode).strip().lower() != "fast":
+        return False
+    return _optional_prep_entry(_prep_binding(mode), "x_prep_spline_fused") is not None
+
+
 class SplineTransformer(_PrepBase):
     """sklearn.preprocessing.SplineTransformer: per feature, B-splines of
     `degree` on `n_knots` base knots ('uniform' over the training range,
@@ -3443,8 +3452,7 @@ class SplineTransformer(_PrepBase):
         # lane apple-fast-gap-kapprox2: with `x_prep_spline_fused` (the FAST
         # Apple build with -D MOJOLEARN_SPLINE_FAST_FUSED only) one program fits
         # and applies; 'error' extrapolation and order 'F' keep fit + transform.
-        if (self.extrapolation != "error" and self.order == "C" and _mode() == "fast"
-                and _optional_prep_entry(_prep_binding("fast"), "x_prep_spline_fused") is not None):
+        if self.extrapolation != "error" and self.order == "C" and _spline_fused(_mode()):
             return self._fit(X, sample_weight, True)
         return self.fit(X, y, sample_weight=sample_weight).transform(X)
 
@@ -3496,11 +3504,19 @@ class SplineTransformer(_PrepBase):
         pr = _Prog()
         xo = pr.put(arr)
         sorts = not given and self.knots == "quantile" and w is None
-        # fused: no n*d block when nothing sorts (unfused it comes back unread)
-        so = pr.work(n * d) if sorts else (None if fuse else pr.alloc(n * d))
+        # MOJOLEARN_SPLINE_FAST_FUSED: no n*d arena block when nothing sorts
+        # (main's is never written and comes back from the device unread: 64 MB
+        # at the board's 1M x 16), and the count / min / max rows by the blocked
+        # units (one unit per row block and column) instead of one threadgroup
+        # per column over every row. The same knots (counts, minima, maxima).
+        fused = _spline_fused(mode)
+        so = pr.work(n * d) if sorts else (None if fused else pr.alloc(n * d))
         st = pr.alloc(6 * d)
         knots = pr.alloc(d * (nk + 2 * k))
-        pr.stage("col_stats", d, xo, n, d, st)
+        if fused:
+            _col_stats(pr, xo, n, d, st, var=False)
+        else:
+            pr.stage("col_stats", d, xo, n, d, st)
         uniform, kst = 0, st
         if given:
             base = pr.put_list([v for col in cols for v in col])
@@ -3554,7 +3570,10 @@ class SplineTransformer(_PrepBase):
         st = pr.alloc(6 * d)
         check = self.extrapolation == "error" or self.handle_missing == "error"
         if check:
-            pr.stage("col_stats", d, xo, n, d, st)
+            if _spline_fused(self.numeric_mode_):
+                _col_stats(pr, xo, n, d, st, var=False)
+            else:
+                pr.stage("col_stats", d, xo, n, d, st)
         pr.stage("spline_apply", n * d, xo, n, d, ko, self._nk, self._k, self._EXTRAP[self.extrapolation], W,
                  1 if self.include_bias else 0, out)
         fo = _p2m_f_stage(pr, out, n, W) if self.order == "F" else None

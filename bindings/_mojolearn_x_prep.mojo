@@ -168,10 +168,11 @@ comptime X_PREP_FAST_UNIQUE = (
 
 #: lane apple-fast-gap-kapprox2 (2026-10-03), an experiment (off unless
 #: defined): `-D MOJOLEARN_SPLINE_FAST_FUSED` registers `x_prep_spline_fused`
-#: in the FAST + Apple build only; SplineTransformer.fit_transform then runs
-#: ONE program (X up once, col_stats, knots, apply, the output back) instead
-#: of fit's program (which also brought an unread n*d block back) and
-#: transform's (X up again, col_stats again). Same knots, same output words.
+#: in the FAST + Apple build only. SplineTransformer.fit then allocates no
+#: n*d arena block when nothing sorts (main's is never written and comes back
+#: from the device unread: 64 MB at the board's 1M x 16) and takes the count /
+#: min / max rows from the blocked units; fit_transform runs ONE program (X up
+#: once, stats, knots, apply). Same knots, same output words.
 comptime SPLINE_FAST_FUSED = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_SPLINE_FAST_FUSED"]()
