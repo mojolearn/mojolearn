@@ -76,8 +76,22 @@ def _fit_module(est, algo):
     return est._bind(_BINDING)
 
 
-#: lane/apple-fast-gap-manprep: IsotonicRegression.fit reads its output Array by byte copies
-_ISO_FAST_NOLIST = os.environ.get("MOJOLEARN_ISOTONIC_FAST_NOLIST") == "1"
+#: lane/apple-fast-gap-manprep: IsotonicRegression.fit reads its output Array
+#: by byte copies on FAST + Apple (default since the M3 A/B
+#: gmp-iso-nolist-istella: 50.9 -> 29.4 ms, r2 / rmse the same words);
+#: MOJOLEARN_ISOTONIC_FAST_NOLIST_OFF=1 restores the list route
+_ISO_FAST_NOLIST = os.environ.get("MOJOLEARN_ISOTONIC_FAST_NOLIST_OFF") != "1"
+
+
+def _fast_apple(est, mod):
+    """The estimator runs the FAST tier on a Metal binding."""
+    try:
+        if str(est.numeric_mode_used()).strip().lower() != "fast":
+            return False
+        v = getattr(mod, "x_linear_vendor", None)
+        return v is not None and str(v()) == "metal"
+    except Exception:
+        return False
 
 
 def _run(est, algo, X, n, d, y, ip, fp, n_out, n_fw, n_iw):
@@ -1329,8 +1343,8 @@ class IsotonicRegression(NumericModeMixin):
         yy, has_w = _with_weights(yv, sample_weight, n)
         ip = [int(self.increasing_), int(self.y_min is not None), int(self.y_max is not None), int(has_w)]
         fp = [0.0 if self.y_min is None else self.y_min, 0.0 if self.y_max is None else self.y_max]
-        if _ISO_FAST_NOLIST:
-            # lane/apple-fast-gap-manprep (2026-10-03), MOJOLEARN_ISOTONIC_FAST_NOLIST=1:
+        if _ISO_FAST_NOLIST and _fast_apple(self, _fit_module(self, ALGO_ISOTONIC)):
+            # lane/apple-fast-gap-manprep (2026-10-03), FAST + Apple default:
             # the 3 + 2n output words stay one float32 Array; the three
             # header words and the two k-word threshold blocks are byte
             # copies, not a 2n-element Python list (2,000,000 floats at the

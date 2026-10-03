@@ -186,7 +186,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | `NB_CAT_ATOMIC` | categorical-nb / taxi | lane/apple-fast-nb @ be2ea3a05 | nb-cat-atomic-taxi | - | OPEN | A/B queued (lane/apple-fast-batch prebuilt arms) |
 | `NB_TEXT_CSR` | multinomial-nb / text | lane/apple-fast-nb @ be2ea3a05 | nb-mnb-csr-text-x (M2) | 221.7 -> 47.7 | HELD (M2 only) | accuracy / logloss identical; main keeps it opt-in (`-D MOJOLEARN_NB_TEXT_CSR`); owes an M3 A/B |
 | `RIDGE_FAST_CLS1_CODES` | ridge-clf / taxi | lane/apple-fast-gap-cls1 @ 4e341dc41 | gapcls1-rccodes-taxi | ridge-clf taxi 120 -> 19.0 | OPEN | judged KEEP (-84%); merge pending |
-| `ISOTONIC_FAST_NOLIST` (env MOJOLEARN_ISOTONIC_FAST_NOLIST=1) | isotonic / istella | lane/apple-fast-gap-manprep @ 1db219f01 | gmp-iso-nolist-istella | - | OPEN | fit's 3 + 2n output words were `tolist()`ed (2,000,000 Python floats at 1M rows), sliced and rebuilt; now three byte copies; same words |
+| `ISOTONIC_FAST_NOLIST` (env `MOJOLEARN_ISOTONIC_FAST_NOLIST_OFF=1` off) | isotonic / istella | lane/apple-fast-gap-manprep @ 1db219f01 | gmp-iso-nolist-istella | isotonic istella 50.9 -> 29.4 | KEPT (FAST+Apple default) | -42%; r2/rmse same; fit's 3 + 2n output words were `tolist()`ed (2,000,000 Python floats at 1M rows), sliced and rebuilt; now three byte copies; same words |
 
 ## Neighbors (42)
 
@@ -335,7 +335,7 @@ Each row is one define, or one combination of defines, on one branch. Combinatio
 | MOJOLEARN_XD_FAST_CLS2_GRP_DEVSCAN | gaussian-rp / istella, taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-devscan-grp-{istella,taxi} | 54.3 -> 15.9, 4.7 -> 3.9 | KEEP, FAST+Apple default (`_OFF` off) | device NaN scan replaces the one-thread host walk; quality identical (n=1) |
 | MOJOLEARN_XD_FAST_CLS2_GRP_NOSCAN | gaussian-rp / istella, taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-noscan-grp-{istella,taxi} | 57 -> 1.1 (istella) | OPT-IN, pending Andrew | moves the NaN/inf refusal from fit to transform (semantics) |
 | MOJOLEARN_XD_FAST_CLS2_GRP_LAZY | gaussian-rp / istella, taxi | lane/apple-fast-gap-cls2@72602a339 | gapcls2-noscanlazy-grp-{istella,taxi} | 54 -> 0.5 (with NOSCAN) | OPT-IN, pending Andrew | measured only with NOSCAN; kept opt-in with it |
-| `LLE_FAST_DEV_F0` (env MOJOLEARN_LLE_FAST_DEV_F0=1) | lle / taxi, istella | lane/apple-fast-gap-manprep @ 9130a81bc | gmp-lle-devf0-taxi, gmp-lle-devf0-istella | - | OPEN | F0 = [F^ | u] built by three device cells instead of F.cols (400 MB download + 10,000 strided Python slices) and _hstack (F^ download, host move); same words for F0 |
+| `LLE_FAST_DEV_F0` (env `MOJOLEARN_LLE_FAST_DEV_F0_OFF=1` off) | lle / taxi, istella | lane/apple-fast-gap-manprep @ 9130a81bc | gmp-lle-devf0-taxi, gmp-lle-devf0-istella | lle taxi 3,827 -> 2,570; istella 3,895 -> 2,653 | KEPT (FAST+Apple default) | -33% / -32%; trustworthiness same; F0 = [F^ | u] built by three device cells instead of F.cols (400 MB download + 10,000 strided Python slices) and _hstack (F^ download, host move); same words for F0 |
 
 ## Cluster (38)
 

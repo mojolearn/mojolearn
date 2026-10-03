@@ -3984,8 +3984,11 @@ class MDS(_Base):
 #: 2,000 on the M3 Ultra). method='standard' only (its factor I - W is
 #: square); 'ltsa', 'hessian' and 'modified' keep the dense route.
 _LLE_ITER_MIN_N = 200
-#: lane/apple-fast-gap-manprep: `_lle_smallest` builds F0 on the device (FAST tier only)
-_LLE_FAST_DEV_F0 = _os.environ.get("MOJOLEARN_LLE_FAST_DEV_F0") == "1"
+#: lane/apple-fast-gap-manprep: `_lle_smallest` builds F0 on the device, FAST +
+#: Apple default since the M3 A/B gmp-lle-devf0-* (taxi 3,827 -> 2,570 ms,
+#: istella 3,895 -> 2,653 ms, trustworthiness the same);
+#: MOJOLEARN_LLE_FAST_DEV_F0_OFF=1 restores the host F.cols + _hstack route
+_LLE_FAST_DEV_F0 = _os.environ.get("MOJOLEARN_LLE_FAST_DEV_F0_OFF") != "1"
 _LLE_ITER_MAX_K = 10
 #: Converged: the sine of the largest principal angle between two successive
 #: wanted Ritz subspaces is at most _LLE_SUBSPACE_TOL, or, under
@@ -4065,10 +4068,10 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     un = _M.of([rn] * n, n, 1)
     hrow = _M.of([rn] * n1, 1, n1)
     Fh = k.mm(F, h)
-    dev_f0 = _LLE_FAST_DEV_F0 and str(k.mode).strip().lower() == "fast" and k._use(F)
+    dev_f0 = (_LLE_FAST_DEV_F0 and str(k.mode).strip().lower() == "fast" and k._use(F)
+              and _kit_vendor(k) == "metal")
     if dev_f0:
-        # lane/apple-fast-gap-manprep (2026-10-03), MOJOLEARN_LLE_FAST_DEV_F0=1
-        # (FAST tier): F0 = [F^ | u] built on the device in three cells
+        # lane/apple-fast-gap-manprep (2026-10-03), FAST + Apple default: F0 = [F^ | u] built on the device in three cells
         # instead of F.cols (F downloaded, then one strided Python slice per
         # column, 10,000 at the board's n) and _hstack (F^ downloaded and
         # moved on the host, then uploaded again for the LU). The same words:
