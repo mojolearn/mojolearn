@@ -166,6 +166,23 @@ comptime X_PREP_FAST_UNIQUE = (
 )
 
 
+#: lane apple-fast-gap-kapprox2 (2026-10-03), an experiment (off unless
+#: defined): `-D MOJOLEARN_SPLINE_FAST_FUSED` registers `x_prep_spline_fused`
+#: in the FAST + Apple build only; SplineTransformer.fit_transform then runs
+#: ONE program (X up once, col_stats, knots, apply, the output back) instead
+#: of fit's program (which also brought an unread n*d block back) and
+#: transform's (X up again, col_stats again). Same knots, same output words.
+comptime SPLINE_FAST_FUSED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_SPLINE_FAST_FUSED"]()
+)
+
+
+def spline_fused_binding() raises -> PythonObject:
+    """Present only under SPLINE_FAST_FUSED (the Python probe)."""
+    return PythonObject(1)
+
+
 def fast_unique_binding() raises -> PythonObject:
     """Lane apple-fast-prep: present only under X_PREP_FAST_UNIQUE."""
     return PythonObject(1)
@@ -217,6 +234,8 @@ def PyInit__mojolearn_x_prep() abi("C") -> PythonObject:
         m.def_function[vendor_binding]("x_prep_vendor")
         comptime if X_PREP_FAST_UNIQUE:
             m.def_function[fast_unique_binding]("x_prep_fast_unique")
+        comptime if SPLINE_FAST_FUSED:
+            m.def_function[spline_fused_binding]("x_prep_spline_fused")
         comptime if CAT_CLS2_PACK:
             m.def_function[cls2_cat_binding]("x_prep_cls2_cat")
         comptime if CALIB_FOLDS:

@@ -3436,6 +3436,21 @@ class SplineTransformer(_PrepBase):
                              "no missing values in X.")
 
     def fit(self, X, y=None, sample_weight=None):
+        self._fit(X, sample_weight, False)
+        return self
+
+    def fit_transform(self, X, y=None, sample_weight=None):
+        # lane apple-fast-gap-kapprox2: with `x_prep_spline_fused` (the FAST
+        # Apple build with -D MOJOLEARN_SPLINE_FAST_FUSED only) one program fits
+        # and applies; 'error' extrapolation and order 'F' keep fit + transform.
+        if (self.extrapolation != "error" and self.order == "C" and _mode() == "fast"
+                and _optional_prep_entry(_prep_binding("fast"), "x_prep_spline_fused") is not None):
+            return self._fit(X, sample_weight, True)
+        return self.fit(X, y, sample_weight=sample_weight).transform(X)
+
+    def _fit(self, X, sample_weight, fuse):
+        """fit; with `fuse`, the same program also applies the splines to X
+        and returns the output (fit_transform's words in one run)."""
         if self.extrapolation not in self._EXTRAP:
             raise ValueError(f"mojolearn: invalid extrapolation {self.extrapolation!r}")
         if self.handle_missing not in ("error", "zeros"):
@@ -3481,7 +3496,9 @@ class SplineTransformer(_PrepBase):
         pr = _Prog()
         xo = pr.put(arr)
         sorts = not given and self.knots == "quantile" and w is None
-        so, st = (pr.work(n * d) if sorts else pr.alloc(n * d)), pr.alloc(6 * d)
+        # fused: no n*d block when nothing sorts (unfused it comes back unread)
+        so = pr.work(n * d) if sorts else (None if fuse else pr.alloc(n * d))
+        st = pr.alloc(6 * d)
         knots = pr.alloc(d * (nk + 2 * k))
         pr.stage("col_stats", d, xo, n, d, st)
         uniform, kst = 0, st
@@ -3505,6 +3522,13 @@ class SplineTransformer(_PrepBase):
                 kst = pr.alloc(6 * d)
                 pr.stage("col_stats", d, _p2m_positive_rows(pr, xo, pr.put(w), n, d, wl), wl, d, kst)
         pr.stage("spline_knots", d, base, nk, d, k, knots, uniform, kst, int(periodic))
+        nspl = nk - 1 if periodic else nk + k - 1
+        W = d * (nspl if self.include_bias else nspl - 1)
+        out = None
+        if fuse:
+            out = pr.output(n * W)
+            pr.stage("spline_apply", n * d, xo, n, d, knots, nk, k, self._EXTRAP[self.extrapolation], W,
+                     1 if self.include_bias else 0, out)
         pr.run(mode)
         self._no_nan(pr, st, d, n)
         self._knots = pr.get(knots, d * (nk + 2 * k))
@@ -3514,10 +3538,9 @@ class SplineTransformer(_PrepBase):
         self._lo = [flat[c * wd + k] for c in range(d)]
         self._hi = [flat[c * wd + k + nk - 1] for c in range(d)]
         self._nk, self._k = nk, k
-        nspl = nk - 1 if periodic else nk + k - 1
-        self.n_features_out_ = d * (nspl if self.include_bias else nspl - 1)
+        self.n_features_out_ = W
         self.numeric_mode_, self.n_features_in_ = mode, d
-        return self
+        return pr.get(out, (n, W)) if fuse else self
 
     def transform(self, X):
         self._check_fitted()
