@@ -8,6 +8,7 @@ not a distributed factorization of a single binary covariance matrix.
 __all__ = ['fit_gaussian_process_classifier', 'predict_gaussian_process_classifier']
 
 from ._parallel_pool import DevicePool
+from ._array import Array
 from ._buffer import as_f32_c
 from ._labels import encode_labels, decode_labels, threshold_codes
 

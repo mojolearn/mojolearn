@@ -840,7 +840,9 @@ class GaussianProcessRegressor(NumericModeMixin):
         theta_out = empty((n_theta,), "<f8")
         values_out = empty((n_theta,), "<f8")
         runs_out = empty((n_runs * 4,), "<f8")
-        seed = int(self.random_state)
+        # random_state may be None only with no restarts (checked in __init__);
+        # the kernel then draws no restart point and ignores the seed.
+        seed = 0 if self.random_state is None else int(self.random_state)
         self._extension().gpr_optimize(
             # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_optimize_binding.
             # x, y, kinds, kparams, ls_len, ls, free, bounds, theta_out,

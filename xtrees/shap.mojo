@@ -118,6 +118,7 @@ def _tree_of(offsets: I32P, n_trees: Int, g: Int) -> Int:
     return lo
 
 
+@always_inline
 def shap_parent_unit(u: Int, offsets: I32P, n_trees: Int, colid: I32P, left: I32P, d: Int,
                      parent: I32P, mark: I32P, meta: I32P):
     """Node u: parent[child] = u (tree-relative) for both children, and
@@ -138,6 +139,7 @@ def shap_parent_unit(u: Int, offsets: I32P, n_trees: Int, colid: I32P, left: I32
     mark[unsafe_offset=t * d + c] = 1
 
 
+@always_inline
 def shap_depth_unit(u: Int, offsets: I32P, n_trees: Int, parent: I32P, meta: I32P):
     """Node u's depth into meta[SHAP_META_DEPTH] by integer max."""
     var t = _tree_of(offsets, n_trees, u)
@@ -154,6 +156,7 @@ def shap_depth_unit(u: Int, offsets: I32P, n_trees: Int, parent: I32P, meta: I32
     _ = Atomic[DType.int32].max(meta.unsafe_offset(SHAP_META_DEPTH), Int32(depth))
 
 
+@always_inline
 def shap_cover_unit(u: Int, nb: Int, offsets: I32P, colid: I32P, quesval: F32P, left: I32P,
                     bg: F32P, d: Int, cover: I32P, meta: I32P):
     """Unit u = t * nb + r: background row r's walk down tree t, +1 on every
@@ -183,6 +186,7 @@ def shap_cover_unit(u: Int, nb: Int, offsets: I32P, colid: I32P, quesval: F32P, 
             return
 
 
+@always_inline
 def shap_slot_unit(t: Int, d: Int, slot: I32P, meta: I32P):
     """Tree t's row of `slot` (the marks of `shap_parent_unit`) becomes its
     slot numbers: marked features ascending 0, 1, ..., the rest -1."""
@@ -196,6 +200,7 @@ def shap_slot_unit(t: Int, d: Int, slot: I32P, meta: I32P):
     _ = Atomic[DType.int32].max(meta.unsafe_offset(SHAP_META_SLOTS), Int32(c))
 
 
+@always_inline
 def shap_ev_part_unit(u: Int, k: Int, offsets: I32P, left: I32P, leaves: F32P, cover: I32P, tscale: F32P,
                       part: F32P):
     """Unit u = t * k + j: tree t's share of the expected value of output j."""
@@ -216,6 +221,7 @@ def shap_ev_part_unit(u: Int, k: Int, offsets: I32P, left: I32P, leaves: F32P, c
     part[unsafe_offset=u] = e
 
 
+@always_inline
 def shap_ev_fold_unit(j: Int, n_trees: Int, k: Int, part: F32P, ev: F32P):
     """ev[j] (the caller's init) plus every tree's share, ascending."""
     var acc = ftz(ev[unsafe_offset=j])
@@ -245,6 +251,7 @@ def _unwound_sum[W: Int](pz: InlineArray[Float32, W], po: InlineArray[Float32, W
     return total
 
 
+@always_inline
 def shap_tree_unit[W: Int](
     u: Int, rows: Int, d: Int, k: Int, slots: Int,
     offsets: I32P, colid: I32P, quesval: F32P, left: I32P, leaves: F32P,
@@ -347,6 +354,7 @@ def shap_tree_unit[W: Int](
                 buf[unsafe_offset=o] = _a(buf[unsafe_offset=o], _m(s, ftz(leaves[unsafe_offset=g * k + j])))
 
 
+@always_inline
 def shap_fold_unit(u: Int, r0: Int, rows: Int, n_trees: Int, d: Int, k: Int, slots: Int, slot: I32P, buf: F32P,
                    phi: F32P):
     """Unit u = (f * k + j) * rows + r: phi[r0 + r, f, j] = +0 plus the
