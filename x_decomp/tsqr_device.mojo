@@ -417,11 +417,17 @@ struct _TsDev(Defaultable, Movable):
     var bufs: List[DeviceBuffer[DType.float32]]
     var m: Int
     var n: Int
+    # -D MOJOLEARN_SVD_FAST_AW (x_decomp/svd_aw.mojo): `arm` asks the next
+    # kept factorization to stash an unfactored copy of A in `acopy`
+    var arm: Bool
+    var acopy: List[DeviceBuffer[DType.float32]]
 
     def __init__(out self):
         self.bufs = List[DeviceBuffer[DType.float32]]()
         self.m = 0
         self.n = 0
+        self.arm = False
+        self.acopy = List[DeviceBuffer[DType.float32]]()
 
 
 comptime TS_DEV_STATE = _Global[StorageType=_TsDev, name="MojoXDecompTsqrDevice", init_fn=_TsDev.__init__]
@@ -430,6 +436,7 @@ comptime TS_DEV_STATE = _Global[StorageType=_TsDev, name="MojoXDecompTsqrDevice"
 def ts_free_device() raises:
     var st = TS_DEV_STATE.get_or_create_ptr()
     st[].bufs = List[DeviceBuffer[DType.float32]]()
+    st[].acopy = List[DeviceBuffer[DType.float32]]()
     st[].m = 0
     st[].n = 0
 
@@ -483,7 +490,13 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
     r; with `keep` the factored state stays for `ts_apply_device`."""
     comptime if not TS_SMEM_OK:
         raise Error("x_decomp tsqr: the panel kernels' threadgroup memory does not fit this column")
+    var arm = TS_DEV_STATE.get_or_create_ptr()[].arm
+    TS_DEV_STATE.get_or_create_ptr()[].arm = False
     ts_free_device()
+    if arm and keep:
+        var acp = ctx.enqueue_create_buffer[DType.float32](m * n)
+        ctx.enqueue_copy(dst_buf=acp, src_buf=da)
+        TS_DEV_STATE.get_or_create_ptr()[].acopy.append(acp)
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
     var dt = ctx.enqueue_create_buffer[DType.float32](nb * npan * _TT)
@@ -548,7 +561,18 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
     _ = dtau^
 
 
-def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int) raises -> DeviceBuffer[DType.float32]:
+def ts_capick_kernel(src: F32Ptr, dst: F32Ptr, n_in: Int32, ldc: Int32, c0: Int32, k: Int32):
+    """dst (n x k) = src[:, c0 .. c0 + k) of the n x ldc src (data movement)."""
+    var t = Int(block_idx.x) * TS_TPB + Int(thread_idx.x)
+    var kk = Int(k)
+    if t < Int(n_in) * kk:
+        var i = t // kk
+        dst.unsafe_store(t, src.unsafe_load(i * Int(ldc) + Int(c0) + t - i * kk))
+
+
+def ts_apply_device(
+    ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, ldc: Int = -1, c0: Int = 0, release: Bool = True
+) raises -> DeviceBuffer[DType.float32]:
     """Q c (m x k) on the device for the kept factorization (c: host n x k);
     the state is released. The caller downloads and frees the result."""
     var st = TS_DEV_STATE.get_or_create_ptr()
@@ -562,7 +586,18 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int) raise
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
     var dcb = ctx.enqueue_create_buffer[DType.float32](nb * n * k)
-    ctx.enqueue_copy(dst_buf=dcb.create_sub_buffer[DType.float32](0, n * k), src_ptr=c)
+    if ldc < 0:
+        ctx.enqueue_copy(dst_buf=dcb.create_sub_buffer[DType.float32](0, n * k), src_ptr=c)
+    else:
+        # columns c0 .. c0 + k of an n x ldc host c (lane/apple-fast-gap-linalg2)
+        var dfull = ctx.enqueue_create_buffer[DType.float32](n * ldc)
+        ctx.enqueue_copy(dst_buf=dfull, src_ptr=c)
+        ctx.enqueue_function[ts_capick_kernel](
+            dfull.unsafe_ptr(), dcb.unsafe_ptr(), Int32(n), Int32(ldc), Int32(c0), Int32(k),
+            grid_dim=_grid(n * k), block_dim=TS_TPB,
+        )
+        ctx.synchronize()
+        _ = dfull^
     var strides = List[Int]()
     var s = 1
     while s < nb:
@@ -604,5 +639,6 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int) raise
     _ = dt^
     _ = dtl^
     _ = dtau^
-    ts_free_device()
+    if release:
+        ts_free_device()
     return dq^
