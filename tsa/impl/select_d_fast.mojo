@@ -124,47 +124,64 @@ def select_d_fast(
             ctx.enqueue_copy(dst_buf=y_diff, src_buf=src)
         else:
             prepare_data(ctx, y_diff, d_y, batch_size, n_obs, d_, D, s)
-        # `_kpss_test`'s launches (tsa/impl/timeSeries/stationarity.mojo), on the workspace
+        # `_kpss_test`'s launches (tsa/impl/timeSeries/stationarity.mojo), on the workspace.
+        # Each region is its own sub-buffer: kernel pointers taken from ONE buffer
+        # alias in the launch's argument check (lane/apple-fast-gap-tsa compile fix).
         var nd_f = Float32(nd)
         var ratio = Float32(1.0) / nd_f
         var elem_grid = (tot + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB
         var series_grid = (batch_size + KPSS_ELEM_TPB - 1) // KPSS_ELEM_TPB
-        var wp = w.unsafe_ptr()
+        var b_cent = w.create_sub_buffer[DType.float32](cent_at, tot)
+        var b_acc = w.create_sub_buffer[DType.float32](acc_at, tot)
+        var b_means = w.create_sub_buffer[DType.float32](means_at, batch_size)
+        var b_s2a = w.create_sub_buffer[DType.float32](s2a_at, batch_size)
+        var b_s2b = w.create_sub_buffer[DType.float32](s2b_at, batch_size)
+        var b_eta = w.create_sub_buffer[DType.float32](eta_at, batch_size)
+        var b_stat = w.create_sub_buffer[DType.float32](stat_at, batch_size)
+        var b_res = res.create_sub_buffer[DType.uint8](d_ * batch_size, batch_size)
         ctx.enqueue_function[sum_kernel](
-            wp + means_at, wp + y_at, Int32(nd), ratio,
+            b_means.unsafe_ptr(), y_diff.unsafe_ptr(), Int32(nd), ratio,
             grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
         )
         ctx.enqueue_function[center_kernel](
-            wp + cent_at, wp + y_at, wp + means_at, Int32(nd), Int32(tot),
+            b_cent.unsafe_ptr(), y_diff.unsafe_ptr(), b_means.unsafe_ptr(), Int32(nd), Int32(tot),
             grid_dim=(elem_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
         )
         ctx.enqueue_function[sumsq_kernel](
-            wp + s2a_at, wp + cent_at, Int32(nd), Float32(1.0),
+            b_s2a.unsafe_ptr(), b_cent.unsafe_ptr(), Int32(nd), Float32(1.0),
             grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
         )
         var lags = kpss_lags(nd)
         var coeffs = kpss_s2B_coefficients(nd, lags)
         ctx.enqueue_function[s2B_accumulation_kernel](
-            wp + acc_at, wp + cent_at, Int32(lags), Int32(nd), Int32(tot), coeffs[0], coeffs[1],
+            b_acc.unsafe_ptr(), b_cent.unsafe_ptr(), Int32(lags), Int32(nd), Int32(tot), coeffs[0], coeffs[1],
             grid_dim=(elem_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
         )
         ctx.enqueue_function[sum_kernel](
-            wp + s2b_at, wp + acc_at, Int32(nd), Float32(1.0),
+            b_s2b.unsafe_ptr(), b_acc.unsafe_ptr(), Int32(nd), Float32(1.0),
             grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
         )
         ctx.enqueue_function[cumsum_by_series_kernel](
-            wp + acc_at, wp + cent_at, Int32(nd), Int32(batch_size),
+            b_acc.unsafe_ptr(), b_cent.unsafe_ptr(), Int32(nd), Int32(batch_size),
             grid_dim=(series_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
         )
         ctx.enqueue_function[sumsq_kernel](
-            wp + eta_at, wp + acc_at, Int32(nd), Float32(1.0),
+            b_eta.unsafe_ptr(), b_acc.unsafe_ptr(), Int32(nd), Float32(1.0),
             grid_dim=(batch_size, 1, 1), block_dim=(STATS_TPB, 1, 1),
         )
         ctx.enqueue_function[kpss_stationarity_check_kernel](
-            res.unsafe_ptr() + d_ * batch_size, wp + stat_at, wp + s2a_at, wp + s2b_at, wp + eta_at,
+            b_res.unsafe_ptr(), b_stat.unsafe_ptr(), b_s2a.unsafe_ptr(), b_s2b.unsafe_ptr(), b_eta.unsafe_ptr(),
             Int32(batch_size), nd_f, pval_threshold,
             grid_dim=(series_grid, 1, 1), block_dim=(KPSS_ELEM_TPB, 1, 1),
         )
+        _ = b_cent^
+        _ = b_acc^
+        _ = b_means^
+        _ = b_s2a^
+        _ = b_s2b^
+        _ = b_eta^
+        _ = b_stat^
+        _ = b_res^
         _ = y_diff^
     ctx.enqueue_function[choose_d_kernel](
         chosen.unsafe_ptr(), res.unsafe_ptr(), Int32(batch_size), Int32(d_max),

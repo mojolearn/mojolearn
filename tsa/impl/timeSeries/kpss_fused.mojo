@@ -376,21 +376,22 @@ def kpss_rounds(
     var hbuf = ctx.enqueue_create_host_buffer[DType.float32](words)
     copy_f32(y_ptr, hbuf.unsafe_ptr(), total)
     var din = dbuf.create_sub_buffer[DType.float32](0, total)
+    var dout = dbuf.create_sub_buffer[DType.float32](total, KPSS_PACK_W * batch_size)
     ctx.enqueue_copy(dst_buf=din, src_ptr=hbuf.unsafe_ptr())
     var lags0 = kpss_lags(n_obs)
     var c0 = kpss_s2B_coefficients(n_obs, lags0)
     var n1 = n_obs - 1 if n_obs > 1 else 1
     var lags1 = kpss_lags(n1)
     var c1 = kpss_s2B_coefficients(n1, lags1)
-    var dp = dbuf.unsafe_ptr()
+    # the two regions as two sub-buffers: two pointers off one buffer alias
+    # in the launch's argument check
     ctx.enqueue_function[kpss_rounds_kernel](
-        dp + total, dp, Int32(n_obs), Int32(rounds),
+        dout.unsafe_ptr(), din.unsafe_ptr(), Int32(n_obs), Int32(rounds),
         Int32(lags0), Float32(1.0) / Float32(n_obs), c0[0], c0[1],
         Int32(lags1), Float32(1.0) / Float32(n1), c1[0], c1[1],
         pval_threshold,
         grid_dim=(batch_size, 1, 1), block_dim=(KPSS_FUSED_TPB, 1, 1),
     )
-    var dout = dbuf.create_sub_buffer[DType.float32](total, KPSS_PACK_W * batch_size)
     ctx.enqueue_copy(dst_ptr=hbuf.unsafe_ptr() + total, src_buf=dout)
     ctx.synchronize()
     var hp = hbuf.unsafe_ptr() + total
