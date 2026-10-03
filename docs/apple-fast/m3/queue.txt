@@ -259,9 +259,9 @@
    259	CMD lane/apple-fast-linear linear-gmm-bc-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-gmm-bc-istella mixture gmm istella 1 2 "" "-D MOJOLEARN_GMM_FAST_BIG_CHOL=1"
    260	CMD lane/apple-fast-linear linear-gmm-es-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-gmm-es-istella mixture gmm istella 1 2 "" "-D MOJOLEARN_GMM_FAST_ESTEP_STACK=1"
    261	CMD lane/apple-fast-linear linear-gmm-all-istella AFC_FAMILY=classical2 bash tools/afc_ab_def.sh linear-gmm-all-istella mixture gmm istella 1 2 "" "-D MOJOLEARN_GMM_FAST_GRID_COV=1 -D MOJOLEARN_GMM_FAST_BIG_CHOL=1 -D MOJ
-   262	CMD lane/apple-fast-trees-depthwise tdw-cat-scan AFT_OUT=$HOME/aft-ab/tdw-cat-scan bash tools/aft_ab.sh gbdt gbdt-categorical taxi 2 "" "-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1"
-   263	CMD lane/apple-fast-trees-depthwise tdw-cat-freq AFT_OUT=$HOME/aft-ab/tdw-cat-freq bash tools/aft_ab.sh gbdt gbdt-categorical taxi 2 "" "-D MOJOLEARN_GBDT_CTR_FAST_FREQ=1"
-   264	CMD lane/apple-fast-trees-depthwise tdw-cat-both AFT_OUT=$HOME/aft-ab/tdw-cat-both bash tools/aft_ab.sh gbdt gbdt-categorical taxi 2 "" "-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1 -D MOJOLEARN_GBDT_CTR_FAST_FREQ=1"
+   262	CMD lane/apple-fast-trees-depthwise tdw-cat-scan AFT_OUT=$HOME/aft-ab/tdw-cat-scan bash tools/aft_ab.sh gbdt gbdt-categorical taxicat 2 "" "-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1"
+   263	CMD lane/apple-fast-trees-depthwise tdw-cat-freq AFT_OUT=$HOME/aft-ab/tdw-cat-freq bash tools/aft_ab.sh gbdt gbdt-categorical taxicat 2 "" "-D MOJOLEARN_GBDT_CTR_FAST_FREQ=1"
+   264	CMD lane/apple-fast-trees-depthwise tdw-cat-both AFT_OUT=$HOME/aft-ab/tdw-cat-both bash tools/aft_ab.sh gbdt gbdt-categorical taxicat 2 "" "-D MOJOLEARN_GBDT_CTR_FAST_SCAN=1 -D MOJOLEARN_GBDT_CTR_FAST_FREQ=1"
    265	CMD lane/apple-fast-ann ann-tsne-split-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-tsne-split-istella x_ann tsne istella 1 2 "" "-D MOJOLEARN_TSNE_FAST_SPLIT=1"
    266	CMD lane/apple-fast-ann ann-cagra-team-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-cagra-team-istella x_ann cagra istella 1 2 "" "-D MOJOLEARN_CAGRA_FAST_TEAM=1"
    267	CMD lane/apple-fast-ann ann-cagra-knnbigd-istella AFC_FAMILY=algos bash tools/afc_ab_def.sh ann-cagra-knnbigd-istella x_ann cagra istella 1 2 "" "-D MOJOLEARN_ANN_FAST_KNN_BIGD=1"
