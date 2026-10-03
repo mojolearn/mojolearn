@@ -614,7 +614,7 @@ comptime GRP_STAGE = _Global[StorageType=_GrpStage, name="MojoXDecompGrpFusedSta
 
 
 def grp_fit_fused_py(
-    xaddr: PythonObject, n: PythonObject, dst: PythonObject, out: PythonObject, p: PythonObject, s: PythonObject
+    xaddr: PythonObject, n: PythonObject, dst: PythonObject, hout: PythonObject, p: PythonObject, s: PythonObject
 ) raises -> PythonObject:
     """p = [count, seed, stream, kind]: the first flat index of a NaN or
     infinity among the n floats at xaddr (or -1), the count-entry matrix
@@ -628,7 +628,7 @@ def grp_fit_fused_py(
     var kind = Int(py=p[3])
     var sc = Float32(Float64(py=s))
     var src = F32Ptr(unsafe_from_address=Int(py=xaddr))
-    var host_out = F32Ptr(unsafe_from_address=Int(py=out))
+    var host_out = F32Ptr(unsafe_from_address=Int(py=hout))
     var pd = _ptr(_id(dst), max(count, 1))
     var best = NONFINITE_NONE
     with GILReleased(Python()):
