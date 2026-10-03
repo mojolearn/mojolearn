@@ -77,6 +77,21 @@ comptime MBK_CLS2_POOL = MINIBATCH_FAST_DEV and not is_defined["MOJOLEARN_X_CLUS
 
 comptime UPtr = MutPointer[UInt64, MutAnyOrigin]
 
+# lane/apple-fast-gap-clus3 (2026-10-03): -D MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP
+# (default off until the M3 A/B). Cause: `_mbf_assign_kernel` is a thread per
+# batch row, so a 4096-row batch is 16 blocks on an 80-core M3 Ultra, and each
+# thread walks its own 880-byte row k times (uncoalesced across the
+# simdgroup). With the switch a batch row is a 32-thread group (8 rows a
+# block, 512 blocks): lane l takes features l, l + 32, ... (a row's reads
+# coalesced), keeps the k partial distances in registers, and the group folds
+# them lane by lane in threadgroup memory. k <= MBF_RG_MAXK, else the old
+# kernel. FAST: the distance's summation order changes (quality, not bits).
+comptime MBK_CLS3_ROWGRP = MINIBATCH_FAST_DEV and is_defined["MOJOLEARN_X_CLUSTER_FAST_CLS3_MBK_ROWGRP"]()
+comptime MBF_RG_W = 32
+"""Threads per batch row."""
+comptime MBF_RG_ROWS = MBF_TPB // MBF_RG_W
+comptime MBF_RG_MAXK = 16
+
 
 @always_inline
 def _sm_next(st: UPtr) -> UInt64:
@@ -127,6 +142,62 @@ def _mbf_assign_kernel(
         off //= 2
     if tid == 0:
         ipart[Int(block_idx.x)] = red[0]
+
+
+def _mbf_assign_rg_kernel(
+    x: FPtr, idx: IPtr, batch: Int32, c: FPtr, k: Int32, d: Int32, lab: IPtr, dist: FPtr, ipart: FPtr,
+):
+    """MBK_CLS3_ROWGRP: `_mbf_assign_kernel` with a 32-thread group per row
+    (see the switch). Ties to the lower center, as there."""
+    var tid = Int(thread_idx.x)
+    var g = tid // MBF_RG_W
+    var l = tid - g * MBF_RG_W
+    var t = Int(block_idx.x) * MBF_RG_ROWS + g
+    var K = Int(k)
+    var D = Int(d)
+    var red = stack_allocation[MBF_TPB * MBF_RG_MAXK, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var rd = stack_allocation[MBF_RG_ROWS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var acc = SIMD[DType.float32, MBF_RG_MAXK](0)
+    var live = t < Int(batch)
+    if live:
+        var p = Int(idx[t])
+        for f in range(l, D, MBF_RG_W):
+            var xv = ftz(x[p * D + f])
+            comptime for j in range(MBF_RG_MAXK):
+                if j < K:
+                    var tt = ftz(ftz(c[j * D + f]) - xv)
+                    acc[j] = ftz(acc[j] + ftz(identical_mul(tt, tt)))
+    comptime for j in range(MBF_RG_MAXK):
+        red[tid * MBF_RG_MAXK + j] = acc[j]
+    barrier()
+    # lane j < K folds center j's 32 partials in lane order
+    if l < K:
+        var s = Float32(0)
+        for q in range(MBF_RG_W):
+            s = ftz(s + red[(g * MBF_RG_W + q) * MBF_RG_MAXK + l])
+        red[(g * MBF_RG_W) * MBF_RG_MAXK + MBF_RG_MAXK * MBF_RG_W // 2 + l] = s
+    barrier()
+    if l == 0:
+        var v = Float32(0)
+        if live:
+            var base = (g * MBF_RG_W) * MBF_RG_MAXK + MBF_RG_MAXK * MBF_RG_W // 2
+            var best = red[base]
+            var bi = 0
+            for j in range(1, K):
+                var a = red[base + j]
+                if a < best:
+                    best = a
+                    bi = j
+            lab[t] = Int32(bi)
+            dist[t] = best
+            v = best
+        rd[g] = v
+    barrier()
+    if tid == 0:
+        var a = Float32(0)
+        for q in range(MBF_RG_ROWS):
+            a = a + rd[q]
+        ipart[Int(block_idx.x)] = a
 
 
 def _mbf_sum_kernel(
@@ -305,7 +376,12 @@ def minibatch_fast_steps(
             return False
         var G = MBF_GROUP
         var kd = k * d
+        var rg = False
+        comptime if MBK_CLS3_ROWGRP:
+            rg = k <= MBF_RG_MAXK
         var nblk = (batch + MBF_TPB - 1) // MBF_TPB
+        if rg:
+            nblk = (batch + MBF_RG_ROWS - 1) // MBF_RG_ROWS
         var nchunk = (batch + MBF_CH - 1) // MBF_CH
         var ncell_blk = (kd + MBF_TPB - 1) // MBF_TPB
         var d_idx = ctx.enqueue_create_buffer[DType.int32](G * batch)
@@ -367,10 +443,16 @@ def minibatch_fast_steps(
                 var wi = p_w + slot_in * k
                 var co = p_c + slot_out * kd
                 var wo = p_w + slot_out * k
-                ctx.enqueue_function[_mbf_assign_kernel](
-                    x, pi, Int32(batch), ci, Int32(k), Int32(d), p_lab, p_dist, p_ipart,
-                    grid_dim=nblk, block_dim=MBF_TPB,
-                )
+                if rg:
+                    ctx.enqueue_function[_mbf_assign_rg_kernel](
+                        x, pi, Int32(batch), ci, Int32(k), Int32(d), p_lab, p_dist, p_ipart,
+                        grid_dim=nblk, block_dim=MBF_TPB,
+                    )
+                else:
+                    ctx.enqueue_function[_mbf_assign_kernel](
+                        x, pi, Int32(batch), ci, Int32(k), Int32(d), p_lab, p_dist, p_ipart,
+                        grid_dim=nblk, block_dim=MBF_TPB,
+                    )
                 ctx.enqueue_function[_mbf_sum_kernel](
                     x, pi, Int32(batch), p_lab, Int32(k), Int32(d), Int32(nchunk), p_part, p_cpart,
                     grid_dim=k * nchunk, block_dim=MBF_TPB,
