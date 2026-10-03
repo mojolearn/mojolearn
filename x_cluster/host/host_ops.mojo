@@ -52,6 +52,7 @@ from x_cluster.bodies import (
 from cluster.host.kmeans_oracle import host_kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from x_cluster.ops import ClusterOps
+from x_cluster.bgmm_device import bgmm_host_step
 from x_cluster.post_bodies import (
     FM_MIN,
     FM_PROD,
@@ -717,6 +718,20 @@ struct HostOps(ClusterOps):
 
     def sum_ff(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int) raises -> Float64:
         return ff_to_f64(ff_fold_host(mode, self._fp(a), self._fp_or(b), self._fp_or(c), n))
+
+    def fold_into(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int, dst: Int) raises:
+        var v = ff_fold_host(mode, self._fp(a), self._fp_or(b), self._fp_or(c), n)
+        var po = self._fp(dst)
+        po[0] = v.hi
+        po[1] = v.lo
+
+    def bgmm_step(
+        mut self, step: Int, kc: Int, d: Int, cfg: Int, aux: Int, w: Int, p1: Int, p2: Int, p3: Int
+    ) raises:
+        bgmm_host_step(
+            step, self._fp(w), self._fp(p1 if p1 >= 0 else w), self._fp(p2 if p2 >= 0 else w),
+            self._fp(p3 if p3 >= 0 else w), kc, d, cfg, aux,
+        )
 
     def bin_seeds(mut self, x: Int, n: Int, d: Int, bin_size: Float32, min_bin_freq: Int, dst: Int) raises -> Int:
         var px = self._fp(x)

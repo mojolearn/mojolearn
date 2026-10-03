@@ -292,6 +292,17 @@ trait ClusterOps(Movable):
         slots a, b, c (-1 when unused), as a double."""
         ...
 
+    def fold_into(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int, dst: Int) raises:
+        """`sum_ff`'s fold left where it is: (hi, lo) into dst[0], dst[1]."""
+        ...
+
+    def bgmm_step(
+        mut self, step: Int, kc: Int, d: Int, cfg: Int, aux: Int, w: Int, p1: Int, p2: Int, p3: Int
+    ) raises:
+        """One step of the mixtures' k-sized work on the workspace slot w
+        (`x_cluster/bgmm_device.mojo`; p1..p3 -1 when unused)."""
+        ...
+
     def bin_seeds(mut self, x: Int, n: Int, d: Int, bin_size: Float32, min_bin_freq: Int, dst: Int) raises -> Int:
         """sklearn `get_bin_seeds`: the kept bins (first-seen order) scaled
         back into `dst` (n x d); returns their count (n: use the rows)."""
