@@ -891,169 +891,169 @@
    891	CMD lane/apple-fast-purity2 purity2-1-gmm-istella AFC_FAMILY=classical2 bash ~/mq/ensure_so.sh bash tools/afc_ab_def.sh purity2-1-gmm-istella mixture gmm istella 1 2 "-D MOJOLEARN_PURITY2_1_OFF" ""
    892	CMD lane/apple-fast-purity2 purity2-2-logreg-istella AFC_FAMILY=classical2 bash ~/mq/ensure_so.sh bash tools/afc_ab_def.sh purity2-2-logreg-istella estimators logreg istella 1 2 "-D MOJOLEARN_PURITY2_2_OFF" ""
    893	CMD lane/apple-fast-purity2 purity2-2-logreg-taxi AFC_FAMILY=classical2 bash ~/mq/ensure_so.sh bash tools/afc_ab_def.sh purity2-2-logreg-taxi estimators logreg taxi 1 2 "-D MOJOLEARN_PURITY2_2_OFF" ""
-   894	CMD lane/apple-fast-gap-misc gapmisc-mma-moe bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapmisc-mma-moe x_sequence moe synthetic 1 2 "" "-D MOJOLEARN_MOE_FAST_MMA"
-   895	CMD lane/apple-fast-gap-misc gapmisc-mmakb32-moe bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapmisc-mmakb32-moe x_sequence moe synthetic 1 2 "" "-D MOJOLEARN_MOE_FAST_MMA_KB32"
-   896	CMD lane/apple-fast-gap-misc gapmisc-mmawide-moe bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapmisc-mmawide-moe x_sequence moe synthetic 1 2 "" "-D MOJOLEARN_MOE_FAST_MMA_WIDE"
-   897	CMD lane/apple-fast-gap-misc gapmisc-mmapf-moe bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapmisc-mmapf-moe x_sequence moe synthetic 1 2 "" "-D MOJOLEARN_MOE_FAST_MMA_PF"
-   898	CMD lane/apple-fast-gap-lstm gaplstm-scan-regsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-scan-regsyn x_sequence lstm-reg synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN"
-   899	CMD lane/apple-fast-gap-lstm gaplstm-scan-regtaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-scan-regtaxi x_sequence lstm-reg taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN"
-   900	CMD lane/apple-fast-gap-lstm gaplstm-scan-clftaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-scan-clftaxi x_sequence lstm-clf taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN"
-   901	CMD lane/apple-fast-gap-lstm gaplstm-scan-clfsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-scan-clfsyn x_sequence lstm-clf synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN"
-   902	CMD lane/apple-fast-gap-lstm gaplstm-smem-regsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-smem-regsyn x_sequence lstm-reg synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN_SEQ
-   903	CMD lane/apple-fast-gap-lstm gaplstm-smem-regtaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-smem-regtaxi x_sequence lstm-reg taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN
-   904	CMD lane/apple-fast-gap-lstm gaplstm-smem-clftaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-smem-clftaxi x_sequence lstm-clf taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN
-   905	CMD lane/apple-fast-gap-lstm gaplstm-smem-clfsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-smem-clfsyn x_sequence lstm-clf synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN_SEQ
-   906	CMD lane/apple-fast-gap-lstm gaplstm-wgrad-regsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-wgrad-regsyn x_sequence lstm-reg synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_WGRAD"
-   907	CMD lane/apple-fast-gap-lstm gaplstm-wgrad-regtaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-wgrad-regtaxi x_sequence lstm-reg taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_WGRAD"
-   908	CMD lane/apple-fast-gap-lstm gaplstm-wgrad-clftaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-wgrad-clftaxi x_sequence lstm-clf taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_WGRAD"
-   909	CMD lane/apple-fast-gap-lstm gaplstm-wgrad-clfsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-wgrad-clfsyn x_sequence lstm-clf synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_WGRAD"
-   910	CMD lane/apple-fast-gap-lstm gaplstm-all-regsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-all-regsyn x_sequence lstm-reg synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN_SEQ_F
-   911	CMD lane/apple-fast-gap-lstm gaplstm-all-regtaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-all-regtaxi x_sequence lstm-reg taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN_S
-   912	CMD lane/apple-fast-gap-lstm gaplstm-all-clftaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-all-clftaxi x_sequence lstm-clf taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN_S
-   913	CMD lane/apple-fast-gap-lstm gaplstm-all-clfsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-all-clfsyn x_sequence lstm-clf synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN_SEQ_F
-   914	CMD lane/apple-fast-gap-optim gapoptim-mapdown-adagrad bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-mapdown-adagrad x_sequence adagrad synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_MAP_DOWN"
-   915	CMD lane/apple-fast-gap-optim gapoptim-rawdown-adagrad bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-rawdown-adagrad x_sequence adagrad synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_RAW_DOWN"
-   916	CMD lane/apple-fast-gap-optim gapoptim-ch2m-adagrad bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-ch2m-adagrad x_sequence adagrad synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_PIPE_CH=524288"
-   917	CMD lane/apple-fast-gap-optim gapoptim-mapdown-rmsprop bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-mapdown-rmsprop x_sequence rmsprop synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_MAP_DOWN"
-   918	CMD lane/apple-fast-gap-optim gapoptim-rawdown-rmsprop bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-rawdown-rmsprop x_sequence rmsprop synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_RAW_DOWN"
-   919	CMD lane/apple-fast-gap-optim gapoptim-ch2m-rmsprop bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-ch2m-rmsprop x_sequence rmsprop synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_PIPE_CH=524288"
-   920	CMD lane/apple-fast-gap-optim gapoptim-mapdown-adamax bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-mapdown-adamax x_sequence adamax synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_MAP_DOWN"
-   921	CMD lane/apple-fast-gap-optim gapoptim-rawdown-adamax bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-rawdown-adamax x_sequence adamax synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_RAW_DOWN"
-   922	CMD lane/apple-fast-gap-optim gapoptim-ch2m-adamax bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-ch2m-adamax x_sequence adamax synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_PIPE_CH=524288"
-   923	CMD lane/apple-fast-gap-optim gapoptim-mapdown-nadam bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-mapdown-nadam x_sequence nadam synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_MAP_DOWN"
-   924	CMD lane/apple-fast-gap-optim gapoptim-rawdown-nadam bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-rawdown-nadam x_sequence nadam synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_RAW_DOWN"
-   925	CMD lane/apple-fast-gap-optim gapoptim-ch2m-nadam bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-ch2m-nadam x_sequence nadam synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_PIPE_CH=524288"
-   926	CMD lane/apple-fast-gap-optim gapoptim-resident-adafactor bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-resident-adafactor x_sequence adafactor synthetic 1 2 "" "-D MOJOLEARN_AF_FAST_RESIDENT"
-   927	CMD lane/apple-fast-gap-optim gapoptim-nofill-adafactor bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-nofill-adafactor x_sequence adafactor synthetic 1 2 "" "-D MOJOLEARN_AF_FAST_NOFILL"
-   928	CMD lane/apple-fast-gap-optim gapoptim-mapdown-adafactor bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-mapdown-adafactor x_sequence adafactor synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_MAP_DOWN"
-   929	CMD lane/apple-fast-gap-optim gapoptim-rawdown-adafactor bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-rawdown-adafactor x_sequence adafactor synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_RAW_DOWN"
-   930	CMD lane/apple-fast-gap-optim gapoptim-nofill-layernorm bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-nofill-layernorm x_sequence layernorm synthetic 1 2 "" "-D MOJOLEARN_LN_FAST_NOFILL"
-   931	CMD lane/apple-fast-gap-optim gapoptim-mapdown-layernorm bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-mapdown-layernorm x_sequence layernorm synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_MAP_DOWN"
-   932	CMD lane/apple-fast-gap-optim gapoptim-rawdown-layernorm bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-rawdown-layernorm x_sequence layernorm synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_RAW_DOWN"
-   933	CMD lane/apple-fast-gap-optim gapoptim-ch2m-layernorm bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-ch2m-layernorm x_sequence layernorm synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_PIPE_CH=524288"
-   934	CMD lane/apple-fast-gap-optim gapoptim-inline-lrexp bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab.sh gapoptim-inline-lrexp lr-exponential synthetic 1 2 - "MOJOLEARN_SCHED_FAST_INLINE=1"
-   935	CMD lane/apple-fast-gap-optim gapoptim-p64-lrexp bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab.sh gapoptim-p64-lrexp lr-exponential synthetic 1 2 - "MOJOLEARN_SCHED_FAST_P64=1"
-   936	CMD lane/apple-fast-gap-optim gapoptim-inlinep64-lrexp bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab.sh gapoptim-inlinep64-lrexp lr-exponential synthetic 1 2 - "MOJOLEARN_SCHED_FAST_INLINE=1 MOJOLEARN_SCHED_F
-   937	CMD lane/apple-fast-gap-optim gapoptim-schedcheck MOJOLEARN_SCHED_FAST_INLINE=1 MOJOLEARN_SCHED_FAST_P64=1 python3 -u sequence/checks/sched_check.py
-   938	CMD lane/apple-fast-neural afn-attn-norm-sg bash tools/afn_ab.sh afn-attn-norm-sg transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_NORM_SG"
-   939	CMD lane/apple-fast-neural afn-attn-rope-cache bash tools/afn_ab.sh afn-attn-rope-cache transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_ROPE_CACHE"
-   940	CMD lane/apple-fast-neural afn-attn-flash bash tools/afn_ab.sh afn-attn-flash transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_FLASH"
-   941	CMD lane/apple-fast-neural afn-attn-gqa-tile bash tools/afn_ab.sh afn-attn-gqa-tile transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_GQA_TILE"
-   942	CMD lane/apple-fast-neural afn-attn-fuse-pre bash tools/afn_ab.sh afn-attn-fuse-pre transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_FUSE_PRE"
-   943	CMD lane/apple-fast-neural afn-attn-fuse-mlp bash tools/afn_ab.sh afn-attn-fuse-mlp transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_FUSE_MLP"
-   944	CMD lane/apple-fast-neural afn-attn-arena bash tools/afn_ab.sh afn-attn-arena transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_ARENA"
-   945	CMD lane/apple-fast-neural afn-attn-all bash tools/afn_ab.sh afn-attn-all transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_ALL"
-   946	CMD lane/apple-fast-neural afn-gemm-gemm-simdgroup bash tools/afn_ab.sh afn-gemm-gemm-simdgroup linalg gemm full 2 "" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP"
-   947	CMD lane/apple-fast-neural afn-gemm-gemm-splitk bash tools/afn_ab.sh afn-gemm-gemm-splitk linalg gemm full 2 "" "-D MOJOLEARN_AFN_GEMM_SPLITK"
-   948	CMD lane/apple-fast-neural afn-gemm-gemm-tileshape bash tools/afn_ab.sh afn-gemm-gemm-tileshape linalg gemm full 2 "" "-D MOJOLEARN_AFN_GEMM_TILESHAPE"
-   949	CMD lane/apple-fast-neural afn-gemm-gemm-all bash tools/afn_ab.sh afn-gemm-gemm-all linalg gemm full 2 "" "-D MOJOLEARN_AFN_GEMM_ALL"
-   950	CMD lane/apple-fast-neural afn-gemm-bf16-bf16mma bash tools/afn_ab.sh afn-gemm-bf16-bf16mma linalg gemm-bf16 full 2 "" "-D MOJOLEARN_AFN_GEMM_BF16_MMA"
-   951	CMD lane/apple-fast-neural afn-gemm-bf16-simdgroup bash tools/afn_ab.sh afn-gemm-bf16-simdgroup linalg gemm-bf16 full 2 "" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP"
-   952	CMD lane/apple-fast-neural afn-gemm-bf16-all bash tools/afn_ab.sh afn-gemm-bf16-all linalg gemm-bf16 full 2 "" "-D MOJOLEARN_AFN_GEMM_ALL"
-   953	CMD lane/apple-fast-neural afn-gemm-int8-int8mma bash tools/afn_ab.sh afn-gemm-int8-int8mma linalg gemm-int8 full 2 "" "-D MOJOLEARN_AFN_GEMM_INT8_MMA"
-   954	CMD lane/apple-fast-neural afn-gemm-int8-all bash tools/afn_ab.sh afn-gemm-int8-all linalg gemm-int8 full 2 "" "-D MOJOLEARN_AFN_GEMM_ALL"
-   955	CMD lane/apple-fast-neural afn-lm-nosync-train bash tools/afn_ab.sh afn-lm-nosync-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_NOSYNC"
-   956	CMD lane/apple-fast-neural afn-lm-bwd-nosync-train bash tools/afn_ab.sh afn-lm-bwd-nosync-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_BWD_NOSYNC"
-   957	CMD lane/apple-fast-neural afn-lm-bwd-fuse-train bash tools/afn_ab.sh afn-lm-bwd-fuse-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_BWD_FUSE"
-   958	CMD lane/apple-fast-neural afn-lm-param-views-train bash tools/afn_ab.sh afn-lm-param-views-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_PARAM_VIEWS"
-   959	CMD lane/apple-fast-neural afn-lm-head-fuse-train bash tools/afn_ab.sh afn-lm-head-fuse-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_HEAD_FUSE"
-   960	CMD lane/apple-fast-neural afn-lm-all-train bash tools/afn_ab.sh afn-lm-all-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_ALL"
-   961	CMD lane/apple-fast-neural afn-lm-param-views-forward bash tools/afn_ab.sh afn-lm-param-views-forward byte_lm lm-forward full 2 "" "-D MOJOLEARN_AFN_LM_PARAM_VIEWS"
-   962	CMD lane/apple-fast-neural afn-lm-all-forward bash tools/afn_ab.sh afn-lm-all-forward byte_lm lm-forward full 2 "" "-D MOJOLEARN_AFN_LM_ALL"
-   963	CMD lane/apple-fast-neural afn-mamba-m1-chunkscan bash tools/afn_ab.sh afn-mamba-m1-chunkscan mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"
-   964	CMD lane/apple-fast-neural afn-mamba-m1-fusein bash tools/afn_ab.sh afn-mamba-m1-fusein mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA1_FUSE_IN"
-   965	CMD lane/apple-fast-neural afn-mamba-m2-ssdmma bash tools/afn_ab.sh afn-mamba-m2-ssdmma mamba mamba2-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA2_SSD_MMA"
-   966	CMD lane/apple-fast-neural afn-mamba-m3-sisofused bash tools/afn_ab.sh afn-mamba-m3-sisofused mamba mamba3-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA3_SISO_FUSED"
-   967	CMD lane/apple-fast-neural afn-mamba-m1-arena bash tools/afn_ab.sh afn-mamba-m1-arena mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_ARENA"
-   968	CMD lane/apple-fast-neural afn-mamba-m2-arena bash tools/afn_ab.sh afn-mamba-m2-arena mamba mamba2-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_ARENA"
-   969	CMD lane/apple-fast-neural afn-mamba-m3-arena bash tools/afn_ab.sh afn-mamba-m3-arena mamba mamba3-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_ARENA"
-   970	CMD lane/apple-fast-neural afn-mamba-m1-devrefusal bash tools/afn_ab.sh afn-mamba-m1-devrefusal mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL"
-   971	CMD lane/apple-fast-neural afn-mamba-m2-devrefusal bash tools/afn_ab.sh afn-mamba-m2-devrefusal mamba mamba2-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL"
-   972	CMD lane/apple-fast-neural afn-mamba-m3-devrefusal bash tools/afn_ab.sh afn-mamba-m3-devrefusal mamba mamba3-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL"
-   973	CMD lane/apple-fast-neural afn-mamba-m1-all bash tools/afn_ab.sh afn-mamba-m1-all mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_ALL"
-   974	CMD lane/apple-fast-neural afn-mamba-m2-all bash tools/afn_ab.sh afn-mamba-m2-all mamba mamba2-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_ALL"
-   975	CMD lane/apple-fast-neural afn-mamba-m3-all bash tools/afn_ab.sh afn-mamba-m3-all mamba mamba3-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_ALL"
-   976	CMD lane/apple-fast-neural afn-mlp-fused bash tools/afn_ab.sh afn-mlp-fused training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_MLP_FUSED_STEP"
-   977	CMD lane/apple-fast-neural afn-mlp-resident bash tools/afn_ab.sh afn-mlp-resident training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_MLP_RESIDENT"
-   978	CMD lane/apple-fast-neural afn-mlp-multistep bash tools/afn_ab.sh afn-mlp-multistep training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_MLP_MULTISTEP"
-   979	CMD lane/apple-fast-neural afn-mlp-all bash tools/afn_ab.sh afn-mlp-all training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_MLP_ALL"
-   980	CMD lane/apple-fast-neural afn-mlp-emb-atomic bash tools/afn_ab.sh afn-mlp-emb-atomic embedding custom full 2 "" "-D MOJOLEARN_AFN_EMB_ATOMIC_BWD"
-   981	CMD lane/apple-fast-neural afn-mlp-cnn-direct bash tools/afn_ab.sh afn-mlp-cnn-direct x_cnn custom full 2 "" "-D MOJOLEARN_AFN_CNN_DIRECT"
-   982	CMD lane/apple-fast-neural afn-optim-fusescan-mlp bash tools/afn_ab.sh afn-optim-fusescan-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_FUSE_SCAN"
-   983	CMD lane/apple-fast-neural afn-optim-fusescan-samba bash tools/afn_ab.sh afn-optim-fusescan-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_FUSE_SCAN"
-   984	CMD lane/apple-fast-neural afn-optim-fusescan-lm bash tools/afn_ab.sh afn-optim-fusescan-lm byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_FUSE_SCAN"
-   985	CMD lane/apple-fast-neural afn-optim-clipfuse-mlp bash tools/afn_ab.sh afn-optim-clipfuse-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_CLIP_FUSE"
-   986	CMD lane/apple-fast-neural afn-optim-clipfuse-samba bash tools/afn_ab.sh afn-optim-clipfuse-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_CLIP_FUSE"
-   987	CMD lane/apple-fast-neural afn-optim-clipfuse-lm bash tools/afn_ab.sh afn-optim-clipfuse-lm byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_CLIP_FUSE"
-   988	CMD lane/apple-fast-neural afn-optim-multitensor-mlp bash tools/afn_ab.sh afn-optim-multitensor-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_MULTITENSOR"
-   989	CMD lane/apple-fast-neural afn-optim-multitensor-samba bash tools/afn_ab.sh afn-optim-multitensor-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_MULTITENSOR"
-   990	CMD lane/apple-fast-neural afn-optim-multitensor-lm bash tools/afn_ab.sh afn-optim-multitensor-lm byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_MULTITENSOR"
-   991	CMD lane/apple-fast-neural afn-optim-vec4-mlp bash tools/afn_ab.sh afn-optim-vec4-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_VEC4"
-   992	CMD lane/apple-fast-neural afn-optim-vec4-samba bash tools/afn_ab.sh afn-optim-vec4-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_VEC4"
-   993	CMD lane/apple-fast-neural afn-optim-vec4-lm bash tools/afn_ab.sh afn-optim-vec4-lm byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_VEC4"
-   994	CMD lane/apple-fast-neural afn-optim-resident-mlp bash tools/afn_ab.sh afn-optim-resident-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_RESIDENT_STATE"
-   995	CMD lane/apple-fast-neural afn-optim-resident-samba bash tools/afn_ab.sh afn-optim-resident-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_RESIDENT_STATE"
-   996	CMD lane/apple-fast-neural afn-optim-resident-lm bash tools/afn_ab.sh afn-optim-resident-lm byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_RESIDENT_STATE"
-   997	CMD lane/apple-fast-neural afn-optim-lossfused-mlp bash tools/afn_ab.sh afn-optim-lossfused-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_LOSS_FUSED"
-   998	CMD lane/apple-fast-neural afn-optim-lossfused-samba bash tools/afn_ab.sh afn-optim-lossfused-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_LOSS_FUSED"
-   999	CMD lane/apple-fast-neural afn-optim-all-mlp bash tools/afn_ab.sh afn-optim-all-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_OPTIM_ALL"
-  1000	CMD lane/apple-fast-neural afn-optim-all-samba bash tools/afn_ab.sh afn-optim-all-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_OPTIM_ALL"
-  1001	CMD lane/apple-fast-neural afn-optim-all-lm bash tools/afn_ab.sh afn-optim-all-lm byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_OPTIM_ALL"
-  1002	CMD lane/apple-fast-neural afn-samba-fuse-fwd bash tools/afn_ab.sh afn-samba-fuse-fwd training samba-forward full 2 "" "-D MOJOLEARN_AFN_SAMBA_FUSE"
-  1003	CMD lane/apple-fast-neural afn-samba-fuse-step bash tools/afn_ab.sh afn-samba-fuse-step training samba-train-step full 2 "" "-D MOJOLEARN_AFN_SAMBA_FUSE"
-  1004	CMD lane/apple-fast-neural afn-samba-arena-fwd bash tools/afn_ab.sh afn-samba-arena-fwd training samba-forward full 2 "" "-D MOJOLEARN_AFN_SAMBA_ARENA"
-  1005	CMD lane/apple-fast-neural afn-samba-arena-step bash tools/afn_ab.sh afn-samba-arena-step training samba-train-step full 2 "" "-D MOJOLEARN_AFN_SAMBA_ARENA"
-  1006	CMD lane/apple-fast-neural afn-samba-admit-fwd bash tools/afn_ab.sh afn-samba-admit-fwd training samba-forward full 2 "" "-D MOJOLEARN_AFN_SAMBA_DEVICE_ADMIT"
-  1007	CMD lane/apple-fast-neural afn-samba-admit-step bash tools/afn_ab.sh afn-samba-admit-step training samba-train-step full 2 "" "-D MOJOLEARN_AFN_SAMBA_DEVICE_ADMIT"
-  1008	CMD lane/apple-fast-neural afn-samba-emb-atomic-step bash tools/afn_ab.sh afn-samba-emb-atomic-step training samba-train-step full 2 "" "-D MOJOLEARN_AFN_SAMBA_EMB_ATOMIC"
-  1009	CMD lane/apple-fast-neural afn-samba-m3-bwd-chunk-step bash tools/afn_ab.sh afn-samba-m3-bwd-chunk-step mamba samba-train-step full 2 "" "-D MOJOLEARN_AFN_MAMBA3_BWD_CHUNK"
-  1010	CMD lane/apple-fast-neural afn-samba-m3-bwd-arena-step bash tools/afn_ab.sh afn-samba-m3-bwd-arena-step mamba samba-train-step full 2 "" "-D MOJOLEARN_AFN_MAMBA3_BWD_ARENA"
-  1011	CMD lane/apple-fast-neural afn-samba-all-training-fwd bash tools/afn_ab.sh afn-samba-all-training-fwd training samba-forward full 2 "" "-D MOJOLEARN_AFN_SAMBA_ALL"
-  1012	CMD lane/apple-fast-neural afn-samba-all-training-step bash tools/afn_ab.sh afn-samba-all-training-step training samba-train-step full 2 "" "-D MOJOLEARN_AFN_SAMBA_ALL"
-  1013	CMD lane/apple-fast-neural afn-samba-all-mamba-step bash tools/afn_ab.sh afn-samba-all-mamba-step mamba samba-train-step full 2 "" "-D MOJOLEARN_AFN_SAMBA_ALL"
-  1014	CMD lane/apple-fast-neural afn-tier-base-gemm bash tools/afn_ab.sh afn-tier-base-gemm linalg gemm full 2 identical fast
-  1015	CMD lane/apple-fast-neural afn-tier-base-gemm-bf16 bash tools/afn_ab.sh afn-tier-base-gemm-bf16 linalg gemm-bf16 full 2 identical fast
-  1016	CMD lane/apple-fast-neural afn-tier-base-gemm-int8 bash tools/afn_ab.sh afn-tier-base-gemm-int8 linalg gemm-int8 full 2 identical fast
-  1017	CMD lane/apple-fast-neural afn-tier-base-transformer-forward bash tools/afn_ab.sh afn-tier-base-transformer-forward transformer transformer-forward full 2 identical fast
-  1018	CMD lane/apple-fast-neural afn-tier-base-mamba1-forward bash tools/afn_ab.sh afn-tier-base-mamba1-forward mamba mamba1-forward full 2 identical fast
-  1019	CMD lane/apple-fast-neural afn-tier-base-mamba2-forward bash tools/afn_ab.sh afn-tier-base-mamba2-forward mamba mamba2-forward full 2 identical fast
-  1020	CMD lane/apple-fast-neural afn-tier-base-mamba3-forward bash tools/afn_ab.sh afn-tier-base-mamba3-forward mamba mamba3-forward full 2 identical fast
-  1021	CMD lane/apple-fast-neural afn-tier-base-samba-forward bash tools/afn_ab.sh afn-tier-base-samba-forward training samba-forward full 2 identical fast
-  1022	CMD lane/apple-fast-neural afn-tier-base-samba-train-step bash tools/afn_ab.sh afn-tier-base-samba-train-step training samba-train-step full 2 identical fast
-  1023	CMD lane/apple-fast-neural afn-tier-base-mlp-train-step bash tools/afn_ab.sh afn-tier-base-mlp-train-step training mlp-train-step full 2 identical fast
-  1024	CMD lane/apple-fast-neural afn-tier-base-lm-forward bash tools/afn_ab.sh afn-tier-base-lm-forward byte_lm lm-forward full 2 identical fast
-  1025	CMD lane/apple-fast-neural afn-tier-base-lm-train-step bash tools/afn_ab.sh afn-tier-base-lm-train-step byte_lm lm-train-step full 2 identical fast
-  1026	CMD lane/apple-fast-neural afn-w2-epi-m1-proj bash tools/afn_ab.sh afn-w2-epi-m1-proj mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"
-  1027	CMD lane/apple-fast-neural afn-w2-epi-m2-proj bash tools/afn_ab.sh afn-w2-epi-m2-proj mamba mamba2-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"
-  1028	CMD lane/apple-fast-neural afn-w2-epi-m3-proj bash tools/afn_ab.sh afn-w2-epi-m3-proj mamba mamba3-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"
-  1029	CMD lane/apple-fast-neural afn-w2-epi-samba-proj-fwd bash tools/afn_ab.sh afn-w2-epi-samba-proj-fwd mamba samba-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"
-  1030	CMD lane/apple-fast-neural afn-w2-epi-samba-proj-step bash tools/afn_ab.sh afn-w2-epi-samba-proj-step mamba samba-train-step full 2 "" "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"
-  1031	CMD lane/apple-fast-neural afn-w2-epi-samba-splitk-fwd bash tools/afn_ab.sh afn-w2-epi-samba-splitk-fwd mamba samba-forward full 2 "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE" "-D MOJOLEARN_AFN_MAMBA_PROJ_SPLITK"
-  1032	CMD lane/apple-fast-neural afn-w2-epi-samba-splitk-step bash tools/afn_ab.sh afn-w2-epi-samba-splitk-step mamba samba-train-step full 2 "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE" "-D MOJOLEARN_AFN_MAMBA_PROJ_SPLITK"
-  1033	CMD lane/apple-fast-neural afn-w2-epi-samba-head-fwd bash tools/afn_ab.sh afn-w2-epi-samba-head-fwd training samba-forward full 2 "-D MOJOLEARN_AFN_SAMBA_FUSE" "-D MOJOLEARN_AFN_SAMBA_FUSE -D MOJOLEARN_AFN_SAMBA_HEAD_GEM
-  1034	CMD lane/apple-fast-neural afn-w2-epi-samba-head-step bash tools/afn_ab.sh afn-w2-epi-samba-head-step training samba-train-step full 2 "-D MOJOLEARN_AFN_SAMBA_FUSE" "-D MOJOLEARN_AFN_SAMBA_FUSE -D MOJOLEARN_AFN_SAMBA_HEA
-  1035	CMD lane/apple-fast-neural afn-w2-epi-m1-all bash tools/afn_ab.sh afn-w2-epi-m1-all mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_EPI_ALL"
-  1036	CMD lane/apple-fast-neural afn-w2-epi-m2-all bash tools/afn_ab.sh afn-w2-epi-m2-all mamba mamba2-forward full 2 "" "-D MOJOLEARN_AFN_EPI_ALL"
-  1037	CMD lane/apple-fast-neural afn-w2-epi-m3-all bash tools/afn_ab.sh afn-w2-epi-m3-all mamba mamba3-forward full 2 "" "-D MOJOLEARN_AFN_EPI_ALL"
-  1038	CMD lane/apple-fast-neural afn-w2-epi-samba-all-mamba-step bash tools/afn_ab.sh afn-w2-epi-samba-all-mamba-step mamba samba-train-step full 2 "" "-D MOJOLEARN_AFN_EPI_ALL"
-  1039	CMD lane/apple-fast-neural afn-w2-epi-samba-all-training-step bash tools/afn_ab.sh afn-w2-epi-samba-all-training-step training samba-train-step full 2 "-D MOJOLEARN_AFN_SAMBA_FUSE" "-D MOJOLEARN_AFN_SAMBA_FUSE -D MOJOLEA
-  1040	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-bigtile bash tools/afn_ab.sh afn-w2-gemm2-gemm-bigtile linalg gemm full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D 
-  1041	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-bf16-bigtile bash tools/afn_ab.sh afn-w2-gemm2-gemm-bf16-bigtile linalg gemm-bf16 full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEM
-  1042	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-dbuf bash tools/afn_ab.sh afn-w2-gemm2-gemm-dbuf linalg gemm full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLE
-  1043	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-bf16-dbuf bash tools/afn_ab.sh afn-w2-gemm2-gemm-bf16-dbuf linalg gemm-bf16 full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMD
-  1044	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-direct-b bash tools/afn_ab.sh afn-w2-gemm2-gemm-direct-b linalg gemm full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -
-  1045	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-bf16-direct-b bash tools/afn_ab.sh afn-w2-gemm2-gemm-bf16-direct-b linalg gemm-bf16 full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_G
-  1046	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-swizzle bash tools/afn_ab.sh afn-w2-gemm2-gemm-swizzle linalg gemm full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D 
-  1047	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-bf16-swizzle bash tools/afn_ab.sh afn-w2-gemm2-gemm-bf16-swizzle linalg gemm-bf16 full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEM
-  1048	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-all bash tools/afn_ab.sh afn-w2-gemm2-gemm-all linalg gemm full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEAR
-  1049	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-bf16-all bash tools/afn_ab.sh afn-w2-gemm2-gemm-bf16-all linalg gemm-bf16 full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMDGR
-  1050	CMD lane/apple-fast-neural afn-w2-gemm2-transformer-forward-all bash tools/afn_ab.sh afn-w2-gemm2-transformer-forward-all transformer transformer-forward full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16
-  1051	CMD lane/apple-fast-neural afn-w2-lmgrad-wgrad-split-train bash tools/afn_ab.sh afn-w2-lmgrad-wgrad-split-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_WGRAD_SPLIT"
-  1052	CMD lane/apple-fast-neural afn-w2-lmgrad-bwd-epilogue-train bash tools/afn_ab.sh afn-w2-lmgrad-bwd-epilogue-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_BWD_EPILOGUE"
-  1053	CMD lane/apple-fast-neural afn-w2-lmgrad-norm1-resid-train bash tools/afn_ab.sh afn-w2-lmgrad-norm1-resid-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_BWD_NORM1_RESID"
-  1054	CMD lane/apple-fast-neural afn-w2-lmgrad-all-train bash tools/afn_ab.sh afn-w2-lmgrad-all-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LMGRAD_ALL"
-  1055	CMD lane/apple-fast-neural afn-w2-lmgrad-wgrad-vs-gemmsplitk-train bash tools/afn_ab.sh afn-w2-lmgrad-wgrad-vs-gemmsplitk-train byte_lm lm-train-step full 2 "-D MOJOLEARN_AFN_GEMM_SPLITK" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP
-  1056	CMD lane/apple-fast-neural afn-w2-lmgrad-all-on-stack-train bash tools/afn_ab.sh afn-w2-lmgrad-all-on-stack-train byte_lm lm-train-step full 2 "-D MOJOLEARN_AFN_LM_ALL -D MOJOLEARN_AFN_GEMM_SIMDGROUP" "-D MOJOLEARN_AFN_L
-  1057	CMD lane/apple-fast-neural afn-w2-lmgrad-fwd-fusemlp-forward bash tools/afn_ab.sh afn-w2-lmgrad-fwd-fusemlp-forward byte_lm lm-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_FUSE_MLP"
-  1058	CMD lane/apple-fast-neural afn-w2-lmgrad-fwd-attnall-forward bash tools/afn_ab.sh afn-w2-lmgrad-fwd-attnall-forward byte_lm lm-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_ALL"
-  1059	CMD lane/apple-fast-purity2 purity2-boruvka-check-b bash ~/mq/ensure_so.sh env PYTHONPATH=$PWD/python $HOME/board-0834/cache/venv/bin/python tools/purity2_boruvka_check.py
+   894	CMD lane/apple-fast-purity2 purity2-boruvka-check-b bash ~/mq/ensure_so.sh env PYTHONPATH=$PWD/python $HOME/board-0834/cache/venv/bin/python tools/purity2_boruvka_check.py
+   895	CMD lane/apple-fast-gap-misc gapmisc-mma-moe bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapmisc-mma-moe x_sequence moe synthetic 1 2 "" "-D MOJOLEARN_MOE_FAST_MMA"
+   896	CMD lane/apple-fast-gap-misc gapmisc-mmakb32-moe bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapmisc-mmakb32-moe x_sequence moe synthetic 1 2 "" "-D MOJOLEARN_MOE_FAST_MMA_KB32"
+   897	CMD lane/apple-fast-gap-misc gapmisc-mmawide-moe bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapmisc-mmawide-moe x_sequence moe synthetic 1 2 "" "-D MOJOLEARN_MOE_FAST_MMA_WIDE"
+   898	CMD lane/apple-fast-gap-misc gapmisc-mmapf-moe bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapmisc-mmapf-moe x_sequence moe synthetic 1 2 "" "-D MOJOLEARN_MOE_FAST_MMA_PF"
+   899	CMD lane/apple-fast-gap-lstm gaplstm-scan-regsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-scan-regsyn x_sequence lstm-reg synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN"
+   900	CMD lane/apple-fast-gap-lstm gaplstm-scan-regtaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-scan-regtaxi x_sequence lstm-reg taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN"
+   901	CMD lane/apple-fast-gap-lstm gaplstm-scan-clftaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-scan-clftaxi x_sequence lstm-clf taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN"
+   902	CMD lane/apple-fast-gap-lstm gaplstm-scan-clfsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-scan-clfsyn x_sequence lstm-clf synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN"
+   903	CMD lane/apple-fast-gap-lstm gaplstm-smem-regsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-smem-regsyn x_sequence lstm-reg synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN_SEQ
+   904	CMD lane/apple-fast-gap-lstm gaplstm-smem-regtaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-smem-regtaxi x_sequence lstm-reg taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN
+   905	CMD lane/apple-fast-gap-lstm gaplstm-smem-clftaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-smem-clftaxi x_sequence lstm-clf taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN
+   906	CMD lane/apple-fast-gap-lstm gaplstm-smem-clfsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-smem-clfsyn x_sequence lstm-clf synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN_SEQ
+   907	CMD lane/apple-fast-gap-lstm gaplstm-wgrad-regsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-wgrad-regsyn x_sequence lstm-reg synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_WGRAD"
+   908	CMD lane/apple-fast-gap-lstm gaplstm-wgrad-regtaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-wgrad-regtaxi x_sequence lstm-reg taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_WGRAD"
+   909	CMD lane/apple-fast-gap-lstm gaplstm-wgrad-clftaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-wgrad-clftaxi x_sequence lstm-clf taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_WGRAD"
+   910	CMD lane/apple-fast-gap-lstm gaplstm-wgrad-clfsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-wgrad-clfsyn x_sequence lstm-clf synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_WGRAD"
+   911	CMD lane/apple-fast-gap-lstm gaplstm-all-regsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-all-regsyn x_sequence lstm-reg synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN_SEQ_F
+   912	CMD lane/apple-fast-gap-lstm gaplstm-all-regtaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-all-regtaxi x_sequence lstm-reg taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN_S
+   913	CMD lane/apple-fast-gap-lstm gaplstm-all-clftaxi bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-all-clftaxi x_sequence lstm-clf taxi-hourly 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN_S
+   914	CMD lane/apple-fast-gap-lstm gaplstm-all-clfsyn bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gaplstm-all-clfsyn x_sequence lstm-clf synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_LSTM_SCAN -D MOJOLEARN_SEQ_F
+   915	CMD lane/apple-fast-gap-optim gapoptim-mapdown-adagrad bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-mapdown-adagrad x_sequence adagrad synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_MAP_DOWN"
+   916	CMD lane/apple-fast-gap-optim gapoptim-rawdown-adagrad bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-rawdown-adagrad x_sequence adagrad synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_RAW_DOWN"
+   917	CMD lane/apple-fast-gap-optim gapoptim-ch2m-adagrad bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-ch2m-adagrad x_sequence adagrad synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_PIPE_CH=524288"
+   918	CMD lane/apple-fast-gap-optim gapoptim-mapdown-rmsprop bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-mapdown-rmsprop x_sequence rmsprop synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_MAP_DOWN"
+   919	CMD lane/apple-fast-gap-optim gapoptim-rawdown-rmsprop bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-rawdown-rmsprop x_sequence rmsprop synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_RAW_DOWN"
+   920	CMD lane/apple-fast-gap-optim gapoptim-ch2m-rmsprop bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-ch2m-rmsprop x_sequence rmsprop synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_PIPE_CH=524288"
+   921	CMD lane/apple-fast-gap-optim gapoptim-mapdown-adamax bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-mapdown-adamax x_sequence adamax synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_MAP_DOWN"
+   922	CMD lane/apple-fast-gap-optim gapoptim-rawdown-adamax bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-rawdown-adamax x_sequence adamax synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_RAW_DOWN"
+   923	CMD lane/apple-fast-gap-optim gapoptim-ch2m-adamax bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-ch2m-adamax x_sequence adamax synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_PIPE_CH=524288"
+   924	CMD lane/apple-fast-gap-optim gapoptim-mapdown-nadam bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-mapdown-nadam x_sequence nadam synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_MAP_DOWN"
+   925	CMD lane/apple-fast-gap-optim gapoptim-rawdown-nadam bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-rawdown-nadam x_sequence nadam synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_RAW_DOWN"
+   926	CMD lane/apple-fast-gap-optim gapoptim-ch2m-nadam bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-ch2m-nadam x_sequence nadam synthetic 1 2 "" "-D MOJOLEARN_OPT_FAST_PIPE_CH=524288"
+   927	CMD lane/apple-fast-gap-optim gapoptim-resident-adafactor bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-resident-adafactor x_sequence adafactor synthetic 1 2 "" "-D MOJOLEARN_AF_FAST_RESIDENT"
+   928	CMD lane/apple-fast-gap-optim gapoptim-nofill-adafactor bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-nofill-adafactor x_sequence adafactor synthetic 1 2 "" "-D MOJOLEARN_AF_FAST_NOFILL"
+   929	CMD lane/apple-fast-gap-optim gapoptim-mapdown-adafactor bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-mapdown-adafactor x_sequence adafactor synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_MAP_DOWN"
+   930	CMD lane/apple-fast-gap-optim gapoptim-rawdown-adafactor bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-rawdown-adafactor x_sequence adafactor synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_RAW_DOWN"
+   931	CMD lane/apple-fast-gap-optim gapoptim-nofill-layernorm bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-nofill-layernorm x_sequence layernorm synthetic 1 2 "" "-D MOJOLEARN_LN_FAST_NOFILL"
+   932	CMD lane/apple-fast-gap-optim gapoptim-mapdown-layernorm bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-mapdown-layernorm x_sequence layernorm synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_MAP_DOWN"
+   933	CMD lane/apple-fast-gap-optim gapoptim-rawdown-layernorm bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-rawdown-layernorm x_sequence layernorm synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_RAW_DOWN"
+   934	CMD lane/apple-fast-gap-optim gapoptim-ch2m-layernorm bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab_def.sh gapoptim-ch2m-layernorm x_sequence layernorm synthetic 1 2 "" "-D MOJOLEARN_SEQ_FAST_PIPE_CH=524288"
+   935	CMD lane/apple-fast-gap-optim gapoptim-inline-lrexp bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab.sh gapoptim-inline-lrexp lr-exponential synthetic 1 2 - "MOJOLEARN_SCHED_FAST_INLINE=1"
+   936	CMD lane/apple-fast-gap-optim gapoptim-p64-lrexp bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab.sh gapoptim-p64-lrexp lr-exponential synthetic 1 2 - "MOJOLEARN_SCHED_FAST_P64=1"
+   937	CMD lane/apple-fast-gap-optim gapoptim-inlinep64-lrexp bash ~/mq/ensure_so.sh AFC_FAMILY=algos bash tools/afc_ab.sh gapoptim-inlinep64-lrexp lr-exponential synthetic 1 2 - "MOJOLEARN_SCHED_FAST_INLINE=1 MOJOLEARN_SCHED_F
+   938	CMD lane/apple-fast-gap-optim gapoptim-schedcheck MOJOLEARN_SCHED_FAST_INLINE=1 MOJOLEARN_SCHED_FAST_P64=1 python3 -u sequence/checks/sched_check.py
+   939	CMD lane/apple-fast-neural afn-attn-norm-sg bash tools/afn_ab.sh afn-attn-norm-sg transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_NORM_SG"
+   940	CMD lane/apple-fast-neural afn-attn-rope-cache bash tools/afn_ab.sh afn-attn-rope-cache transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_ROPE_CACHE"
+   941	CMD lane/apple-fast-neural afn-attn-flash bash tools/afn_ab.sh afn-attn-flash transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_FLASH"
+   942	CMD lane/apple-fast-neural afn-attn-gqa-tile bash tools/afn_ab.sh afn-attn-gqa-tile transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_GQA_TILE"
+   943	CMD lane/apple-fast-neural afn-attn-fuse-pre bash tools/afn_ab.sh afn-attn-fuse-pre transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_FUSE_PRE"
+   944	CMD lane/apple-fast-neural afn-attn-fuse-mlp bash tools/afn_ab.sh afn-attn-fuse-mlp transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_FUSE_MLP"
+   945	CMD lane/apple-fast-neural afn-attn-arena bash tools/afn_ab.sh afn-attn-arena transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_ARENA"
+   946	CMD lane/apple-fast-neural afn-attn-all bash tools/afn_ab.sh afn-attn-all transformer transformer-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_ALL"
+   947	CMD lane/apple-fast-neural afn-gemm-gemm-simdgroup bash tools/afn_ab.sh afn-gemm-gemm-simdgroup linalg gemm full 2 "" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP"
+   948	CMD lane/apple-fast-neural afn-gemm-gemm-splitk bash tools/afn_ab.sh afn-gemm-gemm-splitk linalg gemm full 2 "" "-D MOJOLEARN_AFN_GEMM_SPLITK"
+   949	CMD lane/apple-fast-neural afn-gemm-gemm-tileshape bash tools/afn_ab.sh afn-gemm-gemm-tileshape linalg gemm full 2 "" "-D MOJOLEARN_AFN_GEMM_TILESHAPE"
+   950	CMD lane/apple-fast-neural afn-gemm-gemm-all bash tools/afn_ab.sh afn-gemm-gemm-all linalg gemm full 2 "" "-D MOJOLEARN_AFN_GEMM_ALL"
+   951	CMD lane/apple-fast-neural afn-gemm-bf16-bf16mma bash tools/afn_ab.sh afn-gemm-bf16-bf16mma linalg gemm-bf16 full 2 "" "-D MOJOLEARN_AFN_GEMM_BF16_MMA"
+   952	CMD lane/apple-fast-neural afn-gemm-bf16-simdgroup bash tools/afn_ab.sh afn-gemm-bf16-simdgroup linalg gemm-bf16 full 2 "" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP"
+   953	CMD lane/apple-fast-neural afn-gemm-bf16-all bash tools/afn_ab.sh afn-gemm-bf16-all linalg gemm-bf16 full 2 "" "-D MOJOLEARN_AFN_GEMM_ALL"
+   954	CMD lane/apple-fast-neural afn-gemm-int8-int8mma bash tools/afn_ab.sh afn-gemm-int8-int8mma linalg gemm-int8 full 2 "" "-D MOJOLEARN_AFN_GEMM_INT8_MMA"
+   955	CMD lane/apple-fast-neural afn-gemm-int8-all bash tools/afn_ab.sh afn-gemm-int8-all linalg gemm-int8 full 2 "" "-D MOJOLEARN_AFN_GEMM_ALL"
+   956	CMD lane/apple-fast-neural afn-lm-nosync-train bash tools/afn_ab.sh afn-lm-nosync-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_NOSYNC"
+   957	CMD lane/apple-fast-neural afn-lm-bwd-nosync-train bash tools/afn_ab.sh afn-lm-bwd-nosync-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_BWD_NOSYNC"
+   958	CMD lane/apple-fast-neural afn-lm-bwd-fuse-train bash tools/afn_ab.sh afn-lm-bwd-fuse-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_BWD_FUSE"
+   959	CMD lane/apple-fast-neural afn-lm-param-views-train bash tools/afn_ab.sh afn-lm-param-views-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_PARAM_VIEWS"
+   960	CMD lane/apple-fast-neural afn-lm-head-fuse-train bash tools/afn_ab.sh afn-lm-head-fuse-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_HEAD_FUSE"
+   961	CMD lane/apple-fast-neural afn-lm-all-train bash tools/afn_ab.sh afn-lm-all-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_ALL"
+   962	CMD lane/apple-fast-neural afn-lm-param-views-forward bash tools/afn_ab.sh afn-lm-param-views-forward byte_lm lm-forward full 2 "" "-D MOJOLEARN_AFN_LM_PARAM_VIEWS"
+   963	CMD lane/apple-fast-neural afn-lm-all-forward bash tools/afn_ab.sh afn-lm-all-forward byte_lm lm-forward full 2 "" "-D MOJOLEARN_AFN_LM_ALL"
+   964	CMD lane/apple-fast-neural afn-mamba-m1-chunkscan bash tools/afn_ab.sh afn-mamba-m1-chunkscan mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"
+   965	CMD lane/apple-fast-neural afn-mamba-m1-fusein bash tools/afn_ab.sh afn-mamba-m1-fusein mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA1_FUSE_IN"
+   966	CMD lane/apple-fast-neural afn-mamba-m2-ssdmma bash tools/afn_ab.sh afn-mamba-m2-ssdmma mamba mamba2-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA2_SSD_MMA"
+   967	CMD lane/apple-fast-neural afn-mamba-m3-sisofused bash tools/afn_ab.sh afn-mamba-m3-sisofused mamba mamba3-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA3_SISO_FUSED"
+   968	CMD lane/apple-fast-neural afn-mamba-m1-arena bash tools/afn_ab.sh afn-mamba-m1-arena mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_ARENA"
+   969	CMD lane/apple-fast-neural afn-mamba-m2-arena bash tools/afn_ab.sh afn-mamba-m2-arena mamba mamba2-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_ARENA"
+   970	CMD lane/apple-fast-neural afn-mamba-m3-arena bash tools/afn_ab.sh afn-mamba-m3-arena mamba mamba3-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_ARENA"
+   971	CMD lane/apple-fast-neural afn-mamba-m1-devrefusal bash tools/afn_ab.sh afn-mamba-m1-devrefusal mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL"
+   972	CMD lane/apple-fast-neural afn-mamba-m2-devrefusal bash tools/afn_ab.sh afn-mamba-m2-devrefusal mamba mamba2-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL"
+   973	CMD lane/apple-fast-neural afn-mamba-m3-devrefusal bash tools/afn_ab.sh afn-mamba-m3-devrefusal mamba mamba3-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_DEVICE_REFUSAL"
+   974	CMD lane/apple-fast-neural afn-mamba-m1-all bash tools/afn_ab.sh afn-mamba-m1-all mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_ALL"
+   975	CMD lane/apple-fast-neural afn-mamba-m2-all bash tools/afn_ab.sh afn-mamba-m2-all mamba mamba2-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_ALL"
+   976	CMD lane/apple-fast-neural afn-mamba-m3-all bash tools/afn_ab.sh afn-mamba-m3-all mamba mamba3-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_ALL"
+   977	CMD lane/apple-fast-neural afn-mlp-fused bash tools/afn_ab.sh afn-mlp-fused training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_MLP_FUSED_STEP"
+   978	CMD lane/apple-fast-neural afn-mlp-resident bash tools/afn_ab.sh afn-mlp-resident training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_MLP_RESIDENT"
+   979	CMD lane/apple-fast-neural afn-mlp-multistep bash tools/afn_ab.sh afn-mlp-multistep training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_MLP_MULTISTEP"
+   980	CMD lane/apple-fast-neural afn-mlp-all bash tools/afn_ab.sh afn-mlp-all training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_MLP_ALL"
+   981	CMD lane/apple-fast-neural afn-mlp-emb-atomic bash tools/afn_ab.sh afn-mlp-emb-atomic embedding custom full 2 "" "-D MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+   982	CMD lane/apple-fast-neural afn-mlp-cnn-direct bash tools/afn_ab.sh afn-mlp-cnn-direct x_cnn custom full 2 "" "-D MOJOLEARN_AFN_CNN_DIRECT"
+   983	CMD lane/apple-fast-neural afn-optim-fusescan-mlp bash tools/afn_ab.sh afn-optim-fusescan-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_FUSE_SCAN"
+   984	CMD lane/apple-fast-neural afn-optim-fusescan-samba bash tools/afn_ab.sh afn-optim-fusescan-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_FUSE_SCAN"
+   985	CMD lane/apple-fast-neural afn-optim-fusescan-lm bash tools/afn_ab.sh afn-optim-fusescan-lm byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_FUSE_SCAN"
+   986	CMD lane/apple-fast-neural afn-optim-clipfuse-mlp bash tools/afn_ab.sh afn-optim-clipfuse-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_CLIP_FUSE"
+   987	CMD lane/apple-fast-neural afn-optim-clipfuse-samba bash tools/afn_ab.sh afn-optim-clipfuse-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_CLIP_FUSE"
+   988	CMD lane/apple-fast-neural afn-optim-clipfuse-lm bash tools/afn_ab.sh afn-optim-clipfuse-lm byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_CLIP_FUSE"
+   989	CMD lane/apple-fast-neural afn-optim-multitensor-mlp bash tools/afn_ab.sh afn-optim-multitensor-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_MULTITENSOR"
+   990	CMD lane/apple-fast-neural afn-optim-multitensor-samba bash tools/afn_ab.sh afn-optim-multitensor-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_MULTITENSOR"
+   991	CMD lane/apple-fast-neural afn-optim-multitensor-lm bash tools/afn_ab.sh afn-optim-multitensor-lm byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_MULTITENSOR"
+   992	CMD lane/apple-fast-neural afn-optim-vec4-mlp bash tools/afn_ab.sh afn-optim-vec4-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_VEC4"
+   993	CMD lane/apple-fast-neural afn-optim-vec4-samba bash tools/afn_ab.sh afn-optim-vec4-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_VEC4"
+   994	CMD lane/apple-fast-neural afn-optim-vec4-lm bash tools/afn_ab.sh afn-optim-vec4-lm byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_VEC4"
+   995	CMD lane/apple-fast-neural afn-optim-resident-mlp bash tools/afn_ab.sh afn-optim-resident-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_RESIDENT_STATE"
+   996	CMD lane/apple-fast-neural afn-optim-resident-samba bash tools/afn_ab.sh afn-optim-resident-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_RESIDENT_STATE"
+   997	CMD lane/apple-fast-neural afn-optim-resident-lm bash tools/afn_ab.sh afn-optim-resident-lm byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_OPT_RESIDENT_STATE"
+   998	CMD lane/apple-fast-neural afn-optim-lossfused-mlp bash tools/afn_ab.sh afn-optim-lossfused-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_LOSS_FUSED"
+   999	CMD lane/apple-fast-neural afn-optim-lossfused-samba bash tools/afn_ab.sh afn-optim-lossfused-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_LOSS_FUSED"
+  1000	CMD lane/apple-fast-neural afn-optim-all-mlp bash tools/afn_ab.sh afn-optim-all-mlp training mlp-train-step full 2 "" "-D MOJOLEARN_AFN_OPTIM_ALL"
+  1001	CMD lane/apple-fast-neural afn-optim-all-samba bash tools/afn_ab.sh afn-optim-all-samba training samba-train-step full 2 "" "-D MOJOLEARN_AFN_OPTIM_ALL"
+  1002	CMD lane/apple-fast-neural afn-optim-all-lm bash tools/afn_ab.sh afn-optim-all-lm byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_OPTIM_ALL"
+  1003	CMD lane/apple-fast-neural afn-samba-fuse-fwd bash tools/afn_ab.sh afn-samba-fuse-fwd training samba-forward full 2 "" "-D MOJOLEARN_AFN_SAMBA_FUSE"
+  1004	CMD lane/apple-fast-neural afn-samba-fuse-step bash tools/afn_ab.sh afn-samba-fuse-step training samba-train-step full 2 "" "-D MOJOLEARN_AFN_SAMBA_FUSE"
+  1005	CMD lane/apple-fast-neural afn-samba-arena-fwd bash tools/afn_ab.sh afn-samba-arena-fwd training samba-forward full 2 "" "-D MOJOLEARN_AFN_SAMBA_ARENA"
+  1006	CMD lane/apple-fast-neural afn-samba-arena-step bash tools/afn_ab.sh afn-samba-arena-step training samba-train-step full 2 "" "-D MOJOLEARN_AFN_SAMBA_ARENA"
+  1007	CMD lane/apple-fast-neural afn-samba-admit-fwd bash tools/afn_ab.sh afn-samba-admit-fwd training samba-forward full 2 "" "-D MOJOLEARN_AFN_SAMBA_DEVICE_ADMIT"
+  1008	CMD lane/apple-fast-neural afn-samba-admit-step bash tools/afn_ab.sh afn-samba-admit-step training samba-train-step full 2 "" "-D MOJOLEARN_AFN_SAMBA_DEVICE_ADMIT"
+  1009	CMD lane/apple-fast-neural afn-samba-emb-atomic-step bash tools/afn_ab.sh afn-samba-emb-atomic-step training samba-train-step full 2 "" "-D MOJOLEARN_AFN_SAMBA_EMB_ATOMIC"
+  1010	CMD lane/apple-fast-neural afn-samba-m3-bwd-chunk-step bash tools/afn_ab.sh afn-samba-m3-bwd-chunk-step mamba samba-train-step full 2 "" "-D MOJOLEARN_AFN_MAMBA3_BWD_CHUNK"
+  1011	CMD lane/apple-fast-neural afn-samba-m3-bwd-arena-step bash tools/afn_ab.sh afn-samba-m3-bwd-arena-step mamba samba-train-step full 2 "" "-D MOJOLEARN_AFN_MAMBA3_BWD_ARENA"
+  1012	CMD lane/apple-fast-neural afn-samba-all-training-fwd bash tools/afn_ab.sh afn-samba-all-training-fwd training samba-forward full 2 "" "-D MOJOLEARN_AFN_SAMBA_ALL"
+  1013	CMD lane/apple-fast-neural afn-samba-all-training-step bash tools/afn_ab.sh afn-samba-all-training-step training samba-train-step full 2 "" "-D MOJOLEARN_AFN_SAMBA_ALL"
+  1014	CMD lane/apple-fast-neural afn-samba-all-mamba-step bash tools/afn_ab.sh afn-samba-all-mamba-step mamba samba-train-step full 2 "" "-D MOJOLEARN_AFN_SAMBA_ALL"
+  1015	CMD lane/apple-fast-neural afn-tier-base-gemm bash tools/afn_ab.sh afn-tier-base-gemm linalg gemm full 2 identical fast
+  1016	CMD lane/apple-fast-neural afn-tier-base-gemm-bf16 bash tools/afn_ab.sh afn-tier-base-gemm-bf16 linalg gemm-bf16 full 2 identical fast
+  1017	CMD lane/apple-fast-neural afn-tier-base-gemm-int8 bash tools/afn_ab.sh afn-tier-base-gemm-int8 linalg gemm-int8 full 2 identical fast
+  1018	CMD lane/apple-fast-neural afn-tier-base-transformer-forward bash tools/afn_ab.sh afn-tier-base-transformer-forward transformer transformer-forward full 2 identical fast
+  1019	CMD lane/apple-fast-neural afn-tier-base-mamba1-forward bash tools/afn_ab.sh afn-tier-base-mamba1-forward mamba mamba1-forward full 2 identical fast
+  1020	CMD lane/apple-fast-neural afn-tier-base-mamba2-forward bash tools/afn_ab.sh afn-tier-base-mamba2-forward mamba mamba2-forward full 2 identical fast
+  1021	CMD lane/apple-fast-neural afn-tier-base-mamba3-forward bash tools/afn_ab.sh afn-tier-base-mamba3-forward mamba mamba3-forward full 2 identical fast
+  1022	CMD lane/apple-fast-neural afn-tier-base-samba-forward bash tools/afn_ab.sh afn-tier-base-samba-forward training samba-forward full 2 identical fast
+  1023	CMD lane/apple-fast-neural afn-tier-base-samba-train-step bash tools/afn_ab.sh afn-tier-base-samba-train-step training samba-train-step full 2 identical fast
+  1024	CMD lane/apple-fast-neural afn-tier-base-mlp-train-step bash tools/afn_ab.sh afn-tier-base-mlp-train-step training mlp-train-step full 2 identical fast
+  1025	CMD lane/apple-fast-neural afn-tier-base-lm-forward bash tools/afn_ab.sh afn-tier-base-lm-forward byte_lm lm-forward full 2 identical fast
+  1026	CMD lane/apple-fast-neural afn-tier-base-lm-train-step bash tools/afn_ab.sh afn-tier-base-lm-train-step byte_lm lm-train-step full 2 identical fast
+  1027	CMD lane/apple-fast-neural afn-w2-epi-m1-proj bash tools/afn_ab.sh afn-w2-epi-m1-proj mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"
+  1028	CMD lane/apple-fast-neural afn-w2-epi-m2-proj bash tools/afn_ab.sh afn-w2-epi-m2-proj mamba mamba2-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"
+  1029	CMD lane/apple-fast-neural afn-w2-epi-m3-proj bash tools/afn_ab.sh afn-w2-epi-m3-proj mamba mamba3-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"
+  1030	CMD lane/apple-fast-neural afn-w2-epi-samba-proj-fwd bash tools/afn_ab.sh afn-w2-epi-samba-proj-fwd mamba samba-forward full 2 "" "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"
+  1031	CMD lane/apple-fast-neural afn-w2-epi-samba-proj-step bash tools/afn_ab.sh afn-w2-epi-samba-proj-step mamba samba-train-step full 2 "" "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE"
+  1032	CMD lane/apple-fast-neural afn-w2-epi-samba-splitk-fwd bash tools/afn_ab.sh afn-w2-epi-samba-splitk-fwd mamba samba-forward full 2 "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE" "-D MOJOLEARN_AFN_MAMBA_PROJ_SPLITK"
+  1033	CMD lane/apple-fast-neural afn-w2-epi-samba-splitk-step bash tools/afn_ab.sh afn-w2-epi-samba-splitk-step mamba samba-train-step full 2 "-D MOJOLEARN_AFN_MAMBA_PROJ_EPILOGUE" "-D MOJOLEARN_AFN_MAMBA_PROJ_SPLITK"
+  1034	CMD lane/apple-fast-neural afn-w2-epi-samba-head-fwd bash tools/afn_ab.sh afn-w2-epi-samba-head-fwd training samba-forward full 2 "-D MOJOLEARN_AFN_SAMBA_FUSE" "-D MOJOLEARN_AFN_SAMBA_FUSE -D MOJOLEARN_AFN_SAMBA_HEAD_GEM
+  1035	CMD lane/apple-fast-neural afn-w2-epi-samba-head-step bash tools/afn_ab.sh afn-w2-epi-samba-head-step training samba-train-step full 2 "-D MOJOLEARN_AFN_SAMBA_FUSE" "-D MOJOLEARN_AFN_SAMBA_FUSE -D MOJOLEARN_AFN_SAMBA_HEA
+  1036	CMD lane/apple-fast-neural afn-w2-epi-m1-all bash tools/afn_ab.sh afn-w2-epi-m1-all mamba mamba1-forward full 2 "" "-D MOJOLEARN_AFN_EPI_ALL"
+  1037	CMD lane/apple-fast-neural afn-w2-epi-m2-all bash tools/afn_ab.sh afn-w2-epi-m2-all mamba mamba2-forward full 2 "" "-D MOJOLEARN_AFN_EPI_ALL"
+  1038	CMD lane/apple-fast-neural afn-w2-epi-m3-all bash tools/afn_ab.sh afn-w2-epi-m3-all mamba mamba3-forward full 2 "" "-D MOJOLEARN_AFN_EPI_ALL"
+  1039	CMD lane/apple-fast-neural afn-w2-epi-samba-all-mamba-step bash tools/afn_ab.sh afn-w2-epi-samba-all-mamba-step mamba samba-train-step full 2 "" "-D MOJOLEARN_AFN_EPI_ALL"
+  1040	CMD lane/apple-fast-neural afn-w2-epi-samba-all-training-step bash tools/afn_ab.sh afn-w2-epi-samba-all-training-step training samba-train-step full 2 "-D MOJOLEARN_AFN_SAMBA_FUSE" "-D MOJOLEARN_AFN_SAMBA_FUSE -D MOJOLEA
+  1041	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-bigtile bash tools/afn_ab.sh afn-w2-gemm2-gemm-bigtile linalg gemm full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D 
+  1042	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-bf16-bigtile bash tools/afn_ab.sh afn-w2-gemm2-gemm-bf16-bigtile linalg gemm-bf16 full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEM
+  1043	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-dbuf bash tools/afn_ab.sh afn-w2-gemm2-gemm-dbuf linalg gemm full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLE
+  1044	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-bf16-dbuf bash tools/afn_ab.sh afn-w2-gemm2-gemm-bf16-dbuf linalg gemm-bf16 full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMD
+  1045	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-direct-b bash tools/afn_ab.sh afn-w2-gemm2-gemm-direct-b linalg gemm full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -
+  1046	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-bf16-direct-b bash tools/afn_ab.sh afn-w2-gemm2-gemm-bf16-direct-b linalg gemm-bf16 full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_G
+  1047	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-swizzle bash tools/afn_ab.sh afn-w2-gemm2-gemm-swizzle linalg gemm full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D 
+  1048	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-bf16-swizzle bash tools/afn_ab.sh afn-w2-gemm2-gemm-bf16-swizzle linalg gemm-bf16 full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEM
+  1049	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-all bash tools/afn_ab.sh afn-w2-gemm2-gemm-all linalg gemm full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEAR
+  1050	CMD lane/apple-fast-neural afn-w2-gemm2-gemm-bf16-all bash tools/afn_ab.sh afn-w2-gemm2-gemm-bf16-all linalg gemm-bf16 full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16_MMA" "-D MOJOLEARN_AFN_GEMM_SIMDGR
+  1051	CMD lane/apple-fast-neural afn-w2-gemm2-transformer-forward-all bash tools/afn_ab.sh afn-w2-gemm2-transformer-forward-all transformer transformer-forward full 2 "-D MOJOLEARN_AFN_GEMM_SIMDGROUP -D MOJOLEARN_AFN_GEMM_BF16
+  1052	CMD lane/apple-fast-neural afn-w2-lmgrad-wgrad-split-train bash tools/afn_ab.sh afn-w2-lmgrad-wgrad-split-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_WGRAD_SPLIT"
+  1053	CMD lane/apple-fast-neural afn-w2-lmgrad-bwd-epilogue-train bash tools/afn_ab.sh afn-w2-lmgrad-bwd-epilogue-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_BWD_EPILOGUE"
+  1054	CMD lane/apple-fast-neural afn-w2-lmgrad-norm1-resid-train bash tools/afn_ab.sh afn-w2-lmgrad-norm1-resid-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LM_BWD_NORM1_RESID"
+  1055	CMD lane/apple-fast-neural afn-w2-lmgrad-all-train bash tools/afn_ab.sh afn-w2-lmgrad-all-train byte_lm lm-train-step full 2 "" "-D MOJOLEARN_AFN_LMGRAD_ALL"
+  1056	CMD lane/apple-fast-neural afn-w2-lmgrad-wgrad-vs-gemmsplitk-train bash tools/afn_ab.sh afn-w2-lmgrad-wgrad-vs-gemmsplitk-train byte_lm lm-train-step full 2 "-D MOJOLEARN_AFN_GEMM_SPLITK" "-D MOJOLEARN_AFN_GEMM_SIMDGROUP
+  1057	CMD lane/apple-fast-neural afn-w2-lmgrad-all-on-stack-train bash tools/afn_ab.sh afn-w2-lmgrad-all-on-stack-train byte_lm lm-train-step full 2 "-D MOJOLEARN_AFN_LM_ALL -D MOJOLEARN_AFN_GEMM_SIMDGROUP" "-D MOJOLEARN_AFN_L
+  1058	CMD lane/apple-fast-neural afn-w2-lmgrad-fwd-fusemlp-forward bash tools/afn_ab.sh afn-w2-lmgrad-fwd-fusemlp-forward byte_lm lm-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_FUSE_MLP"
+  1059	CMD lane/apple-fast-neural afn-w2-lmgrad-fwd-attnall-forward bash tools/afn_ab.sh afn-w2-lmgrad-fwd-attnall-forward byte_lm lm-forward full 2 "" "-D MOJOLEARN_AFN_ATTN_ALL"
