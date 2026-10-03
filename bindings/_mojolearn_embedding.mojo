@@ -50,6 +50,14 @@ from embedding.checks.embedding_identical import (
     identical_embedding_forward_into,
 )
 from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
+#: lane afn-mlp (2026-10-03): the Apple FAST atomic backward, compiled only
+#: under FAST + Apple + `-D MOJOLEARN_AFN_EMB_ATOMIC_BWD`; every other build
+#: runs the paths below unchanged (embedding/checks/embedding_fast_apple.mojo).
+from embedding.checks.embedding_fast_apple import (
+    EMB_ATOMIC_BWD,
+    fast_embedding_backward_into,
+    fast_embedding_forward_into,
+)
 from embedding.checks.embedding_oracle import (
     EMB_NO_PADDING_IDX,
     EmbConfig,
@@ -214,6 +222,24 @@ def _forward_run(
     if cells <= 0:
         return
     var ctx = neural_ctx[_NEURAL_CTX]()
+    comptime if EMB_ATOMIC_BWD:
+        # lane afn-mlp: the uploads do not wait (the caller's arrays outlive
+        # the call on the one in-order queue); the W scan keeps its wait;
+        # the gather; the download with the final wait. Two waits, not four.
+        var a_w = ctx.enqueue_create_buffer[DType.float32](cfg.vocab * cfg.width)
+        ctx.enqueue_copy(dst_buf=a_w, src_ptr=wp)
+        _refuse_nonfinite_device(ctx, String("W"), a_w, wp, cfg.vocab * cfg.width)
+        var a_ids = ctx.enqueue_create_buffer[DType.int32](n_positions)
+        ctx.enqueue_copy(dst_buf=a_ids, src_ptr=ids.unsafe_ptr())
+        var a_y = ctx.enqueue_create_buffer[DType.float32](cells)
+        fast_embedding_forward_into(ctx, a_y, a_w, a_ids, n_positions, cfg)
+        ctx.enqueue_copy(dst_ptr=yp, src_buf=a_y)
+        ctx.synchronize()
+        _ = a_w^
+        _ = a_ids^
+        _ = a_y^
+        _ = ctx^
+        return
     var d_w = _upload_f32_ptr(ctx, wp, cfg.vocab * cfg.width)
     _refuse_nonfinite_device(ctx, String("W"), d_w, wp, cfg.vocab * cfg.width)
     var d_ids = _upload_i32(ctx, ids)
@@ -240,6 +266,32 @@ def _backward_run(
     if cells <= 0:
         return
     var ctx = neural_ctx[_NEURAL_CTX]()
+    comptime if EMB_ATOMIC_BWD:
+        # lane afn-mlp: dY up (no wait), its scan (one wait), the carried dW
+        # up when accumulating (no wait; else the device seed), the ids up,
+        # the scatter-add, the padding row, the download, the final wait.
+        var a_dw = ctx.enqueue_create_buffer[DType.float32](cells)
+        if cfg.accumulate:
+            ctx.enqueue_copy(dst_buf=a_dw, src_ptr=dwp)
+        var a_dy = ctx.enqueue_create_buffer[DType.float32](n_positions * cfg.width)
+        ctx.enqueue_copy(dst_buf=a_dy, src_ptr=dyp)
+        _refuse_nonfinite_device(ctx, String("dY"), a_dy, dyp, n_positions * cfg.width)
+        if cfg.accumulate:
+            _refuse_nonfinite_device(ctx, String("the carried dW"), a_dw, dwp, cells)
+        var a_ids = ctx.enqueue_create_buffer[DType.int32](n_positions if n_positions > 0 else 1)
+        if n_positions > 0:
+            ctx.enqueue_copy(
+                dst_buf=a_ids.create_sub_buffer[DType.int32](0, n_positions),
+                src_ptr=ids.unsafe_ptr(),
+            )
+        fast_embedding_backward_into(ctx, a_dw, a_dy, a_ids, n_positions, cfg)
+        ctx.enqueue_copy(dst_ptr=dwp, src_buf=a_dw)
+        ctx.synchronize()
+        _ = a_dw^
+        _ = a_dy^
+        _ = a_ids^
+        _ = ctx^
+        return
     # the carried dW starts from the caller's bits; a fresh one from +0.0
     # (filled on the device: the same +0.0 cells the host list held)
     var d_dw: DeviceBuffer[DType.float32]
