@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The cv fold bookkeeping of Stacking / CalibratedClassifierCV on the device
-(lane/apple-fast-trees-ensembles, 2026-10-02; `-D MOJOLEARN_TE_NATIVE_SPLITS`,
+(lane/apple-fast-trees-ensembles, 2026-10-02; MOJOLEARN_TE_NATIVE_SPLITS, default on unless `-D MOJOLEARN_TE_NATIVE_SPLITS_OFF`,
 FAST + Apple only).
 
 The law is sklearn's StratifiedKFold(shuffle=False) / KFold(shuffle=False),

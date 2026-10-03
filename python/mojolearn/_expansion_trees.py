@@ -458,10 +458,11 @@ def _trees_arange(n):
 
 # lane/apple-fast-trees-ensembles (2026-10-02): the Apple FAST switches of
 # this module are BUILD-TIME defines of the x_trees binding (`-D
-# MOJOLEARN_TE_<NAME>`; xtrees/api.mojo `x_trees_fast_switches` is the bit
+# MOJOLEARN_TE_<NAME>_OFF` turns one off; xtrees/api.mojo `x_trees_fast_switches` is the bit
 # set the FAST + Apple build fills, 0 in every other build), read through
 # the binding once per fit: no env read. IDENTICAL (the default) runs the
-# code above and below them unchanged. Each defaults off:
+# code above and below them unchanged. Each is ON by default in the FAST +
+# Apple build since the M3 A/B (xtrees/api.mojo XTREES_FAST_SWITCHES):
 #   MOJOLEARN_TE_NATIVE_SPLITS  the cv fold bookkeeping of Stacking /
 #     CalibratedClassifierCV, OneVsRest's targets and MultiOutputClassifier's
 #     label columns leave their Python row loops (`_trees_native_folds`,
@@ -1827,7 +1828,7 @@ def _trees_native_folds(est, n_splits, n, codes, n_classes=0):
     row lists made on the device (xtrees/folds_device.mojo through
     `x_trees_device_folds`: sklearn's unshuffled StratifiedKFold / KFold law,
     the same folds `_trees_stratified_folds` / `_trees_kfolds` build, no
-    Python row loop and no host row loop), under `-D MOJOLEARN_TE_NATIVE_SPLITS`
+    Python row loop and no host row loop), under MOJOLEARN_TE_NATIVE_SPLITS (FAST + Apple default; `-D ..._OFF`)
     (lane/apple-fast-trees-ensembles, 2026-10-02). `codes` is an int32 code
     Array in [0, n_classes) (stratified) or None (KFold). The lists are
     zero-copy int32 views into one downloaded buffer: fold i's rows outside
@@ -2228,6 +2229,25 @@ class StackingRegressor(_StackingBase):
 # :200, one clone per column of Y; predict stacks the columns;
 # MultiOutputClassifier.predict_proba :500 returns a list). Y is a numeric
 # 2-D buffer; a classifier's labels per column are encoded to codes.
+#: lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_MULTIOUT_RIDGE_OFF turns it off):
+#: MultiOutputRegressor(Ridge) fits every target in ONE ridge program
+#: (glm/impl/ridge_multi.mojo: X up once, one eigendecomposition, one U^T b
+#: and one V (S b) per target) and predicts every target in one launch. The
+#: estimators binding built with the define exports ridge_fit_multi; every
+#: other binding takes the per-target route below.
+def _multiout_ridge_entry(est, sample_weight):
+    """The estimators binding when it has the one-program ridge and `est`
+    is a plain Ridge (eig arm, no normalize), else None."""
+    from .linear_model import Ridge
+    if sample_weight is not None or type(est) is not Ridge or est.normalize:
+        return None
+    try:
+        b = est._bind("_mojolearn_estimators")
+        return b if hasattr(b, "ridge_fit_multi") else None
+    except Exception:
+        return None
+
+
 class MultiOutputRegressor(_TreesWrapperBase):
     _estimator_type = "regressor"
 
@@ -2237,11 +2257,55 @@ class MultiOutputRegressor(_TreesWrapperBase):
         self.estimator = estimator
         self.n_jobs = n_jobs
 
+    def _fit_ridge_multi(self, b, Xa, Ya):
+        """The one-program fit: X centered once (Ridge.fit's own device
+        helpers), Y's columns centered and solved on the device, m Ridge
+        objects filled from the words so `estimators_` reads as before."""
+        from .linear_model import _center, _column_means, _round_f32
+        n, d = Xa.shape
+        m = Ya.shape[1]
+        est = self.estimator
+        if est.fit_intercept:
+            mu32 = _column_means(b, Xa, None)
+            work_x = _center(b, Xa, mu32)
+        else:
+            mu32 = [0.0] * d
+            work_x = Xa
+        coef = empty((m * d,), "<f4")
+        ymean = empty((m,), "<f4")
+        b.ridge_fit_multi(addr_ro(work_x, name="X"), addr_ro(Ya, name="Y"), addr(coef, name="coef"),
+                          addr(ymean, name="ymean"), [n, d, m, float(est.alpha), 1 if est.fit_intercept else 0])
+        xm = Array.from_list(mu32, "<f4")
+        icpt = []
+        self.estimators_ = []
+        for j in range(m):
+            e = _trees_clone(est)
+            e.solver_ = "eig"
+            e.coef_ = coef[j * d:(j + 1) * d]
+            e._x_mean = xm
+            e._y_mean = float(ymean[j]) if est.fit_intercept else 0.0
+            if est.fit_intercept:
+                dot = math.fsum(float(a) * float(c) for a, c in zip(mu32, e.coef_.tolist()))
+                e.intercept_ = float(_round_f32(e._y_mean) - dot)
+            else:
+                e.intercept_ = 0.0
+            e.n_features_in_ = d
+            icpt.append(e.intercept_)
+            self.estimators_.append(e)
+        self._multi_ridge = (coef, Array.from_list(icpt, "<f4"), m)
+        self.n_features_in_ = d
+        self._fitted = True
+        return self
+
     def fit(self, X, Y, sample_weight=None):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
         Ya, _ = as_f32_c(Y, ndim=2, name="Y")
         if Ya.shape[0] != Xa.shape[0]:
             raise ValueError(f"Y has {Ya.shape[0]} rows, X has {Xa.shape[0]}")
+        self._multi_ridge = None
+        b = _multiout_ridge_entry(self.estimator, sample_weight)
+        if b is not None and Ya.shape[1] > 0:
+            return self._fit_ridge_multi(b, Xa, Ya)
         self.estimators_ = []
         for j in range(Ya.shape[1]):
             e = _trees_clone(self.estimator)
@@ -2255,6 +2319,14 @@ class MultiOutputRegressor(_TreesWrapperBase):
     def predict(self, X):
         Xa = self._check_X(X)
         n, m = Xa.shape[0], len(self.estimators_)
+        mr = getattr(self, "_multi_ridge", None)
+        if mr is not None:
+            coef, icpt, m = mr
+            out = empty((n, m), "<f4")
+            self.estimators_[0]._bind("_mojolearn_estimators").ridge_predict_multi(
+                addr_ro(Xa, name="X"), addr_ro(coef, name="coef"), addr_ro(icpt, name="intercepts"),
+                addr(out, name="predictions"), [n, Xa.shape[1], m])
+            return out
         out = zeros((n * m,), "<f8")
         rows = _trees_arange(n)
         for j, e in enumerate(self.estimators_):
@@ -2437,6 +2509,35 @@ def _cal_native(est):
     return _CAL_NATIVE and hotpath_enabled() and hasattr(est._bind(), "x_trees_platt_apply_strided")
 
 
+#: lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
+#: CalibratedClassifierCV(GaussianNB, method="sigmoid", ensemble=True, cv=int)
+#: as ONE x_prep program per fit and one per predict (x_prep/calib.mojo: the
+#: folds, every fold's statistics, the held-out scores and Platt's sigmoids on
+#: the device, X uploaded once). The binding built with the define exports
+#: x_prep_calib_folds; every other binding takes the reference route below.
+_CAL_XB = 2048      # rows per block of the fold-assignment partials
+_CAL_PB = 512       # rows per block of the Platt partials
+_CAL_ITERS = 40     # Newton iterations unrolled (platt_fit's cap is 100; a stopped problem's stages are no-ops)
+_CAL_TOL = 1e-5     # |gradient| / rows of the fold below this stops a problem
+
+
+def _cal_fast_consts(base, method, ensemble, cv, sample_weight):
+    """[CAL_ST, CAL_LS] of the x_prep binding's calibration program, or None
+    when the binding lacks it or the request is outside what it covers."""
+    from ._expansion_prep import GaussianNB, _mode, _optional_prep_entry, _prep_binding
+    if sample_weight is not None or method != "sigmoid" or not ensemble or not isinstance(base, GaussianNB):
+        return None
+    if base.priors is not None or not isinstance(_trees_cv(cv), int):
+        return None
+    try:
+        entry = _optional_prep_entry(_prep_binding(_mode()), "x_prep_calib_folds")
+    except Exception:
+        return None
+    if entry is None:
+        return None
+    return [int(v) for v in entry()]
+
+
 class CalibratedClassifierCV(_TreesWrapperBase):
     _estimator_type = "classifier"
 
@@ -2604,6 +2705,10 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         if base is None:
             from .svm import LinearSVC
             base = LinearSVC()
+        self._cal_fast = None
+        consts = _cal_fast_consts(base, self.method, self.ensemble, self.cv, sample_weight)
+        if consts is not None:
+            return self._fit_fast(Xa, codes, base, consts)
         nat = _trees_native_glue(self)
         splits = _trees_splits(self.cv, X, y, n, codes=codes if nat is not None else codes.tolist(),
                                partition=not self.ensemble, native=nat, n_classes=len(self.classes_))
@@ -2632,8 +2737,116 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         self._fitted = True
         return self
 
+    def _fit_fast(self, Xa, codes, base, consts):
+        """The one-program fit (x_prep/calib.mojo, lane apple-fast-meta): the
+        members are GaussianNB objects filled from the program's per-fold
+        words, so the reference `calibrated_classifiers_` route still reads
+        them; `_cal_fast` holds the words the one-program predict uploads."""
+        from ._expansion_prep import _NONE, _Prog, _class_stats, _mode
+        cal_st, cal_ls = consts
+        n, d = Xa.shape
+        K = len(self.classes_)
+        F = _trees_cv(self.cv)
+        c = 1 if K == 2 else K
+        FK, FC = F * K, F * c
+        nb = (n + _CAL_XB - 1) // _CAL_XB
+        nbp = (n + _CAL_PB - 1) // _CAL_PB
+        pr = _Prog()
+        xo = pr.put(Xa)
+        co = pr.put_words(codes)
+        # StratifiedKFold(shuffle=False)'s test fold of every row
+        pcnt, pmin = pr.work(nb * K), pr.work(nb * K)
+        pr.stage("cal_fold_part", nb * K, co, n, K, _CAL_XB, pcnt, pmin)
+        ccnt, cfirst, prefix = pr.alloc(K), pr.alloc(K), pr.work(nb * K)
+        pr.stage("cal_fold_scan", K, pcnt, pmin, nb, K, ccnt, cfirst, prefix)
+        rank = pr.work(n)
+        pr.stage("cal_fold_rank", nb * K, co, n, K, _CAL_XB, prefix, rank)
+        fold, pcode, foldf = pr.work(n), pr.work(n), pr.work(n)
+        pr.stage("cal_fold_assign", n, co, rank, n, K, ccnt, cfirst, F, fold, pcode, foldf)
+        # per (fold, class) and per fold column statistics -> each fold's train statistics
+        cnt_fk, mean_fk, var_fk = pr.work(FK), pr.work(FK * d), pr.work(FK * d)
+        _class_stats(pr, None, FK * d, xo, n, d, pcode, FK, cnt_fk, mean_fk, var_fk, _NONE)
+        cnt_f, mean_f, var_f = pr.work(F), pr.work(F * d), pr.work(F * d)
+        _class_stats(pr, None, F * d, xo, n, d, foldf, F, cnt_f, mean_f, var_f, _NONE)
+        tcnt, theta, var = pr.alloc(FK), pr.alloc(FK * d), pr.alloc(FK * d)
+        pr.stage("cal_lofo_merge", FK * d, cnt_fk, mean_fk, var_fk, F, K, d, tcnt, theta, var)
+        ntr, cmean, cvar = pr.work(F), pr.work(F * d), pr.work(F * d)
+        pr.stage("cal_lofo_merge", F * d, cnt_f, mean_f, var_f, F, 1, d, ntr, cmean, cvar)
+        eps, vs = pr.alloc(F), pr.put_scalar(base.var_smoothing)
+        pr.stage("cal_eps_folds", F, cvar, F, d, eps, vs)
+        prior, const = pr.alloc(FK), pr.alloc(FK)
+        pr.stage("cal_params_folds", FK, tcnt, var, K, d, ntr, eps, prior, const)
+        # every row scored by the model that left it out
+        jll, proba = pr.work(n * K), pr.work(n * K)
+        pr.stage("cal_jll_folds", n * K, xo, n, d, theta, var, const, K, fold, jll, F)
+        pr.stage("row_softmax", n, jll, n, K, _NONE, proba)
+        # Platt's sigmoid per (fold, column): Newton with a T-step line search
+        part2 = pr.work(nbp * FC * 2)
+        pr.stage("cal_platt_init", nbp * FC, co, fold, n, F, c, _CAL_PB, part2)
+        state = pr.alloc(FC * cal_st)
+        pr.stage("cal_platt_setup", FC, part2, nbp, F, c, state)
+        part6, part_ls, tol = pr.work(nbp * FC * 6), pr.work(nbp * FC * cal_ls), pr.put_scalar(_CAL_TOL)
+        for _ in range(_CAL_ITERS):
+            pr.stage("cal_platt_part", nbp * FC, proba, K, co, fold, n, F, c, _CAL_PB, state, part6)
+            pr.stage("cal_platt_step", FC, part6, nbp, F, c, state, tol)
+            pr.stage("cal_platt_ls_part", nbp * FC, proba, K, co, fold, n, F, c, _CAL_PB, state, part_ls, cal_ls)
+            pr.stage("cal_platt_ls_pick", FC, part_ls, nbp, F, c, state, cal_ls)
+        mode = _mode()
+        pr.run(mode)
+        counts = pr.get_i32(ccnt, K).tolist()
+        if F > max(counts):
+            raise ValueError(f"n_splits={F} cannot be greater than the number of members in each class")
+        theta_a, var_a = pr.get(theta, (FK * d,)), pr.get(var, (FK * d,))
+        const_a, prior_a, tcnt_a = pr.get(const, (FK,)), pr.get(prior, (FK,)), pr.get(tcnt, (FK,))
+        eps_a, st = pr.get(eps, (F,)), pr.get(state, (FC * cal_st,))
+        self.calibrated_classifiers_ = []
+        for fo in range(F):
+            e = _trees_clone(base)
+            e.classes_ = list(range(K))
+            e.theta_ = theta_a[fo * K * d:(fo + 1) * K * d].reshape((K, d))
+            e.var_ = var_a[fo * K * d:(fo + 1) * K * d].reshape((K, d))
+            e.class_count_ = tcnt_a[fo * K:(fo + 1) * K]
+            e.class_prior_ = prior_a[fo * K:(fo + 1) * K]
+            e.epsilon_ = float(eps_a[fo])
+            e._const = const_a[fo * K:(fo + 1) * K]
+            e._raw_var = e.var_
+            e.numeric_mode_, e.n_features_in_ = mode, d
+            cals = [("sigmoid", (float(st[(fo * c + j) * cal_st]), float(st[(fo * c + j) * cal_st + 1])))
+                    for j in range(c)]
+            self.calibrated_classifiers_.append((e, cals))
+        self._cal_fast = dict(F=F, c=c, K=K, theta=theta_a, var=var_a, const=const_a, state=st)
+        self.n_features_in_ = d
+        self._fitted = True
+        return self
+
+    def _predict_proba_fast(self, Xa, want):
+        """The one-program predict: every member's joint log likelihood of
+        every row, softmax, the members' sigmoids averaged; `want` "proba"
+        gives the (n, K) float32 block, "predict" the int32 argmax codes."""
+        from ._expansion_prep import _NONE, _Prog, _mode
+        cf = self._cal_fast
+        F, c, K = cf["F"], cf["c"], cf["K"]
+        n, d = Xa.shape
+        pr = _Prog()
+        xo = pr.put(Xa)
+        th, va, co, sto = pr.put(cf["theta"]), pr.put(cf["var"]), pr.put(cf["const"]), pr.put(cf["state"])
+        jll, proba = pr.work(n * F * K), pr.work(n * F * K)
+        pr.stage("cal_jll_folds", n * F * K, xo, n, d, th, va, co, K, _NONE, jll, F)
+        pr.stage("row_softmax", n * F, jll, n * F, K, _NONE, proba)
+        out = pr.alloc(n * K)
+        pr.stage("cal_sigmoid_avg", n, proba, n, F, K, sto, c, out)
+        am = pr.alloc(n) if want == "predict" else _NONE
+        if am != _NONE:
+            pr.stage("row_argmax", n, out, n, K, am)
+        pr.run(_mode())
+        if want == "predict":
+            return pr.get_i32(am, n)
+        return pr.get(out, (n, K))
+
     def predict_proba(self, X):
         Xa = self._check_X(X)
+        if getattr(self, "_cal_fast", None) is not None:
+            return self._predict_proba_fast(Xa, "proba")
         n, k = Xa.shape[0], len(self.classes_)
         acc = zeros((n * k,), "<f8")
         for e, cals in self.calibrated_classifiers_:
@@ -2643,6 +2856,8 @@ class CalibratedClassifierCV(_TreesWrapperBase):
         return acc.reshape((n, k))
 
     def predict(self, X):
+        if getattr(self, "_cal_fast", None) is not None:
+            return decode_labels(self.classes_, self._predict_proba_fast(self._check_X(X), "predict"))
         p = self.predict_proba(X)
         return decode_labels(self.classes_, self._argmax(p, p.shape[0], len(self.classes_)))
 
@@ -2656,14 +2871,17 @@ class CalibratedClassifierCV(_TreesWrapperBase):
 # count of BACKGROUND rows (`data`, required) reaching each node, since the
 # flat forest stores no instance counts. KernelExplainer and
 # PermutationExplainer: cuML's `explainer/kernel_shap.cu` and
-# `permutation_shap.cu` build the coalition datasets (xtrees/shap.mojo
-# `mask_expand`); the sampling and the solve follow `shap`'s
-# KernelExplainer (`_kernel.py`: full enumeration of the small coalition
-# sizes, then weighted sampling of the rest, the efficiency-constrained
-# weighted least squares) and PermutationExplainer (`_permutation.py`:
-# forward then backward passes over each permutation). DEVIATIONS: draws
-# come from the lane's counter RNG; KernelExplainer carries no l1 feature
-# selection (`l1_reg` is refused) and treats every feature as varying.
+# `permutation_shap.cu` build the coalition datasets; the sampling and the
+# solve follow `shap`'s KernelExplainer (`_kernel.py`: full enumeration of
+# the small coalition sizes, then weighted sampling of the rest, the
+# efficiency-constrained weighted least squares) and PermutationExplainer
+# (`_permutation.py`: forward then backward passes over each permutation).
+# Lane cgr2-metrics-shap: every step but the model call runs on the device
+# over a chunk of rows at once (xtrees/agnostic*.mojo). DEVIATIONS: draws
+# come from the lane's counter RNG; KernelExplainer's sampled coalitions are
+# pairs (a draw and its complement) without de-duplication (cuML's
+# schedule), carries no l1 feature selection (`l1_reg` is refused) and
+# treats every feature as varying.
 def _trees_forest_arrays(est):
     """(offsets, colid, quesval, left, leaves, k, scale) of a fitted flat
     forest, or None."""
@@ -2777,6 +2995,16 @@ class TreeExplainer(_TreesEnsembleBase):
         return phi.reshape((n, d)) if k == 1 else phi.reshape((n, d, k))
 
 
+#: xtrees/agnostic.mojo AGN_BUDGET: synthetic words per explainer chunk
+_AGN_BUDGET = 1 << 25
+
+
+def _f64_word(x):
+    """The binary64 bits of x as a signed int (a binding param word)."""
+    import struct
+    return struct.unpack("<q", struct.pack("<d", float(x)))[0]
+
+
 def _trees_model_fn(model):
     """The function an agnostic explainer explains: a callable as given, a
     classifier's predict_proba, else predict."""
@@ -2812,47 +3040,14 @@ class _AgnosticExplainer(_TreesEnsembleBase):
         n = X.shape[0]
         return _trees_output_2d(out, n)
 
-    def _coalitions(self, x_row, masks_list):
-        """Mean model output over the background for each coalition mask:
-        float64 (m, k)."""
-        bg = self._bg
-        nb, d = bg.shape
-        m = len(masks_list)
-        masks = Array.from_list([v for mk in masks_list for v in mk], "<i4")
-        syn = empty((m * nb * d,), "<f4")
-        b = self._bind()
-        b.x_trees_mask_expand(addr_ro(x_row, name="x"), addr_ro(bg, name="data"), addr_ro(masks, name="masks"),
-                              addr(syn, name="synthetic"), [nb, d, m])
-        out = self._eval(syn.reshape((m * nb, d)))
-        k = out.shape[1]
-        ey = empty((m * k,), "<f8")
-        b.x_trees_block_mean(addr_ro(out, name="y"), addr(ey, name="ey"), [m, nb, k])
-        return masks, ey
+    def _chunk(self, per_row, n):
+        """Rows per chunk: as many as keep a chunk's synthetic matrix under
+        the budget (xtrees/agnostic.mojo AGN_BUDGET words), at least one."""
+        return max(1, min(n, _AGN_BUDGET // max(1, per_row)))
 
-    def _perm_synthetic(self, x_row, inv, n_perm, syn):
-        """Every permutation coalition over every background row, written on
-        the device (`xtrees/perm_device.mojo`) into `syn` (allocated on the
-        first row, reused after)."""
-        bg = self._bg
-        nb, d = bg.shape
-        total = n_perm * (2 * d + 1) * nb * d
-        if syn is None or syn.shape[0] != total:
-            syn = empty((total,), "<f4")
-        inv_a = Array.from_list(inv, "<i4")
-        self._bind().x_trees_perm_synthetic(addr_ro(x_row, name="x"), addr_ro(bg, name="data"),
-                                            addr_ro(inv_a, name="inv"), addr(syn, name="synthetic"),
-                                            [nb, d, n_perm])
-        return syn
-
-    def _mean_over_background(self, syn, m):
-        """`_coalitions`'s model call and background mean over a written
-        synthetic matrix of m coalitions."""
-        nb, d = self._bg.shape
-        out = self._eval(syn.reshape((m * nb, d)))
-        k = out.shape[1]
-        ey = empty((m * k,), "<f8")
-        self._bind().x_trees_block_mean(addr_ro(out, name="y"), addr(ey, name="ey"), [m, nb, k])
-        return ey
+    def _model_rows(self, syn, rows, d):
+        """The model on a chunk's synthetic matrix: float32 (rows, k)."""
+        return self._eval(syn.reshape((rows, d)))
 
     def _check(self, X):
         Xa, _ = as_f32_c(X, ndim=2, name="X")
@@ -2860,10 +3055,9 @@ class _AgnosticExplainer(_TreesEnsembleBase):
             raise ValueError(f"X has {Xa.shape[1]} features, data has {self.n_features_in_}")
         return Xa
 
-    def _shape(self, rows, n, d):
+    def _shape(self, phi, n, d):
         k = self.n_outputs_
-        flat = Array.from_list([v for r in rows for v in r], "<f8")
-        return flat.reshape((n, d)) if k == 1 else flat.reshape((n, d, k))
+        return phi.reshape((n, d)) if k == 1 else phi.reshape((n, d, k))
 
 
 class KernelExplainer(_AgnosticExplainer):
@@ -2892,10 +3086,11 @@ class KernelExplainer(_AgnosticExplainer):
         from ._portable_math import comb
         return comb(n, r)
 
-    def _masks(self, M, nsamples, seed, row):
-        """shap `KernelExplainer.explain`'s coalition schedule: (masks, weights)."""
-        import itertools
-        masks, weights = [], []
+    def _schedule(self, M, nsamples):
+        """shap `KernelExplainer.explain`'s coalition schedule as the device
+        builds it (xtrees/agnostic.mojo kshap_mask_unit): (m, nfixed, nfull,
+        npaired, size_off, size_w, cdf, wrand). The O(M) scalar bookkeeping
+        over subset SIZES stays here; every mask is made on the device."""
         num_subset_sizes = (M - 1 + 1) // 2 if M > 1 else 0
         num_paired = (M - 1) // 2
         wv = [(M - 1.0) / (i * (M - i)) for i in range(1, num_subset_sizes + 1)]
@@ -2906,6 +3101,7 @@ class KernelExplainer(_AgnosticExplainer):
         num_full = 0
         left = nsamples
         rem = list(wv)
+        size_off, size_w = [0], []
         for size in range(1, num_subset_sizes + 1):
             nsub = self._binom(M, size) * (2 if size <= num_paired else 1)
             if left * rem[size - 1] / nsub >= 1.0 - 1e-8:
@@ -2917,19 +3113,13 @@ class KernelExplainer(_AgnosticExplainer):
                 w = wv[size - 1] / self._binom(M, size)
                 if size <= num_paired:
                     w /= 2.0
-                for inds in itertools.combinations(range(M), size):
-                    mk = [0] * M
-                    for i in inds:
-                        mk[i] = 1
-                    masks.append(mk)
-                    weights.append(w)
-                    if size <= num_paired:
-                        masks.append([1 - v for v in mk])
-                        weights.append(w)
+                size_off.append(size_off[-1] + nsub)
+                size_w.append(w)
             else:
                 break
-        nfixed = len(masks)
+        nfixed = size_off[-1]
         samples_left = nsamples - nfixed
+        cdf, wrand = [], 0.0
         if num_full != num_subset_sizes and samples_left > 0:
             rw = list(wv)
             for i in range(num_paired):
@@ -2937,50 +3127,14 @@ class KernelExplainer(_AgnosticExplainer):
             rw = rw[num_full:]
             t = math.fsum(rw)
             rw = [v / t for v in rw]
-            cdf, run = [], 0.0
+            run = 0.0
             for v in rw:
                 run += v
                 cdf.append(run)
-            n_draw = 4 * samples_left
-            u = empty((n_draw * (1 + M),), "<f8")
-            self._bind().x_trees_uniform(addr(u, name="u"), [n_draw * (1 + M), seed, row])
-            uv = u.tolist()
-            used = {}
-            pos = 0
-            while samples_left > 0 and pos < n_draw:
-                base = pos * (1 + M)
-                c = uv[base] * cdf[-1]
-                ind = next((i for i, v in enumerate(cdf) if c < v), len(cdf) - 1)
-                pos += 1
-                size = ind + num_full + 1
-                perm = list(range(M))
-                for i in range(M - 1, 0, -1):
-                    j = int(uv[base + 1 + i] * (i + 1))
-                    perm[i], perm[j] = perm[j], perm[i]
-                mk = [0] * M
-                for i in perm[:size]:
-                    mk[i] = 1
-                key = tuple(mk)
-                new = key not in used
-                if new:
-                    used[key] = len(masks)
-                    samples_left -= 1
-                    masks.append(mk)
-                    weights.append(1.0)
-                else:
-                    weights[used[key]] += 1.0
-                if samples_left > 0 and size <= num_paired:
-                    if new:
-                        samples_left -= 1
-                        masks.append([1 - v for v in mk])
-                        weights.append(1.0)
-                    else:
-                        weights[used[key] + 1] += 1.0
-            weight_left = math.fsum(wv[num_full:])
-            s = math.fsum(weights[nfixed:])
-            if s > 0:
-                weights[nfixed:] = [w * (weight_left / s) for w in weights[nfixed:]]
-        return masks, weights
+            wrand = 1.0 * (math.fsum(wv[num_full:]) / samples_left)
+        else:
+            samples_left = 0
+        return nfixed + samples_left, nfixed, num_full, num_paired, size_off, size_w, cdf, wrand
 
     def shap_values(self, X, nsamples="auto", l1_reg="auto"):
         if l1_reg not in ("auto", False, 0):
@@ -2994,27 +3148,33 @@ class KernelExplainer(_AgnosticExplainer):
         seed = _trees_seed(self.random_state)
         k = self.n_outputs_
         b = self._bind()
-        rows = []
-        cols = _trees_arange(d)
-        for i in range(n):
-            x_row = self._gather(Xa, Array.from_list([i], "<i4"), cols).reshape((d,))
-            fx = zeros((k,), "<f8")
-            fx32 = self._eval(x_row.reshape((1, d)))   # held: the call reads its address
-            b.x_trees_block_mean(addr_ro(fx32, name="fx"), addr(fx, name="fx"), [1, 1, k])
-            self._link(fx)
-            phi = zeros((d * k,), "<f8")
-            if M == 1 or ns < 1:
-                phi = Array.from_list([fx.tolist()[j] - self._fnull.tolist()[j] for j in range(k)], "<f8")
-            else:
-                mlist, wlist = self._masks(M, ns, seed, i)
-                masks, ey = self._coalitions(x_row, mlist)
-                self._link(ey)
-                w = Array.from_list(wlist, "<f8")
-                b.x_trees_kernel_solve(addr_ro(masks, name="masks"), addr_ro(w, name="w"), addr_ro(ey, name="ey"),
-                                       addr_ro(fx, name="fx"), addr_ro(self._fnull, name="fnull"),
-                                       addr(phi, name="phi"), [len(mlist), d, k])
-            rows.append(phi.tolist())
-        return self._shape(rows, n, d)
+        nb = self._bg.shape[0]
+        m, nfixed, nfull, npaired, size_off, size_w, cdf, wrand = self._schedule(M, max(ns, 0)) if M > 1 \
+            else (0, 0, 0, 0, [0], [], [], 0.0)
+        tables = (Array.from_list(size_off, "<i8"), Array.from_list(size_w or [0.0], "<f8"),
+                  Array.from_list(cdf or [0.0], "<f8"))
+        taddr = tuple(addr_ro(t, name="schedule") for t in tables)
+        phi = zeros((max(n * d * k, 1),), "<f8")
+        if n == 0:
+            return self._shape(zeros((0,), "<f8"), 0, d)
+        fx = self._eval(Xa)                       # the explained rows, one model call
+        x0, f0, p0 = addr_ro(Xa, name="X"), addr_ro(fx, name="fx"), addr(phi, name="phi")
+        fnull = self._fnull
+        R = self._chunk(m * nb * d, n)
+        for r0 in range(0, n, R):
+            rows = min(R, n - r0)
+            params = [rows, nb, d, nfixed, m, nfull, len(cdf), npaired, r0, seed, _f64_word(wrand)]
+            out = None
+            if m > 0:
+                syn = empty((rows * m * nb * d,), "<f4")
+                b.x_trees_kshap_synth(x0 + 4 * r0 * d, addr_ro(self._bg, name="data"), taddr,
+                                      addr(syn, name="synthetic"), params)
+                out = self._model_rows(syn, rows * m * nb, d)
+                del syn
+            b.x_trees_kshap_solve(addr_ro(out, name="y") if out is not None else 0, f0 + 4 * r0 * k,
+                                  addr_ro(fnull, name="fnull"), taddr, p0 + 8 * r0 * d * k,
+                                  params + [k, 1 if self.link == "logit" else 0])
+        return self._shape(phi, n, d)
 
 
 class PermutationExplainer(_AgnosticExplainer):
@@ -3031,43 +3191,24 @@ class PermutationExplainer(_AgnosticExplainer):
         n, d = Xa.shape
         k = self.n_outputs_
         seed = _trees_seed(self.random_state)
-        rows = []
-        cols = _trees_arange(d)
-        syn = None
-        for i in range(n):
-            x_row = self._gather(Xa, Array.from_list([i], "<i4"), cols).reshape((d,))
-            u = empty((max(1, npermutations * d),), "<f8")
-            self._bind().x_trees_uniform(addr(u, name="u"), [npermutations * d, seed, i])
-            uv = u.tolist()
-            perms, inv = [], []
-            for p in range(int(npermutations)):
-                perm = list(range(d))
-                for a in range(d - 1, 0, -1):
-                    j = int(uv[p * d + a] * (a + 1))
-                    perm[a], perm[j] = perm[j], perm[a]
-                perms.append(perm)
-                iv = [0] * d
-                for pos, f in enumerate(perm):
-                    iv[f] = pos
-                inv.extend(iv)
-            # lane/gap-nv-classical2: the coalitions (all features off, the
-            # forward walk adding perm's features, the backward walk removing
-            # them) are written on the device from the inverses, into one
-            # buffer reused across rows; the same words as the mask lists
-            # through `mask_expand`.
-            syn = self._perm_synthetic(x_row, inv, int(npermutations), syn)
-            ey = self._mean_over_background(syn, int(npermutations) * (2 * d + 1))
-            e = ey.tolist()
-            val = [0.0] * (d * k)
-            step = 2 * d + 1
-            for p, perm in enumerate(perms):
-                o = p * step
-                for jj, f in enumerate(perm):
-                    for c in range(k):
-                        val[f * k + c] += e[(o + jj + 1) * k + c] - e[(o + jj) * k + c]
-                for jj, f in enumerate(perm):
-                    for c in range(k):
-                        val[f * k + c] += e[(o + d + jj) * k + c] - e[(o + d + jj + 1) * k + c]
-            den = 2.0 * npermutations
-            rows.append([v / den for v in val])
-        return self._shape(rows, n, d)
+        npm = int(npermutations)
+        if npm < 1:
+            raise ValueError("npermutations must be >= 1")
+        nb = self._bg.shape[0]
+        b = self._bind()
+        phi = zeros((max(n * d * k, 1),), "<f8")
+        if n == 0:
+            return self._shape(zeros((0,), "<f8"), 0, d)
+        mm = npm * (2 * d + 1)
+        x0, p0 = addr_ro(Xa, name="X"), addr(phi, name="phi")
+        R = self._chunk(mm * nb * d, n)
+        for r0 in range(0, n, R):
+            rows = min(R, n - r0)
+            params = [rows, nb, d, npm, r0, seed]
+            syn = empty((rows * mm * nb * d,), "<f4")
+            b.x_trees_pshap_synth(x0 + 4 * r0 * d, addr_ro(self._bg, name="data"), addr(syn, name="synthetic"),
+                                  params)
+            out = self._model_rows(syn, rows * mm * nb, d)
+            del syn
+            b.x_trees_pshap_values(addr_ro(out, name="y"), p0 + 8 * r0 * d * k, params + [k])
+        return self._shape(phi, n, d)

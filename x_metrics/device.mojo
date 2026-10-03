@@ -12,7 +12,7 @@ from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_metrics.common import FP, IP, STAGE_INTS
 from x_metrics.units import N_OPS, run_unit
-from x_metrics.plan import Plan, plan_program, is_user_op, is_host_op, HOST_RD, HOST_WR, OP_SORT_MERGE
+from x_metrics.plan import Plan, plan_program, is_user_op, OP_SORT_MERGE
 from x_metrics.par import sort_merge_path_unit, merge_path_chunks
 from core.arena_io import check_in_ranges, check_out_ranges, upload_ranges, download_ranges
 from core.device_store import DeviceStore
@@ -124,7 +124,6 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     else:
         pl = plan_program(host_q, stages, arena_len)
     var nst = pl.stages
-    var keep = List[List[Float32]]()
     var prof = getenv("MOJOLEARN_XMETRICS_PROFILE") != ""
     var t_setup = perf_counter_ns()
     var ctx = metrics_ctx()
@@ -154,9 +153,6 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             t_last = now
         if total <= 0:
             continue
-        if is_host_op(op):
-            _host_stage(ctx, df, pl, s, op, total, keep)
-            continue
         var qp = dq.unsafe_ptr() + (s * STAGE_INTS + 2)
         if op == OP_SORT_MERGE and not legacy:
             # the device's merge schedule: one thread per MERGE_CHUNK outputs
@@ -185,38 +181,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     ctx.synchronize()
     if prof:
         print("XMPROF download us", (perf_counter_ns() - t_last) // 1000)
-    _ = len(keep)
     _ = len(pl.rows)
     _ = dq^
     _ = df^
     _ = ctx^
 
-
-def _host_stage(
-    ctx: DeviceContext, df: DeviceBuffer[DType.float32], pl: Plan, s: Int, op: Int, total: Int,
-    mut keep: List[List[Float32]],
-) raises:
-    """A HOST stage (x_metrics/plan.mojo): its read slots come down, its
-    units run in ascending t on the host (the host runner's loop, the same
-    unit), its write slots go back up, all in stream order."""
-    var row = s * STAGE_INTS + 2
-    var rlo = Int(pl.rows[row + HOST_RD])
-    var rhi = Int(pl.rows[row + HOST_RD + 1])
-    var wlo = Int(pl.rows[row + HOST_WR])
-    var whi = Int(pl.rows[row + HOST_WR + 1])
-    var lo = min(rlo, wlo)
-    var hi = max(rhi, whi)
-    var hb = List[Float32](length=hi - lo, fill=Float32(0))
-    var hp = hb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    if rhi > rlo:
-        ctx.enqueue_copy(dst_ptr=hp + (rlo - lo), src_buf=df.create_sub_buffer[DType.float32](rlo, rhi - rlo))
-    ctx.synchronize()
-    var hf = FP(unsafe_from_address=Int(hp) - 4 * lo)
-    var hq = IP(unsafe_from_address=Int(pl.rows.unsafe_ptr()) + 4 * row)
-    comptime for k in range(N_OPS):
-        if op == k:
-            for t in range(total):
-                run_unit[k](t, hf, hq)
-    if whi > wlo:
-        ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](wlo, whi - wlo), src_ptr=hp + (wlo - lo))
-    keep.append(hb^)
