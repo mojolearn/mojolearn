@@ -1158,6 +1158,24 @@ def test_store_hit_constructs_then_skips_the_opponent_and_runs_ours_only(tmp_pat
     assert rec["stored_arms"] == ["catboost-cpu"] and rec["stored_now"] == 0
 
 
+def test_default_skips_unstored_opponents_with_opponents_races_them(tmp_path, monkeypatch):
+    ctx, race = _store_ctx(tmp_path)
+    _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.8"})
+    seen = []
+
+    def fake(ctx_, race_):
+        seen.append(race_)
+        cells = [dict(bb.base_cell(ctx_, race_, a, race_["our_arms"].get(a)), status="ok",
+                      median_ms=500.0, times_ms=[500.0], rounds=1) for a in race_["arms"]]
+        return {"cells": cells, "status": "done", "rc": 0, "finished": "now"}
+    monkeypatch.setattr(bb, "_run_race", fake)
+    rec = bb.run_race(ctx, race)                     # empty store, no flag: ours only
+    assert seen[-1]["opponents"] == [] and "catboost-cpu" not in seen[-1]["arms"]
+    assert rec["skipped_opponents"] == ["catboost-cpu"] and "catboost-cpu" not in rec["arms"]
+    rec = bb.run_race(dict(ctx, with_opponents=True), race)
+    assert seen[-1]["opponents"] == ["catboost-cpu"] and rec["skipped_opponents"] == []
+
+
 def test_store_reuses_only_the_same_read_back_version_and_device(tmp_path, monkeypatch):
     ctx, race = _store_ctx(tmp_path)
     bb.STORE.append(ctx["store_path"], _stored_record(ctx, race, "catboost-cpu"))
