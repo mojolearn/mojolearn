@@ -26,6 +26,14 @@
 #         AFB tag=.. family=.. lane=.. ds=.. status=.. median_ms=.. runs=[..] digest=.. q=k=v,..
 #       into ~/mq/out/race-<tag>/race.log (so `lq log m3 <tag> '^AFB '` reads it).
 #
+#       AFB_MODE=identical (env, default fast) runs the same batch in IDENTICAL:
+#       bindings built with MOJOLEARN_NUMERIC_MODE=identical (the stamp records
+#       the mode, so a later FAST job rebuilds), our `ours` arm raced under
+#       MOJOLEARN_NUMERIC_MODE=identical, result lines tagged mode=identical.
+#       Trees task lanes take the board dataset (taxi/istella) and race the
+#       driver's dataset (bench_board.TREE_TASK_DATASETS: taxicat, taximc,
+#       istellamc, istellarank); the AFB line keeps the board dataset.
+#
 #   bash tools/af_board_queue.sh opp <tag>
 #       Box side. Prints AFB-OPPZ lines (gzip+base64 chunks of the 0.8.34 M3
 #       board's per-race FAST and best-opponent ms and quality) for
@@ -44,31 +52,36 @@ board_root() {
 # ----------------------------------------------------------------- box: run
 if [ "${1:-}" = run ]; then
   TAG=$2 FAM=$3 PAIRS=$4
+  MODE=${AFB_MODE:-fast}
+  case $MODE in fast) ARM=ours-fast ;; identical) ARM=ours ;; *) echo "AFB_MODE must be fast or identical" >&2; exit 2 ;; esac
   cd "$here"
   B=$(board_root); VP=$B/cache/venv/bin/python
   [ -x "$VP" ] || VP=python3
   OUT=$HOME/mq/out/race-$TAG; mkdir -p "$OUT"; LOG=$OUT/race.log
   HEAD=$(git rev-parse --short HEAD)
-  echo "AFB-JOB tag=$TAG family=$FAM head=$HEAD board=$B" >> "$LOG"
+  echo "AFB-JOB tag=$TAG family=$FAM mode=$MODE head=$HEAD board=$B" >> "$LOG"
   SAFE=$(basename "$here")
   ST=$HOME/afb-stamps/$SAFE; mkdir -p "$ST"
   fastbuild() {  # $1 build script basename without .sh
     local s=$1 stamp=$ST/$1
     [ -f "bindings/$s.sh" ] || { echo "AFB-BUILD $s rc=missing" >> "$LOG"; return; }
-    if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$(git rev-parse HEAD)" ]; then
+    # The stamp holds "<sha> <mode>": both modes build into the same bindings/*.so.
+    if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$(git rev-parse HEAD) $MODE" ]; then
       echo "AFB-BUILD $s rc=cached" >> "$LOG"; return
     fi
     # The M3 queue's own FAST build at this head (~/mq mq.sh fbuild: core + its bindset) counts.
     local core=$HOME/mq/out/${SAFE}-fbuildb.log one=$HOME/mq/out/${SAFE}-fbuild-${s#build_}.log
-    if [ "$(cat .mq_fbuilt 2>/dev/null)" = "$HEAD" ] && [ -f "$core" ] && \
+    if [ $MODE = fast ] && [ "$(cat .mq_fbuilt 2>/dev/null)" = "$HEAD" ] && [ -f "$core" ] && \
        { [ $s = build ] || { [ -f "$one" ] && [ ! "$one" -ot "$core" ]; }; }; then
       echo "AFB-BUILD $s rc=queue-fbuild" >> "$LOG"; return
     fi
     rm -f "$stamp"
-    MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SKIP_BUILD_GATE=1 pixi run bash "bindings/$s.sh" > "$OUT/build_$s.log" 2>&1
+    # An IDENTICAL build overwrites the queue's FAST .so files: drop its FAST claim.
+    [ $MODE = identical ] && rm -f .mq_fbuilt
+    MOJOLEARN_NUMERIC_MODE=$MODE MOJOLEARN_SKIP_BUILD_GATE=1 pixi run bash "bindings/$s.sh" > "$OUT/build_$s.log" 2>&1
     local rc=$?
     echo "AFB-BUILD $s rc=$rc" >> "$LOG"
-    if [ $rc = 0 ]; then git rev-parse HEAD > "$stamp"; else grep -m 3 -B 2 -A 6 error "$OUT/build_$s.log" | cut -c1-300 >> "$LOG"; fi
+    if [ $rc = 0 ]; then echo "$(git rev-parse HEAD) $MODE" > "$stamp"; else grep -m 3 -B 2 -A 6 error "$OUT/build_$s.log" | cut -c1-300 >> "$LOG"; fi
   }
   # The bindings this batch needs, from the drivers' own lane tables.
   BUILDS=$(PYTHONPATH=$here/tools "$VP" "$here/tools/af_board_merge.py" builds "$FAM" "$PAIRS")
@@ -94,9 +107,14 @@ print(",".join(out)[:160] or "-")'; }
     L=${p%%:*} D=${p##*:}
     d=$OUT/$L-$D; rm -rf "$d"; mkdir -p "$d"
     if [ "$FAM" = trees ]; then
-      MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SPEED_ROUNDS=3 MOJOLEARN_SPEED_SIZE=shipped \
+      DD=$D  # bench_board.TREE_TASK_DATASETS
+      case $L:$D in
+        gbdt-rank-*:istella) DD=istellarank ;; gbdt-multiclass:taxi) DD=taximc ;;
+        gbdt-multiclass:istella) DD=istellamc ;; gbdt-categorical:taxi) DD=taxicat ;;
+      esac
+      MOJOLEARN_NUMERIC_MODE=$MODE MOJOLEARN_SPEED_ROUNDS=3 MOJOLEARN_SPEED_SIZE=shipped \
       MOJOLEARN_SPEED_EXPECTED_VENDOR=metal GBM_BENCH_DATA=${GBM_BENCH_DATA:-$HOME/datasets/gbm-bench} \
-      PYTHONPATH="$here/python" "$VP" -u bench/speed/forest_speed_arm.py --lane "$L" --dataset "$D" --ours-only \
+      PYTHONPATH="$here/python" "$VP" -u bench/speed/forest_speed_arm.py --lane "$L" --dataset "$DD" --ours-only \
         > "$d/race.txt" 2>&1
       line=$(python3 - "$d/race.txt" <<'EOF'
 import re, statistics, sys
@@ -122,19 +140,19 @@ EOF
         *) echo "AFB tag=$TAG family=$FAM lane=$L ds=$D status=bad-family" >> "$LOG"; continue ;;
       esac
       MOJOLEARN_BENCH_INSTALLED=0 PYTHONPATH=$here/python \
-        "$VP" $DRV race --lane "$L" --dataset "$D" --data "$DATA" --arms ours-fast \
+        "$VP" $DRV race --lane "$L" --dataset "$D" --data "$DATA" --arms $ARM \
         --rounds 3 --out "$d/res" --work "$d/work" $XARGS > "$d/race.txt" 2>&1
       rm -rf "$d/work"
-      r=$(grep -o "$PFX lane=$L dataset=$D arm=ours-fast .*" "$d/race.txt" | tail -1)
+      r=$(grep -o "$PFX lane=$L dataset=$D arm=$ARM .*" "$d/race.txt" | tail -1)
       m=$(echo "$r" | grep -o 'median_ms=[^ ]*' | cut -d= -f2)
       st=$(echo "$r" | grep -o 'status=[A-Za-z_-]*' | cut -d= -f2)
       q=$(echo "$r" | sed -n 's/.* quality=//p' | qcompact)
       g=$(grep -o 'digest=[0-9a-f]*' "$d/race.txt" | tail -1 | cut -d= -f2 | cut -c1-16)
-      runs=$(python3 - "$d/res" <<'EOF'
+      runs=$(python3 - "$d/res" "$ARM" <<'EOF'
 import glob, json, sys
 for f in glob.glob(sys.argv[1] + "/*.json"):
     try:
-        a = json.load(open(f))["arms"]["ours-fast"]
+        a = json.load(open(f))["arms"][sys.argv[2]]
         print(" ".join("%.1f" % x for x in a.get("ms") or []))
         break
     except Exception:
@@ -145,9 +163,9 @@ EOF
       [ -z "$m" ] || [ "$m" = None ] && why=" why=$(grep -E -m 1 'REFUSED|SKIPPED|Error|error' "$d/race.txt" | tr ' ' _ | cut -c1-120)"
       line="status=${st:-none} median_ms=${m:-none} runs=[$runs] digest=${g:-none} q=${q:--}$why"
     fi
-    echo "AFB tag=$TAG family=$FAM lane=$L ds=$D head=$HEAD $line" | cut -c1-390 >> "$LOG"
+    echo "AFB tag=$TAG family=$FAM lane=$L ds=$D mode=$MODE head=$HEAD $line" | cut -c1-390 >> "$LOG"
   done
-  echo "AFB-DONE tag=$TAG family=$FAM" >> "$LOG"
+  echo "AFB-DONE tag=$TAG family=$FAM mode=$MODE" >> "$LOG"
   # stdout (~/mq/out/<tag>.log, which lq log also greps) gets no AFB lines, so nothing doubles
   echo "afb done tag=$TAG pairs=$(grep -c '^AFB tag=' "$LOG") ok=$(grep -c '^AFB tag=.* status=ok ' "$LOG")"
   exit 0

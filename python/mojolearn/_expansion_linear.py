@@ -20,6 +20,7 @@ binding and on the device); every score is `x_linear_decision`. Python only
 validates, encodes labels, assigns CV folds (integers) and unpacks the flat
 float32 result. NumPy-free (NUMPY_FREE_CONTRACT.md).
 """
+import collections
 import os
 from . import _portable_math as _pm
 from . import _backend
@@ -1115,37 +1116,13 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
 # Reference: scikit-learn sklearn/linear_model/_logistic.py; kernel
 # x_linear/logcv.mojo (L-BFGS on their LinearModelLoss objective).
 
-def _stratified_kfold_ids(codes, k):
-    """scikit-learn's StratifiedKFold(n_splits=k, shuffle=False)._make_test_folds,
-    in integers: classes renumbered by first appearance, each class's rows
-    dealt to folds by the round-robin allocation of the sorted labels."""
-    n = len(codes)
-    first = {}
-    for i, c in enumerate(codes):
-        first.setdefault(c, i)
-    order = sorted(first, key=lambda c: first[c])
-    enc = {c: r for r, c in enumerate(order)}
-    y_enc = [enc[c] for c in codes]
-    K = len(order)
-    counts = [0] * K
-    for c in y_enc:
-        counts[c] += 1
-    if not isinstance(k, int) or isinstance(k, bool) or k < 2 or k > max(counts):
+def _check_stratified_folds(codes, k):
+    """cv must be an int in [2, the largest class size] (StratifiedKFold's
+    refusal). The fold ids themselves are built from the labels inside the
+    binding (x_linear/logcv.mojo `lcv_fold_table`, on the grid on a GPU)."""
+    largest = max(collections.Counter(codes).values())
+    if not isinstance(k, int) or isinstance(k, bool) or k < 2 or k > largest:
         raise ValueError("mojolearn: cv must be None or an int in [2, the largest class size]")
-    y_order = sorted(y_enc)
-    alloc = [[0] * K for _ in range(k)]
-    for i in range(k):
-        for c in y_order[i::k]:
-            alloc[i][c] += 1
-    ids = [0] * n
-    for c in range(K):
-        folds = [f for f in range(k) for _ in range(alloc[f][c])]
-        pos = 0
-        for i in range(n):
-            if y_enc[i] == c:
-                ids[i] = folds[pos]
-                pos += 1
-    return ids
 
 
 class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
@@ -1181,7 +1158,7 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         else:
             Cs = [float(c) for c in self.Cs]
         folds = 5 if self.cv is None else self.cv
-        ids = _stratified_kfold_ids(cl, folds)
+        _check_stratified_folds(cl, folds)
         has_sw = 0
         tail = []
         if sample_weight is not None or self.class_weight is not None:
@@ -1193,7 +1170,8 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
                                             None if sample_weight is None else raw)
                 fitw = [b * cw[c] for b, c in zip(raw, cl)]
             tail, has_sw = fitw + raw, 1
-        yy = Array.from_list([float(c) for c in cl] + [float(f) for f in ids] + tail, "<f4")
+        # the fold ids' slot is zeros: the binding builds them from the labels
+        yy = Array.from_list([float(c) for c in cl] + [0.0] * n + tail, "<f4")
         p = kp * (d + 1)
         nc = len(Cs)
         vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds, has_sw],

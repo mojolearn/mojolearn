@@ -89,3 +89,35 @@ def gpc_lml_fin(pdot: _P, pt2: _P, nb: Int, logdet_b: Float32) -> Float32:
     var t1 = ftz(identical_mul(Float32(-0.5), dot))
     var t3 = ftz(identical_mul(Float32(0.5), ftz(logdet_b)))
     return ftz(ftz(t1 - t2) - t3)
+
+
+def gpr_ydot_part_item(blk: Int, y: _P, dual: _P, n: Int, part: _P):
+    """GaussianProcessRegressor's `y^T alpha_` (lane/cgr-kernel): block
+    blk's fused multiply-add chain from zero, rows ascending. Was one
+    serial chain over all n on the host."""
+    var lo = blk * GPC_FOLD
+    var hi = min(lo + GPC_FOLD, n)
+    var acc = Float32(0.0)
+    for i in range(lo, hi):
+        acc = ftz(identical_mul_add(ftz(y.unsafe_load(i)), ftz(dual.unsafe_load(i)), acc))
+    part.unsafe_store(blk, acc)
+
+
+def gpr_ydot_fin(part: _P, nb: Int) -> Float32:
+    """The block partials added ascending."""
+    var acc = Float32(0.0)
+    for b in range(nb):
+        acc = ftz(acc + part.unsafe_load(b))
+    return ftz(acc)
+
+
+def gpr_ydot_host(y: _P, dual: _P, n: Int) -> Float32:
+    """The host column's `y^T alpha_`: the device's blocks and order."""
+    var nb = gpc_fold_blocks(n)
+    var parts = List[Float32](length=max(nb, 1), fill=Float32(0.0))
+    var pp = _P(unsafe_from_address=Int(parts.unsafe_ptr()))
+    for b in range(nb):
+        gpr_ydot_part_item(b, y, dual, n, pp)
+    var v = gpr_ydot_fin(pp, nb)
+    _ = parts^
+    return v

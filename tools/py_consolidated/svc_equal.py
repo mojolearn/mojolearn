@@ -4,6 +4,7 @@ random and edge inputs. Run with PYTHONPATH=<tree>/python; MOJOLEARN_VENDOR=cpu
 for the host binding. Prints one line per check and EQUAL RESULT PASS|FAIL."""
 import array, os, random, struct, sys
 from mojolearn import _svm_impl as S, _portable_math as pm
+from mojolearn.tests import _svm_reference as R
 b = S._extension()
 print("binding", getattr(b, "__name__", b), "vendor", os.environ.get("MOJOLEARN_VENDOR", "gpu"))
 bad = 0
@@ -42,7 +43,7 @@ for which, ref, nm in ((0, "exp", "pm_exp"), (1, "log", "pm_log")):
 
 # 2. SplitMix perm
 for n, seed in ((1, 0), (2, 5), (50, 3), (1000, 2**64 - 1), (4097, 0x9E3779B97F4A7C15 * 3 % 2**64), (100000, 12345)):
-    check(f"splitmix n={n}", list(S._native_perm(b, n, seed)) == S._splitmix_perm(n, seed))
+    check(f"splitmix n={n}", list(S._native_perm(b, n, seed)) == R._splitmix_perm(n, seed))
 
 # 3. Platt sigmoid_train
 for trial in range(60):
@@ -55,7 +56,7 @@ for trial in range(60):
     if trial % 11 == 0:
         labels = [1.0] * n
     try:
-        ref = S._sigmoid_train(dec, labels); rerr = None
+        ref = R._sigmoid_train(dec, labels); rerr = None
     except Exception as e:
         ref, rerr = None, type(e).__name__
     try:
@@ -89,7 +90,7 @@ for k in (2, 3, 4, 7, 10):
     ref = S.Array.from_list([[-d[r] for d in lists] for r in range(n)], "<f4").tolist()
     check(f"ovo k={k}", [[bits(v) for v in r] for r in got] == [[bits(v) for v in r] for r in ref])
     got = m._epilogue(S._EPI_OVR, dec, pairs, (n, k), "<f8").tolist()
-    ref = m._ovr_scores(lists, n)
+    ref = R.ovr_scores(m, lists, n)
     check(f"ovr k={k}", [[bits(v) for v in r] for r in got] == [[bits(v) for v in r] for r in ref])
     got = m._epilogue(S._EPI_VOTES, dec, pairs, (n,), "<i8").tolist()
     ref = []
@@ -108,10 +109,10 @@ for k in (2, 3, 4, 7, 10):
     for r in range(n):
         mm = [[0.0] * k for _ in range(k)]
         for (i, j), d, (a, bb) in zip(pairs, lists, ab):
-            v = S._sigmoid_predict(-float(d[r]), a, bb)
+            v = R._sigmoid_predict(-float(d[r]), a, bb)
             v = min(max(v, 1e-7), 1.0 - 1e-7)
             mm[i][j] = v; mm[j][i] = 1.0 - v
-        ref.append([mm[0][1], mm[1][0]] if k == 2 else S._multiclass_probability(k, mm))
+        ref.append([mm[0][1], mm[1][0]] if k == 2 else R._multiclass_probability(k, mm))
     check(f"proba k={k}", [[bits(v) for v in r] for r in got] == [[bits(v) for v in r] for r in ref])
     got = m._epilogue(S._EPI_LOG_PROBA, dec, pairs, (n, k), "<f8", ab=ab).tolist()
     refl = [[pm.log(v) for v in r] for r in ref]

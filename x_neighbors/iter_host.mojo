@@ -18,7 +18,7 @@ from x_neighbors.items import (
 from x_neighbors.host_ops import op_knn_impute_cells, X_NEIGHBORS_HOST_SABOTAGE
 from x_neighbors.items import (
     kernel_item, rowsum_item, scale_div_item, kpca_center_item, unary_item, svgp_var_item,
-    matmul_tn_acc_item, K_RBF, U_IDENTITY,
+    K_RBF, U_IDENTITY,
 )
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
@@ -356,83 +356,54 @@ def _scaled_rbf_rows(q: FP, z: FP, kp: FP, ksp: FP, rows: Int, m: Int, d: Int, g
     _cells(f, rows * m)
 
 
-def op_svgp_stats(
-    x: Int, z: Int, y: Int, bmat: Int, bvec: Int, n: Int, m: Int, d: Int, gamma: Float32, variance: Float32,
+def op_svgp_fit_ff(
+    x: Int, z: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int, n: Int, m: Int, d: Int,
+    gamma: Float32, variance: Float32, noise: Float32, jitter: Float32, kdiag: Float32,
 ) raises:
-    var tr = _tile_rows(n, m)
+    """The device op's chain on the host: Kuu, the float-float statistics
+    over the same tiles, cells and order, then the same solve items."""
+    var mm = m * m
+    var tr = max(_tile_rows(n, m), m)
     var kb = List[Float32](length=max(tr * m, 1), fill=Float32(0))
     var ksb = List[Float32](length=max(tr * m, 1), fill=Float32(0))
+    var kuub = List[Float32](length=max(mm, 1), fill=Float32(0))
+    var bhb = List[Float32](length=max(mm, 1), fill=Float32(0))
+    var blb = List[Float32](length=max(mm, 1), fill=Float32(0))
+    var vhb = List[Float32](length=max(m, 1), fill=Float32(0))
+    var vlb = List[Float32](length=max(m, 1), fill=Float32(0))
     var kp = FP(unsafe_from_address=Int(kb.unsafe_ptr()))
     var ksp = FP(unsafe_from_address=Int(ksb.unsafe_ptr()))
-    var bp = FP(unsafe_from_address=bmat)
-    var bvp = FP(unsafe_from_address=bvec)
-    for t in range(m * m):
-        bp.unsafe_store(t, Float32(0))
-    for t in range(m):
-        bvp.unsafe_store(t, Float32(0))
+    var kuup = FP(unsafe_from_address=Int(kuub.unsafe_ptr()))
+    var bhp = FP(unsafe_from_address=Int(bhb.unsafe_ptr()))
+    var blp = FP(unsafe_from_address=Int(blb.unsafe_ptr()))
+    var vhp = FP(unsafe_from_address=Int(vhb.unsafe_ptr()))
+    var vlp = FP(unsafe_from_address=Int(vlb.unsafe_ptr()))
+    var zp = FP(unsafe_from_address=z)
+    if mm > 0:
+        _scaled_rbf_rows(zp, zp, kp, kuup, m, m, d, gamma, variance)
+    var tile = _tile_rows(n, m)
     var r0 = 0
     while r0 < n:
-        var rows = min(tr, n - r0)
-        _scaled_rbf_rows(FP(unsafe_from_address=x) + r0 * d, FP(unsafe_from_address=z), kp, ksp, rows, m, d, gamma,
-                         variance)
-        var yp = FP(unsafe_from_address=y) + r0
-
-        def bb(t: Int) {imm ksp, imm bp, imm rows, imm m}:
-            matmul_tn_acc_item(t, ksp, ksp, bp, rows, m, m)
-        _cells(bb, m * m)
-        for t in range(m):
-            matmul_tn_acc_item(t, ksp, yp, bvp, rows, m, 1)
-        r0 += rows
-    _hsab(bmat, m * m)
-    _ = kb^
-    _ = ksb^
-
-
-def op_svgp_stats_ff(
-    x: Int, z: Int, y: Int, bh: Int, bl: Int, bvh: Int, bvl: Int, n: Int, m: Int, d: Int, gamma: Float32,
-    variance: Float32,
-) raises:
-    """The device op's float-float statistics on the host: the same tiles, cells and order."""
-    var tr = _tile_rows(n, m)
-    var kb = List[Float32](length=max(tr * m, 1), fill=Float32(0))
-    var ksb = List[Float32](length=max(tr * m, 1), fill=Float32(0))
-    var kp = FP(unsafe_from_address=Int(kb.unsafe_ptr()))
-    var ksp = FP(unsafe_from_address=Int(ksb.unsafe_ptr()))
-    var bhp = FP(unsafe_from_address=bh)
-    var blp = FP(unsafe_from_address=bl)
-    var vhp = FP(unsafe_from_address=bvh)
-    var vlp = FP(unsafe_from_address=bvl)
-    for t in range(m * m):
-        bhp.unsafe_store(t, Float32(0))
-        blp.unsafe_store(t, Float32(0))
-    for t in range(m):
-        vhp.unsafe_store(t, Float32(0))
-        vlp.unsafe_store(t, Float32(0))
-    var r0 = 0
-    while r0 < n:
-        var rows = min(tr, n - r0)
-        _scaled_rbf_rows(FP(unsafe_from_address=x) + r0 * d, FP(unsafe_from_address=z), kp, ksp, rows, m, d, gamma,
-                         variance)
+        var rows = min(tile, n - r0)
+        _scaled_rbf_rows(FP(unsafe_from_address=x) + r0 * d, zp, kp, ksp, rows, m, d, gamma, variance)
         var yp = FP(unsafe_from_address=y) + r0
 
         def bb(t: Int) {imm ksp, imm bhp, imm blp, imm rows, imm m}:
             matmul_tn_acc_ff_item(t, ksp, ksp, bhp, blp, rows, m, m)
-        _cells(bb, m * m)
+        _cells(bb, mm)
         for t in range(m):
             matmul_tn_acc_ff_item(t, ksp, yp, vhp, vlp, rows, m, 1)
         r0 += rows
-    _ = kb^
-    _ = ksb^
-
-
-def op_svgp_ff(
-    kuu: Int, bh: Int, bl: Int, bvh: Int, bvl: Int, y: Int, alpha: Int, cmat: Int, qmu: Int, qsqrt: Int, info: Int,
-    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
-) raises:
-    svgp_ff_solve(FP(unsafe_from_address=kuu), FP(unsafe_from_address=bh), FP(unsafe_from_address=bl),
-                  FP(unsafe_from_address=bvh), FP(unsafe_from_address=bvl), FP(unsafe_from_address=y),
+    svgp_ff_solve(kuup, bhp, blp, vhp, vlp, FP(unsafe_from_address=y),
                   FP(unsafe_from_address=alpha), FP(unsafe_from_address=cmat), FP(unsafe_from_address=qmu),
                   FP(unsafe_from_address=qsqrt), FP(unsafe_from_address=info), m, n, noise, jitter, kdiag)
+    _ = kb^
+    _ = ksb^
+    _ = kuub^
+    _ = bhb^
+    _ = blb^
+    _ = vhb^
+    _ = vlb^
 
 
 def op_svgp_predict(

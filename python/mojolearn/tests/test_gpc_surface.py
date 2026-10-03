@@ -29,7 +29,8 @@ from pathlib import Path
 import mojolearn as ml
 from mojolearn import _backend, host_surface
 from mojolearn._cpu_reference import reference_training
-from mojolearn._gpc_impl import GaussianProcessClassifier, HostGaussianProcessClassifier
+from mojolearn._gpc_impl import GaussianProcessClassifier
+from mojolearn._classical_host import HostGaussianProcessClassifier
 
 ROOT = Path(__file__).resolve().parents[3]
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
