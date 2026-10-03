@@ -37,8 +37,23 @@ comptime IP = MutPointer[Int32, MutAnyOrigin]
 
 
 @always_inline
+def _nc_key(v: Float32) -> Int32:
+    """The value's order as an integer: ascending float order on the word's
+    bits, both zeros one key (as a float compare). An integer compare,
+    because a float compare on the Apple GPU reads a subnormal operand as
+    zero, so subnormals tied there and sorted by row while every other
+    target sorted them by value (x-neighbors-nearest-centroid/denormal
+    manhattan, the 0.8.36 reference recording)."""
+    var b = bitcast[DType.int32](v)
+    if (b & Int32(0x7FFFFFFF)) == 0:
+        return Int32(0)
+    return b ^ Int32(0x7FFFFFFF) if b < 0 else b
+
+
+@always_inline
 def _nc_less(a: Int, b: Int, x: FP, lab: IP, n: Int, d: Int, f: Int) -> Bool:
-    """Key order (class, value, row); the padding row id n sorts last."""
+    """Key order (class, value, row); the padding row id n sorts last. The
+    value compares by `_nc_key`, never as floats."""
     if a == n:
         return False
     if b == n:
@@ -47,8 +62,8 @@ def _nc_less(a: Int, b: Int, x: FP, lab: IP, n: Int, d: Int, f: Int) -> Bool:
     var lb = lab.unsafe_load(b)
     if la != lb:
         return la < lb
-    var va = x.unsafe_load(a * d + f)
-    var vb = x.unsafe_load(b * d + f)
+    var va = _nc_key(x.unsafe_load(a * d + f))
+    var vb = _nc_key(x.unsafe_load(b * d + f))
     if va != vb:
         return va < vb
     return a < b
