@@ -1,0 +1,207 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""lane/apple-fast-tsa (2026-10-02): the FAST ARIMA fit's evaluation
+workspace, allocated ONCE per solve (`-D MOJOLEARN_ARIMA_FAST_EVAL_WS=1`).
+
+THE CAUSE. `eval_batch_device`'s stacked arm (`arima/impl/batched_fit.mojo`,
+the evaluation `batched_min_lbfgs` makes at every candidate point of the
+device L-BFGS, hundreds of times per fit) allocates at every call: `y_ext`
+((N + 1) x batch_size series, the input replicated N + 1 times through
+N + 1 device copies), `x_ext` (N + 1 copies of the candidates), `p_ext`
+and `loglike_ws_packed`'s `t_params` (7 buffers each) and a
+`KalmanWorkspace` (26 buffers), then issues N `perturb_kernel` launches, N
+`grad_kernel` launches, the card's `P0` / `alpha0` copies, and WAITS once
+so the workspace can be released. About 45 buffer creations, 2 (N + 1)
+copies and 2N + 5 launches per evaluation on a batch whose Kalman pass is
+320 threads of 2,000 steps (the board's 64 ARMA(1,1) series): the
+evaluation is allocator and launch time, not filter time.
+
+THE CHANGE. `FastEvalWS` holds every buffer for the solve; `eval` issues
+ONE stacking kernel (`ew_stack_kernel`: member m of series b is the
+candidate, member m >= 1 perturbed at parameter m - 1 with
+`perturb_kernel`'s statement), `unpack`, the Jones transform,
+`fast_kalman_into` (the filter's three launches into the held workspace),
+then main's `arima_mark_infeasible_kernel`, ONE gradient kernel
+(`grad_kernel`'s statement over every (parameter, series)), the
+`d_x_pert = d_x` copy and `arima_eval_finish_kernel`, exactly the stacked
+arm's tail. Nothing is read back and nothing waits: the results stay in the
+optimizer's device buffers as the stacked arm leaves them. The per-element
+arithmetic is `perturb_kernel`'s, `grad_kernel`'s and the filter's, so the
+log-likelihood and gradient bits are the stacked arm's; the batch
+composition and launch geometry are unchanged.
+
+FAST on Apple only; nothing here is launched or instantiated in any other
+build (`eval`'s body exists only under KALMAN_FAST_EVAL_WS)."""
+
+from max.gpu.host import DeviceBuffer, DeviceContext
+from std.gpu import block_dim, block_idx, thread_idx
+
+from arima.impl.batched_kalman import (
+    KALMAN_FAST_EVAL_WS,
+    KalmanWorkspace,
+    fast_kalman_into,
+)
+from arima.impl.lbfgs_device import (
+    LBFGS_TPB,
+    arima_eval_finish_kernel,
+    arima_mark_infeasible_kernel,
+)
+from arima.impl.timeSeries.arima_helpers import batched_jones_transform
+from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validate_order
+from checks.numerics import ftz
+
+comptime EW_TPB = 128
+
+
+def ew_stack_kernel(
+    x_ext: MutPointer[Float32, MutAnyOrigin],
+    d_x: MutPointer[Float32, MutAnyOrigin],
+    batch_size_in: Int32,
+    N_in: Int32,
+    h: Float32,
+):
+    """One thread per (member m, series b): block m of `x_ext` is `d_x`;
+    for m >= 1 parameter m - 1 is `ftz(ftz(x) + h)` (`perturb_kernel`,
+    `batched_arima.mojo`), the others the copy."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var B = Int(batch_size_in)
+    var N = Int(N_in)
+    if t >= (N + 1) * B:
+        return
+    var m = t // B
+    var b = t - m * B
+    var src = N * b
+    var dst = m * (N * B) + N * b
+    for i in range(N):
+        var v = d_x.unsafe_load(src + i)
+        if i == m - 1:
+            v = ftz(ftz(v) + h)
+        x_ext.unsafe_store(dst + i, v)
+
+
+def ew_grad_kernel(
+    d_grad: MutPointer[Float32, MutAnyOrigin],
+    d_ll: MutPointer[Float32, MutAnyOrigin],
+    batch_size_in: Int32,
+    N_in: Int32,
+    h: Float32,
+):
+    """One thread per (parameter i, series b): `grad_kernel`'s
+    `(ll_pert - ll_base) / h` with member i + 1's log-likelihood."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var B = Int(batch_size_in)
+    var N = Int(N_in)
+    if t >= N * B:
+        return
+    var i = t // B
+    var b = t - i * B
+    var diff = ftz(ftz(d_ll.unsafe_load((i + 1) * B + b)) - ftz(d_ll.unsafe_load(b)))
+    d_grad.unsafe_store(N * b + i, ftz(diff / h))
+
+
+struct FastEvalWS(Movable):
+    """Every buffer of one stacked evaluation, sized for `nb` series. The
+    optimizer holds one in an `Optional` that is `None` when the switch is
+    off (`training/byte_lm_logits.mojo`'s `Optional[ByteLogitsScratch]`
+    shape), so nothing here is allocated in any other build."""
+
+    var nb: Int
+    var n_obs: Int
+    var N: Int
+    var eb: Int
+    var y_ext: DeviceBuffer[DType.float32]
+    var x_ext: DeviceBuffer[DType.float32]
+    var p_ext: ARIMAParams
+    var t_params: ARIMAParams
+    var ws: KalmanWorkspace
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        mut d_y: DeviceBuffer[DType.float32],
+        nb: Int,
+        n_obs: Int,
+        order: ARIMAOrder,
+    ) raises:
+        """`d_y` holds the `nb` series (contiguous, `nb * n_obs`); it is
+        replicated N + 1 times here, once per solve."""
+        var N = order.complexity()
+        var M1 = N + 1
+        var eb = M1 * nb
+        var nb_y = nb * n_obs
+        var y_ext = ctx.enqueue_create_buffer[DType.float32](max(1, eb * n_obs))
+        for m in range(M1):
+            ctx.enqueue_copy(
+                dst_buf=y_ext.create_sub_buffer[DType.float32](m * nb_y, nb_y),
+                src_buf=d_y.create_sub_buffer[DType.float32](0, nb_y),
+            )
+        var x_ext = ctx.enqueue_create_buffer[DType.float32](max(1, eb * N))
+        var p_ext = ARIMAParams(ctx, order, eb)
+        var t_params = ARIMAParams(ctx, order, eb)
+        var ws = KalmanWorkspace(ctx, order, eb, n_obs, 0)
+        ctx.synchronize()
+        self.nb = nb
+        self.n_obs = n_obs
+        self.N = N
+        self.eb = eb
+        self.y_ext = y_ext^
+        self.x_ext = x_ext^
+        self.p_ext = p_ext^
+        self.t_params = t_params^
+        self.ws = ws^
+
+    def eval(
+        mut self,
+        ctx: DeviceContext,
+        order: ARIMAOrder,
+        h: Float32,
+        scale: Float32,
+        mut d_x: DeviceBuffer[DType.float32],
+        mut d_grad: DeviceBuffer[DType.float32],
+        mut d_x_pert: DeviceBuffer[DType.float32],
+        mut d_f: DeviceBuffer[DType.float32],
+        mut d_g: DeviceBuffer[DType.float32],
+        mut d_bad: DeviceBuffer[DType.int32],
+    ) raises:
+        """`eval_batch_device`'s stacked arm at the candidates in `d_x`, on
+        the held buffers: `d_f` / `d_g` / `d_bad` are written as that arm
+        writes them, `d_x_pert` ends equal to `d_x`, nothing is read back
+        and nothing waits."""
+        comptime if not KALMAN_FAST_EVAL_WS:
+            raise Error("FastEvalWS.eval: not compiled in this build (MOJOLEARN_ARIMA_FAST_EVAL_WS)")
+        else:
+            var nb = self.nb
+            var N = self.N
+            var eb = self.eb
+            var nb_x = nb * N
+            var grid = (nb + LBFGS_TPB - 1) // LBFGS_TPB
+            ctx.enqueue_memset(d_bad, Int32(0))
+            var g1 = (eb + EW_TPB - 1) // EW_TPB
+            ctx.enqueue_function[ew_stack_kernel](
+                self.x_ext.unsafe_ptr(), d_x.unsafe_ptr(), Int32(nb), Int32(N), h,
+                grid_dim=(g1, 1, 1), block_dim=(EW_TPB, 1, 1),
+            )
+            unpack(ctx, self.p_ext, order, eb, self.x_ext)
+            validate_order(order)
+            batched_jones_transform(ctx, order, eb, False, self.p_ext, self.t_params)
+            fast_kalman_into(ctx, self.y_ext, self.t_params, order, eb, self.n_obs, self.ws, 32)
+            ctx.enqueue_function[arima_mark_infeasible_kernel](
+                d_bad.unsafe_ptr(), self.ws.loglike.unsafe_ptr(), self.ws.info_init.unsafe_ptr(),
+                self.ws.info_loop.unsafe_ptr(), Int32(nb), Int32(N + 1),
+                grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
+            )
+            var g2 = (nb_x + EW_TPB - 1) // EW_TPB
+            ctx.enqueue_function[ew_grad_kernel](
+                d_grad.unsafe_ptr(), self.ws.loglike.unsafe_ptr(), Int32(nb), Int32(N), h,
+                grid_dim=(g2, 1, 1), block_dim=(EW_TPB, 1, 1),
+            )
+            # the caller's scratch ends equal to d_x, as the sequential form leaves it
+            ctx.enqueue_copy(
+                dst_buf=d_x_pert.create_sub_buffer[DType.float32](0, nb_x),
+                src_buf=d_x.create_sub_buffer[DType.float32](0, nb_x),
+            )
+            ctx.enqueue_function[arima_eval_finish_kernel](
+                d_f.unsafe_ptr(), d_g.unsafe_ptr(), self.ws.loglike.unsafe_ptr(),
+                d_grad.unsafe_ptr(), d_bad.unsafe_ptr(), Int32(nb), Int32(N), scale,
+                grid_dim=(grid, 1, 1), block_dim=(LBFGS_TPB, 1, 1),
+            )

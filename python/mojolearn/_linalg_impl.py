@@ -1238,23 +1238,6 @@ def qr(a, mode="r"):
     return out
 
 
-def _from_triangle(a_arr, n, uplo):
-    """The symmetric matrix numpy's eigh reads: the lower (UPLO='L') or upper
-    ('U') triangle mirrored across the diagonal. Pure data movement (strided
-    copies of float32 words), so every column sees the same bytes."""
-    import array as _array
-    from ._buffer import frombytes
-    s = _array.array("f")
-    s.frombytes(a_arr.tobytes())
-    out = _array.array("f", s)
-    for i in range(n):
-        if uplo == "L":   # row i right of the diagonal := column i below it
-            out[i * n + i + 1:(i + 1) * n] = s[(i + 1) * n + i::n]
-        else:             # row i left of the diagonal := column i above it
-            out[i * n:i * n + i] = s[i:i * n:n]
-    return frombytes(out.tobytes(), "<f4", (n, n))
-
-
 def eigh(a, UPLO="L"):
     """`numpy.linalg.eigh(a, UPLO)`: eigenvalues ASCENDING and their vectors.
 
@@ -1303,7 +1286,6 @@ def eigh(a, UPLO="L"):
         )
     if UPLO not in ("L", "U"):
         raise ValueError("mojolearn.linalg.eigh: UPLO argument must be 'L' or 'U'")
-    a_arr = _from_triangle(a_arr, rows, UPLO)
     # lane fix-eigh-main (2026-10-02): x_decomp's eigh, the round-robin
     # Jacobi (x_decomp/jacobi_par.mojo, the pinned order of x_decomp/rr.mojo:
     # n/2 independent rotations per round, one thread per updated cell; the
@@ -1313,7 +1295,10 @@ def eigh(a, UPLO="L"):
     # (grid_dim=(1, 1, 1)), which never finished n = 4096 on the L40S inside
     # the board's 2400 s (0.8.34 board: 1,984 s). `svd(hermitian=True)`
     # already took this route.
-    w, v = _xd_kit().eigh(_xd_matrix(a_arr, rows, rows))
+    # cgr-decomp (2026-10-03): the triangle is mirrored by the binding, on
+    # the device where there is one (`sym_from_triangle_kernel`), not by a
+    # host loop over the rows
+    w, v = _xd_kit().eigh(_xd_matrix(a_arr, rows, rows), uplo=1 if UPLO == "L" else 2)
     return w.out((rows,)), v.out()
 
 
@@ -1483,8 +1468,7 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
     if hermitian:
         if rows != cols:
             raise ValueError("mojolearn.linalg.svd: hermitian=True needs a square matrix")
-        sym = _xd_matrix(_from_triangle(a_arr, rows, "L"), rows, rows)
-        w, v = k.eigh(sym)
+        w, v = k.eigh(A, uplo=1)
         # numpy: argsort(|w|) (ascending) reversed, so equal magnitudes come
         # higher index first
         order = sorted(range(rows), key=lambda j: (abs(w.s[j]), j))[::-1]
