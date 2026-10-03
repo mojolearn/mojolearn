@@ -30,7 +30,12 @@ def _fixture(n=6000, d=12, seed=7):
     rng = np.random.default_rng(seed)
     X = rng.standard_normal((n, d)).astype(np.float32)
     w = rng.standard_normal(d).astype(np.float32)
-    y = (X @ w + 0.5 * rng.standard_normal(n)).astype(np.float32)
+    # No BLAS: X @ w rounds differently per platform BLAS, which would make the
+    # fixture (not the fit) differ between boxes. Column-ordered float64 adds.
+    acc = np.zeros(n, dtype=np.float64)
+    for j in range(d):
+        acc += X[:, j].astype(np.float64) * float(w[j])
+    y = (acc + 0.5 * rng.standard_normal(n)).astype(np.float32)
     sw = rng.uniform(0.2, 3.0, n).astype(np.float32)
     sw[rng.random(n) < 0.05] = 0.0  # some zero weights (isotonic drops them)
     return X, y, sw
