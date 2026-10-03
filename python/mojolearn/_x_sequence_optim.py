@@ -186,7 +186,7 @@ class _SeqOptimizer(_ResidentState):
         # empty tensors hold nothing to move or update
         keep = [k for k, p in enumerate(self.params) if p.size > 0]
         ps = [self.params[k] for k in keep]
-        b.optimizer_resident_step([p.ctypes.data for p in ps] + [gs[k].ctypes.data for k in keep]
+        b.optimizer_resident_step(self._res, [p.ctypes.data for p in ps] + [gs[k].ctypes.data for k in keep]
                                   + [self._sc.ctypes.data],
                                   [len(ps), self._kind, self._flags, self.t, self._sc_t]
                                   + [int(p.size) for p in ps], fp)
@@ -450,7 +450,7 @@ class LAMB(_SeqOptimizer):
                     self._res, self._res_b, self._res_used = int(h), b, int(used)
                     self._host_owned = True
                 self._res_upload()
-                b.lamb_resident_step([p.ctypes.data for p in self.params] + [x.ctypes.data for x in gs]
+                b.lamb_resident_step(self._res, [p.ctypes.data for p in self.params] + [x.ctypes.data for x in gs]
                                      + [self._sc.ctypes.data], [len(self.params), self.t, self.flags], fp)
             except BaseException:
                 self.t -= 1
