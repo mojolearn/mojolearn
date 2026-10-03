@@ -2060,11 +2060,25 @@ def _logdet(k, A):
 
 def _polar(k, A):
     """U V^T of the SVD of a square A, and the sum of its singular values:
-    A V S^-1 V^T through the eigh of A^T A."""
+    A V S^-1 V^T through the eigh of A^T A.
+
+    A is first scaled by a power of two, 2^-e with 2^(e-1) <= max|A| < 2^e,
+    and the singular-value sum scaled back by 2^e. The polar factor is
+    scale-invariant and a power-of-two scale is exact, so a finite A^T A
+    gives the same words as before; what changes is that A^T A can no longer
+    overflow. Varimax on large loadings (FactorAnalysis on the identity
+    reference's `wide` fixture, columns up to 1e4) cubed them into an A whose
+    A^T A was inf in float32, and eigh refused it (DEVIATION 590) on every
+    column. A is n_components x n_components: the max is a k x k host read."""
+    m = max((abs(float(v)) for v in A.s), default=0.0)
+    # clamped so 2^-e stays a normal float32 in the device's scale
+    e = max(-120, min(120, math.frexp(m)[1])) if m > 0.0 and math.isfinite(m) else 0
+    if e:
+        A = k.ew("scale", A, s=math.ldexp(1.0, -e))
     w, V = k.eigh(k.mm(A, A, ta=True))
     sv = k.ew("sqrt", w)
     AV = k.ew("div", k.mm(A, V), sv)
-    return k.mm(AV, V, tb=True), k.total(sv).s[0]
+    return k.mm(AV, V, tb=True), math.ldexp(k.total(sv).s[0], e)
 
 
 def _ortho_rotation(k, C, method, tol=1e-6, max_iter=100):
@@ -3877,7 +3891,6 @@ class MDS(_Base):
         b.x_decomp_argsort_f32(dis_w.buffer_info()[0], m, xorder.buffer_info()[0])
         ir = _xlin.IsotonicRegression(out_of_bounds="clip", numeric_mode=self.numeric_mode_)
         lin = ir._bind(_xlin._BINDING)
-        ones = array.array("f", [1.0]) * m
 
         def call(algo, X, Y, rows, ip, fp, n_out, n_fw, n_iw):
             # _expansion_linear._run's one x_linear_fit call, its parameter
@@ -3905,9 +3918,14 @@ class MDS(_Base):
                 b.x_decomp_gather(dis_w.buffer_info()[0], ob, m, xa.buffer_info()[0])
                 yy = array.array("f", [0.0]) * m
                 b.x_decomp_gather(ds.buffer_info()[0], ob, m, yy.buffer_info()[0])
-                yy.extend(ones)
-                # IsotonicRegression(out_of_bounds='clip').fit(dis_w, ds): increasing, no bounds
-                vals = call(_xlin.ALGO_ISOTONIC, xa, yy, m, [1, 0, 0], [0.0, 0.0], 3 + 2 * m, 3 * m, m)
+                # IsotonicRegression(out_of_bounds='clip').fit(dis_w, ds): increasing, no bounds,
+                # no sample_weight. The ABI of IsotonicRegression.fit since lane/neural-pass70:
+                # ip [increasing, has_y_min, has_y_max, has_weights], float work 6 m, int work
+                # 3 m. This call still passed the old 3 flags and 3 m / m work words, so the
+                # binding read ip[3] past the list and wrote past both work buffers: NaN
+                # thresholds on every device column ("y contains NaN or infinity", refcol
+                # smoke at 811275d5b) and the host column's heap.
+                vals = call(_xlin.ALGO_ISOTONIC, xa, yy, m, [1, 0, 0, 0], [0.0, 0.0], 3 + 2 * m, 6 * m, 3 * m)
                 kk = int(vals[0])
                 thr = vals[3:3 + kk] + vals[3 + m:3 + m + kk]
                 # .transform(dis_w): clip, the thresholds and bounds above

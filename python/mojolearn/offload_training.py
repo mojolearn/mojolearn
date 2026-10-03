@@ -2,7 +2,7 @@
 """Memory-bounded single-GPU replay of ordered byte-LM checkpoints."""
 import threading
 
-from .parallel_training import ParallelByteLanguageModelTrainer
+from .parallel_training import ParallelByteLanguageModelTrainer, _missing_entry
 from ._byte_lm_impl import _load, _validate_state
 from ._byte_lm_config import state_shape
 from ._buffer import addr_ro
@@ -15,7 +15,7 @@ class _OffloadBinding:
         for name in ('create', 'open', 'close', 'step', 'export', 'rollback'):
             function = getattr(binding, 'byte_lm_offload_' + name, None)
             if not callable(function):
-                raise ImportError('rebuild bindings/build_byte_lm.sh for offloaded replay')
+                raise _missing_entry('byte_lm_offload', 'offloaded replay')
             setattr(self, 'byte_lm_parallel_' + name, function)
 
 

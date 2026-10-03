@@ -1291,6 +1291,24 @@ NON_SIZE_REVISIONS = {
 #: explicitly and is never filtered, so the two-device par legs and the CPU
 #: identity gate are unaffected.
 RECORD_EXCLUDED_PREFIXES = ("par-",)
+#: The declared sentence of a cooperative multi-GPU driver's CPU refusal
+#: (python/mojolearn/_parallel_pool.py `_cpu_refusal`; tools/algos_lane_check.py
+#: reads the same words).
+CPU_BY_DESIGN_REFUSAL = "no CPU implementation of the cooperative multi-GPU driver"
+#: The train value of a `par-*` cell on the CPU column whose driver refused
+#: by design (2026-10-03, lane fix-cpu-column): an N/A, not a REFUSED, so a
+#: host column's refusal list holds only what should have run. The cell keeps
+#: the refusal in `error`; the verifier never admits a train n/a as a
+#: reference (`_verify_reference._reference_value`), and `verify` on a CPU
+#: install does not select `par-*` lanes (host_surface.comparable_lanes).
+CPU_BY_DESIGN_NA = "n/a:cpu-by-design (a cooperative multi-GPU driver has no CPU implementation)"
+
+
+def cpu_by_design(name, err, vendor):
+    """True for a `par-*` lane's train refusal on the CPU column that is the
+    cooperative driver's declared by-design sentence."""
+    return (vendor == "cpu" and name.startswith(RECORD_EXCLUDED_PREFIXES)
+            and bool(err) and CPU_BY_DESIGN_REFUSAL in err)
 
 
 def record_excluded_lanes():
@@ -12079,7 +12097,11 @@ def _run_reference(args):
                         errs4.append(_clip_error(err4, f"{name}/{f} rlpair"))
                         if args.verbose:
                             print(err4)
-            if err:
+            if err and cpu_by_design(name, err, ml.vendor()):
+                cell = dict(verdict="N/A", error=_clip_error(err, f"{name}/{f} train"),
+                            hashes=[CPU_BY_DESIGN_NA] * max(len(hs), 1), parts=parts)
+                shown = "N/A"
+            elif err:
                 cell = dict(verdict="REFUSED", error=_clip_error(err, f"{name}/{f} train"),
                             hashes=hs, parts=parts)
                 shown = "REFUSED"
@@ -12551,13 +12573,16 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
     print(f"|{'-'*30}|{'-'*12}|" + "|".join("-" * 18 for _ in names) + "|")
     bad, counts = 0, {}
     for k in keys:
-        vals, shown = [], []
+        vals, shown, na_seen = [], [], False
         for _, j in cols:
             c = j["cells"].get(k)
             if c is None:
                 shown.append("(not run)"); continue
             if c["verdict"] == "REFUSED":
                 shown.append("REFUSED"); continue
+            if c["verdict"] == "N/A":
+                # a by-design CPU refusal (CPU_BY_DESIGN_NA): no hash to compare
+                shown.append("N/A"); na_seen = True; continue
             if c["verdict"] in ("MOVED", "DIVERGENT"):
                 shown.append(c["verdict"]); vals.append(c["verdict"]); continue
             shown.append(c["hashes"][0]); vals.append(c["hashes"][0])
@@ -12567,7 +12592,7 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
         elif "MOVED" in ran:
             verdict = "MOVED"
         elif len(ran) < 2:
-            verdict = "ONE-COLUMN" if len(ran) == 1 else "REFUSED"
+            verdict = "ONE-COLUMN" if len(ran) == 1 else ("N/A" if na_seen else "REFUSED")
         elif len(set(ran)) == 1:
             verdict = f"IDENTICAL x{len(ran)}"
         else:

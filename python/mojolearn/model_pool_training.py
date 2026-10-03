@@ -2,7 +2,7 @@
 """Layer-partitioned byte-LM training with ordered microbatch replay."""
 import threading
 
-from .parallel_training import ParallelByteLanguageModelTrainer
+from .parallel_training import ParallelByteLanguageModelTrainer, _missing_entry
 from ._byte_lm_impl import SmallByteLanguageModelTrainer, _validate_state
 from ._byte_lm_config import state_shape
 from ._buffer import addr_ro
@@ -15,7 +15,7 @@ class _ModelPoolBinding:
         for name in ('create', 'open', 'close', 'step', 'export', 'rollback', 'ownership'):
             function = getattr(binding, 'byte_lm_model_pool_' + name, None)
             if not callable(function):
-                raise ImportError('rebuild bindings/build_byte_lm.sh for model pooling')
+                raise _missing_entry('byte_lm_model_pool', 'model pooling')
             setattr(self, 'byte_lm_parallel_' + name, function)
 
 
