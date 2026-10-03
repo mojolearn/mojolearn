@@ -971,6 +971,23 @@ def _xd_kit():
     return _Kit("identical")
 
 
+def _fast_apple_kit(switch):
+    """lane/apple-fast-decomp-linalg (2026-10-02): the FAST x_decomp kit for
+    one public linalg door, or None (the IDENTICAL kit stands). Three
+    conditions: the process tier is FAST (`_backend.default_mode()`), the
+    FAST x_decomp binding is a Metal build, and it was built with
+    `-D <switch>` (`_kit_fast_define`; no env read). The public doors otherwise always run the
+    IDENTICAL x_decomp cells, FAST tier or not (`_xd_kit`), which is why
+    the FAST-only device routes behind these switches were unreachable
+    from the board's qr / svd / eigh lanes."""
+    from . import _backend
+    if _backend.default_mode() != "fast":
+        return None
+    from ._expansion_decomp import _Kit, _kit_fast_define
+    k = _Kit("fast")
+    return k if _kit_fast_define(k, switch) else None
+
+
 def _xd_matrix(a_arr, rows, cols):
     import array as _array
     from ._expansion_decomp import _M
@@ -1136,10 +1153,18 @@ def _qr_q(a, mode):
     lane's sliced order (x_decomp/qr_sliced.mojo, DEVIATION 5320;
     lane/algos-decomp, 2026-09-27; sliced by lane hr-qr, 2026-10-02). Any shape, wide included."""
     a_arr, rows, cols = _two_d(a, "a")
-    if mode == "reduced" and _tsqr_on(rows, cols):
+    # -D MOJOLEARN_QR_FAST_DEV (lane/apple-fast-decomp-linalg, 2026-10-02, FAST
+    # on Apple only): the FAST x_decomp kit, whose DevExec.geqrf / orgqr then
+    # take the grid-fold device route of x_decomp/fast_qr.mojo (the same define
+    # there), ahead of the blocked TSQR. The A/B arm is that route
+    # against main's TSQR (lane neural-pass140, the default here), which
+    # replaced the host walk this switch was first written against
+    # (xd_qr_on_host, removed by lane hr-qr).
+    kf = _fast_apple_kit("MOJOLEARN_QR_FAST_DEV")
+    if kf is None and mode == "reduced" and _tsqr_on(rows, cols):
         return _qr_tsqr(a_arr, rows, cols)
-    k = _xd_kit()
-    h, tau = _qr_q_factor(a_arr, rows, cols)
+    k = kf or _xd_kit()
+    h, tau = k.geqrf(_xd_matrix(a_arr, rows, cols))
     kk = min(rows, cols)
     if mode == "raw":
         # numpy returns geqrf's Fortran-ordered array seen in C order: the
@@ -1427,9 +1452,18 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
     a_arr, rows, cols = _two_d(a, "a")
     if not compute_uv:
         return svdvals(a_arr)
-    if not hermitian and not full_matrices and _tsqr_on(rows, cols):
+    # -D MOJOLEARN_SVD_FAST_CHOLQR (lane/apple-fast-decomp-linalg, 2026-10-02,
+    # FAST on Apple only): the FAST x_decomp kit on the whole-matrix route
+    # below (`_svd_tall`: k.svd, A V / s, orth_diag), whose `orth_diag` then
+    # takes the CholeskyQR2 route of x_decomp/device.mojo orth_on_device_diag
+    # (the same define there) instead of two sliced Householder passes.
+    # The A/B arm is that route against main's blocked TSQR (`_svd_tsqr`,
+    # lane neural-pass140, the default here: one TSQR pass, the SVD of its
+    # R, U = Q U_R in one more pass), which the switch bypasses.
+    kf = _fast_apple_kit("MOJOLEARN_SVD_FAST_CHOLQR")
+    if kf is None and not hermitian and not full_matrices and _tsqr_on(rows, cols):
         return _svd_tsqr(a_arr, rows, cols)
-    k = _xd_kit()
+    k = kf or _xd_kit()
     A = _xd_matrix(a_arr, rows, cols)
     if hermitian:
         if rows != cols:

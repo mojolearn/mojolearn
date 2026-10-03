@@ -7,8 +7,9 @@ same names, so the GPU binding and the CPU host binding share the address
 contract by construction. Every address is a host buffer the caller owns."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from std.sys.compile import is_defined
 
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.kit import mat_from
@@ -730,3 +731,30 @@ def numeric_mode_py() raises -> PythonObject:
 
 def vendor_py[E: Exec]() raises -> PythonObject:
     return PythonObject(E.vendor())
+
+
+def fast_defines_py() raises -> PythonObject:
+    """The Apple FAST switches this binding was built with (`-D MOJOLEARN_...`,
+    lane/apple-fast-decomp-linalg and -sparse, 2026-10-02), comma-joined, so
+    the Python doors pick a FAST route without an env read (`_kit_fast_define`
+    in python/mojolearn/_expansion_decomp.py). Empty for an IDENTICAL build
+    and for a FAST build with none."""
+    var s = String("")
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+        comptime if is_defined["MOJOLEARN_QR_FAST_DEV"]():
+            s += "MOJOLEARN_QR_FAST_DEV,"
+        comptime if is_defined["MOJOLEARN_SVD_FAST_CHOLQR"]():
+            s += "MOJOLEARN_SVD_FAST_CHOLQR,"
+        comptime if is_defined["MOJOLEARN_DECOMP_FAST_GEMM_TILED"]():
+            s += "MOJOLEARN_DECOMP_FAST_GEMM_TILED,"
+        comptime if is_defined["MOJOLEARN_FA_FAST_QRR"]():
+            s += "MOJOLEARN_FA_FAST_QRR,"
+        comptime if is_defined["MOJOLEARN_DECOMP_FAST_OMP_BLOCK"]():
+            s += "MOJOLEARN_DECOMP_FAST_OMP_BLOCK,"
+        comptime if is_defined["MOJOLEARN_DECOMP_FAST_LASSO_BLOCK"]():
+            s += "MOJOLEARN_DECOMP_FAST_LASSO_BLOCK,"
+        comptime if is_defined["MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2"]():
+            s += "MOJOLEARN_DECOMP_FAST_SMALL_EIGH_J2,"
+        comptime if is_defined["MOJOLEARN_DECOMP_FAST_DICT_UPDATE"]():
+            s += "MOJOLEARN_DECOMP_FAST_DICT_UPDATE,"
+    return PythonObject(s)
