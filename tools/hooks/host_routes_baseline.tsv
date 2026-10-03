@@ -4,66 +4,27 @@
 # newer than the installed hooks (they skip it).
 # A `# why: ...` line gives the reason the next row stays (required for d2h-host-work).
 rule	class	owner	state	path	occ	text
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[chol_strip_diag_kernel](
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[panel_factor_guarded_kernel](
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[panel_factor_kernel](
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	1	ctx.enqueue_function[panel_factor_kernel](
-# why: CROSS-LANE (GP/GMM): DEVIATION 1639's one-thread ascending log-det over n diagonal terms; a fixed-order multi-block fold (core/device_fold shape) needs the host column and the GP/GMM likelihood bits changed together
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[sabotage_logdet_kernel](
-# why: CROSS-LANE (GP/GMM, cgr4-device-optim owns the GP optimizer): the blocked Cholesky's panel step, one block over the panel's rows (width w) per panel; a multi-block panel changes the factor's bits on every vendor and the host column together
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/checks/potrf.mojo	0	ctx.enqueue_function[sabotage_panel_factor_kernel](
-# why: CROSS-LANE (cholesky): DEVIATION 1632's one-thread dot over the m-row column of a rank-one update; a fixed-order multi-block fold needs the host column changed with it
-one-block-n	serial-gpu	UNOWNED	owed	cholesky/impl/linalg/detail/cholesky_r1_update.mojo	0	ctx.enqueue_function[r1_dot_kernel](
-# why: CROSS-LANE (x_decomp/linalg): the one-slice QR (ns == 1, qr_slice_count says the matrix is too short to split) runs one block over n_rows; the sliced TSQR path is multi-block; a forced split needs the host column's order
-one-block-n	serial-gpu	UNOWNED	owed	core/householder_qr.mojo	0	ctx.enqueue_function[qr_panel_kernel](
-# why: CROSS-LANE (x_decomp/linalg): the one-slice QR (ns == 1, qr_slice_count says the matrix is too short to split) runs one block over n_rows; the sliced TSQR path is multi-block; a forced split needs the host column's order
-one-block-n	serial-gpu	UNOWNED	owed	core/householder_qr.mojo	0	devices[rank].enqueue_function[qr_panel_kernel](panels[panel].unsafe_ptr(),outputs[panel].unsafe_ptr(),
-# why: k-sized: a selection sort of the n_cols eigenvalues (n = n_cols, not rows); index-only, no float op
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	glm/impl/linalg/detail/svd.mojo	0	for i in range(n):
-# why: k-sized: a selection sort of the n_cols eigenvalues (n = n_cols, not rows); index-only, no float op
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	glm/impl/linalg/detail/svd.mojo	0	for j in range(i + 1, n):
-# why: CROSS-LANE (glm QN / x_linear logcv, cgr4-device-optim): one-block pinned folds over n (loss value, bias mean, vector norms); the multi-block qn_grid_sum exists behind QN_GRID_SUMS; making it the IDENTICAL default changes the loss bits and the host column must fold the same grid
-one-block-n	serial-gpu	UNOWNED	owed	glm/impl/qn/glm_base.mojo	0	ctx.enqueue_function[mean_kernel](
-# why: CROSS-LANE (glm QN / x_linear logcv, cgr4-device-optim): one-block pinned folds over n (loss value, bias mean, vector norms); the multi-block qn_grid_sum exists behind QN_GRID_SUMS; making it the IDENTICAL default changes the loss bits and the host column must fold the same grid
-one-block-n	serial-gpu	UNOWNED	owed	glm/impl/qn/glm_base.mojo	0	ctx.enqueue_function[sum_terms_kernel](
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for c in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for i in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	1	for i in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	2	for i in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	3	for i in range(m):
-# why: OWED (large rewrite): Boruvka round bookkeeping (per-component cheapest edge, union-find, lower-bound pruning) on the host over m points per round; needs device per-component min-edge (two-pass atomic min on packed keys), pointer-jumping union and device pruning; hdbscan and single-linkage share it
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	hierarchy/impl/cluster/detail/fast_boruvka.mojo	0	for t in range(n_todo):
 # why: OWED (per-query path only: k > 32, dim > FIVF_MAX_DIM, traced, partial storage, or naming a query short of k): each query's candidates gathered on the host and uploaded; the batched scans plan on the device (ivf_group_device.mojo); a device candidate gather for this path is the remaining step
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo	0	for q in range(n_queries):
-# why: FAST tier only (GMM_FAST_MEANLL, the Apple FAST peer's): one 1024-thread block over n; IDENTICAL and default FAST without the define use the chunked-level device fold
-one-block-n	serial-gpu	UNOWNED	owed	mixture/checks/estep.mojo	0	ctx.enqueue_function[fast_meanll_kernel](
-# why: FAST tier only (GMM_FAST_MEANLL, the Apple FAST peer's): one 1024-thread block over n; IDENTICAL and default FAST without the define use the chunked-level device fold
-one-block-n	serial-gpu	UNOWNED	owed	mixture/checks/estep.mojo	1	ctx.enqueue_function[fast_meanll_kernel](
-py-loop	py-numpy	UNOWNED	debt	python/mojolearn/_array.py	0	return (self[i] for i in range(self.shape[0]))
-py-sklearn	py-numpy	UNOWNED	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
+d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo	0	for q in range(n_queries):
+# why: apple-fast-purity2 left it: the public Array's Python iteration protocol (a user's `for row in arr`), not fit/transform/predict work; each row is a view
+py-loop	py-numpy	apple-fast-purity2	debt	python/mojolearn/_array.py	0	return (self[i] for i in range(self.shape[0]))
+# why: apple-fast-purity2 left it: scikit-learn estimator tag classes (metadata for sklearn's checks); no data is touched
+py-sklearn	py-numpy	apple-fast-purity2	debt	python/mojolearn/_mode.py	0	from sklearn.utils import ClassifierTags, RegressorTags, Tags, TargetTags
+# why: apple-fast-purity2 left it: host threads that only dispatch, one per GPU (the multi-GPU driver); no numeric work runs on the CPU
+py-threads	host-threads	apple-fast-purity2	debt	python/mojolearn/_parallel_pool.py	0	from concurrent.futures import ThreadPoolExecutor
+# why: apple-fast-purity2 left it: host threads that only dispatch, one per GPU (the multi-GPU driver); no numeric work runs on the CPU
+py-threads	host-threads	apple-fast-purity2	debt	python/mojolearn/_parallel_pool.py	0	self._threads = ThreadPoolExecutor(max_workers=len(self.devices))
+py-threads	host-threads	gap-lm	debt	python/mojolearn/lm_corpus.py	0	worker = threading.Thread(target=produce, name="mojolearn-token-prefetch", daemon=True)
+py-loop	py-numpy	UNOWNED	debt	python/mojolearn/models/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	module = _backend.load_host_module(_EXTENSION)
 host-module	host-import	gap-lm	debt	python/mojolearn/tokenizer.py	0	return _Entries(_backend.load_host_module(_EXTENSION))
-# why: OWED: the observed statistic folds the host input on the host with the replicate kernels' pinned tree; a device version needs a multi-block tree sum in that order (the replicate kernels fold one block per replicate)
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	resample/estimator.mojo	0	for j in range(n_pooled):
-# why: OWED: the observed statistic folds the host input on the host with the replicate kernels' pinned tree; a device version needs a multi-block tree sum in that order (the replicate kernels fold one block per replicate)
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	resample/estimator.mojo	1	for j in range(n_pooled):
+py-loop	py-numpy	gap-lm	debt	python/mojolearn/tokenizer.py	0	loose = [i for i in range(n) if i not in made and len(tokens[i]) != 1]
 # why: OWED (sequence/neural lane): the MoE pair grouping by expert (a counting sort over T*k picks) runs on the host by default; the device grouping exists only behind -D MOJOLEARN_MOE_DEVGROUP with one-block kernels for E <= 127; needs a multi-block grouping op in the executor registry
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	sequence/pyapi.mojo	0	for i in range(T * k):
+d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	sequence/pyapi.mojo	0	for i in range(T * k):
 # why: OWED (sequence/neural lane): the MoE pair grouping by expert (a counting sort over T*k picks) runs on the host by default; the device grouping exists only behind -D MOJOLEARN_MOE_DEVGROUP with one-block kernels for E <= 127; needs a multi-block grouping op in the executor registry
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	sequence/pyapi.mojo	1	for i in range(T * k):
+d2h-host-work	d2h-roundtrip	apple-fast-purity2	owed	sequence/pyapi.mojo	1	for i in range(T * k):
 # why: CROSS-LANE (training/LM): ce_serial_fold over the n_rows per-row losses in one block (the LM loss value's pinned order); a multi-block fold changes the loss bits on every vendor and the host column together
 one-block-n	serial-gpu	UNOWNED	owed	training/checks/loss.mojo	0	ctx.enqueue_function[ce_serial_fold_kernel](
-# why: k-sized: a NaN check of the n_cols x n_cols R factor the caller receives on the host anyway
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	x_decomp/tsqr_device.mojo	0	for t in range(n * n):
 host-call	host-import	PR#86	debt	x_linear/bayes.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	debt	x_linear/bayes.mojo	0	par_rows(rows_map, n)
 host-call	host-import	PR#86	debt	x_linear/glm.mojo	0	import x_linear/ops.mojo:par_rows
@@ -85,5 +46,3 @@ host-call	host-import	PR#86	debt	x_linear/ridge.mojo	0	par_rows(rows_loo, n)
 host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	import x_linear/ops.mojo:par_rows
 host-call	host-import	PR#86	debt	x_linear/sgd.mojo	0	par_rows(run_problems, problems, 1)
 host-env	host-env/threshold	PR#85	inflight@6a483da91d76ae2560b5316910738e7b3328e375	x_linear/sgd.mojo	0	and not is_defined["MOJOLEARN_SGD_HOST_LEGACY"]()
-# why: error path only: runs after the device flag reported a bad tree, to name the first refusal; the success path never loops
-d2h-host-work	d2h-roundtrip	UNOWNED	owed	xtrees/ops_device.mojo	0	for i in range(n):

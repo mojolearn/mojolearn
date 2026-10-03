@@ -627,21 +627,34 @@ comptime GMM_FAST_MEANLL = (
 comptime FAST_MEANLL_TPB = 1024
 
 
-def fast_meanll_kernel(
+comptime FAST_MEANLL_BLOCKS = 64
+
+
+def fast_meanll_blocks(n: Int) -> Int:
+    """Blocks of the FAST mean: one per FAST_MEANLL_TPB values, at most
+    FAST_MEANLL_BLOCKS (each then grid-strides)."""
+    return max(1, min(FAST_MEANLL_BLOCKS, (n + FAST_MEANLL_TPB - 1) // FAST_MEANLL_TPB))
+
+
+def fast_meanll_partial_kernel(
     lse: MutPointer[Float32, MutAnyOrigin],
-    out_scalar: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
+    blocks_in: Int32,
 ):
-    """FAST (`GMM_FAST_MEANLL`): `meanll_kernel`'s mean, folded by a
-    1024-thread block (grid-stride sums, warp shuffles, one barrier) instead
-    of one thread walking n values. FAST promises no bits."""
+    """FAST (`GMM_FAST_MEANLL`) pass 1: block b folds the grid-stride share
+    lse[b*TPB + t + k*blocks*TPB] (warp shuffles, one barrier) into part[b].
+    lane/apple-fast-purity2: this was ONE 1024-thread block walking all n
+    values; now up to FAST_MEANLL_BLOCKS blocks run at once. FAST promises
+    no bits. `-D MOJOLEARN_PURITY2_1_OFF` = one block (the A/B arm)."""
     comptime N_WARPS = FAST_MEANLL_TPB // WARP_SIZE
     var n = Int(n_in)
+    var stride = Int(blocks_in) * FAST_MEANLL_TPB
     var acc = Float32(0)
-    var i = Int(thread_idx.x)
+    var i = Int(block_idx.x) * FAST_MEANLL_TPB + Int(thread_idx.x)
     while i < n:
         acc += lse[unsafe_offset=i]
-        i += FAST_MEANLL_TPB
+        i += stride
     comptime for step in range(8):
         comptime off = WARP_SIZE >> (step + 1)
         comptime if off > 0:
@@ -656,7 +669,53 @@ def fast_meanll_kernel(
         var tot = Float32(0)
         for w in range(N_WARPS):
             tot += sh[w]
-        out_scalar[unsafe_offset=0] = tot / Float32(n)
+        part[unsafe_offset=Int(block_idx.x)] = tot
+
+
+def fast_meanll_fold_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    out_scalar: MutPointer[Float32, MutAnyOrigin],
+    blocks_in: Int32,
+    n_f: Float32,
+):
+    """FAST pass 2: FAST_MEANLL_BLOCKS lanes, the halving tree over the
+    block partials, divided by n."""
+    var tid = Int(thread_idx.x)
+    var sh = stack_allocation[
+        FAST_MEANLL_BLOCKS, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    sh[tid] = part[unsafe_offset=tid] if tid < Int(blocks_in) else Float32(0)
+    barrier()
+    var h = FAST_MEANLL_BLOCKS // 2
+    while h > 0:
+        if tid < h:
+            sh[tid] = sh[tid] + sh[tid + h]
+        barrier()
+        h //= 2
+    if tid == 0:
+        out_scalar[unsafe_offset=0] = sh[0] / n_f
+
+
+def fast_meanll_launch(
+    ctx: DeviceContext,
+    mut lse: DeviceBuffer[DType.float32],
+    mut meanll: DeviceBuffer[DType.float32],
+    mut scratch: DeviceBuffer[DType.float32],
+    n: Int,
+) raises:
+    """FAST mean of lse[0, n) into meanll[0]: the partial blocks into
+    scratch[0, blocks) (the E-step's `y`, consumed by then), then the fold."""
+    var blocks = fast_meanll_blocks(n)
+    comptime if is_defined["MOJOLEARN_PURITY2_1_OFF"]():
+        blocks = 1
+    ctx.enqueue_function[fast_meanll_partial_kernel](
+        lse.unsafe_ptr(), scratch.unsafe_ptr(), Int32(n), Int32(blocks),
+        grid_dim=(blocks, 1, 1), block_dim=(FAST_MEANLL_TPB, 1, 1),
+    )
+    ctx.enqueue_function[fast_meanll_fold_kernel](
+        scratch.unsafe_ptr(), meanll.unsafe_ptr(), Int32(blocks), Float32(n),
+        grid_dim=(1, 1, 1), block_dim=(FAST_MEANLL_BLOCKS, 1, 1),
+    )
 
 
 #: Operands of this many `meanll_kernel` steps are loaded before the steps
@@ -1264,13 +1323,7 @@ def gmm_e_step(
             block_dim=(elem_tpb, 1, 1),
         )
         comptime if GMM_FAST_MEANLL:
-            ctx.enqueue_function[fast_meanll_kernel](
-                lse.unsafe_ptr(),
-                meanll.unsafe_ptr(),
-                Int32(n),
-                grid_dim=(1, 1, 1),
-                block_dim=(FAST_MEANLL_TPB, 1, 1),
-            )
+            fast_meanll_launch(ctx, lse, meanll, scratch, n)
         else:
             gmm_meanll_launch(ctx, lse, meanll, scratch, n)
         _ = y^
@@ -1334,13 +1387,7 @@ def gmm_e_step(
     # so that a reader of the driver sees the fold's shape without opening
     # the kernel, and so no future edit can widen it by changing a default.
     comptime if GMM_FAST_MEANLL:
-        ctx.enqueue_function[fast_meanll_kernel](
-            lse.unsafe_ptr(),
-            meanll.unsafe_ptr(),
-            Int32(n),
-            grid_dim=(1, 1, 1),
-            block_dim=(FAST_MEANLL_TPB, 1, 1),
-        )
+        fast_meanll_launch(ctx, lse, meanll, scratch, n)
     else:
         gmm_meanll_launch(ctx, lse, meanll, scratch, n)
     trace.record_device(ctx, tag + ".meanll", meanll, 1)

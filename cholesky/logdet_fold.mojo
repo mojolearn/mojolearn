@@ -18,7 +18,7 @@ host column (cholesky/host/chol_oracle.mojo) both call these.
 Before this lane the whole sum was ONE thread's ascending chain over n (n up
 to the GP's training rows). For n <= 256 the words are unchanged.
 """
-from checks.numerics import ftz, identical_log, identical_mul
+from checks.numerics import ftz, identical_log, identical_mul, identical_mul_add
 
 comptime LOGDET_BLOCK = 256
 comptime _LD_STACK = 48
@@ -74,3 +74,49 @@ def logdet_serial(diag: MutPointer[Float32, MutAnyOrigin], n: Int) -> Float32:
             r = logdet_pair(vals[k], r)
             k -= 1
     return logdet_double(r)
+
+
+# lane/apple-fast-purity2 (2026-10-03): the rank-one update's dot
+# `s = sum_k x_k^2` (cholesky/impl/linalg/detail/cholesky_r1_update.mojo)
+# in the same blocked-then-tree order: a block's partial is
+# `acc = ftz(identical_mul_add(v, v, acc))`, `v = ftz(x_k)`, k ascending
+# from +0.0; the partials by the aligned binary tree (`logdet_pair`); no
+# doubling. It was ONE thread's chain over m; for m <= 256 the word is
+# unchanged.
+
+
+@always_inline
+def sqsum_part(x: MutPointer[Float32, MutAnyOrigin], n: Int, b: Int) -> Float32:
+    """Block b's partial of sum x_k^2: its fma chain ascending from +0.0."""
+    var acc = Float32(0.0)
+    var hi = min(b * LOGDET_BLOCK + LOGDET_BLOCK, n)
+    for k in range(b * LOGDET_BLOCK, hi):
+        var v = ftz(x.unsafe_load(k))
+        acc = ftz(identical_mul_add(v, v, acc))
+    return acc
+
+
+def sqsum_serial(x: MutPointer[Float32, MutAnyOrigin], n: Int) -> Float32:
+    """The whole sum x_k^2 order on one thread (the host column): the
+    partials, then the aligned tree by `logdet_serial`'s binary counter."""
+    var vals = InlineArray[Float32, _LD_STACK](fill=Float32(0))
+    var lvls = InlineArray[Int, _LD_STACK](fill=0)
+    var top = 0
+    for b in range(logdet_blocks(n)):
+        var v = sqsum_part(x, n, b)
+        var lv = 0
+        while top > 0 and lvls[top - 1] == lv:
+            v = logdet_pair(vals[top - 1], v)
+            top -= 1
+            lv += 1
+        vals[top] = v
+        lvls[top] = lv
+        top += 1
+    var r = Float32(0.0)
+    if top > 0:
+        r = vals[top - 1]
+        var k = top - 2
+        while k >= 0:
+            r = logdet_pair(vals[k], r)
+            k -= 1
+    return r
