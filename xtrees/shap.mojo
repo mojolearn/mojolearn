@@ -63,7 +63,11 @@ comptime F32P = MutPointer[Float32, MutAnyOrigin]
 comptime I32P = MutPointer[Int32, MutAnyOrigin]
 
 #: meta words written by the preparation units: [widest slot count, deepest
-#: leaf depth, malformed-forest flag]
+#: leaf depth, malformed-forest flag]. The flag is a reason code: 1 a split
+#: node's children or column out of range (parent unit), 2 a parent cycle
+#: (depth unit), 3 a visited node's children or column out of range and 4 a
+#: walk cycle (cover unit), 5 a merged path wider than the compiled width
+#: and 6 a path feature with no slot (tree unit).
 comptime SHAP_META_SLOTS = 0
 comptime SHAP_META_DEPTH = 1
 comptime SHAP_META_BAD = 2
@@ -118,6 +122,7 @@ def _tree_of(offsets: I32P, n_trees: Int, g: Int) -> Int:
     return lo
 
 
+@always_inline
 def shap_parent_unit(u: Int, offsets: I32P, n_trees: Int, colid: I32P, left: I32P, d: Int,
                      parent: I32P, mark: I32P, meta: I32P):
     """Node u: parent[child] = u (tree-relative) for both children, and
@@ -138,6 +143,7 @@ def shap_parent_unit(u: Int, offsets: I32P, n_trees: Int, colid: I32P, left: I32
     mark[unsafe_offset=t * d + c] = 1
 
 
+@always_inline
 def shap_depth_unit(u: Int, offsets: I32P, n_trees: Int, parent: I32P, meta: I32P):
     """Node u's depth into meta[SHAP_META_DEPTH] by integer max."""
     var t = _tree_of(offsets, n_trees, u)
@@ -148,12 +154,13 @@ def shap_depth_unit(u: Int, offsets: I32P, n_trees: Int, parent: I32P, meta: I32
     while p != -1:
         depth += 1
         if depth > count:
-            meta[unsafe_offset=SHAP_META_BAD] = 1
+            meta[unsafe_offset=SHAP_META_BAD] = 2
             return
         p = Int(parent[unsafe_offset=lo + p])
     _ = Atomic[DType.int32].max(meta.unsafe_offset(SHAP_META_DEPTH), Int32(depth))
 
 
+@always_inline
 def shap_cover_unit(u: Int, nb: Int, offsets: I32P, colid: I32P, quesval: F32P, left: I32P,
                     bg: F32P, d: Int, cover: I32P, meta: I32P):
     """Unit u = t * nb + r: background row r's walk down tree t, +1 on every
@@ -171,7 +178,7 @@ def shap_cover_unit(u: Int, nb: Int, offsets: I32P, colid: I32P, quesval: F32P, 
             return
         var c = Int(colid[unsafe_offset=lo + node])
         if c < 0 or c >= d or l < 1 or l + 1 >= count:
-            meta[unsafe_offset=SHAP_META_BAD] = 1
+            meta[unsafe_offset=SHAP_META_BAD] = 3
             return
         if ftz(bg[unsafe_offset=r * d + c]) <= ftz(quesval[unsafe_offset=lo + node]):
             node = l
@@ -179,10 +186,11 @@ def shap_cover_unit(u: Int, nb: Int, offsets: I32P, colid: I32P, quesval: F32P, 
             node = l + 1
         steps += 1
         if steps > count:
-            meta[unsafe_offset=SHAP_META_BAD] = 1
+            meta[unsafe_offset=SHAP_META_BAD] = 4
             return
 
 
+@always_inline
 def shap_slot_unit(t: Int, d: Int, slot: I32P, meta: I32P):
     """Tree t's row of `slot` (the marks of `shap_parent_unit`) becomes its
     slot numbers: marked features ascending 0, 1, ..., the rest -1."""
@@ -196,6 +204,7 @@ def shap_slot_unit(t: Int, d: Int, slot: I32P, meta: I32P):
     _ = Atomic[DType.int32].max(meta.unsafe_offset(SHAP_META_SLOTS), Int32(c))
 
 
+@always_inline
 def shap_ev_part_unit(u: Int, k: Int, offsets: I32P, left: I32P, leaves: F32P, cover: I32P, tscale: F32P,
                       part: F32P):
     """Unit u = t * k + j: tree t's share of the expected value of output j."""
@@ -216,6 +225,7 @@ def shap_ev_part_unit(u: Int, k: Int, offsets: I32P, left: I32P, leaves: F32P, c
     part[unsafe_offset=u] = e
 
 
+@always_inline
 def shap_ev_fold_unit(j: Int, n_trees: Int, k: Int, part: F32P, ev: F32P):
     """ev[j] (the caller's init) plus every tree's share, ascending."""
     var acc = ftz(ev[unsafe_offset=j])
@@ -245,6 +255,7 @@ def _unwound_sum[W: Int](pz: InlineArray[Float32, W], po: InlineArray[Float32, W
     return total
 
 
+@always_inline
 def shap_tree_unit[W: Int](
     u: Int, rows: Int, d: Int, k: Int, slots: Int,
     offsets: I32P, colid: I32P, quesval: F32P, left: I32P, leaves: F32P,
@@ -301,7 +312,7 @@ def shap_tree_unit[W: Int](
             else:
                 if n + 1 >= W:
                     # wider than the compiled path: refused by the caller
-                    meta[unsafe_offset=SHAP_META_BAD] = 1
+                    meta[unsafe_offset=SHAP_META_BAD] = 5
                     return
                 mf[i] = f
                 mz[i] = z
@@ -340,13 +351,14 @@ def shap_tree_unit[W: Int](
             var s = _m(_m(w, _s(po[i], pz[i])), sc)
             var sl = Int(slot[unsafe_offset=t * d + Int(pf[i])])
             if sl < 0 or sl >= slots:
-                meta[unsafe_offset=SHAP_META_BAD] = 1
+                meta[unsafe_offset=SHAP_META_BAD] = 6
                 return
             for j in range(k):
                 var o = ((t * slots + sl) * k + j) * rows + r
                 buf[unsafe_offset=o] = _a(buf[unsafe_offset=o], _m(s, ftz(leaves[unsafe_offset=g * k + j])))
 
 
+@always_inline
 def shap_fold_unit(u: Int, r0: Int, rows: Int, n_trees: Int, d: Int, k: Int, slots: Int, slot: I32P, buf: F32P,
                    phi: F32P):
     """Unit u = (f * k + j) * rows + r: phi[r0 + r, f, j] = +0 plus the
@@ -362,6 +374,164 @@ def shap_fold_unit(u: Int, r0: Int, rows: Int, n_trees: Int, d: Int, k: Int, slo
             acc = _a(acc, buf[unsafe_offset=((t * slots + s) * k + j) * rows + r])
     phi[unsafe_offset=((r0 + r) * d + f) * k + j] = acc
 
+
+# ------------------------------------------- the leaf table (FAST experiment)
+# MOJOLEARN_TREESHAP_FAST_TABLE (xtrees/shap_device.mojo). A leaf's merged
+# path (its features and zero fractions) does not depend on the row; only
+# its one fractions do, and each is 0 or 1. So the terms a leaf adds are a
+# function of the n-bit pattern of its one fractions: `shap_table_unit`
+# runs `shap_tree_unit`'s per-leaf statements once per (leaf, pattern), and
+# `shap_table_row_unit` (row, tree) finds each leaf's pattern by walking its
+# path and adds the stored terms. Every term is the same statement sequence
+# on the same operands as `shap_tree_unit`'s, added into the same cells in
+# the same order (leaves ascending, path elements ascending), so the
+# values are the same bits as the per-row recursion.
+@always_inline
+def shap_table_unit[W: Int](
+    u: Int, M: Int, NM: Int, offsets: I32P, n_trees: Int, colid: I32P, left: I32P, parent: I32P, cover: I32P,
+    tscale: F32P, leaf_mf: I32P, leaf_n: I32P, table: F32P, dead: I32P, meta: I32P,
+):
+    """Unit u = g * M + m: leaf g's terms for the one-fraction pattern m
+    (bit i = element i of the leaf's merged path in walk order, deepest
+    first). leaf_n[g] = the leaf's element count (-1 for a split node) and
+    leaf_mf its features, written by the m == 0 unit; dead[g * M + m] = 1
+    where `shap_tree_unit` skips the leaf; table[(g * M + m) * NM + i - 1]
+    = the term of path element i (recursion order)."""
+    var g = u // M
+    var m = u - g * M
+    if left[unsafe_offset=g] != -1:
+        if m == 0:
+            leaf_n[unsafe_offset=g] = -1
+        return
+    var t = _tree_of(offsets, n_trees, g)
+    var lo = Int(offsets[unsafe_offset=t])
+    var sc = ftz(tscale[unsafe_offset=t])
+    var pf = InlineArray[Int32, W](fill=Int32(-1))
+    var pz = InlineArray[Float32, W](fill=Float32(0.0))
+    var po = InlineArray[Float32, W](fill=Float32(0.0))
+    var pw = InlineArray[Float32, W](fill=Float32(0.0))
+    var mf = InlineArray[Int32, W](fill=Int32(-1))
+    var mz = InlineArray[Float32, W](fill=Float32(0.0))
+    var mo = InlineArray[Float32, W](fill=Float32(0.0))
+    var n = 0
+    var c = g - lo
+    var p = Int(parent[unsafe_offset=g])
+    while p != -1:
+        var a = lo + p
+        var f = colid[unsafe_offset=a]
+        var ca = Int(cover[unsafe_offset=a])
+        var z = Float32(0.0)
+        if ca != 0:
+            z = _q(Float32(Int(cover[unsafe_offset=lo + c])), Float32(ca))
+        var i = 0
+        while i < n and mf[i] != f:
+            i += 1
+        if i < n:
+            mz[i] = _m(mz[i], z)
+        else:
+            if n + 1 >= W or n + 1 > NM:
+                meta[unsafe_offset=SHAP_META_BAD] = 5
+                return
+            mf[i] = f
+            mz[i] = z
+            n += 1
+        c = p
+        p = Int(parent[unsafe_offset=a])
+    if m == 0:
+        leaf_n[unsafe_offset=g] = Int32(n)
+        for i in range(n):
+            leaf_mf[unsafe_offset=g * NM + i] = mf[i]
+    if m >= (1 << n):
+        return
+    var is_dead = False
+    for i in range(n):
+        mo[i] = Float32(1.0) if ((m >> i) & 1) != 0 else Float32(0.0)
+        if mz[i] == 0 and mo[i] == 0:
+            is_dead = True
+    dead[unsafe_offset=g * M + m] = Int32(1) if is_dead else Int32(0)
+    if is_dead:
+        return
+    pf[0] = -1
+    pz[0] = 1.0
+    po[0] = 1.0
+    for i in range(n):
+        pf[i + 1] = mf[n - 1 - i]
+        pz[i + 1] = mz[n - 1 - i]
+        po[i + 1] = mo[n - 1 - i]
+    for dd in range(n + 1):
+        var zf = pz[dd]
+        var of = po[dd]
+        pw[dd] = 1.0 if dd == 0 else 0.0
+        var d1 = Float32(dd + 1)
+        var i = dd - 1
+        while i >= 0:
+            pw[i + 1] = _a(pw[i + 1], _q(_m(_m(of, pw[i]), Float32(i + 1)), d1))
+            pw[i] = _q(_m(_m(zf, pw[i]), Float32(dd - i)), d1)
+            i -= 1
+    var base = (g * M + m) * NM
+    for i in range(1, n + 1):
+        var w = _unwound_sum[W](pz, po, pw, n, i)
+        table[unsafe_offset=base + i - 1] = _m(_m(w, _s(po[i], pz[i])), sc)
+
+
+@always_inline
+def shap_table_row_unit[ACC: Int](
+    u: Int, rows: Int, d: Int, k: Int, slots: Int, M: Int, NM: Int,
+    offsets: I32P, colid: I32P, quesval: F32P, left: I32P, leaves: F32P, parent: I32P, slot: I32P,
+    leaf_mf: I32P, leaf_n: I32P, table: F32P, dead: I32P, x: F32P, buf: F32P, meta: I32P,
+):
+    """Unit u = t * rows + r: `shap_tree_unit`'s cells from the leaf table.
+    ACC > 0 (slots * k <= ACC) keeps the tree's cells in registers and
+    stores them once; the adds are the same in the same order."""
+    var t = u // rows
+    var r = u - t * rows
+    var lo = Int(offsets[unsafe_offset=t])
+    var hi = Int(offsets[unsafe_offset=t + 1])
+    var xr = r * d
+    var acc = InlineArray[Float32, max(ACC, 1)](fill=Float32(0.0))
+    comptime if ACC == 0:
+        for s in range(slots):
+            for j in range(k):
+                buf[unsafe_offset=((t * slots + s) * k + j) * rows + r] = 0.0
+    for g in range(lo, hi):
+        var n = Int(leaf_n[unsafe_offset=g])
+        if n < 0:
+            continue
+        var mask = (1 << n) - 1
+        var c = g - lo
+        var p = Int(parent[unsafe_offset=g])
+        while p != -1:
+            var a = lo + p
+            var f = colid[unsafe_offset=a]
+            var l = Int(left[unsafe_offset=a])
+            var hot = l if ftz(x[unsafe_offset=xr + Int(f)]) <= ftz(quesval[unsafe_offset=a]) else l + 1
+            if c != hot:
+                var e = 0
+                while e < n and leaf_mf[unsafe_offset=g * NM + e] != f:
+                    e += 1
+                mask &= ~(1 << e)
+            c = p
+            p = Int(parent[unsafe_offset=a])
+        if dead[unsafe_offset=g * M + mask] != 0:
+            continue
+        var base = (g * M + mask) * NM
+        for i in range(1, n + 1):
+            var s = table[unsafe_offset=base + i - 1]
+            var sl = Int(slot[unsafe_offset=t * d + Int(leaf_mf[unsafe_offset=g * NM + n - i])])
+            if sl < 0 or sl >= slots:
+                meta[unsafe_offset=SHAP_META_BAD] = 6
+                return
+            for j in range(k):
+                comptime if ACC > 0:
+                    var o = sl * k + j
+                    acc[o] = _a(acc[o], _m(s, ftz(leaves[unsafe_offset=g * k + j])))
+                else:
+                    var o = ((t * slots + sl) * k + j) * rows + r
+                    buf[unsafe_offset=o] = _a(buf[unsafe_offset=o], _m(s, ftz(leaves[unsafe_offset=g * k + j])))
+    comptime if ACC > 0:
+        for s in range(slots):
+            for j in range(k):
+                buf[unsafe_offset=((t * slots + s) * k + j) * rows + r] = acc[s * k + j]
 
 # ------------------------------------------- the model-agnostic explainers
 def block_mean(
