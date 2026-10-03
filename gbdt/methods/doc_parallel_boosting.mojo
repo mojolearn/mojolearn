@@ -222,6 +222,9 @@ from gbdt.options.catboost_options import (
     is_second_order_score_function,
 )
 from gbdt.targets.kernel.multilogit import (
+    MC_CLASS_BATCH_DERIV,
+    MC_REG_MAX_CLASSES,
+    launch_multilogit_value_and_der_reg,
     launch_multilogit_value_and_der_search,
     launch_multi_rmse_value_and_der,
     launch_one_vs_all_value_and_der,
@@ -2627,13 +2630,27 @@ def fit_with_test(
                 # `TMultiClassificationTargets::StochasticDer`
                 # (`multiclass_targets.cpp:22-45`): column 0 the weights,
                 # columns 1.. the ders, one per FREE class.
-                launch_multilogit_value_and_der_search(
-                    ctx, num_classes, n_rows, targets, weights, has_weights,
-                    lcur, n_rows, row_index, False,
-                    fv_part, True,
-                    stats, n_rows,
-                    mag_part, mags_in_mse,
-                )
+                var mc_reg = False
+                comptime if MC_CLASS_BATCH_DERIV:
+                    # FAST Apple (lane af-sym-multi): the softmax in registers,
+                    # the same planes and element values
+                    mc_reg = num_classes <= MC_REG_MAX_CLASSES
+                if mc_reg:
+                    launch_multilogit_value_and_der_reg[True](
+                        ctx, num_classes, n_rows, targets, weights, has_weights,
+                        lcur, n_rows, row_index, False,
+                        fv_part, True,
+                        stats, n_rows,
+                        mag_part, mags_in_mse,
+                    )
+                else:
+                    launch_multilogit_value_and_der_search(
+                        ctx, num_classes, n_rows, targets, weights, has_weights,
+                        lcur, n_rows, row_index, False,
+                        fv_part, True,
+                        stats, n_rows,
+                        mag_part, mags_in_mse,
+                    )
             elif objective == OBJECTIVE_MULTICLASS_OVA:
                 # the same `StochasticDer`, its `MultiClassOneVsAll` arm
                 # (`:46-49`), where `statCount` keeps the full
