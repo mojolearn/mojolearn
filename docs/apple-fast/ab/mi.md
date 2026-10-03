@@ -50,3 +50,8 @@ Brief candidates not built, and why (notes/mi.md): REG_FEATBATCH already holds o
 units, one readback); REG_KNN_TILE keeps the O(n^2 d) brute force (seconds at best) where the sorted search is
 O(n log n d); CLF_CLASSBATCH is what dmi.mojo's class split already does; DIGAMMA_FUSED is covered by FAST_FOLDS
 (the reduce becomes one threadgroup per column) and by MI_WORK (only d values come back).
+
+## Builds (lane af-mi, 2026-10-03, compile only, head de9b194a0 code)
+All passed (rc=0), x_prep binding, MOJOLEARN_SKIP_BUILD_GATE=1: FAST -D MOJOLEARN_MI_ALL; FAST -D MOJOLEARN_MI_REG_SORTCOUNT;
+FAST -D MOJOLEARN_MI_REG_TIES; FAST -D MOJOLEARN_MI_REG_RANKMAJOR; FAST -D MOJOLEARN_MI_FAST_FOLDS;
+FAST -D MOJOLEARN_MI_CLF_RANKMAJOR; FAST with no define; IDENTICAL. Compile owed: none.
