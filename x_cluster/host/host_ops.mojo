@@ -22,6 +22,7 @@ from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_div, identical_mul
 from x_cluster.minibatch_cells import mb_center_update
+from x_cluster.optics_xi_cells import optics_xi_host
 from cluster.host.host_cells import ftz_v, host_cells, mul_v
 from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 
@@ -715,6 +716,15 @@ struct HostOps(ClusterOps):
         for p in range(n):
             if pr[p] > eps and not (pc[p] <= eps):
                 pl[p] = Int32(-1)
+
+    def optics_xi(
+        mut self, ordering: Int, reach: Int, pred: Int, n: Int, xc: Float32, min_samples: Int,
+        min_cluster_size: Int, predecessor_correction: Bool, labels: Int,
+    ) raises -> List[Int32]:
+        return optics_xi_host(
+            self._ip(ordering), self._fp(reach), self._ip(pred), n, xc, min_samples, min_cluster_size,
+            predecessor_correction, self._ip(labels),
+        )
 
     def sum_ff(mut self, a: Int, b: Int, c: Int, n: Int, mode: Int) raises -> Float64:
         return ff_to_f64(ff_fold_host(mode, self._fp(a), self._fp_or(b), self._fp_or(c), n))
