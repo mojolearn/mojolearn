@@ -430,8 +430,8 @@ struct LcvObjective(LbObjective):
         )
 
 
-def _lcv_rows(mut ctx: DeviceContext, mut obj: LcvObjective, mut wit: Witness, bcnt: DeviceBuffer[DType.int32],
-              tot: DeviceBuffer[DType.int32], fold: Int) raises -> Int:
+def _lcv_rows(mut ctx: DeviceContext, mut obj: LcvObjective, mut wit: Witness, mut bcnt: DeviceBuffer[DType.int32],
+              mut tot: DeviceBuffer[DType.int32], fold: Int) raises -> Int:
     """The fold's training rows ascending into obj.ix; the count home."""
     var n = obj.n
     var nbk = _blocks(n)
@@ -464,7 +464,7 @@ def _lcv_rows(mut ctx: DeviceContext, mut obj: LcvObjective, mut wit: Witness, b
 
 
 def _lcv_score(mut ctx: DeviceContext, mut obj: LcvObjective, mut wit: Witness, lw: FP, c: Int,
-               hit: DeviceBuffer[DType.float32], sp: DeviceBuffer[DType.float32], f: Int, weighted: Bool,
+               mut hit: DeviceBuffer[DType.float32], mut sp: DeviceBuffer[DType.float32], f: Int, weighted: Bool,
                dst: FP) raises:
     """The held-out score of theta[c] on fold f into dst[0] (device)."""
     var n = obj.n
