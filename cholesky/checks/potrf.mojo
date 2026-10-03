@@ -1646,7 +1646,7 @@ def fast_diag_factor(
     var s0 = 0
     while s0 < w:
         var sw = min(CHOL_INNER_NB, w - s0)
-        ctx.enqueue_function[panel_factor_kernel](
+        ctx.enqueue_function[panel_factor_kernel](  # small-launch(sw: panel width): the w x w diagonal block of a blocked Cholesky, w <= the panel width (CHOL_NB_PINNED 32 under IDENTICAL, CS_NB 32, CHOL_INNER_NB 64, CHOL_FAST_NB under FAST); n is the row stride only, the trailing updates are multi-block
             a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(j0 + s0),
             Int32(sw),
             grid_dim=(1, 1, 1), block_dim=(panel_tpb, 1, 1),
@@ -1732,7 +1732,7 @@ def _potrf_lower_strips(
         while q0 < s_end:
             var w = min(CS_NB, n - q0)
             var n_trail = n - q0 - w
-            ctx.enqueue_function[chol_strip_diag_kernel](
+            ctx.enqueue_function[chol_strip_diag_kernel](  # small-launch(w: panel width): the w x w diagonal block of a blocked Cholesky, w <= the panel width (CHOL_NB_PINNED 32 under IDENTICAL, CS_NB 32, CHOL_INNER_NB 64, CHOL_FAST_NB under FAST); n is the row stride only, the trailing updates are multi-block
                 a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(q0), Int32(w),
                 grid_dim=(1, 1, 1), block_dim=(CS_DIAG_TPB, 1, 1),
             )
@@ -1961,7 +1961,7 @@ def potrf_lower(
 
         # ---- the panel ------------------------------------------------
         if chol_sabotage_is_kernel_arm(sabotage):
-            ctx.enqueue_function[sabotage_panel_factor_kernel](
+            ctx.enqueue_function[sabotage_panel_factor_kernel](  # small-launch(w: panel width): the w x w diagonal block of a blocked Cholesky, w <= the panel width (CHOL_NB_PINNED 32 under IDENTICAL, CS_NB 32, CHOL_INNER_NB 64, CHOL_FAST_NB under FAST); n is the row stride only, the trailing updates are multi-block
                 a.unsafe_ptr(),
                 dinfo.unsafe_ptr(),
                 Int32(n),
@@ -1977,7 +1977,7 @@ def potrf_lower(
                 inv_shape, panel_tpb, elem_tpb,
             )
         elif defer:
-            ctx.enqueue_function[panel_factor_guarded_kernel](
+            ctx.enqueue_function[panel_factor_guarded_kernel](  # small-launch(w: panel width): the w x w diagonal block of a blocked Cholesky, w <= the panel width (CHOL_NB_PINNED 32 under IDENTICAL, CS_NB 32, CHOL_INNER_NB 64, CHOL_FAST_NB under FAST); n is the row stride only, the trailing updates are multi-block
                 a.unsafe_ptr(),
                 dinfo.unsafe_ptr(),
                 Int32(n),
@@ -1987,7 +1987,7 @@ def potrf_lower(
                 block_dim=(panel_tpb, 1, 1),
             )
         else:
-            ctx.enqueue_function[panel_factor_kernel](
+            ctx.enqueue_function[panel_factor_kernel](  # small-launch(w: panel width): the w x w diagonal block of a blocked Cholesky, w <= the panel width (CHOL_NB_PINNED 32 under IDENTICAL, CS_NB 32, CHOL_INNER_NB 64, CHOL_FAST_NB under FAST); n is the row stride only, the trailing updates are multi-block
                 a.unsafe_ptr(),
                 dinfo.unsafe_ptr(),
                 Int32(n),
