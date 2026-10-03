@@ -906,6 +906,20 @@ comptime KNN2_XS = KNN2_FC + 1  # padded rows (bank spread)
 comptime KNN2_SMEM_BYTES = 4 * (KNN2_TX * KNN2_XS + KNN2_TY * KNN2_XS + KNN2_TX * (KNN2_TY + 1))
 
 
+
+def _knn_mma_finish(
+    ctx: DeviceContext, mut c_d: DeviceBuffer[DType.float32], mut c_i: DeviceBuffer[DType.uint32],
+    mut d_dist: DeviceBuffer[DType.float32], mut d_idx: DeviceBuffer[DType.int32], n: Int, k: Int, kk: Int,
+    exclude_self: Int,
+) raises:
+    """The `knn_mma_finish_kernel` launch, outside `op_knn_sq_tiled`'s
+    function-scope import (the launch there resolved ambiguously)."""
+    ctx.enqueue_function[knn_mma_finish_kernel](
+        c_d.unsafe_ptr(), c_i.unsafe_ptr().bitcast[Int32](), d_dist.unsafe_ptr(), d_idx.unsafe_ptr(),
+        Int64(n), Int64(k), Int64(kk), Int64(exclude_self),
+        grid_dim=(n + KNN_TILE_TPB - 1) // KNN_TILE_TPB, block_dim=KNN_TILE_TPB,
+    )
+
 def knn_sq_tiled2_kernel(
     x: FP, y: FP, dist: FP, idx: IP, n_: Int64, m_: Int64, d_: Int64, k_: Int64, ex_: Int64,
 ):
@@ -1002,20 +1016,7 @@ def op_knn_sq_tiled(
             var d_dist = ctx.enqueue_create_buffer[DType.float32](n * k)
             var d_idx = _buf_i(ctx, 0, n * k, False)
             fast_mma_knn(ctx, d_x, d_y, c_d, c_i, n, m, d, kk, False)
-            # typed locals: the launch's arguments match the kernel's signature exactly (the
-            # inline unsafe_ptr() arguments made the enqueue_function overloads ambiguous)
-            var p_cd: FP = c_d.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-            var p_ci: IP = c_i.unsafe_ptr().bitcast[Int32]().unsafe_origin_cast[MutAnyOrigin]()
-            var p_dist: FP = d_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-            var p_idx: IP = d_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-            var a_n = Int64(n)
-            var a_k = Int64(k)
-            var a_kk = Int64(kk)
-            var a_ex = Int64(exclude_self)
-            ctx.enqueue_function[knn_mma_finish_kernel](
-                p_cd, p_ci, p_dist, p_idx, a_n, a_k, a_kk, a_ex,
-                grid_dim=((n + KNN_TILE_TPB - 1) // KNN_TILE_TPB, 1, 1), block_dim=(KNN_TILE_TPB, 1, 1),
-            )
+            _knn_mma_finish(ctx, c_d, c_i, d_dist, d_idx, n, k, kk, exclude_self)
             ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=dist), src_buf=d_dist)
             _down_i(ctx, d_idx, idx, n * k)
             ctx.synchronize()
