@@ -395,7 +395,9 @@ def kshap_solve(yout: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf:
     var dfx = ctx.enqueue_create_buffer[DType.uint64](max(R * k, 1))
     _fx_dev(ctx, fx, R, k, link, dfx32, dfx)
     var dnull = _up_u64(ctx, fnull, k)
-    _ksolve_core(ctx, mk, ey.unsafe_ptr(), dfx.unsafe_ptr(), dnull.unsafe_ptr(), phi, R, d, k, m)
+    _ksolve_core(ctx, mk, ey.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                 dfx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                 dnull.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), phi, R, d, k, m)
     _ = mk^
     _ = dout^
     _ = ey^
@@ -440,7 +442,9 @@ def kshap_solve_ey(ey: Int, fx: Int, fnull: Int, size_off: Int, size_w: Int, cdf
     var dfx = ctx.enqueue_create_buffer[DType.uint64](max(R * k, 1))
     _fx_dev(ctx, fx, R, k, link, dfx32, dfx)
     var dnull = _up_u64(ctx, fnull, k)
-    _ksolve_core(ctx, mk, dey.unsafe_ptr(), dfx.unsafe_ptr(), dnull.unsafe_ptr(), phi, R, d, k, m)
+    _ksolve_core(ctx, mk, dey.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                 dfx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                 dnull.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), phi, R, d, k, m)
     _ = mk^
     _ = dey^
     _ = dfx32^
