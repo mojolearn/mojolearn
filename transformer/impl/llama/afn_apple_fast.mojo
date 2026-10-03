@@ -606,7 +606,7 @@ def afn_flash_forward_kernel[GROUP: Int](
                 tile[(fr * 8 + frow) * TST + fk * 8 + fcol + e] = acc[e]
         barrier()
         # Online softmax: the row's running max and sum.
-        var sv = SIMD[DType.float32, 4](fill=negmax)
+        var sv = SIMD[DType.float32, 4](negmax)
         var vis = SIMD[DType.bool, 4](fill=False)
         comptime for c in range(4):
             var jj = q8 * 4 + c
