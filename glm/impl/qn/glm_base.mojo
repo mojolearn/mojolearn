@@ -137,7 +137,6 @@ def qn_coalesced_applies(d: Int, c: Int) -> Bool:
 from glm.impl.qn.glm_regularizer import tikhonov_reg_grad_kernel
 from glm.impl.qn.glm_softmax import (
     add_bias_multi_kernel,
-    mean_rows_multi_kernel,
     softmax_loss_dz_kernel,
     transpose_w_kernel,
     xtdz_multi_kernel,
@@ -631,6 +630,72 @@ def qn_tile_sum(
     )
 
 
+def qn_tile_sum_classes_partial_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    c_in: Int32,
+    tiles_in: Int32,
+):
+    """`qn_tile_sum_classes`' pass 1: thread (c, k), k fastest, sums class
+    c's column `v[c + C * r]` over tile k's rows ascending from 0.0 into
+    part[c * tiles + k] (`qn_tile_sum_partial_kernel` per class)."""
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var tiles = Int(tiles_in)
+    var C = Int(c_in)
+    var c = gid // tiles
+    var k = gid - c * tiles
+    if c >= C:
+        return
+    var r0 = k * QNT_ROWS
+    var r1 = min(Int(n_in), r0 + QNT_ROWS)
+    part.unsafe_store(gid, strided_ftz_sum[1](v, C, c, r1, r0, Float32(0.0)))
+
+
+def qn_tile_sum_classes_fold_kernel(
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    tiles_in: Int32,
+    ratio: Float32,
+):
+    """Pass 2, block c: `qn_tile_sum_fold_kernel`'s fold of class c's tile
+    partials, `out_v[c] = ftz(s0 * ratio)`."""
+    var c = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var tiles = Int(tiles_in)
+    var acc = strided_ftz_sum[STATS_TPB](part, 1, c * tiles, tiles, tid, Float32(0.0))
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
+    if tid == 0:
+        out_v.unsafe_store(c, ftz(s0 * ratio))
+
+
+def qn_tile_sum_classes(
+    ctx: DeviceContext,
+    out_v: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    mut ws: DeviceBuffer[DType.float32],
+    n: Int,
+    C: Int,
+) raises:
+    """`out_v[c]` = the mean of class c's column of the row-major `n x C`
+    `v`, in `qn_tile_sum`'s tile order per class: C x qnt_tiles(n) tile
+    chains in one launch, then one block per class over its tile partials
+    (lane cgr5-owed2; it replaced `mean_rows_multi_kernel`, one block per
+    class walking all n rows). `ws` holds C * qnt_tiles(n) floats. The host
+    column is `glm/host/qn_oracle.mojo::host_qnt_sum_strided`."""
+    var tiles = qnt_tiles(n)
+    var cells = C * tiles
+    ctx.enqueue_function[qn_tile_sum_classes_partial_kernel](
+        ws.unsafe_ptr(), v, Int32(n), Int32(C), Int32(tiles),
+        grid_dim=((cells + QNT_TPB - 1) // QNT_TPB, 1, 1),
+        block_dim=(QNT_TPB, 1, 1),
+    )
+    ctx.enqueue_function[qn_tile_sum_classes_fold_kernel](
+        out_v, ws.unsafe_ptr(), Int32(tiles), Float32(1.0) / Float32(n),
+        grid_dim=(C, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+
+
 def linear_fwd(
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
@@ -698,7 +763,7 @@ def linear_bwd(
     """`linearBwd(handle, G, X, dZ, setZero)`, `glm_base.cuh:63-94`. The
     `C > 1` arm (DEVIATION 706) is the same three steps with the class
     stride: `xtdz_multi_kernel` (one block per `(c, j)` cell), the same
-    cuBLAS epilogue over `C*D` cells, `mean_rows_multi_kernel` per class."""
+    cuBLAS epilogue over `C*D` cells, `qn_tile_sum_classes` for the bias."""
     var d = dims.D
     # `alpha = 1.0 / X.m`: a double narrowed to T. `beta = setZero ? 0 : 1`.
     var alpha = Float32(1.0 / Float64(n_rows))
@@ -729,10 +794,12 @@ def linear_bwd(
             block_dim=(VEC_ELEM_TPB, 1, 1),
         )
         if dims.fit_intercept:
-            ctx.enqueue_function[mean_rows_multi_kernel](
-                g.unsafe_ptr() + cd, dz.unsafe_ptr(), Int32(n_rows),
-                Int32(dims.C),
-                grid_dim=(dims.C, 1, 1), block_dim=(STATS_TPB, 1, 1),
+            # per class in the tile order (`qn_tile_sum_classes`), not one
+            # block per class over n
+            qn_tile_sum_classes(
+                ctx, (g.unsafe_ptr() + cd).unsafe_origin_cast[MutAnyOrigin](),
+                dz.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), xtdz_ws,
+                n_rows, dims.C,
             )
         return
     var fast_done1 = False
@@ -840,6 +907,8 @@ struct GLMWithData(Movable):
             ws_floats = max(ws_floats, qnt_workspace_floats(n_rows, dims.D))
         # qn_tile_sum's partials (the loss sum and the bias mean)
         ws_floats = max(ws_floats, qnt_tiles(n_rows))
+        # qn_tile_sum_classes' partials (the C > 1 bias mean)
+        ws_floats = max(ws_floats, dims.C * qnt_tiles(n_rows))
         self.xtdz_ws = ctx.enqueue_create_buffer[DType.float32](ws_floats)
         self.w_weights = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
         self.scalar = ctx.enqueue_create_buffer[DType.float32](1)
