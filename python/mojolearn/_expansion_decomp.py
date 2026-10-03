@@ -1708,9 +1708,17 @@ class NMF(_Base):
 # ================================================================ FastICA
 def _sym_decorrelation(k, W):
     """sklearn `_fastica.py::_sym_decorrelation`: (W W^T)^(-1/2) W through
-    eigh, eigenvalues clipped at float32 tiny."""
+    eigh, eigenvalues clipped at float32 tiny AND at float32 eps times the
+    largest one. sklearn clips at tiny alone; in float32 an eigenvalue below
+    eps * max is rounding noise of the eigh, and 1 / sqrt(tiny) = 9.2e18
+    turns that noise into a W whose next cube overflows to inf - inf = NaN
+    (a fit on duplicated / constant / zero columns: two null directions of
+    the whitened data, the identity reference's `dupes` fixture). The
+    relative floor bounds the gain at 1 / sqrt(eps); a W W^T with no
+    eigenvalue under eps * max is untouched. The floor is a host scalar from
+    the largest eigenvalue (eigh's last, ascending), times 2^-23: exact."""
     w, u = k.eigh(k.mm(W, W, tb=True))
-    w = k.ew("maxs", w, s=1.1754943508222875e-38)
+    w = k.ew("maxs", w, s=max(1.1754943508222875e-38, float(w.s[w.c - 1]) * _F32_EPS))
     ui = k.ew("mul", u, k.ew("recip", k.ew("sqrt", w)))
     return k.mm(k.mm(ui, u, tb=True), W)
 
