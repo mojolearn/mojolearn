@@ -30,7 +30,7 @@ from sequence.exec_trait import Exec
 from sequence.dispatch import apply
 from sequence.ops import OP_MOE_ROUTE, OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_BLK_SUMSQ, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
-from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST
+from sequence.ops import OP_CHOLSOLVE, OP_VAR_FORECAST, TSA2_VAR
 from sequence.vecar_block import VAR_SMEM, VAR_TPB, var_chol_block_kernel, var_forecast_block_kernel
 from sequence.fit_team import SeqTeam, garch_team, prophet_fit_team
 from sequence.ets_team import ETS_TEAM, ets_team
@@ -566,6 +566,22 @@ struct DeviceExec(Exec):
                 self.ctx.enqueue_function[moe_combine_kernel](
                     a.p3, a.p5, a.p4, Int32(a.i0), Int32(a.i2), Int32(n),
                     grid_dim=((n + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                )
+                return
+        # lane/apple-fast-tsa2 (-D MOJOLEARN_TSA2_VAR): the threadgroup VAR
+        # kernels without the env read of `_var_block_on` on the fit path
+        comptime if TSA2_VAR and OP == OP_CHOLSOLVE:
+            if a.i0 * a.i0 + a.i0 * a.i1 <= VAR_SMEM:
+                self.ctx.enqueue_function[var_chol_block_kernel](
+                    a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1),
+                    grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
+                )
+                return
+        comptime if TSA2_VAR and OP == OP_VAR_FORECAST:
+            if (a.i1 + a.i3) * a.i0 <= VAR_SMEM:
+                self.ctx.enqueue_function[var_forecast_block_kernel](
+                    a.p0, a.p1, a.p2, Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3),
+                    grid_dim=(1, 1, 1), block_dim=(VAR_TPB, 1, 1),
                 )
                 return
         # VAR's one-thread ops on one threadgroup (sequence/vecar_block.mojo):
