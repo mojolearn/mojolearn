@@ -451,13 +451,17 @@ def _ols_tsqr(x, y, rows, cols, mode):
     matrix, so the condition number is not squared. A singular value at or
     below cols * eps32 * s_max is dropped (the dependent directions of a
     rank-deficient design, a constant column centered to zero among them,
-    get no weight: the minimum-norm solution). DEVIATION from the normal
-    equations route (DEVIATIONS 2620, 2621): no column equilibration, so a
-    column's units can move that cutoff where they could not before; the
-    cutoff is on singular values, not on squared ones."""
+    get no weight: the minimum-norm solution). The columns are equilibrated
+    first as the normal equations route does (DEVIATION 2620, lane
+    apple-fast-tsqr): R's column j is scaled by the exact power of two that
+    rule picks for ||x e_j||^2 before the SVD and coef_ is scaled by it
+    after, so a column's units do not move the cutoff (istella's columns
+    span seven orders of magnitude; unequilibrated, real directions fell
+    under it). DEVIATION 2621 still differs: the cutoff is on singular
+    values, not on squared ones."""
     from ._expansion_decomp import _F32_EPS, _Kit, _mode, _tsqr_lstsq_core
     k = _Kit(_mode(mode))
-    X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols)
+    X, _, _, _ = _tsqr_lstsq_core(k, x, y, rows, cols, 1, _F32_EPS * cols, equilibrate=True)
     return X.out((cols,))
 
 
